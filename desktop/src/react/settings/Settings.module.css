@@ -2954,6 +2954,26 @@ a.about-link:hover {
     font-size: 0.7rem;
 }
 
+.pv-local-qwen-hardware {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--overlay-light);
+}
+
+.pv-local-qwen-hardware-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.pv-local-qwen-warning {
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: #a06a22;
+}
+
 .pv-local-qwen-error {
     font-size: 0.72rem;
     color: var(--danger, #b44040);

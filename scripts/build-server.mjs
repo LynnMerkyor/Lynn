@@ -275,6 +275,7 @@ if (fs.existsSync(pluginsSrc)) {
 const SCRIPT_RUNTIME_FILES = [
   "local_qwen35_9b_setup.sh",
   "local_qwen35_9b_q4km_llamacpp_server.sh",
+  "local_qwen35_9b_llamacpp_smoke.sh",
   "local_qwen35_9b_release_qa_smoke.sh",
   "local_qwen35_9b_register_provider.py",
   "local_qwen35_9b_client_bootstrap.py",

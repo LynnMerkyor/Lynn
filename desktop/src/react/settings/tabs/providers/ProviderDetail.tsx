@@ -63,6 +63,21 @@ type LocalQwen35Status = {
   plan?: {
     decision?: string;
     base_url?: string;
+    hardware?: {
+      can_enable?: boolean;
+      recommendation?: string;
+      chip?: string | null;
+      total_memory_gib?: number | null;
+      gpus?: Array<{ name?: string; memory_gib?: number | null; compute_capability?: number | null }>;
+      recommended_runtime?: {
+        label?: string;
+        ctx_size?: number;
+        parallel?: number;
+        gpu_layers?: number;
+      };
+      warnings?: string[];
+      blockers?: string[];
+    };
     observed?: {
       endpoint_running?: boolean;
       gguf?: string | null;
@@ -100,10 +115,15 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
 
   const plan = status?.plan || {};
   const observed = plan.observed || {};
+  const hardware = plan.hardware || {};
+  const runtime = hardware.recommended_runtime || {};
+  const hardwareWarnings = [...(hardware.warnings || []), ...(hardware.blockers || [])];
+  const gpu = hardware.gpus?.[0];
   const endpointRunning = observed.endpoint_running === true;
   const hasModel = !!observed.gguf;
   const hasRuntime = !!observed.llama_server;
   const jobRunning = status?.job?.status === 'running';
+  const hardwareBlocked = hardware.can_enable === false;
   const stateLabel = useMemo(() => {
     if (jobRunning) return '正在准备';
     if (endpointRunning) return '已运行';
@@ -112,7 +132,9 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   }, [endpointRunning, hasModel, hasRuntime, jobRunning]);
 
   const authorizeAndSetup = async () => {
-    const ok = window.confirm('Lynn 将在本机安装或定位 llama.cpp，下载 Qwen3.5-9B Q4_K_M imatrix，并启动本地模型服务。继续吗？');
+    const profile = runtime.label ? `\n\n推荐配置：${runtime.label}，上下文 ${runtime.ctx_size || 8192}，并发 ${runtime.parallel || 1}` : '';
+    const warning = hardwareWarnings.length ? `\n\n注意：${hardwareWarnings.join(' ')}` : '';
+    const ok = window.confirm(`Lynn 将在本机安装或定位 llama.cpp，下载 Qwen3.5-9B Q4_K_M imatrix，并启动本地模型服务。${profile}${warning}\n\n继续吗？`);
     if (!ok) return;
     setSettingUp(true);
     try {
@@ -167,6 +189,21 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         <span>{plan.base_url || 'http://127.0.0.1:18099/v1'}</span>
       </div>
 
+      <div className={styles['pv-local-qwen-hardware']}>
+        <div className={styles['pv-local-qwen-hardware-title']}>硬件判断</div>
+        <div className={styles['pv-local-qwen-facts']}>
+          <span>{runtime.label || '云端兜底优先'}</span>
+          {hardware.chip && <span>{hardware.chip}</span>}
+          {gpu?.name && <span>{gpu.name}{gpu.memory_gib ? ` · ${gpu.memory_gib.toFixed(1)}GB` : ''}</span>}
+          {hardware.total_memory_gib && <span>内存 {hardware.total_memory_gib.toFixed(1)}GB</span>}
+          {runtime.ctx_size && <span>上下文 {runtime.ctx_size}</span>}
+          {runtime.parallel && <span>并发 {runtime.parallel}</span>}
+        </div>
+        {hardwareWarnings.length > 0 && (
+          <div className={styles['pv-local-qwen-warning']}>{hardwareWarnings.join(' ')}</div>
+        )}
+      </div>
+
       {status?.error && (
         <div className={styles['pv-local-qwen-error']}>{status.error}</div>
       )}
@@ -180,9 +217,9 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         <button
           className={`${styles['pv-setup-activate-btn']} ${styles['pv-local-qwen-primary']}`}
           onClick={authorizeAndSetup}
-          disabled={settingUp || jobRunning}
+          disabled={settingUp || jobRunning || hardwareBlocked}
         >
-          {endpointRunning ? '重新检查并启用' : '授权安装并启用'}
+          {hardwareBlocked ? '硬件不建议本地启用' : endpointRunning ? '重新检查并启用' : '授权安装并启用'}
         </button>
         <button className={styles['pv-verify-connection-btn']} onClick={loadStatus} disabled={loading}>
           刷新状态

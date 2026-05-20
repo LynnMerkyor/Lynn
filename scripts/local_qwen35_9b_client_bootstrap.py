@@ -108,6 +108,175 @@ def _find_gguf(model_root: Path, variant: str) -> Path | None:
     return None
 
 
+def _run_capture(cmd: list[str], timeout: float = 5.0) -> str:
+    try:
+        return subprocess.run(
+            cmd,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=timeout,
+        ).stdout
+    except Exception:
+        return ""
+
+
+def _total_memory_gib() -> float | None:
+    system = platform.system()
+    if system == "Darwin":
+        out = _run_capture(["sysctl", "-n", "hw.memsize"], timeout=2)
+        try:
+            return int(out.strip()) / (1024 ** 3)
+        except Exception:
+            return None
+    if system == "Linux":
+        try:
+            for line in Path("/proc/meminfo").read_text().splitlines():
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) / (1024 ** 2)
+        except Exception:
+            return None
+    if system == "Windows":
+        try:
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            return stat.ullTotalPhys / (1024 ** 3)
+        except Exception:
+            return None
+    return None
+
+
+def _mac_chip_name() -> str | None:
+    out = _run_capture(["sysctl", "-n", "machdep.cpu.brand_string"], timeout=2).strip()
+    if out:
+        return out
+    out = _run_capture(["system_profiler", "SPHardwareDataType"], timeout=5)
+    for line in out.splitlines():
+        if "Chip:" in line or "Processor Name:" in line:
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def _nvidia_gpus() -> list[dict[str, Any]]:
+    out = _run_capture([
+        "nvidia-smi",
+        "--query-gpu=name,memory.total,compute_cap",
+        "--format=csv,noheader,nounits",
+    ], timeout=4)
+    gpus: list[dict[str, Any]] = []
+    for row in out.splitlines():
+        parts = [p.strip() for p in row.split(",")]
+        if len(parts) < 2:
+            continue
+        try:
+            memory_gib = float(parts[1]) / 1024
+        except Exception:
+            memory_gib = None
+        compute_cap = None
+        if len(parts) >= 3:
+            try:
+                compute_cap = float(parts[2])
+            except Exception:
+                compute_cap = None
+        gpus.append({
+            "vendor": "nvidia",
+            "name": parts[0],
+            "memory_gib": memory_gib,
+            "compute_capability": compute_cap,
+        })
+    return gpus
+
+
+def _hardware_profile() -> dict[str, Any]:
+    system = platform.system()
+    machine = platform.machine()
+    total_gib = _total_memory_gib()
+    nvidia = _nvidia_gpus()
+    chip = _mac_chip_name() if system == "Darwin" else None
+    apple_silicon = system == "Darwin" and machine in {"arm64", "aarch64"}
+    warnings: list[str] = []
+    blockers: list[str] = []
+    recommendation = "not_recommended"
+    profile = {
+        "name": "cloud_fallback",
+        "label": "继续使用云端兜底",
+        "ctx_size": 8192,
+        "parallel": 1,
+        "gpu_layers": 0,
+    }
+
+    best_gpu = max(nvidia, key=lambda g: g.get("memory_gib") or 0, default=None)
+    if apple_silicon:
+        mem = total_gib or 0
+        if mem >= 24:
+            recommendation = "recommended"
+            profile = {"name": "mac_unified_32k", "label": "Mac 32K 舒适档", "ctx_size": 32768, "parallel": 4, "gpu_layers": 999}
+        elif mem >= 16:
+            recommendation = "recommended_with_limits"
+            profile = {"name": "mac_unified_16k", "label": "Mac 16K 稳定档", "ctx_size": 16384, "parallel": 2, "gpu_layers": 999}
+            warnings.append("16GB 统一内存建议先用 16K；32K thinking 可能触发内存压力。")
+        elif mem >= 12:
+            recommendation = "experimental"
+            profile = {"name": "mac_unified_8k", "label": "Mac 8K 试用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
+            warnings.append("统一内存偏小，只建议试用短上下文；长 thinking 体验会不稳。")
+        else:
+            blockers.append("统一内存低于 12GB，不建议本地跑 9B；请保持 MIMO/云端兜底。")
+    elif best_gpu and (best_gpu.get("memory_gib") or 0) >= 8:
+        vram = best_gpu.get("memory_gib") or 0
+        cc = best_gpu.get("compute_capability") or 0
+        if cc and cc < 7.5:
+            recommendation = "experimental"
+            profile = {"name": "nvidia_8k_legacy", "label": "NVIDIA 老卡试用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
+            warnings.append("NVIDIA compute capability 低于 7.5，可能明显慢；不建议作为默认体验。")
+        elif vram >= 24:
+            recommendation = "recommended"
+            profile = {"name": "nvidia_32k", "label": "NVIDIA 32K 舒适档", "ctx_size": 32768, "parallel": 4, "gpu_layers": 999}
+        elif vram >= 16:
+            recommendation = "recommended_with_limits"
+            profile = {"name": "nvidia_16k", "label": "NVIDIA 16K 稳定档", "ctx_size": 16384, "parallel": 2, "gpu_layers": 999}
+            warnings.append("16GB 显存建议先用 16K；32K 可作为高级选项。")
+        else:
+            recommendation = "experimental"
+            profile = {"name": "nvidia_8k", "label": "NVIDIA 8GB 可用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
+            warnings.append("8GB 显存可以启用 9B Q4_K_M，但建议 8K/单并发；32K thinking 不默认开启。")
+    elif system == "Linux" and not best_gpu:
+        blockers.append("未检测到 NVIDIA GPU；CPU 路径可以跑但体验较慢，默认不推荐。")
+    elif system == "Windows":
+        blockers.append("Windows 首发仍在补齐；当前建议使用云端兜底或手动 llama.cpp。")
+    else:
+        blockers.append("当前硬件未达到本地 9B 默认启用条件。")
+
+    return {
+        "platform": system,
+        "machine": machine,
+        "chip": chip,
+        "total_memory_gib": round(total_gib, 2) if total_gib else None,
+        "gpus": nvidia,
+        "recommendation": recommendation,
+        "recommended_runtime": profile,
+        "warnings": warnings,
+        "blockers": blockers,
+        "can_enable": recommendation in {"recommended", "recommended_with_limits", "experimental"},
+    }
+
+
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     model_root = Path(args.model_root).expanduser()
     provider_path = Path(args.provider_config).expanduser()
@@ -119,6 +288,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     llama_server = _which("llama-server") or _which("llama.cpp-server")
     has_brew = _which("brew") is not None
     running = _probe_port(host, port) and _health(base_url)
+    hardware = _hardware_profile()
 
     actions: list[dict[str, Any]] = []
     if not llama_server:
@@ -170,6 +340,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "endpoint_running": running,
             "homebrew_available": has_brew,
         },
+        "hardware": hardware,
         "actions": actions,
         "user_authorization_required": any(a.get("requires_user_authorization") for a in actions),
         "notes": [
@@ -238,6 +409,17 @@ def execute(args: argparse.Namespace) -> int:
         "--env-file",
         str(env_file),
     ]
+    plan_now = build_plan(args)
+    runtime = plan_now.get("hardware", {}).get("recommended_runtime", {})
+    ctx_size = args.ctx_size or runtime.get("ctx_size")
+    parallel = args.parallel or runtime.get("parallel")
+    gpu_layers = args.gpu_layers or runtime.get("gpu_layers")
+    if ctx_size:
+        setup_cmd += ["--ctx", str(ctx_size)]
+    if parallel:
+        setup_cmd += ["--parallel", str(parallel)]
+    if gpu_layers is not None:
+        setup_cmd += ["--gpu-layers", str(gpu_layers)]
     if args.install_runtime:
         setup_cmd.append("--install-runtime")
 
@@ -254,6 +436,7 @@ def execute(args: argparse.Namespace) -> int:
     return _json({
         "schema_version": "lynn-qwen35-local-client-bootstrap-result-v1",
         "ok": True,
+        "runtime_profile": runtime,
         "provider_config": str(provider_path),
         "env_file": str(env_file),
         "started": start_info,
@@ -277,6 +460,9 @@ def main() -> int:
         sp.add_argument("--port", default="18099")
         sp.add_argument("--pid-file", default=str(DEFAULT_PID_FILE))
         sp.add_argument("--log-file", default=str(DEFAULT_LOG_FILE))
+        sp.add_argument("--ctx-size", type=int, default=None)
+        sp.add_argument("--parallel", type=int, default=None)
+        sp.add_argument("--gpu-layers", type=int, default=None)
 
     add_common(sub.add_parser("plan", help="Return the client authorization plan JSON."))
     add_common(sub.add_parser("status", help="Return current local-provider status JSON."))
