@@ -18,6 +18,7 @@ const { initAutoUpdater, checkForUpdatesAuto, setMainWindow: setUpdaterMainWindo
 const { setIpcSenderValidator, wrapIpcHandler, wrapIpcOn } = require('./ipc-wrapper.cjs');
 const { normalizeConfiguredShortcut, registerFirstAvailableGlobalShortcut } = require("./shortcut-policy.cjs");
 const { VoiceTunnelManager } = require("./voice-tunnel-manager.cjs");
+const { LlamaCppManager } = require("./llamacpp-manager.cjs");
 
 // macOS/Linux: Electron 从 Dock/Finder 启动时 PATH 只有系统默认值，
 // Homebrew、npm global 等路径全部丢失。用登录 shell 解析完整 PATH。
@@ -3367,6 +3368,48 @@ function stopVoiceTunnel() {
 }
 wrapIpcHandler("voice-tunnel-status", () => (voiceTunnel ? voiceTunnel.getStatus() : { stopped: true }));
 
+// ─────────────────────────────────────────────────────────────
+// llama.cpp local 推理守护(2026-05-20 战略 pivot 后默认本地推理底层)
+//   - 找 ~/.lynn/llamacpp/bin/llama-server[.exe] + ~/.lynn/models/<default>.gguf
+//   - 任一缺 → emit needs-binary / needs-model state,UI 触发 Phase 2 download
+//   - spawn + 健康监控 + crash auto-restart,跟 Lynn 生命周期绑
+//   - ENV LYNN_SKIP_LLAMACPP=1 → 完全禁用
+//   - LYNN_LLAMACPP_BIN / LYNN_LLAMACPP_MODEL 可覆盖路径(dev / 自定义安装)
+let llamacpp = null;
+function startLlamacpp() {
+  if (llamacpp) return;
+  try {
+    llamacpp = new LlamaCppManager({
+      onLog: (level, msg) => {
+        if (level === "error") console.error(msg);
+        else if (level === "warn") console.warn(msg);
+        else console.log(msg);
+      },
+      onState: (state) => {
+        try {
+          for (const win of BrowserWindow.getAllWindows()) {
+            if (!win.isDestroyed()) win.webContents.send("llamacpp-state", state);
+          }
+        } catch (err) {
+          console.warn("[llamacpp] state broadcast failed:", err?.message || err);
+        }
+      },
+    });
+    void llamacpp.start();
+  } catch (err) {
+    console.warn("[llamacpp] start failed:", err?.message || err);
+    llamacpp = null;
+  }
+}
+function stopLlamacpp() {
+  if (!llamacpp) return;
+  try { llamacpp.stop(); } catch (err) {
+    console.warn("[llamacpp] stop failed:", err?.message || err);
+  }
+  llamacpp = null;
+}
+wrapIpcHandler("llamacpp-status", () => (llamacpp ? llamacpp.getStatus() : { stopped: true }));
+
 // ── App 生命周期 ──
 app.whenReady().then(async () => {
   installMediaPermissionHandlers();
@@ -3422,6 +3465,11 @@ app.whenReady().then(async () => {
     // 2b. 2026-05-01 — 启动 voice tunnel manager(跨平台 ssh 隧道守护)
     //     macOS 已有 launchd watchdog 时自动 standby + 仅监控;Win/Linux 接管 spawn。
     startVoiceTunnel();
+
+    // 2c. 2026-05-20 — 启动 llama.cpp local 推理守护(默认本地推理底层)
+    //     找 ~/.lynn/llamacpp/bin + ~/.lynn/models/<default>.gguf,任一缺 → needs-install
+    //     state 报 UI 引导首次安装。已 install → spawn llama-server + health 监控。
+    startLlamacpp();
 
     // 3. 控制 splash 最短停留时间。冷启动优化后不再额外卡住 3 秒。
     const elapsed = Date.now() - splashShownAt;
@@ -3589,6 +3637,9 @@ app.on("before-quit", async (event) => {
 
   // 2026-05-01 — 停 voice tunnel manager(kill 子 ssh)
   stopVoiceTunnel();
+
+  // 2026-05-20 — 停 llama.cpp local 推理(SIGTERM → 5s SIGKILL)
+  stopLlamacpp();
 
   // 立刻隐藏所有窗口，让用户感觉已退出，server 清理在后台进行
   for (const win of BrowserWindow.getAllWindows()) {

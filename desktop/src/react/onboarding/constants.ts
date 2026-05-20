@@ -44,6 +44,7 @@ export const QUICK_START_PROVIDER = {
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   { value: BRAIN_PROVIDER_ID, label: BRAIN_DEFAULT_DISPLAY_NAME, labelZh: BRAIN_DEFAULT_DISPLAY_NAME, url: QUICK_START_PROVIDER.providerUrl, api: QUICK_START_PROVIDER.providerApi, defaultModelId: QUICK_START_PROVIDER.defaultModelId, noKey: true, group: 'standard' },
+  { value: 'llamacpp',    label: 'Lynn Local (9B Q4_K_M)', labelZh: 'Lynn 本地 (9B Q4_K_M)', url: 'http://127.0.0.1:18099/v1', api: 'openai-completions', local: true, noKey: true, defaultModelId: 'qwen3.5-9b-q4km-imatrix', group: 'standard' },
   { value: 'ollama',      label: 'Ollama (Local)',       labelZh: 'Ollama (本地)',        url: 'http://localhost:11434/v1', api: 'openai-completions', local: true, group: 'standard' },
   { value: 'dashscope',   label: 'DashScope (Qwen)',     url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', api: 'openai-completions', group: 'standard' },
   { value: 'openai',      label: 'OpenAI',               url: 'https://api.openai.com/v1', api: 'openai-completions', group: 'standard' },
