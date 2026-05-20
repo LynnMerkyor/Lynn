@@ -58,6 +58,7 @@ import { createAppStateRoute } from "./routes/app-state.js";
 import { createDebugRoute } from "./routes/debug.js";
 import { createTranslateRoute } from "./routes/translate.js";
 import { createDeepResearchRoute } from "./routes/deep-research.js";
+import { createLocalQwen35Route } from "./routes/local-qwen35.js";
 // internal-browser WS is handled directly via raw ws.WebSocketServer in the
 // upgrade handler below (WsTransport needs raw ws .on()/.off() methods)
 import { ConfirmStore } from "../lib/confirm-store.js";
@@ -221,6 +222,7 @@ app.route("/api", createAppStateRoute(engine, { taskRuntime }));
 app.route("/api", createDebugRoute(engine));
 app.route("/api", createTranslateRoute(engine));
 app.route("/api", createDeepResearchRoute(engine));
+app.route("/api", createLocalQwen35Route(engine));
 app.route("/api", createSessionsRoute(engine));
 app.route("/api", createModelsRoute(engine));
 app.route("/api", createConfigRoute(engine));

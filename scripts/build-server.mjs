@@ -269,6 +269,30 @@ if (fs.existsSync(pluginsSrc)) {
   console.log("[build-server]   plugins/");
 }
 
+// Local model bootstrap scripts. These are invoked by the packaged server after
+// user authorization to install llama.cpp, download Qwen3.5-9B Q4_K_M, start the
+// local OpenAI-compatible endpoint, and register the provider.
+const SCRIPT_RUNTIME_FILES = [
+  "local_qwen35_9b_setup.sh",
+  "local_qwen35_9b_q4km_llamacpp_server.sh",
+  "local_qwen35_9b_release_qa_smoke.sh",
+  "local_qwen35_9b_register_provider.py",
+  "local_qwen35_9b_client_bootstrap.py",
+];
+const scriptsOutDir = path.join(outDir, "scripts");
+for (const file of SCRIPT_RUNTIME_FILES) {
+  const src = path.join(ROOT, "scripts", file);
+  if (fs.existsSync(src)) {
+    fs.mkdirSync(scriptsOutDir, { recursive: true });
+    const dest = path.join(scriptsOutDir, file);
+    fs.copyFileSync(src, dest);
+    if (!isWin && /\.(sh|py)$/.test(file)) fs.chmodSync(dest, 0o755);
+    console.log(`[build-server]   scripts/${file}`);
+  } else {
+    console.warn(`[build-server] ⚠ scripts/${file} not found, skipping`);
+  }
+}
+
 console.log("[build-server] resource files copied");
 
 // ── 4. External dependencies ──
@@ -361,10 +385,10 @@ if (missing.length > 0) {
 // package.json 没有 postinstall，手动跑补丁
 const patchScript = path.join(ROOT, "scripts", "patch-pi-sdk.cjs");
 if (fs.existsSync(patchScript)) {
-  fs.mkdirSync(path.join(outDir, "scripts"), { recursive: true });
-  fs.copyFileSync(patchScript, path.join(outDir, "scripts", "patch-pi-sdk.cjs"));
+  fs.mkdirSync(scriptsOutDir, { recursive: true });
+  fs.copyFileSync(patchScript, path.join(scriptsOutDir, "patch-pi-sdk.cjs"));
   runWithTargetNode("scripts/patch-pi-sdk.cjs");
-  fs.rmSync(path.join(outDir, "scripts"), { recursive: true });
+  fs.rmSync(path.join(scriptsOutDir, "patch-pi-sdk.cjs"), { force: true });
 }
 
 // ── 7. 清理 node_modules/.bin ──

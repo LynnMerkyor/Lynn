@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSettingsStore, type ProviderSummary } from '../../store';
 import { hanaFetch } from '../../api';
 import { t } from '../../helpers';
@@ -9,6 +9,7 @@ import { BRAIN_PROVIDER_ID, BRAIN_PROVIDER_LABEL } from '../../../../../../share
 import styles from '../../Settings.module.css';
 
 const platform = window.platform;
+const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
 
 export function ProviderDetail({ providerId, summary, providerConfig, isPresetSetup, presetInfo, onRefresh }: {
   providerId: string;
@@ -26,6 +27,9 @@ export function ProviderDetail({ providerId, summary, providerConfig, isPresetSe
       <div className={styles['pv-detail-header']}>
         <h2 className={styles['pv-detail-title']}>{title}</h2>
       </div>
+      {providerId === LOCAL_QWEN35_PROVIDER_ID && (
+        <LocalQwen35Panel onRefresh={onRefresh} />
+      )}
       {summary.supports_oauth ? (
         <OAuthCredentials providerId={providerId} summary={summary} onRefresh={onRefresh} />
       ) : (
@@ -45,6 +49,149 @@ export function ProviderDetail({ providerId, summary, providerConfig, isPresetSe
         </div>
       )}
     </div>
+  );
+}
+
+type LocalQwen35Status = {
+  ok?: boolean;
+  job?: {
+    status?: string;
+    log_file?: string;
+    result?: unknown;
+    stderr_tail?: string;
+  } | null;
+  plan?: {
+    decision?: string;
+    base_url?: string;
+    observed?: {
+      endpoint_running?: boolean;
+      gguf?: string | null;
+      llama_server?: string | null;
+      homebrew_available?: boolean;
+    };
+    actions?: Array<{ id?: string; label?: string }>;
+  };
+  error?: string;
+};
+
+function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
+  const { showToast } = useSettingsStore();
+  const [status, setStatus] = useState<LocalQwen35Status | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [settingUp, setSettingUp] = useState(false);
+
+  const loadStatus = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await hanaFetch('/api/local-qwen35-9b/status', { timeout: 20_000 });
+      const data = await res.json();
+      setStatus(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatus({ ok: false, error: msg });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
+
+  const plan = status?.plan || {};
+  const observed = plan.observed || {};
+  const endpointRunning = observed.endpoint_running === true;
+  const hasModel = !!observed.gguf;
+  const hasRuntime = !!observed.llama_server;
+  const jobRunning = status?.job?.status === 'running';
+  const stateLabel = useMemo(() => {
+    if (jobRunning) return '正在准备';
+    if (endpointRunning) return '已运行';
+    if (hasModel && hasRuntime) return '可启动';
+    return '待安装';
+  }, [endpointRunning, hasModel, hasRuntime, jobRunning]);
+
+  const authorizeAndSetup = async () => {
+    const ok = window.confirm('Lynn 将在本机安装或定位 llama.cpp，下载 Qwen3.5-9B Q4_K_M imatrix，并启动本地模型服务。继续吗？');
+    if (!ok) return;
+    setSettingUp(true);
+    try {
+      const res = await hanaFetch('/api/local-qwen35-9b/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authorized: true, variant: 'imatrix', start: true }),
+        timeout: 30_000,
+      });
+      const data = await res.json();
+      setStatus((prev) => ({ ...(prev || {}), job: data.job }));
+      showToast('本地 9B 正在后台准备，完成后会自动注册为可用模型。', 'info');
+      await onRefresh();
+      window.setTimeout(loadStatus, 1500);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast('本地 9B 启用失败：' + msg, 'error');
+    } finally {
+      setSettingUp(false);
+    }
+  };
+
+  const registerOnly = async () => {
+    try {
+      await hanaFetch('/api/local-qwen35-9b/register', { method: 'POST', timeout: 10_000 });
+      showToast('本地 9B 已注册到模型列表。', 'success');
+      await onRefresh();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast('注册失败：' + msg, 'error');
+    }
+  };
+
+  return (
+    <section className={styles['pv-local-qwen-panel']}>
+      <div className={styles['pv-local-qwen-main']}>
+        <div>
+          <div className={styles['pv-local-qwen-kicker']}>本地 9B，日常无限用</div>
+          <div className={styles['pv-local-qwen-title']}>Qwen3.5-9B Q4_K_M imatrix</div>
+          <div className={styles['pv-local-qwen-desc']}>
+            Lynn 会在用户授权后自动准备 llama.cpp、模型文件和本地 OpenAI 端点，MIMO 保持兜底。
+          </div>
+        </div>
+        <span className={`${styles['pv-local-qwen-state']} ${endpointRunning ? styles['ready'] : ''}`}>
+          {loading ? '检查中' : stateLabel}
+        </span>
+      </div>
+
+      <div className={styles['pv-local-qwen-facts']}>
+        <span>模型 {hasModel ? '已就绪' : '待下载'}</span>
+        <span>llama.cpp {hasRuntime ? '已找到' : '待安装'}</span>
+        <span>{plan.base_url || 'http://127.0.0.1:18099/v1'}</span>
+      </div>
+
+      {status?.error && (
+        <div className={styles['pv-local-qwen-error']}>{status.error}</div>
+      )}
+      {status?.job?.status && (
+        <div className={styles['pv-local-qwen-job']}>
+          后台任务：{status.job.status}{status.job.log_file ? ` · ${status.job.log_file}` : ''}
+        </div>
+      )}
+
+      <div className={styles['pv-local-qwen-actions']}>
+        <button
+          className={`${styles['pv-setup-activate-btn']} ${styles['pv-local-qwen-primary']}`}
+          onClick={authorizeAndSetup}
+          disabled={settingUp || jobRunning}
+        >
+          {endpointRunning ? '重新检查并启用' : '授权安装并启用'}
+        </button>
+        <button className={styles['pv-verify-connection-btn']} onClick={loadStatus} disabled={loading}>
+          刷新状态
+        </button>
+        <button className={styles['pv-verify-connection-btn']} onClick={registerOnly}>
+          仅注册 provider
+        </button>
+      </div>
+    </section>
   );
 }
 

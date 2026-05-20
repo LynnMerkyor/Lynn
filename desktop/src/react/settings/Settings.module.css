@@ -2877,6 +2877,104 @@ a.about-link:hover {
 }
 
 .pv-setup-activate-btn:hover { opacity: 0.85; }
+.pv-setup-activate-btn:disabled { opacity: 0.55; cursor: default; }
+
+.pv-local-qwen-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: var(--space-md);
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.pv-local-qwen-main {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.pv-local-qwen-kicker {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 4px;
+}
+
+.pv-local-qwen-title {
+    font-size: 0.95rem;
+    font-weight: 650;
+    color: var(--text);
+    margin-bottom: 4px;
+}
+
+.pv-local-qwen-desc {
+    font-size: 0.76rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.pv-local-qwen-state {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 9px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.pv-local-qwen-state.ready {
+    color: var(--success, #3a7d44);
+    border-color: rgba(90, 170, 153, 0.28);
+    background: rgba(90, 170, 153, 0.08);
+}
+
+.pv-local-qwen-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pv-local-qwen-facts span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 0 8px;
+    border-radius: var(--radius-sm);
+    background: var(--overlay-light);
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+
+.pv-local-qwen-error {
+    font-size: 0.72rem;
+    color: var(--danger, #b44040);
+}
+
+.pv-local-qwen-job {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.pv-local-qwen-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.pv-local-qwen-primary {
+    min-height: 30px;
+}
 
 /* ── 右栏 ── */
 .pv-detail {

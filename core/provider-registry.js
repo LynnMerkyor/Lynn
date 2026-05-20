@@ -68,6 +68,7 @@ const _defaultModels = JSON.parse(
 
 import { dashscopePlugin } from "../lib/providers/dashscope.js";
 import { brainPlugin } from "../lib/providers/brain.js";
+import { localQwen35Plugin } from "../lib/providers/local-qwen35.js";
 import { openaiPlugin } from "../lib/providers/openai.js";
 import { anthropicPlugin } from "../lib/providers/anthropic.js";
 import { deepseekPlugin } from "../lib/providers/deepseek.js";
@@ -107,6 +108,7 @@ import { volcegineCodingPlugin } from "../lib/providers/volcengine-coding.js";
 
 const BUILTIN_PLUGINS = [
   brainPlugin,
+  localQwen35Plugin,
   dashscopePlugin,
   openaiPlugin,
   anthropicPlugin,
