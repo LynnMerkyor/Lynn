@@ -1,0 +1,189 @@
+import { spawn, execFile } from 'node:child_process';
+import { appendFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
+
+const HOME = os.homedir();
+const DEFAULT_PROVIDER_CONFIG = path.join(HOME, '.lynn-engine', 'providers', 'qwen35-9b-q4km-imatrix-gguf.json');
+const DEFAULT_PID_FILE = path.join(HOME, '.lynn-engine', 'run', 'qwen35-9b-q4km-imatrix.pid');
+const DEFAULT_LOG_FILE = path.join(HOME, '.lynn-engine', 'logs', 'qwen35-9b-q4km-imatrix.client.log');
+const DEFAULT_MODEL_ROOT = path.join(HOME, 'Models', 'Lynn', 'Qwen3.5-9B');
+const DEFAULT_HOST = process.env.LYNN_LOCAL_QWEN35_HOST || '127.0.0.1';
+const DEFAULT_PORT = Number(process.env.LYNN_LOCAL_QWEN35_PORT || 18099);
+
+let currentJob = null;
+let lastJob = null;
+
+function repoRoot() {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+}
+
+function candidateBootstrapPaths() {
+  if (process.env.LYNN_QWEN35_BOOTSTRAP) return [process.env.LYNN_QWEN35_BOOTSTRAP];
+  const root = repoRoot();
+  return [
+    path.join(root, 'worktrees', 'codex-qwen35-9b-r6000-release', 'scripts', 'local_qwen35_9b_client_bootstrap.py'),
+    path.join(root, 'lynn-engine', 'scripts', 'local_qwen35_9b_client_bootstrap.py'),
+    path.join(root, 'lynn-engine-main', 'scripts', 'local_qwen35_9b_client_bootstrap.py'),
+  ];
+}
+
+export function resolveBootstrapPath() {
+  return candidateBootstrapPaths().find((p) => existsSync(p)) || null;
+}
+
+export function isLocalAddress(addr = '') {
+  const v = String(addr || '').replace(/^::ffff:/, '');
+  return v === '127.0.0.1' || v === '::1' || v === 'localhost' || v === '';
+}
+
+function commonArgs({ host = DEFAULT_HOST, port = DEFAULT_PORT, variant = 'imatrix' } = {}) {
+  return [
+    '--variant', variant,
+    '--host', String(host),
+    '--port', String(port),
+    '--model-root', process.env.LYNN_LOCAL_QWEN35_MODEL_ROOT || DEFAULT_MODEL_ROOT,
+    '--provider-config', process.env.LYNN_LOCAL_QWEN35_PROVIDER_CONFIG || DEFAULT_PROVIDER_CONFIG,
+    '--pid-file', process.env.LYNN_LOCAL_QWEN35_PID_FILE || DEFAULT_PID_FILE,
+    '--log-file', process.env.LYNN_LOCAL_QWEN35_LOG_FILE || DEFAULT_LOG_FILE,
+  ];
+}
+
+function readJsonMaybe(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try { return JSON.parse(text.slice(start, end + 1)); } catch {}
+    }
+  }
+  return null;
+}
+
+function describeFile(filePath) {
+  try {
+    const st = statSync(filePath);
+    return { path: filePath, exists: true, size_bytes: st.size, mtime_ms: st.mtimeMs };
+  } catch {
+    return { path: filePath, exists: false };
+  }
+}
+
+export async function getLocalQwen35Plan(options = {}) {
+  const bootstrap = resolveBootstrapPath();
+  if (!bootstrap) {
+    return {
+      schema_version: 'lynn-local-qwen35-status-v1',
+      ok: false,
+      error: 'bootstrap_not_found',
+      searched: candidateBootstrapPaths(),
+      fallback_provider: 'mimo',
+    };
+  }
+  try {
+    const { stdout } = await execFileAsync('python3', [bootstrap, 'plan', ...commonArgs(options)], {
+      timeout: 15_000,
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    return {
+      ok: true,
+      bootstrap,
+      plan: readJsonMaybe(stdout),
+      job: currentJob || lastJob,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      bootstrap,
+      error: err.message,
+      stdout: err.stdout || '',
+      stderr: err.stderr || '',
+      job: currentJob || lastJob,
+    };
+  }
+}
+
+export function startLocalQwen35Setup({
+  authorized = false,
+  start = true,
+  installRuntime = true,
+  host = DEFAULT_HOST,
+  port = DEFAULT_PORT,
+  variant = 'imatrix',
+} = {}) {
+  if (!authorized) {
+    return {
+      ok: false,
+      error: 'missing_user_authorization',
+      message: 'Client must pass authorized:true after the user approves local setup.',
+    };
+  }
+  if (currentJob?.status === 'running') return { ok: true, job: currentJob, already_running: true };
+  const bootstrap = resolveBootstrapPath();
+  if (!bootstrap) return { ok: false, error: 'bootstrap_not_found', searched: candidateBootstrapPaths() };
+
+  const logFile = process.env.LYNN_LOCAL_QWEN35_SETUP_LOG || path.join(HOME, '.lynn-engine', 'logs', `qwen35-9b-setup-${Date.now()}.log`);
+  mkdirSync(path.dirname(logFile), { recursive: true });
+  const args = [
+    bootstrap,
+    'execute',
+    ...commonArgs({ host, port, variant }),
+    '--yes-user-authorized',
+  ];
+  if (start) args.push('--start');
+  if (!installRuntime) args.push('--no-install-runtime');
+
+  const startedAt = new Date().toISOString();
+  currentJob = {
+    id: 'local-qwen35-setup-' + Date.now(),
+    status: 'running',
+    started_at: startedAt,
+    finished_at: null,
+    bootstrap,
+    log_file: logFile,
+    command: ['python3', ...args],
+    exit_code: null,
+    result: null,
+  };
+
+  const child = spawn('python3', args, {
+    cwd: repoRoot(),
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env },
+  });
+  let stdout = '';
+  let stderr = '';
+  const append = (chunk) => {
+    try {
+      appendFileSync(logFile, chunk);
+    } catch {}
+  };
+  child.stdout.on('data', (buf) => { const s = buf.toString(); stdout += s; append(s); });
+  child.stderr.on('data', (buf) => { const s = buf.toString(); stderr += s; append(s); });
+  child.on('exit', (code) => {
+    const result = readJsonMaybe(stdout);
+    currentJob = {
+      ...currentJob,
+      status: code === 0 ? 'succeeded' : 'failed',
+      finished_at: new Date().toISOString(),
+      exit_code: code,
+      result,
+      stdout_tail: stdout.slice(-4000),
+      stderr_tail: stderr.slice(-4000),
+      provider_config: describeFile(process.env.LYNN_LOCAL_QWEN35_PROVIDER_CONFIG || DEFAULT_PROVIDER_CONFIG),
+    };
+    lastJob = currentJob;
+  });
+
+  return { ok: true, job: currentJob };
+}
+
+export function getLocalQwen35Job() {
+  return currentJob || lastJob;
+}

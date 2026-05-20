@@ -5,6 +5,17 @@ import 'dotenv/config';
 const env = (k, d) => process.env[k] || d;
 
 export const PROVIDERS = {
+  'local-qwen35-9b-q4km-imatrix': {
+    id: 'local-qwen35-9b-q4km-imatrix',
+    endpoint: env('LYNN_LOCAL_QWEN35_BASE', 'http://127.0.0.1:18099/v1'),
+    apiKey: env('LYNN_LOCAL_QWEN35_API_KEY', 'local'),
+    model: env('LYNN_LOCAL_QWEN35_MODEL', 'qwen35-9b-q4km-imatrix'),
+    capability: { vision: false, audio: false, tools: true, thinking: true, native_search: false },
+    wire: 'openai',
+    cooldown_ms: 15_000,
+    max_tokens: Number(env('LYNN_LOCAL_QWEN35_MAX_TOKENS', '32000')),
+    temperature: Number(env('LYNN_LOCAL_QWEN35_TEMPERATURE', '0.4')),
+  },
   'mimo': {
     id: 'mimo',
     endpoint: env('MIMO_SEARCH_BASE', 'https://token-plan-cn.xiaomimimo.com/v1'),
@@ -64,6 +75,7 @@ export const PROVIDERS = {
 
 // universalOrder — 单一兜底链路,不按 prompt 内容分支
 export const universalOrder = [
+  'local-qwen35-9b-q4km-imatrix', // Mac/local-first: falls back quickly when endpoint is not running
   'mimo',                  // 头位:enable_search:true 内置搜索 + thinking
   'qwen3.6-35b-a3b',       // DGX SGLang FP8 备链
   'deepseek-chat',         // 云兜底 V4-flash
