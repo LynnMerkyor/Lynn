@@ -30,6 +30,8 @@ export function ProviderDetail({ providerId, summary, providerConfig, isPresetSe
       {providerId === LOCAL_QWEN35_PROVIDER_ID && (
         <LocalQwen35Panel onRefresh={onRefresh} />
       )}
+      {providerId === LOCAL_QWEN35_PROVIDER_ID ? null : (
+        <>
       {summary.supports_oauth ? (
         <OAuthCredentials providerId={providerId} summary={summary} onRefresh={onRefresh} />
       ) : (
@@ -48,6 +50,8 @@ export function ProviderDetail({ providerId, summary, providerConfig, isPresetSe
           <ProviderDeleteButton providerId={providerId} onRefresh={onRefresh} />
         </div>
       )}
+        </>
+      )}
     </div>
   );
 }
@@ -59,6 +63,18 @@ type LocalQwen35Status = {
     log_file?: string;
     result?: unknown;
     stderr_tail?: string;
+    progress?: {
+      phase?: string;
+      source?: string | null;
+      percent?: number | null;
+      downloaded?: string;
+      total?: string;
+      elapsed?: string;
+      eta?: string;
+      speed?: string;
+      message?: string;
+      tail?: string[];
+    } | null;
   } | null;
   plan?: {
     decision?: string;
@@ -95,8 +111,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const [loading, setLoading] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
 
-  const loadStatus = useCallback(async () => {
-    setLoading(true);
+  const loadStatus = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const res = await hanaFetch('/api/local-qwen35-9b/status', { timeout: 20_000 });
       const data = await res.json();
@@ -105,7 +121,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       const msg = err instanceof Error ? err.message : String(err);
       setStatus({ ok: false, error: msg });
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
 
@@ -123,6 +139,10 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const hasModel = !!observed.gguf;
   const hasRuntime = !!observed.llama_server;
   const jobRunning = status?.job?.status === 'running';
+  const progress = status?.job?.progress || null;
+  const progressPercent = typeof progress?.percent === 'number'
+    ? Math.max(0, Math.min(100, progress.percent))
+    : null;
   const hardwareBlocked = hardware.can_enable === false;
   const stateLabel = useMemo(() => {
     if (jobRunning) return '正在准备';
@@ -130,6 +150,14 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     if (hasModel && hasRuntime) return '可启动';
     return '待安装';
   }, [endpointRunning, hasModel, hasRuntime, jobRunning]);
+
+  useEffect(() => {
+    if (!jobRunning) return undefined;
+    const id = window.setInterval(() => {
+      loadStatus(true);
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [jobRunning, loadStatus]);
 
   const authorizeAndSetup = async () => {
     const profile = runtime.label ? `\n\n推荐配置：${runtime.label}，上下文 ${runtime.ctx_size || 8192}，并发 ${runtime.parallel || 1}` : '';
@@ -175,7 +203,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           <div className={styles['pv-local-qwen-kicker']}>本地 9B，日常无限用</div>
           <div className={styles['pv-local-qwen-title']}>Qwen3.5-9B Q4_K_M imatrix</div>
           <div className={styles['pv-local-qwen-desc']}>
-            Lynn 会在用户授权后自动准备 llama.cpp、模型文件和本地 OpenAI 端点，MIMO 保持兜底。
+            Lynn 会在用户授权后自动准备 llama.cpp、模型文件和本地 OpenAI 端点。
           </div>
         </div>
         <span className={`${styles['pv-local-qwen-state']} ${endpointRunning ? styles['ready'] : ''}`}>
@@ -212,6 +240,36 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           后台任务：{status.job.status}{status.job.log_file ? ` · ${status.job.log_file}` : ''}
         </div>
       )}
+      {jobRunning && progress && (
+        <div className={styles['pv-local-qwen-progress']}>
+          <div className={styles['pv-local-qwen-progress-row']}>
+            <span>{progress.phase || '准备本地模型'}</span>
+            {progressPercent !== null && <strong>{progressPercent.toFixed(0)}%</strong>}
+          </div>
+          {progressPercent !== null && (
+            <div className={styles['pv-local-qwen-progress-track']} aria-label="本地模型准备进度">
+              <div
+                className={styles['pv-local-qwen-progress-bar']}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          )}
+          {(progress.downloaded || progress.total || progress.speed || progress.eta) && (
+            <div className={styles['pv-local-qwen-progress-meta']}>
+              {progress.downloaded && progress.total && <span>{progress.downloaded} / {progress.total}</span>}
+              {progress.speed && <span>{progress.speed}</span>}
+              {progress.eta && <span>剩余 {progress.eta}</span>}
+            </div>
+          )}
+          {progress.tail && progress.tail.length > 0 && (
+            <div className={styles['pv-local-qwen-progress-tail']}>
+              {progress.tail.slice(-3).map((line, idx) => (
+                <div key={`${idx}-${line}`}>{line}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className={styles['pv-local-qwen-actions']}>
         <button
@@ -221,7 +279,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         >
           {hardwareBlocked ? '硬件不建议本地启用' : endpointRunning ? '重新检查并启用' : '授权安装并启用'}
         </button>
-        <button className={styles['pv-verify-connection-btn']} onClick={loadStatus} disabled={loading}>
+        <button className={styles['pv-verify-connection-btn']} onClick={() => loadStatus(false)} disabled={loading}>
           刷新状态
         </button>
         <button className={styles['pv-verify-connection-btn']} onClick={registerOnly}>

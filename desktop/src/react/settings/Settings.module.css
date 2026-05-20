@@ -2985,6 +2985,76 @@ a.about-link:hover {
     overflow-wrap: anywhere;
 }
 
+.pv-local-qwen-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 9px;
+    border: 1px solid var(--overlay-light);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+}
+
+.pv-local-qwen-progress-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.74rem;
+    color: var(--text);
+}
+
+.pv-local-qwen-progress-row strong {
+    font-size: 0.74rem;
+    color: var(--accent);
+    font-weight: 650;
+}
+
+.pv-local-qwen-progress-track {
+    height: 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--overlay-light);
+}
+
+.pv-local-qwen-progress-bar {
+    height: 100%;
+    min-width: 2px;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width 0.25s ease;
+}
+
+.pv-local-qwen-progress-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+
+.pv-local-qwen-progress-meta span {
+    display: inline-flex;
+    min-height: 20px;
+    align-items: center;
+    padding: 0 7px;
+    border-radius: var(--radius-sm);
+    background: var(--overlay-light);
+}
+
+.pv-local-qwen-progress-tail {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 64px;
+    overflow: hidden;
+    color: var(--text-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 0.64rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
 .pv-local-qwen-actions {
     display: flex;
     flex-wrap: wrap;

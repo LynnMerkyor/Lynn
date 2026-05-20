@@ -52,6 +52,102 @@ function parseJson(text) {
   return null;
 }
 
+function readLogTail(file, maxBytes = 96 * 1024) {
+  if (!file || !fs.existsSync(file)) return "";
+  try {
+    const stat = fs.statSync(file);
+    const size = Math.min(stat.size, maxBytes);
+    const fd = fs.openSync(file, "r");
+    const buffer = Buffer.alloc(size);
+    fs.readSync(fd, buffer, 0, size, Math.max(0, stat.size - size));
+    fs.closeSync(fd);
+    return buffer.toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
+function parseDownloadProgress(text) {
+  const chunks = text.split(/\r|\n/).map((line) => line.trim()).filter(Boolean);
+  const downloadRegex = /Downloading\s+\[[^\]]+\]:\s*(\d{1,3})%\|[^|]*\|\s*([^/\s]+)\/([^\s]+)\s*\[([^<\]]+)<([^,\]]+),\s*([^\]]+)\]/;
+  for (let i = chunks.length - 1; i >= 0; i -= 1) {
+    const match = chunks[i].match(downloadRegex);
+    if (!match) continue;
+    return {
+      phase: "下载模型（ModelScope）",
+      source: "modelscope",
+      percent: Math.max(0, Math.min(100, Number(match[1]))),
+      downloaded: match[2],
+      total: match[3],
+      elapsed: match[4],
+      eta: match[5],
+      speed: match[6],
+      message: chunks[i].replace(/\s+/g, " "),
+    };
+  }
+  return null;
+}
+
+function parseJobProgress(job) {
+  if (!job?.log_file) return null;
+  const text = readLogTail(job.log_file);
+  if (!text) return null;
+  const chunks = text.split(/\r|\n/).map((line) => line.trim()).filter(Boolean);
+  const tail = chunks
+    .filter((line) => !line.startsWith("Downloading [") || /100%\|/.test(line))
+    .slice(-8);
+  const download = parseDownloadProgress(text);
+  if (download) return { ...download, tail };
+
+  let phase = "准备本地模型";
+  let percent = null;
+  let source = null;
+  if (/installing llama\.cpp|Installing llama\.cpp|Pouring llama\.cpp/i.test(text)) {
+    phase = "安装 llama.cpp";
+    percent = 10;
+  }
+  if (/downloading via Lynn CDN/i.test(text)) {
+    phase = "下载模型（Lynn CDN）";
+    source = "lynn-cdn";
+    percent = 25;
+  }
+  if (/downloading via ModelScope/i.test(text)) {
+    phase = "连接 ModelScope 下载";
+    source = "modelscope";
+    percent = 25;
+  }
+  if (/Running llama\.cpp smoke|smoke/i.test(text)) {
+    phase = "验证本地模型";
+    percent = 88;
+  }
+  if (/starting llama\.cpp|server started|llama-server/i.test(text) && /smoke/i.test(text)) {
+    phase = "启动本地端点";
+    percent = 94;
+  }
+  if (job.status === "succeeded") {
+    phase = "本地模型已就绪";
+    percent = 100;
+  }
+  if (job.status === "failed") {
+    phase = "准备失败";
+  }
+  return {
+    phase,
+    source,
+    percent,
+    tail,
+    message: tail[tail.length - 1] || phase,
+  };
+}
+
+function decorateJob(job) {
+  if (!job) return null;
+  return {
+    ...job,
+    progress: parseJobProgress(job),
+  };
+}
+
 async function plan(variant = "imatrix") {
   const bootstrap = bootstrapPath();
   const state = defaultState();
@@ -112,7 +208,7 @@ export function createLocalQwen35Route(engine) {
 
   route.get("/local-qwen35-9b/status", async (c) => {
     const status = await plan();
-    return c.json({ ...status, job });
+    return c.json({ ...status, job: decorateJob(job) });
   });
 
   route.post("/local-qwen35-9b/setup", async (c) => {
@@ -125,7 +221,7 @@ export function createLocalQwen35Route(engine) {
         message: "客户端必须在用户授权后传 authorized:true，才会安装、下载或启动本地模型。",
       }, 403);
     }
-    if (job?.status === "running") return c.json({ ok: true, already_running: true, job }, 202);
+    if (job?.status === "running") return c.json({ ok: true, already_running: true, job: decorateJob(job) }, 202);
 
     const bootstrap = bootstrapPath();
     const state = defaultState();
@@ -186,7 +282,7 @@ export function createLocalQwen35Route(engine) {
         stderr_tail: stderr.slice(-4000),
       };
     });
-    return c.json({ ok: true, job }, 202);
+    return c.json({ ok: true, job: decorateJob(job) }, 202);
   });
 
   route.post("/local-qwen35-9b/register", async (c) => {

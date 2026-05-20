@@ -350,8 +350,13 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _stable_cwd() -> str:
+    """Use a directory that will not disappear if the app bundle is replaced."""
+    return str(Path.home())
+
+
 def _run_checked(cmd: list[str], *, env: dict[str, str] | None = None) -> None:
-    subprocess.run(cmd, cwd=str(ROOT), env=env, check=True)
+    subprocess.run(cmd, cwd=_stable_cwd(), env=env, check=True)
 
 
 def _start_server(env_file: Path, pid_file: Path, log_file: Path) -> dict[str, Any]:
@@ -365,7 +370,7 @@ def _start_server(env_file: Path, pid_file: Path, log_file: Path) -> dict[str, A
     log_handle = log_file.open("ab")
     proc = subprocess.Popen(
         ["bash", "-lc", shell],
-        cwd=str(ROOT),
+        cwd=_stable_cwd(),
         stdout=log_handle,
         stderr=subprocess.STDOUT,
         start_new_session=True,
