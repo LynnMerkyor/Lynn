@@ -27,17 +27,18 @@ describe('Local Qwen provider UX guards', () => {
     const source = read('server/routes/local-qwen35.js');
     expect(source).toContain('qwen36-27b-q4km-imatrix');
     expect(source).toContain('qwen36-35b-a3b-q4km-imatrix');
-    expect(source).toContain('GPQA 78% naive / 81.25% excl_pf');
+    expect(source).toContain('MMLU100 93.0%');
+    expect(source).toContain('R6000 66 tok/s');
+    expect(source).toContain('GPQA50 78% / 81.25% excl_pf');
     expect(source).toContain('工具调用待测');
-    expect(source).toContain('R6000 TPS 待测');
+    expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-27B-GGUF-imatrix');
     expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix');
   });
 
   it('makes advanced local models actionable instead of passive cards', () => {
     const source = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
-    expect(source).toContain('选择已有 GGUF');
-    expect(source).toContain('产物准备中');
-    expect(source).toContain('下载页');
+    expect(source).toContain('选择本机 GGUF');
+    expect(source).toContain('下载/查看');
     expect(source).toContain('chooseGgufModel');
   });
 
@@ -62,6 +63,10 @@ describe('Local Qwen provider UX guards', () => {
     expect(bridge).toContain('resolveBridgeOwnerModel');
     expect(bridge).toContain('brain_default_for_bridge');
     expect(bridge).toContain('owner bridge model pinned to Brain default');
+    expect(bridge).toContain('"weather"');
+    expect(bridge).toContain('"stock_market"');
+    expect(bridge).toContain('"live_news"');
+    expect(bridge).toContain('"sports_score"');
   });
 
   it('uses platform-stable status dots instead of emoji status icons', () => {

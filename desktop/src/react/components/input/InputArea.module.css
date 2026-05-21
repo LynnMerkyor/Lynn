@@ -635,8 +635,8 @@
     display: flex;
     align-items: center;
     min-width: 0;
-    max-width: min(220px, 22vw);
-    flex: 0 1 190px;
+    max-width: min(180px, 18vw);
+    flex: 0 1 auto;
 }
 
 .model-pill {
@@ -687,11 +687,18 @@
 
 .model-pill-name {
     min-width: 0;
-    max-width: 148px;
+    max-width: 112px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text);
+}
+
+.model-pill-local-state {
+    flex-shrink: 0;
+    font-size: 0.64rem;
+    color: var(--text-muted);
+    line-height: 1;
 }
 
 .model-pill-meta {

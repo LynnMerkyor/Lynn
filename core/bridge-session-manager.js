@@ -59,20 +59,23 @@ function resolveBridgeOwnerModel(availableModels, ownerModelId, ownerProvider) {
   }
 
   // External bridges (WeChat/Telegram/etc.) should stay on the stable Brain
-  // route even when the foreground chat is temporarily switched to local 9B.
-  // Local 9B is great for the main app, but bridge messages are latency- and
-  // tool-sensitive and should not inherit local runtime experiments by default.
-  if (currentModel && !requestedLocal && !isLocalQwen35Model(currentModel, ownerProvider)) {
-    return { model: currentModel, reason: "agent_chat" };
+  // route instead of inheriting whatever the foreground chat is testing.
+  // Bridge messages are latency- and tool-sensitive: weather, stock, news and
+  // WeChat replies must keep the full tool chain even when the app chat is on
+  // local 9B or a lightweight provider.
+  const brainModel = findModel(availableModels, BRAIN_DEFAULT_MODEL_ID, BRAIN_PROVIDER_ID)
+    || availableModels.find(model => model?.provider === BRAIN_PROVIDER_ID);
+
+  if (brainModel) {
+    return {
+      model: brainModel,
+      reason: brainModel === currentModel ? "agent_chat_brain" : "brain_default_for_bridge",
+    };
   }
 
-  const brainModel = findModel(availableModels, BRAIN_DEFAULT_MODEL_ID, BRAIN_PROVIDER_ID)
-    || availableModels.find(model => model?.provider === BRAIN_PROVIDER_ID)
-    || currentModel;
-
   return {
-    model: brainModel,
-    reason: brainModel === currentModel ? "agent_chat_local_fallback_unavailable" : "brain_default_for_bridge",
+    model: currentModel,
+    reason: "brain_default_for_bridge_unavailable",
   };
 }
 
@@ -302,7 +305,16 @@ export class BridgeSessionManager {
         const bridgeTools = bridgeReadOnly
           ? baseTools.filter(t => READ_ONLY_BUILTIN_TOOLS.includes(t.name))
           : baseTools;
-        const safeCustomNames = ["search_memory", "web_search", "web_fetch", "present_files"];
+        const safeCustomNames = [
+          "search_memory",
+          "web_search",
+          "web_fetch",
+          "weather",
+          "stock_market",
+          "live_news",
+          "sports_score",
+          "present_files",
+        ];
         const bridgeCustomTools = bridgeReadOnly
           ? (baseCustomTools || []).filter(t => safeCustomNames.includes(t.name))
           : baseCustomTools;

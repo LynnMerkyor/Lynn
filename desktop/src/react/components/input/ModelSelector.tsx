@@ -25,6 +25,9 @@ interface SelectorModel {
   metaLabel?: string;
 }
 
+const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
+const LOCAL_QWEN35_MODEL_ID = 'qwen35-9b-q4km-imatrix';
+
 function formatProviderLabel(provider?: string): string {
   if (!provider) return '';
   return provider
@@ -32,6 +35,15 @@ function formatProviderLabel(provider?: string): string {
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function isLocalQwen35(model?: SelectorModel | null): boolean {
+  return model?.provider === LOCAL_QWEN35_PROVIDER_ID && model?.id === LOCAL_QWEN35_MODEL_ID;
+}
+
+function compactPillModelName(model?: SelectorModel | null, role?: string | null): string {
+  if (isLocalQwen35(model)) return 'Qwen3.5-9B';
+  return normalizeDisplayModelName(model, { role, purpose: 'chat' });
 }
 
 function modelMetaLine(model?: SelectorModel, role?: string | null): string {
@@ -56,23 +68,52 @@ function modelMetaLine(model?: SelectorModel, role?: string | null): string {
   return parts.join(' · ');
 }
 
-export function ModelSelector({ models, disabled }: { models: SelectorModel[]; disabled?: boolean }) {
+export function ModelSelector({
+  models,
+  disabled,
+  localQwenRunning = false,
+  localQwenLoading = false,
+}: {
+  models: SelectorModel[];
+  disabled?: boolean;
+  localQwenRunning?: boolean;
+  localQwenLoading?: boolean;
+}) {
   const { t } = useI18n();
   const agentYuan = useStore((s) => s.agentYuan) || 'lynn';
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const visibleModels = useMemo(() => collapseBrainModelChoices(models), [models]);
+  const visibleModels = useMemo(() => {
+    const priority = (model: SelectorModel) => {
+      if (isLocalQwen35(model)) return 0;
+      if (model.isCurrent) return 1;
+      if (model.provider === LOCAL_QWEN35_PROVIDER_ID) return 2;
+      return 10;
+    };
+    return [...collapseBrainModelChoices(models)].sort((a, b) => {
+      const byPriority = priority(a) - priority(b);
+      if (byPriority !== 0) return byPriority;
+      return compactPillModelName(a, agentYuan).localeCompare(compactPillModelName(b, agentYuan));
+    });
+  }, [agentYuan, models]);
 
   const current = visibleModels.find(m => m.isCurrent);
   const hasSwitchableModels = visibleModels.filter(m => !m.locked).length > 1;
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
+    const mouseHandler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', mouseHandler);
+    document.addEventListener('keydown', keyHandler);
+    return () => {
+      document.removeEventListener('mousedown', mouseHandler);
+      document.removeEventListener('keydown', keyHandler);
+    };
   }, [open]);
 
   const switchModel = useCallback(async (modelId: string, provider?: string) => {
@@ -106,9 +147,35 @@ export function ModelSelector({ models, disabled }: { models: SelectorModel[]; d
     return groups;
   }, [visibleModels, current]);
 
-  const groupKeys = Object.keys(grouped);
+  const groupKeys = Object.keys(grouped).sort((a, b) => {
+    const rank = (provider: string) => {
+      if (provider === LOCAL_QWEN35_PROVIDER_ID) return 0;
+      if (provider === current?.provider) return 1;
+      if (!provider) return 9;
+      return 5;
+    };
+    const byRank = rank(a) - rank(b);
+    if (byRank !== 0) return byRank;
+    return normalizeDisplayProviderLabel(a).localeCompare(normalizeDisplayProviderLabel(b));
+  });
   const hasMultipleProviders = groupKeys.length > 1 || (groupKeys.length === 1 && groupKeys[0] !== '');
   const currentMeta = modelMetaLine(current, agentYuan);
+  const currentIsLocalQwen35 = isLocalQwen35(current);
+  const localQwenStatusClass = localQwenRunning
+    ? styles['model-pill-status-dot-running']
+    : localQwenLoading
+      ? styles['model-pill-status-dot-loading']
+      : styles['model-pill-status-dot-offline'];
+  const localQwenTitle = localQwenRunning
+    ? '本地 Qwen3.5-9B 正在运行 · Q4_K_M imatrix · 32K'
+    : localQwenLoading
+      ? '本地 Qwen3.5-9B 正在启动 · Q4_K_M imatrix · 32K'
+      : '本地 Qwen3.5-9B 已选择，尚未启动';
+  const localQwenInlineState = localQwenRunning
+    ? null
+    : localQwenLoading
+      ? '启动中'
+      : '未启动';
 
   return (
     <div className={`${styles['model-selector']}${open ? ` ${styles.open}` : ''}`} ref={ref}>
@@ -118,10 +185,14 @@ export function ModelSelector({ models, disabled }: { models: SelectorModel[]; d
           e.stopPropagation();
           if (!disabled && hasSwitchableModels) setOpen(!open);
         }}
-        title={currentMeta || current?.id || ''}
+        title={currentIsLocalQwen35 ? localQwenTitle : (currentMeta || current?.id || '')}
       >
-        <span className={styles['model-pill-name']}>{normalizeDisplayModelName(current, { role: agentYuan, purpose: 'chat' }) || t('model.unknown') || '...'}</span>
-        {currentMeta && <span className={styles['model-pill-meta']}>{currentMeta}</span>}
+        {currentIsLocalQwen35 && <span className={`${styles['model-pill-status-dot']} ${localQwenStatusClass}`} aria-hidden="true" />}
+        <span className={styles['model-pill-name']}>{compactPillModelName(current, agentYuan) || t('model.unknown') || '...'}</span>
+        {currentIsLocalQwen35 && localQwenInlineState && (
+          <span className={styles['model-pill-local-state']}>{localQwenInlineState}</span>
+        )}
+        {currentMeta && !currentIsLocalQwen35 && <span className={styles['model-pill-meta']}>{currentMeta}</span>}
         {hasSwitchableModels && <span className={styles['model-arrow']}>▾</span>}
       </button>
       {open && hasSwitchableModels && (
@@ -131,7 +202,9 @@ export function ModelSelector({ models, disabled }: { models: SelectorModel[]; d
             return (
               <div key={provider || '__none'}>
                 {hasMultipleProviders && (
-                  <div className={styles['model-group-header']}>{normalizeDisplayProviderLabel(provider) || '—'}</div>
+                  <div className={styles['model-group-header']}>
+                    {provider === LOCAL_QWEN35_PROVIDER_ID ? '本地模型' : normalizeDisplayProviderLabel(provider) || '—'}
+                  </div>
                 )}
                 {items.map(m => {
                   const meta = modelMetaLine(m);

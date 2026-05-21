@@ -31,7 +31,7 @@
  *   - Phase 2 自动 download 会校验 sha256 + size,失败 fallback CDN/HF 镜像
  */
 
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -47,12 +47,19 @@ const DEFAULT_CONFIG = Object.freeze({
   modelId: "qwen3.5-9b-q4km-imatrix",
   modelFileName: "qwen3.5-9b-q4km-imatrix.gguf",
   modelExpectedSize: 5_300_000_000, // ~5.3 GB
-  // server 启动参数(memory: 9B Spark sm_121 sweep verified baseline 是 ceiling)
+  // Product default: one comfortable 32K local slot. llama.cpp splits context
+  // across parallel slots, so keep -np/--parallel at 1 for the local-first UX.
   serverArgs: [
-    "-ngl", "99",
-    "-np", "8",
-    "-cb",
-    "-c", "65536",
+    "--ctx-size", "32768",
+    "--threads", "4",
+    "--parallel", "1",
+    "--n-gpu-layers", "999",
+    "-a", "qwen35-9b-q4km-imatrix",
+    "--jinja",
+    // Keep Qwen3.5 thinking-on by default; this is the measured high-quality
+    // path. UI must surface thinking progress instead of silently waiting.
+    "--reasoning", "auto",
+    "--metrics",
     "--host", "127.0.0.1",
   ],
   // port 分配
@@ -240,6 +247,23 @@ class LlamaCppManager {
 
   // ── Server spawn ──
 
+  binarySupportsFlag(flag) {
+    try {
+      const out = spawnSync(this.binaryPath, ["--help"], { encoding: "utf8", timeout: 2500 });
+      return `${out.stdout || ""}\n${out.stderr || ""}`.includes(flag);
+    } catch {
+      return false;
+    }
+  }
+
+  buildServerArgs() {
+    const args = [...this.config.serverArgs];
+    if (args.includes("--metrics") && !this.binarySupportsFlag("--metrics")) {
+      return args.filter((arg) => arg !== "--metrics");
+    }
+    return args;
+  }
+
   async spawnServer() {
     if (this.stopped) return;
     if (this.child) {
@@ -257,7 +281,7 @@ class LlamaCppManager {
 
     const args = [
       "-m", this.modelPath,
-      ...this.config.serverArgs,
+      ...this.buildServerArgs(),
       "--port", String(port),
     ];
 

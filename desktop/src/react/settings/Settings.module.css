@@ -26,7 +26,7 @@
 }
 
 .settings-nav {
-    width: 160px;
+    width: 190px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -75,8 +75,10 @@
 .settings-main {
     flex: 1;
     overflow-y: auto;
-    padding: 0 var(--space-xl) var(--space-xl);
-    max-width: 640px;
+    padding: 0 clamp(24px, 3.4vw, 64px) 52px;
+    max-width: 1920px;
+    width: 100%;
+    margin: 0 auto;
 }
 
 
@@ -2682,18 +2684,23 @@ a.about-link:hover {
    Provider Tab — 双栏布局（新）
    ======================================== */
 .pv-layout {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
     gap: 0;
-    height: 520px;
+    height: min(900px, calc(100vh - 132px));
+    min-height: 650px;
+    width: 100%;
+    max-width: none;
+    margin: 0 auto;
     background: var(--bg-card, var(--bg));
     border: 1px solid var(--overlay-light);
-    border-radius: var(--radius-md);
-    box-shadow: 0 1px 4px var(--shadow);
+    border-radius: 22px;
+    box-shadow: 0 18px 48px rgba(34, 31, 25, 0.07), 0 1px 0 rgba(255, 255, 255, 0.72) inset;
 }
 
 .pv-list {
-    width: 210px;
-    flex-shrink: 0;
+    width: auto;
+    min-width: 0;
     border-right: 1px solid var(--overlay-light);
     display: flex;
     flex-direction: column;
@@ -2715,7 +2722,7 @@ a.about-link:hover {
     font-size: 0.62rem;
     font-weight: 600;
     color: var(--accent);
-    padding: 8px 12px 2px;
+    padding: 10px 24px 4px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     opacity: 0.75;
@@ -2724,15 +2731,15 @@ a.about-link:hover {
 .pv-list-item {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
+    gap: 10px;
+    padding: 9px 20px;
     background: none;
     border: none;
     border-left: 2px solid transparent;
     cursor: pointer;
     text-align: left;
     font-family: inherit;
-    font-size: 0.82rem;
+    font-size: 0.9rem;
     color: var(--text-secondary);
     transition: all 0.15s;
     width: 100%;
@@ -2882,38 +2889,45 @@ a.about-link:hover {
 .pv-local-qwen-panel {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 20px;
     margin-bottom: var(--space-md);
-    padding: 14px;
+    padding: clamp(24px, 2.6vw, 42px);
     border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    border-radius: 22px;
+    background:
+        radial-gradient(circle at 4% 0%, rgba(255, 255, 255, 0.86), transparent 36%),
+        color-mix(in srgb, var(--accent) 6%, var(--bg-card));
 }
 
 .pv-local-qwen-main {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
     align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-md);
+    gap: 24px;
 }
 
 .pv-local-qwen-kicker {
-    font-size: 0.72rem;
+    font-size: 0.78rem;
     font-weight: 600;
     color: var(--accent);
     margin-bottom: 4px;
 }
 
 .pv-local-qwen-title {
-    font-size: 0.95rem;
+    max-width: 920px;
+    font-size: clamp(1.6rem, 2vw, 2.2rem);
     font-weight: 650;
     color: var(--text);
     margin-bottom: 4px;
+    line-height: 1.14;
+    word-break: keep-all;
+    overflow-wrap: normal;
 }
 
 .pv-local-qwen-desc {
-    font-size: 0.76rem;
-    line-height: 1.45;
+    max-width: 920px;
+    font-size: 0.98rem;
+    line-height: 1.55;
     color: var(--text-secondary);
 }
 
@@ -2946,12 +2960,30 @@ a.about-link:hover {
 .pv-local-qwen-facts span {
     display: inline-flex;
     align-items: center;
-    min-height: 22px;
-    padding: 0 8px;
+    min-height: 25px;
+    padding: 0 10px;
     border-radius: var(--radius-sm);
     background: var(--overlay-light);
     color: var(--text-muted);
     font-size: 0.7rem;
+}
+
+.pv-local-qwen-benefits {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.pv-local-qwen-benefits span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 11px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 600;
 }
 
 .pv-local-qwen-hardware {
@@ -2974,9 +3006,219 @@ a.about-link:hover {
     color: #a06a22;
 }
 
+.pv-local-qwen-upgrade {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--overlay-light);
+}
+
+.pv-local-qwen-upgrade-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--bg-card) 78%, var(--accent) 5%);
+    border: 1px solid var(--overlay-light);
+}
+
+.pv-local-qwen-upgrade-card:hover {
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--overlay-light));
+    background: color-mix(in srgb, var(--bg-card) 72%, var(--accent) 8%);
+}
+
+.pv-local-qwen-upgrade-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.pv-local-qwen-upgrade-card strong {
+    font-size: 0.82rem;
+    color: var(--text);
+}
+
+.pv-local-qwen-upgrade-card em {
+    font-size: 0.7rem;
+    font-style: normal;
+    color: var(--accent);
+}
+
+.pv-local-qwen-upgrade-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pv-local-qwen-upgrade-card .pv-local-qwen-upgrade-metrics span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 9%, var(--bg-card) 86%);
+    color: var(--text);
+    font-size: 0.69rem;
+    line-height: 1;
+}
+
+.pv-local-qwen-upgrade-card span {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
+.pv-local-qwen-upgrade-card a {
+    flex-shrink: 0;
+    color: var(--accent);
+    font-size: 0.72rem;
+    text-decoration: none;
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+    border-radius: 999px;
+    padding: 7px 11px;
+    background: color-mix(in srgb, var(--accent) 4%, var(--bg-card));
+}
+
+.pv-local-qwen-upgrade-actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+@media (max-width: 760px) {
+    .pv-local-qwen-upgrade-card {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .pv-local-qwen-upgrade-actions {
+        justify-content: flex-start;
+        width: 100%;
+    }
+}
+
+.pv-local-qwen-upgrade-action-btn,
+.pv-local-qwen-upgrade-pending {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 0 11px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.pv-local-qwen-upgrade-action-btn {
+    border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
+    cursor: pointer;
+}
+
+.pv-local-qwen-upgrade-action-btn:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+.pv-local-qwen-upgrade-pending {
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--overlay-light) 80%, transparent);
+}
+
+.pv-local-qwen-advanced {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--overlay-light);
+}
+
+.pv-local-qwen-advanced-toggle {
+    align-self: flex-start;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.pv-local-qwen-advanced-toggle:hover {
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-card));
+}
+
+.pv-local-qwen-advanced-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid var(--overlay-light);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--bg-card) 86%, var(--accent) 4%);
+}
+
+.pv-local-qwen-advanced-panel strong {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text);
+    font-size: 0.84rem;
+}
+
+.pv-local-qwen-advanced-panel span {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    line-height: 1.5;
+}
+
+.pv-local-qwen-advanced-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
 .pv-local-qwen-error {
     font-size: 0.72rem;
     color: var(--danger, #b44040);
+}
+
+.pv-local-qwen-action-status {
+    padding: 9px 11px;
+    border-radius: var(--radius-sm);
+    font-size: 0.74rem;
+    line-height: 1.45;
+    border: 1px solid var(--overlay-light);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+}
+
+.pv-local-qwen-action-status-info {
+    border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
+    background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
+}
+
+.pv-local-qwen-action-status-success {
+    color: var(--success, #3a7d44);
+    border-color: rgba(90, 170, 153, 0.28);
+    background: rgba(90, 170, 153, 0.08);
+}
+
+.pv-local-qwen-action-status-error {
+    color: var(--danger, #b44040);
+    border-color: rgba(180, 64, 64, 0.25);
+    background: rgba(180, 64, 64, 0.07);
 }
 
 .pv-local-qwen-job {
@@ -3058,19 +3300,18 @@ a.about-link:hover {
 .pv-local-qwen-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
 }
 
 .pv-local-qwen-primary {
-    min-height: 30px;
+    min-height: 36px;
 }
 
 /* ── 右栏 ── */
 .pv-detail {
-    flex: 1;
     min-width: 0;
-    padding: var(--space-md);
+    padding: clamp(28px, 2.5vw, 44px);
     overflow-y: auto;
     background: transparent;
 }
@@ -3078,6 +3319,20 @@ a.about-link:hover {
 .pv-detail-inner {
     max-width: none;
     width: 100%;
+}
+
+@media (max-width: 1180px) {
+    .pv-layout {
+        grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
+    }
+
+    .pv-local-qwen-main {
+        grid-template-columns: 1fr;
+    }
+
+    .pv-local-qwen-state {
+        width: fit-content;
+    }
 }
 
 .pv-detail-header {
@@ -3088,10 +3343,11 @@ a.about-link:hover {
 }
 
 .pv-detail-title {
-    font-size: 1rem;
+    font-size: clamp(1.5rem, 2.5vw, 2rem);
     font-weight: 600;
     margin: 0;
     color: var(--text);
+    line-height: 1.25;
 }
 
 .pv-empty {

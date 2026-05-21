@@ -23,6 +23,17 @@ function defaultState() {
   };
 }
 
+function expectedModelPath(state = defaultState(), variant = "imatrix") {
+  const filename = variant === "imatrix"
+    ? "Qwen3.5-9B-Q4_K_M-imatrix.gguf"
+    : "Qwen3.5-9B-Q4_K_M.gguf";
+  return path.join(state.modelRoot, "q4_k_m", filename);
+}
+
+function endpointRoot(state = defaultState()) {
+  return `http://${state.host}:${state.port}`;
+}
+
 function bootstrapPath() {
   const explicit = process.env.LYNN_QWEN35_BOOTSTRAP;
   if (explicit && fs.existsSync(explicit)) return explicit;
@@ -42,12 +53,279 @@ function commonArgs(state, variant = "imatrix") {
   ];
 }
 
+function readPidFile(file) {
+  try {
+    const raw = fs.readFileSync(file, "utf8").trim();
+    const pid = Number(raw.split(/\s+/)[0]);
+    return Number.isFinite(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function isPidAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function listenerPids(port) {
+  try {
+    const { stdout } = await execFileAsync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], {
+      timeout: 2_000,
+      maxBuffer: 32 * 1024,
+    });
+    return stdout
+      .split(/\s+/)
+      .map((value) => Number(value))
+      .filter((pid) => Number.isFinite(pid) && pid > 0);
+  } catch (err) {
+    const stdout = String(err?.stdout || "");
+    return stdout
+      .split(/\s+/)
+      .map((value) => Number(value))
+      .filter((pid) => Number.isFinite(pid) && pid > 0);
+  }
+}
+
+async function qwen35ProcessPids(state = defaultState()) {
+  const modelPath = expectedModelPath(state, "imatrix");
+  try {
+    const { stdout } = await execFileAsync("ps", ["-axo", "pid=,command="], {
+      timeout: 2_000,
+      maxBuffer: 512 * 1024,
+    });
+    return stdout
+      .split("\n")
+      .map((line) => {
+        const match = line.trim().match(/^(\d+)\s+(.+)$/);
+        if (!match) return null;
+        const pid = Number(match[1]);
+        const command = match[2] || "";
+        if (!Number.isFinite(pid) || pid <= 0) return null;
+        if (!/llama-server(?:\s|$)/.test(command) && !/llama-server\b/.test(command)) return null;
+        const mentionsPort = command.includes(`--port ${state.port}`) || command.includes(`:${state.port}`);
+        const mentionsModel = command.includes(modelPath)
+          || /Qwen3\.5-9B-Q4_K_M/i.test(command)
+          || /qwen35-9b-q4km/i.test(command);
+        return mentionsPort || mentionsModel ? pid : null;
+      })
+      .filter((pid) => Number.isFinite(pid) && pid > 0);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 900);
+  try {
+    return await fetch(url, { signal: controller.signal, ...options });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchJsonMaybe(url, timeoutMs = 900) {
+  try {
+    const res = await fetchWithTimeout(url, { timeoutMs });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function fetchJsonStatus(url, timeoutMs = 900) {
+  try {
+    const res = await fetchWithTimeout(url, { timeoutMs });
+    const text = await res.text().catch(() => "");
+    let json = null;
+    if (text) {
+      try { json = JSON.parse(text); } catch {}
+    }
+    return { ok: res.ok, status: res.status, json };
+  } catch {
+    return { ok: false, status: 0, json: null };
+  }
+}
+
+async function fetchTextMaybe(url, timeoutMs = 900) {
+  try {
+    const res = await fetchWithTimeout(url, { timeoutMs });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
+function summarizeSlots(slots) {
+  if (!Array.isArray(slots)) return null;
+  const summaries = slots.map((slot) => ({
+    id: slot.id ?? slot.id_slot ?? null,
+    state: slot.state ?? null,
+    prompt_tokens: slot.n_prompt_tokens_processed ?? slot.n_prompt_tokens ?? slot.prompt_tokens ?? null,
+    predicted_tokens: slot.n_decoded ?? slot.n_predict ?? slot.predicted_tokens ?? null,
+    progress: typeof slot.progress === "number" ? slot.progress : null,
+  }));
+  return {
+    total: summaries.length,
+    busy: summaries.filter((slot) => slot.state && !String(slot.state).toLowerCase().includes("idle")).length,
+    slots: summaries.slice(0, 8),
+  };
+}
+
+function parseMetrics(text) {
+  if (!text) return null;
+  const pick = (patterns) => {
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const value = Number(match[1]);
+        if (Number.isFinite(value)) return value;
+      }
+    }
+    return null;
+  };
+  return {
+    prompt_tokens_total: pick([
+      /(?:^|\n)llamacpp:prompt_tokens_total\s+([0-9.]+)/,
+      /(?:^|\n).*prompt.*tokens.*total\s+([0-9.]+)/i,
+    ]),
+    predicted_tokens_total: pick([
+      /(?:^|\n)llamacpp:tokens_predicted_total\s+([0-9.]+)/,
+      /(?:^|\n).*predicted.*tokens.*total\s+([0-9.]+)/i,
+      /(?:^|\n).*completion.*tokens.*total\s+([0-9.]+)/i,
+    ]),
+    requests_total: pick([
+      /(?:^|\n)llamacpp:requests_total\s+([0-9.]+)/,
+      /(?:^|\n).*requests.*total\s+([0-9.]+)/i,
+    ]),
+  };
+}
+
+async function runtimeDetails() {
+  const state = defaultState();
+  const root = endpointRoot(state);
+  const pidFromFile = readPidFile(state.pidFile);
+  const [listenPids, commandPids] = await Promise.all([
+    listenerPids(state.port),
+    qwen35ProcessPids(state),
+  ]);
+  const pids = [...new Set([...listenPids, ...commandPids])];
+  const pid = pidFromFile && pids.includes(pidFromFile) ? pidFromFile : (pids[0] || pidFromFile || null);
+  const [healthStatus, models, slots, metricsText] = await Promise.all([
+    fetchJsonStatus(`${root}/health`),
+    fetchJsonMaybe(`${root}/v1/models`),
+    fetchJsonMaybe(`${root}/slots`),
+    fetchTextMaybe(`${root}/metrics`),
+  ]);
+  const health = healthStatus.ok ? healthStatus.json : null;
+  const endpointRunning = healthStatus.ok === true;
+  const endpointLoading = !endpointRunning && pids.length > 0
+    && (healthStatus.status === 503 || /loading/i.test(String(healthStatus.json?.error?.message || "")));
+  const modelIds = Array.isArray(models?.data)
+    ? models.data.map((item) => item?.id).filter(Boolean)
+    : [];
+  return {
+    base_url: `${root}/v1`,
+    gui_url: root,
+    pid,
+    pid_file: state.pidFile,
+    process_alive: isPidAlive(pid),
+    listen_pids: listenPids,
+    command_pids: commandPids,
+    pids,
+    endpoint_running: endpointRunning,
+    endpoint_loading: endpointLoading,
+    health_status: healthStatus.status,
+    health,
+    model_ids: modelIds,
+    slots: summarizeSlots(slots),
+    metrics: parseMetrics(metricsText),
+    metrics_available: !!metricsText,
+    checked_at: new Date().toISOString(),
+  };
+}
+
+function fastReadyPlan(runtime, variant = "imatrix") {
+  const state = defaultState();
+  const totalMemoryGib = os.totalmem() / (1024 ** 3);
+  const isMac = process.platform === "darwin";
+  const chip = isMac ? os.cpus()?.[0]?.model || "Apple Silicon" : os.cpus()?.[0]?.model || null;
+  const comfortable = isMac && totalMemoryGib >= 24;
+  const usable = totalMemoryGib >= 8;
+  const ctxSize = comfortable ? 32768 : 8192;
+  const parallel = comfortable ? 1 : 1;
+  const modelPath = expectedModelPath(state, variant);
+  return {
+    ok: true,
+    provider_id: PROVIDER_ID,
+    model: MODEL_ID,
+    plan: {
+      decision: runtime.endpoint_running ? "ready" : runtime.endpoint_loading ? "loading" : "inspect",
+      base_url: runtime.base_url,
+      observed: {
+        endpoint_running: runtime.endpoint_running === true,
+        endpoint_loading: runtime.endpoint_loading === true,
+        gguf: fs.existsSync(modelPath) ? modelPath : null,
+        llama_server: (runtime.endpoint_running || runtime.endpoint_loading || runtime.process_alive) ? "llama-server" : null,
+        homebrew_available: null,
+      },
+      hardware: {
+        can_enable: usable,
+        recommendation: usable ? "recommended" : "not_recommended",
+        chip,
+        total_memory_gib: totalMemoryGib,
+        gpus: [],
+        recommended_runtime: {
+          name: comfortable ? "mac_unified_32k" : "local_qwen35_compact",
+          label: comfortable ? "Mac 32K 舒适档" : "8K 入门档",
+          ctx_size: ctxSize,
+          parallel,
+          gpu_layers: isMac ? 999 : 0,
+        },
+        warnings: usable ? [] : ["当前内存低于 8GB，不建议启用本地 9B。"],
+        blockers: [],
+        upgrade_options: [
+          ...(totalMemoryGib >= 24 ? [{
+            id: "qwen36-27b-q4km-imatrix",
+            label: "Qwen3.6-27B Q4_K_M imatrix",
+            profile: "24GB+ · 速度优先",
+            metrics: ["MMLU100 93.0%", "GPQA 跑测中", "R6000 66 tok/s", "工具调用待测"],
+            reason: "更高吞吐的 27B 路线，适合 24GB+ 设备优先试跑。",
+            modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.6-27B-GGUF-imatrix",
+            download_label: "下载/查看",
+          }] : []),
+          ...(totalMemoryGib >= 24 ? [{
+            id: "qwen36-35b-a3b-q4km-imatrix",
+            label: "Qwen3.6-35B-A3B Q4_K_M imatrix",
+            profile: "24GB+ · 能力优先",
+            metrics: ["MMLU 待补", "GPQA50 78% / 81.25% excl_pf", "R6000 TPS 待补", "工具调用待测"],
+            reason: "能力优先的 MoE 路线，适合复杂推理和长上下文；速度低于 27B。",
+            modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
+            download_label: "下载/查看",
+          }] : []),
+        ],
+      },
+      actions: [],
+    },
+  };
+}
+
 function parseJson(text) {
   try { return JSON.parse(text); } catch {}
-  const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    try { return JSON.parse(text.slice(start, end + 1)); } catch {}
+  if (end <= 0) return null;
+  for (let start = text.lastIndexOf("{", end); start >= 0; start = text.lastIndexOf("{", start - 1)) {
+    try {
+      return JSON.parse(text.slice(start, end + 1));
+    } catch {}
   }
   return null;
 }
@@ -185,7 +463,7 @@ async function plan(variant = "imatrix") {
   }
 }
 
-function registerProvider(engine) {
+async function registerProvider(engine, options = {}) {
   const state = defaultState();
   engine.providerRegistry.saveProvider(PROVIDER_ID, {
     display_name: "本地 Qwen3.5-9B",
@@ -199,7 +477,25 @@ function registerProvider(engine) {
       maxOutput: 32768,
     }],
   });
-  return engine.syncModelsAndRefresh?.();
+  await engine.syncModelsAndRefresh?.();
+  await engine.refreshAvailableModels?.();
+  if (options.activate) {
+    await engine.setPendingModel?.(MODEL_ID, PROVIDER_ID);
+  }
+  return true;
+}
+
+function isReadyPlan(planData) {
+  const observed = planData?.plan?.observed || planData?.observed || {};
+  return observed.endpoint_running === true
+    && !!observed.gguf
+    && !!observed.llama_server;
+}
+
+function isProviderRegistered(engine) {
+  const raw = engine.providerRegistry?.getAllProvidersRaw?.() || {};
+  const entry = raw[PROVIDER_ID];
+  return !!entry?.models?.some?.((m) => (typeof m === "object" ? m.id : m) === MODEL_ID);
 }
 
 export function createLocalQwen35Route(engine) {
@@ -207,8 +503,12 @@ export function createLocalQwen35Route(engine) {
   let job = null;
 
   route.get("/local-qwen35-9b/status", async (c) => {
-    const status = await plan();
-    return c.json({ ...status, job: decorateJob(job) });
+    const runtime = await runtimeDetails();
+    const status = (runtime.endpoint_running || runtime.endpoint_loading || runtime.process_alive)
+      ? fastReadyPlan(runtime)
+      : await plan();
+    const registered = isProviderRegistered(engine);
+    return c.json({ ...status, registered_provider: registered, runtime, job: decorateJob(job) });
   });
 
   route.post("/local-qwen35-9b/setup", async (c) => {
@@ -262,13 +562,18 @@ export function createLocalQwen35Route(engine) {
       const result = parseJson(stdout);
       let registered = false;
       let registerError = null;
-      if (code === 0) {
+      const finalStatus = code === 0 && !isReadyPlan(result?.status)
+        ? await plan(body.variant || "imatrix").catch(() => null)
+        : null;
+      if (code === 0 && (isReadyPlan(result?.status) || isReadyPlan(finalStatus))) {
         try {
-          await registerProvider(engine);
+          await registerProvider(engine, { activate: true });
           registered = true;
         } catch (err) {
           registerError = err.message;
         }
+      } else if (code === 0) {
+        registerError = "endpoint_not_ready";
       }
       job = {
         ...job,
@@ -286,8 +591,55 @@ export function createLocalQwen35Route(engine) {
   });
 
   route.post("/local-qwen35-9b/register", async (c) => {
-    await registerProvider(engine);
+    const status = await plan();
+    if (!isReadyPlan(status)) {
+      return c.json({
+        ok: false,
+        error: "endpoint_not_ready",
+        message: "本地 9B 端点还没有通过 /health 和 /v1/models 就绪检查，暂不注册。",
+        status,
+      }, 409);
+    }
+    await registerProvider(engine, { activate: true });
     return c.json({ ok: true, provider_id: PROVIDER_ID, model: MODEL_ID });
+  });
+
+  route.post("/local-qwen35-9b/stop", async (c) => {
+    const state = defaultState();
+    const before = await runtimeDetails();
+    const targets = new Set([
+      ...before.pids,
+      readPidFile(state.pidFile),
+    ].filter((pid) => Number.isFinite(pid) && pid > 0));
+
+    for (const pid of targets) {
+      try { process.kill(pid, "SIGTERM"); } catch {}
+    }
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    let remaining = [...new Set([
+      ...await listenerPids(state.port),
+      ...await qwen35ProcessPids(state),
+    ])];
+    if (remaining.length > 0) {
+      for (const pid of remaining) {
+        try { process.kill(pid, "SIGKILL"); } catch {}
+      }
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      remaining = [...new Set([
+        ...await listenerPids(state.port),
+        ...await qwen35ProcessPids(state),
+      ])];
+    }
+    try { fs.rmSync(state.pidFile, { force: true }); } catch {}
+
+    return c.json({
+      ok: remaining.length === 0,
+      stopped_pids: [...targets],
+      remaining_pids: remaining,
+      before,
+      runtime: await runtimeDetails(),
+    });
   });
 
   return route;
