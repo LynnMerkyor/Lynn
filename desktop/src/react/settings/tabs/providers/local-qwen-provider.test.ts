@@ -88,4 +88,13 @@ describe('Local Qwen provider UX guards', () => {
     expect(manager).toContain('"--reasoning", "auto"');
     expect(launcher).toContain('--jinja --reasoning auto');
   });
+
+  it('streams local 9B warmup feedback before the first model token', () => {
+    const route = read('server/routes/chat.js');
+    expect(route).toContain('startLocalQwen35WarmupFeedback');
+    expect(route).toContain('本地 9B 已接到任务，正在连接本机 llama.cpp。');
+    expect(route).toContain('首次启动会加载 9B 权重');
+    expect(route).toContain('正在预热本地 32K 上下文');
+    expect(route).toContain('还在等待首字');
+  });
 });

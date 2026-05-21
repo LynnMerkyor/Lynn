@@ -1575,6 +1575,22 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     emitStreamEvent(sessionPath, ss, { type: "thinking_delta", delta: text });
   }
 
+  function startLocalQwen35WarmupFeedback(sessionPath, ss) {
+    const timers = [];
+    const push = (delayMs, text) => {
+      timers.push(setTimeout(() => {
+        if (!ss?._turnClosed && ss?.isStreaming) emitLocalThinkingDelta(sessionPath, ss, `${text}\n`);
+      }, delayMs));
+    };
+    emitLocalThinkingDelta(sessionPath, ss, "本地 9B 已接到任务，正在连接本机 llama.cpp。\n");
+    push(4_000, "首次启动会加载 9B 权重，通常需要 30-45 秒。");
+    push(15_000, "正在预热本地 32K 上下文，并等待模型吐出首字。");
+    push(30_000, "还在等待首字，Lynn 会继续保持会话，不会让这轮请求卡死。");
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }
+
   function closeLocalQwen35DirectTurn(sessionPath, ss, opts = {}) {
     clearTurnTimers(ss);
     if (ss.isThinking) {
@@ -1617,6 +1633,8 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     let assistantText = "";
     let reasoningText = "";
     let usage = null;
+    const stopWarmupFeedback = startLocalQwen35WarmupFeedback(sessionPath, ss);
+    let firstModelDeltaSeen = false;
     const res = await fetch(LOCAL_QWEN35_DIRECT_ENDPOINT, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1661,11 +1679,19 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         const delta = payload?.choices?.[0]?.delta || {};
         const reasoningDelta = delta.reasoning_content || delta.reasoning || delta.thinking || "";
         if (reasoningDelta) {
+          if (!firstModelDeltaSeen) {
+            firstModelDeltaSeen = true;
+            stopWarmupFeedback();
+          }
           reasoningText += reasoningDelta;
           emitLocalThinkingDelta(sessionPath, ss, reasoningDelta);
         }
         const contentDelta = delta.content || "";
         if (contentDelta) {
+          if (!firstModelDeltaSeen) {
+            firstModelDeltaSeen = true;
+            stopWarmupFeedback();
+          }
           if (ss.isThinking) {
             ss.isThinking = false;
             emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
@@ -1679,6 +1705,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         break;
       }
     }
+    stopWarmupFeedback();
     if (!assistantText.trim() && reasoningText.trim()) {
       const fallback = extractVisibleAnswerFromReasoning(reasoningText)
         || "本地 9B 已完成思考，但没有生成可见正文。请再试一次，或增加输出预算。";
