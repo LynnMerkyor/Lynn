@@ -15,6 +15,7 @@ import { clearChat } from '../stores/agent-actions';
 import { sendPrompt } from '../stores/prompt-actions';
 import type { Agent } from '../types';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
+import { ProviderStatusBadge } from './ProviderStatusBadge';
 import styles from './Welcome.module.css';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- store setState 回调 (s: any) */
@@ -53,7 +54,7 @@ function randomWelcome(agentName: string, yuan: string): string {
 }
 
 function WelcomeInner() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const welcomeVisible = useStore(s => s.welcomeVisible);
   const agents = useStore(s => s.agents);
   const agentName = useStore(s => s.agentName);
@@ -68,20 +69,18 @@ function WelcomeInner() {
   const deskJianContent = useStore(s => s.deskJianContent);
   const automationCount = useStore(s => s.automationCount);
   const sessions = useStore(s => s.sessions);
-
-  // 当日摘要
   const daySummary = useMemo(() => {
     const parts: string[] = [];
     const text = String(deskJianContent || '');
     const todos = text.match(/^- \[ \] /gm);
     const done = text.match(/^- \[[xX]\] /gm);
-    const isZh = String((window as any).i18n?.locale || '').startsWith('zh');
+    const isZh = (locale || '').startsWith('zh');
     if (todos?.length) parts.push(isZh ? `${todos.length} 项待办` : `${todos.length} pending`);
     if (done?.length) parts.push(isZh ? `${done.length} 项已完成` : `${done.length} done`);
     if (automationCount > 0) parts.push(isZh ? `${automationCount} 个自动任务` : `${automationCount} automations`);
     if (sessions.length > 0) parts.push(isZh ? `${sessions.length} 个对话` : `${sessions.length} chats`);
     return parts.join(' · ');
-  }, [deskJianContent, automationCount, sessions.length]);
+  }, [deskJianContent, automationCount, sessions.length, locale]);
 
   const displayAgent = useMemo(() => {
     const sel = selectedAgentId || currentAgentId;
@@ -120,6 +119,7 @@ function WelcomeInner() {
       />
       <p className={styles.welcomeText}>{greeting}</p>
       {daySummary && <p className={styles.welcomeDaySummary}>{daySummary}</p>}
+      <ProviderStatusBadge />
       <QuickActions displayName={displayName} selectedFolder={selectedFolder} />
       <FolderPicker
         selectedFolder={selectedFolder}

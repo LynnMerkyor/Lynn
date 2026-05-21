@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { OnboardingFetch } from '../onboarding-actions';
 import { StepContainer } from '../onboarding-ui';
 
-type OnboardingTrack = 'quick' | 'advanced';
+type OnboardingTrack = 'quick' | 'quick-local' | 'advanced';
 
 interface CompatSkillsStepProps {
   preview: boolean;

@@ -3,9 +3,15 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { loadModels as loadModelsAction, saveModel as saveModelAction } from '../onboarding-actions';
+import { loadModels as loadModelsAction, saveModel as saveModelAction, saveProvider } from '../onboarding-actions';
 import type { OnboardingFetch } from '../onboarding-actions';
 import { StepContainer } from '../onboarding-ui';
+import {
+  BRAIN_PROVIDER_ID,
+  BRAIN_PROVIDER_BASE_URL,
+  BRAIN_PROVIDER_API,
+  BRAIN_DEFAULT_MODEL_ID,
+} from '../../../../../shared/brain-provider.js';
 
 interface ModelStepProps {
   preview: boolean;
@@ -83,6 +89,25 @@ export function ModelStep({
     }
   }, [preview, selectedModel, onboardingFetch, fetchedModels, providerName, goToStep, showError]);
 
+  // ── Error fallback: jump straight to Brain v2 quick provider ──
+  const onUseBrainFallback = useCallback(async () => {
+    if (preview) { goToStep(4); return; }
+    try {
+      await saveProvider({
+        onboardingFetch,
+        providerName: BRAIN_PROVIDER_ID,
+        providerUrl: BRAIN_PROVIDER_BASE_URL,
+        apiKey: '',
+        providerApi: BRAIN_PROVIDER_API,
+        defaultModelId: BRAIN_DEFAULT_MODEL_ID,
+      });
+      goToStep(4);
+    } catch (err) {
+      console.error('[onboarding] brain fallback save failed:', err);
+      showError(t('onboarding.error'));
+    }
+  }, [preview, onboardingFetch, goToStep, showError]);
+
   return (
     <StepContainer>
       <h1 className="onboarding-title">{t('onboarding.model.title')}</h1>
@@ -107,7 +132,7 @@ export function ModelStep({
                 style={{ marginTop: 8, fontSize: '0.8rem' }}
                 onClick={() => { modelsLoadedFor.current = ''; loadModels(); }}
               >
-                {t('onboarding.model.retry') || '重试'}
+                {t('onboarding.model.retry')}
               </button>
             )}
           </div>
@@ -125,6 +150,25 @@ export function ModelStep({
           ))
         )}
       </div>
+
+      {modelError && (
+        <div className="model-error-fallback">
+          <div className="model-error-fallback-title">
+            {t('onboarding.model.errorFallbackTitle', { provider: providerName })}
+          </div>
+          <div className="model-error-fallback-subtitle">
+            {t('onboarding.model.errorFallbackSubtitle')}
+          </div>
+          <div className="model-error-fallback-actions">
+            <button className="ob-btn ob-btn-secondary" onClick={() => goToStep(2)}>
+              {t('onboarding.model.errorBack')}
+            </button>
+            <button className="ob-btn ob-btn-primary" onClick={() => void onUseBrainFallback()}>
+              {t('onboarding.model.errorBrain')}
+            </button>
+          </div>
+        </div>
+      )}
 
       <p className="ob-settings-hint">{t('onboarding.model.settingsHint')}</p>
 

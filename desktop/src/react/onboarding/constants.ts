@@ -42,6 +42,19 @@ export const QUICK_START_PROVIDER = {
   defaultModelId: BRAIN_DEFAULT_MODEL_ID,
 } as const;
 
+/**
+ * Quick-local track wires the user straight into the bundled llama.cpp
+ * provider with the Lynn-default Qwen 3.5 9B Q4_K_M-imatrix model. The
+ * actual download / verification / spawn lifecycle is owned by
+ * LocalModelDownloadStep + main-process LlamaCppManager + ModelDownloader.
+ */
+export const QUICK_LOCAL_PROVIDER = {
+  providerName: 'llamacpp',
+  providerUrl: 'http://127.0.0.1:18099/v1',
+  providerApi: 'openai-completions',
+  defaultModelId: 'qwen3.5-9b-q4km-imatrix',
+} as const;
+
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   { value: BRAIN_PROVIDER_ID, label: BRAIN_DEFAULT_DISPLAY_NAME, labelZh: BRAIN_DEFAULT_DISPLAY_NAME, url: QUICK_START_PROVIDER.providerUrl, api: QUICK_START_PROVIDER.providerApi, defaultModelId: QUICK_START_PROVIDER.defaultModelId, noKey: true, group: 'standard' },
   { value: 'llamacpp',    label: 'Lynn Local (9B Q4_K_M)', labelZh: 'Lynn 本地 (9B Q4_K_M)', url: 'http://127.0.0.1:18099/v1', api: 'openai-completions', local: true, noKey: true, defaultModelId: 'qwen3.5-9b-q4km-imatrix', group: 'standard' },

@@ -19,6 +19,7 @@ const { setIpcSenderValidator, wrapIpcHandler, wrapIpcOn } = require('./ipc-wrap
 const { normalizeConfiguredShortcut, registerFirstAvailableGlobalShortcut } = require("./shortcut-policy.cjs");
 const { VoiceTunnelManager } = require("./voice-tunnel-manager.cjs");
 const { LlamaCppManager } = require("./llamacpp-manager.cjs");
+const { ModelDownloader, DEFAULT_SOURCES: MODEL_DOWNLOADER_SOURCES } = require("./model-downloader.cjs");
 
 // macOS/Linux: Electron 从 Dock/Finder 启动时 PATH 只有系统默认值，
 // Homebrew、npm global 等路径全部丢失。用登录 shell 解析完整 PATH。
@@ -1598,11 +1599,10 @@ function createSettingsWindow(target, theme) {
   markPreferredPrimaryWindow("settings");
 
   settingsWindow = new BrowserWindow({
-    width: 720,
-    height: 700,
-    minWidth: 720,
-    maxWidth: 720,
-    minHeight: 500,
+    width: 1500,
+    height: 920,
+    minWidth: 1180,
+    minHeight: 720,
     title: "Settings",
     ...titleBarOpts({ x: 16, y: 14 }),
     backgroundColor: THEME_BG[theme || _browserViewerTheme] || THEME_BG["warm-paper"],
@@ -3376,6 +3376,20 @@ wrapIpcHandler("voice-tunnel-status", () => (voiceTunnel ? voiceTunnel.getStatus
 //   - ENV LYNN_SKIP_LLAMACPP=1 → 完全禁用
 //   - LYNN_LLAMACPP_BIN / LYNN_LLAMACPP_MODEL 可覆盖路径(dev / 自定义安装)
 let llamacpp = null;
+let lastLlamacppState = { status: "idle" };
+let activeModelDownloader = null;
+let lastModelDownloadState = { state: "idle" };
+
+function broadcastToAllWindows(channel, payload) {
+  try {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send(channel, payload);
+    }
+  } catch (err) {
+    console.warn(`[broadcast:${channel}]`, err?.message || err);
+  }
+}
+
 function startLlamacpp() {
   if (llamacpp) return;
   try {
@@ -3386,13 +3400,8 @@ function startLlamacpp() {
         else console.log(msg);
       },
       onState: (state) => {
-        try {
-          for (const win of BrowserWindow.getAllWindows()) {
-            if (!win.isDestroyed()) win.webContents.send("llamacpp-state", state);
-          }
-        } catch (err) {
-          console.warn("[llamacpp] state broadcast failed:", err?.message || err);
-        }
+        lastLlamacppState = state;
+        broadcastToAllWindows("llamacpp:state", state);
       },
     });
     void llamacpp.start();
@@ -3408,7 +3417,121 @@ function stopLlamacpp() {
   }
   llamacpp = null;
 }
+// Legacy channel kept for backward compat.
 wrapIpcHandler("llamacpp-status", () => (llamacpp ? llamacpp.getStatus() : { stopped: true }));
+
+// New unified state channel — returns latest cached llamacpp manager state
+// plus pending downloader state so renderer can hydrate in one round-trip.
+wrapIpcHandler("llamacpp:state", () => ({
+  manager: llamacpp ? llamacpp.getStatus() : { ...lastLlamacppState, stopped: true },
+  download: { ...lastModelDownloadState },
+}));
+
+// Trigger model download. Returns immediately; progress streams via
+// "llamacpp:download-progress" / "llamacpp:download-state" channels.
+wrapIpcHandler("llamacpp:start-download", async () => {
+  if (activeModelDownloader && (lastModelDownloadState.state === "downloading"
+      || lastModelDownloadState.state === "verifying")) {
+    return { ok: true, alreadyRunning: true };
+  }
+  const downloader = new ModelDownloader();
+  activeModelDownloader = downloader;
+  downloader.on("progress", (s) => {
+    lastModelDownloadState = s;
+    broadcastToAllWindows("llamacpp:download-progress", s);
+  });
+  downloader.on("state", (s) => {
+    lastModelDownloadState = s;
+    broadcastToAllWindows("llamacpp:download-state", s);
+  });
+  downloader.on("log", (level, msg) => {
+    if (level === "error") console.error(msg);
+    else if (level === "warn") console.warn(msg);
+    else console.log(msg);
+  });
+  // fire-and-forget; resolve completion drives llamacpp restart
+  downloader.start().then((result) => {
+    if (result?.ok) {
+      // model on disk — bounce llamacpp so it picks it up
+      try { stopLlamacpp(); } catch {}
+      // small delay so the manager teardown fully completes before restart
+      setTimeout(() => { try { startLlamacpp(); } catch {} }, 600);
+    }
+    if (activeModelDownloader === downloader) activeModelDownloader = null;
+  }).catch((err) => {
+    console.warn("[model-downloader] failed:", err?.message || err);
+    if (activeModelDownloader === downloader) activeModelDownloader = null;
+  });
+  return { ok: true, alreadyRunning: false };
+});
+
+wrapIpcHandler("llamacpp:pause-download", () => {
+  if (!activeModelDownloader) return { ok: false, reason: "not-running" };
+  try { activeModelDownloader.pause(); } catch (err) {
+    return { ok: false, reason: String(err?.message || err) };
+  }
+  return { ok: true };
+});
+
+wrapIpcHandler("llamacpp:cancel-download", () => {
+  if (!activeModelDownloader) {
+    lastModelDownloadState = { state: "idle" };
+    return { ok: true, reason: "not-running" };
+  }
+  try { activeModelDownloader.cancel(); } catch (err) {
+    return { ok: false, reason: String(err?.message || err) };
+  }
+  activeModelDownloader = null;
+  return { ok: true };
+});
+
+wrapIpcHandler("llamacpp:sources", () => ({
+  sources: MODEL_DOWNLOADER_SOURCES.map((s) => ({ id: s.id, label: s.label })),
+}));
+
+function stopManagedQwen35LlamaServer() {
+  const pidFile = path.join(os.homedir(), ".lynn-engine", "run", "qwen35-9b-q4km-imatrix.pid");
+  const pids = new Set();
+  try {
+    const pid = Number(fs.readFileSync(pidFile, "utf8").trim());
+    if (Number.isFinite(pid) && pid > 0) pids.add(pid);
+  } catch {}
+  try {
+    const stdout = execFileSync("ps", ["-axo", "pid=,command="], {
+      encoding: "utf8",
+      timeout: 2000,
+      maxBuffer: 512 * 1024,
+    });
+    for (const line of stdout.split("\n")) {
+      const match = line.trim().match(/^(\d+)\s+(.+)$/);
+      if (!match) continue;
+      const pid = Number(match[1]);
+      const cmd = match[2] || "";
+      if (!Number.isFinite(pid) || pid <= 0) continue;
+      if (!/llama-server\b/.test(cmd)) continue;
+      if (
+        cmd.includes("--port 18099")
+        || /qwen35-9b-q4km/i.test(cmd)
+        || /Qwen3\.5-9B-Q4_K_M/i.test(cmd)
+      ) {
+        pids.add(pid);
+      }
+    }
+  } catch {}
+  if (pids.size === 0) {
+    try { fs.rmSync(pidFile, { force: true }); } catch {}
+    return;
+  }
+  for (const pid of pids) {
+    try { process.kill(pid, "SIGTERM"); } catch {}
+  }
+  setTimeout(() => {
+    for (const pid of pids) {
+      try { process.kill(pid, 0); process.kill(pid, "SIGKILL"); } catch {}
+    }
+  }, 5000);
+  try { fs.rmSync(pidFile, { force: true }); } catch {}
+}
 
 // ── App 生命周期 ──
 app.whenReady().then(async () => {
@@ -3640,6 +3763,7 @@ app.on("before-quit", async (event) => {
 
   // 2026-05-20 — 停 llama.cpp local 推理(SIGTERM → 5s SIGKILL)
   stopLlamacpp();
+  stopManagedQwen35LlamaServer();
 
   // 立刻隐藏所有窗口，让用户感觉已退出，server 清理在后台进行
   for (const win of BrowserWindow.getAllWindows()) {

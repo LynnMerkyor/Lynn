@@ -65,7 +65,7 @@ function TutorialCard({ icon, title, desc }: {
   );
 }
 
-type OnboardingTrack = 'quick' | 'advanced';
+type OnboardingTrack = 'quick' | 'quick-local' | 'advanced';
 
 interface TutorialStepProps {
   preview: boolean;
@@ -75,7 +75,7 @@ interface TutorialStepProps {
 
 export function TutorialStep({ preview, showError, track }: TutorialStepProps) {
   const [finishing, setFinishing] = useState(false);
-  const isQuickTrack = track === 'quick';
+  const isQuickTrack = track === 'quick' || track === 'quick-local';
 
   const onFinish = useCallback(async () => {
     if (preview) { window.close(); return; }

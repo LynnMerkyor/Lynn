@@ -7,7 +7,7 @@ import { saveUserName } from '../onboarding-actions';
 import type { OnboardingFetch } from '../onboarding-actions';
 import { StepContainer } from '../onboarding-ui';
 
-type OnboardingTrack = 'quick' | 'advanced';
+type OnboardingTrack = 'quick' | 'quick-local' | 'advanced';
 
 interface NameStepProps {
   preview: boolean;
@@ -17,13 +17,22 @@ interface NameStepProps {
   track: OnboardingTrack;
 }
 
+const LOCAL_MODEL_DOWNLOAD_STEP = 8;
+
+function nextStepForTrack(track: OnboardingTrack): number {
+  if (track === 'quick-local') return LOCAL_MODEL_DOWNLOAD_STEP;
+  if (track === 'advanced') return 2;
+  return 5;
+}
+
 export function NameStep({ preview, onboardingFetch, goToStep, showError, track }: NameStepProps) {
   const [userName, setUserName] = useState('');
-  const isQuickTrack = track === 'quick';
+  const isQuickFlow = track === 'quick' || track === 'quick-local';
 
   const onNext = useCallback(async () => {
+    const target = nextStepForTrack(track);
     if (preview) {
-      goToStep(isQuickTrack ? 5 : 2);
+      goToStep(target);
       return;
     }
 
@@ -32,17 +41,17 @@ export function NameStep({ preview, onboardingFetch, goToStep, showError, track 
       if (trimmed) {
         await saveUserName(onboardingFetch, trimmed);
       }
-      goToStep(isQuickTrack ? 5 : 2);
+      goToStep(target);
     } catch (err) {
       console.error('[onboarding] save name failed:', err);
       showError(t('onboarding.error'));
     }
-  }, [goToStep, onboardingFetch, isQuickTrack, preview, showError, userName]);
+  }, [goToStep, onboardingFetch, preview, showError, track, userName]);
 
   return (
     <StepContainer>
       <h1 className="onboarding-title">{t('onboarding.name.title')}</h1>
-      <p className="onboarding-subtitle">{t(isQuickTrack ? 'onboarding.name.quickSubtitle' : 'onboarding.name.subtitle')}</p>
+      <p className="onboarding-subtitle">{t(isQuickFlow ? 'onboarding.name.quickSubtitle' : 'onboarding.name.subtitle')}</p>
       <input
         className="ob-input"
         type="text"
@@ -52,7 +61,7 @@ export function NameStep({ preview, onboardingFetch, goToStep, showError, track 
         onChange={e => setUserName(e.target.value)}
         autoComplete="off"
       />
-      {isQuickTrack && <p className="ob-step-note">{t('onboarding.name.quickHint')}</p>}
+      {isQuickFlow && <p className="ob-step-note">{t('onboarding.name.quickHint')}</p>}
       <div className="onboarding-actions">
         <button className="ob-btn ob-btn-secondary" onClick={() => goToStep(0)}>
           {t('onboarding.name.back')}
@@ -61,7 +70,7 @@ export function NameStep({ preview, onboardingFetch, goToStep, showError, track 
           className="ob-btn ob-btn-primary"
           onClick={onNext}
         >
-          {t(isQuickTrack ? 'onboarding.name.quickNext' : 'onboarding.name.next')}
+          {t(isQuickFlow ? 'onboarding.name.quickNext' : 'onboarding.name.next')}
         </button>
       </div>
     </StepContainer>

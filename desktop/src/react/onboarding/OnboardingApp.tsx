@@ -6,18 +6,27 @@ import { LocaleStep } from './steps/LocaleStep';
 import { NameStep } from './steps/NameStep';
 import { ProviderStep } from './steps/ProviderStep';
 import { ModelStep } from './steps/ModelStep';
+import { LocalModelDownloadStep } from './steps/LocalModelDownloadStep';
 import { ThemeStep } from './steps/ThemeStep';
 import { PermissionsStep } from './steps/PermissionsStep';
 import { CompatSkillsStep } from './steps/CompatSkillsStep';
 import { TutorialStep } from './steps/TutorialStep';
 import { BRAIN_PROVIDER_ID } from '../../../../shared/brain-provider.js';
+import { QUICK_LOCAL_PROVIDER } from './constants';
 
 interface OnboardingAppProps { preview: boolean; skipToTutorial: boolean }
 
-type OnboardingTrack = 'quick' | 'advanced';
+type OnboardingTrack = 'quick' | 'quick-local' | 'advanced';
 
+// Step indices:
+//   0 LocaleStep   1 NameStep   2 ProviderStep   3 ModelStep
+//   8 LocalModelDownloadStep (was "2.5" in spec; collapsed to int for setStep)
+//   4 ThemeStep   5 PermissionsStep   6 CompatSkillsStep   7 TutorialStep
+const LOCAL_MODEL_DOWNLOAD_STEP = 8;
 const QUICK_START_STEPS = [0, 1, 5, 6, 7] as const;
+const QUICK_LOCAL_STEPS = [0, 1, LOCAL_MODEL_DOWNLOAD_STEP, 5, 6, 7] as const;
 const ADVANCED_SETUP_STEPS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
+const ADVANCED_SETUP_LOCAL_STEPS = [0, 1, 2, LOCAL_MODEL_DOWNLOAD_STEP, 4, 5, 6, 7] as const;
 const ADVANCED_DEFAULT_STEPS = [0, 1, 2, 4, 5, 6, 7] as const;
 
 export function OnboardingApp({ preview, skipToTutorial }: OnboardingAppProps) {
@@ -54,7 +63,7 @@ export function OnboardingApp({ preview, skipToTutorial }: OnboardingAppProps) {
   }, []);
 
   const goToStep = useCallback((index: number) => {
-    if (index < 0 || index > 7) return;
+    if (index < 0 || index > LOCAL_MODEL_DOWNLOAD_STEP) return;
     setStepKey(k => k + 1);
     setStep(index);
   }, []);
@@ -118,11 +127,15 @@ export function OnboardingApp({ preview, skipToTutorial }: OnboardingAppProps) {
     })();
   }, []);
 
-  const progressSteps = useMemo(() => {
-    if (step === 0 && !track) return [] as number[];
-    return track === 'advanced'
-      ? [...(providerName === BRAIN_PROVIDER_ID ? ADVANCED_DEFAULT_STEPS : ADVANCED_SETUP_STEPS)]
-      : [...QUICK_START_STEPS];
+  const progressSteps = useMemo<number[]>(() => {
+    if (step === 0 && !track) return [];
+    if (track === 'quick-local') return [...QUICK_LOCAL_STEPS];
+    if (track === 'advanced') {
+      if (providerName === BRAIN_PROVIDER_ID) return [...ADVANCED_DEFAULT_STEPS];
+      if (providerName === QUICK_LOCAL_PROVIDER.providerName) return [...ADVANCED_SETUP_LOCAL_STEPS];
+      return [...ADVANCED_SETUP_STEPS];
+    }
+    return [...QUICK_START_STEPS];
   }, [providerName, step, track]);
 
   const progressIndex = progressSteps.indexOf(step);
@@ -185,7 +198,7 @@ export function OnboardingApp({ preview, skipToTutorial }: OnboardingAppProps) {
           track={track ?? 'advanced'}
         />
       )}
-      {step === 3 && providerName !== BRAIN_PROVIDER_ID && (
+      {step === 3 && providerName !== BRAIN_PROVIDER_ID && providerName !== QUICK_LOCAL_PROVIDER.providerName && (
         <ModelStep
           key={`step-3-${stepKey}`}
           preview={preview}
@@ -198,11 +211,23 @@ export function OnboardingApp({ preview, skipToTutorial }: OnboardingAppProps) {
           showError={showError}
         />
       )}
+      {step === LOCAL_MODEL_DOWNLOAD_STEP && (
+        <LocalModelDownloadStep
+          key={`step-local-${stepKey}`}
+          preview={preview}
+          onboardingFetch={onboardingFetch}
+          goToStep={goToStep}
+          showError={showError}
+          onProviderReady={onProviderReady}
+          nextStep={track === 'quick-local' ? 5 : 4}
+          backStep={track === 'quick-local' ? 1 : 2}
+        />
+      )}
       {step === 4 && (
         <ThemeStep
           key={`step-4-${stepKey}`}
           goToStep={goToStep}
-          backStep={providerName === BRAIN_PROVIDER_ID ? 2 : 3}
+          backStep={providerName === BRAIN_PROVIDER_ID ? 2 : (providerName === QUICK_LOCAL_PROVIDER.providerName ? LOCAL_MODEL_DOWNLOAD_STEP : 3)}
         />
       )}
       {step === 5 && (

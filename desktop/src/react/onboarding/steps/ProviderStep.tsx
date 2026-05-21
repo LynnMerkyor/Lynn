@@ -3,7 +3,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { PROVIDER_PRESETS, QUICK_START_PROVIDER } from '../constants';
+import { PROVIDER_PRESETS, QUICK_START_PROVIDER, QUICK_LOCAL_PROVIDER } from '../constants';
 import type { ProviderPreset } from '../constants';
 import {
   testConnection,
@@ -36,8 +36,10 @@ interface ProviderStepProps {
   goToStep: (index: number) => void;
   showError: (msg: string) => void;
   onProviderReady: (providerName: string, providerUrl: string, providerApi: string, apiKey: string) => void;
-  track: 'quick' | 'advanced';
+  track: 'quick' | 'quick-local' | 'advanced';
 }
+
+const LOCAL_MODEL_DOWNLOAD_STEP = 8;
 
 export function ProviderStep({
   preview, onboardingFetch, goToStep, showError, onProviderReady,
@@ -61,7 +63,11 @@ export function ProviderStep({
   const [customApi, setCustomApi] = useState('openai-completions');
 
   const isZh = i18n.locale?.startsWith('zh');
-  const isQuickTrack = track === 'quick';
+  // 'quick-local' is a sibling track that bypasses provider selection
+  // (LocaleStep → NameStep → LocalModelDownloadStep). If somehow we land
+  // here while track === 'quick-local', behave like the regular quick
+  // start (brain v2) — switching tracks mid-flow shouldn't crash the UI.
+  const isQuickTrack = track === 'quick' || track === 'quick-local';
   const siliconflowPreset = useMemo(
     () => PROVIDER_PRESETS.find((preset) => preset.value === QUICK_START_PROVIDER.providerName) || null,
     [],
@@ -175,6 +181,15 @@ export function ProviderStep({
       setConnectionTested(true);
       return true;
     }
+    // llama.cpp local provider: spawn lifecycle is managed by main process;
+    // skipping the network probe here avoids a noisy "ECONNREFUSED" before
+    // the user has downloaded the model. LocalModelDownloadStep owns the
+    // real readiness gate (waits for /health 200).
+    if (providerName === QUICK_LOCAL_PROVIDER.providerName) {
+      setTestStatus({ type: 'success', text: t('onboarding.provider.testSuccess') });
+      setConnectionTested(true);
+      return true;
+    }
     setTestStatus({ type: 'loading', text: t('onboarding.provider.testing') });
     try {
       const result = await testConnection({ onboardingFetch, providerName, providerUrl, providerApi, apiKey });
@@ -200,7 +215,17 @@ export function ProviderStep({
   }, [runConnectionTest]);
 
   // ── Next ──
+  // llamacpp selection in advanced track skips the model-listing step and
+  // routes through LocalModelDownloadStep. Saving the provider config is
+  // owned by that step (after the model is verified on disk), so we just
+  // hand off the provider identity and jump.
+  const usesLocalLlamacpp = providerName === QUICK_LOCAL_PROVIDER.providerName;
   const onNext = useCallback(async () => {
+    if (usesLocalLlamacpp && !isQuickTrack) {
+      onProviderReady(providerName, providerUrl, providerApi, apiKey);
+      goToStep(LOCAL_MODEL_DOWNLOAD_STEP);
+      return;
+    }
     const nextStep = isQuickTrack ? 5 : (usesBuiltInDefault ? 4 : 3);
     if (preview) { goToStep(nextStep); return; }
     try {
@@ -220,7 +245,7 @@ export function ProviderStep({
       console.error('[onboarding] save provider failed:', err);
       showError(t('onboarding.provider.testFailed'));
     }
-  }, [activePreset, apiKey, goToStep, isQuickTrack, onboardingFetch, onProviderReady, preview, providerApi, providerName, providerUrl, showError, usesBuiltInDefault]);
+  }, [activePreset, apiKey, goToStep, isQuickTrack, onboardingFetch, onProviderReady, preview, providerApi, providerName, providerUrl, showError, usesBuiltInDefault, usesLocalLlamacpp]);
 
   return (
     <StepContainer>

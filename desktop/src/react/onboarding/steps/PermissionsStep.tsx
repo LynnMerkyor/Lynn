@@ -8,7 +8,7 @@ import { saveHomeFolder } from '../onboarding-actions';
 import type { OnboardingFetch } from '../onboarding-actions';
 import { Multiline, StepContainer } from '../onboarding-ui';
 
-type OnboardingTrack = 'quick' | 'advanced';
+type OnboardingTrack = 'quick' | 'quick-local' | 'advanced';
 
 interface PermissionsStepProps {
   preview: boolean;
@@ -146,7 +146,10 @@ export function PermissionsStep({
 
   const notificationStatusKey = getNotificationStatusKey(notificationStatus, loadingStatus);
   const notificationStatusTone = getNotificationStatusTone(notificationStatus, loadingStatus);
-  const backStep = track === 'quick' ? 1 : 4;
+  // quick → NameStep (1)
+  // quick-local → LocalModelDownloadStep (8) (back path through Name lives there)
+  // advanced → ThemeStep (4)
+  const backStep = track === 'quick' ? 1 : track === 'quick-local' ? 8 : 4;
 
   return (
     <StepContainer>

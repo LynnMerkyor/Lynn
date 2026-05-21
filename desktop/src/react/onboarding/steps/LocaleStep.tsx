@@ -8,7 +8,7 @@ import { saveLocale } from '../onboarding-actions';
 import type { OnboardingFetch } from '../onboarding-actions';
 import { StepContainer, Multiline } from '../onboarding-ui';
 
-type OnboardingTrack = 'quick' | 'advanced';
+type OnboardingTrack = 'quick' | 'quick-local' | 'advanced';
 
 interface LocaleStepProps {
   preview: boolean;
@@ -80,6 +80,17 @@ export function LocaleStep({
           <span className="ob-track-title">{t('onboarding.welcome.quickTitle')}</span>
           <Multiline className="ob-track-desc" text={t('onboarding.welcome.quickDesc')} />
           <span className="ob-track-action">{t('onboarding.welcome.quickAction')}</span>
+        </button>
+
+        <button
+          className="ob-track-card"
+          disabled={!!submittingTrack}
+          onClick={() => handleSelectTrack('quick-local')}
+        >
+          <span className="ob-track-badge">Local First</span>
+          <span className="ob-track-title">{t('onboarding.welcome.localTitle')}</span>
+          <Multiline className="ob-track-desc" text={t('onboarding.welcome.localDesc')} />
+          <span className="ob-track-action">{t('onboarding.welcome.localAction')}</span>
         </button>
 
         <button
