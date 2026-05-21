@@ -13,6 +13,7 @@ import {
 import type { OnboardingFetch } from '../onboarding-actions';
 import { StepContainer, Multiline } from '../onboarding-ui';
 import { getBrainComplianceNote, getBrainUserNotice } from '../../../../../shared/brain-provider.js';
+import { useOnboardingI18n } from '../use-onboarding-i18n';
 
 // ── SVG Icons (local to this step) ──
 
@@ -45,6 +46,7 @@ export function ProviderStep({
   preview, onboardingFetch, goToStep, showError, onProviderReady,
   track,
 }: ProviderStepProps) {
+  const { t, locale } = useOnboardingI18n();
   // ── Provider state ──
   const [providerGroup, setProviderGroup] = useState<'standard' | 'coding-plan'>('standard');
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
@@ -63,7 +65,7 @@ export function ProviderStep({
   const [customUrl, setCustomUrl] = useState('');
   const [customApi, setCustomApi] = useState('openai-completions');
 
-  const isZh = i18n.locale?.startsWith('zh');
+  const isZh = (locale || (typeof i18n !== 'undefined' ? i18n.locale : '') || '').startsWith('zh');
   // 'quick-local' is a sibling track that bypasses provider selection
   // (LocaleStep → NameStep → LocalModelDownloadStep). If somehow we land
   // here while track === 'quick-local', behave like the regular quick
@@ -226,7 +228,7 @@ export function ProviderStep({
       setConnectionTested(false);
       return false;
     }
-  }, [preview, isQuickTrack, onboardingFetch, providerName, providerUrl, providerApi, apiKey]);
+  }, [preview, isQuickTrack, onboardingFetch, providerName, providerUrl, providerApi, apiKey, t]);
 
   // ── Test connection ──
   const onTest = useCallback(async () => {
@@ -264,7 +266,7 @@ export function ProviderStep({
       console.error('[onboarding] save provider failed:', err);
       showError(t('onboarding.provider.testFailed'));
     }
-  }, [activePreset, apiKey, goToStep, isQuickTrack, onboardingFetch, onProviderReady, preview, providerApi, providerName, providerUrl, showError, usesBuiltInDefault, usesLocalLlamacpp]);
+  }, [activePreset, apiKey, goToStep, isQuickTrack, onboardingFetch, onProviderReady, preview, providerApi, providerName, providerUrl, showError, t, usesBuiltInDefault, usesLocalLlamacpp]);
 
   return (
     <StepContainer>

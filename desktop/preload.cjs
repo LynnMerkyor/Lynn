@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld("hana", {
     return granted ? filePath : null;
   },
   getAvatarPath: (role) => ipcRenderer.invoke("get-avatar-path", role),
+  uploadAvatar: (role) => ipcRenderer.invoke("avatar:upload", role),
   getSplashInfo: () => ipcRenderer.invoke("get-splash-info"),
   reloadMainWindow: () => ipcRenderer.invoke("reload-main-window"),
   // Onboarding

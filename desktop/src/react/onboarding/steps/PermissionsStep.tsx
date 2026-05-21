@@ -7,6 +7,7 @@ import type { NotificationPermissionStatus } from '../../types';
 import { saveHomeFolder } from '../onboarding-actions';
 import type { OnboardingFetch } from '../onboarding-actions';
 import { Multiline, StepContainer } from '../onboarding-ui';
+import { useOnboardingI18n } from '../use-onboarding-i18n';
 
 type OnboardingTrack = 'quick' | 'quick-local' | 'advanced';
 
@@ -50,6 +51,7 @@ export function PermissionsStep({
   showError,
   track,
 }: PermissionsStepProps) {
+  const { t } = useOnboardingI18n();
   const [workspacePath, setWorkspacePath] = useState('');
   const [trustedRoots, setTrustedRoots] = useState<string[]>([]);
   const [notificationStatus, setNotificationStatus] = useState<NotificationPermissionStatus>('unsupported');
@@ -142,7 +144,7 @@ export function PermissionsStep({
     }
 
     setSaving(false);
-  }, [continueToTutorial, notificationStatus, onboardingFetch, preview, showError, trustedRoots, workspacePath]);
+  }, [continueToTutorial, notificationStatus, onboardingFetch, preview, showError, t, trustedRoots, workspacePath]);
 
   const notificationStatusKey = getNotificationStatusKey(notificationStatus, loadingStatus);
   const notificationStatusTone = getNotificationStatusTone(notificationStatus, loadingStatus);

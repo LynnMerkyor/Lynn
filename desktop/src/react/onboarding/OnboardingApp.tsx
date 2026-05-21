@@ -13,6 +13,7 @@ import { CompatSkillsStep } from './steps/CompatSkillsStep';
 import { TutorialStep } from './steps/TutorialStep';
 import { BRAIN_PROVIDER_ID } from '../../../../shared/brain-provider.js';
 import { QUICK_LOCAL_PROVIDER } from './constants';
+import { setOnboardingLocale } from './use-onboarding-i18n';
 
 interface OnboardingAppProps { preview: boolean; skipToTutorial: boolean }
 
@@ -71,6 +72,7 @@ export function OnboardingApp({ preview, skipToTutorial }: OnboardingAppProps) {
   const onLocaleChange = useCallback((loc: string) => {
     setLocale(loc);
     setI18nReady(false);
+    setOnboardingLocale(loc);
     requestAnimationFrame(() => setI18nReady(true));
   }, []);
 
@@ -116,6 +118,7 @@ export function OnboardingApp({ preview, skipToTutorial }: OnboardingAppProps) {
         setAgentName(name);
         await i18n.load(loc);
         i18n.defaultName = name;
+        setOnboardingLocale(loc);
         setI18nReady(true);
         try {
           const localPath = await window.hana.getAvatarPath?.('agent');

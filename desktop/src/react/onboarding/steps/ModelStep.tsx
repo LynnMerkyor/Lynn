@@ -12,6 +12,7 @@ import {
   BRAIN_PROVIDER_API,
   BRAIN_DEFAULT_MODEL_ID,
 } from '../../../../../shared/brain-provider.js';
+import { useOnboardingI18n } from '../use-onboarding-i18n';
 
 interface ModelStepProps {
   preview: boolean;
@@ -28,6 +29,7 @@ export function ModelStep({
   preview, onboardingFetch, providerName, providerUrl, providerApi, apiKey,
   goToStep, showError,
 }: ModelStepProps) {
+  const { t } = useOnboardingI18n();
   const [fetchedModels, setFetchedModels] = useState<{ id: string }[]>([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [modelSearch, setModelSearch] = useState('');
@@ -62,7 +64,7 @@ export function ModelStep({
       setModelLoading(msg);
       setModelError(true);
     }
-  }, [preview, onboardingFetch, providerName, providerUrl, providerApi, apiKey]);
+  }, [preview, onboardingFetch, providerName, providerUrl, providerApi, apiKey, t]);
 
   useEffect(() => {
     if (modelsLoadedFor.current === providerName) return;
@@ -87,7 +89,7 @@ export function ModelStep({
       console.error('[onboarding] save model failed:', err);
       showError(t('onboarding.error'));
     }
-  }, [preview, selectedModel, onboardingFetch, fetchedModels, providerName, goToStep, showError]);
+  }, [preview, selectedModel, onboardingFetch, fetchedModels, providerName, goToStep, showError, t]);
 
   // ── Error fallback: jump straight to Brain v2 quick provider ──
   const onUseBrainFallback = useCallback(async () => {
@@ -106,7 +108,7 @@ export function ModelStep({
       console.error('[onboarding] brain fallback save failed:', err);
       showError(t('onboarding.error'));
     }
-  }, [preview, onboardingFetch, goToStep, showError]);
+  }, [preview, onboardingFetch, goToStep, showError, t]);
 
   return (
     <StepContainer>

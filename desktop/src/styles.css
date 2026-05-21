@@ -4003,6 +4003,101 @@ html[data-platform="linux"] .onboarding {
     line-height: 1.4;
 }
 
+/* Interactive Tutorial (TutorialStep P2-2) */
+.tutorial-interactive {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin: 12px 0 8px;
+    max-width: 560px;
+}
+.tutorial-interactive-block {
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--bg-card, rgba(255,255,255,0.5));
+    border: 1px solid var(--border, rgba(0,0,0,0.08));
+}
+.tutorial-interactive-title {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+}
+.tutorial-interactive-desc {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-bottom: 10px;
+}
+.tutorial-preview-stream { display: flex; flex-direction: column; gap: 8px; }
+.tutorial-preview-bubble {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(var(--accent-rgb, 194,134,76), 0.06);
+    border: 1px dashed rgba(var(--accent-rgb, 194,134,76), 0.30);
+    font-size: 0.80rem;
+    color: var(--text);
+    line-height: 1.55;
+    min-height: 48px;
+}
+.tutorial-preview-caret {
+    display: inline-block;
+    margin-left: 2px;
+    animation: tutorial-caret 0.9s steps(2) infinite;
+    color: var(--accent, #c2864c);
+    font-weight: 700;
+}
+@keyframes tutorial-caret { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+.tutorial-preview-btn {
+    align-self: flex-start;
+    font-size: 0.78rem;
+    padding: 6px 14px;
+}
+.tutorial-preview-folder { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tutorial-preview-picked {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    word-break: break-all;
+}
+.tutorial-preview-sidebar-mock {
+    border: 1px solid var(--border, rgba(0,0,0,0.10));
+    border-radius: 8px;
+    overflow: hidden;
+    width: 220px;
+    background: var(--bg, #fff);
+}
+.tutorial-preview-sidebar-row {
+    padding: 8px 12px;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border, rgba(0,0,0,0.06));
+}
+.tutorial-preview-sidebar-row:last-child { border-bottom: none; }
+.tutorial-preview-sidebar-row.is-active {
+    background: rgba(var(--accent-rgb, 194,134,76), 0.10);
+    color: var(--text);
+    font-weight: 600;
+}
+
+/* Avatar upload row (NameStep P2-3) */
+.ob-avatar-upload-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 4px 0 12px;
+}
+.ob-avatar-upload-preview {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--border, rgba(0,0,0,0.10));
+}
+.ob-avatar-upload-btn {
+    font-size: 0.78rem;
+    padding: 6px 14px;
+}
+
 /* Provider more-providers toggle (ProviderStep P1-1) */
 .provider-more-toggle {
     align-self: center;

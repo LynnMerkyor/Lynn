@@ -1253,6 +1253,9 @@
       "quickSubtitle": "You can fill it in now, or change it later in Settings",
       "placeholder": "Enter your name",
       "quickHint": "Leaving it blank is fine — just get inside first.",
+      "avatarUpload": "Upload avatar (optional)",
+      "avatarChange": "Change avatar",
+      "avatarUploading": "Uploading…",
       "back": "Back",
       "next": "Next",
       "quickNext": "Continue Quick Start"
@@ -1355,6 +1358,19 @@
       "back": "Back"
     },
     "tutorial": {
+      "interactive": {
+        "step1Title": "1 / 3 · Try sending a message",
+        "step1Desc": "After you land in the main window, type something and press Enter. Lynn replies in a stream; press Esc to interrupt.",
+        "step1Try": "Try it (preview only)",
+        "step1Playing": "Playing preview…",
+        "step2Title": "2 / 3 · Pick a working folder",
+        "step2Desc": "The working folder is where Lynn patrols, reads/writes files, and runs automations. Pick one now — you can change it later in the main window.",
+        "step2Try": "Pick folder now",
+        "step2Selected": "Picked {folder}",
+        "step3Title": "3 / 3 · Browse your chat history",
+        "step3Desc": "Inside the main window, the left sidebar lists every conversation — jump back any time. Toggle the sidebar with ⌘1 / Ctrl+1.",
+        "step3Hint": "The sidebar looks like this ↓"
+      },
       "title": "All Set ✿",
       "quickTitle": "Quick Start is ready ✿",
       "quickBannerTitle": "One core idea: jian is today's work file",

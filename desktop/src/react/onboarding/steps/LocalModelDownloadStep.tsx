@@ -16,6 +16,7 @@ import { useLlamacppState } from '../../hooks/use-llamacpp-state';
 import { saveProvider } from '../onboarding-actions';
 import type { OnboardingFetch } from '../onboarding-actions';
 import { StepContainer, Multiline } from '../onboarding-ui';
+import { useOnboardingI18n } from '../use-onboarding-i18n';
 import {
   BRAIN_PROVIDER_ID,
   BRAIN_PROVIDER_BASE_URL,
@@ -53,12 +54,13 @@ export function LocalModelDownloadStep({
   preview, onboardingFetch, goToStep, showError, onProviderReady,
   nextStep, backStep,
 }: LocalModelDownloadStepProps) {
+  const { t, locale } = useOnboardingI18n();
   const llamacpp = useLlamacppState();
   const [savingProvider, setSavingProvider] = useState(false);
   const [providerSaved, setProviderSaved] = useState(false);
   const [advanceError, setAdvanceError] = useState<string | null>(null);
 
-  const isZh = (typeof i18n !== 'undefined' && i18n.locale?.startsWith('zh')) || false;
+  const isZh = (locale || (typeof i18n !== 'undefined' ? i18n.locale : '') || '').startsWith('zh');
   const copyText = useCallback((zh: string, en: string) => (isZh ? zh : en), [isZh]);
 
   // ─── derived UI state ───────────────────────────────────────
@@ -106,7 +108,7 @@ export function LocalModelDownloadStep({
     } finally {
       setSavingProvider(false);
     }
-  }, [goToStep, nextStep, onProviderReady, onboardingFetch, preview, providerSaved, savingProvider, showError]);
+  }, [goToStep, nextStep, onProviderReady, onboardingFetch, preview, providerSaved, savingProvider, showError, t]);
 
   // Auto-advance the first time the server reports ready.
   useEffect(() => {
@@ -146,7 +148,7 @@ export function LocalModelDownloadStep({
     } finally {
       setSavingProvider(false);
     }
-  }, [goToStep, nextStep, onProviderReady, onboardingFetch, preview, showError]);
+  }, [goToStep, nextStep, onProviderReady, onboardingFetch, preview, showError, t]);
 
   // ─── progress strings ───────────────────────────────────────
   const percent = llamacpp.download.percent;

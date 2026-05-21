@@ -1572,6 +1572,53 @@ function normalizeSettingsNavigationTarget(target) {
 function createSettingsWindow(target, theme) {
   const navigationTarget = normalizeSettingsNavigationTarget(target);
   const desiredStamp = getWindowEntryStamp("settings");
+  let settingsHealAttempts = 0;
+  const verifySettingsRenderer = () => {
+    const win = settingsWindow;
+    if (!win || win.isDestroyed()) return;
+    setTimeout(() => {
+      const current = settingsWindow;
+      if (!current || current.isDestroyed() || current !== win) return;
+      current.webContents.executeJavaScript(`
+        (() => {
+          const root = document.getElementById('react-root');
+          const bodyText = (document.body && document.body.innerText || '').slice(0, 800);
+          return {
+            href: location.href,
+            title: document.title || '',
+            rootChildren: root ? root.childElementCount : -1,
+            bodyText,
+          };
+        })()
+      `, true).then((snapshot) => {
+        const text = String(snapshot?.bodyText || "");
+        const lowerText = text.toLowerCase();
+        const looksLikeSource = [
+          "<!doctype",
+          "<html",
+          "<head",
+          "<body",
+          "<script",
+          "<link",
+          "stylesheet",
+          "react-root",
+          "settings-main",
+          "窗口控制按钮",
+        ].some((needle) => lowerText.includes(String(needle).toLowerCase()));
+        const emptyRoot = Number(snapshot?.rootChildren || 0) <= 0;
+        if (!emptyRoot && !looksLikeSource) return;
+        if (settingsHealAttempts >= 1) {
+          console.warn("[desktop] settings renderer sanity check failed after reload", snapshot);
+          return;
+        }
+        settingsHealAttempts += 1;
+        console.warn("[desktop] settings renderer looked empty/raw; reloading entry", snapshot);
+        void loadWindowURL(current, "settings");
+      }).catch((err) => {
+        console.warn("[desktop] settings renderer sanity check failed:", err?.message || err);
+      });
+    }, 900);
+  };
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     // renderer 已崩溃：销毁旧窗口，走下方重建流程
     if (settingsWindow.webContents.isCrashed()) {
@@ -1639,6 +1686,8 @@ function createSettingsWindow(target, theme) {
       console.warn(`[desktop] settings console(${level}) ${sourceId}:${line} ${message}`);
     }
   });
+
+  settingsWindow.webContents.on("did-finish-load", verifySettingsRenderer);
 
   void Promise.allSettled([
     settingsWindow.webContents.session.clearCache(),
@@ -2632,6 +2681,14 @@ wrapIpcOn("settings-changed", (_event, type, data) => {
 // 获取头像本地路径（splash 用，不依赖 server）
 wrapIpcHandler("get-avatar-path", (_event, role) => {
   if (role !== "agent" && role !== "user") return null;
+  // First check the user-uploaded avatar slot (P2-3 onboarding upload).
+  try {
+    const uploadedDir = path.join(lynnHome, "avatars");
+    for (const ext of ["png", "jpg", "jpeg", "webp"]) {
+      const p = path.join(uploadedDir, `${role}.${ext}`);
+      if (fs.existsSync(p)) return p;
+    }
+  } catch {}
   const agentId = getCurrentAgentId();
   // agent 头像在 agents/{id}/avatars/，user 头像在 user/avatars/
   const baseDir = role === "user"
@@ -2644,6 +2701,39 @@ wrapIpcHandler("get-avatar-path", (_event, role) => {
     if (fs.existsSync(p)) return p;
   }
   return null;
+});
+
+// P2-3: Upload a user-supplied avatar image into ~/.lynn/avatars/ keyed by role.
+// Returns { ok, path } on success. Used by onboarding NameStep.
+wrapIpcHandler("avatar:upload", async (event, role) => {
+  try {
+    if (role !== "agent" && role !== "user") return { ok: false, reason: "bad-role" };
+    const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getFocusedWindow();
+    const { canceled, filePaths } = await dialog.showOpenDialog(win || undefined, {
+      title: role === "user" ? "Select your avatar" : "Select agent avatar",
+      properties: ["openFile"],
+      filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg", "webp"] }],
+    });
+    if (canceled || !filePaths?.length) return { ok: false, reason: "cancelled" };
+    const src = filePaths[0];
+    const stat = fs.statSync(src);
+    // Reject anything larger than 8 MB so the renderer doesn't strain.
+    if (stat.size > 8 * 1024 * 1024) return { ok: false, reason: "too-large" };
+    const ext = (path.extname(src) || ".png").toLowerCase();
+    const safeExt = [".png", ".jpg", ".jpeg", ".webp"].includes(ext) ? ext : ".png";
+    const targetDir = path.join(lynnHome, "avatars");
+    fs.mkdirSync(targetDir, { recursive: true });
+    const targetPath = path.join(targetDir, `${role}${safeExt}`);
+    // Remove any prior avatar (different ext) so lookup is unambiguous.
+    for (const e of [".png", ".jpg", ".jpeg", ".webp"]) {
+      const stale = path.join(targetDir, `${role}${e}`);
+      if (stale !== targetPath) { try { fs.rmSync(stale, { force: true }); } catch {} }
+    }
+    fs.copyFileSync(src, targetPath);
+    return { ok: true, path: targetPath };
+  } catch (err) {
+    return { ok: false, reason: String(err?.message || err) };
+  }
 });
 
 // 读取 config.yaml 基本信息（splash 用，不依赖 server）

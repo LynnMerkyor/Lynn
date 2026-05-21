@@ -2,8 +2,9 @@
  * TutorialStep.tsx — Finish step for quick start / advanced setup
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { StepContainer, Multiline } from '../onboarding-ui';
+import { useOnboardingI18n } from '../use-onboarding-i18n';
 
 // ── SVG Icons ──
 
@@ -65,6 +66,118 @@ function TutorialCard({ icon, title, desc }: {
   );
 }
 
+const PREVIEW_REPLY_ZH = '我看见你的消息了。我可以读写文件、跑命令、整理笔记，先告诉我你今天想做什么吧。';
+const PREVIEW_REPLY_EN = "I see you — I can read/write files, run commands, and tidy notes. Tell me what you want to get done today.";
+
+/**
+ * StreamingPreview — animates a fake chat reply token-by-token so the user
+ * can preview what streaming looks like without leaving onboarding (the
+ * onboarding window has no chat WS).
+ */
+function StreamingPreview({ isZh }: { isZh: boolean }) {
+  const [playing, setPlaying] = useState(false);
+  const [text, setText] = useState('');
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
+
+  const start = useCallback(() => {
+    if (playing) return;
+    setPlaying(true);
+    setText('');
+    const full = isZh ? PREVIEW_REPLY_ZH : PREVIEW_REPLY_EN;
+    let i = 0;
+    timer.current = setInterval(() => {
+      i += 1;
+      setText(full.slice(0, i));
+      if (i >= full.length) {
+        if (timer.current) clearInterval(timer.current);
+        timer.current = null;
+        setPlaying(false);
+      }
+    }, isZh ? 60 : 32);
+  }, [isZh, playing]);
+
+  return (
+    <div className="tutorial-preview-stream">
+      <div className="tutorial-preview-bubble">
+        {text || (isZh ? '点击下方按钮，看 Lynn 流式回复一段示例。' : 'Click the button below to play a streaming reply demo.')}
+        {playing && <span className="tutorial-preview-caret" aria-hidden>▍</span>}
+      </div>
+      <button
+        type="button"
+        className="ob-btn ob-btn-secondary tutorial-preview-btn"
+        onClick={start}
+        disabled={playing}
+      >
+        {playing
+          ? (isZh ? '正在播放预览…' : 'Playing preview…')
+          : (isZh ? '试试看（仅预览）' : 'Try it (preview only)')}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * FolderPickerStep — really triggers the folder picker IPC. Lets the user
+ * pick their workspace ahead of entering the main window.
+ */
+function FolderPickerStep({ isZh, t }: { isZh: boolean; t: (key: string, vars?: Record<string, string | number>) => string }) {
+  const [picked, setPicked] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const onPick = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const folder = await window.platform?.selectFolder?.();
+      if (folder) setPicked(folder);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy]);
+  return (
+    <div className="tutorial-preview-folder">
+      <button
+        type="button"
+        className="ob-btn ob-btn-secondary tutorial-preview-btn"
+        onClick={() => void onPick()}
+        disabled={busy}
+      >
+        {isZh ? '立即选文件夹' : 'Pick folder now'}
+      </button>
+      {picked && (
+        <div className="tutorial-preview-picked">{t('onboarding.tutorial.interactive.step2Selected', { folder: picked })}</div>
+      )}
+    </div>
+  );
+}
+
+function InteractiveTutorial({ isZh, t }: { isZh: boolean; t: (key: string, vars?: Record<string, string | number>) => string }) {
+  return (
+    <div className="tutorial-interactive">
+      <div className="tutorial-interactive-block">
+        <div className="tutorial-interactive-title">{t('onboarding.tutorial.interactive.step1Title')}</div>
+        <Multiline className="tutorial-interactive-desc" text={t('onboarding.tutorial.interactive.step1Desc')} />
+        <StreamingPreview isZh={isZh} />
+      </div>
+      <div className="tutorial-interactive-block">
+        <div className="tutorial-interactive-title">{t('onboarding.tutorial.interactive.step2Title')}</div>
+        <Multiline className="tutorial-interactive-desc" text={t('onboarding.tutorial.interactive.step2Desc')} />
+        <FolderPickerStep isZh={isZh} t={t} />
+      </div>
+      <div className="tutorial-interactive-block">
+        <div className="tutorial-interactive-title">{t('onboarding.tutorial.interactive.step3Title')}</div>
+        <Multiline className="tutorial-interactive-desc" text={t('onboarding.tutorial.interactive.step3Desc')} />
+        <div className="tutorial-preview-sidebar-mock">
+          <div className="tutorial-preview-sidebar-row is-active">{isZh ? '今天的笺' : "Today's jian"}</div>
+          <div className="tutorial-preview-sidebar-row">{isZh ? '本周回顾' : 'Weekly review'}</div>
+          <div className="tutorial-preview-sidebar-row">{isZh ? '与 Lynn 的随手聊' : 'Casual chat with Lynn'}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type OnboardingTrack = 'quick' | 'quick-local' | 'advanced';
 
 interface TutorialStepProps {
@@ -74,8 +187,10 @@ interface TutorialStepProps {
 }
 
 export function TutorialStep({ preview, showError, track }: TutorialStepProps) {
+  const { t, locale } = useOnboardingI18n();
   const [finishing, setFinishing] = useState(false);
   const isQuickTrack = track === 'quick' || track === 'quick-local';
+  const isZh = (locale || '').startsWith('zh');
 
   const onFinish = useCallback(async () => {
     if (preview) { window.close(); return; }
@@ -91,7 +206,7 @@ export function TutorialStep({ preview, showError, track }: TutorialStepProps) {
       showError(t('onboarding.error'));
       setFinishing(false);
     }
-  }, [preview, showError]);
+  }, [preview, showError, t]);
 
   return (
     <StepContainer className="onboarding-step-tutorial">
@@ -102,6 +217,8 @@ export function TutorialStep({ preview, showError, track }: TutorialStepProps) {
           <Multiline className="ob-step-banner-desc" text={t('onboarding.tutorial.quickBannerDesc')} />
         </div>
       )}
+
+      <InteractiveTutorial isZh={isZh} t={t} />
 
       <div className="tutorial-cards">
         <TutorialCard

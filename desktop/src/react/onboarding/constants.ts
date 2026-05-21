@@ -99,6 +99,19 @@ export const OB_THEMES = [
   'contemplation', 'absolutely', 'delve', 'deep-think',
 ] as const;
 
+/**
+ * Primary themes shown on first paint of ThemeStep. The remaining four
+ * (contemplation / absolutely / delve / deep-think) are tucked behind a
+ * "more themes" toggle to keep the onboarding card scannable.
+ */
+export const OB_PRIMARY_THEMES = [
+  'warm-paper', 'midnight', 'auto', 'high-contrast', 'grass-aroma',
+] as const;
+
+export const OB_ADVANCED_THEMES = [
+  'contemplation', 'absolutely', 'delve', 'deep-think',
+] as const;
+
 export function themeKey(id: string): string {
   return id.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 }
