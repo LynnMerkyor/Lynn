@@ -1606,10 +1606,10 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         role: "system",
         content: [
           "你是 Lynn 的本地 Qwen3.5-9B。优先用用户语言直接回答。",
-          "本轮是低延迟本地直连模式：不要展开长思考，不要输出思考过程，只给结论和必要依据。",
+          "你运行在用户本机。按用户要求自然回答；需要推理时可以先思考，再给出清晰结论。",
           "你运行在用户本机,适合日常问答、写作、翻译和轻量分析。",
           "如果用户问你的 Lynn 测评数据,只使用提示里的 Lynn hard data,并明确区分 thinking-on/off、样本量、naive 与 excluding parse-fail。",
-          "如果问题明显需要实时联网、文件操作或本地工具,简短说明需要切换到 Lynn 的工具链路。",
+          "如果本轮提示已经包含 Lynn 工具取回的资料,请基于这些资料回答；资料不足时说明缺口,不要编造。",
         ].join("\n"),
       },
       { role: "user", content: String(effectivePromptText || originalPromptText || "") },
@@ -1626,6 +1626,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         temperature: 0.2,
         max_tokens: LOCAL_QWEN35_DIRECT_MAX_TOKENS,
         stream: true,
+        chat_template_kwargs: { enable_thinking: true },
         stream_options: { include_usage: true },
       }),
     });
@@ -2657,6 +2658,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                   }
                   return;
                 }
+                const localQwenSynthesisAfterPrefetch = isLocalQwen35Model(currentModelInfo);
                 let directResearchAnswer = "";
                 if (!rehydratedMutation && initialToolUse.behavior === TOOL_USE_BEHAVIOR.PREFETCH_THEN_RUN_OR_STOP) {
                   const toolName = initialToolUse.toolName;
@@ -2674,7 +2676,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                     if (reportContext && reportContext.trim()) {
                       const toolSummary = buildPrefetchToolSummary(reportContext);
                       ss.hasLocalPrefetchEvidence = true;
-                      directResearchAnswer = buildDirectResearchAnswer(reportKind, reportContext, promptText);
+                      if (!localQwenSynthesisAfterPrefetch) {
+                        directResearchAnswer = buildDirectResearchAnswer(reportKind, reportContext, promptText);
+                      }
                       effectivePromptText = buildPrefetchAugmentedPrompt(promptText, reportContext, budgetContext);
                       emitStreamEvent(promptSessionPath, ss, {
                         type: "tool_end",

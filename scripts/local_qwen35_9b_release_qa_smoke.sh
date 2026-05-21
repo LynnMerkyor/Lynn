@@ -85,6 +85,9 @@ skip_long = skip_long_raw in ("1", "true", "yes")
 
 def post(endpoint: str, payload: dict, *, max_time: float = 0) -> dict:
     url = base_url.rstrip("/") + "/" + endpoint.lstrip("/")
+    if endpoint.strip("/") == "chat/completions":
+        payload = dict(payload)
+        payload.setdefault("chat_template_kwargs", {"enable_thinking": False})
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     t0 = time.time()
@@ -107,9 +110,25 @@ def get(endpoint: str) -> dict:
 
 def extract_content(resp_data: dict) -> str:
     try:
-        return resp_data["choices"][0]["message"]["content"]
+        message = resp_data["choices"][0]["message"]
+        return message.get("content") or ""
     except (KeyError, IndexError, TypeError):
         return ""
+
+
+def extract_reasoning(resp_data: dict) -> str:
+    try:
+        message = resp_data["choices"][0]["message"]
+        return message.get("reasoning_content") or message.get("reasoning") or ""
+    except (KeyError, IndexError, TypeError):
+        return ""
+
+
+def extract_text(resp_data: dict) -> str:
+    content = extract_content(resp_data)
+    if content.strip():
+        return content
+    return extract_reasoning(resp_data)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -154,10 +173,10 @@ try:
     r = post("chat/completions", {
         "model": model,
         "messages": [{"role": "user", "content": "What is 2+2? Answer with just the number."}],
-        "max_tokens": 32,
+        "max_tokens": 512,
         "temperature": 0,
     })
-    content = extract_content(r["data"])
+    content = extract_text(r["data"])
     ok = len(content.strip()) > 0 and "4" in content
     record("english_chat", ok, content.strip()[:100], elapsed_sec=r["elapsed_sec"])
 except Exception as e:
@@ -171,10 +190,10 @@ try:
     r = post("chat/completions", {
         "model": model,
         "messages": [{"role": "user", "content": "用一句话回答：中国的首都是哪里？"}],
-        "max_tokens": 64,
+        "max_tokens": 768,
         "temperature": 0,
     })
-    content = extract_content(r["data"])
+    content = extract_text(r["data"])
     ok = len(content.strip()) > 0
     has_beijing = "北京" in content
     record("chinese_chat", ok, f"{'北京 found' if has_beijing else content.strip()[:80]}",
@@ -193,7 +212,7 @@ try:
             {"role": "system", "content": "You output JSON only. No markdown fences."},
             {"role": "user", "content": 'Return a JSON object: {"model":"qwen3.5-9b","quant":"Q4_K_M","ready":true}'},
         ],
-        "max_tokens": 128,
+        "max_tokens": 1024,
         "temperature": 0,
         "response_format": {"type": "json_object"},
     })
@@ -263,19 +282,19 @@ try:
     r1 = post("chat/completions", {
         "model": model,
         "messages": messages,
-        "max_tokens": 64,
+        "max_tokens": 768,
         "temperature": 0,
     })
-    c1 = extract_content(r1["data"])
+    c1 = extract_text(r1["data"])
     messages.append({"role": "assistant", "content": c1})
     messages.append({"role": "user", "content": "What number did I ask you to remember?"})
     r2 = post("chat/completions", {
         "model": model,
         "messages": messages,
-        "max_tokens": 64,
+        "max_tokens": 768,
         "temperature": 0,
     })
-    c2 = extract_content(r2["data"])
+    c2 = extract_text(r2["data"])
     ok = "42" in c2
     record("multi_turn", ok, f"Round 2: {c2.strip()[:80]}",
            elapsed_sec=r1["elapsed_sec"] + r2["elapsed_sec"])
@@ -301,10 +320,10 @@ else:
             "messages": [
                 {"role": "user", "content": long_prompt + "\n\nWhat is the secret code mentioned above?"},
             ],
-            "max_tokens": 64,
+            "max_tokens": 1024,
             "temperature": 0,
         }, max_time=300)
-        content = extract_content(r["data"])
+        content = extract_text(r["data"])
         ok = "PINEAPPLE" in content.upper() or "7749" in content
         record("long_context_32k", ok, content.strip()[:100], elapsed_sec=r["elapsed_sec"])
     except Exception as e:

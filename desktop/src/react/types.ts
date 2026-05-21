@@ -251,7 +251,7 @@ export interface PlatformApi {
   selectGgufModel?(): Promise<string | null>;
   getOnboardingDefaults?(): Promise<{ workspacePath: string; trustedRoots: string[]; installRoot?: string | null; desktopRoot?: string | null }>;
   selectSkill(): Promise<string | null>;
-  llamacppOpenModelDir?(): Promise<{ ok: boolean; path?: string; error?: string | null }>;
+  llamacppOpenModelDir?(targetPath?: string | null): Promise<{ ok: boolean; path?: string; revealedPath?: string; error?: string | null }>;
   llamacppStartCustomModel?(modelPath: string): Promise<{ ok: boolean; modelId?: string; modelPath?: string; reason?: string }>;
   readFile(path: string): Promise<string | null>;
   writeFile(filePath: string, content: string): Promise<boolean>;

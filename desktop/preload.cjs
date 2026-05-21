@@ -37,7 +37,7 @@ contextBridge.exposeInMainWorld("hana", {
   llamacppPauseDownload: () => ipcRenderer.invoke("llamacpp:pause-download"),
   llamacppCancelDownload: () => ipcRenderer.invoke("llamacpp:cancel-download"),
   llamacppGetSources: () => ipcRenderer.invoke("llamacpp:sources"),
-  llamacppOpenModelDir: () => ipcRenderer.invoke("llamacpp:open-model-dir"),
+  llamacppOpenModelDir: (targetPath) => ipcRenderer.invoke("llamacpp:open-model-dir", { targetPath }),
   llamacppStartCustomModel: (modelPath) => ipcRenderer.invoke("llamacpp:start-custom-model", { modelPath }),
   onLlamacppState: (cb) => {
     const handler = (_event, state) => cb(state);

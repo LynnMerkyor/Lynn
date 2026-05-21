@@ -27,18 +27,22 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[qwen35-smoke] starting transient llama.cpp server on $HOST:$PORT"
-HOST="$HOST" \
-PORT="$PORT" \
-SERVED_NAME="$SERVED_NAME" \
-GGUF="${GGUF:-}" \
-LLAMA_SERVER="${LLAMA_SERVER:-}" \
-CTX_SIZE="${CTX_SIZE:-32768}" \
-PARALLEL="${PARALLEL:-1}" \
-N_GPU_LAYERS="${N_GPU_LAYERS:-999}" \
-LOG_FILE="$LOG_FILE" \
-  bash "$SERVER_SCRIPT" > "$LOG_FILE" 2>&1 &
-SPID=$!
+if curl -fsS --max-time 2 "http://$HOST:$PORT/v1/models" >/dev/null 2>&1; then
+  echo "[qwen35-smoke] reusing existing llama.cpp server on $HOST:$PORT"
+else
+  echo "[qwen35-smoke] starting transient llama.cpp server on $HOST:$PORT"
+  HOST="$HOST" \
+  PORT="$PORT" \
+  SERVED_NAME="$SERVED_NAME" \
+  GGUF="${GGUF:-}" \
+  LLAMA_SERVER="${LLAMA_SERVER:-}" \
+  CTX_SIZE="${CTX_SIZE:-32768}" \
+  PARALLEL="${PARALLEL:-1}" \
+  N_GPU_LAYERS="${N_GPU_LAYERS:-999}" \
+  LOG_FILE="$LOG_FILE" \
+    bash "$SERVER_SCRIPT" > "$LOG_FILE" 2>&1 &
+  SPID=$!
+fi
 
 python3 - <<'PY'
 import json
@@ -73,8 +77,9 @@ payload = {
         {"role": "system", "content": "You are Lynn local smoke test."},
         {"role": "user", "content": "用一句中文回答：本地模型是否已经启动？"},
     ],
-    "max_tokens": 64,
+    "max_tokens": 512,
     "temperature": 0,
+    "chat_template_kwargs": {"enable_thinking": False},
 }
 req = urllib.request.Request(
     base + "/v1/chat/completions",
@@ -89,15 +94,23 @@ except urllib.error.HTTPError as exc:
     print(exc.read().decode("utf-8", "ignore"), file=sys.stderr)
     raise
 
-content = (((body.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
-if not content:
+choice = (body.get("choices") or [{}])[0]
+message = choice.get("message") or {}
+content = (message.get("content") or "").strip()
+reasoning = (message.get("reasoning_content") or "").strip()
+usage = body.get("usage") or {}
+completion_tokens = int(usage.get("completion_tokens") or 0)
+if not content and not reasoning and completion_tokens <= 0:
     raise SystemExit("empty smoke response")
 
 print(json.dumps({
     "ok": True,
     "base_url": base + "/v1",
     "model": model,
-    "response_head": content[:120],
+    "finish_reason": choice.get("finish_reason"),
+    "completion_tokens": completion_tokens,
+    "content_head": content[:120],
+    "reasoning_head": reasoning[:120],
 }, ensure_ascii=False, indent=2))
 PY
 

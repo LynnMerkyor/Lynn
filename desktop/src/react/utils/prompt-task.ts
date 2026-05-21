@@ -12,6 +12,7 @@ const FILE_CONTEXT_PATTERN = /\b([A-Za-z0-9_./-]+\.(?:tsx?|jsx?|css|json|md|py|r
 const CJK_PATTERN = /[\u3400-\u9fff]/;
 const WORKSPACE_HINT_PATTERN = /(当前工作区|工作区|书桌|workspace|desk)/i;
 const REPO_HINT_PATTERN = /(源码|代码仓库|仓库|repo|repository|cwd|源代码)/i;
+const GOAL_COMMAND_PATTERN = /^\/goal(?:\s+|$)/i;
 
 export type ComposerTaskMode = 'prompt' | 'steer';
 
@@ -134,6 +135,26 @@ function buildWorkspaceIntentPrompt(text: string, preferredWorkspace?: string | 
     : `[Assistant hint] In this request, "current workspace/desk" should refer to ${preferredWorkspace}. Do not switch to the repo, install directory, or another cwd unless the user explicitly asks for source code, repo, or cwd.`;
 }
 
+function expandGoalCommand(text: string): { displayText: string; requestText: string } | null {
+  if (!GOAL_COMMAND_PATTERN.test(text)) return null;
+  const goal = text.replace(GOAL_COMMAND_PATTERN, '').trim();
+  if (!goal) return null;
+  const isZh = CJK_PATTERN.test(goal);
+  const requestText = isZh
+    ? `[Goal 模式 / 目标锁定]
+目标：${goal}
+
+请把这次请求当作一个持续推进任务：主动拆解步骤、执行可用操作、验证结果。在目标没有真正达成前，不要只给建议，也不要主动结束。遇到阻塞时，请先尝试可行替代路径；如果仍被阻塞，说明已尝试内容、真实阻塞点和下一步最小可行动作。`
+    : `[Goal Mode]
+Goal: ${goal}
+
+Treat this as a persistent execution task: break it down, take available actions, and verify results. Do not stop at advice or end proactively until the goal is genuinely handled. If blocked, try viable alternatives first; if still blocked, report what was tried, the concrete blocker, and the next smallest actionable step.`;
+  return {
+    displayText: text,
+    requestText,
+  };
+}
+
 export async function prepareComposerTask({
   mode,
   composerText,
@@ -148,6 +169,8 @@ export async function prepareComposerTask({
   readFileBase64,
 }: PrepareComposerTaskOptions): Promise<PreparedComposerTask> {
   const text = composerText.trim();
+  const goalCommand = expandGoalCommand(text);
+  const displayText = goalCommand?.displayText ?? composerText;
   const richContextEnabled = mode === 'prompt';
   const imageFiles = richContextEnabled
     ? attachedFiles.filter((file) => !file.isDirectory && isImageFile(file.name) && supportsVision)
@@ -159,10 +182,10 @@ export async function prepareComposerTask({
   const quotedSummary = richContextEnabled && quotedSelection ? buildQuotedSelectionSummary(quotedSelection) : undefined;
   const quotedForSend = richContextEnabled && quotedSelection ? { ...quotedSelection } : null;
 
-  let requestText = text;
+  let requestText = goalCommand?.requestText ?? text;
   if (richContextEnabled && otherFiles.length > 0) {
     const fileBlock = otherFiles.map((file) => (file.isDirectory ? `[目录] ${file.path}` : `[附件] ${file.path}`)).join('\n');
-    requestText = text ? `${text}\n\n${fileBlock}` : fileBlock;
+    requestText = requestText ? `${requestText}\n\n${fileBlock}` : fileBlock;
   }
 
   if (richContextEnabled && docForRender) {
@@ -208,9 +231,9 @@ export async function prepareComposerTask({
     return {
       submission: {
         mode,
-        text: composerText,
-        displayText: composerText,
-        requestText: text,
+        text: displayText,
+        displayText,
+        requestText,
         retryDraft: draft,
       },
       draft,
@@ -272,8 +295,8 @@ export async function prepareComposerTask({
   return {
     submission: {
       mode,
-      text: composerText,
-      displayText: composerText,
+      text: displayText,
+      displayText,
       requestText,
       quotedText: quotedSummary,
       quotedSelection: quotedForSend,

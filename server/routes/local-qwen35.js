@@ -294,20 +294,11 @@ function fastReadyPlan(runtime, variant = "imatrix") {
         blockers: [],
         upgrade_options: [
           ...(totalMemoryGib >= 24 ? [{
-            id: "qwen36-27b-q4km-imatrix",
-            label: "Qwen3.6-27B Q4_K_M imatrix",
-            profile: "24GB+ · 速度优先",
-            metrics: ["MMLU100 93.0%", "GPQA 跑测中", "R6000 66 tok/s", "工具调用待测"],
-            reason: "更高吞吐的 27B 路线，适合 24GB+ 设备优先试跑。",
-            modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.6-27B-GGUF-imatrix",
-            download_label: "下载/查看",
-          }] : []),
-          ...(totalMemoryGib >= 24 ? [{
             id: "qwen36-35b-a3b-q4km-imatrix",
             label: "Qwen3.6-35B-A3B Q4_K_M imatrix",
-            profile: "24GB+ · 能力优先",
-            metrics: ["MMLU 待补", "GPQA50 78% / 81.25% excl_pf", "R6000 TPS 待补", "工具调用待测"],
-            reason: "能力优先的 MoE 路线，适合复杂推理和长上下文；速度低于 27B。",
+            profile: "24GB 显存+ 推荐 · 性能强",
+            metrics: ["thinking-on 32K", "MMLU 90.40%", "GPQA Diamond 80.70%", "R6000 207 tok/s"],
+            reason: "24GB+ 能力优先本地路线；client default · thinking-on 32K，适合复杂推理和长上下文。",
             modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
             download_label: "下载/查看",
           }] : []),

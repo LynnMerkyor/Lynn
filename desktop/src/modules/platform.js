@@ -70,8 +70,11 @@
 
     // 系统对话框 → Web 降级
     selectFolder: async () => null,
+    selectGgufModel: async () => null,
     getOnboardingDefaults: async () => ({ workspacePath: '', trustedRoots: [], installRoot: null, desktopRoot: null }),
     selectSkill: async () => null,
+    llamacppOpenModelDir: async () => ({ ok: false, reason: 'desktop-only' }),
+    llamacppStartCustomModel: async () => ({ ok: false, reason: 'desktop-only' }),
 
     // OS 集成 → 静默降级
     openFolder: () => {},

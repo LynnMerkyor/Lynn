@@ -313,7 +313,7 @@ export function ProvidersTab() {
             if (!summary) {
               return (
                 <div className={styles['pv-empty']}>
-                  {summaryLoaded ? t('settings.providers.selectHint') : '正在读取供应商配置...'}
+                  {summaryLoaded ? t('settings.providers.selectHint') : '正在读取模型配置...'}
                 </div>
               );
             }

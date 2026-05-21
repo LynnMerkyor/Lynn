@@ -19,25 +19,28 @@ describe('Local Qwen provider UX guards', () => {
     const source = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
     expect(source).toContain('本地模型库');
     expect(source).toContain('自选 GGUF 模型');
-    expect(source).toContain('27B/35B');
+    expect(source).toContain('高阶 GGUF');
+    expect(source).toContain('定位 9B 文件');
     expect(source).toContain('selectGgufModel');
   });
 
-  it('advertises 27B and 35B Q4_K_M upgrade options', () => {
+  it('advertises the high-memory 35B Q4_K_M upgrade option with objective metrics', () => {
     const source = read('server/routes/local-qwen35.js');
-    expect(source).toContain('qwen36-27b-q4km-imatrix');
+    expect(source).not.toContain('qwen36-27b-q4km-imatrix');
     expect(source).toContain('qwen36-35b-a3b-q4km-imatrix');
-    expect(source).toContain('MMLU100 93.0%');
-    expect(source).toContain('R6000 66 tok/s');
-    expect(source).toContain('GPQA50 78% / 81.25% excl_pf');
-    expect(source).toContain('工具调用待测');
-    expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-27B-GGUF-imatrix');
+    expect(source).toContain('24GB 显存+ 推荐');
+    expect(source).toContain('thinking-on 32K');
+    expect(source).toContain('MMLU 90.40%');
+    expect(source).toContain('GPQA Diamond 80.70%');
+    expect(source).toContain('R6000 207 tok/s');
+    expect(source).not.toContain('Spark/远端兜底');
     expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix');
   });
 
   it('makes advanced local models actionable instead of passive cards', () => {
     const source = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
-    expect(source).toContain('选择本机 GGUF');
+    expect(source).toContain('导入并启动');
+    expect(source).toContain('定位 9B 文件');
     expect(source).toContain('下载/查看');
     expect(source).toContain('chooseGgufModel');
   });

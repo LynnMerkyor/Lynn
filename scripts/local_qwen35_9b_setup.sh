@@ -53,7 +53,9 @@ PORT="${PORT:-18099}"
 HOST="${HOST:-127.0.0.1}"
 SERVED_NAME="${SERVED_NAME:-qwen35-9b-q4km-$Q4KM_VARIANT}"
 CTX_SIZE="${CTX_SIZE:-32768}"
-PARALLEL="${PARALLEL:-4}"
+# llama.cpp divides --ctx across parallel slots. Keep the product default at
+# one slot so "32K" really means 32K available context for the local user.
+PARALLEL="${PARALLEL:-1}"
 N_GPU_LAYERS="${N_GPU_LAYERS:-999}"
 DOWNLOAD=0
 SMOKE=0
@@ -101,7 +103,7 @@ Options:
   --port PORT           Server port (default: 18099).
   --host HOST           Bind host (default: 127.0.0.1).
   --ctx SIZE            Context size (default: 32768).
-  --parallel N          llama.cpp parallel slots (default: 4).
+  --parallel N          llama.cpp parallel slots (default: 1; preserves full context).
   --gpu-layers N        GPU layers (default: 999).
   --env-file PATH       Env file to write.
   --force               Redownload even if target file exists.

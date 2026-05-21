@@ -224,8 +224,17 @@ export function buildSlashCommands(
   executeClearFn: () => Promise<void>,
   executePlanFn: () => Promise<void>,
   executeSaveFn: () => Promise<void>,
+  executeGoalFn: () => Promise<void>,
 ): SlashCommand[] {
   return [
+    {
+      name: 'goal',
+      label: '/goal',
+      description: '目标模式：不达成不主动停',
+      busyLabel: '',
+      icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>',
+      execute: executeGoalFn,
+    },
     {
       name: 'diary',
       label: '/diary',

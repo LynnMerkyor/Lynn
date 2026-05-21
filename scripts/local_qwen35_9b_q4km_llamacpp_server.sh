@@ -25,7 +25,9 @@ PORT="${PORT:-18099}"
 SERVED_NAME="${SERVED_NAME:-qwen35-9b-q4km-imatrix}"
 CTX_SIZE="${CTX_SIZE:-32768}"
 THREADS="${THREADS:-}"
-PARALLEL="${PARALLEL:-4}"
+# llama.cpp splits --ctx-size across parallel slots. Lynn's local-first UX is a
+# single-user 32K experience, so default to one slot unless explicitly changed.
+PARALLEL="${PARALLEL:-1}"
 N_GPU_LAYERS="${N_GPU_LAYERS:-999}"
 LLAMA_SERVER="${LLAMA_SERVER:-}"
 LLAMA_EXTRA_ARGS="${LLAMA_EXTRA_ARGS:-}"
@@ -51,7 +53,7 @@ Options:
   --model-name NAME     Served model name (default: qwen35-9b-q4km-imatrix)
   --ctx SIZE            Context window (default: 32768)
   --threads N           CPU threads (default: auto-detect)
-  --parallel N          Max concurrent slots (default: 4)
+  --parallel N          Max concurrent slots (default: 1; preserves full --ctx per user)
   --gpu-layers N        Layers to offload to GPU (default: 999=all)
   --gguf PATH           GGUF model file path (overrides auto-discovery)
   --llama-server PATH   llama-server binary path (overrides auto-discovery)
@@ -331,6 +333,13 @@ CMD=(
   -a "$SERVED_NAME"
 )
 
+# With `set -o pipefail`, `grep -q` can close the pipe early and make
+# `llama-server --help` report SIGPIPE, so capture help text before matching.
+server_help="$("$server_bin" --help 2>&1 || true)"
+if [[ "$server_help" == *"--metrics"* ]]; then
+  CMD+=(--metrics)
+fi
+
 # Reasoning/jinja args (space-separated, intentionally unquoted for word-splitting)
 if [[ -n "$LLAMA_REASONING_ARGS" ]]; then
   read -ra _reasoning_arr <<< "$LLAMA_REASONING_ARGS"
@@ -352,4 +361,4 @@ echo ""
 echo "[qwen35-q4km-local] Starting: ${CMD[*]}"
 echo ""
 
-exec "${CMD[@]}" 2>&1 | tee "$LOG_FILE"
+exec "${CMD[@]}"

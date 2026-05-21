@@ -2945,6 +2945,18 @@ a.about-link:hover {
     white-space: nowrap;
 }
 
+.pv-local-qwen-state-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.pv-local-qwen-stop-inline {
+    min-height: 30px;
+    white-space: nowrap;
+}
+
 .pv-local-qwen-state.ready {
     color: var(--success, #3a7d44);
     border-color: rgba(90, 170, 153, 0.28);
@@ -3182,6 +3194,23 @@ a.about-link:hover {
     line-height: 1.5;
 }
 
+.pv-local-qwen-model-path {
+    display: block;
+    width: 100%;
+    max-width: min(100%, 720px);
+    margin-top: 7px;
+    padding: 7px 9px;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--overlay-light) 74%, transparent);
+    color: var(--text-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 0.66rem;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .pv-local-qwen-advanced-actions {
     display: flex;
     flex-wrap: wrap;
@@ -3332,6 +3361,10 @@ a.about-link:hover {
 
     .pv-local-qwen-state {
         width: fit-content;
+    }
+
+    .pv-local-qwen-state-stack {
+        align-items: flex-start;
     }
 }
 

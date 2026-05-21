@@ -73,6 +73,49 @@ def _health(base_url: str) -> bool:
         return False
 
 
+def _models_ready(base_url: str, model: str = "qwen35-9b-q4km-imatrix") -> bool:
+    try:
+        url = base_url.rstrip("/") + "/models"
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            if not (200 <= resp.status < 300):
+                return False
+            data = json.loads(resp.read().decode("utf-8"))
+        ids = [
+            str(item.get("id", ""))
+            for item in data.get("data", [])
+            if isinstance(item, dict)
+        ]
+        return bool(ids) and (model in ids or len(ids) > 0)
+    except Exception:
+        return False
+
+
+def _slot_context_min(base_url: str) -> int | None:
+    try:
+        root = base_url[:-3] if base_url.endswith("/v1") else base_url.rstrip("/")
+        with urllib.request.urlopen(root + "/slots", timeout=2) as resp:
+            if not (200 <= resp.status < 300):
+                return None
+            data = json.loads(resp.read().decode("utf-8"))
+        values = [
+            int(slot.get("n_ctx"))
+            for slot in data
+            if isinstance(slot, dict) and slot.get("n_ctx") is not None
+        ]
+        return min(values) if values else None
+    except Exception:
+        return None
+
+
+def _wait_ready(base_url: str, *, timeout_sec: float = 180.0) -> bool:
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        if _health(base_url) and _models_ready(base_url):
+            return True
+        time.sleep(1.0)
+    return _health(base_url) and _models_ready(base_url)
+
+
 def _find_gguf(model_root: Path, variant: str) -> Path | None:
     roots = [
         model_root / "q4_k_m",
@@ -213,6 +256,7 @@ def _hardware_profile() -> dict[str, Any]:
     apple_silicon = system == "Darwin" and machine in {"arm64", "aarch64"}
     warnings: list[str] = []
     blockers: list[str] = []
+    upgrade_options: list[dict[str, Any]] = []
     recommendation = "not_recommended"
     profile = {
         "name": "cloud_fallback",
@@ -227,10 +271,25 @@ def _hardware_profile() -> dict[str, Any]:
         mem = total_gib or 0
         if mem >= 24:
             recommendation = "recommended"
-            profile = {"name": "mac_unified_32k", "label": "Mac 32K 舒适档", "ctx_size": 32768, "parallel": 4, "gpu_layers": 999}
+            profile = {"name": "mac_unified_32k", "label": "Mac 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
+            upgrade_options.append({
+                "id": "qwen36-27b-q4km-imatrix",
+                "label": "Qwen3.6-27B Q4_K_M imatrix",
+                "reason": "24GB+ 可作为质量优先路线试用；下载和量化产物准备完成后，会进入高级启动器。",
+                "min_memory_gib": 24,
+            })
+            upgrade_options.append({
+                "id": "qwen36-35b-a3b-q4km-imatrix",
+                "label": "Qwen3.6-35B-A3B Q4_K_M imatrix",
+                "reason": "32GB+ 更推荐。当前设备可先走 Spark/远端兜底，或作为高级试用。",
+                "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
+                "min_memory_gib": 32,
+            })
+            if mem >= 32:
+                upgrade_options[-1]["reason"] = "32GB+ 统一内存可试高能力 35B-A3B；下载体积约 20GB，速度会低于 9B。"
         elif mem >= 16:
             recommendation = "recommended_with_limits"
-            profile = {"name": "mac_unified_16k", "label": "Mac 16K 稳定档", "ctx_size": 16384, "parallel": 2, "gpu_layers": 999}
+            profile = {"name": "mac_unified_16k", "label": "Mac 16K 稳定档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
             warnings.append("16GB 统一内存建议先用 16K；32K thinking 可能触发内存压力。")
         elif mem >= 12:
             recommendation = "experimental"
@@ -247,10 +306,24 @@ def _hardware_profile() -> dict[str, Any]:
             warnings.append("NVIDIA compute capability 低于 7.5，可能明显慢；不建议作为默认体验。")
         elif vram >= 24:
             recommendation = "recommended"
-            profile = {"name": "nvidia_32k", "label": "NVIDIA 32K 舒适档", "ctx_size": 32768, "parallel": 4, "gpu_layers": 999}
+            profile = {"name": "nvidia_32k", "label": "NVIDIA 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
+            upgrade_options.append({
+                "id": "qwen36-27b-q4km-imatrix",
+                "label": "Qwen3.6-27B Q4_K_M imatrix",
+                "reason": "24GB+ 显存可试 27B 质量优先路线；速度会低于 9B。",
+                "min_vram_gib": 24,
+            })
+            if vram >= 32:
+                upgrade_options.append({
+                    "id": "qwen36-35b-a3b-q4km-imatrix",
+                    "label": "Qwen3.6-35B-A3B Q4_K_M imatrix",
+                    "reason": "32GB+ 显存可推荐 35B-A3B 本地高能力路线；下载体积约 20GB。",
+                    "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
+                    "min_vram_gib": 32,
+                })
         elif vram >= 16:
             recommendation = "recommended_with_limits"
-            profile = {"name": "nvidia_16k", "label": "NVIDIA 16K 稳定档", "ctx_size": 16384, "parallel": 2, "gpu_layers": 999}
+            profile = {"name": "nvidia_16k", "label": "NVIDIA 16K 稳定档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
             warnings.append("16GB 显存建议先用 16K；32K 可作为高级选项。")
         else:
             recommendation = "experimental"
@@ -274,6 +347,7 @@ def _hardware_profile() -> dict[str, Any]:
         "warnings": warnings,
         "blockers": blockers,
         "can_enable": recommendation in {"recommended", "recommended_with_limits", "experimental"},
+        "upgrade_options": upgrade_options,
     }
 
 
@@ -287,7 +361,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     gguf = _find_gguf(model_root, args.variant)
     llama_server = _which("llama-server") or _which("llama.cpp-server")
     has_brew = _which("brew") is not None
-    running = _probe_port(host, port) and _health(base_url)
+    running = _probe_port(host, port) and _health(base_url) and _models_ready(base_url)
     hardware = _hardware_profile()
 
     actions: list[dict[str, Any]] = []
@@ -359,9 +433,78 @@ def _run_checked(cmd: list[str], *, env: dict[str, str] | None = None) -> None:
     subprocess.run(cmd, cwd=_stable_cwd(), env=env, check=True)
 
 
+def _read_env_file_value(env_file: Path, key: str) -> str | None:
+    try:
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            prefix = f"export {key}="
+            if not line.startswith(prefix):
+                continue
+            value = line[len(prefix):].strip()
+            if len(value) >= 2 and value[0] == value[-1] == '"':
+                value = value[1:-1]
+            return value
+    except Exception:
+        return None
+    return None
+
+
+def _listener_pid(port: int) -> int | None:
+    out = _run_capture(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"], timeout=2).strip()
+    if not out:
+        return None
+    try:
+        return int(out.splitlines()[0].strip())
+    except Exception:
+        return None
+
+
 def _start_server(env_file: Path, pid_file: Path, log_file: Path) -> dict[str, Any]:
+    host = os.environ.get("LYNN_QWEN35_HOST", "127.0.0.1")
+    port = int(os.environ.get("LYNN_QWEN35_PORT", "18099"))
+    base_url = f"http://{host}:{port}/v1"
     pid_file.parent.mkdir(parents=True, exist_ok=True)
     log_file.parent.mkdir(parents=True, exist_ok=True)
+    desired_ctx = None
+    try:
+        desired_ctx = int(_read_env_file_value(env_file, "CTX_SIZE") or "0") or None
+    except Exception:
+        desired_ctx = None
+    if _probe_port(host, port) and _health(base_url):
+        slot_ctx = _slot_context_min(base_url)
+        pid = _listener_pid(port)
+        if desired_ctx and slot_ctx and slot_ctx < desired_ctx and pid:
+            try:
+                os.kill(pid, 15)
+            except Exception:
+                pass
+            time.sleep(1.0)
+            if _probe_port(host, port):
+                try:
+                    os.kill(pid, 9)
+                except Exception:
+                    pass
+            time.sleep(0.5)
+        elif desired_ctx and slot_ctx and slot_ctx < desired_ctx:
+            return {
+                "reused": False,
+                "pid": None,
+                "pid_file": str(pid_file),
+                "log_file": str(log_file),
+                "base_url": base_url,
+                "warning": f"existing endpoint slot context {slot_ctx} is below desired {desired_ctx}, but listener pid was not found",
+            }
+        else:
+            if pid:
+                pid_file.write_text(str(pid) + "\n", encoding="utf-8")
+            return {
+                "reused": True,
+                "pid": pid,
+                "pid_file": str(pid_file),
+                "log_file": str(log_file),
+                "base_url": base_url,
+                "slot_context": slot_ctx,
+            }
     shell = (
         f"set -euo pipefail; "
         f"source {shlex_quote(str(env_file))}; "
@@ -376,7 +519,7 @@ def _start_server(env_file: Path, pid_file: Path, log_file: Path) -> dict[str, A
         start_new_session=True,
     )
     pid_file.write_text(str(proc.pid) + "\n", encoding="utf-8")
-    return {"pid": proc.pid, "pid_file": str(pid_file), "log_file": str(log_file)}
+    return {"reused": False, "pid": proc.pid, "pid_file": str(pid_file), "log_file": str(log_file), "base_url": base_url}
 
 
 def shlex_quote(value: str) -> str:
@@ -430,12 +573,26 @@ def execute(args: argparse.Namespace) -> int:
 
     env = os.environ.copy()
     env["LYNN_PROVIDER_CONFIG"] = str(provider_path)
+    env["LYNN_QWEN35_HOST"] = args.host
+    env["LYNN_QWEN35_PORT"] = str(args.port)
     _run_checked(setup_cmd, env=env)
 
     start_info = None
     if args.start:
         start_info = _start_server(env_file, Path(args.pid_file).expanduser(), Path(args.log_file).expanduser())
-        time.sleep(1.0)
+        if not _wait_ready(f"http://{args.host}:{args.port}/v1"):
+            final_plan = build_plan(args)
+            return _json({
+                "schema_version": "lynn-qwen35-local-client-bootstrap-result-v1",
+                "ok": False,
+                "error": "endpoint_not_ready",
+                "message": "llama.cpp started but did not pass /health and /v1/models readiness in time.",
+                "runtime_profile": runtime,
+                "provider_config": str(provider_path),
+                "env_file": str(env_file),
+                "started": start_info,
+                "status": final_plan,
+            }, 4)
 
     final_plan = build_plan(args)
     return _json({

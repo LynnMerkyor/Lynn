@@ -3645,11 +3645,29 @@ wrapIpcHandler("llamacpp:sources", () => ({
   sources: MODEL_DOWNLOADER_SOURCES.map((s) => ({ id: s.id, label: s.label })),
 }));
 
-wrapIpcHandler("llamacpp:open-model-dir", async () => {
+wrapIpcHandler("llamacpp:open-model-dir", async (event, payload = {}) => {
   const dir = path.join(lynnHome, "models");
+  const userModelDir = path.join(os.homedir(), "Models", "Lynn");
+  const allowedModelDirs = [dir, userModelDir];
+  const isInside = (root, target) => {
+    const relative = path.relative(root, target);
+    return !!relative && !relative.startsWith("..") && !path.isAbsolute(relative);
+  };
   try { fs.mkdirSync(dir, { recursive: true }); } catch {}
-  const error = await shell.openPath(dir);
-  return { ok: !error, path: dir, error: error || null };
+  try { fs.mkdirSync(userModelDir, { recursive: true }); } catch {}
+  const rawTarget = typeof payload === "string" ? payload : payload?.targetPath;
+  if (typeof rawTarget === "string" && rawTarget.trim()) {
+    const target = path.resolve(rawTarget);
+    const isSafeModelFile = path.extname(target).toLowerCase() === ".gguf"
+      && allowedModelDirs.some((root) => isInside(root, target));
+    if (isSafeModelFile && fs.existsSync(target)) {
+      shell.showItemInFolder(target);
+      return { ok: true, path: path.dirname(target), revealedPath: target, error: null };
+    }
+  }
+  const openDir = fs.existsSync(userModelDir) ? userModelDir : dir;
+  const error = await shell.openPath(openDir);
+  return { ok: !error, path: openDir, error: error || null };
 });
 
 wrapIpcHandler("llamacpp:start-custom-model", async (event, payload = {}) => {

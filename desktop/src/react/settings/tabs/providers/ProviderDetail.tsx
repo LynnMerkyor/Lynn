@@ -17,6 +17,43 @@ type LocalActionStatus = {
   text: string;
 };
 
+type LocalUpgradeOption = {
+  id?: string;
+  label?: string;
+  profile?: string;
+  metrics?: string[];
+  reason?: string;
+  modelscope_url?: string;
+  download_label?: string;
+};
+
+const LOCAL_QWEN36_35B_UPGRADE: LocalUpgradeOption = {
+  id: 'qwen36-35b-a3b-q4km-imatrix',
+  label: 'Qwen3.6-35B-A3B Q4_K_M imatrix',
+  profile: '24GB 显存/统一内存+ 推荐 · 能力优先',
+  metrics: ['thinking-on 32K', 'MMLU 90.40%', 'GPQA Diamond 80.70%', 'R6000 207 tok/s'],
+  reason: '24GB+ 能力优先本地路线；client default · thinking-on 32K，适合复杂推理和长上下文。',
+  modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix',
+  download_label: '下载/查看',
+};
+
+function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], memoryGib?: number | null) {
+  const normalized: LocalUpgradeOption[] = [];
+  let has35b = false;
+  for (const option of options) {
+    const haystack = `${option.id || ''} ${option.label || ''}`.toLowerCase();
+    if (haystack.includes('27b')) continue;
+    if (haystack.includes('35b')) {
+      normalized.push({ ...LOCAL_QWEN36_35B_UPGRADE, ...option, ...LOCAL_QWEN36_35B_UPGRADE });
+      has35b = true;
+      continue;
+    }
+    normalized.push(option);
+  }
+  if (!has35b && (memoryGib || 0) >= 24) normalized.push(LOCAL_QWEN36_35B_UPGRADE);
+  return normalized;
+}
+
 function localEndpointRoot(baseUrl?: string | null) {
   return String(baseUrl || 'http://127.0.0.1:18099/v1').replace(/\/v1\/?$/, '');
 }
@@ -122,15 +159,7 @@ type LocalQwen35Status = {
         parallel?: number;
         gpu_layers?: number;
       };
-      upgrade_options?: Array<{
-        id?: string;
-        label?: string;
-        profile?: string;
-        metrics?: string[];
-        reason?: string;
-        modelscope_url?: string;
-        download_label?: string;
-      }>;
+      upgrade_options?: LocalUpgradeOption[];
       warnings?: string[];
       blockers?: string[];
     };
@@ -159,23 +188,10 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
 
   const loadStatus = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
-    if (!quiet) setActionStatus({ kind: 'info', text: '正在刷新本地模型状态…' });
     try {
       const res = await hanaFetch('/api/local-qwen35-9b/status', { timeout: 60_000 });
       const data = await res.json();
       setStatus(data);
-      if (!quiet) {
-        const running = data?.plan?.observed?.endpoint_running === true || data?.runtime?.endpoint_running === true;
-        const loadingNow = data?.plan?.observed?.endpoint_loading === true || data?.runtime?.endpoint_loading === true;
-        setActionStatus({
-          kind: running ? 'success' : 'info',
-          text: running
-            ? `本地端点正在运行：${data?.plan?.base_url || 'http://127.0.0.1:18099/v1'}`
-            : loadingNow
-              ? '模型正在加载权重，Lynn 会继续刷新状态。'
-              : '状态已刷新。本地模型未运行时，可点击启动或重新注册端点。',
-        });
-      }
       if (data?.registered_provider && data?.plan?.observed?.endpoint_running) {
         platform?.settingsChanged?.('models-changed');
         window.dispatchEvent(new CustomEvent('models-changed'));
@@ -194,7 +210,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   }, [onRefresh]);
 
   useEffect(() => {
-    loadStatus();
+    loadStatus(true);
   }, [loadStatus]);
 
   const plan = status?.plan || {};
@@ -211,6 +227,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   );
   const endpointActive = endpointRunning || endpointLoading;
   const hasModel = !!observed.gguf;
+  const modelPath = typeof observed.gguf === 'string' ? observed.gguf : '';
+  const modelFileName = modelPath ? (modelPath.split(/[\\/]/).pop() || modelPath) : '';
   const hasRuntime = !!observed.llama_server;
   const jobRawStatus = status?.job?.status;
   const jobRunning = jobRawStatus === 'running';
@@ -226,7 +244,10 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     && jobRawStatus !== 'succeeded'
     && !(endpointRunning && jobRawStatus === 'failed');
   const progress = status?.job?.progress || null;
-  const upgradeOptions = hardware.upgrade_options || [];
+  const upgradeOptions = useMemo(
+    () => normalizeLocalUpgradeOptions(hardware.upgrade_options || [], hardware.total_memory_gib),
+    [hardware.upgrade_options, hardware.total_memory_gib],
+  );
   const progressPercent = typeof progress?.percent === 'number'
     ? Math.max(0, Math.min(100, progress.percent))
     : null;
@@ -241,7 +262,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     if (!slots?.total) return null;
     const busy = slots.busy || 0;
     const idle = Math.max(0, slots.total - busy);
-    return busy > 0 ? `处理中 ${busy}/${slots.total}` : `空闲 ${idle}/${slots.total}`;
+    return busy > 0 ? `生成中 ${busy}/${slots.total}` : `可用 ${idle}/${slots.total}`;
   })();
   const hardwareBlocked = hardware.can_enable === false;
   const stateLabel = useMemo(() => {
@@ -332,6 +353,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   };
 
   const stopLocalModel = async () => {
+    const ok = window.confirm('停止本地模型会释放内存，并中断正在使用本地 9B 的请求。之后可以随时重新启动。继续停止吗？');
+    if (!ok) return;
     setStopping(true);
     setActionStatus({ kind: 'info', text: '正在停止本地模型服务…' });
     try {
@@ -360,13 +383,14 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   };
 
   const openModelFolder = async () => {
-    const res = await platform?.llamacppOpenModelDir?.();
-    const modelPath = typeof observed.gguf === 'string' ? observed.gguf : '';
+    const res = await platform?.llamacppOpenModelDir?.(modelPath || null);
     setActionStatus({
       kind: res?.ok ? 'success' : 'info',
-      text: res?.ok
-        ? `已打开本地模型库：${res.path || '~/.lynn/models'}${modelPath ? '。当前 9B GGUF 已在本机就绪。' : ''}`
-        : '当前还没有已绑定的模型文件。请把 9B/27B/35B GGUF 放入本地模型目录，或点击“选择 GGUF”直接启动。',
+      text: res?.ok && modelPath
+        ? `已在 Finder 中定位当前 9B 模型：${modelFileName}。完整路径：${res.revealedPath || modelPath}`
+        : res?.ok
+          ? `已打开本地模型存放目录：${res.path || '~/.lynn/models'}。把 GGUF 放到这里后，可点击“导入并启动 GGUF”。`
+          : '当前还没有已绑定的模型文件。请把 GGUF 放入本地模型目录，或点击“导入并启动 GGUF”选择文件。',
     });
   };
 
@@ -412,9 +436,19 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
             llama.cpp、模型文件和本地 OpenAI 端点；完成后可离线使用，不需要 API Key，不上传对话。
           </div>
         </div>
-        <span className={`${styles['pv-local-qwen-state']} ${endpointActive ? styles['ready'] : ''}`}>
-          {loading && !endpointActive ? '检查中' : stateLabel}
-        </span>
+        <div className={styles['pv-local-qwen-state-stack']}>
+          <span className={`${styles['pv-local-qwen-state']} ${endpointActive ? styles['ready'] : ''}`}>
+            {loading && !endpointActive ? '检查中' : stateLabel}
+          </span>
+          <button
+            type="button"
+            className={`${styles['pv-verify-connection-btn']} ${styles['pv-local-qwen-stop-inline']}`}
+            onClick={stopLocalModel}
+            disabled={stopping}
+          >
+            {stopping ? '停止中' : '停止本地模型'}
+          </button>
+        </div>
       </div>
 
       <div className={styles['pv-local-qwen-benefits']}>
@@ -431,6 +465,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
 
       <div className={styles['pv-local-qwen-facts']}>
         <span>模型 {hasModel ? '已就绪' : '待下载'}</span>
+        {modelFileName && <span title={modelPath}>9B 文件 {modelFileName}</span>}
         <span>llama.cpp {hasRuntime ? '已找到' : '待安装'}</span>
         {endpointActive && runtimeStats?.pid && <span>PID {runtimeStats.pid}</span>}
         {endpointLoading && <span>模型权重加载中</span>}
@@ -469,7 +504,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
                     ))}
                   </div>
                 )}
-                <span>{option.reason || '32GB+ 设备可试高能力本地模型。'}</span>
+                <span>{option.reason || '24GB+ 设备可试高能力本地模型。'}</span>
               </div>
               <div className={styles['pv-local-qwen-upgrade-actions']}>
                 {option.modelscope_url ? (
@@ -483,7 +518,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
                   onClick={chooseGgufModel}
                   disabled={customStarting}
                 >
-                  {customStarting ? '启动中' : '选择本机 GGUF'}
+                  {customStarting ? '启动中' : '导入并启动'}
                 </button>
               </div>
             </div>
@@ -504,11 +539,12 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           <div className={styles['pv-local-qwen-advanced-panel']}>
             <div>
               <strong>自选 GGUF 模型</strong>
-              <span>默认使用 9B。你也可以选本机已有的 27B/35B GGUF，Lynn 会按当前硬件配置启动 llama.cpp，并同步本地端点状态。</span>
+              <span>默认使用 9B。点击“定位 9B 文件”可在 Finder 中看到当前模型；如要换成已有 35B 等高阶 GGUF，点“导入并启动 GGUF”。</span>
+              {modelPath && <code className={styles['pv-local-qwen-model-path']}>{modelPath}</code>}
             </div>
             <div className={styles['pv-local-qwen-advanced-actions']}>
               <button type="button" className={styles['pv-verify-connection-btn']} onClick={openModelFolder}>
-                打开模型目录
+                {modelPath ? '定位 9B 文件' : '打开存放目录'}
               </button>
               <button
                 type="button"
@@ -516,7 +552,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
                 onClick={chooseGgufModel}
                 disabled={customStarting}
               >
-                {customStarting ? '启动中' : '选择 GGUF'}
+                {customStarting ? '启动中' : '导入并启动 GGUF'}
               </button>
             </div>
           </div>
@@ -586,16 +622,12 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         <button className={styles['pv-verify-connection-btn']} onClick={() => loadStatus(false)} disabled={loading}>
           {loading ? '刷新中' : '刷新状态'}
         </button>
-        {endpointActive && (
-          <>
-            {endpointRunning && <button className={styles['pv-verify-connection-btn']} onClick={openLocalDashboard}>
-              查看端点
-            </button>}
-            <button className={styles['pv-verify-connection-btn']} onClick={stopLocalModel} disabled={stopping}>
-              {stopping ? '停止中' : '停止本地模型'}
-            </button>
-          </>
-        )}
+        {endpointRunning && <button className={styles['pv-verify-connection-btn']} onClick={openLocalDashboard}>
+          查看端点
+        </button>}
+        <button className={styles['pv-verify-connection-btn']} onClick={stopLocalModel} disabled={stopping}>
+          {stopping ? '停止中' : '停止本地模型'}
+        </button>
         <button className={styles['pv-verify-connection-btn']} onClick={registerOnly} disabled={registering}>
           {registering ? '注册中' : '重新注册本地端点'}
         </button>

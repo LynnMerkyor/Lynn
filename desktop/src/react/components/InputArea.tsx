@@ -130,6 +130,13 @@ const FILE_CONTEXT_PATTERN = /\b([A-Za-z0-9_./-]+\.(?:tsx?|jsx?|css|json|md|py|r
 const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
 const LOCAL_QWEN35_MODEL_ID = 'qwen35-9b-q4km-imatrix';
 const LOCAL_QWEN35_ENDPOINT = 'http://127.0.0.1:18099/v1';
+const LOCAL_QWEN_PROMPT_DISMISS_KEY = 'lynn-local-model-prompt-dismissed-date';
+const LOCAL_QWEN_PROMPT_SHOWN_KEY = 'lynn-local-model-prompt-shown-date';
+const LOCAL_QWEN_PROMPT_DELAY_MS = 60_000;
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 type LocalQwen35RuntimeStatus = {
   ok?: boolean;
@@ -252,11 +259,14 @@ function InputAreaInner() {
   const [inputValue, setInputValue] = useState(composerText);
   const [localQwenStatus, setLocalQwenStatus] = useState<LocalQwen35RuntimeStatus | null>(null);
   const [localQwenDismissed, setLocalQwenDismissed] = useState(false);
+  const [localQwenOptimisticStarting, setLocalQwenOptimisticStarting] = useState(false);
   const [localQwenPanelOpen, setLocalQwenPanelOpen] = useState(false);
+  const [localQwenPromptReady, setLocalQwenPromptReady] = useState(false);
   const [localQwenSnoozed, setLocalQwenSnoozed] = useState(() => {
     try {
-      const until = Number(localStorage.getItem('lynn-local-model-snooze-until') || '0');
-      return Number.isFinite(until) && until > Date.now();
+      const today = todayKey();
+      return localStorage.getItem(LOCAL_QWEN_PROMPT_DISMISS_KEY) === today
+        || localStorage.getItem(LOCAL_QWEN_PROMPT_SHOWN_KEY) === today;
     } catch {
       return false;
     }
@@ -284,12 +294,15 @@ function InputAreaInner() {
   const localQwenRunning = localQwenStatus?.runtime?.endpoint_running === true
     || localQwenStatus?.plan?.observed?.endpoint_running === true
     || localQwenStatus?.plan?.plan?.observed?.endpoint_running === true;
+  const localQwenRuntimeLoading = localQwenStatus?.runtime?.endpoint_loading === true
+    || localQwenStatus?.runtime?.process_alive === true
+    || localQwenStatus?.plan?.observed?.endpoint_loading === true
+    || localQwenStatus?.plan?.plan?.observed?.endpoint_loading === true;
   const localQwenLoading = !localQwenRunning && (
-    localQwenStatus?.runtime?.endpoint_loading === true
-      || localQwenStatus?.runtime?.process_alive === true
-      || localQwenStatus?.plan?.observed?.endpoint_loading === true
-      || localQwenStatus?.plan?.plan?.observed?.endpoint_loading === true
+    localQwenOptimisticStarting
+      || localQwenRuntimeLoading
   );
+  const localQwenStarting = !localQwenRunning && localQwenOptimisticStarting && !localQwenRuntimeLoading;
   const localQwenActive = localQwenRunning || localQwenLoading;
   const localQwenCurrent = currentModelInfo?.id === LOCAL_QWEN35_MODEL_ID && currentModelInfo?.provider === LOCAL_QWEN35_PROVIDER_ID;
   const localQwenStatusVisible = localQwenActive && !localQwenDismissed;
@@ -304,7 +317,7 @@ function InputAreaInner() {
     ?? localQwenStatus?.plan?.plan?.hardware?.can_enable) !== false;
   const localQwenHasModel = !!(localQwenStatus?.plan?.observed?.gguf || localQwenStatus?.plan?.plan?.observed?.gguf);
   const localQwenHasRuntime = !!(localQwenStatus?.plan?.observed?.llama_server || localQwenStatus?.plan?.plan?.observed?.llama_server);
-  const localQwenRecommended = !!localQwenStatus?.ok && localQwenCanEnable && !localQwenActive && !localQwenDismissed && !localQwenSnoozed;
+  const localQwenRecommended = localQwenPromptReady && !!localQwenStatus?.ok && localQwenCanEnable && !localQwenActive && !localQwenDismissed && !localQwenSnoozed;
   const localQwenMetricTokens = Math.round(
     Number(localQwenStatus?.runtime?.metrics?.predicted_tokens_total || 0)
       + Number(localQwenStatus?.runtime?.metrics?.prompt_tokens_total || 0),
@@ -315,11 +328,41 @@ function InputAreaInner() {
     if (!slots?.total) return null;
     const busy = slots.busy || 0;
     const idle = Math.max(0, slots.total - busy);
-    return busy > 0 ? `处理中 ${busy}/${slots.total}` : `空闲 ${idle}/${slots.total}`;
+    return busy > 0 ? `生成中 ${busy}/${slots.total}` : `可接收 ${idle}/${slots.total}`;
   }, [localQwenStatus?.runtime?.slots]);
   const localQwenMetricSummary = localQwenMetricsReady
     ? (localQwenMetricTokens > 0 ? `${localQwenMetricTokens.toLocaleString()} tok` : '0 tok')
     : '统计同步中';
+  const localQwenWarmupStage = localQwenRunning
+    ? 'ready'
+    : localQwenStarting
+      ? 'launching'
+      : localQwenLoading
+        ? 'loading'
+        : 'checking';
+  const localQwenWarmupTitle = localQwenRunning
+    ? (localQwenCurrent ? '本地 9B 正在运行' : '本地 9B 已就绪')
+    : localQwenWarmupStage === 'launching'
+      ? '本地 9B 正在启动'
+      : localQwenWarmupStage === 'loading'
+        ? '本地 9B 正在加载'
+        : '本地 9B 正在连接';
+  const localQwenWarmupCopy = localQwenRunning
+    ? localQwenCurrent
+      ? `${localQwenRuntimeLabel} · 日常任务可无限 token`
+      : localQwenModel
+        ? '已注册到模型列表，可一键切换为本地优先'
+        : '端点已就绪，正在同步到模型列表'
+    : localQwenWarmupStage === 'launching'
+      ? '正在拉起 llama.cpp。首次启动通常需要 30-45 秒，Lynn 会持续反馈进度。'
+      : localQwenWarmupStage === 'loading'
+        ? 'llama.cpp 已启动，正在加载 9B 权重并预热首轮响应。'
+        : '正在确认本地端点状态，稍后会自动刷新。';
+  const localQwenStatusBarClass = [
+    styles['local-model-status-bar'],
+    !localQwenRunning ? styles['local-model-status-bar-muted'] : '',
+    localQwenActive && !localQwenRunning ? styles['local-model-status-bar-busy'] : '',
+  ].filter(Boolean).join(' ');
   const inputLineCount = useMemo(() => {
     if (!inputValue) return 0;
     return inputValue.split(/\r\n|\n|\r/).length;
@@ -347,6 +390,11 @@ function InputAreaInner() {
       const res = await hanaFetch('/api/local-qwen35-9b/status', { timeout: 10_000 });
       const data = await res.json();
       setLocalQwenStatus(data);
+      if (data?.runtime?.endpoint_running === true
+        || data?.plan?.observed?.endpoint_running === true
+        || data?.plan?.plan?.observed?.endpoint_running === true) {
+        setLocalQwenOptimisticStarting(false);
+      }
       if (data?.registered_provider && data?.plan?.observed?.endpoint_running) {
         void loadModels();
       }
@@ -356,6 +404,7 @@ function InputAreaInner() {
   }, []);
 
   const markLocalQwenLoading = useCallback(() => {
+    setLocalQwenOptimisticStarting(true);
     setLocalQwenStatus(prev => ({
       ...(prev || { ok: true }),
       ok: prev?.ok ?? true,
@@ -379,6 +428,7 @@ function InputAreaInner() {
   }, []);
 
   const markLocalQwenStopped = useCallback(() => {
+    setLocalQwenOptimisticStarting(false);
     setLocalQwenStatus(prev => ({
       ...(prev || { ok: true }),
       ok: prev?.ok ?? true,
@@ -412,7 +462,7 @@ function InputAreaInner() {
   }, []);
 
   const scheduleLocalQwenRefreshBurst = useCallback(() => {
-    [500, 1000, 2000, 4000, 8000, 12000].forEach(delay => {
+    [0, 250, 750, 1500, 3000, 6000, 12000].forEach(delay => {
       window.setTimeout(() => void refreshLocalQwenStatus(), delay);
     });
   }, [refreshLocalQwenStatus]);
@@ -452,6 +502,20 @@ function InputAreaInner() {
     const id = window.setInterval(refreshLocalQwenStatus, 15_000);
     return () => window.clearInterval(id);
   }, [refreshLocalQwenStatus]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setLocalQwenPromptReady(true), LOCAL_QWEN_PROMPT_DELAY_MS);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  useEffect(() => {
+    if (!localQwenRecommended) return;
+    try {
+      localStorage.setItem(LOCAL_QWEN_PROMPT_SHOWN_KEY, todayKey());
+    } catch {
+      // ignore unavailable storage
+    }
+  }, [localQwenRecommended]);
 
   useEffect(() => {
     if (isComposing.current) return;
@@ -836,6 +900,14 @@ function InputAreaInner() {
     });
   }, []);
 
+  const dismissLocalQwenStatus = useCallback(() => {
+    const message = localQwenActive
+      ? '只是收起本地模型状态条，不会停止模型。之后可点聊天框里的“本地模型状态”恢复，或去“设置 > 模型”停止本地模型。'
+      : '收起这条本地模型提示？之后仍可在“设置 > 模型”里启动。';
+    if (!window.confirm(message)) return;
+    setLocalQwenDismissed(true);
+  }, [localQwenActive]);
+
   const startLocalQwen = useCallback(async () => {
     try {
       flushSync(() => {
@@ -857,6 +929,7 @@ function InputAreaInner() {
       await refreshLocalQwenStatus();
       scheduleLocalQwenRefreshBurst();
     } catch (err) {
+      setLocalQwenOptimisticStarting(false);
       const msg = err instanceof Error ? err.message : String(err);
       showSidebarToast('启动本地 9B 失败：' + msg, 5000, 'error');
       openLocalQwenSettings();
@@ -869,9 +942,8 @@ function InputAreaInner() {
   }, [refreshLocalQwenStatus]);
 
   const snoozeLocalQwenPrompt = useCallback(() => {
-    const tomorrow = Date.now() + 24 * 60 * 60 * 1000;
     try {
-      localStorage.setItem('lynn-local-model-snooze-until', String(tomorrow));
+      localStorage.setItem(LOCAL_QWEN_PROMPT_DISMISS_KEY, todayKey());
     } catch {
       // ignore unavailable storage
     }
@@ -1441,28 +1513,12 @@ function InputAreaInner() {
       )}
       {localQwenStatusVisible && (
         <div className={styles['local-model-status-stack']}>
-          <div className={`${styles['local-model-status-bar']} ${!localQwenRunning ? styles['local-model-status-bar-muted'] : ''}`}>
+          <div className={localQwenStatusBarClass}>
             <div className={styles['local-model-status-left']}>
               <span className={styles['local-model-status-dot']} aria-hidden="true" />
               <div className={styles['local-model-status-copy']}>
-                <strong>
-                  {localQwenRunning
-                    ? (localQwenCurrent ? '本地 9B 正在运行' : '本地 9B 已就绪')
-                    : localQwenLoading
-                      ? '本地 9B 正在加载'
-                      : '本地 9B 正在连接'}
-                </strong>
-                <span>
-                  {!localQwenRunning
-                    ? localQwenLoading
-                      ? 'llama.cpp 已启动，正在加载模型权重。'
-                      : 'Lynn 正在确认本地端点状态，稍后会自动刷新'
-                    : localQwenCurrent
-                    ? `${localQwenRuntimeLabel} · 日常任务可无限 token`
-                    : localQwenModel
-                      ? '已注册到模型列表，可一键切换为本地优先'
-                      : '端点已就绪，正在同步到模型列表'}
-                </span>
+                <strong>{localQwenWarmupTitle}</strong>
+                <span>{localQwenWarmupCopy}</span>
               </div>
             </div>
             <div className={styles['local-model-status-meta']}>
@@ -1478,7 +1534,7 @@ function InputAreaInner() {
               <button type="button" onClick={refreshLocalQwenStatus}>刷新</button>
               <button type="button" onClick={openLocalQwenDashboard} aria-expanded={localQwenPanelOpen}>状态</button>
               {localQwenActive && <button type="button" onClick={stopLocalQwen}>停止</button>}
-              <button type="button" onClick={() => setLocalQwenDismissed(true)} aria-label="关闭本地模型状态">×</button>
+              <button type="button" onClick={dismissLocalQwenStatus} aria-label="收起本地模型状态">×</button>
             </div>
           </div>
           {localQwenPanelOpen && (
@@ -1493,13 +1549,27 @@ function InputAreaInner() {
               <div className={styles['local-model-status-panel-grid']}>
                 <span><b>端点</b>{localQwenEndpoint}</span>
                 <span><b>进程</b>{localQwenStatus?.runtime?.pid ? `PID ${localQwenStatus.runtime.pid}` : localQwenLoading ? '加载中' : '运行中'}</span>
-                <span><b>槽位</b>{localQwenSlotSummary || '空闲 1/1'}</span>
+                <span><b>任务槽</b>{localQwenSlotSummary || '可接收 1/1'}</span>
                 <span><b>统计</b>{localQwenMetricSummary}</span>
               </div>
               <p>退出 Lynn 时会自动停止本地模型；需要马上释放内存时点“停止”。</p>
             </div>
           )}
         </div>
+      )}
+      {localQwenActive && localQwenDismissed && (
+        <button
+          type="button"
+          className={styles['local-model-status-restore']}
+          onClick={() => {
+            setLocalQwenDismissed(false);
+            setLocalQwenPanelOpen(true);
+          }}
+        >
+          <span className={styles['local-model-status-dot']} aria-hidden="true" />
+          <strong>{localQwenRunning ? '本地 9B 正在运行' : '本地 9B 正在加载'}</strong>
+          <span>显示状态</span>
+        </button>
       )}
       {!localQwenActive && localQwenModel && localQwenHasModel && localQwenHasRuntime && !localQwenDismissed && (
         <div className={`${styles['local-model-status-bar']} ${styles['local-model-status-bar-muted']}`}>
@@ -1517,7 +1587,7 @@ function InputAreaInner() {
           <div className={styles['local-model-status-actions']}>
             <button type="button" onClick={startLocalQwen}>启动</button>
             <button type="button" onClick={refreshLocalQwenStatus}>刷新</button>
-            <button type="button" onClick={() => setLocalQwenDismissed(true)} aria-label="关闭本地模型状态">×</button>
+            <button type="button" onClick={dismissLocalQwenStatus} aria-label="收起本地模型状态">×</button>
           </div>
         </div>
       )}
@@ -1526,16 +1596,16 @@ function InputAreaInner() {
           <div className={styles['local-model-status-left']}>
             <span className={styles['local-model-status-dot']} aria-hidden="true" />
             <div className={styles['local-model-status-copy']}>
-              <strong>这台设备适合本地 9B</strong>
+              <strong>可安装本地 9B</strong>
               <span>
                 {localQwenHasModel && localQwenHasRuntime
                   ? '模型和 llama.cpp 已就绪，授权后即可启动本地无限 token。'
-                  : 'Lynn 可自动准备模型和运行端点，原有模型仍可继续使用。'}
+                  : 'Qwen3.5-9B Q4_K_M imatrix · 5.3GB · 32K；授权后自动准备，当前模型照常保留。'}
               </span>
             </div>
           </div>
           <div className={styles['local-model-status-actions']}>
-            <button type="button" onClick={openLocalQwenSettings}>启用</button>
+            <button type="button" onClick={openLocalQwenSettings}>安装本地模型</button>
             <button type="button" onClick={snoozeLocalQwenPrompt}>稍后</button>
           </div>
         </div>

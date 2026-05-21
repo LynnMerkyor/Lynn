@@ -5,8 +5,9 @@
  *
  * 设计要点：
  *   1. HTTP/HTTPS Range 续传(用 .part 临时文件 + 已下载 byte offset)。
- *   2. 多源 fallback：Tencent mirror → HuggingFace → ModelScope。
+ *   2. 多源 fallback：ModelScope(国内默认) → hf-mirror.com(国内 HF 镜像备选)。
  *      任一源 4xx/5xx/timeout 自动 rotate 到下一个,**保留已下载字节**继续 range。
+ *      不放腾讯镜像作为模型源 — 模型权重统一从公开发布镜像拉,腾讯只做客户端 dmg/exe。
  *   3. SHA-256 校验：streamed 增量算 hash,文件落地后比对 expected;
  *      不匹配 → 删 .part + 整源 fallback;全 fail → emit "checksum-failed"。
  *   4. EventEmitter:'progress'(每 250ms / 256 KiB) | 'state'(needs-source/downloading/verifying/done/error)
@@ -17,10 +18,9 @@
  * 默认目标(可被 opts.target 覆盖):
  *   ~/.lynn/models/qwen3.5-9b-q4km-imatrix.gguf
  *
- * 默认源(可被 opts.sources 覆盖):
- *   - https://download.merkyorlynn.com/models/Qwen3.5-9B-Q4_K_M-imatrix.gguf  (Tencent mirror 默认)
- *   - https://huggingface.co/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix.gguf
- *   - https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix.gguf
+ * 默认源(可被 opts.sources 覆盖,顺序 = 国内优先):
+ *   - https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix.gguf  (国内主源)
+ *   - https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix.gguf          (国内 HF 镜像备)
  *
  * sha256: 9437f5bf0dd0c97800caaf902f41e6a6aa00223ab232f159eda41dcbbb492645
  * size:   5_300_000_000 bytes (期望,允许 ±0.5% 偏差,实际以 sha256 为准)
@@ -45,19 +45,14 @@ const DEFAULT_EXPECTED_SHA256 = "9437f5bf0dd0c97800caaf902f41e6a6aa00223ab232f15
 
 const DEFAULT_SOURCES = Object.freeze([
   {
-    id: "tencent",
-    label: "Tencent mirror",
-    url: "https://download.merkyorlynn.com/models/Qwen3.5-9B-Q4_K_M-imatrix.gguf",
-  },
-  {
-    id: "huggingface",
-    label: "HuggingFace",
-    url: "https://huggingface.co/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix.gguf",
-  },
-  {
     id: "modelscope",
-    label: "ModelScope",
+    label: "ModelScope (国内主源)",
     url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix.gguf",
+  },
+  {
+    id: "hf-mirror",
+    label: "hf-mirror.com (国内 HF 镜像)",
+    url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix.gguf",
   },
 ]);
 
