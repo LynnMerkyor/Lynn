@@ -597,6 +597,29 @@ Lynn 之前一直走"客户端 + Brain 兜底"的路子:模型用别人家的(Mi
 
 ---
 
+## 本地 9B，日常无限用
+
+Lynn v0.79 起把 **Qwen3.5-9B Q4_K_M imatrix** 做成内置本地模型入口。它不是给专家看的隐藏选项，而是给普通 Mac / PC 用户的一键离线能力：Lynn 会在你授权后自动准备 llama.cpp、模型文件和本地 OpenAI 兼容端点，完成后自动切换到本地模型。
+
+| 项目 | 说明 |
+|---|---|
+| 默认本地模型 | Qwen3.5-9B Q4_K_M imatrix |
+| 模型体积 | 约 5.3GB |
+| 上下文 | 32K |
+| 能力信号 | MMLU 90+ / GPQA 80+（thinking-on 32K 口径） |
+| 运行方式 | llama.cpp 本地服务，OpenAI-compatible `/v1` 端点 |
+| 隐私 | 可完全离线；不需要 API Key；对话不上传 |
+
+### 下载与镜像
+
+- 🇨🇳 **ModelScope（国内推荐）**：`Merkyor/Qwen3.5-9B-GGUF-imatrix`（Q4_K_M imatrix GGUF）
+- 🤗 **Hugging Face**：`Merkyor/Qwen3.5-9B-GGUF-imatrix`（Q4_K_M imatrix GGUF）
+- 高配设备（32GB+ 内存/显存）可选 **Qwen3.6-35B-A3B Q4_K_M imatrix**：[ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix)
+
+应用内路径：**设置 → 模型 → 本地 Qwen3.5-9B → 授权安装并启用**。下载、校验、启动和模型注册都由 Lynn 后台完成；你可以随时在输入框旁看到本地模型状态，也可以停止以释放内存。
+
+---
+
 ## 开箱即用，零配置
 
 首次启动有两条路径：
@@ -615,6 +638,7 @@ T6  Step-3.5 Flash / MiniMax M2.7-highspeed（末级兜底）
 多级降级自动切换：某档不可用 → 自动下一档，对话不中断。**默认模型有工具调用能力**（Plan C 透传，可以直接跑 `write` / `edit` / `read` / `bash`），不只是聊天。MiMo 主链已支持 `thinking:{type:"disabled"}` 快速模式，简单 chat TTF -51%。
 
 **隐私三条承诺**：不训练、不落盘、日志最小化。想要绝对隐私？三种逃生路径：
+- Lynn 本地 Qwen3.5-9B Q4_K_M imatrix（推荐日常无限 token）
 - 全程 Ollama 本地模型（无任何数据出门）
 - 自备 OpenAI / Anthropic / Moonshot 等 API Key（走你自己的账号）
 - 敏感工作区路径隔离（`.lynn/private/*` 不进记忆）
@@ -805,6 +829,7 @@ Linux 版本计划中。
 ### 首次运行
 
 - **Quick Start**：输入名字 → 授权 → 进入主界面。默认模型池开箱即用，无需 API Key。
+- **本地模型**：设置 → 模型 → 本地 Qwen3.5-9B。Lynn 会在授权后自动下载 Q4_K_M imatrix、准备 llama.cpp、启动本地端点并切换模型。
 - **Advanced Setup**：输入名字 → 连接自己的供应商 → 选对话/工具模型 → 设权限 → 进入。
 
 所有模型配置后续都可在设置调整。
@@ -931,7 +956,7 @@ npm run dist:local            # 本地打包（macOS DMG，跳过公证）
 
 ### Q6：能改模型吗？接自己的 API？
 
-可以。设置 → 供应商 → 填 API Key（支持 OpenAI / Anthropic / DeepSeek / 智谱 / Kimi / MiniMax / 通义千问 / 百炼 / Ollama 本地 / 硅基流动 等所有 OpenAI-compat provider）。
+可以。设置 → 模型 → 填 API Key（支持 OpenAI / Anthropic / DeepSeek / 智谱 / Kimi / MiniMax / 通义千问 / 百炼 / Ollama 本地 / 硅基流动 等所有 OpenAI-compat provider）。
 
 **7 家国产 Coding Plan 预注册**，填 Key 即用：百炼 / 智谱 / Kimi / MiniMax / 阶跃 / 腾讯云 / 火山引擎。
 

@@ -4,6 +4,7 @@
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { t } from "../i18n.js";
+import { BRAIN_DEFAULT_MODEL_ID, isBrainProvider } from "../../shared/brain-provider.js";
 import { findModel, modelRefEquals, parseModelRef } from "../../shared/model-ref.js";
 import { lookupKnown } from "../../shared/known-models.js";
 
@@ -95,6 +96,27 @@ export function createModelsRoute(engine) {
       // OpenAI Codex Responses API：无法通过简单请求检测（Cloudflare 反爬），跳过
       if (api === "openai-codex-responses") {
         return c.json({ ok: true, status: 0, provider: model.provider, skipped: t("error.codexNoHealthCheck") });
+      }
+
+      if (isBrainProvider(model.provider)) {
+        const { buildProviderAuthHeaders } = await import("../../lib/llm/provider-client.js");
+        const headers = buildProviderAuthHeaders(api, apiKey, {
+          allowMissingApiKey,
+          method: "POST",
+          pathname: "/chat/completions",
+        });
+        const res = await fetch(`${String(baseUrl).replace(/\/+$/, "")}/chat/completions`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: BRAIN_DEFAULT_MODEL_ID,
+            temperature: 0,
+            max_tokens: 1,
+            messages: [{ role: "user", content: "." }],
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+        return c.json({ ok: res.ok, status: res.status, provider: model.provider });
       }
 
       const probe = buildProbeUrl(baseUrl, api);

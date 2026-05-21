@@ -31,7 +31,31 @@ contextBridge.exposeInMainWorld("hana", {
     return () => ipcRenderer.removeListener("auto-update-state", handler);
   },
   appReady: () => ipcRenderer.invoke("app-ready"),
+  // llama.cpp local 推理 (Lynn V0.79 默认本地模型)
+  llamacppGetState: () => ipcRenderer.invoke("llamacpp:state"),
+  llamacppStartDownload: () => ipcRenderer.invoke("llamacpp:start-download"),
+  llamacppPauseDownload: () => ipcRenderer.invoke("llamacpp:pause-download"),
+  llamacppCancelDownload: () => ipcRenderer.invoke("llamacpp:cancel-download"),
+  llamacppGetSources: () => ipcRenderer.invoke("llamacpp:sources"),
+  llamacppOpenModelDir: (targetPath) => ipcRenderer.invoke("llamacpp:open-model-dir", { targetPath }),
+  llamacppStartCustomModel: (modelPath) => ipcRenderer.invoke("llamacpp:start-custom-model", { modelPath }),
+  onLlamacppState: (cb) => {
+    const handler = (_event, state) => cb(state);
+    ipcRenderer.on("llamacpp:state", handler);
+    return () => ipcRenderer.removeListener("llamacpp:state", handler);
+  },
+  onLlamacppDownloadProgress: (cb) => {
+    const handler = (_event, state) => cb(state);
+    ipcRenderer.on("llamacpp:download-progress", handler);
+    return () => ipcRenderer.removeListener("llamacpp:download-progress", handler);
+  },
+  onLlamacppDownloadState: (cb) => {
+    const handler = (_event, state) => cb(state);
+    ipcRenderer.on("llamacpp:download-state", handler);
+    return () => ipcRenderer.removeListener("llamacpp:download-state", handler);
+  },
   selectFolder: () => ipcRenderer.invoke("select-folder"),
+  selectGgufModel: () => ipcRenderer.invoke("select-gguf-model"),
   getOnboardingDefaults: () => ipcRenderer.invoke("get-onboarding-defaults"),
   selectSkill: () => ipcRenderer.invoke("select-skill"),
   openFolder: (path) => ipcRenderer.invoke("open-folder", path),
@@ -56,6 +80,7 @@ contextBridge.exposeInMainWorld("hana", {
     return granted ? filePath : null;
   },
   getAvatarPath: (role) => ipcRenderer.invoke("get-avatar-path", role),
+  uploadAvatar: (role) => ipcRenderer.invoke("avatar:upload", role),
   getSplashInfo: () => ipcRenderer.invoke("get-splash-info"),
   reloadMainWindow: () => ipcRenderer.invoke("reload-main-window"),
   // Onboarding

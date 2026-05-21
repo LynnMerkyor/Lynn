@@ -18,6 +18,8 @@ const { initAutoUpdater, checkForUpdatesAuto, setMainWindow: setUpdaterMainWindo
 const { setIpcSenderValidator, wrapIpcHandler, wrapIpcOn } = require('./ipc-wrapper.cjs');
 const { normalizeConfiguredShortcut, registerFirstAvailableGlobalShortcut } = require("./shortcut-policy.cjs");
 const { VoiceTunnelManager } = require("./voice-tunnel-manager.cjs");
+const { LlamaCppManager, DEFAULT_CONFIG: LLAMACPP_DEFAULT_CONFIG } = require("./llamacpp-manager.cjs");
+const { ModelDownloader, DEFAULT_SOURCES: MODEL_DOWNLOADER_SOURCES } = require("./model-downloader.cjs");
 
 // macOS/Linux: Electron 从 Dock/Finder 启动时 PATH 只有系统默认值，
 // Homebrew、npm global 等路径全部丢失。用登录 shell 解析完整 PATH。
@@ -441,12 +443,19 @@ function writeUserPreferences(nextPrefs) {
   fs.writeFileSync(prefsPath, JSON.stringify(nextPrefs, null, 2) + "\n", "utf-8");
 }
 
-// v0.78 policy: new installs default to Brain v2, while existing user-persisted
-// brain provider URLs stay untouched so stable v1 installs keep working.
+// v0.79 policy: the built-in default model is Brain v2. Older desktop builds
+// persisted v1 roots in ~/.lynn; migrate only the first-party "brain" provider
+// so BYOK/custom providers stay untouched.
 const CANONICAL_BRAIN_API_ROOT = "https://api.merkyorlynn.com/api/v2";
 const CANONICAL_BRAIN_PROVIDER_BASE_URL = `${CANONICAL_BRAIN_API_ROOT}/v1`;
-const DEPRECATED_BRAIN_API_ROOTS = new Set([]);
-const DEPRECATED_BRAIN_PROVIDER_BASE_URLS = new Set([]);
+const DEPRECATED_BRAIN_API_ROOTS = new Set([
+  "https://api.merkyorlynn.com/api",
+  "http://82.156.182.240/api",
+]);
+const DEPRECATED_BRAIN_PROVIDER_BASE_URLS = new Set([
+  "https://api.merkyorlynn.com/api/v1",
+  "http://82.156.182.240/api/v1",
+]);
 
 function normalizeBrainUrl(value) {
   const text = String(value || "").trim();
@@ -1570,6 +1579,53 @@ function normalizeSettingsNavigationTarget(target) {
 function createSettingsWindow(target, theme) {
   const navigationTarget = normalizeSettingsNavigationTarget(target);
   const desiredStamp = getWindowEntryStamp("settings");
+  let settingsHealAttempts = 0;
+  const verifySettingsRenderer = () => {
+    const win = settingsWindow;
+    if (!win || win.isDestroyed()) return;
+    setTimeout(() => {
+      const current = settingsWindow;
+      if (!current || current.isDestroyed() || current !== win) return;
+      current.webContents.executeJavaScript(`
+        (() => {
+          const root = document.getElementById('react-root');
+          const bodyText = (document.body && document.body.innerText || '').slice(0, 800);
+          return {
+            href: location.href,
+            title: document.title || '',
+            rootChildren: root ? root.childElementCount : -1,
+            bodyText,
+          };
+        })()
+      `, true).then((snapshot) => {
+        const text = String(snapshot?.bodyText || "");
+        const lowerText = text.toLowerCase();
+        const looksLikeSource = [
+          "<!doctype",
+          "<html",
+          "<head",
+          "<body",
+          "<script",
+          "<link",
+          "stylesheet",
+          "react-root",
+          "settings-main",
+          "窗口控制按钮",
+        ].some((needle) => lowerText.includes(String(needle).toLowerCase()));
+        const emptyRoot = Number(snapshot?.rootChildren || 0) <= 0;
+        if (!emptyRoot && !looksLikeSource) return;
+        if (settingsHealAttempts >= 1) {
+          console.warn("[desktop] settings renderer sanity check failed after reload", snapshot);
+          return;
+        }
+        settingsHealAttempts += 1;
+        console.warn("[desktop] settings renderer looked empty/raw; reloading entry", snapshot);
+        void loadWindowURL(current, "settings");
+      }).catch((err) => {
+        console.warn("[desktop] settings renderer sanity check failed:", err?.message || err);
+      });
+    }, 900);
+  };
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     // renderer 已崩溃：销毁旧窗口，走下方重建流程
     if (settingsWindow.webContents.isCrashed()) {
@@ -1597,11 +1653,10 @@ function createSettingsWindow(target, theme) {
   markPreferredPrimaryWindow("settings");
 
   settingsWindow = new BrowserWindow({
-    width: 720,
-    height: 700,
-    minWidth: 720,
-    maxWidth: 720,
-    minHeight: 500,
+    width: 1580,
+    height: 960,
+    minWidth: 1280,
+    minHeight: 720,
     title: "Settings",
     ...titleBarOpts({ x: 16, y: 14 }),
     backgroundColor: THEME_BG[theme || _browserViewerTheme] || THEME_BG["warm-paper"],
@@ -1638,6 +1693,8 @@ function createSettingsWindow(target, theme) {
       console.warn(`[desktop] settings console(${level}) ${sourceId}:${line} ${message}`);
     }
   });
+
+  settingsWindow.webContents.on("did-finish-load", verifySettingsRenderer);
 
   void Promise.allSettled([
     settingsWindow.webContents.session.clearCache(),
@@ -2631,6 +2688,14 @@ wrapIpcOn("settings-changed", (_event, type, data) => {
 // 获取头像本地路径（splash 用，不依赖 server）
 wrapIpcHandler("get-avatar-path", (_event, role) => {
   if (role !== "agent" && role !== "user") return null;
+  // First check the user-uploaded avatar slot (P2-3 onboarding upload).
+  try {
+    const uploadedDir = path.join(lynnHome, "avatars");
+    for (const ext of ["png", "jpg", "jpeg", "webp"]) {
+      const p = path.join(uploadedDir, `${role}.${ext}`);
+      if (fs.existsSync(p)) return p;
+    }
+  } catch {}
   const agentId = getCurrentAgentId();
   // agent 头像在 agents/{id}/avatars/，user 头像在 user/avatars/
   const baseDir = role === "user"
@@ -2643,6 +2708,39 @@ wrapIpcHandler("get-avatar-path", (_event, role) => {
     if (fs.existsSync(p)) return p;
   }
   return null;
+});
+
+// P2-3: Upload a user-supplied avatar image into ~/.lynn/avatars/ keyed by role.
+// Returns { ok, path } on success. Used by onboarding NameStep.
+wrapIpcHandler("avatar:upload", async (event, role) => {
+  try {
+    if (role !== "agent" && role !== "user") return { ok: false, reason: "bad-role" };
+    const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getFocusedWindow();
+    const { canceled, filePaths } = await dialog.showOpenDialog(win || undefined, {
+      title: role === "user" ? "Select your avatar" : "Select agent avatar",
+      properties: ["openFile"],
+      filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg", "webp"] }],
+    });
+    if (canceled || !filePaths?.length) return { ok: false, reason: "cancelled" };
+    const src = filePaths[0];
+    const stat = fs.statSync(src);
+    // Reject anything larger than 8 MB so the renderer doesn't strain.
+    if (stat.size > 8 * 1024 * 1024) return { ok: false, reason: "too-large" };
+    const ext = (path.extname(src) || ".png").toLowerCase();
+    const safeExt = [".png", ".jpg", ".jpeg", ".webp"].includes(ext) ? ext : ".png";
+    const targetDir = path.join(lynnHome, "avatars");
+    fs.mkdirSync(targetDir, { recursive: true });
+    const targetPath = path.join(targetDir, `${role}${safeExt}`);
+    // Remove any prior avatar (different ext) so lookup is unambiguous.
+    for (const e of [".png", ".jpg", ".jpeg", ".webp"]) {
+      const stale = path.join(targetDir, `${role}${e}`);
+      if (stale !== targetPath) { try { fs.rmSync(stale, { force: true }); } catch {} }
+    }
+    fs.copyFileSync(src, targetPath);
+    return { ok: true, path: targetPath };
+  } catch (err) {
+    return { ok: false, reason: String(err?.message || err) };
+  }
 });
 
 // 读取 config.yaml 基本信息（splash 用，不依赖 server）
@@ -2702,6 +2800,23 @@ wrapIpcHandler("select-skill", async (event) => {
     title: mt("dialog.selectSkill", null, "Select Skill"),
     filters: [
       { name: "Skill", extensions: ["zip", "skill"] },
+      { name: "All Files", extensions: ["*"] },
+    ],
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  const selectedPath = result.filePaths[0];
+  grantWebContentsAccess(event.sender, selectedPath, "read");
+  return selectedPath;
+});
+
+wrapIpcHandler("select-gguf-model", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  if (!win) return null;
+  const result = await dialog.showOpenDialog(win, {
+    properties: ["openFile"],
+    title: "选择 GGUF 模型",
+    filters: [
+      { name: "GGUF Model", extensions: ["gguf"] },
       { name: "All Files", extensions: ["*"] },
     ],
   });
@@ -3367,6 +3482,258 @@ function stopVoiceTunnel() {
 }
 wrapIpcHandler("voice-tunnel-status", () => (voiceTunnel ? voiceTunnel.getStatus() : { stopped: true }));
 
+// ─────────────────────────────────────────────────────────────
+// llama.cpp local 推理守护(2026-05-20 战略 pivot 后默认本地推理底层)
+//   - 找 ~/.lynn/llamacpp/bin/llama-server[.exe] + ~/.lynn/models/<default>.gguf
+//   - 任一缺 → emit needs-binary / needs-model state,UI 触发 Phase 2 download
+//   - spawn + 健康监控 + crash auto-restart,跟 Lynn 生命周期绑
+//   - ENV LYNN_SKIP_LLAMACPP=1 → 完全禁用
+//   - LYNN_LLAMACPP_BIN / LYNN_LLAMACPP_MODEL 可覆盖路径(dev / 自定义安装)
+let llamacpp = null;
+let lastLlamacppState = { status: "idle" };
+let activeModelDownloader = null;
+let lastModelDownloadState = { state: "idle" };
+
+function broadcastToAllWindows(channel, payload) {
+  try {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send(channel, payload);
+    }
+  } catch (err) {
+    console.warn(`[broadcast:${channel}]`, err?.message || err);
+  }
+}
+
+function startLlamacpp() {
+  if (llamacpp) return;
+  try {
+    llamacpp = new LlamaCppManager({
+      onLog: (level, msg) => {
+        if (level === "error") console.error(msg);
+        else if (level === "warn") console.warn(msg);
+        else console.log(msg);
+      },
+      onState: (state) => {
+        lastLlamacppState = state;
+        broadcastToAllWindows("llamacpp:state", state);
+      },
+    });
+    void llamacpp.start();
+  } catch (err) {
+    console.warn("[llamacpp] start failed:", err?.message || err);
+    llamacpp = null;
+  }
+}
+
+function buildLlamacppArgsForAlias(modelAlias) {
+  const args = [...(LLAMACPP_DEFAULT_CONFIG.serverArgs || [])];
+  const aliasIndex = args.indexOf("-a");
+  if (aliasIndex >= 0 && aliasIndex + 1 < args.length) {
+    args[aliasIndex + 1] = modelAlias;
+  } else {
+    args.push("-a", modelAlias);
+  }
+  return args;
+}
+
+async function startLlamacppCustomModel(modelPath) {
+  const modelAlias = path.basename(modelPath, path.extname(modelPath)).slice(0, 80) || "local-gguf";
+  try { stopLlamacpp(); } catch {}
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  lastLlamacppState = {
+    status: "starting",
+    modelId: modelAlias,
+    modelPath,
+    customModel: true,
+    ts: Date.now(),
+  };
+  broadcastToAllWindows("llamacpp:state", lastLlamacppState);
+  llamacpp = new LlamaCppManager({
+    modelId: modelAlias,
+    modelFileName: path.basename(modelPath),
+    modelPath,
+    serverArgs: buildLlamacppArgsForAlias(modelAlias),
+    onLog: (level, msg) => {
+      if (level === "error") console.error(msg);
+      else if (level === "warn") console.warn(msg);
+      else console.log(msg);
+    },
+    onState: (state) => {
+      lastLlamacppState = { ...state, modelId: modelAlias, modelPath, customModel: true };
+      broadcastToAllWindows("llamacpp:state", lastLlamacppState);
+    },
+  });
+  void llamacpp.start();
+  return { ok: true, modelId: modelAlias, modelPath };
+}
+function stopLlamacpp() {
+  if (!llamacpp) return;
+  try { llamacpp.stop(); } catch (err) {
+    console.warn("[llamacpp] stop failed:", err?.message || err);
+  }
+  llamacpp = null;
+}
+// Legacy channel kept for backward compat.
+wrapIpcHandler("llamacpp-status", () => (llamacpp ? llamacpp.getStatus() : { stopped: true }));
+
+// New unified state channel — returns latest cached llamacpp manager state
+// plus pending downloader state so renderer can hydrate in one round-trip.
+wrapIpcHandler("llamacpp:state", () => ({
+  manager: llamacpp ? llamacpp.getStatus() : { ...lastLlamacppState, stopped: true },
+  download: { ...lastModelDownloadState },
+}));
+
+// Trigger model download. Returns immediately; progress streams via
+// "llamacpp:download-progress" / "llamacpp:download-state" channels.
+wrapIpcHandler("llamacpp:start-download", async () => {
+  if (activeModelDownloader && (lastModelDownloadState.state === "downloading"
+      || lastModelDownloadState.state === "verifying")) {
+    return { ok: true, alreadyRunning: true };
+  }
+  const downloader = new ModelDownloader();
+  activeModelDownloader = downloader;
+  downloader.on("progress", (s) => {
+    lastModelDownloadState = s;
+    broadcastToAllWindows("llamacpp:download-progress", s);
+  });
+  downloader.on("state", (s) => {
+    lastModelDownloadState = s;
+    broadcastToAllWindows("llamacpp:download-state", s);
+  });
+  downloader.on("log", (level, msg) => {
+    if (level === "error") console.error(msg);
+    else if (level === "warn") console.warn(msg);
+    else console.log(msg);
+  });
+  // fire-and-forget; resolve completion drives llamacpp restart
+  downloader.start().then((result) => {
+    if (result?.ok) {
+      // model on disk — bounce llamacpp so it picks it up
+      try { stopLlamacpp(); } catch {}
+      // small delay so the manager teardown fully completes before restart
+      setTimeout(() => { try { startLlamacpp(); } catch {} }, 600);
+    }
+    if (activeModelDownloader === downloader) activeModelDownloader = null;
+  }).catch((err) => {
+    console.warn("[model-downloader] failed:", err?.message || err);
+    if (activeModelDownloader === downloader) activeModelDownloader = null;
+  });
+  return { ok: true, alreadyRunning: false };
+});
+
+wrapIpcHandler("llamacpp:pause-download", () => {
+  if (!activeModelDownloader) return { ok: false, reason: "not-running" };
+  try { activeModelDownloader.pause(); } catch (err) {
+    return { ok: false, reason: String(err?.message || err) };
+  }
+  return { ok: true };
+});
+
+wrapIpcHandler("llamacpp:cancel-download", () => {
+  if (!activeModelDownloader) {
+    lastModelDownloadState = { state: "idle" };
+    return { ok: true, reason: "not-running" };
+  }
+  try { activeModelDownloader.cancel(); } catch (err) {
+    return { ok: false, reason: String(err?.message || err) };
+  }
+  activeModelDownloader = null;
+  return { ok: true };
+});
+
+wrapIpcHandler("llamacpp:sources", () => ({
+  sources: MODEL_DOWNLOADER_SOURCES.map((s) => ({ id: s.id, label: s.label })),
+}));
+
+wrapIpcHandler("llamacpp:open-model-dir", async (event, payload = {}) => {
+  const dir = path.join(lynnHome, "models");
+  const userModelDir = path.join(os.homedir(), "Models", "Lynn");
+  const allowedModelDirs = [dir, userModelDir];
+  const isInside = (root, target) => {
+    const relative = path.relative(root, target);
+    return !!relative && !relative.startsWith("..") && !path.isAbsolute(relative);
+  };
+  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  try { fs.mkdirSync(userModelDir, { recursive: true }); } catch {}
+  const rawTarget = typeof payload === "string" ? payload : payload?.targetPath;
+  if (typeof rawTarget === "string" && rawTarget.trim()) {
+    const target = path.resolve(rawTarget);
+    const isSafeModelFile = path.extname(target).toLowerCase() === ".gguf"
+      && allowedModelDirs.some((root) => isInside(root, target));
+    if (isSafeModelFile && fs.existsSync(target)) {
+      shell.showItemInFolder(target);
+      return { ok: true, path: path.dirname(target), revealedPath: target, error: null };
+    }
+  }
+  const openDir = fs.existsSync(userModelDir) ? userModelDir : dir;
+  const error = await shell.openPath(openDir);
+  return { ok: !error, path: openDir, error: error || null };
+});
+
+wrapIpcHandler("llamacpp:start-custom-model", async (event, payload = {}) => {
+  const rawPath = typeof payload === "string" ? payload : payload?.modelPath;
+  if (!rawPath || typeof rawPath !== "string") {
+    return { ok: false, reason: "missing-model-path" };
+  }
+  const modelPath = path.resolve(rawPath);
+  if (path.extname(modelPath).toLowerCase() !== ".gguf") {
+    return { ok: false, reason: "not-gguf" };
+  }
+  if (!fs.existsSync(modelPath)) {
+    return { ok: false, reason: "model-not-found" };
+  }
+  grantWebContentsAccess(event.sender, modelPath, "read");
+  try {
+    return await startLlamacppCustomModel(modelPath);
+  } catch (err) {
+    return { ok: false, reason: String(err?.message || err) };
+  }
+});
+
+function stopManagedQwen35LlamaServer() {
+  const pidFile = path.join(os.homedir(), ".lynn-engine", "run", "qwen35-9b-q4km-imatrix.pid");
+  const pids = new Set();
+  try {
+    const pid = Number(fs.readFileSync(pidFile, "utf8").trim());
+    if (Number.isFinite(pid) && pid > 0) pids.add(pid);
+  } catch {}
+  try {
+    const stdout = execFileSync("ps", ["-axo", "pid=,command="], {
+      encoding: "utf8",
+      timeout: 2000,
+      maxBuffer: 512 * 1024,
+    });
+    for (const line of stdout.split("\n")) {
+      const match = line.trim().match(/^(\d+)\s+(.+)$/);
+      if (!match) continue;
+      const pid = Number(match[1]);
+      const cmd = match[2] || "";
+      if (!Number.isFinite(pid) || pid <= 0) continue;
+      if (!/llama-server\b/.test(cmd)) continue;
+      if (
+        cmd.includes("--port 18099")
+        || /qwen35-9b-q4km/i.test(cmd)
+        || /Qwen3\.5-9B-Q4_K_M/i.test(cmd)
+      ) {
+        pids.add(pid);
+      }
+    }
+  } catch {}
+  if (pids.size === 0) {
+    try { fs.rmSync(pidFile, { force: true }); } catch {}
+    return;
+  }
+  for (const pid of pids) {
+    try { process.kill(pid, "SIGTERM"); } catch {}
+  }
+  setTimeout(() => {
+    for (const pid of pids) {
+      try { process.kill(pid, 0); process.kill(pid, "SIGKILL"); } catch {}
+    }
+  }, 5000);
+  try { fs.rmSync(pidFile, { force: true }); } catch {}
+}
+
 // ── App 生命周期 ──
 app.whenReady().then(async () => {
   installMediaPermissionHandlers();
@@ -3422,6 +3789,11 @@ app.whenReady().then(async () => {
     // 2b. 2026-05-01 — 启动 voice tunnel manager(跨平台 ssh 隧道守护)
     //     macOS 已有 launchd watchdog 时自动 standby + 仅监控;Win/Linux 接管 spawn。
     startVoiceTunnel();
+
+    // 2c. 2026-05-20 — 启动 llama.cpp local 推理守护(默认本地推理底层)
+    //     找 ~/.lynn/llamacpp/bin + ~/.lynn/models/<default>.gguf,任一缺 → needs-install
+    //     state 报 UI 引导首次安装。已 install → spawn llama-server + health 监控。
+    startLlamacpp();
 
     // 3. 控制 splash 最短停留时间。冷启动优化后不再额外卡住 3 秒。
     const elapsed = Date.now() - splashShownAt;
@@ -3589,6 +3961,10 @@ app.on("before-quit", async (event) => {
 
   // 2026-05-01 — 停 voice tunnel manager(kill 子 ssh)
   stopVoiceTunnel();
+
+  // 2026-05-20 — 停 llama.cpp local 推理(SIGTERM → 5s SIGKILL)
+  stopLlamacpp();
+  stopManagedQwen35LlamaServer();
 
   // 立刻隐藏所有窗口，让用户感觉已退出，server 清理在后台进行
   for (const win of BrowserWindow.getAllWindows()) {

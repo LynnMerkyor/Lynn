@@ -8,8 +8,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { OnboardingFetch } from '../onboarding-actions';
 import { StepContainer } from '../onboarding-ui';
+import { useOnboardingI18n } from '../use-onboarding-i18n';
 
-type OnboardingTrack = 'quick' | 'advanced';
+type OnboardingTrack = 'quick' | 'quick-local' | 'advanced';
 
 interface CompatSkillsStepProps {
   preview: boolean;
@@ -51,6 +52,7 @@ export function CompatSkillsStep({
   goToStep,
   showError,
 }: CompatSkillsStepProps) {
+  const { t } = useOnboardingI18n();
   const [loading, setLoading] = useState(true);
   const [agentId, setAgentId] = useState<string>('lynn');
   const [externalSkills, setExternalSkills] = useState<ExternalSkill[]>([]);
@@ -152,7 +154,7 @@ export function CompatSkillsStep({
       showError(t('onboarding.error'));
       setSaving(false);
     }
-  }, [preview, selected, agentId, onboardingFetch, goToStep, showError]);
+  }, [preview, selected, agentId, onboardingFetch, goToStep, showError, t]);
 
   if (loading) {
     return (

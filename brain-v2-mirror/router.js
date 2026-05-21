@@ -4,6 +4,13 @@ import { universalOrder, getProvider, isInCooldown, markUnhealthy, clearUnhealth
 import { getAdapter } from './wire-adapter/index.js';
 import { isServerTool, executeServerTool, mergeWithServerTools } from './tool-exec/index.js';
 
+function isProviderConfigured(provider) {
+  if (!provider) return false;
+  if (provider.apiKey && provider.apiKey !== '') return true;
+  if (provider.apiKey === 'none') return true;
+  if (provider.authType === 'none') return true;
+  return false;
+}
 
 // [verifier helper v1] extract latest user-role text for verifier prompt
 function _extractLatestUserMessageText(messages) {
@@ -67,6 +74,10 @@ async function runRound({
   for (const providerId of universalOrder) {
     const provider = getProvider(providerId);
     if (!provider) continue;
+    if (!isProviderConfigured(provider)) {
+      log && log('info', `provider ${providerId} has no credential, skip`);
+      continue;
+    }
     if (capabilityRequired?.vision && !provider.capability.vision) continue;
     if (capabilityRequired?.audio && !provider.capability.audio) continue;
     if (isInCooldown(providerId)) {
@@ -121,9 +132,7 @@ async function runRound({
         log && log('warn', `provider ${providerId} empty (${n}/${EMPTY_THRESHOLD})`);
         if (n >= EMPTY_THRESHOLD) {
           log && log('warn', `provider ${providerId} reached empty threshold, ${EMPTY_RESPONSE_COOLDOWN_MS}ms cooldown`);
-          markUnhealthy(providerId, 'empty_response_threshold');
-          // 短 cooldown:覆写 provider.cooldown_ms 临时(只为 markUnhealthy 用)
-          // 简化:不动 PROVIDERS,直接靠 isInCooldown 的 timer
+          markUnhealthy(providerId, 'empty_response_threshold', EMPTY_RESPONSE_COOLDOWN_MS);
         }
         continue;
       }

@@ -58,6 +58,7 @@ import { createAppStateRoute } from "./routes/app-state.js";
 import { createDebugRoute } from "./routes/debug.js";
 import { createTranslateRoute } from "./routes/translate.js";
 import { createDeepResearchRoute } from "./routes/deep-research.js";
+import { createLocalQwen35Route } from "./routes/local-qwen35.js";
 // internal-browser WS is handled directly via raw ws.WebSocketServer in the
 // upgrade handler below (WsTransport needs raw ws .on()/.off() methods)
 import { ConfirmStore } from "../lib/confirm-store.js";
@@ -221,6 +222,7 @@ app.route("/api", createAppStateRoute(engine, { taskRuntime }));
 app.route("/api", createDebugRoute(engine));
 app.route("/api", createTranslateRoute(engine));
 app.route("/api", createDeepResearchRoute(engine));
+app.route("/api", createLocalQwen35Route(engine));
 app.route("/api", createSessionsRoute(engine));
 app.route("/api", createModelsRoute(engine));
 app.route("/api", createConfigRoute(engine));
@@ -303,15 +305,25 @@ app.get("/api/brain/diagnose", async (c) => {
   };
   try {
     const { readSignedClientAgentHeaders } = await import("../core/client-agent-identity.js");
-    const { BRAIN_PROVIDER_BASE_URLS } = await import("../shared/brain-provider.js");
-    const headers = readSignedClientAgentHeaders({ method: "GET", pathname: "/models" });
+    const { BRAIN_DEFAULT_MODEL_ID, BRAIN_PROVIDER_BASE_URLS } = await import("../shared/brain-provider.js");
+    const headers = {
+      "Content-Type": "application/json",
+      ...readSignedClientAgentHeaders({ method: "POST", pathname: "/chat/completions" }),
+    };
     let lastError = null;
     for (const baseUrl of BRAIN_PROVIDER_BASE_URLS) {
       const start = Date.now();
       try {
-        const res = await fetch(`${baseUrl}/models`, {
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
           headers,
-          signal: AbortSignal.timeout(8000),
+          body: JSON.stringify({
+            model: BRAIN_DEFAULT_MODEL_ID,
+            temperature: 0,
+            max_tokens: 1,
+            messages: [{ role: "user", content: "." }],
+          }),
+          signal: AbortSignal.timeout(15000),
         });
         result.latencyMs = Date.now() - start;
         result.url = baseUrl;

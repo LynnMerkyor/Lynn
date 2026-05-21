@@ -10,6 +10,10 @@ import {
   shouldPrefetchReportContext,
   shouldSuppressLocalToolPrefetch,
 } from "./prefetch-context.js";
+import {
+  attachLocalQwen35BenchContext,
+  shouldAttachLocalQwen35BenchContext,
+} from "./local-qwen35-bench-context.js";
 
 export const TOOL_USE_BEHAVIOR = Object.freeze({
   RUN_LLM_AGAIN: "run_llm_again",
@@ -19,6 +23,16 @@ export const TOOL_USE_BEHAVIOR = Object.freeze({
 
 export function resolveInitialToolUseBehavior(promptText, opts = {}) {
   const text = String(promptText || "");
+  if (shouldAttachLocalQwen35BenchContext(text, opts.modelInfo)) {
+    return {
+      behavior: TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN,
+      reason: "local_qwen35_benchmark_context",
+      reportKind: "",
+      budgetContext: "",
+      effectivePromptText: attachLocalQwen35BenchContext(text, opts.modelInfo),
+    };
+  }
+
   const directAnswer = buildLocalOfficeDirectAnswer(text);
   if (directAnswer) {
     return {

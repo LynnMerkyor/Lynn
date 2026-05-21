@@ -3,7 +3,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { PROVIDER_PRESETS, QUICK_START_PROVIDER } from '../constants';
+import { PROVIDER_PRESETS, QUICK_START_PROVIDER, QUICK_LOCAL_PROVIDER } from '../constants';
 import type { ProviderPreset } from '../constants';
 import {
   testConnection,
@@ -13,6 +13,7 @@ import {
 import type { OnboardingFetch } from '../onboarding-actions';
 import { StepContainer, Multiline } from '../onboarding-ui';
 import { getBrainComplianceNote, getBrainUserNotice } from '../../../../../shared/brain-provider.js';
+import { useOnboardingI18n } from '../use-onboarding-i18n';
 
 // ── SVG Icons (local to this step) ──
 
@@ -36,13 +37,16 @@ interface ProviderStepProps {
   goToStep: (index: number) => void;
   showError: (msg: string) => void;
   onProviderReady: (providerName: string, providerUrl: string, providerApi: string, apiKey: string) => void;
-  track: 'quick' | 'advanced';
+  track: 'quick' | 'quick-local' | 'advanced';
 }
+
+const LOCAL_MODEL_DOWNLOAD_STEP = 8;
 
 export function ProviderStep({
   preview, onboardingFetch, goToStep, showError, onProviderReady,
   track,
 }: ProviderStepProps) {
+  const { t, locale } = useOnboardingI18n();
   // ── Provider state ──
   const [providerGroup, setProviderGroup] = useState<'standard' | 'coding-plan'>('standard');
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
@@ -54,14 +58,19 @@ export function ProviderStep({
   const [connectionTested, setConnectionTested] = useState(false);
   const [testStatus, setTestStatus] = useState<{ type: '' | 'loading' | 'success' | 'error'; text: string }>({ type: '', text: '' });
   const [showKey, setShowKey] = useState(false);
+  const [showSecondary, setShowSecondary] = useState(false);
 
   // ── Custom provider fields ──
   const [customName, setCustomName] = useState('');
   const [customUrl, setCustomUrl] = useState('');
   const [customApi, setCustomApi] = useState('openai-completions');
 
-  const isZh = i18n.locale?.startsWith('zh');
-  const isQuickTrack = track === 'quick';
+  const isZh = (locale || (typeof i18n !== 'undefined' ? i18n.locale : '') || '').startsWith('zh');
+  // 'quick-local' is a sibling track that bypasses provider selection
+  // (LocaleStep → NameStep → LocalModelDownloadStep). If somehow we land
+  // here while track === 'quick-local', behave like the regular quick
+  // start (brain v2) — switching tracks mid-flow shouldn't crash the UI.
+  const isQuickTrack = track === 'quick' || track === 'quick-local';
   const siliconflowPreset = useMemo(
     () => PROVIDER_PRESETS.find((preset) => preset.value === QUICK_START_PROVIDER.providerName) || null,
     [],
@@ -70,10 +79,28 @@ export function ProviderStep({
     () => PROVIDER_PRESETS.find((preset) => preset.value === selectedPreset) || null,
     [selectedPreset],
   );
-  const visiblePresets = useMemo(() => {
+  const groupPresets = useMemo(() => {
     if (isQuickTrack) return [];
     return PROVIDER_PRESETS.filter((preset) => (preset.group || 'standard') === providerGroup);
   }, [isQuickTrack, providerGroup]);
+  const visiblePresets = useMemo(() => {
+    if (showSecondary) return groupPresets;
+    return groupPresets.filter((preset) => (preset.tier || 'primary') === 'primary' || preset.custom);
+  }, [groupPresets, showSecondary]);
+  const hiddenSecondaryCount = useMemo(
+    () => groupPresets.filter((preset) => (preset.tier || 'primary') === 'secondary').length,
+    [groupPresets],
+  );
+
+  // If the selected preset is in the secondary tier we must expand the list
+  // so the active card stays visible (covers presets activated by deep-link
+  // / saved config).
+  useEffect(() => {
+    if (!activePreset) return;
+    if ((activePreset.tier || 'primary') === 'secondary' && !showSecondary) {
+      setShowSecondary(true);
+    }
+  }, [activePreset, showSecondary]);
   const usesBuiltInDefault = providerName === QUICK_START_PROVIDER.providerName;
 
   const copyText = useCallback((zh: string, en: string) => (isZh ? zh : en), [isZh]);
@@ -175,6 +202,15 @@ export function ProviderStep({
       setConnectionTested(true);
       return true;
     }
+    // llama.cpp local provider: spawn lifecycle is managed by main process;
+    // skipping the network probe here avoids a noisy "ECONNREFUSED" before
+    // the user has downloaded the model. LocalModelDownloadStep owns the
+    // real readiness gate (waits for /health 200).
+    if (providerName === QUICK_LOCAL_PROVIDER.providerName) {
+      setTestStatus({ type: 'success', text: t('onboarding.provider.testSuccess') });
+      setConnectionTested(true);
+      return true;
+    }
     setTestStatus({ type: 'loading', text: t('onboarding.provider.testing') });
     try {
       const result = await testConnection({ onboardingFetch, providerName, providerUrl, providerApi, apiKey });
@@ -192,7 +228,7 @@ export function ProviderStep({
       setConnectionTested(false);
       return false;
     }
-  }, [preview, isQuickTrack, onboardingFetch, providerName, providerUrl, providerApi, apiKey]);
+  }, [preview, isQuickTrack, onboardingFetch, providerName, providerUrl, providerApi, apiKey, t]);
 
   // ── Test connection ──
   const onTest = useCallback(async () => {
@@ -200,7 +236,17 @@ export function ProviderStep({
   }, [runConnectionTest]);
 
   // ── Next ──
+  // llamacpp selection in advanced track skips the model-listing step and
+  // routes through LocalModelDownloadStep. Saving the provider config is
+  // owned by that step (after the model is verified on disk), so we just
+  // hand off the provider identity and jump.
+  const usesLocalLlamacpp = providerName === QUICK_LOCAL_PROVIDER.providerName;
   const onNext = useCallback(async () => {
+    if (usesLocalLlamacpp && !isQuickTrack) {
+      onProviderReady(providerName, providerUrl, providerApi, apiKey);
+      goToStep(LOCAL_MODEL_DOWNLOAD_STEP);
+      return;
+    }
     const nextStep = isQuickTrack ? 5 : (usesBuiltInDefault ? 4 : 3);
     if (preview) { goToStep(nextStep); return; }
     try {
@@ -220,7 +266,7 @@ export function ProviderStep({
       console.error('[onboarding] save provider failed:', err);
       showError(t('onboarding.provider.testFailed'));
     }
-  }, [activePreset, apiKey, goToStep, isQuickTrack, onboardingFetch, onProviderReady, preview, providerApi, providerName, providerUrl, showError, usesBuiltInDefault]);
+  }, [activePreset, apiKey, goToStep, isQuickTrack, onboardingFetch, onProviderReady, preview, providerApi, providerName, providerUrl, showError, t, usesBuiltInDefault, usesLocalLlamacpp]);
 
   return (
     <StepContainer>
@@ -306,6 +352,25 @@ export function ProviderStep({
               </div>
             ))}
           </div>
+
+          {hiddenSecondaryCount > 0 && !showSecondary && (
+            <button
+              type="button"
+              className="provider-more-toggle"
+              onClick={() => setShowSecondary(true)}
+            >
+              {copyText(`+ 更多供应商 (${hiddenSecondaryCount})`, `+ More providers (${hiddenSecondaryCount})`)}
+            </button>
+          )}
+          {showSecondary && hiddenSecondaryCount > 0 && (
+            <button
+              type="button"
+              className="provider-more-toggle"
+              onClick={() => setShowSecondary(false)}
+            >
+              {copyText('收起常用以外的供应商', 'Collapse less-used providers')}
+            </button>
+          )}
         </>
       )}
 

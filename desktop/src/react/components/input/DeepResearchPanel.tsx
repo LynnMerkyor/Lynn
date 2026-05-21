@@ -21,8 +21,8 @@ export function DeepResearchPanel({
         <span />
       </div>
       <div className={styles['deep-research-copy']}>
-        <strong>Deep Research</strong>
-        <span>适合长调研、竞品梳理、报告初稿。会并行生成多份候选答案，再用 verifier 做质量地板拦截。</span>
+        <strong>深度调研</strong>
+        <span>适合长调研、竞品梳理和报告初稿。会并行生成多份答案，并做质量复核。</span>
       </div>
       <div className={styles['deep-research-actions']}>
         <button
@@ -44,7 +44,7 @@ export function DeepResearchPanel({
           type="button"
           className={styles['deep-research-close']}
           onClick={onClose}
-          aria-label="关闭 Deep Research 引导"
+          aria-label="关闭深度调研引导"
           title="关闭"
         >
           ×

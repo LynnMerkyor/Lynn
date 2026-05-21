@@ -28,6 +28,14 @@ export interface ProviderPreset {
   url: string;
   api: string;
   group?: 'standard' | 'coding-plan';
+  /**
+   * Tier controls onboarding visibility:
+   *   - 'primary'  : shown by default (top 8 most-used)
+   *   - 'secondary': hidden behind the "more providers" disclosure
+   * Custom entry (`_custom`) is always primary so users can still type a
+   * provider name without expanding the secondary list.
+   */
+  tier?: 'primary' | 'secondary';
   defaultModelId?: string;
   signupUrl?: string;
   local?: boolean;
@@ -42,31 +50,65 @@ export const QUICK_START_PROVIDER = {
   defaultModelId: BRAIN_DEFAULT_MODEL_ID,
 } as const;
 
+/**
+ * Quick-local track wires the user straight into the server-side local
+ * Qwen 3.5 9B provider. The install / download / launch lifecycle is owned
+ * by /api/local-qwen35-9b/* so onboarding, settings, chat routing and status
+ * badges all share one provider identity.
+ */
+export const QUICK_LOCAL_PROVIDER = {
+  providerName: 'local-qwen35-9b-q4km-imatrix',
+  providerUrl: 'http://127.0.0.1:18099/v1',
+  providerApi: 'openai-completions',
+  defaultModelId: 'qwen35-9b-q4km-imatrix',
+} as const;
+
 export const PROVIDER_PRESETS: ProviderPreset[] = [
-  { value: BRAIN_PROVIDER_ID, label: BRAIN_DEFAULT_DISPLAY_NAME, labelZh: BRAIN_DEFAULT_DISPLAY_NAME, url: QUICK_START_PROVIDER.providerUrl, api: QUICK_START_PROVIDER.providerApi, defaultModelId: QUICK_START_PROVIDER.defaultModelId, noKey: true, group: 'standard' },
-  { value: 'ollama',      label: 'Ollama (Local)',       labelZh: 'Ollama (本地)',        url: 'http://localhost:11434/v1', api: 'openai-completions', local: true, group: 'standard' },
-  { value: 'dashscope',   label: 'DashScope (Qwen)',     url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', api: 'openai-completions', group: 'standard' },
-  { value: 'openai',      label: 'OpenAI',               url: 'https://api.openai.com/v1', api: 'openai-completions', group: 'standard' },
-  { value: 'deepseek',    label: 'DeepSeek',             url: 'https://api.deepseek.com/v1', api: 'openai-completions', group: 'standard' },
-  { value: 'volcengine',  label: 'Volcengine (Doubao)',  labelZh: 'Volcengine (豆包)',    url: 'https://ark.cn-beijing.volces.com/api/v3', api: 'openai-completions', group: 'standard' },
-  { value: 'moonshot',    label: 'Moonshot (Kimi)',      url: 'https://api.moonshot.cn/v1', api: 'openai-completions', group: 'standard' },
-  { value: 'zhipu',       label: 'Zhipu (GLM)',          url: 'https://open.bigmodel.cn/api/paas/v4', api: 'openai-completions', group: 'standard' },
-  { value: 'siliconflow', label: 'SiliconFlow',          url: 'https://api.siliconflow.cn/v1', api: 'openai-completions', defaultModelId: 'THUDM/GLM-Z1-9B-0414', signupUrl: 'https://cloud.siliconflow.cn/i/OmAO8v3e', group: 'standard' },
-  { value: 'groq',        label: 'Groq',                 url: 'https://api.groq.com/openai/v1', api: 'openai-completions', group: 'standard' },
-  { value: 'mistral',     label: 'Mistral',              url: 'https://api.mistral.ai/v1', api: 'openai-completions', group: 'standard' },
-  { value: 'minimax',     label: 'MiniMax',              url: 'https://api.minimaxi.com/v1', api: 'openai-completions', group: 'standard' },
-  { value: 'minimax-coding',   label: 'MiniMax Coding Plan',      labelZh: 'MiniMax Coding Plan',      url: 'https://api.minimaxi.com/v1', api: 'openai-completions', group: 'coding-plan' },
-  { value: 'kimi-coding',      label: 'Kimi Coding Plan',         labelZh: 'Kimi Coding Plan',         url: 'https://api.kimi.com/coding/', api: 'anthropic-messages', group: 'coding-plan' },
-  { value: 'zhipu-coding',     label: 'Zhipu Coding Plan',        labelZh: '智谱 Coding Plan',         url: 'https://open.bigmodel.cn/api/coding/paas/v4', api: 'openai-completions', group: 'coding-plan' },
-  { value: 'stepfun-coding',   label: 'StepFun Coding Plan',      labelZh: '阶跃星辰 Coding Plan',     url: 'https://api.stepfun.com/step_plan/v1', api: 'openai-completions', group: 'coding-plan' },
-  { value: 'tencent-coding',   label: 'Tencent Coding Plan',      labelZh: '腾讯云 Coding Plan',       url: 'https://api.lkeap.cloud.tencent.com/coding/v3', api: 'openai-completions', group: 'coding-plan' },
-  { value: 'volcengine-coding',label: 'Volcengine Coding Plan',   labelZh: '火山引擎 Coding Plan',     url: 'https://ark.cn-beijing.volces.com/api/coding/v1', api: 'openai-completions', group: 'coding-plan' },
-  { value: 'dashscope-coding', label: 'DashScope Coding Plan',    labelZh: '百炼 Coding Plan',         url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', api: 'openai-completions', group: 'coding-plan' },
-  { value: '_custom',     label: '',                     url: '',  api: 'openai-completions', custom: true, group: 'standard' },
+  // Primary (top 8 most-used) — shown by default in onboarding.
+  { value: BRAIN_PROVIDER_ID, label: BRAIN_DEFAULT_DISPLAY_NAME, labelZh: BRAIN_DEFAULT_DISPLAY_NAME, url: QUICK_START_PROVIDER.providerUrl, api: QUICK_START_PROVIDER.providerApi, defaultModelId: QUICK_START_PROVIDER.defaultModelId, noKey: true, group: 'standard', tier: 'primary' },
+  { value: QUICK_LOCAL_PROVIDER.providerName, label: 'Lynn Local (9B Q4_K_M)', labelZh: 'Lynn 本地 (9B Q4_K_M)', url: QUICK_LOCAL_PROVIDER.providerUrl, api: QUICK_LOCAL_PROVIDER.providerApi, local: true, noKey: true, defaultModelId: QUICK_LOCAL_PROVIDER.defaultModelId, group: 'standard', tier: 'primary' },
+  { value: 'openai',      label: 'OpenAI',               url: 'https://api.openai.com/v1', api: 'openai-completions', group: 'standard', tier: 'primary' },
+  { value: 'deepseek',    label: 'DeepSeek',             url: 'https://api.deepseek.com/v1', api: 'openai-completions', group: 'standard', tier: 'primary' },
+  { value: 'dashscope',   label: 'DashScope (Qwen)',     url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', api: 'openai-completions', group: 'standard', tier: 'primary' },
+  { value: 'moonshot',    label: 'Moonshot (Kimi)',      url: 'https://api.moonshot.cn/v1', api: 'openai-completions', group: 'standard', tier: 'primary' },
+  { value: 'zhipu',       label: 'Zhipu (GLM)',          url: 'https://open.bigmodel.cn/api/paas/v4', api: 'openai-completions', group: 'standard', tier: 'primary' },
+  { value: 'volcengine',  label: 'Volcengine (Doubao)',  labelZh: 'Volcengine (豆包)',    url: 'https://ark.cn-beijing.volces.com/api/v3', api: 'openai-completions', group: 'standard', tier: 'primary' },
+
+  // Secondary — collapsed behind the "more providers" disclosure.
+  { value: 'ollama',      label: 'Ollama (Local)',       labelZh: 'Ollama (本地)',        url: 'http://localhost:11434/v1', api: 'openai-completions', local: true, group: 'standard', tier: 'secondary' },
+  { value: 'siliconflow', label: 'SiliconFlow',          url: 'https://api.siliconflow.cn/v1', api: 'openai-completions', defaultModelId: 'THUDM/GLM-Z1-9B-0414', signupUrl: 'https://cloud.siliconflow.cn/i/OmAO8v3e', group: 'standard', tier: 'secondary' },
+  { value: 'groq',        label: 'Groq',                 url: 'https://api.groq.com/openai/v1', api: 'openai-completions', group: 'standard', tier: 'secondary' },
+  { value: 'mistral',     label: 'Mistral',              url: 'https://api.mistral.ai/v1', api: 'openai-completions', group: 'standard', tier: 'secondary' },
+  { value: 'minimax',     label: 'MiniMax',              url: 'https://api.minimaxi.com/v1', api: 'openai-completions', group: 'standard', tier: 'secondary' },
+
+  // Coding-plan tier (all secondary — surfaced via the existing tab switch).
+  { value: 'minimax-coding',   label: 'MiniMax Coding Plan',      labelZh: 'MiniMax Coding Plan',      url: 'https://api.minimaxi.com/v1', api: 'openai-completions', group: 'coding-plan', tier: 'secondary' },
+  { value: 'kimi-coding',      label: 'Kimi Coding Plan',         labelZh: 'Kimi Coding Plan',         url: 'https://api.kimi.com/coding/', api: 'anthropic-messages', group: 'coding-plan', tier: 'secondary' },
+  { value: 'zhipu-coding',     label: 'Zhipu Coding Plan',        labelZh: '智谱 Coding Plan',         url: 'https://open.bigmodel.cn/api/coding/paas/v4', api: 'openai-completions', group: 'coding-plan', tier: 'secondary' },
+  { value: 'stepfun-coding',   label: 'StepFun Coding Plan',      labelZh: '阶跃星辰 Coding Plan',     url: 'https://api.stepfun.com/step_plan/v1', api: 'openai-completions', group: 'coding-plan', tier: 'secondary' },
+  { value: 'tencent-coding',   label: 'Tencent Coding Plan',      labelZh: '腾讯云 Coding Plan',       url: 'https://api.lkeap.cloud.tencent.com/coding/v3', api: 'openai-completions', group: 'coding-plan', tier: 'secondary' },
+  { value: 'volcengine-coding',label: 'Volcengine Coding Plan',   labelZh: '火山引擎 Coding Plan',     url: 'https://ark.cn-beijing.volces.com/api/coding/v1', api: 'openai-completions', group: 'coding-plan', tier: 'secondary' },
+  { value: 'dashscope-coding', label: 'DashScope Coding Plan',    labelZh: '百炼 Coding Plan',         url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', api: 'openai-completions', group: 'coding-plan', tier: 'secondary' },
+
+  // Custom is always visible (no tier filter applied).
+  { value: '_custom',     label: '',                     url: '',  api: 'openai-completions', custom: true, group: 'standard', tier: 'primary' },
 ];
 
 export const OB_THEMES = [
   'warm-paper', 'midnight', 'auto', 'high-contrast', 'grass-aroma',
+  'contemplation', 'absolutely', 'delve', 'deep-think',
+] as const;
+
+/**
+ * Primary themes shown on first paint of ThemeStep. The remaining four
+ * (contemplation / absolutely / delve / deep-think) are tucked behind a
+ * "more themes" toggle to keep the onboarding card scannable.
+ */
+export const OB_PRIMARY_THEMES = [
+  'warm-paper', 'midnight', 'auto', 'high-contrast', 'grass-aroma',
+] as const;
+
+export const OB_ADVANCED_THEMES = [
   'contemplation', 'absolutely', 'delve', 'deep-think',
 ] as const;
 

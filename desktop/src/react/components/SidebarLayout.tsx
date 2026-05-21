@@ -154,10 +154,17 @@ export function SidebarLayout() {
         return;
       }
 
-      // Cmd+L → 清空/新建聊天
-      if (mod && e.key.toLowerCase() === 'l') {
+      // Cmd+, → 打开 Settings(macOS 标准)
+      if (mod && e.key === ',') {
         e.preventDefault();
-        createNewSession();
+        window.hana?.openSettings?.();
+        return;
+      }
+
+      // Cmd+L → 聚焦输入框(对齐浏览器/ChatGPT Cmd+L 行为,新建会话用 Cmd+Shift+N / Cmd+N)
+      if (mod && !e.shiftKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        useStore.getState().requestInputFocus();
         return;
       }
 

@@ -17,6 +17,10 @@ import { t, getLocale } from "../server/i18n.js";
 import { safeReadJSON } from "../shared/safe-fs.js";
 import { findModel } from "../shared/model-ref.js";
 import {
+  BRAIN_DEFAULT_MODEL_ID,
+  BRAIN_PROVIDER_ID,
+} from "../shared/brain-provider.js";
+import {
   classifyRouteIntent,
 } from "../shared/task-route-intent.js";
 import {
@@ -36,6 +40,44 @@ import {
 import { resolveCompactionSettings } from "./compaction-settings.js";
 import { containsPseudoToolCallSimulation, sanitizeAssistantTextContent } from "./llm-utils.js";
 import { stripPseudoToolCallMarkup } from "../shared/pseudo-tool-call.js";
+
+const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
+const LOCAL_QWEN35_MODEL_ID = "qwen35-9b-q4km-imatrix";
+
+function isLocalQwen35Model(modelOrId, provider) {
+  const modelId = typeof modelOrId === "object" ? modelOrId?.id : modelOrId;
+  const modelProvider = typeof modelOrId === "object" ? modelOrId?.provider : provider;
+  return String(modelProvider || "").trim() === LOCAL_QWEN35_PROVIDER_ID
+    || String(modelId || "").trim() === LOCAL_QWEN35_MODEL_ID;
+}
+
+function resolveBridgeOwnerModel(availableModels, ownerModelId, ownerProvider) {
+  const requestedLocal = isLocalQwen35Model(ownerModelId, ownerProvider);
+  const currentModel = findModel(availableModels, ownerModelId, ownerProvider);
+  if (!currentModel && !requestedLocal) {
+    return { model: null, reason: "missing_current" };
+  }
+
+  // External bridges (WeChat/Telegram/etc.) should stay on the stable Brain
+  // route instead of inheriting whatever the foreground chat is testing.
+  // Bridge messages are latency- and tool-sensitive: weather, stock, news and
+  // WeChat replies must keep the full tool chain even when the app chat is on
+  // local 9B or a lightweight provider.
+  const brainModel = findModel(availableModels, BRAIN_DEFAULT_MODEL_ID, BRAIN_PROVIDER_ID)
+    || availableModels.find(model => model?.provider === BRAIN_PROVIDER_ID);
+
+  if (brainModel) {
+    return {
+      model: brainModel,
+      reason: brainModel === currentModel ? "agent_chat_brain" : "brain_default_for_bridge",
+    };
+  }
+
+  return {
+    model: currentModel,
+    reason: "brain_default_for_bridge_unavailable",
+  };
+}
 
 function getSteerPrefix() {
   const isZh = getLocale().startsWith("zh");
@@ -263,7 +305,16 @@ export class BridgeSessionManager {
         const bridgeTools = bridgeReadOnly
           ? baseTools.filter(t => READ_ONLY_BUILTIN_TOOLS.includes(t.name))
           : baseTools;
-        const safeCustomNames = ["search_memory", "web_search", "web_fetch", "present_files"];
+        const safeCustomNames = [
+          "search_memory",
+          "web_search",
+          "web_fetch",
+          "weather",
+          "stock_market",
+          "live_news",
+          "sports_score",
+          "present_files",
+        ];
         const bridgeCustomTools = bridgeReadOnly
           ? (baseCustomTools || []).filter(t => safeCustomNames.includes(t.name))
           : baseCustomTools;
@@ -275,9 +326,19 @@ export class BridgeSessionManager {
         if (!ownerModelId) {
           throw new Error(t("error.bridgeAgentNoChatModel", { name: agent.agentName }));
         }
-        const ownerModel = findModel(mm.availableModels, ownerModelId, ownerProvider);
+        const { model: ownerModel, reason: bridgeModelReason } = resolveBridgeOwnerModel(
+          mm.availableModels,
+          ownerModelId,
+          ownerProvider,
+        );
         if (!ownerModel) {
           throw new Error(t("error.bridgeAgentModelNotAvailable", { name: agent.agentName, model: ownerModelId }));
+        }
+        if (bridgeModelReason === "brain_default_for_bridge") {
+          debugLog()?.log(
+            "bridge",
+            `owner bridge model pinned to Brain default; foreground chat was ${ownerProvider || "unknown"}/${ownerModelId}`,
+          );
         }
 
         // 包装 resourceLoader 追加 MEDIA 协议指令

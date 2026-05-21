@@ -124,7 +124,7 @@ export function createProvidersRoute(engine) {
 
       result[name] = {
         type: isOAuth ? "oauth" : ((p.auth_type || provRegistry.get(name)?.authType) === "none" ? "none" : "api-key"),
-        display_name: oauthInfo?.name || name,
+        display_name: oauthInfo?.name || p.display_name || name,
         base_url: p.base_url || "",
         api: p.api || "",
         api_key: p.api_key || "",

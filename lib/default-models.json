@@ -34,6 +34,10 @@
     "qwen3-8b"
   ],
 
+  "local-qwen35-9b-q4km-imatrix": [
+    "qwen35-9b-q4km-imatrix"
+  ],
+
   "dashscope": [
     "qwen3.5-plus",
     "qwen3.5-max",

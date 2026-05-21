@@ -163,10 +163,10 @@ function isValidSessionPath(sessionPath, agentsDir) {
 
 function formatDeepResearchResultText(parsed) {
   const text = String(parsed?.text || "").trim()
-    || "Deep Research 没有返回可见答案，请稍后重试或把问题拆得更具体。";
-  const winner = parsed?.winnerProviderId ? ` · winner: ${parsed.winnerProviderId}` : "";
+    || "深度调研没有返回可见答案，请稍后重试或把问题拆得更具体。";
+  const source = parsed?.winnerProviderId ? ` · 推荐来源：${parsed.winnerProviderId}` : "";
   const status = parsed?.qualityRejected
-    ? "质量地板已拦截"
+    ? "未通过质量复核"
     : parsed?.ok === false
       ? "未通过质量复核"
       : "已通过质量复核";
@@ -181,7 +181,7 @@ function formatDeepResearchResultText(parsed) {
     text,
     "",
     "---",
-    `**Deep Research**：${status}${winner}`,
+    `**深度调研**：${status}${source}`,
     scoreLines.length ? `\n${scoreLines.join("\n")}` : "",
   ].filter(Boolean).join("\n");
 }

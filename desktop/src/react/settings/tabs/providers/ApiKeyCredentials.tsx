@@ -137,7 +137,7 @@ export function ApiKeyCredentials({ providerId, summary, providerConfig: _provid
           <div className={styles['pv-default-model-title']}>{getBrainDisplayName()}</div>
           <div className={styles['pv-default-model-desc']}>{getBrainDisplayMetaLabel()}</div>
           <div className={styles['pv-default-model-hint']}>
-            {t('settings.providers.defaultModelReadyHint') || '这条链路已经内置好，日常直接使用即可。只有在你主动更换其他供应商时，才需要再做额外配置。'}
+            {t('settings.providers.defaultModelReadyHint') || '这条链路已经内置好，日常直接使用即可。只有在你主动更换其他模型服务时，才需要再做额外配置。'}
           </div>
           <div className={styles['pv-default-model-hint']}>
             {getBrainComplianceNote()}

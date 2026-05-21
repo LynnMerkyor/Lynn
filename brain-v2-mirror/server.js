@@ -6,6 +6,7 @@ import './perf-init.js';
 import { run as routerRun, detectCapability } from './router.js';
 import { makeSSEEmitter } from './stream-bridge.js';
 import { verifySignedRequest, AuthError } from './auth.js';
+import { getLocalQwen35Plan, getLocalQwen35Job, isLocalAddress, startLocalQwen35Setup } from './local-qwen35-setup.mjs';
 
 // [deep-research v1 import]
 import { runDeepResearch } from './deep-research.mjs';
@@ -306,6 +307,42 @@ async function handleAgentCheckpoint(req, res, pathname) {
 }
 // [/agent-checkpoint v1 handler]
 
+async function handleLocalQwen35(req, res, pathname, method) {
+  const remote = req.socket?.remoteAddress || '';
+  if (!isLocalAddress(remote)) {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'local_only', remote }));
+    return;
+  }
+
+  if (method === 'GET') {
+    const status = await getLocalQwen35Plan();
+    res.writeHead(status.ok ? 200 : 503, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+    res.end(JSON.stringify({ ...status, job: getLocalQwen35Job() }));
+    return;
+  }
+
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'invalid request body: ' + e.message }));
+    return;
+  }
+  const authorized = body.authorized === true || body.yesUserAuthorized === true;
+  const result = startLocalQwen35Setup({
+    authorized,
+    start: body.start !== false,
+    installRuntime: body.installRuntime !== false,
+    variant: body.variant || 'imatrix',
+    host: body.host || undefined,
+    port: body.port || undefined,
+  });
+  res.writeHead(result.ok ? 202 : 403, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+  res.end(JSON.stringify(result));
+}
+
 function resolveCorsOrigin(origin) {
   if (CORS_ALLOWED_ORIGIN === '*') return '*';
   if (CORS_ALLOWED_ORIGIN && origin === CORS_ALLOWED_ORIGIN) return origin;
@@ -359,6 +396,14 @@ const server = http.createServer(async (req, res) => {
     return handleAgentCheckpoint(req, res, url.pathname);
   }
   // [/agent-checkpoint v1 route]
+
+  if ((url.pathname === '/v2/local-qwen35-9b/plan' || url.pathname === '/v2/local-qwen35-9b/status' || url.pathname === '/v1/local-qwen35-9b/status') && req.method === 'GET') {
+    return handleLocalQwen35(req, res, url.pathname, 'GET');
+  }
+  if ((url.pathname === '/v2/local-qwen35-9b/setup' || url.pathname === '/v2/local-qwen35-9b/execute' || url.pathname === '/v1/local-qwen35-9b/setup') && req.method === 'POST') {
+    return handleLocalQwen35(req, res, url.pathname, 'POST');
+  }
+
   if (url.pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, brain: 'v2', version: VERSION, uptime_s: Math.floor(process.uptime()) }));
@@ -369,7 +414,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       brain: 'v2', version: VERSION,
-      endpoints: ['POST /v1/chat/completions', 'POST /v2/chat/completions', 'POST /api/v1/chat/completions', 'GET /health'],
+      endpoints: ['POST /v1/chat/completions', 'POST /v2/chat/completions', 'POST /api/v1/chat/completions', 'GET /v2/local-qwen35-9b/status', 'POST /v2/local-qwen35-9b/setup', 'GET /health'],
     }));
     return;
   }

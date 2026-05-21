@@ -23,7 +23,11 @@ export async function hanaFetch(
 
   const { timeout = DEFAULT_TIMEOUT, ...fetchOpts } = opts;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeout);
 
   try {
     const res = await fetch(`http://127.0.0.1:${serverPort}${path}`, {
@@ -45,6 +49,12 @@ export async function hanaFetch(
       throw new Error(`hanaFetch ${path}: ${detail}`);
     }
     return res;
+  } catch (err) {
+    if (timedOut && controller.signal.aborted) {
+      const seconds = Math.max(1, Math.round(timeout / 1000));
+      throw new Error(`hanaFetch ${path}: 请求超时（${seconds} 秒）`);
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }

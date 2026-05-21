@@ -23,6 +23,27 @@ const CODING_PROVIDER_ORDER = [
   'volcengine-coding',
 ];
 
+const LOCAL_PROVIDER_ORDER = [
+  'local-qwen35-9b-q4km-imatrix',
+];
+const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
+const LOCAL_QWEN35_PROVIDER_LABEL = '本地 Qwen3.5-9B';
+
+const LOCAL_PROVIDER_FALLBACKS: Record<string, ProviderSummary> = {
+  [LOCAL_QWEN35_PROVIDER_ID]: {
+    type: 'none',
+    display_name: LOCAL_QWEN35_PROVIDER_LABEL,
+    base_url: 'http://127.0.0.1:18099/v1',
+    api: 'openai-completions',
+    api_key: '',
+    models: ['qwen35-9b-q4km-imatrix'],
+    custom_models: [],
+    has_credentials: true,
+    supports_oauth: false,
+    can_delete: false,
+  },
+};
+
 const API_PROVIDER_ORDER = [
   BRAIN_PROVIDER_ID,
   'minimax',
@@ -80,6 +101,8 @@ function resolvePreferredProviderId(settingsConfig: SettingsConfig | null): stri
 }
 
 function buildPresetSummary(id: string): ProviderSummary | null {
+  if (LOCAL_PROVIDER_FALLBACKS[id]) return LOCAL_PROVIDER_FALLBACKS[id];
+
   if (id === BRAIN_PROVIDER_ID) {
     const cfg = buildBrainProviderConfig();
     return {
@@ -143,15 +166,24 @@ export function ProvidersTab() {
     providerIds.filter((id) => !providersSummary[id].supports_oauth && providersSummary[id].is_coding_plan),
     CODING_PROVIDER_ORDER,
   ), [providerIds, providersSummary]);
+  const visibleLocalProviderIds = useMemo(() => sortByPriority(
+    LOCAL_PROVIDER_ORDER.filter((id) => providersSummary[id] || LOCAL_PROVIDER_FALLBACKS[id]),
+    LOCAL_PROVIDER_ORDER,
+  ), [providersSummary]);
   const visibleRegisteredApiIds = useMemo(
-    () => providerIds.filter((id) => !providersSummary[id].supports_oauth && !providersSummary[id].is_coding_plan),
+    () => providerIds.filter((id) => (
+      !LOCAL_PROVIDER_ORDER.includes(id) &&
+      !providersSummary[id].supports_oauth &&
+      !providersSummary[id].is_coding_plan
+    )),
     [providerIds, providersSummary],
   );
   const visibleProviderIds = useMemo(() => [
+    ...visibleLocalProviderIds,
     ...visibleOauthProviderIds,
     ...visibleCodingProviderIds,
     ...visibleRegisteredApiIds,
-  ], [visibleCodingProviderIds, visibleOauthProviderIds, visibleRegisteredApiIds]);
+  ], [visibleCodingProviderIds, visibleLocalProviderIds, visibleOauthProviderIds, visibleRegisteredApiIds]);
   const resolvedPreferredProviderId = resolvePreferredProviderId(settingsConfig) || preferredProviderId;
 
   useEffect(() => {
@@ -175,6 +207,7 @@ export function ProvidersTab() {
   // 分组：OAuth / Coding Plan / API Key
   const oauthProviders = visibleOauthProviderIds;
   const codingPlanProviders = visibleCodingProviderIds;
+  const localModelProviders = visibleLocalProviderIds;
   const registeredApiKey = visibleRegisteredApiIds;
   const registeredSet = new Set(providerIds);
 
@@ -195,13 +228,15 @@ export function ProvidersTab() {
   };
 
   const getProviderLabel = (id: string, p?: ProviderSummary) => {
+    if (id === LOCAL_QWEN35_PROVIDER_ID) return LOCAL_QWEN35_PROVIDER_LABEL;
     if (id === BRAIN_PROVIDER_ID) return BRAIN_PROVIDER_LABEL;
     const preset = PROVIDER_PRESETS.find(pr => pr.value === id);
     return preset?.label || p?.display_name || id;
   };
 
   const renderRegistered = (id: string) => {
-    const p = providersSummary[id];
+    const p = providersSummary[id] || buildPresetSummary(id);
+    if (!p) return null;
     const modelCount = (p.models || []).length;
     return (
       <button
@@ -232,6 +267,13 @@ export function ProvidersTab() {
       <div className={styles['pv-layout']}>
         {/* ── 左栏 ── */}
         <div className={styles['pv-list']}>
+          {localModelProviders.length > 0 && (
+            <>
+              <div className={styles['pv-list-section-title']}>本地模型</div>
+              {localModelProviders.map(renderRegistered)}
+            </>
+          )}
+
           {oauthProviders.length > 0 && (
             <>
               <div className={styles['pv-list-section-title']}>OAuth</div>
@@ -264,11 +306,14 @@ export function ProvidersTab() {
           {selected ? (() => {
             const existing = providersSummary[selected];
             const preset = PROVIDER_PRESETS.find(p => p.value === selected);
-            const summary = existing || buildPresetSummary(selected);
+            const rawSummary = existing || buildPresetSummary(selected);
+            const summary = selected === LOCAL_QWEN35_PROVIDER_ID && rawSummary
+              ? { ...rawSummary, display_name: LOCAL_QWEN35_PROVIDER_LABEL }
+              : rawSummary;
             if (!summary) {
               return (
                 <div className={styles['pv-empty']}>
-                  {summaryLoaded ? t('settings.providers.selectHint') : '正在读取供应商配置...'}
+                  {summaryLoaded ? t('settings.providers.selectHint') : '正在读取模型配置...'}
                 </div>
               );
             }

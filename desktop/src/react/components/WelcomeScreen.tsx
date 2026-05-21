@@ -15,6 +15,7 @@ import { clearChat } from '../stores/agent-actions';
 import { sendPrompt } from '../stores/prompt-actions';
 import type { Agent } from '../types';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
+import { ProviderStatusBadge } from './ProviderStatusBadge';
 import styles from './Welcome.module.css';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- store setState 回调 (s: any) */
@@ -22,17 +23,48 @@ import styles from './Welcome.module.css';
 let _avatarTs = Date.now();
 export function refreshAvatarTs() { _avatarTs = Date.now(); }
 
-const QUICK_PROMPT_KEYS = [
+const DEFAULT_QUICK_PROMPT_KEYS = [
   'welcome.quickActions.askFolder',
   'welcome.quickActions.summarizeWork',
   'welcome.quickActions.planToday',
 ] as const;
 
-const QUICK_ACTION_BEHAVIORS: Record<(typeof QUICK_PROMPT_KEYS)[number], 'prompt' | 'at'> = {
+const DEFAULT_QUICK_ACTION_BEHAVIORS: Record<string, 'prompt' | 'at'> = {
   'welcome.quickActions.askFolder': 'prompt',
   'welcome.quickActions.summarizeWork': 'at',
   'welcome.quickActions.planToday': 'prompt',
 };
+
+const QUICK_ACTIONS_LS_KEY = 'lynn-welcome-quick-actions-v1';
+
+interface PersistedQuickAction { key: string; behavior: 'prompt' | 'at' }
+
+/**
+ * Quick action customization scaffold: WelcomeScreen reads from localStorage
+ * first, falls back to the canonical defaults. A future Settings editor
+ * (P2-4 Settings half) can write into this slot — no further changes are
+ * needed here for the read path.
+ *
+ * The default key list is exported so an external editor can use it as the
+ * baseline when initialising the editor with the user's current selection.
+ */
+export function readQuickActionsConfig(): PersistedQuickAction[] {
+  try {
+    const raw = localStorage.getItem(QUICK_ACTIONS_LS_KEY);
+    if (!raw) return null as unknown as PersistedQuickAction[];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null as unknown as PersistedQuickAction[];
+    const sane = parsed
+      .filter((item) => item && typeof item.key === 'string')
+      .map((item) => ({
+        key: String(item.key),
+        behavior: item.behavior === 'at' ? 'at' as const : 'prompt' as const,
+      }));
+    return sane.length > 0 ? sane : (null as unknown as PersistedQuickAction[]);
+  } catch {
+    return null as unknown as PersistedQuickAction[];
+  }
+}
 
 export function WelcomeScreen() {
   return <WelcomeInner />;
@@ -53,7 +85,7 @@ function randomWelcome(agentName: string, yuan: string): string {
 }
 
 function WelcomeInner() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const welcomeVisible = useStore(s => s.welcomeVisible);
   const agents = useStore(s => s.agents);
   const agentName = useStore(s => s.agentName);
@@ -68,20 +100,18 @@ function WelcomeInner() {
   const deskJianContent = useStore(s => s.deskJianContent);
   const automationCount = useStore(s => s.automationCount);
   const sessions = useStore(s => s.sessions);
-
-  // 当日摘要
   const daySummary = useMemo(() => {
     const parts: string[] = [];
     const text = String(deskJianContent || '');
     const todos = text.match(/^- \[ \] /gm);
     const done = text.match(/^- \[[xX]\] /gm);
-    const isZh = String((window as any).i18n?.locale || '').startsWith('zh');
+    const isZh = (locale || '').startsWith('zh');
     if (todos?.length) parts.push(isZh ? `${todos.length} 项待办` : `${todos.length} pending`);
     if (done?.length) parts.push(isZh ? `${done.length} 项已完成` : `${done.length} done`);
     if (automationCount > 0) parts.push(isZh ? `${automationCount} 个自动任务` : `${automationCount} automations`);
     if (sessions.length > 0) parts.push(isZh ? `${sessions.length} 个对话` : `${sessions.length} chats`);
     return parts.join(' · ');
-  }, [deskJianContent, automationCount, sessions.length]);
+  }, [deskJianContent, automationCount, sessions.length, locale]);
 
   const displayAgent = useMemo(() => {
     const sel = selectedAgentId || currentAgentId;
@@ -120,6 +150,7 @@ function WelcomeInner() {
       />
       <p className={styles.welcomeText}>{greeting}</p>
       {daySummary && <p className={styles.welcomeDaySummary}>{daySummary}</p>}
+      <ProviderStatusBadge />
       <QuickActions displayName={displayName} selectedFolder={selectedFolder} />
       <FolderPicker
         selectedFolder={selectedFolder}
@@ -232,12 +263,21 @@ function QuickActions({ displayName, selectedFolder }: { displayName: string; se
   const { t } = useI18n();
   const [busy, setBusy] = useState<string | null>(null);
 
-  const actions = useMemo(() => QUICK_PROMPT_KEYS.map((key) => ({
-    key,
-    behavior: QUICK_ACTION_BEHAVIORS[key],
-    label: t(`${key}.label`),
-    prompt: t(`${key}.prompt`, { name: displayName, folder: selectedFolder || t('input.selectWorkspace') }),
-  })), [displayName, selectedFolder, t]);
+  const actions = useMemo(() => {
+    const persisted = readQuickActionsConfig();
+    const config = persisted && persisted.length > 0
+      ? persisted
+      : DEFAULT_QUICK_PROMPT_KEYS.map((key) => ({
+          key: key as string,
+          behavior: DEFAULT_QUICK_ACTION_BEHAVIORS[key],
+        }));
+    return config.map(({ key, behavior }) => ({
+      key,
+      behavior,
+      label: t(`${key}.label`),
+      prompt: t(`${key}.prompt`, { name: displayName, folder: selectedFolder || t('input.selectWorkspace') }),
+    }));
+  }, [displayName, selectedFolder, t]);
 
   const handleClick = useCallback(async (key: string, prompt: string) => {
     setBusy(key);

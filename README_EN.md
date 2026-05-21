@@ -427,6 +427,27 @@ All tooling is open-sourced: [lynn-distill-toolkit](https://github.com/MerkyorLy
 
 This doesn't replace the cloud fallback chain (MiMo / Qwen / DeepSeek remain the default route). **It adds a private, local path** — not a switch.
 
+## Local 9B for daily unlimited use
+
+Starting with Lynn v0.79, **Qwen3.5-9B Q4_K_M imatrix** is a first-class local model path, not an expert-only escape hatch. After user authorization, Lynn prepares llama.cpp, downloads the GGUF model, starts a local OpenAI-compatible endpoint, registers the model, and switches to it automatically.
+
+| Item | Details |
+|---|---|
+| Default local model | Qwen3.5-9B Q4_K_M imatrix |
+| Model size | ~5.3 GB |
+| Context | 32K |
+| Capability signal | MMLU 90+ / GPQA 80+ under thinking-on 32K evaluation |
+| Runtime | llama.cpp local server, OpenAI-compatible `/v1` endpoint |
+| Privacy | Fully offline capable; no API key required; conversations stay on device |
+
+### Downloads and mirrors
+
+- 🇨🇳 **ModelScope (recommended in China)**: `Merkyor/Qwen3.5-9B-GGUF-imatrix` (Q4_K_M imatrix GGUF)
+- 🤗 **Hugging Face**: `Merkyor/Qwen3.5-9B-GGUF-imatrix` (Q4_K_M imatrix GGUF)
+- High-memory devices (32GB+ RAM/VRAM) can also try **Qwen3.6-35B-A3B Q4_K_M imatrix**: [ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix)
+
+In the app: **Settings → Models → Local Qwen3.5-9B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background. The chat input shows local model status, and users can stop the runtime anytime to release memory.
+
 ## Install and Go
 
 Two paths on first launch. **Quick Start** requires zero API keys — a built-in default model works out of the box. Enter your name, grant permissions, start chatting. Want a stronger model? Connect your own provider anytime in Settings.
@@ -567,6 +588,7 @@ Linux builds are planned.
 Two paths on first launch:
 
 - **Quick Start**: Enter your name → set permissions → jump right in. A built-in default model works out of the box — no API key required.
+- **Local model**: Settings → Models → Local Qwen3.5-9B. Lynn downloads the Q4_K_M imatrix GGUF, prepares llama.cpp, starts the local endpoint, and switches to it automatically after authorization.
 - **Advanced Setup**: Enter your name → connect your own provider (API key + base URL) → choose a **chat model** and a **utility model** → pick a theme → set permissions → enter.
 
 Lynn uses the OpenAI-compatible protocol, so any provider that supports it will work (OpenAI, DeepSeek, Qwen, local models via Ollama, SiliconFlow, etc.). Some providers (e.g. MiniMax) also support OAuth login. All model settings can be adjusted later in Settings.
