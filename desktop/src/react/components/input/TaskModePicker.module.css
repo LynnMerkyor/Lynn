@@ -4,6 +4,8 @@
     position: relative;
     display: inline-flex;
     align-items: center;
+    flex: 0 0 auto;
+    z-index: 20;
 }
 
 /* 输入框左下角的芯片按钮 */
@@ -50,8 +52,10 @@
     position: absolute;
     bottom: calc(100% + 8px);
     left: 0;
-    z-index: 100;
+    z-index: 10010;
     width: 340px;
+    min-width: 300px;
+    max-width: calc(100vw - 28px);
     max-height: 560px;
     overflow-y: auto;
     background: var(--bg-card, var(--bg));
@@ -138,6 +142,7 @@
     font-size: 0.85rem;
     font-weight: 500;
     color: var(--text);
+    white-space: nowrap;
 }
 
 .item-active .item-name {
@@ -307,5 +312,5 @@
 .panel-overlay {
     position: fixed;
     inset: 0;
-    z-index: 99;
+    z-index: 10000;
 }

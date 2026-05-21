@@ -2289,12 +2289,40 @@
 /* ── Typing indicator (streaming 骨架屏) ── */
 
 .typingIndicator {
-    display: flex;
+    position: relative;
+    display: inline-flex;
     align-items: center;
     gap: 10px;
-    padding: 1rem 0;
-    padding-left: calc(var(--space-sm) + 2px);
+    width: min(360px, 72%);
+    margin: 0.75rem 0 0.85rem calc(var(--space-sm) + 2px);
+    padding: 0.82rem 0.95rem 0.92rem;
+    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border-radius: 18px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(250, 248, 244, 0.42)),
+        color-mix(in srgb, var(--bg-card) 94%, rgba(var(--accent-rgb), 0.06));
+    overflow: hidden;
+    box-shadow: 0 14px 34px rgba(38, 34, 27, 0.06);
     animation: msgIn 0.3s var(--ease-out);
+}
+
+.typingIndicator::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 8px;
+    height: 2px;
+    border-radius: 999px;
+    background:
+        linear-gradient(90deg,
+            transparent 0%,
+            rgba(var(--accent-rgb), 0.14) 18%,
+            rgba(var(--accent-rgb), 0.72) 48%,
+            rgba(var(--accent-rgb), 0.14) 78%,
+            transparent 100%);
+    background-size: 220% 100%;
+    animation: waitingSweep 1.45s ease-in-out infinite;
 }
 
 .typingDots {
@@ -2318,6 +2346,12 @@
 @keyframes typingBounce {
     0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
     30% { transform: translateY(-4px); opacity: 0.9; }
+}
+
+@keyframes waitingSweep {
+    0% { background-position: 100% 0; opacity: 0.38; }
+    45% { opacity: 0.92; }
+    100% { background-position: -100% 0; opacity: 0.38; }
 }
 
 .typingLabel {
