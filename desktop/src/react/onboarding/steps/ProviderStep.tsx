@@ -56,6 +56,7 @@ export function ProviderStep({
   const [connectionTested, setConnectionTested] = useState(false);
   const [testStatus, setTestStatus] = useState<{ type: '' | 'loading' | 'success' | 'error'; text: string }>({ type: '', text: '' });
   const [showKey, setShowKey] = useState(false);
+  const [showSecondary, setShowSecondary] = useState(false);
 
   // ── Custom provider fields ──
   const [customName, setCustomName] = useState('');
@@ -76,10 +77,28 @@ export function ProviderStep({
     () => PROVIDER_PRESETS.find((preset) => preset.value === selectedPreset) || null,
     [selectedPreset],
   );
-  const visiblePresets = useMemo(() => {
+  const groupPresets = useMemo(() => {
     if (isQuickTrack) return [];
     return PROVIDER_PRESETS.filter((preset) => (preset.group || 'standard') === providerGroup);
   }, [isQuickTrack, providerGroup]);
+  const visiblePresets = useMemo(() => {
+    if (showSecondary) return groupPresets;
+    return groupPresets.filter((preset) => (preset.tier || 'primary') === 'primary' || preset.custom);
+  }, [groupPresets, showSecondary]);
+  const hiddenSecondaryCount = useMemo(
+    () => groupPresets.filter((preset) => (preset.tier || 'primary') === 'secondary').length,
+    [groupPresets],
+  );
+
+  // If the selected preset is in the secondary tier we must expand the list
+  // so the active card stays visible (covers presets activated by deep-link
+  // / saved config).
+  useEffect(() => {
+    if (!activePreset) return;
+    if ((activePreset.tier || 'primary') === 'secondary' && !showSecondary) {
+      setShowSecondary(true);
+    }
+  }, [activePreset, showSecondary]);
   const usesBuiltInDefault = providerName === QUICK_START_PROVIDER.providerName;
 
   const copyText = useCallback((zh: string, en: string) => (isZh ? zh : en), [isZh]);
@@ -331,6 +350,25 @@ export function ProviderStep({
               </div>
             ))}
           </div>
+
+          {hiddenSecondaryCount > 0 && !showSecondary && (
+            <button
+              type="button"
+              className="provider-more-toggle"
+              onClick={() => setShowSecondary(true)}
+            >
+              {copyText(`+ 更多供应商 (${hiddenSecondaryCount})`, `+ More providers (${hiddenSecondaryCount})`)}
+            </button>
+          )}
+          {showSecondary && hiddenSecondaryCount > 0 && (
+            <button
+              type="button"
+              className="provider-more-toggle"
+              onClick={() => setShowSecondary(false)}
+            >
+              {copyText('收起常用以外的供应商', 'Collapse less-used providers')}
+            </button>
+          )}
         </>
       )}
 
