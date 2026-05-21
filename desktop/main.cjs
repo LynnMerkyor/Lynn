@@ -18,7 +18,7 @@ const { initAutoUpdater, checkForUpdatesAuto, setMainWindow: setUpdaterMainWindo
 const { setIpcSenderValidator, wrapIpcHandler, wrapIpcOn } = require('./ipc-wrapper.cjs');
 const { normalizeConfiguredShortcut, registerFirstAvailableGlobalShortcut } = require("./shortcut-policy.cjs");
 const { VoiceTunnelManager } = require("./voice-tunnel-manager.cjs");
-const { LlamaCppManager } = require("./llamacpp-manager.cjs");
+const { LlamaCppManager, DEFAULT_CONFIG: LLAMACPP_DEFAULT_CONFIG } = require("./llamacpp-manager.cjs");
 const { ModelDownloader, DEFAULT_SOURCES: MODEL_DOWNLOADER_SOURCES } = require("./model-downloader.cjs");
 
 // macOS/Linux: Electron 从 Dock/Finder 启动时 PATH 只有系统默认值，
@@ -443,12 +443,19 @@ function writeUserPreferences(nextPrefs) {
   fs.writeFileSync(prefsPath, JSON.stringify(nextPrefs, null, 2) + "\n", "utf-8");
 }
 
-// v0.78 policy: new installs default to Brain v2, while existing user-persisted
-// brain provider URLs stay untouched so stable v1 installs keep working.
+// v0.79 policy: the built-in default model is Brain v2. Older desktop builds
+// persisted v1 roots in ~/.lynn; migrate only the first-party "brain" provider
+// so BYOK/custom providers stay untouched.
 const CANONICAL_BRAIN_API_ROOT = "https://api.merkyorlynn.com/api/v2";
 const CANONICAL_BRAIN_PROVIDER_BASE_URL = `${CANONICAL_BRAIN_API_ROOT}/v1`;
-const DEPRECATED_BRAIN_API_ROOTS = new Set([]);
-const DEPRECATED_BRAIN_PROVIDER_BASE_URLS = new Set([]);
+const DEPRECATED_BRAIN_API_ROOTS = new Set([
+  "https://api.merkyorlynn.com/api",
+  "http://82.156.182.240/api",
+]);
+const DEPRECATED_BRAIN_PROVIDER_BASE_URLS = new Set([
+  "https://api.merkyorlynn.com/api/v1",
+  "http://82.156.182.240/api/v1",
+]);
 
 function normalizeBrainUrl(value) {
   const text = String(value || "").trim();
@@ -1646,9 +1653,9 @@ function createSettingsWindow(target, theme) {
   markPreferredPrimaryWindow("settings");
 
   settingsWindow = new BrowserWindow({
-    width: 1500,
-    height: 920,
-    minWidth: 1180,
+    width: 1580,
+    height: 960,
+    minWidth: 1280,
     minHeight: 720,
     title: "Settings",
     ...titleBarOpts({ x: 16, y: 14 }),
@@ -2802,6 +2809,23 @@ wrapIpcHandler("select-skill", async (event) => {
   return selectedPath;
 });
 
+wrapIpcHandler("select-gguf-model", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+  if (!win) return null;
+  const result = await dialog.showOpenDialog(win, {
+    properties: ["openFile"],
+    title: "选择 GGUF 模型",
+    filters: [
+      { name: "GGUF Model", extensions: ["gguf"] },
+      { name: "All Files", extensions: ["*"] },
+    ],
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  const selectedPath = result.filePaths[0];
+  grantWebContentsAccess(event.sender, selectedPath, "read");
+  return selectedPath;
+});
+
 // ── Skill 预览窗口 IPC ──
 wrapIpcHandler("open-skill-viewer", (event, data) => {
   if (!data) return;
@@ -3500,6 +3524,48 @@ function startLlamacpp() {
     llamacpp = null;
   }
 }
+
+function buildLlamacppArgsForAlias(modelAlias) {
+  const args = [...(LLAMACPP_DEFAULT_CONFIG.serverArgs || [])];
+  const aliasIndex = args.indexOf("-a");
+  if (aliasIndex >= 0 && aliasIndex + 1 < args.length) {
+    args[aliasIndex + 1] = modelAlias;
+  } else {
+    args.push("-a", modelAlias);
+  }
+  return args;
+}
+
+async function startLlamacppCustomModel(modelPath) {
+  const modelAlias = path.basename(modelPath, path.extname(modelPath)).slice(0, 80) || "local-gguf";
+  try { stopLlamacpp(); } catch {}
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  lastLlamacppState = {
+    status: "starting",
+    modelId: modelAlias,
+    modelPath,
+    customModel: true,
+    ts: Date.now(),
+  };
+  broadcastToAllWindows("llamacpp:state", lastLlamacppState);
+  llamacpp = new LlamaCppManager({
+    modelId: modelAlias,
+    modelFileName: path.basename(modelPath),
+    modelPath,
+    serverArgs: buildLlamacppArgsForAlias(modelAlias),
+    onLog: (level, msg) => {
+      if (level === "error") console.error(msg);
+      else if (level === "warn") console.warn(msg);
+      else console.log(msg);
+    },
+    onState: (state) => {
+      lastLlamacppState = { ...state, modelId: modelAlias, modelPath, customModel: true };
+      broadcastToAllWindows("llamacpp:state", lastLlamacppState);
+    },
+  });
+  void llamacpp.start();
+  return { ok: true, modelId: modelAlias, modelPath };
+}
 function stopLlamacpp() {
   if (!llamacpp) return;
   try { llamacpp.stop(); } catch (err) {
@@ -3578,6 +3644,33 @@ wrapIpcHandler("llamacpp:cancel-download", () => {
 wrapIpcHandler("llamacpp:sources", () => ({
   sources: MODEL_DOWNLOADER_SOURCES.map((s) => ({ id: s.id, label: s.label })),
 }));
+
+wrapIpcHandler("llamacpp:open-model-dir", async () => {
+  const dir = path.join(lynnHome, "models");
+  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  const error = await shell.openPath(dir);
+  return { ok: !error, path: dir, error: error || null };
+});
+
+wrapIpcHandler("llamacpp:start-custom-model", async (event, payload = {}) => {
+  const rawPath = typeof payload === "string" ? payload : payload?.modelPath;
+  if (!rawPath || typeof rawPath !== "string") {
+    return { ok: false, reason: "missing-model-path" };
+  }
+  const modelPath = path.resolve(rawPath);
+  if (path.extname(modelPath).toLowerCase() !== ".gguf") {
+    return { ok: false, reason: "not-gguf" };
+  }
+  if (!fs.existsSync(modelPath)) {
+    return { ok: false, reason: "model-not-found" };
+  }
+  grantWebContentsAccess(event.sender, modelPath, "read");
+  try {
+    return await startLlamacppCustomModel(modelPath);
+  } catch (err) {
+    return { ok: false, reason: String(err?.message || err) };
+  }
+});
 
 function stopManagedQwen35LlamaServer() {
   const pidFile = path.join(os.homedir(), ".lynn-engine", "run", "qwen35-9b-q4km-imatrix.pid");

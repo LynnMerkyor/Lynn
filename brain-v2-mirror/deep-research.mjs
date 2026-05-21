@@ -8,8 +8,14 @@ import 'dotenv/config';
 import { getProvider, isInCooldown, markUnhealthy } from './provider-registry.js';
 import { getAdapter } from './wire-adapter/index.js';
 
-// 默认候选池(避开 thinking 慢的 deepseek-pro,留 4 路稳;后续可由 env 覆盖)
-const DEFAULT_CANDIDATES = ['mimo', 'qwen3.6-35b-a3b', 'deepseek-chat', 'glm-5-turbo'];
+// 默认候选池(避开 deepseek-pro 同端点重复、glm 余额型失败;后续可由 env 覆盖)
+const DEFAULT_CANDIDATES = String(process.env.DEEP_RESEARCH_CANDIDATES || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+if (DEFAULT_CANDIDATES.length === 0) {
+  DEFAULT_CANDIDATES.push('mimo', 'qwen3.6-35b-a3b', 'deepseek-chat');
+}
 const CANDIDATE_TIMEOUT_MS = Number(process.env.DEEP_RESEARCH_CANDIDATE_TIMEOUT_MS || 60_000);
 const VERIFIER_TIMEOUT_MS = Number(process.env.DEEP_RESEARCH_VERIFIER_TIMEOUT_MS || 8_000);
 const MIN_VALID_CANDIDATES = Number(process.env.DEEP_RESEARCH_MIN_CANDIDATES || 2);

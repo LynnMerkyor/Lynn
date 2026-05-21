@@ -248,8 +248,11 @@ export interface PlatformApi {
   openHtmlInBrowser(html: string, title?: string): Promise<void>;
   exportHtmlToPng?(html: string, title?: string, opts?: { width?: number; background?: string; revealAfter?: boolean }): Promise<{ filePath: string; bytes: number; width: number; height: number } | null>;
   selectFolder(): Promise<string | null>;
+  selectGgufModel?(): Promise<string | null>;
   getOnboardingDefaults?(): Promise<{ workspacePath: string; trustedRoots: string[]; installRoot?: string | null; desktopRoot?: string | null }>;
   selectSkill(): Promise<string | null>;
+  llamacppOpenModelDir?(): Promise<{ ok: boolean; path?: string; error?: string | null }>;
+  llamacppStartCustomModel?(modelPath: string): Promise<{ ok: boolean; modelId?: string; modelPath?: string; reason?: string }>;
   readFile(path: string): Promise<string | null>;
   writeFile(filePath: string, content: string): Promise<boolean>;
   watchFile(filePath: string): Promise<boolean>;

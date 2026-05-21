@@ -4,8 +4,10 @@ import { useI18n } from '../../hooks/use-i18n';
 import { getWebSocket } from '../../services/websocket';
 import styles from './InputArea.module.css';
 
-const AUTO_COMPACT_THRESHOLD = 80;
+const AUTO_COMPACT_THRESHOLD = 92;
 const WARNING_THRESHOLD = 70;
+const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
+const LOCAL_QWEN35_MODEL_ID = 'qwen35-9b-q4km-imatrix';
 
 export function ContextRing() {
   const { t } = useI18n();
@@ -23,6 +25,11 @@ export function ContextRing() {
   const storeContextPercent = useStore(s => s.contextPercent);
   const currentSessionPath = useStore(s => s.currentSessionPath);
   const storeCompacting = useStore(s => currentSessionPath ? s.compactingSessions.includes(currentSessionPath) : false);
+  const composerText = useStore(s => s.composerText);
+  const currentModel = useStore(s => s.currentModel);
+  const isLocalQwen35 =
+    currentModel?.provider === LOCAL_QWEN35_PROVIDER_ID &&
+    currentModel?.id === LOCAL_QWEN35_MODEL_ID;
 
   useEffect(() => {
     if (storeContextTokens != null) {
@@ -39,7 +46,14 @@ export function ContextRing() {
   // Auto-compact when approaching limit
   useEffect(() => {
     const pct = percent ?? 0;
-    if (pct >= AUTO_COMPACT_THRESHOLD && !compacting && !autoCompactFired.current && !isStreaming) {
+    if (
+      pct >= AUTO_COMPACT_THRESHOLD &&
+      !compacting &&
+      !autoCompactFired.current &&
+      !isStreaming &&
+      !composerText.trim() &&
+      !isLocalQwen35
+    ) {
       autoCompactFired.current = true;
       const ws = getWebSocket();
       if (ws?.readyState === WebSocket.OPEN) {
@@ -49,7 +63,7 @@ export function ContextRing() {
     if (pct < WARNING_THRESHOLD) {
       autoCompactFired.current = false;
     }
-  }, [percent, compacting, isStreaming]);
+  }, [percent, compacting, isStreaming, composerText, isLocalQwen35]);
 
   const handleClick = useCallback(() => {
     if (compacting) return;

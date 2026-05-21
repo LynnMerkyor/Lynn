@@ -26,11 +26,13 @@ const CODING_PROVIDER_ORDER = [
 const LOCAL_PROVIDER_ORDER = [
   'local-qwen35-9b-q4km-imatrix',
 ];
+const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
+const LOCAL_QWEN35_PROVIDER_LABEL = '本地 Qwen3.5-9B';
 
 const LOCAL_PROVIDER_FALLBACKS: Record<string, ProviderSummary> = {
-  'local-qwen35-9b-q4km-imatrix': {
+  [LOCAL_QWEN35_PROVIDER_ID]: {
     type: 'none',
-    display_name: '本地 Qwen3.5-9B',
+    display_name: LOCAL_QWEN35_PROVIDER_LABEL,
     base_url: 'http://127.0.0.1:18099/v1',
     api: 'openai-completions',
     api_key: '',
@@ -226,6 +228,7 @@ export function ProvidersTab() {
   };
 
   const getProviderLabel = (id: string, p?: ProviderSummary) => {
+    if (id === LOCAL_QWEN35_PROVIDER_ID) return LOCAL_QWEN35_PROVIDER_LABEL;
     if (id === BRAIN_PROVIDER_ID) return BRAIN_PROVIDER_LABEL;
     const preset = PROVIDER_PRESETS.find(pr => pr.value === id);
     return preset?.label || p?.display_name || id;
@@ -303,7 +306,10 @@ export function ProvidersTab() {
           {selected ? (() => {
             const existing = providersSummary[selected];
             const preset = PROVIDER_PRESETS.find(p => p.value === selected);
-            const summary = existing || buildPresetSummary(selected);
+            const rawSummary = existing || buildPresetSummary(selected);
+            const summary = selected === LOCAL_QWEN35_PROVIDER_ID && rawSummary
+              ? { ...rawSummary, display_name: LOCAL_QWEN35_PROVIDER_LABEL }
+              : rawSummary;
             if (!summary) {
               return (
                 <div className={styles['pv-empty']}>

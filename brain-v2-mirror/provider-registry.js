@@ -3,6 +3,10 @@
 import 'dotenv/config';
 
 const env = (k, d) => process.env[k] || d;
+const envList = (k) => String(process.env[k] || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 export const PROVIDERS = {
   'local-qwen35-9b-q4km-imatrix': {
@@ -32,7 +36,7 @@ export const PROVIDERS = {
     model: env('QWEN_LOCAL_MODEL_FALLBACK', 'Qwen3.6-35B-A3B-FP8'),
     capability: { vision: false, audio: false, tools: true, thinking: true, native_search: false },
     wire: 'sglang',
-    cooldown_ms: 300_000,
+    cooldown_ms: Number(env('QWEN_LOCAL_COOLDOWN_MS', '60000')),
   },
   'deepseek-chat': {
     id: 'deepseek-chat',
@@ -54,7 +58,7 @@ export const PROVIDERS = {
   },
   'glm-5-turbo': {
     id: 'glm-5-turbo',
-    endpoint: env('ZHIPU_BASE', 'https://open.bigmodel.cn/api/paas/v4'),
+    endpoint: env('ZHIPU_CODING_BASE', 'https://open.bigmodel.cn/api/coding/paas/v4'),
     apiKey: env('ZHIPU_KEY', ''),
     model: env('ZHIPU_MODEL', 'glm-5-turbo'),
     capability: { vision: false, audio: false, tools: true, thinking: false, native_search: true },
@@ -73,15 +77,22 @@ export const PROVIDERS = {
   },
 };
 
-// universalOrder — 单一兜底链路,不按 prompt 内容分支
-export const universalOrder = [
+// universalOrder — 单一兜底链路,不按 prompt 内容分支。
+// DeepSeek Pro shares the same endpoint/key as DeepSeek Chat, so it is no
+// longer in the default chain; operators can opt back in with
+// BRAIN_V2_UNIVERSAL_ORDER if they intentionally want that duplicate lane.
+const DEFAULT_UNIVERSAL_ORDER = [
   'local-qwen35-9b-q4km-imatrix', // Mac/local-first: falls back quickly when endpoint is not running
   'mimo',                  // 头位:enable_search:true 内置搜索 + thinking
   'qwen3.6-35b-a3b',       // DGX SGLang FP8 备链
   'deepseek-chat',         // 云兜底 V4-flash
-  'deepseek-pro',          // 云兜底 V4-pro
-  'glm-5-turbo',           // 末位
 ];
+const disabledProviders = new Set(envList('BRAIN_V2_DISABLED_PROVIDERS'));
+export const universalOrder = (
+  envList('BRAIN_V2_UNIVERSAL_ORDER').length > 0
+    ? envList('BRAIN_V2_UNIVERSAL_ORDER')
+    : DEFAULT_UNIVERSAL_ORDER
+).filter((id) => PROVIDERS[id] && !disabledProviders.has(id));
 
 // 健康/cooldown 状态(in-memory,不持久化)
 const cooldownState = new Map(); // providerId → { unhealthyUntil: timestamp }
@@ -91,10 +102,13 @@ export function isInCooldown(providerId) {
   if (!s) return false;
   return Date.now() < s.unhealthyUntil;
 }
-export function markUnhealthy(providerId, reason = '') {
+export function markUnhealthy(providerId, reason = '', cooldownMs = null) {
   const provider = PROVIDERS[providerId];
   if (!provider) return;
-  cooldownState.set(providerId, { unhealthyUntil: Date.now() + provider.cooldown_ms, reason });
+  const duration = Number.isFinite(cooldownMs) && cooldownMs > 0
+    ? cooldownMs
+    : provider.cooldown_ms;
+  cooldownState.set(providerId, { unhealthyUntil: Date.now() + duration, reason });
 }
 export function clearUnhealthy(providerId) {
   cooldownState.delete(providerId);

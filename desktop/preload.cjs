@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld("hana", {
   llamacppPauseDownload: () => ipcRenderer.invoke("llamacpp:pause-download"),
   llamacppCancelDownload: () => ipcRenderer.invoke("llamacpp:cancel-download"),
   llamacppGetSources: () => ipcRenderer.invoke("llamacpp:sources"),
+  llamacppOpenModelDir: () => ipcRenderer.invoke("llamacpp:open-model-dir"),
+  llamacppStartCustomModel: (modelPath) => ipcRenderer.invoke("llamacpp:start-custom-model", { modelPath }),
   onLlamacppState: (cb) => {
     const handler = (_event, state) => cb(state);
     ipcRenderer.on("llamacpp:state", handler);
@@ -53,6 +55,7 @@ contextBridge.exposeInMainWorld("hana", {
     return () => ipcRenderer.removeListener("llamacpp:download-state", handler);
   },
   selectFolder: () => ipcRenderer.invoke("select-folder"),
+  selectGgufModel: () => ipcRenderer.invoke("select-gguf-model"),
   getOnboardingDefaults: () => ipcRenderer.invoke("get-onboarding-defaults"),
   selectSkill: () => ipcRenderer.invoke("select-skill"),
   openFolder: (path) => ipcRenderer.invoke("open-folder", path),

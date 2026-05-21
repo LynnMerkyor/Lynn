@@ -81,7 +81,7 @@ function mergeContentStats(target, source) {
 }
 
 function finalizeResponseAnalysis(stats) {
-  const text = stats.textParts.join("\n").trim();
+  const text = stripInternalProgressTags(stats.textParts.join("\n")).trim();
   const responseKind = text
     ? "text"
     : stats.reasoningBlockCount > 0
@@ -95,6 +95,12 @@ function finalizeResponseAnalysis(stats) {
     reasoningBlockCount: stats.reasoningBlockCount,
     nonDisplayableBlockCount: stats.nonDisplayableBlockCount,
   };
+}
+
+function stripInternalProgressTags(value) {
+  return String(value || "")
+    .replace(/<lynn_tool_progress\b[^>]*>(?:<\/lynn_tool_progress>)?/giu, "")
+    .replace(/<\/lynn_tool_progress>/giu, "");
 }
 
 function analyzeLlmResponse(api, data) {
@@ -151,6 +157,109 @@ function analyzeLlmResponse(api, data) {
     }
   }
   return finalizeResponseAnalysis(stats);
+}
+
+function parseSseJsonEvents(rawText) {
+  const events = [];
+  let dataLines = [];
+
+  const flush = () => {
+    if (dataLines.length === 0) return;
+    const payload = dataLines.join("\n").trim();
+    dataLines = [];
+    if (!payload || payload === "[DONE]") return;
+    try {
+      events.push(JSON.parse(payload));
+    } catch {
+      // Ignore malformed telemetry/non-JSON SSE payloads; visible model output
+      // is carried by OpenAI-compatible JSON data chunks.
+    }
+  };
+
+  for (const line of String(rawText || "").split(/\r?\n/u)) {
+    if (line === "") {
+      flush();
+      continue;
+    }
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  }
+  flush();
+  return events;
+}
+
+function appendDeltaContent(parts, value) {
+  if (typeof value === "string") {
+    if (value) parts.push(value);
+    return;
+  }
+  const stats = collectContentStats(value);
+  if (stats.textParts.length > 0) parts.push(stats.textParts.join("\n"));
+}
+
+function normalizeOpenAIStreamPayload(rawText) {
+  const events = parseSseJsonEvents(rawText);
+  if (events.length === 0) return null;
+
+  let id = "";
+  let model = "";
+  let finishReason = null;
+  const contentParts = [];
+  const reasoningParts = [];
+  const toolCalls = [];
+
+  for (const event of events) {
+    if (!event || typeof event !== "object") continue;
+    if (!id && typeof event.id === "string") id = event.id;
+    if (typeof event.model === "string" && event.model) model = event.model;
+
+    const choice = Array.isArray(event.choices) ? event.choices[0] : null;
+    if (!choice || typeof choice !== "object") continue;
+    if (choice.finish_reason) finishReason = choice.finish_reason;
+
+    const delta = choice.delta && typeof choice.delta === "object" ? choice.delta : null;
+    const message = choice.message && typeof choice.message === "object" ? choice.message : null;
+    if (delta) {
+      appendDeltaContent(contentParts, delta.content);
+      if (typeof delta.reasoning_content === "string") reasoningParts.push(delta.reasoning_content);
+      if (typeof delta.reasoning === "string") reasoningParts.push(delta.reasoning);
+      if (Array.isArray(delta.tool_calls)) toolCalls.push(...delta.tool_calls);
+    }
+    if (message) {
+      appendDeltaContent(contentParts, message.content);
+      if (typeof message.reasoning_content === "string") reasoningParts.push(message.reasoning_content);
+      if (typeof message.reasoning === "string") reasoningParts.push(message.reasoning);
+      if (Array.isArray(message.tool_calls)) toolCalls.push(...message.tool_calls);
+    }
+  }
+
+  return {
+    id,
+    model,
+    choices: [{
+      index: 0,
+      finish_reason: finishReason || "stop",
+      message: {
+        role: "assistant",
+        content: contentParts.join("").trim(),
+        reasoning_content: reasoningParts.join("").trim(),
+        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+      },
+    }],
+  };
+}
+
+function parseLlmResponsePayload(rawText, contentType) {
+  try {
+    return rawText ? JSON.parse(rawText) : null;
+  } catch {
+    if (/text\/event-stream/iu.test(contentType || "") || /^\s*data:/mu.test(rawText || "")) {
+      const streamed = normalizeOpenAIStreamPayload(rawText);
+      if (streamed) return streamed;
+    }
+    throw new Error("invalid-json");
+  }
 }
 
 /**
@@ -311,10 +420,11 @@ export async function callText({
 
     // ── 5. 解析响应 ──
     const rawText = await res.text();
+    const contentType = res.headers.get("content-type") || "";
     clearTimeout(slowTimer);
     let data;
     try {
-      data = rawText ? JSON.parse(rawText) : null;
+      data = parseLlmResponsePayload(rawText, contentType);
     } catch {
       throw new Error(`LLM returned invalid JSON (status=${res.status})`);
     }

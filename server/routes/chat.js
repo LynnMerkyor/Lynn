@@ -8,6 +8,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { containsPseudoToolCallSimulation } from "../../core/llm-utils.js";
 import { stripPseudoToolCallMarkup } from "../../shared/pseudo-tool-call.js";
@@ -68,6 +69,10 @@ import {
   resolveInitialToolUseBehavior,
 } from "../chat/tool-use-behavior.js";
 import {
+  attachLocalQwen35BenchContext,
+  isLocalQwen35Model,
+} from "../chat/local-qwen35-bench-context.js";
+import {
   artifactPreviewDedupeKey,
   artifactPreviewFromToolCall,
 } from "../chat/artifact-recovery.js";
@@ -97,7 +102,6 @@ import {
 
 /** tool_start 事件只广播这些 arg 字段，避免传输完整文件内容（同步维护：chat-render-shim.ts extractToolDetail） */
 const TOOL_ARG_SUMMARY_KEYS = ["file_path", "path", "command", "cmd", "shell", "script", "pattern", "url", "query", "key", "value", "action", "type", "schedule", "prompt", "label"];
-
 /**
  * 从 Pi SDK 的 content 块中提取纯文本
  */
@@ -239,6 +243,137 @@ function buildPrefetchToolSummary(context) {
     .filter((line) => !/^(?:下面是|请直接|如果资料不足|来源[:：]?)/.test(line));
   const outputPreview = lines.slice(0, 6).join("\n").slice(0, 200);
   return outputPreview ? { outputPreview } : {};
+}
+
+const LOCAL_QWEN35_DIRECT_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_CHARS || 8000);
+const LOCAL_QWEN35_DIRECT_ENDPOINT = process.env.LYNN_LOCAL_QWEN35_ENDPOINT || "http://127.0.0.1:18099/v1/chat/completions";
+const LOCAL_QWEN35_DIRECT_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_TOKENS || 1536);
+
+function looksLikeToolOrLiveLocalPrompt(text = "") {
+  const value = String(text || "");
+  return /(?:^|\s)\/goal\b|(?:网页|网站|搜索|搜一下|查询|调查|调研|最新|实时|今天|新闻|天气|股价|行情|价格|收费|私董会|来源|引用|链接|打开|读取|文件|目录|桌面|Excel|表格|PPT|PDF|运行|命令|终端|bash|shell|安装|下载|删除|移动|复制|创建|代码|报错|修复|提交|commit|git|MCP|tool|工具|web[-_ ]?(?:search|fetch)|current|latest|news|weather|stock|price|benchmark\s+run)/i.test(value);
+}
+
+function shouldUseLocalQwen35DirectBridge(promptText = "", opts = {}) {
+  if (!isLocalQwen35Model(opts.modelInfo)) return false;
+  if (opts.hasImages) return false;
+  if (opts.rehydratedMutation) return false;
+  if (opts.toolBehavior && opts.toolBehavior !== TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN) return false;
+  const text = String(promptText || "").trim();
+  if (!text || text.length > LOCAL_QWEN35_DIRECT_MAX_CHARS) return false;
+  if (opts.reason === "local_qwen35_benchmark_context") return true;
+  if (opts.reason === "quick_translation") return true;
+  if (looksLikeToolOrLiveLocalPrompt(text)) return false;
+  return opts.routeIntent === "chat" || opts.routeIntent === "reasoning";
+}
+
+function extractVisibleAnswerFromReasoning(reasoningText = "") {
+  const text = String(reasoningText || "").trim();
+  if (!text) return "";
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]
+      .replace(/^[-*]\s+/, "")
+      .replace(/^\d+[.)]\s+/, "")
+      .trim();
+    const match = line.match(/^(?:final\s+answer|answer|答案|最终答案|结论)\s*[:：]\s*(.+)$/i);
+    if (match?.[1]?.trim()) return match[1].trim();
+  }
+  const tail = lines[lines.length - 1] || "";
+  if (tail.length > 0 && tail.length <= 80 && !/^(thinking process|analyze|step|首先|然后|因此)/i.test(tail)) {
+    return tail;
+  }
+  return "";
+}
+
+function sessionLineId() {
+  return randomUUID().replace(/-/g, "").slice(0, 8);
+}
+
+function getLastSessionEntryId(sessionPath) {
+  try {
+    const raw = fs.readFileSync(sessionPath, "utf-8");
+    const lines = raw.split("\n").filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const entry = JSON.parse(lines[i]);
+        if (entry?.id) return entry.id;
+      } catch { /* skip malformed historical entries */ }
+    }
+  } catch { /* best-effort persistence */ }
+  return null;
+}
+
+function latestPersistedMessageText(sessionPath) {
+  try {
+    const raw = fs.readFileSync(sessionPath, "utf-8");
+    const lines = raw.split("\n").filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const entry = JSON.parse(lines[i]);
+        const msg = entry?.message;
+        if (!msg?.role) continue;
+        return {
+          role: msg.role,
+          text: extractText(msg.content),
+        };
+      } catch { /* skip malformed historical entries */ }
+    }
+  } catch { /* best-effort persistence */ }
+  return null;
+}
+
+function appendJsonlLine(filePath, entry) {
+  fs.appendFileSync(filePath, `${JSON.stringify(entry)}\n`);
+}
+
+function persistLocalQwen35DirectTurn(sessionPath, originalPromptText, assistantText, opts = {}) {
+  if (!sessionPath || !assistantText) return;
+  const now = new Date().toISOString();
+  let parentId = getLastSessionEntryId(sessionPath);
+  let userId = null;
+  const latest = latestPersistedMessageText(sessionPath);
+  if (!(latest?.role === "user" && String(latest.text || "").trim() === String(originalPromptText || "").trim())) {
+    userId = sessionLineId();
+    appendJsonlLine(sessionPath, {
+      type: "message",
+      id: userId,
+      parentId,
+      timestamp: now,
+      message: {
+        role: "user",
+        content: [{ type: "text", text: String(originalPromptText || "") }],
+        timestamp: Date.now(),
+      },
+    });
+    parentId = userId;
+  }
+
+  const content = [];
+  const reasoning = String(opts.reasoningText || "").trim();
+  if (reasoning) {
+    content.push({ type: "thinking", thinking: `${reasoning}\n`, thinkingSignature: "reasoning_content" });
+  }
+  content.push({ type: "text", text: String(assistantText || "") });
+  appendJsonlLine(sessionPath, {
+    type: "message",
+    id: sessionLineId(),
+    parentId,
+    timestamp: now,
+    message: {
+      role: "assistant",
+      content,
+      api: "openai-completions",
+      provider: "local-qwen35-9b-q4km-imatrix",
+      model: "qwen35-9b-q4km-imatrix",
+      usage: opts.usage || undefined,
+      stopReason: "stop",
+      timestamp: Date.now(),
+    },
+  });
 }
 
 function resolveEditSnapshotPath(session, engine, rawPath) {
@@ -1367,6 +1502,202 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     maybeSteerPseudoToolSimulation(sessionPath, ss);
   }
 
+  function feedLocalVisibleText(sessionPath, ss, delta) {
+    if (!delta) return;
+    ss.rawTextAcc += delta || "";
+    ss.thinkTagParser.feed(delta, (tEvt) => {
+      switch (tEvt.type) {
+        case "think_start":
+          if (!ss.isThinking) {
+            ss.isThinking = true;
+            ss.hasThinking = true;
+            emitStreamEvent(sessionPath, ss, { type: "thinking_start" });
+          }
+          break;
+        case "think_text":
+          ss.hasThinking = true;
+          emitStreamEvent(sessionPath, ss, { type: "thinking_delta", delta: tEvt.data });
+          break;
+        case "think_end":
+          if (ss.isThinking) {
+            ss.isThinking = false;
+            emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
+          }
+          break;
+        case "text":
+          ss.progressParser.feed(tEvt.data, (pEvt) => {
+            if (pEvt.type === "tool_progress") {
+              ss.progressMarkerCount++;
+              maybeSteerPseudoToolSimulation(sessionPath, ss);
+              return;
+            }
+            ss.moodParser.feed(pEvt.data, (evt) => {
+              if (evt.type === "text") {
+                ss.xingParser.feed(evt.data, (xEvt) => {
+                  switch (xEvt.type) {
+                    case "text":
+                      emitVisibleTextDelta(sessionPath, ss, xEvt.data);
+                      break;
+                    case "xing_start":
+                      emitStreamEvent(sessionPath, ss, { type: "xing_start", title: xEvt.title });
+                      break;
+                    case "xing_text":
+                      emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
+                      break;
+                    case "xing_end":
+                      emitStreamEvent(sessionPath, ss, { type: "xing_end" });
+                      break;
+                  }
+                });
+              } else if (evt.type === "mood_start") {
+                emitStreamEvent(sessionPath, ss, { type: "mood_start" });
+              } else if (evt.type === "mood_text") {
+                emitStreamEvent(sessionPath, ss, { type: "mood_text", delta: evt.data });
+              } else if (evt.type === "mood_end") {
+                emitStreamEvent(sessionPath, ss, { type: "mood_end" });
+              }
+            });
+          });
+          break;
+      }
+    });
+  }
+
+  function emitLocalThinkingDelta(sessionPath, ss, delta) {
+    const text = String(delta || "");
+    if (!text) return;
+    if (!ss.isThinking) {
+      ss.isThinking = true;
+      ss.hasThinking = true;
+      emitStreamEvent(sessionPath, ss, { type: "thinking_start" });
+    }
+    ss.hasThinking = true;
+    emitStreamEvent(sessionPath, ss, { type: "thinking_delta", delta: text });
+  }
+
+  function closeLocalQwen35DirectTurn(sessionPath, ss, opts = {}) {
+    clearTurnTimers(ss);
+    if (ss.isThinking) {
+      ss.isThinking = false;
+      emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
+    }
+    emitStreamEvent(sessionPath, ss, { type: "model_hint", model: "qwen35-9b-q4km-imatrix" });
+    emitStreamEvent(sessionPath, ss, { type: "turn_end" });
+    lifecycleHooks.run("turn_end", {
+      ss,
+      sessionPath,
+      hasOutput: ss.hasOutput,
+      hasToolCall: ss.hasToolCall,
+      direct: true,
+      source: "local_qwen35_direct",
+    });
+    broadcast({ type: "status", isStreaming: false, sessionPath });
+    finishSessionStream(ss);
+    resetCompletedTurnState(ss);
+    if (opts.debugLabel) {
+      debugLog()?.log("ws", `[LOCAL-QWEN35-DIRECT v1] closed · ${opts.debugLabel} · ${sessionPath}`);
+    }
+  }
+
+  async function streamLocalQwen35DirectBridge(sessionPath, ss, originalPromptText, effectivePromptText) {
+    const startedAt = Date.now();
+    const messages = [
+      {
+        role: "system",
+        content: [
+          "你是 Lynn 的本地 Qwen3.5-9B。优先用用户语言直接回答。",
+          "本轮是低延迟本地直连模式：不要展开长思考，不要输出思考过程，只给结论和必要依据。",
+          "你运行在用户本机,适合日常问答、写作、翻译和轻量分析。",
+          "如果用户问你的 Lynn 测评数据,只使用提示里的 Lynn hard data,并明确区分 thinking-on/off、样本量、naive 与 excluding parse-fail。",
+          "如果问题明显需要实时联网、文件操作或本地工具,简短说明需要切换到 Lynn 的工具链路。",
+        ].join("\n"),
+      },
+      { role: "user", content: String(effectivePromptText || originalPromptText || "") },
+    ];
+    let assistantText = "";
+    let reasoningText = "";
+    let usage = null;
+    const res = await fetch(LOCAL_QWEN35_DIRECT_ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "qwen35-9b-q4km-imatrix",
+        messages,
+        temperature: 0.2,
+        max_tokens: LOCAL_QWEN35_DIRECT_MAX_TOKENS,
+        stream: true,
+        stream_options: { include_usage: true },
+      }),
+    });
+    if (!res.ok || !res.body) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`local qwen35 direct bridge failed: HTTP ${res.status}${body ? ` ${body.slice(0, 240)}` : ""}`);
+    }
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let streamDone = false;
+    for await (const chunk of res.body) {
+      buffer += decoder.decode(chunk, { stream: true });
+      let newlineIdx = buffer.indexOf("\n");
+      while (newlineIdx >= 0) {
+        const line = buffer.slice(0, newlineIdx).trim();
+        buffer = buffer.slice(newlineIdx + 1);
+        newlineIdx = buffer.indexOf("\n");
+        if (!line || !line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (!data) continue;
+        if (data === "[DONE]") {
+          streamDone = true;
+          break;
+        }
+        let payload = null;
+        try {
+          payload = JSON.parse(data);
+        } catch {
+          continue;
+        }
+        if (payload?.usage) usage = payload.usage;
+        const delta = payload?.choices?.[0]?.delta || {};
+        const reasoningDelta = delta.reasoning_content || delta.reasoning || delta.thinking || "";
+        if (reasoningDelta) {
+          reasoningText += reasoningDelta;
+          emitLocalThinkingDelta(sessionPath, ss, reasoningDelta);
+        }
+        const contentDelta = delta.content || "";
+        if (contentDelta) {
+          if (ss.isThinking) {
+            ss.isThinking = false;
+            emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
+          }
+          assistantText += contentDelta;
+          feedLocalVisibleText(sessionPath, ss, contentDelta);
+        }
+      }
+      if (streamDone) {
+        try { await res.body.cancel?.(); } catch { /* body may already be closed */ }
+        break;
+      }
+    }
+    if (!assistantText.trim() && reasoningText.trim()) {
+      const fallback = extractVisibleAnswerFromReasoning(reasoningText)
+        || "本地 9B 已完成思考，但没有生成可见正文。请再试一次，或增加输出预算。";
+      assistantText = fallback;
+      if (ss.isThinking) {
+        ss.isThinking = false;
+        emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
+      }
+      feedLocalVisibleText(sessionPath, ss, fallback);
+    }
+    persistLocalQwen35DirectTurn(sessionPath, originalPromptText, assistantText, {
+      reasoningText,
+      usage,
+    });
+    closeLocalQwen35DirectTurn(sessionPath, ss, {
+      debugLabel: `chars=${assistantText.length} ms=${Date.now() - startedAt}`,
+    });
+    return true;
+  }
+
   function isAssistantStreamScopedEvent(event) {
     return event?.type === "message_update"
       || event?.type === "tool_execution_start"
@@ -2298,9 +2629,33 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 const reportKind = initialToolUse.reportKind;
                 const budgetContext = initialToolUse.budgetContext || "";
                 let effectivePromptText = initialToolUse.effectivePromptText || promptText;
+                effectivePromptText = attachLocalQwen35BenchContext(effectivePromptText, currentModelInfo);
                 if (ss._rehydratedEffectivePrompt) {
                   effectivePromptText = ss._rehydratedEffectivePrompt;
                   ss._rehydratedEffectivePrompt = null;
+                }
+                if (shouldUseLocalQwen35DirectBridge(promptText, {
+                  modelInfo: currentModelInfo,
+                  hasImages: Boolean(msg.images?.length),
+                  rehydratedMutation: Boolean(rehydratedMutation),
+                  toolBehavior: initialToolUse.behavior,
+                  reason: initialToolUse.reason,
+                  routeIntent: ss.routeIntent,
+                })) {
+                  ss.effectivePromptText = effectivePromptText;
+                  try {
+                    await streamLocalQwen35DirectBridge(promptSessionPath, ss, promptText, effectivePromptText);
+                  } catch (directErr) {
+                    debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] failed · ${directErr?.message || directErr} · ${promptSessionPath}`);
+                    closeStreamWithVisibleFallback(
+                      promptSessionPath,
+                      ss,
+                      "本地 9B 这次没有稳定返回。我已经保留问题，可以切回默认工具链路或稍后重试。",
+                      "local_qwen35_direct_failed",
+                      { trustedFallback: true },
+                    );
+                  }
+                  return;
                 }
                 let directResearchAnswer = "";
                 if (!rehydratedMutation && initialToolUse.behavior === TOOL_USE_BEHAVIOR.PREFETCH_THEN_RUN_OR_STOP) {

@@ -408,7 +408,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           <div className={styles['pv-local-qwen-kicker']}>本地 9B，日常无限用</div>
           <div className={styles['pv-local-qwen-title']}>Qwen3.5-9B Q4_K_M imatrix</div>
           <div className={styles['pv-local-qwen-desc']}>
-            5.3GB · 32K 上下文 · MMLU 90+ / GPQA 80+。Lynn 会在用户授权后自动准备
+            5.3GB · 32K 上下文 · MMLU 90+ / GPQA 80+ · JSON 输出与工具调用稳定。Lynn 会在用户授权后自动准备
             llama.cpp、模型文件和本地 OpenAI 端点；完成后可离线使用，不需要 API Key，不上传对话。
           </div>
         </div>
@@ -422,6 +422,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         <span>GPQA 80+</span>
         <span>5.3GB</span>
         <span>32K 上下文</span>
+        <span>JSON 输出稳定</span>
+        <span>工具调用稳定</span>
         <span>本地优先</span>
         <span>无限 token</span>
         <span>隐私留在本机</span>
