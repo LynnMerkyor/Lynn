@@ -1,22 +1,18 @@
 /**
- * LocalModelDownloadStep.tsx — Step 2.5: Download / verify / spawn
- * the Lynn-default local model (Qwen 3.5 9B Q4_K_M-imatrix · 5.3 GB).
+ * LocalModelDownloadStep.tsx — Qwen 3.5 9B local setup.
  *
- * Triggered when the user picks the 'quick-local' track or selects the
- * llamacpp provider in advanced setup. Owns:
- *   - hydrate llama.cpp manager state via use-llamacpp-state
- *   - render progress / pause / resume / cancel
- *   - on completion: wait for llama-server /health 200, save provider
- *     config, then call goToStep(next)
- *   - on hard failure: offer fallback to Brain v2 default
+ * This step intentionally uses the same server-side /api/local-qwen35-9b/*
+ * lifecycle as Settings and chat routing. Keeping onboarding on the same
+ * provider id avoids the old split where onboarding saved "llamacpp" while
+ * the app routed through "local-qwen35-9b-q4km-imatrix".
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useLlamacppState } from '../../hooks/use-llamacpp-state';
 import { saveProvider } from '../onboarding-actions';
 import type { OnboardingFetch } from '../onboarding-actions';
 import { StepContainer, Multiline } from '../onboarding-ui';
 import { useOnboardingI18n } from '../use-onboarding-i18n';
+import { QUICK_LOCAL_PROVIDER } from '../constants';
 import {
   BRAIN_PROVIDER_ID,
   BRAIN_PROVIDER_BASE_URL,
@@ -30,24 +26,70 @@ interface LocalModelDownloadStepProps {
   goToStep: (index: number) => void;
   showError: (msg: string) => void;
   onProviderReady: (providerName: string, providerUrl: string, providerApi: string, apiKey: string) => void;
-  /** Where to go after success. Quick-local jumps to permissions (5). */
   nextStep: number;
-  /** Where the back button goes (0 = locale picker, 2 = provider picker). */
   backStep: number;
 }
 
-const LOCAL_PROVIDER = {
-  name: 'llamacpp',
-  url: 'http://127.0.0.1:18099/v1',
-  api: 'openai-completions',
-  modelId: 'qwen3.5-9b-q4km-imatrix',
-} as const;
+type LocalSetupStatus = {
+  ok?: boolean;
+  registered_provider?: boolean;
+  error?: string;
+  runtime?: {
+    endpoint_running?: boolean;
+    endpoint_loading?: boolean;
+    process_alive?: boolean;
+    base_url?: string;
+  };
+  plan?: {
+    base_url?: string;
+    observed?: {
+      endpoint_running?: boolean;
+      endpoint_loading?: boolean;
+      gguf?: string | null;
+      llama_server?: string | null;
+    };
+    hardware?: {
+      can_enable?: boolean;
+      warnings?: string[];
+      blockers?: string[];
+      recommended_runtime?: {
+        label?: string;
+        ctx_size?: number;
+        parallel?: number;
+      };
+    };
+  };
+  job?: {
+    status?: string;
+    log_file?: string;
+    progress?: {
+      phase?: string;
+      percent?: number | null;
+      downloaded?: string;
+      total?: string;
+      eta?: string;
+      speed?: string;
+      message?: string;
+      tail?: string[];
+    } | null;
+  } | null;
+};
 
-function formatBytes(n: number): string {
-  if (!n || n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+function endpointReady(status: LocalSetupStatus | null): boolean {
+  return status?.runtime?.endpoint_running === true || status?.plan?.observed?.endpoint_running === true;
+}
+
+function endpointLoading(status: LocalSetupStatus | null): boolean {
+  return !endpointReady(status) && (
+    status?.runtime?.endpoint_loading === true
+      || status?.runtime?.process_alive === true
+      || status?.plan?.observed?.endpoint_loading === true
+      || status?.job?.status === 'running'
+  );
+}
+
+function hasModelAndRuntime(status: LocalSetupStatus | null): boolean {
+  return !!(status?.plan?.observed?.gguf && status?.plan?.observed?.llama_server);
 }
 
 export function LocalModelDownloadStep({
@@ -55,32 +97,55 @@ export function LocalModelDownloadStep({
   nextStep, backStep,
 }: LocalModelDownloadStepProps) {
   const { t, locale } = useOnboardingI18n();
-  const llamacpp = useLlamacppState();
+  const isZh = (locale || (typeof i18n !== 'undefined' ? i18n.locale : '') || '').startsWith('zh');
+  const [status, setStatus] = useState<LocalSetupStatus | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [setupStarted, setSetupStarted] = useState(false);
   const [savingProvider, setSavingProvider] = useState(false);
   const [providerSaved, setProviderSaved] = useState(false);
-  const [advanceError, setAdvanceError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const isZh = (locale || (typeof i18n !== 'undefined' ? i18n.locale : '') || '').startsWith('zh');
-  const copyText = useCallback((zh: string, en: string) => (isZh ? zh : en), [isZh]);
+  const refreshStatus = useCallback(async () => {
+    try {
+      const res = await onboardingFetch('/api/local-qwen35-9b/status');
+      const data = await res.json();
+      setStatus(data);
+      return data as LocalSetupStatus;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      return null;
+    }
+  }, [onboardingFetch]);
 
-  // ─── derived UI state ───────────────────────────────────────
-  // The local-model step has four high-level "screens":
-  //   1. needs-binary → guidance to install llama.cpp
-  //   2. needs-model + idle → start download
-  //   3. needs-model + downloading|verifying|paused → progress + controls
-  //   4. ready / healthy → success / next
-  const downloadActive = useMemo(() => (
-    llamacpp.download.state === 'downloading' || llamacpp.download.state === 'verifying'
-  ), [llamacpp.download.state]);
+  useEffect(() => {
+    void refreshStatus();
+  }, [refreshStatus]);
 
-  const downloadPaused = llamacpp.download.state === 'paused' || llamacpp.download.paused;
-  const downloadDone = llamacpp.download.state === 'done';
-  const downloadError = llamacpp.download.state === 'error';
+  const ready = endpointReady(status);
+  const busy = endpointLoading(status);
+  const modelPrepared = hasModelAndRuntime(status);
+  const jobRunning = status?.job?.status === 'running';
+  const jobFailed = status?.job?.status === 'failed';
+  const progress = status?.job?.progress || null;
+  const warnings = [
+    ...(status?.plan?.hardware?.warnings || []),
+    ...(status?.plan?.hardware?.blockers || []),
+  ];
+  const hardwareBlocked = status?.plan?.hardware?.can_enable === false;
+  const canStart = !busy && !ready && !hardwareBlocked;
+  const progressPercent = typeof progress?.percent === 'number'
+    ? Math.max(0, Math.min(100, progress.percent))
+    : ready ? 100 : busy ? 45 : 0;
 
-  // llama-server is up + responsive — proceed.
-  const serverReady = (llamacpp.status === 'ready' || llamacpp.status === 'standby') && !!llamacpp.healthy;
+  useEffect(() => {
+    if (!busy && !jobRunning) return undefined;
+    const id = window.setInterval(() => {
+      void refreshStatus();
+    }, 1500);
+    return () => window.clearInterval(id);
+  }, [busy, jobRunning, refreshStatus]);
 
-  // ─── persist provider + advance once server is ready ────────
   const persistAndAdvance = useCallback(async () => {
     if (preview) {
       goToStep(nextStep);
@@ -91,42 +156,59 @@ export function LocalModelDownloadStep({
     try {
       await saveProvider({
         onboardingFetch,
-        providerName: LOCAL_PROVIDER.name,
-        providerUrl: LOCAL_PROVIDER.url,
+        providerName: QUICK_LOCAL_PROVIDER.providerName,
+        providerUrl: QUICK_LOCAL_PROVIDER.providerUrl,
         apiKey: '',
-        providerApi: LOCAL_PROVIDER.api,
-        defaultModelId: LOCAL_PROVIDER.modelId,
+        providerApi: QUICK_LOCAL_PROVIDER.providerApi,
+        defaultModelId: QUICK_LOCAL_PROVIDER.defaultModelId,
       });
-      onProviderReady(LOCAL_PROVIDER.name, LOCAL_PROVIDER.url, LOCAL_PROVIDER.api, '');
+      onProviderReady(QUICK_LOCAL_PROVIDER.providerName, QUICK_LOCAL_PROVIDER.providerUrl, QUICK_LOCAL_PROVIDER.providerApi, '');
       setProviderSaved(true);
       goToStep(nextStep);
     } catch (err) {
-      console.error('[onboarding] save llamacpp provider failed:', err);
-      const reason = err instanceof Error ? err.message : String(err);
-      setAdvanceError(reason);
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
       showError(t('onboarding.error'));
     } finally {
       setSavingProvider(false);
     }
   }, [goToStep, nextStep, onProviderReady, onboardingFetch, preview, providerSaved, savingProvider, showError, t]);
 
-  // Auto-advance the first time the server reports ready.
   useEffect(() => {
     if (preview) return;
-    if (serverReady && !providerSaved && !savingProvider) {
+    if (ready && !providerSaved && !savingProvider) {
       void persistAndAdvance();
     }
-  }, [preview, persistAndAdvance, providerSaved, savingProvider, serverReady]);
+  }, [persistAndAdvance, preview, providerSaved, ready, savingProvider]);
 
-  // ─── handlers ───────────────────────────────────────────────
-  const onStart = useCallback(() => {
-    setAdvanceError(null);
-    void llamacpp.startDownload();
-  }, [llamacpp]);
-
-  const onPause = useCallback(() => { void llamacpp.pauseDownload(); }, [llamacpp]);
-  const onResume = useCallback(() => { void llamacpp.startDownload(); }, [llamacpp]);
-  const onCancel = useCallback(() => { void llamacpp.cancelDownload(); }, [llamacpp]);
+  const startSetup = useCallback(async () => {
+    if (preview) {
+      goToStep(nextStep);
+      return;
+    }
+    setLoading(true);
+    setSetupStarted(true);
+    setError(null);
+    try {
+      const res = await onboardingFetch('/api/local-qwen35-9b/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authorized: true, variant: 'imatrix', start: true }),
+      });
+      const data = await res.json();
+      if (!res.ok || data?.ok === false) {
+        throw new Error(data?.message || data?.error || 'setup_failed');
+      }
+      setStatus((prev) => ({ ...(prev || {}), job: data.job }));
+      window.setTimeout(() => void refreshStatus(), 900);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      showError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [goToStep, nextStep, onboardingFetch, preview, refreshStatus, showError]);
 
   const fallbackToBrain = useCallback(async () => {
     if (preview) { goToStep(nextStep); return; }
@@ -150,76 +232,14 @@ export function LocalModelDownloadStep({
     }
   }, [goToStep, nextStep, onProviderReady, onboardingFetch, preview, showError, t]);
 
-  // ─── progress strings ───────────────────────────────────────
-  const percent = llamacpp.download.percent;
-  const transferred = llamacpp.download.bytesTransferred;
-  const total = llamacpp.download.totalBytes;
-  const sourceLabel = llamacpp.download.activeSource || '';
-
-  const subStatusText = (() => {
-    if (advanceError) return t('onboarding.localModel.spawnFailed', { reason: advanceError });
-    if (downloadError) {
-      if (llamacpp.download.lastError === 'all-sources-failed') return t('onboarding.localModel.errorAll');
-      if (llamacpp.download.lastError === 'checksum-failed') return t('onboarding.localModel.errorChecksum');
-      return t('onboarding.localModel.errorGeneric', { reason: llamacpp.download.lastError || 'unknown' });
-    }
-    if (downloadPaused) return t('onboarding.localModel.paused');
-    if (llamacpp.download.state === 'verifying') return t('onboarding.localModel.verifying');
-    if (llamacpp.download.state === 'downloading') {
-      return t('onboarding.localModel.downloading', { source: sourceLabel || (isZh ? '镜像' : 'mirror') });
-    }
-    if (downloadDone && !serverReady) return t('onboarding.localModel.spawning');
-    if (serverReady) return t('onboarding.localModel.spawnReady');
-    return '';
-  })();
-
-  // ─── render ─────────────────────────────────────────────────
-  // Case A: binary missing — can't proceed via UI download; guide install + offer brain fallback.
-  if (llamacpp.needsBinary) {
-    return (
-      <StepContainer>
-        <h1 className="onboarding-title">{t('onboarding.localModel.title')}</h1>
-        <Multiline className="onboarding-subtitle" text={t('onboarding.localModel.needsBinary')} />
-        <p className="ob-step-note">{t('onboarding.localModel.needsBinaryHint')}</p>
-
-        <div className="onboarding-actions">
-          <button className="ob-btn ob-btn-secondary" onClick={() => goToStep(backStep)}>
-            {t('onboarding.localModel.back')}
-          </button>
-          <button className="ob-btn ob-btn-primary" disabled={savingProvider} onClick={() => void fallbackToBrain()}>
-            {t('onboarding.localModel.switchBackBtn')}
-          </button>
-        </div>
-      </StepContainer>
-    );
-  }
-
-  // Case B: model on disk + server already healthy.
-  if (serverReady && !llamacpp.needsModel) {
-    return (
-      <StepContainer>
-        <h1 className="onboarding-title">{t('onboarding.localModel.alreadyHave')}</h1>
-        <Multiline className="onboarding-subtitle" text={t('onboarding.localModel.alreadyHaveDesc')} />
-        <p className="ob-step-note">{t('onboarding.localModel.specsLine')}</p>
-        <div className="onboarding-actions">
-          <button className="ob-btn ob-btn-secondary" onClick={() => goToStep(backStep)}>
-            {t('onboarding.localModel.back')}
-          </button>
-          <button
-            className="ob-btn ob-btn-primary"
-            disabled={savingProvider}
-            onClick={() => void persistAndAdvance()}
-          >
-            {t('onboarding.localModel.next')}
-          </button>
-        </div>
-      </StepContainer>
-    );
-  }
-
-  // Case C: download flow (idle / downloading / verifying / paused / error / done-waiting-spawn).
-  const canStart = llamacpp.download.state === 'idle' && !downloadActive;
-  const showProgressBar = downloadActive || downloadPaused || downloadDone;
+  const statusLine = useMemo(() => {
+    if (error) return error;
+    if (ready) return t('onboarding.localModel.spawnReady');
+    if (jobFailed) return t('onboarding.localModel.spawnFailed', { reason: status?.job?.progress?.message || 'setup_failed' });
+    if (busy) return progress?.message || progress?.phase || t('onboarding.localModel.spawning');
+    if (modelPrepared) return isZh ? '模型和 llama.cpp 已就绪，点击启动即可切换到本地 9B。' : 'Model and llama.cpp are ready. Start it to switch to Local 9B.';
+    return t('onboarding.localModel.subtitle');
+  }, [busy, error, isZh, jobFailed, modelPrepared, progress?.message, progress?.phase, ready, status?.job?.progress?.message, t]);
 
   return (
     <StepContainer>
@@ -227,89 +247,47 @@ export function LocalModelDownloadStep({
       <Multiline className="onboarding-subtitle" text={t('onboarding.localModel.subtitle')} />
       <p className="ob-step-note">{t('onboarding.localModel.specsLine')}</p>
 
-      {showProgressBar && (
-        <div className="local-model-progress" role="status" aria-live="polite">
-          <div className="local-model-progress-bar">
-            <div
-              className="local-model-progress-fill"
-              style={{ width: `${Math.max(2, Math.min(100, percent))}%` }}
-            />
-          </div>
-          <div className="local-model-progress-meta">
-            <span>{percent}%</span>
-            <span>{formatBytes(transferred)} / {formatBytes(total || 5_300_000_000)}</span>
-          </div>
-          {subStatusText && (
-            <div className={`local-model-progress-substatus${downloadError || advanceError ? ' is-error' : ''}`}>
-              {subStatusText}
-            </div>
-          )}
+      <div className="local-model-progress" role="status" aria-live="polite">
+        <div className="local-model-progress-bar">
+          <div
+            className="local-model-progress-fill"
+            style={{ width: `${Math.max(2, progressPercent)}%` }}
+          />
         </div>
-      )}
+        <div className="local-model-progress-meta">
+          <span>{ready ? '100%' : busy ? `${Math.round(progressPercent)}%` : modelPrepared ? '可启动' : '待准备'}</span>
+          <span>{status?.plan?.hardware?.recommended_runtime?.label || (isZh ? '本地 9B' : 'Local 9B')}</span>
+        </div>
+        <div className={`local-model-progress-substatus${error || jobFailed ? ' is-error' : ''}`}>
+          {statusLine}
+        </div>
+      </div>
 
-      {!showProgressBar && subStatusText && (
-        <div className={`local-model-substatus${downloadError ? ' is-error' : ''}`}>{subStatusText}</div>
+      {warnings.length > 0 && (
+        <p className="ob-step-note">{warnings.join(' ')}</p>
       )}
 
       <div className="onboarding-actions">
         <button className="ob-btn ob-btn-secondary" onClick={() => goToStep(backStep)}>
           {t('onboarding.localModel.back')}
         </button>
-
-        {canStart && (
-          <button className="ob-btn ob-btn-primary" onClick={onStart}>
-            {t('onboarding.localModel.startBtn')}
+        {ready ? (
+          <button className="ob-btn ob-btn-primary" disabled={savingProvider} onClick={() => void persistAndAdvance()}>
+            {t('onboarding.localModel.next')}
+          </button>
+        ) : (
+          <button className="ob-btn ob-btn-primary" disabled={!canStart || loading} onClick={() => void startSetup()}>
+            {busy || loading
+              ? t('onboarding.localModel.spawning')
+              : setupStarted || jobFailed
+                ? t('onboarding.localModel.retryBtn')
+                : t('onboarding.localModel.startBtn')}
           </button>
         )}
-
-        {downloadActive && (
-          <>
-            <button className="ob-btn ob-btn-secondary" onClick={onPause}>
-              {t('onboarding.localModel.pauseBtn')}
-            </button>
-            <button className="ob-btn ob-btn-secondary" onClick={onCancel}>
-              {t('onboarding.localModel.cancelBtn')}
-            </button>
-          </>
-        )}
-
-        {downloadPaused && (
-          <>
-            <button className="ob-btn ob-btn-primary" onClick={onResume}>
-              {t('onboarding.localModel.resumeBtn')}
-            </button>
-            <button className="ob-btn ob-btn-secondary" onClick={onCancel}>
-              {t('onboarding.localModel.cancelBtn')}
-            </button>
-          </>
-        )}
-
-        {downloadError && (
-          <>
-            <button className="ob-btn ob-btn-primary" onClick={onStart}>
-              {t('onboarding.localModel.retryBtn')}
-            </button>
-            <button className="ob-btn ob-btn-secondary" onClick={() => void fallbackToBrain()}>
-              {t('onboarding.localModel.switchBackBtn')}
-            </button>
-          </>
-        )}
-
-        {downloadDone && !serverReady && (
-          <button className="ob-btn ob-btn-primary" disabled>
-            {t('onboarding.localModel.spawning')}
-          </button>
-        )}
+        <button className="ob-btn ob-btn-secondary" disabled={savingProvider} onClick={() => void fallbackToBrain()}>
+          {t('onboarding.localModel.switchBackBtn')}
+        </button>
       </div>
-
-      {!canStart && !downloadActive && !downloadPaused && !downloadDone && !downloadError && llamacpp.status !== 'ready' && llamacpp.status !== 'standby' && (
-        <p className="ob-step-note" style={{ marginTop: 12 }}>
-          {copyText(
-            '尚未开始下载。点击「开始下载」即可。',
-            'Click "Start download" to begin.',
-          )}
-        </p>
-      )}
     </StepContainer>
   );
 }

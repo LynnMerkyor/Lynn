@@ -51,22 +51,22 @@ export const QUICK_START_PROVIDER = {
 } as const;
 
 /**
- * Quick-local track wires the user straight into the bundled llama.cpp
- * provider with the Lynn-default Qwen 3.5 9B Q4_K_M-imatrix model. The
- * actual download / verification / spawn lifecycle is owned by
- * LocalModelDownloadStep + main-process LlamaCppManager + ModelDownloader.
+ * Quick-local track wires the user straight into the server-side local
+ * Qwen 3.5 9B provider. The install / download / launch lifecycle is owned
+ * by /api/local-qwen35-9b/* so onboarding, settings, chat routing and status
+ * badges all share one provider identity.
  */
 export const QUICK_LOCAL_PROVIDER = {
-  providerName: 'llamacpp',
+  providerName: 'local-qwen35-9b-q4km-imatrix',
   providerUrl: 'http://127.0.0.1:18099/v1',
   providerApi: 'openai-completions',
-  defaultModelId: 'qwen3.5-9b-q4km-imatrix',
+  defaultModelId: 'qwen35-9b-q4km-imatrix',
 } as const;
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   // Primary (top 8 most-used) — shown by default in onboarding.
   { value: BRAIN_PROVIDER_ID, label: BRAIN_DEFAULT_DISPLAY_NAME, labelZh: BRAIN_DEFAULT_DISPLAY_NAME, url: QUICK_START_PROVIDER.providerUrl, api: QUICK_START_PROVIDER.providerApi, defaultModelId: QUICK_START_PROVIDER.defaultModelId, noKey: true, group: 'standard', tier: 'primary' },
-  { value: 'llamacpp',    label: 'Lynn Local (9B Q4_K_M)', labelZh: 'Lynn 本地 (9B Q4_K_M)', url: 'http://127.0.0.1:18099/v1', api: 'openai-completions', local: true, noKey: true, defaultModelId: 'qwen3.5-9b-q4km-imatrix', group: 'standard', tier: 'primary' },
+  { value: QUICK_LOCAL_PROVIDER.providerName, label: 'Lynn Local (9B Q4_K_M)', labelZh: 'Lynn 本地 (9B Q4_K_M)', url: QUICK_LOCAL_PROVIDER.providerUrl, api: QUICK_LOCAL_PROVIDER.providerApi, local: true, noKey: true, defaultModelId: QUICK_LOCAL_PROVIDER.defaultModelId, group: 'standard', tier: 'primary' },
   { value: 'openai',      label: 'OpenAI',               url: 'https://api.openai.com/v1', api: 'openai-completions', group: 'standard', tier: 'primary' },
   { value: 'deepseek',    label: 'DeepSeek',             url: 'https://api.deepseek.com/v1', api: 'openai-completions', group: 'standard', tier: 'primary' },
   { value: 'dashscope',   label: 'DashScope (Qwen)',     url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', api: 'openai-completions', group: 'standard', tier: 'primary' },

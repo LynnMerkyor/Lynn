@@ -3952,13 +3952,55 @@ html[data-platform="linux"] .onboarding {
 }
 .provider-status-chip:hover { border-color: var(--accent, #c2864c); }
 .provider-status-chip:disabled { opacity: 0.6; cursor: default; }
-.provider-status-icon { font-size: 0.9rem; line-height: 1; }
+.provider-status-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 10px;
+    height: 10px;
+    flex: 0 0 10px;
+}
+.provider-status-dot {
+    display: block;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--text-muted);
+    color: var(--text-muted);
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
+}
 .provider-status-label { font-weight: 500; }
 .provider-status-sep { color: var(--text-muted); opacity: 0.6; }
 .provider-status-status { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .provider-status-badge.tone-busy .provider-status-chip { border-color: var(--accent, #c2864c); }
 .provider-status-badge.tone-error .provider-status-chip { border-color: var(--coral, #c66); color: var(--coral, #c66); }
 .provider-status-badge.tone-standby .provider-status-chip { color: var(--text-muted); }
+.provider-status-badge.tone-ready .provider-status-dot {
+    background: #4fb49d;
+    color: #4fb49d;
+}
+.provider-status-badge.tone-busy .provider-status-dot {
+    background: var(--accent, #c2864c);
+    color: var(--accent, #c2864c);
+    animation: providerPulse 1.2s ease-in-out infinite;
+}
+.provider-status-badge.tone-error .provider-status-dot {
+    background: var(--coral, #c66);
+    color: var(--coral, #c66);
+}
+.provider-status-badge.tone-standby .provider-status-dot {
+    background: #9aa1a8;
+    color: #9aa1a8;
+}
+.provider-status-badge.tone-cloud .provider-status-dot {
+    background: #7ea0b7;
+    color: #7ea0b7;
+}
+
+@keyframes providerPulse {
+    0%, 100% { opacity: 0.55; transform: scale(0.92); }
+    50% { opacity: 1; transform: scale(1); }
+}
 
 .provider-status-menu {
     position: absolute;
@@ -3995,6 +4037,22 @@ html[data-platform="linux"] .onboarding {
 .provider-status-menu-item.is-active {
     background: rgba(var(--accent-rgb, 194,134,76), 0.12);
     font-weight: 600;
+}
+.provider-status-menu-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    flex: 0 0 8px;
+    background: #7ea0b7;
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 10%, transparent);
+}
+.provider-status-menu-dot.tone-local {
+    background: #4fb49d;
+    color: #4fb49d;
+}
+.provider-status-menu-dot.tone-cloud {
+    background: #7ea0b7;
+    color: #7ea0b7;
 }
 .provider-status-menu-note {
     padding: 6px 10px;

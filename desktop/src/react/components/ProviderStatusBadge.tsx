@@ -1,116 +1,142 @@
 /**
- * ProviderStatusBadge.tsx — Compact provider chip rendered next to the
- * welcome focus-hint. Surfaces the active provider plus the live llama.cpp
- * download / health status, and lets the user switch providers (Brain v2 /
- * llamacpp) without entering Settings.
+ * ProviderStatusBadge.tsx — Compact model-route chip for the welcome screen.
  *
- * Status iconography:
- *   ready                 → 🟢 + provider label
- *   downloading X% / paused / verifying → 📥 X%
- *   needs-model / idle    → 🟡 "standby"
- *   error / failed        → 🔴
- *   cloud (non-llamacpp) → ☁️ provider label
+ * Local 9B state is sourced from the server-side /api/local-qwen35-9b/*
+ * route so this chip, Settings, onboarding, and chat routing share the same
+ * provider id and setup lifecycle.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../stores';
 import { useI18n } from '../hooks/use-i18n';
-import { useLlamacppState } from '../hooks/use-llamacpp-state';
 import { hanaFetch } from '../hooks/use-hana-fetch';
 import { loadModels } from '../utils/ui-helpers';
 import { BRAIN_PROVIDER_ID, BRAIN_DEFAULT_MODEL_ID } from '../../../../shared/brain-provider.js';
 
-const LLAMACPP_PROVIDER_ID = 'llamacpp';
-const LLAMACPP_DEFAULT_MODEL = 'qwen3.5-9b-q4km-imatrix';
+const LOCAL_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
+const LOCAL_MODEL_ID = 'qwen35-9b-q4km-imatrix';
+
+type LocalStatus = {
+  ok?: boolean;
+  registered_provider?: boolean;
+  runtime?: {
+    endpoint_running?: boolean;
+    endpoint_loading?: boolean;
+    process_alive?: boolean;
+    base_url?: string;
+  };
+  plan?: {
+    observed?: {
+      endpoint_running?: boolean;
+      endpoint_loading?: boolean;
+      gguf?: string | null;
+      llama_server?: string | null;
+    };
+  };
+  job?: {
+    status?: string;
+    progress?: {
+      percent?: number | null;
+      phase?: string;
+    } | null;
+  } | null;
+};
 
 function providerDisplayLabel(provider: string | null, isZh: boolean): string {
-  if (!provider) return isZh ? '未配置' : 'No provider';
-  if (provider === BRAIN_PROVIDER_ID) return isZh ? '默认模型' : 'Brain v2';
-  if (provider === LLAMACPP_PROVIDER_ID) return isZh ? '本地 9B' : 'Local 9B';
+  if (!provider) return isZh ? '未配置' : 'No model';
+  if (provider === BRAIN_PROVIDER_ID) return isZh ? '默认模型' : 'Default model';
+  if (provider === LOCAL_PROVIDER_ID) return isZh ? '本地 9B' : 'Local 9B';
   return provider;
 }
 
+function isLocalReady(status: LocalStatus | null): boolean {
+  return status?.runtime?.endpoint_running === true || status?.plan?.observed?.endpoint_running === true;
+}
+
+function isLocalBusy(status: LocalStatus | null): boolean {
+  return !isLocalReady(status) && (
+    status?.runtime?.endpoint_loading === true
+      || status?.runtime?.process_alive === true
+      || status?.plan?.observed?.endpoint_loading === true
+      || status?.job?.status === 'running'
+  );
+}
+
+function hasLocalAssets(status: LocalStatus | null): boolean {
+  return !!(status?.plan?.observed?.gguf && status?.plan?.observed?.llama_server);
+}
+
 export function ProviderStatusBadge() {
-  const { t, locale } = useI18n();
+  const { locale } = useI18n();
   const isZh = (locale || '').startsWith('zh');
   const currentModel = useStore((s) => s.currentModel);
-  const llamacpp = useLlamacppState();
+  const [localStatus, setLocalStatus] = useState<LocalStatus | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
+  const refreshLocal = useCallback(async () => {
+    try {
+      const res = await hanaFetch('/api/local-qwen35-9b/status', { timeout: 10_000 });
+      const data = await res.json();
+      setLocalStatus(data);
+      if (data?.registered_provider && (data?.runtime?.endpoint_running || data?.plan?.observed?.endpoint_running)) {
+        void loadModels();
+      }
+      return data as LocalStatus;
+    } catch {
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
-    if (!menuOpen) return;
+    void refreshLocal();
+    const id = window.setInterval(refreshLocal, 12_000);
+    return () => window.clearInterval(id);
+  }, [refreshLocal]);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
     const onDocClick = (e: MouseEvent) => {
       if (!wrapRef.current) return;
       if (!wrapRef.current.contains(e.target as Node)) setMenuOpen(false);
     };
     const t1 = window.setTimeout(() => document.addEventListener('mousedown', onDocClick), 0);
-    return () => { window.clearTimeout(t1); document.removeEventListener('mousedown', onDocClick); };
+    return () => {
+      window.clearTimeout(t1);
+      document.removeEventListener('mousedown', onDocClick);
+    };
   }, [menuOpen]);
 
   const activeProvider = currentModel?.provider || null;
-  const isLocalActive = activeProvider === LLAMACPP_PROVIDER_ID;
+  const isLocalActive = activeProvider === LOCAL_PROVIDER_ID;
+  const localReady = isLocalReady(localStatus);
+  const localBusy = isLocalBusy(localStatus) || preparing;
+  const localAssets = hasLocalAssets(localStatus);
 
-  // Derive the icon + status text from llama.cpp state when local is active,
-  // otherwise treat as a cloud chip.
-  const { icon, statusText, tone } = useMemo<{ icon: string; statusText: string; tone: 'ready' | 'busy' | 'standby' | 'error' | 'cloud' }>(() => {
+  const { statusText, tone } = useMemo<{ statusText: string; tone: 'ready' | 'busy' | 'standby' | 'error' | 'cloud' }>(() => {
     if (!isLocalActive) {
-      return {
-        icon: '☁️',
-        statusText: providerDisplayLabel(activeProvider, isZh),
-        tone: 'cloud',
-      };
+      return { statusText: providerDisplayLabel(activeProvider, isZh), tone: 'cloud' };
     }
-    // local active → reflect llama.cpp state
-    if (llamacpp.download.state === 'downloading' || llamacpp.download.state === 'verifying') {
+    if (localReady) return { statusText: isZh ? '本地就绪' : 'Local ready', tone: 'ready' };
+    if (localBusy) {
+      const percent = localStatus?.job?.progress?.percent;
       return {
-        icon: '📥',
-        statusText: `${llamacpp.download.percent}%`,
+        statusText: typeof percent === 'number' ? `${Math.round(percent)}%` : (isZh ? '准备中' : 'Preparing'),
         tone: 'busy',
       };
     }
-    if (llamacpp.download.state === 'paused') {
-      return {
-        icon: '⏸',
-        statusText: isZh ? '已暂停' : 'Paused',
-        tone: 'busy',
-      };
-    }
-    if (llamacpp.status === 'ready' || llamacpp.status === 'standby') {
-      return {
-        icon: '🟢',
-        statusText: isZh ? '本地就绪' : 'Local ready',
-        tone: 'ready',
-      };
-    }
-    if (llamacpp.status === 'crashed' || llamacpp.status === 'failed' || llamacpp.status === 'unhealthy') {
-      return {
-        icon: '🔴',
-        statusText: isZh ? '推理服务异常' : 'Inference error',
-        tone: 'error',
-      };
-    }
-    if (llamacpp.status === 'needs-model' || llamacpp.status === 'needs-binary') {
-      return {
-        icon: '🟡',
-        statusText: isZh ? '待安装' : 'Standby',
-        tone: 'standby',
-      };
-    }
-    return {
-      icon: '🟡',
-      statusText: isZh ? '待机' : 'Idle',
-      tone: 'standby',
-    };
-  }, [activeProvider, isLocalActive, isZh, llamacpp.download.percent, llamacpp.download.state, llamacpp.status]);
+    if (!localAssets) return { statusText: isZh ? '待准备' : 'Needs setup', tone: 'standby' };
+    return { statusText: isZh ? '可启动' : 'Ready to start', tone: 'standby' };
+  }, [activeProvider, isLocalActive, isZh, localAssets, localBusy, localReady, localStatus?.job?.progress?.percent]);
 
-  const switchToProvider = useCallback(async (targetProvider: 'brain' | 'llamacpp') => {
+  const switchToProvider = useCallback(async (targetProvider: typeof BRAIN_PROVIDER_ID | typeof LOCAL_PROVIDER_ID) => {
     if (switching) return;
     setSwitching(true);
     setMenuOpen(false);
     try {
-      const modelId = targetProvider === BRAIN_PROVIDER_ID ? BRAIN_DEFAULT_MODEL_ID : LLAMACPP_DEFAULT_MODEL;
+      const modelId = targetProvider === BRAIN_PROVIDER_ID ? BRAIN_DEFAULT_MODEL_ID : LOCAL_MODEL_ID;
       await hanaFetch('/api/models/set', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -124,15 +150,36 @@ export function ProviderStatusBadge() {
     }
   }, [switching]);
 
+  const prepareAndSwitchLocal = useCallback(async () => {
+    if (preparing || switching) return;
+    setPreparing(true);
+    setMenuOpen(false);
+    try {
+      const latest = await refreshLocal();
+      if (!isLocalReady(latest)) {
+        const res = await hanaFetch('/api/local-qwen35-9b/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ authorized: true, variant: 'imatrix', start: true }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data?.ok === false) throw new Error(data?.message || data?.error || 'setup_failed');
+        setLocalStatus((prev) => ({ ...(prev || {}), job: data.job }));
+      }
+      window.setTimeout(() => void refreshLocal(), 1000);
+      await switchToProvider(LOCAL_PROVIDER_ID);
+    } catch (err) {
+      console.warn('[ProviderStatusBadge] local setup failed:', err);
+    } finally {
+      setPreparing(false);
+    }
+  }, [preparing, refreshLocal, switching, switchToProvider]);
+
   const chipTitle = (() => {
     const provider = providerDisplayLabel(activeProvider, isZh);
     if (!isLocalActive) return `${provider}${currentModel?.id ? ` · ${currentModel.id}` : ''}`;
-    if (llamacpp.download.state === 'downloading' || llamacpp.download.state === 'verifying') {
-      return isZh
-        ? `本地模型下载中 · ${llamacpp.download.percent}%`
-        : `Local model downloading · ${llamacpp.download.percent}%`;
-    }
-    return `${provider}${llamacpp.modelPath ? ` · ${llamacpp.modelPath}` : ''}`;
+    const base = localStatus?.runtime?.base_url || 'http://127.0.0.1:18099/v1';
+    return `${provider} · ${statusText} · ${base}`;
   })();
 
   return (
@@ -142,9 +189,11 @@ export function ProviderStatusBadge() {
         className="provider-status-chip"
         title={chipTitle}
         onClick={() => setMenuOpen((v) => !v)}
-        disabled={switching}
+        disabled={switching || preparing}
       >
-        <span className="provider-status-icon" aria-hidden>{icon}</span>
+        <span className="provider-status-icon" aria-hidden>
+          <span className="provider-status-dot" />
+        </span>
         <span className="provider-status-label">{providerDisplayLabel(activeProvider, isZh)}</span>
         <span className="provider-status-sep">·</span>
         <span className="provider-status-status">{statusText}</span>
@@ -157,31 +206,37 @@ export function ProviderStatusBadge() {
             aria-checked={activeProvider === BRAIN_PROVIDER_ID}
             className={`provider-status-menu-item${activeProvider === BRAIN_PROVIDER_ID ? ' is-active' : ''}`}
             onClick={() => void switchToProvider(BRAIN_PROVIDER_ID)}
-            disabled={switching}
+            disabled={switching || preparing}
           >
-            <span aria-hidden>☁️</span>
-            <span>{isZh ? '云端默认 (Brain v2)' : 'Cloud default (Brain v2)'}</span>
+            <span className="provider-status-menu-dot tone-cloud" aria-hidden />
+            <span>{isZh ? '默认模型' : 'Default model'}</span>
           </button>
           <button
             type="button"
             role="menuitemradio"
-            aria-checked={activeProvider === LLAMACPP_PROVIDER_ID}
-            className={`provider-status-menu-item${activeProvider === LLAMACPP_PROVIDER_ID ? ' is-active' : ''}`}
-            onClick={() => void switchToProvider(LLAMACPP_PROVIDER_ID)}
-            disabled={switching || llamacpp.needsModel || llamacpp.needsBinary}
+            aria-checked={activeProvider === LOCAL_PROVIDER_ID}
+            className={`provider-status-menu-item${activeProvider === LOCAL_PROVIDER_ID ? ' is-active' : ''}`}
+            onClick={() => void (localReady ? switchToProvider(LOCAL_PROVIDER_ID) : prepareAndSwitchLocal())}
+            disabled={switching || preparing}
           >
-            <span aria-hidden>🟢</span>
-            <span>{isZh ? '本地 9B 离线模型' : 'Local 9B (offline)'}</span>
+            <span className="provider-status-menu-dot tone-local" aria-hidden />
+            <span>
+              {localReady
+                ? (isZh ? '本地 9B' : 'Local 9B')
+                : localBusy
+                  ? (isZh ? '本地 9B 准备中' : 'Local 9B preparing')
+                  : (isZh ? '准备并切换本地 9B' : 'Prepare and switch to Local 9B')}
+            </span>
           </button>
-          {(llamacpp.needsModel || llamacpp.needsBinary) && (
+          {!localReady && (
             <div className="provider-status-menu-note">
-              {isZh ? '本地模型尚未就绪，请到引导页下载' : 'Local model not ready. Download via onboarding.'}
+              {isZh
+                ? 'Lynn 会在授权后自动准备 llama.cpp、模型文件和本地端点。'
+                : 'Lynn will prepare llama.cpp, the model file, and the local endpoint after authorization.'}
             </div>
           )}
         </div>
       )}
-      {/* unused t to keep linter happy across locale switches */}
-      <span style={{ display: 'none' }}>{t('welcome.focusHint')}</span>
     </div>
   );
 }
