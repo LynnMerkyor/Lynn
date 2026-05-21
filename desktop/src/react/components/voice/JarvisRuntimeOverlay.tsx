@@ -49,30 +49,32 @@ export function resolveJarvisPrimaryAction(state: VoiceState | string): JarvisAc
 }
 
 export function jarvisPrimaryLabel(action: JarvisAction): string {
+  const tt = (window as { t?: (key: string) => string }).t;
   switch (action) {
     case 'end-turn':
-      return '完成';
+      return tt?.('jarvis.action.endTurn') || '完成';
     case 'interrupt-listen':
-      return '插话';
+      return tt?.('jarvis.action.interruptListen') || '插话';
     case 'interrupt':
-      return '中断';
+      return tt?.('jarvis.action.interrupt') || '中断';
     default:
-      return '开始';
+      return tt?.('jarvis.action.start') || '开始';
   }
 }
 
 function stateLabel(state: VoiceState | string): string {
+  const tt = (window as { t?: (key: string) => string }).t;
   switch (state) {
     case VOICE_STATE.LISTENING:
-      return '正在听';
+      return tt?.('jarvis.state.listening') || '正在听';
     case VOICE_STATE.THINKING:
-      return '思考中';
+      return tt?.('jarvis.state.thinking') || '思考中';
     case VOICE_STATE.SPEAKING:
-      return '正在说';
+      return tt?.('jarvis.state.speaking') || '正在说';
     case VOICE_STATE.DEGRADED:
-      return '主链异常';
+      return tt?.('jarvis.state.degraded') || '主链异常';
     default:
-      return '待机';
+      return tt?.('jarvis.state.idle') || '待机';
   }
 }
 

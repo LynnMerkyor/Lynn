@@ -36,7 +36,14 @@ async function handleDrop(e: React.DragEvent): Promise<void> {
   if (!files || files.length === 0) return;
 
   const store = useStore.getState();
-  if (store.attachedFiles.length >= 9) return;
+  if (store.attachedFiles.length >= 9) {
+    store.addToast?.(
+      window.t?.('drop.attachLimit') || '已附加 9 个文件，请先发送或移除部分附件',
+      'warning',
+      3000,
+    );
+    return;
+  }
 
   let srcPaths: string[] = [];
   const nameMap: Record<string, string> = {};
@@ -119,7 +126,8 @@ function tryAutoAnalyze() {
   const ext = getExt(file.name);
   if (!ANALYZABLE_EXTS.has(ext) && !file.isDirectory) return;
 
-  const isZh = String((window as any).i18n?.locale || '').startsWith('zh');
+  const locale = String((window as { i18n?: { locale?: string } }).i18n?.locale || '');
+  const isZh = locale.startsWith('zh');
   const prompt = isZh
     ? `请分析这个文件：${file.name}`
     : `Please analyze this file: ${file.name}`;
@@ -178,7 +186,13 @@ export function MainContent({ children }: { children: React.ReactNode }) {
     >
       <div className={`drop-overlay${dragActive ? ' visible' : ''}`}>
         <div className="drop-overlay-inner">
-          <span className="drop-icon">📂</span>
+          <span className="drop-icon" aria-hidden>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              <line x1="12" y1="11" x2="12" y2="17" />
+              <line x1="9" y1="14" x2="15" y2="14" />
+            </svg>
+          </span>
           <DropText />
         </div>
       </div>
