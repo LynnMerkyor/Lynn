@@ -2,13 +2,14 @@
  * ThinkingBlock — 可折叠的思考过程区块
  */
 
-import { memo, useState, useCallback, useEffect, useRef, type MouseEvent } from 'react';
+import { memo, useState, useCallback, useEffect, useMemo, useRef, type MouseEvent } from 'react';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import styles from './Chat.module.css';
 
 interface Props {
   content: string;
   sealed: boolean;
+  modelLabel?: string | null;
 }
 
 const MAX_THINKING_TRANSLATE_CHARS = 3_000;
@@ -20,17 +21,21 @@ function formatElapsed(ms: number): string {
   return `${m}m${s % 60}s`;
 }
 
-export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed }: Props) {
-  const t = window.t ?? ((p: string) => p);
+export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, modelLabel }: Props) {
+  const t = useMemo(() => window.t ?? ((p: string) => p), []);
   // Keep raw provider thinking opt-in. Some providers stream internal thoughts in
   // English, so default-collapsing prevents that text from reading like the answer.
   const [explicitOpen, setExplicitOpen] = useState<boolean | null>(null);
-  const open = explicitOpen ?? false;
   const [elapsed, setElapsed] = useState(0);
   const [translated, setTranslated] = useState<string | null>(null);
   const [translateBusy, setTranslateBusy] = useState(false);
   const [translateError, setTranslateError] = useState<string | null>(null);
   const startRef = useRef(Date.now());
+  const isLocalModelThinking = /local-qwen35|qwen35-9b|Qwen3\.5-9B|本地\s*9B/i.test(modelLabel || "");
+  const isLocalProgressThinking = isLocalModelThinking || /本地\s*9B|本地模型|llama\.cpp|等待工具/.test(content || "");
+  const isLocalColdStartThinking = /首次启动|第一问|暖机|等待首字/.test(content || "");
+  // Local cold-start notes are user-facing progress, not private reasoning.
+  const open = explicitOpen ?? (!sealed && isLocalProgressThinking);
   const toggle = useCallback(() => setExplicitOpen(v => !(v ?? false)), []);
   const shouldOfferTranslate = sealed && /[A-Za-z]{4,}/.test(content || "");
 
@@ -53,6 +58,24 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed }: Pr
   }, [content]);
 
   const elapsedLabel = !sealed && elapsed >= 2000 ? ` (${formatElapsed(elapsed)})` : '';
+  const activeLabel = useMemo(() => {
+    if (sealed) return t('thinking.done');
+    if (isLocalColdStartThinking && elapsed >= 8_000) return '首轮暖机中，后续会更快';
+    if (isLocalModelThinking && elapsed >= 40_000) return '本地 9B 仍在生成';
+    if (isLocalModelThinking && elapsed >= 25_000) return '本地 9B 正在本机生成';
+    if (isLocalProgressThinking && elapsed >= 8_000) return '本地 9B 正在组织答案';
+    if (elapsed >= 8_000) return '正在组织答案';
+    return t('thinking.active');
+  }, [elapsed, isLocalColdStartThinking, isLocalModelThinking, isLocalProgressThinking, sealed, t]);
+
+  const fallbackBody = useMemo(() => {
+    if (sealed || content.trim()) return '';
+    if (!isLocalModelThinking) return 'Lynn 正在组织答案。';
+    if (elapsed >= 8_000) {
+      return '本地 9B 正在本机生成答案。首次启动后的第一问可能较慢，后续同一会话通常会明显更快。';
+    }
+    return '本地 9B 正在本机生成答案，请稍候。';
+  }, [content, elapsed, isLocalModelThinking, sealed]);
 
   const handleTranslateThinking = useCallback(async (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -93,11 +116,15 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed }: Pr
   }, [content, sealed, translateBusy]);
 
   return (
-    <details className={styles.thinkingBlock} open={open} onToggle={(e) => setExplicitOpen((e.target as HTMLDetailsElement).open)}>
+    <details
+      className={`${styles.thinkingBlock}${sealed ? '' : ` ${styles.thinkingBlockRunning}`}`}
+      open={open}
+      onToggle={(e) => setExplicitOpen((e.target as HTMLDetailsElement).open)}
+    >
       <summary className={styles.thinkingBlockSummary} onClick={(e) => { e.preventDefault(); toggle(); }}>
         <span className={`${styles.thinkingBlockArrow}${open ? ` ${styles.thinkingBlockArrowOpen}` : ''}`}>›</span>
         <span className={styles.thinkingBlockLabel}>
-          {sealed ? t('thinking.done') : t('thinking.active')}
+          {activeLabel}
           {elapsedLabel}
         </span>
         {shouldOfferTranslate && (
@@ -113,9 +140,9 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed }: Pr
         )}
         {!sealed && <span className={styles.thinkingDots}><span /><span /><span /></span>}
       </summary>
-      {open && content && (
+      {open && (content || fallbackBody) && (
         <>
-          <div className={styles.thinkingBlockBody}>{content}</div>
+          <div className={styles.thinkingBlockBody}>{content || fallbackBody}</div>
           {(translated || translateError) && (
             <div className={styles.thinkingTranslationCard}>
               <div className={styles.translationCardHead}>

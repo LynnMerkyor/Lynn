@@ -1223,6 +1223,37 @@
     animation: local-model-dot-breathe 1.2s ease-in-out infinite;
 }
 
+.local-model-warmup-note {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 8px 0 0;
+    padding: 9px 12px;
+    border: 1px solid rgba(181, 128, 52, 0.24);
+    border-radius: 16px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(253, 246, 234, 0.58)),
+        color-mix(in srgb, var(--composer-bg, var(--bg-card)) 88%, rgba(181, 128, 52, 0.12));
+    color: var(--text-secondary);
+    box-shadow: 0 12px 24px rgba(107, 70, 24, 0.055);
+}
+
+.local-model-warmup-note strong {
+    flex-shrink: 0;
+    color: var(--text);
+    font-size: 0.76rem;
+}
+
+.local-model-warmup-note span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.72rem;
+}
+
 .local-model-status-bar-muted {
     border-color: rgba(var(--accent-rgb), 0.12);
     background:

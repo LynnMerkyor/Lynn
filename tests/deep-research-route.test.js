@@ -232,8 +232,8 @@ describe("deep research route", () => {
       message: { role: "user", content: [{ type: "text", text: "解释 active parameters" }] },
     });
     expect(lines[2].message.role).toBe("assistant");
-    expect(lines[2].message.content[0].text).toContain("Deep Research");
-    expect(lines[2].message.content[0].text).toContain("winner: deepseek-chat");
+    expect(lines[2].message.content[0].text).toContain("深度调研");
+    expect(lines[2].message.content[0].text).toContain("推荐来源：deepseek-chat");
   });
 
   it("surfaces upstream failures with a useful error", async () => {

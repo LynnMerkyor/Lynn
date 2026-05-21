@@ -253,6 +253,14 @@ export interface PlatformApi {
   selectSkill(): Promise<string | null>;
   llamacppOpenModelDir?(targetPath?: string | null): Promise<{ ok: boolean; path?: string; revealedPath?: string; error?: string | null }>;
   llamacppStartCustomModel?(modelPath: string): Promise<{ ok: boolean; modelId?: string; modelPath?: string; reason?: string }>;
+  llamacppStartDownload?(payload?: { modelId?: string }): Promise<{
+    ok: boolean;
+    alreadyRunning?: boolean;
+    reason?: string;
+    modelId?: string;
+    target?: string;
+    parallelSegments?: number;
+  }>;
   readFile(path: string): Promise<string | null>;
   writeFile(filePath: string, content: string): Promise<boolean>;
   watchFile(filePath: string): Promise<boolean>;

@@ -420,7 +420,9 @@ export async function callText({
 
     // ── 5. 解析响应 ──
     const rawText = await res.text();
-    const contentType = res.headers.get("content-type") || "";
+    const contentType = typeof res.headers?.get === "function"
+      ? (res.headers.get("content-type") || "")
+      : "";
     clearTimeout(slowTimer);
     let data;
     try {
@@ -435,7 +437,10 @@ export async function callText({
         throw new AppError('LLM_AUTH_FAILED', { context: { model, status: res.status } });
       }
       if (res.status === 429) {
-        const retryAfterSec = parseInt(res.headers.get('retry-after') || '0', 10);
+        const retryAfterSec = parseInt(
+          typeof res.headers?.get === "function" ? (res.headers.get('retry-after') || '0') : '0',
+          10,
+        );
         const err = new AppError('LLM_RATE_LIMITED', { context: { model, retryAfterMs: retryAfterSec > 0 ? retryAfterSec * 1000 : undefined } });
         if (retryAfterSec > 0) err._retryAfterMs = retryAfterSec * 1000;
         throw err;

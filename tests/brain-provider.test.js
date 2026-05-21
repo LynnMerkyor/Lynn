@@ -15,10 +15,10 @@ describe("Brain v2 default policy", () => {
     expect(buildBrainProviderConfig().base_url).toBe(BRAIN_PROVIDER_BASE_URL);
   });
 
-  it("keeps old Brain v1 URLs out of the force-migration list", () => {
+  it("force-migrates old Brain v1 URLs to the Brain v2 default route", () => {
     expect(BRAIN_BACKUP_API_ROOT).toBe("http://82.156.182.240/api/v2");
-    expect(isDeprecatedBrainProviderBaseUrl("https://api.merkyorlynn.com/api/v1")).toBe(false);
-    expect(isDeprecatedBrainProviderBaseUrl("http://82.156.182.240/api/v1")).toBe(false);
+    expect(isDeprecatedBrainProviderBaseUrl("https://api.merkyorlynn.com/api/v1")).toBe(true);
+    expect(isDeprecatedBrainProviderBaseUrl("http://82.156.182.240/api/v1")).toBe(true);
   });
 });
 

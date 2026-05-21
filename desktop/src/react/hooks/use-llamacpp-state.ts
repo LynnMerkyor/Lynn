@@ -59,6 +59,10 @@ export interface DownloadState {
   lastError: string | null;
   target?: string | null;
   partPath?: string | null;
+  modelId?: string | null;
+  modelLabel?: string | null;
+  fileName?: string | null;
+  parallelSegments?: number | null;
 }
 
 export interface LlamaCppStateSnapshot {
@@ -71,7 +75,7 @@ export interface LlamaCppStateSnapshot {
   needsBinary: boolean;
   needsModel: boolean;
   download: DownloadState;
-  startDownload: () => Promise<{ ok: boolean; alreadyRunning?: boolean }>;
+  startDownload: (payload?: { modelId?: string }) => Promise<{ ok: boolean; alreadyRunning?: boolean }>;
   pauseDownload: () => Promise<{ ok: boolean }>;
   cancelDownload: () => Promise<{ ok: boolean }>;
 }
@@ -117,6 +121,10 @@ function normaliseDownload(raw: Partial<DownloadState> | null | undefined): Down
     lastError: raw.lastError ?? null,
     target: raw.target ?? null,
     partPath: raw.partPath ?? null,
+    modelId: raw.modelId ?? null,
+    modelLabel: raw.modelLabel ?? null,
+    fileName: raw.fileName ?? null,
+    parallelSegments: typeof raw.parallelSegments === 'number' ? raw.parallelSegments : null,
   };
 }
 
@@ -167,10 +175,12 @@ export function useLlamacppState(): LlamaCppStateSnapshot {
     };
   }, []);
 
-  const startDownload = useCallback(async (): Promise<{ ok: boolean; alreadyRunning?: boolean }> => {
-    const platform = (window as unknown as { platform?: { llamacppStartDownload?: () => Promise<{ ok: boolean; alreadyRunning?: boolean }> } }).platform;
+  const startDownload = useCallback(async (payload?: { modelId?: string }): Promise<{ ok: boolean; alreadyRunning?: boolean }> => {
+    const platform = (window as unknown as {
+      platform?: { llamacppStartDownload?: (payload?: { modelId?: string }) => Promise<{ ok: boolean; alreadyRunning?: boolean }> }
+    }).platform;
     try {
-      const result = await platform?.llamacppStartDownload?.();
+      const result = await platform?.llamacppStartDownload?.(payload);
       return result || { ok: false };
     } catch (err) {
       console.warn('[useLlamacppState] startDownload failed:', err);

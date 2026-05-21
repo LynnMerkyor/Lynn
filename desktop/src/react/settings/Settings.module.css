@@ -3085,7 +3085,7 @@ a.about-link:hover {
     line-height: 1.45;
 }
 
-.pv-local-qwen-upgrade-card a {
+.pv-local-qwen-upgrade-download-btn {
     flex-shrink: 0;
     color: var(--accent);
     font-size: 0.72rem;
@@ -3094,6 +3094,51 @@ a.about-link:hover {
     border-radius: 999px;
     padding: 7px 11px;
     background: color-mix(in srgb, var(--accent) 4%, var(--bg-card));
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.pv-local-qwen-upgrade-download-btn:hover {
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-card));
+}
+
+.pv-local-qwen-upgrade-download-btn:disabled {
+    cursor: wait;
+    opacity: 0.68;
+}
+
+.pv-local-qwen-upgrade-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 520px;
+    margin-top: 3px;
+    padding: 8px;
+    border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--overlay-light));
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--accent) 4%, var(--bg-card));
+}
+
+.pv-local-qwen-upgrade-progress-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+}
+
+.pv-local-qwen-upgrade-progress-row span {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pv-local-qwen-upgrade-progress-row strong {
+    flex-shrink: 0;
+    color: var(--accent);
+    font-size: 0.72rem;
 }
 
 .pv-local-qwen-upgrade-actions {

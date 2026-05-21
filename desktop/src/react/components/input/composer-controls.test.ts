@@ -71,9 +71,12 @@ describe('composer controls regression', () => {
 
   it('shows a left-to-right waiting sweep while the assistant is thinking', () => {
     const chatCss = read('desktop/src/react/components/chat/Chat.module.css');
+    const trace = read('desktop/src/react/components/chat/ExecutionTraceBlock.tsx');
 
     expect(chatCss).toContain('.typingIndicator::after');
+    expect(chatCss).toContain('.executionTraceRunning::after');
     expect(chatCss).toContain('waitingSweep');
     expect(chatCss).toContain('background-size: 220% 100%');
+    expect(trace).toContain('setElapsedTick');
   });
 });

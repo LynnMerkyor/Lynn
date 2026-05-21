@@ -4,7 +4,8 @@
  * 跨平台大文件下载守护 — Qwen3.5-9B Q4_K_M-imatrix 5.3 GB GGUF。
  *
  * 设计要点：
- *   1. HTTP/HTTPS Range 续传(用 .part 临时文件 + 已下载 byte offset)。
+ *   1. HTTP/HTTPS Range 续传(用 .part 临时文件 + 已下载 byte offset);
+ *      大模型可启用并发 Range 分片,服务器不支持时自动退回单路续传。
  *   2. 多源 fallback：ModelScope(国内默认) → hf-mirror.com(国内 HF 镜像备选)。
  *      任一源 4xx/5xx/timeout 自动 rotate 到下一个,**保留已下载字节**继续 range。
  *      不放腾讯镜像作为模型源 — 模型权重统一从公开发布镜像拉,腾讯只做客户端 dmg/exe。
@@ -60,6 +61,7 @@ const PROGRESS_THROTTLE_MS = 250;
 const PROGRESS_THROTTLE_BYTES = 256 * 1024;
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_REDIRECTS = 5;
+const DEFAULT_PARALLEL_SEGMENTS = 1;
 
 // ─────────────────────────────────────────────────────────────
 // 路径工具
@@ -99,6 +101,10 @@ class ModelDownloader extends EventEmitter {
     this.partPath = `${this.target}.part`;
     this.expectedSize = opts.expectedSize || DEFAULT_EXPECTED_SIZE;
     this.expectedSha256 = (opts.expectedSha256 || DEFAULT_EXPECTED_SHA256).toLowerCase();
+    const requestedSegments = Number(opts.parallelSegments || DEFAULT_PARALLEL_SEGMENTS);
+    this.parallelSegments = Number.isFinite(requestedSegments)
+      ? Math.max(1, Math.min(8, Math.floor(requestedSegments)))
+      : DEFAULT_PARALLEL_SEGMENTS;
     this.sources = Array.isArray(opts.sources) && opts.sources.length > 0
       ? opts.sources.map(s => ({ id: s.id, label: s.label || s.id, url: s.url }))
       : DEFAULT_SOURCES.map(s => ({ ...s }));
@@ -106,6 +112,9 @@ class ModelDownloader extends EventEmitter {
     // runtime state
     this.activeRequest = null;
     this.activeStream = null;
+    this.parallelRequests = [];
+    this.parallelStreams = [];
+    this.parallelSegmentPaths = [];
     this.activeHash = null;
     this.activeSourceIndex = -1;
     this.bytesTransferred = 0;
@@ -192,6 +201,7 @@ class ModelDownloader extends EventEmitter {
       activeSource: this.activeSourceLabel,
       target: this.target,
       partPath: this.partPath,
+      parallelSegments: this.parallelSegments,
       paused: this.paused,
       lastError: this.lastError,
     };
@@ -219,10 +229,185 @@ class ModelDownloader extends EventEmitter {
     this.activeSourceLabel = src.label;
     this._log("info", `[download] starting source=${src.label} url=${src.url}`);
     this._setState("downloading", { sourceLabel: src.label });
-    this._downloadFromSource(src.url, 0).catch((err) => {
+    const canTryParallel = this.parallelSegments > 1
+      && this.expectedSize > 0
+      && safeStatSize(this.partPath) === 0;
+    const task = canTryParallel
+      ? this._downloadFromSourceParallel(src.url, 0)
+      : this._downloadFromSource(src.url, 0);
+    task.catch((err) => {
+      if (this.aborted || this.paused) return;
       this._log("warn", `[download] source ${src.label} failed: ${err?.message || err}`);
       this._teardownActive();
       this._beginNextSource();
+    });
+  }
+
+  async _downloadFromSourceParallel(urlStr, redirectsLeft) {
+    if (this.aborted || this.paused) return;
+    ensureDirSync(path.dirname(this.target));
+    this.bytesTransferred = 0;
+    this.totalBytes = this.expectedSize;
+    this.activeHash = null;
+    this._emitProgress(true);
+
+    const segments = [];
+    const segmentSize = Math.ceil(this.expectedSize / this.parallelSegments);
+    for (let i = 0; i < this.parallelSegments; i += 1) {
+      const start = i * segmentSize;
+      const end = Math.min(this.expectedSize - 1, start + segmentSize - 1);
+      if (start <= end) {
+      segments.push({
+          index: i,
+          start,
+          end,
+          path: `${this.partPath}.seg${i}`,
+        });
+      }
+    }
+    for (const seg of segments) {
+      try { fs.rmSync(seg.path, { force: true }); } catch {}
+    }
+    this.parallelSegmentPaths = segments.map((seg) => seg.path);
+
+    try {
+      await Promise.all(segments.map((seg) => this._downloadRangeSegment(urlStr, seg, redirectsLeft)));
+    } catch (err) {
+      if (this.aborted || this.paused) return;
+      this._teardownActive();
+      for (const seg of segments) {
+        try { fs.rmSync(seg.path, { force: true }); } catch {}
+      }
+      this.parallelSegmentPaths = [];
+      if (/range-not-supported|http 200/.test(String(err?.message || err))) {
+        this._log("warn", "[download] parallel range unavailable — falling back to single connection");
+        return this._downloadFromSource(urlStr, redirectsLeft);
+      }
+      throw err;
+    }
+    if (this.aborted || this.paused) return;
+
+    await new Promise((resolve, reject) => {
+      const out = fs.createWriteStream(this.partPath, { flags: "w" });
+      out.on("error", reject);
+      out.on("finish", resolve);
+      let chain = Promise.resolve();
+      for (const seg of segments) {
+        chain = chain.then(() => new Promise((segResolve, segReject) => {
+          const input = fs.createReadStream(seg.path);
+          input.on("error", segReject);
+          input.on("end", segResolve);
+          input.pipe(out, { end: false });
+        }));
+      }
+      chain.then(() => out.end(), (err) => {
+        try { out.destroy(); } catch {}
+        reject(err);
+      });
+    });
+    for (const seg of segments) {
+      try { fs.rmSync(seg.path, { force: true }); } catch {}
+    }
+    this.parallelSegmentPaths = [];
+
+    const ok = await this._finalizeDownload();
+    if (ok === "verified") {
+      this._setState("done", { sourceLabel: this.activeSourceLabel });
+      this._finish({ ok: true });
+      return;
+    }
+    if (ok === "checksum-failed") {
+    try { fs.rmSync(this.partPath, { force: true }); } catch {}
+    this._cleanupParallelSegments();
+      this.bytesTransferred = 0;
+      throw new Error("checksum-failed");
+    }
+    throw new Error(String(ok));
+  }
+
+  _downloadRangeSegment(urlStr, segment, redirectsLeft) {
+    if (this.aborted || this.paused) return Promise.resolve();
+    const url = new URL(urlStr);
+    const lib = url.protocol === "http:" ? http : https;
+    const headers = {
+      "User-Agent": "Lynn-Desktop/0.79 (model-downloader)",
+      "Range": `bytes=${segment.start}-${segment.end}`,
+    };
+    const req = lib.get({
+      protocol: url.protocol,
+      hostname: url.hostname,
+      port: url.port || (url.protocol === "http:" ? 80 : 443),
+      path: url.pathname + url.search,
+      headers,
+      timeout: REQUEST_TIMEOUT_MS,
+    });
+    this.parallelRequests.push(req);
+
+    return new Promise((resolve, reject) => {
+      req.on("response", (res) => {
+        if (this.aborted || this.paused) {
+          try { res.destroy(); } catch {}
+          resolve();
+          return;
+        }
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          if (redirectsLeft >= MAX_REDIRECTS) {
+            try { res.destroy(); } catch {}
+            reject(new Error("too-many-redirects"));
+            return;
+          }
+          try { res.destroy(); } catch {}
+          const next = new URL(res.headers.location, url).toString();
+          this._downloadRangeSegment(next, segment, redirectsLeft + 1).then(resolve, reject);
+          return;
+        }
+        if (res.statusCode === 200) {
+          try { res.destroy(); } catch {}
+          reject(new Error("range-not-supported"));
+          return;
+        }
+        if (res.statusCode !== 206) {
+          try { res.destroy(); } catch {}
+          reject(new Error(`http ${res.statusCode}`));
+          return;
+        }
+        const totalMatch = String(res.headers["content-range"] || "").match(/\/(\d+)$/);
+        const reportedTotal = totalMatch ? Number(totalMatch[1]) : 0;
+        if (Number.isFinite(reportedTotal) && reportedTotal > 0) {
+          this.totalBytes = reportedTotal;
+        }
+        const fileStream = fs.createWriteStream(segment.path, { flags: "w" });
+        this.parallelStreams.push(fileStream);
+        let segmentBytes = 0;
+        res.on("data", (chunk) => {
+          if (this.aborted || this.paused) {
+            try { res.destroy(); } catch {}
+            return;
+          }
+          segmentBytes += chunk.length;
+          this.bytesTransferred += chunk.length;
+          this._emitProgress(false);
+        });
+        res.on("error", (err) => {
+          try { fileStream.destroy(); } catch {}
+          reject(err);
+        });
+        fileStream.on("error", reject);
+        fileStream.on("finish", () => {
+          const expected = segment.end - segment.start + 1;
+          if (!this.aborted && !this.paused && segmentBytes !== expected) {
+            reject(new Error(`segment-incomplete-${segment.index}`));
+            return;
+          }
+          resolve();
+        });
+        res.pipe(fileStream);
+      });
+      req.on("error", reject);
+      req.on("timeout", () => {
+        try { req.destroy(); } catch {}
+        reject(new Error("request-timeout"));
+      });
     });
   }
 
@@ -381,7 +566,9 @@ class ModelDownloader extends EventEmitter {
       }
     }
     this._setState("verifying", { sourceLabel: this.activeSourceLabel });
-    const digest = this.activeHash.digest("hex");
+    const digest = this.activeHash
+      ? this.activeHash.digest("hex")
+      : await this._hashFile(this.partPath);
     if (digest.toLowerCase() !== this.expectedSha256) {
       this._log("error", `[download] sha256 mismatch got=${digest} expected=${this.expectedSha256}`);
       return "checksum-failed";
@@ -410,13 +597,19 @@ class ModelDownloader extends EventEmitter {
       if (Math.abs(size - this.expectedSize) > tolerance) return false;
     }
     const digest = await new Promise((resolve, reject) => {
+      this._hashFile(this.target).then(resolve, reject);
+    });
+    return digest.toLowerCase() === this.expectedSha256;
+  }
+
+  _hashFile(filePath) {
+    return new Promise((resolve, reject) => {
       const h = crypto.createHash("sha256");
-      const rs = fs.createReadStream(this.target);
+      const rs = fs.createReadStream(filePath);
       rs.on("data", (chunk) => h.update(chunk));
       rs.on("error", reject);
       rs.on("end", () => resolve(h.digest("hex")));
     });
-    return digest.toLowerCase() === this.expectedSha256;
   }
 
   // ── internal helpers ──
@@ -454,6 +647,22 @@ class ModelDownloader extends EventEmitter {
       try { this.activeStream.destroy(); } catch {}
       this.activeStream = null;
     }
+    for (const req of this.parallelRequests) {
+      try { req.destroy(); } catch {}
+    }
+    for (const stream of this.parallelStreams) {
+      try { stream.destroy(); } catch {}
+    }
+    this.parallelRequests = [];
+    this.parallelStreams = [];
+    if (this.aborted) this._cleanupParallelSegments();
+  }
+
+  _cleanupParallelSegments() {
+    for (const segPath of this.parallelSegmentPaths || []) {
+      try { fs.rmSync(segPath, { force: true }); } catch {}
+    }
+    this.parallelSegmentPaths = [];
   }
 
   _fail(reason) {

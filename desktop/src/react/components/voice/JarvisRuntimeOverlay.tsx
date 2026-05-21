@@ -49,7 +49,7 @@ export function resolveJarvisPrimaryAction(state: VoiceState | string): JarvisAc
 }
 
 export function jarvisPrimaryLabel(action: JarvisAction): string {
-  const tt = (window as { t?: (key: string) => string }).t;
+  const tt = typeof window === 'undefined' ? undefined : (window as { t?: (key: string) => string }).t;
   switch (action) {
     case 'end-turn':
       return tt?.('jarvis.action.endTurn') || '完成';
@@ -63,7 +63,7 @@ export function jarvisPrimaryLabel(action: JarvisAction): string {
 }
 
 function stateLabel(state: VoiceState | string): string {
-  const tt = (window as { t?: (key: string) => string }).t;
+  const tt = typeof window === 'undefined' ? undefined : (window as { t?: (key: string) => string }).t;
   switch (state) {
     case VOICE_STATE.LISTENING:
       return tt?.('jarvis.state.listening') || '正在听';

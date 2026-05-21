@@ -3494,6 +3494,66 @@ let lastLlamacppState = { status: "idle" };
 let activeModelDownloader = null;
 let lastModelDownloadState = { state: "idle" };
 
+const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
+  "qwen35-9b-q4km-imatrix": {
+    modelId: "qwen35-9b-q4km-imatrix",
+    label: "Qwen3.5-9B Q4_K_M imatrix",
+    fileName: "qwen3.5-9b-q4km-imatrix.gguf",
+    expectedSize: 5_300_000_000,
+    expectedSha256: "9437f5bf0dd0c97800caaf902f41e6a6aa00223ab232f159eda41dcbbb492645",
+    parallelSegments: 1,
+    autoStart: true,
+    sources: MODEL_DOWNLOADER_SOURCES,
+  },
+  "local-qwen35-9b-q4km-imatrix": {
+    modelId: "qwen35-9b-q4km-imatrix",
+    label: "Qwen3.5-9B Q4_K_M imatrix",
+    fileName: "qwen3.5-9b-q4km-imatrix.gguf",
+    expectedSize: 5_300_000_000,
+    expectedSha256: "9437f5bf0dd0c97800caaf902f41e6a6aa00223ab232f159eda41dcbbb492645",
+    parallelSegments: 1,
+    autoStart: true,
+    sources: MODEL_DOWNLOADER_SOURCES,
+  },
+  "qwen36-35b-a3b-q4km-imatrix": {
+    modelId: "qwen36-35b-a3b-q4km-imatrix",
+    label: "Qwen3.6-35B-A3B Q4_K_M imatrix",
+    fileName: "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
+    expectedSize: 21_166_758_272,
+    expectedSha256: "3e398e6c53398de229ade3a38b04e0d626289651d6d8b49ecfccc2165816efa1",
+    parallelSegments: 4,
+    autoStart: false,
+    sources: [
+      {
+        id: "modelscope",
+        label: "ModelScope (国内主源)",
+        url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix/resolve/master/Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
+      },
+      {
+        id: "hf-mirror",
+        label: "hf-mirror.com (国内 HF 镜像)",
+        url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-GGUF-imatrix/resolve/main/Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
+      },
+    ],
+  },
+});
+
+function getLlamacppDownloadProfile(modelId) {
+  const requested = typeof modelId === "string" && modelId.trim()
+    ? modelId.trim()
+    : "qwen35-9b-q4km-imatrix";
+  return LLAMACPP_DOWNLOAD_PROFILES[requested] || LLAMACPP_DOWNLOAD_PROFILES["qwen35-9b-q4km-imatrix"];
+}
+
+function decorateDownloadState(profile, state) {
+  return {
+    ...state,
+    modelId: profile.modelId,
+    modelLabel: profile.label,
+    fileName: profile.fileName,
+  };
+}
+
 function broadcastToAllWindows(channel, payload) {
   try {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -3585,20 +3645,36 @@ wrapIpcHandler("llamacpp:state", () => ({
 
 // Trigger model download. Returns immediately; progress streams via
 // "llamacpp:download-progress" / "llamacpp:download-state" channels.
-wrapIpcHandler("llamacpp:start-download", async () => {
+wrapIpcHandler("llamacpp:start-download", async (event, payload = {}) => {
+  const profile = getLlamacppDownloadProfile(payload?.modelId);
   if (activeModelDownloader && (lastModelDownloadState.state === "downloading"
       || lastModelDownloadState.state === "verifying")) {
-    return { ok: true, alreadyRunning: true };
+    const runningModelId = lastModelDownloadState.modelId || "qwen35-9b-q4km-imatrix";
+    return {
+      ok: runningModelId === profile.modelId,
+      alreadyRunning: true,
+      reason: runningModelId === profile.modelId ? undefined : "another-download-running",
+      modelId: runningModelId,
+      target: lastModelDownloadState.target,
+    };
   }
-  const downloader = new ModelDownloader();
+  const target = path.join(lynnHome, "models", profile.fileName);
+  const downloader = new ModelDownloader({
+    target,
+    fileName: profile.fileName,
+    expectedSize: profile.expectedSize,
+    expectedSha256: profile.expectedSha256,
+    sources: profile.sources,
+    parallelSegments: profile.parallelSegments,
+  });
   activeModelDownloader = downloader;
   downloader.on("progress", (s) => {
-    lastModelDownloadState = s;
-    broadcastToAllWindows("llamacpp:download-progress", s);
+    lastModelDownloadState = decorateDownloadState(profile, s);
+    broadcastToAllWindows("llamacpp:download-progress", lastModelDownloadState);
   });
   downloader.on("state", (s) => {
-    lastModelDownloadState = s;
-    broadcastToAllWindows("llamacpp:download-state", s);
+    lastModelDownloadState = decorateDownloadState(profile, s);
+    broadcastToAllWindows("llamacpp:download-state", lastModelDownloadState);
   });
   downloader.on("log", (level, msg) => {
     if (level === "error") console.error(msg);
@@ -3608,17 +3684,22 @@ wrapIpcHandler("llamacpp:start-download", async () => {
   // fire-and-forget; resolve completion drives llamacpp restart
   downloader.start().then((result) => {
     if (result?.ok) {
-      // model on disk — bounce llamacpp so it picks it up
-      try { stopLlamacpp(); } catch {}
-      // small delay so the manager teardown fully completes before restart
-      setTimeout(() => { try { startLlamacpp(); } catch {} }, 600);
+      const doneState = decorateDownloadState(profile, { ...downloader.getState(), state: "done", target });
+      lastModelDownloadState = doneState;
+      broadcastToAllWindows("llamacpp:download-state", doneState);
+      if (profile.autoStart) {
+        // default 9B on disk — bounce llamacpp so it picks it up
+        try { stopLlamacpp(); } catch {}
+        // small delay so the manager teardown fully completes before restart
+        setTimeout(() => { try { startLlamacpp(); } catch {} }, 600);
+      }
     }
     if (activeModelDownloader === downloader) activeModelDownloader = null;
   }).catch((err) => {
     console.warn("[model-downloader] failed:", err?.message || err);
     if (activeModelDownloader === downloader) activeModelDownloader = null;
   });
-  return { ok: true, alreadyRunning: false };
+  return { ok: true, alreadyRunning: false, modelId: profile.modelId, target, parallelSegments: profile.parallelSegments };
 });
 
 wrapIpcHandler("llamacpp:pause-download", () => {
@@ -3643,6 +3724,16 @@ wrapIpcHandler("llamacpp:cancel-download", () => {
 
 wrapIpcHandler("llamacpp:sources", () => ({
   sources: MODEL_DOWNLOADER_SOURCES.map((s) => ({ id: s.id, label: s.label })),
+  models: Object.values(LLAMACPP_DOWNLOAD_PROFILES)
+    .filter((profile, index, list) => list.findIndex((item) => item.modelId === profile.modelId) === index)
+    .map((profile) => ({
+      modelId: profile.modelId,
+      label: profile.label,
+      fileName: profile.fileName,
+      expectedSize: profile.expectedSize,
+      parallelSegments: profile.parallelSegments,
+      sources: profile.sources.map((s) => ({ id: s.id, label: s.label })),
+    })),
 }));
 
 wrapIpcHandler("llamacpp:open-model-dir", async (event, payload = {}) => {

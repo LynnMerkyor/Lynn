@@ -1583,9 +1583,45 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       }, delayMs));
     };
     emitLocalThinkingDelta(sessionPath, ss, "本地 9B 已接到任务，正在连接本机 llama.cpp。\n");
-    push(4_000, "首次启动会加载 9B 权重，通常需要 30-45 秒。");
+    push(1_000, "如果这是刚启动后的第一问，本地模型需要先暖机；这不是常态，后续回答通常会明显更快。");
+    push(4_000, "首次启动会加载 9B 权重，通常需要 30-60 秒。");
     push(15_000, "正在预热本地 32K 上下文，并等待模型吐出首字。");
     push(30_000, "还在等待首字，Lynn 会继续保持会话，不会让这轮请求卡死。");
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }
+
+  function describePrefetchForUser(toolName, promptText) {
+    const query = String(promptText || "");
+    if (toolName === "weather" || /天气|下雨|下雪|气温|温度|weather|rain|snow|forecast/i.test(query)) {
+      return "正在查询实时天气数据，拿到结果后会交给本地 9B 组织答案。";
+    }
+    if (toolName === "stock_market" || /股票|A\s*股|港股|美股|行情|股价|stock|market/i.test(query)) {
+      return "正在取回行情数据，拿到结果后会交给本地 9B 汇总。";
+    }
+    if (toolName === "live_news" || /新闻|热点|最新|消息|news/i.test(query)) {
+      return "正在取回最新资料，拿到结果后会交给本地 9B 汇总。";
+    }
+    return "正在取回必要资料，拿到结果后会交给本地 9B 生成答案。";
+  }
+
+  function startLocalQwen35PrefetchFeedback(sessionPath, ss, toolName, promptText) {
+    const timers = [];
+    const push = (delayMs, text) => {
+      timers.push(setTimeout(() => {
+        if (!ss?._turnClosed && ss?.isStreaming) emitLocalThinkingDelta(sessionPath, ss, `${text}\n`);
+      }, delayMs));
+    };
+    emitLocalThinkingDelta(
+      sessionPath,
+      ss,
+      `如果这是刚启动后的第一问，本地 9B 正在暖机，可能需要 30-60 秒；后续同一会话通常会明显更快。\n${describePrefetchForUser(toolName, promptText)}\n`,
+    );
+    push(3_000, "本地模型已保持会话，正在等待工具返回。");
+    push(12_000, "外部数据还在返回中，Lynn 会继续更新进度。");
+    push(25_000, "这次工具耗时偏长，模型没有卡住，仍在等待资料。");
+    push(40_000, "仍在等待工具完成；完成后会立即进入本地 9B 生成。");
     return () => {
       for (const timer of timers) clearTimeout(timer);
     };
@@ -2691,6 +2727,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                   const toolName = initialToolUse.toolName;
                   ss.hasPrefetchToolCall = true;
                   emitStreamEvent(promptSessionPath, ss, { type: "tool_start", name: toolName, args: { query: promptText } });
+                  const stopPrefetchFeedback = localQwenSynthesisAfterPrefetch
+                    ? startLocalQwen35PrefetchFeedback(promptSessionPath, ss, toolName, promptText)
+                    : () => {};
                   lifecycleHooks.run("tool_start", {
                     ss,
                     sessionPath: promptSessionPath,
@@ -2750,9 +2789,15 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                       localPrefetch: true,
                     });
                     rememberFailedTool(ss, toolName);
+                  } finally {
+                    stopPrefetchFeedback();
                   }
                 }
                 if (directResearchAnswer) {
+                  if (ss.isThinking) {
+                    ss.isThinking = false;
+                    emitStreamEvent(promptSessionPath, ss, { type: "thinking_end" });
+                  }
                   emitVisibleTextDelta(promptSessionPath, ss, directResearchAnswer);
                   emitStreamEvent(promptSessionPath, ss, { type: "turn_end" });
                   lifecycleHooks.run("turn_end", {

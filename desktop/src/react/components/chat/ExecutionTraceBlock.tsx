@@ -128,6 +128,7 @@ export const ExecutionTraceBlock = memo(function ExecutionTraceBlock({ tools }: 
   const zh = locale.startsWith('zh');
   const allDone = tools.every((tool) => tool.done);
   const running = tools.filter((tool) => !tool.done).length;
+  const [, setElapsedTick] = useState(0);
   const defaultOpen = tools.length <= 3;
   const [open, setOpen] = useState(defaultOpen);
   const [userTouched, setUserTouched] = useState(false);
@@ -142,6 +143,12 @@ export const ExecutionTraceBlock = memo(function ExecutionTraceBlock({ tools }: 
     }
   }, [tools.length, userTouched]);
 
+  useEffect(() => {
+    if (allDone) return undefined;
+    const timer = window.setInterval(() => setElapsedTick((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [allDone]);
+
   const summary = useMemo(
     () => (zh ? zhSummary(tools) : enSummary(tools)),
     [tools, zh],
@@ -151,7 +158,11 @@ export const ExecutionTraceBlock = memo(function ExecutionTraceBlock({ tools }: 
     : (open ? 'Click to collapse details' : 'Click to view execution details');
 
   return (
-    <details className={styles.executionTrace} open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+    <details
+      className={`${styles.executionTrace}${allDone ? '' : ` ${styles.executionTraceRunning}`}`}
+      open={open}
+      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+    >
       <summary className={styles.executionTraceSummary} onClick={(e) => { e.preventDefault(); toggle(); }}>
         <span className={`${styles.executionTraceArrow}${open ? ` ${styles.executionTraceArrowOpen}` : ''}`}>›</span>
         <span className={styles.executionTraceTitle}>{summary}</span>

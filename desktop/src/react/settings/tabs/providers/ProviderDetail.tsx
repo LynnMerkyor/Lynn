@@ -5,6 +5,7 @@ import { t } from '../../helpers';
 import { OAuthCredentials } from './OAuthCredentials';
 import { ApiKeyCredentials } from './ApiKeyCredentials';
 import { ProviderModelList } from './ProviderModelList';
+import { useLlamacppState } from '../../../hooks/use-llamacpp-state';
 import { BRAIN_PROVIDER_ID, BRAIN_PROVIDER_LABEL } from '../../../../../../shared/brain-provider.js';
 import styles from '../../Settings.module.css';
 
@@ -25,6 +26,7 @@ type LocalUpgradeOption = {
   reason?: string;
   modelscope_url?: string;
   download_label?: string;
+  file_name?: string;
 };
 
 const LOCAL_QWEN36_35B_UPGRADE: LocalUpgradeOption = {
@@ -32,9 +34,10 @@ const LOCAL_QWEN36_35B_UPGRADE: LocalUpgradeOption = {
   label: 'Qwen3.6-35B-A3B Q4_K_M imatrix',
   profile: '24GB 显存/统一内存+ 推荐 · 能力优先',
   metrics: ['thinking-on 32K', 'MMLU 90.40%', 'GPQA Diamond 80.70%', 'R6000 207 tok/s'],
-  reason: '24GB+ 能力优先本地路线；client default · thinking-on 32K，适合复杂推理和长上下文。',
+  reason: 'Lynn 会直接下载并校验；完成后可一键启动，也可以导入已有 GGUF。',
   modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix',
-  download_label: '下载/查看',
+  download_label: '下载到本机',
+  file_name: 'Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf',
 };
 
 function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], memoryGib?: number | null) {
@@ -56,6 +59,19 @@ function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], memory
 
 function localEndpointRoot(baseUrl?: string | null) {
   return String(baseUrl || 'http://127.0.0.1:18099/v1').replace(/\/v1\/?$/, '');
+}
+
+function formatBytes(bytes?: number | null) {
+  const value = Number(bytes || 0);
+  if (!Number.isFinite(value) || value <= 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let amount = value;
+  let index = 0;
+  while (amount >= 1024 && index < units.length - 1) {
+    amount /= 1024;
+    index += 1;
+  }
+  return `${amount >= 10 || index === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[index]}`;
 }
 
 export function ProviderDetail({ providerId, summary, providerConfig, isPresetSetup, presetInfo, onRefresh }: {
@@ -177,14 +193,16 @@ type LocalQwen35Status = {
 
 function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const { showToast } = useSettingsStore();
+  const llamaState = useLlamacppState();
   const [status, setStatus] = useState<LocalQwen35Status | null>(null);
   const [loading, setLoading] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [customStarting, setCustomStarting] = useState(false);
-  const [showAdvancedLauncher, setShowAdvancedLauncher] = useState(false);
+  const [showAdvancedLauncher, setShowAdvancedLauncher] = useState(true);
   const [actionStatus, setActionStatus] = useState<LocalActionStatus | null>(null);
+  const [upgradeStartingId, setUpgradeStartingId] = useState<string | null>(null);
 
   const loadStatus = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -226,6 +244,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       || status?.runtime?.process_alive === true
   );
   const endpointActive = endpointRunning || endpointLoading;
+  const canStopLocalModel = endpointActive;
   const hasModel = !!observed.gguf;
   const modelPath = typeof observed.gguf === 'string' ? observed.gguf : '';
   const modelFileName = modelPath ? (modelPath.split(/[\\/]/).pop() || modelPath) : '';
@@ -382,38 +401,73 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     showToast(`已打开本地端点：${target}`, 'info');
   };
 
+  const startRecommendedDownload = async (option: LocalUpgradeOption) => {
+    const modelId = option.id || 'qwen36-35b-a3b-q4km-imatrix';
+    if (!platform?.llamacppStartDownload) {
+      setActionStatus({ kind: 'error', text: '当前运行环境不支持本地模型下载。请使用桌面客户端。' });
+      return;
+    }
+    setUpgradeStartingId(modelId);
+    setActionStatus({ kind: 'info', text: `正在准备下载 ${option.label || '推荐模型'}，进度会留在当前页面。` });
+    try {
+      const res = await platform.llamacppStartDownload({ modelId });
+      if (!res?.ok) {
+        throw new Error(res?.reason || 'download-start-failed');
+      }
+      setActionStatus({
+        kind: 'info',
+        text: res.alreadyRunning
+          ? `${option.label || '推荐模型'} 已在下载队列中。`
+          : `${option.label || '推荐模型'} 已开始下载。Lynn 会校验文件，完成后可一键启动。`,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast('推荐模型下载失败：' + msg, 'error');
+      setActionStatus({ kind: 'error', text: `下载未启动：${msg}` });
+    } finally {
+      setUpgradeStartingId(null);
+    }
+  };
+
+  const cancelRecommendedDownload = async (option: LocalUpgradeOption) => {
+    try {
+      const res = await llamaState.cancelDownload();
+      if (!res?.ok) throw new Error('cancel-download-failed');
+      setActionStatus({ kind: 'info', text: `已取消 ${option.label || '推荐模型'} 下载。` });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast('取消下载失败：' + msg, 'error');
+      setActionStatus({ kind: 'error', text: `取消下载失败：${msg}` });
+    }
+  };
+
   const openModelFolder = async () => {
     const res = await platform?.llamacppOpenModelDir?.(modelPath || null);
     setActionStatus({
       kind: res?.ok ? 'success' : 'info',
       text: res?.ok && modelPath
-        ? `已在 Finder 中定位当前 9B 模型：${modelFileName}。完整路径：${res.revealedPath || modelPath}`
+          ? `已在 Finder 中定位当前 9B 模型：${modelFileName}。完整路径：${res.revealedPath || modelPath}`
         : res?.ok
-          ? `已打开本地模型存放目录：${res.path || '~/.lynn/models'}。把 GGUF 放到这里后，可点击“导入并启动 GGUF”。`
-          : '当前还没有已绑定的模型文件。请把 GGUF 放入本地模型目录，或点击“导入并启动 GGUF”选择文件。',
+          ? `已打开本地模型存放目录：${res.path || '~/.lynn/models'}。把 GGUF 放到这里后，可点击“选择本机 GGUF 启动”。`
+          : '当前还没有已绑定的模型文件。请把 GGUF 放入本地模型目录，或点击“选择本机 GGUF 启动”选择文件。',
     });
   };
 
-  const chooseGgufModel = async () => {
-    if (!platform?.selectGgufModel || !platform?.llamacppStartCustomModel) {
+  const startGgufPath = async (modelPath: string) => {
+    if (!platform?.llamacppStartCustomModel) {
       setActionStatus({ kind: 'error', text: '当前运行环境不支持原生 GGUF 选择器。请使用桌面客户端。' });
       return;
     }
+    const fileName = modelPath.split(/[\\/]/).pop() || 'GGUF 模型';
     setCustomStarting(true);
     try {
-      const modelPath = await platform.selectGgufModel();
-      if (!modelPath) {
-        setActionStatus({ kind: 'info', text: '未选择模型。默认 9B 仍保持可用。' });
-        return;
-      }
-      const fileName = modelPath.split(/[\\/]/).pop() || 'GGUF 模型';
-      setActionStatus({ kind: 'info', text: `已选择 ${fileName}，正在用 llama.cpp 启动…` });
+      setActionStatus({ kind: 'info', text: `已选择 ${fileName}，正在用 llama.cpp 启动本地模型…` });
       const res = await platform.llamacppStartCustomModel(modelPath);
       if (!res?.ok) {
         throw new Error(res?.reason || 'start-custom-model-failed');
       }
       showToast(`正在启动 ${fileName}，状态会在此处和聊天栏同步。`, 'success');
-      setActionStatus({ kind: 'success', text: `已提交启动：${fileName}。加载完成后可直接在聊天中使用本地端点。` });
+      setActionStatus({ kind: 'success', text: `已提交启动：${fileName}。加载完成后会同步到聊天栏，可直接使用本地端点。` });
       window.setTimeout(loadStatus, 1600);
       await onRefresh();
     } catch (err: unknown) {
@@ -422,6 +476,25 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       setActionStatus({ kind: 'error', text: `自选模型启动失败：${msg}` });
     } finally {
       setCustomStarting(false);
+    }
+  };
+
+  const chooseGgufModel = async () => {
+    if (!platform?.selectGgufModel) {
+      setActionStatus({ kind: 'error', text: '当前运行环境不支持原生 GGUF 选择器。请使用桌面客户端。' });
+      return;
+    }
+    try {
+      const modelPath = await platform.selectGgufModel();
+      if (!modelPath) {
+        setActionStatus({ kind: 'info', text: '未选择模型。默认 9B 仍保持可用。' });
+        return;
+      }
+      await startGgufPath(modelPath);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast('选择模型失败：' + msg, 'error');
+      setActionStatus({ kind: 'error', text: `选择模型失败：${msg}` });
     }
   };
 
@@ -440,14 +513,16 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           <span className={`${styles['pv-local-qwen-state']} ${endpointActive ? styles['ready'] : ''}`}>
             {loading && !endpointActive ? '检查中' : stateLabel}
           </span>
-          <button
-            type="button"
-            className={`${styles['pv-verify-connection-btn']} ${styles['pv-local-qwen-stop-inline']}`}
-            onClick={stopLocalModel}
-            disabled={stopping}
-          >
-            {stopping ? '停止中' : '停止本地模型'}
-          </button>
+          {canStopLocalModel && (
+            <button
+              type="button"
+              className={`${styles['pv-verify-connection-btn']} ${styles['pv-local-qwen-stop-inline']}`}
+              onClick={stopLocalModel}
+              disabled={stopping}
+            >
+              {stopping ? '停止中' : '停止本地模型'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -491,38 +566,87 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
 
       {upgradeOptions.length > 0 && (
         <div className={styles['pv-local-qwen-upgrade']}>
-          <div className={styles['pv-local-qwen-hardware-title']}>更多本地模型</div>
-          {upgradeOptions.map((option) => (
-            <div key={option.id || option.label} className={styles['pv-local-qwen-upgrade-card']}>
-              <div className={styles['pv-local-qwen-upgrade-copy']}>
-                <strong>{option.label || 'Qwen3.6-35B-A3B Q4_K_M imatrix'}</strong>
-                {option.profile && <em>{option.profile}</em>}
-                {Array.isArray(option.metrics) && option.metrics.length > 0 && (
-                  <div className={styles['pv-local-qwen-upgrade-metrics']}>
-                    {option.metrics.map((metric) => (
-                      <span key={metric}>{metric}</span>
-                    ))}
-                  </div>
-                )}
-                <span>{option.reason || '24GB+ 设备可试高能力本地模型。'}</span>
+          <div className={styles['pv-local-qwen-hardware-title']}>推荐下载</div>
+          {upgradeOptions.map((option) => {
+            const optionId = option.id || 'qwen36-35b-a3b-q4km-imatrix';
+            const download = llamaState.download;
+            const isThisDownload = download.modelId === optionId
+              || (!!option.file_name && download.fileName === option.file_name);
+            const isDownloading = isThisDownload && (download.state === 'downloading' || download.state === 'verifying');
+            const isDownloaded = isThisDownload && download.state === 'done' && !!download.target;
+            const downloadErrored = isThisDownload && download.state === 'error';
+            const downloadPercent = Math.max(0, Math.min(100, Number(download.percent || 0)));
+            const downloadedText = formatBytes(download.bytesTransferred);
+            const totalText = formatBytes(download.totalBytes);
+            return (
+              <div key={option.id || option.label} className={styles['pv-local-qwen-upgrade-card']}>
+                <div className={styles['pv-local-qwen-upgrade-copy']}>
+                  <strong>{option.label || 'Qwen3.6-35B-A3B Q4_K_M imatrix'}</strong>
+                  {option.profile && <em>{option.profile}</em>}
+                  {Array.isArray(option.metrics) && option.metrics.length > 0 && (
+                    <div className={styles['pv-local-qwen-upgrade-metrics']}>
+                      {option.metrics.map((metric) => (
+                        <span key={metric}>{metric}</span>
+                      ))}
+                    </div>
+                  )}
+                  <span>{option.reason || '24GB+ 设备可试高能力本地模型。'}</span>
+                  {(isDownloading || isDownloaded || downloadErrored) && (
+                    <div className={styles['pv-local-qwen-upgrade-progress']}>
+                      <div className={styles['pv-local-qwen-upgrade-progress-row']}>
+                        <span>
+                          {download.state === 'verifying'
+                            ? '正在校验文件'
+                            : isDownloaded
+                              ? '下载完成，可启动'
+                              : downloadErrored
+                                ? `下载失败：${download.lastError || '请重试'}`
+                                : `${download.activeSource || '正在下载'}${download.parallelSegments && download.parallelSegments > 1 ? ` · ${download.parallelSegments} 路` : ''}`}
+                        </span>
+                        {(isDownloading || isDownloaded) && <strong>{downloadPercent.toFixed(0)}%</strong>}
+                      </div>
+                      <div className={styles['pv-local-qwen-progress-track']} aria-label={`${option.label || '推荐模型'}下载进度`}>
+                        <div
+                          className={styles['pv-local-qwen-progress-bar']}
+                          style={{ width: `${isDownloaded ? 100 : downloadPercent}%` }}
+                        />
+                      </div>
+                      {(downloadedText || totalText) && (
+                        <div className={styles['pv-local-qwen-progress-meta']}>
+                          <span>{downloadedText || '0 B'}{totalText ? ` / ${totalText}` : ''}</span>
+                          {download.target && <span title={download.target}>{download.fileName || option.file_name || 'GGUF'}</span>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className={styles['pv-local-qwen-upgrade-actions']}>
+                  <button
+                    type="button"
+                    className={styles['pv-local-qwen-upgrade-download-btn']}
+                    onClick={() => isDownloaded && download.target ? startGgufPath(download.target) : startRecommendedDownload(option)}
+                    disabled={isDownloading || customStarting || upgradeStartingId === optionId}
+                  >
+                    {isDownloading
+                      ? '下载中'
+                      : isDownloaded
+                        ? (customStarting ? '启动中' : '启动此模型')
+                        : upgradeStartingId === optionId
+                          ? '准备中'
+                          : (option.download_label || '下载到本机')}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles['pv-local-qwen-upgrade-action-btn']}
+                    onClick={() => isDownloading ? cancelRecommendedDownload(option) : chooseGgufModel()}
+                    disabled={customStarting}
+                  >
+                    {isDownloading ? '取消下载' : customStarting ? '启动中' : '导入本机 GGUF'}
+                  </button>
+                </div>
               </div>
-              <div className={styles['pv-local-qwen-upgrade-actions']}>
-                {option.modelscope_url ? (
-                  <a href={option.modelscope_url} target="_blank" rel="noreferrer">{option.download_label || '下载/查看'}</a>
-                ) : (
-                  <span className={styles['pv-local-qwen-upgrade-pending']}>发布中</span>
-                )}
-                <button
-                  type="button"
-                  className={styles['pv-local-qwen-upgrade-action-btn']}
-                  onClick={chooseGgufModel}
-                  disabled={customStarting}
-                >
-                  {customStarting ? '启动中' : '导入并启动'}
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -533,18 +657,18 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           onClick={() => setShowAdvancedLauncher((value) => !value)}
           aria-expanded={showAdvancedLauncher}
         >
-          {showAdvancedLauncher ? '收起本地模型库' : '本地模型库'}
+          {showAdvancedLauncher ? '收起管理' : '管理本地模型'}
         </button>
         {showAdvancedLauncher && (
           <div className={styles['pv-local-qwen-advanced-panel']}>
             <div>
-              <strong>自选 GGUF 模型</strong>
-              <span>默认使用 9B。点击“定位 9B 文件”可在 Finder 中看到当前模型；如要换成已有 35B 等高阶 GGUF，点“导入并启动 GGUF”。</span>
+              <strong>已有 GGUF / 模型目录</strong>
+              <span>默认使用 9B。你可以查看模型目录、导入已经下载好的 35B 或其他 GGUF；Lynn 会用当前硬件配置拉起 llama.cpp。</span>
               {modelPath && <code className={styles['pv-local-qwen-model-path']}>{modelPath}</code>}
             </div>
             <div className={styles['pv-local-qwen-advanced-actions']}>
               <button type="button" className={styles['pv-verify-connection-btn']} onClick={openModelFolder}>
-                {modelPath ? '定位 9B 文件' : '打开存放目录'}
+                {modelPath ? '定位默认 9B 文件' : '打开模型目录'}
               </button>
               <button
                 type="button"
@@ -552,7 +676,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
                 onClick={chooseGgufModel}
                 disabled={customStarting}
               >
-                {customStarting ? '启动中' : '导入并启动 GGUF'}
+                {customStarting ? '启动中' : '选择本机 GGUF 启动'}
               </button>
             </div>
           </div>
@@ -625,9 +749,11 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         {endpointRunning && <button className={styles['pv-verify-connection-btn']} onClick={openLocalDashboard}>
           查看端点
         </button>}
-        <button className={styles['pv-verify-connection-btn']} onClick={stopLocalModel} disabled={stopping}>
-          {stopping ? '停止中' : '停止本地模型'}
-        </button>
+        {canStopLocalModel && (
+          <button className={styles['pv-verify-connection-btn']} onClick={stopLocalModel} disabled={stopping}>
+            {stopping ? '停止中' : '停止本地模型'}
+          </button>
+        )}
         <button className={styles['pv-verify-connection-btn']} onClick={registerOnly} disabled={registering}>
           {registering ? '注册中' : '重新注册本地端点'}
         </button>

@@ -328,11 +328,12 @@ function InputAreaInner() {
     if (!slots?.total) return null;
     const busy = slots.busy || 0;
     const idle = Math.max(0, slots.total - busy);
-    return busy > 0 ? `生成中 ${busy}/${slots.total}` : `可接收 ${idle}/${slots.total}`;
+    return busy > 0 ? `生成中 ${busy}/${slots.total}` : `可用 ${idle}/${slots.total}`;
   }, [localQwenStatus?.runtime?.slots]);
   const localQwenMetricSummary = localQwenMetricsReady
     ? (localQwenMetricTokens > 0 ? `${localQwenMetricTokens.toLocaleString()} tok` : '0 tok')
     : '统计同步中';
+  const localQwenColdStartLikely = localQwenRunning && localQwenCurrent && localQwenMetricTokens < 800;
   const localQwenWarmupStage = localQwenRunning
     ? 'ready'
     : localQwenStarting
@@ -349,14 +350,16 @@ function InputAreaInner() {
         : '本地 9B 正在连接';
   const localQwenWarmupCopy = localQwenRunning
     ? localQwenCurrent
-      ? `${localQwenRuntimeLabel} · 日常任务可无限 token`
+      ? (localQwenColdStartLikely
+        ? '首问暖机中，后续同一会话会明显更快'
+        : `${localQwenRuntimeLabel} · 日常任务可无限 token`)
       : localQwenModel
         ? '已注册到模型列表，可一键切换为本地优先'
         : '端点已就绪，正在同步到模型列表'
     : localQwenWarmupStage === 'launching'
-      ? '正在拉起 llama.cpp。首次启动通常需要 30-45 秒，Lynn 会持续反馈进度。'
+      ? '正在拉起 llama.cpp，本地端点马上接管'
       : localQwenWarmupStage === 'loading'
-        ? 'llama.cpp 已启动，正在加载 9B 权重并预热首轮响应。'
+        ? 'llama.cpp 已启动，正在加载 9B 权重'
         : '正在确认本地端点状态，稍后会自动刷新。';
   const localQwenStatusBarClass = [
     styles['local-model-status-bar'],
@@ -1537,6 +1540,12 @@ function InputAreaInner() {
               <button type="button" onClick={dismissLocalQwenStatus} aria-label="收起本地模型状态">×</button>
             </div>
           </div>
+          {(localQwenColdStartLikely || (localQwenActive && !localQwenRunning)) && (
+            <div className={styles['local-model-warmup-note']} role="status" aria-live="polite">
+              <strong>首次暖机提示</strong>
+              <span>本地 9B 刚启动时要加载权重和预热上下文，第一问可能 30-60 秒；暖好后同一会话会明显更快。</span>
+            </div>
+          )}
           {localQwenPanelOpen && (
             <div className={styles['local-model-status-panel']} role="status" aria-live="polite">
               <div className={styles['local-model-status-panel-head']}>
@@ -1549,7 +1558,7 @@ function InputAreaInner() {
               <div className={styles['local-model-status-panel-grid']}>
                 <span><b>端点</b>{localQwenEndpoint}</span>
                 <span><b>进程</b>{localQwenStatus?.runtime?.pid ? `PID ${localQwenStatus.runtime.pid}` : localQwenLoading ? '加载中' : '运行中'}</span>
-                <span><b>任务槽</b>{localQwenSlotSummary || '可接收 1/1'}</span>
+                <span><b>任务槽</b>{localQwenSlotSummary || '可用 1/1'}</span>
                 <span><b>统计</b>{localQwenMetricSummary}</span>
               </div>
               <p>退出 Lynn 时会自动停止本地模型；需要马上释放内存时点“停止”。</p>
