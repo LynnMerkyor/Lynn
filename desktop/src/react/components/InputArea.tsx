@@ -351,7 +351,7 @@ function InputAreaInner() {
   const localQwenWarmupCopy = localQwenRunning
     ? localQwenCurrent
       ? (localQwenColdStartLikely
-        ? '首问暖机中，后续同一会话会明显更快'
+        ? '本地端点已就绪，正在生成首个回答'
         : `${localQwenRuntimeLabel} · 日常任务可无限 token`)
       : localQwenModel
         ? '已注册到模型列表，可一键切换为本地优先'

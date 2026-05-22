@@ -1180,7 +1180,8 @@
 }
 
 .local-model-status-stack {
-    width: 100%;
+    width: min(980px, calc(100vw - 48px));
+    max-width: 100%;
     box-sizing: border-box;
     margin: 0 auto 8px;
 }
@@ -1192,8 +1193,9 @@
     gap: 12px;
     position: relative;
     overflow: hidden;
-    width: 100%;
-    margin: 0;
+    width: min(980px, calc(100vw - 48px));
+    max-width: 100%;
+    margin: 0 auto 8px;
     padding: 9px 12px;
     border: 1px solid rgba(90, 170, 153, 0.18);
     border-radius: 18px;
@@ -1203,6 +1205,12 @@
     box-shadow: 0 16px 34px rgba(36, 94, 76, 0.065), inset 0 1px 0 rgba(255, 255, 255, 0.72);
     backdrop-filter: blur(18px) saturate(1.08);
     -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.local-model-status-stack > .local-model-status-bar {
+    width: 100%;
+    max-width: none;
+    margin: 0;
 }
 
 .local-model-status-bar-busy::after {

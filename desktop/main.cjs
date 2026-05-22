@@ -1046,12 +1046,12 @@ async function startServer() {
     if (process.platform === "win32") {
       serverBin = fs.existsSync(bundledExe) ? bundledExe : bundledNode;
       serverArgs = [bundledEntry];
-    } else if (fs.existsSync(bundledWrapper)) {
-      serverBin = bundledWrapper;
-      serverArgs = [];
-    } else {
+    } else if (hasBundledNodeRuntime) {
       serverBin = bundledNode;
       serverArgs = [bundledEntry];
+    } else {
+      serverBin = bundledWrapper;
+      serverArgs = [];
     }
     serverEnv.HANA_ROOT = bundledServerDir;
   } else {
@@ -1616,6 +1616,7 @@ function createSettingsWindow(target, theme) {
         if (!emptyRoot && !looksLikeSource) return;
         if (settingsHealAttempts >= 1) {
           console.warn("[desktop] settings renderer sanity check failed after reload", snapshot);
+          void loadWindowErrorPage(current, "settings", new Error(`settings renderer stayed empty/raw after reload: ${JSON.stringify(snapshot).slice(0, 500)}`));
           return;
         }
         settingsHealAttempts += 1;
@@ -3756,7 +3757,10 @@ wrapIpcHandler("llamacpp:open-model-dir", async (event, payload = {}) => {
       return { ok: true, path: path.dirname(target), revealedPath: target, error: null };
     }
   }
-  const openDir = fs.existsSync(userModelDir) ? userModelDir : dir;
+  // Open Lynn's managed model library first so users immediately see the 9B/35B
+  // files downloaded by the app. User-provided folders remain available through
+  // the native GGUF picker.
+  const openDir = dir;
   const error = await shell.openPath(openDir);
   return { ok: !error, path: openDir, error: error || null };
 });

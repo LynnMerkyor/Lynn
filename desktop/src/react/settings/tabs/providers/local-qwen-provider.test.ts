@@ -131,7 +131,7 @@ describe('Local Qwen provider UX guards', () => {
     expect(thinkingBlock).toContain('本地 9B 正在本机生成答案');
     expect(thinkingBlock).toContain('首次启动后的第一问可能较慢');
     expect(thinkingBlock).not.toContain('马上给出结果');
-    expect(inputArea).toContain('首问暖机中，后续同一会话会明显更快');
+    expect(inputArea).toContain('本地端点已就绪，正在生成首个回答');
     expect(inputArea).toContain('首次暖机提示');
     expect(inputArea).toContain('第一问可能 30-60 秒');
     expect(inputArea).not.toContain('首次启动后的第一问正在暖机，可能 30-60 秒；后续会明显更快。');

@@ -168,6 +168,43 @@ function readPersistedAssistantVisibleTexts(session, sessionPath = "") {
   return fromMessages;
 }
 
+function readPersistedAssistantRawTexts(session, sessionPath = "") {
+  const messages = Array.isArray(session?.messages) ? session.messages : [];
+  const fromMessages = [];
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    const text = stripHiddenReflectionBlocks(extractText(msg.content));
+    if (text) fromMessages.push(text);
+  }
+  if (sessionPath) {
+    try {
+      const raw = fs.readFileSync(sessionPath, "utf-8");
+      const lines = raw.split("\n").filter(Boolean);
+      const fromFile = [];
+      for (let i = 0; i < lines.length; i++) {
+        const entry = JSON.parse(lines[i]);
+        const msg = entry?.message;
+        if (msg?.role !== "assistant") continue;
+        const text = stripHiddenReflectionBlocks(extractText(msg.content));
+        if (text) fromFile.push(text);
+      }
+      if (fromFile.length > 0) return fromFile;
+    } catch {
+      // Best-effort recovery for SDK paths that persist answers without streaming them.
+    }
+  }
+  return fromMessages;
+}
+
+function latestPersistedAssistantLooksPseudoOnly(session, sessionPath = "") {
+  const texts = readPersistedAssistantRawTexts(session, sessionPath);
+  const raw = texts[texts.length - 1] || "";
+  if (!raw) return false;
+  if (!containsPseudoToolCallSimulation(raw) && !containsNonProgressPseudoToolSimulation(raw)) return false;
+  return !normalizePersistedAssistantText(raw);
+}
+
 function countPersistedAssistantVisibleTexts(session, sessionPath = "") {
   return readPersistedAssistantVisibleTexts(session, sessionPath).length;
 }
@@ -665,10 +702,12 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
     if (hasToolExecutionInFlight(ss)) return false;
     if (!opts.ignoreInternalRetry && hasScheduledInternalRetry(ss)) return false;
+    const session = !ss.hasOutput ? engine.getSessionByPath(sessionPath) : null;
     const finalText = !ss.hasOutput
-      ? extractLatestAssistantVisibleText(engine.getSessionByPath(sessionPath), sessionPath)
+      ? extractLatestAssistantVisibleText(session, sessionPath)
       : "";
-    if (opts.requirePersistedText && !ss.hasOutput && !finalText) return false;
+    const allowPseudoOnlyClose = opts.allowPseudoOnlyClose && !ss.hasOutput && !finalText && latestPersistedAssistantLooksPseudoOnly(session, sessionPath);
+    if (opts.requirePersistedText && !ss.hasOutput && !finalText && !allowPseudoOnlyClose) return false;
     if (finalText && shouldRetryUnverifiedLocalMutation(ss, finalText)) {
       if (maybeRecoverUnexecutedLocalMutationCommand(sessionPath, ss, finalText)) return true;
     }
@@ -691,7 +730,12 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       ) {
         return;
       }
-      finalizeReturnedTurnWithoutStream(sessionPath, ss, reason);
+      // hub.send may return before the provider SSE has delivered final text.
+      // The open-stream safety timer must not close an active turn as "empty"
+      // unless there is already persisted assistant text to finalize. The one
+      // exception is pseudo-tool-only persisted output: close it silently after
+      // stripping the leaked markup, instead of leaving the UI stuck streaming.
+      finalizeReturnedTurnWithoutStream(sessionPath, ss, reason, { requirePersistedText: true, allowPseudoOnlyClose: true });
     }, RETURNED_TURN_FINALIZATION_GRACE_MS);
     if (ss.returnedTurnFinalizationTimer.unref) ss.returnedTurnFinalizationTimer.unref();
     return true;

@@ -37,7 +37,21 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.77.11</strong> · 2026-05-09 · Deep Research desktop entry + quality gate + session persistence <em>(latest)</em></summary>
+<summary><strong>v0.79.0</strong> · 2026-05-22 · Local 9B unlimited tokens + local model manager <em>(latest)</em></summary>
+
+**Local model release**:
+- 🧠 **Local 9B for daily unlimited use**:Qwen3.5-9B Q4_K_M imatrix is now the default one-click local model path. Lynn prepares llama.cpp, downloads and verifies the GGUF, starts a local OpenAI-compatible `/v1` endpoint, and registers the provider after user authorization.
+- 📦 **Local model manager**:Settings → Models supports in-app 35B GGUF download, user-provided GGUF import, endpoint inspection, and stopping the local runtime to release memory.
+- ⏳ **Warmup feedback**:the first local reply now explains the 30-60s weight-load/context-warmup window and shows staged progress instead of leaving users waiting.
+- 🧭 **Brain V2 migration**:legacy Brain endpoints migrate to the V2 canonical endpoint; GLM Coding Plan uses the dedicated coding endpoint; empty-answer recovery remains a fallback, not a model-output override.
+- ✅ **Regression gate**:full test suite `168 files / 1447 passed / 1 skipped`,TypeScript, renderer build, local install, and GUI smoke passed.
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.0)
+
+</details>
+
+<details>
+<summary><strong>v0.77.11</strong> · 2026-05-09 · Deep Research desktop entry + quality gate + session persistence</summary>
 
 **Deep Research UX**:
 - 🧠 **New `Deep Research` entry**:the chat composer now exposes a dedicated research toggle for multi-model research with quality review.
@@ -444,9 +458,9 @@ Starting with Lynn v0.79, **Qwen3.5-9B Q4_K_M imatrix** is a first-class local m
 
 - 🇨🇳 **ModelScope (recommended in China)**: `Merkyor/Qwen3.5-9B-GGUF-imatrix` (Q4_K_M imatrix GGUF)
 - 🤗 **Hugging Face**: `Merkyor/Qwen3.5-9B-GGUF-imatrix` (Q4_K_M imatrix GGUF)
-- High-memory devices (32GB+ RAM/VRAM) can also try **Qwen3.6-35B-A3B Q4_K_M imatrix**: [ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix)
+- High-memory devices (24GB+ unified memory or VRAM) can also use **Qwen3.6-35B-A3B Q4_K_M imatrix**: [ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix). Under the thinking-on 32K evaluation it reaches MMLU 90.40% / GPQA Diamond 80.70%,with an R6000 reference speed of 207 tok/s.
 
-In the app: **Settings → Models → Local Qwen3.5-9B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background. The chat input shows local model status, and users can stop the runtime anytime to release memory.
+In the app: **Settings → Models → Local Qwen3.5-9B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background. The chat input shows local model status, and users can stop the runtime anytime to release memory. The Models page also supports in-app 35B download and importing any llama.cpp-compatible GGUF the user already has.
 
 ## Install and Go
 
