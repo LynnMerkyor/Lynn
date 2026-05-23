@@ -40,9 +40,9 @@ Related repositories:
 <summary><strong>v0.79.1</strong> · 2026-05-23 · Default local model switched to Qwen3.5-4B, three-tier hardware ladder <em>(latest)</em></summary>
 
 **Default local tier swap**:
-- 🆕 **Default Qwen3.5-4B Q4_K_M (unsloth)**: 2.55 GB · thinking-on 32K · 8GB RAM ready · V8 tool-call 30/35 · fast launch · covers the widest user base. New-install download halved, entry bar dropped to mainstream PC/Mac.
+- 🆕 **Default Qwen3.5-4B Q4_K_M (unsloth)**: 2.55 GB · thinking-on 32K · 8~16GB RAM recommended · tool-call 85.7% · fast launch · covers the widest user base. New-install download halved, entry bar dropped to mainstream PC/Mac.
 - 🎚️ **Three-tier hardware ladder**:
-  - **Default (8GB RAM, all platforms)**: Qwen3.5-4B Q4_K_M
+  - **Default (8~16GB RAM recommended (all platforms))**: Qwen3.5-4B Q4_K_M
   - **Upgrade (24GB VRAM/unified memory+)**: Qwen3.5-9B Q4_K_M imatrix MTP — stronger quality, MTP draft acceleration
   - **High-end (32GB+ VRAM/unified memory+)**: Qwen3.6-35B-A3B APEX-MTP I-Balanced — MMLU 90.40% / GPQA Diamond 80.70%
 - 🔁 **Smooth migration**: existing 9B / 35B configs are not force-migrated; new users get the 4B one-click experience by default.
@@ -463,7 +463,7 @@ Starting with Lynn v0.79.1, local models are grouped by hardware. **Default tier
 
 | Tier | Model | Size | Recommended hardware | Context | Capability signal |
 |------|-------|:----:|---------------------|:-------:|-------------------|
-| **Default** | **Qwen3.5-4B Q4_K_M (unsloth)** | 2.55 GB | **8GB RAM, all platforms** | 32K | V8 tool-call 30/35 (85.71%) · thinking-on default |
+| **Default** | **Qwen3.5-4B Q4_K_M (unsloth)** | 2.55 GB | **8~16GB RAM recommended (all platforms)** | 32K | tool-call 85.7% (85.71%) · thinking-on default |
 | Upgrade | Qwen3.5-9B Q4_K_M imatrix MTP | 5.38 GB | 24GB VRAM/unified memory+ | 32K | MMLU 81.00% / GPQA Diamond 81.71% · 14/15 tool · MTP draft accel |
 | High-end | Qwen3.6-35B-A3B APEX-MTP I-Balanced | 26 GB | 32GB+ VRAM/unified memory+ | 32K | MMLU 90.40% / GPQA Diamond 80.70% · APEX MoE |
 
@@ -625,7 +625,7 @@ Linux builds are planned.
 Two paths on first launch:
 
 - **Quick Start**: Enter your name → set permissions → jump right in. A built-in default model works out of the box — no API key required.
-- **Local model**: Settings → Models → Local Qwen3.5-4B (default, 2.55 GB / 8GB RAM) / 9B MTP (24GB VRAM upgrade) / 35B APEX-MTP (32GB+ high-end). Lynn downloads the Q4_K_M GGUF, prepares llama.cpp, starts the local endpoint, and switches to it automatically after authorization.
+- **Local model**: Settings → Models → Local Qwen3.5-4B (default, 2.55 GB / 8~16GB RAM recommended) / 9B MTP (24GB VRAM upgrade) / 35B APEX-MTP (32GB+ high-end). Lynn downloads the Q4_K_M GGUF, prepares llama.cpp, starts the local endpoint, and switches to it automatically after authorization.
 - **Advanced Setup**: Enter your name → connect your own provider (API key + base URL) → choose a **chat model** and a **utility model** → pick a theme → set permissions → enter.
 
 Lynn uses the OpenAI-compatible protocol, so any provider that supports it will work (OpenAI, DeepSeek, Qwen, local models via Ollama, SiliconFlow, etc.). Some providers (e.g. MiniMax) also support OAuth login. All model settings can be adjusted later in Settings.

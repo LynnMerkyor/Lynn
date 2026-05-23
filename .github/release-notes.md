@@ -2,20 +2,20 @@
 
 > 发布日期: 2026-05-23 · 代号: "4B 入门"
 
-v0.79.1 把默认本地模型从 Qwen3.5-9B 切到 **unsloth/Qwen3.5-4B-GGUF Q4_K_M**(2.55GB,thinking-on 32K,8GB 内存即可启动),覆盖最大用户群。同时把 9B MTP / 35B APEX-MTP 升级为"硬件分级"可选档,按用户机器显存自动浮现。
+v0.79.1 把默认本地模型从 Qwen3.5-9B 切到 **unsloth/Qwen3.5-4B-GGUF Q4_K_M**(2.55GB,thinking-on 32K,8~16G 显存推荐),覆盖最大用户群。同时把 9B MTP / 35B APEX-MTP 升级为"硬件分级"可选档,按用户机器显存自动浮现。
 
 ## 重点更新
 
 ### 默认本地模型切到 Qwen3.5-4B
-- 设置 → 模型内的"本地模型"卡片默认指向 **Qwen3.5-4B Q4_K_M (unsloth)**,2.55 GB,thinking-on 32K,8GB 内存即可流畅运行。
+- 设置 → 模型内的"本地模型"卡片默认指向 **Qwen3.5-4B Q4_K_M (unsloth)**,2.55 GB,thinking-on 32K,8~16G 显存即可流畅运行。
 - 下载量减半(5.38GB → 2.55GB),启动门槛降到主流 PC/Mac。
-- V8 工具调用 grader 修正后 30/35 = 85.71%;V9 60-prompt mixed 评测 46/60 = 76.67%(finance/medical 100%,math/physics/biology/chemistry 88-89%)。
+- V8 工具调用 grader 修正后 30/35 (85.71%);V9 60-prompt mixed 评测 46/60 = 76.67%(finance/medical 100%,math/physics/biology/chemistry 88-89%)。
 - 模型源: ModelScope `unsloth/Qwen3.5-4B-GGUF` · HF mirror `hf-mirror.com/unsloth/Qwen3.5-4B-GGUF`(2 源 fallback,sha256 校验)。
 
 ### 三档硬件分级
 | 档位 | 模型 | 推荐硬件 | 体积 |
 |------|------|---------|:----:|
-| **默认** | Qwen3.5-4B Q4_K_M | **8GB 内存,全机型** | 2.55 GB |
+| **默认** | Qwen3.5-4B Q4_K_M | **8~16G 显存推荐 · 全机型** | 2.55 GB |
 | 升级 | Qwen3.5-9B Q4_K_M imatrix MTP | 24GB 显存/统一内存+ | 5.38 GB |
 | 高端 | Qwen3.6-35B-A3B APEX-MTP I-Balanced | 32GB+ 显存/统一内存+ | 26 GB |
 

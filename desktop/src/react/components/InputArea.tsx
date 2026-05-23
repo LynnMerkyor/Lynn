@@ -636,13 +636,14 @@ function InputAreaInner() {
       return;
     }
 
-    const useLocalDeepResearch = activeModelInfo?.provider === LOCAL_QWEN35_PROVIDER_ID
-      && activeModelInfo?.id === LOCAL_QWEN35_MODEL_ID;
+    const selectedProvider = String(activeModelInfo?.provider || '').trim();
+    const selectedModel = String(activeModelInfo?.id || '').trim();
+    const selectedModelLabel = String(activeModelInfo?.name || selectedModel || '当前模型').trim();
+    const useLocalDeepResearch = /^local-qwen35-/u.test(selectedProvider);
+    const useDefaultBrainDeepResearch = selectedProvider === 'brain';
     flushSync(() => {
       setDeepResearchBusy(true);
-      setInlineNotice(useLocalDeepResearch
-        ? '深研已启动：正在用本地 Qwen3.5-4B 生成答案…'
-        : '深研已启动：正在拆题、检索并生成多路候选…');
+      setInlineNotice(`深研已启动：正在用 ${selectedModelLabel} 生成答案…`);
       setInlineError(null);
     });
     try {
@@ -660,9 +661,7 @@ function InputAreaInner() {
       const now = Date.now();
       const userId = `deep-user-${now}`;
       const assistantId = `deep-assistant-${now}`;
-      const thinkingText = useLocalDeepResearch
-        ? '深度调研正在使用本地 Qwen3.5-4B。'
-        : '深度调研正在并行生成多份答案，并做交叉参考…';
+      const thinkingText = `深度调研正在使用 ${selectedModelLabel}。`;
       const thinkingBlocks = await renderAssistantText(thinkingText);
       const session = useStore.getState().chatSessions[sessionPath];
       if (!session) {
@@ -705,10 +704,11 @@ function InputAreaInner() {
           prompt,
           sessionPath,
           candidates: useLocalDeepResearch
-            ? [LOCAL_QWEN35_PROVIDER_ID]
-            : ['mimo', 'deepseek-chat', 'qwen3.6-a3b-fp8', 'glm-5-turbo'],
-          provider: useLocalDeepResearch ? LOCAL_QWEN35_PROVIDER_ID : undefined,
-          model: useLocalDeepResearch ? LOCAL_QWEN35_MODEL_ID : undefined,
+            ? [selectedProvider]
+            : undefined,
+          provider: selectedProvider || undefined,
+          model: selectedModel || undefined,
+          sourceLabel: useDefaultBrainDeepResearch ? '默认工作模型' : selectedModelLabel,
           localBaseUrl: useLocalDeepResearch ? localQwenEndpoint : undefined,
           timeoutMs: DEEP_RESEARCH_TIMEOUT_MS,
         }),
@@ -749,6 +749,7 @@ function InputAreaInner() {
     requestInputFocus,
     serverReady,
     activeModelInfo?.id,
+    activeModelInfo?.name,
     activeModelInfo?.provider,
     composerText,
     inputValue,

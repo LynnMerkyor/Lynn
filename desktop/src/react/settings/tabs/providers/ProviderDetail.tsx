@@ -52,26 +52,27 @@ const LOCAL_QWEN36_35B_UPGRADE: LocalUpgradeOption = {
 };
 
 function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], memoryGib?: number | null) {
-  const normalized: LocalUpgradeOption[] = [];
-  let has9b = false;
-  let has35b = false;
+  // 三档硬件分级:9B (24G+) 在前,35B (32G+) 在后 — 按硬件门槛递增排序,不论 server 返回顺序
+  let server9b: LocalUpgradeOption | null = null;
+  let server35b: LocalUpgradeOption | null = null;
+  const others: LocalUpgradeOption[] = [];
   for (const option of options) {
     const haystack = `${option.id || ''} ${option.label || ''}`.toLowerCase();
     if (haystack.includes('27b')) continue;
-    if (haystack.includes('9b')) {
-      normalized.push({ ...LOCAL_QWEN35_9B_UPGRADE, ...option, ...LOCAL_QWEN35_9B_UPGRADE });
-      has9b = true;
-      continue;
-    }
-    if (haystack.includes('35b')) {
-      normalized.push({ ...LOCAL_QWEN36_35B_UPGRADE, ...option, ...LOCAL_QWEN36_35B_UPGRADE });
-      has35b = true;
-      continue;
-    }
-    normalized.push(option);
+    if (haystack.includes('9b')) { server9b = option; continue; }
+    if (haystack.includes('35b')) { server35b = option; continue; }
+    others.push(option);
   }
-  if (!has9b && (memoryGib || 0) >= 16) normalized.push(LOCAL_QWEN35_9B_UPGRADE);
-  if (!has35b && (memoryGib || 0) >= 24) normalized.push(LOCAL_QWEN36_35B_UPGRADE);
+  const normalized: LocalUpgradeOption[] = [...others];
+  const mem = memoryGib || 0;
+  // 9B 24G+ 升级档(永远在 35B 前面)
+  if (server9b || mem >= 16) {
+    normalized.push({ ...LOCAL_QWEN35_9B_UPGRADE, ...(server9b || {}), ...LOCAL_QWEN35_9B_UPGRADE });
+  }
+  // 35B 32G+ 高端档
+  if (server35b || mem >= 24) {
+    normalized.push({ ...LOCAL_QWEN36_35B_UPGRADE, ...(server35b || {}), ...LOCAL_QWEN36_35B_UPGRADE });
+  }
   return normalized;
 }
 
@@ -520,12 +521,12 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     <section className={styles['pv-local-qwen-panel']}>
       <div className={styles['pv-local-qwen-main']}>
         <div>
-          <div className={styles['pv-local-qwen-kicker']}>默认本地 Qwen3.5-4B，启动快 · 全机型可用</div>
+          <div className={styles['pv-local-qwen-kicker']}>默认本地 Qwen3.5-4B，启动快 · 8~16G 显存推荐</div>
           <div className={styles['pv-local-qwen-title']}>Qwen3.5-4B Q4_K_M (unsloth)</div>
           <div className={styles['pv-local-qwen-desc']}>
-            2.55GB · thinking-on 32K 默认 · V8 工具调用 30/35 · 8GB 内存可用。Lynn 会在用户授权后自动准备
+            2.55GB · thinking-on 32K 默认 · 工具调用 85.7% · 8~16G 显存推荐。Lynn 会在用户授权后自动准备
             llama.cpp、模型文件和本地 OpenAI 端点；完成后可离线使用，不需要 API Key，不上传对话。
-            24GB 显存可升级 9B MTP，32GB+ 选择 35B APEX-MTP。
+            24GB+ 显存可升级 9B MTP，32GB+ 选择 35B APEX-MTP。
           </div>
         </div>
         <div className={styles['pv-local-qwen-state-stack']}>
@@ -549,8 +550,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         <span>2.55GB</span>
         <span>thinking-on 32K</span>
         <span>启动快</span>
-        <span>工具调用 30/35</span>
-        <span>8GB 内存可用</span>
+        <span>工具调用 85.7%</span>
+        <span>8~16G 显存推荐</span>
         <span>本地优先</span>
         <span>无限 token</span>
         <span>隐私留在本机</span>
@@ -759,7 +760,9 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
                 ? '已启用，重新检查'
                 : hasModel && hasRuntime
                   ? '启动本地模型'
-                  : '授权安装并启用'}
+                  : !hasModel
+                    ? '📥 下载 4B 并启动 (2.55 GB)'
+                    : '授权安装并启用'}
         </button>
         <button className={styles['pv-verify-connection-btn']} onClick={() => loadStatus(false)} disabled={loading}>
           {loading ? '刷新中' : '刷新状态'}

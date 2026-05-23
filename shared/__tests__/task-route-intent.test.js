@@ -146,8 +146,8 @@ describe("task route intent", () => {
   // ─────────────────────────────────────────────────────────────────
   // [REGRESSION GUARANTEE · 2026-04-27 night]
   // 文件管理动词 + "图片"宾语 不能再被 VISION_RE 误判 → 必须 UTILITY
-  // 原 bug:模型只 narrate 不 emit tool_call(因为被注入"按默认推理链路处理"系统提示)
-  // 这组测试通过 = 文件移动/整理图片不再走伪 tool_call 路径
+  // 原 bug:文件管理动词 + "图片"宾语曾被误判成图像分析任务。
+  // 这组测试通过 = 文件移动/整理图片仍然按 utility 分类,且不会生成隐藏提示词。
   // ─────────────────────────────────────────────────────────────────
   describe("file-move-image regression guarantee (2026-04-27 night)", () => {
     it("file-create + folder + 图片 noun → utility (not vision)", () => {

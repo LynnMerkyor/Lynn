@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import fs from "fs";
+import { createServer } from "http";
 import os from "os";
 import path from "path";
 import { describe, expect, it, vi } from "vitest";
@@ -26,6 +27,13 @@ function makeAppWithEngine(fetchImpl, engine) {
 
 function sseLine(payload) {
   return `data: ${JSON.stringify(payload)}\n\n`;
+}
+
+function listen(server) {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve(server.address()));
+  });
 }
 
 describe("deep research route", () => {
@@ -57,44 +65,44 @@ describe("deep research route", () => {
     });
   });
 
-  it("treats legacy quality rejection payloads as model-visible output", () => {
+  it("treats legacy meta payloads as metadata, not route-level rejection", () => {
     const raw = [
       sseLine({
         object: "deep-research.meta",
-        type: "quality-rejected-final",
+        type: "candidate-picked",
         winnerProviderId: "mimo",
       }),
       sseLine({
-        choices: [{ delta: { content: "候选答案质量不足。" }, finish_reason: "stop" }],
+        choices: [{ delta: { content: "模型原样输出。" }, finish_reason: "stop" }],
       }),
     ].join("");
 
     expect(parseDeepResearchSse(raw)).toMatchObject({
       ok: true,
       winnerProviderId: null,
-      text: "候选答案质量不足。",
+      text: "模型原样输出。",
     });
   });
 
-  it("does not turn nested legacy quality rejection payloads into route-level rejection", () => {
+  it("does not turn nested metadata payloads into route-level rejection", () => {
     const raw = [
       sseLine({
         id: "chatcmpl-deep",
         object: "deep-research.meta",
         meta: {
-          event: "quality-rejected-final",
+          event: "candidate-picked",
           winnerProviderId: null,
         },
       }),
       sseLine({
-        choices: [{ delta: { content: "这轮 Deep Research 已拦截。" }, finish_reason: "stop" }],
+        choices: [{ delta: { content: "深度调研返回模型内容。" }, finish_reason: "stop" }],
       }),
     ].join("");
 
     expect(parseDeepResearchSse(raw)).toMatchObject({
       ok: true,
       winnerProviderId: null,
-      text: "这轮 Deep Research 已拦截。",
+      text: "深度调研返回模型内容。",
     });
   });
 
@@ -175,6 +183,64 @@ describe("deep research route", () => {
       messages: [{ role: "user", content: "A3B 是什么意思？" }],
       candidates: ["deepseek-chat", "mimo"],
     });
+  });
+
+  it("uses the selected BYOK model directly instead of hardcoded Brain candidates", async () => {
+    const seenBodies = [];
+    const server = createServer((req, res) => {
+      let raw = "";
+      req.on("data", (chunk) => { raw += chunk; });
+      req.on("end", () => {
+        seenBodies.push(JSON.parse(raw || "{}"));
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          choices: [{ message: { role: "assistant", content: "selected model answer" }, finish_reason: "stop" }],
+        }));
+      });
+    });
+    const address = await listen(server);
+    const baseUrl = `http://127.0.0.1:${address.port}/v1`;
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("Brain upstream should not be called for a selected BYOK model");
+    });
+    const engine = {
+      availableModels: [{ id: "gpt-5.4", provider: "openai-codex", name: "GPT 5.4", api: "openai-completions" }],
+      resolveProviderCredentials: () => ({ api_key: "test-key", base_url: baseUrl, api: "openai-completions" }),
+      authStorage: { get: () => null, getApiKey: async () => "" },
+      providerRegistry: { get: () => ({ authType: "apiKey" }) },
+    };
+    const app = makeAppWithEngine(fetchImpl, engine);
+
+    try {
+      const res = await app.request("/api/deep-research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: "做个调研",
+          provider: "openai-codex",
+          model: "gpt-5.4",
+          sourceLabel: "GPT 5.4",
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        ok: true,
+        text: "selected model answer",
+        winnerProviderId: "openai-codex",
+        winnerModelId: "gpt-5.4",
+        sourceLabel: "GPT 5.4",
+        source: "selected-model-deep-research",
+      });
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(seenBodies[0]).toMatchObject({
+        model: "gpt-5.4",
+        messages: [{ role: "user", content: "做个调研" }],
+        max_tokens: 32768,
+      });
+    } finally {
+      server.close();
+    }
   });
 
   it("persists Deep Research user and assistant messages when sessionPath is provided", async () => {

@@ -1,5 +1,5 @@
 /**
- * translate.js — Lynn 内部快速翻译路由
+ * translate.js — Lynn 翻译路由
  *
  * POST /api/translate
  *   body: { text, targetLanguage? }

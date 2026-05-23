@@ -1,5 +1,5 @@
 /**
- * Legacy turn-quality gate compatibility shim.
+ * Legacy turn completion compatibility shim.
  *
  * V0.79 removes Brain-side output intervention. Do not synthesize fallback
  * answers, retry prompts, or tool summaries from this layer.

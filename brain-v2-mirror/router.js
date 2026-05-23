@@ -57,7 +57,7 @@ async function runRound({
     }
     if (capabilityRequired?.vision && !provider.capability.vision) continue;
     if (capabilityRequired?.audio && !provider.capability.audio) continue;
-    // tool-call quality gate — provider 自报 capability.tools=false → tool-attached 请求跳过
+    // Capability check only: providers that declare no tool support are skipped for tool-attached requests.
     if (Array.isArray(tools) && tools.length > 0 && provider.capability && provider.capability.tools === false) {
       log && log('info', `provider ${providerId} skipped: tool-call request but capability.tools=false`);
       continue;

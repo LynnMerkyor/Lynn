@@ -1223,7 +1223,7 @@
     },
     "localModel": {
       "title": "下载 Lynn 默认本地模型",
-      "subtitle": "Lynn 預設模型 Qwen3.5-4B Q4_K_M (unsloth) · 2.55GB · thinking-on 32K · V8 工具調用 30/35 · 8GB 記憶體可用。\n完全離線，不需要任何 API Key，不上傳任何對話。",
+      "subtitle": "Lynn 預設模型 Qwen3.5-4B Q4_K_M (unsloth) · 2.55GB · thinking-on 32K · 工具調用 85.7% · 8~16G 顯存推薦。\n完全離線，不需要任何 API Key，不上傳任何對話。",
       "specsLine": "2.55 GB · Q4_K_M (unsloth) · thinking-on · 32K · 完全離線",
       "needsBinary": "缺少 llama.cpp 推理引擎，请先安装：~/.lynn/llamacpp/bin/llama-server",
       "needsBinaryHint": "请按文档安装 llama.cpp 后重试。",

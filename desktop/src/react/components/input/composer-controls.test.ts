@@ -56,7 +56,7 @@ describe('composer controls regression', () => {
     const joined = [panel, inputArea, formatter, serverFormatter].join('\n');
 
     expect(joined).toContain('深度调研');
-    expect(joined).toContain('并做交叉参考');
+    expect(joined).toContain('正在使用');
     expect(joined).not.toMatch(/verifier|质量地板|候选答案|winner:/);
   });
 

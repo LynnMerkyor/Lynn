@@ -56,7 +56,8 @@ describe("local workspace context", () => {
     expect(context).toContain("[file] jian.md");
     expect(context).toContain("[dir] docs");
     expect(context).toContain("# 今日笺");
-    expect(context).toContain("不要说“没有文件系统权限”");
+    expect(context).toContain("读取状态：成功");
+    expect(context).not.toContain("不要说“没有文件系统权限”");
   });
 
   it("builds a direct user-facing reply for local folder reads", () => {

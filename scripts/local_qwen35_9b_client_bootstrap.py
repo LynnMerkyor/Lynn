@@ -280,7 +280,7 @@ def _hardware_profile() -> dict[str, Any]:
         mem = total_gib or 0
         if mem >= 24:
             recommendation = "recommended"
-            profile = {"name": "mac_unified_32k", "label": "Mac 9B MTP 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "mac_unified_32k", "label": "Qwen3.5-4B 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
             upgrade_options.append({
                 "id": "qwen36-35b-a3b-apex-mtp",
                 "label": "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
@@ -300,27 +300,27 @@ def _hardware_profile() -> dict[str, Any]:
             })
         elif mem >= 16:
             recommendation = "recommended_with_limits"
-            profile = {"name": "mac_unified_32k", "label": "Mac 9B MTP 32K 稳定档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "mac_unified_32k", "label": "Qwen3.5-4B 32K 稳定档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
         elif mem >= 12:
             recommendation = "recommended_with_limits"
-            profile = {"name": "mac_unified_16k", "label": "Mac 9B MTP 16K 入门档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "mac_unified_16k", "label": "Qwen3.5-4B 16K 入门档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
             warnings.append("12GB 统一内存建议先用 16K；32K thinking 可作为高级选项。")
         elif mem >= 8:
             recommendation = "experimental"
-            profile = {"name": "mac_unified_8k", "label": "Mac 9B MTP 8K 试用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "mac_unified_8k", "label": "Qwen3.5-4B 8K 试用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
             warnings.append("统一内存偏小，只建议试用短上下文；长 thinking 体验可能不稳。")
         else:
-            blockers.append("统一内存低于 8GB，不建议本地跑 9B MTP；请保持默认云端模型。")
+            blockers.append("统一内存低于 8GB，不建议本地跑 Qwen3.5-4B；请保持默认云端模型。")
     elif best_gpu and (best_gpu.get("memory_gib") or 0) >= 6:
         vram = best_gpu.get("memory_gib") or 0
         cc = best_gpu.get("compute_capability") or 0
         if cc and cc < 7.5:
             recommendation = "experimental"
-            profile = {"name": "nvidia_8k_legacy", "label": "NVIDIA 9B MTP 老卡试用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "nvidia_8k_legacy", "label": "NVIDIA Qwen3.5-4B 老卡试用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
             warnings.append("NVIDIA compute capability 低于 7.5，可能明显慢；不建议作为默认体验。")
         elif vram >= 24:
             recommendation = "recommended"
-            profile = {"name": "nvidia_32k", "label": "NVIDIA 9B MTP 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "nvidia_32k", "label": "NVIDIA Qwen3.5-4B 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
             upgrade_options.append({
                 "id": "qwen36-35b-a3b-apex-mtp",
                 "label": "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
@@ -340,17 +340,17 @@ def _hardware_profile() -> dict[str, Any]:
             })
         elif vram >= 16:
             recommendation = "recommended_with_limits"
-            profile = {"name": "nvidia_32k", "label": "NVIDIA 9B MTP 32K 稳定档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "nvidia_32k", "label": "NVIDIA Qwen3.5-4B 32K 稳定档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
         else:
             recommendation = "recommended_with_limits"
-            profile = {"name": "nvidia_16k", "label": "NVIDIA 9B MTP 16K 入门档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
-            warnings.append("8-12GB 显存可以试用本地 9B MTP；建议 16K/单并发。")
+            profile = {"name": "nvidia_16k", "label": "NVIDIA Qwen3.5-4B 16K 入门档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
+            warnings.append("8-12GB 显存可以试用本地 Qwen3.5-4B；建议 16K/单并发。")
     elif system == "Linux" and not best_gpu:
         blockers.append("未检测到 NVIDIA GPU；CPU 路径可以跑但体验较慢，默认不推荐。")
     elif system == "Windows":
         blockers.append("Windows 首发仍在补齐；当前建议使用云端兜底或手动 llama.cpp。")
     else:
-        blockers.append("当前硬件未达到本地 9B MTP 默认启用条件。")
+        blockers.append("当前硬件未达到本地 Qwen3.5-4B 默认启用条件 (8GB+ 推荐)。")
 
     return {
         "platform": system,

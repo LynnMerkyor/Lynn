@@ -4,6 +4,8 @@ export const DEEP_RESEARCH_FETCH_TIMEOUT_MS = DEEP_RESEARCH_TIMEOUT_MS + 10_000;
 export interface DeepResearchResponse {
   text?: unknown;
   winnerProviderId?: unknown;
+  winnerModelId?: unknown;
+  sourceLabel?: unknown;
   ok?: unknown;
 }
 
@@ -17,7 +19,8 @@ export function normalizeDeepResearchErrorMessage(raw: unknown): string {
 
 export function formatDeepResearchAssistantText(data: DeepResearchResponse): string {
   const text = String(data?.text || "").trim();
-  const source = data?.winnerProviderId ? ` · 输出来源：${data.winnerProviderId}` : "";
+  const label = String(data?.sourceLabel || data?.winnerModelId || data?.winnerProviderId || "").trim();
+  const source = label ? ` · 输出来源：${label}` : "";
   const status = "完成";
   const footer = [
     "",

@@ -3,7 +3,9 @@ import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import { safeJson } from "../hono-helpers.js";
-import { BRAIN_API_ROOT, BRAIN_BACKUP_API_ROOT } from "../../shared/brain-provider.js";
+import { BRAIN_API_ROOT, BRAIN_BACKUP_API_ROOT, isBrainProvider } from "../../shared/brain-provider.js";
+import { findModel } from "../../shared/model-ref.js";
+import { callText } from "../../core/llm-client.js";
 
 export const DEFAULT_DEEP_RESEARCH_TIMEOUT_MS = 180_000;
 const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-4b-q4km";
@@ -153,7 +155,7 @@ function shouldRunLocalDeepResearch(body) {
   const candidates = Array.isArray(body?.candidates)
     ? body.candidates.map((candidate) => String(candidate || "").trim()).filter(Boolean)
     : [];
-  return provider === LOCAL_QWEN35_PROVIDER_ID || candidates.includes(LOCAL_QWEN35_PROVIDER_ID);
+  return /^local-qwen35-/u.test(provider) || candidates.some((candidate) => /^local-qwen35-/u.test(candidate));
 }
 
 function buildLocalChatCompletionsEndpoint(rawBaseUrl) {
@@ -178,7 +180,7 @@ function parseOpenAiStreamLine(data, state) {
   if (choice?.finish_reason) state.finishReason = choice.finish_reason;
 }
 
-async function runLocalDeepResearch({ fetchImpl, messages, signal, timeoutMs, maxTokens, baseUrl }) {
+async function runLocalDeepResearch({ fetchImpl, messages, signal, timeoutMs, maxTokens, baseUrl, providerId, modelId, sourceLabel }) {
   const endpoint = buildLocalChatCompletionsEndpoint(baseUrl);
   const localTimeoutMs = Math.max(timeoutMs || DEFAULT_DEEP_RESEARCH_TIMEOUT_MS, 300_000);
   const controller = new AbortController();
@@ -193,7 +195,7 @@ async function runLocalDeepResearch({ fetchImpl, messages, signal, timeoutMs, ma
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
       body: JSON.stringify({
-        model: LOCAL_QWEN35_MODEL_ID,
+        model: modelId || LOCAL_QWEN35_MODEL_ID,
         messages,
         temperature: 0.2,
         max_tokens: Number.isFinite(Number(maxTokens)) && Number(maxTokens) > 0
@@ -238,7 +240,9 @@ async function runLocalDeepResearch({ fetchImpl, messages, signal, timeoutMs, ma
       text: state.text,
       reasoning: state.reasoning,
       finishReason: state.finishReason || "stop",
-      winnerProviderId: LOCAL_QWEN35_PROVIDER_ID,
+      winnerProviderId: providerId || LOCAL_QWEN35_PROVIDER_ID,
+      winnerModelId: modelId || LOCAL_QWEN35_MODEL_ID,
+      sourceLabel: sourceLabel || providerId || LOCAL_QWEN35_PROVIDER_ID,
       metaEvents: [{ type: "local-deep-research", endpoint }],
       usage: state.usage,
     };
@@ -246,6 +250,84 @@ async function runLocalDeepResearch({ fetchImpl, messages, signal, timeoutMs, ma
     clearTimeout(timer);
     signal?.removeEventListener?.("abort", relayAbort);
   }
+}
+
+async function resolveDirectModelConfig(engine, body) {
+  const provider = String(body?.provider || body?.modelProvider || "").trim();
+  const modelId = String(body?.model || body?.modelId || "").trim();
+  if (!provider || !modelId || isBrainProvider(provider) || /^local-qwen35-/u.test(provider)) return null;
+
+  const model = findModel(engine?.availableModels || [], modelId, provider);
+  if (!model) {
+    const err = new Error(`selected model not found: ${provider}/${modelId}`);
+    err.status = 404;
+    throw err;
+  }
+
+  const creds = engine.resolveProviderCredentials?.(model.provider) || {};
+  const oauthCred = engine.authStorage?.get?.(model.provider);
+  const oauthBaseUrl = oauthCred?.type === "oauth" ? oauthCred.resourceUrl : "";
+  const baseUrl = creds.base_url || oauthBaseUrl || model.baseUrl || "";
+  const api = creds.api || model.api || "openai-completions";
+  let apiKey = creds.api_key || "";
+  if (!apiKey) {
+    try {
+      apiKey = await engine.authStorage?.getApiKey?.(model.provider);
+    } catch {
+      // Some providers intentionally allow missing keys; validate below.
+    }
+  }
+  const providerEntry = engine.providerRegistry?.get?.(model.provider);
+  const allowMissingApiKey = providerEntry?.authType === "none";
+  if (!baseUrl) {
+    const err = new Error(`selected provider has no base_url: ${model.provider}`);
+    err.status = 400;
+    throw err;
+  }
+  if (!apiKey && !allowMissingApiKey) {
+    const err = new Error(`selected provider has no api_key: ${model.provider}`);
+    err.status = 401;
+    throw err;
+  }
+
+  return {
+    provider: model.provider,
+    model: model.id,
+    api,
+    apiKey,
+    baseUrl,
+    sourceLabel: String(body?.sourceLabel || model.name || `${model.provider}/${model.id}`).trim(),
+  };
+}
+
+async function runDirectModelDeepResearch({ engine, messages, signal, timeoutMs, maxTokens, body }) {
+  const config = await resolveDirectModelConfig(engine, body);
+  if (!config) return null;
+  const text = await callText({
+    api: config.api,
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
+    model: config.model,
+    provider: config.provider,
+    messages,
+    temperature: 0.2,
+    maxTokens: Number.isFinite(Number(maxTokens)) && Number(maxTokens) > 0
+      ? Math.min(Number(maxTokens), LOCAL_DEEP_RESEARCH_MAX_TOKENS)
+      : LOCAL_DEEP_RESEARCH_MAX_TOKENS,
+    timeoutMs: Math.max(timeoutMs || DEFAULT_DEEP_RESEARCH_TIMEOUT_MS, 300_000),
+    signal,
+    reasoning: true,
+  });
+  return {
+    ok: true,
+    text,
+    finishReason: "stop",
+    winnerProviderId: config.provider,
+    winnerModelId: config.model,
+    sourceLabel: config.sourceLabel,
+    metaEvents: [{ type: "selected-model-deep-research", provider: config.provider, model: config.model }],
+    usage: null,
+  };
 }
 
 function isValidSessionPath(sessionPath, agentsDir) {
@@ -257,7 +339,8 @@ function isValidSessionPath(sessionPath, agentsDir) {
 
 function formatDeepResearchResultText(parsed) {
   const text = String(parsed?.text || "").trim();
-  const source = parsed?.winnerProviderId ? ` · 输出来源：${parsed.winnerProviderId}` : "";
+  const label = String(parsed?.sourceLabel || parsed?.winnerModelId || parsed?.winnerProviderId || "").trim();
+  const source = label ? ` · 输出来源：${label}` : "";
   const status = "完成";
   return [
     text,
@@ -350,6 +433,9 @@ export function createDeepResearchRoute(engine, options = {}) {
           timeoutMs,
           maxTokens: body.max_tokens,
           baseUrl: body.localBaseUrl,
+          providerId: String(body.provider || LOCAL_QWEN35_PROVIDER_ID),
+          modelId: String(body.model || LOCAL_QWEN35_MODEL_ID),
+          sourceLabel: String(body.sourceLabel || ""),
         });
         const persistence = persistDeepResearchExchange(engine, body, messages, parsed);
         return c.json({
@@ -362,10 +448,27 @@ export function createDeepResearchRoute(engine, options = {}) {
         });
       }
 
+      const selectedModelParsed = await runDirectModelDeepResearch({
+        engine,
+        messages,
+        signal: controller.signal,
+        timeoutMs,
+        maxTokens: body.max_tokens,
+        body,
+      });
+      if (selectedModelParsed) {
+        const persistence = persistDeepResearchExchange(engine, body, messages, selectedModelParsed);
+        return c.json({
+          ...selectedModelParsed,
+          attemptedBaseUrls: [],
+          ...persistence,
+          source: "selected-model-deep-research",
+        });
+      }
+
       const upstreamBody = {
         messages,
         ...(Array.isArray(body.candidates) ? { candidates: body.candidates } : {}),
-        ...(body.model ? { model: body.model } : {}),
         ...(Number.isFinite(Number(body.max_tokens)) ? { max_tokens: Number(body.max_tokens) } : {}),
       };
 
@@ -392,6 +495,9 @@ export function createDeepResearchRoute(engine, options = {}) {
             }
 
             const parsed = parseDeepResearchSse(raw);
+            if (body.sourceLabel && isBrainProvider(String(body.provider || ""))) {
+              parsed.sourceLabel = String(body.sourceLabel);
+            }
             const persistence = persistDeepResearchExchange(engine, body, messages, parsed);
             return c.json({
               ...parsed,
