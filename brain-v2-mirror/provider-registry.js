@@ -14,7 +14,11 @@ export const PROVIDERS = {
     endpoint: env('LYNN_LOCAL_QWEN35_BASE', 'http://127.0.0.1:18099/v1'),
     apiKey: env('LYNN_LOCAL_QWEN35_API_KEY', 'local'),
     model: env('LYNN_LOCAL_QWEN35_MODEL', 'qwen35-9b-q4km-imatrix'),
-    capability: { vision: false, audio: false, tools: true, thinking: true, native_search: false },
+    // #7: tools=false because Q4_K_M lacks native tool parser config in llama.cpp default --jinja mode.
+    // Router treats tools-attached requests as needing native tool emit; setting tools:false here
+    // tells the router to skip local for tool-heavy prompts (downgrade quality avoidance).
+    // (thinking still true — local 9B handles reasoning fine; only tool-call emit is the gap.)
+    capability: { vision: false, audio: false, tools: false, thinking: true, native_search: false },
     wire: 'openai',
     cooldown_ms: 15_000,
     max_tokens: Number(env('LYNN_LOCAL_QWEN35_MAX_TOKENS', '32000')),

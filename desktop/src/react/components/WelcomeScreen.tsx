@@ -110,6 +110,10 @@ function WelcomeInner() {
     if (done?.length) parts.push(isZh ? `${done.length} 项已完成` : `${done.length} done`);
     if (automationCount > 0) parts.push(isZh ? `${automationCount} 个自动任务` : `${automationCount} automations`);
     if (sessions.length > 0) parts.push(isZh ? `${sessions.length} 个对话` : `${sessions.length} chats`);
+    // #30: empty-state nudge for fresh users (0 todos / 0 done / 0 automations / 0 sessions)
+    if (parts.length === 0) {
+      parts.push(isZh ? '问点什么开始吧 ✿' : 'Ask me anything to get started ✿');
+    }
     return parts.join(' · ');
   }, [deskJianContent, automationCount, sessions.length, locale]);
 

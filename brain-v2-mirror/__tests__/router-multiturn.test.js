@@ -190,7 +190,7 @@ describe('Router multi-turn server-side tool execution', () => {
     expect(result.hitMaxIterations).toBe(true);
     expect(result.synthesisRound).toBeUndefined();
     expect(result.iterations).toBe(6);
-    expect(chunks.find(c => c.type === 'content' && c.delta?.includes('工具结果合成失败'))).toBeDefined();
+    expect(chunks.find(c => c.type === 'content' && c.delta?.includes('工具结果合成失败'))).toBeUndefined();
   });
 
   it('falls through to the next provider when synthesis emits reasoning but no visible content', async () => {

@@ -137,10 +137,26 @@ function clampActivityLevel(value: number): number {
  *
  * 只加在 requestText,displayText 仍是原转写(chat history 看到原话)。
  */
-const VOICE_PROMPT_PREFIX = "[语音对话·短答口语化无markdown·有工具直接执行不展开候选] ";
+// #32: voice prompt prefix — language-aware (was: hardcoded Chinese)
+// English speakers were getting a Chinese system instruction prepended invisibly.
+const VOICE_PROMPT_PREFIX_ZH = "[语音对话·短答口语化无markdown·有工具直接执行不展开候选] ";
+const VOICE_PROMPT_PREFIX_EN = "[Voice mode · short conversational answer · no markdown · execute tools directly without listing candidates] ";
+
+function resolveVoicePrefix(): string {
+  try {
+    const locale = (window as unknown as { i18n?: { locale?: string } }).i18n?.locale
+      || (typeof navigator !== 'undefined' ? navigator.language : '')
+      || '';
+    return locale.toLowerCase().startsWith('zh') || locale.toLowerCase().startsWith('ja') || locale.toLowerCase().startsWith('ko')
+      ? VOICE_PROMPT_PREFIX_ZH
+      : VOICE_PROMPT_PREFIX_EN;
+  } catch {
+    return VOICE_PROMPT_PREFIX_ZH;
+  }
+}
 
 export function buildVoiceRequestText(transcript: string): string {
-  return `${VOICE_PROMPT_PREFIX}${transcript.trim()}`;
+  return `${resolveVoicePrefix()}${transcript.trim()}`;
 }
 
 export function extractAssistantSpeechText(message: ChatMessage | null | undefined): string {
@@ -505,10 +521,19 @@ export function JarvisRuntimeOverlay() {
         setOpen(true);
       }
     };
+    // #17: Esc dismisses overlay when open (was: only × button)
+    const escHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && open) {
+        e.preventDefault();
+        close();
+      }
+    };
     window.addEventListener(JARVIS_RUNTIME_OPEN_EVENT, openHandler);
     window.addEventListener(JARVIS_RUNTIME_START_EVENT, startHandler);
     window.addEventListener(JARVIS_RUNTIME_TOGGLE_EVENT, toggleHandler);
+    window.addEventListener('keydown', escHandler);
     return () => {
+      window.removeEventListener('keydown', escHandler);
       window.removeEventListener(JARVIS_RUNTIME_OPEN_EVENT, openHandler);
       window.removeEventListener(JARVIS_RUNTIME_START_EVENT, startHandler);
       window.removeEventListener(JARVIS_RUNTIME_TOGGLE_EVENT, toggleHandler);

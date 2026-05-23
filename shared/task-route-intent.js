@@ -8,18 +8,6 @@ const ROUTE_INTENTS = Object.freeze({
   VISION: "vision",
 });
 
-const STRICT_TOOL_FIRST_PROVIDER_IDS = new Set([
-  "moonshot",
-  "kimi-coding",
-  "minimax",
-  "minimax-coding",
-  "stepfun",
-  "stepfun-coding",
-  "gemini",
-  "openrouter",
-]);
-
-const STRICT_TOOL_FIRST_MODEL_RE = /\b(?:kimi|moonshot|minimax|step|gemini)\b/i;
 const PENDING_TOOL_EXECUTION_PATTERNS = [
   /^(?:让我|我来|我先|现在就|马上)(?:去|来)?(?:查询|查一下|查找|搜索|搜一下|检索|查看|看一下|看|读取|读一下|读|打开|检查|扫描|浏览|列出|整理|分析|获取|比对|对比|比较)/i,
   /^(?:让我|我来|我先|现在就|马上).*(?:天气|金价|股价|指数|基金|汇率|新闻|头条|热点|比分|赛程|排名|评测|测评|版本更新|官方文档)/i,
@@ -215,33 +203,12 @@ export function buildRouteIntentSystemHint(routeIntent, locale = "zh") {
   return "";
 }
 
-function shouldUseStrictToolFirstHint(provider, modelId, routeIntent) {
-  const intent = normalizeRouteIntent(routeIntent);
-  if (![ROUTE_INTENTS.UTILITY, ROUTE_INTENTS.CODING].includes(intent)) return false;
-  const providerId = String(provider || "").trim().toLowerCase();
-  const id = String(modelId || "").trim();
-  if (providerId === "zhipu" || providerId === "zhipu-coding") return false;
-  if (STRICT_TOOL_FIRST_PROVIDER_IDS.has(providerId)) return true;
-  return STRICT_TOOL_FIRST_MODEL_RE.test(`${providerId} ${id}`);
-}
-
 export function buildProviderToolCallHint({ routeIntent, provider, modelId, locale = "zh" } = {}) {
-  if (!shouldUseStrictToolFirstHint(provider, modelId, routeIntent)) return "";
-  const isZh = String(locale || "").toLowerCase().startsWith("zh");
-  if (isZh) {
-    return [
-      "【工具优先兼容提示】当前这条模型链路只有在你先发出标准 tool call 时，才能稳定完成搜索、天气、行情、新闻、比分、安装和资料查询任务。",
-      "遇到这类任务时，不要先输出 Premise / Conduct / Reflection / Act，也不要先说“我来查询”“让我搜索”“我先看看”。",
-      "第一步就直接调用真实工具；如果需要多个工具，一次只调一个，等结果回来再继续。",
-      "在拿到真实工具结果之前，正文保持极短或为空；但如果工具链没有稳定返回，最终也必须用可见正文说明已知信息、限制和下一步，不能空答。绝不要在正文里打印 web_search(...)、weather(...)、stock_market(...) 或任何伪工具调用标记。",
-    ].join(" ");
-  }
-  return [
-    "[Tool-first compatibility hint] This provider only completes lookup and execution tasks reliably when you emit a standard tool call first.",
-    "For search, weather, market data, news, scores, installation, or docs lookup tasks, do not output Premise / Conduct / Reflection / Act and do not say things like \"let me search\" first.",
-    "Your first step must be a real tool call. If you need more than one tool, call one tool at a time and wait for the result before continuing.",
-    "Until a real tool result arrives, keep the assistant text empty or extremely short. If the tool chain does not return stable results, the final answer must still include visible text with known information, limits, and the next step; do not end empty. Never print pseudo tool-call text such as web_search(...), weather(...), or stock_market(...).",
-  ].join(" ");
+  void routeIntent;
+  void provider;
+  void modelId;
+  void locale;
+  return "";
 }
 
 function collectPendingExecutionCandidates(text) {

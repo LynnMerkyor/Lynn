@@ -13,7 +13,7 @@ import { CompatSkillsStep } from './steps/CompatSkillsStep';
 import { TutorialStep } from './steps/TutorialStep';
 import { BRAIN_PROVIDER_ID } from '../../../../shared/brain-provider.js';
 import { QUICK_LOCAL_PROVIDER } from './constants';
-import { setOnboardingLocale } from './use-onboarding-i18n';
+import { setOnboardingLocale, useOnboardingI18n } from './use-onboarding-i18n';
 
 interface OnboardingAppProps { preview: boolean; skipToTutorial: boolean }
 
@@ -31,6 +31,7 @@ const ADVANCED_SETUP_LOCAL_STEPS = [0, 1, 2, LOCAL_MODEL_DOWNLOAD_STEP, 4, 5, 6,
 const ADVANCED_DEFAULT_STEPS = [0, 1, 2, 4, 5, 6, 7] as const;
 
 export function OnboardingApp({ preview, skipToTutorial }: OnboardingAppProps) {
+  const { t } = useOnboardingI18n();
   const [serverPort, setServerPort] = useState<string | null>(null);
   const [serverToken, setServerToken] = useState<string | null>(null);
   const [step, setStep] = useState(skipToTutorial ? 7 : 0);
@@ -102,7 +103,7 @@ export function OnboardingApp({ preview, skipToTutorial }: OnboardingAppProps) {
       showError(t('onboarding.error'));
       setSkipping(false);
     }
-  }, [preview, showError, skipping]);
+  }, [preview, showError, skipping, t]);
 
   useEffect(() => {
     (async () => {
@@ -154,7 +155,7 @@ export function OnboardingApp({ preview, skipToTutorial }: OnboardingAppProps) {
           disabled={skipping}
           onClick={() => void skipOnboarding()}
         >
-          {locale.startsWith('zh') ? '跳过引导' : 'Skip setup'}
+          {t('onboarding.skipSetup')}
         </button>
       )}
       {progressSteps.length > 0 && (

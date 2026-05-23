@@ -649,7 +649,7 @@ export class HanaEngine {
   //  Model 代理
   // ════════════════════════════
 
-  _resolveThinkingLevel(l) { return this._models.resolveThinkingLevel(l); }
+  _resolveThinkingLevel(l, model = null) { return this._models.resolveThinkingLevel(l, model); }
   _resolveExecutionModel(r) { return this._models.resolveExecutionModel(r); }
   _resolveProviderCredentials(p) { return this._models.resolveProviderCredentials(p); }
   resolveProviderCredentials(p) { return this._resolveProviderCredentials(p); }

@@ -82,6 +82,17 @@ function startServerReadinessPolling(): void {
   setTimeout(poll, 1000);
 }
 
+function handleServerRestarted(data: { port: number; token: string }): void {
+  useStore.setState({ serverPort: String(data.port), serverToken: data.token });
+  useStore.getState().markStartupStep('server-restart', '检测到本地服务重启', 'warning', `127.0.0.1:${data.port}`);
+  connectWebSocket(String(data.port), data.token);
+  void syncRuntimeSnapshot({ announceRecovery: true });
+  hanaFetch('/api/health')
+    .then((res) => res.json())
+    .then((healthData) => loadAvatars(healthData?.avatars))
+    .catch(() => loadAvatars());
+}
+
 // ── __hanaLog：前端日志上报 ──
 window.__hanaLog = function (level: string, module: string, message: string) {
   const { serverPort } = useStore.getState();
@@ -108,6 +119,7 @@ window.addEventListener('unhandledrejection', (e) => {
 export async function initApp(): Promise<void> {
   const platform = window.platform;
   let shouldDiagnoseBrain = false;
+  platform.onServerRestarted?.(handleServerRestarted);
   const startup = useStore.getState();
   startup.resetStartupDiagnostics();
   startup.markStartupStep('server-port', '读取本地服务端口', 'running');
@@ -313,18 +325,6 @@ export async function initApp(): Promise<void> {
       e.preventDefault();
       platform.openSettings();
     }
-  });
-
-  // 19. 服务端重启后同步新端口/令牌并主动重连 WS
-  platform.onServerRestarted?.((data: { port: number; token: string }) => {
-    useStore.setState({ serverPort: String(data.port), serverToken: data.token });
-    useStore.getState().markStartupStep('server-restart', '检测到本地服务重启', 'warning', `127.0.0.1:${data.port}`);
-    connectWebSocket(String(data.port), data.token);
-    void syncRuntimeSnapshot({ announceRecovery: true });
-    hanaFetch('/api/health')
-      .then((res) => res.json())
-      .then((healthData) => loadAvatars(healthData?.avatars))
-      .catch(() => loadAvatars());
   });
 
   platform.onConfirmActionRequest?.((payload) => {

@@ -1,3 +1,21 @@
+/**
+ * @deprecated D1: This server-route Path B (Python bootstrap) is being phased out in favor of
+ * the Electron-main Path A (LlamaCppManager in desktop/llamacpp-manager.cjs + desktop/model-downloader.cjs).
+ *
+ * Path A is canonical because:
+ *  - No python3 dependency (clean Mac install works out of the box)
+ *  - Same llama.cpp binary location across platforms (~/.lynn/llamacpp/bin/)
+ *  - Single GGUF location (~/.lynn/models/) avoiding the Path-A vs Path-B model-dir confusion
+ *  - LlamaCppManager owns port allocation and restart lifecycle
+ *  - Onboarding step can call platform IPC instead of HTTP route
+ *
+ * This route remains for:
+ *  - Backward compat (existing client builds still call /api/local-qwen35-9b/*)
+ *  - python3 bootstrap path users who explicitly opted in via env LYNN_LOCAL_QWEN35_USE_BOOTSTRAP=1
+ *
+ * TODO sprint: migrate LocalModelDownloadStep.tsx to call platform.llamacppStartDownload()
+ *              instead of this HTTP route, then mark file for removal.
+ */
 import { spawn, execFile } from "child_process";
 import fs from "fs";
 import os from "os";
@@ -418,6 +436,24 @@ function decorateJob(job) {
   };
 }
 
+// Cache python3 availability check across requests (resets on process restart)
+let _python3CheckResult = null;
+async function ensurePython3() {
+  if (_python3CheckResult !== null) return _python3CheckResult;
+  try {
+    await execFileAsync("python3", ["--version"], { timeout: 5_000 });
+    _python3CheckResult = { ok: true };
+  } catch (err) {
+    _python3CheckResult = {
+      ok: false,
+      error: "python3_not_found",
+      detail: "python3 executable not in PATH. On macOS install via Homebrew (brew install python3) or python.org installer. Lynn local model setup needs python3 to run the bootstrap script.",
+      raw: err.message,
+    };
+  }
+  return _python3CheckResult;
+}
+
 async function plan(variant = "imatrix") {
   const bootstrap = bootstrapPath();
   const state = defaultState();
@@ -428,6 +464,15 @@ async function plan(variant = "imatrix") {
       searched: [fromRoot("scripts", "local_qwen35_9b_client_bootstrap.py")],
       provider_id: PROVIDER_ID,
       fallback_provider: "brain",
+    };
+  }
+  const pyCheck = await ensurePython3();
+  if (!pyCheck.ok) {
+    return {
+      ok: false,
+      provider_id: PROVIDER_ID,
+      fallback_provider: "brain",
+      ...pyCheck,
     };
   }
   try {

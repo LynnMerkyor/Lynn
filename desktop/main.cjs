@@ -1094,6 +1094,7 @@ async function startServer() {
   });
   serverPort = info.port;
   serverToken = info.token;
+  _serverStartedAt = Date.now();
   ensureLocalAuthHeaderHook();
   serverProcess.unref(); // 脱离 Electron 事件循环，允许 Electron 独立退出
 }
@@ -1106,6 +1107,11 @@ let _serverHeartbeatTimer = null;
 let _serverHeartbeatFailures = 0;
 let _serverHeartbeatChecking = false;
 let _serverHeartbeatRestarting = false;
+let _serverStartedAt = 0;
+const SERVER_HEARTBEAT_STARTUP_GRACE_MS = 4 * 60 * 1000;
+const SERVER_HEARTBEAT_INTERVAL_MS = 10_000;
+const SERVER_HEARTBEAT_TIMEOUT_MS = 5_000;
+const SERVER_HEARTBEAT_MAX_FAILURES = 6;
 
 function notifyRendererServerRestarted() {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1147,11 +1153,12 @@ function monitorServer() {
 async function checkServerHeartbeat() {
   if (isQuitting || _serverHeartbeatRestarting || _serverHeartbeatChecking) return;
   if (!serverPort || !serverToken) return;
+  if (_serverStartedAt && Date.now() - _serverStartedAt < SERVER_HEARTBEAT_STARTUP_GRACE_MS) return;
   _serverHeartbeatChecking = true;
   try {
     const res = await fetch(`http://127.0.0.1:${serverPort}/api/health`, {
       headers: { Authorization: `Bearer ${serverToken}` },
-      signal: AbortSignal.timeout(2000),
+      signal: AbortSignal.timeout(SERVER_HEARTBEAT_TIMEOUT_MS),
     });
     const health = res.ok ? await res.json().catch(() => null) : null;
     if (res.ok && isReusableServerHealth(health)) {
@@ -1165,7 +1172,7 @@ async function checkServerHeartbeat() {
     _serverHeartbeatChecking = false;
   }
 
-  if (_serverHeartbeatFailures < 3 || _serverHeartbeatRestarting || isQuitting) return;
+  if (_serverHeartbeatFailures < SERVER_HEARTBEAT_MAX_FAILURES || _serverHeartbeatRestarting || isQuitting) return;
   _serverHeartbeatRestarting = true;
   console.warn("[desktop] Server heartbeat failed 3 times, restarting server...");
   try {
@@ -1186,7 +1193,7 @@ function startServerHeartbeat() {
   if (_serverHeartbeatTimer) clearInterval(_serverHeartbeatTimer);
   _serverHeartbeatTimer = setInterval(() => {
     void checkServerHeartbeat();
-  }, 5000);
+  }, SERVER_HEARTBEAT_INTERVAL_MS);
   if (typeof _serverHeartbeatTimer.unref === "function") {
     _serverHeartbeatTimer.unref();
   }
@@ -3660,6 +3667,34 @@ wrapIpcHandler("llamacpp:start-download", async (event, payload = {}) => {
     };
   }
   const target = path.join(lynnHome, "models", profile.fileName);
+
+  // #5: disk-space precheck — refuse to start if free space < expectedSize × 1.1 (account for .part + final)
+  if (profile.expectedSize && profile.expectedSize > 0) {
+    try {
+      const modelsDir = path.dirname(target);
+      try { fs.mkdirSync(modelsDir, { recursive: true }); } catch {}
+      const stat = (fs.statfsSync || fs.statfs)?.(modelsDir);
+      if (stat) {
+        const free = Number(stat.bavail) * Number(stat.bsize);
+        const need = Number(profile.expectedSize) * 1.1;
+        if (Number.isFinite(free) && free < need) {
+          const freeGB = (free / 1024 / 1024 / 1024).toFixed(2);
+          const needGB = (need / 1024 / 1024 / 1024).toFixed(2);
+          return {
+            ok: false,
+            reason: "insufficient-disk-space",
+            detail: `Need ~${needGB} GB free in ${modelsDir}, have ${freeGB} GB. Free up space and retry.`,
+            modelId: profile.modelId,
+            target,
+          };
+        }
+      }
+    } catch (err) {
+      // statfs unavailable on some platforms — best-effort, fall through
+      console.warn("[disk-precheck] failed:", err?.message || err);
+    }
+  }
+
   const downloader = new ModelDownloader({
     target,
     fileName: profile.fileName,
@@ -3690,9 +3725,20 @@ wrapIpcHandler("llamacpp:start-download", async (event, payload = {}) => {
       broadcastToAllWindows("llamacpp:download-state", doneState);
       if (profile.autoStart) {
         // default 9B on disk — bounce llamacpp so it picks it up
+        // #18: 1500ms conservative wait (was 600ms) + port-busy probe before spawn.
+        // Manager.stop() SIGTERMs the child but only SIGKILLs after 5s;
+        // we wait long enough for the typical clean exit, then verify the bind port is free
+        // (lets the old child finish flushing). If port still busy, manager's own retry kicks in.
         try { stopLlamacpp(); } catch {}
-        // small delay so the manager teardown fully completes before restart
-        setTimeout(() => { try { startLlamacpp(); } catch {} }, 600);
+        const probeAndStart = () => {
+          const net = require('net');
+          const probe = net.createConnection({ port: 18099, host: '127.0.0.1' });
+          let settled = false;
+          probe.once('error', () => { if (settled) return; settled = true; probe.destroy(); try { startLlamacpp(); } catch {} });
+          probe.once('connect', () => { if (settled) return; settled = true; probe.end(); setTimeout(probeAndStart, 500); });
+          setTimeout(() => { if (settled) return; settled = true; probe.destroy(); try { startLlamacpp(); } catch {} }, 800);
+        };
+        setTimeout(probeAndStart, 1500);
       }
     }
     if (activeModelDownloader === downloader) activeModelDownloader = null;
@@ -3792,6 +3838,11 @@ function stopManagedQwen35LlamaServer() {
     const pid = Number(fs.readFileSync(pidFile, "utf8").trim());
     if (Number.isFinite(pid) && pid > 0) pids.add(pid);
   } catch {}
+  // #19: ps grep narrowed to Lynn-managed model paths only (was matching any --port 18099)
+  // Match the bootstrap-spawned llama-server by model file path under ~/Models/Lynn/Qwen3.5-9B/
+  // or the lynn-engine run dir convention. Prevents accidentally killing user's other llama-server.
+  const lynnModelsDir = path.join(os.homedir(), "Models", "Lynn");
+  const lynnEngineDir = path.join(os.homedir(), ".lynn-engine");
   try {
     const stdout = execFileSync("ps", ["-axo", "pid=,command="], {
       encoding: "utf8",
@@ -3805,11 +3856,13 @@ function stopManagedQwen35LlamaServer() {
       const cmd = match[2] || "";
       if (!Number.isFinite(pid) || pid <= 0) continue;
       if (!/llama-server\b/.test(cmd)) continue;
-      if (
-        cmd.includes("--port 18099")
+      // Require BOTH a Lynn-owned path indicator AND the qwen35-9b model hint
+      const isLynnOwned =
+        cmd.includes(lynnModelsDir)
+        || cmd.includes(lynnEngineDir)
         || /qwen35-9b-q4km/i.test(cmd)
-        || /Qwen3\.5-9B-Q4_K_M/i.test(cmd)
-      ) {
+        || /Qwen3\.5-9B-Q4_K_M/i.test(cmd);
+      if (isLynnOwned && cmd.includes("--port 18099")) {
         pids.add(pid);
       }
     }
@@ -3889,6 +3942,30 @@ app.whenReady().then(async () => {
     //     找 ~/.lynn/llamacpp/bin + ~/.lynn/models/<default>.gguf,任一缺 → needs-install
     //     state 报 UI 引导首次安装。已 install → spawn llama-server + health 监控。
     startLlamacpp();
+
+    // #11: 2026-05-22 — resume-download relaunch hint
+    // If a `.part` file exists in ~/.lynn/models/, surface it to UI so user can resume
+    // (download was interrupted by app quit). Fire-and-forget — broadcast event,
+    // renderer's onboarding/settings can subscribe to llamacpp:resume-hint.
+    try {
+      const modelsDir = path.join(lynnHome, "models");
+      const partFiles = (fs.existsSync(modelsDir) ? fs.readdirSync(modelsDir) : [])
+        .filter((f) => f.endsWith(".part"));
+      if (partFiles.length > 0) {
+        const stats = partFiles.map((f) => {
+          try {
+            const s = fs.statSync(path.join(modelsDir, f));
+            return { fileName: f, size: s.size, mtimeMs: s.mtimeMs };
+          } catch { return null; }
+        }).filter(Boolean);
+        // Defer to next tick so windows are ready to receive
+        setImmediate(() => {
+          broadcastToAllWindows("llamacpp:resume-hint", { partFiles: stats });
+        });
+      }
+    } catch (err) {
+      console.warn("[resume-hint] check failed:", err?.message || err);
+    }
 
     // 3. 控制 splash 最短停留时间。冷启动优化后不再额外卡住 3 秒。
     const elapsed = Date.now() - splashShownAt;

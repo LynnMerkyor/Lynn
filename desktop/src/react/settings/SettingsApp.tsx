@@ -64,7 +64,9 @@ function persistSettingsUi(activeTab: string) {
     if (TAB_COMPONENTS[activeTab]) {
       localStorage.setItem(SETTINGS_ACTIVE_TAB_KEY, activeTab);
     }
-    localStorage.removeItem('hana-settings-provider');
+    // #28: don't strip `hana-settings-provider` here — ProvidersTab/ProviderDetail
+    // own this key, so blanket-removing it on every persist defeats their state.
+    // (Previously removed every save → users always landed on first provider when navigating back.)
   } catch {
     // ignore persistence failures
   }

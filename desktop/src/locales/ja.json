@@ -115,7 +115,9 @@
     "more": "もっと見る",
     "empty": "空",
     "edit": "編集",
-    "delete": "削除"
+    "delete": "削除",
+    "editResend": "編集して再送",
+    "editResendTitle": "編集して再送(このメッセージを入力欄に貼り、修正後 Enter で再送)"
   },
   "chat": {
     "send": "送信",
@@ -124,6 +126,7 @@
     "browserScreenshot": "ブラウザスクリーンショット",
     "compacting": "コンテキスト圧縮中",
     "needWsConnection": "アシスタントとの接続が切れています。再接続を待つか、ステータスバーの「再接続」をタップしてください",
+    "waitForCurrentReply": "現在の返信はまだ完了していません。このターンが終わってから次のメッセージを送ってください。",
     "retry": "Retry",
     "waitingTooLong": "この返信はまだ処理中です。Lynn は既定モデルの予備経路へ順次引き継ぎながら、このターンの完了を試みます。",
     "emptyAnswerHint": "モデルは考えただけで、何も話してくれませんでした。再試行をタップしてもう一度試せます。",
@@ -627,7 +630,9 @@
       "changeAvatar": "変更",
       "userNameHint": "アシスタントがあなたを呼ぶ名前",
       "userProfile": "ユーザープロフィール",
-      "userProfileHint": "アシスタントがあなたを理解する手がかり：興味、習慣、好みなど。システムプロンプトに挿入されます"
+      "userProfileHint": "アシスタントがあなたを理解する手がかり：興味、習慣、好みなど。システムプロンプトに挿入されます",
+      "defaultProviderHint": "ローカル 9B とクラウドを 1 クリックで切り替え。",
+      "openProviders": "Providers を開く →"
     },
     "crop": {
       "title": "アバターを調整",
@@ -855,7 +860,9 @@
       "verifyFailed": "検証に失敗しました",
       "noProvider": "先に検索エンジンを選択してください",
       "noKey": "先に API Key を入力してください",
-      "noBaseUrl": "先に searXNG の URL を入力してください"
+      "noBaseUrl": "先に searXNG の URL を入力してください",
+      "placeholder": "設定を検索…",
+      "empty": "一致するタブはありません"
     },
     "work": {
       "title": "巡回",
@@ -1005,6 +1012,11 @@
         "上の入力欄に App ID と App Secret を貼り付けてスイッチをオンにします"
       ],
       "whatsappHint": "近日対応予定"
+    },
+    "shortcuts": {
+      "title": "キーボードショートカット",
+      "globalSummon": "グローバル呼び出し",
+      "globalSummonHint": "音声タブで再バインド可能。他アプリと衝突時は Cmd/Ctrl+Opt+J に自動フォールバック。"
     }
   },
   "onboarding": {
@@ -1123,7 +1135,39 @@
       },
       "finish": "さあ、始めましょう",
       "quickFinish": "今すぐ Lynn に入る"
-    }
+    },
+    "localModel": {
+      "title": "Download Lynn's default local model",
+      "subtitle": "Qwen 3.5 9B (Q4_K_M-imatrix) · 5.3 GB · MMLU 90.4% / GPQA 80% · 32K context.\nRuns fully offline — no API key, no data ever leaves your machine.",
+      "specsLine": "5.3 GB · Q4_K_M-imatrix · 32K context · fully offline",
+      "needsBinary": "llama.cpp inference engine not found at ~/.lynn/llamacpp/bin/llama-server",
+      "needsBinaryHint": "Install llama.cpp following the docs and retry.",
+      "alreadyHave": "Local model is ready",
+      "alreadyHaveDesc": "The model is already downloaded — you're good to go.",
+      "startBtn": "Start download",
+      "pauseBtn": "Pause",
+      "resumeBtn": "Resume",
+      "cancelBtn": "Cancel download",
+      "retryBtn": "Retry download",
+      "switchBackBtn": "Use Brain v2 default model instead",
+      "downloading": "Downloading (source {source})",
+      "verifying": "Verifying SHA-256…",
+      "paused": "Paused",
+      "ready": "Download complete ✿",
+      "spawning": "Starting llama.cpp inference server…",
+      "spawnReady": "llama.cpp is ready",
+      "spawnFailed": "Inference server failed to start: {reason}",
+      "errorChecksum": "Checksum mismatch — rotating to next mirror",
+      "errorAll": "All mirrors failed — check your network and retry",
+      "errorGeneric": "Download error: {reason}",
+      "next": "Continue",
+      "back": "Back",
+      "modelPreparedHint": "モデルと llama.cpp の準備完了。Start を押すと Local 9B に切り替わります。",
+      "statusReady": "起動可",
+      "statusWaiting": "準備中",
+      "runtimeLocal9B": "Local 9B"
+    },
+    "skipSetup": "セットアップをスキップ"
   },
   "activity": {
     "title": "アクティビティ",
@@ -1238,7 +1282,7 @@
     "missingParam": "{param} パラメータが不足しています",
     "invalidJson": "リクエストボディは JSON オブジェクトである必要があります",
     "sessionNotFound": "セッションファイルが見つかりません",
-    "stillStreaming": "{name} はまだ応答中です。お待ちください",
+    "stillStreaming": "{name} はまだ応答中です。この応答が終わってから次のメッセージを送ってください",
     "agentNameEmpty": "アシスタント名は空にできません",
     "agentIdInvalid": "アシスタント ID に不正な文字が含まれています",
     "agentAlreadyExists": "アシスタント \"{id}\" は既に存在します",

@@ -157,7 +157,9 @@
     "more": "更多",
     "empty": "空",
     "edit": "編輯",
-    "delete": "刪除"
+    "delete": "刪除",
+    "editResend": "編輯重發",
+    "editResendTitle": "編輯後重發(把這條訊息複製到輸入框,改完按 Enter 重新發送)"
   },
   "chat": {
     "send": "傳送",
@@ -166,6 +168,7 @@
     "browserScreenshot": "瀏覽器截圖",
     "compacting": "上下文壓縮中",
     "needWsConnection": "與助手連線已中斷，請等待重新連線或點選狀態列「重新連線」",
+    "waitForCurrentReply": "目前回覆還沒結束，請等本輪完成後再發下一條。",
     "retry": "Retry",
     "waitingTooLong": "這條回覆仍在處理中。Lynn 會持續接力預設模型的備援鏈路，盡量把這一輪任務完成。",
     "emptyAnswerHint": "模型只想了想，沒說出話來。可以點重試再試一次。",
@@ -698,7 +701,9 @@
       "changeAvatar": "更換",
       "userNameHint": "Ta 怎麼稱呼你",
       "userProfile": "使用者檔案",
-      "userProfileHint": "讓助手了解你：興趣、習慣、偏好等，會注入到系統提示詞中"
+      "userProfileHint": "讓助手了解你：興趣、習慣、偏好等，會注入到系統提示詞中",
+      "defaultProviderHint": "一鍵在本機 9B 和雲端模型之間切換。",
+      "openProviders": "開啟 Providers →"
     },
     "crop": {
       "title": "調整頭像",
@@ -929,7 +934,9 @@
       "verifyFailed": "驗證失敗",
       "noProvider": "請先選擇搜尋引擎",
       "noKey": "請先輸入 API Key",
-      "noBaseUrl": "請先輸入 searXNG 網址"
+      "noBaseUrl": "請先輸入 searXNG 網址",
+      "placeholder": "搜尋設定…",
+      "empty": "沒有符合的標籤"
     },
     "work": {
       "title": "巡檢",
@@ -1089,6 +1096,11 @@
         "將 App ID 和 App Secret 貼到上方輸入框，打開開關即可"
       ],
       "whatsappHint": "即將支援"
+    },
+    "shortcuts": {
+      "title": "鍵盤快捷鍵",
+      "globalSummon": "全域喚起",
+      "globalSummonHint": "在「語音」分頁可改鍵。若被其他 App 佔用,Lynn 會自動退回 Cmd/Ctrl+Opt+J。"
     }
   },
   "onboarding": {
@@ -1208,7 +1220,39 @@
       },
       "finish": "開始使用",
       "quickFinish": "直接進入 Lynn"
-    }
+    },
+    "localModel": {
+      "title": "下载 Lynn 默认本地模型",
+      "subtitle": "Lynn 默认模型 Qwen 3.5 9B(Q4_K_M-imatrix)· 5.3GB · MMLU 90.4% / GPQA 80% · 32K 上下文。\n完全离线，不需要任何 API Key，不上传任何对话。",
+      "specsLine": "5.3 GB · Q4_K_M-imatrix · 32K 上下文 · 完全离线",
+      "needsBinary": "缺少 llama.cpp 推理引擎，请先安装：~/.lynn/llamacpp/bin/llama-server",
+      "needsBinaryHint": "请按文档安装 llama.cpp 后重试。",
+      "alreadyHave": "本地模型已就绪",
+      "alreadyHaveDesc": "我们检测到模型已经下载完成，可以直接开始使用。",
+      "startBtn": "开始下载",
+      "pauseBtn": "暂停",
+      "resumeBtn": "继续",
+      "cancelBtn": "取消下载",
+      "retryBtn": "重试下载",
+      "switchBackBtn": "改用 Brain v2 默认免费模型",
+      "downloading": "下载中(来源 {source})",
+      "verifying": "校验 SHA-256 中…",
+      "paused": "已暂停",
+      "ready": "下载完成 ✿",
+      "spawning": "正在启动 llama.cpp 推理服务…",
+      "spawnReady": "llama.cpp 已就绪",
+      "spawnFailed": "推理服务启动失败：{reason}",
+      "errorChecksum": "校验失败，已切到下一个源继续重试",
+      "errorAll": "所有镜像都失败了，请检查网络后重试",
+      "errorGeneric": "下载出错：{reason}",
+      "next": "下一步",
+      "back": "上一步",
+      "modelPreparedHint": "模型和 llama.cpp 已就緒,點擊啟動即可切換到本機 9B。",
+      "statusReady": "可啟動",
+      "statusWaiting": "待準備",
+      "runtimeLocal9B": "本機 9B"
+    },
+    "skipSetup": "跳過引導"
   },
   "activity": {
     "title": "助手活動",
@@ -1340,7 +1384,7 @@
     "missingParam": "缺少 {param} 參數",
     "invalidJson": "請求本體必須是 JSON 物件",
     "sessionNotFound": "Session 檔案不存在",
-    "stillStreaming": "{name} 還在說話，請等一下",
+    "stillStreaming": "{name} 還在回覆，請等本輪結束後再發下一條",
     "agentNameEmpty": "助手名字不能為空",
     "agentIdInvalid": "助手 ID 包含非法字元",
     "agentAlreadyExists": "助手 \"{id}\" 已存在",

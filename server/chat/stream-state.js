@@ -154,6 +154,7 @@ export function resetCompletedTurnState(ss) {
   ss.hasToolCall = false;
   ss.hasPrefetchToolCall = false;
   ss.activeToolCallCount = 0;
+  ss.activeToolCallStartedAt = null;
   ss.lastToolExecutionActivity = 0;
   ss.hasThinking = false;
   ss.hasError = false;
@@ -162,6 +163,8 @@ export function resetCompletedTurnState(ss) {
   ss.moodParser.reset();
   ss.xingParser.reset();
   ss.visibleTextAcc = "";
+  ss.bufferedVisibleTextDuringTool = "";
+  ss.hasBufferedVisibleTextDuringTool = false;
   ss.rawTextAcc = "";
   ss.pseudoToolSteered = false;
   ss.pseudoToolRecoveryHandled = false;
@@ -180,6 +183,7 @@ export function resetCompletedTurnState(ss) {
   ss.toolFinalizationRetryAttempted = false;
   ss.toolFailedFallbackRetryAttempted = false;
   ss.persistedAssistantTextBaseline = 0;
+  ss.persistedAssistantMessageBaseline = 0;
   ss.rehydratedThisTurn = false;
   ss.postRehydrateEscalationAttempted = false;
   ss.postRehydrateDeterministicAttempted = false;

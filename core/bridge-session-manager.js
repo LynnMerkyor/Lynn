@@ -29,17 +29,11 @@ import {
   normalizeVisionPromptText,
 } from "../shared/vision-prompt.js";
 import {
-  buildEmptyReplyFallbackText,
-  buildEmptyReplyRetryPrompt,
-} from "../server/chat/turn-retry-policy.js";
-import {
   buildClientAgentMetadata,
   readClientAgentKeyFromPreferencesFile,
   readSignedClientAgentHeaders,
 } from "./client-agent-identity.js";
 import { resolveCompactionSettings } from "./compaction-settings.js";
-import { containsPseudoToolCallSimulation, sanitizeAssistantTextContent } from "./llm-utils.js";
-import { stripPseudoToolCallMarkup } from "../shared/pseudo-tool-call.js";
 
 const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
 const LOCAL_QWEN35_MODEL_ID = "qwen35-9b-q4km-imatrix";
@@ -352,7 +346,7 @@ export class BridgeSessionManager {
 
         sessionOpts = {
           model: ownerModel,
-          thinkingLevel: mm.resolveThinkingLevel(prefs?.thinking_level || "auto"),
+          thinkingLevel: mm.resolveThinkingLevel(prefs?.thinking_level || "auto", ownerModel),
           resourceLoader: ownerRL,
           tools: bridgeTools,
           customTools: bridgeCustomTools,
@@ -418,19 +412,10 @@ export class BridgeSessionManager {
 
       let capturedText = "";
       try {
-        // 非 vision 模型：静默剥离图片，只发文字
-        // 注意：bridge session 可能不属于 focus agent，必须传入该 session 对应 agent 的 overrides
+        // 外部桥接与主聊天保持一致：只转发真实模型输出，不做补写、
+        // 伪工具清洗或二次提示重试，避免 Brain 以兜底名义改写模型结果。
         const first = await runBridgeAttempt(effectivePrompt);
         capturedText = first.capturedText;
-        if (!first.sawToolCall && containsPseudoToolCallSimulation(capturedText)) {
-          debugLog()?.warn("bridge", "pseudo tool simulation detected; sanitizing without model retry");
-          capturedText = stripPseudoToolCallMarkup(capturedText);
-        }
-        if (!String(capturedText || "").trim()) {
-          debugLog()?.warn("bridge", `empty bridge reply detected, retrying once as plain text · route=${routeIntent}`);
-          const retry = await runBridgeAttempt(buildEmptyReplyRetryPrompt(effectivePrompt, routeIntent), { streamDeltas: false });
-          capturedText = retry.capturedText || capturedText;
-        }
       } finally {
         this._activeSessions.delete(sessionKey);
       }
@@ -451,24 +436,7 @@ export class BridgeSessionManager {
         this.writeIndex(index, agent);
       }
 
-      const finalText = sanitizeAssistantTextContent(capturedText).trim();
-      if (finalText) return finalText;
-      // [BRIDGE-OVERSANITIZE-FALLBACK v1 · 2026-05-01] sanitize 剥空但 raw capturedText 有内容时,
-      // 说明 stripPseudoToolCallMarkup 误删(常见于 A3B 长 history wechat 桥接,
-      // 输出含被误判的 markdown / 模板格式)。返回 raw 比触发"本轮没生成可见答案"兜底更可用。
-      const rawCaptured = String(capturedText || "").trim();
-      if (rawCaptured.length >= 50) {
-        debugLog()?.warn(
-          "bridge",
-          `sanitize stripped to empty (raw=${rawCaptured.length}ch · route=${routeIntent}); returning raw to avoid empty fallback`,
-        );
-        return rawCaptured;
-      }
-      return buildEmptyReplyFallbackText({
-        routeIntent,
-        originalPromptText: effectivePrompt,
-        effectivePromptText: effectivePrompt,
-      });
+      return String(capturedText || "").trim();
     } catch (err) {
       console.error(`[bridge-session] external message failed (${sessionKey}):`, err.message);
       return { __bridgeError: true, message: err.message };

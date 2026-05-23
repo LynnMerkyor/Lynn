@@ -295,82 +295,15 @@ function stripToolCodeMarkup(raw) {
 // ── Public API ──
 
 export function containsPseudoToolSimulation(raw) {
-  const text = String(raw || "");
-  if (!text) return false;
-  return PSEUDO_PATTERNS.some((p) => p.detect(text));
+  void raw;
+  return false;
 }
 
 export function countPseudoToolMarkers(raw) {
-  const text = String(raw || "");
-  if (!text) return 0;
-  return PSEUDO_PATTERNS.reduce((sum, p) => sum + p.count(text), 0);
+  void raw;
+  return 0;
 }
 
 export function stripPseudoToolCallMarkup(raw) {
-  let text = stripToolCodeMarkup(raw);
-  if (!text) return "";
-
-  // Strip leaked thinking tag boundaries; actual thinking content is handled upstream.
-  text = text.replace(THINK_TAG_RE, "");
-
-  // Strip Qwen-style tool call markup
-  text = text.replace(QWEN_TOOL_CALL_SECTION_RE, "");
-  text = text.replace(QWEN_TOOL_CODE_BLOCK_RE, "");
-  text = text.replace(QWEN_TOOL_CALL_MARKER_RE, "");
-  text = text.replace(QWEN_TOOL_CODE_MARKER_RE, "");
-
-  // Strip pipe-numbered
-  text = text.replace(PIPE_NUMBERED_PSEUDO_TOOL_RE, "");
-  text = text.replace(TRAILING_PIPE_NUM_RE, "");
-
-  // Strip tool_params fence
-  text = text.replace(TOOL_PARAMS_FENCE_RE, "");
-  text = text.replace(TOOL_NAME_JSON_ARGS_BLOCK_RE, "");
-
-  // Strip template tags
-  text = text.replace(TEMPLATE_TOOL_TAG_GLOBAL_RE, "");
-  text = text.replace(ORPHAN_TEMPLATE_FRAGMENT_RE, "");
-
-  // Apply inline patterns
-  text = text.replace(REPEATED_READ_TOOL_ERROR_RE, "");
-
-  // Per-line stripping
-  text = text
-    .split("\n")
-    .map((line) => {
-      let cleaned = String(line ?? "");
-      if (READ_TOOL_LEAK_RE.test(cleaned)) return "";
-      if (ARG_LINE_PSEUDO_RE.test(cleaned)) return "";
-      if (PSEUDO_SHELL_LINE_RE.test(cleaned) || BARE_PSEUDO_COMMAND_LINE_RE.test(cleaned)) return "";
-      if (looksLikeStandalonePseudoToolCall(cleaned)) return "";
-      // Clean inline tags on non-standalone lines
-      ORPHAN_TEMPLATE_FRAGMENT_RE.lastIndex = 0;
-      const hasKnownToolXmlTag = testPattern(KNOWN_TOOL_XML_TAG_GLOBAL_RE, cleaned);
-      if (!hasKnownToolXmlTag && !PSEUDO_TOOL_TAG_RE.test(cleaned) && !TEMPLATE_TOOL_TAG_RE.test(cleaned) && !ORPHAN_TEMPLATE_FRAGMENT_RE.test(cleaned)) return cleaned;
-      ORPHAN_TEMPLATE_FRAGMENT_RE.lastIndex = 0;
-      cleaned = cleaned
-        .replace(KNOWN_TOOL_XML_TAG_GLOBAL_RE, "")
-        .replace(TEMPLATE_TOOL_TAG_GLOBAL_RE, "")
-        .replace(PSEUDO_TOOL_TAG_GLOBAL_RE, "")
-        .replace(FUNCTION_PARAM_GLOBAL_RE, "")
-        .replace(ORPHAN_TEMPLATE_FRAGMENT_RE, "");
-      return cleaned
-        .replace(
-          /^\s*(?:[a-z_][\w:-]*)(?:\s+[a-z_][\w:-]*=(?:"[^"]*"|'[^']*'|`[^`]*`|[^\s]+))+\s*/i,
-          "",
-        )
-        .replace(/^\s*\/?(?:[a-z_][\w:-]*)\s*$/i, "");
-    })
-    .join("\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n");
-
-  // Per-paragraph: remove standalone pseudo calls
-  text = text
-    .split(/\n\s*\n/)
-    .map((p) => p.trim())
-    .filter((p) => p && !looksLikeStandalonePseudoToolCall(p))
-    .join("\n\n");
-
-  return text;
+  return String(raw || "");
 }

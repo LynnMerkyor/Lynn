@@ -216,6 +216,7 @@ function InputAreaInner() {
   const attachedFiles = useStore(s => s.attachedFiles);
   const quotedSelection = useStore(s => s.quotedSelection);
   const models = useStore(s => s.models);
+  const currentModelRef = useStore(s => s.currentModel);
   const agentYuan = useStore(s => s.agentYuan);
   const thinkingLevel = useStore(s => s.thinkingLevel);
   const setThinkingLevel = useStore(s => s.setThinkingLevel);
@@ -236,10 +237,33 @@ function InputAreaInner() {
   const setActivePanel = useStore(s => s.setActivePanel);
   const setPendingConfirm = useStore(s => s.setPendingConfirm);
 
-  const currentModelInfo = useMemo(() => models.find(m => m.isCurrent), [models]);
-  const activeModelInfo = currentModelInfo || (models.length > 0 ? models[0] : null);
-  const selectorModels = models;
-  const noModelsAtAll = models.length === 0;
+  const effectiveModels = useMemo(() => {
+    if (!currentModelRef?.id) return models;
+    if (models.some(m => m.isCurrent)) return models;
+    const sameModel = (m: { id?: string; provider?: string }) =>
+      m.id === currentModelRef.id && (m.provider || '') === (currentModelRef.provider || '');
+    if (models.some(sameModel)) {
+      return models.map(m => sameModel(m) ? { ...m, isCurrent: true } : m);
+    }
+    const isDefaultBrain = currentModelRef.provider === 'brain' && currentModelRef.id === 'lynn-brain-router';
+    return [
+      {
+        id: currentModelRef.id,
+        provider: currentModelRef.provider,
+        name: isDefaultBrain ? '默认模型' : currentModelRef.id,
+        isCurrent: true,
+        reasoning: true,
+        contextWindow: isDefaultBrain ? 128000 : undefined,
+        maxTokens: isDefaultBrain ? 8192 : undefined,
+      },
+      ...models,
+    ];
+  }, [currentModelRef, models]);
+  const currentModelInfo = useMemo(() => effectiveModels.find(m => m.isCurrent), [effectiveModels]);
+  const activeModelInfo = currentModelInfo || (effectiveModels.length > 0 ? effectiveModels[0] : null);
+  const selectorModels = effectiveModels;
+  const noModelsAtAll = selectorModels.length === 0;
+  const showModelConfigHint = noModelsAtAll || (models.length <= 1 && !currentModelRef?.id);
   const supportsVision = activeModelInfo?.vision !== false && activeModelInfo !== null;
   const translatedInlineNotice = useMemo(() => {
     if (!inlineNotice) return null;
@@ -330,10 +354,11 @@ function InputAreaInner() {
     const idle = Math.max(0, slots.total - busy);
     return busy > 0 ? `生成中 ${busy}/${slots.total}` : `可用 ${idle}/${slots.total}`;
   }, [localQwenStatus?.runtime?.slots]);
+  const localQwenBusySlots = Number(localQwenStatus?.runtime?.slots?.busy || 0);
   const localQwenMetricSummary = localQwenMetricsReady
     ? (localQwenMetricTokens > 0 ? `${localQwenMetricTokens.toLocaleString()} tok` : '0 tok')
     : '统计同步中';
-  const localQwenColdStartLikely = localQwenRunning && localQwenCurrent && localQwenMetricTokens < 800;
+  const localQwenColdStartLikely = localQwenRunning && localQwenCurrent && localQwenBusySlots > 0 && localQwenMetricTokens < 800;
   const localQwenWarmupStage = localQwenRunning
     ? 'ready'
     : localQwenStarting
@@ -387,6 +412,17 @@ function InputAreaInner() {
   useEffect(() => {
     if (inputFocusTrigger > 0) textareaRef.current?.focus();
   }, [inputFocusTrigger]);
+
+  useEffect(() => {
+    if (!serverReady || models.length > 0) return;
+    void loadModels();
+    const retry = window.setTimeout(() => {
+      if (useStore.getState().models.length === 0) {
+        void loadModels();
+      }
+    }, 1500);
+    return () => window.clearTimeout(retry);
+  }, [models.length, serverReady]);
 
   const refreshLocalQwenStatus = useCallback(async () => {
     try {
@@ -1776,7 +1812,7 @@ function InputAreaInner() {
                 localQwenRunning={localQwenRunning}
                 localQwenLoading={localQwenLoading}
               />
-              {(noModelsAtAll || models.length <= 1) && (
+              {showModelConfigHint && (
                 <button
                   type="button"
                   className={styles['model-upgrade-btn']}

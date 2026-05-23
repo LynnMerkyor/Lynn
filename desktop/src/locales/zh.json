@@ -201,7 +201,9 @@
     "more": "更多",
     "empty": "空",
     "edit": "编辑",
-    "delete": "删除"
+    "delete": "删除",
+    "editResend": "编辑重发",
+    "editResendTitle": "编辑后重发(把这条消息复制到输入框,改完按 Enter 重新发送)"
   },
   "chat": {
     "thinking": "正在思考...",
@@ -211,6 +213,7 @@
     "browserScreenshot": "浏览器截图",
     "compacting": "上下文压缩中",
     "needWsConnection": "与助手连接已断开，请等待重连或点击状态栏「重新连接」",
+    "waitForCurrentReply": "当前回复还没结束，请等本轮结束后再发下一条。",
     "retry": "Retry",
     "emptyAnswerHint": "模型只想了想，没说出话来。可以点重试再试一次。",
     "emptyAnswerRetry": "重试"
@@ -847,7 +850,9 @@
       "changeAvatar": "更换",
       "userNameHint": "Ta 怎么称呼你",
       "userProfile": "用户档案",
-      "userProfileHint": "让助手了解你：兴趣、习惯、偏好等，会注入到系统提示词中"
+      "userProfileHint": "让助手了解你：兴趣、习惯、偏好等，会注入到系统提示词中",
+      "defaultProviderHint": "一键在本地 9B 和云端模型之间切换。",
+      "openProviders": "打开 Providers →"
     },
     "crop": {
       "title": "调整头像",
@@ -1074,7 +1079,9 @@
       "verified": "验证通过，已保存 ✿",
       "verifyFailed": "验证失败",
       "noProvider": "请先选择搜索引擎",
-      "noKey": "请先输入 API Key"
+      "noKey": "请先输入 API Key",
+      "placeholder": "搜索设置…",
+      "empty": "没有匹配的标签"
     },
     "work": {
       "title": "巡检",
@@ -1137,9 +1144,9 @@
       "noUser": "暂无自定义技能",
       "copyToSkills": "复制到我的技能",
       "copied": "已复制 ✓",
-    "copyFailed": "复制失败",
-    "dropzone": "拖入技能文件夹安装，或点击选择",
-    "learnHint": "试着对助手说：帮我从 GitHub 上找一些安全并且有用的技能",
+      "copyFailed": "复制失败",
+      "dropzone": "拖入技能文件夹安装，或点击选择",
+      "learnHint": "试着对助手说：帮我从 GitHub 上找一些安全并且有用的技能",
       "reloaded": "技能已刷新",
       "reload": "刷新技能",
       "compatTitle": "兼容技能",
@@ -1250,6 +1257,11 @@
         "将 App ID 和 App Secret 粘贴到上方输入框，打开开关即可"
       ],
       "whatsappHint": "即将支持"
+    },
+    "shortcuts": {
+      "title": "键盘快捷键",
+      "globalSummon": "全局唤起",
+      "globalSummonHint": "在「语音」标签可改键。若被其他 App 占用,Lynn 会自动回退到 Cmd/Ctrl+Opt+J。"
     }
   },
   "onboarding": {
@@ -1377,7 +1389,11 @@
       "errorAll": "所有镜像都失败了，请检查网络后重试",
       "errorGeneric": "下载出错：{reason}",
       "next": "下一步",
-      "back": "上一步"
+      "back": "上一步",
+      "modelPreparedHint": "模型和 llama.cpp 已就绪,点击启动即可切换到本地 9B。",
+      "statusReady": "可启动",
+      "statusWaiting": "待准备",
+      "runtimeLocal9B": "本地 9B"
     },
     "tutorial": {
       "interactive": {
@@ -1423,7 +1439,8 @@
       },
       "finish": "开始使用",
       "quickFinish": "直接进入 Lynn"
-    }
+    },
+    "skipSetup": "跳过引导"
   },
   "activity": {
     "title": "助手活动",
@@ -1564,7 +1581,7 @@
     "missingParam": "缺少 {param} 参数",
     "invalidJson": "请求体必须是 JSON 对象",
     "sessionNotFound": "Session 文件不存在",
-    "stillStreaming": "{name} 还在说话，请等一下",
+    "stillStreaming": "{name} 还在回复，请等本轮结束后再发下一条",
     "agentNameEmpty": "助手名字不能为空",
     "agentIdInvalid": "助手 ID 包含非法字符",
     "agentAlreadyExists": "助手 \"{id}\" 已存在",

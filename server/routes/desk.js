@@ -7,6 +7,7 @@
  */
 
 import fs from "fs";
+import fsp from "fs/promises";
 import path from "path";
 import os from "os";
 import { execSync, execFileSync } from "child_process";
@@ -65,6 +66,28 @@ function isApprovedDir(dir, engine) {
   });
 }
 
+function isApprovedDirStringOnly(dir, engine) {
+  if (typeof dir !== "string" || dir.includes("\0")) return false;
+  const resolved = path.resolve(dir);
+  const approved = [
+    engine.deskCwd,
+    engine.homeCwd,
+    os.homedir(),
+  ].filter(Boolean).map((root) => path.resolve(root));
+  return approved.some((root) => {
+    const rel = path.relative(root, resolved);
+    return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+  });
+}
+
+function isInsidePathStringOnly(target, baseDir) {
+  if (typeof target !== "string" || target.includes("\0")) return false;
+  const base = path.resolve(baseDir);
+  const resolved = path.resolve(target);
+  const rel = path.relative(base, resolved);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
 /** 敏感 dot 目录（不允许 upload 从这些目录复制文件） */
 const SENSITIVE_DIRS = [".ssh", ".gnupg", ".aws", ".config/gcloud", ".kube"];
 
@@ -83,8 +106,20 @@ function isSensitivePath(srcPath, lynnHome) {
   return false;
 }
 
-/** 列出工作空间目录下的文件 */
-function listWorkspaceFiles(dir) {
+function withTimeout(promise, ms, fallback) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve(fallback), ms);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+/** 列出工作空间目录下的文件。这个接口是启动热路径，禁止同步 readdir/stat 卡死主线程。 */
+async function listWorkspaceFiles(dir) {
   const HOVER_IGNORE_NAMES = new Set([
     "__pycache__",
     "node_modules",
@@ -95,19 +130,27 @@ function listWorkspaceFiles(dir) {
     ".pytest_cache",
   ]);
   if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir, { withFileTypes: true })
+  const entries = await withTimeout(
+    fsp.readdir(dir, { withFileTypes: true }),
+    800,
+    [],
+  );
+  if (!Array.isArray(entries) || entries.length === 0) return [];
+  const visibleEntries = entries
     .filter(e => !e.name.startsWith(".") && !HOVER_IGNORE_NAMES.has(e.name))
-    .map(e => {
-      const fullPath = path.join(dir, e.name);
-      const stat = fs.statSync(fullPath);
-      return {
-        name: e.name,
-        size: stat.size,
-        mtime: stat.mtime.toISOString(),
-        isDir: e.isDirectory(),
-      };
-    })
-    .sort((a, b) => new Date(b.mtime) - new Date(a.mtime));
+    .slice(0, 300);
+  const now = new Date(0).toISOString();
+  const files = await Promise.all(visibleEntries.map(async (entry) => {
+    const fullPath = path.join(dir, entry.name);
+    const stat = await withTimeout(fsp.stat(fullPath), 300, null);
+    return {
+      name: entry.name,
+      size: stat?.size || 0,
+      mtime: stat?.mtime?.toISOString?.() || now,
+      isDir: entry.isDirectory(),
+    };
+  }));
+  return files.sort((a, b) => new Date(b.mtime) - new Date(a.mtime));
 }
 
 export function createDeskRoute(engine, hub) {
@@ -274,7 +317,13 @@ export function createDeskRoute(engine, hub) {
   route.post("/desk/heartbeat", async (c) => {
     const hb = hub?.scheduler?.heartbeat;
     if (!hb) return c.json({ error: "Heartbeat not initialized" });
-    hb.triggerNow();
+    setTimeout(() => {
+      try {
+        hb.triggerNow();
+      } catch (err) {
+        console.warn("[desk] heartbeat trigger failed:", err?.message || err);
+      }
+    }, 0);
     return c.json({ ok: true, message: t("error.heartbeatTriggered") });
   });
 
@@ -625,27 +674,23 @@ export function createDeskRoute(engine, hub) {
     }
     const target = subdir ? path.join(dir, subdir) : dir;
     if (!isInsidePath(target, dir)) return c.json({ error: "invalid path" });
-    return c.json({ files: listWorkspaceFiles(target), subdir: subdir || "", basePath: dir });
+    return c.json({ files: await listWorkspaceFiles(target), subdir: subdir || "", basePath: dir });
   });
 
   /** 读取指定目录的 jian.md */
   route.get("/desk/jian", async (c) => {
     const dir = c.req.query("dir") ? decodeURIComponent(c.req.query("dir")) : engine.deskCwd;
     if (!dir) return c.json({ content: null });
-    if (c.req.query("dir") && !isApprovedDir(dir, engine)) return c.json({ error: t("error.dirNotAllowed") });
+    if (c.req.query("dir") && !isApprovedDirStringOnly(dir, engine)) return c.json({ error: t("error.dirNotAllowed") });
     const subdir = c.req.query("subdir") || "";
     if (subdir && (subdir.includes("\\") || subdir.includes("..") || subdir.startsWith("."))) {
       return c.json({ error: "invalid subdir" });
     }
     const target = subdir ? path.join(dir, subdir) : dir;
-    if (!isInsidePath(target, dir)) return c.json({ error: "invalid path" });
+    if (!isInsidePathStringOnly(target, dir)) return c.json({ error: "invalid path" });
     const jianPath = path.join(target, "jian.md");
-    if (!fs.existsSync(jianPath)) return c.json({ content: null });
-    try {
-      return c.json({ content: fs.readFileSync(jianPath, "utf-8") });
-    } catch {
-      return c.json({ content: null });
-    }
+    const content = await withTimeout(fsp.readFile(jianPath, "utf-8"), 800, null).catch(() => null);
+    return c.json({ content });
   });
 
   /** 保存指定目录的 jian.md（自动创建 / 内容为空时删除） */
@@ -725,7 +770,7 @@ export function createDeskRoute(engine, hub) {
             results.push({ src: srcPath, error: err.message });
           }
         }
-        return c.json({ ok: true, results, files: listWorkspaceFiles(dir) });
+        return c.json({ ok: true, results, files: await listWorkspaceFiles(dir) });
       }
 
       case "create": {
@@ -735,7 +780,7 @@ export function createDeskRoute(engine, hub) {
         const createTarget = path.join(dir, path.basename(name));
         if (!isInsidePath(createTarget, dir)) return c.json({ error: "invalid name" });
         fs.writeFileSync(createTarget, content, "utf-8");
-        return c.json({ ok: true, files: listWorkspaceFiles(dir) });
+        return c.json({ ok: true, files: await listWorkspaceFiles(dir) });
       }
 
       case "mkdir": {
@@ -744,7 +789,7 @@ export function createDeskRoute(engine, hub) {
         if (!isInsidePath(mkTarget, dir)) return c.json({ error: "invalid name" });
         if (fs.existsSync(mkTarget)) return c.json({ error: "already exists" });
         fs.mkdirSync(mkTarget, { recursive: true });
-        return c.json({ ok: true, files: listWorkspaceFiles(dir) });
+        return c.json({ ok: true, files: await listWorkspaceFiles(dir) });
       }
 
       case "rename": {
@@ -755,7 +800,7 @@ export function createDeskRoute(engine, hub) {
         if (!fs.existsSync(src)) return c.json({ error: "not found" });
         if (fs.existsSync(dest)) return c.json({ error: "target already exists" });
         fs.renameSync(src, dest);
-        return c.json({ ok: true, files: listWorkspaceFiles(dir) });
+        return c.json({ ok: true, files: await listWorkspaceFiles(dir) });
       }
 
       case "move": {
@@ -786,7 +831,7 @@ export function createDeskRoute(engine, hub) {
             results.push({ name: n, error: err.message });
           }
         }
-        return c.json({ ok: true, results, files: listWorkspaceFiles(dir) });
+        return c.json({ ok: true, results, files: await listWorkspaceFiles(dir) });
       }
 
       case "remove": {
@@ -795,7 +840,7 @@ export function createDeskRoute(engine, hub) {
         if (!isInsidePath(rmTarget, dir)) return c.json({ error: "invalid name" });
         if (!fs.existsSync(rmTarget)) return c.json({ error: "not found" });
         fs.rmSync(rmTarget, { recursive: true, force: true });
-        return c.json({ ok: true, files: listWorkspaceFiles(dir) });
+        return c.json({ ok: true, files: await listWorkspaceFiles(dir) });
       }
 
       default:

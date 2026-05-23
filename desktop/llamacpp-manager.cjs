@@ -248,12 +248,20 @@ class LlamaCppManager {
   // ── Server spawn ──
 
   binarySupportsFlag(flag) {
-    try {
-      const out = spawnSync(this.binaryPath, ["--help"], { encoding: "utf8", timeout: 2500 });
-      return `${out.stdout || ""}\n${out.stderr || ""}`.includes(flag);
-    } catch {
-      return false;
+    // #34: cache --help output per-binary-path to avoid 50-200ms spawn on every server start
+    if (!this._helpCache) this._helpCache = new Map();
+    const cached = this._helpCache.get(this.binaryPath);
+    let helpText = cached;
+    if (!helpText) {
+      try {
+        const out = spawnSync(this.binaryPath, ["--help"], { encoding: "utf8", timeout: 2500 });
+        helpText = `${out.stdout || ""}\n${out.stderr || ""}`;
+        this._helpCache.set(this.binaryPath, helpText);
+      } catch {
+        return false;
+      }
     }
+    return helpText.includes(flag);
   }
 
   buildServerArgs() {

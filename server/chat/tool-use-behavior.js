@@ -1,4 +1,3 @@
-import { buildLocalOfficeDirectAnswer } from "./local-office-answer.js";
 import {
   buildQuickTranslationPrompt,
   detectQuickTranslationIntent,
@@ -17,7 +16,6 @@ import {
 
 export const TOOL_USE_BEHAVIOR = Object.freeze({
   RUN_LLM_AGAIN: "run_llm_again",
-  STOP_WITH_DIRECT_ANSWER: "stop_with_direct_answer",
   PREFETCH_THEN_RUN_OR_STOP: "prefetch_then_run_or_stop",
 });
 
@@ -33,17 +31,9 @@ export function resolveInitialToolUseBehavior(promptText, opts = {}) {
     };
   }
 
-  const directAnswer = buildLocalOfficeDirectAnswer(text);
-  if (directAnswer) {
-    return {
-      behavior: TOOL_USE_BEHAVIOR.STOP_WITH_DIRECT_ANSWER,
-      reason: "local_office_direct_answer",
-      directAnswer,
-      reportKind: "",
-      budgetContext: "",
-      effectivePromptText: text,
-    };
-  }
+  // V0.79: do not short-circuit with handcrafted answers. The model should
+  // produce the user-visible response; this layer may add context, but should
+  // not replace model output.
 
   const translationIntent = detectQuickTranslationIntent(text);
   if (translationIntent) {
@@ -62,12 +52,12 @@ export function resolveInitialToolUseBehavior(promptText, opts = {}) {
     ? `${budgetContext}\n\n【用户原始问题】\n${text}`
     : text;
   const suppressLocalPrefetch = shouldSuppressLocalToolPrefetch(text);
-  const isBrainModel = Boolean(opts.modelInfo?.isBrain);
 
-  // Brain v2 owns realtime/search/research evidence collection. Keep the local
-  // prefetch stage only as a BYOK/non-Brain safety net; otherwise the client can
-  // feed shallow evidence that competes with Brain's multi-step synthesis.
-  if (!isBrainModel && !suppressLocalPrefetch && shouldPrefetchReportContext(reportKind, opts.modelInfo)) {
+  // Treat Brain/default the same way as BYOK for deterministic realtime
+  // evidence. This does not replace the model answer; it only supplies the
+  // current facts so a slow remote tool chain cannot turn weather/market asks
+  // into an invisible timeout.
+  if (!suppressLocalPrefetch && shouldPrefetchReportContext(reportKind, opts.modelInfo)) {
     return {
       behavior: TOOL_USE_BEHAVIOR.PREFETCH_THEN_RUN_OR_STOP,
       reason: "report_context_prefetch",

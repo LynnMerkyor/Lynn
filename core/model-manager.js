@@ -21,6 +21,7 @@ import { ExecutionRouter } from "./execution-router.js";
 import { findModel } from "../shared/model-ref.js";
 import { isLocalBaseUrl } from "../shared/net-utils.js";
 import { syncModels } from "./model-sync.js";
+import { BRAIN_PROVIDER_ID } from "../shared/brain-provider.js";
 
 export class ModelManager {
   /**
@@ -188,9 +189,12 @@ export class ModelManager {
     return model;
   }
 
-  /** auto -> medium，其余原样 */
-  resolveThinkingLevel(level) {
-    return level === "auto" ? "medium" : level;
+  /** auto -> medium by default; Brain keeps auto fast unless the user explicitly asks for deeper reasoning. */
+  resolveThinkingLevel(level, model = null) {
+    const rawLevel = level || "auto";
+    const provider = String(model?.provider || "").trim();
+    if (provider === BRAIN_PROVIDER_ID && rawLevel === "auto") return "off";
+    return rawLevel === "auto" ? "medium" : rawLevel;
   }
 
   /**

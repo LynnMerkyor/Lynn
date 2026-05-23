@@ -211,24 +211,32 @@ class ModelDownloader extends EventEmitter {
 
   _beginNextSource() {
     if (this.aborted) return;
-    // Find next un-attempted source.
-    const nextIdx = this.sources.findIndex((s, idx) => idx > this.activeSourceIndex && !this.attemptedSources.has(s.id));
-    if (nextIdx === -1) {
-      // try first un-attempted from start (rotation)
-      const firstFresh = this.sources.findIndex((s) => !this.attemptedSources.has(s.id));
-      if (firstFresh === -1) {
-        this._fail("all-sources-failed");
-        return;
-      }
-      this.activeSourceIndex = firstFresh;
-    } else {
-      this.activeSourceIndex = nextIdx;
+    // #4: per-source retry budget — each source can be tried up to PER_SOURCE_RETRIES times
+    // before being marked exhausted. Survives a single transient mirror outage during
+    // a 5+GB download instead of declaring "all-sources-failed" after one round.
+    const PER_SOURCE_RETRIES = Number(process.env.LYNN_DOWNLOAD_SOURCE_RETRIES || 3);
+    if (!this._sourceAttemptCounts) this._sourceAttemptCounts = new Map();
+    const exhausted = (s) => (this._sourceAttemptCounts.get(s.id) || 0) >= PER_SOURCE_RETRIES;
+
+    // Find next non-exhausted source, prefer rotation order.
+    let chosen = -1;
+    for (let offset = 1; offset <= this.sources.length; offset++) {
+      const idx = (this.activeSourceIndex + offset) % this.sources.length;
+      if (!exhausted(this.sources[idx])) { chosen = idx; break; }
     }
+    if (chosen === -1) {
+      // All sources exhausted across all retries.
+      this._fail("all-sources-failed");
+      return;
+    }
+    this.activeSourceIndex = chosen;
     const src = this.sources[this.activeSourceIndex];
-    this.attemptedSources.add(src.id);
+    const attempt = (this._sourceAttemptCounts.get(src.id) || 0) + 1;
+    this._sourceAttemptCounts.set(src.id, attempt);
+    this.attemptedSources.add(src.id); // legacy field kept for backward compat (status reporting)
     this.activeSourceLabel = src.label;
-    this._log("info", `[download] starting source=${src.label} url=${src.url}`);
-    this._setState("downloading", { sourceLabel: src.label });
+    this._log("info", `[download] starting source=${src.label} (attempt ${attempt}/${PER_SOURCE_RETRIES}) url=${src.url}`);
+    this._setState("downloading", { sourceLabel: src.label, sourceAttempt: attempt });
     const canTryParallel = this.parallelSegments > 1
       && this.expectedSize > 0
       && safeStatSize(this.partPath) === 0;
@@ -237,9 +245,11 @@ class ModelDownloader extends EventEmitter {
       : this._downloadFromSource(src.url, 0);
     task.catch((err) => {
       if (this.aborted || this.paused) return;
-      this._log("warn", `[download] source ${src.label} failed: ${err?.message || err}`);
+      this._log("warn", `[download] source ${src.label} attempt ${attempt} failed: ${err?.message || err}`);
       this._teardownActive();
-      this._beginNextSource();
+      // Brief jitter before next attempt to avoid thundering retry
+      const jitterMs = 500 + Math.floor(Math.random() * 1500);
+      setTimeout(() => this._beginNextSource(), jitterMs);
     });
   }
 

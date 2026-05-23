@@ -10,9 +10,14 @@ interface Props {
   content: string;
   sealed: boolean;
   modelLabel?: string | null;
+  // #12: explicit capability flag — preferred over modelLabel regex (regex breaks on model rename).
+  // Falls back to regex on modelLabel when not provided. Caller can wire from provider meta.
+  isLocalProvider?: boolean;
 }
 
 const MAX_THINKING_TRANSLATE_CHARS = 3_000;
+const TRANSLATE_CHUNK_CHARS = 2_500; // #29: chunked translate ceiling per request
+const MAX_TRANSLATE_CHUNKS = 8;       // #29: cap total chunks (≈ 20K char absolute ceiling)
 
 function formatElapsed(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -21,7 +26,7 @@ function formatElapsed(ms: number): string {
   return `${m}m${s % 60}s`;
 }
 
-export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, modelLabel }: Props) {
+export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, modelLabel, isLocalProvider }: Props) {
   const t = useMemo(() => window.t ?? ((p: string) => p), []);
   // Keep raw provider thinking opt-in. Some providers stream internal thoughts in
   // English, so default-collapsing prevents that text from reading like the answer.
@@ -31,7 +36,9 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
   const [translateBusy, setTranslateBusy] = useState(false);
   const [translateError, setTranslateError] = useState<string | null>(null);
   const startRef = useRef(Date.now());
-  const isLocalModelThinking = /local-qwen35|qwen35-9b|Qwen3\.5-9B|本地\s*9B/i.test(modelLabel || "");
+  // #12: prefer explicit prop; fallback to regex (kept for callers not yet passing the flag)
+  const isLocalModelThinking = isLocalProvider === true
+    || (isLocalProvider !== false && /local-qwen35|qwen35-9b|Qwen3\.5-9B|本地\s*9B/i.test(modelLabel || ""));
   const isLocalProgressThinking = isLocalModelThinking || /本地\s*9B|本地模型|llama\.cpp|等待工具/.test(content || "");
   const isLocalColdStartThinking = /首次启动|第一问|暖机|等待首字/.test(content || "");
   // Local cold-start notes are user-facing progress, not private reasoning.
@@ -85,29 +92,57 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
       setTranslateError('思考完成后再翻译。');
       return;
     }
-    if (content.length > MAX_THINKING_TRANSLATE_CHARS) {
-      setTranslateError(`思考内容超过 ${MAX_THINKING_TRANSLATE_CHARS} 字，请先复制需要的片段再翻译。`);
-      setExplicitOpen(true);
-      return;
-    }
+    // #29: chunked translate for long thinking (was: hard reject > 3000)
     setTranslateBusy(true);
     setTranslateError(null);
     setExplicitOpen(true);
     try {
-      const res = await hanaFetch('/api/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: content,
-          targetLanguage: '中文',
-        }),
-        timeout: 70_000,
-      });
-      const data = await res.json().catch(() => null) as { text?: string; error?: string; message?: string } | null;
-      if (!res.ok || !data?.text) {
-        throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+      // Split into ≤ MAX_TRANSLATE_CHUNKS chunks of ≤ TRANSLATE_CHUNK_CHARS each at sentence boundaries
+      const splitIntoChunks = (text: string): string[] => {
+        if (text.length <= TRANSLATE_CHUNK_CHARS) return [text];
+        const chunks: string[] = [];
+        let remaining = text;
+        while (remaining.length > 0 && chunks.length < MAX_TRANSLATE_CHUNKS) {
+          if (remaining.length <= TRANSLATE_CHUNK_CHARS) {
+            chunks.push(remaining);
+            break;
+          }
+          // find last sentence boundary within window
+          const window = remaining.slice(0, TRANSLATE_CHUNK_CHARS);
+          const lastBoundary = Math.max(
+            window.lastIndexOf('. '),
+            window.lastIndexOf('.\n'),
+            window.lastIndexOf('。'),
+            window.lastIndexOf('！'),
+            window.lastIndexOf('？'),
+            window.lastIndexOf('\n\n'),
+          );
+          const cut = lastBoundary > TRANSLATE_CHUNK_CHARS * 0.5 ? lastBoundary + 1 : TRANSLATE_CHUNK_CHARS;
+          chunks.push(remaining.slice(0, cut));
+          remaining = remaining.slice(cut).trimStart();
+        }
+        return chunks;
+      };
+
+      const chunks = splitIntoChunks(content);
+      const wasTruncated = content.length > TRANSLATE_CHUNK_CHARS * MAX_TRANSLATE_CHUNKS;
+      const pieces: string[] = [];
+      for (let i = 0; i < chunks.length; i++) {
+        const res = await hanaFetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: chunks[i], targetLanguage: '中文' }),
+          timeout: 70_000,
+        });
+        const data = await res.json().catch(() => null) as { text?: string; error?: string; message?: string } | null;
+        if (!res.ok || !data?.text) {
+          throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+        }
+        pieces.push(data.text);
       }
-      setTranslated(data.text);
+      const combined = pieces.join('\n\n') + (wasTruncated ? '\n\n[已截至前 ' + (TRANSLATE_CHUNK_CHARS * MAX_TRANSLATE_CHUNKS) + ' 字]' : '');
+      if (!combined) throw new Error('translation produced empty result');
+      setTranslated(combined);
     } catch (err) {
       setTranslateError(err instanceof Error ? err.message : String(err));
     } finally {

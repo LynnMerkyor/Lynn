@@ -22,7 +22,7 @@ import { READ_ONLY_BUILTIN_TOOLS } from "./config-coordinator.js";
 import { findModel } from "../shared/model-ref.js";
 import { lookupToolTier } from "../shared/known-models.js";
 import { runReadToolPromptInjectionGuardrail } from "./claw-aegis-guardrails.js";
-import { refreshSessionIndex } from "./session-index.js";
+import { SESSION_INDEX_FILENAME, readSessionIndex, refreshSessionIndex } from "./session-index.js";
 import {
   SecurityMode,
   DEFAULT_SECURITY_MODE,
@@ -39,7 +39,6 @@ import { formatProjectInstructions } from "../lib/project-instructions.js";
 import { getBrainDisplayName, isBrainModelRef } from "../shared/brain-provider.js";
 import { getUserFacingModelAlias, getUserFacingRoleModelLabel, resolveRoleDefaultModel } from "../shared/assistant-role-models.js";
 import {
-  buildProviderToolCallHint,
   buildRouteIntentSystemHint,
   classifyRouteIntent,
   normalizeRouteIntent,
@@ -48,10 +47,7 @@ import {
 import { buildScenarioContractHintForText } from "../shared/scenario-contracts.js";
 import {
   isNativeToolCallingDisabled,
-  routeIntentRequiresNativeTools,
 } from "../shared/model-tool-capabilities.js";
-import { stripPseudoToolCallMarkup } from "../shared/pseudo-tool-call.js";
-import { containsPseudoToolCallSimulation } from "./llm-utils.js";
 
 const log = createModuleLogger("session");
 
@@ -120,8 +116,7 @@ function buildScenarioHintContext(text, opts = {}) {
 }
 
 function shouldInjectLocalRoutePromptHints() {
-  const flag = String(process?.env?.LYNN_LOCAL_ROUTE_PROMPT_HINTS || "").trim().toLowerCase();
-  return flag === "1" || flag === "true" || flag === "yes";
+  return false;
 }
 
 function toSessionPromptOptions(images) {
@@ -173,6 +168,133 @@ function filterCustomToolsByTier(customTools, tier) {
   return customTools.filter(t => allowed.has(t.name));
 }
 
+const OPENAI_RESPONSES_TOOL_NAME_RE = /^[a-zA-Z0-9_-]+$/;
+
+function isStrictToolNameModel(model) {
+  const provider = String(model?.provider || "").toLowerCase();
+  const api = String(model?.api || "").toLowerCase();
+  return provider === "openai"
+    || provider === "openai-codex"
+    || provider === "openai-codex-oauth"
+    || api === "openai-responses"
+    || api === "openai-codex-responses";
+}
+
+function sanitizeToolName(name) {
+  const sanitized = String(name || "tool")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+  return sanitized || "tool";
+}
+
+function normalizeCustomToolsForModel(customTools, model) {
+  if (!Array.isArray(customTools) || customTools.length === 0) return [];
+  if (!isStrictToolNameModel(model)) return customTools;
+
+  const seen = new Set();
+  let changed = 0;
+  const normalized = customTools.map((tool) => {
+    const originalName = String(tool?.name || "");
+    let nextName = sanitizeToolName(originalName);
+    let suffix = 2;
+    while (seen.has(nextName)) {
+      const base = nextName.slice(0, Math.max(1, 64 - String(suffix).length - 1));
+      nextName = `${base}_${suffix}`;
+      suffix += 1;
+    }
+    seen.add(nextName);
+    if (OPENAI_RESPONSES_TOOL_NAME_RE.test(originalName) && originalName === nextName) return tool;
+    changed += 1;
+    return { ...tool, name: nextName, _aliasOf: originalName };
+  });
+
+  if (changed > 0) {
+    log.warn(`[model-tools] normalized ${changed}/${customTools.length} tool name(s) for ${model?.provider || "?"}/${model?.id || model?.name || "?"}`);
+  }
+  return normalized;
+}
+
+function shouldSuppressClientToolSchema(model) {
+  return false;
+}
+
+function messageContentText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (!part) return "";
+      if (typeof part === "string") return part;
+      if (typeof part.text === "string") return part.text;
+      if (typeof part.content === "string") return part.content;
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function isRecoverableProviderErrorMessage(message) {
+  if (!message || message.role !== "assistant") return false;
+  if (message.stopReason !== "error") return false;
+  const errorMessage = String(message.errorMessage || "");
+  if (/all providers failed/i.test(errorMessage)) return true;
+  return !messageContentText(message.content).trim();
+}
+
+function isInternalRetryPromptMessage(message) {
+  if (!message || message.role !== "user") return false;
+  const text = messageContentText(message.content).trim();
+  return text.startsWith("[系统提示] 这是空回复后的补救回答")
+    || text.startsWith("[System] This is a recovery answer after an empty model turn");
+}
+
+function isTransientRecoveredToolPlaceholder(message) {
+  if (!message || message.role !== "assistant") return false;
+  const text = messageContentText(message.content).trim();
+  return text === "正在取回工具结果，稍后会整理成回答。";
+}
+
+function sanitizeMessagesBeforePrompt(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return { messages: Array.isArray(messages) ? messages : [], removed: 0 };
+  }
+  const cleaned = [];
+  let removed = 0;
+  for (const message of messages) {
+    if (
+      isRecoverableProviderErrorMessage(message) ||
+      isInternalRetryPromptMessage(message) ||
+      isTransientRecoveredToolPlaceholder(message)
+    ) {
+      removed += 1;
+      continue;
+    }
+    cleaned.push(message);
+  }
+  return { messages: cleaned, removed };
+}
+
+function sanitizeActiveSessionContextForPrompt(session, sessionPath) {
+  const manager = session?.sessionManager;
+  const replaceMessages = session?.agent?.replaceMessages;
+  if (!manager?.buildSessionContext || typeof replaceMessages !== "function") return 0;
+  try {
+    const context = manager.buildSessionContext();
+    const currentMessages = Array.isArray(context?.messages) ? context.messages : [];
+    const { messages, removed } = sanitizeMessagesBeforePrompt(currentMessages);
+    if (removed > 0 && messages.length > 0) {
+      replaceMessages.call(session.agent, messages);
+      log.warn(`[prompt] scrubbed ${removed} transient provider/retry message(s) from active context · session=${sessionPath || "unknown"}`);
+    }
+    return removed;
+  } catch (err) {
+    log.warn(`[prompt] active context scrub failed · session=${sessionPath || "unknown"} · ${err?.message || err}`);
+    return 0;
+  }
+}
+
 /**
  * 推断模型的 toolTier
  * 优先使用 known-models.json 标注，fallback 按 context window 推断
@@ -188,25 +310,6 @@ function resolveToolTier(model) {
   return null;
 }
 
-function findToolCapableFallbackModel(models, agentRole = null, currentModel = null) {
-  const available = models?.availableModels || [];
-  const candidates = [
-    resolveRoleDefaultModel(available, agentRole),
-    models?.defaultModel,
-    findModel(available, "lynn-brain-router", "brain"),
-    ...available.filter((model) => model?.provider === "brain"),
-  ].filter(Boolean);
-
-  const currentKey = currentModel ? `${currentModel.provider || ""}/${currentModel.id || ""}` : "";
-  const seen = new Set();
-  for (const candidate of candidates) {
-    const key = `${candidate.provider || ""}/${candidate.id || ""}`;
-    if (!candidate?.id || seen.has(key) || key === currentKey) continue;
-    seen.add(key);
-    if (!isNativeToolCallingDisabled(candidate)) return candidate;
-  }
-  return null;
-}
 const MAX_CACHED_SESSIONS = 20;
 const SESSION_RELAY_SUMMARY_MAX_CHARS = 4000;
 const DEFAULT_SESSION_RELAY = {
@@ -249,24 +352,8 @@ function createReplyIntegrityTracker() {
   };
 }
 
-function pseudoToolSimulationMessage() {
-  const localized = t("error.invalidToolSimulation");
-  return localized && localized !== "error.invalidToolSimulation"
-    ? localized
-    : "Model emitted an invalid tool-call simulation instead of executing the tool.";
-}
-
-function createPseudoToolSimulationError(replyText = "") {
-  const err = new Error(pseudoToolSimulationMessage());
-  err.code = "INVALID_TOOL_SIMULATION";
-  err.replyText = replyText;
-  return err;
-}
-
 function ensureValidReplyExecution(tracker) {
-  if (!tracker || tracker.sawToolCall) return;
-  if (!containsPseudoToolCallSimulation(tracker.replyText)) return;
-  throw createPseudoToolSimulationError(tracker.replyText);
+  return;
 }
 
 function getBuiltinToolNames(tools) {
@@ -348,6 +435,60 @@ function shouldAttachSkillHint(routeIntent) {
 }
 
 const FILE_MENTION_PATTERN = /\b([A-Za-z0-9_./-]+\.(?:tsx?|jsx?|css|json|md|py|rs|go|java|vue|svelte|swift|kt|kts|c|cc|cpp|h|hpp|m|mm|sql|yaml|yml|toml|sh))\b/gi;
+
+const SESSION_LIST_TIMEOUT_MS = 700;
+const SESSION_STAT_TIMEOUT_MS = 250;
+const SESSION_LIST_MAX_FILES = 600;
+const SESSION_AUX_FILES = new Set([
+  SESSION_INDEX_FILENAME,
+  "session-meta.json",
+  "session-titles.json",
+]);
+
+function withTimeout(promise, ms, fallback) {
+  let timer;
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve(fallback), ms);
+    }),
+  ]);
+}
+
+async function listSessionFileSkeletons(sessionDir, agent) {
+  const entries = await withTimeout(
+    fsp.readdir(sessionDir, { withFileTypes: true }),
+    SESSION_LIST_TIMEOUT_MS,
+    [],
+  );
+  if (!Array.isArray(entries) || entries.length === 0) return [];
+
+  const files = entries
+    .filter((entry) => entry.isFile?.() && entry.name.endsWith(".jsonl") && !SESSION_AUX_FILES.has(entry.name))
+    .map((entry) => entry.name)
+    .sort()
+    .slice(-SESSION_LIST_MAX_FILES);
+
+  const skeletons = await Promise.all(files.map(async (fileName) => {
+    const sessionPath = path.join(sessionDir, fileName);
+    const stat = await withTimeout(fsp.stat(sessionPath), SESSION_STAT_TIMEOUT_MS, null);
+    return {
+      path: sessionPath,
+      title: null,
+      firstMessage: "",
+      modified: stat?.mtime || new Date(0),
+      messageCount: 0,
+      cwd: "",
+      agentId: agent.id,
+      agentName: agent.name,
+      modelId: null,
+      modelProvider: null,
+      pinned: false,
+      labels: [],
+    };
+  }));
+  return skeletons.filter((entry) => entry.path);
+}
 
 function buildAtInjectionPromptHint(text) {
   if (!text || /@\S+/.test(text)) return "";
@@ -467,15 +608,6 @@ export class SessionCoordinator {
           }
           if (sessionEntry._scenarioContractHintContext) {
             extras.push(sessionEntry._scenarioContractHintContext);
-          }
-          const providerToolCallHint = buildProviderToolCallHint({
-            routeIntent: sessionEntry._routeIntentValue,
-            provider: sessionEntry.modelProvider || effectiveModel?.provider || sessionEntry.session?.model?.provider,
-            modelId: sessionEntry.modelId || effectiveModel?.id || sessionEntry.session?.model?.id,
-            locale: getLocale(),
-          });
-          if (providerToolCallHint) {
-            extras.push(providerToolCallHint);
           }
           if (sessionEntry._relaySummaryContext) {
             extras.push(sessionEntry._relaySummaryContext);
@@ -659,14 +791,18 @@ export class SessionCoordinator {
     // P0: 按模型能力裁剪自定义工具集
     const toolTier = resolveToolTier(effectiveModel);
     const nativeToolsDisabled = isNativeToolCallingDisabled(effectiveModel);
+    const suppressClientTools = shouldSuppressClientToolSchema(effectiveModel);
     const filteredCustomTools = filterCustomToolsByTier(sessionCustomTools, toolTier);
-    const effectiveSessionTools = nativeToolsDisabled ? [] : sessionTools;
-    const effectiveCustomTools = nativeToolsDisabled ? [] : filteredCustomTools;
+    const effectiveSessionTools = (nativeToolsDisabled || suppressClientTools) ? [] : sessionTools;
+    const effectiveCustomTools = (nativeToolsDisabled || suppressClientTools) ? [] : normalizeCustomToolsForModel(filteredCustomTools, effectiveModel);
     if (toolTier && toolTier !== "full") {
       log.log(`toolTier=${toolTier}: ${filteredCustomTools.length}/${sessionCustomTools.length} custom tools`);
     }
     if (nativeToolsDisabled) {
       log.warn(`[model-tools] native tool calling disabled for ${effectiveModel?.provider || "?"}/${effectiveModel?.id || effectiveModel?.name || "?"}`);
+    }
+    if (suppressClientTools) {
+      log.log(`[model-tools] using Brain V2 internal tool chain for ${effectiveModel?.provider || "?"}/${effectiveModel?.id || effectiveModel?.name || "?"}; client tool schema suppressed`);
     }
 
     const clientAgentKey = readClientAgentKeyFromPreferencesFile();
@@ -682,7 +818,7 @@ export class SessionCoordinator {
       authStorage: models.authStorage,
       modelRegistry: models.modelRegistry,
       model: effectiveModel,
-      thinkingLevel: models.resolveThinkingLevel(this._d.getPrefs().getThinkingLevel()),
+      thinkingLevel: models.resolveThinkingLevel(this._d.getPrefs().getThinkingLevel(), effectiveModel),
       resourceLoader,
       tools: effectiveSessionTools,
       customTools: effectiveCustomTools,
@@ -723,22 +859,13 @@ export class SessionCoordinator {
           void this._relaySession(mapKey, entryForEvent.compactionCount);
         }
       }
-      // P3: 工具调用连续失败降级追踪
+      // 工具失败只记录事件本身，不再向后续上下文注入“停止使用工具”等
+      // 指令。模型是否继续调用工具应由模型和真实工具结果决定。
       if (event?.type === "tool_execution_end" && entryForEvent) {
-        const toolIsError = Boolean(event.isError || event.result?.isError);
-        if (toolIsError) {
-          entryForEvent._toolFailCount = (entryForEvent._toolFailCount || 0) + 1;
-          if (entryForEvent._toolFailCount >= 3 && !entryForEvent._toolFailDegraded) {
-            entryForEvent._toolFailDegraded = true;
-            const isZhEvt = getLocale().startsWith("zh");
-            entryForEvent._lastRecallContext = isZhEvt
-              ? "【系统提示】工具调用连续失败 3 次。请停止使用工具，用文字向用户说明情况和遇到的问题。"
-              : "[System] Tool calls failed 3 times in a row. Stop using tools and explain the situation to the user in text.";
-          }
-        } else {
-          entryForEvent._toolFailCount = 0;
-          entryForEvent._toolFailDegraded = false;
-        }
+        entryForEvent._toolFailCount = Boolean(event.isError || event.result?.isError)
+          ? (entryForEvent._toolFailCount || 0) + 1
+          : 0;
+        entryForEvent._toolFailDegraded = false;
 
         // ── ClawAegis 输入层：read 工具返回内容 prompt injection 扫描 ──
         const toolName = event.toolName || event.toolCall?.name || "";
@@ -942,6 +1069,7 @@ export class SessionCoordinator {
     // [VISION-ARG-FIX v0.76.6] 当前 session.prompt() 使用 options 形态，
     // 图片需转为 { images: [{ type: "image", source: { type: "base64", mediaType, data } }] }。
     const _promptOpts = toSessionPromptOptions(opts?.images);
+    sanitizeActiveSessionContextForPrompt(this._session, sp);
     const runPromptAttempt = async (attemptText) => {
       const tracker = createReplyIntegrityTracker();
       const unsub = this._session.subscribe((event) => {
@@ -956,12 +1084,7 @@ export class SessionCoordinator {
       }
     };
     try {
-      try {
-        await runPromptAttempt(text);
-      } catch (err) {
-        if (err?.code !== "INVALID_TOOL_SIMULATION") throw err;
-        log.warn("[prompt] 检测到伪工具文本，按零干预策略结束本轮并交给上层兜底");
-      }
+      await runPromptAttempt(text);
       if (sp) {
         const entry = this._sessions.get(sp);
         const agentForTicker = entry ? this._d.getAgentById(entry.agentId) : agent;
@@ -1052,6 +1175,7 @@ export class SessionCoordinator {
     }
     // [VISION-ARG-FIX v0.76.6] session.prompt() 需要 options.images，且图片块走 source.base64。
     const _promptOpts = toSessionPromptOptions(opts?.images);
+    sanitizeActiveSessionContextForPrompt(entry.session, sessionPath);
     const runPromptAttempt = async (attemptText) => {
       const tracker = createReplyIntegrityTracker();
       const unsub = entry.session.subscribe((event) => {
@@ -1066,12 +1190,7 @@ export class SessionCoordinator {
       }
     };
     try {
-      try {
-        await runPromptAttempt(text);
-      } catch (err) {
-        if (err?.code !== "INVALID_TOOL_SIMULATION") throw err;
-        log.warn("[promptSession] 检测到伪工具文本，按零干预策略结束本轮并交给上层兜底");
-      }
+      await runPromptAttempt(text);
       agent?._memoryTicker?.notifyTurn(sessionPath);
     } finally {
       entry._lastRecallContext = "";
@@ -1154,6 +1273,7 @@ export class SessionCoordinator {
     const modelRef = entry.session?.model
       || (entry.modelId ? { id: entry.modelId, provider: entry.modelProvider } : null);
     const nativeToolsDisabled = isNativeToolCallingDisabled(modelRef);
+    const suppressClientTools = shouldSuppressClientToolSchema(modelRef);
     if (nativeToolsDisabled) {
       entry.nativeToolCallingDisabled = true;
       entry.securityMode = effectiveMode;
@@ -1164,8 +1284,19 @@ export class SessionCoordinator {
       log.warn(`[model-tools] runtime tools disabled for ${modelRef?.provider || "?"}/${modelRef?.id || modelRef?.name || "?"}`);
       return;
     }
+    if (suppressClientTools) {
+      entry.nativeToolCallingDisabled = false;
+      entry.securityMode = effectiveMode;
+      entry.planMode = effectiveMode === SecurityMode.PLAN;
+      entry.session._customTools = [];
+      entry.session._baseToolsOverride = {};
+      entry.session._buildRuntime({ activeToolNames: [] });
+      log.log(`[model-tools] runtime using Brain V2 internal tool chain for ${modelRef?.provider || "?"}/${modelRef?.id || modelRef?.name || "?"}; client tool schema suppressed`);
+      return;
+    }
     const baseToolsOverride = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
-    const customNames = (customTools || []).map((tool) => tool.name);
+    const normalizedCustomTools = normalizeCustomToolsForModel(customTools || [], modelRef);
+    const customNames = normalizedCustomTools.map((tool) => tool.name);
     const activeToolNames = config.toolsRestricted
       ? [...READ_ONLY_BUILTIN_TOOLS, ...customNames]
       : [...getBuiltinToolNames(tools), ...customNames];
@@ -1173,7 +1304,7 @@ export class SessionCoordinator {
     entry.securityMode = effectiveMode;
     entry.planMode = effectiveMode === SecurityMode.PLAN;
     entry.nativeToolCallingDisabled = false;
-    entry.session._customTools = customTools || [];
+    entry.session._customTools = normalizedCustomTools;
     entry.session._baseToolsOverride = baseToolsOverride;
     entry.session._buildRuntime({ activeToolNames });
   }
@@ -1282,37 +1413,7 @@ export class SessionCoordinator {
   }
 
   async _maybeRouteAroundBrokenToolModel(entry, routeIntent, agent, sessionPath) {
-    if (!entry?.session || !routeIntentRequiresNativeTools(routeIntent)) return false;
-    const currentModel = entry.session.model
-      || (entry.modelId ? { id: entry.modelId, provider: entry.modelProvider } : null);
-    if (!isNativeToolCallingDisabled(currentModel)) return false;
-
-    const models = this._d.getModels();
-    const agentRole = agent?.config?.agent?.yuan || agent?.yuan || null;
-    const fallback = findToolCapableFallbackModel(models, agentRole, currentModel);
-    if (!fallback || typeof entry.session.setModel !== "function") {
-      const isZh = getLocale().startsWith("zh");
-      entry._lastRecallContext = [
-        entry._lastRecallContext || "",
-        isZh
-          ? "【系统提示】当前模型的原生工具调用已被关闭，因为该模型在带 tools 参数时会死循环。若本轮需要读取文件、查询行情、天气或运行命令，请切换到默认工作模型或其它工具兼容模型。"
-          : "[System] Native tool calling is disabled for the current model because it loops when tools are provided. Switch to the default work model or another tool-compatible model for files, market data, weather, or commands.",
-      ].filter(Boolean).join("\n");
-      return false;
-    }
-
-    const switched = await entry.session.setModel(fallback);
-    if (switched === false) return false;
-    entry.modelId = fallback.id || null;
-    entry.modelProvider = fallback.provider || null;
-    entry.nativeToolCallingDisabled = false;
-    entry.lastTouchedAt = Date.now();
-    this._applySessionToolRuntime(sessionPath);
-    const from = `${currentModel?.provider || "?"}/${currentModel?.id || currentModel?.name || "?"}`;
-    const to = `${fallback.provider || "?"}/${fallback.id || fallback.name || "?"}`;
-    log.warn(`[model-tools] routed tool-required turn away from ${from} -> ${to}`);
-    this._d.emitDevLog?.(`工具任务已从不兼容模型切换到 ${fallback.name || fallback.id}`, "warn");
-    return true;
+    return false;
   }
 
   /** 中断所有正在 streaming 的 session */
@@ -1390,41 +1491,24 @@ export class SessionCoordinator {
       const sessionDir = path.join(this._d.agentsDir, agent.id, "sessions");
       if (!fs.existsSync(sessionDir)) continue;
       try {
-        const sessions = await SessionManager.list(process.cwd(), sessionDir);
-        const titles = await this._loadSessionTitlesFor(sessionDir);
-        // 读取 session-meta.json 获取 modelId + pinned
-        let meta = {};
-        try {
-          meta = JSON.parse(fs.readFileSync(path.join(sessionDir, "..", "session-meta.json"), "utf-8"));
-        } catch {}
-        // 也读取 sessions/ 级 session-meta.json（saveSessionMeta 写入位置）
-        let sessionMeta = {};
-        try {
-          sessionMeta = JSON.parse(fs.readFileSync(path.join(sessionDir, "session-meta.json"), "utf-8"));
-        } catch {}
-        const indexedSessions = [];
-        for (const s of sessions) {
-          if (titles[s.path]) s.title = titles[s.path];
-          s.agentId = agent.id;
-          s.agentName = agent.name;
-          const sessKey = path.basename(s.path);
-          const metaEntry = meta[sessKey];
-          // 读取新格式 model:{id,provider} 或旧格式 modelId
-          if (metaEntry?.model && typeof metaEntry.model === "object") {
-            s.modelId = metaEntry.model.id || null;
-            s.modelProvider = metaEntry.model.provider || null;
-          } else {
-            s.modelId = metaEntry?.modelId || null;
-            s.modelProvider = null;
+        const indexed = await readSessionIndex(sessionDir);
+        if (indexed.length > 0) {
+          for (const entry of indexed) {
+            const modified = entry.modified ? new Date(entry.modified) : new Date(0);
+            allSessions.push({
+              ...entry,
+              modified: Number.isNaN(modified.getTime()) ? new Date(0) : modified,
+              agentId: entry.agentId || agent.id,
+              agentName: entry.agentName || agent.name,
+              labels: Array.isArray(entry.labels) ? entry.labels.filter(Boolean) : [],
+            });
           }
-          // pinned 从 session-level meta 读取
-          const pinMeta = sessionMeta[s.path] || {};
-          s.pinned = !!pinMeta.pinned;
-          s.labels = Array.isArray(pinMeta.labels) ? pinMeta.labels.filter(Boolean) : [];
-          indexedSessions.push(s);
-          allSessions.push(s);
+          continue;
         }
-        await refreshSessionIndex(sessionDir, indexedSessions, { agent }).catch((err) => {
+
+        const skeletons = await listSessionFileSkeletons(sessionDir, agent);
+        for (const s of skeletons) allSessions.push(s);
+        await refreshSessionIndex(sessionDir, skeletons, { agent }).catch((err) => {
           log.warn(`session index refresh failed · agent=${agent.id} · ${err?.message || err}`);
         });
       } catch {}
@@ -1450,6 +1534,22 @@ export class SessionCoordinator {
 
     allSessions.sort((a, b) => b.modified - a.modified);
     return allSessions;
+  }
+
+  async _refreshSessionIndexesInBackground() {
+    const agents = this._d.listAgents();
+    for (const agent of agents) {
+      const sessionDir = path.join(this._d.agentsDir, agent.id, "sessions");
+      if (!fs.existsSync(sessionDir)) continue;
+      try {
+        const existing = await readSessionIndex(sessionDir);
+        if (existing.length > 0) continue;
+        const skeletons = await listSessionFileSkeletons(sessionDir, agent);
+        await refreshSessionIndex(sessionDir, skeletons, { agent });
+      } catch (err) {
+        log.warn(`session index refresh skipped · agent=${agent.id} · ${err?.message || err}`);
+      }
+    }
   }
 
   async saveSessionTitle(sessionPath, title) {
@@ -1645,12 +1745,23 @@ export class SessionCoordinator {
         || targetAgent.config?.desk?.patrol_tools
         || PATROL_TOOLS_DEFAULT;
       const allowSet = new Set(patrolAllowed);
-      const actCustomTools = allCustomTools.filter(t => allowSet.has(t.name));
+      const suppressClientTools = shouldSuppressClientToolSchema(execModel);
+      const actCustomTools = suppressClientTools
+        ? []
+        : normalizeCustomToolsForModel(
+            allCustomTools.filter(t => allowSet.has(t.name)),
+            execModel
+          );
 
       // builtin tools 过滤：传入 builtinFilter 时只保留白名单内的 builtin 工具
-      const actTools = opts.builtinFilter
-        ? allBuiltinTools.filter(t => opts.builtinFilter.includes(t.name))
-        : allBuiltinTools;
+      const actTools = suppressClientTools
+        ? []
+        : (opts.builtinFilter
+            ? allBuiltinTools.filter(t => opts.builtinFilter.includes(t.name))
+            : allBuiltinTools);
+      if (suppressClientTools) {
+        log.log(`[executeIsolated] using Brain V2 internal tool chain for ${execModel?.provider || "?"}/${execModel?.id || execModel?.name || "?"}; client tool schema suppressed`);
+      }
 
       const agent = this._d.getAgent();
       const skills = this._d.getSkills();
@@ -1675,7 +1786,7 @@ export class SessionCoordinator {
         authStorage: models.authStorage,
         modelRegistry: models.modelRegistry,
         model: execModel,
-        thinkingLevel: models.resolveThinkingLevel(this._d.getPrefs().getThinkingLevel()),
+        thinkingLevel: models.resolveThinkingLevel(this._d.getPrefs().getThinkingLevel(), execModel),
         resourceLoader: execResourceLoader,
         tools: actTools,
         customTools: actCustomTools,
@@ -1710,13 +1821,7 @@ export class SessionCoordinator {
 
       let replyText = "";
       try {
-        try {
-          replyText = await runPromptAttempt(prompt);
-        } catch (err) {
-          if (err?.code !== "INVALID_TOOL_SIMULATION") throw err;
-          log.warn("[executeIsolated] 检测到伪工具文本，返回清洗后的文本");
-          replyText = stripPseudoToolCallMarkup(String(err.replyText || "")).trim();
-        }
+        replyText = await runPromptAttempt(prompt);
       } finally {
         opts.signal?.removeEventListener("abort", abortHandler);
       }

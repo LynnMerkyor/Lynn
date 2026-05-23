@@ -104,6 +104,7 @@ describe("WebSocket protocol contract", () => {
           "model_hint",
           "notification",
           "plan_mode",
+          "prompt_accepted",
           "review_progress",
           "review_result",
           "review_start",
@@ -194,6 +195,9 @@ describe("WebSocket protocol contract", () => {
           ],
           "plan_mode": [
             "enabled",
+          ],
+          "prompt_accepted": [
+            "sessionPath",
           ],
           "review_progress": [
             "reviewId",

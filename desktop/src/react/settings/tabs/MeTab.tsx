@@ -80,8 +80,46 @@ export function MeTab() {
     input.click();
   };
 
+  const { set: setStore } = useSettingsStore();
+
   return (
     <div className={`${styles['settings-tab-content']} ${styles['active']}`} data-tab="me">
+      {/* #16: top-level default-provider quick link — was buried under Providers tab */}
+      <div
+        style={{
+          margin: '0 0 16px 0',
+          padding: '10px 12px',
+          background: 'rgba(99, 102, 241, 0.06)',
+          border: '1px solid rgba(99, 102, 241, 0.18)',
+          borderRadius: 8,
+          fontSize: 12,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <span style={{ opacity: 0.85 }}>
+          {t('settings.me.defaultProviderHint') || 'Switch between local 9B and cloud providers in one click.'}
+        </span>
+        <button
+          type="button"
+          onClick={() => setStore({ activeTab: 'providers' })}
+          style={{
+            padding: '4px 12px',
+            background: 'rgba(99, 102, 241, 0.95)',
+            color: 'white',
+            border: 'none',
+            borderRadius: 6,
+            fontSize: 12,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {t('settings.me.openProviders') || 'Open Providers →'}
+        </button>
+      </div>
+
       <section className={styles['settings-section']}>
         <h2 className={styles['settings-section-title']}>{t('settings.me.title')}</h2>
 

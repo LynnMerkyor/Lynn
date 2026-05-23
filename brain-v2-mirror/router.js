@@ -80,9 +80,35 @@ async function runRound({
     }
     if (capabilityRequired?.vision && !provider.capability.vision) continue;
     if (capabilityRequired?.audio && !provider.capability.audio) continue;
+    // #7: tool-call quality gate — when caller attaches tools and provider can't reliably emit them, skip.
+    // Prevents silent quality regression on local 9B Q4_K_M (which has tools:false in registry).
+    if (Array.isArray(tools) && tools.length > 0 && provider.capability && provider.capability.tools === false) {
+      log && log('info', `provider ${providerId} skipped: tool-call request but capability.tools=false`);
+      continue;
+    }
     if (isInCooldown(providerId)) {
       log && log('info', `provider ${providerId} in cooldown, skip`);
       continue;
+    }
+    // D3: fast health probe for local providers to avoid ~1s ECONNREFUSED + 15s cooldown on cold-start race.
+    // Only probes providers whose endpoint is loopback (127.0.0.1 / localhost) — avoid extra latency for cloud APIs.
+    if (provider.endpoint && /^https?:\/\/(127\.0\.0\.1|localhost)/i.test(provider.endpoint)) {
+      try {
+        const probeCtrl = new AbortController();
+        const probeTimer = setTimeout(() => probeCtrl.abort(), 800);
+        const probeRes = await fetch(provider.endpoint + '/models', { method: 'GET', signal: probeCtrl.signal })
+          .catch(() => null);
+        clearTimeout(probeTimer);
+        if (!probeRes || !probeRes.ok) {
+          log && log('info', `provider ${providerId} fast-probe failed (cold-start race), skip+cooldown`);
+          markUnhealthy(providerId, 'health-probe-failed', 5000); // short 5s cooldown — likely warming up
+          continue;
+        }
+      } catch {
+        log && log('info', `provider ${providerId} fast-probe threw, skip+cooldown`);
+        markUnhealthy(providerId, 'health-probe-threw', 5000);
+        continue;
+      }
     }
     const adapter = getAdapter(provider.wire);
     let anyEmit = false;
@@ -489,12 +515,9 @@ async function runSynthesisRound({
     };
   } catch (e) {
     log && log('error', `synthesis round failed: ${e.message}`);
-    await onChunk(
-      { type: 'content', delta: '\n本轮工具结果合成失败，Lynn 已安全结束本次任务。你可以直接重试一次，或把任务范围缩小后再试。' },
-      { providerId: lastProviderId }
-    );
     return {
-      ok: true,
+      ok: false,
+      error: e,
       providerId: lastProviderId,
       iterations: iter,
       hitMaxIterations: hitMax || undefined,

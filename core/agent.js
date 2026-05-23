@@ -793,6 +793,13 @@ export class Agent {
       ishiki,
     ];
 
+    if (isZh) {
+      parts.push(
+        "\n## 语言偏好\n\n"
+        + "用户使用中文或界面语言为中文时，最终回答优先使用中文；如果你输出可见思考、思考摘要或推理说明，必须使用自然中文，不要输出 Thinking Process、Analyze the Request、Evaluate Constraints、Final Decision、Safety Check 等英文模板标题。"
+      );
+    }
+
     if (skillsText) parts.push(skillsText);
     if (skillsText) {
       parts.push(isZh

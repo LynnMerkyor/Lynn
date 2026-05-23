@@ -22,6 +22,7 @@ export interface HistoryApiResponse {
     thinking?: string;
     toolCalls?: Array<{ name: string; args?: Record<string, unknown> }>;
     images?: Array<{ data: string; mimeType: string }>;
+    model?: string | null;
   }>;
   fileOutputs?: Array<{
     afterIndex: number;
@@ -215,7 +216,7 @@ export function buildItemsFromHistory(data: HistoryApiResponse): ChatListItem[] 
         }
       }
 
-      const msg: ChatMessage = { id, role: 'assistant', blocks };
+      const msg: ChatMessage = { id, role: 'assistant', blocks, model: m.model || null };
       items.push({ type: 'message', data: msg });
     }
   }

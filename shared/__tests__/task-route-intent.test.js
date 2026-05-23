@@ -120,16 +120,14 @@ describe("task route intent", () => {
     expect(looksLikePendingToolExecutionText("I cannot access the local file system to list this folder.", "utility")).toBe(true);
   });
 
-  it("adds strict tool-first hints for Kimi-like providers on utility tasks", () => {
+  it("does not add strict tool-first hints for Kimi-like providers on utility tasks", () => {
     const hint = buildProviderToolCallHint({
       routeIntent: "utility",
       provider: "moonshot",
       modelId: "kimi-k2.5",
       locale: "zh",
     });
-    expect(hint).toContain("第一步就直接调用真实工具");
-    expect(hint).toContain("Premise / Conduct / Reflection / Act");
-    expect(hint).toContain("不能空答");
+    expect(hint).toBe("");
   });
 
   it("does not add strict tool-first hints for zhipu-coding", () => {

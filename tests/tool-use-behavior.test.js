@@ -6,12 +6,12 @@ import {
 } from "../server/chat/tool-use-behavior.js";
 
 describe("tool-use behavior resolver", () => {
-  it("stops immediately for local office direct answers", () => {
+  it("does not short-circuit local office prompts with handcrafted answers", () => {
     const decision = resolveInitialToolUseBehavior("【DATA-01】华东 Q1 120 Q2 150；华南 Q1 90 Q2 81；华北 Q1 60 Q2 78（万元）。算环比增长率，给 3 条管理建议。");
 
-    expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.STOP_WITH_DIRECT_ANSWER);
-    expect(decision.directAnswer).toContain("25%");
-    expect(decision.reason).toBe("local_office_direct_answer");
+    expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);
+    expect(decision.directAnswer).toBeUndefined();
+    expect(decision.reason).toBe("default");
   });
 
   it("prefetches realtime report context for non-brain models", () => {

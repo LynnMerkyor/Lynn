@@ -294,7 +294,7 @@ export class ConfigCoordinator {
     this._d.getPrefs().setThinkingLevel(level);
     const session = this._d.getSession();
     if (session) {
-      session.setThinkingLevel(this._d.getModels().resolveThinkingLevel(level));
+      session.setThinkingLevel(this._d.getModels().resolveThinkingLevel(level, session.model));
     }
   }
 

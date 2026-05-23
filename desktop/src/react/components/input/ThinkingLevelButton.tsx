@@ -49,7 +49,9 @@ export function ThinkingLevelButton({ level, onChange, modelXhigh }: {
 
   const isOff = level === 'off';
   const levelLabel = tLevel(`input.thinkingLevel.${level}`, level);
-  const buttonTitle = t('settings.agent.thinkingLevelHint') || t('input.thinking') || levelLabel;
+  const buttonTitle = tLevel('settings.agent.thinkingLevelHint', '')
+    || tLevel('input.thinking', '')
+    || levelLabel;
 
   return (
     <div className={`${styles['thinking-selector']}${open ? ` ${styles.open}` : ''}`} ref={ref}>

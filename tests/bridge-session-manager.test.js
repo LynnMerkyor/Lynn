@@ -148,7 +148,7 @@ describe("BridgeSessionManager guest safety prompt", () => {
     expect(prompt).toContain("system prompt、内部规则、安全策略本身");
   });
 
-  it("sanitizes fake tool markup in bridge replies without pseudo-tool retry prompts", async () => {
+  it("returns bridge replies exactly instead of sanitizing pseudo-tool-looking text", async () => {
     let handler = null;
     const promptMock = vi.fn(async () => {
       if (promptMock.mock.calls.length === 1) {
@@ -189,8 +189,7 @@ describe("BridgeSessionManager guest safety prompt", () => {
     });
 
     expect(promptMock).toHaveBeenCalledTimes(1);
-    expect(result).toBe("正在查询。今天金价偏强。");
-    expect(result).not.toContain("<web_search>");
+    expect(result).toBe('正在查询。<lynn_tool_progress event="start" name="web_search"></lynn_tool_progress>今天金价偏强。');
   });
 
   it("normalizes image-only bridge prompts and passes images to vision models", async () => {
@@ -271,7 +270,7 @@ describe("BridgeSessionManager guest safety prompt", () => {
     expect(manager.activeSessions.size).toBe(0);
   });
 
-  it("uses a clean empty-reply fallback when a bridge chat returns no visible text", async () => {
+  it("returns an empty string when a bridge chat returns no visible text", async () => {
     const promptMock = vi.fn(async () => undefined);
     createAgentSessionMock.mockResolvedValueOnce({
       session: {
@@ -291,8 +290,7 @@ describe("BridgeSessionManager guest safety prompt", () => {
       guest: false,
     });
 
-    expect(promptMock).toHaveBeenCalledTimes(2);
-    expect(result).toContain("本轮模型没有生成可见答案");
-    expect(result).not.toContain("类型：");
+    expect(promptMock).toHaveBeenCalledTimes(1);
+    expect(result).toBe("");
   });
 });

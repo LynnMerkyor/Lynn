@@ -58,6 +58,6 @@ export function buildVisionUnsupportedMessage(opts = {}) {
 
 export function buildVisionEmptyFallbackText(opts = {}) {
   return isZhLocale(opts.locale || "zh")
-    ? "这次图片没有被模型可靠识别到，Lynn 已结束空转以免卡住会话。请重新上传图片，或把图片文件路径发来；如果是截图，也可以补一句你希望我重点看哪里。"
-    : "The image was not reliably processed by the model, so Lynn ended this empty turn to avoid locking the conversation. Please upload the image again or send its file path, and optionally describe what you want me to focus on.";
+    ? "这次图片没有被模型可靠识别到。请重新上传图片，或把图片文件路径发来；如果是截图，也可以补一句你希望我重点看哪里。"
+    : "The image was not reliably processed by the model. Please upload the image again or send its file path, and optionally describe what you want me to focus on.";
 }

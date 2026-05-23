@@ -115,7 +115,9 @@
     "more": "더보기",
     "empty": "비어 있음",
     "edit": "편집",
-    "delete": "삭제"
+    "delete": "삭제",
+    "editResend": "편집 후 재전송",
+    "editResendTitle": "편집 후 재전송 (메시지를 입력란에 붙여넣고 수정 후 Enter)"
   },
   "chat": {
     "send": "보내기",
@@ -124,6 +126,7 @@
     "browserScreenshot": "브라우저 스크린샷",
     "compacting": "컨텍스트 압축 중",
     "needWsConnection": "어시스턴트와 연결이 끊겼어요. 재연결을 기다리거나 상태 표시줄에서 다시 연결을 눌러 주세요",
+    "waitForCurrentReply": "현재 응답이 아직 끝나지 않았어요. 이번 턴이 끝난 뒤 다음 메시지를 보내 주세요.",
     "retry": "Retry",
     "waitingTooLong": "이 응답은 아직 처리 중입니다. Lynn이 기본 모델의 보조 경로로 계속 넘겨 가며 이번 턴을 끝내려고 하고 있어요.",
     "emptyAnswerHint": "모델이 생각만 하고 아무 말도 하지 않았어요. 재시도를 눌러 다시 시도할 수 있어요.",
@@ -628,7 +631,9 @@
       "changeAvatar": "변경",
       "userNameHint": "어시스턴트가 부르는 이름",
       "userProfile": "사용자 프로필",
-      "userProfileHint": "어시스턴트가 당신을 이해하는 데 도움이 돼요: 관심사, 습관, 취향 등. 시스템 프롬프트에 주입돼요"
+      "userProfileHint": "어시스턴트가 당신을 이해하는 데 도움이 돼요: 관심사, 습관, 취향 등. 시스템 프롬프트에 주입돼요",
+      "defaultProviderHint": "로컬 9B와 클라우드를 한 번에 전환.",
+      "openProviders": "Providers 열기 →"
     },
     "crop": {
       "title": "아바타 조정",
@@ -856,7 +861,9 @@
       "verifyFailed": "확인 실패",
       "noProvider": "먼저 검색 엔진을 선택해 주세요",
       "noKey": "먼저 API Key를 입력해 주세요",
-      "noBaseUrl": "먼저 searXNG URL을 입력해 주세요"
+      "noBaseUrl": "먼저 searXNG URL을 입력해 주세요",
+      "placeholder": "설정 검색…",
+      "empty": "일치하는 탭 없음"
     },
     "work": {
       "title": "순찰",
@@ -1015,6 +1022,11 @@
         "위 입력란에 App ID와 App Secret을 붙여넣고 스위치를 켜주세요"
       ],
       "whatsappHint": "곧 지원 예정"
+    },
+    "shortcuts": {
+      "title": "키보드 단축키",
+      "globalSummon": "전역 호출",
+      "globalSummonHint": "음성 탭에서 재바인딩 가능. 다른 앱이 점유 시 Cmd/Ctrl+Opt+J로 폴백."
     }
   },
   "onboarding": {
@@ -1133,7 +1145,39 @@
       },
       "finish": "시작할게요",
       "quickFinish": "지금 Lynn으로 들어가기"
-    }
+    },
+    "localModel": {
+      "title": "Download Lynn's default local model",
+      "subtitle": "Qwen 3.5 9B (Q4_K_M-imatrix) · 5.3 GB · MMLU 90.4% / GPQA 80% · 32K context.\nRuns fully offline — no API key, no data ever leaves your machine.",
+      "specsLine": "5.3 GB · Q4_K_M-imatrix · 32K context · fully offline",
+      "needsBinary": "llama.cpp inference engine not found at ~/.lynn/llamacpp/bin/llama-server",
+      "needsBinaryHint": "Install llama.cpp following the docs and retry.",
+      "alreadyHave": "Local model is ready",
+      "alreadyHaveDesc": "The model is already downloaded — you're good to go.",
+      "startBtn": "Start download",
+      "pauseBtn": "Pause",
+      "resumeBtn": "Resume",
+      "cancelBtn": "Cancel download",
+      "retryBtn": "Retry download",
+      "switchBackBtn": "Use Brain v2 default model instead",
+      "downloading": "Downloading (source {source})",
+      "verifying": "Verifying SHA-256…",
+      "paused": "Paused",
+      "ready": "Download complete ✿",
+      "spawning": "Starting llama.cpp inference server…",
+      "spawnReady": "llama.cpp is ready",
+      "spawnFailed": "Inference server failed to start: {reason}",
+      "errorChecksum": "Checksum mismatch — rotating to next mirror",
+      "errorAll": "All mirrors failed — check your network and retry",
+      "errorGeneric": "Download error: {reason}",
+      "next": "Continue",
+      "back": "Back",
+      "modelPreparedHint": "모델과 llama.cpp 준비 완료. 시작을 누르면 Local 9B로 전환됩니다.",
+      "statusReady": "시작 가능",
+      "statusWaiting": "준비 중",
+      "runtimeLocal9B": "Local 9B"
+    },
+    "skipSetup": "설정 건너뛰기"
   },
   "activity": {
     "title": "활동",
@@ -1248,7 +1292,7 @@
     "missingParam": "{param} 파라미터가 없어요",
     "invalidJson": "요청 본문은 JSON 객체여야 해요",
     "sessionNotFound": "세션 파일을 찾을 수 없어요",
-    "stillStreaming": "{name}이(가) 아직 응답 중이에요. 잠시 기다려 주세요",
+    "stillStreaming": "{name}이(가) 아직 응답 중이에요. 이번 응답이 끝난 뒤 다음 메시지를 보내 주세요",
     "agentNameEmpty": "어시스턴트 이름을 비워둘 수 없어요",
     "agentIdInvalid": "어시스턴트 ID에 잘못된 문자가 포함되어 있어요",
     "agentAlreadyExists": "어시스턴트 \"{id}\"가 이미 존재해요",

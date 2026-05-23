@@ -2,7 +2,7 @@
  * Session 管理 REST 路由
  */
 import fs from "fs/promises";
-import { appendFileSync, existsSync, mkdirSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import path from "path";
 import { Hono } from "hono";
@@ -23,6 +23,13 @@ import {
  * 返回 { text, thinking, toolUses }
  */
 const TOOL_ARG_SUMMARY_KEYS = ["file_path", "path", "command", "pattern", "url", "query", "key", "value", "action", "type", "schedule", "prompt", "label"];
+
+function formatMessageModelRef(message = {}) {
+  const model = typeof message.model === "string" ? message.model.trim() : "";
+  if (!model) return null;
+  const provider = typeof message.provider === "string" ? message.provider.trim() : "";
+  return provider ? `${provider}/${model}` : model;
+}
 
 /** 从文本中提取并剥离 <think>...</think> 标签 */
 function stripThinkTags(raw) {
@@ -96,7 +103,10 @@ async function loadSessionHistoryMessages(engine, explicitPath) {
   const sessionPath = explicitPath || engine.currentSessionPath;
   if (sessionPath) {
     try {
-      const raw = await fs.readFile(sessionPath, "utf-8");
+      // Keep this hot path independent of libuv's fs promise queue. Background
+      // memory/indexing work can saturate that queue and make the chat view wait
+      // for 30s even when the session file itself is tiny.
+      const raw = readFileSync(sessionPath, "utf-8");
       const messages = [];
 
       for (const line of raw.split("\n")) {
@@ -146,18 +156,63 @@ function normalizeLegacyWorkspaceCwd(cwd) {
   return raw;
 }
 
+function ensureSessionFileOnDisk(sessionPath) {
+  if (!sessionPath) return false;
+  try {
+    const dir = path.dirname(sessionPath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    if (!existsSync(sessionPath)) writeFileSync(sessionPath, "", "utf-8");
+    return true;
+  } catch (err) {
+    console.warn("[sessions] failed to materialize session file:", err?.message || err);
+    return false;
+  }
+}
+
+async function fastListCurrentAgentSessions(engine) {
+  const agentId = engine.currentAgentId || path.basename(engine.agentDir || "");
+  const agentName = engine.agentName || agentId || null;
+  const currentPath = engine.currentSessionPath;
+  if (!currentPath) return [];
+
+  // Hot path: this endpoint is hit during app boot and must never scan or parse
+  // session history. Full history can be rebuilt lazily elsewhere; chat input
+  // availability matters more than a perfect sidebar on first paint.
+  return [{
+    path: currentPath,
+    title: null,
+    firstMessage: "",
+    modified: new Date().toISOString(),
+    messageCount: 0,
+    cwd: engine.homeCwd || "",
+    agentId,
+    agentName,
+    modelId: null,
+    modelProvider: null,
+    labels: [],
+  }];
+}
+
+function formatSessionDate(value) {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 export function createSessionsRoute(engine) {
   const route = new Hono();
 
   // 列出所有 agent 的历史 session
   route.get("/sessions", async (c) => {
     try {
-      const sessions = await engine.listSessions();
+      const sessions = await fastListCurrentAgentSessions(engine);
       return c.json(sessions.map(s => ({
         path: s.path,
         title: s.title || null,
         firstMessage: (s.firstMessage || "").slice(0, 100),
-        modified: s.modified?.toISOString() || null,
+        modified: formatSessionDate(s.modified),
         messageCount: s.messageCount || 0,
         cwd: normalizeLegacyWorkspaceCwd(s.cwd),
         agentId: s.agentId || null,
@@ -209,6 +264,7 @@ export function createSessionsRoute(engine) {
               content: text,
               thinking: thinking || undefined,
               toolCalls: toolUses.length ? toolUses : undefined,
+              model: formatMessageModelRef(m),
             });
           }
           for (const artifact of artifactPreviewsFromContent(m.content)) {
@@ -332,6 +388,7 @@ export function createSessionsRoute(engine) {
       } else {
         await engine.createSession(null, cwd || undefined, memFlag);
       }
+      ensureSessionFileOnDisk(engine.currentSessionPath);
       engine.persistSessionMeta();
 
       // 记住工作目录 + 更新历史

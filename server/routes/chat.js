@@ -6,19 +6,16 @@
  */
 import fs from "fs";
 import path from "path";
-import os from "os";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { containsPseudoToolCallSimulation } from "../../core/llm-utils.js";
-import { stripPseudoToolCallMarkup } from "../../shared/pseudo-tool-call.js";
 import { wsSend, wsParse } from "../ws-protocol.js";
 import { debugLog } from "../../lib/debug-log.js";
 import { t, getLocale } from "../i18n.js";
 import { BrowserManager } from "../../lib/browser/browser-manager.js";
 import {
-  buildDirectResearchAnswer,
   buildReportResearchContext,
+  buildDirectResearchAnswer,
 } from "../chat/report-research-context.js";
 import {
   resolveCurrentModelInfo,
@@ -38,16 +35,6 @@ import {
 import { AppError } from "../../shared/errors.js";
 import { errorBus } from "../../shared/error-bus.js";
 import {
-  createTurnQualitySnapshot,
-  evaluateForcedTurnFallback,
-  evaluatePostTurnEndQuality,
-  evaluatePreTurnEndQuality,
-} from "../chat/turn-quality-gate.js";
-import {
-  stripStreamingPseudoToolBlocks,
-  containsNonProgressPseudoToolSimulation,
-} from "../chat/stream-sanitizer.js";
-import {
   clearPersistedFinalAnswerPollTimer,
   clearReturnedTurnFinalizationTimer,
   clearSilentBrainAbortTimer,
@@ -61,9 +48,6 @@ import {
   resetCompletedTurnState,
 } from "../chat/stream-state.js";
 import {
-  scheduleInternalRetry,
-} from "../chat/internal-retry.js";
-import {
   TOOL_USE_BEHAVIOR,
   buildPrefetchAugmentedPrompt,
   resolveInitialToolUseBehavior,
@@ -72,33 +56,18 @@ import {
   attachLocalQwen35BenchContext,
   isLocalQwen35Model,
 } from "../chat/local-qwen35-bench-context.js";
+import { readSignedClientAgentHeaders } from "../../core/client-agent-identity.js";
+import { BRAIN_PROVIDER_BASE_URLS } from "../../shared/brain-provider.js";
 import {
   artifactPreviewDedupeKey,
   artifactPreviewFromToolCall,
 } from "../chat/artifact-recovery.js";
 import {
-  buildLocalToolSuccessFallback,
-  buildFailedToolFallbackText,
-  buildSuccessfulToolNoTextFallback,
-  buildPostRehydrateEscalationPrompt,
-  classifyRequestedLocalMutation,
   clearPendingMutationOnSuccessfulDelete,
-  commandLooksLikeDelete,
   consumeMutationConfirmation,
   recordPendingDeleteRequest,
-  shouldRetryUnverifiedLocalMutation,
   stripRouteMetadataLeaks,
 } from "../chat/turn-retry-policy.js";
-
-import {
-  buildExplicitPromptMutationCommand,
-  extractRecoverablePseudoBashCommand,
-  isMeaningfulRecoveredBashCommand,
-  isInsidePath,
-  looksLikeIncompleteLocalMutationProbe,
-  looksLikeLocalMutationProbeCommand,
-  shellQuote,
-} from "../chat/command-recovery.js";
 
 /** tool_start 事件只广播这些 arg 字段，避免传输完整文件内容（同步维护：chat-render-shim.ts extractToolDetail） */
 const TOOL_ARG_SUMMARY_KEYS = ["file_path", "path", "command", "cmd", "shell", "script", "pattern", "url", "query", "key", "value", "action", "type", "schedule", "prompt", "label"];
@@ -114,14 +83,6 @@ function extractText(content) {
     .join("");
 }
 
-function looksLikeCodingDiagnosticPrompt(text = "") {
-  return /(?:traceback|importerror|cannot import|main\.py|python|comfyui|代码|报错|导入失败|修复)/i.test(String(text || ""));
-}
-
-function looksLikeEarlyStoppedToolFailure(text = "") {
-  return /(?:命令被提前停止|broad\s+home|home-root|Command aborted|timeout|timed out|NOT_FOUND|not found|No such file|no such file|permission denied|EACCES|EPERM)/i.test(String(text || ""));
-}
-
 function stripHiddenReflectionBlocks(text) {
   return String(text || "")
     .replace(/```(?:mood|pulse|reflect)[\s\S]*?```\s*/gi, "")
@@ -131,82 +92,48 @@ function stripHiddenReflectionBlocks(text) {
 
 function normalizePersistedAssistantText(text) {
   const trimmed = stripHiddenReflectionBlocks(text);
-  if (!trimmed) return "";
-  if (containsPseudoToolCallSimulation(trimmed) || containsNonProgressPseudoToolSimulation(trimmed)) {
-    return "";
-  }
   return trimmed;
 }
 
+function readPersistedAssistantRecords(session, sessionPath = "") {
+  const messages = Array.isArray(session?.messages) ? session.messages : [];
+  const fromMessages = [];
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    fromMessages.push(msg);
+  }
+  if (sessionPath) {
+    try {
+      const raw = fs.readFileSync(sessionPath, "utf-8");
+      const lines = raw.split("\n").filter(Boolean);
+      const fromFile = [];
+      for (let i = 0; i < lines.length; i++) {
+        const entry = JSON.parse(lines[i]);
+        const msg = entry?.message;
+        if (msg?.role !== "assistant") continue;
+        fromFile.push(msg);
+      }
+      if (fromFile.length > 0) return fromFile;
+    } catch {
+      // Best-effort recovery for SDK paths that persist answers without streaming them.
+    }
+  }
+  return fromMessages;
+}
+
 function readPersistedAssistantVisibleTexts(session, sessionPath = "") {
-  const messages = Array.isArray(session?.messages) ? session.messages : [];
-  const fromMessages = [];
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
-    if (msg?.role !== "assistant") continue;
-    const text = normalizePersistedAssistantText(extractText(msg.content));
-    if (!text) continue;
-    fromMessages.push(text);
-  }
-  if (sessionPath) {
-    try {
-      const raw = fs.readFileSync(sessionPath, "utf-8");
-      const lines = raw.split("\n").filter(Boolean);
-      const fromFile = [];
-      for (let i = 0; i < lines.length; i++) {
-        const entry = JSON.parse(lines[i]);
-        const msg = entry?.message;
-        if (msg?.role !== "assistant") continue;
-        const text = normalizePersistedAssistantText(extractText(msg.content));
-        if (text) fromFile.push(text);
-      }
-      if (fromFile.length > 0) return fromFile;
-    } catch {
-      // Best-effort recovery for SDK paths that persist answers without streaming them.
-    }
-  }
-  return fromMessages;
-}
-
-function readPersistedAssistantRawTexts(session, sessionPath = "") {
-  const messages = Array.isArray(session?.messages) ? session.messages : [];
-  const fromMessages = [];
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
-    if (msg?.role !== "assistant") continue;
-    const text = stripHiddenReflectionBlocks(extractText(msg.content));
-    if (text) fromMessages.push(text);
-  }
-  if (sessionPath) {
-    try {
-      const raw = fs.readFileSync(sessionPath, "utf-8");
-      const lines = raw.split("\n").filter(Boolean);
-      const fromFile = [];
-      for (let i = 0; i < lines.length; i++) {
-        const entry = JSON.parse(lines[i]);
-        const msg = entry?.message;
-        if (msg?.role !== "assistant") continue;
-        const text = stripHiddenReflectionBlocks(extractText(msg.content));
-        if (text) fromFile.push(text);
-      }
-      if (fromFile.length > 0) return fromFile;
-    } catch {
-      // Best-effort recovery for SDK paths that persist answers without streaming them.
-    }
-  }
-  return fromMessages;
-}
-
-function latestPersistedAssistantLooksPseudoOnly(session, sessionPath = "") {
-  const texts = readPersistedAssistantRawTexts(session, sessionPath);
-  const raw = texts[texts.length - 1] || "";
-  if (!raw) return false;
-  if (!containsPseudoToolCallSimulation(raw) && !containsNonProgressPseudoToolSimulation(raw)) return false;
-  return !normalizePersistedAssistantText(raw);
+  return readPersistedAssistantRecords(session, sessionPath)
+    .map((msg) => normalizePersistedAssistantText(extractText(msg.content)))
+    .filter(Boolean);
 }
 
 function countPersistedAssistantVisibleTexts(session, sessionPath = "") {
   return readPersistedAssistantVisibleTexts(session, sessionPath).length;
+}
+
+function countPersistedAssistantMessages(session, sessionPath = "") {
+  return readPersistedAssistantRecords(session, sessionPath).length;
 }
 
 function extractLatestAssistantVisibleTextAfter(session, sessionPath = "", baselineCount = 0) {
@@ -217,6 +144,84 @@ function extractLatestAssistantVisibleTextAfter(session, sessionPath = "", basel
 
 function extractLatestAssistantVisibleText(session, sessionPath = "") {
   return extractLatestAssistantVisibleTextAfter(session, sessionPath, 0);
+}
+
+function displayProviderLabel(msg) {
+  const provider = String(msg?.provider || "").trim();
+  const model = String(msg?.model || "").trim();
+  if (/openai-codex/i.test(provider)) return model || "GPT-5.4";
+  if (provider && model) return `${provider}/${model}`;
+  return model || provider || "当前模型";
+}
+
+function formatAssistantErrorForUser(msg) {
+  const raw = String(msg?.errorMessage || msg?.error?.message || msg?.error || "").trim();
+  if (!raw) return "";
+  let reason = raw;
+  if (/fetch failed/i.test(raw)) reason = "网络请求失败(fetch failed)";
+  if (/timeout|timed out|aborted/i.test(raw)) reason = "请求超时";
+  if (/auth|unauthori[sz]ed|401|403/i.test(raw)) reason = "授权失败";
+  if (/rate|429/i.test(raw)) reason = "被限流";
+  return `${displayProviderLabel(msg)} 本轮请求失败：${reason}。没有生成模型输出。`;
+}
+
+function extractLatestAssistantErrorAfter(session, sessionPath = "", baselineCount = 0) {
+  const records = readPersistedAssistantRecords(session, sessionPath);
+  const start = Math.max(0, baselineCount || 0);
+  if (records.length <= start) return "";
+  for (let i = records.length - 1; i >= start; i--) {
+    const msg = records[i];
+    if (!msg || msg.role !== "assistant") continue;
+    const visible = normalizePersistedAssistantText(extractText(msg.content));
+    if (visible) return "";
+    if (msg.stopReason !== "error" && !msg.errorMessage && !msg.error) continue;
+    const errorText = formatAssistantErrorForUser(msg);
+    if (errorText) return errorText;
+  }
+  return "";
+}
+
+function patchLatestAssistantErrorVisibleText(sessionPath, baselineCount = 0, visibleText = "") {
+  if (!sessionPath || !visibleText) return false;
+  try {
+    const raw = fs.readFileSync(sessionPath, "utf-8");
+    const lines = raw.split("\n");
+    const parsed = [];
+    let assistantCount = 0;
+    let targetIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) {
+        parsed.push(null);
+        continue;
+      }
+      try {
+        const entry = JSON.parse(line);
+        parsed.push(entry);
+        const msg = entry?.message;
+        if (msg?.role === "assistant") {
+          assistantCount += 1;
+          const visible = normalizePersistedAssistantText(extractText(msg.content));
+          if (
+            assistantCount > Math.max(0, baselineCount || 0)
+            && !visible
+            && (msg.stopReason === "error" || msg.errorMessage || msg.error)
+          ) {
+            targetIndex = i;
+          }
+        }
+      } catch {
+        parsed.push(null);
+      }
+    }
+    if (targetIndex < 0 || !parsed[targetIndex]?.message) return false;
+    parsed[targetIndex].message.content = [{ type: "text", text: visibleText }];
+    lines[targetIndex] = JSON.stringify(parsed[targetIndex]);
+    fs.writeFileSync(sessionPath, lines.join("\n"), "utf-8");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function hasStreamEvent(ss, type) {
@@ -285,10 +290,30 @@ function buildPrefetchToolSummary(context) {
 const LOCAL_QWEN35_DIRECT_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_CHARS || 8000);
 const LOCAL_QWEN35_DIRECT_ENDPOINT = process.env.LYNN_LOCAL_QWEN35_ENDPOINT || "http://127.0.0.1:18099/v1/chat/completions";
 const LOCAL_QWEN35_DIRECT_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_TOKENS || 1536);
+const BRAIN_DIRECT_MAX_TOKENS = Number(process.env.LYNN_BRAIN_DIRECT_MAX_TOKENS || 256);
+const BRAIN_DIRECT_TIMEOUT_MS = Number(process.env.LYNN_BRAIN_DIRECT_TIMEOUT_MS || 4_500);
+const BRAIN_DIRECT_RETRY_DELAY_MS = Number(process.env.LYNN_BRAIN_DIRECT_RETRY_DELAY_MS || 200);
 
 function looksLikeToolOrLiveLocalPrompt(text = "") {
   const value = String(text || "");
   return /(?:^|\s)\/goal\b|(?:网页|网站|搜索|搜一下|查询|调查|调研|最新|实时|今天|新闻|天气|股价|行情|价格|收费|私董会|来源|引用|链接|打开|读取|文件|目录|桌面|Excel|表格|PPT|PDF|运行|命令|终端|bash|shell|安装|下载|删除|移动|复制|创建|代码|报错|修复|提交|commit|git|MCP|tool|工具|web[-_ ]?(?:search|fetch)|current|latest|news|weather|stock|price|benchmark\s+run)/i.test(value);
+}
+
+function looksLikeSimpleBrainDirectPrompt(text = "") {
+  const value = String(text || "").trim();
+  if (!value || value.length > 160) return false;
+  if (looksLikeToolOrLiveLocalPrompt(value)) return false;
+  if (/(?:门禁测试|只回复|只回答|请回复\s*OK|回复\s*OK|reply\s+only|answer\s+only)/i.test(value)) return true;
+  if (/^(?:hi|hello|hey|yo|你好|嗨|哈喽|在吗|早上好|上午好|中午好|下午好|晚上好)[\s!！。？?～~,.，]*$/i.test(value)) return true;
+  return false;
+}
+
+function shouldUseBrainDirectBridge(promptText = "", opts = {}) {
+  if (!opts?.modelInfo?.isBrain) return false;
+  if (opts.hasImages) return false;
+  if (opts.rehydratedMutation) return false;
+  if (opts.toolBehavior && opts.toolBehavior !== TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN) return false;
+  return looksLikeSimpleBrainDirectPrompt(promptText);
 }
 
 function shouldUseLocalQwen35DirectBridge(promptText = "", opts = {}) {
@@ -302,28 +327,6 @@ function shouldUseLocalQwen35DirectBridge(promptText = "", opts = {}) {
   if (opts.reason === "quick_translation") return true;
   if (looksLikeToolOrLiveLocalPrompt(text)) return false;
   return opts.routeIntent === "chat" || opts.routeIntent === "reasoning";
-}
-
-function extractVisibleAnswerFromReasoning(reasoningText = "") {
-  const text = String(reasoningText || "").trim();
-  if (!text) return "";
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i]
-      .replace(/^[-*]\s+/, "")
-      .replace(/^\d+[.)]\s+/, "")
-      .trim();
-    const match = line.match(/^(?:final\s+answer|answer|答案|最终答案|结论)\s*[:：]\s*(.+)$/i);
-    if (match?.[1]?.trim()) return match[1].trim();
-  }
-  const tail = lines[lines.length - 1] || "";
-  if (tail.length > 0 && tail.length <= 80 && !/^(thinking process|analyze|step|首先|然后|因此)/i.test(tail)) {
-    return tail;
-  }
-  return "";
 }
 
 function sessionLineId() {
@@ -367,6 +370,19 @@ function appendJsonlLine(filePath, entry) {
   fs.appendFileSync(filePath, `${JSON.stringify(entry)}\n`);
 }
 
+function ensureSessionFileOnDisk(sessionPath) {
+  if (!sessionPath) return false;
+  try {
+    const dir = path.dirname(sessionPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(sessionPath)) fs.writeFileSync(sessionPath, "", "utf-8");
+    return true;
+  } catch (err) {
+    debugLog()?.warn("ws", `[PROMPT-SESSION-FILE v1] failed · ${err?.message || err} · ${sessionPath}`);
+    return false;
+  }
+}
+
 function persistLocalQwen35DirectTurn(sessionPath, originalPromptText, assistantText, opts = {}) {
   if (!sessionPath || !assistantText) return;
   const now = new Date().toISOString();
@@ -403,9 +419,9 @@ function persistLocalQwen35DirectTurn(sessionPath, originalPromptText, assistant
     message: {
       role: "assistant",
       content,
-      api: "openai-completions",
-      provider: "local-qwen35-9b-q4km-imatrix",
-      model: "qwen35-9b-q4km-imatrix",
+      api: opts.api || "openai-completions",
+      provider: opts.provider || "local-qwen35-9b-q4km-imatrix",
+      model: opts.model || "qwen35-9b-q4km-imatrix",
       usage: opts.usage || undefined,
       stopReason: "stop",
       timestamp: Date.now(),
@@ -536,104 +552,31 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
-  async function forceResetSessionStream(sessionPath, ss, reason = "unknown") {
+  async function closeBusySessionBeforeNextPrompt(sessionPath, ss) {
     if (!sessionPath || !ss) return false;
     clearTurnTimers(ss);
     try {
       await engine.abortSessionByPath?.(sessionPath);
     } catch (err) {
-      console.warn("[chat] failed to abort hidden-busy session stream:", err?.message || err);
+      console.warn("[chat] failed to abort busy session stream:", err?.message || err);
     }
     if (ss.isThinking) {
       ss.isThinking = false;
       emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
     }
-    editRollbackStore.discardPendingForSession(sessionPath, ss.activeStreamToken || null);
+    if (!hasStreamEvent(ss, "turn_end")) {
+      emitStreamEvent(sessionPath, ss, { type: "turn_end" });
+    }
+    lifecycleHooks.run("turn_close", { sessionPath, ss, reason: "busy_new_prompt", forced: true });
+    broadcast({ type: "status", isStreaming: false, sessionPath });
     finishSessionStream(ss);
     resetCompletedTurnState(ss);
-    broadcast({ type: "status", isStreaming: false, sessionPath });
-    debugLog()?.warn("ws", `[HIDDEN-BUSY-RESET v1] force-reset session stream · reason=${reason} · ${sessionPath}`);
+    debugLog()?.warn("ws", `[BUSY-STREAM-FENCE v1] closed active stream before accepting next prompt · session=${sessionPath}`);
     return true;
-  }
-
-  function isGenericEmptyFallbackText(text) {
-    const value = String(text || "");
-    return /本轮模型没有生成可[见用]回复|本轮模型没有生成可见答案|本轮补写回答没有稳定完成|空转以免卡住会话|The model did not produce (?:a )?visible answer|The model did not produce visible text/i.test(value);
-  }
-
-  function shouldSuppressGenericEmptyFallback(ss, text) {
-    if (!isGenericEmptyFallbackText(text)) return false;
-    if (ss?.routeIntent === "vision") return false;
-    return true;
-  }
-
-  function applyVisibleFallbackDecision(sessionPath, ss, decision) {
-    if (!decision || decision.type !== "fallback" || !decision.text || ss.hasOutput) return false;
-    if (shouldSuppressGenericEmptyFallback(ss, decision.text)) {
-      debugLog()?.warn("ws", `[EMPTY-FALLBACK-SUPPRESS v1] suppressed generic fallback · route=${ss?.routeIntent || "unknown"} · session=${sessionPath}`);
-      return false;
-    }
-    emitVisibleTextDelta(sessionPath, ss, decision.text);
-    if (decision.logMessage) {
-      const logger = debugLog();
-      const level = decision.logLevel === "log" ? "log" : "warn";
-      const logFn = logger?.[level];
-      if (typeof logFn === "function") logFn.call(logger, "ws", decision.logMessage);
-    }
-    return true;
-  }
-
-  function hasSuccessfulDeleteFromHistory(ss) {
-    const tools = Array.isArray(ss?.lastSuccessfulTools) ? ss.lastSuccessfulTools : [];
-    return tools.some((tool) => tool?.name === "bash" && commandLooksLikeDelete(String(tool?.command || "")));
-  }
-
-  function maybePostRehydrateRecover(sessionPath, ss) {
-    if (!sessionPath || !ss || !ss.rehydratedThisTurn) return false;
-    if (hasSuccessfulDeleteFromHistory(ss)) return false;
-    const originalPrompt = ss.originalPromptText || ss.effectivePromptText || "";
-    if (!originalPrompt) return false;
-
-    if (!ss.postRehydrateEscalationAttempted) {
-      ss.postRehydrateEscalationAttempted = true;
-      const retryPrompt = buildPostRehydrateEscalationPrompt(originalPrompt);
-      // Finish the current stream so the internal retry can start a fresh one
-      // (scheduleInternalRetry's startRetry waits while ss.isStreaming is true).
-      clearTurnTimers(ss);
-      if (ss.isThinking) {
-        ss.isThinking = false;
-        emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-      }
-      finishSessionStream(ss);
-      const ok = doScheduleInternalRetry(sessionPath, "post_rehydrate_escalate", retryPrompt);
-      if (ok) {
-        debugLog()?.warn("ws", `[POST-REHYDRATE-ESCALATE v1] scheduled escalation retry · session=${sessionPath}`);
-        return true;
-      }
-      return false;
-    }
-
-    if (!ss.postRehydrateDeterministicAttempted) {
-      const session = engine.getSessionByPath(sessionPath);
-      const command = buildExplicitPromptMutationCommand(ss, session, engine);
-      if (!command) return false;
-      ss.postRehydrateDeterministicAttempted = true;
-      const ok = executeRecoveredBashCommand(sessionPath, ss, session, command, "post_rehydrate_deterministic");
-      if (ok) {
-        debugLog()?.warn("ws", `[POST-REHYDRATE-DETERMINISTIC v1] forced deterministic delete · cmd=${command.slice(0, 80)} · session=${sessionPath}`);
-        return true;
-      }
-      return false;
-    }
-    return false;
   }
 
   function closeStreamWithVisibleFallback(sessionPath, ss, text, reason, opts = {}) {
     if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
-    if (!opts.skipPostRehydrateRecover && maybePostRehydrateRecover(sessionPath, ss)) {
-      debugLog()?.warn("ws", `[POST-REHYDRATE-INTERCEPT v1] deferred close · reason=${reason} · session=${sessionPath}`);
-      return true;
-    }
     ss._turnClosed = true;
     ss.internalRetryPending = false;
     ss.internalRetryInFlight = false;
@@ -644,18 +587,13 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       ss.isThinking = false;
       emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
     }
-    if (text && shouldSuppressGenericEmptyFallback(ss, text)) {
-      debugLog()?.warn("ws", `[TURN-CLOSE-FALLBACK-SUPPRESS v1] suppressed generic fallback · reason=${reason} · route=${ss?.routeIntent || "unknown"} · session=${sessionPath}`);
-    } else if (text && (!ss.hasOutput || opts.appendEvenIfHasOutput)) {
+    if (text && (!ss.hasOutput || opts.appendEvenIfHasOutput)) {
       const prefix = ss.hasOutput && opts.appendEvenIfHasOutput ? "\n\n" : "";
       if (opts.trustedFallback) {
         emitTrustedVisibleTextDelta(sessionPath, ss, prefix + text);
       } else {
         emitVisibleTextDelta(sessionPath, ss, prefix + text);
       }
-    } else if (!ss.hasOutput) {
-      const snapshot = createTurnQualitySnapshot(ss, ss.visibleTextAcc || "");
-      applyVisibleFallbackDecision(sessionPath, ss, evaluateForcedTurnFallback(ss, snapshot, { sessionPath }));
     }
     emitStreamEvent(sessionPath, ss, { type: "turn_end" });
     lifecycleHooks.run("turn_close", { sessionPath, ss, reason, forced: true });
@@ -680,38 +618,25 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
-  function visibleTextLooksLikeLocalCompletion(text) {
-    return /(?:已完成|已成功|成功执行|移动完成|删除完成|整理完成|处理了\s*\d+|已删除|已移动|已复制|已创建|目标文件夹|执行摘要)/i.test(String(text || ""));
-  }
-
-  function maybeEmitLocalToolCompletionFallback(sessionPath, ss, opts = {}) {
-    if (!sessionPath || !ss) return false;
-    const text = buildLocalToolSuccessFallback(ss);
-    if (!text) return false;
-    const requirement = classifyRequestedLocalMutation(ss.originalPromptText || ss.effectivePromptText || "");
-    if (!opts.force && ss.hasOutput && (!requirement || visibleTextLooksLikeLocalCompletion(ss.visibleTextAcc))) {
-      return false;
-    }
-    const delta = ss.hasOutput ? `\n\n${text}` : text;
-    emitTrustedVisibleTextDelta(sessionPath, ss, delta);
-    debugLog()?.warn("ws", `[LOCAL-TOOL-COMPLETION-FALLBACK v1] emitted · hasOutput=${ss.hasOutput} · session=${sessionPath}`);
-    return true;
-  }
-
   function finalizeReturnedTurnWithoutStream(sessionPath, ss, reason, opts = {}) {
     if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
     if (hasToolExecutionInFlight(ss)) return false;
     if (!opts.ignoreInternalRetry && hasScheduledInternalRetry(ss)) return false;
-    const session = !ss.hasOutput ? engine.getSessionByPath(sessionPath) : null;
+    const session = engine.getSessionByPath(sessionPath);
     const finalText = !ss.hasOutput
       ? extractLatestAssistantVisibleText(session, sessionPath)
       : "";
-    const allowPseudoOnlyClose = opts.allowPseudoOnlyClose && !ss.hasOutput && !finalText && latestPersistedAssistantLooksPseudoOnly(session, sessionPath);
-    if (opts.requirePersistedText && !ss.hasOutput && !finalText && !allowPseudoOnlyClose) return false;
-    if (finalText && shouldRetryUnverifiedLocalMutation(ss, finalText)) {
-      if (maybeRecoverUnexecutedLocalMutationCommand(sessionPath, ss, finalText)) return true;
+    const errorText = (!ss.hasOutput && !finalText)
+      ? extractLatestAssistantErrorAfter(session, sessionPath, ss.persistedAssistantMessageBaseline || 0)
+      : "";
+    if (opts.requirePersistedText && !ss.hasOutput && !finalText && !errorText) return false;
+    if (errorText) {
+      patchLatestAssistantErrorVisibleText(sessionPath, ss.persistedAssistantMessageBaseline || 0, errorText);
+      ss.hasError = true;
     }
-    return closeStreamWithVisibleFallback(sessionPath, ss, finalText, reason);
+    return closeStreamWithVisibleFallback(sessionPath, ss, finalText || errorText, reason, {
+      trustedFallback: Boolean(errorText),
+    });
   }
 
   function scheduleReturnedTurnFinalizationFallback(sessionPath, ss, reason) {
@@ -731,11 +656,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         return;
       }
       // hub.send may return before the provider SSE has delivered final text.
-      // The open-stream safety timer must not close an active turn as "empty"
-      // unless there is already persisted assistant text to finalize. The one
-      // exception is pseudo-tool-only persisted output: close it silently after
-      // stripping the leaked markup, instead of leaving the UI stuck streaming.
-      finalizeReturnedTurnWithoutStream(sessionPath, ss, reason, { requirePersistedText: true, allowPseudoOnlyClose: true });
+      // Do not synthesize or strip output here; only finalize when there is
+      // already persisted assistant text to show.
+      finalizeReturnedTurnWithoutStream(sessionPath, ss, reason, { requirePersistedText: true });
     }, RETURNED_TURN_FINALIZATION_GRACE_MS);
     if (ss.returnedTurnFinalizationTimer.unref) ss.returnedTurnFinalizationTimer.unref();
     return true;
@@ -764,10 +687,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         ss.persistedAssistantTextBaseline || 0,
       );
       if (finalText) {
-        if (shouldRetryUnverifiedLocalMutation(ss, finalText)) {
-          clearPersistedFinalAnswerPollTimer(ss);
-          if (maybeRecoverUnexecutedLocalMutationCommand(sessionPath, ss, finalText)) return;
-        }
         closeStreamWithVisibleFallback(sessionPath, ss, finalText, "persisted_final_answer_poll");
       }
     }, 1000);
@@ -793,11 +712,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       if (hasDifferentActiveStreamToken(ss, streamToken) || ss.hasError || hasStreamEvent(ss, "turn_end")) return;
       ss._lastTurnAborted = true;
       Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
-      const isZh = getLocale().startsWith("zh");
-      const text = isZh
-        ? "本轮模型长时间没有生成可见答案，Lynn 已结束这次空转以免卡住会话。你可以直接重试一次，或把任务说得更具体一点。"
-        : "The model did not produce visible text in time, so Lynn closed this turn to avoid blocking the session. Please retry or make the task more specific.";
-      closeStreamWithVisibleFallback(sessionPath, ss, text, "hard_turn_timeout");
+      closeStreamWithVisibleFallback(sessionPath, ss, "", "hard_turn_timeout");
     }, timeoutMs);
     if (ss.turnHardAbortTimer.unref) ss.turnHardAbortTimer.unref();
   }
@@ -816,32 +731,56 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         return;
       }
       if (hasToolExecutionInFlight(ss)) {
+        flushBufferedAssistantText(sessionPath, ss);
+        const toolStartedAt = Number.isFinite(ss.activeToolCallStartedAt)
+          ? ss.activeToolCallStartedAt
+          : (Number.isFinite(ss.lastToolExecutionActivity) ? ss.lastToolExecutionActivity : Date.now());
+        const toolAgeMs = Date.now() - toolStartedAt;
+        if ((ss.hasOutput || ss.hasBufferedVisibleTextDuringTool) && toolAgeMs >= TOOL_FINALIZATION_GRACE_MS) {
+          const finalText = extractLatestAssistantVisibleTextAfter(
+            engine.getSessionByPath(sessionPath),
+            sessionPath,
+            ss.persistedAssistantTextBaseline || 0,
+          );
+          ss.activeToolCallCount = 0;
+          ss.activeToolCallStartedAt = null;
+          ss.recoveredBashInFlight = false;
+          flushBufferedToolVisibleText(
+            sessionPath,
+            ss,
+            isMeaningfulPersistedFinalText(finalText, ss) ? finalText : "",
+          );
+          debugLog()?.warn("ws", `[TOOL-MISSING-END-FENCE v1] closing turn with visible output despite missing tool_end · age=${toolAgeMs}ms · session=${sessionPath}`);
+          Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
+          closeStreamWithVisibleFallback(
+            sessionPath,
+            ss,
+            "",
+            "tool_missing_end_after_output",
+          );
+          return;
+        }
         scheduleToolFinalizationFallback(sessionPath, ss);
         return;
       }
-      if (shouldRetryUnverifiedLocalMutation(ss, ss.visibleTextAcc || "")) {
-        if (maybeRecoverUnexecutedLocalMutationCommand(sessionPath, ss, ss.visibleTextAcc || "")) return;
-      }
       Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
-      const localToolFallback = buildLocalToolSuccessFallback(ss);
-      const snapshot = createTurnQualitySnapshot(ss, ss.visibleTextAcc || "");
-      const successfulToolFallback =
-        snapshot.toolSuccessFallback ||
-        ((snapshot.isToolSuccessLeadInOnly || snapshot.isToolDidNotProduceText)
-          ? buildSuccessfulToolNoTextFallback(ss)
-          : "");
-      const fallback = localToolFallback || successfulToolFallback || (ss.hasOutput ? "" : (evaluateForcedTurnFallback(ss, snapshot, { sessionPath })?.text || (getLocale().startsWith("zh")
-        ? "工具已执行，但模型没有生成最终回复。Lynn 已结束这轮会话；你可以检查上方工具结果，或让我继续核对。"
-        : "The tool ran, but the model did not produce a final reply. Lynn closed this turn; you can inspect the tool result above or ask me to verify it.")));
+      if (ss.hasBufferedVisibleTextDuringTool && !ss.hasOutput) {
+        const finalText = extractLatestAssistantVisibleTextAfter(
+          engine.getSessionByPath(sessionPath),
+          sessionPath,
+          ss.persistedAssistantTextBaseline || 0,
+        );
+        flushBufferedToolVisibleText(
+          sessionPath,
+          ss,
+          isMeaningfulPersistedFinalText(finalText, ss) ? finalText : "",
+        );
+      }
       closeStreamWithVisibleFallback(
         sessionPath,
         ss,
-        fallback,
+        "",
         "tool_finalization_timeout",
-        {
-          appendEvenIfHasOutput: Boolean(fallback && ss.hasOutput),
-          trustedFallback: Boolean(localToolFallback || successfulToolFallback),
-        },
       );
     }, TOOL_FINALIZATION_GRACE_MS);
     if (ss.toolFinalizationTimer.unref) ss.toolFinalizationTimer.unref();
@@ -865,10 +804,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       const finalText = extractLatestAssistantVisibleText(engine.getSessionByPath(sessionPath), sessionPath);
       if (isMeaningfulPersistedFinalText(finalText, ss)) {
         if (hasToolExecutionInFlight(ss)) return;
-        if (shouldRetryUnverifiedLocalMutation(ss, finalText)) {
-          clearToolAuthorizationPollTimer(ss);
-          if (maybeRecoverUnexecutedLocalMutationCommand(sessionPath, ss, finalText)) return;
-        }
         closeStreamWithVisibleFallback(sessionPath, ss, finalText, "tool_authorization_persisted_final");
       }
     }, 1000);
@@ -880,25 +815,14 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         scheduleToolAuthorizationFallback(sessionPath, ss);
         return;
       }
-      if (shouldRetryUnverifiedLocalMutation(ss, ss.visibleTextAcc || "")) {
-        if (maybeRecoverUnexecutedLocalMutationCommand(sessionPath, ss, ss.visibleTextAcc || "")) return;
-      }
       Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
       const finalText = extractLatestAssistantVisibleText(engine.getSessionByPath(sessionPath), sessionPath);
-      const localToolFallback = buildLocalToolSuccessFallback(ss);
       const meaningfulFinalText = isMeaningfulPersistedFinalText(finalText, ss) ? finalText : "";
-      const fallback = getLocale().startsWith("zh")
-        ? "工具授权后没有收到最终回复，Lynn 已结束这轮会话以免卡住。请检查目标目录或上方工具状态；如果需要，我可以继续核对结果。"
-        : "The tool authorization did not produce a final reply, so Lynn closed this turn to avoid blocking the session. Please inspect the target path or ask me to verify the result.";
       closeStreamWithVisibleFallback(
         sessionPath,
         ss,
-        meaningfulFinalText || localToolFallback || fallback,
+        meaningfulFinalText || "",
         "tool_authorization_timeout",
-        {
-          appendEvenIfHasOutput: Boolean(localToolFallback && !meaningfulFinalText),
-          trustedFallback: Boolean(localToolFallback && !meaningfulFinalText),
-        },
       );
     }, TOOL_AUTHORIZATION_GRACE_MS);
     if (ss.toolAuthorizationTimer.unref) ss.toolAuthorizationTimer.unref();
@@ -906,34 +830,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
 
   function scheduleSilentBrainAbort(sessionPath, ss) {
     clearSilentBrainAbortTimer(ss);
-    const info = resolveCurrentModelInfo(engine);
-    if (!info.isBrain) return;
-    const timeoutMs = ss?.routeIntent === "reasoning" || ss?.routeIntent === "coding"
-      ? 45_000
-      : 25_000;
-    const streamToken = ss?.activeStreamToken || null;
-    ss.silentBrainAbortTimer = setTimeout(() => {
-      ss.silentBrainAbortTimer = null;
-      if (hasDifferentActiveStreamToken(ss, streamToken)) return;
-      if (ss.hasOutput || ss.hasToolCall || ss.hasThinking || ss.hasError || hasStreamEvent(ss, "turn_end")) return;
-      if (maybeRecoverUnexecutedLocalMutationCommand(sessionPath, ss, ss.visibleTextAcc || "")) {
-        Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
-        return;
-      }
-      ss._lastTurnAborted = true;
-      Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
-      if (
-        !hasDifferentActiveStreamToken(ss, streamToken) &&
-        !ss.hasOutput &&
-        !ss.hasToolCall &&
-        !ss.hasThinking &&
-        !ss.hasError &&
-        !hasStreamEvent(ss, "turn_end")
-      ) {
-        closeStreamAfterError(sessionPath, ss);
-      }
-    }, timeoutMs);
-    if (ss.silentBrainAbortTimer.unref) ss.silentBrainAbortTimer.unref();
   }
 
   const clients = new Set();
@@ -1069,25 +965,8 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return preview ? emitRecoveredArtifact(sessionPath, ss, preview, source) : false;
   }
 
-  // ── scheduleInternalRetry 的闭包适配器 ──
-  function doScheduleInternalRetry(sessionPath, reason, retryPrompt) {
-    return scheduleInternalRetry({
-      sessionPath, reason, retryPrompt,
-      getState, broadcast, hub, engine,
-      scheduleSilentBrainAbort,
-      clearSilentBrainAbort: clearSilentBrainAbortTimer,
-      closeStreamAfterError,
-      emitStreamEvent,
-      finalizeReturnedTurnWithoutStream,
-      cleanupPendingEdits: (sp, streamToken = null) => editRollbackStore.discardPendingForSession(sp, streamToken),
-    });
-  }
-
   function closeStreamAfterError(sessionPath, ss) {
     if (!sessionPath || !ss || hasStreamEvent(ss, "turn_end")) return;
-    if (maybeRecoverUnexecutedLocalMutationCommand(sessionPath, ss, ss.visibleTextAcc || "", { ignoreError: true })) {
-      return;
-    }
     if (!ss.hasOutput && !ss.hasToolCall) ss._lastTurnAborted = true;
     closeStreamWithVisibleFallback(sessionPath, ss, "", "model_tool_error");
   }
@@ -1116,382 +995,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     });
   }
 
-  function maybeRecoverPseudoToolCommand(sessionPath, ss, inspectedText) {
-    if (
-      !sessionPath ||
-      !ss ||
-      ss.pseudoToolCommandRecoveryAttempted ||
-      ss.hasToolCall ||
-      ss._turnClosed ||
-      hasStreamEvent(ss, "turn_end") ||
-      typeof engine.buildTools !== "function"
-    ) {
-      return false;
-    }
-    const session = engine.getSessionByPath(sessionPath);
-    const command = extractRecoverablePseudoBashCommand(inspectedText, ss, session, engine)
-      || buildExplicitPromptMutationCommand(ss, session, engine);
-    if (!command) {
-      return maybeRecoverReadOnlyPseudoTool(sessionPath, ss, session, inspectedText);
-    }
-
-    ss.pseudoToolCommandRecoveryAttempted = true;
-    ss.pseudoToolRecoveryHandled = true;
-    ss.hasToolCall = true;
-    ss.recoveredBashInFlight = true;
-    const toolCallId = `recovered_pseudo_bash_${Date.now().toString(36)}`;
-    emitStreamEvent(sessionPath, ss, { type: "tool_start", name: "bash", args: { command } });
-
-    Promise.resolve().then(async () => {
-      try {
-        const cwd = session?.sessionManager?.getCwd?.() || engine.cwd || process.cwd();
-        const built = engine.buildTools(cwd, null, {
-          workspace: cwd,
-          getSessionPath: () => sessionPath,
-        });
-        const bashTool = [...(built?.tools || []), ...(built?.customTools || [])].find((tool) => tool?.name === "bash");
-        if (!bashTool?.execute) throw new Error("bash tool unavailable");
-        const result = await bashTool.execute(toolCallId, { command });
-        const resultText = extractText(result?.content);
-        const toolSummary = {
-          command: command.slice(0, 160),
-          outputPreview: resultText ? resultText.slice(0, 200) : "",
-        };
-        emitStreamEvent(sessionPath, ss, {
-          type: "tool_end",
-          name: "bash",
-          success: !result?.isError,
-          summary: Object.keys(toolSummary).length > 0 ? toolSummary : undefined,
-        });
-        if (result?.isError) {
-          rememberFailedTool(ss, "bash");
-          ss.recoveredBashInFlight = false;
-          closeStreamWithVisibleFallback(sessionPath, ss, "", "recovered_pseudo_bash_failed");
-          return;
-        }
-        rememberSuccessfulTool(ss, "bash", toolSummary, { command });
-        ss.recoveredBashInFlight = false;
-        closeStreamWithVisibleFallback(
-          sessionPath,
-          ss,
-          buildLocalToolSuccessFallback(ss),
-          "recovered_pseudo_bash",
-          { appendEvenIfHasOutput: true, trustedFallback: true },
-        );
-      } catch (err) {
-        ss.recoveredBashInFlight = false;
-        emitStreamEvent(sessionPath, ss, {
-          type: "tool_end",
-          name: "bash",
-          success: false,
-          error: err?.message || String(err),
-        });
-        rememberFailedTool(ss, "bash");
-        closeStreamWithVisibleFallback(sessionPath, ss, "", "recovered_pseudo_bash_error");
-      }
-    });
-
-    debugLog()?.warn("ws", `recovering pseudo bash command through real tool · session=${sessionPath}`);
-    return true;
-  }
-
-  function buildReadOnlyPseudoToolRequest(ss, inspectedText) {
-    const prompt = String(ss?.originalPromptText || ss?.effectivePromptText || "");
-    const leaked = String(inspectedText || "");
-    const combined = `${prompt}\n${leaked}`;
-
-    const wantsWeather = /(?:天气|气温|温度|下雨|降雨|带伞|雨伞|forecast|weather|rain|umbrella)/i.test(combined)
-      || /\/skills\/weather\/SKILL\.md/i.test(leaked)
-      || /<function=weather\b|<weather\b|weather\s*\(/i.test(leaked);
-    if (wantsWeather) {
-      return {
-        name: "weather",
-        args: { query: prompt || stripPseudoToolCallMarkup(leaked).slice(0, 200) || "天气" },
-      };
-    }
-
-    const wantsMarket = /(?:\bAAPL\b|\bTSLA\b|\bNVDA\b|\bMSFT\b|股票|股价|行情|美股|港股|A股|金价|黄金|原油|布伦特|stock|market|ticker|quote)/i.test(combined)
-      || /<function=stock_market\b|<stock_market\b|stock_market\s*\(/i.test(leaked);
-    if (wantsMarket) {
-      return {
-        name: "stock_market",
-        args: { query: prompt || stripPseudoToolCallMarkup(leaked).slice(0, 240) || "行情" },
-      };
-    }
-
-    return null;
-  }
-
-  function buildReadOnlyToolVisibleFallback(toolName, args, resultText, details) {
-    const prompt = String(args?.query || "");
-    const body = String(resultText || "").trim();
-    const timestamp = new Date().toLocaleString("zh-CN", { hour12: false });
-    const source = details?.provider || details?.source || details?.scene || toolName;
-    const lines = [];
-    if (body) lines.push(body);
-    lines.push("");
-    lines.push("数据来源/判断依据");
-    lines.push(`- 工具：${toolName}`);
-    lines.push(`- 时间：${timestamp}`);
-    if (source) lines.push(`- 来源：${source}`);
-    if (toolName === "stock_market" && !/不构成投资建议/.test(body)) {
-      lines.push("");
-      lines.push("以上只是最近可用行情快照，不构成投资建议。");
-    }
-    if (toolName === "weather" && /带伞|下雨|降雨|雨伞/i.test(prompt) && !/带伞|雨伞/.test(body)) {
-      lines.push("");
-      lines.push("出门前建议再看一次本地天气 App 或雷达；如预报有雨，建议带伞。");
-    }
-    return lines.join("\n").trim();
-  }
-
-  function maybeRecoverReadOnlyPseudoTool(sessionPath, ss, session, inspectedText) {
-    const request = buildReadOnlyPseudoToolRequest(ss, inspectedText);
-    if (!request?.name || !request?.args) return false;
-
-    ss.pseudoToolCommandRecoveryAttempted = true;
-    ss.pseudoToolRecoveryHandled = true;
-    ss.hasToolCall = true;
-    ss.recoveredBashInFlight = true;
-    const toolCallId = `recovered_pseudo_${request.name}_${Date.now().toString(36)}`;
-    emitStreamEvent(sessionPath, ss, { type: "tool_start", name: request.name, args: request.args });
-
-    Promise.resolve().then(async () => {
-      try {
-        const cwd = session?.sessionManager?.getCwd?.() || engine.cwd || process.cwd();
-        const built = engine.buildTools(cwd, null, {
-          workspace: cwd,
-          getSessionPath: () => sessionPath,
-        });
-        const tool = [...(built?.tools || []), ...(built?.customTools || [])].find((item) => item?.name === request.name);
-        if (!tool?.execute) throw new Error(`${request.name} tool unavailable`);
-        const result = await tool.execute(toolCallId, request.args);
-        const resultText = extractText(result?.content);
-        const toolSummary = {
-          outputPreview: resultText ? resultText.slice(0, 240) : "",
-        };
-        emitStreamEvent(sessionPath, ss, {
-          type: "tool_end",
-          name: request.name,
-          success: !result?.isError,
-          summary: toolSummary.outputPreview ? toolSummary : undefined,
-        });
-        ss.recoveredBashInFlight = false;
-        if (result?.isError) {
-          rememberFailedTool(ss, request.name);
-          closeStreamWithVisibleFallback(sessionPath, ss, "", `recovered_pseudo_${request.name}_failed`);
-          return;
-        }
-        rememberSuccessfulTool(ss, request.name, toolSummary, request.args);
-        closeStreamWithVisibleFallback(
-          sessionPath,
-          ss,
-          buildReadOnlyToolVisibleFallback(request.name, request.args, resultText, result?.details),
-          `recovered_pseudo_${request.name}`,
-          { appendEvenIfHasOutput: true, trustedFallback: true },
-        );
-      } catch (err) {
-        ss.recoveredBashInFlight = false;
-        emitStreamEvent(sessionPath, ss, {
-          type: "tool_end",
-          name: request.name,
-          success: false,
-          error: err?.message || String(err),
-        });
-        rememberFailedTool(ss, request.name);
-        closeStreamWithVisibleFallback(sessionPath, ss, "", `recovered_pseudo_${request.name}_error`);
-      }
-    });
-
-    debugLog()?.warn("ws", `recovering pseudo ${request.name} call through real read-only tool · session=${sessionPath}`);
-    return true;
-  }
-
-  function executeRecoveredBashCommand(sessionPath, ss, session, command, reason) {
-    if (!sessionPath || !ss || !isMeaningfulRecoveredBashCommand(command) || typeof engine.buildTools !== "function") {
-      return false;
-    }
-    ss.hasToolCall = true;
-    ss.recoveredBashInFlight = true;
-    const toolCallId = `recovered_bash_${Date.now().toString(36)}`;
-    emitStreamEvent(sessionPath, ss, { type: "tool_start", name: "bash", args: { command } });
-
-    Promise.resolve().then(async () => {
-      try {
-        const cwd = session?.sessionManager?.getCwd?.() || engine.cwd || process.cwd();
-        const built = engine.buildTools(cwd, null, {
-          workspace: cwd,
-          getSessionPath: () => sessionPath,
-        });
-        const bashTool = [...(built?.tools || []), ...(built?.customTools || [])].find((tool) => tool?.name === "bash");
-        if (!bashTool?.execute) throw new Error("bash tool unavailable");
-        const result = await bashTool.execute(toolCallId, { command });
-        const resultText = extractText(result?.content);
-        const toolSummary = {
-          command: command.slice(0, 160),
-          outputPreview: resultText ? resultText.slice(0, 200) : "",
-        };
-        emitStreamEvent(sessionPath, ss, {
-          type: "tool_end",
-          name: "bash",
-          success: !result?.isError,
-          summary: Object.keys(toolSummary).length > 0 ? toolSummary : undefined,
-        });
-        if (result?.isError) {
-          rememberFailedTool(ss, "bash");
-          ss.recoveredBashInFlight = false;
-          closeStreamWithVisibleFallback(sessionPath, ss, "", `${reason || "recovered_bash"}_failed`);
-          return;
-        }
-        rememberSuccessfulTool(ss, "bash", toolSummary, { command });
-        ss.recoveredBashInFlight = false;
-        closeStreamWithVisibleFallback(
-          sessionPath,
-          ss,
-          buildLocalToolSuccessFallback(ss),
-          reason || "recovered_bash",
-          { appendEvenIfHasOutput: true, trustedFallback: true },
-        );
-      } catch (err) {
-        ss.recoveredBashInFlight = false;
-        emitStreamEvent(sessionPath, ss, {
-          type: "tool_end",
-          name: "bash",
-          success: false,
-          error: err?.message || String(err),
-        });
-        rememberFailedTool(ss, "bash");
-        closeStreamWithVisibleFallback(sessionPath, ss, "", `${reason || "recovered_bash"}_error`);
-      }
-    });
-    debugLog()?.warn("ws", `recovering failed local mutation with real bash · reason=${reason || "unknown"} · session=${sessionPath}`);
-    return true;
-  }
-
-  function maybeRecoverFailedLocalMutationCommand(sessionPath, ss, failedToolName, failedArgs, failedResultText) {
-    if (
-      !sessionPath ||
-      !ss ||
-      ss.failedLocalMutationRecoveryAttempted ||
-      ss._turnClosed ||
-      hasStreamEvent(ss, "turn_end") ||
-      !looksLikeIncompleteLocalMutationProbe(failedToolName, failedArgs, failedResultText)
-    ) {
-      return false;
-    }
-    const session = engine.getSessionByPath(sessionPath);
-    const command = buildExplicitPromptMutationCommand(ss, session, engine);
-    if (!command) return false;
-    const failedCommand = String(failedArgs?.command || failedArgs?.query || failedArgs?.cmd || "").trim();
-    if (failedCommand && failedCommand === command.trim()) return false;
-    ss.failedLocalMutationRecoveryAttempted = true;
-    return executeRecoveredBashCommand(sessionPath, ss, session, command, "failed_local_mutation_recovery");
-  }
-
-  function shouldEmitFailedCodingToolFallback(ss, toolName, failedText = "") {
-    if (!ss) return false;
-    const name = String(toolName || "");
-    if (!["bash", "read", "grep", "glob", "find"].includes(name)) return false;
-    const prompt = ss.originalPromptText || ss.effectivePromptText || "";
-    if (!looksLikeCodingDiagnosticPrompt(prompt)) return false;
-    const visible = String(ss.visibleTextAcc || "").trim();
-    if (visible.length > 120) return false;
-    return looksLikeEarlyStoppedToolFailure(failedText) || ss.hasFailedTool;
-  }
-
-  function emitFailedCodingToolFallback(sessionPath, ss, reason = "coding_tool_failed_fallback") {
-    if (!sessionPath || !ss || ss.__failedCodingToolFallbackEmitted) return false;
-    const text = buildFailedToolFallbackText(ss);
-    if (!text) return false;
-    ss.__failedCodingToolFallbackEmitted = true;
-    clearToolFinalizationTimer(ss);
-    const closed = closeStreamWithVisibleFallback(sessionPath, ss, text, reason, {
-      appendEvenIfHasOutput: true,
-      trustedFallback: true,
-      skipPostRehydrateRecover: true,
-    });
-    if (!closed && !hasDifferentActiveStreamToken(ss, ss.activeStreamToken)) {
-      const prefix = ss.hasOutput ? "\n\n" : "";
-      emitTrustedVisibleTextDelta(sessionPath, ss, prefix + text);
-      if (!hasStreamEvent(ss, "turn_end")) {
-        emitStreamEvent(sessionPath, ss, { type: "turn_end" });
-      }
-      broadcast({ type: "status", isStreaming: false, sessionPath });
-      finishSessionStream(ss);
-      resetCompletedTurnState(ss);
-      debugLog()?.warn("ws", `[FAILED-CODING-TOOL-FALLBACK v1] emitted after close refusal · reason=${reason} · session=${sessionPath}`);
-      return true;
-    }
-    if (closed) {
-      debugLog()?.warn("ws", `[FAILED-CODING-TOOL-FALLBACK v1] closed stream · reason=${reason} · session=${sessionPath}`);
-    }
-    return closed;
-  }
-
-  function maybeRecoverUnexecutedLocalMutationCommand(sessionPath, ss, visibleTextBeforeReset = "", opts = {}) {
-    const successfulTools = Array.isArray(ss?.lastSuccessfulTools) ? ss.lastSuccessfulTools : [];
-    const hasOnlyLocalProbeTools =
-      successfulTools.length > 0 &&
-      successfulTools.every((tool) => looksLikeLocalMutationProbeCommand(tool));
-    if (
-      !sessionPath ||
-      !ss ||
-      ss.unexecutedLocalMutationRecoveryAttempted ||
-      (ss.hasToolCall && !hasOnlyLocalProbeTools) ||
-      (ss.hasError && !opts.ignoreError) ||
-      ss._turnClosed ||
-      hasStreamEvent(ss, "turn_end")
-    ) {
-      return false;
-    }
-    const requirement = classifyRequestedLocalMutation(ss.originalPromptText || ss.effectivePromptText || "");
-    if (!requirement) return false;
-    const session = engine.getSessionByPath(sessionPath);
-    const command = buildExplicitPromptMutationCommand(ss, session, engine);
-    if (!command) return false;
-    ss.unexecutedLocalMutationRecoveryAttempted = true;
-    debugLog()?.warn("ws", `recovering unexecuted local mutation with deterministic bash · visibleLen=${String(visibleTextBeforeReset || "").trim().length} · session=${sessionPath}`);
-    return executeRecoveredBashCommand(sessionPath, ss, session, command, "unexecuted_local_mutation_recovery");
-  }
-
-  function maybeSteerPseudoToolSimulation(sessionPath, ss, textOverride = null) {
-    if (!sessionPath || !ss) return false;
-    const inspectedText = textOverride != null ? String(textOverride || "") : (ss.visibleTextAcc || ss.rawTextAcc || "");
-    const hasPseudoToolText = containsPseudoToolCallSimulation(inspectedText);
-    const hasFakeProgress = ss.progressMarkerCount > 0 && !ss.hasToolCall;
-    if (!hasPseudoToolText && !hasFakeProgress) return false;
-
-    // P0/P1: 不抢模型是否调用工具的决策，只在模型已经把伪工具泄漏给用户时兜底。
-    // 本地文件任务可从原始用户意图构造确定性 bash，则真实执行；否则只剥离泄漏文本。
-    // Brain v2 不再走客户端二次提示 retry，避免“伪工具纠错提示”反过来污染模型自主工具决策。
-    const recovered = maybeRecoverPseudoToolCommand(sessionPath, ss, inspectedText);
-    if (recovered) {
-      debugLog()?.warn("ws", `pseudo tool text recovered through real tool; suppressing leaked text without steer · session=${sessionPath}`);
-      return true;
-    }
-
-    if (!ss.pseudoToolRecoveryHandled) {
-      const isBrainModel = Boolean(resolveCurrentModelInfo(engine)?.isBrain);
-      ss.pseudoToolSteered = !isBrainModel;
-      ss.pseudoToolRecoveryHandled = true;
-      debugLog()?.warn("ws", `pseudo tool/progress detected; suppressing leaked text without model steer · brain=${isBrainModel} text=${hasPseudoToolText} fake_progress=${hasFakeProgress} count=${ss.progressMarkerCount} · session=${sessionPath}`);
-    }
-    return true;
-  }
-
-  function trimDegenerateTail(text) {
-    let out = String(text || "");
-    out = out.replace(/(?:\s*[—-]\s*[」]?\s*){8,}[\s\]\}】）」）]*$/g, "");
-    out = out.replace(/(?:\s*[\]\}】）」）]){12,}\s*$/g, "");
-    out = out.replace(/(.{1,6})\1{12,}\s*$/s, "");
-    return out;
-  }
-
   function emitTrustedVisibleTextDelta(sessionPath, ss, delta) {
-    const next = trimDegenerateTail(String(delta || "")
-      .replace(/�+/g, "")
-      .replace(/<\|mask_(?:start|end)\|>/gi, ""));
-    if (!next || !next.trim()) return false;
+    const next = String(delta || "");
+    if (!next) return false;
     ss.hasOutput = true;
     ss.titlePreview += next;
     ss.visibleTextAcc += next;
@@ -1501,34 +1007,14 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
   }
 
   function emitVisibleTextDelta(sessionPath, ss, delta) {
-    const rawNext = String(delta || "")
-      .replace(/�+/g, "")
-      .replace(/<\|mask_(?:start|end)\|>/gi, "");
-    let next = rawNext;
+    const next = String(delta || "");
     if (!next) return;
-    const strippedBlock = stripStreamingPseudoToolBlocks(ss, next);
-    if (strippedBlock.suppressed) {
-      maybeSteerPseudoToolSimulation(sessionPath, ss, rawNext);
-      next = strippedBlock.text;
-    }
-    if (containsNonProgressPseudoToolSimulation(next)) {
-      maybeSteerPseudoToolSimulation(sessionPath, ss, next);
-      next = stripPseudoToolCallMarkup(next);
-    }
-    if (!next) return;
-    const combined = ss.visibleTextAcc + next;
-    const trimmed = trimDegenerateTail(combined);
-    if (trimmed.length < combined.length) {
-      next = trimmed.length > ss.visibleTextAcc.length ? trimmed.slice(ss.visibleTextAcc.length) : "";
-      if (!ss.degenerationAbortRequested) {
-        ss.degenerationAbortRequested = true;
-        engine.abortSessionByPath?.(sessionPath).catch(() => {});
-        debugLog()?.warn("ws", `suppressed degenerate tail and requested abort · session=${sessionPath}`);
+    if (hasToolExecutionInFlight(ss)) {
+      ss.bufferedVisibleTextDuringTool = `${ss.bufferedVisibleTextDuringTool || ""}${next}`;
+      if (next.trim()) {
+        ss.hasBufferedVisibleTextDuringTool = true;
+        scheduleToolFinalizationFallback(sessionPath, ss);
       }
-    }
-    if (!next) return;
-    if (containsNonProgressPseudoToolSimulation(ss.visibleTextAcc + next)) {
-      maybeSteerPseudoToolSimulation(sessionPath, ss, ss.visibleTextAcc + next);
       return;
     }
     if (next.trim()) {
@@ -1543,7 +1029,18 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     ss.visibleTextAcc += next;
     emitStreamEvent(sessionPath, ss, { type: "text_delta", delta: next });
     maybeGenerateFirstTurnTitle(sessionPath, ss);
-    maybeSteerPseudoToolSimulation(sessionPath, ss);
+  }
+
+  function flushBufferedToolVisibleText(sessionPath, ss, preferredText = "") {
+    if (!sessionPath || !ss || ss.hasOutput) return false;
+    const persisted = String(preferredText || "").trim();
+    const buffered = String(ss.bufferedVisibleTextDuringTool || "").trim();
+    const text = persisted || buffered;
+    ss.bufferedVisibleTextDuringTool = "";
+    ss.hasBufferedVisibleTextDuringTool = false;
+    if (!text) return false;
+    emitTrustedVisibleTextDelta(sessionPath, ss, text);
+    return true;
   }
 
   function feedLocalVisibleText(sessionPath, ss, delta) {
@@ -1572,7 +1069,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
           ss.progressParser.feed(tEvt.data, (pEvt) => {
             if (pEvt.type === "tool_progress") {
               ss.progressMarkerCount++;
-              maybeSteerPseudoToolSimulation(sessionPath, ss);
               return;
             }
             ss.moodParser.feed(pEvt.data, (evt) => {
@@ -1603,6 +1099,96 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
             });
           });
           break;
+      }
+    });
+  }
+
+  function flushBufferedAssistantText(sessionPath, ss) {
+    if (!sessionPath || !ss) return;
+    // flush 顺序：ThinkTag → LynnProgress → Mood → Xing。即使 tool_end 丢失,
+    // 已经到达的可见文本也要先释放出来,避免用户面对空白等待到硬超时。
+    const feedMoodOnly = (text) => {
+      ss.moodParser.feed(text, (evt) => {
+        if (evt.type === "text") {
+          ss.xingParser.feed(evt.data, (xEvt) => {
+            switch (xEvt.type) {
+              case "text":
+                emitVisibleTextDelta(sessionPath, ss, xEvt.data);
+                break;
+              case "xing_start":
+                emitStreamEvent(sessionPath, ss, { type: "xing_start", title: xEvt.title });
+                break;
+              case "xing_text":
+                emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
+                break;
+              case "xing_end":
+                emitStreamEvent(sessionPath, ss, { type: "xing_end" });
+                break;
+            }
+          });
+        } else if (evt.type === "mood_start") {
+          emitStreamEvent(sessionPath, ss, { type: "mood_start" });
+        } else if (evt.type === "mood_text") {
+          emitStreamEvent(sessionPath, ss, { type: "mood_text", delta: evt.data });
+        } else if (evt.type === "mood_end") {
+          emitStreamEvent(sessionPath, ss, { type: "mood_end" });
+        }
+      });
+    };
+    const feedMoodPipeline = (text) => {
+      ss.progressParser.feed(text, (pEvt) => {
+        if (pEvt.type === "tool_progress") {
+          ss.progressMarkerCount++;
+          debugLog()?.warn("ws", `suppressed hallucinated <lynn_tool_progress> during flush · ${sessionPath}`);
+          return;
+        }
+        feedMoodOnly(pEvt.data);
+      });
+    };
+    ss.thinkTagParser.flush((tEvt) => {
+      if (tEvt.type === "think_text") {
+        emitStreamEvent(sessionPath, ss, { type: "thinking_delta", delta: tEvt.data });
+      } else if (tEvt.type === "think_end") {
+        emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
+      } else if (tEvt.type === "text") {
+        feedMoodPipeline(tEvt.data);
+      }
+    });
+    ss.progressParser.flush((pEvt) => {
+      if (pEvt.type === "text") {
+        feedMoodOnly(pEvt.data);
+      } else if (pEvt.type === "tool_progress") {
+        ss.progressMarkerCount++;
+        debugLog()?.warn("ws", `suppressed hallucinated <lynn_tool_progress> during progress flush · ${sessionPath}`);
+      }
+    });
+    ss.moodParser.flush((evt) => {
+      if (evt.type === "text") {
+        ss.xingParser.feed(evt.data, (xEvt) => {
+          switch (xEvt.type) {
+            case "text":
+              emitVisibleTextDelta(sessionPath, ss, xEvt.data);
+              break;
+            case "xing_start":
+              emitStreamEvent(sessionPath, ss, { type: "xing_start", title: xEvt.title });
+              break;
+            case "xing_text":
+              emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
+              break;
+            case "xing_end":
+              emitStreamEvent(sessionPath, ss, { type: "xing_end" });
+              break;
+          }
+        });
+      } else if (evt.type === "mood_text") {
+        emitStreamEvent(sessionPath, ss, { type: "mood_text", delta: evt.data });
+      }
+    });
+    ss.xingParser.flush((xEvt) => {
+      if (xEvt.type === "text") {
+        emitVisibleTextDelta(sessionPath, ss, xEvt.data);
+      } else if (xEvt.type === "xing_text") {
+        emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
       }
     });
   }
@@ -1677,7 +1263,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       ss.isThinking = false;
       emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
     }
-    emitStreamEvent(sessionPath, ss, { type: "model_hint", model: "qwen35-9b-q4km-imatrix" });
+    emitStreamEvent(sessionPath, ss, { type: "model_hint", model: "local-qwen35-9b-q4km-imatrix/qwen35-9b-q4km-imatrix" });
     emitStreamEvent(sessionPath, ss, { type: "turn_end" });
     lifecycleHooks.run("turn_end", {
       ss,
@@ -1695,6 +1281,166 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     }
   }
 
+  function closeDirectBridgeTurn(sessionPath, ss, opts = {}) {
+    clearTurnTimers(ss);
+    if (ss.isThinking) {
+      ss.isThinking = false;
+      emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
+    }
+    if (opts.modelHint) emitStreamEvent(sessionPath, ss, { type: "model_hint", model: opts.modelHint });
+    emitStreamEvent(sessionPath, ss, { type: "turn_end" });
+    lifecycleHooks.run("turn_end", {
+      ss,
+      sessionPath,
+      hasOutput: ss.hasOutput,
+      hasToolCall: ss.hasToolCall,
+      direct: true,
+      source: opts.source || "direct_bridge",
+    });
+    broadcast({ type: "status", isStreaming: false, sessionPath });
+    finishSessionStream(ss);
+    resetCompletedTurnState(ss);
+    if (opts.debugLabel) {
+      debugLog()?.log("ws", `[DIRECT-BRIDGE v1] closed · ${opts.debugLabel} · ${sessionPath}`);
+    }
+  }
+
+  function resolveChatCompletionsEndpoint(baseUrl = "") {
+    const root = String(baseUrl || "").replace(/\/+$/, "");
+    if (!root) return "";
+    return /\/chat\/completions$/i.test(root) ? root : `${root}/chat/completions`;
+  }
+
+  function resolveBrainDirectEndpoints(credentials = {}) {
+    const candidates = [
+      credentials.base_url,
+      ...BRAIN_PROVIDER_BASE_URLS,
+    ]
+      .map((baseUrl) => resolveChatCompletionsEndpoint(baseUrl))
+      .filter(Boolean);
+    return [...new Set(candidates)];
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function streamBrainDirectBridge(sessionPath, ss, originalPromptText, currentModelInfo) {
+    const startedAt = Date.now();
+    const credentials = engine.resolveProviderCredentials?.(currentModelInfo?.provider || "brain") || {};
+    const endpoints = resolveBrainDirectEndpoints(credentials);
+    if (!endpoints.length) throw new Error("brain direct bridge missing endpoint");
+    let assistantText = "";
+    const userLanguageHint = /[\u4e00-\u9fa5]/.test(originalPromptText) ? "中文" : "the user's language";
+    let lastError = null;
+    const body = JSON.stringify({
+      model: currentModelInfo?.modelId || "lynn-brain-router",
+      messages: [
+        {
+          role: "system",
+          content: [
+            "你是 Lynn。这个通道只用于简单问候、连通性门禁或用户明确要求的短回答。",
+            `请使用${userLanguageHint}自然、简洁回答。`,
+            "如果用户要求只回复某个词或短句，最终回答只能包含那个词或短句。",
+            "不要额外解释，不要输出思考过程。",
+          ].join("\n"),
+        },
+        { role: "user", content: String(originalPromptText || "") },
+      ],
+      temperature: 0.2,
+      max_tokens: BRAIN_DIRECT_MAX_TOKENS,
+      reasoning_effort: "off",
+      extra_body: {
+        reasoning_effort: "off",
+        thinking: { type: "disabled" },
+      },
+      stream: true,
+    });
+
+    for (let attempt = 0; attempt < 1; attempt += 1) {
+      if (attempt > 0) await sleep(BRAIN_DIRECT_RETRY_DELAY_MS);
+      for (const endpoint of endpoints) {
+        if (assistantText.trim()) break;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(new Error("brain direct bridge timeout")), BRAIN_DIRECT_TIMEOUT_MS);
+        try {
+          const pathname = (() => {
+            try { return new URL(endpoint).pathname || "/chat/completions"; } catch { return "/chat/completions"; }
+          })();
+          const res = await fetch(endpoint, {
+            method: "POST",
+            signal: controller.signal,
+            headers: {
+              "content-type": "application/json",
+              ...readSignedClientAgentHeaders({ method: "POST", pathname }),
+              ...(credentials.api_key ? { authorization: `Bearer ${credentials.api_key}` } : {}),
+            },
+            body,
+          });
+          if (!res.ok || !res.body) {
+            const errorBody = await res.text().catch(() => "");
+            throw new Error(`brain direct bridge failed: HTTP ${res.status}${errorBody ? ` ${errorBody.slice(0, 240)}` : ""}`);
+          }
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let streamDone = false;
+          for await (const chunk of res.body) {
+            buffer += decoder.decode(chunk, { stream: true });
+            let newlineIdx = buffer.indexOf("\n");
+            while (newlineIdx >= 0) {
+              const line = buffer.slice(0, newlineIdx).trim();
+              buffer = buffer.slice(newlineIdx + 1);
+              newlineIdx = buffer.indexOf("\n");
+              if (!line || !line.startsWith("data:")) continue;
+              const data = line.slice(5).trim();
+              if (!data) continue;
+              if (data === "[DONE]") {
+                streamDone = true;
+                break;
+              }
+              let payload = null;
+              try {
+                payload = JSON.parse(data);
+              } catch {
+                continue;
+              }
+              const delta = payload?.choices?.[0]?.delta || {};
+              const contentDelta = delta.content || "";
+              if (contentDelta) {
+                assistantText += contentDelta;
+                emitTrustedVisibleTextDelta(sessionPath, ss, contentDelta);
+              }
+            }
+            if (streamDone) {
+              try { await res.body.cancel?.(); } catch { /* body may already be closed */ }
+              break;
+            }
+          }
+          if (assistantText.trim()) break;
+          throw new Error("brain direct bridge produced no visible text");
+        } catch (err) {
+          lastError = err;
+          debugLog()?.warn("ws", `[BRAIN-DIRECT v1] attempt failed · ${endpoint} · ${err?.message || err}`);
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+      if (assistantText.trim()) break;
+    }
+    if (!assistantText.trim()) throw (lastError || new Error("brain direct bridge produced no visible text"));
+    persistLocalQwen35DirectTurn(sessionPath, originalPromptText, assistantText, {
+      api: currentModelInfo?.api || "openai-completions",
+      provider: currentModelInfo?.provider || "brain",
+      model: currentModelInfo?.modelId || "lynn-brain-router",
+    });
+    closeDirectBridgeTurn(sessionPath, ss, {
+      source: "brain_direct_bridge",
+      modelHint: `${currentModelInfo?.provider || "brain"}/${currentModelInfo?.modelId || "lynn-brain-router"}`,
+      debugLabel: `brain chars=${assistantText.length} ms=${Date.now() - startedAt}`,
+    });
+    return true;
+  }
+
   async function streamLocalQwen35DirectBridge(sessionPath, ss, originalPromptText, effectivePromptText) {
     const startedAt = Date.now();
     const messages = [
@@ -1703,6 +1449,8 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         content: [
           "你是 Lynn 的本地 Qwen3.5-9B。优先用用户语言直接回答。",
           "你运行在用户本机。按用户要求自然回答；需要推理时可以先思考，再给出清晰结论。",
+          "如果输出可见思考、思考摘要或推理说明,必须使用自然中文。不要输出 Thinking Process、Analyze the Request、Evaluate Constraints、Final Decision、Safety Check 等英文模板标题。",
+          "用户要求只回复某个短答案时,最终回答只输出该短答案；不要在最终回答里追加解释。",
           "你运行在用户本机,适合日常问答、写作、翻译和轻量分析。",
           "如果用户问你的 Lynn 测评数据,只使用提示里的 Lynn hard data,并明确区分 thinking-on/off、样本量、naive 与 excluding parse-fail。",
           "如果本轮提示已经包含 Lynn 工具取回的资料,请基于这些资料回答；资料不足时说明缺口,不要编造。",
@@ -1787,15 +1535,15 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     }
     stopWarmupFeedback();
     if (!assistantText.trim() && reasoningText.trim()) {
-      const fallback = extractVisibleAnswerFromReasoning(reasoningText)
-        || "本地 9B 已完成思考，但没有生成可见正文。请再试一次，或增加输出预算。";
-      assistantText = fallback;
       if (ss.isThinking) {
         ss.isThinking = false;
         emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
       }
-      feedLocalVisibleText(sessionPath, ss, fallback);
     }
+    // Local llama.cpp streams may finish with a short final chunk still held by
+    // the ThinkTag/Mood/Xing parsers. Flush before turn_end so the real model
+    // output is visible immediately instead of only appearing after reload.
+    flushBufferedAssistantText(sessionPath, ss);
     persistLocalQwen35DirectTurn(sessionPath, originalPromptText, assistantText, {
       reasoningText,
       usage,
@@ -1843,11 +1591,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
 
         const delta = event.assistantMessageEvent.delta;
         ss.rawTextAcc += delta || "";
-        const deltaHasPseudoTool = containsNonProgressPseudoToolSimulation(delta);
-        const accumulatedHasPseudoTool = !deltaHasPseudoTool && containsNonProgressPseudoToolSimulation(ss.rawTextAcc);
-        if (deltaHasPseudoTool || accumulatedHasPseudoTool) {
-          maybeSteerPseudoToolSimulation(sessionPath, ss, ss.rawTextAcc);
-        }
         ss.thinkTagParser.feed(delta, (tEvt) => {
           switch (tEvt.type) {
             case "think_start":
@@ -1863,7 +1606,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
               ss.progressParser.feed(tEvt.data, (pEvt) => {
                 if (pEvt.type === "tool_progress") {
                   ss.progressMarkerCount++;
-                  maybeSteerPseudoToolSimulation(sessionPath, ss);
                   return;
                 }
                 ss.moodParser.feed(pEvt.data, (evt) => {
@@ -1925,6 +1667,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       ss.hasToolCall = true;
       ss.activeToolCallCount = Math.max(0, Number(ss.activeToolCallCount || 0)) + 1;
       ss.lastToolExecutionActivity = Date.now();
+      if (Number(ss.activeToolCallCount || 0) === 1) {
+        ss.activeToolCallStartedAt = ss.lastToolExecutionActivity;
+      }
       if (ss.isThinking) {
         ss.isThinking = false;
         emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
@@ -1980,6 +1725,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       if (!ss) return;
       ss.activeToolCallCount = Math.max(0, Number(ss.activeToolCallCount || 0) - 1);
       ss.lastToolExecutionActivity = Date.now();
+      if (Number(ss.activeToolCallCount || 0) === 0) {
+        ss.activeToolCallStartedAt = null;
+      }
       try {
         const __key = event.toolCallId || event.toolName || "";
         const __t = ss.__slowToolTimers?.get(__key);
@@ -2061,16 +1809,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         rememberSuccessfulTool(ss, toolName, toolSummary, normalizedArgs);
       } else {
         rememberFailedTool(ss, toolName);
-        const failedText = extractText(event.result?.content);
-        if (maybeRecoverFailedLocalMutationCommand(sessionPath, ss, toolName, normalizedArgs, failedText)) {
-          clearToolAuthorizationTimer(ss);
-          return;
-        }
-        if (shouldEmitFailedCodingToolFallback(ss, toolName, failedText)) {
-          clearToolAuthorizationTimer(ss);
-          emitFailedCodingToolFallback(sessionPath, ss);
-          return;
-        }
       }
       clearToolAuthorizationTimer(ss);
       scheduleToolFinalizationFallback(sessionPath, ss);
@@ -2237,6 +1975,11 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       broadcast({ type: "dm_new_message", from: event.from, to: event.to });
     } else if (event.type === "turn_end") {
       if (!ss) return;
+      if (ss.isThinking) {
+        ss.isThinking = false;
+        emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
+      }
+      flushBufferedAssistantText(sessionPath, ss);
       if (hasToolExecutionInFlight(ss)) {
         scheduleToolFinalizationFallback(sessionPath, ss);
         debugLog()?.log("ws", `[TURN-END v4] defer turn_end (tool still in flight count=${ss.activeToolCallCount || 0}, recovered=${!!ss.recoveredBashInFlight}) · hasOutput=${ss.hasOutput} · ${sessionPath}`);
@@ -2354,69 +2097,21 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         }
       });
 
-      const visibleTextBeforeReset = ss.visibleTextAcc || "";
-      if (maybeRecoverUnexecutedLocalMutationCommand(sessionPath, ss, visibleTextBeforeReset)) {
-        clearTurnTimers(ss);
-        finishSessionStream(ss);
-        return;
+      if (!ss.hasOutput && !ss.hasToolCall) {
+        const errorText = extractLatestAssistantErrorAfter(
+          engine.getSessionByPath(sessionPath),
+          sessionPath,
+          ss.persistedAssistantMessageBaseline || 0,
+        );
+        if (errorText) {
+          patchLatestAssistantErrorVisibleText(sessionPath, ss.persistedAssistantMessageBaseline || 0, errorText);
+          ss.hasError = true;
+          emitTrustedVisibleTextDelta(sessionPath, ss, errorText);
+        }
       }
-      let internalRetry = null;
-      const qualitySnapshot = createTurnQualitySnapshot(ss, visibleTextBeforeReset);
-      const applyTurnQualityDecision = (decision) => {
-        if (!decision) return null;
-        if (decision.markPendingToolRetryAttempted) ss.pendingToolRetryAttempted = true;
-        if (decision.markToolFailedFallbackRetryAttempted) ss.toolFailedFallbackRetryAttempted = true;
-        if (decision.flag === "toolFinalizationRetryAttempted") ss.toolFinalizationRetryAttempted = true;
-        if (decision.type === "fallback") {
-          if (decision.text && shouldSuppressGenericEmptyFallback(ss, decision.text)) {
-            debugLog()?.warn("ws", `[TURN-QUALITY-FALLBACK-SUPPRESS v1] suppressed generic fallback · route=${ss?.routeIntent || "unknown"} · session=${sessionPath}`);
-          } else if (decision.text) {
-            emitStreamEvent(sessionPath, ss, { type: "text_delta", delta: decision.text });
-            ss.visibleTextAcc += decision.text;
-            ss.hasOutput = true;
-          }
-        }
-        if (decision.logMessage) {
-          const logger = debugLog();
-          const level = decision.logLevel === "log" ? "log" : "warn";
-          const logFn = logger?.[level];
-          if (typeof logFn === "function") logFn.call(logger, "ws", decision.logMessage);
-        }
-        if (decision.type === "retry") {
-          return { reason: decision.reason, prompt: decision.prompt };
-        }
-        return null;
-      };
-
-      internalRetry = applyTurnQualityDecision(evaluatePreTurnEndQuality(ss, qualitySnapshot, {
-        isActive,
-        sessionPath,
-        visibleTextBeforeReset,
-      }));
-
-      if (internalRetry) {
-        // Keep the user-visible turn open while the internal retry runs. Emitting
-        // turn_end here makes the UI/test harness treat the failed draft as final
-        // and can drop the repaired answer that follows.
-        clearTurnTimers(ss);
-        finishSessionStream(ss);
-        if (ss.progressMarkerCount > 0 && !ss.hasToolCall) {
-          debugLog()?.warn("ws", `observed ${ss.progressMarkerCount} hallucinated <lynn_tool_progress> markers before internal retry · session=${sessionPath}`);
-        }
-        doScheduleInternalRetry(sessionPath, internalRetry.reason, internalRetry.prompt);
-        if (isActive) debugLog()?.log("ws", `assistant reply deferred for internal retry · reason=${internalRetry.reason}`);
-        return;
-      }
-
-      maybeEmitLocalToolCompletionFallback(sessionPath, ss);
 
       emitStreamEvent(sessionPath, ss, { type: "turn_end" });
       broadcast({ type: "status", isStreaming: false, sessionPath });
-      internalRetry = internalRetry || applyTurnQualityDecision(evaluatePostTurnEndQuality(ss, qualitySnapshot, {
-        internalRetry,
-        sessionPath,
-        visibleTextBeforeReset,
-      }));
       (async () => {
         try {
           const raw = await readFile(sessionPath, "utf-8").catch(() => "");
@@ -2427,7 +2122,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
               const entry = JSON.parse(lines[i]);
               const mm = entry?.message;
               if (mm?.role === "assistant" && mm.model) {
-                emitStreamEvent(sessionPath, ss, { type: "model_hint", model: String(mm.model) });
+                const model = String(mm.model || "").trim();
+                const provider = String(mm.provider || "").trim();
+                emitStreamEvent(sessionPath, ss, { type: "model_hint", model: provider ? `${provider}/${model}` : model });
                 return;
               }
             } catch { /* skip */ }
@@ -2439,10 +2136,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         debugLog()?.warn("ws", `observed ${ss.progressMarkerCount} hallucinated <lynn_tool_progress> markers (no real tool_call) · session=${sessionPath}`);
       }
       resetCompletedTurnState(ss);
-      if (internalRetry) {
-        doScheduleInternalRetry(sessionPath, internalRetry.reason, internalRetry.prompt);
-      }
-
       if (isActive) debugLog()?.log("ws", "assistant reply done");
       maybeGenerateFirstTurnTitle(sessionPath, ss);
     } else if (event.type === "auto_compaction_start") {
@@ -2639,22 +2332,31 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 const createdSession = await engine.createSession(null, engine.homeCwd || process.cwd());
                 promptSessionPath = createdSession?.sessionManager?.getSessionFile?.() || engine.currentSessionPath || "";
               }
+              ensureSessionFileOnDisk(promptSessionPath);
               const ss = getState(promptSessionPath);
               if (!ss) {
                 wsSend(ws, { type: "error", message: t("error.noActiveSession") });
                 return;
               }
+              wsSend(ws, {
+                type: "prompt_accepted",
+                sessionPath: promptSessionPath,
+                clientMessageId: msg.clientMessageId || null,
+              });
               const engineStreaming = engine.isSessionStreaming(promptSessionPath);
               if (engineStreaming || ss?.isStreaming) {
-                const isInternalRetryStream = ss?.streamSource === "internal_retry";
+                const isLegacySyntheticStream = ss?.streamSource === "internal_retry";
                 const shouldReleaseStale = isStaleEmptySessionStream(ss)
                   || (engineStreaming && !ss?.isStreaming)
-                  || isInternalRetryStream;
-                const releasedStale = shouldReleaseStale
+                  || isLegacySyntheticStream;
+                let releasedStale = shouldReleaseStale
                   ? await releaseStaleSessionStream(promptSessionPath, ss)
                   : false;
-                if (releasedStale && isInternalRetryStream) {
-                  debugLog()?.warn("ws", `[INTERNAL-RETRY-FENCE v1] aborted stale internal retry on new user prompt · session=${promptSessionPath}`);
+                if (!releasedStale && ss?.isStreaming) {
+                  releasedStale = await closeBusySessionBeforeNextPrompt(promptSessionPath, ss);
+                }
+                if (releasedStale && isLegacySyntheticStream) {
+                  debugLog()?.warn("ws", `[STALE-STREAM-FENCE v1] released legacy synthetic stream on new user prompt · session=${promptSessionPath}`);
                 }
                 if (!releasedStale) {
                   wsSend(ws, { type: "error", message: t("error.stillStreaming", { name: engine.agentName }) });
@@ -2669,6 +2371,8 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 ss.titleRequested = false;
                 ss.titlePreview = "";
                 ss.visibleTextAcc = "";
+                ss.bufferedVisibleTextDuringTool = "";
+                ss.hasBufferedVisibleTextDuringTool = false;
                 ss.rawTextAcc = "";
                 ss.routeIntent = classifyRouteIntent(promptText, { imagesCount: msg.images?.length || 0 });
                 ss.originalPromptText = promptText;
@@ -2692,6 +2396,10 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 ss.hasThinking = false;
                 ss.hasError = false;
                 ss.persistedAssistantTextBaseline = countPersistedAssistantVisibleTexts(
+                  engine.getSessionByPath(promptSessionPath),
+                  promptSessionPath,
+                );
+                ss.persistedAssistantMessageBaseline = countPersistedAssistantMessages(
                   engine.getSessionByPath(promptSessionPath),
                   promptSessionPath,
                 );
@@ -2719,21 +2427,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 });
                 const currentModelInfo = resolveCurrentModelInfo(engine);
                 const initialToolUse = resolveInitialToolUseBehavior(promptText, { modelInfo: currentModelInfo });
-                if (initialToolUse.behavior === TOOL_USE_BEHAVIOR.STOP_WITH_DIRECT_ANSWER) {
-                  emitVisibleTextDelta(promptSessionPath, ss, initialToolUse.directAnswer);
-                  emitStreamEvent(promptSessionPath, ss, { type: "turn_end" });
-                  lifecycleHooks.run("turn_end", {
-                    ss,
-                    sessionPath: promptSessionPath,
-                    hasOutput: ss.hasOutput,
-                    hasToolCall: ss.hasToolCall,
-                    direct: true,
-                  });
-                  broadcast({ type: "status", isStreaming: false, sessionPath: promptSessionPath });
-                  finishSessionStream(ss);
-                  resetCompletedTurnState(ss);
-                  return;
-                }
                 const reportKind = initialToolUse.reportKind;
                 const budgetContext = initialToolUse.budgetContext || "";
                 let effectivePromptText = initialToolUse.effectivePromptText || promptText;
@@ -2758,15 +2451,29 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                     closeStreamWithVisibleFallback(
                       promptSessionPath,
                       ss,
-                      "本地 9B 这次没有稳定返回。我已经保留问题，可以切回默认工具链路或稍后重试。",
+                      "",
                       "local_qwen35_direct_failed",
                       { trustedFallback: true },
                     );
                   }
                   return;
                 }
+	                if (shouldUseBrainDirectBridge(promptText, {
+	                  modelInfo: currentModelInfo,
+	                  hasImages: Boolean(msg.images?.length),
+	                  rehydratedMutation: Boolean(rehydratedMutation),
+	                  toolBehavior: initialToolUse.behavior,
+	                })) {
+	                  ss.effectivePromptText = effectivePromptText;
+	                  try {
+	                    await streamBrainDirectBridge(promptSessionPath, ss, promptText, currentModelInfo);
+	                  } catch (directErr) {
+	                    debugLog()?.warn("ws", `[BRAIN-DIRECT v2] fast path failed, falling back to normal route · ${directErr?.message || directErr} · ${promptSessionPath}`);
+	                  }
+	                  if (ss?._turnClosed || hasStreamEvent(ss, "turn_end")) return;
+	                }
                 const localQwenSynthesisAfterPrefetch = isLocalQwen35Model(currentModelInfo);
-                let directResearchAnswer = "";
+                let prefetchDirectAnswer = "";
                 if (!rehydratedMutation && initialToolUse.behavior === TOOL_USE_BEHAVIOR.PREFETCH_THEN_RUN_OR_STOP) {
                   const toolName = initialToolUse.toolName;
                   ss.hasPrefetchToolCall = true;
@@ -2786,10 +2493,13 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                     if (reportContext && reportContext.trim()) {
                       const toolSummary = buildPrefetchToolSummary(reportContext);
                       ss.hasLocalPrefetchEvidence = true;
-                      if (!localQwenSynthesisAfterPrefetch) {
-                        directResearchAnswer = buildDirectResearchAnswer(reportKind, reportContext, promptText);
-                      }
                       effectivePromptText = buildPrefetchAugmentedPrompt(promptText, reportContext, budgetContext);
+                      if (currentModelInfo?.isBrain) {
+                        prefetchDirectAnswer = buildDirectResearchAnswer(reportKind, reportContext, promptText).trim();
+                        if (!prefetchDirectAnswer && /未检索到明确天气数据|No concrete weather data was found/i.test(reportContext)) {
+                          debugLog()?.warn("ws", `[BRAIN-PREFETCH v1] ${reportKind || "realtime"} returned no concrete evidence · ${promptSessionPath}`);
+                        }
+                      }
                       emitStreamEvent(promptSessionPath, ss, {
                         type: "tool_end",
                         name: toolName,
@@ -2837,23 +2547,17 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                     stopPrefetchFeedback();
                   }
                 }
-                if (directResearchAnswer) {
-                  if (ss.isThinking) {
-                    ss.isThinking = false;
-                    emitStreamEvent(promptSessionPath, ss, { type: "thinking_end" });
-                  }
-                  emitVisibleTextDelta(promptSessionPath, ss, directResearchAnswer);
-                  emitStreamEvent(promptSessionPath, ss, { type: "turn_end" });
-                  lifecycleHooks.run("turn_end", {
-                    ss,
-                    sessionPath: promptSessionPath,
-                    hasOutput: ss.hasOutput,
-                    hasToolCall: ss.hasToolCall,
-                    direct: true,
+                if (currentModelInfo?.isBrain && prefetchDirectAnswer) {
+                  ss.effectivePromptText = effectivePromptText;
+                  persistLocalQwen35DirectTurn(promptSessionPath, promptText, prefetchDirectAnswer, {
+                    api: currentModelInfo.api || "openai-completions",
+                    provider: currentModelInfo.provider || "brain",
+                    model: currentModelInfo.modelId || "lynn-brain-router",
                   });
-                  broadcast({ type: "status", isStreaming: false, sessionPath: promptSessionPath });
-                  finishSessionStream(ss);
-                  resetCompletedTurnState(ss);
+                  emitTrustedVisibleTextDelta(promptSessionPath, ss, prefetchDirectAnswer);
+                  closeStreamWithVisibleFallback(promptSessionPath, ss, "", "brain_prefetch_direct_answer", {
+                    trustedFallback: true,
+                  });
                   return;
                 }
                 if (ss._lastTurnAborted) {
@@ -2861,53 +2565,28 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                   ss._lastTurnAborted = false;
                 }
                 ss.effectivePromptText = effectivePromptText;
-                let activeStreamToken = streamToken;
-                let sendAttempt = 0;
-                while (sendAttempt < 2) {
-                  sendAttempt += 1;
-                  scheduleSilentBrainAbort(promptSessionPath, ss);
-                  try {
-                    await hub.send(
-                      effectivePromptText,
-                      msg.images
-                        ? { images: msg.images, sessionPath: promptSessionPath, streamToken: activeStreamToken }
-                        : { sessionPath: promptSessionPath, streamToken: activeStreamToken },
-                    );
-                    if (!ss.isStreaming) {
-                      if (hasToolExecutionInFlight(ss)) {
-                        scheduleToolFinalizationFallback(promptSessionPath, ss);
-                        debugLog()?.log("ws", `[HUB-SEND v2] returned while tool is still in flight count=${ss.activeToolCallCount || 0}, recovered=${!!ss.recoveredBashInFlight}; defer close · ${promptSessionPath}`);
-                        break;
-                      }
-                      clearTurnTimers(ss);
-                      if (!finalizeReturnedTurnWithoutStream(promptSessionPath, ss, "hub_send_returned_closed_without_turn_end")) {
-                        broadcast({ type: "status", isStreaming: false, sessionPath: promptSessionPath });
-                      }
-                    } else if (!hasToolExecutionInFlight(ss) && finalizeReturnedTurnWithoutStream(promptSessionPath, ss, "hub_send_returned_open_without_turn_end", { requirePersistedText: true })) {
-                      // finalized from the persisted non-streaming assistant message
-                    } else {
-                      scheduleReturnedTurnFinalizationFallback(promptSessionPath, ss, "hub_send_returned_open_safety_timeout");
-                      debugLog()?.log("ws", `hub.send returned while server stream remains open · ${promptSessionPath}`);
-                    }
-                    break;
-                  } catch (sendErr) {
+                scheduleSilentBrainAbort(promptSessionPath, ss);
+                await hub.send(
+                  effectivePromptText,
+                  msg.images
+                    ? { images: msg.images, sessionPath: promptSessionPath, streamToken }
+                    : { sessionPath: promptSessionPath, streamToken },
+                );
+                if (!ss.isStreaming) {
+                  if (hasToolExecutionInFlight(ss)) {
+                    scheduleToolFinalizationFallback(promptSessionPath, ss);
+                    debugLog()?.log("ws", `[HUB-SEND v2] returned while tool is still in flight count=${ss.activeToolCallCount || 0}, recovered=${!!ss.recoveredBashInFlight}; defer close · ${promptSessionPath}`);
+                  } else {
                     clearTurnTimers(ss);
-                    const busyMessage = String(sendErr?.message || sendErr || "");
-                    const isHiddenBusy = /already processing a prompt/i.test(busyMessage);
-                    if (isHiddenBusy && sendAttempt < 2 && !ss.hasOutput && !ss.hasToolCall && !ss.hasThinking && !ss.hasError) {
-                      await forceResetSessionStream(promptSessionPath, ss, "agent_hidden_busy");
-                      const retryToken = beginSessionStream(ss);
-                      ss.activeStreamToken = retryToken;
-                      ss.streamSource = "user";
-                      scheduleTurnHardAbort(promptSessionPath, ss);
-                      schedulePersistedFinalAnswerPoll(promptSessionPath, ss);
-                      broadcast({ type: "status", isStreaming: true, sessionPath: promptSessionPath });
-                      activeStreamToken = retryToken;
-                      debugLog()?.warn("ws", `[HIDDEN-BUSY-RETRY v1] retrying same prompt after forced reset · session=${promptSessionPath}`);
-                      continue;
+                    if (!finalizeReturnedTurnWithoutStream(promptSessionPath, ss, "hub_send_returned_closed_without_turn_end")) {
+                      broadcast({ type: "status", isStreaming: false, sessionPath: promptSessionPath });
                     }
-                    throw sendErr;
                   }
+                } else if (!hasToolExecutionInFlight(ss) && finalizeReturnedTurnWithoutStream(promptSessionPath, ss, "hub_send_returned_open_without_turn_end", { requirePersistedText: true })) {
+                  // finalized from the persisted non-streaming assistant message
+                } else {
+                  scheduleReturnedTurnFinalizationFallback(promptSessionPath, ss, "hub_send_returned_open_safety_timeout");
+                  debugLog()?.log("ws", `hub.send returned while server stream remains open · ${promptSessionPath}`);
                 }
               } catch (err) {
                 clearTurnTimers(ss);

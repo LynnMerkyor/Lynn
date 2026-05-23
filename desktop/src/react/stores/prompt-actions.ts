@@ -48,6 +48,58 @@ function syncOptimisticSessionList(displayText: string, sessionPath: string): vo
   useStore.setState({ sessions: [nextSession, ...sessions] });
 }
 
+function isCurrentSessionStreaming(state: { currentSessionPath?: string | null; isStreaming?: boolean; streamingSessions?: string[] }): boolean {
+  const currentSessionPath = state.currentSessionPath;
+  if (state.isStreaming) return true;
+  return !!(
+    currentSessionPath &&
+    Array.isArray(state.streamingSessions) &&
+    state.streamingSessions.includes(currentSessionPath)
+  );
+}
+
+function sendWebSocketJson(payload: Record<string, unknown>): boolean {
+  const ws = getWebSocket();
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    showSidebarToast(window.t?.('chat.needWsConnection') ?? 'Disconnected from assistant', 5000);
+    return false;
+  }
+  try {
+    ws.send(JSON.stringify(payload));
+    return true;
+  } catch (error) {
+    console.warn('[prompt-actions] websocket send failed', error);
+    showSidebarToast(window.t?.('chat.needWsConnection') ?? 'Disconnected from assistant', 5000);
+    return false;
+  }
+}
+
+function createClientMessageId(): string {
+  return `prompt-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function waitForPromptAccepted(clientMessageId: string, sessionPath: string, timeoutMs = 2500): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const cleanup = (accepted: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      window.removeEventListener('hana-prompt-accepted', onAccepted as EventListener);
+      resolve(accepted);
+    };
+    const onAccepted = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {};
+      if (detail.clientMessageId !== clientMessageId) return;
+      if (detail.sessionPath && detail.sessionPath !== sessionPath) return;
+      cleanup(true);
+    };
+    window.addEventListener('hana-prompt-accepted', onAccepted as EventListener);
+    timer = setTimeout(() => cleanup(false), timeoutMs);
+  });
+}
+
 export async function sendPrompt(options: SendPromptOptions): Promise<boolean> {
   return submitPromptTask({ ...options, mode: options.mode ?? 'prompt' });
 }
@@ -78,7 +130,9 @@ export async function submitPromptTask(options: SendPromptOptions): Promise<bool
     return false;
   }
 
-  if (initialState.isStreaming && mode === 'prompt') {
+  if (isCurrentSessionStreaming(initialState) && mode === 'prompt') {
+    const message = window.t?.('chat.waitForCurrentReply') ?? '当前回复还没结束，请等本轮结束后再发下一条。';
+    initialState.setInlineNotice?.(message);
     return false;
   }
 
@@ -102,6 +156,23 @@ export async function submitPromptTask(options: SendPromptOptions): Promise<bool
     ? (await import('../utils/markdown')).renderMarkdown(displayText)
     : undefined;
 
+  const clientMessageId = mode === 'prompt' ? createClientMessageId() : null;
+  const promptAccepted = clientMessageId ? waitForPromptAccepted(clientMessageId, sessionPath) : null;
+  const sent = mode === 'steer'
+    ? sendWebSocketJson({ type: 'steer', text: requestText, sessionPath })
+    : resendPromptRequest(requestText, options.images, sessionPath, clientMessageId);
+  if (!sent) {
+    return false;
+  }
+  if (promptAccepted) {
+    const accepted = await promptAccepted;
+    if (!accepted) {
+      showSidebarToast(window.t?.('chat.sendNotConfirmed') ?? '发送没有得到服务端确认，Lynn 正在重连，请再试一次。', 5000);
+      try { getWebSocket()?.close(); } catch { /* trigger reconnect */ }
+      return false;
+    }
+  }
+
   useStore.getState().appendItem(sessionPath, {
     type: 'message',
     data: {
@@ -121,22 +192,23 @@ export async function submitPromptTask(options: SendPromptOptions): Promise<bool
   });
   syncOptimisticSessionList(displayText || requestText, sessionPath);
   useStore.setState({ welcomeVisible: false });
-
-  if (mode === 'steer') {
-    ws.send(JSON.stringify({ type: 'steer', text: requestText, sessionPath }));
-    return true;
-  }
-
-  return resendPromptRequest(requestText, options.images, sessionPath);
+  return true;
 }
 
-export function resendPromptRequest(requestText: string, images?: PromptImage[], sessionPath?: string | null): boolean {
+export function resendPromptRequest(
+  requestText: string,
+  images?: PromptImage[],
+  sessionPath?: string | null,
+  clientMessageId?: string | null,
+): boolean {
   if (!canSendPayload(requestText, images)) {
     return false;
   }
 
   const state = useStore.getState();
-  if (state.isStreaming) {
+  if (isCurrentSessionStreaming(state)) {
+    const message = window.t?.('chat.waitForCurrentReply') ?? '当前回复还没结束，请等本轮结束后再发下一条。';
+    state.setInlineNotice?.(message);
     return false;
   }
 
@@ -152,9 +224,11 @@ export function resendPromptRequest(requestText: string, images?: PromptImage[],
     text: requestText,
     sessionPath: targetSession,
   };
+  if (clientMessageId) {
+    payload.clientMessageId = clientMessageId;
+  }
   if (images?.length) {
     payload.images = images;
   }
-  ws.send(JSON.stringify(payload));
-  return true;
+  return sendWebSocketJson(payload);
 }

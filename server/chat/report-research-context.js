@@ -451,6 +451,7 @@ function appendEvidenceBlock(answer, { kind, context, userPrompt } = {}) {
   const body = String(answer || "").trim();
   if (!body || /数据来源\/判断依据/.test(body)) return body;
   const prompt = textOf(userPrompt);
+  if (/(?:一句话|一行|简短|简洁|直接回答|只回复|只回答)/.test(prompt)) return body;
   const meta = inferEvidenceMeta(kind, prompt);
   const sources = extractEvidenceSources(context);
   return [
@@ -560,7 +561,7 @@ function parseIndexSnapshot(result, fallbackTarget = null) {
 }
 
 function parseWeatherForecastRows(text) {
-  return Array.from(String(text || "").matchAll(/-\s*(\d{4}-\d{2}-\d{2}):\s*(.+?)\s+(-?\d+)~(-?\d+)\s*°?\s*C/g)).map((match) => ({
+  return Array.from(String(text || "").matchAll(/-\s*(\d{4}-\d{2}-\d{2}):\s*(.+?)\s+(-?\d+(?:\.\d+)?)~(-?\d+(?:\.\d+)?)\s*(?:°\s*C|°C|℃|C)/g)).map((match) => ({
     date: match[1],
     desc: textOf(match[2]),
     min: match[3],
@@ -568,14 +569,44 @@ function parseWeatherForecastRows(text) {
   }));
 }
 
+function weekdayIndexFromPrompt(userPrompt = "") {
+  const text = String(userPrompt || "");
+  const patterns = [
+    /周日|周天|星期日|星期天|礼拜日|礼拜天/,
+    /周一|星期一|礼拜一/,
+    /周二|星期二|礼拜二/,
+    /周三|星期三|礼拜三/,
+    /周四|星期四|礼拜四/,
+    /周五|星期五|礼拜五/,
+    /周六|星期六|礼拜六/,
+  ];
+  return patterns.findIndex((pattern) => pattern.test(text));
+}
+
+function localWeekdayOfDate(date) {
+  const parsed = new Date(`${date}T00:00:00+08:00`);
+  const day = parsed.getDay();
+  return Number.isFinite(day) ? day : -1;
+}
+
+function pickWeatherForecastRow(rows = [], userPrompt = "") {
+  if (!rows.length) return null;
+  if (/后天/.test(userPrompt) && rows[2]) return rows[2];
+  if (/明天/.test(userPrompt) && rows[1]) return rows[1];
+  const weekday = weekdayIndexFromPrompt(userPrompt);
+  if (weekday >= 0) {
+    const matched = rows.find((row) => localWeekdayOfDate(row.date) === weekday);
+    if (matched) return matched;
+  }
+  return rows[0];
+}
+
 function parseWeatherSnapshot(result, userPrompt = "", locationHint = "") {
   const text = extractToolText(result);
   const rows = parseWeatherForecastRows(text);
   if (!rows.length && !locationHint) return null;
 
-  let picked = rows[0] || null;
-  if (/后天/.test(userPrompt) && rows[2]) picked = rows[2];
-  else if (/明天/.test(userPrompt) && rows[1]) picked = rows[1];
+  const picked = pickWeatherForecastRow(rows, userPrompt);
 
   const rawLocation = text.match(/^([^\n]+?)\s+当前天气/m)?.[1]?.trim() || "";
   return {
@@ -733,23 +764,34 @@ function buildDirectOilAnswer(context) {
 function buildDirectWeatherAnswer(context, userPrompt = "") {
   const text = String(context || "");
   if (/未检索到明确天气数据|No concrete weather data was found/i.test(text)) {
+    const location = extractWeatherLocation(userPrompt, "")
+      || text.match(/没有拿到\s+(.+?)\s+的可用天气/)?.[1]?.trim()
+      || "";
+    const target = location || "目标地点";
+    const errorLine = text.split(/\r?\n/).find((line) => /^错误[:：]/.test(line.trim())) || "";
+    const errorText = errorLine ? `（${errorLine.replace(/^错误[:：]\s*/, "")}）` : "";
+    if (/(?:一句话|一行|简短|简洁|直接回答|只回复|只回答)/.test(userPrompt)) {
+      return `${target}天气源本轮超时，wttr.in 和 Open-Meteo 都没有返回可用数据${errorText}，我没有生成降雨判断。`;
+    }
     return [
-      "未检索到明确天气数据。",
-      "天气工具已尝试主源和搜索兜底，但没有拿到同时包含天气状态、温度/降雨等字段的可用预报；我不会把天气网站首页或导航菜单当成有效结果。",
-      "建议直接核验：中国天气网 https://www.weather.com.cn/ 或中央气象台 https://www.nmc.cn/ 。",
+      `${target}天气源本轮超时，wttr.in 和 Open-Meteo 都没有返回可用数据${errorText}。`,
+      "我不会把天气网站首页或导航菜单当成有效结果。",
+      "我没有生成降雨判断；可以直接重试一次，或稍后用本地天气 App / 中国天气网核验。",
     ].join("\n");
   }
   const rows = parseWeatherForecastRows(text);
   if (!rows.length) return "";
-  let picked = rows[0];
-  if (/后天/.test(userPrompt) && rows[2]) picked = rows[2];
-  else if (/明天/.test(userPrompt) && rows[1]) picked = rows[1];
+  const picked = pickWeatherForecastRow(rows, userPrompt);
+  if (!picked) return "";
   const location = extractWeatherLocation(userPrompt, "")
     || text.match(/\n\n([^\n]+?)\s+当前天气/)?.[1]?.trim()
     || text.match(/资料。\n\n([^\n]+?)\s+当前天气/)?.[1]?.trim()
     || "";
   const rainy = weatherLooksRainy(picked.desc);
   const desc = String(picked.desc || "")
+    .replace(/Light rain shower/i, "小阵雨")
+    .replace(/Moderate or heavy rain shower/i, "阵雨")
+    .replace(/Rain shower/i, "阵雨")
     .replace(/Patchy rain nearby/i, "附近有零星小雨")
     .replace(/Partly Cloudy/i, "局部多云")
     .replace(/Sunny/i, "晴")
@@ -761,6 +803,9 @@ function buildDirectWeatherAnswer(context, userPrompt = "") {
   const rainText = /下雨|降雨|降水/.test(userPrompt)
     ? `降雨判断：${rainy ? "有降雨可能" : "未显示明显降雨"}。`
     : "";
+  if (/(?:一句话|一行|简短|简洁|直接回答|只回复|只回答)/.test(userPrompt)) {
+    return `${[location, picked.date].filter(Boolean).join(" ")}天气：${desc}，${picked.min}-${picked.max}°C${rainText ? `，${rainy ? "有降雨可能" : "未显示明显降雨"}。` : "。"}`;
+  }
   return [
     `${[location, picked.date].filter(Boolean).join(" ")}天气：${desc}，${picked.min}-${picked.max}°C。`,
     rainText,
@@ -992,10 +1037,11 @@ async function buildRealtimeToolContext({ title, toolFactory, params, timeoutMs 
 }
 
 async function buildWeatherResearchContext(userPrompt) {
+  const location = extractWeatherLocation(userPrompt, "");
   return buildRealtimeToolContext({
     title: "【系统已完成天气工具预取】",
     toolFactory: createWeatherTool,
-    params: { query: userPrompt },
+    params: { query: userPrompt, location },
   });
 }
 

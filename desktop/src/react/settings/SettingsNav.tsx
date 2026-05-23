@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSettingsStore } from './store';
 import { t } from './helpers';
 import styles from './Settings.module.css';
@@ -26,6 +26,8 @@ const TAB_ITEMS = [
 
 export function SettingsNav() {
   const { activeTab, set } = useSettingsStore();
+  // #15: nav filter — type to filter visible tabs by translated label
+  const [filter, setFilter] = useState('');
 
   const handleTabClick = (tabId: string) => {
     if (tabId === 'agent') {
@@ -39,9 +41,37 @@ export function SettingsNav() {
     set({ activeTab: tabId });
   };
 
+  const visibleTabs = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return TAB_ITEMS;
+    return TAB_ITEMS.filter((item) => {
+      const label = String(t(item.key) || '').toLowerCase();
+      return label.includes(q) || item.id.toLowerCase().includes(q);
+    });
+  }, [filter]);
+
   return (
     <nav className={styles['settings-nav']}>
-      {TAB_ITEMS.map(item => (
+      <input
+        type="search"
+        className={styles['settings-nav-filter']}
+        placeholder={t('settings.search.placeholder') || 'Search settings...'}
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        style={{
+          margin: '0 8px 8px 8px',
+          padding: '6px 10px',
+          border: '1px solid var(--border-secondary, rgba(0,0,0,0.1))',
+          borderRadius: 6,
+          fontSize: 12,
+          background: 'transparent',
+          outline: 'none',
+          width: 'calc(100% - 16px)',
+          boxSizing: 'border-box',
+        }}
+        aria-label="Filter settings tabs"
+      />
+      {visibleTabs.map(item => (
         <button
           key={item.id}
           className={`${styles['settings-nav-item']}${activeTab === item.id ? ' ' + styles['active'] : ''}`}
@@ -52,6 +82,11 @@ export function SettingsNav() {
           <span>{t(item.key)}</span>
         </button>
       ))}
+      {visibleTabs.length === 0 && (
+        <div style={{ padding: '12px', fontSize: 12, opacity: 0.6, textAlign: 'center' }}>
+          {t('settings.search.empty') || 'No matching tabs'}
+        </div>
+      )}
     </nav>
   );
 }

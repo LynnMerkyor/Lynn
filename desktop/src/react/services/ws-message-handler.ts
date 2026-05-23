@@ -119,6 +119,17 @@ export function applyStreamingStatus(isStreaming: boolean): void {
   }
 }
 
+function applySessionStreamingStatus(sessionPath: string | null | undefined, isStreaming: boolean): void {
+  const path = sessionPath || useStore.getState().currentSessionPath;
+  if (path) {
+    if (isStreaming) useStore.getState().addStreamingSession(path);
+    else useStore.getState().removeStreamingSession(path);
+  }
+  if (!path || path === useStore.getState().currentSessionPath) {
+    applyStreamingStatus(isStreaming);
+  }
+}
+
 // ── 消息分发（大 switch） ──
 
 export function handleServerMessage(msg: ServerEvent | any): void {
@@ -207,6 +218,23 @@ export function handleServerMessage(msg: ServerEvent | any): void {
 
   // 非聊天渲染事件走传统 switch
   switch (msg.type) {
+    case 'status':
+      applySessionStreamingStatus(msg.sessionPath, !!msg.isStreaming);
+      break;
+
+    case 'error': {
+      const raw = String(msg.message || 'Unknown error');
+      const message = /request timed out|timeout|aborted/iu.test(raw)
+        ? `模型请求超时：${raw}`
+        : raw;
+      useStore.getState().setInlineError?.(message);
+      if (msg.sessionPath) applySessionStreamingStatus(msg.sessionPath, false);
+      useStore.getState().addToast?.(message, 'error', 5000, {
+        dedupeKey: `ws-error:${msg.sessionPath || 'global'}:${raw}`,
+      });
+      break;
+    }
+
     case 'stream_resume':
       replayStreamResume(msg);
       break;
@@ -357,6 +385,15 @@ export function handleServerMessage(msg: ServerEvent | any): void {
 
     case 'plan_mode':
       window.dispatchEvent(new CustomEvent('hana-plan-mode', { detail: { enabled: !!msg.enabled } }));
+      break;
+
+    case 'prompt_accepted':
+      window.dispatchEvent(new CustomEvent('hana-prompt-accepted', {
+        detail: {
+          sessionPath: msg.sessionPath || null,
+          clientMessageId: msg.clientMessageId || null,
+        },
+      }));
       break;
 
     case 'security_mode':

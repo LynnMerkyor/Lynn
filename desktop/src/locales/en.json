@@ -199,7 +199,9 @@
     "more": "More",
     "empty": "Empty",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "editResend": "Edit & resend",
+    "editResendTitle": "Edit & resend (copies this message to the input; press Enter to resend after fixing)"
   },
   "chat": {
     "send": "Send",
@@ -208,6 +210,7 @@
     "browserScreenshot": "Browser screenshot",
     "compacting": "Compacting context",
     "needWsConnection": "Disconnected from the assistant. Wait for reconnect or tap Reconnect in the status bar.",
+    "waitForCurrentReply": "The current reply is still running. Please wait for this turn to finish before sending another message.",
     "retry": "Retry",
     "emptyAnswerHint": "The model thought but didn't say anything. Tap retry to try again.",
     "emptyAnswerRetry": "Retry"
@@ -834,7 +837,9 @@
       "changeAvatar": "Change",
       "userNameHint": "How they address you",
       "userProfile": "User Profile",
-      "userProfileHint": "Help the assistant know you: interests, habits, preferences. Injected into the system prompt"
+      "userProfileHint": "Help the assistant know you: interests, habits, preferences. Injected into the system prompt",
+      "defaultProviderHint": "Switch between local 9B and cloud providers in one click.",
+      "openProviders": "Open Providers →"
     },
     "crop": {
       "title": "Adjust avatar",
@@ -1057,7 +1062,9 @@
       "verified": "Verified & saved ✿",
       "verifyFailed": "Verification failed",
       "noProvider": "Please select a search engine first",
-      "noKey": "Please enter an API Key first"
+      "noKey": "Please enter an API Key first",
+      "placeholder": "Search settings…",
+      "empty": "No matching tabs"
     },
     "work": {
       "title": "Patrol",
@@ -1120,9 +1127,9 @@
       "noUser": "No custom skills",
       "copyToSkills": "Copy to your skills",
       "copied": "Copied ✓",
-    "copyFailed": "Copy failed",
-    "dropzone": "Drop a skill folder to install, or click to browse",
-    "learnHint": "Try asking your assistant: find me some safe and useful skills from GitHub",
+      "copyFailed": "Copy failed",
+      "dropzone": "Drop a skill folder to install, or click to browse",
+      "learnHint": "Try asking your assistant: find me some safe and useful skills from GitHub",
       "reloaded": "Skills reloaded",
       "reload": "Reload skills",
       "compatTitle": "Compatible Skills",
@@ -1231,6 +1238,11 @@
         "Paste the App ID and App Secret into the input fields above and turn on the switch"
       ],
       "whatsappHint": "Coming soon"
+    },
+    "shortcuts": {
+      "title": "Keyboard shortcuts",
+      "globalSummon": "Global summon",
+      "globalSummonHint": "Rebind in Voice settings. If the shortcut is taken by another app, Lynn falls back to Cmd/Ctrl+Opt+J."
     }
   },
   "onboarding": {
@@ -1358,7 +1370,11 @@
       "errorAll": "All mirrors failed — check your network and retry",
       "errorGeneric": "Download error: {reason}",
       "next": "Continue",
-      "back": "Back"
+      "back": "Back",
+      "modelPreparedHint": "Model and llama.cpp are ready. Click Start to switch to Local 9B.",
+      "statusReady": "Ready",
+      "statusWaiting": "Pending",
+      "runtimeLocal9B": "Local 9B"
     },
     "tutorial": {
       "interactive": {
@@ -1404,7 +1420,8 @@
       },
       "finish": "Let's Go",
       "quickFinish": "Enter Lynn now"
-    }
+    },
+    "skipSetup": "Skip setup"
   },
   "activity": {
     "title": "Activity",
@@ -1545,7 +1562,7 @@
     "missingParam": "Missing {param} parameter",
     "invalidJson": "Request body must be a JSON object",
     "sessionNotFound": "Session file not found",
-    "stillStreaming": "{name} is still responding, please wait",
+    "stillStreaming": "{name} is still responding. Please wait for this turn to finish before sending another message.",
     "agentNameEmpty": "Agent name cannot be empty",
     "agentIdInvalid": "Agent ID contains invalid characters",
     "agentAlreadyExists": "Agent \"{id}\" already exists",

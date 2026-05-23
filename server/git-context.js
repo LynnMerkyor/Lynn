@@ -7,6 +7,7 @@ function runGit(args, cwd) {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    timeout: 1200,
   }).trim();
 }
 

@@ -179,7 +179,34 @@ app.use("*", async (c, next) => {
   });
   if (token !== SERVER_TOKEN) return c.json({ error: "forbidden" }, 403);
 
-  await next();
+  const url = new URL(c.req.url);
+  const pathName = url.pathname;
+  const shouldTraceRequest = (
+    pathName.startsWith("/api/")
+    || pathName === "/api/health"
+    || pathName === "/api/config"
+    || pathName === "/api/app-state"
+    || pathName === "/api/sessions"
+    || pathName === "/api/desk/files"
+    || pathName === "/api/desk/git-context"
+    || pathName === "/api/desk/git-diff"
+  );
+  const started = Date.now();
+  let slowTimer = null;
+  if (shouldTraceRequest) {
+    dlog.log("request", `→ ${c.req.method} ${pathName}${url.search || ""}`);
+    slowTimer = setTimeout(() => {
+      dlog.warn("request", `slow ${c.req.method} ${pathName}${url.search || ""} still running after ${Date.now() - started}ms`);
+    }, 1500);
+  }
+  try {
+    await next();
+  } finally {
+    if (slowTimer) clearTimeout(slowTimer);
+    if (shouldTraceRequest) {
+      dlog.log("request", `← ${c.req.method} ${pathName} ${Date.now() - started}ms`);
+    }
+  }
 });
 
 // 全局错误处理
@@ -250,25 +277,16 @@ startupState.routeReady = true;
 
 // 健康检查 + 身份信息
 app.get("/api/health", async (c) => {
-  // 检查自定义头像是否存在（避免前端 HEAD 请求 404）
-  const avatars = {};
-  for (const role of ['agent', 'user']) {
-    const dir = path.join(role === 'user' ? engine.userDir : engine.agentDir, 'avatars');
-    avatars[role] = false;
-    try {
-      const files = fs.readdirSync(dir);
-      avatars[role] = files.some(f => /\.(png|jpe?g|webp)$/i.test(f));
-    } catch {
-      // Missing avatar directories are represented as avatars[role] = false.
-    }
-  }
   return c.json({
     status: "ok",
     version: appVersion,
     agent: engine.agentName,
     user: engine.userName,
     model: engine.currentModel?.name,
-    avatars,
+    // Health is a hot startup path for the renderer and heartbeat. Keep it
+    // side-effect free and avoid filesystem probes; avatar routes can answer
+    // their own existence checks when the UI actually requests an image.
+    avatars: { agent: false, user: false },
     features: {
       translateRoute: true,
       toolsRoute: true,

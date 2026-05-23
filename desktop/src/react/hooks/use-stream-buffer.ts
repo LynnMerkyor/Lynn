@@ -36,6 +36,8 @@ interface Buffer {
   lastRenderedText: string;
   lastRenderedHtml: string;
   lastRenderedFinalized: boolean;
+  activeMessageId: string | null;
+  pendingModelHint: string | null;
 }
 
 function createBuffer(sessionPath: string): Buffer {
@@ -56,6 +58,8 @@ function createBuffer(sessionPath: string): Buffer {
     lastRenderedText: '',
     lastRenderedHtml: '',
     lastRenderedFinalized: false,
+    activeMessageId: null,
+    pendingModelHint: null,
   };
 }
 
@@ -100,7 +104,21 @@ class StreamBufferManager {
     if (!session) return; // session 未初始化（可能还没 loadMessages）
 
     const id = `stream-${Date.now()}`;
-    const msg: ChatMessage = { id, role: 'assistant', blocks: [] };
+    buf.activeMessageId = id;
+    const currentModel = store.currentModel;
+    const currentModelHint = currentModel?.id
+      ? (currentModel.provider ? `${currentModel.provider}/${currentModel.id}` : currentModel.id)
+      : null;
+    const msg: ChatMessage = {
+      id,
+      role: 'assistant',
+      blocks: [],
+      // Snapshot the user-selected model at turn creation. A later server
+      // model_hint can still override this when routing/fallback chooses a
+      // different provider, but completed stream messages must not drift when
+      // the user changes the selector afterward.
+      model: buf.pendingModelHint || currentModelHint,
+    };
     store.appendItem(buf.sessionPath, { type: 'message', data: msg });
   }
 
@@ -301,6 +319,7 @@ class StreamBufferManager {
           while (lastTg >= 0 && blocks[lastTg].type !== 'tool_group') lastTg--;
           if (lastTg >= 0 && blocks[lastTg].type === 'tool_group') {
             const tg = blocks[lastTg] as Extract<ContentBlock, { type: 'tool_group' }>;
+            if (tg.tools.some(t => t.name === msg.name && !t.done)) return m;
             // 如果上一个 group 里还有未完成的工具，追加到同一个 group
             if (tg.tools.some(t => !t.done)) {
               blocks[lastTg] = {
@@ -374,6 +393,7 @@ class StreamBufferManager {
             while (lastTg >= 0 && blocks[lastTg].type !== 'tool_group') lastTg--;
             if (lastTg >= 0 && blocks[lastTg].type === 'tool_group') {
               const tg = blocks[lastTg] as Extract<ContentBlock, { type: 'tool_group' }>;
+              if (tg.tools.some(t => t.name === name && !t.done)) return m;
               if (tg.tools.some(t => !t.done)) {
                 blocks[lastTg] = {
                   ...tg,
@@ -545,19 +565,29 @@ class StreamBufferManager {
         break;
 
       case 'model_hint':
-        // [PROVIDER-BADGE v2] Follow-up event (arrives shortly after turn_end) carrying the
-        // actual provider/model that answered. Attach to the latest assistant message.
+        // [PROVIDER-BADGE v3] Only attach provider/model hints to the active streaming
+        // message. Late follow-up hints must never rewrite completed history.
         if (msg.model) {
           try {
+            const modelHint = String(msg.model);
+            if (!buf.messageAppended || !buf.activeMessageId) {
+              buf.pendingModelHint = modelHint;
+              break;
+            }
             const state = useStore.getState();
             const sess = state.chatSessions?.[sessionPath];
             const items = sess?.items;
             if (items && items.length) {
               for (let i = items.length - 1; i >= 0; i--) {
                 const it = items[i];
-                if (it?.type === 'message' && it.data?.role === 'assistant') {
+                if (
+                  it?.type === 'message'
+                  && it.data?.role === 'assistant'
+                  && it.data.id === buf.activeMessageId
+                  && it.data.id.startsWith('stream-')
+                ) {
                   const nextItems = items.slice();
-                  nextItems[i] = { ...it, data: { ...it.data, model: String(msg.model) } };
+                  nextItems[i] = { ...it, data: { ...it.data, model: modelHint } };
                   useStore.setState({
                     chatSessions: { ...state.chatSessions, [sessionPath]: { ...sess, items: nextItems } },
                   });
@@ -583,6 +613,8 @@ class StreamBufferManager {
         buf.lastRenderedText = '';
         buf.lastRenderedHtml = '';
         buf.lastRenderedFinalized = false;
+        buf.activeMessageId = null;
+        buf.pendingModelHint = null;
         // [PROGRESS-UX v1] clear title-bar activity on turn end
         useStore.setState({ currentActivity: null });
         break;

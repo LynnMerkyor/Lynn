@@ -71,6 +71,25 @@ const TOOL_LABELS: Record<string, string> = {
   todo: '待办管理',
 };
 
+function parseMessageModelRef(raw?: string | null): { id: string; provider?: string } | null {
+  const value = String(raw || '').trim();
+  if (!value) return null;
+  const spaced = value.split(/\s+\/\s+/);
+  if (spaced.length >= 2 && spaced[0] && spaced.slice(1).join('/')) {
+    return { provider: spaced[0], id: spaced.slice(1).join('/') };
+  }
+  const slashIndex = value.indexOf('/');
+  if (slashIndex > 0 && slashIndex < value.length - 1) {
+    return { provider: value.slice(0, slashIndex), id: value.slice(slashIndex + 1) };
+  }
+  const lower = value.toLowerCase();
+  if (lower === 'lynn-brain-router') return { provider: 'brain', id: value };
+  if (lower === 'qwen35-9b-q4km-imatrix') {
+    return { provider: 'local-qwen35-9b-q4km-imatrix', id: value };
+  }
+  return { id: value };
+}
+
 function audioFileNameFromPath(filePath: string): string {
   return filePath.split(/[\\/]/).filter(Boolean).pop() || '';
 }
@@ -246,9 +265,16 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
   );
   const plainText = useMemo(() => extractPlainTextFromBlocks(blocks), [blocks]);
   const latestReviewBlock = useMemo(() => findLatestReviewBlock(blocks), [blocks]);
-  const currentModel = useStore(s => s.currentModel);
   const { running: runningTools, total: totalTools, activeLabel: activeToolLabel } = useMemo(() => summarizeToolState(blocks), [blocks]);
   const isStreamMsg = !!message.id?.startsWith('stream-');
+  const appIsStreaming = useStore(s => s.isStreaming);
+  const currentModel = useStore(s => s.currentModel);
+  const messageModelLabel = useMemo(() => {
+    const modelRef = parseMessageModelRef(message.model);
+    const isActiveStreamingMessage = isStreamMsg && isLastAssistant && appIsStreaming;
+    const fallbackRef = isActiveStreamingMessage ? currentModel : { provider: 'brain', id: 'lynn-brain-router' };
+    return formatCompactModelLabel(modelRef || fallbackRef, { role: displayYuan, purpose: 'chat' });
+  }, [message.model, currentModel, displayYuan, isStreamMsg, isLastAssistant, appIsStreaming]);
   const showStreamingMeta = isStreamMsg && (runningTools > 0 || blocks.some(block => block.type === 'thinking' && !block.sealed));
   // T2: TTFT 等待提示——streaming 中但还没有任何实际内容
   const showWaitingHint = isStreamMsg && blocks.length === 0;
@@ -554,9 +580,9 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
             <span className={`${styles.avatar} ${styles.userAvatar}`}>🌸</span>
           )}
           <span className={styles.avatarName}>{displayName}</span>
-          {formatCompactModelLabel(currentModel, { role: displayYuan, purpose: 'chat' }) && (
+          {messageModelLabel && (
             <span className={styles.avatarMeta}>
-              {formatCompactModelLabel(currentModel, { role: displayYuan, purpose: 'chat' })}
+              {messageModelLabel}
             </span>
           )}
           {showStreamingMeta && (
@@ -589,7 +615,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
           agentName={displayName}
           agentYuan={displayYuan}
           agentAvatarUrl={avatarSrc}
-          agentModelLabel={formatCompactModelLabel(currentModel, { role: displayYuan, purpose: 'chat' })}
+          agentModelLabel={messageModelLabel}
           openLabel={openLabel}
           stateKey={message.id}
           sourceResponse={plainText}

@@ -224,7 +224,10 @@ export class AgentManager {
   listAgents() {
     const now = Date.now();
     if (!this._agentListCache || now - this._agentListCache.ts > AgentManager.AGENT_LIST_TTL) {
-      this._agentListCache = { raw: this._scanAgentList(), ts: now };
+      const raw = this._agents.size > 0
+        ? this._listLoadedAgents()
+        : this._scanAgentList();
+      this._agentListCache = { raw, ts: now };
     }
 
     const prefs = this._d.getPrefs();
@@ -242,6 +245,23 @@ export class AgentManager {
         const ia = order.indexOf(a.id);
         const ib = order.indexOf(b.id);
         return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+      });
+    }
+    return agents;
+  }
+
+  _listLoadedAgents() {
+    const agents = [];
+    for (const [id, ag] of this._agents.entries()) {
+      const cfg = ag?.config || {};
+      agents.push({
+        id,
+        name: cfg.agent?.name || ag?.agentName || id,
+        yuan: cfg.agent?.yuan || "hanako",
+        tier: cfg.agent?.tier || "local",
+        expertSlug: cfg.expert?.slug || null,
+        identity: "",
+        hasAvatar: false,
       });
     }
     return agents;

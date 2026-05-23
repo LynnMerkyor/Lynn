@@ -152,6 +152,33 @@ export function InterfaceTab() {
           </div>
         </div>
       </section>
+
+      {/* #14: Global shortcut discoverability — surfaces the keybinding that was previously
+          only set in main.cjs registerGlobalSummon() with no UI exposure. Rebinding still
+          happens in Voice tab (existing wiring); this read-only section makes the binding
+          discoverable from Interface settings where users naturally look. */}
+      <section className={styles['settings-section']}>
+        <h2 className={styles['settings-section-title']}>{t('settings.shortcuts.title') || 'Keyboard shortcuts'}</h2>
+        <div className={styles['settings-field']}>
+          <label className={styles['settings-field-label']}>{t('settings.shortcuts.globalSummon') || 'Global summon'}</label>
+          <div className={styles['settings-field-control']}>
+            <code style={{
+              display: 'inline-block',
+              padding: '4px 8px',
+              borderRadius: 4,
+              background: 'rgba(0,0,0,0.05)',
+              fontSize: 12,
+              fontFamily: 'ui-monospace, monospace',
+            }}>
+              {navigator.userAgent.toLowerCase().includes('mac') ? '⌘ Shift L' : 'Ctrl Shift L'}
+            </code>
+            <span className={styles['settings-field-hint']} style={{ marginLeft: 12 }}>
+              {t('settings.shortcuts.globalSummonHint')
+                || 'Rebind in Voice settings. If the shortcut is taken by another app, Lynn falls back to Cmd/Ctrl+Opt+J.'}
+            </span>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

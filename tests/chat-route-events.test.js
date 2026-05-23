@@ -170,7 +170,7 @@ describe("chat route event forwarding", () => {
     expect(clients[0].sent).toContainEqual({ type: "security_mode", mode: "safe" });
   });
 
-  it("suppresses pseudo-tool XML without steering Brain default model text", async () => {
+  it("passes pseudo-tool XML through without steering Brain default model text", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -190,15 +190,16 @@ describe("chat route event forwarding", () => {
         delta: '<web_search>\n深圳 2026年4月28日 天气预报\n</web_search>',
       },
     }, "/sessions/current.jsonl");
+    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
 
     expect(engine.steerSession).not.toHaveBeenCalled();
     expect(clients[0].sent
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
-      .join("")).not.toContain("<web_search>");
+      .join("")).toContain("<web_search>");
   });
 
-  it("suppresses pseudo-tool function text for non-Brain model text without steering", async () => {
+  it("passes pseudo-tool function text for non-Brain model text without steering", async () => {
     engine.currentModel = { id: "kimi-k2.5", provider: "moonshot", name: "Kimi K2.5" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -218,16 +219,17 @@ describe("chat route event forwarding", () => {
         delta: 'web_search(query="深圳天气")',
       },
     }, "/sessions/current.jsonl");
+    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
 
     expect(engine.steerSession).not.toHaveBeenCalled();
     const visibleText = clients[0].sent
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).not.toContain("web_search");
+    expect(visibleText).toContain("web_search");
   });
 
-  it("suppresses pseudo bash XML even after a real tool call already ran", async () => {
+  it("passes pseudo bash XML even after a real tool call already ran", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -275,11 +277,11 @@ describe("chat route event forwarding", () => {
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).not.toContain("<bash>");
-    expect(visibleText).not.toContain("mkdir -p");
+    expect(visibleText).toContain("<bash>");
+    expect(visibleText).toContain("mkdir -p");
   });
 
-  it("suppresses fragmented pseudo web_search XML across streaming chunks", async () => {
+  it("passes fragmented pseudo web_search XML across streaming chunks", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -304,17 +306,18 @@ describe("chat route event forwarding", () => {
       type: "message_update",
       assistantMessageEvent: { type: "text_delta", delta: "</web_search>" },
     }, "/sessions/current.jsonl");
+    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
 
     expect(engine.steerSession).not.toHaveBeenCalled();
     const visibleText = clients[0].sent
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).not.toContain("<web_search>");
-    expect(visibleText).not.toContain("深圳 2026年4月28日 天气预报");
+    expect(visibleText).toContain("<web_search>");
+    expect(visibleText).toContain("深圳 2026年4月28日 天气预报");
   });
 
-  it("suppresses pseudo-tool XML without retrying Brain when a thinking-only turn ends", async () => {
+  it("passes pseudo-tool XML without retrying Brain when a thinking-only turn ends", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -345,14 +348,13 @@ describe("chat route event forwarding", () => {
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).toContain("模型输出了无效工具标记");
-    expect(visibleText).not.toContain("<bash>");
+    expect(visibleText).toContain("<bash>");
     expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
     }));
   });
 
-  it("suppresses backend tool-template XML fragments across streaming chunks", async () => {
+  it("passes backend tool-template XML fragments across streaming chunks", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -385,11 +387,11 @@ describe("chat route event forwarding", () => {
       .map((evt) => evt.delta)
       .join("");
     expect(visibleText).toContain("最终答案");
-    expect(visibleText).not.toMatch(/tavily|_calls|<\/?inv/i);
-    expect(visibleText).not.toContain("深圳天气");
+    expect(visibleText).toMatch(/tavily|_calls|<\/?inv/i);
+    expect(visibleText).toContain("深圳天气");
   });
 
-  it("defers turn_end when pre-turn quality schedules an internal retry", async () => {
+  it("does not defer turn_end or schedule internal retry for truncated-looking text", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     hub.send = vi.fn(() => new Promise(() => {}));
@@ -410,19 +412,16 @@ describe("chat route event forwarding", () => {
     }, "/sessions/current.jsonl");
     subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
 
-    await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(2));
+    await Promise.resolve();
 
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+    expect(hub.send).toHaveBeenCalledTimes(1);
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
-      reason: "truncated_structured_answer",
     }));
-    expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(false);
-    const retryPrompt = hub.send.mock.calls.at(-1)?.[0] || "";
-    expect(retryPrompt).toContain("结构化答案开头就中断");
-    expect(retryPrompt).toContain("宋朝科举");
+    expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true);
   });
 
-  it("retries when a real tool ran but the assistant only says it will continue executing", async () => {
+  it("does not retry when a real tool ran but the assistant only says it will continue executing", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     hub.send = vi.fn(() => new Promise(() => {}));
@@ -462,18 +461,13 @@ describe("chat route event forwarding", () => {
 
     await Promise.resolve();
 
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
-      reason: "tool_continuation",
     }));
-    expect(hub.send).toHaveBeenCalledTimes(2);
-    const retryPrompt = hub.send.mock.calls.at(-1)?.[0] || "";
-    expect(retryPrompt).toContain("继续调用真实工具");
-    expect(retryPrompt).toContain("没有继续调用真实工具完成任务");
-    expect(retryPrompt).toContain(prompt);
+    expect(hub.send).toHaveBeenCalledTimes(1);
   });
 
-  it("retries when a local file mutation task only scanned files but claimed completion", async () => {
+  it("does not retry when a local file mutation task only scanned files but claimed completion", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     hub.send = vi.fn(() => new Promise(() => {}));
@@ -518,19 +512,13 @@ describe("chat route event forwarding", () => {
 
     await Promise.resolve();
 
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
-      reason: "tool_continuation",
     }));
-    expect(hub.send).toHaveBeenCalledTimes(2);
-    const retryPrompt = hub.send.mock.calls.at(-1)?.[0] || "";
-    expect(retryPrompt).toContain("只看到扫描/列出类命令");
-    expect(retryPrompt).toContain("不要把“找到文件”当成“已经移动/整理完成”");
-    expect(retryPrompt).toContain("find ~/Downloads");
-    expect(retryPrompt).toContain(prompt);
+    expect(hub.send).toHaveBeenCalledTimes(1);
   });
 
-  it("retries safely when a download-folder delete task only scanned zip files", async () => {
+  it("does not retry when a download-folder delete task only scanned zip files", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     hub.send = vi.fn(() => new Promise(() => {}));
@@ -571,19 +559,13 @@ describe("chat route event forwarding", () => {
 
     await Promise.resolve();
 
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
-      reason: "tool_continuation",
     }));
-    expect(hub.send).toHaveBeenCalledTimes(2);
-    const retryPrompt = hub.send.mock.calls.at(-1)?.[0] || "";
-    expect(retryPrompt).toContain("删除任务安全要求");
-    expect(retryPrompt).toContain("下载文件夹 / Downloads");
-    expect(retryPrompt).toContain("find ~/Downloads");
-    expect(retryPrompt).toContain(prompt);
+    expect(hub.send).toHaveBeenCalledTimes(1);
   });
 
-  it("retries when a local file mutation task only produces a preparatory lead-in without tools", async () => {
+  it("does not retry when a local file mutation task only produces a preparatory lead-in without tools", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     hub.send = vi.fn(() => new Promise(() => {}));
@@ -607,20 +589,15 @@ describe("chat route event forwarding", () => {
 
     await Promise.resolve();
 
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
-      reason: "local_mutation_no_tool",
     }));
-    expect(hub.send).toHaveBeenCalledTimes(2);
-    const retryPrompt = hub.send.mock.calls.at(-1)?.[0] || "";
-    expect(retryPrompt).toContain("本地文件变更任务");
-    expect(retryPrompt).toContain("必须继续调用真实工具完成变更");
-    expect(retryPrompt).toContain(prompt);
+    expect(hub.send).toHaveBeenCalledTimes(1);
   });
 
   // [TOOL-FAILED-FALLBACK v1 · 2026-04-28] 工具失败 + 短开场句:必须再给一轮机会让模型给"基于常识/无法核实"的兜底答
   // 复现 V8 T08 case:live_news 工具失败,模型只回 "两个任务一起处理。" 9c → 用户拿到无意义短答
-  it("retries when a tool failed and the assistant only produced a short throat-clearing lead-in", async () => {
+  it("does not retry when a tool failed and the assistant only produced a short throat-clearing lead-in", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     hub.send = vi.fn(() => new Promise(() => {}));
@@ -660,20 +637,14 @@ describe("chat route event forwarding", () => {
 
     await Promise.resolve();
 
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
-      reason: "tool_failed_fallback",
     }));
-    expect(hub.send).toHaveBeenCalledTimes(2);
-    const retryPrompt = hub.send.mock.calls.at(-1)?.[0] || "";
-    expect(retryPrompt).toContain("工具失败");
-    expect(retryPrompt).toContain("不要再次调用工具");
-    expect(retryPrompt).toContain("live_news");
-    expect(retryPrompt).toContain(prompt);
+    expect(hub.send).toHaveBeenCalledTimes(1);
   });
 
   // 同源 case:工具调用成功但模型只回 "好的" 这种 < 30c 短句也兜底
-  it("retries when a tool failed and the assistant produced a sub-30-char generic answer", async () => {
+  it("does not retry when a tool failed and the assistant produced a sub-30-char generic answer", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     hub.send = vi.fn(() => new Promise(() => {}));
@@ -713,14 +684,13 @@ describe("chat route event forwarding", () => {
 
     await Promise.resolve();
 
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
-      reason: "tool_failed_fallback",
     }));
   });
 
   // [TOOL-FAILED-FALLBACK v1.1 · 2026-04-28] 0c case (V8 v7 T08):工具失败 + 模型 0 文本
-  it("retries when a tool failed and the assistant produced ZERO text (T08 case)", async () => {
+  it("does not retry when a tool failed and the assistant produced ZERO text (T08 case)", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     hub.send = vi.fn(() => new Promise(() => {}));
@@ -753,14 +723,10 @@ describe("chat route event forwarding", () => {
 
     await Promise.resolve();
 
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
-      reason: "tool_failed_fallback",
     }));
-    expect(hub.send).toHaveBeenCalledTimes(2);
-    const retryPrompt = hub.send.mock.calls.at(-1)?.[0] || "";
-    expect(retryPrompt).toContain("工具失败");
-    expect(retryPrompt).toContain("live_news");
+    expect(hub.send).toHaveBeenCalledTimes(1);
   });
 
   // 反向 case:工具成功 + 短答应该 NOT 触发 fallback (避免误伤)
@@ -807,7 +773,7 @@ describe("chat route event forwarding", () => {
     expect(retryEvents).toHaveLength(0);
   });
 
-  it("closes a successful tool turn with a visible summary when the model never sends final text", async () => {
+  it("closes a successful tool turn without synthesizing a visible summary when the model never sends final text", async () => {
     vi.useFakeTimers();
     try {
       engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
@@ -843,8 +809,7 @@ describe("chat route event forwarding", () => {
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
         .join("");
-      expect(visibleText).toContain("已完成本轮本地操作");
-      expect(visibleText).toContain("mkdir -p 表格");
+      expect(visibleText).toBe("");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
     } finally {
@@ -883,7 +848,7 @@ describe("chat route event forwarding", () => {
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
         .join("");
-      expect(visibleText).toContain("工具授权后没有收到最终回复");
+      expect(visibleText).toBe("");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
     } finally {
@@ -936,7 +901,7 @@ describe("chat route event forwarding", () => {
     }
   });
 
-  it("recovers a failed probe into an authorized Downloads zip delete command", async () => {
+  it("does not recover a failed probe into an authorized Downloads zip delete command", async () => {
     const recoveredExecute = vi.fn(async () => ({
       content: [{ type: "text", text: "下载文件夹中没有 zip 文件。\n" }],
     }));
@@ -977,17 +942,16 @@ describe("chat route event forwarding", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(recoveredExecute).toHaveBeenCalledTimes(1);
-    const recoveredCommand = recoveredExecute.mock.calls[0]?.[1]?.command || "";
-    expect(recoveredCommand).toContain("Downloads");
-    expect(recoveredCommand).toContain("*.zip");
-    expect(recoveredCommand).toContain("rm -f");
-    expect(recoveredCommand).not.toMatch(/\bthen\s*;/);
-    expect(recoveredCommand).not.toMatch(/\belse\s*;/);
+    expect(recoveredExecute).not.toHaveBeenCalled();
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "tool_start",
       name: "bash",
-      args: expect.objectContaining({ command: recoveredCommand }),
+      args: expect.objectContaining({ command: "find" }),
+    }));
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
+      type: "tool_start",
+      name: "bash",
+      args: expect.objectContaining({ command: expect.stringContaining("rm -f") }),
     }));
   });
 
@@ -1007,7 +971,7 @@ describe("chat route event forwarding", () => {
       'bash\n\n{“cmd”: “find /Users/lynn/Downloads -type f -name "*zzzzzztest" 2>/dev/null”}',
       /(?:^|\n)\s*bash\s*(?:\n|$)|[“"]cmd[”"]|你刚才把工具调用写成了普通文本/,
     ],
-  ])("recovers %s pseudo markup for a Downloads delete task without leaking steer text", async (_label, delta, forbiddenRe) => {
+  ])("passes %s pseudo markup for a Downloads delete task without recovery", async (_label, delta, forbiddenRe) => {
     const recoveredExecute = vi.fn(async () => ({
       content: [{ type: "text", text: "下载文件夹中没有 zzzzzztest 文件。\n" }],
     }));
@@ -1038,21 +1002,18 @@ describe("chat route event forwarding", () => {
         delta,
       },
     }, "/sessions/current.jsonl");
+    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
 
-    await vi.waitFor(() => expect(recoveredExecute).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
 
-    const recoveredCommand = recoveredExecute.mock.calls[0]?.[1]?.command || "";
-    expect(recoveredCommand).toContain("Downloads");
-    expect(recoveredCommand).toContain("*.zzzzzztest");
-    expect(recoveredCommand).toContain("rm -f");
+    expect(recoveredExecute).not.toHaveBeenCalled();
     expect(engine.steerSession).not.toHaveBeenCalled();
 
     const visibleText = clients[0].sent
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).not.toMatch(forbiddenRe);
-    expect(visibleText).toContain("已完成本轮本地操作");
+    expect(visibleText).toMatch(forbiddenRe);
   });
 
   it("emits a persisted assistant reply when hub.send completes without stream deltas", async () => {
@@ -1112,7 +1073,7 @@ describe("chat route event forwarding", () => {
         .join("");
       expect(visibleText).not.toContain("本轮模型没有生成可见答案");
       expect(visibleText).not.toContain("空转");
-      expect(visibleText).not.toContain("rm delete-me.txt");
+      expect(visibleText).toContain("rm delete-me.txt");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
     } finally {
@@ -1157,9 +1118,54 @@ describe("chat route event forwarding", () => {
       await vi.advanceTimersByTimeAsync(7999);
       expect(clients[0].sent.filter((evt) => evt.type === "turn_end")).toHaveLength(0);
 
-      await vi.advanceTimersByTimeAsync(1);
+      await vi.advanceTimersByTimeAsync(2);
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not wait for hard timeout when a tool_end is missing but visible answer arrived", async () => {
+    vi.useFakeTimers();
+    try {
+      engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+      engine.resolveModelOverrides = vi.fn((model) => model);
+      engine.abortSessionByPath = vi.fn(async () => true);
+      hub.send = vi.fn(() => new Promise(() => {}));
+
+      const res = await app.request("/ws");
+      expect(res.status).toBe(200);
+
+      await connections[0].handlers.onMessage({
+        data: JSON.stringify({ type: "prompt", text: "明天深圳天气如何？" }),
+      }, connections[0].client);
+
+      subscribed({
+        type: "tool_execution_start",
+        toolCallId: "weather-1",
+        toolName: "weather",
+        args: { location: "深圳" },
+      }, "/sessions/current.jsonl");
+      subscribed({
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: "明天深圳有零星小雨。" },
+      }, "/sessions/current.jsonl");
+      subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+
+      await vi.advanceTimersByTimeAsync(7999);
+      expect(clients[0].sent.filter((evt) => evt.type === "turn_end")).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(2);
+      expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+      expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
+      expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
+      const visibleText = clients[0].sent
+        .filter((evt) => evt.type === "text_delta")
+        .map((evt) => evt.delta)
+        .join("");
+      expect(visibleText).toContain("明天深圳有零星小雨");
+      expect(visibleText).not.toContain("本轮模型没有生成可见答案");
     } finally {
       vi.useRealTimers();
     }
@@ -1204,30 +1210,11 @@ describe("chat route event forwarding", () => {
     }
   });
 
-  // [INTERNAL-RETRY-CROSS-PROMPT-FENCE v1 · 2026-04-28] V8 v6 T05/T06 跨测污染修复
-  // 旧行为:T05 空答 → 调度 internal retry → T05 ws 关闭 → T06 ws 连同 session 时 retry 还在跑
-  //         → "Lynn 还在说话" 错误 + retry 的 text_delta 仍 broadcast 到 T06 → T05 答案串到 T06
-  // 新行为:T06 进来时检测到 streamSource==='internal_retry' → 视为可释放 → 中止旧 retry → T06 走新流
-  it("aborts an in-flight internal retry when a new user prompt arrives mid-retry", async () => {
+  it("does not create an internal retry after an empty model turn, so the next prompt can proceed", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.abortSessionByPath = vi.fn(async () => true);
-    // 关键:让 hub.send 的第一次调用挂起(模拟 retry 仍在跑)
-    let firstCallResolve;
-    const sends = [];
-    hub.send = vi.fn((prompt, ctx) => {
-      sends.push({ prompt, ctx });
-      if (sends.length === 1) {
-        // 第 1 次发送:用户 T05 prompt,挂起让我们手工触发 empty_reply
-        return Promise.resolve();
-      }
-      if (sends.length === 2) {
-        // 第 2 次:internal retry 触发,挂起模拟它在跑
-        return new Promise((resolve) => { firstCallResolve = resolve; });
-      }
-      // 第 3 次:T06 新 prompt 应能正常 send 出去
-      return Promise.resolve();
-    });
+    hub.send = vi.fn(() => Promise.resolve());
 
     const res = await app.request("/ws");
     expect(res.status).toBe(200);
@@ -1239,31 +1226,23 @@ describe("chat route event forwarding", () => {
 
     await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(1));
 
-    // T05 模型给 turn_end 但没有任何文本 → empty_reply 路径触发 internal retry
+    // T05 模型给 turn_end 但没有任何文本 → 不触发内部重试
     subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
     await Promise.resolve();
     await Promise.resolve();
 
-    // 应该已发起 retry(第 2 次 hub.send)
-    await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(2), { timeout: 1000 });
-
-    // 验证 turn_retry 事件被 broadcast
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+    expect(hub.send).toHaveBeenCalledTimes(1);
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
-      reason: "empty_reply",
     }));
-
-    // 此时 retry 还在跑,模拟 isSessionStreaming=true(第 2 个 hub.send 还没 resolve)
-    engine.isSessionStreaming = vi.fn(() => true);
 
     // T06 进来发新 prompt
     connections[0].handlers.onMessage({
       data: JSON.stringify({ type: "prompt", text: "T06 推荐电影" }),
     }, connections[0].client);
 
-    await vi.waitFor(() => expect(engine.abortSessionByPath).toHaveBeenCalled(), { timeout: 1000 });
-
-    // 关键断言:旧 retry 被中止 → 没收到 "Lynn 还在说话" 错误
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(2), { timeout: 1000 });
+    expect(engine.abortSessionByPath).not.toHaveBeenCalled();
     expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "error",
       message: expect.stringContaining("还在说话"),
@@ -1276,14 +1255,52 @@ describe("chat route event forwarding", () => {
       type: "text_delta",
       delta: expect.stringMatching(/没有生成可用回复|空转/),
     }));
-    await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(3), { timeout: 1000 });
-    expect(hub.send.mock.calls[2]?.[0]).toContain("T06 推荐电影");
-
-    // 让旧 retry 的 hub.send promise 解掉,清理悬挂
-    firstCallResolve?.();
+    expect(hub.send.mock.calls[1]?.[0]).toContain("T06 推荐电影");
   });
 
-  it("aborts the first silent Brain tool turn after the 25s grace window", async () => {
+  it("closes the active stream before accepting a second prompt, preventing stale replies", async () => {
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    engine.abortSessionByPath = vi.fn(async () => true);
+    engine.isSessionStreaming = vi.fn(() => false);
+    hub.send = vi.fn(() => new Promise(() => {}));
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "请写一段不少于 300 字的广州旅行计划" }),
+    }, connections[0].client);
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(1));
+    engine.isSessionStreaming.mockReturnValue(true);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "周日广州会下雨吗？" }),
+    }, connections[0].client);
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(2));
+
+    expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "turn_end",
+      sessionPath: "/sessions/current.jsonl",
+    }));
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "status",
+      isStreaming: false,
+      sessionPath: "/sessions/current.jsonl",
+    }));
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
+      type: "error",
+      message: expect.stringContaining("还在说话"),
+    }));
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
+      type: "error",
+      message: expect.stringContaining("still"),
+    }));
+    expect(hub.send.mock.calls[1]?.[0]).toContain("周日广州会下雨吗？");
+  });
+
+  it("does not abort a silent Brain turn after the old 25s grace window", async () => {
     vi.useFakeTimers();
     let rejectSend;
     try {
@@ -1305,7 +1322,7 @@ describe("chat route event forwarding", () => {
       expect(engine.abortSessionByPath).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1);
-      expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+      expect(engine.abortSessionByPath).not.toHaveBeenCalled();
 
       rejectSend?.(new Error("aborted"));
       await vi.runOnlyPendingTimersAsync();
@@ -1366,7 +1383,7 @@ describe("chat route event forwarding", () => {
     }
   });
 
-  it("emits a local-operation summary when tools succeeded but the model never finalizes", async () => {
+  it("closes without emitting a local-operation summary when tools succeeded but the model never finalizes", async () => {
     vi.useFakeTimers();
     try {
       engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
@@ -1417,9 +1434,7 @@ describe("chat route event forwarding", () => {
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
         .join("");
-      expect(visibleText).toContain("已完成本轮本地操作");
-      expect(visibleText).toContain("已成功执行 1 个命令");
-      expect(visibleText).toContain("mkdir -p /Users/lynn/Desktop/图片");
+      expect(visibleText).toBe("");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({
         type: "turn_end",
         sessionPath: "/sessions/current.jsonl",
@@ -1434,9 +1449,8 @@ describe("chat route event forwarding", () => {
     }
   });
 
-  // Brain v2 自己负责实时资料、研究和合成；客户端不再提前注入浅层本地预取，
-  // 避免浅资料和 Brain 多步调研互相抢上下文。
-  it("does not inject local realtime prefetch for brain weather turns", async () => {
+  // 简单天气/行情类问题先走本地实时预取,避免默认模型工具链冷启动时长时间空白。
+  it("injects local realtime prefetch for brain weather turns", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     let eventsBeforeModelCall = [];
@@ -1455,21 +1469,21 @@ describe("chat route event forwarding", () => {
 
     await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
 
-    expect(eventsBeforeModelCall).not.toContainEqual(expect.objectContaining({
+    expect(eventsBeforeModelCall).toContainEqual(expect.objectContaining({
       type: "tool_start",
       name: "weather",
       sessionPath: "/sessions/current.jsonl",
     }));
-    expect(eventsBeforeModelCall).not.toContainEqual(expect.objectContaining({
+    expect(eventsBeforeModelCall).toContainEqual(expect.objectContaining({
       type: "tool_end",
       name: "weather",
       success: true,
       sessionPath: "/sessions/current.jsonl",
     }));
-    expect(reportResearchMock.buildReportResearchContext).not.toHaveBeenCalled();
+    expect(reportResearchMock.buildReportResearchContext).toHaveBeenCalled();
   });
 
-  it("suppresses pseudo tool text for Brain without client-side retry prompts", async () => {
+  it("passes pseudo tool text for Brain without client-side retry prompts", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -1500,14 +1514,13 @@ describe("chat route event forwarding", () => {
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).toContain("模型输出了无效工具标记");
-    expect(visibleText).not.toContain("<web_search>");
+    expect(visibleText).toContain("<web_search>");
     expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
     }));
   });
 
-  it("recovers Brain pseudo weather skill reads through the real weather tool", async () => {
+  it("does not recover Brain pseudo weather skill reads through the real weather tool", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     const weatherExecute = vi.fn(async () => ({
@@ -1538,32 +1551,20 @@ describe("chat route event forwarding", () => {
     }, "/sessions/current.jsonl");
     subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
 
-    await vi.waitFor(() => expect(weatherExecute).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(clients[0].sent).toContainEqual(expect.objectContaining({
-      type: "tool_start",
-      name: "weather",
-      sessionPath: "/sessions/current.jsonl",
-    })));
-    await vi.waitFor(() => expect(clients[0].sent).toContainEqual(expect.objectContaining({
-      type: "tool_end",
-      name: "weather",
-      success: true,
-      sessionPath: "/sessions/current.jsonl",
-    })));
+    await Promise.resolve();
+    expect(weatherExecute).not.toHaveBeenCalled();
 
     const visibleText = clients[0].sent
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).toContain("深圳明天小雨");
-    expect(visibleText).toContain("数据来源/判断依据");
-    expect(visibleText).not.toContain("<tool_call>");
+    expect(visibleText).toContain("<tool_call>");
     expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
     }));
   });
 
-  it("recovers Brain pseudo market searches through the real stock_market tool", async () => {
+  it("does not recover Brain pseudo market searches through the real stock_market tool", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     const stockExecute = vi.fn(async () => ({
@@ -1594,20 +1595,18 @@ describe("chat route event forwarding", () => {
     }, "/sessions/current.jsonl");
     subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
 
-    await vi.waitFor(() => expect(stockExecute).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    expect(stockExecute).not.toHaveBeenCalled();
     const visibleText = clients[0].sent
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "tool_start",
       name: "stock_market",
       sessionPath: "/sessions/current.jsonl",
     }));
-    expect(visibleText).toContain("AAPL");
-    expect(visibleText).toContain("TSLA");
-    expect(visibleText).toContain("不构成投资建议");
-    expect(visibleText).not.toContain("<tool_call>");
+    expect(visibleText).toContain("<tool_call>");
   });
 
   it("does not inject local prefetch for non-realtime brain turns", async () => {
@@ -1676,6 +1675,7 @@ describe("chat route event forwarding", () => {
     reportResearchMock.inferReportResearchKind.mockReturnValue("market_weather_brief");
     reportResearchMock.buildReportResearchContext.mockResolvedValue("【系统已完成综合工具预取】");
     reportResearchMock.buildDirectResearchAnswer.mockReturnValue("数据快照\n- AAPL：$273.05");
+    hub.send = vi.fn(async () => {});
 
     const res = await app.request("/ws");
     expect(res.status).toBe(200);
@@ -1691,13 +1691,9 @@ describe("chat route event forwarding", () => {
       name: "market_weather_brief",
       sessionPath: "/sessions/new.jsonl",
     }));
-    await vi.waitFor(() => {
-      expect(
-        clients[0].sent.some((evt) => evt.type === "text_delta"
-          && evt.sessionPath === "/sessions/new.jsonl"
-          && String(evt.delta || "").includes("AAPL")),
-      ).toBe(true);
-    });
+    expect(clients[0].sent.some((evt) => evt.type === "text_delta"
+      && evt.sessionPath === "/sessions/new.jsonl"
+      && String(evt.delta || "").includes("AAPL"))).toBe(false);
   });
 
   it("suppresses hallucinated tool-progress XML that only flushes at turn end", async () => {
@@ -1736,7 +1732,7 @@ describe("chat route event forwarding", () => {
     expect(visibleText).not.toContain("<lynn_tool_progress");
   });
 
-  it("still aborts a silent Brain turn even after local prefetch has evidence", async () => {
+  it("does not abort a silent Brain turn after the old 25s prefetch grace window", async () => {
     vi.useFakeTimers();
     try {
       engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
@@ -1756,7 +1752,7 @@ describe("chat route event forwarding", () => {
       await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
       await vi.advanceTimersByTimeAsync(25_001);
 
-      expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+      expect(engine.abortSessionByPath).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -1764,7 +1760,7 @@ describe("chat route event forwarding", () => {
 
   // [BYOK-EQUALITY · 2026-04-27 night] retry-after-prefetch 仅适用于 prefetch 还在的路径(非 brain)。
   // 改 provider=openai 来保留这条覆盖。后续若全 provider 都移除 prefetch,这条改 .skip 即可。
-  it("still retries pending-tool text after local prefetch evidence (non-brain path)", async () => {
+  it("does not retry pending-tool text after local prefetch evidence (non-brain path)", async () => {
     engine.currentModel = { id: "gpt-4o", provider: "openai", name: "GPT-4o" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     let modelCallCount = 0;
@@ -1791,9 +1787,9 @@ describe("chat route event forwarding", () => {
       data: JSON.stringify({ type: "prompt", text: "今天深圳天气如何" }),
     }, connections[0].client);
 
-    await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(1));
 
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
       sessionPath: "/sessions/current.jsonl",
     }));

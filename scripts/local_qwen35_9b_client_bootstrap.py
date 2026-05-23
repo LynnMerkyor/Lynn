@@ -273,20 +273,21 @@ def _hardware_profile() -> dict[str, Any]:
             recommendation = "recommended"
             profile = {"name": "mac_unified_32k", "label": "Mac 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
             upgrade_options.append({
-                "id": "qwen36-27b-q4km-imatrix",
-                "label": "Qwen3.6-27B Q4_K_M imatrix",
-                "reason": "24GB+ 可作为质量优先路线试用；下载和量化产物准备完成后，会进入高级启动器。",
-                "min_memory_gib": 24,
-            })
-            upgrade_options.append({
                 "id": "qwen36-35b-a3b-q4km-imatrix",
                 "label": "Qwen3.6-35B-A3B Q4_K_M imatrix",
-                "reason": "32GB+ 更推荐。当前设备可先走 Spark/远端兜底，或作为高级试用。",
+                "profile": "24GB 统一内存+ 推荐 · 性能强",
+                "metrics": [
+                    "thinking-on 32K",
+                    "MMLU 90.40%",
+                    "GPQA Diamond 80.70%",
+                    "R6000 207 tok/s",
+                ],
+                "reason": "24GB+ 能力优先本地路线；适合复杂推理和长上下文，速度会低于 9B。",
                 "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
-                "min_memory_gib": 32,
+                "download_label": "下载到本机",
+                "file_name": "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
+                "min_memory_gib": 24,
             })
-            if mem >= 32:
-                upgrade_options[-1]["reason"] = "32GB+ 统一内存可试高能力 35B-A3B；下载体积约 20GB，速度会低于 9B。"
         elif mem >= 16:
             recommendation = "recommended_with_limits"
             profile = {"name": "mac_unified_16k", "label": "Mac 16K 稳定档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
@@ -308,19 +309,21 @@ def _hardware_profile() -> dict[str, Any]:
             recommendation = "recommended"
             profile = {"name": "nvidia_32k", "label": "NVIDIA 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
             upgrade_options.append({
-                "id": "qwen36-27b-q4km-imatrix",
-                "label": "Qwen3.6-27B Q4_K_M imatrix",
-                "reason": "24GB+ 显存可试 27B 质量优先路线；速度会低于 9B。",
+                "id": "qwen36-35b-a3b-q4km-imatrix",
+                "label": "Qwen3.6-35B-A3B Q4_K_M imatrix",
+                "profile": "24GB 显存+ 推荐 · 性能强",
+                "metrics": [
+                    "thinking-on 32K",
+                    "MMLU 90.40%",
+                    "GPQA Diamond 80.70%",
+                    "R6000 207 tok/s",
+                ],
+                "reason": "24GB+ 能力优先本地路线；适合复杂推理和长上下文，速度会低于 9B。",
+                "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
+                "download_label": "下载到本机",
+                "file_name": "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
                 "min_vram_gib": 24,
             })
-            if vram >= 32:
-                upgrade_options.append({
-                    "id": "qwen36-35b-a3b-q4km-imatrix",
-                    "label": "Qwen3.6-35B-A3B Q4_K_M imatrix",
-                    "reason": "32GB+ 显存可推荐 35B-A3B 本地高能力路线；下载体积约 20GB。",
-                    "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
-                    "min_vram_gib": 32,
-                })
         elif vram >= 16:
             recommendation = "recommended_with_limits"
             profile = {"name": "nvidia_16k", "label": "NVIDIA 16K 稳定档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}

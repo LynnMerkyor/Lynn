@@ -96,8 +96,7 @@ export function LocalModelDownloadStep({
   preview, onboardingFetch, goToStep, showError, onProviderReady,
   nextStep, backStep,
 }: LocalModelDownloadStepProps) {
-  const { t, locale } = useOnboardingI18n();
-  const isZh = (locale || (typeof i18n !== 'undefined' ? i18n.locale : '') || '').startsWith('zh');
+  const { t } = useOnboardingI18n();
   const [status, setStatus] = useState<LocalSetupStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [setupStarted, setSetupStarted] = useState(false);
@@ -128,10 +127,9 @@ export function LocalModelDownloadStep({
   const jobRunning = status?.job?.status === 'running';
   const jobFailed = status?.job?.status === 'failed';
   const progress = status?.job?.progress || null;
-  const warnings = [
-    ...(status?.plan?.hardware?.warnings || []),
-    ...(status?.plan?.hardware?.blockers || []),
-  ];
+  // #21: keep warnings and blockers visually separate
+  const softWarnings: string[] = status?.plan?.hardware?.warnings || [];
+  const hardBlockers: string[] = status?.plan?.hardware?.blockers || [];
   const hardwareBlocked = status?.plan?.hardware?.can_enable === false;
   const canStart = !busy && !ready && !hardwareBlocked;
   const progressPercent = typeof progress?.percent === 'number'
@@ -237,9 +235,9 @@ export function LocalModelDownloadStep({
     if (ready) return t('onboarding.localModel.spawnReady');
     if (jobFailed) return t('onboarding.localModel.spawnFailed', { reason: status?.job?.progress?.message || 'setup_failed' });
     if (busy) return progress?.message || progress?.phase || t('onboarding.localModel.spawning');
-    if (modelPrepared) return isZh ? '模型和 llama.cpp 已就绪，点击启动即可切换到本地 9B。' : 'Model and llama.cpp are ready. Start it to switch to Local 9B.';
+    if (modelPrepared) return t('onboarding.localModel.modelPreparedHint');
     return t('onboarding.localModel.subtitle');
-  }, [busy, error, isZh, jobFailed, modelPrepared, progress?.message, progress?.phase, ready, status?.job?.progress?.message, t]);
+  }, [busy, error, jobFailed, modelPrepared, progress?.message, progress?.phase, ready, status?.job?.progress?.message, t]);
 
   return (
     <StepContainer>
@@ -255,16 +253,42 @@ export function LocalModelDownloadStep({
           />
         </div>
         <div className="local-model-progress-meta">
-          <span>{ready ? '100%' : busy ? `${Math.round(progressPercent)}%` : modelPrepared ? '可启动' : '待准备'}</span>
-          <span>{status?.plan?.hardware?.recommended_runtime?.label || (isZh ? '本地 9B' : 'Local 9B')}</span>
+          <span>{ready ? '100%' : busy ? `${Math.round(progressPercent)}%` : modelPrepared ? t('onboarding.localModel.statusReady') : t('onboarding.localModel.statusWaiting')}</span>
+          <span>{status?.plan?.hardware?.recommended_runtime?.label || t('onboarding.localModel.runtimeLocal9B')}</span>
         </div>
         <div className={`local-model-progress-substatus${error || jobFailed ? ' is-error' : ''}`}>
           {statusLine}
         </div>
       </div>
 
-      {warnings.length > 0 && (
-        <p className="ob-step-note">{warnings.join(' ')}</p>
+      {/* #21+#22: hard blockers (red) get prominent display + actionable hint;
+          soft warnings (grey) stay subtle */}
+      {hardBlockers.length > 0 && (
+        <div className="ob-step-blocker" style={{
+          marginTop: 12,
+          padding: '10px 12px',
+          borderRadius: 8,
+          background: 'rgba(255, 78, 78, 0.08)',
+          border: '1px solid rgba(255, 78, 78, 0.35)',
+          color: '#b73a3a',
+          fontSize: 13,
+          lineHeight: 1.55,
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>
+            {hardwareBlocked ? '⚠ ' : ''}{hardBlockers[0]}
+          </div>
+          {hardBlockers.slice(1).map((b, i) => (
+            <div key={i} style={{ marginTop: 4 }}>{b}</div>
+          ))}
+          {hardwareBlocked && (
+            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>
+              {t('onboarding.localModel.switchBackBtn')} →
+            </div>
+          )}
+        </div>
+      )}
+      {softWarnings.length > 0 && (
+        <p className="ob-step-note">{softWarnings.join(' ')}</p>
       )}
 
       <div className="onboarding-actions">
@@ -282,6 +306,21 @@ export function LocalModelDownloadStep({
               : setupStarted || jobFailed
                 ? t('onboarding.localModel.retryBtn')
                 : t('onboarding.localModel.startBtn')}
+          </button>
+        )}
+        {/* #24: download-in-progress cancel UX — if download is busy, allow user to cancel/skip */}
+        {busy && !ready && (
+          <button
+            className="ob-btn ob-btn-secondary"
+            onClick={() => {
+              const platform = (window as unknown as { platform?: { llamacppCancelDownload?: () => Promise<unknown> } }).platform;
+              try {
+                void platform?.llamacppCancelDownload?.();
+              } catch { /* best-effort */ }
+            }}
+            title={t('onboarding.localModel.cancelBtn')}
+          >
+            {t('onboarding.localModel.cancelBtn')}
           </button>
         )}
         <button className="ob-btn ob-btn-secondary" disabled={savingProvider} onClick={() => void fallbackToBrain()}>
