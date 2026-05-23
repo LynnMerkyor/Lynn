@@ -17,25 +17,6 @@ function isProviderConfigured(provider) {
   return false;
 }
 
-// [verifier helper v1] extract latest user-role text for verifier prompt
-function _extractLatestUserMessageText(messages) {
-  if (!Array.isArray(messages)) return '';
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m && m.role === 'user') {
-      if (typeof m.content === 'string') return m.content;
-      if (Array.isArray(m.content)) {
-        return m.content
-          .map((p) => (typeof p === 'string' ? p : (p && typeof p.text === 'string' ? p.text : '')))
-          .filter(Boolean)
-          .join(' ');
-      }
-      try { return JSON.stringify(m.content); } catch { return ''; }
-    }
-  }
-  return '';
-}
-
 // Tool loop guard. Default raised to 50 — long research / agentic chains need 20-30 turns.
 // Set BRAIN_V2_MAX_ITERATIONS=0 for unlimited (only abort on real errors).
 const MAX_ITERATIONS = Number(process.env.BRAIN_V2_MAX_ITERATIONS || 50);
@@ -242,31 +223,6 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       const toolResult = await executeServerTool(tc.function.name, tc.function.arguments || '{}', { log });
       const ms = Date.now() - t0;
       const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
-      // [verifier hook v1] fire-and-forget telemetry (read-only,不影响 SSE stream)
-      if (process.env.VERIFIER_ENABLED === '1' && ok) {
-        const _toolResultSnapshot = toolResult;
-        const _toolNameSnapshot = tc.function.name;
-        const _userPromptText = _extractLatestUserMessageText(originalMessages);
-        (async () => {
-          try {
-            const { verifyToolResult } = await import('./verifier-middleware.mjs');
-            const _verifyMeta = await verifyToolResult({
-              userPrompt: _userPromptText,
-              toolName: _toolNameSnapshot,
-              toolResult: _toolResultSnapshot,
-              log,
-            });
-            if (_verifyMeta && !_verifyMeta.skipped) {
-              const _scoresStr = _verifyMeta.scores
-                ? `C1=${_verifyMeta.scores.C1} C2=${_verifyMeta.scores.C2} C3=${_verifyMeta.scores.C3}`
-                : (_verifyMeta.failOpen ? `fail-open(${_verifyMeta.error || 'parse'})` : 'no-scores');
-              log && log('info', `[verifier-async] ${_toolNameSnapshot}: pass=${_verifyMeta.pass} avg=${_verifyMeta.avg?.toFixed(2) || 'n/a'} latency=${_verifyMeta.latencyMs}ms ${_scoresStr}`);
-            }
-          } catch (e) {
-            log && log('warn', `[verifier-async] ${_toolNameSnapshot} hook error: ${e.message}`);
-          }
-        })();
-      }
       await onChunk(
         { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok },
         { providerId: lastProviderId }

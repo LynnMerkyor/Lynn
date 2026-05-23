@@ -15,7 +15,6 @@ import { t, getLocale } from "../i18n.js";
 import { BrowserManager } from "../../lib/browser/browser-manager.js";
 import {
   buildReportResearchContext,
-  buildDirectResearchAnswer,
 } from "../chat/report-research-context.js";
 import {
   resolveCurrentModelInfo,
@@ -83,16 +82,8 @@ function extractText(content) {
     .join("");
 }
 
-function stripHiddenReflectionBlocks(text) {
-  return String(text || "")
-    .replace(/```(?:mood|pulse|reflect)[\s\S]*?```\s*/gi, "")
-    .replace(/<(?:mood|pulse|reflect)>[\s\S]*?<\/(?:mood|pulse|reflect)>\s*/gi, "")
-    .trim();
-}
-
 function normalizePersistedAssistantText(text) {
-  const trimmed = stripHiddenReflectionBlocks(text);
-  return trimmed;
+  return String(text || "");
 }
 
 function readPersistedAssistantRecords(session, sessionPath = "") {
@@ -144,84 +135,6 @@ function extractLatestAssistantVisibleTextAfter(session, sessionPath = "", basel
 
 function extractLatestAssistantVisibleText(session, sessionPath = "") {
   return extractLatestAssistantVisibleTextAfter(session, sessionPath, 0);
-}
-
-function displayProviderLabel(msg) {
-  const provider = String(msg?.provider || "").trim();
-  const model = String(msg?.model || "").trim();
-  if (/openai-codex/i.test(provider)) return model || "GPT-5.4";
-  if (provider && model) return `${provider}/${model}`;
-  return model || provider || "当前模型";
-}
-
-function formatAssistantErrorForUser(msg) {
-  const raw = String(msg?.errorMessage || msg?.error?.message || msg?.error || "").trim();
-  if (!raw) return "";
-  let reason = raw;
-  if (/fetch failed/i.test(raw)) reason = "网络请求失败(fetch failed)";
-  if (/timeout|timed out|aborted/i.test(raw)) reason = "请求超时";
-  if (/auth|unauthori[sz]ed|401|403/i.test(raw)) reason = "授权失败";
-  if (/rate|429/i.test(raw)) reason = "被限流";
-  return `${displayProviderLabel(msg)} 本轮请求失败：${reason}。没有生成模型输出。`;
-}
-
-function extractLatestAssistantErrorAfter(session, sessionPath = "", baselineCount = 0) {
-  const records = readPersistedAssistantRecords(session, sessionPath);
-  const start = Math.max(0, baselineCount || 0);
-  if (records.length <= start) return "";
-  for (let i = records.length - 1; i >= start; i--) {
-    const msg = records[i];
-    if (!msg || msg.role !== "assistant") continue;
-    const visible = normalizePersistedAssistantText(extractText(msg.content));
-    if (visible) return "";
-    if (msg.stopReason !== "error" && !msg.errorMessage && !msg.error) continue;
-    const errorText = formatAssistantErrorForUser(msg);
-    if (errorText) return errorText;
-  }
-  return "";
-}
-
-function patchLatestAssistantErrorVisibleText(sessionPath, baselineCount = 0, visibleText = "") {
-  if (!sessionPath || !visibleText) return false;
-  try {
-    const raw = fs.readFileSync(sessionPath, "utf-8");
-    const lines = raw.split("\n");
-    const parsed = [];
-    let assistantCount = 0;
-    let targetIndex = -1;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line.trim()) {
-        parsed.push(null);
-        continue;
-      }
-      try {
-        const entry = JSON.parse(line);
-        parsed.push(entry);
-        const msg = entry?.message;
-        if (msg?.role === "assistant") {
-          assistantCount += 1;
-          const visible = normalizePersistedAssistantText(extractText(msg.content));
-          if (
-            assistantCount > Math.max(0, baselineCount || 0)
-            && !visible
-            && (msg.stopReason === "error" || msg.errorMessage || msg.error)
-          ) {
-            targetIndex = i;
-          }
-        }
-      } catch {
-        parsed.push(null);
-      }
-    }
-    if (targetIndex < 0 || !parsed[targetIndex]?.message) return false;
-    parsed[targetIndex].message.content = [{ type: "text", text: visibleText }];
-    lines[targetIndex] = JSON.stringify(parsed[targetIndex]);
-    fs.writeFileSync(sessionPath, lines.join("\n"), "utf-8");
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function hasStreamEvent(ss, type) {
@@ -293,35 +206,7 @@ const LOCAL_QWEN35_DIRECT_ENDPOINT = process.env.LYNN_LOCAL_QWEN35_ENDPOINT || "
 // before emitting visible content. Keep the default comfortably above short
 // answer gates so local runs do not look like "no reply" just because the
 // model used its first tokens to think.
-const LOCAL_QWEN35_DIRECT_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_TOKENS || 8192);
-
-function looksLikeToolOrLiveLocalPrompt(text = "") {
-  const value = String(text || "");
-  return /(?:^|\s)\/goal\b|(?:网页|网站|搜索|搜一下|查询|调查|调研|最新|实时|今天|新闻|天气|股价|行情|价格|收费|私董会|来源|引用|链接|打开|读取|文件|目录|桌面|Excel|表格|PPT|PDF|运行|命令|终端|bash|shell|安装|下载|删除|移动|复制|创建|代码|报错|修复|提交|commit|git|MCP|tool|工具|web[-_ ]?(?:search|fetch)|current|latest|news|weather|stock|price|benchmark\s+run)/i.test(value);
-}
-
-function looksLikeSimpleBrainDirectPrompt(text = "") {
-  const value = String(text || "").trim();
-  if (!value || value.length > 160) return false;
-  if (looksLikeToolOrLiveLocalPrompt(value)) return false;
-  if (/(?:门禁测试|只回复|只回答|请回复\s*OK|回复\s*OK|reply\s+only|answer\s+only)/i.test(value)) return true;
-  if (/^(?:hi|hello|hey|yo|你好|嗨|哈喽|在吗|早上好|上午好|中午好|下午好|晚上好)[\s!！。？?～~,.，]*$/i.test(value)) return true;
-  return false;
-}
-
-const LOCAL_QWEN35_FAST_PREFETCH_KINDS = new Set([
-  "market_weather_brief",
-  "weather",
-  "sports",
-  "market",
-  "news",
-]);
-
-function shouldUseFastLocalQwen35DirectResponse(promptText = "", opts = {}) {
-  if (looksLikeSimpleBrainDirectPrompt(promptText)) return true;
-  if (opts.prefetchedEvidence && LOCAL_QWEN35_FAST_PREFETCH_KINDS.has(String(opts.reportKind || ""))) return true;
-  return false;
-}
+const LOCAL_QWEN35_DIRECT_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_TOKENS || 32768);
 
 function shouldUseLocalQwen35DirectBridge(promptText = "", opts = {}) {
   if (!isLocalQwen35Model(opts.modelInfo)) return false;
@@ -630,17 +515,8 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     const finalText = !ss.hasOutput
       ? extractLatestAssistantVisibleText(session, sessionPath)
       : "";
-    const errorText = (!ss.hasOutput && !finalText)
-      ? extractLatestAssistantErrorAfter(session, sessionPath, ss.persistedAssistantMessageBaseline || 0)
-      : "";
-    if (opts.requirePersistedText && !ss.hasOutput && !finalText && !errorText) return false;
-    if (errorText) {
-      patchLatestAssistantErrorVisibleText(sessionPath, ss.persistedAssistantMessageBaseline || 0, errorText);
-      ss.hasError = true;
-    }
-    return closeStreamWithVisibleFallback(sessionPath, ss, finalText || errorText, reason, {
-      trustedFallback: Boolean(errorText),
-    });
+    if (opts.requirePersistedText && !ss.hasOutput && !finalText) return false;
+    return closeStreamWithVisibleFallback(sessionPath, ss, finalText, reason);
   }
 
   function scheduleReturnedTurnFinalizationFallback(sessionPath, ss, reason) {
@@ -1639,6 +1515,14 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         emitFileOutputsFromDetails(sessionPath, ss, event.result?.details || {});
       }
 
+      if (event.toolName === "write" && !toolIsError && toolSummary.filePath) {
+        emitFileOutputsFromDetails(sessionPath, ss, {
+          filePath: toolSummary.filePath,
+          label: path.basename(toolSummary.filePath),
+          ext: path.extname(toolSummary.filePath).replace(/^\./, ""),
+        });
+      }
+
       if ((event.toolName === "edit" || event.toolName === "edit-diff") && rawDetails.diff && !toolIsError) {
         const diffFilePath = event.args?.file_path || event.args?.path || "";
         const rollback = event.toolCallId ? editRollbackStore.finalize(event.toolCallId) : null;
@@ -1912,19 +1796,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
           emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
         }
       });
-
-      if (!ss.hasOutput && !ss.hasToolCall) {
-        const errorText = extractLatestAssistantErrorAfter(
-          engine.getSessionByPath(sessionPath),
-          sessionPath,
-          ss.persistedAssistantMessageBaseline || 0,
-        );
-        if (errorText) {
-          patchLatestAssistantErrorVisibleText(sessionPath, ss.persistedAssistantMessageBaseline || 0, errorText);
-          ss.hasError = true;
-          emitTrustedVisibleTextDelta(sessionPath, ss, errorText);
-        }
-      }
 
       emitStreamEvent(sessionPath, ss, { type: "turn_end" });
       broadcast({ type: "status", isStreaming: false, sessionPath });
@@ -2261,13 +2132,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 })) {
                   ss.effectivePromptText = effectivePromptText;
                   try {
-                    const fastLocalResponse = shouldUseFastLocalQwen35DirectResponse(promptText, {
-                      reportKind,
-                      prefetchedEvidence: false,
-                    });
                     await streamLocalQwen35DirectBridge(promptSessionPath, ss, promptText, effectivePromptText, currentModelInfo, {
-                      enableThinking: !fastLocalResponse,
-                      maxTokens: fastLocalResponse ? 1024 : LOCAL_QWEN35_DIRECT_MAX_TOKENS,
+                      enableThinking: true,
+                      maxTokens: LOCAL_QWEN35_DIRECT_MAX_TOKENS,
                     });
                   } catch (directErr) {
                     debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] failed · ${directErr?.message || directErr} · ${promptSessionPath}`);
@@ -2351,13 +2218,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                   if (localQwenSynthesisAfterPrefetch) {
                     ss.effectivePromptText = effectivePromptText;
                     try {
-                      const fastPrefetchResponse = shouldUseFastLocalQwen35DirectResponse(promptText, {
-                        reportKind,
-                        prefetchedEvidence: ss.hasLocalPrefetchEvidence,
-                      });
                       await streamLocalQwen35DirectBridge(promptSessionPath, ss, promptText, effectivePromptText, currentModelInfo, {
-                        enableThinking: !fastPrefetchResponse,
-                        maxTokens: fastPrefetchResponse ? 2048 : LOCAL_QWEN35_DIRECT_MAX_TOKENS,
+                        enableThinking: true,
+                        maxTokens: LOCAL_QWEN35_DIRECT_MAX_TOKENS,
                       });
                     } catch (directErr) {
                       debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v2] failed after prefetch · ${directErr?.message || directErr} · ${promptSessionPath}`);

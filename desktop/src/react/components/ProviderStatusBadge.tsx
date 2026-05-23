@@ -1,9 +1,10 @@
 /**
  * ProviderStatusBadge.tsx — Compact model-route chip for the welcome screen.
  *
- * Local 9B MTP state is sourced from the server-side /api/local-qwen35-9b/*
- * route so this chip, Settings, onboarding, and chat routing share the same
- * provider id and setup lifecycle.
+ * Local Qwen3.5-4B state is sourced from the server-side /api/local-qwen35-9b/*
+ * route (legacy endpoint name kept for backward compat) so this chip,
+ * Settings, onboarding, and chat routing share the same provider id and
+ * setup lifecycle. 2026-05-23: default model switched from 9B to 4B.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -13,8 +14,8 @@ import { hanaFetch } from '../hooks/use-hana-fetch';
 import { loadModels } from '../utils/ui-helpers';
 import { BRAIN_PROVIDER_ID, BRAIN_DEFAULT_MODEL_ID } from '../../../../shared/brain-provider.js';
 
-const LOCAL_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_MODEL_ID = 'qwen35-9b-q4km-imatrix';
+const LOCAL_PROVIDER_ID = 'local-qwen35-4b-q4km';
+const LOCAL_MODEL_ID = 'qwen35-4b-q4km';
 
 type LocalStatus = {
   ok?: boolean;
@@ -45,7 +46,7 @@ type LocalStatus = {
 function providerDisplayLabel(provider: string | null, isZh: boolean): string {
   if (!provider) return isZh ? '未配置' : 'No model';
   if (provider === BRAIN_PROVIDER_ID) return isZh ? '默认模型' : 'Default model';
-  if (provider === LOCAL_PROVIDER_ID) return isZh ? '本地 9B MTP' : 'Local 9B MTP';
+  if (provider === LOCAL_PROVIDER_ID) return isZh ? '本地 Qwen3.5-4B' : 'Local Qwen3.5-4B';
   return provider;
 }
 
@@ -222,10 +223,10 @@ export function ProviderStatusBadge() {
             <span className="provider-status-menu-dot tone-local" aria-hidden />
             <span>
               {localReady
-                ? (isZh ? '本地 9B MTP' : 'Local 9B MTP')
+                ? (isZh ? '本地 Qwen3.5-4B' : 'Local Qwen3.5-4B')
                 : localBusy
-                  ? (isZh ? '本地 9B MTP 准备中' : 'Local 9B MTP preparing')
-                  : (isZh ? '准备并切换本地 9B MTP' : 'Prepare and switch to Local 9B MTP')}
+                  ? (isZh ? '本地 Qwen3.5-4B 准备中' : 'Local Qwen3.5-4B preparing')
+                  : (isZh ? '准备并切换本地 Qwen3.5-4B' : 'Prepare and switch to Local Qwen3.5-4B')}
             </span>
           </button>
           {!localReady && (

@@ -1,3 +1,40 @@
+# Lynn v0.79.1 Release Notes
+
+> 发布日期: 2026-05-23 · 代号: "4B 入门"
+
+v0.79.1 把默认本地模型从 Qwen3.5-9B 切到 **unsloth/Qwen3.5-4B-GGUF Q4_K_M**(2.55GB,thinking-on 32K,8GB 内存即可启动),覆盖最大用户群。同时把 9B MTP / 35B APEX-MTP 升级为"硬件分级"可选档,按用户机器显存自动浮现。
+
+## 重点更新
+
+### 默认本地模型切到 Qwen3.5-4B
+- 设置 → 模型内的"本地模型"卡片默认指向 **Qwen3.5-4B Q4_K_M (unsloth)**,2.55 GB,thinking-on 32K,8GB 内存即可流畅运行。
+- 下载量减半(5.38GB → 2.55GB),启动门槛降到主流 PC/Mac。
+- V8 工具调用 grader 修正后 30/35 = 85.71%;V9 60-prompt mixed 评测 46/60 = 76.67%(finance/medical 100%,math/physics/biology/chemistry 88-89%)。
+- 模型源: ModelScope `unsloth/Qwen3.5-4B-GGUF` · HF mirror `hf-mirror.com/unsloth/Qwen3.5-4B-GGUF`(2 源 fallback,sha256 校验)。
+
+### 三档硬件分级
+| 档位 | 模型 | 推荐硬件 | 体积 |
+|------|------|---------|:----:|
+| **默认** | Qwen3.5-4B Q4_K_M | **8GB 内存,全机型** | 2.55 GB |
+| 升级 | Qwen3.5-9B Q4_K_M imatrix MTP | 24GB 显存/统一内存+ | 5.38 GB |
+| 高端 | Qwen3.6-35B-A3B APEX-MTP I-Balanced | 32GB+ 显存/统一内存+ | 26 GB |
+
+升级档自动按 `os.totalmem()` 浮现到模型卡的"可选本地模型"区,无需手动配置。
+
+### 兼容性与迁移
+- 已有 9B / 35B 配置不强迁:用户继续使用现有配置;新用户默认获得 4B 一键体验。
+- `core/migrate-providers.js` 的 `migrateLocalQwenDefaultTo4B` seed 函数指向新 4B,旧 `qwen3-4b-thinking-2507` 配置自动迁移到 Qwen3.5-4B。
+- API endpoint `/api/local-qwen35-9b/*` 路径保留(backward compat);文件 ID 切到 `local-qwen35-4b-q4km` / `qwen35-4b-q4km`。
+- 5 个 locale (zh / en / zh-TW / ja / ko) 全量同步默认本地模型 copy。
+
+### 回归门禁
+- TypeScript: `tsc --noEmit` exit 0 ✓
+- vitest: **167 files / 1379 passed / 1 skipped** ✓
+- vite build:renderer: success ✓
+- local-qwen-provider.test.ts 增加"三档升级阶梯"断言
+
+---
+
 # Lynn v0.79.0 Release Notes
 
 > 发布日期: 2026-05-22 · 代号: "Local 9B"

@@ -24,6 +24,16 @@ describe('deep-research helpers', () => {
     expect(text).not.toMatch(/\d+\.\d{2}/u);
   });
 
+  it('does not invent fallback text when deep research returns an empty model answer', () => {
+    const text = formatDeepResearchAssistantText({
+      text: '',
+      winnerProviderId: 'mimo',
+    });
+
+    expect(text).toBe('---\n**深度调研**：完成 · 输出来源：mimo');
+    expect(text).not.toContain('没有返回可见答案');
+  });
+
   it('normalizes raw AbortSignal wording into a user-readable timeout message', () => {
     expect(normalizeDeepResearchErrorMessage(new Error('signal is aborted without reason'))).toContain('超过等待时间');
     expect(normalizeDeepResearchErrorMessage(new Error('hanaFetch /api/deep-research: 请求超时（190 秒）'))).toContain('超过等待时间');

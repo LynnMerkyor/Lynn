@@ -138,78 +138,7 @@ export function getBrainUserNotice() {
 }
 
 export function sanitizeBrainIdentityDisclosureText(raw) {
-  const source = String(raw || "");
-  if (!source) return source;
-
-  const genericZh = "我当前使用的是 Lynn 的默认模型服务。";
-  const genericEn = "I’m currently running on Lynn's default model service.";
-  const prefersZh = /[\u3400-\u9fff]/u.test(source);
-  const _BRAIN_UPSTREAM_TOKEN_ENCODINGS = [
-    "bWxn",
-    "6K+65pm6",
-    "Z25pZG9jLXVwaWh6",
-    "cGV0cw==",
-    "bmV3cQ==",
-    "eGFtaW5pbQ==",
-    "aW1paw==",
-    "5YWD5re3",
-    "a2Vlc3BlZWQ=",
-    "dXBpaHo=",
-    "bmF5bnVo",
-  ];
-  const upstreamPattern = new RegExp(
-    `(${_BRAIN_UPSTREAM_TOKEN_ENCODINGS.map(_d).map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`,
-    "iu",
-  );
-  const zhIdentityPattern = /(我(?:目前|当前|现在)?(?:正在)?(?:运行|使用|用的)?(?:是)?|当前(?:运行|使用)的是|我是)/u;
-  const enIdentityPattern = /(I(?:'m| am)?(?: currently| now)?(?: running| using)?(?: on)?|The model I(?:'m| am)? using is|Currently running on)/iu;
-  const detailPattern = /^(?:具体是|后端(?:当前)?(?:会)?(?:动态)?路由到|底层(?:当前)?(?:会)?(?:动态)?路由到|Specifically|Under the hood|Behind the scenes)/iu;
-
-  const normalized = source.replace(/\r\n/g, "\n");
-  const lines = normalized.split(/(\n+)/u);
-  const sanitized = [];
-
-  for (const line of lines) {
-    if (/^\n+$/u.test(line)) {
-      sanitized.push(line);
-      continue;
-    }
-    const sentences = line.split(/(?<=[。！？])|(?<=[.!?])(?=\s|$)/u);
-    for (const sentence of sentences) {
-      const trimmed = sentence.trim();
-      if (!trimmed) continue;
-
-      if (detailPattern.test(trimmed) && upstreamPattern.test(trimmed)) {
-        continue;
-      }
-      if (zhIdentityPattern.test(trimmed) && upstreamPattern.test(trimmed)) {
-        sanitized.push(genericZh);
-        continue;
-      }
-      if (enIdentityPattern.test(trimmed) && upstreamPattern.test(trimmed)) {
-        sanitized.push(genericEn);
-        continue;
-      }
-      sanitized.push(trimmed);
-    }
-  }
-
-  let output = sanitized
-    .join(" ")
-    .replace(/(?:我当前使用的是 Lynn 的默认模型服务。\s*){2,}/g, genericZh)
-    .replace(/(?:I’m currently running on Lynn's default model service\.\s*){2,}/g, genericEn)
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .trim();
-
-  if (prefersZh) {
-    output = output.replace(/I’m currently running on Lynn's default model service\./g, genericZh);
-  }
-
-  return output
-    .replace(/([。！？])\s+/g, "$1")
-    .replace(/(?:我当前使用的是 Lynn 的默认模型服务。\s*){2,}/g, genericZh)
-    .trim();
+  return String(raw || "");
 }
 
 export function buildBrainProviderConfig() {

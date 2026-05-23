@@ -8,10 +8,11 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 
 const HOME = os.homedir();
-const DEFAULT_PROVIDER_CONFIG = path.join(HOME, '.lynn-engine', 'providers', 'qwen35-9b-q4km-imatrix-gguf.json');
-const DEFAULT_PID_FILE = path.join(HOME, '.lynn-engine', 'run', 'qwen35-9b-q4km-imatrix.pid');
-const DEFAULT_LOG_FILE = path.join(HOME, '.lynn-engine', 'logs', 'qwen35-9b-q4km-imatrix.client.log');
-const DEFAULT_MODEL_ROOT = path.join(HOME, 'Models', 'Lynn', 'Qwen3.5-9B');
+// 2026-05-23 默认本地模型切到 Qwen3.5-4B Q4_K_M (unsloth)。
+const DEFAULT_PROVIDER_CONFIG = path.join(HOME, '.lynn-engine', 'providers', 'qwen35-4b-q4km-gguf.json');
+const DEFAULT_PID_FILE = path.join(HOME, '.lynn-engine', 'run', 'qwen35-4b-q4km.pid');
+const DEFAULT_LOG_FILE = path.join(HOME, '.lynn-engine', 'logs', 'qwen35-4b-q4km.client.log');
+const DEFAULT_MODEL_ROOT = path.join(HOME, 'Models', 'Lynn', 'Qwen3.5-4B');
 const DEFAULT_HOST = process.env.LYNN_LOCAL_QWEN35_HOST || '127.0.0.1';
 const DEFAULT_PORT = Number(process.env.LYNN_LOCAL_QWEN35_PORT || 18099);
 

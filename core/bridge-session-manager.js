@@ -36,10 +36,12 @@ import {
 import { resolveCompactionSettings } from "./compaction-settings.js";
 
 const LOCAL_QWEN35_PROVIDER_IDS = new Set([
+  "local-qwen35-4b-q4km",
   "local-qwen3-4b-thinking-2507-q4km-imatrix",
   "local-qwen35-9b-q4km-imatrix",
 ]);
 const LOCAL_QWEN35_MODEL_IDS = new Set([
+  "qwen35-4b-q4km",
   "qwen3-4b-thinking-2507-q4km-imatrix",
   "qwen35-9b-q4km-imatrix",
 ]);

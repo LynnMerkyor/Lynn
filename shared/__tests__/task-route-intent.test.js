@@ -71,13 +71,8 @@ describe("task route intent", () => {
     expect(classifyRouteIntent("明天早上9点提醒我执行日报定时任务")).toBe("utility");
   });
 
-  it("tells utility routes to research the user's actual question and use scripts when useful", () => {
-    const hint = buildRouteIntentSystemHint("utility", "zh");
-    expect(hint).toContain("用户问什么就围绕什么自然延展");
-    expect(hint).toContain("临时 Python/Node 脚本");
-    expect(hint).toContain("截图、链接、导出文件、PDF");
-    expect(hint).toContain("工具链没有稳定返回");
-    expect(hint).toContain("不要只输出");
+  it("does not create hidden route instructions for utility routes", () => {
+    expect(buildRouteIntentSystemHint("utility", "zh")).toBe("");
   });
 
   it("detects pending tool execution even when reflection text comes first", () => {
@@ -182,11 +177,7 @@ describe("task route intent", () => {
     });
   });
 
-  it("requires copyable verification commands for coding fix tasks", () => {
-    const hint = buildRouteIntentSystemHint("coding", "zh-CN");
-
-    expect(hint).toContain("python main.py");
-    expect(hint).toContain("请运行验证");
-    expect(hint).toContain("没有真实修改时不要说“已修复”");
+  it("does not create hidden route instructions for coding routes", () => {
+    expect(buildRouteIntentSystemHint("coding", "zh-CN")).toBe("");
   });
 });

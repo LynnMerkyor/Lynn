@@ -32,7 +32,7 @@ PARALLEL="${PARALLEL:-1}"
 N_GPU_LAYERS="${N_GPU_LAYERS:-999}"
 LLAMA_SERVER="${LLAMA_SERVER:-}"
 LLAMA_EXTRA_ARGS="${LLAMA_EXTRA_ARGS:-}"
-LLAMA_REASONING_ARGS="${LLAMA_REASONING_ARGS:---jinja --reasoning auto --reasoning-budget 2048}"
+LLAMA_REASONING_ARGS="${LLAMA_REASONING_ARGS:---jinja --reasoning auto --reasoning-budget 8192}"
 LLAMA_MTP_ARGS="${LLAMA_MTP_ARGS:---spec-type draft-mtp --spec-draft-n-max 4}"
 GGUF="${GGUF:-}"
 MODEL_ROOT="${MODEL_ROOT:-$HOME/Models}"
@@ -68,7 +68,7 @@ Environment:
   MODEL_ROOT            Root directory for model search (default: ~/Models)
   LLAMA_SERVER          Binary path (same as --llama-server)
   LLAMA_EXTRA_ARGS      Additional llama-server arguments
-  LLAMA_REASONING_ARGS  Reasoning flags (default: --jinja --reasoning auto --reasoning-budget 2048)
+  LLAMA_REASONING_ARGS  Reasoning flags (default: --jinja --reasoning auto --reasoning-budget 8192)
   LLAMA_MTP_ARGS        MTP speculative decoding flags (default: --spec-type draft-mtp --spec-draft-n-max 4)
   DRY_RUN=1             Same as --dry-run
   LOG_DIR               Log directory (default: ~/.lynn-engine/logs)

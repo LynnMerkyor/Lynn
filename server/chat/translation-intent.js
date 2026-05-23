@@ -150,20 +150,6 @@ export function detectQuickTranslationIntent(raw) {
 }
 
 export function buildQuickTranslationPrompt(intent) {
-  const targetLanguage = normalizeTranslationTarget(intent?.targetLanguage, "中文") || "中文";
   const sourceText = normalizeText(intent?.sourceText);
-  return [
-    "【Lynn 内部快速翻译任务】",
-    `目标语言：${targetLanguage}`,
-    "",
-    "规则：",
-    "- 只输出译文，不要解释、不要总结、不要给翻译策略。",
-    "- 不要调用任何工具，不要输出 tool_name(...)、XML 工具标签、JSON 工具调用。",
-    "- 不要输出 Premise / Conduct / Reflection / Act。",
-    "- 尽量保留原文段落、列表、Markdown 和代码块结构。",
-    "- 技术名词、品牌名、人名和产品名按上下文保留或使用通行译法。",
-    "",
-    "【待翻译文本】",
-    sourceText,
-  ].join("\n");
+  return sourceText;
 }

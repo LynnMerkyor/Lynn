@@ -348,7 +348,7 @@ export async function buildMemoryContext(userText, opts = {}) {
 
   const systemMessage = {
     role: "system",
-    content: `# 相关记忆 (按相关性排序,Top ${hits.length})\n${memoryBlock}\n\n基于以上记忆回答用户。如果记忆与问题无关,请忽略。`,
+    content: `# 相关记忆 (按相关性排序,Top ${hits.length})\n${memoryBlock}`,
   };
 
   // 给前端的事件

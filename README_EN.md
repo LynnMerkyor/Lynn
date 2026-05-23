@@ -37,7 +37,23 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.79.0</strong> · 2026-05-22 · Local 9B unlimited tokens + local model manager <em>(latest)</em></summary>
+<summary><strong>v0.79.1</strong> · 2026-05-23 · Default local model switched to Qwen3.5-4B, three-tier hardware ladder <em>(latest)</em></summary>
+
+**Default local tier swap**:
+- 🆕 **Default Qwen3.5-4B Q4_K_M (unsloth)**: 2.55 GB · thinking-on 32K · 8GB RAM ready · V8 tool-call 30/35 · fast launch · covers the widest user base. New-install download halved, entry bar dropped to mainstream PC/Mac.
+- 🎚️ **Three-tier hardware ladder**:
+  - **Default (8GB RAM, all platforms)**: Qwen3.5-4B Q4_K_M
+  - **Upgrade (24GB VRAM/unified memory+)**: Qwen3.5-9B Q4_K_M imatrix MTP — stronger quality, MTP draft acceleration
+  - **High-end (32GB+ VRAM/unified memory+)**: Qwen3.6-35B-A3B APEX-MTP I-Balanced — MMLU 90.40% / GPQA Diamond 80.70%
+- 🔁 **Smooth migration**: existing 9B / 35B configs are not force-migrated; new users get the 4B one-click experience by default.
+- ✅ **Test matrix**: V8 corrected-grader 30/35 (85.71%) · V9 60-prompt mixed suite (in progress).
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.1)
+
+</details>
+
+<details>
+<summary><strong>v0.79.0</strong> · 2026-05-22 · Local 9B unlimited tokens + local model manager</summary>
 
 **Local model release**:
 - 🧠 **Local 9B MTP for daily unlimited use**:Qwen3.5-9B Q4_K_M imatrix MTP is now the default one-click local model path. Lynn prepares llama.cpp, downloads and verifies the GGUF, starts a local OpenAI-compatible `/v1` endpoint, and registers the provider after user authorization.
@@ -441,27 +457,33 @@ All tooling is open-sourced: [lynn-distill-toolkit](https://github.com/MerkyorLy
 
 This doesn't replace the cloud fallback chain (MiMo / Qwen / DeepSeek remain the default route). **It adds a private, local path** — not a switch.
 
-## Local 9B for daily unlimited use
+## Local models — three-tier hardware ladder
 
-Starting with Lynn v0.79, **Qwen3.5-9B Q4_K_M imatrix MTP** is a first-class local model path, not an expert-only escape hatch. After user authorization, Lynn prepares llama.cpp, downloads the GGUF model, starts a local OpenAI-compatible endpoint, registers the model, and switches to it automatically.
+Starting with Lynn v0.79.1, local models are grouped by hardware. **Default tier switched from 9B to 4B for faster startup and lower entry bar**:
 
-| Item | Details |
+| Tier | Model | Size | Recommended hardware | Context | Capability signal |
+|------|-------|:----:|---------------------|:-------:|-------------------|
+| **Default** | **Qwen3.5-4B Q4_K_M (unsloth)** | 2.55 GB | **8GB RAM, all platforms** | 32K | V8 tool-call 30/35 (85.71%) · thinking-on default |
+| Upgrade | Qwen3.5-9B Q4_K_M imatrix MTP | 5.38 GB | 24GB VRAM/unified memory+ | 32K | MMLU 81.00% / GPQA Diamond 81.71% · 14/15 tool · MTP draft accel |
+| High-end | Qwen3.6-35B-A3B APEX-MTP I-Balanced | 26 GB | 32GB+ VRAM/unified memory+ | 32K | MMLU 90.40% / GPQA Diamond 80.70% · APEX MoE |
+
+| Universal | Details |
 |---|---|
-| Default local model | Qwen3.5-9B Q4_K_M imatrix MTP |
-| Model size | 5.38 GB |
-| Context | 32K |
-| Capability signal | MMLU 81.00% (100 sample) / GPQA Diamond 81.71% excl_pf / tool-call 14/15 |
-| Speed signal | GB10 Spark: think-on 4K 77.46 tok/s; 16K 69.00 tok/s; 32K sustained 78.32 tok/s |
 | Runtime | llama.cpp local server, OpenAI-compatible `/v1` endpoint |
 | Privacy | Fully offline capable; no API key required; conversations stay on device |
+| Default thinking | thinking-on (can be turned off in the Lynn composer) |
 
 ### Downloads and mirrors
 
-- 🇨🇳 **ModelScope (recommended in China)**: [Merkyor/Qwen3.5-9B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/files) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`)
-- 🤗 **Hugging Face / mirror**: `nerkyor/Qwen3.5-9B-GGUF-imatrix` (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`)
-- High-memory devices (24GB+ unified memory or VRAM) can also use **Qwen3.6-35B-A3B APEX-MTP I-Balanced**: [ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF). Under the thinking-on 32K evaluation it reaches MMLU 90.40% / GPQA Diamond 80.70%; GB10 Spark reference speed is 84.69 tok/s at think-on 4K and 75.53 tok/s at think-on 16K.
+**Default 4B** (recommended for new users):
+- 🇨🇳 **ModelScope**: [unsloth/Qwen3.5-4B-GGUF](https://modelscope.cn/models/unsloth/Qwen3.5-4B-GGUF) (`Qwen3.5-4B-Q4_K_M.gguf`, **2.55 GB**)
+- 🤗 **Hugging Face**: [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) / mirror `hf-mirror.com/unsloth/Qwen3.5-4B-GGUF`
 
-In the app: **Settings → Models → Local Qwen3.5-9B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background. The chat input shows local model status, and users can stop the runtime anytime to release memory. The Models page also supports in-app 35B download and importing any llama.cpp-compatible GGUF the user already has.
+**Upgrade 9B / High-end 35B** (optional for high-memory devices):
+- 9B: [Merkyor/Qwen3.5-9B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/files) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`)
+- 35B: [Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF) — GB10 Spark reference think-on 4K 84.69 tok/s / 16K 75.53 tok/s
+
+In the app: **Settings → Models → Local Qwen3.5-4B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background. The chat input shows local model status, and you can stop the runtime anytime to release memory. The Models page also supports one-click upgrade to 9B / 35B, or importing any llama.cpp-compatible GGUF you already have.
 
 ## Install and Go
 
@@ -603,7 +625,7 @@ Linux builds are planned.
 Two paths on first launch:
 
 - **Quick Start**: Enter your name → set permissions → jump right in. A built-in default model works out of the box — no API key required.
-- **Local model**: Settings → Models → Local Qwen3.5-9B. Lynn downloads the Q4_K_M imatrix GGUF, prepares llama.cpp, starts the local endpoint, and switches to it automatically after authorization.
+- **Local model**: Settings → Models → Local Qwen3.5-4B (default, 2.55 GB / 8GB RAM) / 9B MTP (24GB VRAM upgrade) / 35B APEX-MTP (32GB+ high-end). Lynn downloads the Q4_K_M GGUF, prepares llama.cpp, starts the local endpoint, and switches to it automatically after authorization.
 - **Advanced Setup**: Enter your name → connect your own provider (API key + base URL) → choose a **chat model** and a **utility model** → pick a theme → set permissions → enter.
 
 Lynn uses the OpenAI-compatible protocol, so any provider that supports it will work (OpenAI, DeepSeek, Qwen, local models via Ollama, SiliconFlow, etc.). Some providers (e.g. MiniMax) also support OAuth login. All model settings can be adjusted later in Settings.

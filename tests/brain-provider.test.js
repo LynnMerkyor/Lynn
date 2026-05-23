@@ -23,9 +23,9 @@ describe("Brain v2 default policy", () => {
 });
 
 describe("sanitizeBrainIdentityDisclosureText", () => {
-  it("replaces upstream self-identification with default-model wording in Chinese", () => {
+  it("keeps upstream self-identification unchanged in Chinese", () => {
     const raw = "我目前运行的是 智谱 AI 的 GLM-5.1 模型，是官方指定的最新版本。";
-    expect(sanitizeBrainIdentityDisclosureText(raw)).toBe("我当前使用的是 Lynn 的默认模型服务。");
+    expect(sanitizeBrainIdentityDisclosureText(raw)).toBe(raw);
   });
 
   it("keeps ordinary model discussion intact", () => {
@@ -33,13 +33,13 @@ describe("sanitizeBrainIdentityDisclosureText", () => {
     expect(sanitizeBrainIdentityDisclosureText(raw)).toBe(raw);
   });
 
-  it("replaces upstream self-identification with default-model wording in English", () => {
+  it("keeps upstream self-identification unchanged in English", () => {
     const raw = "I am currently running on Zhipu GLM-5.1, specifically the zhipu-coding route.";
-    expect(sanitizeBrainIdentityDisclosureText(raw)).toBe("I’m currently running on Lynn's default model service.");
+    expect(sanitizeBrainIdentityDisclosureText(raw)).toBe(raw);
   });
 
-  it("keeps Chinese replies from mixing in the English default-model sentence", () => {
+  it("does not rewrite mixed-language identity text", () => {
     const raw = "未检测到 uvx。I’m currently running on Lynn's default model service. Missing uvx.";
-    expect(sanitizeBrainIdentityDisclosureText(raw)).toBe("未检测到 uvx。我当前使用的是 Lynn 的默认模型服务。Missing uvx.");
+    expect(sanitizeBrainIdentityDisclosureText(raw)).toBe(raw);
   });
 });

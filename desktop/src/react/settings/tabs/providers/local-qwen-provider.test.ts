@@ -24,11 +24,19 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('selectGgufModel');
   });
 
-  it('advertises the high-memory 35B APEX-MTP upgrade option with objective metrics', () => {
+  it('advertises three-tier upgrade ladder (4B default → 9B 24GB+ → 35B 32GB+) with objective metrics', () => {
     const source = read('server/routes/local-qwen35.js');
     expect(source).not.toContain('qwen36-27b-q4km-imatrix');
+    // 4B is the new default
+    expect(source).toContain('local-qwen35-4b-q4km');
+    expect(source).toContain('qwen35-4b-q4km');
+    // 9B = 24GB+ upgrade
+    expect(source).toContain('qwen35-9b-q4km-imatrix');
+    expect(source).toContain('24GB 显存/统一内存+ 推荐');
+    expect(source).toContain('Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf');
+    // 35B = 32GB+ high-end
     expect(source).toContain('qwen36-35b-a3b-apex-mtp');
-    expect(source).toContain('24GB 显存+ 推荐');
+    expect(source).toContain('32GB 显存/统一内存+ 推荐');
     expect(source).toContain('thinking-on 32K');
     expect(source).toContain('MMLU 90.40%');
     expect(source).toContain('GPQA Diamond 80.70%');
@@ -71,8 +79,8 @@ describe('Local Qwen provider UX guards', () => {
     const constants = read('desktop/src/react/onboarding/constants.ts');
     const onboardingStep = read('desktop/src/react/onboarding/steps/LocalModelDownloadStep.tsx');
     const badge = read('desktop/src/react/components/ProviderStatusBadge.tsx');
-    expect(constants).toContain("providerName: 'local-qwen35-9b-q4km-imatrix'");
-    expect(constants).toContain("defaultModelId: 'qwen35-9b-q4km-imatrix'");
+    expect(constants).toContain("providerName: 'local-qwen35-4b-q4km'");
+    expect(constants).toContain("defaultModelId: 'qwen35-4b-q4km'");
     expect(onboardingStep).toContain('/api/local-qwen35-9b/status');
     expect(onboardingStep).toContain('/api/local-qwen35-9b/setup');
     expect(badge).toContain('/api/local-qwen35-9b/status');
@@ -133,7 +141,7 @@ describe('Local Qwen provider UX guards', () => {
     expect(thinkingBlock).not.toContain('马上给出结果');
     expect(inputArea).toContain('本地端点已就绪，正在生成首个回答');
     expect(inputArea).toContain('首次暖机提示');
-    expect(inputArea).toContain('本地 9B MTP 刚启动时要加载权重和预热上下文');
+    expect(inputArea).toContain('本地 Qwen3.5-4B 刚启动时要加载权重和预热上下文');
     expect(inputArea).not.toContain('首次启动后的第一问正在暖机，可能 30-60 秒；后续会明显更快。');
     expect(inputArea).not.toContain('可接收');
   });

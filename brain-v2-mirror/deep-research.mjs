@@ -1,5 +1,5 @@
 // Brain v2 · Deep Research multi-candidate orchestrator
-// 目标:对一个 user prompt 同时跑 N 个 provider → 返回第一个可见候选。
+// 目标:对一个 user prompt 同时跑 N 个 provider → 返回第一个成功候选。
 // 不做质量评分、不拦截、不改写候选内容；模型输出是什么就呈现什么。
 //
 // 不打主链普通流路。挂在新 endpoint POST /v2/deep-research/completions。
@@ -17,7 +17,6 @@ if (DEFAULT_CANDIDATES.length === 0) {
   DEFAULT_CANDIDATES.push('mimo', 'apex-spark-i-balanced', 'deepseek-chat');
 }
 const CANDIDATE_TIMEOUT_MS = Number(process.env.DEEP_RESEARCH_CANDIDATE_TIMEOUT_MS || 60_000);
-const MIN_VALID_CANDIDATES = Number(process.env.DEEP_RESEARCH_MIN_CANDIDATES || 1);
 
 // Run one provider non-streaming-equivalent: drain the SSE adapter and return final answer text.
 async function runOneCandidate({ providerId, messages, signal, log }) {
@@ -93,35 +92,26 @@ export async function runDeepResearch({ messages, candidates, signal, log, onPro
   );
   const phase1Ms = Date.now() - t0;
 
-  const validCandidates = candidateResults.filter((c) => c.ok && c.content && c.content.length > 20);
-  log && log('info', `[deep-research] phase1 done in ${phase1Ms}ms — ${validCandidates.length}/${candidatePool.length} valid`);
+  const successfulCandidates = candidateResults.filter((c) => c.ok);
+  log && log('info', `[deep-research] phase1 done in ${phase1Ms}ms — ${successfulCandidates.length}/${candidatePool.length} successful`);
   onProgress && onProgress({
     event: 'phase1-done',
     phase1Ms,
-    valid: validCandidates.map((c) => ({ providerId: c.providerId, latencyMs: c.latencyMs, contentLen: c.content.length })),
+    successful: successfulCandidates.map((c) => ({ providerId: c.providerId, latencyMs: c.latencyMs, contentLen: c.content.length })),
     failed: candidateResults.filter((c) => !c.ok).map((c) => ({ providerId: c.providerId, error: c.error })),
   });
 
-  if (validCandidates.length === 0) {
+  if (successfulCandidates.length === 0) {
     throw new Error('deep-research: all candidates failed');
   }
-  if (validCandidates.length < MIN_VALID_CANDIDATES) {
-    log && log('warn', `[deep-research] continuing with ${validCandidates.length}/${MIN_VALID_CANDIDATES} valid candidates`);
-    onProgress && onProgress({
-      event: 'candidate-warning',
-      reason: 'insufficient-valid-candidates',
-      validCount: validCandidates.length,
-      minValidCandidates: MIN_VALID_CANDIDATES,
-    });
-  }
 
-  const winner = validCandidates[0];
+  const winner = successfulCandidates[0];
   onProgress && onProgress({
     event: 'candidate-picked',
     winnerProviderId: winner.providerId,
-    validCount: validCandidates.length,
+    successfulCount: successfulCandidates.length,
   });
-  log && log('info', `[deep-research] winner: ${winner.providerId} (first visible candidate)`);
+  log && log('info', `[deep-research] winner: ${winner.providerId} (first successful candidate)`);
 
   return {
     winner,
@@ -130,8 +120,8 @@ export async function runDeepResearch({ messages, candidates, signal, log, onPro
       phase1Ms,
       totalMs: Date.now() - t0,
       candidateCount: candidatePool.length,
-      validCount: validCandidates.length,
-      selection: 'first-visible-candidate',
+      successfulCount: successfulCandidates.length,
+      selection: 'first-successful-candidate',
     },
   };
 }
@@ -157,5 +147,4 @@ function extractLatestUser(messages) {
 export const _internals = {
   DEFAULT_CANDIDATES,
   CANDIDATE_TIMEOUT_MS,
-  MIN_VALID_CANDIDATES,
 };

@@ -3503,6 +3503,28 @@ let activeModelDownloader = null;
 let lastModelDownloadState = { state: "idle" };
 
 const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
+  // 2026-05-23 默认 ship 模型切到 Qwen3.5-4B Q4_K_M (unsloth)。
+  "qwen35-4b-q4km": {
+    modelId: "qwen35-4b-q4km",
+    label: "Qwen3.5-4B Q4_K_M (unsloth)",
+    fileName: "Qwen3.5-4B-Q4_K_M.gguf",
+    expectedSize: 2_740_937_888,
+    expectedSha256: "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+    parallelSegments: 2,
+    autoStart: true,
+    sources: MODEL_DOWNLOADER_SOURCES,
+  },
+  "local-qwen35-4b-q4km": {
+    modelId: "qwen35-4b-q4km",
+    label: "Qwen3.5-4B Q4_K_M (unsloth)",
+    fileName: "Qwen3.5-4B-Q4_K_M.gguf",
+    expectedSize: 2_740_937_888,
+    expectedSha256: "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+    parallelSegments: 2,
+    autoStart: true,
+    sources: MODEL_DOWNLOADER_SOURCES,
+  },
+  // 9B MTP 作为 24G+ 显存可选档保留(老用户 / 高质量场景)
   "qwen35-9b-q4km-imatrix": {
     modelId: "qwen35-9b-q4km-imatrix",
     label: "Qwen3.5-9B Q4_K_M imatrix MTP",
@@ -3510,8 +3532,19 @@ const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
     expectedSize: 5_780_090_944,
     expectedSha256: "0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4",
     parallelSegments: 2,
-    autoStart: true,
-    sources: MODEL_DOWNLOADER_SOURCES,
+    autoStart: false,
+    sources: [
+      {
+        id: "modelscope",
+        label: "ModelScope (国内主源)",
+        url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
+      },
+      {
+        id: "hf-mirror",
+        label: "hf-mirror.com (国内 HF 镜像)",
+        url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
+      },
+    ],
   },
   "local-qwen35-9b-q4km-imatrix": {
     modelId: "qwen35-9b-q4km-imatrix",
@@ -3520,8 +3553,19 @@ const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
     expectedSize: 5_780_090_944,
     expectedSha256: "0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4",
     parallelSegments: 2,
-    autoStart: true,
-    sources: MODEL_DOWNLOADER_SOURCES,
+    autoStart: false,
+    sources: [
+      {
+        id: "modelscope",
+        label: "ModelScope (国内主源)",
+        url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
+      },
+      {
+        id: "hf-mirror",
+        label: "hf-mirror.com (国内 HF 镜像)",
+        url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
+      },
+    ],
   },
   "qwen36-35b-a3b-apex-mtp": {
     modelId: "qwen36-35b-a3b-apex-mtp",
@@ -3570,8 +3614,8 @@ const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
 function getLlamacppDownloadProfile(modelId) {
   const requested = typeof modelId === "string" && modelId.trim()
     ? modelId.trim()
-    : "qwen35-9b-q4km-imatrix";
-  return LLAMACPP_DOWNLOAD_PROFILES[requested] || LLAMACPP_DOWNLOAD_PROFILES["qwen35-9b-q4km-imatrix"];
+    : "qwen35-4b-q4km";
+  return LLAMACPP_DOWNLOAD_PROFILES[requested] || LLAMACPP_DOWNLOAD_PROFILES["qwen35-4b-q4km"];
 }
 
 function decorateDownloadState(profile, state) {
@@ -3693,7 +3737,7 @@ wrapIpcHandler("llamacpp:start-download", async (event, payload = {}) => {
   const profile = getLlamacppDownloadProfile(payload?.modelId);
   if (activeModelDownloader && (lastModelDownloadState.state === "downloading"
       || lastModelDownloadState.state === "verifying")) {
-    const runningModelId = lastModelDownloadState.modelId || "qwen35-9b-q4km-imatrix";
+    const runningModelId = lastModelDownloadState.modelId || "qwen35-4b-q4km";
     return {
       ok: runningModelId === profile.modelId,
       alreadyRunning: true,
@@ -3869,6 +3913,7 @@ wrapIpcHandler("llamacpp:start-custom-model", async (event, payload = {}) => {
 
 function stopManagedQwen35LlamaServer() {
   const pidFiles = [
+    path.join(os.homedir(), ".lynn-engine", "run", "qwen35-4b-q4km.pid"),
     path.join(os.homedir(), ".lynn-engine", "run", "qwen35-9b-q4km-imatrix.pid"),
   ];
   const pids = new Set();
@@ -3900,7 +3945,9 @@ function stopManagedQwen35LlamaServer() {
       const isLynnOwned =
         cmd.includes(lynnModelsDir)
         || cmd.includes(lynnEngineDir)
+        || /qwen35-4b-q4km/i.test(cmd)
         || /qwen35-9b-q4km/i.test(cmd)
+        || /Qwen3\.5-4B-Q4_K_M/i.test(cmd)
         || /Qwen3\.5-9B-Q4_K_M/i.test(cmd);
       if (isLynnOwned && cmd.includes("--port 18099")) {
         pids.add(pid);

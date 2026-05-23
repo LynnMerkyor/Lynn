@@ -10,8 +10,8 @@ import { BRAIN_PROVIDER_ID, BRAIN_PROVIDER_LABEL } from '../../../../../../share
 import styles from '../../Settings.module.css';
 
 const platform = window.platform;
-const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN_PROVIDER_LABEL = '本地 Qwen3.5-9B MTP';
+const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-4b-q4km';
+const LOCAL_QWEN_PROVIDER_LABEL = '本地 Qwen3.5-4B';
 
 type LocalActionStatus = {
   kind: 'info' | 'success' | 'error';
@@ -29,10 +29,21 @@ type LocalUpgradeOption = {
   file_name?: string;
 };
 
+const LOCAL_QWEN35_9B_UPGRADE: LocalUpgradeOption = {
+  id: 'qwen35-9b-q4km-imatrix',
+  label: 'Qwen3.5-9B Q4_K_M imatrix MTP',
+  profile: '24GB 显存/统一内存+ 推荐 · 质量优先',
+  metrics: ['thinking-on 32K', 'MTP draft-mtp', '78.32 tok/s', '工具调用 14/15'],
+  reason: '中端质量档；MTP speculative + thinking-on,推理能力比 4B 强一档。',
+  modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix',
+  download_label: '下载到本机',
+  file_name: 'Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf',
+};
+
 const LOCAL_QWEN36_35B_UPGRADE: LocalUpgradeOption = {
   id: 'qwen36-35b-a3b-apex-mtp',
   label: 'Qwen3.6-35B-A3B APEX-MTP I-Balanced',
-  profile: '24GB 显存/统一内存+ 推荐 · 能力优先',
+  profile: '32GB 显存/统一内存+ 推荐 · 能力优先',
   metrics: ['thinking-on 32K', 'MMLU 90.40%', 'GPQA Diamond 80.70%', 'think-on 4K 84.69 tok/s', 'think-on 16K 75.53 tok/s'],
   reason: '高端质量档；长思考默认 MTP，短答场景可关闭 MTP。',
   modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF',
@@ -42,10 +53,16 @@ const LOCAL_QWEN36_35B_UPGRADE: LocalUpgradeOption = {
 
 function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], memoryGib?: number | null) {
   const normalized: LocalUpgradeOption[] = [];
+  let has9b = false;
   let has35b = false;
   for (const option of options) {
     const haystack = `${option.id || ''} ${option.label || ''}`.toLowerCase();
     if (haystack.includes('27b')) continue;
+    if (haystack.includes('9b')) {
+      normalized.push({ ...LOCAL_QWEN35_9B_UPGRADE, ...option, ...LOCAL_QWEN35_9B_UPGRADE });
+      has9b = true;
+      continue;
+    }
     if (haystack.includes('35b')) {
       normalized.push({ ...LOCAL_QWEN36_35B_UPGRADE, ...option, ...LOCAL_QWEN36_35B_UPGRADE });
       has35b = true;
@@ -53,6 +70,7 @@ function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], memory
     }
     normalized.push(option);
   }
+  if (!has9b && (memoryGib || 0) >= 16) normalized.push(LOCAL_QWEN35_9B_UPGRADE);
   if (!has35b && (memoryGib || 0) >= 24) normalized.push(LOCAL_QWEN36_35B_UPGRADE);
   return normalized;
 }
@@ -304,8 +322,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     const profile = runtime.label ? `\n\n推荐配置：${runtime.label}，上下文 ${runtime.ctx_size || 8192}，并发 ${runtime.parallel || 1}` : '';
     const warning = hardwareWarnings.length ? `\n\n注意：${hardwareWarnings.join(' ')}` : '';
     const setupText = hasModel && hasRuntime
-      ? 'Lynn 将启动本地 Qwen3.5-9B MTP 模型服务，并切换为本地模型。'
-      : 'Lynn 将在本机安装或定位 llama.cpp，下载 Qwen3.5-9B Q4_K_M imatrix MTP，并启动本地模型服务。\n\n模型约 5.38GB，默认 thinking-on + MTP。完成后可离线使用，不需要 API Key，不上传对话。';
+      ? 'Lynn 将启动本地 Qwen3.5-4B 模型服务，并切换为本地模型。'
+      : 'Lynn 将在本机安装或定位 llama.cpp，下载 Qwen3.5-4B Q4_K_M（unsloth），并启动本地模型服务。\n\n模型约 2.55GB，默认 thinking-on。完成后可离线使用，不需要 API Key，不上传对话。';
     const ok = window.confirm(`${setupText}${profile}${warning}\n\n继续吗？`);
     if (!ok) return;
     setSettingUp(true);
@@ -321,8 +339,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       setStatus((prev) => ({ ...(prev || {}), job: data.job }));
       showToast(
         hasModel && hasRuntime
-          ? '本地 9B MTP 正在启动，加载完成后会自动切换为当前模型。'
-          : '本地 9B MTP 正在后台准备，完成后会自动注册并切换为当前模型。',
+          ? '本地 Qwen3.5-4B 正在启动，加载完成后会自动切换为当前模型。'
+          : '本地 Qwen3.5-4B 正在后台准备，完成后会自动注册并切换为当前模型。',
         'info',
       );
       setActionStatus({
@@ -335,7 +353,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       window.setTimeout(loadStatus, 1500);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      showToast('本地 9B MTP 启用失败：' + msg, 'error');
+      showToast('本地 Qwen3.5-4B 启用失败：' + msg, 'error');
       setActionStatus({ kind: 'error', text: `启用失败：${msg}` });
     } finally {
       setSettingUp(false);
@@ -357,8 +375,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     setActionStatus({ kind: 'info', text: '正在重新注册本地 OpenAI 端点，并刷新模型列表…' });
     try {
       await hanaFetch('/api/local-qwen35-9b/register', { method: 'POST', timeout: 10_000 });
-      showToast('本地 9B MTP 已注册到模型列表。', 'success');
-      setActionStatus({ kind: 'success', text: '已重新注册本地端点，并切换到本地 Qwen3.5-9B MTP。' });
+      showToast('本地 Qwen3.5-4B 已注册到模型列表。', 'success');
+      setActionStatus({ kind: 'success', text: '已重新注册本地端点，并切换到本地 Qwen3.5-4B。' });
       platform?.settingsChanged?.('models-changed');
       window.dispatchEvent(new CustomEvent('models-changed'));
       await onRefresh();
@@ -487,7 +505,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     try {
       const modelPath = await platform.selectGgufModel();
       if (!modelPath) {
-        setActionStatus({ kind: 'info', text: '未选择模型。默认 9B MTP 仍保持可用。' });
+        setActionStatus({ kind: 'info', text: '未选择模型。默认 Qwen3.5-4B 仍保持可用。' });
         return;
       }
       await startGgufPath(modelPath);
@@ -502,11 +520,12 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     <section className={styles['pv-local-qwen-panel']}>
       <div className={styles['pv-local-qwen-main']}>
         <div>
-          <div className={styles['pv-local-qwen-kicker']}>默认本地 9B MTP，质量优先</div>
-          <div className={styles['pv-local-qwen-title']}>Qwen3.5-9B Q4_K_M imatrix MTP</div>
+          <div className={styles['pv-local-qwen-kicker']}>默认本地 Qwen3.5-4B，启动快 · 全机型可用</div>
+          <div className={styles['pv-local-qwen-title']}>Qwen3.5-4B Q4_K_M (unsloth)</div>
           <div className={styles['pv-local-qwen-desc']}>
-            5.38GB · thinking-on + MTP 默认 · think-on 32K sustained 78.32 tok/s · tool-call 14/15。Lynn 会在用户授权后自动准备
-            llama.cpp、模型文件和本地 OpenAI 端点；完成后可离线使用，不需要 API Key，不上传对话。35B APEX-MTP 可在下方作为高端档选择。
+            2.55GB · thinking-on 32K 默认 · V8 工具调用 30/35 · 8GB 内存可用。Lynn 会在用户授权后自动准备
+            llama.cpp、模型文件和本地 OpenAI 端点；完成后可离线使用，不需要 API Key，不上传对话。
+            24GB 显存可升级 9B MTP，32GB+ 选择 35B APEX-MTP。
           </div>
         </div>
         <div className={styles['pv-local-qwen-state-stack']}>
@@ -527,11 +546,11 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       </div>
 
       <div className={styles['pv-local-qwen-benefits']}>
-        <span>5.38GB</span>
-        <span>thinking-on + MTP</span>
-        <span>32K 78.32 tok/s</span>
-        <span>工具调用 14/15</span>
-        <span>质量优先</span>
+        <span>2.55GB</span>
+        <span>thinking-on 32K</span>
+        <span>启动快</span>
+        <span>工具调用 30/35</span>
+        <span>8GB 内存可用</span>
         <span>本地优先</span>
         <span>无限 token</span>
         <span>隐私留在本机</span>
@@ -662,7 +681,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           <div className={styles['pv-local-qwen-advanced-panel']}>
             <div>
               <strong>已有 GGUF / 模型目录</strong>
-              <span>默认使用 9B MTP。你也可以导入已经下载好的 35B 或其他 GGUF；Lynn 会用当前硬件配置拉起 llama.cpp。</span>
+              <span>默认使用 Qwen3.5-4B。你也可以导入已经下载好的 9B / 35B 或其他 GGUF；Lynn 会用当前硬件配置拉起 llama.cpp。</span>
               {modelPath && <code className={styles['pv-local-qwen-model-path']}>{modelPath}</code>}
             </div>
             <div className={styles['pv-local-qwen-advanced-actions']}>

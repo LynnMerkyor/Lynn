@@ -838,7 +838,7 @@
       "userNameHint": "How they address you",
       "userProfile": "User Profile",
       "userProfileHint": "Help the assistant know you: interests, habits, preferences. Injected into the system prompt",
-      "defaultProviderHint": "Switch between local 9B MTP and cloud providers in one click.",
+      "defaultProviderHint": "Switch between local Qwen3.5-4B and cloud providers in one click.",
       "openProviders": "Open Providers →"
     },
     "crop": {
@@ -1257,7 +1257,7 @@
       "advancedDesc": "If you already know your provider and model,\nset up connection, model, and theme in one pass.",
       "advancedAction": "Enter Advanced Setup",
       "localTitle": "Local first (offline)",
-      "localDesc": "Download the 5.38 GB Lynn default model (Qwen3.5-9B MTP),\nfully offline — no chats ever uploaded.",
+      "localDesc": "Download the 2.55 GB Lynn default model (Qwen3.5-4B),\nfully offline — no chats ever uploaded.",
       "localAction": "Download local model"
     },
     "name": {
@@ -1347,8 +1347,8 @@
     },
     "localModel": {
       "title": "Download Lynn's default local model",
-      "subtitle": "Qwen3.5-9B Q4_K_M imatrix MTP · 5.38 GB · thinking-on 32K sustained 78.32 tok/s · tool-call 14/15.\nRuns fully offline — no API key, no data ever leaves your machine.",
-      "specsLine": "5.38 GB · Q4_K_M-imatrix MTP · thinking-on · 32K · fully offline",
+      "subtitle": "Qwen3.5-4B Q4_K_M (unsloth) · 2.55 GB · thinking-on 32K · V8 tool-call 30/35 · 8GB RAM ready.\nRuns fully offline — no API key, no data ever leaves your machine.",
+      "specsLine": "2.55 GB · Q4_K_M (unsloth) · thinking-on · 32K · fully offline",
       "needsBinary": "llama.cpp inference engine not found at ~/.lynn/llamacpp/bin/llama-server",
       "needsBinaryHint": "Install llama.cpp following the docs and retry.",
       "alreadyHave": "Local model is ready",
@@ -1371,10 +1371,10 @@
       "errorGeneric": "Download error: {reason}",
       "next": "Continue",
       "back": "Back",
-      "modelPreparedHint": "Model and llama.cpp are ready. Click Start to switch to Local 9B MTP.",
+      "modelPreparedHint": "Model and llama.cpp are ready. Click Start to switch to Local Qwen3.5-4B.",
       "statusReady": "Ready",
       "statusWaiting": "Pending",
-      "runtimeLocal9B": "Local 9B MTP"
+      "runtimeLocal9B": "Local Qwen3.5-4B"
     },
     "tutorial": {
       "interactive": {

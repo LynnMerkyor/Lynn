@@ -1,7 +1,3 @@
-import {
-  buildQuickTranslationPrompt,
-  detectQuickTranslationIntent,
-} from "./translation-intent.js";
 import { inferReportResearchKind } from "./report-research-context.js";
 import {
   buildBudgetCalculationContext,
@@ -34,17 +30,6 @@ export function resolveInitialToolUseBehavior(promptText, opts = {}) {
   // V0.79: do not short-circuit with handcrafted answers. The model should
   // produce the user-visible response; this layer may add context, but should
   // not replace model output.
-
-  const translationIntent = detectQuickTranslationIntent(text);
-  if (translationIntent) {
-    return {
-      behavior: TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN,
-      reason: "quick_translation",
-      reportKind: "",
-      budgetContext: "",
-      effectivePromptText: buildQuickTranslationPrompt(translationIntent),
-    };
-  }
 
   const reportKind = inferReportResearchKind(text);
   const budgetContext = buildBudgetCalculationContext(text);

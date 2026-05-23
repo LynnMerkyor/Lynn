@@ -6,8 +6,9 @@
  * 背景:
  *   5/20 战略 pivot 后 Lynn 客户端默认本地推理底层 = llama.cpp。
  *   Mac Q4_K_M GGUF / Linux CUDA Q4_K_M / Win x64 CUDA Q4_K_M 全平台 ship。
- *   默认模型 = Qwen3.5-9B Q4_K_M-imatrix (MTP),thinking-on。
- *   35B 作为高端可选本地模型,适合更大内存/显存机器手动升级。
+ *   2026-05-23 更新: 默认 ship 模型从 9B 切到 unsloth/Qwen3.5-4B-GGUF Q4_K_M
+ *     (2.55GB,thinking-on,启动快,8GB 内存可用),适配最大用户群。
+ *   9B Q4_K_M-imatrix MTP 降到"24GB 显存推荐"可选档,35B APEX-MTP 是"32GB+"高端档。
  *
  * 本模块策略:
  *   1. start():
@@ -43,25 +44,25 @@ const net = require("net");
 // ─────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = Object.freeze({
-  // 默认 ship 模型 — 9B MTP,质量优先;低配机器继续使用云端默认模型。
-  modelId: "qwen35-9b-q4km-imatrix",
-  modelFileName: "qwen3.5-9b-q4km-imatrix-mtp.gguf",
-  modelExpectedSize: 5_780_090_944, // ~5.38 GB
+  // 默认 ship 模型 — 4B Q4_K_M,启动快 + 8GB 内存可用 + 覆盖最大用户群。
+  // 升级路径: 24G 显存→9B MTP,32G+ 显存→35B APEX-MTP。
+  modelId: "qwen35-4b-q4km",
+  modelFileName: "Qwen3.5-4B-Q4_K_M.gguf",
+  modelExpectedSize: 2_740_937_888, // ~2.55 GB
   // Product default: one comfortable 32K local slot. llama.cpp splits context
   // across parallel slots, so keep -np/--parallel at 1 for the local-first UX.
+  // 4B 无 MTP head — 移除 --spec-type draft-mtp 相关参数。
   serverArgs: [
     "--ctx-size", "32768",
     "--threads", "4",
     "--parallel", "1",
     "--n-gpu-layers", "999",
-    "-a", "qwen35-9b-q4km-imatrix",
+    "-a", "qwen35-4b-q4km",
     "--jinja",
     // Keep thinking-on by default; UI surfaces warmup/reasoning progress
     // instead of silently waiting.
     "--reasoning", "auto",
-    "--reasoning-budget", "2048",
-    "--spec-type", "draft-mtp",
-    "--spec-draft-n-max", "4",
+    "--reasoning-budget", "8192",
     "--metrics",
     "--host", "127.0.0.1",
   ],
@@ -100,6 +101,13 @@ function legacyModelPathCandidates(homeDir, modelId, fileName) {
   const candidates = [
     defaultModelPath(homeDir, fileName),
   ];
+  if (modelId === "qwen35-4b-q4km") {
+    candidates.push(
+      path.join(homeDir, "Models", "Lynn", "Qwen3.5-4B", "q4_k_m", "Qwen3.5-4B-Q4_K_M.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.5-4B", "q4_k_m", fileName),
+      path.join(homeDir, "Models", "Qwen3.5-4B-GGUF", "Qwen3.5-4B-Q4_K_M.gguf"),
+    );
+  }
   if (modelId === "qwen35-9b-q4km-imatrix") {
     candidates.push(
       path.join(homeDir, "Models", "Lynn", "Qwen3.5-9B", "q4_k_m", "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf"),

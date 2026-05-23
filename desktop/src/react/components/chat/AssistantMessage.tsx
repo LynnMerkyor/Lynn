@@ -84,6 +84,9 @@ function parseMessageModelRef(raw?: string | null): { id: string; provider?: str
   }
   const lower = value.toLowerCase();
   if (lower === 'lynn-brain-router') return { provider: 'brain', id: value };
+  if (lower === 'qwen35-4b-q4km') {
+    return { provider: 'local-qwen35-4b-q4km', id: value };
+  }
   if (lower === 'qwen35-9b-q4km-imatrix') {
     return { provider: 'local-qwen35-9b-q4km-imatrix', id: value };
   }

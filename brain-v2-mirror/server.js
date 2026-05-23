@@ -6,19 +6,34 @@ import './perf-init.js';
 import { run as routerRun, detectCapability } from './router.js';
 import { makeSSEEmitter } from './stream-bridge.js';
 import { verifySignedRequest, AuthError } from './auth.js';
-import { getLocalQwen35Plan, getLocalQwen35Job, isLocalAddress, startLocalQwen35Setup } from './local-qwen35-setup.mjs';
 
 // [deep-research v1 import]
 import { runDeepResearch } from './deep-research.mjs';
-// [agent-checkpoint v1 import]
-import { checkpointAgent } from './agent-checkpoint.mjs';
 const PORT = Number(process.env.BRAIN_V2_PORT || 8790);
 const HOST = process.env.BRAIN_V2_HOST || '127.0.0.1';
 const VERSION = '0.0.1';
 const CORS_ALLOWED_ORIGIN = process.env.BRAIN_V2_CORS_ORIGIN || '';
+let localQwen35BridgePromise = null;
 
 function log(level, msg) {
   console.log('[' + new Date().toISOString() + '] [' + level + '] ' + msg);
+}
+
+function isLocalRequestAddress(remote) {
+  return remote === '127.0.0.1'
+    || remote === '::1'
+    || remote === '::ffff:127.0.0.1'
+    || remote === 'localhost';
+}
+
+async function loadLocalQwen35Bridge() {
+  if (!localQwen35BridgePromise) {
+    localQwen35BridgePromise = import('./local-qwen35-setup.mjs').catch((err) => {
+      localQwen35BridgePromise = null;
+      throw err;
+    });
+  }
+  return localQwen35BridgePromise;
 }
 
 async function readJsonBody(req, maxBytes = 16 * 1024 * 1024) {
@@ -207,25 +222,21 @@ async function handleDeepResearch(req, res, pathname) {
     }
 
     const winnerContent = result.winner?.content || '';
-    if (!winnerContent) {
-      sendChunk({ content: '[deep-research] no winner content' }, 'stop');
-      log('error', `[${id}] no winner content`);
-    } else {
-      // Send the provider that produced the visible answer as one meta chunk.
-      sendMeta({
-        event: 'winner-picked',
-        winnerProviderId: result.winner?.providerId || null,
-        meta: result.meta || {},
-      });
-      // Stream winner content in 100-char chunks (simulated streaming for client compat)
-      const CHUNK_SIZE = 200;
-      for (let i = 0; i < winnerContent.length; i += CHUNK_SIZE) {
-        if (clientDisconnected) return;
-        sendChunk({ content: winnerContent.slice(i, i + CHUNK_SIZE) });
-      }
-      sendChunk({}, 'stop');
-      log('info', `[${id}] done winner=${result.winner?.providerId || 'none'} totalMs=${result.meta?.totalMs}`);
+    // Send the provider that produced the answer as one meta chunk. Even if the
+    // provider produced an empty answer, keep it faithful: do not invent a
+    // fallback sentence.
+    sendMeta({
+      event: 'winner-picked',
+      winnerProviderId: result.winner?.providerId || null,
+      meta: result.meta || {},
+    });
+    const CHUNK_SIZE = 200;
+    for (let i = 0; i < winnerContent.length; i += CHUNK_SIZE) {
+      if (clientDisconnected) return;
+      sendChunk({ content: winnerContent.slice(i, i + CHUNK_SIZE) });
     }
+    sendChunk({}, 'stop');
+    log('info', `[${id}] done winner=${result.winner?.providerId || 'none'} contentLen=${winnerContent.length} totalMs=${result.meta?.totalMs}`);
   } catch (err) {
     if (!clientDisconnected) {
       log('error', `[${id}] deep-research failed: ${err.message}`);
@@ -242,9 +253,8 @@ async function handleDeepResearch(req, res, pathname) {
 
 // [agent-checkpoint v1 handler]
 async function handleAgentCheckpoint(req, res, pathname) {
-  let body;
   try {
-    body = await readJsonBody(req);
+    await readJsonBody(req);
   } catch (e) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'invalid request body: ' + e.message }));
@@ -266,55 +276,48 @@ async function handleAgentCheckpoint(req, res, pathname) {
     return;
   }
 
-  const userPrompt = String(body.userPrompt || '').slice(0, 4000);
-  const trajectory = Array.isArray(body.trajectory) ? body.trajectory : [];
-  const currentStep = body.currentStep ?? null;
-  const maxSteps = body.maxSteps ?? null;
-
-  if (!userPrompt) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'userPrompt is required' }));
-    return;
-  }
-
   const id = 'agent-ck-' + Date.now();
-  log('info', `[${id}] agent-checkpoint agentKey=${device?.key || 'anon'} step=${currentStep}/${maxSteps} trajLen=${trajectory.length}`);
-
-  try {
-    const result = await checkpointAgent({ userPrompt, trajectory, currentStep, maxSteps, log });
-    res.writeHead(200, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
-    res.end(JSON.stringify({
-      id,
-      ok: result.ok ?? false,
-      verdict: result.verdict || 'continue',
-      scores: result.scores || null,
-      avg: result.avg ?? null,
-      reason: result.reason || null,
-      latencyMs: result.latencyMs || null,
-      failOpen: result.failOpen || false,
-      parseFailed: result.parseFailed || false,
-    }));
-    log('info', `[${id}] verdict=${result.verdict} avg=${result.avg?.toFixed(2)} latency=${result.latencyMs}ms`);
-  } catch (err) {
-    log('error', `[${id}] checkpoint failed: ${err.message}`);
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: err.message, verdict: 'continue' }));
-  }
+  res.writeHead(200, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+  res.end(JSON.stringify({
+    id,
+    ok: true,
+    verdict: 'continue',
+    scores: null,
+    avg: null,
+    reason: 'disabled_by_byok_equality',
+    latencyMs: 0,
+    failOpen: false,
+    parseFailed: false,
+  }));
+  log('info', `[${id}] agent-checkpoint disabled by BYOK-equality policy → continue`);
 }
 // [/agent-checkpoint v1 handler]
 
 async function handleLocalQwen35(req, res, pathname, method) {
   const remote = req.socket?.remoteAddress || '';
-  if (!isLocalAddress(remote)) {
+  if (!isLocalRequestAddress(remote)) {
     res.writeHead(403, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: false, error: 'local_only', remote }));
     return;
   }
 
+  let bridge;
+  try {
+    bridge = await loadLocalQwen35Bridge();
+  } catch (err) {
+    res.writeHead(503, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+    res.end(JSON.stringify({
+      ok: false,
+      error: 'local_qwen35_bridge_unavailable',
+      message: err?.code === 'ERR_MODULE_NOT_FOUND' ? 'local setup bridge is not bundled on this host' : err.message,
+    }));
+    return;
+  }
+
   if (method === 'GET') {
-    const status = await getLocalQwen35Plan();
+    const status = await bridge.getLocalQwen35Plan();
     res.writeHead(status.ok ? 200 : 503, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
-    res.end(JSON.stringify({ ...status, job: getLocalQwen35Job() }));
+    res.end(JSON.stringify({ ...status, job: bridge.getLocalQwen35Job() }));
     return;
   }
 
@@ -327,7 +330,7 @@ async function handleLocalQwen35(req, res, pathname, method) {
     return;
   }
   const authorized = body.authorized === true || body.yesUserAuthorized === true;
-  const result = startLocalQwen35Setup({
+  const result = bridge.startLocalQwen35Setup({
     authorized,
     start: body.start !== false,
     installRuntime: body.installRuntime !== false,

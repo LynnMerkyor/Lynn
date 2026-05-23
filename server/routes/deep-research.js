@@ -6,6 +6,10 @@ import { safeJson } from "../hono-helpers.js";
 import { BRAIN_API_ROOT, BRAIN_BACKUP_API_ROOT } from "../../shared/brain-provider.js";
 
 export const DEFAULT_DEEP_RESEARCH_TIMEOUT_MS = 180_000;
+const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-4b-q4km";
+const LOCAL_QWEN35_MODEL_ID = "qwen35-4b-q4km";
+const LOCAL_QWEN35_BASE_URL = "http://127.0.0.1:18099/v1";
+const LOCAL_DEEP_RESEARCH_MAX_TOKENS = 32_768;
 
 function normalizeBaseUrl(rawValue) {
   const value = String(rawValue || "").trim().replace(/\/+$/, "");
@@ -144,6 +148,106 @@ function normalizeMessages(body) {
   return prompt ? [{ role: "user", content: prompt }] : [];
 }
 
+function shouldRunLocalDeepResearch(body) {
+  const provider = String(body?.provider || body?.modelProvider || "").trim();
+  const candidates = Array.isArray(body?.candidates)
+    ? body.candidates.map((candidate) => String(candidate || "").trim()).filter(Boolean)
+    : [];
+  return provider === LOCAL_QWEN35_PROVIDER_ID || candidates.includes(LOCAL_QWEN35_PROVIDER_ID);
+}
+
+function buildLocalChatCompletionsEndpoint(rawBaseUrl) {
+  const normalized = normalizeBaseUrl(rawBaseUrl || process.env.LOCAL_QWEN35_BASE_URL || LOCAL_QWEN35_BASE_URL);
+  if (!normalized) return `${LOCAL_QWEN35_BASE_URL}/chat/completions`;
+  if (/\/chat\/completions$/iu.test(normalized)) return normalized;
+  return `${normalized.replace(/\/+$/u, "")}/chat/completions`;
+}
+
+function parseOpenAiStreamLine(data, state) {
+  if (!data || data === "[DONE]") return;
+  const payload = parseJsonLine(data);
+  if (!payload) return;
+  if (payload.usage) state.usage = payload.usage;
+  const choice = Array.isArray(payload.choices) ? payload.choices[0] : null;
+  const delta = choice?.delta || {};
+  const message = choice?.message || {};
+  if (typeof delta.content === "string") state.text += delta.content;
+  if (typeof message.content === "string") state.text += message.content;
+  const reasoning = delta.reasoning_content || delta.reasoning || delta.thinking || message.reasoning_content || "";
+  if (typeof reasoning === "string") state.reasoning += reasoning;
+  if (choice?.finish_reason) state.finishReason = choice.finish_reason;
+}
+
+async function runLocalDeepResearch({ fetchImpl, messages, signal, timeoutMs, maxTokens, baseUrl }) {
+  const endpoint = buildLocalChatCompletionsEndpoint(baseUrl);
+  const localTimeoutMs = Math.max(timeoutMs || DEFAULT_DEEP_RESEARCH_TIMEOUT_MS, 300_000);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), localTimeoutMs);
+  const relayAbort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener?.("abort", relayAbort, { once: true });
+
+  try {
+    const res = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: LOCAL_QWEN35_MODEL_ID,
+        messages,
+        temperature: 0.2,
+        max_tokens: Number.isFinite(Number(maxTokens)) && Number(maxTokens) > 0
+          ? Number(maxTokens)
+          : LOCAL_DEEP_RESEARCH_MAX_TOKENS,
+        stream: true,
+        chat_template_kwargs: { enable_thinking: true },
+        stream_options: { include_usage: true },
+      }),
+    });
+    if (!res.ok || !res.body) {
+      const raw = await res.text().catch(() => "");
+      throw new Error(`local deep research failed: HTTP ${res.status}${raw ? ` ${raw.slice(0, 500)}` : ""}`);
+    }
+
+    const state = { text: "", reasoning: "", finishReason: null, usage: null };
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let done = false;
+    for await (const chunk of res.body) {
+      buffer += decoder.decode(chunk, { stream: true });
+      let idx = buffer.indexOf("\n");
+      while (idx >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        idx = buffer.indexOf("\n");
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (data === "[DONE]") {
+          done = true;
+          break;
+        }
+        parseOpenAiStreamLine(data, state);
+      }
+      if (done) break;
+    }
+    if (buffer.trim().startsWith("data:")) {
+      parseOpenAiStreamLine(buffer.trim().slice(5).trim(), state);
+    }
+    return {
+      ok: true,
+      text: state.text,
+      reasoning: state.reasoning,
+      finishReason: state.finishReason || "stop",
+      winnerProviderId: LOCAL_QWEN35_PROVIDER_ID,
+      metaEvents: [{ type: "local-deep-research", endpoint }],
+      usage: state.usage,
+    };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener?.("abort", relayAbort);
+  }
+}
+
 function isValidSessionPath(sessionPath, agentsDir) {
   if (!sessionPath || !agentsDir || !sessionPath.endsWith(".jsonl")) return false;
   const resolved = path.resolve(sessionPath);
@@ -152,8 +256,7 @@ function isValidSessionPath(sessionPath, agentsDir) {
 }
 
 function formatDeepResearchResultText(parsed) {
-  const text = String(parsed?.text || "").trim()
-    || "深度调研没有返回可见答案，请稍后重试或把问题拆得更具体。";
+  const text = String(parsed?.text || "").trim();
   const source = parsed?.winnerProviderId ? ` · 输出来源：${parsed.winnerProviderId}` : "";
   const status = "完成";
   return [
@@ -239,6 +342,26 @@ export function createDeepResearchRoute(engine, options = {}) {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      if (shouldRunLocalDeepResearch(body)) {
+        const parsed = await runLocalDeepResearch({
+          fetchImpl,
+          messages,
+          signal: controller.signal,
+          timeoutMs,
+          maxTokens: body.max_tokens,
+          baseUrl: body.localBaseUrl,
+        });
+        const persistence = persistDeepResearchExchange(engine, body, messages, parsed);
+        return c.json({
+          ...parsed,
+          baseUrl: buildLocalChatCompletionsEndpoint(body.localBaseUrl),
+          endpoint: buildLocalChatCompletionsEndpoint(body.localBaseUrl),
+          attemptedBaseUrls: [buildLocalChatCompletionsEndpoint(body.localBaseUrl)],
+          ...persistence,
+          source: "local-qwen35-deep-research",
+        });
+      }
+
       const upstreamBody = {
         messages,
         ...(Array.isArray(body.candidates) ? { candidates: body.candidates } : {}),

@@ -259,7 +259,6 @@ export function buildLocalWorkspaceContext({
   const root = snapshot.root;
   const lines = [
     "【Lynn 本地工作区快照】",
-    "下面是 Lynn 本地服务刚刚读取到的真实工作区结果。它等同于本地文件工具返回的数据，不是模型记忆或猜测。",
     `用户当前请求：${String(promptText || "").trim() || "(空)"}`,
     `工作区路径：${root}`,
     `读取时间：${now.toISOString()}`,
@@ -267,7 +266,6 @@ export function buildLocalWorkspaceContext({
 
   if (!snapshot.ok) {
     lines.push(`读取状态：失败，路径不存在或不是目录。`);
-    lines.push("回答时请明确说明这个真实读取结果，不要编造目录内容。");
     return lines.join("\n");
   }
 
@@ -296,10 +294,5 @@ export function buildLocalWorkspaceContext({
     }
   }
 
-  lines.push("");
-  lines.push("使用要求：");
-  lines.push("- 回答用户时必须基于上面的真实本地快照，不要说“没有文件系统权限”“无法读取目录”或只凭记忆回答。");
-  lines.push("- 如果这些摘要已经足够，就直接给结论和下一步。");
-  lines.push("- 如果用户要求更深层读取、编辑、创建或移动文件，再继续调用真实本地工具。");
   return lines.join("\n");
 }

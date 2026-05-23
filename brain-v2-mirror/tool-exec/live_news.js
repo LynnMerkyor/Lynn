@@ -72,7 +72,7 @@ export async function liveNews(query, { log, webSearchFn } = {}) {
       if (rows.length >= 2) break;
     }
     if (rows.length) {
-      sections.push('## ' + win.label + '\n新鲜度：搜索候选，需打开原文核验日期；不要把近 7 天结果说成"今天发生"。\n' + rows.join('\n\n'));
+      sections.push('## ' + win.label + '\n新鲜度：搜索候选，原文日期需要核验；近 7 天结果不等同于今天发生。\n' + rows.join('\n\n'));
     }
   }
   if (!sections.length) {
@@ -83,7 +83,7 @@ export async function liveNews(query, { log, webSearchFn } = {}) {
   return [
     '【实时新闻扩展检索】',
     '查询：' + raw,
-    '说明：国内默认不依赖 Google News RSS；已自动扩展到 今日/最近36小时、最近3天、最近7天 三个窗口。回答时请先给"今日可核验/搜索候选"的分组结论，并明确哪些需要打开原文核验日期。',
+    '说明：国内默认不依赖 Google News RSS；已自动扩展到 今日/最近36小时、最近3天、最近7天 三个窗口。部分结果可能需要打开原文核验日期。',
     '',
     sections.join('\n\n---\n\n'),
   ].join('\n');

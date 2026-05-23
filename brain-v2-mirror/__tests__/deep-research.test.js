@@ -5,14 +5,12 @@ import { _internals } from '../deep-research.mjs';
 
 const {
   DEFAULT_CANDIDATES,
-  MIN_VALID_CANDIDATES,
 } = _internals;
 
 describe('deep-research config', () => {
   it('has sane defaults', () => {
     expect(DEFAULT_CANDIDATES.length).toBeGreaterThanOrEqual(3);
     expect(DEFAULT_CANDIDATES.length).toBeLessThanOrEqual(6);
-    expect(MIN_VALID_CANDIDATES).toBeGreaterThanOrEqual(1);
   });
   it('default candidates are registered providers', async () => {
     const { getProvider } = await import('../provider-registry.js');

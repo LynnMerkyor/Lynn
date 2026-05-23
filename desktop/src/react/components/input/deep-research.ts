@@ -16,8 +16,7 @@ export function normalizeDeepResearchErrorMessage(raw: unknown): string {
 }
 
 export function formatDeepResearchAssistantText(data: DeepResearchResponse): string {
-  const text = String(data?.text || "").trim()
-    || "深度调研没有返回可见答案，请稍后重试或把问题拆得更具体。";
+  const text = String(data?.text || "").trim();
   const source = data?.winnerProviderId ? ` · 输出来源：${data.winnerProviderId}` : "";
   const status = "完成";
   const footer = [
@@ -25,5 +24,5 @@ export function formatDeepResearchAssistantText(data: DeepResearchResponse): str
     "---",
     `**深度调研**：${status}${source}`,
   ].filter(Boolean).join("\n");
-  return `${text}\n${footer}`;
+  return [text, footer].filter(Boolean).join("\n");
 }

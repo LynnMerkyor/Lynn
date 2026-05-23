@@ -177,29 +177,8 @@ export async function classifyRouteIntentHybrid(text, opts = {}) {
 }
 
 export function buildRouteIntentSystemHint(routeIntent, locale = "zh") {
-  const isZh = String(locale || "").toLowerCase().startsWith("zh");
-  const intent = normalizeRouteIntent(routeIntent);
-
-  if (intent === ROUTE_INTENTS.CODING) {
-    return isZh
-      ? "【本轮任务类型】这更像编码型任务。优先按“默认编码链路”思考与执行：先检查相关文件、错误信息和测试线索，再用真实工具逐步修改、验证并完成，不要停留在泛泛建议。调试/修复类任务的最终回答必须给出可复制的验证命令（例如 python main.py、npm test、pytest），并明确提示用户“请运行验证”；没有真实修改时不要说“已修复”。"
-      : "[Current task type] This is primarily a coding task. Treat it as a default coding-route task: inspect relevant files, errors, and test signals first, then use real tools to edit, verify, and finish. Do not stay at generic advice. For debugging/fix tasks, the final answer must include a copyable verification command (for example python main.py, npm test, or pytest) and explicitly ask the user to run it; do not say it is fixed when no real change was made.";
-  }
-  if (intent === ROUTE_INTENTS.UTILITY) {
-    return isZh
-      ? "【本轮任务类型】这更像工具优先任务。优先按“默认工作链路”处理：工作区/文件/命令用 ls/read/grep/find/bash；安装依赖用 bash 并等待结果；天气用 weather；金价/股价/指数/汇率用 stock_market，必要时补 web_search；体育比分/赛程用 sports_score；实时新闻、国际事件、热点、房产楼盘、竞品调研、模型评测、版本更新和官方资料用 live_news / web_search / web_fetch。用户问什么就围绕什么自然延展：证据链任务可以用 bash 跑临时 Python/Node 脚本抓取、解析、去重、制表和计算；资料不足时先给已验证部分，再向用户索要具体截图、链接、导出文件、PDF 或假设参数。如果上下文已经出现【系统已完成】或【系统已完成实时/行情/天气/新闻/楼盘/股票资料预取】，说明 Lynn 本地工具已经拿到真实资料，此时直接基于资料回答，不要重复调用工具或模拟工具。先拿到真实工具结果，再总结给用户；如果工具链没有稳定返回，也要用可见正文说明已知信息、未核验缺口和下一步，不要只输出“我来查一下”后结束。不要先输出计划、反思、<execute>、web_search(...) 或任何伪工具文本。"
-      : "[Current task type] This is primarily a tool-first task. Treat it as a default work-route task: use ls/read/grep/find/bash for workspace, files, and commands; bash for installation requests; weather for weather; stock_market for prices, equities, indices, and exchange rates, with web_search as backup; sports_score for sports; live_news / web_search / web_fetch for breaking news, public events, real estate, competitive research, benchmarks, release notes, and official docs. Follow the user's exact question instead of a fixed template: for evidence-chain tasks, use bash to run temporary Python/Node scripts to fetch, parse, deduplicate, tabulate, and calculate; if source material is missing, provide verified findings and ask for the specific screenshot, link, export, PDF, or assumption. If the context already contains a completed Lynn prefetch block, local tools have already gathered real evidence; answer directly from that evidence instead of calling or simulating tools again. Get real tool results first, then summarize. If the tool chain does not return stable results, still write visible text with known information, unverified gaps, and the next step; do not only say that you will look something up. Do not emit planning, reflection, <execute>, web_search(...), or any pseudo tool text.";
-  }
-  if (intent === ROUTE_INTENTS.VISION) {
-    return isZh
-      ? "【本轮任务类型】这更像图像或附件分析任务。优先按“默认推理链路”处理，先理解图片/附件里的关键信息，再给结论；只有确实需要时才补充额外工具。"
-      : "[Current task type] This is primarily an image or attachment analysis task. Treat it as a default reasoning-route task: understand the key information in the image or attachment first, then answer. Only add extra tools when they are genuinely needed.";
-  }
-  if (intent === ROUTE_INTENTS.REASONING) {
-    return isZh
-      ? "【本轮任务类型】这更像分析调研任务。优先按“默认推理链路”处理：先梳理用户真正的问题，再按命题决定需要哪些资料、计算和验证；涉及数据、文档、财经、房产、竞品或长报告时，不要只凭常识写，必要时转工具或脚本拿证据。"
-      : "[Current task type] This is primarily an analysis or research task. Treat it as a default reasoning-route task: identify the user's real question first, then decide what evidence, calculation, and verification it needs; for data, documents, finance, real estate, competitive research, or long reports, do not rely on general knowledge when tools or scripts can provide evidence.";
-  }
+  void routeIntent;
+  void locale;
   return "";
 }
 
