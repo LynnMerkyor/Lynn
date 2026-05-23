@@ -851,7 +851,7 @@
       "userNameHint": "Ta 怎么称呼你",
       "userProfile": "用户档案",
       "userProfileHint": "让助手了解你：兴趣、习惯、偏好等，会注入到系统提示词中",
-      "defaultProviderHint": "一键在本地 9B 和云端模型之间切换。",
+      "defaultProviderHint": "一键在本地 4B 和云端模型之间切换。",
       "openProviders": "打开 Providers →"
     },
     "crop": {
@@ -1276,7 +1276,7 @@
       "advancedDesc": "如果你已经有 provider / model 偏好，\n现在就把连接、模型和主题一起配好。",
       "advancedAction": "进入 Advanced Setup",
       "localTitle": "本地优先(离线)",
-      "localDesc": "下载 5.3 GB 的 Lynn 默认模型(Qwen 3.5 9B)，\n完全离线运行，不上传任何对话。",
+      "localDesc": "下载 2.5 GB 的 Lynn 默认模型(Qwen3-4B Thinking 2507)，\n完全离线运行，不上传任何对话。",
       "localAction": "下载本地模型"
     },
     "name": {
@@ -1366,8 +1366,8 @@
     },
     "localModel": {
       "title": "下载 Lynn 默认本地模型",
-      "subtitle": "Lynn 默认模型 Qwen 3.5 9B(Q4_K_M-imatrix)· 5.3GB · MMLU 90.4% / GPQA 80% · 32K 上下文。\n完全离线，不需要任何 API Key，不上传任何对话。",
-      "specsLine": "5.3 GB · Q4_K_M-imatrix · 32K 上下文 · 完全离线",
+      "subtitle": "Lynn 默认模型 Qwen3-4B Thinking 2507(Q4_K_M-imatrix)· 2.5GB · V9/V9 83.3% 进行中 · Stage5 工具调用 80%。\n完全离线，不需要任何 API Key，不上传任何对话。",
+      "specsLine": "2.5 GB · Q4_K_M-imatrix · thinking-on · 完全离线",
       "needsBinary": "缺少 llama.cpp 推理引擎，请先安装：~/.lynn/llamacpp/bin/llama-server",
       "needsBinaryHint": "请按文档安装 llama.cpp 后重试。",
       "alreadyHave": "本地模型已就绪",
@@ -1390,10 +1390,10 @@
       "errorGeneric": "下载出错：{reason}",
       "next": "下一步",
       "back": "上一步",
-      "modelPreparedHint": "模型和 llama.cpp 已就绪,点击启动即可切换到本地 9B。",
+      "modelPreparedHint": "模型和 llama.cpp 已就绪,点击启动即可切换到本地 4B。",
       "statusReady": "可启动",
       "statusWaiting": "待准备",
-      "runtimeLocal9B": "本地 9B"
+      "runtimeLocal9B": "本地 4B"
     },
     "tutorial": {
       "interactive": {

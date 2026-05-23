@@ -205,6 +205,53 @@ describe("model sync related routes", () => {
     });
   });
 
+  it("provider summary exposes OAuth login entries before the user logs in", async () => {
+    const { createProvidersRoute } = await import("../server/routes/providers.js");
+    const app = new Hono();
+    const oauthEntry = {
+      id: "openai-codex-oauth",
+      displayName: "OpenAI Codex (OAuth)",
+      authType: "oauth",
+      baseUrl: "",
+      api: "openai-codex-responses",
+      authJsonKey: "openai-codex",
+    };
+    const registryEntries = new Map([["openai-codex-oauth", oauthEntry]]);
+    const engine = {
+      availableModels: [],
+      authStorage: {
+        getOAuthProviders: () => [],
+      },
+      preferences: {
+        getOAuthCustomModels: () => ({}),
+      },
+      providerRegistry: {
+        getAllProvidersRaw: () => ({}),
+        getAll: () => registryEntries,
+        get: (id) => (id === "openai-codex-oauth" || id === "openai-codex" ? oauthEntry : null),
+        isOAuth: (id) => id === "openai-codex-oauth",
+        getAuthJsonKey: (id) => (id === "openai-codex-oauth" ? "openai-codex" : id),
+        getDefaultModels: (id) => (id === "openai-codex-oauth" ? ["gpt-5.4"] : []),
+        getOAuthProviderIds: () => ["openai-codex-oauth"],
+      },
+    };
+
+    app.route("/api", createProvidersRoute(engine));
+
+    const res = await app.request("/api/providers/summary");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.providers["openai-codex-oauth"]).toMatchObject({
+      type: "oauth",
+      display_name: "OpenAI Codex (OAuth)",
+      api: "openai-codex-responses",
+      has_credentials: false,
+      logged_in: false,
+      supports_oauth: true,
+      models: ["gpt-5.4"],
+    });
+  });
+
   it("oauth provider fetch reports registry issue instead of remote /models fallback", async () => {
     const { createProvidersRoute } = await import("../server/routes/providers.js");
     const app = new Hono();

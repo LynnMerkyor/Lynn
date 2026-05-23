@@ -140,25 +140,27 @@ export function createProvidersRoute(engine) {
       };
     }
 
-    // 追加 OAuth-only provider（有 auth.json 但没在 added-models.yaml 里）
-    // 遍历已注册的 OAuth plugin，用 authJsonKey 查 oauthLoginMap
+    // 追加 OAuth-only provider。即使用户尚未登录，也必须显示授权入口；
+    // 否则新用户会在「模型」页找不到 GPT/Codex 登录。
+    // 只遍历 ProviderRegistry 中声明的 OAuth plugin，不暴露 SDK 内置 OAuth。
     for (const oauthId of provRegistry.getOAuthProviderIds()) {
       if (result[oauthId]) continue;
       const authKey = provRegistry.getAuthJsonKey(oauthId);
       const loginInfo = oauthLoginMap.get(authKey);
-      if (!loginInfo) continue;
+      const entry = provRegistry.get(oauthId);
       const sdkIds = sdkByProvider.get(authKey) || sdkByProvider.get(oauthId) || [];
+      const defaultModels = provRegistry.getDefaultModels(oauthId) || [];
       const customModels = oauthCustom[authKey] || oauthCustom[oauthId] || [];
       result[oauthId] = {
         type: "oauth",
-        display_name: loginInfo.name || oauthId,
-        base_url: "",
-        api: "",
+        display_name: loginInfo?.name || entry?.displayName || oauthId,
+        base_url: entry?.baseUrl || "",
+        api: entry?.api || "",
         api_key: "",
-        models: sdkIds,
+        models: [...new Set([...defaultModels, ...sdkIds])],
         custom_models: customModels,
-        has_credentials: !!loginInfo.loggedIn,
-        logged_in: !!loginInfo.loggedIn,
+        has_credentials: !!loginInfo?.loggedIn,
+        logged_in: !!loginInfo?.loggedIn,
         supports_oauth: true,
         is_coding_plan: false,
         can_delete: false,

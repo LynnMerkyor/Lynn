@@ -9,15 +9,15 @@ const envList = (k) => String(process.env[k] || '')
   .filter(Boolean);
 
 export const PROVIDERS = {
-  'local-qwen35-9b-q4km-imatrix': {
-    id: 'local-qwen35-9b-q4km-imatrix',
+  'local-qwen3-4b-thinking-2507-q4km-imatrix': {
+    id: 'local-qwen3-4b-thinking-2507-q4km-imatrix',
     endpoint: env('LYNN_LOCAL_QWEN35_BASE', 'http://127.0.0.1:18099/v1'),
     apiKey: env('LYNN_LOCAL_QWEN35_API_KEY', 'local'),
-    model: env('LYNN_LOCAL_QWEN35_MODEL', 'qwen35-9b-q4km-imatrix'),
+    model: env('LYNN_LOCAL_QWEN35_MODEL', 'qwen3-4b-thinking-2507-q4km-imatrix'),
     // #7: tools=false because Q4_K_M lacks native tool parser config in llama.cpp default --jinja mode.
     // Router treats tools-attached requests as needing native tool emit; setting tools:false here
     // tells the router to skip local for tool-heavy prompts (downgrade quality avoidance).
-    // (thinking still true — local 9B handles reasoning fine; only tool-call emit is the gap.)
+    // (thinking still true — local model handles reasoning; only tool-call emit is the gap.)
     capability: { vision: false, audio: false, tools: false, thinking: true, native_search: false },
     wire: 'openai',
     cooldown_ms: 15_000,
@@ -86,7 +86,7 @@ export const PROVIDERS = {
 // longer in the default chain; operators can opt back in with
 // BRAIN_V2_UNIVERSAL_ORDER if they intentionally want that duplicate lane.
 const DEFAULT_UNIVERSAL_ORDER = [
-  'local-qwen35-9b-q4km-imatrix', // Mac/local-first: falls back quickly when endpoint is not running
+  'local-qwen3-4b-thinking-2507-q4km-imatrix', // Mac/local-first: falls back quickly when endpoint is not running
   'mimo',                  // 头位:enable_search:true 内置搜索 + thinking
   'qwen3.6-35b-a3b',       // DGX SGLang FP8 备链
   'deepseek-chat',         // 云兜底 V4-flash

@@ -26,16 +26,19 @@ import { safeJson } from "../hono-helpers.js";
 import { fromRoot } from "../../shared/hana-root.js";
 
 const execFileAsync = promisify(execFile);
-const PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
-const MODEL_ID = "qwen35-9b-q4km-imatrix";
+const PROVIDER_ID = "local-qwen3-4b-thinking-2507-q4km-imatrix";
+const MODEL_ID = "qwen3-4b-thinking-2507-q4km-imatrix";
+const MODEL_DISPLAY_NAME = "Qwen3-4B Thinking 2507 Q4_K_M imatrix";
+const MODEL_FILE_NAME = "Qwen3-4B-Thinking-2507-Q4_K_M-imatrix.gguf";
+const MODEL_ROOT_NAME = "Qwen3-4B-Thinking-2507";
 
 function defaultState() {
   const home = os.homedir();
   return {
-    modelRoot: process.env.LYNN_LOCAL_QWEN35_MODEL_ROOT || path.join(home, "Models", "Lynn", "Qwen3.5-9B"),
-    providerConfig: process.env.LYNN_LOCAL_QWEN35_PROVIDER_CONFIG || path.join(home, ".lynn-engine", "providers", "qwen35-9b-q4km-imatrix-gguf.json"),
-    pidFile: process.env.LYNN_LOCAL_QWEN35_PID_FILE || path.join(home, ".lynn-engine", "run", "qwen35-9b-q4km-imatrix.pid"),
-    logFile: process.env.LYNN_LOCAL_QWEN35_LOG_FILE || path.join(home, ".lynn-engine", "logs", "qwen35-9b-q4km-imatrix.client.log"),
+    modelRoot: process.env.LYNN_LOCAL_QWEN35_MODEL_ROOT || path.join(home, "Models", "Lynn", MODEL_ROOT_NAME),
+    providerConfig: process.env.LYNN_LOCAL_QWEN35_PROVIDER_CONFIG || path.join(home, ".lynn-engine", "providers", "qwen3-4b-thinking-2507-q4km-imatrix-gguf.json"),
+    pidFile: process.env.LYNN_LOCAL_QWEN35_PID_FILE || path.join(home, ".lynn-engine", "run", "qwen3-4b-thinking-2507-q4km-imatrix.pid"),
+    logFile: process.env.LYNN_LOCAL_QWEN35_LOG_FILE || path.join(home, ".lynn-engine", "logs", "qwen3-4b-thinking-2507-q4km-imatrix.client.log"),
     host: process.env.LYNN_LOCAL_QWEN35_HOST || "127.0.0.1",
     port: String(process.env.LYNN_LOCAL_QWEN35_PORT || "18099"),
   };
@@ -43,8 +46,8 @@ function defaultState() {
 
 function expectedModelPath(state = defaultState(), variant = "imatrix") {
   const filename = variant === "imatrix"
-    ? "Qwen3.5-9B-Q4_K_M-imatrix.gguf"
-    : "Qwen3.5-9B-Q4_K_M.gguf";
+    ? MODEL_FILE_NAME
+    : "Qwen3-4B-Thinking-2507-Q4_K_M.gguf";
   return path.join(state.modelRoot, "q4_k_m", filename);
 }
 
@@ -128,6 +131,8 @@ async function qwen35ProcessPids(state = defaultState()) {
         if (!/llama-server(?:\s|$)/.test(command) && !/llama-server\b/.test(command)) return null;
         const mentionsPort = command.includes(`--port ${state.port}`) || command.includes(`:${state.port}`);
         const mentionsModel = command.includes(modelPath)
+          || /Qwen3-4B-Thinking-2507/i.test(command)
+          || /qwen3-4b-thinking-2507/i.test(command)
           || /Qwen3\.5-9B-Q4_K_M/i.test(command)
           || /qwen35-9b-q4km/i.test(command);
         return mentionsPort || mentionsModel ? pid : null;
@@ -276,8 +281,8 @@ function fastReadyPlan(runtime, variant = "imatrix") {
   const totalMemoryGib = os.totalmem() / (1024 ** 3);
   const isMac = process.platform === "darwin";
   const chip = isMac ? os.cpus()?.[0]?.model || "Apple Silicon" : os.cpus()?.[0]?.model || null;
-  const comfortable = isMac && totalMemoryGib >= 24;
-  const usable = totalMemoryGib >= 8;
+  const comfortable = isMac && totalMemoryGib >= 16;
+  const usable = totalMemoryGib >= 6;
   const ctxSize = comfortable ? 32768 : 8192;
   const parallel = comfortable ? 1 : 1;
   const modelPath = expectedModelPath(state, variant);
@@ -302,15 +307,25 @@ function fastReadyPlan(runtime, variant = "imatrix") {
         total_memory_gib: totalMemoryGib,
         gpus: [],
         recommended_runtime: {
-          name: comfortable ? "mac_unified_32k" : "local_qwen35_compact",
-          label: comfortable ? "Mac 32K 舒适档" : "8K 入门档",
+          name: comfortable ? "mac_unified_4b_32k" : "local_qwen4b_compact",
+          label: comfortable ? "Mac 4B 32K 舒适档" : "4B 8K 入门档",
           ctx_size: ctxSize,
           parallel,
           gpu_layers: isMac ? 999 : 0,
         },
-        warnings: usable ? [] : ["当前内存低于 8GB，不建议启用本地 9B。"],
+        warnings: usable ? [] : ["当前内存低于 6GB，不建议启用本地 4B。"],
         blockers: [],
         upgrade_options: [
+          {
+            id: "qwen35-9b-q4km-imatrix",
+            label: "Qwen3.5-9B Q4_K_M imatrix",
+            profile: "12GB+ 可选 · 平衡质量与速度",
+            metrics: ["thinking-on 32K", "MMLU 81.00%", "GPQA Diamond 81.71% excl_pf", "tool-call 93%"],
+            reason: "更强的日常推理与工具调用档；适合内存更宽裕的 Mac/PC。",
+            modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix",
+            download_label: "下载 9B",
+            file_name: "Qwen3.5-9B-Q4_K_M-imatrix.gguf",
+          },
           ...(totalMemoryGib >= 24 ? [{
             id: "qwen36-35b-a3b-q4km-imatrix",
             label: "Qwen3.6-35B-A3B Q4_K_M imatrix",
@@ -503,13 +518,13 @@ async function plan(variant = "imatrix") {
 async function registerProvider(engine, options = {}) {
   const state = defaultState();
   engine.providerRegistry.saveProvider(PROVIDER_ID, {
-    display_name: "本地 Qwen3.5-9B",
+    display_name: "本地 Qwen3-4B Thinking",
     base_url: `http://${state.host}:${state.port}/v1`,
     api: "openai-completions",
     auth_type: "none",
     models: [{
       id: MODEL_ID,
-      name: "Qwen3.5-9B Q4_K_M imatrix",
+      name: MODEL_DISPLAY_NAME,
       context: 32768,
       maxOutput: 32768,
     }],
@@ -565,7 +580,7 @@ export function createLocalQwen35Route(engine) {
     if (!bootstrap) return c.json({ ok: false, error: "bootstrap_not_found" }, 503);
 
     fs.mkdirSync(path.dirname(state.logFile), { recursive: true });
-    const logFile = path.join(path.dirname(state.logFile), `qwen35-9b-setup-${Date.now()}.log`);
+    const logFile = path.join(path.dirname(state.logFile), `qwen3-4b-setup-${Date.now()}.log`);
     const args = [
       bootstrap,
       "execute",
@@ -576,7 +591,7 @@ export function createLocalQwen35Route(engine) {
     if (body.installRuntime === false) args.push("--no-install-runtime");
 
     job = {
-      id: "local-qwen35-setup-" + Date.now(),
+      id: "local-qwen4b-setup-" + Date.now(),
       status: "running",
       started_at: new Date().toISOString(),
       finished_at: null,
@@ -633,7 +648,7 @@ export function createLocalQwen35Route(engine) {
       return c.json({
         ok: false,
         error: "endpoint_not_ready",
-        message: "本地 9B 端点还没有通过 /health 和 /v1/models 就绪检查，暂不注册。",
+        message: "本地 4B 端点还没有通过 /health 和 /v1/models 就绪检查，暂不注册。",
         status,
       }, 409);
     }

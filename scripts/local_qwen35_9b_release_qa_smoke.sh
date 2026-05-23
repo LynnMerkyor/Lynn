@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Qwen3.5-9B Mac Q4_K_M Release QA Smoke
+# Qwen3-4B Thinking Mac Q4_K_M Release QA Smoke
 #
 # One-command local QA for the Mac Q4_K_M stable track.
 # Assumes the user has ALREADY started llama-server via:
@@ -17,7 +17,7 @@ set -euo pipefail
 #   6. Short multi-turn (2 rounds)
 #   7. 32K-ish long context (opt-in: SKIP_LONG=0)
 #
-# Output: JSON report to reports/qwen35_9b/local_qwen35_9b_release_qa_smoke_<stamp>.json
+# Output: JSON report to reports/qwen3_4b/local_qwen3_4b_release_qa_smoke_<stamp>.json
 #
 # Usage:
 #   bash scripts/local_qwen35_9b_release_qa_smoke.sh
@@ -29,17 +29,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:18099/v1}"
-MODEL="${MODEL:-qwen35-9b-q4km-imatrix}"
+MODEL="${MODEL:-qwen3-4b-thinking-2507-q4km-imatrix}"
 TIMEOUT="${TIMEOUT:-120}"
 SKIP_LONG="${SKIP_LONG:-1}"
 STAMP="${STAMP:-$(date +%Y%m%d_%H%M%S)}"
-OUT_DIR="${OUT_DIR:-$REPO_ROOT/reports/qwen35_9b}"
-OUT_JSON="${OUT_DIR}/local_qwen35_9b_release_qa_smoke_${STAMP}.json"
+OUT_DIR="${OUT_DIR:-$REPO_ROOT/reports/qwen3_4b}"
+OUT_JSON="${OUT_DIR}/local_qwen3_4b_release_qa_smoke_${STAMP}.json"
 
 mkdir -p "$OUT_DIR"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  Qwen3.5-9B Mac Q4_K_M Release QA Smoke                    ║"
+echo "║  Qwen3-4B Thinking Mac Q4_K_M Release QA Smoke             ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "  Endpoint:  $BASE_URL"
@@ -60,7 +60,7 @@ if [[ "$HTTP_CODE" != "200" ]]; then
   echo "  Please start the server first:" >&2
   echo "    bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh" >&2
   echo "" >&2
-  echo "  See: docs/QWEN35_9B_MAC_Q4KM_QA_RUNBOOK_20260519.md" >&2
+  echo "  See: docs/QWEN35_9B_MAC_Q4KM_QA_RUNBOOK_20260519.md for the historical 9B flow; 4B uses the same endpoint contract." >&2
   exit 1
 fi
 echo "  [OK] Server healthy"
@@ -336,7 +336,7 @@ total = passed + failed
 all_ok = failed == 0
 
 report = {
-    "schema": "lynn-qwen35-9b-mac-q4km-release-qa-smoke-v1",
+    "schema": "lynn-qwen3-4b-mac-q4km-release-qa-smoke-v1",
     "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
     "stamp": stamp,
     "base_url": base_url,

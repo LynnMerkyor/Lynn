@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the Lynn local-provider contract for Qwen3.5-9B llama.cpp.
+"""Write the Lynn local-provider contract for Lynn's local llama.cpp model.
 
 The desktop/client side can consume this JSON directly, or mirror the fields
 into its own settings store. The key rule is conservative: keep MIMO as
@@ -52,7 +52,7 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
         "schema_version": "lynn-local-provider-v1",
         "generated_at_unix": int(time.time()),
         "provider_id": f"local-{args.served_name}",
-        "display_name": "Qwen3.5-9B Local",
+        "display_name": "Qwen3-4B Thinking Local",
         "status": "configured_pending_smoke",
         "default_provider": "mimo",
         "fallback_provider": "mimo",
@@ -73,7 +73,7 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
         },
         "artifact": {
             "artifact_id": args.artifact_id,
-            "model_family": "Qwen3.5-9B",
+            "model_family": "Qwen3-4B-Thinking-2507",
             "quant": "Q4_K_M",
             "variant": args.variant,
             "format": "GGUF",
@@ -106,8 +106,8 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
         },
         "notes": [
             "The Lynn client must keep MIMO available until smoke_required passes.",
-            "The imatrix artifact is the recommended Mac first-run variant.",
-            "The default/no-imatrix artifact is a benchmark control, not the first-run default.",
+            "The 4B imatrix artifact is the recommended first-run variant for most users.",
+            "9B and 35B GGUF files remain optional upgrades through the local model manager.",
         ],
     }
 

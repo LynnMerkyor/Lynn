@@ -8,10 +8,10 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 
 const HOME = os.homedir();
-const DEFAULT_PROVIDER_CONFIG = path.join(HOME, '.lynn-engine', 'providers', 'qwen35-9b-q4km-imatrix-gguf.json');
-const DEFAULT_PID_FILE = path.join(HOME, '.lynn-engine', 'run', 'qwen35-9b-q4km-imatrix.pid');
-const DEFAULT_LOG_FILE = path.join(HOME, '.lynn-engine', 'logs', 'qwen35-9b-q4km-imatrix.client.log');
-const DEFAULT_MODEL_ROOT = path.join(HOME, 'Models', 'Lynn', 'Qwen3.5-9B');
+const DEFAULT_PROVIDER_CONFIG = path.join(HOME, '.lynn-engine', 'providers', 'qwen3-4b-thinking-2507-q4km-imatrix-gguf.json');
+const DEFAULT_PID_FILE = path.join(HOME, '.lynn-engine', 'run', 'qwen3-4b-thinking-2507-q4km-imatrix.pid');
+const DEFAULT_LOG_FILE = path.join(HOME, '.lynn-engine', 'logs', 'qwen3-4b-thinking-2507-q4km-imatrix.client.log');
+const DEFAULT_MODEL_ROOT = path.join(HOME, 'Models', 'Lynn', 'Qwen3-4B-Thinking-2507');
 const DEFAULT_HOST = process.env.LYNN_LOCAL_QWEN35_HOST || '127.0.0.1';
 const DEFAULT_PORT = Number(process.env.LYNN_LOCAL_QWEN35_PORT || 18099);
 
@@ -128,7 +128,7 @@ export function startLocalQwen35Setup({
   const bootstrap = resolveBootstrapPath();
   if (!bootstrap) return { ok: false, error: 'bootstrap_not_found', searched: candidateBootstrapPaths() };
 
-  const logFile = process.env.LYNN_LOCAL_QWEN35_SETUP_LOG || path.join(HOME, '.lynn-engine', 'logs', `qwen35-9b-setup-${Date.now()}.log`);
+  const logFile = process.env.LYNN_LOCAL_QWEN35_SETUP_LOG || path.join(HOME, '.lynn-engine', 'logs', `qwen3-4b-thinking-setup-${Date.now()}.log`);
   mkdirSync(path.dirname(logFile), { recursive: true });
   const args = [
     bootstrap,

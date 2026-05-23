@@ -631,7 +631,7 @@
       "userNameHint": "アシスタントがあなたを呼ぶ名前",
       "userProfile": "ユーザープロフィール",
       "userProfileHint": "アシスタントがあなたを理解する手がかり：興味、習慣、好みなど。システムプロンプトに挿入されます",
-      "defaultProviderHint": "ローカル 9B とクラウドを 1 クリックで切り替え。",
+      "defaultProviderHint": "ローカル 4B とクラウドを 1 クリックで切り替え。",
       "openProviders": "Providers を開く →"
     },
     "crop": {
@@ -1138,8 +1138,8 @@
     },
     "localModel": {
       "title": "Download Lynn's default local model",
-      "subtitle": "Qwen 3.5 9B (Q4_K_M-imatrix) · 5.3 GB · MMLU 90.4% / GPQA 80% · 32K context.\nRuns fully offline — no API key, no data ever leaves your machine.",
-      "specsLine": "5.3 GB · Q4_K_M-imatrix · 32K context · fully offline",
+      "subtitle": "Qwen3-4B Thinking 2507 (Q4_K_M-imatrix) · 2.5 GB · V9/V9 83.3% in progress · Stage5 tool-call 80%.\nRuns fully offline — no API key, no data ever leaves your machine.",
+      "specsLine": "2.5 GB · Q4_K_M-imatrix · thinking-on · fully offline",
       "needsBinary": "llama.cpp inference engine not found at ~/.lynn/llamacpp/bin/llama-server",
       "needsBinaryHint": "Install llama.cpp following the docs and retry.",
       "alreadyHave": "Local model is ready",
@@ -1162,10 +1162,10 @@
       "errorGeneric": "Download error: {reason}",
       "next": "Continue",
       "back": "Back",
-      "modelPreparedHint": "モデルと llama.cpp の準備完了。Start を押すと Local 9B に切り替わります。",
+      "modelPreparedHint": "モデルと llama.cpp の準備完了。Start を押すと Local 4B に切り替わります。",
       "statusReady": "起動可",
       "statusWaiting": "準備中",
-      "runtimeLocal9B": "Local 9B"
+      "runtimeLocal9B": "Local 4B"
     },
     "skipSetup": "セットアップをスキップ"
   },

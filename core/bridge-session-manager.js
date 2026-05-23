@@ -35,14 +35,20 @@ import {
 } from "./client-agent-identity.js";
 import { resolveCompactionSettings } from "./compaction-settings.js";
 
-const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
-const LOCAL_QWEN35_MODEL_ID = "qwen35-9b-q4km-imatrix";
+const LOCAL_QWEN35_PROVIDER_IDS = new Set([
+  "local-qwen3-4b-thinking-2507-q4km-imatrix",
+  "local-qwen35-9b-q4km-imatrix",
+]);
+const LOCAL_QWEN35_MODEL_IDS = new Set([
+  "qwen3-4b-thinking-2507-q4km-imatrix",
+  "qwen35-9b-q4km-imatrix",
+]);
 
 function isLocalQwen35Model(modelOrId, provider) {
   const modelId = typeof modelOrId === "object" ? modelOrId?.id : modelOrId;
   const modelProvider = typeof modelOrId === "object" ? modelOrId?.provider : provider;
-  return String(modelProvider || "").trim() === LOCAL_QWEN35_PROVIDER_ID
-    || String(modelId || "").trim() === LOCAL_QWEN35_MODEL_ID;
+  return LOCAL_QWEN35_PROVIDER_IDS.has(String(modelProvider || "").trim())
+    || LOCAL_QWEN35_MODEL_IDS.has(String(modelId || "").trim());
 }
 
 function resolveBridgeOwnerModel(availableModels, ownerModelId, ownerProvider) {
@@ -56,7 +62,7 @@ function resolveBridgeOwnerModel(availableModels, ownerModelId, ownerProvider) {
   // route instead of inheriting whatever the foreground chat is testing.
   // Bridge messages are latency- and tool-sensitive: weather, stock, news and
   // WeChat replies must keep the full tool chain even when the app chat is on
-  // local 9B or a lightweight provider.
+  // a local model or another lightweight provider.
   const brainModel = findModel(availableModels, BRAIN_DEFAULT_MODEL_ID, BRAIN_PROVIDER_ID)
     || availableModels.find(model => model?.provider === BRAIN_PROVIDER_ID);
 

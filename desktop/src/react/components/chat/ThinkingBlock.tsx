@@ -38,8 +38,8 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
   const startRef = useRef(Date.now());
   // #12: prefer explicit prop; fallback to regex (kept for callers not yet passing the flag)
   const isLocalModelThinking = isLocalProvider === true
-    || (isLocalProvider !== false && /local-qwen35|qwen35-9b|Qwen3\.5-9B|本地\s*9B/i.test(modelLabel || ""));
-  const isLocalProgressThinking = isLocalModelThinking || /本地\s*9B|本地模型|llama\.cpp|等待工具/.test(content || "");
+    || (isLocalProvider !== false && /local-qwen|qwen3-4b|qwen35-9b|qwen36-35b|Qwen3(?:\.5)?-(?:4B|9B|35B)|本地\s*(?:4B|9B|35B)/i.test(modelLabel || ""));
+  const isLocalProgressThinking = isLocalModelThinking || /本地\s*(?:4B|9B|35B)|本地模型|llama\.cpp|等待工具/.test(content || "");
   const isLocalColdStartThinking = /首次启动|第一问|暖机|等待首字/.test(content || "");
   // Local cold-start notes are user-facing progress, not private reasoning.
   const open = explicitOpen ?? (!sealed && isLocalProgressThinking);
@@ -68,9 +68,9 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
   const activeLabel = useMemo(() => {
     if (sealed) return t('thinking.done');
     if (isLocalColdStartThinking && elapsed >= 8_000) return '首轮暖机中，后续会更快';
-    if (isLocalModelThinking && elapsed >= 40_000) return '本地 9B 仍在生成';
-    if (isLocalModelThinking && elapsed >= 25_000) return '本地 9B 正在本机生成';
-    if (isLocalProgressThinking && elapsed >= 8_000) return '本地 9B 正在组织答案';
+    if (isLocalModelThinking && elapsed >= 40_000) return '本地模型仍在生成';
+    if (isLocalModelThinking && elapsed >= 25_000) return '本地模型正在本机生成';
+    if (isLocalProgressThinking && elapsed >= 8_000) return '本地模型正在组织答案';
     if (elapsed >= 8_000) return '正在组织答案';
     return t('thinking.active');
   }, [elapsed, isLocalColdStartThinking, isLocalModelThinking, isLocalProgressThinking, sealed, t]);
@@ -79,9 +79,9 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
     if (sealed || content.trim()) return '';
     if (!isLocalModelThinking) return 'Lynn 正在组织答案。';
     if (elapsed >= 8_000) {
-      return '本地 9B 正在本机生成答案。首次启动后的第一问可能较慢，后续同一会话通常会明显更快。';
+      return '本地模型正在本机生成答案。首次启动后的第一问可能较慢，后续同一会话通常会明显更快。';
     }
-    return '本地 9B 正在本机生成答案，请稍候。';
+    return '本地模型正在本机生成答案，请稍候。';
   }, [content, elapsed, isLocalModelThinking, sealed]);
 
   const handleTranslateThinking = useCallback(async (event: MouseEvent<HTMLButtonElement>) => {

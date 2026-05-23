@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Local Mac/Linux launcher for the Qwen3.5-9B Q4_K_M GGUF route (V2).
+# Local Mac/Linux launcher for Lynn's default Qwen3-4B Thinking Q4_K_M GGUF route (V2).
 #
 # This is the product-facing counterpart to Lynn Engine's NVIDIA/NVFP4 route:
 # it starts a llama.cpp OpenAI-compatible endpoint that agent CLIs can use with
@@ -22,7 +22,7 @@ set -euo pipefail
 
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-18099}"
-SERVED_NAME="${SERVED_NAME:-qwen35-9b-q4km-imatrix}"
+SERVED_NAME="${SERVED_NAME:-qwen3-4b-thinking-2507-q4km-imatrix}"
 CTX_SIZE="${CTX_SIZE:-32768}"
 THREADS="${THREADS:-}"
 # llama.cpp splits --ctx-size across parallel slots. Lynn's local-first UX is a
@@ -35,7 +35,7 @@ LLAMA_REASONING_ARGS="${LLAMA_REASONING_ARGS:---jinja --reasoning auto}"
 GGUF="${GGUF:-}"
 MODEL_ROOT="${MODEL_ROOT:-$HOME/Models}"
 LOG_DIR="${LOG_DIR:-$HOME/.lynn-engine/logs}"
-LOG_FILE="${LOG_FILE:-$LOG_DIR/qwen35_9b_q4km_llamacpp_${PORT}.log}"
+LOG_FILE="${LOG_FILE:-$LOG_DIR/qwen3_4b_thinking_q4km_llamacpp_${PORT}.log}"
 DRY_RUN="${DRY_RUN:-0}"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -45,12 +45,12 @@ show_help() {
   cat <<'HELP'
 Usage: local_qwen35_9b_q4km_llamacpp_server.sh [OPTIONS]
 
-Start a local llama.cpp OpenAI-compatible endpoint for Qwen3.5-9B Q4_K_M.
+Start a local llama.cpp OpenAI-compatible endpoint for Qwen3-4B Thinking 2507 Q4_K_M.
 
 Options:
   --port PORT           Server port (default: 18099)
   --host ADDR           Bind address (default: 127.0.0.1)
-  --model-name NAME     Served model name (default: qwen35-9b-q4km-imatrix)
+  --model-name NAME     Served model name (default: qwen3-4b-thinking-2507-q4km-imatrix)
   --ctx SIZE            Context window (default: 32768)
   --threads N           CPU threads (default: auto-detect)
   --parallel N          Max concurrent slots (default: 1; preserves full --ctx per user)
@@ -75,7 +75,7 @@ Examples:
   bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh
 
   # Explicit model path:
-  GGUF=~/Models/Qwen3.5-9B-Q4_K_M-imatrix.gguf bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh
+  GGUF=~/Models/Qwen3-4B-Thinking-2507-Q4_K_M-imatrix.gguf bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh
 
   # Different port + dry run check:
   bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh --port 8080 --dry-run
@@ -218,10 +218,10 @@ find_gguf() {
         return 0
       fi
     done < <(find "$root" -maxdepth 5 -type f \( \
-      -iname '*Qwen3.5*9B*Q4*K*M*imatrix*.gguf' -o \
-      -iname '*qwen3.5*9b*q4*k*m*imatrix*.gguf' -o \
-      -iname '*Qwen3.5*9B*Q4_K_M*imatrix*.gguf' -o \
-      -iname '*qwen3.5*9b*q4_k_m*imatrix*.gguf' \
+      -iname '*Qwen3*4B*Thinking*Q4*K*M*imatrix*.gguf' -o \
+      -iname '*qwen3*4b*thinking*q4*k*m*imatrix*.gguf' -o \
+      -iname '*Qwen3*4B*Thinking*Q4_K_M*imatrix*.gguf' -o \
+      -iname '*qwen3*4b*thinking*q4_k_m*imatrix*.gguf' \
     \) 2>/dev/null | sort)
     while IFS= read -r candidate; do
       if [[ -s "$candidate" ]]; then
@@ -229,10 +229,10 @@ find_gguf() {
         return 0
       fi
     done < <(find "$root" -maxdepth 5 -type f \( \
-      -iname '*Qwen3.5*9B*Q4*K*M*.gguf' -o \
-      -iname '*qwen3.5*9b*q4*k*m*.gguf' -o \
-      -iname '*Qwen3.5*9B*Q4_K_M*imatrix*.gguf' -o \
-      -iname '*qwen3.5*9b*q4_k_m*imatrix*.gguf' \
+      -iname '*Qwen3*4B*Thinking*Q4*K*M*.gguf' -o \
+      -iname '*qwen3*4b*thinking*q4*k*m*.gguf' -o \
+      -iname '*Qwen3*4B*Thinking*Q4_K_M*.gguf' -o \
+      -iname '*qwen3*4b*thinking*q4_k_m*.gguf' \
     \) 2>/dev/null | sort)
   done
   return 1
@@ -241,10 +241,10 @@ find_gguf() {
 gguf_path="$(find_gguf || true)"
 if [[ -z "$gguf_path" ]]; then
   if [[ "$DRY_RUN" == "1" ]]; then
-    gguf_path="${GGUF:-/absolute/path/to/Qwen3.5-9B-Q4_K_M-imatrix.gguf}"
+    gguf_path="${GGUF:-/absolute/path/to/Qwen3-4B-Thinking-2507-Q4_K_M-imatrix.gguf}"
   else
   cat >&2 <<EOF
-[qwen35-q4km-local] ERROR: Qwen3.5-9B Q4_K_M GGUF not found.
+[qwen35-q4km-local] ERROR: Qwen3-4B Thinking 2507 Q4_K_M GGUF not found.
 
 Searched:
   $MODEL_ROOT
@@ -258,10 +258,10 @@ Download options:
 
   # HuggingFace (non-China):
   aria2c -x 16 -s 16 -c -d ~/Models \\
-    'https://dl.merkyorlynn.com/models/qwen35-9b/q4_k_m/Qwen3.5-9B-Q4_K_M-imatrix.gguf'
+    'https://hf-mirror.com/nerkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix/resolve/main/Qwen3-4B-Thinking-2507-Q4_K_M-imatrix.gguf'
 
   # ModelScope (China):
-  modelscope download Merkyor/Qwen3.5-9B-GGUF-imatrix Qwen3.5-9B-Q4_K_M-imatrix.gguf --local_dir ~/Models
+  modelscope download Merkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix Qwen3-4B-Thinking-2507-Q4_K_M-imatrix.gguf --local_dir ~/Models
 
 Then rerun, or set GGUF=/path/to/model.gguf
 EOF
@@ -287,7 +287,7 @@ SERVER_VER="$("$server_bin" --version 2>/dev/null | head -1 || echo 'unknown')"
 
 cat <<EOF
 ┌──────────────────────────────────────────────────────────────────┐
-│  Lynn Engine — Qwen3.5-9B Q4_K_M Local Agent Endpoint            │
+│  Lynn Engine — Qwen3-4B Thinking Q4_K_M Local Endpoint           │
 └──────────────────────────────────────────────────────────────────┘
   Platform:      $PLATFORM ($GPU_HINT)
   Server:        $server_bin

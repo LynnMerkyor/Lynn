@@ -1,10 +1,10 @@
 /**
- * LocalModelDownloadStep.tsx — Qwen 3.5 9B local setup.
+ * LocalModelDownloadStep.tsx — Lynn default local model setup.
  *
  * This step intentionally uses the same server-side /api/local-qwen35-9b/*
  * lifecycle as Settings and chat routing. Keeping onboarding on the same
  * provider id avoids the old split where onboarding saved "llamacpp" while
- * the app routed through "local-qwen35-9b-q4km-imatrix".
+ * the app routed through the local Qwen provider.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';

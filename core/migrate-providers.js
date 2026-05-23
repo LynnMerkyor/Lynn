@@ -240,6 +240,102 @@ export function migrateToProvidersYaml(lynnHome, agentsDir, log = () => {}) {
   log("[migrate-providers] 迁移完成");
 }
 
+// ── Local Qwen 默认模型迁移 ───────────────────────────────────────────────────
+
+const LOCAL_QWEN_4B_MIGRATION_FLAG = "local_qwen_default_4b_migrated_v1";
+const OLD_LOCAL_QWEN_PROVIDER = "local-qwen35-9b-q4km-imatrix";
+const OLD_LOCAL_QWEN_MODEL = "qwen35-9b-q4km-imatrix";
+const NEW_LOCAL_QWEN_PROVIDER = "local-qwen3-4b-thinking-2507-q4km-imatrix";
+const NEW_LOCAL_QWEN_MODEL = "qwen3-4b-thinking-2507-q4km-imatrix";
+
+function _localQwen4BProviderSeed(oldProvider = {}) {
+  return {
+    display_name: "本地 Qwen3-4B Thinking",
+    base_url: oldProvider.base_url || "http://127.0.0.1:18099/v1",
+    api: oldProvider.api || "openai-completions",
+    auth_type: "none",
+    models: [
+      {
+        id: NEW_LOCAL_QWEN_MODEL,
+        name: "Qwen3-4B Thinking 2507 Q4_K_M imatrix",
+        context: 32768,
+        maxOutput: 32768,
+      },
+    ],
+  };
+}
+
+function _migrateChatRef(chat) {
+  if (typeof chat === "string") {
+    return chat === OLD_LOCAL_QWEN_MODEL ? NEW_LOCAL_QWEN_MODEL : chat;
+  }
+  if (!chat || typeof chat !== "object") return chat;
+  const isOldLocal =
+    chat.id === OLD_LOCAL_QWEN_MODEL
+    || chat.provider === OLD_LOCAL_QWEN_PROVIDER;
+  return isOldLocal
+    ? { ...chat, id: NEW_LOCAL_QWEN_MODEL, provider: NEW_LOCAL_QWEN_PROVIDER }
+    : chat;
+}
+
+/**
+ * V0.79 之后 Lynn 默认本地模型从 9B 改为 4B。
+ *
+ * 老用户可能已经把 primary agent 固定在旧 9B provider/model 上；仅改
+ * default-models.json 不会改变这些显式选择。这个迁移只跑一次，把旧的本地
+ * 9B 默认选择切到 4B，同时保留旧 9B provider 作为可选模型。
+ */
+export function migrateLocalQwenDefaultTo4B(lynnHome, agentsDir, log = () => {}) {
+  const providersPath = path.join(lynnHome, "added-models.yaml");
+  const prefsPath = path.join(lynnHome, "user", "preferences.json");
+  const raw = safeReadYAMLSync(providersPath, {}, YAML) || {};
+  raw.providers = raw.providers || {};
+
+  const oldProvider = raw.providers[OLD_LOCAL_QWEN_PROVIDER] || {};
+  if (!raw.providers[NEW_LOCAL_QWEN_PROVIDER]) {
+    raw.providers[NEW_LOCAL_QWEN_PROVIDER] = _localQwen4BProviderSeed(oldProvider);
+    const header =
+      "# Lynn 供应商配置（全局，跨 agent 共享）\n" +
+      "# 由设置页面管理\n\n";
+    atomicWriteYAML(providersPath, raw, header);
+    log("[migrate-providers] seeded default local Qwen3-4B provider");
+  }
+
+  const prefs = _readPrefs(prefsPath);
+  if (prefs[LOCAL_QWEN_4B_MIGRATION_FLAG]) return;
+
+  let changedAgents = 0;
+  for (const ac of _collectAgentConfigs(agentsDir)) {
+    const cfg = ac.config || {};
+    let changed = false;
+
+    if (cfg.api?.provider === OLD_LOCAL_QWEN_PROVIDER) {
+      cfg.api.provider = NEW_LOCAL_QWEN_PROVIDER;
+      changed = true;
+    }
+
+    const nextChat = _migrateChatRef(cfg.models?.chat);
+    if (nextChat !== cfg.models?.chat) {
+      cfg.models = cfg.models || {};
+      cfg.models.chat = nextChat;
+      changed = true;
+    }
+
+    if (changed) {
+      atomicWriteYAML(ac.path, cfg);
+      changedAgents += 1;
+    }
+  }
+
+  prefs[LOCAL_QWEN_4B_MIGRATION_FLAG] = true;
+  atomicWriteJSON(prefsPath, prefs);
+  if (changedAgents > 0) {
+    log(`[migrate-providers] migrated ${changedAgents} agent local Qwen default(s) 9B → 4B`);
+  } else {
+    log("[migrate-providers] local Qwen 4B default migration marked");
+  }
+}
+
 // ── 内部工具 ─────────────────────────────────────────────────────────────────
 
 /**

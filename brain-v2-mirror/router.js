@@ -30,18 +30,19 @@ function _extractLatestUserMessageText(messages) {
   }
   return '';
 }
-// [FIX 2026-05-06 → Lynn#4] 3 → 6: 调研类任务多轮搜索常见 5-6 轮(广搜 → 锁源 → 深挖 → 验证 → 合成),
-// 原 3 轮上限会让模型 3 轮全用来调 parallel_research,没机会写最终答案。
-// 配合下方"撞顶强合成轮"兜底,即便撞 6 也强制再走一轮 tools=null 让模型基于已有材料合成。
-const MAX_ITERATIONS = Number(process.env.BRAIN_V2_MAX_ITERATIONS || 6);
+// Tool loop guard. Keep this high enough for research tasks, but do not coerce a
+// synthetic final answer by default; the model's own output is the source of truth.
+const MAX_ITERATIONS = Number(process.env.BRAIN_V2_MAX_ITERATIONS || 10);
+const FORCE_SYNTHESIS_ENABLED = process.env.BRAIN_V2_FORCE_SYNTHESIS === '1';
 // Default 3 means: at least two completed tool rounds, then a short stop on the third round.
 // This avoids re-synthesizing legitimate one-tool short answers such as weather/price snippets.
 const SHORT_STOP_SYNTHESIS_MIN_ITER = Number(process.env.BRAIN_V2_SHORT_STOP_SYNTHESIS_MIN_ITER || 3);
 const SHORT_STOP_SYNTHESIS_MAX_CHARS = Number(process.env.BRAIN_V2_SHORT_STOP_SYNTHESIS_MAX_CHARS || 200);
 const RESEARCH_SYNTHESIS_MIN_ITER = Number(process.env.BRAIN_V2_RESEARCH_SYNTHESIS_MIN_ITER || 2);
 const RESEARCH_FINAL_MIN_CHARS = Number(process.env.BRAIN_V2_RESEARCH_FINAL_MIN_CHARS || 900);
-// Lynn#4: local Lynn closes long turns at ~120s. Start synthesis before that so final content arrives in time.
-const SYNTHESIS_BUDGET_MS = Number(process.env.BRAIN_V2_SYNTHESIS_BUDGET_MS || 80_000);
+// 0 disables the old local "time budget" synthesis guard. Desktop handles
+// transport timeouts; Brain should not inject visible fallback text.
+const SYNTHESIS_BUDGET_MS = Number(process.env.BRAIN_V2_SYNTHESIS_BUDGET_MS || 0);
 // P1#4: empty_response 不立即 cooldown 5min。短期 cooldown(30s),且需累计 ≥ 2 次
 const EMPTY_RESPONSE_COOLDOWN_MS = Number(process.env.BRAIN_V2_EMPTY_COOLDOWN_MS || 30_000);
 const EMPTY_THRESHOLD = Number(process.env.BRAIN_V2_EMPTY_THRESHOLD || 2);
@@ -220,10 +221,12 @@ function hasUsableVisibleContent(text, { rejectPseudoToolMarkup = false } = {}) 
 }
 
 function isOverSynthesisBudget(startedAt, budgetMs = SYNTHESIS_BUDGET_MS) {
+  if (!Number.isFinite(budgetMs) || budgetMs <= 0) return false;
   return Number.isFinite(startedAt) && Date.now() - startedAt >= budgetMs;
 }
 
 function shouldForceSynthesisAfterShortStop(iter, result) {
+  if (!FORCE_SYNTHESIS_ENABLED) return false;
   if (iter < SHORT_STOP_SYNTHESIS_MIN_ITER) return false;
   if (result?.finishReason !== 'stop') return false;
   if (Array.isArray(result?.toolCalls) && result.toolCalls.length > 0) return false;
@@ -369,6 +372,7 @@ function isResearchProgressNarration(text) {
 }
 
 function shouldForceResearchSynthesisAfterStop(originalMessages, iter, result) {
+  if (!FORCE_SYNTHESIS_ENABLED) return false;
   if (!isResearchLikeRequest(originalMessages)) return false;
   if (iter < RESEARCH_SYNTHESIS_MIN_ITER) return false;
   if (result?.finishReason !== 'stop') return false;
@@ -445,18 +449,11 @@ async function runSynthesisRound({
 }) {
   const hitMax = reason === 'max_iterations';
   const hitTimeBudget = reason === 'time_budget';
-  const reasonText = hitMax
-    ? `已用完 ${MAX_ITERATIONS} 轮工具调用预算`
-    : (hitTimeBudget ? '已接近本地会话时间上限' : '检测到多轮工具后仅有短进度文字');
   log && log('warn', hitMax
     ? `hit MAX_ITERATIONS=${MAX_ITERATIONS}, forcing synthesis round`
     : (hitTimeBudget
       ? `iter ${iter}: time budget reached, forcing synthesis round`
       : `iter ${iter}: short stop content after tool rounds, forcing synthesis round`));
-  await onChunk(
-    { type: 'reasoning', delta: `\n[brain] ${reasonText},基于已有材料给最终答案...\n` },
-    { providerId: lastProviderId }
-  );
   const baseInstruction = hitMax
     ? '本轮资料收集阶段已经结束。请基于以上对话历史中的工具结果直接给用户最终答案,不要再规划或请求更多检索。'
     : (hitTimeBudget
@@ -678,34 +675,35 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       });
     }
 
-    const remaining = MAX_ITERATIONS - iter;
-    if (remaining > 0) {
-      await onChunk(
-        { type: 'reasoning', delta: `\n[brain] 第 ${iter} 轮工具调用完成 (${serverCalls.length} 个 tool),继续整理...\n` },
-        { providerId: lastProviderId }
-      );
-    }
+    // Do not emit synthetic Brain progress text. Tool progress is already
+    // represented by lynn_tool_progress markers and the model's own stream.
   }
-  // [FIX 2026-05-06 → Lynn#4] 撞顶强合成轮: 不再 silently return — 给模型一次"基于已有工具结果直接给最终答"的机会。
-  // 原 bug: 3 轮全花在 parallel_research,撞顶后 silently return,模型最后一次 emit 的 progress 文字
-  // ("继续深挖/需要抓取/搜索结果较简略")成了 user 看到的 final answer。
-  // 修复策略(结构化兜底,不教模型该写啥):
-  //   1) 禁工具(tools=null) — 模型 schema 里没工具就不会再 emit tool_call
-  //   2) 加一条 system 消息客观陈述"工具预算已用完",让模型理解为何 tools 不可用
-  //   3) 即便合成轮模型还 hallucinate tool_call,直接 return 不再 loop
-  return runSynthesisRound({
-    originalMessages,
-    workingMessages,
-    capabilityRequired,
-    signal,
-    onChunk,
-    log,
-    extraBody,
-    reasoningEffort,
-    lastProviderId,
-    iter,
-    reason: 'max_iterations',
-  });
+  if (FORCE_SYNTHESIS_ENABLED) {
+    return runSynthesisRound({
+      originalMessages,
+      workingMessages,
+      capabilityRequired,
+      signal,
+      onChunk,
+      log,
+      extraBody,
+      reasoningEffort,
+      lastProviderId,
+      iter,
+      reason: 'max_iterations',
+    });
+  }
+  log && log('warn', `hit MAX_ITERATIONS=${MAX_ITERATIONS}, stop without synthetic fallback`);
+  if (lastProviderId) {
+    await onChunk({ type: 'finish', reason: 'stop' }, { providerId: lastProviderId });
+  }
+  return {
+    ok: true,
+    providerId: lastProviderId,
+    iterations: iter,
+    hitMaxIterations: true,
+    synthesisSkipped: true,
+  };
 }
 
 export function detectCapability(messages) {

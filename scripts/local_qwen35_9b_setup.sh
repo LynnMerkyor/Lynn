@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Product-facing one-command setup for the Qwen3.5-9B Q4_K_M llama.cpp route.
+# Product-facing one-command setup for Lynn's default Qwen3-4B Thinking Q4_K_M llama.cpp route.
 #
 # This script intentionally glues together the release pieces:
 #   - model discovery / optional download
@@ -14,7 +14,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-MODEL_ROOT="${MODEL_ROOT:-$HOME/Models/Lynn/Qwen3.5-9B}"
+MODEL_ROOT="${MODEL_ROOT:-$HOME/Models/Lynn/Qwen3-4B-Thinking-2507}"
 Q4KM_VARIANT="${Q4KM_VARIANT:-imatrix}"
 Q4KM_FILE_EXPLICIT=0
 if [[ -n "${Q4KM_FILE:-}" ]]; then
@@ -34,12 +34,12 @@ if [[ -n "${LYNN_PROVIDER_CONFIG:-}" ]]; then
 fi
 case "$Q4KM_VARIANT" in
   imatrix)
-    Q4KM_FILE="${Q4KM_FILE:-Qwen3.5-9B-Q4_K_M-imatrix.gguf}"
-    ARTIFACT_ID="${ARTIFACT_ID:-qwen35-9b-q4km-imatrix-gguf}"
+    Q4KM_FILE="${Q4KM_FILE:-Qwen3-4B-Thinking-2507-Q4_K_M-imatrix.gguf}"
+    ARTIFACT_ID="${ARTIFACT_ID:-qwen3-4b-thinking-2507-q4km-imatrix-gguf}"
     ;;
   default)
-    Q4KM_FILE="${Q4KM_FILE:-Qwen3.5-9B-Q4_K_M-default.gguf}"
-    ARTIFACT_ID="${ARTIFACT_ID:-qwen35-9b-q4km-default-gguf}"
+    Q4KM_FILE="${Q4KM_FILE:-Qwen3-4B-Thinking-2507-Q4_K_M.gguf}"
+    ARTIFACT_ID="${ARTIFACT_ID:-qwen3-4b-thinking-2507-q4km-default-gguf}"
     ;;
   *)
     echo "[qwen35-setup] Q4KM_VARIANT must be imatrix or default" >&2
@@ -51,7 +51,7 @@ Q4KM_PATH="${GGUF:-$Q4KM_DIR/$Q4KM_FILE}"
 SOURCE="${SOURCE:-auto}"
 PORT="${PORT:-18099}"
 HOST="${HOST:-127.0.0.1}"
-SERVED_NAME="${SERVED_NAME:-qwen35-9b-q4km-$Q4KM_VARIANT}"
+SERVED_NAME="${SERVED_NAME:-qwen3-4b-thinking-2507-q4km-$Q4KM_VARIANT}"
 CTX_SIZE="${CTX_SIZE:-32768}"
 # llama.cpp divides --ctx across parallel slots. Keep the product default at
 # one slot so "32K" really means 32K available context for the local user.
@@ -60,14 +60,14 @@ N_GPU_LAYERS="${N_GPU_LAYERS:-999}"
 DOWNLOAD=0
 SMOKE=0
 SERVE=0
-DRY_RUN=0
+DRY_RUN="${DRY_RUN:-0}"
 FORCE=0
 REGISTER_PROVIDER=1
 INSTALL_RUNTIME=0
 
-DL_BASE_URL="${DL_BASE_URL:-https://dl.merkyorlynn.com/models/qwen35-9b}"
-HF_REPO_Q4KM="${HF_REPO_Q4KM:-nerkyor/Qwen3.5-9B-GGUF-imatrix}"
-MS_REPO_Q4KM="${MS_REPO_Q4KM:-Merkyor/Qwen3.5-9B-GGUF-imatrix}"
+DL_BASE_URL="${DL_BASE_URL:-https://dl.merkyorlynn.com/models/qwen3-4b-thinking-2507}"
+HF_REPO_Q4KM="${HF_REPO_Q4KM:-nerkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix}"
+MS_REPO_Q4KM="${MS_REPO_Q4KM:-Merkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix}"
 LYNN_PROVIDER_DIR="${LYNN_PROVIDER_DIR:-$HOME/.lynn-engine/providers}"
 LYNN_PROVIDER_CONFIG="${LYNN_PROVIDER_CONFIG:-$LYNN_PROVIDER_DIR/$ARTIFACT_ID.json}"
 
@@ -75,7 +75,7 @@ ENV_FILE_EXPLICIT=0
 if [[ -n "${ENV_FILE:-}" ]]; then
   ENV_FILE_EXPLICIT=1
 else
-  ENV_FILE="$MODEL_ROOT/lynn-qwen35-9b-q4km.env"
+  ENV_FILE="$MODEL_ROOT/lynn-qwen3-4b-thinking-q4km.env"
 fi
 
 usage() {
@@ -87,17 +87,17 @@ Recommended first-run:
   bash scripts/local_qwen35_9b_setup.sh --download --smoke
 
 Start the endpoint after setup:
-  source ~/Models/Lynn/Qwen3.5-9B/lynn-qwen35-9b-q4km.env
+  source ~/Models/Lynn/Qwen3-4B-Thinking-2507/lynn-qwen3-4b-thinking-q4km.env
   bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh
 
 Options:
   --download            Download Q4_K_M GGUF if missing.
-  --source auto|dl|hf|ms Download source. auto tries dl, then hf, then ms.
+  --source auto|dl|hf|ms Download source. auto tries ms, then hf, then dl.
   --variant imatrix|default
                         Q4_K_M artifact variant (default: imatrix).
   --smoke               Run transient llama.cpp smoke after setup.
   --serve               Exec the persistent llama.cpp endpoint after setup.
-  --model-root PATH     Model root (default: ~/Models/Lynn/Qwen3.5-9B).
+  --model-root PATH     Model root (default: ~/Models/Lynn/Qwen3-4B-Thinking-2507).
   --gguf PATH           Explicit GGUF path.
   --llama-server PATH   Explicit llama-server binary.
   --port PORT           Server port (default: 18099).
@@ -114,8 +114,8 @@ Options:
 
 Environment overrides:
   DL_BASE_URL           Lynn CDN base URL.
-  HF_REPO_Q4KM          Hugging Face repo id (default: nerkyor/Qwen3.5-9B-GGUF-imatrix).
-  MS_REPO_Q4KM          ModelScope repo id (default: Merkyor/Qwen3.5-9B-GGUF-imatrix).
+  HF_REPO_Q4KM          Hugging Face repo id (default: nerkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix).
+  MS_REPO_Q4KM          ModelScope repo id (default: Merkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix).
   Q4KM_FILE             GGUF file name.
   Q4KM_VARIANT          imatrix or default.
   LYNN_PROVIDER_DIR     Provider config directory.
@@ -133,24 +133,24 @@ while [[ $# -gt 0 ]]; do
       case "$Q4KM_VARIANT" in
         imatrix)
           if [[ "$Q4KM_FILE_EXPLICIT" != "1" ]]; then
-            Q4KM_FILE="Qwen3.5-9B-Q4_K_M-imatrix.gguf"
+            Q4KM_FILE="Qwen3-4B-Thinking-2507-Q4_K_M-imatrix.gguf"
           fi
           if [[ "$ARTIFACT_ID_EXPLICIT" != "1" ]]; then
-            ARTIFACT_ID="qwen35-9b-q4km-imatrix-gguf"
+            ARTIFACT_ID="qwen3-4b-thinking-2507-q4km-imatrix-gguf"
           fi
           if [[ "$SERVED_NAME_EXPLICIT" != "1" ]]; then
-            SERVED_NAME="qwen35-9b-q4km-imatrix"
+            SERVED_NAME="qwen3-4b-thinking-2507-q4km-imatrix"
           fi
           ;;
         default)
           if [[ "$Q4KM_FILE_EXPLICIT" != "1" ]]; then
-            Q4KM_FILE="Qwen3.5-9B-Q4_K_M-default.gguf"
+            Q4KM_FILE="Qwen3-4B-Thinking-2507-Q4_K_M.gguf"
           fi
           if [[ "$ARTIFACT_ID_EXPLICIT" != "1" ]]; then
-            ARTIFACT_ID="qwen35-9b-q4km-default-gguf"
+            ARTIFACT_ID="qwen3-4b-thinking-2507-q4km-default-gguf"
           fi
           if [[ "$SERVED_NAME_EXPLICIT" != "1" ]]; then
-            SERVED_NAME="qwen35-9b-q4km-default"
+            SERVED_NAME="qwen3-4b-thinking-2507-q4km-default"
           fi
           ;;
         *) echo "[qwen35-setup] --variant must be imatrix or default" >&2; exit 2 ;;
@@ -169,7 +169,7 @@ while [[ $# -gt 0 ]]; do
       Q4KM_DIR="$MODEL_ROOT/q4_k_m"
       Q4KM_PATH="${GGUF:-$Q4KM_DIR/$Q4KM_FILE}"
       if [[ "$ENV_FILE_EXPLICIT" != "1" ]]; then
-        ENV_FILE="$MODEL_ROOT/lynn-qwen35-9b-q4km.env"
+        ENV_FILE="$MODEL_ROOT/lynn-qwen3-4b-thinking-q4km.env"
       fi
       if [[ "$LYNN_PROVIDER_CONFIG_EXPLICIT" != "1" ]]; then
         LYNN_PROVIDER_CONFIG="$LYNN_PROVIDER_DIR/$ARTIFACT_ID.json"
@@ -231,36 +231,39 @@ find_existing_gguf() {
     [[ -d "$root" ]] || continue
     if [[ "$Q4KM_VARIANT" == "imatrix" ]]; then
       while IFS= read -r candidate; do
+        [[ "$candidate" == *"/."* ]] && continue
         [[ -s "$candidate" ]] || continue
         printf '%s\n' "$candidate"
         return 0
       done < <(find "$root" -maxdepth 5 -type f \( \
-        -iname '*Qwen3.5*9B*Q4*K*M*imatrix*.gguf' -o \
-        -iname '*qwen3.5*9b*q4*k*m*imatrix*.gguf' -o \
-        -iname '*Qwen3.5*9B*Q4_K_M*imatrix*.gguf' -o \
-        -iname '*qwen3.5*9b*q4_k_m*imatrix*.gguf' \
+        -iname '*Qwen3*4B*Thinking*Q4*K*M*imatrix*.gguf' -o \
+        -iname '*qwen3*4b*thinking*q4*k*m*imatrix*.gguf' -o \
+        -iname '*Qwen3*4B*Thinking*Q4_K_M*imatrix*.gguf' -o \
+        -iname '*qwen3*4b*thinking*q4_k_m*imatrix*.gguf' \
       \) 2>/dev/null | sort)
     else
       while IFS= read -r candidate; do
+        [[ "$candidate" == *"/."* ]] && continue
         [[ -s "$candidate" ]] || continue
         printf '%s\n' "$candidate"
         return 0
       done < <(find "$root" -maxdepth 5 -type f \( \
-        -iname '*Qwen3.5*9B*Q4*K*M*default*.gguf' -o \
-        -iname '*qwen3.5*9b*q4*k*m*default*.gguf' -o \
-        -iname '*Qwen3.5*9B*Q4_K_M*default*.gguf' -o \
-        -iname '*qwen3.5*9b*q4_k_m*default*.gguf' \
+        -iname '*Qwen3*4B*Thinking*Q4*K*M*.gguf' -o \
+        -iname '*qwen3*4b*thinking*q4*k*m*.gguf' -o \
+        -iname '*Qwen3*4B*Thinking*Q4_K_M*.gguf' -o \
+        -iname '*qwen3*4b*thinking*q4_k_m*.gguf' \
       \) 2>/dev/null | sort)
     fi
     while IFS= read -r candidate; do
+      [[ "$candidate" == *"/."* ]] && continue
       [[ -s "$candidate" ]] || continue
       printf '%s\n' "$candidate"
       return 0
     done < <(find "$root" -maxdepth 5 -type f \( \
-      -iname '*Qwen3.5*9B*Q4*K*M*.gguf' -o \
-      -iname '*qwen3.5*9b*q4*k*m*.gguf' -o \
-      -iname '*Qwen3.5*9B*Q4_K_M*.gguf' -o \
-      -iname '*qwen3.5*9b*q4_k_m*.gguf' \
+      -iname '*Qwen3*4B*Thinking*Q4*K*M*.gguf' -o \
+      -iname '*qwen3*4b*thinking*q4*k*m*.gguf' -o \
+      -iname '*Qwen3*4B*Thinking*Q4_K_M*.gguf' -o \
+      -iname '*qwen3*4b*thinking*q4_k_m*.gguf' \
     \) 2>/dev/null | sort)
   done
   return 1
@@ -347,9 +350,9 @@ download_model() {
     hf) download_hf ;;
     ms) download_ms ;;
     auto)
-      download_dl && return 0
-      download_hf && return 0
       download_ms && return 0
+      download_hf && return 0
+      download_dl && return 0
       return 1
       ;;
   esac
@@ -360,7 +363,7 @@ write_env_file() {
   local gguf="$2"
   mkdir -p "$(dirname "$ENV_FILE")"
   cat > "$ENV_FILE" <<EOF
-# Lynn Qwen3.5-9B Q4_K_M local backend
+# Lynn Qwen3-4B Thinking Q4_K_M local backend
 # Generated by scripts/local_qwen35_9b_setup.sh
 export ARTIFACT_ID="$ARTIFACT_ID"
 export Q4KM_VARIANT="$Q4KM_VARIANT"
@@ -408,7 +411,7 @@ if [[ -z "$resolved_gguf" ]]; then
 
 Manual fallback:
   mkdir -p "$Q4KM_DIR"
-  # Put Qwen3.5-9B Q4_K_M GGUF at:
+  # Put Qwen3-4B Thinking 2507 Q4_K_M GGUF at:
   #   $Q4KM_PATH
 EOF
       exit 4

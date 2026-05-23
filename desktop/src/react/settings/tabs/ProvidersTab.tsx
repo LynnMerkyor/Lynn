@@ -13,6 +13,11 @@ const OAUTH_PROVIDER_ORDER = [
   'minimax-oauth',
 ];
 
+const OAUTH_PROVIDER_LABELS: Record<string, string> = {
+  'openai-codex-oauth': 'GPT / Codex 授权登录',
+  'minimax-oauth': 'MiniMax 授权登录',
+};
+
 const CODING_PROVIDER_ORDER = [
   'minimax-coding',
   'zhipu-coding',
@@ -24,19 +29,19 @@ const CODING_PROVIDER_ORDER = [
 ];
 
 const LOCAL_PROVIDER_ORDER = [
-  'local-qwen35-9b-q4km-imatrix',
+  'local-qwen3-4b-thinking-2507-q4km-imatrix',
 ];
-const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN35_PROVIDER_LABEL = '本地 Qwen3.5-9B';
+const LOCAL_QWEN_PROVIDER_ID = 'local-qwen3-4b-thinking-2507-q4km-imatrix';
+const LOCAL_QWEN_PROVIDER_LABEL = '本地 Qwen3-4B Thinking';
 
 const LOCAL_PROVIDER_FALLBACKS: Record<string, ProviderSummary> = {
-  [LOCAL_QWEN35_PROVIDER_ID]: {
+  [LOCAL_QWEN_PROVIDER_ID]: {
     type: 'none',
-    display_name: LOCAL_QWEN35_PROVIDER_LABEL,
+    display_name: LOCAL_QWEN_PROVIDER_LABEL,
     base_url: 'http://127.0.0.1:18099/v1',
     api: 'openai-completions',
     api_key: '',
-    models: ['qwen35-9b-q4km-imatrix'],
+    models: ['qwen3-4b-thinking-2507-q4km-imatrix'],
     custom_models: [],
     has_credentials: true,
     supports_oauth: false,
@@ -228,8 +233,9 @@ export function ProvidersTab() {
   };
 
   const getProviderLabel = (id: string, p?: ProviderSummary) => {
-    if (id === LOCAL_QWEN35_PROVIDER_ID) return LOCAL_QWEN35_PROVIDER_LABEL;
+    if (id === LOCAL_QWEN_PROVIDER_ID) return LOCAL_QWEN_PROVIDER_LABEL;
     if (id === BRAIN_PROVIDER_ID) return BRAIN_PROVIDER_LABEL;
+    if (OAUTH_PROVIDER_LABELS[id]) return OAUTH_PROVIDER_LABELS[id];
     const preset = PROVIDER_PRESETS.find(pr => pr.value === id);
     return preset?.label || p?.display_name || id;
   };
@@ -276,7 +282,7 @@ export function ProvidersTab() {
 
           {oauthProviders.length > 0 && (
             <>
-              <div className={styles['pv-list-section-title']}>OAuth</div>
+              <div className={styles['pv-list-section-title']}>GPT / 授权登录</div>
               {oauthProviders.map(renderRegistered)}
             </>
           )}
@@ -307,8 +313,8 @@ export function ProvidersTab() {
             const existing = providersSummary[selected];
             const preset = PROVIDER_PRESETS.find(p => p.value === selected);
             const rawSummary = existing || buildPresetSummary(selected);
-            const summary = selected === LOCAL_QWEN35_PROVIDER_ID && rawSummary
-              ? { ...rawSummary, display_name: LOCAL_QWEN35_PROVIDER_LABEL }
+            const summary = selected === LOCAL_QWEN_PROVIDER_ID && rawSummary
+              ? { ...rawSummary, display_name: LOCAL_QWEN_PROVIDER_LABEL }
               : rawSummary;
             if (!summary) {
               return (

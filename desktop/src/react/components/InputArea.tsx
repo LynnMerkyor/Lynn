@@ -127,8 +127,8 @@ function buildRunCommandPrompt(command: string, cwd: string | null): string {
 }
 
 const FILE_CONTEXT_PATTERN = /\b([A-Za-z0-9_./-]+\.(?:tsx?|jsx?|css|json|md|py|rs|go|java|vue|svelte|swift|kt|kts|c|cc|cpp|h|hpp|m|mm|sql|yaml|yml|toml|sh))\b/i;
-const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN35_MODEL_ID = 'qwen35-9b-q4km-imatrix';
+const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen3-4b-thinking-2507-q4km-imatrix';
+const LOCAL_QWEN35_MODEL_ID = 'qwen3-4b-thinking-2507-q4km-imatrix';
 const LOCAL_QWEN35_ENDPOINT = 'http://127.0.0.1:18099/v1';
 const LOCAL_QWEN_PROMPT_DISMISS_KEY = 'lynn-local-model-prompt-dismissed-date';
 const LOCAL_QWEN_PROMPT_SHOWN_KEY = 'lynn-local-model-prompt-shown-date';
@@ -367,12 +367,12 @@ function InputAreaInner() {
         ? 'loading'
         : 'checking';
   const localQwenWarmupTitle = localQwenRunning
-    ? (localQwenCurrent ? '本地 9B 正在运行' : '本地 9B 已就绪')
+    ? (localQwenCurrent ? '本地 4B 正在运行' : '本地 4B 已就绪')
     : localQwenWarmupStage === 'launching'
-      ? '本地 9B 正在启动'
+      ? '本地 4B 正在启动'
       : localQwenWarmupStage === 'loading'
-        ? '本地 9B 正在加载'
-        : '本地 9B 正在连接';
+        ? '本地 4B 正在加载'
+        : '本地 4B 正在连接';
   const localQwenWarmupCopy = localQwenRunning
     ? localQwenCurrent
       ? (localQwenColdStartLikely
@@ -384,7 +384,7 @@ function InputAreaInner() {
     : localQwenWarmupStage === 'launching'
       ? '正在拉起 llama.cpp，本地端点马上接管'
       : localQwenWarmupStage === 'loading'
-        ? 'llama.cpp 已启动，正在加载 9B 权重'
+        ? 'llama.cpp 已启动，正在加载 4B 权重'
         : '正在确认本地端点状态，稍后会自动刷新。';
   const localQwenStatusBarClass = [
     styles['local-model-status-bar'],
@@ -530,8 +530,8 @@ function InputAreaInner() {
 
     setLocalQwenDismissed(false);
     setInlineNotice(null);
-    setInlineError('本地 Qwen3.5-9B 未运行。请先点击上方“启动”，或从模型选择器切换到云端模型。');
-    showSidebarToast('本地模型还没启动。请先启动本地 9B，或切换到云端模型。', 5000, 'warning', 'local-qwen-not-running');
+    setInlineError('本地 Qwen3-4B 未运行。请先点击上方“启动”，或从模型选择器切换到云端模型。');
+    showSidebarToast('本地模型还没启动。请先启动本地 4B，或切换到云端模型。', 5000, 'warning', 'local-qwen-not-running');
     requestInputFocus();
     return false;
   }, [localQwenCurrent, localQwenRunning, requestInputFocus, setInlineError, setInlineNotice]);
@@ -908,10 +908,10 @@ function InputAreaInner() {
         body: JSON.stringify({ modelId: LOCAL_QWEN35_MODEL_ID, provider: LOCAL_QWEN35_PROVIDER_ID }),
       });
       await loadModels();
-      showSidebarToast('已切换到本地 Qwen3.5-9B。', 4000, 'success');
+      showSidebarToast('已切换到本地 Qwen3-4B。', 4000, 'success');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      showSidebarToast('切换本地 9B 失败：' + msg, 5000, 'error');
+      showSidebarToast('切换本地 4B 失败：' + msg, 5000, 'error');
     }
   }, []);
 
@@ -925,10 +925,10 @@ function InputAreaInner() {
       markLocalQwenStopped();
       setLocalQwenDismissed(false);
       await refreshLocalQwenStatus();
-      showSidebarToast('本地 9B 已停止，已释放 llama.cpp。', 4000, 'success');
+      showSidebarToast('本地模型已停止，已释放 llama.cpp。', 4000, 'success');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      showSidebarToast('停止本地 9B 失败：' + msg, 5000, 'error');
+      showSidebarToast('停止本地模型失败：' + msg, 5000, 'error');
     }
   }, [markLocalQwenStopped, refreshLocalQwenStatus]);
 
@@ -964,13 +964,13 @@ function InputAreaInner() {
       if (!res.ok || data?.ok === false) {
         throw new Error(data?.error || 'start_failed');
       }
-      showSidebarToast('本地 9B 正在启动，Lynn 会自动切换到本地模型。', 4500, 'info');
+      showSidebarToast('本地 4B 正在启动，Lynn 会自动切换到本地模型。', 4500, 'info');
       await refreshLocalQwenStatus();
       scheduleLocalQwenRefreshBurst();
     } catch (err) {
       setLocalQwenOptimisticStarting(false);
       const msg = err instanceof Error ? err.message : String(err);
-      showSidebarToast('启动本地 9B 失败：' + msg, 5000, 'error');
+      showSidebarToast('启动本地 4B 失败：' + msg, 5000, 'error');
       openLocalQwenSettings();
     }
   }, [markLocalQwenLoading, openLocalQwenSettings, refreshLocalQwenStatus, scheduleLocalQwenRefreshBurst]);
@@ -1579,15 +1579,15 @@ function InputAreaInner() {
           {(localQwenColdStartLikely || (localQwenActive && !localQwenRunning)) && (
             <div className={styles['local-model-warmup-note']} role="status" aria-live="polite">
               <strong>首次暖机提示</strong>
-              <span>本地 9B 刚启动时要加载权重和预热上下文，第一问可能 30-60 秒；暖好后同一会话会明显更快。</span>
+              <span>本地 4B 刚启动时要加载权重和预热上下文，通常比 9B 更快；暖好后同一会话会明显更快。</span>
             </div>
           )}
           {localQwenPanelOpen && (
             <div className={styles['local-model-status-panel']} role="status" aria-live="polite">
               <div className={styles['local-model-status-panel-head']}>
                 <div>
-                  <strong>本地 Qwen3.5-9B</strong>
-                  <span>Q4_K_M imatrix · 32K 单用户上下文</span>
+                  <strong>本地 Qwen3-4B Thinking</strong>
+                  <span>Q4_K_M imatrix · thinking-on · 适配更多电脑</span>
                 </div>
                 <button type="button" onClick={() => setLocalQwenPanelOpen(false)} aria-label="收起本地模型状态">×</button>
               </div>
@@ -1612,7 +1612,7 @@ function InputAreaInner() {
           }}
         >
           <span className={styles['local-model-status-dot']} aria-hidden="true" />
-          <strong>{localQwenRunning ? '本地 9B 正在运行' : '本地 9B 正在加载'}</strong>
+          <strong>{localQwenRunning ? '本地 4B 正在运行' : '本地 4B 正在加载'}</strong>
           <span>显示状态</span>
         </button>
       )}
@@ -1621,7 +1621,7 @@ function InputAreaInner() {
           <div className={styles['local-model-status-left']}>
             <span className={styles['local-model-status-dot-muted']} aria-hidden="true" />
             <div className={styles['local-model-status-copy']}>
-              <strong>{localQwenCurrent ? '当前本地 9B 未启动' : '本地 9B 未运行'}</strong>
+              <strong>{localQwenCurrent ? '当前本地 4B 未启动' : '本地 4B 未运行'}</strong>
               <span>
                 {localQwenCurrent
                   ? '你已选择本地模型。点击启动后，Lynn 会拉起 llama.cpp 并继续使用当前模型。'
@@ -1641,11 +1641,11 @@ function InputAreaInner() {
           <div className={styles['local-model-status-left']}>
             <span className={styles['local-model-status-dot']} aria-hidden="true" />
             <div className={styles['local-model-status-copy']}>
-              <strong>可安装本地 9B</strong>
+              <strong>可安装本地 4B</strong>
               <span>
                 {localQwenHasModel && localQwenHasRuntime
                   ? '模型和 llama.cpp 已就绪，授权后即可启动本地无限 token。'
-                  : 'Qwen3.5-9B Q4_K_M imatrix · 5.3GB · 32K；授权后自动准备，当前模型照常保留。'}
+                  : 'Qwen3-4B Thinking Q4_K_M imatrix · 2.5GB · thinking-on；授权后自动准备，当前模型照常保留。'}
               </span>
             </div>
           </div>

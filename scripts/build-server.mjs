@@ -270,7 +270,7 @@ if (fs.existsSync(pluginsSrc)) {
 }
 
 // Local model bootstrap scripts. These are invoked by the packaged server after
-// user authorization to install llama.cpp, download Qwen3.5-9B Q4_K_M, start the
+// user authorization to install llama.cpp, download the default local GGUF, start the
 // local OpenAI-compatible endpoint, and register the provider.
 const SCRIPT_RUNTIME_FILES = [
   "local_qwen35_9b_setup.sh",

@@ -6,8 +6,8 @@
  * 背景:
  *   5/20 战略 pivot 后 Lynn 客户端默认本地推理底层 = llama.cpp。
  *   Mac Q4_K_M GGUF / Linux CUDA Q4_K_M / Win x64 CUDA Q4_K_M 全平台 ship。
- *   默认模型 = Qwen3.5-9B Q4_K_M-imatrix (5.3 GB),thinking-on excl_pf
- *   MMLU 90+ / GPQA 80+,Spark sm_121 单流 36.80 TPS / c=8 total 177.54。
+ *   默认模型 = Qwen3-4B-Thinking-2507 Q4_K_M-imatrix (2.5 GB),thinking-on。
+ *   9B/35B 作为可选本地模型,适合更大内存/显存机器手动升级。
  *
  * 本模块策略:
  *   1. start():
@@ -43,10 +43,10 @@ const net = require("net");
 // ─────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = Object.freeze({
-  // 默认 ship 模型 — 5.3GB, thinking-on excl_pf MMLU 90+/GPQA 80+
-  modelId: "qwen3.5-9b-q4km-imatrix",
-  modelFileName: "qwen3.5-9b-q4km-imatrix.gguf",
-  modelExpectedSize: 5_300_000_000, // ~5.3 GB
+  // 默认 ship 模型 — 2.5GB, 覆盖更多普通 Mac / PC。
+  modelId: "qwen3-4b-thinking-2507-q4km-imatrix",
+  modelFileName: "qwen3-4b-thinking-2507-q4km-imatrix.gguf",
+  modelExpectedSize: 2_497_280_864, // ~2.5 GB
   // Product default: one comfortable 32K local slot. llama.cpp splits context
   // across parallel slots, so keep -np/--parallel at 1 for the local-first UX.
   serverArgs: [
@@ -54,10 +54,10 @@ const DEFAULT_CONFIG = Object.freeze({
     "--threads", "4",
     "--parallel", "1",
     "--n-gpu-layers", "999",
-    "-a", "qwen35-9b-q4km-imatrix",
+    "-a", "qwen3-4b-thinking-2507-q4km-imatrix",
     "--jinja",
-    // Keep Qwen3.5 thinking-on by default; this is the measured high-quality
-    // path. UI must surface thinking progress instead of silently waiting.
+    // Keep thinking-on by default; UI surfaces warmup/reasoning progress
+    // instead of silently waiting.
     "--reasoning", "auto",
     "--metrics",
     "--host", "127.0.0.1",
