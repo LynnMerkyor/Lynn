@@ -11,10 +11,10 @@ SERVER_SCRIPT="$ROOT/scripts/local_qwen35_9b_q4km_llamacpp_server.sh"
 
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-18099}"
-SERVED_NAME="${SERVED_NAME:-qwen35-9b-q4km-imatrix}"
+SERVED_NAME="${SERVED_NAME:-qwen35-4b-q4km}"
 SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-900}"
 LOG_DIR="${LOG_DIR:-$HOME/.lynn-engine/logs}"
-LOG_FILE="${LOG_FILE:-$LOG_DIR/qwen35_9b_mtp_smoke_${PORT}.log}"
+LOG_FILE="${LOG_FILE:-$LOG_DIR/qwen35_4b_smoke_${PORT}.log}"
 
 mkdir -p "$LOG_DIR"
 
@@ -54,7 +54,7 @@ import urllib.request
 
 host = os.environ.get("HOST", "127.0.0.1")
 port = int(os.environ.get("PORT", "18099"))
-model = os.environ.get("SERVED_NAME", "qwen35-9b-q4km-imatrix")
+model = os.environ.get("SERVED_NAME", "qwen35-4b-q4km")
 timeout = float(os.environ.get("SMOKE_TIMEOUT", "900"))
 base = f"http://{host}:{port}"
 deadline = time.time() + timeout

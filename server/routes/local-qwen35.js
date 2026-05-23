@@ -44,11 +44,34 @@ function defaultState() {
   };
 }
 
-function expectedModelPath(state = defaultState(), variant = "imatrix") {
-  const filename = variant === "imatrix"
-    ? MODEL_FILE_NAME
-    : "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf";
-  return path.join(state.modelRoot, "q4_k_m", filename);
+function expectedModelPath(state = defaultState(), _variant = "imatrix") {
+  // 2026-05-23: 4B 默认无 imatrix variant 区分 — 始终用 MODEL_FILE_NAME (Qwen3.5-4B-Q4_K_M.gguf)。
+  // 老代码在 variant !== "imatrix" 时硬编 9B mtp 文件名,4B 切换后该 fallback 是 stale bug —
+  // 会让 hasModel=true (找到本机老 9B 文件) → 隐藏下载按钮 → 用户没法走 install flow。
+  return path.join(state.modelRoot, "q4_k_m", MODEL_FILE_NAME);
+}
+
+function candidateModelPaths(state = defaultState()) {
+  const home = os.homedir();
+  return [
+    expectedModelPath(state, "imatrix"),
+    path.join(state.modelRoot, MODEL_FILE_NAME),
+    path.join(home, ".lynn", "models", MODEL_FILE_NAME),
+    path.join(home, ".lynn", "models", MODEL_FILE_NAME.toLowerCase()),
+    path.join(home, "Models", "Lynn", MODEL_ROOT_NAME, "q4_k_m", MODEL_FILE_NAME),
+    path.join(home, "Models", "Lynn", MODEL_ROOT_NAME, MODEL_FILE_NAME),
+  ];
+}
+
+function installedModelPath(state = defaultState()) {
+  for (const candidate of candidateModelPaths(state)) {
+    try {
+      if (candidate && fs.existsSync(candidate)) return candidate;
+    } catch {
+      // Ignore inaccessible candidate paths; they simply are not installed.
+    }
+  }
+  return null;
 }
 
 function endpointRoot(state = defaultState()) {
@@ -114,7 +137,7 @@ async function listenerPids(port) {
 }
 
 async function qwen35ProcessPids(state = defaultState()) {
-  const modelPath = expectedModelPath(state, "imatrix");
+  const modelPaths = candidateModelPaths(state);
   try {
     const { stdout } = await execFileAsync("ps", ["-axo", "pid=,command="], {
       timeout: 2_000,
@@ -130,9 +153,9 @@ async function qwen35ProcessPids(state = defaultState()) {
         if (!Number.isFinite(pid) || pid <= 0) return null;
         if (!/llama-server(?:\s|$)/.test(command) && !/llama-server\b/.test(command)) return null;
         const mentionsPort = command.includes(`--port ${state.port}`) || command.includes(`:${state.port}`);
-        const mentionsModel = command.includes(modelPath)
-          || /Qwen3\.5-9B-Q4_K_M/i.test(command)
-          || /qwen35-9b-q4km/i.test(command);
+        const mentionsModel = modelPaths.some((candidate) => candidate && command.includes(candidate))
+          || /Qwen3\.5-4B-Q4_K_M/i.test(command)
+          || /qwen35-4b-q4km/i.test(command);
         return mentionsPort || mentionsModel ? pid : null;
       })
       .filter((pid) => Number.isFinite(pid) && pid > 0);
@@ -167,7 +190,9 @@ async function fetchJsonStatus(url, timeoutMs = 900) {
     const text = await res.text().catch(() => "");
     let json = null;
     if (text) {
-      try { json = JSON.parse(text); } catch {}
+      try { json = JSON.parse(text); } catch {
+        // Some llama.cpp endpoints return text during loading; keep status only.
+      }
     }
     return { ok: res.ok, status: res.status, json };
   } catch {
@@ -274,7 +299,7 @@ async function runtimeDetails() {
   };
 }
 
-function fastReadyPlan(runtime, variant = "imatrix") {
+function fastReadyPlan(runtime, _variant = "imatrix") {
   const state = defaultState();
   const totalMemoryGib = os.totalmem() / (1024 ** 3);
   const isMac = process.platform === "darwin";
@@ -284,7 +309,7 @@ function fastReadyPlan(runtime, variant = "imatrix") {
   const usable = totalMemoryGib >= 8;            // 4B 16K 入门可跑
   const ctxSize = comfortable ? 32768 : 16384;
   const parallel = 1;
-  const modelPath = expectedModelPath(state, variant);
+  const modelPath = installedModelPath(state);
   return {
     ok: true,
     provider_id: PROVIDER_ID,
@@ -295,7 +320,7 @@ function fastReadyPlan(runtime, variant = "imatrix") {
       observed: {
         endpoint_running: runtime.endpoint_running === true,
         endpoint_loading: runtime.endpoint_loading === true,
-        gguf: fs.existsSync(modelPath) ? modelPath : null,
+        gguf: modelPath,
         llama_server: (runtime.endpoint_running || runtime.endpoint_loading || runtime.process_alive) ? "llama-server" : null,
         homebrew_available: null,
       },
@@ -345,13 +370,17 @@ function fastReadyPlan(runtime, variant = "imatrix") {
 }
 
 function parseJson(text) {
-  try { return JSON.parse(text); } catch {}
+  try { return JSON.parse(text); } catch {
+    // Bootstrap logs may wrap the final JSON; scan for the last object below.
+  }
   const end = text.lastIndexOf("}");
   if (end <= 0) return null;
   for (let start = text.lastIndexOf("{", end); start >= 0; start = text.lastIndexOf("{", start - 1)) {
     try {
       return JSON.parse(text.slice(start, end + 1));
-    } catch {}
+    } catch {
+      // Continue scanning earlier braces until a valid JSON object is found.
+    }
   }
   return null;
 }
@@ -581,7 +610,7 @@ export function createLocalQwen35Route(engine) {
     if (!bootstrap) return c.json({ ok: false, error: "bootstrap_not_found" }, 503);
 
     fs.mkdirSync(path.dirname(state.logFile), { recursive: true });
-    const logFile = path.join(path.dirname(state.logFile), `qwen35-9b-mtp-setup-${Date.now()}.log`);
+    const logFile = path.join(path.dirname(state.logFile), `qwen35-4b-setup-${Date.now()}.log`);
     const args = [
       bootstrap,
       "execute",
@@ -592,7 +621,7 @@ export function createLocalQwen35Route(engine) {
     if (body.installRuntime === false) args.push("--no-install-runtime");
 
     job = {
-      id: "local-qwen35-9b-mtp-setup-" + Date.now(),
+      id: "local-qwen35-4b-setup-" + Date.now(),
       status: "running",
       started_at: new Date().toISOString(),
       finished_at: null,
@@ -607,7 +636,9 @@ export function createLocalQwen35Route(engine) {
     let stdout = "";
     let stderr = "";
     const append = (chunk) => {
-      try { fs.appendFileSync(logFile, chunk); } catch {}
+      try { fs.appendFileSync(logFile, chunk); } catch {
+        // Best effort logging; setup should continue if the log file is unavailable.
+      }
     };
     child.stdout.on("data", (buf) => { const s = buf.toString(); stdout += s; append(s); });
     child.stderr.on("data", (buf) => { const s = buf.toString(); stderr += s; append(s); });
@@ -666,7 +697,9 @@ export function createLocalQwen35Route(engine) {
     ].filter((pid) => Number.isFinite(pid) && pid > 0));
 
     for (const pid of targets) {
-      try { process.kill(pid, "SIGTERM"); } catch {}
+      try { process.kill(pid, "SIGTERM"); } catch {
+        // Process may have exited between discovery and termination.
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, 800));
 
@@ -676,7 +709,9 @@ export function createLocalQwen35Route(engine) {
     ])];
     if (remaining.length > 0) {
       for (const pid of remaining) {
-        try { process.kill(pid, "SIGKILL"); } catch {}
+        try { process.kill(pid, "SIGKILL"); } catch {
+          // Process may have exited after SIGTERM.
+        }
       }
       await new Promise((resolve) => setTimeout(resolve, 350));
       remaining = [...new Set([
@@ -684,7 +719,9 @@ export function createLocalQwen35Route(engine) {
         ...await qwen35ProcessPids(state),
       ])];
     }
-    try { fs.rmSync(state.pidFile, { force: true }); } catch {}
+    try { fs.rmSync(state.pidFile, { force: true }); } catch {
+      // Non-fatal cleanup.
+    }
 
     return c.json({
       ok: remaining.length === 0,

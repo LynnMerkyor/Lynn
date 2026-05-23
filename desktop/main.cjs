@@ -3671,9 +3671,10 @@ function buildLlamacppArgsForAlias(modelAlias, modelPath = "") {
   const args = [...(LLAMACPP_DEFAULT_CONFIG.serverArgs || [])];
   const fileName = path.basename(String(modelPath || ""));
   const is35bApexMtp = /35B-A3B-APEX-MTP|qwen36-35b-a3b-apex-mtp/i.test(`${modelAlias} ${fileName}`);
-  const launchAlias = is35bApexMtp ? "qwen36-35b-a3b-apex-mtp" : modelAlias;
+  const is9bMtp = /9B.*(?:imatrix.*mtp|mtp)|qwen35-9b-q4km-imatrix/i.test(`${modelAlias} ${fileName}`);
+  const launchAlias = is35bApexMtp ? "qwen36-35b-a3b-apex-mtp" : is9bMtp ? "qwen35-9b-q4km-imatrix" : modelAlias;
   replaceArgValue(args, "-a", launchAlias);
-  if (is35bApexMtp) {
+  if (is35bApexMtp || is9bMtp) {
     replaceArgValue(args, "--spec-type", "draft-mtp");
     replaceArgValue(args, "--spec-draft-n-max", "4");
     replaceArgValue(args, "--cache-type-k", "q8_0");
@@ -3730,6 +3731,23 @@ wrapIpcHandler("llamacpp:state", () => ({
   manager: llamacpp ? llamacpp.getStatus() : { ...lastLlamacppState, stopped: true },
   download: { ...lastModelDownloadState },
 }));
+
+wrapIpcHandler("llamacpp:stop", async () => {
+  try {
+    stopLlamacpp();
+    lastLlamacppState = {
+      ...(lastLlamacppState || {}),
+      status: "stopped",
+      stopped: true,
+      healthy: false,
+      ts: Date.now(),
+    };
+    broadcastToAllWindows("llamacpp:state", lastLlamacppState);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: String(err?.message || err) };
+  }
+});
 
 // Trigger model download. Returns immediately; progress streams via
 // "llamacpp:download-progress" / "llamacpp:download-state" channels.

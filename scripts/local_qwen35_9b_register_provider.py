@@ -42,17 +42,39 @@ def _binary_version(path: Path) -> str | None:
     return out.splitlines()[0].strip() if out.splitlines() else None
 
 
+def _model_profile(served_name: str, gguf: Path) -> dict[str, str]:
+    text = f"{served_name} {gguf.name}".lower()
+    if "35b" in text:
+        return {
+            "display_name": "Qwen3.6-35B APEX-MTP Local",
+            "model_family": "Qwen3.6-35B-A3B",
+            "recommendation": "35B APEX-MTP is the 32GB+ high-capability local upgrade.",
+        }
+    if "9b" in text:
+        return {
+            "display_name": "Qwen3.5-9B MTP Local",
+            "model_family": "Qwen3.5-9B",
+            "recommendation": "9B MTP is the 24GB+ quality upgrade for local reasoning.",
+        }
+    return {
+        "display_name": "Qwen3.5-4B Local",
+        "model_family": "Qwen3.5-4B",
+        "recommendation": "4B Q4_K_M is Lynn's default local model for most users.",
+    }
+
+
 def build_payload(args: argparse.Namespace) -> dict[str, Any]:
     gguf = Path(args.gguf).expanduser().resolve()
     llama_server = Path(args.llama_server).expanduser().resolve()
     endpoint = f"http://{args.host}:{args.port}/v1"
     size_bytes = gguf.stat().st_size if gguf.exists() else None
+    profile = _model_profile(args.served_name, gguf)
 
     return {
         "schema_version": "lynn-local-provider-v1",
         "generated_at_unix": int(time.time()),
         "provider_id": f"local-{args.served_name}",
-        "display_name": "Qwen3.5-9B MTP Local",
+        "display_name": profile["display_name"],
         "status": "configured_pending_smoke",
         "default_provider": "mimo",
         "fallback_provider": "mimo",
@@ -73,7 +95,7 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
         },
         "artifact": {
             "artifact_id": args.artifact_id,
-            "model_family": "Qwen3.5-9B",
+            "model_family": profile["model_family"],
             "quant": "Q4_K_M",
             "variant": args.variant,
             "format": "GGUF",
@@ -106,7 +128,7 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
         },
         "notes": [
             "The Lynn client must keep MIMO available until smoke_required passes.",
-            "The 9B MTP imatrix artifact is the recommended first-run variant for most users.",
+            profile["recommendation"],
             "35B APEX-MTP remains an optional high-memory upgrade through the local model manager.",
         ],
     }

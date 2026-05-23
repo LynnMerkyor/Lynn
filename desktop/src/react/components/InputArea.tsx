@@ -932,6 +932,10 @@ function InputAreaInner() {
 
   const stopLocalQwen = useCallback(async () => {
     try {
+      const managerStop = await window.platform?.llamacppStop?.();
+      if (managerStop && managerStop.ok === false) {
+        throw new Error(managerStop.reason || 'llamacpp_manager_stop_failed');
+      }
       const res = await hanaFetch('/api/local-qwen35-9b/stop', { method: 'POST', timeout: 10_000 });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.ok === false) {
@@ -969,6 +973,22 @@ function InputAreaInner() {
         markLocalQwenLoading();
       });
       scheduleLocalQwenRefreshBurst();
+      const managerStart = await window.platform?.llamacppStartDownload?.({ modelId: 'qwen35-4b-q4km' });
+      if (managerStart) {
+        if (managerStart.ok === false) {
+          throw new Error(managerStart.reason || 'llamacpp_manager_start_failed');
+        }
+        await hanaFetch('/api/models/set', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modelId: LOCAL_QWEN35_MODEL_ID, provider: LOCAL_QWEN35_PROVIDER_ID }),
+        }).catch(() => null);
+        showSidebarToast('本地 Qwen3.5-4B 正在启动，Lynn 会自动切换到本地模型。', 4500, 'info');
+        await loadModels();
+        await refreshLocalQwenStatus();
+        scheduleLocalQwenRefreshBurst();
+        return;
+      }
       const res = await hanaFetch('/api/local-qwen35-9b/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1660,7 +1680,7 @@ function InputAreaInner() {
               <span>
                 {localQwenHasModel && localQwenHasRuntime
                   ? '模型和 llama.cpp 已就绪，授权后即可启动本地无限 token。'
-                  : 'Qwen3.5-4B Q4_K_M (unsloth) · 2.55GB · thinking-on 32K；授权后自动准备，当前模型照常保留。'}
+                  : 'Qwen3.5-4B Q4_K_M (unsloth) · 2.55GB · 32K 上下文；授权后自动准备，当前模型照常保留。'}
               </span>
             </div>
           </div>

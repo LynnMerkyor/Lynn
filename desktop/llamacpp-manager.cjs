@@ -59,8 +59,8 @@ const DEFAULT_CONFIG = Object.freeze({
     "--n-gpu-layers", "999",
     "-a", "qwen35-4b-q4km",
     "--jinja",
-    // Keep thinking-on by default; UI surfaces warmup/reasoning progress
-    // instead of silently waiting.
+    // Keep thinking available by default, but cap the 4B thinking budget so
+    // everyday asks do not loop for a minute before the first visible answer.
     "--reasoning", "auto",
     "--reasoning-budget", "8192",
     "--metrics",
@@ -91,6 +91,23 @@ function defaultBinaryPath(homeDir, platform) {
   const root = defaultLynnRoot(homeDir);
   const binName = platform === "win32" ? "llama-server.exe" : "llama-server";
   return path.join(root, "llamacpp", "bin", binName);
+}
+
+function systemBinaryCandidates(platform) {
+  if (platform === "win32") return [];
+  const candidates = [
+    "/opt/homebrew/bin/llama-server",
+    "/usr/local/bin/llama-server",
+    "/usr/bin/llama-server",
+  ];
+  try {
+    const resolved = spawnSync("which", ["llama-server"], { encoding: "utf8", timeout: 1000 });
+    const fromPath = String(resolved.stdout || "").trim();
+    if (fromPath) candidates.unshift(fromPath);
+  } catch {
+    // which is best-effort only; static candidates cover the common Mac/Linux paths.
+  }
+  return [...new Set(candidates)];
 }
 
 function defaultModelPath(homeDir, fileName) {
@@ -191,7 +208,11 @@ class LlamaCppManager {
       return this.binaryOverride;
     }
     const candidate = defaultBinaryPath(this.homeDir, this.platform);
-    return this.fsModule.existsSync(candidate) ? candidate : null;
+    if (this.fsModule.existsSync(candidate)) return candidate;
+    for (const systemCandidate of systemBinaryCandidates(this.platform)) {
+      if (this.fsModule.existsSync(systemCandidate)) return systemCandidate;
+    }
+    return null;
   }
 
   resolveModelPath() {

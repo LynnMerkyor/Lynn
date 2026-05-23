@@ -41,8 +41,9 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
     || (isLocalProvider !== false && /local-qwen|qwen35-9b|qwen36-35b|Qwen3(?:\.5)?-(?:9B|35B)|本地\s*(?:9B|35B)/i.test(modelLabel || ""));
   const isLocalProgressThinking = isLocalModelThinking || /本地\s*(?:9B|35B)|本地模型|llama\.cpp|等待工具/.test(content || "");
   const isLocalColdStartThinking = /首次启动|第一问|暖机|等待首字/.test(content || "");
-  // Local cold-start notes are user-facing progress, not private reasoning.
-  const open = explicitOpen ?? (!sealed && isLocalProgressThinking);
+  // Local cold-start notes are user-facing progress, but raw provider thinking
+  // can be long or English. Keep it collapsed unless the user explicitly opens it.
+  const open = explicitOpen ?? false;
   const toggle = useCallback(() => setExplicitOpen(v => !(v ?? false)), []);
   const shouldOfferTranslate = sealed && /[A-Za-z]{4,}/.test(content || "");
 

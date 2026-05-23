@@ -37,6 +37,11 @@ export function t(key: string, params?: Record<string, string | number>): string
   return window.t?.(key, params) ?? key;
 }
 
+function labelFor(key: string, fallback: string): string {
+  const value = t(key);
+  return value && value !== key ? value : fallback;
+}
+
 export function escapeHtml(str: string): string {
   // eslint-disable-next-line no-restricted-syntax -- escapeHtml utility, not React rendering
   const div = document.createElement('div');
@@ -214,10 +219,10 @@ export const PROVIDER_PRESETS = [
 ];
 
 export const API_FORMAT_OPTIONS = [
-  { value: 'openai-completions', label: t('onboarding.provider.apiOpenai') || 'OpenAI Compatible' },
-  { value: 'anthropic-messages', label: t('onboarding.provider.apiAnthropic') || 'Anthropic Messages' },
-  { value: 'openai-responses', label: t('settings.providers.apiResponses') || 'OpenAI Responses' },
-  { value: 'openai-codex-responses', label: t('settings.providers.apiCodex') || 'ChatGPT Codex (Plus/Pro)' },
+  { value: 'openai-completions', label: labelFor('onboarding.provider.apiOpenai', 'OpenAI Compatible') },
+  { value: 'anthropic-messages', label: labelFor('onboarding.provider.apiAnthropic', 'Anthropic Messages') },
+  { value: 'openai-responses', label: labelFor('settings.providers.apiResponses', 'OpenAI Responses') },
+  { value: 'openai-codex-responses', label: labelFor('settings.providers.apiCodex', 'ChatGPT Codex (Plus/Pro)') },
 ];
 
 export const CONTEXT_PRESETS = [

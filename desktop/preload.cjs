@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld("hana", {
   // llama.cpp local 推理 (Lynn V0.79 默认本地模型)
   llamacppGetState: () => ipcRenderer.invoke("llamacpp:state"),
   llamacppStartDownload: (payload) => ipcRenderer.invoke("llamacpp:start-download", payload || {}),
+  llamacppStop: () => ipcRenderer.invoke("llamacpp:stop"),
   llamacppPauseDownload: () => ipcRenderer.invoke("llamacpp:pause-download"),
   llamacppCancelDownload: () => ipcRenderer.invoke("llamacpp:cancel-download"),
   llamacppGetSources: () => ipcRenderer.invoke("llamacpp:sources"),

@@ -202,11 +202,11 @@ function buildPrefetchToolSummary(context) {
 
 const LOCAL_QWEN35_DIRECT_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_CHARS || 8000);
 const LOCAL_QWEN35_DIRECT_ENDPOINT = process.env.LYNN_LOCAL_QWEN35_ENDPOINT || "http://127.0.0.1:18099/v1/chat/completions";
-// Thinking-on Qwen models spend part of the generation budget in reasoning
-// before emitting visible content. Keep the default comfortably above short
-// answer gates so local runs do not look like "no reply" just because the
-// model used its first tokens to think.
-const LOCAL_QWEN35_DIRECT_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_TOKENS || 32768);
+// Default local 4B keeps a 32K context window, but its visible answer path
+// should stay responsive. 9B/35B upgrade profiles can still opt into larger
+// budgets via env or their own launcher args.
+const LOCAL_QWEN35_DIRECT_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_TOKENS || 8192);
+const LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS || 2048);
 
 function shouldUseLocalQwen35DirectBridge(promptText = "", opts = {}) {
   if (!isLocalQwen35Model(opts.modelInfo)) return false;
@@ -2219,8 +2219,11 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                     ss.effectivePromptText = effectivePromptText;
                     try {
                       await streamLocalQwen35DirectBridge(promptSessionPath, ss, promptText, effectivePromptText, currentModelInfo, {
-                        enableThinking: true,
-                        maxTokens: LOCAL_QWEN35_DIRECT_MAX_TOKENS,
+                        // The realtime tool result is already supplied as context.
+                        // Keep this path as a fast local writer so weather/market
+                        // asks do not spend a minute in hidden reasoning.
+                        enableThinking: false,
+                        maxTokens: LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS,
                       });
                     } catch (directErr) {
                       debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v2] failed after prefetch · ${directErr?.message || directErr} · ${promptSessionPath}`);

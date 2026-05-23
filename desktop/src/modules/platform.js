@@ -75,6 +75,7 @@
     selectSkill: async () => null,
     llamacppOpenModelDir: async () => ({ ok: false, reason: 'desktop-only' }),
     llamacppStartCustomModel: async () => ({ ok: false, reason: 'desktop-only' }),
+    llamacppStop: async () => ({ ok: false, reason: 'desktop-only' }),
     llamacppStartDownload: async () => ({ ok: false, reason: 'desktop-only' }),
 
     // OS 集成 → 静默降级

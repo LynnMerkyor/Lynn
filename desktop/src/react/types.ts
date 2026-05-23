@@ -253,6 +253,7 @@ export interface PlatformApi {
   selectSkill(): Promise<string | null>;
   llamacppOpenModelDir?(targetPath?: string | null): Promise<{ ok: boolean; path?: string; revealedPath?: string; error?: string | null }>;
   llamacppStartCustomModel?(modelPath: string): Promise<{ ok: boolean; modelId?: string; modelPath?: string; reason?: string }>;
+  llamacppStop?(): Promise<{ ok: boolean; reason?: string }>;
   llamacppStartDownload?(payload?: { modelId?: string }): Promise<{
     ok: boolean;
     alreadyRunning?: boolean;
