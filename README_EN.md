@@ -40,7 +40,7 @@ Related repositories:
 <summary><strong>v0.79.0</strong> · 2026-05-22 · Local 9B unlimited tokens + local model manager <em>(latest)</em></summary>
 
 **Local model release**:
-- 🧠 **Local 9B for daily unlimited use**:Qwen3.5-9B Q4_K_M imatrix is now the default one-click local model path. Lynn prepares llama.cpp, downloads and verifies the GGUF, starts a local OpenAI-compatible `/v1` endpoint, and registers the provider after user authorization.
+- 🧠 **Local 9B MTP for daily unlimited use**:Qwen3.5-9B Q4_K_M imatrix MTP is now the default one-click local model path. Lynn prepares llama.cpp, downloads and verifies the GGUF, starts a local OpenAI-compatible `/v1` endpoint, and registers the provider after user authorization.
 - 📦 **Local model manager**:Settings → Models supports in-app 35B GGUF download, user-provided GGUF import, endpoint inspection, and stopping the local runtime to release memory.
 - ⏳ **Warmup feedback**:the first local reply now explains the 30-60s weight-load/context-warmup window and shows staged progress instead of leaving users waiting.
 - 🧭 **Brain V2 migration**:legacy Brain endpoints migrate to the V2 canonical endpoint; GLM Coding Plan uses the dedicated coding endpoint; empty-answer recovery remains a fallback, not a model-output override.
@@ -443,22 +443,23 @@ This doesn't replace the cloud fallback chain (MiMo / Qwen / DeepSeek remain the
 
 ## Local 9B for daily unlimited use
 
-Starting with Lynn v0.79, **Qwen3.5-9B Q4_K_M imatrix** is a first-class local model path, not an expert-only escape hatch. After user authorization, Lynn prepares llama.cpp, downloads the GGUF model, starts a local OpenAI-compatible endpoint, registers the model, and switches to it automatically.
+Starting with Lynn v0.79, **Qwen3.5-9B Q4_K_M imatrix MTP** is a first-class local model path, not an expert-only escape hatch. After user authorization, Lynn prepares llama.cpp, downloads the GGUF model, starts a local OpenAI-compatible endpoint, registers the model, and switches to it automatically.
 
 | Item | Details |
 |---|---|
-| Default local model | Qwen3.5-9B Q4_K_M imatrix |
-| Model size | ~5.3 GB |
+| Default local model | Qwen3.5-9B Q4_K_M imatrix MTP |
+| Model size | 5.38 GB |
 | Context | 32K |
-| Capability signal | MMLU 90+ / GPQA 80+ under thinking-on 32K evaluation |
+| Capability signal | MMLU 81.00% (100 sample) / GPQA Diamond 81.71% excl_pf / tool-call 14/15 |
+| Speed signal | GB10 Spark: think-on 4K 77.46 tok/s; 16K 69.00 tok/s; 32K sustained 78.32 tok/s |
 | Runtime | llama.cpp local server, OpenAI-compatible `/v1` endpoint |
 | Privacy | Fully offline capable; no API key required; conversations stay on device |
 
 ### Downloads and mirrors
 
-- 🇨🇳 **ModelScope (recommended in China)**: `Merkyor/Qwen3.5-9B-GGUF-imatrix` (Q4_K_M imatrix GGUF)
-- 🤗 **Hugging Face**: `Merkyor/Qwen3.5-9B-GGUF-imatrix` (Q4_K_M imatrix GGUF)
-- High-memory devices (24GB+ unified memory or VRAM) can also use **Qwen3.6-35B-A3B Q4_K_M imatrix**: [ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix). Under the thinking-on 32K evaluation it reaches MMLU 90.40% / GPQA Diamond 80.70%,with an R6000 reference speed of 207 tok/s.
+- 🇨🇳 **ModelScope (recommended in China)**: [Merkyor/Qwen3.5-9B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/files) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`)
+- 🤗 **Hugging Face / mirror**: `nerkyor/Qwen3.5-9B-GGUF-imatrix` (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`)
+- High-memory devices (24GB+ unified memory or VRAM) can also use **Qwen3.6-35B-A3B APEX-MTP I-Balanced**: [ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF). Under the thinking-on 32K evaluation it reaches MMLU 90.40% / GPQA Diamond 80.70%; GB10 Spark reference speed is 84.69 tok/s at think-on 4K and 75.53 tok/s at think-on 16K.
 
 In the app: **Settings → Models → Local Qwen3.5-9B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background. The chat input shows local model status, and users can stop the runtime anytime to release memory. The Models page also supports in-app 35B download and importing any llama.cpp-compatible GGUF the user already has.
 

@@ -34,8 +34,8 @@
     "qwen3-8b"
   ],
 
-  "local-qwen3-4b-thinking-2507-q4km-imatrix": [
-    "qwen3-4b-thinking-2507-q4km-imatrix"
+  "local-qwen35-9b-q4km-imatrix": [
+    "qwen35-9b-q4km-imatrix"
   ],
 
   "dashscope": [

@@ -24,20 +24,19 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('selectGgufModel');
   });
 
-  it('advertises the high-memory 35B Q4_K_M upgrade option with objective metrics', () => {
+  it('advertises the high-memory 35B APEX-MTP upgrade option with objective metrics', () => {
     const source = read('server/routes/local-qwen35.js');
     expect(source).not.toContain('qwen36-27b-q4km-imatrix');
-    expect(source).toContain('qwen36-35b-a3b-q4km-imatrix');
+    expect(source).toContain('qwen36-35b-a3b-apex-mtp');
     expect(source).toContain('24GB 显存+ 推荐');
     expect(source).toContain('thinking-on 32K');
     expect(source).toContain('MMLU 90.40%');
     expect(source).toContain('GPQA Diamond 80.70%');
-    expect(source).toContain('R6000 207 tok/s');
+    expect(source).toContain('think-on 4K 84.69 tok/s');
     expect(source).not.toContain('Spark/远端兜底');
-    expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix');
-    expect(source).toContain('下载 9B');
+    expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF');
     expect(source).toContain('下载到本机');
-    expect(source).toContain('Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf');
+    expect(source).toContain('Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf');
   });
 
   it('makes advanced local models actionable instead of passive cards', () => {
@@ -54,15 +53,15 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('chooseGgufModel');
   });
 
-  it('downloads the recommended 35B model through Lynn with checksum and parallel ranges', () => {
+  it('downloads the recommended 35B APEX-MTP model through Lynn with checksum and parallel ranges', () => {
     const main = read('desktop/main.cjs');
     const downloader = read('desktop/model-downloader.cjs');
     const preload = read('desktop/preload.cjs');
-    expect(main).toContain('qwen36-35b-a3b-q4km-imatrix');
-    expect(main).toContain('21_166_758_272');
-    expect(main).toContain('3e398e6c53398de229ade3a38b04e0d626289651d6d8b49ecfccc2165816efa1');
+    expect(main).toContain('qwen36-35b-a3b-apex-mtp');
+    expect(main).toContain('26_059_443_808');
+    expect(main).toContain('9bf7d96bb3a9d363e645dd998aee9e9bff8e016a82aec7ff081e0e6cdb53419e');
     expect(main).toContain('parallelSegments: 4');
-    expect(main).toContain('Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf');
+    expect(main).toContain('Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf');
     expect(preload).toContain('llamacppStartDownload: (payload)');
     expect(downloader).toContain('_downloadFromSourceParallel');
     expect(downloader).toContain('"Range"');
@@ -72,8 +71,8 @@ describe('Local Qwen provider UX guards', () => {
     const constants = read('desktop/src/react/onboarding/constants.ts');
     const onboardingStep = read('desktop/src/react/onboarding/steps/LocalModelDownloadStep.tsx');
     const badge = read('desktop/src/react/components/ProviderStatusBadge.tsx');
-    expect(constants).toContain("providerName: 'local-qwen3-4b-thinking-2507-q4km-imatrix'");
-    expect(constants).toContain("defaultModelId: 'qwen3-4b-thinking-2507-q4km-imatrix'");
+    expect(constants).toContain("providerName: 'local-qwen35-9b-q4km-imatrix'");
+    expect(constants).toContain("defaultModelId: 'qwen35-9b-q4km-imatrix'");
     expect(onboardingStep).toContain('/api/local-qwen35-9b/status');
     expect(onboardingStep).toContain('/api/local-qwen35-9b/setup');
     expect(badge).toContain('/api/local-qwen35-9b/status');
@@ -112,21 +111,21 @@ describe('Local Qwen provider UX guards', () => {
     expect(launcher).toContain('--jinja --reasoning auto');
   });
 
-  it('streams local model warmup feedback before the first model token', () => {
+  it('keeps local model progress out of model-visible thinking', () => {
     const route = read('server/routes/chat.js');
     const thinkingBlock = read('desktop/src/react/components/chat/ThinkingBlock.tsx');
     const assistantMessage = read('desktop/src/react/components/chat/AssistantMessage.tsx');
     const inputArea = read('desktop/src/react/components/InputArea.tsx');
     expect(route).toContain('startLocalQwen35WarmupFeedback');
     expect(route).toContain('startLocalQwen35PrefetchFeedback');
-    expect(route).toContain('本地 4B 已接到任务，正在连接本机 llama.cpp。');
-    expect(route).toContain('正在查询实时天气数据');
-    expect(route).toContain('首次启动会加载 4B 权重');
-    expect(route).toContain('这不是常态，后续回答通常会明显更快');
-    expect(route).toContain('刚启动后的第一问，本地 4B 正在暖机');
-    expect(route).toContain('正在预热本地上下文');
-    expect(route).toContain('还在等待首字');
-    expect(route).toContain('这次工具耗时偏长');
+    expect(route).not.toContain('本地 4B 已接到任务，正在连接本机 llama.cpp。');
+    expect(route).not.toContain('正在查询实时天气数据');
+    expect(route).not.toContain('首次启动会加载 4B 权重');
+    expect(route).not.toContain('这不是常态，后续回答通常会明显更快');
+    expect(route).not.toContain('刚启动后的第一问，本地 4B 正在暖机');
+    expect(route).not.toContain('正在预热本地上下文');
+    expect(route).not.toContain('还在等待首字');
+    expect(route).not.toContain('这次工具耗时偏长');
     expect(assistantMessage).toContain('modelLabel={agentModelLabel}');
     expect(thinkingBlock).toContain('isLocalModelThinking');
     expect(thinkingBlock).toContain('本地模型正在本机生成答案');
@@ -134,7 +133,7 @@ describe('Local Qwen provider UX guards', () => {
     expect(thinkingBlock).not.toContain('马上给出结果');
     expect(inputArea).toContain('本地端点已就绪，正在生成首个回答');
     expect(inputArea).toContain('首次暖机提示');
-    expect(inputArea).toContain('通常比 9B 更快');
+    expect(inputArea).toContain('本地 9B MTP 刚启动时要加载权重和预热上下文');
     expect(inputArea).not.toContain('首次启动后的第一问正在暖机，可能 30-60 秒；后续会明显更快。');
     expect(inputArea).not.toContain('可接收');
   });

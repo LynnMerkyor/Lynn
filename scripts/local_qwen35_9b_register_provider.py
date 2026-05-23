@@ -52,7 +52,7 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
         "schema_version": "lynn-local-provider-v1",
         "generated_at_unix": int(time.time()),
         "provider_id": f"local-{args.served_name}",
-        "display_name": "Qwen3-4B Thinking Local",
+        "display_name": "Qwen3.5-9B MTP Local",
         "status": "configured_pending_smoke",
         "default_provider": "mimo",
         "fallback_provider": "mimo",
@@ -73,7 +73,7 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
         },
         "artifact": {
             "artifact_id": args.artifact_id,
-            "model_family": "Qwen3-4B-Thinking-2507",
+            "model_family": "Qwen3.5-9B",
             "quant": "Q4_K_M",
             "variant": args.variant,
             "format": "GGUF",
@@ -106,8 +106,8 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
         },
         "notes": [
             "The Lynn client must keep MIMO available until smoke_required passes.",
-            "The 4B imatrix artifact is the recommended first-run variant for most users.",
-            "9B and 35B GGUF files remain optional upgrades through the local model manager.",
+            "The 9B MTP imatrix artifact is the recommended first-run variant for most users.",
+            "35B APEX-MTP remains an optional high-memory upgrade through the local model manager.",
         ],
     }
 

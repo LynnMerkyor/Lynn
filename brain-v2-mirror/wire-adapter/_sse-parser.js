@@ -7,11 +7,18 @@
 //   { type: 'tool_call_delta', delta: Array<{index, id?, function?: {name?, arguments?}}> }
 //   { type: 'finish',    reason: string }
 
+// Guard against pathological upstreams that stream MB of data with no '\n' delimiter.
+// 4MB is far above any sane single-line SSE event; trip → abort the stream.
+const MAX_BUFFER = 4 * 1024 * 1024;
+
 export async function* parseOpenAISSE(body) {
   const decoder = new TextDecoder();
   let buffer = '';
   for await (const chunk of body) {
     buffer += decoder.decode(chunk, { stream: true });
+    if (buffer.length > MAX_BUFFER) {
+      throw new Error(`SSE parser buffer overflow (>${MAX_BUFFER} bytes without newline) — upstream likely sending non-SSE garbage`);
+    }
     const lines = buffer.split('\n');
     buffer = lines.pop() || '';
     for (const rawLine of lines) {

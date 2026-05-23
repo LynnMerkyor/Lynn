@@ -206,19 +206,15 @@ async function handleDeepResearch(req, res, pathname) {
       return;
     }
 
-    const winnerContent = result.qualityRejected
-      ? (result.fallbackContent || '')
-      : (result.winner?.content || '');
+    const winnerContent = result.winner?.content || '';
     if (!winnerContent) {
       sendChunk({ content: '[deep-research] no winner content' }, 'stop');
       log('error', `[${id}] no winner content`);
     } else {
-      // Send final winner pick + ranked scores as one meta chunk
+      // Send the provider that produced the visible answer as one meta chunk.
       sendMeta({
-        event: result.qualityRejected ? 'quality-rejected-final' : 'winner-picked',
+        event: 'winner-picked',
         winnerProviderId: result.winner?.providerId || null,
-        qualityRejected: !!result.qualityRejected,
-        rankedScores: result.rankedScores || [],
         meta: result.meta || {},
       });
       // Stream winner content in 100-char chunks (simulated streaming for client compat)
@@ -228,7 +224,7 @@ async function handleDeepResearch(req, res, pathname) {
         sendChunk({ content: winnerContent.slice(i, i + CHUNK_SIZE) });
       }
       sendChunk({}, 'stop');
-      log('info', `[${id}] done winner=${result.winner?.providerId || 'none'} qualityRejected=${!!result.qualityRejected} totalMs=${result.meta?.totalMs}`);
+      log('info', `[${id}] done winner=${result.winner?.providerId || 'none'} totalMs=${result.meta?.totalMs}`);
     }
   } catch (err) {
     if (!clientDisconnected) {

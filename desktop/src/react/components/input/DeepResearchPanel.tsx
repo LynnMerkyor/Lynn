@@ -22,7 +22,7 @@ export function DeepResearchPanel({
       </div>
       <div className={styles['deep-research-copy']}>
         <strong>深度调研</strong>
-        <span>适合长调研、竞品梳理和报告初稿。会并行生成多份答案，并做质量复核。</span>
+        <span>适合长调研、竞品梳理和报告初稿。会并行生成多份答案，并做交叉参考。</span>
       </div>
       <div className={styles['deep-research-actions']}>
         <button

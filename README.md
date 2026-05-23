@@ -47,7 +47,7 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 <summary><strong>v0.79.0</strong> · 2026-05-22 · 本地 9B 无限 token + 本地模型管理器 <em>(最新)</em></summary>
 
 **本地模型大版本**:
-- 🧠 **本地 9B,日常无限用**:Qwen3.5-9B Q4_K_M imatrix 成为一键安装的默认本地模型路径,授权后自动准备 llama.cpp、下载/校验 GGUF、启动本地 OpenAI `/v1` 端点并注册模型。
+- 🧠 **本地 9B MTP,日常无限用**:Qwen3.5-9B Q4_K_M imatrix MTP 成为一键安装的默认本地模型路径,授权后自动准备 llama.cpp、下载/校验 GGUF、启动本地 OpenAI `/v1` 端点并注册模型。
 - 📦 **本地模型管理器**:设置 → 模型 支持应用内下载 35B 推荐 GGUF、导入用户自己的 GGUF、查看本地端点、停止模型释放内存。
 - ⏳ **暖机反馈**:本地模型首次加载权重和预热上下文时会给出 30-60 秒提示、阶段状态和等待动效,避免用户误以为卡死。
 - 🧭 **Brain V2 迁移**:老用户的旧 Brain endpoint 会自动迁移到 V2 canonical;GLM Coding Plan 使用专属 coding 端点;空答兜底只做可见修复,不提前干预模型输出。
@@ -613,22 +613,23 @@ Lynn 之前一直走"客户端 + Brain 兜底"的路子:模型用别人家的(Mi
 
 ## 本地 9B，日常无限用
 
-Lynn v0.79 起把 **Qwen3.5-9B Q4_K_M imatrix** 做成内置本地模型入口。它不是给专家看的隐藏选项，而是给普通 Mac / PC 用户的一键离线能力:Lynn 会在你授权后自动准备 llama.cpp、模型文件和本地 OpenAI 兼容端点,完成后自动切换到本地模型。
+Lynn v0.79 起把 **Qwen3.5-9B Q4_K_M imatrix MTP** 做成内置本地模型入口。它不是给专家看的隐藏选项，而是给普通 Mac / PC 用户的一键离线能力:Lynn 会在你授权后自动准备 llama.cpp、模型文件和本地 OpenAI 兼容端点,完成后自动切换到本地模型。
 
 | 项目 | 说明 |
 |---|---|
-| 默认本地模型 | Qwen3.5-9B Q4_K_M imatrix |
-| 模型体积 | 约 5.3GB |
+| 默认本地模型 | Qwen3.5-9B Q4_K_M imatrix MTP |
+| 模型体积 | 5.38GB |
 | 上下文 | 32K |
-| 能力信号 | MMLU 90+ / GPQA 80+（thinking-on 32K 口径） |
+| 能力信号 | MMLU 81.00%（100 sample）/ GPQA Diamond 81.71% excl_pf / 工具调用 14/15 |
+| 速度信号 | GB10 Spark: think-on 4K 77.46 tok/s; 16K 69.00 tok/s; 32K sustained 78.32 tok/s |
 | 运行方式 | llama.cpp 本地服务，OpenAI-compatible `/v1` 端点 |
 | 隐私 | 可完全离线；不需要 API Key；对话不上传 |
 
 ### 下载与镜像
 
-- 🇨🇳 **ModelScope（国内推荐）**：`Merkyor/Qwen3.5-9B-GGUF-imatrix`（Q4_K_M imatrix GGUF）
-- 🤗 **Hugging Face**：`Merkyor/Qwen3.5-9B-GGUF-imatrix`（Q4_K_M imatrix GGUF）
-- 高配设备（24GB 显存/统一内存+）推荐 **Qwen3.6-35B-A3B Q4_K_M imatrix**：[ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix)。thinking-on 32K 口径:MMLU 90.40% / GPQA Diamond 80.70%,R6000 参考 207 tok/s。
+- 🇨🇳 **ModelScope（国内推荐）**：[Merkyor/Qwen3.5-9B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/files)（`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`）
+- 🤗 **Hugging Face / 镜像**：`nerkyor/Qwen3.5-9B-GGUF-imatrix`（`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`）
+- 高配设备（24GB 显存/统一内存+）可选 **Qwen3.6-35B-A3B APEX-MTP I-Balanced**：[ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF)。thinking-on 32K 口径:MMLU 90.40% / GPQA Diamond 80.70%;GB10 Spark 参考 think-on 4K 84.69 tok/s、16K 75.53 tok/s。
 
 应用内路径:**设置 → 模型 → 本地 Qwen3.5-9B → 授权安装并启用**。下载、校验、启动和模型注册都由 Lynn 后台完成;你可以随时在输入框旁看到本地模型状态,也可以停止以释放内存。模型页还支持应用内下载 35B 推荐 GGUF,或导入你自己下载的任意 llama.cpp 可用 GGUF。
 
@@ -652,7 +653,7 @@ T6  Step-3.5 Flash / MiniMax M2.7-highspeed（末级兜底）
 多级降级自动切换：某档不可用 → 自动下一档，对话不中断。**默认模型有工具调用能力**（Plan C 透传，可以直接跑 `write` / `edit` / `read` / `bash`），不只是聊天。MiMo 主链已支持 `thinking:{type:"disabled"}` 快速模式，简单 chat TTF -51%。
 
 **隐私三条承诺**：不训练、不落盘、日志最小化。想要绝对隐私？三种逃生路径：
-- Lynn 本地 Qwen3.5-9B Q4_K_M imatrix（推荐日常无限 token）
+- Lynn 本地 Qwen3.5-9B Q4_K_M imatrix MTP（推荐日常无限 token）
 - 全程 Ollama 本地模型（无任何数据出门）
 - 自备 OpenAI / Anthropic / Moonshot 等 API Key（走你自己的账号）
 - 敏感工作区路径隔离（`.lynn/private/*` 不进记忆）

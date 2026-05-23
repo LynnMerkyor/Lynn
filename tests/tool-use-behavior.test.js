@@ -35,6 +35,6 @@ describe("tool-use behavior resolver", () => {
 
   it("builds a single augmented prompt after prefetch", () => {
     const prompt = buildPrefetchAugmentedPrompt("原始问题", "证据\n", "预算上下文");
-    expect(prompt).toBe("证据\n\n预算上下文\n\n【用户原始问题】\n原始问题");
+    expect(prompt).toBe("证据\n\n预算上下文\n\n原始问题");
   });
 });

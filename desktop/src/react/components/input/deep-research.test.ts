@@ -12,24 +12,16 @@ describe('deep-research helpers', () => {
     expect(DEEP_RESEARCH_FETCH_TIMEOUT_MS).toBeGreaterThan(DEEP_RESEARCH_TIMEOUT_MS);
   });
 
-  it('formats review status and top candidate scores', () => {
+  it('formats completion status without exposing scoring metadata', () => {
     const text = formatDeepResearchAssistantText({
       text: 'A3B 通常指每次推理激活约 3B 参数。',
       winnerProviderId: 'deepseek-chat',
-      rankedScores: [
-        { providerId: 'deepseek-chat', avg: 1.3333 },
-        { providerId: 'mimo', avg: 2 },
-        { provider: 'glm', average: 3.5 },
-        { providerId: 'ignored', avg: 1 },
-      ],
     });
 
     expect(text).toContain('A3B 通常指每次推理激活约 3B 参数。');
-    expect(text).toContain('**深度调研**：已通过质量复核 · 推荐来源：deepseek-chat');
-    expect(text).toContain('- deepseek-chat: 1.33');
-    expect(text).toContain('- mimo: 2.00');
-    expect(text).toContain('- glm: 3.50');
-    expect(text).not.toContain('ignored');
+    expect(text).toContain('**深度调研**：完成 · 输出来源：deepseek-chat');
+    expect(text).not.toContain('推荐来源');
+    expect(text).not.toMatch(/\d+\.\d{2}/u);
   });
 
   it('normalizes raw AbortSignal wording into a user-readable timeout message', () => {

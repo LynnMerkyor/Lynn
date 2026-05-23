@@ -1,5 +1,10 @@
-// Brain v2 · Router with multi-turn server-side tool execution
-// 原则:只做兜底(universalOrder + cooldown + capability gate)+ 服务端工具回灌
+// Brain v2 · Router — BYOK-equality thin pipe
+// 原则: 只做事实层 (provider universalOrder + cooldown + capability gate + wire adapter)
+//       + 服务端工具回灌循环。不注入 system prompt,不限工具调用次数(env 可配),不检测/拒绝伪工具,
+//       不强制 synthesis,不解析模型内容做策略判断。BYOK 直连什么样,brain 就什么样。
+//
+// 2026-05-23 重构: 砍掉 ~500 行 synthesis + pseudo-tool detection + buffered content 干涉。
+
 import { universalOrder, getProvider, isInCooldown, markUnhealthy, clearUnhealthy } from './provider-registry.js';
 import { getAdapter } from './wire-adapter/index.js';
 import { isServerTool, executeServerTool, mergeWithServerTools } from './tool-exec/index.js';
@@ -30,23 +35,17 @@ function _extractLatestUserMessageText(messages) {
   }
   return '';
 }
-// Tool loop guard. Keep this high enough for research tasks, but do not coerce a
-// synthetic final answer by default; the model's own output is the source of truth.
-const MAX_ITERATIONS = Number(process.env.BRAIN_V2_MAX_ITERATIONS || 10);
-const FORCE_SYNTHESIS_ENABLED = process.env.BRAIN_V2_FORCE_SYNTHESIS === '1';
-// Default 3 means: at least two completed tool rounds, then a short stop on the third round.
-// This avoids re-synthesizing legitimate one-tool short answers such as weather/price snippets.
-const SHORT_STOP_SYNTHESIS_MIN_ITER = Number(process.env.BRAIN_V2_SHORT_STOP_SYNTHESIS_MIN_ITER || 3);
-const SHORT_STOP_SYNTHESIS_MAX_CHARS = Number(process.env.BRAIN_V2_SHORT_STOP_SYNTHESIS_MAX_CHARS || 200);
-const RESEARCH_SYNTHESIS_MIN_ITER = Number(process.env.BRAIN_V2_RESEARCH_SYNTHESIS_MIN_ITER || 2);
-const RESEARCH_FINAL_MIN_CHARS = Number(process.env.BRAIN_V2_RESEARCH_FINAL_MIN_CHARS || 900);
-// 0 disables the old local "time budget" synthesis guard. Desktop handles
-// transport timeouts; Brain should not inject visible fallback text.
-const SYNTHESIS_BUDGET_MS = Number(process.env.BRAIN_V2_SYNTHESIS_BUDGET_MS || 0);
-// P1#4: empty_response 不立即 cooldown 5min。短期 cooldown(30s),且需累计 ≥ 2 次
+
+// Tool loop guard. Default raised to 50 — long research / agentic chains need 20-30 turns.
+// Set BRAIN_V2_MAX_ITERATIONS=0 for unlimited (only abort on real errors).
+const MAX_ITERATIONS = Number(process.env.BRAIN_V2_MAX_ITERATIONS || 50);
+// P1#4: empty_response 不立即 cooldown。短期 cooldown,需累计 ≥ 2 次 transport-empty(零 SSE chunks)
+// 注: 此判断只看 transport 层 anyEmit,不窥探 content。一个 finish_reason=stop+空 content 不会触发。
 const EMPTY_RESPONSE_COOLDOWN_MS = Number(process.env.BRAIN_V2_EMPTY_COOLDOWN_MS || 30_000);
 const EMPTY_THRESHOLD = Number(process.env.BRAIN_V2_EMPTY_THRESHOLD || 2);
-const _emptyCounters = new Map();  // providerId → consecutive empty count
+const _emptyCounters = new Map();
+// Local provider fast probe (cold-start race avoidance). Opt-out via env.
+const LOCAL_HEALTH_PROBE_ENABLED = process.env.BRAIN_V2_LOCAL_HEALTH_PROBE !== '0';
 
 function _bumpEmpty(providerId) {
   const n = (_emptyCounters.get(providerId) || 0) + 1;
@@ -66,10 +65,6 @@ async function runRound({
   log,
   extraBody,
   reasoningEffort,
-  bufferContent = false,
-  requireContentOrTool = false,
-  rejectPseudoToolMarkup = false,
-  allowToolCallsAsValid = true,
 }) {
   const errors = [];
   for (const providerId of universalOrder) {
@@ -81,8 +76,7 @@ async function runRound({
     }
     if (capabilityRequired?.vision && !provider.capability.vision) continue;
     if (capabilityRequired?.audio && !provider.capability.audio) continue;
-    // #7: tool-call quality gate — when caller attaches tools and provider can't reliably emit them, skip.
-    // Prevents silent quality regression on local 9B Q4_K_M (which has tools:false in registry).
+    // tool-call quality gate — provider 自报 capability.tools=false → tool-attached 请求跳过
     if (Array.isArray(tools) && tools.length > 0 && provider.capability && provider.capability.tools === false) {
       log && log('info', `provider ${providerId} skipped: tool-call request but capability.tools=false`);
       continue;
@@ -91,9 +85,8 @@ async function runRound({
       log && log('info', `provider ${providerId} in cooldown, skip`);
       continue;
     }
-    // D3: fast health probe for local providers to avoid ~1s ECONNREFUSED + 15s cooldown on cold-start race.
-    // Only probes providers whose endpoint is loopback (127.0.0.1 / localhost) — avoid extra latency for cloud APIs.
-    if (provider.endpoint && /^https?:\/\/(127\.0\.0\.1|localhost)/i.test(provider.endpoint)) {
+    // 本地 provider 快速探针 (避免 cold-start race + 1s ECONNREFUSED)。BRAIN_V2_LOCAL_HEALTH_PROBE=0 关
+    if (LOCAL_HEALTH_PROBE_ENABLED && provider.endpoint && /^https?:\/\/(127\.0\.0\.1|localhost)/i.test(provider.endpoint)) {
       try {
         const probeCtrl = new AbortController();
         const probeTimer = setTimeout(() => probeCtrl.abort(), 800);
@@ -101,8 +94,8 @@ async function runRound({
           .catch(() => null);
         clearTimeout(probeTimer);
         if (!probeRes || !probeRes.ok) {
-          log && log('info', `provider ${providerId} fast-probe failed (cold-start race), skip+cooldown`);
-          markUnhealthy(providerId, 'health-probe-failed', 5000); // short 5s cooldown — likely warming up
+          log && log('info', `provider ${providerId} fast-probe failed, skip+cooldown`);
+          markUnhealthy(providerId, 'health-probe-failed', 5000);
           continue;
         }
       } catch {
@@ -111,23 +104,18 @@ async function runRound({
         continue;
       }
     }
+
     const adapter = getAdapter(provider.wire);
     let anyEmit = false;
     let finishReason = null;
     let contentAccum = '';
     const toolCallsAcc = [];
-    const bufferedContentChunks = [];
-    let bufferedFinishChunk = null;
     try {
       log && log('info', `→ provider ${providerId}`);
       for await (const chunk of adapter({ provider, messages, tools, signal, log, extraBody, reasoningEffort })) {
         anyEmit = true;
         if (chunk.type === 'content') {
           contentAccum += chunk.delta;
-          if (bufferContent) {
-            bufferedContentChunks.push(chunk);
-            continue;
-          }
           await onChunk(chunk, { providerId });
           continue;
         }
@@ -144,51 +132,37 @@ async function runRound({
         }
         if (chunk.type === 'finish') {
           finishReason = chunk.reason;
-          if (bufferContent || requireContentOrTool) {
-            bufferedFinishChunk = chunk;
-            continue;
-          }
           await onChunk(chunk, { providerId });
           continue;
         }
         await onChunk(chunk, { providerId });
       }
+      // anyEmit=false 表示 transport 层零 SSE chunks (真正 wire 失败)。
+      // 注意: 这不是检测 "content 为空" — 一个 finish_reason=stop+空 content 仍算正常,因为 chunks≥1。
       if (!anyEmit) {
-        // P1#4: 累积 empty,达阈值才 cooldown(短)
         const n = _bumpEmpty(providerId);
-        log && log('warn', `provider ${providerId} empty (${n}/${EMPTY_THRESHOLD})`);
+        log && log('warn', `provider ${providerId} transport-empty (${n}/${EMPTY_THRESHOLD})`);
         if (n >= EMPTY_THRESHOLD) {
           log && log('warn', `provider ${providerId} reached empty threshold, ${EMPTY_RESPONSE_COOLDOWN_MS}ms cooldown`);
           markUnhealthy(providerId, 'empty_response_threshold', EMPTY_RESPONSE_COOLDOWN_MS);
         }
         continue;
       }
-      const completedToolCalls = toolCallsAcc.filter(Boolean);
-      const hasValidContent = hasUsableVisibleContent(contentAccum, { rejectPseudoToolMarkup });
-      const hasValidToolCall = allowToolCallsAsValid && completedToolCalls.length > 0;
-      if (requireContentOrTool && !hasValidContent && !hasValidToolCall) {
-        const why = hasPseudoToolMarkup(contentAccum) ? 'pseudo_tool_markup' : 'no_visible_content';
-        log && log('warn', `provider ${providerId} emitted ${why}, fallback`);
-        continue;
-      }
-      if (requireContentOrTool && !bufferContent && bufferedFinishChunk) {
-        await onChunk(bufferedFinishChunk, { providerId });
-      }
       _resetEmpty(providerId);
-      clearUnhealthy(providerId);
       return {
         ok: true,
         providerId,
         finishReason,
+        toolCalls: toolCallsAcc.filter(Boolean),
         contentAccum,
-        toolCalls: completedToolCalls,
-        bufferedContentChunks,
-        bufferedFinishChunk,
       };
     } catch (e) {
       errors.push({ providerId, error: e.message });
-      log && log('warn', `provider ${providerId} failed: ${e.message}, fallback`);
-      markUnhealthy(providerId, e.message);
+      const logMsg = e.suppressBody
+        ? `provider ${providerId} failed: HTTP-auth (suppressed), fallback`
+        : `provider ${providerId} failed: ${e.message}, fallback`;
+      log && log('warn', logMsg);
+      markUnhealthy(providerId, e.message, e.cooldownMs); // variable cooldown for auth fail
       continue;
     }
   }
@@ -197,410 +171,60 @@ async function runRound({
   throw err;
 }
 
-function normalizedVisibleLength(text) {
-  return String(text || '')
-    .replace(/<lynn_tool_progress\b[^>]*><\/lynn_tool_progress>/gi, '')
-    .replace(/\s+/g, '')
-    .trim()
-    .length;
-}
-
-function hasPseudoToolMarkup(text) {
-  const s = String(text || '');
-  return /<\s*\/?\s*tool_call\b/i.test(s)
-    || /<\s*function\s*=/i.test(s)
-    || /<\s*parameter\s*=/i.test(s)
-    || /<\|tool_code_(?:begin|end)\|>/i.test(s)
-    || /<\s*\/?\s*(?:web_search|bash|find_files|create_docx)\b/i.test(s);
-}
-
-function hasUsableVisibleContent(text, { rejectPseudoToolMarkup = false } = {}) {
-  if (normalizedVisibleLength(text) === 0) return false;
-  if (rejectPseudoToolMarkup && hasPseudoToolMarkup(text)) return false;
-  return true;
-}
-
-function isOverSynthesisBudget(startedAt, budgetMs = SYNTHESIS_BUDGET_MS) {
-  if (!Number.isFinite(budgetMs) || budgetMs <= 0) return false;
-  return Number.isFinite(startedAt) && Date.now() - startedAt >= budgetMs;
-}
-
-function shouldForceSynthesisAfterShortStop(iter, result) {
-  if (!FORCE_SYNTHESIS_ENABLED) return false;
-  if (iter < SHORT_STOP_SYNTHESIS_MIN_ITER) return false;
-  if (result?.finishReason !== 'stop') return false;
-  if (Array.isArray(result?.toolCalls) && result.toolCalls.length > 0) return false;
-  return normalizedVisibleLength(result?.contentAccum) > 0
-    && normalizedVisibleLength(result?.contentAccum) < SHORT_STOP_SYNTHESIS_MAX_CHARS;
-}
-
-function stringifyMessageContent(content) {
-  if (content == null) return '';
-  if (typeof content === 'string') return content;
-  try { return JSON.stringify(content); } catch { return String(content); }
-}
-
-function compactText(text, maxChars = 12_000) {
-  const s = stringifyMessageContent(text);
-  if (s.length <= maxChars) return s;
-  return s.slice(0, maxChars) + '\n...[truncated]';
-}
-
-function extractUserText(messages) {
-  return (Array.isArray(messages) ? messages : [])
-    .filter(m => m?.role === 'user')
-    .map(m => stringifyMessageContent(m.content))
-    .filter(Boolean)
-    .join('\n\n')
-    .trim();
-}
-
-function isResearchLikeRequest(messages) {
-  const text = extractUserText(messages);
-  if (!text) return false;
-  return /(?:深度|深入|完整|系统性|多维度|调研|研究|研报|报告|分析报告|行业分析|竞品分析|受众|用户画像|传播策略|内容生态|市场规模|来源包括|但不限于|学术界|咨询领域|小红书|抖音|快手|视频号|公众号|形成\s*(?:docx|文档)|docx\s*格式)/i.test(text);
-}
-
-function isDocLikeRequest(messages) {
-  return /(?:docx|word|文档|报告附件|形成\s*报告|生成\s*报告)/i.test(extractUserText(messages));
-}
-
-function extractResearchQuestions(messages) {
-  const text = extractUserText(messages);
-  if (!text) return [];
-  const lines = text
-    .split(/\n+/)
-    .map(s => s.trim())
-    .filter(Boolean);
-  const numbered = [];
-  for (const line of lines) {
-    const m = line.match(/^(?:[-*]\s*)?(?:\d+[.、)]|[一二三四五六七八九十]+[、.])\s*(.+)$/);
-    if (m?.[1]) numbered.push(m[1].trim());
-  }
-  if (numbered.length) return numbered.slice(0, 10);
-  return text
-    .split(/[；;。！？!?]\s*/)
-    .map(s => s.trim())
-    .filter(s => s.length >= 12)
-    .slice(0, 8);
-}
-
-function parseToolCallArgs(args) {
-  try {
-    const obj = typeof args === 'string' ? JSON.parse(args || '{}') : (args || {});
-    if (!obj || typeof obj !== 'object') return '';
-    return obj.query || obj.city || obj.location || obj.url || obj.code || obj.name || JSON.stringify(obj).slice(0, 180);
-  } catch {
-    return String(args || '').slice(0, 180);
-  }
-}
-
-function buildEvidenceLedger(messages) {
-  const callsById = new Map();
-  const entries = [];
-  let fallbackIndex = 0;
-  for (const m of (Array.isArray(messages) ? messages : [])) {
-    if (m?.role === 'assistant' && Array.isArray(m.tool_calls)) {
-      for (const tc of m.tool_calls) {
-        if (!tc?.id) continue;
-        callsById.set(tc.id, {
-          name: tc.function?.name || 'tool',
-          query: parseToolCallArgs(tc.function?.arguments),
-        });
-      }
-      continue;
-    }
-    if (m?.role !== 'tool') continue;
-    fallbackIndex += 1;
-    const call = callsById.get(m.tool_call_id) || { name: 'tool', query: '' };
-    const content = stringifyMessageContent(m.content).trim();
-    const urls = Array.from(new Set(content.match(/https?:\/\/[^\s)\]}>"]+/g) || [])).slice(0, 4);
-    const dates = Array.from(new Set(content.match(/\b20\d{2}[-/.年]\d{1,2}(?:[-/.月]\d{1,2}日?)?\b/g) || [])).slice(0, 3);
-    entries.push({
-      index: entries.length + 1,
-      tool: call.name,
-      query: call.query || `tool-result-${fallbackIndex}`,
-      chars: content.length,
-      urls,
-      dates,
-      excerpt: compactText(content.replace(/\s+/g, ' '), 900),
-    });
-  }
-  return entries;
-}
-
-function formatResearchContextForSynthesis(originalMessages, workingMessages) {
-  if (!isResearchLikeRequest(originalMessages)) return '';
-  const questions = extractResearchQuestions(originalMessages);
-  const ledger = buildEvidenceLedger(workingMessages);
-  const lines = [];
-  lines.push('【研究拆题清单】');
-  if (questions.length) {
-    questions.forEach((q, i) => lines.push(`${i + 1}. ${q}`));
-  } else {
-    lines.push('1. 按用户原始问题拆成可回答的研究维度。');
-  }
-  lines.push('');
-  lines.push('【证据账本】');
-  if (ledger.length) {
-    for (const e of ledger.slice(0, 12)) {
-      const meta = [
-        `工具:${e.tool}`,
-        e.query ? `查询:${e.query}` : '',
-        `长度:${e.chars}`,
-        e.dates.length ? `日期:${e.dates.join(',')}` : '',
-        e.urls.length ? `来源:${e.urls.join(' ; ')}` : '',
-      ].filter(Boolean).join(' | ');
-      lines.push(`${e.index}. ${meta}`);
-      lines.push(`   摘要:${e.excerpt}`);
-    }
-  } else {
-    lines.push('暂无可用工具结果。若证据不足,最终答案必须明确标注缺口。');
-  }
-  lines.push('');
-  lines.push('【合成门禁】');
-  lines.push('- 必须逐项覆盖研究拆题清单;不能只说“继续深挖/还要搜索/摘要较粗”。');
-  lines.push('- 必须把证据账本中的来源、时间或缺口写清楚;不能把未核验内容当事实。');
-  lines.push('- 若用户要求 docx/报告,先输出完整可复制正文;没有真实附件时不要假装附件已生成。');
-  return lines.join('\n');
-}
-
-function isResearchProgressNarration(text) {
-  const s = stringifyMessageContent(text).trim();
-  if (!s) return false;
-  return /(?:继续(?:深挖|调研|搜索|抓取|整理)|初步搜索|拿到了方向|摘要(?:较|太)粗|搜索结果(?:较|太)简略|还需要(?:补充|进一步)|下一轮|第\s*\d+\s*轮工具调用完成|正在(?:调研|搜索|整理|生成)|稍后(?:继续|再)|我来(?:继续|进一步)|需要抓取更详细)/i.test(s);
-}
-
-function shouldForceResearchSynthesisAfterStop(originalMessages, iter, result) {
-  if (!FORCE_SYNTHESIS_ENABLED) return false;
-  if (!isResearchLikeRequest(originalMessages)) return false;
-  if (iter < RESEARCH_SYNTHESIS_MIN_ITER) return false;
-  if (result?.finishReason !== 'stop') return false;
-  if (Array.isArray(result?.toolCalls) && result.toolCalls.length > 0) return false;
-  const len = normalizedVisibleLength(result?.contentAccum);
-  if (len <= 0) return true;
-  if (isResearchProgressNarration(result?.contentAccum)) return true;
-  if (isDocLikeRequest(originalMessages) && len < RESEARCH_FINAL_MIN_CHARS) return true;
-  return false;
-}
-
-function flattenMessagesForSynthesis(messages) {
-  const list = [];
-  let toolIndex = 0;
-  for (const m of (Array.isArray(messages) ? messages : [])) {
-    if (!m || typeof m !== 'object') continue;
-    if (m.role === 'system') {
-      const content = stringifyMessageContent(m.content).trim();
-      if (content) list.push({ role: 'system', content });
-      continue;
-    }
-    if (m.role === 'user') {
-      const content = stringifyMessageContent(m.content).trim();
-      if (content) list.push({ role: 'user', content });
-      continue;
-    }
-    if (m.role === 'tool') {
-      toolIndex += 1;
-      const content = compactText(m.content).trim();
-      if (content) list.push({ role: "user", content: "【工具结果 " + toolIndex + "】\n" + content });
-      continue;
-    }
-    if (m.role === 'assistant') {
-      const content = stringifyMessageContent(m.content).trim();
-      if (content && hasUsableVisibleContent(content, { rejectPseudoToolMarkup: true })) {
-        list.push({ role: 'assistant', content: compactText(content) });
-      }
-      // Do not carry tool_calls across providers in synthesis fallback. Some providers reject
-      // assistant tool-call history generated by a different model/wire protocol.
-    }
-  }
-  return list;
-}
-
-function withSynthesisSystemMessage(messages, instruction) {
-  const list = Array.isArray(messages) ? [...messages] : [];
-  const systemIndex = list.findIndex(m => m?.role === 'system');
-  if (systemIndex < 0) {
-    return [{ role: 'system', content: instruction }, ...list];
-  }
-  const current = list[systemIndex];
-  const previous = current.content == null
-    ? ''
-    : (typeof current.content === 'string' ? current.content : JSON.stringify(current.content));
-  list[systemIndex] = {
-    ...current,
-    content: [previous, instruction].filter(Boolean).join('\n\n'),
-  };
-  return list;
-}
-
-async function runSynthesisRound({
-  originalMessages,
-  workingMessages,
-  capabilityRequired,
-  signal,
-  onChunk,
-  log,
-  extraBody,
-  reasoningEffort,
-  lastProviderId,
-  iter,
-  reason,
-}) {
-  const hitMax = reason === 'max_iterations';
-  const hitTimeBudget = reason === 'time_budget';
-  log && log('warn', hitMax
-    ? `hit MAX_ITERATIONS=${MAX_ITERATIONS}, forcing synthesis round`
-    : (hitTimeBudget
-      ? `iter ${iter}: time budget reached, forcing synthesis round`
-      : `iter ${iter}: short stop content after tool rounds, forcing synthesis round`));
-  const baseInstruction = hitMax
-    ? '本轮资料收集阶段已经结束。请基于以上对话历史中的工具结果直接给用户最终答案,不要再规划或请求更多检索。'
-    : (hitTimeBudget
-      ? '本轮资料收集阶段已经接近本地会话时间上限。请基于以上对话历史中的工具结果直接给用户最终答案,不要再规划或请求更多检索。'
-      : '已经完成多轮资料收集。请基于以上对话历史中的工具结果直接给用户最终答案,不要再规划或请求更多检索。');
-  const synthesisInstruction = baseInstruction + '\n只输出用户可见的最终内容;不要输出任何工具标签、XML、JSON 工具调用或文档创建指令。若用户要求 docx/html 等交付格式但当前没有实际附件,请直接输出可复制到文档中的完整正文,不要提及工具被禁用或无法生成附件。';
-  const researchContext = formatResearchContextForSynthesis(originalMessages, workingMessages);
-  const finalInstruction = researchContext
-    ? synthesisInstruction + '\n\n' + researchContext
-    : synthesisInstruction;
-  const synthesisMessages = withSynthesisSystemMessage(flattenMessagesForSynthesis(workingMessages), finalInstruction);
-  try {
-    let suppressedToolCallChunks = 0;
-    const synthesisOnChunk = async (chunk, meta) => {
-      if (chunk?.type === 'tool_call_delta') {
-        suppressedToolCallChunks += 1;
-        log && log('warn', `synthesis round suppressed hallucinated tool_call_delta (${suppressedToolCallChunks})`);
-        return;
-      }
-      if (chunk?.type === 'finish' && chunk.reason === 'tool_calls') {
-        await onChunk({ ...chunk, reason: 'stop' }, meta);
-        return;
-      }
-      await onChunk(chunk, meta);
-    };
-    const synthesisResult = await runRound({
-      messages: synthesisMessages,
-      tools: null,
-      capabilityRequired,
-      signal,
-      onChunk: synthesisOnChunk,
-      log,
-      extraBody,
-      reasoningEffort,
-      bufferContent: true,
-      requireContentOrTool: true,
-      rejectPseudoToolMarkup: true,
-      allowToolCallsAsValid: false,
-    });
-    for (const bufferedChunk of (synthesisResult.bufferedContentChunks || [])) {
-      await onChunk(bufferedChunk, { providerId: synthesisResult.providerId || lastProviderId });
-    }
-    if (synthesisResult.bufferedFinishChunk) {
-      const finishChunk = synthesisResult.bufferedFinishChunk.reason === 'tool_calls'
-        ? { ...synthesisResult.bufferedFinishChunk, reason: 'stop' }
-        : synthesisResult.bufferedFinishChunk;
-      await onChunk(finishChunk, { providerId: synthesisResult.providerId || lastProviderId });
-    }
-    return {
-      ok: true,
-      providerId: synthesisResult.providerId || lastProviderId,
-      iterations: iter + 1,
-      hitMaxIterations: hitMax || undefined,
-      synthesisRound: true,
-      synthesisReason: reason,
-    };
-  } catch (e) {
-    log && log('error', `synthesis round failed: ${e.message}`);
-    return {
-      ok: false,
-      error: e,
-      providerId: lastProviderId,
-      iterations: iter,
-      hitMaxIterations: hitMax || undefined,
-      synthesisReason: reason,
-    };
-  }
-}
-
 export async function run({ messages, tools, capabilityRequired, signal, onChunk, log, extraBody, reasoningEffort }) {
+  // Capability pre-flight — vision/audio capability gate, friendly error if no provider supports
+  if (capabilityRequired && (capabilityRequired.vision || capabilityRequired.audio)) {
+    const anySupports = universalOrder.some((id) => {
+      const p = getProvider(id);
+      if (!p) return false;
+      if (capabilityRequired.vision && !p.capability.vision) return false;
+      if (capabilityRequired.audio && !p.capability.audio) return false;
+      return true;
+    });
+    if (!anySupports) {
+      const missing = [capabilityRequired.vision && 'vision', capabilityRequired.audio && 'audio'].filter(Boolean).join('+');
+      const err = new Error(`CAPABILITY_NOT_SUPPORTED: no provider supports ${missing} in current build`);
+      err.code = 'CAPABILITY_NOT_SUPPORTED';
+      throw err;
+    }
+  }
+
   const mergedTools = mergeWithServerTools(tools);
   let workingMessages = [...(messages || [])];
   const originalMessages = [...(messages || [])];
   let lastProviderId = null;
   let iter = 0;
-  const startedAt = Date.now();
+  const maxIter = MAX_ITERATIONS > 0 ? MAX_ITERATIONS : Infinity;
 
-  while (iter < MAX_ITERATIONS) {
+  while (iter < maxIter) {
     iter++;
     const result = await runRound({
-      messages: workingMessages, tools: mergedTools, capabilityRequired, signal, onChunk, log, extraBody, reasoningEffort, bufferContent: true,
+      messages: workingMessages, tools: mergedTools, capabilityRequired,
+      signal, onChunk, log, extraBody, reasoningEffort,
     });
     lastProviderId = result.providerId;
 
+    // Model 自然结束 (stop / length / content_filter / function_call 等非 tool_calls) → 透传完成
     if (result.finishReason !== 'tool_calls' || result.toolCalls.length === 0) {
-      if (shouldForceSynthesisAfterShortStop(iter, result) || shouldForceResearchSynthesisAfterStop(originalMessages, iter, result)) {
-        log && log('warn', `iter ${iter}: dropped ${result.bufferedContentChunks?.length || 0} buffered short-progress content chunks before synthesis`);
-        return runSynthesisRound({
-          originalMessages,
-          workingMessages,
-          capabilityRequired,
-          signal,
-          onChunk,
-          log,
-          extraBody,
-          reasoningEffort,
-          lastProviderId,
-          iter,
-          reason: 'short_stop',
-        });
-      }
-      for (const bufferedChunk of (result.bufferedContentChunks || [])) {
-        await onChunk(bufferedChunk, { providerId: lastProviderId });
-      }
-      if (result.bufferedFinishChunk) {
-        await onChunk(result.bufferedFinishChunk, { providerId: lastProviderId });
-      }
       return { ok: true, providerId: lastProviderId, iterations: iter };
     }
 
-    const serverCalls = result.toolCalls.filter(tc => isServerTool(tc.function?.name));
-    const clientCalls = result.toolCalls.filter(tc => !isServerTool(tc.function?.name));
+    const serverCalls = result.toolCalls.filter((tc) => isServerTool(tc.function?.name));
+    const clientCalls = result.toolCalls.filter((tc) => !isServerTool(tc.function?.name));
 
-    if (serverCalls.length > 0 && isOverSynthesisBudget(startedAt)) {
-      log && log('warn', `iter ${iter}: time budget reached before executing ${serverCalls.length} more server tools, forcing synthesis`);
-      return runSynthesisRound({
-        originalMessages,
-        workingMessages,
-        capabilityRequired,
-        signal,
-        onChunk,
-        log,
-        extraBody,
-        reasoningEffort,
-        lastProviderId,
-        iter,
-        reason: 'time_budget',
-      });
-    }
-
+    // 客户端工具 (client 自己执行) → 透传 tool_calls 到客户端,loop 退出
     if (clientCalls.length > 0) {
-      if (result.bufferedFinishChunk) {
-        await onChunk(result.bufferedFinishChunk, { providerId: lastProviderId });
-      }
       log && log('info', `iter ${iter}: ${clientCalls.length} client-side tool_calls forwarded, stop loop`);
       return {
         ok: true, providerId: lastProviderId, iterations: iter,
         forwardedToClient: true, clientToolCalls: clientCalls.length,
+        toolCalls: result.toolCalls,
+        bufferedContentChunks: [],
+        bufferedFinishChunk: { type: 'finish', reason: 'tool_calls' },
       };
     }
 
-    if (result.bufferedContentChunks?.length) {
-      log && log('warn', `iter ${iter}: suppressed ${result.bufferedContentChunks.length} buffered content chunks from tool-call round`);
-    }
-    if (result.bufferedFinishChunk) {
-      await onChunk(result.bufferedFinishChunk, { providerId: lastProviderId });
-    }
+    // 服务端工具 → brain 代执行,结果回灌 messages,下一轮再问 model
     log && log('info', `iter ${iter}: ${serverCalls.length} server-side tool_calls, executing...`);
     workingMessages.push({
       role: 'assistant',
@@ -609,19 +233,20 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     });
     for (const tc of serverCalls) {
       const t0 = Date.now();
+      // 工具进度通过自定义 chunk type 表达,不污染 content stream (F5 fix)
+      // Lynn UI 消费 type=tool_progress;非 Lynn 客户端 ignored。
       await onChunk(
-        { type: 'content', delta: `<lynn_tool_progress event="start" name="${tc.function.name}"></lynn_tool_progress>` },
+        { type: 'tool_progress', event: 'start', name: tc.function.name },
         { providerId: lastProviderId }
       );
       const toolResult = await executeServerTool(tc.function.name, tc.function.arguments || '{}', { log });
       const ms = Date.now() - t0;
-      const ok = toolResult && !String(toolResult).startsWith('{"error"');
-      // [verifier hook v1] log-only, fail-open, fire-and-forget (does NOT block user SSE)
+      const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
+      // [verifier hook v1] fire-and-forget telemetry (read-only,不影响 SSE stream)
       if (process.env.VERIFIER_ENABLED === '1' && ok) {
         const _toolResultSnapshot = toolResult;
         const _toolNameSnapshot = tc.function.name;
         const _userPromptText = _extractLatestUserMessageText(originalMessages);
-        // fire-and-forget — verifier observability runs in background
         (async () => {
           try {
             const { verifyToolResult } = await import('./verifier-middleware.mjs');
@@ -635,19 +260,15 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
               const _scoresStr = _verifyMeta.scores
                 ? `C1=${_verifyMeta.scores.C1} C2=${_verifyMeta.scores.C2} C3=${_verifyMeta.scores.C3}`
                 : (_verifyMeta.failOpen ? `fail-open(${_verifyMeta.error || 'parse'})` : 'no-scores');
-              log && log(
-                'info',
-                `[verifier-async] ${_toolNameSnapshot}: pass=${_verifyMeta.pass} avg=${_verifyMeta.avg?.toFixed(2) || 'n/a'} latency=${_verifyMeta.latencyMs}ms ${_scoresStr}`
-              );
+              log && log('info', `[verifier-async] ${_toolNameSnapshot}: pass=${_verifyMeta.pass} avg=${_verifyMeta.avg?.toFixed(2) || 'n/a'} latency=${_verifyMeta.latencyMs}ms ${_scoresStr}`);
             }
           } catch (e) {
             log && log('warn', `[verifier-async] ${_toolNameSnapshot} hook error: ${e.message}`);
           }
         })();
       }
-      // [/verifier hook v1]
       await onChunk(
-        { type: 'content', delta: `<lynn_tool_progress event="end" name="${tc.function.name}" ms="${ms}" ok="${ok}"></lynn_tool_progress>` },
+        { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok },
         { providerId: lastProviderId }
       );
       workingMessages.push({
@@ -656,53 +277,21 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
       });
     }
-    // v0.77.7: emit progress heartbeat between iters (用户感受到进度,防 7min 空窗心慌)
-    // 用 reasoning_content 流出 (Lynn UI thinking block 显示, 不污染最终 markdown 答案)
-    if (isOverSynthesisBudget(startedAt)) {
-      log && log('warn', `iter ${iter}: time budget reached after tool execution, forcing synthesis`);
-      return runSynthesisRound({
-        originalMessages,
-        workingMessages,
-        capabilityRequired,
-        signal,
-        onChunk,
-        log,
-        extraBody,
-        reasoningEffort,
-        lastProviderId,
-        iter,
-        reason: 'time_budget',
-      });
-    }
-
-    // Do not emit synthetic Brain progress text. Tool progress is already
-    // represented by lynn_tool_progress markers and the model's own stream.
   }
-  if (FORCE_SYNTHESIS_ENABLED) {
-    return runSynthesisRound({
-      originalMessages,
-      workingMessages,
-      capabilityRequired,
-      signal,
-      onChunk,
-      log,
-      extraBody,
-      reasoningEffort,
-      lastProviderId,
-      iter,
-      reason: 'max_iterations',
-    });
-  }
-  log && log('warn', `hit MAX_ITERATIONS=${MAX_ITERATIONS}, stop without synthetic fallback`);
+  // 达 MAX_ITERATIONS 上限 → emit 显式 error chunk (不再撒谎成 finish:stop)
+  log && log('warn', `hit MAX_ITERATIONS=${MAX_ITERATIONS}, emit error chunk`);
   if (lastProviderId) {
-    await onChunk({ type: 'finish', reason: 'stop' }, { providerId: lastProviderId });
+    await onChunk(
+      { type: 'error', error: 'max_iterations_reached', limit: MAX_ITERATIONS, iterations: iter },
+      { providerId: lastProviderId }
+    );
   }
   return {
-    ok: true,
+    ok: false,
     providerId: lastProviderId,
     iterations: iter,
     hitMaxIterations: true,
-    synthesisSkipped: true,
+    error: 'max_iterations_reached',
   };
 }
 
@@ -722,17 +311,4 @@ export function detectCapability(messages) {
 
 export const __testing__ = {
   _emptyCounters,
-  normalizedVisibleLength,
-  hasPseudoToolMarkup,
-  hasUsableVisibleContent,
-  flattenMessagesForSynthesis,
-  shouldForceSynthesisAfterShortStop,
-  withSynthesisSystemMessage,
-  isOverSynthesisBudget,
-  isResearchLikeRequest,
-  extractResearchQuestions,
-  buildEvidenceLedger,
-  formatResearchContextForSynthesis,
-  isResearchProgressNarration,
-  shouldForceResearchSynthesisAfterStop,
 };

@@ -1,7 +1,7 @@
 /**
  * ProviderStatusBadge.tsx — Compact model-route chip for the welcome screen.
  *
- * Local 4B state is sourced from the server-side /api/local-qwen35-9b/*
+ * Local 9B MTP state is sourced from the server-side /api/local-qwen35-9b/*
  * route so this chip, Settings, onboarding, and chat routing share the same
  * provider id and setup lifecycle.
  */
@@ -13,8 +13,8 @@ import { hanaFetch } from '../hooks/use-hana-fetch';
 import { loadModels } from '../utils/ui-helpers';
 import { BRAIN_PROVIDER_ID, BRAIN_DEFAULT_MODEL_ID } from '../../../../shared/brain-provider.js';
 
-const LOCAL_PROVIDER_ID = 'local-qwen3-4b-thinking-2507-q4km-imatrix';
-const LOCAL_MODEL_ID = 'qwen3-4b-thinking-2507-q4km-imatrix';
+const LOCAL_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
+const LOCAL_MODEL_ID = 'qwen35-9b-q4km-imatrix';
 
 type LocalStatus = {
   ok?: boolean;
@@ -45,7 +45,7 @@ type LocalStatus = {
 function providerDisplayLabel(provider: string | null, isZh: boolean): string {
   if (!provider) return isZh ? '未配置' : 'No model';
   if (provider === BRAIN_PROVIDER_ID) return isZh ? '默认模型' : 'Default model';
-  if (provider === LOCAL_PROVIDER_ID) return isZh ? '本地 4B' : 'Local 4B';
+  if (provider === LOCAL_PROVIDER_ID) return isZh ? '本地 9B MTP' : 'Local 9B MTP';
   return provider;
 }
 
@@ -222,10 +222,10 @@ export function ProviderStatusBadge() {
             <span className="provider-status-menu-dot tone-local" aria-hidden />
             <span>
               {localReady
-                ? (isZh ? '本地 4B' : 'Local 4B')
+                ? (isZh ? '本地 9B MTP' : 'Local 9B MTP')
                 : localBusy
-                  ? (isZh ? '本地 4B 准备中' : 'Local 4B preparing')
-                  : (isZh ? '准备并切换本地 4B' : 'Prepare and switch to Local 4B')}
+                  ? (isZh ? '本地 9B MTP 准备中' : 'Local 9B MTP preparing')
+                  : (isZh ? '准备并切换本地 9B MTP' : 'Prepare and switch to Local 9B MTP')}
             </span>
           </button>
           {!localReady && (

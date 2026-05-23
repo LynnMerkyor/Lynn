@@ -9,8 +9,8 @@ import styles from './StatusBar.module.css';
 
 declare function t(key: string, vars?: Record<string, string | number>): string;
 
-const LOCAL_QWEN_PROVIDER_ID = 'local-qwen3-4b-thinking-2507-q4km-imatrix';
-const LOCAL_QWEN_MODEL_ID = 'qwen3-4b-thinking-2507-q4km-imatrix';
+const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
+const LOCAL_QWEN_MODEL_ID = 'qwen35-9b-q4km-imatrix';
 
 type LocalQwenStatus = {
   runtime?: {
@@ -47,11 +47,11 @@ function formatLocalQwenTag(status: LocalQwenStatus | null): string {
     const predictedTokens = Number(status?.runtime?.metrics?.predicted_tokens_total || 0);
     const totalTokens = Math.round(promptTokens + predictedTokens);
     return totalTokens > 0
-      ? `本地 Qwen3-4B 正在运行 · ${totalTokens.toLocaleString()} tokens`
-      : '本地 Qwen3-4B 正在运行';
+      ? `本地 Qwen3.5-9B MTP 正在运行 · ${totalTokens.toLocaleString()} tokens`
+      : '本地 Qwen3.5-9B MTP 正在运行';
   }
-  if (endpointLoading) return '本地 Qwen3-4B 正在加载';
-  return '本地 Qwen3-4B 已选择 · 模型未启动';
+  if (endpointLoading) return '本地 Qwen3.5-9B MTP 正在加载';
+  return '本地 Qwen3.5-9B MTP 已选择 · 模型未启动';
 }
 
 function formatModelTag(

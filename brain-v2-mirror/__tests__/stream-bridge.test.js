@@ -20,6 +20,10 @@ function parseSSEWrites(writes) {
     .map(s => JSON.parse(s));
 }
 
+function chatChunks(writes) {
+  return parseSSEWrites(writes).filter((ev) => ev.object === 'chat.completion.chunk');
+}
+
 describe('stream-bridge SSE emitter', () => {
   it('emitRole writes role=assistant first chunk', () => {
     const res = makeMockRes();
@@ -33,9 +37,13 @@ describe('stream-bridge SSE emitter', () => {
     const res = makeMockRes();
     const e = makeSSEEmitter(res, { id: 'x' });
     e.emitChunk({ type: 'content', delta: 'hi' }, { providerId: 'p1' });
-    const ev = parseSSEWrites(res.writes)[0];
+    const ev = chatChunks(res.writes)[0];
     expect(ev.choices[0].delta.content).toBe('hi');
-    expect(ev.model).toBe('p1');
+    expect(ev.model).toBe('lynn-v2');
+    expect(parseSSEWrites(res.writes)[0]).toMatchObject({
+      object: 'lynn.provider',
+      meta: { active_provider: 'p1' },
+    });
   });
 
   it('forwards reasoning as reasoning_content delta', () => {
@@ -95,7 +103,8 @@ describe('stream-bridge SSE emitter', () => {
     e.emitChunk({ type: 'content', delta: 'a' }, { providerId: 'mimo' });
     e.emitChunk({ type: 'content', delta: 'b' }, { providerId: 'spark' });
     const events = parseSSEWrites(res.writes);
-    expect(events[0].model).toBe('mimo');
-    expect(events[1].model).toBe('spark');
+    const providerEvents = events.filter((ev) => ev.object === 'lynn.provider');
+    expect(providerEvents.map((ev) => ev.meta.active_provider)).toEqual(['mimo', 'spark']);
+    expect(chatChunks(res.writes).map((ev) => ev.model)).toEqual(['lynn-v2', 'lynn-v2']);
   });
 });

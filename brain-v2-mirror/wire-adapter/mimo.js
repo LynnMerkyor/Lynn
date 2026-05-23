@@ -1,16 +1,18 @@
 // Brain v2 · MiMo wire adapter
 // enable_search:true 内置 web search(memory feedback_mimo_token_plan.md)
-// v0.77.7:
-//   - extraBody 透传(OpenAI 标准),客户端可传 thinking:{type:"disabled"} 关思考
-//   - reasoning_effort: low/minimal/off → 自动翻译成 MiMo 的 thinking:{type:"disabled"}
-//     (MiMo 不识别 OpenAI 标准 reasoning_effort 字段,Lynn ThinkingLevelButton 'off' 走这条路径)
+// F10 fix (2026-05-23): reasoning_effort 全档位都翻译到 MiMo thinking schema,不再 silently drop
+//   - low/minimal/off/none → { type: 'disabled' }
+//   - medium/high/xhigh    → { type: 'enabled' }  (MiMo server default budget)
+//   - undefined/其他       → 不动 body.thinking,由 extraBody 或 server default 决定
+//   BYOK-equality:caller 显式 thinking via extraBody 总是 win(在 spread 之后我们才 set)
 import { parseOpenAISSE } from './_sse-parser.js';
 
 function reasoningEffortToMimoThinking(effort) {
-  if (!effort) return undefined;
-  const v = String(effort).toLowerCase();
+  // 用户拍板 2026-05-23: caller 不显式传 → 默认 'xhigh'(MiMo thinking 全开)
+  const v = String(effort || 'xhigh').toLowerCase();
   if (v === 'low' || v === 'minimal' || v === 'off' || v === 'none') return { type: 'disabled' };
-  return undefined;
+  // medium / high / xhigh / max / 任何未知值 → enabled
+  return { type: 'enabled' };
 }
 
 export async function* call({ provider, messages, tools, signal, log, extraBody, reasoningEffort }) {
@@ -24,11 +26,13 @@ export async function* call({ provider, messages, tools, signal, log, extraBody,
     // extraBody spread 末尾 = 客户端可 override
     ...(extraBody && typeof extraBody === 'object' ? extraBody : {}),
   };
-  // reasoning_effort 翻译:Lynn ThinkingLevelButton 'off' → low → MiMo thinking:{type:disabled}
-  // 注意:此翻译在 extraBody spread 后,如果客户端显式传 thinking 字段会被这里 override
-  const translatedThinking = reasoningEffortToMimoThinking(reasoningEffort);
+  // reasoning_effort 翻译:Lynn ThinkingLevelButton 通过 reasoningEffort 参数传入
+  // F10: 也认 extraBody.reasoning_effort,不让 caller intent silently drop
+  // 优先级:caller 显式 body.thinking > reasoningEffort 参数 > extraBody.reasoning_effort
+  const effortSource = reasoningEffort || body.reasoning_effort;
+  const translatedThinking = reasoningEffortToMimoThinking(effortSource);
   if (translatedThinking && !body.thinking) body.thinking = translatedThinking;
-  // MiMo 不识别 OpenAI 标准 reasoning_effort 字段,删除避免 400
+  // MiMo 不识别 OpenAI 标准 reasoning_effort 字段,删除避免 400(翻译已上抬到 thinking)
   delete body.reasoning_effort;
 
   if (Array.isArray(tools) && tools.length > 0) {

@@ -1,16 +1,14 @@
-// Brain v2 · SGLang wire adapter
+// Brain v2 · SGLang wire adapter (BYOK-equality pipe)
 // Qwen3.6-A3B-FP8 + qwen3_coder parser native tool_calls + reasoning_content
-// 关键:默认 no-think, caller 可显式 opt-in；避免把 thinking 过程泄漏成可见回复。
+// F9 fix (2026-05-23): 不再 force enable_thinking=false。caller 通过 extra_body.chat_template_kwargs
+//   显式控制(跟 BYOK 直连 SGLang 同行为)。caller 不给 → 让 SGLang 模板 default 决定。
 import { parseOpenAISSE } from './_sse-parser.js';
 
-export async function* call({ provider, messages, tools, signal, log, extraBody }) {
+export async function* call({ provider, messages, tools, signal, log, extraBody, reasoningEffort }) {
   const {
     chat_template_kwargs: callerTemplateKwargs,
     ...restExtraBody
   } = extraBody && typeof extraBody === 'object' ? extraBody : {};
-  const templateKwargs = callerTemplateKwargs && typeof callerTemplateKwargs === 'object'
-    ? callerTemplateKwargs
-    : {};
   const body = {
     model: provider.model,
     messages,
@@ -18,11 +16,16 @@ export async function* call({ provider, messages, tools, signal, log, extraBody 
     temperature: 0.4,
     stream: true,
     ...restExtraBody,
-    chat_template_kwargs: {
-      ...templateKwargs,
-      enable_thinking: templateKwargs.enable_thinking ?? false,
-    },
   };
+  // F9: 只在 caller 显式传 chat_template_kwargs 时透传,否则 omit (让 server template default 决定)
+  if (callerTemplateKwargs && typeof callerTemplateKwargs === 'object') {
+    body.chat_template_kwargs = { ...callerTemplateKwargs };
+  }
+  // F11: reasoning_effort BYOK 透传 — SGLang 不一定原生认,但保留 caller intent
+  // (server.js 把它抽到独立 arg,这里如 extraBody 没,从 arg 回灌)
+  if (reasoningEffort && !body.reasoning_effort) {
+    body.reasoning_effort = reasoningEffort;
+  }
   if (Array.isArray(tools) && tools.length > 0) {
     body.tools = tools;
     body.tool_choice = 'auto';

@@ -221,10 +221,7 @@ async function buildStockResearchContext(text, userPrompt) {
 
   const queryTarget = [target.name, target.code].filter(Boolean).join(" ");
   const sections = [
-    "【系统已完成的自适应股票研究资料预取】",
-    "下面是回答前按用户命题动态获取的行情/公告/研报/技术面/风险线索。请围绕用户问的点回答，不要强行套固定股票报告模板，也不要输出“我搜一下/我来查询/继续查吗”这类未完成承诺。",
-    "如果用户只问压力位/支撑位，就重点回答技术证据和触发/失效条件；如果问估值/市值区间，就重点回答假设、计算路径、可比锚和区间；如果问整体怎么看，再自然覆盖基本面、估值、技术面、资金情绪、情景和风险。",
-    "必要时你可以自己用 bash 跑临时 Python/Node 脚本处理抓取文本、去重资料、制表或计算区间；资料不足时必须标注【待核验】，并向用户索要具体截图、链接、导出数据、PDF 或假设参数。",
+    "【股票研究资料】",
     `识别标的：${target.name || "待核验"}${target.code ? `（${target.code}）` : ""}`,
   ];
 
@@ -254,9 +251,7 @@ async function buildStockResearchContext(text, userPrompt) {
 
 async function buildRealEstateResearchContext(userPrompt) {
   const sections = [
-    "【系统已完成的楼盘对标资料预取】",
-    "下面是回答前按用户命题获取的楼盘/容积率/绿化率/价格搜索线索。请围绕用户问的指标自然组织答案，不要强行套固定楼盘报告模板，也不要在信息缺口处停止。",
-    "若数据不完整，必须标注【待核验】，并继续给出基于已验证信息的候选、匹配度、价格区间和核验建议；缺成交、户型、楼层、视野或预算时，明确向用户要具体截图或约束。",
+    "【楼盘对标资料】",
   ];
   const searches = await Promise.all(buildRealEstateQueries(userPrompt).map((query) => searchSummary(query, "research")));
   sections.push(`\n【补充搜索线索】\n${searches.join("\n\n")}`);
@@ -265,9 +260,7 @@ async function buildRealEstateResearchContext(userPrompt) {
 
 async function buildGenericResearchContext(userPrompt) {
   const sections = [
-    "【系统已完成的自适应研究资料预取】",
-    "下面是回答前按用户命题获取的搜索线索。请围绕用户真正的问题自然延展：先说明资料路径和证据，再给结论；不要强行套固定模板。",
-    "如果需要计算、去重、制表或解析长文本，可以自己用 bash 跑临时 Python/Node 脚本。资料不足时，先给已验证部分，再明确向用户索要具体截图、链接、导出文件、PDF 或假设参数。",
+    "【研究资料】",
   ];
   const searches = await Promise.all(buildGenericResearchQueries(userPrompt).map((query) => searchSummary(query, "research")));
   sections.push(`\n【补充搜索线索】\n${searches.join("\n\n")}`);
@@ -1028,9 +1021,7 @@ async function buildRealtimeToolContext({ title, toolFactory, params, timeoutMs 
   const text = extractToolText(result);
   if (!text) return "";
   return [
-    title || "【系统已完成实时工具预取】",
-    "下面是真实工具已经返回的资料。请直接基于这些资料回答用户，不要再调用工具、不要模拟工具调用、不要输出“我搜一下/我来查询”。",
-    "如果资料不足以得出确定结论，请明确说明“未检索到明确证据/需继续核验”，并告诉用户还需要补充什么来源。",
+    title || "【实时工具资料】",
     "",
     text,
   ].join("\n").slice(0, MAX_CONTEXT_CHARS);
@@ -1039,7 +1030,7 @@ async function buildRealtimeToolContext({ title, toolFactory, params, timeoutMs 
 async function buildWeatherResearchContext(userPrompt) {
   const location = extractWeatherLocation(userPrompt, "");
   return buildRealtimeToolContext({
-    title: "【系统已完成天气工具预取】",
+    title: "【天气工具资料】",
     toolFactory: createWeatherTool,
     params: { query: userPrompt, location },
   });
@@ -1047,7 +1038,7 @@ async function buildWeatherResearchContext(userPrompt) {
 
 async function buildSportsResearchContext(userPrompt) {
   return buildRealtimeToolContext({
-    title: "【系统已完成体育比分工具预取】",
+    title: "【体育比分工具资料】",
     toolFactory: createSportsScoreTool,
     params: { query: userPrompt, maxResults: 5 },
   });
@@ -1055,7 +1046,7 @@ async function buildSportsResearchContext(userPrompt) {
 
 async function buildMarketResearchContext(userPrompt) {
   return buildRealtimeToolContext({
-    title: "【系统已完成行情工具预取】",
+    title: "【行情工具资料】",
     toolFactory: createStockMarketTool,
     params: { query: userPrompt },
     timeoutMs: STOCK_MARKET_TIMEOUT_MS,
@@ -1124,8 +1115,7 @@ async function buildMarketWeatherBriefContext(userPrompt) {
   }
 
   const sections = [
-    "【系统已完成综合工具预取】",
-    "下面是已拿到的结构化快照。请直接用这些数据回答用户，不要再调用工具，不要输出“我再查一下”。",
+    "【综合工具资料】",
   ];
 
   if (stockSnapshot) {
@@ -1164,7 +1154,7 @@ async function buildMarketWeatherBriefContext(userPrompt) {
 
 async function buildLiveNewsResearchContext(userPrompt) {
   return buildRealtimeToolContext({
-    title: "【系统已完成实时新闻工具预取】",
+    title: "【实时新闻工具资料】",
     toolFactory: createLiveNewsTool,
     params: { query: userPrompt, maxResults: 5 },
   });

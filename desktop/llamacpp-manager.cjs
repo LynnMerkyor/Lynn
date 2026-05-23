@@ -6,8 +6,8 @@
  * 背景:
  *   5/20 战略 pivot 后 Lynn 客户端默认本地推理底层 = llama.cpp。
  *   Mac Q4_K_M GGUF / Linux CUDA Q4_K_M / Win x64 CUDA Q4_K_M 全平台 ship。
- *   默认模型 = Qwen3-4B-Thinking-2507 Q4_K_M-imatrix (2.5 GB),thinking-on。
- *   9B/35B 作为可选本地模型,适合更大内存/显存机器手动升级。
+ *   默认模型 = Qwen3.5-9B Q4_K_M-imatrix (MTP),thinking-on。
+ *   35B 作为高端可选本地模型,适合更大内存/显存机器手动升级。
  *
  * 本模块策略:
  *   1. start():
@@ -43,10 +43,10 @@ const net = require("net");
 // ─────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = Object.freeze({
-  // 默认 ship 模型 — 2.5GB, 覆盖更多普通 Mac / PC。
-  modelId: "qwen3-4b-thinking-2507-q4km-imatrix",
-  modelFileName: "qwen3-4b-thinking-2507-q4km-imatrix.gguf",
-  modelExpectedSize: 2_497_280_864, // ~2.5 GB
+  // 默认 ship 模型 — 9B MTP,质量优先;低配机器继续使用云端默认模型。
+  modelId: "qwen35-9b-q4km-imatrix",
+  modelFileName: "qwen3.5-9b-q4km-imatrix-mtp.gguf",
+  modelExpectedSize: 5_780_090_944, // ~5.38 GB
   // Product default: one comfortable 32K local slot. llama.cpp splits context
   // across parallel slots, so keep -np/--parallel at 1 for the local-first UX.
   serverArgs: [
@@ -54,11 +54,14 @@ const DEFAULT_CONFIG = Object.freeze({
     "--threads", "4",
     "--parallel", "1",
     "--n-gpu-layers", "999",
-    "-a", "qwen3-4b-thinking-2507-q4km-imatrix",
+    "-a", "qwen35-9b-q4km-imatrix",
     "--jinja",
     // Keep thinking-on by default; UI surfaces warmup/reasoning progress
     // instead of silently waiting.
     "--reasoning", "auto",
+    "--reasoning-budget", "2048",
+    "--spec-type", "draft-mtp",
+    "--spec-draft-n-max", "4",
     "--metrics",
     "--host", "127.0.0.1",
   ],
@@ -91,6 +94,32 @@ function defaultBinaryPath(homeDir, platform) {
 
 function defaultModelPath(homeDir, fileName) {
   return path.join(defaultLynnRoot(homeDir), "models", fileName);
+}
+
+function legacyModelPathCandidates(homeDir, modelId, fileName) {
+  const candidates = [
+    defaultModelPath(homeDir, fileName),
+  ];
+  if (modelId === "qwen35-9b-q4km-imatrix") {
+    candidates.push(
+      path.join(homeDir, "Models", "Lynn", "Qwen3.5-9B", "q4_k_m", "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.5-9B", "q4_k_m", fileName),
+    );
+  }
+  if (modelId === "qwen36-35b-a3b-q4km-imatrix") {
+    candidates.push(
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", fileName),
+    );
+  }
+  if (modelId === "qwen36-35b-a3b-apex-mtp") {
+    candidates.push(
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "apex_mtp", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B-APEX-MTP", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),
+    );
+  }
+  return [...new Set(candidates)];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -161,8 +190,10 @@ class LlamaCppManager {
     if (this.modelOverride && this.fsModule.existsSync(this.modelOverride)) {
       return this.modelOverride;
     }
-    const candidate = defaultModelPath(this.homeDir, this.config.modelFileName);
-    return this.fsModule.existsSync(candidate) ? candidate : null;
+    for (const candidate of legacyModelPathCandidates(this.homeDir, this.config.modelId, this.config.modelFileName)) {
+      if (this.fsModule.existsSync(candidate)) return candidate;
+    }
+    return null;
   }
 
   // ── Port allocation ──
@@ -266,10 +297,33 @@ class LlamaCppManager {
 
   buildServerArgs() {
     const args = [...this.config.serverArgs];
-    if (args.includes("--metrics") && !this.binarySupportsFlag("--metrics")) {
-      return args.filter((arg) => arg !== "--metrics");
+    let next = args;
+    if (next.includes("--metrics") && !this.binarySupportsFlag("--metrics")) {
+      next = next.filter((arg) => arg !== "--metrics");
     }
-    return args;
+    if (next.includes("--reasoning-budget") && !this.binarySupportsFlag("--reasoning-budget")) {
+      const out = [];
+      for (let i = 0; i < next.length; i += 1) {
+        if (next[i] === "--reasoning-budget") {
+          i += 1;
+          continue;
+        }
+        out.push(next[i]);
+      }
+      next = out;
+    }
+    if (next.includes("--spec-type") && !this.binarySupportsFlag("--spec-type")) {
+      const out = [];
+      for (let i = 0; i < next.length; i += 1) {
+        if (next[i] === "--spec-type" || next[i] === "--spec-draft-n-max") {
+          i += 1;
+          continue;
+        }
+        out.push(next[i]);
+      }
+      next = out;
+    }
+    return next;
   }
 
   async spawnServer() {
@@ -389,7 +443,12 @@ class LlamaCppManager {
     this.modelPath = this.resolveModelPath();
     if (!this.modelPath) {
       const candidate = defaultModelPath(this.homeDir, this.config.modelFileName);
-      this.emitState({ status: "needs-model", expectedPath: candidate, modelId: this.config.modelId });
+      this.emitState({
+        status: "needs-model",
+        expectedPath: candidate,
+        candidatePaths: legacyModelPathCandidates(this.homeDir, this.config.modelId, this.config.modelFileName),
+        modelId: this.config.modelId,
+      });
       this.onLog("warn", `[llamacpp] model not found at ${candidate} — UI should trigger download`);
       return;
     }

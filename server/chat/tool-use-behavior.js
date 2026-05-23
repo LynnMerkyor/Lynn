@@ -49,7 +49,7 @@ export function resolveInitialToolUseBehavior(promptText, opts = {}) {
   const reportKind = inferReportResearchKind(text);
   const budgetContext = buildBudgetCalculationContext(text);
   const effectivePromptText = budgetContext
-    ? `${budgetContext}\n\n【用户原始问题】\n${text}`
+    ? buildPrefetchAugmentedPrompt(text, "", budgetContext)
     : text;
   const suppressLocalPrefetch = shouldSuppressLocalToolPrefetch(text);
 
@@ -77,10 +77,30 @@ export function resolveInitialToolUseBehavior(promptText, opts = {}) {
   };
 }
 
+function sanitizeContextForModel(context) {
+  return String(context || "")
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => !/^【[^】]*(?:工具资料|实时工具资料)[^】]*】$/.test(line.trim()))
+    .filter((line) => !/^请直接/.test(line.trim()))
+    .filter((line) => !/^下面是/.test(line.trim()))
+    .filter((line) => !/^如果资料不足/.test(line.trim()))
+    .filter((line) => !/^不要/.test(line.trim()))
+    .filter((line) => !/^现实建议/.test(line.trim()))
+    .map((line) => line
+      .replace(/^【系统已完成(?:的)?(.+?)】$/, "【$1】")
+      .replace(/^【系统已完成(.+?)】$/, "【$1】"))
+    .join("\n")
+    .trim();
+}
+
 export function buildPrefetchAugmentedPrompt(promptText, reportContext, budgetContext = "") {
+  // Keep this as evidence only. Do not add task instructions such as
+  // "answer based on the material" or "think step by step"; thinking mode
+  // belongs to the model/runtime, not this helper.
   return [
-    String(reportContext || "").trim(),
-    budgetContext,
-    `【用户原始问题】\n${String(promptText || "")}`,
+    sanitizeContextForModel(reportContext),
+    sanitizeContextForModel(budgetContext),
+    String(promptText || "").trim(),
   ].filter(Boolean).join("\n\n");
 }

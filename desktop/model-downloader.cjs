@@ -1,7 +1,7 @@
 /**
  * model-downloader.cjs · Lynn V0.79 onboarding 2026-05-21
  *
- * 跨平台大文件下载守护 — Qwen3-4B-Thinking-2507 Q4_K_M-imatrix 2.5 GB GGUF。
+ * 跨平台大文件下载守护 — Qwen3.5-9B Q4_K_M-imatrix 5.9 GB GGUF。
  *
  * 设计要点：
  *   1. HTTP/HTTPS Range 续传(用 .part 临时文件 + 已下载 byte offset);
@@ -17,14 +17,14 @@
  *   6. 不引入第三方下载库(axios/got/aria2),用 native http/https 满足 build size。
  *
  * 默认目标(可被 opts.target 覆盖):
- *   ~/.lynn/models/qwen3-4b-thinking-2507-q4km-imatrix.gguf
+ *   ~/.lynn/models/qwen3.5-9b-q4km-imatrix-mtp.gguf
  *
  * 默认源(可被 opts.sources 覆盖,顺序 = 国内优先):
- *   - https://modelscope.cn/models/Merkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix/resolve/master/Qwen3-4B-Thinking-2507-Q4_K_M-imatrix.gguf  (国内主源)
- *   - https://hf-mirror.com/nerkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix/resolve/main/Qwen3-4B-Thinking-2507-Q4_K_M-imatrix.gguf          (国内 HF 镜像备)
+ *   - https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf  (国内主源)
+ *   - https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf          (国内 HF 镜像备)
  *
- * sha256: 530e7ee3da9e5d8873fa51cc1c66110c7cd23265aa79c3fabe8822c5ceb9c76c
- * size:   2_497_280_864 bytes (期望,允许 ±0.5% 偏差,实际以 sha256 为准)
+ * sha256: 0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4
+ * size:   5_780_090_944 bytes (期望,允许 ±0.5% 偏差,实际以 sha256 为准)
  */
 
 const fs = require("fs");
@@ -40,20 +40,20 @@ const { EventEmitter } = require("events");
 // 默认配置
 // ─────────────────────────────────────────────────────────────
 
-const DEFAULT_FILE_NAME = "qwen3-4b-thinking-2507-q4km-imatrix.gguf";
-const DEFAULT_EXPECTED_SIZE = 2_497_280_864;
-const DEFAULT_EXPECTED_SHA256 = "530e7ee3da9e5d8873fa51cc1c66110c7cd23265aa79c3fabe8822c5ceb9c76c";
+const DEFAULT_FILE_NAME = "qwen3.5-9b-q4km-imatrix-mtp.gguf";
+const DEFAULT_EXPECTED_SIZE = 5_780_090_944;
+const DEFAULT_EXPECTED_SHA256 = "0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4";
 
 const DEFAULT_SOURCES = Object.freeze([
   {
     id: "modelscope",
     label: "ModelScope (国内主源)",
-    url: "https://modelscope.cn/models/Merkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix/resolve/master/Qwen3-4B-Thinking-2507-Q4_K_M-imatrix.gguf",
+    url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
   },
   {
     id: "hf-mirror",
     label: "hf-mirror.com (国内 HF 镜像)",
-    url: "https://hf-mirror.com/nerkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix/resolve/main/Qwen3-4B-Thinking-2507-Q4_K_M-imatrix.gguf",
+    url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
   },
 ]);
 
@@ -100,7 +100,7 @@ class ModelDownloader extends EventEmitter {
     this.target = opts.target || defaultModelPath(homeDir, fileName);
     this.partPath = `${this.target}.part`;
     this.expectedSize = opts.expectedSize || DEFAULT_EXPECTED_SIZE;
-    this.expectedSha256 = (opts.expectedSha256 || DEFAULT_EXPECTED_SHA256).toLowerCase();
+    this.expectedSha256 = (opts.expectedSha256 || DEFAULT_EXPECTED_SHA256 || "").toLowerCase();
     const requestedSegments = Number(opts.parallelSegments || DEFAULT_PARALLEL_SEGMENTS);
     this.parallelSegments = Number.isFinite(requestedSegments)
       ? Math.max(1, Math.min(8, Math.floor(requestedSegments)))
@@ -576,12 +576,16 @@ class ModelDownloader extends EventEmitter {
       }
     }
     this._setState("verifying", { sourceLabel: this.activeSourceLabel });
-    const digest = this.activeHash
-      ? this.activeHash.digest("hex")
-      : await this._hashFile(this.partPath);
-    if (digest.toLowerCase() !== this.expectedSha256) {
-      this._log("error", `[download] sha256 mismatch got=${digest} expected=${this.expectedSha256}`);
-      return "checksum-failed";
+    if (this.expectedSha256) {
+      const digest = this.activeHash
+        ? this.activeHash.digest("hex")
+        : await this._hashFile(this.partPath);
+      if (digest.toLowerCase() !== this.expectedSha256) {
+        this._log("error", `[download] sha256 mismatch got=${digest} expected=${this.expectedSha256}`);
+        return "checksum-failed";
+      }
+    } else if (this.activeHash) {
+      this.activeHash.digest("hex");
     }
     // atomic rename .part → target
     try {
@@ -606,6 +610,7 @@ class ModelDownloader extends EventEmitter {
       const tolerance = Math.max(1024 * 1024, Math.floor(this.expectedSize * 0.005));
       if (Math.abs(size - this.expectedSize) > tolerance) return false;
     }
+    if (!this.expectedSha256) return true;
     const digest = await new Promise((resolve, reject) => {
       this._hashFile(this.target).then(resolve, reject);
     });

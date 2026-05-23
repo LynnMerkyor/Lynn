@@ -9,7 +9,7 @@ Current entry points:
 - `server.js`: HTTP/SSE routes for Brain v2.
 - `router.js`: provider/tool orchestration.
 - `verifier-middleware.mjs`: asynchronous tool-result verifier.
-- `deep-research.mjs`: best-of-N research orchestrator with quality-floor gating.
+- `deep-research.mjs`: multi-candidate research orchestrator; no quality gate or output rewriting.
 - `agent-checkpoint.mjs`: trajectory checkpoint evaluator.
 
 Production deployment still runs from `/opt/lobster-brain-v2`; sync intentionally and run the mirror tests before deployment.

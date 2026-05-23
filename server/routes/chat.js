@@ -289,7 +289,11 @@ function buildPrefetchToolSummary(context) {
 
 const LOCAL_QWEN35_DIRECT_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_CHARS || 8000);
 const LOCAL_QWEN35_DIRECT_ENDPOINT = process.env.LYNN_LOCAL_QWEN35_ENDPOINT || "http://127.0.0.1:18099/v1/chat/completions";
-const LOCAL_QWEN35_DIRECT_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_TOKENS || 1536);
+// Thinking-on Qwen models spend part of the generation budget in reasoning
+// before emitting visible content. Keep the default comfortably above short
+// answer gates so local runs do not look like "no reply" just because the
+// model used its first tokens to think.
+const LOCAL_QWEN35_DIRECT_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_TOKENS || 8192);
 
 function looksLikeToolOrLiveLocalPrompt(text = "") {
   const value = String(text || "");
@@ -302,6 +306,20 @@ function looksLikeSimpleBrainDirectPrompt(text = "") {
   if (looksLikeToolOrLiveLocalPrompt(value)) return false;
   if (/(?:门禁测试|只回复|只回答|请回复\s*OK|回复\s*OK|reply\s+only|answer\s+only)/i.test(value)) return true;
   if (/^(?:hi|hello|hey|yo|你好|嗨|哈喽|在吗|早上好|上午好|中午好|下午好|晚上好)[\s!！。？?～~,.，]*$/i.test(value)) return true;
+  return false;
+}
+
+const LOCAL_QWEN35_FAST_PREFETCH_KINDS = new Set([
+  "market_weather_brief",
+  "weather",
+  "sports",
+  "market",
+  "news",
+]);
+
+function shouldUseFastLocalQwen35DirectResponse(promptText = "", opts = {}) {
+  if (looksLikeSimpleBrainDirectPrompt(promptText)) return true;
+  if (opts.prefetchedEvidence && LOCAL_QWEN35_FAST_PREFETCH_KINDS.has(String(opts.reportKind || ""))) return true;
   return false;
 }
 
@@ -1192,55 +1210,13 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
   }
 
   function startLocalQwen35WarmupFeedback(sessionPath, ss) {
-    const timers = [];
-    const push = (delayMs, text) => {
-      timers.push(setTimeout(() => {
-        if (!ss?._turnClosed && ss?.isStreaming) emitLocalThinkingDelta(sessionPath, ss, `${text}\n`);
-      }, delayMs));
-    };
-    emitLocalThinkingDelta(sessionPath, ss, "本地 4B 已接到任务，正在连接本机 llama.cpp。\n");
-    push(1_000, "如果这是刚启动后的第一问，本地模型需要先暖机；这不是常态，后续回答通常会明显更快。");
-    push(4_000, "首次启动会加载 4B 权重，通常比 9B 更快；老机器或长上下文可能多等一会。");
-    push(15_000, "正在预热本地上下文，并等待模型吐出首字。");
-    push(30_000, "还在等待首字，Lynn 会继续保持会话，不会让这轮请求卡死。");
-    return () => {
-      for (const timer of timers) clearTimeout(timer);
-    };
-  }
-
-  function describePrefetchForUser(toolName, promptText) {
-    const query = String(promptText || "");
-    if (toolName === "weather" || /天气|下雨|下雪|气温|温度|weather|rain|snow|forecast/i.test(query)) {
-      return "正在查询实时天气数据，拿到结果后会交给本地 4B 组织答案。";
-    }
-    if (toolName === "stock_market" || /股票|A\s*股|港股|美股|行情|股价|stock|market/i.test(query)) {
-      return "正在取回行情数据，拿到结果后会交给本地 4B 汇总。";
-    }
-    if (toolName === "live_news" || /新闻|热点|最新|消息|news/i.test(query)) {
-      return "正在取回最新资料，拿到结果后会交给本地 4B 汇总。";
-    }
-    return "正在取回必要资料，拿到结果后会交给本地 4B 生成答案。";
+    debugLog()?.log("ws", `[LOCAL-QWEN35-DIRECT v3] warmup started outside model stream · ${sessionPath}`);
+    return () => {};
   }
 
   function startLocalQwen35PrefetchFeedback(sessionPath, ss, toolName, promptText) {
-    const timers = [];
-    const push = (delayMs, text) => {
-      timers.push(setTimeout(() => {
-        if (!ss?._turnClosed && ss?.isStreaming) emitLocalThinkingDelta(sessionPath, ss, `${text}\n`);
-      }, delayMs));
-    };
-    emitLocalThinkingDelta(
-      sessionPath,
-      ss,
-      `如果这是刚启动后的第一问，本地 4B 正在暖机；4B 通常比 9B 更快，后续同一会话也会明显更快。\n${describePrefetchForUser(toolName, promptText)}\n`,
-    );
-    push(3_000, "本地模型已保持会话，正在等待工具返回。");
-    push(12_000, "外部数据还在返回中，Lynn 会继续更新进度。");
-    push(25_000, "这次工具耗时偏长，模型没有卡住，仍在等待资料。");
-    push(40_000, "仍在等待工具完成；完成后会立即进入本地模型生成。");
-    return () => {
-      for (const timer of timers) clearTimeout(timer);
-    };
+    debugLog()?.log("ws", `[LOCAL-QWEN35-DIRECT v3] prefetch started outside model stream · tool=${toolName || ""} · ${sessionPath} · prompt=${String(promptText || "").slice(0, 80)}`);
+    return () => {};
   }
 
   function closeLocalQwen35DirectTurn(sessionPath, ss, opts = {}) {
@@ -1291,23 +1267,15 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     }
   }
 
-  async function streamLocalQwen35DirectBridge(sessionPath, ss, originalPromptText, effectivePromptText, modelInfo = {}) {
+  async function streamLocalQwen35DirectBridge(sessionPath, ss, originalPromptText, effectivePromptText, modelInfo = {}, opts = {}) {
     const startedAt = Date.now();
     const localProviderId = String(modelInfo?.provider || LOCAL_QWEN35_PROVIDER_ID);
     const localModelId = String(modelInfo?.modelId || modelInfo?.id || LOCAL_QWEN35_MODEL_ID);
+    const enableThinking = opts.enableThinking !== false;
+    const maxTokens = Number.isFinite(Number(opts.maxTokens)) && Number(opts.maxTokens) > 0
+      ? Number(opts.maxTokens)
+      : LOCAL_QWEN35_DIRECT_MAX_TOKENS;
     const messages = [
-      {
-        role: "system",
-        content: [
-          "你是 Lynn 的本地 Qwen3-4B Thinking。优先用用户语言直接回答。",
-          "你运行在用户本机。按用户要求自然回答；需要推理时可以先思考，再给出清晰结论。",
-          "如果输出可见思考、思考摘要或推理说明,必须使用自然中文。不要输出 Thinking Process、Analyze the Request、Evaluate Constraints、Final Decision、Safety Check 等英文模板标题。",
-          "用户要求只回复某个短答案时,最终回答只输出该短答案；不要在最终回答里追加解释。",
-          "你运行在用户本机,适合日常问答、写作、翻译和轻量分析。",
-          "如果用户问你的 Lynn 测评数据,只使用提示里的 Lynn hard data,并明确区分 thinking-on/off、样本量、naive 与 excluding parse-fail。",
-          "如果本轮提示已经包含 Lynn 工具取回的资料,请基于这些资料回答；资料不足时说明缺口,不要编造。",
-        ].join("\n"),
-      },
       { role: "user", content: String(effectivePromptText || originalPromptText || "") },
     ];
     let assistantText = "";
@@ -1322,9 +1290,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         model: localModelId,
         messages,
         temperature: 0.2,
-        max_tokens: LOCAL_QWEN35_DIRECT_MAX_TOKENS,
+        max_tokens: maxTokens,
         stream: true,
-        chat_template_kwargs: { enable_thinking: true },
+        chat_template_kwargs: { enable_thinking: enableThinking },
         stream_options: { include_usage: true },
       }),
     });
@@ -1386,48 +1354,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       }
     }
     stopWarmupFeedback();
-    if (!assistantText.trim() && reasoningText.trim()) {
-      if (ss.isThinking) {
-        ss.isThinking = false;
-        emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-      }
-      try {
-        const retryRes = await fetch(LOCAL_QWEN35_DIRECT_ENDPOINT, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            model: localModelId,
-            messages: [
-              {
-                role: "system",
-                content: [
-                  "你是 Lynn 的本地 Qwen3-4B Thinking。",
-                  "这次重试只用于补出用户可见答案：不要输出思考过程，不要解释重试，不要提系统内部状态。",
-                  "直接用中文回答用户当前问题；如果用户要求短答，就保持短答。",
-                ].join("\n"),
-              },
-              { role: "user", content: String(effectivePromptText || originalPromptText || "") },
-            ],
-            temperature: 0.1,
-            max_tokens: 512,
-            stream: false,
-            chat_template_kwargs: { enable_thinking: false },
-          }),
-        });
-        if (retryRes.ok) {
-          const retryPayload = await retryRes.json().catch(() => null);
-          const retryMessage = retryPayload?.choices?.[0]?.message || {};
-          const retryText = String(retryMessage.content || retryPayload?.choices?.[0]?.text || "").trim();
-          if (retryText) {
-            assistantText = retryText;
-            usage = retryPayload?.usage || usage;
-            feedLocalVisibleText(sessionPath, ss, retryText);
-          }
-        }
-      } catch (retryErr) {
-        debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v2] visible-answer retry failed · ${retryErr?.message || retryErr} · ${sessionPath}`);
-      }
-    }
     // Local llama.cpp streams may finish with a short final chunk still held by
     // the ThinkTag/Mood/Xing parsers. Flush before turn_end so the real model
     // output is visible immediately instead of only appearing after reload.
@@ -2335,7 +2261,14 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 })) {
                   ss.effectivePromptText = effectivePromptText;
                   try {
-                    await streamLocalQwen35DirectBridge(promptSessionPath, ss, promptText, effectivePromptText, currentModelInfo);
+                    const fastLocalResponse = shouldUseFastLocalQwen35DirectResponse(promptText, {
+                      reportKind,
+                      prefetchedEvidence: false,
+                    });
+                    await streamLocalQwen35DirectBridge(promptSessionPath, ss, promptText, effectivePromptText, currentModelInfo, {
+                      enableThinking: !fastLocalResponse,
+                      maxTokens: fastLocalResponse ? 1024 : LOCAL_QWEN35_DIRECT_MAX_TOKENS,
+                    });
                   } catch (directErr) {
                     debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] failed · ${directErr?.message || directErr} · ${promptSessionPath}`);
                     closeStreamWithVisibleFallback(
@@ -2418,7 +2351,14 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                   if (localQwenSynthesisAfterPrefetch) {
                     ss.effectivePromptText = effectivePromptText;
                     try {
-                      await streamLocalQwen35DirectBridge(promptSessionPath, ss, promptText, effectivePromptText, currentModelInfo);
+                      const fastPrefetchResponse = shouldUseFastLocalQwen35DirectResponse(promptText, {
+                        reportKind,
+                        prefetchedEvidence: ss.hasLocalPrefetchEvidence,
+                      });
+                      await streamLocalQwen35DirectBridge(promptSessionPath, ss, promptText, effectivePromptText, currentModelInfo, {
+                        enableThinking: !fastPrefetchResponse,
+                        maxTokens: fastPrefetchResponse ? 2048 : LOCAL_QWEN35_DIRECT_MAX_TOKENS,
+                      });
                     } catch (directErr) {
                       debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v2] failed after prefetch · ${directErr?.message || directErr} · ${promptSessionPath}`);
                       closeStreamWithVisibleFallback(
@@ -2433,7 +2373,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                   }
                 }
                 if (ss._lastTurnAborted) {
-                  effectivePromptText = `【系统注意】上一个问题因超时未能回答。本轮只回答下面这个当前问题,不要再回答之前未答复的任何问题。\n\n${effectivePromptText}`;
                   ss._lastTurnAborted = false;
                 }
                 ss.effectivePromptText = effectivePromptText;

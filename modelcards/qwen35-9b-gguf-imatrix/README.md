@@ -14,19 +14,19 @@ language:
 pipeline_tag: text-generation
 ---
 
-# Qwen3.5-9B Q4_K_M imatrix GGUF（Lynn 本地智能体推荐版）
+# Qwen3.5-9B Q4_K_M imatrix MTP GGUF（Lynn 本地智能体推荐版）
 
-这是 Lynn 首发本地 9B 路线使用的 Qwen3.5-9B GGUF 量化包，面向 llama.cpp / 本地 OpenAI-compatible endpoint。
+这是 Lynn 默认本地 9B 路线使用的 Qwen3.5-9B GGUF MTP 量化包，面向 llama.cpp / 本地 OpenAI-compatible endpoint。
 
 定位很简单：**本地 9B，日常无限用。** 让 Lynn 客户端在 Mac / Windows / Linux 上自动安装或定位 llama.cpp、下载模型、启动本地端点，并把它注册成 Lynn 的本地优先模型；云端 MIMO/Brain 仍作为兜底。
 
-English summary: this is Lynn's recommended Qwen3.5-9B Q4_K_M imatrix GGUF artifact for local-agent inference through llama.cpp. It is intended to be downloaded and started automatically by the Lynn client after user authorization.
+English summary: this is Lynn's recommended Qwen3.5-9B Q4_K_M imatrix MTP GGUF artifact for local-agent inference through llama.cpp. It is intended to be downloaded and started automatically by the Lynn client after user authorization.
 
 ## 文件
 
 | 文件 | 大小 | SHA256 | 备注 |
 |---|---:|---|---|
-| `Qwen3.5-9B-Q4_K_M-imatrix.gguf` | 5.89GB decimal / 5.49GiB | `9437f5bf0dd0c97800caaf902f41e6a6aa00223ab232f159eda41dcbbb492645` | Lynn imatrix 校准 Q4_K_M 发布文件 |
+| `Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf` | 5.78GB decimal / 5.38GiB | `0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4` | Lynn imatrix 校准 Q4_K_M MTP 发布文件 |
 
 > 与官方 default/RTN Q4_K_M 区分：本仓库文件名带 `imatrix`，Lynn 客户端默认下载这一版。官方 default RTN 会作为对照测试项保留，不作为默认推荐。
 
@@ -35,7 +35,8 @@ English summary: this is Lynn's recommended Qwen3.5-9B Q4_K_M imatrix GGUF artif
 我们最后选择 Qwen3.5-9B + Q4_K_M imatrix 作为 Lynn 本地首发，是因为它在端侧体验、质量、体积和生态成熟度之间最均衡：
 
 - llama.cpp/GGUF 生态成熟，Mac 和 CUDA 都能跑，runtime 小，部署维护成本低。
-- 5.9GB 文件量级适合大多数 16GB+ 内存设备；24GB MacBook Air 可以比较从容地跑 32K thinking。
+- 5.38GB 级别文件适合大多数 16GB+ 内存设备；24GB MacBook Air 可以比较从容地跑 32K thinking。
+- MTP 在 thinking-on 长链路上明显提速：GB10 Spark 实测 think-on 4K 77.46 tok/s、16K 69.00 tok/s、32K sustained 78.32 tok/s。
 - thinking-on 32K 下，9B 的能力接近 35B A3B 的实用区间，适合日常智能体、本地代码解释、长文档和工具流。
 - 与 Lynn-native NVFP4 相比，Q4_K_M 牺牲少量量化精度，但换来跨平台、低依赖和即装即用。
 
@@ -57,7 +58,7 @@ English note: we chose this artifact because it gives the best release trade-off
 
 | 版本 | MMLU | GPQA Diamond | 备注 |
 |---|---:|---:|---|
-| Q4_K_M imatrix GGUF | 92.00% (92/100), parse_fail 0 | 72.22% naive (143/198) / 81.71% excl_pf, parse_fail 23 | 推荐本地路线 |
+| Q4_K_M imatrix MTP GGUF | 81.00% (81/100) | 72.22% naive / 81.71% excl_pf | 推荐本地路线 |
 | Lynn-native W4A16 NVFP4 | 91.00% (91/100), parse_fail 1 | 56.00% naive (28/50) / 70.00% excl_pf, parse_fail 10 | GPQA 当前仅 50 题样本 |
 | BF16 official | 87.00% (87/100), parse_fail 1 | running / pending | R6000 BF16 GPQA50 仍在补测 |
 | Q4_K_M default RTN | pending | pending | 对照基线,不是默认推荐 |
@@ -80,18 +81,19 @@ Lynn Desktop 会在用户授权后自动完成下载、启动和 provider 注册
 
 ```bash
 modelscope download --model Merkyor/Qwen3.5-9B-GGUF-imatrix \
-  Qwen3.5-9B-Q4_K_M-imatrix.gguf \
+  Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf \
   --local_dir ~/Models/Lynn/Qwen3.5-9B/q4_k_m
 
 llama-server \
-  --model ~/Models/Lynn/Qwen3.5-9B/q4_k_m/Qwen3.5-9B-Q4_K_M-imatrix.gguf \
+  --model ~/Models/Lynn/Qwen3.5-9B/q4_k_m/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf \
   --host 127.0.0.1 \
   --port 18099 \
   --ctx-size 32768 \
   --parallel 4 \
   --n-gpu-layers 999 \
   --jinja \
-  --reasoning auto
+  --reasoning auto \
+  --spec-type draft-mtp
 ```
 
 OpenAI-compatible endpoint:

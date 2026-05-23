@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Qwen3-4B Thinking Mac Q4_K_M Release QA Smoke
+# Qwen3.5-9B MTP Mac Q4_K_M Release QA Smoke
 #
 # One-command local QA for the Mac Q4_K_M stable track.
 # Assumes the user has ALREADY started llama-server via:
@@ -12,12 +12,13 @@ set -euo pipefail
 #   1. /v1/models endpoint
 #   2. Plain English chat
 #   3. Chinese chat
-#   4. JSON response_format
-#   5. OpenAI tool-call contract
-#   6. Short multi-turn (2 rounds)
-#   7. 32K-ish long context (opt-in: SKIP_LONG=0)
+#   4. Thinking-on answer budget
+#   5. JSON response_format
+#   6. OpenAI tool-call contract
+#   7. Short multi-turn (2 rounds)
+#   8. 32K-ish long context (opt-in: SKIP_LONG=0)
 #
-# Output: JSON report to reports/qwen3_4b/local_qwen3_4b_release_qa_smoke_<stamp>.json
+# Output: JSON report to reports/qwen35_9b_mtp/local_qwen35_9b_mtp_release_qa_smoke_<stamp>.json
 #
 # Usage:
 #   bash scripts/local_qwen35_9b_release_qa_smoke.sh
@@ -29,17 +30,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:18099/v1}"
-MODEL="${MODEL:-qwen3-4b-thinking-2507-q4km-imatrix}"
+MODEL="${MODEL:-qwen35-9b-q4km-imatrix}"
 TIMEOUT="${TIMEOUT:-120}"
 SKIP_LONG="${SKIP_LONG:-1}"
 STAMP="${STAMP:-$(date +%Y%m%d_%H%M%S)}"
-OUT_DIR="${OUT_DIR:-$REPO_ROOT/reports/qwen3_4b}"
-OUT_JSON="${OUT_DIR}/local_qwen3_4b_release_qa_smoke_${STAMP}.json"
+OUT_DIR="${OUT_DIR:-$REPO_ROOT/reports/qwen35_9b_mtp}"
+OUT_JSON="${OUT_DIR}/local_qwen35_9b_mtp_release_qa_smoke_${STAMP}.json"
 
 mkdir -p "$OUT_DIR"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  Qwen3-4B Thinking Mac Q4_K_M Release QA Smoke             ║"
+echo "║  Qwen3.5-9B MTP Mac Q4_K_M Release QA Smoke               ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "  Endpoint:  $BASE_URL"
@@ -60,7 +61,7 @@ if [[ "$HTTP_CODE" != "200" ]]; then
   echo "  Please start the server first:" >&2
   echo "    bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh" >&2
   echo "" >&2
-  echo "  See: docs/QWEN35_9B_MAC_Q4KM_QA_RUNBOOK_20260519.md for the historical 9B flow; 4B uses the same endpoint contract." >&2
+  echo "  See: docs/QWEN35_9B_MAC_Q4KM_QA_RUNBOOK_20260519.md for the historical 9B flow." >&2
   exit 1
 fi
 echo "  [OK] Server healthy"
@@ -202,9 +203,29 @@ except Exception as e:
     record("chinese_chat", False, str(e))
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test 4: JSON response_format
+# Test 4: Thinking-on answer budget
 # ─────────────────────────────────────────────────────────────────────────────
-print("━━━ Test 4: JSON response_format ━━━")
+print("━━━ Test 4: Thinking-on answer budget ━━━")
+try:
+    r = post("chat/completions", {
+        "model": model,
+        "messages": [{"role": "user", "content": "默认本地9B MTP门禁测试：请只回复 OK。"}],
+        "max_tokens": 8192,
+        "temperature": 0,
+        "chat_template_kwargs": {"enable_thinking": True},
+    }, max_time=300)
+    content = extract_content(r["data"]).strip()
+    reasoning = extract_reasoning(r["data"])
+    ok = content == "OK"
+    record("thinking_on_budget", ok, content[:100] or "(empty content)",
+           elapsed_sec=r["elapsed_sec"], reasoning_chars=len(reasoning))
+except Exception as e:
+    record("thinking_on_budget", False, str(e))
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 5: JSON response_format
+# ─────────────────────────────────────────────────────────────────────────────
+print("━━━ Test 5: JSON response_format ━━━")
 try:
     r = post("chat/completions", {
         "model": model,
@@ -230,9 +251,9 @@ except Exception as e:
     record("json_format", False, str(e))
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test 5: OpenAI tool-call contract
+# Test 6: OpenAI tool-call contract
 # ─────────────────────────────────────────────────────────────────────────────
-print("━━━ Test 5: Tool call contract ━━━")
+print("━━━ Test 6: Tool call contract ━━━")
 try:
     r = post("chat/completions", {
         "model": model,
@@ -274,9 +295,9 @@ except Exception as e:
     record("tool_call_weather", False, str(e))
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test 6: Multi-turn (2 rounds)
+# Test 7: Multi-turn (2 rounds)
 # ─────────────────────────────────────────────────────────────────────────────
-print("━━━ Test 6: Multi-turn ━━━")
+print("━━━ Test 7: Multi-turn ━━━")
 try:
     messages = [{"role": "user", "content": "Remember this number: 42."}]
     r1 = post("chat/completions", {
@@ -302,9 +323,9 @@ except Exception as e:
     record("multi_turn", False, str(e))
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test 7: 32K-ish long context (opt-in)
+# Test 8: 32K-ish long context (opt-in)
 # ─────────────────────────────────────────────────────────────────────────────
-print("━━━ Test 7: Long context (32K) ━━━")
+print("━━━ Test 8: Long context (32K) ━━━")
 if skip_long:
     record("long_context_32k", True, "SKIPPED (SKIP_LONG=1)", skipped=True)
 else:
@@ -336,7 +357,7 @@ total = passed + failed
 all_ok = failed == 0
 
 report = {
-    "schema": "lynn-qwen3-4b-mac-q4km-release-qa-smoke-v1",
+    "schema": "lynn-qwen35-9b-mtp-mac-q4km-release-qa-smoke-v1",
     "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
     "stamp": stamp,
     "base_url": base_url,

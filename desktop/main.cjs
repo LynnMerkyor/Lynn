@@ -3503,86 +3503,65 @@ let activeModelDownloader = null;
 let lastModelDownloadState = { state: "idle" };
 
 const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
-  "qwen3-4b-thinking-2507-q4km-imatrix": {
-    modelId: "qwen3-4b-thinking-2507-q4km-imatrix",
-    label: "Qwen3-4B Thinking 2507 Q4_K_M imatrix",
-    fileName: "qwen3-4b-thinking-2507-q4km-imatrix.gguf",
-    expectedSize: 2_497_280_864,
-    expectedSha256: "530e7ee3da9e5d8873fa51cc1c66110c7cd23265aa79c3fabe8822c5ceb9c76c",
-    parallelSegments: 2,
-    autoStart: true,
-    sources: MODEL_DOWNLOADER_SOURCES,
-  },
-  "local-qwen3-4b-thinking-2507-q4km-imatrix": {
-    modelId: "qwen3-4b-thinking-2507-q4km-imatrix",
-    label: "Qwen3-4B Thinking 2507 Q4_K_M imatrix",
-    fileName: "qwen3-4b-thinking-2507-q4km-imatrix.gguf",
-    expectedSize: 2_497_280_864,
-    expectedSha256: "530e7ee3da9e5d8873fa51cc1c66110c7cd23265aa79c3fabe8822c5ceb9c76c",
-    parallelSegments: 2,
-    autoStart: true,
-    sources: MODEL_DOWNLOADER_SOURCES,
-  },
   "qwen35-9b-q4km-imatrix": {
     modelId: "qwen35-9b-q4km-imatrix",
-    label: "Qwen3.5-9B Q4_K_M imatrix",
-    fileName: "qwen3.5-9b-q4km-imatrix.gguf",
-    expectedSize: 5_300_000_000,
-    expectedSha256: "9437f5bf0dd0c97800caaf902f41e6a6aa00223ab232f159eda41dcbbb492645",
+    label: "Qwen3.5-9B Q4_K_M imatrix MTP",
+    fileName: "qwen3.5-9b-q4km-imatrix-mtp.gguf",
+    expectedSize: 5_780_090_944,
+    expectedSha256: "0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4",
     parallelSegments: 2,
-    autoStart: false,
-    sources: [
-      {
-        id: "modelscope",
-        label: "ModelScope (国内主源)",
-        url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix.gguf",
-      },
-      {
-        id: "hf-mirror",
-        label: "hf-mirror.com (国内 HF 镜像)",
-        url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix.gguf",
-      },
-    ],
+    autoStart: true,
+    sources: MODEL_DOWNLOADER_SOURCES,
   },
   "local-qwen35-9b-q4km-imatrix": {
     modelId: "qwen35-9b-q4km-imatrix",
-    label: "Qwen3.5-9B Q4_K_M imatrix",
-    fileName: "qwen3.5-9b-q4km-imatrix.gguf",
-    expectedSize: 5_300_000_000,
-    expectedSha256: "9437f5bf0dd0c97800caaf902f41e6a6aa00223ab232f159eda41dcbbb492645",
+    label: "Qwen3.5-9B Q4_K_M imatrix MTP",
+    fileName: "qwen3.5-9b-q4km-imatrix-mtp.gguf",
+    expectedSize: 5_780_090_944,
+    expectedSha256: "0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4",
     parallelSegments: 2,
-    autoStart: false,
-    sources: [
-      {
-        id: "modelscope",
-        label: "ModelScope (国内主源)",
-        url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix.gguf",
-      },
-      {
-        id: "hf-mirror",
-        label: "hf-mirror.com (国内 HF 镜像)",
-        url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix.gguf",
-      },
-    ],
+    autoStart: true,
+    sources: MODEL_DOWNLOADER_SOURCES,
   },
-  "qwen36-35b-a3b-q4km-imatrix": {
-    modelId: "qwen36-35b-a3b-q4km-imatrix",
-    label: "Qwen3.6-35B-A3B Q4_K_M imatrix",
-    fileName: "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
-    expectedSize: 21_166_758_272,
-    expectedSha256: "3e398e6c53398de229ade3a38b04e0d626289651d6d8b49ecfccc2165816efa1",
+  "qwen36-35b-a3b-apex-mtp": {
+    modelId: "qwen36-35b-a3b-apex-mtp",
+    label: "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
+    fileName: "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
+    expectedSize: 26_059_443_808,
+    expectedSha256: "9bf7d96bb3a9d363e645dd998aee9e9bff8e016a82aec7ff081e0e6cdb53419e",
     parallelSegments: 4,
     autoStart: false,
     sources: [
       {
         id: "modelscope",
         label: "ModelScope (国内主源)",
-        url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix/resolve/master/Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
+        url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/master/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
       },
       {
         id: "hf-mirror",
         label: "hf-mirror.com (国内 HF 镜像)",
-        url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-GGUF-imatrix/resolve/main/Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
+        url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
+      },
+    ],
+  },
+  "qwen36-35b-a3b-q4km-imatrix": {
+    modelId: "qwen36-35b-a3b-apex-mtp",
+    label: "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
+    fileName: "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
+    expectedSize: 26_059_443_808,
+    expectedSha256: "9bf7d96bb3a9d363e645dd998aee9e9bff8e016a82aec7ff081e0e6cdb53419e",
+    parallelSegments: 4,
+    autoStart: false,
+    sources: [
+      {
+        id: "modelscope",
+        label: "ModelScope (国内主源)",
+        url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/master/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
+      },
+      {
+        id: "hf-mirror",
+        label: "hf-mirror.com (国内 HF 镜像)",
+        url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
       },
     ],
   },
@@ -3591,8 +3570,8 @@ const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
 function getLlamacppDownloadProfile(modelId) {
   const requested = typeof modelId === "string" && modelId.trim()
     ? modelId.trim()
-    : "qwen3-4b-thinking-2507-q4km-imatrix";
-  return LLAMACPP_DOWNLOAD_PROFILES[requested] || LLAMACPP_DOWNLOAD_PROFILES["qwen3-4b-thinking-2507-q4km-imatrix"];
+    : "qwen35-9b-q4km-imatrix";
+  return LLAMACPP_DOWNLOAD_PROFILES[requested] || LLAMACPP_DOWNLOAD_PROFILES["qwen35-9b-q4km-imatrix"];
 }
 
 function decorateDownloadState(profile, state) {
@@ -3635,19 +3614,34 @@ function startLlamacpp() {
   }
 }
 
-function buildLlamacppArgsForAlias(modelAlias) {
-  const args = [...(LLAMACPP_DEFAULT_CONFIG.serverArgs || [])];
-  const aliasIndex = args.indexOf("-a");
-  if (aliasIndex >= 0 && aliasIndex + 1 < args.length) {
-    args[aliasIndex + 1] = modelAlias;
+function replaceArgValue(args, flag, value) {
+  const index = args.indexOf(flag);
+  if (index >= 0 && index + 1 < args.length) {
+    args[index + 1] = value;
   } else {
-    args.push("-a", modelAlias);
+    args.push(flag, value);
   }
-  return args;
+}
+
+function buildLlamacppArgsForAlias(modelAlias, modelPath = "") {
+  const args = [...(LLAMACPP_DEFAULT_CONFIG.serverArgs || [])];
+  const fileName = path.basename(String(modelPath || ""));
+  const is35bApexMtp = /35B-A3B-APEX-MTP|qwen36-35b-a3b-apex-mtp/i.test(`${modelAlias} ${fileName}`);
+  const launchAlias = is35bApexMtp ? "qwen36-35b-a3b-apex-mtp" : modelAlias;
+  replaceArgValue(args, "-a", launchAlias);
+  if (is35bApexMtp) {
+    replaceArgValue(args, "--spec-type", "draft-mtp");
+    replaceArgValue(args, "--spec-draft-n-max", "4");
+    replaceArgValue(args, "--cache-type-k", "q8_0");
+    replaceArgValue(args, "--cache-type-v", "q8_0");
+  }
+  return { alias: launchAlias, args };
 }
 
 async function startLlamacppCustomModel(modelPath) {
-  const modelAlias = path.basename(modelPath, path.extname(modelPath)).slice(0, 80) || "local-gguf";
+  const rawAlias = path.basename(modelPath, path.extname(modelPath)).slice(0, 80) || "local-gguf";
+  const launchProfile = buildLlamacppArgsForAlias(rawAlias, modelPath);
+  const modelAlias = launchProfile.alias;
   try { stopLlamacpp(); } catch {}
   await new Promise((resolve) => setTimeout(resolve, 700));
   lastLlamacppState = {
@@ -3662,7 +3656,7 @@ async function startLlamacppCustomModel(modelPath) {
     modelId: modelAlias,
     modelFileName: path.basename(modelPath),
     modelPath,
-    serverArgs: buildLlamacppArgsForAlias(modelAlias),
+    serverArgs: launchProfile.args,
     onLog: (level, msg) => {
       if (level === "error") console.error(msg);
       else if (level === "warn") console.warn(msg);
@@ -3699,7 +3693,7 @@ wrapIpcHandler("llamacpp:start-download", async (event, payload = {}) => {
   const profile = getLlamacppDownloadProfile(payload?.modelId);
   if (activeModelDownloader && (lastModelDownloadState.state === "downloading"
       || lastModelDownloadState.state === "verifying")) {
-    const runningModelId = lastModelDownloadState.modelId || "qwen3-4b-thinking-2507-q4km-imatrix";
+    const runningModelId = lastModelDownloadState.modelId || "qwen35-9b-q4km-imatrix";
     return {
       ok: runningModelId === profile.modelId,
       alreadyRunning: true,
@@ -3845,7 +3839,7 @@ wrapIpcHandler("llamacpp:open-model-dir", async (event, payload = {}) => {
       return { ok: true, path: path.dirname(target), revealedPath: target, error: null };
     }
   }
-  // Open Lynn's managed model library first so users immediately see the 4B/9B/35B
+  // Open Lynn's managed model library first so users immediately see the 9B/35B
   // files downloaded by the app. User-provided folders remain available through
   // the native GGUF picker.
   const openDir = dir;
@@ -3875,7 +3869,6 @@ wrapIpcHandler("llamacpp:start-custom-model", async (event, payload = {}) => {
 
 function stopManagedQwen35LlamaServer() {
   const pidFiles = [
-    path.join(os.homedir(), ".lynn-engine", "run", "qwen3-4b-thinking-2507-q4km-imatrix.pid"),
     path.join(os.homedir(), ".lynn-engine", "run", "qwen35-9b-q4km-imatrix.pid"),
   ];
   const pids = new Set();
@@ -3907,8 +3900,6 @@ function stopManagedQwen35LlamaServer() {
       const isLynnOwned =
         cmd.includes(lynnModelsDir)
         || cmd.includes(lynnEngineDir)
-        || /qwen3-4b-thinking-2507/i.test(cmd)
-        || /Qwen3-4B-Thinking-2507/i.test(cmd)
         || /qwen35-9b-q4km/i.test(cmd)
         || /Qwen3\.5-9B-Q4_K_M/i.test(cmd);
       if (isLynnOwned && cmd.includes("--port 18099")) {

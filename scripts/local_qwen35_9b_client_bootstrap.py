@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Client-facing bootstrap for the default Qwen3-4B local llama.cpp provider.
+"""Client-facing bootstrap for the default Qwen3.5-9B MTP local llama.cpp provider.
 
 This is meant for the Lynn desktop/client UI, not for end users to run by hand:
 
@@ -32,11 +32,11 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SETUP_SCRIPT = ROOT / "scripts" / "local_qwen35_9b_setup.sh"
 SERVER_SCRIPT = ROOT / "scripts" / "local_qwen35_9b_q4km_llamacpp_server.sh"
-DEFAULT_PROVIDER_ID = "local-qwen3-4b-thinking-2507-q4km-imatrix"
-DEFAULT_MODEL_ID = "qwen3-4b-thinking-2507-q4km-imatrix"
-DEFAULT_ARTIFACT_ID = "qwen3-4b-thinking-2507-q4km-imatrix-gguf"
-DEFAULT_MODEL_FAMILY = "Qwen3-4B-Thinking-2507"
-DEFAULT_MODEL_ROOT = Path.home() / "Models" / "Lynn" / "Qwen3-4B-Thinking-2507"
+DEFAULT_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix"
+DEFAULT_MODEL_ID = "qwen35-9b-q4km-imatrix"
+DEFAULT_ARTIFACT_ID = "qwen35-9b-q4km-imatrix-mtp-gguf"
+DEFAULT_MODEL_FAMILY = "Qwen3.5-9B"
+DEFAULT_MODEL_ROOT = Path.home() / "Models" / "Lynn" / "Qwen3.5-9B"
 DEFAULT_PROVIDER = Path.home() / ".lynn-engine" / "providers" / f"{DEFAULT_MODEL_ID}-gguf.json"
 DEFAULT_PID_FILE = Path.home() / ".lynn-engine" / "run" / f"{DEFAULT_MODEL_ID}.pid"
 DEFAULT_LOG_FILE = Path.home() / ".lynn-engine" / "logs" / f"{DEFAULT_MODEL_ID}.client.log"
@@ -140,9 +140,8 @@ def _find_gguf(model_root: Path, variant: str) -> Path | None:
         candidates = sorted(p for p in root.rglob("*.gguf") if is_complete_candidate(p))
         preferred = [
             p for p in candidates
-            if "qwen3" in p.name.lower()
-            and "4b" in p.name.lower()
-            and "thinking" in p.name.lower()
+            if "qwen3.5" in p.name.lower()
+            and "9b" in p.name.lower()
             and "q4" in p.name.lower()
             and "k" in p.name.lower()
             and any(t in p.name.lower() for t in terms)
@@ -151,8 +150,8 @@ def _find_gguf(model_root: Path, variant: str) -> Path | None:
             return preferred[0]
         fallback = [
             p for p in candidates
-            if "qwen3" in p.name.lower()
-            and "4b" in p.name.lower()
+            if "qwen3.5" in p.name.lower()
+            and "9b" in p.name.lower()
             and "q4" in p.name.lower()
             and "k" in p.name.lower()
         ]
@@ -281,107 +280,77 @@ def _hardware_profile() -> dict[str, Any]:
         mem = total_gib or 0
         if mem >= 24:
             recommendation = "recommended"
-            profile = {"name": "mac_unified_32k", "label": "Mac 4B 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "mac_unified_32k", "label": "Mac 9B MTP 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
             upgrade_options.append({
-                "id": "qwen35-9b-q4km-imatrix",
-                "label": "Qwen3.5-9B Q4_K_M imatrix",
-                "profile": "12GB+ 可选 · 质量/速度平衡",
-                "metrics": [
-                    "thinking-on 32K",
-                    "MMLU 81.00%",
-                    "GPQA Diamond 81.71% excl_pf",
-                    "tool-call 93%",
-                ],
-                "reason": "比默认 4B 更大，适合愿意多占内存换取稳健回答的用户。",
-                "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix",
-                "download_label": "下载 9B",
-                "file_name": "Qwen3.5-9B-Q4_K_M-imatrix.gguf",
-                "min_memory_gib": 12,
-            })
-            upgrade_options.append({
-                "id": "qwen36-35b-a3b-q4km-imatrix",
-                "label": "Qwen3.6-35B-A3B Q4_K_M imatrix",
+                "id": "qwen36-35b-a3b-apex-mtp",
+                "label": "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
                 "profile": "24GB 统一内存+ 推荐 · 性能强",
                 "metrics": [
                     "thinking-on 32K",
                     "MMLU 90.40%",
                     "GPQA Diamond 80.70%",
-                    "R6000 207 tok/s",
+                    "think-on 4K 84.69 tok/s",
+                    "think-on 16K 75.53 tok/s",
                 ],
-                "reason": "24GB+ 能力优先本地路线；适合复杂推理和长上下文，速度会低于默认 4B。",
-                "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
+                "reason": "高端质量档；长思考默认 MTP，适合复杂推理和长上下文。",
+                "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF",
                 "download_label": "下载到本机",
-                "file_name": "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
+                "file_name": "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
                 "min_memory_gib": 24,
             })
         elif mem >= 16:
             recommendation = "recommended_with_limits"
-            profile = {"name": "mac_unified_32k", "label": "Mac 4B 32K 稳定档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
-        elif mem >= 8:
+            profile = {"name": "mac_unified_32k", "label": "Mac 9B MTP 32K 稳定档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
+        elif mem >= 12:
             recommendation = "recommended_with_limits"
-            profile = {"name": "mac_unified_16k", "label": "Mac 4B 16K 入门档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
-            warnings.append("8GB 统一内存建议先用 16K；32K thinking 可作为高级选项。")
-        elif mem >= 6:
+            profile = {"name": "mac_unified_16k", "label": "Mac 9B MTP 16K 入门档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
+            warnings.append("12GB 统一内存建议先用 16K；32K thinking 可作为高级选项。")
+        elif mem >= 8:
             recommendation = "experimental"
-            profile = {"name": "mac_unified_8k", "label": "Mac 4B 8K 试用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "mac_unified_8k", "label": "Mac 9B MTP 8K 试用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
             warnings.append("统一内存偏小，只建议试用短上下文；长 thinking 体验可能不稳。")
         else:
-            blockers.append("统一内存低于 6GB，不建议本地跑 4B；请保持默认云端模型。")
+            blockers.append("统一内存低于 8GB，不建议本地跑 9B MTP；请保持默认云端模型。")
     elif best_gpu and (best_gpu.get("memory_gib") or 0) >= 6:
         vram = best_gpu.get("memory_gib") or 0
         cc = best_gpu.get("compute_capability") or 0
         if cc and cc < 7.5:
             recommendation = "experimental"
-            profile = {"name": "nvidia_8k_legacy", "label": "NVIDIA 4B 老卡试用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "nvidia_8k_legacy", "label": "NVIDIA 9B MTP 老卡试用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
             warnings.append("NVIDIA compute capability 低于 7.5，可能明显慢；不建议作为默认体验。")
         elif vram >= 24:
             recommendation = "recommended"
-            profile = {"name": "nvidia_32k", "label": "NVIDIA 4B 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "nvidia_32k", "label": "NVIDIA 9B MTP 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
             upgrade_options.append({
-                "id": "qwen35-9b-q4km-imatrix",
-                "label": "Qwen3.5-9B Q4_K_M imatrix",
-                "profile": "12GB+ 可选 · 质量/速度平衡",
-                "metrics": [
-                    "thinking-on 32K",
-                    "MMLU 81.00%",
-                    "GPQA Diamond 81.71% excl_pf",
-                    "tool-call 93%",
-                ],
-                "reason": "比默认 4B 更大，适合愿意多占显存换取稳健回答的用户。",
-                "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix",
-                "download_label": "下载 9B",
-                "file_name": "Qwen3.5-9B-Q4_K_M-imatrix.gguf",
-                "min_vram_gib": 12,
-            })
-            upgrade_options.append({
-                "id": "qwen36-35b-a3b-q4km-imatrix",
-                "label": "Qwen3.6-35B-A3B Q4_K_M imatrix",
+                "id": "qwen36-35b-a3b-apex-mtp",
+                "label": "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
                 "profile": "24GB 显存+ 推荐 · 性能强",
                 "metrics": [
                     "thinking-on 32K",
                     "MMLU 90.40%",
                     "GPQA Diamond 80.70%",
-                    "R6000 207 tok/s",
+                    "think-on 4K 84.69 tok/s",
+                    "think-on 16K 75.53 tok/s",
                 ],
-                "reason": "24GB+ 能力优先本地路线；适合复杂推理和长上下文，速度会低于默认 4B。",
-                "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
+                "reason": "高端质量档；长思考默认 MTP，适合复杂推理和长上下文。",
+                "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF",
                 "download_label": "下载到本机",
-                "file_name": "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
+                "file_name": "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
                 "min_vram_gib": 24,
             })
         elif vram >= 16:
             recommendation = "recommended_with_limits"
-            profile = {"name": "nvidia_32k", "label": "NVIDIA 4B 32K 稳定档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "nvidia_32k", "label": "NVIDIA 9B MTP 32K 稳定档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
         else:
             recommendation = "recommended_with_limits"
-            profile = {"name": "nvidia_16k", "label": "NVIDIA 4B 16K 入门档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
-            warnings.append("6-8GB 显存可以启用默认 4B；建议 16K/单并发。")
+            profile = {"name": "nvidia_16k", "label": "NVIDIA 9B MTP 16K 入门档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
+            warnings.append("8-12GB 显存可以试用本地 9B MTP；建议 16K/单并发。")
     elif system == "Linux" and not best_gpu:
         blockers.append("未检测到 NVIDIA GPU；CPU 路径可以跑但体验较慢，默认不推荐。")
     elif system == "Windows":
         blockers.append("Windows 首发仍在补齐；当前建议使用云端兜底或手动 llama.cpp。")
     else:
-        blockers.append("当前硬件未达到本地 4B 默认启用条件。")
+        blockers.append("当前硬件未达到本地 9B MTP 默认启用条件。")
 
     return {
         "platform": system,
@@ -422,9 +391,9 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     if gguf is None:
         actions.append({
             "id": "download_model",
-            "label": "Download Qwen3-4B Thinking 2507 Q4_K_M-imatrix GGUF",
+            "label": "Download Qwen3.5-9B Q4_K_M-imatrix MTP GGUF",
             "requires_user_authorization": True,
-            "approx_download_gib": 2.5,
+            "approx_download_gib": 5.38,
             "artifact_id": DEFAULT_ARTIFACT_ID,
         })
     if provider is None:
@@ -587,7 +556,7 @@ def execute(args: argparse.Namespace) -> int:
 
     model_root = Path(args.model_root).expanduser()
     provider_path = Path(args.provider_config).expanduser()
-    env_file = model_root / "lynn-qwen3-4b-thinking-q4km.env"
+    env_file = model_root / "lynn-qwen35-9b-mtp.env"
     setup_cmd = [
         "bash",
         str(SETUP_SCRIPT),

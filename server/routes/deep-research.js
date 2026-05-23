@@ -83,8 +83,6 @@ export function parseDeepResearchSse(rawText) {
   const metaEvents = [];
   let finishReason = null;
   let winnerProviderId = null;
-  let qualityRejected = false;
-  let rankedScores = null;
   let usage = null;
 
   for (const rawLine of String(rawText || "").split(/\r?\n/u)) {
@@ -108,12 +106,6 @@ export function parseDeepResearchSse(rawText) {
       metaEvents.push(normalizedMeta);
       if (eventType === "winner-picked") {
         winnerProviderId = payload.providerId || payload.winnerProviderId || payload.meta?.winnerProviderId || payload.meta?.providerId || winnerProviderId;
-        rankedScores = payload.rankedScores || payload.meta?.rankedScores || rankedScores;
-      }
-      if (eventType === "quality-rejected" || eventType === "quality-rejected-final") {
-        qualityRejected = true;
-        winnerProviderId = payload.winnerProviderId || payload.providerId || payload.meta?.winnerProviderId || payload.meta?.providerId || winnerProviderId;
-        rankedScores = payload.rankedScores || payload.meta?.rankedScores || payload.scores || rankedScores;
       }
       continue;
     }
@@ -128,12 +120,10 @@ export function parseDeepResearchSse(rawText) {
   }
 
   return {
-    ok: !qualityRejected,
+    ok: true,
     text: textParts.join(""),
     finishReason,
     winnerProviderId,
-    rankedScores,
-    qualityRejected,
     metaEvents,
     usage,
   };
@@ -164,25 +154,13 @@ function isValidSessionPath(sessionPath, agentsDir) {
 function formatDeepResearchResultText(parsed) {
   const text = String(parsed?.text || "").trim()
     || "深度调研没有返回可见答案，请稍后重试或把问题拆得更具体。";
-  const source = parsed?.winnerProviderId ? ` · 推荐来源：${parsed.winnerProviderId}` : "";
-  const status = parsed?.qualityRejected
-    ? "未通过质量复核"
-    : parsed?.ok === false
-      ? "未通过质量复核"
-      : "已通过质量复核";
-  const scoreLines = Array.isArray(parsed?.rankedScores)
-    ? parsed.rankedScores.slice(0, 3).map((row, index) => {
-      const provider = String(row?.providerId || row?.provider || `候选 ${index + 1}`);
-      const avg = Number(row?.avg ?? row?.average ?? NaN);
-      return Number.isFinite(avg) ? `- ${provider}: ${avg.toFixed(2)}` : `- ${provider}`;
-    })
-    : [];
+  const source = parsed?.winnerProviderId ? ` · 输出来源：${parsed.winnerProviderId}` : "";
+  const status = "完成";
   return [
     text,
     "",
     "---",
     `**深度调研**：${status}${source}`,
-    scoreLines.length ? `\n${scoreLines.join("\n")}` : "",
   ].filter(Boolean).join("\n");
 }
 

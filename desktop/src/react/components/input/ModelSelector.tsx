@@ -25,8 +25,8 @@ interface SelectorModel {
   metaLabel?: string;
 }
 
-const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen3-4b-thinking-2507-q4km-imatrix';
-const LOCAL_QWEN35_MODEL_ID = 'qwen3-4b-thinking-2507-q4km-imatrix';
+const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
+const LOCAL_QWEN35_MODEL_ID = 'qwen35-9b-q4km-imatrix';
 
 function formatProviderLabel(provider?: string): string {
   if (!provider) return '';
@@ -42,7 +42,7 @@ function isLocalQwen35(model?: SelectorModel | null): boolean {
 }
 
 function compactPillModelName(model?: SelectorModel | null, role?: string | null): string {
-  if (isLocalQwen35(model)) return 'Qwen3-4B';
+  if (isLocalQwen35(model)) return 'Qwen3.5-9B';
   return normalizeDisplayModelName(model, { role, purpose: 'chat' });
 }
 
@@ -167,10 +167,10 @@ export function ModelSelector({
       ? styles['model-pill-status-dot-loading']
       : styles['model-pill-status-dot-offline'];
   const localQwenTitle = localQwenRunning
-    ? '本地 Qwen3-4B Thinking 正在运行 · Q4_K_M imatrix'
+    ? '本地 Qwen3.5-9B MTP 正在运行 · Q4_K_M imatrix'
     : localQwenLoading
-      ? '本地 Qwen3-4B Thinking 正在启动 · Q4_K_M imatrix'
-      : '本地 Qwen3-4B Thinking 已选择，尚未启动';
+      ? '本地 Qwen3.5-9B MTP 正在启动 · Q4_K_M imatrix'
+      : '本地 Qwen3.5-9B MTP 已选择，尚未启动';
   const localQwenInlineState = localQwenRunning
     ? null
     : localQwenLoading

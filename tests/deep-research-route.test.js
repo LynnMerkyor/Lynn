@@ -39,7 +39,6 @@ describe("deep research route", () => {
         object: "deep-research.meta",
         type: "winner-picked",
         providerId: "deepseek-chat",
-        rankedScores: [{ providerId: "deepseek-chat", avg: 1.33 }],
       }),
       sseLine({
         id: "dr-test",
@@ -54,19 +53,16 @@ describe("deep research route", () => {
       text: "第一段，第二段",
       finishReason: "stop",
       winnerProviderId: "deepseek-chat",
-      rankedScores: [{ providerId: "deepseek-chat", avg: 1.33 }],
-      qualityRejected: false,
       usage: { completion_tokens: 8 },
     });
   });
 
-  it("marks low-quality winners as rejected instead of treating them as pass", () => {
+  it("treats legacy quality rejection payloads as model-visible output", () => {
     const raw = [
       sseLine({
         object: "deep-research.meta",
         type: "quality-rejected-final",
         winnerProviderId: "mimo",
-        rankedScores: [{ providerId: "mimo", avg: 4.67 }],
       }),
       sseLine({
         choices: [{ delta: { content: "候选答案质量不足。" }, finish_reason: "stop" }],
@@ -74,14 +70,13 @@ describe("deep research route", () => {
     ].join("");
 
     expect(parseDeepResearchSse(raw)).toMatchObject({
-      ok: false,
-      qualityRejected: true,
-      winnerProviderId: "mimo",
+      ok: true,
+      winnerProviderId: null,
       text: "候选答案质量不足。",
     });
   });
 
-  it("recognizes Brain v2 nested meta.event quality rejection payloads", () => {
+  it("does not turn nested legacy quality rejection payloads into route-level rejection", () => {
     const raw = [
       sseLine({
         id: "chatcmpl-deep",
@@ -89,8 +84,6 @@ describe("deep research route", () => {
         meta: {
           event: "quality-rejected-final",
           winnerProviderId: null,
-          qualityRejected: true,
-          rankedScores: [{ providerId: "deepseek-chat", avg: 5.33, maxDimension: 6 }],
         },
       }),
       sseLine({
@@ -99,10 +92,8 @@ describe("deep research route", () => {
     ].join("");
 
     expect(parseDeepResearchSse(raw)).toMatchObject({
-      ok: false,
-      qualityRejected: true,
+      ok: true,
       winnerProviderId: null,
-      rankedScores: [{ providerId: "deepseek-chat", avg: 5.33, maxDimension: 6 }],
       text: "这轮 Deep Research 已拦截。",
     });
   });
@@ -115,8 +106,6 @@ describe("deep research route", () => {
         meta: {
           event: "winner-picked",
           winnerProviderId: "deepseek-chat",
-          qualityRejected: false,
-          rankedScores: [{ providerId: "deepseek-chat", avg: 1 }],
         },
       }),
       sseLine({
@@ -126,9 +115,7 @@ describe("deep research route", () => {
 
     expect(parseDeepResearchSse(raw)).toMatchObject({
       ok: true,
-      qualityRejected: false,
       winnerProviderId: "deepseek-chat",
-      rankedScores: [{ providerId: "deepseek-chat", avg: 1 }],
       text: "MoE 是混合专家模型。",
     });
   });
@@ -204,7 +191,6 @@ describe("deep research route", () => {
         object: "deep-research.meta",
         type: "winner-picked",
         providerId: "deepseek-chat",
-        rankedScores: [{ providerId: "deepseek-chat", avg: 1 }],
       }),
     ].join(""), { status: 200 }));
     const app = makeAppWithEngine(fetchImpl, { agentsDir });
@@ -233,7 +219,8 @@ describe("deep research route", () => {
     });
     expect(lines[2].message.role).toBe("assistant");
     expect(lines[2].message.content[0].text).toContain("深度调研");
-    expect(lines[2].message.content[0].text).toContain("推荐来源：deepseek-chat");
+    expect(lines[2].message.content[0].text).toContain("输出来源：deepseek-chat");
+    expect(lines[2].message.content[0].text).not.toContain("推荐来源");
   });
 
   it("surfaces upstream failures with a useful error", async () => {

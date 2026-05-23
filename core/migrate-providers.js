@@ -243,21 +243,22 @@ export function migrateToProvidersYaml(lynnHome, agentsDir, log = () => {}) {
 // ── Local Qwen 默认模型迁移 ───────────────────────────────────────────────────
 
 const LOCAL_QWEN_4B_MIGRATION_FLAG = "local_qwen_default_4b_migrated_v1";
-const OLD_LOCAL_QWEN_PROVIDER = "local-qwen35-9b-q4km-imatrix";
-const OLD_LOCAL_QWEN_MODEL = "qwen35-9b-q4km-imatrix";
-const NEW_LOCAL_QWEN_PROVIDER = "local-qwen3-4b-thinking-2507-q4km-imatrix";
-const NEW_LOCAL_QWEN_MODEL = "qwen3-4b-thinking-2507-q4km-imatrix";
+const LOCAL_QWEN_9B_MTP_RESTORE_FLAG = "local_qwen_default_9b_mtp_restored_v1";
+const OLD_LOCAL_QWEN_PROVIDER = "local-qwen3-4b-thinking-2507-q4km-imatrix";
+const OLD_LOCAL_QWEN_MODEL = "qwen3-4b-thinking-2507-q4km-imatrix";
+const NEW_LOCAL_QWEN_PROVIDER = "local-qwen35-9b-q4km-imatrix";
+const NEW_LOCAL_QWEN_MODEL = "qwen35-9b-q4km-imatrix";
 
-function _localQwen4BProviderSeed(oldProvider = {}) {
+function _localQwen9BMtpProviderSeed(oldProvider = {}) {
   return {
-    display_name: "本地 Qwen3-4B Thinking",
+    display_name: "本地 Qwen3.5-9B MTP",
     base_url: oldProvider.base_url || "http://127.0.0.1:18099/v1",
     api: oldProvider.api || "openai-completions",
     auth_type: "none",
     models: [
       {
         id: NEW_LOCAL_QWEN_MODEL,
-        name: "Qwen3-4B Thinking 2507 Q4_K_M imatrix",
+        name: "Qwen3.5-9B Q4_K_M imatrix MTP",
         context: 32768,
         maxOutput: 32768,
       },
@@ -279,11 +280,10 @@ function _migrateChatRef(chat) {
 }
 
 /**
- * V0.79 之后 Lynn 默认本地模型从 9B 改为 4B。
+ * V0.79 恢复默认本地模型为 9B MTP。
  *
- * 老用户可能已经把 primary agent 固定在旧 9B provider/model 上；仅改
- * default-models.json 不会改变这些显式选择。这个迁移只跑一次，把旧的本地
- * 9B 默认选择切到 4B，同时保留旧 9B provider 作为可选模型。
+ * 早期内测曾短暂把默认本地模型迁到 4B；4B thinking 容易吞正文,不适合
+ * 默认产品路径。这里把显式落到 4B 的旧配置迁回 9B MTP。
  */
 export function migrateLocalQwenDefaultTo4B(lynnHome, agentsDir, log = () => {}) {
   const providersPath = path.join(lynnHome, "added-models.yaml");
@@ -293,16 +293,16 @@ export function migrateLocalQwenDefaultTo4B(lynnHome, agentsDir, log = () => {})
 
   const oldProvider = raw.providers[OLD_LOCAL_QWEN_PROVIDER] || {};
   if (!raw.providers[NEW_LOCAL_QWEN_PROVIDER]) {
-    raw.providers[NEW_LOCAL_QWEN_PROVIDER] = _localQwen4BProviderSeed(oldProvider);
+    raw.providers[NEW_LOCAL_QWEN_PROVIDER] = _localQwen9BMtpProviderSeed(oldProvider);
     const header =
       "# Lynn 供应商配置（全局，跨 agent 共享）\n" +
       "# 由设置页面管理\n\n";
     atomicWriteYAML(providersPath, raw, header);
-    log("[migrate-providers] seeded default local Qwen3-4B provider");
+    log("[migrate-providers] seeded default local Qwen3.5-9B MTP provider");
   }
 
   const prefs = _readPrefs(prefsPath);
-  if (prefs[LOCAL_QWEN_4B_MIGRATION_FLAG]) return;
+  if (prefs[LOCAL_QWEN_9B_MTP_RESTORE_FLAG]) return;
 
   let changedAgents = 0;
   for (const ac of _collectAgentConfigs(agentsDir)) {
@@ -328,11 +328,12 @@ export function migrateLocalQwenDefaultTo4B(lynnHome, agentsDir, log = () => {})
   }
 
   prefs[LOCAL_QWEN_4B_MIGRATION_FLAG] = true;
+  prefs[LOCAL_QWEN_9B_MTP_RESTORE_FLAG] = true;
   atomicWriteJSON(prefsPath, prefs);
   if (changedAgents > 0) {
-    log(`[migrate-providers] migrated ${changedAgents} agent local Qwen default(s) 9B → 4B`);
+    log(`[migrate-providers] migrated ${changedAgents} agent local Qwen default(s) 4B → 9B MTP`);
   } else {
-    log("[migrate-providers] local Qwen 4B default migration marked");
+    log("[migrate-providers] local Qwen 9B MTP default migration marked");
   }
 }
 
