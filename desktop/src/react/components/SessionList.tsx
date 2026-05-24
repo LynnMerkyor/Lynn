@@ -11,7 +11,7 @@ import { hanaFetch, hanaUrl } from '../hooks/use-hana-fetch';
 import { useI18n } from '../hooks/use-i18n';
 import { formatSessionDate } from '../utils/format';
 import { switchSession, archiveSession, renameSession } from '../stores/session-actions';
-import type { Session, Agent, BridgeSession } from '../types';
+import type { Session, Agent } from '../types';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
 import { lookupKnownModel } from '../utils/known-models';
 import { isDisplayDefaultModel } from '../utils/brain-models';

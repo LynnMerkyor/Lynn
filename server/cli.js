@@ -31,8 +31,6 @@ export function startCLI({ port, token, agentName, userName }) {
   let ws = null;
   let isStreaming = false;
   let currentMood = "";
-  let inMood = false;
-  let inThinking = false;
 
   // ── HTTP 工具 ──
   async function api(path, opts = {}) {
@@ -82,7 +80,6 @@ ${c.dim}${t("cli.disconnected")}${c.reset}`);
         break;
 
       case "mood_start":
-        inMood = true;
         currentMood = "";
         break;
 
@@ -91,7 +88,6 @@ ${c.dim}${t("cli.disconnected")}${c.reset}`);
         break;
 
       case "mood_end":
-        inMood = false;
         // 灰色显示 mood
         if (currentMood.trim()) {
           process.stdout.write(`${c.gray}${c.italic}`);
@@ -104,7 +100,6 @@ ${c.dim}${t("cli.disconnected")}${c.reset}`);
         break;
 
       case "thinking_start":
-        inThinking = true;
         process.stdout.write(`${c.dim}  thinking...${c.reset}`);
         break;
 
@@ -113,7 +108,6 @@ ${c.dim}${t("cli.disconnected")}${c.reset}`);
         break;
 
       case "thinking_end":
-        inThinking = false;
         // 清除 "thinking..." 行
         process.stdout.write("\r\x1b[K");
         break;
@@ -180,7 +174,6 @@ ${c.red}${t("cli.error", { msg: msg.message })}${c.reset}
 ${c.dim}${t("cli.interrupted")}${c.reset}
 `);
         isStreaming = false;
-        inThinking = false;
         showPrompt();
         return;
       }
@@ -190,7 +183,6 @@ ${c.dim}${t("cli.interrupted")}${c.reset}
         if (isStreaming) {
           ws.send(JSON.stringify({ type: "abort" }));
           isStreaming = false;
-          inThinking = false;
           process.stdout.write(`
 ${c.dim}${t("cli.interrupted")}${c.reset}
 `);

@@ -93,10 +93,6 @@ function parseMessageModelRef(raw?: string | null): { id: string; provider?: str
   return { id: value };
 }
 
-function audioFileNameFromPath(filePath: string): string {
-  return filePath.split(/[\\/]/).filter(Boolean).pop() || '';
-}
-
 type TtsPlaybackController = {
   stop: () => void;
   finished: Promise<void>;
@@ -145,7 +141,7 @@ async function playAudioHttpUrl(audioPath: string): Promise<TtsPlaybackControlle
     const stop = () => {
       if (stopped) return;
       stopped = true;
-      try { source.stop(0); } catch {}
+      try { source.stop(0); } catch { /* source may already be stopped */ }
     };
     return { stop, finished };
   }
@@ -172,7 +168,7 @@ async function playAudioHttpUrl(audioPath: string): Promise<TtsPlaybackControlle
   const stop = () => {
     if (stopped) return;
     stopped = true;
-    try { audio.pause(); audio.currentTime = 0; } catch {}
+    try { audio.pause(); audio.currentTime = 0; } catch { /* best-effort playback stop */ }
     cleanup();
   };
   return { stop, finished };
@@ -336,7 +332,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
     const ctrl = ttsControllerRef.current;
     ttsControllerRef.current = null;
     setTtsPlaying(false);
-    try { ctrl?.stop(); } catch {}
+    try { ctrl?.stop(); } catch { /* best-effort playback stop */ }
   }, []);
   // 卸载时清理:防止用户切换/删除消息时音频还在跑
   useEffect(() => () => stopTtsPlayback(), [stopTtsPlayback]);

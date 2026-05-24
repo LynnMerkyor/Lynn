@@ -21,7 +21,7 @@ export function isMeaningfulRecoveredBashCommand(command) {
   if (/^[<>/\\\s]+$/.test(trimmed)) return false;
   if (/^<\/?[a-zA-Z0-9_.:-]+\s*\/?>$/.test(trimmed)) return false;
   if (/^```(?:bash|sh|shell)?$/i.test(trimmed)) return false;
-  return /[A-Za-z0-9_$~\'\""` .-]/.test(trimmed);
+  return /[A-Za-z0-9_$~'"` .-]/.test(trimmed);
 }
 
 export function isInsidePath(child, parent) {
@@ -124,7 +124,7 @@ export function sanitizeFolderName(name = "") {
     .replace(/(?:的)?(?:文件夹|目录|folder)(?:里|中|内)?$/i, "")
     .replace(/^(?:到|至|进|进入|放进|放到|移动到|移到|挪到|拷贝到|复制到)\s*/i, "")
     .trim()
-    .replace(/[\/\\:*?"<>|]/g, "")
+    .replace(/[/\\:*?"<>|]/g, "")
     .slice(0, 80);
   if (/^(?:一?个)?(?:新的?|新建(?:的)?|另?一个新的?)$/i.test(cleaned)) return "";
   return cleaned;

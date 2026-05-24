@@ -5,8 +5,6 @@ import { t } from '../helpers';
 import { loadSettingsConfig } from '../actions';
 import styles from '../Settings.module.css';
 
-const platform = window.platform;
-
 export function MeTab() {
   const { settingsConfig, userAvatarUrl, showToast } = useSettingsStore();
   const [userName, setUserName] = useState('');

@@ -4,7 +4,7 @@ export interface AutomationSlice {
 }
 
 export const createAutomationSlice = (
-  set: (partial: Partial<AutomationSlice>) => void
+  _set: (partial: Partial<AutomationSlice>) => void
 ): AutomationSlice => ({
   automationCount: 0,
 });

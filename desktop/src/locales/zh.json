@@ -851,7 +851,7 @@
       "userNameHint": "Ta 怎么称呼你",
       "userProfile": "用户档案",
       "userProfileHint": "让助手了解你：兴趣、习惯、偏好等，会注入到系统提示词中",
-      "defaultProviderHint": "一键在本地 Qwen3.5-4B 和云端模型之间切换。",
+      "defaultProviderHint": "一键在本地 Qwen3.5-9B 和云端模型之间切换。",
       "openProviders": "打开 Providers →"
     },
     "crop": {
@@ -1276,7 +1276,7 @@
       "advancedDesc": "如果你已经有 provider / model 偏好，\n现在就把连接、模型和主题一起配好。",
       "advancedAction": "进入 Advanced Setup",
       "localTitle": "本地优先(离线)",
-      "localDesc": "下载 2.55 GB 的 Lynn 默认模型(Qwen3.5-4B)，\n完全离线运行，不上传任何对话。",
+      "localDesc": "下载 5.38 GB 的 Lynn 默认模型(Qwen3.5-9B Q4_K_M imatrix)，\n完全离线运行，不上传任何对话。",
       "localAction": "下载本地模型"
     },
     "name": {
@@ -1366,8 +1366,8 @@
     },
     "localModel": {
       "title": "下载 Lynn 默认本地模型",
-      "subtitle": "Lynn 默认模型 Qwen3.5-4B Q4_K_M (unsloth) · 2.55GB · 32K 上下文 · 工具调用 85.7% · 8~16G 显存推荐。\n完全离线，不需要任何 API Key，不上传任何对话。",
-      "specsLine": "2.55 GB · Q4_K_M (unsloth) · 32K 上下文 · 完全离线",
+      "subtitle": "Lynn 默认模型 Qwen3.5-9B Q4_K_M imatrix MTP · 5.38GB · 32K 上下文 · 24GB+ 显存推荐。\n完全离线，不需要任何 API Key，不上传任何对话。",
+      "specsLine": "5.38 GB · Q4_K_M imatrix MTP · 32K 上下文 · 完全离线",
       "needsBinary": "缺少 llama.cpp 推理引擎，请先安装：~/.lynn/llamacpp/bin/llama-server",
       "needsBinaryHint": "请按文档安装 llama.cpp 后重试。",
       "alreadyHave": "本地模型已就绪",
@@ -1390,11 +1390,11 @@
       "errorGeneric": "下载出错：{reason}",
       "next": "下一步",
       "back": "上一步",
-      "modelPreparedHint": "模型和 llama.cpp 已就绪,点击启动即可切换到本地 Qwen3.5-4B。",
+      "modelPreparedHint": "模型和 llama.cpp 已就绪,点击启动即可切换到本地 Qwen3.5-9B。",
       "statusReady": "可启动",
       "statusWaiting": "待准备",
-      "runtimeLocal9B": "本地 Qwen3.5-4B",
-      "runtimeLocalDefault": "本地 Qwen3.5-4B"
+      "runtimeLocal9B": "本地 Qwen3.5-9B",
+      "runtimeLocalDefault": "本地 Qwen3.5-9B"
     },
     "tutorial": {
       "interactive": {
@@ -1921,7 +1921,7 @@
     },
     "artifact": {
       "label": "创建预览",
-      "description": "当你需要向用户展示 HTML 页面、代码片段或长篇 Markdown 内容时，调用此工具。\n内容会在独立的预览面板中渲染，用户可以实时查看效果。\n适用场景：可运行的 HTML/CSS/JS 页面、交互式可视化、SVG 图表、完整代码文件、长篇格式化文档。\n不适用场景：简短的文字回复、对话性回答、单行代码片段（直接在消息中展示即可）。",
+      "description": "当用户明确要求可预览页面、HTML、长篇 Markdown 文档、完整代码文件或交互式可视化时，调用此工具。\n内容会在独立的预览面板中渲染，用户可以实时查看效果。\n适用场景：可运行的 HTML/CSS/JS 页面、交互式可视化、SVG 图表、完整代码文件、长篇格式化文档。\n不适用场景：简短的文字回复、普通表格、简单计算、管理建议、对话性回答、单行代码片段（直接在消息中展示即可）。",
       "typeDesc": "内容类型：html（渲染页面）、code（语法高亮）、markdown（文档）",
       "titleDesc": "展示标题，简短描述内容",
       "contentDesc": "完整内容（HTML 源码 / 代码 / Markdown 文本）",
@@ -1929,7 +1929,7 @@
     },
     "report": {
       "label": "生成 HTML 报告",
-      "description": "生成可在聊天框预览、浏览器打开并导出 PNG 的专业 HTML 报告。适合深度研究、行情分析、行业报告、项目复盘、发布稿。必须先提供真实内容章节，不要生成空壳报告。stylePreset 可选：editorial-paper（纸质杂志感深度报告，推荐默认）、finance-dark（深色金融看板）、magazine（大胆杂志版式）、clean-briefing（清爽简报）。",
+      "description": "仅当用户明确要求生成报告、HTML 报告、可预览/可导出的页面或发布稿时，生成可在聊天框预览、浏览器打开并导出 PNG 的专业 HTML 报告。适合深度研究、行情分析、行业报告、项目复盘、发布稿。简单计算、普通表格、摘要和管理建议应直接在聊天正文回答，不要调用此工具。必须先提供真实内容章节，不要生成空壳报告。stylePreset 可选：editorial-paper（纸质杂志感深度报告，推荐默认）、finance-dark（深色金融看板）、magazine（大胆杂志版式）、clean-briefing（清爽简报）。",
       "titleDesc": "报告标题",
       "tagDesc": "报告分类或短标签，如 A股研究、行业观察",
       "subtitleDesc": "副标题或一句话摘要",

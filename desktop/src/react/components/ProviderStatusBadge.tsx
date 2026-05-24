@@ -1,10 +1,10 @@
 /**
  * ProviderStatusBadge.tsx — Compact model-route chip for the welcome screen.
  *
- * Local Qwen3.5-4B state is sourced from the server-side /api/local-qwen35-9b/*
+ * Local Qwen3.5-9B state is sourced from the server-side /api/local-qwen35-9b/*
  * route (legacy endpoint name kept for backward compat) so this chip,
  * Settings, onboarding, and chat routing share the same provider id and
- * setup lifecycle. 2026-05-23: default model switched from 9B to 4B.
+ * setup lifecycle. 2026-05-25: default model is 9B MTP; 4B is downgrade-only.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -14,22 +14,28 @@ import { hanaFetch } from '../hooks/use-hana-fetch';
 import { loadModels } from '../utils/ui-helpers';
 import { BRAIN_PROVIDER_ID, BRAIN_DEFAULT_MODEL_ID } from '../../../../shared/brain-provider.js';
 
-const LOCAL_PROVIDER_ID = 'local-qwen35-4b-q4km';
-const LOCAL_MODEL_ID = 'qwen35-4b-q4km';
+const LOCAL_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
+const LOCAL_MODEL_ID = 'qwen35-9b-q4km-imatrix';
 
 type LocalStatus = {
   ok?: boolean;
   registered_provider?: boolean;
   runtime?: {
     endpoint_running?: boolean;
+    endpoint_running_any?: boolean;
     endpoint_loading?: boolean;
+    endpoint_occupied?: boolean;
+    serves_default_model?: boolean;
     process_alive?: boolean;
     base_url?: string;
+    model_ids?: string[];
   };
   plan?: {
     observed?: {
       endpoint_running?: boolean;
       endpoint_loading?: boolean;
+      endpoint_occupied?: boolean;
+      served_model_ids?: string[];
       gguf?: string | null;
       llama_server?: string | null;
     };
@@ -46,16 +52,28 @@ type LocalStatus = {
 function providerDisplayLabel(provider: string | null, isZh: boolean): string {
   if (!provider) return isZh ? '未配置' : 'No model';
   if (provider === BRAIN_PROVIDER_ID) return isZh ? '默认模型' : 'Default model';
-  if (provider === LOCAL_PROVIDER_ID) return isZh ? '本地 Qwen3.5-4B' : 'Local Qwen3.5-4B';
+  if (provider === LOCAL_PROVIDER_ID) return isZh ? '本地 Qwen3.5-9B' : 'Local Qwen3.5-9B';
   return provider;
 }
 
 function isLocalReady(status: LocalStatus | null): boolean {
-  return status?.runtime?.endpoint_running === true || status?.plan?.observed?.endpoint_running === true;
+  const modelIds = status?.runtime?.model_ids || status?.plan?.observed?.served_model_ids || [];
+  const servesDefault = status?.runtime?.serves_default_model === true || modelIds.includes(LOCAL_MODEL_ID);
+  return servesDefault && (status?.runtime?.endpoint_running === true || status?.plan?.observed?.endpoint_running === true);
+}
+
+function isLocalEndpointOccupied(status: LocalStatus | null): boolean {
+  const modelIds = status?.runtime?.model_ids || status?.plan?.observed?.served_model_ids || [];
+  const servesDefault = status?.runtime?.serves_default_model === true || modelIds.includes(LOCAL_MODEL_ID);
+  return status?.runtime?.endpoint_occupied === true
+    || status?.plan?.observed?.endpoint_occupied === true
+    || ((status?.runtime?.endpoint_running_any === true || status?.runtime?.endpoint_running === true)
+      && modelIds.length > 0
+      && !servesDefault);
 }
 
 function isLocalBusy(status: LocalStatus | null): boolean {
-  return !isLocalReady(status) && (
+  return !isLocalReady(status) && !isLocalEndpointOccupied(status) && (
     status?.runtime?.endpoint_loading === true
       || status?.runtime?.process_alive === true
       || status?.plan?.observed?.endpoint_loading === true
@@ -113,6 +131,7 @@ export function ProviderStatusBadge() {
   const activeProvider = currentModel?.provider || null;
   const isLocalActive = activeProvider === LOCAL_PROVIDER_ID;
   const localReady = isLocalReady(localStatus);
+  const localOccupied = isLocalEndpointOccupied(localStatus);
   const localBusy = isLocalBusy(localStatus) || preparing;
   const localAssets = hasLocalAssets(localStatus);
 
@@ -121,6 +140,7 @@ export function ProviderStatusBadge() {
       return { statusText: providerDisplayLabel(activeProvider, isZh), tone: 'cloud' };
     }
     if (localReady) return { statusText: isZh ? '本地就绪' : 'Local ready', tone: 'ready' };
+    if (localOccupied) return { statusText: isZh ? '4B 占用端点' : '4B endpoint active', tone: 'error' };
     if (localBusy) {
       const percent = localStatus?.job?.progress?.percent;
       return {
@@ -130,7 +150,7 @@ export function ProviderStatusBadge() {
     }
     if (!localAssets) return { statusText: isZh ? '待准备' : 'Needs setup', tone: 'standby' };
     return { statusText: isZh ? '可启动' : 'Ready to start', tone: 'standby' };
-  }, [activeProvider, isLocalActive, isZh, localAssets, localBusy, localReady, localStatus?.job?.progress?.percent]);
+  }, [activeProvider, isLocalActive, isZh, localAssets, localBusy, localOccupied, localReady, localStatus?.job?.progress?.percent]);
 
   const switchToProvider = useCallback(async (targetProvider: typeof BRAIN_PROVIDER_ID | typeof LOCAL_PROVIDER_ID) => {
     if (switching) return;
@@ -223,10 +243,10 @@ export function ProviderStatusBadge() {
             <span className="provider-status-menu-dot tone-local" aria-hidden />
             <span>
               {localReady
-                ? (isZh ? '本地 Qwen3.5-4B' : 'Local Qwen3.5-4B')
+                ? (isZh ? '本地 Qwen3.5-9B' : 'Local Qwen3.5-9B')
                 : localBusy
-                  ? (isZh ? '本地 Qwen3.5-4B 准备中' : 'Local Qwen3.5-4B preparing')
-                  : (isZh ? '准备并切换本地 Qwen3.5-4B' : 'Prepare and switch to Local Qwen3.5-4B')}
+                  ? (isZh ? '本地 Qwen3.5-9B 准备中' : 'Local Qwen3.5-9B preparing')
+                  : (isZh ? '准备并切换本地 Qwen3.5-9B' : 'Prepare and switch to Local Qwen3.5-9B')}
             </span>
           </button>
           {!localReady && (

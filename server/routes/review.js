@@ -165,11 +165,6 @@ function isRetryableReviewError(err) {
     || /ECONNRESET|ETIMEDOUT|EAI_AGAIN/i.test(message);
 }
 
-function describeModel(model) {
-  if (!model) return "";
-  return String(model.name || model.id || "").trim();
-}
-
 function hasMeaningfulReviewOutput(content) {
   return typeof content === "string" && content.trim().length > 0;
 }

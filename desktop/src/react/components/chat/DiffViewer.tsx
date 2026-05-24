@@ -61,7 +61,6 @@ function getFileName(filePath: string): string {
 }
 
 export const DiffViewer = memo(function DiffViewer({ filePath, diff, linesAdded, linesRemoved, rollbackId, maximized }: Props) {
-  const t = window.t ?? ((key: string, fallback?: string) => fallback || key);
   const isZh = String(document?.documentElement?.lang || '').startsWith('zh');
   const [expanded, setExpanded] = useState(true);
   const [status, setStatus] = useState<'pending' | 'accepted' | 'rejected'>('pending');

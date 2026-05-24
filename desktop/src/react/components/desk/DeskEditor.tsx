@@ -20,7 +20,6 @@ const JIAN_PREFILL_KEY = 'hana-jian-prefill-used';
 const PATROL_TRIGGERED_KEYS = new Set<string>();
 
 function getJianPrefill(): string {
-  const t = window.t ?? ((key: string) => key);
   const isZh = String(window.i18n?.locale || '').startsWith('zh');
   if (isZh) {
     return `# 今天的计划

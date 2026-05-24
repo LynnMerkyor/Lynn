@@ -46,20 +46,20 @@ def _model_profile(served_name: str, gguf: Path) -> dict[str, str]:
     text = f"{served_name} {gguf.name}".lower()
     if "35b" in text:
         return {
-            "display_name": "Qwen3.6-35B APEX-MTP Local",
+            "display_name": "Qwen3.6-35B Q4_K_M imatrix Local",
             "model_family": "Qwen3.6-35B-A3B",
-            "recommendation": "35B APEX-MTP is the 32GB+ high-capability local upgrade.",
+            "recommendation": "35B Q4_K_M imatrix is the 24GB+ high-capability local upgrade.",
         }
     if "9b" in text:
         return {
             "display_name": "Qwen3.5-9B MTP Local",
             "model_family": "Qwen3.5-9B",
-            "recommendation": "9B MTP is the 24GB+ quality upgrade for local reasoning.",
+            "recommendation": "9B MTP is Lynn's default local model for stable thinking-on local reasoning.",
         }
     return {
         "display_name": "Qwen3.5-4B Local",
         "model_family": "Qwen3.5-4B",
-        "recommendation": "4B Q4_K_M is Lynn's default local model for most users.",
+        "recommendation": "4B Q4_K_M is a low-config downgrade; thinking-on may produce empty long reasoning.",
     }
 
 
@@ -129,7 +129,7 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
         "notes": [
             "The Lynn client must keep MIMO available until smoke_required passes.",
             profile["recommendation"],
-            "35B APEX-MTP remains an optional high-memory upgrade through the local model manager.",
+            "35B Q4_K_M imatrix remains an optional high-memory upgrade through the local model manager.",
         ],
     }
 

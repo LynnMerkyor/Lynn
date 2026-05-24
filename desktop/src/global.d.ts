@@ -8,15 +8,12 @@
 
 import type { PlatformApi } from './react/types';
 
-// v0.77 自定义 Vite env vars
-interface ImportMetaEnv {
-  readonly VITE_USE_MSW?: string;
-}
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
-
 declare global {
+  // v0.77 自定义 Vite env vars
+  interface ImportMetaEnv {
+    readonly VITE_USE_MSW?: string;
+  }
+
   interface Window {
     // ── i18n ──
     t: (path: string, vars?: Record<string, string | number>) => string;

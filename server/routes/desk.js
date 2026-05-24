@@ -10,7 +10,7 @@ import fs from "fs";
 import fsp from "fs/promises";
 import path from "path";
 import os from "os";
-import { execSync, execFileSync } from "child_process";
+import { execFileSync } from "child_process";
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { parseSkillMetadata } from "../../lib/skills/skill-metadata.js";

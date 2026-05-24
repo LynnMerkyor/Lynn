@@ -29,14 +29,14 @@ const CODING_PROVIDER_ORDER = [
 ];
 
 const LOCAL_PROVIDER_ORDER = [
-  'local-qwen35-4b-q4km',
+  'local-qwen35-9b-q4km-imatrix',
 ];
-const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-4b-q4km';
-const LOCAL_QWEN_PROVIDER_LABEL = '本地 Qwen3.5-4B';
+const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
+const LOCAL_QWEN_PROVIDER_LABEL = '本地 Qwen3.5-9B';
 const LOCAL_QWEN_COMPAT_PROVIDER_IDS = new Set([
   LOCAL_QWEN_PROVIDER_ID,
+  'local-qwen35-4b-q4km',
   'local-qwen3-4b-thinking-2507-q4km-imatrix',
-  'local-qwen35-9b-q4km-imatrix',
 ]);
 
 function isLocalQwenProviderId(id?: string | null) {
@@ -54,7 +54,7 @@ const LOCAL_PROVIDER_FALLBACKS: Record<string, ProviderSummary> = {
     base_url: 'http://127.0.0.1:18099/v1',
     api: 'openai-completions',
     api_key: '',
-    models: ['qwen35-4b-q4km'],
+    models: ['qwen35-9b-q4km-imatrix'],
     custom_models: [],
     has_credentials: true,
     supports_oauth: false,

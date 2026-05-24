@@ -145,7 +145,7 @@ describe("deep research route", () => {
 
   it("forwards prompt requests to Brain v2 and returns normalized JSON", async () => {
     const fetchImpl = vi.fn(async () => new Response([
-      sseLine({ choices: [{ delta: { content: "A3B 通常指 active 3B parameters。" } }] }),
+      sseLine({ choices: [{ delta: { content: "A3B 通常指 active 3B parameters。<script>alert(1)</script>" } }] }),
       sseLine({
         object: "deep-research.meta",
         type: "winner-picked",
@@ -165,13 +165,22 @@ describe("deep research route", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    const json = await res.json();
+    expect(json).toMatchObject({
       ok: true,
-      text: "A3B 通常指 active 3B parameters。",
+      text: "A3B 通常指 active 3B parameters。<script>alert(1)</script>",
       winnerProviderId: "deepseek-chat",
       baseUrl: "http://brain-v2.test",
       source: "brain-v2-deep-research",
     });
+    expect(json.artifact).toMatchObject({
+      artifactType: "html",
+      type: "html",
+      language: "html",
+    });
+    expect(json.artifact.content).toContain("<!DOCTYPE html>");
+    expect(json.artifact.content).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(json.artifact.content).not.toContain("<script>alert(1)</script>");
     expect(fetchImpl).toHaveBeenCalledWith(
       "http://brain-v2.test/v2/deep-research/completions",
       expect.objectContaining({
@@ -224,7 +233,8 @@ describe("deep research route", () => {
       });
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toMatchObject({
+      const json = await res.json();
+      expect(json).toMatchObject({
         ok: true,
         text: "selected model answer",
         winnerProviderId: "openai-codex",
@@ -232,6 +242,11 @@ describe("deep research route", () => {
         sourceLabel: "GPT 5.4",
         source: "selected-model-deep-research",
       });
+      expect(json.artifact).toMatchObject({
+        artifactType: "html",
+        title: "深度调研报告 · 做个调研",
+      });
+      expect(json.artifact.content).toContain("selected model answer");
       expect(fetchImpl).not.toHaveBeenCalled();
       expect(seenBodies[0]).toMatchObject({
         model: "gpt-5.4",
@@ -241,6 +256,117 @@ describe("deep research route", () => {
     } finally {
       server.close();
     }
+  });
+
+  it("retries selected BYOK deep research without thinking when the first response has no visible answer", async () => {
+    const seenBodies = [];
+    const server = createServer((req, res) => {
+      let raw = "";
+      req.on("data", (chunk) => { raw += chunk; });
+      req.on("end", () => {
+        const body = JSON.parse(raw || "{}");
+        seenBodies.push(body);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        if (seenBodies.length === 1) {
+          res.end(JSON.stringify({
+            choices: [{ message: { role: "assistant", content: "", reasoning_content: "hidden thinking" }, finish_reason: "stop" }],
+          }));
+          return;
+        }
+        res.end(JSON.stringify({
+          choices: [{ message: { role: "assistant", content: "selected model no-think fallback answer" }, finish_reason: "stop" }],
+        }));
+      });
+    });
+    const address = await listen(server);
+    const baseUrl = `http://127.0.0.1:${address.port}/v1`;
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("Brain upstream should not be called for a selected BYOK model");
+    });
+    const engine = {
+      availableModels: [{ id: "glm-5.1", provider: "zhipu-coding", name: "GLM 5.1", api: "openai-completions" }],
+      resolveProviderCredentials: () => ({ api_key: "test-key", base_url: baseUrl, api: "openai-completions" }),
+      authStorage: { get: () => null, getApiKey: async () => "" },
+      providerRegistry: { get: () => ({ authType: "apiKey" }) },
+    };
+    const app = makeAppWithEngine(fetchImpl, engine);
+
+    try {
+      const res = await app.request("/api/deep-research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: "做个调研",
+          provider: "zhipu-coding",
+          model: "glm-5.1",
+          sourceLabel: "GLM 5.1",
+          max_tokens: 512,
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json).toMatchObject({
+        ok: true,
+        text: "selected model no-think fallback answer",
+        winnerProviderId: "zhipu-coding",
+        winnerModelId: "glm-5.1",
+        source: "selected-model-deep-research",
+      });
+      expect(json.metaEvents.some((event) => event.type === "selected-model-deep-research-retry")).toBe(true);
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(seenBodies).toHaveLength(2);
+      expect(seenBodies[0].messages.at(-1).content).toBe("做个调研");
+      expect(seenBodies[0].enable_thinking).toBeUndefined();
+      expect(seenBodies[1].messages.at(-1).content).toContain("/no_think");
+      expect(seenBodies[1].enable_thinking).toBe(false);
+    } finally {
+      server.close();
+    }
+  });
+
+  it("retries local deep research with thinking disabled when thinking-on returns no visible answer", async () => {
+    const seenBodies = [];
+    const fetchImpl = vi.fn(async (_url, init) => {
+      seenBodies.push(JSON.parse(init?.body || "{}"));
+      if (seenBodies.length === 1) {
+        return new Response([
+          sseLine({ choices: [{ delta: { reasoning_content: "long hidden reasoning" }, finish_reason: "length" }] }),
+          "data: [DONE]\n\n",
+        ].join(""), { status: 200 });
+      }
+      return new Response([
+        sseLine({ choices: [{ delta: { content: "本地 thinking-off fallback 输出了可见调研报告。" }, finish_reason: "stop" }] }),
+        "data: [DONE]\n\n",
+      ].join(""), { status: 200 });
+    });
+    const app = makeApp(fetchImpl);
+
+    const res = await app.request("/api/deep-research", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "做一份长调研",
+        provider: "local-qwen35-9b-q4km-imatrix",
+        model: "qwen35-9b-q4km-imatrix",
+        localBaseUrl: "http://127.0.0.1:18099/v1",
+        max_tokens: 512,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toMatchObject({
+      ok: true,
+      text: "本地 thinking-off fallback 输出了可见调研报告。",
+      source: "local-qwen35-deep-research",
+    });
+    expect(json.metaEvents.some((event) => event.type === "local-deep-research-retry")).toBe(true);
+    expect(json.artifact).toMatchObject({ artifactType: "html", language: "html" });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(seenBodies[0].chat_template_kwargs).toEqual({ enable_thinking: true });
+    expect(seenBodies[1].chat_template_kwargs).toEqual({ enable_thinking: false });
+    expect(seenBodies[1].messages.at(-1).content).toContain("/no_think");
   });
 
   it("persists Deep Research user and assistant messages when sessionPath is provided", async () => {
@@ -272,7 +398,8 @@ describe("deep research route", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    const json = await res.json();
+    expect(json).toMatchObject({
       ok: true,
       persisted: true,
       persistedSessionPath: sessionPath,
@@ -287,6 +414,17 @@ describe("deep research route", () => {
     expect(lines[2].message.content[0].text).toContain("深度调研");
     expect(lines[2].message.content[0].text).toContain("输出来源：deepseek-chat");
     expect(lines[2].message.content[0].text).not.toContain("推荐来源");
+    expect(lines[2].message.content[1]).toMatchObject({
+      type: "toolCall",
+      name: "create_artifact",
+      arguments: {
+        artifactId: json.artifact.artifactId,
+        type: "html",
+        language: "html",
+      },
+    });
+    expect(lines[2].message.content[1].arguments.content).toContain("<!DOCTYPE html>");
+    expect(lines[2].message.content[1].arguments.content).toContain("MoE 的 active parameters");
   });
 
   it("surfaces upstream failures with a useful error", async () => {

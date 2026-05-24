@@ -320,7 +320,7 @@ export function createConfigRoute(engine) {
     if (!agentId || agentId === activeId) {
       return { store: engine.factStore, isTemp: false };
     }
-    if (/[\/\\.]/.test(agentId)) {
+    if (/[/\\.]/.test(agentId)) {
       throw new Error("Invalid agent ID");
     }
     const dbPath = path.join(engine.agentsDir, agentId, "memory", "facts.db");
@@ -337,7 +337,7 @@ export function createConfigRoute(engine) {
     if (!agentId || agentId === activeId) {
       return engine.inferredProfile?.getRawProfile?.() || null;
     }
-    if (/[\/\\.]/.test(agentId)) {
+    if (/[/\\.]/.test(agentId)) {
       throw new Error("Invalid agent ID");
     }
     const profilePath = path.join(engine.agentsDir, agentId, "memory", "user-inferred.json");

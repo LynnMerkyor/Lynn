@@ -6,8 +6,8 @@ import styles from './InputArea.module.css';
 
 const AUTO_COMPACT_THRESHOLD = 92;
 const WARNING_THRESHOLD = 70;
-const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-4b-q4km';
-const LOCAL_QWEN35_MODEL_ID = 'qwen35-4b-q4km';
+const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
+const LOCAL_QWEN35_MODEL_ID = 'qwen35-9b-q4km-imatrix';
 
 export function ContextRing() {
   const { t } = useI18n();

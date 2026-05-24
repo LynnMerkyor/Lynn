@@ -40,7 +40,8 @@ export const createSessionSlice = (
     })),
   removeSessionStream: (sessionPath) =>
     set((s) => {
-      const { [sessionPath]: _, ...rest } = s.sessionStreams;
+      const rest = { ...s.sessionStreams };
+      delete rest[sessionPath];
       return { sessionStreams: rest };
     }),
   setPendingNewSession: (pending) => set({ pendingNewSession: pending }),

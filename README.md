@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.79.0-brightgreen" alt="Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.79.1-brightgreen" alt="Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -44,26 +44,27 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 ## 🆕 近期更新
 
 <details>
-<summary><strong>v0.79.1</strong> · 2026-05-23 · 默认本地模型切到 Qwen3.5-4B,三档硬件分级 <em>(最新)</em></summary>
+<summary><strong>v0.79.1</strong> · 2026-05-25 · 默认本地模型保持 Qwen3.5-9B MTP,4B 低配降级 <em>(最新)</em></summary>
 
 **本地模型默认档更换**:
-- 🆕 **默认 Qwen3.5-4B Q4_K_M (unsloth)**:2.55 GB · thinking-on 32K · 8~16G 显存推荐 · 工具调用 85.7% · 启动快 · 覆盖最大用户群。新用户下载量减半,启动门槛降到入门级 PC/Mac。
+- 🧠 **默认 Qwen3.5-9B Q4_K_M imatrix MTP**:5.38 GB · 24GB 显存/统一内存推荐 · MTP 加速 · thinking-on 稳定性优先。4B 复测确认 thinking-on 有长思考后无正文风险,不再作为默认引导模型。
 - 🎚️ **三档硬件分级**:
-  - **默认 (8~16G 显存推荐 · 全机型)**:Qwen3.5-4B Q4_K_M
-  - **升级 (24GB 显存/统一内存+)**:Qwen3.5-9B Q4_K_M imatrix MTP — 质量更强,带 MTP draft 加速
-  - **高端 (32GB+ 显存/统一内存+)**:Qwen3.6-35B-A3B APEX-MTP I-Balanced — MMLU 90.40% / GPQA Diamond 80.70%
-- 🔁 **平滑迁移**:已有 9B / 35B 配置不强迁;新用户默认获得 4B 一键体验。
-- ✅ **测试矩阵**:V8 修正后 grader 30/35 (85.71%) · V9 60-prompt mixed suite (跑中)。
+  - **默认 (24GB 显存/统一内存+)**:Qwen3.5-9B Q4_K_M imatrix MTP — 质量更强,带 MTP 加速
+  - **低配降级 (8~16GB 可选)**:Qwen3.5-4B Q4_K_M imatrix (Lynn) — 建议 thinking-off,thinking-on 可能长思考后无正文
+  - **高端 (24GB 显存/统一内存+)**:Qwen3.6-35B-A3B Q4_K_M imatrix — MMLU 90.40% / GPQA Diamond 80.70% · Lynn 校准 · 21 GB
+- 🔁 **平滑迁移**:旧 4B 默认配置自动回到 9B MTP;4B 保留为显式低配降级。
+- 🧾 **深度调研 HTML 报告**:本地 9B、BYOK 和默认模型都会生成聊天内可点击预览的 HTML 报告;本地/部分 thinking 模型遇到空正文会自动 no-think fallback。
+- ✅ **测试矩阵**:9B MTP、GPT-5.4、默认模型安装版 smoke 全绿;Deep Research 三路 HTML artifact 门禁全绿;4B thinking-on 风险已在 Spark 复现并写入模型说明。
 
 [完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.1)
 
 </details>
 
 <details>
-<summary><strong>v0.79.0</strong> · 2026-05-22 · 本地 9B 无限 token + 本地模型管理器</summary>
+<summary><strong>v0.79.0</strong> · 2026-05-22 · 本地 9B 离线推理 + 本地模型管理器</summary>
 
 **本地模型大版本**:
-- 🧠 **本地 9B MTP,日常无限用**:Qwen3.5-9B Q4_K_M imatrix MTP 成为一键安装的默认本地模型路径,授权后自动准备 llama.cpp、下载/校验 GGUF、启动本地 OpenAI `/v1` 端点并注册模型。
+- 🧠 **本地 9B MTP,日常离线用**:Qwen3.5-9B Q4_K_M imatrix MTP 成为一键安装的默认本地模型路径,授权后自动准备 llama.cpp、下载/校验 GGUF、启动本地 OpenAI `/v1` 端点并注册模型。
 - 📦 **本地模型管理器**:设置 → 模型 支持应用内下载 35B 推荐 GGUF、导入用户自己的 GGUF、查看本地端点、停止模型释放内存。
 - ⏳ **暖机反馈**:本地模型首次加载权重和预热上下文时会给出 30-60 秒提示、阶段状态和等待动效,避免用户误以为卡死。
 - 🧭 **Brain V2 迁移**:老用户的旧 Brain endpoint 会自动迁移到 V2 canonical;GLM Coding Plan 使用专属 coding 端点;空答兜底只做可见修复,不提前干预模型输出。
@@ -106,7 +107,7 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 <summary><strong>v0.77.11</strong> · 2026-05-09 · Deep Research 桌面入口 + 质量复核 + 会话持久化</summary>
 
 **Deep Research 体验**:
-- 🧠 **新增 `深研` 入口**:输入框底部新增 Deep Research 按钮,空输入展示引导,有输入直接进入多模型并行调研。
+- 🧠 **新增 `深研` 入口**:输入框底部新增 Deep Research 按钮,空输入展示引导,有输入则进入深度调研链路并生成可预览结果。
 - 🧪 **质量地板**:对 `A3B` 这类容易误判的缩写和低可信 winner 做拒绝输出,不把不稳定答案伪装成结论。
 - 📌 **结果可追溯**:回答尾部显示 Deep Research 质量复核状态、winner 和候选模型评分。
 
@@ -629,33 +630,33 @@ Lynn 之前一直走"客户端 + Brain 兜底"的路子:模型用别人家的(Mi
 
 ## 本地模型,三档硬件分级
 
-Lynn v0.79.1 起本地模型按硬件分三档,**默认从 9B 切到 4B,启动更快、入门更低**:
+Lynn v0.79.1 起本地模型按硬件分三档,**默认保持 9B MTP,4B 只作为低配降级**:
 
 | 档位 | 模型 | 体积 | 推荐硬件 | 上下文 | 能力信号 |
 |------|------|:----:|---------|:------:|----------|
-| **默认** | **Qwen3.5-4B Q4_K_M (unsloth)** | 2.55 GB | **8~16G 显存推荐 · 全机型** | 32K | **Q4_K_M** · MMLU 500 = **81.20%** · 工具调用 85.71% · thinking-on 默认 |
-| 升级 | Qwen3.5-9B Q4_K_M imatrix MTP | 5.38 GB | 24GB 显存/统一内存+ | 32K | **Q4_K_M imatrix** · MMLU 100 = 81.00% · GPQA Diamond 81.71% (excl. parse-fail) · 工具调用 14/15 · MTP draft 加速 |
-| 高端 | Qwen3.6-35B-A3B APEX-MTP I-Balanced | 26 GB | 32GB+ 显存/统一内存+ | 32K | **Q4_K_M (APEX-MTP)** · MMLU 500 = 90.40% · GPQA Diamond 80.70% · APEX MoE |
+| **默认** | **Qwen3.5-9B Q4_K_M imatrix MTP** | 5.38 GB | **24GB 显存/统一内存+** | 32K | **Q4_K_M imatrix** · MMLU 100 = 81.00% · GPQA Diamond 81.71% (excl. parse-fail) · 工具调用 14/15 · MTP 加速 |
+| 降级 | Qwen3.5-4B Q4_K_M imatrix (Lynn) | 2.6 GB | 8~16GB 可选 | 32K | **Q4_K_M imatrix** · MMLU thinking-off 73.00% · GPQA thinking-off 16.67% · thinking-on 可能长思考后无正文 |
+| 高端 | Qwen3.6-35B-A3B Q4_K_M imatrix | 21 GB | 24GB 显存/统一内存+ | 32K | **Q4_K_M imatrix (Lynn 校准)** · MMLU 500 = 90.40% · GPQA Diamond 80.70% · R6000 参考 207 tok/s |
 
-> 所有质量数据均为 **Q4_K_M 量化态** + **thinking-on 32K max_tokens** 口径,GB10 Spark llama.cpp 同硬件实测。MMLU sample 数标注在分数后(500 / 100 sample)。
+> 9B / 35B 质量数据均为 **Q4_K_M 量化态** + **thinking-on 32K max_tokens** 口径,GB10 Spark llama.cpp 同硬件实测。4B imatrix 作为低配降级:thinking-off 可用,thinking-on 已复现长思考后无正文,不作为默认引导模型。
 
 | 通用 | 说明 |
 |---|---|
 | 运行方式 | llama.cpp 本地服务,OpenAI-compatible `/v1` 端点 |
 | 隐私 | 可完全离线;不需要 API Key;对话不上传 |
-| 默认 thinking | thinking-on(可在 Lynn 输入框关) |
+| 默认 thinking | 自动策略:轻任务关闭 thinking;复杂任务可在 Lynn 输入框开启 |
 
 ### 下载与镜像
 
-**默认 4B** (推荐新用户):
-- 🇨🇳 **ModelScope**: [unsloth/Qwen3.5-4B-GGUF](https://modelscope.cn/models/unsloth/Qwen3.5-4B-GGUF) (`Qwen3.5-4B-Q4_K_M.gguf`,**2.55 GB**)
-- 🤗 **Hugging Face**: [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) / mirror `hf-mirror.com/unsloth/Qwen3.5-4B-GGUF`
+**默认 9B** (推荐新用户):
+- 🇨🇳 **ModelScope**: [Merkyor/Qwen3.5-9B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`,**5.38 GB**)
+- 🤗 **Hugging Face**: [nerkyor/Qwen3.5-9B-GGUF-imatrix](https://huggingface.co/nerkyor/Qwen3.5-9B-GGUF-imatrix) / mirror `hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix`
 
-**升级 9B / 高端 35B**(高配设备可选):
-- 9B: [Merkyor/Qwen3.5-9B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/files) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`)
-- 35B: [Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF) — GB10 Spark 参考 think-on 4K 84.69 tok/s / 16K 75.53 tok/s
+**低配 4B / 高端 35B**(按硬件显式选择):
+- 4B: [Merkyor/Qwen3.5-4B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix) (`Qwen3.5-4B-Q4_K_M-imatrix.gguf`,**2.6 GB**) — 低配降级,建议 thinking-off
+- 35B: [Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix) (`Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf`,**21 GB**) — Lynn imatrix 校准,R6000 参考 207 tok/s,24G 本地机可加载
 
-应用内路径:**设置 → 模型 → 本地 Qwen3.5-4B → 授权安装并启用**。下载、校验、启动和模型注册都由 Lynn 后台完成;你可以随时在输入框旁看到本地模型状态,也可以停止以释放内存。模型页支持应用内一键升级到 9B / 35B,或导入你自己下载的任意 llama.cpp 可用 GGUF。
+应用内路径:**设置 → 模型 → 本地 Qwen3.5-9B → 授权安装并启用**。下载、校验、启动和模型注册都由 Lynn 后台完成;你可以随时在输入框旁看到本地模型状态,也可以停止以释放内存。模型页支持应用内切换 4B 降级 / 35B 高端档,或导入你自己下载的任意 llama.cpp 可用 GGUF。
 
 ---
 
@@ -677,7 +678,7 @@ T6  Step-3.5 Flash / MiniMax M2.7-highspeed（末级兜底）
 多级降级自动切换：某档不可用 → 自动下一档，对话不中断。**默认模型有工具调用能力**（Plan C 透传，可以直接跑 `write` / `edit` / `read` / `bash`），不只是聊天。MiMo 主链已支持 `thinking:{type:"disabled"}` 快速模式，简单 chat TTF -51%。
 
 **隐私三条承诺**：不训练、不落盘、日志最小化。想要绝对隐私？三种逃生路径：
-- Lynn 本地 Qwen3.5-4B Q4_K_M (unsloth, 默认) / 9B MTP / 35B APEX-MTP(按硬件升级,日常无限 token)
+- Lynn 本地 Qwen3.5-9B Q4_K_M imatrix MTP (默认) / 4B imatrix 低配降级 / 35B Q4_K_M imatrix(按硬件选择,本地离线使用且不消耗云端额度)
 - 全程 Ollama 本地模型（无任何数据出门）
 - 自备 OpenAI / Anthropic / Moonshot 等 API Key（走你自己的账号）
 - 敏感工作区路径隔离（`.lynn/private/*` 不进记忆）

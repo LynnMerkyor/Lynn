@@ -428,6 +428,20 @@ export async function callText({
     try {
       data = parseLlmResponsePayload(rawText, contentType);
     } catch {
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          throw new AppError('LLM_AUTH_FAILED', { context: { model, status: res.status } });
+        }
+        if (res.status === 429) {
+          const retryAfterSec = parseInt(
+            typeof res.headers?.get === "function" ? (res.headers.get('retry-after') || '0') : '0',
+            10,
+          );
+          const err = new AppError('LLM_RATE_LIMITED', { context: { model, retryAfterMs: retryAfterSec > 0 ? retryAfterSec * 1000 : undefined } });
+          if (retryAfterSec > 0) err._retryAfterMs = retryAfterSec * 1000;
+          throw err;
+        }
+      }
       throw new Error(`LLM returned invalid JSON (status=${res.status})`);
     }
 

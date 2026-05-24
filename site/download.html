@@ -9,14 +9,14 @@
     <title>Lynn 下载 | macOS 与 Windows 安装包</title>
     <meta
       name="description"
-      content="下载 Lynn 的 macOS Apple Silicon、macOS Intel 和 Windows 安装包。v0.79 内置本地 9B 无限 token 与本地模型管理器。"
+      content="下载 Lynn 的 macOS Apple Silicon、macOS Intel 和 Windows 安装包。v0.79.1 默认本地 Qwen3.5-9B MTP，并提供 4B 低配降级说明。"
     />
     <meta name="theme-color" content="#f7f1e6" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Lynn 下载 | macOS 与 Windows 安装包" />
     <meta
       property="og:description"
-      content="下载 Lynn 的 macOS Apple Silicon、macOS Intel 和 Windows 安装包。v0.79 内置本地 9B 无限 token 与本地模型管理器。"
+      content="下载 Lynn 的 macOS Apple Silicon、macOS Intel 和 Windows 安装包。v0.79.1 默认本地 Qwen3.5-9B MTP，并提供 4B 低配降级说明。"
     />
     <meta property="og:image" content="../.github/assets/screenshot-main-20260407-v3.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -37,7 +37,7 @@
           <a href="./index.html#features">功能</a>
           <a href="./index.html#scenes">场景</a>
           <a href="./download.html" aria-current="page">下载</a>
-          <a href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.0" target="_blank" rel="noreferrer">Release</a>
+          <a href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.1" target="_blank" rel="noreferrer">Release</a>
         </nav>
       </header>
 
@@ -47,8 +47,8 @@
             <span class="eyebrow">Lynn 下载页</span>
             <h1>选择适合你设备的版本</h1>
             <p class="lead">
-              当前版本 <strong id="release-version">0.79.0</strong>。
-              下载后即可开始使用 Lynn 的默认模型、桌面记忆、自动任务、多 Agent 协作和本地 9B 无限 token。
+              当前版本 <strong id="release-version">0.79.1</strong>。
+              下载后即可开始使用 Lynn 的默认模型、桌面记忆、自动任务、多 Agent 协作和本地 Qwen3.5-9B MTP。
             </p>
             <div class="platform-callout" id="platform-callout">
               系统识别中…
@@ -59,7 +59,7 @@
         <section class="download-grid" aria-label="下载选项">
           <article class="download-card" data-platform-card="mac-arm">
             <div class="download-card-top">
-              <span class="pill">推荐给 M1 / M2 / M3 / M4</span>
+              <span class="pill">推荐给 Apple Silicon Mac</span>
               <h2>macOS Apple Silicon</h2>
             </div>
             <p>适用于 Apple Silicon 芯片的 Mac。已完成签名与公证，可直接安装。</p>
@@ -119,7 +119,7 @@
             </article>
             <article class="requirement-card">
               <h3>网络与模型</h3>
-              <p>可直接使用 Lynn 默认模型，也可以在设置 → 模型中一键安装本地 Qwen3.5-9B，离线、无 API Key、日常无限 token。</p>
+              <p>可直接使用 Lynn 默认模型，也可以在设置 → 模型中一键安装本地 Qwen3.5-9B，离线、无 API Key、对话留在本机。</p>
             </article>
           </div>
         </section>
@@ -132,7 +132,7 @@
           <div class="faq-list">
             <article class="faq-card">
               <h3>我怎么知道我的 Mac 是 Apple Silicon 还是 Intel？</h3>
-              <p>点击左上角苹果菜单，选择“关于本机”。如果看到 M1 / M2 / M3 / M4，就是 Apple Silicon；如果看到 Intel，就是 Intel 版。</p>
+              <p>点击左上角苹果菜单，选择“关于本机”。如果看到 M 系列芯片，就是 Apple Silicon；如果看到 Intel，就是 Intel 版。</p>
             </article>
             <article class="faq-card">
               <h3>Windows 弹出安全提示还能装吗？</h3>
@@ -149,14 +149,14 @@
           <div class="release-card">
             <h2>本次版本重点</h2>
             <ul>
-              <li>本地 Qwen3.5-9B Q4_K_M imatrix 一键安装、启动和停止</li>
-              <li>本地模型状态条、首次暖机提示、推理等待动效和 token 统计</li>
-              <li>35B 推荐 GGUF 应用内下载,也支持导入用户已有 GGUF</li>
-              <li>Brain V2 老用户配置迁移,GLM Coding Plan 专属端点修复</li>
+              <li>默认本地模型保持 Qwen3.5-9B Q4_K_M imatrix MTP</li>
+              <li>4B 作为低配降级,明确提示 thinking-on 可能长思考后无正文</li>
+              <li>Deep Research 生成聊天内可点击预览的 HTML 报告</li>
+              <li>本地 9B、BYOK 和默认模型输出链路完成安装版门禁</li>
             </ul>
             <a
               class="button button-secondary"
-              href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.0"
+              href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.1"
               target="_blank"
               rel="noreferrer"
             >查看完整 Release</a>
@@ -168,7 +168,7 @@
         <div class="footer-links">
           <a href="./index.html">产品介绍</a>
           <a href="https://github.com/MerkyorLynn/Lynn" target="_blank" rel="noreferrer">GitHub</a>
-          <a href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.0" target="_blank" rel="noreferrer">Release</a>
+          <a href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.1" target="_blank" rel="noreferrer">Release</a>
           <a href="#faq">常见问题</a>
         </div>
         <div class="footer-meta">
@@ -179,6 +179,6 @@
       </footer>
     </div>
 
-    <script src="./app.js?v=0.79.0"></script>
+    <script src="./app.js?v=0.79.1"></script>
   </body>
 </html>

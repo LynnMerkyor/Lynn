@@ -256,13 +256,7 @@ export function PressToTalkButton({
     }
   }, [cleanup, finalize, maxDurationSec, stopRecording]);
 
-  const cancelRecording = useCallback(() => {
-    cancelledRef.current = true;
-    stopRecording();
-  }, [stopRecording]);
-
   // ============ B 模式:长按锁定连续录音 ============
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lockedRef = useRef(false);
   const [locked, setLocked] = useState(false);
 

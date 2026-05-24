@@ -12,10 +12,8 @@ async function maybeStartMockSW() {
       onUnhandledRequest: 'bypass',
       serviceWorker: { url: '/mockServiceWorker.js' },
     });
-    // eslint-disable-next-line no-console
     console.log('[v0.77] mock service worker active · /v1/memory/* /v1/audio/* 走 mock');
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn('[v0.77] mock SW 启动失败,继续走真实后端', err);
   }
 }

@@ -2,7 +2,7 @@
  * ChannelList — 频道列表渲染（DM + Group 分区）
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useStore } from '../../stores';
 import { useI18n } from '../../hooks/use-i18n';
 import { hanaUrl } from '../../hooks/use-hana-fetch';
@@ -41,7 +41,7 @@ export function resolveChannelMember(
   userName: string,
   userAvatarUrl: string | null,
   agents: Agent[],
-  currentAgentId: string | null,
+  _currentAgentId: string | null,
 ): MemberInfo {
   if (memberId === 'user' || memberId === userName) {
     return {

@@ -13,7 +13,6 @@ import { useI18n } from '../hooks/use-i18n';
 import { loadDeskFiles } from '../stores/desk-actions';
 import { clearChat } from '../stores/agent-actions';
 import { sendPrompt } from '../stores/prompt-actions';
-import type { Agent } from '../types';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
 import { ProviderStatusBadge } from './ProviderStatusBadge';
 import styles from './Welcome.module.css';
@@ -205,61 +204,6 @@ function WelcomeAvatar({ agentId, hasAvatar, agentAvatarUrl, yuan, name }: {
         onError={handleError}
       />
     </span>
-  );
-}
-
-function AgentChips({ agents, selectedId }: {
-  agents: Agent[];
-  selectedId: string | null;
-}) {
-  const handleClick = useCallback((agentId: string) => {
-    useStore.setState({ selectedAgentId: agentId });
-  }, []);
-
-  return (
-    <div className={styles.welcomeAgentSelector}>
-      {agents.map(agent => (
-        <AgentChip
-          key={agent.id}
-          agent={agent}
-          isSelected={agent.id === selectedId}
-          onClick={handleClick}
-        />
-      ))}
-    </div>
-  );
-}
-
-function AgentChip({ agent, isSelected, onClick }: {
-  agent: Agent;
-  isSelected: boolean;
-  onClick: (id: string) => void;
-}) {
-  const [src, setSrc] = useState(() =>
-    agent.hasAvatar ? hanaUrl(`/api/agents/${agent.id}/avatar?t=${_avatarTs}`) : yuanFallbackAvatar(agent.yuan),
-  );
-
-  const handleError = useCallback(() => {
-    setSrc(yuanFallbackAvatar(agent.yuan));
-  }, [agent.yuan]);
-
-  const handleClick = useCallback(() => {
-    onClick(agent.id);
-  }, [agent.id, onClick]);
-
-  return (
-    <button
-      className={`${styles.welcomeAgentChip}${isSelected ? ` ${styles.welcomeAgentChipSelected}` : ''}`}
-      onClick={handleClick}
-    >
-      <img
-        className={styles.welcomeAgentChipAvatar}
-        src={src}
-        draggable={false}
-        onError={handleError}
-      />
-      <span>{agent.name}</span>
-    </button>
   );
 }
 

@@ -182,7 +182,6 @@ export function ChangesPanel() {
   const handleRevertAll = useCallback(async () => {
     if (revertingAll || rollbackIds.length === 0) return;
     setRevertingAll(true);
-    let success = 0;
     for (const rollbackId of rollbackIds) {
       try {
         await hanaFetch('/api/fs/revert-edit', {
@@ -190,7 +189,6 @@ export function ChangesPanel() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ rollbackId }),
         });
-        success++;
       } catch (err) {
         console.warn('[changes] revert failed:', rollbackId, err);
       }

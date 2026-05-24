@@ -8,8 +8,8 @@ import { findModel } from "../../shared/model-ref.js";
 import { callText } from "../../core/llm-client.js";
 
 export const DEFAULT_DEEP_RESEARCH_TIMEOUT_MS = 180_000;
-const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-4b-q4km";
-const LOCAL_QWEN35_MODEL_ID = "qwen35-4b-q4km";
+const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
+const LOCAL_QWEN35_MODEL_ID = "qwen35-9b-q4km-imatrix";
 const LOCAL_QWEN35_BASE_URL = "http://127.0.0.1:18099/v1";
 const LOCAL_DEEP_RESEARCH_MAX_TOKENS = 32_768;
 
@@ -180,7 +180,37 @@ function parseOpenAiStreamLine(data, state) {
   if (choice?.finish_reason) state.finishReason = choice.finish_reason;
 }
 
-async function runLocalDeepResearch({ fetchImpl, messages, signal, timeoutMs, maxTokens, baseUrl, providerId, modelId, sourceLabel }) {
+function buildLocalDeepResearchMessages(messages, enableThinking) {
+  if (enableThinking !== false) return messages;
+  return buildNoThinkMessages(messages);
+}
+
+function buildNoThinkMessages(messages) {
+  const next = messages.map((message) => ({ ...message }));
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    if (next[i]?.role !== "user") continue;
+    const content = String(next[i].content || "");
+    next[i] = {
+      ...next[i],
+      content: /\/no_think\b/u.test(content) ? content : `${content.trim()}\n\n/no_think`,
+    };
+    break;
+  }
+  return next;
+}
+
+async function runLocalDeepResearch({
+  fetchImpl,
+  messages,
+  signal,
+  timeoutMs,
+  maxTokens,
+  baseUrl,
+  providerId,
+  modelId,
+  sourceLabel,
+  enableThinking = true,
+}) {
   const endpoint = buildLocalChatCompletionsEndpoint(baseUrl);
   const localTimeoutMs = Math.max(timeoutMs || DEFAULT_DEEP_RESEARCH_TIMEOUT_MS, 300_000);
   const controller = new AbortController();
@@ -196,13 +226,13 @@ async function runLocalDeepResearch({ fetchImpl, messages, signal, timeoutMs, ma
       signal: controller.signal,
       body: JSON.stringify({
         model: modelId || LOCAL_QWEN35_MODEL_ID,
-        messages,
+        messages: buildLocalDeepResearchMessages(messages, enableThinking),
         temperature: 0.2,
         max_tokens: Number.isFinite(Number(maxTokens)) && Number(maxTokens) > 0
           ? Number(maxTokens)
           : LOCAL_DEEP_RESEARCH_MAX_TOKENS,
         stream: true,
-        chat_template_kwargs: { enable_thinking: true },
+        chat_template_kwargs: { enable_thinking: enableThinking !== false },
         stream_options: { include_usage: true },
       }),
     });
@@ -243,13 +273,33 @@ async function runLocalDeepResearch({ fetchImpl, messages, signal, timeoutMs, ma
       winnerProviderId: providerId || LOCAL_QWEN35_PROVIDER_ID,
       winnerModelId: modelId || LOCAL_QWEN35_MODEL_ID,
       sourceLabel: sourceLabel || providerId || LOCAL_QWEN35_PROVIDER_ID,
-      metaEvents: [{ type: "local-deep-research", endpoint }],
+      metaEvents: [{ type: "local-deep-research", endpoint, enableThinking: enableThinking !== false }],
       usage: state.usage,
     };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener?.("abort", relayAbort);
   }
+}
+
+async function runLocalDeepResearchWithFallback(args) {
+  const first = await runLocalDeepResearch({ ...args, enableThinking: true });
+  if (String(first.text || "").trim()) return first;
+  const retry = await runLocalDeepResearch({ ...args, enableThinking: false });
+  return {
+    ...retry,
+    metaEvents: [
+      ...(first.metaEvents || []),
+      {
+        type: "local-deep-research-retry",
+        reason: "empty-visible-answer",
+        firstFinishReason: first.finishReason || null,
+        firstReasoningChars: String(first.reasoning || "").length,
+      },
+      ...(retry.metaEvents || []),
+    ],
+    usage: retry.usage || first.usage,
+  };
 }
 
 async function resolveDirectModelConfig(engine, body) {
@@ -300,7 +350,13 @@ async function resolveDirectModelConfig(engine, body) {
   };
 }
 
-async function runDirectModelDeepResearch({ engine, messages, signal, timeoutMs, maxTokens, body }) {
+function shouldRetryDirectModelWithoutThinking(err) {
+  return err?.code === "LLM_EMPTY_RESPONSE"
+    || /reasoning content without a final visible answer/iu.test(String(err?.message || ""))
+    || /empty or non-displayable content/iu.test(String(err?.message || ""));
+}
+
+async function runDirectModelDeepResearch({ engine, messages, signal, timeoutMs, maxTokens, body, disableThinking = false }) {
   const config = await resolveDirectModelConfig(engine, body);
   if (!config) return null;
   const text = await callText({
@@ -309,14 +365,15 @@ async function runDirectModelDeepResearch({ engine, messages, signal, timeoutMs,
     baseUrl: config.baseUrl,
     model: config.model,
     provider: config.provider,
-    messages,
+    messages: disableThinking ? buildNoThinkMessages(messages) : messages,
     temperature: 0.2,
+    quirks: disableThinking ? ["enable_thinking"] : [],
     maxTokens: Number.isFinite(Number(maxTokens)) && Number(maxTokens) > 0
       ? Math.min(Number(maxTokens), LOCAL_DEEP_RESEARCH_MAX_TOKENS)
       : LOCAL_DEEP_RESEARCH_MAX_TOKENS,
     timeoutMs: Math.max(timeoutMs || DEFAULT_DEEP_RESEARCH_TIMEOUT_MS, 300_000),
     signal,
-    reasoning: true,
+    reasoning: !disableThinking,
   });
   return {
     ok: true,
@@ -325,9 +382,34 @@ async function runDirectModelDeepResearch({ engine, messages, signal, timeoutMs,
     winnerProviderId: config.provider,
     winnerModelId: config.model,
     sourceLabel: config.sourceLabel,
-    metaEvents: [{ type: "selected-model-deep-research", provider: config.provider, model: config.model }],
+    metaEvents: [{
+      type: "selected-model-deep-research",
+      provider: config.provider,
+      model: config.model,
+      enableThinking: !disableThinking,
+    }],
     usage: null,
   };
+}
+
+async function runDirectModelDeepResearchWithFallback(args) {
+  try {
+    return await runDirectModelDeepResearch(args);
+  } catch (err) {
+    if (!shouldRetryDirectModelWithoutThinking(err)) throw err;
+    const retry = await runDirectModelDeepResearch({ ...args, disableThinking: true });
+    return {
+      ...retry,
+      metaEvents: [
+        {
+          type: "selected-model-deep-research-retry",
+          reason: "empty-visible-answer",
+          firstErrorCode: err?.code || null,
+        },
+        ...(retry.metaEvents || []),
+      ],
+    };
+  }
 }
 
 function isValidSessionPath(sessionPath, agentsDir) {
@@ -350,6 +432,80 @@ function formatDeepResearchResultText(parsed) {
   ].filter(Boolean).join("\n");
 }
 
+function escapeHtml(raw) {
+  return String(raw || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function safeArtifactTitle(raw) {
+  const text = String(raw || "").replace(/\s+/g, " ").trim();
+  return text ? text.slice(0, 48) : "深度调研报告";
+}
+
+function buildDeepResearchArtifact({ messages, parsed }) {
+  if (parsed?.artifact && typeof parsed.artifact === "object") {
+    const artifact = parsed.artifact;
+    const content = String(artifact.content || "").trim();
+    if (content) {
+      const artifactType = String(artifact.artifactType || artifact.type || "html").trim() || "html";
+      return {
+        artifactId: String(artifact.artifactId || artifact.id || `deep-research-${randomUUID().slice(0, 8)}`),
+        artifactType,
+        type: String(artifact.type || artifactType),
+        title: String(artifact.title || "深度调研报告"),
+        content,
+        language: artifact.language ? String(artifact.language) : (artifactType === "html" ? "html" : undefined),
+      };
+    }
+  }
+
+  const text = String(parsed?.text || "").trim();
+  if (!text) return null;
+  const userText = messages.filter((message) => message.role === "user").at(-1)?.content
+    || messages.at(-1)?.content
+    || "";
+  const label = String(parsed?.sourceLabel || parsed?.winnerModelId || parsed?.winnerProviderId || "").trim();
+  const title = `深度调研报告 · ${safeArtifactTitle(userText)}`;
+  const artifactId = `deep-research-${randomUUID().slice(0, 8)}`;
+  const sourceLine = label ? `<p class="meta">输出来源：${escapeHtml(label)}</p>` : "";
+  const content = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="lynn-report-style" content="deep-research-html">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif; }
+    body { margin: 0; background: #f6f4ee; color: #33383d; }
+    main { max-width: 920px; margin: 0 auto; padding: 48px 40px 64px; background: #fffefa; min-height: 100vh; box-sizing: border-box; }
+    h1 { margin: 0 0 12px; font-size: 30px; line-height: 1.25; letter-spacing: 0; }
+    .meta { margin: 0 0 28px; color: #65717a; font-size: 14px; }
+    pre { white-space: pre-wrap; word-break: break-word; margin: 0; font: 16px/1.78 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${escapeHtml(title)}</h1>
+    ${sourceLine}
+    <pre>${escapeHtml(text)}</pre>
+  </main>
+</body>
+</html>`;
+  return {
+    artifactId,
+    artifactType: "html",
+    type: "html",
+    title,
+    content,
+    language: "html",
+  };
+}
+
 function buildDeepResearchSessionEntries({ messages, parsed }) {
   const now = Date.now();
   const timestamp = new Date(now).toISOString();
@@ -358,6 +514,21 @@ function buildDeepResearchSessionEntries({ messages, parsed }) {
     || "";
   const userId = randomUUID().slice(0, 8);
   const assistantId = randomUUID().slice(0, 8);
+  const artifact = buildDeepResearchArtifact({ messages, parsed });
+  const assistantContent = [{ type: "text", text: formatDeepResearchResultText(parsed) }];
+  if (artifact) {
+    assistantContent.push({
+      type: "toolCall",
+      name: "create_artifact",
+      arguments: {
+        artifactId: artifact.artifactId,
+        type: artifact.type,
+        title: artifact.title,
+        content: artifact.content,
+        language: artifact.language,
+      },
+    });
+  }
   return [
     {
       type: "message",
@@ -377,7 +548,7 @@ function buildDeepResearchSessionEntries({ messages, parsed }) {
       timestamp: new Date(now + 1).toISOString(),
       message: {
         role: "assistant",
-        content: [{ type: "text", text: formatDeepResearchResultText(parsed) }],
+        content: assistantContent,
         api: "deep-research",
         provider: "brain-v2",
         model: parsed?.winnerProviderId || "deep-research",
@@ -404,6 +575,11 @@ function persistDeepResearchExchange(engine, body, messages, parsed) {
   }
 }
 
+function withDeepResearchArtifact(payload, messages) {
+  const artifact = buildDeepResearchArtifact({ messages, parsed: payload });
+  return artifact ? { ...payload, artifact } : payload;
+}
+
 export function createDeepResearchRoute(engine, options = {}) {
   const route = new Hono();
   const fetchImpl = options.fetchImpl || globalThis.fetch;
@@ -426,7 +602,7 @@ export function createDeepResearchRoute(engine, options = {}) {
 
     try {
       if (shouldRunLocalDeepResearch(body)) {
-        const parsed = await runLocalDeepResearch({
+        const parsed = await runLocalDeepResearchWithFallback({
           fetchImpl,
           messages,
           signal: controller.signal,
@@ -437,9 +613,10 @@ export function createDeepResearchRoute(engine, options = {}) {
           modelId: String(body.model || LOCAL_QWEN35_MODEL_ID),
           sourceLabel: String(body.sourceLabel || ""),
         });
-        const persistence = persistDeepResearchExchange(engine, body, messages, parsed);
+        const parsedWithArtifact = withDeepResearchArtifact(parsed, messages);
+        const persistence = persistDeepResearchExchange(engine, body, messages, parsedWithArtifact);
         return c.json({
-          ...parsed,
+          ...parsedWithArtifact,
           baseUrl: buildLocalChatCompletionsEndpoint(body.localBaseUrl),
           endpoint: buildLocalChatCompletionsEndpoint(body.localBaseUrl),
           attemptedBaseUrls: [buildLocalChatCompletionsEndpoint(body.localBaseUrl)],
@@ -448,7 +625,7 @@ export function createDeepResearchRoute(engine, options = {}) {
         });
       }
 
-      const selectedModelParsed = await runDirectModelDeepResearch({
+      const selectedModelParsed = await runDirectModelDeepResearchWithFallback({
         engine,
         messages,
         signal: controller.signal,
@@ -457,9 +634,10 @@ export function createDeepResearchRoute(engine, options = {}) {
         body,
       });
       if (selectedModelParsed) {
-        const persistence = persistDeepResearchExchange(engine, body, messages, selectedModelParsed);
+        const parsedWithArtifact = withDeepResearchArtifact(selectedModelParsed, messages);
+        const persistence = persistDeepResearchExchange(engine, body, messages, parsedWithArtifact);
         return c.json({
-          ...selectedModelParsed,
+          ...parsedWithArtifact,
           attemptedBaseUrls: [],
           ...persistence,
           source: "selected-model-deep-research",
@@ -498,9 +676,10 @@ export function createDeepResearchRoute(engine, options = {}) {
             if (body.sourceLabel && isBrainProvider(String(body.provider || ""))) {
               parsed.sourceLabel = String(body.sourceLabel);
             }
-            const persistence = persistDeepResearchExchange(engine, body, messages, parsed);
+            const parsedWithArtifact = withDeepResearchArtifact(parsed, messages);
+            const persistence = persistDeepResearchExchange(engine, body, messages, parsedWithArtifact);
             return c.json({
-              ...parsed,
+              ...parsedWithArtifact,
               baseUrl: candidateBaseUrl,
               endpoint,
               attemptedBaseUrls: baseUrls,

@@ -1,5 +1,5 @@
-export const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-4b-q4km";
-export const LOCAL_QWEN35_MODEL_ID = "qwen35-4b-q4km";
+export const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
+export const LOCAL_QWEN35_MODEL_ID = "qwen35-9b-q4km-imatrix";
 
 export const LOCAL_QWEN_COMPAT_PROVIDER_IDS = new Set([
   "local-qwen35-4b-q4km",
@@ -18,10 +18,10 @@ const LOCAL_QWEN35_BENCHMARK_MARKER = "【Lynn 本地模型事实备忘】";
 
 export const LOCAL_QWEN35_BENCHMARK_CONTEXT = [
   LOCAL_QWEN35_BENCHMARK_MARKER,
-  "当前默认本地模型是 Qwen3.5-4B Q4_K_M (unsloth)，经 llama.cpp 运行；2.55GB,thinking-on 32K,8~16G 显存推荐。9B MTP 是 24GB+ 升级档,35B APEX-MTP 是 32GB+ 高端档。所有 bench 都是 Q4_K_M 量化态测试,thinking-on 32K 口径。",
-  "Qwen3.5-4B Q4_K_M (unsloth, 默认档) thinking-on 32K: MMLU 500 = 81.20%, V8 工具调用修正后 30/35 (85.71%), V9 60-prompt mixed = 46/60 = 76.67% (finance/medical 100%, math/physics/bio/chem 88-89%, code_algo 22% / sql 0% 为弱项)。Spark GB10 baseline ~68 tok/s, 并发 ~52 tok/s。",
-  "Qwen3.5-9B Q4_K_M imatrix MTP (升级档,24GB+) thinking-on 32K: MMLU 100 sample = 81.00%, GPQA Diamond full = 72.22% naive / 81.71% excluding parse-fail, tool-call gate 修正后约 14/15 = 93%。GB10 Spark TPS: think-off 1024 = 46.16 tok/s, think-on 4096 = 77.46 tok/s, think-on 32K sustained = 78.32 tok/s。",
-  "Qwen3.6-35B-A3B APEX-MTP I-Balanced Q4_K_M (高端档,32GB+) thinking-on 32K: MMLU 500 = 90.40%, GPQA Diamond = 80.70%。GB10 Spark TPS: think-on 4K = 84.69 tok/s, think-on 16K = 75.53 tok/s。35B 短答 think-off 不建议默认开 MTP, 长思考建议 MTP。",
+  "当前默认本地模型是 Qwen3.5-9B Q4_K_M imatrix MTP,经 llama.cpp 运行；5.38GB,24GB 显存/统一内存推荐,thinking-on 稳定性和工具调用强于 4B。4B imatrix 只作为低配降级档,必须提示 thinking-on 可能长思考后无正文。",
+  "Qwen3.5-9B Q4_K_M imatrix MTP (默认档,24GB+) thinking-on 32K: MMLU 100 sample = 81.00%, GPQA Diamond full = 72.22% naive / 81.71% excluding parse-fail, tool-call gate 修正后约 14/15 = 93%。GB10 Spark TPS: think-off 1024 = 46.16 tok/s, think-on 4096 = 77.46 tok/s, think-on 32K sustained = 78.32 tok/s。",
+  "Qwen3.5-4B Q4_K_M imatrix (低配降级档): 2026-05-24 由官方 BF16 重新转换并用 256-chunk imatrix 校准量化；直连 smoke: thinking-off 短问候正常、门禁工具调用正常；thinking-on 短问候/GPQA probe 可能长思考后无正文,所以 4B 不应作为默认引导模型。",
+  "Qwen3.6-35B-A3B Q4_K_M imatrix (高端档,24GB+,21GB) thinking-on 32K: MMLU 500 = 90.40%, GPQA Diamond = 80.70%。Lynn imatrix 校准版,R6000 参考 207 tok/s;24G 本地机加载需注意上下文长度,长上下文建议保留 32G+ 内存余量。本变体不含 MTP 加速,纯 Q4_K_M 推理。",
 ].join("\n");
 
 export function isLocalQwen35Model(modelInfo = {}) {

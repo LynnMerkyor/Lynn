@@ -702,7 +702,7 @@
       "userNameHint": "Ta 怎麼稱呼你",
       "userProfile": "使用者檔案",
       "userProfileHint": "讓助手了解你：興趣、習慣、偏好等，會注入到系統提示詞中",
-      "defaultProviderHint": "一鍵在本機 Qwen3.5-4B 和雲端模型之間切換。",
+      "defaultProviderHint": "一鍵在本機 Qwen3.5-9B 和雲端模型之間切換。",
       "openProviders": "開啟 Providers →"
     },
     "crop": {
@@ -1223,8 +1223,8 @@
     },
     "localModel": {
       "title": "下载 Lynn 默认本地模型",
-      "subtitle": "Lynn 預設模型 Qwen3.5-4B Q4_K_M (unsloth) · 2.55GB · 32K 上下文 · 工具調用 85.7% · 8~16G 顯存推薦。\n完全離線，不需要任何 API Key，不上傳任何對話。",
-      "specsLine": "2.55 GB · Q4_K_M (unsloth) · 32K 上下文 · 完全離線",
+      "subtitle": "Lynn 預設模型 Qwen3.5-9B Q4_K_M imatrix MTP · 5.38GB · 32K 上下文 · 24GB+ 顯存推薦。\n完全離線，不需要任何 API Key，不上傳任何對話。",
+      "specsLine": "5.38 GB · Q4_K_M imatrix MTP · 32K 上下文 · 完全離線",
       "needsBinary": "缺少 llama.cpp 推理引擎，请先安装：~/.lynn/llamacpp/bin/llama-server",
       "needsBinaryHint": "请按文档安装 llama.cpp 后重试。",
       "alreadyHave": "本地模型已就绪",
@@ -1247,11 +1247,11 @@
       "errorGeneric": "下载出错：{reason}",
       "next": "下一步",
       "back": "上一步",
-      "modelPreparedHint": "模型和 llama.cpp 已就緒,點擊啟動即可切換到本機 Qwen3.5-4B。",
+      "modelPreparedHint": "模型和 llama.cpp 已就緒,點擊啟動即可切換到本機 Qwen3.5-9B。",
       "statusReady": "可啟動",
       "statusWaiting": "待準備",
-      "runtimeLocal9B": "本機 Qwen3.5-4B",
-      "runtimeLocalDefault": "本機 Qwen3.5-4B"
+      "runtimeLocal9B": "本機 Qwen3.5-9B",
+      "runtimeLocalDefault": "本機 Qwen3.5-9B"
     },
     "skipSetup": "跳過引導"
   },
@@ -1736,7 +1736,7 @@
     },
     "artifact": {
       "label": "建立預覽",
-      "description": "當你需要向使用者展示 HTML 頁面、程式碼片段或長篇 Markdown 內容時，呼叫此工具。\n內容會在獨立的預覽面板中算繪，使用者可以即時查看效果。\n適用場景：可執行的 HTML/CSS/JS 頁面、互動式視覺化、SVG 圖表、完整程式碼檔案、長篇格式化文件。\n不適用場景：簡短的文字回覆、對話性回答、單行程式碼片段（直接在訊息中展示即可）。",
+      "description": "當使用者明確要求可預覽頁面、HTML、長篇 Markdown 文件、完整程式碼檔案或互動式視覺化時，呼叫此工具。\n內容會在獨立的預覽面板中算繪，使用者可以即時查看效果。\n適用場景：可執行的 HTML/CSS/JS 頁面、互動式視覺化、SVG 圖表、完整程式碼檔案、長篇格式化文件。\n不適用場景：簡短的文字回覆、普通表格、簡單計算、管理建議、對話性回答、單行程式碼片段（直接在訊息中展示即可）。",
       "typeDesc": "內容類型：html（算繪頁面）、code（語法高亮）、markdown（文件）",
       "titleDesc": "展示標題，簡短描述內容",
       "contentDesc": "完整內容（HTML 原始碼 / 程式碼 / Markdown 文字）",
@@ -1744,7 +1744,7 @@
     },
     "report": {
       "label": "產生 HTML 報告",
-      "description": "產生可在聊天框預覽、瀏覽器開啟並匯出 PNG 的專業 HTML 報告。適合深度研究、行情分析、產業報告、專案復盤、發布稿。必須先提供真實內容章節，不要產生空殼報告。stylePreset 可選：editorial-paper（紙本雜誌感深度報告，推薦預設）、finance-dark（深色金融看板）、magazine（大膽雜誌版式）、clean-briefing（清爽簡報）。",
+      "description": "僅當使用者明確要求產生報告、HTML 報告、可預覽/可匯出的頁面或發布稿時，產生可在聊天框預覽、瀏覽器開啟並匯出 PNG 的專業 HTML 報告。適合深度研究、行情分析、產業報告、專案復盤、發布稿。簡單計算、普通表格、摘要和管理建議應直接在聊天正文回答，不要呼叫此工具。必須先提供真實內容章節，不要產生空殼報告。stylePreset 可選：editorial-paper（紙本雜誌感深度報告，推薦預設）、finance-dark（深色金融看板）、magazine（大膽雜誌版式）、clean-briefing（清爽簡報）。",
       "titleDesc": "報告標題",
       "tagDesc": "報告分類或短標籤，如 A股研究、產業觀察",
       "subtitleDesc": "副標題或一句話摘要",

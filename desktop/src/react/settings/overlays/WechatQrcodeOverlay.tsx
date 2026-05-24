@@ -13,7 +13,7 @@ export function WechatQrcodeOverlay() {
   const [qrcodeId, setQrcodeId] = useState('');
   const [status, setStatus] = useState<QrStatus>('loading');
   const [error, setError] = useState('');
-  const [refreshCount, setRefreshCount] = useState(0);
+  const [, setRefreshCount] = useState(0);
   const stoppedRef = useRef(true);
 
   const stopPolling = useCallback(() => { stoppedRef.current = true; }, []);

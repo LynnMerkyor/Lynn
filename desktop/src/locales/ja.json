@@ -631,7 +631,7 @@
       "userNameHint": "アシスタントがあなたを呼ぶ名前",
       "userProfile": "ユーザープロフィール",
       "userProfileHint": "アシスタントがあなたを理解する手がかり：興味、習慣、好みなど。システムプロンプトに挿入されます",
-      "defaultProviderHint": "ローカル Qwen3.5-4B とクラウドを 1 クリックで切り替え。",
+      "defaultProviderHint": "ローカル Qwen3.5-9B とクラウドを 1 クリックで切り替え。",
       "openProviders": "Providers を開く →"
     },
     "crop": {
@@ -1138,8 +1138,8 @@
     },
     "localModel": {
       "title": "Download Lynn's default local model",
-      "subtitle": "Qwen3.5-4B Q4_K_M (unsloth) · 2.55 GB · 32K context · tool-call 85.7% · 8~16GB RAM recommended.\nRuns fully offline — no API key, no data ever leaves your machine.",
-      "specsLine": "2.55 GB · Q4_K_M (unsloth) · 32K context · fully offline",
+      "subtitle": "Qwen3.5-9B Q4_K_M imatrix MTP · 5.38 GB · 32K context · 24GB+ RAM recommended.\nRuns fully offline — no API key, no data ever leaves your machine.",
+      "specsLine": "5.38 GB · Q4_K_M imatrix MTP · 32K context · fully offline",
       "needsBinary": "llama.cpp inference engine not found at ~/.lynn/llamacpp/bin/llama-server",
       "needsBinaryHint": "Install llama.cpp following the docs and retry.",
       "alreadyHave": "Local model is ready",
@@ -1162,11 +1162,11 @@
       "errorGeneric": "Download error: {reason}",
       "next": "Continue",
       "back": "Back",
-      "modelPreparedHint": "モデルと llama.cpp の準備完了。Start を押すと Local Qwen3.5-4B に切り替わります。",
+      "modelPreparedHint": "モデルと llama.cpp の準備完了。Start を押すと Local Qwen3.5-9B に切り替わります。",
       "statusReady": "起動可",
       "statusWaiting": "準備中",
-      "runtimeLocal9B": "Local Qwen3.5-4B",
-      "runtimeLocalDefault": "Local Qwen3.5-4B"
+      "runtimeLocal9B": "Local Qwen3.5-9B",
+      "runtimeLocalDefault": "Local Qwen3.5-9B"
     },
     "skipSetup": "セットアップをスキップ"
   },
@@ -1634,7 +1634,7 @@
     },
     "artifact": {
       "label": "プレビュー作成",
-      "description": "HTML ページ、コードスニペット、または長文 Markdown コンテンツをユーザーに表示する必要がある場合にこのツールを呼び出します。\nコンテンツは独立したプレビューパネルでレンダリングされ、ユーザーはリアルタイムで結果を確認できます。\n適している場面：実行可能な HTML/CSS/JS ページ、インタラクティブな可視化、SVG チャート、完全なコードファイル、長文のフォーマット済みドキュメント。\n適さない場面：短いテキスト回答、会話的な応答、一行のコードスニペット（メッセージ内に直接表示します）。",
+      "description": "ユーザーがプレビューページ、HTML、長文 Markdown ドキュメント、完全なコードファイル、またはインタラクティブな可視化を明示的に求めた場合にこのツールを呼び出します。\nコンテンツは独立したプレビューパネルでレンダリングされ、ユーザーはリアルタイムで結果を確認できます。\n適している場面：実行可能な HTML/CSS/JS ページ、インタラクティブな可視化、SVG チャート、完全なコードファイル、長文のフォーマット済みドキュメント。\n適さない場面：短いテキスト回答、通常の表、簡単な計算、管理上の助言、会話的な応答、一行のコードスニペット（メッセージ内に直接表示します）。",
       "typeDesc": "コンテンツタイプ：html（レンダリングページ）、code（シンタックスハイライト）、markdown（ドキュメント）",
       "titleDesc": "表示タイトル、コンテンツの簡単な説明",
       "contentDesc": "完全なコンテンツ（HTML ソース / コード / Markdown テキスト）",
@@ -1642,7 +1642,7 @@
     },
     "report": {
       "label": "HTML レポート生成",
-      "description": "チャット内プレビュー、ブラウザ表示、PNG 書き出しに対応したプロ品質の HTML レポートを生成します。深掘り調査、市場分析、業界レポート、プロジェクト振り返り、公開用ブリーフィングに適しています。実質的な章立てを先に提供し、空のレポートは生成しないでください。stylePreset は editorial-paper（紙の雑誌風の深掘りレポート、推奨既定）、finance-dark（ダーク金融ダッシュボード）、magazine（大胆な雑誌レイアウト）、clean-briefing（すっきりしたビジネスブリーフ）から選べます。",
+      "description": "ユーザーがレポート、HTML レポート、プレビュー/書き出し可能なページ、または公開用ブリーフィングを明示的に求めた場合のみ使用します。チャット内プレビュー、ブラウザ表示、PNG 書き出しに対応したプロ品質の HTML レポートを生成します。深掘り調査、市場分析、業界レポート、プロジェクト振り返り、公開用ブリーフィングに適しています。簡単な計算、通常の表、要約、管理上の助言はこのツールを使わず、チャット本文で直接回答してください。実質的な章立てを先に提供し、空のレポートは生成しないでください。stylePreset は editorial-paper（紙の雑誌風の深掘りレポート、推奨既定）、finance-dark（ダーク金融ダッシュボード）、magazine（大胆な雑誌レイアウト）、clean-briefing（すっきりしたビジネスブリーフ）から選べます。",
       "titleDesc": "レポートタイトル",
       "tagDesc": "レポート分類または短いタグ。例：株式調査、業界ウォッチ",
       "subtitleDesc": "副題または一文要約",

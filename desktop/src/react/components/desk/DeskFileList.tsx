@@ -5,7 +5,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../stores';
 import {
-  loadDeskFiles,
   deskCurrentDir,
   deskCreateFile,
   deskMkdir,

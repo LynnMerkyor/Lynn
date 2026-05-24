@@ -632,7 +632,7 @@
       "userNameHint": "어시스턴트가 부르는 이름",
       "userProfile": "사용자 프로필",
       "userProfileHint": "어시스턴트가 당신을 이해하는 데 도움이 돼요: 관심사, 습관, 취향 등. 시스템 프롬프트에 주입돼요",
-      "defaultProviderHint": "로컬 Qwen3.5-4B와 클라우드를 한 번에 전환.",
+      "defaultProviderHint": "로컬 Qwen3.5-9B와 클라우드를 한 번에 전환.",
       "openProviders": "Providers 열기 →"
     },
     "crop": {
@@ -1148,8 +1148,8 @@
     },
     "localModel": {
       "title": "Download Lynn's default local model",
-      "subtitle": "Qwen3.5-4B Q4_K_M (unsloth) · 2.55 GB · 32K context · tool-call 85.7% · 8~16GB RAM recommended.\nRuns fully offline — no API key, no data ever leaves your machine.",
-      "specsLine": "2.55 GB · Q4_K_M (unsloth) · 32K context · fully offline",
+      "subtitle": "Qwen3.5-9B Q4_K_M imatrix MTP · 5.38 GB · 32K context · 24GB+ RAM recommended.\nRuns fully offline — no API key, no data ever leaves your machine.",
+      "specsLine": "5.38 GB · Q4_K_M imatrix MTP · 32K context · fully offline",
       "needsBinary": "llama.cpp inference engine not found at ~/.lynn/llamacpp/bin/llama-server",
       "needsBinaryHint": "Install llama.cpp following the docs and retry.",
       "alreadyHave": "Local model is ready",
@@ -1172,11 +1172,11 @@
       "errorGeneric": "Download error: {reason}",
       "next": "Continue",
       "back": "Back",
-      "modelPreparedHint": "모델과 llama.cpp 준비 완료. 시작을 누르면 Local Qwen3.5-4B로 전환됩니다.",
+      "modelPreparedHint": "모델과 llama.cpp 준비 완료. 시작을 누르면 Local Qwen3.5-9B로 전환됩니다.",
       "statusReady": "시작 가능",
       "statusWaiting": "준비 중",
-      "runtimeLocal9B": "Local Qwen3.5-4B",
-      "runtimeLocalDefault": "Local Qwen3.5-4B"
+      "runtimeLocal9B": "Local Qwen3.5-9B",
+      "runtimeLocalDefault": "Local Qwen3.5-9B"
     },
     "skipSetup": "설정 건너뛰기"
   },
@@ -1644,7 +1644,7 @@
     },
     "artifact": {
       "label": "미리보기 만들기",
-      "description": "사용자에게 HTML 페이지, 코드 스니펫, 또는 긴 Markdown 콘텐츠를 보여줘야 할 때 이 도구를 호출해요.\n콘텐츠는 독립된 미리보기 패널에서 렌더링되고, 사용자가 실시간으로 결과를 확인할 수 있어요.\n적합한 경우: 실행 가능한 HTML/CSS/JS 페이지, 인터랙티브 시각화, SVG 차트, 완전한 코드 파일, 긴 포맷 문서.\n적합하지 않은 경우: 짧은 텍스트 답변, 대화형 응답, 한 줄 코드 스니펫 (메시지에 직접 표시하면 돼요).",
+      "description": "사용자가 미리보기 페이지, HTML, 긴 Markdown 문서, 완전한 코드 파일, 인터랙티브 시각화를 명확히 요청했을 때 이 도구를 호출해요.\n콘텐츠는 독립된 미리보기 패널에서 렌더링되고, 사용자가 실시간으로 결과를 확인할 수 있어요.\n적합한 경우: 실행 가능한 HTML/CSS/JS 페이지, 인터랙티브 시각화, SVG 차트, 완전한 코드 파일, 긴 포맷 문서.\n적합하지 않은 경우: 짧은 텍스트 답변, 일반 표, 간단한 계산, 관리 조언, 대화형 응답, 한 줄 코드 스니펫 (메시지에 직접 표시하면 돼요).",
       "typeDesc": "콘텐츠 유형: html (렌더링 페이지), code (구문 강조), markdown (문서)",
       "titleDesc": "표시 제목, 콘텐츠에 대한 간단한 설명",
       "contentDesc": "전체 콘텐츠 (HTML 소스 / 코드 / Markdown 텍스트)",
@@ -1652,7 +1652,7 @@
     },
     "report": {
       "label": "HTML 리포트 생성",
-      "description": "채팅에서 미리 보고, 브라우저로 열고, PNG로 내보낼 수 있는 전문 HTML 리포트를 생성해요. 심층 리서치, 시장 분석, 산업 리포트, 프로젝트 회고, 게시용 브리핑에 적합해요. 반드시 실제 내용 섹션을 먼저 제공하고 빈 껍데기 리포트는 만들지 마세요. stylePreset 옵션: editorial-paper(종이 잡지 느낌의 심층 리포트, 권장 기본값), finance-dark(다크 금융 대시보드), magazine(강한 잡지형 레이아웃), clean-briefing(깔끔한 비즈니스 브리핑).",
+      "description": "사용자가 리포트, HTML 리포트, 미리보기/내보내기 가능한 페이지, 게시용 브리핑을 명확히 요청했을 때만 사용해요. 채팅에서 미리 보고, 브라우저로 열고, PNG로 내보낼 수 있는 전문 HTML 리포트를 생성해요. 심층 리서치, 시장 분석, 산업 리포트, 프로젝트 회고, 게시용 브리핑에 적합해요. 간단한 계산, 일반 표, 요약, 관리 조언은 이 도구를 쓰지 말고 채팅 본문에 직접 답하세요. 반드시 실제 내용 섹션을 먼저 제공하고 빈 껍데기 리포트는 만들지 마세요. stylePreset 옵션: editorial-paper(종이 잡지 느낌의 심층 리포트, 권장 기본값), finance-dark(다크 금융 대시보드), magazine(강한 잡지형 레이아웃), clean-briefing(깔끔한 비즈니스 브리핑).",
       "titleDesc": "리포트 제목",
       "tagDesc": "리포트 분류 또는 짧은 태그, 예: 주식 리서치, 산업 관찰",
       "subtitleDesc": "부제 또는 한 줄 요약",

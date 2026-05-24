@@ -15,7 +15,6 @@ interface Props {
   isLocalProvider?: boolean;
 }
 
-const MAX_THINKING_TRANSLATE_CHARS = 3_000;
 const TRANSLATE_CHUNK_CHARS = 2_500; // #29: chunked translate ceiling per request
 const MAX_TRANSLATE_CHUNKS = 8;       // #29: cap total chunks (≈ 20K char absolute ceiling)
 
@@ -37,7 +36,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
   const [translateError, setTranslateError] = useState<string | null>(null);
   const startRef = useRef(Date.now());
   // #12: prefer explicit prop; fallback to regex (kept for callers not yet passing the flag)
-  // 2026-05-24 U4 fix: 4B 默认档替换 9B,正则要识别 4B 才能给本地模型友好的暖机文案;
+  // 2026-05-25: 默认回到 9B,正则保留 4B/35B 兼容以覆盖自选 GGUF 和降级档。
   // 同时保留 9B / 35B 的 backward-compat。
   const isLocalModelThinking = isLocalProvider === true
     || (isLocalProvider !== false && /local-qwen|qwen35-4b|qwen35-9b|qwen36-35b|Qwen3(?:\.5)?-(?:4B|9B|35B)|本地\s*(?:4B|9B|35B|Qwen)/i.test(modelLabel || ""));

@@ -37,26 +37,27 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.79.1</strong> · 2026-05-23 · Default local model switched to Qwen3.5-4B, three-tier hardware ladder <em>(latest)</em></summary>
+<summary><strong>v0.79.1</strong> · 2026-05-25 · Default local model stays on Qwen3.5-9B MTP, 4B as downgrade <em>(latest)</em></summary>
 
 **Default local tier swap**:
-- 🆕 **Default Qwen3.5-4B Q4_K_M (unsloth)**: 2.55 GB · thinking-on 32K · 8~16GB RAM recommended · tool-call 85.7% · fast launch · covers the widest user base. New-install download halved, entry bar dropped to mainstream PC/Mac.
+- 🧠 **Default Qwen3.5-9B Q4_K_M imatrix MTP**: 5.38 GB · 24GB VRAM/unified memory recommended · MTP acceleration · stable thinking-on first. Spark retests confirmed 4B can think for a long time and return no visible answer with thinking-on, so it is no longer the default onboarding model.
 - 🎚️ **Three-tier hardware ladder**:
-  - **Default (8~16GB RAM recommended (all platforms))**: Qwen3.5-4B Q4_K_M
-  - **Upgrade (24GB VRAM/unified memory+)**: Qwen3.5-9B Q4_K_M imatrix MTP — stronger quality, MTP draft acceleration
-  - **High-end (32GB+ VRAM/unified memory+)**: Qwen3.6-35B-A3B APEX-MTP I-Balanced — MMLU 90.40% / GPQA Diamond 80.70%
-- 🔁 **Smooth migration**: existing 9B / 35B configs are not force-migrated; new users get the 4B one-click experience by default.
-- ✅ **Test matrix**: V8 corrected-grader 30/35 (85.71%) · V9 60-prompt mixed suite (in progress).
+  - **Default (24GB VRAM/unified memory+)**: Qwen3.5-9B Q4_K_M imatrix MTP — stronger quality, MTP acceleration
+  - **Low-config downgrade (8~16GB optional)**: Qwen3.5-4B Q4_K_M imatrix (Lynn) — thinking-off recommended; thinking-on may think for a long time and return no visible answer
+  - **High-end (24GB VRAM/unified memory+)**: Qwen3.6-35B-A3B Q4_K_M imatrix — MMLU 90.40% / GPQA Diamond 80.70% · Lynn-calibrated · 21 GB
+- 🔁 **Smooth migration**: old 4B default configs migrate back to 9B MTP; 4B remains an explicit low-config downgrade.
+- 🧾 **Deep Research HTML reports**: local 9B, BYOK, and the default model now create a clickable HTML report inside chat; local/BYOK thinking models retry with no-think fallback when the first response has no visible answer.
+- ✅ **Test matrix**: installed-app smoke passed for 9B MTP, GPT-5.4, and the default model; Deep Research HTML artifact gates passed for local/BYOK/default paths; the 4B thinking-on risk is documented in the model guide.
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.1)
 
 </details>
 
 <details>
-<summary><strong>v0.79.0</strong> · 2026-05-22 · Local 9B unlimited tokens + local model manager</summary>
+<summary><strong>v0.79.0</strong> · 2026-05-22 · Local 9B offline inference + local model manager</summary>
 
 **Local model release**:
-- 🧠 **Local 9B MTP for daily unlimited use**:Qwen3.5-9B Q4_K_M imatrix MTP is now the default one-click local model path. Lynn prepares llama.cpp, downloads and verifies the GGUF, starts a local OpenAI-compatible `/v1` endpoint, and registers the provider after user authorization.
+- 🧠 **Local 9B MTP for daily offline use**:Qwen3.5-9B Q4_K_M imatrix MTP is now the default one-click local model path. Lynn prepares llama.cpp, downloads and verifies the GGUF, starts a local OpenAI-compatible `/v1` endpoint, and registers the provider after user authorization.
 - 📦 **Local model manager**:Settings → Models supports in-app 35B GGUF download, user-provided GGUF import, endpoint inspection, and stopping the local runtime to release memory.
 - ⏳ **Warmup feedback**:the first local reply now explains the 30-60s weight-load/context-warmup window and shows staged progress instead of leaving users waiting.
 - 🧭 **Brain V2 migration**:legacy Brain endpoints migrate to the V2 canonical endpoint; GLM Coding Plan uses the dedicated coding endpoint; empty-answer recovery remains a fallback, not a model-output override.
@@ -459,33 +460,33 @@ This doesn't replace the cloud fallback chain (MiMo / Qwen / DeepSeek remain the
 
 ## Local models — three-tier hardware ladder
 
-Starting with Lynn v0.79.1, local models are grouped by hardware. **Default tier switched from 9B to 4B for faster startup and lower entry bar**:
+Starting with Lynn v0.79.1, local models are grouped by hardware. **The default tier stays on 9B MTP; 4B is a low-config downgrade only**:
 
 | Tier | Model | Size | Recommended hardware | Context | Capability signal |
 |------|-------|:----:|---------------------|:-------:|-------------------|
-| **Default** | **Qwen3.5-4B Q4_K_M (unsloth)** | 2.55 GB | **8~16GB RAM recommended (all platforms)** | 32K | **Q4_K_M** · MMLU 500 = **81.20%** · tool-call 85.71% · thinking-on default |
-| Upgrade | Qwen3.5-9B Q4_K_M imatrix MTP | 5.38 GB | 24GB VRAM/unified memory+ | 32K | **Q4_K_M imatrix** · MMLU 100 = 81.00% · GPQA Diamond 81.71% (excl. parse-fail) · tool-call 14/15 · MTP draft accel |
-| High-end | Qwen3.6-35B-A3B APEX-MTP I-Balanced | 26 GB | 32GB+ VRAM/unified memory+ | 32K | **Q4_K_M (APEX-MTP)** · MMLU 500 = 90.40% · GPQA Diamond 80.70% · APEX MoE |
+| **Default** | **Qwen3.5-9B Q4_K_M imatrix MTP** | 5.38 GB | **24GB VRAM/unified memory+** | 32K | **Q4_K_M imatrix** · default gate target · MTP acceleration · stable thinking-on path |
+| Downgrade | Qwen3.5-4B Q4_K_M imatrix (Lynn) | 2.6 GB | 8~16GB optional | 32K | **Q4_K_M imatrix** · MMLU thinking-off 73.00% · GPQA thinking-off 16.67% · thinking-on may think for a long time and return no visible answer |
+| High-end | Qwen3.6-35B-A3B Q4_K_M imatrix | 21 GB | 24GB VRAM/unified memory+ | 32K | **Q4_K_M imatrix (Lynn-calibrated)** · MMLU 500 = 90.40% · GPQA Diamond 80.70% · R6000 reference 207 tok/s |
 
-> All quality numbers are measured with **Q4_K_M quantization** + **thinking-on 32K max_tokens**, GB10 Spark llama.cpp on the same hardware. MMLU sample counts are annotated next to the score (500 / 100 sample).
+> 9B / 35B quality numbers are measured with **Q4_K_M quantization** + **thinking-on 32K max_tokens**, GB10 Spark llama.cpp on the same hardware. 4B imatrix is available only as a downgrade: thinking-off is usable; thinking-on has reproduced long empty reasoning and is not safe as the onboarding default.
 
 | Universal | Details |
 |---|---|
 | Runtime | llama.cpp local server, OpenAI-compatible `/v1` endpoint |
 | Privacy | Fully offline capable; no API key required; conversations stay on device |
-| Default thinking | thinking-on (can be turned off in the Lynn composer) |
+| Default thinking | Automatic: light tasks disable thinking; complex tasks can enable it in the Lynn composer |
 
 ### Downloads and mirrors
 
-**Default 4B** (recommended for new users):
-- 🇨🇳 **ModelScope**: [unsloth/Qwen3.5-4B-GGUF](https://modelscope.cn/models/unsloth/Qwen3.5-4B-GGUF) (`Qwen3.5-4B-Q4_K_M.gguf`, **2.55 GB**)
-- 🤗 **Hugging Face**: [unsloth/Qwen3.5-4B-GGUF](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF) / mirror `hf-mirror.com/unsloth/Qwen3.5-4B-GGUF`
+**Default 9B** (recommended for new users):
+- 🇨🇳 **ModelScope**: [Merkyor/Qwen3.5-9B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`, **5.38 GB**)
+- 🤗 **Hugging Face**: [nerkyor/Qwen3.5-9B-GGUF-imatrix](https://huggingface.co/nerkyor/Qwen3.5-9B-GGUF-imatrix) / mirror `hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix`
 
-**Upgrade 9B / High-end 35B** (optional for high-memory devices):
-- 9B: [Merkyor/Qwen3.5-9B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/files) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`)
-- 35B: [Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF) — GB10 Spark reference think-on 4K 84.69 tok/s / 16K 75.53 tok/s
+**Low-config 4B / High-end 35B** (explicit hardware choices):
+- 4B: [Merkyor/Qwen3.5-4B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix) (`Qwen3.5-4B-Q4_K_M-imatrix.gguf`, **2.6 GB**) — downgrade only; thinking-off recommended
+- 35B: [Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix) (`Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf`, **21 GB**) — Lynn imatrix-calibrated, R6000 reference 207 tok/s, fits 24G local machines
 
-In the app: **Settings → Models → Local Qwen3.5-4B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background. The chat input shows local model status, and you can stop the runtime anytime to release memory. The Models page also supports one-click upgrade to 9B / 35B, or importing any llama.cpp-compatible GGUF you already have.
+In the app: **Settings → Models → Local Qwen3.5-9B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background. The chat input shows local model status, and you can stop the runtime anytime to release memory. The Models page also supports explicit 4B downgrade / 35B high-end choices, or importing any llama.cpp-compatible GGUF you already have.
 
 ## Install and Go
 
@@ -627,7 +628,7 @@ Linux builds are planned.
 Two paths on first launch:
 
 - **Quick Start**: Enter your name → set permissions → jump right in. A built-in default model works out of the box — no API key required.
-- **Local model**: Settings → Models → Local Qwen3.5-4B (default, 2.55 GB / 8~16GB RAM recommended) / 9B MTP (24GB VRAM upgrade) / 35B APEX-MTP (32GB+ high-end). Lynn downloads the Q4_K_M GGUF, prepares llama.cpp, starts the local endpoint, and switches to it automatically after authorization.
+- **Local model**: Settings → Models → Local Qwen3.5-9B imatrix MTP (default, 5.38 GB / 24GB VRAM or unified memory recommended) / 4B imatrix downgrade / 35B Q4_K_M imatrix (24GB high-end, 21 GB). Lynn downloads the Q4_K_M GGUF, prepares llama.cpp, starts the local endpoint, and switches to it automatically after authorization.
 - **Advanced Setup**: Enter your name → connect your own provider (API key + base URL) → choose a **chat model** and a **utility model** → pick a theme → set permissions → enter.
 
 Lynn uses the OpenAI-compatible protocol, so any provider that supports it will work (OpenAI, DeepSeek, Qwen, local models via Ollama, SiliconFlow, etc.). Some providers (e.g. MiniMax) also support OAuth login. All model settings can be adjusted later in Settings.

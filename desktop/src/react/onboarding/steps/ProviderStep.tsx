@@ -55,7 +55,7 @@ export function ProviderStep({
   const [providerApi, setProviderApi] = useState('openai-completions');
   const [apiKey, setApiKey] = useState('');
   const [isLocalProvider, setIsLocalProvider] = useState(false);
-  const [connectionTested, setConnectionTested] = useState(false);
+  const [, setConnectionTested] = useState(false);
   const [testStatus, setTestStatus] = useState<{ type: '' | 'loading' | 'success' | 'error'; text: string }>({ type: '', text: '' });
   const [showKey, setShowKey] = useState(false);
   const [showSecondary, setShowSecondary] = useState(false);

@@ -242,25 +242,26 @@ export function migrateToProvidersYaml(lynnHome, agentsDir, log = () => {}) {
 
 // ── Local Qwen 默认模型迁移 ───────────────────────────────────────────────────
 
-const LOCAL_QWEN_4B_MIGRATION_FLAG = "local_qwen_default_4b_migrated_v1";
-const LOCAL_QWEN_9B_MTP_RESTORE_FLAG = "local_qwen_default_9b_mtp_restored_v1";
-// 2026-05-23: 默认本地模型切到 unsloth/Qwen3.5-4B-GGUF Q4_K_M(2.55GB,启动快,8GB 内存可用)。
-// 9B MTP / 35B APEX-MTP 降到"可选本地模型"高端档,用户按硬件升级。
+const LOCAL_QWEN_9B_MTP_DEFAULT_FLAG = "local_qwen_default_9b_mtp_default_v2";
+// 2026-05-25: 默认本地模型回到 Qwen3.5-9B Q4_K_M imatrix MTP。
+// 4B imatrix 只保留为低配降级档,因为 thinking-on 会空正文长思考。
 const OLD_LOCAL_QWEN_PROVIDER = "local-qwen3-4b-thinking-2507-q4km-imatrix";
 const OLD_LOCAL_QWEN_MODEL = "qwen3-4b-thinking-2507-q4km-imatrix";
-const NEW_LOCAL_QWEN_PROVIDER = "local-qwen35-4b-q4km";
-const NEW_LOCAL_QWEN_MODEL = "qwen35-4b-q4km";
+const LOCAL_QWEN_4B_PROVIDER = "local-qwen35-4b-q4km";
+const LOCAL_QWEN_4B_MODEL = "qwen35-4b-q4km";
+const NEW_LOCAL_QWEN_PROVIDER = "local-qwen35-9b-q4km-imatrix";
+const NEW_LOCAL_QWEN_MODEL = "qwen35-9b-q4km-imatrix";
 
-function _localQwen4BProviderSeed(oldProvider = {}) {
+function _localQwen9BProviderSeed(oldProvider = {}) {
   return {
-    display_name: "本地 Qwen3.5-4B",
+    display_name: "本地 Qwen3.5-9B",
     base_url: oldProvider.base_url || "http://127.0.0.1:18099/v1",
     api: oldProvider.api || "openai-completions",
     auth_type: "none",
     models: [
       {
         id: NEW_LOCAL_QWEN_MODEL,
-        name: "Qwen3.5-4B Q4_K_M (unsloth)",
+        name: "Qwen3.5-9B Q4_K_M imatrix MTP",
         context: 32768,
         maxOutput: 32768,
       },
@@ -270,50 +271,53 @@ function _localQwen4BProviderSeed(oldProvider = {}) {
 
 function _migrateChatRef(chat) {
   if (typeof chat === "string") {
-    return chat === OLD_LOCAL_QWEN_MODEL ? NEW_LOCAL_QWEN_MODEL : chat;
+    return (chat === OLD_LOCAL_QWEN_MODEL || chat === LOCAL_QWEN_4B_MODEL) ? NEW_LOCAL_QWEN_MODEL : chat;
   }
   if (!chat || typeof chat !== "object") return chat;
   const isOldLocal =
     chat.id === OLD_LOCAL_QWEN_MODEL
-    || chat.provider === OLD_LOCAL_QWEN_PROVIDER;
+    || chat.provider === OLD_LOCAL_QWEN_PROVIDER
+    || chat.id === LOCAL_QWEN_4B_MODEL
+    || chat.provider === LOCAL_QWEN_4B_PROVIDER;
   return isOldLocal
     ? { ...chat, id: NEW_LOCAL_QWEN_MODEL, provider: NEW_LOCAL_QWEN_PROVIDER }
     : chat;
 }
 
 /**
- * V0.79 → 2026-05-23 切换默认本地模型到 unsloth/Qwen3.5-4B-GGUF Q4_K_M。
+ * V0.79.1 → 2026-05-25 切换默认本地模型回 Qwen3.5-9B Q4_K_M imatrix MTP。
  *
- * 历史: 早期内测短暂用过 qwen3-4b-thinking-2507 → 因 thinking 吞正文回退 9B MTP。
- * 现在: 2026-05-23 切到 unsloth Qwen3.5-4B Q4_K_M(2.55GB,启动快,覆盖最大用户群)。
- * 旧 4B(qwen3-4b-thinking-2507)或缺失 provider 的配置都会被 seed 到新 Qwen3.5-4B。
- * 已存在 9B MTP 配置不会被强迁(用户可主动切到 4B 或保留 9B 作为 24G+ 可选)。
+ * 4B imatrix 的 thinking-on 路径会空正文长思考,所以它只能作为低配降级选项。
+ * 旧 4B(qwen3-4b-thinking-2507 / qwen35-4b-q4km)或缺失 provider 的配置都会 seed 到 9B。
  */
-export function migrateLocalQwenDefaultTo4B(lynnHome, agentsDir, log = () => {}) {
+export function migrateLocalQwenDefaultTo9B(lynnHome, agentsDir, log = () => {}) {
   const providersPath = path.join(lynnHome, "added-models.yaml");
   const prefsPath = path.join(lynnHome, "user", "preferences.json");
   const raw = safeReadYAMLSync(providersPath, {}, YAML) || {};
   raw.providers = raw.providers || {};
 
   const oldProvider = raw.providers[OLD_LOCAL_QWEN_PROVIDER] || {};
-  if (!raw.providers[NEW_LOCAL_QWEN_PROVIDER]) {
-    raw.providers[NEW_LOCAL_QWEN_PROVIDER] = _localQwen4BProviderSeed(oldProvider);
+  const existingNewProvider = raw.providers[NEW_LOCAL_QWEN_PROVIDER] || {};
+  const hasNewModel = Array.isArray(existingNewProvider.models)
+    && existingNewProvider.models.some((model) => model?.id === NEW_LOCAL_QWEN_MODEL);
+  if (!raw.providers[NEW_LOCAL_QWEN_PROVIDER] || !hasNewModel) {
+    raw.providers[NEW_LOCAL_QWEN_PROVIDER] = _localQwen9BProviderSeed(existingNewProvider.base_url ? existingNewProvider : oldProvider);
     const header =
       "# Lynn 供应商配置（全局，跨 agent 共享）\n" +
       "# 由设置页面管理\n\n";
     atomicWriteYAML(providersPath, raw, header);
-    log("[migrate-providers] seeded default local Qwen3.5-4B provider");
+    log("[migrate-providers] seeded default local Qwen3.5-9B provider");
   }
 
   const prefs = _readPrefs(prefsPath);
-  if (prefs[LOCAL_QWEN_9B_MTP_RESTORE_FLAG]) return;
+  if (prefs[LOCAL_QWEN_9B_MTP_DEFAULT_FLAG]) return;
 
   let changedAgents = 0;
   for (const ac of _collectAgentConfigs(agentsDir)) {
     const cfg = ac.config || {};
     let changed = false;
 
-    if (cfg.api?.provider === OLD_LOCAL_QWEN_PROVIDER) {
+    if (cfg.api?.provider === OLD_LOCAL_QWEN_PROVIDER || cfg.api?.provider === LOCAL_QWEN_4B_PROVIDER) {
       cfg.api.provider = NEW_LOCAL_QWEN_PROVIDER;
       changed = true;
     }
@@ -324,6 +328,15 @@ export function migrateLocalQwenDefaultTo4B(lynnHome, agentsDir, log = () => {})
       cfg.models.chat = nextChat;
       changed = true;
     }
+    for (const key of ["utility", "utility_large", "utilityLarge"]) {
+      const current = cfg.models?.[key];
+      const migrated = _migrateChatRef(current);
+      if (migrated !== current) {
+        cfg.models = cfg.models || {};
+        cfg.models[key] = migrated;
+        changed = true;
+      }
+    }
 
     if (changed) {
       atomicWriteYAML(ac.path, cfg);
@@ -331,13 +344,12 @@ export function migrateLocalQwenDefaultTo4B(lynnHome, agentsDir, log = () => {})
     }
   }
 
-  prefs[LOCAL_QWEN_4B_MIGRATION_FLAG] = true;
-  prefs[LOCAL_QWEN_9B_MTP_RESTORE_FLAG] = true;
+  prefs[LOCAL_QWEN_9B_MTP_DEFAULT_FLAG] = true;
   atomicWriteJSON(prefsPath, prefs);
   if (changedAgents > 0) {
-    log(`[migrate-providers] migrated ${changedAgents} agent local Qwen default(s) → Qwen3.5-4B`);
+    log(`[migrate-providers] migrated ${changedAgents} agent local Qwen default(s) → Qwen3.5-9B`);
   } else {
-    log("[migrate-providers] local Qwen 3.5-4B default migration marked");
+    log("[migrate-providers] local Qwen 3.5-9B default migration marked");
   }
 }
 

@@ -1,12 +1,42 @@
 export const DEEP_RESEARCH_TIMEOUT_MS = 180_000;
 export const DEEP_RESEARCH_FETCH_TIMEOUT_MS = DEEP_RESEARCH_TIMEOUT_MS + 10_000;
 
+export interface DeepResearchArtifact {
+  artifactId?: unknown;
+  id?: unknown;
+  artifactType?: unknown;
+  type?: unknown;
+  title?: unknown;
+  content?: unknown;
+  language?: unknown;
+}
+
+export interface NormalizedDeepResearchArtifact {
+  artifactId: string;
+  artifactType: string;
+  title: string;
+  content: string;
+  language?: string;
+}
+
 export interface DeepResearchResponse {
   text?: unknown;
   winnerProviderId?: unknown;
   winnerModelId?: unknown;
   sourceLabel?: unknown;
   ok?: unknown;
+  artifact?: DeepResearchArtifact | null;
+}
+
+export function normalizeDeepResearchArtifact(raw: DeepResearchArtifact | null | undefined): NormalizedDeepResearchArtifact | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const content = String(raw.content || '').trim();
+  if (!content) return null;
+  const artifactType = String(raw.artifactType || raw.type || 'html').trim() || 'html';
+  const artifactId = String(raw.artifactId || raw.id || `deep-research-${Date.now().toString(36)}`);
+  const title = String(raw.title || '深度调研报告').trim() || '深度调研报告';
+  const language = raw.language == null ? (artifactType === 'html' ? 'html' : undefined) : String(raw.language);
+  return { artifactId, artifactType, title, content, language };
 }
 
 export function normalizeDeepResearchErrorMessage(raw: unknown): string {

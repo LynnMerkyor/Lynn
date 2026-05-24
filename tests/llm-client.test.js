@@ -149,6 +149,28 @@ describe("callText", () => {
     });
   });
 
+  it("classifies non-json 403 responses as auth failures instead of invalid JSON", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      headers: { get: () => "text/html" },
+      text: async () => "<html>forbidden</html>",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(callText({
+      api: "openai-responses",
+      apiKey: "sk-test",
+      baseUrl: "https://example.com/v1",
+      model: "demo-model",
+      messages: [{ role: "user", content: "ping" }],
+      timeoutMs: 1000,
+    })).rejects.toMatchObject({
+      code: "LLM_AUTH_FAILED",
+      context: { model: "demo-model", status: 403 },
+    });
+  });
+
   it("attaches client identity headers from preferences.json without signature by default", async () => {
     const lynnHome = makeTempDir("hanako-llm-");
     const clientKey = "ak_test_client_001";

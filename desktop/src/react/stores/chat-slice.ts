@@ -22,7 +22,7 @@ const MAX_CACHED_SESSIONS = 8;
 
 export const createChatSlice = (
   set: (partial: Partial<ChatSlice> | ((s: ChatSlice) => Partial<ChatSlice>)) => void,
-  get: () => ChatSlice,
+  _get: () => ChatSlice,
 ): ChatSlice => ({
   chatSessions: {},
   scrollPositions: {},

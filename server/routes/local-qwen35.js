@@ -26,28 +26,26 @@ import { safeJson } from "../hono-helpers.js";
 import { fromRoot } from "../../shared/hana-root.js";
 
 const execFileAsync = promisify(execFile);
-const PROVIDER_ID = "local-qwen35-4b-q4km";
-const MODEL_ID = "qwen35-4b-q4km";
-const MODEL_DISPLAY_NAME = "Qwen3.5-4B Q4_K_M (unsloth)";
-const MODEL_FILE_NAME = "Qwen3.5-4B-Q4_K_M.gguf";
-const MODEL_ROOT_NAME = "Qwen3.5-4B";
+const PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
+const MODEL_ID = "qwen35-9b-q4km-imatrix";
+const MODEL_DISPLAY_NAME = "Qwen3.5-9B Q4_K_M imatrix MTP";
+const MODEL_FILE_NAME = "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf";
+const MODEL_ROOT_NAME = "Qwen3.5-9B";
 
 function defaultState() {
   const home = os.homedir();
   return {
     modelRoot: process.env.LYNN_LOCAL_QWEN35_MODEL_ROOT || path.join(home, "Models", "Lynn", MODEL_ROOT_NAME),
-    providerConfig: process.env.LYNN_LOCAL_QWEN35_PROVIDER_CONFIG || path.join(home, ".lynn-engine", "providers", "qwen35-4b-q4km-gguf.json"),
-    pidFile: process.env.LYNN_LOCAL_QWEN35_PID_FILE || path.join(home, ".lynn-engine", "run", "qwen35-4b-q4km.pid"),
-    logFile: process.env.LYNN_LOCAL_QWEN35_LOG_FILE || path.join(home, ".lynn-engine", "logs", "qwen35-4b-q4km.client.log"),
+    providerConfig: process.env.LYNN_LOCAL_QWEN35_PROVIDER_CONFIG || path.join(home, ".lynn-engine", "providers", "qwen35-9b-q4km-imatrix-gguf.json"),
+    pidFile: process.env.LYNN_LOCAL_QWEN35_PID_FILE || path.join(home, ".lynn-engine", "run", "qwen35-9b-q4km-imatrix.pid"),
+    logFile: process.env.LYNN_LOCAL_QWEN35_LOG_FILE || path.join(home, ".lynn-engine", "logs", "qwen35-9b-q4km-imatrix.client.log"),
     host: process.env.LYNN_LOCAL_QWEN35_HOST || "127.0.0.1",
     port: String(process.env.LYNN_LOCAL_QWEN35_PORT || "18099"),
   };
 }
 
 function expectedModelPath(state = defaultState(), _variant = "imatrix") {
-  // 2026-05-23: 4B 默认无 imatrix variant 区分 — 始终用 MODEL_FILE_NAME (Qwen3.5-4B-Q4_K_M.gguf)。
-  // 老代码在 variant !== "imatrix" 时硬编 9B mtp 文件名,4B 切换后该 fallback 是 stale bug —
-  // 会让 hasModel=true (找到本机老 9B 文件) → 隐藏下载按钮 → 用户没法走 install flow。
+  // 2026-05-25: 默认回到 9B MTP;4B 仅作为显式 downgrade,不能误匹配成默认。
   return path.join(state.modelRoot, "q4_k_m", MODEL_FILE_NAME);
 }
 
@@ -154,8 +152,8 @@ async function qwen35ProcessPids(state = defaultState()) {
         if (!/llama-server(?:\s|$)/.test(command) && !/llama-server\b/.test(command)) return null;
         const mentionsPort = command.includes(`--port ${state.port}`) || command.includes(`:${state.port}`);
         const mentionsModel = modelPaths.some((candidate) => candidate && command.includes(candidate))
-          || /Qwen3\.5-4B-Q4_K_M/i.test(command)
-          || /qwen35-4b-q4km/i.test(command);
+          || /Qwen3\.5-9B-Q4_K_M/i.test(command)
+          || /qwen35-9b-q4km/i.test(command);
         return mentionsPort || mentionsModel ? pid : null;
       })
       .filter((pid) => Number.isFinite(pid) && pid > 0);
@@ -277,27 +275,35 @@ async function _computeRuntimeDetails() {
     fetchJsonMaybe(`${root}/slots`),
     fetchTextMaybe(`${root}/metrics`),
   ]);
-  const health = healthStatus.ok ? healthStatus.json : null;
-  const endpointRunning = healthStatus.ok === true;
-  const endpointLoading = !endpointRunning && pids.length > 0
-    && (healthStatus.status === 503 || /loading/i.test(String(healthStatus.json?.error?.message || "")));
   const modelIds = Array.isArray(models?.data)
     ? models.data.map((item) => item?.id).filter(Boolean)
     : [];
+  const health = healthStatus.ok ? healthStatus.json : null;
+  const rawEndpointRunning = healthStatus.ok === true;
+  const servesDefaultModel = modelIds.includes(MODEL_ID);
+  const endpointOccupied = rawEndpointRunning && !servesDefaultModel;
+  const defaultProcessAlive = isPidAlive(pidFromFile) || commandPids.some((candidate) => isPidAlive(candidate));
+  const endpointRunning = rawEndpointRunning && servesDefaultModel;
+  const endpointLoading = !rawEndpointRunning && defaultProcessAlive
+    && (healthStatus.status === 503 || /loading/i.test(String(healthStatus.json?.error?.message || "")) || commandPids.length > 0);
   return {
     base_url: `${root}/v1`,
     gui_url: root,
     pid,
     pid_file: state.pidFile,
-    process_alive: isPidAlive(pid),
+    process_alive: endpointRunning || endpointLoading ? isPidAlive(pid) : false,
+    endpoint_running_any: rawEndpointRunning,
     listen_pids: listenPids,
     command_pids: commandPids,
     pids,
     endpoint_running: endpointRunning,
     endpoint_loading: endpointLoading,
+    endpoint_occupied: endpointOccupied,
+    serves_default_model: servesDefaultModel,
     health_status: healthStatus.status,
     health,
     model_ids: modelIds,
+    foreign_model_ids: endpointOccupied ? modelIds : [],
     slots: summarizeSlots(slots),
     metrics: parseMetrics(metricsText),
     metrics_available: !!metricsText,
@@ -332,9 +338,9 @@ function fastReadyPlan(runtime, _variant = "imatrix") {
   const totalMemoryGib = os.totalmem() / (1024 ** 3);
   const isMac = process.platform === "darwin";
   const chip = isMac ? os.cpus()?.[0]?.model || "Apple Silicon" : os.cpus()?.[0]?.model || null;
-  // 2026-05-23 默认从 9B 切到 4B,门槛降低:4B Q4_K_M ~3GB + KV ~5GB,所以 8GB 内存 usable,16GB 舒适。
-  const comfortable = totalMemoryGib >= 16;     // 4B 32K 舒适运行
-  const usable = totalMemoryGib >= 8;            // 4B 16K 入门可跑
+  // 2026-05-25 默认回到 9B MTP。24GB+ 推荐;16GB 可试但提示降级 4B。
+  const comfortable = totalMemoryGib >= 24;
+  const usable = totalMemoryGib >= 16;
   const ctxSize = comfortable ? 32768 : 16384;
   const parallel = 1;
   const modelPath = installedModelPath(state);
@@ -343,11 +349,13 @@ function fastReadyPlan(runtime, _variant = "imatrix") {
     provider_id: PROVIDER_ID,
     model: MODEL_ID,
     plan: {
-      decision: runtime.endpoint_running ? "ready" : runtime.endpoint_loading ? "loading" : "inspect",
+      decision: runtime.endpoint_occupied ? "occupied" : runtime.endpoint_running ? "ready" : runtime.endpoint_loading ? "loading" : "inspect",
       base_url: runtime.base_url,
       observed: {
         endpoint_running: runtime.endpoint_running === true,
         endpoint_loading: runtime.endpoint_loading === true,
+        endpoint_occupied: runtime.endpoint_occupied === true,
+        served_model_ids: runtime.model_ids || [],
         gguf: modelPath,
         llama_server: (runtime.endpoint_running || runtime.endpoint_loading || runtime.process_alive) ? "llama-server" : null,
         homebrew_available: null,
@@ -359,43 +367,50 @@ function fastReadyPlan(runtime, _variant = "imatrix") {
         total_memory_gib: totalMemoryGib,
         gpus: [],
         recommended_runtime: {
-          name: comfortable ? "local_qwen4b_32k" : "local_qwen4b_16k",
-          label: comfortable ? "Qwen3.5-4B 32K 舒适档" : "Qwen3.5-4B 16K 入门档",
+          name: comfortable ? "local_qwen9b_32k" : "local_qwen9b_16k",
+          label: comfortable ? "Qwen3.5-9B MTP 32K 推荐档" : "Qwen3.5-9B MTP 16K 试用档",
           ctx_size: ctxSize,
           parallel,
           gpu_layers: isMac ? 999 : 0,
         },
-        warnings: usable ? [] : ["当前内存低于 8GB,不建议启用本地 Qwen3.5-4B;可继续使用默认云端模型。"],
+        warnings: [
+          ...(runtime.endpoint_occupied
+            ? [`检测到 ${runtime.base_url} 当前运行的是 ${runtime.model_ids?.join(", ") || "非 9B"} 降级/兼容端点,不会作为默认 9B 使用;停止该端点后可启动默认 Qwen3.5-9B MTP。`]
+            : []),
+          ...(comfortable ? [] : [
+          usable
+            ? "当前内存低于 24GB,默认 9B 可试 16K;低配建议改用 4B 降级档,但 4B thinking-on 可能长思考后无正文。"
+            : "当前内存低于 16GB,不建议默认安装 9B;可继续使用云端模型或在模型页手动选择 4B 降级档。",
+          ]),
+        ],
         blockers: [],
-        // 2026-05-23: 三档全部 surface,profile 文字标硬件门槛(用户看到知情即可,自己决定下不下)
-        // 之前 mem 严格 gate(9B≥24G, 35B≥32G)导致 24GB 设备看不到 35B、16GB 设备看不到 9B,
-        // 不利于用户对模型阶梯的整体感知。
+        // 三档全部 surface:默认 9B,低配 4B downgrade,高端 35B。
         upgrade_options: [
-          // 9B 升级档 (24GB+ 推荐)
+          // 4B 低配降级档
           {
-            id: "qwen35-9b-q4km-imatrix",
-            label: "Qwen3.5-9B Q4_K_M imatrix MTP",
-            profile: "24GB 显存/统一内存+ 推荐 · 质量优先",
-            metrics: ["thinking-on 32K", "MMLU Q4_K_M 81.00% (100 sample)", "GPQA Diamond 81.71% (excl. parse-fail)", "MTP 78.32 tok/s", "工具调用 14/15"],
-            reason: "中端质量档;MTP speculative + thinking-on,推理能力比 4B 强一档。",
-            modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix",
+            id: "qwen35-4b-q4km",
+            label: "Qwen3.5-4B Q4_K_M imatrix (低配降级)",
+            profile: "8~16GB 设备可选 · thinking-off 建议",
+            metrics: ["2.6 GB", "MMLU thinking-off 73.00%", "GPQA thinking-off 16.67%", "thinking-on 可能长思考后无正文"],
+            reason: "只建议低配机器降级使用;请保持 thinking-off 或让 Lynn 自动关闭轻任务 thinking。",
+            modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix",
             download_label: "下载到本机",
-            file_name: "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
+            file_name: "Qwen3.5-4B-Q4_K_M-imatrix.gguf",
+            requires_memory_gib: 8,
+            can_run: totalMemoryGib >= 8,
+          },
+          // 35B 高端档 (24GB+ 推荐) — 2026-05-24 切到 Lynn Q4_K_M imatrix(21G,24G+ 即可加载)
+          {
+            id: "qwen36-35b-a3b-q4km-imatrix",
+            label: "Qwen3.6-35B-A3B Q4_K_M imatrix",
+            profile: "24GB 显存/统一内存+ 推荐 · 综合最优",
+            metrics: ["thinking-on 32K", "MMLU Q4_K_M 90.40% (500)", "GPQA Diamond Q4_K_M 80.70%", "R6000 参考 207 tok/s", "21 GB · imatrix 校准"],
+            reason: "高端质量档;Lynn imatrix 校准 Q4_K_M,24G 机器即可加载,thinking-on 32K 长上下文最佳。",
+            modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
+            download_label: "下载到本机",
+            file_name: "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
             requires_memory_gib: 24,
             can_run: totalMemoryGib >= 24,
-          },
-          // 35B 高端档 (32GB+ 推荐)
-          {
-            id: "qwen36-35b-a3b-apex-mtp",
-            label: "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
-            profile: "32GB 显存/统一内存+ 推荐 · 综合最优",
-            metrics: ["thinking-on 32K", "MMLU Q4_K_M 90.40% (500)", "GPQA Diamond Q4_K_M 80.70%", "think-on 4K 84.69 tok/s", "think-on 16K 75.53 tok/s"],
-            reason: "高端质量档;长思考默认 MTP,短答场景可关闭 MTP。",
-            modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF",
-            download_label: "下载到本机",
-            file_name: "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
-            requires_memory_gib: 32,
-            can_run: totalMemoryGib >= 32,
           },
         ],
       },
@@ -583,7 +598,7 @@ async function plan(variant = "imatrix") {
 async function registerProvider(engine, options = {}) {
   const state = defaultState();
   engine.providerRegistry.saveProvider(PROVIDER_ID, {
-    display_name: "本地 Qwen3.5-4B",
+    display_name: "本地 Qwen3.5-9B",
     base_url: `http://${state.host}:${state.port}/v1`,
     api: "openai-completions",
     auth_type: "none",
@@ -645,7 +660,7 @@ export function createLocalQwen35Route(engine) {
     if (!bootstrap) return c.json({ ok: false, error: "bootstrap_not_found" }, 503);
 
     fs.mkdirSync(path.dirname(state.logFile), { recursive: true });
-    const logFile = path.join(path.dirname(state.logFile), `qwen35-4b-setup-${Date.now()}.log`);
+    const logFile = path.join(path.dirname(state.logFile), `qwen35-9b-setup-${Date.now()}.log`);
     const args = [
       bootstrap,
       "execute",
@@ -656,7 +671,7 @@ export function createLocalQwen35Route(engine) {
     if (body.installRuntime === false) args.push("--no-install-runtime");
 
     job = {
-      id: "local-qwen35-4b-setup-" + Date.now(),
+      id: "local-qwen35-9b-setup-" + Date.now(),
       status: "running",
       started_at: new Date().toISOString(),
       finished_at: null,
@@ -716,7 +731,7 @@ export function createLocalQwen35Route(engine) {
       return c.json({
         ok: false,
         error: "endpoint_not_ready",
-        message: "本地 Qwen3.5-4B 端点还没有通过 /health 和 /v1/models 就绪检查,暂不注册。",
+        message: "本地 Qwen3.5-9B 端点还没有通过 /health 和 /v1/models 就绪检查,暂不注册。",
         status,
       }, 409);
     }

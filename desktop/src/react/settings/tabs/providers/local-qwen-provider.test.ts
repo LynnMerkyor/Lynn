@@ -24,27 +24,27 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('selectGgufModel');
   });
 
-  it('advertises three-tier upgrade ladder (4B default → 9B 24GB+ → 35B 32GB+) with objective metrics', () => {
+  it('advertises the local ladder (9B default → 4B downgrade → 35B 24GB+ Q4_K_M imatrix) with objective metrics', () => {
     const source = read('server/routes/local-qwen35.js');
     expect(source).not.toContain('qwen36-27b-q4km-imatrix');
-    // 4B is the new default
-    expect(source).toContain('local-qwen35-4b-q4km');
-    expect(source).toContain('qwen35-4b-q4km');
-    // 9B = 24GB+ upgrade
+    // 9B is the default local onboarding model.
+    expect(source).toContain('local-qwen35-9b-q4km-imatrix');
     expect(source).toContain('qwen35-9b-q4km-imatrix');
-    expect(source).toContain('24GB 显存/统一内存+ 推荐');
     expect(source).toContain('Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf');
-    // 35B = 32GB+ high-end
-    expect(source).toContain('qwen36-35b-a3b-apex-mtp');
-    expect(source).toContain('32GB 显存/统一内存+ 推荐');
+    // 4B remains visible only as a low-config downgrade with explicit thinking-on risk.
+    expect(source).toContain('qwen35-4b-q4km');
+    expect(source).toContain('低配降级');
+    expect(source).toContain('thinking-on 可能长思考后无正文');
+    // 35B = 24GB+ high-end (quality-first, 21GB Q4_K_M imatrix replaces the older 26GB/32GB+ package)
+    expect(source).toContain('qwen36-35b-a3b-q4km-imatrix');
     expect(source).toContain('thinking-on 32K');
     expect(source).toContain('MMLU Q4_K_M 90.40%');
     expect(source).toContain('GPQA Diamond Q4_K_M 80.70%');
-    expect(source).toContain('think-on 4K 84.69 tok/s');
+    expect(source).toContain('R6000 参考 207 tok/s');
     expect(source).not.toContain('Spark/远端兜底');
-    expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF');
+    expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix');
     expect(source).toContain('下载到本机');
-    expect(source).toContain('Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf');
+    expect(source).toContain('Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf');
   });
 
   it('makes advanced local models actionable instead of passive cards', () => {
@@ -61,15 +61,19 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('chooseGgufModel');
   });
 
-  it('downloads the recommended 35B APEX-MTP model through Lynn with checksum and parallel ranges', () => {
+  it('downloads the recommended 35B Q4_K_M imatrix model through Lynn with checksum and parallel ranges', () => {
     const main = read('desktop/main.cjs');
     const downloader = read('desktop/model-downloader.cjs');
     const preload = read('desktop/preload.cjs');
-    expect(main).toContain('qwen36-35b-a3b-apex-mtp');
-    expect(main).toContain('26_059_443_808');
-    expect(main).toContain('9bf7d96bb3a9d363e645dd998aee9e9bff8e016a82aec7ff081e0e6cdb53419e');
+    // 2026-05-24: canonical 35B = Q4_K_M imatrix(21GB,24G+ 可加载);legacy id 保留为 alias backward compat。
+    expect(main).toContain('qwen36-35b-a3b-q4km-imatrix');
+    expect(main).toContain('21_166_758_272');
+    expect(main).toContain('3e398e6c53398de229ade3a38b04e0d626289651d6d8b49ecfccc2165816efa1');
     expect(main).toContain('parallelSegments: 4');
-    expect(main).toContain('Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf');
+    expect(main).toContain('Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf');
+    expect(main).toContain('Qwen3.6-35B-A3B-GGUF-imatrix');
+    // legacy alias still mapped for old installs
+    expect(main).toContain('"qwen36-35b-a3b-apex-mtp": "qwen36-35b-a3b-q4km-imatrix"');
     expect(preload).toContain('llamacppStartDownload: (payload)');
     expect(downloader).toContain('_downloadFromSourceParallel');
     expect(downloader).toContain('"Range"');
@@ -79,8 +83,8 @@ describe('Local Qwen provider UX guards', () => {
     const constants = read('desktop/src/react/onboarding/constants.ts');
     const onboardingStep = read('desktop/src/react/onboarding/steps/LocalModelDownloadStep.tsx');
     const badge = read('desktop/src/react/components/ProviderStatusBadge.tsx');
-    expect(constants).toContain("providerName: 'local-qwen35-4b-q4km'");
-    expect(constants).toContain("defaultModelId: 'qwen35-4b-q4km'");
+    expect(constants).toContain("providerName: 'local-qwen35-9b-q4km-imatrix'");
+    expect(constants).toContain("defaultModelId: 'qwen35-9b-q4km-imatrix'");
     expect(onboardingStep).toContain('/api/local-qwen35-9b/status');
     expect(onboardingStep).toContain('/api/local-qwen35-9b/setup');
     expect(badge).toContain('/api/local-qwen35-9b/status');
@@ -112,11 +116,24 @@ describe('Local Qwen provider UX guards', () => {
     expect(emojiStatusIcons.some(icon => badge.includes(icon))).toBe(false);
   });
 
-  it('keeps the daily local model in thinking-on auto mode by default', () => {
+  it('keeps reasoning auto mode available for the daily local model', () => {
     const manager = read('desktop/llamacpp-manager.cjs');
     const launcher = read('scripts/local_qwen35_9b_q4km_llamacpp_server.sh');
     expect(manager).toContain('"--reasoning", "auto"');
     expect(launcher).toContain('--jinja --reasoning auto');
+  });
+
+  it('uses the Lynn imatrix 9B MTP artifact for the default local download', () => {
+    const main = read('desktop/main.cjs');
+    const downloader = read('desktop/model-downloader.cjs');
+    const route = read('server/routes/local-qwen35.js');
+    expect(main).toContain('Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf');
+    expect(main).toContain('0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4');
+    expect(downloader).toContain('Merkyor/Qwen3.5-9B-GGUF-imatrix');
+    expect(downloader).toContain('nerkyor/Qwen3.5-9B-GGUF-imatrix');
+    expect(route).toContain('Qwen3.5-9B Q4_K_M imatrix MTP');
+    expect(route).toContain('Qwen3.5-4B Q4_K_M imatrix (低配降级)');
+    expect(route).not.toContain('Qwen3.5-4B Q4_K_M (unsloth)');
   });
 
   it('keeps local model progress out of model-visible thinking', () => {
@@ -141,7 +158,7 @@ describe('Local Qwen provider UX guards', () => {
     expect(thinkingBlock).not.toContain('马上给出结果');
     expect(inputArea).toContain('本地端点已就绪，正在生成首个回答');
     expect(inputArea).toContain('首次暖机提示');
-    expect(inputArea).toContain('本地 Qwen3.5-4B 刚启动时要加载权重和预热上下文');
+    expect(inputArea).toContain('本地 Qwen3.5-9B 刚启动时要加载权重和预热上下文');
     expect(inputArea).not.toContain('首次启动后的第一问正在暖机，可能 30-60 秒；后续会明显更快。');
     expect(inputArea).not.toContain('可接收');
   });

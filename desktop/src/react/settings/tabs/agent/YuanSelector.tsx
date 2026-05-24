@@ -7,8 +7,6 @@ import {
   resolveBundledAvatar,
 } from '../../../utils/agent-helpers';
 
-const kongBannerUrl = 'assets/kong-banner.jpg';
-
 export function YuanSelector({ currentYuan, onChange }: { currentYuan: string; onChange: (key: string) => void }) {
   const types = t('yuan.types') || {};
   const entries = getDisplayYuanEntries(types);

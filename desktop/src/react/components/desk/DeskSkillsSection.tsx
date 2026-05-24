@@ -249,8 +249,6 @@ export function DeskSkillsSection() {
         return left.name.localeCompare(right.name, 'zh-Hans-CN');
       });
   }, [allSkills, deskSkillsSnapshot]);
-  const enabledCount = useMemo(() => allSkills.filter((skill) => skill.enabled).length, [allSkills]);
-
   const recommendedSkills = useMemo(() => {
     const byAlias = new Map(installedSkills.map((skill) => [normalizeSkillAlias(skill.name), skill]));
     return RECOMMENDED_SKILLS.map((entry) => {

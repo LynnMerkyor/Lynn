@@ -89,12 +89,6 @@ function formatEmotion(value: unknown): string | null {
   return null;
 }
 
-function formatStats(stats: VoiceWsClientStats | null): string | null {
-  if (!stats) return null;
-  const rtt = typeof stats.rttMs === 'number' ? ` · ${Math.round(stats.rttMs)}ms` : '';
-  return `↑${stats.pcmFramesOut} ↓${stats.ttsFramesIn}${rtt}`;
-}
-
 function formatHealth(health: VoiceHealthStatus | null): string | null {
   if (!health) return null;
   // 2026-05-01 优先用 orchestrator 给的 tierLabel(Tier 1/2 为空字符串 → 不显示)
@@ -296,7 +290,6 @@ export function JarvisRuntimeOverlay() {
             }).catch((err) => {
               const message = err instanceof Error ? err.message : String(err);
               // 增量路径失败 → 不污染主 turn,记 console;最终的"完整 message"仍可走 useEffect 兜底
-              // eslint-disable-next-line no-console
               console.warn('[jarvis] incremental TTS speak failed:', message);
             });
           },

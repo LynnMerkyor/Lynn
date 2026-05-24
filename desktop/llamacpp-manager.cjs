@@ -6,9 +6,9 @@
  * 背景:
  *   5/20 战略 pivot 后 Lynn 客户端默认本地推理底层 = llama.cpp。
  *   Mac Q4_K_M GGUF / Linux CUDA Q4_K_M / Win x64 CUDA Q4_K_M 全平台 ship。
- *   2026-05-23 更新: 默认 ship 模型从 9B 切到 unsloth/Qwen3.5-4B-GGUF Q4_K_M
- *     (2.55GB,thinking-on,启动快,8GB 内存可用),适配最大用户群。
- *   9B Q4_K_M-imatrix MTP 降到"24GB 显存推荐"可选档,35B APEX-MTP 是"32GB+"高端档。
+ *   2026-05-25 更新: 默认 ship 模型回到 Qwen3.5-9B Q4_K_M imatrix MTP
+ *     (5.38GB,thinking-on 更稳,24GB 显存/统一内存推荐)。
+ *   4B Q4_K_M imatrix 保留为低配降级档,但 thinking-on 可能空正文长思考。
  *
  * 本模块策略:
  *   1. start():
@@ -44,25 +44,27 @@ const net = require("net");
 // ─────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = Object.freeze({
-  // 默认 ship 模型 — 4B Q4_K_M,启动快 + 8GB 内存可用 + 覆盖最大用户群。
-  // 升级路径: 24G 显存→9B MTP,32G+ 显存→35B APEX-MTP。
-  modelId: "qwen35-4b-q4km",
-  modelFileName: "Qwen3.5-4B-Q4_K_M.gguf",
-  modelExpectedSize: 2_740_937_888, // ~2.55 GB
+  // 默认 ship 模型 — Qwen3.5-9B Q4_K_M imatrix MTP,避免 4B thinking-on 空正文长思考。
+  // 降级路径: 8~16G 设备可手动选 4B,但产品层会提示 thinking-on 风险。
+  modelId: "qwen35-9b-q4km-imatrix",
+  modelFileName: "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
+  modelExpectedSize: 5_780_090_944, // ~5.38 GB
   // Product default: one comfortable 32K local slot. llama.cpp splits context
   // across parallel slots, so keep -np/--parallel at 1 for the local-first UX.
-  // 4B 无 MTP head — 移除 --spec-type draft-mtp 相关参数。
   serverArgs: [
     "--ctx-size", "32768",
     "--threads", "4",
     "--parallel", "1",
     "--n-gpu-layers", "999",
-    "-a", "qwen35-4b-q4km",
+    "-a", "qwen35-9b-q4km-imatrix",
     "--jinja",
-    // Keep thinking available by default, but cap the 4B thinking budget so
-    // everyday asks do not loop for a minute before the first visible answer.
+    "--spec-type", "draft-mtp",
+    "--spec-draft-n-max", "4",
+    "--cache-type-k", "q8_0",
+    "--cache-type-v", "q8_0",
+    // Keep thinking available for 9B; 4B downgrade is guarded elsewhere.
     "--reasoning", "auto",
-    "--reasoning-budget", "8192",
+    "--reasoning-budget", "-1",
     "--metrics",
     "--host", "127.0.0.1",
   ],
@@ -120,8 +122,10 @@ function legacyModelPathCandidates(homeDir, modelId, fileName) {
   ];
   if (modelId === "qwen35-4b-q4km") {
     candidates.push(
-      path.join(homeDir, "Models", "Lynn", "Qwen3.5-4B", "q4_k_m", "Qwen3.5-4B-Q4_K_M.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.5-4B", "q4_k_m", "Qwen3.5-4B-Q4_K_M-imatrix.gguf"),
       path.join(homeDir, "Models", "Lynn", "Qwen3.5-4B", "q4_k_m", fileName),
+      // Legacy unsloth locations remain as fallback only; new installs should use the Lynn imatrix artifact above.
+      path.join(homeDir, "Models", "Lynn", "Qwen3.5-4B", "q4_k_m", "Qwen3.5-4B-Q4_K_M.gguf"),
       path.join(homeDir, "Models", "Qwen3.5-4B-GGUF", "Qwen3.5-4B-Q4_K_M.gguf"),
     );
   }
@@ -132,13 +136,18 @@ function legacyModelPathCandidates(homeDir, modelId, fileName) {
     );
   }
   if (modelId === "qwen36-35b-a3b-q4km-imatrix") {
+    // 2026-05-24 canonical:Q4_K_M imatrix(21G,24G+ 加载)替换 APEX-MTP I-Balanced(26G,32G+);
+    // 老 APEX-MTP 路径保留为 fallback,已下载的用户不必重下。
     candidates.push(
-      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf"),
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", fileName),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),
     );
   }
   if (modelId === "qwen36-35b-a3b-apex-mtp") {
+    // legacy alias:APEX-MTP I-Balanced(2026-05-24 弃用,统一新装走 q4km-imatrix);老用户继续可用。
     candidates.push(
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf"),
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "apex_mtp", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B-APEX-MTP", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),

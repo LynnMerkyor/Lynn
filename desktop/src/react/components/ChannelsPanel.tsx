@@ -12,8 +12,6 @@ import styles from './channels/Channels.module.css';
 /* eslint-disable @typescript-eslint/no-explicit-any -- isComposing 等 nativeEvent 字段需 as any */
 
 export function ChannelsPanel() {
-  const currentTab = useStore(s => s.currentTab);
-  const channels = useStore(s => s.channels);
   const serverPort = useStore(s => s.serverPort);
 
   // 启动时加载频道列表

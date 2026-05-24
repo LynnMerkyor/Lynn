@@ -10,14 +10,14 @@
     <title>Lynn — 开源桌面 AI Agent | Claude Code / Cursor / Codex 替代 | 智能体助手</title>
     <meta
       name="description"
-      content="Lynn 是基于 Open Hanako 的开源桌面 AI Agent，支持多模型路由、记忆系统、复查闭环、自动任务和本地 9B 无限 token。可作为 Claude Code、Cursor、Codex 的桌面级替代。"
+      content="Lynn 是基于 Open Hanako 的开源桌面 AI Agent，支持多模型路由、记忆系统、复查闭环、自动任务和本地 Qwen3.5-9B MTP。可作为 Claude Code、Cursor、Codex 的桌面级替代。"
     />
     <meta name="theme-color" content="#f7f1e6" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Lynn — 开源桌面 AI Agent | Claude Code / Cursor / Codex 替代 | 智能体助手" />
     <meta
       property="og:description"
-      content="Lynn 是基于 Open Hanako 的开源桌面 AI Agent，支持多模型路由、记忆系统、复查闭环、自动任务和本地 9B 无限 token。可作为 Claude Code、Cursor、Codex 的桌面级替代。"
+      content="Lynn 是基于 Open Hanako 的开源桌面 AI Agent，支持多模型路由、记忆系统、复查闭环、自动任务和本地 Qwen3.5-9B MTP。可作为 Claude Code、Cursor、Codex 的桌面级替代。"
     />
     <meta property="og:image" content="https://raw.githubusercontent.com/MerkyorLynn/Lynn/main/.github/assets/screenshot-main-20260407-v3.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -36,12 +36,12 @@
       "applicationCategory": "DeveloperApplication",
       "applicationSubCategory": "AI Agent",
       "operatingSystem": "macOS 12+, Windows 10+",
-      "description": "Lynn 是基于 Open Hanako 的开源桌面 AI Agent。支持多模型路由、本地 9B 无限 token、六层记忆系统、写作工作台、Diff 视图、MCP 接入、多 Agent 协作。可作为 Claude Code、Cursor、Codex 的桌面级替代。",
+      "description": "Lynn 是基于 Open Hanako 的开源桌面 AI Agent。支持多模型路由、本地 Qwen3.5-9B MTP、六层记忆系统、写作工作台、Diff 视图、MCP 接入、多 Agent 协作。可作为 Claude Code、Cursor、Codex 的桌面级替代。",
       "url": "https://download.merkyorlynn.com",
       "downloadUrl": "https://download.merkyorlynn.com/download",
       "screenshot": "https://raw.githubusercontent.com/MerkyorLynn/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
       "image": "https://raw.githubusercontent.com/MerkyorLynn/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
-      "softwareVersion": "0.79.0",
+      "softwareVersion": "0.79.1",
       "datePublished": "2026-04-16",
       "fileSize": "180MB",
       "inLanguage": "zh-CN",
@@ -61,7 +61,7 @@
       },
       "featureList": [
         "多模型智能路由 (MiMo / Qwen3.6 / DeepSeek / GLM Coding Plan / Kimi)",
-        "本地 Qwen3.5-9B Q4_K_M imatrix 一键安装、离线使用、无限 token",
+        "本地 Qwen3.5-9B Q4_K_M imatrix MTP 一键安装、离线使用、无 API Key",
         "六层记忆系统：心跳/心态/工作记忆/用户画像",
         "写作工作台 + Diff 视图 + 对比外部修改",
         "本地工具：edit/write/read/bash/grep/find 全链路",
@@ -105,11 +105,11 @@
       <main>
         <section class="hero">
           <div class="hero-copy">
-            <span class="eyebrow">Lynn 0.79.0</span>
+            <span class="eyebrow">Lynn 0.79.1</span>
             <h1>让 AI 不只会聊天，而是真的在你的电脑上一起工作。</h1>
             <p class="lead">
               Lynn 是一个有心跳、有记忆、会主动行动、还能多 Agent 协作的桌面 AI
-              助手。它能记住重要事实、整理文件、巡检工作区、操作工具，也能一键启用本地 9B，日常任务离线无限用。
+              助手。它能记住重要事实、整理文件、巡检工作区、操作工具，也能一键启用本地 Qwen3.5-9B MTP。
             </p>
             <div class="hero-actions">
               <a class="button button-primary" href="./download.html">下载 Lynn</a>
@@ -118,7 +118,7 @@
             <div class="hero-points">
               <span>已支持 macOS Apple Silicon / Intel</span>
               <span>Windows 安装版可用</span>
-              <span>本地 9B · 32K 上下文 · 无 API Key</span>
+            <span>本地 9B MTP · 32K 上下文 · 无 API Key</span>
             </div>
           </div>
 
@@ -152,8 +152,8 @@
             <p>不只回复你，还会调用工具、整理结果、继续推进任务。</p>
           </article>
           <article>
-            <strong>本地 9B</strong>
-            <p>一键安装 Qwen3.5-9B Q4_K_M imatrix，离线使用、无限 token。</p>
+            <strong>本地 9B MTP</strong>
+            <p>一键安装 Qwen3.5-9B Q4_K_M imatrix MTP，离线使用、无 API Key。</p>
           </article>
         </section>
 
@@ -259,7 +259,7 @@
             <a class="button button-primary" href="./download.html">前往下载页</a>
             <a
               class="button button-secondary"
-              href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.0"
+              href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.1"
               target="_blank"
               rel="noreferrer"
             >查看 Release</a>
@@ -294,6 +294,6 @@
       </footer>
     </div>
 
-    <script src="./app.js?v=0.79.0"></script>
+    <script src="./app.js?v=0.79.1"></script>
   </body>
 </html>

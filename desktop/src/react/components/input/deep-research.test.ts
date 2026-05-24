@@ -3,6 +3,7 @@ import {
   DEEP_RESEARCH_FETCH_TIMEOUT_MS,
   DEEP_RESEARCH_TIMEOUT_MS,
   formatDeepResearchAssistantText,
+  normalizeDeepResearchArtifact,
   normalizeDeepResearchErrorMessage,
 } from './deep-research';
 
@@ -37,6 +38,23 @@ describe('deep-research helpers', () => {
   it('normalizes raw AbortSignal wording into a user-readable timeout message', () => {
     expect(normalizeDeepResearchErrorMessage(new Error('signal is aborted without reason'))).toContain('超过等待时间');
     expect(normalizeDeepResearchErrorMessage(new Error('hanaFetch /api/deep-research: 请求超时（190 秒）'))).toContain('超过等待时间');
+  });
+
+  it('normalizes deep research HTML artifacts for chat preview cards', () => {
+    expect(normalizeDeepResearchArtifact({
+      artifactId: 'deep-1',
+      type: 'html',
+      title: '深度调研报告',
+      content: '<!DOCTYPE html><html></html>',
+    })).toEqual({
+      artifactId: 'deep-1',
+      artifactType: 'html',
+      title: '深度调研报告',
+      content: '<!DOCTYPE html><html></html>',
+      language: 'html',
+    });
+    expect(normalizeDeepResearchArtifact({ content: '' })).toBeNull();
+    expect(normalizeDeepResearchArtifact(null)).toBeNull();
   });
 
   it('preserves non-timeout failures for debugging', () => {

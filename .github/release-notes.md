@@ -1,37 +1,53 @@
 # Lynn v0.79.1 Release Notes
 
-> 发布日期: 2026-05-23 · 代号: "4B 入门"
+> 发布日期: 2026-05-25 · 代号: "9B MTP 默认回归"
 
-v0.79.1 把默认本地模型从 Qwen3.5-9B 切到 **unsloth/Qwen3.5-4B-GGUF Q4_K_M**(2.55GB,thinking-on 32K,8~16G 显存推荐),覆盖最大用户群。同时把 9B MTP / 35B APEX-MTP 升级为"硬件分级"可选档,按用户机器显存自动浮现。
+v0.79.1 是 v0.79 本地模型体验的正式收口版本。默认本地引导模型保持为 **Qwen3.5-9B Q4_K_M imatrix MTP**(5.38GB,24GB 显存/统一内存推荐)。Spark 复测确认 4B imatrix 在 thinking-on 下仍可能出现长思考后无正文,因此 4B 只保留为低配降级档,并在模型页明确提示风险。
 
 ## 重点更新
 
-### 默认本地模型切到 Qwen3.5-4B
-- 设置 → 模型内的"本地模型"卡片默认指向 **Qwen3.5-4B Q4_K_M (unsloth)**,2.55 GB,thinking-on 32K,8~16G 显存即可流畅运行。
-- 下载量减半(5.38GB → 2.55GB),启动门槛降到主流 PC/Mac。
-- 同硬件 Q4_K_M 量化态 + thinking-on 32K 口径(GB10 Spark llama.cpp):**MMLU 500 = 81.20%**, V8 工具调用 grader 修正后 30/35 (85.71%), V9 60-prompt mixed = 46/60 (76.67%) — finance / medical 100%, math / physics / biology / chemistry 88-89%。9B 升级档 MMLU 100 sample 81.00% / GPQA 81.71% (excl. parse-fail), 35B 高端档 MMLU 500 = 90.40% / GPQA Diamond 80.70%。
-- 模型源: ModelScope `unsloth/Qwen3.5-4B-GGUF` · HF mirror `hf-mirror.com/unsloth/Qwen3.5-4B-GGUF`(2 源 fallback,sha256 校验)。
+### 默认本地模型保持 Qwen3.5-9B MTP
+- 设置 → 模型内的"本地模型"卡片默认指向 **Qwen3.5-9B Q4_K_M imatrix MTP**,5.38 GB,24GB 显存/统一内存推荐。
+- 9B 保留 MTP 加速和更稳的 thinking-on 路径,避免 4B 在短问候、天气、GPQA 等场景出现长思考后无正文。
+- 4B imatrix 直连 smoke:thinking-off 短问候正常、门禁工具调用正常;thinking-on 短问候/GPQA probe 可能长思考后无正文。Spark MMLU500 thinking-on 为 81.20%;GPQA thinking-on 本轮只跑出 15/198,判定无效。thinking-off 口径 MMLU500 为 73.00%,GPQA Diamond 为 16.67%。
+- 模型源: ModelScope `Merkyor/Qwen3.5-9B-GGUF-imatrix` · HF mirror `hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix`(2 源 fallback,sha256 校验)。
 
 ### 三档硬件分级
 | 档位 | 模型 | 推荐硬件 | 体积 |
 |------|------|---------|:----:|
-| **默认** | Qwen3.5-4B Q4_K_M | **8~16G 显存推荐 · 全机型** | 2.55 GB |
-| 升级 | Qwen3.5-9B Q4_K_M imatrix MTP | 24GB 显存/统一内存+ | 5.38 GB |
-| 高端 | Qwen3.6-35B-A3B APEX-MTP I-Balanced | 32GB+ 显存/统一内存+ | 26 GB |
+| **默认** | Qwen3.5-9B Q4_K_M imatrix MTP | **24GB 显存/统一内存+** | 5.38 GB |
+| 降级 | Qwen3.5-4B Q4_K_M imatrix (Lynn) | 8~16GB 可选 · 建议 thinking-off | 2.6 GB |
+| 高端 | Qwen3.6-35B-A3B Q4_K_M imatrix | 24GB 显存/统一内存+ | 21 GB |
 
-升级档自动按 `os.totalmem()` 浮现到模型卡的"可选本地模型"区,无需手动配置。
+4B/35B 按硬件浮现到模型卡的"可选本地模型"区,无需手动配置。
+
+### Deep Research HTML 报告
+- 深度调研现在会生成聊天内可点击预览的 HTML 报告,并在 session JSONL 中持久化 `create_artifact`。
+- 本地 9B / BYOK thinking 模型如果出现 reasoning-only 空正文,服务端会自动 no-think fallback,避免用户得到空结果。
+- 403/401/429 非 JSON 错误会按认证/限流分类,不再误报为 invalid JSON。
 
 ### 兼容性与迁移
-- 已有 9B / 35B 配置不强迁:用户继续使用现有配置;新用户默认获得 4B 一键体验。
-- `core/migrate-providers.js` 的 `migrateLocalQwenDefaultTo4B` seed 函数指向新 4B,旧 `qwen3-4b-thinking-2507` 配置自动迁移到 Qwen3.5-4B。
-- API endpoint `/api/local-qwen35-9b/*` 路径保留(backward compat);文件 ID 切到 `local-qwen35-4b-q4km` / `qwen35-4b-q4km`。
-- 5 个 locale (zh / en / zh-TW / ja / ko) 全量同步默认本地模型 copy。
+- 已有 4B/旧 4B thinking provider 会自动迁回默认 9B provider;35B 配置不强迁。
+- API endpoint `/api/local-qwen35-9b/*` 路径保留(backward compat);文件 ID 回到 `local-qwen35-9b-q4km-imatrix` / `qwen35-9b-q4km-imatrix`。
+- 模型页、输入区、状态条、README / README_EN / 镜像站 copy 已统一到 9B 默认、4B 降级风险口径。
 
 ### 回归门禁
-- TypeScript: `tsc --noEmit` exit 0 ✓
-- vitest: **167 files / 1379 passed / 1 skipped** ✓
-- vite build:renderer: success ✓
-- local-qwen-provider.test.ts 增加"三档升级阶梯"断言
+- `npm test`: **168 files / 1374 passed / 1 skipped** ✓
+- TypeScript: `tsc --noEmit` ✓
+- ESLint: `npm run lint` ✓
+- Deep Research 安装版三路门禁:本地 9B / BYOK GLM-5.1 / 默认 Brain 均输出正文 + HTML artifact + session 持久化 ✓
+- 安装版 smoke:本地 9B / GPT-5.4 / 默认模型均 `Failed:0; blocker:0; critical:0` ✓
+
+## English Summary
+
+v0.79.1 finalizes the v0.79 local-model onboarding path. The default local model remains **Qwen3.5-9B Q4_K_M imatrix MTP** (5.38GB, 24GB VRAM/unified memory recommended). The 4B imatrix build is kept as a low-config downgrade only because Spark retests reproduced a thinking-on risk where the model can spend a long time reasoning and return no visible answer.
+
+Highlights:
+- Default local tier: Qwen3.5-9B Q4_K_M imatrix MTP with MTP acceleration and a clearer 24GB recommendation.
+- Low-config downgrade: Qwen3.5-4B Q4_K_M imatrix, thinking-off recommended; thinking-on risk is documented in the Models page.
+- Deep Research now creates a clickable HTML report inside chat and persists the artifact into the session JSONL.
+- Local 9B and BYOK thinking models retry with no-think fallback when the first response contains reasoning only but no visible answer.
+- Installed-app gates passed for local 9B, GPT-5.4, the default model, and Deep Research across local/BYOK/default paths.
 
 ---
 
@@ -43,9 +59,9 @@ v0.79.0 是 Lynn 的本地模型大版本。它把 Qwen3.5-9B Q4_K_M imatrix 接
 
 ## 重点更新
 
-### 本地 9B,日常无限用
+### 本地 9B,离线日常使用
 - 设置 → 模型内新增“本地 Qwen3.5-9B”入口,授权后自动准备 llama.cpp、下载/校验 GGUF、启动本地 OpenAI `/v1` 端点并注册 provider。
-- 默认模型为 Qwen3.5-9B Q4_K_M imatrix,约 5.3GB,32K 上下文;thinking-on 32K 口径:MMLU 90+ / GPQA 80+。
+- 默认模型为 Qwen3.5-9B Q4_K_M imatrix MTP,约 5.38GB,32K 上下文;Spark 口径:MMLU 100 sample 81.00%,GPQA Diamond 72.22% naive / 81.71% excluding parse-fail,工具调用 14/15。
 - 输入框、状态条和设置页都会显示本地模型运行、加载、空闲槽位、token 统计和停止入口。
 
 ### 本地模型管理器
@@ -79,4 +95,4 @@ v0.79.0 是 Lynn 的本地模型大版本。它把 Qwen3.5-9B Q4_K_M imatrix 接
 
 ## 升级建议
 
-建议所有用户升级。Mac / Windows 普通用户可直接使用内置 9B 本地模型获得离线、无限 token 的日常体验;高配用户可在“模型”页导入或下载 35B GGUF。
+建议所有用户升级。Mac / Windows 普通用户可直接使用内置 9B 本地模型获得离线、不消耗云端额度的日常体验;高配用户可在“模型”页导入或下载 35B GGUF。

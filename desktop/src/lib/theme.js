@@ -65,3 +65,6 @@ function loadSavedFont() {
 
 // 暴露给 WS 事件处理器（设置工具远程切换主题用）
 window.applyTheme = setTheme;
+window.loadSavedTheme = loadSavedTheme;
+window.loadSavedFont = loadSavedFont;
+window.setSerifFont = setSerifFont;

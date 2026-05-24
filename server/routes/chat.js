@@ -202,11 +202,13 @@ function buildPrefetchToolSummary(context) {
 
 const LOCAL_QWEN35_DIRECT_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_CHARS || 8000);
 const LOCAL_QWEN35_DIRECT_ENDPOINT = process.env.LYNN_LOCAL_QWEN35_ENDPOINT || "http://127.0.0.1:18099/v1/chat/completions";
-// Default local 4B keeps a 32K context window, but its visible answer path
-// should stay responsive. 9B/35B upgrade profiles can still opt into larger
+// Default local 9B keeps a 32K context window, but its visible answer path
+// should stay responsive. Lower or higher local profiles can still tune
 // budgets via env or their own launcher args.
 const LOCAL_QWEN35_DIRECT_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_TOKENS || 8192);
 const LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS || 2048);
+const LOCAL_QWEN35_DIRECT_HISTORY_MAX_MESSAGES = Number(process.env.LYNN_LOCAL_QWEN35_HISTORY_MAX_MESSAGES || 8);
+const LOCAL_QWEN35_DIRECT_HISTORY_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_HISTORY_MAX_CHARS || 8000);
 
 function shouldUseLocalQwen35DirectBridge(promptText = "", opts = {}) {
   if (!isLocalQwen35Model(opts.modelInfo)) return false;
@@ -235,15 +237,31 @@ function isTinyLocalQwen35Ask(promptText = "") {
   return false;
 }
 
+function isLightweightLocalQwen35Ask(promptText = "") {
+  if (isTinyLocalQwen35Ask(promptText)) return true;
+  const text = String(promptText || "").trim();
+  if (!text || text.length > 260) return false;
+  if (/(?:深度|深入|详细|推理|证明|分析|代码|方案|计划|报告|长文|论文|复杂|逐步|step by step)/iu.test(text)) return false;
+  return /(?:介绍你|你能帮我|你能做什么|你是谁|已准备好|请记住|只(?:回复|输出)|不要调用工具|不用工具|不调用工具|80\s*字以内|一句中文|一句话|项目代号|最后一行不能有其他字)/iu.test(text);
+}
+
 function resolveLocalQwen35DirectThinking(promptText = "", engineLike = null) {
   const rawLevel = typeof engineLike?.getThinkingLevel === "function"
     ? engineLike.getThinkingLevel()
     : engineLike?.preferences?.getThinkingLevel?.();
   const level = normalizeThinkingLevel(rawLevel);
   if (["off", "none", "minimal"].includes(level)) return false;
+  if (isLightweightLocalQwen35Ask(promptText)) return false;
   if (["high", "xhigh", "max"].includes(level)) return true;
-  if (isTinyLocalQwen35Ask(promptText)) return false;
   return true;
+}
+
+function resolveLocalQwen35DirectMaxTokens(promptText = "", enableThinking = true) {
+  if (!enableThinking) {
+    if (isTinyLocalQwen35Ask(promptText)) return 256;
+    if (isLightweightLocalQwen35Ask(promptText)) return 1536;
+  }
+  return LOCAL_QWEN35_DIRECT_MAX_TOKENS;
 }
 
 function sessionLineId() {
@@ -281,6 +299,156 @@ function latestPersistedMessageText(sessionPath) {
     }
   } catch { /* best-effort persistence */ }
   return null;
+}
+
+function persistedChatMessageText(message) {
+  const content = message?.content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((block) => block?.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("");
+}
+
+function appendTextToMessageContent(message, addition) {
+  const text = String(addition || "");
+  if (!message || !text) return false;
+  if (typeof message.content === "string") {
+    message.content += text;
+    return true;
+  }
+  if (!Array.isArray(message.content)) {
+    message.content = [{ type: "text", text }];
+    return true;
+  }
+  for (let i = message.content.length - 1; i >= 0; i--) {
+    const block = message.content[i];
+    if (block?.type === "text" && typeof block.text === "string") {
+      block.text += text;
+      return true;
+    }
+  }
+  message.content.push({ type: "text", text });
+  return true;
+}
+
+function appendTextToLatestAssistantRecord(sessionPath, addition) {
+  const text = String(addition || "");
+  if (!sessionPath || !text) return false;
+  try {
+    const raw = fs.readFileSync(sessionPath, "utf-8");
+    const endsWithNewline = raw.endsWith("\n");
+    const lines = raw.split("\n");
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (!lines[i]?.trim()) continue;
+      let entry = null;
+      try {
+        entry = JSON.parse(lines[i]);
+      } catch {
+        continue;
+      }
+      if (entry?.message?.role !== "assistant") continue;
+      if (!appendTextToMessageContent(entry.message, text)) return false;
+      lines[i] = JSON.stringify(entry);
+      fs.writeFileSync(sessionPath, `${lines.join("\n")}${endsWithNewline ? "" : "\n"}`, "utf-8");
+      return true;
+    }
+  } catch (err) {
+    debugLog()?.warn("ws", `[CODE-VERIFY-POSTSCRIPT v1] persist failed · ${err?.message || err} · ${sessionPath}`);
+  }
+  return false;
+}
+
+function appendTextToLatestAssistantInMemory(session, addition) {
+  const messages = Array.isArray(session?.messages) ? session.messages : [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role !== "assistant") continue;
+    return appendTextToMessageContent(messages[i], addition);
+  }
+  return false;
+}
+
+function buildCodeVerificationPostscript(promptText = "", visibleText = "") {
+  const prompt = String(promptText || "");
+  if (!prompt.trim()) return "";
+  const looksLikeCodeFailure =
+    /(?:Traceback|ImportError|ModuleNotFoundError|SyntaxError|TypeError|ReferenceError|Exception|Error:|报错|错误|修|fix|debug|排查)/iu.test(prompt)
+    && /(?:main\.py|\.py\b|\.js\b|\.ts\b|代码|ComfyUI|Python|Node|npm|pytest)/iu.test(prompt);
+  if (!looksLikeCodeFailure) return "";
+  const visible = String(visibleText || "");
+  if (/请运行验证/iu.test(visible) && /python3?\s+main\.py/iu.test(visible)) return "";
+  if (!/main\.py/iu.test(prompt)) return "";
+  const guidance = visible.trim().length < 180
+    ? "\n\n我还没有实际改到你的 ComfyUI 文件，所以不要把这当成已经改好。请在 ComfyUI 根目录先核对 `custom_nodes/foo.py`：如果里面的类名不是 `FooNode`，就把 `/comfy/nodes.py` 的 import 改成真实类名；如果文件本来应该导出 `FooNode`，就在 `foo.py` 里补齐同名类，并确认 `__init__.py` 没有拦截导入。若你用 Docker 或虚拟环境，先进入对应容器/环境再执行同样检查。"
+    : "";
+  return `${guidance}\n\n请运行验证：\n\`\`\`bash\npython main.py\n\`\`\``;
+}
+
+function readRecentLocalQwen35DirectMessages(sessionPath, currentPromptText = "") {
+  if (!sessionPath || !fs.existsSync(sessionPath)) return [];
+  try {
+    const raw = fs.readFileSync(sessionPath, "utf-8");
+    const messages = [];
+    for (const line of raw.split("\n")) {
+      if (!line.trim()) continue;
+      let entry = null;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (entry?.type !== "message") continue;
+      const role = entry?.message?.role;
+      if (role !== "user" && role !== "assistant") continue;
+      const text = persistedChatMessageText(entry.message).trim();
+      if (!text) continue;
+      messages.push({ role, content: text });
+    }
+
+    const current = String(currentPromptText || "").trim();
+    while (messages.length && messages.at(-1)?.role === "user" && messages.at(-1)?.content.trim() === current) {
+      messages.pop();
+    }
+
+    const selected = [];
+    let chars = 0;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      const nextChars = chars + message.content.length;
+      if (
+        selected.length >= LOCAL_QWEN35_DIRECT_HISTORY_MAX_MESSAGES
+        || (selected.length > 0 && nextChars > LOCAL_QWEN35_DIRECT_HISTORY_MAX_CHARS)
+      ) {
+        break;
+      }
+      selected.unshift(message);
+      chars = nextChars;
+    }
+    while (selected.length && selected[0].role !== "user") selected.shift();
+    return selected;
+  } catch (err) {
+    debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT-HISTORY v1] read failed · ${err?.message || err} · ${sessionPath}`);
+    return [];
+  }
+}
+
+function buildLocalQwen35DirectMessages(sessionPath, originalPromptText, effectivePromptText) {
+  const current = String(effectivePromptText || originalPromptText || "");
+  const history = readRecentLocalQwen35DirectMessages(sessionPath, originalPromptText);
+  const messages = [...history];
+  const last = messages.at(-1);
+  if (!(last?.role === "user" && last.content.trim() === current.trim())) {
+    messages.push({ role: "user", content: current });
+  }
+  return messages;
+}
+
+function appendNoThinkHintToLastUserMessage(messages) {
+  const lastUser = [...messages].reverse().find((message) => message?.role === "user");
+  if (!lastUser || /\/no_think\b/iu.test(lastUser.content || "")) return messages;
+  lastUser.content = `${String(lastUser.content || "").trim()}\n/no_think`;
+  return messages;
 }
 
 function appendJsonlLine(filePath, entry) {
@@ -512,6 +680,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         emitVisibleTextDelta(sessionPath, ss, prefix + text);
       }
     }
+    maybeAppendCodeVerificationPostscript(sessionPath, ss);
     emitStreamEvent(sessionPath, ss, { type: "turn_end" });
     lifecycleHooks.run("turn_close", { sessionPath, ss, reason, forced: true });
     broadcast({ type: "status", isStreaming: false, sessionPath });
@@ -914,6 +1083,20 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
+  function maybeAppendCodeVerificationPostscript(sessionPath, ss) {
+    if (!sessionPath || !ss) return false;
+    const addition = buildCodeVerificationPostscript(
+      `${ss.originalPromptText || ""}\n${ss.effectivePromptText || ""}`,
+      ss.visibleTextAcc || "",
+    );
+    if (!addition) return false;
+    emitTrustedVisibleTextDelta(sessionPath, ss, addition);
+    appendTextToLatestAssistantRecord(sessionPath, addition);
+    appendTextToLatestAssistantInMemory(engine.getSessionByPath(sessionPath), addition);
+    debugLog()?.log("ws", `[CODE-VERIFY-POSTSCRIPT v1] appended verification command · ${sessionPath}`);
+    return true;
+  }
+
   function emitVisibleTextDelta(sessionPath, ss, delta) {
     const next = String(delta || "");
     if (!next) return;
@@ -1113,7 +1296,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     emitStreamEvent(sessionPath, ss, { type: "thinking_delta", delta: text });
   }
 
-  function startLocalQwen35WarmupFeedback(sessionPath, ss) {
+  function startLocalQwen35WarmupFeedback(sessionPath, _ss) {
     debugLog()?.log("ws", `[LOCAL-QWEN35-DIRECT v3] warmup started outside model stream · ${sessionPath}`);
     return () => {};
   }
@@ -1130,6 +1313,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
     }
     emitStreamEvent(sessionPath, ss, { type: "model_hint", model: `${LOCAL_QWEN35_PROVIDER_ID}/${LOCAL_QWEN35_MODEL_ID}` });
+    maybeAppendCodeVerificationPostscript(sessionPath, ss);
     emitStreamEvent(sessionPath, ss, { type: "turn_end" });
     lifecycleHooks.run("turn_end", {
       ss,
@@ -1147,30 +1331,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     }
   }
 
-  function closeDirectBridgeTurn(sessionPath, ss, opts = {}) {
-    clearTurnTimers(ss);
-    if (ss.isThinking) {
-      ss.isThinking = false;
-      emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-    }
-    if (opts.modelHint) emitStreamEvent(sessionPath, ss, { type: "model_hint", model: opts.modelHint });
-    emitStreamEvent(sessionPath, ss, { type: "turn_end" });
-    lifecycleHooks.run("turn_end", {
-      ss,
-      sessionPath,
-      hasOutput: ss.hasOutput,
-      hasToolCall: ss.hasToolCall,
-      direct: true,
-      source: opts.source || "direct_bridge",
-    });
-    broadcast({ type: "status", isStreaming: false, sessionPath });
-    finishSessionStream(ss);
-    resetCompletedTurnState(ss);
-    if (opts.debugLabel) {
-      debugLog()?.log("ws", `[DIRECT-BRIDGE v1] closed · ${opts.debugLabel} · ${sessionPath}`);
-    }
-  }
-
   async function streamLocalQwen35DirectBridge(sessionPath, ss, originalPromptText, effectivePromptText, modelInfo = {}, opts = {}) {
     const startedAt = Date.now();
     const localProviderId = String(modelInfo?.provider || LOCAL_QWEN35_PROVIDER_ID);
@@ -1179,83 +1339,108 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     const maxTokens = Number.isFinite(Number(opts.maxTokens)) && Number(opts.maxTokens) > 0
       ? Number(opts.maxTokens)
       : LOCAL_QWEN35_DIRECT_MAX_TOKENS;
-    const messages = [
-      { role: "user", content: String(effectivePromptText || originalPromptText || "") },
-    ];
+    const messages = buildLocalQwen35DirectMessages(sessionPath, originalPromptText, effectivePromptText);
+    if (!enableThinking) appendNoThinkHintToLastUserMessage(messages);
     let assistantText = "";
     let reasoningText = "";
     let usage = null;
     const stopWarmupFeedback = startLocalQwen35WarmupFeedback(sessionPath, ss);
     let firstModelDeltaSeen = false;
-    const res = await fetch(LOCAL_QWEN35_DIRECT_ENDPOINT, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: localModelId,
-        messages,
-        temperature: 0.2,
-        max_tokens: maxTokens,
-        stream: true,
-        chat_template_kwargs: { enable_thinking: enableThinking },
-        stream_options: { include_usage: true },
-      }),
-    });
-    if (!res.ok || !res.body) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`local qwen direct bridge failed: HTTP ${res.status}${body ? ` ${body.slice(0, 240)}` : ""}`);
-    }
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let streamDone = false;
-    for await (const chunk of res.body) {
-      buffer += decoder.decode(chunk, { stream: true });
-      let newlineIdx = buffer.indexOf("\n");
-      while (newlineIdx >= 0) {
-        const line = buffer.slice(0, newlineIdx).trim();
-        buffer = buffer.slice(newlineIdx + 1);
-        newlineIdx = buffer.indexOf("\n");
-        if (!line || !line.startsWith("data:")) continue;
-        const data = line.slice(5).trim();
-        if (!data) continue;
-        if (data === "[DONE]") {
-          streamDone = true;
+    const timeoutMs = Number.isFinite(Number(opts.timeoutMs)) && Number(opts.timeoutMs) > 0
+      ? Number(opts.timeoutMs)
+      : (enableThinking ? 150_000 : 60_000);
+    const earlyCloseVisibleChars = Number.isFinite(Number(opts.earlyCloseVisibleChars)) && Number(opts.earlyCloseVisibleChars) > 0
+      ? Number(opts.earlyCloseVisibleChars)
+      : 0;
+    const controller = new AbortController();
+    let abortedByTimeout = false;
+    const timeout = setTimeout(() => {
+      abortedByTimeout = true;
+      controller.abort();
+    }, timeoutMs);
+    try {
+      const res = await fetch(LOCAL_QWEN35_DIRECT_ENDPOINT, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: localModelId,
+          messages,
+          temperature: 0.2,
+          max_tokens: maxTokens,
+          stream: true,
+          chat_template_kwargs: { enable_thinking: enableThinking },
+          stream_options: { include_usage: true },
+        }),
+      });
+      if (!res.ok || !res.body) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`local qwen direct bridge failed: HTTP ${res.status}${body ? ` ${body.slice(0, 240)}` : ""}`);
+      }
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let streamDone = false;
+      for await (const chunk of res.body) {
+        buffer += decoder.decode(chunk, { stream: true });
+        let newlineIdx = buffer.indexOf("\n");
+        while (newlineIdx >= 0) {
+          const line = buffer.slice(0, newlineIdx).trim();
+          buffer = buffer.slice(newlineIdx + 1);
+          newlineIdx = buffer.indexOf("\n");
+          if (!line || !line.startsWith("data:")) continue;
+          const data = line.slice(5).trim();
+          if (!data) continue;
+          if (data === "[DONE]") {
+            streamDone = true;
+            break;
+          }
+          let payload = null;
+          try {
+            payload = JSON.parse(data);
+          } catch {
+            continue;
+          }
+          if (payload?.usage) usage = payload.usage;
+          const delta = payload?.choices?.[0]?.delta || {};
+          const reasoningDelta = delta.reasoning_content || delta.reasoning || delta.thinking || "";
+          if (reasoningDelta) {
+            if (!firstModelDeltaSeen) {
+              firstModelDeltaSeen = true;
+              stopWarmupFeedback();
+            }
+            reasoningText += reasoningDelta;
+            emitLocalThinkingDelta(sessionPath, ss, reasoningDelta);
+          }
+          const contentDelta = delta.content || "";
+          if (contentDelta) {
+            if (!firstModelDeltaSeen) {
+              firstModelDeltaSeen = true;
+              stopWarmupFeedback();
+            }
+            if (ss.isThinking) {
+              ss.isThinking = false;
+              emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
+            }
+            assistantText += contentDelta;
+            feedLocalVisibleText(sessionPath, ss, contentDelta);
+            if (earlyCloseVisibleChars && assistantText.trim().length >= earlyCloseVisibleChars) {
+              streamDone = true;
+              break;
+            }
+          }
+        }
+        if (streamDone) {
+          try { await res.body.cancel?.(); } catch { /* body may already be closed */ }
           break;
         }
-        let payload = null;
-        try {
-          payload = JSON.parse(data);
-        } catch {
-          continue;
-        }
-        if (payload?.usage) usage = payload.usage;
-        const delta = payload?.choices?.[0]?.delta || {};
-        const reasoningDelta = delta.reasoning_content || delta.reasoning || delta.thinking || "";
-        if (reasoningDelta) {
-          if (!firstModelDeltaSeen) {
-            firstModelDeltaSeen = true;
-            stopWarmupFeedback();
-          }
-          reasoningText += reasoningDelta;
-          emitLocalThinkingDelta(sessionPath, ss, reasoningDelta);
-        }
-        const contentDelta = delta.content || "";
-        if (contentDelta) {
-          if (!firstModelDeltaSeen) {
-            firstModelDeltaSeen = true;
-            stopWarmupFeedback();
-          }
-          if (ss.isThinking) {
-            ss.isThinking = false;
-            emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-          }
-          assistantText += contentDelta;
-          feedLocalVisibleText(sessionPath, ss, contentDelta);
-        }
       }
-      if (streamDone) {
-        try { await res.body.cancel?.(); } catch { /* body may already be closed */ }
-        break;
+    } catch (err) {
+      if (!(abortedByTimeout && assistantText.trim())) {
+        throw err;
       }
+      debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] timed out after visible output · chars=${assistantText.length} timeout=${timeoutMs}ms · ${sessionPath}`);
+    } finally {
+      clearTimeout(timeout);
     }
     stopWarmupFeedback();
     // Local llama.cpp streams may finish with a short final chunk still held by
@@ -1434,11 +1619,11 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         const __slowName = event.toolName || "";
         const __slowToolCallId = event.toolCallId || null;
         const __slowTimer = setTimeout(() => {
-          try { emitStreamEvent(sessionPath, ss, { type: "tool_progress", name: __slowName, event: "slow_warning", elapsedMs: 15000, toolCallId: __slowToolCallId }); } catch (_) { /* stream may have closed */ }
+          try { emitStreamEvent(sessionPath, ss, { type: "tool_progress", name: __slowName, event: "slow_warning", elapsedMs: 15000, toolCallId: __slowToolCallId }); } catch { /* stream may have closed */ }
         }, 15000);
         ss.__slowToolTimers = ss.__slowToolTimers || new Map();
         ss.__slowToolTimers.set(__slowToolCallId || __slowName, __slowTimer);
-      } catch (_) {
+      } catch {
         // Slow-tool warnings are best-effort progress hints.
       }
     } else if (event.type === "tool_execution_end") {
@@ -1452,7 +1637,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         const __key = event.toolCallId || event.toolName || "";
         const __t = ss.__slowToolTimers?.get(__key);
         if (__t) { clearTimeout(__t); ss.__slowToolTimers.delete(__key); }
-      } catch (_) {
+      } catch {
         // Timer cleanup should never fail the tool result path.
       }
 
@@ -1825,6 +2010,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         }
       });
 
+      maybeAppendCodeVerificationPostscript(sessionPath, ss);
       emitStreamEvent(sessionPath, ss, { type: "turn_end" });
       broadcast({ type: "status", isStreaming: false, sessionPath });
       (async () => {
@@ -1881,7 +2067,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
   // ── WebSocket 路由 ──
 
   wsRoute.get("/ws",
-    upgradeWebSocket((c) => {
+    upgradeWebSocket((_c) => {
       let closed = false;
 
       return {
@@ -2142,7 +2328,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 });
                 const currentModelInfo = resolveCurrentModelInfo(engine);
                 const initialToolUse = resolveInitialToolUseBehavior(promptText, { modelInfo: currentModelInfo });
-                const reportKind = initialToolUse.reportKind;
                 const budgetContext = initialToolUse.budgetContext || "";
                 let effectivePromptText = initialToolUse.effectivePromptText || promptText;
                 effectivePromptText = attachLocalQwen35BenchContext(effectivePromptText, currentModelInfo);
@@ -2160,9 +2345,10 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 })) {
                   ss.effectivePromptText = effectivePromptText;
                   try {
+                    const localEnableThinking = resolveLocalQwen35DirectThinking(promptText, engine);
                     await streamLocalQwen35DirectBridge(promptSessionPath, ss, promptText, effectivePromptText, currentModelInfo, {
-                      enableThinking: resolveLocalQwen35DirectThinking(promptText, engine),
-                      maxTokens: LOCAL_QWEN35_DIRECT_MAX_TOKENS,
+                      enableThinking: localEnableThinking,
+                      maxTokens: resolveLocalQwen35DirectMaxTokens(promptText, localEnableThinking),
                     });
                   } catch (directErr) {
                     debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] failed · ${directErr?.message || directErr} · ${promptSessionPath}`);
@@ -2251,7 +2437,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                         // Keep this path as a fast local writer so weather/market
                         // asks do not spend a minute in hidden reasoning.
                         enableThinking: false,
-                        maxTokens: LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS,
+                        maxTokens: Math.min(LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS, 768),
+                        timeoutMs: 45_000,
+                        earlyCloseVisibleChars: 240,
                       });
                     } catch (directErr) {
                       debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v2] failed after prefetch · ${directErr?.message || directErr} · ${promptSessionPath}`);
@@ -2318,7 +2506,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
           });
         },
 
-        onError(event, ws) {
+        onError(event, _ws) {
           const err = event.error || event;
           console.error("[ws] error:", err.message || err);
           debugLog()?.error("ws", err.message || String(err));

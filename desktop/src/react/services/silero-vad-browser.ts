@@ -71,7 +71,6 @@ export interface SileroVadOptions {
  */
 export async function startSileroVad(_options: SileroVadOptions): Promise<SileroVadHandle> {
   if (STUB_MODE) {
-    // eslint-disable-next-line no-console
     console.info("[SileroVad] stub 模式,跳过真实 VAD 启动;按文件顶部激活清单操作后切真");
     return {
       running: false,

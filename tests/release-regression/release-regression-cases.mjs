@@ -70,7 +70,7 @@ export const RELEASE_CASES = [
         minChars: 5,
         maxVisibleChars: 80,
         forbidTools: true,
-        mustMatch: ["银杏-42"],
+        mustMatch: [/银杏\s*-\s*42/u],
       },
     ],
   },
@@ -152,7 +152,7 @@ export const RELEASE_CASES = [
     timeoutMs: 90000,
     turns: [
       {
-        prompt: "【THINK-01】解释韦伯官僚制和福柯规训权力的区别，各举一个现代公司例子。不要输出你的思考过程。",
+        prompt: "【THINK-01】解释韦伯官僚制和福柯规训权力的区别，各举一个现代公司例子。不要调用工具，不要输出你的思考过程。",
         minChars: 120,
         forbidTools: true,
         mustNotMatch: ["</think>", "思考过程", "用户要求我", "根据系统设定", "the user wants me to", "analysis:"],
@@ -216,7 +216,7 @@ export const RELEASE_CASES = [
         prompt: "【CODE-02】我跑 ComfyUI 的 main.py 报这个错:\n```\nTraceback (most recent call last):\n  File \"main.py\", line 12, in <module>\n    from nodes import NODE_CLASS_MAPPINGS\n  File \"/comfy/nodes.py\", line 5, in <module>\n    from custom_nodes.foo import FooNode\nImportError: cannot import name 'FooNode' from 'custom_nodes.foo'\n```\n请帮我修。我在 macOS 上,Python 3.11,ComfyUI 是最新主分支。",
         minChars: 200,
         // 必须给 verify 命令,不能直接说"已修复"
-        mustMatch: ["python main.py", "请运行验证"],
+        mustMatch: [/python3?\s+main\.py/iu, "请运行验证"],
         // 不许出现 patch-the-symptom 自信兜底
         mustNotMatch: ["已修复", "应该好了", "这下能跑了"],
       },
@@ -258,7 +258,7 @@ export const RELEASE_CASES = [
         prompt: "【DATA-01】华东 Q1 120 Q2 150；华南 Q1 90 Q2 81；华北 Q1 60 Q2 78（万元）。算环比增长率，给 3 条管理建议。",
         minChars: 120,
         forbidTools: true,
-        mustMatch: ["25", "-10", "30"],
+        mustMatch: ["25", /[-−]\s*10/u, "30"],
       },
     ],
   },

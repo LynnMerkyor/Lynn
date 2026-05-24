@@ -1,7 +1,7 @@
 /**
- * model-downloader.cjs · Lynn V0.79 onboarding 2026-05-21 / 2026-05-23 默认切 4B
+ * model-downloader.cjs · Lynn V0.79 onboarding 2026-05-21 / 2026-05-25 默认回到 9B
  *
- * 跨平台大文件下载守护 — Qwen3.5-4B Q4_K_M 2.55 GB GGUF (unsloth 镜像)。
+ * 跨平台大文件下载守护 — Qwen3.5-9B Q4_K_M imatrix MTP 5.38 GB GGUF。
  *
  * 设计要点：
  *   1. HTTP/HTTPS Range 续传(用 .part 临时文件 + 已下载 byte offset);
@@ -17,14 +17,14 @@
  *   6. 不引入第三方下载库(axios/got/aria2),用 native http/https 满足 build size。
  *
  * 默认目标(可被 opts.target 覆盖):
- *   ~/.lynn/models/Qwen3.5-4B-Q4_K_M.gguf
+ *   ~/.lynn/models/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf
  *
  * 默认源(可被 opts.sources 覆盖,顺序 = 国内优先):
- *   - https://modelscope.cn/models/unsloth/Qwen3.5-4B-GGUF/resolve/master/Qwen3.5-4B-Q4_K_M.gguf  (国内主源)
- *   - https://hf-mirror.com/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf          (国内 HF 镜像备)
+ *   - https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf  (国内主源)
+ *   - https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf          (国内 HF 镜像备)
  *
- * sha256: 00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4
- * size:   2_740_937_888 bytes (期望,允许 ±0.5% 偏差,实际以 sha256 为准)
+ * sha256: 0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4
+ * size:   5_780_090_944 bytes (期望,允许 ±0.5% 偏差,实际以 sha256 为准)
  */
 
 const fs = require("fs");
@@ -40,20 +40,20 @@ const { EventEmitter } = require("events");
 // 默认配置
 // ─────────────────────────────────────────────────────────────
 
-const DEFAULT_FILE_NAME = "Qwen3.5-4B-Q4_K_M.gguf";
-const DEFAULT_EXPECTED_SIZE = 2_740_937_888;
-const DEFAULT_EXPECTED_SHA256 = "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4";
+const DEFAULT_FILE_NAME = "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf";
+const DEFAULT_EXPECTED_SIZE = 5_780_090_944;
+const DEFAULT_EXPECTED_SHA256 = "0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4";
 
 const DEFAULT_SOURCES = Object.freeze([
   {
     id: "modelscope",
     label: "ModelScope (国内主源)",
-    url: "https://modelscope.cn/models/unsloth/Qwen3.5-4B-GGUF/resolve/master/Qwen3.5-4B-Q4_K_M.gguf",
+    url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
   },
   {
     id: "hf-mirror",
     label: "hf-mirror.com (国内 HF 镜像)",
-    url: "https://hf-mirror.com/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf",
+    url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
   },
 ]);
 

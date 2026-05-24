@@ -151,7 +151,7 @@ export class WebSpeechAsr {
     this.running = false;
     try {
       this.recognition?.abort();
-    } catch {}
+    } catch { /* browser abort may throw after recognition already stopped */ }
     this.recognition = null;
     this.partial = '';
   }

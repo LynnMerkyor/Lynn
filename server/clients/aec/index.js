@@ -61,7 +61,6 @@ export function createAecProcessor(cfg = {}) {
       enableNs: cfg.enableNs !== false,
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn("[aec] createProcessor failed:", err?.message || err);
     return null;
   }

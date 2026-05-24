@@ -371,10 +371,8 @@ export function createProvidersRoute(engine) {
 
     // 解析 api_key：显式传入 > providers 块 > auth.json OAuth token
     let key = api_key || "";
-    let api = explicitApi || "";
     if (!key && name) {
       key = savedKey;
-      api = api || savedProvider.api || "";
     }
     // OAuth provider fallback：从 AuthStorage 获取 token
     if (!key && name) {

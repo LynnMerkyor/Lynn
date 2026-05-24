@@ -11,7 +11,6 @@ import { useStore } from './index';
 import { hanaFetch, hanaUrl } from '../hooks/use-hana-fetch';
 import { closePreview } from './artifact-actions';
 
-declare function t(key: string, vars?: Record<string, string>): any;
 declare const i18n: { defaultName: string };
 
 // ── clearChat ──

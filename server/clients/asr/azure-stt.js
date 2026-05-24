@@ -16,7 +16,7 @@ export function createAzureSTTProvider(config) {
     name: "azure-stt",
     label: "Azure Speech-to-Text",
 
-    async transcribe(audioBuffer, { language = "zh-CN", filename = "audio.webm" } = {}) {
+    async transcribe(audioBuffer, { language: _language = "zh-CN", filename: _filename = "audio.webm" } = {}) {
       if (!apiKey) throw new Error("Azure Speech Key is not configured");
 
       // Azure STT REST API: POST /speechtotext/v3.1/transcriptions

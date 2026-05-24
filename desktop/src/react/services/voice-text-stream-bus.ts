@@ -68,7 +68,6 @@ class VoiceTextStreamBus {
       try {
         handler(msg as VoiceStreamEvent);
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.warn('[voice-text-bus] handler threw:', err);
       }
     }

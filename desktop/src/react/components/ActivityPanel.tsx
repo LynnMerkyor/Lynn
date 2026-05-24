@@ -11,7 +11,7 @@ import fp from './FloatingPanels.module.css';
 import chatStyles from './chat/Chat.module.css';
 
 // ── 稳定头像时间戳（避免每次渲染生成新 URL） ──
-let _avatarTs = Date.now();
+const _avatarTs = Date.now();
 
 interface ActivityItem {
   id: string;

@@ -167,7 +167,6 @@ export async function openChannel(channelId: string, isDM?: boolean): Promise<vo
   const s = useStore.getState();
   const ch = s.channels.find((c: Channel) => c.id === channelId);
   const isThisDM = isDM ?? ch?.isDM ?? false;
-  const t = window.t;
   const prevViewState = {
     currentChannel: s.currentChannel,
     channelMessages: s.channelMessages,

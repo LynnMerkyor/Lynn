@@ -65,7 +65,7 @@ export function createDmRoute(engine) {
         return c.json({ error: "No active agent" }, 400);
       }
 
-      if (/[\/\\]|\.\./.test(peerId)) {
+      if (/[/\\]|\.\./.test(peerId)) {
         return c.json({ error: "Invalid peerId" }, 400);
       }
 

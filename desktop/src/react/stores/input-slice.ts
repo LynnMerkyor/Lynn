@@ -85,7 +85,7 @@ function emptyDraft(): ComposerDraft {
 
 export const createInputSlice = (
   set: (partial: Partial<InputSlice> | ((s: InputSlice) => Partial<InputSlice>)) => void,
-  get?: () => InputSlice,
+  _get?: () => InputSlice,
 ): InputSlice => ({
   composerText: '',
   attachedFiles: [],
@@ -182,7 +182,8 @@ export const createInputSlice = (
     };
   }),
   clearLastSubmittedDraft: (sessionKey) => set((s) => {
-    const { [sessionKey]: _, ...rest } = s.lastSubmittedDrafts;
+    const rest = { ...s.lastSubmittedDrafts };
+    delete rest[sessionKey];
     return { lastSubmittedDrafts: rest };
   }),
   rememberWorkingSetFile: (file) => set((s) => {

@@ -3503,46 +3503,47 @@ let activeModelDownloader = null;
 let lastModelDownloadState = { state: "idle" };
 
 // 2026-05-24 A6 dedup: 老代码 6 entry 三对 byte-identical 重复 ~70 行,改为单 source-of-truth + alias map。
-// canonical key 始终是模型 GGUF 文件的 model id (qwen35-4b-q4km / qwen35-9b-q4km-imatrix / qwen36-35b-a3b-apex-mtp);
-// `local-*` / `*-q4km-imatrix` 等历史 alias 通过 _LLAMACPP_ALIAS_MAP 转回 canonical。
+// canonical key 始终是模型 GGUF 文件的 model id (qwen35-9b-q4km-imatrix / qwen35-4b-q4km / qwen36-35b-a3b-q4km-imatrix);
+// `local-*` / `qwen36-35b-a3b-apex-mtp` 等历史 alias 通过 _LLAMACPP_ALIAS_MAP 转回 canonical。
 const _LLAMACPP_BASE_PROFILES = Object.freeze({
-  // 2026-05-23 默认 ship 模型 — unsloth/Qwen3.5-4B-GGUF Q4_K_M。
+  // 2026-05-25 低配降级档 — 4B thinking-on 会空正文打满 token,只能作为显式降级。
   "qwen35-4b-q4km": {
     modelId: "qwen35-4b-q4km",
-    label: "Qwen3.5-4B Q4_K_M (unsloth)",
-    fileName: "Qwen3.5-4B-Q4_K_M.gguf",
-    expectedSize: 2_740_937_888,
-    expectedSha256: "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+    label: "Qwen3.5-4B Q4_K_M imatrix (Lynn downgrade)",
+    fileName: "Qwen3.5-4B-Q4_K_M-imatrix.gguf",
+    expectedSize: 2_783_446_976,
+    expectedSha256: "7abaf02bbe25c608deb308db526766f761ad4fb85c512a69ff36520c4b304b23",
+    parallelSegments: 2,
+    autoStart: false,
+    sources: [
+      { id: "modelscope", label: "ModelScope (国内主源)", url: "https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix/resolve/master/Qwen3.5-4B-Q4_K_M-imatrix.gguf" },
+      { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.5-4B-GGUF-imatrix/resolve/main/Qwen3.5-4B-Q4_K_M-imatrix.gguf" },
+    ],
+  },
+  // 2026-05-25 默认 ship 模型 — 9B MTP,thinking-on 稳定性和工具调用强于 4B。
+  "qwen35-9b-q4km-imatrix": {
+    modelId: "qwen35-9b-q4km-imatrix",
+    label: "Qwen3.5-9B Q4_K_M imatrix MTP",
+    fileName: "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
+    expectedSize: 5_780_090_944,
+    expectedSha256: "0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4",
     parallelSegments: 2,
     autoStart: true,
     sources: MODEL_DOWNLOADER_SOURCES,
   },
-  // 9B MTP 24G+ 显存可选档(老用户 / 高质量场景)。
-  "qwen35-9b-q4km-imatrix": {
-    modelId: "qwen35-9b-q4km-imatrix",
-    label: "Qwen3.5-9B Q4_K_M imatrix MTP",
-    fileName: "qwen3.5-9b-q4km-imatrix-mtp.gguf",
-    expectedSize: 5_780_090_944,
-    expectedSha256: "0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4",
-    parallelSegments: 2,
-    autoStart: false,
-    sources: [
-      { id: "modelscope", label: "ModelScope (国内主源)", url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf" },
-      { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf" },
-    ],
-  },
-  // 35B APEX-MTP 32G+ 高端档。
-  "qwen36-35b-a3b-apex-mtp": {
-    modelId: "qwen36-35b-a3b-apex-mtp",
-    label: "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
-    fileName: "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
-    expectedSize: 26_059_443_808,
-    expectedSha256: "9bf7d96bb3a9d363e645dd998aee9e9bff8e016a82aec7ff081e0e6cdb53419e",
+  // 35B Q4_K_M imatrix 24G+ 高端档。2026-05-24 替换 APEX-MTP I-Balanced(26G,32G+ 仅) →
+  // Q4_K_M imatrix(21G,24G+ 可加载),用户硬件门槛降一档。imatrix Lynn 校准版,thinking-on 32K 同质量。
+  "qwen36-35b-a3b-q4km-imatrix": {
+    modelId: "qwen36-35b-a3b-q4km-imatrix",
+    label: "Qwen3.6-35B-A3B Q4_K_M imatrix",
+    fileName: "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
+    expectedSize: 21_166_758_272,
+    expectedSha256: "3e398e6c53398de229ade3a38b04e0d626289651d6d8b49ecfccc2165816efa1",
     parallelSegments: 4,
     autoStart: false,
     sources: [
-      { id: "modelscope", label: "ModelScope (国内主源)", url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/master/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf" },
-      { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf" },
+      { id: "modelscope", label: "ModelScope (国内主源)", url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix/resolve/master/Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf" },
+      { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-GGUF-imatrix/resolve/main/Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf" },
     ],
   },
 });
@@ -3551,7 +3552,8 @@ const _LLAMACPP_BASE_PROFILES = Object.freeze({
 const _LLAMACPP_ALIAS_MAP = Object.freeze({
   "local-qwen35-4b-q4km": "qwen35-4b-q4km",
   "local-qwen35-9b-q4km-imatrix": "qwen35-9b-q4km-imatrix",
-  "qwen36-35b-a3b-q4km-imatrix": "qwen36-35b-a3b-apex-mtp",
+  // 2026-05-24: APEX-MTP I-Balanced(32G+ 高端档)弃用,统一指向新 Q4_K_M imatrix(24G+ 可加载)。
+  "qwen36-35b-a3b-apex-mtp": "qwen36-35b-a3b-q4km-imatrix",
 });
 
 const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
@@ -3562,9 +3564,9 @@ const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
 });
 
 function getLlamacppDownloadProfile(modelId) {
-  const requested = typeof modelId === "string" && modelId.trim() ? modelId.trim() : "qwen35-4b-q4km";
+  const requested = typeof modelId === "string" && modelId.trim() ? modelId.trim() : "qwen35-9b-q4km-imatrix";
   const canonical = _LLAMACPP_ALIAS_MAP[requested] || requested;
-  return _LLAMACPP_BASE_PROFILES[canonical] || _LLAMACPP_BASE_PROFILES["qwen35-4b-q4km"];
+  return _LLAMACPP_BASE_PROFILES[canonical] || _LLAMACPP_BASE_PROFILES["qwen35-9b-q4km-imatrix"];
 }
 
 function decorateDownloadState(profile, state) {
@@ -3616,16 +3618,46 @@ function replaceArgValue(args, flag, value) {
   }
 }
 
+function removeArgsWithValues(args, flags) {
+  const flagSet = new Set(flags);
+  const out = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (flagSet.has(args[i])) {
+      i += 1;
+      continue;
+    }
+    out.push(args[i]);
+  }
+  return out;
+}
+
 function buildLlamacppArgsForAlias(modelAlias, modelPath = "") {
-  const args = [...(LLAMACPP_DEFAULT_CONFIG.serverArgs || [])];
+  let args = [...(LLAMACPP_DEFAULT_CONFIG.serverArgs || [])];
   const fileName = path.basename(String(modelPath || ""));
-  const is35bApexMtp = /35B-A3B-APEX-MTP|qwen36-35b-a3b-apex-mtp/i.test(`${modelAlias} ${fileName}`);
-  const is9bMtp = /9B.*(?:imatrix.*mtp|mtp)|qwen35-9b-q4km-imatrix/i.test(`${modelAlias} ${fileName}`);
-  const launchAlias = is35bApexMtp ? "qwen36-35b-a3b-apex-mtp" : is9bMtp ? "qwen35-9b-q4km-imatrix" : modelAlias;
+  const haystack = `${modelAlias} ${fileName}`;
+  // 35B Q4_K_M imatrix(24G+ 默认)和 APEX-MTP I-Balanced(legacy 32G+ 高端)共用同一档,但 APEX-MTP 嵌 MTP draft
+  // → 需要 `--spec-type draft-mtp`;纯 Q4_K_M imatrix 不带 draft tensors,只需 KV cache 压缩。
+  const is35bImatrix = /qwen36-35b-a3b-q4km-imatrix|35B-A3B-Q4_K_M-imatrix/i.test(haystack);
+  const is35bApexMtp = /35B-A3B-APEX-MTP|qwen36-35b-a3b-apex-mtp/i.test(haystack);
+  const is35b = is35bImatrix || is35bApexMtp;
+  const is9bMtp = /9B.*(?:imatrix.*mtp|mtp)|qwen35-9b-q4km-imatrix/i.test(haystack);
+  const launchAlias = is35bImatrix
+    ? "qwen36-35b-a3b-q4km-imatrix"
+    : is35bApexMtp
+      ? "qwen36-35b-a3b-apex-mtp"
+      : is9bMtp
+        ? "qwen35-9b-q4km-imatrix"
+        : modelAlias;
   replaceArgValue(args, "-a", launchAlias);
   if (is35bApexMtp || is9bMtp) {
+    // 嵌 MTP draft 的两档(APEX-MTP / 9B MTP)启 speculative decode
     replaceArgValue(args, "--spec-type", "draft-mtp");
     replaceArgValue(args, "--spec-draft-n-max", "4");
+  } else {
+    args = removeArgsWithValues(args, ["--spec-type", "--spec-draft-n-max"]);
+  }
+  if (is35b || is9bMtp) {
+    // KV cache 量化(24G/32G+ 档跑长上下文必须)
     replaceArgValue(args, "--cache-type-k", "q8_0");
     replaceArgValue(args, "--cache-type-v", "q8_0");
   }
@@ -3704,7 +3736,7 @@ wrapIpcHandler("llamacpp:start-download", async (event, payload = {}) => {
   const profile = getLlamacppDownloadProfile(payload?.modelId);
   if (activeModelDownloader && (lastModelDownloadState.state === "downloading"
       || lastModelDownloadState.state === "verifying")) {
-    const runningModelId = lastModelDownloadState.modelId || "qwen35-4b-q4km";
+    const runningModelId = lastModelDownloadState.modelId || "qwen35-9b-q4km-imatrix";
     return {
       ok: runningModelId === profile.modelId,
       alreadyRunning: true,

@@ -850,7 +850,9 @@ export class Agent {
         + "5. 关键数字、时间、文件路径、命令结果必须以工具返回为准，不要脑补\n"
         + "6. 工具失败两次后，要换策略（换 query、换来源、缩小范围、改用其他工具），不要机械重试\n"
         + "7. 用户要研究什么，就围绕这个命题自然延展资料路径；不要把任务套进固定模板。任何需要证据链的长任务，都可以自己用 bash 启动临时 Python/Node 脚本来抓取、解析、去重、汇总和计算；先产出可核验的中间数据，再写结论，不要只凭常识写报告\n"
-        + "8. 如果脚本、搜索或抓取拿不到关键资料（例如交易软件行情、公告全文、PDF 原文、成交明细、用户持仓成本、具体房源截图），不要硬编；先给已验证部分，再明确列出缺口并向用户索要具体截图、链接、导出文件或假设参数"
+        + "8. 如果脚本、搜索或抓取拿不到关键资料（例如交易软件行情、公告全文、PDF 原文、成交明细、用户持仓成本、具体房源截图），不要硬编；先给已验证部分，再明确列出缺口并向用户索要具体截图、链接、导出文件或假设参数\n"
+        + "9. 用户让你修代码或排查 traceback 时，若你没有实际编辑文件并成功运行验证，不要说“已修复”。给出最小改动建议后，最后必须写一条用户可执行的验证命令，并用“请运行验证：”开头；如果报错入口是 `main.py`，验证命令应包含 `python main.py` 或 `python3 main.py`\n"
+        + "10. 不要把普通答案自动升级成交付物。只有用户明确要求生成报告、HTML、文档、文件、附件、可预览页面、导出物或 PPT/DOCX/PDF 时，才调用 create_report、create_artifact、create_docx、create_pptx、present_files 等交付物工具。简单计算、表格、摘要、管理建议、代码片段和对话性回答必须直接写在聊天正文里"
       : "\n## Tool Execution Discipline\n\n"
         + "For tool-heavy, coding-heavy, or long-running tasks:\n"
         + "1. Think in 2-5 concrete steps before calling tools\n"
@@ -860,7 +862,9 @@ export class Agent {
         + "5. Trust tool outputs for numbers, timestamps, file paths, and command results; do not invent them\n"
         + "6. After two failed tool attempts, change strategy instead of mechanically retrying\n"
         + "7. Follow the user's exact research question instead of forcing a fixed template. For any evidence-chain long task, use bash to run temporary Python/Node scripts when useful for fetching, parsing, deduplicating, aggregating, or calculating; build verifiable intermediate data before writing conclusions\n"
-        + "8. If scripts, search, or fetch cannot obtain key source material, do not fabricate. Provide the verified portion, then explicitly ask the user for the needed screenshot, URL, exported file, PDF, or assumption"
+        + "8. If scripts, search, or fetch cannot obtain key source material, do not fabricate. Provide the verified portion, then explicitly ask the user for the needed screenshot, URL, exported file, PDF, or assumption\n"
+        + "9. When the user asks you to fix code or debug a traceback, do not say it is fixed unless you actually edited files and successfully ran verification. After the minimal fix guidance, end with an explicit verification command. If the failing entrypoint is `main.py`, include `python main.py` or `python3 main.py`\n"
+        + "10. Do not auto-upgrade ordinary answers into deliverables. Only call deliverable tools such as create_report, create_artifact, create_docx, create_pptx, or present_files when the user explicitly asks for a report, HTML, document, file, attachment, preview page, export, PPT/DOCX/PDF, or similar artifact. Simple calculations, tables, summaries, management advice, code snippets, and conversational answers must stay in the chat body"
     );
 
     // 设置工具路由

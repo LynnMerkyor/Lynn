@@ -37,7 +37,6 @@ export function OnboardingApp({ preview, skipToTutorial }: OnboardingAppProps) {
   const [step, setStep] = useState(skipToTutorial ? 7 : 0);
   const [stepKey, setStepKey] = useState(0);
   const [track, setTrack] = useState<OnboardingTrack | null>(skipToTutorial ? 'quick' : null);
-  const [agentName, setAgentName] = useState('Lynn');
   const [avatarSrc, setAvatarSrc] = useState('assets/Lynn-512-opt.png');
   const [locale, setLocale] = useState('zh-CN');
   const [i18nReady, setI18nReady] = useState(false);
@@ -116,7 +115,6 @@ export function OnboardingApp({ preview, skipToTutorial }: OnboardingAppProps) {
         const loc = splashInfo?.locale || 'zh-CN';
         const name = splashInfo?.agentName || 'Lynn';
         setLocale(loc);
-        setAgentName(name);
         await i18n.load(loc);
         i18n.defaultName = name;
         setOnboardingLocale(loc);

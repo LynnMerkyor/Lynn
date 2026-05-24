@@ -13,7 +13,7 @@ import { safeJson } from "../hono-helpers.js";
 import { extractZip } from "../../lib/extract-zip.js";
 import { saveConfig } from "../../lib/memory/config-loader.js";
 import { parseSkillMetadata } from "../../lib/skills/skill-metadata.js";
-import { sanitizeSkillName, safetyReview } from "../../lib/tools/install-skill.js";
+import { sanitizeSkillName } from "../../lib/tools/install-skill.js";
 import { t } from "../i18n.js";
 import { safeCopyDir } from "../../shared/safe-fs.js";
 
@@ -35,20 +35,6 @@ function parseSkillName(skillMdPath) {
     return nameMatch ? nameMatch[1].trim().replace(/^["']|["']$/g, "") : null;
   } catch {
     return null;
-  }
-}
-
-/** 递归复制目录 */
-function copyDirSync(src, dst) {
-  fs.mkdirSync(dst, { recursive: true });
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const s = path.join(src, entry.name);
-    const d = path.join(dst, entry.name);
-    if (entry.isDirectory()) {
-      copyDirSync(s, d);
-    } else {
-      fs.copyFileSync(s, d);
-    }
   }
 }
 
