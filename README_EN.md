@@ -463,9 +463,11 @@ Starting with Lynn v0.79.1, local models are grouped by hardware. **Default tier
 
 | Tier | Model | Size | Recommended hardware | Context | Capability signal |
 |------|-------|:----:|---------------------|:-------:|-------------------|
-| **Default** | **Qwen3.5-4B Q4_K_M (unsloth)** | 2.55 GB | **8~16GB RAM recommended (all platforms)** | 32K | tool-call 85.7% (85.71%) · thinking-on default |
-| Upgrade | Qwen3.5-9B Q4_K_M imatrix MTP | 5.38 GB | 24GB VRAM/unified memory+ | 32K | MMLU 81.00% / GPQA Diamond 81.71% · 14/15 tool · MTP draft accel |
-| High-end | Qwen3.6-35B-A3B APEX-MTP I-Balanced | 26 GB | 32GB+ VRAM/unified memory+ | 32K | MMLU 90.40% / GPQA Diamond 80.70% · APEX MoE |
+| **Default** | **Qwen3.5-4B Q4_K_M (unsloth)** | 2.55 GB | **8~16GB RAM recommended (all platforms)** | 32K | **Q4_K_M** · MMLU 500 = **81.20%** · tool-call 85.71% · thinking-on default |
+| Upgrade | Qwen3.5-9B Q4_K_M imatrix MTP | 5.38 GB | 24GB VRAM/unified memory+ | 32K | **Q4_K_M imatrix** · MMLU 100 = 81.00% · GPQA Diamond 81.71% (excl. parse-fail) · tool-call 14/15 · MTP draft accel |
+| High-end | Qwen3.6-35B-A3B APEX-MTP I-Balanced | 26 GB | 32GB+ VRAM/unified memory+ | 32K | **Q4_K_M (APEX-MTP)** · MMLU 500 = 90.40% · GPQA Diamond 80.70% · APEX MoE |
+
+> All quality numbers are measured with **Q4_K_M quantization** + **thinking-on 32K max_tokens**, GB10 Spark llama.cpp on the same hardware. MMLU sample counts are annotated next to the score (500 / 100 sample).
 
 | Universal | Details |
 |---|---|

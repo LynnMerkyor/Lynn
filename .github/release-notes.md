@@ -9,7 +9,7 @@ v0.79.1 把默认本地模型从 Qwen3.5-9B 切到 **unsloth/Qwen3.5-4B-GGUF Q4_
 ### 默认本地模型切到 Qwen3.5-4B
 - 设置 → 模型内的"本地模型"卡片默认指向 **Qwen3.5-4B Q4_K_M (unsloth)**,2.55 GB,thinking-on 32K,8~16G 显存即可流畅运行。
 - 下载量减半(5.38GB → 2.55GB),启动门槛降到主流 PC/Mac。
-- V8 工具调用 grader 修正后 30/35 (85.71%);V9 60-prompt mixed 评测 46/60 = 76.67%(finance/medical 100%,math/physics/biology/chemistry 88-89%)。
+- 同硬件 Q4_K_M 量化态 + thinking-on 32K 口径(GB10 Spark llama.cpp):**MMLU 500 = 81.20%**, V8 工具调用 grader 修正后 30/35 (85.71%), V9 60-prompt mixed = 46/60 (76.67%) — finance / medical 100%, math / physics / biology / chemistry 88-89%。9B 升级档 MMLU 100 sample 81.00% / GPQA 81.71% (excl. parse-fail), 35B 高端档 MMLU 500 = 90.40% / GPQA Diamond 80.70%。
 - 模型源: ModelScope `unsloth/Qwen3.5-4B-GGUF` · HF mirror `hf-mirror.com/unsloth/Qwen3.5-4B-GGUF`(2 源 fallback,sha256 校验)。
 
 ### 三档硬件分级

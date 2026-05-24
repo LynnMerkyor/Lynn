@@ -1374,7 +1374,8 @@
       "modelPreparedHint": "Model and llama.cpp are ready. Click Start to switch to Local Qwen3.5-4B.",
       "statusReady": "Ready",
       "statusWaiting": "Pending",
-      "runtimeLocal9B": "Local Qwen3.5-4B"
+      "runtimeLocal9B": "Local Qwen3.5-4B",
+      "runtimeLocalDefault": "Local Qwen3.5-4B"
     },
     "tutorial": {
       "interactive": {

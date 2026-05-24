@@ -33,6 +33,19 @@ const LOCAL_PROVIDER_ORDER = [
 ];
 const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-4b-q4km';
 const LOCAL_QWEN_PROVIDER_LABEL = '本地 Qwen3.5-4B';
+const LOCAL_QWEN_COMPAT_PROVIDER_IDS = new Set([
+  LOCAL_QWEN_PROVIDER_ID,
+  'local-qwen3-4b-thinking-2507-q4km-imatrix',
+  'local-qwen35-9b-q4km-imatrix',
+]);
+
+function isLocalQwenProviderId(id?: string | null) {
+  return !!id && (LOCAL_QWEN_COMPAT_PROVIDER_IDS.has(id) || /^local-qwen/i.test(id));
+}
+
+function normalizeProviderId(id?: string | null) {
+  return isLocalQwenProviderId(id) ? LOCAL_QWEN_PROVIDER_ID : (id || null);
+}
 
 const LOCAL_PROVIDER_FALLBACKS: Record<string, ProviderSummary> = {
   [LOCAL_QWEN_PROVIDER_ID]: {
@@ -107,6 +120,7 @@ function resolvePreferredProviderId(settingsConfig: SettingsConfig | null): stri
 
 function buildPresetSummary(id: string): ProviderSummary | null {
   if (LOCAL_PROVIDER_FALLBACKS[id]) return LOCAL_PROVIDER_FALLBACKS[id];
+  if (isLocalQwenProviderId(id)) return LOCAL_PROVIDER_FALLBACKS[LOCAL_QWEN_PROVIDER_ID];
 
   if (id === BRAIN_PROVIDER_ID) {
     const cfg = buildBrainProviderConfig();
@@ -177,6 +191,7 @@ export function ProvidersTab() {
   ), [providersSummary]);
   const visibleRegisteredApiIds = useMemo(
     () => providerIds.filter((id) => (
+      !isLocalQwenProviderId(id) &&
       !LOCAL_PROVIDER_ORDER.includes(id) &&
       !providersSummary[id].supports_oauth &&
       !providersSummary[id].is_coding_plan
@@ -193,21 +208,23 @@ export function ProvidersTab() {
 
   useEffect(() => {
     if (!summaryLoaded) return;
-    const hasSelected = !!selectedProviderId && visibleProviderIds.includes(selectedProviderId);
+    const normalizedSelected = normalizeProviderId(selectedProviderId);
+    const hasSelected = !!normalizedSelected && visibleProviderIds.includes(normalizedSelected);
     if (hasSelected) return;
 
-    const preferred = resolvedPreferredProviderId && (
-      visibleProviderIds.includes(resolvedPreferredProviderId) ||
-      PROVIDER_PRESETS.some((preset) => preset.value === resolvedPreferredProviderId)
+    const normalizedPreferred = normalizeProviderId(resolvedPreferredProviderId);
+    const preferred = normalizedPreferred && (
+      visibleProviderIds.includes(normalizedPreferred) ||
+      PROVIDER_PRESETS.some((preset) => preset.value === normalizedPreferred)
     )
-      ? resolvedPreferredProviderId
+      ? normalizedPreferred
       : null;
     const fallback = preferred || visibleProviderIds[0] || PROVIDER_PRESETS[0]?.value || null;
     if (fallback && fallback !== selectedProviderId) {
       useSettingsStore.setState({ selectedProviderId: fallback });
     }
   }, [resolvedPreferredProviderId, selectedProviderId, summaryLoaded, visibleProviderIds]);
-  const selected = selectedProviderId || BRAIN_PROVIDER_ID;
+  const selected = normalizeProviderId(selectedProviderId || BRAIN_PROVIDER_ID) || BRAIN_PROVIDER_ID;
 
   // 分组：OAuth / Coding Plan / API Key
   const oauthProviders = visibleOauthProviderIds;
@@ -233,7 +250,7 @@ export function ProvidersTab() {
   };
 
   const getProviderLabel = (id: string, p?: ProviderSummary) => {
-    if (id === LOCAL_QWEN_PROVIDER_ID) return LOCAL_QWEN_PROVIDER_LABEL;
+    if (isLocalQwenProviderId(id)) return LOCAL_QWEN_PROVIDER_LABEL;
     if (id === BRAIN_PROVIDER_ID) return BRAIN_PROVIDER_LABEL;
     if (OAUTH_PROVIDER_LABELS[id]) return OAUTH_PROVIDER_LABELS[id];
     const preset = PROVIDER_PRESETS.find(pr => pr.value === id);

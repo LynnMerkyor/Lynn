@@ -38,8 +38,8 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('qwen36-35b-a3b-apex-mtp');
     expect(source).toContain('32GB 显存/统一内存+ 推荐');
     expect(source).toContain('thinking-on 32K');
-    expect(source).toContain('MMLU 90.40%');
-    expect(source).toContain('GPQA Diamond 80.70%');
+    expect(source).toContain('MMLU Q4_K_M 90.40%');
+    expect(source).toContain('GPQA Diamond Q4_K_M 80.70%');
     expect(source).toContain('think-on 4K 84.69 tok/s');
     expect(source).not.toContain('Spark/远端兜底');
     expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF');

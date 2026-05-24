@@ -76,8 +76,18 @@ export async function verifySignedRequest(req, { pathname = '/v2/chat/completion
   const nonce = String(h['x-lynn-nonce'] || '').trim();
   const signatureHeader = String(h['x-lynn-signature'] || '').trim();
 
+  // 2026-05-24 C2 hardening: production 拒绝缺 header / 重放; dev 仍 relaxed-allow 以兼容老客户端。
+  // 默认值 strict — 设 LYNN_BRAIN_V2_AUTH_MODE=relaxed 才回到旧行为 (本地 dev / smoke / 老客户端调试)。
+  const authMode = String(process.env.LYNN_BRAIN_V2_AUTH_MODE || 'strict').toLowerCase();
+  const strict = authMode !== 'relaxed';
+
   if (!agentKey || !timestamp || !nonce || !signatureHeader) {
-    log && log('warn', 'auth missing headers from ' + (h['x-agent-key'] || (req.socket?.remoteAddress) || '?') + ' — relaxed allow');
+    const peer = h['x-agent-key'] || (req.socket?.remoteAddress) || '?';
+    if (strict) {
+      log && log('warn', 'auth missing headers from ' + peer + ' — strict reject');
+      throw new AuthError(401, 'missing device signature headers');
+    }
+    log && log('warn', 'auth missing headers from ' + peer + ' — relaxed allow (LYNN_BRAIN_V2_AUTH_MODE=relaxed)');
     return null;
   }
 
@@ -85,8 +95,11 @@ export async function verifySignedRequest(req, { pathname = '/v2/chat/completion
   if (!Number.isFinite(parsedTs)) throw new AuthError(401, 'invalid device timestamp');
   if (Math.abs(Date.now() - parsedTs) > DEVICE_AUTH_WINDOW_MS) throw new AuthError(401, 'device signature expired');
   if (!rememberNonce(agentKey, nonce)) {
+    if (strict) {
+      log && log('warn', 'auth nonce replayed for ' + agentKey + ' — strict reject');
+      throw new AuthError(401, 'device nonce replayed');
+    }
     log && log('warn', 'auth nonce replayed for ' + agentKey + ' — relaxed allow');
-    // brain v1 also relaxes here (signature+timestamp considered enough)
   }
 
   const device = await loadDevice(agentKey);

@@ -1,11 +1,19 @@
 // Brain v2 · HTTP Server
 // 端口默认 8790,跟 brain v1 (8789) 共存
 import http from 'node:http';
+import crypto from 'node:crypto';
 import 'dotenv/config';
 import './perf-init.js';
 import { run as routerRun, detectCapability } from './router.js';
 import { makeSSEEmitter } from './stream-bridge.js';
 import { verifySignedRequest, AuthError } from './auth.js';
+
+// H4 fix (2026-05-24): agentKey 是长期 bearer,不能进 INFO 日志 plaintext。
+// 用 sha256 头 8 个 hex 做指纹 — 足够区分会话,不可反推。
+function _agentFingerprint(key) {
+  if (!key) return 'anon';
+  return 'ak:' + crypto.createHash('sha256').update(String(key)).digest('hex').slice(0, 8);
+}
 
 // [deep-research v1 import]
 import { runDeepResearch } from './deep-research.mjs';
@@ -111,7 +119,7 @@ async function handleChatCompletions(req, res, pathname) {
 
   emitter.emitRole();
 
-  log('info', `[${id}] start agentKey=${device?.key || 'anon'} msgs=${messages.length} tools=${tools?.length || 0} cap=${JSON.stringify(capabilityRequired)}`);
+  log('info', `[${id}] start agent=${_agentFingerprint(device?.key)} msgs=${messages.length} tools=${tools?.length || 0} cap=${JSON.stringify(capabilityRequired)}`);
 
   try {
     const result = await routerRun({
@@ -183,7 +191,7 @@ async function handleDeepResearch(req, res, pathname) {
   const messages = body.messages || [];
   const candidates = Array.isArray(body.candidates) && body.candidates.length > 0 ? body.candidates : null;
   const id = 'chatcmpl-deep-' + Date.now();
-  log('info', `[${id}] deep-research start agentKey=${device?.key || 'anon'} msgs=${messages.length} requestedCandidates=${candidates?.length || 'default'}`);
+  log('info', `[${id}] deep-research start agent=${_agentFingerprint(device?.key)} msgs=${messages.length} requestedCandidates=${candidates?.length || 'default'}`);
 
   // Helper to send SSE chunks in OpenAI-compat format
   const sendChunk = (deltaObj, finishReason = null) => {

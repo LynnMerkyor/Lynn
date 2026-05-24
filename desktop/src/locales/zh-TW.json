@@ -1250,7 +1250,8 @@
       "modelPreparedHint": "模型和 llama.cpp 已就緒,點擊啟動即可切換到本機 Qwen3.5-4B。",
       "statusReady": "可啟動",
       "statusWaiting": "待準備",
-      "runtimeLocal9B": "本機 Qwen3.5-4B"
+      "runtimeLocal9B": "本機 Qwen3.5-4B",
+      "runtimeLocalDefault": "本機 Qwen3.5-4B"
     },
     "skipSetup": "跳過引導"
   },

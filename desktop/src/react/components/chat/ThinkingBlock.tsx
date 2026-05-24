@@ -37,9 +37,11 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
   const [translateError, setTranslateError] = useState<string | null>(null);
   const startRef = useRef(Date.now());
   // #12: prefer explicit prop; fallback to regex (kept for callers not yet passing the flag)
+  // 2026-05-24 U4 fix: 4B 默认档替换 9B,正则要识别 4B 才能给本地模型友好的暖机文案;
+  // 同时保留 9B / 35B 的 backward-compat。
   const isLocalModelThinking = isLocalProvider === true
-    || (isLocalProvider !== false && /local-qwen|qwen35-9b|qwen36-35b|Qwen3(?:\.5)?-(?:9B|35B)|本地\s*(?:9B|35B)/i.test(modelLabel || ""));
-  const isLocalProgressThinking = isLocalModelThinking || /本地\s*(?:9B|35B)|本地模型|llama\.cpp|等待工具/.test(content || "");
+    || (isLocalProvider !== false && /local-qwen|qwen35-4b|qwen35-9b|qwen36-35b|Qwen3(?:\.5)?-(?:4B|9B|35B)|本地\s*(?:4B|9B|35B|Qwen)/i.test(modelLabel || ""));
+  const isLocalProgressThinking = isLocalModelThinking || /本地\s*(?:4B|9B|35B|Qwen)|本地模型|llama\.cpp|等待工具/.test(content || "");
   const isLocalColdStartThinking = /首次启动|第一问|暖机|等待首字/.test(content || "");
   // Local cold-start notes are user-facing progress, but raw provider thinking
   // can be long or English. Keep it collapsed unless the user explicitly opens it.

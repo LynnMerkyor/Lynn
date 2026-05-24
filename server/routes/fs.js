@@ -94,9 +94,26 @@ function getAllowedRoots(engine, mode) {
   ]);
 }
 
+// 2026-05-24 P2 security: 即使 ~/.lynn 在 allowed_roots(skills / 配置访问需要),
+// 也绝不允许工具调用读敏感凭据文件 — prompt injection 不应能 exfiltrate secrets。
+const _SENSITIVE_PATH_PATTERNS = [
+  /\/\.lynn\/brain\.env(\.bak[^/]*)?$/,
+  /\/\.lynn\/auth\.json$/,
+  /\/\.lynn\/added-models\.yaml$/,
+  /\/\.lynn-engine\/providers\/[^/]+\.json$/,  // engine provider configs 含 api keys
+  /\/\.ssh\/(?:id_|known_hosts|authorized_keys|config)/,
+  /\/\.aws\/credentials/,
+  /\.env(\.[^/]+)?$/i,  // 任何 .env / .env.local / .env.production 等
+];
+
+function isSensitivePath(resolvedPath) {
+  return _SENSITIVE_PATH_PATTERNS.some((re) => re.test(resolvedPath));
+}
+
 function isSafePath(filePath, allowedRoots) {
   const resolved = resolveCanonicalPath(filePath);
   if (!resolved) return false;
+  if (isSensitivePath(resolved)) return false;  // 显式 deny secrets
   return allowedRoots.some(root => isInsideRoot(resolved, root));
 }
 

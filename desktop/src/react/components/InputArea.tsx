@@ -132,7 +132,9 @@ const LOCAL_QWEN35_MODEL_ID = 'qwen35-4b-q4km';
 const LOCAL_QWEN35_ENDPOINT = 'http://127.0.0.1:18099/v1';
 const LOCAL_QWEN_PROMPT_DISMISS_KEY = 'lynn-local-model-prompt-dismissed-date';
 const LOCAL_QWEN_PROMPT_SHOWN_KEY = 'lynn-local-model-prompt-shown-date';
-const LOCAL_QWEN_PROMPT_DELAY_MS = 60_000;
+// 2026-05-24 U3 fix: 60s 太晚,新装用户多半在 60s 内就关或换 provider 了,根本看不到安装 banner。
+// 8s 是综合考虑(避免开屏即弹太突兀 + 用户能注意到)。
+const LOCAL_QWEN_PROMPT_DELAY_MS = 8_000;
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);

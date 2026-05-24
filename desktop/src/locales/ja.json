@@ -1165,7 +1165,8 @@
       "modelPreparedHint": "モデルと llama.cpp の準備完了。Start を押すと Local Qwen3.5-4B に切り替わります。",
       "statusReady": "起動可",
       "statusWaiting": "準備中",
-      "runtimeLocal9B": "Local Qwen3.5-4B"
+      "runtimeLocal9B": "Local Qwen3.5-4B",
+      "runtimeLocalDefault": "Local Qwen3.5-4B"
     },
     "skipSetup": "セットアップをスキップ"
   },

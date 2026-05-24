@@ -254,7 +254,7 @@ export function LocalModelDownloadStep({
         </div>
         <div className="local-model-progress-meta">
           <span>{ready ? '100%' : busy ? `${Math.round(progressPercent)}%` : modelPrepared ? t('onboarding.localModel.statusReady') : t('onboarding.localModel.statusWaiting')}</span>
-          <span>{status?.plan?.hardware?.recommended_runtime?.label || t('onboarding.localModel.runtimeLocal9B')}</span>
+          <span>{status?.plan?.hardware?.recommended_runtime?.label || t('onboarding.localModel.runtimeLocalDefault')}</span>
         </div>
         <div className={`local-model-progress-substatus${error || jobFailed ? ' is-error' : ''}`}>
           {statusLine}

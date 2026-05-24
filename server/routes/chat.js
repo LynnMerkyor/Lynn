@@ -218,6 +218,34 @@ function shouldUseLocalQwen35DirectBridge(promptText = "", opts = {}) {
   return true;
 }
 
+function normalizeThinkingLevel(level) {
+  return String(level || "auto").trim().toLowerCase();
+}
+
+function isTinyLocalQwen35Ask(promptText = "") {
+  const text = String(promptText || "").trim();
+  if (!text) return false;
+  const compact = text.replace(/\s+/g, "");
+  if (compact.length <= 24 && /^(?:hi|hello|hey|yo|ping|test|ok|在吗|在不在|你好|您好|哈喽|嗨|嗯|好的)[。！？!?.,，、~～]*$/iu.test(compact)) {
+    return true;
+  }
+  if (compact.length <= 80 && /(?:门禁测试|只(?:回复|输出)|请(?:只|直接)(?:回复|输出)|回复ok|输出ok)/iu.test(compact)) {
+    return true;
+  }
+  return false;
+}
+
+function resolveLocalQwen35DirectThinking(promptText = "", engineLike = null) {
+  const rawLevel = typeof engineLike?.getThinkingLevel === "function"
+    ? engineLike.getThinkingLevel()
+    : engineLike?.preferences?.getThinkingLevel?.();
+  const level = normalizeThinkingLevel(rawLevel);
+  if (["off", "none", "minimal"].includes(level)) return false;
+  if (["high", "xhigh", "max"].includes(level)) return true;
+  if (isTinyLocalQwen35Ask(promptText)) return false;
+  return true;
+}
+
 function sessionLineId() {
   return randomUUID().replace(/-/g, "").slice(0, 8);
 }
@@ -2133,7 +2161,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                   ss.effectivePromptText = effectivePromptText;
                   try {
                     await streamLocalQwen35DirectBridge(promptSessionPath, ss, promptText, effectivePromptText, currentModelInfo, {
-                      enableThinking: true,
+                      enableThinking: resolveLocalQwen35DirectThinking(promptText, engine),
                       maxTokens: LOCAL_QWEN35_DIRECT_MAX_TOKENS,
                     });
                   } catch (directErr) {

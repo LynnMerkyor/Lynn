@@ -255,7 +255,13 @@ function parseMetrics(text) {
   };
 }
 
-async function runtimeDetails() {
+// 2026-05-24 A2 fix: runtimeDetails 一次开销 ~600-800ms (4 fetch + 2 execFile lsof+ps);
+// 多组件 polling (StatusBar 15s / ProviderStatusBadge 12s / InputArea 15s / LocalModelDownloadStep 1.5s)
+// 同时 hit 这条 route。加 1500ms 内存 cache + inflight dedup,避免 N 个并发 caller 各自 spawn lsof/ps。
+const _RUNTIME_CACHE_TTL_MS = 1500;
+let _runtimeCache = { at: 0, value: null, inflight: null };
+
+async function _computeRuntimeDetails() {
   const state = defaultState();
   const root = endpointRoot(state);
   const pidFromFile = readPidFile(state.pidFile);
@@ -299,6 +305,28 @@ async function runtimeDetails() {
   };
 }
 
+async function runtimeDetails({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && _runtimeCache.value && (now - _runtimeCache.at) < _RUNTIME_CACHE_TTL_MS) {
+    return _runtimeCache.value;
+  }
+  if (_runtimeCache.inflight) return _runtimeCache.inflight;
+  const promise = _computeRuntimeDetails().then((value) => {
+    _runtimeCache = { at: Date.now(), value, inflight: null };
+    return value;
+  }).catch((err) => {
+    _runtimeCache = { at: Date.now(), value: null, inflight: null };
+    throw err;
+  });
+  _runtimeCache.inflight = promise;
+  return promise;
+}
+
+// 在 stopLocalModel / setup / register 等 mutation 后 invalidate cache,避免下一次 status 返回 stale。
+function _invalidateRuntimeCache() {
+  _runtimeCache = { at: 0, value: null, inflight: null };
+}
+
 function fastReadyPlan(runtime, _variant = "imatrix") {
   const state = defaultState();
   const totalMemoryGib = os.totalmem() / (1024 ** 3);
@@ -339,29 +367,36 @@ function fastReadyPlan(runtime, _variant = "imatrix") {
         },
         warnings: usable ? [] : ["当前内存低于 8GB,不建议启用本地 Qwen3.5-4B;可继续使用默认云端模型。"],
         blockers: [],
+        // 2026-05-23: 三档全部 surface,profile 文字标硬件门槛(用户看到知情即可,自己决定下不下)
+        // 之前 mem 严格 gate(9B≥24G, 35B≥32G)导致 24GB 设备看不到 35B、16GB 设备看不到 9B,
+        // 不利于用户对模型阶梯的整体感知。
         upgrade_options: [
-          // 24GB+ → 升级到 9B MTP
-          ...(totalMemoryGib >= 24 ? [{
+          // 9B 升级档 (24GB+ 推荐)
+          {
             id: "qwen35-9b-q4km-imatrix",
             label: "Qwen3.5-9B Q4_K_M imatrix MTP",
             profile: "24GB 显存/统一内存+ 推荐 · 质量优先",
-            metrics: ["thinking-on 32K", "MTP draft-mtp", "78.32 tok/s", "工具调用 14/15"],
+            metrics: ["thinking-on 32K", "MMLU Q4_K_M 81.00% (100 sample)", "GPQA Diamond 81.71% (excl. parse-fail)", "MTP 78.32 tok/s", "工具调用 14/15"],
             reason: "中端质量档;MTP speculative + thinking-on,推理能力比 4B 强一档。",
             modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix",
             download_label: "下载到本机",
             file_name: "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
-          }] : []),
-          // 32GB+ → 高端 35B APEX-MTP
-          ...(totalMemoryGib >= 32 ? [{
+            requires_memory_gib: 24,
+            can_run: totalMemoryGib >= 24,
+          },
+          // 35B 高端档 (32GB+ 推荐)
+          {
             id: "qwen36-35b-a3b-apex-mtp",
             label: "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
-            profile: "32GB 显存/统一内存+ 推荐 · 能力优先",
-            metrics: ["thinking-on 32K", "MMLU 90.40%", "GPQA Diamond 80.70%", "think-on 4K 84.69 tok/s", "think-on 16K 75.53 tok/s"],
+            profile: "32GB 显存/统一内存+ 推荐 · 综合最优",
+            metrics: ["thinking-on 32K", "MMLU Q4_K_M 90.40% (500)", "GPQA Diamond Q4_K_M 80.70%", "think-on 4K 84.69 tok/s", "think-on 16K 75.53 tok/s"],
             reason: "高端质量档;长思考默认 MTP,短答场景可关闭 MTP。",
             modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF",
             download_label: "下载到本机",
             file_name: "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
-          }] : []),
+            requires_memory_gib: 32,
+            can_run: totalMemoryGib >= 32,
+          },
         ],
       },
       actions: [],
@@ -670,6 +705,7 @@ export function createLocalQwen35Route(engine) {
         stdout_tail: stdout.slice(-4000),
         stderr_tail: stderr.slice(-4000),
       };
+      _invalidateRuntimeCache();
     });
     return c.json({ ok: true, job: decorateJob(job) }, 202);
   });
@@ -722,13 +758,14 @@ export function createLocalQwen35Route(engine) {
     try { fs.rmSync(state.pidFile, { force: true }); } catch {
       // Non-fatal cleanup.
     }
+    _invalidateRuntimeCache();
 
     return c.json({
       ok: remaining.length === 0,
       stopped_pids: [...targets],
       remaining_pids: remaining,
       before,
-      runtime: await runtimeDetails(),
+      runtime: await runtimeDetails({ force: true }),
     });
   });
 

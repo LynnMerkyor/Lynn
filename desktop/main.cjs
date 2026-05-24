@@ -3502,8 +3502,11 @@ let lastLlamacppState = { status: "idle" };
 let activeModelDownloader = null;
 let lastModelDownloadState = { state: "idle" };
 
-const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
-  // 2026-05-23 默认 ship 模型切到 Qwen3.5-4B Q4_K_M (unsloth)。
+// 2026-05-24 A6 dedup: 老代码 6 entry 三对 byte-identical 重复 ~70 行,改为单 source-of-truth + alias map。
+// canonical key 始终是模型 GGUF 文件的 model id (qwen35-4b-q4km / qwen35-9b-q4km-imatrix / qwen36-35b-a3b-apex-mtp);
+// `local-*` / `*-q4km-imatrix` 等历史 alias 通过 _LLAMACPP_ALIAS_MAP 转回 canonical。
+const _LLAMACPP_BASE_PROFILES = Object.freeze({
+  // 2026-05-23 默认 ship 模型 — unsloth/Qwen3.5-4B-GGUF Q4_K_M。
   "qwen35-4b-q4km": {
     modelId: "qwen35-4b-q4km",
     label: "Qwen3.5-4B Q4_K_M (unsloth)",
@@ -3514,17 +3517,7 @@ const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
     autoStart: true,
     sources: MODEL_DOWNLOADER_SOURCES,
   },
-  "local-qwen35-4b-q4km": {
-    modelId: "qwen35-4b-q4km",
-    label: "Qwen3.5-4B Q4_K_M (unsloth)",
-    fileName: "Qwen3.5-4B-Q4_K_M.gguf",
-    expectedSize: 2_740_937_888,
-    expectedSha256: "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
-    parallelSegments: 2,
-    autoStart: true,
-    sources: MODEL_DOWNLOADER_SOURCES,
-  },
-  // 9B MTP 作为 24G+ 显存可选档保留(老用户 / 高质量场景)
+  // 9B MTP 24G+ 显存可选档(老用户 / 高质量场景)。
   "qwen35-9b-q4km-imatrix": {
     modelId: "qwen35-9b-q4km-imatrix",
     label: "Qwen3.5-9B Q4_K_M imatrix MTP",
@@ -3534,39 +3527,11 @@ const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
     parallelSegments: 2,
     autoStart: false,
     sources: [
-      {
-        id: "modelscope",
-        label: "ModelScope (国内主源)",
-        url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
-      },
-      {
-        id: "hf-mirror",
-        label: "hf-mirror.com (国内 HF 镜像)",
-        url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
-      },
+      { id: "modelscope", label: "ModelScope (国内主源)", url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf" },
+      { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf" },
     ],
   },
-  "local-qwen35-9b-q4km-imatrix": {
-    modelId: "qwen35-9b-q4km-imatrix",
-    label: "Qwen3.5-9B Q4_K_M imatrix MTP",
-    fileName: "qwen3.5-9b-q4km-imatrix-mtp.gguf",
-    expectedSize: 5_780_090_944,
-    expectedSha256: "0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4",
-    parallelSegments: 2,
-    autoStart: false,
-    sources: [
-      {
-        id: "modelscope",
-        label: "ModelScope (国内主源)",
-        url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
-      },
-      {
-        id: "hf-mirror",
-        label: "hf-mirror.com (国内 HF 镜像)",
-        url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
-      },
-    ],
-  },
+  // 35B APEX-MTP 32G+ 高端档。
   "qwen36-35b-a3b-apex-mtp": {
     modelId: "qwen36-35b-a3b-apex-mtp",
     label: "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
@@ -3576,46 +3541,30 @@ const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
     parallelSegments: 4,
     autoStart: false,
     sources: [
-      {
-        id: "modelscope",
-        label: "ModelScope (国内主源)",
-        url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/master/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
-      },
-      {
-        id: "hf-mirror",
-        label: "hf-mirror.com (国内 HF 镜像)",
-        url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
-      },
-    ],
-  },
-  "qwen36-35b-a3b-q4km-imatrix": {
-    modelId: "qwen36-35b-a3b-apex-mtp",
-    label: "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
-    fileName: "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
-    expectedSize: 26_059_443_808,
-    expectedSha256: "9bf7d96bb3a9d363e645dd998aee9e9bff8e016a82aec7ff081e0e6cdb53419e",
-    parallelSegments: 4,
-    autoStart: false,
-    sources: [
-      {
-        id: "modelscope",
-        label: "ModelScope (国内主源)",
-        url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/master/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
-      },
-      {
-        id: "hf-mirror",
-        label: "hf-mirror.com (国内 HF 镜像)",
-        url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
-      },
+      { id: "modelscope", label: "ModelScope (国内主源)", url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/master/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf" },
+      { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf" },
     ],
   },
 });
 
+// Historical alias keys still in use by older client builds / configs — map back to canonical entries.
+const _LLAMACPP_ALIAS_MAP = Object.freeze({
+  "local-qwen35-4b-q4km": "qwen35-4b-q4km",
+  "local-qwen35-9b-q4km-imatrix": "qwen35-9b-q4km-imatrix",
+  "qwen36-35b-a3b-q4km-imatrix": "qwen36-35b-a3b-apex-mtp",
+});
+
+const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
+  ..._LLAMACPP_BASE_PROFILES,
+  ...Object.fromEntries(
+    Object.entries(_LLAMACPP_ALIAS_MAP).map(([alias, canonical]) => [alias, _LLAMACPP_BASE_PROFILES[canonical]]),
+  ),
+});
+
 function getLlamacppDownloadProfile(modelId) {
-  const requested = typeof modelId === "string" && modelId.trim()
-    ? modelId.trim()
-    : "qwen35-4b-q4km";
-  return LLAMACPP_DOWNLOAD_PROFILES[requested] || LLAMACPP_DOWNLOAD_PROFILES["qwen35-4b-q4km"];
+  const requested = typeof modelId === "string" && modelId.trim() ? modelId.trim() : "qwen35-4b-q4km";
+  const canonical = _LLAMACPP_ALIAS_MAP[requested] || requested;
+  return _LLAMACPP_BASE_PROFILES[canonical] || _LLAMACPP_BASE_PROFILES["qwen35-4b-q4km"];
 }
 
 function decorateDownloadState(profile, state) {

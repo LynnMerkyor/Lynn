@@ -1393,7 +1393,8 @@
       "modelPreparedHint": "模型和 llama.cpp 已就绪,点击启动即可切换到本地 Qwen3.5-4B。",
       "statusReady": "可启动",
       "statusWaiting": "待准备",
-      "runtimeLocal9B": "本地 Qwen3.5-4B"
+      "runtimeLocal9B": "本地 Qwen3.5-4B",
+      "runtimeLocalDefault": "本地 Qwen3.5-4B"
     },
     "tutorial": {
       "interactive": {

@@ -80,10 +80,23 @@ describe('verifySignedRequest (happy path)', () => {
     expect(device.key).toBe(TEST_KEY);
   });
 
-  it('relaxed: returns null when no headers (missing-headers allow)', async () => {
+  it('relaxed mode: returns null when no headers (missing-headers allow)', async () => {
+    const prev = process.env.LYNN_BRAIN_V2_AUTH_MODE;
+    process.env.LYNN_BRAIN_V2_AUTH_MODE = 'relaxed';
+    try {
+      const req = { headers: {}, socket: { remoteAddress: '1.2.3.4' } };
+      const device = await verifySignedRequest(req, { log: () => {} });
+      expect(device).toBe(null);
+    } finally {
+      if (prev === undefined) delete process.env.LYNN_BRAIN_V2_AUTH_MODE;
+      else process.env.LYNN_BRAIN_V2_AUTH_MODE = prev;
+    }
+  });
+
+  it('strict mode (default): rejects missing headers with 401', async () => {
+    // No env override — strict is default.
     const req = { headers: {}, socket: { remoteAddress: '1.2.3.4' } };
-    const device = await verifySignedRequest(req, { log: () => {} });
-    expect(device).toBe(null);
+    await expect(verifySignedRequest(req, { log: () => {} })).rejects.toThrowError(/missing device signature/);
   });
 });
 
@@ -127,15 +140,30 @@ describe('verifySignedRequest (failure modes)', () => {
     await expect(verifySignedRequest(req)).rejects.toThrowError(/invalid device signature/);
   });
 
-  it('relaxes nonce replay (allows but logs)', async () => {
+  it('relaxed mode: nonce replay allowed (logs only)', async () => {
+    const prev = process.env.LYNN_BRAIN_V2_AUTH_MODE;
+    process.env.LYNN_BRAIN_V2_AUTH_MODE = 'relaxed';
+    try {
+      await setupDevice();
+      const req1 = makeReq({ nonce: 'replay-test-relaxed' });
+      await verifySignedRequest(req1);
+      await new Promise(r => setTimeout(r, 80));  // wait for fire-and-forget device writeFile
+      const req2 = makeReq({ nonce: 'replay-test-relaxed' });
+      const device = await verifySignedRequest(req2, { log: () => {} });
+      expect(device.key).toBe(TEST_KEY);  // relaxed: still allowed
+    } finally {
+      if (prev === undefined) delete process.env.LYNN_BRAIN_V2_AUTH_MODE;
+      else process.env.LYNN_BRAIN_V2_AUTH_MODE = prev;
+    }
+  });
+
+  it('strict mode (default): rejects nonce replay with 401', async () => {
     await setupDevice();
-    const req1 = makeReq({ nonce: 'replay-test' });
+    const req1 = makeReq({ nonce: 'replay-test-strict' });
     await verifySignedRequest(req1);
-    await new Promise(r => setTimeout(r, 80));  // wait for fire-and-forget device writeFile
-    // Use new req with same nonce but fresh timestamp + sig
-    const req2 = makeReq({ nonce: 'replay-test' });
-    const device = await verifySignedRequest(req2, { log: () => {} });
-    expect(device.key).toBe(TEST_KEY);  // relaxed: still allowed
+    await new Promise(r => setTimeout(r, 80));
+    const req2 = makeReq({ nonce: 'replay-test-strict' });
+    await expect(verifySignedRequest(req2, { log: () => {} })).rejects.toThrowError(/nonce replayed/);
   });
 });
 
