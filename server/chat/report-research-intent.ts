@@ -1,6 +1,42 @@
 import { extractWeatherLocation } from "../../lib/tools/realtime-info.js";
 import { inferReportPromptKind } from "../../shared/report-normalizer.js";
-const KNOWN_STOCK_NAME_TO_CODE = new Map([
+
+export type ReportResearchKind =
+  | ""
+  | "stock"
+  | "real_estate"
+  | "market_weather_brief"
+  | "weather"
+  | "sports"
+  | "market"
+  | "news"
+  | "generic";
+
+export interface StockResearchTarget {
+  name: string;
+  code: string;
+}
+
+export interface IndexResearchTarget {
+  re: RegExp;
+  label: string;
+  query: string;
+}
+
+export interface AirportCityHint {
+  re: RegExp;
+  city: string;
+}
+
+export interface ReportResearchIntent {
+  kind: ReportResearchKind;
+  target?: StockResearchTarget;
+  ticker?: string;
+  indexTarget?: IndexResearchTarget;
+  weatherLocation?: string;
+}
+
+const KNOWN_STOCK_NAME_TO_CODE = new Map<string, string>([
   ["华丰科技", "688629"],
 ]);
 const STOCK_COMPANY_RE = /[\u4e00-\u9fa5A-Za-z]{2,18}(?:科技|股份|电子|智能|软件|证券|银行|集团|药业|医药|能源|材料|半导体|光电|电气|通信|汽车|机器人|芯片|电力|股份)/;
@@ -25,7 +61,7 @@ const COMMON_US_TICKERS = new Set([
   "NFLX", "AMD", "INTC", "AVGO", "SMCI", "PLTR", "COIN", "MSTR",
   "BABA", "PDD", "NIO", "XPEV", "LI",
 ]);
-const INDEX_TARGETS = [
+const INDEX_TARGETS: IndexResearchTarget[] = [
   { re: /上证指数|上证综指|沪指/, label: "上证指数", query: "上证指数 最新点位" },
   { re: /深证成指/, label: "深证成指", query: "深证成指 最新点位" },
   { re: /创业板指/, label: "创业板指", query: "创业板指 最新点位" },
@@ -34,13 +70,13 @@ const INDEX_TARGETS = [
   { re: /道琼斯|道指/, label: "道琼斯指数", query: "道琼斯指数 最新点位" },
   { re: /标普(?:500)?/, label: "标普500", query: "标普500 最新点位" },
 ];
-const AIRPORT_CITY_HINTS = [
+const AIRPORT_CITY_HINTS: AirportCityHint[] = [
   { re: /浦东|虹桥/, city: "上海" },
   { re: /首都机场|大兴/, city: "北京" },
   { re: /白云机场/, city: "广州" },
   { re: /宝安机场/, city: "深圳" },
 ];
-export function extractStockTargetForResearch(text) {
+export function extractStockTargetForResearch(text: unknown): StockResearchTarget {
   const source = String(text || "");
   const code = source.match(/\b([0368]\d{5})\b/)?.[1] || "";
   for (const [name, mappedCode] of KNOWN_STOCK_NAME_TO_CODE) {
@@ -50,7 +86,7 @@ export function extractStockTargetForResearch(text) {
   if (name || code) return { name, code };
   return { name: "", code: "" };
 }
-export function inferReportResearchKind(text) {
+export function inferReportResearchKind(text: unknown): ReportResearchKind {
   const normalized = String(text || "").trim();
   if (!normalized) return "";
   if (WEATHER_LOOKUP_RE.test(normalized) && MARKET_LOOKUP_RE.test(normalized) && MARKET_WEATHER_BRIEF_RE.test(normalized)) {
@@ -80,8 +116,8 @@ export function inferReportResearchKind(text) {
   if (GENERIC_RESEARCH_RE.test(normalized) && EXTERNAL_RESEARCH_INTENT_RE.test(normalized) && !LOCAL_OFFICE_TASK_RE.test(normalized)) return "generic";
   return "";
 }
-export function extractRequestedUsTickers(text) {
-  const symbols = [];
+export function extractRequestedUsTickers(text: unknown): string[] {
+  const symbols: string[] = [];
   for (const match of String(text || "").matchAll(/\$?\b([A-Z]{1,5})(?:\.US)?\b/g)) {
     const raw = String(match[0] || "");
     const bare = String(match[1] || "").toUpperCase();
@@ -91,9 +127,9 @@ export function extractRequestedUsTickers(text) {
   }
   return symbols.slice(0, 8);
 }
-export function extractPrimaryUsTicker(text) {
+export function extractPrimaryUsTicker(text: unknown): string {
   const normalized = String(text || "");
-  const seen = new Set();
+  const seen = new Set<string>();
   for (const match of normalized.matchAll(/\$?\b([A-Z]{2,5})\b/g)) {
     const symbol = (match[1] || "").toUpperCase();
     if (!symbol || MARKET_WEATHER_TICKER_STOPWORDS.has(symbol) || seen.has(symbol)) continue;
@@ -102,11 +138,11 @@ export function extractPrimaryUsTicker(text) {
   }
   return "";
 }
-export function detectPrimaryIndexTarget(text) {
+export function detectPrimaryIndexTarget(text: unknown): IndexResearchTarget | null {
   const normalized = String(text || "");
   return INDEX_TARGETS.find((item) => item.re.test(normalized)) || null;
 }
-export function extractCompositeWeatherLocation(text) {
+export function extractCompositeWeatherLocation(text: unknown): string {
   const normalized = String(text || "");
   for (const hint of AIRPORT_CITY_HINTS) {
     if (hint.re.test(normalized)) return hint.city;
@@ -114,10 +150,10 @@ export function extractCompositeWeatherLocation(text) {
   const clause = normalized.match(/[^。；，,\n]{0,80}(?:天气|气温|温度|预报)/)?.[0] || normalized;
   return extractWeatherLocation(clause, "");
 }
-export function extractWeatherLocationForResearch(query, fallback = "") {
+export function extractWeatherLocationForResearch(query: unknown, fallback: string = ""): string {
   return extractWeatherLocation(query, fallback);
 }
-export function inferKind(promptText) {
+export function inferKind(promptText: unknown): ReportResearchIntent {
   const source = String(promptText || "");
   const kind = inferReportResearchKind(source);
   const stockTarget = extractStockTargetForResearch(source);
