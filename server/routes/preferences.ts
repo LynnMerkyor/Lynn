@@ -9,7 +9,29 @@ import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { debugLog } from "../../lib/debug-log.js";
 
-export function createPreferencesRoute(engine) {
+type ProviderSettings = {
+  provider?: string | null;
+  base_url?: string | null;
+  api_key?: string | null;
+};
+
+type PreferencesBody = {
+  models?: unknown;
+  search?: unknown;
+  utility_api?: unknown;
+};
+
+interface PreferencesRouteEngine {
+  getSharedModels(): unknown;
+  getSearchConfig(): ProviderSettings;
+  getUtilityApi(): ProviderSettings;
+  setSharedModels(models: unknown): unknown;
+  setSearchConfig(search: unknown): unknown;
+  setUtilityApi(utilityApi: unknown): unknown;
+  syncModelsAndRefresh(): Promise<unknown> | unknown;
+}
+
+export function createPreferencesRoute(engine: PreferencesRouteEngine): Hono {
   const route = new Hono();
 
   // 读取全局模型 + 搜索配置
@@ -33,19 +55,19 @@ export function createPreferencesRoute(engine) {
         },
       });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: (err as Error).message }, 500);
     }
   });
 
   // 更新全局模型 + 搜索配置
   route.put("/preferences/models", async (c) => {
     try {
-      const body = await safeJson(c);
+      const body = await safeJson(c) as PreferencesBody | null;
       if (!body || typeof body !== "object") {
         return c.json({ error: "invalid JSON body" }, 400);
       }
 
-      const sections = [];
+      const sections: string[] = [];
       let needsModelSync = false;
       // 共享模型（utility / utility_large）
       if (body.models) {
@@ -68,15 +90,15 @@ export function createPreferencesRoute(engine) {
 
       if (needsModelSync) {
         try { await engine.syncModelsAndRefresh(); } catch (e) {
-          debugLog()?.warn("api", `syncModelsAndRefresh after preferences change: ${e.message}`);
+          debugLog()?.warn("api", `syncModelsAndRefresh after preferences change: ${(e as Error).message}`);
         }
       }
 
       debugLog()?.log("api", `PUT /api/preferences/models sections=[${sections.join(",")}]`);
       return c.json({ ok: true });
     } catch (err) {
-      debugLog()?.error("api", `PUT /api/preferences/models failed: ${err.message}`);
-      return c.json({ error: err.message }, 500);
+      debugLog()?.error("api", `PUT /api/preferences/models failed: ${(err as Error).message}`);
+      return c.json({ error: (err as Error).message }, 500);
     }
   });
 
