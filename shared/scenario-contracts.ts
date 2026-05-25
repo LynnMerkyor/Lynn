@@ -1,4 +1,4 @@
-const SCENARIO_CONTRACT_IDS = Object.freeze({
+export const SCENARIO_CONTRACT_IDS = Object.freeze({
   WEATHER: "weather",
   GOLD: "gold",
   STOCK: "stock",
@@ -13,7 +13,28 @@ const SCENARIO_CONTRACT_IDS = Object.freeze({
   MULTIMEDIA: "multimedia",
   LONG_AGENT: "long_agent",
   GENERAL: "general",
-});
+} as const);
+
+export type ScenarioContractId = (typeof SCENARIO_CONTRACT_IDS)[keyof typeof SCENARIO_CONTRACT_IDS];
+
+export type ScenarioContract = {
+  title: string;
+  requiredEvidence: readonly string[];
+  passCriteria: string;
+  failureMode: string;
+  regressionCases?: readonly string[];
+  examples: readonly string[];
+};
+
+export type ScenarioContractOptions = {
+  imagesCount?: number | null;
+  attachmentsCount?: number | null;
+  audioCount?: number | null;
+};
+
+export type ScenarioContractHintOptions = ScenarioContractOptions & {
+  locale?: string | null;
+};
 
 const CONTRACTS = Object.freeze({
   [SCENARIO_CONTRACT_IDS.WEATHER]: {
@@ -120,7 +141,7 @@ const CONTRACTS = Object.freeze({
     failureMode: "不确定时说明假设。",
     examples: [],
   },
-});
+} as const satisfies Readonly<Record<ScenarioContractId, ScenarioContract>>);
 
 const WEATHER_RE = /(?:天气|下雨|降雨|温度|气温|带伞|台风|空气质量|AQI|weather|rain|temperature)/i;
 const GOLD_RE = /(?:金价|黄金|沪金|伦敦金|黄金回收|\bXAU\b|\bau\b|gold)/i;
@@ -141,22 +162,22 @@ const MULTIMEDIA_RE = /(?:图片|截图|照片|图像|OCR|看图|识图|TTS|ASR|
 const SCENARIO_FILE_OPS_RE = /(?:(?:新建|创建|建立|建一个|做一个|加一个|生成).{0,8}(?:文件夹|目录|folder|directory))|(?:(?:移动|挪到|挪进|挪去|放到|放进|拷贝|复制|copy|move).{0,12}(?:文件夹|目录|folder|directory|里|进))|(?:(?:整理|归档|归类|分类|清理).{0,10}(?:文件夹|目录|文件|桌面|下载))|(?:把.{0,30}(?:移到|放到|放进|挪到|挪进|归档到|归类到))/i;
 const LONG_AGENT_RE = /(?:长任务|深度研究|深度调研|深度报告|完整调研|复杂报告|项目代码分析|架构分析|代码结构|连续多步|尽调|从头到尾|完整报告|完整深度报告|伪深度|跑脚本|运行脚本|中间产物|交付结果)/i;
 
-function normalizeText(value) {
+function normalizeText(value: unknown): string {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
-export function normalizeScenarioContractId(value) {
+export function normalizeScenarioContractId(value?: string | null): ScenarioContractId {
   const normalized = String(value || "").trim().toLowerCase();
-  return Object.values(SCENARIO_CONTRACT_IDS).includes(normalized)
-    ? normalized
+  return (Object.values(SCENARIO_CONTRACT_IDS) as readonly string[]).includes(normalized)
+    ? normalized as ScenarioContractId
     : SCENARIO_CONTRACT_IDS.GENERAL;
 }
 
-export function getScenarioContract(value) {
+export function getScenarioContract(value?: string | null): ScenarioContract {
   return CONTRACTS[normalizeScenarioContractId(value)] || CONTRACTS[SCENARIO_CONTRACT_IDS.GENERAL];
 }
 
-export function classifyScenarioContract(text, opts = {}) {
+export function classifyScenarioContract(text?: string | null, opts: ScenarioContractOptions = {}): ScenarioContractId {
   const normalized = normalizeText(text);
   if (!normalized) return SCENARIO_CONTRACT_IDS.GENERAL;
 
@@ -189,7 +210,7 @@ export function classifyScenarioContract(text, opts = {}) {
   return SCENARIO_CONTRACT_IDS.GENERAL;
 }
 
-export function buildScenarioContractHint(contractId, locale = "zh") {
+export function buildScenarioContractHint(contractId?: string | null, locale: string | null | undefined = "zh"): string {
   const id = normalizeScenarioContractId(contractId);
   if (id === SCENARIO_CONTRACT_IDS.GENERAL) return "";
   const contract = getScenarioContract(id);
@@ -210,9 +231,9 @@ export function buildScenarioContractHint(contractId, locale = "zh") {
   ].filter(Boolean).join(" ");
 }
 
-export function buildScenarioContractHintForText(text, opts = {}) {
+export function buildScenarioContractHintForText(text?: string | null, opts: ScenarioContractHintOptions = {}): string {
   const id = classifyScenarioContract(text, opts);
   return buildScenarioContractHint(id, opts.locale || "zh");
 }
 
-export { CONTRACTS as SCENARIO_CONTRACTS, SCENARIO_CONTRACT_IDS };
+export { CONTRACTS as SCENARIO_CONTRACTS };

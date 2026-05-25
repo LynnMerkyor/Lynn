@@ -1,3 +1,10 @@
+type RequiredFieldMap<T extends string> = Readonly<Record<T, readonly string[]>>;
+
+export type WsValidationResult = {
+  ok: boolean;
+  errors: string[];
+};
+
 export const CLIENT_EVENT_TYPES = Object.freeze([
   "abort",
   "compact",
@@ -6,7 +13,9 @@ export const CLIENT_EVENT_TYPES = Object.freeze([
   "resume_stream",
   "steer",
   "toggle_plan_mode",
-]);
+] as const);
+
+export type ClientEventType = (typeof CLIENT_EVENT_TYPES)[number];
 
 export const REACT_CHAT_EVENT_TYPES = Object.freeze([
   "artifact",
@@ -35,7 +44,9 @@ export const REACT_CHAT_EVENT_TYPES = Object.freeze([
   "xing_end",
   "xing_start",
   "xing_text",
-]);
+] as const);
+
+export type ReactChatEventType = (typeof REACT_CHAT_EVENT_TYPES)[number];
 
 export const SERVER_EVENT_TYPES = Object.freeze([
   ...REACT_CHAT_EVENT_TYPES,
@@ -68,7 +79,9 @@ export const SERVER_EVENT_TYPES = Object.freeze([
   "stream_resume",
   "task_update",
   "turn_retry",
-]);
+] as const);
+
+export type ServerEventType = (typeof SERVER_EVENT_TYPES)[number];
 
 export const SERVER_EVENT_REQUIRED_FIELDS = Object.freeze({
   activity_update: ["activity"],
@@ -126,7 +139,7 @@ export const SERVER_EVENT_REQUIRED_FIELDS = Object.freeze({
   xing_end: [],
   xing_start: [],
   xing_text: ["delta"],
-});
+} as const satisfies RequiredFieldMap<ServerEventType>);
 
 export const CLIENT_EVENT_REQUIRED_FIELDS = Object.freeze({
   abort: [],
@@ -136,50 +149,81 @@ export const CLIENT_EVENT_REQUIRED_FIELDS = Object.freeze({
   resume_stream: ["sessionPath", "sinceSeq"],
   steer: ["text"],
   toggle_plan_mode: [],
-});
+} as const satisfies RequiredFieldMap<ClientEventType>);
 
-const serverTypeSet = new Set(SERVER_EVENT_TYPES);
-const clientTypeSet = new Set(CLIENT_EVENT_TYPES);
-const reactChatTypeSet = new Set(REACT_CHAT_EVENT_TYPES);
+type EventPayload<
+  TType extends string,
+  TFields extends readonly string[],
+> = {
+  type: TType;
+} & {
+  [Field in TFields[number]]: unknown;
+} & Record<string, unknown>;
 
-function validateEvent(event, typeSet, requiredFields, label) {
+export type ClientEvent = {
+  [Type in ClientEventType]: EventPayload<Type, (typeof CLIENT_EVENT_REQUIRED_FIELDS)[Type]>;
+}[ClientEventType];
+
+export type ServerEvent = {
+  [Type in ServerEventType]: EventPayload<Type, (typeof SERVER_EVENT_REQUIRED_FIELDS)[Type]>;
+}[ServerEventType];
+
+export type WsProtocolSnapshot = {
+  clientEventTypes: readonly ClientEventType[];
+  reactChatEventTypes: readonly ReactChatEventType[];
+  serverEventTypes: readonly ServerEventType[];
+  clientRequiredFields: typeof CLIENT_EVENT_REQUIRED_FIELDS;
+  serverRequiredFields: typeof SERVER_EVENT_REQUIRED_FIELDS;
+};
+
+const serverTypeSet: ReadonlySet<string> = new Set(SERVER_EVENT_TYPES);
+const clientTypeSet: ReadonlySet<string> = new Set(CLIENT_EVENT_TYPES);
+const reactChatTypeSet: ReadonlySet<string> = new Set(REACT_CHAT_EVENT_TYPES);
+
+function validateEvent(
+  event: unknown,
+  typeSet: ReadonlySet<string>,
+  requiredFields: Readonly<Record<string, readonly string[]>>,
+  label: string,
+): WsValidationResult {
   if (!event || typeof event !== "object") {
     return { ok: false, errors: [`${label} event must be an object`] };
   }
-  if (typeof event.type !== "string" || !event.type) {
+  const candidate = event as Record<string, unknown>;
+  if (typeof candidate.type !== "string" || !candidate.type) {
     return { ok: false, errors: [`${label} event type must be a non-empty string`] };
   }
-  if (!typeSet.has(event.type)) {
-    return { ok: false, errors: [`unknown ${label} event type: ${event.type}`] };
+  if (!typeSet.has(candidate.type)) {
+    return { ok: false, errors: [`unknown ${label} event type: ${candidate.type}`] };
   }
-  const missing = (requiredFields[event.type] || []).filter((field) => event[field] === undefined);
+  const missing = (requiredFields[candidate.type] || []).filter((field) => candidate[field] === undefined);
   if (missing.length) {
-    return { ok: false, errors: [`${label} event ${event.type} missing required field(s): ${missing.join(", ")}`] };
+    return { ok: false, errors: [`${label} event ${candidate.type} missing required field(s): ${missing.join(", ")}`] };
   }
   return { ok: true, errors: [] };
 }
 
-export function isKnownServerEventType(type) {
-  return serverTypeSet.has(type);
+export function isKnownServerEventType(type: unknown): type is ServerEventType {
+  return typeof type === "string" && serverTypeSet.has(type);
 }
 
-export function isKnownClientEventType(type) {
-  return clientTypeSet.has(type);
+export function isKnownClientEventType(type: unknown): type is ClientEventType {
+  return typeof type === "string" && clientTypeSet.has(type);
 }
 
-export function isReactChatEventType(type) {
-  return reactChatTypeSet.has(type);
+export function isReactChatEventType(type: unknown): type is ReactChatEventType {
+  return typeof type === "string" && reactChatTypeSet.has(type);
 }
 
-export function validateServerEvent(event) {
+export function validateServerEvent(event: unknown): WsValidationResult {
   return validateEvent(event, serverTypeSet, SERVER_EVENT_REQUIRED_FIELDS, "server");
 }
 
-export function validateClientEvent(event) {
+export function validateClientEvent(event: unknown): WsValidationResult {
   return validateEvent(event, clientTypeSet, CLIENT_EVENT_REQUIRED_FIELDS, "client");
 }
 
-export function createWsProtocolSnapshot() {
+export function createWsProtocolSnapshot(): WsProtocolSnapshot {
   return {
     clientEventTypes: [...CLIENT_EVENT_TYPES],
     reactChatEventTypes: [...REACT_CHAT_EVENT_TYPES],

@@ -1,21 +1,38 @@
 export const BRAIN_PROVIDER_ID = "brain";
 export const BRAIN_PROVIDER_LABEL = "默认模型";
 
-function normalizeApiRoot(rawValue, fallbackValue) {
+export type BrainProviderId = typeof BRAIN_PROVIDER_ID;
+export type BrainProviderApi = "openai-completions";
+export type BrainRole =
+  | "chat"
+  | "utility"
+  | "utility_large"
+  | "summarizer"
+  | "compiler";
+
+export interface BrainProviderConfig {
+  display_name: string;
+  base_url: string;
+  api: BrainProviderApi;
+  auth_type: "none";
+  models: string[];
+}
+
+function normalizeApiRoot(rawValue: unknown, fallbackValue: string): string {
   const normalized = String(rawValue || "").trim().replace(/\/+$/, "");
   if (!normalized) return fallbackValue;
   if (/^https?:\/\//i.test(normalized)) return normalized;
   return `http://${normalized}`;
 }
 
-function resolveProcessEnvValue(key) {
+function resolveProcessEnvValue(key: string): string {
   if (typeof process === "undefined" || !process?.env) return "";
   return process.env[key] || "";
 }
 
 // ── 运行时端点解析（混淆） ──
 // 构建时注入或运行时解码；源码不含明文地址。
-function _d(encoded) {
+function _d(encoded: string): string {
   try {
     const r = typeof atob === "function"
       ? atob(encoded)
@@ -90,17 +107,17 @@ export const BRAIN_DEFAULT_DISPLAY_NAME = "默认模型";
 export const BRAIN_DEFAULT_META_LABEL = "第三方已备案 AI 模型";
 export const BRAIN_COMPLIANCE_NOTE = "默认模型服务接入第三方已备案 AI 模型，由 Lynn 统一调度对话、推理与工具执行链路。";
 export const BRAIN_USER_NOTICE = "继续使用默认模型，即表示你知悉 Lynn 会为对话、推理、摘要与工具协作向第三方已备案 AI 模型服务发起必要请求。你也可以在供应商设置中改用自己的模型服务。";
-export const BRAIN_LEGACY_MODEL_IDS = [
+export const BRAIN_LEGACY_MODEL_IDS: readonly string[] = [
   _d(_BRAIN_MODEL_LEGACY_ENCODED),
 ];
-export const BRAIN_DEFAULT_MODEL_IDS = [
+export const BRAIN_DEFAULT_MODEL_IDS: readonly string[] = [
   _d(_BRAIN_MODEL_ROUTER_ENCODED),
   _d(_BRAIN_MODEL_PRIMARY_ENCODED),
   _d(_BRAIN_MODEL_UTILITY_ENCODED),
   _d(_BRAIN_MODEL_AUX_1_ENCODED),
   _d(_BRAIN_MODEL_AUX_2_ENCODED),
 ];
-export const BRAIN_ROLE_MODEL_IDS = {
+export const BRAIN_ROLE_MODEL_IDS: Readonly<Record<BrainRole, string>> = {
   chat: BRAIN_CHAT_MODEL_ID,
   utility: BRAIN_UTILITY_MODEL_ID,
   utility_large: BRAIN_UTILITY_LARGE_MODEL_ID,
@@ -108,40 +125,40 @@ export const BRAIN_ROLE_MODEL_IDS = {
   compiler: BRAIN_COMPILER_MODEL_ID,
 };
 
-export function isBrainProvider(provider) {
+export function isBrainProvider(provider: string | null | undefined): provider is BrainProviderId {
   return String(provider || "").trim() === BRAIN_PROVIDER_ID;
 }
 
-export function isBrainModelId(modelId) {
+export function isBrainModelId(modelId: string | null | undefined): boolean {
   const id = String(modelId || "").trim();
   return BRAIN_DEFAULT_MODEL_IDS.includes(id) || BRAIN_LEGACY_MODEL_IDS.includes(id);
 }
 
-export function isBrainModelRef(modelId, provider) {
+export function isBrainModelRef(modelId: string | null | undefined, provider: string | null | undefined): boolean {
   return isBrainProvider(provider) && isBrainModelId(modelId);
 }
 
-export function getBrainDisplayName() {
+export function getBrainDisplayName(): typeof BRAIN_DEFAULT_DISPLAY_NAME {
   return BRAIN_DEFAULT_DISPLAY_NAME;
 }
 
-export function getBrainDisplayMetaLabel() {
+export function getBrainDisplayMetaLabel(): typeof BRAIN_DEFAULT_META_LABEL {
   return BRAIN_DEFAULT_META_LABEL;
 }
 
-export function getBrainComplianceNote() {
+export function getBrainComplianceNote(): typeof BRAIN_COMPLIANCE_NOTE {
   return BRAIN_COMPLIANCE_NOTE;
 }
 
-export function getBrainUserNotice() {
+export function getBrainUserNotice(): typeof BRAIN_USER_NOTICE {
   return BRAIN_USER_NOTICE;
 }
 
-export function sanitizeBrainIdentityDisclosureText(raw) {
+export function sanitizeBrainIdentityDisclosureText(raw: unknown): string {
   return String(raw || "");
 }
 
-export function buildBrainProviderConfig() {
+export function buildBrainProviderConfig(): BrainProviderConfig {
   return {
     display_name: BRAIN_PROVIDER_LABEL,
     base_url: BRAIN_PROVIDER_BASE_URL,
@@ -151,22 +168,22 @@ export function buildBrainProviderConfig() {
   };
 }
 
-function normalizeComparableUrl(value) {
+function normalizeComparableUrl(value: unknown): string {
   return String(value || "").trim().replace(/\/+$/, "");
 }
 
-export function isDeprecatedBrainApiRoot(value) {
+export function isDeprecatedBrainApiRoot(value: string | null | undefined): boolean {
   const normalized = normalizeComparableUrl(value);
   return normalized ? BRAIN_DEPRECATED_API_ROOTS.includes(normalized) : false;
 }
 
-export function isDeprecatedBrainProviderBaseUrl(value) {
+export function isDeprecatedBrainProviderBaseUrl(value: string | null | undefined): boolean {
   const normalized = normalizeComparableUrl(value);
   return normalized ? BRAIN_DEPRECATED_PROVIDER_BASE_URLS.includes(normalized) : false;
 }
 
 // 设备注册令牌（混淆存储，运行时解码）
 const _BRAIN_REG_TOKEN_ENCODED = "MWFhZTdhODhkYzdhOGIzYzk3YmRkMzg3ZjI3NTkwZTgtZ2VyLW5pYXJiLW5ueWw=";
-export function getBrainRegistrationToken() {
+export function getBrainRegistrationToken(): string {
   return _d(_BRAIN_REG_TOKEN_ENCODED);
 }

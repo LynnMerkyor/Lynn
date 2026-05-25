@@ -13,7 +13,10 @@ const TEMPLATE_TOOL_TAG_NAMES = [
   "tool_call", "tool_calls", "_calls", "calls", "inv",
   "argument", "arguments", "args", "json",
   "result", "results", "response", "responses",
-];
+] as const;
+
+export type TemplateToolTagName = (typeof TEMPLATE_TOOL_TAG_NAMES)[number];
+
 const TEMPLATE_TAG_SOURCE = TEMPLATE_TOOL_TAG_NAMES
   .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
   .join("|");
@@ -59,23 +62,32 @@ const KNOWN_TOOL_NAME_LIST = [
   // File-operation aliases emitted by some model/tool templates.
   "find_files", "list_files", "delete_files", "move_files", "move_file",
   "fs_delete", "fs_move", "fs_list",
-];
-const KNOWN_TOOL_NAMES = new Set(KNOWN_TOOL_NAME_LIST);
+] as const;
+
+export type KnownPseudoToolName = (typeof KNOWN_TOOL_NAME_LIST)[number];
+
+const KNOWN_TOOL_NAMES: ReadonlySet<string> = new Set(KNOWN_TOOL_NAME_LIST);
 const KNOWN_TOOL_PREFIXES = [
   "web_", "search_", "pin_", "unpin_", "record_", "recall_",
   "create_", "message_", "request_", "spawn_", "send_", "wait_", "close_", "resume_",
-];
+] as const;
 
-function escapeRegExpSource(value) {
+function escapeRegExpSource(value: unknown): string {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 const STREAMING_PSEUDO_XML_EXTRA_TAG_NAMES = [
   "code", "pre", "details", "summary", "think",
   "tool", "function", "parameter", "execute",
-];
+] as const;
 
-export const STREAMING_PSEUDO_XML_TAG_NAMES = Object.freeze([
+export type StreamingPseudoXmlExtraTagName = (typeof STREAMING_PSEUDO_XML_EXTRA_TAG_NAMES)[number];
+export type StreamingPseudoXmlTagName =
+  | KnownPseudoToolName
+  | TemplateToolTagName
+  | StreamingPseudoXmlExtraTagName;
+
+export const STREAMING_PSEUDO_XML_TAG_NAMES: readonly StreamingPseudoXmlTagName[] = Object.freeze([
   ...new Set([
     ...KNOWN_TOOL_NAME_LIST,
     ...TEMPLATE_TOOL_TAG_NAMES,
@@ -87,15 +99,15 @@ export const STREAMING_PSEUDO_XML_TAG_SOURCE = STREAMING_PSEUDO_XML_TAG_NAMES
   .map(escapeRegExpSource)
   .join("|");
 
-export function createStreamingPseudoXmlOpenRegex() {
+export function createStreamingPseudoXmlOpenRegex(): RegExp {
   return new RegExp(`<(${STREAMING_PSEUDO_XML_TAG_SOURCE})\\b[^>\\n]*(?:>|$)`, "iu");
 }
 
-export function createStreamingPseudoXmlOrphanCloseRegex() {
+export function createStreamingPseudoXmlOrphanCloseRegex(): RegExp {
   return new RegExp(`</_?(?:${STREAMING_PSEUDO_XML_TAG_SOURCE})\\s*>`, "giu");
 }
 
-export function createStreamingPseudoXmlOrphanFragmentRegex() {
+export function createStreamingPseudoXmlOrphanFragmentRegex(): RegExp {
   return /(?:^|[\s>])(?:t?avily|_?calls?|inv)>\s*/giu;
 }
 
@@ -109,21 +121,21 @@ const TOOL_NAME_JSON_ARGS_BLOCK_RE = new RegExp(
   "giu",
 );
 
-function testPattern(re, text) {
+function testPattern(re: RegExp, text: string): boolean {
   re.lastIndex = 0;
   const matched = re.test(text);
   re.lastIndex = 0;
   return matched;
 }
 
-function looksLikeKnownToolName(name) {
+function looksLikeKnownToolName(name: unknown): boolean {
   const normalized = String(name || "").trim().toLowerCase();
   if (!normalized) return false;
   if (KNOWN_TOOL_NAMES.has(normalized)) return true;
   return KNOWN_TOOL_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
-function looksLikeStandalonePseudoToolCall(paragraph) {
+function looksLikeStandalonePseudoToolCall(paragraph: unknown): boolean {
   const text = String(paragraph || "").trim();
   if (!text || text.startsWith("```") || text.startsWith(">")) return false;
 
@@ -144,7 +156,14 @@ function looksLikeStandalonePseudoToolCall(paragraph) {
 // 每个 entry: { name, detect(text) => boolean, count(text) => number, strip(text) => text }
 // count 返回匹配到的伪标记数量（用于 contains 只需 >0 则 true）
 
-const PSEUDO_PATTERNS = [
+type PseudoPattern = {
+  name: string;
+  detect: (text: string) => boolean;
+  count: (text: string) => number;
+  strip: (text: string) => string;
+};
+
+const PSEUDO_PATTERNS: readonly PseudoPattern[] = [
   {
     name: "qwen_tool_call_markup",
     detect: (t) => (
@@ -272,7 +291,7 @@ const PSEUDO_PATTERNS = [
 
 // ── Block-level tool markup stripper (shared by template_tool_block + standalone_function_call) ──
 
-function stripToolCodeMarkup(raw) {
+function stripToolCodeMarkup(raw: unknown): string {
   return String(raw || "")
     .replace(TOOL_PARAMS_FENCE_RE, "")
     .replace(QWEN_TOOL_CODE_BLOCK_RE, "")
@@ -294,16 +313,16 @@ function stripToolCodeMarkup(raw) {
 
 // ── Public API ──
 
-export function containsPseudoToolSimulation(raw) {
+export function containsPseudoToolSimulation(raw: unknown): boolean {
   void raw;
   return false;
 }
 
-export function countPseudoToolMarkers(raw) {
+export function countPseudoToolMarkers(raw: unknown): number {
   void raw;
   return 0;
 }
 
-export function stripPseudoToolCallMarkup(raw) {
+export function stripPseudoToolCallMarkup(raw: unknown): string {
   return String(raw || "");
 }
