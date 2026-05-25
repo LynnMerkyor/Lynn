@@ -102,6 +102,8 @@ import {
 } from "../chat/turn-retry-policy.js";
 import { extractProviderRouteMeta } from "../chat/provider-route-meta.js";
 import { emitSessionStreamEvent } from "../chat/stream-event-emitter.js";
+import { createChatRouteContext } from "../chat/chat-route-context.js";
+import { generateSessionTitle } from "../chat/title-generator.js";
 
 function hasStreamEvent(ss, type) {
   return Array.isArray(ss?.events) && ss.events.some((entry) => entry?.event?.type === type);
@@ -130,6 +132,7 @@ function resolveEditSnapshotPath(session, engine, rawPath) {
 }
 
 export function createChatRoute(engine, hub, { upgradeWebSocket }) {
+  const routeContext = createChatRouteContext(engine, hub, { upgradeWebSocket });
   const restRoute = new Hono();
   const wsRoute = new Hono();
 
@@ -1401,7 +1404,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
   // ── WebSocket 路由 ──
 
   wsRoute.get("/ws",
-    upgradeWebSocket((_c) => {
+    routeContext.upgradeWebSocket((_c) => {
       let closed = false;
 
       return {
@@ -1867,45 +1870,4 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
   );
 
   return { restRoute, wsRoute, broadcast, editRollbackStore, lifecycleHooks };
-}
-
-/**
- * 后台生成 session 标题：从第一轮对话提取摘要
- */
-async function generateSessionTitle(engine, notify, opts = {}) {
-  try {
-    const sessionPath = opts.sessionPath || engine.currentSessionPath;
-    if (!sessionPath) return false;
-
-    const sessions = await engine.listSessions();
-    const current = sessions.find(s => s.path === sessionPath);
-    if (current?.title) return true;
-
-    const session = engine.getSessionByPath(sessionPath);
-    const messages = Array.isArray(session?.messages) ? session.messages : [];
-    const userMsg = messages.find(m => m.role === "user");
-    const assistantMsg = messages.find(m => m.role === "assistant");
-    if (!userMsg && !opts.userTextHint) return false;
-
-    const userText = (opts.userTextHint || extractText(userMsg?.content)).trim();
-    const assistantText = (opts.assistantTextHint || extractText(assistantMsg?.content)).trim();
-    if (!userText || !assistantText) return false;
-
-    let title = await engine.summarizeTitle(userText, assistantText, { timeoutMs: 15_000 });
-
-    if (!title) {
-      const fallback = userText.replace(/\n/g, " ").trim().slice(0, 30);
-      if (!fallback) return;
-      title = fallback;
-      console.log("[chat] session 标题 API 失败，使用 fallback:", title);
-    }
-
-    await engine.saveSessionTitle(sessionPath, title);
-
-    notify({ type: "session_title", title, path: sessionPath });
-    return true;
-  } catch (err) {
-    console.error("[chat] 生成 session 标题失败:", err.message);
-    return false;
-  }
 }
