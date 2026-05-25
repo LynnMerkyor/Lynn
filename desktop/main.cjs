@@ -2334,11 +2334,25 @@ async function handleBrowserCommand(cmd, params) {
     }
 
     // ── evaluate ──
+    // 2026-05-25 P1-3 (security hardening):
+    // 1. 长度上限 10000 → 4000 字符(合法页面操作 < 1KB,>4KB 几乎确定可疑)
+    // 2. **完整 expression** 进 audit log(之前只 log 头 200 字,exfil-script 截不到尾)
+    // 3. LYNN_BROWSER_EVAL_DENY_SENSITIVE=1 时拒绝含 cookie / localStorage / sessionStorage /
+    //    indexedDB / document.domain 等 exfil 关键词的 expression。默认关(向后兼容),
+    //    生产高 paranoia 部署可 opt-in。
     case "evaluate": {
-      if (!params.expression || params.expression.length > 10000) {
-        throw new Error("Expression too long (max 10000 chars)");
+      if (!params.expression || params.expression.length > 4000) {
+        throw new Error("Expression too long (max 4000 chars; was 10000 — tightened 2026-05-25 P1-3 security)");
       }
-      console.log(`[browser:evaluate] ${params.expression.slice(0, 200)}${params.expression.length > 200 ? "..." : ""}`);
+      // 完整 expression audit log,而不是头 200 字 — exfil 脚本常把敏感操作藏在尾部
+      console.log(`[browser:evaluate audit][${new Date().toISOString()}][len=${params.expression.length}] ${params.expression}`);
+      // 高 paranoia 模式:阻断典型 cookie / 存储 exfil 关键词
+      if (process.env.LYNN_BROWSER_EVAL_DENY_SENSITIVE === "1") {
+        const sensitivePatterns = /\b(document\.cookie|localStorage|sessionStorage|indexedDB|document\.domain|navigator\.credentials)\b/i;
+        if (sensitivePatterns.test(params.expression)) {
+          throw new Error("browser:evaluate denied — expression accesses sensitive storage (LYNN_BROWSER_EVAL_DENY_SENSITIVE=1)");
+        }
+      }
       _ensureBrowser();
       const result = await _browserWebView.webContents.executeJavaScript(params.expression);
       const serialized = typeof result === "string" ? result : JSON.stringify(result, null, 2);

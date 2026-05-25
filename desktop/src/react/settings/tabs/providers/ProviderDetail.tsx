@@ -61,8 +61,13 @@ const LOCAL_QWEN36_35B_UPGRADE: LocalUpgradeOption = {
   file_name: 'Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf',
 };
 
-function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], _memoryGib?: number | null) {
-  // 默认卡即 9B;可选区只展示低配 4B 降级和高端 35B,避免用户误以为 4B 仍是推荐入口。
+function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], memoryGib?: number | null) {
+  // 默认卡即 9B;可选区按硬件分级展示降级 / 高端档。
+  // 2026-05-25 P1-1: 接 hardware.total_memory_gib 做 memory-adaptive 显示 —
+  //   - memoryGib > 32:藏 4B 降级(高配机器不需要降级提示),保留 35B
+  //   - memoryGib < 22:藏 35B 高端(21GB 文件 + KV cache 加载不动)
+  //   - 中间(22~32GB):4B + 35B 都显示,用户自选
+  //   - memoryGib 未知(null/undefined):全显示(保留 v0.79.1 之前行为)
   let server4b: LocalUpgradeOption | null = null;
   let server35b: LocalUpgradeOption | null = null;
   const others: LocalUpgradeOption[] = [];
@@ -74,12 +79,16 @@ function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], _memor
     if (haystack.includes('35b')) { server35b = option; continue; }
     others.push(option);
   }
-  const normalized: LocalUpgradeOption[] = [
-    { ...LOCAL_QWEN35_4B_DOWNGRADE, ...(server4b || {}), ...LOCAL_QWEN35_4B_DOWNGRADE },
-    ...others,
-  ];
-  // 35B 高端档(32G+ 推荐)永远显示
-  normalized.push({ ...LOCAL_QWEN36_35B_UPGRADE, ...(server35b || {}), ...LOCAL_QWEN36_35B_UPGRADE });
+  const mem = typeof memoryGib === 'number' && Number.isFinite(memoryGib) ? memoryGib : null;
+  const show4b = mem === null || mem <= 32;
+  const show35b = mem === null || mem >= 22;
+  const normalized: LocalUpgradeOption[] = [...others];
+  if (show4b) {
+    normalized.unshift({ ...LOCAL_QWEN35_4B_DOWNGRADE, ...(server4b || {}), ...LOCAL_QWEN35_4B_DOWNGRADE });
+  }
+  if (show35b) {
+    normalized.push({ ...LOCAL_QWEN36_35B_UPGRADE, ...(server35b || {}), ...LOCAL_QWEN36_35B_UPGRADE });
+  }
   return normalized;
 }
 

@@ -71,6 +71,9 @@ async function runRound({
   reasoningEffort,
 }) {
   const errors = [];
+  // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
+  // (例:"MiMo → Spark fallback"),不再让 cascade decision 对 UI 不可见。
+  const fallbackChain = [];
   for (const providerId of universalOrder) {
     const provider = getProvider(providerId);
     if (!provider) continue;
@@ -87,6 +90,7 @@ async function runRound({
     }
     if (isInCooldown(providerId)) {
       log && log('info', `provider ${providerId} in cooldown, skip`);
+      fallbackChain.push({ id: providerId, reason: 'cooldown' });
       continue;
     }
     // 本地 provider 快速探针 (避免 cold-start race + 1s ECONNREFUSED)。BRAIN_V2_LOCAL_HEALTH_PROBE=0 关
@@ -100,11 +104,13 @@ async function runRound({
         if (!probeRes || !probeRes.ok) {
           log && log('info', `provider ${providerId} fast-probe failed, skip+cooldown`);
           markUnhealthy(providerId, 'health-probe-failed', 5000);
+          fallbackChain.push({ id: providerId, reason: 'probe-failed' });
           continue;
         }
       } catch {
         log && log('info', `provider ${providerId} fast-probe threw, skip+cooldown`);
         markUnhealthy(providerId, 'health-probe-threw', 5000);
+        fallbackChain.push({ id: providerId, reason: 'probe-threw' });
         continue;
       }
     }
@@ -120,7 +126,7 @@ async function runRound({
         anyEmit = true;
         if (chunk.type === 'content') {
           contentAccum += chunk.delta;
-          await onChunk(chunk, { providerId });
+          await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
           continue;
         }
         if (chunk.type === 'tool_call_delta') {
@@ -131,15 +137,15 @@ async function runRound({
             if (d.function?.name) toolCallsAcc[idx].function.name += d.function.name;
             if (d.function?.arguments) toolCallsAcc[idx].function.arguments += d.function.arguments;
           }
-          await onChunk(chunk, { providerId });
+          await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
           continue;
         }
         if (chunk.type === 'finish') {
           finishReason = chunk.reason;
-          await onChunk(chunk, { providerId });
+          await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
           continue;
         }
-        await onChunk(chunk, { providerId });
+        await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
       }
       // anyEmit=false 表示 transport 层零 SSE chunks (真正 wire 失败)。
       // 注意: 这不是检测 "content 为空" — 一个 finish_reason=stop+空 content 仍算正常,因为 chunks≥1。
@@ -150,6 +156,7 @@ async function runRound({
           log && log('warn', `provider ${providerId} reached empty threshold, ${EMPTY_RESPONSE_COOLDOWN_MS}ms cooldown`);
           markUnhealthy(providerId, 'empty_response_threshold', EMPTY_RESPONSE_COOLDOWN_MS);
         }
+        fallbackChain.push({ id: providerId, reason: 'empty' });
         continue;
       }
       _resetEmpty(providerId);
@@ -167,6 +174,7 @@ async function runRound({
         : `provider ${providerId} failed: ${e.message}, fallback`;
       log && log('warn', logMsg);
       markUnhealthy(providerId, e.message, e.cooldownMs); // variable cooldown for auth fail
+      fallbackChain.push({ id: providerId, reason: 'error' });
       continue;
     }
   }

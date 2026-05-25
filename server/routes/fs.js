@@ -172,14 +172,23 @@ export function createFsRoute(engine) {
       if (!filePath || typeof content !== "string") {
         return c.json({ error: "missing filePath or content" }, 400);
       }
-      if (!isSafePath(filePath, getAllowedRoots(engine, "write"))) {
+      // 2026-05-25 P1-2 (security): TOCTOU fix — 写入必须用 canonical 解析后的路径,
+      // 不能用 raw filePath。否则 symlink swap 攻击:check 时 workspace/notes.md → /tmp/safe,
+      // write 时被换成 → ~/.ssh/authorized_keys。canonical 解析锁定 inode,确保 check 和 write
+      // 看的是同一个文件。
+      const allowedRoots = getAllowedRoots(engine, "write");
+      if (!isSafePath(filePath, allowedRoots)) {
         return c.json({ error: "path not allowed" }, 403);
       }
-      const dir = path.dirname(filePath);
+      const canonical = resolveCanonicalPath(filePath);
+      if (!canonical || !isSafePath(canonical, allowedRoots)) {
+        return c.json({ error: "path not allowed (canonical recheck)" }, 403);
+      }
+      const dir = path.dirname(canonical);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(filePath, content, "utf-8");
+      fs.writeFileSync(canonical, content, "utf-8");
       return c.json({ ok: true, bytesWritten: Buffer.byteLength(content, "utf-8") });
     } catch (err) {
       return c.json({ error: err?.message || "write failed" }, 500);
@@ -205,19 +214,25 @@ export function createFsRoute(engine) {
       if (!snapshot.filePath || typeof snapshot.originalContent !== "string") {
         return c.json({ error: "rollback snapshot invalid" }, 500);
       }
-      if (!isSafePath(snapshot.filePath, getAllowedRoots(engine, "write"))) {
+      // 2026-05-25 P1-2 (security): TOCTOU fix — 同 /fs/apply,用 canonical 路径写入。
+      const allowedRoots = getAllowedRoots(engine, "write");
+      if (!isSafePath(snapshot.filePath, allowedRoots)) {
         return c.json({ error: "path not allowed" }, 403);
       }
+      const canonical = resolveCanonicalPath(snapshot.filePath);
+      if (!canonical || !isSafePath(canonical, allowedRoots)) {
+        return c.json({ error: "path not allowed (canonical recheck)" }, 403);
+      }
 
-      const currentContent = safeReadFile(snapshot.filePath, null);
+      const currentContent = safeReadFile(canonical, null);
       const currentHash = currentContent == null
         ? null
         : crypto.createHash("sha256").update(currentContent).digest("hex");
       const snapshotHash = crypto.createHash("sha256").update(snapshot.originalContent).digest("hex");
 
-      const dir = path.dirname(snapshot.filePath);
+      const dir = path.dirname(canonical);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(snapshot.filePath, snapshot.originalContent, "utf-8");
+      fs.writeFileSync(canonical, snapshot.originalContent, "utf-8");
 
       return c.json({
         ok: true,

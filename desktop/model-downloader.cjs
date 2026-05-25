@@ -124,6 +124,45 @@ function isLocalOrPrivateHost(hostname) {
   return false;
 }
 
+// 2026-05-25 P0-2 (security): DNS rebinding defense for http(s).get.
+// validateModelSourceUrl checks hostname string,但实际 TCP connect 的 DNS
+// 在 https.get 内部解析。Attacker-controlled short-TTL DNS 可在第二次解析返
+// 127.0.0.1,劫持下载流到本机 admin endpoint。给 http(s).get.lookup 选项
+// 注入这个 lookup wrapper,resolve 后任何私网/loopback IP 立即 reject。
+function _dnsLookupBlockingPrivate(hostname, optionsOrCallback, maybeCallback) {
+  const dns = require("node:dns");
+  let opts, callback;
+  if (typeof optionsOrCallback === "function") {
+    callback = optionsOrCallback;
+    opts = {};
+  } else {
+    opts = optionsOrCallback || {};
+    callback = maybeCallback;
+  }
+  // Opt-out for dev/testing against localhost — same env as validateModelSourceUrl
+  if (allowInsecureModelSources()) {
+    return dns.lookup(hostname, opts, callback);
+  }
+  dns.lookup(hostname, { all: true, family: opts.family || 0, hints: opts.hints }, (err, addresses) => {
+    if (err) return callback(err);
+    if (!Array.isArray(addresses) || addresses.length === 0) {
+      return callback(new Error(`model-source: DNS empty for ${hostname}`));
+    }
+    for (const addr of addresses) {
+      if (isLocalOrPrivateHost(addr.address)) {
+        const e = new Error(`model-source: DNS rebinding blocked — ${hostname} → ${addr.address} (private/loopback)`);
+        e.code = "DNS_REBINDING_BLOCKED";
+        return callback(e);
+      }
+    }
+    if (opts.all) {
+      return callback(null, addresses);
+    }
+    const first = addresses[0];
+    callback(null, first.address, first.family);
+  });
+}
+
 function validateModelSourceUrl(urlStr, opts = {}) {
   const context = opts.context || "model-source";
   const enforceGgufPath = opts.enforceGgufPath !== false;
@@ -495,6 +534,7 @@ class ModelDownloader extends EventEmitter {
       path: url.pathname + url.search,
       headers,
       timeout: REQUEST_TIMEOUT_MS,
+      lookup: _dnsLookupBlockingPrivate,  // 2026-05-25 P0-2: DNS rebinding defense
     });
     this.parallelRequests.push(req);
 
@@ -605,6 +645,7 @@ class ModelDownloader extends EventEmitter {
       path: url.pathname + url.search,
       headers,
       timeout: REQUEST_TIMEOUT_MS,
+      lookup: _dnsLookupBlockingPrivate,  // 2026-05-25 P0-2: DNS rebinding defense
     });
     this.activeRequest = req;
 

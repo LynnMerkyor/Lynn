@@ -38,8 +38,14 @@ export function makeSSEEmitter(res, { id, model = 'lynn-v2' } = {}) {
   function emitChunk(chunk, meta = {}) {
     if (meta.providerId && meta.providerId !== currentProviderId) {
       currentProviderId = meta.providerId;
-      // one-time meta event on provider switch (client can read .object === 'lynn.provider')
-      write({ id, object: 'lynn.provider', created, model: originalModel, meta: { active_provider: meta.providerId } });
+      // 2026-05-25 P0-1: 在 provider 切换(包括 first emit)时,把 fallback chain 一并发给 UI,
+      // 让用户看到"MiMo → Spark fallback (probe-failed)"。fallback_from 来自 router 的
+      // fallbackChain 数组(skipped/failed providers 顺序列表 [{id, reason}])。
+      const providerMeta = { active_provider: meta.providerId };
+      if (Array.isArray(meta.fallback_from) && meta.fallback_from.length > 0) {
+        providerMeta.fallback_from = meta.fallback_from;
+      }
+      write({ id, object: 'lynn.provider', created, model: originalModel, meta: providerMeta });
     }
     if (chunk.type === 'reasoning') {
       write({ id, object: 'chat.completion.chunk', created, model: originalModel,
