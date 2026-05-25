@@ -4,7 +4,7 @@
 const RERANK_URL = process.env.LYNN_RERANK_URL || "http://localhost:8003";
 const TIMEOUT_MS = Number(process.env.LYNN_RERANK_TIMEOUT_MS || 5000);
 
-export async function rerank(query, docs, topK = 5) {
+export async function rerank(query: string, docs: string[], topK: number = 5): Promise<unknown[]> {
   const res = await fetch(`${RERANK_URL}/rerank`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -12,11 +12,11 @@ export async function rerank(query, docs, topK = 5) {
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`rerank failed: HTTP ${res.status}`);
-  const scored = await res.json();
+  const scored = await res.json() as unknown[];
   return scored.slice(0, topK);
 }
 
-export async function rerankHealth() {
+export async function rerankHealth(): Promise<boolean> {
   try {
     const r = await fetch(`${RERANK_URL}/health`, { signal: AbortSignal.timeout(2000) });
     return r.ok;

@@ -1,4 +1,10 @@
-export function readCookieValue(cookieHeader, name) {
+export interface RequestAuthTokenInput {
+  authorization?: string | null;
+  protocolHeader?: string | null;
+  cookieHeader?: string | null;
+}
+
+export function readCookieValue(cookieHeader: string | null | undefined, name: string): string {
   if (!cookieHeader || !name) return "";
   for (const part of cookieHeader.split(';')) {
     const trimmed = part.trim();
@@ -13,7 +19,11 @@ export function readCookieValue(cookieHeader, name) {
   return "";
 }
 
-export function resolveRequestAuthToken({ authorization, protocolHeader, cookieHeader }) {
+export function resolveRequestAuthToken({
+  authorization,
+  protocolHeader,
+  cookieHeader,
+}: RequestAuthTokenInput): string {
   const headerToken = authorization?.replace(/^Bearer\s+/i, "") || "";
   if (headerToken) return headerToken;
 

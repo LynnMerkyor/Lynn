@@ -15,7 +15,34 @@ import { createFasterWhisperProvider } from "./faster-whisper.js";
 import { createOpenAIWhisperProvider } from "./openai-whisper.js";
 import { createAzureSTTProvider } from "./azure-stt.js";
 
-const PROVIDERS = {
+interface ASRConfig {
+  provider?: string;
+  fallback_provider?: string;
+  fallbackProvider?: string;
+  fallback?: ASRConfig;
+  [key: string]: unknown;
+}
+
+interface ASRProvider {
+  name?: string;
+  label?: string;
+  transcribe(audioBuffer: unknown, opts?: Record<string, unknown>): Promise<Record<string, unknown>> | Record<string, unknown>;
+  health?(): Promise<boolean | { ok?: unknown }> | boolean | { ok?: unknown };
+  [key: string]: unknown;
+}
+
+interface ASRFallbackDeps {
+  primaryProvider?: ASRProvider;
+  fallbackProvider?: ASRProvider;
+}
+
+type ASRProviderFactory = (config: ASRConfig) => ASRProvider;
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error && err.message ? err.message : String(err);
+}
+
+const PROVIDERS: Record<string, ASRProviderFactory> = {
   "qwen3-asr": createQwen3AsrProvider,
   "qwen3": createQwen3AsrProvider,
   "qwen": createQwen3AsrProvider,
@@ -37,7 +64,7 @@ export function listASRProviders() {
   ];
 }
 
-export function createASRProvider(config = {}) {
+export function createASRProvider(config: ASRConfig = {}): ASRProvider {
   const providerId = config.provider || "sensevoice";
   const factory = PROVIDERS[providerId];
   if (!factory) {
@@ -47,7 +74,7 @@ export function createASRProvider(config = {}) {
   return factory(config);
 }
 
-export function createASRFallbackProvider(config = {}, deps = {}) {
+export function createASRFallbackProvider(config: ASRConfig = {}, deps: ASRFallbackDeps = {}): ASRProvider {
   const primaryProvider = config.provider || "qwen3-asr";
   const fallbackProvider = config.fallback_provider || config.fallbackProvider || "sensevoice";
   const primary = deps.primaryProvider || createASRProvider({ ...config, provider: primaryProvider });
@@ -63,7 +90,7 @@ export function createASRFallbackProvider(config = {}, deps = {}) {
     name: `${primary.name || primaryProvider}+fallback`,
     label: `${primary.label || primaryProvider} with fallback`,
 
-    async transcribe(audioBuffer, opts = {}) {
+    async transcribe(audioBuffer: unknown, opts: Record<string, unknown> = {}) {
       try {
         return await primary.transcribe(audioBuffer, opts);
       } catch (err) {
@@ -71,7 +98,7 @@ export function createASRFallbackProvider(config = {}, deps = {}) {
         return {
           ...result,
           fallbackUsed: true,
-          primaryError: err?.message || String(err),
+          primaryError: errorMessage(err),
         };
       }
     },
@@ -90,7 +117,7 @@ export function createASRFallbackProvider(config = {}, deps = {}) {
   };
 }
 
-async function healthOf(provider) {
+async function healthOf(provider: ASRProvider | null | undefined): Promise<boolean> {
   if (!provider || typeof provider.health !== "function") return true;
   try {
     const value = await provider.health();

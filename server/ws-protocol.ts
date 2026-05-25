@@ -6,6 +6,7 @@ import {
   validateClientEvent,
   validateServerEvent,
 } from "../shared/ws-events.js";
+import type { ClientEvent, ServerEvent } from "../shared/ws-events.js";
 
 export {
   CLIENT_EVENT_TYPES,
@@ -19,8 +20,13 @@ export {
 const warnedServerEvents = new Set();
 const warnedClientEvents = new Set();
 
+interface JsonWebSocket {
+  readyState: number;
+  send(data: string): void;
+}
+
 /** 安全地发送 JSON 消息到 WebSocket */
-export function wsSend(ws, msg) {
+export function wsSend(ws: JsonWebSocket, msg: ServerEvent | Record<string, unknown>): void {
   if (ws.readyState === 1) { // OPEN
     const validation = validateServerEvent(msg);
     if (!validation.ok) {
@@ -35,7 +41,7 @@ export function wsSend(ws, msg) {
 }
 
 /** 安全地解析 WebSocket 消息（兼容 Buffer / string / ArrayBuffer） */
-export function wsParse(data) {
+export function wsParse(data: string | ArrayBuffer | Buffer | { toString?: () => string } | null | undefined): ClientEvent | Record<string, unknown> | null {
   try {
     const str = typeof data === "string" ? data : (data?.toString?.() ?? String(data));
     const msg = JSON.parse(str);

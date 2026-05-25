@@ -6,7 +6,7 @@
 const EMBED_URL = process.env.LYNN_EMBED_URL || "http://localhost:8002";
 const TIMEOUT_MS = Number(process.env.LYNN_EMBED_TIMEOUT_MS || 5000);
 
-export async function embed(texts) {
+export async function embed(texts: string | string[]): Promise<unknown> {
   const arr = Array.isArray(texts) ? texts : [texts];
   const res = await fetch(`${EMBED_URL}/embed`, {
     method: "POST",
@@ -18,7 +18,7 @@ export async function embed(texts) {
   return await res.json();
 }
 
-export async function embedHealth() {
+export async function embedHealth(): Promise<boolean> {
   try {
     const r = await fetch(`${EMBED_URL}/health`, { signal: AbortSignal.timeout(2000) });
     return r.ok;

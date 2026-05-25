@@ -7,8 +7,54 @@
 
 const DEFAULT_MAX_EVENTS = 200;
 
+export interface SessionStreamEvent {
+  [key: string]: unknown;
+}
+
+export interface SessionStreamEntry {
+  streamId: string | null;
+  seq: number;
+  event: SessionStreamEvent;
+  ts: number;
+}
+
+export interface SessionStreamState {
+  streamId: string | null;
+  nextSeq: number;
+  isStreaming: boolean;
+  startedAt: number;
+  endedAt: number;
+  events: SessionStreamEntry[];
+  maxEvents: number;
+}
+
+export interface CreateSessionStreamStateOptions {
+  maxEvents?: number;
+}
+
+export interface ResumeSessionStreamOptions {
+  streamId?: string | null;
+  sinceSeq?: number;
+}
+
+export interface PublicSessionStreamEvent {
+  seq: number;
+  event: SessionStreamEvent;
+  ts: number;
+}
+
+export interface ResumeSessionStreamResult {
+  streamId: string | null;
+  sinceSeq: number;
+  nextSeq: number;
+  isStreaming: boolean;
+  reset: boolean;
+  truncated: boolean;
+  events: PublicSessionStreamEvent[];
+}
+
 /** 创建初始流状态 */
-export function createSessionStreamState(opts = {}) {
+export function createSessionStreamState(opts: CreateSessionStreamStateOptions = {}): SessionStreamState {
   return {
     streamId: null,
     nextSeq: 1,
@@ -21,7 +67,7 @@ export function createSessionStreamState(opts = {}) {
 }
 
 /** 开始新一轮流式回复 */
-export function beginSessionStream(state, streamId = null) {
+export function beginSessionStream(state: SessionStreamState, streamId: string | null = null): string {
   state.streamId = streamId || createStreamId();
   state.nextSeq = 1;
   state.isStreaming = true;
@@ -32,7 +78,7 @@ export function beginSessionStream(state, streamId = null) {
 }
 
 /** 写入一条流式事件，返回带 seq 的事件条目 */
-export function appendSessionStreamEvent(state, event) {
+export function appendSessionStreamEvent(state: SessionStreamState, event: SessionStreamEvent): SessionStreamEntry {
   if (!state.streamId) beginSessionStream(state);
 
   const entry = {
@@ -48,7 +94,7 @@ export function appendSessionStreamEvent(state, event) {
 }
 
 /** 结束当前流 */
-export function finishSessionStream(state) {
+export function finishSessionStream(state: SessionStreamState): void {
   state.isStreaming = false;
   state.endedAt = Date.now();
 }
@@ -58,7 +104,10 @@ export function finishSessionStream(state) {
  * @param {object} state
  * @param {{ streamId?: string|null, sinceSeq?: number }} [opts]
  */
-export function resumeSessionStream(state, opts = {}) {
+export function resumeSessionStream(
+  state: SessionStreamState,
+  opts: ResumeSessionStreamOptions = {},
+): ResumeSessionStreamResult {
   const requestedStreamId = opts.streamId ?? state.streamId ?? null;
   const currentStreamId = state.streamId ?? null;
   const requestedSinceSeq = normalizeSeq(opts.sinceSeq);
@@ -106,13 +155,13 @@ export function resumeSessionStream(state, opts = {}) {
   };
 }
 
-function trimEvents(state) {
+function trimEvents(state: SessionStreamState): void {
   const overflow = state.events.length - state.maxEvents;
   if (overflow <= 0) return;
   state.events.splice(0, overflow);
 }
 
-function toPublicEvent(entry) {
+function toPublicEvent(entry: SessionStreamEntry): PublicSessionStreamEvent {
   return {
     seq: entry.seq,
     event: entry.event,
@@ -120,11 +169,11 @@ function toPublicEvent(entry) {
   };
 }
 
-function normalizeSeq(value) {
-  const n = Number.isFinite(value) ? value : 0;
+function normalizeSeq(value: unknown): number {
+  const n = typeof value === "number" && Number.isFinite(value) ? value : 0;
   return n < 0 ? 0 : Math.floor(n);
 }
 
-function createStreamId() {
+function createStreamId(): string {
   return `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }

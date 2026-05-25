@@ -1,23 +1,13 @@
 import { appendSessionStreamEvent } from "../session-stream-store.js";
+import type {
+  SessionStreamEntry as StoredSessionStreamEntry,
+  SessionStreamEvent,
+  SessionStreamState as StoredSessionStreamState,
+} from "../session-stream-store.js";
 
-export interface StreamEventPayload {
-  [key: string]: unknown;
-}
-
-export interface SessionStreamEntry {
-  streamId: string | null;
-  seq: number;
-  event: StreamEventPayload;
-  ts: number;
-}
-
-export interface SessionStreamState {
-  streamId?: string | null;
-  nextSeq: number;
-  events: SessionStreamEntry[];
-  maxEvents: number;
-  [key: string]: unknown;
-}
+export type StreamEventPayload = SessionStreamEvent;
+export type SessionStreamEntry = StoredSessionStreamEntry;
+export type SessionStreamState = StoredSessionStreamState;
 
 export type SessionStreamBroadcast = (
   event: StreamEventPayload & { sessionPath: string; streamId: string | null; seq: number },

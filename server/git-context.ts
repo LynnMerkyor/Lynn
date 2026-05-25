@@ -2,7 +2,66 @@ import fs from "fs";
 import path from "path";
 import { execFileSync } from "child_process";
 
-function runGit(args, cwd) {
+interface BranchInfo {
+  branch: string | null;
+  detached: boolean;
+  ahead: number;
+  behind: number;
+}
+
+interface StatusEntries {
+  changedFiles: string[];
+  totalChanged: number;
+  stagedCount: number;
+  unstagedCount: number;
+  untrackedCount: number;
+}
+
+interface LineStats {
+  linesAdded: number;
+  linesRemoved: number;
+}
+
+interface GitContextOptions {
+  maxFiles?: number;
+  maxCommits?: number;
+}
+
+export interface GitContextUnavailable {
+  available: false;
+}
+
+export interface GitContextAvailable {
+  available: true;
+  root: string;
+  repoName: string;
+  branch: string | null;
+  detached: boolean;
+  ahead: number;
+  behind: number;
+  stagedCount: number;
+  unstagedCount: number;
+  untrackedCount: number;
+  totalChanged: number;
+  linesAdded: number;
+  linesRemoved: number;
+  changedFiles: string[];
+  recentCommits: string[];
+}
+
+export type GitContext = GitContextAvailable | GitContextUnavailable;
+
+export interface GitDiffResult {
+  available: boolean;
+  filePath?: string;
+  diff?: string;
+  linesAdded?: number;
+  linesRemoved?: number;
+  synthetic?: boolean;
+  untracked?: boolean;
+}
+
+function runGit(args: string[], cwd: string): string {
   return execFileSync("git", args, {
     cwd,
     encoding: "utf8",
@@ -11,7 +70,7 @@ function runGit(args, cwd) {
   }).trim();
 }
 
-function parseBranchHeader(line) {
+function parseBranchHeader(line: string): BranchInfo {
   const header = String(line || "").trim();
   const body = header.startsWith("## ") ? header.slice(3) : header;
   const detached = body.startsWith("HEAD ") || body === "HEAD";
@@ -38,7 +97,7 @@ function parseBranchHeader(line) {
   };
 }
 
-function normalizeChangedPath(rawPath) {
+function normalizeChangedPath(rawPath: string): string {
   const cleaned = String(rawPath || "").trim();
   if (!cleaned) return "";
   if (cleaned.includes(" -> ")) {
@@ -47,9 +106,9 @@ function normalizeChangedPath(rawPath) {
   return cleaned;
 }
 
-function parseStatusEntries(lines, maxFiles) {
-  const changedFiles = [];
-  const seen = new Set();
+function parseStatusEntries(lines: string[], maxFiles: number): StatusEntries {
+  const changedFiles: string[] = [];
+  const seen = new Set<string>();
   let stagedCount = 0;
   let unstagedCount = 0;
   let untrackedCount = 0;
@@ -81,7 +140,7 @@ function parseStatusEntries(lines, maxFiles) {
   };
 }
 
-function readRecentCommits(cwd, maxCommits) {
+function readRecentCommits(cwd: string, maxCommits: number): string[] {
   try {
     const logOutput = runGit(["log", "--oneline", `-${maxCommits}`], cwd);
     if (!logOutput) return [];
@@ -94,7 +153,7 @@ function readRecentCommits(cwd, maxCommits) {
   }
 }
 
-function countUnifiedDiffStats(diffText) {
+function countUnifiedDiffStats(diffText: string): LineStats {
   let linesAdded = 0;
   let linesRemoved = 0;
   for (const line of String(diffText || "").split("\n")) {
@@ -106,7 +165,7 @@ function countUnifiedDiffStats(diffText) {
   return { linesAdded, linesRemoved };
 }
 
-function readRepoLineStats(cwd) {
+function readRepoLineStats(cwd: string): LineStats {
   try {
     const output = runGit(["diff", "--numstat", "HEAD"], cwd);
     if (!output) return { linesAdded: 0, linesRemoved: 0 };
@@ -125,7 +184,7 @@ function readRepoLineStats(cwd) {
   }
 }
 
-function buildSyntheticUntrackedDiff(filePath, absolutePath) {
+function buildSyntheticUntrackedDiff(filePath: string, absolutePath: string): GitDiffResult {
   try {
     const raw = fs.readFileSync(absolutePath, "utf8");
     const lines = raw.split(/\r?\n/);
@@ -151,7 +210,10 @@ function buildSyntheticUntrackedDiff(filePath, absolutePath) {
   }
 }
 
-export function readGitContext(targetDir, { maxFiles = 8, maxCommits = 3 } = {}) {
+export function readGitContext(
+  targetDir: string,
+  { maxFiles = 8, maxCommits = 3 }: GitContextOptions = {},
+): GitContext {
   try {
     const root = runGit(["rev-parse", "--show-toplevel"], targetDir);
     if (!root) return { available: false };
@@ -184,7 +246,7 @@ export function readGitContext(targetDir, { maxFiles = 8, maxCommits = 3 } = {})
   }
 }
 
-export function readGitDiff(targetDir, filePath) {
+export function readGitDiff(targetDir: string, filePath: string): GitDiffResult {
   try {
     const root = runGit(["rev-parse", "--show-toplevel"], targetDir);
     if (!root) return { available: false, filePath };
