@@ -42,7 +42,7 @@ describe("scripts/launch", () => {
     expect(plan.warning).toContain("自动切换到 Electron 运行时");
   });
 
-  it("keeps the current JS server path unchanged when server/index.js exists", () => {
+  it("keeps the current JS server path unchanged when only JS sources exist", () => {
     class FakeDatabase {
       close() {}
     }
@@ -60,7 +60,7 @@ describe("scripts/launch", () => {
       execPath: "/usr/local/bin/node",
       requireFn,
       resolveFn,
-      fileExists: serverFiles("server/index.js", "server/index.ts"),
+      fileExists: serverFiles("server/index.js"),
     });
 
     expect(plan.bin).toBe("/usr/local/bin/node");
@@ -68,6 +68,36 @@ describe("scripts/launch", () => {
     expect(plan.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(plan.warning).toBeNull();
     expect(resolveFn).not.toHaveBeenCalled();
+  });
+
+  it("loads tsx for JS server entry when runtime leaf modules are TypeScript", () => {
+    class FakeDatabase {
+      close() {}
+    }
+    const requireFn = vi.fn((id) => {
+      if (id === "better-sqlite3") return FakeDatabase;
+      throw new Error(`unexpected module: ${id}`);
+    });
+    const resolveFn = vi.fn((id) => {
+      if (id === "tsx") return "/repo/node_modules/tsx/dist/cli.mjs";
+      throw new Error(`unexpected module: ${id}`);
+    });
+
+    const plan = resolveLaunchPlan({
+      mode: "server",
+      extra: ["--port", "9999"],
+      env: {},
+      execPath: "/usr/local/bin/node",
+      requireFn,
+      resolveFn,
+      fileExists: serverFiles("server/index.js", "server/chat/content-utils.ts"),
+    });
+
+    expect(plan.bin).toBe("/usr/local/bin/node");
+    expect(plan.args).toEqual(["--import", "tsx", "server/index.js", "--port", "9999"]);
+    expect(plan.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+    expect(plan.warning).toBeNull();
+    expect(resolveFn).toHaveBeenCalledWith("tsx");
   });
 
   it("uses tsx for an explicit TS source server path", () => {
@@ -158,7 +188,7 @@ describe("scripts/launch", () => {
     expect(plan.warning).toBeNull();
   });
 
-  it("throws a clear error when TS source server mode is selected without tsx", () => {
+  it("throws a clear error when TypeScript server sources are selected without tsx", () => {
     const resolveFn = vi.fn(() => {
       throw new Error("Cannot find module 'tsx'");
     });
@@ -168,7 +198,7 @@ describe("scripts/launch", () => {
       env: { LYNN_SERVER_ENTRY: "ts" },
       resolveFn,
       fileExists: serverFiles("server/index.ts"),
-    })).toThrow("server/index.ts requires dev dependency `tsx`");
+    })).toThrow("TypeScript server sources require dev dependency `tsx`");
     expect(resolveFn).toHaveBeenCalledWith("tsx");
   });
 });

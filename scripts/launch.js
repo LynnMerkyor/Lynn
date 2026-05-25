@@ -18,6 +18,11 @@ const defaultLynnHome = join(homedir(), ".lynn-dev");
 const serverJsEntry = "server/index.js";
 const serverTsEntry = "server/index.ts";
 const tsxSpecifier = "tsx";
+const runtimeTsSentinelFiles = [
+  serverTsEntry,
+  "server/chat/content-utils.ts",
+  "core/provider-registry.ts",
+];
 
 export function canLoadBetterSqlite3(requireFn = require) {
   try {
@@ -30,26 +35,31 @@ export function canLoadBetterSqlite3(requireFn = require) {
   }
 }
 
+function hasRuntimeTsSources(fileExists) {
+  return runtimeTsSentinelFiles.some((file) => fileExists(file));
+}
+
 function resolveServerEntry({ env, fileExists }) {
   const entryHint = String(env.LYNN_SERVER_ENTRY || "auto").toLowerCase();
+  const needsTsLoader = hasRuntimeTsSources(fileExists);
 
   if (["ts", "typescript", "source"].includes(entryHint)) {
-    return { path: serverTsEntry, isTypeScript: true };
+    return { path: serverTsEntry, usesTsLoader: true };
   }
   if (["js", "javascript", "bundle"].includes(entryHint)) {
-    return { path: serverJsEntry, isTypeScript: false };
+    return { path: serverJsEntry, usesTsLoader: needsTsLoader };
   }
   if (entryHint !== "auto") {
     throw new Error("[launch] LYNN_SERVER_ENTRY must be auto, js, or ts");
   }
 
   if (fileExists(serverJsEntry)) {
-    return { path: serverJsEntry, isTypeScript: false };
+    return { path: serverJsEntry, usesTsLoader: needsTsLoader };
   }
   if (fileExists(serverTsEntry)) {
-    return { path: serverTsEntry, isTypeScript: true };
+    return { path: serverTsEntry, usesTsLoader: true };
   }
-  return { path: serverJsEntry, isTypeScript: false };
+  return { path: serverJsEntry, usesTsLoader: needsTsLoader };
 }
 
 function assertTsxAvailable(resolveFn) {
@@ -57,13 +67,13 @@ function assertTsxAvailable(resolveFn) {
     resolveFn(tsxSpecifier);
   } catch {
     throw new Error(
-      "[launch] server/index.ts requires dev dependency `tsx`. Run `npm install` and retry, or set LYNN_SERVER_ENTRY=js to use server/index.js."
+      "[launch] TypeScript server sources require dev dependency `tsx`. Run `npm install` and retry."
     );
   }
 }
 
 function serverArgsFor(entry, extra) {
-  if (!entry.isTypeScript) return [entry.path, ...extra];
+  if (!entry.usesTsLoader) return [entry.path, ...extra];
   return ["--import", tsxSpecifier, entry.path, ...extra];
 }
 
@@ -108,7 +118,7 @@ export function resolveLaunchPlan(options = {}) {
       break;
     case "server": {
       const entry = resolveServerEntry({ env: childEnv, fileExists });
-      if (entry.isTypeScript) assertTsxAvailable(resolveFn);
+      if (entry.usesTsLoader) assertTsxAvailable(resolveFn);
 
       const runtimeHint = String(childEnv.LYNN_SERVER_RUNTIME || "auto").toLowerCase();
       const shouldUseNode = runtimeHint === "node"
