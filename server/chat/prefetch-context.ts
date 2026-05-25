@@ -4,22 +4,28 @@
  * 从 server/routes/chat.js 提取。负责本地精确计算（预算等）和
  * report-research 预取决策。
  */
-export function shouldPrefetchReportContext(reportKind, currentModelInfo) {
-  if (!reportKind) return false;
-  if (!currentModelInfo?.isBrain) return true;
-  return new Set([
-    "market_weather_brief", "weather", "sports", "market", "news",
-  ]).has(reportKind);
+interface ModelInfoLike {
+  isBrain?: unknown;
 }
 
-export function shouldSuppressLocalToolPrefetch(text) {
+const BRAIN_PREFETCH_KINDS = new Set<unknown>([
+  "market_weather_brief", "weather", "sports", "market", "news",
+]);
+
+export function shouldPrefetchReportContext(reportKind: unknown, currentModelInfo?: ModelInfoLike | null): boolean {
+  if (!reportKind) return false;
+  if (!currentModelInfo?.isBrain) return true;
+  return BRAIN_PREFETCH_KINDS.has(reportKind);
+}
+
+export function shouldSuppressLocalToolPrefetch(text: unknown): boolean {
   const source = String(text || "");
   return /(?:不要|不必|不用|无需|别|勿).{0,12}(?:调用|使用|用).{0,8}(?:工具|搜索|联网|查询|检索)/.test(source)
     || /(?:不要|不必|不用|无需|别|勿).{0,8}(?:搜索|联网|查询|检索)/.test(source)
     || /(?:只|仅)(?:回复|输出|回答)\s*[：:]/.test(source);
 }
 
-export function prefetchToolNameForKind(kind) {
+export function prefetchToolNameForKind(kind: unknown): string {
   if (kind === "market_weather_brief") return "market_weather_brief";
   if (kind === "weather") return "weather";
   if (kind === "sports") return "sports_score";
@@ -28,12 +34,12 @@ export function prefetchToolNameForKind(kind) {
   return "web_search";
 }
 
-function parseLooseAmount(value) {
+function parseLooseAmount(value: unknown): number | null {
   const n = Number(String(value || "").replace(/[,\s]/g, ""));
   return Number.isFinite(n) ? n : null;
 }
 
-export function buildBudgetCalculationContext(text) {
+export function buildBudgetCalculationContext(text: unknown): string {
   const source = String(text || "");
   if (!/(?:月收入|收入)/.test(source) || !/(?:攒|存|储蓄|存款)/.test(source)) return "";
 
@@ -46,22 +52,24 @@ export function buildBudgetCalculationContext(text) {
       || source.match(/目标(?:金额|存款|储蓄)?\s*[：:]?\s*[¥￥]?\s*([\d,\s]+)/)?.[1],
   );
 
-  if (![income, rent, fixed, months, goal].every((n) => Number.isFinite(n) && n > 0)) return "";
-  const fixedSpend = rent + fixed;
-  const remainingBeforeSaving = income - fixedSpend;
-  const monthlySaving = goal / months;
+  const amounts = [income, rent, fixed, months, goal];
+  if (!amounts.every((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0)) return "";
+  const [incomeAmount, rentAmount, fixedAmount, monthsAmount, goalAmount] = amounts;
+  const fixedSpend = rentAmount + fixedAmount;
+  const remainingBeforeSaving = incomeAmount - fixedSpend;
+  const monthlySaving = goalAmount / monthsAmount;
   const disposableAfterSaving = remainingBeforeSaving - monthlySaving;
-  const fmt = (n) => Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.00$/, "");
+  const fmt = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.00$/, "");
 
   return [
     "【本地精确计算】",
-    `月收入：${fmt(income)}`,
-    `房租：${fmt(rent)}`,
-    `固定支出：${fmt(fixed)}`,
+    `月收入：${fmt(incomeAmount)}`,
+    `房租：${fmt(rentAmount)}`,
+    `固定支出：${fmt(fixedAmount)}`,
     `房租+固定支出：${fmt(fixedSpend)}`,
     `未储蓄前每月剩余：${fmt(remainingBeforeSaving)}`,
-    `目标金额：${fmt(goal)}`,
-    `目标周期：${fmt(months)} 个月`,
+    `目标金额：${fmt(goalAmount)}`,
+    `目标周期：${fmt(monthsAmount)} 个月`,
     `每月需要存：${fmt(monthlySaving)}`,
     `完成储蓄后每月可支配：${fmt(disposableAfterSaving)}`,
   ].join("\n");

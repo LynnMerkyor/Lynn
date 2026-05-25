@@ -1,4 +1,4 @@
-import fs from "fs";
+import fs, { type Dirent, type Stats } from "fs";
 import path from "path";
 
 import {
@@ -25,17 +25,73 @@ const SKIP_DIRS = new Set([
 const DOC_EXT_RE = /\.(?:md|markdown|txt|todo|log)$/i;
 const NOTE_NAME_RE = /(?:笺|便签|工作|清单|待办|计划|优先|jian|note|todo|task|plan|readme)/i;
 
-function safeStat(filePath) {
+interface WorkspaceEntry {
+  rel: string;
+  full: string;
+  isDir: boolean;
+  size: number;
+  mtimeMs: number;
+}
+
+interface WorkspaceDocument extends WorkspaceEntry {
+  preview: string;
+}
+
+interface WalkOptions {
+  maxDepth?: number;
+  maxEntries?: number;
+}
+
+interface WorkspaceOptions {
+  promptText?: unknown;
+  cwd?: unknown;
+  maxEntries?: number;
+  maxDocs?: number;
+  maxDocChars?: number;
+  now?: Date;
+}
+
+type WorkspaceSnapshot = {
+  ok: true;
+  root: string;
+  promptText: string;
+  now: Date;
+  entries: WorkspaceEntry[];
+  docs: WorkspaceDocument[];
+} | {
+  ok: false;
+  root: string;
+  promptText: string;
+  now: Date;
+  entries: WorkspaceEntry[];
+  docs: WorkspaceDocument[];
+  error: string;
+};
+
+export type LocalWorkspaceDirectReply = {
+  ok: false;
+  root: string;
+  entriesCount: number;
+  text: string;
+} | {
+  ok: true;
+  root: string;
+  entriesCount: number;
+  docsCount: number;
+  text: string;
+};
+
+function safeStat(filePath: string): Stats | null {
   try { return fs.statSync(filePath); } catch { return null; }
 }
 
-function safeReadDir(dir) {
+function safeReadDir(dir: string): Dirent[] {
   try { return fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; }
 }
 
-function extractExplicitWorkspacePath(promptText) {
+function extractExplicitWorkspacePath(promptText: unknown): string {
   const text = String(promptText || "");
-  const matches = [];
+  const matches: string[] = [];
   for (const match of text.matchAll(ABSOLUTE_PATH_RE)) {
     const raw = String(match[1] || "").replace(/[，。；;:：,.]+$/g, "");
     if (raw) matches.push(raw);
@@ -51,22 +107,23 @@ function extractExplicitWorkspacePath(promptText) {
   return matches[0] ? path.resolve(matches[0]) : "";
 }
 
-function formatSize(bytes) {
+function formatSize(bytes: unknown): string {
   const n = Number(bytes || 0);
   if (n < 1024) return `${n}B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
   return `${(n / 1024 / 1024).toFixed(1)}MB`;
 }
 
-function toPosixPath(filePath) {
+function toPosixPath(filePath: unknown): string {
   return String(filePath || "").split(path.sep).join("/");
 }
 
-function walkWorkspace(root, { maxDepth = 2, maxEntries = 80 } = {}) {
-  const entries = [];
-  const queue = [{ dir: root, rel: "", depth: 0 }];
+function walkWorkspace(root: string, { maxDepth = 2, maxEntries = 80 }: WalkOptions = {}): WorkspaceEntry[] {
+  const entries: WorkspaceEntry[] = [];
+  const queue: Array<{ dir: string; rel: string; depth: number }> = [{ dir: root, rel: "", depth: 0 }];
   while (queue.length && entries.length < maxEntries) {
     const current = queue.shift();
+    if (!current) break;
     const dirents = safeReadDir(current.dir)
       .filter((item) => !item.name.startsWith("."))
       .sort((a, b) => {
@@ -94,14 +151,14 @@ function walkWorkspace(root, { maxDepth = 2, maxEntries = 80 } = {}) {
   return entries;
 }
 
-function scoreDoc(entry) {
+function scoreDoc(entry: WorkspaceEntry): number {
   const nameScore = NOTE_NAME_RE.test(entry.rel) ? 100 : 0;
   const rootScore = entry.rel.includes("/") ? 0 : 30;
   const recentScore = Math.max(0, Math.min(30, Math.floor((entry.mtimeMs || 0) / 86_400_000_000)));
   return nameScore + rootScore + recentScore;
 }
 
-function pickDocuments(entries, maxDocs = 6) {
+function pickDocuments(entries: WorkspaceEntry[], maxDocs = 6): WorkspaceEntry[] {
   return entries
     .filter((entry) => !entry.isDir && DOC_EXT_RE.test(entry.rel))
     .filter((entry) => entry.size > 0 && entry.size <= 120_000)
@@ -109,18 +166,19 @@ function pickDocuments(entries, maxDocs = 6) {
     .slice(0, maxDocs);
 }
 
-function readDocumentPreview(entry, maxChars) {
+function readDocumentPreview(entry: WorkspaceEntry, maxChars: number): string {
   try {
     const raw = fs.readFileSync(entry.full, "utf8");
     const text = raw.replace(/\0/g, "").trim();
     if (text.length <= maxChars) return text;
     return `${text.slice(0, maxChars)}\n\n[内容过长，已截断 ${text.length - maxChars} 字]`;
   } catch (err) {
-    return `[读取失败: ${err?.message || err}]`;
+    const message = err && typeof err === "object" && "message" in err ? err.message : err;
+    return `[读取失败: ${message || err}]`;
   }
 }
 
-function extractOpenTasks(text) {
+function extractOpenTasks(text: unknown): string[] {
   return String(text || "")
     .split("\n")
     .map((line) => line.trim())
@@ -130,7 +188,7 @@ function extractOpenTasks(text) {
     .slice(0, 6);
 }
 
-function getSnapshot({ promptText, cwd, maxEntries = 80, maxDocs = 6, maxDocChars = 2600, now = new Date() } = {}) {
+function getSnapshot({ promptText, cwd, maxEntries = 80, maxDocs = 6, maxDocChars = 2600, now = new Date() }: WorkspaceOptions = {}): WorkspaceSnapshot {
   const explicitRoot = extractExplicitWorkspacePath(promptText);
   const root = explicitRoot || path.resolve(String(cwd || process.cwd()));
   const stat = safeStat(root);
@@ -160,13 +218,13 @@ function getSnapshot({ promptText, cwd, maxEntries = 80, maxDocs = 6, maxDocChar
   };
 }
 
-function formatEntryLine(entry) {
+function formatEntryLine(entry: WorkspaceEntry | null | undefined): string {
   if (!entry) return "";
   if (entry.isDir) return `- [目录] ${entry.rel}`;
   return `- [文件] ${entry.rel} · ${formatSize(entry.size)}`;
 }
 
-function summarizeImportantDocs(docs) {
+function summarizeImportantDocs(docs: WorkspaceDocument[]): string {
   return docs
     .slice(0, 5)
     .map((doc) => {
@@ -179,9 +237,9 @@ function summarizeImportantDocs(docs) {
     .join("\n");
 }
 
-export function shouldAttachLocalWorkspaceContext(promptText, routeIntent) {
+export function shouldAttachLocalWorkspaceContext(promptText: unknown, routeIntent?: string | null): boolean {
   const intent = normalizeRouteIntent(routeIntent);
-  if (![ROUTE_INTENTS.UTILITY, ROUTE_INTENTS.CODING].includes(intent)) return false;
+  if (intent !== ROUTE_INTENTS.UTILITY && intent !== ROUTE_INTENTS.CODING) return false;
   const text = String(promptText || "");
   if (isInternalAutomationPrompt(text)) return false;
   return LOCAL_WORKSPACE_RE.test(text) && LOCAL_ACTION_RE.test(text);
@@ -194,7 +252,7 @@ export function buildLocalWorkspaceDirectReply({
   maxDocs = 6,
   maxDocChars = 2600,
   now = new Date(),
-} = {}) {
+}: WorkspaceOptions = {}): LocalWorkspaceDirectReply {
   const snapshot = getSnapshot({ promptText, cwd, maxEntries, maxDocs, maxDocChars, now });
   if (!snapshot.ok) {
     return {
@@ -254,7 +312,7 @@ export function buildLocalWorkspaceContext({
   maxDocs = 6,
   maxDocChars = 2600,
   now = new Date(),
-} = {}) {
+}: WorkspaceOptions = {}): string {
   const snapshot = getSnapshot({ promptText, cwd, maxEntries, maxDocs, maxDocChars, now });
   const root = snapshot.root;
   const lines = [
