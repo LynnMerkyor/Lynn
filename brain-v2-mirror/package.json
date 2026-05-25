@@ -2,13 +2,14 @@
   "name": "lobster-brain-v2",
   "version": "0.0.1",
   "type": "module",
-  "main": "server.js",
+  "main": "server.ts",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
+    "start": "tsx server.ts",
+    "dev": "tsx watch server.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "tsx scripts/smoke.ts",
+    "tsc": "tsc --noEmit"
   },
   "dependencies": {
     "dotenv": "^16.0.0",
@@ -16,6 +17,9 @@
     "undici": "^7.25.0"
   },
   "devDependencies": {
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.5"
   }
 }

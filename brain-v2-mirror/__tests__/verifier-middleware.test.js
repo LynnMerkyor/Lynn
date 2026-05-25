@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { verifyToolResult, _internals } from '../verifier-middleware.mjs';
+import { verifyToolResult, _internals } from '../verifier-middleware.js';
 
 describe('verifier middleware BYOK-equality shim', () => {
   it('never grades or rejects tool output', async () => {

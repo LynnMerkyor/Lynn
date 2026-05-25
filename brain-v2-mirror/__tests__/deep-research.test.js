@@ -1,7 +1,7 @@
 // Brain v2 · deep-research module unit tests
 // Tests config logic. Does NOT call real LLMs (those are in scripts/deep-research-smoke.mjs).
 import { describe, it, expect } from 'vitest';
-import { _internals } from '../deep-research.mjs';
+import { _internals } from '../deep-research.js';
 
 const {
   DEFAULT_CANDIDATES,
