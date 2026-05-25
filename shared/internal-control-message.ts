@@ -1,4 +1,4 @@
-const INTERNAL_CONTROL_PATTERNS = [
+const INTERNAL_CONTROL_PATTERNS: readonly RegExp[] = [
   /【严格执行要求】/u,
   /上一轮把工具调用写成了正文文本/u,
   /上一轮错误地说自己没有\s*shell/u,
@@ -11,7 +11,7 @@ const INTERNAL_CONTROL_PATTERNS = [
   /改为使用真实工具接口继续完成当前任务/u,
 ];
 
-export function isInternalRecoveryPromptText(text) {
+export function isInternalRecoveryPromptText(text: string | null | undefined): boolean {
   const normalized = String(text || "").trim();
   if (!normalized) return false;
   return INTERNAL_CONTROL_PATTERNS.some((pattern) => pattern.test(normalized));

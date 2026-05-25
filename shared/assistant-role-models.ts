@@ -8,10 +8,21 @@ import {
 } from "./brain-provider.js";
 import { findModel } from "./model-ref.js";
 
-const VALID_ASSISTANT_ROLES = new Set(["lynn", "hanako", "butter"]);
-const VALID_MODEL_PURPOSES = new Set(["chat", "review", "utility", "utility_large"]);
+export type AssistantRole = "lynn" | "hanako" | "butter";
+export type ModelPurpose = "chat" | "review" | "utility" | "utility_large";
+export type ModelRef = { provider: string; id: string };
+export type AvailableModelRef = { id: string; provider?: string | null };
 
-function _d(encoded) {
+type AgentRoleConfig = {
+  agent?: {
+    yuan?: string | null;
+  } | null;
+} | null | undefined;
+
+const VALID_ASSISTANT_ROLES = new Set<string>(["lynn", "hanako", "butter"]);
+const VALID_MODEL_PURPOSES = new Set<string>(["chat", "review", "utility", "utility_large"]);
+
+function _d(encoded: string): string {
   try {
     const raw = typeof atob === "function"
       ? atob(encoded)
@@ -22,14 +33,14 @@ function _d(encoded) {
   }
 }
 
-function _ref(providerEncoded, idEncoded) {
+function _ref(providerEncoded: string, idEncoded: string): Readonly<ModelRef> {
   return Object.freeze({
     provider: providerEncoded === BRAIN_PROVIDER_ID ? BRAIN_PROVIDER_ID : _d(providerEncoded),
     id: _d(idEncoded),
   });
 }
 
-export const USER_FACING_MODEL_LABELS = Object.freeze({
+export const USER_FACING_MODEL_LABELS: Readonly<Record<string, string>> = Object.freeze({
   lynn: "默认工作模型",
   hanako: "默认复查模型",
   butter: "默认复查模型",
@@ -39,7 +50,7 @@ export const USER_FACING_MODEL_LABELS = Object.freeze({
   brain: getBrainDisplayName(),
 });
 
-export const ASSISTANT_ROLE_MODEL_FALLBACKS = Object.freeze({
+export const ASSISTANT_ROLE_MODEL_FALLBACKS: Readonly<Record<string, readonly ModelRef[]>> = Object.freeze({
   lynn: Object.freeze([
     Object.freeze({ provider: BRAIN_PROVIDER_ID, id: BRAIN_CHAT_MODEL_ID }),
     _ref("a2Vlc3BlZWQ=", "dGFoYy1rZWVzcGVlZA=="),
@@ -68,23 +79,26 @@ export const ASSISTANT_ROLE_MODEL_FALLBACKS = Object.freeze({
   ]),
 });
 
-export function normalizeAssistantRole(role) {
+export function normalizeAssistantRole(role?: string | null): AssistantRole | null {
   const value = String(role || "").trim().toLowerCase();
   if (!value) return null;
   if (value === "ming") return "lynn";
-  return VALID_ASSISTANT_ROLES.has(value) ? value : null;
+  return VALID_ASSISTANT_ROLES.has(value) ? value as AssistantRole : null;
 }
 
-function normalizePurpose(purpose) {
+function normalizePurpose(purpose?: string | null): ModelPurpose | null {
   const value = String(purpose || "").trim().toLowerCase();
-  return VALID_MODEL_PURPOSES.has(value) ? value : null;
+  return VALID_MODEL_PURPOSES.has(value) ? value as ModelPurpose : null;
 }
 
-export function getAssistantRoleFromConfig(agentConfig) {
+export function getAssistantRoleFromConfig(agentConfig: AgentRoleConfig): AssistantRole | null {
   return normalizeAssistantRole(agentConfig?.agent?.yuan);
 }
 
-export function getRoleDefaultModelRefs(roleOrPurpose, purpose) {
+export function getRoleDefaultModelRefs(
+  roleOrPurpose?: string | null,
+  purpose?: ModelPurpose | null,
+): ModelRef[] {
   const normalizedRole = normalizeAssistantRole(roleOrPurpose);
   const normalizedPurpose = normalizePurpose(purpose)
     || (normalizedRole ? normalizedRole : normalizePurpose(roleOrPurpose));
@@ -107,16 +121,23 @@ export function getRoleDefaultModelRefs(roleOrPurpose, purpose) {
   return [];
 }
 
-export function resolveRoleDefaultModel(availableModels, roleOrPurpose, purpose) {
+export function resolveRoleDefaultModel(
+  availableModels: readonly AvailableModelRef[],
+  roleOrPurpose?: string | null,
+  purpose?: ModelPurpose | null,
+): AvailableModelRef | null {
   const refs = getRoleDefaultModelRefs(roleOrPurpose, purpose);
   for (const ref of refs) {
-    const match = findModel(availableModels, ref.id, ref.provider);
+    const match = findModel(availableModels, ref.id, ref.provider) as AvailableModelRef | null | undefined;
     if (match) return match;
   }
   return null;
 }
 
-export function getUserFacingRoleModelLabel(roleOrPurpose, purpose) {
+export function getUserFacingRoleModelLabel(
+  roleOrPurpose?: string | null,
+  purpose?: ModelPurpose | null,
+): string | null {
   const normalizedRole = normalizeAssistantRole(roleOrPurpose);
   const normalizedPurpose = normalizePurpose(purpose)
     || (normalizedRole ? normalizedRole : normalizePurpose(roleOrPurpose));
@@ -131,11 +152,21 @@ export function getUserFacingRoleModelLabel(roleOrPurpose, purpose) {
   return null;
 }
 
-function modelMatchesAnyRef(modelId, provider, refs) {
+function modelMatchesAnyRef(modelId: string, provider: string, refs: readonly ModelRef[]): boolean {
   return refs.some((ref) => ref.id === modelId && (!ref.provider || !provider || ref.provider === provider));
 }
 
-export function getUserFacingModelAlias({ modelId, provider, role, purpose } = {}) {
+export function getUserFacingModelAlias({
+  modelId,
+  provider,
+  role,
+  purpose,
+}: {
+  modelId?: string | null;
+  provider?: string | null;
+  role?: string | null;
+  purpose?: ModelPurpose | null;
+} = {}): string | null {
   const id = String(modelId || "").trim();
   const normalizedProvider = String(provider || "").trim();
   if (!id) return null;
