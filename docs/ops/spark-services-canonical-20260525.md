@@ -50,7 +50,7 @@ Kimi K2.6
 Step / MiniMax
 ```
 
-Brain v2 mirror(Tencent `82.156.182.240`)→ `127.0.0.1:18098`(via reverse tunnel)→ Spark `127.0.0.1:18098`(`lynn-apex-mtp-llamacpp.service`)。
+Brain v2 mirror(Tencent `<tencent-edge-ip>`)→ `127.0.0.1:18098`(via reverse tunnel)→ Spark `127.0.0.1:18098`(`lynn-apex-mtp-llamacpp.service`)。
 
 ---
 
@@ -103,15 +103,15 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=merkyor
-Group=merkyor
-WorkingDirectory=/home/merkyor
+User=<spark-user>
+Group=<spark-user>
+WorkingDirectory=/home/<spark-user>
 Nice=-5
 LimitNOFILE=65536
 
-ExecStartPre=/bin/sh -c 'test -f /home/merkyor/models/Qwen3.6-35B-A3B-APEX-MTP-GGUF/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf'
-ExecStart=/home/merkyor/build/llama.cpp/build-cuda-sm121/bin/llama-server \
-  -m /home/merkyor/models/Qwen3.6-35B-A3B-APEX-MTP-GGUF/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf \
+ExecStartPre=/bin/sh -c 'test -f /home/<spark-user>/models/Qwen3.6-35B-A3B-APEX-MTP-GGUF/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf'
+ExecStart=/home/<spark-user>/build/llama.cpp/build-cuda-sm121/bin/llama-server \
+  -m /home/<spark-user>/models/Qwen3.6-35B-A3B-APEX-MTP-GGUF/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf \
   --host 127.0.0.1 \
   --port 18098 \
   -a qwen36-35b-a3b-apex-mtp \

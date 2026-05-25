@@ -13,7 +13,7 @@
 | CUDA | 13.0 |
 | llama.cpp build | **161 (1acee6b)**,GNU 13.3.0 for Linux aarch64 |
 | systemd unit | `lynn-apex-mtp-llamacpp.service` |
-| Model file | `/home/merkyor/models/Qwen3.6-35B-A3B-APEX-MTP-GGUF/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf` |
+| Model file | `/home/<spark-user>/models/Qwen3.6-35B-A3B-APEX-MTP-GGUF/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf` |
 | Model size | 26 GB (Q4_K_M + 嵌入式 MTP draft tensors) |
 | n_params | 35,505,251,456 |
 | n_vocab | 248,320 |
