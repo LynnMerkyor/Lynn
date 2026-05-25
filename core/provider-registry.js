@@ -150,26 +150,13 @@ const BUILTIN_PLUGINS = [
 
 // ── Types (JSDoc) ─────────────────────────────────────────────────────────────
 
-/**
- * @typedef {object} ProviderPlugin
- * @property {string} id
- * @property {string} displayName
- * @property {"api-key"|"oauth"|"none"} authType
- * @property {string} defaultBaseUrl
- * @property {string} defaultApi
- * @property {string} [authJsonKey] - OAuth provider 在 auth.json 中的 key（不同于 id 时）
- */
-
-/**
- * @typedef {object} ProviderEntry
- * @property {string} id
- * @property {string} displayName
- * @property {"api-key"|"oauth"|"none"} authType
- * @property {string} baseUrl        - 生效的 base URL（用户覆盖 > 插件默认）
- * @property {string} api            - 生效的 API 协议
- * @property {string} [authJsonKey]
- * @property {boolean} isBuiltin     - 是否为内置插件
- */
+/** @typedef {import("./types.d.ts").ModelId} ModelId */
+/** @typedef {import("./types.d.ts").ProviderConfig} ProviderConfig */
+/** @typedef {import("./types.d.ts").ProviderCredentials} ProviderCredentials */
+/** @typedef {import("./types.d.ts").ProviderEntry} ProviderEntry */
+/** @typedef {import("./types.d.ts").ProviderId} ProviderId */
+/** @typedef {import("./types.d.ts").ProviderModelEntry} ProviderModelEntry */
+/** @typedef {import("./types.d.ts").ProviderPlugin} ProviderPlugin */
 
 // ── ProviderRegistry ─────────────────────────────────────────────────────────
 
@@ -179,9 +166,9 @@ export class ProviderRegistry {
    */
   constructor(lynnHome) {
     this._lynnHome = lynnHome;
-    /** @type {Map<string, ProviderPlugin>} id → plugin */
+    /** @type {Map<ProviderId, ProviderPlugin>} id → plugin */
     this._plugins = new Map();
-    /** @type {Map<string, ProviderEntry>} id → entry（合并后） */
+    /** @type {Map<ProviderId, ProviderEntry>} id → entry（合并后） */
     this._entries = new Map();
 
     // 注册内置插件
@@ -202,14 +189,20 @@ export class ProviderRegistry {
     this._entries.delete(plugin.id);
   }
 
-  /** 从 _lynnHome 直接读 added-models.yaml（不走全局 config-loader） */
+  /**
+   * 从 _lynnHome 直接读 added-models.yaml（不走全局 config-loader）
+   * @returns {Record<ProviderId, ProviderConfig>}
+   */
   _loadAddedModels() {
     const ymlPath = path.join(this._lynnHome, "added-models.yaml");
     const raw = safeReadYAMLSync(ymlPath, {}, YAML) || {};
     return raw.providers || {};
   }
 
-  /** 将 providers 对象写入 _lynnHome/added-models.yaml */
+  /**
+   * 将 providers 对象写入 _lynnHome/added-models.yaml
+   * @param {Record<ProviderId, ProviderConfig>} providers
+   */
   _saveAddedModels(providers) {
     const ymlPath = path.join(this._lynnHome, "added-models.yaml");
     // 读取现有文件以保留 _migrated 等顶层元数据
@@ -270,6 +263,10 @@ export class ProviderRegistry {
 
   /**
    * 合并插件声明和用户配置
+   * @param {ProviderPlugin} plugin
+   * @param {ProviderConfig} userConfig
+   * @param {boolean} isBuiltin
+   * @returns {ProviderEntry}
    * @private
    */
   _merge(plugin, userConfig, isBuiltin) {
@@ -286,7 +283,7 @@ export class ProviderRegistry {
 
   /**
    * 获取所有 provider entry（已合并）
-   * @returns {Map<string, ProviderEntry>}
+   * @returns {Map<ProviderId, ProviderEntry>}
    */
   getAll() {
     if (this._entries.size === 0) this.reload();
@@ -295,7 +292,7 @@ export class ProviderRegistry {
 
   /**
    * 获取单个 provider entry
-   * @param {string} providerId
+   * @param {ProviderId} providerId
    * @returns {ProviderEntry|null}
    */
   get(providerId) {
@@ -312,8 +309,8 @@ export class ProviderRegistry {
 
   /**
    * 批量获取 provider entry
-   * @param {string[]} providerIds
-   * @returns {Map<string, ProviderEntry>}
+   * @param {ProviderId[]} providerIds
+   * @returns {Map<ProviderId, ProviderEntry>}
    */
   getBatch(providerIds) {
     const result = new Map();
@@ -326,7 +323,7 @@ export class ProviderRegistry {
 
   /**
    * 列出所有 authType 为 "oauth" 的 provider id
-   * @returns {string[]}
+   * @returns {ProviderId[]}
    */
   getOAuthProviderIds() {
     const all = this.getAll();
@@ -338,8 +335,8 @@ export class ProviderRegistry {
   /**
    * 获取 OAuth provider 在 auth.json 中的实际 key
    * （部分 provider 的 authJsonKey 与 id 不同，如 minimax-oauth → minimax）
-   * @param {string} providerId
-   * @returns {string}
+   * @param {ProviderId} providerId
+   * @returns {ProviderId}
    */
   getAuthJsonKey(providerId) {
     return this.get(providerId)?.authJsonKey || providerId;
@@ -347,8 +344,8 @@ export class ProviderRegistry {
 
   /**
    * 获取某 provider 的默认模型列表（来自 lib/default-models.json）
-   * @param {string} providerId
-   * @returns {string[]}
+   * @param {ProviderId} providerId
+   * @returns {ModelId[]}
    */
   getDefaultModels(providerId) {
     return _defaultModels[providerId] || [];
@@ -357,8 +354,8 @@ export class ProviderRegistry {
   /**
    * 更新 provider 的用户配置（写 added-models.yaml）
    * 只更新非凭证字段（base_url / api / display_name / auth_type）
-   * @param {string} providerId
-   * @param {{ base_url?: string, api?: string, display_name?: string, auth_type?: string }} overrides
+   * @param {ProviderId} providerId
+   * @param {Pick<ProviderConfig, "base_url" | "api" | "display_name" | "auth_type">} overrides
    */
   setUserConfig(providerId, overrides) {
     const userConfig = this._loadAddedModels();
@@ -376,7 +373,7 @@ export class ProviderRegistry {
 
   /**
    * 删除一个 provider（仅从 added-models.yaml，内置插件的插件声明保留）
-   * @param {string} providerId
+   * @param {ProviderId} providerId
    */
   remove(providerId) {
     const userConfig = this._loadAddedModels();
@@ -393,7 +390,7 @@ export class ProviderRegistry {
 
   /**
    * 检查某个 id 是否是已知的 OAuth provider
-   * @param {string} providerId
+   * @param {ProviderId} providerId
    */
   isOAuth(providerId) {
     return this.get(providerId)?.authType === "oauth";
@@ -404,8 +401,8 @@ export class ProviderRegistry {
   /**
    * 读取 provider 的凭证信息（apiKey, baseUrl, api）
    * 从 added-models.yaml 读取用户配置值，baseUrl/api 不存在时回退到插件默认值
-   * @param {string} providerId
-   * @returns {{ apiKey: string, baseUrl: string, api: string } | null}
+   * @param {ProviderId} providerId
+   * @returns {ProviderCredentials | null}
    */
   getCredentials(providerId) {
     const userConfig = this._loadAddedModels();
@@ -423,8 +420,8 @@ export class ProviderRegistry {
   /**
    * 读取某 provider 在 added-models.yaml 中的模型 ID 列表
    * 模型条目可以是字符串或 {id, name?, context?, maxOutput?} 对象，统一提取 id
-   * @param {string} providerId
-   * @returns {string[]}
+   * @param {ProviderId} providerId
+   * @returns {ModelId[]}
    */
   getProviderModels(providerId) {
     const userConfig = this._loadAddedModels();
@@ -435,7 +432,7 @@ export class ProviderRegistry {
 
   /**
    * 返回 added-models.yaml 的原始数据（不经过插件合并）
-   * @returns {Record<string, any>}
+   * @returns {Record<ProviderId, ProviderConfig>}
    */
   getAllProvidersRaw() {
     return this._loadAddedModels();
@@ -444,8 +441,8 @@ export class ProviderRegistry {
   /**
    * 向某 provider 的 models 列表添加一个模型，立即持久化
    * 不会添加重复项（按 id 判断）
-   * @param {string} providerId
-   * @param {string | { id: string, name?: string, context?: number, maxOutput?: number }} model
+   * @param {ProviderId} providerId
+   * @param {ModelId | ProviderModelEntry} model
    */
   addModel(providerId, model) {
     const userConfig = this._loadAddedModels();
@@ -467,8 +464,8 @@ export class ProviderRegistry {
 
   /**
    * 从某 provider 的 models 列表移除一个模型（按 id 匹配），立即持久化
-   * @param {string} providerId
-   * @param {string} modelId
+   * @param {ProviderId} providerId
+   * @param {ModelId} modelId
    */
   removeModel(providerId, modelId) {
     const userConfig = this._loadAddedModels();
@@ -484,8 +481,8 @@ export class ProviderRegistry {
 
   /**
    * 创建或更新一个 provider 条目（合并写入 added-models.yaml）
-   * @param {string} providerId
-   * @param {Record<string, any>} data - 要写入的字段（api_key, base_url, api, models 等）
+   * @param {ProviderId} providerId
+   * @param {ProviderConfig} data - 要写入的字段（api_key, base_url, api, models 等）
    */
   saveProvider(providerId, data) {
     const userConfig = this._loadAddedModels();
@@ -496,7 +493,7 @@ export class ProviderRegistry {
 
   /**
    * 删除一个 provider（remove 的显式别名）
-   * @param {string} providerId
+   * @param {ProviderId} providerId
    */
   removeProvider(providerId) {
     this.remove(providerId);

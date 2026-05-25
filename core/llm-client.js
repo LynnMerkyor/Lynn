@@ -6,8 +6,19 @@ import {
 } from './client-agent-identity.js';
 import { getPooledDispatcher } from '../shared/http-pool.js';
 
+/** @typedef {import("./types.d.ts").LLMApi} LLMApi */
+/** @typedef {import("./types.d.ts").LLMContentBlock} LLMContentBlock */
+/** @typedef {import("./types.d.ts").LLMMessage} LLMMessage */
+/** @typedef {import("./types.d.ts").LLMRequest} LLMRequest */
+/** @typedef {import("./types.d.ts").LLMResponse} LLMResponse */
+/** @typedef {import("./types.d.ts").ToolCall} ToolCall */
+
 const DISPLAYABLE_TEXT_TYPES = new Set(["text", "output_text", "input_text", "refusal"]);
 
+/**
+ * @param {string | LLMContentBlock | null | undefined} value
+ * @returns {string}
+ */
 function extractTextValue(value) {
   if (typeof value === "string") return value;
   if (!value || typeof value !== "object") return "";
@@ -21,6 +32,10 @@ function extractTextValue(value) {
   return "";
 }
 
+/**
+ * @param {unknown} block
+ * @returns {boolean}
+ */
 function isReasoningLikeBlock(block) {
   if (!block || typeof block !== "object") return false;
   const type = String(block.type || "").toLowerCase();
@@ -31,6 +46,9 @@ function isReasoningLikeBlock(block) {
     || typeof block.reasoning_content === "string";
 }
 
+/**
+ * @param {LLMMessage["content"]} content
+ */
 function collectContentStats(content) {
   const stats = {
     textParts: [],
@@ -103,6 +121,10 @@ function stripInternalProgressTags(value) {
     .replace(/<\/lynn_tool_progress>/giu, "");
 }
 
+/**
+ * @param {LLMApi} api
+ * @param {LLMResponse | null} data
+ */
 function analyzeLlmResponse(api, data) {
   if (api === "anthropic-messages") {
     return finalizeResponseAnalysis(collectContentStats(data?.content));
@@ -189,6 +211,10 @@ function parseSseJsonEvents(rawText) {
   return events;
 }
 
+/**
+ * @param {string[]} parts
+ * @param {LLMMessage["content"]} value
+ */
 function appendDeltaContent(parts, value) {
   if (typeof value === "string") {
     if (value) parts.push(value);
@@ -198,6 +224,10 @@ function appendDeltaContent(parts, value) {
   if (stats.textParts.length > 0) parts.push(stats.textParts.join("\n"));
 }
 
+/**
+ * @param {string} rawText
+ * @returns {LLMResponse | null}
+ */
 function normalizeOpenAIStreamPayload(rawText) {
   const events = parseSseJsonEvents(rawText);
   if (events.length === 0) return null;
@@ -250,6 +280,11 @@ function normalizeOpenAIStreamPayload(rawText) {
   };
 }
 
+/**
+ * @param {string} rawText
+ * @param {string} contentType
+ * @returns {LLMResponse | null}
+ */
 function parseLlmResponsePayload(rawText, contentType) {
   try {
     return rawText ? JSON.parse(rawText) : null;
@@ -278,20 +313,7 @@ function parseLlmResponsePayload(rawText, contentType) {
 /**
  * 统一非流式文本生成。
  *
- * @param {object} opts
- * @param {string} opts.api            API 协议
- * @param {string} opts.apiKey         API key（本地模型可省略）
- * @param {string} opts.baseUrl        Provider base URL
- * @param {string} opts.model          模型 ID
- * @param {string} [opts.provider]     Provider ID
- * @param {string[]} [opts.quirks]     Provider quirk flags (e.g. ["enable_thinking"])
- * @param {string} [opts.systemPrompt] System prompt
- * @param {Array}  [opts.messages]     消息数组 [{ role, content }]
- * @param {number} [opts.temperature]  温度 (default 0.3)
- * @param {number} [opts.maxTokens]    最大输出 token (default 512)
- * @param {number} [opts.timeoutMs]    超时毫秒 (default 60000)
- * @param {AbortSignal} [opts.signal]  外部取消信号
- * @param {Record<string, string>} [opts.requestHeaders] 额外请求头
+ * @param {LLMRequest} opts
  * @returns {Promise<string>} 生成的文本
  */
 export async function callText({
