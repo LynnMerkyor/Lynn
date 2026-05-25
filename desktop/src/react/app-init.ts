@@ -20,9 +20,7 @@ import { updateLayout } from './components/SidebarLayout';
 import { initErrorBusBridge } from './errors/error-bus-bridge';
 import { syncRuntimeSnapshot } from './utils/runtime-snapshot';
 import { JARVIS_RUNTIME_TOGGLE_EVENT } from './services/jarvis-runtime-events';
-// @ts-expect-error — shared JS module
 import { errorBus as _errorBus } from '../../../shared/error-bus.js';
-// @ts-expect-error — shared JS module
 import { AppError as _AppError } from '../../../shared/errors.js';
 
 declare const i18n: {

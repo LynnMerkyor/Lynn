@@ -7,9 +7,7 @@
 import { useStore } from '../stores';
 import { hanaFetch } from '../hooks/use-hana-fetch';
 import { parseSharedModelRef } from './model-ref';
-// @ts-expect-error — shared JS module
 import { errorBus } from '../../../../shared/error-bus.js';
-// @ts-expect-error — shared JS module
 import { AppError } from '../../../../shared/errors.js';
 
 // ── 连接状态 ──

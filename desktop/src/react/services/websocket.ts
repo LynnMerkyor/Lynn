@@ -10,9 +10,7 @@ import { handleServerMessage, applyStreamingStatus } from './ws-message-handler'
 import { requestStreamResume, injectHandlers } from './stream-resume';
 import { useStore } from '../stores';
 import { setStatus } from '../utils/ui-helpers';
-// @ts-expect-error -- shared JS module, no type declarations
 import { AppError } from '../../../../shared/errors.js';
-// @ts-expect-error -- shared JS module, no type declarations
 import { errorBus } from '../../../../shared/error-bus.js';
 
 // ── 模块级 WS 实例 ──
