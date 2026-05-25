@@ -13,6 +13,13 @@ describe("stream sanitizer pass-through", () => {
     });
   });
 
+  it("normalizes nullish chunks to an empty pass-through string", () => {
+    expect(stripStreamingPseudoToolBlocks({}, null)).toEqual({
+      text: "",
+      suppressed: false,
+    });
+  });
+
   it("passes pseudo-tool-looking text through unchanged", () => {
     const raw = "</think>\n<|tool_code_begin|>bash\nfind ~/Downloads -name '*.zip'\n<|tool_code_end|>\n完成。";
     expect(stripStreamingPseudoToolBlocks({}, raw)).toEqual({

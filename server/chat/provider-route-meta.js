@@ -1,3 +1,16 @@
+// @ts-check
+
+/**
+ * @typedef {{ id?: unknown, provider?: unknown, providerId?: unknown, name?: unknown, reason?: unknown, status?: unknown, error?: unknown }} RawProviderFallbackHop
+ * @typedef {{ id: string, reason?: string }} ProviderFallbackHop
+ * @typedef {{ [key: string]: any, assistantMessageEvent?: ProviderRouteEvent | null }} ProviderRouteEvent
+ * @typedef {{ activeProvider: string, fallbackFrom?: ProviderFallbackHop[] }} ProviderRouteMeta
+ */
+
+/**
+ * @param {RawProviderFallbackHop | null | undefined} raw
+ * @returns {ProviderFallbackHop | null}
+ */
 export function normalizeProviderFallbackHop(raw) {
   const id = String(raw?.id || raw?.provider || raw?.providerId || raw?.name || "").trim();
   if (!id) return null;
@@ -5,6 +18,13 @@ export function normalizeProviderFallbackHop(raw) {
   return reason ? { id, reason } : { id };
 }
 
+/**
+ * Extracts the normalized provider routing metadata from SSE or websocket
+ * event envelopes.
+ *
+ * @param {ProviderRouteEvent | null | undefined} event
+ * @returns {ProviderRouteMeta | null}
+ */
 export function extractProviderRouteMeta(event) {
   if (!event || typeof event !== "object") return null;
   const assistantEvent = event.assistantMessageEvent && typeof event.assistantMessageEvent === "object"
@@ -45,8 +65,9 @@ export function extractProviderRouteMeta(event) {
     : (Array.isArray(source.fallback_from)
       ? source.fallback_from
       : (Array.isArray(event.fallbackFrom) ? event.fallbackFrom : event.fallback_from));
+  /** @type {ProviderFallbackHop[]} */
   const fallbackFrom = Array.isArray(rawFallback)
-    ? rawFallback.map(normalizeProviderFallbackHop).filter(Boolean).slice(0, 8)
+    ? rawFallback.map(normalizeProviderFallbackHop).filter((hop) => hop !== null).slice(0, 8)
     : [];
   return {
     activeProvider,

@@ -1,3 +1,5 @@
+// @ts-check
+
 import { inferReportResearchKind } from "./report-research-context.js";
 import {
   buildBudgetCalculationContext,
@@ -10,20 +12,34 @@ import {
   shouldAttachLocalQwen35BenchContext,
 } from "./local-qwen35-bench-context.js";
 
+/**
+ * @typedef {"run_llm_again" | "prefetch_then_run_or_stop"} ToolUseBehaviorName
+ * @typedef {{ isBrain?: boolean, [key: string]: any }} ModelInfoLike
+ * @typedef {{ modelInfo?: ModelInfoLike | null }} ToolUseBehaviorOptions
+ * @typedef {{ behavior: ToolUseBehaviorName, reason: string, reportKind: string, budgetContext: string, effectivePromptText: string, toolName?: string }} ToolUseDecision
+ */
+
+/** @type {Readonly<{ RUN_LLM_AGAIN: "run_llm_again", PREFETCH_THEN_RUN_OR_STOP: "prefetch_then_run_or_stop" }>} */
 export const TOOL_USE_BEHAVIOR = Object.freeze({
   RUN_LLM_AGAIN: "run_llm_again",
   PREFETCH_THEN_RUN_OR_STOP: "prefetch_then_run_or_stop",
 });
 
+/**
+ * @param {unknown} promptText
+ * @param {ToolUseBehaviorOptions} [opts]
+ * @returns {ToolUseDecision}
+ */
 export function resolveInitialToolUseBehavior(promptText, opts = {}) {
   const text = String(promptText || "");
-  if (shouldAttachLocalQwen35BenchContext(text, opts.modelInfo)) {
+  const modelInfo = opts.modelInfo || undefined;
+  if (shouldAttachLocalQwen35BenchContext(text, modelInfo)) {
     return {
       behavior: TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN,
       reason: "local_qwen35_benchmark_context",
       reportKind: "",
       budgetContext: "",
-      effectivePromptText: attachLocalQwen35BenchContext(text, opts.modelInfo),
+      effectivePromptText: attachLocalQwen35BenchContext(text, modelInfo),
     };
   }
 
@@ -42,7 +58,7 @@ export function resolveInitialToolUseBehavior(promptText, opts = {}) {
   // evidence. This does not replace the model answer; it only supplies the
   // current facts so a slow remote tool chain cannot turn weather/market asks
   // into an invisible timeout.
-  if (!suppressLocalPrefetch && shouldPrefetchReportContext(reportKind, opts.modelInfo)) {
+  if (!suppressLocalPrefetch && shouldPrefetchReportContext(reportKind, modelInfo)) {
     return {
       behavior: TOOL_USE_BEHAVIOR.PREFETCH_THEN_RUN_OR_STOP,
       reason: "report_context_prefetch",
@@ -62,6 +78,10 @@ export function resolveInitialToolUseBehavior(promptText, opts = {}) {
   };
 }
 
+/**
+ * @param {unknown} context
+ * @returns {string}
+ */
 function sanitizeContextForModel(context) {
   return String(context || "")
     .split(/\r?\n/)
@@ -79,6 +99,12 @@ function sanitizeContextForModel(context) {
     .trim();
 }
 
+/**
+ * @param {unknown} promptText
+ * @param {unknown} reportContext
+ * @param {unknown} [budgetContext]
+ * @returns {string}
+ */
 export function buildPrefetchAugmentedPrompt(promptText, reportContext, budgetContext = "") {
   // Keep this as evidence only. Do not add task instructions such as
   // "answer based on the material" or "think step by step"; thinking mode

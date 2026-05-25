@@ -1,3 +1,5 @@
+// @ts-check
+
 /**
  * Legacy stream sanitizer compatibility shim.
  *
@@ -6,10 +8,22 @@
  * by the structured event pipeline.
  */
 
+/**
+ * @typedef {{ text: string, suppressed: false }} SanitizedStreamChunk
+ */
+
+/**
+ * @param {unknown} _ss
+ * @param {unknown} chunk
+ * @returns {SanitizedStreamChunk}
+ */
 export function stripStreamingPseudoToolBlocks(_ss, chunk) {
   return { text: String(chunk || ""), suppressed: false };
 }
 
+/**
+ * @returns {false}
+ */
 export function containsNonProgressPseudoToolSimulation() {
   return false;
 }

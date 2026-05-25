@@ -1,7 +1,16 @@
+// @ts-check
+
 import fs from "fs";
 import { debugLog } from "../../lib/debug-log.js";
 import { TOOL_USE_BEHAVIOR } from "./tool-use-behavior.js";
 import { persistedChatMessageText } from "./session-persistence.js";
+
+/**
+ * @typedef {{ isLocalModel?: boolean, hasImages?: boolean, rehydratedMutation?: boolean, toolBehavior?: string }} LocalQwen35BridgeOptions
+ * @typedef {{ getThinkingLevel?: () => unknown, preferences?: { getThinkingLevel?: () => unknown } }} ThinkingEngineLike
+ * @typedef {{ role: "user" | "assistant", content: string }} LocalQwen35Message
+ * @typedef {{ enableThinking?: boolean, assistantText?: unknown, reasoningText?: unknown }} LocalQwen35RetryInput
+ */
 
 export const LOCAL_QWEN35_DIRECT_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_CHARS || 8000);
 export const LOCAL_QWEN35_DIRECT_ENDPOINT = process.env.LYNN_LOCAL_QWEN35_ENDPOINT || "http://127.0.0.1:18099/v1/chat/completions";
@@ -14,6 +23,11 @@ export const LOCAL_QWEN35_DIRECT_HISTORY_MAX_MESSAGES = Number(process.env.LYNN_
 export const LOCAL_QWEN35_DIRECT_HISTORY_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_HISTORY_MAX_CHARS || 8000);
 export const LOCAL_QWEN35_EMPTY_CONTENT_FALLBACK_MESSAGE = "本地模型这次只输出了思考过程,没有返回可见正文。已保留思考记录;请关闭深研重试,或临时切到默认云端模型。";
 
+/**
+ * @param {unknown} [promptText]
+ * @param {LocalQwen35BridgeOptions} [opts]
+ * @returns {boolean}
+ */
 export function shouldUseLocalQwen35DirectBridge(promptText = "", opts = {}) {
   if (!opts.isLocalModel) return false;
   if (opts.hasImages) return false;
@@ -24,10 +38,18 @@ export function shouldUseLocalQwen35DirectBridge(promptText = "", opts = {}) {
   return true;
 }
 
+/**
+ * @param {unknown} level
+ * @returns {string}
+ */
 export function normalizeThinkingLevel(level) {
   return String(level || "auto").trim().toLowerCase();
 }
 
+/**
+ * @param {unknown} [promptText]
+ * @returns {boolean}
+ */
 export function isTinyLocalQwen35Ask(promptText = "") {
   const text = String(promptText || "").trim();
   if (!text) return false;
@@ -41,6 +63,10 @@ export function isTinyLocalQwen35Ask(promptText = "") {
   return false;
 }
 
+/**
+ * @param {unknown} [promptText]
+ * @returns {boolean}
+ */
 export function isLightweightLocalQwen35Ask(promptText = "") {
   if (isTinyLocalQwen35Ask(promptText)) return true;
   const text = String(promptText || "").trim();
@@ -49,6 +75,11 @@ export function isLightweightLocalQwen35Ask(promptText = "") {
   return /(?:介绍你|你能帮我|你能做什么|你是谁|已准备好|请记住|只(?:回复|输出)|不要调用工具|不用工具|不调用工具|80\s*字以内|一句中文|一句话|项目代号|最后一行不能有其他字)/iu.test(text);
 }
 
+/**
+ * @param {unknown} [promptText]
+ * @param {ThinkingEngineLike | null} [engineLike]
+ * @returns {boolean}
+ */
 export function resolveLocalQwen35DirectThinking(promptText = "", engineLike = null) {
   const rawLevel = typeof engineLike?.getThinkingLevel === "function"
     ? engineLike.getThinkingLevel()
@@ -60,6 +91,11 @@ export function resolveLocalQwen35DirectThinking(promptText = "", engineLike = n
   return true;
 }
 
+/**
+ * @param {unknown} [promptText]
+ * @param {boolean} [enableThinking]
+ * @returns {number}
+ */
 export function resolveLocalQwen35DirectMaxTokens(promptText = "", enableThinking = true) {
   if (!enableThinking) {
     if (isTinyLocalQwen35Ask(promptText)) return 256;
@@ -68,16 +104,26 @@ export function resolveLocalQwen35DirectMaxTokens(promptText = "", enableThinkin
   return LOCAL_QWEN35_DIRECT_MAX_TOKENS;
 }
 
+/**
+ * @param {LocalQwen35RetryInput} [input]
+ * @returns {boolean}
+ */
 export function shouldRetryLocalQwen35WithoutThinking({ enableThinking = false, assistantText = "", reasoningText = "" } = {}) {
   return !!enableThinking
     && !String(assistantText || "").trim()
     && !!String(reasoningText || "").trim();
 }
 
+/**
+ * @param {string | null | undefined} sessionPath
+ * @param {unknown} [currentPromptText]
+ * @returns {LocalQwen35Message[]}
+ */
 export function readRecentLocalQwen35DirectMessages(sessionPath, currentPromptText = "") {
   if (!sessionPath || !fs.existsSync(sessionPath)) return [];
   try {
     const raw = fs.readFileSync(sessionPath, "utf-8");
+    /** @type {LocalQwen35Message[]} */
     const messages = [];
     for (const line of raw.split("\n")) {
       if (!line.trim()) continue;
@@ -100,6 +146,7 @@ export function readRecentLocalQwen35DirectMessages(sessionPath, currentPromptTe
       messages.pop();
     }
 
+    /** @type {LocalQwen35Message[]} */
     const selected = [];
     let chars = 0;
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -117,11 +164,18 @@ export function readRecentLocalQwen35DirectMessages(sessionPath, currentPromptTe
     while (selected.length && selected[0].role !== "user") selected.shift();
     return selected;
   } catch (err) {
-    debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT-HISTORY v1] read failed · ${err?.message || err} · ${sessionPath}`);
+    const message = err instanceof Error ? err.message : String(err);
+    debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT-HISTORY v1] read failed · ${message} · ${sessionPath}`);
     return [];
   }
 }
 
+/**
+ * @param {string | null | undefined} sessionPath
+ * @param {unknown} originalPromptText
+ * @param {unknown} effectivePromptText
+ * @returns {LocalQwen35Message[]}
+ */
 export function buildLocalQwen35DirectMessages(sessionPath, originalPromptText, effectivePromptText) {
   const current = String(effectivePromptText || originalPromptText || "");
   const history = readRecentLocalQwen35DirectMessages(sessionPath, originalPromptText);
@@ -133,6 +187,10 @@ export function buildLocalQwen35DirectMessages(sessionPath, originalPromptText, 
   return messages;
 }
 
+/**
+ * @param {LocalQwen35Message[]} messages
+ * @returns {LocalQwen35Message[]}
+ */
 export function appendNoThinkHintToLastUserMessage(messages) {
   const lastUser = [...messages].reverse().find((message) => message?.role === "user");
   if (!lastUser || /\/no_think\b/iu.test(lastUser.content || "")) return messages;

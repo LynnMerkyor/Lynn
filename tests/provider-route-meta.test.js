@@ -55,4 +55,22 @@ describe("provider route metadata helpers", () => {
     expect(extractProviderRouteMeta({ type: "message_update", assistantMessageEvent: { type: "text_delta" } })).toBeNull();
     expect(normalizeProviderFallbackHop({ reason: "cooldown" })).toBeNull();
   });
+
+  it("trims fallback reasons and limits fallback hop count", () => {
+    const longReason = "x".repeat(240);
+    const result = extractProviderRouteMeta({
+      object: "lynn.provider",
+      activeProvider: "spark",
+      fallbackFrom: Array.from({ length: 12 }, (_, index) => ({
+        providerId: `provider-${index}`,
+        reason: longReason,
+      })),
+    });
+
+    expect(result?.fallbackFrom).toHaveLength(8);
+    expect(result?.fallbackFrom?.[0]).toEqual({
+      id: "provider-0",
+      reason: "x".repeat(160),
+    });
+  });
 });

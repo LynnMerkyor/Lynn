@@ -1,10 +1,34 @@
 import { describe, expect, it } from "vitest";
 import {
   appendNoThinkHintToLastUserMessage,
+  resolveLocalQwen35DirectMaxTokens,
+  resolveLocalQwen35DirectThinking,
   shouldRetryLocalQwen35WithoutThinking,
+  shouldUseLocalQwen35DirectBridge,
 } from "../server/chat/local-qwen35-direct-policy.js";
+import { TOOL_USE_BEHAVIOR } from "../server/chat/tool-use-behavior.js";
 
 describe("local Qwen3.5 direct policy", () => {
+  it("uses the direct bridge only for small local non-prefetch text requests", () => {
+    expect(shouldUseLocalQwen35DirectBridge("hello", {
+      isLocalModel: true,
+      toolBehavior: TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN,
+    })).toBe(true);
+    expect(shouldUseLocalQwen35DirectBridge("hello", { isLocalModel: false })).toBe(false);
+    expect(shouldUseLocalQwen35DirectBridge("hello", { isLocalModel: true, hasImages: true })).toBe(false);
+    expect(shouldUseLocalQwen35DirectBridge("hello", {
+      isLocalModel: true,
+      toolBehavior: TOOL_USE_BEHAVIOR.PREFETCH_THEN_RUN_OR_STOP,
+    })).toBe(false);
+  });
+
+  it("disables thinking and tightens max tokens for lightweight asks", () => {
+    expect(resolveLocalQwen35DirectThinking("ping", { getThinkingLevel: () => "high" })).toBe(false);
+    expect(resolveLocalQwen35DirectThinking("证明这个复杂算法", { getThinkingLevel: () => "off" })).toBe(false);
+    expect(resolveLocalQwen35DirectMaxTokens("ping", false)).toBe(256);
+    expect(resolveLocalQwen35DirectMaxTokens("一句话介绍你自己", false)).toBe(1536);
+  });
+
   it("retries with thinking off only for thinking-only local output", () => {
     expect(shouldRetryLocalQwen35WithoutThinking({
       enableThinking: true,
