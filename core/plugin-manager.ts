@@ -1,21 +1,200 @@
 import fs from "fs";
 import path from "path";
+import type { Hono } from "hono";
 import { createPluginContext } from "./plugin-context.js";
+import type { PluginBus, PluginContext, PluginDisposable, PluginLogger } from "./plugin-context.js";
 
 const KNOWN_CONTRIBUTION_DIRS = [
   "tools", "routes", "skills", "hooks", "agents", "commands", "providers",
-];
+] as const;
+
+type KnownContributionDir = (typeof KNOWN_CONTRIBUTION_DIRS)[number];
+type PluginContribution = KnownContributionDir | "lifecycle";
+type PluginStatus = "loading" | "loaded" | "failed" | "unloaded";
+type JsonRecord = Record<string, unknown>;
+type UnknownFunction = (...args: unknown[]) => unknown;
+
+export type PluginConfigSchema = JsonRecord;
+
+export interface PluginManifestContributes extends JsonRecord {
+  configuration?: PluginConfigSchema;
+}
+
+export interface PluginManifest extends JsonRecord {
+  id?: string;
+  name?: string;
+  version?: string;
+  description?: string;
+  contributes?: PluginManifestContributes;
+}
+
+export interface PluginDescriptor {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  pluginDir: string;
+  manifest: PluginManifest | null;
+  contributions: PluginContribution[];
+}
+
+export interface PluginLifecycleInstance {
+  ctx?: PluginContext;
+  register?: (disposable: unknown) => void;
+  onload?: () => unknown;
+  onunload?: () => unknown;
+  [key: string]: unknown;
+}
+
+export interface PluginEntry extends PluginDescriptor {
+  status: PluginStatus;
+  instance: PluginLifecycleInstance | null;
+  _disposables: PluginDisposable[];
+  error?: string;
+}
+
+export interface PluginTool {
+  name: string;
+  description: unknown;
+  parameters: unknown;
+  execute: (input: unknown) => unknown;
+  _pluginId: string;
+}
+
+export interface PluginCommand {
+  name: string;
+  description: unknown;
+  execute: UnknownFunction;
+  _pluginId: string;
+}
+
+export interface PluginSkillPath {
+  dirPath: string;
+  label: string;
+}
+
+export interface PluginAgentTemplate extends JsonRecord {
+  _pluginId?: string;
+}
+
+export interface PluginProvider extends JsonRecord {
+  _pluginId: string;
+}
+
+export interface PluginConfigSchemaEntry {
+  pluginId: string;
+  schema: PluginConfigSchema;
+}
+
+export interface PluginManagerOptions {
+  pluginsDirs?: string[] | null;
+  pluginsDir?: string | null;
+  dataDir: string;
+  bus?: PluginBus | null;
+  engine?: unknown;
+}
+
+interface ToolExecutionContext {
+  bus: PluginBus | null;
+  engine: unknown;
+  config: {
+    get(): JsonRecord;
+    get(key: string): unknown;
+  };
+  log: PluginLogger;
+}
+
+interface ToolModule {
+  name?: unknown;
+  description?: unknown;
+  parameters?: unknown;
+  execute?: unknown;
+}
+
+type ToolExecutor = (input: unknown, ctx: ToolExecutionContext) => unknown;
+
+interface CommandModule {
+  name?: unknown;
+  description?: unknown;
+  execute?: unknown;
+}
+
+interface RouteModule {
+  default?: unknown;
+  register?: unknown;
+}
+
+interface HookMap {
+  [eventType: string]: string;
+}
+
+interface HookEntry {
+  pluginId: string;
+  handlerPath: string;
+  _cache: unknown;
+}
+
+interface HookModule {
+  default?: unknown;
+}
+
+type HookHandler = (event: unknown) => unknown;
+
+interface ProviderModule extends JsonRecord {
+  id?: unknown;
+}
+
+interface LifecycleModule {
+  default?: unknown;
+}
+
+type PluginConstructor = new () => PluginLifecycleInstance;
+
+function errorMessage(err: unknown): string | undefined {
+  if (err && (typeof err === "object" || typeof err === "function") && "message" in err) {
+    const message = (err as { message?: unknown }).message;
+    return message === undefined ? undefined : String(message);
+  }
+  return undefined;
+}
+
+function hasFetch(value: unknown): value is Hono {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "fetch" in value &&
+    typeof (value as { fetch?: unknown }).fetch === "function",
+  );
+}
+
+function readJsonFile<T>(filePath: string): T {
+  return JSON.parse(fs.readFileSync(filePath, "utf-8")) as T;
+}
 
 export class PluginManager {
   /**
-   * @param {{ pluginsDirs: string[], dataDir: string, bus: object }} opts
    * pluginsDirs: 多个扫描目录，先内嵌后用户（靠前的优先）
-   * 兼容旧签名 { pluginsDir: string } → 自动转为单元素数组
+   * 兼容旧签名 { pluginsDir: string } -> 自动转为单元素数组
    */
-  constructor({ pluginsDirs, pluginsDir, dataDir, bus, engine }) {
+  _pluginsDirs: string[];
+  _dataDir: string;
+  _bus: PluginBus | null;
+  _engine: unknown;
+  _plugins: Map<string, PluginEntry>;
+  _scanned: PluginDescriptor[];
+  routeRegistry: Map<string, Hono>;
+  _tools: PluginTool[];
+  _commands: PluginCommand[];
+  _skillPaths: PluginSkillPath[];
+  _agentTemplates: PluginAgentTemplate[];
+  _providerPlugins: PluginProvider[];
+  _configSchemas: PluginConfigSchemaEntry[];
+  _hookRegistry: Map<string, HookEntry[]>;
+
+  constructor({ pluginsDirs, pluginsDir, dataDir, bus, engine }: PluginManagerOptions) {
     this._pluginsDirs = pluginsDirs || (pluginsDir ? [pluginsDir] : []);
     this._dataDir = dataDir;
-    this._bus = bus;
+    this._bus = bus || null;
     this._engine = engine || null;
     this._plugins = new Map();
     this._scanned = [];
@@ -32,9 +211,9 @@ export class PluginManager {
     this._hookRegistry = new Map();
   }
 
-  scan() {
-    const results = [];
-    const seen = new Set();
+  scan(): PluginDescriptor[] {
+    const results: PluginDescriptor[] = [];
+    const seen = new Set<string>();
     for (const dir of this._pluginsDirs) {
       if (!fs.existsSync(dir)) continue;
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -46,7 +225,7 @@ export class PluginManager {
           const desc = this._readPluginDescriptor(pluginDir, entry.name);
           results.push(desc);
         } catch (err) {
-          console.error(`[plugin-manager] failed to read plugin "${entry.name}":`, err.message);
+          console.error(`[plugin-manager] failed to read plugin "${entry.name}":`, errorMessage(err));
         }
       }
     }
@@ -54,17 +233,17 @@ export class PluginManager {
     return results;
   }
 
-  _readPluginDescriptor(pluginDir, dirName) {
+  _readPluginDescriptor(pluginDir: string, dirName: string): PluginDescriptor {
     const manifestPath = path.join(pluginDir, "manifest.json");
-    let manifest = null;
+    let manifest: PluginManifest | null = null;
     if (fs.existsSync(manifestPath)) {
-      manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+      manifest = readJsonFile<PluginManifest>(manifestPath);
     }
     const id = manifest?.id || dirName;
     const name = manifest?.name || dirName;
     const version = manifest?.version || "0.0.0";
     const description = manifest?.description || "";
-    const contributions = [];
+    const contributions: PluginContribution[] = [];
     for (const dir of KNOWN_CONTRIBUTION_DIRS) {
       if (fs.existsSync(path.join(pluginDir, dir))) contributions.push(dir);
     }
@@ -73,23 +252,23 @@ export class PluginManager {
     return { id, name, version, description, pluginDir, manifest, contributions };
   }
 
-  async loadAll() {
+  async loadAll(): Promise<void> {
     const descriptors = this._scanned.length > 0 ? this._scanned : this.scan();
     for (const desc of descriptors) {
-      const entry = { ...desc, status: "loading", instance: null, _disposables: [] };
+      const entry: PluginEntry = { ...desc, status: "loading", instance: null, _disposables: [] };
       this._plugins.set(desc.id, entry);
       try {
         await this._loadPlugin(entry);
         entry.status = "loaded";
       } catch (err) {
         entry.status = "failed";
-        entry.error = err.message;
-        console.error(`[plugin-manager] plugin "${desc.id}" failed to load:`, err.message);
+        entry.error = errorMessage(err);
+        console.error(`[plugin-manager] plugin "${desc.id}" failed to load:`, errorMessage(err));
       }
     }
   }
 
-  async _loadPlugin(entry) {
+  async _loadPlugin(entry: PluginEntry): Promise<void> {
     // Contribution loaders
     await this._loadTools(entry);
     await this._loadRoutes(entry);
@@ -103,10 +282,10 @@ export class PluginManager {
     // Lifecycle (index.js)
     const indexPath = path.join(entry.pluginDir, "index.js");
     if (!fs.existsSync(indexPath)) return;
-    const mod = await import(indexPath);
+    const mod = (await import(indexPath)) as LifecycleModule;
     const PluginClass = mod.default;
     if (!PluginClass || typeof PluginClass !== "function") return;
-    const instance = new PluginClass();
+    const instance = new (PluginClass as PluginConstructor)();
     entry.instance = instance;
     instance.ctx = createPluginContext({
       pluginId: entry.id,
@@ -116,29 +295,36 @@ export class PluginManager {
       engine: this._engine || null,
       disposables: entry._disposables,
     });
-    instance.register = (disposable) => {
-      if (typeof disposable === "function") entry._disposables.push(disposable);
+    instance.register = (disposable: unknown) => {
+      if (typeof disposable === "function") entry._disposables.push(disposable as PluginDisposable);
     };
     if (typeof instance.onload === "function") await instance.onload();
   }
 
-  // ── Task 5: Tool loader ──────────────────────────────────────────────────
+  // -- Task 5: Tool loader --------------------------------------------------
 
-  async _loadTools(entry) {
+  async _loadTools(entry: PluginEntry): Promise<void> {
     const toolsDir = path.join(entry.pluginDir, "tools");
     if (!fs.existsSync(toolsDir)) return;
     const files = fs.readdirSync(toolsDir).filter((f) => f.endsWith(".js"));
-    const ctx = {
+    const configPath = path.join(this._dataDir, entry.id, "config.json");
+
+    function getConfig(): JsonRecord;
+    function getConfig(key: string): unknown;
+    function getConfig(key?: string): JsonRecord | unknown {
+      try {
+        const data = readJsonFile<JsonRecord>(configPath);
+        return key ? data[key] : data;
+      } catch {
+        return key ? undefined : {};
+      }
+    }
+
+    const ctx: ToolExecutionContext = {
       bus: this._bus,
       engine: this._engine || null,
       config: {
-        get: (key) => {
-          try {
-            const p = path.join(this._dataDir, entry.id, "config.json");
-            const data = JSON.parse(fs.readFileSync(p, "utf-8"));
-            return key ? data[key] : data;
-          } catch { return key ? undefined : {}; }
-        },
+        get: getConfig,
       },
       log: {
         info: (...a) => console.log(`[plugin:${entry.id}]`, ...a),
@@ -150,29 +336,29 @@ export class PluginManager {
     for (const file of files) {
       const filePath = path.join(toolsDir, file);
       try {
-        const mod = await import(filePath);
+        const mod = (await import(filePath)) as ToolModule;
         if (!mod.name || !mod.description || typeof mod.execute !== "function") continue;
-        const origExecute = mod.execute;
+        const origExecute = mod.execute as ToolExecutor;
         this._tools.push({
-          name: `${entry.id}.${mod.name}`,
+          name: `${entry.id}.${String(mod.name)}`,
           description: mod.description,
           parameters: mod.parameters ?? {},
-          execute: (input) => origExecute(input, ctx),
+          execute: (input: unknown) => origExecute(input, ctx),
           _pluginId: entry.id,
         });
       } catch (err) {
-        console.error(`[plugin-manager] tool "${file}" in "${entry.id}" failed to load:`, err.message);
+        console.error(`[plugin-manager] tool "${file}" in "${entry.id}" failed to load:`, errorMessage(err));
       }
     }
   }
 
-  getAllTools() {
+  getAllTools(): PluginTool[] {
     return [...this._tools];
   }
 
-  // ── Task 6: Skill paths + Command loader ────────────────────────────────
+  // -- Task 6: Skill paths + Command loader --------------------------------
 
-  async _loadSkillPaths(entry) {
+  async _loadSkillPaths(entry: PluginEntry): Promise<void> {
     const skillsDir = path.join(entry.pluginDir, "skills");
     if (!fs.existsSync(skillsDir)) return;
     this._skillPaths.push({
@@ -181,42 +367,42 @@ export class PluginManager {
     });
   }
 
-  getSkillPaths() {
+  getSkillPaths(): PluginSkillPath[] {
     return [...this._skillPaths];
   }
 
-  async _loadCommands(entry) {
+  async _loadCommands(entry: PluginEntry): Promise<void> {
     const cmdsDir = path.join(entry.pluginDir, "commands");
     if (!fs.existsSync(cmdsDir)) return;
     const files = fs.readdirSync(cmdsDir).filter((f) => f.endsWith(".js"));
     for (const file of files) {
       const filePath = path.join(cmdsDir, file);
       try {
-        const mod = await import(filePath);
+        const mod = (await import(filePath)) as CommandModule;
         if (!mod.name || typeof mod.execute !== "function") continue;
         this._commands.push({
-          name: `${entry.id}.${mod.name}`,
+          name: `${entry.id}.${String(mod.name)}`,
           description: mod.description ?? "",
-          execute: mod.execute,
+          execute: mod.execute as UnknownFunction,
           _pluginId: entry.id,
         });
       } catch (err) {
-        console.error(`[plugin-manager] command "${file}" in "${entry.id}" failed to load:`, err.message);
+        console.error(`[plugin-manager] command "${file}" in "${entry.id}" failed to load:`, errorMessage(err));
       }
     }
   }
 
-  getAllCommands() {
+  getAllCommands(): PluginCommand[] {
     return [...this._commands];
   }
 
-  // ── Task 7: Route loader ─────────────────────────────────────────────────
+  // -- Task 7: Route loader -------------------------------------------------
 
-  async _loadRoutes(entry) {
+  async _loadRoutes(entry: PluginEntry): Promise<void> {
     const routesDir = path.join(entry.pluginDir, "routes");
     if (!fs.existsSync(routesDir)) return;
-    const { Hono } = await import("hono");
-    const app = new Hono();
+    const { Hono: HonoCtor } = await import("hono");
+    const app = new HonoCtor();
     const files = fs.readdirSync(routesDir).filter((f) => f.endsWith(".js"));
     const ctx = createPluginContext({
       pluginId: entry.id,
@@ -230,50 +416,51 @@ export class PluginManager {
       const filePath = path.join(routesDir, file);
       const prefix = "/" + path.basename(file, ".js");
       try {
-        const mod = await import(filePath);
-        if (mod.default && typeof mod.default.fetch === "function") {
+        const mod = (await import(filePath)) as RouteModule;
+        if (hasFetch(mod.default)) {
           app.route(prefix, mod.default);
           continue;
         }
         if (typeof mod.default === "function") {
-          if (mod.default.length >= 2) {
-            mod.default(app, ctx);
+          const routeFactory = mod.default as UnknownFunction;
+          if (routeFactory.length >= 2) {
+            routeFactory(app, ctx);
           } else {
-            const maybeApp = mod.default(ctx);
-            if (maybeApp && typeof maybeApp.fetch === "function") {
+            const maybeApp = routeFactory(ctx);
+            if (hasFetch(maybeApp)) {
               app.route(prefix, maybeApp);
             }
           }
           continue;
         }
         if (mod.register && typeof mod.register === "function") {
-          const maybeApp = mod.register(app, ctx);
-          if (maybeApp && typeof maybeApp.fetch === "function") {
+          const maybeApp = (mod.register as UnknownFunction)(app, ctx);
+          if (hasFetch(maybeApp)) {
             app.route(prefix, maybeApp);
           }
         }
       } catch (err) {
-        console.error('[plugin-manager] route "' + file + '" in "' + entry.id + '" failed to load:', err.message);
+        console.error('[plugin-manager] route "' + file + '" in "' + entry.id + '" failed to load:', errorMessage(err));
       }
     }
     this.routeRegistry.set(entry.id, app);
   }
 
-  // ── Task 8: Hook loader ──────────────────────────────────────────────────
+  // -- Task 8: Hook loader --------------------------------------------------
 
-  _loadHooks(entry) {
+  _loadHooks(entry: PluginEntry): void {
     const hooksJsonPath = path.join(entry.pluginDir, "hooks.json");
     if (!fs.existsSync(hooksJsonPath)) return;
-    let hookMap;
+    let hookMap: HookMap;
     try {
-      hookMap = JSON.parse(fs.readFileSync(hooksJsonPath, "utf-8"));
+      hookMap = readJsonFile<HookMap>(hooksJsonPath);
     } catch (err) {
-      console.error(`[plugin-manager] hooks.json in "${entry.id}" is invalid:`, err.message);
+      console.error(`[plugin-manager] hooks.json in "${entry.id}" is invalid:`, errorMessage(err));
       return;
     }
     for (const [eventType, handlerPath] of Object.entries(hookMap)) {
       if (!this._hookRegistry.has(eventType)) this._hookRegistry.set(eventType, []);
-      this._hookRegistry.get(eventType).push({
+      this._hookRegistry.get(eventType)?.push({
         pluginId: entry.id,
         // Resolve relative path against plugin directory
         handlerPath: path.resolve(entry.pluginDir, handlerPath),
@@ -286,14 +473,14 @@ export class PluginManager {
    * Execute hooks for a given event type.
    *
    * Semantics for before-* hooks:
-   *   - handler returns null   → cancel (propagation stops, return null)
-   *   - handler returns object → replace event with returned value, continue chain
-   *   - handler returns undefined → pass-through unchanged
+   *   - handler returns null   -> cancel (propagation stops, return null)
+   *   - handler returns object -> replace event with returned value, continue chain
+   *   - handler returns undefined -> pass-through unchanged
    *
    * For non-before-* hooks, the result of the last responding handler is returned.
    * If no handlers exist, the original event is returned unchanged.
    */
-  async executeHook(eventType, event) {
+  async executeHook(eventType: string, event: unknown): Promise<unknown> {
     const handlers = this._hookRegistry.get(eventType);
     if (!handlers || handlers.length === 0) return event;
 
@@ -304,25 +491,25 @@ export class PluginManager {
       // Lazy-load and cache the handler function
       if (!hookEntry._cache) {
         try {
-          const mod = await import(hookEntry.handlerPath);
+          const mod = (await import(hookEntry.handlerPath)) as HookModule;
           hookEntry._cache = mod.default ?? mod;
         } catch (err) {
-          console.error(`[plugin-manager] hook handler "${hookEntry.handlerPath}" failed to load:`, err.message);
+          console.error(`[plugin-manager] hook handler "${hookEntry.handlerPath}" failed to load:`, errorMessage(err));
           continue;
         }
       }
-      let result;
+      let result: unknown;
       try {
-        result = await hookEntry._cache(current);
+        result = await (hookEntry._cache as HookHandler)(current);
       } catch (err) {
-        console.error(`[plugin-manager] hook handler "${hookEntry.handlerPath}" threw:`, err.message);
+        console.error(`[plugin-manager] hook handler "${hookEntry.handlerPath}" threw:`, errorMessage(err));
         continue;
       }
 
       if (isBefore) {
         if (result === null) return null; // cancelled
         if (result !== undefined) current = result; // replaced
-        // undefined → pass-through, current stays
+        // undefined -> pass-through, current stays
       } else {
         if (result !== undefined) current = result;
       }
@@ -330,67 +517,67 @@ export class PluginManager {
     return current;
   }
 
-  // ── Task 9: Configuration loader ─────────────────────────────────────────
+  // -- Task 9: Configuration loader ----------------------------------------
 
-  _loadConfiguration(entry) {
+  _loadConfiguration(entry: PluginEntry): void {
     const schema = entry.manifest?.contributes?.configuration;
     if (!schema) return;
     this._configSchemas.push({ pluginId: entry.id, schema });
   }
 
-  getConfigSchema(pluginId) {
+  getConfigSchema(pluginId: string): PluginConfigSchema | null {
     return this._configSchemas.find((s) => s.pluginId === pluginId)?.schema ?? null;
   }
 
-  getAllConfigSchemas() {
+  getAllConfigSchemas(): PluginConfigSchemaEntry[] {
     return [...this._configSchemas];
   }
 
-  // ── Task 10: Agent templates + Provider loader ───────────────────────────
+  // -- Task 10: Agent templates + Provider loader --------------------------
 
-  async _loadAgentTemplates(entry) {
+  async _loadAgentTemplates(entry: PluginEntry): Promise<void> {
     const agentsDir = path.join(entry.pluginDir, "agents");
     if (!fs.existsSync(agentsDir)) return;
     const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".json"));
     for (const file of files) {
       const filePath = path.join(agentsDir, file);
       try {
-        const template = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+        const template = readJsonFile<PluginAgentTemplate>(filePath);
         template._pluginId = entry.id;
         this._agentTemplates.push(template);
       } catch (err) {
-        console.error(`[plugin-manager] agent template "${file}" in "${entry.id}" failed to load:`, err.message);
+        console.error(`[plugin-manager] agent template "${file}" in "${entry.id}" failed to load:`, errorMessage(err));
       }
     }
   }
 
-  getAgentTemplates() {
+  getAgentTemplates(): PluginAgentTemplate[] {
     return [...this._agentTemplates];
   }
 
-  async _loadProviders(entry) {
+  async _loadProviders(entry: PluginEntry): Promise<void> {
     const providersDir = path.join(entry.pluginDir, "providers");
     if (!fs.existsSync(providersDir)) return;
     const files = fs.readdirSync(providersDir).filter((f) => f.endsWith(".js"));
     for (const file of files) {
       const filePath = path.join(providersDir, file);
       try {
-        const mod = await import(filePath);
+        const mod = (await import(filePath)) as ProviderModule;
         if (!mod.id) continue;
         this._providerPlugins.push({ ...mod, _pluginId: entry.id });
       } catch (err) {
-        console.error(`[plugin-manager] provider "${file}" in "${entry.id}" failed to load:`, err.message);
+        console.error(`[plugin-manager] provider "${file}" in "${entry.id}" failed to load:`, errorMessage(err));
       }
     }
   }
 
-  getProviderPlugins() {
+  getProviderPlugins(): PluginProvider[] {
     return [...this._providerPlugins];
   }
 
-  // ── Lifecycle ─────────────────────────────────────────────────────────────
+  // -- Lifecycle ------------------------------------------------------------
 
-  _removePluginContributions(pluginId) {
+  _removePluginContributions(pluginId: string): void {
     this._tools = this._tools.filter((item) => item?._pluginId !== pluginId);
     this._commands = this._commands.filter((item) => item?._pluginId !== pluginId);
     this._skillPaths = this._skillPaths.filter((item) => item?.label !== `plugin:${pluginId}`);
@@ -405,18 +592,18 @@ export class PluginManager {
     }
   }
 
-  async unloadPlugin(pluginId) {
+  async unloadPlugin(pluginId: string): Promise<void> {
     const entry = this._plugins.get(pluginId);
     if (!entry) return;
     if (entry.instance) {
       if (typeof entry.instance.onunload === "function") {
         try { await entry.instance.onunload(); } catch (err) {
-          console.error(`[plugin-manager] "${pluginId}" onunload error:`, err.message);
+          console.error(`[plugin-manager] "${pluginId}" onunload error:`, errorMessage(err));
         }
       }
       for (const d of entry._disposables.reverse()) {
         try { d(); } catch (err) {
-          console.error(`[plugin-manager] "${pluginId}" disposable error:`, err.message);
+          console.error(`[plugin-manager] "${pluginId}" disposable error:`, errorMessage(err));
         }
       }
       entry._disposables = [];
@@ -426,6 +613,6 @@ export class PluginManager {
     entry.status = "unloaded";
   }
 
-  getPlugin(id) { return this._plugins.get(id) || null; }
-  listPlugins() { return [...this._plugins.values()]; }
+  getPlugin(id: string): PluginEntry | null { return this._plugins.get(id) || null; }
+  listPlugins(): PluginEntry[] { return [...this._plugins.values()]; }
 }
