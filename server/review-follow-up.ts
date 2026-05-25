@@ -1,16 +1,52 @@
-function cleanText(value, maxLength = 0) {
+interface FollowUpFinding {
+  severity?: string;
+  title?: string;
+  filePath?: string;
+  detail?: string;
+  suggestion?: string;
+}
+
+interface FollowUpStructuredReview {
+  summary?: string;
+  nextStep?: string;
+  findings?: FollowUpFinding[];
+}
+
+interface FollowUpContextPack {
+  request?: string;
+  workspacePath?: string;
+  sessionContext?: {
+    userText?: string;
+    assistantText?: string;
+  };
+}
+
+interface BuildFollowUpPromptInput {
+  structuredReview?: FollowUpStructuredReview | null;
+  contextPack?: FollowUpContextPack | null;
+  followUpPrompt?: string;
+  reviewerName?: string;
+  sourceResponse?: string;
+  executionResolution?: string;
+}
+
+interface LocaleOptions {
+  zh?: boolean;
+}
+
+function cleanText(value: unknown, maxLength: number = 0): string {
   if (typeof value !== 'string') return '';
   const normalized = value.replace(/\r\n?/g, '\n').trim();
   if (!maxLength || normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, maxLength).trim()}…`;
 }
 
-function normalizeFindings(structuredReview) {
+function normalizeFindings(structuredReview?: FollowUpStructuredReview | null): FollowUpFinding[] {
   return Array.isArray(structuredReview?.findings) ? structuredReview.findings.filter(Boolean) : [];
 }
 
-function renderFindingBlock(finding, index, zh) {
-  const lines = [];
+function renderFindingBlock(finding: FollowUpFinding, index: number, zh: boolean): string {
+  const lines: string[] = [];
   lines.push(`${index + 1}. [${finding.severity || 'medium'}] ${cleanText(finding.title, 160) || (zh ? '未命名问题' : 'Untitled finding')}`);
   if (finding.filePath) lines.push(zh ? `文件: ${cleanText(finding.filePath, 260)}` : `File: ${cleanText(finding.filePath, 260)}`);
   if (finding.detail) lines.push(zh ? `细节: ${cleanText(finding.detail, 700)}` : `Detail: ${cleanText(finding.detail, 700)}`);
@@ -18,16 +54,29 @@ function renderFindingBlock(finding, index, zh) {
   return lines.join('\n');
 }
 
-export function buildReviewFollowUpTaskTitle(structuredReview, { zh = false } = {}) {
+export function buildReviewFollowUpTaskTitle(
+  structuredReview?: FollowUpStructuredReview | null,
+  { zh = false }: LocaleOptions = {},
+): string {
   const findings = normalizeFindings(structuredReview);
   const lead = cleanText(findings[0]?.title, 80);
   if (zh) return lead ? `处理复查发现：${lead}` : '处理复查发现';
   return lead ? `Address review findings: ${lead}` : 'Address review findings';
 }
 
-export function buildReviewFollowUpTaskPrompt({ structuredReview, contextPack, followUpPrompt, reviewerName, sourceResponse, executionResolution } = {}, { zh = false } = {}) {
+export function buildReviewFollowUpTaskPrompt(
+  {
+    structuredReview,
+    contextPack,
+    followUpPrompt,
+    reviewerName,
+    sourceResponse,
+    executionResolution,
+  }: BuildFollowUpPromptInput = {},
+  { zh = false }: LocaleOptions = {},
+): string {
   const findings = normalizeFindings(structuredReview);
-  const lines = [];
+  const lines: string[] = [];
 
   if (zh) {
     lines.push('你正在处理一份异步 review 留下的发现项。请在当前工作区中完成必要修改，并在完成后用简短中文说明处理结果。');
