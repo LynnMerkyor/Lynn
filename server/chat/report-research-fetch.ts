@@ -4,16 +4,155 @@ import { fetchWebContent } from "../../lib/tools/web-fetch.js";
 import { runSearchQuery } from "../../lib/tools/web-search.js";
 import { buildStructuredSection, extractToolText, parseIndexSnapshot, parseStockSnapshot, parseWeatherSnapshot } from "./report-research-answer.js";
 import { detectPrimaryIndexTarget, extractCompositeWeatherLocation, extractPrimaryUsTicker, extractStockTargetForResearch, extractWeatherLocationForResearch } from "./report-research-intent.js";
+import type { IndexResearchTarget, ReportResearchKind, StockResearchTarget } from "./report-research-intent.js";
+
+export type RealtimeResearchToolKind = "live_news" | "sports" | "weather";
+type ResearchToolContextKind = RealtimeResearchToolKind | "stock_market";
+type TimeoutKey = "stockMarket" | "realtimeTool" | "search" | "fetch";
+
+export interface ToolTextContent {
+  text?: string;
+  [key: string]: unknown;
+}
+
+export interface ToolExecutionResult {
+  content?: ToolTextContent[];
+  details?: unknown;
+  [key: string]: unknown;
+}
+
+export interface StockMarketToolParams {
+  query?: string;
+  kind?: string;
+  symbol?: string;
+  [key: string]: unknown;
+}
+
+export interface RealtimeInfoToolParams {
+  query?: string;
+  location?: string;
+  maxResults?: number;
+  [key: string]: unknown;
+}
+
+export interface WebSearchOptions {
+  sceneHint?: string;
+  [key: string]: unknown;
+}
+
+export interface WebSearchResultItem {
+  title?: string;
+  url?: string;
+  snippet?: string;
+  [key: string]: unknown;
+}
+
+export interface WebSearchResult {
+  provider?: string;
+  results?: WebSearchResultItem[];
+  [key: string]: unknown;
+}
+
+export interface WebFetchResult {
+  text?: string;
+  [key: string]: unknown;
+}
+
+export interface ReportResearchToolWrappers {
+  stockMarket?: (callId: string, params: StockMarketToolParams) => Promise<ToolExecutionResult> | ToolExecutionResult;
+  realtimeInfo?: (kind: RealtimeResearchToolKind, callId: string, params: RealtimeInfoToolParams) => Promise<ToolExecutionResult> | ToolExecutionResult;
+  webFetch?: (url: string, maxChars: number) => Promise<WebFetchResult> | WebFetchResult;
+  webSearch?: (query: string, limit: number, options: WebSearchOptions) => Promise<WebSearchResult> | WebSearchResult;
+}
+
+type ResolvedReportResearchToolWrappers = Required<ReportResearchToolWrappers>;
+
+export interface ReportResearchTimeouts {
+  stockMarket?: number;
+  realtimeTool?: number;
+  search?: number;
+  fetch?: number;
+}
+
+export interface ReportResearchFetchOptions {
+  userPrompt?: unknown;
+  prompt?: unknown;
+  text?: unknown;
+  callId?: string;
+  label?: string;
+  timeoutMs?: number;
+  stockMarketTimeoutMs?: number;
+  realtimeToolTimeoutMs?: number;
+  searchTimeoutMs?: number;
+  fetchTimeoutMs?: number;
+  timeouts?: ReportResearchTimeouts;
+  toolWrappers?: ReportResearchToolWrappers;
+  tools?: ReportResearchToolWrappers;
+}
+
+interface ToolFactory {
+  execute(callId: string, params: RealtimeInfoToolParams): Promise<ToolExecutionResult> | ToolExecutionResult;
+}
+
+type RealtimeToolFactory = () => ToolFactory;
+
+interface RealtimeToolContextRequest {
+  title?: string;
+  toolKind?: ResearchToolContextKind;
+  params?: StockMarketToolParams | RealtimeInfoToolParams;
+  timeoutMs?: number;
+}
+
+type MarketWeatherTaskType = "stock" | "index" | "weather";
+
+interface MarketWeatherTaskResult {
+  type: MarketWeatherTaskType;
+  result: ToolExecutionResult;
+}
+
+interface StockSnapshot {
+  symbol?: string;
+  price?: string;
+  timestamp?: string;
+  source?: string;
+  url?: string;
+  range?: string;
+}
+
+interface IndexSnapshot {
+  name?: string;
+  level?: string;
+  change?: string;
+  queryDate?: string;
+  source?: string;
+  url?: string;
+}
+
+interface WeatherSnapshot {
+  location?: string;
+  date?: string;
+  desc?: string;
+  tempRange?: string;
+}
+
+type StructuredSectionEntry = readonly [string, unknown];
+
+const buildStructuredSectionForResearch = buildStructuredSection as (title: string, entries: StructuredSectionEntry[]) => string;
+const extractToolTextForResearch = extractToolText as (result: ToolExecutionResult) => string;
+const parseStockSnapshotForResearch = parseStockSnapshot as (result: ToolExecutionResult) => StockSnapshot | null;
+const parseIndexSnapshotForResearch = parseIndexSnapshot as (result: ToolExecutionResult, fallbackTarget?: IndexResearchTarget | null) => IndexSnapshot | null;
+const parseWeatherSnapshotForResearch = parseWeatherSnapshot as (result: ToolExecutionResult, userPrompt?: unknown, fallbackLocation?: string) => WeatherSnapshot | null;
+
 const MAX_CONTEXT_CHARS = 9000;
 const SEARCH_TIMEOUT_MS = 9000;
 const FETCH_TIMEOUT_MS = 7000;
 const STOCK_MARKET_TIMEOUT_MS = 25000;
 const REALTIME_TOOL_TIMEOUT_MS = 25000;
-function textOf(value) {
+function textOf(value: unknown): string {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
-function compactLines(lines, maxChars = 2600) {
-  const out = [];
+function compactLines(lines: unknown[], maxChars: number = 2600): string {
+  const out: string[] = [];
   let used = 0;
   for (const line of lines.map(textOf).filter(Boolean)) {
     const next = line.length + 1;
@@ -23,13 +162,13 @@ function compactLines(lines, maxChars = 2600) {
   }
   return out.join("\n");
 }
-function extractUsefulResearchLines(text, query, maxLines = 5) {
+function extractUsefulResearchLines(text: unknown, query: unknown, maxLines: number = 5): string[] {
   const queryTerms = String(query || "")
     .split(/\s+/)
     .map((item) => item.trim())
     .filter((item) => item.length >= 2);
   const priorityRe = /(?:现价|收盘|涨跌|涨幅|跌幅|成交|换手|市盈率|PE|估值|财报|营收|净利润|毛利率|订单|客户|公告|解禁|减持|研报|机构|资金|主力|龙虎榜|K线|均线|MACD|RSI|支撑|压力|目标价|风险|容积率|绿化率|均价|挂牌|成交价|山景|海景|景观|物业|楼龄|地铁|配套)/i;
-  const seen = new Set();
+  const seen = new Set<string>();
   return String(text || "")
     .split(/\r?\n/)
     .map(textOf)
@@ -42,12 +181,16 @@ function extractUsefulResearchLines(text, query, maxLines = 5) {
     })
     .slice(0, maxLines);
 }
-export async function withTimeout(promise, ms, label) {
-  let timer;
+function errorMessage(err: unknown): string {
+  return err instanceof Error && err.message ? err.message : String(err);
+}
+
+export async function withTimeout<T>(promise: PromiseLike<T> | T, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      promise,
-      new Promise((_, reject) => {
+      Promise.resolve(promise),
+      new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms);
       }),
     ]);
@@ -55,7 +198,7 @@ export async function withTimeout(promise, ms, label) {
     if (timer) clearTimeout(timer);
   }
 }
-function buildStockQueries(target, userPrompt) {
+function buildStockQueries(target: StockResearchTarget, userPrompt: unknown): string[] {
   const targetText = [target.name, target.code].filter(Boolean).join(" ");
   const base = targetText || textOf(userPrompt).slice(0, 60);
   const prompt = textOf(userPrompt);
@@ -71,16 +214,16 @@ function buildStockQueries(target, userPrompt) {
   if (wantsRisks) queries.push(`${base} 解禁 减持 风险 科创板`);
   return [...new Set(queries)].slice(0, 5);
 }
-function buildRealEstateQueries(userPrompt) {
+function buildRealEstateQueries(userPrompt: unknown): string[] {
   const prompt = textOf(userPrompt).slice(0, 120);
   return [`${prompt} 容积率 绿化率 山海景观 二手房价格`, "深圳蛇口 鸣溪谷 山语海 兰溪谷一期 容积率 绿化率 均价", "深圳蛇口 低密 山海景观 楼盘 容积率 绿化率 二手房价格", "蛇口 兰溪谷 鲸山觐海 双玺 伍兹 南海玫瑰园 容积率 绿化率 价格"];
 }
-function buildGenericResearchQueries(userPrompt) {
+function buildGenericResearchQueries(userPrompt: unknown): string[] {
   const prompt = textOf(userPrompt).slice(0, 120);
   return [`${prompt} 最新 资料 数据 来源`, `${prompt} 官方 公告 报告 文档`, `${prompt} 分析 观点 对比 风险`];
 }
-const REALTIME_FACTORIES = { live_news: createLiveNewsTool, sports: createSportsScoreTool, weather: createWeatherTool };
-export const defaultReportResearchToolWrappers = {
+const REALTIME_FACTORIES: Record<RealtimeResearchToolKind, RealtimeToolFactory> = { live_news: createLiveNewsTool, sports: createSportsScoreTool, weather: createWeatherTool };
+export const defaultReportResearchToolWrappers: ResolvedReportResearchToolWrappers = {
   stockMarket: (callId, params) => createStockMarketTool().execute(callId, params || {}),
   realtimeInfo(kind, callId, params) {
     const factory = REALTIME_FACTORIES[kind];
@@ -90,30 +233,30 @@ export const defaultReportResearchToolWrappers = {
   webFetch: (url, maxChars) => fetchWebContent(url, maxChars),
   webSearch: (query, limit, options) => runSearchQuery(query, limit, options),
 };
-function resolveToolWrappers(opts = {}) {
+function resolveToolWrappers(opts: ReportResearchFetchOptions = {}): ResolvedReportResearchToolWrappers {
   return { ...defaultReportResearchToolWrappers, ...(opts.toolWrappers || opts.tools || {}) };
 }
-function resolveTimeout(opts, key, fallback) {
+function resolveTimeout(opts: ReportResearchFetchOptions | undefined, key: TimeoutKey, fallback: number): number {
   const value = opts?.timeouts?.[key] ?? opts?.[`${key}TimeoutMs`];
   return Number.isFinite(Number(value)) ? Number(value) : fallback;
 }
-export function executeStockMarketTool(params, opts = {}) {
+export function executeStockMarketTool(params: StockMarketToolParams, opts: ReportResearchFetchOptions = {}): Promise<ToolExecutionResult> {
   const wrappers = resolveToolWrappers(opts);
   return withTimeout(wrappers.stockMarket(opts.callId || "lynn-local-prefetch", params || {}), opts.timeoutMs || resolveTimeout(opts, "stockMarket", STOCK_MARKET_TIMEOUT_MS), opts.label || "stock_market");
 }
-export function executeRealtimeInfoTool(kind, params, opts = {}) {
+export function executeRealtimeInfoTool(kind: RealtimeResearchToolKind, params: RealtimeInfoToolParams, opts: ReportResearchFetchOptions = {}): Promise<ToolExecutionResult> {
   const wrappers = resolveToolWrappers(opts);
   return withTimeout(wrappers.realtimeInfo(kind, opts.callId || "lynn-local-prefetch", params || {}), opts.timeoutMs || resolveTimeout(opts, "realtimeTool", REALTIME_TOOL_TIMEOUT_MS), opts.label || kind || "realtime_tool");
 }
-export function executeWebSearch(query, limit = 4, options = {}, opts = {}) {
+export function executeWebSearch(query: string, limit: number = 4, options: WebSearchOptions = {}, opts: ReportResearchFetchOptions = {}): Promise<WebSearchResult> {
   const wrappers = resolveToolWrappers(opts);
   return withTimeout(wrappers.webSearch(query, limit, options), opts.timeoutMs || resolveTimeout(opts, "search", SEARCH_TIMEOUT_MS), opts.label || "search");
 }
-export function executeWebFetch(url, maxChars = 3600, opts = {}) {
+export function executeWebFetch(url: string, maxChars: number = 3600, opts: ReportResearchFetchOptions = {}): Promise<WebFetchResult> {
   const wrappers = resolveToolWrappers(opts);
   return withTimeout(wrappers.webFetch(url, maxChars), opts.timeoutMs || resolveTimeout(opts, "fetch", FETCH_TIMEOUT_MS), opts.label || "fetch");
 }
-export async function searchSummary(query, sceneHint, opts = {}) {
+export async function searchSummary(query: string, sceneHint: string, opts: ReportResearchFetchOptions = {}): Promise<string> {
   try {
     const result = await executeWebSearch(query, 4, { sceneHint }, opts);
     const provider = result.provider || "search";
@@ -137,10 +280,10 @@ export async function searchSummary(query, sceneHint, opts = {}) {
     }
     return [`查询：${query}`, `来源：${provider}`, compactLines(rows, 1600), fetchedLines].filter(Boolean).join("\n");
   } catch (err) {
-    return [`查询：${query}`, `结果：搜索失败或超时（${err.message || err}）`].join("\n");
+    return [`查询：${query}`, `结果：搜索失败或超时（${errorMessage(err)}）`].join("\n");
   }
 }
-async function buildStockResearchContext(target, text, userPrompt, opts = {}) {
+async function buildStockResearchContext(target: StockResearchTarget | null | undefined, text: unknown, userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const resolvedTarget = target?.name || target?.code ? target : extractStockTargetForResearch(text);
   if (!resolvedTarget.name && !resolvedTarget.code) return "";
   const queryTarget = [resolvedTarget.name, resolvedTarget.code].filter(Boolean).join(" ");
@@ -163,46 +306,50 @@ async function buildStockResearchContext(target, text, userPrompt, opts = {}) {
     return marketText
       ? `\n【行情快照】\n${marketText.slice(0, 2600)}`
       : "\n【行情快照】\n行情工具未返回可用文本。";
-  })().catch((err) => `\n【行情快照】\n行情工具失败或超时：${err.message || err}`);
+  })().catch((err: unknown) => `\n【行情快照】\n行情工具失败或超时：${errorMessage(err)}`);
   const searchesPromise = Promise.all(buildStockQueries(resolvedTarget, userPrompt).map((query) => searchSummary(query, "finance", opts)));
   const [marketSection, searches] = await Promise.all([marketPromise, searchesPromise]);
   sections.push(marketSection);
   sections.push(`\n【补充搜索线索】\n${searches.join("\n\n")}`);
   return sections.join("\n").slice(0, MAX_CONTEXT_CHARS);
 }
-async function buildSearchResearchContext(title, queries, opts = {}) {
+async function buildSearchResearchContext(title: string, queries: string[], opts: ReportResearchFetchOptions = {}): Promise<string> {
   const searches = await Promise.all(queries.map((query) => searchSummary(query, "research", opts)));
   return [title, `\n【补充搜索线索】\n${searches.join("\n\n")}`].join("\n").slice(0, MAX_CONTEXT_CHARS);
 }
-function buildRealEstateResearchContext(userPrompt, opts = {}) {
+function buildRealEstateResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   return buildSearchResearchContext("【楼盘对标资料】", buildRealEstateQueries(userPrompt), opts);
 }
-function buildGenericResearchContext(userPrompt, opts = {}) {
+function buildGenericResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   return buildSearchResearchContext("【研究资料】", buildGenericResearchQueries(userPrompt), opts);
 }
-async function buildRealtimeToolContext({ title, toolKind, params, timeoutMs = REALTIME_TOOL_TIMEOUT_MS } = {}, opts = {}) {
+async function buildRealtimeToolContext({ title, toolKind, params, timeoutMs = REALTIME_TOOL_TIMEOUT_MS }: RealtimeToolContextRequest = {}, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const result = toolKind === "stock_market"
-    ? await executeStockMarketTool(params, { ...opts, timeoutMs, label: "stock_market" })
-    : await executeRealtimeInfoTool(toolKind, params, { ...opts, timeoutMs, label: toolKind || "realtime_tool" });
-  const text = extractToolText(result);
+    ? await executeStockMarketTool((params || {}) as StockMarketToolParams, { ...opts, timeoutMs, label: "stock_market" })
+    : await executeRealtimeInfoTool(toolKind as RealtimeResearchToolKind, (params || {}) as RealtimeInfoToolParams, { ...opts, timeoutMs, label: toolKind || "realtime_tool" });
+  const text = extractToolTextForResearch(result);
   if (!text) return "";
   return [title || "【实时工具资料】", "", text].join("\n").slice(0, MAX_CONTEXT_CHARS);
 }
-function buildWeatherResearchContext(userPrompt, opts = {}) {
+function buildWeatherResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
+  const promptText = String(userPrompt || "");
   const location = extractWeatherLocationForResearch(userPrompt, "");
-  return buildRealtimeToolContext({ title: "【天气工具资料】", toolKind: "weather", params: { query: userPrompt, location } }, opts);
+  return buildRealtimeToolContext({ title: "【天气工具资料】", toolKind: "weather", params: { query: promptText, location } }, opts);
 }
-function buildSportsResearchContext(userPrompt, opts = {}) {
-  return buildRealtimeToolContext({ title: "【体育比分工具资料】", toolKind: "sports", params: { query: userPrompt, maxResults: 5 } }, opts);
+function buildSportsResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
+  const promptText = String(userPrompt || "");
+  return buildRealtimeToolContext({ title: "【体育比分工具资料】", toolKind: "sports", params: { query: promptText, maxResults: 5 } }, opts);
 }
-function buildMarketResearchContext(userPrompt, opts = {}) {
-  return buildRealtimeToolContext({ title: "【行情工具资料】", toolKind: "stock_market", params: { query: userPrompt }, timeoutMs: resolveTimeout(opts, "stockMarket", STOCK_MARKET_TIMEOUT_MS) }, opts);
+function buildMarketResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
+  const promptText = String(userPrompt || "");
+  return buildRealtimeToolContext({ title: "【行情工具资料】", toolKind: "stock_market", params: { query: promptText }, timeoutMs: resolveTimeout(opts, "stockMarket", STOCK_MARKET_TIMEOUT_MS) }, opts);
 }
-async function buildMarketWeatherBriefContext(userPrompt, opts = {}) {
+async function buildMarketWeatherBriefContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
+  const promptText = String(userPrompt || "");
   const ticker = extractPrimaryUsTicker(userPrompt);
   const indexTarget = detectPrimaryIndexTarget(userPrompt);
   const weatherLocation = extractCompositeWeatherLocation(userPrompt);
-  const tasks = [];
+  const tasks: Promise<MarketWeatherTaskResult>[] = [];
   if (ticker) {
     tasks.push(executeStockMarketTool(
       { query: `${ticker} 最新价`, kind: "stock", symbol: ticker },
@@ -216,9 +363,9 @@ async function buildMarketWeatherBriefContext(userPrompt, opts = {}) {
     ).then((result) => ({ type: "index", result })));
   }
   if (weatherLocation) {
-    const weatherQuery = /后天/.test(userPrompt)
+    const weatherQuery = /后天/.test(promptText)
       ? `后天${weatherLocation}天气`
-      : /明天/.test(userPrompt)
+      : /明天/.test(promptText)
         ? `明天${weatherLocation}天气`
         : `${weatherLocation}天气`;
     tasks.push(executeRealtimeInfoTool(
@@ -228,18 +375,18 @@ async function buildMarketWeatherBriefContext(userPrompt, opts = {}) {
     ).then((result) => ({ type: "weather", result })));
   }
   const settled = await Promise.allSettled(tasks);
-  let stockSnapshot = null;
-  let indexSnapshot = null;
-  let weatherSnapshot = null;
+  let stockSnapshot: StockSnapshot | null = null;
+  let indexSnapshot: IndexSnapshot | null = null;
+  let weatherSnapshot: WeatherSnapshot | null = null;
   for (const item of settled) {
     if (item.status !== "fulfilled") continue;
-    if (item.value.type === "stock") stockSnapshot = parseStockSnapshot(item.value.result);
-    if (item.value.type === "index") indexSnapshot = parseIndexSnapshot(item.value.result, indexTarget);
-    if (item.value.type === "weather") weatherSnapshot = parseWeatherSnapshot(item.value.result, userPrompt, weatherLocation);
+    if (item.value.type === "stock") stockSnapshot = parseStockSnapshotForResearch(item.value.result);
+    if (item.value.type === "index") indexSnapshot = parseIndexSnapshotForResearch(item.value.result, indexTarget);
+    if (item.value.type === "weather") weatherSnapshot = parseWeatherSnapshotForResearch(item.value.result, promptText, weatherLocation);
   }
   const sections = ["【综合工具资料】"];
   if (stockSnapshot) {
-    sections.push(buildStructuredSection("美股快照", [
+    sections.push(buildStructuredSectionForResearch("美股快照", [
       ["标的", stockSnapshot.symbol],
       ["最新价", stockSnapshot.price ? `$${stockSnapshot.price}` : ""],
       ["时间戳", stockSnapshot.timestamp],
@@ -249,7 +396,7 @@ async function buildMarketWeatherBriefContext(userPrompt, opts = {}) {
     ]));
   }
   if (indexSnapshot) {
-    sections.push(buildStructuredSection("指数快照", [
+    sections.push(buildStructuredSectionForResearch("指数快照", [
       ["指数", indexSnapshot.name],
       ["最新点位", indexSnapshot.level],
       ["涨跌幅", indexSnapshot.change],
@@ -259,7 +406,7 @@ async function buildMarketWeatherBriefContext(userPrompt, opts = {}) {
     ]));
   }
   if (weatherSnapshot) {
-    sections.push(buildStructuredSection("天气快照", [
+    sections.push(buildStructuredSectionForResearch("天气快照", [
       ["地点", weatherSnapshot.location],
       ["日期", weatherSnapshot.date],
       ["天气", weatherSnapshot.desc],
@@ -268,10 +415,11 @@ async function buildMarketWeatherBriefContext(userPrompt, opts = {}) {
   }
   return sections.length > 2 ? sections.join("\n\n").slice(0, MAX_CONTEXT_CHARS) : "";
 }
-async function buildLiveNewsResearchContext(userPrompt, opts = {}) {
-  return buildRealtimeToolContext({ title: "【实时新闻工具资料】", toolKind: "live_news", params: { query: userPrompt, maxResults: 5 } }, opts);
+async function buildLiveNewsResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
+  const promptText = String(userPrompt || "");
+  return buildRealtimeToolContext({ title: "【实时新闻工具资料】", toolKind: "live_news", params: { query: promptText, maxResults: 5 } }, opts);
 }
-export async function fetchForKind(kind, target, opts = {}) {
+export async function fetchForKind(kind: ReportResearchKind, target: StockResearchTarget | null | undefined, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const userPrompt = opts.userPrompt || opts.prompt || opts.text || "";
   const text = opts.text || userPrompt;
   if (kind === "stock") return buildStockResearchContext(target, text, userPrompt, opts);
