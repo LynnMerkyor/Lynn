@@ -1,11 +1,39 @@
-export function createEditRollbackStore(opts = {}) {
+export interface EditRollbackSnapshot {
+  sessionPath?: string;
+  streamToken?: string | null;
+  cwd?: string;
+  filePath?: string;
+  originalContent?: string;
+  [key: string]: unknown;
+}
+
+export interface FinalizedEditRollbackSnapshot extends EditRollbackSnapshot {
+  rollbackId: string;
+  createdAt: number;
+}
+
+interface EditRollbackStoreOptions {
+  maxSnapshots?: number;
+}
+
+export interface EditRollbackStore {
+  get(rollbackId: string | null | undefined): FinalizedEditRollbackSnapshot | null;
+  setPending(toolCallId: string | null | undefined, snapshot: EditRollbackSnapshot | null | undefined): void;
+  discardPending(toolCallId: string | null | undefined): void;
+  discardPendingForSession(sessionPath: string | null | undefined, streamToken?: string | null): number;
+  pendingCount(): number;
+  finalize(toolCallId: string | null | undefined): FinalizedEditRollbackSnapshot | null;
+}
+
+export function createEditRollbackStore(opts: EditRollbackStoreOptions = {}): EditRollbackStore {
   const maxSnapshots = Math.max(1, Number(opts.maxSnapshots || 200));
-  const pendingEditSnapshots = new Map();
-  const rollbackSnapshots = new Map();
-  const rollbackOrder = [];
+  const pendingEditSnapshots = new Map<string, EditRollbackSnapshot>();
+  const rollbackSnapshots = new Map<string, FinalizedEditRollbackSnapshot>();
+  const rollbackOrder: string[] = [];
 
   return {
     get(rollbackId) {
+      if (!rollbackId) return null;
       return rollbackSnapshots.get(rollbackId) || null;
     },
     setPending(toolCallId, snapshot) {
@@ -49,7 +77,7 @@ export function createEditRollbackStore(opts = {}) {
         if (oldestId) rollbackSnapshots.delete(oldestId);
       }
 
-      return rollbackSnapshots.get(rollbackId);
+      return rollbackSnapshots.get(rollbackId) || null;
     },
   };
 }

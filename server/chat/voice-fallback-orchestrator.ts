@@ -1,3 +1,32 @@
+export interface VoiceProviderHealth {
+  ok?: boolean;
+  fallbackOk?: boolean;
+  degraded?: boolean;
+  error?: string;
+  [key: string]: unknown;
+}
+
+export interface VoiceProviderHealthSnapshot {
+  asr?: VoiceProviderHealth;
+  ser?: VoiceProviderHealth;
+  tts?: VoiceProviderHealth;
+}
+
+export type VoiceTier = 1 | 2 | 3 | 4 | 5 | 6;
+export type VoiceOrbColor = "green" | "yellow" | "red";
+
+export interface VoiceTierInfo {
+  tier: VoiceTier;
+  orbColor: VoiceOrbColor;
+  label: string;
+  details: VoiceProviderHealthSnapshot;
+}
+
+export interface VoiceHealthPayload {
+  providers?: VoiceProviderHealthSnapshot;
+  [key: string]: unknown;
+}
+
 /**
  * Voice Fallback Orchestrator — Lynn V0.79 Phase 2.5 · DS V4 Pro 反馈 #5 落地
  *
@@ -37,10 +66,10 @@
  *     details: { asr, ser, tts }
  *   }
  */
-export function computeVoiceTier({ asr, ser, tts } = {}) {
+export function computeVoiceTier({ asr, ser, tts }: VoiceProviderHealthSnapshot = {}): VoiceTierInfo {
   // Tier 6:硬红线 — ASR 或 TTS 的 primary 和 fallback 都挂
-  const asrCompletelyDown = asr && !asr.ok && !asr.fallbackOk;
-  const ttsCompletelyDown = tts && !tts.ok && !tts.fallbackOk;
+  const asrCompletelyDown = !!(asr && !asr.ok && !asr.fallbackOk);
+  const ttsCompletelyDown = !!(tts && !tts.ok && !tts.fallbackOk);
   if (asrCompletelyDown || ttsCompletelyDown) {
     return {
       tier: 6,
@@ -52,7 +81,7 @@ export function computeVoiceTier({ asr, ser, tts } = {}) {
 
   const asrDegraded = !!asr?.degraded;
   const ttsDegraded = !!tts?.degraded;
-  const serDead = ser && !ser.ok; // SER 无 fallback,挂了就挂了,但不阻塞
+  const serDead = !!(ser && !ser.ok); // SER 无 fallback,挂了就挂了,但不阻塞
 
   // Tier 5:ASR 和 TTS 都在 fallback 上
   if (asrDegraded && ttsDegraded) {
@@ -103,7 +132,7 @@ export function computeVoiceTier({ asr, ser, tts } = {}) {
   };
 }
 
-function buildFatalLabel(asrDown, ttsDown) {
+function buildFatalLabel(asrDown: boolean, ttsDown: boolean): string {
   if (asrDown && ttsDown) return "语音服务完全不可用(ASR/TTS 双挂)";
   if (asrDown) return "ASR 完全不可用,请检查网络或切回文字模式";
   if (ttsDown) return "TTS 完全不可用,请检查网络或切回文字模式";
@@ -114,7 +143,9 @@ function buildFatalLabel(asrDown, ttsDown) {
  * 把 tier 转成客户端可渲染的紧凑对象(进 FRAME.HEALTH_STATUS payload)
  * 原 health JSON 保留(向后兼容),再附加 tier 字段
  */
-export function enrichHealthWithTier(rawHealth) {
+export function enrichHealthWithTier<T extends VoiceHealthPayload | null | undefined>(
+  rawHealth: T,
+): T | (VoiceHealthPayload & { tier: VoiceTier; orbColor: VoiceOrbColor; tierLabel: string }) {
   if (!rawHealth || !rawHealth.providers) return rawHealth;
   const tierInfo = computeVoiceTier(rawHealth.providers);
   return {
