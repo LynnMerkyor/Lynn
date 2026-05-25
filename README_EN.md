@@ -37,7 +37,22 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.79.2</strong> · 2026-05-25 · Stability patch + TypeScript migration foundation <em>(latest)</em></summary>
+<summary><strong>v0.79.3</strong> · 2026-05-25 · TypeScript safety migration + package gate candidate <em>(latest)</em></summary>
+
+**V0.79 architecture hardening release**:
+- 🧱 **TypeScript migration keeps moving**:`server/chat` leaf helpers, lightweight `server/routes` modules, and shared runtime utilities are now typed, reducing string typos and unguarded `unknown` values in hot paths.
+- 🔎 **Release gate tightened**:V0.79.3 passed full `npm test`, `typecheck`, `typecheck:runtime`, server/main/renderer builds, and targeted regression tests after the merge.
+- 🧭 **Local model policy unchanged**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model; 4B remains a low-config downgrade with the thinking-on risk documented.
+- 🧾 **Chat/artifact paths are easier to maintain**:stream emitters, turn state, artifact recovery, tool summaries, and voice fallback helpers now have TS boundaries ahead of the larger `chat.js` and core split.
+- 🧪 **Core migration deferred intentionally**:`core/session-coordinator.js`, `core/engine.js`, and similarly large files stay out of this package to keep the release stable.
+- 📦 **macOS is shipped as a non-notarized candidate this round**:signing checks remain, Apple notarization is skipped, and the download page now says users may need to confirm first launch in macOS.
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.3)
+
+</details>
+
+<details>
+<summary><strong>v0.79.2</strong> · 2026-05-25 · Stability patch + TypeScript migration foundation</summary>
 
 **V0.79 stabilization patch**:
 - 🧭 **Local onboarding stays on 9B by default**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default; 4B stays as a low-config downgrade with the thinking-on risk documented.
@@ -631,7 +646,7 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-The app is signed and notarized with an Apple Developer ID. macOS should allow it to launch directly.
+V0.79.3 is a non-notarized macOS candidate. Signing checks remain, but Apple notarization is skipped; macOS may ask you to confirm the first launch.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
@@ -698,7 +713,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (signed & notarized) |
+| macOS (Apple Silicon) | Supported (V0.79.3 non-notarized candidate) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |
