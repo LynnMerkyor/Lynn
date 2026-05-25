@@ -27,16 +27,62 @@ import {
 
 const log = createModuleLogger("channel");
 
+type ChannelHub = {
+  triggerChannelTriage(channelName: string, opts?: unknown): unknown;
+};
+
+export interface ChannelManagerDeps {
+  channelsDir: string;
+  agentsDir: string;
+  userDir: string;
+  getHub: () => ChannelHub | null | undefined;
+  deleteAgent?: (agentId: string) => Promise<void> | void;
+}
+
+export interface CreateChannelInput {
+  name: string;
+  description?: string | null;
+  members?: string[] | null;
+  intro?: string | null;
+  spawnedExpertIds?: string[];
+}
+
+export interface DeleteChannelResult {
+  deletedAgentIds: string[];
+  failedAgentIds: string[];
+}
+
+export interface ArchiveChannelResult {
+  archived: true;
+  alreadyArchived: boolean;
+  archivedAt: unknown;
+}
+
+type AgentConfig = {
+  expert?: {
+    spawnedForChannel?: unknown;
+  } | null;
+  [key: string]: unknown;
+};
+
+type ChannelMeta = {
+  archived?: boolean | string;
+  archivedAt?: unknown;
+  [key: string]: unknown;
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export class ChannelManager {
-  /**
-   * @param {object} deps
-   * @param {string} deps.channelsDir - 频道目录
-   * @param {string} deps.agentsDir  - agents 根目录
-   * @param {string} deps.userDir    - 用户数据目录
-   * @param {() => object|null} deps.getHub - 返回 Hub（可能为 null）
-   * @param {(agentId: string) => Promise<void>} [deps.deleteAgent] - 删除 agent 的回调（可选）
-   */
-  constructor(deps) {
+  private _channelsDir: string;
+  private _agentsDir: string;
+  private _userDir: string;
+  private _getHub: () => ChannelHub | null | undefined;
+  private _deleteAgent: ((agentId: string) => Promise<void> | void) | null;
+
+  constructor(deps: ChannelManagerDeps) {
     this._channelsDir = deps.channelsDir;
     this._agentsDir = deps.agentsDir;
     this._userDir = deps.userDir;
@@ -47,15 +93,16 @@ export class ChannelManager {
   /**
    * 统一创建频道：写入频道文件 + 成员/用户 bookmark + 绑定频道专家
    */
-  createChannel({ name, description, members, intro, spawnedExpertIds = [] }) {
+  createChannel({ name, description, members, intro, spawnedExpertIds = [] }: CreateChannelInput): string {
+    const channelMembers = members || [];
     const { id: channelId } = createChannelFile(this._channelsDir, {
       name,
       description: description || undefined,
-      members,
+      members: channelMembers,
       intro: intro || undefined,
-    });
+    }) as { id: string };
 
-    for (const memberId of members || []) {
+    for (const memberId of channelMembers) {
       const memberDir = path.join(this._agentsDir, memberId);
       if (!fs.existsSync(memberDir)) continue;
       addBookmarkEntry(path.join(memberDir, "channels.md"), channelId);
@@ -63,7 +110,7 @@ export class ChannelManager {
 
     addBookmarkEntry(this._userBookmarkPath(), channelId);
     this.markAgentsSpawnedForChannel(spawnedExpertIds, channelId);
-    log.log(`已创建频道: ${channelId} members=[${(members || []).join(",")}]`);
+    log.log(`已创建频道: ${channelId} members=[${channelMembers.join(",")}]`);
     return channelId;
   }
 
@@ -73,29 +120,29 @@ export class ChannelManager {
    * - 移除后只剩 ≤1 人的频道直接删除
    * - 清理相关 bookmark
    */
-  cleanupAgentFromChannels(agentId) {
+  cleanupAgentFromChannels(agentId: string): void {
     if (!this._channelsDir || !fs.existsSync(this._channelsDir)) return;
 
     const channelFiles = fs.readdirSync(this._channelsDir).filter(f => f.endsWith(".md"));
-    const deletedChannels = [];
+    const deletedChannels: string[] = [];
 
     for (const f of channelFiles) {
       const filePath = path.join(this._channelsDir, f);
       const channelId = f.replace(".md", "");
-      const members = getChannelMembers(filePath);
+      const members = getChannelMembers(filePath) as string[];
 
       if (!members.includes(agentId)) continue;
 
       try {
         removeChannelMember(filePath, agentId);
-        const remaining = getChannelMembers(filePath);
+        const remaining = getChannelMembers(filePath) as string[];
         if (remaining.length <= 1) {
           deleteChannel(filePath);
           deletedChannels.push(channelId);
           log.log(`频道 "${channelId}" 成员不足，已删除`);
         }
       } catch (err) {
-        log.error(`清理频道 "${channelId}" 失败: ${err.message}`);
+        log.error(`清理频道 "${channelId}" 失败: ${errorMessage(err)}`);
       }
     }
 
@@ -110,20 +157,20 @@ export class ChannelManager {
    * - 删除频道文件和 bookmark
    * - 再级联删除频道专家 agent
    */
-  async deleteChannelByName(channelId) {
+  async deleteChannelByName(channelId: string): Promise<DeleteChannelResult> {
     const filePath = path.join(this._channelsDir, `${channelId}.md`);
     if (!fs.existsSync(filePath)) {
       throw new Error(t("error.channelNotFoundById", { id: channelId }));
     }
 
-    const members = getChannelMembers(filePath);
+    const members = getChannelMembers(filePath) as string[];
     const scopedExperts = this._getChannelScopedExperts(channelId, members);
 
     deleteChannel(filePath);
     this._cleanupBookmarks([channelId]);
 
-    const deletedAgentIds = [];
-    const failedAgentIds = [];
+    const deletedAgentIds: string[] = [];
+    const failedAgentIds: string[] = [];
 
     for (const agentId of scopedExperts) {
       try {
@@ -131,7 +178,7 @@ export class ChannelManager {
         deletedAgentIds.push(agentId);
       } catch (err) {
         failedAgentIds.push(agentId);
-        log.error(`删除频道专家失败 (${agentId} @ ${channelId}): ${err.message}`);
+        log.error(`删除频道专家失败 (${agentId} @ ${channelId}): ${errorMessage(err)}`);
       }
     }
 
@@ -142,19 +189,19 @@ export class ChannelManager {
   /**
    * 归档频道：保留历史消息并切换为只读
    */
-  archiveChannelByName(channelId) {
+  archiveChannelByName(channelId: string): ArchiveChannelResult {
     const filePath = path.join(this._channelsDir, `${channelId}.md`);
     if (!fs.existsSync(filePath)) {
       throw new Error(t("error.channelNotFoundById", { id: channelId }));
     }
 
-    const meta = getChannelMeta(filePath);
+    const meta = getChannelMeta(filePath) as ChannelMeta;
     const alreadyArchived = meta.archived === true || meta.archived === "true";
     if (!alreadyArchived) {
       setChannelArchived(filePath, true);
     }
 
-    const updatedMeta = getChannelMeta(filePath);
+    const updatedMeta = getChannelMeta(filePath) as ChannelMeta;
     log.log(`已归档频道: ${channelId}`);
     return {
       archived: true,
@@ -166,7 +213,7 @@ export class ChannelManager {
   /**
    * 触发频道立即 triage（用户发消息后调用）
    */
-  async triggerChannelTriage(channelName, opts) {
+  async triggerChannelTriage(channelName: string, opts?: unknown): Promise<unknown> {
     return this._getHub()?.triggerChannelTriage(channelName, opts);
   }
 
@@ -175,7 +222,7 @@ export class ChannelManager {
    * - 确保 ch_crew 频道存在并加入
    * - 写 agent 的 channels.md
    */
-  setupChannelsForNewAgent(agentId) {
+  setupChannelsForNewAgent(agentId: string): void {
     const channelsMdPath = path.join(this._agentsDir, agentId, "channels.md");
 
     // 确保 ch_crew 频道存在
@@ -202,7 +249,7 @@ export class ChannelManager {
         if (!f.endsWith(".md")) continue;
         const channelId = f.replace(".md", "");
         if (channelId === "ch_crew") continue;
-        const members = getChannelMembers(path.join(this._channelsDir, f));
+        const members = getChannelMembers(path.join(this._channelsDir, f)) as string[];
         if (members.includes(agentId)) {
           allChannels.push(channelId);
         }
@@ -215,7 +262,7 @@ export class ChannelManager {
   }
 
   /** 给 spawn 出的专家写入频道归属，便于删频道时级联清理 */
-  markAgentSpawnedForChannel(agentId, channelId) {
+  markAgentSpawnedForChannel(agentId: string, channelId: string): boolean {
     if (!agentId || !channelId) return false;
     const configPath = path.join(this._agentsDir, agentId, "config.yaml");
     if (!fs.existsSync(configPath)) return false;
@@ -223,16 +270,16 @@ export class ChannelManager {
     return true;
   }
 
-  markAgentsSpawnedForChannel(agentIds, channelId) {
+  markAgentsSpawnedForChannel(agentIds: string[] | null | undefined, channelId: string): string[] {
     if (!Array.isArray(agentIds) || !channelId) return [];
     return agentIds.filter((agentId) => this.markAgentSpawnedForChannel(agentId, channelId));
   }
 
   /** 扫描所有 agent，找出绑定了不存在频道的孤儿专家 */
-  listOrphanedChannelExperts() {
+  listOrphanedChannelExperts(): string[] {
     if (!this._agentsDir || !fs.existsSync(this._agentsDir)) return [];
 
-    const orphaned = [];
+    const orphaned: string[] = [];
     const agentDirs = fs.readdirSync(this._agentsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory());
 
@@ -248,7 +295,7 @@ export class ChannelManager {
         continue;
       }
 
-      const members = getChannelMembers(channelFile);
+      const members = getChannelMembers(channelFile) as string[];
       if (!members.includes(agentId)) {
         orphaned.push(agentId);
       }
@@ -257,20 +304,20 @@ export class ChannelManager {
     return orphaned;
   }
 
-  _getChannelScopedExperts(channelId, members) {
+  private _getChannelScopedExperts(channelId: string, members: string[]): string[] {
     return (members || []).filter((agentId) => {
       const cfg = this._readAgentConfig(agentId);
       return cfg?.expert?.spawnedForChannel === channelId;
     });
   }
 
-  _readAgentConfig(agentId) {
+  private _readAgentConfig(agentId: string): AgentConfig | null {
     const configPath = path.join(this._agentsDir, agentId, "config.yaml");
     if (!fs.existsSync(configPath)) return null;
-    return safeReadYAMLSync(configPath, {}, YAML);
+    return safeReadYAMLSync(configPath, {}, YAML) as AgentConfig;
   }
 
-  async _deleteScopedAgent(agentId) {
+  private async _deleteScopedAgent(agentId: string): Promise<void> {
     if (this._deleteAgent) {
       await this._deleteAgent(agentId);
       return;
@@ -278,12 +325,12 @@ export class ChannelManager {
     fs.rmSync(path.join(this._agentsDir, agentId), { recursive: true, force: true });
   }
 
-  _userBookmarkPath() {
+  private _userBookmarkPath(): string {
     return path.join(this._userDir, "channel-bookmarks.md");
   }
 
   /** 清理被删频道的 bookmark（从其他 agent 和用户的 bookmark 中移除） */
-  _cleanupBookmarks(deletedChannels, excludeAgentId) {
+  private _cleanupBookmarks(deletedChannels: string[], excludeAgentId?: string): void {
     const agentDirs = fs.readdirSync(this._agentsDir, { withFileTypes: true })
       .filter(d => d.isDirectory() && d.name !== excludeAgentId);
 
@@ -293,7 +340,7 @@ export class ChannelManager {
         try {
           removeBookmarkEntry(channelsMd, ch);
         } catch (err) {
-          log.error(`清理 ${d.name} bookmark "${ch}" 失败: ${err.message}`);
+          log.error(`清理 ${d.name} bookmark "${ch}" 失败: ${errorMessage(err)}`);
         }
       }
     }
@@ -303,7 +350,7 @@ export class ChannelManager {
       try {
         removeBookmarkEntry(userBookmarkPath, ch);
       } catch (err) {
-        log.error(`清理用户 bookmark "${ch}" 失败: ${err.message}`);
+        log.error(`清理用户 bookmark "${ch}" 失败: ${errorMessage(err)}`);
       }
     }
   }
