@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkpointAgent, _internals } from '../agent-checkpoint.mjs';
+import { checkpointAgent, _internals } from '../agent-checkpoint.js';
 
 describe('agent-checkpoint BYOK-equality shim', () => {
   it('never calls a reviewer model and always continues', async () => {

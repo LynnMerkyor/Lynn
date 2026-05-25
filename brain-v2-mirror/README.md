@@ -6,10 +6,10 @@ Keep this tree self-contained enough to run `npm test` locally. Do not commit pr
 
 Current entry points:
 
-- `server.js`: HTTP/SSE routes for Brain v2.
-- `router.js`: provider/tool orchestration.
-- `verifier-middleware.mjs`: asynchronous tool-result verifier.
-- `deep-research.mjs`: multi-candidate research orchestrator; no quality gate or output rewriting.
-- `agent-checkpoint.mjs`: trajectory checkpoint evaluator.
+- `server.ts`: HTTP/SSE routes for Brain v2. Run with `npm start` (`tsx server.ts`).
+- `router.ts`: provider/tool orchestration.
+- `verifier-middleware.ts`: asynchronous tool-result verifier.
+- `deep-research.ts`: multi-candidate research orchestrator; no quality gate or output rewriting.
+- `agent-checkpoint.ts`: trajectory checkpoint evaluator.
 
 Production deployment still runs from `/opt/lobster-brain-v2`; sync intentionally and run the mirror tests before deployment.

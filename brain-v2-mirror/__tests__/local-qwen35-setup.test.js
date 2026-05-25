@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { isLocalAddress, startLocalQwen35Setup } from '../local-qwen35-setup.mjs';
+import { isLocalAddress, startLocalQwen35Setup } from '../local-qwen35-setup.js';
 
 describe('local Qwen3.5-9B setup bridge', () => {
   it('requires explicit user authorization before install/download/start', () => {
