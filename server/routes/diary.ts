@@ -9,7 +9,19 @@ import fs from "fs";
 import { Hono } from "hono";
 import { resolveDiaryDir } from "../../lib/diary/diary-writer.js";
 
-export function createDiaryRoute(engine) {
+type DiaryWriteResult = {
+  error?: string;
+  filePath?: string;
+  content?: string;
+  logicalDate?: string;
+};
+
+interface DiaryRouteEngine {
+  homeCwd?: string | null;
+  writeDiary(): Promise<DiaryWriteResult> | DiaryWriteResult;
+}
+
+export function createDiaryRoute(engine: DiaryRouteEngine): Hono {
   const route = new Hono();
 
   /** POST /diary/write — 触发日记生成 */
@@ -25,8 +37,9 @@ export function createDiaryRoute(engine) {
         logicalDate: result.logicalDate,
       });
     } catch (err) {
-      console.error(`[diary] write failed: ${err.message}`);
-      return c.json({ error: err.message }, 500);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[diary] write failed: ${message}`);
+      return c.json({ error: message }, 500);
     }
   });
 
@@ -36,7 +49,7 @@ export function createDiaryRoute(engine) {
     const diaryDir = resolveDiaryDir(cwd);
     try {
       const files = fs.readdirSync(diaryDir)
-        .filter(f => f.endsWith(".md"))
+        .filter((f) => f.endsWith(".md"))
         .sort()
         .reverse();
       return c.json({ files });

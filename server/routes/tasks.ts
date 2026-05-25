@@ -2,14 +2,53 @@ import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { TaskRuntime } from "../../hub/task-runtime.js";
 
-function parseQueryBoolean(value) {
+type RouteTask = {
+  id: string;
+  sessionPath?: string | null;
+};
+
+type TaskRouteBody = {
+  kind?: string;
+  context?: string;
+  title?: string;
+  reviewerKind?: string;
+  sessionPath?: string | null;
+  source?: string;
+  metadata?: unknown;
+  prompt?: string;
+  agentId?: string;
+  model?: unknown;
+  systemAppend?: string | null;
+  noMemory?: boolean;
+  cwdOverride?: string | null;
+  readOnly?: boolean;
+  noTools?: boolean;
+};
+
+interface TaskRuntimeLike {
+  listTasks(): RouteTask[];
+  getTask(id: string): RouteTask | null | undefined;
+  createReviewTask(input: Record<string, unknown>): RouteTask;
+  createPlanTask(input: Record<string, unknown>): RouteTask;
+  createDelegateTask(input: Record<string, unknown>): RouteTask;
+  cancelTask(id: string): RouteTask | null | undefined;
+  retryTask(id: string): RouteTask | null | undefined;
+  buildTaskChatBlock(id: string): unknown;
+}
+
+interface TasksRouteEngine {
+  currentSessionPath?: string | null;
+  currentAgentId?: string | null;
+}
+
+function parseQueryBoolean(value: unknown): boolean | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   if (value === true || value === "true" || value === "1") return true;
   if (value === false || value === "false" || value === "0") return false;
   return undefined;
 }
 
-export function createTasksRoute(taskRuntime, engine) {
+export function createTasksRoute(taskRuntime: TaskRuntimeLike, engine: TasksRouteEngine): Hono {
   const route = new Hono();
 
   route.get("/tasks", (c) => {
@@ -28,7 +67,7 @@ export function createTasksRoute(taskRuntime, engine) {
   });
 
   route.post("/tasks", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<TaskRouteBody>(c);
     const kind = body.kind === "review"
       ? "review"
       : body.kind === "plan"

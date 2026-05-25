@@ -14,7 +14,21 @@
 import { Hono } from "hono";
 import { createASRProvider } from "../clients/asr/index.js";
 
-export function createAudioRoute(engine) {
+type AudioRouteEngine = {
+  config?: {
+    voice?: {
+      asr?: Record<string, unknown>;
+    };
+  };
+};
+
+type TranscriptionResult = {
+  text?: string;
+  language?: string;
+  duration?: number;
+};
+
+export function createAudioRoute(engine: AudioRouteEngine): Hono {
   const route = new Hono();
 
   route.post("/transcribe", async (c) => {
@@ -35,7 +49,7 @@ export function createAudioRoute(engine) {
       const result = await provider.transcribe(buffer, {
         language: language === "auto" ? "zh" : language,
         filename: file.name || "audio.webm",
-      });
+      }) as TranscriptionResult;
 
       return c.json({
         text: result.text || "",
@@ -43,7 +57,7 @@ export function createAudioRoute(engine) {
         duration_ms: result.duration ? Math.round(result.duration * 1000) : undefined,
       });
     } catch (err) {
-      return c.json({ error: err?.message || "Transcription failed" }, 500);
+      return c.json({ error: err instanceof Error ? err.message : "Transcription failed" }, 500);
     }
   });
 

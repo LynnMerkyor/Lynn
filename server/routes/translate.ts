@@ -7,16 +7,26 @@
 
 import { Hono } from "hono";
 import { translateText } from "../../core/llm-utils.js";
+import type { UtilityConfig } from "../../core/llm-utils.js";
 import { normalizeTranslationTarget, TRANSLATION_TARGET_LABELS } from "../chat/translation-intent.js";
 import { safeJson } from "../hono-helpers.js";
 
 export const MAX_TRANSLATE_CHARS = 3_000;
 
-export function createTranslateRoute(engine) {
+type TranslateBody = {
+  text?: unknown;
+  targetLanguage?: unknown;
+};
+
+interface TranslateRouteEngine {
+  resolveUtilityConfig?: () => UtilityConfig | null | undefined;
+}
+
+export function createTranslateRoute(engine: TranslateRouteEngine): Hono {
   const route = new Hono();
 
   route.post("/translate", async (c) => {
-    const body = await safeJson(c, {});
+    const body = await safeJson<TranslateBody>(c, {});
     const text = String(body?.text || "").trim();
     if (!text) {
       return c.json({ error: "missing_text" }, 400);

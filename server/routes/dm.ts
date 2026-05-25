@@ -13,7 +13,37 @@ import path from "path";
 import { Hono } from "hono";
 import { parseChannel } from "../../lib/channels/channel-store.js";
 
-export function createDmRoute(engine) {
+type DmAgent = {
+  agentDir: string;
+  agentName?: string;
+  config?: {
+    agent?: {
+      name?: string;
+    };
+  };
+};
+
+type ChannelMessage = {
+  sender?: string;
+  timestamp?: string;
+  body?: string;
+};
+
+type DmSummary = {
+  peerId: string;
+  peerName: string;
+  lastMessage: string;
+  lastSender: string;
+  lastTimestamp: string;
+  messageCount: number;
+};
+
+interface DmRouteEngine {
+  agent?: DmAgent | null;
+  getAgent(peerId: string): DmAgent | null | undefined;
+}
+
+export function createDmRoute(engine: DmRouteEngine): Hono {
   const route = new Hono();
 
   // ── 列出已有 DM 对话（只返回真的聊过的，不做占位） ──
@@ -29,12 +59,12 @@ export function createDmRoute(engine) {
         return c.json({ dms: [] });
       }
 
-      const dms = [];
+      const dms: DmSummary[] = [];
       for (const f of fs.readdirSync(dmDir).filter((file) => file.endsWith(".md"))) {
         const peerId = f.replace(".md", "");
         const filePath = path.join(dmDir, f);
         const content = fs.readFileSync(filePath, "utf-8");
-        const { messages } = parseChannel(content);
+        const { messages } = parseChannel(content) as { messages: ChannelMessage[] };
         if (!Array.isArray(messages) || messages.length === 0) continue;
 
         const lastMsg = messages[messages.length - 1];
@@ -52,7 +82,7 @@ export function createDmRoute(engine) {
       dms.sort((a, b) => (b.lastTimestamp || "").localeCompare(a.lastTimestamp || ""));
       return c.json({ dms });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
     }
   });
 
@@ -75,7 +105,7 @@ export function createDmRoute(engine) {
       }
 
       const content = fs.readFileSync(dmFile, "utf-8");
-      const { messages } = parseChannel(content);
+      const { messages } = parseChannel(content) as { messages: ChannelMessage[] };
 
       const peerAgent = engine.getAgent(peerId);
       const peerName = peerAgent?.agentName || peerId;
@@ -86,7 +116,7 @@ export function createDmRoute(engine) {
         messages,
       });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
     }
   });
 

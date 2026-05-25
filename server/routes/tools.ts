@@ -9,7 +9,22 @@
 
 import { Hono } from "hono";
 
-function resolveToolByName(tools, toolName) {
+type PluginTool = {
+  name: string;
+  execute(body: unknown): Promise<unknown> | unknown;
+};
+
+type ToolResolution =
+  | { tool: PluginTool; ambiguous: false; matches?: string[] }
+  | { tool: null; ambiguous: boolean; matches: string[] };
+
+interface ToolsRouteEngine {
+  pluginManager?: {
+    getAllTools(): PluginTool[];
+  } | null;
+}
+
+function resolveToolByName(tools: PluginTool[], toolName: string): ToolResolution {
   const exact = tools.find((t) => t.name === toolName);
   if (exact) return { tool: exact, ambiguous: false };
 
@@ -27,7 +42,7 @@ function resolveToolByName(tools, toolName) {
   return { tool: null, ambiguous: false, matches: [] };
 }
 
-export function createToolsRoute(engine) {
+export function createToolsRoute(engine: ToolsRouteEngine): Hono {
   const route = new Hono();
 
   route.post("/:toolName", async (c) => {
@@ -53,7 +68,7 @@ export function createToolsRoute(engine) {
       const result = await tool.execute(body);
       return c.json(result);
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
     }
   });
 

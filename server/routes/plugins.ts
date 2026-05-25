@@ -1,6 +1,7 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 
-function createSubRequest(c, pluginId) {
+function createSubRequest(c: Context, pluginId: string): Request {
   const url = new URL(c.req.url);
   const prefix = `/plugins/${pluginId}`;
   const prefixIndex = url.pathname.indexOf(prefix);
@@ -24,11 +25,8 @@ function createSubRequest(c, pluginId) {
  *
  * Mount example (server entry):
  *   app.route("/api", createPluginProxyRoute(pluginManager.routeRegistry));
- *
- * @param {Map<string, import("hono").Hono>} routeRegistry
- * @returns {import("hono").Hono}
  */
-export function createPluginProxyRoute(routeRegistry) {
+export function createPluginProxyRoute(routeRegistry: Map<string, Hono>): Hono {
   const route = new Hono();
 
   route.all("/plugins/:pluginId", async (c) => {
@@ -52,6 +50,27 @@ export function createPluginProxyRoute(routeRegistry) {
   return route;
 }
 
+type PluginInfo = {
+  id: string;
+  name?: string;
+  version?: string;
+  description?: string;
+  status?: string;
+  contributions?: unknown;
+  error?: unknown;
+};
+
+type PluginManager = {
+  routeRegistry: Map<string, Hono>;
+  listPlugins(): PluginInfo[];
+  getAllConfigSchemas(): unknown[];
+  getConfigSchema(id: string): unknown;
+};
+
+interface PluginsRouteEngine {
+  pluginManager?: PluginManager | null;
+}
+
 /**
  * Plugin management REST API + route proxy (combined).
  * Provides:
@@ -59,11 +78,8 @@ export function createPluginProxyRoute(routeRegistry) {
  *   GET  /plugins/config-schemas — all config schemas
  *   GET  /plugins/:id/config-schema — single plugin config schema
  *   ALL  /plugins/:pluginId/*  — proxy to plugin sub-app
- *
- * @param {import('../../core/engine.js').HanaEngine} engine
- * @returns {import("hono").Hono}
  */
-export function createPluginsRoute(engine) {
+export function createPluginsRoute(engine: PluginsRouteEngine): Hono {
   const route = new Hono();
 
   route.get("/plugins", (c) => {
