@@ -21,28 +21,65 @@
 import { t } from "../server/i18n.js";
 import { isLocalBaseUrl } from "../shared/net-utils.js";
 import { getAssistantRoleFromConfig, getRoleDefaultModelRefs } from "../shared/assistant-role-models.js";
+import type {
+  ExecutionRoute,
+  LLMApi,
+  ModelRef,
+  ProviderCredentials,
+  ProviderEntry,
+  ProviderId,
+  ResolvedModel,
+  UtilityExecutionConfig,
+  UtilityRoute,
+} from "./types.js";
 
-// 角色名称 -> preferences 字段名（SHARED_MODEL_KEYS 兼容）
-/** @typedef {import("./types.js").ExecutionRoute} ExecutionRoute */
-/** @typedef {import("./types.js").ModelRef} ModelRef */
-/** @typedef {import("./types.js").ProviderCredentialsSnake} ProviderCredentialsSnake */
-/** @typedef {import("./types.js").ResolvedModel} ResolvedModel */
-/** @typedef {import("./types.js").UtilityExecutionConfig} UtilityExecutionConfig */
-/** @typedef {import("./types.js").UtilityRoute} UtilityRoute */
+type UtilityModelRole = "utility" | "utility_large" | "summarizer" | "compiler";
+type ModelRole = "chat" | UtilityModelRole | "embed";
+type AgentModelKey = "chat" | UtilityModelRole;
+type AgentModels = Partial<Record<AgentModelKey, string>>;
+
+type AgentConfig = {
+  models?: AgentModels;
+  embedding_api?: { model?: string };
+  agent?: { yuan?: string | null } | null;
+  [key: string]: unknown;
+};
+
+type SharedModels = Partial<Record<UtilityModelRole, string>>;
+type UtilityApiOverride = {
+  provider?: string;
+  api_key?: string;
+  base_url?: string;
+};
+
+type ResolveModel = (ref: string | ModelRef) => ResolvedModel | null;
+
+export interface ExecutionRouterProviderRegistry {
+  getCredentials(providerId: ProviderId): ProviderCredentials | null;
+  get?(providerId: ProviderId): Pick<ProviderEntry, "authType"> | null;
+}
+
+type UtilityProviderMismatchError = Error & { code?: "UTILITY_API_PROVIDER_MISMATCH" };
 
 const ROLE_TO_PREF_KEY = {
   utility: "utility_model",
   utility_large: "utility_large_model",
   summarizer: "summarizer_model",
   compiler: "compiler_model",
-};
+} as const satisfies Record<UtilityModelRole, string>;
+
+function hasErrorCode(err: unknown, code: string): err is Error & { code: string } {
+  return typeof err === "object"
+    && err !== null
+    && "code" in err
+    && (err as { code?: unknown }).code === code;
+}
 
 export class ExecutionRouter {
-  /**
-   * @param {(ref: ModelRef) => ResolvedModel | null} resolveModel - 从 _availableModels 解析模型的函数
-   * @param {import('./provider-registry.js').ProviderRegistry} providerRegistry
-   */
-  constructor(resolveModel, providerRegistry) {
+  private _resolveModel: ResolveModel;
+  private _providerRegistry: ExecutionRouterProviderRegistry;
+
+  constructor(resolveModel: ResolveModel, providerRegistry: ExecutionRouterProviderRegistry) {
     this._resolveModel = resolveModel;
     this._providerRegistry = providerRegistry;
   }
@@ -50,16 +87,17 @@ export class ExecutionRouter {
   /**
    * 解析角色 -> 完整执行参数
    *
-   * @param {string} roleOrRef
+   * @param roleOrRef
    *   角色名（"chat"/"utility"/"utility_large"/"embed"/"summarizer"/"compiler"）
    *   或直接是模型引用（"provider/model" 或裸 modelId）
-   * @param {{ models?: Record<string, string>, embedding_api?: { model?: string }, [key: string]: unknown }} agentConfig - agent config 对象（来自 config.yaml）
-   * @param {{ utility?: string, utility_large?: string, summarizer?: string, compiler?: string }} [sharedModels] - 全局共享角色模型（来自 preferences）
-   * @param {{ provider?: string, api_key?: string, base_url?: string }} [utilApiOverride] - utility API 覆盖（来自 preferences）
-   * @returns {ExecutionRoute}
    * @throws 找不到模型或凭证时抛出
    */
-  resolve(roleOrRef, agentConfig, sharedModels, utilApiOverride) {
+  resolve(
+    roleOrRef: ModelRole | string,
+    agentConfig?: AgentConfig | null,
+    sharedModels?: SharedModels | null,
+    utilApiOverride?: UtilityApiOverride | null,
+  ): ExecutionRoute {
     const modelRef = this._resolveRef(roleOrRef, agentConfig, sharedModels);
     if (!modelRef) {
       throw new Error(t("error.noUtilityModel") + ` (role: ${roleOrRef})`);
@@ -80,9 +118,9 @@ export class ExecutionRouter {
       return {
         modelId: model.id,
         providerId: model.provider,
-        api: model.api,
+        api: model.api as LLMApi,
         apiKey: utilApiOverride.api_key,
-        baseUrl: utilApiOverride.base_url || model.baseUrl,
+        baseUrl: (utilApiOverride.base_url || model.baseUrl) as string,
       };
     }
 
@@ -113,13 +151,13 @@ export class ExecutionRouter {
    * 现有 6 处消费方（hub/channel-router, install-skill, llm-utils 等）都调这个
    * 返回结构与原 ModelManager.resolveUtilityConfig() 完全一致
    *
-   * @param {{ models?: Record<string, string>, [key: string]: unknown }} agentConfig
-   * @param {{ utility?: string, utility_large?: string, summarizer?: string, compiler?: string }} sharedModels
-   * @param {{ provider?: string, api_key?: string, base_url?: string }} utilApiOverride
-   * @returns {UtilityExecutionConfig}
    */
-  resolveUtilityConfig(agentConfig, sharedModels, utilApiOverride) {
-    const cfg = agentConfig || {};
+  resolveUtilityConfig(
+    agentConfig?: AgentConfig | null,
+    sharedModels?: SharedModels | null,
+    utilApiOverride?: UtilityApiOverride | null,
+  ): UtilityExecutionConfig {
+    const cfg: AgentConfig = agentConfig || {};
     const agentRole = getAssistantRoleFromConfig(cfg);
     const chatModelRef = cfg.models?.chat || null;
     const utilityRoleDefaults = getRoleDefaultModelRefs(agentRole, "utility")
@@ -172,14 +210,12 @@ export class ExecutionRouter {
     };
   }
 
-  /**
-   * @param {Array<string | null | undefined>} refs
-   * @param {{ provider?: string, api_key?: string, base_url?: string } | null | undefined} utilApiOverride
-   * @returns {UtilityRoute[]}
-   */
-  _buildCandidateConfigs(refs, utilApiOverride) {
-    const seen = new Set();
-    const candidates = [];
+  private _buildCandidateConfigs(
+    refs: Array<string | null | undefined>,
+    utilApiOverride?: UtilityApiOverride | null,
+  ): UtilityRoute[] {
+    const seen = new Set<string>();
+    const candidates: UtilityRoute[] = [];
     for (const ref of refs) {
       const resolved = this._resolveCandidateConfig(ref, utilApiOverride);
       if (!resolved) continue;
@@ -191,17 +227,15 @@ export class ExecutionRouter {
     return candidates;
   }
 
-  /**
-   * @param {string | null | undefined} modelRef
-   * @param {{ provider?: string, api_key?: string, base_url?: string } | null | undefined} utilApiOverride
-   * @returns {UtilityRoute | null}
-   */
-  _resolveCandidateConfig(modelRef, utilApiOverride) {
+  private _resolveCandidateConfig(
+    modelRef: string | null | undefined,
+    utilApiOverride?: UtilityApiOverride | null,
+  ): UtilityRoute | null {
     if (!modelRef) return null;
     try {
       return this._resolveModelConfig(modelRef, utilApiOverride);
     } catch (err) {
-      if (err?.code === "UTILITY_API_PROVIDER_MISMATCH") throw err;
+      if (hasErrorCode(err, "UTILITY_API_PROVIDER_MISMATCH")) throw err;
       try {
         return this._resolveModelConfig(modelRef, null);
       } catch {
@@ -210,19 +244,17 @@ export class ExecutionRouter {
     }
   }
 
-  /**
-   * @param {string} modelRef
-   * @param {{ provider?: string, api_key?: string, base_url?: string } | null | undefined} utilApiOverride
-   * @returns {UtilityRoute}
-   */
-  _resolveModelConfig(modelRef, utilApiOverride) {
+  private _resolveModelConfig(
+    modelRef: string,
+    utilApiOverride?: UtilityApiOverride | null,
+  ): UtilityRoute {
     const model = this._resolveModel(modelRef);
     if (!model) {
       throw new Error(t("error.modelNotFound", { id: modelRef }));
     }
 
     if (utilApiOverride?.provider && utilApiOverride.provider !== model.provider) {
-      const err = new Error(t("error.utilityApiProviderMismatch", { model: modelRef }));
+      const err: UtilityProviderMismatchError = new Error(t("error.utilityApiProviderMismatch", { model: modelRef }));
       err.code = "UTILITY_API_PROVIDER_MISMATCH";
       throw err;
     }
@@ -270,14 +302,14 @@ export class ExecutionRouter {
 
   /**
    * 将角色名或模型引用解析为实际模型 ref 字符串
-   * @param {string} roleOrRef
-   * @param {{ models?: Record<string, string>, embedding_api?: { model?: string }, [key: string]: unknown }} agentConfig
-   * @param {{ utility?: string, utility_large?: string, summarizer?: string, compiler?: string } | null | undefined} sharedModels
-   * @returns {string | null}
    * @private
    */
-  _resolveRef(roleOrRef, agentConfig, sharedModels) {
-    const cfg = agentConfig || {};
+  private _resolveRef(
+    roleOrRef: ModelRole | string,
+    agentConfig?: AgentConfig | null,
+    sharedModels?: SharedModels | null,
+  ): string | null {
+    const cfg: AgentConfig = agentConfig || {};
 
     // 内置角色名的查找顺序：sharedModels -> agentConfig.models
     switch (roleOrRef) {
