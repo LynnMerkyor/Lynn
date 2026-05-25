@@ -27,6 +27,7 @@ const EMPTY_THRESHOLD = Number(process.env.BRAIN_V2_EMPTY_THRESHOLD || 2);
 const _emptyCounters = new Map();
 // Local provider fast probe (cold-start race avoidance). Opt-out via env.
 const LOCAL_HEALTH_PROBE_ENABLED = process.env.BRAIN_V2_LOCAL_HEALTH_PROBE !== '0';
+const DEFAULT_LOCAL_HEALTH_PROBE_MS = Number(process.env.BRAIN_V2_LOCAL_HEALTH_PROBE_MS || 1_500);
 
 function _bumpEmpty(providerId) {
   const n = (_emptyCounters.get(providerId) || 0) + 1;
@@ -35,6 +36,28 @@ function _bumpEmpty(providerId) {
 }
 function _resetEmpty(providerId) {
   _emptyCounters.delete(providerId);
+}
+
+function isLocalEndpoint(endpoint) {
+  return typeof endpoint === 'string' && /^https?:\/\/(127\.0\.0\.1|localhost)/i.test(endpoint);
+}
+
+function buildLocalProbeUrl(provider) {
+  const endpointUrl = new URL(provider.endpoint);
+  const healthPath = provider.health_path || '/models';
+  if (/^https?:\/\//i.test(healthPath)) return healthPath;
+  if (healthPath.startsWith('/')) {
+    const url = new URL(endpointUrl.origin);
+    url.pathname = healthPath;
+    return url.toString();
+  }
+  const base = provider.endpoint.endsWith('/') ? provider.endpoint : provider.endpoint + '/';
+  return new URL(healthPath, base).toString();
+}
+
+function localProbeTimeoutMs(provider) {
+  const configured = Number(provider.health_probe_ms || DEFAULT_LOCAL_HEALTH_PROBE_MS);
+  return Number.isFinite(configured) && configured > 0 ? configured : 1_500;
 }
 
 async function runRound({
@@ -67,11 +90,11 @@ async function runRound({
       continue;
     }
     // 本地 provider 快速探针 (避免 cold-start race + 1s ECONNREFUSED)。BRAIN_V2_LOCAL_HEALTH_PROBE=0 关
-    if (LOCAL_HEALTH_PROBE_ENABLED && provider.endpoint && /^https?:\/\/(127\.0\.0\.1|localhost)/i.test(provider.endpoint)) {
+    if (LOCAL_HEALTH_PROBE_ENABLED && isLocalEndpoint(provider.endpoint)) {
       try {
         const probeCtrl = new AbortController();
-        const probeTimer = setTimeout(() => probeCtrl.abort(), 800);
-        const probeRes = await fetch(provider.endpoint + '/models', { method: 'GET', signal: probeCtrl.signal })
+        const probeTimer = setTimeout(() => probeCtrl.abort(), localProbeTimeoutMs(provider));
+        const probeRes = await fetch(buildLocalProbeUrl(provider), { method: 'GET', signal: probeCtrl.signal })
           .catch(() => null);
         clearTimeout(probeTimer);
         if (!probeRes || !probeRes.ok) {
@@ -267,4 +290,7 @@ export function detectCapability(messages) {
 
 export const __testing__ = {
   _emptyCounters,
+  buildLocalProbeUrl,
+  isLocalEndpoint,
+  localProbeTimeoutMs,
 };

@@ -1,5 +1,5 @@
 // Brain v2 · Router tests (vi.mock provider-registry + wire-adapter for hermetic DI)
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // hoisted shared mock state
 const mockState = vi.hoisted(() => ({
@@ -23,7 +23,7 @@ vi.mock('../wire-adapter/index.js', () => ({
   ADAPTERS: {},
 }));
 
-import { run, detectCapability } from '../router.js';
+import { run, detectCapability, __testing__ } from '../router.js';
 
 function makeProvider(id, capability = {}) {
   return {
@@ -44,6 +44,10 @@ beforeEach(() => {
   };
   mockState.adapterCalls = [];
   mockState.adapterFn = null;
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('Router', () => {
@@ -103,6 +107,28 @@ describe('Router', () => {
     const r = await run({ messages: [{ role: 'user', content: 'q' }], onChunk: async () => {} });
     expect(r.providerId).toBe('p-cloud');
     expect(mockState.adapterCalls).toEqual(['p-cloud']);
+  });
+
+  it('probes local providers through explicit health_path before fallback use', async () => {
+    mockState.cooldown.add('p-mimo');
+    mockState.providers['p-spark'] = {
+      ...makeProvider('p-spark'),
+      endpoint: 'http://127.0.0.1:18098/v1',
+      health_path: '/health',
+      health_probe_ms: 25,
+    };
+    const fetchMock = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'spark ok' };
+    };
+
+    const r = await run({ messages: [{ role: 'user', content: 'q' }], onChunk: async () => {} });
+
+    expect(r.providerId).toBe('p-spark');
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:18098/health', expect.any(Object));
+    expect(mockState.adapterCalls).toEqual(['p-spark']);
   });
 
   it('clears cooldown on successful provider run', async () => {
@@ -170,5 +196,21 @@ describe('detectCapability', () => {
   it('handles empty messages array', () => {
     expect(detectCapability([])).toEqual({ vision: false, audio: false });
     expect(detectCapability(null)).toEqual({ vision: false, audio: false });
+  });
+});
+
+describe('router local probe helpers', () => {
+  it('builds root health URLs for local llama.cpp endpoints', () => {
+    expect(__testing__.buildLocalProbeUrl({
+      endpoint: 'http://127.0.0.1:18098/v1',
+      health_path: '/health',
+    })).toBe('http://127.0.0.1:18098/health');
+  });
+
+  it('keeps relative probe paths under the OpenAI-compatible endpoint', () => {
+    expect(__testing__.buildLocalProbeUrl({
+      endpoint: 'http://127.0.0.1:18098/v1',
+      health_path: 'models',
+    })).toBe('http://127.0.0.1:18098/v1/models');
   });
 });

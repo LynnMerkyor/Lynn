@@ -25,6 +25,8 @@ export const PROVIDERS = {
     capability: { vision: false, audio: false, tools: true, thinking: true, native_search: false },
     wire: 'openai',
     cooldown_ms: 300_000,
+    health_path: '/health',
+    health_probe_ms: 2_500,
     // 2026-05-25: 默认 thinking-off,跟 MiMo 行为对齐。短 max_tokens 工况下避免 35B 长思考
     // 把 reasoning_content 吃光、content 空、用户拿到空答案。client 通过 reasoning_effort
     // (非 'off' / 'none')显式 opt-in 才走 thinking-on。
