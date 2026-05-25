@@ -8,15 +8,59 @@ import { extractText } from "./content-utils.js";
 const DEFAULT_LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
 const DEFAULT_LOCAL_QWEN35_MODEL_ID = "qwen35-9b-q4km-imatrix";
 
-function normalizePersistedAssistantText(text) {
+type JsonRecord = Record<string, unknown>;
+type ExtractTextContent = Parameters<typeof extractText>[0];
+
+interface PersistedMessage extends JsonRecord {
+  role?: unknown;
+  content?: unknown;
+}
+
+interface PersistLocalQwen35DirectTurnOptions {
+  reasoningText?: unknown;
+  api?: unknown;
+  provider?: unknown;
+  model?: unknown;
+  usage?: unknown;
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function getSessionMessages(session: unknown): unknown[] {
+  return isRecord(session) && Array.isArray(session.messages) ? session.messages : [];
+}
+
+function asPersistedMessage(value: unknown): PersistedMessage | null {
+  return isRecord(value) ? value as PersistedMessage : null;
+}
+
+function getEntryMessage(entry: unknown): PersistedMessage | null {
+  if (!isRecord(entry)) return null;
+  return asPersistedMessage(entry.message);
+}
+
+function contentForExtractText(content: unknown): ExtractTextContent {
+  if (typeof content === "string" || content == null) return content;
+  if (Array.isArray(content)) return content as ExtractTextContent;
+  return undefined;
+}
+
+function formatError(err: unknown): string {
+  if (isRecord(err) && typeof err.message === "string") return err.message;
+  return String(err);
+}
+
+function normalizePersistedAssistantText(text: unknown): string {
   return String(text || "");
 }
 
-export function readPersistedAssistantRecords(session, sessionPath = "") {
-  const messages = Array.isArray(session?.messages) ? session.messages : [];
-  const fromMessages = [];
+export function readPersistedAssistantRecords(session: unknown, sessionPath = ""): PersistedMessage[] {
+  const messages = getSessionMessages(session);
+  const fromMessages: PersistedMessage[] = [];
   for (let i = 0; i < messages.length; i += 1) {
-    const msg = messages[i];
+    const msg = asPersistedMessage(messages[i]);
     if (msg?.role !== "assistant") continue;
     fromMessages.push(msg);
   }
@@ -24,10 +68,10 @@ export function readPersistedAssistantRecords(session, sessionPath = "") {
     try {
       const raw = fs.readFileSync(sessionPath, "utf-8");
       const lines = raw.split("\n").filter(Boolean);
-      const fromFile = [];
+      const fromFile: PersistedMessage[] = [];
       for (let i = 0; i < lines.length; i += 1) {
-        const entry = JSON.parse(lines[i]);
-        const msg = entry?.message;
+        const entry: unknown = JSON.parse(lines[i]);
+        const msg = getEntryMessage(entry);
         if (msg?.role !== "assistant") continue;
         fromFile.push(msg);
       }
@@ -39,42 +83,42 @@ export function readPersistedAssistantRecords(session, sessionPath = "") {
   return fromMessages;
 }
 
-export function readPersistedAssistantVisibleTexts(session, sessionPath = "") {
+export function readPersistedAssistantVisibleTexts(session: unknown, sessionPath = ""): string[] {
   return readPersistedAssistantRecords(session, sessionPath)
-    .map((msg) => normalizePersistedAssistantText(extractText(msg.content)))
+    .map((msg) => normalizePersistedAssistantText(extractText(contentForExtractText(msg.content))))
     .filter(Boolean);
 }
 
-export function countPersistedAssistantVisibleTexts(session, sessionPath = "") {
+export function countPersistedAssistantVisibleTexts(session: unknown, sessionPath = ""): number {
   return readPersistedAssistantVisibleTexts(session, sessionPath).length;
 }
 
-export function countPersistedAssistantMessages(session, sessionPath = "") {
+export function countPersistedAssistantMessages(session: unknown, sessionPath = ""): number {
   return readPersistedAssistantRecords(session, sessionPath).length;
 }
 
-export function extractLatestAssistantVisibleTextAfter(session, sessionPath = "", baselineCount = 0) {
+export function extractLatestAssistantVisibleTextAfter(session: unknown, sessionPath = "", baselineCount = 0): string {
   const texts = readPersistedAssistantVisibleTexts(session, sessionPath);
   if (texts.length <= Math.max(0, baselineCount || 0)) return "";
   return stripRouteMetadataLeaks(texts[texts.length - 1] || "");
 }
 
-export function extractLatestAssistantVisibleText(session, sessionPath = "") {
+export function extractLatestAssistantVisibleText(session: unknown, sessionPath = ""): string {
   return extractLatestAssistantVisibleTextAfter(session, sessionPath, 0);
 }
 
-export function sessionLineId() {
+export function sessionLineId(): string {
   return randomUUID().replace(/-/g, "").slice(0, 8);
 }
 
-export function getLastSessionEntryId(sessionPath) {
+export function getLastSessionEntryId(sessionPath: string): unknown | null {
   try {
     const raw = fs.readFileSync(sessionPath, "utf-8");
     const lines = raw.split("\n").filter(Boolean);
     for (let i = lines.length - 1; i >= 0; i -= 1) {
       try {
-        const entry = JSON.parse(lines[i]);
-        if (entry?.id) return entry.id;
+        const entry: unknown = JSON.parse(lines[i]);
+        if (isRecord(entry) && entry.id) return entry.id;
       } catch {
         // skip malformed historical entries
       }
@@ -85,18 +129,18 @@ export function getLastSessionEntryId(sessionPath) {
   return null;
 }
 
-export function latestPersistedMessageText(sessionPath) {
+export function latestPersistedMessageText(sessionPath: string): { role: unknown; text: string } | null {
   try {
     const raw = fs.readFileSync(sessionPath, "utf-8");
     const lines = raw.split("\n").filter(Boolean);
     for (let i = lines.length - 1; i >= 0; i -= 1) {
       try {
-        const entry = JSON.parse(lines[i]);
-        const msg = entry?.message;
+        const entry: unknown = JSON.parse(lines[i]);
+        const msg = getEntryMessage(entry);
         if (!msg?.role) continue;
         return {
           role: msg.role,
-          text: extractText(msg.content),
+          text: extractText(contentForExtractText(msg.content)),
         };
       } catch {
         // skip malformed historical entries
@@ -108,17 +152,17 @@ export function latestPersistedMessageText(sessionPath) {
   return null;
 }
 
-export function persistedChatMessageText(message) {
-  const content = message?.content;
+export function persistedChatMessageText(message: unknown): string {
+  const content = isRecord(message) ? message.content : undefined;
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
-    .filter((block) => block?.type === "text" && typeof block.text === "string")
-    .map((block) => block.text)
+    .filter((block) => isRecord(block) && block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text as string)
     .join("");
 }
 
-export function appendTextToMessageContent(message, addition) {
+export function appendTextToMessageContent(message: { content?: unknown } | null | undefined, addition: unknown): boolean {
   const text = String(addition || "");
   if (!message || !text) return false;
   if (typeof message.content === "string") {
@@ -131,8 +175,8 @@ export function appendTextToMessageContent(message, addition) {
   }
   for (let i = message.content.length - 1; i >= 0; i -= 1) {
     const block = message.content[i];
-    if (block?.type === "text" && typeof block.text === "string") {
-      block.text += text;
+    if (isRecord(block) && block.type === "text" && typeof block.text === "string") {
+      block.text = `${block.text}${text}`;
       return true;
     }
   }
@@ -140,7 +184,7 @@ export function appendTextToMessageContent(message, addition) {
   return true;
 }
 
-export function appendTextToLatestAssistantRecord(sessionPath, addition) {
+export function appendTextToLatestAssistantRecord(sessionPath: string | null | undefined, addition: unknown): boolean {
   const text = String(addition || "");
   if (!sessionPath || !text) return false;
   try {
@@ -149,38 +193,40 @@ export function appendTextToLatestAssistantRecord(sessionPath, addition) {
     const lines = raw.split("\n");
     for (let i = lines.length - 1; i >= 0; i -= 1) {
       if (!lines[i]?.trim()) continue;
-      let entry = null;
+      let entry: unknown = null;
       try {
         entry = JSON.parse(lines[i]);
       } catch {
         continue;
       }
-      if (entry?.message?.role !== "assistant") continue;
-      if (!appendTextToMessageContent(entry.message, text)) return false;
+      const msg = getEntryMessage(entry);
+      if (msg?.role !== "assistant") continue;
+      if (!appendTextToMessageContent(msg, text)) return false;
       lines[i] = JSON.stringify(entry);
       fs.writeFileSync(sessionPath, `${lines.join("\n")}${endsWithNewline ? "" : "\n"}`, "utf-8");
       return true;
     }
   } catch (err) {
-    debugLog()?.warn("ws", `[CODE-VERIFY-POSTSCRIPT v1] persist failed · ${err?.message || err} · ${sessionPath}`);
+    debugLog()?.warn("ws", `[CODE-VERIFY-POSTSCRIPT v1] persist failed · ${formatError(err)} · ${sessionPath}`);
   }
   return false;
 }
 
-export function appendTextToLatestAssistantInMemory(session, addition) {
-  const messages = Array.isArray(session?.messages) ? session.messages : [];
+export function appendTextToLatestAssistantInMemory(session: unknown, addition: unknown): boolean {
+  const messages = getSessionMessages(session);
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i]?.role !== "assistant") continue;
-    return appendTextToMessageContent(messages[i], addition);
+    const msg = asPersistedMessage(messages[i]);
+    if (msg?.role !== "assistant") continue;
+    return appendTextToMessageContent(msg, addition);
   }
   return false;
 }
 
-export function appendJsonlLine(filePath, entry) {
+export function appendJsonlLine(filePath: string, entry: unknown): void {
   fs.appendFileSync(filePath, `${JSON.stringify(entry)}\n`);
 }
 
-export function ensureSessionFileOnDisk(sessionPath) {
+export function ensureSessionFileOnDisk(sessionPath: string | null | undefined): boolean {
   if (!sessionPath) return false;
   try {
     const dir = path.dirname(sessionPath);
@@ -188,16 +234,21 @@ export function ensureSessionFileOnDisk(sessionPath) {
     if (!fs.existsSync(sessionPath)) fs.writeFileSync(sessionPath, "", "utf-8");
     return true;
   } catch (err) {
-    debugLog()?.warn("ws", `[PROMPT-SESSION-FILE v1] failed · ${err?.message || err} · ${sessionPath}`);
+    debugLog()?.warn("ws", `[PROMPT-SESSION-FILE v1] failed · ${formatError(err)} · ${sessionPath}`);
     return false;
   }
 }
 
-export function persistLocalQwen35DirectTurn(sessionPath, originalPromptText, assistantText, opts = {}) {
+export function persistLocalQwen35DirectTurn(
+  sessionPath: string | null | undefined,
+  originalPromptText: unknown,
+  assistantText: unknown,
+  opts: PersistLocalQwen35DirectTurnOptions = {},
+): void {
   if (!sessionPath || !assistantText) return;
   const now = new Date().toISOString();
   let parentId = getLastSessionEntryId(sessionPath);
-  let userId = null;
+  let userId: string | null = null;
   const latest = latestPersistedMessageText(sessionPath);
   if (!(latest?.role === "user" && String(latest.text || "").trim() === String(originalPromptText || "").trim())) {
     userId = sessionLineId();
