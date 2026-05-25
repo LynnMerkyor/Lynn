@@ -22,8 +22,28 @@ import { t } from "../i18n.js";
 
 const MAX_FILES = 9;
 
+type UploadBody = {
+  paths?: string[];
+};
+
+type UploadResult = {
+  src: string;
+  dest?: string;
+  name?: string;
+  isDirectory?: boolean;
+  error?: string;
+};
+
+type UploadRouteEngine = {
+  cwd: string;
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /** 递归统计路径中的文件数量（文件夹递归计数内部文件，普通文件计 1） */
-function countFiles(p) {
+function countFiles(p: string): number {
   try {
     const stat = fs.statSync(p);
     if (!stat.isDirectory()) return 1;
@@ -38,7 +58,7 @@ function countFiles(p) {
 }
 
 /** 清理超过 24 小时的上传临时文件 */
-function cleanOldUploads(uploadsDir) {
+function cleanOldUploads(uploadsDir: string): void {
   try {
     if (!fs.existsSync(uploadsDir)) return;
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
@@ -58,11 +78,11 @@ function cleanOldUploads(uploadsDir) {
   }
 }
 
-export function createUploadRoute(engine) {
+export function createUploadRoute(engine: UploadRouteEngine): Hono {
   const route = new Hono();
 
   route.post("/upload", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<UploadBody>(c);
     const { paths } = body;
     if (!Array.isArray(paths) || paths.length === 0) {
       return c.json({ error: t("error.pathsRequired") }, 400);
@@ -93,7 +113,7 @@ export function createUploadRoute(engine) {
     // 清理超过 24 小时的旧上传文件
     cleanOldUploads(uploadsDir);
 
-    const results = [];
+    const results: UploadResult[] = [];
 
     for (const srcPath of paths) {
       try {
@@ -131,7 +151,7 @@ export function createUploadRoute(engine) {
           isDirectory: isDir,
         });
       } catch (err) {
-        results.push({ src: srcPath, error: err.message });
+        results.push({ src: srcPath, error: errorMessage(err) });
       }
     }
 
