@@ -245,6 +245,10 @@ export function isLocalModelSource(value: unknown): value is LocalModelSource {
   return typeof value === "string" && sourceSet.has(value);
 }
 
+export function isLocalModelIpcErrorReason(value: unknown): value is LocalModelIpcErrorReason {
+  return typeof value === "string" && Object.values(LocalModelIpcErrorReason).includes(value as LocalModelIpcErrorReason);
+}
+
 export function validateLocalModelIpcRequest(input: unknown): LocalModelIpcValidationResult {
   if (!isPlainRecord(input)) {
     return {
@@ -341,6 +345,7 @@ export function sanitizeLocalModelError(
 }
 
 export function mapLocalModelIpcErrorReason(input: unknown): LocalModelIpcErrorReason {
+  if (isPlainRecord(input) && isLocalModelIpcErrorReason(input.reason)) return input.reason;
   const text = stringifyErrorLike(input).toLowerCase();
   if (!text) return LocalModelIpcErrorReason.UNKNOWN;
   if (hasAny(text, ["cancel", "aborted", "aborterror"])) return LocalModelIpcErrorReason.CANCELLED;
