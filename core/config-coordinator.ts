@@ -18,8 +18,145 @@ import {
   uniqueTrustedRoots,
 } from "../shared/trusted-roots.js";
 import { t } from "../server/i18n.js";
+import type { ResolvedModel } from "./types.js";
 
 const log = createModuleLogger("config");
+
+type JsonRecord = Record<string, unknown>;
+type SharedModelRole = "utility" | "utility_large" | "summarizer" | "compiler";
+type SharedModelPrefKey =
+  | "utility_model"
+  | "utility_large_model"
+  | "summarizer_model"
+  | "compiler_model";
+type ModelSelection = string | { id: string; provider?: string | null; [key: string]: unknown };
+type SharedModels = Record<SharedModelRole, ModelSelection | null>;
+type SearchConfig = {
+  provider: string | null;
+  base_url: string | null;
+  api_key: string | null;
+};
+type UtilityApiConfig = SearchConfig;
+type LogFn = (message: string) => void;
+
+interface CoordinatorPreferences extends JsonRecord {
+  home_folder?: string;
+  trusted_roots?: string[];
+  agentOrder?: string[];
+  utility_model?: ModelSelection | null;
+  utility_large_model?: ModelSelection | null;
+  summarizer_model?: ModelSelection | null;
+  compiler_model?: ModelSelection | null;
+  search_provider?: string;
+  search_base_url?: string;
+  search_api_key?: string;
+  utility_api_provider?: string;
+  utility_api_base_url?: string;
+  utility_api_key?: string;
+}
+
+interface PreferencesManagerLike {
+  getPreferences(): CoordinatorPreferences;
+  savePreferences(prefs: CoordinatorPreferences): unknown;
+  setThinkingLevel(level: string): unknown;
+  getThinkingLevel(): string;
+}
+
+interface ModelManagerLike {
+  availableModels: ResolvedModel[];
+  defaultModel: ResolvedModel | null;
+  syncAndRefresh(): Promise<unknown>;
+  resolveUtilityConfig(agentConfig: AgentConfig | undefined, sharedModels: SharedModels, utilityApi: UtilityApiConfig): unknown;
+  setDefaultModel(modelId: string, provider?: string): ResolvedModel;
+  resolveThinkingLevel(level: string, model: unknown): string;
+}
+
+interface AgentConfig extends JsonRecord {
+  models?: {
+    chat?: ModelSelection | null;
+    utility?: ModelSelection | null;
+    [key: string]: unknown;
+  };
+  api?: {
+    provider?: string;
+    [key: string]: unknown;
+  };
+}
+
+interface AgentLike {
+  configPath?: string;
+  sessionDir: string;
+  config?: AgentConfig;
+  memoryEnabled?: boolean;
+  _utilityModel?: ModelSelection | null;
+  updateConfig?: (partial: ConfigPatch) => unknown;
+  setMemoryEnabled: (val: boolean) => unknown;
+  setMemoryMasterEnabled: (val: boolean) => unknown;
+}
+
+interface SessionLike {
+  model?: unknown;
+  setThinkingLevel(level: string): unknown;
+  sessionManager?: {
+    getSessionFile?: () => string | null | undefined;
+  };
+}
+
+interface SessionCoordinatorLike {
+  switchCurrentSessionModel(model: ResolvedModel): Promise<unknown> | unknown;
+  getCurrentSessionModelRef(): ModelSelection | null;
+}
+
+interface SkillManagerLike {
+  syncAgentSkills(agent: AgentLike): unknown;
+}
+
+interface HubLike {
+  scheduler?: {
+    reloadHeartbeat(): Promise<unknown> | unknown;
+    heartbeat?: {
+      start(): unknown;
+      stop(): Promise<unknown> | unknown;
+    } | null;
+  } | null;
+}
+
+interface ConfigCoordinatorDeps {
+  lynnHome: string;
+  agentsDir: string;
+  getAgent: () => AgentLike;
+  getAgents: () => Map<string, AgentLike>;
+  getModels: () => ModelManagerLike;
+  getPrefs: () => PreferencesManagerLike;
+  getSkills: () => SkillManagerLike | null | undefined;
+  getSession: () => SessionLike | null | undefined;
+  getSessionCoordinator: () => SessionCoordinatorLike | null | undefined;
+  getHub: () => HubLike | null | undefined;
+  emitEvent: (event: string, sp?: unknown) => void;
+  emitDevLog: (text: string, level?: string) => void;
+  getCurrentModel: () => string | null;
+}
+
+interface ConfigPatch extends JsonRecord {
+  models?: {
+    chat?: ModelSelection | null;
+    [key: string]: unknown;
+  };
+  api?: {
+    provider?: string;
+    [key: string]: unknown;
+  };
+  skills?: unknown;
+  desk?: {
+    heartbeat_interval?: unknown;
+    heartbeat_enabled?: boolean;
+    [key: string]: unknown;
+  };
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 /** Plan Mode / Bridge 只读工具名白名单 */
 export const READ_ONLY_BUILTIN_TOOLS = ["read", "grep", "find", "ls"];
@@ -30,32 +167,18 @@ export const SHARED_MODEL_KEYS = [
   ["utility_large",  "utility_large_model"],
   ["summarizer",     "summarizer_model"],
   ["compiler",       "compiler_model"],
-];
+] as const satisfies readonly (readonly [SharedModelRole, SharedModelPrefKey])[];
 
 export class ConfigCoordinator {
-  /**
-   * @param {object} deps
-   * @param {string} deps.lynnHome
-   * @param {string} deps.agentsDir
-   * @param {() => object} deps.getAgent - 当前焦点 agent
-   * @param {() => Map} deps.getAgents - 所有 agent Map
-   * @param {() => import('./model-manager.js').ModelManager} deps.getModels
-   * @param {() => import('./preferences-manager.js').PreferencesManager} deps.getPrefs
-   * @param {() => import('./skill-manager.js').SkillManager} deps.getSkills
-   * @param {() => object|null} deps.getSession - 当前 session
-   * @param {() => import('./session-coordinator.js').SessionCoordinator|null} deps.getSessionCoordinator
-   * @param {() => object|null} deps.getHub
-   * @param {(event, sp) => void} deps.emitEvent
-   * @param {(text, level?) => void} deps.emitDevLog
-   * @param {() => string|null} deps.getCurrentModel - currentModel name
-   */
-  constructor(deps) {
+  private _d: ConfigCoordinatorDeps;
+
+  constructor(deps: ConfigCoordinatorDeps) {
     this._d = deps;
   }
 
   // ── Home Folder ──
 
-  getHomeFolder() {
+  getHomeFolder(): string {
     const prefs = this._prefs();
     const configured = getPreferredHomeFolder(prefs);
     if (configured && fs.existsSync(configured)) return configured;
@@ -69,7 +192,7 @@ export class ConfigCoordinator {
     return defaultHome;
   }
 
-  setHomeFolder(folder) {
+  setHomeFolder(folder: string | null | undefined): void {
     const prefs = this._prefs();
     const normalized = normalizeTrustedRoot(folder);
     if (normalized) {
@@ -87,11 +210,11 @@ export class ConfigCoordinator {
     log.log(`setHomeFolder: ${normalized || "(cleared)"}`);
   }
 
-  getTrustedRoots() {
+  getTrustedRoots(): string[] {
     return getEffectiveTrustedRoots(this._prefs());
   }
 
-  setTrustedRoots(roots) {
+  setTrustedRoots(roots: Iterable<unknown>): void {
     const prefs = this._prefs();
     prefs.trusted_roots = uniqueTrustedRoots(roots);
 
@@ -108,9 +231,14 @@ export class ConfigCoordinator {
 
   // ── Shared Models ──
 
-  getSharedModels() {
+  getSharedModels(): SharedModels {
     const prefs = this._prefs();
-    const result = {};
+    const result: SharedModels = {
+      utility: null,
+      utility_large: null,
+      summarizer: null,
+      compiler: null,
+    };
     for (const [field, prefKey] of SHARED_MODEL_KEYS) {
       const raw = prefs[prefKey];
       if (typeof raw === "object" && raw?.id) {
@@ -124,7 +252,7 @@ export class ConfigCoordinator {
     return result;
   }
 
-  setSharedModels(partial) {
+  setSharedModels(partial: Partial<Record<SharedModelRole, ModelSelection | null | "">>): void {
     const prefs = this._prefs();
     const changed = [];
     for (const [field, prefKey] of SHARED_MODEL_KEYS) {
@@ -145,7 +273,7 @@ export class ConfigCoordinator {
 
   // ── Search Config ──
 
-  getSearchConfig() {
+  getSearchConfig(): SearchConfig {
     const prefs = this._prefs();
     return {
       provider: prefs.search_provider || null,
@@ -154,7 +282,7 @@ export class ConfigCoordinator {
     };
   }
 
-  setSearchConfig(partial) {
+  setSearchConfig(partial: Partial<SearchConfig>): void {
     const prefs = this._prefs();
     if (partial.provider !== undefined) {
       if (partial.provider) prefs.search_provider = partial.provider;
@@ -174,7 +302,7 @@ export class ConfigCoordinator {
 
   // ── Utility API ──
 
-  getUtilityApi() {
+  getUtilityApi(): UtilityApiConfig {
     const prefs = this._prefs();
     return {
       provider: prefs.utility_api_provider || null,
@@ -183,13 +311,13 @@ export class ConfigCoordinator {
     };
   }
 
-  setUtilityApi(partial) {
+  setUtilityApi(partial: Partial<UtilityApiConfig>): void {
     const prefs = this._prefs();
     for (const [key, prefKey] of [
       ["provider", "utility_api_provider"],
       ["base_url", "utility_api_base_url"],
       ["api_key", "utility_api_key"],
-    ]) {
+    ] as const) {
       if (partial[key] !== undefined) {
         if (partial[key]) prefs[prefKey] = partial[key];
         else delete prefs[prefKey];
@@ -199,7 +327,7 @@ export class ConfigCoordinator {
     log.log(`setUtilityApi: provider=${partial.provider || "-"}, base_url=${partial.base_url || "-"}`);
   }
 
-  resolveUtilityConfig() {
+  resolveUtilityConfig(): unknown {
     const models = this._d.getModels();
     return models.resolveUtilityConfig(
       this._d.getAgent().config,
@@ -210,11 +338,11 @@ export class ConfigCoordinator {
 
   // ── Agent Order ──
 
-  readAgentOrder() {
+  readAgentOrder(): string[] {
     return this._prefs().agentOrder || [];
   }
 
-  saveAgentOrder(order) {
+  saveAgentOrder(order: string[]): void {
     const prefs = this._prefs();
     prefs.agentOrder = order;
     this._savePrefs(prefs);
@@ -222,7 +350,7 @@ export class ConfigCoordinator {
 
   // ── Model / Thinking ──
 
-  async syncAndRefresh() {
+  async syncAndRefresh(): Promise<unknown> {
     const models = this._d.getModels();
     const synced = await models.syncAndRefresh();
     this.normalizeUtilityApiPreferences();
@@ -236,7 +364,7 @@ export class ConfigCoordinator {
    * 2. 同步写回当前 agent 的默认 chat 模型，避免 UI / 会话 / config.yaml 漂移
    * 3. 持久化 session meta，确保冷启动恢复时也沿用正确模型
    */
-  async setPendingModel(modelId, provider) {
+  async setPendingModel(modelId: string, provider?: string): Promise<ResolvedModel> {
     const models = this._d.getModels();
     const model = findModel(models.availableModels, modelId, provider);
     if (!model) throw new Error(t("error.modelNotFound", { id: modelId }));
@@ -244,7 +372,7 @@ export class ConfigCoordinator {
     await sessionCoord?.switchCurrentSessionModel(model);
     models.setDefaultModel(model.id, model.provider || undefined);
     const agent = this._d.getAgent();
-    const configPatch = {
+    const configPatch: ConfigPatch = {
       models: { chat: model.provider ? { id: model.id, provider: model.provider } : model.id },
       ...(model.provider ? { api: { provider: model.provider } } : {}),
     };
@@ -256,7 +384,7 @@ export class ConfigCoordinator {
         if (agent.config && typeof agent.config === "object") {
           agent.config.models = {
             ...(agent.config.models || {}),
-            chat: configPatch.models.chat,
+            chat: configPatch.models?.chat,
           };
           if (model.provider) {
             agent.config.api = {
@@ -276,7 +404,7 @@ export class ConfigCoordinator {
    * 更新 ModelManager._defaultModel + 持久化到 config.yaml。
    * 不修改任何已有 session 的模型。
    */
-  setDefaultModel(modelId, provider) {
+  setDefaultModel(modelId: string, provider?: string): ResolvedModel {
     const models = this._d.getModels();
     const model = models.setDefaultModel(modelId, provider);
     const agent = this._d.getAgent();
@@ -289,7 +417,7 @@ export class ConfigCoordinator {
     return model;
   }
 
-  setThinkingLevel(level) {
+  setThinkingLevel(level: string): void {
     // 持久化到全局 preference（跨 session 常驻）
     this._d.getPrefs().setThinkingLevel(level);
     const session = this._d.getSession();
@@ -299,23 +427,23 @@ export class ConfigCoordinator {
   }
 
   /** 从 preference 读取用户设定的 thinking level */
-  getThinkingLevel() {
+  getThinkingLevel(): string {
     return this._d.getPrefs().getThinkingLevel();
   }
 
   // ── Memory ──
 
-  setMemoryEnabled(val) {
+  setMemoryEnabled(val: boolean): void {
     this._d.getAgent().setMemoryEnabled(val);
     this.persistSessionMeta();
   }
 
-  setMemoryMasterEnabled(agentId, val) {
+  setMemoryMasterEnabled(agentId: string, val: boolean): void {
     const ag = this._d.getAgents().get(agentId);
     if (ag) ag.setMemoryMasterEnabled(val);
   }
 
-  persistSessionMeta() {
+  persistSessionMeta(): void {
     const session = this._d.getSession();
     const sessPath = session?.sessionManager?.getSessionFile?.();
     if (!sessPath) return;
@@ -327,7 +455,7 @@ export class ConfigCoordinator {
 
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        let meta = {};
+        let meta: Record<string, JsonRecord> = {};
         try { meta = JSON.parse(fs.readFileSync(metaPath, "utf-8")); } catch {}
         const sessKey = path.basename(sessPath);
         meta[sessKey] = {
@@ -341,7 +469,7 @@ export class ConfigCoordinator {
         if (attempt === 0) {
           try { fs.mkdirSync(path.dirname(metaPath), { recursive: true }); } catch {}
         } else {
-          console.error("[config] persistSessionMeta failed:", err.message);
+          console.error("[config] persistSessionMeta failed:", errorMessage(err));
         }
       }
     }
@@ -349,7 +477,7 @@ export class ConfigCoordinator {
 
   // ── updateConfig ──
 
-  async updateConfig(partial) {
+  async updateConfig(partial: ConfigPatch): Promise<void> {
     const keys = Object.keys(partial);
     if (keys.length) log.log(`updateConfig: keys=[${keys.join(",")}]`);
 
@@ -357,7 +485,7 @@ export class ConfigCoordinator {
     const models = this._d.getModels();
 
     // agent 负责：写磁盘、刷新身份、刷新模块、重建 prompt
-    agent.updateConfig(partial);
+    agent.updateConfig!(partial);
 
     // 切换聊天模型：不需要 sync，模型早已注册
     if (partial.models?.chat) {
@@ -374,7 +502,7 @@ export class ConfigCoordinator {
     }
 
     if (partial.skills) {
-      this._d.getSkills().syncAgentSkills(agent);
+      this._d.getSkills()!.syncAgentSkills(agent);
     }
 
     if (partial.desk) {
@@ -398,7 +526,7 @@ export class ConfigCoordinator {
     }
   }
 
-  normalizeUtilityApiPreferences(logFn = null) {
+  normalizeUtilityApiPreferences(logFn: LogFn | null = null): boolean {
     const prefs = this._prefs();
     const hasOverride =
       !!prefs.utility_api_provider ||
@@ -407,7 +535,7 @@ export class ConfigCoordinator {
     if (!hasOverride) return false;
 
     const shared = this.getSharedModels();
-    const utilityModelId = shared.utility || this._d.getAgent()?.config?.models?.utility || "";
+    const utilityModelId: ModelSelection | "" = shared.utility || this._d.getAgent()?.config?.models?.utility || "";
     const utilityEntry = utilityModelId
       ? findModel(this._d.getModels().availableModels, utilityModelId)
       : null;
@@ -434,6 +562,6 @@ export class ConfigCoordinator {
 
   // ── helpers ──
 
-  _prefs() { return this._d.getPrefs().getPreferences(); }
-  _savePrefs(prefs) { return this._d.getPrefs().savePreferences(prefs); }
+  _prefs(): CoordinatorPreferences { return this._d.getPrefs().getPreferences(); }
+  _savePrefs(prefs: CoordinatorPreferences): unknown { return this._d.getPrefs().savePreferences(prefs); }
 }
