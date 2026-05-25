@@ -1,0 +1,8 @@
+desktop/dist-renderer/** linguist-generated=true
+desktop/dist-server/** linguist-generated=true
+desktop/main.bundle.cjs linguist-generated=true
+dist-server-bundle/** linguist-generated=true
+dist/** linguist-generated=true
+*.min.js linguist-generated=true
+worktrees/** linguist-vendored=true
+lynn-engine*/** linguist-vendored=true

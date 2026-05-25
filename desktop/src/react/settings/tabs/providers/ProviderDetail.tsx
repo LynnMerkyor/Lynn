@@ -656,7 +656,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         <span>32K 上下文</span>
         <span>MTP 加速</span>
         <span>Lynn imatrix 校准</span>
-        <span>MMLU 100 81.00%</span>
+        <span>MMLU 500 81.20%</span>
         <span>24GB+ 推荐</span>
         <span>本地优先</span>
         <span>无 API Key</span>

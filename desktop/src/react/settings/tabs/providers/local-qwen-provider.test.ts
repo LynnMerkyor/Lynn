@@ -49,6 +49,8 @@ describe('Local Qwen provider UX guards', () => {
 
   it('makes advanced local models actionable instead of passive cards', () => {
     const source = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
+    expect(source).toContain('MMLU 500 81.20%');
+    expect(source).not.toContain('MMLU 100 81.00%');
     expect(source).toContain('startRecommendedDownload');
     expect(source).toContain('llamacppStartDownload');
     expect(source).toContain('下载到本机');
