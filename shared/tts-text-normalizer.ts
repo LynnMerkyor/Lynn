@@ -2,14 +2,14 @@ const DIGITS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "
 const SMALL_UNITS = ["", "十", "百", "千"];
 const BIG_UNITS = ["", "万", "亿"];
 
-function digitByDigit(value) {
+function digitByDigit(value: string | number): string {
   return String(value)
     .split("")
     .map((ch) => (/\d/.test(ch) ? DIGITS[Number(ch)] : ch))
     .join("");
 }
 
-function integerUnder10000ToChinese(value) {
+function integerUnder10000ToChinese(value: string | number): string {
   const n = Number(value);
   if (!Number.isFinite(n) || n === 0) return DIGITS[0];
   const chars = String(Math.trunc(n)).split("").map(Number);
@@ -32,14 +32,14 @@ function integerUnder10000ToChinese(value) {
   return out.replace(/^一十/, "十");
 }
 
-function integerToChinese(value) {
+function integerToChinese(value: string | number): string {
   const raw = String(value || "0");
   if (/^0\d+$/.test(raw) || raw.length >= 5) return digitByDigit(raw);
   let n = Number(raw);
   if (!Number.isFinite(n)) return raw;
   n = Math.trunc(n);
   if (n === 0) return DIGITS[0];
-  const parts = [];
+  const parts: string[] = [];
   let unitIndex = 0;
   while (n > 0) {
     const part = n % 10000;
@@ -54,7 +54,7 @@ function integerToChinese(value) {
   return parts.join("").replace(/零+/g, "零").replace(/零$/g, "");
 }
 
-function numberToChinese(rawValue, opts = {}) {
+function numberToChinese(rawValue: string | number, opts: { digitByDigit?: boolean } = {}): string {
   const raw = String(rawValue || "").trim();
   if (!raw) return raw;
   const negative = raw.startsWith("-");
@@ -65,7 +65,7 @@ function numberToChinese(rawValue, opts = {}) {
   return `${negative ? "负" : ""}${integer}${decimal}`;
 }
 
-function normalizeDateSeparators(text) {
+function normalizeDateSeparators(text: string): string {
   return text
     .replace(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/g, (_m, y, mo, d) => (
       `${digitByDigit(y)}年${numberToChinese(Number(mo))}月${numberToChinese(Number(d))}日`
@@ -76,7 +76,7 @@ function normalizeDateSeparators(text) {
     ));
 }
 
-function normalizeUnits(text) {
+function normalizeUnits(text: string): string {
   return text
     .replace(/(-?\d+(?:\.\d+)?)\s*[~～\-—–至到]\s*(-?\d+(?:\.\d+)?)\s*(?:°\s*C|℃|摄氏度)/gi, (_m, a, b) => (
       `${numberToChinese(a)}到${numberToChinese(b)}摄氏度`
@@ -91,7 +91,7 @@ function normalizeUnits(text) {
     .replace(/(-?\d+(?:\.\d+)?)\s*(?:元\/克|元\/g)/gi, (_m, n) => `${numberToChinese(n)}元每克`);
 }
 
-function normalizeCurrencyAndSymbols(text) {
+function normalizeCurrencyAndSymbols(text: string): string {
   return text
     .replace(/\bXAU\/USD\b/gi, "国际现货黄金")
     .replace(/\bXAG\/USD\b/gi, "国际现货白银")
@@ -101,8 +101,8 @@ function normalizeCurrencyAndSymbols(text) {
     .replace(/\bRMB\b/g, "人民币");
 }
 
-function normalizeRemainingNumbers(text) {
-  return text.replace(/-?\d+(?:\.\d+)?/g, (match, offset, full) => {
+function normalizeRemainingNumbers(text: string): string {
+  return text.replace(/-?\d+(?:\.\d+)?/g, (match, offset: number, full: string) => {
     const prev = full[offset - 1] || "";
     const next = full[offset + match.length] || "";
     if ((prev === "/" || prev === ":") && /[A-Za-z]/.test(next)) return match;
@@ -113,14 +113,14 @@ function normalizeRemainingNumbers(text) {
 
 const EMOJI_SEQUENCE_RE = /(?:[\u{1F1E6}-\u{1F1FF}]{2})|(?:[#*0-9]\uFE0F?\u20E3)|(?:\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?)*)/gu;
 
-export function stripEmojiForTts(value) {
+export function stripEmojiForTts(value: unknown): string {
   return String(value || "")
     .replace(EMOJI_SEQUENCE_RE, "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-export function normalizeChineseTtsText(value) {
+export function normalizeChineseTtsText(value: unknown): string {
   const input = stripEmojiForTts(value);
   if (!input.trim()) return "";
   return normalizeRemainingNumbers(
