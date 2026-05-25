@@ -1,3 +1,53 @@
+# Lynn v0.79.2 Release Notes
+
+> 发布日期: 2026-05-25 · 代号: "V0.79 稳定补丁"
+
+v0.79.2 是 v0.79 本地模型与 Deep Research 路线的稳定补丁版本。默认本地引导继续保持 **Qwen3.5-9B Q4_K_M imatrix MTP**,4B 只作为低配降级;本版重点是修正实时工具与 fallback 细节,并把 TypeScript 迁移推进到不会改变运行路径的安全基建阶段。
+
+## 重点更新
+
+### 本地模型与工具链路
+- 默认本地模型仍为 **Qwen3.5-9B Q4_K_M imatrix MTP**;4B 保持低配降级,并继续提示 thinking-on 可能长思考后无正文。
+- 天气/实时工具回答按工具返回的绝对日期、天气现象与降水描述输出,减少“明天/后天/未来两天”相对日期误读。
+- 本地 9B 短问候/轻任务继续走 tiny prompt thinking-off 策略,避免无意义长思考。
+
+### Brain v2 fallback
+- Spark APEX-MTP fallback 修正为 canonical model id `qwen36-35b-a3b-apex-mtp`。
+- fallback 默认注入 `enable_thinking:false`,避免 reasoning 消耗输出预算后返回空正文。
+- 本地 provider fast-probe 从固定 800ms 误判风险改为可配置 timeout,并支持 per-provider `health_path` / `health_probe_ms`。
+
+### Deep Research 与 artifact
+- Deep Research / session 历史 / tool recovery 共用 artifact payload 规范。
+- 本地模型、BYOK 和默认模型路径都能生成聊天内可点击预览的 HTML 报告。
+- 认证、限流与非 JSON 错误按类别呈现,不再误报为 invalid JSON。
+
+### TypeScript 迁移基建
+- `brain-v2-mirror` 完成 TS island 后继续收紧热路径类型,移除可行的 `@ts-nocheck`,并收窄 wire adapter SSE 解析类型。
+- `server/chat` 叶子 helper 增加 `@ts-check` / JSDoc contract,补齐 artifact shape 与 stream event emitter 测试。
+- `core` provider / LLM contract 增加 `core/types.d.ts`,为后续 core/server TS 迁移建立边界。
+- 新增 `npm run typecheck:runtime`,只做 no-emit 检查,不改变默认 JS runtime 启动路径。
+
+## 回归门禁
+
+- `npm test`: **180 files / 1425 passed / 1 skipped** ✓
+- TypeScript: `npm run typecheck` ✓
+- Runtime TS foundation: `npm run typecheck:runtime` ✓
+- Brain v2: `npm run tsc && npm test` → **104 tests passed** ✓
+- Build gates:server / main / renderer build ✓
+- Release regression / Electron UI smoke:纳入 `release:preflight` ✓
+
+## English Summary
+
+v0.79.2 is the stabilization patch for the v0.79 local-model and Deep Research release line. The default local onboarding path remains **Qwen3.5-9B Q4_K_M imatrix MTP**, while 4B remains a low-config downgrade with its thinking-on risk documented.
+
+Highlights:
+- Weather/realtime tool answers now respect tool-returned absolute dates and precipitation wording.
+- Brain v2 Spark APEX-MTP fallback uses the canonical model id, disables thinking by default, and has configurable cold-start health probe timeouts.
+- Deep Research artifacts are normalized across local, BYOK, and default model paths, with clickable HTML preview cards in chat.
+- TypeScript migration moved forward safely:brain-v2 hot paths tightened, chat leaf helpers and core provider/LLM contracts typed, and `typecheck:runtime` added without changing the runtime launch path.
+
+---
+
 # Lynn v0.79.1 Release Notes
 
 > 发布日期: 2026-05-25 · 代号: "9B MTP 默认回归"

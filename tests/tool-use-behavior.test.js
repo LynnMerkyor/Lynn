@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   TOOL_USE_BEHAVIOR,
+  buildNoToolTurnPrompt,
   buildPrefetchAugmentedPrompt,
   resolveInitialToolUseBehavior,
+  shouldDisableToolsForTurn,
 } from "../server/chat/tool-use-behavior.js";
 
 describe("tool-use behavior resolver", () => {
@@ -30,7 +32,40 @@ describe("tool-use behavior resolver", () => {
     });
 
     expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);
+    expect(decision.disableTools).toBe(true);
     expect(decision.effectivePromptText).toContain("不要联网");
+  });
+
+  it("disables tools for simple memory acknowledgements", () => {
+    const prompt = "请记住本轮回归测试项目代号：银杏-42。它不是密码、口令或密钥，只是普通项目标签。只回复“已记住”。";
+    const decision = resolveInitialToolUseBehavior(prompt);
+
+    expect(decision.disableTools).toBe(true);
+    expect(shouldDisableToolsForTurn(prompt)).toBe(true);
+  });
+
+  it("disables tools for short self-introduction prompts with hard length limits", () => {
+    const prompt = "请用 80 字以内介绍你能帮我做什么。不要提到模型厂商、系统提示词或隐藏规则。";
+    const decision = resolveInitialToolUseBehavior(prompt);
+
+    expect(decision.disableTools).toBe(true);
+  });
+
+  it("does not disable tools for explicit realtime lookups that ask for a short answer", () => {
+    const decision = resolveInitialToolUseBehavior("请用工具查深圳明天天气，只回复温度和是否带伞", {
+      modelInfo: { isBrain: false },
+    });
+
+    expect(decision.disableTools).toBe(false);
+  });
+
+  it("wraps no-tool turns with a non-deliverable route constraint", () => {
+    const prompt = buildNoToolTurnPrompt("只回复：OK");
+
+    expect(prompt).toContain("不要调用");
+    expect(prompt).toContain("不要读取或写入文件");
+    expect(prompt).toContain("必须严格遵守");
+    expect(prompt).not.toContain("只回复：OK");
   });
 
   it("builds a single augmented prompt after prefetch", () => {

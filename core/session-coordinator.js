@@ -603,6 +603,9 @@ export class SessionCoordinator {
           if (sessionEntry._atInjectionHintContext) {
             extras.push(sessionEntry._atInjectionHintContext);
           }
+          if (sessionEntry._turnInstructionHintContext) {
+            extras.push(sessionEntry._turnInstructionHintContext);
+          }
           if (shouldInjectLocalRoutePromptHints() && sessionEntry._routeIntentHintContext) {
             extras.push(sessionEntry._routeIntentHintContext);
           }
@@ -1057,6 +1060,7 @@ export class SessionCoordinator {
           entry._lastSkillHintContext = "";
         }
         entry._atInjectionHintContext = buildAtInjectionPromptHint(text);
+        entry._turnInstructionHintContext = String(opts?.turnInstruction || "").trim();
         await this._maybeRouteAroundBrokenToolModel(entry, entry._routeIntentValue, agent, sp);
       }
     }
@@ -1084,7 +1088,12 @@ export class SessionCoordinator {
       }
     };
     try {
-      await runPromptAttempt(text);
+      const entry = sp ? this._sessions.get(sp) : null;
+      if (opts?.disableTools && entry) {
+        await this._runWithTurnToolsDisabled(sp, entry, () => runPromptAttempt(text));
+      } else {
+        await runPromptAttempt(text);
+      }
       if (sp) {
         const entry = this._sessions.get(sp);
         const agentForTicker = entry ? this._d.getAgentById(entry.agentId) : agent;
@@ -1097,6 +1106,7 @@ export class SessionCoordinator {
           entry._lastRecallContext = "";
           entry._lastSkillHintContext = "";
           entry._atInjectionHintContext = "";
+          entry._turnInstructionHintContext = "";
           entry._routeIntentHintContext = "";
           entry._scenarioContractHintContext = "";
           entry._routeIntentValue = ROUTE_INTENTS.CHAT;
@@ -1165,6 +1175,7 @@ export class SessionCoordinator {
       entry._lastSkillHintContext = "";
     }
     entry._atInjectionHintContext = buildAtInjectionPromptHint(text);
+    entry._turnInstructionHintContext = String(opts?.turnInstruction || "").trim();
     await this._maybeRouteAroundBrokenToolModel(entry, entry._routeIntentValue, agent, sessionPath);
 
     if (sessionPath === this.currentSessionPath) this._sessionStarted = true;
@@ -1190,15 +1201,47 @@ export class SessionCoordinator {
       }
     };
     try {
-      await runPromptAttempt(text);
+      if (opts?.disableTools) {
+        await this._runWithTurnToolsDisabled(sessionPath, entry, () => runPromptAttempt(text));
+      } else {
+        await runPromptAttempt(text);
+      }
       agent?._memoryTicker?.notifyTurn(sessionPath);
     } finally {
       entry._lastRecallContext = "";
       entry._lastSkillHintContext = "";
       entry._atInjectionHintContext = "";
+      entry._turnInstructionHintContext = "";
       entry._routeIntentHintContext = "";
       entry._scenarioContractHintContext = "";
       entry._routeIntentValue = ROUTE_INTENTS.CHAT;
+    }
+  }
+
+  async _runWithTurnToolsDisabled(sessionPath, entry, run) {
+    const session = entry?.session;
+    if (!session || typeof session._buildRuntime !== "function") {
+      return run();
+    }
+
+    const previousCustomTools = session._customTools;
+    const previousBaseToolsOverride = session._baseToolsOverride;
+    try {
+      session._customTools = [];
+      session._baseToolsOverride = {};
+      session._buildRuntime({ activeToolNames: [] });
+      log.log(`[model-tools] disabled client tools for no-tool turn · ${sessionPath || "current"}`);
+      return await run();
+    } finally {
+      session._customTools = previousCustomTools;
+      session._baseToolsOverride = previousBaseToolsOverride;
+      if (sessionPath && this._sessions.has(sessionPath)) {
+        this._applySessionToolRuntime(sessionPath, entry.securityMode);
+      } else {
+        try {
+          session._buildRuntime({ activeToolNames: [] });
+        } catch {}
+      }
     }
   }
 

@@ -37,7 +37,22 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.79.1</strong> · 2026-05-25 · Default local model stays on Qwen3.5-9B MTP, 4B as downgrade <em>(latest)</em></summary>
+<summary><strong>v0.79.2</strong> · 2026-05-25 · Stability patch + TypeScript migration foundation <em>(latest)</em></summary>
+
+**V0.79 stabilization patch**:
+- 🧭 **Local onboarding stays on 9B by default**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default; 4B stays as a low-config downgrade with the thinking-on risk documented.
+- 🌦️ **Weather and realtime tools hardened**:weather answers now follow the tool-returned absolute dates and precipitation wording instead of misreading relative day ranges.
+- 🔁 **Brain v2 fallback stabilized**:Spark APEX-MTP fallback now uses the canonical model id, disables thinking by default for fallback, and has configurable cold-start health probe timeouts.
+- 🧾 **Deep Research artifact shape unified**:local, BYOK, and default model paths all create clickable HTML preview cards in chat.
+- 🧱 **Architecture debt cleanup**:`brain-v2-mirror` continues its TypeScript island hardening, while `server/chat` leaf helpers and `core` provider/LLM contracts now have migration-safe type boundaries.
+- ✅ **Release gate**:full `npm test` passed, `typecheck:runtime` was added, brain-v2 `tsc + 104 tests` passed, and release preflight covers build/regression gates.
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.2)
+
+</details>
+
+<details>
+<summary><strong>v0.79.1</strong> · 2026-05-25 · Default local model stays on Qwen3.5-9B MTP, 4B as downgrade</summary>
 
 **Default local tier swap**:
 - 🧠 **Default Qwen3.5-9B Q4_K_M imatrix MTP**: 5.38 GB · 24GB VRAM/unified memory recommended · MTP acceleration · stable thinking-on first. Spark retests confirmed 4B can think for a long time and return no visible answer with thinking-on, so it is no longer the default onboarding model.

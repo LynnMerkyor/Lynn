@@ -1483,6 +1483,32 @@ describe("chat route event forwarding", () => {
     expect(reportResearchMock.buildReportResearchContext).toHaveBeenCalled();
   });
 
+  it("disables tools for simple memory acknowledgement turns", async () => {
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(async () => {});
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({
+        type: "prompt",
+        text: "请记住本轮回归测试项目代号：银杏-42。它不是密码、口令或密钥，只是普通项目标签。只回复“已记住”。",
+      }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
+    const [effectivePrompt, opts] = hub.send.mock.calls[0];
+    expect(effectivePrompt).not.toContain("不要读取或写入文件");
+    expect(effectivePrompt).toContain("只回复“已记住”");
+    expect(opts).toEqual(expect.objectContaining({
+      sessionPath: "/sessions/current.jsonl",
+      disableTools: true,
+      turnInstruction: expect.stringContaining("不要读取或写入文件"),
+    }));
+  });
+
   it("passes pseudo tool text for Brain without client-side retry prompts", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);

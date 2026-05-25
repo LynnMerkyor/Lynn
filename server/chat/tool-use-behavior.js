@@ -16,7 +16,7 @@ import {
  * @typedef {"run_llm_again" | "prefetch_then_run_or_stop"} ToolUseBehaviorName
  * @typedef {{ isBrain?: boolean, [key: string]: any }} ModelInfoLike
  * @typedef {{ modelInfo?: ModelInfoLike | null }} ToolUseBehaviorOptions
- * @typedef {{ behavior: ToolUseBehaviorName, reason: string, reportKind: string, budgetContext: string, effectivePromptText: string, toolName?: string }} ToolUseDecision
+ * @typedef {{ behavior: ToolUseBehaviorName, reason: string, reportKind: string, budgetContext: string, effectivePromptText: string, disableTools?: boolean, toolName?: string }} ToolUseDecision
  */
 
 /** @type {Readonly<{ RUN_LLM_AGAIN: "run_llm_again", PREFETCH_THEN_RUN_OR_STOP: "prefetch_then_run_or_stop" }>} */
@@ -24,6 +24,59 @@ export const TOOL_USE_BEHAVIOR = Object.freeze({
   RUN_LLM_AGAIN: "run_llm_again",
   PREFETCH_THEN_RUN_OR_STOP: "prefetch_then_run_or_stop",
 });
+
+/**
+ * Some prompts are explicitly chat-only: "do not call tools", same-conversation
+ * recall with "only reply X", or a simple "remember this normal label"
+ * acknowledgement. For those turns we suppress tool schemas at runtime instead
+ * of relying on model obedience.
+ *
+ * @param {unknown} promptText
+ * @returns {boolean}
+ */
+export function shouldDisableToolsForTurn(promptText) {
+  const text = String(promptText || "").trim();
+  if (!text) return false;
+  const compact = text.replace(/\s+/g, "");
+  const explicitNoTools = /(?:不要|不用|不必|无需|禁止).{0,12}(?:调用|使用|启用|走|打开)?(?:任何)?(?:工具|tool|tools|联网|搜索|网页|浏览器)|(?:do\s+not|don't|without|no)\s+(?:call\s+|use\s+)?(?:any\s+)?(?:tools?|web|browser|search)/iu.test(text);
+  if (explicitNoTools) return true;
+
+  const shortAnswerOnly = /(?:只|仅)(?:需要)?(?:回复|输出|回答)|请(?:只|仅|直接)(?:回复|输出|回答)|最后一行不能有其他字|only\s+(?:reply|respond|output|answer)|reply\s+only|respond\s+only/iu.test(text);
+  const explicitToolAsk = /(?:用|调用|使用).{0,12}(?:工具|搜索|联网|浏览器|查)|(?:查|搜索|检索).{0,12}(?:天气|行情|股价|新闻|网页|资料|来源)|use\s+(?:the\s+)?(?:tool|tools|web|browser|search)|look\s+up|search\s+for/iu.test(text);
+  const sameConversationRecallOnly = shortAnswerOnly
+    && !explicitToolAsk
+    && compact.length <= 180
+    && /(?:刚才|上(?:一)?轮|前面|项目代号|本身|FENCE_OK|已准备好|介绍你|你能帮我|你能做什么|last\s+turn|previous|above)/iu.test(text);
+  if (sameConversationRecallOnly) return true;
+
+  const shortLengthChatOnly = /\d+\s*(?:字|字符|个字|words?|chars?|characters?)\s*(?:以内|以下|之内|内|or\s+less|max(?:imum)?|under)/iu.test(text)
+    && !explicitToolAsk
+    && compact.length <= 220
+    && /(?:介绍你|你能帮我|你能做什么|你是谁|已准备好|identity|introduce|what\s+can\s+you\s+do|who\s+are\s+you)/iu.test(text);
+  if (shortLengthChatOnly) return true;
+
+  const simpleMemoryAck = /(?:请)?记住|remember/iu.test(text)
+    && /(?:项目代号|普通项目标签|标签|代号|偏好|preference|label|project\s+code)/iu.test(text)
+    && (shortAnswerOnly || /已记住|got\s+it|remembered/iu.test(text))
+    && compact.length <= 260;
+  return simpleMemoryAck;
+}
+
+/**
+ * @param {unknown} promptText
+ * @returns {string}
+ */
+export function buildNoToolTurnPrompt(promptText) {
+  const text = String(promptText || "").trim();
+  const formatHint = /\d+\s*(?:字|字符|个字|words?|chars?|characters?)|只(?:回复|输出|回答)|最后一行|only\s+(?:reply|respond|output|answer)/iu.test(text)
+    ? "若用户限制字数、格式或最后一行内容,必须严格遵守。"
+    : "";
+  return [
+    "【Lynn 路由约束】本轮用户要求直接聊天短答。不要调用、模拟或提及任何工具/技能;不要读取或写入文件;不要运行命令;不要创建交付物。",
+    formatHint ? `${formatHint}有数字字数上限时,答案要保守控制在上限的约 70% 以内;不要列清单,不要展开解释。` : "",
+    "只根据当前对话直接回答用户。",
+  ].filter(Boolean).join("");
+}
 
 /**
  * @param {unknown} promptText
@@ -49,6 +102,7 @@ export function resolveInitialToolUseBehavior(promptText, opts = {}) {
 
   const reportKind = inferReportResearchKind(text);
   const budgetContext = buildBudgetCalculationContext(text);
+  const disableTools = shouldDisableToolsForTurn(text);
   const effectivePromptText = budgetContext
     ? buildPrefetchAugmentedPrompt(text, "", budgetContext)
     : text;
@@ -65,6 +119,7 @@ export function resolveInitialToolUseBehavior(promptText, opts = {}) {
       reportKind,
       budgetContext,
       effectivePromptText,
+      disableTools,
       toolName: prefetchToolNameForKind(reportKind),
     };
   }
@@ -75,6 +130,7 @@ export function resolveInitialToolUseBehavior(promptText, opts = {}) {
     reportKind,
     budgetContext,
     effectivePromptText,
+    disableTools,
   };
 }
 

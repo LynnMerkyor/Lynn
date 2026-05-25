@@ -46,6 +46,7 @@ import {
 } from "../chat/stream-state.js";
 import {
   TOOL_USE_BEHAVIOR,
+  buildNoToolTurnPrompt,
   buildPrefetchAugmentedPrompt,
   resolveInitialToolUseBehavior,
 } from "../chat/tool-use-behavior.js";
@@ -1663,11 +1664,14 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 const initialToolUse = resolveInitialToolUseBehavior(promptText, { modelInfo: currentModelInfo });
                 const budgetContext = initialToolUse.budgetContext || "";
                 let effectivePromptText = initialToolUse.effectivePromptText || promptText;
+                let disableTurnTools = !!initialToolUse.disableTools;
                 effectivePromptText = attachLocalQwen35BenchContext(effectivePromptText, currentModelInfo);
                 if (ss._rehydratedEffectivePrompt) {
                   effectivePromptText = ss._rehydratedEffectivePrompt;
+                  disableTurnTools = false;
                   ss._rehydratedEffectivePrompt = null;
                 }
+                const noToolTurnInstruction = disableTurnTools ? buildNoToolTurnPrompt(effectivePromptText) : "";
                 if (shouldUseLocalQwen35DirectBridge(promptText, {
                   isLocalModel: isLocalQwen35Model(currentModelInfo),
                   hasImages: Boolean(msg.images?.length),
@@ -1795,8 +1799,8 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 await hub.send(
                   effectivePromptText,
                   msg.images
-                    ? { images: msg.images, sessionPath: promptSessionPath, streamToken }
-                    : { sessionPath: promptSessionPath, streamToken },
+                    ? { images: msg.images, sessionPath: promptSessionPath, streamToken, disableTools: disableTurnTools, turnInstruction: noToolTurnInstruction }
+                    : { sessionPath: promptSessionPath, streamToken, disableTools: disableTurnTools, turnInstruction: noToolTurnInstruction },
                 );
                 if (!ss.isStreaming) {
                   if (hasToolExecutionInFlight(ss)) {

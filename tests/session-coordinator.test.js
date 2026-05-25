@@ -250,6 +250,70 @@ describe("SessionCoordinator", () => {
     expect(coordinator.getPlanMode()).toBe(true);
   });
 
+  it("temporarily disables runtime tools for a no-tool prompt and restores them", async () => {
+    const buildTools = vi.fn(() => ({
+      tools: [{ name: 'read' }, { name: 'edit' }, { name: 'bash' }],
+      customTools: [{ name: 'todo' }],
+    }));
+    const session = {
+      sessionManager: { getSessionFile: () => "/tmp/session.jsonl", getCwd: () => "/tmp/workspace" },
+      subscribe: vi.fn(() => vi.fn()),
+      _buildRuntime: vi.fn(),
+      prompt: vi.fn().mockResolvedValue(undefined),
+    };
+    createAgentSessionMock.mockResolvedValueOnce({ session });
+
+    const coordinator = new SessionCoordinator({
+      agentsDir: "/tmp/agents",
+      getAgent: () => ({
+        agentDir: "/tmp/agent",
+        sessionDir: "/tmp/agent-sessions",
+        tools: [],
+        config: {},
+        recallForMessage: vi.fn(async () => ""),
+        setMemoryEnabled: vi.fn(),
+      }),
+      getActiveAgentId: () => "hana",
+      getModels: () => ({
+        currentModel: { name: "test-model" },
+        authStorage: {},
+        modelRegistry: {},
+        resolveThinkingLevel: () => "medium",
+      }),
+      getResourceLoader: () => ({ getAppendSystemPrompt: () => [] }),
+      getSkills: () => null,
+      buildTools,
+      emitEvent: vi.fn(),
+      emitDevLog: vi.fn(),
+      getHomeCwd: () => "/tmp/home",
+      agentIdFromSessionPath: () => null,
+      switchAgentOnly: async () => {},
+      getConfig: () => ({}),
+      getPrefs: () => ({ getThinkingLevel: () => "medium" }),
+      getAgents: () => new Map(),
+      getActivityStore: () => null,
+      getAgentById: () => null,
+      listAgents: () => [],
+    });
+
+    await coordinator.createSession(null, "/tmp/workspace", true);
+    const resourceLoader = createAgentSessionMock.mock.calls.at(-1)[0].resourceLoader;
+    session.prompt.mockImplementationOnce(async () => {
+      expect(resourceLoader.getAppendSystemPrompt()).toContain("NO_TOOL_TURN");
+    });
+    session._buildRuntime.mockClear();
+
+    await coordinator.promptSession("/tmp/session.jsonl", "只回复：已记住", {
+      disableTools: true,
+      turnInstruction: "NO_TOOL_TURN",
+    });
+
+    expect(session.prompt).toHaveBeenCalledWith("只回复：已记住", undefined);
+    expect(session._buildRuntime).toHaveBeenNthCalledWith(1, { activeToolNames: [] });
+    expect(session._buildRuntime).toHaveBeenLastCalledWith({ activeToolNames: ['read', 'edit', 'bash', 'todo'] });
+    expect(resourceLoader.getAppendSystemPrompt()).not.toContain("NO_TOOL_TURN");
+  });
+
   it("switches the active session model immediately", async () => {
     const oldModel = { id: "old-model", provider: "brain", name: "Old Model" };
     const nextModel = { id: "next-model", provider: "brain", name: "Next Model" };

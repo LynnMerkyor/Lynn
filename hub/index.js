@@ -88,6 +88,8 @@ export class Hub {
    * @param {string}  [opts.model]       模型覆盖
    * @param {string}  [opts.persist]     持久化目录（activity session）
    * @param {string}  [opts.systemAppend] 追加到 bridge system prompt 的硬规则
+   * @param {boolean} [opts.disableTools] true = 本轮不暴露工具 schema
+   * @param {string}  [opts.turnInstruction] 本轮附加系统提示，不写入用户消息历史
    * @returns {Promise<*>}
    */
   async send(text, opts = {}) {
@@ -108,8 +110,10 @@ export class Hub {
       agentId,
       streamToken,
       systemAppend,
+      disableTools = false,
+      turnInstruction = "",
     } = opts;
-    const o = { sessionKey, role, ephemeral, meta, isGroup, cwd, model, persist, from, to, onDelta, images, sessionPath, agentId, systemAppend };
+    const o = { sessionKey, role, ephemeral, meta, isGroup, cwd, model, persist, from, to, onDelta, images, sessionPath, agentId, systemAppend, disableTools, turnInstruction };
 
     // 路由表：按顺序匹配，第一条命中即执行。
     // 优先级通过位置保证，新增路由在此处显式插入，不依赖散落在各处的 if 顺序。
@@ -121,8 +125,8 @@ export class Hub {
       { // 桌面端 owner
         match: o => !o.sessionKey && !o.ephemeral && o.role === "owner",
         handle: () => o.sessionPath
-          ? this._engine.promptSession(o.sessionPath, text, { images: o.images })
-          : this._engine.prompt(text, { images: o.images }),
+          ? this._engine.promptSession(o.sessionPath, text, { images: o.images, disableTools: o.disableTools, turnInstruction: o.turnInstruction })
+          : this._engine.prompt(text, { images: o.images, disableTools: o.disableTools, turnInstruction: o.turnInstruction }),
       },
       { // Bridge guest
         match: o => o.sessionKey && o.role === "guest",

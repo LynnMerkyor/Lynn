@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.79.1-brightgreen" alt="Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.79.2-brightgreen" alt="Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -44,7 +44,22 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 ## 🆕 近期更新
 
 <details>
-<summary><strong>v0.79.1</strong> · 2026-05-25 · 默认本地模型保持 Qwen3.5-9B MTP,4B 低配降级 <em>(最新)</em></summary>
+<summary><strong>v0.79.2</strong> · 2026-05-25 · 稳定性补丁 + TypeScript 迁移基建 <em>(最新)</em></summary>
+
+**V0.79 稳定收口补丁**:
+- 🧭 **本地模型引导维持 9B 默认**:继续默认 Qwen3.5-9B Q4_K_M imatrix MTP,4B 只作为低配降级并保留 thinking-on 风险提示。
+- 🌦️ **天气/实时工具链路加固**:天气回答按工具返回的绝对日期与降水描述输出,避免把“未来两天/明后天”解释错。
+- 🔁 **Brain v2 fallback 更稳**:Spark APEX-MTP fallback 修正模型 ID、默认关闭 thinking,并把本地 provider health probe 从冷启 800ms 误判加固为可配置超时。
+- 🧾 **Deep Research artifact 统一**:本地模型、BYOK 和默认模型的 HTML 报告统一落为聊天内可点击预览卡片。
+- 🧱 **架构债务清扫**:`brain-v2-mirror` 完成 TypeScript island 后继续收紧热路径类型;`server/chat` 叶子模块与 `core` provider/LLM contract 增加 TS 迁移前的类型边界。
+- ✅ **发布门禁**:`npm test` 全量通过,新增 `typecheck:runtime`,brain-v2 `tsc + 104 tests` 通过,release preflight 覆盖构建与回归。
+
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.2)
+
+</details>
+
+<details>
+<summary><strong>v0.79.1</strong> · 2026-05-25 · 默认本地模型保持 Qwen3.5-9B MTP,4B 低配降级</summary>
 
 **本地模型默认档更换**:
 - 🧠 **默认 Qwen3.5-9B Q4_K_M imatrix MTP**:5.38 GB · 24GB 显存/统一内存推荐 · MTP 加速 · thinking-on 稳定性优先。4B 复测确认 thinking-on 有长思考后无正文风险,不再作为默认引导模型。
