@@ -2783,6 +2783,31 @@ a.about-link:hover {
     opacity: 1;
 }
 
+.pv-status-dot.pv-status-ready {
+    background: var(--success, #5a9);
+    opacity: 1;
+}
+
+.pv-status-dot.pv-status-muted {
+    background: var(--text-muted);
+    opacity: 0.4;
+}
+
+.pv-status-dot.pv-status-warning {
+    background: var(--warning-color, #c59a28);
+    opacity: 0.95;
+}
+
+.pv-status-dot.pv-status-warm {
+    background: var(--warning-color, #d88734);
+    opacity: 1;
+}
+
+.pv-status-dot.pv-status-error {
+    background: var(--danger, #c85f5f);
+    opacity: 1;
+}
+
 .pv-list-divider {
     height: 1px;
     background: var(--overlay-light);

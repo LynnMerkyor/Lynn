@@ -1,5 +1,11 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { useSettingsStore, type ProviderSummary, type SettingsConfig } from '../store';
+import {
+  getProviderSummaryStatus,
+  useSettingsStore,
+  type ProviderSummary,
+  type ProviderSummaryStatusTone,
+  type SettingsConfig,
+} from '../store';
 import { hanaFetch } from '../api';
 import { t, PROVIDER_PRESETS } from '../helpers';
 import { loadSettingsConfig } from '../actions';
@@ -16,6 +22,14 @@ const OAUTH_PROVIDER_ORDER = [
 const OAUTH_PROVIDER_LABELS: Record<string, string> = {
   'openai-codex-oauth': 'GPT / Codex 授权登录',
   'minimax-oauth': 'MiniMax 授权登录',
+};
+
+const PROVIDER_STATUS_CLASS_BY_TONE: Record<ProviderSummaryStatusTone, string> = {
+  ready: 'pv-status-ready',
+  muted: 'pv-status-muted',
+  warning: 'pv-status-warning',
+  warm: 'pv-status-warm',
+  error: 'pv-status-error',
 };
 
 const CODING_PROVIDER_ORDER = [
@@ -261,14 +275,18 @@ export function ProvidersTab() {
     const p = providersSummary[id] || buildPresetSummary(id);
     if (!p) return null;
     const modelCount = (p.models || []).length;
+    const providerLabel = getProviderLabel(id, p);
+    const status = getProviderSummaryStatus(p);
+    const statusClass = styles[PROVIDER_STATUS_CLASS_BY_TONE[status.tone]];
     return (
       <button
         key={id}
         className={`${styles['pv-list-item']}${selected === id  ? ' ' + styles['selected'] : ''}`}
+        aria-label={`${providerLabel}，${status.label}`}
         onClick={() => selectProvider(id)}
       >
-        <span className={`${styles['pv-status-dot']}${p.has_credentials  ? ' ' + styles['on'] : ''}`} />
-        <span className={styles['pv-list-item-name']}>{getProviderLabel(id, p)}</span>
+        <span className={`${styles['pv-status-dot']} ${statusClass}`} title={status.label} />
+        <span className={styles['pv-list-item-name']}>{providerLabel}</span>
         <span className={styles['pv-list-item-count']}>{modelCount}</span>
       </button>
     );
@@ -278,9 +296,10 @@ export function ProvidersTab() {
     <button
       key={preset.value}
       className={`${styles['pv-list-item']} ${styles['dim']}${selected === preset.value ? ' ' + styles['selected'] : ''}`}
+      aria-label={`${preset.label}，未配置`}
       onClick={() => selectProvider(preset.value)}
     >
-      <span className={styles['pv-status-dot']} />
+      <span className={`${styles['pv-status-dot']} ${styles['pv-status-muted']}`} title="未配置" />
       <span className={styles['pv-list-item-name']}>{preset.label}</span>
     </button>
   );

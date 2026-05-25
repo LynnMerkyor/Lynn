@@ -3,6 +3,7 @@
  * 独立于主窗口 store，设置窗口有自己的 BrowserWindow + JS context
  */
 import { create } from 'zustand';
+import type { ProviderSnapshot } from '../../../../shared/provider-state.js';
 
 export interface Agent {
   id: string;
@@ -39,6 +40,50 @@ export interface ProviderSummary {
   supports_oauth: boolean;
   is_coding_plan?: boolean;
   can_delete: boolean;
+  stateSnapshot?: ProviderSnapshot;
+}
+
+export type ProviderSummaryStatusTone = 'ready' | 'muted' | 'warning' | 'warm' | 'error';
+
+export interface ProviderSummaryStatus {
+  tone: ProviderSummaryStatusTone;
+  label: string;
+}
+
+type ProviderSummaryStatusInput = Pick<ProviderSummary, 'type' | 'has_credentials' | 'supports_oauth' | 'stateSnapshot'>;
+
+const AUTH_READY_STATUSES = new Set(['authenticated', 'not_required']);
+
+function needsProviderAuth(summary: ProviderSummaryStatusInput): boolean {
+  const auth = summary.stateSnapshot?.auth;
+  if (!auth) return false;
+  return auth.required === true && !AUTH_READY_STATUSES.has(auth.status);
+}
+
+export function getProviderSummaryStatus(summary: ProviderSummaryStatusInput): ProviderSummaryStatus {
+  const snapshot = summary.stateSnapshot;
+  if (snapshot) {
+    const state = snapshot.state;
+    const healthStatus = snapshot.health?.status;
+    if (state === 'disabled') return { tone: 'muted', label: '已禁用' };
+    if (state === 'unconfigured') return { tone: 'muted', label: '未配置' };
+    if (state === 'needs_auth' || needsProviderAuth(summary)) {
+      return { tone: 'warning', label: summary.type === 'api-key' ? '缺 Key' : '需登录' };
+    }
+    if (state === 'checking' || healthStatus === 'checking') return { tone: 'warning', label: '检查中' };
+    if (state === 'error' || healthStatus === 'error' || healthStatus === 'unhealthy') {
+      return { tone: 'error', label: '错误' };
+    }
+    if (state === 'fallback_active' || snapshot.fallback?.active === true) return { tone: 'warm', label: '兜底中' };
+    if (state === 'cooldown' || snapshot.cooldown?.active === true) return { tone: 'warm', label: '冷却' };
+    if (state === 'degraded' || healthStatus === 'degraded') return { tone: 'warm', label: '降级' };
+    return { tone: 'ready', label: '已就绪' };
+  }
+
+  if (summary.has_credentials) return { tone: 'ready', label: '已就绪' };
+  if (summary.type === 'api-key') return { tone: 'warning', label: '缺 Key' };
+  if (summary.supports_oauth || summary.type === 'oauth') return { tone: 'warning', label: '需登录' };
+  return { tone: 'muted', label: '未配置' };
 }
 
 export interface ProviderConfig extends Record<string, unknown> {
