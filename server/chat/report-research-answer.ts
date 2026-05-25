@@ -1,4 +1,152 @@
 import { extractWeatherLocation } from "../../lib/tools/realtime-info.js";
+
+type ResearchAnswerKind =
+  | ""
+  | "stock"
+  | "real_estate"
+  | "market_weather_brief"
+  | "weather"
+  | "sports"
+  | "market"
+  | "news"
+  | "generic"
+  | (string & {});
+
+interface ToolTextContent {
+  text?: unknown;
+  [key: string]: unknown;
+}
+
+interface DirectQuoteSnapshot {
+  symbol?: unknown;
+  close?: unknown;
+  date?: unknown;
+  time?: unknown;
+  source?: unknown;
+  url?: unknown;
+  open?: unknown;
+  high?: unknown;
+  low?: unknown;
+  [key: string]: unknown;
+}
+
+interface EvidenceSource {
+  title?: unknown;
+  source?: unknown;
+  url?: unknown;
+  [key: string]: unknown;
+}
+
+interface ToolResultDetails {
+  directQuotes?: DirectQuoteSnapshot[];
+  provider?: unknown;
+  sources?: EvidenceSource[];
+  location?: unknown;
+  [key: string]: unknown;
+}
+
+interface ToolExecutionResult {
+  content?: ToolTextContent[];
+  details?: ToolResultDetails;
+  [key: string]: unknown;
+}
+
+interface StooqItem {
+  symbol: string;
+  source: string;
+  url: string;
+  name: string;
+  price: string;
+  change: string;
+  timestamp: string;
+  range: string;
+}
+
+interface StockSnapshot {
+  symbol?: unknown;
+  price?: unknown;
+  timestamp?: string;
+  source?: unknown;
+  url?: unknown;
+  range?: string;
+}
+
+interface IndexFallbackTarget {
+  label?: string;
+  [key: string]: unknown;
+}
+
+interface IndexSnapshot {
+  name?: string;
+  level?: string;
+  change?: string;
+  source?: unknown;
+  url?: unknown;
+  queryDate: string;
+}
+
+interface WeatherForecastRow {
+  date: string;
+  desc: string;
+  min: string;
+  max: string;
+}
+
+interface WeatherSnapshot {
+  location?: unknown;
+  date: string;
+  desc: string;
+  tempRange: string;
+}
+
+interface EvidenceMeta {
+  tool: string;
+  basis: string;
+  caveat: string;
+}
+
+interface EvidenceBlockOptions {
+  kind?: ResearchAnswerKind;
+  context?: unknown;
+  userPrompt?: unknown;
+}
+
+type StructuredSectionEntry = readonly [string, unknown];
+type StructuredFields = Record<string, string>;
+
+interface TempRange {
+  min: number | null;
+  max: number | null;
+}
+
+interface GoldSummary {
+  date: string;
+  jewelry: string;
+  bars: string;
+  recovery: string;
+  examples: string;
+  sge: string;
+  shuibei: string;
+  international: string;
+}
+
+interface NewsItem {
+  title: string;
+  source: string;
+  sourceUrl: string;
+  link: string;
+  snippet?: string;
+  published: string;
+  windowLabel: string;
+  freshness: string;
+}
+
+interface BuildAnswerOptions {
+  userPrompt?: unknown;
+  prompt?: unknown;
+  [key: string]: unknown;
+}
+
 const MARKET_WEATHER_TICKER_STOPWORDS = new Set([
   "AI", "API", "ETF", "ETFS", "USD", "CNY", "EUR", "GBP", "JPY",
   "PE", "PB", "PS", "IPO", "CEO", "CFO", "GDP", "CPI", "PPI",
@@ -9,17 +157,17 @@ const COMMON_US_TICKERS = new Set([
   "NFLX", "AMD", "INTC", "AVGO", "SMCI", "PLTR", "COIN", "MSTR",
   "BABA", "PDD", "NIO", "XPEV", "LI",
 ]);
-function textOf(value) {
+function textOf(value: unknown): string {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
-function extractToolText(result) {
+function extractToolText(result: ToolExecutionResult | null | undefined): string {
   return (result?.content || [])
     .map((item) => item?.text || "")
     .filter(Boolean)
     .join("\n")
     .trim();
 }
-function parseStooqItems(context) {
+function parseStooqItems(context: unknown): StooqItem[] {
   const text = String(context || "");
   const starts = Array.from(text.matchAll(/(?:^|\n)(\d+\.\s+[A-Z0-9.]{1,12}\s+最近可用行情)/g)).map((match) => {
     const full = String(match[0] || "");
@@ -43,8 +191,8 @@ function parseStooqItems(context) {
     return { symbol, source, url, name, price, change, timestamp, range };
   }).filter((item) => item.symbol && item.price);
 }
-function extractRequestedUsTickers(text) {
-  const symbols = [];
+function extractRequestedUsTickers(text: unknown): string[] {
+  const symbols: string[] = [];
   for (const match of String(text || "").matchAll(/\$?\b([A-Z]{1,5})(?:\.US)?\b/g)) {
     const raw = String(match[0] || "");
     const bare = String(match[1] || "").toUpperCase();
@@ -54,15 +202,15 @@ function extractRequestedUsTickers(text) {
   }
   return symbols.slice(0, 8);
 }
-function escapeRegExp(value) {
+function escapeRegExp(value: unknown): string {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-function extractStructuredContextSection(context, title) {
+function extractStructuredContextSection(context: unknown, title: string): string {
   const re = new RegExp(`【${escapeRegExp(title)}】\\n([\\s\\S]*?)(?=\\n【|$)`);
   return String(context || "").match(re)?.[1]?.trim() || "";
 }
-function parseStructuredFields(sectionText) {
-  const fields = {};
+function parseStructuredFields(sectionText: unknown): StructuredFields {
+  const fields: StructuredFields = {};
   for (const rawLine of String(sectionText || "").split(/\r?\n/)) {
     const line = textOf(rawLine);
     const match = line.match(/^-?\s*([^:：]+)[:：]\s*(.+)$/);
@@ -70,27 +218,27 @@ function parseStructuredFields(sectionText) {
   }
   return fields;
 }
-function buildStructuredSection(title, entries) {
+function buildStructuredSection(title: string, entries: readonly StructuredSectionEntry[]): string {
   const lines = entries
     .filter(([, value]) => textOf(value))
     .map(([label, value]) => `- ${label}: ${textOf(value)}`);
   if (!lines.length) return "";
   return [`【${title}】`, ...lines].join("\n");
 }
-function formatLocalDate(date = new Date()) {
+function formatLocalDate(date: Date = new Date()): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
-function formatLocalDateTime(date = new Date()) {
+function formatLocalDateTime(date: Date = new Date()): string {
   const hour = String(date.getHours()).padStart(2, "0");
   const minute = String(date.getMinutes()).padStart(2, "0");
   return `${formatLocalDate(date)} ${hour}:${minute}`;
 }
-function uniqueCompact(items, max = 3) {
-  const seen = new Set();
-  const out = [];
+function uniqueCompact(items: unknown[], max: number = 3): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
   for (const item of items.map(textOf).filter(Boolean)) {
     const clean = item
       .replace(/\s+/g, " ")
@@ -104,9 +252,9 @@ function uniqueCompact(items, max = 3) {
   }
   return out;
 }
-function extractEvidenceSources(context, max = 3) {
+function extractEvidenceSources(context: unknown, max: number = 3): string[] {
   const text = String(context || "");
-  const sources = [];
+  const sources: unknown[] = [];
   for (const match of text.matchAll(/(?:来源|来源站点)[:：]\s*([^\n]+)/g)) {
     sources.push(match[1]);
   }
@@ -122,7 +270,7 @@ function extractEvidenceSources(context, max = 3) {
   }
   return uniqueCompact(sources, max);
 }
-function inferEvidenceMeta(kind, prompt) {
+function inferEvidenceMeta(kind: ResearchAnswerKind | undefined, prompt: string): EvidenceMeta {
   if (kind === "weather") {
     return {
       tool: "weather",
@@ -171,7 +319,7 @@ function inferEvidenceMeta(kind, prompt) {
     caveat: "资料不足时应继续补充来源再下结论。",
   };
 }
-function appendEvidenceBlock(answer, { kind, context, userPrompt } = {}) {
+function appendEvidenceBlock(answer: unknown, { kind, context, userPrompt }: EvidenceBlockOptions = {}): string {
   const body = String(answer || "").trim();
   if (!body || /数据来源\/判断依据/.test(body)) return body;
   const prompt = textOf(userPrompt);
@@ -189,7 +337,7 @@ function appendEvidenceBlock(answer, { kind, context, userPrompt } = {}) {
     `- 注意：${meta.caveat}`,
   ].filter(Boolean).join("\n");
 }
-function parseStockSnapshot(result) {
+function parseStockSnapshot(result: ToolExecutionResult | null | undefined): StockSnapshot | null {
   const directQuote = result?.details?.directQuotes?.[0];
   if (directQuote?.symbol && directQuote?.close) {
     return {
@@ -212,7 +360,7 @@ function parseStockSnapshot(result) {
     range: item.range,
   };
 }
-function parseIndexSnapshot(result, fallbackTarget = null) {
+function parseIndexSnapshot(result: ToolExecutionResult | null | undefined, fallbackTarget: IndexFallbackTarget | null = null): IndexSnapshot | null {
   const sources = Array.isArray(result?.details?.sources) ? result.details.sources : [];
   for (const source of sources) {
     const title = textOf(source?.title);
@@ -252,7 +400,7 @@ function parseIndexSnapshot(result, fallbackTarget = null) {
     queryDate: formatLocalDate(),
   };
 }
-function parseWeatherForecastRows(text) {
+function parseWeatherForecastRows(text: unknown): WeatherForecastRow[] {
   return Array.from(String(text || "").matchAll(/-\s*(\d{4}-\d{2}-\d{2}):\s*(.+?)\s+(-?\d+(?:\.\d+)?)~(-?\d+(?:\.\d+)?)\s*(?:°\s*C|°C|℃|C)/g)).map((match) => ({
     date: match[1],
     desc: textOf(match[2]),
@@ -260,7 +408,7 @@ function parseWeatherForecastRows(text) {
     max: match[4],
   }));
 }
-function weekdayIndexFromPrompt(userPrompt = "") {
+function weekdayIndexFromPrompt(userPrompt: string = ""): number {
   const text = String(userPrompt || "");
   const patterns = [
     /周日|周天|星期日|星期天|礼拜日|礼拜天/,
@@ -273,12 +421,12 @@ function weekdayIndexFromPrompt(userPrompt = "") {
   ];
   return patterns.findIndex((pattern) => pattern.test(text));
 }
-function localWeekdayOfDate(date) {
+function localWeekdayOfDate(date: string): number {
   const parsed = new Date(`${date}T00:00:00+08:00`);
   const day = parsed.getDay();
   return Number.isFinite(day) ? day : -1;
 }
-function pickWeatherForecastRow(rows = [], userPrompt = "") {
+function pickWeatherForecastRow(rows: WeatherForecastRow[] = [], userPrompt: string = ""): WeatherForecastRow | null {
   if (!rows.length) return null;
   if (/后天/.test(userPrompt) && rows[2]) return rows[2];
   if (/明天/.test(userPrompt) && rows[1]) return rows[1];
@@ -289,7 +437,7 @@ function pickWeatherForecastRow(rows = [], userPrompt = "") {
   }
   return rows[0];
 }
-function parseWeatherSnapshot(result, userPrompt = "", locationHint = "") {
+function parseWeatherSnapshot(result: ToolExecutionResult | null | undefined, userPrompt: string = "", locationHint: string = ""): WeatherSnapshot | null {
   const text = extractToolText(result);
   const rows = parseWeatherForecastRows(text);
   if (!rows.length && !locationHint) return null;
@@ -302,10 +450,10 @@ function parseWeatherSnapshot(result, userPrompt = "", locationHint = "") {
     tempRange: picked ? `${picked.min}~${picked.max} C` : "",
   };
 }
-function weatherLooksRainy(desc) {
+function weatherLooksRainy(desc: unknown): boolean {
   return /rain|drizzle|shower|storm|雷|雨|阵雨|降水/i.test(String(desc || ""));
 }
-function parseTempRange(value) {
+function parseTempRange(value: unknown): TempRange {
   const match = String(value || "").match(/(-?\d+)\s*~\s*(-?\d+)/);
   if (!match) return { min: null, max: null };
   return {
@@ -313,12 +461,12 @@ function parseTempRange(value) {
     max: Number(match[2]),
   };
 }
-function buildDirectMarketWeatherBriefAnswer(context) {
+function buildDirectMarketWeatherBriefAnswer(context: unknown): string {
   const stock = parseStructuredFields(extractStructuredContextSection(context, "美股快照"));
   const index = parseStructuredFields(extractStructuredContextSection(context, "指数快照"));
   const weather = parseStructuredFields(extractStructuredContextSection(context, "天气快照"));
   if (!Object.keys(stock).length && !Object.keys(index).length && !Object.keys(weather).length) return "";
-  const dataLines = [];
+  const dataLines: string[] = [];
   if (stock["标的"] && stock["最新价"]) {
     const stockBits = [
       `${stock["标的"]}：${stock["最新价"]}`,
@@ -351,7 +499,7 @@ function buildDirectMarketWeatherBriefAnswer(context) {
   } else {
     dataLines.push("- 上海天气：未检索到明确预报，建议出发前再看一次。");
   }
-  const adviceLines = [];
+  const adviceLines: string[] = [];
   const rainy = weatherLooksRainy(weather["天气"]);
   if (weather["天气"]) {
     adviceLines.push(
@@ -360,11 +508,11 @@ function buildDirectMarketWeatherBriefAnswer(context) {
         : "- 明早去浦东机场可以按常规节奏出发，但仍建议预留 15-20 分钟机动时间。",
     );
     const { min, max } = parseTempRange(weather["温度"]);
-    if (Number.isFinite(max) && max <= 18) {
+    if (max !== null && Number.isFinite(max) && max <= 18) {
       adviceLines.push("- 着装建议：长袖打底加轻薄外套或防风层，怕冷的话再加一层更稳妥。");
-    } else if (Number.isFinite(min) && min < 18) {
+    } else if (min !== null && Number.isFinite(min) && min < 18) {
       adviceLines.push("- 着装建议：薄长袖或短袖加一件轻薄外套，进出空调环境更舒服。");
-    } else if (Number.isFinite(max)) {
+    } else if (max !== null && Number.isFinite(max)) {
       adviceLines.push("- 着装建议：薄长袖或短袖都可以，包里备一件轻薄外套即可。");
     } else {
       adviceLines.push("- 着装建议：以上海早间通勤场景看，备一件轻薄外套会更稳。");
@@ -384,7 +532,7 @@ function buildDirectMarketWeatherBriefAnswer(context) {
     ...adviceLines,
   ].join("\n");
 }
-function buildDirectMarketAnswer(context, userPrompt = "") {
+function buildDirectMarketAnswer(context: unknown, userPrompt: string = ""): string {
   const items = parseStooqItems(context);
   if (!items.length) return "";
   const seen = new Set(items.map((item) => item.symbol.toUpperCase()));
@@ -413,7 +561,7 @@ function buildDirectMarketAnswer(context, userPrompt = "") {
     "以上信息仅作行情展示，不构成任何投资建议、买卖建议或收益承诺。",
   ].join("\n");
 }
-function buildDirectOilAnswer(context) {
+function buildDirectOilAnswer(context: unknown): string {
   const text = String(context || "");
   const rows = Array.from(text.matchAll(/-\s*(布伦特原油|纽约原油|WTI原油|原油[^：\n]*)[:：]\s*([0-9]+(?:\.[0-9]+)?)\s*美元\/桶(?:，涨跌幅\s*([+-]?\d+(?:\.\d+)?%))?(?:，涨跌\s*([+-]?\d+(?:\.\d+)?))?/g))
     .map((match) => ({
@@ -436,7 +584,7 @@ function buildDirectOilAnswer(context) {
     "说明：这是最近可用行情快照，盘中价格会变动；交易或下单前请再用期货/券商行情终端核验。",
   ].join("\n");
 }
-function buildDirectWeatherAnswer(context, userPrompt = "") {
+function buildDirectWeatherAnswer(context: unknown, userPrompt: string = ""): string {
   const text = String(context || "");
   if (/未检索到明确天气数据|No concrete weather data was found/i.test(text)) {
     const location = extractWeatherLocation(userPrompt, "")
@@ -487,11 +635,11 @@ function buildDirectWeatherAnswer(context, userPrompt = "") {
     "说明：这是刚刚通过天气工具拿到的预报快照，出门前建议再看一次实时雷达或本地天气 App。",
   ].filter(Boolean).join("\n");
 }
-function parseGoldSummary(context) {
+function parseGoldSummary(context: unknown): GoldSummary | null {
   const text = String(context || "");
   const date = text.match(/可核验到的黄金价格（(\d{4}-\d{2}-\d{2})）/)?.[1] || "";
   const lines = text.split(/\r?\n/).map((line) => textOf(line));
-  const findLine = (re) => lines.find((line) => re.test(line)) || "";
+  const findLine = (re: RegExp): string => lines.find((line) => re.test(line)) || "";
   const jewelry = findLine(/品牌金店首饰金价/);
   const bars = findLine(/银行投资金条/);
   const recovery = findLine(/黄金回收/);
@@ -512,7 +660,7 @@ function parseGoldSummary(context) {
     international,
   };
 }
-function buildDirectGoldAnswer(context) {
+function buildDirectGoldAnswer(context: unknown): string {
   const summary = parseGoldSummary(context);
   if (!summary) return "";
   return [
@@ -530,8 +678,8 @@ function buildDirectGoldAnswer(context) {
     "说明：以上是刚检索到的网页报价汇总，不同品牌门店、工费和地区会有差异，不构成投资或购买建议。",
   ].filter(Boolean).join("\n");
 }
-function parseNewsRssItems(context) {
-  const items = [];
+function parseNewsRssItems(context: unknown): NewsItem[] {
+  const items: NewsItem[] = [];
   const blocks = String(context || "").split(/\n(?=\d+\.\s+)/);
   for (const block of blocks) {
     const title = block.match(/^\d+\.\s+([^\n]+)/)?.[1]?.trim() || "";
@@ -547,9 +695,9 @@ function parseNewsRssItems(context) {
   }
   return items;
 }
-function parseNewsSearchItems(context) {
-  const items = [];
-  const seen = new Set();
+function parseNewsSearchItems(context: unknown): NewsItem[] {
+  const items: NewsItem[] = [];
+  const seen = new Set<string>();
   const blocks = String(context || "").split(/\n(?=\d+\.\s+)/);
   for (const block of blocks) {
     const title = block.match(/^\d+\.\s+([^\n]+)/)?.[1]?.trim() || "";
@@ -570,7 +718,7 @@ function parseNewsSearchItems(context) {
   }
   return items;
 }
-function newsImportance(title) {
+function newsImportance(title: unknown): string {
   const text = String(title || "");
   if (/金融科技|券商|投顾|风控|交易|金融/.test(text)) {
     return "这说明 AI 正在从演示和概念进入金融业务流程，对投研、风控、客服和交易系统的投入优先级会继续上升。";
@@ -589,7 +737,7 @@ function newsImportance(title) {
   }
   return "这条信息与用户关注主题相关，建议重点核验原文时间、出处和是否有后续权威报道。";
 }
-function scoreNewsItem(item) {
+function scoreNewsItem(item: NewsItem): number {
   const text = `${item.title} ${item.source} ${item.snippet || ""}`;
   let score = 0;
   if (/AI|人工智能|大模型|科技/i.test(text)) score += 2;
@@ -599,7 +747,7 @@ function scoreNewsItem(item) {
   if (/直播|挑战|艺术|漫剧|培训|结课/.test(text)) score -= 2;
   return score;
 }
-function buildDirectNewsAnswer(context) {
+function buildDirectNewsAnswer(context: unknown): string {
   const rssItems = parseNewsRssItems(context);
   const searchItems = parseNewsSearchItems(context);
   const merged = [...rssItems, ...searchItems]
@@ -608,12 +756,12 @@ function buildDirectNewsAnswer(context) {
     .sort((a, b) => scoreNewsItem(b) - scoreNewsItem(a))
     .slice(0, 8);
   if (picked.length < 1) return "";
-  const isTodayEvidence = (item) => {
+  const isTodayEvidence = (item: NewsItem): boolean => {
     if (item.published && /今日|36/.test(item.windowLabel || "")) return true;
     const ts = Date.parse(item.published || "");
     return Number.isFinite(ts) && Date.now() - ts <= 36 * 60 * 60 * 1000;
   };
-  const formatItem = (item, index) => {
+  const formatItem = (item: NewsItem, index: number): string => {
     const snippet = item.snippet ? `${String(item.snippet).replace(/\s+/g, " ").trim().slice(0, 220)}${String(item.snippet).length > 220 ? "..." : ""}` : "";
     return [
       `**${index + 1}. ${item.title}**`,
@@ -628,7 +776,7 @@ function buildDirectNewsAnswer(context) {
   };
   const todayItems = picked.filter(isTodayEvidence).slice(0, 5);
   const recentItems = picked.filter((item) => !isTodayEvidence(item)).slice(0, 5);
-  const sections = [];
+  const sections: string[] = [];
   if (todayItems.length) {
     sections.push([
       "## 今日可核验",
@@ -652,7 +800,7 @@ function buildDirectNewsAnswer(context) {
     "说明：我按检索窗口区分“今日”和“近7日”，不把旧结果冒充今日新闻；正式引用前建议继续打开原站核验全文。",
   ].join("\n");
 }
-export function buildDirectResearchAnswer(kind, context, userPrompt = "") {
+export function buildDirectResearchAnswer(kind: ResearchAnswerKind, context: unknown, userPrompt: unknown = ""): string {
   if (!context) return "";
   const prompt = textOf(userPrompt);
   let answer = "";
@@ -685,6 +833,6 @@ export function buildDirectResearchAnswer(kind, context, userPrompt = "") {
   return "";
 }
 export { appendEvidenceBlock, buildDirectGoldAnswer, buildDirectMarketAnswer, buildDirectMarketWeatherBriefAnswer, buildDirectNewsAnswer, buildDirectOilAnswer, buildDirectWeatherAnswer, buildStructuredSection, extractToolText, parseGoldSummary, parseIndexSnapshot, parseNewsRssItems, parseNewsSearchItems, parseStooqItems, parseStockSnapshot, parseWeatherForecastRows, parseWeatherSnapshot };
-export function buildAnswer(kind, rawResults, opts = {}) {
+export function buildAnswer(kind: ResearchAnswerKind, rawResults: unknown, opts: BuildAnswerOptions = {}): string {
   return buildDirectResearchAnswer(kind, rawResults, opts.userPrompt || opts.prompt || "");
 }
