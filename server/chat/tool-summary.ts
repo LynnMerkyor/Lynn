@@ -1,5 +1,61 @@
 import { extractText } from "./content-utils.js";
 import { clearPendingMutationOnSuccessfulDelete } from "./turn-retry-policy.js";
+import type { TurnRetryState } from "./turn-retry-policy.js";
+
+type ToolArgs = Record<string, unknown>;
+
+interface ToolSummaryLike {
+  outputPreview?: unknown;
+}
+
+interface ToolSuccessRecord {
+  name: string;
+  command: string;
+  filePath: string;
+  outputPreview: string;
+}
+
+export interface ToolSummaryState extends TurnRetryState {
+  successfulToolCount?: number;
+  lastSuccessfulTools?: ToolSuccessRecord[];
+  hasFailedTool?: boolean;
+  lastFailedTools?: string[];
+}
+
+interface ToolResultLike {
+  details?: ToolArgs;
+  content?: unknown;
+  isError?: unknown;
+}
+
+interface ToolExecutionEvent {
+  toolName?: string;
+  args?: unknown;
+  isError?: unknown;
+  result?: ToolResultLike | null;
+}
+
+export interface ToolPublicSummary {
+  linesAdded?: number;
+  linesRemoved?: number;
+  filePath?: string;
+  bytesWritten?: number;
+  outputPreview?: string;
+  command?: string;
+  totalLines?: unknown;
+  truncated?: boolean;
+  matchCount?: number;
+  lineCount?: number;
+}
+
+export interface ToolExecutionSummaryResult {
+  toolName: string;
+  rawDetails: ToolArgs;
+  normalizedArgs: ToolArgs;
+  toolIsError: boolean;
+  summary: ToolPublicSummary;
+  publicSummary?: ToolPublicSummary;
+}
 
 /** tool_start broadcasts only these arg fields to avoid sending full file contents. */
 export const TOOL_ARG_SUMMARY_KEYS = [
@@ -21,9 +77,9 @@ export const TOOL_ARG_SUMMARY_KEYS = [
   "label",
 ];
 
-export function normalizeToolArgsForSummary(toolName, rawArgs) {
+export function normalizeToolArgsForSummary(toolName: string, rawArgs: unknown): unknown {
   if (!rawArgs || typeof rawArgs !== "object" || Array.isArray(rawArgs)) return rawArgs;
-  const args = { ...rawArgs };
+  const args = { ...(rawArgs as ToolArgs) };
   if (toolName === "bash" && (typeof args.command !== "string" || !args.command.trim())) {
     for (const key of ["query", "cmd", "shell", "script"]) {
       if (typeof args[key] === "string" && args[key].trim()) {
@@ -35,14 +91,20 @@ export function normalizeToolArgsForSummary(toolName, rawArgs) {
   return args;
 }
 
-export function rememberSuccessfulTool(ss, toolName, toolSummary, rawArgs) {
+export function rememberSuccessfulTool(
+  ss: ToolSummaryState | null | undefined,
+  toolName: string | null | undefined,
+  toolSummary: ToolSummaryLike | null | undefined,
+  rawArgs: unknown,
+): void {
   if (!ss || !toolName) return;
   ss.successfulToolCount = (ss.successfulToolCount || 0) + 1;
-  const args = normalizeToolArgsForSummary(toolName, rawArgs) || {};
-  const record = {
+  const args = (normalizeToolArgsForSummary(toolName, rawArgs) || {}) as ToolArgs;
+  const filePath = args.file_path || args.path;
+  const record: ToolSuccessRecord = {
     name: toolName,
     command: typeof args.command === "string" ? args.command : "",
-    filePath: typeof (args.file_path || args.path) === "string" ? (args.file_path || args.path) : "",
+    filePath: typeof filePath === "string" ? filePath : "",
     outputPreview: typeof toolSummary?.outputPreview === "string" ? toolSummary.outputPreview : "",
   };
   ss.lastSuccessfulTools = [...(ss.lastSuccessfulTools || []), record].slice(-8);
@@ -51,13 +113,13 @@ export function rememberSuccessfulTool(ss, toolName, toolSummary, rawArgs) {
   }
 }
 
-export function rememberFailedTool(ss, toolName) {
+export function rememberFailedTool(ss: ToolSummaryState | null | undefined, toolName: string | null | undefined): void {
   if (!ss || !toolName) return;
   ss.hasFailedTool = true;
   ss.lastFailedTools = [...(ss.lastFailedTools || []), toolName].slice(-8);
 }
 
-export function buildPrefetchToolSummary(context) {
+export function buildPrefetchToolSummary(context: unknown): ToolPublicSummary {
   const lines = String(context || "")
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -68,16 +130,16 @@ export function buildPrefetchToolSummary(context) {
   return outputPreview ? { outputPreview } : {};
 }
 
-export function summarizeToolExecution(event) {
+export function summarizeToolExecution(event: ToolExecutionEvent | null | undefined): ToolExecutionSummaryResult {
   const rawDetails = event?.result?.details || {};
   const toolName = event?.toolName || "";
-  const normalizedArgs = normalizeToolArgsForSummary(toolName, event?.args) || {};
+  const normalizedArgs = (normalizeToolArgsForSummary(toolName, event?.args) || {}) as ToolArgs;
   const toolIsError = Boolean(event?.isError || event?.result?.isError);
-  const summary = {};
+  const summary: ToolPublicSummary = {};
 
   if (toolName === "edit" || toolName === "edit-diff") {
     if (rawDetails.diff) {
-      const lines = rawDetails.diff.split("\n");
+      const lines = (rawDetails.diff as string).split("\n");
       let added = 0;
       let removed = 0;
       for (const line of lines) {
@@ -86,37 +148,37 @@ export function summarizeToolExecution(event) {
       }
       summary.linesAdded = added;
       summary.linesRemoved = removed;
-      summary.filePath = normalizedArgs.file_path || normalizedArgs.path || "";
+      summary.filePath = (normalizedArgs.file_path || normalizedArgs.path || "") as string;
     }
   } else if (toolName === "write") {
-    summary.filePath = normalizedArgs.file_path || normalizedArgs.path || "";
-    const text = extractText(event?.result?.content);
+    summary.filePath = (normalizedArgs.file_path || normalizedArgs.path || "") as string;
+    const text = extractText(event?.result?.content as Parameters<typeof extractText>[0]);
     const bytesMatch = text.match(/(\d+)\s*bytes/i);
     if (bytesMatch) summary.bytesWritten = parseInt(bytesMatch[1], 10);
   } else if (toolName === "bash") {
-    const text = extractText(event?.result?.content);
+    const text = extractText(event?.result?.content as Parameters<typeof extractText>[0]);
     if (text) summary.outputPreview = text.slice(0, 200);
-    summary.command = (normalizedArgs.command || "").slice(0, 80);
+    summary.command = ((normalizedArgs.command as string) || "").slice(0, 80);
     if (rawDetails.truncation) {
-      summary.totalLines = rawDetails.truncation.totalLines;
+      summary.totalLines = (rawDetails.truncation as { totalLines?: unknown }).totalLines;
       summary.truncated = true;
     }
   } else if (toolName === "grep" || toolName === "glob" || toolName === "find") {
-    const text = extractText(event?.result?.content);
+    const text = extractText(event?.result?.content as Parameters<typeof extractText>[0]);
     if (text) {
       const matchLines = text.trim().split("\n").filter(Boolean);
       summary.matchCount = matchLines.length;
       summary.outputPreview = matchLines.slice(0, 5).join("\n");
     }
   } else if (toolName === "web_search") {
-    const text = extractText(event?.result?.content);
+    const text = extractText(event?.result?.content as Parameters<typeof extractText>[0]);
     if (text) summary.outputPreview = text.slice(0, 200);
   } else if (toolName === "read") {
-    summary.filePath = normalizedArgs.file_path || normalizedArgs.path || "";
-    const text = extractText(event?.result?.content);
+    summary.filePath = (normalizedArgs.file_path || normalizedArgs.path || "") as string;
+    const text = extractText(event?.result?.content as Parameters<typeof extractText>[0]);
     if (text) summary.lineCount = text.split("\n").length;
   } else {
-    const text = extractText(event?.result?.content);
+    const text = extractText(event?.result?.content as Parameters<typeof extractText>[0]);
     if (text) summary.outputPreview = text.slice(0, 200);
   }
 

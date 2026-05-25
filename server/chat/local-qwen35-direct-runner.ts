@@ -1,3 +1,63 @@
+import type { LocalQwen35Message } from "./local-qwen35-direct-policy.js";
+
+export interface LocalQwen35Usage {
+  [key: string]: unknown;
+}
+
+interface LocalQwen35FetchBody extends AsyncIterable<Uint8Array> {
+  cancel?: () => unknown | Promise<unknown>;
+}
+
+interface LocalQwen35FetchResponse {
+  ok: boolean;
+  body: LocalQwen35FetchBody | null;
+  status: number;
+  text: () => Promise<string>;
+}
+
+export type LocalQwen35FetchImpl = (input: unknown, init: RequestInit) => Promise<LocalQwen35FetchResponse>;
+
+export interface LocalQwen35StreamState {
+  assistantText: string;
+  reasoningText: string;
+  usage: LocalQwen35Usage | null;
+}
+
+interface LocalQwen35StreamDelta {
+  reasoning_content?: string;
+  reasoning?: string;
+  thinking?: string;
+  content?: string;
+}
+
+interface LocalQwen35StreamPayload {
+  usage?: LocalQwen35Usage;
+  choices?: Array<{ delta?: LocalQwen35StreamDelta }>;
+}
+
+export interface StreamLocalQwen35CompletionOptions {
+  endpoint?: string;
+  model?: string;
+  messages?: LocalQwen35Message[];
+  enableThinking?: boolean;
+  maxTokens?: number;
+  timeoutMs?: number;
+  temperature?: number;
+  fetchImpl?: LocalQwen35FetchImpl;
+  onFirstDelta?: () => void;
+  onReasoningDelta?: (delta: string) => void | Promise<void>;
+  onContentDelta?: (delta: string) => void | Promise<void>;
+  onUsage?: (usage: LocalQwen35Usage) => void;
+  shouldStopEarly?: (state: LocalQwen35StreamState) => boolean;
+}
+
+export interface StreamLocalQwen35CompletionResult {
+  assistantText: string;
+  reasoningText: string;
+  usage: LocalQwen35Usage | null;
+  timedOutAfterVisibleOutput: boolean;
+}
+
 export async function streamLocalQwen35Completion({
   endpoint,
   model,
@@ -6,13 +66,13 @@ export async function streamLocalQwen35Completion({
   maxTokens,
   timeoutMs,
   temperature = 0.2,
-  fetchImpl = globalThis.fetch,
+  fetchImpl = globalThis.fetch as unknown as LocalQwen35FetchImpl,
   onFirstDelta,
   onReasoningDelta,
   onContentDelta,
   onUsage,
   shouldStopEarly,
-} = {}) {
+}: StreamLocalQwen35CompletionOptions = {}): Promise<StreamLocalQwen35CompletionResult> {
   if (typeof fetchImpl !== "function") {
     throw new Error("local qwen direct bridge failed: fetch is unavailable");
   }
@@ -22,7 +82,7 @@ export async function streamLocalQwen35Completion({
   let timedOutAfterVisibleOutput = false;
   let assistantText = "";
   let reasoningText = "";
-  let usage = null;
+  let usage: LocalQwen35Usage | null = null;
   let firstDeltaSeen = false;
   const timeout = setTimeout(() => {
     abortedByTimeout = true;
@@ -73,9 +133,9 @@ export async function streamLocalQwen35Completion({
           streamDone = true;
           break;
         }
-        let payload = null;
+        let payload: LocalQwen35StreamPayload | null = null;
         try {
-          payload = JSON.parse(data);
+          payload = JSON.parse(data) as LocalQwen35StreamPayload;
         } catch {
           continue;
         }

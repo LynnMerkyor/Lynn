@@ -1,13 +1,20 @@
 export const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
 export const LOCAL_QWEN35_MODEL_ID = "qwen35-9b-q4km-imatrix";
 
-export const LOCAL_QWEN_COMPAT_PROVIDER_IDS = new Set([
+export interface LocalQwenModelInfo {
+  provider?: unknown;
+  modelId?: unknown;
+  id?: unknown;
+  [key: string]: unknown;
+}
+
+export const LOCAL_QWEN_COMPAT_PROVIDER_IDS = new Set<string>([
   "local-qwen35-4b-q4km",
   "local-qwen3-4b-thinking-2507-q4km-imatrix",
   "local-qwen35-9b-q4km-imatrix",
 ]);
 
-export const LOCAL_QWEN_COMPAT_MODEL_IDS = new Set([
+export const LOCAL_QWEN_COMPAT_MODEL_IDS = new Set<string>([
   "qwen35-4b-q4km",
   "qwen3-4b-thinking-2507-q4km-imatrix",
   "qwen35-9b-q4km-imatrix",
@@ -24,20 +31,20 @@ export const LOCAL_QWEN35_BENCHMARK_CONTEXT = [
   "Qwen3.6-35B-A3B Q4_K_M imatrix (高端档,24GB+,21GB) thinking-on 32K: MMLU 500 = 90.40%, GPQA Diamond = 80.70%。Lynn imatrix 校准版,R6000 参考 207 tok/s;24G 本地机加载需注意上下文长度,长上下文建议保留 32G+ 内存余量。本变体不含 MTP 加速,纯 Q4_K_M 推理。",
 ].join("\n");
 
-export function isLocalQwen35Model(modelInfo = {}) {
+export function isLocalQwen35Model(modelInfo: LocalQwenModelInfo | null | undefined = {}): boolean {
   const provider = String(modelInfo?.provider || "").toLowerCase();
   const modelId = String(modelInfo?.modelId || modelInfo?.id || "").toLowerCase();
   return LOCAL_QWEN_COMPAT_PROVIDER_IDS.has(provider) && LOCAL_QWEN_COMPAT_MODEL_IDS.has(modelId);
 }
 
-export function shouldAttachLocalQwen35BenchContext(promptText = "", modelInfo = {}) {
+export function shouldAttachLocalQwen35BenchContext(promptText: unknown = "", modelInfo: LocalQwenModelInfo | null | undefined = {}): boolean {
   if (!isLocalQwen35Model(modelInfo)) return false;
   const text = String(promptText || "");
   if (!/(qwen3|4b|9b|35b|本地模型|本地\s*(4b|9b|35b)|自己|你的|你自己|量化|q4[_-]?k[_-]?m|nvfp4|w4a16|bf16|tool|工具)/i.test(text)) return false;
   return /(?:mmlu|gpqa|gqpa|成绩|分数|测评|benchmark|bench|评测|能力|tool.?call|工具调用|thinking|思考|量化)/i.test(text);
 }
 
-export function attachLocalQwen35BenchContext(promptText = "", modelInfo = {}) {
+export function attachLocalQwen35BenchContext(promptText: unknown = "", modelInfo: LocalQwenModelInfo | null | undefined = {}): string {
   const text = String(promptText || "");
   if (text.includes(LOCAL_QWEN35_BENCHMARK_MARKER)) return text;
   if (!shouldAttachLocalQwen35BenchContext(text, modelInfo)) return text;
