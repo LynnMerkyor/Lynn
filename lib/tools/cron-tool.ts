@@ -1,5 +1,5 @@
 /**
- * cron-tool.js — Agent 使用的定时任务工具
+ * cron-tool.ts — Agent 使用的定时任务工具
  *
  * 让 agent 能通过对话创建、管理定时任务。
  * Agent 读取 jian.md 上的自然语言任务后，
@@ -15,12 +15,88 @@ import { Type } from "@sinclair/typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 import { t, getLocale } from "../../server/i18n.js";
 
-/**
- * 创建 cron 工具
- * @param {import('../desk/cron-store.js').CronStore} cronStore
- * @returns {import('@mariozechner/pi-coding-agent').ToolDefinition}
- */
-export function createCronTool(cronStore, { autoApprove = false, getAutoApprove, confirmStore, emitEvent, getSessionPath } = {}) {
+type CronAction = "list" | "add" | "remove" | "toggle";
+type CronScheduleType = "at" | "every" | "cron";
+
+type CronJob = {
+  id: string;
+  type: CronScheduleType;
+  schedule: string | number;
+  prompt: string;
+  label: string;
+  enabled: boolean;
+  nextRunAt?: string | null;
+  model?: string;
+  [key: string]: unknown;
+};
+
+type CronJobInput = {
+  type: CronScheduleType;
+  schedule: string | number;
+  prompt: string;
+  label?: string;
+  model?: string;
+};
+
+type CronStoreLike = {
+  listJobs(): CronJob[];
+  addJob(job: CronJobInput): CronJob;
+  removeJob(id: string): boolean;
+  toggleJob(id: string): CronJob | null;
+};
+
+type CronToolParams = {
+  action: CronAction | string;
+  type?: CronScheduleType;
+  schedule?: string;
+  prompt?: string;
+  label?: string;
+  model?: string;
+  id?: string;
+};
+
+type CronConfirmResult = {
+  action: "confirmed" | "rejected" | "timeout" | string;
+};
+
+type CronConfirmStore = {
+  create(
+    kind: "cron",
+    payload: { jobData: CronJobInput },
+    sessionPath: string | null,
+  ): { confirmId: string; promise: Promise<CronConfirmResult> };
+};
+
+type CronConfirmationEvent = {
+  type: "cron_confirmation";
+  confirmId: string;
+  jobData: CronJobInput;
+};
+
+type CronToolOptions = {
+  autoApprove?: boolean;
+  getAutoApprove?: () => boolean;
+  confirmStore?: CronConfirmStore;
+  emitEvent?: (event: CronConfirmationEvent) => void;
+  getSessionPath?: () => string | null | undefined;
+};
+
+type CronToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+/** 创建 cron 工具 */
+export function createCronTool(
+  cronStore: CronStoreLike,
+  {
+    autoApprove = false,
+    getAutoApprove,
+    confirmStore,
+    emitEvent,
+    getSessionPath,
+  }: CronToolOptions = {},
+) {
   return {
     name: "cron",
     label: t("toolDef.cron.label"),
@@ -51,7 +127,7 @@ export function createCronTool(cronStore, { autoApprove = false, getAutoApprove,
       })),
     }),
 
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: CronToolParams): Promise<CronToolResult> => {
       switch (params.action) {
         case "list": {
           const jobs = cronStore.listJobs();
@@ -88,7 +164,7 @@ export function createCronTool(cronStore, { autoApprove = false, getAutoApprove,
           }
 
           // every 类型：schedule 为分钟数，转为毫秒
-          let schedule = params.schedule;
+          let schedule: string | number = params.schedule;
           if (params.type === "every") {
             const minutes = parseInt(schedule, 10);
             if (isNaN(minutes) || minutes <= 0) {
@@ -114,7 +190,7 @@ export function createCronTool(cronStore, { autoApprove = false, getAutoApprove,
           }
 
           // 阻塞式确认
-          const jobData = { type: params.type, schedule, prompt: params.prompt, label: params.label, model: params.model };
+          const jobData: CronJobInput = { type: params.type, schedule, prompt: params.prompt, label: params.label, model: params.model };
 
           if (confirmStore) {
             const sessionPath = getSessionPath?.() || null;
