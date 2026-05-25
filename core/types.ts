@@ -1,14 +1,52 @@
-export type ProviderId = string;
-export type ModelId = string;
+export type BuiltinProviderId =
+  | "anthropic"
+  | "baichuan"
+  | "baidu-cloud"
+  | "brain"
+  | "dashscope"
+  | "dashscope-coding"
+  | "deepseek"
+  | "fireworks"
+  | "gemini"
+  | "groq"
+  | "hunyuan"
+  | "infini"
+  | "kimi-coding"
+  | "local-qwen35-9b-q4km-imatrix"
+  | "minimax"
+  | "minimax-coding"
+  | "minimax-oauth"
+  | "mimo"
+  | "mistral"
+  | "modelscope"
+  | "moonshot"
+  | "ollama"
+  | "openai"
+  | "openai-codex-oauth"
+  | "openrouter"
+  | "perplexity"
+  | "siliconflow"
+  | "stepfun"
+  | "stepfun-coding"
+  | "tencent-coding"
+  | "together"
+  | "volcengine"
+  | "volcengine-coding"
+  | "xai"
+  | "zhipu"
+  | "zhipu-coding";
+
+export type ProviderId = BuiltinProviderId | (string & {});
+export type ModelId = string & {};
 
 export type LLMApi =
   | "anthropic-messages"
   | "openai-completions"
   | "openai-responses"
   | "openai-codex-responses"
-  | string;
+  | (string & {});
 
-export type ProviderAuthType = "api-key" | "oauth" | "none" | string;
+export type ProviderAuthType = "api-key" | "oauth" | "none" | (string & {});
 
 export interface ProviderModelEntry {
   id: ModelId;
@@ -17,15 +55,19 @@ export interface ProviderModelEntry {
   maxOutput?: number;
 }
 
+export type ProviderModelConfig = ModelId | ProviderModelEntry;
+
 export interface ProviderConfig {
   api_key?: string;
   base_url?: string;
   api?: LLMApi;
   display_name?: string;
   auth_type?: ProviderAuthType;
-  models?: Array<ModelId | ProviderModelEntry>;
+  models?: ProviderModelConfig[];
   [key: string]: unknown;
 }
+
+export type ProviderConfigMap = Record<string, ProviderConfig>;
 
 export interface ProviderPlugin {
   id: ProviderId;
@@ -58,7 +100,37 @@ export interface ProviderCredentialsSnake {
   api: LLMApi;
 }
 
-export type LLMRole = "system" | "user" | "assistant" | "tool" | "developer" | string;
+export interface SyncModelsOptions {
+  modelsJsonPath: string;
+  authJsonPath?: string;
+  oauthKeyMap?: Record<string, ProviderId>;
+}
+
+export interface ProviderModelsJsonEntry {
+  baseUrl: string;
+  api: LLMApi;
+  apiKey: string;
+  models: ModelsJsonModelEntry[];
+}
+
+export type ProviderModelsJsonMap = Record<string, ProviderModelsJsonEntry>;
+
+export interface ModelsJsonModelEntry {
+  id: ModelId;
+  name: string;
+  input: Array<"text" | "image">;
+  contextWindow: number;
+  vision: boolean;
+  reasoning: boolean;
+  maxTokens?: number;
+  quirks?: string[];
+  compat?: {
+    supportsDeveloperRole?: boolean;
+    thinkingFormat?: "qwen" | "zai" | string;
+  };
+}
+
+export type LLMRole = "system" | "user" | "assistant" | "tool" | "developer" | (string & {});
 
 export interface LLMContentBlock {
   type?: string;
@@ -195,3 +267,43 @@ export interface ResolvedModel {
 }
 
 export type ModelRef = ModelId | { id: ModelId; provider?: ProviderId } | ResolvedModel;
+
+export type SecurityMode = "authorized" | "plan" | "safe" | "full-access";
+export type ThinkingLevel = "auto" | "low" | "medium" | "high" | (string & {});
+
+export interface LearnSkillsPreferences {
+  enabled?: boolean;
+  safety_review?: boolean;
+  [key: string]: unknown;
+}
+
+export interface SessionRelayPreferences {
+  enabled?: boolean;
+  compaction_threshold?: number;
+  summary_max_tokens?: number;
+  [key: string]: unknown;
+}
+
+export interface SnapshotPreferences {
+  enabled?: boolean;
+  maxDays?: number;
+  [key: string]: unknown;
+}
+
+export interface EnginePreferences {
+  sandbox?: boolean;
+  securityMode?: SecurityMode | (string & {});
+  learn_skills?: LearnSkillsPreferences;
+  locale?: string;
+  timezone?: string;
+  thinking_level?: ThinkingLevel;
+  session_relay?: SessionRelayPreferences;
+  external_skill_paths?: string[];
+  oauth_custom_models?: Record<ProviderId, ModelId[]>;
+  update_channel?: "stable" | "beta" | (string & {});
+  snapshot?: SnapshotPreferences;
+  primaryAgent?: string | null;
+  client_agent_key?: string;
+  client_agent_secret?: string;
+  [key: string]: unknown;
+}

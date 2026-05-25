@@ -8,8 +8,13 @@ import {
   lsTool,
 } from "@mariozechner/pi-coding-agent";
 
+export interface WellKnownSkillPath {
+  suffix: string;
+  label: string;
+}
+
 /** 已知的外部 AI 工具技能目录（相对 $HOME） */
-export const WELL_KNOWN_SKILL_PATHS = [
+export const WELL_KNOWN_SKILL_PATHS: WellKnownSkillPath[] = [
   { suffix: ".claude/skills",     label: "Claude Code" },
   { suffix: ".codex/skills",      label: "Codex" },
   { suffix: ".openclaw/skills",   label: "OpenClaw" },
@@ -23,4 +28,4 @@ export const WELL_KNOWN_SKILL_PATHS = [
 ];
 
 /** 内置 coding 工具集 */
-export const allBuiltInTools = [...codingTools, grepTool, findTool, lsTool];
+export const allBuiltInTools: unknown[] = [...codingTools, grepTool, findTool, lsTool];

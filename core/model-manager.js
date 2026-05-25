@@ -23,12 +23,12 @@ import { isLocalBaseUrl } from "../shared/net-utils.js";
 import { syncModels } from "./model-sync.js";
 import { BRAIN_PROVIDER_ID } from "../shared/brain-provider.js";
 
-/** @typedef {import("./types.d.ts").ModelId} ModelId */
-/** @typedef {import("./types.d.ts").ModelRef} ModelRef */
-/** @typedef {import("./types.d.ts").ProviderCredentialsSnake} ProviderCredentialsSnake */
-/** @typedef {import("./types.d.ts").ProviderId} ProviderId */
-/** @typedef {import("./types.d.ts").ResolvedModel} ResolvedModel */
-/** @typedef {import("./types.d.ts").UtilityExecutionConfig} UtilityExecutionConfig */
+/** @typedef {import("./types.js").ModelId} ModelId */
+/** @typedef {import("./types.js").ModelRef} ModelRef */
+/** @typedef {import("./types.js").ProviderCredentialsSnake} ProviderCredentialsSnake */
+/** @typedef {import("./types.js").ProviderId} ProviderId */
+/** @typedef {import("./types.js").ResolvedModel} ResolvedModel */
+/** @typedef {import("./types.js").UtilityExecutionConfig} UtilityExecutionConfig */
 
 export class ModelManager {
   /**
@@ -154,7 +154,7 @@ export class ModelManager {
   async syncAndRefresh() {
     const rawProviders = this.providerRegistry.getAllProvidersRaw();
     // 合并 plugin 默认值（base_url/api），YAML 里可能只存了 api_key + models
-    /** @type {Record<ProviderId, import("./types.d.ts").ProviderConfig>} */
+    /** @type {Record<ProviderId, import("./types.js").ProviderConfig>} */
     const providers = {};
     for (const [name, raw] of Object.entries(rawProviders)) {
       const entry = this.providerRegistry.get(name);

@@ -16,10 +16,42 @@
  *   });
  */
 
-const TAGS = ["mood", "pulse", "reflect"];
+const TAGS = ["mood", "pulse", "reflect"] as const;
+
+type Emit<T> = (evt: T) => void;
+type MoodTag = typeof TAGS[number];
+type TextEvent = { type: "text"; data: string };
+
+export type MoodParserEvent =
+  | TextEvent
+  | { type: "mood_start" }
+  | { type: "mood_text"; data: string }
+  | { type: "mood_end" };
+
+export type ThinkTagParserEvent =
+  | TextEvent
+  | { type: "think_start" }
+  | { type: "think_text"; data: string }
+  | { type: "think_end" };
+
+export type XingParserEvent =
+  | TextEvent
+  | { type: "xing_start"; title: string }
+  | { type: "xing_text"; data: string }
+  | { type: "xing_end" };
+
+export type LynnProgressParserEvent =
+  | TextEvent
+  | {
+      type: "tool_progress";
+      event: string;
+      name: string;
+      ms?: number;
+      ok?: boolean;
+    };
 
 /** 检查 buffer 末尾是否是 target 的前缀（1..target.length-1 个字符），返回匹配长度 */
-function trailingPrefixLen(buffer, target) {
+function trailingPrefixLen(buffer: string, target: string): number {
   const maxCheck = Math.min(buffer.length, target.length - 1);
   for (let len = maxCheck; len >= 1; len--) {
     if (buffer.endsWith(target.slice(0, len))) return len;
@@ -36,6 +68,11 @@ const XING_OPEN_RE = /<xing\s+title=["\u201C\u201D]([^"\u201C\u201D]*)["\u201C\u
 const LYNN_PROGRESS_RE = /<lynn_tool_progress\s+([^>]*?)><\/lynn_tool_progress>/;
 
 export class MoodParser {
+  inMood: boolean;
+  buffer: string;
+  _justEndedMood: boolean;
+  _currentTag: MoodTag | null;
+
   constructor() {
     this.inMood = false;
     this.buffer = "";
@@ -48,13 +85,13 @@ export class MoodParser {
    * @param {string} delta
    * @param {(evt: {type: string, data?: string}) => void} emit
    */
-  feed(delta, emit) {
+  feed(delta: string, emit: Emit<MoodParserEvent>): void {
     this.buffer += delta;
     this._drain(emit);
   }
 
   /** 强制输出 buffer 中剩余内容 */
-  flush(emit) {
+  flush(emit: Emit<MoodParserEvent>): void {
     if (this.buffer) {
       if (this.inMood) {
         emit({ type: "mood_text", data: this.buffer });
@@ -70,14 +107,14 @@ export class MoodParser {
     }
   }
 
-  reset() {
+  reset(): void {
     this.inMood = false;
     this.buffer = "";
     this._justEndedMood = false;
     this._currentTag = null;
   }
 
-  _trailingPrefixLen(buffer, target) {
+  _trailingPrefixLen(buffer: string, target: string): number {
     return trailingPrefixLen(buffer, target);
   }
 
@@ -85,8 +122,8 @@ export class MoodParser {
    * 在 buffer 中查找最早出现的开始标签
    * @returns {{ tag: string, idx: number, openTag: string } | null}
    */
-  _findOpenTag() {
-    let best = null;
+  _findOpenTag(): { tag: MoodTag; idx: number; openTag: string } | null {
+    let best: { tag: MoodTag; idx: number; openTag: string } | null = null;
     for (const tag of TAGS) {
       const openTag = `<${tag}>`;
       const idx = this.buffer.indexOf(openTag);
@@ -100,7 +137,7 @@ export class MoodParser {
   /**
    * 计算所有开始标签在 buffer 末尾的最大前缀匹配长度
    */
-  _maxTrailingPrefix() {
+  _maxTrailingPrefix(): number {
     let max = 0;
     for (const tag of TAGS) {
       const len = trailingPrefixLen(this.buffer, `<${tag}>`);
@@ -110,7 +147,7 @@ export class MoodParser {
   }
 
   /** 内部：尽可能多地从 buffer 中提取完整事件 */
-  _drain(emit) {
+  _drain(emit: Emit<MoodParserEvent>): void {
     while (this.buffer.length > 0) {
       // mood 刚结束时，裁掉前导换行
       if (this._justEndedMood && !this.inMood) {
@@ -198,7 +235,7 @@ const CORRUPTION_PATTERNS = [
   /<\|[a-z_]{0,40}\|>/gi,
 ];
 
-function matchesThinkingPrefix(text) {
+function matchesThinkingPrefix(text: string): boolean {
   const head = text.trimStart();
   if (!head) return false;
   for (const pat of THINKING_PREFIX_PATTERNS) {
@@ -207,30 +244,30 @@ function matchesThinkingPrefix(text) {
   return false;
 }
 
-function sanitizeCorruption(text) {
+function sanitizeCorruption(text: string): string {
   let out = text;
   for (const pat of CORRUPTION_PATTERNS) out = out.replace(pat, "");
   return out;
 }
 
-function planningScaffoldLabels(text) {
+function planningScaffoldLabels(text: string): string[] {
   const head = String(text || "").trimStart();
   if (!/^Premise\s*:/i.test(head)) return [];
   return [...head.matchAll(/(?:^|\n)\s*(Premise|Conduct|Reflection|Act)\s*:/gi)]
     .map((match) => String(match[1] || "").toLowerCase());
 }
 
-function looksLikeLeadingPlanningScaffold(text) {
+function looksLikeLeadingPlanningScaffold(text: string): boolean {
   const labels = planningScaffoldLabels(text);
   return labels.includes("premise") && labels.includes("conduct");
 }
 
-function hasCompletePlanningScaffold(text) {
+function hasCompletePlanningScaffold(text: string): boolean {
   const labels = new Set(planningScaffoldLabels(text));
   return labels.has("premise") && labels.has("conduct") && labels.has("act");
 }
 
-function stripLeadingPlanningScaffold(text) {
+function stripLeadingPlanningScaffold(text: string): string {
   if (!looksLikeLeadingPlanningScaffold(text)) return text;
   // Premise / Conduct / Reflection / Act is an internal planning scaffold.
   // If it reaches the visible channel, showing it is worse than returning
@@ -238,12 +275,12 @@ function stripLeadingPlanningScaffold(text) {
   return "";
 }
 
-function stripLeadingThinkingPrefixOnce(text) {
+function stripLeadingThinkingPrefixOnce(text: string): string {
   const leadingWs = text.match(/^\s*/)?.[0] || "";
   const head = text.slice(leadingWs.length);
   if (!head) return text;
 
-  const candidates = [];
+  const candidates: number[] = [];
   const lineBreak = head.indexOf("\n");
   if (lineBreak !== -1 && lineBreak <= 180) candidates.push(lineBreak + 1);
 
@@ -263,7 +300,7 @@ function stripLeadingThinkingPrefixOnce(text) {
   return text;
 }
 
-function stripLeadingThinkingPrefixes(text, maxPasses = 2) {
+function stripLeadingThinkingPrefixes(text: string, maxPasses = 2): string {
   let out = stripLeadingPlanningScaffold(text);
   for (let i = 0; i < maxPasses; i++) {
     const next = stripLeadingThinkingPrefixOnce(out);
@@ -292,6 +329,12 @@ function stripLeadingThinkingPrefixes(text, maxPasses = 2) {
  *   text { data } — 已过 corruption sanitization
  */
 export class ThinkTagParser {
+  inThink: boolean;
+  buffer: string;
+  _justEnded: boolean;
+  DECISION_WINDOW: number;
+  _decisionMade: boolean;
+
   constructor() {
     this.inThink = false;
     this.buffer = "";
@@ -301,7 +344,7 @@ export class ThinkTagParser {
     this._decisionMade = false;
   }
 
-  feed(delta, emit) {
+  feed(delta: string, emit: Emit<ThinkTagParserEvent>): void {
     this.buffer += delta;
     // 首轮 · 累积到决策阈值或看到确定标记 · 再 drain
     if (!this._decisionMade && !this.inThink) {
@@ -324,7 +367,7 @@ export class ThinkTagParser {
   }
 
   // 做模式决策：look at buffer head · 决定是 thinking / 正文
-  _makeDecision(emit) {
+  _makeDecision(emit: Emit<ThinkTagParserEvent>): void {
     const text = this.buffer;
 
     // Case A: 裸 </think>（前面没 <think>）→ 前半段当 thinking
@@ -355,7 +398,7 @@ export class ThinkTagParser {
     // Case C: 正常 · buffer 保留让 _drain 处理（可能含标准 <think>）
   }
 
-  flush(emit) {
+  flush(emit: Emit<ThinkTagParserEvent>): void {
     // flush 前 · 如果还没决策 · 强制决策
     if (!this._decisionMade && !this.inThink && this.buffer) {
       this._makeDecision(emit);
@@ -380,14 +423,14 @@ export class ThinkTagParser {
     }
   }
 
-  reset() {
+  reset(): void {
     this.inThink = false;
     this.buffer = "";
     this._justEnded = false;
     this._decisionMade = false;
   }
 
-  _drain(emit) {
+  _drain(emit: Emit<ThinkTagParserEvent>): void {
     while (this.buffer.length > 0) {
       // think 刚结束时裁掉前导换行
       if (this._justEnded && !this.inThink) {
@@ -451,18 +494,22 @@ export class ThinkTagParser {
  *   text { data } — 非 xing 内容透传
  */
 export class XingParser {
+  inXing: boolean;
+  buffer: string;
+  _title: string | null;
+
   constructor() {
     this.inXing = false;
     this.buffer = "";
     this._title = null;
   }
 
-  feed(delta, emit) {
+  feed(delta: string, emit: Emit<XingParserEvent>): void {
     this.buffer += delta;
     this._drain(emit);
   }
 
-  flush(emit) {
+  flush(emit: Emit<XingParserEvent>): void {
     if (this.buffer) {
       if (this.inXing) {
         emit({ type: "xing_text", data: this.buffer });
@@ -478,24 +525,25 @@ export class XingParser {
     }
   }
 
-  reset() {
+  reset(): void {
     this.inXing = false;
     this.buffer = "";
     this._title = null;
   }
 
-  _drain(emit) {
+  _drain(emit: Emit<XingParserEvent>): void {
     while (this.buffer.length > 0) {
       if (!this.inXing) {
         // 尝试匹配完整的开标签 <xing title="...">
         const match = this.buffer.match(XING_OPEN_RE);
         if (match) {
-          const before = this.buffer.slice(0, match.index);
+          const matchIndex = match.index ?? 0;
+          const before = this.buffer.slice(0, matchIndex);
           if (before) emit({ type: "text", data: before });
-          this._title = match[1];
+          this._title = match[1] || "";
           emit({ type: "xing_start", title: this._title });
           this.inXing = true;
-          this.buffer = this.buffer.slice(match.index + match[0].length);
+          this.buffer = this.buffer.slice(matchIndex + match[0].length);
           continue;
         }
         // buffer 里有 <xing 但标签还没闭合 → 持住等更多数据
@@ -557,39 +605,42 @@ export class XingParser {
  *           （即在 text-后、mood-前）
  */
 export class LynnProgressParser {
+  buffer: string;
+
   constructor() {
     this.buffer = "";
   }
 
-  feed(delta, emit) {
+  feed(delta: string, emit: Emit<LynnProgressParserEvent>): void {
     this.buffer += delta;
     this._drain(emit);
   }
 
-  flush(emit) {
+  flush(emit: Emit<LynnProgressParserEvent>): void {
     if (this.buffer) {
       emit({ type: "text", data: this.buffer });
       this.buffer = "";
     }
   }
 
-  reset() {
+  reset(): void {
     this.buffer = "";
   }
 
-  _parseAttrs(attrStr) {
-    const out = {};
+  _parseAttrs(attrStr: string): Record<string, string> {
+    const out: Record<string, string> = {};
     const re = /(\w+)=["']([^"']*)["']/g;
     let m;
     while ((m = re.exec(attrStr)) !== null) out[m[1]] = m[2];
     return out;
   }
 
-  _drain(emit) {
+  _drain(emit: Emit<LynnProgressParserEvent>): void {
     while (this.buffer.length > 0) {
       const match = this.buffer.match(LYNN_PROGRESS_RE);
       if (match) {
-        const before = this.buffer.slice(0, match.index);
+        const matchIndex = match.index ?? 0;
+        const before = this.buffer.slice(0, matchIndex);
         if (before) emit({ type: "text", data: before });
         const attrs = this._parseAttrs(match[1]);
         emit({
@@ -599,7 +650,7 @@ export class LynnProgressParser {
           ms: attrs.ms ? Number(attrs.ms) : undefined,
           ok: attrs.ok === undefined ? undefined : attrs.ok === "true",
         });
-        this.buffer = this.buffer.slice(match.index + match[0].length);
+        this.buffer = this.buffer.slice(matchIndex + match[0].length);
         continue;
       }
       // Hold tail if it might be the start of "<lynn_tool_progress"
