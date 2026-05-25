@@ -8,11 +8,35 @@
 import { t } from "../../shared/i18n-runtime.js";
 import { readSignedClientAgentHeaders } from "../../core/client-agent-identity.js";
 
+export type ProviderApiProtocol =
+  | "anthropic-messages"
+  | "openai-completions"
+  | "openai-codex-responses"
+  | "openai-responses"
+  | string;
+
+export type ProviderAuthHeaderOptions = {
+  allowMissingApiKey?: boolean;
+  method?: string;
+  pathname?: string;
+};
+
+export type ProviderAuthHeaders = Record<string, string>;
+
+export type ProviderProbe = {
+  url: string;
+  method: "GET" | "POST";
+};
+
 /**
  * 构建 provider 认证 header
  * 被 /api/providers/test 和 /api/models/health 路由使用
  */
-export function buildProviderAuthHeaders(api, apiKey, opts = {}) {
+export function buildProviderAuthHeaders(
+  api: ProviderApiProtocol,
+  apiKey?: string | null,
+  opts: ProviderAuthHeaderOptions = {},
+): ProviderAuthHeaders {
   const allowMissingApiKey = opts.allowMissingApiKey === true;
   const method = String(opts.method || "GET").toUpperCase();
   const pathname = typeof opts.pathname === "string" && opts.pathname.trim()
@@ -26,7 +50,7 @@ export function buildProviderAuthHeaders(api, apiKey, opts = {}) {
   }
 
   if (api === "anthropic-messages") {
-    const headers = {
+    const headers: ProviderAuthHeaders = {
       "Content-Type": "application/json",
       "anthropic-version": "2023-06-01",
       ...(allowMissingApiKey ? readSignedClientAgentHeaders({ method, pathname }) : {}),
@@ -36,7 +60,7 @@ export function buildProviderAuthHeaders(api, apiKey, opts = {}) {
   }
 
   if (api === "openai-completions" || api === "openai-codex-responses" || api === "openai-responses") {
-    const headers = {
+    const headers: ProviderAuthHeaders = {
       "Content-Type": "application/json",
       ...(allowMissingApiKey ? readSignedClientAgentHeaders({ method, pathname }) : {}),
     };
@@ -53,11 +77,8 @@ export function buildProviderAuthHeaders(api, apiKey, opts = {}) {
  * Anthropic 协议：POST baseUrl/v1/messages（和 Pi SDK Anthropic provider 一致）
  * OpenAI 兼容协议：GET baseUrl/models
  *
- * @param {string} baseUrl
- * @param {string} api
- * @returns {{ url: string, method: string }}
  */
-export function buildProbeUrl(baseUrl, api) {
+export function buildProbeUrl(baseUrl: string | null | undefined, api: ProviderApiProtocol): ProviderProbe {
   const base = String(baseUrl || "").replace(/\/+$/, "");
   if (api === "anthropic-messages") {
     return { url: `${base}/v1/messages`, method: "POST" };
