@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const {
   DEFAULT_MODEL_ID,
   canonicalizeLlamacppModelId,
+  decorateDownloadState,
   listLlamacppDownloadProfiles,
   resolveLlamacppDownloadProfile,
 } = require("../desktop/llamacpp-profiles.cjs");
@@ -45,5 +46,41 @@ describe("llama.cpp model profile boundary", () => {
       "qwen35-9b-q4km-imatrix",
       "qwen36-35b-a3b-q4km-imatrix",
     ]);
+  });
+
+  it("decorates download IPC state with an explicit safe shape", () => {
+    const profile = resolveLlamacppDownloadProfile(DEFAULT_MODEL_ID).profile;
+    const decorated = decorateDownloadState(profile, {
+      state: "downloading",
+      bytesTransferred: "10",
+      totalBytes: "20",
+      percent: 150,
+      activeSource: "ModelScope\0hidden",
+      target: "/tmp/model.gguf",
+      partPath: "/tmp/model.gguf.part",
+      parallelSegments: 99,
+      paused: 1,
+      lastError: "network-error",
+      reason: "retrying",
+      injected: "do-not-forward",
+    });
+
+    expect(decorated).toMatchObject({
+      state: "downloading",
+      bytesTransferred: 10,
+      totalBytes: 20,
+      percent: 100,
+      activeSource: "ModelScopehidden",
+      target: "/tmp/model.gguf",
+      partPath: "/tmp/model.gguf.part",
+      parallelSegments: 8,
+      paused: true,
+      lastError: "network-error",
+      reason: "retrying",
+      modelId: DEFAULT_MODEL_ID,
+      fileName: "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
+    });
+    expect(decorated).not.toHaveProperty("injected");
+    expect(decorateDownloadState(profile, { state: "surprise" })).toMatchObject({ state: "idle" });
   });
 });

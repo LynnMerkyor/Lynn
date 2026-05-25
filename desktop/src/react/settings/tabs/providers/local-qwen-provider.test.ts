@@ -61,6 +61,21 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('定位当前模型文件');
     expect(source).not.toContain('下载/查看');
     expect(source).toContain('chooseGgufModel');
+    expect(source).toContain('4B 仅作为低配降级');
+    expect(source).toContain('thinking-on 可能长思考后无正文');
+    expect(source).toContain('localModelActionErrorText');
+  });
+
+  it('keeps local model IPC commands explicit and guarded', () => {
+    const main = read('desktop/main.cjs');
+    const preload = read('desktop/preload.cjs');
+    expect(main).toContain('const LOCAL_MODEL_IPC = Object.freeze');
+    expect(main).toContain('parseStartDownloadPayload');
+    expect(main).toContain('download-boundary-invalid');
+    expect(main).toContain('model-path-not-allowed');
+    expect(main).toContain('isLocalModelPathAllowed');
+    expect(preload).toContain('llamacppStartDownload: (payload)');
+    expect(preload).toContain('llamacppStartCustomModel: (modelPath)');
   });
 
   it('downloads the recommended 35B Q4_K_M imatrix model through Lynn with checksum and parallel ranges', () => {

@@ -44,7 +44,7 @@ const LOCAL_QWEN35_4B_DOWNGRADE: LocalUpgradeOption = {
   label: 'Qwen3.5-4B Q4_K_M imatrix (低配降级)',
   profile: '8~16GB 显存/统一内存可选 · 建议 thinking-off',
   metrics: ['2.6 GB', 'MMLU thinking-off 73.00%', 'GPQA thinking-off 16.67%', 'thinking-on 可能长思考后无正文'],
-  reason: '仅推荐给跑不动 9B 的低配设备。4B thinking-on 已在 Spark 复现长思考后无正文问题,默认不要作为引导模型。',
+  reason: '仅推荐给跑不动 9B 的低配设备。4B 只作为降级档；thinking-on 可能长思考后无正文，默认不要作为引导模型。',
   modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix',
   download_label: '下载到本机',
   file_name: 'Qwen3.5-4B-Q4_K_M-imatrix.gguf',
@@ -107,6 +107,18 @@ function formatBytes(bytes?: number | null) {
     index += 1;
   }
   return `${amount >= 10 || index === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[index]}`;
+}
+
+function localModelActionErrorText(reason?: string, detail?: string) {
+  const value = String(detail || reason || 'unknown-error');
+  if (reason === 'insufficient-disk-space') return detail || '磁盘空间不足。请清理模型目录所在磁盘后重试。';
+  if (reason === 'another-download-running') return '已有其他本地模型正在下载或校验。请等待完成，或先取消当前下载。';
+  if (reason === 'unknown-model-id' || reason === 'invalid-model-id') return '本地模型请求无效。请刷新设置页后重试。';
+  if (reason === 'download-boundary-invalid') return detail || '下载源未通过安全校验。Lynn 只允许公开 http/https GGUF 源。';
+  if (reason === 'model-path-not-allowed') return '请通过“选择本机 GGUF 启动”重新选择该文件，或把 GGUF 放到本地模型目录后再启动。';
+  if (reason === 'not-gguf') return '只能导入 .gguf 模型文件。';
+  if (reason === 'model-not-found') return '模型文件不存在或已移动。请重新选择 GGUF。';
+  return value;
 }
 
 export function ProviderDetail({ providerId, summary, providerConfig, isPresetSetup, presetInfo, onRefresh }: {
@@ -398,7 +410,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       });
       try {
         const res = await platform.llamacppStartDownload({ modelId: 'qwen35-9b-q4km-imatrix' });
-        if (!res?.ok) throw new Error(res?.reason || 'download-start-failed');
+        if (!res?.ok) throw new Error(localModelActionErrorText(res?.reason, res?.detail));
         showToast(
           res.alreadyRunning
             ? '默认 9B 已在下载/启动队列中。'
@@ -534,7 +546,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     try {
       const res = await platform.llamacppStartDownload({ modelId });
       if (!res?.ok) {
-        throw new Error(res?.reason || 'download-start-failed');
+        throw new Error(localModelActionErrorText(res?.reason, res?.detail));
       }
       setActionStatus({
         kind: 'info',
@@ -586,7 +598,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       setActionStatus({ kind: 'info', text: `已选择 ${fileName}，正在用 llama.cpp 启动本地模型…` });
       const res = await platform.llamacppStartCustomModel(modelPath);
       if (!res?.ok) {
-        throw new Error(res?.reason || 'start-custom-model-failed');
+        throw new Error(localModelActionErrorText(res?.reason, res?.detail));
       }
       showToast(`正在启动 ${fileName}，状态会在此处和聊天栏同步。`, 'success');
       setActionStatus({ kind: 'success', text: `已提交启动：${fileName}。加载完成后会同步到聊天栏，可直接使用本地端点。` });
@@ -819,7 +831,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           <div className={styles['pv-local-qwen-advanced-panel']}>
             <div>
               <strong>已有 GGUF / 模型目录</strong>
-              <span>默认使用 Qwen3.5-9B MTP。你也可以导入已经下载好的 4B / 35B 或其他 GGUF；Lynn 会用当前硬件配置拉起 llama.cpp。</span>
+              <span>默认使用 Qwen3.5-9B MTP。4B 仅作为低配降级，thinking-on 可能长思考后无正文；也可以导入已经下载好的 35B 或其他 GGUF。</span>
               {modelPath && <code className={styles['pv-local-qwen-model-path']}>{modelPath}</code>}
             </div>
             <div className={styles['pv-local-qwen-advanced-actions']}>

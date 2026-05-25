@@ -92,13 +92,45 @@ function getLlamacppDownloadProfile(modelId) {
   return resolveLlamacppDownloadProfile(modelId).profile;
 }
 
-function decorateDownloadState(profile, state) {
-  return {
-    ...state,
-    modelId: profile.modelId,
-    modelLabel: profile.label,
-    fileName: profile.fileName,
+function safeIpcText(value, max = 500) {
+  if (value == null) return null;
+  return String(value).replace(/\0/g, "").slice(0, max);
+}
+
+function safeNonNegativeNumber(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
+function safeDownloadStateName(value) {
+  const state = String(value || "idle");
+  return ["idle", "downloading", "verifying", "done", "error", "paused"].includes(state) ? state : "idle";
+}
+
+function decorateDownloadState(profile, state = {}) {
+  const percent = Math.max(0, Math.min(100, safeNonNegativeNumber(state.percent)));
+  const parallelSegments = Number(state.parallelSegments || 0);
+  const payload = {
+    state: safeDownloadStateName(state.state),
+    bytesTransferred: safeNonNegativeNumber(state.bytesTransferred),
+    totalBytes: safeNonNegativeNumber(state.totalBytes),
+    percent,
+    activeSource: safeIpcText(state.activeSource, 120),
+    target: safeIpcText(state.target, 1024),
+    partPath: safeIpcText(state.partPath, 1024),
+    parallelSegments: Number.isFinite(parallelSegments) && parallelSegments > 0
+      ? Math.max(1, Math.min(8, Math.floor(parallelSegments)))
+      : null,
+    paused: Boolean(state.paused),
+    lastError: safeIpcText(state.lastError, 500),
+    modelId: safeIpcText(profile.modelId, 120),
+    modelLabel: safeIpcText(profile.label, 160),
+    fileName: safeIpcText(profile.fileName, 200),
   };
+  if (state.reason != null) payload.reason = safeIpcText(state.reason, 200);
+  if (state.sourceAttempt != null) payload.sourceAttempt = safeNonNegativeNumber(state.sourceAttempt);
+  if (state.finalCheck != null) payload.finalCheck = Boolean(state.finalCheck);
+  return payload;
 }
 
 function listLlamacppDownloadProfiles() {
