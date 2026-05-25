@@ -15,11 +15,121 @@
  *   DELETE /v1/memory/:id
  */
 import { Hono } from "hono";
-import Database from "better-sqlite3";
-import * as sqliteVec from "sqlite-vec";
+import type { Context } from "hono";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+
+type SqlParam = string | number | bigint | Buffer | null;
+
+type Statement<TRow = unknown> = {
+  run(...params: SqlParam[]): { lastInsertRowid: number | bigint };
+  all(...params: SqlParam[]): TRow[];
+  get(...params: SqlParam[]): TRow | undefined;
+};
+
+type DatabaseInstance = {
+  pragma(sql: string): unknown;
+  exec(sql: string): unknown;
+  prepare<TRow = unknown>(sql: string): Statement<TRow>;
+  transaction<TResult>(fn: () => TResult): () => TResult;
+};
+
+type DatabaseFactory = new (dbPath: string) => DatabaseInstance;
+
+type SqliteVecModule = {
+  load(db: DatabaseInstance): void;
+};
+
+type MemoryMetadata = Record<string, unknown> & {
+  document_id?: string | number | null;
+};
+
+type WriteBody = {
+  text?: string;
+  layer?: string;
+  source?: string;
+  metadata?: MemoryMetadata | null;
+};
+
+type WriteBatchItem = {
+  text: string;
+  layer: string;
+  source: string;
+  metadata?: MemoryMetadata | null;
+};
+
+type WriteBatchBody = {
+  items?: WriteBatchItem[];
+};
+
+type RecallBody = {
+  query?: string;
+  top_k?: number;
+  layers?: string[];
+  rerank?: boolean;
+  sources?: string[];
+};
+
+type MemoryRow = {
+  id: number;
+  text: string;
+  layer: string;
+  source: string;
+  timestamp: number;
+  metadata: string | null;
+  distance?: number | null;
+};
+
+type CountRow = {
+  n: number;
+};
+
+type MemoryItem = {
+  id: number;
+  text: string;
+  layer: string;
+  source: string;
+  timestamp: number;
+  score: number;
+  metadata?: unknown;
+  snippet?: string;
+};
+
+type RerankScore = {
+  index: number;
+  score: number;
+};
+
+type MemoryRouteContext = Context;
+
+type BuildMemoryContextOptions = {
+  enabled?: boolean;
+  top_k?: number;
+  layers?: string[];
+  inject_strategy?: string;
+};
+
+type BuildMemoryContextResult = {
+  systemMessage: { role: "system"; content: string } | null;
+  memoryUsedEvent: {
+    type: "memory_used";
+    items: Array<{
+      id: number;
+      snippet: string;
+      source: string;
+      layer: string;
+      timestamp: number;
+      score: number;
+    }>;
+    recall_ms: number;
+  } | null;
+};
+
+const require = createRequire(import.meta.url);
+const Database = require("better-sqlite3") as DatabaseFactory;
+const sqliteVec = require("sqlite-vec") as SqliteVecModule;
 
 // ============ DB 初始化 (启动时执行一次) ============
 const DB_PATH = process.env.LYNN_MEMORY_DB
@@ -51,7 +161,7 @@ const stmts = {
   insertVec: db.prepare(`
     INSERT INTO memory_vec (rowid, embedding) VALUES (?, ?)
   `),
-  vecSearch: db.prepare(`
+  vecSearch: db.prepare<MemoryRow>(`
     SELECT m.id, m.text, m.layer, m.source, m.timestamp, m.metadata,
            vec.distance
     FROM memory_vec vec
@@ -63,7 +173,7 @@ const stmts = {
     ORDER BY vec.distance
     LIMIT ?
   `),
-  vecSearchWithSources: db.prepare(`
+  vecSearchWithSources: db.prepare<MemoryRow>(`
     SELECT m.id, m.text, m.layer, m.source, m.timestamp, m.metadata,
            vec.distance
     FROM memory_vec vec
@@ -75,7 +185,7 @@ const stmts = {
     ORDER BY vec.distance
     LIMIT ?
   `),
-  list: db.prepare(`
+  list: db.prepare<MemoryRow>(`
     SELECT id, text, layer, source, timestamp, metadata
     FROM v_memory_active
     WHERE (? IS NULL OR layer = ?)
@@ -83,7 +193,7 @@ const stmts = {
     ORDER BY CASE WHEN ? = 'recent' THEN -timestamp ELSE timestamp END
     LIMIT ? OFFSET ?
   `),
-  count: db.prepare(`
+  count: db.prepare<CountRow>(`
     SELECT COUNT(*) as n FROM v_memory_active
     WHERE (? IS NULL OR layer = ?) AND (? IS NULL OR source = ?)
   `),
@@ -94,7 +204,7 @@ const stmts = {
 const EMBED_URL = process.env.LYNN_EMBED_URL || "http://localhost:8002";
 const RERANK_URL = process.env.LYNN_RERANK_URL || "http://localhost:8003";
 
-async function embed(texts) {
+async function embed(texts: string | string[]): Promise<number[][]> {
   const arr = Array.isArray(texts) ? texts : [texts];
   const r = await fetch(`${EMBED_URL}/embed`, {
     method: "POST",
@@ -102,10 +212,10 @@ async function embed(texts) {
     body: JSON.stringify({ inputs: arr }),
   });
   if (!r.ok) throw new Error(`embed failed: ${r.status}`);
-  return await r.json(); // [[1024-d float], ...]
+  return await r.json() as number[][]; // [[1024-d float], ...]
 }
 
-async function rerank(query, docs, topK) {
+async function rerank(query: string, docs: string[], topK: number): Promise<RerankScore[]> {
   const r = await fetch(`${RERANK_URL}/rerank`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -117,27 +227,27 @@ async function rerank(query, docs, topK) {
     }),
   });
   if (!r.ok) throw new Error(`rerank failed: ${r.status}`);
-  const scored = await r.json();
+  const scored = await r.json() as RerankScore[];
   // 已按分数降序排
   return scored.slice(0, topK);
 }
 
 // ============ helpers ============
-function vecAsBlob(arr) {
+function vecAsBlob(arr: ArrayLike<number>): Buffer {
   // sqlite-vec 接受 Float32Array → Buffer
   return Buffer.from(new Float32Array(arr).buffer);
 }
 
-function metaJSON(obj) {
+function metaJSON(obj: unknown): string | null {
   return obj ? JSON.stringify(obj) : null;
 }
 
-function parseMetadata(raw) {
+function parseMetadata(raw: string | null): unknown {
   if (!raw) return undefined;
   try { return JSON.parse(raw); } catch { return undefined; }
 }
 
-function rowToItem(row, score = null) {
+function rowToItem(row: MemoryRow, score: number | null = null): MemoryItem {
   return {
     id: row.id,
     text: row.text,
@@ -153,8 +263,8 @@ function rowToItem(row, score = null) {
 export const memoryRoutes = new Hono();
 
 // ---- POST /v1/memory/write ----
-memoryRoutes.post("/write", async (c) => {
-  const body = await c.req.json();
+memoryRoutes.post("/write", async (c: MemoryRouteContext) => {
+  const body = await c.req.json() as WriteBody;
   const { text, layer, source, metadata } = body;
 
   if (!text || !layer || !source) {
@@ -178,8 +288,8 @@ memoryRoutes.post("/write", async (c) => {
 });
 
 // ---- POST /v1/memory/write_batch ----
-memoryRoutes.post("/write_batch", async (c) => {
-  const { items } = await c.req.json();
+memoryRoutes.post("/write_batch", async (c: MemoryRouteContext) => {
+  const { items } = await c.req.json() as WriteBatchBody;
   if (!Array.isArray(items) || items.length === 0) {
     return c.json({ error: "items required" }, 400);
   }
@@ -210,8 +320,8 @@ memoryRoutes.post("/write_batch", async (c) => {
 });
 
 // ---- POST /v1/memory/recall ----
-memoryRoutes.post("/recall", async (c) => {
-  const body = await c.req.json();
+memoryRoutes.post("/recall", async (c: MemoryRouteContext) => {
+  const body = await c.req.json() as RecallBody;
   const {
     query,
     top_k = 5,
@@ -273,7 +383,7 @@ memoryRoutes.post("/recall", async (c) => {
 });
 
 // ---- GET /v1/memory/list ----
-memoryRoutes.get("/list", (c) => {
+memoryRoutes.get("/list", (c: MemoryRouteContext) => {
   const layer = c.req.query("layer") || null;
   const source = c.req.query("source") || null;
   const limit = Math.min(500, Number(c.req.query("limit") || 50));
@@ -281,7 +391,7 @@ memoryRoutes.get("/list", (c) => {
   const order = c.req.query("order") === "oldest" ? "oldest" : "recent";
 
   const items = stmts.list.all(layer, layer, source, source, order, limit, offset);
-  const { n: total } = stmts.count.get(layer, layer, source, source);
+  const { n: total } = stmts.count.get(layer, layer, source, source) as CountRow;
 
   return c.json({
     items: items.map(r => ({
@@ -298,7 +408,7 @@ memoryRoutes.get("/list", (c) => {
 });
 
 // ---- DELETE /v1/memory/:id ----
-memoryRoutes.delete("/:id", (c) => {
+memoryRoutes.delete("/:id", (c: MemoryRouteContext) => {
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id)) return c.json({ error: "invalid id" }, 400);
   stmts.softDelete.run(id);
@@ -312,7 +422,10 @@ memoryRoutes.delete("/:id", (c) => {
  * @param {object} opts
  * @returns {Promise<{systemMessage: object|null, memoryUsedEvent: object|null}>}
  */
-export async function buildMemoryContext(userText, opts = {}) {
+export async function buildMemoryContext(
+  userText: string,
+  opts: BuildMemoryContextOptions = {},
+): Promise<BuildMemoryContextResult> {
   const {
     enabled = false,
     top_k = 5,
@@ -349,7 +462,7 @@ export async function buildMemoryContext(userText, opts = {}) {
   const systemMessage = {
     role: "system",
     content: `# 相关记忆 (按相关性排序,Top ${hits.length})\n${memoryBlock}`,
-  };
+  } as const;
 
   // 给前端的事件
   const memoryUsedEvent = {
@@ -363,7 +476,7 @@ export async function buildMemoryContext(userText, opts = {}) {
       score: h.score,
     })),
     recall_ms: recallMs,
-  };
+  } as const;
 
   return { systemMessage, memoryUsedEvent };
 }
