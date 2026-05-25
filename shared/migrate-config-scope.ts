@@ -1,4 +1,4 @@
-// shared/migrate-config-scope.js
+// shared/migrate-config-scope.ts
 
 import fs from "fs";
 import path from "path";
@@ -6,29 +6,92 @@ import YAML from "js-yaml";
 import { CONFIG_SCHEMA } from './config-schema.js';
 import { uniqueTrustedRoots } from './trusted-roots.js';
 
+type JsonRecord = Record<string, unknown>;
+
+type PreferencesRecord = JsonRecord & {
+  _configScopeMigrated?: boolean;
+  trusted_roots?: unknown;
+  home_folder?: unknown;
+};
+
+type PreferencesManagerLike = {
+  getPreferences: () => PreferencesRecord;
+  savePreferences: (preferences: PreferencesRecord) => void;
+};
+
+type AgentConfigRecord = JsonRecord;
+
+type AgentConfigSnapshot = {
+  id: string;
+  path: string;
+  config: AgentConfigRecord;
+  content: string;
+};
+
+type MigrateConfigScopeOptions = {
+  agentsDir: string;
+  prefs: PreferencesManagerLike;
+  primaryAgentId?: string | null;
+  log?: (msg: string) => void;
+};
+
+const DEFAULTS: Record<string, unknown> = {
+  locale: "",
+  timezone: "",
+  sandbox: true,
+  update_channel: "stable",
+  thinking_level: "auto",
+};
+
+function asRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+function getNestedValue(record: JsonRecord, parts: string[]): unknown {
+  if (parts.length === 1) return record[parts[0]];
+  const parent = asRecord(record[parts[0]]);
+  return parent[parts[1]];
+}
+
+function setNestedValue(record: JsonRecord, parts: string[], value: unknown): void {
+  if (parts.length === 1) {
+    record[parts[0]] = value;
+    return;
+  }
+  const parent = asRecord(record[parts[0]]);
+  record[parts[0]] = parent;
+  parent[parts[1]] = value;
+}
+
+function deleteNestedValue(record: JsonRecord, parts: string[]): boolean {
+  if (parts.length === 1) {
+    if (!(parts[0] in record)) return false;
+    delete record[parts[0]];
+    return true;
+  }
+  const parent = asRecord(record[parts[0]]);
+  if (parent[parts[1]] === undefined) return false;
+  delete parent[parts[1]];
+  if (Object.keys(parent).length === 0) delete record[parts[0]];
+  return true;
+}
+
+function asUnknownArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 /**
  * 一次性迁移：将 agent config.yaml 中的 global scope 字段
  * 向上迁移到 preferences.json，然后从 config.yaml 中删除。
- *
- * 策略：migrate up, then clean。
- * - 如果 preferences 中已有非默认值，以 preferences 为准
- * - 如果 preferences 中无值，从 primary agent 的 config.yaml 取
- * - 迁移前对每个 agent 的 config.yaml 做 .pre-scope-migration 备份
- *
- * @param {object} opts
- * @param {string} opts.agentsDir - agents 根目录
- * @param {object} opts.prefs - PreferencesManager 实例
- * @param {string|null} opts.primaryAgentId - 主 agent ID
- * @param {(msg: string) => void} [opts.log] - 日志回调
  */
-export function migrateConfigScope({ agentsDir, prefs, primaryAgentId, log = () => {} }) {
+export function migrateConfigScope({ agentsDir, prefs, primaryAgentId, log = () => {} }: MigrateConfigScopeOptions): void {
   const preferences = prefs.getPreferences();
 
   if (preferences._configScopeMigrated) return;
 
   log("[migrate] config scope 迁移开始...");
 
-  let agentConfigs = [];
+  const agentConfigs: AgentConfigSnapshot[] = [];
   try {
     const entries = fs.readdirSync(agentsDir, { withFileTypes: true });
     for (const entry of entries) {
@@ -37,7 +100,7 @@ export function migrateConfigScope({ agentsDir, prefs, primaryAgentId, log = () 
       if (!fs.existsSync(cfgPath)) continue;
       try {
         const content = fs.readFileSync(cfgPath, "utf-8");
-        const config = YAML.load(content) || {};
+        const config = asRecord(YAML.load(content));
         agentConfigs.push({ id: entry.name, path: cfgPath, config, content });
       } catch {}
     }
@@ -57,28 +120,18 @@ export function migrateConfigScope({ agentsDir, prefs, primaryAgentId, log = () 
     return 0;
   });
 
-  const DEFAULTS = {
-    locale: "",
-    timezone: "",
-    sandbox: true,
-    update_channel: "stable",
-    thinking_level: "auto",
-  };
-
   let prefsChanged = false;
   for (const [schemaPath, def] of Object.entries(CONFIG_SCHEMA)) {
     if (def.scope !== 'global') continue;
 
     const parts = schemaPath.split('.');
-    let prefsValue;
+    let prefsValue: unknown;
     if (schemaPath === 'desk.trusted_roots') {
       prefsValue = preferences.trusted_roots;
     } else if (schemaPath === 'desk.home_folder') {
       prefsValue = preferences.home_folder;
-    } else if (parts.length === 1) {
-      prefsValue = preferences[parts[0]];
-    } else if (parts.length === 2) {
-      prefsValue = preferences[parts[0]]?.[parts[1]];
+    } else {
+      prefsValue = getNestedValue(preferences, parts);
     }
 
     const defaultVal = DEFAULTS[parts[0]];
@@ -88,15 +141,10 @@ export function migrateConfigScope({ agentsDir, prefs, primaryAgentId, log = () 
     if (prefsHasValue) continue;
 
     for (const ac of agentConfigs) {
-      let agentValue;
-      if (parts.length === 1) {
-        agentValue = ac.config[parts[0]];
-      } else if (parts.length === 2) {
-        agentValue = ac.config[parts[0]]?.[parts[1]];
-      }
+      const agentValue = getNestedValue(ac.config, parts);
 
       if (schemaPath === 'desk.trusted_roots') {
-        const normalizedRoots = uniqueTrustedRoots(agentValue);
+        const normalizedRoots = uniqueTrustedRoots(asUnknownArray(agentValue));
         if (normalizedRoots.length === 0) continue;
         preferences.trusted_roots = normalizedRoots;
         prefsChanged = true;
@@ -107,11 +155,8 @@ export function migrateConfigScope({ agentsDir, prefs, primaryAgentId, log = () 
       if (agentValue !== undefined && agentValue !== defaultVal) {
         if (schemaPath === 'desk.home_folder') {
           preferences.home_folder = agentValue;
-        } else if (parts.length === 1) {
-          preferences[parts[0]] = agentValue;
-        } else if (parts.length === 2) {
-          if (!preferences[parts[0]]) preferences[parts[0]] = {};
-          preferences[parts[0]][parts[1]] = agentValue;
+        } else {
+          setNestedValue(preferences, parts, agentValue);
         }
         prefsChanged = true;
         log(`[migrate] ${schemaPath}: "${JSON.stringify(agentValue)}" migrated from agent "${ac.id}" to preferences`);
@@ -121,7 +166,7 @@ export function migrateConfigScope({ agentsDir, prefs, primaryAgentId, log = () 
   }
 
   const mergedRoots = uniqueTrustedRoots([
-    ...(preferences.trusted_roots || []),
+    ...asUnknownArray(preferences.trusted_roots),
     preferences.home_folder,
   ]);
   if (mergedRoots.length > 0) {
@@ -133,18 +178,7 @@ export function migrateConfigScope({ agentsDir, prefs, primaryAgentId, log = () 
     let changed = false;
     for (const schemaPath of Object.keys(CONFIG_SCHEMA)) {
       const parts = schemaPath.split('.');
-      if (parts.length === 1 && parts[0] in ac.config) {
-        delete ac.config[parts[0]];
-        changed = true;
-      } else if (parts.length === 2) {
-        if (ac.config[parts[0]]?.[parts[1]] !== undefined) {
-          delete ac.config[parts[0]][parts[1]];
-          if (Object.keys(ac.config[parts[0]]).length === 0) {
-            delete ac.config[parts[0]];
-          }
-          changed = true;
-        }
-      }
+      changed = deleteNestedValue(ac.config, parts) || changed;
     }
 
     if (changed) {

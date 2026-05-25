@@ -1,17 +1,17 @@
 import { Agent } from "undici";
 
-const pools = new Map();
+const pools = new Map<string, Agent>();
 
-function normalizePoolKey(baseUrl) {
+function normalizePoolKey(baseUrl: unknown): string {
   try {
-    const url = new URL(baseUrl);
+    const url = new URL(String(baseUrl || ""));
     return `${url.protocol}//${url.host}`;
   } catch {
     return String(baseUrl || "").trim();
   }
 }
 
-export function getPooledDispatcher(baseUrl) {
+export function getPooledDispatcher(baseUrl: unknown): Agent | null {
   const key = normalizePoolKey(baseUrl);
   if (!key) return null;
   if (!pools.has(key)) {
@@ -25,24 +25,31 @@ export function getPooledDispatcher(baseUrl) {
       },
     }));
   }
-  return pools.get(key);
+  return pools.get(key) || null;
 }
 
-export async function prewarmHttpConnection(url, {
+type PrewarmOptions = {
+  method?: string;
+  headers?: HeadersInit;
+  timeoutMs?: number;
+};
+
+export async function prewarmHttpConnection(url: string | URL, {
   method = "HEAD",
   headers = {},
   timeoutMs = 3000,
-} = {}) {
+}: PrewarmOptions = {}): Promise<Response> {
   const dispatcher = getPooledDispatcher(url);
-  return fetch(url, {
+  const init: RequestInit & { dispatcher?: Agent } = {
     method,
     headers,
     dispatcher: dispatcher || undefined,
     signal: AbortSignal.timeout(timeoutMs),
-  });
+  };
+  return fetch(url, init);
 }
 
-export async function closeHttpPools() {
+export async function closeHttpPools(): Promise<void> {
   const closers = [...pools.values()].map((agent) => agent.close().catch(() => {}));
   pools.clear();
   await Promise.allSettled(closers);
