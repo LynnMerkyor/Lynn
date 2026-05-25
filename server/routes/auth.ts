@@ -14,8 +14,68 @@ import crypto from "crypto";
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 
+type OAuthErrorLike = {
+  message?: string;
+  cause?: {
+    message?: string;
+    code?: string;
+  };
+};
+
+type OAuthProvider = {
+  id: string;
+  name: string;
+  usesCallbackServer?: boolean;
+};
+
+type OAuthCredential = {
+  type?: string;
+};
+
+type OAuthAuthInfo = {
+  url: string;
+  instructions?: string | null;
+};
+
+type OAuthLoginCallbacks = {
+  onAuth(info: OAuthAuthInfo): void;
+  onPrompt(): Promise<string | undefined>;
+};
+
+type FlowResult = { ok: true } | { ok: false; error: string };
+
+type PendingFlow = {
+  resolveCode(code: string | undefined): void;
+  rejectCode(reason?: unknown): void;
+  loginPromise: Promise<unknown>;
+  result: FlowResult | null;
+};
+
+type AuthRouteModel = {
+  provider: string;
+};
+
+interface AuthRouteEngine {
+  authStorage: {
+    getOAuthProviders(): OAuthProvider[];
+    login(providerId: string, callbacks: OAuthLoginCallbacks): Promise<unknown>;
+    get(providerId: string): OAuthCredential | null | undefined;
+    logout(providerId: string): unknown;
+  };
+  providerRegistry?: {
+    getAuthJsonKey(providerId: string): string | null | undefined;
+  };
+  syncModelsAndRefresh(): Promise<unknown> | unknown;
+  availableModels: AuthRouteModel[];
+  preferences: {
+    getOAuthCustomModels(): Record<string, string[] | undefined>;
+    setOAuthCustomModels(provider: string, models: string[]): unknown;
+  };
+  refreshModels(): Promise<unknown> | unknown;
+}
+
 /** 将 OAuth 底层错误转为用户可理解的诊断信息 */
-function diagnoseOAuthError(err) {
+function diagnoseOAuthError(err: OAuthErrorLike): string {
   const msg = err.message || String(err);
   const cause = err.cause?.message || err.cause?.code || "";
   const full = cause ? `${msg} (${cause})` : msg;
@@ -32,11 +92,11 @@ function diagnoseOAuthError(err) {
   return full;
 }
 
-export function createAuthRoute(engine) {
+export function createAuthRoute(engine: AuthRouteEngine): Hono {
   const route = new Hono();
 
   /** 进行中的 OAuth 流程 */
-  const pendingFlows = new Map();
+  const pendingFlows = new Map<string | undefined, PendingFlow>();
 
   /**
    * 启动 OAuth 登录
@@ -45,7 +105,7 @@ export function createAuthRoute(engine) {
    *   instructions 存在时为设备码流程（值为 user_code）
    */
   route.post("/auth/oauth/start", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson(c) as { provider?: string };
     const { provider } = body;
     if (!provider) {
       return c.json({ error: "provider is required" }, 400);
@@ -55,20 +115,22 @@ export function createAuthRoute(engine) {
     const sessionId = crypto.randomUUID();
 
     // onAuth 回调会把 URL 和 instructions 交给我们
-    let resolveUrl, rejectUrl;
-    const urlPromise = new Promise((resolve, reject) => {
+    let resolveUrl!: (url: string) => void;
+    let rejectUrl!: (reason?: unknown) => void;
+    const urlPromise = new Promise<string>((resolve, reject) => {
       resolveUrl = resolve;
       rejectUrl = reject;
     });
 
     // onPrompt 回调等待用户粘贴授权码（仅授权码流程使用）
-    let resolveCode, rejectCode;
-    const codePromise = new Promise((resolve, reject) => {
+    let resolveCode!: (code: string | undefined) => void;
+    let rejectCode!: (reason?: unknown) => void;
+    const codePromise = new Promise<string | undefined>((resolve, reject) => {
       resolveCode = resolve;
       rejectCode = reject;
     });
 
-    let authInstructions = null;
+    let authInstructions: string | null = null;
     let usesCallbackServer = false;
 
     // 检查 provider 是否使用本地回调服务器（如 OpenAI Codex）
@@ -94,13 +156,13 @@ export function createAuthRoute(engine) {
     });
 
     // 追踪 loginPromise 的结果（供 poll 端点使用）
-    const flow = { resolveCode, rejectCode, loginPromise, result: null };
+    const flow: PendingFlow = { resolveCode, rejectCode, loginPromise, result: null };
     loginPromise.then(() => {
       flow.result = { ok: true };
     }).catch(err => {
       const cause = err.cause?.message || err.cause?.code || "";
       console.error(`[auth] OAuth login failed (${authKey}): ${err.message}${cause ? ` [${cause}]` : ""}`);
-      flow.result = { ok: false, error: diagnoseOAuthError(err) };
+      flow.result = { ok: false, error: diagnoseOAuthError(err as OAuthErrorLike) };
     });
 
     try {
@@ -117,12 +179,12 @@ export function createAuthRoute(engine) {
       }, 5 * 60 * 1000);
       timer.unref();
 
-      const resp = { sessionId, url };
+      const resp: { sessionId: string; url: string; instructions?: string; polling?: boolean } = { sessionId, url };
       if (authInstructions) resp.instructions = authInstructions;
       if (usesCallbackServer) resp.polling = true;
       return c.json(resp);
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: (err as Error).message }, 500);
     }
   });
 
@@ -131,7 +193,7 @@ export function createAuthRoute(engine) {
    * body: { sessionId, code }
    */
   route.post("/auth/oauth/callback", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson(c) as { sessionId?: string; code?: string };
     const { sessionId, code } = body;
     const flow = pendingFlows.get(sessionId);
     if (!flow) {
@@ -147,13 +209,13 @@ export function createAuthRoute(engine) {
       try {
         await engine.syncModelsAndRefresh();
       } catch (err) {
-        console.error("[auth] post-login model sync failed:", err.message);
+        console.error("[auth] post-login model sync failed:", (err as Error).message);
       }
 
       return c.json({ ok: true });
     } catch (err) {
       pendingFlows.delete(sessionId);
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: (err as Error).message }, 500);
     }
   });
 
@@ -178,7 +240,7 @@ export function createAuthRoute(engine) {
       try {
         await engine.syncModelsAndRefresh();
       } catch (err) {
-        console.error("[auth] post-login model sync failed:", err.message);
+        console.error("[auth] post-login model sync failed:", (err as Error).message);
       }
       return c.json({ status: "done" });
     }
@@ -192,7 +254,7 @@ export function createAuthRoute(engine) {
    */
   route.get("/auth/oauth/status", async (c) => {
     const providers = engine.authStorage.getOAuthProviders();
-    const status = {};
+    const status: Record<string, { name: string; loggedIn: boolean; modelCount: number }> = {};
     for (const p of providers) {
       const cred = engine.authStorage.get(p.id);
       const modelCount = cred?.type === "oauth"
@@ -212,7 +274,7 @@ export function createAuthRoute(engine) {
    * body: { provider }
    */
   route.post("/auth/oauth/logout", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson(c) as { provider?: string };
     const { provider } = body;
     if (!provider) {
       return c.json({ error: "provider is required" }, 400);
@@ -234,7 +296,7 @@ export function createAuthRoute(engine) {
   /** 添加自定义模型到 OAuth provider */
   route.post("/auth/oauth/:provider/custom-models", async (c) => {
     const provider = c.req.param("provider");
-    const body = await safeJson(c);
+    const body = await safeJson(c) as { modelId?: unknown };
     const { modelId } = body;
     if (!modelId || typeof modelId !== "string" || !modelId.trim()) {
       return c.json({ error: "modelId is required" }, 400);
