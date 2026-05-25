@@ -1,5 +1,5 @@
 /**
- * migrate-providers.js — 一次性迁移旧数据到 added-models.yaml
+ * migrate-providers.ts — 一次性迁移旧数据到 added-models.yaml
  *
  * 运行时机：engine.init() 启动时，model init 之前
  * 幂等：added-models.yaml 中 _migrated: true 存在则跳过
@@ -17,22 +17,98 @@ import path from "path";
 import YAML from "js-yaml";
 import { safeReadYAMLSync } from "../shared/safe-fs.js";
 import { fromRoot } from "../shared/hana-root.js";
+import type { LLMApi, ProviderConfig, ProviderConfigMap } from "./types.js";
+
+type LogFn = (msg: string) => void;
+type MutableRecord = Record<string, unknown>;
+type DefaultModelsIndex = Record<string, string[] | string>;
+type AddedModelsYaml = MutableRecord & {
+  _migrated?: unknown;
+  providers?: ProviderConfigMap;
+};
+type AgentApiConfig = MutableRecord & {
+  api_key?: unknown;
+  base_url?: unknown;
+  provider?: unknown;
+};
+type AgentConfig = MutableRecord & {
+  providers?: unknown;
+  api?: unknown;
+  models?: unknown;
+};
+type AgentConfigEntry = {
+  id: string;
+  path: string;
+  config: AgentConfig;
+};
+type PreferencesJson = MutableRecord & {
+  favorites?: unknown;
+  oauth_custom_models?: unknown;
+};
+type ModelRefObject = MutableRecord & {
+  id?: unknown;
+  provider?: unknown;
+};
 
 const _defaultModels = JSON.parse(
   fs.readFileSync(fromRoot("lib", "default-models.json"), "utf-8"),
-);
+) as DefaultModelsIndex;
+
+function isRecord(value: unknown): value is MutableRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toAddedModelsYaml(value: unknown): AddedModelsYaml {
+  return isRecord(value) ? value : {};
+}
+
+function getProvidersMap(raw: AddedModelsYaml): ProviderConfigMap {
+  return isRecord(raw.providers) ? raw.providers as ProviderConfigMap : {};
+}
+
+function getAgentApi(config: AgentConfig): AgentApiConfig | null {
+  return isRecord(config.api) ? config.api as AgentApiConfig : null;
+}
+
+function getAgentProviders(config: AgentConfig): MutableRecord | null {
+  return isRecord(config.providers) ? config.providers : null;
+}
+
+function getAgentModels(config: AgentConfig): MutableRecord | null {
+  return isRecord(config.models) ? config.models : null;
+}
+
+function ensureAgentModels(config: AgentConfig): MutableRecord {
+  if (!isRecord(config.models)) config.models = {};
+  return config.models as MutableRecord;
+}
+
+function ensureProvider(providers: ProviderConfigMap, providerName: string): ProviderConfig {
+  if (!isRecord(providers[providerName])) providers[providerName] = {};
+  return providers[providerName];
+}
+
+function modelEntryId(model: unknown): string | null {
+  if (typeof model === "string") return model;
+  if (isRecord(model) && typeof model.id === "string") return model.id;
+  return null;
+}
+
+function hasModelId(models: unknown, modelId: string): boolean {
+  return Array.isArray(models) && models.some((model) => modelEntryId(model) === modelId);
+}
 
 /** 反查 default-models.json：模型 ID → provider name */
-function resolveProviderForModel(modelId) {
+function resolveProviderForModel(modelId: string): string | null {
   for (const [provider, models] of Object.entries(_defaultModels)) {
-    if (models.includes(modelId)) return provider;
+    if ((Array.isArray(models) || typeof models === "string") && models.includes(modelId)) return provider;
   }
   return null;
 }
 
 // ── 原子写入工具 ──────────────────────────────────────────────────────────────
 
-function atomicWriteYAML(filePath, data, header = "") {
+function atomicWriteYAML(filePath: string, data: unknown, header = ""): void {
   const yamlStr = header + YAML.dump(data, {
     indent: 2,
     lineWidth: -1,
@@ -45,7 +121,7 @@ function atomicWriteYAML(filePath, data, header = "") {
   fs.renameSync(tmp, filePath);
 }
 
-function atomicWriteJSON(filePath, data) {
+function atomicWriteJSON(filePath: string, data: unknown): void {
   const tmp = filePath + ".tmp";
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + "\n", "utf-8");
   fs.renameSync(tmp, filePath);
@@ -56,11 +132,8 @@ function atomicWriteJSON(filePath, data) {
 /**
  * 将旧数据整合到 added-models.yaml（幂等，只跑一次）
  *
- * @param {string} lynnHome - 用户数据根目录（~/.lynn-dev）
- * @param {string} agentsDir  - agents 目录
- * @param {(msg: string) => void} log - 日志回调
  */
-export function migrateToProvidersYaml(lynnHome, agentsDir, log = () => {}) {
+export function migrateToProvidersYaml(lynnHome: string, agentsDir: string, log: LogFn = () => {}): void {
   const providersPath = path.join(lynnHome, "added-models.yaml");
   const prefsPath = path.join(lynnHome, "user", "preferences.json");
 
@@ -72,21 +145,23 @@ export function migrateToProvidersYaml(lynnHome, agentsDir, log = () => {}) {
   }
 
   // ── 快速路径：已迁移则立即返回 ──
-  const existingRaw = safeReadYAMLSync(providersPath, null, YAML);
+  const existingRaw = toAddedModelsYaml(safeReadYAMLSync(providersPath, null, YAML));
   if (existingRaw?._migrated) return;
 
   // ── 检测是否有任何需要迁移的数据 ──
   const agentConfigs = _collectAgentConfigs(agentsDir);
   const prefs = _readPrefs(prefsPath);
 
-  const hasAgentProviders = agentConfigs.some(ac => ac.config.providers);
-  const hasAgentApiKey = agentConfigs.some(ac => ac.config.api?.api_key);
-  const hasFavorites = Array.isArray(prefs.favorites) && prefs.favorites.length > 0;
-  const hasOAuthCustom = prefs.oauth_custom_models && Object.keys(prefs.oauth_custom_models).length > 0;
+  const favorites = Array.isArray(prefs.favorites) ? prefs.favorites : [];
+  const oauthCustomModels = isRecord(prefs.oauth_custom_models) ? prefs.oauth_custom_models : null;
+  const hasAgentProviders = agentConfigs.some(ac => Boolean(getAgentProviders(ac.config)));
+  const hasAgentApiKey = agentConfigs.some(ac => Boolean(getAgentApi(ac.config)?.api_key));
+  const hasFavorites = favorites.length > 0;
+  const hasOAuthCustom = oauthCustomModels !== null && Object.keys(oauthCustomModels).length > 0;
 
   if (!hasAgentProviders && !hasAgentApiKey && !hasFavorites && !hasOAuthCustom) {
     // 没有需要迁移的数据，写标记后返回
-    const data = existingRaw || {};
+    const data = existingRaw;
     data._migrated = true;
     const header =
       "# Lynn 供应商配置（全局，跨 agent 共享）\n" +
@@ -99,27 +174,27 @@ export function migrateToProvidersYaml(lynnHome, agentsDir, log = () => {}) {
   log("[migrate-providers] 检测到旧配置数据，开始迁移...");
 
   // ── 读取 added-models.yaml 当前内容 ──
-  const raw = existingRaw || {};
-  const providers = raw.providers || {};
+  const raw = existingRaw;
+  const providers = getProvidersMap(raw);
 
   // ── Source 1: per-agent config.yaml providers 块 ──
   for (const ac of agentConfigs) {
-    const agentProviders = ac.config.providers;
-    if (!agentProviders || typeof agentProviders !== "object") continue;
+    const agentProviders = getAgentProviders(ac.config);
+    if (!agentProviders) continue;
 
     for (const [name, block] of Object.entries(agentProviders)) {
-      if (!block || typeof block !== "object") continue;
-      if (!providers[name]) providers[name] = {};
+      if (!isRecord(block)) continue;
+      const providerConfig = ensureProvider(providers, name);
 
       // 合并凭证：不覆盖已有值
-      if (block.api_key && !providers[name].api_key) {
-        providers[name].api_key = block.api_key;
+      if (typeof block.api_key === "string" && block.api_key && !providerConfig.api_key) {
+        providerConfig.api_key = block.api_key;
       }
-      if (block.base_url && !providers[name].base_url) {
-        providers[name].base_url = block.base_url;
+      if (typeof block.base_url === "string" && block.base_url && !providerConfig.base_url) {
+        providerConfig.base_url = block.base_url;
       }
-      if (block.api && !providers[name].api) {
-        providers[name].api = block.api;
+      if (typeof block.api === "string" && block.api && !providerConfig.api) {
+        providerConfig.api = block.api as LLMApi;
       }
 
       log(`[migrate-providers] agent "${ac.id}": providers.${name} → added-models.yaml`);
@@ -128,19 +203,19 @@ export function migrateToProvidersYaml(lynnHome, agentsDir, log = () => {}) {
 
   // ── Source 2: per-agent config.yaml inline api credentials ──
   for (const ac of agentConfigs) {
-    const api = ac.config.api;
+    const api = getAgentApi(ac.config);
     if (!api?.api_key) continue;
 
     const providerName = api.provider;
-    if (!providerName) continue;
+    if (typeof providerName !== "string" || !providerName) continue;
 
-    if (!providers[providerName]) providers[providerName] = {};
+    const providerConfig = ensureProvider(providers, providerName);
 
-    if (!providers[providerName].api_key) {
-      providers[providerName].api_key = api.api_key;
+    if (typeof api.api_key === "string" && !providerConfig.api_key) {
+      providerConfig.api_key = api.api_key;
     }
-    if (api.base_url && !providers[providerName].base_url) {
-      providers[providerName].base_url = api.base_url;
+    if (typeof api.base_url === "string" && api.base_url && !providerConfig.base_url) {
+      providerConfig.base_url = api.base_url;
     }
 
     log(`[migrate-providers] agent "${ac.id}": api.api_key (${providerName}) → added-models.yaml`);
@@ -148,18 +223,17 @@ export function migrateToProvidersYaml(lynnHome, agentsDir, log = () => {}) {
 
   // ── Source 3: preferences.json favorites ──
   if (hasFavorites) {
-    for (const fav of prefs.favorites) {
-      const modelId = typeof fav === "object" ? fav.id : fav;
-      let provider = typeof fav === "object" ? fav.provider : null;
+    for (const fav of favorites) {
+      const favorite = normalizeFavorite(fav);
+      if (!favorite) continue;
 
-      if (!modelId) continue;
+      const { modelId } = favorite;
+      let provider = favorite.provider;
 
       // 尝试从 added-models.yaml 中已有的模型列表找 provider
       if (!provider) {
         for (const [pName, pConf] of Object.entries(providers)) {
-          if (Array.isArray(pConf.models) && pConf.models.some(
-            m => (typeof m === "object" ? m.id : m) === modelId
-          )) {
+          if (isRecord(pConf) && hasModelId(pConf.models, modelId)) {
             provider = pName;
             break;
           }
@@ -183,9 +257,10 @@ export function migrateToProvidersYaml(lynnHome, agentsDir, log = () => {}) {
 
   // ── Source 4: preferences.json oauth_custom_models ──
   if (hasOAuthCustom) {
-    for (const [provider, modelIds] of Object.entries(prefs.oauth_custom_models)) {
+    for (const [provider, modelIds] of Object.entries(oauthCustomModels)) {
       if (!Array.isArray(modelIds)) continue;
       for (const modelId of modelIds) {
+        if (typeof modelId !== "string" || !modelId) continue;
         _addModelToProvider(providers, provider, modelId);
         log(`[migrate-providers] oauth_custom_models: "${modelId}" → added-models.yaml (${provider})`);
       }
@@ -208,17 +283,18 @@ export function migrateToProvidersYaml(lynnHome, agentsDir, log = () => {}) {
     let changed = false;
 
     // 删除 providers 块
-    if (ac.config.providers) {
+    if (getAgentProviders(ac.config)) {
       delete ac.config.providers;
       changed = true;
     }
 
     // 删除 api.api_key（保留 api.provider）
-    if (ac.config.api?.api_key) {
-      delete ac.config.api.api_key;
+    const api = getAgentApi(ac.config);
+    if (api?.api_key) {
+      delete api.api_key;
       // 如果同时有 base_url，也清理（已迁移到 added-models.yaml）
-      if (ac.config.api.base_url) {
-        delete ac.config.api.base_url;
+      if (api.base_url) {
+        delete api.base_url;
       }
       changed = true;
     }
@@ -252,7 +328,7 @@ const LOCAL_QWEN_4B_MODEL = "qwen35-4b-q4km";
 const NEW_LOCAL_QWEN_PROVIDER = "local-qwen35-9b-q4km-imatrix";
 const NEW_LOCAL_QWEN_MODEL = "qwen35-9b-q4km-imatrix";
 
-function _localQwen9BProviderSeed(oldProvider = {}) {
+function _localQwen9BProviderSeed(oldProvider: Partial<ProviderConfig> = {}): ProviderConfig {
   return {
     display_name: "本地 Qwen3.5-9B",
     base_url: oldProvider.base_url || "http://127.0.0.1:18099/v1",
@@ -269,11 +345,11 @@ function _localQwen9BProviderSeed(oldProvider = {}) {
   };
 }
 
-function _migrateChatRef(chat) {
+function _migrateChatRef(chat: unknown): unknown {
   if (typeof chat === "string") {
     return (chat === OLD_LOCAL_QWEN_MODEL || chat === LOCAL_QWEN_4B_MODEL) ? NEW_LOCAL_QWEN_MODEL : chat;
   }
-  if (!chat || typeof chat !== "object") return chat;
+  if (!isRecord(chat)) return chat;
   const isOldLocal =
     chat.id === OLD_LOCAL_QWEN_MODEL
     || chat.provider === OLD_LOCAL_QWEN_PROVIDER
@@ -290,16 +366,20 @@ function _migrateChatRef(chat) {
  * 4B imatrix 的 thinking-on 路径会空正文长思考,所以它只能作为低配降级选项。
  * 旧 4B(qwen3-4b-thinking-2507 / qwen35-4b-q4km)或缺失 provider 的配置都会 seed 到 9B。
  */
-export function migrateLocalQwenDefaultTo9B(lynnHome, agentsDir, log = () => {}) {
+export function migrateLocalQwenDefaultTo9B(lynnHome: string, agentsDir: string, log: LogFn = () => {}): void {
   const providersPath = path.join(lynnHome, "added-models.yaml");
   const prefsPath = path.join(lynnHome, "user", "preferences.json");
-  const raw = safeReadYAMLSync(providersPath, {}, YAML) || {};
-  raw.providers = raw.providers || {};
+  const raw = toAddedModelsYaml(safeReadYAMLSync(providersPath, {}, YAML));
+  raw.providers = getProvidersMap(raw);
 
-  const oldProvider = raw.providers[OLD_LOCAL_QWEN_PROVIDER] || {};
-  const existingNewProvider = raw.providers[NEW_LOCAL_QWEN_PROVIDER] || {};
+  const oldProvider = isRecord(raw.providers[OLD_LOCAL_QWEN_PROVIDER])
+    ? raw.providers[OLD_LOCAL_QWEN_PROVIDER]
+    : {};
+  const existingNewProvider = isRecord(raw.providers[NEW_LOCAL_QWEN_PROVIDER])
+    ? raw.providers[NEW_LOCAL_QWEN_PROVIDER]
+    : {};
   const hasNewModel = Array.isArray(existingNewProvider.models)
-    && existingNewProvider.models.some((model) => model?.id === NEW_LOCAL_QWEN_MODEL);
+    && existingNewProvider.models.some((model) => isRecord(model) && model.id === NEW_LOCAL_QWEN_MODEL);
   if (!raw.providers[NEW_LOCAL_QWEN_PROVIDER] || !hasNewModel) {
     raw.providers[NEW_LOCAL_QWEN_PROVIDER] = _localQwen9BProviderSeed(existingNewProvider.base_url ? existingNewProvider : oldProvider);
     const header =
@@ -316,24 +396,25 @@ export function migrateLocalQwenDefaultTo9B(lynnHome, agentsDir, log = () => {})
   for (const ac of _collectAgentConfigs(agentsDir)) {
     const cfg = ac.config || {};
     let changed = false;
+    const api = getAgentApi(cfg);
 
-    if (cfg.api?.provider === OLD_LOCAL_QWEN_PROVIDER || cfg.api?.provider === LOCAL_QWEN_4B_PROVIDER) {
-      cfg.api.provider = NEW_LOCAL_QWEN_PROVIDER;
+    if (api && (api.provider === OLD_LOCAL_QWEN_PROVIDER || api.provider === LOCAL_QWEN_4B_PROVIDER)) {
+      api.provider = NEW_LOCAL_QWEN_PROVIDER;
       changed = true;
     }
 
-    const nextChat = _migrateChatRef(cfg.models?.chat);
-    if (nextChat !== cfg.models?.chat) {
-      cfg.models = cfg.models || {};
-      cfg.models.chat = nextChat;
+    const models = getAgentModels(cfg);
+    const currentChat = models?.chat;
+    const nextChat = _migrateChatRef(currentChat);
+    if (nextChat !== currentChat) {
+      ensureAgentModels(cfg).chat = nextChat;
       changed = true;
     }
     for (const key of ["utility", "utility_large", "utilityLarge"]) {
-      const current = cfg.models?.[key];
+      const current = getAgentModels(cfg)?.[key];
       const migrated = _migrateChatRef(current);
       if (migrated !== current) {
-        cfg.models = cfg.models || {};
-        cfg.models[key] = migrated;
+        ensureAgentModels(cfg)[key] = migrated;
         changed = true;
       }
     }
@@ -357,10 +438,9 @@ export function migrateLocalQwenDefaultTo9B(lynnHome, agentsDir, log = () => {})
 
 /**
  * 收集所有 agent 的 config.yaml
- * @returns {Array<{id: string, path: string, config: object}>}
  */
-function _collectAgentConfigs(agentsDir) {
-  const result = [];
+function _collectAgentConfigs(agentsDir: string): AgentConfigEntry[] {
+  const result: AgentConfigEntry[] = [];
   try {
     const entries = fs.readdirSync(agentsDir, { withFileTypes: true });
     for (const entry of entries) {
@@ -368,7 +448,7 @@ function _collectAgentConfigs(agentsDir) {
       const cfgPath = path.join(agentsDir, entry.name, "config.yaml");
       if (!fs.existsSync(cfgPath)) continue;
       const config = safeReadYAMLSync(cfgPath, null, YAML);
-      if (!config) continue;
+      if (!isRecord(config)) continue;
       result.push({ id: entry.name, path: cfgPath, config });
     }
   } catch {
@@ -378,24 +458,36 @@ function _collectAgentConfigs(agentsDir) {
 }
 
 /** 安全读取 preferences.json */
-function _readPrefs(prefsPath) {
+function _readPrefs(prefsPath: string): PreferencesJson {
   try {
-    return JSON.parse(fs.readFileSync(prefsPath, "utf-8")) || {};
+    const parsed = JSON.parse(fs.readFileSync(prefsPath, "utf-8"));
+    return isRecord(parsed) ? parsed : {};
   } catch {
     return {};
   }
 }
 
-/** 向 provider 的 models 列表添加模型（去重） */
-function _addModelToProvider(providers, providerName, modelId) {
-  if (!providers[providerName]) providers[providerName] = {};
-  if (!Array.isArray(providers[providerName].models)) {
-    providers[providerName].models = [];
+function normalizeFavorite(fav: unknown): { modelId: string; provider: string | null } | null {
+  if (typeof fav === "string") {
+    return fav ? { modelId: fav, provider: null } : null;
   }
-  const exists = providers[providerName].models.some(
-    m => (typeof m === "object" ? m.id : m) === modelId,
+  if (!isRecord(fav) || typeof fav.id !== "string" || !fav.id) return null;
+  return {
+    modelId: fav.id,
+    provider: typeof fav.provider === "string" && fav.provider ? fav.provider : null,
+  };
+}
+
+/** 向 provider 的 models 列表添加模型（去重） */
+function _addModelToProvider(providers: ProviderConfigMap, providerName: string, modelId: string): void {
+  const providerConfig = ensureProvider(providers, providerName);
+  if (!Array.isArray(providerConfig.models)) {
+    providerConfig.models = [];
+  }
+  const exists = providerConfig.models.some(
+    m => modelEntryId(m) === modelId,
   );
   if (!exists) {
-    providers[providerName].models.push(modelId);
+    providerConfig.models.push(modelId);
   }
 }
