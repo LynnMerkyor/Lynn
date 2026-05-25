@@ -10,13 +10,33 @@ import fs from "fs";
 import os from "os";
 import { isLocalBaseUrl } from "../shared/net-utils.js";
 import { lookupKnown } from "../shared/known-models.js";
+import type {
+  ModelId,
+  ModelsJsonModelEntry,
+  ProviderConfigMap,
+  ProviderId,
+  ProviderModelConfig,
+  ProviderModelsJsonMap,
+  SyncModelsOptions,
+} from "./types.js";
 
 const DEFAULT_CONTEXT_WINDOW = 128_000;
-const ZAI_PROVIDER_IDS = new Set(["zhipu", "glm", "glm-5", "zai", "z-ai"]);
+const ZAI_PROVIDER_IDS = new Set<ProviderId>(["zhipu", "glm", "glm-5", "zai", "z-ai"]);
 const PROVIDER_KEY_SALT = "hanako-provider-keys-v1";
 
-function decryptStoredApiKey(stored) {
-  if (!stored || typeof stored !== "string" || !stored.startsWith("enc:")) return stored || "";
+type KnownModelMetadata = {
+  name?: string;
+  context?: number;
+  maxOutput?: number;
+  vision?: boolean;
+  reasoning?: boolean;
+  quirks?: string[];
+};
+
+function decryptStoredApiKey(stored: unknown): string {
+  if (!stored || typeof stored !== "string" || !stored.startsWith("enc:")) {
+    return typeof stored === "string" ? stored : "";
+  }
   try {
     const parts = stored.split(":");
     if (parts.length !== 4) return stored;
@@ -37,7 +57,7 @@ function decryptStoredApiKey(stored) {
  * 模型 ID → 人类可读名
  * "doubao-seed-2-0-pro-260215" → "Doubao Seed 2.0 Pro"
  */
-function humanizeName(id) {
+function humanizeName(id: ModelId): string {
   let name = id.replace(/-(\d{6})$/, "");
   name = name.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   name = name.replace(/(\d) (\d)/g, "$1.$2");
@@ -45,12 +65,14 @@ function humanizeName(id) {
 }
 
 /** 从 auth.json entry 提取 API key（兼容多种格式） */
-function extractApiKey(entry) {
+function extractApiKey(entry: unknown): string {
   if (!entry) return "";
   if (typeof entry === "string") return entry;
-  if (typeof entry?.apiKey === "string") return entry.apiKey;
-  if (typeof entry?.access === "string") return entry.access;
-  if (typeof entry?.token === "string") return entry.token;
+  if (typeof entry !== "object") return "";
+  const record = entry as Record<string, unknown>;
+  if (typeof record.apiKey === "string") return record.apiKey;
+  if (typeof record.access === "string") return record.access;
+  if (typeof record.token === "string") return record.token;
   return "";
 }
 
@@ -59,13 +81,13 @@ function extractApiKey(entry) {
  * @param {string|{id:string, name?:string, context?:number, maxOutput?:number}} modelEntry
  * @param {string} provider - provider 名称（查词典用）
  */
-function buildModelEntry(modelEntry, provider) {
+function buildModelEntry(modelEntry: ProviderModelConfig, provider: ProviderId): ModelsJsonModelEntry {
   const isObj = typeof modelEntry === "object" && modelEntry !== null;
   const id = isObj ? modelEntry.id : modelEntry;
-  const known = lookupKnown(provider, id);
+  const known = lookupKnown(provider, id) as KnownModelMetadata | null;
 
   const vision = known?.vision === true;
-  const entry = {
+  const entry: ModelsJsonModelEntry = {
     id,
     name: (isObj && modelEntry.name) || known?.name || humanizeName(id),
     input: vision ? ["text", "image"] : ["text"],
@@ -84,7 +106,7 @@ function buildModelEntry(modelEntry, provider) {
   // 2. Qwen reasoning 模型使用 enable_thinking
   // 3. 智谱 / GLM reasoning 模型使用 zai thinking 格式：thinking: { type: "enabled|disabled" }
   if (entry.reasoning && provider !== "openai") {
-    const compat = { supportsDeveloperRole: false };
+    const compat: NonNullable<ModelsJsonModelEntry["compat"]> = { supportsDeveloperRole: false };
     if (entry.quirks?.includes("enable_thinking")) {
       compat.thinkingFormat = "qwen";
     } else if (ZAI_PROVIDER_IDS.has(provider)) {
@@ -106,28 +128,32 @@ function buildModelEntry(modelEntry, provider) {
  * @param {Record<string, string>} [opts.oauthKeyMap] - providerId → auth.json key 映射
  * @returns {boolean} 内容是否有变化
  */
-export function syncModels(providers, opts = {}) {
+export function syncModels(
+  providers: ProviderConfigMap,
+  opts: SyncModelsOptions = {} as SyncModelsOptions,
+): boolean {
   const modelsJsonPath = opts.modelsJsonPath;
   const authJsonPath = opts.authJsonPath;
   const oauthKeyMap = opts.oauthKeyMap || {};
 
   // 懒加载 auth.json（只在需要时读一次）
-  let _authJson;
-  function getAuthJson() {
+  let _authJson: Record<string, unknown> | undefined;
+  function getAuthJson(): Record<string, unknown> {
     if (_authJson !== undefined) return _authJson;
     if (!authJsonPath) { _authJson = {}; return _authJson; }
     try {
-      _authJson = JSON.parse(fs.readFileSync(authJsonPath, "utf-8")) || {};
+      _authJson = (JSON.parse(fs.readFileSync(authJsonPath, "utf-8")) || {}) as Record<string, unknown>;
     } catch {
       _authJson = {};
     }
-    return _authJson;
+    return _authJson || {};
   }
 
   // 构建新的 providers 块
-  const newProviders = {};
+  const newProviders: ProviderModelsJsonMap = {};
 
   for (const [name, p] of Object.entries(providers || {})) {
+    const providerId = name as ProviderId;
     if (!p.base_url) continue;
     if (!p.models || p.models.length === 0) continue;
 
@@ -136,7 +162,7 @@ export function syncModels(providers, opts = {}) {
 
     // 无 api_key 时尝试 OAuth 查找
     if (!apiKey) {
-      const authKey = oauthKeyMap[name] || name;
+      const authKey = oauthKeyMap[providerId] || providerId;
       apiKey = extractApiKey(getAuthJson()[authKey]);
     }
 
@@ -149,11 +175,11 @@ export function syncModels(providers, opts = {}) {
     // 用占位值保活 models.json，真实请求侧会依赖 Lynn 签名头鉴权。
     const effectiveApiKey = apiKey || "local";
 
-    newProviders[name] = {
+    newProviders[providerId] = {
       baseUrl: p.base_url,
       api: p.api || "openai-completions",
       apiKey: effectiveApiKey,
-      models: p.models.map(m => buildModelEntry(m, name)),
+      models: p.models.map(m => buildModelEntry(m, providerId)),
     };
   }
 

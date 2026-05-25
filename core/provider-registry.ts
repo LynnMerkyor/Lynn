@@ -17,18 +17,31 @@ import crypto from "crypto";
 import os from "os";
 import { safeReadYAMLSync } from "../shared/safe-fs.js";
 import { fromRoot } from "../shared/hana-root.js";
+import type {
+  ModelId,
+  ProviderConfig,
+  ProviderConfigMap,
+  ProviderCredentials,
+  ProviderEntry,
+  ProviderId,
+  ProviderModelEntry,
+  ProviderPlugin,
+} from "./types.js";
+
+type SafeReadYamlSync = (filePath: string, fallback: unknown, yaml: typeof YAML) => unknown;
+const readYamlSync = safeReadYAMLSync as SafeReadYamlSync;
 
 // ── API Key encryption helpers ──
 // Derive a machine-local encryption key from hostname + username
 const _ENC_ALGO = "aes-256-gcm";
 const _ENC_SALT = "hanako-provider-keys-v1";
 
-function _deriveKey() {
+function _deriveKey(): Buffer {
   const material = `${os.hostname()}:${os.userInfo().username}`;
   return crypto.pbkdf2Sync(material, _ENC_SALT, 100000, 32, "sha256");
 }
 
-function _encryptKey(plaintext) {
+function _encryptKey(plaintext: string): string {
   if (!plaintext) return plaintext;
   try {
     const key = _deriveKey();
@@ -43,8 +56,8 @@ function _encryptKey(plaintext) {
   }
 }
 
-function _decryptKey(stored) {
-  if (!stored || typeof stored !== "string" || !stored.startsWith("enc:")) return stored;
+function _decryptKey(stored: string | undefined): string {
+  if (!stored || typeof stored !== "string" || !stored.startsWith("enc:")) return stored || "";
   try {
     const parts = stored.split(":");
     if (parts.length !== 4) return stored;
@@ -62,7 +75,7 @@ function _decryptKey(stored) {
 
 const _defaultModels = JSON.parse(
   fs.readFileSync(fromRoot("lib", "default-models.json"), "utf-8"),
-);
+) as Record<string, ModelId[]>;
 
 // ── 内置插件 ────────────────────────────────────────────────────────────────
 
@@ -148,23 +161,17 @@ const BUILTIN_PLUGINS = [
   volcegineCodingPlugin,
 ];
 
-// ── Types (JSDoc) ─────────────────────────────────────────────────────────────
-
-/** @typedef {import("./types.d.ts").ModelId} ModelId */
-/** @typedef {import("./types.d.ts").ProviderConfig} ProviderConfig */
-/** @typedef {import("./types.d.ts").ProviderCredentials} ProviderCredentials */
-/** @typedef {import("./types.d.ts").ProviderEntry} ProviderEntry */
-/** @typedef {import("./types.d.ts").ProviderId} ProviderId */
-/** @typedef {import("./types.d.ts").ProviderModelEntry} ProviderModelEntry */
-/** @typedef {import("./types.d.ts").ProviderPlugin} ProviderPlugin */
-
 // ── ProviderRegistry ─────────────────────────────────────────────────────────
 
 export class ProviderRegistry {
+  _lynnHome: string;
+  _plugins: Map<ProviderId, ProviderPlugin>;
+  _entries: Map<ProviderId, ProviderEntry>;
+
   /**
    * @param {string} lynnHome - 用户数据根目录（如 ~/.lynn-dev）
    */
-  constructor(lynnHome) {
+  constructor(lynnHome: string) {
     this._lynnHome = lynnHome;
     /** @type {Map<ProviderId, ProviderPlugin>} id → plugin */
     this._plugins = new Map();
@@ -182,7 +189,7 @@ export class ProviderRegistry {
    * 同一 id 注册两次会覆盖（方便测试/扩展）
    * @param {ProviderPlugin} plugin
    */
-  register(plugin) {
+  register(plugin: ProviderPlugin): void {
     if (!plugin?.id) throw new Error("ProviderPlugin must have an id");
     this._plugins.set(plugin.id, plugin);
     // 让 reload() 在下次调用时重新合并
@@ -193,9 +200,9 @@ export class ProviderRegistry {
    * 从 _lynnHome 直接读 added-models.yaml（不走全局 config-loader）
    * @returns {Record<ProviderId, ProviderConfig>}
    */
-  _loadAddedModels() {
+  _loadAddedModels(): ProviderConfigMap {
     const ymlPath = path.join(this._lynnHome, "added-models.yaml");
-    const raw = safeReadYAMLSync(ymlPath, {}, YAML) || {};
+    const raw = (readYamlSync(ymlPath, {}, YAML) || {}) as { providers?: ProviderConfigMap };
     return raw.providers || {};
   }
 
@@ -203,17 +210,17 @@ export class ProviderRegistry {
    * 将 providers 对象写入 _lynnHome/added-models.yaml
    * @param {Record<ProviderId, ProviderConfig>} providers
    */
-  _saveAddedModels(providers) {
+  _saveAddedModels(providers: ProviderConfigMap): void {
     const ymlPath = path.join(this._lynnHome, "added-models.yaml");
     // 读取现有文件以保留 _migrated 等顶层元数据
-    const existing = safeReadYAMLSync(ymlPath, {}, YAML) || {};
+    const existing = (readYamlSync(ymlPath, {}, YAML) || {}) as Record<string, unknown>;
     const header =
       "# Lynn 供应商配置（全局，跨 agent 共享）\n" +
       "# 由设置页面管理\n\n";
     const data = { ...existing, providers };
     // Encrypt API keys before persisting
     if (data.providers) {
-      for (const prov of Object.values(data.providers)) {
+      for (const prov of Object.values(data.providers) as ProviderConfig[]) {
         if (prov && typeof prov === "object" && prov.api_key && !prov.api_key.startsWith("enc:")) {
           prov.api_key = _encryptKey(prov.api_key);
         }
@@ -236,7 +243,7 @@ export class ProviderRegistry {
    * 从 added-models.yaml 加载用户配置，与所有插件声明合并
    * 每次 added-models.yaml 变更后调用
    */
-  reload() {
+  reload(): void {
     this._entries.clear();
     const userConfig = this._loadAddedModels();
 
@@ -250,7 +257,7 @@ export class ProviderRegistry {
     for (const [id, uc] of Object.entries(userConfig)) {
       if (this._entries.has(id)) continue;
       // 没有插件声明，从配置推断
-      const syntheticPlugin = {
+      const syntheticPlugin: ProviderPlugin = {
         id,
         displayName: uc.display_name || id,
         authType: uc.auth_type || "api-key",
@@ -269,7 +276,7 @@ export class ProviderRegistry {
    * @returns {ProviderEntry}
    * @private
    */
-  _merge(plugin, userConfig, isBuiltin) {
+  _merge(plugin: ProviderPlugin, userConfig: ProviderConfig, isBuiltin: boolean): ProviderEntry {
     return {
       id: plugin.id,
       displayName: userConfig.display_name || plugin.displayName,
@@ -285,7 +292,7 @@ export class ProviderRegistry {
    * 获取所有 provider entry（已合并）
    * @returns {Map<ProviderId, ProviderEntry>}
    */
-  getAll() {
+  getAll(): Map<ProviderId, ProviderEntry> {
     if (this._entries.size === 0) this.reload();
     return this._entries;
   }
@@ -295,7 +302,7 @@ export class ProviderRegistry {
    * @param {ProviderId} providerId
    * @returns {ProviderEntry|null}
    */
-  get(providerId) {
+  get(providerId: ProviderId): ProviderEntry | null {
     if (this._entries.size === 0) this.reload();
     const direct = this._entries.get(providerId);
     if (direct) return direct;
@@ -312,8 +319,8 @@ export class ProviderRegistry {
    * @param {ProviderId[]} providerIds
    * @returns {Map<ProviderId, ProviderEntry>}
    */
-  getBatch(providerIds) {
-    const result = new Map();
+  getBatch(providerIds: ProviderId[]): Map<ProviderId, ProviderEntry> {
+    const result = new Map<ProviderId, ProviderEntry>();
     for (const id of providerIds) {
       const entry = this.get(id);
       if (entry) result.set(id, entry);
@@ -325,7 +332,7 @@ export class ProviderRegistry {
    * 列出所有 authType 为 "oauth" 的 provider id
    * @returns {ProviderId[]}
    */
-  getOAuthProviderIds() {
+  getOAuthProviderIds(): ProviderId[] {
     const all = this.getAll();
     return [...all.values()]
       .filter(e => e.authType === "oauth")
@@ -338,7 +345,7 @@ export class ProviderRegistry {
    * @param {ProviderId} providerId
    * @returns {ProviderId}
    */
-  getAuthJsonKey(providerId) {
+  getAuthJsonKey(providerId: ProviderId): ProviderId {
     return this.get(providerId)?.authJsonKey || providerId;
   }
 
@@ -347,7 +354,7 @@ export class ProviderRegistry {
    * @param {ProviderId} providerId
    * @returns {ModelId[]}
    */
-  getDefaultModels(providerId) {
+  getDefaultModels(providerId: ProviderId): ModelId[] {
     return _defaultModels[providerId] || [];
   }
 
@@ -357,7 +364,10 @@ export class ProviderRegistry {
    * @param {ProviderId} providerId
    * @param {Pick<ProviderConfig, "base_url" | "api" | "display_name" | "auth_type">} overrides
    */
-  setUserConfig(providerId, overrides) {
+  setUserConfig(
+    providerId: ProviderId,
+    overrides: Pick<ProviderConfig, "base_url" | "api" | "display_name" | "auth_type">,
+  ): void {
     const userConfig = this._loadAddedModels();
     userConfig[providerId] = { ...(userConfig[providerId] || {}), ...overrides };
     this._saveAddedModels(userConfig);
@@ -365,7 +375,7 @@ export class ProviderRegistry {
     this._entries.delete(providerId);
     if (this._plugins.has(providerId)) {
       const plugin = this._plugins.get(providerId);
-      this._entries.set(providerId, this._merge(plugin, userConfig[providerId], true));
+      if (plugin) this._entries.set(providerId, this._merge(plugin, userConfig[providerId], true));
     } else {
       this.reload(); // 自定义 provider 走完整 reload
     }
@@ -375,7 +385,7 @@ export class ProviderRegistry {
    * 删除一个 provider（仅从 added-models.yaml，内置插件的插件声明保留）
    * @param {ProviderId} providerId
    */
-  remove(providerId) {
+  remove(providerId: ProviderId): void {
     const userConfig = this._loadAddedModels();
     if (!Object.prototype.hasOwnProperty.call(userConfig, providerId)) return;
     delete userConfig[providerId];
@@ -384,7 +394,7 @@ export class ProviderRegistry {
     // 如果有内置插件声明，以默认值重建 entry
     if (this._plugins.has(providerId)) {
       const plugin = this._plugins.get(providerId);
-      this._entries.set(providerId, this._merge(plugin, {}, true));
+      if (plugin) this._entries.set(providerId, this._merge(plugin, {}, true));
     }
   }
 
@@ -392,7 +402,7 @@ export class ProviderRegistry {
    * 检查某个 id 是否是已知的 OAuth provider
    * @param {ProviderId} providerId
    */
-  isOAuth(providerId) {
+  isOAuth(providerId: ProviderId): boolean {
     return this.get(providerId)?.authType === "oauth";
   }
 
@@ -404,7 +414,7 @@ export class ProviderRegistry {
    * @param {ProviderId} providerId
    * @returns {ProviderCredentials | null}
    */
-  getCredentials(providerId) {
+  getCredentials(providerId: ProviderId): ProviderCredentials | null {
     const userConfig = this._loadAddedModels();
     const uc = userConfig[providerId];
     if (!uc) return null;
@@ -423,7 +433,7 @@ export class ProviderRegistry {
    * @param {ProviderId} providerId
    * @returns {ModelId[]}
    */
-  getProviderModels(providerId) {
+  getProviderModels(providerId: ProviderId): ModelId[] {
     const userConfig = this._loadAddedModels();
     const uc = userConfig[providerId];
     if (!uc?.models || !Array.isArray(uc.models)) return [];
@@ -434,7 +444,7 @@ export class ProviderRegistry {
    * 返回 added-models.yaml 的原始数据（不经过插件合并）
    * @returns {Record<ProviderId, ProviderConfig>}
    */
-  getAllProvidersRaw() {
+  getAllProvidersRaw(): ProviderConfigMap {
     return this._loadAddedModels();
   }
 
@@ -444,7 +454,7 @@ export class ProviderRegistry {
    * @param {ProviderId} providerId
    * @param {ModelId | ProviderModelEntry} model
    */
-  addModel(providerId, model) {
+  addModel(providerId: ProviderId, model: ModelId | ProviderModelEntry): void {
     const userConfig = this._loadAddedModels();
     if (!userConfig[providerId]) userConfig[providerId] = {};
     if (!Array.isArray(userConfig[providerId].models)) {
@@ -467,7 +477,7 @@ export class ProviderRegistry {
    * @param {ProviderId} providerId
    * @param {ModelId} modelId
    */
-  removeModel(providerId, modelId) {
+  removeModel(providerId: ProviderId, modelId: ModelId): void {
     const userConfig = this._loadAddedModels();
     const uc = userConfig[providerId];
     if (!uc?.models || !Array.isArray(uc.models)) return;
@@ -484,7 +494,7 @@ export class ProviderRegistry {
    * @param {ProviderId} providerId
    * @param {ProviderConfig} data - 要写入的字段（api_key, base_url, api, models 等）
    */
-  saveProvider(providerId, data) {
+  saveProvider(providerId: ProviderId, data: ProviderConfig): void {
     const userConfig = this._loadAddedModels();
     userConfig[providerId] = { ...(userConfig[providerId] || {}), ...data };
     this._saveAddedModels(userConfig);
@@ -495,7 +505,7 @@ export class ProviderRegistry {
    * 删除一个 provider（remove 的显式别名）
    * @param {ProviderId} providerId
    */
-  removeProvider(providerId) {
+  removeProvider(providerId: ProviderId): void {
     this.remove(providerId);
   }
 }

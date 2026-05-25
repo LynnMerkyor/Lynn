@@ -1,12 +1,23 @@
 import { lookupKnown } from "../shared/known-models.js";
+import type { ModelRef, ProviderId, ResolvedModel } from "./types.js";
 
 export const DEFAULT_COMPACTION_RESERVE_TOKENS = 16_384;
 export const DEFAULT_COMPACTION_KEEP_RECENT_TOKENS = 20_000;
 export const MIN_COMPACTION_KEEP_RECENT_TOKENS = 8_192;
 export const MAX_COMPACTION_KEEP_RECENT_TOKENS = 65_536;
 
-// 动态保留比例：小窗口模型保留更多近期上下文
-function resolveKeepRecentRatio(contextWindow) {
+const KEEP_RECENT_GAP_TOKENS = 4_096;
+
+export interface CompactionSettings {
+  enabled: boolean;
+  reserveTokens: number;
+  keepRecentTokens: number;
+}
+
+type ContextModelRef = Pick<ResolvedModel, "id" | "provider" | "contextWindow"> | ModelRef | null | undefined;
+type KnownModelMetadata = { contextWindow?: unknown; context?: unknown };
+
+function resolveKeepRecentRatio(contextWindow: number | null): number {
   if (!contextWindow || contextWindow >= 64_000) return 0.20;
   if (contextWindow >= 32_000) return 0.25;
   if (contextWindow >= 16_000) return 0.30;
@@ -14,30 +25,30 @@ function resolveKeepRecentRatio(contextWindow) {
 }
 
 // 动态 reserve：小窗口模型减少输出预留
-function resolveReserveTokens(contextWindow) {
+function resolveReserveTokens(contextWindow: number | null): number {
   if (!contextWindow || contextWindow >= 32_000) return 16_384;
   if (contextWindow >= 16_000) return 8_192;
   return 4_096;
 }
 
-const KEEP_RECENT_GAP_TOKENS = 4_096;
-
-function normalizePositiveInteger(value) {
-  return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+function normalizePositiveInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : null;
 }
 
-export function resolveModelContextWindow(model) {
-  const direct = normalizePositiveInteger(model?.contextWindow);
+export function resolveModelContextWindow(model: ContextModelRef): number | null {
+  if (typeof model === "string") return null;
+  const direct = normalizePositiveInteger((model as { contextWindow?: unknown } | null | undefined)?.contextWindow);
   if (direct) return direct;
 
   const modelId = typeof model?.id === "string" ? model.id.trim() : "";
   if (!modelId) return null;
 
-  const known = lookupKnown(model?.provider, modelId);
+  const provider = typeof model?.provider === "string" ? model.provider : "";
+  const known = lookupKnown(provider as ProviderId, modelId) as KnownModelMetadata | null;
   return normalizePositiveInteger(known?.contextWindow || known?.context);
 }
 
-export function resolveCompactionSettings(model) {
+export function resolveCompactionSettings(model: ContextModelRef): CompactionSettings {
   const contextWindow = resolveModelContextWindow(model);
   if (!contextWindow) {
     return {

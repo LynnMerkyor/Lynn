@@ -23,12 +23,12 @@ import { isLocalBaseUrl } from "../shared/net-utils.js";
 import { getAssistantRoleFromConfig, getRoleDefaultModelRefs } from "../shared/assistant-role-models.js";
 
 // 角色名称 -> preferences 字段名（SHARED_MODEL_KEYS 兼容）
-/** @typedef {import("./types.d.ts").ExecutionRoute} ExecutionRoute */
-/** @typedef {import("./types.d.ts").ModelRef} ModelRef */
-/** @typedef {import("./types.d.ts").ProviderCredentialsSnake} ProviderCredentialsSnake */
-/** @typedef {import("./types.d.ts").ResolvedModel} ResolvedModel */
-/** @typedef {import("./types.d.ts").UtilityExecutionConfig} UtilityExecutionConfig */
-/** @typedef {import("./types.d.ts").UtilityRoute} UtilityRoute */
+/** @typedef {import("./types.js").ExecutionRoute} ExecutionRoute */
+/** @typedef {import("./types.js").ModelRef} ModelRef */
+/** @typedef {import("./types.js").ProviderCredentialsSnake} ProviderCredentialsSnake */
+/** @typedef {import("./types.js").ResolvedModel} ResolvedModel */
+/** @typedef {import("./types.js").UtilityExecutionConfig} UtilityExecutionConfig */
+/** @typedef {import("./types.js").UtilityRoute} UtilityRoute */
 
 const ROLE_TO_PREF_KEY = {
   utility: "utility_model",

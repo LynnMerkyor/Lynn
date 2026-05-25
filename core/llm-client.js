@@ -6,12 +6,12 @@ import {
 } from './client-agent-identity.js';
 import { getPooledDispatcher } from '../shared/http-pool.js';
 
-/** @typedef {import("./types.d.ts").LLMApi} LLMApi */
-/** @typedef {import("./types.d.ts").LLMContentBlock} LLMContentBlock */
-/** @typedef {import("./types.d.ts").LLMMessage} LLMMessage */
-/** @typedef {import("./types.d.ts").LLMRequest} LLMRequest */
-/** @typedef {import("./types.d.ts").LLMResponse} LLMResponse */
-/** @typedef {import("./types.d.ts").ToolCall} ToolCall */
+/** @typedef {import("./types.js").LLMApi} LLMApi */
+/** @typedef {import("./types.js").LLMContentBlock} LLMContentBlock */
+/** @typedef {import("./types.js").LLMMessage} LLMMessage */
+/** @typedef {import("./types.js").LLMRequest} LLMRequest */
+/** @typedef {import("./types.js").LLMResponse} LLMResponse */
+/** @typedef {import("./types.js").ToolCall} ToolCall */
 
 const DISPLAYABLE_TEXT_TYPES = new Set(["text", "output_text", "input_text", "refusal"]);
 
