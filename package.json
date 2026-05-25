@@ -110,6 +110,7 @@
     "jsdom": "^29.1.0",
     "msw": "^2.13.4",
     "patch-package": "^8.0.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.57.2",
     "vite": "^7.3.1",
