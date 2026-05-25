@@ -13,11 +13,35 @@ import type { StreamChunk } from '../types.js';
 // 4MB is far above any sane single-line SSE event; trip → abort the stream.
 const MAX_BUFFER = 4 * 1024 * 1024;
 
-export async function* parseOpenAISSE(body: AsyncIterable<Uint8Array> | ReadableStream<Uint8Array> | null): AsyncGenerator<StreamChunk> {
+type SSEBody = AsyncIterable<Uint8Array> | ReadableStream<Uint8Array> | null;
+
+function isAsyncIterable(body: NonNullable<SSEBody>): body is AsyncIterable<Uint8Array> {
+  return typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === 'function';
+}
+
+async function* iterateSSEBytes(body: SSEBody): AsyncGenerator<Uint8Array> {
   if (!body) return;
+  if (isAsyncIterable(body)) {
+    yield* body;
+    return;
+  }
+
+  const reader = body.getReader();
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      if (value) yield value;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+export async function* parseOpenAISSE(body: SSEBody): AsyncGenerator<StreamChunk> {
   const decoder = new TextDecoder();
   let buffer = '';
-  for await (const chunk of body) {
+  for await (const chunk of iterateSSEBytes(body)) {
     buffer += decoder.decode(chunk, { stream: true });
     if (buffer.length > MAX_BUFFER) {
       throw new Error(`SSE parser buffer overflow (>${MAX_BUFFER} bytes without newline) — upstream likely sending non-SSE garbage`);
