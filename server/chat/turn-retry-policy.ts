@@ -1,47 +1,54 @@
-// @ts-check
+export interface LocalMutationRequirement {
+  requiresDelete: boolean;
+  requiresMove: boolean;
+  requiresCreate: boolean;
+}
 
-/**
- * @typedef {{ requiresDelete: boolean, requiresMove: boolean, requiresCreate: boolean }} LocalMutationRequirement
- * @typedef {{ originalPrompt: string, requirement: LocalMutationRequirement | null, recordedAt: number }} PendingMutationContext
- * @typedef {{ pendingMutationContext?: PendingMutationContext | null, [key: string]: any }} TurnRetryState
- * @typedef {{ originalPrompt: string, requirement: LocalMutationRequirement | null, retryPrompt: string }} ConsumedMutationConfirmation
- */
+export type PendingMutationRequirement = LocalMutationRequirement | Partial<LocalMutationRequirement>;
+
+export interface PendingMutationContext {
+  originalPrompt: string;
+  requirement: PendingMutationRequirement | null;
+  recordedAt: number;
+}
+
+export interface TurnRetryState extends Record<string, unknown> {
+  pendingMutationContext?: PendingMutationContext | null;
+}
+
+export interface ConsumedMutationConfirmation {
+  originalPrompt: string;
+  requirement: PendingMutationRequirement | null;
+  retryPrompt: string;
+}
+
+interface MutationConfirmationOptions {
+  now?: number;
+}
 
 export const LOCAL_COMPLETION_TOOLS = new Set(["bash", "write", "edit", "edit-diff"]);
 
-/** @returns {string} */
-export function buildLocalToolSuccessFallback() {
+export function buildLocalToolSuccessFallback(..._args: unknown[]): string {
   return "";
 }
 
-/** @returns {string} */
-export function buildSuccessfulToolNoTextFallback() {
+export function buildSuccessfulToolNoTextFallback(..._args: unknown[]): string {
   return "";
 }
 
-/** @returns {string} */
-export function buildFailedToolFallbackText() {
+export function buildFailedToolFallbackText(..._args: unknown[]): string {
   return "";
 }
 
-/** @returns {string} */
-export function buildCodingDiagnosticVerificationAppend() {
+export function buildCodingDiagnosticVerificationAppend(..._args: unknown[]): string {
   return "";
 }
 
-/**
- * @param {unknown} originalPrompt
- * @returns {string}
- */
-export function buildToolContinuationRetryPrompt(originalPrompt) {
+export function buildToolContinuationRetryPrompt(originalPrompt: unknown, ..._args: unknown[]): string {
   return String(originalPrompt || "").trim();
 }
 
-/**
- * @param {unknown} [command]
- * @returns {boolean}
- */
-export function commandLooksLikeLocalMutation(command = "") {
+export function commandLooksLikeLocalMutation(command: unknown = ""): boolean {
   const text = String(command || "").trim();
   if (!text) return false;
   return /(^|[;&|()\s/])(?:mkdir|mv|cp|rsync|rm|rmdir|trash|touch|install\s+-d|ditto|osascript)(?=\s|$|[;&|()])/i.test(text)
@@ -49,22 +56,14 @@ export function commandLooksLikeLocalMutation(command = "") {
     || /\b(?:shutil\.(?:move|copy|copy2|copytree|rmtree)|os\.(?:rename|renames|replace|remove|unlink|makedirs|mkdir|rmdir)|Path\([^)]*\)\.mkdir|fs\.(?:rename|renameSync|copyFile|copyFileSync|mkdir|mkdirSync|rm|rmSync|unlink|unlinkSync|writeFile|writeFileSync))\b/.test(text);
 }
 
-/**
- * @param {unknown} [command]
- * @returns {boolean}
- */
-export function commandLooksLikeMoveOrCopy(command = "") {
+export function commandLooksLikeMoveOrCopy(command: unknown = ""): boolean {
   const text = String(command || "").trim();
   if (!text) return false;
   return /(^|[;&|()\s/])(?:mv|cp|rsync|ditto)(?=\s|$|[;&|()])/i.test(text)
     || /\b(?:shutil\.(?:move|copy|copy2|copytree)|os\.(?:rename|renames|replace)|fs\.(?:rename|renameSync|copyFile|copyFileSync))\b/.test(text);
 }
 
-/**
- * @param {unknown} [command]
- * @returns {boolean}
- */
-export function commandLooksLikeCreate(command = "") {
+export function commandLooksLikeCreate(command: unknown = ""): boolean {
   const text = String(command || "").trim();
   if (!text) return false;
   return /(^|[;&|()\s/])(?:mkdir|touch|install\s+-d)(?=\s|$|[;&|()])/i.test(text)
@@ -72,11 +71,7 @@ export function commandLooksLikeCreate(command = "") {
     || /\b(?:os\.(?:makedirs|mkdir)|Path\([^)]*\)\.mkdir|fs\.(?:mkdir|mkdirSync|writeFile|writeFileSync))\b/.test(text);
 }
 
-/**
- * @param {unknown} [command]
- * @returns {boolean}
- */
-export function commandLooksLikeDelete(command = "") {
+export function commandLooksLikeDelete(command: unknown = ""): boolean {
   const text = String(command || "").trim();
   if (!text) return false;
   return /(^|[;&|()\s/])(?:rm|rmdir|trash)(?=\s|$|[;&|()])/i.test(text)
@@ -84,11 +79,7 @@ export function commandLooksLikeDelete(command = "") {
     || /\b(?:shutil\.rmtree|os\.(?:remove|unlink|rmdir)|fs\.(?:rm|rmSync|unlink|unlinkSync))\b/.test(text);
 }
 
-/**
- * @param {unknown} [prompt]
- * @returns {LocalMutationRequirement | null}
- */
-export function classifyRequestedLocalMutation(prompt = "") {
+export function classifyRequestedLocalMutation(prompt: unknown = ""): LocalMutationRequirement | null {
   const text = String(prompt || "");
   const requiresDelete = /(?:删除|删掉|移除|清理掉|trash|delete|remove)/i.test(text);
   const requiresMove = /(?:移动|挪到|挪进|挪去|放到|放进|归档|归类|整理|分类|复制|拷贝|\bmove\b|\bcopy\b|\barchive\b|\borganize\b)/i.test(text);
@@ -97,29 +88,18 @@ export function classifyRequestedLocalMutation(prompt = "") {
   return { requiresDelete, requiresMove, requiresCreate };
 }
 
-/** @returns {false} */
-export function shouldRetryUnverifiedLocalMutation() {
+export function shouldRetryUnverifiedLocalMutation(..._args: unknown[]): false {
   return false;
 }
 
-/**
- * @param {unknown} originalPrompt
- * @returns {string}
- */
-export function buildLocalMutationContinuationRetryPrompt(originalPrompt) {
+export function buildLocalMutationContinuationRetryPrompt(originalPrompt: unknown, ..._args: unknown[]): string {
   return String(originalPrompt || "").trim();
 }
 
 const PENDING_MUTATION_CONFIRMATION_TTL_MS = 10 * 60 * 1000;
 const MUTATION_CONFIRMATION_PATTERN = /^\s*(?:确认删除|确认执行|执行删除|继续执行|确认[\s,，]*(?:执行|删除)|confirm(?:\s+delete)?|yes|y|ok|okay|do\s+it|go\s+ahead|proceed)\s*[。.!！,，]?\s*$/i;
 
-/**
- * @param {TurnRetryState | null | undefined} ss
- * @param {unknown} originalPrompt
- * @param {LocalMutationRequirement | null | undefined} requirement
- * @returns {void}
- */
-function rememberPendingDeleteConfirmation(ss, originalPrompt, requirement) {
+function rememberPendingDeleteConfirmation(ss: TurnRetryState | null | undefined, originalPrompt: unknown, requirement: LocalMutationRequirement | null | undefined): void {
   if (!ss || !originalPrompt || !requirement?.requiresDelete) return;
   ss.pendingMutationContext = {
     originalPrompt: String(originalPrompt).slice(0, 4000),
@@ -128,12 +108,7 @@ function rememberPendingDeleteConfirmation(ss, originalPrompt, requirement) {
   };
 }
 
-/**
- * @param {TurnRetryState | null | undefined} ss
- * @param {unknown} originalPrompt
- * @returns {boolean}
- */
-export function recordPendingDeleteRequest(ss, originalPrompt) {
+export function recordPendingDeleteRequest(ss: TurnRetryState | null | undefined, originalPrompt: unknown): boolean {
   if (!ss || !originalPrompt) return false;
   const requirement = classifyRequestedLocalMutation(originalPrompt);
   if (!requirement?.requiresDelete) return false;
@@ -141,33 +116,18 @@ export function recordPendingDeleteRequest(ss, originalPrompt) {
   return true;
 }
 
-/**
- * @param {TurnRetryState | null | undefined} ss
- * @param {unknown} command
- * @returns {boolean}
- */
-export function clearPendingMutationOnSuccessfulDelete(ss, command) {
+export function clearPendingMutationOnSuccessfulDelete(ss: TurnRetryState | null | undefined, command: unknown): boolean {
   if (!ss || !ss.pendingMutationContext) return false;
   if (!commandLooksLikeDelete(command)) return false;
   ss.pendingMutationContext = null;
   return true;
 }
 
-/**
- * @param {unknown} originalPrompt
- * @returns {string}
- */
-export function buildPostRehydrateEscalationPrompt(originalPrompt) {
+export function buildPostRehydrateEscalationPrompt(originalPrompt: unknown, ..._args: unknown[]): string {
   return String(originalPrompt || "").trim();
 }
 
-/**
- * @param {TurnRetryState | null | undefined} ss
- * @param {unknown} userInput
- * @param {{ now?: number }} [opts]
- * @returns {ConsumedMutationConfirmation | null}
- */
-export function consumeMutationConfirmation(ss, userInput, { now = Date.now() } = {}) {
+export function consumeMutationConfirmation(ss: TurnRetryState | null | undefined, userInput: unknown, { now = Date.now() }: MutationConfirmationOptions = {}): ConsumedMutationConfirmation | null {
   if (!ss || !ss.pendingMutationContext) return null;
   const ctx = ss.pendingMutationContext;
   const recordedAt = Number(ctx?.recordedAt) || 0;
@@ -187,52 +147,30 @@ export function consumeMutationConfirmation(ss, userInput, { now = Date.now() } 
   };
 }
 
-/** @returns {string} */
-export function buildEmptyReplyFallbackText() {
+export function buildEmptyReplyFallbackText(..._args: unknown[]): string {
   return "";
 }
 
-/**
- * @param {unknown} originalPromptText
- * @returns {string}
- */
-export function buildEmptyReplyRetryPrompt(originalPromptText) {
+export function buildEmptyReplyRetryPrompt(originalPromptText: unknown, ..._args: unknown[]): string {
   return String(originalPromptText || "").trim();
 }
 
-/**
- * @param {unknown} text
- * @returns {string}
- */
-export function stripRouteMetadataLeaks(text) {
+export function stripRouteMetadataLeaks(text: unknown): string {
   return String(text || "");
 }
 
-/**
- * @param {unknown} originalPromptText
- * @returns {string}
- */
-export function buildShortLeadInRetryPrompt(originalPromptText) {
+export function buildShortLeadInRetryPrompt(originalPromptText: unknown, ..._args: unknown[]): string {
   return String(originalPromptText || "").trim();
 }
 
-/** @returns {false} */
-export function looksLikeTruncatedStructuredAnswer() {
+export function looksLikeTruncatedStructuredAnswer(..._args: unknown[]): false {
   return false;
 }
 
-/**
- * @param {unknown} originalPromptText
- * @returns {string}
- */
-export function buildTruncatedStructuredRetryPrompt(originalPromptText) {
+export function buildTruncatedStructuredRetryPrompt(originalPromptText: unknown, ..._args: unknown[]): string {
   return String(originalPromptText || "").trim();
 }
 
-/**
- * @param {unknown} originalPromptText
- * @returns {string}
- */
-export function buildToolFailedRetryPrompt(originalPromptText) {
+export function buildToolFailedRetryPrompt(originalPromptText: unknown, ..._args: unknown[]): string {
   return String(originalPromptText || "").trim();
 }
