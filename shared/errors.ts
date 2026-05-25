@@ -10,7 +10,15 @@ export const ErrorCategory = Object.freeze({
   CONFIG: 'config', AUTH: 'auth', UNKNOWN: 'unknown',
 });
 
-export const ERROR_DEFS = Object.freeze({
+type ErrorDef = {
+  severity: string;
+  category: string;
+  i18nKey: string;
+  retryable: boolean;
+  httpStatus?: number;
+};
+
+export const ERROR_DEFS: Readonly<Record<string, ErrorDef>> = Object.freeze({
   LLM_TIMEOUT:         { severity: 'degraded', category: 'llm',        i18nKey: 'error.llmTimeout',        retryable: true,  httpStatus: 504 },
   LLM_RATE_LIMITED:    { severity: 'degraded', category: 'llm',        i18nKey: 'error.llmRateLimited',    retryable: true,  httpStatus: 429 },
   LLM_EMPTY_RESPONSE:  { severity: 'degraded', category: 'llm',        i18nKey: 'error.llmEmptyResponse',  retryable: true,  httpStatus: 502 },
@@ -33,8 +41,32 @@ export const ERROR_DEFS = Object.freeze({
   UNKNOWN:             { severity: 'degraded', category: 'unknown',    i18nKey: 'error.unknown',           retryable: false, httpStatus: 500 },
 });
 
+export type AppErrorOptions = {
+  message?: string;
+  context?: Record<string, unknown>;
+  traceId?: string;
+  cause?: unknown;
+};
+
+export type AppErrorJSON = {
+  code?: string;
+  message?: string;
+  context?: Record<string, unknown>;
+  traceId?: string;
+};
+
 export class AppError extends Error {
-  constructor(code, opts = {}) {
+  declare code: string;
+  declare severity: string;
+  declare category: string;
+  declare retryable: boolean;
+  declare userMessageKey: string;
+  declare httpStatus: number;
+  declare context: Record<string, unknown>;
+  declare traceId: string;
+  declare cause?: unknown;
+
+  constructor(code: string, opts: AppErrorOptions = {}) {
     const def = ERROR_DEFS[code] || ERROR_DEFS.UNKNOWN;
     super(opts.message || code);
     this.name = 'AppError';
@@ -49,11 +81,11 @@ export class AppError extends Error {
     if (opts.cause) this.cause = opts.cause;
   }
 
-  toJSON() {
+  toJSON(): { code: string; message: string; context: Record<string, unknown>; traceId: string } {
     return { code: this.code, message: this.message, context: this.context, traceId: this.traceId };
   }
 
-  static fromJSON(data) {
+  static fromJSON(data: AppErrorJSON): AppError {
     return new AppError(data.code || 'UNKNOWN', {
       message: data.message,
       context: data.context,
@@ -61,12 +93,14 @@ export class AppError extends Error {
     });
   }
 
-  static wrap(err, fallbackCode = 'UNKNOWN') {
+  static wrap(err: unknown, fallbackCode = 'UNKNOWN'): AppError {
     if (err instanceof AppError) return err;
     const raw = err instanceof Error ? err : new Error(String(err));
     const appErr = new AppError(fallbackCode, { cause: raw, message: raw.message });
     // Preserve explicit retryable flag set on plain errors (e.g. from third-party libraries)
-    if (typeof raw.retryable === 'boolean') appErr.retryable = raw.retryable;
+    if (typeof (raw as Error & { retryable?: unknown }).retryable === 'boolean') {
+      appErr.retryable = (raw as Error & { retryable: boolean }).retryable;
+    }
     return appErr;
   }
 }

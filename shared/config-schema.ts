@@ -8,16 +8,16 @@
  *
  * 未在此处声明的字段默认为 agent scope。
  * 嵌套路径最多支持 2 级（如 'capabilities.learn_skills'）。
- *
- * @typedef {'global' | 'agent'} ConfigScope
- * @typedef {object} FieldDef
- * @property {ConfigScope} scope
- * @property {string} [setter] - engine 上的 setter 方法名（仅 global scope）
- * @property {string} [getter] - engine 上的 getter 方法名（仅 global scope）
  */
+export type ConfigScope = 'global' | 'agent';
 
-/** @type {Record<string, FieldDef>} */
-export const CONFIG_SCHEMA = {
+export type FieldDef = {
+  scope: ConfigScope;
+  setter?: string;
+  getter?: string;
+};
+
+export const CONFIG_SCHEMA: Record<string, FieldDef> = {
   locale:                       { scope: 'global', setter: 'setLocale',         getter: 'getLocale' },
   timezone:                     { scope: 'global', setter: 'setTimezone',       getter: 'getTimezone' },
   sandbox:                      { scope: 'global', setter: 'setSandbox',        getter: 'getSandbox' },

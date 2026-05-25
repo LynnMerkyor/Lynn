@@ -1,7 +1,27 @@
 // shared/error-bus.js
 import { AppError } from './errors.js';
 
+export type ErrorBusEntry = {
+  error: AppError;
+  timestamp: number;
+  breadcrumbs: Array<Record<string, unknown>>;
+};
+
+export type ErrorReportExtra = {
+  context?: unknown;
+  dedupeKey?: unknown;
+  route?: unknown;
+};
+
+export type ErrorBusListener = (entry: ErrorBusEntry, route: unknown) => void;
+
 export class ErrorBus {
+  declare _listeners: ErrorBusListener[];
+  declare _breadcrumbs: Array<Record<string, unknown>>;
+  declare _maxBreadcrumbs: number;
+  declare _recentFingerprints: Map<unknown, number>;
+  declare _dedupeWindowMs: number;
+
   constructor() {
     this._listeners = [];
     this._breadcrumbs = [];
@@ -10,12 +30,12 @@ export class ErrorBus {
     this._dedupeWindowMs = 5000;
   }
 
-  addBreadcrumb(crumb) {
+  addBreadcrumb(crumb: unknown): void {
     if (this._breadcrumbs.length >= this._maxBreadcrumbs) this._breadcrumbs.shift();
-    this._breadcrumbs.push({ ...crumb, timestamp: Date.now() });
+    this._breadcrumbs.push({ ...(crumb as object), timestamp: Date.now() });
   }
 
-  report(error, extra) {
+  report(error: unknown, extra?: ErrorReportExtra | null): void {
     const appErr = AppError.wrap(error);
     if (extra?.context) Object.assign(appErr.context, extra.context);
 
@@ -49,18 +69,18 @@ export class ErrorBus {
     }
   }
 
-  subscribe(listener) {
+  subscribe(listener: ErrorBusListener): () => void {
     this._listeners.push(listener);
     return () => { this._listeners = this._listeners.filter(l => l !== listener); };
   }
 
-  _autoRoute(err) {
+  private _autoRoute(err: AppError): string {
     if (err.code === 'WS_DISCONNECTED') return 'statusbar';
     if (err.severity === 'critical') return 'boundary';
     return 'toast';
   }
 
-  _log(entry) {
+  private _log(entry: ErrorBusEntry): void {
     const { error } = entry;
     console.error(`[ErrorBus][${error.code}][${error.traceId}] ${error.message}`, error.context);
   }

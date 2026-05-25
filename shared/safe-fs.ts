@@ -3,47 +3,56 @@ import path from 'path';
 import { AppError } from './errors.js';
 import { errorBus } from './error-bus.js';
 
-export function safeReadFile(filePath, fallback = '') {
+export function safeReadFile<F = string>(filePath: fs.PathOrFileDescriptor, fallback: F = '' as F): string | F {
   try {
     return fs.readFileSync(filePath, 'utf-8');
   } catch (err) {
     // ENOENT 是 fallback 的合法场景（可选文件不存在），不上报 ErrorBus
-    if (err.code !== 'ENOENT') {
-      const code = err.code === 'EACCES' ? 'FS_PERMISSION' : 'UNKNOWN';
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      const code = (err as NodeJS.ErrnoException).code === 'EACCES' ? 'FS_PERMISSION' : 'UNKNOWN';
       errorBus.report(new AppError(code, { cause: err, context: { filePath } }));
     }
     return fallback;
   }
 }
 
-export function safeReadJSON(filePath, fallback = null) {
+export function safeReadJSON<T = unknown, F = null>(filePath: fs.PathOrFileDescriptor, fallback: F = null as F): T | F {
   const text = safeReadFile(filePath, null);
   if (text === null) return fallback;
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as T;
   } catch (err) {
     errorBus.report(new AppError('CONFIG_PARSE', { cause: err, context: { filePath } }));
     return fallback;
   }
 }
 
-export async function safeReadYAML(filePath, fallback = null) {
+type YamlModule = {
+  default?: { load?: (text: string) => unknown };
+  load: (text: string) => unknown;
+};
+
+export async function safeReadYAML<T = unknown, F = null>(filePath: fs.PathOrFileDescriptor, fallback: F = null as F): Promise<T | F> {
   const text = safeReadFile(filePath, null);
   if (text === null) return fallback;
   try {
-    const yaml = await import('js-yaml');
-    return yaml.default?.load?.(text) ?? yaml.load(text);
+    const yaml = await import('js-yaml') as YamlModule;
+    return (yaml.default?.load?.(text) ?? yaml.load(text)) as T;
   } catch (err) {
     errorBus.report(new AppError('CONFIG_PARSE', { cause: err, context: { filePath } }));
     return fallback;
   }
 }
 
-export function safeReadYAMLSync(filePath, fallback = null, yaml) {
+type YamlLoader = {
+  load: (text: string) => unknown;
+};
+
+export function safeReadYAMLSync<T = unknown, F = null>(filePath: fs.PathOrFileDescriptor, fallback: F = null as F, yaml?: unknown): T | F {
   const text = safeReadFile(filePath, null);
   if (text === null) return fallback;
   try {
-    return yaml.load(text);
+    return (yaml as YamlLoader).load(text) as T;
   } catch (err) {
     errorBus.report(new AppError('CONFIG_PARSE', { cause: err, context: { filePath } }));
     return fallback;
@@ -58,7 +67,7 @@ export function safeReadYAMLSync(filePath, fallback = null, yaml) {
  * 4. Delete dst.bak_{ts}
  * Recovery: if step 3 fails, rename dst.bak_{ts} back to dst, clean up tmp.
  */
-export function safeCopyDir(src, dst) {
+export function safeCopyDir(src: string, dst: string): void {
   const ts = Date.now();
   const tmpDst = `${dst}.tmp_${ts}`;
   const bakDst = `${dst}.bak_${ts}`;
@@ -89,7 +98,7 @@ export function safeCopyDir(src, dst) {
   }
 }
 
-function _copyDirRecursive(src, dst) {
+function _copyDirRecursive(src: string, dst: string): void {
   fs.mkdirSync(dst, { recursive: true });
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     const s = path.join(src, entry.name);
@@ -105,6 +114,6 @@ function _copyDirRecursive(src, dst) {
   }
 }
 
-function _cleanupDir(dir) {
+function _cleanupDir(dir: string): void {
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
 }
