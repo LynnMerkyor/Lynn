@@ -101,7 +101,7 @@ import {
   recordPendingDeleteRequest,
 } from "../chat/turn-retry-policy.js";
 import { extractProviderRouteMeta } from "../chat/provider-route-meta.js";
-import { emitSessionStreamEvent } from "../chat/stream-event-emitter.js";
+import { createStreamEmitters } from "../chat/stream-emitters.js";
 import { createChatRouteContext } from "../chat/chat-route-context.js";
 import { generateSessionTitle } from "../chat/title-generator.js";
 
@@ -523,10 +523,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     if (_browserThumbTimer) { clearInterval(_browserThumbTimer); _browserThumbTimer = null; }
   }
 
-  function emitStreamEvent(sessionPath, ss, event) {
-    return emitSessionStreamEvent(sessionPath, ss, event, broadcast);
-  }
-
   function emitFileOutputsFromDetails(sessionPath, ss, details = {}) {
     const files = Array.isArray(details.files) ? [...details.files] : [];
     if (files.length === 0 && details.filePath) {
@@ -600,16 +596,21 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     });
   }
 
-  function emitTrustedVisibleTextDelta(sessionPath, ss, delta) {
-    const next = String(delta || "");
-    if (!next) return false;
-    ss.hasOutput = true;
-    ss.titlePreview += next;
-    ss.visibleTextAcc += next;
-    emitStreamEvent(sessionPath, ss, { type: "text_delta", delta: next });
-    maybeGenerateFirstTurnTitle(sessionPath, ss);
-    return true;
-  }
+  const {
+    emitStreamEvent,
+    emitTrustedVisibleTextDelta,
+    emitVisibleTextDelta,
+    flushBufferedToolVisibleText,
+    feedAssistantVisibleText,
+    flushBufferedAssistantText,
+  } = createStreamEmitters({
+    broadcast,
+    hasStreamEvent,
+    hasToolExecutionInFlight,
+    scheduleToolFinalizationFallback,
+    clearToolFinalizationTimer,
+    maybeGenerateFirstTurnTitle,
+  });
 
   function maybeAppendCodeVerificationPostscript(sessionPath, ss) {
     if (!sessionPath || !ss) return false;
@@ -623,193 +624,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     appendTextToLatestAssistantInMemory(engine.getSessionByPath(sessionPath), addition);
     debugLog()?.log("ws", `[CODE-VERIFY-POSTSCRIPT v1] appended verification command · ${sessionPath}`);
     return true;
-  }
-
-  function emitVisibleTextDelta(sessionPath, ss, delta) {
-    const next = String(delta || "");
-    if (!next) return;
-    if (hasToolExecutionInFlight(ss)) {
-      ss.bufferedVisibleTextDuringTool = `${ss.bufferedVisibleTextDuringTool || ""}${next}`;
-      if (next.trim()) {
-        ss.hasBufferedVisibleTextDuringTool = true;
-        scheduleToolFinalizationFallback(sessionPath, ss);
-      }
-      return;
-    }
-    if (next.trim()) {
-      ss.hasOutput = true;
-      if (ss.hasToolCall && !ss.hasError && !hasStreamEvent(ss, "turn_end")) {
-        scheduleToolFinalizationFallback(sessionPath, ss);
-      } else {
-        clearToolFinalizationTimer(ss);
-      }
-    }
-    ss.titlePreview += next;
-    ss.visibleTextAcc += next;
-    emitStreamEvent(sessionPath, ss, { type: "text_delta", delta: next });
-    maybeGenerateFirstTurnTitle(sessionPath, ss);
-  }
-
-  function flushBufferedToolVisibleText(sessionPath, ss, preferredText = "") {
-    if (!sessionPath || !ss || ss.hasOutput) return false;
-    const persisted = String(preferredText || "").trim();
-    const buffered = String(ss.bufferedVisibleTextDuringTool || "").trim();
-    const text = persisted || buffered;
-    ss.bufferedVisibleTextDuringTool = "";
-    ss.hasBufferedVisibleTextDuringTool = false;
-    if (!text) return false;
-    emitTrustedVisibleTextDelta(sessionPath, ss, text);
-    return true;
-  }
-
-  function feedAssistantVisibleText(sessionPath, ss, delta) {
-    if (!delta) return;
-    ss.rawTextAcc += delta || "";
-    ss.thinkTagParser.feed(delta, (tEvt) => {
-      switch (tEvt.type) {
-        case "think_start":
-          if (!ss.isThinking) {
-            ss.isThinking = true;
-            ss.hasThinking = true;
-            emitStreamEvent(sessionPath, ss, { type: "thinking_start" });
-          }
-          break;
-        case "think_text":
-          ss.hasThinking = true;
-          emitStreamEvent(sessionPath, ss, { type: "thinking_delta", delta: tEvt.data });
-          break;
-        case "think_end":
-          if (ss.isThinking) {
-            ss.isThinking = false;
-            emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-          }
-          break;
-        case "text":
-          ss.progressParser.feed(tEvt.data, (pEvt) => {
-            if (pEvt.type === "tool_progress") {
-              ss.progressMarkerCount++;
-              return;
-            }
-            ss.moodParser.feed(pEvt.data, (evt) => {
-              if (evt.type === "text") {
-                ss.xingParser.feed(evt.data, (xEvt) => {
-                  switch (xEvt.type) {
-                    case "text":
-                      emitVisibleTextDelta(sessionPath, ss, xEvt.data);
-                      break;
-                    case "xing_start":
-                      emitStreamEvent(sessionPath, ss, { type: "xing_start", title: xEvt.title });
-                      break;
-                    case "xing_text":
-                      emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
-                      break;
-                    case "xing_end":
-                      emitStreamEvent(sessionPath, ss, { type: "xing_end" });
-                      break;
-                  }
-                });
-              } else if (evt.type === "mood_start") {
-                emitStreamEvent(sessionPath, ss, { type: "mood_start" });
-              } else if (evt.type === "mood_text") {
-                emitStreamEvent(sessionPath, ss, { type: "mood_text", delta: evt.data });
-              } else if (evt.type === "mood_end") {
-                emitStreamEvent(sessionPath, ss, { type: "mood_end" });
-              }
-            });
-          });
-          break;
-      }
-    });
-  }
-
-  function flushBufferedAssistantText(sessionPath, ss) {
-    if (!sessionPath || !ss) return;
-    // flush 顺序：ThinkTag → LynnProgress → Mood → Xing。即使 tool_end 丢失,
-    // 已经到达的可见文本也要先释放出来,避免用户面对空白等待到硬超时。
-    const feedMoodOnly = (text) => {
-      ss.moodParser.feed(text, (evt) => {
-        if (evt.type === "text") {
-          ss.xingParser.feed(evt.data, (xEvt) => {
-            switch (xEvt.type) {
-              case "text":
-                emitVisibleTextDelta(sessionPath, ss, xEvt.data);
-                break;
-              case "xing_start":
-                emitStreamEvent(sessionPath, ss, { type: "xing_start", title: xEvt.title });
-                break;
-              case "xing_text":
-                emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
-                break;
-              case "xing_end":
-                emitStreamEvent(sessionPath, ss, { type: "xing_end" });
-                break;
-            }
-          });
-        } else if (evt.type === "mood_start") {
-          emitStreamEvent(sessionPath, ss, { type: "mood_start" });
-        } else if (evt.type === "mood_text") {
-          emitStreamEvent(sessionPath, ss, { type: "mood_text", delta: evt.data });
-        } else if (evt.type === "mood_end") {
-          emitStreamEvent(sessionPath, ss, { type: "mood_end" });
-        }
-      });
-    };
-    const feedMoodPipeline = (text) => {
-      ss.progressParser.feed(text, (pEvt) => {
-        if (pEvt.type === "tool_progress") {
-          ss.progressMarkerCount++;
-          debugLog()?.warn("ws", `suppressed hallucinated <lynn_tool_progress> during flush · ${sessionPath}`);
-          return;
-        }
-        feedMoodOnly(pEvt.data);
-      });
-    };
-    ss.thinkTagParser.flush((tEvt) => {
-      if (tEvt.type === "think_text") {
-        emitStreamEvent(sessionPath, ss, { type: "thinking_delta", delta: tEvt.data });
-      } else if (tEvt.type === "think_end") {
-        emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-      } else if (tEvt.type === "text") {
-        feedMoodPipeline(tEvt.data);
-      }
-    });
-    ss.progressParser.flush((pEvt) => {
-      if (pEvt.type === "text") {
-        feedMoodOnly(pEvt.data);
-      } else if (pEvt.type === "tool_progress") {
-        ss.progressMarkerCount++;
-        debugLog()?.warn("ws", `suppressed hallucinated <lynn_tool_progress> during progress flush · ${sessionPath}`);
-      }
-    });
-    ss.moodParser.flush((evt) => {
-      if (evt.type === "text") {
-        ss.xingParser.feed(evt.data, (xEvt) => {
-          switch (xEvt.type) {
-            case "text":
-              emitVisibleTextDelta(sessionPath, ss, xEvt.data);
-              break;
-            case "xing_start":
-              emitStreamEvent(sessionPath, ss, { type: "xing_start", title: xEvt.title });
-              break;
-            case "xing_text":
-              emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
-              break;
-            case "xing_end":
-              emitStreamEvent(sessionPath, ss, { type: "xing_end" });
-              break;
-          }
-        });
-      } else if (evt.type === "mood_text") {
-        emitStreamEvent(sessionPath, ss, { type: "mood_text", delta: evt.data });
-      }
-    });
-    ss.xingParser.flush((xEvt) => {
-      if (xEvt.type === "text") {
-        emitVisibleTextDelta(sessionPath, ss, xEvt.data);
-      } else if (xEvt.type === "xing_text") {
-        emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
-      }
-    });
   }
 
   function emitLocalThinkingDelta(sessionPath, ss, delta) {
