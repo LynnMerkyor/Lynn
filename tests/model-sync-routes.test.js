@@ -252,6 +252,106 @@ describe("model sync related routes", () => {
     });
   });
 
+  it("provider summary attaches safe canonical state snapshots", async () => {
+    const { createProvidersRoute } = await import("../server/routes/providers.js");
+    const app = new Hono();
+    const rawProviders = {
+      "api-missing": {
+        auth_type: "api-key",
+        base_url: "https://api.example.com/v1",
+        api: "openai-completions",
+        api_key: "",
+        models: ["demo-model"],
+      },
+      "local-ready": {
+        auth_type: "none",
+        base_url: "http://127.0.0.1:18099/v1",
+        api: "openai-completions",
+        models: ["local-model"],
+      },
+      "disabled-provider": {
+        auth_type: "api-key",
+        base_url: "https://disabled.example/v1",
+        api: "openai-completions",
+        api_key: "sk-disabled-secret",
+        disabled: true,
+        health: { status: "healthy" },
+      },
+      "cooldown-provider": {
+        auth_type: "api-key",
+        base_url: "https://cooldown.example/v1",
+        api: "openai-completions",
+        api_key: "sk-cooldown-secret",
+        cooldown: { active: true, reason: "429", safeReason: "token=tp-cooldown-secret" },
+      },
+      "error-provider": {
+        auth_type: "none",
+        base_url: "http://127.0.0.1:18100/v1",
+        api: "openai-completions",
+        error: { active: true, code: "upstream_500", safeReason: "api_key=sk-error-secret" },
+      },
+    };
+    const registryEntries = new Map([
+      ["api-missing", { displayName: "API Missing", authType: "api-key", baseUrl: "https://api.example.com/v1", api: "openai-completions" }],
+      ["local-ready", { displayName: "Local Ready", authType: "none", baseUrl: "http://127.0.0.1:18099/v1", api: "openai-completions" }],
+      ["local-unconfigured", { displayName: "Local Unconfigured", authType: "none", baseUrl: "", api: "openai-completions" }],
+      ["disabled-provider", { displayName: "Disabled Provider", authType: "api-key", baseUrl: "https://disabled.example/v1", api: "openai-completions" }],
+      ["cooldown-provider", { displayName: "Cooldown Provider", authType: "api-key", baseUrl: "https://cooldown.example/v1", api: "openai-completions" }],
+      ["error-provider", { displayName: "Error Provider", authType: "none", baseUrl: "http://127.0.0.1:18100/v1", api: "openai-completions" }],
+    ]);
+    const engine = {
+      availableModels: [],
+      authStorage: {
+        getOAuthProviders: () => [],
+      },
+      preferences: {
+        getOAuthCustomModels: () => ({}),
+      },
+      providerRegistry: {
+        getAllProvidersRaw: () => rawProviders,
+        getAll: () => registryEntries,
+        get: (id) => registryEntries.get(id) || null,
+        isOAuth: () => false,
+        getAuthJsonKey: (id) => id,
+        getDefaultModels: (id) => (id === "local-unconfigured" ? ["local-default"] : []),
+        getOAuthProviderIds: () => [],
+      },
+    };
+
+    app.route("/api", createProvidersRoute(engine));
+
+    const res = await app.request("/api/providers/summary");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    expect(data.providers["api-missing"].stateSnapshot).toMatchObject({
+      state: "needs_auth",
+      auth: { required: true, status: "missing" },
+    });
+    expect(data.providers["local-ready"].stateSnapshot).toMatchObject({
+      state: "ready",
+      auth: { required: false, status: "not_required" },
+      selectedModel: { id: "local-model" },
+    });
+    expect(data.providers["local-unconfigured"].stateSnapshot).toMatchObject({
+      state: "unconfigured",
+      auth: { required: false, status: "not_required" },
+    });
+    expect(data.providers["disabled-provider"].stateSnapshot.state).toBe("disabled");
+    expect(data.providers["cooldown-provider"].stateSnapshot).toMatchObject({
+      state: "cooldown",
+      cooldown: { active: true, reason: "429", safeReason: "token=[redacted]" },
+    });
+    expect(data.providers["error-provider"].stateSnapshot).toMatchObject({
+      state: "error",
+      safeReason: "api_key=[redacted]",
+    });
+
+    expect(JSON.stringify(data.providers["disabled-provider"].stateSnapshot)).not.toContain("sk-disabled-secret");
+    expect(JSON.stringify(data.providers["cooldown-provider"].stateSnapshot)).not.toContain("sk-cooldown-secret");
+    expect(JSON.stringify(data.providers["error-provider"].stateSnapshot)).not.toContain("sk-error-secret");
+  });
+
   it("oauth provider fetch reports registry issue instead of remote /models fallback", async () => {
     const { createProvidersRoute } = await import("../server/routes/providers.js");
     const app = new Hono();

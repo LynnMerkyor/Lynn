@@ -7,6 +7,7 @@ import os from "os";
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { buildProviderAuthHeaders, buildProbeUrl } from "../../lib/llm/provider-client.js";
+import { buildProviderSummaryStateSnapshot } from "../../core/provider-state-summary.js";
 
 // ── Models-cache helpers ──
 
@@ -113,8 +114,24 @@ export function createProvidersRoute(engine) {
       return null;
     }
 
+    function withProviderState(name, summary, { rawProvider = null, registryEntry = null, isOAuth = false, loggedIn = false } = {}) {
+      return {
+        ...summary,
+        stateSnapshot: buildProviderSummaryStateSnapshot({
+          id: name,
+          summary,
+          rawProvider,
+          registryEntry,
+          isOAuth,
+          loggedIn,
+        }),
+      };
+    }
+
     // 先处理 added-models.yaml 中的 provider（保持顺序）
     for (const [name, p] of Object.entries(providers)) {
+      const rawProvider = rawProviders[name] || p;
+      const registryEntry = provRegistry.get(name);
       const isOAuth = provRegistry.isOAuth(name);
       const oauthInfo = getOAuthLoginInfo(name);
       const sdkIds = sdkByProvider.get(name) || [];
@@ -122,22 +139,28 @@ export function createProvidersRoute(engine) {
       const allModels = [...new Set([...(p.models || []), ...defaultModels, ...sdkIds])];
       const customModels = oauthCustom[name] || [];
 
-      result[name] = {
-        type: isOAuth ? "oauth" : ((p.auth_type || provRegistry.get(name)?.authType) === "none" ? "none" : "api-key"),
+      const summary = {
+        type: isOAuth ? "oauth" : ((p.auth_type || registryEntry?.authType) === "none" ? "none" : "api-key"),
         display_name: oauthInfo?.name || p.display_name || name,
         base_url: p.base_url || "",
         api: p.api || "",
         api_key: p.api_key || "",
         models: allModels,
         custom_models: customModels,
-        has_credentials: ((p.auth_type || provRegistry.get(name)?.authType) === "none")
-          ? !!(p.base_url || provRegistry.get(name)?.baseUrl)
+        has_credentials: ((p.auth_type || registryEntry?.authType) === "none")
+          ? !!(p.base_url || registryEntry?.baseUrl)
           : !!(p.api_key || (isOAuth && oauthInfo?.loggedIn)),
         logged_in: isOAuth ? !!oauthInfo?.loggedIn : undefined,
         supports_oauth: isOAuth,
         is_coding_plan: name.endsWith("-coding"),
         can_delete: !isOAuth || Object.prototype.hasOwnProperty.call(providers, name),
       };
+      result[name] = withProviderState(name, summary, {
+        rawProvider,
+        registryEntry,
+        isOAuth,
+        loggedIn: !!oauthInfo?.loggedIn,
+      });
     }
 
     // 追加 OAuth-only provider。即使用户尚未登录，也必须显示授权入口；
@@ -151,7 +174,7 @@ export function createProvidersRoute(engine) {
       const sdkIds = sdkByProvider.get(authKey) || sdkByProvider.get(oauthId) || [];
       const defaultModels = provRegistry.getDefaultModels(oauthId) || [];
       const customModels = oauthCustom[authKey] || oauthCustom[oauthId] || [];
-      result[oauthId] = {
+      const summary = {
         type: "oauth",
         display_name: loginInfo?.name || entry?.displayName || oauthId,
         base_url: entry?.baseUrl || "",
@@ -165,6 +188,11 @@ export function createProvidersRoute(engine) {
         is_coding_plan: false,
         can_delete: false,
       };
+      result[oauthId] = withProviderState(oauthId, summary, {
+        registryEntry: entry,
+        isOAuth: true,
+        loggedIn: !!loginInfo?.loggedIn,
+      });
     }
 
     // 追加 ProviderRegistry 中已声明但尚未出现的 provider（未配置状态）
@@ -175,7 +203,7 @@ export function createProvidersRoute(engine) {
         if (entry.authType === "oauth") continue; // OAuth provider 走上面的白名单逻辑
         const sdkIds = sdkByProvider.get(id) || [];
         const defaultModels = provRegistry.getDefaultModels(id) || [];
-        result[id] = {
+        const summary = {
           type: entry.authType === "none" ? "none" : "api-key",
           display_name: entry.displayName || id,
           base_url: entry.baseUrl || "",
@@ -189,6 +217,10 @@ export function createProvidersRoute(engine) {
           is_coding_plan: id.endsWith("-coding"),
           can_delete: false,
         };
+        result[id] = withProviderState(id, summary, {
+          registryEntry: entry,
+          isOAuth: false,
+        });
       }
     }
 
