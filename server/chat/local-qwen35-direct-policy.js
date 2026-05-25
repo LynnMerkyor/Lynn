@@ -12,6 +12,7 @@ export const LOCAL_QWEN35_DIRECT_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN
 export const LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS || 2048);
 export const LOCAL_QWEN35_DIRECT_HISTORY_MAX_MESSAGES = Number(process.env.LYNN_LOCAL_QWEN35_HISTORY_MAX_MESSAGES || 8);
 export const LOCAL_QWEN35_DIRECT_HISTORY_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_HISTORY_MAX_CHARS || 8000);
+export const LOCAL_QWEN35_EMPTY_CONTENT_FALLBACK_MESSAGE = "本地模型这次只输出了思考过程,没有返回可见正文。已保留思考记录;请关闭深研重试,或临时切到默认云端模型。";
 
 export function shouldUseLocalQwen35DirectBridge(promptText = "", opts = {}) {
   if (!opts.isLocalModel) return false;
@@ -65,6 +66,12 @@ export function resolveLocalQwen35DirectMaxTokens(promptText = "", enableThinkin
     if (isLightweightLocalQwen35Ask(promptText)) return 1536;
   }
   return LOCAL_QWEN35_DIRECT_MAX_TOKENS;
+}
+
+export function shouldRetryLocalQwen35WithoutThinking({ enableThinking = false, assistantText = "", reasoningText = "" } = {}) {
+  return !!enableThinking
+    && !String(assistantText || "").trim()
+    && !!String(reasoningText || "").trim();
 }
 
 export function readRecentLocalQwen35DirectMessages(sessionPath, currentPromptText = "") {

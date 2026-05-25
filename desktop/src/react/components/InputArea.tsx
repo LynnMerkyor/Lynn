@@ -386,7 +386,7 @@ function InputAreaInner() {
   }, [localQwenStatus?.runtime?.slots]);
   const localQwenBusySlots = Number(localQwenStatus?.runtime?.slots?.busy || 0);
   const localQwenMetricSummary = localQwenMetricsReady
-    ? (localQwenMetricTokens > 0 ? `本进程累计 ${localQwenMetricTokens.toLocaleString()} tokens` : '本进程暂无 token 统计')
+    ? (localQwenMetricTokens > 0 ? `服务累计处理 ${localQwenMetricTokens.toLocaleString()} tokens` : '服务暂无 token 统计')
     : '运行统计同步中';
   const localQwenColdStartLikely = localQwenRunning && localQwenCurrent && localQwenBusySlots > 0 && localQwenMetricTokens < 800;
   const localQwenWarmupStage = localQwenRunning

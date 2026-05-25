@@ -159,6 +159,11 @@ describe('Local Qwen provider UX guards', () => {
     expect(inputArea).toContain('本地端点已就绪，正在生成首个回答');
     expect(inputArea).toContain('首次暖机提示');
     expect(inputArea).toContain('本地 Qwen3.5-9B 刚启动时要加载权重和预热上下文');
+    expect(inputArea).toContain('服务累计处理');
+    expect(read('desktop/src/react/components/StatusBar.tsx')).toContain('服务累计处理');
+    expect(read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx')).toContain('服务累计处理');
+    expect(inputArea).not.toContain('本进程累计');
+    expect(read('desktop/src/react/components/StatusBar.tsx')).not.toContain('本进程累计');
     expect(inputArea).not.toContain('首次启动后的第一问正在暖机，可能 30-60 秒；后续会明显更快。');
     expect(inputArea).not.toContain('可接收');
   });

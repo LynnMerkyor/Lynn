@@ -47,7 +47,7 @@ function formatLocalQwenTag(status: LocalQwenStatus | null): string {
     const predictedTokens = Number(status?.runtime?.metrics?.predicted_tokens_total || 0);
     const totalTokens = Math.round(promptTokens + predictedTokens);
     return totalTokens > 0
-      ? `本地 Qwen3.5-9B 正在运行 · 本进程累计 ${totalTokens.toLocaleString()} tokens`
+      ? `本地 Qwen3.5-9B 正在运行 · 服务累计处理 ${totalTokens.toLocaleString()} tokens`
       : '本地 Qwen3.5-9B 正在运行';
   }
   if (endpointLoading) return '本地 Qwen3.5-9B 正在加载';

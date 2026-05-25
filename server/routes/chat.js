@@ -66,12 +66,14 @@ import {
 } from "../chat/session-persistence.js";
 import {
   LOCAL_QWEN35_DIRECT_ENDPOINT,
+  LOCAL_QWEN35_EMPTY_CONTENT_FALLBACK_MESSAGE,
   LOCAL_QWEN35_DIRECT_MAX_TOKENS,
   LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS,
   appendNoThinkHintToLastUserMessage,
   buildLocalQwen35DirectMessages,
   resolveLocalQwen35DirectMaxTokens,
   resolveLocalQwen35DirectThinking,
+  shouldRetryLocalQwen35WithoutThinking,
   shouldUseLocalQwen35DirectBridge,
 } from "../chat/local-qwen35-direct-policy.js";
 import {
@@ -82,6 +84,7 @@ import {
   rememberSuccessfulTool,
   summarizeToolExecution,
 } from "../chat/tool-summary.js";
+import { streamLocalQwen35Completion } from "../chat/local-qwen35-direct-runner.js";
 import {
   attachLocalQwen35BenchContext,
   isLocalQwen35Model,
@@ -866,12 +869,16 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     const maxTokens = Number.isFinite(Number(opts.maxTokens)) && Number(opts.maxTokens) > 0
       ? Number(opts.maxTokens)
       : LOCAL_QWEN35_DIRECT_MAX_TOKENS;
-    const messages = buildLocalQwen35DirectMessages(sessionPath, originalPromptText, effectivePromptText);
-    if (!enableThinking) appendNoThinkHintToLastUserMessage(messages);
     let assistantText = "";
     let reasoningText = "";
     let usage = null;
     const stopWarmupFeedback = startLocalQwen35WarmupFeedback(sessionPath, ss);
+    let warmupStopped = false;
+    const stopWarmupOnce = () => {
+      if (warmupStopped) return;
+      warmupStopped = true;
+      stopWarmupFeedback();
+    };
     let firstModelDeltaSeen = false;
     const timeoutMs = Number.isFinite(Number(opts.timeoutMs)) && Number(opts.timeoutMs) > 0
       ? Number(opts.timeoutMs)
@@ -879,97 +886,79 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     const earlyCloseVisibleChars = Number.isFinite(Number(opts.earlyCloseVisibleChars)) && Number(opts.earlyCloseVisibleChars) > 0
       ? Number(opts.earlyCloseVisibleChars)
       : 0;
-    const controller = new AbortController();
-    let abortedByTimeout = false;
-    const timeout = setTimeout(() => {
-      abortedByTimeout = true;
-      controller.abort();
-    }, timeoutMs);
-    try {
-      const res = await fetch(LOCAL_QWEN35_DIRECT_ENDPOINT, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          model: localModelId,
-          messages,
-          temperature: 0.2,
-          max_tokens: maxTokens,
-          stream: true,
-          chat_template_kwargs: { enable_thinking: enableThinking },
-          stream_options: { include_usage: true },
-        }),
+
+    const buildAttemptMessages = (attemptEnableThinking) => {
+      const attemptMessages = buildLocalQwen35DirectMessages(sessionPath, originalPromptText, effectivePromptText);
+      if (!attemptEnableThinking) appendNoThinkHintToLastUserMessage(attemptMessages);
+      return attemptMessages;
+    };
+
+    const runAttempt = async ({ attemptEnableThinking, attemptMaxTokens, attemptTimeoutMs, allowEarlyClose }) => {
+      const attemptMessages = buildAttemptMessages(attemptEnableThinking);
+      const attempt = await streamLocalQwen35Completion({
+        endpoint: LOCAL_QWEN35_DIRECT_ENDPOINT,
+        model: localModelId,
+        messages: attemptMessages,
+        enableThinking: attemptEnableThinking,
+        maxTokens: attemptMaxTokens,
+        timeoutMs: attemptTimeoutMs,
+        onFirstDelta: () => {
+          if (!firstModelDeltaSeen) {
+            firstModelDeltaSeen = true;
+            stopWarmupOnce();
+          }
+        },
+        onUsage: (nextUsage) => { usage = nextUsage; },
+        onReasoningDelta: (reasoningDelta) => {
+          reasoningText += reasoningDelta;
+          emitLocalThinkingDelta(sessionPath, ss, reasoningDelta);
+        },
+        onContentDelta: (contentDelta) => {
+          if (ss.isThinking) {
+            ss.isThinking = false;
+            emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
+          }
+          assistantText += contentDelta;
+          feedAssistantVisibleText(sessionPath, ss, contentDelta);
+        },
+        shouldStopEarly: () => (
+          !!(allowEarlyClose && earlyCloseVisibleChars && assistantText.trim().length >= earlyCloseVisibleChars)
+        ),
       });
-      if (!res.ok || !res.body) {
-        const body = await res.text().catch(() => "");
-        throw new Error(`local qwen direct bridge failed: HTTP ${res.status}${body ? ` ${body.slice(0, 240)}` : ""}`);
+      if (attempt.timedOutAfterVisibleOutput) {
+        debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] timed out after visible output · chars=${attempt.assistantText.length} timeout=${attemptTimeoutMs}ms · ${sessionPath}`);
       }
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let streamDone = false;
-      for await (const chunk of res.body) {
-        buffer += decoder.decode(chunk, { stream: true });
-        let newlineIdx = buffer.indexOf("\n");
-        while (newlineIdx >= 0) {
-          const line = buffer.slice(0, newlineIdx).trim();
-          buffer = buffer.slice(newlineIdx + 1);
-          newlineIdx = buffer.indexOf("\n");
-          if (!line || !line.startsWith("data:")) continue;
-          const data = line.slice(5).trim();
-          if (!data) continue;
-          if (data === "[DONE]") {
-            streamDone = true;
-            break;
-          }
-          let payload = null;
-          try {
-            payload = JSON.parse(data);
-          } catch {
-            continue;
-          }
-          if (payload?.usage) usage = payload.usage;
-          const delta = payload?.choices?.[0]?.delta || {};
-          const reasoningDelta = delta.reasoning_content || delta.reasoning || delta.thinking || "";
-          if (reasoningDelta) {
-            if (!firstModelDeltaSeen) {
-              firstModelDeltaSeen = true;
-              stopWarmupFeedback();
-            }
-            reasoningText += reasoningDelta;
-            emitLocalThinkingDelta(sessionPath, ss, reasoningDelta);
-          }
-          const contentDelta = delta.content || "";
-          if (contentDelta) {
-            if (!firstModelDeltaSeen) {
-              firstModelDeltaSeen = true;
-              stopWarmupFeedback();
-            }
-            if (ss.isThinking) {
-              ss.isThinking = false;
-              emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-            }
-            assistantText += contentDelta;
-            feedAssistantVisibleText(sessionPath, ss, contentDelta);
-            if (earlyCloseVisibleChars && assistantText.trim().length >= earlyCloseVisibleChars) {
-              streamDone = true;
-              break;
-            }
-          }
-        }
-        if (streamDone) {
-          try { await res.body.cancel?.(); } catch { /* body may already be closed */ }
-          break;
-        }
+      return attempt;
+    };
+
+    const firstAttempt = await runAttempt({
+      attemptEnableThinking: enableThinking,
+      attemptMaxTokens: maxTokens,
+      attemptTimeoutMs: timeoutMs,
+      allowEarlyClose: true,
+    });
+    if (shouldRetryLocalQwen35WithoutThinking({
+      enableThinking,
+      assistantText: firstAttempt.assistantText,
+      reasoningText: firstAttempt.reasoningText,
+    })) {
+      if (ss.isThinking) {
+        ss.isThinking = false;
+        emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
       }
-    } catch (err) {
-      if (!(abortedByTimeout && assistantText.trim())) {
-        throw err;
+      debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] thinking-only output, retrying with thinking-off · reasoningChars=${firstAttempt.reasoningText.length} · ${sessionPath}`);
+      const retryAttempt = await runAttempt({
+        attemptEnableThinking: false,
+        attemptMaxTokens: resolveLocalQwen35DirectMaxTokens(originalPromptText, false),
+        attemptTimeoutMs: 60_000,
+        allowEarlyClose: false,
+      });
+      if (!retryAttempt.assistantText.trim()) {
+        assistantText += LOCAL_QWEN35_EMPTY_CONTENT_FALLBACK_MESSAGE;
+        feedAssistantVisibleText(sessionPath, ss, LOCAL_QWEN35_EMPTY_CONTENT_FALLBACK_MESSAGE);
       }
-      debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] timed out after visible output · chars=${assistantText.length} timeout=${timeoutMs}ms · ${sessionPath}`);
-    } finally {
-      clearTimeout(timeout);
     }
-    stopWarmupFeedback();
+    stopWarmupOnce();
     // Local llama.cpp streams may finish with a short final chunk still held by
     // the ThinkTag/Mood/Xing parsers. Flush before turn_end so the real model
     // output is visible immediately instead of only appearing after reload.

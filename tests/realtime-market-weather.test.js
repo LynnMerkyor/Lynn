@@ -526,7 +526,9 @@ describe("realtime market/weather tools", () => {
     ]));
     expect(text).toContain("深圳 · 广东");
     expect(text).toContain("20.1~26.6°C");
+    expect(text).toContain("明天 2026-04-25");
     expect(text).toContain("降雨概率 25%");
+    expect(text).toContain("降雨判断: 有降雨可能");
   });
 
   it("extracts the city from spoken ASR filler before weather lookup", async () => {
@@ -612,7 +614,9 @@ describe("realtime market/weather tools", () => {
     expect(text).toContain("上海 当前天气");
     expect(text).toContain("天气: 晴");
     expect(text).toContain("24°C");
+    expect(text).toContain("今天 2026-04-24");
     expect(text).toContain("附近有零星小雨");
+    expect(text).toContain("降雨判断: 有降雨可能");
     expect(text).not.toContain("Pootung");
   });
 

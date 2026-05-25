@@ -662,7 +662,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         {(endpointActive || endpointForeign) && runtimeStats?.pid && <span>PID {runtimeStats.pid}</span>}
         {endpointForeign && <span>停止后可启用默认 9B</span>}
         {endpointLoading && <span>模型权重加载中</span>}
-        {endpointRunning && <span>{runtimeMetricsReady ? `本地端点累计处理 ${runtimeTokens.toLocaleString()} tokens` : '运行统计同步中'}</span>}
+        {endpointRunning && <span>{runtimeMetricsReady ? `服务累计处理 ${runtimeTokens.toLocaleString()} tokens` : '运行统计同步中'}</span>}
         {endpointRunning && slotLabel && <span>{slotLabel}</span>}
         <span>{plan.base_url || 'http://127.0.0.1:18099/v1'}</span>
       </div>
