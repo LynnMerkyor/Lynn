@@ -6,22 +6,22 @@
  * points for old tests/imports, but never schedule a model retry here.
  */
 
-export function internalRetryCount() {
+export function internalRetryCount(): number {
   return 0;
 }
 
-export function canScheduleInternalRetry() {
+export function canScheduleInternalRetry(): boolean {
   return false;
 }
 
-export function markInternalRetry() {
+export function markInternalRetry(): boolean {
   return false;
 }
 
-export function prepareInternalRetryStream() {
+export function prepareInternalRetryStream(): null {
   return null;
 }
 
-export function scheduleInternalRetry() {
+export function scheduleInternalRetry(): boolean {
   return false;
 }

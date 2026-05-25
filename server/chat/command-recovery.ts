@@ -11,11 +11,11 @@ import { classifyRequestedLocalMutation } from "./turn-retry-policy.js";
 //  Layer A — pure text utilities
 // ════════════════════════════
 
-export function shellQuote(value) {
+export function shellQuote(value: unknown): string {
   return `'${String(value || "").replace(/'/g, "'\\''")}'`;
 }
 
-export function isMeaningfulRecoveredBashCommand(command) {
+export function isMeaningfulRecoveredBashCommand(command: unknown): boolean {
   const trimmed = String(command || "").trim();
   if (!trimmed || trimmed.length > 2000) return false;
   if (/^[<>/\\\s]+$/.test(trimmed)) return false;
@@ -24,12 +24,12 @@ export function isMeaningfulRecoveredBashCommand(command) {
   return /[A-Za-z0-9_$~'"` .-]/.test(trimmed);
 }
 
-export function isInsidePath(child, parent) {
+export function isInsidePath(child: string, parent: string): boolean {
   const rel = path.relative(parent, child);
   return rel === "" || (!!rel && !rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
-export function extractPseudoBashCommand(text) {
+export function extractPseudoBashCommand(text: unknown): string {
   const raw = String(text || "");
   const patterns = [
     /<\|tool_code_begin\|>\s*bash\s*([\s\S]*?)(?:<\|tool_code_end\|>|$)/i,
@@ -45,7 +45,7 @@ export function extractPseudoBashCommand(text) {
   return "";
 }
 
-export function extractPseudoRemovePath(text) {
+export function extractPseudoRemovePath(text: unknown): string {
   const raw = String(text || "");
   const patterns = [
     /<remove[^>]*>\s*\(([^)]+)\)\s*<\/remove>/i,
@@ -59,7 +59,7 @@ export function extractPseudoRemovePath(text) {
   return "";
 }
 
-export function extractExplicitDeleteTargetFromPrompt(prompt) {
+export function extractExplicitDeleteTargetFromPrompt(prompt: unknown): string {
   const text = String(prompt || "");
   const match = text.match(/(?:删除|删掉|移除|delete|remove)\s*(?:当前目录下|当前目录中|当前文件夹下|current directory|current folder)?\s*[`"'“”]?([A-Za-z0-9][A-Za-z0-9._ -]{0,180}\.[A-Za-z0-9]{1,16})[`"'“”]?/i);
   const target = String(match?.[1] || "").trim();
@@ -67,7 +67,12 @@ export function extractExplicitDeleteTargetFromPrompt(prompt) {
   return target;
 }
 
-export function extractPromptDeleteExtensionRequest(prompt) {
+interface DeleteExtensionRequest {
+  folder: string;
+  extension: string;
+}
+
+export function extractPromptDeleteExtensionRequest(prompt: unknown): DeleteExtensionRequest | null {
   const text = String(prompt || "");
   if (!/(?:删除|删掉|清理|移除|delete|remove)/i.test(text)) return null;
   const wantsDownloads = /(?:下载文件夹|下载目录|Downloads?|download folder)/i.test(text);
@@ -84,7 +89,12 @@ export function extractPromptDeleteExtensionRequest(prompt) {
   };
 }
 
-export function buildDeleteExtensionCommand(request) {
+interface ExtensionRequest {
+  folder?: string;
+  extension?: string;
+}
+
+export function buildDeleteExtensionCommand(request: ExtensionRequest | null | undefined): string {
   if (!request?.folder || !request?.extension) return "";
   const quotedFolder = shellQuote(request.folder);
   const pattern = "*." + request.extension;
@@ -97,7 +107,7 @@ export function buildDeleteExtensionCommand(request) {
   ].join("; ");
 }
 
-export function normalizeMoveExtensionToken(token = "") {
+export function normalizeMoveExtensionToken(token: unknown = ""): string[] {
   const raw = String(token || "").trim().toLowerCase();
   if (!raw) return [];
   if (/^(?:html?|网页)$/.test(raw)) return ["html", "htm"];
@@ -110,15 +120,15 @@ export function normalizeMoveExtensionToken(token = "") {
   return [];
 }
 
-export function resolveKnownFolderFromText(text = "", fallback = "") {
+export function resolveKnownFolderFromText(text: unknown = "", fallback: unknown = ""): string {
   const raw = String(text || "");
   if (/(?:下载文件夹|下载目录|Downloads?|download folder)/i.test(raw)) return path.join(os.homedir(), "Downloads");
   if (/(?:桌面|Desktop)/i.test(raw)) return path.join(os.homedir(), "Desktop");
   if (/(?:文稿|文档|Documents?)/i.test(raw)) return path.join(os.homedir(), "Documents");
-  return fallback || "";
+  return String(fallback || "");
 }
 
-export function sanitizeFolderName(name = "") {
+export function sanitizeFolderName(name: unknown = ""): string {
   const cleaned = String(name || "")
     .replace(/["'`“”]/g, "")
     .replace(/(?:的)?(?:文件夹|目录|folder)(?:里|中|内)?$/i, "")
@@ -130,7 +140,7 @@ export function sanitizeFolderName(name = "") {
   return cleaned;
 }
 
-export function extractTargetFolderName(text = "") {
+export function extractTargetFolderName(text: unknown = ""): string {
   const raw = String(text || "");
   const patterns = [
     /(?:移动到|移到|挪到|放到|放进|放入|归档到|整理到|复制到|拷贝到)\s*([^\n，。；;,.!?！？]{1,80})/i,
@@ -144,7 +154,13 @@ export function extractTargetFolderName(text = "") {
   return "";
 }
 
-export function extractPromptMoveExtensionRequest(prompt) {
+interface MoveExtensionRequest {
+  sourceFolder: string;
+  targetFolder: string;
+  extensions: string[];
+}
+
+export function extractPromptMoveExtensionRequest(prompt: unknown): MoveExtensionRequest | null {
   const text = String(prompt || "");
   const requirement = classifyRequestedLocalMutation(text);
   if (!requirement?.requiresMove) return null;
@@ -185,7 +201,13 @@ export function extractPromptMoveExtensionRequest(prompt) {
   };
 }
 
-export function buildMoveExtensionCommand(request) {
+interface MoveExtensionCommandRequest {
+  sourceFolder?: string;
+  targetFolder?: string;
+  extensions?: string[];
+}
+
+export function buildMoveExtensionCommand(request: MoveExtensionCommandRequest | null | undefined): string {
   if (!request?.sourceFolder || !request?.targetFolder || !Array.isArray(request.extensions) || !request.extensions.length) {
     return "";
   }
@@ -209,7 +231,13 @@ export function buildMoveExtensionCommand(request) {
 //  Layer C — probe detection
 // ════════════════════════════
 
-export function looksLikeIncompleteLocalMutationProbe(toolName, args, resultText = "") {
+interface ProbeArgs {
+  command?: string;
+  query?: string;
+  cmd?: string;
+}
+
+export function looksLikeIncompleteLocalMutationProbe(toolName: unknown, args: ProbeArgs = {}, resultText: unknown = ""): boolean {
   const name = String(toolName || "");
   if (name !== "bash" && name !== "find" && name !== "ls") return false;
   const command = String(args?.command || args?.query || args?.cmd || "").trim();
@@ -221,7 +249,12 @@ export function looksLikeIncompleteLocalMutationProbe(toolName, args, resultText
     && !/(?:\brm\b|\bmv\b|\bcp\b|\bmkdir\b|\b-delete\b)/i.test(command);
 }
 
-export function looksLikeLocalMutationProbeCommand(toolRecord) {
+interface ToolRecord {
+  name?: string;
+  command?: string;
+}
+
+export function looksLikeLocalMutationProbeCommand(toolRecord: ToolRecord): boolean {
   const name = String(toolRecord?.name || "");
   const command = String(toolRecord?.command || "").trim();
   if (name !== "bash" && name !== "find" && name !== "ls") return false;
@@ -234,15 +267,30 @@ export function looksLikeLocalMutationProbeCommand(toolRecord) {
 //  Layer B — orchestration (needs ss/session/engine)
 // ════════════════════════════
 
-function resolveCwd(session, engine) {
+interface SessionLike {
+  sessionManager?: {
+    getCwd?: () => string;
+  };
+}
+
+interface EngineLike {
+  cwd?: string;
+}
+
+interface SSLike {
+  originalPromptText?: string;
+  effectivePromptText?: string;
+}
+
+function resolveCwd(session: SessionLike | null | undefined, engine: EngineLike | null | undefined): string {
   return session?.sessionManager?.getCwd?.() || engine?.cwd || process.cwd();
 }
 
-function promptTextFromSS(ss) {
+function promptTextFromSS(ss: SSLike | null | undefined): string {
   return ss?.originalPromptText || ss?.effectivePromptText || "";
 }
 
-export function extractRecoverablePseudoBashCommand(text, ss, session, engine) {
+export function extractRecoverablePseudoBashCommand(text: unknown, ss: SSLike | null | undefined, session: SessionLike | null | undefined, engine: EngineLike | null | undefined): string {
   const requirement = classifyRequestedLocalMutation(promptTextFromSS(ss));
   if (!requirement) return "";
 
@@ -262,7 +310,7 @@ export function extractRecoverablePseudoBashCommand(text, ss, session, engine) {
   return "rm -f " + shellQuote(resolved) + " && ls -la " + shellQuote(path.dirname(resolved));
 }
 
-export function buildExplicitPromptDeleteCommand(ss, session, engine) {
+export function buildExplicitPromptDeleteCommand(ss: SSLike | null | undefined, session: SessionLike | null | undefined, engine: EngineLike | null | undefined): string {
   const requirement = classifyRequestedLocalMutation(promptTextFromSS(ss));
   if (!requirement?.requiresDelete) return "";
   const prompt = promptTextFromSS(ss);
@@ -277,14 +325,18 @@ export function buildExplicitPromptDeleteCommand(ss, session, engine) {
   return isMeaningfulRecoveredBashCommand(command) ? command : "";
 }
 
-export function buildExplicitPromptMoveCommand(ss) {
+export function buildExplicitPromptMoveCommand(
+  ss: SSLike | null | undefined,
+  _session?: SessionLike | null,
+  _engine?: EngineLike | null,
+): string {
   const prompt = promptTextFromSS(ss);
   const request = extractPromptMoveExtensionRequest(prompt);
   if (!request) return "";
   return buildMoveExtensionCommand(request);
 }
 
-export function buildExplicitPromptMutationCommand(ss, session, engine) {
+export function buildExplicitPromptMutationCommand(ss: SSLike | null | undefined, session: SessionLike | null | undefined, engine: EngineLike | null | undefined): string {
   return buildExplicitPromptDeleteCommand(ss, session, engine)
     || buildExplicitPromptMoveCommand(ss, session, engine);
 }
