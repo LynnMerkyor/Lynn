@@ -1,12 +1,8 @@
-// @ts-check
+interface TranslationTargetSpec {
+  label: string;
+  aliases: readonly string[];
+}
 
-/**
- * @typedef {{ label: string, aliases: readonly string[] }} TranslationTargetSpec
- * @typedef {{ label: string, alias: string }} TranslationTargetAliasPair
- * @typedef {{ targetLanguage: string, sourceText: string }} QuickTranslationIntent
- */
-
-/** @type {readonly TranslationTargetSpec[]} */
 const TRANSLATION_TARGETS = [
   { label: "繁体中文", aliases: ["繁体中文", "繁中", "traditional chinese", "traditional"] },
   { label: "简体中文", aliases: ["简体中文", "简中", "simplified chinese", "simplified"] },
@@ -18,13 +14,23 @@ const TRANSLATION_TARGETS = [
   { label: "德文", aliases: ["德文", "德语", "german", "de"] },
   { label: "西班牙文", aliases: ["西班牙文", "西班牙语", "spanish", "es"] },
   { label: "粤语", aliases: ["粤语", "广东话", "cantonese"] },
-];
+] as const satisfies readonly TranslationTargetSpec[];
 
-/** @type {readonly string[]} */
-export const TRANSLATION_TARGET_LABELS = Object.freeze(TRANSLATION_TARGETS.map((target) => target.label));
+export type TranslationTargetLabel = (typeof TRANSLATION_TARGETS)[number]["label"];
 
-/** @type {readonly TranslationTargetAliasPair[]} */
-const TARGET_ALIAS_PAIRS = TRANSLATION_TARGETS.flatMap((target) => (
+interface TranslationTargetAliasPair {
+  label: TranslationTargetLabel;
+  alias: string;
+}
+
+export interface QuickTranslationIntent {
+  targetLanguage: TranslationTargetLabel;
+  sourceText: string;
+}
+
+export const TRANSLATION_TARGET_LABELS: readonly TranslationTargetLabel[] = Object.freeze(TRANSLATION_TARGETS.map((target) => target.label));
+
+const TARGET_ALIAS_PAIRS: readonly TranslationTargetAliasPair[] = TRANSLATION_TARGETS.flatMap((target) => (
   target.aliases.map((alias) => ({ label: target.label, alias }))
 ));
 
@@ -33,36 +39,22 @@ const TARGET_ALIAS_PATTERN = TARGET_ALIAS_PAIRS
   .sort((a, b) => b.length - a.length)
   .join("|");
 
-/**
- * @param {unknown} value
- * @returns {string}
- */
-function normalizeText(value) {
+function normalizeText(value: unknown): string {
   return String(value || "").replace(/\r\n?/g, "\n").trim();
 }
 
-/**
- * @param {unknown} value
- * @returns {string}
- */
-function normalizeKey(value) {
+function normalizeKey(value: unknown): string {
   return String(value || "").trim().toLowerCase().replace(/[\s_-]+/g, " ");
 }
 
-/**
- * @param {unknown} value
- * @returns {string}
- */
-function escapeRegExp(value) {
+function escapeRegExp(value: unknown): string {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/**
- * @param {unknown} value
- * @param {string | null} [fallback]
- * @returns {string | null}
- */
-export function normalizeTranslationTarget(value, fallback = null) {
+export function normalizeTranslationTarget(value: unknown): TranslationTargetLabel | null;
+export function normalizeTranslationTarget(value: unknown, fallback: null): TranslationTargetLabel | null;
+export function normalizeTranslationTarget<T extends string>(value: unknown, fallback: T): TranslationTargetLabel | T;
+export function normalizeTranslationTarget(value: unknown, fallback: string | null = null): TranslationTargetLabel | string | null {
   const raw = String(value || "").trim();
   if (!raw) return fallback;
   if (raw.length > 32 || /[\r\n{}[\]<>]/.test(raw)) return fallback;
@@ -73,11 +65,7 @@ export function normalizeTranslationTarget(value, fallback = null) {
   return fallback;
 }
 
-/**
- * @param {unknown} commandText
- * @returns {string | null}
- */
-function findTargetInCommand(commandText) {
+function findTargetInCommand(commandText: unknown): TranslationTargetLabel | null {
   const command = normalizeText(commandText);
   if (!command) return null;
   for (const { label, alias } of TARGET_ALIAS_PAIRS) {
@@ -90,40 +78,24 @@ function findTargetInCommand(commandText) {
   return null;
 }
 
-/**
- * @param {unknown} commandText
- * @returns {string}
- */
-function defaultTargetForCommand(commandText) {
+function defaultTargetForCommand(commandText: unknown): TranslationTargetLabel {
   const command = String(commandText || "");
   if (/\btranslate\b/i.test(command) && !/(?:翻译|译一下|译成|译为)/.test(command)) return "中文";
   return "英文";
 }
 
-/**
- * @param {unknown} text
- * @returns {string}
- */
-function stripWrappingQuotes(text) {
+function stripWrappingQuotes(text: unknown): string {
   return normalizeText(text)
     .replace(/^[“"']+/, "")
     .replace(/[”"']+$/, "")
     .trim();
 }
 
-/**
- * @param {unknown} text
- * @returns {boolean}
- */
-function isTranslationMetaQuestion(text) {
+function isTranslationMetaQuestion(text: unknown): boolean {
   return /(?:翻译功能|翻译插件|如何翻译|怎么翻译|翻译怎么用)/.test(String(text || ""));
 }
 
-/**
- * @param {unknown} commandText
- * @returns {boolean}
- */
-function isTranslationCommand(commandText) {
+function isTranslationCommand(commandText: unknown): boolean {
   const command = normalizeText(commandText).replace(/[：:]\s*$/, "");
   if (!command || isTranslationMetaQuestion(command)) return false;
   if (/[?？]/.test(command)) return false;
@@ -140,11 +112,7 @@ function isTranslationCommand(commandText) {
   return zhCommand.test(command) || enCommand.test(command);
 }
 
-/**
- * @param {string} text
- * @returns {QuickTranslationIntent | null}
- */
-function parseColonSource(text) {
+function parseColonSource(text: string): QuickTranslationIntent | null {
   const match = text.match(/[：:]/);
   if (!match) return null;
   const idx = match.index ?? -1;
@@ -158,11 +126,7 @@ function parseColonSource(text) {
   };
 }
 
-/**
- * @param {string} text
- * @returns {QuickTranslationIntent | null}
- */
-function parseBlockSource(text) {
+function parseBlockSource(text: string): QuickTranslationIntent | null {
   const lines = text.split("\n");
   if (lines.length < 2) return null;
   const command = lines[0].trim();
@@ -175,11 +139,7 @@ function parseBlockSource(text) {
   };
 }
 
-/**
- * @param {string} text
- * @returns {QuickTranslationIntent | null}
- */
-function parseInlineSource(text) {
+function parseInlineSource(text: string): QuickTranslationIntent | null {
   const zhMatch = text.match(new RegExp(
     `^(?:请|帮我|麻烦)?(?:把|将)\\s*([\\s\\S]{2,}?)\\s*(?:翻译|译)(?:成|为|到)\\s*(${TARGET_ALIAS_PATTERN})\\s*$`,
     "i",
@@ -203,21 +163,13 @@ function parseInlineSource(text) {
   return null;
 }
 
-/**
- * @param {unknown} raw
- * @returns {QuickTranslationIntent | null}
- */
-export function detectQuickTranslationIntent(raw) {
+export function detectQuickTranslationIntent(raw: unknown): QuickTranslationIntent | null {
   const text = normalizeText(raw);
   if (!text || isTranslationMetaQuestion(text)) return null;
   return parseBlockSource(text) || parseColonSource(text) || parseInlineSource(text);
 }
 
-/**
- * @param {Partial<QuickTranslationIntent> | null | undefined} intent
- * @returns {string}
- */
-export function buildQuickTranslationPrompt(intent) {
+export function buildQuickTranslationPrompt(intent: Partial<QuickTranslationIntent> | null | undefined): string {
   const sourceText = normalizeText(intent?.sourceText);
   return sourceText;
 }
