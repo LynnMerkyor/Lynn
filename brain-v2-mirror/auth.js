@@ -9,6 +9,11 @@ const DEVICE_AUTH_WINDOW_MS = Number(process.env.DEVICE_AUTH_WINDOW_MS || 5 * 60
 const DEVICE_NONCE_TTL_MS = Number(process.env.DEVICE_NONCE_TTL_MS || 10 * 60 * 1000);
 const DEVICES_DIR = process.env.LOBSTER_DEVICES_DIR || '/opt/lobster-brain/data/devices';
 
+// 2026-05-25 P2-3: nonce cache memory DoS 防护。
+// Map 默认无大小限制,未授权攻击者可在 device-lookup 前 spray 100k nonces/sec 撑爆内存。
+// 加 LRU cap:超过 NONCE_CACHE_MAX 时按 expiresAt 早→晚 evict 最早的。
+// 上限按 100 req/s × 600s TTL = 60k 计,默认 100k 留余量,可 env 调。
+const NONCE_CACHE_MAX = Number(process.env.DEVICE_NONCE_CACHE_MAX || 100_000);
 const _nonceCache = new Map(); // `${agentKey}:${nonce}` → expiresAt
 
 function deviceFilePath(key) {
@@ -52,8 +57,20 @@ function cleanupNonces(now = Date.now()) {
   }
 }
 
+// 2026-05-25 P2-3: LRU 限流。当 cache 达到 NONCE_CACHE_MAX 时,evict 最早入的条目
+// (Map 的迭代顺序就是 insertion order)。结合 cleanupNonces 的 expiry-based 清理,
+// 双层防御对抗 nonce-spray DoS。
+function evictOldestIfFull() {
+  while (_nonceCache.size >= NONCE_CACHE_MAX) {
+    const oldestKey = _nonceCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    _nonceCache.delete(oldestKey);
+  }
+}
+
 export function rememberNonce(agentKey, nonce, now = Date.now()) {
   cleanupNonces(now);
+  evictOldestIfFull();
   const k = `${agentKey}:${nonce}`;
   if (_nonceCache.has(k)) return false;
   _nonceCache.set(k, now + DEVICE_NONCE_TTL_MS);
@@ -94,6 +111,13 @@ export async function verifySignedRequest(req, { pathname = '/v2/chat/completion
   const parsedTs = Number(timestamp);
   if (!Number.isFinite(parsedTs)) throw new AuthError(401, 'invalid device timestamp');
   if (Math.abs(Date.now() - parsedTs) > DEVICE_AUTH_WINDOW_MS) throw new AuthError(401, 'device signature expired');
+
+  // 2026-05-25 P2-3: 把 device existence check 移到 rememberNonce 之前。
+  // 未授权 agentKey spray nonces 时,直接在 loadDevice 阶段 reject,不会污染 _nonceCache。
+  // 已注册 agent 的 nonce 仍正常 dedupe。
+  const device = await loadDevice(agentKey);
+  if (!device?.secret) throw new AuthError(401, 'device not registered');
+
   if (!rememberNonce(agentKey, nonce)) {
     if (strict) {
       log && log('warn', 'auth nonce replayed for ' + agentKey + ' — strict reject');
@@ -102,8 +126,7 @@ export async function verifySignedRequest(req, { pathname = '/v2/chat/completion
     log && log('warn', 'auth nonce replayed for ' + agentKey + ' — relaxed allow');
   }
 
-  const device = await loadDevice(agentKey);
-  if (!device?.secret) throw new AuthError(401, 'device not registered');
+
   if (device.disabled) throw new AuthError(403, 'device disabled');
 
   const [version, actualSig = ''] = signatureHeader.split(':', 2);
