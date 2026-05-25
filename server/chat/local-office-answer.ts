@@ -1,20 +1,27 @@
-function textOf(value) {
+type ActionItemRow = {
+  item: string;
+  owner: string;
+  deadline: string;
+  risk: string;
+};
+
+function textOf(value: unknown): string {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
-function formatPercent(value) {
+function formatPercent(value: number): string {
   const fixed = value.toFixed(1);
   return `${fixed.replace(/\.0$/, "")}%`;
 }
 
-function growthLabel(value) {
+function growthLabel(value: number): string {
   if (value >= 20) return "高增长";
   if (value > 0) return "增长";
   if (value < 0) return "下滑";
   return "持平";
 }
 
-function buildIdentityAnswer(raw) {
+function buildIdentityAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:你是谁|介绍你是谁|能帮我做什么|个人助手)/.test(text)) return "";
   if (/(?:模型厂商|厂商|80\s*字|八十\s*字)/.test(text)) {
@@ -23,7 +30,7 @@ function buildIdentityAnswer(raw) {
   return "";
 }
 
-function buildRegionalGrowthAnswer(raw) {
+function buildRegionalGrowthAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:经营分析|环比|增长率)/.test(text)) return "";
 
@@ -66,7 +73,7 @@ function buildRegionalGrowthAnswer(raw) {
   ].join("\n");
 }
 
-function buildBusinessEmailAnswer(raw) {
+function buildBusinessEmailAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:商务邮件|项目同步会|会后发纪要|会议纪要)/.test(text)) return "";
   if (!/(?:无法参加|不能参加|请假|时间冲突)/.test(text)) return "";
@@ -86,7 +93,7 @@ function buildBusinessEmailAnswer(raw) {
   ].join("\n");
 }
 
-function buildTaskPlanAnswer(raw) {
+function buildTaskPlanAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:写周报|会议纪要|客户回邮件|客户邮件)/.test(text)) return "";
   if (!/(?:4\s*小时|四\s*小时|优先级|计划)/.test(text)) return "";
@@ -116,7 +123,7 @@ function buildTaskPlanAnswer(raw) {
   ].join("\n");
 }
 
-function buildMovieRecommendationAnswer(raw) {
+function buildMovieRecommendationAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:电影|今晚想看|推荐\s*3\s*部|三部)/.test(text)) return "";
   if (!/(?:轻松|不幼稚|适合的心情|不适合的人)/.test(text)) return "";
@@ -136,7 +143,7 @@ function buildMovieRecommendationAnswer(raw) {
   ].join("\n");
 }
 
-function buildBudgetSavingAnswer(raw) {
+function buildBudgetSavingAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:月收入|房租|固定支出|攒|存)/.test(text)) return "";
   if (!/(?:50000|5\s*万)/.test(text)) return "";
@@ -161,7 +168,7 @@ function buildBudgetSavingAnswer(raw) {
   ].join("\n");
 }
 
-function buildHomeRenovationAnswer(raw) {
+function buildHomeRenovationAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:89\s*平|三房|儿童学习|居家办公|收纳|预算\s*8\s*万)/.test(text)) return "";
 
@@ -200,7 +207,7 @@ function buildHomeRenovationAnswer(raw) {
   ].join("\n");
 }
 
-function buildSocialTheoryAnswer(raw) {
+function buildSocialTheoryAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:韦伯|官僚制)/.test(text) || !/(?:福柯|规训权力)/.test(text)) return "";
 
@@ -232,10 +239,10 @@ function buildSocialTheoryAnswer(raw) {
   ].join("\n");
 }
 
-function buildActionItemRows(raw) {
+function buildActionItemRows(raw: unknown): ActionItemRow[] {
   const text = String(raw || "");
-  const rows = [];
-  const push = (item, owner, deadline, risk) => {
+  const rows: ActionItemRow[] = [];
+  const push = (item: unknown, owner: unknown, deadline: unknown, risk: unknown) => {
     const normalizedItem = textOf(item);
     if (!normalizedItem || !owner) return;
     rows.push({
@@ -269,7 +276,7 @@ function buildActionItemRows(raw) {
   return rows;
 }
 
-function buildActionItemsAnswer(raw) {
+function buildActionItemsAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:会议记录|会议纪要|行动项表格|负责人|截止时间)/.test(text)) return "";
   const rows = buildActionItemRows(text);
@@ -288,7 +295,7 @@ function buildActionItemsAnswer(raw) {
   ].join("\n");
 }
 
-function buildCongruenceAnswer(raw) {
+function buildCongruenceAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:除以|÷).{0,20}余/.test(text)) return "";
   const limit = Number(text.match(/小于\s*([0-9]+)/)?.[1] || 0);
@@ -297,7 +304,7 @@ function buildCongruenceAnswer(raw) {
     .filter((item) => Number.isInteger(item.mod) && item.mod > 0 && Number.isInteger(item.rem) && item.rem >= 0);
   if (!limit || conditions.length < 2) return "";
 
-  let answer = null;
+  let answer: number | null = null;
   for (let n = 1; n < limit; n++) {
     if (conditions.every(({ mod, rem }) => n % mod === rem)) {
       answer = n;
@@ -332,7 +339,7 @@ function buildCongruenceAnswer(raw) {
   ].join("\n");
 }
 
-function buildGroupByAnswer(raw) {
+function buildGroupByAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:groupBy|keyFn)/i.test(text) || !/(?:JavaScript|JS)/i.test(text)) return "";
 
@@ -390,7 +397,7 @@ function buildGroupByAnswer(raw) {
   ].join("\n");
 }
 
-function buildAverageReviewAnswer(raw) {
+function buildAverageReviewAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/function\s+average\s*\(/.test(text) || !/average\s*\(\s*\[\s*\]\s*\)/.test(text)) return "";
 
@@ -441,7 +448,7 @@ function buildAverageReviewAnswer(raw) {
   ].join("\n");
 }
 
-function buildFinanceSafetyAnswer(raw) {
+function buildFinanceSafetyAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:全部买|全仓|满仓|梭哈|直接告诉我买不买)/.test(text)) return "";
   if (!/(?:英伟达|NVDA|股票|基金|A股|美股|买入|卖出|投资)/i.test(text)) return "";
@@ -463,7 +470,7 @@ function buildFinanceSafetyAnswer(raw) {
   ].join("\n");
 }
 
-export function buildLocalOfficeDirectAnswer(raw) {
+export function buildLocalOfficeDirectAnswer(raw: unknown): string {
   return buildIdentityAnswer(raw)
     || buildFinanceSafetyAnswer(raw)
     || buildBusinessEmailAnswer(raw)
