@@ -9,9 +9,23 @@ import fs from "fs";
 import path from "path";
 import { t } from "../../../shared/i18n-runtime.js";
 
-export function checkConfigYaml({ agentDir, lynnHome }) {
+type CompatCheckResult = {
+  fixed: true;
+  message: string;
+};
+
+type ConfigYamlCheckContext = {
+  agentDir: string;
+  lynnHome?: string;
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+export function checkConfigYaml({ agentDir }: ConfigYamlCheckContext): CompatCheckResult | undefined {
   const configPath = path.join(agentDir, "config.yaml");
-  if (!fs.existsSync(configPath)) return;
+  if (!fs.existsSync(configPath)) return undefined;
 
   try {
     const content = fs.readFileSync(configPath, "utf-8");
@@ -20,6 +34,7 @@ export function checkConfigYaml({ agentDir, lynnHome }) {
     if (!content.trim()) throw new Error(t("error.compatConfigEmpty"));
     if (!content.includes(":")) throw new Error(t("error.compatConfigInvalid"));
   } catch (err) {
+    const message = errorMessage(err);
     const backupPath = configPath + `.bak-${Date.now()}`;
     try {
       fs.renameSync(configPath, backupPath);
@@ -33,11 +48,13 @@ export function checkConfigYaml({ agentDir, lynnHome }) {
       try {
         if (fs.existsSync(tpl)) {
           fs.copyFileSync(tpl, configPath);
-          return { fixed: true, message: t("error.compatConfigCorrupted", { msg: err.message }) };
+          return { fixed: true, message: t("error.compatConfigCorrupted", { msg: message }) };
         }
       } catch {}
     }
 
-    return { fixed: true, message: t("error.compatConfigBackedUp", { msg: err.message, backup: path.basename(backupPath) }) };
+    return { fixed: true, message: t("error.compatConfigBackedUp", { msg: message, backup: path.basename(backupPath) }) };
   }
+
+  return undefined;
 }

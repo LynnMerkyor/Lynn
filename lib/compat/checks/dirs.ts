@@ -17,9 +17,18 @@ const REQUIRED_AGENT_DIRS = [
   "book",
   "activity",
   "avatars",
-];
+] as const;
 
-export function checkDirs({ agentDir }) {
+type CompatCheckResult = {
+  fixed: true;
+  message: string;
+};
+
+type DirsCheckContext = {
+  agentDir: string;
+};
+
+export function checkDirs({ agentDir }: DirsCheckContext): CompatCheckResult | undefined {
   let created = 0;
 
   for (const dir of REQUIRED_AGENT_DIRS) {
@@ -33,4 +42,6 @@ export function checkDirs({ agentDir }) {
   if (created > 0) {
     return { fixed: true, message: t("error.compatDirCreated", { count: created }) };
   }
+
+  return undefined;
 }
