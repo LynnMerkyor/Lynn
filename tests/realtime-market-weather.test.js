@@ -525,8 +525,9 @@ describe("realtime market/weather tools", () => {
       }),
     ]));
     expect(text).toContain("深圳 · 广东");
-    expect(text).toContain("20.1~26.6°C");
+    expect(text).toContain("问题匹配日期：明天");
     expect(text).toContain("明天 2026-04-25");
+    expect(text).toContain("21~28°C");
     expect(text).toContain("降雨概率 25%");
     expect(text).toContain("降雨判断: 有降雨可能");
   });
@@ -593,12 +594,20 @@ describe("realtime market/weather tools", () => {
             windspeedKmph: "10",
             precipMM: "0.0",
           }],
-          weather: [{
-            date: "2026-04-24",
-            mintempC: "18",
-            maxtempC: "26",
-            hourly: [{ weatherDesc: [{ value: "Patchy rain nearby" }] }],
-          }],
+          weather: [
+            {
+              date: "2026-04-24",
+              mintempC: "18",
+              maxtempC: "26",
+              hourly: [{ weatherDesc: [{ value: "Sunny" }] }],
+            },
+            {
+              date: "2026-04-25",
+              mintempC: "19",
+              maxtempC: "27",
+              hourly: [{ weatherDesc: [{ value: "Patchy rain nearby" }] }],
+            },
+          ],
         });
       }
       throw new Error(`unexpected fetch ${href}`);
@@ -614,10 +623,52 @@ describe("realtime market/weather tools", () => {
     expect(text).toContain("上海 当前天气");
     expect(text).toContain("天气: 晴");
     expect(text).toContain("24°C");
-    expect(text).toContain("今天 2026-04-24");
+    expect(text).toContain("问题匹配日期：明天");
+    expect(text).toContain("明天 2026-04-25");
+    expect(text).not.toContain("今天 2026-04-24");
     expect(text).toContain("附近有零星小雨");
     expect(text).toContain("降雨判断: 有降雨可能");
     expect(text).not.toContain("Pootung");
+  });
+
+  it("treats future two days as tomorrow and the day after tomorrow", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      const href = String(url);
+      if (href.includes("wttr.in")) throw new Error("wttr unavailable");
+      if (href.includes("api.open-meteo.com")) {
+        expect(href).toContain("forecast_days=3");
+        return jsonResponse({
+          current: {
+            temperature_2m: 27,
+            relative_humidity_2m: 80,
+            precipitation: 0,
+            weather_code: 3,
+            wind_speed_10m: 6,
+          },
+          daily: {
+            time: ["2026-05-25", "2026-05-26", "2026-05-27"],
+            weather_code: [80, 81, 3],
+            temperature_2m_min: [24, 25, 24],
+            temperature_2m_max: [33, 31, 30],
+            precipitation_probability_max: [95, 97, 77],
+            precipitation_sum: [4, 3, 0],
+          },
+        });
+      }
+      throw new Error(`unexpected fetch ${href}`);
+    }));
+
+    const result = await createWeatherTool().execute("test", {
+      query: "杭州未来两天的天气",
+    });
+    const text = result.content[0].text;
+
+    expect(result.details.location).toBe("杭州");
+    expect(text).toContain("问题匹配日期：未来2天（不含今天）");
+    expect(text).toContain("明天 2026-05-26");
+    expect(text).toContain("后天 2026-05-27");
+    expect(text).not.toContain("今天 2026-05-25");
+    expect(text).toContain("降雨判断: 有降雨可能");
   });
 
   it("extracts common city names from rain questions without a weather keyword", async () => {
