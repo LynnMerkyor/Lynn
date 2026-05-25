@@ -12,21 +12,69 @@ import { Type } from "@sinclair/typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 import { t } from "../../server/i18n.js";
 
-/**
- * 创建 todo 工具定义
- * @returns {import('@mariozechner/pi-coding-agent').ToolDefinition}
- */
+type TodoAction = "list" | "add" | "toggle" | "clear";
+
+interface TodoItem {
+  id: number;
+  text: string;
+  done: boolean;
+}
+
+interface TodoParams {
+  action: TodoAction | string;
+  text?: string;
+  id?: number;
+}
+
+interface TodoDetails {
+  action: string;
+  todos: TodoItem[];
+  nextId: number;
+  error?: string;
+}
+
+interface ToolResultMessage {
+  role?: string;
+  toolName?: string;
+  details?: {
+    todos?: TodoItem[];
+    nextId?: number;
+  };
+}
+
+interface SessionEntry {
+  type?: string;
+  message?: ToolResultMessage;
+}
+
+interface TodoExecutionContext {
+  sessionManager?: {
+    getBranch?: () => SessionEntry[] | null | undefined;
+    getSessionId?: () => string | null | undefined;
+  };
+}
+
+interface TodoToolResult {
+  content: Array<{ type: "text"; text: string }>;
+  details: TodoDetails;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** 创建 todo 工具定义 */
 export function createTodoTool() {
   // session 内状态
-  let todos = [];
+  let todos: TodoItem[] = [];
   let nextId = 1;
-  let _reconstructedSessionId = null;
+  let _reconstructedSessionId: string | null = null;
 
   /**
    * 从当前 session 分支中重建 todo 状态
    * 扫描所有 toolResult(todo) entries，按顺序重放
    */
-  function reconstructFromSession(ctx) {
+  function reconstructFromSession(ctx?: TodoExecutionContext) {
     todos = [];
     nextId = 1;
 
@@ -37,6 +85,7 @@ export function createTodoTool() {
       for (const entry of branch) {
         if (entry.type !== "message") continue;
         const msg = entry.message;
+        if (!msg) continue;
         if (msg.role !== "toolResult" || msg.toolName !== "todo") continue;
 
         const details = msg.details;
@@ -46,7 +95,7 @@ export function createTodoTool() {
         }
       }
     } catch (err) {
-      console.error("[todo] state reconstruction failed:", err.message);
+      console.error("[todo] state reconstruction failed:", errorMessage(err));
     }
   }
 
@@ -54,7 +103,7 @@ export function createTodoTool() {
    * 确保状态与当前 session 同步
    * 如果 session 变了（session ID 不同），重新扫描历史
    */
-  function ensureState(ctx) {
+  function ensureState(ctx?: TodoExecutionContext) {
     const sessionId = ctx?.sessionManager?.getSessionId?.();
     if (sessionId && sessionId !== _reconstructedSessionId) {
       reconstructFromSession(ctx);
@@ -63,7 +112,7 @@ export function createTodoTool() {
   }
 
   /** 构建当前快照（写入 details 供未来重建） */
-  function snapshot(action) {
+  function snapshot(action: string): TodoDetails {
     return { action, todos: [...todos], nextId };
   }
 
@@ -80,7 +129,13 @@ export function createTodoTool() {
       id: Type.Optional(Type.Number({ description: t("toolDef.todo.idDesc") })),
     }),
 
-    execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
+    execute: async (
+      _toolCallId: string,
+      params: TodoParams,
+      _signal?: AbortSignal,
+      _onUpdate?: unknown,
+      ctx?: TodoExecutionContext,
+    ): Promise<TodoToolResult> => {
       // 确保状态与当前 session 同步
       ensureState(ctx);
 
