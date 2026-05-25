@@ -252,15 +252,18 @@ export interface PlatformApi {
   getOnboardingDefaults?(): Promise<{ workspacePath: string; trustedRoots: string[]; installRoot?: string | null; desktopRoot?: string | null }>;
   selectSkill(): Promise<string | null>;
   llamacppOpenModelDir?(targetPath?: string | null): Promise<{ ok: boolean; path?: string; revealedPath?: string; error?: string | null }>;
-  llamacppStartCustomModel?(modelPath: string): Promise<{ ok: boolean; modelId?: string; modelPath?: string; reason?: string }>;
+  llamacppStartCustomModel?(modelPath: string): Promise<{ ok: boolean; modelId?: string; modelPath?: string; reason?: string; detail?: string }>;
   llamacppStop?(): Promise<{ ok: boolean; reason?: string }>;
   llamacppStartDownload?(payload?: { modelId?: string }): Promise<{
     ok: boolean;
     alreadyRunning?: boolean;
+    alreadyIdle?: boolean;
     reason?: string;
+    detail?: string;
     modelId?: string;
     target?: string;
     parallelSegments?: number;
+    availableModelIds?: string[];
   }>;
   readFile(path: string): Promise<string | null>;
   writeFile(filePath: string, content: string): Promise<boolean>;

@@ -2850,9 +2850,10 @@ wrapIpcHandler("select-gguf-model", async (event) => {
     ],
   });
   if (result.canceled || !result.filePaths.length) return null;
-  const selectedPath = result.filePaths[0];
-  grantWebContentsAccess(event.sender, selectedPath, "read");
-  return selectedPath;
+  const parsedPath = parseGgufModelPathPayload(result.filePaths[0]);
+  if (!parsedPath.ok || !fs.existsSync(parsedPath.modelPath)) return null;
+  grantWebContentsAccess(event.sender, parsedPath.modelPath, "read");
+  return parsedPath.modelPath;
 });
 
 // ── Skill 预览窗口 IPC ──
@@ -3523,6 +3524,67 @@ let lastLlamacppState = { status: "idle" };
 let activeModelDownloader = null;
 let lastModelDownloadState = { state: "idle" };
 
+const LOCAL_MODEL_IPC = Object.freeze({
+  state: "llamacpp:state",
+  stop: "llamacpp:stop",
+  startDownload: "llamacpp:start-download",
+  pauseDownload: "llamacpp:pause-download",
+  cancelDownload: "llamacpp:cancel-download",
+  sources: "llamacpp:sources",
+  openModelDir: "llamacpp:open-model-dir",
+  startCustomModel: "llamacpp:start-custom-model",
+  downloadProgress: "llamacpp:download-progress",
+  downloadState: "llamacpp:download-state",
+});
+
+function ipcOk(payload = {}) {
+  return { ok: true, ...payload };
+}
+
+function ipcError(reason, payload = {}) {
+  return { ok: false, reason: String(reason || "unknown-error"), ...payload };
+}
+
+function parseStartDownloadPayload(payload) {
+  if (payload == null) return { ok: true, modelId: undefined };
+  if (typeof payload === "string") {
+    const modelId = payload.trim();
+    return modelId ? validateLocalModelId(modelId) : { ok: true, modelId: undefined };
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return ipcError("invalid-payload");
+  }
+  if (payload.modelId == null) return { ok: true, modelId: undefined };
+  if (typeof payload.modelId !== "string") return ipcError("invalid-model-id");
+  const modelId = payload.modelId.trim();
+  return modelId ? validateLocalModelId(modelId) : { ok: true, modelId: undefined };
+}
+
+function validateLocalModelId(modelId) {
+  if (!/^[A-Za-z0-9_.-]{1,96}$/.test(modelId)) return ipcError("invalid-model-id");
+  return { ok: true, modelId };
+}
+
+function parseGgufModelPathPayload(payload, key = "modelPath") {
+  const rawPath = typeof payload === "string" ? payload : payload?.[key];
+  if (typeof rawPath !== "string" || !rawPath.trim()) return ipcError("missing-model-path");
+  if (rawPath.includes("\0")) return ipcError("invalid-model-path");
+  const modelPath = path.resolve(rawPath);
+  if (path.extname(modelPath).toLowerCase() !== ".gguf") return ipcError("not-gguf");
+  return { ok: true, modelPath };
+}
+
+function getAllowedLocalModelDirs() {
+  return [path.join(lynnHome, "models"), path.join(os.homedir(), "Models", "Lynn")];
+}
+
+function isLocalModelPathAllowed(event, modelPath) {
+  const canonical = resolveCanonicalPath(modelPath);
+  if (!canonical) return false;
+  if (getAllowedLocalModelDirs().some((root) => isPathInsideRoot(canonical, root))) return true;
+  return canReadPath(event?.sender, canonical).allowed;
+}
+
 function broadcastToAllWindows(channel, payload) {
   try {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -3531,6 +3593,18 @@ function broadcastToAllWindows(channel, payload) {
   } catch (err) {
     console.warn(`[broadcast:${channel}]`, err?.message || err);
   }
+}
+
+function setLlamacppFailureState(reason, patch = {}) {
+  lastLlamacppState = {
+    ...(lastLlamacppState || {}),
+    ...patch,
+    status: "failed",
+    healthy: false,
+    reason: String(reason || "unknown-error"),
+    ts: Date.now(),
+  };
+  broadcastToAllWindows(LOCAL_MODEL_IPC.state, lastLlamacppState);
 }
 
 function startLlamacpp() {
@@ -3544,13 +3618,15 @@ function startLlamacpp() {
       },
       onState: (state) => {
         lastLlamacppState = state;
-        broadcastToAllWindows("llamacpp:state", state);
+        broadcastToAllWindows(LOCAL_MODEL_IPC.state, state);
       },
     });
     void llamacpp.start();
   } catch (err) {
-    console.warn("[llamacpp] start failed:", err?.message || err);
+    const reason = err?.message || err;
+    console.warn("[llamacpp] start failed:", reason);
     llamacpp = null;
+    setLlamacppFailureState(reason);
   }
 }
 
@@ -3567,24 +3643,31 @@ async function startLlamacppCustomModel(modelPath) {
     customModel: true,
     ts: Date.now(),
   };
-  broadcastToAllWindows("llamacpp:state", lastLlamacppState);
-  llamacpp = new LlamaCppManager({
-    modelId: modelAlias,
-    modelFileName: path.basename(modelPath),
-    modelPath,
-    serverArgs: launchProfile.args,
-    onLog: (level, msg) => {
-      if (level === "error") console.error(msg);
-      else if (level === "warn") console.warn(msg);
-      else console.log(msg);
-    },
-    onState: (state) => {
-      lastLlamacppState = { ...state, modelId: modelAlias, modelPath, customModel: true };
-      broadcastToAllWindows("llamacpp:state", lastLlamacppState);
-    },
-  });
-  void llamacpp.start();
-  return { ok: true, modelId: modelAlias, modelPath };
+  broadcastToAllWindows(LOCAL_MODEL_IPC.state, lastLlamacppState);
+  try {
+    llamacpp = new LlamaCppManager({
+      modelId: modelAlias,
+      modelFileName: path.basename(modelPath),
+      modelPath,
+      serverArgs: launchProfile.args,
+      onLog: (level, msg) => {
+        if (level === "error") console.error(msg);
+        else if (level === "warn") console.warn(msg);
+        else console.log(msg);
+      },
+      onState: (state) => {
+        lastLlamacppState = { ...state, modelId: modelAlias, modelPath, customModel: true };
+        broadcastToAllWindows(LOCAL_MODEL_IPC.state, lastLlamacppState);
+      },
+    });
+    void llamacpp.start();
+    return ipcOk({ modelId: modelAlias, modelPath });
+  } catch (err) {
+    const reason = err?.message || err;
+    llamacpp = null;
+    setLlamacppFailureState(reason, { modelId: modelAlias, modelPath, customModel: true });
+    throw err;
+  }
 }
 function stopLlamacpp() {
   if (!llamacpp) return;
@@ -3598,12 +3681,12 @@ wrapIpcHandler("llamacpp-status", () => (llamacpp ? llamacpp.getStatus() : { sto
 
 // New unified state channel — returns latest cached llamacpp manager state
 // plus pending downloader state so renderer can hydrate in one round-trip.
-wrapIpcHandler("llamacpp:state", () => ({
+wrapIpcHandler(LOCAL_MODEL_IPC.state, () => ({
   manager: llamacpp ? llamacpp.getStatus() : { ...lastLlamacppState, stopped: true },
   download: { ...lastModelDownloadState },
 }));
 
-wrapIpcHandler("llamacpp:stop", async () => {
+wrapIpcHandler(LOCAL_MODEL_IPC.stop, async () => {
   try {
     stopLlamacpp();
     lastLlamacppState = {
@@ -3613,37 +3696,37 @@ wrapIpcHandler("llamacpp:stop", async () => {
       healthy: false,
       ts: Date.now(),
     };
-    broadcastToAllWindows("llamacpp:state", lastLlamacppState);
-    return { ok: true };
+    broadcastToAllWindows(LOCAL_MODEL_IPC.state, lastLlamacppState);
+    return ipcOk();
   } catch (err) {
-    return { ok: false, reason: String(err?.message || err) };
+    return ipcError(err?.message || err);
   }
 });
 
 // Trigger model download. Returns immediately; progress streams via
-// "llamacpp:download-progress" / "llamacpp:download-state" channels.
-wrapIpcHandler("llamacpp:start-download", async (event, payload = {}) => {
-  const requestedModelId = typeof payload === "string" ? payload : payload?.modelId;
-  const resolvedProfile = resolveLlamacppDownloadProfile(requestedModelId);
+// LOCAL_MODEL_IPC.downloadProgress / LOCAL_MODEL_IPC.downloadState channels.
+wrapIpcHandler(LOCAL_MODEL_IPC.startDownload, async (event, payload = {}) => {
+  const parsedPayload = parseStartDownloadPayload(payload);
+  if (!parsedPayload.ok) return parsedPayload;
+  const resolvedProfile = resolveLlamacppDownloadProfile(parsedPayload.modelId);
   if (!resolvedProfile.known) {
-    return {
-      ok: false,
-      reason: "unknown-model-id",
+    return ipcError("unknown-model-id", {
       modelId: resolvedProfile.requestedModelId,
       availableModelIds: listLlamacppDownloadProfiles().map((profile) => profile.modelId),
-    };
+    });
   }
   const profile = resolvedProfile.profile;
   if (activeModelDownloader && (lastModelDownloadState.state === "downloading"
       || lastModelDownloadState.state === "verifying")) {
     const runningModelId = lastModelDownloadState.modelId || "qwen35-9b-q4km-imatrix";
-    return {
-      ok: runningModelId === profile.modelId,
+    const payload = {
       alreadyRunning: true,
-      reason: runningModelId === profile.modelId ? undefined : "another-download-running",
       modelId: runningModelId,
       target: lastModelDownloadState.target,
     };
+    return runningModelId === profile.modelId
+      ? ipcOk(payload)
+      : ipcError("another-download-running", payload);
   }
   const target = path.join(lynnHome, "models", profile.fileName);
 
@@ -3659,13 +3742,11 @@ wrapIpcHandler("llamacpp:start-download", async (event, payload = {}) => {
         if (Number.isFinite(free) && free < need) {
           const freeGB = (free / 1024 / 1024 / 1024).toFixed(2);
           const needGB = (need / 1024 / 1024 / 1024).toFixed(2);
-          return {
-            ok: false,
-            reason: "insufficient-disk-space",
+          return ipcError("insufficient-disk-space", {
             detail: `Need ~${needGB} GB free in ${modelsDir}, have ${freeGB} GB. Free up space and retry.`,
             modelId: profile.modelId,
             target,
-          };
+          });
         }
       }
     } catch (err) {
@@ -3674,22 +3755,31 @@ wrapIpcHandler("llamacpp:start-download", async (event, payload = {}) => {
     }
   }
 
-  const downloader = new ModelDownloader({
-    target,
-    fileName: profile.fileName,
-    expectedSize: profile.expectedSize,
-    expectedSha256: profile.expectedSha256,
-    sources: profile.sources,
-    parallelSegments: profile.parallelSegments,
-  });
+  let downloader;
+  try {
+    downloader = new ModelDownloader({
+      target,
+      fileName: profile.fileName,
+      expectedSize: profile.expectedSize,
+      expectedSha256: profile.expectedSha256,
+      sources: profile.sources,
+      parallelSegments: profile.parallelSegments,
+    });
+  } catch (err) {
+    return ipcError("download-boundary-invalid", {
+      detail: String(err?.message || err),
+      modelId: profile.modelId,
+      target,
+    });
+  }
   activeModelDownloader = downloader;
   downloader.on("progress", (s) => {
     lastModelDownloadState = decorateDownloadState(profile, s);
-    broadcastToAllWindows("llamacpp:download-progress", lastModelDownloadState);
+    broadcastToAllWindows(LOCAL_MODEL_IPC.downloadProgress, lastModelDownloadState);
   });
   downloader.on("state", (s) => {
     lastModelDownloadState = decorateDownloadState(profile, s);
-    broadcastToAllWindows("llamacpp:download-state", lastModelDownloadState);
+    broadcastToAllWindows(LOCAL_MODEL_IPC.downloadState, lastModelDownloadState);
   });
   downloader.on("log", (level, msg) => {
     if (level === "error") console.error(msg);
@@ -3701,7 +3791,7 @@ wrapIpcHandler("llamacpp:start-download", async (event, payload = {}) => {
     if (result?.ok) {
       const doneState = decorateDownloadState(profile, { ...downloader.getState(), state: "done", target });
       lastModelDownloadState = doneState;
-      broadcastToAllWindows("llamacpp:download-state", doneState);
+      broadcastToAllWindows(LOCAL_MODEL_IPC.downloadState, doneState);
       if (profile.autoStart) {
         // default local model on disk — bounce llamacpp so it picks it up
         // #18: 1500ms conservative wait (was 600ms) + port-busy probe before spawn.
@@ -3725,30 +3815,31 @@ wrapIpcHandler("llamacpp:start-download", async (event, payload = {}) => {
     console.warn("[model-downloader] failed:", err?.message || err);
     if (activeModelDownloader === downloader) activeModelDownloader = null;
   });
-  return { ok: true, alreadyRunning: false, modelId: profile.modelId, target, parallelSegments: profile.parallelSegments };
+  return ipcOk({ alreadyRunning: false, modelId: profile.modelId, target, parallelSegments: profile.parallelSegments });
 });
 
-wrapIpcHandler("llamacpp:pause-download", () => {
-  if (!activeModelDownloader) return { ok: false, reason: "not-running" };
+wrapIpcHandler(LOCAL_MODEL_IPC.pauseDownload, () => {
+  if (!activeModelDownloader) return ipcError("not-running");
   try { activeModelDownloader.pause(); } catch (err) {
-    return { ok: false, reason: String(err?.message || err) };
+    return ipcError(err?.message || err);
   }
-  return { ok: true };
+  return ipcOk();
 });
 
-wrapIpcHandler("llamacpp:cancel-download", () => {
+wrapIpcHandler(LOCAL_MODEL_IPC.cancelDownload, () => {
   if (!activeModelDownloader) {
     lastModelDownloadState = { state: "idle" };
-    return { ok: true, reason: "not-running" };
+    return ipcOk({ alreadyIdle: true });
   }
   try { activeModelDownloader.cancel(); } catch (err) {
-    return { ok: false, reason: String(err?.message || err) };
+    return ipcError(err?.message || err);
   }
   activeModelDownloader = null;
-  return { ok: true };
+  return ipcOk();
 });
 
-wrapIpcHandler("llamacpp:sources", () => ({
+wrapIpcHandler(LOCAL_MODEL_IPC.sources, () => ({
+  ok: true,
   sources: MODEL_DOWNLOADER_SOURCES.map((s) => ({ id: s.id, label: s.label })),
   models: listLlamacppDownloadProfiles().map((profile) => ({
       modelId: profile.modelId,
@@ -3760,10 +3851,10 @@ wrapIpcHandler("llamacpp:sources", () => ({
     })),
 }));
 
-wrapIpcHandler("llamacpp:open-model-dir", async (event, payload = {}) => {
+wrapIpcHandler(LOCAL_MODEL_IPC.openModelDir, async (event, payload = {}) => {
   const dir = path.join(lynnHome, "models");
   const userModelDir = path.join(os.homedir(), "Models", "Lynn");
-  const allowedModelDirs = [dir, userModelDir];
+  const allowedModelDirs = getAllowedLocalModelDirs();
   const isInside = (root, target) => {
     const relative = path.relative(root, target);
     return !!relative && !relative.startsWith("..") && !path.isAbsolute(relative);
@@ -3788,23 +3879,23 @@ wrapIpcHandler("llamacpp:open-model-dir", async (event, payload = {}) => {
   return { ok: !error, path: openDir, error: error || null };
 });
 
-wrapIpcHandler("llamacpp:start-custom-model", async (event, payload = {}) => {
-  const rawPath = typeof payload === "string" ? payload : payload?.modelPath;
-  if (!rawPath || typeof rawPath !== "string") {
-    return { ok: false, reason: "missing-model-path" };
-  }
-  const modelPath = path.resolve(rawPath);
-  if (path.extname(modelPath).toLowerCase() !== ".gguf") {
-    return { ok: false, reason: "not-gguf" };
-  }
+wrapIpcHandler(LOCAL_MODEL_IPC.startCustomModel, async (event, payload = {}) => {
+  const parsedPath = parseGgufModelPathPayload(payload);
+  if (!parsedPath.ok) return parsedPath;
+  const { modelPath } = parsedPath;
   if (!fs.existsSync(modelPath)) {
-    return { ok: false, reason: "model-not-found" };
+    return ipcError("model-not-found");
+  }
+  if (!isLocalModelPathAllowed(event, modelPath)) {
+    return ipcError("model-path-not-allowed", {
+      detail: "Choose the GGUF through Lynn's file picker or place it in the local model directory.",
+    });
   }
   grantWebContentsAccess(event.sender, modelPath, "read");
   try {
     return await startLlamacppCustomModel(modelPath);
   } catch (err) {
-    return { ok: false, reason: String(err?.message || err) };
+    return ipcError(err?.message || err);
   }
 });
 

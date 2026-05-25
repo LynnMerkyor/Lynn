@@ -75,9 +75,9 @@ export interface LlamaCppStateSnapshot {
   needsBinary: boolean;
   needsModel: boolean;
   download: DownloadState;
-  startDownload: (payload?: { modelId?: string }) => Promise<{ ok: boolean; alreadyRunning?: boolean }>;
-  pauseDownload: () => Promise<{ ok: boolean }>;
-  cancelDownload: () => Promise<{ ok: boolean }>;
+  startDownload: (payload?: { modelId?: string }) => Promise<{ ok: boolean; alreadyRunning?: boolean; reason?: string; detail?: string }>;
+  pauseDownload: () => Promise<{ ok: boolean; reason?: string }>;
+  cancelDownload: () => Promise<{ ok: boolean; reason?: string }>;
 }
 
 const DEFAULT_DOWNLOAD: DownloadState = {
@@ -175,38 +175,38 @@ export function useLlamacppState(): LlamaCppStateSnapshot {
     };
   }, []);
 
-  const startDownload = useCallback(async (payload?: { modelId?: string }): Promise<{ ok: boolean; alreadyRunning?: boolean }> => {
+  const startDownload = useCallback(async (payload?: { modelId?: string }): Promise<{ ok: boolean; alreadyRunning?: boolean; reason?: string; detail?: string }> => {
     const platform = (window as unknown as {
-      platform?: { llamacppStartDownload?: (payload?: { modelId?: string }) => Promise<{ ok: boolean; alreadyRunning?: boolean }> }
+      platform?: { llamacppStartDownload?: (payload?: { modelId?: string }) => Promise<{ ok: boolean; alreadyRunning?: boolean; reason?: string; detail?: string }> }
     }).platform;
     try {
       const result = await platform?.llamacppStartDownload?.(payload);
-      return result || { ok: false };
+      return result || { ok: false, reason: 'ipc-unavailable' };
     } catch (err) {
       console.warn('[useLlamacppState] startDownload failed:', err);
-      return { ok: false };
+      return { ok: false, reason: 'ipc-failed', detail: err instanceof Error ? err.message : String(err) };
     }
   }, []);
 
-  const pauseDownload = useCallback(async (): Promise<{ ok: boolean }> => {
-    const platform = (window as unknown as { platform?: { llamacppPauseDownload?: () => Promise<{ ok: boolean }> } }).platform;
+  const pauseDownload = useCallback(async (): Promise<{ ok: boolean; reason?: string }> => {
+    const platform = (window as unknown as { platform?: { llamacppPauseDownload?: () => Promise<{ ok: boolean; reason?: string }> } }).platform;
     try {
       const result = await platform?.llamacppPauseDownload?.();
-      return result || { ok: false };
+      return result || { ok: false, reason: 'ipc-unavailable' };
     } catch (err) {
       console.warn('[useLlamacppState] pauseDownload failed:', err);
-      return { ok: false };
+      return { ok: false, reason: 'ipc-failed' };
     }
   }, []);
 
-  const cancelDownload = useCallback(async (): Promise<{ ok: boolean }> => {
-    const platform = (window as unknown as { platform?: { llamacppCancelDownload?: () => Promise<{ ok: boolean }> } }).platform;
+  const cancelDownload = useCallback(async (): Promise<{ ok: boolean; reason?: string }> => {
+    const platform = (window as unknown as { platform?: { llamacppCancelDownload?: () => Promise<{ ok: boolean; reason?: string }> } }).platform;
     try {
       const result = await platform?.llamacppCancelDownload?.();
-      return result || { ok: false };
+      return result || { ok: false, reason: 'ipc-unavailable' };
     } catch (err) {
       console.warn('[useLlamacppState] cancelDownload failed:', err);
-      return { ok: false };
+      return { ok: false, reason: 'ipc-failed' };
     }
   }, []);
 
