@@ -43,7 +43,7 @@ LYNN_HOME=~/.lynn-dev npm run test:release
 - `.github/update-manifest.json` 二进制资产不能指 GitHub `.dmg/.exe`，必须走腾讯镜像。
 - `site/app.js`、`site/download.html`、`site/index.html` 不能把 `.dmg/.exe` 链到 GitHub。
 - 核心 UI 文件必须存在：AssistantMessage、ThinkingBlock、ToolGroupBlock、WritingDiffViewer、TaskModePicker、PressToTalkButton、streaming store。
-- WebSocket 事件协议必须保留共享定义：`shared/ws-events.js` / `shared/ws-events.d.ts`。
+- WebSocket 事件协议必须保留共享定义：`shared/ws-events.ts`。
 - 多语言文件必须存在。
 - README 必须提到当前 `package.json` 版本。
 
