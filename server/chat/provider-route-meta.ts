@@ -1,17 +1,29 @@
-// @ts-check
+export interface ProviderFallbackHop {
+  id: string;
+  reason?: string;
+}
 
-/**
- * @typedef {{ id?: unknown, provider?: unknown, providerId?: unknown, name?: unknown, reason?: unknown, status?: unknown, error?: unknown }} RawProviderFallbackHop
- * @typedef {{ id: string, reason?: string }} ProviderFallbackHop
- * @typedef {{ [key: string]: any, assistantMessageEvent?: ProviderRouteEvent | null }} ProviderRouteEvent
- * @typedef {{ activeProvider: string, fallbackFrom?: ProviderFallbackHop[] }} ProviderRouteMeta
- */
+export interface ProviderRouteMeta {
+  activeProvider: string;
+  fallbackFrom?: ProviderFallbackHop[];
+}
 
-/**
- * @param {RawProviderFallbackHop | null | undefined} raw
- * @returns {ProviderFallbackHop | null}
- */
-export function normalizeProviderFallbackHop(raw) {
+interface RawProviderFallbackHop {
+  id?: unknown;
+  provider?: unknown;
+  providerId?: unknown;
+  name?: unknown;
+  reason?: unknown;
+  status?: unknown;
+  error?: unknown;
+}
+
+interface ProviderRouteEvent {
+  [key: string]: unknown;
+  assistantMessageEvent?: ProviderRouteEvent | null;
+}
+
+export function normalizeProviderFallbackHop(raw: RawProviderFallbackHop | null | undefined): ProviderFallbackHop | null {
   const id = String(raw?.id || raw?.provider || raw?.providerId || raw?.name || "").trim();
   if (!id) return null;
   const reason = String(raw?.reason || raw?.status || raw?.error || "").trim().slice(0, 160);
@@ -21,11 +33,8 @@ export function normalizeProviderFallbackHop(raw) {
 /**
  * Extracts the normalized provider routing metadata from SSE or websocket
  * event envelopes.
- *
- * @param {ProviderRouteEvent | null | undefined} event
- * @returns {ProviderRouteMeta | null}
  */
-export function extractProviderRouteMeta(event) {
+export function extractProviderRouteMeta(event: ProviderRouteEvent | null | undefined): ProviderRouteMeta | null {
   if (!event || typeof event !== "object") return null;
   const assistantEvent = event.assistantMessageEvent && typeof event.assistantMessageEvent === "object"
     ? event.assistantMessageEvent
@@ -51,23 +60,22 @@ export function extractProviderRouteMeta(event) {
     : (markedProviderEvent ? event : null);
   if (!source || typeof source !== "object") return null;
   const activeProvider = String(
-    source.activeProvider
-    || source.active_provider
-    || source.providerId
-    || source.provider
+    (source as Record<string, unknown>).activeProvider
+    || (source as Record<string, unknown>).active_provider
+    || (source as Record<string, unknown>).providerId
+    || (source as Record<string, unknown>).provider
     || event.activeProvider
     || event.active_provider
     || "",
   ).trim();
   if (!activeProvider) return null;
-  const rawFallback = Array.isArray(source.fallbackFrom)
-    ? source.fallbackFrom
-    : (Array.isArray(source.fallback_from)
-      ? source.fallback_from
+  const rawFallback = Array.isArray((source as Record<string, unknown>).fallbackFrom)
+    ? (source as Record<string, unknown>).fallbackFrom
+    : (Array.isArray((source as Record<string, unknown>).fallback_from)
+      ? (source as Record<string, unknown>).fallback_from
       : (Array.isArray(event.fallbackFrom) ? event.fallbackFrom : event.fallback_from));
-  /** @type {ProviderFallbackHop[]} */
-  const fallbackFrom = Array.isArray(rawFallback)
-    ? rawFallback.map(normalizeProviderFallbackHop).filter((hop) => hop !== null).slice(0, 8)
+  const fallbackFrom: ProviderFallbackHop[] = Array.isArray(rawFallback)
+    ? (rawFallback as RawProviderFallbackHop[]).map(normalizeProviderFallbackHop).filter((hop): hop is ProviderFallbackHop => hop !== null).slice(0, 8)
     : [];
   return {
     activeProvider,

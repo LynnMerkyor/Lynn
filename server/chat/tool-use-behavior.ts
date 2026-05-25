@@ -1,5 +1,3 @@
-// @ts-check
-
 import { inferReportResearchKind } from "./report-research-context.js";
 import {
   buildBudgetCalculationContext,
@@ -12,15 +10,28 @@ import {
   shouldAttachLocalQwen35BenchContext,
 } from "./local-qwen35-bench-context.js";
 
-/**
- * @typedef {"run_llm_again" | "prefetch_then_run_or_stop"} ToolUseBehaviorName
- * @typedef {{ isBrain?: boolean, [key: string]: any }} ModelInfoLike
- * @typedef {{ modelInfo?: ModelInfoLike | null }} ToolUseBehaviorOptions
- * @typedef {{ behavior: ToolUseBehaviorName, reason: string, reportKind: string, budgetContext: string, effectivePromptText: string, disableTools?: boolean, toolName?: string }} ToolUseDecision
- */
+export type ToolUseBehaviorName = "run_llm_again" | "prefetch_then_run_or_stop";
 
-/** @type {Readonly<{ RUN_LLM_AGAIN: "run_llm_again", PREFETCH_THEN_RUN_OR_STOP: "prefetch_then_run_or_stop" }>} */
-export const TOOL_USE_BEHAVIOR = Object.freeze({
+export interface ToolDisableDecision {
+  behavior: ToolUseBehaviorName;
+  reason: string;
+  reportKind: string;
+  budgetContext: string;
+  effectivePromptText: string;
+  disableTools?: boolean;
+  toolName?: string;
+}
+
+interface ModelInfoLike {
+  isBrain?: boolean;
+  [key: string]: unknown;
+}
+
+interface ToolUseBehaviorOptions {
+  modelInfo?: ModelInfoLike | null;
+}
+
+export const TOOL_USE_BEHAVIOR: Readonly<{ RUN_LLM_AGAIN: "run_llm_again"; PREFETCH_THEN_RUN_OR_STOP: "prefetch_then_run_or_stop" }> = Object.freeze({
   RUN_LLM_AGAIN: "run_llm_again",
   PREFETCH_THEN_RUN_OR_STOP: "prefetch_then_run_or_stop",
 });
@@ -30,11 +41,8 @@ export const TOOL_USE_BEHAVIOR = Object.freeze({
  * recall with "only reply X", or a simple "remember this normal label"
  * acknowledgement. For those turns we suppress tool schemas at runtime instead
  * of relying on model obedience.
- *
- * @param {unknown} promptText
- * @returns {boolean}
  */
-export function shouldDisableToolsForTurn(promptText) {
+export function shouldDisableToolsForTurn(promptText: unknown): boolean {
   const text = String(promptText || "").trim();
   if (!text) return false;
   const compact = text.replace(/\s+/g, "");
@@ -62,11 +70,7 @@ export function shouldDisableToolsForTurn(promptText) {
   return simpleMemoryAck;
 }
 
-/**
- * @param {unknown} promptText
- * @returns {string}
- */
-export function buildNoToolTurnPrompt(promptText) {
+export function buildNoToolTurnPrompt(promptText: unknown): string {
   const text = String(promptText || "").trim();
   const formatHint = /\d+\s*(?:字|字符|个字|words?|chars?|characters?)|只(?:回复|输出|回答)|最后一行|only\s+(?:reply|respond|output|answer)/iu.test(text)
     ? "若用户限制字数、格式或最后一行内容,必须严格遵守。"
@@ -78,12 +82,7 @@ export function buildNoToolTurnPrompt(promptText) {
   ].filter(Boolean).join("");
 }
 
-/**
- * @param {unknown} promptText
- * @param {ToolUseBehaviorOptions} [opts]
- * @returns {ToolUseDecision}
- */
-export function resolveInitialToolUseBehavior(promptText, opts = {}) {
+export function resolveInitialToolUseBehavior(promptText: unknown, opts: ToolUseBehaviorOptions = {}): ToolDisableDecision {
   const text = String(promptText || "");
   const modelInfo = opts.modelInfo || undefined;
   if (shouldAttachLocalQwen35BenchContext(text, modelInfo)) {
@@ -134,11 +133,7 @@ export function resolveInitialToolUseBehavior(promptText, opts = {}) {
   };
 }
 
-/**
- * @param {unknown} context
- * @returns {string}
- */
-function sanitizeContextForModel(context) {
+function sanitizeContextForModel(context: unknown): string {
   return String(context || "")
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
@@ -156,15 +151,11 @@ function sanitizeContextForModel(context) {
 }
 
 /**
- * @param {unknown} promptText
- * @param {unknown} reportContext
- * @param {unknown} [budgetContext]
- * @returns {string}
+ * Keep this as evidence only. Do not add task instructions such as
+ * "answer based on the material" or "think step by step"; thinking mode
+ * belongs to the model/runtime, not this helper.
  */
-export function buildPrefetchAugmentedPrompt(promptText, reportContext, budgetContext = "") {
-  // Keep this as evidence only. Do not add task instructions such as
-  // "answer based on the material" or "think step by step"; thinking mode
-  // belongs to the model/runtime, not this helper.
+export function buildPrefetchAugmentedPrompt(promptText: unknown, reportContext: unknown, budgetContext: unknown = ""): string {
   return [
     sanitizeContextForModel(reportContext),
     sanitizeContextForModel(budgetContext),

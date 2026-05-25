@@ -3,7 +3,7 @@
  * explanation without a runnable verification step.
  */
 
-export function buildCodeVerificationPostscript(promptText = "", visibleText = "") {
+export function buildCodeVerificationPostscript(promptText: string = "", visibleText: string = ""): string {
   const prompt = String(promptText || "");
   if (!prompt.trim()) return "";
   const looksLikeCodeFailure =
