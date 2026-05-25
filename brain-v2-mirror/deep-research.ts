@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Brain v2 · Deep Research multi-candidate orchestrator
 // 目标:对一个 user prompt 同时跑 N 个 provider → 返回第一个成功候选。
 // 不做质量评分、不拦截、不改写候选内容；模型输出是什么就呈现什么。
@@ -8,6 +7,7 @@
 import 'dotenv/config';
 import { getProvider, isInCooldown, markUnhealthy } from './provider-registry.js';
 import { getAdapter } from './wire-adapter/index.js';
+import { errorMessage, errorName, type ChatMessage, type LogFn, type ProviderId } from './types.js';
 
 // 默认候选池(避开 deepseek-pro 同端点重复、glm 余额型失败;后续可由 env 覆盖)
 const DEFAULT_CANDIDATES = String(process.env.DEEP_RESEARCH_CANDIDATES || '')
@@ -19,17 +19,48 @@ if (DEFAULT_CANDIDATES.length === 0) {
 }
 const CANDIDATE_TIMEOUT_MS = Number(process.env.DEEP_RESEARCH_CANDIDATE_TIMEOUT_MS || 60_000);
 
+type DeepResearchProgressEvent = Record<string, unknown>;
+type DeepResearchCandidateFailure = { providerId: string; ok: false; error: string; latencyMs?: number };
+type DeepResearchCandidateSuccess = {
+  providerId: string;
+  ok: true;
+  content: string;
+  reasoning: string;
+  finishReason: string | null;
+  latencyMs: number;
+};
+type DeepResearchCandidateResult = DeepResearchCandidateFailure | DeepResearchCandidateSuccess;
+
+type RunOneCandidateOptions = {
+  providerId: string;
+  messages?: ChatMessage[];
+  signal?: AbortSignal;
+  log?: LogFn | null;
+};
+
+export type DeepResearchOptions = {
+  messages?: ChatMessage[];
+  candidates?: string[] | null;
+  signal?: AbortSignal;
+  log?: LogFn | null;
+  onProgress?: (event: DeepResearchProgressEvent) => void;
+};
+
+function isSuccessfulCandidate(candidate: DeepResearchCandidateResult): candidate is DeepResearchCandidateSuccess {
+  return candidate.ok;
+}
+
 // Run one provider non-streaming-equivalent: drain the SSE adapter and return final answer text.
-async function runOneCandidate({ providerId, messages, signal, log }) {
+async function runOneCandidate({ providerId, messages, signal, log }: RunOneCandidateOptions): Promise<DeepResearchCandidateResult> {
   const provider = getProvider(providerId);
   if (!provider) return { providerId, ok: false, error: 'provider not registered' };
-  if (isInCooldown(providerId)) return { providerId, ok: false, error: 'in-cooldown' };
+  if (isInCooldown(providerId as ProviderId)) return { providerId, ok: false, error: 'in-cooldown' };
 
   const adapter = getAdapter(provider.wire);
   const t0 = Date.now();
   let content = '';
   let reasoning = '';
-  let finishReason = null;
+  let finishReason: string | null = null;
 
   try {
     const ctrl = new AbortController();
@@ -55,14 +86,15 @@ async function runOneCandidate({ providerId, messages, signal, log }) {
       latencyMs: Date.now() - t0,
     };
   } catch (err) {
-    log && log('warn', `[deep-research] candidate ${providerId} failed: ${err.message}`);
-    if (err.name !== 'AbortError') markUnhealthy(providerId, err.message);
-    return { providerId, ok: false, error: err.message, latencyMs: Date.now() - t0 };
+    const message = errorMessage(err);
+    log && log('warn', `[deep-research] candidate ${providerId} failed: ${message}`);
+    if (errorName(err) !== 'AbortError') markUnhealthy(providerId as ProviderId, message);
+    return { providerId, ok: false, error: message, latencyMs: Date.now() - t0 };
   }
 }
 
 // anySignal: combine multiple AbortSignal into one
-function anySignal(signals) {
+function anySignal(signals: Array<AbortSignal | undefined>): AbortSignal {
   const ctrl = new AbortController();
   for (const s of signals) {
     if (!s) continue;
@@ -79,7 +111,7 @@ function anySignal(signals) {
  * runDeepResearch
  *  Returns: { winner: { providerId, content, ... }, allCandidates, meta }
  */
-export async function runDeepResearch({ messages, candidates, signal, log, onProgress }) {
+export async function runDeepResearch({ messages, candidates, signal, log, onProgress }: DeepResearchOptions) {
   const candidatePool = (Array.isArray(candidates) && candidates.length > 0) ? candidates : DEFAULT_CANDIDATES;
   if (!extractLatestUser(messages)) throw new Error('deep-research: no user message found');
 
@@ -93,7 +125,7 @@ export async function runDeepResearch({ messages, candidates, signal, log, onPro
   );
   const phase1Ms = Date.now() - t0;
 
-  const successfulCandidates = candidateResults.filter((c) => c.ok);
+  const successfulCandidates = candidateResults.filter(isSuccessfulCandidate);
   log && log('info', `[deep-research] phase1 done in ${phase1Ms}ms — ${successfulCandidates.length}/${candidatePool.length} successful`);
   onProgress && onProgress({
     event: 'phase1-done',
@@ -127,15 +159,23 @@ export async function runDeepResearch({ messages, candidates, signal, log, onPro
   };
 }
 
-function extractLatestUser(messages) {
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+}
+
+function extractLatestUser(messages: unknown): string {
   if (!Array.isArray(messages)) return '';
   for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m && m.role === 'user') {
+    const m = asRecord(messages[i]);
+    if (m?.role === 'user') {
       if (typeof m.content === 'string') return m.content;
       if (Array.isArray(m.content)) {
         return m.content
-          .map((p) => (typeof p === 'string' ? p : (p && typeof p.text === 'string' ? p.text : '')))
+          .map((p) => {
+            if (typeof p === 'string') return p;
+            const part = asRecord(p);
+            return typeof part?.text === 'string' ? part.text : '';
+          })
           .filter(Boolean)
           .join(' ');
       }

@@ -3,10 +3,22 @@
 // F11 fix (2026-05-23): reasoning_effort 透传 (server.js 把它抽到独立 arg,这里 inject 回 body)
 //   OpenAI 标准字段,DeepSeek/GLM/Kimi 都原生支持
 import { parseOpenAISSE } from './_sse-parser.js';
-import type { StreamChunk, WireAdapterOptions } from '../types.js';
+import type { ChatMessage, ModelId, StreamChunk, ToolDefinition, WireAdapterOptions } from '../types.js';
+
+type OpenAICompatRequestBody = Record<string, unknown> & {
+  model: ModelId;
+  messages?: ChatMessage[];
+  max_tokens: number;
+  temperature: number;
+  stream: boolean;
+  reasoning_effort?: string | null;
+  chat_template_kwargs?: Record<string, unknown>;
+  tools?: ToolDefinition[];
+  tool_choice?: 'auto';
+};
 
 export async function* call({ provider, messages, tools, signal, extraBody, reasoningEffort }: WireAdapterOptions): AsyncGenerator<StreamChunk> {
-  const body: Record<string, any> = {
+  const body: OpenAICompatRequestBody = {
     model: provider.model,
     messages,
     max_tokens: provider.max_tokens || 4096,
@@ -28,8 +40,11 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
       && reasoningEffort !== 'off'
       && reasoningEffort !== 'none'
       && reasoningEffort !== 'disabled';
+    const chatTemplateKwargs = body.chat_template_kwargs && typeof body.chat_template_kwargs === 'object'
+      ? body.chat_template_kwargs
+      : {};
     body.chat_template_kwargs = {
-      ...(body.chat_template_kwargs || {}),
+      ...chatTemplateKwargs,
       enable_thinking: wantsThinking,
     };
   }

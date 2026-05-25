@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Brain v2 perf init — 全局 undici Agent + keep-alive pool
 // 复用上游 connections,解决晚高峰冷连接(并发 3 12.7s → 期望 ~6s)
 import { setGlobalDispatcher, Agent } from 'undici';

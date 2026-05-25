@@ -7,7 +7,7 @@
 //   { type: 'tool_call_delta', delta: Array<{index, id?, function?: {name?, arguments?}}> }
 //   { type: 'finish',    reason: string }
 
-import type { StreamChunk } from '../types.js';
+import type { StreamChunk, ToolCallDelta } from '../types.js';
 
 // Guard against pathological upstreams that stream MB of data with no '\n' delimiter.
 // 4MB is far above any sane single-line SSE event; trip → abort the stream.
@@ -17,6 +17,10 @@ type SSEBody = AsyncIterable<Uint8Array> | ReadableStream<Uint8Array> | null;
 
 function isAsyncIterable(body: NonNullable<SSEBody>): body is AsyncIterable<Uint8Array> {
   return typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === 'function';
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null;
 }
 
 async function* iterateSSEBytes(body: SSEBody): AsyncGenerator<Uint8Array> {
@@ -53,11 +57,12 @@ export async function* parseOpenAISSE(body: SSEBody): AsyncGenerator<StreamChunk
       if (!line.startsWith('data:')) continue;
       const data = line.slice(5).trim();
       if (!data || data === '[DONE]') continue;
-      let parsed: any;
+      let parsed: unknown;
       try { parsed = JSON.parse(data); } catch { continue; }
-      const choice = parsed.choices && parsed.choices[0];
+      const choices = asRecord(parsed)?.choices;
+      const choice = Array.isArray(choices) ? asRecord(choices[0]) : null;
       if (!choice) continue;
-      const delta = choice.delta || {};
+      const delta = asRecord(choice.delta) || {};
       // reasoning_content (thinking 模型) — 兼容多种字段名
       const reasoning = delta.reasoning_content ?? delta.reasoning;
       if (reasoning != null && reasoning !== '') {
@@ -67,10 +72,10 @@ export async function* parseOpenAISSE(body: SSEBody): AsyncGenerator<StreamChunk
         yield { type: 'content', delta: String(delta.content) };
       }
       if (Array.isArray(delta.tool_calls) && delta.tool_calls.length > 0) {
-        yield { type: 'tool_call_delta', delta: delta.tool_calls };
+        yield { type: 'tool_call_delta', delta: delta.tool_calls as ToolCallDelta[] };
       }
       if (choice.finish_reason) {
-        yield { type: 'finish', reason: choice.finish_reason };
+        yield { type: 'finish', reason: String(choice.finish_reason) };
       }
     }
   }

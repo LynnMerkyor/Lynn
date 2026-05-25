@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { spawn, execFile } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import os from 'node:os';
@@ -17,8 +16,44 @@ const DEFAULT_MODEL_ROOT = path.join(HOME, 'Models', 'Lynn', 'Qwen3.5-9B');
 const DEFAULT_HOST = process.env.LYNN_LOCAL_QWEN35_HOST || '127.0.0.1';
 const DEFAULT_PORT = Number(process.env.LYNN_LOCAL_QWEN35_PORT || 18099);
 
-let currentJob = null;
-let lastJob = null;
+type LocalQwen35Options = {
+  host?: string;
+  port?: string | number;
+  variant?: string;
+};
+
+type LocalQwen35SetupOptions = LocalQwen35Options & {
+  authorized?: boolean;
+  start?: boolean;
+  installRuntime?: boolean;
+};
+
+type FileDescription = {
+  path: string;
+  exists: boolean;
+  size_bytes?: number;
+  mtime_ms?: number;
+};
+
+type LocalQwen35Job = {
+  id: string;
+  status: 'running' | 'succeeded' | 'failed';
+  started_at: string;
+  finished_at: string | null;
+  bootstrap: string;
+  log_file: string;
+  command: string[];
+  exit_code: number | null;
+  result: unknown;
+  stdout_tail?: string;
+  stderr_tail?: string;
+  provider_config?: FileDescription;
+};
+
+type ExecFileError = Error & { stdout?: unknown; stderr?: unknown };
+
+let currentJob: LocalQwen35Job | null = null;
+let lastJob: LocalQwen35Job | null = null;
 
 function repoRoot() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,7 +78,7 @@ export function isLocalAddress(addr = '') {
   return v === '127.0.0.1' || v === '::1' || v === 'localhost' || v === '';
 }
 
-function commonArgs({ host = DEFAULT_HOST, port = DEFAULT_PORT, variant = 'imatrix' } = {}) {
+function commonArgs({ host = DEFAULT_HOST, port = DEFAULT_PORT, variant = 'imatrix' }: LocalQwen35Options = {}): string[] {
   return [
     '--variant', variant,
     '--host', String(host),
@@ -55,7 +90,7 @@ function commonArgs({ host = DEFAULT_HOST, port = DEFAULT_PORT, variant = 'imatr
   ];
 }
 
-function readJsonMaybe(text) {
+function readJsonMaybe(text: string): unknown | null {
   try {
     return JSON.parse(text);
   } catch {
@@ -68,7 +103,7 @@ function readJsonMaybe(text) {
   return null;
 }
 
-function describeFile(filePath) {
+function describeFile(filePath: string): FileDescription {
   try {
     const st = statSync(filePath);
     return { path: filePath, exists: true, size_bytes: st.size, mtime_ms: st.mtimeMs };
@@ -77,7 +112,7 @@ function describeFile(filePath) {
   }
 }
 
-export async function getLocalQwen35Plan(options = {}) {
+export async function getLocalQwen35Plan(options: LocalQwen35Options = {}) {
   const bootstrap = resolveBootstrapPath();
   if (!bootstrap) {
     return {
@@ -100,12 +135,13 @@ export async function getLocalQwen35Plan(options = {}) {
       job: currentJob || lastJob,
     };
   } catch (err) {
+    const e = err as ExecFileError;
     return {
       ok: false,
       bootstrap,
-      error: err.message,
-      stdout: err.stdout || '',
-      stderr: err.stderr || '',
+      error: e.message,
+      stdout: e.stdout || '',
+      stderr: e.stderr || '',
       job: currentJob || lastJob,
     };
   }
@@ -118,7 +154,7 @@ export function startLocalQwen35Setup({
   host = DEFAULT_HOST,
   port = DEFAULT_PORT,
   variant = 'imatrix',
-} = {}) {
+}: LocalQwen35SetupOptions = {}) {
   if (!authorized) {
     return {
       ok: false,
@@ -161,7 +197,7 @@ export function startLocalQwen35Setup({
   });
   let stdout = '';
   let stderr = '';
-  const append = (chunk) => {
+  const append = (chunk: string) => {
     try {
       appendFileSync(logFile, chunk);
     } catch {}
@@ -171,7 +207,7 @@ export function startLocalQwen35Setup({
   child.on('exit', (code) => {
     const result = readJsonMaybe(stdout);
     currentJob = {
-      ...currentJob,
+      ...(currentJob as LocalQwen35Job),
       status: code === 0 ? 'succeeded' : 'failed',
       finished_at: new Date().toISOString(),
       exit_code: code,

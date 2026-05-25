@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Brain v2 checkpoint is intentionally inert.
 //
 // BYOK-equality policy: Brain must not ask a second model to judge, replan,

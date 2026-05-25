@@ -6,9 +6,23 @@
 //   - undefined/其他       → 不动 body.thinking,由 extraBody 或 server default 决定
 //   BYOK-equality:caller 显式 thinking via extraBody 总是 win(在 spread 之后我们才 set)
 import { parseOpenAISSE } from './_sse-parser.js';
-import type { StreamChunk, WireAdapterOptions } from '../types.js';
+import type { ChatMessage, ModelId, StreamChunk, ToolDefinition, WireAdapterOptions } from '../types.js';
 
-function reasoningEffortToMimoThinking(effort?: string | null): { type: 'disabled' | 'enabled' } {
+type MimoThinking = { type: 'disabled' | 'enabled' };
+type MimoRequestBody = Record<string, unknown> & {
+  model: ModelId;
+  messages?: ChatMessage[];
+  enable_search: boolean;
+  max_completion_tokens: number;
+  temperature: number;
+  stream: boolean;
+  reasoning_effort?: string | null;
+  thinking?: MimoThinking;
+  tools?: ToolDefinition[];
+  tool_choice?: 'auto';
+};
+
+function reasoningEffortToMimoThinking(effort?: string | null): MimoThinking {
   // 用户拍板 2026-05-23: caller 不显式传 → 默认 'xhigh'(MiMo thinking 全开)
   const v = String(effort || 'xhigh').toLowerCase();
   if (v === 'low' || v === 'minimal' || v === 'off' || v === 'none') return { type: 'disabled' };
@@ -17,7 +31,7 @@ function reasoningEffortToMimoThinking(effort?: string | null): { type: 'disable
 }
 
 export async function* call({ provider, messages, tools, signal, extraBody, reasoningEffort }: WireAdapterOptions): AsyncGenerator<StreamChunk> {
-  const body: Record<string, any> = {
+  const body: MimoRequestBody = {
     model: provider.model,
     messages,
     enable_search: true,
