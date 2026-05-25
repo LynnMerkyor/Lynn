@@ -1,5 +1,5 @@
 /**
- * channels.js — 频道 REST API
+ * channels.ts — 频道 REST API
  *
  * Channel ID 化：文件名为 ch_{id}.md，frontmatter 含 id/name/description/members。
  *
@@ -28,22 +28,130 @@ import {
   getChannelMeta,
 } from "../../lib/channels/channel-store.js";
 
-function hasUsableChannelMeta(meta, fallbackId = "") {
+type ChannelMeta = {
+  id?: unknown;
+  name?: unknown;
+  description?: unknown;
+  members?: unknown;
+  archived?: unknown;
+  archivedAt?: unknown;
+  [key: string]: unknown;
+};
+
+type ChannelMessage = {
+  sender?: string;
+  timestamp: string;
+  body?: string;
+};
+
+type ParsedChannel = {
+  meta: ChannelMeta;
+  messages: ChannelMessage[];
+};
+
+type ChannelSummary = {
+  id: string;
+  name: unknown;
+  description: unknown;
+  members: unknown[];
+  messageCount: number;
+  newMessageCount: number;
+  lastMessage: string;
+  lastSender: string;
+  lastTimestamp: string;
+  archived: boolean;
+  archivedAt: unknown;
+};
+
+type CreateChannelBody = {
+  name?: unknown;
+  description?: unknown;
+  members?: unknown;
+  intro?: unknown;
+  spawnedExpertIds?: unknown;
+};
+
+type SendMessageBody = {
+  body?: string;
+};
+
+type ReadBookmarkBody = {
+  timestamp?: string;
+};
+
+type AddMembersBody = {
+  add?: string[];
+};
+
+type ToggleChannelsBody = {
+  enabled?: unknown;
+};
+
+type RouteAgent = {
+  id: string;
+  name?: string;
+};
+
+type DeleteChannelResult = {
+  deletedAgentIds?: string[];
+  failedAgentIds?: string[];
+};
+
+type ArchiveChannelResult = {
+  archivedAt?: unknown;
+  alreadyArchived?: unknown;
+};
+
+type CreateChannelInput = {
+  name: string;
+  description?: unknown;
+  members: string[];
+  intro?: unknown;
+  spawnedExpertIds: unknown[];
+};
+
+type ChannelsRouteEngine = {
+  channelsDir: string;
+  userDir: string;
+  agentsDir: string;
+  userName?: string;
+  createChannel(input: CreateChannelInput): string;
+  deleteChannelByName(channelId: string): DeleteChannelResult | Promise<DeleteChannelResult>;
+  archiveChannelByName(channelId: string): ArchiveChannelResult | Promise<ArchiveChannelResult>;
+  listAgents?: () => RouteAgent[];
+};
+
+type ChannelEventBus = {
+  emit(event: unknown, target?: unknown): unknown;
+};
+
+type ChannelsRouteHub = {
+  eventBus?: ChannelEventBus;
+  triggerChannelConclusion?: (channelName: string) => Promise<unknown> | undefined;
+  triggerChannelTriage(channelName: string, opts?: { mentionedAgents: string[] }): Promise<unknown> | undefined;
+  toggleChannels(enabled: boolean): Promise<unknown> | unknown;
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function hasUsableChannelMeta(meta: ChannelMeta | null | undefined, fallbackId = ""): boolean {
   const members = Array.isArray(meta?.members) ? meta.members.filter(Boolean) : [];
   const id = typeof meta?.id === "string" && meta.id.trim() ? meta.id.trim() : fallbackId;
   return Boolean(id) && members.length > 0;
 }
 
-export function createChannelsRoute(engine, hub) {
+export function createChannelsRoute(engine: ChannelsRouteEngine, hub: ChannelsRouteHub): Hono {
   const route = new Hono();
 
   /** 用户 bookmark 文件路径 */
-  function userBookmarkPath() {
+  function userBookmarkPath(): string {
     return path.join(engine.userDir, "channel-bookmarks.md");
   }
 
   /** 安全路径校验：id 不能穿越出 channelsDir */
-  function safeChannelPath(id) {
+  function safeChannelPath(id: string): string | null {
     const filePath = path.join(engine.channelsDir, `${id}.md`);
     const resolved = path.resolve(filePath);
     const base = path.resolve(engine.channelsDir);
@@ -53,7 +161,7 @@ export function createChannelsRoute(engine, hub) {
     return resolved;
   }
 
-  function getArchivedState(meta = {}) {
+  function getArchivedState(meta: ChannelMeta = {}): { archived: boolean; archivedAt: unknown } {
     return {
       archived: meta.archived === true || meta.archived === "true",
       archivedAt: meta.archivedAt || "",
@@ -69,14 +177,14 @@ export function createChannelsRoute(engine, hub) {
       }
 
       const files = fs.readdirSync(channelsDir).filter((f) => f.endsWith(".md"));
-      const bookmarks = readBookmarks(userBookmarkPath());
+      const bookmarks = readBookmarks(userBookmarkPath()) as Map<string, string>;
 
-      const channels = [];
+      const channels: ChannelSummary[] = [];
       for (const f of files) {
         const channelId = f.replace(".md", "");
         const filePath = path.join(channelsDir, f);
         const content = fs.readFileSync(filePath, "utf-8");
-        const { meta, messages } = parseChannel(content);
+        const { meta, messages } = parseChannel(content) as ParsedChannel;
         if (!hasUsableChannelMeta(meta, channelId)) {
           debugLog()?.warn?.("api", `skip malformed channel file: ${f}`);
           continue;
@@ -113,19 +221,19 @@ export function createChannelsRoute(engine, hub) {
         (b.lastTimestamp || "").localeCompare(a.lastTimestamp || "")
       );
 
-      const bookmarksObj = {};
+      const bookmarksObj: Record<string, string> = {};
       for (const [k, v] of bookmarks) bookmarksObj[k] = v;
 
       return c.json({ channels, bookmarks: bookmarksObj });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // ── 创建新频道 ──
   route.post("/channels", async (c) => {
     try {
-      const body = await safeJson(c);
+      const body = await safeJson<CreateChannelBody>(c);
       const { name, description, members, intro, spawnedExpertIds } = body;
 
       if (!name || typeof name !== "string") {
@@ -140,7 +248,7 @@ export function createChannelsRoute(engine, hub) {
       const channelId = engine.createChannel({
         name,
         description: description || undefined,
-        members,
+        members: members as string[],
         intro: intro || undefined,
         spawnedExpertIds: Array.isArray(spawnedExpertIds) ? spawnedExpertIds : [],
       });
@@ -148,10 +256,11 @@ export function createChannelsRoute(engine, hub) {
       debugLog()?.log("api", `POST /channels — created "${channelId}" (${name}) members=[${members}]`);
       return c.json({ ok: true, id: channelId, name, members });
     } catch (err) {
-      if (err.message?.includes("已存在")) {
-        return c.json({ error: err.message }, 409);
+      const message = errorMessage(err);
+      if (message.includes("已存在")) {
+        return c.json({ error: message }, 409);
       }
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: message }, 500);
     }
   });
 
@@ -167,7 +276,7 @@ export function createChannelsRoute(engine, hub) {
       }
 
       const content = fs.readFileSync(filePath, "utf-8");
-      const { meta, messages } = parseChannel(content);
+      const { meta, messages } = parseChannel(content) as ParsedChannel;
       if (!hasUsableChannelMeta(meta, name)) {
         return c.json({ error: "Channel file is malformed" }, 409);
       }
@@ -184,7 +293,7 @@ export function createChannelsRoute(engine, hub) {
         archivedAt,
       });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -195,7 +304,7 @@ export function createChannelsRoute(engine, hub) {
       const filePath = safeChannelPath(name);
       if (!filePath) return c.json({ error: "Invalid channel id" }, 400);
 
-      const reqBody = await safeJson(c);
+      const reqBody = await safeJson<SendMessageBody>(c);
       const { body } = reqBody;
 
       if (!body) {
@@ -206,7 +315,7 @@ export function createChannelsRoute(engine, hub) {
         return c.json({ error: "Channel not found" }, 404);
       }
 
-      const channelMeta = getChannelMeta(filePath);
+      const channelMeta = getChannelMeta(filePath) as ChannelMeta;
       if (!hasUsableChannelMeta(channelMeta, name)) {
         return c.json({ error: "Channel file is malformed" }, 409);
       }
@@ -227,22 +336,22 @@ export function createChannelsRoute(engine, hub) {
 
       if (isConclusionCmd) {
         // 触发结论生成
-        hub.triggerChannelConclusion?.(name)?.catch((err) =>
-          console.error(`[channel] 触发结论生成失败: ${err.message}`)
+        hub.triggerChannelConclusion?.(name)?.catch((err: unknown) =>
+          console.error(`[channel] 触发结论生成失败: ${errorMessage(err)}`)
         );
       } else {
         // 提取 @ 提及
         const atMatches = body.match(/@(\S+)/g) || [];
-        const channelMembers = Array.isArray(channelMeta.members) ? channelMeta.members : [];
+        const channelMembers = Array.isArray(channelMeta.members) ? channelMeta.members as string[] : [];
 
         for (const memberId of channelMembers) {
           addBookmarkEntry(path.join(engine.agentsDir, memberId, "channels.md"), name);
         }
 
-        const mentionedAgents = [];
+        const mentionedAgents: string[] = [];
         if (atMatches.length > 0) {
           const allAgents = engine.listAgents?.() || [];
-          const seen = new Set();
+          const seen = new Set<string>();
           for (const at of atMatches) {
             const atName = at
               .slice(1)
@@ -259,14 +368,14 @@ export function createChannelsRoute(engine, hub) {
           }
         }
 
-        hub.triggerChannelTriage(name, { mentionedAgents })?.catch((err) =>
-          console.error(`[channel] 触发立即 triage 失败: ${err.message}`)
+        hub.triggerChannelTriage(name, { mentionedAgents })?.catch((err: unknown) =>
+          console.error(`[channel] 触发立即 triage 失败: ${errorMessage(err)}`)
         );
       }
 
       return c.json({ ok: true, timestamp: result.timestamp, isConclusion: isConclusionCmd });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -277,7 +386,7 @@ export function createChannelsRoute(engine, hub) {
       const filePath = safeChannelPath(name);
       if (!filePath) return c.json({ error: "Invalid channel id" }, 400);
 
-      const body = await safeJson(c);
+      const body = await safeJson<ReadBookmarkBody>(c);
       const { timestamp } = body;
 
       if (!timestamp) {
@@ -287,7 +396,7 @@ export function createChannelsRoute(engine, hub) {
       updateBookmark(userBookmarkPath(), name, timestamp);
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -317,10 +426,11 @@ export function createChannelsRoute(engine, hub) {
         archivedAt: result?.archivedAt || "",
       });
     } catch (err) {
-      if (err.message?.includes("不存在")) {
-        return c.json({ error: err.message }, 404);
+      const message = errorMessage(err);
+      if (message.includes("不存在")) {
+        return c.json({ error: message }, 404);
       }
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: message }, 500);
     }
   });
 
@@ -335,10 +445,11 @@ export function createChannelsRoute(engine, hub) {
       debugLog()?.log("api", `DELETE /channels/${name}`);
       return c.json({ ok: true, deletedAgentIds: result?.deletedAgentIds || [], failedAgentIds: result?.failedAgentIds || [] });
     } catch (err) {
-      if (err.message?.includes("不存在")) {
-        return c.json({ error: err.message }, 404);
+      const message = errorMessage(err);
+      if (message.includes("不存在")) {
+        return c.json({ error: message }, 404);
       }
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: message }, 500);
     }
   });
 
@@ -353,12 +464,12 @@ export function createChannelsRoute(engine, hub) {
         return c.json({ error: "Channel not found" }, 404);
       }
 
-      const channelMeta = getChannelMeta(filePath);
+      const channelMeta = getChannelMeta(filePath) as ChannelMeta;
       if (channelMeta.archived === true || channelMeta.archived === "true") {
         return c.json({ error: "Channel is archived" }, 409);
       }
 
-      const body = await safeJson(c);
+      const body = await safeJson<AddMembersBody>(c);
       const { add } = body;
 
       if (!Array.isArray(add) || add.length === 0) {
@@ -381,19 +492,19 @@ export function createChannelsRoute(engine, hub) {
       }
 
       // 读取更新后的成员列表
-      const meta = getChannelMeta(filePath);
+      const meta = getChannelMeta(filePath) as ChannelMeta;
       const members = Array.isArray(meta.members) ? meta.members : [];
 
       debugLog()?.log("api", `PATCH /channels/${name}/members — added [${add}]`);
       return c.json({ ok: true, members });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // ── 频道开关（启停 channelTicker）──
   route.post("/channels/toggle", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<ToggleChannelsBody>(c);
     const { enabled } = body;
     await hub.toggleChannels(!!enabled);
     debugLog()?.log("api", `POST /channels/toggle enabled=${!!enabled}`);
