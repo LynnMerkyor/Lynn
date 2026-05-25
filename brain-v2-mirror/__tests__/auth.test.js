@@ -70,6 +70,21 @@ describe('rememberNonce', () => {
     expect(rememberNonce('a', 'shared')).toBe(true);
     expect(rememberNonce('b', 'shared')).toBe(true);
   });
+  it('checks replay before LRU eviction at the cache boundary', async () => {
+    const previousMax = process.env.DEVICE_NONCE_CACHE_MAX;
+    process.env.DEVICE_NONCE_CACHE_MAX = '2';
+    try {
+      const isolated = await import('../auth.js?nonce-lru-boundary');
+      isolated.__testing__._nonceCache.clear();
+      expect(isolated.rememberNonce('a', 'n1')).toBe(true);
+      expect(isolated.rememberNonce('a', 'n2')).toBe(true);
+      expect(isolated.rememberNonce('a', 'n1')).toBe(false);
+      expect(isolated.__testing__._nonceCache.has('a:n1')).toBe(true);
+    } finally {
+      if (previousMax === undefined) delete process.env.DEVICE_NONCE_CACHE_MAX;
+      else process.env.DEVICE_NONCE_CACHE_MAX = previousMax;
+    }
+  });
 });
 
 describe('verifySignedRequest (happy path)', () => {

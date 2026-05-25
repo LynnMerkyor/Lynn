@@ -11,7 +11,7 @@ const DEVICES_DIR = process.env.LOBSTER_DEVICES_DIR || '/opt/lobster-brain/data/
 
 // 2026-05-25 P2-3: nonce cache memory DoS 防护。
 // Map 默认无大小限制,未授权攻击者可在 device-lookup 前 spray 100k nonces/sec 撑爆内存。
-// 加 LRU cap:超过 NONCE_CACHE_MAX 时按 expiresAt 早→晚 evict 最早的。
+// 加 LRU cap:超过 NONCE_CACHE_MAX 时按 insertion order evict 最早的。
 // 上限按 100 req/s × 600s TTL = 60k 计,默认 100k 留余量,可 env 调。
 const NONCE_CACHE_MAX = Number(process.env.DEVICE_NONCE_CACHE_MAX || 100_000);
 const _nonceCache = new Map(); // `${agentKey}:${nonce}` → expiresAt
@@ -70,9 +70,9 @@ function evictOldestIfFull() {
 
 export function rememberNonce(agentKey, nonce, now = Date.now()) {
   cleanupNonces(now);
-  evictOldestIfFull();
   const k = `${agentKey}:${nonce}`;
   if (_nonceCache.has(k)) return false;
+  evictOldestIfFull();
   _nonceCache.set(k, now + DEVICE_NONCE_TTL_MS);
   return true;
 }
