@@ -6,6 +6,7 @@ import { safeJson } from "../hono-helpers.js";
 import { BRAIN_API_ROOT, BRAIN_BACKUP_API_ROOT, isBrainProvider } from "../../shared/brain-provider.js";
 import { findModel } from "../../shared/model-ref.js";
 import { callText } from "../../core/llm-client.js";
+import { artifactToolArguments, normalizeArtifactPayload } from "../chat/artifact-shape.js";
 
 export const DEFAULT_DEEP_RESEARCH_TIMEOUT_MS = 180_000;
 const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
@@ -448,19 +449,12 @@ function safeArtifactTitle(raw) {
 
 function buildDeepResearchArtifact({ messages, parsed }) {
   if (parsed?.artifact && typeof parsed.artifact === "object") {
-    const artifact = parsed.artifact;
-    const content = String(artifact.content || "").trim();
-    if (content) {
-      const artifactType = String(artifact.artifactType || artifact.type || "html").trim() || "html";
-      return {
-        artifactId: String(artifact.artifactId || artifact.id || `deep-research-${randomUUID().slice(0, 8)}`),
-        artifactType,
-        type: String(artifact.type || artifactType),
-        title: String(artifact.title || "深度调研报告"),
-        content,
-        language: artifact.language ? String(artifact.language) : (artifactType === "html" ? "html" : undefined),
-      };
-    }
+    const artifact = normalizeArtifactPayload(parsed.artifact, {
+      fallbackIdPrefix: "deep-research",
+      fallbackId: `deep-research-${randomUUID().slice(0, 8)}`,
+      defaultTitle: "深度调研报告",
+    });
+    if (artifact) return artifact;
   }
 
   const text = String(parsed?.text || "").trim();
@@ -496,14 +490,14 @@ function buildDeepResearchArtifact({ messages, parsed }) {
   </main>
 </body>
 </html>`;
-  return {
+  return normalizeArtifactPayload({
     artifactId,
     artifactType: "html",
     type: "html",
     title,
     content,
     language: "html",
-  };
+  }, { defaultTitle: "深度调研报告" });
 }
 
 function buildDeepResearchSessionEntries({ messages, parsed }) {
@@ -517,16 +511,11 @@ function buildDeepResearchSessionEntries({ messages, parsed }) {
   const artifact = buildDeepResearchArtifact({ messages, parsed });
   const assistantContent = [{ type: "text", text: formatDeepResearchResultText(parsed) }];
   if (artifact) {
+    const args = artifactToolArguments(artifact);
     assistantContent.push({
       type: "toolCall",
       name: "create_artifact",
-      arguments: {
-        artifactId: artifact.artifactId,
-        type: artifact.type,
-        title: artifact.title,
-        content: artifact.content,
-        language: artifact.language,
-      },
+      arguments: args,
     });
   }
   return [

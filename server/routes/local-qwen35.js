@@ -375,7 +375,7 @@ function fastReadyPlan(runtime, _variant = "imatrix") {
         },
         warnings: [
           ...(runtime.endpoint_occupied
-            ? [`检测到 ${runtime.base_url} 当前运行的是 ${runtime.model_ids?.join(", ") || "非 9B"} 降级/兼容端点,不会作为默认 9B 使用;停止该端点后可启动默认 Qwen3.5-9B MTP。`]
+            ? [`检测到 ${runtime.base_url} 当前运行的是 ${runtime.model_ids?.join(", ") || "非默认模型"} 端点,不会作为默认 9B 使用;停止该端点后可启动默认 Qwen3.5-9B MTP。`]
             : []),
           ...(comfortable ? [] : [
           usable
@@ -630,6 +630,75 @@ function isProviderRegistered(engine) {
   return !!entry?.models?.some?.((m) => (typeof m === "object" ? m.id : m) === MODEL_ID);
 }
 
+export function deriveLocalQwen35ProviderState({ runtime, status, registered, job } = {}) {
+  const observed = status?.plan?.observed || status?.observed || {};
+  const hasObservedGguf = Object.prototype.hasOwnProperty.call(observed, "gguf");
+  const hasObservedLlamaServer = Object.prototype.hasOwnProperty.call(observed, "llama_server");
+  const gguf = hasObservedGguf ? observed.gguf : installedModelPath(defaultState());
+  const llamaServer = hasObservedLlamaServer ? observed.llama_server : null;
+  if (runtime?.endpoint_occupied || observed.endpoint_occupied) {
+    return {
+      state: "occupied",
+      severity: "error",
+      canSwitch: false,
+      canSetup: true,
+      reason: "endpoint_running_non_default_model",
+    };
+  }
+  if (runtime?.endpoint_running || observed.endpoint_running) {
+    return {
+      state: registered ? "ready" : "endpoint_ready_unregistered",
+      severity: registered ? "ready" : "warning",
+      canSwitch: registered === true,
+      canSetup: registered !== true,
+      reason: registered ? "ready" : "register_provider_required",
+    };
+  }
+  if (runtime?.endpoint_loading || runtime?.process_alive || observed.endpoint_loading || job?.status === "running") {
+    return {
+      state: "preparing",
+      severity: "busy",
+      canSwitch: false,
+      canSetup: false,
+      reason: job?.status === "running" ? "setup_job_running" : "runtime_loading",
+    };
+  }
+  if (!gguf) {
+    return {
+      state: "needs_model",
+      severity: "standby",
+      canSwitch: false,
+      canSetup: true,
+      reason: "gguf_missing",
+    };
+  }
+  if (!llamaServer) {
+    return {
+      state: "needs_runtime",
+      severity: "standby",
+      canSwitch: false,
+      canSetup: true,
+      reason: "llama_server_missing",
+    };
+  }
+  if (status?.ok === false) {
+    return {
+      state: "unavailable",
+      severity: "error",
+      canSwitch: false,
+      canSetup: true,
+      reason: status?.error || "status_error",
+    };
+  }
+  return {
+    state: "ready_to_start",
+    severity: "standby",
+    canSwitch: false,
+    canSetup: true,
+    reason: "assets_ready_endpoint_stopped",
+  };
+}
+
 export function createLocalQwen35Route(engine) {
   const route = new Hono();
   let job = null;
@@ -640,7 +709,14 @@ export function createLocalQwen35Route(engine) {
       ? fastReadyPlan(runtime)
       : await plan();
     const registered = isProviderRegistered(engine);
-    return c.json({ ...status, registered_provider: registered, runtime, job: decorateJob(job) });
+    const decoratedJob = decorateJob(job);
+    const providerState = deriveLocalQwen35ProviderState({
+      runtime,
+      status,
+      registered,
+      job: decoratedJob,
+    });
+    return c.json({ ...status, registered_provider: registered, runtime, job: decoratedJob, provider_state: providerState });
   });
 
   route.post("/local-qwen35-9b/setup", async (c) => {

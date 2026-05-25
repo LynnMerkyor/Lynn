@@ -62,6 +62,148 @@ const PROGRESS_THROTTLE_BYTES = 256 * 1024;
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_REDIRECTS = 5;
 const DEFAULT_PARALLEL_SEGMENTS = 1;
+const INSECURE_MODEL_SOURCE_ENV = "LYNN_ALLOW_INSECURE_MODEL_SOURCE";
+
+// ─────────────────────────────────────────────────────────────
+// 下载安全边界
+// ─────────────────────────────────────────────────────────────
+
+function truthyEnv(value) {
+  return /^(1|true|yes|on)$/i.test(String(value || "").trim());
+}
+
+function allowInsecureModelSources() {
+  return truthyEnv(process.env[INSECURE_MODEL_SOURCE_ENV]);
+}
+
+function stripIpv6Brackets(hostname) {
+  const value = String(hostname || "").trim().toLowerCase();
+  return value.startsWith("[") && value.endsWith("]") ? value.slice(1, -1) : value;
+}
+
+function parseIpv4Literal(hostname) {
+  const parts = String(hostname || "").trim().split(".");
+  if (parts.length !== 4) return null;
+  const octets = [];
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const value = Number(part);
+    if (!Number.isInteger(value) || value < 0 || value > 255) return null;
+    octets.push(value);
+  }
+  return octets;
+}
+
+function isPrivateIpv4(octets) {
+  if (!Array.isArray(octets) || octets.length !== 4) return false;
+  const [a, b] = octets;
+  return a === 0
+    || a === 10
+    || a === 127
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168);
+}
+
+function isLocalOrPrivateHost(hostname) {
+  const host = stripIpv6Brackets(hostname).replace(/\.$/, "");
+  if (!host) return true;
+  if (host === "localhost" || host.endsWith(".localhost") || host === "ip6-localhost" || host === "ip6-loopback") {
+    return true;
+  }
+  if (host.endsWith(".local")) return true;
+  const ipv4 = parseIpv4Literal(host);
+  if (ipv4) return isPrivateIpv4(ipv4);
+  if (host === "::1" || host === "0:0:0:0:0:0:0:1" || host.startsWith("fe80:")) return true;
+  if (/^f[cd][0-9a-f]{2}:/i.test(host)) return true;
+  const mappedIpv4 = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (mappedIpv4) {
+    const octets = parseIpv4Literal(mappedIpv4[1]);
+    return isPrivateIpv4(octets);
+  }
+  return false;
+}
+
+function validateModelSourceUrl(urlStr, opts = {}) {
+  const context = opts.context || "model-source";
+  const enforceGgufPath = opts.enforceGgufPath !== false;
+  let url;
+  try {
+    url = new URL(String(urlStr || ""));
+  } catch {
+    throw new Error(`${context}: invalid-url`);
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error(`${context}: unsupported-url-scheme`);
+  }
+  if (url.username || url.password) {
+    throw new Error(`${context}: credentials-not-allowed`);
+  }
+  if (!allowInsecureModelSources() && isLocalOrPrivateHost(url.hostname)) {
+    throw new Error(`${context}: local-or-private-host-not-allowed`);
+  }
+  if (enforceGgufPath) {
+    let decodedPath = "";
+    try {
+      decodedPath = decodeURIComponent(url.pathname || "");
+    } catch {
+      throw new Error(`${context}: invalid-url-path`);
+    }
+    if (!decodedPath.toLowerCase().endsWith(".gguf")) {
+      throw new Error(`${context}: source-must-end-with-gguf`);
+    }
+  }
+  return url.toString();
+}
+
+function normalizeSourceId(value, fallback) {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+  return normalized || fallback;
+}
+
+function normalizeDownloadSources(sources, opts = {}) {
+  if (!Array.isArray(sources) || sources.length === 0) {
+    throw new Error("model-source: at-least-one-source-required");
+  }
+  const seen = new Map();
+  return sources.map((entry, index) => {
+    const raw = typeof entry === "string" ? { url: entry } : (entry || {});
+    const url = validateModelSourceUrl(raw.url, {
+      context: `model-source[${index}]`,
+      enforceGgufPath: opts.enforceGgufPath !== false,
+    });
+    const parsed = new URL(url);
+    const fallbackId = `source-${index + 1}`;
+    const baseId = normalizeSourceId(raw.id || parsed.hostname, fallbackId);
+    const duplicateCount = seen.get(baseId) || 0;
+    seen.set(baseId, duplicateCount + 1);
+    const id = duplicateCount > 0 ? `${baseId}-${duplicateCount + 1}` : baseId;
+    const label = String(raw.label || id).trim().slice(0, 120) || id;
+    return { id, label, url };
+  });
+}
+
+function normalizeModelFileName(fileName) {
+  const value = String(fileName || "").trim();
+  if (!value || value.includes("\0")) throw new Error("model-file-name: invalid");
+  if (path.basename(value) !== value) throw new Error("model-file-name: path-separators-not-allowed");
+  if (path.extname(value).toLowerCase() !== ".gguf") throw new Error("model-file-name: must-end-with-gguf");
+  return value;
+}
+
+function validateModelTargetPath(targetPath) {
+  const raw = String(targetPath || "");
+  if (!raw || raw.includes("\0")) throw new Error("model-target: invalid-path");
+  const resolved = path.resolve(raw);
+  if (path.extname(resolved).toLowerCase() !== ".gguf") {
+    throw new Error("model-target: must-end-with-gguf");
+  }
+  return resolved;
+}
 
 // ─────────────────────────────────────────────────────────────
 // 路径工具
@@ -96,8 +238,8 @@ class ModelDownloader extends EventEmitter {
   constructor(opts = {}) {
     super();
     const homeDir = opts.homeDir || os.homedir();
-    const fileName = opts.fileName || DEFAULT_FILE_NAME;
-    this.target = opts.target || defaultModelPath(homeDir, fileName);
+    const fileName = normalizeModelFileName(opts.fileName || DEFAULT_FILE_NAME);
+    this.target = validateModelTargetPath(opts.target || defaultModelPath(homeDir, fileName));
     this.partPath = `${this.target}.part`;
     this.expectedSize = opts.expectedSize || DEFAULT_EXPECTED_SIZE;
     this.expectedSha256 = (opts.expectedSha256 || DEFAULT_EXPECTED_SHA256 || "").toLowerCase();
@@ -105,9 +247,9 @@ class ModelDownloader extends EventEmitter {
     this.parallelSegments = Number.isFinite(requestedSegments)
       ? Math.max(1, Math.min(8, Math.floor(requestedSegments)))
       : DEFAULT_PARALLEL_SEGMENTS;
-    this.sources = Array.isArray(opts.sources) && opts.sources.length > 0
-      ? opts.sources.map(s => ({ id: s.id, label: s.label || s.id, url: s.url }))
-      : DEFAULT_SOURCES.map(s => ({ ...s }));
+    this.sources = normalizeDownloadSources(
+      Array.isArray(opts.sources) && opts.sources.length > 0 ? opts.sources : DEFAULT_SOURCES,
+    );
 
     // runtime state
     this.activeRequest = null;
@@ -337,7 +479,10 @@ class ModelDownloader extends EventEmitter {
 
   _downloadRangeSegment(urlStr, segment, redirectsLeft) {
     if (this.aborted || this.paused) return Promise.resolve();
-    const url = new URL(urlStr);
+    const url = new URL(validateModelSourceUrl(urlStr, {
+      context: "model-source-redirect",
+      enforceGgufPath: false,
+    }));
     const lib = url.protocol === "http:" ? http : https;
     const headers = {
       "User-Agent": "Lynn-Desktop/0.79 (model-downloader)",
@@ -367,7 +512,10 @@ class ModelDownloader extends EventEmitter {
             return;
           }
           try { res.destroy(); } catch {}
-          const next = new URL(res.headers.location, url).toString();
+          const next = validateModelSourceUrl(new URL(res.headers.location, url).toString(), {
+            context: "model-source-redirect",
+            enforceGgufPath: false,
+          });
           this._downloadRangeSegment(next, segment, redirectsLeft + 1).then(resolve, reject);
           return;
         }
@@ -440,7 +588,10 @@ class ModelDownloader extends EventEmitter {
       }
     }
 
-    const url = new URL(urlStr);
+    const url = new URL(validateModelSourceUrl(urlStr, {
+      context: "model-source-redirect",
+      enforceGgufPath: false,
+    }));
     const lib = url.protocol === "http:" ? http : https;
     const headers = { "User-Agent": "Lynn-Desktop/0.79 (model-downloader)" };
     if (this.bytesTransferred > 0) {
@@ -470,7 +621,10 @@ class ModelDownloader extends EventEmitter {
             return reject(new Error("too-many-redirects"));
           }
           try { res.destroy(); } catch {}
-          const next = new URL(res.headers.location, url).toString();
+          const next = validateModelSourceUrl(new URL(res.headers.location, url).toString(), {
+            context: "model-source-redirect",
+            enforceGgufPath: false,
+          });
           this._log("info", `[download] redirect → ${next}`);
           this._downloadFromSource(next, redirectsLeft + 1).then(resolve, reject);
           return;
@@ -703,4 +857,10 @@ module.exports = {
   DEFAULT_EXPECTED_SIZE,
   DEFAULT_EXPECTED_SHA256,
   DEFAULT_SOURCES,
+  INSECURE_MODEL_SOURCE_ENV,
+  allowInsecureModelSources,
+  validateModelSourceUrl,
+  normalizeDownloadSources,
+  normalizeModelFileName,
+  validateModelTargetPath,
 };

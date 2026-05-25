@@ -286,7 +286,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   );
   const hardwareWarnings = [...new Set([
     ...(endpointForeign
-      ? [`检测到 18099 当前运行的是 ${servedModelIds.join(', ') || '4B 降级/兼容端点'}，它不会作为默认 9B 使用；停止后可启动默认 Qwen3.5-9B MTP。`]
+      ? [`检测到 18099 当前运行的是 ${servedModelIds.join(', ') || '非默认模型端点'}，它不会作为默认 9B 使用；停止后可启动默认 Qwen3.5-9B MTP。`]
       : []),
     ...(hardware.warnings || []),
     ...(hardware.blockers || []),
@@ -355,7 +355,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const hardwareBlocked = hardware.can_enable === false;
   const hardwareLabel = runtime.label || (loading || !status ? '正在检查硬件' : '默认使用云端模型');
   const stateLabel = useMemo(() => {
-    if (endpointForeign) return '4B 降级端点运行中';
+    if (endpointForeign) return '非默认本地端点运行中';
     if (jobRunning) return '正在准备';
     if (endpointLoading) return '正在加载';
     if (endpointRunning) return '已运行';
@@ -662,7 +662,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         {(endpointActive || endpointForeign) && runtimeStats?.pid && <span>PID {runtimeStats.pid}</span>}
         {endpointForeign && <span>停止后可启用默认 9B</span>}
         {endpointLoading && <span>模型权重加载中</span>}
-        {endpointRunning && <span>{runtimeMetricsReady ? `本进程累计 ${runtimeTokens.toLocaleString()} tokens` : '运行统计同步中'}</span>}
+        {endpointRunning && <span>{runtimeMetricsReady ? `本地端点累计处理 ${runtimeTokens.toLocaleString()} tokens` : '运行统计同步中'}</span>}
         {endpointRunning && slotLabel && <span>{slotLabel}</span>}
         <span>{plan.base_url || 'http://127.0.0.1:18099/v1'}</span>
       </div>

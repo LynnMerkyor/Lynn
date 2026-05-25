@@ -16,6 +16,7 @@ import {
   artifactPreviewDedupeKey,
   artifactPreviewsFromContent,
 } from "../chat/artifact-recovery.js";
+import { normalizeArtifactPayload } from "../chat/artifact-shape.js";
 
 /**
  * 从 Pi SDK 的 content 块数组中提取纯文本 + thinking + tool_use 调用
@@ -307,18 +308,18 @@ export function createSessionsRoute(engine) {
               rollbackId: m.toolCallId || undefined,
             });
           } else if ((m.toolName === "create_artifact" || m.toolName === "create_report") && d.content) {
-            const artifact = {
-              afterIndex: allMessages.length - 1,
+            const artifact = normalizeArtifactPayload({
               artifactId: d.artifactId,
-              artifactType: d.type,
+              artifactType: d.artifactType || d.type,
               title: d.title,
               content: d.content,
               language: d.language || (d.type === "html" ? "html" : undefined),
-            };
+            }, { messageType: "artifact" });
+            if (!artifact) continue;
             const key = artifactPreviewDedupeKey(artifact);
             if (!artifactKeys.has(key)) {
               artifactKeys.add(key);
-              artifacts.push(artifact);
+              artifacts.push({ ...artifact, afterIndex: allMessages.length - 1 });
             }
           }
         }

@@ -54,6 +54,7 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
   - **高端 (24GB 显存/统一内存+)**:Qwen3.6-35B-A3B Q4_K_M imatrix — MMLU 90.40% / GPQA Diamond 80.70% · Lynn 校准 · 21 GB
 - 🔁 **平滑迁移**:旧 4B 默认配置自动回到 9B MTP;4B 保留为显式低配降级。
 - 🧾 **深度调研 HTML 报告**:本地 9B、BYOK 和默认模型都会生成聊天内可点击预览的 HTML 报告;本地/部分 thinking 模型遇到空正文会自动 no-think fallback。
+- 🛡️ **架构与安全刷新**:聊天主链拆分为更小的服务模块,本地 GGUF 下载增加源地址/文件类型校验,模型状态与 token 文案统一到 provider state,避免 4B/9B 状态误导。
 - ✅ **测试矩阵**:9B MTP、GPT-5.4、默认模型安装版 smoke 全绿;Deep Research 三路 HTML artifact 门禁全绿;4B thinking-on 风险已在 Spark 复现并写入模型说明。
 
 [完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.1)

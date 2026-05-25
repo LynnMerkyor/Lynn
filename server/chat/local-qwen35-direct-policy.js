@@ -1,0 +1,134 @@
+import fs from "fs";
+import { debugLog } from "../../lib/debug-log.js";
+import { TOOL_USE_BEHAVIOR } from "./tool-use-behavior.js";
+import { persistedChatMessageText } from "./session-persistence.js";
+
+export const LOCAL_QWEN35_DIRECT_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_CHARS || 8000);
+export const LOCAL_QWEN35_DIRECT_ENDPOINT = process.env.LYNN_LOCAL_QWEN35_ENDPOINT || "http://127.0.0.1:18099/v1/chat/completions";
+// Default local 9B keeps a 32K context window, but its visible answer path
+// should stay responsive. Lower or higher local profiles can still tune
+// budgets via env or their own launcher args.
+export const LOCAL_QWEN35_DIRECT_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_TOKENS || 8192);
+export const LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS || 2048);
+export const LOCAL_QWEN35_DIRECT_HISTORY_MAX_MESSAGES = Number(process.env.LYNN_LOCAL_QWEN35_HISTORY_MAX_MESSAGES || 8);
+export const LOCAL_QWEN35_DIRECT_HISTORY_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_HISTORY_MAX_CHARS || 8000);
+
+export function shouldUseLocalQwen35DirectBridge(promptText = "", opts = {}) {
+  if (!opts.isLocalModel) return false;
+  if (opts.hasImages) return false;
+  if (opts.rehydratedMutation) return false;
+  if (opts.toolBehavior && opts.toolBehavior !== TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN) return false;
+  const text = String(promptText || "").trim();
+  if (!text || text.length > LOCAL_QWEN35_DIRECT_MAX_CHARS) return false;
+  return true;
+}
+
+export function normalizeThinkingLevel(level) {
+  return String(level || "auto").trim().toLowerCase();
+}
+
+export function isTinyLocalQwen35Ask(promptText = "") {
+  const text = String(promptText || "").trim();
+  if (!text) return false;
+  const compact = text.replace(/\s+/g, "");
+  if (compact.length <= 24 && /^(?:hi|hello|hey|yo|ping|test|ok|在吗|在不在|你好|您好|哈喽|嗨|嗯|好的)[。！？!?.,，、~～]*$/iu.test(compact)) {
+    return true;
+  }
+  if (compact.length <= 80 && /(?:门禁测试|只(?:回复|输出)|请(?:只|直接)(?:回复|输出)|回复ok|输出ok)/iu.test(compact)) {
+    return true;
+  }
+  return false;
+}
+
+export function isLightweightLocalQwen35Ask(promptText = "") {
+  if (isTinyLocalQwen35Ask(promptText)) return true;
+  const text = String(promptText || "").trim();
+  if (!text || text.length > 260) return false;
+  if (/(?:深度|深入|详细|推理|证明|分析|代码|方案|计划|报告|长文|论文|复杂|逐步|step by step)/iu.test(text)) return false;
+  return /(?:介绍你|你能帮我|你能做什么|你是谁|已准备好|请记住|只(?:回复|输出)|不要调用工具|不用工具|不调用工具|80\s*字以内|一句中文|一句话|项目代号|最后一行不能有其他字)/iu.test(text);
+}
+
+export function resolveLocalQwen35DirectThinking(promptText = "", engineLike = null) {
+  const rawLevel = typeof engineLike?.getThinkingLevel === "function"
+    ? engineLike.getThinkingLevel()
+    : engineLike?.preferences?.getThinkingLevel?.();
+  const level = normalizeThinkingLevel(rawLevel);
+  if (["off", "none", "minimal"].includes(level)) return false;
+  if (isLightweightLocalQwen35Ask(promptText)) return false;
+  if (["high", "xhigh", "max"].includes(level)) return true;
+  return true;
+}
+
+export function resolveLocalQwen35DirectMaxTokens(promptText = "", enableThinking = true) {
+  if (!enableThinking) {
+    if (isTinyLocalQwen35Ask(promptText)) return 256;
+    if (isLightweightLocalQwen35Ask(promptText)) return 1536;
+  }
+  return LOCAL_QWEN35_DIRECT_MAX_TOKENS;
+}
+
+export function readRecentLocalQwen35DirectMessages(sessionPath, currentPromptText = "") {
+  if (!sessionPath || !fs.existsSync(sessionPath)) return [];
+  try {
+    const raw = fs.readFileSync(sessionPath, "utf-8");
+    const messages = [];
+    for (const line of raw.split("\n")) {
+      if (!line.trim()) continue;
+      let entry = null;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (entry?.type !== "message") continue;
+      const role = entry?.message?.role;
+      if (role !== "user" && role !== "assistant") continue;
+      const text = persistedChatMessageText(entry.message).trim();
+      if (!text) continue;
+      messages.push({ role, content: text });
+    }
+
+    const current = String(currentPromptText || "").trim();
+    while (messages.length && messages.at(-1)?.role === "user" && messages.at(-1)?.content.trim() === current) {
+      messages.pop();
+    }
+
+    const selected = [];
+    let chars = 0;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      const nextChars = chars + message.content.length;
+      if (
+        selected.length >= LOCAL_QWEN35_DIRECT_HISTORY_MAX_MESSAGES
+        || (selected.length > 0 && nextChars > LOCAL_QWEN35_DIRECT_HISTORY_MAX_CHARS)
+      ) {
+        break;
+      }
+      selected.unshift(message);
+      chars = nextChars;
+    }
+    while (selected.length && selected[0].role !== "user") selected.shift();
+    return selected;
+  } catch (err) {
+    debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT-HISTORY v1] read failed · ${err?.message || err} · ${sessionPath}`);
+    return [];
+  }
+}
+
+export function buildLocalQwen35DirectMessages(sessionPath, originalPromptText, effectivePromptText) {
+  const current = String(effectivePromptText || originalPromptText || "");
+  const history = readRecentLocalQwen35DirectMessages(sessionPath, originalPromptText);
+  const messages = [...history];
+  const last = messages.at(-1);
+  if (!(last?.role === "user" && last.content.trim() === current.trim())) {
+    messages.push({ role: "user", content: current });
+  }
+  return messages;
+}
+
+export function appendNoThinkHintToLastUserMessage(messages) {
+  const lastUser = [...messages].reverse().find((message) => message?.role === "user");
+  if (!lastUser || /\/no_think\b/iu.test(lastUser.content || "")) return messages;
+  lastUser.content = `${String(lastUser.content || "").trim()}\n/no_think`;
+  return messages;
+}

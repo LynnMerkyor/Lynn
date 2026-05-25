@@ -1,4 +1,5 @@
 import { getToolArgs, isToolCallBlock } from "../../core/llm-utils.js";
+import { normalizeArtifactPayload } from "./artifact-shape.js";
 
 const ARTIFACT_TOOL_NAMES = new Set(["create_artifact", "create_report"]);
 
@@ -13,16 +14,6 @@ function normalizeArgs(raw) {
     }
   }
   return typeof raw === "object" ? raw : null;
-}
-
-function looksLikeHtml(content) {
-  return /<!doctype\s+html|<html[\s>]|<body[\s>]|<style[\s>]/i.test(String(content || ""));
-}
-
-function normalizeArtifactType(type, content) {
-  const raw = String(type || "").trim().toLowerCase();
-  if (raw === "html" || raw === "markdown" || raw === "code") return raw;
-  return looksLikeHtml(content) ? "html" : "markdown";
 }
 
 export function artifactPreviewDedupeKey(artifact) {
@@ -44,21 +35,16 @@ export function artifactPreviewFromToolCall(toolCall, { fallbackIdPrefix = "reco
 
   const args = normalizeArgs(getToolArgs(toolCall) || toolCall.function?.arguments);
   if (!args) return null;
-  const content = String(args.content || args.html || "").trim();
-  if (!content) return null;
-
-  const artifactType = normalizeArtifactType(args.type, content);
-  const title = String(args.title || args.label || (artifactType === "html" ? "HTML 报告" : "生成内容")).trim();
   const callId = String(toolCall.id || toolCall.toolCallId || toolCall.callId || "").trim();
-  const artifactId = String(args.artifactId || args.id || callId || `${fallbackIdPrefix}-${Date.now()}`).trim();
+  const artifact = normalizeArtifactPayload(args, {
+    fallbackId: callId,
+    fallbackIdPrefix,
+    messageType: "artifact",
+  });
+  if (!artifact) return null;
 
   return {
-    type: "artifact",
-    artifactId,
-    artifactType,
-    title,
-    content,
-    language: args.language || (artifactType === "html" ? "html" : undefined),
+    ...artifact,
     recovered: true,
     recoveredFromTool: name,
   };

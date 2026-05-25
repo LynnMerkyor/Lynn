@@ -62,18 +62,18 @@ describe('Local Qwen provider UX guards', () => {
   });
 
   it('downloads the recommended 35B Q4_K_M imatrix model through Lynn with checksum and parallel ranges', () => {
-    const main = read('desktop/main.cjs');
+    const profiles = read('desktop/llamacpp-profiles.cjs');
     const downloader = read('desktop/model-downloader.cjs');
     const preload = read('desktop/preload.cjs');
     // 2026-05-24: canonical 35B = Q4_K_M imatrix(21GB,24G+ 可加载);legacy id 保留为 alias backward compat。
-    expect(main).toContain('qwen36-35b-a3b-q4km-imatrix');
-    expect(main).toContain('21_166_758_272');
-    expect(main).toContain('3e398e6c53398de229ade3a38b04e0d626289651d6d8b49ecfccc2165816efa1');
-    expect(main).toContain('parallelSegments: 4');
-    expect(main).toContain('Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf');
-    expect(main).toContain('Qwen3.6-35B-A3B-GGUF-imatrix');
+    expect(profiles).toContain('qwen36-35b-a3b-q4km-imatrix');
+    expect(profiles).toContain('21_166_758_272');
+    expect(profiles).toContain('3e398e6c53398de229ade3a38b04e0d626289651d6d8b49ecfccc2165816efa1');
+    expect(profiles).toContain('parallelSegments: 4');
+    expect(profiles).toContain('Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf');
+    expect(profiles).toContain('Qwen3.6-35B-A3B-GGUF-imatrix');
     // legacy alias still mapped for old installs
-    expect(main).toContain('"qwen36-35b-a3b-apex-mtp": "qwen36-35b-a3b-q4km-imatrix"');
+    expect(profiles).toContain('"qwen36-35b-a3b-apex-mtp": "qwen36-35b-a3b-q4km-imatrix"');
     expect(preload).toContain('llamacppStartDownload: (payload)');
     expect(downloader).toContain('_downloadFromSourceParallel');
     expect(downloader).toContain('"Range"');
@@ -124,11 +124,11 @@ describe('Local Qwen provider UX guards', () => {
   });
 
   it('uses the Lynn imatrix 9B MTP artifact for the default local download', () => {
-    const main = read('desktop/main.cjs');
+    const profiles = read('desktop/llamacpp-profiles.cjs');
     const downloader = read('desktop/model-downloader.cjs');
     const route = read('server/routes/local-qwen35.js');
-    expect(main).toContain('Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf');
-    expect(main).toContain('0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4');
+    expect(profiles).toContain('Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf');
+    expect(profiles).toContain('0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4');
     expect(downloader).toContain('Merkyor/Qwen3.5-9B-GGUF-imatrix');
     expect(downloader).toContain('nerkyor/Qwen3.5-9B-GGUF-imatrix');
     expect(route).toContain('Qwen3.5-9B Q4_K_M imatrix MTP');

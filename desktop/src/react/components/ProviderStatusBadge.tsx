@@ -20,6 +20,13 @@ const LOCAL_MODEL_ID = 'qwen35-9b-q4km-imatrix';
 type LocalStatus = {
   ok?: boolean;
   registered_provider?: boolean;
+  provider_state?: {
+    state?: string;
+    severity?: string;
+    canSwitch?: boolean;
+    canSetup?: boolean;
+    reason?: string;
+  };
   runtime?: {
     endpoint_running?: boolean;
     endpoint_running_any?: boolean;
@@ -49,6 +56,10 @@ type LocalStatus = {
   } | null;
 };
 
+function localProviderState(status: LocalStatus | null): string {
+  return String(status?.provider_state?.state || '');
+}
+
 function providerDisplayLabel(provider: string | null, isZh: boolean): string {
   if (!provider) return isZh ? '未配置' : 'No model';
   if (provider === BRAIN_PROVIDER_ID) return isZh ? '默认模型' : 'Default model';
@@ -57,12 +68,14 @@ function providerDisplayLabel(provider: string | null, isZh: boolean): string {
 }
 
 function isLocalReady(status: LocalStatus | null): boolean {
+  if (localProviderState(status) === 'ready') return true;
   const modelIds = status?.runtime?.model_ids || status?.plan?.observed?.served_model_ids || [];
   const servesDefault = status?.runtime?.serves_default_model === true || modelIds.includes(LOCAL_MODEL_ID);
   return servesDefault && (status?.runtime?.endpoint_running === true || status?.plan?.observed?.endpoint_running === true);
 }
 
 function isLocalEndpointOccupied(status: LocalStatus | null): boolean {
+  if (localProviderState(status) === 'occupied') return true;
   const modelIds = status?.runtime?.model_ids || status?.plan?.observed?.served_model_ids || [];
   const servesDefault = status?.runtime?.serves_default_model === true || modelIds.includes(LOCAL_MODEL_ID);
   return status?.runtime?.endpoint_occupied === true
@@ -73,6 +86,7 @@ function isLocalEndpointOccupied(status: LocalStatus | null): boolean {
 }
 
 function isLocalBusy(status: LocalStatus | null): boolean {
+  if (localProviderState(status) === 'preparing') return true;
   return !isLocalReady(status) && !isLocalEndpointOccupied(status) && (
     status?.runtime?.endpoint_loading === true
       || status?.runtime?.process_alive === true
@@ -82,6 +96,8 @@ function isLocalBusy(status: LocalStatus | null): boolean {
 }
 
 function hasLocalAssets(status: LocalStatus | null): boolean {
+  const state = localProviderState(status);
+  if (state === 'ready_to_start' || state === 'ready' || state === 'endpoint_ready_unregistered') return true;
   return !!(status?.plan?.observed?.gguf && status?.plan?.observed?.llama_server);
 }
 
@@ -140,7 +156,7 @@ export function ProviderStatusBadge() {
       return { statusText: providerDisplayLabel(activeProvider, isZh), tone: 'cloud' };
     }
     if (localReady) return { statusText: isZh ? '本地就绪' : 'Local ready', tone: 'ready' };
-    if (localOccupied) return { statusText: isZh ? '4B 占用端点' : '4B endpoint active', tone: 'error' };
+    if (localOccupied) return { statusText: isZh ? '其他模型占用' : 'Other model active', tone: 'error' };
     if (localBusy) {
       const percent = localStatus?.job?.progress?.percent;
       return {

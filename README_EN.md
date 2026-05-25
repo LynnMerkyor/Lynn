@@ -47,6 +47,7 @@ Related repositories:
   - **High-end (24GB VRAM/unified memory+)**: Qwen3.6-35B-A3B Q4_K_M imatrix — MMLU 90.40% / GPQA Diamond 80.70% · Lynn-calibrated · 21 GB
 - 🔁 **Smooth migration**: old 4B default configs migrate back to 9B MTP; 4B remains an explicit low-config downgrade.
 - 🧾 **Deep Research HTML reports**: local 9B, BYOK, and the default model now create a clickable HTML report inside chat; local/BYOK thinking models retry with no-think fallback when the first response has no visible answer.
+- 🛡️ **Architecture and safety refresh**: the chat route is split into smaller service modules, local GGUF downloads validate source and file type, and model status/token copy now comes from provider state to avoid 4B/9B confusion.
 - ✅ **Test matrix**: installed-app smoke passed for 9B MTP, GPT-5.4, and the default model; Deep Research HTML artifact gates passed for local/BYOK/default paths; the 4B thinking-on risk is documented in the model guide.
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.1)

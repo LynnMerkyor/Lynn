@@ -7,7 +7,6 @@
 import fs from "fs";
 import path from "path";
 import { readFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { wsSend, wsParse } from "../ws-protocol.js";
 import { debugLog } from "../../lib/debug-log.js";
@@ -51,6 +50,38 @@ import {
   buildPrefetchAugmentedPrompt,
   resolveInitialToolUseBehavior,
 } from "../chat/tool-use-behavior.js";
+import { extractText } from "../chat/content-utils.js";
+import { buildCodeVerificationPostscript } from "../chat/code-verification-postscript.js";
+import { createEditRollbackStore } from "../chat/edit-rollback-store.js";
+import { createTokenBucketRateLimiter } from "../chat/rate-limit.js";
+import {
+  appendTextToLatestAssistantInMemory,
+  appendTextToLatestAssistantRecord,
+  countPersistedAssistantMessages,
+  countPersistedAssistantVisibleTexts,
+  ensureSessionFileOnDisk,
+  extractLatestAssistantVisibleText,
+  extractLatestAssistantVisibleTextAfter,
+  persistLocalQwen35DirectTurn,
+} from "../chat/session-persistence.js";
+import {
+  LOCAL_QWEN35_DIRECT_ENDPOINT,
+  LOCAL_QWEN35_DIRECT_MAX_TOKENS,
+  LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS,
+  appendNoThinkHintToLastUserMessage,
+  buildLocalQwen35DirectMessages,
+  resolveLocalQwen35DirectMaxTokens,
+  resolveLocalQwen35DirectThinking,
+  shouldUseLocalQwen35DirectBridge,
+} from "../chat/local-qwen35-direct-policy.js";
+import {
+  TOOL_ARG_SUMMARY_KEYS,
+  buildPrefetchToolSummary,
+  normalizeToolArgsForSummary,
+  rememberFailedTool,
+  rememberSuccessfulTool,
+  summarizeToolExecution,
+} from "../chat/tool-summary.js";
 import {
   attachLocalQwen35BenchContext,
   isLocalQwen35Model,
@@ -61,81 +92,11 @@ import {
   artifactPreviewDedupeKey,
   artifactPreviewFromToolCall,
 } from "../chat/artifact-recovery.js";
+import { normalizeArtifactPayload } from "../chat/artifact-shape.js";
 import {
-  clearPendingMutationOnSuccessfulDelete,
   consumeMutationConfirmation,
   recordPendingDeleteRequest,
-  stripRouteMetadataLeaks,
 } from "../chat/turn-retry-policy.js";
-
-/** tool_start 事件只广播这些 arg 字段，避免传输完整文件内容（同步维护：chat-render-shim.ts extractToolDetail） */
-const TOOL_ARG_SUMMARY_KEYS = ["file_path", "path", "command", "cmd", "shell", "script", "pattern", "url", "query", "key", "value", "action", "type", "schedule", "prompt", "label"];
-/**
- * 从 Pi SDK 的 content 块中提取纯文本
- */
-function extractText(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter(b => b.type === "text" && b.text)
-    .map(b => b.text)
-    .join("");
-}
-
-function normalizePersistedAssistantText(text) {
-  return String(text || "");
-}
-
-function readPersistedAssistantRecords(session, sessionPath = "") {
-  const messages = Array.isArray(session?.messages) ? session.messages : [];
-  const fromMessages = [];
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
-    if (msg?.role !== "assistant") continue;
-    fromMessages.push(msg);
-  }
-  if (sessionPath) {
-    try {
-      const raw = fs.readFileSync(sessionPath, "utf-8");
-      const lines = raw.split("\n").filter(Boolean);
-      const fromFile = [];
-      for (let i = 0; i < lines.length; i++) {
-        const entry = JSON.parse(lines[i]);
-        const msg = entry?.message;
-        if (msg?.role !== "assistant") continue;
-        fromFile.push(msg);
-      }
-      if (fromFile.length > 0) return fromFile;
-    } catch {
-      // Best-effort recovery for SDK paths that persist answers without streaming them.
-    }
-  }
-  return fromMessages;
-}
-
-function readPersistedAssistantVisibleTexts(session, sessionPath = "") {
-  return readPersistedAssistantRecords(session, sessionPath)
-    .map((msg) => normalizePersistedAssistantText(extractText(msg.content)))
-    .filter(Boolean);
-}
-
-function countPersistedAssistantVisibleTexts(session, sessionPath = "") {
-  return readPersistedAssistantVisibleTexts(session, sessionPath).length;
-}
-
-function countPersistedAssistantMessages(session, sessionPath = "") {
-  return readPersistedAssistantRecords(session, sessionPath).length;
-}
-
-function extractLatestAssistantVisibleTextAfter(session, sessionPath = "", baselineCount = 0) {
-  const texts = readPersistedAssistantVisibleTexts(session, sessionPath);
-  if (texts.length <= Math.max(0, baselineCount || 0)) return "";
-  return stripRouteMetadataLeaks(texts[texts.length - 1] || "");
-}
-
-function extractLatestAssistantVisibleText(session, sessionPath = "") {
-  return extractLatestAssistantVisibleTextAfter(session, sessionPath, 0);
-}
 
 function hasStreamEvent(ss, type) {
   return Array.isArray(ss?.events) && ss.events.some((entry) => entry?.event?.type === type);
@@ -151,367 +112,6 @@ function hasToolExecutionInFlight(ss) {
 
 function hasDifferentActiveStreamToken(ss, streamToken) {
   return Boolean(streamToken && ss?.activeStreamToken && ss.activeStreamToken !== streamToken);
-}
-
-function normalizeToolArgsForSummary(toolName, rawArgs) {
-  if (!rawArgs || typeof rawArgs !== "object" || Array.isArray(rawArgs)) return rawArgs;
-  const args = { ...rawArgs };
-  if (toolName === "bash" && (typeof args.command !== "string" || !args.command.trim())) {
-    for (const key of ["query", "cmd", "shell", "script"]) {
-      if (typeof args[key] === "string" && args[key].trim()) {
-        args.command = args[key];
-        break;
-      }
-    }
-  }
-  return args;
-}
-
-function rememberSuccessfulTool(ss, toolName, toolSummary, rawArgs) {
-  if (!ss || !toolName) return;
-  ss.successfulToolCount = (ss.successfulToolCount || 0) + 1;
-  const args = normalizeToolArgsForSummary(toolName, rawArgs) || {};
-  const record = {
-    name: toolName,
-    command: typeof args.command === "string" ? args.command : "",
-    filePath: typeof (args.file_path || args.path) === "string" ? (args.file_path || args.path) : "",
-    outputPreview: typeof toolSummary?.outputPreview === "string" ? toolSummary.outputPreview : "",
-  };
-  ss.lastSuccessfulTools = [...(ss.lastSuccessfulTools || []), record].slice(-8);
-  if (toolName === "bash" && record.command) {
-    clearPendingMutationOnSuccessfulDelete(ss, record.command);
-  }
-}
-
-function rememberFailedTool(ss, toolName) {
-  if (!ss || !toolName) return;
-  ss.hasFailedTool = true;
-  ss.lastFailedTools = [...(ss.lastFailedTools || []), toolName].slice(-8);
-}
-
-function buildPrefetchToolSummary(context) {
-  const lines = String(context || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !/^【系统已完成/.test(line))
-    .filter((line) => !/^(?:下面是|请直接|如果资料不足|来源[:：]?)/.test(line));
-  const outputPreview = lines.slice(0, 6).join("\n").slice(0, 200);
-  return outputPreview ? { outputPreview } : {};
-}
-
-const LOCAL_QWEN35_DIRECT_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_CHARS || 8000);
-const LOCAL_QWEN35_DIRECT_ENDPOINT = process.env.LYNN_LOCAL_QWEN35_ENDPOINT || "http://127.0.0.1:18099/v1/chat/completions";
-// Default local 9B keeps a 32K context window, but its visible answer path
-// should stay responsive. Lower or higher local profiles can still tune
-// budgets via env or their own launcher args.
-const LOCAL_QWEN35_DIRECT_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_MAX_TOKENS || 8192);
-const LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS = Number(process.env.LYNN_LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS || 2048);
-const LOCAL_QWEN35_DIRECT_HISTORY_MAX_MESSAGES = Number(process.env.LYNN_LOCAL_QWEN35_HISTORY_MAX_MESSAGES || 8);
-const LOCAL_QWEN35_DIRECT_HISTORY_MAX_CHARS = Number(process.env.LYNN_LOCAL_QWEN35_HISTORY_MAX_CHARS || 8000);
-
-function shouldUseLocalQwen35DirectBridge(promptText = "", opts = {}) {
-  if (!isLocalQwen35Model(opts.modelInfo)) return false;
-  if (opts.hasImages) return false;
-  if (opts.rehydratedMutation) return false;
-  if (opts.toolBehavior && opts.toolBehavior !== TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN) return false;
-  const text = String(promptText || "").trim();
-  if (!text || text.length > LOCAL_QWEN35_DIRECT_MAX_CHARS) return false;
-  return true;
-}
-
-function normalizeThinkingLevel(level) {
-  return String(level || "auto").trim().toLowerCase();
-}
-
-function isTinyLocalQwen35Ask(promptText = "") {
-  const text = String(promptText || "").trim();
-  if (!text) return false;
-  const compact = text.replace(/\s+/g, "");
-  if (compact.length <= 24 && /^(?:hi|hello|hey|yo|ping|test|ok|在吗|在不在|你好|您好|哈喽|嗨|嗯|好的)[。！？!?.,，、~～]*$/iu.test(compact)) {
-    return true;
-  }
-  if (compact.length <= 80 && /(?:门禁测试|只(?:回复|输出)|请(?:只|直接)(?:回复|输出)|回复ok|输出ok)/iu.test(compact)) {
-    return true;
-  }
-  return false;
-}
-
-function isLightweightLocalQwen35Ask(promptText = "") {
-  if (isTinyLocalQwen35Ask(promptText)) return true;
-  const text = String(promptText || "").trim();
-  if (!text || text.length > 260) return false;
-  if (/(?:深度|深入|详细|推理|证明|分析|代码|方案|计划|报告|长文|论文|复杂|逐步|step by step)/iu.test(text)) return false;
-  return /(?:介绍你|你能帮我|你能做什么|你是谁|已准备好|请记住|只(?:回复|输出)|不要调用工具|不用工具|不调用工具|80\s*字以内|一句中文|一句话|项目代号|最后一行不能有其他字)/iu.test(text);
-}
-
-function resolveLocalQwen35DirectThinking(promptText = "", engineLike = null) {
-  const rawLevel = typeof engineLike?.getThinkingLevel === "function"
-    ? engineLike.getThinkingLevel()
-    : engineLike?.preferences?.getThinkingLevel?.();
-  const level = normalizeThinkingLevel(rawLevel);
-  if (["off", "none", "minimal"].includes(level)) return false;
-  if (isLightweightLocalQwen35Ask(promptText)) return false;
-  if (["high", "xhigh", "max"].includes(level)) return true;
-  return true;
-}
-
-function resolveLocalQwen35DirectMaxTokens(promptText = "", enableThinking = true) {
-  if (!enableThinking) {
-    if (isTinyLocalQwen35Ask(promptText)) return 256;
-    if (isLightweightLocalQwen35Ask(promptText)) return 1536;
-  }
-  return LOCAL_QWEN35_DIRECT_MAX_TOKENS;
-}
-
-function sessionLineId() {
-  return randomUUID().replace(/-/g, "").slice(0, 8);
-}
-
-function getLastSessionEntryId(sessionPath) {
-  try {
-    const raw = fs.readFileSync(sessionPath, "utf-8");
-    const lines = raw.split("\n").filter(Boolean);
-    for (let i = lines.length - 1; i >= 0; i--) {
-      try {
-        const entry = JSON.parse(lines[i]);
-        if (entry?.id) return entry.id;
-      } catch { /* skip malformed historical entries */ }
-    }
-  } catch { /* best-effort persistence */ }
-  return null;
-}
-
-function latestPersistedMessageText(sessionPath) {
-  try {
-    const raw = fs.readFileSync(sessionPath, "utf-8");
-    const lines = raw.split("\n").filter(Boolean);
-    for (let i = lines.length - 1; i >= 0; i--) {
-      try {
-        const entry = JSON.parse(lines[i]);
-        const msg = entry?.message;
-        if (!msg?.role) continue;
-        return {
-          role: msg.role,
-          text: extractText(msg.content),
-        };
-      } catch { /* skip malformed historical entries */ }
-    }
-  } catch { /* best-effort persistence */ }
-  return null;
-}
-
-function persistedChatMessageText(message) {
-  const content = message?.content;
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter((block) => block?.type === "text" && typeof block.text === "string")
-    .map((block) => block.text)
-    .join("");
-}
-
-function appendTextToMessageContent(message, addition) {
-  const text = String(addition || "");
-  if (!message || !text) return false;
-  if (typeof message.content === "string") {
-    message.content += text;
-    return true;
-  }
-  if (!Array.isArray(message.content)) {
-    message.content = [{ type: "text", text }];
-    return true;
-  }
-  for (let i = message.content.length - 1; i >= 0; i--) {
-    const block = message.content[i];
-    if (block?.type === "text" && typeof block.text === "string") {
-      block.text += text;
-      return true;
-    }
-  }
-  message.content.push({ type: "text", text });
-  return true;
-}
-
-function appendTextToLatestAssistantRecord(sessionPath, addition) {
-  const text = String(addition || "");
-  if (!sessionPath || !text) return false;
-  try {
-    const raw = fs.readFileSync(sessionPath, "utf-8");
-    const endsWithNewline = raw.endsWith("\n");
-    const lines = raw.split("\n");
-    for (let i = lines.length - 1; i >= 0; i--) {
-      if (!lines[i]?.trim()) continue;
-      let entry = null;
-      try {
-        entry = JSON.parse(lines[i]);
-      } catch {
-        continue;
-      }
-      if (entry?.message?.role !== "assistant") continue;
-      if (!appendTextToMessageContent(entry.message, text)) return false;
-      lines[i] = JSON.stringify(entry);
-      fs.writeFileSync(sessionPath, `${lines.join("\n")}${endsWithNewline ? "" : "\n"}`, "utf-8");
-      return true;
-    }
-  } catch (err) {
-    debugLog()?.warn("ws", `[CODE-VERIFY-POSTSCRIPT v1] persist failed · ${err?.message || err} · ${sessionPath}`);
-  }
-  return false;
-}
-
-function appendTextToLatestAssistantInMemory(session, addition) {
-  const messages = Array.isArray(session?.messages) ? session.messages : [];
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role !== "assistant") continue;
-    return appendTextToMessageContent(messages[i], addition);
-  }
-  return false;
-}
-
-function buildCodeVerificationPostscript(promptText = "", visibleText = "") {
-  const prompt = String(promptText || "");
-  if (!prompt.trim()) return "";
-  const looksLikeCodeFailure =
-    /(?:Traceback|ImportError|ModuleNotFoundError|SyntaxError|TypeError|ReferenceError|Exception|Error:|报错|错误|修|fix|debug|排查)/iu.test(prompt)
-    && /(?:main\.py|\.py\b|\.js\b|\.ts\b|代码|ComfyUI|Python|Node|npm|pytest)/iu.test(prompt);
-  if (!looksLikeCodeFailure) return "";
-  const visible = String(visibleText || "");
-  if (/请运行验证/iu.test(visible) && /python3?\s+main\.py/iu.test(visible)) return "";
-  if (!/main\.py/iu.test(prompt)) return "";
-  const guidance = visible.trim().length < 180
-    ? "\n\n我还没有实际改到你的 ComfyUI 文件，所以不要把这当成已经改好。请在 ComfyUI 根目录先核对 `custom_nodes/foo.py`：如果里面的类名不是 `FooNode`，就把 `/comfy/nodes.py` 的 import 改成真实类名；如果文件本来应该导出 `FooNode`，就在 `foo.py` 里补齐同名类，并确认 `__init__.py` 没有拦截导入。若你用 Docker 或虚拟环境，先进入对应容器/环境再执行同样检查。"
-    : "";
-  return `${guidance}\n\n请运行验证：\n\`\`\`bash\npython main.py\n\`\`\``;
-}
-
-function readRecentLocalQwen35DirectMessages(sessionPath, currentPromptText = "") {
-  if (!sessionPath || !fs.existsSync(sessionPath)) return [];
-  try {
-    const raw = fs.readFileSync(sessionPath, "utf-8");
-    const messages = [];
-    for (const line of raw.split("\n")) {
-      if (!line.trim()) continue;
-      let entry = null;
-      try {
-        entry = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      if (entry?.type !== "message") continue;
-      const role = entry?.message?.role;
-      if (role !== "user" && role !== "assistant") continue;
-      const text = persistedChatMessageText(entry.message).trim();
-      if (!text) continue;
-      messages.push({ role, content: text });
-    }
-
-    const current = String(currentPromptText || "").trim();
-    while (messages.length && messages.at(-1)?.role === "user" && messages.at(-1)?.content.trim() === current) {
-      messages.pop();
-    }
-
-    const selected = [];
-    let chars = 0;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
-      const nextChars = chars + message.content.length;
-      if (
-        selected.length >= LOCAL_QWEN35_DIRECT_HISTORY_MAX_MESSAGES
-        || (selected.length > 0 && nextChars > LOCAL_QWEN35_DIRECT_HISTORY_MAX_CHARS)
-      ) {
-        break;
-      }
-      selected.unshift(message);
-      chars = nextChars;
-    }
-    while (selected.length && selected[0].role !== "user") selected.shift();
-    return selected;
-  } catch (err) {
-    debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT-HISTORY v1] read failed · ${err?.message || err} · ${sessionPath}`);
-    return [];
-  }
-}
-
-function buildLocalQwen35DirectMessages(sessionPath, originalPromptText, effectivePromptText) {
-  const current = String(effectivePromptText || originalPromptText || "");
-  const history = readRecentLocalQwen35DirectMessages(sessionPath, originalPromptText);
-  const messages = [...history];
-  const last = messages.at(-1);
-  if (!(last?.role === "user" && last.content.trim() === current.trim())) {
-    messages.push({ role: "user", content: current });
-  }
-  return messages;
-}
-
-function appendNoThinkHintToLastUserMessage(messages) {
-  const lastUser = [...messages].reverse().find((message) => message?.role === "user");
-  if (!lastUser || /\/no_think\b/iu.test(lastUser.content || "")) return messages;
-  lastUser.content = `${String(lastUser.content || "").trim()}\n/no_think`;
-  return messages;
-}
-
-function appendJsonlLine(filePath, entry) {
-  fs.appendFileSync(filePath, `${JSON.stringify(entry)}\n`);
-}
-
-function ensureSessionFileOnDisk(sessionPath) {
-  if (!sessionPath) return false;
-  try {
-    const dir = path.dirname(sessionPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (!fs.existsSync(sessionPath)) fs.writeFileSync(sessionPath, "", "utf-8");
-    return true;
-  } catch (err) {
-    debugLog()?.warn("ws", `[PROMPT-SESSION-FILE v1] failed · ${err?.message || err} · ${sessionPath}`);
-    return false;
-  }
-}
-
-function persistLocalQwen35DirectTurn(sessionPath, originalPromptText, assistantText, opts = {}) {
-  if (!sessionPath || !assistantText) return;
-  const now = new Date().toISOString();
-  let parentId = getLastSessionEntryId(sessionPath);
-  let userId = null;
-  const latest = latestPersistedMessageText(sessionPath);
-  if (!(latest?.role === "user" && String(latest.text || "").trim() === String(originalPromptText || "").trim())) {
-    userId = sessionLineId();
-    appendJsonlLine(sessionPath, {
-      type: "message",
-      id: userId,
-      parentId,
-      timestamp: now,
-      message: {
-        role: "user",
-        content: [{ type: "text", text: String(originalPromptText || "") }],
-        timestamp: Date.now(),
-      },
-    });
-    parentId = userId;
-  }
-
-  const content = [];
-  const reasoning = String(opts.reasoningText || "").trim();
-  if (reasoning) {
-    content.push({ type: "thinking", thinking: `${reasoning}\n`, thinkingSignature: "reasoning_content" });
-  }
-  content.push({ type: "text", text: String(assistantText || "") });
-  appendJsonlLine(sessionPath, {
-    type: "message",
-    id: sessionLineId(),
-    parentId,
-    timestamp: now,
-    message: {
-      role: "assistant",
-      content,
-      api: opts.api || "openai-completions",
-      provider: opts.provider || LOCAL_QWEN35_PROVIDER_ID,
-      model: opts.model || LOCAL_QWEN35_MODEL_ID,
-      usage: opts.usage || undefined,
-      stopReason: "stop",
-      timestamp: Date.now(),
-    },
-  });
 }
 
 function resolveEditSnapshotPath(session, engine, rawPath) {
@@ -559,28 +159,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     debugLog()?.span("turn_close", { sessionPath, reason }, { module: "ws", level: "INFO" });
   });
 
-  // ── Per-client rate limiting (token bucket) ──
-  const _wsRateLimits = new WeakMap();
-  const RATE_TOKENS = 5;
-  const RATE_REFILL_MS = 10000;
-
-  function checkRateLimit(ws) {
-    let bucket = _wsRateLimits.get(ws);
-    if (!bucket) {
-      bucket = { tokens: RATE_TOKENS, lastRefill: Date.now() };
-      _wsRateLimits.set(ws, bucket);
-    }
-    const now = Date.now();
-    const elapsed = now - bucket.lastRefill;
-    if (elapsed >= RATE_REFILL_MS) {
-      const refills = Math.floor(elapsed / RATE_REFILL_MS);
-      bucket.tokens = Math.min(RATE_TOKENS, bucket.tokens + refills * RATE_TOKENS);
-      bucket.lastRefill += refills * RATE_REFILL_MS;
-    }
-    if (bucket.tokens <= 0) return false;
-    bucket.tokens--;
-    return true;
-  }
+  const checkRateLimit = createTokenBucketRateLimiter({ capacity: 5, refillMs: 10_000 });
 
   function cancelDisconnectAbort() {
     if (disconnectAbortTimer) {
@@ -911,59 +490,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
 
   const clients = new Set();
 
-  const pendingEditSnapshots = new Map();
-  const rollbackSnapshots = new Map();
-  const rollbackOrder = [];
-  const MAX_ROLLBACK_SNAPSHOTS = 200;
-
-  const editRollbackStore = {
-    get(rollbackId) {
-      return rollbackSnapshots.get(rollbackId) || null;
-    },
-    setPending(toolCallId, snapshot) {
-      if (!toolCallId || !snapshot) return;
-      pendingEditSnapshots.set(toolCallId, snapshot);
-    },
-    discardPending(toolCallId) {
-      if (!toolCallId) return;
-      pendingEditSnapshots.delete(toolCallId);
-    },
-    discardPendingForSession(sessionPath, streamToken = null) {
-      if (!sessionPath) return 0;
-      let count = 0;
-      for (const [toolCallId, snapshot] of pendingEditSnapshots) {
-        if (snapshot?.sessionPath !== sessionPath) continue;
-        if (streamToken && snapshot?.streamToken && snapshot.streamToken !== streamToken) continue;
-        pendingEditSnapshots.delete(toolCallId);
-        count += 1;
-      }
-      return count;
-    },
-    pendingCount() {
-      return pendingEditSnapshots.size;
-    },
-    finalize(toolCallId) {
-      if (!toolCallId) return null;
-      const snapshot = pendingEditSnapshots.get(toolCallId);
-      pendingEditSnapshots.delete(toolCallId);
-      if (!snapshot) return null;
-
-      const rollbackId = toolCallId;
-      if (!rollbackSnapshots.has(rollbackId)) rollbackOrder.push(rollbackId);
-      rollbackSnapshots.set(rollbackId, {
-        rollbackId,
-        createdAt: Date.now(),
-        ...snapshot,
-      });
-
-      while (rollbackOrder.length > MAX_ROLLBACK_SNAPSHOTS) {
-        const oldestId = rollbackOrder.shift();
-        if (oldestId) rollbackSnapshots.delete(oldestId);
-      }
-
-      return rollbackSnapshots.get(rollbackId);
-    },
-  };
+  const editRollbackStore = createEditRollbackStore({ maxSnapshots: 200 });
 
   function broadcast(msg) {
     for (const client of clients) {
@@ -1134,7 +661,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
-  function feedLocalVisibleText(sessionPath, ss, delta) {
+  function feedAssistantVisibleText(sessionPath, ss, delta) {
     if (!delta) return;
     ss.rawTextAcc += delta || "";
     ss.thinkTagParser.feed(delta, (tEvt) => {
@@ -1422,7 +949,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
               emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
             }
             assistantText += contentDelta;
-            feedLocalVisibleText(sessionPath, ss, contentDelta);
+            feedAssistantVisibleText(sessionPath, ss, contentDelta);
             if (earlyCloseVisibleChars && assistantText.trim().length >= earlyCloseVisibleChars) {
               streamDone = true;
               break;
@@ -1495,59 +1022,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         }
 
         const delta = event.assistantMessageEvent.delta;
-        ss.rawTextAcc += delta || "";
-        ss.thinkTagParser.feed(delta, (tEvt) => {
-          switch (tEvt.type) {
-            case "think_start":
-              emitStreamEvent(sessionPath, ss, { type: "thinking_start" });
-              break;
-            case "think_text":
-              emitStreamEvent(sessionPath, ss, { type: "thinking_delta", delta: tEvt.data });
-              break;
-            case "think_end":
-              emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-              break;
-            case "text":
-              ss.progressParser.feed(tEvt.data, (pEvt) => {
-                if (pEvt.type === "tool_progress") {
-                  ss.progressMarkerCount++;
-                  return;
-                }
-                ss.moodParser.feed(pEvt.data, (evt) => {
-                switch (evt.type) {
-                  case "text":
-                    ss.xingParser.feed(evt.data, (xEvt) => {
-                      switch (xEvt.type) {
-                        case "text":
-                          emitVisibleTextDelta(sessionPath, ss, xEvt.data);
-                          break;
-                        case "xing_start":
-                          emitStreamEvent(sessionPath, ss, { type: "xing_start", title: xEvt.title });
-                          break;
-                        case "xing_text":
-                          emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
-                          break;
-                        case "xing_end":
-                          emitStreamEvent(sessionPath, ss, { type: "xing_end" });
-                          break;
-                      }
-                    });
-                    break;
-                  case "mood_start":
-                    emitStreamEvent(sessionPath, ss, { type: "mood_start" });
-                    break;
-                  case "mood_text":
-                    emitStreamEvent(sessionPath, ss, { type: "mood_text", delta: evt.data });
-                    break;
-                  case "mood_end":
-                    emitStreamEvent(sessionPath, ss, { type: "mood_end" });
-                    break;
-                }
-              });
-              });
-              break;
-          }
-        });
+        feedAssistantVisibleText(sessionPath, ss, delta);
       } else if (sub === "thinking_delta") {
         ss.hasThinking = true;
         if (!ss.isThinking) {
@@ -1641,65 +1116,21 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         // Timer cleanup should never fail the tool result path.
       }
 
-      const rawDetails = event.result?.details || {};
-      const toolSummary = {};
-      const toolName = event.toolName || "";
-      const normalizedArgs = normalizeToolArgsForSummary(toolName, event.args) || {};
-      const toolIsError = Boolean(event.isError || event.result?.isError);
-
-      if (toolName === "edit" || toolName === "edit-diff") {
-        if (rawDetails.diff) {
-          const lines = rawDetails.diff.split("\n");
-          let added = 0, removed = 0;
-          for (const l of lines) {
-            if (l.startsWith("+") && !l.startsWith("+++")) added++;
-            if (l.startsWith("-") && !l.startsWith("---")) removed++;
-          }
-          toolSummary.linesAdded = added;
-          toolSummary.linesRemoved = removed;
-          toolSummary.filePath = normalizedArgs.file_path || normalizedArgs.path || "";
-        }
-      } else if (toolName === "write") {
-        toolSummary.filePath = normalizedArgs.file_path || normalizedArgs.path || "";
-        const text = extractText(event.result?.content);
-        const bytesMatch = text.match(/(\d+)\s*bytes/i);
-        if (bytesMatch) toolSummary.bytesWritten = parseInt(bytesMatch[1], 10);
-      } else if (toolName === "bash") {
-        const text = extractText(event.result?.content);
-        if (text) toolSummary.outputPreview = text.slice(0, 200);
-        toolSummary.command = (normalizedArgs.command || "").slice(0, 80);
-        if (rawDetails.truncation) {
-          toolSummary.totalLines = rawDetails.truncation.totalLines;
-          toolSummary.truncated = true;
-        }
-      } else if (toolName === "grep" || toolName === "glob" || toolName === "find") {
-        const text = extractText(event.result?.content);
-        if (text) {
-          const matchLines = text.trim().split("\n").filter(Boolean);
-          toolSummary.matchCount = matchLines.length;
-          toolSummary.outputPreview = matchLines.slice(0, 5).join("\n");
-        }
-      } else if (toolName === "web_search") {
-        const text = extractText(event.result?.content);
-        if (text) toolSummary.outputPreview = text.slice(0, 200);
-      } else if (toolName === "read") {
-        toolSummary.filePath = normalizedArgs.file_path || normalizedArgs.path || "";
-        const text = extractText(event.result?.content);
-        if (text) {
-          const lineCount = text.split("\n").length;
-          toolSummary.lineCount = lineCount;
-        }
-      } else {
-        const text = extractText(event.result?.content);
-        if (text) toolSummary.outputPreview = text.slice(0, 200);
-      }
+      const {
+        rawDetails,
+        summary: toolSummary,
+        toolName,
+        normalizedArgs,
+        toolIsError,
+        publicSummary,
+      } = summarizeToolExecution(event);
 
       emitStreamEvent(sessionPath, ss, {
         type: "tool_end",
         name: toolName,
         success: !toolIsError,
         details: rawDetails,
-        summary: Object.keys(toolSummary).length > 0 ? toolSummary : undefined,
+        summary: publicSummary,
       });
       lifecycleHooks.run("tool_end", {
         event,
@@ -1707,7 +1138,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         sessionPath,
         toolName,
         success: !toolIsError,
-        summary: Object.keys(toolSummary).length > 0 ? toolSummary : undefined,
+        summary: publicSummary,
       });
 
       if (!toolIsError) {
@@ -1751,15 +1182,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
 
       if (event.toolName === "create_artifact" || event.toolName === "create_report") {
         const d = event.result?.details || {};
-        if (d.artifactId && d.type && d.content) {
-          emitStreamEvent(sessionPath, ss, {
-            type: "artifact",
-            artifactId: d.artifactId,
-            artifactType: d.type,
-            title: d.title,
-            content: d.content,
-            language: d.language || (d.type === "html" ? "html" : undefined),
-          });
+        const artifact = normalizeArtifactPayload(d, { messageType: "artifact" });
+        if (artifact) {
+          emitStreamEvent(sessionPath, ss, artifact);
         }
       }
 
@@ -1924,92 +1349,6 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         ss.isThinking = false;
         emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
       }
-      // flush 顺序：ThinkTag → LynnProgress → Mood → Xing
-      const feedMoodPipeline = (text) => {
-        ss.progressParser.feed(text, (pEvt) => {
-          if (pEvt.type === "tool_progress") {
-            ss.progressMarkerCount++;
-            debugLog()?.warn("ws", `suppressed hallucinated <lynn_tool_progress> during flush · ${sessionPath}`);
-            return;
-          }
-          feedMoodOnly(pEvt.data);
-        });
-      };
-      const feedMoodOnly = (text) => {
-        ss.moodParser.feed(text, (evt) => {
-          if (evt.type === "text") {
-            ss.xingParser.feed(evt.data, (xEvt) => {
-              switch (xEvt.type) {
-                case "text":
-                  emitVisibleTextDelta(sessionPath, ss, xEvt.data);
-                  break;
-                case "xing_start":
-                  emitStreamEvent(sessionPath, ss, { type: "xing_start", title: xEvt.title });
-                  break;
-                case "xing_text":
-                  emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
-                  break;
-                case "xing_end":
-                  emitStreamEvent(sessionPath, ss, { type: "xing_end" });
-                  break;
-              }
-            });
-          } else if (evt.type === "mood_start") {
-            emitStreamEvent(sessionPath, ss, { type: "mood_start" });
-          } else if (evt.type === "mood_text") {
-            emitStreamEvent(sessionPath, ss, { type: "mood_text", delta: evt.data });
-          } else if (evt.type === "mood_end") {
-            emitStreamEvent(sessionPath, ss, { type: "mood_end" });
-          }
-        });
-      };
-      ss.thinkTagParser.flush((tEvt) => {
-        if (tEvt.type === "think_text") {
-          emitStreamEvent(sessionPath, ss, { type: "thinking_delta", delta: tEvt.data });
-        } else if (tEvt.type === "think_end") {
-          emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-        } else if (tEvt.type === "text") {
-          feedMoodPipeline(tEvt.data);
-        }
-      });
-      ss.progressParser.flush((pEvt) => {
-        if (pEvt.type === "text") {
-          feedMoodOnly(pEvt.data);
-        } else if (pEvt.type === "tool_progress") {
-          ss.progressMarkerCount++;
-          debugLog()?.warn("ws", `suppressed hallucinated <lynn_tool_progress> during progress flush · ${sessionPath}`);
-        }
-      });
-      ss.moodParser.flush((evt) => {
-        if (evt.type === "text") {
-          ss.xingParser.feed(evt.data, (xEvt) => {
-            switch (xEvt.type) {
-              case "text":
-                emitVisibleTextDelta(sessionPath, ss, xEvt.data);
-                break;
-              case "xing_start":
-                emitStreamEvent(sessionPath, ss, { type: "xing_start", title: xEvt.title });
-                break;
-              case "xing_text":
-                emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
-                break;
-              case "xing_end":
-                emitStreamEvent(sessionPath, ss, { type: "xing_end" });
-                break;
-            }
-          });
-        } else if (evt.type === "mood_text") {
-          emitStreamEvent(sessionPath, ss, { type: "mood_text", delta: evt.data });
-        }
-      });
-      ss.xingParser.flush((xEvt) => {
-        if (xEvt.type === "text") {
-          emitVisibleTextDelta(sessionPath, ss, xEvt.data);
-        } else if (xEvt.type === "xing_text") {
-          emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
-        }
-      });
-
       maybeAppendCodeVerificationPostscript(sessionPath, ss);
       emitStreamEvent(sessionPath, ss, { type: "turn_end" });
       broadcast({ type: "status", isStreaming: false, sessionPath });
@@ -2336,7 +1675,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                   ss._rehydratedEffectivePrompt = null;
                 }
                 if (shouldUseLocalQwen35DirectBridge(promptText, {
-                  modelInfo: currentModelInfo,
+                  isLocalModel: isLocalQwen35Model(currentModelInfo),
                   hasImages: Boolean(msg.images?.length),
                   rehydratedMutation: Boolean(rehydratedMutation),
                   toolBehavior: initialToolUse.behavior,
