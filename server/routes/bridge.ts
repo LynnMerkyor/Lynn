@@ -6,6 +6,7 @@
 
 import fs from "fs";
 import path from "path";
+import { createRequire } from "node:module";
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { getWechatQrcode, pollWechatQrcodeStatus } from "../../lib/bridge/wechat-login.js";
@@ -13,7 +14,148 @@ import { debugLog } from "../../lib/debug-log.js";
 import { parseSessionKey, collectKnownUsers, KNOWN_PLATFORMS } from "../../lib/bridge/session-key.js";
 import { t } from "../i18n.js";
 
-export function createBridgeRoute(engine, bridgeManager) {
+type BridgePlatform = string;
+
+type BridgePlatformConfig = {
+  enabled?: boolean;
+  token?: string;
+  appId?: string;
+  appSecret?: string;
+  appID?: string;
+  appSecretLegacy?: string;
+  botToken?: string;
+  [key: string]: unknown;
+};
+
+type BridgePreferences = {
+  telegram?: BridgePlatformConfig;
+  feishu?: BridgePlatformConfig;
+  qq?: BridgePlatformConfig;
+  wechat?: BridgePlatformConfig;
+  readOnly?: boolean;
+  owner?: Record<string, string>;
+  [platform: string]: BridgePlatformConfig | Record<string, string> | boolean | undefined;
+};
+
+type Preferences = {
+  bridge?: BridgePreferences;
+  [key: string]: unknown;
+};
+
+type BridgeIndexEntry = {
+  file?: string;
+  userId?: string;
+  name?: string;
+  avatarUrl?: string;
+  [key: string]: unknown;
+};
+
+type BridgeIndex = Record<string, string | BridgeIndexEntry>;
+
+type BridgeEngine = {
+  lynnHome: string;
+  homeCwd?: string;
+  cwd?: string;
+  agent: {
+    sessionDir: string;
+    deskManager?: { deskDir?: string };
+  };
+  getPreferences(): Preferences;
+  savePreferences(prefs: Preferences): void;
+  getBridgeIndex(): BridgeIndex;
+  saveBridgeIndex(index: BridgeIndex): void;
+};
+
+type PlatformStatus = {
+  status?: string;
+  error?: unknown;
+};
+
+type BridgeManager = {
+  getStatus(): Partial<Record<string, PlatformStatus>>;
+  startPlatformFromConfig(platform: BridgePlatform, cfg: BridgePlatformConfig): unknown;
+  stopPlatform(platform: BridgePlatform): unknown;
+  getMessages(limit: number): unknown[];
+  sendMediaFile(platform: BridgePlatform, chatId: string, filePath: string): Promise<unknown> | unknown;
+};
+
+type OwnerBody = {
+  platform?: unknown;
+  userId?: unknown;
+};
+
+type ConfigBody = {
+  platform?: unknown;
+  credentials?: unknown;
+  enabled?: unknown;
+};
+
+type SettingsBody = {
+  readOnly?: unknown;
+};
+
+type StopBody = {
+  platform?: unknown;
+};
+
+type SendMediaBody = {
+  platform?: unknown;
+  chatId?: unknown;
+  filePath?: unknown;
+};
+
+type TestCredentials = Record<string, string | undefined>;
+type TelegramBotCtor = new (token: string) => {
+  getMe(): Promise<{ username?: string; first_name?: string }>;
+};
+
+type TestBody = {
+  platform?: unknown;
+  credentials?: unknown;
+};
+
+type QrcodeStatusBody = {
+  qrcodeId?: unknown;
+};
+
+type BridgeSessionMessage = {
+  role?: unknown;
+  content?: unknown;
+};
+
+type BridgeSessionLine = {
+  type?: unknown;
+  message?: BridgeSessionMessage;
+  timestamp?: unknown;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isKnownPlatform(value: unknown): value is BridgePlatform {
+  return typeof value === "string" && KNOWN_PLATFORMS.includes(value);
+}
+
+function asPlatformConfig(value: unknown): BridgePlatformConfig {
+  return isRecord(value) ? value as BridgePlatformConfig : {};
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function loadTelegramBot(): TelegramBotCtor {
+  const require = createRequire(import.meta.url);
+  const mod = require("node-telegram-bot-api") as TelegramBotCtor | { default?: TelegramBotCtor };
+  return typeof mod === "function" ? mod : mod.default as TelegramBotCtor;
+}
+
+export function createBridgeRoute(engine: BridgeEngine, bridgeManager: BridgeManager) {
   const route = new Hono();
 
   /** 获取所有平台连接状态 */
@@ -66,15 +208,15 @@ export function createBridgeRoute(engine, bridgeManager) {
 
   /** 设置 owner（哪个账号是你） */
   route.post("/bridge/owner", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<OwnerBody>(c);
     const { platform, userId } = body;
-    if (!platform || !KNOWN_PLATFORMS.includes(platform)) {
+    if (!isKnownPlatform(platform)) {
       return c.json({ ok: false, error: "invalid platform" });
     }
     const prefs = engine.getPreferences();
     if (!prefs.bridge) prefs.bridge = {};
     if (!prefs.bridge.owner) prefs.bridge.owner = {};
-    if (userId) {
+    if (typeof userId === "string" && userId) {
       prefs.bridge.owner[platform] = userId;
     } else {
       delete prefs.bridge.owner[platform];
@@ -86,30 +228,32 @@ export function createBridgeRoute(engine, bridgeManager) {
 
   /** 保存凭证 + 启停平台 */
   route.post("/bridge/config", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<ConfigBody>(c);
     const { platform, credentials, enabled } = body;
-    if (!platform || !KNOWN_PLATFORMS.includes(platform)) {
+    if (!isKnownPlatform(platform)) {
       return c.json({ error: "invalid platform" }, 400);
     }
 
     const prefs = engine.getPreferences();
     if (!prefs.bridge) prefs.bridge = {};
     if (!prefs.bridge[platform]) prefs.bridge[platform] = {};
+    const platformPrefs = asPlatformConfig(prefs.bridge[platform]);
+    prefs.bridge[platform] = platformPrefs;
 
     // 更新凭证
-    if (credentials) {
-      Object.assign(prefs.bridge[platform], credentials);
+    if (isRecord(credentials)) {
+      Object.assign(platformPrefs, credentials);
     }
 
     // 更新启用状态
     if (typeof enabled === "boolean") {
-      prefs.bridge[platform].enabled = enabled;
+      platformPrefs.enabled = enabled;
     }
 
     engine.savePreferences(prefs);
 
     // 启停（委托给 bridgeManager，由 ADAPTER_REGISTRY 决定凭证提取逻辑）
-    const cfg = prefs.bridge[platform];
+    const cfg = platformPrefs;
     if (cfg.enabled) {
       bridgeManager.startPlatformFromConfig(platform, cfg);
     } else {
@@ -122,7 +266,7 @@ export function createBridgeRoute(engine, bridgeManager) {
 
   /** 更新 bridge 全局设置（readOnly 等） */
   route.post("/bridge/settings", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<SettingsBody>(c);
     const { readOnly } = body;
     const prefs = engine.getPreferences();
     if (!prefs.bridge) prefs.bridge = {};
@@ -134,9 +278,9 @@ export function createBridgeRoute(engine, bridgeManager) {
 
   /** 停止指定平台 */
   route.post("/bridge/stop", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<StopBody>(c);
     const { platform } = body;
-    if (!platform) {
+    if (typeof platform !== "string" || !platform) {
       return c.json({ error: "platform required" }, 400);
     }
 
@@ -144,8 +288,10 @@ export function createBridgeRoute(engine, bridgeManager) {
 
     // 同步更新 preferences
     const prefs = engine.getPreferences();
+    const platformPrefs = asPlatformConfig(prefs.bridge?.[platform]);
     if (prefs.bridge?.[platform]) {
-      prefs.bridge[platform].enabled = false;
+      platformPrefs.enabled = false;
+      prefs.bridge[platform] = platformPrefs;
       engine.savePreferences(prefs);
     }
 
@@ -155,7 +301,7 @@ export function createBridgeRoute(engine, bridgeManager) {
 
   /** 获取最近消息日志（实时内存缓冲） */
   route.get("/bridge/messages", async (c) => {
-    const limit = parseInt(c.req.query("limit"), 10) || 50;
+    const limit = parseInt(c.req.query("limit") || "", 10) || 50;
     return c.json({ messages: bridgeManager.getMessages(limit) });
   });
 
@@ -166,11 +312,21 @@ export function createBridgeRoute(engine, bridgeManager) {
     const bridgeDir = path.join(engine.agent.sessionDir, "bridge");
     const prefs = engine.getPreferences();
     const owner = prefs.bridge?.owner || {};
-    const sessions = [];
+    const sessions: Array<{
+      sessionKey: string;
+      platform: string;
+      chatType: string | null;
+      chatId: string | null;
+      file: string;
+      lastActive: number | null;
+      displayName: string | null;
+      avatarUrl: string | null;
+      isOwner: boolean;
+    }> = [];
 
     for (const [sessionKey, raw] of Object.entries(index)) {
       // 兼容旧格式（字符串）和新格式（对象）
-      const entry = typeof raw === "string" ? { file: raw } : raw;
+      const entry: BridgeIndexEntry = typeof raw === "string" ? { file: raw } : raw;
       const file = entry.file;
       if (!file) continue;
 
@@ -192,12 +348,12 @@ export function createBridgeRoute(engine, bridgeManager) {
 
       // isOwner 运行时计算：entry.userId 匹配 prefs.bridge.owner[platform]
       const ownerUserId = owner[plat] || null;
-      const isOwner = !!(entry.userId && ownerUserId && entry.userId === ownerUserId);
+      const isOwner = !!(typeof entry.userId === "string" && ownerUserId && entry.userId === ownerUserId);
 
       sessions.push({
         sessionKey, platform: plat, chatType, chatId, file, lastActive,
-        displayName: entry.name || null,
-        avatarUrl: entry.avatarUrl || null,
+        displayName: typeof entry.name === "string" ? entry.name : null,
+        avatarUrl: typeof entry.avatarUrl === "string" ? entry.avatarUrl : null,
         isOwner,
       });
     }
@@ -226,10 +382,16 @@ export function createBridgeRoute(engine, bridgeManager) {
     try {
       const rawContent = fs.readFileSync(fp, "utf-8");
       const lines = rawContent.trim().split("\n").map(l => {
-        try { return JSON.parse(l); } catch { return null; }
-      }).filter(Boolean);
+        try { return JSON.parse(l) as BridgeSessionLine; } catch { return null; }
+      }).filter((line): line is BridgeSessionLine => Boolean(line));
 
-      const messages = [];
+      const messages: Array<{
+        role: "user" | "assistant";
+        content: string;
+        hasMedia: boolean;
+        mediaCount: number;
+        ts: unknown;
+      }> = [];
       for (const line of lines) {
         if (line.type !== "message") continue;
         const msg = line.message;
@@ -239,7 +401,8 @@ export function createBridgeRoute(engine, bridgeManager) {
         let mediaCount = 0;
         if (Array.isArray(msg.content)) {
           for (const b of msg.content) {
-            if (b.type === "text" && b.text) textContent += b.text;
+            if (!isRecord(b)) continue;
+            if (b.type === "text" && typeof b.text === "string") textContent += b.text;
             if (b.type === "image") mediaCount++;
           }
         } else if (typeof msg.content === "string") {
@@ -259,7 +422,7 @@ export function createBridgeRoute(engine, bridgeManager) {
 
       return c.json({ messages });
     } catch (err) {
-      return c.json({ error: err.message, messages: [] });
+      return c.json({ error: errorMessage(err), messages: [] });
     }
   });
 
@@ -271,7 +434,7 @@ export function createBridgeRoute(engine, bridgeManager) {
     if (!raw) return c.json({ ok: false, error: "session not found" });
 
     // 保留元数据（name, avatarUrl），只删 file 引用
-    const entry = typeof raw === "string" ? {} : { ...raw };
+    const entry: BridgeIndexEntry = typeof raw === "string" ? {} : { ...raw };
     delete entry.file;
     index[sessionKey] = entry;
     engine.saveBridgeIndex(index);
@@ -281,9 +444,9 @@ export function createBridgeRoute(engine, bridgeManager) {
 
   /** 发送媒体到 bridge 平台（桌面端推送文件） */
   route.post("/bridge/send-media", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<SendMediaBody>(c);
     const { platform, chatId, filePath } = body;
-    if (!platform || !chatId || !filePath) {
+    if (typeof platform !== "string" || typeof chatId !== "string" || typeof filePath !== "string") {
       return c.json({ error: "platform, chatId, filePath required" }, 400);
     }
 
@@ -302,7 +465,7 @@ export function createBridgeRoute(engine, bridgeManager) {
     }
 
     // 用 realpathSync 解析 symlink，防止 symlink 绕过白名单
-    let realPath;
+    let realPath: string;
     try { realPath = fs.realpathSync(resolved); }
     catch { return c.json({ error: "file not found" }, 404); }
 
@@ -326,26 +489,28 @@ export function createBridgeRoute(engine, bridgeManager) {
       await bridgeManager.sendMediaFile(platform, chatId, realPath);
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   /** 测试凭证（不启动轮询） */
   route.post("/bridge/test", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<TestBody>(c);
     const { platform, credentials } = body;
-    if (!platform || !credentials) {
+    if (typeof platform !== "string" || !isRecord(credentials)) {
       return c.json({ error: "platform and credentials required" }, 400);
     }
 
-    if (!KNOWN_PLATFORMS.includes(platform)) {
+    if (!isKnownPlatform(platform)) {
       return c.json({ error: "unknown platform" }, 400);
     }
 
+    const typedCredentials = credentials as TestCredentials;
+
     try {
       if (platform === "telegram") {
-        const TelegramBot = (await import("node-telegram-bot-api")).default;
-        const bot = new TelegramBot(credentials.token);
+        const TelegramBot = loadTelegramBot();
+        const bot = new TelegramBot(String(typedCredentials.token || ""));
         const me = await bot.getMe();
         return c.json({ ok: true, info: { username: me.username, name: me.first_name } });
       } else if (platform === "feishu") {
@@ -353,11 +518,11 @@ export function createBridgeRoute(engine, bridgeManager) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            app_id: credentials.appId,
-            app_secret: credentials.appSecret,
+            app_id: typedCredentials.appId,
+            app_secret: typedCredentials.appSecret,
           }),
         });
-        const data = await resp.json();
+        const data = await resp.json() as { code?: number; msg?: string };
         if (data.code === 0) {
           return c.json({ ok: true, info: { msg: t("error.tokenSuccess") } });
         }
@@ -367,16 +532,16 @@ export function createBridgeRoute(engine, bridgeManager) {
         const tokenRes = await fetch("https://bots.qq.com/app/getAppAccessToken", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ appId: credentials.appID, clientSecret: credentials.appSecret }),
+          body: JSON.stringify({ appId: typedCredentials.appID, clientSecret: typedCredentials.appSecret }),
         });
-        const tokenData = await tokenRes.json();
+        const tokenData = await tokenRes.json() as { access_token?: string; message?: string };
         if (!tokenData.access_token) {
           return c.json({ ok: false, error: tokenData.message || t("error.tokenFetchFailed") });
         }
         const meRes = await fetch("https://api.sgroup.qq.com/users/@me", {
           headers: { Authorization: `QQBot ${tokenData.access_token}` },
         });
-        const me = await meRes.json();
+        const me = await meRes.json() as { id?: string; username?: string; message?: string };
         if (me.id) {
           return c.json({ ok: true, info: { username: me.username, name: me.username } });
         }
@@ -391,13 +556,13 @@ export function createBridgeRoute(engine, bridgeManager) {
           headers: {
             "Content-Type": "application/json",
             "AuthorizationType": "ilink_bot_token",
-            "Authorization": `Bearer ${credentials.botToken}`,
+            "Authorization": `Bearer ${typedCredentials.botToken || ""}`,
             "X-WECHAT-UIN": uin,
           },
           body: JSON.stringify({ base_info: { channel_version: "1.0.0" } }),
           signal: AbortSignal.timeout(10_000),
         });
-        const data = await res.json();
+        const data = await res.json() as { ret?: number; errmsg?: string };
         if (data.ret && data.ret !== 0) {
           return c.json({ ok: false, error: data.errmsg || `errcode ${data.ret}` });
         }
@@ -405,7 +570,7 @@ export function createBridgeRoute(engine, bridgeManager) {
       }
       return c.json({ ok: false, error: t("error.platformTestUnsupported") });
     } catch (err) {
-      return c.json({ ok: false, error: err.message });
+      return c.json({ ok: false, error: errorMessage(err) });
     }
   });
 
@@ -416,9 +581,9 @@ export function createBridgeRoute(engine, bridgeManager) {
 
   /** 轮询微信扫码状态 */
   route.post("/bridge/wechat/qrcode-status", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<QrcodeStatusBody>(c);
     const { qrcodeId } = body;
-    return c.json(await pollWechatQrcodeStatus(qrcodeId));
+    return c.json(await pollWechatQrcodeStatus(asString(qrcodeId) || ""));
   });
 
   return route;
