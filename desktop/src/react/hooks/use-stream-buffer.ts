@@ -38,6 +38,7 @@ interface Buffer {
   lastRenderedFinalized: boolean;
   activeMessageId: string | null;
   pendingModelHint: string | null;
+  pendingProviderRoute: ChatMessage['providerRoute'] | null;
 }
 
 function createBuffer(sessionPath: string): Buffer {
@@ -60,6 +61,31 @@ function createBuffer(sessionPath: string): Buffer {
     lastRenderedFinalized: false,
     activeMessageId: null,
     pendingModelHint: null,
+    pendingProviderRoute: null,
+  };
+}
+
+function providerHopFromWire(raw: any): { id: string; reason?: string | null } | null {
+  const id = String(raw?.id || raw?.provider || raw?.providerId || '').trim();
+  if (!id) return null;
+  const reason = raw?.reason == null ? null : String(raw.reason).trim().slice(0, 120);
+  return reason ? { id, reason } : { id };
+}
+
+function providerRouteFromWire(msg: any): ChatMessage['providerRoute'] | null {
+  const activeProvider = String(msg?.activeProvider || msg?.active_provider || '').trim();
+  if (!activeProvider) return null;
+  const rawFallback = Array.isArray(msg?.fallbackFrom)
+    ? msg.fallbackFrom
+    : (Array.isArray(msg?.fallback_from) ? msg.fallback_from : []);
+  const fallbackFrom = rawFallback
+    .map(providerHopFromWire)
+    .filter(Boolean)
+    .slice(0, 6) as NonNullable<ChatMessage['providerRoute']>['fallbackFrom'];
+  return {
+    activeProvider,
+    ...(fallbackFrom && fallbackFrom.length > 0 ? { fallbackFrom } : {}),
+    updatedAt: Date.now(),
   };
 }
 
@@ -118,8 +144,34 @@ class StreamBufferManager {
       // different provider, but completed stream messages must not drift when
       // the user changes the selector afterward.
       model: buf.pendingModelHint || currentModelHint,
+      providerRoute: buf.pendingProviderRoute || null,
     };
     store.appendItem(buf.sessionPath, { type: 'message', data: msg });
+  }
+
+  private updateActiveStreamingMessage(buf: Buffer, updater: (message: ChatMessage) => ChatMessage): boolean {
+    if (!buf.messageAppended || !buf.activeMessageId) return false;
+    const state = useStore.getState();
+    const sess = state.chatSessions?.[buf.sessionPath];
+    const items = sess?.items;
+    if (!items || !items.length) return false;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      if (
+        it?.type === 'message'
+        && it.data?.role === 'assistant'
+        && it.data.id === buf.activeMessageId
+        && it.data.id.startsWith('stream-')
+      ) {
+        const nextItems = items.slice();
+        nextItems[i] = { ...it, data: updater(it.data) };
+        useStore.setState({
+          chatSessions: { ...state.chatSessions, [buf.sessionPath]: { ...sess, items: nextItems } },
+        });
+        return true;
+      }
+    }
+    return false;
   }
 
   /** 调度节流 flush */
@@ -574,30 +626,21 @@ class StreamBufferManager {
               buf.pendingModelHint = modelHint;
               break;
             }
-            const state = useStore.getState();
-            const sess = state.chatSessions?.[sessionPath];
-            const items = sess?.items;
-            if (items && items.length) {
-              for (let i = items.length - 1; i >= 0; i--) {
-                const it = items[i];
-                if (
-                  it?.type === 'message'
-                  && it.data?.role === 'assistant'
-                  && it.data.id === buf.activeMessageId
-                  && it.data.id.startsWith('stream-')
-                ) {
-                  const nextItems = items.slice();
-                  nextItems[i] = { ...it, data: { ...it.data, model: modelHint } };
-                  useStore.setState({
-                    chatSessions: { ...state.chatSessions, [sessionPath]: { ...sess, items: nextItems } },
-                  });
-                  break;
-                }
-              }
-            }
+            this.updateActiveStreamingMessage(buf, (m) => ({ ...m, model: modelHint }));
           } catch { /* non-fatal */ }
         }
         break;
+
+      case 'provider_meta': {
+        const route = providerRouteFromWire(msg);
+        if (!route) break;
+        if (!buf.messageAppended || !buf.activeMessageId) {
+          buf.pendingProviderRoute = route;
+          break;
+        }
+        this.updateActiveStreamingMessage(buf, (m) => ({ ...m, providerRoute: route }));
+        break;
+      }
 
       case 'turn_end':
         this.flush(buf, true);
@@ -615,6 +658,7 @@ class StreamBufferManager {
         buf.lastRenderedFinalized = false;
         buf.activeMessageId = null;
         buf.pendingModelHint = null;
+        buf.pendingProviderRoute = null;
         // [PROGRESS-UX v1] clear title-bar activity on turn end
         useStore.setState({ currentActivity: null });
         break;

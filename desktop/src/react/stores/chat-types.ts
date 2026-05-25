@@ -160,8 +160,20 @@ export interface ChatMessage {
   // Assistant
   blocks?: ContentBlock[];
   model?: string | null;  // [PROVIDER-BADGE v1] which provider actually answered (T1/T2/T3...)
+  providerRoute?: ProviderRouteMeta | null;
   // 通用
   timestamp?: number;
+}
+
+export interface ProviderFallbackHop {
+  id: string;
+  reason?: string | null;
+}
+
+export interface ProviderRouteMeta {
+  activeProvider: string;
+  fallbackFrom?: ProviderFallbackHop[];
+  updatedAt?: number;
 }
 
 // ── Virtuoso 列表项 ──

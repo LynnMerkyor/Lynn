@@ -46,6 +46,8 @@ describe("WebSocket protocol contract", () => {
           "mood_end",
           "mood_start",
           "mood_text",
+          "model_hint",
+          "provider_meta",
           "settings_confirmation",
           "skill_activated",
           "text_delta",
@@ -72,6 +74,8 @@ describe("WebSocket protocol contract", () => {
           "mood_end",
           "mood_start",
           "mood_text",
+          "model_hint",
+          "provider_meta",
           "settings_confirmation",
           "skill_activated",
           "text_delta",
@@ -101,7 +105,6 @@ describe("WebSocket protocol contract", () => {
           "dm_new_message",
           "error",
           "jian_update",
-          "model_hint",
           "notification",
           "plan_mode",
           "prompt_accepted",
@@ -198,6 +201,9 @@ describe("WebSocket protocol contract", () => {
           ],
           "prompt_accepted": [
             "sessionPath",
+          ],
+          "provider_meta": [
+            "activeProvider",
           ],
           "review_progress": [
             "reviewId",

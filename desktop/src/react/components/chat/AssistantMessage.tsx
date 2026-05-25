@@ -93,6 +93,45 @@ function parseMessageModelRef(raw?: string | null): { id: string; provider?: str
   return { id: value };
 }
 
+function formatProviderRouteName(id?: string | null): string {
+  const raw = String(id || '').trim();
+  if (!raw) return '';
+  const lower = raw.toLowerCase();
+  if (lower.includes('mimo')) return 'MiMo';
+  if (lower.includes('spark') || lower.includes('apex')) return 'Spark';
+  if (lower.includes('deepseek')) return 'DeepSeek';
+  if (lower.includes('openai') || lower.includes('gpt')) return 'OpenAI';
+  if (lower.includes('local')) return 'Local';
+  return raw
+    .replace(/^qwen\d+[-_]/i, 'Qwen ')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 28);
+}
+
+function providerRouteLabel(route?: ChatMessage['providerRoute'] | null): string | null {
+  if (!route?.activeProvider) return null;
+  const fallback = (route.fallbackFrom || []).map((hop) => formatProviderRouteName(hop.id)).filter(Boolean);
+  if (fallback.length === 0) return null;
+  const chain = [...fallback, formatProviderRouteName(route.activeProvider)].filter(Boolean);
+  return Array.from(new Set(chain)).join(' -> ');
+}
+
+function providerRouteTitle(route?: ChatMessage['providerRoute'] | null): string | undefined {
+  if (!route?.activeProvider) return undefined;
+  const active = formatProviderRouteName(route.activeProvider) || route.activeProvider;
+  const fallback = route.fallbackFrom || [];
+  if (fallback.length === 0) return `当前回答模型：${active}`;
+  const details = fallback
+    .map((hop) => {
+      const name = formatProviderRouteName(hop.id) || hop.id;
+      return hop.reason ? `${name}: ${hop.reason}` : name;
+    })
+    .join('；');
+  return `备用链路已切换到 ${active}。跳过：${details}`;
+}
+
 type TtsPlaybackController = {
   stop: () => void;
   finished: Promise<void>;
@@ -274,6 +313,8 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
     const fallbackRef = isActiveStreamingMessage ? currentModel : { provider: 'brain', id: 'lynn-brain-router' };
     return formatCompactModelLabel(modelRef || fallbackRef, { role: displayYuan, purpose: 'chat' });
   }, [message.model, currentModel, displayYuan, isStreamMsg, isLastAssistant, appIsStreaming]);
+  const providerFallbackLabel = useMemo(() => providerRouteLabel(message.providerRoute), [message.providerRoute]);
+  const providerFallbackTitle = useMemo(() => providerRouteTitle(message.providerRoute), [message.providerRoute]);
   const showStreamingMeta = isStreamMsg && (runningTools > 0 || blocks.some(block => block.type === 'thinking' && !block.sealed));
   // T2: TTFT 等待提示——streaming 中但还没有任何实际内容
   const showWaitingHint = isStreamMsg && blocks.length === 0;
@@ -582,6 +623,11 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
           {messageModelLabel && (
             <span className={styles.avatarMeta}>
               {messageModelLabel}
+            </span>
+          )}
+          {providerFallbackLabel && (
+            <span className={`${styles.avatarMeta} ${styles.providerRouteMeta}`} title={providerFallbackTitle}>
+              {providerFallbackLabel}
             </span>
           )}
           {showStreamingMeta && (
