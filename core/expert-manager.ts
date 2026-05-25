@@ -10,29 +10,175 @@
  * - 积分系统通过 CreditInterface 抽象，开源版为 noop
  */
 import path from "path";
-import { loadPresets, loadPresetBySlug } from "../lib/experts/expert-loader.js";
+import { loadPresets } from "../lib/experts/expert-loader.js";
 import { CreditInterface } from "../lib/credits/credit-interface.js";
 import { createModuleLogger } from "../lib/debug-log.js";
 
 const log = createModuleLogger("expert-mgr");
 
+export type ExpertLocale = "zh" | "ja" | "en";
+export type ExpertYuan = "lynn" | "butter" | "hanako";
+
+export interface ExpertI18nText {
+  en?: string;
+  zh?: string;
+  ja?: string;
+  [locale: string]: string | undefined;
+}
+
+export interface ExpertModelBinding {
+  preferred: string;
+  fallback?: string;
+  [key: string]: unknown;
+}
+
+export interface ExpertCreditCost {
+  per_session: number;
+  per_extra_round?: number;
+  [key: string]: unknown;
+}
+
+export interface ExpertPreset {
+  slug: string;
+  name: ExpertI18nText;
+  icon: string;
+  category: string;
+  tier: string;
+  model_binding: ExpertModelBinding;
+  credit_cost: ExpertCreditCost;
+  skills: string[];
+  description: ExpertI18nText;
+  _dir?: string;
+  _identity?: string;
+  _ishiki?: string;
+}
+
+export interface ExpertSummary {
+  slug: string;
+  name: string;
+  nameI18n: ExpertI18nText;
+  icon: string;
+  avatarUrl: string;
+  category: string;
+  tier: string;
+  model_binding: ExpertModelBinding;
+  credit_cost: ExpertCreditCost;
+  skills: string[];
+  description: string;
+  descriptionI18n: ExpertI18nText;
+}
+
+export interface ExpertDetail extends ExpertSummary {
+  identity: string;
+  ishiki: string;
+  _dir?: string;
+}
+
+export interface ExpertSpawnOptions {
+  userId?: string;
+  persistent?: boolean;
+  provider?: string;
+  modelId?: string;
+  channelId?: string;
+  [key: string]: unknown;
+}
+
+export interface SpawnExpertResult {
+  agentId: string;
+  name: string;
+}
+
+export interface CreditLedger {
+  getBalance(userId: string): Promise<number> | number;
+  consume(userId: string, amount: number, reason: string): Promise<boolean> | boolean;
+  canAfford(userId: string, amount: number): Promise<boolean> | boolean;
+}
+
+export interface ModelRef {
+  id: string;
+  provider?: string;
+  name?: string;
+  [key: string]: unknown;
+}
+
+export interface ProviderRegistryLike {
+  getAllProvidersRaw?: () => Record<string, unknown>;
+}
+
+export interface ModelManagerLike {
+  availableModels?: ModelRef[];
+  defaultModel?: ModelRef | null;
+  providerRegistry?: ProviderRegistryLike;
+}
+
+interface AgentConfigPatch {
+  [key: string]: unknown;
+}
+
+export interface AgentLike {
+  agentDir: string;
+  updateConfig(patch: AgentConfigPatch): void;
+  buildSystemPrompt(): string;
+  _systemPrompt?: string;
+}
+
+interface AgentCreateResult {
+  id: string;
+  name?: string;
+}
+
+export interface AgentManagerLike {
+  createAgent(opts: { name: string; yuan: ExpertYuan }): Promise<AgentCreateResult> | AgentCreateResult;
+  getAgent(agentId: string): AgentLike | null | undefined;
+}
+
+export interface ExpertManagerDeps {
+  presetsDir: string;
+  getAgentManager: () => AgentManagerLike;
+  getModelManager: () => ModelManagerLike;
+  getSkillManager: () => unknown;
+  creditInterface?: CreditLedger;
+}
+
+interface RawProviderWithModels {
+  models: Array<string | { id?: unknown }>;
+}
+
+function resolveLocale(locale?: string): ExpertLocale {
+  return locale?.startsWith("zh") ? "zh" : locale?.startsWith("ja") ? "ja" : "en";
+}
+
+function hasRawProviderModels(raw: unknown): raw is RawProviderWithModels {
+  if (!raw || typeof raw !== "object") return false;
+  const models = (raw as { models?: unknown }).models;
+  return Array.isArray(models);
+}
+
+function rawProviderHasModel(raw: unknown, modelId: string): boolean {
+  if (!hasRawProviderModels(raw)) return false;
+  return raw.models.some((model) => {
+    if (typeof model === "string") return model === modelId;
+    if (!model || typeof model !== "object") return false;
+    return model.id === modelId;
+  });
+}
+
 export class ExpertManager {
-  /**
-   * @param {object} deps
-   * @param {string} deps.presetsDir - 专家预设目录 (lib/experts/presets/)
-   * @param {() => import('./agent-manager.js').AgentManager} deps.getAgentManager
-   * @param {() => import('./model-manager.js').ModelManager} deps.getModelManager
-   * @param {() => import('./skill-manager.js').SkillManager} deps.getSkillManager
-   * @param {CreditInterface} [deps.creditInterface] - 积分接口（默认 noop）
-   */
-  constructor(deps) {
+  private _presetsDir: string;
+  private _getAgentMgr: () => AgentManagerLike;
+  private _getModelMgr: () => ModelManagerLike;
+  private _getSkillMgr: () => unknown;
+  private _creditInterface: CreditLedger;
+  private _presets: ExpertPreset[];
+  private _presetsLoaded: boolean;
+
+  constructor(deps: ExpertManagerDeps) {
     this._presetsDir = deps.presetsDir;
     this._getAgentMgr = deps.getAgentManager;
     this._getModelMgr = deps.getModelManager;
     this._getSkillMgr = deps.getSkillManager;
     this._creditInterface = deps.creditInterface || new CreditInterface();
 
-    /** @type {Array<object>} 缓存的预设列表 */
     this._presets = [];
     this._presetsLoaded = false;
   }
@@ -44,8 +190,8 @@ export class ExpertManager {
   /**
    * 扫描并加载所有预设专家（启动时或首次访问时调用）
    */
-  loadPresets() {
-    this._presets = loadPresets(this._presetsDir);
+  loadPresets(): ExpertPreset[] {
+    this._presets = loadPresets(this._presetsDir) as ExpertPreset[];
     this._presetsLoaded = true;
     log.log(`加载了 ${this._presets.length} 个专家预设`);
     return this._presets;
@@ -54,7 +200,7 @@ export class ExpertManager {
   /**
    * 确保预设已加载（懒加载）
    */
-  _ensureLoaded() {
+  private _ensureLoaded(): void {
     if (!this._presetsLoaded) this.loadPresets();
   }
 
@@ -64,12 +210,11 @@ export class ExpertManager {
 
   /**
    * 列出所有可用专家预设
-   * @param {string} [locale] - 可选语言代码，用于选择 name/description
-   * @returns {Array<object>}
+   * @param locale - 可选语言代码，用于选择 name/description
    */
-  listExperts(locale) {
+  listExperts(locale?: string): ExpertSummary[] {
     this._ensureLoaded();
-    const lang = locale?.startsWith("zh") ? "zh" : locale?.startsWith("ja") ? "ja" : "en";
+    const lang = resolveLocale(locale);
 
     return this._presets.map(p => ({
       slug: p.slug,
@@ -92,16 +237,15 @@ export class ExpertManager {
 
   /**
    * 获取单个专家详情
-   * @param {string} slug
-   * @param {string} [locale]
-   * @returns {object|null}
+   * @param slug
+   * @param locale
    */
-  getExpert(slug, locale) {
+  getExpert(slug: string, locale?: string): ExpertDetail | null {
     this._ensureLoaded();
     const preset = this._presets.find(p => p.slug === slug);
     if (!preset) return null;
 
-    const lang = locale?.startsWith("zh") ? "zh" : locale?.startsWith("ja") ? "ja" : "en";
+    const lang = resolveLocale(locale);
     return {
       slug: preset.slug,
       name: preset.name[lang] || preset.name.en || preset.slug,
@@ -123,10 +267,9 @@ export class ExpertManager {
 
   /**
    * 获取专家积分消耗
-   * @param {string} slug
-   * @returns {object|null}
+   * @param slug
    */
-  getExpertCost(slug) {
+  getExpertCost(slug: string): ExpertCreditCost | null {
     this._ensureLoaded();
     const preset = this._presets.find(p => p.slug === slug);
     return preset?.credit_cost || null;
@@ -134,10 +277,9 @@ export class ExpertManager {
 
   /**
    * 获取专家绑定的技能列表
-   * @param {string} slug
-   * @returns {string[]}
+   * @param slug
    */
-  getExpertSkills(slug) {
+  getExpertSkills(slug: string): string[] {
     this._ensureLoaded();
     const preset = this._presets.find(p => p.slug === slug);
     return preset?.skills || [];
@@ -154,10 +296,10 @@ export class ExpertManager {
    * 则降级到 fallback 模型；如果 fallback 也不可用，
    * 使用用户当前的默认模型。
    *
-   * @param {string} slug
-   * @returns {string|null} - 模型 ID 或 null
+   * @param slug
+   * @returns 模型 ID 或 null
    */
-  resolveModelForExpert(slug) {
+  resolveModelForExpert(slug: string): string | null {
     this._ensureLoaded();
     const preset = this._presets.find(p => p.slug === slug);
     if (!preset) return null;
@@ -195,13 +337,10 @@ export class ExpertManager {
    * 3. 注入 expert 配置（tier、model_binding 等）
    * 4. 返回新创建的 agentId
    *
-   * @param {string} slug - 专家 slug
-   * @param {object} [opts]
-   * @param {string} [opts.userId] - 用户 ID（计费用）
-   * @param {boolean} [opts.persistent=true] - 是否持久化（默认是）
-   * @returns {Promise<{agentId: string, name: string}>}
+   * @param slug - 专家 slug
+   * @param opts
    */
-  async spawnExpert(slug, opts = {}) {
+  async spawnExpert(slug: string, opts: ExpertSpawnOptions = {}): Promise<SpawnExpertResult> {
     this._ensureLoaded();
     const preset = this._presets.find(p => p.slug === slug);
     if (!preset) throw new Error(`Expert not found: ${slug}`);
@@ -226,7 +365,7 @@ export class ExpertManager {
     const availableModels = modelMgr.availableModels || [];
 
     // 解析最佳可用模型，优先尊重用户显式选择的 provider + model
-    let modelId = null;
+    let modelId: string | null = null;
     let modelProvider = opts.provider || "";
     if (opts.modelId) {
       const explicitModel = availableModels.find((m) => m.id === opts.modelId && (!opts.provider || m.provider === opts.provider))
@@ -240,9 +379,10 @@ export class ExpertManager {
       modelId = this.resolveModelForExpert(slug);
       modelProvider = availableModels.find((m) => m.id === modelId)?.provider || modelProvider;
       if (!modelProvider && modelId) {
+        const resolvedModelId = modelId;
         const rawProviders = modelMgr.providerRegistry?.getAllProvidersRaw?.() || {};
         modelProvider = Object.entries(rawProviders).find(([, raw]) =>
-          Array.isArray(raw?.models) && raw.models.some((m) => (typeof m === "object" ? m.id : m) === modelId)
+          rawProviderHasModel(raw, resolvedModelId)
         )?.[0] || modelProvider;
       }
     }
@@ -341,11 +481,11 @@ export class ExpertManager {
   // ════════════════════════════
 
   /** 替换积分接口（闭源插件注入用） */
-  setCreditInterface(impl) {
+  setCreditInterface(impl: CreditLedger): void {
     this._creditInterface = impl;
   }
 
-  get creditInterface() {
+  get creditInterface(): CreditLedger {
     return this._creditInterface;
   }
 
@@ -365,7 +505,7 @@ export class ExpertManager {
    * hanako = 通用平衡式思维（Vibe → Sparks → Reflections → Will）
    *          适合：产品、通用 — 兼顾感性灵感与理性反思
    */
-  static resolveYuanForCategory(category) {
+  static resolveYuanForCategory(category: string): ExpertYuan {
     const LYNN_CATEGORIES = new Set(["finance", "legal", "business", "tech", "engineering", "data"]);
     const BUTTER_CATEGORIES = new Set(["wellness", "psychology", "education", "creative"]);
     if (LYNN_CATEGORIES.has(category)) return "lynn";
