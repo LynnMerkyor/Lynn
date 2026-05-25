@@ -14,21 +14,29 @@ export const SecurityMode = {
   AUTHORIZED: "authorized",
   PLAN: "plan",
   SAFE: "safe",
+} as const;
+
+export type SecurityModeValue = (typeof SecurityMode)[keyof typeof SecurityMode];
+export type SandboxMode = "authorized" | "standard";
+export type SecurityModeConfig = {
+  sandboxMode: SandboxMode;
+  toolsRestricted: boolean;
+  allowConfirmation: boolean;
 };
 
 /** 默认安全模式 */
 export const DEFAULT_SECURITY_MODE = SecurityMode.AUTHORIZED;
 
 /** 所有合法的安全模式值 */
-export const VALID_SECURITY_MODES = new Set([
+export const VALID_SECURITY_MODES: ReadonlySet<SecurityModeValue> = new Set([
   SecurityMode.AUTHORIZED,
   SecurityMode.PLAN,
   SecurityMode.SAFE,
 ]);
 
 /** 校验安全模式值是否合法，不合法则返回默认值 */
-export function normalizeSecurityMode(mode) {
-  if (VALID_SECURITY_MODES.has(mode)) return mode;
+export function normalizeSecurityMode(mode: unknown): SecurityModeValue {
+  if (typeof mode === "string" && VALID_SECURITY_MODES.has(mode as SecurityModeValue)) return mode as SecurityModeValue;
   // 迁移：旧版 full-access 映射到新版 authorized（行为一致）
   if (mode === "full-access") return SecurityMode.AUTHORIZED;
   return DEFAULT_SECURITY_MODE;
@@ -45,7 +53,7 @@ export function normalizeSecurityMode(mode) {
  * toolsRestricted: 是否限制为只读工具
  * allowConfirmation: 是否允许弹授权确认
  */
-export const SECURITY_MODE_CONFIG = {
+export const SECURITY_MODE_CONFIG: Record<SecurityModeValue, SecurityModeConfig> = {
   [SecurityMode.AUTHORIZED]: {
     sandboxMode: "authorized",
     toolsRestricted: false,

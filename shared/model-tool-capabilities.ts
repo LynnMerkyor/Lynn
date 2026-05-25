@@ -8,11 +8,25 @@
 import { lookupKnown } from "./known-models.js";
 import { ROUTE_INTENTS, normalizeRouteIntent } from "./task-route-intent.js";
 
+type KnownModelToolMetadata = {
+  supportsToolCalls?: boolean;
+  toolTier?: string | null;
+};
+
+export type ToolCapabilityModel = {
+  provider?: unknown;
+  id?: unknown;
+  name?: unknown;
+  model?: unknown;
+  baseUrl?: unknown;
+  baseURL?: unknown;
+};
+
 const BROKEN_TOOLCALL_MODEL_RE = /\b(?:prism[-_\s]*)?nvfp4\b|\bnvfp4[-_\s]*prism\b/i;
 
-export function isNativeToolCallingDisabled(model) {
+export function isNativeToolCallingDisabled(model: ToolCapabilityModel | null | undefined): boolean {
   if (!model) return false;
-  const known = lookupKnown(model.provider, model.id);
+  const known = lookupKnown(model.provider as string, model.id as string) as KnownModelToolMetadata | null;
   if (known?.supportsToolCalls === false || known?.toolTier === "none") return true;
 
   const haystack = [
@@ -26,7 +40,7 @@ export function isNativeToolCallingDisabled(model) {
   return BROKEN_TOOLCALL_MODEL_RE.test(haystack);
 }
 
-export function routeIntentRequiresNativeTools(routeIntent) {
-  const intent = normalizeRouteIntent(routeIntent);
+export function routeIntentRequiresNativeTools(routeIntent: unknown): boolean {
+  const intent = normalizeRouteIntent(routeIntent as string | null);
   return intent === ROUTE_INTENTS.UTILITY || intent === ROUTE_INTENTS.CODING;
 }
