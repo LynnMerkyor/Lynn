@@ -22,26 +22,50 @@ import { findModel } from "../shared/model-ref.js";
 import { isLocalBaseUrl } from "../shared/net-utils.js";
 import { syncModels } from "./model-sync.js";
 import { BRAIN_PROVIDER_ID } from "../shared/brain-provider.js";
+import type {
+  LLMApi,
+  ModelId,
+  ModelRef,
+  ProviderConfig,
+  ProviderCredentialsSnake,
+  ProviderId,
+  ResolvedModel,
+  UtilityExecutionConfig,
+} from "./types.js";
 
-/** @typedef {import("./types.js").ModelId} ModelId */
-/** @typedef {import("./types.js").ModelRef} ModelRef */
-/** @typedef {import("./types.js").ProviderCredentialsSnake} ProviderCredentialsSnake */
-/** @typedef {import("./types.js").ProviderId} ProviderId */
-/** @typedef {import("./types.js").ResolvedModel} ResolvedModel */
-/** @typedef {import("./types.js").UtilityExecutionConfig} UtilityExecutionConfig */
+type AgentModelRefs = Partial<Record<"chat" | "utility" | "utility_large" | "summarizer" | "compiler", string>>;
+
+interface AgentConfig {
+  models?: AgentModelRefs;
+  [key: string]: unknown;
+}
+
+type SharedUtilityModels = Partial<Record<"utility" | "utility_large" | "summarizer" | "compiler", string>>;
+
+interface UtilityApiOverride {
+  provider?: string;
+  api_key?: string;
+  base_url?: string;
+}
+
+interface ModelManagerOptions {
+  lynnHome: string;
+}
 
 export class ModelManager {
-  /**
-   * @param {object} opts
-   * @param {string} opts.lynnHome - 用户数据根目录
-   */
-  constructor({ lynnHome }) {
+  _lynnHome: string;
+  _authStorage: AuthStorage | null;
+  _modelRegistry: ModelRegistry | null;
+  _defaultModel: ResolvedModel | null;
+  _availableModels: ResolvedModel[];
+  providerRegistry: ProviderRegistry;
+  executionRouter: ExecutionRouter | null;
+
+  constructor({ lynnHome }: ModelManagerOptions) {
     this._lynnHome = lynnHome;
     this._authStorage = null;
     this._modelRegistry = null;
-    /** @type {ResolvedModel | null} */
     this._defaultModel = null;   // 设置页面选的，持久化，bridge 用这个
-    /** @type {ResolvedModel[]} */
     this._availableModels = [];
 
     // 新架构模块（init() 后可用）
@@ -50,7 +74,7 @@ export class ModelManager {
   }
 
   /** 初始化 AuthStorage + ModelRegistry + 新架构模块 */
-  init() {
+  init(): void {
     this._authStorage = AuthStorage.create(path.join(this._lynnHome, "auth.json"));
     registerOAuthProvider(minimaxOAuthProvider);
     this._modelRegistry = new ModelRegistry(
@@ -67,14 +91,14 @@ export class ModelManager {
 
   // ── Getters ──
 
-  get authStorage() { return this._authStorage; }
-  get modelRegistry() { return this._modelRegistry; }
-  get defaultModel() { return this._defaultModel; }
-  set defaultModel(m) { this._defaultModel = m; }
-  get currentModel() { return this._defaultModel; }
-  get availableModels() { return this._availableModels; }
-  get modelsJsonPath() { return path.join(this._lynnHome, "models.json"); }
-  get authJsonPath() { return path.join(this._lynnHome, "auth.json"); }
+  get authStorage(): AuthStorage | null { return this._authStorage; }
+  get modelRegistry(): ModelRegistry | null { return this._modelRegistry; }
+  get defaultModel(): ResolvedModel | null { return this._defaultModel; }
+  set defaultModel(m: ResolvedModel | null) { this._defaultModel = m; }
+  get currentModel(): ResolvedModel | null { return this._defaultModel; }
+  get availableModels(): ResolvedModel[] { return this._availableModels; }
+  get modelsJsonPath(): string { return path.join(this._lynnHome, "models.json"); }
+  get authJsonPath(): string { return path.join(this._lynnHome, "auth.json"); }
 
   // ── 模型解析：_availableModels 唯一真理源 ──
 
@@ -84,10 +108,8 @@ export class ModelManager {
    *   1. "provider/model" 格式（精确匹配 provider + id）
    *   2. 裸 model ID（匹配 id 或 name）
    * 不做模糊 fallback，避免静默绑到错误 provider。
-   * @param {ModelRef} ref - 模型引用字符串
-   * @returns {ResolvedModel | null} SDK 模型对象
    */
-  _resolveFromAvailable(ref) {
+  _resolveFromAvailable(ref: ModelRef | string | null | undefined): ResolvedModel | null {
     if (!ref) return null;
 
     // 新格式：{id, provider} 对象 — 用复合键精确查找
@@ -121,15 +143,13 @@ export class ModelManager {
 
   /**
    * 刷新可用模型列表，用 added-models.yaml 过滤
-   * @returns {Promise<ResolvedModel[]>}
    */
-  async refreshAvailable() {
-    /** @type {ResolvedModel[]} */
-    const allModels = await this._modelRegistry.getAvailable();
+  async refreshAvailable(): Promise<ResolvedModel[]> {
+    const allModels = await this._modelRegistry!.getAvailable() as unknown as ResolvedModel[];
     // Pi SDK 返回所有有 auth 的模型（包括 OAuth 内置模型），
     // 但用户只想看自己配置的模型。用 added-models.yaml 的模型列表过滤。
     const rawProviders = this.providerRegistry.getAllProvidersRaw();
-    const userModelSets = new Map();
+    const userModelSets = new Map<string, Set<string>>();
     for (const [name, raw] of Object.entries(rawProviders)) {
       if (!raw.models?.length) continue;
       const ids = new Set(raw.models.map(m => typeof m === "object" ? m.id : m));
@@ -138,7 +158,7 @@ export class ModelManager {
       const authKey = this.providerRegistry.getAuthJsonKey(name);
       if (authKey !== name) userModelSets.set(authKey, ids);
     }
-    this._availableModels = allModels.filter(m => {
+    this._availableModels = allModels.filter((m) => {
       const allowed = userModelSets.get(m.provider);
       // 没有在 added-models.yaml 里的 provider → 全部放行（兼容未知来源）
       if (!allowed) return true;
@@ -149,19 +169,17 @@ export class ModelManager {
 
   /**
    * 同步 added-models.yaml → models.json，然后刷新 ModelRegistry
-   * @returns {boolean} 是否有变化
    */
-  async syncAndRefresh() {
+  async syncAndRefresh(): Promise<boolean> {
     const rawProviders = this.providerRegistry.getAllProvidersRaw();
     // 合并 plugin 默认值（base_url/api），YAML 里可能只存了 api_key + models
-    /** @type {Record<ProviderId, import("./types.js").ProviderConfig>} */
-    const providers = {};
+    const providers: Record<string, ProviderConfig> = {};
     for (const [name, raw] of Object.entries(rawProviders)) {
       const entry = this.providerRegistry.get(name);
       providers[name] = {
         ...raw,
         base_url: raw.base_url || entry?.baseUrl || "",
-        api: raw.api || entry?.api || "openai-completions",
+        api: (raw.api || entry?.api || "openai-completions") as LLMApi,
         auth_type: raw.auth_type || entry?.authType || "api-key",
       };
     }
@@ -171,7 +189,7 @@ export class ModelManager {
       oauthKeyMap: this._buildOAuthKeyMap(),
     });
     if (changed) {
-      this._modelRegistry.refresh();
+      this._modelRegistry!.refresh();
       // refresh() 内部调 resetOAuthProviders()，需要重新注册
       registerOAuthProvider(minimaxOAuthProvider);
       await this.refreshAvailable();
@@ -181,12 +199,10 @@ export class ModelManager {
 
   /**
    * 构建 OAuth providerId → auth.json key 映射
-   * @returns {Record<ProviderId, ProviderId>}
    * @private
    */
-  _buildOAuthKeyMap() {
-    /** @type {Record<ProviderId, ProviderId>} */
-    const map = {};
+  _buildOAuthKeyMap(): Record<string, ProviderId> {
+    const map: Record<string, ProviderId> = {};
     for (const id of this.providerRegistry.getOAuthProviderIds()) {
       const authKey = this.providerRegistry.getAuthJsonKey(id);
       if (authKey !== id) map[id] = authKey;
@@ -196,11 +212,8 @@ export class ModelManager {
 
   /**
    * 设置 agent 默认模型
-   * @param {ModelId} modelId
-   * @param {ProviderId} provider
-   * @returns {ResolvedModel} 新模型对象
    */
-  setDefaultModel(modelId, provider) {
+  setDefaultModel(modelId: ModelId, provider: ProviderId): ResolvedModel {
     const model = findModel(this._availableModels, modelId, provider);
     if (!model) throw new Error(t("error.modelNotFound", { id: modelId }));
     this._defaultModel = model;
@@ -209,10 +222,8 @@ export class ModelManager {
 
   /**
    * auto -> medium by default; Brain keeps auto fast unless the user explicitly asks for deeper reasoning.
-   * @param {string | null | undefined} level
-   * @param {ResolvedModel | null} model
    */
-  resolveThinkingLevel(level, model = null) {
+  resolveThinkingLevel(level: string | null | undefined, model: ResolvedModel | null = null): string {
     const rawLevel = level || "auto";
     const provider = String(model?.provider || "").trim();
     if (provider === BRAIN_PROVIDER_ID && rawLevel === "auto") return "off";
@@ -222,12 +233,10 @@ export class ModelManager {
   /**
    * 将模型引用（id/name/object）解析成 SDK 可用的模型对象
    * 只查 _availableModels（唯一真理源）
-   * @param {ModelRef | null | undefined} modelRef
-   * @returns {ResolvedModel | null}
    */
-  resolveExecutionModel(modelRef) {
+  resolveExecutionModel(modelRef: ModelRef | null | undefined): ResolvedModel | null {
     if (!modelRef) return this.currentModel;
-    if (typeof modelRef !== "string") return modelRef; // 对象直通（session-coordinator 路径）
+    if (typeof modelRef !== "string") return modelRef as ResolvedModel; // 对象直通（session-coordinator 路径）
     const ref = modelRef.trim();
     if (!ref) return this.currentModel;
 
@@ -239,10 +248,8 @@ export class ModelManager {
 
   /**
    * 根据模型 ID 推断其所属 provider
-   * @param {ModelId | null | undefined} modelId
-   * @returns {ProviderId | null}
    */
-  inferModelProvider(modelId) {
+  inferModelProvider(modelId: ModelId | null | undefined): ProviderId | null {
     if (!modelId) return null;
     const model = this._resolveFromAvailable(modelId);
     return model?.provider || null;
@@ -251,10 +258,8 @@ export class ModelManager {
   /**
    * 根据 provider 名称查找凭证
    * 委托 ProviderRegistry，返回 snake_case 格式（兼容 callProviderText 消费方）
-   * @param {ProviderId | null | undefined} provider
-   * @returns {ProviderCredentialsSnake}
    */
-  resolveProviderCredentials(provider) {
+  resolveProviderCredentials(provider: ProviderId | null | undefined): ProviderCredentialsSnake {
     if (!provider) return { api_key: "", base_url: "", api: "" };
     const cred = this.providerRegistry.getCredentials(provider);
     if (cred) {
@@ -266,10 +271,14 @@ export class ModelManager {
   /**
    * 统一解析：模型引用 -> { model, provider, api, api_key, base_url }
    * 返回 snake_case 格式（兼容 callProviderText / diary-writer / compile 等消费方）
-   * @param {ModelRef | null | undefined} modelRef
-   * @returns {{ model: ModelId, provider: ProviderId, api: string, api_key: string, base_url: string }}
    */
-  resolveModelWithCredentials(modelRef) {
+  resolveModelWithCredentials(modelRef: ModelRef | null | undefined): {
+    model: ModelId;
+    provider: ProviderId;
+    api: LLMApi;
+    api_key: string;
+    base_url: string;
+  } {
     const entry = this.resolveExecutionModel(modelRef);
     const provider = entry?.provider;
     if (!provider) {
@@ -296,12 +305,12 @@ export class ModelManager {
   /**
    * 解析 utility 模型 + API 凭证完整配置
    * 委托 ExecutionRouter
-   * @param {{ models?: Record<string, string>, [key: string]: unknown }} agentConfig
-   * @param {{ utility?: string, utility_large?: string, summarizer?: string, compiler?: string }} sharedModels
-   * @param {{ provider?: string, api_key?: string, base_url?: string }} utilApi
-   * @returns {UtilityExecutionConfig}
    */
-  resolveUtilityConfig(agentConfig, sharedModels, utilApi) {
+  resolveUtilityConfig(
+    agentConfig?: AgentConfig | null,
+    sharedModels?: SharedUtilityModels | null,
+    utilApi?: UtilityApiOverride | null,
+  ): UtilityExecutionConfig {
     if (!this.executionRouter) {
       throw new Error(t("error.noUtilityModel"));
     }
