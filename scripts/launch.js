@@ -7,6 +7,7 @@
  * - ABI 不兼容：自动回退到 Electron 的 Node（ELECTRON_RUN_AS_NODE=1）
  */
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +15,9 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const defaultLynnHome = join(homedir(), ".lynn-dev");
+const serverJsEntry = "server/index.js";
+const serverTsEntry = "server/index.ts";
+const tsxSpecifier = "tsx";
 
 export function canLoadBetterSqlite3(requireFn = require) {
   try {
@@ -26,14 +30,54 @@ export function canLoadBetterSqlite3(requireFn = require) {
   }
 }
 
-export function resolveLaunchPlan({
-  mode,
-  extra = [],
-  env = process.env,
-  execPath = process.execPath,
-  requireFn = require,
-  nodeVersion = process.version,
-} = {}) {
+function resolveServerEntry({ env, fileExists }) {
+  const entryHint = String(env.LYNN_SERVER_ENTRY || "auto").toLowerCase();
+
+  if (["ts", "typescript", "source"].includes(entryHint)) {
+    return { path: serverTsEntry, isTypeScript: true };
+  }
+  if (["js", "javascript", "bundle"].includes(entryHint)) {
+    return { path: serverJsEntry, isTypeScript: false };
+  }
+  if (entryHint !== "auto") {
+    throw new Error("[launch] LYNN_SERVER_ENTRY must be auto, js, or ts");
+  }
+
+  if (fileExists(serverJsEntry)) {
+    return { path: serverJsEntry, isTypeScript: false };
+  }
+  if (fileExists(serverTsEntry)) {
+    return { path: serverTsEntry, isTypeScript: true };
+  }
+  return { path: serverJsEntry, isTypeScript: false };
+}
+
+function assertTsxAvailable(resolveFn) {
+  try {
+    resolveFn(tsxSpecifier);
+  } catch {
+    throw new Error(
+      "[launch] server/index.ts requires dev dependency `tsx`. Run `npm install` and retry, or set LYNN_SERVER_ENTRY=js to use server/index.js."
+    );
+  }
+}
+
+function serverArgsFor(entry, extra) {
+  if (!entry.isTypeScript) return [entry.path, ...extra];
+  return ["--import", tsxSpecifier, entry.path, ...extra];
+}
+
+export function resolveLaunchPlan(options = {}) {
+  const {
+    mode,
+    extra = [],
+    env = process.env,
+    execPath = process.execPath,
+    requireFn = require,
+    resolveFn = requireFn.resolve?.bind(requireFn) ?? require.resolve.bind(require),
+    fileExists = existsSync,
+    nodeVersion = process.version,
+  } = options;
   const childEnv = {
     ...env,
     LYNN_HOME: env.LYNN_HOME || defaultLynnHome,
@@ -63,13 +107,17 @@ export function resolveLaunchPlan({
       args = ["index.js", ...extra];
       break;
     case "server": {
+      const entry = resolveServerEntry({ env: childEnv, fileExists });
+      if (entry.isTypeScript) assertTsxAvailable(resolveFn);
+
       const runtimeHint = String(childEnv.LYNN_SERVER_RUNTIME || "auto").toLowerCase();
       const shouldUseNode = runtimeHint === "node"
         || (runtimeHint !== "electron" && canLoadBetterSqlite3(requireFn));
+      const serverArgs = serverArgsFor(entry, extra);
 
       if (shouldUseNode) {
         bin = execPath;
-        args = ["server/index.js", ...extra];
+        args = serverArgs;
       } else {
         try {
           bin = requireFn("electron");
@@ -78,7 +126,7 @@ export function resolveLaunchPlan({
             `[launch] 当前 Node ${nodeVersion} 无法加载 better-sqlite3，且 Electron 运行时不可用：${err.message}`
           );
         }
-        args = ["server/index.js", ...extra];
+        args = serverArgs;
         childEnv.ELECTRON_RUN_AS_NODE = "1";
         warning = runtimeHint === "electron"
           ? "[launch] LYNN_SERVER_RUNTIME=electron，使用 Electron 的 Node 运行 server"
