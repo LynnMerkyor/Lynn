@@ -37,7 +37,7 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.79.3</strong> · 2026-05-25 · TypeScript safety migration + package gate candidate <em>(latest)</em></summary>
+<summary><strong>v0.79.3</strong> · 2026-05-25 · TypeScript safety migration + notarized package <em>(latest)</em></summary>
 
 **V0.79 architecture hardening release**:
 - 🧱 **TypeScript migration keeps moving**:`server/chat` leaf helpers, lightweight `server/routes` modules, and shared runtime utilities are now typed, reducing string typos and unguarded `unknown` values in hot paths.
@@ -45,7 +45,7 @@ Related repositories:
 - 🧭 **Local model policy unchanged**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model; 4B remains a low-config downgrade with the thinking-on risk documented.
 - 🧾 **Chat/artifact paths are easier to maintain**:stream emitters, turn state, artifact recovery, tool summaries, and voice fallback helpers now have TS boundaries ahead of the larger `chat.js` and core split.
 - 🧪 **Core migration deferred intentionally**:`core/session-coordinator.js`, `core/engine.js`, and similarly large files stay out of this package to keep the release stable.
-- 📦 **macOS is shipped as a non-notarized candidate this round**:signing checks remain, Apple notarization is skipped, and the download page now says users may need to confirm first launch in macOS.
+- 📦 **macOS release artifacts are notarized**:Apple Silicon and Intel DMGs are signed, notarized, stapled, and Gatekeeper-validated; Windows ships as a signed NSIS installer.
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.3)
 
@@ -646,11 +646,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.79.3 is a non-notarized macOS candidate. Signing checks remain, but Apple notarization is skipped; macOS may ask you to confirm the first launch.
+V0.79.3 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The portable build is not yet code-signed. Windows Defender SmartScreen may show a warning on first run. Click **More info** → **Run anyway**. This is expected for unsigned builds.
+> **Windows SmartScreen notice:** The v0.79.3 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -713,7 +713,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.79.3 non-notarized candidate) |
+| macOS (Apple Silicon) | Supported (V0.79.3 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

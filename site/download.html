@@ -62,12 +62,12 @@
               <span class="pill">推荐给 Apple Silicon Mac</span>
               <h2>macOS Apple Silicon</h2>
             </div>
-            <p>适用于 Apple Silicon 芯片的 Mac。本轮为无公证候选包,已保留签名校验;首次打开可能需要按 macOS 提示确认。</p>
+            <p>适用于 Apple Silicon 芯片的 Mac。V0.79.3 已签名、公证、stapled,并通过 Gatekeeper 校验。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
-              <li>签名状态：打包门禁校验</li>
-              <li>公证状态：本轮跳过 Apple notarization</li>
-              <li>下载大小：约 175 MB</li>
+              <li>签名状态：Developer ID 签名</li>
+              <li>公证状态：Apple notarization 已通过</li>
+              <li>下载大小：约 173 MiB</li>
             </ul>
             <a class="button button-primary" data-download-key="macArm" href="#">下载 Apple Silicon 版</a>
           </article>
@@ -77,12 +77,12 @@
               <span class="pill pill-soft">适用于 Intel Mac</span>
               <h2>macOS Intel</h2>
             </div>
-            <p>适用于 Intel 芯片的 Mac。本轮为无公证候选包,适合仍在使用 Intel 机型的用户。</p>
+            <p>适用于 Intel 芯片的 Mac。V0.79.3 已签名、公证、stapled,适合仍在使用 Intel 机型的用户。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
-              <li>签名状态：打包门禁校验</li>
-              <li>公证状态：本轮跳过 Apple notarization</li>
-              <li>下载大小：约 184 MB</li>
+              <li>签名状态：Developer ID 签名</li>
+              <li>公证状态：Apple notarization 已通过</li>
+              <li>下载大小：约 180 MiB</li>
             </ul>
             <a class="button button-primary" data-download-key="macIntel" href="#">下载 Intel 版</a>
           </article>
@@ -92,12 +92,12 @@
               <span class="pill pill-warm">Windows 安装版</span>
               <h2>Windows</h2>
             </div>
-            <p>提供 `Setup.exe` 安装包。首次运行时，Windows 可能会提示未知发布者或 SmartScreen。</p>
+            <p>提供已签名的 `Setup.exe` 安装包。首次运行时，Windows SmartScreen 仍可能因为新版应用声誉积累不足而提示确认。</p>
             <ul>
               <li>文件格式：`.exe`</li>
               <li>安装方式：图形安装向导</li>
-              <li>说明：未做 Windows 代码签名，不影响安装</li>
-              <li>下载大小：约 198 MB</li>
+              <li>说明：已完成 Windows 代码签名</li>
+              <li>下载大小：约 195 MiB</li>
             </ul>
             <a class="button button-primary" data-download-key="windows" href="#">下载 Windows 安装版</a>
           </article>
@@ -136,7 +136,7 @@
             </article>
             <article class="faq-card">
               <h3>Windows 弹出安全提示还能装吗？</h3>
-              <p>可以。当前安装包未做 Windows Authenticode 签名，所以系统可能提示未知发布者。点击“更多信息”后仍可继续安装。</p>
+              <p>可以。V0.79.3 安装包已完成 Windows 代码签名；SmartScreen 仍可能因为新版应用声誉积累不足而提示确认。</p>
             </article>
             <article class="faq-card">
               <h3>我想看更新说明或校验原始发布记录怎么办？</h3>

@@ -44,7 +44,7 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 ## 🆕 近期更新
 
 <details>
-<summary><strong>v0.79.3</strong> · 2026-05-25 · TypeScript 安全迁移 + 打包门禁候选 <em>(最新)</em></summary>
+<summary><strong>v0.79.3</strong> · 2026-05-25 · TypeScript 安全迁移 + 公证包 <em>(最新)</em></summary>
 
 **V0.79 架构安全推进版**:
 - 🧱 **TypeScript 迁移继续推进**:`server/chat` 多个叶子 helper、`server/routes` 轻路由、`shared` runtime 工具与配置迁移到 TS,减少字符串 typo 和隐式 `unknown` 进入热路径。
@@ -52,7 +52,7 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 - 🧭 **本地模型口径不变**:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;4B 保持低配降级,继续提示 thinking-on 风险。
 - 🧾 **聊天与 artifact 热路径更容易维护**:stream emitter、turn state、artifact recovery、tool summary、voice fallback 等模块进入 TS 边界,为后续拆 `chat.js` 和 core 做铺垫。
 - 🧪 **core 大迁移延后**:`core/session-coordinator.js`、`core/engine.js` 等大文件不塞进本次包,避免为追求 JS 占比牺牲发版稳定性。
-- 📦 **macOS 本轮按无公证候选包发布**:保留签名校验,跳过 Apple notarization;下载页会明确提示首次打开可能需要系统确认。
+- 📦 **macOS 三重校验完成**:Apple Silicon / Intel DMG 已签名、公证、stapled,并通过 Gatekeeper 校验;Windows 提供签名 NSIS 安装包。
 
 [完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.3)
 
@@ -889,11 +889,11 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.79.3 本轮为无公证候选包,保留签名校验但跳过 Apple notarization;首次打开如遇系统确认,请按 macOS 提示允许打开。
+**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.79.3 的 Apple Silicon / Intel DMG 均已签名、公证、stapled,并通过 Gatekeeper 校验。
 
 **Windows**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.exe`，直接运行。
 
-> **Windows SmartScreen 提示：** 便携版暂未代码签名，首次运行 Windows Defender SmartScreen 可能拦截，点 **更多信息** → **仍要运行** 即可。
+> **Windows SmartScreen 提示：** V0.79.3 安装包已完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
 Linux 版本计划中。
 
@@ -961,7 +961,7 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（V0.79.3 无公证候选包） |
+| macOS (Apple Silicon) | 已支持（V0.79.3 签名 + 公证 DMG） |
 | macOS (Intel) | 已支持 |
 | Windows x64 | Beta |
 | Linux | 计划中 |
@@ -1023,7 +1023,7 @@ npm run dist:local            # 本地打包（macOS DMG，跳过公证）
 
 ### Q5：Windows 能用吗？
 
-可以。但 **Windows 版暂未代码签名**，首次运行 Windows Defender SmartScreen 会拦截，点 **更多信息 → 仍要运行** 即可。代码签名费用高昂，作为开源项目暂时没覆盖。macOS V0.79.3 为无公证候选包,首次打开可能需要按系统提示确认。
+可以。V0.79.3 的 **Windows 安装包已完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均已签名、公证并通过 Gatekeeper 校验。
 
 ### Q6：能改模型吗？接自己的 API？
 
