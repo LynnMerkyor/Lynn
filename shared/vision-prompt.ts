@@ -10,17 +10,17 @@ const IMAGE_ONLY_MARKERS = new Set([
   "(이미지 보기)",
 ]);
 
-function isZhLocale(locale = "zh") {
+function isZhLocale(locale: string = "zh"): boolean {
   return String(locale || "").toLowerCase().startsWith("zh");
 }
 
-function defaultVisionPrompt(locale = "zh") {
+function defaultVisionPrompt(locale: string = "zh"): string {
   return isZhLocale(locale)
     ? "请分析这张图片，提取主要内容，并用一段文字做总结。"
     : "Please analyze this image, extract the main content, and summarize it in one paragraph.";
 }
 
-function senderOnlyPrefix(text) {
+function senderOnlyPrefix(text: string): string {
   const raw = String(text || "");
   const zh = raw.match(/^(\[来自 [^\]]+\])\s*$/);
   if (zh) return zh[1];
@@ -29,11 +29,11 @@ function senderOnlyPrefix(text) {
   return "";
 }
 
-export function hasVisionImages(images) {
+export function hasVisionImages(images: unknown): images is unknown[] {
   return Array.isArray(images) && images.length > 0;
 }
 
-export function normalizeVisionPromptText(text, images, opts = {}) {
+export function normalizeVisionPromptText(text: unknown, images: unknown, opts: { locale?: string } = {}): string {
   if (!hasVisionImages(images)) return String(text || "");
   const locale = opts.locale || "zh";
   const raw = String(text || "");
@@ -50,13 +50,13 @@ export function normalizeVisionPromptText(text, images, opts = {}) {
   return raw;
 }
 
-export function buildVisionUnsupportedMessage(opts = {}) {
+export function buildVisionUnsupportedMessage(opts: { locale?: string } = {}): string {
   return isZhLocale(opts.locale || "zh")
     ? "我收到了图片，但当前模型不支持视觉输入，无法可靠识别图片内容。请切换到支持图片的模型，或重新发送图片并附上需要我看的重点。"
     : "I received the image, but the current model does not support vision input, so I cannot reliably inspect it. Please switch to a vision-capable model or resend the image with the details you want checked.";
 }
 
-export function buildVisionEmptyFallbackText(opts = {}) {
+export function buildVisionEmptyFallbackText(opts: { locale?: string } = {}): string {
   return isZhLocale(opts.locale || "zh")
     ? "这次图片没有被模型可靠识别到。请重新上传图片，或把图片文件路径发来；如果是截图，也可以补一句你希望我重点看哪里。"
     : "The image was not reliably processed by the model. Please upload the image again or send its file path, and optionally describe what you want me to focus on.";

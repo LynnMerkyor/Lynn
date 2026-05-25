@@ -6,14 +6,14 @@
  * therefore always returns null and callers fall back to deterministic regex.
  */
 
-export async function classifyByLLM() {
+export async function classifyByLLM(): Promise<null> {
   return null;
 }
 
 /**
  * Confidence for deterministic route-regex hits.
  */
-export function scoreRegexConfidence(regexHits) {
+export function scoreRegexConfidence(regexHits: Record<string, unknown>): number {
   const hits = Object.values(regexHits || {}).filter(Boolean).length;
   if (hits === 0) return 0.50;
   if (hits === 1) return 0.92;
@@ -21,8 +21,8 @@ export function scoreRegexConfidence(regexHits) {
   return 0.40;
 }
 
-export function _resetTriageCache() {}
+export function _resetTriageCache(): void {}
 
-export function _triageCacheSize() {
+export function _triageCacheSize(): number {
   return 0;
 }
