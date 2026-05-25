@@ -15,13 +15,74 @@ import {
   sanitizeClientAgentSecret,
 } from "./client-agent-identity.js";
 
+export type SecurityModePreference = "authorized" | "plan" | "safe";
+export type UpdateChannelPreference = "stable" | "beta";
+
+export interface PreferencesManagerOptions {
+  userDir: string;
+  agentsDir: string;
+}
+
+export interface LearnSkillsPreference {
+  enabled?: boolean;
+  safety_review?: boolean;
+  [key: string]: unknown;
+}
+
+export interface SessionRelayPreference {
+  enabled?: boolean;
+  compaction_threshold?: number;
+  summary_max_tokens?: number;
+  [key: string]: unknown;
+}
+
+export interface NormalizedSessionRelayPreference {
+  enabled: boolean;
+  compaction_threshold: number;
+  summary_max_tokens: number;
+}
+
+export interface SnapshotPreference {
+  enabled?: boolean;
+  maxDays?: number;
+  [key: string]: unknown;
+}
+
+export interface NormalizedSnapshotPreference {
+  enabled: boolean;
+  maxDays: number;
+}
+
+export interface ClientIdentity {
+  key: string;
+  secret: string;
+}
+
+export interface PreferencesData {
+  sandbox?: boolean;
+  securityMode?: SecurityModePreference | "full-access" | string;
+  learn_skills?: LearnSkillsPreference;
+  locale?: string;
+  timezone?: string;
+  thinking_level?: string;
+  session_relay?: SessionRelayPreference;
+  external_skill_paths?: unknown[];
+  oauth_custom_models?: Record<string, string[]>;
+  update_channel?: UpdateChannelPreference | string;
+  snapshot?: SnapshotPreference;
+  [CLIENT_AGENT_KEY_PREF_KEY]?: unknown;
+  [CLIENT_AGENT_SECRET_PREF_KEY]?: unknown;
+  primaryAgent?: string | null;
+  [key: string]: unknown;
+}
+
 export class PreferencesManager {
-  /**
-   * @param {object} opts
-   * @param {string} opts.userDir  - 用户数据目录（preferences.json 所在）
-   * @param {string} opts.agentsDir - agents 根目录（findFirstAgent 用）
-   */
-  constructor({ userDir, agentsDir }) {
+  _userDir: string;
+  _agentsDir: string;
+  _path: string;
+  _cache: PreferencesData;
+
+  constructor({ userDir, agentsDir }: PreferencesManagerOptions) {
     this._userDir = userDir;
     this._agentsDir = agentsDir;
     this._path = path.join(userDir, "preferences.json");
@@ -29,12 +90,12 @@ export class PreferencesManager {
   }
 
   /** 读取全局 preferences（从内存缓存） */
-  getPreferences() {
+  getPreferences(): PreferencesData {
     return structuredClone(this._cache);
   }
 
   /** 写入全局 preferences（更新缓存 + 原子写磁盘） */
-  savePreferences(prefs) {
+  savePreferences(prefs: PreferencesData): void {
     this._cache = structuredClone(prefs);
     fs.mkdirSync(this._userDir, { recursive: true });
     const tmp = this._path + ".tmp";
@@ -43,25 +104,25 @@ export class PreferencesManager {
   }
 
   /** @private 从磁盘读取（仅构造时调用一次） */
-  _readFromDisk() {
-    try { return JSON.parse(fs.readFileSync(this._path, "utf-8")); }
+  _readFromDisk(): PreferencesData {
+    try { return JSON.parse(fs.readFileSync(this._path, "utf-8")) as PreferencesData; }
     catch { return {}; }
   }
 
   /** 读取沙盒模式偏好 */
-  getSandbox() {
+  getSandbox(): boolean {
     return this.getPreferences().sandbox !== false;
   }
 
   /** 保存沙盒模式偏好 */
-  setSandbox(enabled) {
+  setSandbox(enabled: boolean | string): void {
     const prefs = this.getPreferences();
     prefs.sandbox = typeof enabled === "string" ? enabled === "true" : !!enabled;
     this.savePreferences(prefs);
   }
 
   /** 读取安全模式偏好（全局默认） */
-  getSecurityMode() {
+  getSecurityMode(): SecurityModePreference {
     const prefs = this.getPreferences();
     const mode = prefs.securityMode;
     // 迁移：旧版 full-access 映射到新版 authorized（行为一致）
@@ -71,7 +132,7 @@ export class PreferencesManager {
   }
 
   /** 保存安全模式偏好（全局默认） */
-  setSecurityMode(mode) {
+  setSecurityMode(mode: string): void {
     const prefs = this.getPreferences();
     prefs.securityMode = mode;
     // 向后兼容：full-access <=> sandbox: false
@@ -80,57 +141,57 @@ export class PreferencesManager {
   }
 
   /** 读取自学技能配置（全局，跨 agent） */
-  getLearnSkills() {
+  getLearnSkills(): LearnSkillsPreference {
     const cfg = this.getPreferences().learn_skills;
     if (!cfg) return { enabled: true, safety_review: true };
     return cfg;
   }
 
   /** 合并写入自学技能配置 */
-  setLearnSkills(partial) {
+  setLearnSkills(partial: Partial<LearnSkillsPreference>): void {
     const prefs = this.getPreferences();
     prefs.learn_skills = { ...(prefs.learn_skills || {}), ...partial };
     this.savePreferences(prefs);
   }
 
   /** 读取语言偏好（全局） */
-  getLocale() {
+  getLocale(): string {
     return this.getPreferences().locale || "";
   }
 
   /** 保存语言偏好 */
-  setLocale(locale) {
+  setLocale(locale: string | null | undefined): void {
     const prefs = this.getPreferences();
     prefs.locale = locale || "";
     this.savePreferences(prefs);
   }
 
   /** 读取时区偏好（全局） */
-  getTimezone() {
+  getTimezone(): string {
     return this.getPreferences().timezone || "";
   }
 
   /** 保存时区偏好 */
-  setTimezone(tz) {
+  setTimezone(tz: string | null | undefined): void {
     const prefs = this.getPreferences();
     prefs.timezone = tz || "";
     this.savePreferences(prefs);
   }
 
   /** 读取 thinking level 偏好（用户全局，跨 agent / session） */
-  getThinkingLevel() {
+  getThinkingLevel(): string {
     return this.getPreferences().thinking_level || "auto";
   }
 
   /** 保存 thinking level 偏好 */
-  setThinkingLevel(level) {
+  setThinkingLevel(level: string): void {
     const prefs = this.getPreferences();
     prefs.thinking_level = level;
     this.savePreferences(prefs);
   }
 
   /** 读取 session 自动接力配置 */
-  getSessionRelay() {
+  getSessionRelay(): NormalizedSessionRelayPreference {
     const cfg = this.getPreferences().session_relay || {};
     return {
       enabled: cfg.enabled !== false,
@@ -140,7 +201,7 @@ export class PreferencesManager {
   }
 
   /** 保存 session 自动接力配置 */
-  setSessionRelay(partial) {
+  setSessionRelay(partial: Partial<SessionRelayPreference>): void {
     const prefs = this.getPreferences();
     prefs.session_relay = {
       ...(prefs.session_relay || {}),
@@ -150,24 +211,24 @@ export class PreferencesManager {
   }
 
   /** 读取外部技能扫描路径 */
-  getExternalSkillPaths() {
+  getExternalSkillPaths(): unknown[] {
     return this.getPreferences().external_skill_paths || [];
   }
 
   /** 保存外部技能扫描路径 */
-  setExternalSkillPaths(paths) {
+  setExternalSkillPaths(paths: unknown[]): void {
     const prefs = this.getPreferences();
     prefs.external_skill_paths = paths;
     this.savePreferences(prefs);
   }
 
   /** 读取 OAuth 自定义模型 { provider: ["model-id", ...] } */
-  getOAuthCustomModels() {
+  getOAuthCustomModels(): Record<string, string[]> {
     return this.getPreferences().oauth_custom_models || {};
   }
 
   /** 设置某个 OAuth provider 的自定义模型列表 */
-  setOAuthCustomModels(provider, modelIds) {
+  setOAuthCustomModels(provider: string, modelIds: string[]): void {
     const prefs = this.getPreferences();
     if (!prefs.oauth_custom_models) prefs.oauth_custom_models = {};
     if (modelIds.length === 0) {
@@ -179,19 +240,19 @@ export class PreferencesManager {
   }
 
   /** 读取更新通道偏好："stable" | "beta" */
-  getUpdateChannel() {
+  getUpdateChannel(): string {
     return this.getPreferences().update_channel || "stable";
   }
 
   /** 保存更新通道偏好 */
-  setUpdateChannel(channel) {
+  setUpdateChannel(channel: string): void {
     const prefs = this.getPreferences();
     prefs.update_channel = channel === "beta" ? "beta" : "stable";
     this.savePreferences(prefs);
   }
 
   /** 读取快照配置（文件防丢失） */
-  getSnapshot() {
+  getSnapshot(): NormalizedSnapshotPreference {
     const cfg = this.getPreferences().snapshot || {};
     return {
       enabled: cfg.enabled !== false,       // 默认开启
@@ -200,24 +261,24 @@ export class PreferencesManager {
   }
 
   /** 保存快照配置 */
-  setSnapshot(partial) {
+  setSnapshot(partial: Partial<SnapshotPreference>): void {
     const prefs = this.getPreferences();
     prefs.snapshot = { ...(prefs.snapshot || {}), ...partial };
     this.savePreferences(prefs);
   }
 
   /** 读取当前客户端的 Agent Key */
-  getClientAgentKey() {
+  getClientAgentKey(): string | null {
     return sanitizeClientAgentKey(this.getPreferences()[CLIENT_AGENT_KEY_PREF_KEY]);
   }
 
   /** 读取当前客户端的签名密钥 */
-  getClientAgentSecret() {
+  getClientAgentSecret(): string | null {
     return sanitizeClientAgentSecret(this.getPreferences()[CLIENT_AGENT_SECRET_PREF_KEY]);
   }
 
   /** 确保当前客户端存在稳定的 Agent Key（首次启动自动生成） */
-  ensureClientAgentKey() {
+  ensureClientAgentKey(): string {
     const existing = this.getClientAgentKey();
     if (existing) return existing;
     const prefs = this.getPreferences();
@@ -228,7 +289,7 @@ export class PreferencesManager {
   }
 
   /** 确保当前客户端存在稳定的签名密钥（首次启动自动生成） */
-  ensureClientAgentSecret() {
+  ensureClientAgentSecret(): string {
     const existing = this.getClientAgentSecret();
     if (existing) return existing;
     const prefs = this.getPreferences();
@@ -239,29 +300,26 @@ export class PreferencesManager {
   }
 
   /** 同时确保客户端 ID 与签名密钥都存在 */
-  ensureClientIdentity() {
+  ensureClientIdentity(): ClientIdentity {
     const key = this.ensureClientAgentKey();
     const secret = this.ensureClientAgentSecret();
     return { key, secret };
   }
 
   /** 读取 primary agent ID */
-  getPrimaryAgent() {
+  getPrimaryAgent(): string | null {
     return this.getPreferences().primaryAgent || null;
   }
 
   /** 保存 primary agent ID */
-  savePrimaryAgent(agentId) {
+  savePrimaryAgent(agentId: string | null): void {
     const prefs = this.getPreferences();
     prefs.primaryAgent = agentId;
     this.savePreferences(prefs);
   }
 
-  /**
-   * 找到 agents/ 目录下第一个合法的 agent
-   * @returns {string|null}
-   */
-  findFirstAgent() {
+  /** 找到 agents/ 目录下第一个合法的 agent */
+  findFirstAgent(): string | null {
     try {
       const entries = fs.readdirSync(this._agentsDir, { withFileTypes: true });
       for (const entry of entries) {

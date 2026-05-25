@@ -12,47 +12,134 @@ import {
   containsPseudoToolSimulation as containsSharedPseudoToolSimulation,
   stripPseudoToolCallMarkup,
 } from "../shared/pseudo-tool-call.js";
+import type { LLMApi, LLMMessage, ModelId } from "./types.js";
+
+export interface ContentBlock {
+  type?: string;
+  name?: string;
+  input?: unknown;
+  arguments?: unknown;
+  text?: string;
+}
+
+export interface ToolCallBlock extends ContentBlock {
+  name: string;
+}
+
+export interface UtilityModelAttempt {
+  model?: ModelId | null;
+  api?: LLMApi | null;
+  api_key?: string | null;
+  base_url?: string | null;
+}
+
+interface ConfiguredUtilityModelAttempt {
+  model: ModelId;
+  api: LLMApi;
+  api_key?: string | null;
+  base_url: string;
+}
+
+export interface UtilityConfig {
+  utility?: ModelId | null;
+  api?: LLMApi | null;
+  api_key?: string | null;
+  base_url?: string | null;
+  utility_fallbacks?: UtilityModelAttempt[];
+  utility_large?: ModelId | null;
+  large_api?: LLMApi | null;
+  large_api_key?: string | null;
+  large_base_url?: string | null;
+  utility_large_allow_missing_api_key?: boolean;
+  utility_large_fallbacks?: UtilityModelAttempt[];
+  [key: string]: unknown;
+}
+
+export interface LlmCallOptions extends UtilityModelAttempt {
+  messages: LLMMessage[];
+  temperature?: number;
+  max_tokens?: number;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  quirks?: string[];
+  fallbacks?: UtilityModelAttempt[];
+}
+
+export interface TimeoutSignalOptions {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
+export interface SessionRelayOptions {
+  maxTokens?: number;
+}
+
+export type DevLogEmitter = (text: string, level?: string) => void;
+
+interface SessionContentOptions {
+  userLimit?: number;
+  assistantLimit?: number;
+  includeToolCalls?: boolean;
+}
+
+interface SessionContentSummary {
+  userText: string;
+  assistantText: string;
+  toolCalls: string[];
+  toolCallsText?: string;
+}
+
+interface SessionContentLine {
+  type?: string;
+  message?: SessionMessage;
+}
+
+interface SessionMessage {
+  role?: string;
+  content?: SessionContentBlock[];
+}
+
+interface SessionContentBlock extends ContentBlock {}
+
+interface ErrorLike {
+  name?: string;
+  code?: string;
+  message?: string;
+}
 
 /** Pi SDK content block 是否为工具调用（兼容 tool_use / toolCall 两种格式） */
-export const isToolCallBlock = (b) => (b.type === "tool_use" || b.type === "toolCall") && !!b.name;
+export const isToolCallBlock = (b: ContentBlock): b is ToolCallBlock => (b.type === "tool_use" || b.type === "toolCall") && !!b.name;
 
 /** 取工具调用参数（兼容 input / arguments） */
-export const getToolArgs = (b) => b.input || b.arguments;
+export const getToolArgs = (b: ContentBlock): unknown => b.input || b.arguments;
 
-export function containsPseudoToolCallSimulation(raw) {
+export function containsPseudoToolCallSimulation(raw: string): boolean {
   return containsSharedPseudoToolSimulation(raw);
 }
 
-export function sanitizeAssistantTextContent(raw) {
+export function sanitizeAssistantTextContent(raw: string): string {
   return stripPseudoToolCallMarkup(raw)
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-/**
- * 统一的 utility LLM 调用
- * @param {object} opts
- * @param {string} opts.model
- * @param {string} opts.api_key
- * @param {string} opts.base_url
- * @param {Array} opts.messages
- * @param {number} [opts.temperature=0.3]
- * @param {number} [opts.max_tokens=100]
- * @param {Array<{ model: string, api: string, api_key: string, base_url: string }>} [opts.fallbacks=[]]
- * @returns {Promise<string|null>} 回复文本
- */
-async function callLlm({ model, api, api_key, base_url, messages, temperature = 0.3, max_tokens = 100, timeoutMs, signal, quirks, fallbacks = [] }) {
-  const attempts = [{ model, api, api_key, base_url }, ...fallbacks]
-    .filter((candidate) => candidate?.model && candidate?.api && candidate?.base_url);
+function isConfiguredAttempt(candidate: UtilityModelAttempt): candidate is ConfiguredUtilityModelAttempt {
+  return !!(candidate?.model && candidate?.api && candidate?.base_url);
+}
 
-  let lastError = null;
+/** 统一的 utility LLM 调用 */
+async function callLlm({ model, api, api_key, base_url, messages, temperature = 0.3, max_tokens = 100, timeoutMs, signal, quirks, fallbacks = [] }: LlmCallOptions): Promise<string | null> {
+  const attempts = [{ model, api, api_key, base_url }, ...fallbacks]
+    .filter(isConfiguredAttempt);
+
+  let lastError: unknown = null;
   for (const candidate of attempts) {
     try {
       return await callText({
         api: candidate.api,
         model: candidate.model,
-        apiKey: candidate.api_key,
+        apiKey: candidate.api_key as string | undefined,
         baseUrl: candidate.base_url,
         messages,
         temperature,
@@ -71,39 +158,35 @@ async function callLlm({ model, api, api_key, base_url, messages, temperature = 
   return null;
 }
 
-/**
- * 从 .jsonl session 文件提取 user/assistant 文本和工具调用
- */
-function parseSessionContent(sessionPath, { userLimit = 1000, assistantLimit = 1000 } = {}) {
+/** 从 .jsonl session 文件提取 user/assistant 文本和工具调用 */
+function parseSessionContent(sessionPath: string, { userLimit = 1000, assistantLimit = 1000 }: SessionContentOptions = {}): SessionContentSummary {
   const raw = fs.readFileSync(sessionPath, "utf-8");
   const lines = raw.trim().split("\n").map(l => {
-    try { return JSON.parse(l); } catch { return null; }
-  }).filter(Boolean);
+    try { return JSON.parse(l) as SessionContentLine; } catch { return null; }
+  }).filter(Boolean) as SessionContentLine[];
 
   let userText = "";
   let assistantText = "";
-  const toolCalls = [];
+  const toolCalls: string[] = [];
   for (const line of lines) {
     if (line.type !== "message" || !line.message) continue;
     const msg = line.message;
     if (msg.role === "user" && !userText) {
-      const textParts = (msg.content || []).filter(c => c.type === "text");
+      const textParts = ((msg.content || []) as SessionContentBlock[]).filter(c => c.type === "text");
       userText = textParts.map(c => c.text).join("\n").slice(0, userLimit);
     }
     if (msg.role === "assistant") {
-      const textParts = (msg.content || []).filter(c => c.type === "text");
+      const textParts = ((msg.content || []) as SessionContentBlock[]).filter(c => c.type === "text");
       assistantText = sanitizeAssistantTextContent(textParts.map(c => c.text).join("\n")).slice(0, assistantLimit);
-      const toolParts = (msg.content || []).filter(isToolCallBlock);
+      const toolParts = ((msg.content || []) as SessionContentBlock[]).filter(isToolCallBlock);
       for (const t of toolParts) toolCalls.push(t.name || "unknown_tool");
     }
   }
   return { userText, assistantText, toolCalls };
 }
 
-/**
- * 从 session 内容生成本地兜底摘要（不依赖外部 API）
- */
-export function buildLocalSummary(assistantText, toolCalls) {
+/** 从 session 内容生成本地兜底摘要（不依赖外部 API） */
+export function buildLocalSummary(assistantText: string, toolCalls: string[]): string | null {
   const isZh = getLocale().startsWith("zh");
   const uniqueTools = [...new Set(toolCalls)];
   if (uniqueTools.length > 0) {
@@ -120,14 +203,8 @@ export function buildLocalSummary(assistantText, toolCalls) {
   return null;
 }
 
-/**
- * 生成对话标题
- * @param {object} utilConfig - resolveUtilityConfig() 结果
- * @param {string} userText
- * @param {string} assistantText
- * @param {{ timeoutMs?: number, signal?: AbortSignal }} [opts]
- */
-export async function summarizeTitle(utilConfig, userText, assistantText, opts = {}) {
+/** 生成对话标题 */
+export async function summarizeTitle(utilConfig: UtilityConfig, userText: string, assistantText: string, opts: TimeoutSignalOptions = {}): Promise<string | null> {
   try {
     const isZh = getLocale().startsWith("zh");
     const { utility: model, api_key, base_url, api, utility_fallbacks = [] } = utilConfig;
@@ -169,19 +246,18 @@ Rules:
       signal: opts.signal,
     });
   } catch (err) {
+    const error = err as ErrorLike;
     // AbortError（超时）不算失败，静默返回 null 让调用方走 fallback
-    if (err.name === "AbortError" || err.name === "TimeoutError" || err.code === "LLM_TIMEOUT") return null;
-    console.error("[llm-utils] summarizeTitle failed:", err.message);
+    if (error.name === "AbortError" || error.name === "TimeoutError" || error.code === "LLM_TIMEOUT") return null;
+    console.error("[llm-utils] summarizeTitle failed:", error.message);
     return null;
   }
 }
 
-/**
- * 批量翻译技能名称
- */
-export async function translateSkillNames(utilConfig, names, lang) {
+/** 批量翻译技能名称 */
+export async function translateSkillNames(utilConfig: UtilityConfig, names: string[], lang: string): Promise<Record<string, unknown>> {
   if (!names.length) return {};
-  const LANG_LABEL = { zh: "中文", ja: "日本語", ko: "한국어" };
+  const LANG_LABEL: Record<string, string> = { zh: "中文", ja: "日本語", ko: "한국어" };
   const label = LANG_LABEL[lang] || lang;
   try {
     const { utility: model, api_key, base_url, api, utility_fallbacks = [] } = utilConfig;
@@ -206,14 +282,15 @@ export async function translateSkillNames(utilConfig, names, lang) {
     });
     if (!text) return {};
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    return jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+    return jsonMatch ? JSON.parse(jsonMatch[0]) as Record<string, unknown> : {};
   } catch (err) {
-    console.error("[llm-utils] translateSkillNames 失败:", err.message);
+    const error = err as ErrorLike;
+    console.error("[llm-utils] translateSkillNames 失败:", error.message);
     return {};
   }
 }
 
-export async function translateText(utilConfig, text, targetLanguage = "中文", opts = {}) {
+export async function translateText(utilConfig: UtilityConfig | null | undefined, text: unknown, targetLanguage = "中文", opts: TimeoutSignalOptions = {}): Promise<string | null> {
   const source = String(text || "").trim();
   const target = String(targetLanguage || "中文").trim() || "中文";
   if (!source) return "";
@@ -256,13 +333,8 @@ export async function translateText(utilConfig, text, targetLanguage = "中文",
   });
 }
 
-/**
- * 为活动 session 生成摘要（用 utility_large 模型）
- * @param {object} utilConfig - resolveUtilityConfig() 结果
- * @param {string} sessionPath
- * @param {(text: string, level?: string) => void} [emitDevLog]
- */
-export async function summarizeActivity(utilConfig, sessionPath, emitDevLog) {
+/** 为活动 session 生成摘要（用 utility_large 模型） */
+export async function summarizeActivity(utilConfig: UtilityConfig, sessionPath: string, emitDevLog?: DevLogEmitter): Promise<string | null> {
   const log = emitDevLog || (() => {});
   const isZh = getLocale().startsWith("zh");
   try {
@@ -330,18 +402,15 @@ Rules:
 
     return text;
   } catch (err) {
-    log(`[summarize] error: ${err.message}`);
-    console.error("[llm-utils] summarizeActivity failed:", err.message);
+    const error = err as ErrorLike;
+    log(`[summarize] error: ${error.message}`);
+    console.error("[llm-utils] summarizeActivity failed:", error.message);
     return null;
   }
 }
 
-/**
- * 快速摘要（用 utility 小模型）
- * @param {object} utilConfig
- * @param {string} sessionPath - activity session 文件绝对路径
- */
-export async function summarizeActivityQuick(utilConfig, sessionPath) {
+/** 快速摘要（用 utility 小模型） */
+export async function summarizeActivityQuick(utilConfig: UtilityConfig, sessionPath: string): Promise<string | null> {
   if (!fs.existsSync(sessionPath)) return null;
   const isZh = getLocale().startsWith("zh");
   try {
@@ -376,19 +445,14 @@ export async function summarizeActivityQuick(utilConfig, sessionPath) {
       max_tokens: 80,
     });
   } catch (err) {
-    console.error("[llm-utils] summarizeActivityQuick failed:", err.message);
+    const error = err as ErrorLike;
+    console.error("[llm-utils] summarizeActivityQuick failed:", error.message);
     return null;
   }
 }
 
-/**
- * 为自动接力生成 session 摘要（更完整，供下一个 session 继承）
- * @param {object} utilConfig
- * @param {string} sessionPath
- * @param {object} [opts]
- * @param {number} [opts.maxTokens=800]
- */
-export async function summarizeSessionRelay(utilConfig, sessionPath, opts = {}) {
+/** 为自动接力生成 session 摘要（更完整，供下一个 session 继承） */
+export async function summarizeSessionRelay(utilConfig: UtilityConfig, sessionPath: string, opts: SessionRelayOptions = {}): Promise<string | null> {
   if (!fs.existsSync(sessionPath)) return null;
   const isZh = getLocale().startsWith("zh");
   const maxTokens = Number(opts.maxTokens) > 0 ? Number(opts.maxTokens) : 800;
@@ -439,18 +503,14 @@ Requirements:
       max_tokens: Math.max(256, Math.min(maxTokens, 1200)),
     });
   } catch (err) {
-    console.error("[llm-utils] summarizeSessionRelay failed:", err.message);
+    const error = err as ErrorLike;
+    console.error("[llm-utils] summarizeSessionRelay failed:", error.message);
     return null;
   }
 }
 
-/**
- * 用 LLM 根据显示名生成 agent ID
- * @param {object} utilConfig
- * @param {string} name - 显示名
- * @param {string} agentsDir - agents 根目录（检查冲突）
- */
-export async function generateAgentId(utilConfig, name, agentsDir) {
+/** 用 LLM 根据显示名生成 agent ID */
+export async function generateAgentId(utilConfig: UtilityConfig, name: string, agentsDir: string): Promise<string> {
   try {
     const isZh = getLocale().startsWith("zh");
     const { utility: model, api_key, base_url, api, utility_fallbacks = [] } = utilConfig;
@@ -498,7 +558,8 @@ Examples:
       }
     }
   } catch (err) {
-    console.error("[llm-utils] generateAgentId LLM failed:", err.message);
+    const error = err as ErrorLike;
+    console.error("[llm-utils] generateAgentId LLM failed:", error.message);
   }
   return `agent-${Date.now().toString(36)}`;
 }

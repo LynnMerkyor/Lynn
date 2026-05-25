@@ -3,7 +3,29 @@ import {
   formatInjectionWarning,
 } from "../lib/sandbox/prompt-injection-detector.js";
 
-export function runReadToolPromptInjectionGuardrail(event, opts = {}) {
+export interface ToolResultTextBlock {
+  type?: string;
+  text?: unknown;
+}
+
+export interface ReadToolGuardrailEvent {
+  toolName?: string;
+  toolCall?: { name?: string } | null;
+  isError?: boolean;
+  result?: { content?: ToolResultTextBlock[] } | null;
+}
+
+export interface ReadToolGuardrailOptions {
+  logger?: (message: string) => void;
+  onError?: (error: unknown) => void;
+}
+
+export type ReadToolGuardrailResult =
+  | { detected: false; skipped: true; reason: "not_read_tool" | "short_or_non_text" | "guardrail_error" }
+  | { detected: false; skipped: false; matches: [] }
+  | { detected: true; skipped: false; matches: ReturnType<typeof detectPromptInjection>["matches"]; warningAppended: boolean };
+
+export function runReadToolPromptInjectionGuardrail(event: ReadToolGuardrailEvent | null | undefined, opts: ReadToolGuardrailOptions = {}): ReadToolGuardrailResult {
   const toolName = event?.toolName || event?.toolCall?.name || "";
   if ((toolName !== "read" && toolName !== "read_file") || event?.isError) {
     return { detected: false, skipped: true, reason: "not_read_tool" };
