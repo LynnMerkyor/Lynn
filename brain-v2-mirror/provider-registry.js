@@ -18,10 +18,17 @@ export const PROVIDERS = {
     id: 'apex-spark-i-balanced',
     endpoint: env('APEX_SPARK_BASE', 'http://127.0.0.1:18098/v1'),
     apiKey: 'none',
-    model: env('APEX_SPARK_MODEL', 'qwen36-35b-a3b-apex-i-balanced'),
+    // 2026-05-25: 实际 Spark llama-server `-a` alias 是 qwen36-35b-a3b-apex-mtp
+    // (lynn-apex-mtp-llamacpp.service)。之前 default 'apex-i-balanced' 跟 server alias
+    // mismatch,fallback 触发就 404,所以 MiMo 降级链路一直没真跑过。
+    model: env('APEX_SPARK_MODEL', 'qwen36-35b-a3b-apex-mtp'),
     capability: { vision: false, audio: false, tools: true, thinking: true, native_search: false },
     wire: 'openai',
     cooldown_ms: 300_000,
+    // 2026-05-25: 默认 thinking-off,跟 MiMo 行为对齐。短 max_tokens 工况下避免 35B 长思考
+    // 把 reasoning_content 吃光、content 空、用户拿到空答案。client 通过 reasoning_effort
+    // (非 'off' / 'none')显式 opt-in 才走 thinking-on。
+    default_thinking: false,
   },
   'deepseek-chat': {
     id: 'deepseek-chat',

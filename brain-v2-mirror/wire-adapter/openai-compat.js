@@ -17,6 +17,21 @@ export async function* call({ provider, messages, tools, signal, log, extraBody,
   if (reasoningEffort && !body.reasoning_effort) {
     body.reasoning_effort = reasoningEffort;
   }
+  // 2026-05-25: provider.default_thinking === false 时(例如 apex-spark Brain v2 fallback),
+  // 默认关 thinking,跟 MiMo 行为对齐。避免短 max_tokens 工况下 35B 长 reasoning 吃光
+  // 预算返回空 content。client 通过 reasoning_effort('low'/'medium'/'high'/'on')显式
+  // opt-in,或 extraBody.chat_template_kwargs.enable_thinking 直接覆盖。
+  if (provider.default_thinking === false
+      && body?.chat_template_kwargs?.enable_thinking === undefined) {
+    const wantsThinking = !!reasoningEffort
+      && reasoningEffort !== 'off'
+      && reasoningEffort !== 'none'
+      && reasoningEffort !== 'disabled';
+    body.chat_template_kwargs = {
+      ...(body.chat_template_kwargs || {}),
+      enable_thinking: wantsThinking,
+    };
+  }
   if (Array.isArray(tools) && tools.length > 0) {
     body.tools = tools;
     body.tool_choice = 'auto';
