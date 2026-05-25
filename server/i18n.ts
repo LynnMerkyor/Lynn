@@ -7,13 +7,13 @@ import { fromRoot } from "../shared/hana-root.js";
 
 const localesDir = fromRoot("desktop", "src", "locales");
 
-let data = {};
+let data: Record<string, unknown> = {};
 let currentLocale = "zh";
 
 /**
  * locale 字符串 → JSON 文件名 key
  */
-function resolveKey(locale) {
+function resolveKey(locale?: string | null): string {
   if (!locale) return "zh";
   if (locale === "zh-TW" || locale === "zh-Hant") return "zh-TW";
   if (locale.startsWith("zh")) return "zh";
@@ -26,14 +26,15 @@ function resolveKey(locale) {
  * 加载语言包
  * @param {string} locale  config.yaml 里的 locale 值，如 "zh-CN" / "zh-TW" / "ja" / "ko" / "en"
  */
-export function loadLocale(locale) {
+export function loadLocale(locale?: string | null): void {
   const key = resolveKey(locale);
   currentLocale = key;
   try {
     const file = path.join(localesDir, `${key}.json`);
     data = JSON.parse(fs.readFileSync(file, "utf-8"));
   } catch (err) {
-    console.error(`[i18n] Failed to load locale "${key}":`, err.message);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[i18n] Failed to load locale "${key}":`, message);
     if (key !== "en") {
       try {
         data = JSON.parse(fs.readFileSync(path.join(localesDir, "en.json"), "utf-8"));
@@ -47,8 +48,11 @@ export function loadLocale(locale) {
 /**
  * 按 dot path 取值
  */
-function get(p) {
-  return p.split(".").reduce((obj, k) => obj?.[k], data);
+function get(p: string): unknown {
+  return p.split(".").reduce<unknown>((obj, k) => {
+    if (!obj || typeof obj !== "object") return undefined;
+    return (obj as Record<string, unknown>)[k];
+  }, data);
 }
 
 /**
@@ -57,18 +61,19 @@ function get(p) {
  * @param {object} [vars]  占位符变量
  * @returns {string}
  */
-export function t(path, vars) {
+export function t(path: string, vars?: Record<string, unknown>): string {
   let val = get(path);
   if (val === undefined || val === null) return path;
-  if (typeof val !== "string") return val;
+  if (typeof val !== "string") return String(val);
+  let text = val;
   if (vars) {
     for (const [k, v] of Object.entries(vars)) {
-      val = val.replaceAll(`{${k}}`, String(v));
+      text = text.replaceAll(`{${k}}`, String(v));
     }
   }
-  return val;
+  return text;
 }
 
-export function getLocale() {
+export function getLocale(): string {
   return currentLocale;
 }

@@ -22,13 +22,13 @@ const RAG_USERS = (process.env.LYNN_RAG_USERS || "")
  * - flag 全开 + 无白名单 → true
  * - flag 全开 + 有白名单 → 仅白名单用户 true
  */
-export function isRAGEnabledForUser(userId) {
+export function isRAGEnabledForUser(userId?: string | null): boolean {
   if (!RAG_ENABLED) return false;
   if (RAG_USERS.length === 0) return true;
   return userId ? RAG_USERS.includes(userId) : false;
 }
 
-export function isASREnabledForUser(_userId) {
+export function isASREnabledForUser(_userId?: string | null): boolean {
   if (!ASR_ENABLED) return false;
   return true;
 }
