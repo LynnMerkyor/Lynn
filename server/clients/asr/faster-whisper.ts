@@ -7,14 +7,23 @@
 
 const ASR_URL = process.env.LYNN_ASR_URL || "http://localhost:8004";
 
-export function createFasterWhisperProvider(_config) {
+interface FasterWhisperConfig {
+  [key: string]: unknown;
+}
+
+interface TranscribeOptions {
+  language?: string;
+  filename?: string;
+}
+
+export function createFasterWhisperProvider(_config: FasterWhisperConfig = {}) {
   return {
     name: "faster-whisper",
     label: "Faster Whisper (自托管)",
 
-    async transcribe(audioBuffer, { language = "zh", filename = "audio.webm" } = {}) {
+    async transcribe(audioBuffer: unknown, { language = "zh", filename = "audio.webm" }: TranscribeOptions = {}) {
       const form = new FormData();
-      form.append("file", new Blob([audioBuffer], { type: "audio/webm" }), filename);
+      form.append("file", new Blob([audioBuffer as BlobPart], { type: "audio/webm" }), filename);
       form.append("language", language);
       form.append("response_format", "json");
 
@@ -23,7 +32,7 @@ export function createFasterWhisperProvider(_config) {
         body: form,
       });
       if (!res.ok) throw new Error(`transcribe failed: HTTP ${res.status}`);
-      return await res.json(); // { text, language, duration }
+      return (await res.json()) as Record<string, unknown>; // { text, language, duration }
     },
 
     async health() {

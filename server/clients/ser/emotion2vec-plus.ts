@@ -31,8 +31,25 @@
 
 const SER_URL = process.env.LYNN_EMOTION2VEC_URL || "http://localhost:18008";
 
+type EmotionTag = "angry" | "disgusted" | "fearful" | "happy" | "neutral" | "other" | "sad" | "surprised" | "unknown";
+
+interface Emotion2VecConfig {
+  [key: string]: unknown;
+}
+
+interface ClassifyOptions {
+  filename?: string;
+}
+
+interface Emotion2VecResponse {
+  labels?: string[];
+  scores?: number[];
+  top1?: string;
+  top1_score?: number;
+}
+
 // 9 类情绪 → 简化 tag(Lynn LLM context 用的英文小写 token)
-const EMO_TAG_MAP = {
+const EMO_TAG_MAP: Record<string, EmotionTag> = {
   "生气/angry": "angry",
   "厌恶/disgusted": "disgusted",
   "恐惧/fearful": "fearful",
@@ -44,7 +61,7 @@ const EMO_TAG_MAP = {
   "<unk>": "unknown",
 };
 
-export function createEmotion2VecProvider(_config) {
+export function createEmotion2VecProvider(_config: Emotion2VecConfig = {}) {
   return {
     name: "emotion2vec-plus-base",
     label: "emotion2vec+ base (V0.79 SER,SM121 实测 P50 70ms)",
@@ -55,9 +72,9 @@ export function createEmotion2VecProvider(_config) {
      * @param {object} opts
      * @returns {Promise<{tag: string, score: number, all: object[]}>}
      */
-    async classify(audioBuffer, { filename = "audio.webm" } = {}) {
+    async classify(audioBuffer: unknown, { filename = "audio.webm" }: ClassifyOptions = {}) {
       const form = new FormData();
-      form.append("file", new Blob([audioBuffer], { type: "audio/webm" }), filename);
+      form.append("file", new Blob([audioBuffer as BlobPart], { type: "audio/webm" }), filename);
 
       const res = await fetch(`${SER_URL}/classify`, {
         method: "POST",
@@ -67,11 +84,11 @@ export function createEmotion2VecProvider(_config) {
         const errText = await res.text().catch(() => "");
         throw new Error(`emotion2vec classify failed: HTTP ${res.status} ${errText.slice(0, 120)}`);
       }
-      const result = await res.json();
+      const result = await res.json() as Emotion2VecResponse;
       // 归一化输出
       const top1Label = result.top1 || result.labels?.[0];
       const top1Score = result.top1_score || result.scores?.[0] || 0;
-      const tag = EMO_TAG_MAP[top1Label] || "unknown";
+      const tag = (top1Label && EMO_TAG_MAP[top1Label]) || "unknown";
       return {
         tag,
         score: top1Score,
@@ -123,4 +140,4 @@ export const EMOTION_LLM_HINT = {
   neutral: null,
   other: null,
   unknown: null,
-};
+} satisfies Record<EmotionTag, string | null>;

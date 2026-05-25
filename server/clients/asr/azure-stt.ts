@@ -8,7 +8,19 @@
  * 当前为占位实现，需要时补充完整逻辑。
  */
 
-export function createAzureSTTProvider(config) {
+interface AzureSTTConfig {
+  apiKey?: string;
+  api_key?: string;
+  region?: string;
+  [key: string]: unknown;
+}
+
+interface AzureTranscribeOptions {
+  language?: string;
+  filename?: string;
+}
+
+export function createAzureSTTProvider(config: AzureSTTConfig = {}) {
   const apiKey = config?.apiKey || config?.api_key || "";
   const region = config?.region || "eastasia";
 
@@ -16,7 +28,7 @@ export function createAzureSTTProvider(config) {
     name: "azure-stt",
     label: "Azure Speech-to-Text",
 
-    async transcribe(audioBuffer, { language: _language = "zh-CN", filename: _filename = "audio.webm" } = {}) {
+    async transcribe(_audioBuffer: unknown, { language: _language = "zh-CN", filename: _filename = "audio.webm" }: AzureTranscribeOptions = {}) {
       if (!apiKey) throw new Error("Azure Speech Key is not configured");
 
       // Azure STT REST API: POST /speechtotext/v3.1/transcriptions

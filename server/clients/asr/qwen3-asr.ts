@@ -25,7 +25,20 @@
 const DEFAULT_ASR_URL = process.env.LYNN_QWEN3_ASR_URL || "http://localhost:18007";
 const DEFAULT_TRANSCRIBE_TIMEOUT_MS = Number(process.env.LYNN_QWEN3_ASR_TIMEOUT_MS || 15000);
 
-function normalizeLanguage(language) {
+interface Qwen3AsrConfig {
+  base_url?: string;
+  baseUrl?: string;
+  timeout_ms?: number | string;
+  timeoutMs?: number | string;
+  [key: string]: unknown;
+}
+
+interface Qwen3TranscribeOptions {
+  language?: string;
+  filename?: string;
+}
+
+function normalizeLanguage(language: unknown): string {
   const value = String(language || "auto").trim();
   if (!value || value.toLowerCase() === "auto") return "";
   const key = value.toLowerCase().replace(/_/g, "-");
@@ -34,7 +47,7 @@ function normalizeLanguage(language) {
   return value;
 }
 
-function inferAudioMimeType(filename) {
+function inferAudioMimeType(filename: unknown): string {
   const value = String(filename || "").toLowerCase();
   if (value.endsWith(".wav")) return "audio/wav";
   if (value.endsWith(".mp3")) return "audio/mpeg";
@@ -44,16 +57,16 @@ function inferAudioMimeType(filename) {
   return "audio/wav";
 }
 
-export function createQwen3AsrProvider(config = {}) {
+export function createQwen3AsrProvider(config: Qwen3AsrConfig = {}) {
   const baseUrl = String(config.base_url || config.baseUrl || DEFAULT_ASR_URL).replace(/\/+$/, "");
   const timeoutMs = Number(config.timeout_ms || config.timeoutMs || DEFAULT_TRANSCRIBE_TIMEOUT_MS);
   return {
     name: "qwen3-asr",
     label: "Qwen3-ASR-0.6B (V0.79 主转写,SM121 实测稳态)",
 
-    async transcribe(audioBuffer, { language = "auto", filename = "audio.wav" } = {}) {
+    async transcribe(audioBuffer: unknown, { language = "auto", filename = "audio.wav" }: Qwen3TranscribeOptions = {}) {
       const form = new FormData();
-      form.append("file", new Blob([audioBuffer], { type: inferAudioMimeType(filename) }), filename);
+      form.append("file", new Blob([audioBuffer as BlobPart], { type: inferAudioMimeType(filename) }), filename);
       // 2026-05-01 实测:qwen-asr 0.0.6 只接受完整英文名 (Chinese/English/...),不接 ISO
       // server 端已做归一化,但客户端也给友好默认,避免日志错误刷屏
       const normalizedLanguage = normalizeLanguage(language);
@@ -70,7 +83,7 @@ export function createQwen3AsrProvider(config = {}) {
         const errText = await res.text().catch(() => "");
         throw new Error(`qwen3-asr transcribe failed: HTTP ${res.status} ${errText.slice(0, 120)}`);
       }
-      return await res.json(); // { text, language, duration_ms }
+      return (await res.json()) as Record<string, unknown>; // { text, language, duration_ms }
     },
 
     async health() {
@@ -86,7 +99,7 @@ export function createQwen3AsrProvider(config = {}) {
      * Phase 2 placeholder:streaming partial transcript
      * 真实接口会接 Python 包装的 Qwen3ASRModel.streaming_transcribe()
      */
-    async transcribeStreaming(_audioStream, _opts = {}) {
+    async transcribeStreaming(_audioStream: unknown, _opts: Record<string, unknown> = {}) {
       throw new Error("qwen3-asr streaming: Phase 2 实装,Phase 1 stub");
     },
   };

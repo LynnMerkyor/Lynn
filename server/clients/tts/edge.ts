@@ -5,6 +5,7 @@
  * 16kHz PCM instead of the npm package's hardcoded MP3 output.
  */
 import { randomUUID } from "node:crypto";
+// @ts-ignore -- ws is a runtime dependency without bundled declarations in this project.
 import { WebSocket } from "ws";
 
 const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
@@ -15,11 +16,63 @@ const EDGE_TTS_VOICE_LIST_URL = `https://${EDGE_TTS_BASE}/voices/list?trustedcli
 const DEFAULT_VOICE = "zh-CN-XiaoxiaoNeural";
 const DEFAULT_OUTPUT_FORMAT = "raw-16khz-16bit-mono-pcm";
 
-function requestId() {
+type WebSocketSendCallback = (err?: Error) => void;
+
+interface WebSocketLike {
+  on(event: "message", cb: (rawData: Buffer, isBinary: boolean) => void): unknown;
+  on(event: "error", cb: (err: unknown) => void): unknown;
+  on(event: "open", cb: () => void): unknown;
+  on(event: string, cb: (...args: unknown[]) => void): unknown;
+  send(message: string, options: { compress: boolean }, cb: WebSocketSendCallback): unknown;
+  close(): unknown;
+}
+
+interface WebSocketOptions {
+  host: string;
+  origin: string;
+  headers: Record<string, string>;
+}
+
+type WebSocketCtor = new (url: string, options: WebSocketOptions) => WebSocketLike;
+
+interface EdgeTtsConfig {
+  default_voice?: string;
+  voice?: string;
+  output_format?: string;
+  outputFormat?: string;
+  timeout_ms?: number | string;
+  timeoutMs?: number | string;
+  websocketCtor?: WebSocketCtor;
+  [key: string]: unknown;
+}
+
+interface EdgeSynthesizeOptions {
+  voice?: string;
+  speed?: number | string;
+  pitch?: string;
+  volume?: string;
+  signal?: AbortSignal | null;
+  timeoutMs?: number | string;
+  [key: string]: unknown;
+}
+
+interface EdgeWebSocketRequest {
+  text: string;
+  voice: string;
+  rate: string;
+  pitch: string;
+  volume: string;
+  outputFormat: string;
+  timeoutMs: number | string;
+  signal: AbortSignal | null;
+  websocketCtor: WebSocketCtor;
+}
+
+function requestId(): string {
   return randomUUID().replaceAll("-", "");
 }
 
-function escapeXml(value) {
+function escapeXml(value: unknown): string {
   return String(value || "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -28,32 +81,36 @@ function escapeXml(value) {
     .replaceAll("'", "&apos;");
 }
 
-function speedToRate(speed) {
+function speedToRate(speed: unknown): string {
   const n = Number(speed);
   if (!Number.isFinite(n) || n <= 0) return "+0%";
   const pct = Math.max(-80, Math.min(200, Math.round((n - 1) * 100)));
   return `${pct >= 0 ? "+" : ""}${pct}%`;
 }
 
-function extractAudioPayload(data) {
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+function extractAudioPayload(data: Buffer | ArrayBuffer | ArrayBufferView): Buffer {
+  const buf = Buffer.isBuffer(data)
+    ? data
+    : ArrayBuffer.isView(data)
+      ? Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+      : Buffer.from(data);
   const marker = Buffer.from("Path:audio\r\n", "utf-8");
   const markerIndex = buf.indexOf(marker);
   if (markerIndex < 0) return buf;
   return buf.subarray(markerIndex + marker.length);
 }
 
-export function createEdgeTtsProvider(config = {}) {
+export function createEdgeTtsProvider(config: EdgeTtsConfig = {}) {
   const defaultVoice = config.default_voice || config.voice || DEFAULT_VOICE;
   const outputFormat = config.output_format || config.outputFormat || DEFAULT_OUTPUT_FORMAT;
   const timeoutMs = Number(config.timeout_ms || config.timeoutMs || 15000);
-  const websocketCtor = config.websocketCtor || WebSocket;
+  const websocketCtor = config.websocketCtor || (WebSocket as unknown as WebSocketCtor);
 
   return {
     name: "edge-tts",
     label: "Edge TTS (fallback)",
 
-    async synthesize(text, { voice = defaultVoice, speed = 1.0, pitch = "+0Hz", volume = "+0%", signal = null, timeoutMs: callTimeoutMs = timeoutMs } = {}) {
+    async synthesize(text: unknown, { voice = defaultVoice, speed = 1.0, pitch = "+0Hz", volume = "+0%", signal = null, timeoutMs: callTimeoutMs = timeoutMs }: EdgeSynthesizeOptions = {}) {
       const input = String(text || "").trim();
       if (!input) throw new Error("edge-tts: empty text");
 
@@ -98,11 +155,11 @@ function synthesizeWithEdgeWebSocket({
   timeoutMs,
   signal,
   websocketCtor,
-}) {
+}: EdgeWebSocketRequest): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     let settled = false;
-    let timer = null;
-    const audioChunks = [];
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const audioChunks: Buffer[] = [];
     const ws = new websocketCtor(`${EDGE_TTS_WS_URL}&ConnectionId=${requestId()}`, {
       host: EDGE_TTS_HOST,
       origin: "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
@@ -111,10 +168,10 @@ function synthesizeWithEdgeWebSocket({
       },
     });
 
-    const finish = (err, audio = null) => {
+    const finish = (err: unknown, audio: Buffer | null = null) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       signal?.removeEventListener?.("abort", onAbort);
       try { ws.close(); } catch {
         // Best-effort cleanup only; network socket may already be closed.
@@ -132,7 +189,7 @@ function synthesizeWithEdgeWebSocket({
 
     timer = setTimeout(() => {
       finish(new Error(`edge-tts synthesize timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
+    }, Number(timeoutMs));
 
     ws.on("message", (rawData, isBinary) => {
       if (isBinary) {

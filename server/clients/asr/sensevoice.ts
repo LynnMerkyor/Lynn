@@ -10,15 +10,26 @@
 
 const DEFAULT_ASR_URL = process.env.LYNN_SENSEVOICE_URL || "http://localhost:18020";
 
-export function createSenseVoiceProvider(config = {}) {
+interface SenseVoiceConfig {
+  base_url?: string;
+  baseUrl?: string;
+  [key: string]: unknown;
+}
+
+interface TranscribeOptions {
+  language?: string;
+  filename?: string;
+}
+
+export function createSenseVoiceProvider(config: SenseVoiceConfig = {}) {
   const baseUrl = String(config.base_url || config.baseUrl || DEFAULT_ASR_URL).replace(/\/+$/, "");
   return {
     name: "sensevoice",
     label: "SenseVoice (达摩院・推荐)",
 
-    async transcribe(audioBuffer, { language = "zh", filename = "audio.webm" } = {}) {
+    async transcribe(audioBuffer: unknown, { language = "zh", filename = "audio.webm" }: TranscribeOptions = {}) {
       const form = new FormData();
-      form.append("file", new Blob([audioBuffer], { type: "audio/webm" }), filename);
+      form.append("file", new Blob([audioBuffer as BlobPart], { type: "audio/webm" }), filename);
       form.append("language", language);
       form.append("response_format", "json");
 
@@ -30,7 +41,7 @@ export function createSenseVoiceProvider(config = {}) {
         const errText = await res.text().catch(() => "");
         throw new Error(`sensevoice transcribe failed: HTTP ${res.status} ${errText.slice(0, 120)}`);
       }
-      return await res.json(); // { text, language, duration }
+      return (await res.json()) as Record<string, unknown>; // { text, language, duration }
     },
 
     async health() {

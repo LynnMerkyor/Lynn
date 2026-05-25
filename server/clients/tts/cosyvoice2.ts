@@ -10,12 +10,48 @@ import { normalizeChineseTtsText } from "../../../shared/tts-text-normalizer.js"
 const DEFAULT_TTS_URL = process.env.LYNN_COSYVOICE_URL || "http://localhost:18021";
 const DEFAULT_TIMEOUT_MS = 45000;
 
-function requestSignal(parentSignal, timeoutMs = DEFAULT_TIMEOUT_MS) {
+interface CosyVoice2Config {
+  base_url?: string;
+  baseUrl?: string;
+  default_voice?: string;
+  voice?: string;
+  [key: string]: unknown;
+}
+
+interface CosyVoiceSynthesizeOptions {
+  voice?: string;
+  speed?: number | string;
+  signal?: AbortSignal | null;
+  timeoutMs?: number | string;
+  [key: string]: unknown;
+}
+
+interface RequestSignalResult {
+  signal: AbortSignal;
+  cleanup(): void;
+}
+
+interface CosyVoiceSynthesisResult {
+  ok: true;
+  provider: "cosyvoice2";
+  mimeType: string;
+  audio: Buffer;
+  [key: string]: unknown;
+}
+
+interface CosyVoiceStreamChunk {
+  audio: Buffer;
+  mimeType: "audio/wav";
+  provider: "cosyvoice2";
+  [key: string]: unknown;
+}
+
+function requestSignal(parentSignal: AbortSignal | null | undefined, timeoutMs: number | string = DEFAULT_TIMEOUT_MS): RequestSignalResult {
   const timeout = Number(timeoutMs || DEFAULT_TIMEOUT_MS);
   if (parentSignal?.aborted) return { signal: parentSignal, cleanup: () => {} };
   const controller = new AbortController();
   const abort = () => controller.abort(parentSignal?.reason);
-  let timer = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
   if (parentSignal) parentSignal.addEventListener("abort", abort, { once: true });
   if (Number.isFinite(timeout) && timeout > 0) {
     timer = setTimeout(() => controller.abort(new Error(`cosyvoice2 synthesize timed out after ${timeout}ms`)), timeout);
@@ -29,7 +65,7 @@ function requestSignal(parentSignal, timeoutMs = DEFAULT_TIMEOUT_MS) {
   };
 }
 
-export function createCosyVoice2TtsProvider(config = {}) {
+export function createCosyVoice2TtsProvider(config: CosyVoice2Config = {}) {
   const baseUrl = String(config.base_url || config.baseUrl || DEFAULT_TTS_URL).replace(/\/+$/, "");
   const defaultVoice = config.default_voice || config.voice || "中文女";
 
@@ -37,12 +73,12 @@ export function createCosyVoice2TtsProvider(config = {}) {
     name: "cosyvoice2",
     label: "CosyVoice 2 (V0.79 Jarvis Runtime TTS)",
 
-    async synthesize(text, { voice = defaultVoice, speed = 1.0, signal = null, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+    async synthesize(text: unknown, { voice = defaultVoice, speed = 1.0, signal = null, timeoutMs = DEFAULT_TIMEOUT_MS }: CosyVoiceSynthesizeOptions = {}): Promise<CosyVoiceSynthesisResult> {
       const input = normalizeChineseTtsText(text);
       if (!input) throw new Error("cosyvoice2: empty text");
 
       const req = requestSignal(signal, timeoutMs);
-      let res;
+      let res: Response;
       try {
         res = await fetch(`${baseUrl}/v1/audio/speech`, {
           method: "POST",
@@ -88,12 +124,12 @@ export function createCosyVoice2TtsProvider(config = {}) {
      *
      * yields:{ audio: Buffer, mimeType: 'audio/wav' } per WAV chunk
      */
-    async *synthesizeStream(text, { voice = defaultVoice, speed = 1.0, signal = null, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+    async *synthesizeStream(text: unknown, { voice = defaultVoice, speed = 1.0, signal = null, timeoutMs = DEFAULT_TIMEOUT_MS }: CosyVoiceSynthesizeOptions = {}): AsyncGenerator<CosyVoiceStreamChunk> {
       const input = normalizeChineseTtsText(text);
       if (!input) throw new Error("cosyvoice2: empty text");
 
       const req = requestSignal(signal, timeoutMs);
-      let res;
+      let res: Response;
       try {
         res = await fetch(`${baseUrl}/v1/audio/speech/stream`, {
           method: "POST",

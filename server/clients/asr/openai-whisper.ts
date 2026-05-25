@@ -5,7 +5,25 @@
  * 配置项：apiKey, baseUrl（可选，默认 https://api.openai.com/v1）
  */
 
-export function createOpenAIWhisperProvider(config) {
+interface OpenAIWhisperConfig {
+  apiKey?: string;
+  api_key?: string;
+  baseUrl?: string;
+  base_url?: string;
+  [key: string]: unknown;
+}
+
+interface TranscribeOptions {
+  language?: string;
+  filename?: string;
+}
+
+interface WhisperResponse {
+  text?: string;
+  [key: string]: unknown;
+}
+
+export function createOpenAIWhisperProvider(config: OpenAIWhisperConfig = {}) {
   const apiKey = config?.apiKey || config?.api_key || "";
   const baseUrl = (config?.baseUrl || config?.base_url || "https://api.openai.com/v1").replace(/\/+$/, "");
 
@@ -13,11 +31,11 @@ export function createOpenAIWhisperProvider(config) {
     name: "openai-whisper",
     label: "OpenAI Whisper API",
 
-    async transcribe(audioBuffer, { language = "zh", filename = "audio.webm" } = {}) {
+    async transcribe(audioBuffer: unknown, { language = "zh", filename = "audio.webm" }: TranscribeOptions = {}) {
       if (!apiKey) throw new Error("OpenAI API Key is not configured");
 
       const form = new FormData();
-      form.append("file", new Blob([audioBuffer], { type: "audio/webm" }), filename);
+      form.append("file", new Blob([audioBuffer as BlobPart], { type: "audio/webm" }), filename);
       form.append("model", "whisper-1");
       if (language && language !== "auto") {
         form.append("language", language);
@@ -33,7 +51,7 @@ export function createOpenAIWhisperProvider(config) {
         const err = await res.text();
         throw new Error(`OpenAI Whisper failed: HTTP ${res.status} ${err}`);
       }
-      const data = await res.json(); // { text }
+      const data = await res.json() as WhisperResponse; // { text }
       return { text: data.text || "", language, duration: 0 };
     },
 
