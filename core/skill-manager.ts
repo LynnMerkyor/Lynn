@@ -9,7 +9,112 @@ import path from "path";
 import chokidar from "chokidar";
 import { parseSkillMetadata } from "../lib/skills/skill-metadata.js";
 
-function normalizeSkillAlias(value) {
+export interface SkillMetadata {
+  name: string;
+  description: string;
+  disableModelInvocation?: boolean;
+}
+
+export interface Skill {
+  name: string;
+  description?: string;
+  filePath?: string;
+  baseDir?: string;
+  dirPath?: string;
+  source?: string;
+  disableModelInvocation?: boolean;
+  _agentId?: string | null;
+  _hidden?: boolean;
+  _externalLabel?: string | null;
+  _externalPath?: string | null;
+  _readonly?: boolean;
+  [key: string]: unknown;
+}
+
+export interface SkillListItem {
+  name: string;
+  description?: string;
+  filePath?: string;
+  baseDir?: string;
+  source?: string;
+  hidden: boolean;
+  enabled: boolean;
+  externalLabel: string | null;
+  externalPath: string | null;
+  readonly: boolean;
+}
+
+export interface SkillSuggestion {
+  name: string;
+  description?: string;
+  filePath?: string;
+  score: number;
+  matchedTokens: string[];
+}
+
+export interface ExternalSkillPath {
+  dirPath: string;
+  label: string;
+}
+
+export interface CwdSkillDir {
+  sub: string;
+  label: string;
+}
+
+export interface CwdSkillScanResult {
+  skills: Skill[];
+  mtime: number;
+  fromCache: boolean;
+}
+
+export interface SkillAgent {
+  agentDir: string;
+  config?: {
+    skills?: {
+      enabled?: string[];
+    };
+  };
+  setEnabledSkills?: (skills: Skill[]) => void;
+  [key: string]: unknown;
+}
+
+export interface SkillAgentWithSetter extends SkillAgent {
+  setEnabledSkills: (skills: Skill[]) => void;
+}
+
+export interface SkillResourceLoader {
+  getSkills?: () => { skills: Skill[] };
+  reload: () => Promise<unknown>;
+}
+
+export interface SkillManagerOptions {
+  skillsDir: string;
+  externalPaths?: ExternalSkillPath[];
+}
+
+interface CwdSkillCacheEntry {
+  skills: Skill[];
+  mtime: number;
+}
+
+interface ReloadDeps {
+  resourceLoader: SkillResourceLoader;
+  agents: Map<unknown, SkillAgent>;
+  onReloaded: () => void;
+}
+
+type SkillWatcher = ReturnType<typeof chokidar.watch>;
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function readSkillMetadata(content: string, fallbackName: string): SkillMetadata {
+  return parseSkillMetadata(content, fallbackName) as SkillMetadata;
+}
+
+function normalizeSkillAlias(value: unknown): string {
   return String(value || "").trim().toLowerCase().replace(/[_\s]+/g, "-");
 }
 
@@ -19,10 +124,10 @@ const SKILL_MATCH_STOPWORDS = new Set([
   "the", "and", "for", "with", "from", "that", "this", "into", "use", "using",
 ]);
 
-function tokenizeSkillText(value) {
+function tokenizeSkillText(value: unknown): string[] {
   const matches = String(value || "").match(/[\p{Script=Han}]{2,}|[a-zA-Z][a-zA-Z0-9_.-]{1,}/gu) || [];
-  const tokens = [];
-  const seen = new Set();
+  const tokens: string[] = [];
+  const seen = new Set<string>();
   for (const raw of matches) {
     const token = normalizeSkillAlias(raw).replace(/\.+/g, "-");
     if (!token || SKILL_MATCH_STOPWORDS.has(token) || seen.has(token)) continue;
@@ -42,7 +147,7 @@ const QUERY_TOKEN_SYNONYMS = [
   { pattern: /novel|fiction|story|writing/u, expansions: ["小说", "创作", "故事", "写作"] },
 ];
 
-function expandQueryTokens(text, tokens) {
+function expandQueryTokens(text: unknown, tokens: string[]): string[] {
   const expanded = new Set(tokens);
   const rawText = String(text || "");
   for (const entry of QUERY_TOKEN_SYNONYMS) {
@@ -60,7 +165,17 @@ export class SkillManager {
    * @param {string} opts.skillsDir - 全局 skills 目录
    * @param {Array<{ dirPath: string, label: string }>} [opts.externalPaths] - 外部兼容技能目录
    */
-  constructor({ skillsDir, externalPaths = [] }) {
+  skillsDir: string;
+  _allSkills: Skill[];
+  _hiddenSkills: Set<string>;
+  _watcher: SkillWatcher | null;
+  _reloadTimer: ReturnType<typeof setTimeout> | null;
+  _reloadDeps: ReloadDeps | null;
+  _externalPaths: ExternalSkillPath[];
+  _externalWatchers: Map<string, SkillWatcher>;
+  _cwdSkillCache: Map<string, CwdSkillCacheEntry>;
+
+  constructor({ skillsDir, externalPaths = [] }: SkillManagerOptions) {
     this.skillsDir = skillsDir;
     this._allSkills = [];
     this._hiddenSkills = new Set();
@@ -69,12 +184,11 @@ export class SkillManager {
     this._reloadDeps = null; // { resourceLoader, agents, onReloaded }
     this._externalPaths = externalPaths;
     this._externalWatchers = new Map();
-    /** @type {Map<string, { skills: Array, mtime: number }>} */
     this._cwdSkillCache = new Map();
   }
 
   /** 全量 skill 列表 */
-  get allSkills() { return this._allSkills; }
+  get allSkills(): Skill[] { return this._allSkills; }
 
   /**
    * 首次加载：从 resourceLoader 获取内置 skills + 合并所有 agent 的 learned skills + 外部技能
@@ -82,9 +196,9 @@ export class SkillManager {
    * @param {Map} agents - agent Map
    * @param {Set<string>} hiddenSkills - 需要隐藏的 skill name 集合
    */
-  init(resourceLoader, agents, hiddenSkills) {
+  init(resourceLoader: SkillResourceLoader, agents: Map<unknown, SkillAgent>, hiddenSkills: Set<string>): void {
     this._hiddenSkills = hiddenSkills;
-    this._allSkills = resourceLoader.getSkills().skills;
+    this._allSkills = resourceLoader.getSkills!().skills;
     for (const s of this._allSkills) {
       s._hidden = hiddenSkills.has(s.name);
     }
@@ -95,7 +209,7 @@ export class SkillManager {
   }
 
   /** 将 agent 启用的 skill 同步到 agent 的 system prompt */
-  syncAgentSkills(agent) {
+  syncAgentSkills(agent: SkillAgentWithSetter): void {
     const enabled = agent?.config?.skills?.enabled || [];
     const enabledAliases = new Set(enabled.map(normalizeSkillAlias).filter(Boolean));
     const skills = this._allSkills.filter((s) => this._isSkillEnabled(s, enabledAliases));
@@ -103,7 +217,7 @@ export class SkillManager {
   }
 
   /** 返回全量 skill 列表（供 API 使用），附带指定 agent 的 enabled 状态 */
-  getAllSkills(agent) {
+  getAllSkills(agent?: SkillAgent | null): SkillListItem[] {
     const enabled = agent?.config?.skills?.enabled || [];
     const enabledAliases = new Set(enabled.map(normalizeSkillAlias).filter(Boolean));
     return this._allSkills.map(s => ({
@@ -121,7 +235,7 @@ export class SkillManager {
   }
 
   /** 按 agent 过滤可用 skills（learned skills 有 per-agent 隔离） */
-  getSkillsForAgent(targetAgent) {
+  getSkillsForAgent(targetAgent?: SkillAgent | null): { skills: Skill[]; diagnostics: unknown[] } {
     const enabled = targetAgent?.config?.skills?.enabled;
     if (!enabled || enabled.length === 0) {
       return { skills: [], diagnostics: [] };
@@ -137,7 +251,7 @@ export class SkillManager {
     };
   }
 
-  suggestSkillsForText(targetAgent, text, limit = 3) {
+  suggestSkillsForText(targetAgent: SkillAgent | null | undefined, text: unknown, limit = 3): SkillSuggestion[] {
     const query = String(text || "").trim();
     if (!query) return [];
     const { skills } = this.getSkillsForAgent(targetAgent);
@@ -148,7 +262,7 @@ export class SkillManager {
     if (!queryTokens.length) return [];
 
     return skills
-      .map((skill) => {
+      .map((skill): SkillSuggestion | null => {
         const skillTokens = tokenizeSkillText(`${skill.name} ${skill.description || ""}`);
         let score = 0;
         const matchedTokens = [];
@@ -175,7 +289,7 @@ export class SkillManager {
             }
           : null;
       })
-      .filter(Boolean)
+      .filter((value): value is SkillSuggestion => Boolean(value))
       .sort((a, b) => b.score - a.score)
       .slice(0, Math.max(1, limit));
   }
@@ -185,12 +299,12 @@ export class SkillManager {
    * @param {object} resourceLoader
    * @param {Map} agents
    */
-  async reload(resourceLoader, agents) {
+  async reload(resourceLoader: SkillResourceLoader, agents: Map<unknown, SkillAgent>): Promise<void> {
     // 暂时恢复原始 getSkills 以便 reload() 正确扫描
     delete resourceLoader.getSkills;
     await resourceLoader.reload();
 
-    this._allSkills = resourceLoader.getSkills().skills;
+    this._allSkills = resourceLoader.getSkills!().skills;
     for (const s of this._allSkills) {
       s._hidden = this._hiddenSkills.has(s.name);
     }
@@ -206,7 +320,7 @@ export class SkillManager {
    * @param {Map} agents
    * @param {() => void} onReloaded - reload 完成后的回调（用于 syncAllAgentSkills 等）
    */
-  watch(resourceLoader, agents, onReloaded) {
+  watch(resourceLoader: SkillResourceLoader, agents: Map<unknown, SkillAgent>, onReloaded: () => void): void {
     this._reloadDeps = { resourceLoader, agents, onReloaded };
     if (this._watcher) return;
     try {
@@ -220,27 +334,27 @@ export class SkillManager {
         this._reloadTimer = setTimeout(() => this._autoReload(), 1000);
       });
       this._watcher.on("error", (err) => {
-        console.error("[skill-manager] watcher error:", err.message);
+        console.error("[skill-manager] watcher error:", errorMessage(err));
       });
     } catch (err) {
-      console.error("[skill-manager] failed to create watcher:", err.message);
+      console.error("[skill-manager] failed to create watcher:", errorMessage(err));
     }
     this._watchExternalPaths();
   }
 
-  async _autoReload() {
+  async _autoReload(): Promise<void> {
     const deps = this._reloadDeps;
     if (!deps) return;
     try {
       await this.reload(deps.resourceLoader, deps.agents);
       deps.onReloaded?.();
     } catch (err) {
-      console.warn("[skill-manager] auto-reload failed:", err.message);
+      console.warn("[skill-manager] auto-reload failed:", errorMessage(err));
     }
   }
 
   /** 停止文件监听 */
-  unwatch() {
+  unwatch(): void {
     if (this._watcher) { this._watcher.close(); this._watcher = null; }
     if (this._reloadTimer) { clearTimeout(this._reloadTimer); this._reloadTimer = null; }
     this._reloadDeps = null;
@@ -251,7 +365,7 @@ export class SkillManager {
    * 更新外部路径（纯数据更新 + 重建 watcher，不触发 reload）
    * @param {Array<{ dirPath: string, label: string }>} paths
    */
-  setExternalPaths(paths) {
+  setExternalPaths(paths: ExternalSkillPath[]): void {
     this._externalPaths = paths;
     this._closeExternalWatchers();
     if (this._reloadDeps) {
@@ -267,7 +381,7 @@ export class SkillManager {
    * @param {Array<{ sub: string, label: string }>} skillDirs
    * @returns {number} 最新 mtime（ms）
    */
-  _getCwdSkillsMtime(dir, skillDirs) {
+  _getCwdSkillsMtime(dir: string, skillDirs: CwdSkillDir[]): number {
     let maxMtime = 0;
     for (const { sub } of skillDirs) {
       const skillsDir = path.join(dir, sub);
@@ -288,7 +402,7 @@ export class SkillManager {
    * @param {Array<{ sub: string, label: string }>} skillDirs - 技能子目录配置
    * @returns {{ skills: Array, mtime: number, fromCache: boolean }}
    */
-  scanCwdSkills(dir, skillDirs) {
+  scanCwdSkills(dir: string, skillDirs: CwdSkillDir[]): CwdSkillScanResult {
     const mtime = this._getCwdSkillsMtime(dir, skillDirs);
     const cached = this._cwdSkillCache.get(dir);
     if (cached && cached.mtime === mtime) {
@@ -296,7 +410,7 @@ export class SkillManager {
     }
 
     // 缓存未命中，扫描文件系统
-    const results = [];
+    const results: Skill[] = [];
     for (const { sub, label } of skillDirs) {
       const skillsDir = path.join(dir, sub);
       if (!fs.existsSync(skillsDir)) continue;
@@ -307,7 +421,7 @@ export class SkillManager {
           if (!fs.existsSync(skillFile)) continue;
           try {
             const content = fs.readFileSync(skillFile, "utf-8");
-            const meta = parseSkillMetadata(content, entry.name);
+            const meta = readSkillMetadata(content, entry.name);
             results.push({
               name: meta.name,
               description: meta.description,
@@ -327,7 +441,9 @@ export class SkillManager {
     // 限制缓存大小（最多保留 20 个工作区）
     if (this._cwdSkillCache.size > 20) {
       const firstKey = this._cwdSkillCache.keys().next().value;
-      this._cwdSkillCache.delete(firstKey);
+      if (firstKey !== undefined) {
+        this._cwdSkillCache.delete(firstKey);
+      }
     }
 
     return { skills: results, mtime, fromCache: false };
@@ -337,7 +453,7 @@ export class SkillManager {
    * 使指定工作区的缓存失效
    * @param {string} [dir] - 不传则清空全部
    */
-  invalidateCwdCache(dir) {
+  invalidateCwdCache(dir?: string): void {
     if (dir) {
       this._cwdSkillCache.delete(dir);
     } else {
@@ -345,15 +461,15 @@ export class SkillManager {
     }
   }
 
-  _collectSkillAliases(skill) {
-    const aliases = new Set();
+  _collectSkillAliases(skill: Skill | null | undefined): Set<string> {
+    const aliases = new Set<string>();
     if (skill?.name) aliases.add(normalizeSkillAlias(skill.name));
     if (skill?.baseDir) aliases.add(normalizeSkillAlias(path.basename(skill.baseDir)));
     if (skill?.filePath) aliases.add(normalizeSkillAlias(path.basename(path.dirname(skill.filePath))));
     return aliases;
   }
 
-  _isSkillEnabled(skill, enabledAliases) {
+  _isSkillEnabled(skill: Skill, enabledAliases: Set<string>): boolean {
     if (!(enabledAliases instanceof Set) || enabledAliases.size === 0) return false;
     for (const alias of this._collectSkillAliases(skill)) {
       if (enabledAliases.has(alias)) return true;
@@ -367,8 +483,8 @@ export class SkillManager {
    * 扫描所有外部路径下的技能
    * @returns {Array} 外部技能列表
    */
-  scanExternalSkills() {
-    const results = [];
+  scanExternalSkills(): Skill[] {
+    const results: Skill[] = [];
     for (const { dirPath, label } of this._externalPaths) {
       if (!fs.existsSync(dirPath)) continue;
       try {
@@ -378,7 +494,7 @@ export class SkillManager {
           if (!fs.existsSync(skillFile)) continue;
           try {
             const content = fs.readFileSync(skillFile, "utf-8");
-            const meta = parseSkillMetadata(content, entry.name);
+            const meta = readSkillMetadata(content, entry.name);
             results.push({
               name: meta.name,
               description: meta.description,
@@ -400,7 +516,7 @@ export class SkillManager {
   }
 
   /** 将外部技能追加到 _allSkills（去重：内部优先） */
-  _appendExternalSkills() {
+  _appendExternalSkills(): void {
     const existingNames = new Set(this._allSkills.map(s => s.name));
     for (const ext of this.scanExternalSkills()) {
       if (!existingNames.has(ext.name)) {
@@ -412,7 +528,7 @@ export class SkillManager {
 
   // ── 外部路径 watcher ──
 
-  _watchExternalPaths() {
+  _watchExternalPaths(): void {
     for (const { dirPath } of this._externalPaths) {
       if (!fs.existsSync(dirPath)) continue;
       if (this._externalWatchers.has(dirPath)) continue;
@@ -427,16 +543,16 @@ export class SkillManager {
           this._reloadTimer = setTimeout(() => this._autoReload(), 1000);
         });
         w.on("error", (err) => {
-          console.error(`[skill-manager] external watcher error (${dirPath}):`, err.message);
+          console.error(`[skill-manager] external watcher error (${dirPath}):`, errorMessage(err));
         });
         this._externalWatchers.set(dirPath, w);
       } catch (err) {
-        console.error(`[skill-manager] failed to watch external path (${dirPath}):`, err.message);
+        console.error(`[skill-manager] failed to watch external path (${dirPath}):`, errorMessage(err));
       }
     }
   }
 
-  _closeExternalWatchers() {
+  _closeExternalWatchers(): void {
     for (const [, w] of this._externalWatchers) {
       try { w.close(); } catch {}
     }
@@ -449,18 +565,18 @@ export class SkillManager {
    * 扫描 agentDir/learned-skills/ 下的自学 skills
    * @param {string} agentDir
    */
-  scanLearnedSkills(agentDir) {
+  scanLearnedSkills(agentDir: string): Skill[] {
     const agentId = path.basename(agentDir);
     const learnedDir = path.join(agentDir, "learned-skills");
     if (!fs.existsSync(learnedDir)) return [];
-    const results = [];
+    const results: Skill[] = [];
     for (const entry of fs.readdirSync(learnedDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const skillFile = path.join(learnedDir, entry.name, "SKILL.md");
       if (!fs.existsSync(skillFile)) continue;
       try {
         const content = fs.readFileSync(skillFile, "utf-8");
-        const meta = parseSkillMetadata(content, entry.name);
+        const meta = readSkillMetadata(content, entry.name);
         results.push({
           name: meta.name,
           description: meta.description,
