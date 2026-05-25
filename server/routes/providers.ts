@@ -9,36 +9,181 @@ import { safeJson } from "../hono-helpers.js";
 import { buildProviderAuthHeaders, buildProbeUrl } from "../../lib/llm/provider-client.js";
 import { buildProviderSummaryStateSnapshot } from "../../core/provider-state-summary.js";
 
+type ProviderModelConfig = string | {
+  id?: string;
+  name?: string;
+  context?: number | null;
+  maxOutput?: number | null;
+  [key: string]: unknown;
+};
+
+type RawProviderConfig = {
+  api_key?: string;
+  base_url?: string;
+  api?: string;
+  auth_type?: string;
+  display_name?: string;
+  models?: ProviderModelConfig[];
+  [key: string]: unknown;
+};
+
+type ProviderSummary = {
+  type: string;
+  display_name: string;
+  base_url: string;
+  api: string;
+  api_key: string;
+  models: unknown[];
+  custom_models: string[];
+  has_credentials: boolean;
+  logged_in?: boolean;
+  supports_oauth: boolean;
+  is_coding_plan: boolean;
+  can_delete: boolean;
+};
+
+type ProviderRegistryEntry = {
+  id?: string;
+  displayName?: string;
+  authType?: string;
+  baseUrl?: string;
+  api?: string;
+  authJsonKey?: string;
+};
+
+type ProviderCredentials = {
+  apiKey?: string;
+  baseUrl?: string;
+  api?: string;
+};
+
+type OAuthProviderInfo = {
+  id: string;
+  name: string;
+};
+
+type OAuthCredential = {
+  type?: string;
+};
+
+type OAuthLoginInfo = {
+  name: string;
+  loggedIn: boolean;
+};
+
+type SmokeResponsePayload = {
+  error?: { message?: string };
+  message?: string;
+};
+
+type RouteModel = {
+  id: string;
+  name?: string;
+  provider: string;
+  contextWindow?: number | null;
+  context?: number | null;
+  maxOutputTokens?: number | null;
+  maxOutput?: number | null;
+};
+
+type NormalizedModel = {
+  id: string;
+  name: string;
+  context: number | null;
+  maxOutput: number | null;
+};
+
+type ModelsCache = Record<string, {
+  models?: NormalizedModel[];
+  fetchedAt?: string | null;
+}>;
+
+type ProviderFetchModelsBody = {
+  name?: string;
+  base_url?: string;
+  api?: string;
+  api_key?: string;
+};
+
+type ProviderTestBody = {
+  name?: string;
+  base_url?: string;
+  api?: string;
+  api_key?: string;
+  model_id?: unknown;
+  modelId?: unknown;
+  model?: unknown;
+};
+
+type ProviderRegistryLike = {
+  get(providerId: string): ProviderRegistryEntry | null | undefined;
+  getAll(): Map<string, ProviderRegistryEntry>;
+  getAllProvidersRaw(): Record<string, RawProviderConfig>;
+  getOAuthProviderIds(): string[];
+  getAuthJsonKey(providerId: string): string;
+  getDefaultModels(providerId: string | undefined): string[];
+  getCredentials(providerId: string): ProviderCredentials | null | undefined;
+  isOAuth(providerId: string): boolean;
+};
+
+type AuthStorageLike = {
+  getOAuthProviders?(): OAuthProviderInfo[];
+  get(providerId: string): OAuthCredential | null | undefined;
+  getApiKey(providerId: string): Promise<string | null | undefined> | string | null | undefined;
+};
+
+type PreferencesLike = {
+  getOAuthCustomModels(): Record<string, string[] | undefined>;
+};
+
+type ModelRegistryLike = {
+  getAll(): RouteModel[];
+};
+
+interface ProvidersRouteEngine {
+  lynnHome: string;
+  providerRegistry: ProviderRegistryLike;
+  authStorage: AuthStorageLike;
+  preferences: PreferencesLike;
+  availableModels?: RouteModel[];
+  modelRegistry?: ModelRegistryLike;
+  refreshAvailableModels(): Promise<unknown> | unknown;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 // ── Models-cache helpers ──
 
-function getCachePath(engine) {
+function getCachePath(engine: Pick<ProvidersRouteEngine, "lynnHome">): string {
   return path.join(engine.lynnHome, "models-cache.json");
 }
 
-function readModelsCache(engine) {
+function readModelsCache(engine: Pick<ProvidersRouteEngine, "lynnHome">): ModelsCache {
   try {
-    return JSON.parse(fs.readFileSync(getCachePath(engine), "utf-8"));
+    return JSON.parse(fs.readFileSync(getCachePath(engine), "utf-8")) as ModelsCache;
   } catch {
     return {};
   }
 }
 
 /** Atomic write: tmp + rename to avoid partial reads */
-function writeModelsCache(engine, cache) {
+function writeModelsCache(engine: Pick<ProvidersRouteEngine, "lynnHome">, cache: ModelsCache): void {
   const target = getCachePath(engine);
   const tmp = target + ".tmp." + process.pid;
   fs.writeFileSync(tmp, JSON.stringify(cache, null, 2) + os.EOL);
   fs.renameSync(tmp, target);
 }
 
-export function createProvidersRoute(engine) {
+export function createProvidersRoute(engine: ProvidersRouteEngine): Hono {
   const route = new Hono();
 
-  function normalizeBaseUrl(value) {
+  function normalizeBaseUrl(value: unknown): string {
     return String(value || "").trim().replace(/\/+$/, "");
   }
 
-  function resolveAllowMissingApiKey(name, baseUrl) {
+  function resolveAllowMissingApiKey(name: string | undefined, baseUrl: unknown): boolean {
     if (name) {
       return engine.providerRegistry?.get?.(name)?.authType === "none";
     }
@@ -50,7 +195,7 @@ export function createProvidersRoute(engine) {
   }
 
   // ── Cache helper: persist discovered models per-provider ──
-  function saveToCache(providerName, models) {
+  function saveToCache(providerName: string | undefined, models: NormalizedModel[]): void {
     if (!providerName || !models?.length) return;
     try {
       const cache = readModelsCache(engine);
@@ -68,7 +213,7 @@ export function createProvidersRoute(engine) {
   route.get("/providers/summary", async (c) => {
     const rawProviders = engine.providerRegistry.getAllProvidersRaw();
     // 补全凭证和模型列表（getAllProvidersRaw 返回的是 added-models.yaml 原始数据）
-    const providers = {};
+    const providers: Record<string, RawProviderConfig> = {};
     for (const [name, p] of Object.entries(rawProviders)) {
       const entry = engine.providerRegistry.get(name);
       providers[name] = {
@@ -87,9 +232,9 @@ export function createProvidersRoute(engine) {
 
     // OAuth provider 登录状态（Pi SDK AuthStorage，key 是 authJsonKey）
     const oauthProviders = engine.authStorage?.getOAuthProviders?.() || [];
-    const oauthLoginMap = new Map();
+    const oauthLoginMap = new Map<string, OAuthLoginInfo>();
     for (const p of oauthProviders) {
-      const cred = engine.authStorage.get(p.id);
+      const cred = engine.authStorage?.get(p.id);
       oauthLoginMap.set(p.id, { name: p.name, loggedIn: cred?.type === "oauth" });
     }
 
@@ -98,23 +243,37 @@ export function createProvidersRoute(engine) {
 
     // SDK 可用模型（含 OAuth 注入的）
     const sdkModels = engine.availableModels || [];
-    const sdkByProvider = new Map();
+    const sdkByProvider = new Map<string, string[]>();
     for (const m of sdkModels) {
       if (!sdkByProvider.has(m.provider)) sdkByProvider.set(m.provider, []);
-      sdkByProvider.get(m.provider).push(m.id);
+      sdkByProvider.get(m.provider)?.push(m.id);
     }
 
-    const result = {};
+    const result: Record<string, ProviderSummary & { stateSnapshot: ReturnType<typeof buildProviderSummaryStateSnapshot> }> = {};
 
     // OAuth 登录信息查找（oauthLoginMap 用 authJsonKey 索引）
-    function getOAuthLoginInfo(name) {
-      if (oauthLoginMap.has(name)) return oauthLoginMap.get(name);
+    function getOAuthLoginInfo(name: string): OAuthLoginInfo | null {
+      if (oauthLoginMap.has(name)) return oauthLoginMap.get(name) || null;
       const authKey = provRegistry.getAuthJsonKey(name);
-      if (authKey !== name && oauthLoginMap.has(authKey)) return oauthLoginMap.get(authKey);
+      if (authKey !== name && oauthLoginMap.has(authKey)) return oauthLoginMap.get(authKey) || null;
       return null;
     }
 
-    function withProviderState(name, summary, { rawProvider = null, registryEntry = null, isOAuth = false, loggedIn = false } = {}) {
+    function withProviderState(
+      name: string,
+      summary: ProviderSummary,
+      {
+        rawProvider = null,
+        registryEntry = null,
+        isOAuth = false,
+        loggedIn = false,
+      }: {
+        rawProvider?: RawProviderConfig | null;
+        registryEntry?: ProviderRegistryEntry | null;
+        isOAuth?: boolean;
+        loggedIn?: boolean;
+      } = {},
+    ): ProviderSummary & { stateSnapshot: ReturnType<typeof buildProviderSummaryStateSnapshot> } {
       return {
         ...summary,
         stateSnapshot: buildProviderSummaryStateSnapshot({
@@ -139,7 +298,7 @@ export function createProvidersRoute(engine) {
       const allModels = [...new Set([...(p.models || []), ...defaultModels, ...sdkIds])];
       const customModels = oauthCustom[name] || [];
 
-      const summary = {
+      const summary: ProviderSummary = {
         type: isOAuth ? "oauth" : ((p.auth_type || registryEntry?.authType) === "none" ? "none" : "api-key"),
         display_name: oauthInfo?.name || p.display_name || name,
         base_url: p.base_url || "",
@@ -174,7 +333,7 @@ export function createProvidersRoute(engine) {
       const sdkIds = sdkByProvider.get(authKey) || sdkByProvider.get(oauthId) || [];
       const defaultModels = provRegistry.getDefaultModels(oauthId) || [];
       const customModels = oauthCustom[authKey] || oauthCustom[oauthId] || [];
-      const summary = {
+      const summary: ProviderSummary = {
         type: "oauth",
         display_name: loginInfo?.name || entry?.displayName || oauthId,
         base_url: entry?.baseUrl || "",
@@ -203,7 +362,7 @@ export function createProvidersRoute(engine) {
         if (entry.authType === "oauth") continue; // OAuth provider 走上面的白名单逻辑
         const sdkIds = sdkByProvider.get(id) || [];
         const defaultModels = provRegistry.getDefaultModels(id) || [];
-        const summary = {
+        const summary: ProviderSummary = {
           type: entry.authType === "none" ? "none" : "api-key",
           display_name: entry.displayName || id,
           base_url: entry.baseUrl || "",
@@ -227,7 +386,7 @@ export function createProvidersRoute(engine) {
     return c.json({ providers: result });
   });
 
-  function buildBuiltinFallbackModels(providerName) {
+  function buildBuiltinFallbackModels(providerName: string | undefined): NormalizedModel[] {
     if (!providerName) return [];
     const defaults = engine.providerRegistry?.getDefaultModels?.(providerName) || [];
     return defaults.map((id) => ({
@@ -238,7 +397,7 @@ export function createProvidersRoute(engine) {
     }));
   }
 
-  function buildFetchFallback(providerName) {
+  function buildFetchFallback(providerName: string | undefined): { source: "builtin" | "cache"; models: NormalizedModel[] } | null {
     const builtinModels = buildBuiltinFallbackModels(providerName);
     if (builtinModels.length > 0) {
       saveToCache(providerName, builtinModels);
@@ -255,14 +414,17 @@ export function createProvidersRoute(engine) {
     return null;
   }
 
-  function normalizeModelId(value) {
+  function normalizeModelId(value: unknown): string {
     if (!value) return "";
     if (typeof value === "string") return value.trim();
-    if (typeof value === "object" && typeof value.id === "string") return value.id.trim();
+    if (typeof value === "object") {
+      const record = value as { id?: unknown };
+      if (typeof record.id === "string") return record.id.trim();
+    }
     return String(value).trim();
   }
 
-  function resolveProviderSmokeModel(providerName, body = {}) {
+  function resolveProviderSmokeModel(providerName: string | undefined, body: ProviderTestBody = {}): string {
     const explicit = normalizeModelId(body.model_id || body.modelId || body.model);
     if (explicit && explicit !== "test") return explicit;
     if (!providerName) return "";
@@ -277,7 +439,19 @@ export function createProvidersRoute(engine) {
   const PROVIDER_SMOKE_PROMPT = "Reply with OK only.";
   const PROVIDER_SMOKE_MAX_TOKENS = 128;
 
-  async function runProviderChatSmoke({ baseUrl, api, apiKey, allowMissingApiKey, modelId }) {
+  async function runProviderChatSmoke({
+    baseUrl,
+    api,
+    apiKey,
+    allowMissingApiKey,
+    modelId,
+  }: {
+    baseUrl: string;
+    api: string;
+    apiKey: string;
+    allowMissingApiKey: boolean;
+    modelId: string;
+  }): Promise<{ ok: boolean; status: number; model: string; message: string } | null> {
     if (!modelId) return null;
     if (!["openai-completions", "openai-responses", "anthropic-messages"].includes(api)) return null;
 
@@ -296,7 +470,7 @@ export function createProvidersRoute(engine) {
       allowMissingApiKey,
       method: "POST",
       pathname,
-    });
+    }) as HeadersInit;
     const body = api === "anthropic-messages"
       ? {
           model: modelId,
@@ -324,10 +498,10 @@ export function createProvidersRoute(engine) {
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(12000),
     });
-    let payload = null;
+    let payload: SmokeResponsePayload | null = null;
     try {
       const text = await res.text();
-      payload = text ? JSON.parse(text) : null;
+      payload = text ? JSON.parse(text) as SmokeResponsePayload : null;
     } catch {
       payload = null;
     }
@@ -341,7 +515,7 @@ export function createProvidersRoute(engine) {
 
   // ── Fetch / Test ──
 
-  function normalizeRegistryModels(models) {
+  function normalizeRegistryModels(models: RouteModel[]): NormalizedModel[] {
     return models.map((model) => ({
       id: model.id,
       name: model.name || model.id,
@@ -355,13 +529,13 @@ export function createProvidersRoute(engine) {
    * body: { name, base_url, api, api_key? }
    */
   route.post("/providers/fetch-models", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<ProviderFetchModelsBody>(c);
     const { name, base_url, api: explicitApi, api_key } = body;
     if (!name && !base_url) {
       return c.json({ error: "name or base_url is required" }, 400);
     }
 
-    const savedProvider = name ? (() => {
+    const savedProvider: RawProviderConfig = name ? (() => {
       const cred = engine.providerRegistry.getCredentials(name);
       if (!cred) return {};
       return { api_key: cred.apiKey, base_url: cred.baseUrl, api: cred.api };
@@ -379,7 +553,7 @@ export function createProvidersRoute(engine) {
         await engine.refreshAvailableModels();
         // Pi SDK 用 authJsonKey 作为 model.provider，需要两个 ID 都匹配
         const authKey = engine.providerRegistry.getAuthJsonKey(name);
-        const registryModels = engine.availableModels.filter(
+        const registryModels = (engine.availableModels || []).filter(
           (model) => model.provider === name || model.provider === authKey,
         );
         if (registryModels.length > 0) {
@@ -393,7 +567,7 @@ export function createProvidersRoute(engine) {
           models: [],
         });
       } catch (err) {
-        return c.json({ error: err.message, models: [] });
+        return c.json({ error: errorMessage(err), models: [] });
       }
     }
 
@@ -437,7 +611,7 @@ export function createProvidersRoute(engine) {
 
     try {
       const url = effectiveBaseUrl.replace(/\/+$/, "") + "/models";
-      let headers = { "Content-Type": "application/json" };
+      let headers: HeadersInit = { "Content-Type": "application/json" };
       if (key || allowMissingApiKey) {
         if (!effectiveApi) {
           return c.json({ error: "api is required", models: [] });
@@ -446,7 +620,7 @@ export function createProvidersRoute(engine) {
           allowMissingApiKey,
           method: "GET",
           pathname: "/models",
-        });
+        }) as HeadersInit;
       }
       const res = await fetch(url, {
         headers,
@@ -459,7 +633,16 @@ export function createProvidersRoute(engine) {
         return c.json({ error: `HTTP ${res.status}: ${res.statusText}`, models: [] });
       }
 
-      const data = await res.json();
+      const data = await res.json() as {
+        data?: Array<{
+          id: string;
+          context_length?: number;
+          context_window?: number;
+          max_context_length?: number;
+          max_completion_tokens?: number;
+          max_output_tokens?: number;
+        }>;
+      };
       // OpenAI 兼容格式：{ data: [{ id, ... }] }
       // 尝试从返回里抓取上下文长度和最大输出（各 provider 扩展字段不同）
       const models = (data.data || []).map(m => ({
@@ -479,7 +662,7 @@ export function createProvidersRoute(engine) {
     } catch (err) {
       const fallback = buildFetchFallback(name);
       if (fallback) return c.json(fallback);
-      return c.json({ error: err.message, models: [] });
+      return c.json({ error: errorMessage(err), models: [] });
     }
   });
 
@@ -500,13 +683,13 @@ export function createProvidersRoute(engine) {
    * body: { base_url, api, api_key }
    */
   route.post("/providers/test", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<ProviderTestBody>(c);
     const { name } = body;
     const base_url = String(body.base_url || "").trim();
     const explicitApi = String(body.api || "").trim();
     // 清洗 API key：去除非 ASCII 字符（防止粘贴时输入法带入中文）
     const explicitApiKey = (body.api_key || "").replace(/[^\x20-\x7E]/g, "").trim();
-    const savedProvider = name ? (() => {
+    const savedProvider: RawProviderConfig = name ? (() => {
       const cred = engine.providerRegistry.getCredentials(name);
       if (!cred) return {};
       return { api_key: cred.apiKey, base_url: cred.baseUrl, api: cred.api };
@@ -552,7 +735,7 @@ export function createProvidersRoute(engine) {
         return c.json({ ok: false, error: "No model available for smoke test" });
       }
 
-      let headers = {};
+      let headers: HeadersInit = {};
       if (effectiveApiKey || allowMissingApiKey) {
         if (!effectiveApi) {
           return c.json({ error: "api is required when api_key is present" }, 400);
@@ -561,7 +744,7 @@ export function createProvidersRoute(engine) {
           allowMissingApiKey,
           method: probe.method,
           pathname,
-        });
+        }) as HeadersInit;
       }
       const res = await fetch(probe.url, {
         headers,
@@ -607,7 +790,7 @@ export function createProvidersRoute(engine) {
       }
       return c.json({ ok: res.ok, status: res.status });
     } catch (err) {
-      return c.json({ ok: false, error: err.message });
+      return c.json({ ok: false, error: errorMessage(err) });
     }
   });
 
