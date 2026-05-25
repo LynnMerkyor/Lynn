@@ -3,7 +3,6 @@ import { useStore } from '../stores';
 import { hanaFetch } from '../hooks/use-hana-fetch';
 import { formatSessionDate, parseMoodFromContent } from '../utils/format';
 import { renderMarkdown } from '../utils/markdown';
-// @ts-expect-error - shared JS module
 import { stripPseudoToolCallMarkup } from '../../../../shared/pseudo-tool-call.js';
 import fp from './FloatingPanels.module.css';
 

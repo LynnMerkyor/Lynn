@@ -5,7 +5,6 @@ import { formatSessionDate, injectCopyButtons, parseMoodFromContent } from '../u
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
 import { getMd } from '../utils/markdown';
 import { sanitizeHtml } from '../utils/sanitize';
-// @ts-expect-error - shared JS module
 import { stripPseudoToolCallMarkup } from '../../../../shared/pseudo-tool-call.js';
 import fp from './FloatingPanels.module.css';
 import chatStyles from './chat/Chat.module.css';
