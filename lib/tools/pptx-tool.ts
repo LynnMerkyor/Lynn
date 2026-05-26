@@ -36,7 +36,46 @@ const THEMES = {
 };
 const THEME = THEMES.dark; // default
 
-function parseBody(body = "", theme = THEME) {
+type PptxThemeName = keyof typeof THEMES;
+type PptxLayout = "title" | "content" | "section" | "two_column";
+type PptxTheme = typeof THEME;
+
+interface PptxSlideParams {
+  layout?: PptxLayout | string;
+  title: string;
+  body?: string;
+  notes?: string;
+}
+
+interface PptxToolParams {
+  title: string;
+  theme?: PptxThemeName | string;
+  author?: string;
+  slides: PptxSlideParams[];
+}
+
+type PptxToolOptions = {
+  getDeskDir?: () => string | null | undefined;
+};
+
+type PptxToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+type PptxTextRun = {
+  text: string;
+  options: Record<string, unknown>;
+};
+
+type PptxSlideLike = {
+  background?: { color: string };
+  addText(text: string | PptxTextRun[], options?: Record<string, unknown>): void;
+  addShape(shape: string, options?: Record<string, unknown>): void;
+  addNotes(notes: string): void;
+};
+
+function parseBody(body = "", theme: PptxTheme = THEME): PptxTextRun[] {
   return body.split("\n").filter((l) => l.trim()).map((line) => {
     const m = line.match(/^\s*[-*]\s+(.+)/);
     return m
@@ -45,21 +84,21 @@ function parseBody(body = "", theme = THEME) {
   });
 }
 
-function parseTwoColumnBody(body = "", theme = THEME) {
+function parseTwoColumnBody(body = "", theme: PptxTheme = THEME): { left: PptxTextRun[]; right: PptxTextRun[] } {
   const sep = body.includes("|||") ? "|||" : "---";
   const parts = body.split(sep);
   return { left: parseBody(parts[0] || "", theme), right: parseBody(parts[1] || "", theme) };
 }
 
-function addFooter(slide, num, total, theme = THEME) {
+function addFooter(slide: PptxSlideLike, num: number, total: number, theme: PptxTheme = THEME) {
   slide.addText(`${num} / ${total}`, { x: 11.5, y: 6.9, w: 1.5, h: 0.3, fontSize: 9, color: theme.textDim, align: "right" });
 }
 
-function safeFilename(title) {
+function safeFilename(title: string): string {
   return title.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim().slice(0, 80) || "presentation";
 }
 
-export function createPptxTool({ getDeskDir } = {}) {
+export function createPptxTool({ getDeskDir }: PptxToolOptions = {}) {
   return {
     name: "create_pptx",
     label: t("toolDef.pptx.label"),
@@ -84,8 +123,15 @@ export function createPptxTool({ getDeskDir } = {}) {
         { minItems: 1, description: t("toolDef.pptx.slidesDesc") },
       ),
     }),
-    execute: async (_toolCallId, params) => {
-      const PptxGenJS = (await import("pptxgenjs")).default;
+    execute: async (_toolCallId: string, params: PptxToolParams): Promise<PptxToolResult> => {
+      const pptxgen = await import("pptxgenjs");
+      const PptxGenJS = (pptxgen.default || pptxgen) as unknown as { new (): {
+        layout: string;
+        title: string;
+        author?: string;
+        addSlide(): unknown;
+        write(options: { outputType: "nodebuffer" }): Promise<Buffer>;
+      } };
       const pres = new PptxGenJS();
 
       pres.layout = "LAYOUT_WIDE";
@@ -93,13 +139,13 @@ export function createPptxTool({ getDeskDir } = {}) {
       if (params.author) pres.author = params.author;
 
       // Select theme
-      const T = THEMES[params.theme] || THEMES.dark;
+      const T = THEMES[params.theme as PptxThemeName] || THEMES.dark;
       const total = params.slides.length;
 
       for (let i = 0; i < total; i++) {
         const s = params.slides[i];
         const layout = s.layout || "content";
-        const slide = pres.addSlide();
+        const slide = pres.addSlide() as PptxSlideLike;
 
         if (layout === "title") {
           slide.background = { color: T.bg };
