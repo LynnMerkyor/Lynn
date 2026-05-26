@@ -8,30 +8,128 @@
 
 import { Type } from "@sinclair/typebox";
 import { getLocale } from "../../server/i18n.js";
-import { runSearchQuery } from "./web-search.js";
+import { runSearchQuery, type SearchResultItem } from "./web-search.js";
 import { fetchWebContent } from "./web-fetch.js";
 
 const SEARCH_LIMIT = 5;
 const FETCH_LIMIT = 2200;
 const NEWS_RSS_TIMEOUT_MS = 9000;
 
-function isZhLocale() {
+type ToolTextResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+interface BasicToolParams {
+  query?: string;
+  maxResults?: number;
+}
+
+interface WeatherToolParams {
+  query?: string;
+  location?: string;
+}
+
+interface ForecastWindow {
+  startIndex: number;
+  days: number;
+  targeted: boolean;
+  label: string;
+}
+
+interface RainHintInput {
+  desc?: unknown;
+  code?: unknown;
+  precipitationProbability?: unknown;
+  precipitation?: unknown;
+}
+
+interface TimeoutHandle {
+  signal: AbortSignal;
+  clear: () => void;
+}
+
+interface NewsRssOptions {
+  days?: number;
+  maxAgeHours?: number;
+  windowLabel?: string;
+}
+
+interface NewsRssFormatOptions {
+  expanded?: boolean;
+}
+
+interface RealtimeSearchResult extends SearchResultItem {
+  fetchedText?: string;
+  freshness?: string;
+  pubDate?: string;
+  source?: string;
+  sourceUrl?: string;
+  windowDays?: number;
+  windowLabel?: string;
+}
+
+interface SearchGroup {
+  provider: string;
+  plan?: unknown;
+  results: RealtimeSearchResult[];
+}
+
+interface WeatherEvidenceExtra {
+  fallback?: boolean;
+  error?: string;
+}
+
+interface WeatherEvidence {
+  type: "weather";
+  kind: "weather";
+  label: string;
+  value: string;
+  timestamp: string;
+  source: string;
+  location: string;
+  fallback: boolean;
+  error: string;
+}
+
+interface WeatherNoEvidenceInput {
+  location?: string;
+  query?: string;
+  provider?: string;
+  error?: string;
+}
+
+type WeatherGeo = {
+  name?: string;
+  admin1?: string;
+  latitude: number;
+  longitude: number;
+  timezone?: string;
+};
+
+type LooseRecord = Record<string, any>;
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function isZhLocale(): boolean {
   return String(getLocale?.() || "").toLowerCase().startsWith("zh");
 }
 
-function zhOrEn(zh, en) {
+function zhOrEn(zh: string, en: string): string {
   return isZhLocale() ? zh : en;
 }
 
-function compactLine(value) {
+function compactLine(value: unknown): string {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
-function sleep(ms) {
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function normalizeWeatherLocationToken(value) {
+function normalizeWeatherLocationToken(value: unknown): string {
   return compactLine(value)
     .replace(/^(?:请|帮我|麻烦|顺便|再|同时|一起|以及|还有|然后|顺手|看一下|看下|查一下|查查|搜一下|搜索|查询)\s*/g, "")
     .replace(/^(?:今天|今日|明天|后天|今晚|今早|今天早上|明早|明天早上|下午|上午|中午|夜间|晚上|白天|夜里)\s*/g, "")
@@ -56,7 +154,7 @@ const WEATHER_CODE_ZH = new Map([
   [95, "雷暴"], [96, "雷暴伴小冰雹"], [99, "雷暴伴冰雹"],
 ]);
 
-function weatherCodeText(code) {
+function weatherCodeText(code: unknown): string {
   const n = Number(code);
   return WEATHER_CODE_ZH.get(n) || `天气代码 ${code}`;
 }
@@ -84,32 +182,32 @@ const WTTR_DESC_ZH = new Map([
   ["Light snow", "小雪"],
 ]);
 
-function localizeWttrDesc(value) {
+function localizeWttrDesc(value: unknown): string {
   const text = compactLine(value);
   if (!text) return "";
   if (!isZhLocale()) return text;
   return WTTR_DESC_ZH.get(text) || text;
 }
 
-function forecastDayLabel(index) {
+function forecastDayLabel(index: number): string {
   const labels = isZhLocale()
     ? ["今天", "明天", "后天", "大后天"]
     : ["today", "tomorrow", "day after tomorrow"];
   return labels[index] || (isZhLocale() ? `${index}天后` : `in ${index} days`);
 }
 
-function parseWeatherDayCount(text) {
+function parseWeatherDayCount(text: unknown): number | null {
   const value = compactLine(text);
   const digit = value.match(/(?:未来|接下来|往后|之后|后面)\s*(\d{1,2})\s*天/);
   if (digit) return Math.max(1, Math.min(7, Number(digit[1])));
-  const zhDigits = new Map([
+  const zhDigits = new Map<string, number>([
     ["一", 1], ["二", 2], ["两", 2], ["俩", 2], ["三", 3], ["四", 4], ["五", 5], ["六", 6], ["七", 7],
   ]);
   const zh = value.match(/(?:未来|接下来|往后|之后|后面)\s*([一二两俩三四五六七])\s*天/);
-  return zh ? zhDigits.get(zh[1]) : null;
+  return zh ? (zhDigits.get(zh[1]) ?? null) : null;
 }
 
-function resolveWeatherForecastWindow(query = "") {
+function resolveWeatherForecastWindow(query = ""): ForecastWindow {
   const text = compactLine(query);
   if (/明后天|明天.*后天|后天.*明天/.test(text)) {
     return { startIndex: 1, days: 2, targeted: true, label: zhOrEn("明天和后天", "tomorrow and the day after tomorrow") };
@@ -135,7 +233,7 @@ function resolveWeatherForecastWindow(query = "") {
   return { startIndex: 0, days: 3, targeted: false, label: zhOrEn("未来三天", "Next days") };
 }
 
-function formatForecastSection(lines, window) {
+function formatForecastSection(lines: string[], window?: ForecastWindow): string {
   const safeWindow = window || resolveWeatherForecastWindow("");
   const selected = lines.slice(safeWindow.startIndex, safeWindow.startIndex + safeWindow.days);
   const body = (selected.length ? selected : lines.slice(0, 3)).join("\n");
@@ -152,16 +250,21 @@ function formatForecastSection(lines, window) {
   return `\n${title}${note}\n${body}`;
 }
 
-function weatherLooksRainyText(text) {
+function weatherLooksRainyText(text: unknown): boolean {
   return /雨|阵雨|雷暴|雷雨|毛毛雨|rain|shower|storm|drizzle/i.test(String(text || ""));
 }
 
-function openMeteoCodeLooksRainy(code) {
+function openMeteoCodeLooksRainy(code: unknown): boolean {
   const n = Number(code);
   return (n >= 51 && n <= 67) || (n >= 80 && n <= 82) || (n >= 95 && n <= 99);
 }
 
-function formatRainHint({ desc = "", code = null, precipitationProbability = null, precipitation = null } = {}) {
+function formatRainHint({
+  desc = "",
+  code = null,
+  precipitationProbability = null,
+  precipitation = null,
+}: RainHintInput = {}): string {
   const probability = Number(precipitationProbability);
   const amount = Number(precipitation);
   const rainy = weatherLooksRainyText(desc)
@@ -174,7 +277,7 @@ function formatRainHint({ desc = "", code = null, precipitationProbability = nul
   );
 }
 
-function decodeHtml(value) {
+function decodeHtml(value: unknown): string {
   return String(value || "")
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
     .replace(/&amp;/g, "&")
@@ -187,11 +290,11 @@ function decodeHtml(value) {
     .trim();
 }
 
-function stripHtml(value) {
+function stripHtml(value: unknown): string {
   return decodeHtml(value).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function hostname(url) {
+function hostname(url: unknown): string {
   try {
     return new URL(String(url || "")).hostname.replace(/^www\./i, "");
   } catch {
@@ -199,7 +302,7 @@ function hostname(url) {
   }
 }
 
-function timeoutSignal(ms) {
+function timeoutSignal(ms: number): TimeoutHandle {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   return {
@@ -208,12 +311,12 @@ function timeoutSignal(ms) {
   };
 }
 
-function extractXmlTag(xml, tag) {
+function extractXmlTag(xml: unknown, tag: string): string {
   const match = String(xml || "").match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, "i"));
   return match ? decodeHtml(match[1]) : "";
 }
 
-function extractSourceFromItemXml(xml) {
+function extractSourceFromItemXml(xml: unknown): { name: string; url: string } {
   const match = String(xml || "").match(/<source\s+url="([^"]*)"[^>]*>([\s\S]*?)<\/source>/i);
   if (!match) return { name: "", url: "" };
   return {
@@ -222,17 +325,17 @@ function extractSourceFromItemXml(xml) {
   };
 }
 
-function isRecentPubDate(pubDate, maxAgeHours = 36) {
-  const ts = Date.parse(pubDate || "");
+function isRecentPubDate(pubDate: unknown, maxAgeHours = 36): boolean {
+  const ts = Date.parse(String(pubDate || ""));
   if (!Number.isFinite(ts)) return false;
   const ageMs = Date.now() - ts;
   return ageMs >= -60 * 60 * 1000 && ageMs <= maxAgeHours * 60 * 60 * 1000;
 }
 
-function buildNewsRssQuery(query) {
+function buildNewsRssQuery(query: unknown): string {
   const text = compactLine(query);
-  const terms = [];
-  const addIf = (pattern, term) => {
+  const terms: string[] = [];
+  const addIf = (pattern: RegExp, term: string): void => {
     if (pattern.test(text) && !terms.includes(term)) terms.push(term);
   };
 
@@ -259,7 +362,11 @@ function buildNewsRssQuery(query) {
     .slice(0, 80) || "今日 热点";
 }
 
-async function fetchGoogleNewsRss(query, maxResults = SEARCH_LIMIT, opts = {}) {
+async function fetchGoogleNewsRss(
+  query: string,
+  maxResults = SEARCH_LIMIT,
+  opts: NewsRssOptions = {},
+): Promise<RealtimeSearchResult[]> {
   const timer = timeoutSignal(NEWS_RSS_TIMEOUT_MS);
   try {
     const days = Math.max(1, Math.min(30, Number(opts.days || 1)));
@@ -306,7 +413,12 @@ async function fetchGoogleNewsRss(query, maxResults = SEARCH_LIMIT, opts = {}) {
   }
 }
 
-function formatSearchResults(title, query, provider, results) {
+function formatSearchResults(
+  title: string,
+  query: string,
+  provider: string,
+  results: RealtimeSearchResult[],
+): string {
   const rows = results.map((result, index) => {
     const host = hostname(result.url);
     return [
@@ -328,7 +440,11 @@ function formatSearchResults(title, query, provider, results) {
   ].join("\n");
 }
 
-function formatNewsRssResults(query, results, opts = {}) {
+function formatNewsRssResults(
+  query: string,
+  results: RealtimeSearchResult[],
+  opts: NewsRssFormatOptions = {},
+): string {
   const rows = results.map((result, index) => {
     const published = result.pubDate ? new Date(result.pubDate).toISOString().replace("T", " ").replace(".000Z", " UTC") : "";
     return [
@@ -359,10 +475,14 @@ function formatNewsRssResults(query, results, opts = {}) {
   ].join("\n");
 }
 
-async function searchAndFetch(query, sceneHint, maxResults = SEARCH_LIMIT) {
+async function searchAndFetch(
+  query: string,
+  sceneHint: string,
+  maxResults = SEARCH_LIMIT,
+): Promise<SearchGroup> {
   const searchResult = await runSearchQuery(query, maxResults, { sceneHint }) || {};
   const { results = [], provider = "", plan = null } = searchResult;
-  const enriched = [];
+  const enriched: RealtimeSearchResult[] = [];
   for (const result of results.slice(0, 2)) {
     let text = "";
     try {
@@ -371,16 +491,16 @@ async function searchAndFetch(query, sceneHint, maxResults = SEARCH_LIMIT) {
     } catch {
       text = "";
     }
-    enriched.push({ ...result, fetchedText: text });
+    enriched.push({ ...result, fetchedText: text } as RealtimeSearchResult);
   }
   return {
     provider,
     plan,
-    results: enriched.length ? enriched : results,
+    results: (enriched.length ? enriched : results) as RealtimeSearchResult[],
   };
 }
 
-function localDateQueryText() {
+function localDateQueryText(): string {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -388,7 +508,7 @@ function localDateQueryText() {
   return `${year}年${month}月${day}日`;
 }
 
-function buildSupplementalNewsQueries(query, windowDays = 1) {
+function buildSupplementalNewsQueries(query: unknown, windowDays = 1): string[] {
   const raw = compactLine(query);
   const core = raw
     .replace(/(?:请|帮我|查一下|查查|搜索|查询|全网|今天|今日|最新|新闻|有什么|哪些|一下)/g, " ")
@@ -411,9 +531,9 @@ function buildSupplementalNewsQueries(query, windowDays = 1) {
   return [...new Set(queries.map(compactLine).filter(Boolean))].slice(0, 4);
 }
 
-function mergeSearchResults(groups, maxResults = SEARCH_LIMIT) {
-  const merged = [];
-  const seen = new Set();
+function mergeSearchResults(groups: Array<SearchGroup | null | undefined>, maxResults = SEARCH_LIMIT): RealtimeSearchResult[] {
+  const merged: RealtimeSearchResult[] = [];
+  const seen = new Set<string>();
   for (const group of groups || []) {
     for (const item of group?.results || []) {
       const key = item.url || item.title;
@@ -426,16 +546,20 @@ function mergeSearchResults(groups, maxResults = SEARCH_LIMIT) {
   return merged;
 }
 
-function mergeSearchResultsBalancedByWindow(groups, maxPerWindow = 3, maxTotal = 12) {
-  const labels = [];
+function mergeSearchResultsBalancedByWindow(
+  groups: Array<SearchGroup | null | undefined>,
+  maxPerWindow = 3,
+  maxTotal = 12,
+): RealtimeSearchResult[] {
+  const labels: string[] = [];
   for (const group of groups || []) {
     for (const item of group?.results || []) {
       const label = item.windowLabel || "";
       if (label && !labels.includes(label)) labels.push(label);
     }
   }
-  const balanced = [];
-  const seen = new Set();
+  const balanced: RealtimeSearchResult[] = [];
+  const seen = new Set<string>();
   const windows = labels.length ? labels : [""];
   for (const label of windows) {
     let picked = 0;
@@ -456,7 +580,7 @@ function mergeSearchResultsBalancedByWindow(groups, maxPerWindow = 3, maxTotal =
   return balanced;
 }
 
-function cleanWeatherLocationCandidate(value) {
+function cleanWeatherLocationCandidate(value: unknown): string {
   const normalized = normalizeWeatherLocationToken(value)
     .replace(/^(?:嗯|呃|啊|那个|就是|请问|我想问(?:一下)?|我想查(?:一下)?|我要查(?:一下)?|我要问(?:一下)?|我查(?:一下)?|我问(?:一下)?|查的是|问的是|要查的是|想查的是|要问的是|想问的是)\s*/g, "")
     .replace(/^(?:用工具\s*)?(?:帮我|请|麻烦|给我|替我)?\s*(?:查一下|查下|查查|查询|查|搜一下|搜索|看看|看一下|看下|告诉我)\s*/, "")
@@ -506,10 +630,10 @@ const COMMON_WEATHER_COORDS = new Map([
   ["澳门", { name: "澳门", admin1: "澳门", latitude: 22.1987, longitude: 113.5439, timezone: "Asia/Macau" }],
 ]);
 
-function extractKnownWeatherLocation(text) {
+function extractKnownWeatherLocation(text: unknown): string {
   const value = compactLine(text);
   if (!value) return "";
-  const hits = [];
+  const hits: Array<{ city: string; index: number }> = [];
   for (const city of COMMON_WEATHER_LOCATIONS) {
     let index = value.indexOf(city);
     while (index >= 0) {
@@ -530,7 +654,7 @@ function extractKnownWeatherLocation(text) {
   return hits[0].city;
 }
 
-export function extractWeatherLocation(query, location) {
+export function extractWeatherLocation(query: unknown, location?: unknown): string {
   const explicit = normalizeWeatherLocationToken(location);
   if (explicit) return explicit;
   const text = compactLine(query);
@@ -549,10 +673,10 @@ export function extractWeatherLocation(query, location) {
   return cleanWeatherLocationCandidate(text) || "深圳";
 }
 
-async function fetchOpenMeteoWeather(location, query = "") {
+async function fetchOpenMeteoWeather(location: string, query = ""): Promise<string> {
   const safeLocation = compactLine(location) || "深圳";
   const geoTimer = timeoutSignal(5000);
-  let geo = COMMON_WEATHER_COORDS.get(safeLocation);
+  let geo: WeatherGeo | undefined = COMMON_WEATHER_COORDS.get(safeLocation);
   try {
     if (!geo) {
       const params = new URLSearchParams({
@@ -566,7 +690,7 @@ async function fetchOpenMeteoWeather(location, query = "") {
         headers: { "User-Agent": "Lynn/OpenMeteoWeather" },
       });
       if (!resp.ok) throw new Error(`open-meteo geocode ${resp.status}`);
-      const data = await resp.json();
+      const data = await resp.json() as LooseRecord;
       geo = data.results?.[0];
       if (!geo?.latitude || !geo?.longitude) throw new Error("open-meteo geocode empty");
     }
@@ -590,7 +714,7 @@ async function fetchOpenMeteoWeather(location, query = "") {
       headers: { "User-Agent": "Lynn/OpenMeteoWeather" },
     });
     if (!resp.ok) throw new Error(`open-meteo forecast ${resp.status}`);
-    const data = await resp.json();
+    const data = await resp.json() as LooseRecord;
     const areaName = [geo.name, geo.admin1].filter(Boolean).join(" · ");
     const current = data.current || {};
     const now = [
@@ -601,8 +725,8 @@ async function fetchOpenMeteoWeather(location, query = "") {
       Number.isFinite(Number(current.wind_speed_10m)) ? `- ${zhOrEn("风速", "Wind")}: ${current.wind_speed_10m} km/h` : "",
       Number.isFinite(Number(current.precipitation)) ? `- ${zhOrEn("降水", "Rain")}: ${current.precipitation} mm` : "",
     ].filter(Boolean).join("\n");
-    const daily = data.daily || {};
-    const forecastLines = (daily.time || []).slice(0, Math.max(3, window.startIndex + window.days)).map((date, index) => {
+    const daily = (data.daily || {}) as LooseRecord;
+    const forecastLines = ((daily.time || []) as unknown[]).slice(0, Math.max(3, window.startIndex + window.days)).map((date, index) => {
       const desc = weatherCodeText(daily.weather_code?.[index]);
       const min = daily.temperature_2m_min?.[index] ?? "?";
       const max = daily.temperature_2m_max?.[index] ?? "?";
@@ -621,7 +745,7 @@ async function fetchOpenMeteoWeather(location, query = "") {
   }
 }
 
-async function fetchWttrWeather(location, query = "") {
+async function fetchWttrWeather(location: string, query = ""): Promise<string> {
   const safeLocation = compactLine(location) || "深圳";
   const timer = timeoutSignal(8000);
   try {
@@ -631,7 +755,7 @@ async function fetchWttrWeather(location, query = "") {
       headers: { "User-Agent": "Lynn/RealtimeWeather" },
     });
     if (!resp.ok) throw new Error(`wttr ${resp.status}`);
-    const data = await resp.json();
+    const data = await resp.json() as LooseRecord;
     const current = data.current_condition?.[0] || {};
     const area = data.nearest_area?.[0] || {};
     const rawAreaName = area.areaName?.[0]?.value || safeLocation;
@@ -648,7 +772,7 @@ async function fetchWttrWeather(location, query = "") {
     ].filter(Boolean).join("\n");
 
     const window = resolveWeatherForecastWindow(query);
-    const forecastLines = (data.weather || []).map((day, index) => {
+    const forecastLines = ((data.weather || []) as LooseRecord[]).map((day, index) => {
       const hourly = day.hourly?.[4] || day.hourly?.[0] || {};
       const desc = localizeWttrDesc(hourly.weatherDesc?.[0]?.value) || "";
       const displayDesc = desc || zhOrEn("天气数据可用", "weather data available");
@@ -661,9 +785,14 @@ async function fetchWttrWeather(location, query = "") {
   }
 }
 
-function buildWeatherEvidence(provider, location, text, extra = {}) {
+function buildWeatherEvidence(
+  provider: string,
+  location: string,
+  text: unknown,
+  extra: WeatherEvidenceExtra = {},
+): WeatherEvidence[] {
   const firstLine = compactLine(String(text || "").split(/\n/).find(Boolean) || "");
-  return [{
+  const evidence: WeatherEvidence[] = [{
     type: "weather",
     kind: "weather",
     label: location || "",
@@ -673,19 +802,20 @@ function buildWeatherEvidence(provider, location, text, extra = {}) {
     location: location || "",
     fallback: !!extra.fallback,
     error: extra.error || "",
-  }].filter((item) => item.value || item.source);
+  }];
+  return evidence.filter((item) => item.value || item.source);
 }
 
 const WEATHER_NUMERIC_EVIDENCE_RE = /(?:-?\d+(?:\.\d+)?\s*(?:°\s*C|°C|℃|度)|(?:温度|气温|体感|湿度|风速|风力|降雨概率|降水|雨量|最高|最低)[：:\s]*-?\d|(?:min|max|temp|humidity|wind|rain|precipitation)[^\d-]{0,12}-?\d)/i;
 const WEATHER_STATE_EVIDENCE_RE = /(?:晴|多云|阴|小雨|中雨|大雨|阵雨|雷雨|暴雨|雪|雾|霾|台风|天气|预报|sunny|cloudy|overcast|rain|shower|storm|snow|fog|weather|forecast)/i;
 
-function hasConcreteWeatherEvidence(text) {
+function hasConcreteWeatherEvidence(text: unknown): boolean {
   const value = compactLine(text);
   if (!value) return false;
   return WEATHER_NUMERIC_EVIDENCE_RE.test(value) && WEATHER_STATE_EVIDENCE_RE.test(value);
 }
 
-function filterConcreteWeatherSearchResults(results = []) {
+function filterConcreteWeatherSearchResults(results: RealtimeSearchResult[] = []): RealtimeSearchResult[] {
   return (results || []).filter((result) => {
     const text = [
       result?.title,
@@ -696,7 +826,7 @@ function filterConcreteWeatherSearchResults(results = []) {
   });
 }
 
-function buildWeatherNoEvidenceText({ location, query, provider, error } = {}) {
+function buildWeatherNoEvidenceText({ location, query, provider, error }: WeatherNoEvidenceInput = {}): string {
   const target = compactLine(location || query) || zhOrEn("目标城市", "the requested location");
   return [
     zhOrEn("未检索到明确天气数据。", "No concrete weather data was found."),
@@ -725,7 +855,7 @@ export function createWeatherTool() {
       query: Type.String({ description: zhOrEn("原始天气问题", "Original weather query") }),
       location: Type.Optional(Type.String({ description: zhOrEn("城市或地区", "City or location") })),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: WeatherToolParams): Promise<ToolTextResult> => {
       const query = compactLine(params.query);
       const location = extractWeatherLocation(query, params.location);
       const providers = [
@@ -738,16 +868,16 @@ export function createWeatherTool() {
           run: () => fetchOpenMeteoWeather(location, query),
         },
       ];
-      const runProviderRound = () => {
+      const runProviderRound = (): Promise<{ provider: string; text: string }> => {
         const attempts = providers.map((provider) => provider.run()
           .then((text) => ({ provider: provider.name, text }))
-          .catch((err) => {
-            throw new Error(`${provider.name}: ${err?.message || err}`);
+          .catch((err: unknown) => {
+            throw new Error(`${provider.name}: ${errorMessage(err)}`);
           }));
         return Promise.any(attempts);
       };
 
-      let lastError;
+      let lastError: unknown;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
           const { provider, text } = await runProviderRound();
@@ -770,9 +900,10 @@ export function createWeatherTool() {
       }
 
       {
-        const errors = Array.isArray(lastError?.errors)
-          ? lastError.errors.map((item) => item?.message || String(item)).join("; ")
-          : lastError?.message || String(lastError);
+        const aggregateErrors = lastError instanceof AggregateError ? lastError.errors : null;
+        const errors = Array.isArray(aggregateErrors)
+          ? aggregateErrors.map((item: unknown) => errorMessage(item)).join("; ")
+          : errorMessage(lastError);
         const text = buildWeatherNoEvidenceText({
           location,
           query,
@@ -809,7 +940,7 @@ export function createLiveNewsTool() {
       query: Type.String({ description: zhOrEn("新闻问题或关键词", "News query or keywords") }),
       maxResults: Type.Optional(Type.Number({ default: 5 })),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: BasicToolParams): Promise<ToolTextResult> => {
       const query = compactLine(params.query);
       const searchQuery = `${query} 今日 最新 消息 新闻`;
       const maxResults = params.maxResults || SEARCH_LIMIT;
@@ -819,10 +950,10 @@ export function createLiveNewsTool() {
         { days: 3, label: zhOrEn("最近3天", "last 3 days"), maxAgeHours: 84 },
         { days: 7, label: zhOrEn("最近7天", "last 7 days"), maxAgeHours: 180 },
       ];
-      const allRssResults = [];
-      const allSearchGroups = [];
-      const allSupplementalQueries = [];
-      const usedWindows = [];
+      const allRssResults: RealtimeSearchResult[] = [];
+      const allSearchGroups: SearchGroup[] = [];
+      const allSupplementalQueries: string[] = [];
+      const usedWindows: string[] = [];
 
       for (const window of windows) {
         const supplementalQueries = buildSupplementalNewsQueries(query, window.days);
@@ -838,7 +969,7 @@ export function createLiveNewsTool() {
           return searchAndFetch(item, "realtime", Math.max(3, Math.ceil(maxResults / 2)))
             .then((group) => ({
               ...group,
-              results: (group.results || []).map((result) => ({
+              results: (group.results || []).map((result): RealtimeSearchResult => ({
                 ...result,
                 windowLabel: window.label,
                 windowDays: window.days,
@@ -850,7 +981,7 @@ export function createLiveNewsTool() {
         const [rssResults, ...searchGroups] = await Promise.all([rssPromise, ...searchPromises]);
         if (rssResults.length || searchGroups.some(Boolean)) usedWindows.push(window.label);
         allRssResults.push(...rssResults);
-        allSearchGroups.push(...searchGroups.filter(Boolean));
+        allSearchGroups.push(...searchGroups.filter((group): group is SearchGroup => Boolean(group)));
         // RSS carries verified timestamps; plain search often returns stale pages even for
         // "today" queries, so it should not stop expansion by itself.
         if (allRssResults.length >= Math.min(3, maxResults)) break;
@@ -862,7 +993,7 @@ export function createLiveNewsTool() {
         Math.max(2, Math.ceil(maxResults / 2)),
         Math.max(maxResults * 3, 12),
       );
-      const sections = [];
+      const sections: string[] = [];
       if (allRssResults.length) {
         sections.push(formatNewsRssResults(searchQuery, allRssResults.slice(0, maxResults), {
           expanded: usedWindows.some((label) => /3|7/.test(label)),
@@ -917,7 +1048,7 @@ export function createSportsScoreTool() {
       query: Type.String({ description: zhOrEn("体育比分或赛程问题", "Sports score or schedule query") }),
       maxResults: Type.Optional(Type.Number({ default: 5 })),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: BasicToolParams): Promise<ToolTextResult> => {
       const query = compactLine(params.query);
       const searchQuery = `${query} 比分 赛程 排名 最新`;
       const { provider, results } = await searchAndFetch(searchQuery, "sports", params.maxResults || SEARCH_LIMIT);
