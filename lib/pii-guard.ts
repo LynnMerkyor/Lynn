@@ -1,12 +1,22 @@
 /**
- * pii-guard.js — PII / 凭证检测与脱敏
+ * pii-guard.ts — PII / 凭证检测与脱敏
  *
  * 在持久化写入前（fact-store、pinned-memory、session-summary）
  * 检测并脱敏敏感信息，防止凭证和关键 PII 被写入存储。
  */
 
+interface Pattern {
+  name: string;
+  regex: RegExp;
+}
+
+interface ScrubResult {
+  cleaned: string;
+  detected: string[];
+}
+
 /** 硬脱敏：检测到直接替换为 [REDACTED] */
-const HARD_PATTERNS = [
+const HARD_PATTERNS: Pattern[] = [
   // API keys（sk-*, AKIA*、gsk_* 等常见前缀）
   { name: "api_key", regex: /\b(sk-[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|gsk_[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36}|glpat-[a-zA-Z0-9_-]{20,}|xoxb-[a-zA-Z0-9-]+)\b/g },
 
@@ -28,13 +38,13 @@ const HARD_PATTERNS = [
 
 /**
  * 检测文本中的敏感信息并脱敏
- * @param {string} text - 待检查文本
- * @returns {{ cleaned: string, detected: string[] }} 脱敏后的文本 + 检测到的类型列表
+ * @param text - 待检查文本
+ * @returns 脱敏后的文本 + 检测到的类型列表
  */
-export function scrubPII(text) {
+export function scrubPII(text: string): ScrubResult {
   if (!text) return { cleaned: text, detected: [] };
 
-  const detected = [];
+  const detected: string[] = [];
   let cleaned = text;
 
   for (const { name, regex } of HARD_PATTERNS) {
@@ -52,10 +62,10 @@ export function scrubPII(text) {
 
 /**
  * 检测是否包含敏感信息（不修改文本）
- * @param {string} text
- * @returns {boolean}
+ * @param text
+ * @returns
  */
-export function hasPII(text) {
+export function hasPII(text: string): boolean {
   if (!text) return false;
   for (const { regex } of HARD_PATTERNS) {
     regex.lastIndex = 0;
