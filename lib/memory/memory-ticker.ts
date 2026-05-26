@@ -57,7 +57,9 @@ interface SessionFile {
 }
 
 interface SummaryEntry {
+  session_id?: string;
   summary?: string;
+  created_at?: string | null;
   updated_at?: string | null;
   [key: string]: unknown;
 }
@@ -65,6 +67,7 @@ interface SummaryEntry {
 interface SummaryManager {
   rollingSummary(sessionId: string, messages: SessionMessage[], resolvedModel: ResolvedMemoryModel): Promise<unknown>;
   getSummary(sessionId: string): SummaryEntry | null | undefined;
+  getSummariesInRange(startDate: Date, endDate: Date): Array<SummaryEntry & { session_id: string }>;
   [key: string]: unknown;
 }
 
