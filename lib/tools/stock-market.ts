@@ -7,7 +7,7 @@
 
 import { Type } from "@sinclair/typebox";
 import { getLocale, t } from "../../server/i18n.js";
-import { runSearchQuery } from "./web-search.js";
+import { runSearchQuery, type SearchResultItem } from "./web-search.js";
 import { fetchWebContent } from "./web-fetch.js";
 
 const DEFAULT_FETCH_COUNT = 2;
@@ -15,6 +15,107 @@ const GOLD_FETCH_COUNT = 8;
 const MAX_FETCH_LENGTH = 3600;
 const MAX_LINES_PER_SOURCE = 4;
 const STOOQ_TIMEOUT_MS = 6500;
+
+type MarketKind = string;
+type LooseRecord = Record<string, any>;
+
+type ToolTextResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+interface StockMarketToolParams {
+  query?: string;
+  kind?: string;
+  market?: string;
+  symbol?: string;
+}
+
+interface MarketQuote {
+  symbol?: string;
+  stooqSymbol?: string;
+  name?: string;
+  date?: string;
+  time?: string;
+  open?: string;
+  high?: string;
+  low?: string;
+  close?: string;
+  previousClose?: string;
+  previous?: string;
+  change?: string;
+  pct?: string;
+  volume?: string;
+  amount?: string;
+  amountText?: string;
+  turnoverRate?: string;
+  pe?: string;
+  source?: string;
+  url?: string;
+  currency?: string;
+  price?: string;
+}
+
+interface NamedPrice {
+  name: string;
+  price: string;
+  date?: string;
+}
+
+interface PriceRange {
+  min: number;
+  minName: string;
+  max: number;
+  maxName: string;
+}
+
+interface GoldSignals {
+  jewelry: NamedPrice[];
+  jewelryRange: PriceRange | null;
+  bars: NamedPrice[];
+  barRange: PriceRange | null;
+  recovery: NamedPrice[];
+  goldRecovery: NamedPrice | null;
+  date: string;
+  sgeLines: string[];
+  shuibeiLines: string[];
+  internationalLines: string[];
+}
+
+interface MarketSource extends Partial<SearchResultItem> {
+  title?: string;
+  url?: string;
+  snippet?: string;
+  lines?: string[];
+  goldSignals?: GoldSignals | null;
+  source?: string;
+  host?: string;
+  timestamp?: string;
+  date?: string;
+}
+
+interface MarketCollection {
+  provider: string;
+  plan: { scene?: string } | null;
+  sources: MarketSource[];
+  directQuotes: MarketQuote[];
+}
+
+interface ConceptResolution {
+  marketHint: string;
+  symbols: string[];
+  sources: MarketSource[];
+}
+
+interface ConceptQuotes {
+  marketHint?: string;
+  sources: MarketSource[];
+  directQuotes: MarketQuote[];
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 const US_STOCK_NAME_TO_SYMBOL = new Map([
   ["苹果", "AAPL"],
@@ -113,11 +214,11 @@ const FINANCE_LOOKUP_CONTEXT_RE =
 const NON_FINANCE_QUOTE_CONTEXT_RE =
   /(?:报价模板|报价单|销售报价|客户报价|统一报价|报价流程|方案报价|采购报价|合同报价|客户\s*[A-Z]\b|会议记录|会议纪要|行动项|负责人|截止时间)/i;
 
-function isZhLocale() {
+function isZhLocale(): boolean {
   return String(getLocale?.() || "").startsWith("zh");
 }
 
-function detectKind(query, explicitKind = "") {
+function detectKind(query: unknown, explicitKind = ""): MarketKind {
   const forced = String(explicitKind || "").trim().toLowerCase();
   if (forced) return forced;
   const text = String(query || "").toLowerCase();
@@ -131,28 +232,28 @@ function detectKind(query, explicitKind = "") {
   return "stock";
 }
 
-function hasStockBasketIntent(query) {
+function hasStockBasketIntent(query: unknown): boolean {
   const text = String(query || "");
   return /(?:港股.{0,8}科技股?|科技股?.{0,8}港股|恒生科技(?!指数)|港股互联网|港股.{0,8}互联网|中概科技)/i.test(text)
     || /(?:美股|纳斯达克|纳指|七姐妹|七巨头|magnificent|mag7).{0,12}(?:科技股?|AI|人工智能|芯片|半导体|互联网|表现|行情|涨跌)?|(?:科技股?|AI|人工智能|芯片|半导体|互联网).{0,12}(?:美股|纳斯达克|纳指|七姐妹|七巨头|magnificent|mag7)/i.test(text)
     || /(?:A股|a股|沪深|科创|创业板).{0,12}(?:AI|人工智能|算力|服务器|光模块|CPO|高速连接|科技股?|半导体|芯片|新能源|电动车|锂电|光伏|机器人|人形机器人|券商|证券|白酒|消费)|(?:AI|人工智能|算力|服务器|光模块|CPO|高速连接|科技股?|半导体|芯片|新能源|电动车|锂电|光伏|机器人|人形机器人|券商|证券|白酒|消费).{0,12}(?:A股|a股|沪深|科创|创业板)/i.test(text);
 }
 
-function hasConceptStockIntent(query) {
+function hasConceptStockIntent(query: unknown): boolean {
   const text = String(query || "");
   if (hasStockBasketIntent(text)) return true;
   return /(?:概念股|概念板块|板块|行业|题材|赛道|龙头|成分股|产业链|科技股)/i.test(text)
     && /(?:今天|今日|当前|最新|表现|行情|涨跌|涨幅|跌幅|看一下|怎么样|如何|盘中|收盘|报价|股票|股价|A股|a股|港股|美股|纳指|恒生)/i.test(text);
 }
 
-function shouldPreferDynamicConceptResolution(query, explicitSymbol = "") {
+function shouldPreferDynamicConceptResolution(query: unknown, explicitSymbol = ""): boolean {
   if (String(explicitSymbol || "").trim()) return false;
   const text = String(query || "");
   return /(?:概念股|概念板块|龙头|成分股|产业链|题材|赛道)/i.test(text)
     && !/(?:七姐妹|七巨头|mag7|magnificent|港股.{0,8}科技|恒生科技|纳指科技|美股.{0,8}科技|A股AI算力|a股AI算力)/i.test(text);
 }
 
-function buildQuery(query, kind, market = "", symbol = "") {
+function buildQuery(query: unknown, kind: MarketKind, market = "", symbol = ""): string {
   const raw = String(query || "").trim();
   const marketText = String(market || "").trim();
   const symbolText = String(symbol || "").trim();
@@ -177,7 +278,7 @@ function buildQuery(query, kind, market = "", symbol = "") {
   return [raw, ...suffix].filter(Boolean).join(" ");
 }
 
-function keywordScore(kind, line) {
+function keywordScore(kind: MarketKind, line: unknown): number {
   const text = String(line || "");
   let score = 0;
   if (/\d/.test(text)) score += 2;
@@ -191,26 +292,26 @@ function keywordScore(kind, line) {
   return score;
 }
 
-function normalizeLine(line) {
+function normalizeLine(line: unknown): string {
   return String(line || "")
     .replace(/\s+/g, " ")
     .replace(/[|│┃]/g, " ")
     .trim();
 }
 
-function toFiniteNumber(value) {
+function toFiniteNumber(value: unknown): number | null {
   const n = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
   return Number.isFinite(n) ? n : null;
 }
 
-function formatPrice(value, digits = 2) {
+function formatPrice(value: unknown, digits = 2): string {
   const n = toFiniteNumber(value);
-  if (!Number.isFinite(n)) return "";
+  if (n == null || !Number.isFinite(n)) return "";
   if (Number.isInteger(n)) return String(n);
   return n.toFixed(digits).replace(/\.?0+$/, "");
 }
 
-function extractSection(text, startRe, endReList = []) {
+function extractSection(text: unknown, startRe: RegExp, endReList: RegExp[] = []): string {
   const source = String(text || "");
   const startMatch = startRe.exec(source);
   if (!startMatch) return "";
@@ -224,8 +325,8 @@ function extractSection(text, startRe, endReList = []) {
   return tail.slice(0, end);
 }
 
-function dedupeByName(items = []) {
-  const seen = new Set();
+function dedupeByName<T extends { name?: unknown }>(items: T[] = []): T[] {
+  const seen = new Set<string>();
   return items.filter((item) => {
     const key = String(item?.name || "").trim();
     if (!key || seen.has(key)) return false;
@@ -234,8 +335,8 @@ function dedupeByName(items = []) {
   });
 }
 
-function dedupeStrings(items = []) {
-  const seen = new Set();
+function dedupeStrings(items: unknown[] = []): string[] {
+  const seen = new Set<string>();
   return items
     .map((item) => String(item || "").trim())
     .filter(Boolean)
@@ -246,10 +347,10 @@ function dedupeStrings(items = []) {
     });
 }
 
-function summarizeRange(items = []) {
+function summarizeRange(items: NamedPrice[] = []): PriceRange | null {
   const priced = items
     .map((item) => ({ ...item, numericPrice: toFiniteNumber(item.price) }))
-    .filter((item) => Number.isFinite(item.numericPrice));
+    .filter((item): item is NamedPrice & { numericPrice: number } => Number.isFinite(item.numericPrice));
   if (!priced.length) return null;
   const sorted = [...priced].sort((a, b) => a.numericPrice - b.numericPrice);
   return {
@@ -260,12 +361,12 @@ function summarizeRange(items = []) {
   };
 }
 
-function numberInRange(value, min, max) {
+function numberInRange(value: unknown, min: number, max: number): boolean {
   const n = toFiniteNumber(value);
-  return Number.isFinite(n) && n >= min && n <= max;
+  return n != null && Number.isFinite(n) && n >= min && n <= max;
 }
 
-function normalizeDateToken(token = "") {
+function normalizeDateToken(token = ""): string {
   const raw = String(token || "").trim();
   const match = raw.match(/(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})/);
   if (!match) return "";
@@ -273,7 +374,7 @@ function normalizeDateToken(token = "") {
   return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 }
 
-function normalizeSgeName(raw = "") {
+function normalizeSgeName(raw = ""): string {
   const text = String(raw || "").toUpperCase();
   if (text.includes("100G")) return "Au100g";
   if (text.includes("9995")) return "Au9995";
@@ -282,7 +383,7 @@ function normalizeSgeName(raw = "") {
   return "Au99.99";
 }
 
-function hasGoldEvidence(signals) {
+function hasGoldEvidence(signals: GoldSignals | null | undefined): boolean {
   return Boolean(
     signals?.sgeLines?.length
     || signals?.shuibeiLines?.length
@@ -293,22 +394,22 @@ function hasGoldEvidence(signals) {
   );
 }
 
-function hasPriorityGoldEvidence(signals) {
+function hasPriorityGoldEvidence(signals: GoldSignals | null | undefined): boolean {
   return Boolean(
     signals?.sgeLines?.length
     || signals?.shuibeiLines?.length,
   );
 }
 
-function countPriorityGoldEvidence(signals) {
+function countPriorityGoldEvidence(signals: GoldSignals | null | undefined): number {
   let count = 0;
   if (signals?.sgeLines?.length) count += 1;
   if (signals?.shuibeiLines?.length) count += 1;
   return count;
 }
 
-function mergeGoldSignals(sources = []) {
-  const merged = {
+function mergeGoldSignals(sources: MarketSource[] = []): GoldSignals {
+  const merged: GoldSignals = {
     jewelry: [],
     jewelryRange: null,
     bars: [],
@@ -346,7 +447,7 @@ function mergeGoldSignals(sources = []) {
   return merged;
 }
 
-function extractGoldSignals(text) {
+function extractGoldSignals(text: unknown): GoldSignals | null {
   const source = String(text || "");
   if (!source) return null;
 
@@ -470,7 +571,7 @@ function extractGoldSignals(text) {
   };
 }
 
-function buildGoldSummary(sources = []) {
+function buildGoldSummary(sources: MarketSource[] = []): string {
   const signals = mergeGoldSignals(sources);
   if (!hasGoldEvidence(signals)) return "";
 
@@ -507,7 +608,7 @@ function buildGoldSummary(sources = []) {
   return lines.join("\n");
 }
 
-async function fetchJsonWithTimeout(url, ms, headers = {}) {
+async function fetchJsonWithTimeout(url: string, ms: number, headers: Record<string, string> = {}): Promise<LooseRecord> {
   const timer = timeoutSignal(ms);
   try {
     const resp = await fetch(url, {
@@ -515,13 +616,18 @@ async function fetchJsonWithTimeout(url, ms, headers = {}) {
       headers: { "User-Agent": "Lynn/MarketQuote", ...headers },
     });
     if (!resp.ok) throw new Error(`${url} ${resp.status}`);
-    return await resp.json();
+    return await resp.json() as LooseRecord;
   } finally {
     timer.clear();
   }
 }
 
-async function fetchTextWithTimeout(url, ms, headers = {}, encoding = "utf-8") {
+async function fetchTextWithTimeout(
+  url: string,
+  ms: number,
+  headers: Record<string, string> = {},
+  encoding = "utf-8",
+): Promise<string> {
   const timer = timeoutSignal(ms);
   try {
     const resp = await fetch(url, {
@@ -539,7 +645,7 @@ async function fetchTextWithTimeout(url, ms, headers = {}, encoding = "utf-8") {
   }
 }
 
-async function fetchUsdCnyRate() {
+async function fetchUsdCnyRate(): Promise<{ rate: number; updatedAt: string; source: string }> {
   const json = await fetchJsonWithTimeout("https://open.er-api.com/v6/latest/USD", 4500);
   const rate = Number(json?.rates?.CNY);
   if (!Number.isFinite(rate)) throw new Error("USD/CNY unavailable");
@@ -550,7 +656,7 @@ async function fetchUsdCnyRate() {
   };
 }
 
-async function fetchGoldApiMarketSource() {
+async function fetchGoldApiMarketSource(): Promise<MarketSource | null> {
   const [gold, silver, fx] = await Promise.all([
     fetchJsonWithTimeout("https://api.gold-api.com/price/XAU", 4500),
     fetchJsonWithTimeout("https://api.gold-api.com/price/XAG", 4500).catch(() => null),
@@ -591,7 +697,7 @@ async function fetchGoldApiMarketSource() {
   };
 }
 
-function buildGoldQueries(query, market = "", symbol = "") {
+function buildGoldQueries(query: unknown, market = "", symbol = ""): string[] {
   const raw = String(query || "").trim();
   return [...new Set([
     buildQuery(query, "gold", market, symbol),
@@ -601,14 +707,14 @@ function buildGoldQueries(query, market = "", symbol = "") {
   ].filter(Boolean))];
 }
 
-function parseSinaFuturesQuote(raw, fallbackSymbol = "") {
+function parseSinaFuturesQuote(raw: unknown, fallbackSymbol = ""): MarketQuote | null {
   const match = String(raw || "").match(/=\"([^\"]*)\"/);
   const parts = (match?.[1] || "").split(",");
   const price = toFiniteNumber(parts[0]);
-  if (!Number.isFinite(price)) return null;
+  if (price == null || !Number.isFinite(price)) return null;
   const prev = toFiniteNumber(parts[7]);
-  const change = Number.isFinite(prev) ? price - prev : null;
-  const pct = Number.isFinite(change) && prev ? `${change >= 0 ? "+" : ""}${((change / prev) * 100).toFixed(2)}%` : "";
+  const change = prev != null && Number.isFinite(prev) ? price - prev : null;
+  const pct = change != null && Number.isFinite(change) && prev ? `${change >= 0 ? "+" : ""}${((change / prev) * 100).toFixed(2)}%` : "";
   const fallbackName = fallbackSymbol === "hf_OIL"
     ? "布伦特原油"
     : fallbackSymbol === "hf_CL"
@@ -624,29 +730,31 @@ function parseSinaFuturesQuote(raw, fallbackSymbol = "") {
     low: formatPrice(parts[5], 3),
     time: [parts[12], parts[6]].filter(Boolean).join(" "),
     previous: Number.isFinite(prev) ? formatPrice(prev, 3) : "",
-    change: Number.isFinite(change) ? `${change >= 0 ? "+" : ""}${formatPrice(change, 3)}` : "",
+    change: change != null && Number.isFinite(change) ? `${change >= 0 ? "+" : ""}${formatPrice(change, 3)}` : "",
     pct,
   };
 }
 
-async function fetchSinaFuturesQuote(symbol) {
+async function fetchSinaFuturesQuote(symbol: string): Promise<MarketQuote | null> {
   const raw = await fetchTextWithTimeout(`https://hq.sinajs.cn/list=${symbol}`, 4500, {
     Referer: "https://finance.sina.com.cn/",
   }, "gbk");
   return parseSinaFuturesQuote(raw, symbol);
 }
 
-async function collectOilDirectQuotes(query) {
+async function collectOilDirectQuotes(query: unknown): Promise<MarketQuote[]> {
   const text = String(query || "");
-  const targets = [];
+  const targets: string[] = [];
   if (/布伦特|brent|oil/i.test(text)) targets.push("hf_OIL");
   if (/WTI|纽约原油|美油|crude|CL\b/i.test(text)) targets.push("hf_CL");
   if (!targets.length) targets.push("hf_OIL");
   const settled = await Promise.allSettled([...new Set(targets)].map(fetchSinaFuturesQuote));
-  return settled.map((item) => item.status === "fulfilled" ? item.value : null).filter(Boolean);
+  return settled
+    .map((item) => item.status === "fulfilled" ? item.value : null)
+    .filter((item): item is MarketQuote => Boolean(item));
 }
 
-function timeoutSignal(ms) {
+function timeoutSignal(ms: number): { signal: AbortSignal; clear: () => void } {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   return {
@@ -655,14 +763,15 @@ function timeoutSignal(ms) {
   };
 }
 
-function parseCsvLine(line) {
-  const cells = [];
+function parseCsvLine(line: unknown): string[] {
+  const cells: string[] = [];
   let current = "";
   let inQuotes = false;
-  for (let i = 0; i < String(line || "").length; i++) {
-    const ch = line[i];
+  const source = String(line || "");
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
     if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
+      if (inQuotes && source[i + 1] === '"') {
         current += '"';
         i++;
       } else {
@@ -679,7 +788,7 @@ function parseCsvLine(line) {
   return cells.map((cell) => cell.trim());
 }
 
-function hasFinanceLookupIntent(query, explicitSymbol = "") {
+function hasFinanceLookupIntent(query: unknown, explicitSymbol = ""): boolean {
   const text = String(query || "");
   if (String(explicitSymbol || "").trim()) return true;
   if (hasStockBasketIntent(text)) return true;
@@ -693,11 +802,14 @@ function hasFinanceLookupIntent(query, explicitSymbol = "") {
   return false;
 }
 
-function extractUsStockSymbols(query, explicitSymbol = "") {
-  const symbols = [];
+function extractUsStockSymbols(query: unknown, explicitSymbol = ""): string[] {
+  const symbols: string[] = [];
   const text = String(query || "");
   const financeContext = hasFinanceLookupIntent(text, explicitSymbol);
-  const add = (value, { explicit = false, dollar = false, known = false } = {}) => {
+  const add = (
+    value: unknown,
+    { explicit = false, dollar = false, known = false }: { explicit?: boolean; dollar?: boolean; known?: boolean } = {},
+  ): void => {
     const normalized = String(value || "").trim().toUpperCase().replace(/^\$/, "");
     if (!/^[A-Z]{1,5}(?:\.[A-Z]{1,3})?$/.test(normalized)) return;
     const bare = normalized.split(".")[0];
@@ -722,7 +834,7 @@ function extractUsStockSymbols(query, explicitSymbol = "") {
   return symbols.slice(0, 8);
 }
 
-async function fetchStooqQuote(symbol) {
+async function fetchStooqQuote(symbol: string): Promise<MarketQuote | null> {
   const bare = String(symbol || "").trim().toUpperCase().replace(/^\$/, "").split(".")[0];
   if (!bare) return null;
   let lastError = null;
@@ -739,7 +851,7 @@ async function fetchStooqQuote(symbol) {
       const [headerLine, dataLine] = csv.trim().split(/\r?\n/);
       const headers = parseCsvLine(headerLine);
       const values = parseCsvLine(dataLine);
-      const row = Object.fromEntries(headers.map((key, index) => [key, values[index] || ""]));
+      const row = Object.fromEntries(headers.map((key, index) => [key, values[index] || ""])) as LooseRecord;
       if (!row.Symbol || row.Close === "N/D" || !Number.isFinite(Number(row.Close))) return null;
       return {
         symbol: bare,
@@ -765,19 +877,19 @@ async function fetchStooqQuote(symbol) {
   return null;
 }
 
-async function collectStooqQuotes(query, explicitSymbol = "") {
+async function collectStooqQuotes(query: unknown, explicitSymbol = ""): Promise<MarketQuote[]> {
   const symbols = extractUsStockSymbols(query, explicitSymbol);
   if (!symbols.length) return [];
   const settled = await Promise.allSettled(symbols.map((symbol) => fetchStooqQuote(symbol)));
   return settled
     .map((item) => item.status === "fulfilled" ? item.value : null)
-    .filter(Boolean);
+    .filter((item): item is MarketQuote => Boolean(item));
 }
 
-function extractHongKongStockSymbols(query, explicitSymbol = "") {
-  const symbols = [];
+function extractHongKongStockSymbols(query: unknown, explicitSymbol = ""): string[] {
+  const symbols: string[] = [];
   const text = String(query || "");
-  const add = (value) => {
+  const add = (value: unknown): void => {
     const raw = String(value || "").trim().toUpperCase();
     const match = raw.match(/^(\d{4,5})(?:\.HK)?$/);
     if (!match) return;
@@ -798,10 +910,10 @@ function extractHongKongStockSymbols(query, explicitSymbol = "") {
   return symbols.slice(0, 8);
 }
 
-function extractAStockSymbols(query, explicitSymbol = "") {
-  const symbols = [];
+function extractAStockSymbols(query: unknown, explicitSymbol = ""): string[] {
+  const symbols: string[] = [];
   const text = String(query || "");
-  const add = (value) => {
+  const add = (value: unknown): void => {
     const raw = String(value || "").trim();
     const match = raw.match(/^([0368]\d{5})$/);
     if (!match) return;
@@ -823,7 +935,7 @@ function extractAStockSymbols(query, explicitSymbol = "") {
   return symbols.slice(0, 8);
 }
 
-function aStockTencentPrefix(symbol) {
+function aStockTencentPrefix(symbol: unknown): string {
   const code = String(symbol || "");
   if (/^6/.test(code)) return "sh";
   if (/^[03]/.test(code)) return "sz";
@@ -831,7 +943,7 @@ function aStockTencentPrefix(symbol) {
   return "";
 }
 
-function parseTencentAStockQuote(raw, requestedSymbol) {
+function parseTencentAStockQuote(raw: unknown, requestedSymbol: string): MarketQuote | null {
   const match = String(raw || "").match(/=\"([^\"]*)\"/);
   const fields = match?.[1]?.split("~") || [];
   const price = fields[3];
@@ -839,7 +951,7 @@ function parseTencentAStockQuote(raw, requestedSymbol) {
   const symbol = String(requestedSymbol || fields[2] || "").trim();
   const prefix = aStockTencentPrefix(symbol);
   const amountWan = toFiniteNumber(fields[37]);
-  const amountText = Number.isFinite(amountWan) ? `${formatPrice(amountWan / 10000)} 亿元` : "";
+  const amountText = amountWan != null && Number.isFinite(amountWan) ? `${formatPrice(amountWan / 10000)} 亿元` : "";
   return {
     symbol: `${symbol}.${prefix === "sh" ? "SH" : prefix === "bj" ? "BJ" : "SZ"}`,
     name: fields[1] || symbol,
@@ -863,7 +975,7 @@ function parseTencentAStockQuote(raw, requestedSymbol) {
   };
 }
 
-async function fetchTencentAStockQuote(symbol) {
+async function fetchTencentAStockQuote(symbol: string): Promise<MarketQuote | null> {
   const normalized = String(symbol || "").trim();
   const prefix = aStockTencentPrefix(normalized);
   if (!prefix || !/^[0368]\d{5}$/.test(normalized)) return null;
@@ -874,23 +986,23 @@ async function fetchTencentAStockQuote(symbol) {
   return parseTencentAStockQuote(raw, normalized);
 }
 
-async function collectAStockQuotes(query, explicitSymbol = "") {
+async function collectAStockQuotes(query: unknown, explicitSymbol = ""): Promise<MarketQuote[]> {
   const symbols = extractAStockSymbols(query, explicitSymbol);
   if (!symbols.length) return [];
   const settled = await Promise.allSettled(symbols.map((symbol) => fetchTencentAStockQuote(symbol)));
   return settled
     .map((item) => item.status === "fulfilled" ? item.value : null)
-    .filter(Boolean);
+    .filter((item): item is MarketQuote => Boolean(item));
 }
 
-function inferConceptMarketHint(query) {
+function inferConceptMarketHint(query: unknown): string {
   const text = String(query || "");
   if (/(?:港股|恒生|恒指|港交所|HK\b|\.HK\b|中概港股)/i.test(text)) return "hk";
   if (/(?:美股|纳斯达克|纳指|纽交所|七姐妹|七巨头|magnificent|mag7|nasdaq|nyse|\bUS\b)/i.test(text)) return "us";
   return "a";
 }
 
-function buildConceptSearchQueries(query, marketHint) {
+function buildConceptSearchQueries(query: unknown, marketHint: string): string[] {
   const raw = String(query || "").replace(/\s+/g, " ").trim();
   if (marketHint === "hk") {
     return [
@@ -910,7 +1022,7 @@ function buildConceptSearchQueries(query, marketHint) {
   ];
 }
 
-function hasTickerAnchorNear(source, index = 0) {
+function hasTickerAnchorNear(source: unknown, index = 0): boolean {
   const text = String(source || "");
   const start = Math.max(0, Number(index || 0) - 36);
   const end = Math.min(text.length, Number(index || 0) + 48);
@@ -918,7 +1030,7 @@ function hasTickerAnchorNear(source, index = 0) {
     .test(text.slice(start, end));
 }
 
-function hasExplicitAStockCodeNearName(source, name, symbol) {
+function hasExplicitAStockCodeNearName(source: unknown, name: string, symbol: string): boolean {
   const idx = String(source || "").indexOf(name);
   if (idx < 0) return false;
   const start = Math.max(0, idx - 24);
@@ -927,7 +1039,7 @@ function hasExplicitAStockCodeNearName(source, name, symbol) {
   return new RegExp(`(?:${symbol}|(?:SH|SZ|BJ)[:：]?${symbol}|${symbol}\\.(?:SH|SZ|BJ))`, "i").test(window);
 }
 
-function hasConceptListAnchorNear(source, index = 0) {
+function hasConceptListAnchorNear(source: unknown, index = 0): boolean {
   const text = String(source || "");
   const start = Math.max(0, Number(index || 0) - 42);
   const end = Math.min(text.length, Number(index || 0) + 64);
@@ -935,11 +1047,15 @@ function hasConceptListAnchorNear(source, index = 0) {
     .test(text.slice(start, end));
 }
 
-function extractConceptSymbolsFromText(text, marketHint, opts = {}) {
+function extractConceptSymbolsFromText(
+  text: unknown,
+  marketHint: string,
+  opts: { query?: unknown } = {},
+): string[] {
   const source = String(text || "");
   const query = String(opts.query || "");
-  const symbols = [];
-  const add = (value) => {
+  const symbols: string[] = [];
+  const add = (value: unknown): void => {
     const normalized = String(value || "").trim().toUpperCase().replace(/^(?:SH|SZ|BJ|HK)[:：]?/i, "");
     if (!normalized || symbols.includes(normalized)) return;
     symbols.push(normalized);
@@ -985,7 +1101,7 @@ function extractConceptSymbolsFromText(text, marketHint, opts = {}) {
   return symbols.slice(0, 8);
 }
 
-function shouldFetchConceptUrl(url) {
+function shouldFetchConceptUrl(url: unknown): boolean {
   try {
     const host = new URL(String(url || "")).hostname.replace(/^www\./i, "");
     return !!host && !SLOW_OR_LOW_VALUE_CONCEPT_HOST_RE.test(host);
@@ -994,12 +1110,12 @@ function shouldFetchConceptUrl(url) {
   }
 }
 
-async function resolveConceptStockSymbols(query) {
+async function resolveConceptStockSymbols(query: unknown): Promise<ConceptResolution> {
   if (!hasConceptStockIntent(query)) return { marketHint: "", symbols: [], sources: [] };
   const marketHint = inferConceptMarketHint(query);
-  const symbols = [];
-  const sources = [];
-  const addSymbol = (value) => {
+  const symbols: string[] = [];
+  const sources: MarketSource[] = [];
+  const addSymbol = (value: unknown): void => {
     const symbol = String(value || "").trim().toUpperCase();
     if (symbol && !symbols.includes(symbol)) symbols.push(symbol);
   };
@@ -1073,7 +1189,7 @@ async function resolveConceptStockSymbols(query) {
   return { marketHint, symbols: symbols.slice(0, 8), sources: sources.slice(0, 3) };
 }
 
-async function collectConceptStockQuotes(query) {
+async function collectConceptStockQuotes(query: unknown): Promise<ConceptQuotes> {
   const resolved = await resolveConceptStockSymbols(query);
   if (!resolved.symbols.length) return { directQuotes: [], sources: [], marketHint: resolved.marketHint };
 
@@ -1088,11 +1204,11 @@ async function collectConceptStockQuotes(query) {
     sources: resolved.sources,
     directQuotes: settled
       .map((item) => item.status === "fulfilled" ? item.value : null)
-      .filter(Boolean),
+      .filter((item): item is MarketQuote => Boolean(item)),
   };
 }
 
-function parseSinaHongKongQuote(raw, requestedSymbol) {
+function parseSinaHongKongQuote(raw: unknown, requestedSymbol: string): MarketQuote | null {
   const match = String(raw || "").match(/=\"([^\"]*)\"/);
   const fields = match?.[1]?.split(",") || [];
   if (fields.length < 18) return null;
@@ -1121,7 +1237,7 @@ function parseSinaHongKongQuote(raw, requestedSymbol) {
   };
 }
 
-async function fetchSinaHongKongQuote(symbol) {
+async function fetchSinaHongKongQuote(symbol: string): Promise<MarketQuote | null> {
   const normalized = String(symbol || "").trim().padStart(5, "0");
   if (!/^\d{5}$/.test(normalized)) return null;
   const raw = await fetchTextWithTimeout(`https://hq.sinajs.cn/list=rt_hk${normalized}`, 4500, {
@@ -1131,17 +1247,17 @@ async function fetchSinaHongKongQuote(symbol) {
   return parseSinaHongKongQuote(raw, normalized);
 }
 
-async function collectHongKongQuotes(query, explicitSymbol = "") {
+async function collectHongKongQuotes(query: unknown, explicitSymbol = ""): Promise<MarketQuote[]> {
   const symbols = extractHongKongStockSymbols(query, explicitSymbol);
   if (!symbols.length) return [];
   const settled = await Promise.allSettled(symbols.map((symbol) => fetchSinaHongKongQuote(symbol)));
   return settled
     .map((item) => item.status === "fulfilled" ? item.value : null)
-    .filter(Boolean);
+    .filter((item): item is MarketQuote => Boolean(item));
 }
 
-function extractCandidateLines(text, kind) {
-  const seen = new Set();
+function extractCandidateLines(text: unknown, kind: MarketKind): string[] {
+  const seen = new Set<string>();
   const lines = String(text || "")
     .split(/\r?\n/)
     .map(normalizeLine)
@@ -1159,7 +1275,7 @@ function extractCandidateLines(text, kind) {
   return lines.slice(0, MAX_LINES_PER_SOURCE);
 }
 
-function sourceLabel(url) {
+function sourceLabel(url: unknown): string {
   try {
     const host = new URL(String(url || "")).hostname.replace(/^www\./i, "");
     if (host.includes("finance.sina.com.cn") || host.includes("sina.com.cn")) return "新浪财经";
@@ -1176,7 +1292,13 @@ function sourceLabel(url) {
   }
 }
 
-function buildSnapshotText(query, kind, provider, sources, directQuotes = []) {
+function buildSnapshotText(
+  query: string,
+  kind: MarketKind,
+  provider: string,
+  sources: MarketSource[],
+  directQuotes: MarketQuote[] = [],
+): string {
   const goldSummary = kind === "gold" ? buildGoldSummary(sources) : "";
   if (kind === "gold" && goldSummary) {
     const refs = sources.slice(0, 3).map((item, idx) => {
@@ -1250,7 +1372,12 @@ function buildSnapshotText(query, kind, provider, sources, directQuotes = []) {
   return `${header}\n\n${body}${tail}`;
 }
 
-function buildMarketEvidence(kind, provider, sources = [], directQuotes = []) {
+function buildMarketEvidence(
+  kind: MarketKind,
+  provider: string,
+  sources: MarketSource[] = [],
+  directQuotes: MarketQuote[] = [],
+): Array<Record<string, unknown>> {
   const quoteEvidence = (directQuotes || []).map((item) => {
     const timestamp = [item.date, item.time].filter(Boolean).join(" ");
     return {
@@ -1276,6 +1403,7 @@ function buildMarketEvidence(kind, provider, sources = [], directQuotes = []) {
     timestamp: item.timestamp || item.date || "",
     source: item.source || item.host || provider || "",
     url: item.url || "",
+    symbol: "",
   }));
 
   return [...quoteEvidence, ...sourceEvidence]
@@ -1283,9 +1411,9 @@ function buildMarketEvidence(kind, provider, sources = [], directQuotes = []) {
     .slice(0, 12);
 }
 
-async function collectMarketSources(query, kind, market, symbol) {
-  let conceptSources = [];
-  let directQuotes = [];
+async function collectMarketSources(query: string, kind: MarketKind, market = "", symbol = ""): Promise<MarketCollection> {
+  let conceptSources: MarketSource[] = [];
+  let directQuotes: MarketQuote[] = [];
   let triedConceptResolution = false;
   if (kind === "stock" && shouldPreferDynamicConceptResolution(query, symbol)) {
     triedConceptResolution = true;
@@ -1314,7 +1442,7 @@ async function collectMarketSources(query, kind, market, symbol) {
     };
   }
 
-  const picked = [];
+  const picked: MarketSource[] = [];
   if (kind === "gold") {
     const goldApiSource = await fetchGoldApiMarketSource().catch(() => null);
     if (goldApiSource) picked.push(goldApiSource);
@@ -1324,7 +1452,7 @@ async function collectMarketSources(query, kind, market, symbol) {
     for (const quote of oilQuotes) {
       picked.push({
         title: `${quote.name} 实时行情`,
-        url: `https://finance.sina.com.cn/futures/quotes/${quote.symbol.replace(/^hf_/, "")}.shtml`,
+        url: `https://finance.sina.com.cn/futures/quotes/${String(quote.symbol || "").replace(/^hf_/, "")}.shtml`,
         snippet: `${quote.name} ${quote.price}`,
         lines: [
           `${quote.name}：${quote.price} 美元/桶${quote.pct ? `，涨跌幅 ${quote.pct}` : ""}${quote.change ? `，涨跌 ${quote.change}` : ""}`,
@@ -1351,12 +1479,12 @@ async function collectMarketSources(query, kind, market, symbol) {
     : [buildQuery(query, kind, market, symbol)];
   const seenUrls = new Set();
   let provider = "";
-  let plan = null;
-  let lastError = null;
+  let plan: { scene?: string } | null = null;
+  let lastError: unknown = null;
   const fetchLimit = kind === "gold" ? GOLD_FETCH_COUNT : DEFAULT_FETCH_COUNT;
 
   for (const searchQuery of searchQueries) {
-    let results = [];
+    let results: SearchResultItem[] = [];
     try {
       const searchResult = await runSearchQuery(searchQuery, 5, { sceneHint: "finance" });
       results = searchResult.results || [];
@@ -1427,7 +1555,7 @@ export function createStockMarketTool() {
         pattern: "^(?:[A-Z]{2,5}|[0-9]{6})$",
       })),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: StockMarketToolParams): Promise<ToolTextResult> => {
       const query = String(params.query || "").trim();
       if (!query) {
         return {
@@ -1502,8 +1630,8 @@ export function createStockMarketTool() {
           content: [{
             type: "text",
             text: isZhLocale()
-              ? `行情查询失败：${err.message}`
-              : `Market lookup failed: ${err.message}`,
+              ? `行情查询失败：${errorMessage(err)}`
+              : `Market lookup failed: ${errorMessage(err)}`,
           }],
           details: { kind, evidence: [] },
         };
