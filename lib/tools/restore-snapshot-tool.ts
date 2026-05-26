@@ -6,7 +6,17 @@
 
 import { listSnapshots, restoreSnapshot } from "../sandbox/snapshot.js";
 
-export function createRestoreSnapshotTool(agentId) {
+interface RestoreSnapshotParams {
+  action: "list" | "restore" | string;
+  snapshot_name?: string;
+  target_path?: string;
+}
+
+type RestoreSnapshotToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+};
+
+export function createRestoreSnapshotTool(agentId: string) {
   return {
     name: "restore_snapshot",
     description: "List and restore workspace file snapshots. Use 'list' action to see available snapshots, 'restore' action to restore a specific snapshot to a target path.",
@@ -29,7 +39,7 @@ export function createRestoreSnapshotTool(agentId) {
       },
       required: ["action"],
     },
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: RestoreSnapshotParams): Promise<RestoreSnapshotToolResult> => {
       const { action, snapshot_name, target_path } = params;
 
       if (action === "list") {
