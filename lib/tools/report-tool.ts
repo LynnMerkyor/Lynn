@@ -37,23 +37,81 @@ const STYLE_PRESETS = {
   },
 };
 
-function esc(s) { return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
-function bold(s) { return String(s || "").replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"); }
-function dirCls(d) { return d === "up" ? "up" : d === "down" ? "dn" : "nt-c"; }
-function nl2p(s) { return bold(esc(s)).split(/\n+/).filter(Boolean).map((p) => `<p>${p}</p>`).join(""); }
+type ReportStylePreset = keyof typeof STYLE_PRESETS;
+type ReportSectionType = "metrics" | "text" | "table" | "verdict" | "warning";
+type MetricDirection = "up" | "down" | "neutral";
 
-function normalizeStylePreset(value) {
-  const key = String(value || "").trim();
-  return STYLE_PRESETS[key] ? key : "";
+interface ReportMetric {
+  label?: string;
+  value?: string;
+  change?: string;
+  direction?: MetricDirection | string;
 }
 
-function chooseStylePreset(params) {
+interface ReportTextBlock {
+  heading?: string;
+  text?: string;
+}
+
+interface ReportVerdictItem {
+  period?: string;
+  range?: string;
+  note?: string;
+}
+
+interface ReportSection {
+  title?: string;
+  type?: ReportSectionType | string;
+  metrics?: ReportMetric[];
+  content?: string;
+  blocks?: ReportTextBlock[];
+  headers?: string[];
+  rows?: string[][];
+  items?: ReportVerdictItem[];
+}
+
+interface ReportParams {
+  title: string;
+  tag?: string;
+  subtitle?: string;
+  date?: string;
+  stylePreset?: string;
+  sections: ReportSection[];
+  disclaimer?: string;
+}
+
+interface RenderReportParams extends Required<Pick<ReportParams, "title" | "date" | "sections" | "disclaimer">> {
+  tag: string;
+  subtitle: string;
+  stylePreset: string;
+}
+
+type ReportToolOptions = {
+  getDeskDir?: () => string | null | undefined;
+};
+
+type ReportToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+function esc(s: unknown): string { return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function bold(s: unknown): string { return String(s || "").replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"); }
+function dirCls(d: unknown): string { return d === "up" ? "up" : d === "down" ? "dn" : "nt-c"; }
+function nl2p(s: unknown): string { return bold(esc(s)).split(/\n+/).filter(Boolean).map((p) => `<p>${p}</p>`).join(""); }
+
+function normalizeStylePreset(value: unknown): ReportStylePreset | "" {
+  const key = String(value || "").trim();
+  return Object.prototype.hasOwnProperty.call(STYLE_PRESETS, key) ? key as ReportStylePreset : "";
+}
+
+function chooseStylePreset(params: Partial<ReportParams> | null | undefined): ReportStylePreset {
   const explicit = normalizeStylePreset(params?.stylePreset);
   if (explicit) return explicit;
   return isDeepReportRequest(params) ? "editorial-paper" : "finance-dark";
 }
 
-function renderReport({ title, tag, subtitle, date, sections, disclaimer, stylePreset }) {
+function renderReport({ title, tag, subtitle, date, sections, disclaimer, stylePreset }: RenderReportParams): string {
   const presetKey = normalizeStylePreset(stylePreset) || "finance-dark";
   const preset = STYLE_PRESETS[presetKey] || STYLE_PRESETS["finance-dark"];
   let body = "";
@@ -102,8 +160,8 @@ function renderReport({ title, tag, subtitle, date, sections, disclaimer, styleP
       for (const row of (sec.rows || [])) {
         body += `<tr>`;
         for (const cell of row) {
-          const isUp = /涨|增|\+|扭亏/.test(cell);
-          const isDn = /跌|降|亏|-/.test(cell);
+          const isUp = /涨|增|\+|扭亏/.test(String(cell));
+          const isDn = /跌|降|亏|-/.test(String(cell));
           body += `<td class="${isUp ? "up" : isDn ? "dn" : ""}">${esc(cell)}</td>`;
         }
         body += `</tr>`;
@@ -127,70 +185,72 @@ function renderReport({ title, tag, subtitle, date, sections, disclaimer, styleP
   return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><meta name="lynn-report-style" content="${esc(presetKey)}"><title>${esc(title)}</title><link href="${preset.fonts}" rel="stylesheet"><style>${preset.css}</style></head><body class="report-${esc(presetKey)}"><div class="c">${body}</div></body></html>`;
 }
 
-function safeFilename(title) {
+function safeFilename(title: string): string {
   return title.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim().slice(0, 80) || "report";
 }
 
-function hasText(value, minLength = 12) {
+function hasText(value: unknown, minLength = 12): boolean {
   return String(value || "").replace(/\s+/g, "").length >= minLength;
 }
 
-function hasMeaningfulSection(section) {
+function hasMeaningfulSection(section: unknown): section is ReportSection {
   if (!section || typeof section !== "object") return false;
-  if (section.type === "metrics") {
-    return Array.isArray(section.metrics)
-      && section.metrics.some((item) => hasText(item?.label, 1) && hasText(item?.value, 1));
+  const typed = section as ReportSection;
+  if (typed.type === "metrics") {
+    return Array.isArray(typed.metrics)
+      && typed.metrics.some((item) => hasText(item?.label, 1) && hasText(item?.value, 1));
   }
-  if (section.type === "text") {
-    if (hasText(section.content)) return true;
-    return Array.isArray(section.blocks)
-      && section.blocks.some((block) => hasText(block?.text));
+  if (typed.type === "text") {
+    if (hasText(typed.content)) return true;
+    return Array.isArray(typed.blocks)
+      && typed.blocks.some((block) => hasText(block?.text));
   }
-  if (section.type === "table") {
-    return Array.isArray(section.headers)
-      && section.headers.length > 0
-      && Array.isArray(section.rows)
-      && section.rows.some((row) => Array.isArray(row) && row.some((cell) => hasText(cell, 1)));
+  if (typed.type === "table") {
+    return Array.isArray(typed.headers)
+      && typed.headers.length > 0
+      && Array.isArray(typed.rows)
+      && typed.rows.some((row) => Array.isArray(row) && row.some((cell) => hasText(cell, 1)));
   }
-  if (section.type === "verdict") {
-    return Array.isArray(section.items)
-      && section.items.some((item) => hasText(item?.period, 1) && hasText(item?.range, 1));
+  if (typed.type === "verdict") {
+    return Array.isArray(typed.items)
+      && typed.items.some((item) => hasText(item?.period, 1) && hasText(item?.range, 1));
   }
-  if (section.type === "warning") {
-    return hasText(section.content);
+  if (typed.type === "warning") {
+    return hasText(typed.content);
   }
-  return hasText(section.content);
+  return hasText(typed.content);
 }
 
-function sectionTextLength(section) {
+function sectionTextLength(section: unknown): number {
   if (!section || typeof section !== "object") return 0;
+  const typed = section as ReportSection;
   let total = 0;
-  const add = (value) => { total += String(value || "").replace(/\s+/g, "").length; };
-  add(section.title);
-  add(section.content);
-  if (Array.isArray(section.blocks)) {
-    for (const block of section.blocks) {
+  const add = (value: unknown) => { total += String(value || "").replace(/\s+/g, "").length; };
+  add(typed.title);
+  add(typed.content);
+  if (Array.isArray(typed.blocks)) {
+    for (const block of typed.blocks) {
       add(block?.heading);
       add(block?.text);
     }
   }
-  if (Array.isArray(section.metrics)) {
-    for (const item of section.metrics) {
+  if (Array.isArray(typed.metrics)) {
+    for (const item of typed.metrics) {
       add(item?.label);
       add(item?.value);
       add(item?.change);
     }
   }
-  if (Array.isArray(section.headers)) {
-    for (const item of section.headers) add(item);
+  if (Array.isArray(typed.headers)) {
+    for (const item of typed.headers) add(item);
   }
-  if (Array.isArray(section.rows)) {
-    for (const row of section.rows) {
+  if (Array.isArray(typed.rows)) {
+    for (const row of typed.rows) {
       if (Array.isArray(row)) for (const cell of row) add(cell);
     }
   }
-  if (Array.isArray(section.items)) {
-    for (const item of section.items) {
+  if (Array.isArray(typed.items)) {
+    for (const item of typed.items) {
       add(item?.period);
       add(item?.range);
       add(item?.note);
@@ -199,7 +259,7 @@ function sectionTextLength(section) {
   return total;
 }
 
-function isDeepReportRequest(params) {
+function isDeepReportRequest(params: Partial<ReportParams> | null | undefined): boolean {
   const haystack = [
     params?.title,
     params?.tag,
@@ -211,7 +271,7 @@ function isDeepReportRequest(params) {
 
 let _counter = 0;
 
-export function createReportTool({ getDeskDir } = {}) {
+export function createReportTool({ getDeskDir }: ReportToolOptions = {}) {
   return {
     name: "create_report",
     label: t("toolDef.report.label"),
@@ -253,7 +313,7 @@ export function createReportTool({ getDeskDir } = {}) {
       ),
       disclaimer: Type.Optional(Type.String({ description: t("toolDef.report.disclaimerDesc") })),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: ReportParams): Promise<ReportToolResult> => {
       const date = params.date || new Date().toLocaleDateString("zh-CN");
       const disclaimer = params.disclaimer || "本报告基于公开信息整理，不构成任何投资建议，请审慎决策。";
       const meaningfulSections = Array.isArray(params.sections)
