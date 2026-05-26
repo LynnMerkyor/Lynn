@@ -1,11 +1,44 @@
 /**
- * wechat-login.js — 微信 iLink 扫码登录模块
+ * wechat-login.ts — 微信 iLink 扫码登录模块
  *
  * 独立于 adapter 生命周期，被 REST route 直接调用。
  * 参考 @tencent-weixin/openclaw-weixin v1.0.2 的 src/auth/login-qr.ts（MIT 协议）。
  */
 
-import QRCode from "qrcode";
+import { createRequire } from "node:module";
+
+type QrcodeModule = {
+  toDataURL(text: string, options: { width: number; margin: number }): Promise<string>;
+};
+
+type WechatQrcodePayload = {
+  qrcode?: string;
+  qrcode_img_content?: string;
+};
+
+type WechatQrcodeStatusPayload = {
+  status?: string;
+  bot_token?: string;
+  ilink_bot_id?: string;
+  ilink_user_id?: string;
+  baseurl?: string;
+};
+
+export type WechatQrcodeResult =
+  | { ok: true; qrcodeUrl: string; qrcodeId: string }
+  | { ok: false; error?: string };
+
+export type WechatQrcodeStatus = {
+  status: string;
+  botToken?: string;
+  botId?: string;
+  userId?: string;
+  baseUrl?: string;
+  error?: string;
+};
+
+const require = createRequire(import.meta.url);
+const QRCode = require("qrcode") as QrcodeModule;
 
 const BASE_URL = "https://ilinkai.weixin.qq.com";
 const BOT_TYPE = "3";
@@ -13,7 +46,7 @@ const BOT_TYPE = "3";
 /**
  * 构造 iLink 请求头（登录阶段无需 Authorization）
  */
-function loginHeaders() {
+function loginHeaders(): Record<string, string> {
   return {
     "iLink-App-ClientVersion": "1",
   };
@@ -21,9 +54,8 @@ function loginHeaders() {
 
 /**
  * 获取微信扫码登录二维码
- * @returns {Promise<{ ok: boolean, qrcodeUrl?: string, qrcodeId?: string, error?: string }>}
  */
-export async function getWechatQrcode() {
+export async function getWechatQrcode(): Promise<WechatQrcodeResult> {
   try {
     const url = `${BASE_URL}/ilink/bot/get_bot_qrcode?bot_type=${BOT_TYPE}`;
     const res = await fetch(url, { headers: loginHeaders() });
@@ -31,7 +63,7 @@ export async function getWechatQrcode() {
       const body = await res.text().catch(() => "");
       return { ok: false, error: `HTTP ${res.status}: ${body}` };
     }
-    const data = await res.json();
+    const data = await res.json() as WechatQrcodePayload;
     if (!data.qrcode) {
       return { ok: false, error: "服务器未返回二维码" };
     }
@@ -45,7 +77,7 @@ export async function getWechatQrcode() {
       qrcodeId: data.qrcode,
     };
   } catch (err) {
-    return { ok: false, error: err.message };
+    return { ok: false, error: (err as Error).message };
   }
 }
 
@@ -55,10 +87,9 @@ export async function getWechatQrcode() {
  * iLink 服务器会 hold 连接最多 35 秒（长轮询），
  * 所以前端不需要高频调用，每次请求本身就会等待。
  *
- * @param {string} qrcodeId - 从 getWechatQrcode 获取的 qrcode 值
- * @returns {Promise<{ status: string, botToken?: string, botId?: string, userId?: string, baseUrl?: string, error?: string }>}
+ * @param qrcodeId - 从 getWechatQrcode 获取的 qrcode 值
  */
-export async function pollWechatQrcodeStatus(qrcodeId) {
+export async function pollWechatQrcodeStatus(qrcodeId: string): Promise<WechatQrcodeStatus> {
   if (!qrcodeId) {
     return { status: "error", error: "qrcodeId is required" };
   }
@@ -68,13 +99,13 @@ export async function pollWechatQrcodeStatus(qrcodeId) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 40_000);
 
-    let res;
+    let res: Response;
     try {
       res = await fetch(url, { headers: loginHeaders(), signal: controller.signal });
       clearTimeout(timer);
     } catch (err) {
       clearTimeout(timer);
-      if (err.name === "AbortError") {
+      if ((err as Error).name === "AbortError") {
         return { status: "waiting" };
       }
       throw err;
@@ -85,7 +116,7 @@ export async function pollWechatQrcodeStatus(qrcodeId) {
       return { status: "error", error: `HTTP ${res.status}: ${body}` };
     }
 
-    const data = await res.json();
+    const data = await res.json() as WechatQrcodeStatusPayload;
 
     switch (data.status) {
       case "wait":
@@ -109,6 +140,6 @@ export async function pollWechatQrcodeStatus(qrcodeId) {
         return { status: data.status || "waiting" };
     }
   } catch (err) {
-    return { status: "error", error: err.message };
+    return { status: "error", error: (err as Error).message };
   }
 }

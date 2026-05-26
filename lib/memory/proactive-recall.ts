@@ -14,6 +14,58 @@
 import fs from "fs";
 import path from "path";
 
+interface FactLike {
+  id?: number | string;
+  fact?: string;
+  tags?: string[];
+  time?: string;
+  category?: string;
+  [key: string]: unknown;
+}
+
+interface ExperienceResult {
+  category: string;
+  content: string;
+}
+
+interface RecallContext {
+  projectTags?: string[];
+  projectPath?: string;
+}
+
+interface RecallResult {
+  facts: FactLike[];
+  experiences: ExperienceResult[];
+  keywords: string[];
+  preferredCategories: string[];
+}
+
+interface FactStoreLike {
+  size: number;
+  searchByProject?: (projectPath: string, keywords: string[], limit: number) => FactLike[];
+  searchCombined: (keywords: string[], limit: number) => FactLike[];
+}
+
+interface HybridRetrieverLike {
+  search: (
+    keywords: string[],
+    limit: number,
+    opts?: { projectPath?: string; preferredCategories?: string[] },
+  ) => Promise<FactLike[]>;
+}
+
+interface ProactiveRecallOptions {
+  factStore: FactStoreLike;
+  experienceDir: string;
+  experienceIndexPath: string;
+  isMemoryEnabled: () => boolean;
+}
+
+interface CategoryHint {
+  category: string;
+  pattern: RegExp;
+}
+
 /**
  * 中文词组正则：2-8 个连续汉字（避免单字噪声）
  */
@@ -43,7 +95,7 @@ const STOP_WORDS = new Set([
   "have", "has", "been", "will", "just", "some", "also", "like",
 ]);
 
-const CATEGORY_HINTS = [
+const CATEGORY_HINTS: CategoryHint[] = [
   {
     category: "pitfall",
     pattern: /(踩坑|坑|教训|误区|bug|故障|失败|回归|超时|卡死|崩溃|不兼容|timeout|regression|failure|failed|broken|hang|stuck)/i,
@@ -69,7 +121,7 @@ const CATEGORY_HINTS = [
 const NOTE_FACT_CATEGORIES = new Set(["pitfall", "procedure"]);
 const TASK_FACT_CATEGORIES = new Set(["task"]);
 
-function inferPreferredCategories(message, keywords = []) {
+function inferPreferredCategories(message: string, keywords: string[] = []): string[] {
   const haystack = `${message || ""} ${keywords.join(" ")}`;
   const preferred = [];
   for (const hint of CATEGORY_HINTS) {
@@ -78,7 +130,7 @@ function inferPreferredCategories(message, keywords = []) {
   return preferred;
 }
 
-function factCategory(fact) {
+function factCategory(fact: FactLike): string {
   return String(fact?.category || "")
     .trim()
     .toLowerCase()
@@ -86,6 +138,12 @@ function factCategory(fact) {
 }
 
 export class ProactiveRecall {
+  private readonly _factStore: FactStoreLike;
+  private readonly _experienceDir: string;
+  private readonly _experienceIndexPath: string;
+  private readonly _isMemoryEnabled: () => boolean;
+  private _retriever: HybridRetrieverLike | null;
+
   /**
    * @param {object} opts
    * @param {import('./fact-store.js').FactStore} opts.factStore
@@ -93,7 +151,7 @@ export class ProactiveRecall {
    * @param {string} opts.experienceIndexPath - experience.md 索引路径
    * @param {() => boolean} opts.isMemoryEnabled - 综合记忆开关
    */
-  constructor({ factStore, experienceDir, experienceIndexPath, isMemoryEnabled }) {
+  constructor({ factStore, experienceDir, experienceIndexPath, isMemoryEnabled }: ProactiveRecallOptions) {
     this._factStore = factStore;
     this._experienceDir = experienceDir;
     this._experienceIndexPath = experienceIndexPath;
@@ -104,7 +162,7 @@ export class ProactiveRecall {
   /**
    * Phase 4 接口：注入 HybridRetriever
    */
-  setRetriever(retriever) {
+  setRetriever(retriever: HybridRetrieverLike | null): void {
     this._retriever = retriever;
   }
 
@@ -114,19 +172,19 @@ export class ProactiveRecall {
    * @param {string} message - 用户消息文本
    * @returns {string[]} - top-5 关键词
    */
-  extractKeywords(message) {
+  extractKeywords(message: string): string[] {
     if (!message || typeof message !== "string") return [];
 
     // 提取文本内容（处理数组格式的 content）
     const text = message.trim();
     if (!text) return [];
 
-    const candidates = new Map(); // word → score
+    const candidates = new Map<string, number>(); // word → score
 
     // 1. 引号内容（最高优先级）
     let match;
     while ((match = RE_QUOTED.exec(text)) !== null) {
-      const word = match[1].trim();
+      const word = match[1]?.trim() || "";
       if (word.length >= 2) {
         candidates.set(word, (candidates.get(word) || 0) + 3);
       }
@@ -165,7 +223,7 @@ export class ProactiveRecall {
    * @param {string[]} [context.projectTags] - Phase 2: 项目标签（framework, language）
    * @returns {Promise<{ facts: Array, experiences: Array, keywords: string[], preferredCategories: string[] }>}
    */
-  async recall(userMessage, context = {}) {
+  async recall(userMessage: string, context: RecallContext = {}): Promise<RecallResult> {
     if (!this._isMemoryEnabled()) {
       return { facts: [], experiences: [], keywords: [], preferredCategories: [] };
     }
@@ -177,7 +235,7 @@ export class ProactiveRecall {
 
     // 合并项目标签（Phase 2 注入）
     const allKeywords = context.projectTags
-      ? [...keywords, ...context.projectTags.filter(t => !keywords.includes(t))]
+      ? [...keywords, ...context.projectTags.filter((t) => !keywords.includes(t))]
       : keywords;
     const preferredCategories = inferPreferredCategories(userMessage, allKeywords);
 
@@ -199,7 +257,10 @@ export class ProactiveRecall {
    * @param {string[]} keywords
    * @returns {Promise<Array<{ fact: string, tags: string[], time: string }>>}
    */
-  async _searchFacts(keywords, opts = {}) {
+  async _searchFacts(
+    keywords: string[],
+    opts: { projectPath?: string; preferredCategories?: string[] } = {},
+  ): Promise<FactLike[]> {
     if (!this._factStore || this._factStore.size === 0) return [];
 
     // Phase 4: 使用 HybridRetriever
@@ -218,7 +279,8 @@ export class ProactiveRecall {
       }
       return this._factStore.searchCombined(keywords, 5);
     } catch (err) {
-      console.error(`[proactive-recall] fact search failed: ${err.message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[proactive-recall] fact search failed: ${message}`);
       return [];
     }
   }
@@ -229,7 +291,7 @@ export class ProactiveRecall {
    * @param {string[]} keywords
    * @returns {Promise<Array<{ category: string, content: string }>>}
    */
-  async _scanExperiences(keywords) {
+  async _scanExperiences(keywords: string[]): Promise<ExperienceResult[]> {
     if (!this._experienceDir || !this._experienceIndexPath) return [];
 
     try {
@@ -237,7 +299,7 @@ export class ProactiveRecall {
       if (!index.trim()) return [];
 
       // 扫描索引找到匹配的分类
-      const matchedCategories = [];
+      const matchedCategories: Array<{ category: string; hits: number }> = [];
       const blocks = index.split(/\n(?=# )/);
 
       for (const block of blocks) {
@@ -264,15 +326,15 @@ export class ProactiveRecall {
       matchedCategories.sort((a, b) => b.hits - a.hits);
       const topCategories = matchedCategories.slice(0, 2);
 
-      const results = [];
+      const results: ExperienceResult[] = [];
       for (const { category } of topCategories) {
         const filePath = path.join(this._experienceDir, `${category}.md`);
         const content = _safeReadFile(filePath);
         if (!content.trim()) continue;
 
         // 从分类文件中找到最相关的条目（关键词匹配）
-        const entries = content.split("\n").filter(l => /^\d+\.\s/.test(l.trim()));
-        const scored = entries.map(entry => {
+        const entries = content.split("\n").filter((line) => /^\d+\.\s/.test(line.trim()));
+        const scored = entries.map((entry) => {
           let score = 0;
           const entryLower = entry.toLowerCase();
           for (const kw of keywords) {
@@ -291,7 +353,8 @@ export class ProactiveRecall {
 
       return results.slice(0, 2);
     } catch (err) {
-      console.error(`[proactive-recall] experience scan failed: ${err.message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[proactive-recall] experience scan failed: ${message}`);
       return [];
     }
   }
@@ -305,16 +368,16 @@ export class ProactiveRecall {
    * @param {boolean} isZh - 是否中文
    * @returns {string} - 格式化后的注入文本（空字符串表示无需注入）
    */
-  formatForInjection(result, isZh) {
+  formatForInjection(result: Pick<RecallResult, "facts" | "experiences">, isZh: boolean): string {
     const { facts, experiences } = result;
     if (facts.length === 0 && experiences.length === 0) return "";
 
     const parts = [];
 
     if (facts.length > 0) {
-      const taskFacts = [];
-      const noteFacts = [];
-      const contextFacts = [];
+      const taskFacts: string[] = [];
+      const noteFacts: string[] = [];
+      const contextFacts: string[] = [];
 
       for (const f of facts) {
         const fact = typeof f === "string" ? f : f.fact;
@@ -349,7 +412,7 @@ export class ProactiveRecall {
   }
 }
 
-function _safeReadFile(filePath) {
+function _safeReadFile(filePath: string): string {
   try {
     return fs.readFileSync(filePath, "utf-8");
   } catch {

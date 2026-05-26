@@ -1,5 +1,5 @@
 /**
- * media-utils.js — Bridge 媒体工具层
+ * media-utils.ts — Bridge 媒体工具层
  *
  * 对标 OpenClaw 的 loadWebMedia + splitMediaFromOutput。
  * 集中处理入站媒体下载和出站回复媒体提取。
@@ -10,17 +10,17 @@ import path from "path";
 
 // ── 本地路径安全白名单（对标 OpenClaw mediaLocalRoots）────
 
-let _allowedRoots = [];
+let _allowedRoots: string[] = [];
 
 /**
  * 设置允许读取的本地目录白名单。
  * 由 BridgeManager 初始化时调用，传入 LYNN_HOME 和 workspace。
  */
-export function setMediaLocalRoots(roots) {
+export function setMediaLocalRoots(roots: string[]): void {
   _allowedRoots = roots.map(r => path.resolve(r));
 }
 
-function isPathAllowed(filePath) {
+function isPathAllowed(filePath: string): boolean {
   const resolved = path.resolve(filePath);
   return _allowedRoots.some(root =>
     resolved === root || resolved.startsWith(root + path.sep)
@@ -33,7 +33,7 @@ function isPathAllowed(filePath) {
  * 下载媒体资源，返回 Buffer。
  * 支持 http:// / https:// / data: / 本地路径（需在白名单内）。
  */
-export async function downloadMedia(url) {
+export async function downloadMedia(url: string): Promise<Buffer> {
   if (url.startsWith("data:")) {
     const comma = url.indexOf(",");
     if (comma === -1) throw new Error("invalid data URI");
@@ -48,7 +48,7 @@ export async function downloadMedia(url) {
   const localPath = url.startsWith("file://") ? fileUrlToPath(url) : url;
   if (path.isAbsolute(localPath)) {
     // 解析 symlink 再校验白名单，防止 symlink 绕过
-    let realPath;
+    let realPath: string;
     try { realPath = fs.realpathSync(localPath); }
     catch { throw new Error(`file not found: ${localPath}`); }
     if (!isPathAllowed(realPath)) {
@@ -65,7 +65,7 @@ export async function downloadMedia(url) {
 }
 
 /** file:// URI → 本地路径 */
-function fileUrlToPath(fileUrl) {
+function fileUrlToPath(fileUrl: string): string {
   try { return new URL(fileUrl).pathname; }
   catch { return fileUrl.replace(/^file:\/\//, ""); }
 }
@@ -73,13 +73,22 @@ function fileUrlToPath(fileUrl) {
 /**
  * Buffer → base64 字符串（不含 data: 前缀）
  */
-export function bufferToBase64(buffer) {
+export function bufferToBase64(buffer: Buffer): string {
   return buffer.toString("base64");
 }
 
 // ── MIME 检测（magic bytes）─────────────────────────────
 
-const MAGIC_TABLE = [
+type MagicEntry = {
+  bytes: number[];
+  mime: string;
+  offset?: number;
+  extra?: number[];
+  minLen?: number;
+  check?: (buffer: Buffer) => boolean;
+};
+
+const MAGIC_TABLE: MagicEntry[] = [
   { bytes: [0xFF, 0xD8, 0xFF],                         mime: "image/jpeg" },
   { bytes: [0x89, 0x50, 0x4E, 0x47],                   mime: "image/png" },
   { bytes: [0x47, 0x49, 0x46, 0x38],                   mime: "image/gif" },
@@ -94,7 +103,7 @@ const MAGIC_TABLE = [
  * 检测 Buffer 的真实 MIME（magic bytes 优先）。
  * 检测不出时返回 fallback 或 "application/octet-stream"。
  */
-export function detectMime(buffer, fallback) {
+export function detectMime(buffer: Buffer, fallback?: string): string {
   for (const entry of MAGIC_TABLE) {
     if (buffer.length < entry.bytes.length) continue;
     const match = entry.bytes.every((b, i) => buffer[i] === b);
@@ -129,9 +138,9 @@ const IMG_MD_RE = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/;
  * @param {string} text
  * @returns {{ text: string, mediaUrls: string[] }}
  */
-export function splitMediaFromOutput(text) {
-  const mediaUrls = [];
-  const outputLines = [];
+export function splitMediaFromOutput(text: string): { text: string; mediaUrls: string[] } {
+  const mediaUrls: string[] = [];
+  const outputLines: string[] = [];
   let inFence = false;
 
   for (const line of text.split("\n")) {
@@ -177,7 +186,7 @@ export function splitMediaFromOutput(text) {
   };
 }
 
-function isValidMediaSource(url) {
+function isValidMediaSource(url: string): boolean {
   // HTTP(S) URL
   try {
     const u = new URL(url);
@@ -194,8 +203,8 @@ function isValidMediaSource(url) {
 /**
  * Readable stream → Buffer
  */
-export async function streamToBuffer(stream) {
-  const chunks = [];
+export async function streamToBuffer(stream: AsyncIterable<Buffer | Uint8Array>): Promise<Buffer> {
+  const chunks: Array<Buffer | Uint8Array> = [];
   for await (const chunk of stream) {
     chunks.push(chunk);
   }
@@ -205,7 +214,7 @@ export async function streamToBuffer(stream) {
 /**
  * 格式化文件大小
  */
-export function formatSize(bytes) {
+export function formatSize(bytes: number): string {
   if (!bytes || bytes < 0) return "";
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;

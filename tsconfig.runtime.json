@@ -20,6 +20,8 @@
     "server/**/*.d.ts",
     "core/**/*.ts",
     "core/**/*.d.ts",
+    "hub/**/*.ts",
+    "hub/**/*.d.ts",
     "shared/**/*.ts",
     "shared/**/*.d.ts",
     "lib/**/*.ts",

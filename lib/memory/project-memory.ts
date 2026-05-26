@@ -11,18 +11,61 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 
+interface ProjectDetection {
+  type: string;
+  framework?: string;
+  language?: string;
+  monorepo?: boolean;
+}
+
+interface ProjectDetectionPatch {
+  framework?: string;
+  language?: string;
+  monorepo?: boolean;
+}
+
+interface ProjectDetector {
+  file: string;
+  type: string;
+  detect: (content: string) => ProjectDetectionPatch;
+}
+
+interface ProjectProfile {
+  path: string;
+  name: string;
+  detected: Partial<ProjectDetection>;
+  learned: {
+    architecture: string;
+    conventions: string[];
+    commonIssues: string[];
+  };
+  sessionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ProjectMemoryOptions {
+  projectsDir: string;
+}
+
+interface PackageJsonLike {
+  dependencies?: Record<string, unknown>;
+  devDependencies?: Record<string, unknown>;
+  workspaces?: unknown;
+}
+
 /**
  * 项目类型探测规则
  * 每个规则：{ file: 检测文件, type: 项目类型, detect: (content) => { framework?, language? } }
  */
-const PROJECT_DETECTORS = [
+const PROJECT_DETECTORS: ProjectDetector[] = [
   {
     file: "package.json",
     type: "nodejs",
     detect: (content) => {
-      const result = { language: "JavaScript" };
+      const result: ProjectDetectionPatch = { language: "JavaScript" };
       try {
-        const pkg = JSON.parse(content);
+        const pkg = JSON.parse(content) as PackageJsonLike;
         const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
 
         // TypeScript
@@ -53,7 +96,7 @@ const PROJECT_DETECTORS = [
     file: "Cargo.toml",
     type: "rust",
     detect: (content) => {
-      const result = { language: "Rust" };
+      const result: ProjectDetectionPatch = { language: "Rust" };
       if (content.includes("[workspace]")) result.monorepo = true;
       if (content.includes("actix")) result.framework = "Actix";
       else if (content.includes("axum")) result.framework = "Axum";
@@ -66,7 +109,7 @@ const PROJECT_DETECTORS = [
     file: "go.mod",
     type: "go",
     detect: (content) => {
-      const result = { language: "Go" };
+      const result: ProjectDetectionPatch = { language: "Go" };
       if (content.includes("github.com/gin-gonic/gin")) result.framework = "Gin";
       else if (content.includes("github.com/gofiber/fiber")) result.framework = "Fiber";
       else if (content.includes("github.com/labstack/echo")) result.framework = "Echo";
@@ -77,7 +120,7 @@ const PROJECT_DETECTORS = [
     file: "pyproject.toml",
     type: "python",
     detect: (content) => {
-      const result = { language: "Python" };
+      const result: ProjectDetectionPatch = { language: "Python" };
       if (content.includes("django")) result.framework = "Django";
       else if (content.includes("fastapi")) result.framework = "FastAPI";
       else if (content.includes("flask")) result.framework = "Flask";
@@ -89,7 +132,7 @@ const PROJECT_DETECTORS = [
     file: "requirements.txt",
     type: "python",
     detect: (content) => {
-      const result = { language: "Python" };
+      const result: ProjectDetectionPatch = { language: "Python" };
       const lower = content.toLowerCase();
       if (lower.includes("django")) result.framework = "Django";
       else if (lower.includes("fastapi")) result.framework = "FastAPI";
@@ -101,7 +144,7 @@ const PROJECT_DETECTORS = [
     file: "pom.xml",
     type: "java",
     detect: (content) => {
-      const result = { language: "Java" };
+      const result: ProjectDetectionPatch = { language: "Java" };
       if (content.includes("spring-boot")) result.framework = "Spring Boot";
       return result;
     },
@@ -110,7 +153,7 @@ const PROJECT_DETECTORS = [
     file: "build.gradle",
     type: "java",
     detect: (content) => {
-      const result = { language: "Java" };
+      const result: ProjectDetectionPatch = { language: "Java" };
       if (content.includes("kotlin")) result.language = "Kotlin";
       if (content.includes("spring")) result.framework = "Spring Boot";
       return result;
@@ -120,7 +163,7 @@ const PROJECT_DETECTORS = [
     file: "pubspec.yaml",
     type: "dart",
     detect: (content) => {
-      const result = { language: "Dart" };
+      const result: ProjectDetectionPatch = { language: "Dart" };
       if (content.includes("flutter")) result.framework = "Flutter";
       return result;
     },
@@ -129,7 +172,7 @@ const PROJECT_DETECTORS = [
     file: "Gemfile",
     type: "ruby",
     detect: (content) => {
-      const result = { language: "Ruby" };
+      const result: ProjectDetectionPatch = { language: "Ruby" };
       if (content.includes("rails")) result.framework = "Rails";
       return result;
     },
@@ -138,7 +181,7 @@ const PROJECT_DETECTORS = [
     file: "mix.exs",
     type: "elixir",
     detect: (content) => {
-      const result = { language: "Elixir" };
+      const result: ProjectDetectionPatch = { language: "Elixir" };
       if (content.includes("phoenix")) result.framework = "Phoenix";
       return result;
     },
@@ -147,7 +190,7 @@ const PROJECT_DETECTORS = [
     file: "composer.json",
     type: "php",
     detect: (content) => {
-      const result = { language: "PHP" };
+      const result: ProjectDetectionPatch = { language: "PHP" };
       if (content.includes("laravel")) result.framework = "Laravel";
       return result;
     },
@@ -165,11 +208,14 @@ const PROJECT_DETECTORS = [
 ];
 
 export class ProjectMemory {
+  private readonly _projectsDir: string;
+  private readonly _cache: Map<string, ProjectProfile>;
+
   /**
    * @param {object} opts
    * @param {string} opts.projectsDir - {agentDir}/memory/projects/
    */
-  constructor({ projectsDir }) {
+  constructor({ projectsDir }: ProjectMemoryOptions) {
     this._projectsDir = projectsDir;
     this._cache = new Map(); // pathHash → profile
     fs.mkdirSync(projectsDir, { recursive: true });
@@ -178,14 +224,14 @@ export class ProjectMemory {
   /**
    * 生成路径 hash（稳定、短）
    */
-  _pathHash(cwd) {
+  _pathHash(cwd: string): string {
     return crypto.createHash("md5").update(cwd).digest("hex").slice(0, 12);
   }
 
   /**
    * profile 文件路径
    */
-  _profilePath(cwd) {
+  _profilePath(cwd: string): string {
     return path.join(this._projectsDir, `${this._pathHash(cwd)}.json`);
   }
 
@@ -195,7 +241,7 @@ export class ProjectMemory {
    * @param {string} cwd - 工作目录
    * @returns {{ type: string, framework?: string, language?: string, monorepo?: boolean } | null}
    */
-  detectProject(cwd) {
+  detectProject(cwd: string | null | undefined): ProjectDetection | null {
     if (!cwd) return null;
 
     for (const detector of PROJECT_DETECTORS) {
@@ -219,14 +265,14 @@ export class ProjectMemory {
    * @param {string} cwd - 工作目录
    * @returns {object | null} - 项目 profile
    */
-  getProfile(cwd) {
+  getProfile(cwd: string | null | undefined): ProjectProfile | null {
     if (!cwd) return null;
 
     const hash = this._pathHash(cwd);
 
     // 内存缓存
     if (this._cache.has(hash)) {
-      return this._cache.get(hash);
+      return this._cache.get(hash) ?? null;
     }
 
     // 磁盘读取
@@ -235,7 +281,7 @@ export class ProjectMemory {
 
     try {
       if (fs.existsSync(profilePath)) {
-        profile = JSON.parse(fs.readFileSync(profilePath, "utf-8"));
+        profile = JSON.parse(fs.readFileSync(profilePath, "utf-8")) as ProjectProfile;
       }
     } catch {}
 
@@ -271,7 +317,7 @@ export class ProjectMemory {
    * @param {string} summaryText - session 摘要文本
    * @param {{ model: string, api: string, api_key: string, base_url: string }} resolvedModel
    */
-  async learnFromSession(cwd, summaryText, resolvedModel) {
+  async learnFromSession(cwd: string | null | undefined, summaryText: string, _resolvedModel?: unknown): Promise<void> {
     if (!cwd || !summaryText || summaryText.trim().length < 50) return;
 
     const profile = this.getProfile(cwd);
@@ -291,7 +337,7 @@ export class ProjectMemory {
    * 启发式学习：从摘要中提取项目知识
    * 纯正则/关键词匹配，不调 LLM
    */
-  _learnHeuristic(profile, summaryText) {
+  _learnHeuristic(profile: ProjectProfile, summaryText: string): void {
     const text = summaryText.toLowerCase();
 
     // 提取提到的技术栈（如果 detected 中缺失）
@@ -321,7 +367,7 @@ export class ProjectMemory {
     for (const pattern of issuePatterns) {
       let match;
       while ((match = pattern.exec(summaryText)) !== null) {
-        const issue = match[1].trim();
+        const issue = match[1]?.trim() || "";
         if (issue.length >= 10 && !profile.learned.commonIssues.includes(issue)) {
           profile.learned.commonIssues.push(issue);
           // 最多保留 10 条
@@ -340,7 +386,7 @@ export class ProjectMemory {
    * @param {string} cwd - 工作目录
    * @returns {string} - 格式化文本（空字符串表示无需注入）
    */
-  formatForPrompt(cwd) {
+  formatForPrompt(cwd: string | null | undefined): string {
     if (!cwd) return "";
 
     const profile = this.getProfile(cwd);
@@ -385,14 +431,15 @@ export class ProjectMemory {
   /**
    * 保存 profile 到磁盘
    */
-  _saveProfile(cwd, profile) {
+  _saveProfile(cwd: string, profile: ProjectProfile): void {
     try {
       const profilePath = this._profilePath(cwd);
       fs.writeFileSync(profilePath, JSON.stringify(profile, null, 2), "utf-8");
       // 更新缓存
       this._cache.set(this._pathHash(cwd), profile);
     } catch (err) {
-      console.error(`[project-memory] save failed: ${err.message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[project-memory] save failed: ${message}`);
     }
   }
 }

@@ -18,11 +18,47 @@ import { scrubPII } from "../pii-guard.js";
 import { callText } from "../../core/llm-client.js";
 import { getLocale } from "../../server/i18n.js";
 
+interface SummaryData {
+  session_id: string;
+  created_at?: string;
+  updated_at?: string;
+  summary?: string;
+  snapshot?: string;
+  snapshot_at?: string | null;
+  [key: string]: unknown;
+}
+
+interface MessageContentPart {
+  type?: string;
+  text?: string;
+}
+
+interface ConversationMessage {
+  role: string;
+  content: string | MessageContentPart[] | null | undefined;
+  timestamp?: string;
+}
+
+interface ResolvedSummaryModel {
+  model: string;
+  api: string;
+  api_key: string;
+  base_url: string;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export class SessionSummaryManager {
+  readonly summariesDir: string;
+  private readonly _cache: Map<string, SummaryData>;
+  private _cachePopulated: boolean;
+
   /**
    * @param {string} summariesDir - summaries/ 目录的绝对路径
    */
-  constructor(summariesDir) {
+  constructor(summariesDir: string) {
     this.summariesDir = summariesDir;
     fs.mkdirSync(summariesDir, { recursive: true });
     this._cache = new Map();          // sessionId → summary data
@@ -38,11 +74,11 @@ export class SessionSummaryManager {
    * @param {string} sessionId
    * @returns {object|null}
    */
-  getSummary(sessionId) {
-    if (this._cache.has(sessionId)) return this._cache.get(sessionId);
+  getSummary(sessionId: string): SummaryData | null {
+    if (this._cache.has(sessionId)) return this._cache.get(sessionId) ?? null;
     const fp = this._filePath(sessionId);
     try {
-      const data = JSON.parse(fs.readFileSync(fp, "utf-8"));
+      const data = JSON.parse(fs.readFileSync(fp, "utf-8")) as SummaryData;
       this._cache.set(sessionId, data);
       return data;
     } catch {
@@ -55,7 +91,7 @@ export class SessionSummaryManager {
    * @param {string} sessionId
    * @param {object} data
    */
-  saveSummary(sessionId, data) {
+  saveSummary(sessionId: string, data: SummaryData): void {
     const fp = this._filePath(sessionId);
     fs.mkdirSync(path.dirname(fp), { recursive: true });
     const tmp = fp + ".tmp";
@@ -72,9 +108,9 @@ export class SessionSummaryManager {
    * 获取所有"脏" session（summary !== snapshot）
    * @returns {Array<{ session_id, summary, snapshot, snapshot_at, updated_at }>}
    */
-  getDirtySessions() {
+  getDirtySessions(): SummaryData[] {
     this._ensureCachePopulated();
-    const dirty = [];
+    const dirty: SummaryData[] = [];
     for (const data of this._cache.values()) {
       if (!data?.summary) continue;
       if (data.summary !== (data.snapshot || "")) {
@@ -88,7 +124,7 @@ export class SessionSummaryManager {
    * 标记 session 已被深度记忆处理（snapshot = summary）
    * @param {string} sessionId
    */
-  markProcessed(sessionId) {
+  markProcessed(sessionId: string): void {
     const data = this.getSummary(sessionId);
     if (!data) return;
 
@@ -105,9 +141,9 @@ export class SessionSummaryManager {
    * 获取所有摘要（按 updated_at 降序）
    * @returns {Array<object>}
    */
-  getAllSummaries() {
+  getAllSummaries(): SummaryData[] {
     this._ensureCachePopulated();
-    const summaries = [];
+    const summaries: SummaryData[] = [];
     for (const data of this._cache.values()) {
       if (data?.summary) summaries.push(data);
     }
@@ -116,14 +152,14 @@ export class SessionSummaryManager {
   }
 
   /** 首次调用时做一次全量扫描填充缓存 */
-  _ensureCachePopulated() {
+  _ensureCachePopulated(): void {
     if (this._cachePopulated) return;
     const files = this._listFiles();
     for (const file of files) {
       try {
-        const data = JSON.parse(fs.readFileSync(file, "utf-8"));
+        const data = JSON.parse(fs.readFileSync(file, "utf-8")) as SummaryData;
         if (data?.session_id) this._cache.set(data.session_id, data);
-      } catch (e) { console.warn("[session-summary]", e.message || e); }
+      } catch (e) { console.warn("[session-summary]", errorMessage(e)); }
     }
     this._cachePopulated = true;
   }
@@ -134,7 +170,7 @@ export class SessionSummaryManager {
    * @param {Date} endDate
    * @returns {Array<object>}
    */
-  getSummariesInRange(startDate, endDate) {
+  getSummariesInRange(startDate: Date, endDate: Date): SummaryData[] {
     const startISO = startDate.toISOString();
     const endISO = endDate.toISOString();
 
@@ -148,14 +184,14 @@ export class SessionSummaryManager {
   //  内部
   // ════════════════════════════
 
-  _filePath(sessionId) {
+  _filePath(sessionId: string): string {
     // session 文件名可能包含时间戳前缀（如 1234567890_uuid），
     // 直接取 uuid 部分（去掉 .jsonl 后缀和时间戳前缀）
     const cleanId = sessionId.replace(/\.jsonl$/, "");
     return path.join(this.summariesDir, `${cleanId}.json`);
   }
 
-  _listFiles() {
+  _listFiles(): string[] {
     try {
       return fs.readdirSync(this.summariesDir)
         .filter((f) => f.endsWith(".json"))
@@ -170,7 +206,7 @@ export class SessionSummaryManager {
    * @param {Array<{role: string, content: any, timestamp?: string}>} messages
    * @returns {string}
    */
-  _buildConversationText(messages) {
+  _buildConversationText(messages: ConversationMessage[]): string {
     const ASSISTANT_CAP = 300; // 助手消息截断上限（字符）
     const parts = [];
 
@@ -218,7 +254,11 @@ export class SessionSummaryManager {
    * @param {{ model: string, api: string, api_key: string, base_url: string }} resolvedModel
    * @returns {Promise<string>} 更新后的摘要文本
    */
-  async rollingSummary(sessionId, messages, resolvedModel) {
+  async rollingSummary(
+    sessionId: string,
+    messages: ConversationMessage[],
+    resolvedModel: ResolvedSummaryModel,
+  ): Promise<string> {
     const existing = this.getSummary(sessionId);
     const prevSummary = existing?.summary || "";
 
@@ -257,7 +297,12 @@ export class SessionSummaryManager {
    * @param {{ model: string, api: string, api_key: string, base_url: string }} resolvedModel
    * @returns {Promise<string>}
    */
-  async _callRollingLLM(convText, prevSummary, resolvedModel, turnCount = 10) {
+  async _callRollingLLM(
+    convText: string,
+    prevSummary: string,
+    resolvedModel: ResolvedSummaryModel,
+    turnCount = 10,
+  ): Promise<string> {
     const { model: utilityModel, api, api_key, base_url } = resolvedModel;
 
     const isZh = getLocale().startsWith("zh");
@@ -345,12 +390,12 @@ Word limit: write according to actual information, max ${eventsWordBudget} words
   }
 
   /** 从 message 的 content 提取纯文本 */
-  _extractText(msg) {
+  _extractText(msg: ConversationMessage): string {
     if (!msg.content) return "";
     if (typeof msg.content === "string") return msg.content;
     return msg.content
       .filter((c) => c.type === "text")
-      .map((c) => c.text)
+      .map((c) => c.text || "")
       .join("\n");
   }
 }
