@@ -8,14 +8,34 @@
 import fs from "fs";
 import path from "path";
 
-const ACTIVE_STATUSES = new Set(["idle", "active", "blocked", "done"]);
+export type ActiveTaskStatus = "idle" | "active" | "blocked" | "done";
 
-function cleanString(value, maxLength = 500) {
+export interface ActiveTaskState {
+  title: string;
+  status: ActiveTaskStatus;
+  goal: string;
+  next_step: string;
+  project_path: string;
+  notes: string[];
+  evidence: string[];
+  source: string;
+  updated_at: string;
+}
+
+export type ActiveTaskInput = Partial<ActiveTaskState> & {
+  nextStep?: unknown;
+  projectPath?: unknown;
+  updatedAt?: unknown;
+};
+
+const ACTIVE_STATUSES = new Set<ActiveTaskStatus>(["idle", "active", "blocked", "done"]);
+
+function cleanString(value: unknown, maxLength = 500): string {
   if (typeof value !== "string") return "";
   return value.trim().slice(0, maxLength);
 }
 
-function cleanArray(value, maxItems = 6, maxLength = 300) {
+function cleanArray(value: unknown, maxItems = 6, maxLength = 300): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .map((item) => cleanString(item, maxLength))
@@ -23,38 +43,42 @@ function cleanArray(value, maxItems = 6, maxLength = 300) {
     .slice(0, maxItems);
 }
 
-function normalizeStatus(value) {
+function normalizeStatus(value: unknown): ActiveTaskStatus {
   const status = cleanString(value, 30).toLowerCase().replace(/\s+/g, "_");
-  return ACTIVE_STATUSES.has(status) ? status : "active";
+  return ACTIVE_STATUSES.has(status as ActiveTaskStatus) ? status as ActiveTaskStatus : "active";
 }
 
-function normalizeTask(input = {}) {
+function isTaskInput(value: unknown): ActiveTaskInput {
+  return typeof value === "object" && value !== null ? value as ActiveTaskInput : {};
+}
+
+function normalizeTask(input: ActiveTaskInput = {}): ActiveTaskState {
   const now = new Date().toISOString();
+  const source = isTaskInput(input);
   return {
-    title: cleanString(input.title, 160),
-    status: normalizeStatus(input.status),
-    goal: cleanString(input.goal, 800),
-    next_step: cleanString(input.next_step ?? input.nextStep, 500),
-    project_path: cleanString(input.project_path ?? input.projectPath, 500),
-    notes: cleanArray(input.notes),
-    evidence: cleanArray(input.evidence),
-    source: cleanString(input.source, 120),
-    updated_at: cleanString(input.updated_at ?? input.updatedAt, 80) || now,
+    title: cleanString(source.title, 160),
+    status: normalizeStatus(source.status),
+    goal: cleanString(source.goal, 800),
+    next_step: cleanString(source.next_step ?? source.nextStep, 500),
+    project_path: cleanString(source.project_path ?? source.projectPath, 500),
+    notes: cleanArray(source.notes),
+    evidence: cleanArray(source.evidence),
+    source: cleanString(source.source, 120),
+    updated_at: cleanString(source.updated_at ?? source.updatedAt, 80) || now,
   };
 }
 
 export class ActiveTaskMemory {
-  /**
-   * @param {{ filePath: string }} opts
-   */
-  constructor({ filePath }) {
+  private filePath: string;
+
+  constructor({ filePath }: { filePath: string }) {
     this.filePath = filePath;
   }
 
-  get() {
+  get(): ActiveTaskState | null {
     try {
       if (!this.filePath || !fs.existsSync(this.filePath)) return null;
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf-8"));
+      const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf-8")) as ActiveTaskInput;
       const task = normalizeTask(parsed);
       return task.title || task.goal || task.next_step || task.notes.length > 0 ? task : null;
     } catch {
@@ -62,7 +86,7 @@ export class ActiveTaskMemory {
     }
   }
 
-  set(task) {
+  set(task: ActiveTaskInput): ActiveTaskState {
     const normalized = normalizeTask(task);
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
     const tmpPath = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
@@ -71,7 +95,7 @@ export class ActiveTaskMemory {
     return normalized;
   }
 
-  patch(partial) {
+  patch(partial: ActiveTaskInput): ActiveTaskState {
     return this.set({
       ...(this.get() || {}),
       ...(partial || {}),
@@ -79,13 +103,13 @@ export class ActiveTaskMemory {
     });
   }
 
-  clear() {
+  clear(): void {
     try {
       if (this.filePath && fs.existsSync(this.filePath)) fs.unlinkSync(this.filePath);
     } catch {}
   }
 
-  formatForPrompt(isZh = true) {
+  formatForPrompt(isZh = true): string {
     const task = this.get();
     if (!task || task.status === "idle" || task.status === "done") return "";
 

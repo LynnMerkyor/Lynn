@@ -6,9 +6,25 @@
 
 import { Type } from "@sinclair/typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
+import type { ActiveTaskInput, ActiveTaskMemory } from "../memory/active-task.js";
 
-function pickTaskParams(params = {}) {
-  const picked = {
+type ActiveTaskAction = "get" | "set" | "patch" | "clear";
+
+type ActiveTaskToolParams = ActiveTaskInput & {
+  action?: ActiveTaskAction | string;
+};
+
+type ActiveTaskToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+type ActiveTaskToolOptions = {
+  onUpdated?: () => void;
+};
+
+function pickTaskParams(params: ActiveTaskToolParams = {}): ActiveTaskInput {
+  const picked: ActiveTaskInput = {
     title: params.title,
     status: params.status,
     goal: params.goal,
@@ -18,13 +34,16 @@ function pickTaskParams(params = {}) {
     evidence: params.evidence,
     source: "active_task_tool",
   };
-  for (const key of Object.keys(picked)) {
+  for (const key of Object.keys(picked) as Array<keyof ActiveTaskInput>) {
     if (picked[key] === undefined) delete picked[key];
   }
   return picked;
 }
 
-export function createActiveTaskTool(activeTaskMemory, { onUpdated } = {}) {
+export function createActiveTaskTool(
+  activeTaskMemory: ActiveTaskMemory | null | undefined,
+  { onUpdated }: ActiveTaskToolOptions = {},
+) {
   return {
     name: "active_task",
     label: "Active Task",
@@ -43,7 +62,7 @@ export function createActiveTaskTool(activeTaskMemory, { onUpdated } = {}) {
       notes: Type.Optional(Type.Array(Type.String(), { description: "Important constraints or pitfalls" })),
       evidence: Type.Optional(Type.Array(Type.String(), { description: "Short evidence items such as test names or benchmark outputs" })),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: ActiveTaskToolParams): Promise<ActiveTaskToolResult> => {
       if (!activeTaskMemory) {
         return {
           content: [{ type: "text", text: "Active task storage is unavailable." }],
