@@ -12,6 +12,60 @@
 import { Type } from "@sinclair/typebox";
 import { t } from "../../server/i18n.js";
 
+interface MemoryFact {
+  id: string | number;
+  fact: string;
+  tags: string[];
+  category?: string;
+  confidence?: number;
+  evidence?: string;
+  time?: string;
+  source?: string;
+  score?: number;
+  vectorScore?: number;
+  matchCount?: number;
+  [key: string]: unknown;
+}
+
+interface RelatedFact {
+  relation: string;
+  fact: string;
+  category?: string;
+}
+
+interface MemoryFactStore {
+  size: number;
+  searchByCategory?: (category: string, limit: number) => MemoryFact[];
+  searchByTags: (tags: string[], dateRange?: { from?: string; to?: string }, limit?: number) => MemoryFact[];
+  searchFullText: (query: string, limit?: number) => MemoryFact[];
+  getRelatedFacts?: (ids: Array<string | number>) => Map<string | number, RelatedFact[]>;
+}
+
+interface MemoryRetriever {
+  search: (keywords: string[], limit: number) => Promise<MemoryFact[]>;
+}
+
+interface MemorySearchOptions {
+  retriever?: MemoryRetriever | null;
+}
+
+interface MemorySearchParams {
+  query?: string;
+  tags?: string[];
+  category?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
+type MemorySearchResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /**
  * 创建 search_memory 工具定义
  * @param {import('./fact-store.js').FactStore} factStore
@@ -19,7 +73,7 @@ import { t } from "../../server/i18n.js";
  * @param {import('./retriever.js').HybridRetriever} [opts.retriever] - Phase 4 混合检索器
  * @returns {import('@mariozechner/pi-coding-agent').ToolDefinition}
  */
-export function createMemorySearchTool(factStore, opts = {}) {
+export function createMemorySearchTool(factStore: MemoryFactStore, opts: MemorySearchOptions = {}) {
   const retriever = opts.retriever || null;
 
   return {
@@ -43,7 +97,7 @@ export function createMemorySearchTool(factStore, opts = {}) {
         Type.String({ description: t("error.memorySearchDateToDesc") }),
       ),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: MemorySearchParams): Promise<MemorySearchResult> => {
       try {
         const t0 = performance.now();
 
@@ -54,37 +108,37 @@ export function createMemorySearchTool(factStore, opts = {}) {
           };
         }
 
-        const dateRange = {};
+        const dateRange: { from?: string; to?: string } = {};
         if (params.date_from) dateRange.from = params.date_from;
         if (params.date_to) dateRange.to = params.date_to + "T23:59";
 
-        let results = [];
+        let results: MemoryFact[] = [];
         const normalizedCategory = params.category ? String(params.category).trim().toLowerCase() : "";
 
-        if (normalizedCategory && !(params.tags?.length > 0) && !params.query) {
-          results = factStore.searchByCategory(normalizedCategory, 15).map((r) => ({
+        if (normalizedCategory && !((params.tags?.length || 0) > 0) && !params.query) {
+          results = (factStore.searchByCategory?.(normalizedCategory, 15) || []).map((r) => ({
             ...r,
             source: "category",
           }));
         }
         // Phase 4: 优先使用 HybridRetriever
-        else if (retriever && ((params.tags?.length > 0) || params.query)) {
+        else if (retriever && (((params.tags?.length || 0) > 0) || params.query)) {
           const keywords = [...(params.tags || [])];
           // 将 query 中的词也加入关键词
           if (params.query) {
-            const queryWords = params.query.trim().split(/\s+/).filter(w => w.length >= 2);
+            const queryWords = params.query.trim().split(/\s+/).filter((w) => w.length >= 2);
             for (const w of queryWords) {
               if (!keywords.includes(w)) keywords.push(w);
             }
           }
           const hybridResults = await retriever.search(keywords, 15);
-          results = hybridResults.map(r => ({
+          results = hybridResults.map((r) => ({
             ...r,
-            source: r.vectorScore > 0.2 ? "vector" : (r.score > 1.5 ? "tag" : "fts"),
+            source: (r.vectorScore || 0) > 0.2 ? "vector" : ((r.score || 0) > 1.5 ? "tag" : "fts"),
           }));
         } else {
           // 回退到原始逻辑
-          const seenIds = new Set();
+          const seenIds = new Set<string | number>();
 
           // 策略 1：标签匹配（优先）
           if (params.tags && params.tags.length > 0) {
@@ -150,7 +204,7 @@ export function createMemorySearchTool(factStore, opts = {}) {
           const confidenceStr = typeof r.confidence === "number" ? ` · ${(r.confidence * 100).toFixed(0)}%` : "";
           const evidenceStr = r.evidence ? `\n   ↳ ${r.evidence}` : "";
           const links = relatedFacts.get(r.id) || [];
-          const relationLines = links.slice(0, 3).map((link) =>
+          const relationLines = links.slice(0, 3).map((link: RelatedFact) =>
             `\n   ↳ ${link.relation}: ${link.fact}${link.category ? ` [${link.category}]` : ""}`,
           ).join("");
           return `${i + 1}. ${r.fact}${categoryStr}${tagsStr}${timeStr}${confidenceStr}${evidenceStr}${relationLines}`;
@@ -162,7 +216,7 @@ export function createMemorySearchTool(factStore, opts = {}) {
         };
       } catch (err) {
         return {
-          content: [{ type: "text", text: t("error.memorySearchError", { msg: err.message }) }],
+            content: [{ type: "text", text: t("error.memorySearchError", { msg: errorMessage(err) }) }],
           details: {},
         };
       }
