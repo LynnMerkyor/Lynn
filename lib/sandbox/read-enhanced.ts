@@ -14,22 +14,42 @@
 import { readFile as fsReadFile } from "fs/promises";
 import { extname, basename as pathBasename } from "path";
 
+interface ToolResultContent {
+  type: "text";
+  text: string;
+}
+
+interface ToolResult {
+  content: ToolResultContent[];
+  isError?: boolean;
+  details?: { fuzzyHint: string[] };
+}
+
+interface ReadToolParams {
+  path?: string;
+}
+
+interface ReadToolLike {
+  execute: (toolCallId: unknown, params: ReadToolParams, ...rest: unknown[]) => Promise<unknown>;
+  [key: string]: unknown;
+}
+
 // ── xlsx → 纯文本 ──
 
-async function xlsxToText(filePath) {
+async function xlsxToText(filePath: string): Promise<string> {
   const ExcelJS = (await import("exceljs")).default;
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
 
-  const parts = [];
+  const parts: string[] = [];
   for (const sheet of workbook.worksheets) {
     if (sheet.rowCount === 0) continue;
     parts.push(`[Sheet: ${sheet.name}]`);
 
     // 收集所有行的文本
-    const rows = [];
+    const rows: string[][] = [];
     sheet.eachRow((row) => {
-      const cells = [];
+      const cells: string[] = [];
       for (let i = 1; i <= sheet.columnCount; i++) {
         cells.push(String(row.getCell(i).text).replace(/\t/g, " "));
       }
@@ -37,7 +57,7 @@ async function xlsxToText(filePath) {
     });
 
     // 计算每列最大宽度（上限 40 字符），对齐输出
-    const colWidths = [];
+    const colWidths: number[] = [];
     for (let c = 0; c < (rows[0]?.length || 0); c++) {
       let max = 0;
       for (const row of rows) {
@@ -64,7 +84,7 @@ async function xlsxToText(filePath) {
 
 // ── docx → 纯文本 ──
 
-async function docxToText(filePath) {
+async function docxToText(filePath: string): Promise<string> {
   const mammoth = (await import("mammoth")).default;
   const result = await mammoth.extractRawText({ path: filePath });
   return result.value;
@@ -76,7 +96,7 @@ async function docxToText(filePath) {
  * 检查 buffer 是否是合法的 UTF-8。
  * 非法 UTF-8 序列会被 TextDecoder 替换为 U+FFFD，统计替换数判断。
  */
-function isValidUtf8(buffer) {
+function isValidUtf8(buffer: Buffer): boolean {
   // 有 UTF-8 BOM 直接认定
   if (buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) return true;
 
@@ -96,7 +116,7 @@ function isValidUtf8(buffer) {
   }
 }
 
-function decodeBuffer(buffer) {
+function decodeBuffer(buffer: Buffer): string {
   if (isValidUtf8(buffer)) {
     // 去掉 UTF-8 BOM
     if (buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
@@ -131,7 +151,10 @@ const TEXT_LIKE_EXTS = new Set([
  * 只在 requestedPath 是纯文件名(不含 / \)时启用 —— 模型给全路径仍 ENOENT 说明路径错、不该猜。
  * 返回命中路径数组(最多 5 个),无命中或异常返回 null。
  */
-async function suggestFuzzyPath(requestedPath, cwd) {
+async function suggestFuzzyPath(
+  requestedPath: string | null | undefined,
+  cwd: string | null | undefined,
+): Promise<string[] | null> {
   if (!requestedPath || !cwd) return null;
   const hasSep = requestedPath.includes("/") || requestedPath.includes("\\");
   if (hasSep) return null;
@@ -166,7 +189,7 @@ async function suggestFuzzyPath(requestedPath, cwd) {
  * 返回结果是正常 tool result(不是抛错),这样模型能看到并据此重试正确路径,
  * 而不是循环调 read 撞同一个 ENOENT。
  */
-export function wrapReadToolWithFuzzy(tool, cwd) {
+export function wrapReadToolWithFuzzy<T extends ReadToolLike>(tool: T, cwd: string | null | undefined): T {
   const origExecute = tool.execute.bind(tool);
   return {
     ...tool,
@@ -174,7 +197,7 @@ export function wrapReadToolWithFuzzy(tool, cwd) {
       try {
         return await origExecute(toolCallId, params, ...rest);
       } catch (err) {
-        const msg = err?.message || String(err || "");
+        const msg = errorMessage(err);
         const isMissing = /ENOENT|no such file|not found/i.test(msg);
         if (!isMissing || !params?.path) throw err;
         const suggestions = await suggestFuzzyPath(params.path, cwd);
@@ -183,7 +206,7 @@ export function wrapReadToolWithFuzzy(tool, cwd) {
           return {
             content: [{ type: "text", text: `文件不存在: ${params.path}\n(在当前工作目录下未找到同名文件，请用 ls 或 grep 确认路径后重试)` }],
             isError: true,
-          };
+          } satisfies ToolResult;
         }
         const hint = suggestions.length === 1
           ? `文件不存在: ${params.path}\n\n在工作区找到一个候选 → 请用完整路径重试:\n  ${suggestions[0]}`
@@ -191,18 +214,18 @@ export function wrapReadToolWithFuzzy(tool, cwd) {
         return {
           content: [{ type: "text", text: hint }],
           details: { fuzzyHint: suggestions },
-        };
+        } satisfies ToolResult;
       }
     },
-  };
+  } as T;
 }
 
 /**
  * 创建增强的 readFile 函数，作为 PI SDK read tool 的 operations.readFile
  * @returns {(absolutePath: string) => Promise<Buffer>}
  */
-export function createEnhancedReadFile() {
-  return async (absolutePath) => {
+export function createEnhancedReadFile(): (absolutePath: string) => Promise<Buffer> {
+  return async (absolutePath: string): Promise<Buffer> => {
     const ext = extname(absolutePath).toLowerCase();
 
     // xlsx/xls → 解析为纯文本，返回 UTF-8 buffer
@@ -213,7 +236,7 @@ export function createEnhancedReadFile() {
       } catch (err) {
         // 解析失败，返回错误提示而非乱码
         const { t } = await import("../../server/i18n.js");
-        return Buffer.from(`[${t("error.xlsxParseFailed", { ext, msg: err.message })}]`, "utf-8");
+        return Buffer.from(`[${t("error.xlsxParseFailed", { ext, msg: errorMessage(err) })}]`, "utf-8");
       }
     }
 
@@ -224,7 +247,7 @@ export function createEnhancedReadFile() {
         return Buffer.from(text, "utf-8");
       } catch (err) {
         const { t } = await import("../../server/i18n.js");
-        return Buffer.from(`[${t("error.docxParseFailed", { ext, msg: err.message })}]`, "utf-8");
+        return Buffer.from(`[${t("error.docxParseFailed", { ext, msg: errorMessage(err) })}]`, "utf-8");
       }
     }
 
@@ -240,4 +263,8 @@ export function createEnhancedReadFile() {
     // 其他文件：原样返回（图片等由 PI SDK 自己处理）
     return buffer;
   };
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err || "");
 }
