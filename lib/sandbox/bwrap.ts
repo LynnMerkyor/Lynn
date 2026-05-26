@@ -10,13 +10,28 @@ import path from "path";
 import os from "os";
 import { spawnAndStream } from "./exec-helper.js";
 import { writeScript, cleanup } from "./script.js";
+import type { SpawnAndStreamResult } from "./exec-helper.js";
+import type { StandardSandboxPolicy } from "./policy.js";
+
+interface SandboxExecOptions {
+  onData: (data: Buffer) => void;
+  signal?: AbortSignal;
+  timeout?: number;
+  env?: NodeJS.ProcessEnv;
+}
+
+type SandboxExec = (
+  command: string,
+  cwd: string,
+  opts: SandboxExecOptions,
+) => Promise<SpawnAndStreamResult>;
 
 /**
  * 创建 Linux 沙盒化的 exec 函数
  * @param {object} policy  从 deriveSandboxPolicy() 得到
  * @returns {(command, cwd, opts) => Promise<{exitCode}>}
  */
-export function createBwrapExec(policy) {
+export function createBwrapExec(policy: StandardSandboxPolicy): SandboxExec {
   return async (command, cwd, { onData, signal, timeout, env }) => {
     const { scriptPath } = writeScript(command, cwd);
     const args = buildArgs(policy, env);
@@ -35,7 +50,7 @@ export function createBwrapExec(policy) {
 /**
  * 构造 bwrap 参数
  */
-function buildArgs(policy, env) {
+function buildArgs(policy: StandardSandboxPolicy, env?: NodeJS.ProcessEnv): string[] {
   const args = [
     "--ro-bind", "/", "/",
     "--dev", "/dev",

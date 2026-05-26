@@ -10,6 +10,18 @@
 
 import { spawn } from "child_process";
 
+export interface SpawnAndStreamOptions {
+  cwd: string;
+  env?: NodeJS.ProcessEnv;
+  onData: (data: Buffer) => void;
+  signal?: AbortSignal;
+  timeout?: number;
+}
+
+export interface SpawnAndStreamResult {
+  exitCode: number | null;
+}
+
 /**
  * @param {string} cmd  可执行文件路径（sandbox-exec / bwrap）
  * @param {string[]} args  argv 数组
@@ -21,7 +33,11 @@ import { spawn } from "child_process";
  * @param {number} [opts.timeout]  秒
  * @returns {Promise<{exitCode: number|null}>}
  */
-export function spawnAndStream(cmd, args, { cwd, env, onData, signal, timeout }) {
+export function spawnAndStream(
+  cmd: string,
+  args: string[],
+  { cwd, env, onData, signal, timeout }: SpawnAndStreamOptions,
+): Promise<SpawnAndStreamResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
       cwd,
@@ -40,7 +56,7 @@ export function spawnAndStream(cmd, args, { cwd, env, onData, signal, timeout })
     let timedOut = false;
 
     // timeout：标记 + 杀进程，close 里再 reject
-    let timer;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     if (timeout != null && timeout > 0) {
       timer = setTimeout(() => {
         timedOut = true;
@@ -82,7 +98,7 @@ export function spawnAndStream(cmd, args, { cwd, env, onData, signal, timeout })
   });
 }
 
-function killTree(pid) {
+function killTree(pid: number | undefined): void {
   if (!pid) return;
   if (process.platform === "win32") {
     try {

@@ -8,13 +8,28 @@
 import fs from "fs";
 import { spawnAndStream } from "./exec-helper.js";
 import { writeScript, writeProfile, cleanup } from "./script.js";
+import type { SpawnAndStreamResult } from "./exec-helper.js";
+import type { StandardSandboxPolicy } from "./policy.js";
+
+interface SandboxExecOptions {
+  onData: (data: Buffer) => void;
+  signal?: AbortSignal;
+  timeout?: number;
+  env?: NodeJS.ProcessEnv;
+}
+
+type SandboxExec = (
+  command: string,
+  cwd: string,
+  opts: SandboxExecOptions,
+) => Promise<SpawnAndStreamResult>;
 
 /**
  * 创建 macOS 沙盒化的 exec 函数
  * @param {object} policy  从 deriveSandboxPolicy() 得到
  * @returns {(command, cwd, opts) => Promise<{exitCode}>}
  */
-export function createSeatbeltExec(policy) {
+export function createSeatbeltExec(policy: StandardSandboxPolicy): SandboxExec {
   return async (command, cwd, { onData, signal, timeout, env }) => {
     const { scriptPath } = writeScript(command, cwd);
     const profile = generateProfile(policy);
@@ -34,7 +49,7 @@ export function createSeatbeltExec(policy) {
 /**
  * 解析真实路径（符号链接 + macOS /var → /private/var）
  */
-function realpath(p) {
+function realpath(p: string): string {
   try {
     return fs.realpathSync(p);
   } catch {
@@ -45,7 +60,7 @@ function realpath(p) {
 /**
  * 生成 Seatbelt SBPL profile
  */
-function generateProfile(policy) {
+function generateProfile(policy: StandardSandboxPolicy): string {
   const lines = [
     "(version 1)",
     "(deny default)",
