@@ -1,5 +1,5 @@
 /**
- * time-utils.js — 日界线 + 逻辑日期工具
+ * time-utils.ts — 日界线 + 逻辑日期工具
  *
  * 系统全局以凌晨 4:00 为日界线（4:00 前算前一天）。
  * 日记、记忆编译、滚动摘要等模块共享此定义。
@@ -7,12 +7,18 @@
 
 export const DAY_BOUNDARY_HOUR = 4;
 
+interface LogicalDayResult {
+  logicalDate: string;
+  rangeStart: Date;
+  rangeEnd: Date;
+}
+
 /**
  * 计算逻辑日期：4:00 前算前一天
- * @param {Date} [now]
- * @returns {{ logicalDate: string, rangeStart: Date, rangeEnd: Date }}
+ * @param now
+ * @returns
  */
-export function getLogicalDay(now = new Date()) {
+export function getLogicalDay(now: Date = new Date()): LogicalDayResult {
   const base = new Date(now);
   if (base.getHours() < DAY_BOUNDARY_HOUR) base.setDate(base.getDate() - 1);
 
