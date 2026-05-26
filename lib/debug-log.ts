@@ -1,5 +1,5 @@
 /**
- * debug-log.js — 持久化调试日志
+ * debug-log.ts — 持久化调试日志
  *
  * 每次 server 启动时创建一个日志文件（按时间戳命名），
  * 运行期间追加写入，关闭后下次启动写新的。
@@ -21,13 +21,51 @@ const LEVEL_VALUES = Object.freeze({
   SILENT: Infinity,
 });
 
-function normalizeLevel(level, fallback = "INFO") {
-  const key = String(level || "").trim().toUpperCase();
-  return LEVEL_VALUES[key] != null ? key : fallback;
+type LogLevel = keyof typeof LEVEL_VALUES;
+
+interface LogFilter {
+  defaultLevel: LogLevel;
+  modules: Map<string, LogLevel>;
 }
 
-function parseLogFilter(raw) {
-  const filter = { defaultLevel: "INFO", modules: new Map() };
+interface DedupState {
+  level: LogLevel | null;
+  module: string | null;
+  msg: string | null;
+  count: number;
+}
+
+interface HeaderInfo {
+  model?: unknown;
+  agent?: unknown;
+  agentId?: unknown;
+  utilityModel?: unknown;
+  channelsDir?: unknown;
+  [key: string]: unknown;
+}
+
+type SpanFields = Record<string, unknown> & { module?: unknown };
+
+interface SpanOptions {
+  module?: string;
+  level?: LogLevel;
+}
+
+export interface ModuleLogger {
+  trace(msg: unknown): void;
+  debug(msg: unknown): void;
+  log(msg: unknown): void;
+  warn(msg: unknown): void;
+  error(msg: unknown): void;
+}
+
+function normalizeLevel(level: unknown, fallback: LogLevel = "INFO"): LogLevel {
+  const key = String(level || "").trim().toUpperCase();
+  return LEVEL_VALUES[key as LogLevel] != null ? key as LogLevel : fallback;
+}
+
+function parseLogFilter(raw: unknown): LogFilter {
+  const filter: LogFilter = { defaultLevel: "INFO", modules: new Map<string, LogLevel>() };
   const source = String(raw || "").trim();
   if (!source) return filter;
 
@@ -45,7 +83,7 @@ function parseLogFilter(raw) {
   return filter;
 }
 
-function stableValue(value) {
+function stableValue(value: unknown): string {
   if (value == null) return String(value);
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -56,11 +94,18 @@ function stableValue(value) {
   }
 }
 
-class DebugLog {
+export class DebugLog {
+  private _filePath: string;
+  private _logDir: string;
+  private _size: number;
+  private _truncated: boolean;
+  private _filter: LogFilter;
+  private _dedup: DedupState;
+
   /**
-   * @param {string} logDir - 日志目录路径（如 ~/.lynn/logs）
+   * @param logDir - 日志目录路径（如 ~/.lynn/logs）
    */
-  constructor(logDir) {
+  constructor(logDir: string) {
     fs.mkdirSync(logDir, { recursive: true });
 
     const now = new Date();
@@ -87,14 +132,14 @@ class DebugLog {
     this._cleanup(7);
   }
 
-  get filePath() { return this._filePath; }
+  get filePath(): string { return this._filePath; }
 
   /**
    * 写启动头部信息
-   * @param {string} version - 应用版本号
-   * @param {object} info - 启动信息
+   * @param version - 应用版本号
+   * @param info - 启动信息
    */
-  header(version, info = {}) {
+  header(version: string, info: HeaderInfo = {}): void {
     const lines = [
       "═".repeat(60),
       `Lynn v${version} — started at ${new Date().toISOString()}`,
@@ -114,38 +159,38 @@ class DebugLog {
   /**
    * 写关闭标记
    */
-  close() {
+  close(): void {
     this._flushDedup();
     this._write("INFO", "system", "Server shutting down");
     fs.appendFileSync(this._filePath, "\n" + "═".repeat(60) + "\n", "utf-8");
   }
 
   /** INFO 级别日志 */
-  log(module, msg) {
+  log(module: string, msg: unknown): void {
     this._write("INFO", module, msg);
   }
 
   /** TRACE 级别日志 */
-  trace(module, msg) {
+  trace(module: string, msg: unknown): void {
     this._write("TRACE", module, msg);
   }
 
   /** DEBUG 级别日志 */
-  debug(module, msg) {
+  debug(module: string, msg: unknown): void {
     this._write("DEBUG", module, msg);
   }
 
   /** ERROR 级别日志 */
-  error(module, msg) {
+  error(module: string, msg: unknown): void {
     this._write("ERROR", module, msg);
   }
 
   /** WARN 级别日志 */
-  warn(module, msg) {
+  warn(module: string, msg: unknown): void {
     this._write("WARN", module, msg);
   }
 
-  span(name, fields = {}, opts = {}) {
+  span(name: string, fields: SpanFields = {}, opts: SpanOptions = {}): void {
     const module = opts.module || fields.module || "span";
     const level = normalizeLevel(opts.level || "INFO");
     const payload = Object.entries(fields || {})
@@ -157,10 +202,10 @@ class DebugLog {
 
   /**
    * 读取最近 N 行日志
-   * @param {number} n - 行数
-   * @returns {string[]}
+   * @param n - 行数
+   * @returns 最近的日志行
    */
-  tail(n = 100) {
+  tail(n = 100): string[] {
     try {
       const content = fs.readFileSync(this._filePath, "utf-8");
       const lines = content.split("\n");
@@ -171,16 +216,16 @@ class DebugLog {
   }
 
   /** 对消息做隐私清洗后写入（含去重判断） */
-  _write(level, module, msg) {
-    level = normalizeLevel(level);
-    module = String(module || "app");
-    if (!this._shouldWrite(level, module)) return;
+  _write(level: unknown, module: unknown, msg: unknown): void {
+    const normalizedLevel = normalizeLevel(level);
+    const normalizedModule = String(module || "app");
+    if (!this._shouldWrite(normalizedLevel, normalizedModule)) return;
 
     const cleaned = this._scrub(String(msg));
 
     // 去重：与上一条完全相同则只计数
     const d = this._dedup;
-    if (d.level === level && d.module === module && d.msg === cleaned) {
+    if (d.level === normalizedLevel && d.module === normalizedModule && d.msg === cleaned) {
       d.count++;
       return;
     }
@@ -189,18 +234,18 @@ class DebugLog {
     this._flushDedup();
 
     // 更新去重状态
-    this._dedup = { level, module, msg: cleaned, count: 1 };
+    this._dedup = { level: normalizedLevel, module: normalizedModule, msg: cleaned, count: 1 };
 
-    this._append(level, module, cleaned);
+    this._append(normalizedLevel, normalizedModule, cleaned);
   }
 
-  _shouldWrite(level, module) {
+  _shouldWrite(level: LogLevel, module: string): boolean {
     const threshold = this._filter.modules.get(module) || this._filter.defaultLevel;
     return LEVEL_VALUES[level] >= LEVEL_VALUES[threshold];
   }
 
   /** 把积压的"重复 N 次"补写进文件 */
-  _flushDedup() {
+  _flushDedup(): void {
     const d = this._dedup;
     if (d.count > 1) {
       this._append("INFO", "dedup", `⤷ 上条重复 ${d.count} 次`);
@@ -209,7 +254,7 @@ class DebugLog {
   }
 
   /** 底层写入（单文件上限 5MB，超限后写一次截断通知再静默丢弃） */
-  _append(level, module, msg) {
+  _append(level: LogLevel, module: string, msg: string): void {
     const MAX = 5 * 1024 * 1024;
 
     if (this._truncated) return;
@@ -241,14 +286,14 @@ class DebugLog {
   }
 
   /** 隐私清洗：移除或遮盖可识别用户身份的信息 */
-  _scrub(msg) {
+  _scrub(msg: string): string {
     // 1. home 目录路径 → ~（最无损的替换，仅隐藏用户名）
     const home = os.homedir();
     if (home) msg = msg.split(home).join("~");
 
     // 2. URL 内嵌凭证：https://user:pass@host → https://***@host
     msg = msg.replace(/https?:\/\/[^:@\s/]+:[^@\s/]+@/gi, (m) => {
-      const proto = m.match(/^https?:\/\//i)[0];
+      const proto = m.match(/^https?:\/\//i)?.[0] ?? "";
       const host = m.slice(m.lastIndexOf("@"));
       return `${proto}***${host}`;
     });
@@ -259,7 +304,7 @@ class DebugLog {
     // 4. key=/token=/secret= 后跟的值
     msg = msg.replace(
       /\b(api_key|apikey|api-key|token|secret|password|passwd|Authorization)\s*[=:]\s*\S+/gi,
-      (_, k) => `${k}=***`
+      (_, k: string) => `${k}=***`
     );
 
     // 5. Telegram bot token 格式: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
@@ -275,7 +320,7 @@ class DebugLog {
   }
 
   /** 清理超过 maxDays 天的旧日志 */
-  _cleanup(maxDays) {
+  _cleanup(maxDays: number): void {
     try {
       const cutoff = Date.now() - maxDays * 24 * 60 * 60 * 1000;
       const files = fs.readdirSync(this._logDir).filter(f => f.endsWith(".log"));
@@ -295,23 +340,23 @@ class DebugLog {
 
 // ── 全局单例 ──
 
-let _instance = null;
+let _instance: DebugLog | null = null;
 
 /**
  * 初始化全局日志实例
- * @param {string} logDir - 日志目录路径
- * @returns {DebugLog}
+ * @param logDir - 日志目录路径
+ * @returns DebugLog 实例
  */
-export function initDebugLog(logDir) {
+export function initDebugLog(logDir: string): DebugLog {
   _instance = new DebugLog(logDir);
   return _instance;
 }
 
 /**
  * 获取全局日志实例
- * @returns {DebugLog|null}
+ * @returns DebugLog 实例或 null
  */
-export function debugLog() {
+export function debugLog(): DebugLog | null {
   return _instance;
 }
 
@@ -320,8 +365,8 @@ export function debugLog() {
  *
  * 同时写 console + 持久日志文件，统一替代散落的 console.error / debugLog()?.log()。
  *
- * @param {string} module - 模块标识（如 "engine", "bridge", "session"）
- * @returns {{ trace: (msg: string) => void, debug: (msg: string) => void, log: (msg: string) => void, warn: (msg: string) => void, error: (msg: string) => void }}
+ * @param module - 模块标识（如 "engine", "bridge", "session"）
+ * @returns 模块日志器
  *
  * @example
  * const log = createModuleLogger("bridge");
@@ -329,25 +374,25 @@ export function debugLog() {
  * // console: [bridge] connection failed
  * // file:    [HH:MM:SS.mmm] [ERROR] [bridge] connection failed
  */
-export function createModuleLogger(module) {
+export function createModuleLogger(module: string): ModuleLogger {
   return {
-    trace(msg) {
+    trace(msg: unknown): void {
       _instance?.trace(module, msg);
     },
-    debug(msg) {
+    debug(msg: unknown): void {
       _instance?.debug(module, msg);
     },
-    log(msg) {
+    log(msg: unknown): void {
       const cleaned = _instance ? _instance._scrub(String(msg)) : msg;
       console.log(`[${module}] ${cleaned}`);
       _instance?.log(module, msg);
     },
-    warn(msg) {
+    warn(msg: unknown): void {
       const cleaned = _instance ? _instance._scrub(String(msg)) : msg;
       console.warn(`[${module}] ${cleaned}`);
       _instance?.warn(module, msg);
     },
-    error(msg) {
+    error(msg: unknown): void {
       const cleaned = _instance ? _instance._scrub(String(msg)) : msg;
       console.error(`[${module}] ${cleaned}`);
       _instance?.error(module, msg);
