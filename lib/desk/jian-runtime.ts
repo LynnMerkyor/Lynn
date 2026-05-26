@@ -4,20 +4,53 @@ import path from "path";
 const ZH_RECENT_HEADING = "## 最近执行";
 const EN_RECENT_HEADING = "## Recent activity";
 
-function normalizeText(text) {
+type RecurringTaskMode = "daily" | "weekdays" | "weekly";
+
+type RecurringTaskParseResult = {
+  schedule: string;
+  taskText: string;
+  rawTask: string;
+  mode: RecurringTaskMode;
+} | null;
+
+type RecurringTaskEntry = {
+  lineIndex: number;
+  originalLine: string;
+  schedule: string;
+  taskText: string;
+  rawTask: string;
+  mode: RecurringTaskMode;
+  nextRunAt?: unknown;
+  [key: string]: unknown;
+};
+
+type RecentExecutionOptions = {
+  summary?: unknown;
+  type?: unknown;
+  label?: unknown;
+  at?: unknown;
+  locale?: unknown;
+  maxEntries?: unknown;
+  [key: string]: unknown;
+};
+
+type DuplicateExecutionInput = unknown;
+type DuplicateExecutionCache = Map<string, number>;
+
+function normalizeText(text: unknown): string {
   return String(text || "").replace(/\s+/g, " ").trim();
 }
 
-function isZhLocale(locale) {
+function isZhLocale(locale: unknown): boolean {
   return !locale || String(locale).startsWith("zh");
 }
 
-function pad(num) {
+function pad(num: unknown): string {
   return String(num).padStart(2, "0");
 }
 
-function formatStamp(at, locale) {
-  const date = at instanceof Date ? at : new Date(at || Date.now());
+function formatStamp(at: unknown, locale: unknown): string {
+  const date = at instanceof Date ? at : new Date((at || Date.now()) as string | number | Date);
   if (Number.isNaN(date.getTime())) return "";
   if (isZhLocale(locale)) {
     return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -25,7 +58,7 @@ function formatStamp(at, locale) {
   return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function buildRecurringTaskMarker(task, locale = "zh") {
+function buildRecurringTaskMarker(task: Partial<RecurringTaskEntry> | null | undefined, locale: unknown = "zh"): string {
   const nextRun = formatStamp(task?.nextRunAt, locale);
   if (isZhLocale(locale)) {
     return nextRun ? `⏰ 自动任务 · 下次 ${nextRun}` : "⏰ 已设定";
@@ -33,11 +66,11 @@ function buildRecurringTaskMarker(task, locale = "zh") {
   return nextRun ? `⏰ automation · next ${nextRun}` : "⏰ scheduled";
 }
 
-function stripTodoPrefix(line) {
+function stripTodoPrefix(line: unknown): string {
   return String(line || "").replace(/^- \[[ xX]\]\s+/, "").trim();
 }
 
-function normalizeHourMinute(hour, minute, period = "") {
+function normalizeHourMinute(hour: unknown, minute: unknown, period: unknown = ""): { hour: number; minute: number } {
   let h = parseInt(String(hour || "9"), 10);
   let m = parseInt(String(minute || "0"), 10);
   if (Number.isNaN(h)) h = 9;
@@ -51,13 +84,13 @@ function normalizeHourMinute(hour, minute, period = "") {
   return { hour: h, minute: m };
 }
 
-function buildCron(hour, minute, days = []) {
+function buildCron(hour: number, minute: number, days: number[] = []): string {
   const uniqueDays = Array.from(new Set(days)).sort((a, b) => a - b);
   const dow = uniqueDays.length === 0 ? "*" : uniqueDays.join(",");
   return `${minute} ${hour} * * ${dow}`;
 }
 
-function parseZhRecurring(line) {
+function parseZhRecurring(line: unknown): RecurringTaskParseResult {
   const body = stripTodoPrefix(line);
   if (!body || body.includes("⏰")) return null;
 
@@ -83,7 +116,7 @@ function parseZhRecurring(line) {
     };
   }
 
-  const zhDayMap = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 0, 天: 0 };
+  const zhDayMap: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 0, 天: 0 };
   const weekly = body.match(/^每周([一二三四五六日天])(凌晨|早上|上午|中午|下午|晚上)?\s*(\d{1,2})\s*(?:[:：](\d{1,2})|点(?:\s*(\d{1,2})分?)?)\s*(.+)$/);
   if (weekly) {
     const { hour, minute } = normalizeHourMinute(weekly[3], weekly[4] || weekly[5], weekly[2]);
@@ -98,7 +131,7 @@ function parseZhRecurring(line) {
   return null;
 }
 
-function parseEnRecurring(line) {
+function parseEnRecurring(line: unknown): RecurringTaskParseResult {
   const body = stripTodoPrefix(line);
   if (!body || body.includes("⏰")) return null;
 
@@ -124,7 +157,7 @@ function parseEnRecurring(line) {
     };
   }
 
-  const enDayMap = {
+  const enDayMap: Record<string, number> = {
     monday: 1,
     tuesday: 2,
     wednesday: 3,
@@ -147,10 +180,10 @@ function parseEnRecurring(line) {
   return null;
 }
 
-export function extractRecurringJianTasks(content, locale = "zh") {
+export function extractRecurringJianTasks(content: unknown, locale: unknown = "zh"): RecurringTaskEntry[] {
   const lines = String(content || "").split("\n");
   const isZh = isZhLocale(locale);
-  const results = [];
+  const results: RecurringTaskEntry[] = [];
 
   lines.forEach((line, index) => {
     if (!/^- \[ \] /.test(line.trim())) return;
@@ -171,9 +204,9 @@ export function extractRecurringJianTasks(content, locale = "zh") {
   return results;
 }
 
-export function applyRecurringTaskMarkers(content, tasks, locale = "zh") {
+export function applyRecurringTaskMarkers(content: unknown, tasks: unknown, locale: unknown = "zh"): string {
   const lines = String(content || "").split("\n");
-  for (const task of tasks || []) {
+  for (const task of (tasks || []) as Iterable<Partial<RecurringTaskEntry> | null | undefined>) {
     const idx = Number(task?.lineIndex);
     if (!Number.isInteger(idx) || idx < 0 || idx >= lines.length) continue;
     const nextMarker = buildRecurringTaskMarker(task, locale);
@@ -182,14 +215,14 @@ export function applyRecurringTaskMarkers(content, tasks, locale = "zh") {
   return lines.join("\n");
 }
 
-export function upsertRecentExecutionSection(content, {
+export function upsertRecentExecutionSection(content: unknown, {
   summary,
   type = "heartbeat",
   label = "",
   at = Date.now(),
   locale = "zh",
   maxEntries = 6,
-} = {}) {
+}: RecentExecutionOptions = {}): string {
   const cleanSummary = normalizeText(summary);
   if (!cleanSummary) return String(content || "");
 
@@ -222,7 +255,7 @@ export function upsertRecentExecutionSection(content, {
     .filter(Boolean)
     .filter((line) => line !== entry && !line.includes(cleanSummary));
 
-  const mergedEntries = [entry, ...existingEntries].slice(0, maxEntries);
+  const mergedEntries = [entry, ...existingEntries].slice(0, maxEntries as number | undefined);
   const rebuilt = [
     ...lines.slice(0, headingIndex),
     heading,
@@ -232,8 +265,8 @@ export function upsertRecentExecutionSection(content, {
   return `${rebuilt.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
 }
 
-export function appendRecentExecutionToJian(dirPath, options = {}) {
-  const jianPath = path.join(dirPath, "jian.md");
+export function appendRecentExecutionToJian(dirPath: unknown, options: RecentExecutionOptions = {}): boolean {
+  const jianPath = path.join(dirPath as string, "jian.md");
   if (!dirPath || !fs.existsSync(jianPath)) return false;
   const current = fs.readFileSync(jianPath, "utf-8");
   // 敏感信息打码后再写入
@@ -266,7 +299,7 @@ const SENSITIVE_PATTERNS = [
   /(-----BEGIN\s+\w+\s+PRIVATE\s+KEY-----)/g,
 ];
 
-export function maskSensitiveContent(text) {
+export function maskSensitiveContent(text: unknown): unknown {
   if (!text || typeof text !== "string") return text;
   let result = text;
   for (const pattern of SENSITIVE_PATTERNS) {
@@ -289,7 +322,7 @@ export function maskSensitiveContent(text) {
 
 // ── 执行去重 ──
 
-const _recentExecHashes = new Map(); // hash → timestamp
+const _recentExecHashes: DuplicateExecutionCache = new Map(); // hash → timestamp
 const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
@@ -297,7 +330,7 @@ const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
  * @param {string} taskText - 任务文本
  * @returns {boolean} true = 已执行过，应跳过
  */
-export function isDuplicateExecution(taskText) {
+export function isDuplicateExecution(taskText: DuplicateExecutionInput): boolean {
   const hash = normalizeText(taskText);
   const now = Date.now();
   // 清理过期条目
