@@ -18,17 +18,48 @@ import { existsSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
 import { spawnAndStream } from "./exec-helper.js";
+import type { SpawnAndStreamResult } from "./exec-helper.js";
+
+interface ShellCandidate {
+  shell: string;
+  args: string[];
+  label: string;
+}
+
+interface Win32ExecOptions {
+  onData: (data: Buffer) => void;
+  signal?: AbortSignal;
+  timeout?: number;
+  env?: NodeJS.ProcessEnv;
+}
+
+type Win32Exec = (
+  command: string,
+  cwd: string,
+  opts: Win32ExecOptions,
+) => Promise<SpawnAndStreamResult>;
+
+interface SpawnError extends Error {
+  code?: string;
+  path?: string;
+}
+
+interface CodedError extends Error {
+  code?: string;
+}
+
+type ElectronProcess = NodeJS.Process & { resourcesPath?: string };
 
 // ── Shell 查找 ──
 
-let _cachedShell = null; // { shell, args, label }
+let _cachedShell: ShellCandidate | null = null; // { shell, args, label }
 
 const PROBE_TOKEN = "__hana_probe_ok__";
 
 /**
  * 对候选 shell 做 probe：用 spawnSync 跑 echo，确认 shell 可正常启动
  */
-function probeShell(shell, args) {
+function probeShell(shell: string, args: string[]): boolean {
   try {
     const result = spawnSync(shell, [...args, `echo ${PROBE_TOKEN}`], {
       encoding: "utf-8",
@@ -57,8 +88,8 @@ function probeShell(shell, args) {
  * 4. PATH 上的 bash.exe / sh.exe
  * 5. MSYS2 / Cygwin
  */
-function getAllShellCandidates() {
-  const found = [];
+function getAllShellCandidates(): ShellCandidate[] {
+  const found: ShellCandidate[] = [];
 
   // ── 1. 系统 Git Bash 标准 + 常见安装位置 ──
   const gitBashPaths = [];
@@ -98,7 +129,7 @@ function getAllShellCandidates() {
         const match = result.stdout.match(/InstallPath\s+REG_SZ\s+(.+)/i);
         if (match) {
           const gitBash = join(match[1].trim(), "bin", "bash.exe");
-          if (existsSync(gitBash) && !found.some(c => c.shell === gitBash)) {
+          if (existsSync(gitBash) && !found.some((c) => c.shell === gitBash)) {
             found.push({ shell: gitBash, args: ["-c"], label: `Git Bash via registry ${regKey} (${gitBash})` });
           }
         }
@@ -107,8 +138,9 @@ function getAllShellCandidates() {
   }
 
   // ── 3. 内嵌 MinGit-busybox 的 sh.exe ──
-  if (process.resourcesPath) {
-    const bundledSh = join(process.resourcesPath, "git", "mingw64", "bin", "sh.exe");
+  const resourcesPath = (process as ElectronProcess).resourcesPath;
+  if (resourcesPath) {
+    const bundledSh = join(resourcesPath, "git", "mingw64", "bin", "sh.exe");
     if (existsSync(bundledSh)) {
       found.push({ shell: bundledSh, args: ["-c"], label: `Bundled MinGit (${bundledSh})` });
     }
@@ -122,7 +154,7 @@ function getAllShellCandidates() {
         for (const line of result.stdout.trim().split(/\r?\n/)) {
           const candidate = line.trim();
           if (!candidate || !existsSync(candidate)) continue;
-          if (found.some(c => c.shell === candidate)) continue;
+          if (found.some((c) => c.shell === candidate)) continue;
           // System32/SysWOW64 下的 bash.exe 是 WSL launcher，不是真正的 bash shell
           // WSL 进入不同的文件系统命名空间，cwd/PATH/编码全对不上
           const lower = candidate.toLowerCase();
@@ -140,7 +172,7 @@ function getAllShellCandidates() {
     "C:\\cygwin64\\bin\\bash.exe",
     "C:\\cygwin\\bin\\bash.exe",
   ]) {
-    if (existsSync(p) && !found.some(c => c.shell === p)) {
+    if (existsSync(p) && !found.some((c) => c.shell === p)) {
       found.push({ shell: p, args: ["-c"], label: `MSYS2/Cygwin (${p})` });
     }
   }
@@ -156,7 +188,7 @@ function getAllShellCandidates() {
  * 从候选列表中找到第一个 probe 成功的 shell 并缓存
  * @param {string} [startAfter] - 跳过此路径及之前的所有候选（用于降级重试）
  */
-function findAndCacheShell(startAfter) {
+function findAndCacheShell(startAfter?: string): ShellCandidate {
   // 有缓存且不是降级重试 → 直接返回
   if (_cachedShell && !startAfter) return _cachedShell;
 
@@ -165,11 +197,11 @@ function findAndCacheShell(startAfter) {
   // 降级重试：跳过 startAfter 及之前的候选
   let startIdx = 0;
   if (startAfter) {
-    const idx = candidates.findIndex(c => c.shell === startAfter);
+    const idx = candidates.findIndex((c) => c.shell === startAfter);
     if (idx >= 0) startIdx = idx + 1;
   }
 
-  const failures = [];
+  const failures: string[] = [];
 
   for (let i = startIdx; i < candidates.length; i++) {
     const c = candidates[i];
@@ -183,7 +215,7 @@ function findAndCacheShell(startAfter) {
   // 全部失败
   const allLabels = startAfter
     ? [`(前序已跳过)`, ...failures]
-    : candidates.map(c => c.label);
+    : candidates.map((c) => c.label);
   throw new Error(
     `[win32-exec] No usable bash-compatible shell found.\n` +
     `Tried (probe failed):\n${allLabels.map(s => `  - ${s}`).join("\n")}\n\n` +
@@ -206,19 +238,21 @@ const SPAWN_ERROR_CODES = new Set(["ENOENT", "EACCES", "EPERM", "UNKNOWN"]);
  * 在 cwd 不存在时也抛 ENOENT，但 err.path 不等于 shell 路径
  * 只有确认是 shell 本身的问题才触发降级重试
  */
-function isShellSpawnError(err, shellPath) {
-  if (!err || typeof err.code !== "string") return false;
-  if (!SPAWN_ERROR_CODES.has(err.code)) return false;
+function isShellSpawnError(err: unknown, shellPath: string): err is SpawnError {
+  if (typeof err !== "object" || err === null) return false;
+  const spawnErr = err as SpawnError;
+  if (typeof spawnErr.code !== "string") return false;
+  if (!SPAWN_ERROR_CODES.has(spawnErr.code)) return false;
   // ENOENT 特殊处理：只有 err.path 指向 shell 可执行文件时才算 shell 问题
   // cwd 不存在也会 ENOENT，但 err.path 会是 undefined 或其他值
-  if (err.code === "ENOENT" && err.path && err.path !== shellPath) return false;
+  if (spawnErr.code === "ENOENT" && spawnErr.path && spawnErr.path !== shellPath) return false;
   return true;
 }
 
 /**
  * 包装错误信息，附带完整诊断
  */
-function enrichError(retryErr, primaryShell, originalErr) {
+function enrichError(retryErr: Error, primaryShell: ShellCandidate, originalErr: SpawnError): Error {
   const msg = [
     `[win32-exec] Cannot execute shell command.`,
     ``,
@@ -233,7 +267,7 @@ function enrichError(retryErr, primaryShell, originalErr) {
     `  3. If using antivirus software, check if it blocks bash.exe`,
   ].join("\n");
 
-  const enriched = new Error(msg);
+  const enriched = new Error(msg) as CodedError;
   enriched.code = originalErr.code;
   return enriched;
 }
@@ -244,13 +278,13 @@ function enrichError(retryErr, primaryShell, originalErr) {
  * 构建干净的 shell 执行环境
  * 移除 ELECTRON_RUN_AS_NODE（不应泄漏到用户命令子进程）
  */
-function cleanShellEnv(baseEnv) {
+function cleanShellEnv(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const env = { ...baseEnv };
   delete env.ELECTRON_RUN_AS_NODE;
   return env;
 }
 
-function getShellEnv() {
+function getShellEnv(): NodeJS.ProcessEnv {
   const pathKey = Object.keys(process.env).find((k) => k.toLowerCase() === "path") ?? "PATH";
   return cleanShellEnv({ ...process.env, [pathKey]: process.env[pathKey] ?? "" });
 }
@@ -265,7 +299,7 @@ function getShellEnv() {
  *
  * @returns {(command: string, cwd: string, opts: object) => Promise<{exitCode: number|null}>}
  */
-export function createWin32Exec() {
+export function createWin32Exec(): Win32Exec {
   return async (command, cwd, { onData, signal, timeout, env }) => {
     const shellInfo = findAndCacheShell();
     const shellEnv = cleanShellEnv(env ?? getShellEnv());
@@ -282,15 +316,16 @@ export function createWin32Exec() {
       console.warn(`[win32-exec] Shell exec failed (${shellInfo.label}): ${err.code} ${err.message}, trying fallback…`);
       _cachedShell = null;
 
+      let fallback: ShellCandidate | null = null;
       try {
-        const fallback = findAndCacheShell(shellInfo.shell);
+        fallback = findAndCacheShell(shellInfo.shell);
         console.warn(`[win32-exec] 降级到: ${fallback.label}`);
         return await spawnAndStream(fallback.shell, [...fallback.args, command], {
           cwd, env: shellEnv, onData, signal, timeout,
         });
       } catch (retryErr) {
         // 降级也失败：抛出富化的错误信息
-        if (isShellSpawnError(retryErr, fallback.shell)) {
+        if (isShellSpawnError(retryErr, fallback?.shell ?? shellInfo.shell)) {
           throw enrichError(retryErr, shellInfo, err);
         }
         throw retryErr;
