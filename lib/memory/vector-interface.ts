@@ -1,5 +1,5 @@
 /**
- * vector-interface.js — 本地向量检索接口
+ * vector-interface.ts — 本地向量检索接口
  *
  * 当前支持两类本地 sidecar：
  * - local-file / sqlite-local: 旧版确定性 hash 词袋向量
@@ -13,23 +13,50 @@ const DEFAULT_DIMENSION = 128;
 const DEFAULT_TFIDF_DIMENSION = 256;
 const TOKEN_RE = /[A-Za-z][\w.-]*|[\u4e00-\u9fff]{2,8}/g;
 
-function tokenize(text) {
+// Types for vector interface
+type VectorRowId = string | number;
+interface VectorRow {
+  id?: unknown;
+  text?: unknown;
+  fact?: unknown;
+  tags?: unknown;
+  vector?: unknown;
+}
+
+interface VectorSearchResult {
+  id: VectorRowId;
+  score: number;
+}
+
+interface VectorRetrieverConfig {
+  type?: string;
+  dbPath?: string;
+  dimensions?: number;
+}
+
+interface TfIdfRow {
+  text: string;
+  tags: unknown[];
+  vector: number[];
+}
+
+function tokenize(text: unknown): string[] {
   const matches = String(text || "").toLowerCase().match(TOKEN_RE) || [];
   return matches.filter((token) => token.length >= 2);
 }
 
-function normalizeTags(tags) {
+function normalizeTags(tags: unknown): unknown[] {
   return Array.isArray(tags) ? tags.filter(Boolean) : [];
 }
 
-function tokensForEntry(text, tags = []) {
+function tokensForEntry(text: unknown, tags: unknown = []): string[] {
   return [
     ...tokenize(text),
     ...normalizeTags(tags).flatMap((tag) => tokenize(tag)),
   ];
 }
 
-function hashToken(token, dims) {
+function hashToken(token: string, dims: number): number {
   let hash = 2166136261;
   for (let i = 0; i < token.length; i++) {
     hash ^= token.charCodeAt(i);
@@ -38,7 +65,7 @@ function hashToken(token, dims) {
   return Math.abs(hash >>> 0) % dims;
 }
 
-function normalizeVector(vector) {
+function normalizeVector(vector: Float32Array): number[] {
   let norm = 0;
   for (let i = 0; i < vector.length; i++) {
     norm += vector[i] * vector[i];
@@ -52,7 +79,7 @@ function normalizeVector(vector) {
   return Array.from(vector);
 }
 
-function buildHashedVector(text, tags, dims) {
+function buildHashedVector(text: unknown, tags: unknown, dims: number): number[] {
   const vector = new Float32Array(dims);
   const tokens = tokensForEntry(text, tags);
 
@@ -65,11 +92,11 @@ function buildHashedVector(text, tags, dims) {
   return normalizeVector(vector);
 }
 
-function buildTfIdfVector(tokens, dims, idfMap, docCount) {
+function buildTfIdfVector(tokens: string[], dims: number, idfMap: Map<string, number>, docCount: number): number[] {
   const vector = new Float32Array(dims);
   if (!tokens || tokens.length === 0) return Array.from(vector);
 
-  const tf = new Map();
+  const tf = new Map<string, number>();
   for (const token of tokens) {
     tf.set(token, (tf.get(token) || 0) + 1);
   }
@@ -84,7 +111,7 @@ function buildTfIdfVector(tokens, dims, idfMap, docCount) {
   return normalizeVector(vector);
 }
 
-function cosineSimilarity(a, b) {
+function cosineSimilarity(a: number[], b: number[]): number {
   if (!a || !b || a.length !== b.length) return 0;
   let dot = 0;
   for (let i = 0; i < a.length; i++) {
@@ -93,53 +120,57 @@ function cosineSimilarity(a, b) {
   return dot;
 }
 
-function atomicWriteJson(filePath, data) {
+function atomicWriteJson(filePath: string, data: unknown): void {
   const tmpPath = `${filePath}.tmp`;
   fs.writeFileSync(tmpPath, JSON.stringify(data), "utf8");
   fs.renameSync(tmpPath, filePath);
 }
 
-function isValidId(value) {
+function isValidId(value: unknown): value is VectorRowId {
   return Number.isInteger(Number(value));
 }
 
-function toNormalizedId(value) {
+function toNormalizedId(value: VectorRowId): number {
   return Number(value);
 }
 
 export class NullVectorRetriever {
-  get available() { return false; }
+  get available(): boolean { return false; }
 
-  async search(_query, _limit) {
+  async search(_query: string, _limit: number): Promise<VectorSearchResult[]> {
     return [];
   }
 
-  async index(_id, _text, _tags) {
+  async index(_id: VectorRowId, _text: unknown, _tags: unknown = []): Promise<void> {
     // no-op
   }
 
-  async remove(_id) {
+  async remove(_id: VectorRowId): Promise<void> {
     // no-op
   }
 
-  async clear() {
+  async clear(): Promise<void> {
     // no-op
   }
 
-  async rebuildIndex(_rows = []) {
+  async rebuildIndex(_rows: VectorRow[] = []): Promise<void> {
     // no-op
   }
 
-  close() {
+  close(): void {
     // no-op
   }
 }
 
 export class LocalVectorRetriever {
-  constructor(dbPath, opts = {}) {
+  private _dbPath: string;
+  private _dims: number;
+  private _rows: Map<number, number[]>;
+
+  constructor(dbPath: string, opts: { dimensions?: number } = {}) {
     this._dbPath = dbPath;
-    this._dims = Number.isInteger(opts.dimensions) && opts.dimensions > 0
-      ? opts.dimensions
+    this._dims = Number.isInteger(opts.dimensions) && (opts.dimensions ?? 0) > 0
+      ? (opts.dimensions as number)
       : DEFAULT_DIMENSION;
     this._rows = new Map();
 
@@ -147,24 +178,24 @@ export class LocalVectorRetriever {
     this._load();
   }
 
-  get available() {
+  get available(): boolean {
     return true;
   }
 
-  _load() {
+  private _load(): void {
     try {
       const raw = JSON.parse(fs.readFileSync(this._dbPath, "utf8"));
       if (!Array.isArray(raw?.rows)) return;
       for (const row of raw.rows) {
         if (!row || !isValidId(row.id) || !Array.isArray(row.vector)) continue;
-        this._rows.set(toNormalizedId(row.id), row.vector.map((value) => Number(value) || 0));
+        this._rows.set(toNormalizedId(row.id), row.vector.map((value: unknown) => Number(value) || 0));
       }
     } catch {
       // file missing or invalid -> start empty
     }
   }
 
-  _persist() {
+  private _persist(): void {
     const rows = Array.from(this._rows.entries()).map(([id, vector]) => ({ id, vector }));
     atomicWriteJson(this._dbPath, {
       version: 1,
@@ -174,35 +205,35 @@ export class LocalVectorRetriever {
     });
   }
 
-  async index(id, text, tags = []) {
+  async index(id: VectorRowId, text: unknown, tags: unknown = []): Promise<void> {
     if (!isValidId(id)) return;
     this._rows.set(toNormalizedId(id), buildHashedVector(text, tags, this._dims));
     this._persist();
   }
 
-  async rebuildIndex(rows = []) {
+  async rebuildIndex(rows: VectorRow[] = []): Promise<void> {
     this._rows.clear();
     for (const row of rows) {
       if (!isValidId(row?.id)) continue;
       this._rows.set(
         toNormalizedId(row.id),
-        buildHashedVector(row.text || row.fact || "", row.tags || [], this._dims),
+        buildHashedVector((row.text || row.fact || ""), row.tags || [], this._dims),
       );
     }
     this._persist();
   }
 
-  async remove(id) {
+  async remove(id: VectorRowId): Promise<void> {
     this._rows.delete(toNormalizedId(id));
     this._persist();
   }
 
-  async clear() {
+  async clear(): Promise<void> {
     this._rows.clear();
     this._persist();
   }
 
-  async search(query, limit = 5) {
+  async search(query: string, limit = 5): Promise<VectorSearchResult[]> {
     const queryVector = buildHashedVector(query, [], this._dims);
     const scored = Array.from(this._rows.entries())
       .map(([id, vector]) => ({ id, score: cosineSimilarity(queryVector, vector) }))
@@ -212,16 +243,22 @@ export class LocalVectorRetriever {
     return scored.slice(0, limit);
   }
 
-  close() {
+  close(): void {
     // no-op
   }
 }
 
 export class TfIdfVectorRetriever {
-  constructor(dbPath, opts = {}) {
+  private _dbPath: string;
+  private _dims: number;
+  private _rows: Map<number, TfIdfRow>;
+  private _idf: Map<string, number>;
+  private _docCount: number;
+
+  constructor(dbPath: string, opts: { dimensions?: number } = {}) {
     this._dbPath = dbPath;
-    this._dims = Number.isInteger(opts.dimensions) && opts.dimensions > 0
-      ? opts.dimensions
+    this._dims = Number.isInteger(opts.dimensions) && (opts.dimensions ?? 0) > 0
+      ? (opts.dimensions as number)
       : DEFAULT_TFIDF_DIMENSION;
     this._rows = new Map();
     this._idf = new Map();
@@ -231,11 +268,11 @@ export class TfIdfVectorRetriever {
     this._load();
   }
 
-  get available() {
+  get available(): boolean {
     return true;
   }
 
-  _load() {
+  private _load(): void {
     try {
       const raw = JSON.parse(fs.readFileSync(this._dbPath, "utf8"));
       if (!Array.isArray(raw?.rows)) return;
@@ -244,7 +281,7 @@ export class TfIdfVectorRetriever {
         this._rows.set(toNormalizedId(row.id), {
           text: String(row.text || ""),
           tags: normalizeTags(row.tags),
-          vector: Array.isArray(row.vector) ? row.vector.map((value) => Number(value) || 0) : [],
+          vector: Array.isArray(row.vector) ? row.vector.map((value: unknown) => Number(value) || 0) : [],
         });
       }
       this._rebuildIdf();
@@ -253,7 +290,7 @@ export class TfIdfVectorRetriever {
     }
   }
 
-  _persist() {
+  private _persist(): void {
     const rows = Array.from(this._rows.entries()).map(([id, row]) => ({
       id,
       text: row.text,
@@ -269,8 +306,8 @@ export class TfIdfVectorRetriever {
     });
   }
 
-  _rebuildIdf() {
-    const docFreq = new Map();
+  private _rebuildIdf(): void {
+    const docFreq = new Map<string, number>();
     this._docCount = this._rows.size;
     for (const row of this._rows.values()) {
       const uniqueTokens = new Set(tokensForEntry(row.text, row.tags));
@@ -284,7 +321,7 @@ export class TfIdfVectorRetriever {
     }
   }
 
-  _rebuildVectors() {
+  private _rebuildVectors(): void {
     for (const row of this._rows.values()) {
       row.vector = buildTfIdfVector(
         tokensForEntry(row.text, row.tags),
@@ -295,13 +332,13 @@ export class TfIdfVectorRetriever {
     }
   }
 
-  async rebuildIndex(rows = null) {
+  async rebuildIndex(rows: VectorRow[] | null = null): Promise<void> {
     if (Array.isArray(rows)) {
       this._rows.clear();
       for (const row of rows) {
         if (!isValidId(row?.id)) continue;
         this._rows.set(toNormalizedId(row.id), {
-          text: String(row.text || row.fact || ""),
+          text: String((row.text || row.fact || "")),
           tags: normalizeTags(row.tags),
           vector: [],
         });
@@ -312,7 +349,7 @@ export class TfIdfVectorRetriever {
     this._persist();
   }
 
-  async index(id, text, tags = []) {
+  async index(id: VectorRowId, text: unknown, tags: unknown = []): Promise<void> {
     if (!isValidId(id)) return;
     this._rows.set(toNormalizedId(id), {
       text: String(text || ""),
@@ -322,19 +359,19 @@ export class TfIdfVectorRetriever {
     await this.rebuildIndex();
   }
 
-  async remove(id) {
+  async remove(id: VectorRowId): Promise<void> {
     this._rows.delete(toNormalizedId(id));
     await this.rebuildIndex();
   }
 
-  async clear() {
+  async clear(): Promise<void> {
     this._rows.clear();
     this._idf.clear();
     this._docCount = 0;
     this._persist();
   }
 
-  async search(query, limit = 5) {
+  async search(query: string, limit = 5): Promise<VectorSearchResult[]> {
     const queryVector = buildTfIdfVector(
       tokenize(query),
       this._dims,
@@ -349,7 +386,7 @@ export class TfIdfVectorRetriever {
     return scored.slice(0, limit);
   }
 
-  close() {
+  close(): void {
     // no-op
   }
 }
@@ -365,7 +402,7 @@ export { LocalVectorRetriever as SqliteVectorRetriever };
  * @param {number} [config.dimensions] - 向量维度
  * @returns {NullVectorRetriever|LocalVectorRetriever|TfIdfVectorRetriever}
  */
-export function createVectorRetriever(config = {}) {
+export function createVectorRetriever(config: VectorRetrieverConfig = {}): NullVectorRetriever | LocalVectorRetriever | TfIdfVectorRetriever {
   const type = config.type || (config.dbPath ? "local-file" : "null");
   if (type === "tfidf-local" && config.dbPath) {
     return new TfIdfVectorRetriever(config.dbPath, {
