@@ -26,6 +26,40 @@ const DELEGATE_CUSTOM_TOOLS_WRITE = [
 
 const DEFAULT_DELEGATE_TIMEOUT_MS = 10 * 60 * 1000; // 10 分钟（从 5 分钟提升）
 
+interface DelegateToolParams {
+  task: string;
+  model?: string;
+  allowWrite?: boolean;
+  timeout?: number;
+  dryRun?: boolean;
+}
+
+interface DelegateExecutionOptions {
+  model: string | null;
+  toolFilter: string[];
+  builtinFilter?: string[];
+  dryRun: boolean;
+  signal: AbortSignal;
+}
+
+interface DelegateExecutionResult {
+  replyText?: string | null;
+  error?: string | null;
+}
+
+interface DelegateToolDeps {
+  executeIsolated: (
+    prompt: string,
+    opts: DelegateExecutionOptions,
+  ) => Promise<DelegateExecutionResult>;
+  resolveUtilityModel: () => string | null;
+  readOnlyBuiltinTools: string[];
+}
+
+type DelegateToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+};
+
 /** 注入到子任务 prompt 前的前导指令 */
 function getDelegatePreamble() {
   const isZh = getLocale().startsWith("zh");
@@ -48,15 +82,7 @@ function getDelegatePreamble() {
 let activeCount = 0;
 const MAX_CONCURRENT = 5;
 
-/**
- * 创建 delegate 工具
- * @param {object} deps
- * @param {(prompt: string, opts: object) => Promise} deps.executeIsolated
- * @param {() => string|null} deps.resolveUtilityModel
- * @param {string[]} deps.readOnlyBuiltinTools
- * @returns {import('@mariozechner/pi-coding-agent').ToolDefinition}
- */
-export function createDelegateTool(deps) {
+export function createDelegateTool(deps: DelegateToolDeps) {
   return {
     name: "delegate",
     label: t("toolDef.delegate.label"),
@@ -69,7 +95,11 @@ export function createDelegateTool(deps) {
       dryRun: Type.Optional(Type.Boolean({ description: "Run writes in a temporary shadow workspace and return validation info." })),
     }),
 
-    execute: async (_toolCallId, params, signal) => {
+    execute: async (
+      _toolCallId: string,
+      params: DelegateToolParams,
+      signal?: AbortSignal,
+    ): Promise<DelegateToolResult> => {
       if (activeCount >= MAX_CONCURRENT) {
         return {
           content: [{ type: "text", text: t("error.delegateMaxConcurrent", { max: MAX_CONCURRENT }) }],

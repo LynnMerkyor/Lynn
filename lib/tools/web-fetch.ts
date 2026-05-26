@@ -25,7 +25,39 @@ const PRIVATE_IP_RANGES = [
   /^fc00:/i, /^fd[0-9a-f]{2}:/i,                                // IPv6 ULA
 ];
 
-async function isPrivateHost(hostname) {
+type FetchWebContentDetails = Record<string, unknown>;
+
+export interface FetchWebContentResult {
+  text: string;
+  format: string;
+  details: FetchWebContentDetails;
+  url: string;
+  host: string;
+  path: string;
+  contentType: string;
+  truncated: boolean;
+  [key: string]: unknown;
+}
+
+interface WebFetchToolParams {
+  url?: string;
+  maxLength?: number;
+}
+
+type WebFetchToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: FetchWebContentDetails;
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function errorName(err: unknown): string {
+  return err instanceof Error ? err.name : "";
+}
+
+async function isPrivateHost(hostname: string): Promise<boolean> {
   if (isIP(hostname)) return PRIVATE_IP_RANGES.some(r => r.test(hostname));
   try {
     // 检查所有解析到的 IP（防止部分 A/AAAA 记录指向内网）
@@ -38,7 +70,7 @@ async function isPrivateHost(hostname) {
 /**
  * 简易 HTML → 文本：去标签、合并空白
  */
-function htmlToText(html) {
+function htmlToText(html: string): string {
   // 移除 script / style / head 内容
   let text = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
@@ -63,7 +95,7 @@ function htmlToText(html) {
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n));
+    .replace(/&#(\d+);/g, (_: string, n: string) => String.fromCharCode(+n));
 
   // 合并空白
   text = text.replace(/[ \t]+/g, " ");
@@ -72,7 +104,11 @@ function htmlToText(html) {
   return text.trim();
 }
 
-async function fetchViaJinaReader(url, maxLen) {
+async function fetchViaJinaReader(url: string, maxLen: number): Promise<{
+  text: string;
+  format: string;
+  details: FetchWebContentDetails;
+}> {
   const readerUrl = `https://r.jina.ai/${url}`;
   const res = await fetch(readerUrl, {
     headers: {
@@ -100,26 +136,26 @@ async function fetchViaJinaReader(url, maxLen) {
   };
 }
 
-async function normalizeFetchUrl(url) {
-  let parsedUrl;
+async function normalizeFetchUrl(url: string): Promise<URL> {
+  let parsedUrl: URL;
   try {
     parsedUrl = new URL(url);
     if (!["http:", "https:"].includes(parsedUrl.protocol)) {
       throw new Error(t("error.fetchHttpOnly"));
     }
   } catch (err) {
-    if (err?.message === t("error.fetchHttpOnly")) throw err;
+    if (errorMessage(err) === t("error.fetchHttpOnly")) throw err;
     throw new Error(t("error.fetchInvalidUrl", { url }));
   }
   return parsedUrl;
 }
 
-export async function fetchWebContent(url, maxLength = MAX_CONTENT_LENGTH) {
+export async function fetchWebContent(url: string, maxLength = MAX_CONTENT_LENGTH): Promise<FetchWebContentResult> {
   const parsedUrl = await normalizeFetchUrl(url);
 
   try {
     let currentUrl = url;
-    let res;
+    let res: Response | undefined;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       const hopParsed = new URL(currentUrl);
       if (await isPrivateHost(hopParsed.hostname)) {
@@ -156,9 +192,9 @@ export async function fetchWebContent(url, maxLength = MAX_CONTENT_LENGTH) {
     const contentType = res.headers.get("content-type") || "";
     const raw = await res.text();
 
-    let text;
-    let format;
-    let details = {};
+    let text: string;
+    let format: string;
+    let details: FetchWebContentDetails = {};
 
     if (contentType.includes("application/json")) {
       try {
@@ -175,7 +211,7 @@ export async function fetchWebContent(url, maxLength = MAX_CONTENT_LENGTH) {
           const reader = await fetchViaJinaReader(currentUrl, maxLength);
           text = reader.text;
           format = reader.format;
-          details = reader.details;
+        details = reader.details;
         } catch {
           // 直抓太短但仍可能有用，保留原结果
         }
@@ -232,7 +268,7 @@ export function createWebFetchTool() {
         Type.Number({ description: t("toolDef.webFetch.maxLenDesc", { max: MAX_CONTENT_LENGTH }), default: MAX_CONTENT_LENGTH })
       ),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: WebFetchToolParams): Promise<WebFetchToolResult> => {
       const url = params.url?.trim();
       if (!url) {
         return {
@@ -254,9 +290,9 @@ export function createWebFetchTool() {
         };
       } catch (err) {
         return {
-          content: [{ type: "text", text: err.name === "TimeoutError"
+          content: [{ type: "text", text: errorName(err) === "TimeoutError"
             ? t("error.fetchTimeout", { sec: FETCH_TIMEOUT / 1000, url })
-            : t("error.fetchError", { msg: err.message }) }],
+            : t("error.fetchError", { msg: errorMessage(err) }) }],
           details: {},
         };
       }
