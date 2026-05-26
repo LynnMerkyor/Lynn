@@ -28,18 +28,141 @@ import { callText } from "../core/llm-client.js";
 import { runAgentSession } from "./agent-executor.js";
 import { debugLog } from "../lib/debug-log.js";
 import { getLocale } from "../server/i18n.js";
+import type { ChannelMessage } from "../lib/channels/channel-store.js";
+import type { LLMApi, ModelId } from "../core/types.js";
 
 const CHANNEL_REPLY_TIMEOUT_MS = 45_000;
 const CHANNEL_SUMMARY_TIMEOUT_MS = 30_000;
 
-function messageText(message) {
+type ModelRef = string | { id?: string; provider?: string; name?: string } | null | undefined;
+
+interface AgentConfig {
+  agent?: { name?: string; yuan?: string };
+  api?: { provider?: string };
+  models?: { chat?: ModelRef };
+}
+
+interface FactStoreLike {
+  add: (entry: { fact: string; tags?: string[]; time?: string; session_id?: string }) => unknown;
+  close?: () => unknown;
+}
+
+interface AgentLike {
+  agentDir?: string;
+  config?: AgentConfig;
+  personality?: string;
+  systemPrompt?: string;
+  tools?: unknown[];
+  factStore?: FactStoreLike;
+}
+
+interface ModelCandidate {
+  id?: string;
+  provider?: string;
+  name?: string;
+}
+
+interface ProviderCreds {
+  api?: string;
+  api_key?: string;
+  base_url?: string;
+}
+
+interface EngineLike {
+  agentsDir: string;
+  channelsDir: string;
+  productDir: string;
+  userDir: string;
+  homeCwd?: string;
+  currentAgentId?: string | null;
+  currentModel?: ModelCandidate | null;
+  agents?: Map<string, AgentLike>;
+  agent?: AgentLike & { _channelPostHandler?: (channelName: string, senderId: string) => void };
+  _models?: {
+    resolveModelWithCredentials?: (ref: ModelRef) => { model?: string; provider?: string; api?: string; api_key?: string; base_url?: string } | null;
+  };
+  ensureAgentLoaded?: (agentId: string) => Promise<AgentLike | null> | AgentLike | null;
+  resolveProviderCredentials?: (provider: string) => ProviderCreds;
+  providerRegistry?: { get?: (provider: string) => { authType?: string } | undefined };
+  resolveUtilityConfig?: () => Record<string, unknown>;
+}
+
+interface EventBusLike {
+  emit: (event: Record<string, unknown>, sessionPath?: string | null) => unknown;
+}
+
+interface HubLike {
+  engine: EngineLike;
+  eventBus: EventBusLike;
+}
+
+type ChannelTickerLike = ReturnType<typeof createChannelTicker>;
+
+interface ChannelRouterOptions {
+  hub: HubLike;
+}
+
+interface AgentOrderCache {
+  list: string[];
+  ts: number;
+}
+
+interface ChannelMessageLike {
+  sender?: string;
+  timestamp?: string;
+  body?: string;
+  text?: string;
+}
+
+interface CheckOptions {
+  signal?: AbortSignal;
+  triggerMessage?: ChannelMessageLike | null;
+}
+
+interface ConclusionOptions {
+  signal?: AbortSignal;
+  reason?: string;
+}
+
+interface AgentSessionRound {
+  text: string;
+  capture?: boolean;
+}
+
+interface AgentSessionOptions {
+  engine: EngineLike;
+  signal?: AbortSignal;
+  sessionSuffix?: string;
+  systemAppend?: string;
+  keepSession?: boolean;
+  noTools?: boolean;
+  readOnly?: boolean;
+  noMemory?: boolean;
+  modelOverride?: ModelCandidate | null;
+}
+
+interface ResolvedChannelReplyModel {
+  model: { id: string; provider: string; name: string };
+  creds: { api: string; api_key?: string; base_url: string };
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function messageText(message: ChannelMessageLike | null | undefined): string {
   if (!message || typeof message !== "object") return "";
   if (typeof message.body === "string" && message.body.trim()) return message.body.trim();
   if (typeof message.text === "string" && message.text.trim()) return message.text.trim();
   return "";
 }
 
-function looksLikePresencePrompt(text) {
+function looksLikePresencePrompt(text: unknown): boolean {
   const normalized = String(text || "").trim().toLowerCase();
   if (!normalized) return false;
   return /(?:在吗|在线|都在吗|有人吗|谁在|能聊|能说话|可以聊|可以说话|忙吗|hi\b|hello\b|在不在|\?|？)/iu.test(normalized);
@@ -52,7 +175,12 @@ export class ChannelRouter {
    */
   static _AGENT_ORDER_TTL = 30_000; // 30 秒
 
-  constructor({ hub }) {
+  private _hub: HubLike;
+  private _ticker: ChannelTickerLike | null;
+  private _agentOrderCache: AgentOrderCache | null;
+  private _channelLocks: Map<string, Promise<unknown>>;
+
+  constructor({ hub }: ChannelRouterOptions) {
     this._hub = hub;
     this._ticker = null;
     this._agentOrderCache = null; // { list: string[], ts: number }
@@ -60,7 +188,7 @@ export class ChannelRouter {
   }
 
   /** @returns {import('../core/engine.js').HanaEngine} */
-  get _engine() { return this._hub.engine; }
+  get _engine(): EngineLike { return this._hub.engine; }
 
   // ──────────── 生命周期 ────────────
 
@@ -68,12 +196,12 @@ export class ChannelRouter {
     const engine = this._engine;
     if (!engine.channelsDir) return;
 
-    this._ticker = createChannelTicker({
+    const ticker = createChannelTicker({
       channelsDir: engine.channelsDir,
       agentsDir: engine.agentsDir,
       getAgentOrder: () => this.getAgentOrder(),
       executeCheck: (agentId, channelName, newMessages, allUpdates, opts) =>
-        this._executeCheckLocked(agentId, channelName, newMessages, allUpdates, opts),
+        this._executeCheckLocked(agentId, channelName, newMessages as unknown[], allUpdates as unknown[], opts),
       onMemorySummarize: (agentId, channelName, contextText) =>
         this._memorySummarize(agentId, channelName, contextText),
       onAllReplied: (channelName, opts) =>
@@ -82,7 +210,8 @@ export class ChannelRouter {
         this._hub.eventBus.emit({ type: event, ...data }, null);
       },
     });
-    this._ticker.start();
+    this._ticker = ticker;
+    ticker.start();
   }
 
   async stop() {
@@ -92,7 +221,7 @@ export class ChannelRouter {
     }
   }
 
-  async toggle(enabled) {
+  async toggle(enabled: boolean): Promise<void> {
     if (enabled) {
       if (this._ticker) return;
       this.start();
@@ -101,11 +230,14 @@ export class ChannelRouter {
     }
   }
 
-  triggerImmediate(channelName, opts) {
+  triggerImmediate(
+    channelName: string,
+    opts?: Parameters<ChannelTickerLike["triggerImmediate"]>[1],
+  ): Promise<unknown> | unknown {
     return this._ticker?.triggerImmediate(channelName, opts);
   }
 
-  async triggerConclusion(channelName, opts) {
+  async triggerConclusion(channelName: string, opts?: ConclusionOptions) {
     return this._executeConclusion(channelName, opts);
   }
 
@@ -114,10 +246,11 @@ export class ChannelRouter {
    * agent 用 channel tool 发消息后，触发其他 agent 的 triage
    */
   setupPostHandler() {
-    this._engine.agent._channelPostHandler = (channelName, senderId) => {
+    if (!this._engine.agent) return;
+    this._engine.agent._channelPostHandler = (channelName: string, senderId: string) => {
       debugLog()?.log("channel", `agent ${senderId} posted to #${channelName}, triggering triage`);
-      this.triggerImmediate(channelName)?.catch(err =>
-        console.error(`[channel] agent post triage 失败: ${err.message}`)
+      Promise.resolve(this.triggerImmediate(channelName)).catch((err: unknown) =>
+        console.error(`[channel] agent post triage 失败: ${errorMessage(err)}`),
       );
     };
   }
@@ -125,7 +258,7 @@ export class ChannelRouter {
   // ──────────── 频道 Agent 顺序 ────────────
 
   /** 获取参与频道轮转的 agent 列表（只含有 channels.md 的，30s TTL 缓存） */
-  getAgentOrder() {
+  getAgentOrder(): string[] {
     const now = Date.now();
     if (this._agentOrderCache && now - this._agentOrderCache.ts < ChannelRouter._AGENT_ORDER_TTL) {
       return this._agentOrderCache.list;
@@ -146,7 +279,7 @@ export class ChannelRouter {
     }
   }
 
-  async _resolveChannelAgentInfo(agentId) {
+  async _resolveChannelAgentInfo(agentId: string) {
     const engine = this._engine;
     let agentInstance = engine.agents?.get?.(agentId) || null;
     if (!agentInstance && typeof engine.ensureAgentLoaded === "function") {
@@ -156,14 +289,16 @@ export class ChannelRouter {
     }
 
     const agentDir = path.join(engine.agentsDir, agentId);
-    const readFile = (p) => {
+    const readFile = (p: string) => {
       try { return fs.readFileSync(p, "utf-8"); } catch { return ""; }
     };
 
-    const cfg = (agentInstance?.config && typeof agentInstance.config === "object")
+    const cfg: AgentConfig = (agentInstance?.config && typeof agentInstance.config === "object")
       ? agentInstance.config
-      : (loadConfig(path.join(agentDir, "config.yaml")) || {});
-    const agentConfig = (cfg?.agent && typeof cfg.agent === "object") ? cfg.agent : {};
+      : ((loadConfig(path.join(agentDir, "config.yaml")) || {}) as AgentConfig);
+    const agentConfig = (cfg?.agent && typeof cfg.agent === "object")
+      ? cfg.agent as { name?: unknown; yuan?: unknown }
+      : {};
     const yuanId = typeof agentConfig.yuan === "string" && agentConfig.yuan.trim()
       ? agentConfig.yuan.trim()
       : "hanako";
@@ -186,7 +321,7 @@ export class ChannelRouter {
     };
   }
 
-  _resolveChannelReplyModel(cfg = {}) {
+  _resolveChannelReplyModel(cfg: AgentConfig = {}): ResolvedChannelReplyModel | null {
     const engine = this._engine;
     const modelManager = engine?._models || null;
     const providerFromConfig = typeof cfg?.api?.provider === "string" && cfg.api.provider.trim()
@@ -194,7 +329,7 @@ export class ChannelRouter {
       : "";
     const refs = [cfg?.models?.chat || null, engine.currentModel || null];
 
-    const buildCandidate = (ref) => {
+    const buildCandidate = (ref: ModelRef): ModelCandidate | null => {
       if (!ref) return null;
       if (typeof ref === "object" && ref?.id) {
         return {
@@ -222,9 +357,9 @@ export class ChannelRouter {
             return {
               model: { id: resolved.model, provider: resolved.provider, name: resolved.model },
               creds: {
-                api: resolved.api,
+                api: resolved.api || "",
                 api_key: resolved.api_key,
-                base_url: resolved.base_url,
+                base_url: resolved.base_url || "",
               },
             };
           }
@@ -239,14 +374,25 @@ export class ChannelRouter {
         const allowMissingApiKey = providerEntry?.authType === "none";
         if (!creds.api || !creds.base_url) continue;
         if (!creds.api_key && !allowMissingApiKey) continue;
-        return { model: candidate, creds };
+        return {
+          model: {
+            id: candidate.id,
+            provider: candidate.provider,
+            name: candidate.name || candidate.id,
+          },
+          creds: {
+            api: creds.api,
+            api_key: creds.api_key,
+            base_url: creds.base_url,
+          },
+        };
       } catch {}
     }
 
     return null;
   }
 
-  _commitChannelReply(channelName, senderId, senderName, replyText) {
+  _commitChannelReply(channelName: string, senderId: string, senderName: string, replyText: string) {
     const channelFile = path.join(this._engine.channelsDir, `${channelName}.md`);
     if (!fs.existsSync(channelFile)) {
       debugLog()?.warn("channel", `skip reply for missing channel file: #${channelName}`);
@@ -265,7 +411,7 @@ export class ChannelRouter {
     return { replied: true, replyContent: replyText };
   }
 
-  async _executeDirectReply(agentId, channelName, msgText, { signal } = {}) {
+  async _executeDirectReply(agentId: string, channelName: string, msgText: string, { signal }: CheckOptions = {}) {
     const isZh = getLocale().startsWith("zh");
     const { agentContext, agentName, cfg } = await this._resolveChannelAgentInfo(agentId);
     const resolved = this._resolveChannelReplyModel(cfg);
@@ -277,11 +423,11 @@ export class ChannelRouter {
       : fallbackTimeout;
 
     const replyText = await callText({
-      api: resolved.creds.api,
+      api: resolved.creds.api as LLMApi,
       apiKey: resolved.creds.api_key,
       baseUrl: resolved.creds.base_url,
       provider: resolved.model.provider,
-      model: resolved.model.id,
+      model: resolved.model.id as ModelId,
       systemPrompt: `${agentContext}\n\n${isZh
         ? "你正在一个多人频道里发言。保持你自己的人格、语气和判断，像群聊里自然接话。"
         : "You are replying in a multi-person chat channel. Keep your own persona, tone, and judgment, and sound natural."}`,
@@ -304,23 +450,29 @@ export class ChannelRouter {
     return { agentName, replyText };
   }
 
-  async _runChannelAgentSession(agentId, rounds, opts = {}) {
+  async _runChannelAgentSession(agentId: string, rounds: AgentSessionRound[], opts: AgentSessionOptions): Promise<string> {
     try {
-      return await runAgentSession(agentId, rounds, opts);
+      return await runAgentSession(agentId, rounds, opts as Parameters<typeof runAgentSession>[2]);
     } catch (err) {
       const fallbackModel = this._engine.currentModel;
       if (!fallbackModel?.id) throw err;
-      debugLog()?.log("channel", `fallback model retry for ${agentId}: ${err.message}`);
+      debugLog()?.log("channel", `fallback model retry for ${agentId}: ${errorMessage(err)}`);
       return runAgentSession(agentId, rounds, {
         ...opts,
-        modelOverride: fallbackModel,
-      });
+        modelOverride: fallbackModel as { id: string; provider?: string; name?: string },
+      } as Parameters<typeof runAgentSession>[2]);
     }
   }
 
   // ──────────── Triage + Reply ────────────
 
-  async _executeCheckLocked(agentId, channelName, newMessages, allUpdates, opts) {
+  async _executeCheckLocked(
+    agentId: string,
+    channelName: string,
+    newMessages: unknown[],
+    allUpdates: unknown[],
+    opts: CheckOptions = {},
+  ) {
     const lockKey = channelName || "__unknown__";
     const previous = this._channelLocks.get(lockKey);
     if (previous) {
@@ -342,16 +494,22 @@ export class ChannelRouter {
    * 频道检查回调：triage → 两轮 Agent Session → 写入回复
    * 从 engine._executeChannelCheck 搬入
    */
-  async _executeCheck(agentId, channelName, newMessages, _allChannelUpdates, { signal, triggerMessage } = {}) {
+  async _executeCheck(
+    agentId: string,
+    channelName: string,
+    newMessages: unknown[],
+    _allChannelUpdates: unknown[],
+    { signal, triggerMessage }: CheckOptions = {},
+  ) {
     const engine = this._engine;
-    const msgText = formatMessagesForLLM(newMessages);
+    const msgText = formatMessagesForLLM(newMessages as ChannelMessage[]);
 
     try {
       const { agentDir, agentName, agentContext } = await this._resolveChannelAgentInfo(agentId);
 
       // ── 主持人跳过 triage：她只在 onAllReplied 阶段作为审查者+主持人发言 ──
       const isHost = agentId === engine.currentAgentId;
-      const readFile = (p) => { try { return fs.readFileSync(p, "utf-8"); } catch { return ""; } };
+      const readFile = (p: string) => { try { return fs.readFileSync(p, "utf-8"); } catch { return ""; } };
       const isZh = getLocale().startsWith("zh");
 
       // memory.md 和 user.md 内容会变，仍需从磁盘读取
@@ -381,7 +539,7 @@ export class ChannelRouter {
         debugLog()?.warn("channel", `skip malformed channel during triage: #${channelName}`);
         return { replied: false };
       }
-      let channelMessages = [];
+      let channelMessages: ChannelMessage[] = [];
       let lastMsgIsUser = false;
       try {
         const parsed = parseChannel(fs.readFileSync(channelFile, "utf-8"));
@@ -406,7 +564,7 @@ export class ChannelRouter {
       const triggerTimestamp = triggerMessage?.timestamp || "";
       const triggeredByImmediateTurn = !!triggerTimestamp;
       const triggerIsSelf = triggerSender === agentId || triggerSender === agentName;
-      const latestPromptText = messageText(triggerMessage) || messageText(newMessages[newMessages.length - 1]);
+      const latestPromptText = messageText(triggerMessage) || messageText(newMessages[newMessages.length - 1] as ChannelMessageLike | undefined);
       const forcePresenceReply = triggeredByImmediateTurn && looksLikePresencePrompt(latestPromptText);
       const alreadyRepliedToTrigger = triggeredByImmediateTurn
         && channelMessages.some((message) =>
@@ -432,14 +590,12 @@ export class ChannelRouter {
 
       if (!shouldReply) {
         try {
-          const utilCfg = engine.resolveUtilityConfig() || {};
-          const {
-            utility_large: model,
-            large_api_key: api_key,
-            large_base_url: base_url,
-            large_api: api,
-            utility_large_allow_missing_api_key = false,
-          } = utilCfg;
+          const utilCfg = engine.resolveUtilityConfig?.() || {};
+          const model = stringValue(utilCfg.utility_large);
+          const api_key = stringValue(utilCfg.large_api_key);
+          const base_url = stringValue(utilCfg.large_base_url);
+          const api = stringValue(utilCfg.large_api);
+          const utility_large_allow_missing_api_key = utilCfg.utility_large_allow_missing_api_key === true;
           if ((api_key || utility_large_allow_missing_api_key) && base_url && api) {
             const triageSystem = agentContext + memoryContext + userContext
               + "\n\n---\n\n"
@@ -458,7 +614,8 @@ export class ChannelRouter {
               ? AbortSignal.any([signal, triageTimeout])
               : triageTimeout;
             const answer = await callText({
-              api, model,
+              api: api as LLMApi,
+              model: model as ModelId,
               apiKey: api_key,
               baseUrl: base_url,
               systemPrompt: triageSystem,
@@ -473,7 +630,7 @@ export class ChannelRouter {
             shouldReply = true;
           }
         } catch (err) {
-          console.warn(`[channel] triage 不可用，默认回复 (${agentId}/#${channelName}): ${err.message}`);
+          console.warn(`[channel] triage 不可用，默认回复 (${agentId}/#${channelName}): ${errorMessage(err)}`);
           shouldReply = true;
         }
       }
@@ -493,8 +650,8 @@ export class ChannelRouter {
         }
         return this._commitChannelReply(channelName, agentId, agentName, replyText);
       } catch (err) {
-        console.error(`[channel] 回复失败 (${agentId}/#${channelName}): ${err.message}`);
-        debugLog()?.error("channel", `回复失败 (${agentId}/#${channelName}): ${err.message}`);
+        console.error(`[channel] 回复失败 (${agentId}/#${channelName}): ${errorMessage(err)}`);
+        debugLog()?.error("channel", `回复失败 (${agentId}/#${channelName}): ${errorMessage(err)}`);
         const fallback = await this._executeDirectReply(agentId, channelName, msgText, { signal });
         if (fallback.replyText) {
           debugLog()?.warn("channel", `使用轻量兜底回复 (${agentId}/#${channelName})`);
@@ -503,8 +660,8 @@ export class ChannelRouter {
         return { replied: false };
       }
     } catch (err) {
-      console.error(`[channel] 检查失败 (${agentId}/#${channelName}): ${err.message}`);
-      debugLog()?.error("channel", `检查失败 (${agentId}/#${channelName}): ${err.message}`);
+      console.error(`[channel] 检查失败 (${agentId}/#${channelName}): ${errorMessage(err)}`);
+      debugLog()?.error("channel", `检查失败 (${agentId}/#${channelName}): ${errorMessage(err)}`);
       try {
         const fallback = await this._executeDirectReply(agentId, channelName, msgText, { signal });
         if (fallback.replyText) {
@@ -512,7 +669,7 @@ export class ChannelRouter {
           return this._commitChannelReply(channelName, agentId, fallback.agentName, fallback.replyText);
         }
       } catch (fallbackErr) {
-        debugLog()?.error("channel", `兜底回复失败 (${agentId}/#${channelName}): ${fallbackErr.message}`);
+        debugLog()?.error("channel", `兜底回复失败 (${agentId}/#${channelName}): ${errorMessage(fallbackErr)}`);
       }
       return { replied: false };
     }
@@ -521,7 +678,7 @@ export class ChannelRouter {
   /**
    * 两轮 Agent Session 生成频道回复
    */
-  async _executeReply(agentId, channelName, msgText, { signal } = {}) {
+  async _executeReply(agentId: string, channelName: string, msgText: string, { signal }: CheckOptions = {}): Promise<string | null> {
     const isZh = getLocale().startsWith("zh");
     const replyTimeout = AbortSignal.timeout(CHANNEL_REPLY_TIMEOUT_MS);
     const replySignal = signal
@@ -583,7 +740,7 @@ export class ChannelRouter {
     return text;
   }
 
-  async _executeConclusion(channelName, { signal, reason = "manual" } = {}) {
+  async _executeConclusion(channelName: string, { signal, reason = "manual" }: ConclusionOptions = {}) {
     const engine = this._engine;
     const channelFile = path.join(engine.channelsDir, `${channelName}.md`);
     if (!fs.existsSync(channelFile)) {
@@ -666,7 +823,7 @@ export class ChannelRouter {
     return { reportText: finalText, savedFactCount, hostId };
   }
 
-  _resolveConclusionHostId(members) {
+  _resolveConclusionHostId(members: string[]): string | null {
     const engine = this._engine;
     if (engine.currentAgentId && members.includes(engine.currentAgentId)) {
       return engine.currentAgentId;
@@ -680,7 +837,7 @@ export class ChannelRouter {
     return engine.currentAgentId || null;
   }
 
-  async _saveConclusionFacts(channelName, members, reportText) {
+  async _saveConclusionFacts(channelName: string, members: string[], reportText: string): Promise<number> {
     const engine = this._engine;
     const isZh = getLocale().startsWith("zh");
     const agentIds = [...new Set((members || []).filter((agentId) => agentId && agentId !== "user"))];
@@ -690,7 +847,7 @@ export class ChannelRouter {
     for (const agentId of agentIds) {
       try {
         const isCurrentAgent = agentId === engine.currentAgentId;
-        let factStore = null;
+        let factStore: FactStoreLike | null = null;
         let needClose = false;
 
         if (isCurrentAgent && engine.agent?.factStore) {
@@ -699,11 +856,12 @@ export class ChannelRouter {
           const dbPath = path.join(engine.agentsDir, agentId, "memory", "facts.db");
           if (!fs.existsSync(path.dirname(dbPath))) continue;
           const { FactStore } = await import("../lib/memory/fact-store.js");
-          factStore = new FactStore(dbPath);
+          factStore = new FactStore(dbPath) as FactStoreLike;
           needClose = true;
         }
 
         try {
+          if (!factStore) continue;
           factStore.add({
             fact: `[#${channelName}] ${reportText}`,
             tags: [isZh ? "频道结论" : "channel-conclusion", channelName],
@@ -712,10 +870,10 @@ export class ChannelRouter {
           });
           savedCount += 1;
         } finally {
-          if (needClose) factStore.close();
+          if (needClose) factStore?.close?.();
         }
       } catch (err) {
-        console.warn(`[channel] 写入结论记忆失败 (${agentId}/#${channelName}): ${err.message}`);
+        console.warn(`[channel] 写入结论记忆失败 (${agentId}/#${channelName}): ${errorMessage(err)}`);
       }
     }
 
@@ -726,17 +884,15 @@ export class ChannelRouter {
    * 频道记忆摘要（结构化版本，Auto Dream 频道版）
    * 将频道讨论整理为结构化记忆：话题 + 各方立场 + 共识 + 分歧
    */
-  async _memorySummarize(agentId, channelName, contextText) {
+  async _memorySummarize(agentId: string, channelName: string, contextText: string): Promise<void> {
     const engine = this._engine;
     try {
-      const utilCfg = engine.resolveUtilityConfig() || {};
-      const {
-        utility: model,
-        api_key,
-        base_url,
-        api,
-        utility_allow_missing_api_key = false,
-      } = utilCfg;
+      const utilCfg = engine.resolveUtilityConfig?.() || {};
+      const model = stringValue(utilCfg.utility);
+      const api_key = stringValue(utilCfg.api_key);
+      const base_url = stringValue(utilCfg.base_url);
+      const api = stringValue(utilCfg.api);
+      const utility_allow_missing_api_key = utilCfg.utility_allow_missing_api_key === true;
       if ((!api_key && !utility_allow_missing_api_key) || !base_url || !api) {
         console.log(`\x1b[90m[channel] ${agentId} 无 API 配置，跳过记忆摘要\x1b[0m`);
         return;
@@ -744,7 +900,8 @@ export class ChannelRouter {
 
       const isZhMem = getLocale().startsWith("zh");
       const summaryText = await callText({
-        api, model,
+        api: api as LLMApi,
+        model: model as ModelId,
         apiKey: api_key,
         baseUrl: base_url,
         systemPrompt: isZhMem
@@ -757,7 +914,7 @@ export class ChannelRouter {
 
       // 写入 agent 的 fact store
       const isCurrentAgent = (agentId === engine.currentAgentId);
-      let factStore = null;
+      let factStore: FactStoreLike | null = null;
       let needClose = false;
 
       if (isCurrentAgent && engine.agent?.factStore) {
@@ -765,12 +922,13 @@ export class ChannelRouter {
       } else {
         const { FactStore } = await import("../lib/memory/fact-store.js");
         const dbPath = path.join(engine.agentsDir, agentId, "memory", "facts.db");
-        factStore = new FactStore(dbPath);
+        factStore = new FactStore(dbPath) as FactStoreLike;
         needClose = true;
       }
 
       const now = new Date();
       try {
+        if (!factStore) return;
         factStore.add({
           fact: `[#${channelName}] ${summaryText}`,
           tags: [isZhMem ? "频道" : "channel", channelName],
@@ -778,13 +936,13 @@ export class ChannelRouter {
           session_id: `channel-${channelName}`,
         });
       } finally {
-        if (needClose) factStore.close();
+        if (needClose) factStore?.close?.();
       }
 
       console.log(`\x1b[90m[channel] ${agentId} memory saved (#${channelName}, ${summaryText.length} chars)\x1b[0m`);
     } catch (err) {
-      console.error(`[channel] 记忆摘要失败 (${agentId}/#${channelName}): ${err.message}`);
-      debugLog()?.error("channel", `记忆摘要失败 (${agentId}/#${channelName}): ${err.message}`);
+      console.error(`[channel] 记忆摘要失败 (${agentId}/#${channelName}): ${errorMessage(err)}`);
+      debugLog()?.error("channel", `记忆摘要失败 (${agentId}/#${channelName}): ${errorMessage(err)}`);
     }
   }
 
@@ -792,7 +950,7 @@ export class ChannelRouter {
    * 频道主持人总结（Lynn/hanako 角色）
    * 在所有专家回复后自动触发，总结分歧、追问盲点、或引导下一步讨论。
    */
-  async _executeHostSummary(channelName, { signal } = {}) {
+  async _executeHostSummary(channelName: string, { signal }: CheckOptions = {}): Promise<void> {
     const engine = this._engine;
     const hostId = engine.currentAgentId; // Lynn = 当前活跃 agent（主持人兼验证者）
     if (!hostId) return;
@@ -804,7 +962,7 @@ export class ChannelRouter {
     // （用户通过 ExpertTeamGuide 创建频道时可能只选了专家没选主 agent）
     const { getChannelMembers: _getMembers } = await import("../lib/channels/channel-store.js");
     const members = _getMembers(channelFile);
-    const agentMembers = members.filter(id => id !== hostId && id !== "user");
+    const agentMembers = members.filter((id: string) => id !== hostId && id !== "user");
     if (agentMembers.length === 0) return; // 频道里没有专家，不总结
 
     const isZh = getLocale().startsWith("zh");
@@ -862,8 +1020,8 @@ export class ChannelRouter {
       debugLog()?.log("channel", `主持人 ${hostName} 审查+总结 #${channelName} (${summaryText.length} chars)`);
     } catch (err) {
       if (signal?.aborted) return;
-      console.error(`[channel] 主持人总结失败 (#${channelName}): ${err.message}`);
-      debugLog()?.error("channel", `主持人总结失败 (#${channelName}): ${err.message}`);
+      console.error(`[channel] 主持人总结失败 (#${channelName}): ${errorMessage(err)}`);
+      debugLog()?.error("channel", `主持人总结失败 (#${channelName}): ${errorMessage(err)}`);
     }
   }
 }
