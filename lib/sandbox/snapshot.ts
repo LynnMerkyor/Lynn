@@ -18,8 +18,24 @@ import { debugLog } from "../debug-log.js";
 
 const SNAPSHOT_BASE = path.join(os.homedir(), ".lynn", "snapshots");
 
+export interface SnapshotResult {
+  snapshotPath: string | null;
+  success: boolean;
+  error?: string;
+}
+
+export interface SnapshotInfo {
+  name: string;
+  path: string;
+  created: Date;
+}
+
+interface ExecError extends Error {
+  status?: number;
+}
+
 /** 确保快照基础目录存在 */
-function ensureSnapshotDir(agentId) {
+function ensureSnapshotDir(agentId?: string | null): string {
   const dir = path.join(SNAPSHOT_BASE, agentId || "default");
   fs.mkdirSync(dir, { recursive: true });
   return dir;
@@ -32,7 +48,11 @@ function ensureSnapshotDir(agentId) {
  * @param {string} [reason] - 触发原因（用于日志）
  * @returns {{ snapshotPath: string, success: boolean, error?: string }}
  */
-export function createSnapshot(targetPath, agentId, reason) {
+export function createSnapshot(
+  targetPath: string | null | undefined,
+  agentId?: string | null,
+  reason?: string,
+): SnapshotResult {
   if (!targetPath || !fs.existsSync(targetPath)) {
     return { snapshotPath: null, success: false, error: "target path does not exist" };
   }
@@ -81,15 +101,16 @@ export function createSnapshot(targetPath, agentId, reason) {
         });
       } catch (e) {
         // robocopy returns non-zero exit codes for success (1 = files copied)
-        if (e.status > 7) throw e;
+        if ((e as ExecError).status !== undefined && (e as ExecError).status! > 7) throw e;
       }
     }
 
     debugLog()?.log("snapshot", `created snapshot: ${snapshotPath} (reason: ${reason || "manual"})`);
     return { snapshotPath, success: true };
   } catch (err) {
-    debugLog()?.error("snapshot", `snapshot failed: ${err.message}`);
-    return { snapshotPath: null, success: false, error: err.message };
+    const message = errorMessage(err);
+    debugLog()?.error("snapshot", `snapshot failed: ${message}`);
+    return { snapshotPath: null, success: false, error: message };
   }
 }
 
@@ -98,7 +119,7 @@ export function createSnapshot(targetPath, agentId, reason) {
  * @param {string} agentId
  * @returns {Array<{ name: string, path: string, created: Date }>}
  */
-export function listSnapshots(agentId) {
+export function listSnapshots(agentId?: string | null): SnapshotInfo[] {
   const dir = path.join(SNAPSHOT_BASE, agentId || "default");
   if (!fs.existsSync(dir)) return [];
 
@@ -122,7 +143,7 @@ export function listSnapshots(agentId) {
  * @param {string} targetPath - 恢复到的目标路径
  * @returns {{ success: boolean, error?: string }}
  */
-export function restoreSnapshot(snapshotPath, targetPath) {
+export function restoreSnapshot(snapshotPath: string, targetPath: string): Omit<SnapshotResult, "snapshotPath"> {
   if (!fs.existsSync(snapshotPath)) {
     return { success: false, error: "snapshot not found" };
   }
@@ -144,7 +165,7 @@ export function restoreSnapshot(snapshotPath, targetPath) {
           timeout: 120000,
         });
       } catch (e) {
-        if (e.status > 7) throw e;
+        if ((e as ExecError).status !== undefined && (e as ExecError).status! > 7) throw e;
       }
     } else {
       execSync(`rsync -a --delete "${sourcePath}/" "${targetPath}/"`, {
@@ -156,8 +177,9 @@ export function restoreSnapshot(snapshotPath, targetPath) {
     debugLog()?.log("snapshot", `restored snapshot: ${snapshotPath} → ${targetPath}`);
     return { success: true };
   } catch (err) {
-    debugLog()?.error("snapshot", `restore failed: ${err.message}`);
-    return { success: false, error: err.message };
+    const message = errorMessage(err);
+    debugLog()?.error("snapshot", `restore failed: ${message}`);
+    return { success: false, error: message };
   }
 }
 
@@ -167,7 +189,7 @@ export function restoreSnapshot(snapshotPath, targetPath) {
  * @param {number} maxDays - 保留天数（默认 7）
  * @returns {number} 删除的快照数
  */
-export function cleanupSnapshots(agentId, maxDays = 7) {
+export function cleanupSnapshots(agentId?: string | null, maxDays = 7): number {
   const dir = path.join(SNAPSHOT_BASE, agentId || "default");
   if (!fs.existsSync(dir)) return 0;
 
@@ -206,6 +228,10 @@ const DANGEROUS_PATTERNS = [
  * @param {string} command
  * @returns {boolean}
  */
-export function isDangerousCommand(command) {
+export function isDangerousCommand(command: string): boolean {
   return DANGEROUS_PATTERNS.some(p => p.test(command));
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }

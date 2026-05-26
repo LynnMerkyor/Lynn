@@ -20,6 +20,7 @@ import {
   READ_WRITE_AGENT_DIRS,
   READ_WRITE_AGENT_FILES,
   READ_WRITE_HOME_DIRS,
+  type SandboxPolicy,
 } from "./policy.js";
 
 export const AccessLevel = {
@@ -27,22 +28,35 @@ export const AccessLevel = {
   READ_ONLY: "read_only",
   READ_WRITE: "read_write",
   FULL: "full",
-};
+} as const;
+
+export type AccessLevelValue = (typeof AccessLevel)[keyof typeof AccessLevel];
+export type PathGuardOperation = "read" | "write" | "delete";
 
 /** 操作 → 所需最低级别 */
-const OP_REQUIREMENTS = {
+const OP_REQUIREMENTS: Record<PathGuardOperation, Set<AccessLevelValue>> = {
   read: new Set([AccessLevel.READ_ONLY, AccessLevel.READ_WRITE, AccessLevel.FULL]),
   write: new Set([AccessLevel.READ_WRITE, AccessLevel.FULL]),
   delete: new Set([AccessLevel.FULL]),
 };
 
 export class PathGuard {
+  private _fullAccess: boolean;
+  private readonly lynnHome: string;
+  private readonly agentDir: string;
+  private readonly workspace: string | null;
+  private readonly trustedRoots: string[];
+
   /**
    * @param {object} policy  从 deriveSandboxPolicy() 得到，或兼容旧格式
    */
-  constructor(policy) {
+  constructor(policy: SandboxPolicy) {
     if (policy.mode === "full-access") {
       this._fullAccess = true;
+      this.lynnHome = "";
+      this.agentDir = "";
+      this.workspace = null;
+      this.trustedRoots = [];
       return;
     }
     this._fullAccess = false;
@@ -60,14 +74,14 @@ export class PathGuard {
    * 对它做 realpath，然后把不存在的段拼回去。
    * 这样 mkdir -p 多层目录时也能正确判断权限。
    */
-  _resolveReal(p) {
+  _resolveReal(p: string): string | null {
     const abs = path.resolve(p);
     try {
       return fs.realpathSync(abs);
     } catch (err) {
-      if (err.code !== "ENOENT") return null;
+      if (!isEnoent(err)) return null;
 
-      const pending = [];
+      const pending: string[] = [];
       let current = abs;
       while (true) {
         const parent = path.dirname(current);
@@ -87,7 +101,7 @@ export class PathGuard {
               }
               break;
             } catch (e2) {
-              if (e2.code !== "ENOENT") return null;
+              if (!isEnoent(e2)) return null;
               const up = path.dirname(check);
               if (up === check) return null;
               check = up;
@@ -96,7 +110,7 @@ export class PathGuard {
 
           return joined;
         } catch (e) {
-          if (e.code !== "ENOENT") return null;
+          if (!isEnoent(e)) return null;
           current = parent;
         }
       }
@@ -104,7 +118,7 @@ export class PathGuard {
   }
 
   /** 判断 target 是否在 base 内部（含相等） */
-  _isInside(target, base) {
+  _isInside(target: string, base: string): boolean {
     return target === base || target.startsWith(base + path.sep);
   }
 
@@ -113,7 +127,7 @@ export class PathGuard {
    * @param {string} rawPath 绝对路径
    * @returns {string} AccessLevel
    */
-  getAccessLevel(rawPath) {
+  getAccessLevel(rawPath: string): AccessLevelValue {
     const resolved = this._resolveReal(rawPath);
     if (!resolved) return AccessLevel.BLOCKED;
 
@@ -180,7 +194,7 @@ export class PathGuard {
    * @param {"read"|"write"|"delete"} operation
    * @returns {{ allowed: boolean, reason?: string, logged?: boolean }}
    */
-  check(absolutePath, operation) {
+  check(absolutePath: string, operation: PathGuardOperation): { allowed: boolean; reason?: string; logged?: boolean } {
     if (this._fullAccess) return { allowed: true };
     const level = this.getAccessLevel(absolutePath);
     const wouldBlock = !(OP_REQUIREMENTS[operation]?.has(level) ?? false);
@@ -203,7 +217,18 @@ export class PathGuard {
 const AUDIT_LOG_PATH = path.join(os.homedir(), ".lynn", "audit.jsonl");
 const MAX_AUDIT_SIZE = 2 * 1024 * 1024; // 2MB，超过则截断保留后半
 
-function appendAuditLog(entry) {
+export interface AuditLogEntry {
+  operation: string;
+  path: string;
+  level: string;
+  ts: string;
+}
+
+function isEnoent(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as NodeJS.ErrnoException).code === "ENOENT";
+}
+
+function appendAuditLog(entry: AuditLogEntry): void {
   try {
     const dir = path.dirname(AUDIT_LOG_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -221,15 +246,15 @@ function appendAuditLog(entry) {
   } catch {}
 }
 
-export function readAuditLog(limit = 100) {
+export function readAuditLog(limit = 100): AuditLogEntry[] {
   try {
     if (!fs.existsSync(AUDIT_LOG_PATH)) return [];
     const content = fs.readFileSync(AUDIT_LOG_PATH, "utf-8");
     const lines = content.trim().split("\n").filter(Boolean);
     return lines
       .slice(-limit)
-      .map((line) => { try { return JSON.parse(line); } catch { return null; } })
-      .filter(Boolean)
+      .map((line) => { try { return JSON.parse(line) as AuditLogEntry; } catch { return null; } })
+      .filter((entry): entry is AuditLogEntry => entry !== null)
       .reverse();
   } catch {
     return [];
