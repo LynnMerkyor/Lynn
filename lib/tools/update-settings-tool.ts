@@ -12,7 +12,102 @@ import { t } from "../../server/i18n.js";
 /**
  * i18n key → 本地化标签 批量转换
  */
-function i18nLabels(keyMap) {
+type SettingType = "list" | "text" | "toggle";
+type SettingScope = "agent";
+type SettingValue = string | boolean;
+
+interface AgentConfigLike {
+  models?: { chat?: string };
+  [key: string]: unknown;
+}
+
+interface AgentLike {
+  memoryMasterEnabled?: boolean;
+  agentName?: string;
+  userName?: string;
+  config?: AgentConfigLike;
+  updateConfig(config: Record<string, unknown>): void;
+}
+
+interface PreferencesLike {
+  getLocale(): string | null | undefined;
+  getTimezone(): string | null | undefined;
+  getThinkingLevel(): string | null | undefined;
+}
+
+interface SettingsEngineLike {
+  securityMode?: string;
+  preferences: PreferencesLike;
+  agent?: AgentLike | null;
+  availableModels?: Array<{ id: string }>;
+  setSecurityMode(value: string): void;
+  setLocale(value: string): void;
+  setTimezone(value: string): void;
+  setThinkingLevel(value: string): void;
+  getHomeFolder(): string | null | undefined;
+  setHomeFolder(value: string): void;
+}
+
+interface SettingsRegistryEntry {
+  type: SettingType;
+  label: string;
+  description?: string;
+  options?: string[];
+  optionLabels?: Record<string, string>;
+  searchTerms?: string[];
+  scope?: SettingScope;
+  frontend?: boolean;
+  optionsFrom?: "availableModels";
+  get(engine: SettingsEngineLike): string | null;
+  apply?: ((engine: SettingsEngineLike, value: SettingValue) => void) | null;
+}
+
+interface SearchResult {
+  key: string;
+  reg: SettingsRegistryEntry;
+  options: string[] | null;
+}
+
+interface SettingsToolParams {
+  action: "search" | "apply" | string;
+  query?: string;
+  key?: string;
+  value?: string;
+}
+
+interface ConfirmationResult {
+  action: "confirmed" | "rejected" | string;
+  value?: unknown;
+}
+
+interface ConfirmStoreLike {
+  create(
+    kind: "settings",
+    payload: Record<string, unknown>,
+    sessionPath?: string | null,
+  ): { confirmId: string; promise: Promise<ConfirmationResult> };
+}
+
+type SettingsToolOptions = {
+  getEngine?: () => SettingsEngineLike | null | undefined;
+  getConfirmStore?: () => ConfirmStoreLike | null | undefined;
+  getSessionPath?: () => string | null | undefined;
+  emitEvent?: (event: Record<string, unknown>) => void;
+};
+
+type SettingsToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function settingString(value: SettingValue): string {
+  return typeof value === "string" ? value : String(value);
+}
+
+function i18nLabels(keyMap: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(keyMap).map(([k, v]) => [k, t(v)]));
 }
 
@@ -43,7 +138,7 @@ const LOCALE_LABELS = {
 /**
  * 设置注册表
  */
-const SETTINGS_REGISTRY = {
+const SETTINGS_REGISTRY: Record<string, SettingsRegistryEntry> = {
   securityMode: {
     type: "list",
     get label() { return t("toolDef.updateSettings.securityMode") || "安全模式"; },
@@ -57,8 +152,8 @@ const SETTINGS_REGISTRY = {
       };
     },
     searchTerms: ["security", "mode", "安全", "模式", "セキュリティ", "보안"],
-    get: (engine) => engine.securityMode,
-    apply: (engine, v) => engine.setSecurityMode(v),
+    get: (engine) => engine.securityMode || null,
+    apply: (engine, v) => engine.setSecurityMode(settingString(v)),
   },
   locale: {
     type: "list",
@@ -67,14 +162,14 @@ const SETTINGS_REGISTRY = {
     optionLabels: LOCALE_LABELS,
     searchTerms: ["language", "国际化", "言語", "언어"],
     get: (engine) => engine.preferences.getLocale() || "zh-CN",
-    apply: (engine, v) => engine.setLocale(v),
+    apply: (engine, v) => engine.setLocale(settingString(v)),
   },
   timezone: {
     type: "text",
     get label() { return t("toolDef.updateSettings.timezone"); },
     get description() { return t("toolDef.updateSettings.timezoneDesc"); },
     get: (engine) => engine.preferences.getTimezone() || Intl.DateTimeFormat().resolvedOptions().timeZone,
-    apply: (engine, v) => engine.setTimezone(v),
+    apply: (engine, v) => engine.setTimezone(settingString(v)),
   },
   thinking_level: {
     type: "list",
@@ -83,7 +178,7 @@ const SETTINGS_REGISTRY = {
     get optionLabels() { return i18nLabels(THINKING_I18N); },
     searchTerms: ["reasoning", "推理", "思考", "推論"],
     get: (engine) => engine.preferences.getThinkingLevel() || "auto",
-    apply: (engine, v) => engine.setThinkingLevel(v),
+    apply: (engine, v) => engine.setThinkingLevel(settingString(v)),
   },
   "memory.enabled": {
     type: "toggle",
@@ -103,7 +198,7 @@ const SETTINGS_REGISTRY = {
     get: (engine) => engine.agent?.agentName || null,
     apply: (engine, v) => {
       if (!engine.agent) throw new Error("no active agent");
-      engine.agent.updateConfig({ agent: { name: v } });
+      engine.agent.updateConfig({ agent: { name: settingString(v) } });
     },
   },
   "user.name": {
@@ -113,7 +208,7 @@ const SETTINGS_REGISTRY = {
     get: (engine) => engine.agent?.userName || null,
     apply: (engine, v) => {
       if (!engine.agent) throw new Error("no active agent");
-      engine.agent.updateConfig({ user: { name: v } });
+      engine.agent.updateConfig({ user: { name: settingString(v) } });
     },
   },
   home_folder: {
@@ -121,7 +216,7 @@ const SETTINGS_REGISTRY = {
     get label() { return t("toolDef.updateSettings.workingDir"); },
     get description() { return t("toolDef.updateSettings.workingDirDesc"); },
     get: (engine) => engine.getHomeFolder() || "",
-    apply: (engine, v) => engine.setHomeFolder(v),
+    apply: (engine, v) => engine.setHomeFolder(settingString(v)),
   },
   theme: {
     type: "list",
@@ -149,17 +244,17 @@ const SETTINGS_REGISTRY = {
 
 // ── 搜索 ──
 
-function resolveOptions(reg, engine) {
+function resolveOptions(reg: SettingsRegistryEntry, engine: SettingsEngineLike): string[] | null {
   if (reg.optionsFrom === "availableModels") {
     return (engine.availableModels || []).map(m => m.id);
   }
   return reg.options || null;
 }
 
-function searchSettings(query, engine) {
+function searchSettings(query: string, engine: SettingsEngineLike): SearchResult[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  const results = [];
+  const results: SearchResult[] = [];
   for (const [key, reg] of Object.entries(SETTINGS_REGISTRY)) {
     const options = resolveOptions(reg, engine);
     const haystack = [
@@ -177,7 +272,7 @@ function searchSettings(query, engine) {
 
 // ── 格式化 ──
 
-function formatOptionList(options, labels, maxShow = 10) {
+function formatOptionList(options: string[] | null | undefined, labels?: Record<string, string>, maxShow = 10): string {
   if (!options?.length) return "";
   const shown = options.slice(0, maxShow);
   const rest = options.length - shown.length;
@@ -186,7 +281,7 @@ function formatOptionList(options, labels, maxShow = 10) {
   return parts.join(" / ");
 }
 
-function formatSearchResults(results, engine) {
+function formatSearchResults(results: SearchResult[], engine: SettingsEngineLike): string {
   return results.map((r, i) => {
     const { key, reg, options } = r;
     const ol = reg.optionLabels;
@@ -218,7 +313,7 @@ function formatSearchResults(results, engine) {
 
 // ── 工具 ──
 
-export function createUpdateSettingsTool(deps = {}) {
+export function createUpdateSettingsTool(deps: SettingsToolOptions = {}) {
   const {
     getEngine,
     getConfirmStore,
@@ -240,7 +335,7 @@ export function createUpdateSettingsTool(deps = {}) {
       value: Type.Optional(Type.String({ description: t("toolDef.updateSettings.valueDesc") })),
     }),
     isUserFacing: true,
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: SettingsToolParams): Promise<SettingsToolResult> => {
       const engine = getEngine?.();
 
       switch (params.action) {
@@ -342,7 +437,7 @@ export function createUpdateSettingsTool(deps = {}) {
               }
               return { content: [{ type: "text", text: t("error.settingsApplied", { label: reg.label, value: finalValue }) }] };
             } catch (err) {
-              return { content: [{ type: "text", text: t("error.settingsApplyFailed", { msg: err.message }) }] };
+              return { content: [{ type: "text", text: t("error.settingsApplyFailed", { msg: errorMessage(err) }) }] };
             }
           } else if (result.action === "rejected") {
             return { content: [{ type: "text", text: t("error.settingsCancelled", { label: reg.label }) }] };
