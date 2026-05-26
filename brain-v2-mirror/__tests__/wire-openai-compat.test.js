@@ -81,6 +81,7 @@ describe('OpenAI-compat wire adapter', () => {
       await drain(callOpenAI({ provider: sparkProvider, messages: [{ role: 'user', content: 'q' }] }));
       const body = JSON.parse(f.mock.calls[0][1].body);
       expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
+      expect(body.max_tokens).toBe(512);
     });
 
     it('default_thinking:false + reasoningEffort=high → opt-in thinking=true', async () => {
@@ -93,6 +94,7 @@ describe('OpenAI-compat wire adapter', () => {
       const body = JSON.parse(f.mock.calls[0][1].body);
       expect(body.chat_template_kwargs.enable_thinking).toBe(true);
       expect(body.reasoning_effort).toBe('high');
+      expect(body.max_tokens).toBe(4096);
     });
 
     it('default_thinking:false + reasoningEffort=off → 保持 thinking=false', async () => {
@@ -104,6 +106,45 @@ describe('OpenAI-compat wire adapter', () => {
       }));
       const body = JSON.parse(f.mock.calls[0][1].body);
       expect(body.chat_template_kwargs.enable_thinking).toBe(false);
+      expect(body.max_tokens).toBe(512);
+    });
+
+    it('default_thinking:false + reasoningEffort=auto → 短答自动关闭 thinking', async () => {
+      const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'hi' }), sseDone())));
+      await drain(callOpenAI({
+        provider: sparkProvider,
+        messages: [{ role: 'user', content: '你好' }],
+        reasoningEffort: 'auto',
+      }));
+      const body = JSON.parse(f.mock.calls[0][1].body);
+      expect(body.chat_template_kwargs.enable_thinking).toBe(false);
+      expect(body.max_tokens).toBe(512);
+      expect(body.reasoning_effort).toBe('auto');
+    });
+
+    it('default_thinking:false + reasoningEffort=auto → 复杂问题自动打开 thinking', async () => {
+      const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'hi' }), sseDone())));
+      await drain(callOpenAI({
+        provider: sparkProvider,
+        messages: [{ role: 'user', content: '请分析一下本地模型默认安装 9B 和 4B 降级入口的产品取舍' }],
+        reasoningEffort: 'auto',
+      }));
+      const body = JSON.parse(f.mock.calls[0][1].body);
+      expect(body.chat_template_kwargs.enable_thinking).toBe(true);
+      expect(body.max_tokens).toBe(4096);
+    });
+
+    it('default_thinking:false + auto short answer respects explicit max_tokens override', async () => {
+      const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'hi' }), sseDone())));
+      await drain(callOpenAI({
+        provider: sparkProvider,
+        messages: [{ role: 'user', content: '今天天气怎么样?' }],
+        reasoningEffort: 'auto',
+        extraBody: { max_tokens: 2048 },
+      }));
+      const body = JSON.parse(f.mock.calls[0][1].body);
+      expect(body.chat_template_kwargs.enable_thinking).toBe(false);
+      expect(body.max_tokens).toBe(2048);
     });
 
     it('extraBody.chat_template_kwargs.enable_thinking 显式覆盖 default_thinking', async () => {
