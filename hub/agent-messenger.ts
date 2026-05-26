@@ -16,9 +16,35 @@ const COOLDOWN_MS = 10_000;
 const DEFAULT_MAX_ROUNDS = 3;
 const DONE_RE = /<done\s*\/>/i;
 
+interface AgentMessengerEngine {
+  channelsDir?: string | null;
+  [key: string]: unknown;
+}
+
+interface AgentMessengerEventBus {
+  emit(event: { type: string; [key: string]: unknown }, sessionPath?: string | null): void;
+}
+
+interface AgentMessengerHub {
+  engine: AgentMessengerEngine;
+  eventBus: AgentMessengerEventBus;
+}
+
+export interface AgentMessengerOptions {
+  maxRounds?: number;
+  signal?: AbortSignal;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export class AgentMessenger {
+  private _hub: AgentMessengerHub;
+  private _cooldowns: Map<string, number>;
+
   /** @param {{ hub: import('./index.js').Hub }} opts */
-  constructor({ hub }) {
+  constructor({ hub }: { hub: AgentMessengerHub }) {
     this._hub = hub;
     this._cooldowns = new Map();
   }
@@ -32,7 +58,12 @@ export class AgentMessenger {
    * @param {{ maxRounds?: number, signal?: AbortSignal }} [opts]
    * @returns {Promise<string|null>}  最后一轮的回复（已剥离 <done/>）
    */
-  async send(text, fromAgent, toAgent, opts = {}) {
+  async send(
+    text: string,
+    fromAgent: string,
+    toAgent: string,
+    opts: AgentMessengerOptions = {},
+  ): Promise<string | null> {
     const maxRounds = opts.maxRounds ?? DEFAULT_MAX_ROUNDS;
 
     const cooldownKey = `${fromAgent}→${toAgent}`;
@@ -52,24 +83,24 @@ export class AgentMessenger {
     const dmName = `${pair[0]}-${pair[1]}`;
     const channelsDir = this._hub.engine.channelsDir;
     const dmFile = channelsDir ? path.join(channelsDir, `${dmName}.md`) : null;
-    const canWrite = dmFile && fs.existsSync(dmFile);
+    const canWrite = dmFile != null && fs.existsSync(dmFile);
 
     const traceId = `dm_${Date.now()}`;
     debugLog()?.log("agent-messenger", `[${traceId}] ${fromAgent} ⇄ ${toAgent} (maxRounds=${maxRounds})`);
 
     const isZh = getLocale().startsWith("zh");
-    const systemNote = (sender) => isZh
+    const systemNote = (sender: string): string => isZh
       ? `当前消息来自内部 agent「${sender}」，这是 agent 间的内部通信，不是用户发来的。如果你认为对话可以结束了，在回复末尾加 <done/>。`
       : `This message is from internal agent "${sender}". This is agent-to-agent communication, not from the user. If you think the conversation can end, append <done/> at the end of your reply.`;
 
     let sender = fromAgent;
     let receiver = toAgent;
     let currentText = text;
-    let lastReply = null;
+    let lastReply: string | null = null;
 
     try {
       // 写入发起方的初始消息
-      if (canWrite) appendMessage(dmFile, fromAgent, text);
+      if (dmFile && canWrite) appendMessage(dmFile, fromAgent, text);
 
       for (let round = 0; round < maxRounds; round++) {
         if (opts.signal?.aborted) break;
@@ -78,7 +109,7 @@ export class AgentMessenger {
           receiver,
           [{ text: isZh ? `[来自 ${sender}] ${currentText}` : `[From ${sender}] ${currentText}`, capture: true }],
           {
-            engine: this._hub.engine,
+            engine: this._hub.engine as any,
             signal: opts.signal,
             sessionSuffix: "dms",
             keepSession: true,
@@ -92,7 +123,7 @@ export class AgentMessenger {
         lastReply = reply.replace(DONE_RE, "").trim();
 
         // 写入接收方的回复到频道文件
-        if (canWrite && lastReply) {
+        if (dmFile && canWrite && lastReply) {
           appendMessage(dmFile, receiver, lastReply);
           this._hub.eventBus.emit({ type: "channel_new_message", channelName: dmName, sender: receiver }, null);
         }
@@ -109,7 +140,7 @@ export class AgentMessenger {
         currentText = lastReply;
       }
     } catch (err) {
-      console.error(`[agent-messenger] ${fromAgent} ⇄ ${toAgent} failed: ${err.message}`);
+      console.error(`[agent-messenger] ${fromAgent} ⇄ ${toAgent} failed: ${errorMessage(err)}`);
       return null;
     }
 

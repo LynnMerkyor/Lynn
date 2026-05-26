@@ -8,12 +8,49 @@
 
 import { getLocale } from "../server/i18n.js";
 
+export interface GuestMeta {
+  name?: string;
+  avatarUrl?: string;
+  userId?: string;
+  [key: string]: unknown;
+}
+
+export interface GuestHandleOptions {
+  isGroup?: boolean;
+  systemAppend?: string;
+  agentId?: string;
+  onDelta?: (delta: string) => void;
+  images?: unknown[];
+}
+
+interface GuestEngine {
+  executeExternalMessage(
+    text: string,
+    sessionKey: string,
+    meta: GuestMeta | undefined,
+    opts: {
+      guest: boolean;
+      agentId?: string;
+      contextTag: string;
+      systemAppend?: string;
+      onDelta?: (delta: string) => void;
+      images?: unknown[];
+    },
+  ): Promise<string | null>;
+}
+
+interface GuestHub {
+  engine: GuestEngine;
+}
+
 export class GuestHandler {
+  private _hub: GuestHub;
+
   /**
    * @param {object} opts
    * @param {import('./index.js').Hub} opts.hub
    */
-  constructor({ hub }) {
+  constructor({ hub }: { hub: GuestHub }) {
     this._hub = hub;
   }
 
@@ -25,7 +62,12 @@ export class GuestHandler {
    * @param {object} [opts]  { isGroup, systemAppend }
    * @returns {Promise<string|null>}
    */
-  async handle(text, sessionKey, meta, opts = {}) {
+  async handle(
+    text: string,
+    sessionKey: string,
+    meta?: GuestMeta,
+    opts: GuestHandleOptions = {},
+  ): Promise<string | null> {
     const isZh = getLocale().startsWith("zh");
     const senderName = meta?.name || (isZh ? "访客" : "Guest");
     const isGroup = opts.isGroup || false;

@@ -26,21 +26,48 @@ import { getLocale } from "../server/i18n.js";
 const MAX_ROUNDS = 3;
 const COOLDOWN_MS = 10_000;
 
+interface DmAgent {
+  agentName?: string;
+}
+
+interface DmEngine {
+  agentsDir: string;
+  getAgent(id: string): DmAgent | null | undefined;
+  [key: string]: unknown;
+}
+
+interface DmEventBus {
+  emit(event: { type: string; [key: string]: unknown }, sessionPath?: string | null): void;
+}
+
+interface DmHub {
+  engine: DmEngine;
+  eventBus: DmEventBus;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export class DmRouter {
-  constructor({ hub }) {
+  private _hub: DmHub;
+  private _cooldowns: Map<string, number>;
+  private _processing: Set<string>;
+
+  constructor({ hub }: { hub: DmHub }) {
     this._hub = hub;
     this._cooldowns = new Map();
     this._processing = new Set();
   }
 
-  get _engine() { return this._hub.engine; }
+  get _engine(): DmEngine { return this._hub.engine; }
 
   /**
    * 处理新私信：让接收方回复
    * @param {string} fromId - 发送方 agent ID
    * @param {string} toId - 接收方 agent ID
    */
-  async handleNewDm(fromId, toId) {
+  async handleNewDm(fromId: string, toId: string): Promise<void> {
     const key = `${fromId}→${toId}`;
 
     // 防重入
@@ -51,7 +78,8 @@ export class DmRouter {
     for (const [k, t] of this._cooldowns) {
       if (now - t >= COOLDOWN_MS) this._cooldowns.delete(k);
     }
-    if (this._cooldowns.has(key) && now - this._cooldowns.get(key) < COOLDOWN_MS) {
+    const last = this._cooldowns.get(key);
+    if (last != null && now - last < COOLDOWN_MS) {
       debugLog()?.log("dm-router", `cooldown hit: ${key}`);
       return;
     }
@@ -62,7 +90,7 @@ export class DmRouter {
     try {
       await this._processReply(fromId, toId);
     } catch (err) {
-      console.error(`[dm-router] ${key} failed: ${err.message}`);
+      console.error(`[dm-router] ${key} failed: ${errorMessage(err)}`);
     } finally {
       this._processing.delete(key);
     }
@@ -71,7 +99,7 @@ export class DmRouter {
   /**
    * 让 toId 读取聊天记录并回复，可能触发多轮
    */
-  async _processReply(fromId, toId) {
+  private async _processReply(fromId: string, toId: string): Promise<void> {
     const engine = this._engine;
     const agentsDir = engine.agentsDir;
 
@@ -120,7 +148,7 @@ export class DmRouter {
           },
         ],
         {
-          engine,
+          engine: engine as any,
           sessionSuffix: "dm-temp",
           keepSession: false,
           noTools: true,
