@@ -22,8 +22,130 @@ import {
 import { processDirtySessions } from "./deep-memory.js";
 import { extractSessionExperiences } from "../experience-extractor.js";
 import { getLogicalDay } from "../time-utils.js";
+import type { SessionStats } from "./session-stats.js";
 
 const TURNS_PER_SUMMARY = 6;    // 每隔多少轮触发一次滚动摘要
+
+type SessionRole = "user" | "assistant";
+
+interface SessionMessage {
+  role: SessionRole;
+  content: unknown;
+  timestamp: unknown;
+}
+
+interface SessionReadResult {
+  messages: SessionMessage[];
+  lastTimestamp: unknown | null;
+}
+
+interface SessionJsonlMessage {
+  role?: unknown;
+  content?: unknown;
+}
+
+interface SessionJsonlEntry {
+  type?: unknown;
+  timestamp?: unknown;
+  message?: SessionJsonlMessage | null;
+}
+
+interface SessionFile {
+  filename: string;
+  filePath: string;
+  mtime: Date;
+}
+
+interface SummaryEntry {
+  summary?: string;
+  updated_at?: string | null;
+  [key: string]: unknown;
+}
+
+interface SummaryManager {
+  rollingSummary(sessionId: string, messages: SessionMessage[], resolvedModel: ResolvedMemoryModel): Promise<unknown>;
+  getSummary(sessionId: string): SummaryEntry | null | undefined;
+  [key: string]: unknown;
+}
+
+interface FactStore {
+  [key: string]: unknown;
+}
+
+interface MemoryExclusions {
+  matchesFact(entry: unknown): boolean;
+}
+
+interface ProjectMemoryRuntime {
+  learnFromSession(cwd: string, summaryText: string, resolvedModel: ResolvedMemoryModel): Promise<unknown>;
+}
+
+interface UserProfileRuntime {
+  updateFromSession(stats: SessionStats): void;
+}
+
+interface InferredProfileRuntime {
+  inferFromSession(summaryText: string, resolvedModel: ResolvedMemoryModel): Promise<unknown>;
+}
+
+interface SkillDistillerRuntime {
+  finalizeSession(args: { sessionPath: string; summaryText: string }): Promise<unknown>;
+  distillFromSession(args: { summaryText: string; sessionStats: SessionStats | null }): Promise<unknown>;
+}
+
+export interface ResolvedMemoryModel {
+  model: string;
+  provider?: string;
+  api: string;
+  api_key: string;
+  base_url: string;
+  requestHeaders?: Record<string, string> | null;
+  [key: string]: unknown;
+}
+
+export interface MemoryTickerOptions {
+  summaryManager: SummaryManager;
+  configPath: string;
+  factStore: FactStore;
+  getResolvedMemoryModel: () => ResolvedMemoryModel;
+  onCompiled?: () => void;
+  sessionDir: string;
+  memoryMdPath: string;
+  todayMdPath: string;
+  weekMdPath: string;
+  longtermMdPath: string;
+  factsMdPath: string;
+  experienceDir?: string;
+  experienceIndexPath?: string;
+  getMemoryExclusions?: () => MemoryExclusions | null | undefined;
+  getMemoryMasterEnabled?: () => boolean;
+  isSessionMemoryEnabled?: (sessionPath: string) => boolean;
+  getProjectMemory?: () => ProjectMemoryRuntime | null | undefined;
+  getUserProfile?: () => UserProfileRuntime | null | undefined;
+  getInferredProfile?: () => InferredProfileRuntime | null | undefined;
+  getResolvedUtilityModel?: () => ResolvedMemoryModel | null | undefined;
+  getCwd?: () => string | null | undefined;
+  getSkillDistiller?: () => SkillDistillerRuntime | null | undefined;
+}
+
+export interface MemoryTicker {
+  start(): void;
+  stop(): Promise<void>;
+  tick(): Promise<void>;
+  triggerNow(): void;
+  notifyTurn(sessionPath: string): void;
+  notifySessionEnd(sessionPath?: string | null): Promise<void>;
+  notifyPromoted(sessionPath?: string | null): Promise<void>;
+  flushSession(sessionPath?: string | null): Promise<void>;
+}
+
+function errorMessage(err: unknown): string | undefined {
+  return (err as { message?: string } | null | undefined)?.message;
+}
+
+function errorMessageOrValue(err: unknown): unknown {
+  return errorMessage(err) || err;
+}
 
 // ── session JSONL 解析 ──
 
@@ -32,8 +154,8 @@ const TURNS_PER_SUMMARY = 6;    // 每隔多少轮触发一次滚动摘要
  */
 const TAIL_READ_THRESHOLD = 256 * 1024; // 256KB：超过此大小只读尾部
 
-function readSessionMessages(filePath) {
-  let raw;
+function readSessionMessages(filePath: string): SessionReadResult {
+  let raw: string;
   try {
     const stat = fs.statSync(filePath);
     if (stat.size > TAIL_READ_THRESHOLD) {
@@ -55,13 +177,13 @@ function readSessionMessages(filePath) {
     return { messages: [], lastTimestamp: null };
   }
 
-  const messages = [];
-  let lastTimestamp = null;
+  const messages: SessionMessage[] = [];
+  let lastTimestamp: unknown | null = null;
 
   for (const line of raw.split("\n")) {
     if (!line.trim()) continue;
     try {
-      const entry = JSON.parse(line);
+      const entry = JSON.parse(line) as SessionJsonlEntry;
       if (entry.type === "message" && entry.message) {
         const { role, content } = entry.message;
         if (role === "user" || role === "assistant") {
@@ -80,10 +202,10 @@ function readSessionMessages(filePath) {
 /**
  * 列出所有 session JSONL 文件
  */
-function listAllSessions(sessionDir) {
-  const results = [];
+function listAllSessions(sessionDir: string): SessionFile[] {
+  const results: SessionFile[] = [];
 
-  function scanDir(dir, prefix) {
+  function scanDir(dir: string, prefix: string | null) {
     try {
       for (const f of fs.readdirSync(dir)) {
         if (!f.endsWith(".jsonl")) continue;
@@ -91,9 +213,9 @@ function listAllSessions(sessionDir) {
         try {
           const stat = fs.statSync(fp);
           if (stat.isFile()) results.push({ filename: prefix ? `${prefix}/${f}` : f, filePath: fp, mtime: stat.mtime });
-        } catch (e) { console.warn("[memory-ticker] stat failed:", e.message || e); }
+        } catch (e) { console.warn("[memory-ticker] stat failed:", errorMessageOrValue(e)); }
       }
-    } catch (e) { console.warn("[memory-ticker] scanDir failed:", e.message || e); }
+    } catch (e) { console.warn("[memory-ticker] scanDir failed:", errorMessageOrValue(e)); }
   }
 
   scanDir(sessionDir, null);
@@ -103,7 +225,7 @@ function listAllSessions(sessionDir) {
   return results;
 }
 
-function sessionIdFromFilename(filename) {
+function sessionIdFromFilename(filename: string): string {
   return filename.replace(/\.jsonl$/, "");
 }
 
@@ -131,7 +253,7 @@ function sessionIdFromFilename(filename) {
  * @param {(sessionPath: string) => boolean} [opts.isSessionMemoryEnabled] - 返回指定 session 的记忆状态
  * @param {() => import('./skill-distiller.js').SkillDistiller | null} [opts.getSkillDistiller]
  */
-export function createMemoryTicker(opts) {
+export function createMemoryTicker(opts: MemoryTickerOptions): MemoryTicker {
   const {
     summaryManager,
     configPath,
@@ -158,27 +280,27 @@ export function createMemoryTicker(opts) {
   } = opts;
 
   /** agent 级总开关 */
-  const _isMemoryMasterOn = () => !getMemoryMasterEnabled || getMemoryMasterEnabled();
+  const _isMemoryMasterOn = (): boolean => !getMemoryMasterEnabled || getMemoryMasterEnabled();
   /** 指定 session 是否允许进入记忆流水线 */
-  const _isSessionMemoryOn = (sessionPath) =>
+  const _isSessionMemoryOn = (sessionPath: string): boolean =>
     _isMemoryMasterOn() && (!isSessionMemoryEnabled || isSessionMemoryEnabled(sessionPath));
 
   // 每小时检查日期变化（备用触发，主触发是 notifyTurn）
   const DAILY_CHECK_INTERVAL = 60 * 60 * 1000;
 
-  let _timer = null;
-  let _tickInFlight = null;
+  let _timer: ReturnType<typeof setInterval> | null = null;
+  let _tickInFlight: Promise<void> | null = null;
   let _dailyRunning = false;
-  let _lastDailyJobDate = null;
-  let _dailyStepsDate = null;               // 当天已完成步骤所属日期
-  const _dailyStepsCompleted = new Set();    // 当天已完成的步骤名（断点续跑）
-  const _turnCounts = new Map();             // sessionPath → turn count
-  const _endNotified = new Set();            // guard against double notifySessionEnd
-  const _summaryInProgress = new Set();      // 正在跑滚动摘要的 session
+  let _lastDailyJobDate: string | null = null;
+  let _dailyStepsDate: string | null = null;               // 当天已完成步骤所属日期
+  const _dailyStepsCompleted = new Set<string>();    // 当天已完成的步骤名（断点续跑）
+  const _turnCounts = new Map<string, number>();             // sessionPath → turn count
+  const _endNotified = new Set<string>();            // guard against double notifySessionEnd
+  const _summaryInProgress = new Set<string>();      // 正在跑滚动摘要的 session
 
   // ── 内部：滚动摘要 ──
 
-  async function _doRollingSummary(sessionPath) {
+  async function _doRollingSummary(sessionPath: string): Promise<void> {
     if (_summaryInProgress.has(sessionPath)) return; // 并发保护
     _summaryInProgress.add(sessionPath);
     try {
@@ -189,8 +311,8 @@ export function createMemoryTicker(opts) {
       await summaryManager.rollingSummary(sessionId, messages, getResolvedMemoryModel());
       debugLog()?.log("memory", `rolling summary updated: ${sessionId.slice(0, 8)}...`);
     } catch (err) {
-      console.error(`\x1b[90m[memory-ticker] 滚动摘要失败 (${path.basename(sessionPath)}): ${err.message}\x1b[0m`);
-      debugLog()?.error("memory", `rolling summary failed: ${err.message}`);
+      console.error(`\x1b[90m[memory-ticker] 滚动摘要失败 (${path.basename(sessionPath)}): ${errorMessage(err)}\x1b[0m`);
+      debugLog()?.error("memory", `rolling summary failed: ${errorMessage(err)}`);
     } finally {
       _summaryInProgress.delete(sessionPath);
     }
@@ -198,21 +320,21 @@ export function createMemoryTicker(opts) {
 
   // ── 内部：今天编译 + 组装 ──
 
-  async function _doCompileTodayAndAssemble() {
+  async function _doCompileTodayAndAssemble(): Promise<void> {
     try {
       await compileToday(summaryManager, todayMdPath, getResolvedMemoryModel());
       assemble(factsMdPath, todayMdPath, weekMdPath, longtermMdPath, memoryMdPath);
       onCompiled?.();
       debugLog()?.log("memory", "today compiled + assembled");
     } catch (err) {
-      console.error(`\x1b[90m[memory-ticker] compileToday 失败: ${err.message}\x1b[0m`);
-      debugLog()?.error("memory", `compileToday failed: ${err.message}`);
+      console.error(`\x1b[90m[memory-ticker] compileToday 失败: ${errorMessage(err)}\x1b[0m`);
+      debugLog()?.error("memory", `compileToday failed: ${errorMessage(err)}`);
     }
   }
 
   // ── 内部：经验提取 ──
 
-  async function _doExtractExperiences(sessionPath) {
+  async function _doExtractExperiences(sessionPath: string): Promise<void> {
     if (!experienceDir || !experienceIndexPath) return;
     try {
       const sessionId = sessionIdFromFilename(path.basename(sessionPath));
@@ -230,13 +352,13 @@ export function createMemoryTicker(opts) {
         debugLog()?.log("experience", `extracted ${extracted} lessons from ${sessionId.slice(0, 8)}...`);
       }
     } catch (err) {
-      console.error(`\x1b[90m[experience] 提取失败: ${err.message}\x1b[0m`);
+      console.error(`\x1b[90m[experience] 提取失败: ${errorMessage(err)}\x1b[0m`);
     }
   }
 
   // ── 内部：每日任务 ──
 
-  async function _doDaily() {
+  async function _doDaily(): Promise<void> {
     if (_dailyRunning) return;
     _dailyRunning = true;
     try {
@@ -258,8 +380,8 @@ export function createMemoryTicker(opts) {
           _dailyStepsCompleted.add("compileToday");
         } catch (err) {
           hasFailed = true;
-          console.error(`\x1b[90m[memory-ticker] compileToday(daily) 失败: ${err.message}\x1b[0m`);
-          debugLog()?.error("memory", `compileToday(daily) failed: ${err.message}`);
+          console.error(`\x1b[90m[memory-ticker] compileToday(daily) 失败: ${errorMessage(err)}\x1b[0m`);
+          debugLog()?.error("memory", `compileToday(daily) failed: ${errorMessage(err)}`);
         }
       }
 
@@ -270,8 +392,8 @@ export function createMemoryTicker(opts) {
           _dailyStepsCompleted.add("compileWeek");
         } catch (err) {
           hasFailed = true;
-          console.error(`\x1b[90m[memory-ticker] compileWeek 失败: ${err.message}\x1b[0m`);
-          debugLog()?.error("memory", `compileWeek failed: ${err.message}`);
+          console.error(`\x1b[90m[memory-ticker] compileWeek 失败: ${errorMessage(err)}\x1b[0m`);
+          debugLog()?.error("memory", `compileWeek failed: ${errorMessage(err)}`);
         }
       }
 
@@ -282,8 +404,8 @@ export function createMemoryTicker(opts) {
           _dailyStepsCompleted.add("compileLongterm");
         } catch (err) {
           hasFailed = true;
-          console.error(`\x1b[90m[memory-ticker] compileLongterm 失败: ${err.message}\x1b[0m`);
-          debugLog()?.error("memory", `compileLongterm failed: ${err.message}`);
+          console.error(`\x1b[90m[memory-ticker] compileLongterm 失败: ${errorMessage(err)}\x1b[0m`);
+          debugLog()?.error("memory", `compileLongterm failed: ${errorMessage(err)}`);
         }
       }
 
@@ -294,8 +416,8 @@ export function createMemoryTicker(opts) {
           _dailyStepsCompleted.add("compileFacts");
         } catch (err) {
           hasFailed = true;
-          console.error(`\x1b[90m[memory-ticker] compileFacts 失败: ${err.message}\x1b[0m`);
-          debugLog()?.error("memory", `compileFacts failed: ${err.message}`);
+          console.error(`\x1b[90m[memory-ticker] compileFacts 失败: ${errorMessage(err)}\x1b[0m`);
+          debugLog()?.error("memory", `compileFacts failed: ${errorMessage(err)}`);
         }
       }
 
@@ -305,14 +427,16 @@ export function createMemoryTicker(opts) {
         onCompiled?.();
       } catch (err) {
         hasFailed = true;
-        console.error(`\x1b[90m[memory-ticker] assemble 失败: ${err.message}\x1b[0m`);
+        console.error(`\x1b[90m[memory-ticker] assemble 失败: ${errorMessage(err)}\x1b[0m`);
       }
 
       // Step 5: deep-memory（独立，更新 facts.db）
       if (!_dailyStepsCompleted.has("deepMemory")) {
         try {
           const { processed, factsAdded } = await processDirtySessions(
-            summaryManager, factStore, getResolvedMemoryModel(), {
+            summaryManager as unknown as Parameters<typeof processDirtySessions>[0],
+            factStore as unknown as Parameters<typeof processDirtySessions>[1],
+            getResolvedMemoryModel(), {
               memoryExclusions: getMemoryExclusions?.() || null,
             },
           );
@@ -322,8 +446,8 @@ export function createMemoryTicker(opts) {
           }
         } catch (err) {
           hasFailed = true;
-          console.error(`\x1b[90m[memory-ticker] deep-memory 失败: ${err.message}\x1b[0m`);
-          debugLog()?.error("memory", `deep-memory failed: ${err.message}`);
+          console.error(`\x1b[90m[memory-ticker] deep-memory 失败: ${errorMessage(err)}\x1b[0m`);
+          debugLog()?.error("memory", `deep-memory failed: ${errorMessage(err)}`);
         }
       }
 
@@ -345,14 +469,14 @@ export function createMemoryTicker(opts) {
           console.log(`\x1b[90m[memory-ticker] snapshot cleanup: 删除 ${deleted} 个过期快照\x1b[0m`);
         }
       } catch (err) {
-        debugLog()?.warn("memory", `snapshot cleanup failed: ${err.message}`);
+        debugLog()?.warn("memory", `snapshot cleanup failed: ${errorMessage(err)}`);
       }
     } finally {
       _dailyRunning = false;
     }
   }
 
-  function _checkDailyJob() {
+  function _checkDailyJob(): void {
     if (!_isMemoryMasterOn()) return;
     const todayStr = getLogicalDay().logicalDate;
     if (_lastDailyJobDate !== todayStr) {
@@ -366,7 +490,7 @@ export function createMemoryTicker(opts) {
    * 每轮对话结束后调用（由 engine.js 在 prompt() 返回后调用）
    * @param {string} sessionPath - 当前 session 的 .jsonl 文件路径
    */
-  function notifyTurn(sessionPath) {
+  function notifyTurn(sessionPath: string): void {
     const count = (_turnCounts.get(sessionPath) || 0) + 1;
     _turnCounts.set(sessionPath, count);
 
@@ -385,7 +509,7 @@ export function createMemoryTicker(opts) {
    * Session 切换或 dispose 前调用（final pass）
    * @param {string} sessionPath
    */
-  async function notifySessionEnd(sessionPath) {
+  async function notifySessionEnd(sessionPath?: string | null): Promise<void> {
     if (!sessionPath) return;
     // Guard against double invocation for the same session
     if (_endNotified.has(sessionPath)) return;
@@ -412,11 +536,11 @@ export function createMemoryTicker(opts) {
             await projectMemory.learnFromSession(cwd, summary, getResolvedMemoryModel());
           }
         } catch (err) {
-          console.error(`\x1b[90m[memory-ticker] project memory learn failed: ${err.message}\x1b[0m`);
+          console.error(`\x1b[90m[memory-ticker] project memory learn failed: ${errorMessage(err)}\x1b[0m`);
         }
       }
 
-      let sessionStats = null;
+      let sessionStats: SessionStats | null = null;
 
       // Phase 3: 用户画像更新
       const userProfile = getUserProfile?.();
@@ -426,7 +550,7 @@ export function createMemoryTicker(opts) {
           sessionStats = extractSessionStats(sessionPath);
           if (userProfile && sessionStats) userProfile.updateFromSession(sessionStats);
         } catch (err) {
-          console.error(`\x1b[90m[memory-ticker] session stats update failed: ${err.message}\x1b[0m`);
+          console.error(`\x1b[90m[memory-ticker] session stats update failed: ${errorMessage(err)}\x1b[0m`);
         }
       }
 
@@ -441,7 +565,7 @@ export function createMemoryTicker(opts) {
             await inferredProfile.inferFromSession(summary, resolvedUtilityModel);
           }
         } catch (err) {
-          console.error(`\x1b[90m[memory-ticker] inferred profile update failed: ${err.message}\x1b[0m`);
+          console.error(`\x1b[90m[memory-ticker] inferred profile update failed: ${errorMessage(err)}\x1b[0m`);
         }
       }
 
@@ -462,25 +586,25 @@ export function createMemoryTicker(opts) {
             });
           }
         } catch (err) {
-          console.error(`\x1b[90m[memory-ticker] skill distill failed: ${err.message}\x1b[0m`);
+          console.error(`\x1b[90m[memory-ticker] skill distill failed: ${errorMessage(err)}\x1b[0m`);
         }
       }
     } catch (err) {
-      console.error(`\x1b[90m[memory-ticker] notifySessionEnd 失败: ${err.message}\x1b[0m`);
+      console.error(`\x1b[90m[memory-ticker] notifySessionEnd 失败: ${errorMessage(err)}\x1b[0m`);
     }
   }
 
   /**
    * 启动每小时的日期检查 timer（备用触发，不依赖用户对话）
    */
-  function start() {
+  function start(): void {
     if (_timer) return;
     _timer = setInterval(() => _checkDailyJob(), DAILY_CHECK_INTERVAL);
     if (_timer.unref) _timer.unref();
     console.log(`\x1b[90m[memory-ticker] v3 已启动（turn-based，每日任务备用 timer 1h）\x1b[0m`);
   }
 
-  async function stop() {
+  async function stop(): Promise<void> {
     if (_timer) {
       clearInterval(_timer);
       _timer = null;
@@ -493,7 +617,7 @@ export function createMemoryTicker(opts) {
    * 说明上次崩溃/重启前有未收尾的对话，补跑一次滚动摘要。
    * 只处理过去 24 小时内修改的文件，避免全量扫描。
    */
-  async function _recoverUnsummarized() {
+  async function _recoverUnsummarized(): Promise<void> {
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
     const sessions = listAllSessions(sessionDir);
     for (const { filePath, mtime } of sessions) {
@@ -512,13 +636,13 @@ export function createMemoryTicker(opts) {
    * 手动触发一次完整编译（调试 / 启动时用）
    * 先跑 daily job（确保 week/facts/longterm.md 存在），再 compileToday + assemble
    */
-  async function tick() {
+  async function tick(): Promise<void> {
     const p = _tickCore();
     _tickInFlight = p;
     try { await p; } finally { if (_tickInFlight === p) _tickInFlight = null; }
   }
 
-  async function _tickCore() {
+  async function _tickCore(): Promise<void> {
     if (!_isMemoryMasterOn()) return;
     await _recoverUnsummarized(); // 补偿崩溃/重启前未收尾的 session
     const todayStr = getLogicalDay().logicalDate;
@@ -531,7 +655,7 @@ export function createMemoryTicker(opts) {
   /**
    * 手动触发（兼容旧调用）
    */
-  function triggerNow() {
+  function triggerNow(): void {
     tick().catch(() => {});
   }
 
@@ -540,7 +664,7 @@ export function createMemoryTicker(opts) {
    * executeIsolated 不调 notifyTurn，所以需要显式补一次滚动摘要。
    * @param {string} sessionPath - promote 后的新 session 文件路径
    */
-  async function notifyPromoted(sessionPath) {
+  async function notifyPromoted(sessionPath?: string | null): Promise<void> {
     if (!sessionPath) return;
     if (!_isSessionMemoryOn(sessionPath)) return;
     try {
@@ -548,7 +672,7 @@ export function createMemoryTicker(opts) {
       await _doCompileTodayAndAssemble();
       debugLog()?.log("memory", `promoted session summarized: ${path.basename(sessionPath).slice(0, 20)}...`);
     } catch (err) {
-      console.error(`\x1b[90m[memory-ticker] notifyPromoted 失败: ${err.message}\x1b[0m`);
+      console.error(`\x1b[90m[memory-ticker] notifyPromoted 失败: ${errorMessage(err)}\x1b[0m`);
     }
     // 注册 turn count = 1，后续 notifySessionEnd 不会因 count===0 跳过
     _turnCounts.set(sessionPath, 1);
@@ -558,7 +682,7 @@ export function createMemoryTicker(opts) {
    * 强制刷新指定 session 的摘要（日记等功能调用前确保摘要最新）
    * @param {string} sessionPath
    */
-  async function flushSession(sessionPath) {
+  async function flushSession(sessionPath?: string | null): Promise<void> {
     if (!sessionPath) return;
     if (!_isSessionMemoryOn(sessionPath)) return;
     await _doRollingSummary(sessionPath);
