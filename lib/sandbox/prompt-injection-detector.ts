@@ -13,7 +13,34 @@
 
 // ── 检测模式 ──
 
-const INJECTION_PATTERNS = [
+type InjectionCategory =
+  | "directive_override"
+  | "role_hijack"
+  | "exec_induction"
+  | "data_theft"
+  | "hidden_text";
+
+type InjectionSeverity = "medium" | "high";
+
+interface InjectionPattern {
+  pattern: RegExp;
+  category: InjectionCategory;
+  severity: InjectionSeverity;
+}
+
+export interface PromptInjectionMatch {
+  pattern: string;
+  category: InjectionCategory;
+  severity: InjectionSeverity;
+  position: number;
+}
+
+export interface PromptInjectionResult {
+  detected: boolean;
+  matches: PromptInjectionMatch[];
+}
+
+const INJECTION_PATTERNS: InjectionPattern[] = [
   // 直接指令注入
   { pattern: /ignore\s+(all\s+)?previous\s+instructions/i, category: "directive_override", severity: "high" },
   { pattern: /disregard\s+(all\s+)?prior\s+(instructions|rules|guidelines)/i, category: "directive_override", severity: "high" },
@@ -54,7 +81,7 @@ const MAX_SCAN_LENGTH = 10_000;
  * @param {string} text - 待检测文本（文件内容）
  * @returns {{ detected: boolean, matches: Array<{ pattern: string, category: string, severity: string, position: number }> }}
  */
-export function detectPromptInjection(text) {
+export function detectPromptInjection(text: unknown): PromptInjectionResult {
   if (!text || typeof text !== "string") {
     return { detected: false, matches: [] };
   }
@@ -63,7 +90,7 @@ export function detectPromptInjection(text) {
     ? text.slice(0, MAX_SCAN_LENGTH)
     : text;
 
-  const matches = [];
+  const matches: PromptInjectionMatch[] = [];
 
   for (const { pattern, category, severity } of INJECTION_PATTERNS) {
     pattern.lastIndex = 0;
@@ -73,7 +100,7 @@ export function detectPromptInjection(text) {
         pattern: m[0].slice(0, 80),
         category,
         severity,
-        position: m.index,
+        position: m.index ?? 0,
       });
     }
   }
@@ -90,12 +117,12 @@ export function detectPromptInjection(text) {
  * @param {Array} matches - detectPromptInjection 返回的 matches
  * @returns {string}
  */
-export function formatInjectionWarning(matches) {
+export function formatInjectionWarning(matches: PromptInjectionMatch[] | null | undefined): string {
   if (!matches || matches.length === 0) return "";
   const highSeverity = matches.some((m) => m.severity === "high");
   const categories = [...new Set(matches.map((m) => m.category))];
 
-  const categoryLabels = {
+  const categoryLabels: Record<InjectionCategory, string> = {
     directive_override: "指令覆盖",
     role_hijack: "角色劫持",
     exec_induction: "执行诱导",
