@@ -24,13 +24,76 @@ import {
   formatMessagesForLLM,
   parseChannel,
 } from "./channel-store.js";
+import type { ChannelMessage, SelfName } from "./channel-store.js";
 import { debugLog } from "../debug-log.js";
 import { getLocale } from "../../server/i18n.js";
 import fs from "fs";
 import path from "path";
 
+interface ChannelUpdate {
+  channelName: string;
+  channelFile: string;
+  channelsMdPath: string;
+  bookmark: string | null;
+  newMessages: ChannelMessage[];
+  hasNew: boolean;
+}
+
+interface ExecuteCheckOptions {
+  signal: AbortSignal;
+  triggerMessage?: ChannelMessage | null;
+}
+
+interface ExecuteCheckResult {
+  replied?: boolean;
+  replyContent?: string | null;
+}
+
+interface ChannelTickerOptions {
+  channelsDir: string;
+  agentsDir: string;
+  getAgentOrder: () => string[];
+  executeCheck: (
+    agentId: string,
+    channelName: string,
+    newMessages: ChannelMessage[],
+    allUpdates: ChannelUpdate[],
+    opts: ExecuteCheckOptions,
+  ) => Promise<ExecuteCheckResult | null | undefined>;
+  onMemorySummarize?: (agentId: string, channelName: string, contextText: string) => Promise<void> | void;
+  onAllReplied?: (channelName: string, opts: { signal: AbortSignal }) => Promise<void> | void;
+  onEvent?: (event: string, data: Record<string, unknown>) => void;
+}
+
+interface TriggerImmediateOptions {
+  mentionedAgents?: string[];
+}
+
+interface TriageOptions extends TriggerImmediateOptions {
+  triggerMessage?: ChannelMessage | null;
+}
+
+interface Checkpoint {
+  agentIdx: number;
+  channelIdx: number;
+}
+
+export interface ChannelTicker {
+  start: () => void;
+  stop: () => Promise<void>;
+  triggerImmediate: (channelName: string, opts?: TriggerImmediateOptions) => Promise<void>;
+  readonly isRunning: boolean;
+}
+
+function errorMessage(err: unknown): string {
+  if (err && typeof err === "object" && "message" in err) {
+    return String((err as { message?: unknown }).message);
+  }
+  return String(err);
+}
+
 /** 从 config.yaml 中快速提取 agent name（用于 selfName 过滤，兼容 agentId + agentName 两种 sender） */
-function readAgentName(agentsDir, agentId) {
+function readAgentName(agentsDir: string, agentId: string): string | null {
   try {
     const cfg = fs.readFileSync(path.join(agentsDir, agentId, "config.yaml"), "utf-8");
     const match = cfg.match(/^\s*name:\s*(.+)$/m);
@@ -40,7 +103,7 @@ function readAgentName(agentsDir, agentId) {
 }
 
 /** 返回 [agentId, agentName]（用于 getNewMessages/getRecentMessages 的 selfName 参数） */
-function selfNames(agentsDir, agentId) {
+function selfNames(agentsDir: string, agentId: string): SelfName {
   const name = readAgentName(agentsDir, agentId);
   return name && name !== agentId ? [agentId, name] : agentId;
 }
@@ -65,27 +128,27 @@ export function createChannelTicker({
   onMemorySummarize,
   onAllReplied,
   onEvent,
-}) {
+}: ChannelTickerOptions): ChannelTicker {
   const PAUSE_MS = 10 * 60 * 1000; // 10 分钟间隔
 
   // ── 状态 ──
-  let _timer = null;          // 下一个 cycle 的定时器
-  let _cyclePromise = null;   // 当前 cycle 的 Promise
-  let _abortCtrl = null;      // 当前频道执行的 AbortController
+  let _timer: ReturnType<typeof setTimeout> | null = null;          // 下一个 cycle 的定时器
+  let _cyclePromise: Promise<void> | null = null;   // 当前 cycle 的 Promise
+  let _abortCtrl: AbortController | null = null;      // 当前频道执行的 AbortController
   let _interruptPending = false; // 中断标记
-  let _checkpoint = null;     // { agentIdx, channelIdx } 中断恢复点
+  let _checkpoint: Checkpoint | null = null;     // { agentIdx, channelIdx } 中断恢复点
   let _running = false;       // 是否有 cycle 在运行
 
   // ── triage 状态（用户消息触发的立即处理）──
-  let _triageAbortCtrl = null;   // triage 专用 AbortController
-  let _triagePromise = null;     // 当前 triage 的 Promise
-  let _triggerChain = Promise.resolve(); // 串行化 triggerImmediate 调用
+  let _triageAbortCtrl: AbortController | null = null;   // triage 专用 AbortController
+  let _triagePromise: Promise<void> | null = null;     // 当前 triage 的 Promise
+  let _triggerChain: Promise<void> = Promise.resolve(); // 串行化 triggerImmediate 调用
   let _stopped = false;          // stop() 后禁止新的 triage
 
   // ── 工具函数 ──
 
   /** 获取频道文件中最新一条消息 */
-  function getLatestMessage(channelFile) {
+  function getLatestMessage(channelFile: string): ChannelMessage | null {
     if (!fs.existsSync(channelFile)) return null;
     try {
       const content = fs.readFileSync(channelFile, "utf-8");
@@ -97,12 +160,12 @@ export function createChannelTicker({
   }
 
   /** 获取频道文件中最新一条消息的时间戳 */
-  function getLatestTimestamp(channelFile) {
+  function getLatestTimestamp(channelFile: string): string | null {
     return getLatestMessage(channelFile)?.timestamp || null;
   }
 
   /** 收集一个 agent 的所有频道更新（有新消息的） */
-  function collectAgentChannels(agentId) {
+  function collectAgentChannels(agentId: string): ChannelUpdate[] {
     const channelsMdPath = path.join(agentsDir, agentId, "channels.md");
     const bookmarks = readBookmarks(channelsMdPath);
     try {
@@ -118,7 +181,7 @@ export function createChannelTicker({
         debugLog()?.log("ticker", `healed missing bookmark: ${agentId}/#${channelName}`);
       }
     } catch {}
-    const updates = [];
+    const updates: ChannelUpdate[] = [];
     const self = selfNames(agentsDir, agentId);
 
     for (const [channelName, bookmark] of bookmarks) {
@@ -147,7 +210,7 @@ export function createChannelTicker({
    * 执行一个完整的 cycle：所有 agent 依次处理所有频道
    * 支持从 checkpoint 恢复
    */
-  async function _runCycle() {
+  async function _runCycle(): Promise<void> {
     _running = true;
     try {
       const agents = getAgentOrder();
@@ -165,7 +228,7 @@ export function createChannelTicker({
       for (let ai = startAgent; ai < agents.length; ai++) {
         const agentId = agents[ai];
         const channelUpdates = collectAgentChannels(agentId);
-        const withNew = channelUpdates.filter(u => u.hasNew);
+        const withNew = channelUpdates.filter((u) => u.hasNew);
         const startCh = (ai === startAgent) ? startChannel : 0;
 
         if (withNew.length === 0) {
@@ -198,8 +261,9 @@ export function createChannelTicker({
       onEvent?.("channel_cycle_done", {});
       _scheduleNext(PAUSE_MS);
     } catch (err) {
-      console.error(`\x1b[90m[channel-ticker] cycle 错误: ${err.message}\x1b[0m`);
-      debugLog()?.error("ticker", `cycle error: ${err.message}`);
+      const message = errorMessage(err);
+      console.error(`\x1b[90m[channel-ticker] cycle 错误: ${message}\x1b[0m`);
+      debugLog()?.error("ticker", `cycle error: ${message}`);
       // 出错后也调度下一轮
       _scheduleNext(PAUSE_MS);
     } finally {
@@ -210,7 +274,7 @@ export function createChannelTicker({
   /**
    * 处理单个频道（可被 abort）
    */
-  async function _processOneChannel(agentId, update) {
+  async function _processOneChannel(agentId: string, update: ChannelUpdate): Promise<void> {
     _abortCtrl = new AbortController();
 
     console.log(`\x1b[90m[channel-ticker] ${agentId} 检查 #${update.channelName}（${update.newMessages.length} 条新消息）\x1b[0m`);
@@ -245,7 +309,7 @@ export function createChannelTicker({
         console.log(`\x1b[90m[channel-ticker] ${agentId}/#${update.channelName} 被中断\x1b[0m`);
         return;
       }
-      console.error(`\x1b[90m[channel-ticker] ${agentId} 处理 #${update.channelName} 失败: ${err.message}\x1b[0m`);
+      console.error(`\x1b[90m[channel-ticker] ${agentId} 处理 #${update.channelName} 失败: ${errorMessage(err)}\x1b[0m`);
     } finally {
       _abortCtrl = null;
     }
@@ -266,7 +330,7 @@ export function createChannelTicker({
    * @param {string} channelName
    * @param {{ mentionedAgents?: string[] }} [opts]
    */
-  function triggerImmediate(channelName, { mentionedAgents } = {}) {
+  function triggerImmediate(channelName: string, { mentionedAgents }: TriggerImmediateOptions = {}): Promise<void> {
     if (_stopped) return Promise.resolve();
 
     // 串行化：新调用排在前一个完成之后，避免并发重入
@@ -298,7 +362,7 @@ export function createChannelTicker({
   /**
    * 实际执行 triage 的内部方法（可被 abort）
    */
-  async function _doTriage(channelName, { mentionedAgents, triggerMessage } = {}) {
+  async function _doTriage(channelName: string, { mentionedAgents, triggerMessage }: TriageOptions = {}): Promise<void> {
     // ── 1. 中断正在运行的 cycle ──
     _interruptPending = true;
 
@@ -326,7 +390,7 @@ export function createChannelTicker({
     const allAgents = getAgentOrder();
     const hasMentions = mentionedAgents && mentionedAgents.length > 0;
     const agents = hasMentions
-      ? allAgents.filter(id => mentionedAgents.includes(id))
+      ? allAgents.filter((id) => mentionedAgents.includes(id))
       : allAgents;
     const channelFile = path.join(channelsDir, `${channelName}.md`);
     const channelMeta = getChannelMeta(channelFile);
@@ -384,7 +448,7 @@ export function createChannelTicker({
           }
         } catch (err) {
           if (signal.aborted) return; // 被 abort 了，静默退出
-          console.error(`[channel-ticker] 立即 triage ${agentId}/#${channelName} 失败: ${err.message}`);
+          console.error(`[channel-ticker] 立即 triage ${agentId}/#${channelName} 失败: ${errorMessage(err)}`);
         }
       }
 
@@ -393,7 +457,7 @@ export function createChannelTicker({
         try {
           await onAllReplied(channelName, { signal });
         } catch (err) {
-          if (!signal.aborted) console.error(`[channel-ticker] onAllReplied 失败: ${err.message}`);
+          if (!signal.aborted) console.error(`[channel-ticker] onAllReplied 失败: ${errorMessage(err)}`);
         }
       }
     } finally {
@@ -417,7 +481,7 @@ export function createChannelTicker({
   // ── 定时调度 ──
 
   /** 调度下一个 cycle */
-  function _scheduleNext(delayMs) {
+  function _scheduleNext(delayMs: number): void {
     if (_timer) clearTimeout(_timer);
     _timer = setTimeout(() => {
       _timer = null;
@@ -430,7 +494,7 @@ export function createChannelTicker({
   }
 
   /** 启动调度器 */
-  function start() {
+  function start(): void {
     if (_timer || _running) return;
     _stopped = false;
 
@@ -446,7 +510,7 @@ export function createChannelTicker({
   }
 
   /** 停止调度器 */
-  async function stop() {
+  async function stop(): Promise<void> {
     _stopped = true; // 禁止新的 triage
     if (_timer) {
       clearTimeout(_timer);
