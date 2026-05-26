@@ -28,8 +28,54 @@ import { StringEnum } from "@mariozechner/pi-ai";
 import { BrowserManager } from "../browser/browser-manager.js";
 import { t } from "../../server/i18n.js";
 
+type BrowserAction =
+  | "start" | "stop" | "navigate" | "snapshot" | "screenshot" | "click"
+  | "type" | "scroll" | "select" | "key" | "wait" | "evaluate" | "show";
+
+interface BrowserToolParams {
+  action: BrowserAction | string;
+  url?: string;
+  ref?: number;
+  text?: string;
+  direction?: "up" | "down" | string;
+  amount?: number;
+  value?: string;
+  key?: string;
+  expression?: string;
+  timeout?: number;
+  state?: string;
+  pressEnter?: boolean;
+}
+
+type BrowserToolContent =
+  | { type: "text"; text: string }
+  | { type: "image"; mimeType: string; data: string };
+
+type BrowserToolResult = {
+  content: BrowserToolContent[];
+  details: Record<string, unknown>;
+};
+
+interface BrowserStatusFields {
+  running: boolean;
+  url: string | null;
+  thumbnail?: string;
+}
+
+interface BrowserActionLogEntry {
+  ts: string;
+  action: string;
+  params: Record<string, unknown>;
+  result: string | null;
+  url: string | null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** 成功结果 */
-function ok(text, details = {}) {
+function ok(text: string, details: Record<string, unknown> = {}): BrowserToolResult {
   return {
     content: [{ type: "text", text }],
     details,
@@ -37,7 +83,7 @@ function ok(text, details = {}) {
 }
 
 /** 错误结果 */
-function err(text) {
+function err(text: string): BrowserToolResult {
   return {
     content: [{ type: "text", text: t("error.browserError", { msg: text }) }],
     details: { error: text },
@@ -52,9 +98,14 @@ export function createBrowserTool() {
   const browser = BrowserManager.instance();
 
   /** 操作日志（每次 start 时清空，记录所有操作供回看纠错） */
-  let _actionLog = [];
+  let _actionLog: BrowserActionLogEntry[] = [];
 
-  function logAction(action, params, resultSummary, error) {
+  function logAction(
+    action: string,
+    params: Record<string, unknown> | null,
+    resultSummary: string | null,
+    error?: string,
+  ): void {
     _actionLog.push({
       ts: new Date().toISOString(),
       action,
@@ -65,8 +116,8 @@ export function createBrowserTool() {
   }
 
   /** 当前状态快照（附加到每个 action 的 details），运行时自动带缩略图 */
-  async function statusFields() {
-    const fields = { running: browser.isRunning, url: browser.currentUrl };
+  async function statusFields(): Promise<BrowserStatusFields> {
+    const fields: BrowserStatusFields = { running: browser.isRunning, url: browser.currentUrl };
     if (browser.isRunning) {
       fields.thumbnail = await browser.thumbnail();
     }
@@ -98,7 +149,7 @@ export function createBrowserTool() {
       pressEnter: Type.Optional(Type.Boolean({ description: t("toolDef.browser.pressEnterDesc") })),
     }),
 
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: BrowserToolParams): Promise<BrowserToolResult> => {
       try {
         switch (params.action) {
 
@@ -230,8 +281,9 @@ export function createBrowserTool() {
             return err(t("error.browserUnknownAction", { action: params.action }));
         }
       } catch (error) {
-        logAction(params.action, params, null, error.message);
-        return err(t("error.browserActionFailed", { msg: error.message }));
+        const message = errorMessage(error);
+        logAction(params.action, { ...params }, null, message);
+        return err(t("error.browserActionFailed", { msg: message }));
       }
     },
   };
