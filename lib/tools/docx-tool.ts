@@ -10,7 +10,66 @@ import { Type } from "@sinclair/typebox";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-function escapeXml(value) {
+interface DocxContentParams {
+  title?: string;
+  content?: string;
+  author?: string;
+}
+
+interface ZipEntry {
+  name: string;
+  data: string | Buffer;
+}
+
+interface DocxFileParams extends DocxContentParams {
+  outDir?: string;
+  filename?: string;
+}
+
+interface WrittenDocxFile {
+  filePath: string;
+  label: string;
+  ext: "docx";
+}
+
+type DocxToolOptions = {
+  getDeskDir?: () => string | null | undefined;
+};
+
+type DocxToolParams = {
+  title: string;
+  content: string;
+  filename?: string;
+  author?: string;
+};
+
+type DocxToolResult = {
+  isError?: boolean;
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+type DocxQualityErrorCode = "DOCX_CONTENT_TOO_SHORT" | "DOCX_REPORT_INCOMPLETE";
+
+class DocxQualityError extends Error {
+  code: DocxQualityErrorCode;
+
+  constructor(message: string, code: DocxQualityErrorCode) {
+    super(message);
+    this.name = "DocxQualityError";
+    this.code = code;
+  }
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function errorCode(err: unknown): string {
+  return err instanceof DocxQualityError ? err.code : "docx_generation_failed";
+}
+
+function escapeXml(value: unknown): string {
   return String(value || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -18,7 +77,7 @@ function escapeXml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function safeFilename(title, ext = "docx") {
+function safeFilename(title: unknown, ext = "docx"): string {
   const base = String(title || "report")
     .replace(/[\\/:*?"<>|]/g, "-")
     .replace(/\s+/g, " ")
@@ -27,7 +86,7 @@ function safeFilename(title, ext = "docx") {
   return base.toLowerCase().endsWith(`.${ext}`) ? base : `${base}.${ext}`;
 }
 
-function stripInlineMarkdown(text) {
+function stripInlineMarkdown(text: unknown): string {
   return String(text || "")
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/__(.*?)__/g, "$1")
@@ -35,7 +94,7 @@ function stripInlineMarkdown(text) {
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)");
 }
 
-function paragraphXml(text, styleId = "Normal") {
+function paragraphXml(text: unknown, styleId = "Normal"): string {
   const value = stripInlineMarkdown(text);
   const style = styleId && styleId !== "Normal"
     ? `<w:pPr><w:pStyle w:val="${styleId}"/></w:pPr>`
@@ -43,7 +102,7 @@ function paragraphXml(text, styleId = "Normal") {
   return `<w:p>${style}<w:r><w:t xml:space="preserve">${escapeXml(value)}</w:t></w:r></w:p>`;
 }
 
-function contentToParagraphs({ title, content }) {
+function contentToParagraphs({ title, content }: DocxContentParams): string {
   const paragraphs = [paragraphXml(title, "Title")];
   const lines = String(content || "").replace(/\r\n/g, "\n").split("\n");
 
@@ -78,7 +137,7 @@ function contentToParagraphs({ title, content }) {
   return paragraphs.join("");
 }
 
-function documentXml(params) {
+function documentXml(params: DocxContentParams): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 wp14">
   <w:body>
@@ -93,7 +152,7 @@ function documentXml(params) {
 </w:document>`;
 }
 
-function stylesXml() {
+function stylesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
@@ -133,7 +192,7 @@ function stylesXml() {
 </w:styles>`;
 }
 
-function contentTypesXml() {
+function contentTypesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -145,7 +204,7 @@ function contentTypesXml() {
 </Types>`;
 }
 
-function relsXml() {
+function relsXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
@@ -154,7 +213,7 @@ function relsXml() {
 </Relationships>`;
 }
 
-function corePropsXml({ title, author }) {
+function corePropsXml({ title, author }: Pick<DocxContentParams, "title" | "author">): string {
   const now = new Date().toISOString();
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
@@ -166,7 +225,7 @@ function corePropsXml({ title, author }) {
 </cp:coreProperties>`;
 }
 
-function appPropsXml() {
+function appPropsXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
   <Application>Lynn</Application>
@@ -185,34 +244,34 @@ const CRC_TABLE = (() => {
   return table;
 })();
 
-function crc32(buf) {
+function crc32(buf: Buffer): number {
   let crc = 0xffffffff;
   for (const byte of buf) crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-function dosDateTime(date = new Date()) {
+function dosDateTime(date = new Date()): { time: number; day: number } {
   const year = Math.max(1980, date.getFullYear());
   const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
   const day = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
   return { time, day };
 }
 
-function u16(value) {
+function u16(value: number): Buffer {
   const b = Buffer.alloc(2);
   b.writeUInt16LE(value & 0xffff, 0);
   return b;
 }
 
-function u32(value) {
+function u32(value: number): Buffer {
   const b = Buffer.alloc(4);
   b.writeUInt32LE(value >>> 0, 0);
   return b;
 }
 
-function createZip(entries) {
-  const localParts = [];
-  const centralParts = [];
+function createZip(entries: ZipEntry[]): Buffer {
+  const localParts: Buffer[] = [];
+  const centralParts: Buffer[] = [];
   let offset = 0;
   const { time, day } = dosDateTime();
 
@@ -245,7 +304,7 @@ function createZip(entries) {
   return Buffer.concat([...localParts, ...centralParts, end]);
 }
 
-export function createDocxBuffer({ title, content, author } = {}) {
+export function createDocxBuffer({ title, content, author }: DocxContentParams = {}): Buffer {
   const docTitle = String(title || "Lynn 文档").trim() || "Lynn 文档";
   return createZip([
     { name: "[Content_Types].xml", data: contentTypesXml() },
@@ -257,35 +316,31 @@ export function createDocxBuffer({ title, content, author } = {}) {
   ]);
 }
 
-function looksLikeReportTitle(text = "") {
+function looksLikeReportTitle(text: unknown = ""): boolean {
   return /(?:报告|调研|研究|分析|白皮书|方案|proposal|report|research|analysis)/i.test(String(text || ""));
 }
 
-function hasDanglingMarkdownTable(content = "") {
+function hasDanglingMarkdownTable(content: unknown = ""): boolean {
   const lines = String(content || "").trimEnd().split(/\r?\n/);
   const tail = lines.slice(-5).map((line) => line.trim()).filter(Boolean);
   return tail.some((line) => line === "|" || /^\|(?:\s*[-:]+?\s*\|?){1,}$/.test(line));
 }
 
-function assertDocxContentQuality({ title, content } = {}) {
+function assertDocxContentQuality({ title, content }: Pick<DocxContentParams, "title" | "content"> = {}) {
   const normalizedContent = String(content || "").trim();
   const compactLen = normalizedContent.replace(/\s+/g, "").length;
   if (compactLen < 20) {
-    const err = new Error("DOCX 内容不足，未生成文件");
-    err.code = "DOCX_CONTENT_TOO_SHORT";
-    throw err;
+    throw new DocxQualityError("DOCX 内容不足，未生成文件", "DOCX_CONTENT_TOO_SHORT");
   }
 
   const reportLike = looksLikeReportTitle(title) || looksLikeReportTitle(normalizedContent.slice(0, 240));
   const progressOrFailure = /(?:正在|继续(?:整理|调研|深挖|生成)?|稍后|还需要|未完成|未能完成|失败|空转|工具调用|tool|fetch failed|timeout|AI 分析超时|使用数据直接生成)/i.test(normalizedContent);
   if (reportLike && (compactLen < 800 || progressOrFailure || hasDanglingMarkdownTable(normalizedContent))) {
-    const err = new Error("DOCX 报告正文疑似未完成或被截断，未生成文件");
-    err.code = "DOCX_REPORT_INCOMPLETE";
-    throw err;
+    throw new DocxQualityError("DOCX 报告正文疑似未完成或被截断，未生成文件", "DOCX_REPORT_INCOMPLETE");
   }
 }
 
-export function writeDocxFile({ outDir, title, content, author, filename } = {}) {
+export function writeDocxFile({ outDir, title, content, author, filename }: DocxFileParams = {}): WrittenDocxFile {
   const normalizedTitle = String(title || "Lynn 文档").trim() || "Lynn 文档";
   const normalizedContent = String(content || "").trim();
   assertDocxContentQuality({ title: normalizedTitle, content: normalizedContent });
@@ -305,7 +360,7 @@ export function writeDocxFile({ outDir, title, content, author, filename } = {})
   };
 }
 
-export function createDocxTool({ getDeskDir } = {}) {
+export function createDocxTool({ getDeskDir }: DocxToolOptions = {}) {
   return {
     name: "create_docx",
     label: "生成 Word 文档",
@@ -316,7 +371,7 @@ export function createDocxTool({ getDeskDir } = {}) {
       filename: Type.Optional(Type.String({ description: "可选文件名，默认使用标题" })),
       author: Type.Optional(Type.String({ description: "可选作者名" })),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: DocxToolParams): Promise<DocxToolResult> => {
       try {
         const file = writeDocxFile({
           outDir: getDeskDir?.() || process.cwd(),
@@ -332,8 +387,8 @@ export function createDocxTool({ getDeskDir } = {}) {
       } catch (err) {
         return {
           isError: true,
-          content: [{ type: "text", text: err?.message || "DOCX 生成失败" }],
-          details: { rejected: true, reason: err?.code || "docx_generation_failed" },
+          content: [{ type: "text", text: errorMessage(err) || "DOCX 生成失败" }],
+          details: { rejected: true, reason: errorCode(err) },
         };
       }
     },
