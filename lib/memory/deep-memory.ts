@@ -1,5 +1,5 @@
 /**
- * deep-memory.js — 深度记忆处理器
+ * deep-memory.ts — 深度记忆处理器
  *
  * 每日执行一次。遍历所有"脏" session（summary !== snapshot），
  * 通过 snapshot diff 发现新增内容，调 LLM 拆成元事实 + 打标签，
@@ -13,18 +13,109 @@ import { getLocale } from "../../server/i18n.js";
 
 const MAX_RETRIES = 3;
 const MAX_CONCURRENT = 3;
-const _failCounts = new Map();
+
+export interface ProcessDirtySessionsResult {
+  processed: number;
+  factsAdded: number;
+}
+
+export interface ResolvedDeepMemoryModel {
+  model: string;
+  api: string;
+  api_key: string;
+  base_url: string;
+}
+
+export interface ProcessDirtySessionsOptions {
+  memoryExclusions?: MemoryExclusions | null;
+}
+
+type DeepMemorySession = {
+  session_id: string;
+  summary: string;
+  snapshot?: string | null;
+  snapshot_at?: string | null;
+  updated_at?: string | null;
+  [key: string]: unknown;
+};
+
+type SessionSummaryManagerLike = {
+  getDirtySessions(): DeepMemorySession[];
+  markProcessed(sessionId: string): void;
+};
+
+type ExistingFact = {
+  id: number;
+  fact: string;
+};
+
+type FactStoreEntry = {
+  fact: string;
+  tags: string[];
+  time: string | null;
+  session_id: string;
+  category: string;
+  confidence: number;
+  evidence: string | null;
+};
+
+type FactStoreLike = {
+  getAll(): ExistingFact[];
+  add(entry: FactStoreEntry): { id: number };
+  addLink(fromId: number, toId: number, relation?: string): boolean;
+};
+
+type MemoryExclusions = {
+  matchesFact(entry: ExtractedFact): boolean;
+};
+
+type FactLink = {
+  fact: string;
+  relation: string;
+};
+
+type ExtractedFact = {
+  fact: string;
+  tags: string[];
+  time: string | null;
+  category: string;
+  confidence: number;
+  evidence: string | null;
+  links: FactLink[];
+};
+
+type RawFactRecord = Record<string, unknown> & {
+  fact: string;
+};
+
+const _failCounts = new Map<string, number>();
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function isRawFactRecord(value: unknown): value is RawFactRecord {
+  return isRecord(value) && typeof value.fact === "string" && value.fact.length > 0;
+}
+
+function isNonEmptyTrimmedString(value: unknown): value is string {
+  return typeof value === "string" && Boolean(value.trim());
+}
 
 /**
  * 处理所有脏 session，提取新增元事实写入 fact-store
  *
- * @param {import('./session-summary.js').SessionSummaryManager} summaryManager
- * @param {import('./fact-store.js').FactStore} factStore
- * @param {{ model: string, api: string, api_key: string, base_url: string }} resolvedModel
- * @param {{ memoryExclusions?: { matchesFact: (entry: any) => boolean } | null }} [opts]
- * @returns {Promise<{ processed: number, factsAdded: number }>}
  */
-export async function processDirtySessions(summaryManager, factStore, resolvedModel, opts = {}) {
+export async function processDirtySessions(
+  summaryManager: SessionSummaryManagerLike,
+  factStore: FactStoreLike,
+  resolvedModel: ResolvedDeepMemoryModel,
+  opts: ProcessDirtySessionsOptions = {},
+): Promise<ProcessDirtySessionsResult> {
   const dirty = summaryManager.getDirtySessions();
   if (dirty.length === 0) {
     return { processed: 0, factsAdded: 0 };
@@ -36,7 +127,7 @@ export async function processDirtySessions(summaryManager, factStore, resolvedMo
 
   let totalFacts = 0;
 
-  const processOne = async (session) => {
+  const processOne = async (session: DeepMemorySession): Promise<void> => {
     try {
       const facts = await extractFactsFromDiff(
         session.summary,
@@ -49,13 +140,13 @@ export async function processDirtySessions(summaryManager, factStore, resolvedMo
         : facts;
 
       if (acceptedFacts.length > 0) {
-        const existingFactIds = new Map();
+        const existingFactIds = new Map<string, number>();
         for (const row of factStore.getAll()) {
           const key = normalizeFactKey(row.fact);
           if (key && !existingFactIds.has(key)) existingFactIds.set(key, row.id);
         }
 
-        const insertedFactIds = new Map();
+        const insertedFactIds = new Map<string, number>();
         for (const f of acceptedFacts) {
           const { id } = factStore.add({
             fact: f.fact,
@@ -89,18 +180,19 @@ export async function processDirtySessions(summaryManager, factStore, resolvedMo
       summaryManager.markProcessed(session.session_id);
       _failCounts.delete(session.session_id);
     } catch (err) {
+      const message = errorMessage(err);
       const count = (_failCounts.get(session.session_id) || 0) + 1;
       _failCounts.set(session.session_id, count);
 
       if (count >= MAX_RETRIES) {
         console.error(
-          `\x1b[90m[deep-memory] ${session.session_id.slice(0, 8)}... 连续失败 ${count} 次，标记跳过: ${err.message}\x1b[0m`,
+          `\x1b[90m[deep-memory] ${session.session_id.slice(0, 8)}... 连续失败 ${count} 次，标记跳过: ${message}\x1b[0m`,
         );
         summaryManager.markProcessed(session.session_id);
         _failCounts.delete(session.session_id);
       } else {
         console.error(
-          `\x1b[90m[deep-memory] 处理失败 (${session.session_id.slice(0, 8)}... ${count}/${MAX_RETRIES}): ${err.message}\x1b[0m`,
+          `\x1b[90m[deep-memory] 处理失败 (${session.session_id.slice(0, 8)}... ${count}/${MAX_RETRIES}): ${message}\x1b[0m`,
         );
       }
     }
@@ -112,7 +204,7 @@ export async function processDirtySessions(summaryManager, factStore, resolvedMo
     const results = await Promise.allSettled(batch.map(processOne));
     for (const r of results) {
       if (r.status === "rejected") {
-        console.warn(`[deep-memory] batch item failed: ${r.reason?.message || r.reason}`);
+        console.warn(`[deep-memory] batch item failed: ${errorMessage(r.reason)}`);
       }
     }
   }
@@ -126,19 +218,19 @@ export async function processDirtySessions(summaryManager, factStore, resolvedMo
 /**
  * 从摘要 diff 中提取元事实
  *
- * @param {string} currentSummary - 当前摘要全文
- * @param {string} previousSnapshot - 上次处理时的摘要快照
- * @param {{ model: string, api: string, api_key: string, base_url: string }} resolvedModel
- * @returns {Promise<Array<{ fact: string, tags: string[], time: string, category?: string, confidence?: number, evidence?: string, links?: Array<{ fact: string, relation?: string }> }>>}
  */
-async function extractFactsFromDiff(currentSummary, previousSnapshot, resolvedModel) {
+async function extractFactsFromDiff(
+  currentSummary: string,
+  previousSnapshot: string,
+  resolvedModel: ResolvedDeepMemoryModel,
+): Promise<ExtractedFact[]> {
   const { model: utilityModel, api, api_key, base_url } = resolvedModel;
 
   const hasPrevious = !!previousSnapshot;
 
   const isZh = getLocale().startsWith("zh");
 
-  let userContent;
+  let userContent: string;
   if (hasPrevious) {
     const prevLabel = isZh ? "## 上次快照" : "## Previous Snapshot";
     const currLabel = isZh ? "## 当前摘要" : "## Current Summary";
@@ -164,37 +256,44 @@ async function extractFactsFromDiff(currentSummary, previousSnapshot, resolvedMo
   const jsonStr = (fenceMatch ? fenceMatch[1] : raw).trim();
 
   try {
-    const facts = JSON.parse(jsonStr);
+    const facts: unknown = JSON.parse(jsonStr);
     if (!Array.isArray(facts)) return [];
     return facts
-      .filter((f) => f && typeof f.fact === "string" && f.fact.length > 0)
-      .map((f) => ({
-        fact: String(f.fact).trim(),
-        tags: Array.isArray(f.tags) ? f.tags.filter((tag) => typeof tag === "string" && tag.trim()).slice(0, 5) : [],
-        time: f.time || null,
-        category: typeof f.category === "string" ? f.category : "other",
-        confidence: Number.isFinite(Number(f.confidence)) ? Number(f.confidence) : 0.5,
-        evidence: typeof f.evidence === "string" ? f.evidence.trim().slice(0, 500) : null,
-        links: Array.isArray(f.links)
-          ? f.links
-            .filter((link) => link && typeof link.fact === "string" && link.fact.trim())
-            .slice(0, 5)
-            .map((link) => ({
-              fact: String(link.fact).trim(),
-              relation: typeof link.relation === "string" ? link.relation : "related_to",
-            }))
-          : [],
-      }));
+      .filter(isRawFactRecord)
+      .map(normalizeExtractedFact);
   } catch {
     console.error(`[deep-memory] JSON 解析失败: ${jsonStr.slice(0, 200)}`);
     return [];
   }
 }
 
+function normalizeExtractedFact(f: RawFactRecord): ExtractedFact {
+  return {
+    fact: String(f.fact).trim(),
+    tags: Array.isArray(f.tags) ? f.tags.filter(isNonEmptyTrimmedString).slice(0, 5) : [],
+    time: typeof f.time === "string" ? f.time || null : null,
+    category: typeof f.category === "string" ? f.category : "other",
+    confidence: Number.isFinite(Number(f.confidence)) ? Number(f.confidence) : 0.5,
+    evidence: typeof f.evidence === "string" ? f.evidence.trim().slice(0, 500) : null,
+    links: normalizeFactLinks(f.links),
+  };
+}
+
+function normalizeFactLinks(value: unknown): FactLink[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((link): link is RawFactRecord => isRecord(link) && typeof link.fact === "string" && Boolean(link.fact.trim()))
+    .slice(0, 5)
+    .map((link) => ({
+      fact: String(link.fact).trim(),
+      relation: typeof link.relation === "string" ? link.relation : "related_to",
+    }));
+}
+
 /**
  * 构建元事实提取 prompt
  */
-function buildFactExtractionPrompt(hasPrevious) {
+function buildFactExtractionPrompt(hasPrevious: boolean): string {
   const isZh = getLocale().startsWith("zh");
 
   if (isZh) {
@@ -321,6 +420,6 @@ Strict JSON array, no markdown code blocks:
 ]`;
 }
 
-function normalizeFactKey(value) {
+function normalizeFactKey(value: unknown): string {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
