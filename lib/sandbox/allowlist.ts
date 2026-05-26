@@ -8,24 +8,60 @@
 import fs from "fs";
 import path from "path";
 
-function normalizeKey(text) {
+interface RuleOptions {
+  trustedRoot?: string | null;
+  path?: string | null;
+}
+
+interface StoredRule {
+  category: unknown;
+  identifier: unknown;
+  trustedRoot: string | null;
+}
+
+export interface AllowlistRule {
+  category: string;
+  identifier: string;
+  trustedRoot?: string | null;
+}
+
+export interface AllowlistEntry {
+  key: string;
+  category: unknown;
+  identifier: unknown;
+  trustedRoot: string | null;
+  scope: "persistent" | "session";
+}
+
+function errorMessage(err: unknown): string {
+  if (err && typeof err === "object" && "message" in err) {
+    return String((err as { message?: unknown }).message);
+  }
+  return String(err);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object";
+}
+
+function normalizeKey(text: string): string {
   if (typeof text !== "string") return "";
   return process.platform === "win32" ? text.toLowerCase() : text;
 }
 
-function normalizeRoot(root) {
+function normalizeRoot(root: unknown): string | null {
   if (!root || typeof root !== "string") return null;
   return path.resolve(root);
 }
 
-function isInsideRoot(targetPath, rootPath) {
+function isInsideRoot(targetPath: string, rootPath: string): boolean {
   const target = normalizeKey(path.resolve(targetPath));
   const root = normalizeKey(path.resolve(rootPath));
   return target === root || target.startsWith(root + path.sep);
 }
 
-function toRule(entryOrCategory, identifier, options = {}) {
-  if (typeof entryOrCategory === "object" && entryOrCategory) {
+function toRule(entryOrCategory: unknown, identifier?: unknown, options: RuleOptions = {}): StoredRule {
+  if (isRecord(entryOrCategory)) {
     return {
       category: entryOrCategory.category,
       identifier: entryOrCategory.identifier,
@@ -39,7 +75,7 @@ function toRule(entryOrCategory, identifier, options = {}) {
   };
 }
 
-function ruleKey(rule) {
+function ruleKey(rule: StoredRule): string {
   return JSON.stringify({
     category: rule.category,
     identifier: rule.identifier,
@@ -47,17 +83,20 @@ function ruleKey(rule) {
   });
 }
 
-function matchesRule(rule, query) {
+function matchesRule(
+  rule: StoredRule,
+  query: Pick<StoredRule, "category" | "identifier"> & { path?: string | null },
+): boolean {
   if (rule.category !== query.category || rule.identifier !== query.identifier) return false;
   if (!rule.trustedRoot) return true;
   if (!query.path) return false;
   return isInsideRoot(query.path, rule.trustedRoot);
 }
 
-function normalizeLegacyRaw(raw) {
+function normalizeLegacyRaw(raw: unknown): StoredRule[] {
   if (Array.isArray(raw)) {
     return raw
-      .filter((entry) => entry && typeof entry.category === "string" && typeof entry.identifier === "string")
+      .filter((entry) => isRecord(entry) && typeof entry.category === "string" && typeof entry.identifier === "string")
       .map((entry) => ({
         category: entry.category,
         identifier: entry.identifier,
@@ -65,7 +104,7 @@ function normalizeLegacyRaw(raw) {
       }));
   }
 
-  if (raw && typeof raw === "object") {
+  if (isRecord(raw)) {
     return Object.keys(raw)
       .filter((key) => raw[key])
       .map((key) => {
@@ -82,17 +121,20 @@ function normalizeLegacyRaw(raw) {
 }
 
 class RuleStore {
-  constructor(initialRules = []) {
+  protected _rules: StoredRule[];
+  protected _keys: Set<string>;
+
+  constructor(initialRules: unknown[] = []) {
     this._rules = [];
-    this._keys = new Set();
+    this._keys = new Set<string>();
     for (const rule of initialRules) {
       this.add(rule);
     }
   }
 
-  check(entryOrCategory, identifier, options = {}) {
+  check(entryOrCategory: unknown, identifier?: unknown, options: RuleOptions = {}): boolean {
     const query = toRule(entryOrCategory, identifier, options);
-    const pathForCheck = options.path || query.identifier;
+    const pathForCheck = options.path || (typeof query.identifier === "string" ? query.identifier : null);
     return this._rules.some((rule) => matchesRule(rule, {
       category: query.category,
       identifier: query.identifier,
@@ -100,7 +142,7 @@ class RuleStore {
     }));
   }
 
-  add(entryOrCategory, identifier, options = {}) {
+  add(entryOrCategory: unknown, identifier?: unknown, options: RuleOptions = {}): boolean {
     const rule = toRule(entryOrCategory, identifier, options);
     if (!rule.category || !rule.identifier) return false;
     const key = ruleKey(rule);
@@ -110,12 +152,12 @@ class RuleStore {
     return true;
   }
 
-  clear() {
+  clear(): void {
     this._rules = [];
     this._keys.clear();
   }
 
-  list(scope = "persistent") {
+  list(scope: "persistent" | "session" = "persistent"): AllowlistEntry[] {
     return this._rules.map((rule) => ({
       key: ruleKey(rule),
       category: rule.category,
@@ -125,14 +167,14 @@ class RuleStore {
     }));
   }
 
-  removeByKey(key) {
+  removeByKey(key: string): boolean {
     if (!this._keys.has(key)) return false;
     this._rules = this._rules.filter((rule) => ruleKey(rule) !== key);
     this._keys.delete(key);
     return true;
   }
 
-  toJSON() {
+  toJSON(): StoredRule[] {
     return this._rules.map((rule) => ({
       category: rule.category,
       identifier: rule.identifier,
@@ -146,7 +188,7 @@ export class SessionAllowlist extends RuleStore {
     super([]);
   }
 
-  list() {
+  list(): AllowlistEntry[] {
     return super.list("session");
   }
 }
@@ -155,7 +197,9 @@ export class SecurityAllowlist extends RuleStore {
   /**
    * @param {string} lynnHome  ~/.lynn 目录
    */
-  constructor(lynnHome) {
+  private _path: string;
+
+  constructor(lynnHome: string) {
     super([]);
     this._path = path.join(lynnHome, "security-allowlist.json");
 
@@ -165,7 +209,7 @@ export class SecurityAllowlist extends RuleStore {
     }
   }
 
-  static _loadFromDisk(filePath) {
+  static _loadFromDisk(filePath: string): StoredRule[] {
     try {
       const raw = JSON.parse(fs.readFileSync(filePath, "utf-8"));
       return normalizeLegacyRaw(raw);
@@ -174,13 +218,13 @@ export class SecurityAllowlist extends RuleStore {
     }
   }
 
-  add(entryOrCategory, identifier, options = {}) {
+  add(entryOrCategory: unknown, identifier?: unknown, options: RuleOptions = {}): boolean {
     const changed = super.add(entryOrCategory, identifier, options);
     if (changed) this._save();
     return changed;
   }
 
-  remove(category, identifier) {
+  remove(category: unknown, identifier: unknown): void {
     const prefix = JSON.stringify({ category, identifier }).slice(0, -1);
     const before = this._keys.size;
     for (const item of this.list("persistent")) {
@@ -191,24 +235,25 @@ export class SecurityAllowlist extends RuleStore {
     if (this._keys.size !== before) this._save();
   }
 
-  removeByKey(key) {
+  removeByKey(key: string): boolean {
     const changed = super.removeByKey(key);
     if (changed) this._save();
+    return changed;
   }
 
-  clear() {
+  clear(): void {
     super.clear();
     this._save();
   }
 
-  _save() {
+  private _save(): void {
     try {
       fs.mkdirSync(path.dirname(this._path), { recursive: true });
       const tmp = `${this._path}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(this.toJSON(), null, 2) + "\n", "utf-8");
       fs.renameSync(tmp, this._path);
     } catch (err) {
-      console.error("[allowlist] save failed:", err.message);
+      console.error("[allowlist] save failed:", errorMessage(err));
     }
   }
 }
