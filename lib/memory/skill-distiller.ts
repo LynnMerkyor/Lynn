@@ -23,6 +23,110 @@ const MAX_SKILL_MD_SIZE = 16_000;
 const REVISION_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const MIN_FAILURES_FOR_REVISION = 2;
 
+type JsonObject = Record<string, unknown>;
+
+type ExistingSkill = {
+  name: string;
+  description?: string;
+};
+
+type SessionStats = {
+  turnCount?: number;
+  toolUsage?: Record<string, unknown> | null;
+};
+
+type ResolvedSkillModel = {
+  model?: string | null;
+  api?: string | null;
+  api_key?: string | null;
+  base_url?: string | null;
+  allow_missing_api_key?: boolean;
+  [key: string]: unknown;
+};
+
+type SkillMeta = JsonObject & {
+  version?: unknown;
+  usageCount?: unknown;
+  successCount?: unknown;
+  failureCount?: unknown;
+  lastRevisedAt?: unknown;
+};
+
+type SkillUsageMap = Map<string, number>;
+
+type FactStoreLike = {
+  searchCombined: (keywords: string[], limit: number) => unknown[];
+};
+
+type ParsedSkillMetadata = {
+  name: string;
+  description: string;
+  disableModelInvocation?: boolean;
+};
+
+type DistillDecision = {
+  ok: boolean;
+  matchedSignals: string[];
+  reason: string;
+};
+
+type Outcome = "success" | "failure" | "neutral";
+
+type UpdatedSkill = {
+  skillName: string;
+  outcome: Outcome;
+  meta: SkillMeta;
+};
+
+type DistillResult =
+  | { status: "skipped"; reason: unknown; matchedSignals: string[] }
+  | { status: "created"; skillName: string; matchedSignals: string[]; reason: string };
+
+type FinalizeResult =
+  | { status: "skipped"; reason: "no_tracked_usage" }
+  | { status: "finalized"; outcome: Outcome; updated: UpdatedSkill[]; revised: string[] };
+
+type RevisionResult =
+  | { revised: false; reason: unknown; skillName: string }
+  | { revised: true; skillName: string; meta: SkillMeta };
+
+type SkillActivationResult =
+  | { tracked: false; reason: "not_learned_skill" | "meta_missing" }
+  | { tracked: true; skillName: string; meta: SkillMeta };
+
+type InstallDetails = {
+  matchedSignals: string[];
+  reason: string;
+};
+
+type UpdateDetails = {
+  reason: string;
+  version: number;
+};
+
+type SkillDistillerOptions = {
+  agentDir: string;
+  listExistingSkills?: () => unknown;
+  resolveDistillModel?: () => ResolvedSkillModel | null | undefined;
+  resolveSafetyModel?: () => ResolvedSkillModel | null | undefined;
+  factStore?: FactStoreLike | null;
+  onInstalled?: (skillName: string, details: InstallDetails) => Promise<void> | void;
+  onUpdated?: (skillName: string, details: UpdateDetails) => Promise<void> | void;
+};
+
+type BuildPromptOptions = {
+  existingSkills: ExistingSkill[];
+  summaryText: string;
+  sessionStats?: SessionStats | null;
+};
+
+type BuildRevisionPromptOptions = {
+  skillName: string;
+  skillMd: string;
+  summaryText: string;
+  meta: SkillMeta;
+};
+
 const COMPLETION_PATTERNS = [
   /写好了|已经写好|已完成|完成了|修好了|修复了|整理进去了|整理完成|成功|收口|落地/u,
   /\b(?:completed|finished|implemented|created|updated|fixed|wrote|shipped|wrapped up)\b/i,
@@ -41,23 +145,27 @@ const STOPWORDS = new Set([
   "used", "about", "for", "your", "user", "assistant", "chat",
 ]);
 
-function normalizeAlias(value) {
+function normalizeAlias(value: unknown): string {
   return String(value || "").trim().toLowerCase().replace(/[_\s]+/g, "-");
 }
 
-function extractJsonPayload(raw) {
+function readField(value: unknown, field: string): unknown {
+  return (Object(value) as JsonObject)[field];
+}
+
+function extractJsonPayload(raw: unknown): unknown | null {
   const text = String(raw || "").trim();
   if (!text) return null;
   const fenceMatch = text.match(/^```(?:json)?\s*\n([\s\S]*?)\n\s*```\s*$/);
   const candidate = (fenceMatch ? fenceMatch[1] : text).trim();
   try {
-    return JSON.parse(candidate);
+    return JSON.parse(candidate) as unknown;
   } catch {
     const start = candidate.indexOf("{");
     const end = candidate.lastIndexOf("}");
     if (start >= 0 && end > start) {
       try {
-        return JSON.parse(candidate.slice(start, end + 1));
+        return JSON.parse(candidate.slice(start, end + 1)) as unknown;
       } catch {
         return null;
       }
@@ -66,10 +174,10 @@ function extractJsonPayload(raw) {
   }
 }
 
-function extractKeywordCandidates(text) {
+function extractKeywordCandidates(text: unknown): string[] {
   const matches = String(text || "").match(/[\p{Script=Han}]{2,}|[a-zA-Z][a-zA-Z0-9_.-]{2,}/gu) || [];
-  const seen = new Set();
-  const keywords = [];
+  const seen = new Set<string>();
+  const keywords: string[] = [];
   for (const raw of matches) {
     const token = raw.trim();
     const lowered = token.toLowerCase();
@@ -81,15 +189,23 @@ function extractKeywordCandidates(text) {
   return keywords;
 }
 
-function hasCompletionSignal(summaryText) {
+function hasCompletionSignal(summaryText: string): boolean {
   return COMPLETION_PATTERNS.some((pattern) => pattern.test(summaryText));
 }
 
-function hasFailureSignal(summaryText) {
+function hasFailureSignal(summaryText: string): boolean {
   return FAILURE_PATTERNS.some((pattern) => pattern.test(summaryText));
 }
 
-function buildPrompt({ existingSkills, summaryText, sessionStats }) {
+function isObjectLike(value: unknown): value is SkillMeta {
+  return Boolean(value) && typeof value === "object";
+}
+
+function parseMetadata(content: string, fallbackName: string): ParsedSkillMetadata {
+  return parseSkillMetadata(content, fallbackName) as ParsedSkillMetadata;
+}
+
+function buildPrompt({ existingSkills, summaryText, sessionStats }: BuildPromptOptions): string {
   const isZh = getLocale().startsWith("zh");
   const toolUsage = Object.entries(sessionStats?.toolUsage || {})
     .map(([name, count]) => `${name}:${count}`)
@@ -166,7 +282,7 @@ Session summary:
 ${summaryText}`;
 }
 
-function buildRevisionPrompt({ skillName, skillMd, summaryText, meta }) {
+function buildRevisionPrompt({ skillName, skillMd, summaryText, meta }: BuildRevisionPromptOptions): string {
   const isZh = getLocale().startsWith("zh");
   const version = Number(meta?.version || 1);
   const usageCount = Number(meta?.usageCount || 0);
@@ -239,6 +355,15 @@ ${summaryText}`;
 }
 
 export class SkillDistiller {
+  private readonly _agentDir: string;
+  private readonly _listExistingSkills?: () => unknown;
+  private readonly _resolveDistillModel?: () => ResolvedSkillModel | null | undefined;
+  private readonly _resolveSafetyModel?: () => ResolvedSkillModel | null | undefined;
+  private readonly _factStore: FactStoreLike | null;
+  private readonly _onInstalled?: (skillName: string, details: InstallDetails) => Promise<void> | void;
+  private readonly _onUpdated?: (skillName: string, details: UpdateDetails) => Promise<void> | void;
+  private readonly _sessionUsage: Map<string, SkillUsageMap>;
+
   constructor({
     agentDir,
     listExistingSkills,
@@ -247,7 +372,7 @@ export class SkillDistiller {
     factStore = null,
     onInstalled,
     onUpdated,
-  }) {
+  }: SkillDistillerOptions) {
     this._agentDir = agentDir;
     this._listExistingSkills = listExistingSkills;
     this._resolveDistillModel = resolveDistillModel;
@@ -258,32 +383,32 @@ export class SkillDistiller {
     this._sessionUsage = new Map();
   }
 
-  _skillDir(skillName) {
+  _skillDir(skillName: string): string {
     return path.join(this._agentDir, "learned-skills", skillName);
   }
 
-  _metaPath(skillName) {
+  _metaPath(skillName: string): string {
     return path.join(this._skillDir(skillName), "_meta.json");
   }
 
-  _skillMdPath(skillName) {
+  _skillMdPath(skillName: string): string {
     return path.join(this._skillDir(skillName), "SKILL.md");
   }
 
-  _readSkillMeta(skillName) {
+  _readSkillMeta(skillName: string): SkillMeta | null {
     try {
-      const raw = JSON.parse(fs.readFileSync(this._metaPath(skillName), "utf-8"));
-      return raw && typeof raw === "object" ? raw : null;
+      const raw = JSON.parse(fs.readFileSync(this._metaPath(skillName), "utf-8")) as unknown;
+      return isObjectLike(raw) ? raw : null;
     } catch {
       return null;
     }
   }
 
-  _writeSkillMeta(skillName, meta) {
+  _writeSkillMeta(skillName: string, meta: SkillMeta): void {
     fs.writeFileSync(this._metaPath(skillName), JSON.stringify(meta, null, 2), "utf-8");
   }
 
-  _resolveTrackedSkillName(skillName, skillFilePath = "") {
+  _resolveTrackedSkillName(skillName: unknown, skillFilePath = ""): string | null {
     const normalized = sanitizeSkillName(skillName);
     if (normalized && fs.existsSync(this._metaPath(normalized))) return normalized;
     if (skillFilePath) {
@@ -293,14 +418,18 @@ export class SkillDistiller {
     return null;
   }
 
-  recordSkillActivation({ skillName, skillFilePath = "", sessionPath = null }) {
+  recordSkillActivation({ skillName, skillFilePath = "", sessionPath = null }: {
+    skillName: unknown;
+    skillFilePath?: string;
+    sessionPath?: string | null;
+  }): SkillActivationResult {
     const trackedName = this._resolveTrackedSkillName(skillName, skillFilePath);
     if (!trackedName) return { tracked: false, reason: "not_learned_skill" };
 
     const meta = this._readSkillMeta(trackedName);
     if (!meta) return { tracked: false, reason: "meta_missing" };
 
-    const nextMeta = {
+    const nextMeta: SkillMeta = {
       ...meta,
       usageCount: Number(meta.usageCount || 0) + 1,
       lastUsedAt: new Date().toISOString(),
@@ -308,7 +437,7 @@ export class SkillDistiller {
     this._writeSkillMeta(trackedName, nextMeta);
 
     if (sessionPath) {
-      const usageMap = this._sessionUsage.get(sessionPath) || new Map();
+      const usageMap = this._sessionUsage.get(sessionPath) || new Map<string, number>();
       usageMap.set(trackedName, Number(usageMap.get(trackedName) || 0) + 1);
       this._sessionUsage.set(sessionPath, usageMap);
     }
@@ -316,27 +445,30 @@ export class SkillDistiller {
     return { tracked: true, skillName: trackedName, meta: nextMeta };
   }
 
-  async finalizeSession({ sessionPath, summaryText = "" }) {
+  async finalizeSession({ sessionPath, summaryText = "" }: {
+    sessionPath?: string | null;
+    summaryText?: unknown;
+  }): Promise<FinalizeResult> {
     const usageMap = sessionPath ? this._sessionUsage.get(sessionPath) : null;
     if (!usageMap || usageMap.size === 0) {
       return { status: "skipped", reason: "no_tracked_usage" };
     }
 
     const summary = String(summaryText || "").trim();
-    const outcome = hasFailureSignal(summary)
+    const outcome: Outcome = hasFailureSignal(summary)
       ? "failure"
       : hasCompletionSignal(summary)
         ? "success"
         : "neutral";
 
-    const updated = [];
-    const revised = [];
+    const updated: UpdatedSkill[] = [];
+    const revised: string[] = [];
 
     for (const [trackedName, count] of usageMap.entries()) {
       const meta = this._readSkillMeta(trackedName);
       if (!meta) continue;
 
-      const nextMeta = {
+      const nextMeta: SkillMeta = {
         ...meta,
         lastOutcome: outcome,
         lastOutcomeAt: new Date().toISOString(),
@@ -357,7 +489,7 @@ export class SkillDistiller {
       }
     }
 
-    this._sessionUsage.delete(sessionPath);
+    this._sessionUsage.delete(sessionPath as string);
     return {
       status: "finalized",
       outcome,
@@ -366,13 +498,13 @@ export class SkillDistiller {
     };
   }
 
-  _shouldReviseSkill(meta) {
+  _shouldReviseSkill(meta: SkillMeta): boolean {
     const successCount = Number(meta?.successCount || 0);
     const failureCount = Number(meta?.failureCount || 0);
     const usageCount = Number(meta?.usageCount || 0);
     const evaluated = successCount + failureCount;
     const failureRate = evaluated > 0 ? failureCount / evaluated : 0;
-    const lastRevisedAt = meta?.lastRevisedAt ? new Date(meta.lastRevisedAt).getTime() : 0;
+    const lastRevisedAt = meta?.lastRevisedAt ? new Date(meta.lastRevisedAt as string | number | Date).getTime() : 0;
     const cooledDown = !lastRevisedAt || (Date.now() - lastRevisedAt) >= REVISION_COOLDOWN_MS;
 
     return (
@@ -383,7 +515,7 @@ export class SkillDistiller {
     );
   }
 
-  async _maybeReviseSkill(skillName, meta, summaryText) {
+  async _maybeReviseSkill(skillName: string, meta: SkillMeta, summaryText: string): Promise<RevisionResult> {
     if (!this._shouldReviseSkill(meta)) {
       return { revised: false, reason: "threshold_not_met", skillName };
     }
@@ -396,7 +528,7 @@ export class SkillDistiller {
       return { revised: false, reason: "skill_missing", skillName };
     }
 
-    let resolvedModel;
+    let resolvedModel: ResolvedSkillModel | null | undefined;
     try {
       resolvedModel = this._resolveDistillModel?.() || this._resolveSafetyModel?.();
     } catch {
@@ -415,7 +547,7 @@ export class SkillDistiller {
     const raw = await callText({
       api: resolvedModel.api,
       model: resolvedModel.model,
-      apiKey: resolvedModel.api_key,
+      apiKey: resolvedModel.api_key as string | undefined,
       baseUrl: resolvedModel.base_url,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.2,
@@ -424,12 +556,12 @@ export class SkillDistiller {
     });
 
     const payload = extractJsonPayload(raw);
-    if (!payload || payload.action === "skip") {
-      return { revised: false, reason: payload?.reason || "model_skip", skillName };
+    if (!payload || readField(payload, "action") === "skip") {
+      return { revised: false, reason: payload ? readField(payload, "reason") || "model_skip" : "model_skip", skillName };
     }
 
-    const nextSkillMd = String(payload.skill_md || "").trim();
-    const parsed = parseSkillMetadata(nextSkillMd, skillName);
+    const nextSkillMd = String(readField(payload, "skill_md") || "").trim();
+    const parsed = parseMetadata(nextSkillMd, skillName);
     const nextSkillName = sanitizeSkillName(parsed.name || skillName);
     if (!nextSkillMd.startsWith("---") || !parsed.description || nextSkillName !== skillName) {
       return { revised: false, reason: "invalid_revision_draft", skillName };
@@ -451,22 +583,22 @@ export class SkillDistiller {
     }
 
     fs.writeFileSync(skillMdPath, nextSkillMd, "utf-8");
-    const nextMeta = {
+    const nextMeta: SkillMeta = {
       ...meta,
       version: Number(meta.version || 1) + 1,
       lastRevisedAt: new Date().toISOString(),
-      lastRevisionReason: String(payload.reason || "").trim(),
+      lastRevisionReason: String(readField(payload, "reason") || "").trim(),
       revisionCount: Number(meta.revisionCount || 0) + 1,
     };
     this._writeSkillMeta(skillName, nextMeta);
     await this._onUpdated?.(skillName, {
-      reason: String(payload.reason || "").trim(),
-      version: nextMeta.version,
+      reason: String(readField(payload, "reason") || "").trim(),
+      version: Number(nextMeta.version),
     });
     return { revised: true, skillName, meta: nextMeta };
   }
 
-  _hasRepeatedPattern(summaryText) {
+  _hasRepeatedPattern(summaryText: string): boolean {
     if (!this._factStore) return false;
     const keywords = extractKeywordCandidates(summaryText);
     if (keywords.length < 2) return false;
@@ -477,15 +609,18 @@ export class SkillDistiller {
     }
   }
 
-  shouldDistill({ summaryText, sessionStats }) {
+  shouldDistill({ summaryText, sessionStats }: {
+    summaryText?: unknown;
+    sessionStats?: SessionStats | null;
+  }): DistillDecision {
     const normalizedSummary = String(summaryText || "").trim();
     if (normalizedSummary.length < MIN_SUMMARY_LENGTH) {
       return { ok: false, matchedSignals: [], reason: "summary_too_short" };
     }
 
     const stats = sessionStats || {};
-    const toolUsageCount = Object.values(stats.toolUsage || {}).reduce((sum, count) => sum + Number(count || 0), 0);
-    const matchedSignals = [];
+    const toolUsageCount = Object.values(stats.toolUsage || {}).reduce<number>((sum, count) => sum + Number(count || 0), 0);
+    const matchedSignals: string[] = [];
 
     if ((stats.turnCount || 0) >= MIN_TURN_COUNT) matchedSignals.push("turn_count");
     if (toolUsageCount >= MIN_TOOL_USAGE) matchedSignals.push("tool_usage");
@@ -499,14 +634,17 @@ export class SkillDistiller {
     };
   }
 
-  async distillFromSession({ summaryText, sessionStats }) {
+  async distillFromSession({ summaryText, sessionStats }: {
+    summaryText?: unknown;
+    sessionStats?: SessionStats | null;
+  }): Promise<DistillResult> {
     const summary = String(summaryText || "").trim();
     const decision = this.shouldDistill({ summaryText: summary, sessionStats });
     if (!decision.ok) {
       return { status: "skipped", reason: decision.reason, matchedSignals: decision.matchedSignals };
     }
 
-    let resolvedModel;
+    let resolvedModel: ResolvedSkillModel | null | undefined;
     try {
       resolvedModel = this._resolveDistillModel?.();
     } catch {
@@ -516,12 +654,12 @@ export class SkillDistiller {
       return { status: "skipped", reason: "distill_model_unavailable", matchedSignals: decision.matchedSignals };
     }
 
-    const existingSkills = Array.isArray(this._listExistingSkills?.()) ? this._listExistingSkills() : [];
+    const existingSkills = (Array.isArray(this._listExistingSkills?.()) ? this._listExistingSkills?.() : []) as ExistingSkill[];
     const prompt = buildPrompt({ existingSkills, summaryText: summary, sessionStats });
     const raw = await callText({
       api: resolvedModel.api,
       model: resolvedModel.model,
-      apiKey: resolvedModel.api_key,
+      apiKey: resolvedModel.api_key as string | undefined,
       baseUrl: resolvedModel.base_url,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.2,
@@ -530,17 +668,17 @@ export class SkillDistiller {
     });
 
     const payload = extractJsonPayload(raw);
-    if (!payload || payload.action === "skip") {
+    if (!payload || readField(payload, "action") === "skip") {
       return {
         status: "skipped",
-        reason: payload?.reason || "model_skip",
+        reason: payload ? readField(payload, "reason") || "model_skip" : "model_skip",
         matchedSignals: decision.matchedSignals,
       };
     }
 
-    const skillMd = String(payload.skill_md || "").trim();
-    const parsed = parseSkillMetadata(skillMd, String(payload.skill_name || "").trim());
-    const skillName = sanitizeSkillName(parsed.name || payload.skill_name);
+    const skillMd = String(readField(payload, "skill_md") || "").trim();
+    const parsed = parseMetadata(skillMd, String(readField(payload, "skill_name") || "").trim());
+    const skillName = sanitizeSkillName(parsed.name || readField(payload, "skill_name"));
     if (!skillName || !parsed.description || !skillMd.startsWith("---")) {
       return { status: "skipped", reason: "invalid_skill_draft", matchedSignals: decision.matchedSignals };
     }
@@ -576,7 +714,7 @@ export class SkillDistiller {
       version: 1,
       source: "auto-distilled",
       createdAt: new Date().toISOString(),
-      reason: String(payload.reason || "").trim(),
+      reason: String(readField(payload, "reason") || "").trim(),
       matchedSignals: decision.matchedSignals,
       usageCount: 0,
       successCount: 0,
@@ -586,14 +724,14 @@ export class SkillDistiller {
 
     await this._onInstalled?.(skillName, {
       matchedSignals: decision.matchedSignals,
-      reason: String(payload.reason || "").trim(),
+      reason: String(readField(payload, "reason") || "").trim(),
     });
 
     return {
       status: "created",
       skillName,
       matchedSignals: decision.matchedSignals,
-      reason: String(payload.reason || "").trim(),
+      reason: String(readField(payload, "reason") || "").trim(),
     };
   }
 }
