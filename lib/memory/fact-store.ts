@@ -11,8 +11,34 @@
  * 为结构化记忆与可解释展示提供基础。
  */
 
-import Database from "better-sqlite3";
+// @ts-expect-error better-sqlite3 does not ship declarations in this project.
+import DatabaseModule from "better-sqlite3";
 import { scrubPII } from "../pii-guard.js";
+
+type SqliteRunResult = {
+  changes: number;
+  lastInsertRowid?: number | bigint;
+};
+
+type SqliteStatement<TRow = unknown> = {
+  run(...params: unknown[]): SqliteRunResult;
+  all(...params: unknown[]): TRow[];
+  get(...params: unknown[]): TRow | undefined;
+  finalize?: () => void;
+};
+
+type DatabaseInstance = {
+  open: boolean;
+  pragma<TResult = unknown>(source: string, options?: { simple?: boolean }): TResult;
+  exec(source: string): unknown;
+  prepare<TRow = unknown>(source: string): SqliteStatement<TRow>;
+  transaction<TArgs extends unknown[], TResult>(fn: (...args: TArgs) => TResult): (...args: TArgs) => TResult;
+  close(): void;
+};
+
+type DatabaseFactory = new (dbPath: string) => DatabaseInstance;
+
+const Database = DatabaseModule as DatabaseFactory;
 
 /**
  * 当前 schema 版本。每次改表结构时递增，
@@ -32,18 +58,172 @@ export const MEMORY_CATEGORIES = Object.freeze([
   "project_decision",
   "procedure",
   DEFAULT_MEMORY_CATEGORY,
-]);
+] as const);
 export const HIGH_PRIORITY_MEMORY_CATEGORIES = Object.freeze([
   "pitfall",
   "task",
   "project_decision",
   "model_benchmark",
   "procedure",
-]);
+] as const);
+
+type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
+type FactRelation = "related_to" | "uses" | "belongs_to" | "caused_by";
+
+type FactStoreOptions = {
+  baseImportance?: number;
+  hitBonus?: number;
+  compileThreshold?: number;
+};
+
+type FactInput = {
+  fact: string;
+  tags?: string[] | null;
+  time?: string | null;
+  session_id?: string | null;
+  source?: string | null;
+  project_path?: string | null;
+  importance_score?: number | null;
+  hit_count?: number | null;
+  last_accessed_at?: string | null;
+  category?: string | null;
+  confidence?: number | null;
+  evidence?: string | null;
+};
+
+type FactRecord = {
+  id: number;
+  fact: string;
+  tags: string[];
+  time: string | null;
+  session_id: string | null;
+  created_at: string;
+  source: string | null;
+  project_path: string | null;
+  importance_score: number;
+  hit_count: number;
+  last_accessed_at: string | null;
+  category: MemoryCategory;
+  confidence: number;
+  evidence: string | null;
+  matchCount?: number;
+};
+
+type FactInsertRow = Omit<FactRecord, "id" | "matchCount">;
+
+type FactDbRow = {
+  id: number;
+  fact: string;
+  tags: string;
+  time: string | null;
+  session_id: string | null;
+  created_at: string;
+  source?: string | null;
+  project_path?: string | null;
+  importance_score?: number | null;
+  hit_count?: number | null;
+  last_accessed_at?: string | null;
+  category?: string | null;
+  confidence?: number | null;
+  evidence?: string | null;
+  matchCount?: number | null;
+  rank?: number | null;
+};
+
+type FactLinkDbRow = {
+  id: number;
+  from_id: number | string;
+  to_id: number | string;
+  relation: string;
+  created_at: string;
+  related_fact: string;
+  related_category: string | null;
+  related_confidence: number | null;
+};
+
+type RelatedFact = {
+  id: number;
+  to_id: number;
+  relation: string;
+  fact: string;
+  category: MemoryCategory;
+  confidence: number;
+  created_at: string;
+};
+
+type ColumnInfoRow = {
+  name: string;
+};
+
+type CountRow = {
+  cnt: number;
+};
+
+type FactStatements = {
+  insert: SqliteStatement;
+  getAll: SqliteStatement<FactDbRow>;
+  getById: SqliteStatement<FactDbRow>;
+  getBySession: SqliteStatement<FactDbRow>;
+  getImportant: SqliteStatement<FactDbRow>;
+  count: SqliteStatement<CountRow>;
+  deleteById: SqliteStatement;
+  deleteAll: SqliteStatement;
+  touchFact: SqliteStatement;
+  updateFact: SqliteStatement;
+  ftsSearch: SqliteStatement<FactDbRow>;
+  getByCategory: SqliteStatement<FactDbRow>;
+  insertLink: SqliteStatement;
+  getLinksForFactIds: SqliteStatement<FactLinkDbRow>;
+};
+
+type DateRange = {
+  from?: string | null;
+  to?: string | null;
+};
+
+type ImportantFactsOptions = {
+  limit?: number;
+  minImportance?: number;
+};
+
+type MarkAccessedOptions = {
+  increment?: number;
+  importanceDelta?: number;
+  at?: string;
+};
+
+type UpdateFactOptions = {
+  category?: string | null;
+  confidence?: number | null;
+  evidence?: string | null;
+};
+
+type UpdateFactPayload = {
+  id: number;
+  category: MemoryCategory | null;
+  confidence: number | null;
+  evidenceSet: 0 | 1;
+  evidence: string | null;
+};
+
+type FactStoreChangeEvent =
+  | { type: "add"; row: { id: number } & FactInsertRow }
+  | { type: "access"; ids: number[]; at: string }
+  | { type: "delete"; id: number }
+  | { type: "update"; id: number; updates: UpdateFactPayload }
+  | { type: "clear" };
+
+type FactStoreChangeListener = (event: FactStoreChangeEvent) => void;
+
+type TagSearchParams = Record<string, string | number | undefined> & {
+  limit: number;
+  dateFrom?: string;
+  dateTo?: string;
+};
 
 const DEFAULT_CATEGORY = DEFAULT_MEMORY_CATEGORY;
-const ALLOWED_CATEGORIES = new Set(MEMORY_CATEGORIES);
-const CATEGORY_ALIASES = new Map([
+const ALLOWED_CATEGORIES = new Set<string>(MEMORY_CATEGORIES);
+const CATEGORY_ALIASES = new Map<string, MemoryCategory>([
   ["bug", "pitfall"],
   ["failure", "pitfall"],
   ["lesson", "pitfall"],
@@ -61,25 +241,25 @@ const CATEGORY_ALIASES = new Map([
   ["todo", "task"],
 ]);
 
-function isFiniteNumber(value) {
+function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function clampConfidence(value) {
+function clampConfidence(value: unknown): number {
   if (!isFiniteNumber(value)) return 0.5;
   return Math.max(0, Math.min(1, value));
 }
 
-function normalizeCategory(value) {
+function normalizeCategory(value: unknown): MemoryCategory {
   const normalized = String(value || "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "_");
   const aliased = CATEGORY_ALIASES.get(normalized) || normalized;
-  return ALLOWED_CATEGORIES.has(aliased) ? aliased : DEFAULT_CATEGORY;
+  return ALLOWED_CATEGORIES.has(aliased) ? (aliased as MemoryCategory) : DEFAULT_CATEGORY;
 }
 
-function inferCategoryFromContent(fact, tags = []) {
+function inferCategoryFromContent(fact: unknown, tags: readonly unknown[] = []): MemoryCategory {
   const haystack = `${fact || ""} ${(tags || []).join(" ")}`.toLowerCase();
   if (/(踩坑|坑点|教训|误区|bug|故障|失败|回归|超时|卡死|崩溃|不兼容|timeout|regression|failure|failed|broken|hang|stuck)/.test(haystack)) return "pitfall";
   if (/(当前任务|下一步|待办|进行中|阻塞|计划|收尾|todo|next step|in progress|blocked|active task)/.test(haystack)) return "task";
@@ -94,23 +274,33 @@ function inferCategoryFromContent(fact, tags = []) {
   return DEFAULT_CATEGORY;
 }
 
-function normalizeRelation(value) {
+function normalizeRelation(value: unknown): FactRelation {
   const normalized = String(value || "related_to")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "_");
   if (["related_to", "uses", "belongs_to", "caused_by"].includes(normalized)) {
-    return normalized;
+    return normalized as FactRelation;
   }
   return "related_to";
 }
 
 export class FactStore {
+  readonly dbPath: string;
+  readonly baseImportance: number;
+  readonly hitBonus: number;
+  readonly compileThreshold: number;
+  private readonly db: DatabaseInstance;
+  private _stmts!: FactStatements;
+  private readonly _tagSearchCache!: Map<string, SqliteStatement<FactDbRow>>;
+  private _walTimer!: NodeJS.Timeout | null;
+  private readonly _changeListeners: Set<FactStoreChangeListener>;
+
   /**
    * @param {string} dbPath - facts.db 的路径
    * @param {{ baseImportance?: number, hitBonus?: number, compileThreshold?: number }} [opts]
    */
-  constructor(dbPath, opts = {}) {
+  constructor(dbPath: string, opts: FactStoreOptions = {}) {
     this.dbPath = dbPath;
     this.baseImportance = isFiniteNumber(opts.baseImportance) ? opts.baseImportance : 10;
     this.hitBonus = isFiniteNumber(opts.hitBonus) ? opts.hitBonus : 1;
@@ -137,7 +327,7 @@ export class FactStore {
     if (this._walTimer.unref) this._walTimer.unref();
   }
 
-  _initSchema() {
+  private _initSchema(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS facts (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -199,7 +389,7 @@ export class FactStore {
     `);
   }
 
-  _ensureBaseIndexes() {
+  private _ensureBaseIndexes(): void {
     if (this._hasColumn("facts", "time")) {
       this.db.exec("CREATE INDEX IF NOT EXISTS idx_facts_time ON facts(time)");
     }
@@ -214,8 +404,8 @@ export class FactStore {
     }
   }
 
-  _migrate() {
-    const current = this.db.pragma("user_version", { simple: true });
+  private _migrate(): void {
+    const current = this.db.pragma<number>("user_version", { simple: true });
     if (current >= SCHEMA_VERSION) return;
 
     this.db.transaction(() => {
@@ -275,7 +465,7 @@ export class FactStore {
     console.log(`[FactStore] schema migrated: v${current} → v${SCHEMA_VERSION}`);
   }
 
-  _ensureDerivedIndexes() {
+  private _ensureDerivedIndexes(): void {
     this._ensureBaseIndexes();
     if (this._hasColumn("facts", "project_path")) {
       this.db.exec("CREATE INDEX IF NOT EXISTS idx_facts_project ON facts(project_path)");
@@ -291,7 +481,7 @@ export class FactStore {
     }
   }
 
-  _prepareStatements() {
+  private _prepareStatements(): void {
     this._stmts = {
       insert: this.db.prepare(`
         INSERT INTO facts (
@@ -305,16 +495,16 @@ export class FactStore {
           @category, @confidence, @evidence
         )
       `),
-      getAll: this.db.prepare(`SELECT * FROM facts ORDER BY time DESC`),
-      getById: this.db.prepare(`SELECT * FROM facts WHERE id = ?`),
-      getBySession: this.db.prepare(`SELECT * FROM facts WHERE session_id = ? ORDER BY time DESC`),
-      getImportant: this.db.prepare(`
+      getAll: this.db.prepare<FactDbRow>(`SELECT * FROM facts ORDER BY time DESC`),
+      getById: this.db.prepare<FactDbRow>(`SELECT * FROM facts WHERE id = ?`),
+      getBySession: this.db.prepare<FactDbRow>(`SELECT * FROM facts WHERE session_id = ? ORDER BY time DESC`),
+      getImportant: this.db.prepare<FactDbRow>(`
         SELECT * FROM facts
         WHERE importance_score >= ?
         ORDER BY importance_score DESC, COALESCE(last_accessed_at, created_at) DESC
         LIMIT ?
       `),
-      count: this.db.prepare(`SELECT COUNT(*) as cnt FROM facts`),
+      count: this.db.prepare<CountRow>(`SELECT COUNT(*) as cnt FROM facts`),
       deleteById: this.db.prepare(`DELETE FROM facts WHERE id = ?`),
       deleteAll: this.db.prepare(`DELETE FROM facts`),
       touchFact: this.db.prepare(`
@@ -336,7 +526,7 @@ export class FactStore {
           END
         WHERE id = @id
       `),
-      ftsSearch: this.db.prepare(`
+      ftsSearch: this.db.prepare<FactDbRow>(`
         SELECT f.*, rank
         FROM facts_fts fts
         JOIN facts f ON f.id = fts.rowid
@@ -344,7 +534,7 @@ export class FactStore {
         ORDER BY rank
         LIMIT ?
       `),
-      getByCategory: this.db.prepare(`
+      getByCategory: this.db.prepare<FactDbRow>(`
         SELECT *
         FROM facts
         WHERE category = ?
@@ -355,7 +545,7 @@ export class FactStore {
         INSERT OR IGNORE INTO fact_links (from_id, to_id, relation, created_at)
         VALUES (@fromId, @toId, @relation, @createdAt)
       `),
-      getLinksForFactIds: this.db.prepare(`
+      getLinksForFactIds: this.db.prepare<FactLinkDbRow>(`
         SELECT
           fl.id,
           fl.from_id,
@@ -373,23 +563,24 @@ export class FactStore {
     };
   }
 
-  registerChangeListener(listener) {
+  registerChangeListener(listener: FactStoreChangeListener): () => void {
     if (typeof listener !== "function") return () => {};
     this._changeListeners.add(listener);
     return () => this._changeListeners.delete(listener);
   }
 
-  _emitChange(event) {
+  private _emitChange(event: FactStoreChangeEvent): void {
     for (const listener of this._changeListeners) {
       try {
         listener(event);
       } catch (err) {
-        console.warn(`[FactStore] change listener failed: ${err?.message || err}`);
+        const maybeError = err as { message?: unknown } | null | undefined;
+        console.warn(`[FactStore] change listener failed: ${maybeError?.message || err}`);
       }
     }
   }
 
-  add(entry) {
+  add(entry: FactInput): { id: number } {
     const { cleaned, detected } = scrubPII(entry.fact);
     if (detected.length > 0) {
       console.warn(`[FactStore] PII detected (${detected.join(", ")}), redacted before storage`);
@@ -397,7 +588,7 @@ export class FactStore {
 
     const now = new Date().toISOString();
     const tags = Array.isArray(entry.tags) ? entry.tags : [];
-    const row = {
+    const row: FactInsertRow = {
       fact: cleaned,
       tags,
       time: entry.time || null,
@@ -436,13 +627,13 @@ export class FactStore {
     return { id };
   }
 
-  searchByCategory(category, limit = 20) {
+  searchByCategory(category: string, limit = 20): FactRecord[] {
     const normalized = normalizeCategory(category);
     const rows = this._stmts.getByCategory.all(normalized, limit);
     return rows.map((row) => this._rowToFact(row));
   }
 
-  addLink(fromId, toId, relation = "related_to") {
+  addLink(fromId: number | string, toId: number | string, relation: string = "related_to"): boolean {
     const normalizedFrom = Number(fromId);
     const normalizedTo = Number(toId);
     if (!Number.isInteger(normalizedFrom) || !Number.isInteger(normalizedTo)) return false;
@@ -456,16 +647,16 @@ export class FactStore {
     return result.changes > 0;
   }
 
-  getRelatedFacts(ids) {
+  getRelatedFacts(ids: Array<number | string> | null | undefined): Map<number, RelatedFact[]> {
     const normalizedIds = [...new Set((ids || []).filter((id) => Number.isInteger(id) || /^[0-9]+$/.test(String(id))).map((id) => Number(id)))];
     if (normalizedIds.length === 0) return new Map();
 
     const rows = this._stmts.getLinksForFactIds.all(JSON.stringify(normalizedIds));
-    const map = new Map();
+    const map = new Map<number, RelatedFact[]>();
     for (const row of rows) {
       const key = Number(row.from_id);
       if (!map.has(key)) map.set(key, []);
-      map.get(key).push({
+      map.get(key)!.push({
         id: row.id,
         to_id: Number(row.to_id),
         relation: row.relation,
@@ -478,7 +669,7 @@ export class FactStore {
     return map;
   }
 
-  addBatch(entries) {
+  addBatch(entries: FactInput[]): number {
     const run = this.db.transaction(() => {
       for (const entry of entries) {
         this.add(entry);
@@ -488,11 +679,11 @@ export class FactStore {
     return entries.length;
   }
 
-  searchByTags(queryTags, dateRange, limit = 20) {
+  searchByTags(queryTags: string[] | null | undefined, dateRange?: DateRange, limit = 20): FactRecord[] {
     if (!queryTags || queryTags.length === 0) return [];
 
     const stmt = this._getTagSearchStmt(queryTags.length, dateRange);
-    const params = { limit };
+    const params: TagSearchParams = { limit };
     for (let i = 0; i < queryTags.length; i++) {
       params[`tag${i}`] = queryTags[i];
     }
@@ -503,7 +694,7 @@ export class FactStore {
     return rows.map((row) => this._rowToFact(row));
   }
 
-  _getTagSearchStmt(tagCount, dateRange) {
+  private _getTagSearchStmt(tagCount: number, dateRange?: DateRange): SqliteStatement<FactDbRow> {
     const dateKey = (dateRange?.from ? 1 : 0) | (dateRange?.to ? 2 : 0);
     const cacheKey = `${tagCount}:${dateKey}`;
 
@@ -527,13 +718,13 @@ export class FactStore {
     stmt = this.db.prepare(sql);
     if (this._tagSearchCache.size >= 200) {
       const firstKey = this._tagSearchCache.keys().next().value;
-      this._tagSearchCache.delete(firstKey);
+      if (firstKey !== undefined) this._tagSearchCache.delete(firstKey);
     }
     this._tagSearchCache.set(cacheKey, stmt);
     return stmt;
   }
 
-  searchFullText(query, limit = 20) {
+  searchFullText(query: string, limit = 20): FactRecord[] {
     if (!query || !query.trim()) return [];
 
     try {
@@ -550,33 +741,33 @@ export class FactStore {
     }
   }
 
-  _likeFallback(query, limit) {
+  private _likeFallback(query: string, limit: number): FactRecord[] {
     const rows = this.db
-      .prepare(`SELECT * FROM facts WHERE fact LIKE '%' || ? || '%' ORDER BY time DESC LIMIT ?`)
+      .prepare<FactDbRow>(`SELECT * FROM facts WHERE fact LIKE '%' || ? || '%' ORDER BY time DESC LIMIT ?`)
       .all(query, limit);
     return rows.map((row) => this._rowToFact(row));
   }
 
-  getAll() {
+  getAll(): FactRecord[] {
     return this._stmts.getAll.all().map((row) => this._rowToFact(row));
   }
 
-  getBySession(sessionId) {
+  getBySession(sessionId: string): FactRecord[] {
     return this._stmts.getBySession.all(sessionId).map((row) => this._rowToFact(row));
   }
 
-  getById(id) {
+  getById(id: number | string): FactRecord | null {
     const row = this._stmts.getById.get(id);
     return row ? this._rowToFact(row) : null;
   }
 
-  getImportantFacts({ limit = 20, minImportance = this.compileThreshold } = {}) {
+  getImportantFacts({ limit = 20, minImportance = this.compileThreshold }: ImportantFactsOptions = {}): FactRecord[] {
     return this._stmts.getImportant
       .all(minImportance, limit)
       .map((row) => this._rowToFact(row));
   }
 
-  markAccessed(ids, opts = {}) {
+  markAccessed(ids: Array<number | string> | null | undefined, opts: MarkAccessedOptions = {}): number {
     const normalizedIds = [...new Set((ids || []).filter((id) => Number.isInteger(id) || /^[0-9]+$/.test(String(id))).map((id) => Number(id)))];
     if (normalizedIds.length === 0) return 0;
 
@@ -604,18 +795,18 @@ export class FactStore {
     return touched;
   }
 
-  get size() {
-    return this._stmts.count.get().cnt;
+  get size(): number {
+    return this._stmts.count.get()!.cnt;
   }
 
-  delete(id) {
+  delete(id: number | string): boolean {
     const changed = this._stmts.deleteById.run(id).changes > 0;
     if (changed) this._emitChange({ type: "delete", id: Number(id) });
     return changed;
   }
 
-  updateFact(id, updates = {}) {
-    const payload = {
+  updateFact(id: number | string, updates: UpdateFactOptions = {}): FactRecord | null {
+    const payload: UpdateFactPayload = {
       id: Number(id),
       category: Object.prototype.hasOwnProperty.call(updates, "category")
         ? normalizeCategory(updates.category)
@@ -639,7 +830,7 @@ export class FactStore {
     return null;
   }
 
-  clearAll() {
+  clearAll(): void {
     this.db.transaction(() => {
       this._stmts.deleteAll.run();
       this.db.exec("INSERT INTO facts_fts(facts_fts) VALUES ('rebuild')");
@@ -647,11 +838,11 @@ export class FactStore {
     this._emitChange({ type: "clear" });
   }
 
-  exportAll() {
+  exportAll(): FactRecord[] {
     return this.getAll();
   }
 
-  importAll(entries) {
+  importAll(entries: FactInput[]): void {
     const run = this.db.transaction(() => {
       for (const entry of entries) {
         this.add({
@@ -673,7 +864,7 @@ export class FactStore {
     run();
   }
 
-  close() {
+  close(): void {
     if (this._walTimer) { clearInterval(this._walTimer); this._walTimer = null; }
     try { this.db?.pragma?.("wal_checkpoint(TRUNCATE)"); } catch {}
     for (const stmt of this._tagSearchCache.values()) {
@@ -684,11 +875,11 @@ export class FactStore {
     if (this.db?.open) this.db.close();
   }
 
-  searchCombined(keywords, limit = 5) {
+  searchCombined(keywords: string[] | null | undefined, limit = 5): FactRecord[] {
     if (!keywords || keywords.length === 0) return [];
 
-    const seenIds = new Set();
-    const scored = [];
+    const seenIds = new Set<number>();
+    const scored: Array<{ row: FactRecord; score: number }> = [];
 
     try {
       const tagResults = this.searchByTags(keywords, undefined, limit * 2);
@@ -716,14 +907,14 @@ export class FactStore {
     return results;
   }
 
-  searchByProject(projectPath, keywords, limit = 10) {
+  searchByProject(projectPath: string | null | undefined, keywords: string[], limit = 10): FactRecord[] {
     const hasProjectColumn = this._hasColumn("facts", "project_path");
     if (!hasProjectColumn || !projectPath) {
       return this.searchCombined(keywords, limit);
     }
 
     try {
-      const stmt = this.db.prepare(`
+      const stmt = this.db.prepare<FactDbRow>(`
         SELECT f.*, COUNT(DISTINCT je.value) as matchCount
         FROM facts f, json_each(f.tags) je
         WHERE je.value IN (${keywords.map(() => "?").join(", ")})
@@ -741,25 +932,25 @@ export class FactStore {
     }
   }
 
-  _hasColumn(table, column) {
+  private _hasColumn(table: string, column: string): boolean {
     try {
-      const cols = this.db.pragma(`table_info(${table})`);
+      const cols = this.db.pragma<ColumnInfoRow[]>(`table_info(${table})`);
       return cols.some(c => c.name === column);
     } catch {
       return false;
     }
   }
 
-  _hasColumns(table, columns) {
+  private _hasColumns(table: string, columns: string[]): boolean {
     try {
-      const existing = new Set(this.db.pragma(`table_info(${table})`).map((c) => c.name));
+      const existing = new Set(this.db.pragma<ColumnInfoRow[]>(`table_info(${table})`).map((c) => c.name));
       return columns.every((column) => existing.has(column));
     } catch {
       return false;
     }
   }
 
-  _ensureFactLinksTable() {
+  private _ensureFactLinksTable(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS fact_links (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -774,12 +965,12 @@ export class FactStore {
     `);
   }
 
-  _backfillStructuredFields() {
+  private _backfillStructuredFields(): void {
     const hasCategory = this._hasColumn("facts", "category");
     const hasConfidence = this._hasColumn("facts", "confidence");
     if (!hasCategory && !hasConfidence) return;
 
-    const rows = this.db.prepare(`
+    const rows = this.db.prepare<FactDbRow>(`
       SELECT id, fact, tags, category, confidence
       FROM facts
     `).all();
@@ -802,7 +993,7 @@ export class FactStore {
     }
   }
 
-  _rowToFact(row) {
+  private _rowToFact(row: FactDbRow): FactRecord {
     return {
       id: row.id,
       fact: row.fact,
