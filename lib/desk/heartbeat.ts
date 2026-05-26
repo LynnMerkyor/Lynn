@@ -1,5 +1,5 @@
 /**
- * heartbeat.js — 日常巡检 + 笺目录扫描
+ * heartbeat.ts — 日常巡检 + 笺目录扫描
  *
  * 让 agent 从被动应答变成主动行动的关键机制。
  * 两个阶段：
@@ -17,13 +17,161 @@ import { debugLog } from "../debug-log.js";
 import { createPluginDeskBridge } from "./plugin-desk-bridge.js";
 import { applyRecurringTaskMarkers, extractRecurringJianTasks, upsertRecentExecutionSection, isDuplicateExecution } from "./jian-runtime.js";
 
+type MaybePromise<T> = T | Promise<T>;
+
+type DevLogCallback = (text: string, level?: string) => void;
+type SessionBeatCallback = (prompt: string) => MaybePromise<void>;
+type JianBeatCallback = (prompt: string, cwd: string) => MaybePromise<void>;
+
+interface DeskFile {
+  name: string;
+  isDir?: boolean;
+  mtime?: string | number;
+}
+
+interface JianFile {
+  name: string;
+  isDir: boolean;
+  size: number;
+  mtime: string;
+}
+
+interface HeartbeatContextOptions {
+  deskFiles: DeskFile[];
+  overwatch: string | null;
+  isZh: boolean;
+}
+
+interface JianPromptOptions {
+  dirPath: string;
+  jianContent: string;
+  files: JianFile[];
+  jianChanged: boolean;
+  filesChanged: boolean;
+  isZh: boolean;
+}
+
+interface JianDir {
+  name: string;
+  absPath: string;
+  jianContent: string;
+  files: JianFile[];
+}
+
+interface JianChange extends JianDir {
+  jianHash: string;
+  filesHash: string;
+  jianChanged: boolean;
+  filesChanged: boolean;
+}
+
+interface RegistryEntry {
+  jianHash: string;
+  filesHash: string;
+  lastCheckedAt: string;
+  lastSkippedReason?: string;
+}
+
+type JianRegistry = Record<string, RegistryEntry>;
+
+interface EventBus {
+  emit(eventName: string, payload: unknown): void;
+}
+
+interface PluginDeskBridgeOptions {
+  deskDir: string;
+  bus?: EventBus;
+  log?: DevLogCallback;
+}
+
+interface PluginDeskFile {
+  name: string;
+  isDir: boolean;
+  size: number;
+  mtime: string;
+}
+
+interface PluginDeskChange {
+  pluginId: string;
+  files: PluginDeskFile[];
+}
+
+interface PluginDeskBridge {
+  heartbeatScan(): PluginDeskChange[];
+}
+
+interface RecurringJianTask {
+  lineIndex: number;
+  originalLine: string;
+  schedule: string;
+  taskText: string;
+  rawTask: string;
+  mode: string;
+}
+
+interface ScheduledRecurringJianTask extends RecurringJianTask {
+  nextRunAt: string | number | Date | null;
+  jobId: string | null;
+  jobLabel: string | null;
+}
+
+interface JianScheduleConfig {
+  dirPath: string;
+  schedule: string;
+  taskText: string;
+  rawTask: string;
+  label: string;
+}
+
+interface JianScheduleResult {
+  id?: string | null;
+  label?: string | null;
+  nextRunAt?: string | number | Date | null;
+}
+
+type JianScheduleCallback = (config: JianScheduleConfig) => MaybePromise<JianScheduleResult | false | null | undefined>;
+
+interface RecentExecutionOptions {
+  summary: string;
+  type: string;
+  label: string;
+  at: number;
+  locale?: string;
+}
+
+interface HeartbeatOptions {
+  bus?: EventBus;
+  getDeskFiles?: () => DeskFile[];
+  getWorkspacePath?: () => string;
+  registryPath?: string;
+  onBeat: SessionBeatCallback;
+  onJianBeat?: JianBeatCallback;
+  onJianSchedule?: JianScheduleCallback;
+  intervalMinutes?: number;
+  emitDevLog?: DevLogCallback;
+  overwatchPath?: string;
+  locale?: string;
+}
+
+interface HeartbeatController {
+  start: () => void;
+  stop: () => Promise<void>;
+  beat: () => Promise<void>;
+  triggerNow: () => boolean;
+}
+
+const createTypedPluginDeskBridge = createPluginDeskBridge as (opts: PluginDeskBridgeOptions) => PluginDeskBridge;
+const extractRecurringJianTasksTyped = extractRecurringJianTasks as (content: string, locale?: string) => RecurringJianTask[];
+const applyRecurringTaskMarkersTyped = applyRecurringTaskMarkers as (content: string, tasks: ScheduledRecurringJianTask[], locale?: string) => string;
+const upsertRecentExecutionSectionTyped = upsertRecentExecutionSection as (content: string, options: RecentExecutionOptions) => string;
+
 /** 12 位 MD5 短指纹 */
-function quickHash(str) {
+function quickHash(str: string): string {
   return createHash("md5").update(str).digest("hex").slice(0, 12);
 }
 
 /** 人类可读文件大小 */
-function formatSize(bytes) {
+function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
@@ -36,7 +184,7 @@ function formatSize(bytes) {
 /**
  * 工作空间巡检 prompt（支持 i18n）
  */
-function buildHeartbeatContext({ deskFiles, overwatch, isZh }) {
+function buildHeartbeatContext({ deskFiles, overwatch, isZh }: HeartbeatContextOptions): string {
   const now = new Date();
   const timeStr = now.toLocaleString(isZh ? "zh-CN" : "en-US", { hour12: false });
 
@@ -81,7 +229,7 @@ function buildHeartbeatContext({ deskFiles, overwatch, isZh }) {
 /**
  * 笺目录专用 prompt（支持 i18n）
  */
-function buildJianPrompt({ dirPath, jianContent, files, jianChanged, filesChanged, isZh }) {
+function buildJianPrompt({ dirPath, jianContent, files, jianChanged, filesChanged, isZh }: JianPromptOptions): string {
   const parts = isZh
     ? [
         `[目录巡检] ${dirPath}`,
@@ -137,7 +285,7 @@ function buildJianPrompt({ dirPath, jianContent, files, jianChanged, filesChange
   return parts.join("\n");
 }
 
-function stripRecentExecutionSection(content) {
+function stripRecentExecutionSection(content: unknown): string {
   const lines = String(content || "").split("\n");
   const headingIndex = lines.findIndex((line) => /^##\s+(最近执行|Recent activity)\s*$/i.test(line.trim()));
   if (headingIndex === -1) return String(content || "");
@@ -153,7 +301,7 @@ function stripRecentExecutionSection(content) {
   return [...lines.slice(0, headingIndex), ...lines.slice(endIndex)].join("\n");
 }
 
-export function hasActionableJianContent(content, locale = "zh") {
+export function hasActionableJianContent(content: unknown, locale = "zh"): boolean {
   const body = stripRecentExecutionSection(content);
   const activeBody = body
     .split("\n")
@@ -162,7 +310,7 @@ export function hasActionableJianContent(content, locale = "zh") {
   const compact = activeBody.replace(/\s+/g, " ").trim();
   if (!compact) return false;
 
-  if (extractRecurringJianTasks(body, locale).length > 0) return true;
+  if (extractRecurringJianTasksTyped(body, locale).length > 0) return true;
   if (/^- \[ \]\s+\S/m.test(activeBody)) return true;
 
   const actionableRe = /(?:\b(?:todo|todos?|remind|reminder|daily|weekly|weekdays|every day|every week|schedule|cron|automation|automate|monitor|watch|follow up|check|review|summarize|merge|organize|read|analyze|backup|sync|publish|release|report|when|if new|new file)\b|待办|提醒|每天|工作日|每周|定时|自动任务|自动化|关注|监控|跟进|检查|复盘|总结|汇总|整理|合并|读取|分析|备份|同步|发布|报告|如果|当.*(?:新增|出现|变化)|新增.*(?:文件|PDF|报表|资料)|发现.*(?:文件|变化|异常))/i;
@@ -176,13 +324,13 @@ export function hasActionableJianContent(content, locale = "zh") {
 /**
  * 列出目录下的文件（排除 . 开头和 jian.md 本身）
  */
-function listDirFiles(dir) {
+function listDirFiles(dir: string): JianFile[] {
   try {
     return fs.readdirSync(dir, { withFileTypes: true })
       .filter(e => !e.name.startsWith(".") && e.name !== "jian.md")
       .map(e => {
         const fp = path.join(dir, e.name);
-        let stat;
+        let stat: fs.Stats;
         try { stat = fs.lstatSync(fp); } catch { return null; }
         if (stat.isSymbolicLink()) return null; // 跳过 symlink
         return {
@@ -192,7 +340,7 @@ function listDirFiles(dir) {
           mtime: stat.mtime.toISOString(),
         };
       })
-      .filter(Boolean);
+      .filter((file): file is JianFile => file !== null);
   } catch {
     return [];
   }
@@ -201,10 +349,10 @@ function listDirFiles(dir) {
 /**
  * 扫描工作空间，找到所有含 jian.md 的目录（根目录 + 一级子目录）
  */
-function scanJianDirs(wsPath) {
+function scanJianDirs(wsPath: string): JianDir[] {
   if (!wsPath || !fs.existsSync(wsPath)) return [];
 
-  const dirs = [];
+  const dirs: JianDir[] = [];
 
   // 根目录
   if (fs.existsSync(path.join(wsPath, "jian.md"))) {
@@ -247,15 +395,7 @@ function scanJianDirs(wsPath) {
 /**
  * 创建心跳调度器
  *
- * @param {object} opts
- * @param {() => Array} [opts.getDeskFiles] - 获取根目录文件列表
- * @param {() => string} [opts.getWorkspacePath] - 获取工作空间路径
- * @param {string} [opts.registryPath] - jian-registry.json 存储路径
- * @param {(prompt: string) => Promise<void>} opts.onBeat - 工作空间巡检回调
- * @param {(prompt: string, cwd: string) => Promise<void>} [opts.onJianBeat] - 笺巡检回调（带 cwd）
- * * @param {object} [opts.bus] - EventBus，用于插件 desk 事件推送（v0.77 新增）
- * @param {number} [opts.intervalMinutes] - 巡检间隔（分钟），默认 15
- * @param {(text: string, level?: string) => void} [opts.emitDevLog]
+ * @param opts
  * @returns {{ start, stop, beat, triggerNow }}
  */
 export function createHeartbeat({
@@ -265,55 +405,55 @@ export function createHeartbeat({
   onJianSchedule,
   intervalMinutes, emitDevLog,
   overwatchPath, locale,
-}) {
+}: HeartbeatOptions): HeartbeatController {
   // v0.77: 插件 desk 桥接器（懒初始化）
-  let _pluginDeskBridge = null;
-  function getPluginBridge() {
+  let _pluginDeskBridge: PluginDeskBridge | null = null;
+  function getPluginBridge(): PluginDeskBridge | null {
     if (_pluginDeskBridge) return _pluginDeskBridge;
     const wsPath = getWorkspacePath?.();
     if (!wsPath) return null;
-    _pluginDeskBridge = createPluginDeskBridge({ deskDir: wsPath, bus, log: emitDevLog });
+    _pluginDeskBridge = createTypedPluginDeskBridge({ deskDir: wsPath, bus, log: emitDevLog });
     return _pluginDeskBridge;
   }
 
   const isZh = !locale || String(locale).startsWith("zh");
-  const devlog = (text, level = "heartbeat") => {
+  const devlog = (text: string, level = "heartbeat"): void => {
     emitDevLog?.(text, level);
   };
   const INTERVAL = (intervalMinutes || 17) * 60 * 1000;
   const COOLDOWN = 2 * 60 * 1000;
   const BEAT_TIMEOUT = 5 * 60 * 1000;
 
-  let _timer = null;
+  let _timer: NodeJS.Timeout | null = null;
   let _running = false;
-  let _beatPromise = null;
+  let _beatPromise: Promise<void> | null = null;
   let _lastTrigger = 0;
   let _lastDeskFingerprint = "";
 
   // ── 指纹注册表 ──
 
-  function loadRegistry() {
+  function loadRegistry(): JianRegistry {
     if (!registryPath) return {};
     try {
-      return JSON.parse(fs.readFileSync(registryPath, "utf-8"));
+      return JSON.parse(fs.readFileSync(registryPath, "utf-8")) as JianRegistry;
     } catch {
       return {};
     }
   }
 
-  function saveRegistry(reg) {
+  function saveRegistry(reg: JianRegistry): void {
     if (!registryPath) return;
     try {
       fs.mkdirSync(path.dirname(registryPath), { recursive: true });
       fs.writeFileSync(registryPath, JSON.stringify(reg, null, 2), "utf-8");
     } catch (err) {
-      console.warn(`[heartbeat] saveRegistry 失败: ${err.message}`);
+      console.warn(`[heartbeat] saveRegistry 失败: ${(err as { message: string }).message}`);
     }
   }
 
   // ── 心跳执行 ──
 
-  async function beat() {
+  async function beat(): Promise<void> {
     if (_running) return;
     _running = true;
     const p = _doBeat();
@@ -321,7 +461,7 @@ export function createHeartbeat({
     await p;
   }
 
-  async function _doBeat() {
+  async function _doBeat(): Promise<void> {
     try {
       const tag = "\x1b[36m[heartbeat]\x1b[0m";
       console.log(`${tag} ── 心跳开始 ──`);
@@ -346,7 +486,7 @@ export function createHeartbeat({
       if (firstDeskScan) _lastDeskFingerprint = deskFingerprint;
 
       // Overwatch 注意力清单
-      let overwatch = null;
+      let overwatch: string | null = null;
       if (overwatchPath) {
         try {
           const content = fs.readFileSync(overwatchPath, "utf-8").trim();
@@ -381,7 +521,7 @@ export function createHeartbeat({
         console.log(`${tag}  Phase 1: 工作空间巡检 (${prompt.length} chars)`);
         devlog("Phase 1: 工作空间巡检执行中...");
         {
-          let timer;
+          let timer: NodeJS.Timeout | undefined;
           try {
             await Promise.race([
               onBeat(prompt),
@@ -407,7 +547,7 @@ export function createHeartbeat({
           }
         }
       } catch (err) {
-        devlog(`Phase 1.5 扫描失败: ${err.message}`, "error");
+        devlog(`Phase 1.5 扫描失败: ${(err as { message: string }).message}`, "error");
       }
 
       // ── Phase 2: 笺目录执行 ──
@@ -419,9 +559,9 @@ export function createHeartbeat({
       debugLog()?.log("heartbeat", "beat done");
       devlog("── 心跳完成 ──");
     } catch (err) {
-      console.error(`[heartbeat] beat error: ${err.message}`);
-      debugLog()?.error("heartbeat", `beat error: ${err.message}`);
-      devlog(`错误: ${err.message}`, "error");
+      console.error(`[heartbeat] beat error: ${(err as { message: string }).message}`);
+      debugLog()?.error("heartbeat", `beat error: ${(err as { message: string }).message}`);
+      devlog(`错误: ${(err as { message: string }).message}`, "error");
     } finally {
       _running = false;
     }
@@ -430,11 +570,11 @@ export function createHeartbeat({
   /**
    * 对比注册表，找出有变化的笺目录
    */
-  function _detectJianChanges(jianDirs) {
+  function _detectJianChanges(jianDirs: JianDir[]): JianChange[] {
     if (jianDirs.length === 0) return [];
 
     const registry = loadRegistry();
-    const result = [];
+    const result: JianChange[] = [];
     let registryTouched = false;
 
     for (const dir of jianDirs) {
@@ -471,7 +611,7 @@ export function createHeartbeat({
   /**
    * 逐个执行有变化的笺目录
    */
-  async function _processJianChanges(changes, tag) {
+  async function _processJianChanges(changes: JianChange[], tag: string): Promise<void> {
     const registry = loadRegistry();
 
     for (const dir of changes) {
@@ -482,8 +622,8 @@ export function createHeartbeat({
       let scheduledCount = 0;
       if (typeof onJianSchedule === "function") {
         try {
-          const recurringTasks = extractRecurringJianTasks(dir.jianContent, locale);
-          const createdTasks = [];
+          const recurringTasks = extractRecurringJianTasksTyped(dir.jianContent, locale);
+          const createdTasks: ScheduledRecurringJianTask[] = [];
           for (const task of recurringTasks) {
             try {
               const created = await onJianSchedule({
@@ -502,11 +642,11 @@ export function createHeartbeat({
                 });
               }
             } catch (err) {
-              devlog(`笺 [${label}] 自动任务创建失败: ${err.message}`, "error");
+              devlog(`笺 [${label}] 自动任务创建失败: ${(err as { message: string }).message}`, "error");
             }
           }
           if (createdTasks.length > 0) {
-            dir.jianContent = applyRecurringTaskMarkers(dir.jianContent, createdTasks, locale);
+            dir.jianContent = applyRecurringTaskMarkersTyped(dir.jianContent, createdTasks, locale);
             const preview = createdTasks
               .slice(0, 2)
               .map((task) => {
@@ -522,7 +662,7 @@ export function createHeartbeat({
                   : task.taskText;
               })
               .join(isZh ? "、" : ", ");
-            dir.jianContent = upsertRecentExecutionSection(dir.jianContent, {
+            dir.jianContent = upsertRecentExecutionSectionTyped(dir.jianContent, {
               summary: isZh
                 ? `已接管 ${createdTasks.length} 条重复待办${preview ? `：${preview}` : ""}`
                 : `Took over ${createdTasks.length} recurring todos${preview ? `: ${preview}` : ""}`,
@@ -537,7 +677,7 @@ export function createHeartbeat({
             devlog(`笺 [${label}] 已设定 ${createdTasks.length} 个自动任务${preview ? `：${preview}` : ""}`);
           }
         } catch (err) {
-          devlog(`笺 [${label}] 自动任务检测失败: ${err.message}`, "error");
+          devlog(`笺 [${label}] 自动任务检测失败: ${(err as { message: string }).message}`, "error");
         }
       }
 
@@ -552,10 +692,10 @@ export function createHeartbeat({
 
       try {
         {
-          let timer;
+          let timer: NodeJS.Timeout | undefined;
           try {
             await Promise.race([
-              onJianBeat(prompt, dir.absPath),
+              onJianBeat!(prompt, dir.absPath),
               new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(isZh ? `笺 [${label}] 执行超时 (5min)` : `Jian [${label}] timed out (5min)`)), BEAT_TIMEOUT); }),
             ]);
           } finally {
@@ -585,14 +725,14 @@ export function createHeartbeat({
           devlog(`笺 [${label}] 本轮新增自动任务 ${scheduledCount} 个`);
         }
       } catch (err) {
-        devlog(`笺 [${label}] 执行失败: ${err.message}`, "error");
+        devlog(`笺 [${label}] 执行失败: ${(err as { message: string }).message}`, "error");
       }
     }
   }
 
   // ── 调度 ──
 
-  function start() {
+  function start(): void {
     if (_timer) return;
     const now = Date.now();
     const msIntoSlot = now % INTERVAL;
@@ -609,7 +749,7 @@ export function createHeartbeat({
     if (_timer.unref) _timer.unref();
   }
 
-  async function stop() {
+  async function stop(): Promise<void> {
     if (_timer) {
       clearTimeout(_timer);
       clearInterval(_timer);
@@ -623,7 +763,7 @@ export function createHeartbeat({
     devlog("心跳已停止");
   }
 
-  function triggerNow() {
+  function triggerNow(): boolean {
     const now = Date.now();
     if (now - _lastTrigger < COOLDOWN) {
       devlog("手动触发冷却中，跳过");
