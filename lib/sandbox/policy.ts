@@ -50,9 +50,36 @@ export const READ_WRITE_AGENT_FILES = ["pinned.md", "channels.md"];
  */
 export const READ_WRITE_HOME_DIRS = ["channels", "logs", "skills"];
 
-function uniqueResolvedPaths(paths) {
-  const out = [];
-  const seen = new Set();
+export type SandboxPolicyMode = "standard" | "full-access";
+
+export interface FullAccessSandboxPolicy {
+  mode: "full-access";
+}
+
+export interface StandardSandboxPolicy {
+  mode: "standard";
+  lynnHome: string;
+  agentDir: string;
+  workspace: string | null;
+  trustedRoots: string[];
+  writablePaths: string[];
+  denyReadPaths: string[];
+  protectedPaths: string[];
+}
+
+export type SandboxPolicy = FullAccessSandboxPolicy | StandardSandboxPolicy;
+
+export interface DeriveSandboxPolicyOptions {
+  agentDir: string;
+  workspace: string | null;
+  trustedRoots?: string[] | null;
+  lynnHome: string;
+  mode: SandboxPolicyMode;
+}
+
+function uniqueResolvedPaths(paths: Array<string | null | undefined> | null | undefined): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
   for (const entry of paths || []) {
     if (!entry) continue;
     const resolved = path.resolve(entry);
@@ -77,7 +104,13 @@ function uniqueResolvedPaths(paths) {
  * @param {"standard"|"full-access"} opts.mode
  * @returns {object} policy
  */
-export function deriveSandboxPolicy({ agentDir, workspace, trustedRoots, lynnHome, mode }) {
+export function deriveSandboxPolicy({
+  agentDir,
+  workspace,
+  trustedRoots,
+  lynnHome,
+  mode,
+}: DeriveSandboxPolicyOptions): SandboxPolicy {
   if (mode === "full-access") {
     return { mode: "full-access" };
   }
