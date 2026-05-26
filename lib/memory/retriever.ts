@@ -16,11 +16,94 @@ const DEFAULT_CATEGORY_BOOSTS = Object.freeze({
   procedure: 1.2,
 });
 
-function timeDecay(createdAt) {
+interface FactRow {
+  id: string | number;
+  fact: string;
+  tags?: string[];
+  category?: string;
+  time?: string;
+  created_at?: string;
+  last_accessed_at?: string | null;
+  importance_score?: number;
+  hit_count?: number;
+  matchCount?: number;
+  project_path?: string | null;
+  [key: string]: unknown;
+}
+
+interface FactStoreLike {
+  size: number;
+  getAll: () => FactRow[];
+  getById: (id: string | number) => FactRow | null | undefined;
+  searchByTags: (keywords: string[], range?: unknown, limit?: number) => FactRow[];
+  searchFullText: (query: string, limit?: number) => FactRow[];
+  markAccessed: (ids: Array<string | number>) => void;
+  registerChangeListener?: (listener: (event: FactStoreEvent) => void) => () => void;
+}
+
+interface FactStoreEvent {
+  type: "add" | "delete" | "clear" | string;
+  row?: FactRow;
+  id?: string | number;
+}
+
+interface VectorSearchResult {
+  id: string | number;
+  score: number;
+}
+
+interface VectorRetrieverLike {
+  available: boolean;
+  search: (query: string, limit: number) => Promise<VectorSearchResult[]>;
+  index: (id: string | number, text: string, tags: string[]) => Promise<unknown>;
+  remove?: (id: string | number | undefined) => Promise<unknown>;
+  rebuildIndex?: (rows: Array<{ id: string | number; text: string; tags: string[] }>) => Promise<unknown>;
+  close?: () => void;
+}
+
+interface HybridRetrieverWeights {
+  tag: number;
+  fts: number;
+  vector: number;
+  recency: number;
+  importance: number;
+  category: number;
+}
+
+interface HybridRetrieverOptions {
+  factStore?: FactStoreLike;
+  vectorRetriever?: VectorRetrieverLike;
+  vectorConfig?: Record<string, unknown>;
+  weights?: Partial<HybridRetrieverWeights>;
+  categoryBoosts?: Record<string, number>;
+}
+
+interface HybridSearchOptions {
+  preferredCategories?: string[];
+  categoryBoosts?: Record<string, number>;
+  projectPath?: string;
+}
+
+interface ScoredFact extends FactRow {
+  tagScore: number;
+  ftsScore: number;
+  vectorScore: number;
+  categoryBoost: number;
+  score: number;
+}
+
+interface ScoreEntry {
+  row: FactRow;
+  tagScore: number;
+  ftsScore: number;
+  vectorScore: number;
+}
+
+function timeDecay(createdAt: unknown): number {
   if (!createdAt) return 0.5;
 
   try {
-    const ageMs = Date.now() - new Date(createdAt).getTime();
+    const ageMs = Date.now() - new Date(String(createdAt)).getTime();
     const ageDays = Math.max(0, ageMs / (24 * 60 * 60 * 1000));
     return Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
   } catch {
@@ -28,14 +111,18 @@ function timeDecay(createdAt) {
   }
 }
 
-function normalizeCategory(value) {
+function normalizeCategory(value: unknown): string {
   return String(value || "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "_");
 }
 
-function computeCategoryBoost(row, preferredCategories, categoryBoosts) {
+function computeCategoryBoost(
+  row: FactRow,
+  preferredCategories: Set<string>,
+  categoryBoosts: Record<string, number>,
+): number {
   const category = normalizeCategory(row.category);
   let boost = categoryBoosts[category] || 0;
   if (preferredCategories.has(category)) boost += 1.2;
@@ -43,6 +130,12 @@ function computeCategoryBoost(row, preferredCategories, categoryBoosts) {
 }
 
 export class HybridRetriever {
+  private _factStore?: FactStoreLike;
+  private _vectorRetriever: VectorRetrieverLike;
+  private _categoryBoosts: Record<string, number>;
+  private _weights: HybridRetrieverWeights;
+  private _unsubscribeFactStore?: () => void;
+
   /**
    * @param {object} opts
    * @param {import('./fact-store.js').FactStore} opts.factStore
@@ -51,9 +144,15 @@ export class HybridRetriever {
    * @param {object} [opts.weights]
    * @param {Record<string, number>} [opts.categoryBoosts]
    */
-  constructor({ factStore, vectorRetriever, vectorConfig, weights, categoryBoosts } = {}) {
+  constructor({
+    factStore,
+    vectorRetriever,
+    vectorConfig,
+    weights,
+    categoryBoosts,
+  }: HybridRetrieverOptions = {}) {
     this._factStore = factStore;
-    this._vectorRetriever = vectorRetriever || createVectorRetriever(vectorConfig || {});
+    this._vectorRetriever = vectorRetriever || createVectorRetriever(vectorConfig || {}) as VectorRetrieverLike;
     this._categoryBoosts = {
       ...DEFAULT_CATEGORY_BOOSTS,
       ...(categoryBoosts || {}),
@@ -82,7 +181,7 @@ export class HybridRetriever {
     }
   }
 
-  async rebuildIndex() {
+  async rebuildIndex(): Promise<void> {
     if (!this._vectorRetriever.available || !this._factStore) return;
     const rows = this._factStore.getAll();
     if (typeof this._vectorRetriever.rebuildIndex === "function") {
@@ -98,11 +197,11 @@ export class HybridRetriever {
     }
   }
 
-  async search(keywords, limit = 5, opts = {}) {
+  async search(keywords: string[], limit = 5, opts: HybridSearchOptions = {}): Promise<ScoredFact[]> {
     if (!keywords || keywords.length === 0) return [];
     if (!this._factStore || this._factStore.size === 0) return [];
 
-    const scoreMap = new Map();
+    const scoreMap = new Map<string | number, ScoreEntry>();
 
     try {
       const tagResults = this._factStore.searchByTags(keywords, undefined, limit * 3);
@@ -159,7 +258,7 @@ export class HybridRetriever {
       } catch {}
     }
 
-    const results = [];
+    const results: ScoredFact[] = [];
     const w = this._weights;
     const preferredCategories = new Set((opts.preferredCategories || []).map(normalizeCategory));
     const categoryBoosts = {
