@@ -11,32 +11,50 @@ import { BRAIN_API_ROOTS } from "../../shared/brain-provider.js";
 
 const STOCK_RESEARCH_PATH = "/stock-research";
 
-function normalizeRoot(value) {
+type NormalizeStockResearchResult =
+  | { ok: true; tsCode: string; message?: undefined }
+  | { ok: false; message: string; tsCode?: undefined };
+
+interface StockResearchParams {
+  code: string;
+  name?: string;
+}
+
+type StockResearchToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function normalizeRoot(value: unknown): string {
   const raw = String(value || "").trim().replace(/\/+$/, "");
   if (!raw) return "";
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
-function resolveStockResearchRoots() {
+function resolveStockResearchRoots(): string[] {
   const override = normalizeRoot(process.env.LYNN_STOCK_RESEARCH_API_ROOT || "");
   return [...new Set([override, ...BRAIN_API_ROOTS.map(normalizeRoot)].filter(Boolean))];
 }
 
-function buildStockResearchUrl(root, tsCode, name) {
+function buildStockResearchUrl(root: string, tsCode: string, name?: string): URL {
   const url = new URL(`${root}${STOCK_RESEARCH_PATH}`);
   url.searchParams.set("code", tsCode);
   if (name) url.searchParams.set("name", name);
   return url;
 }
 
-function exchangeForAStockCode(code) {
+function exchangeForAStockCode(code: string): string {
   if (/^6/.test(code)) return "SH";
   if (/^[03]/.test(code)) return "SZ";
   if (/^[48]/.test(code)) return "BJ";
   return "";
 }
 
-export function normalizeStockResearchTsCode(rawCode) {
+export function normalizeStockResearchTsCode(rawCode: unknown): NormalizeStockResearchResult {
   const code = String(rawCode || "").trim().toUpperCase();
   if (!code) {
     return { ok: false, message: "请提供股票代码，如 688629.SH" };
@@ -75,11 +93,11 @@ export function normalizeStockResearchTsCode(rawCode) {
   return { ok: true, tsCode: `${digits}.${expectedExchange}` };
 }
 
-async function fetchStockResearch(tsCode, name) {
+async function fetchStockResearch(tsCode: string, name?: string): Promise<unknown> {
   const roots = resolveStockResearchRoots();
   if (roots.length === 0) throw new Error("Brain API root 未配置");
 
-  const errors = [];
+  const errors: string[] = [];
   for (let i = 0; i < roots.length; i++) {
     const url = buildStockResearchUrl(roots[i], tsCode, name);
     try {
@@ -91,14 +109,17 @@ async function fetchStockResearch(tsCode, name) {
         signal: AbortSignal.timeout(35_000),
       });
       const text = await resp.text();
-      let data = null;
+      let data: unknown = null;
       try { data = text ? JSON.parse(text) : null; } catch {}
-      if (!resp.ok) throw new Error(data?.error || text?.slice(0, 120) || `HTTP ${resp.status}`);
+      const responseError = data && typeof data === "object" && "error" in data
+        ? String((data as { error?: unknown }).error || "")
+        : "";
+      if (!resp.ok) throw new Error(responseError || text?.slice(0, 120) || `HTTP ${resp.status}`);
       if (!data || typeof data !== "object") throw new Error("empty JSON response");
-      if (data.error) throw new Error(data.error);
+      if (responseError) throw new Error(responseError);
       return data;
     } catch (err) {
-      errors.push(`endpoint ${i + 1}: ${err?.message || String(err)}`);
+      errors.push(`endpoint ${i + 1}: ${errorMessage(err)}`);
     }
   }
   throw new Error(errors.join(" | "));
@@ -113,7 +134,7 @@ export function createStockResearchTool() {
       code: Type.String({ description: t("toolDef.stockResearch.codeDesc") }),
       name: Type.Optional(Type.String({ description: t("toolDef.stockResearch.nameDesc") })),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: StockResearchParams): Promise<StockResearchToolResult> => {
       const normalized = normalizeStockResearchTsCode(params.code);
       if (!normalized.ok) {
         return {
@@ -130,7 +151,7 @@ export function createStockResearchTool() {
         };
       } catch (err) {
         return {
-          content: [{ type: "text", text: `股票研究数据查询失败: ${err.message}` }],
+          content: [{ type: "text", text: `股票研究数据查询失败: ${errorMessage(err)}` }],
           details: {},
         };
       }

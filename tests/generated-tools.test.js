@@ -130,7 +130,7 @@ describe("generated document tools", () => {
   });
 
   it("keeps stock research routed through configured Brain API roots", () => {
-    const source = fs.readFileSync(path.join(process.cwd(), "lib/tools/stock-research-tool.js"), "utf-8");
+    const source = fs.readFileSync(path.join(process.cwd(), "lib/tools/stock-research-tool.ts"), "utf-8");
     expect(source).not.toContain("https://82.156.182.240");
     expect(source).toContain("BRAIN_API_ROOTS");
     expect(source).toContain("readSignedClientAgentHeaders");
