@@ -1,15 +1,396 @@
 import path from "path";
 import { TaskStore, TASK_STATUS } from "../lib/tasks/task-store.js";
-import { runAgentSession } from "./agent-executor.js";
+import { runAgentSession as runAgentSessionUntyped } from "./agent-executor.js";
 import { getLocale } from "../server/i18n.js";
 
-const TERMINAL_TASK_STATUSES = new Set([
-  TASK_STATUS.COMPLETED,
-  TASK_STATUS.FAILED,
-  TASK_STATUS.CANCELLED,
+type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+type AgentId = string | null | undefined;
+type ModelRefInput = string | { id?: unknown; provider?: unknown; name?: unknown; [key: string]: unknown } | null | undefined;
+
+export type TaskStatus = "pending" | "running" | "waiting_approval" | "completed" | "failed" | "cancelled";
+export type TaskRunnerKind = "delegate" | "plan" | "review" | "generic" | string;
+
+export interface RuntimeModelRef {
+  id: string | null;
+  provider: string | null;
+  name?: string | null;
+}
+
+export interface TaskRunnerPayload extends Record<string, unknown> {
+  agentId?: AgentId;
+  prompt?: string | null;
+  model?: ModelRefInput;
+  readOnly?: boolean;
+  systemAppend?: string | null;
+  noMemory?: boolean;
+  noTools?: boolean;
+  cwdOverride?: string | null;
+  runtimeSessionPath?: string | null;
+  context?: string | null;
+  reviewerKind?: string | null;
+}
+
+export interface TaskRunner {
+  kind: TaskRunnerKind;
+  payload: TaskRunnerPayload;
+}
+
+export interface TaskProgress extends Record<string, unknown> {
+  total?: number | null;
+  completed?: number;
+  currentLabel?: string | null;
+}
+
+export interface ReviewFinding extends Record<string, unknown> {
+  severity?: string;
+  title?: string;
+  filePath?: string;
+  detail?: string;
+  suggestion?: string;
+}
+
+export interface StructuredReview extends Record<string, unknown> {
+  summary?: string;
+  nextStep?: string;
+  verdict?: string | null;
+  workflowGate?: string | null;
+  findings?: ReviewFinding[];
+}
+
+export interface TaskArtifact extends Record<string, unknown> {
+  ts?: string;
+  type?: string;
+  label?: string;
+  text?: string;
+  sessionPath?: string;
+  sessionFile?: string;
+  reviewerName?: string | null;
+  structured?: StructuredReview;
+  followUpPrompt?: string | null;
+}
+
+export interface SanitizedApprovalPayload extends Record<string, unknown> {
+  command?: unknown;
+  reason?: unknown;
+  description?: unknown;
+  category?: unknown;
+  identifier?: unknown;
+  trustedRoot?: unknown;
+  title?: unknown;
+  message?: unknown;
+}
+
+export interface TaskApproval extends Record<string, unknown> {
+  ts?: string;
+  confirmId?: string;
+  kind?: string;
+  status?: string;
+  value?: unknown;
+  payload?: SanitizedApprovalPayload | null;
+}
+
+export interface TaskEvent extends Record<string, unknown> {
+  ts?: string;
+  type: string;
+  level?: string;
+  message?: string;
+  data?: unknown;
+}
+
+export interface TaskMetadata extends Record<string, unknown> {
+  autoRun?: boolean;
+  activityRecorded?: boolean;
+  autoVerify?: boolean;
+  retryOf?: string;
+  retriedAt?: string;
+  reviewId?: string | null;
+  reviewerName?: string | null;
+  findingsCount?: number;
+  workflowGate?: string | null;
+  structuredReview?: StructuredReview | null;
+  contextPack?: unknown;
+  followUpPrompt?: string | null;
+  sourceResponse?: unknown;
+  executionResolution?: unknown;
+}
+
+export interface TaskSnapshot extends Record<string, unknown> {
+  capturedAt?: string;
+  agentId?: AgentId;
+  agentName?: string | null;
+  sessionPath?: string | null;
+  runtimeSessionPath?: string | null;
+  cwd?: string | null;
+  securityMode?: string | null;
+  planMode?: boolean;
+  currentModel?: RuntimeModelRef | null;
+  taskModel?: RuntimeModelRef | null;
+  defaultChatModel?: RuntimeModelRef | null;
+  utilityModel?: RuntimeModelRef | null;
+  utilityLargeModel?: RuntimeModelRef | null;
+  promptPreview?: string | null;
+}
+
+export interface TaskRecord extends Record<string, unknown> {
+  id: string;
+  type: string;
+  title: string;
+  status: TaskStatus;
+  scope?: string;
+  agentId?: AgentId;
+  sessionPath?: string | null;
+  source?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  resultSummary?: string | null;
+  error?: string | null;
+  interruptible?: boolean;
+  runKey?: string | null;
+  runner: TaskRunner;
+  progress?: TaskProgress;
+  review?: unknown;
+  approvals?: TaskApproval[];
+  events?: TaskEvent[];
+  metadata: TaskMetadata;
+  artifacts?: TaskArtifact[];
+  snapshot?: TaskSnapshot | null;
+}
+
+export type TaskInput = Partial<TaskRecord> & {
+  runner?: TaskRunner;
+  metadata?: TaskMetadata;
+  progress?: TaskProgress;
+  snapshot?: TaskSnapshot | null;
+};
+
+export interface PersistedTasksJson {
+  tasks?: TaskRecord[];
+}
+
+type TaskPatch = Partial<TaskRecord>;
+type TaskUpdater = TaskPatch | ((current: TaskRecord) => TaskPatch | null | undefined);
+
+interface TaskStoreLike {
+  list(): TaskRecord[];
+  get(taskId: string): TaskRecord | null;
+  create(input?: TaskInput): TaskRecord;
+  update(taskId: string, updater: TaskUpdater): TaskRecord | null;
+  appendEvent(taskId: string, event: Partial<TaskEvent>): TaskRecord | null;
+  appendApproval(taskId: string, approval: Partial<TaskApproval>): TaskRecord | null;
+  addArtifact(taskId: string, artifact: TaskArtifact): TaskRecord | null;
+}
+
+interface RuntimeEventBus {
+  emit(event: { type: string; [key: string]: unknown }, sessionPath?: string | null): void;
+}
+
+interface TaskRuntimeHub extends Record<string, unknown> {
+  eventBus?: RuntimeEventBus;
+}
+
+interface RuntimeSession {
+  sessionManager?: {
+    getCwd?: () => string | null;
+  };
+}
+
+interface RuntimeAgent extends Record<string, unknown> {
+  agentName?: string | null;
+  agentDir?: string | null;
+}
+
+interface TaskActivityEntry extends Record<string, unknown> {
+  id: string;
+  type: string;
+  label: string | null;
+  agentId: AgentId;
+  agentName: string | null | undefined;
+  startedAt: number;
+  finishedAt: number;
+  summary: string;
+  sessionFile: string | null;
+  status: "done" | "error" | "cancelled";
+  error: string | null;
+  taskId: string;
+  source: string | null;
+}
+
+interface ActivityStore {
+  add?: (entry: TaskActivityEntry) => void;
+}
+
+export interface RuntimeEngine extends Record<string, unknown> {
+  currentAgentId?: AgentId;
+  currentSessionPath?: string | null;
+  currentModel?: (RuntimeModelRef & { name?: string | null }) | null;
+  cwd?: string | null;
+  planMode?: boolean;
+  config?: {
+    models?: {
+      chat?: ModelRefInput;
+    };
+  };
+  getSessionByPath?: (sessionPath: string) => RuntimeSession | null;
+  getSharedModels?: () => Record<string, ModelRefInput>;
+  resolveUtilityConfig?: () => Record<string, ModelRefInput>;
+  getAgent?: (agentId?: AgentId) => RuntimeAgent | null;
+  getSecurityMode?: () => string | null;
+  getActivityStore?: (agentId?: AgentId) => ActivityStore | null;
+}
+
+interface ReviewRunnerInput {
+  context?: unknown;
+  reviewerKind?: unknown;
+  taskId: string;
+  signal: AbortSignal;
+  sessionPath?: string | null;
+}
+
+interface ReviewRunnerResult extends Record<string, unknown> {
+  content?: string;
+  reviewerName?: string | null;
+  structured?: StructuredReview | null;
+  followUpPrompt?: string | null;
+}
+
+type ReviewRunner = (input: ReviewRunnerInput) => ReviewRunnerResult | Promise<ReviewRunnerResult>;
+type ReviewRouteFactory = () => { runDetachedReview?: ReviewRunner } | null | undefined;
+
+export interface TaskRuntimeDeps {
+  hub?: TaskRuntimeHub | null;
+  engine: RuntimeEngine;
+  lynnHome: string;
+  reviewRouteFactory?: ReviewRouteFactory | null;
+  reviewRunner?: ReviewRunner | null;
+}
+
+interface RunningTask {
+  controller: AbortController;
+  promise: Promise<TaskRecord | null>;
+}
+
+interface ConfirmationResult extends Record<string, unknown> {
+  confirmId: string;
+}
+
+interface ConfirmStore {
+  create: (kind: string, payload: unknown, sessionPath?: string | null, timeoutMs?: number) => ConfirmationResult;
+  resolve: (confirmId: string, action: string, value?: unknown) => boolean;
+  onResolved?: (confirmId: string, action: string) => void;
+}
+
+export interface TaskRunResult extends Record<string, unknown> {
+  summary?: string | null;
+  text?: string;
+  reviewerName?: string | null;
+  structured?: StructuredReview | null;
+}
+
+interface AgentRound {
+  text: string;
+  capture?: boolean;
+}
+
+interface RunAgentSessionOptions {
+  engine: RuntimeEngine;
+  signal?: AbortSignal;
+  sessionSuffix?: string;
+  systemAppend?: string | null;
+  keepSession?: boolean;
+  noMemory?: boolean;
+  noTools?: boolean;
+  readOnly?: boolean;
+  onSessionReady?: (sessionPath: string | null) => void;
+  sessionPath?: string | null;
+  cwdOverride?: string | null;
+  model?: ModelRefInput;
+  modelOverride?: ModelRefInput;
+}
+
+type RunAgentSession = (agentId: AgentId, rounds: AgentRound[], opts: RunAgentSessionOptions) => Promise<string>;
+const runAgentSession = runAgentSessionUntyped as unknown as RunAgentSession;
+
+export interface CreateDelegateTaskInput {
+  autoRun?: boolean;
+  title?: string | null;
+  prompt?: string | null;
+  agentId?: AgentId;
+  sessionPath?: string | null;
+  source?: string;
+  readOnly?: boolean;
+  model?: ModelRefInput;
+  systemAppend?: string | null;
+  noMemory?: boolean;
+  noTools?: boolean;
+  cwdOverride?: string | null;
+  metadata?: TaskMetadata;
+}
+
+export interface CreatePlanTaskInput {
+  autoRun?: boolean;
+  title?: string | null;
+  prompt?: string | null;
+  agentId?: AgentId;
+  sessionPath?: string | null;
+  source?: string;
+  model?: ModelRefInput;
+  systemAppend?: string | null;
+  noMemory?: boolean;
+  cwdOverride?: string | null;
+  metadata?: TaskMetadata;
+}
+
+export interface CreateReviewFollowUpTaskInput {
+  reviewId?: string | null;
+  title?: string | null;
+  prompt?: string | null;
+  structuredReview?: StructuredReview | null;
+  contextPack?: unknown;
+  followUpPrompt?: string | null;
+  reviewerName?: string | null;
+  sessionPath?: string | null;
+  sourceResponse?: unknown;
+  executionResolution?: unknown;
+  source?: string;
+  metadata?: TaskMetadata;
+}
+
+export interface CreateReviewTaskInput {
+  title?: string | null;
+  context?: string | null;
+  reviewerKind?: string;
+  sessionPath?: string | null;
+  source?: string;
+  metadata?: TaskMetadata;
+}
+
+export interface TaskChatBlock extends Record<string, unknown> {
+  type: "task";
+  taskId: string;
+  title: string;
+  status: TaskStatus;
+  source: string | null | undefined;
+  sessionPath: string | null;
+  agentId: AgentId;
+  metadata: TaskMetadata | null;
+  resultSummary: string | null | undefined;
+  error: string | null | undefined;
+  currentLabel: string | null;
+  updatedAt: string | undefined;
+  snapshot: TaskSnapshot | null;
+}
+
+const TERMINAL_TASK_STATUSES = new Set<TaskStatus>([
+  TASK_STATUS.COMPLETED as TaskStatus,
+  TASK_STATUS.FAILED as TaskStatus,
+  TASK_STATUS.CANCELLED as TaskStatus,
 ]);
 
-const APPROVAL_ACTIONS = new Set([
+const APPROVAL_ACTIONS = new Set<string>([
   "confirmed",
   "confirmed_once",
   "confirmed_session",
@@ -19,23 +400,27 @@ const APPROVAL_ACTIONS = new Set([
   "aborted",
 ]);
 
-function isZh() {
+function isZh(): boolean {
   return getLocale().startsWith("zh");
 }
 
-function pluralize(items = []) {
+function pluralize(items: string[] = []): string {
   if (!Array.isArray(items) || items.length === 0) return "";
   return items.join("\n");
 }
 
-function summarizeText(text, max = 180) {
+function summarizeText(text: unknown, max = 180): string | null {
   if (typeof text !== "string") return null;
   const compact = text.replace(/\s+/g, " ").trim();
   if (!compact) return null;
   return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
 }
 
-function latestTaskOutput(task) {
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function latestTaskOutput(task: TaskRecord | null | undefined): string | null {
   const artifacts = Array.isArray(task?.artifacts) ? task.artifacts : [];
   for (let i = artifacts.length - 1; i >= 0; i--) {
     const artifact = artifacts[i];
@@ -46,18 +431,18 @@ function latestTaskOutput(task) {
   return null;
 }
 
-function cloneRunner(runner) {
+function cloneRunner(runner: TaskRunner | null | undefined): TaskRunner {
   if (!runner || typeof runner !== "object") return { kind: "generic", payload: {} };
-  return structuredClone(runner);
+  return structuredClone(runner) as TaskRunner;
 }
 
-function toModelRef(value) {
+function toModelRef(value: ModelRefInput): RuntimeModelRef | null {
   if (!value) return null;
   if (typeof value === "string") {
     const id = value.trim();
     return id ? { id, provider: null } : null;
   }
-  if (typeof value === "object" && value !== null) {
+  if (typeof value === "object") {
     const id = typeof value.id === "string" ? value.id.trim() : "";
     if (!id) return null;
     const provider = typeof value.provider === "string" && value.provider.trim()
@@ -68,7 +453,7 @@ function toModelRef(value) {
   return null;
 }
 
-function taskQueuedLabel(task) {
+function taskQueuedLabel(task: { runner?: { kind?: string } | null } | null | undefined): string {
   if (task?.runner?.kind === "review") {
     return isZh() ? "等待复查" : "Queued for review";
   }
@@ -78,7 +463,7 @@ function taskQueuedLabel(task) {
   return isZh() ? "等待执行" : "Queued";
 }
 
-function taskRunningLabel(task) {
+function taskRunningLabel(task: { runner?: { kind?: string } | null } | null | undefined): string {
   if (task?.runner?.kind === "review") {
     return isZh() ? "复查中" : "Reviewing";
   }
@@ -88,11 +473,11 @@ function taskRunningLabel(task) {
   return isZh() ? "执行中" : "Running";
 }
 
-function taskWaitingApprovalLabel() {
+function taskWaitingApprovalLabel(): string {
   return isZh() ? "等待授权" : "Waiting for approval";
 }
 
-function planSystemAppend() {
+function planSystemAppend(): string {
   if (isZh()) {
     return [
       "你是一个任务策划人。",
@@ -115,37 +500,47 @@ function planSystemAppend() {
   ].join("\n");
 }
 
-function approvalSummary(entry) {
+function approvalSummary(entry: TaskApproval | null | undefined): string | null {
   const payload = entry?.payload && typeof entry.payload === "object" ? entry.payload : null;
-  return payload?.description || payload?.reason || payload?.category || entry?.confirmId || null;
+  return String(payload?.description || payload?.reason || payload?.category || entry?.confirmId || "") || null;
 }
 
 export class TaskRuntime {
-  constructor({ hub, engine, lynnHome, reviewRouteFactory, reviewRunner } = {}) {
+  private _hub: TaskRuntimeHub | null | undefined;
+  private _engine: RuntimeEngine;
+  private _reviewRouteFactory: ReviewRouteFactory | null;
+  private _reviewRunner: ReviewRunner | null;
+  private _store: TaskStoreLike;
+  private _running: Map<string, RunningTask>;
+  private _confirmIndex: Map<string, string>;
+  private _sessionIndex: Map<string, string>;
+  private _wiredConfirmStore: ConfirmStore | null;
+
+  constructor({ hub, engine, lynnHome, reviewRouteFactory, reviewRunner }: TaskRuntimeDeps = {} as TaskRuntimeDeps) {
     this._hub = hub;
     this._engine = engine;
     this._reviewRouteFactory = reviewRouteFactory || null;
     this._reviewRunner = reviewRunner || null;
-    this._store = new TaskStore(path.join(lynnHome, "tasks", "tasks.json"));
-    this._running = new Map();
-    this._confirmIndex = new Map();
-    this._sessionIndex = new Map();
+    this._store = new TaskStore(path.join(lynnHome, "tasks", "tasks.json")) as TaskStoreLike;
+    this._running = new Map<string, RunningTask>();
+    this._confirmIndex = new Map<string, string>();
+    this._sessionIndex = new Map<string, string>();
     this._wiredConfirmStore = null;
   }
 
-  get store() {
+  get store(): TaskStoreLike {
     return this._store;
   }
 
-  listTasks() {
+  listTasks(): TaskRecord[] {
     return this._store.list();
   }
 
-  getTask(taskId) {
+  getTask(taskId: string): TaskRecord | null {
     return this._store.get(taskId);
   }
 
-  bindConfirmStore(confirmStore) {
+  bindConfirmStore(confirmStore: ConfirmStore | null | undefined): void {
     if (!confirmStore || this._wiredConfirmStore === confirmStore) return;
     this._wiredConfirmStore = confirmStore;
 
@@ -162,7 +557,7 @@ export class TaskRuntime {
           payload: this._sanitizeApprovalPayload(payload),
         });
         this._store.update(taskId, {
-          status: TASK_STATUS.WAITING_APPROVAL,
+          status: TASK_STATUS.WAITING_APPROVAL as TaskStatus,
           progress: this._withProgress(taskId, { currentLabel: taskWaitingApprovalLabel() }),
         });
         this._emitTaskUpdate(taskId);
@@ -187,7 +582,7 @@ export class TaskRuntime {
     };
   }
 
-  createTask(input = {}) {
+  createTask(input: TaskInput = {}): TaskRecord {
     const task = this._store.create({
       ...input,
       snapshot: this._captureSnapshot(input),
@@ -196,8 +591,8 @@ export class TaskRuntime {
     return task;
   }
 
-  async runTask(taskId) {
-    if (this._running.has(taskId)) return this._running.get(taskId).promise;
+  async runTask(taskId: string): Promise<TaskRecord | null> {
+    if (this._running.has(taskId)) return this._running.get(taskId)!.promise;
     const task = this._store.get(taskId);
     if (!task) throw new Error(`Task not found: ${taskId}`);
 
@@ -211,9 +606,9 @@ export class TaskRuntime {
     return runnerPromise;
   }
 
-  _runTaskDetached(taskId, source = "background") {
-    void this.runTask(taskId).catch((err) => {
-      const message = err?.message || String(err);
+  _runTaskDetached(taskId: string, source = "background"): void {
+    void this.runTask(taskId).catch((err: unknown) => {
+      const message = errorMessage(err);
       console.error(`[task-runtime] detached runTask failed (${source}) ${taskId}:`, message);
       try {
         this._store.appendEvent(taskId, {
@@ -229,7 +624,7 @@ export class TaskRuntime {
     });
   }
 
-  resumePendingTasks() {
+  resumePendingTasks(): void {
     const resumable = this._store.list().filter((task) =>
       [TASK_STATUS.PENDING, TASK_STATUS.RUNNING, TASK_STATUS.WAITING_APPROVAL].includes(task.status),
     );
@@ -253,7 +648,7 @@ export class TaskRuntime {
     }
   }
 
-  cancelTask(taskId) {
+  cancelTask(taskId: string): TaskRecord | null {
     const task = this._store.get(taskId);
     if (!task) return null;
 
@@ -267,7 +662,7 @@ export class TaskRuntime {
     }
 
     const updated = this._store.update(taskId, {
-      status: TASK_STATUS.CANCELLED,
+      status: TASK_STATUS.CANCELLED as TaskStatus,
       finishedAt: new Date().toISOString(),
       progress: this._withProgress(taskId, { currentLabel: isZh() ? "已取消" : "Cancelled" }),
     });
@@ -283,7 +678,7 @@ export class TaskRuntime {
     return updated;
   }
 
-  retryTask(taskId) {
+  retryTask(taskId: string): TaskRecord | null {
     const task = this._store.get(taskId);
     if (!task) return null;
 
@@ -336,13 +731,13 @@ export class TaskRuntime {
     });
   }
 
-  async _executeTask(taskId, controller) {
+  async _executeTask(taskId: string, controller: AbortController): Promise<TaskRecord | null> {
     const task = this._store.get(taskId);
     if (!task) return null;
 
     this._restoreSessionLinks(task);
     this._store.update(taskId, {
-      status: TASK_STATUS.RUNNING,
+      status: TASK_STATUS.RUNNING as TaskStatus,
       startedAt: task.startedAt || new Date().toISOString(),
       finishedAt: null,
       error: null,
@@ -356,7 +751,7 @@ export class TaskRuntime {
     this._emitTaskUpdate(taskId);
 
     try {
-      let result;
+      let result: TaskRunResult | null = null;
       switch (task.runner?.kind) {
         case "delegate":
           result = await this._runDelegateTask(taskId, controller.signal);
@@ -376,7 +771,7 @@ export class TaskRuntime {
       }
 
       this._store.update(taskId, {
-        status: TASK_STATUS.COMPLETED,
+        status: TASK_STATUS.COMPLETED as TaskStatus,
         finishedAt: new Date().toISOString(),
         resultSummary: result?.summary || null,
         error: null,
@@ -390,12 +785,13 @@ export class TaskRuntime {
       });
       this._emitTaskUpdate(taskId);
       return this._store.get(taskId);
-    } catch (err) {
-      const aborted = controller.signal.aborted || err?.name === "AbortError";
+    } catch (err: unknown) {
+      const aborted = controller.signal.aborted || (err instanceof Error && err.name === "AbortError");
+      const message = errorMessage(err);
       this._store.update(taskId, {
-        status: aborted ? TASK_STATUS.CANCELLED : TASK_STATUS.FAILED,
+        status: (aborted ? TASK_STATUS.CANCELLED : TASK_STATUS.FAILED) as TaskStatus,
         finishedAt: new Date().toISOString(),
-        error: err?.message || String(err),
+        error: message,
         progress: this._withProgress(taskId, {
           currentLabel: aborted
             ? (isZh() ? "已取消" : "Cancelled")
@@ -408,14 +804,14 @@ export class TaskRuntime {
         level: aborted ? "info" : "error",
         message: aborted
           ? (isZh() ? "任务被中止" : "Task aborted")
-          : (err?.message || String(err)),
+          : message,
       });
       this._emitTaskUpdate(taskId);
       throw err;
     }
   }
 
-  async _runDelegateTask(taskId, signal) {
+  async _runDelegateTask(taskId: string, signal: AbortSignal): Promise<TaskRunResult> {
     const task = this._store.get(taskId);
     if (!task) throw new Error(`Task not found: ${taskId}`);
 
@@ -442,7 +838,7 @@ export class TaskRuntime {
       onSessionReady: (sessionPath) => {
         if (!sessionPath) return;
         this._linkSessionToTask(taskId, sessionPath);
-        this._store.update(taskId, (current) => ({
+        this._store.update(taskId, (current: TaskRecord) => ({
           runner: {
             ...current.runner,
             payload: {
@@ -475,7 +871,7 @@ export class TaskRuntime {
     return { summary, text: result };
   }
 
-  async _runPlanTask(taskId, signal) {
+  async _runPlanTask(taskId: string, signal: AbortSignal): Promise<TaskRunResult> {
     const task = this._store.get(taskId);
     if (!task) throw new Error(`Task not found: ${taskId}`);
 
@@ -503,7 +899,7 @@ export class TaskRuntime {
       onSessionReady: (sessionPath) => {
         if (!sessionPath) return;
         this._linkSessionToTask(taskId, sessionPath);
-        this._store.update(taskId, (current) => ({
+        this._store.update(taskId, (current: TaskRecord) => ({
           runner: {
             ...current.runner,
             payload: {
@@ -536,7 +932,7 @@ export class TaskRuntime {
     return { summary, text: result };
   }
 
-  async _runReviewTask(taskId, signal) {
+  async _runReviewTask(taskId: string, signal: AbortSignal): Promise<TaskRunResult> {
     const task = this._store.get(taskId);
     if (!task) throw new Error(`Task not found: ${taskId}`);
     const runner = task.runner?.payload || {};
@@ -582,7 +978,12 @@ export class TaskRuntime {
    * Auto Verify→Fix loop (max 3 iterations).
    * After a delegate task completes, run review; if review finds issues, auto-fix and re-verify.
    */
-  async _autoVerifyFixLoop(taskId, executeResult, signal, maxIterations = 3) {
+  async _autoVerifyFixLoop(
+    taskId: string,
+    executeResult: TaskRunResult | null,
+    signal: AbortSignal,
+    maxIterations = 3,
+  ): Promise<TaskRunResult | null> {
     const reviewRunner = this._reviewRunner || this._reviewRouteFactory?.()?.runDetachedReview;
     if (typeof reviewRunner !== "function") return executeResult;
 
@@ -603,7 +1004,7 @@ export class TaskRuntime {
       });
       this._emitTaskUpdate(taskId);
 
-      let reviewResult;
+      let reviewResult: ReviewRunnerResult;
       try {
         reviewResult = await reviewRunner({
           context: currentResult?.text || currentResult?.summary || "",
@@ -612,11 +1013,12 @@ export class TaskRuntime {
           signal,
           sessionPath: this._store.get(taskId)?.sessionPath || null,
         });
-      } catch (err) {
+      } catch (err: unknown) {
+        const message = errorMessage(err);
         this._store.appendEvent(taskId, {
           type: "task.verify_error",
           level: "warn",
-          message: isZh() ? `验证失败: ${err.message}` : `Verify failed: ${err.message}`,
+          message: isZh() ? `验证失败: ${message}` : `Verify failed: ${message}`,
         });
         break;
       }
@@ -661,8 +1063,8 @@ export class TaskRuntime {
       const fixPrompt = buildReviewFollowUpTaskPrompt({
         structuredReview: structured,
         contextPack: null,
-        followUpPrompt: reviewResult?.followUpPrompt || null,
-        reviewerName: reviewResult?.reviewerName || null,
+        followUpPrompt: reviewResult?.followUpPrompt || undefined,
+        reviewerName: reviewResult?.reviewerName || undefined,
       }, { zh: isZh() });
 
       try {
@@ -693,11 +1095,12 @@ export class TaskRuntime {
           message: isZh() ? "修复完成，准备重新验证" : "Fix done, re-verifying",
         });
         this._emitTaskUpdate(taskId);
-      } catch (err) {
+      } catch (err: unknown) {
+        const message = errorMessage(err);
         this._store.appendEvent(taskId, {
           type: "task.fix_error",
           level: "error",
-          message: isZh() ? `修复失败: ${err.message}` : `Fix failed: ${err.message}`,
+          message: isZh() ? `修复失败: ${message}` : `Fix failed: ${message}`,
         });
         break;
       }
@@ -720,7 +1123,7 @@ export class TaskRuntime {
     noTools = false,
     cwdOverride = null,
     metadata = {},
-  } = {}) {
+  }: CreateDelegateTaskInput = {}): TaskRecord {
     const task = this.createTask({
       type: "delegate",
       title: title || (isZh() ? "长任务" : "Long-running task"),
@@ -767,7 +1170,7 @@ export class TaskRuntime {
     noMemory = false,
     cwdOverride = null,
     metadata = {},
-  } = {}) {
+  }: CreatePlanTaskInput = {}): TaskRecord {
     const task = this.createTask({
       type: "plan",
       title: title || (isZh() ? "规划任务" : "Planning task"),
@@ -813,7 +1216,7 @@ export class TaskRuntime {
     executionResolution = null,
     source = "review_follow_up",
     metadata = {},
-  } = {}) {
+  }: CreateReviewFollowUpTaskInput = {}): TaskRecord {
     const findings = Array.isArray(structuredReview?.findings) ? structuredReview.findings : [];
     if (findings.length === 0) {
       throw new Error(isZh() ? "缺少可执行的 review 发现项" : "Missing executable review findings");
@@ -849,7 +1252,7 @@ export class TaskRuntime {
     sessionPath = null,
     source = "review",
     metadata = {},
-  } = {}) {
+  }: CreateReviewTaskInput = {}): TaskRecord {
     const task = this.createTask({
       type: "review",
       title: title || (isZh() ? "复查任务" : "Review task"),
@@ -874,13 +1277,13 @@ export class TaskRuntime {
     return task;
   }
 
-  buildTaskChatBlock(taskId) {
+  buildTaskChatBlock(taskId: string): TaskChatBlock | null {
     const task = this._store.get(taskId);
     if (!task) return null;
     return this._asTaskChatBlock(task);
   }
 
-  injectTaskContext(taskId, lines = []) {
+  injectTaskContext(taskId: string, lines: string[] = []): string[] {
     const task = this._store.get(taskId);
     if (!task) return lines;
     const output = latestTaskOutput(task);
@@ -898,18 +1301,26 @@ export class TaskRuntime {
     return lines;
   }
 
-  _resolveTaskIdForConfirmation(payload, sessionPath) {
-    return payload?.taskId || payload?.metadata?.taskId || this._sessionIndex.get(sessionPath || "") || null;
+  _resolveTaskIdForConfirmation(payload: unknown, sessionPath?: string | null): string | null {
+    const record = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
+    const metadata = record?.metadata && typeof record.metadata === "object"
+      ? record.metadata as Record<string, unknown>
+      : null;
+    return typeof record?.taskId === "string"
+      ? record.taskId
+      : typeof metadata?.taskId === "string"
+        ? metadata.taskId
+        : this._sessionIndex.get(sessionPath || "") || null;
   }
 
-  _markApprovalResolution(confirmId, action, value) {
+  _markApprovalResolution(confirmId: string, action: string, value: unknown): void {
     if (!APPROVAL_ACTIONS.has(action)) return;
     const taskId = this._confirmIndex.get(confirmId);
     if (!taskId) return;
 
     const terminalFailure = action === "rejected" || action === "timeout" || action === "aborted";
-    const task = this._store.update(taskId, (current) => {
-      const nextStatus = terminalFailure ? TASK_STATUS.FAILED : TASK_STATUS.RUNNING;
+    const task = this._store.update(taskId, (current: TaskRecord) => {
+      const nextStatus = (terminalFailure ? TASK_STATUS.FAILED : TASK_STATUS.RUNNING) as TaskStatus;
       const nextLabel = nextStatus === TASK_STATUS.RUNNING
         ? taskRunningLabel(current)
         : (isZh() ? "等待处理" : "Needs attention");
@@ -951,40 +1362,41 @@ export class TaskRuntime {
     if (action !== "pending") this._confirmIndex.delete(confirmId);
   }
 
-  _restoreSessionLinks(task) {
+  _restoreSessionLinks(task: TaskRecord | null | undefined): void {
     const sessionPath = task?.runner?.payload?.runtimeSessionPath;
-    if (typeof sessionPath === "string" && sessionPath) {
+    if (typeof sessionPath === "string" && sessionPath && task?.id) {
       this._sessionIndex.set(sessionPath, task.id);
     }
   }
 
-  _clearSessionLinks(taskId, task) {
+  _clearSessionLinks(taskId: string, task: TaskRecord | null | undefined): void {
     const sessionPath = task?.runner?.payload?.runtimeSessionPath;
-    if (sessionPath && this._sessionIndex.get(sessionPath) === taskId) {
+    if (typeof sessionPath === "string" && sessionPath && this._sessionIndex.get(sessionPath) === taskId) {
       this._sessionIndex.delete(sessionPath);
     }
   }
 
-  _linkSessionToTask(taskId, sessionPath) {
+  _linkSessionToTask(taskId: string, sessionPath: string | null | undefined): void {
     if (!sessionPath) return;
     this._sessionIndex.set(sessionPath, taskId);
   }
 
-  _sanitizeApprovalPayload(payload) {
+  _sanitizeApprovalPayload(payload: unknown): SanitizedApprovalPayload | null {
     if (!payload || typeof payload !== "object") return null;
+    const record = payload as Record<string, unknown>;
     return {
-      command: payload.command || null,
-      reason: payload.reason || null,
-      description: payload.description || null,
-      category: payload.category || null,
-      identifier: payload.identifier || null,
-      trustedRoot: payload.trustedRoot || null,
-      title: payload.title || null,
-      message: payload.message || null,
+      command: record.command || null,
+      reason: record.reason || null,
+      description: record.description || null,
+      category: record.category || null,
+      identifier: record.identifier || null,
+      trustedRoot: record.trustedRoot || null,
+      title: record.title || null,
+      message: record.message || null,
     };
   }
 
-  _withProgress(taskId, patch) {
+  _withProgress(taskId: string, patch: TaskProgress = {}): TaskProgress {
     const task = this._store.get(taskId);
     return {
       ...(task?.progress || {}),
@@ -992,7 +1404,7 @@ export class TaskRuntime {
     };
   }
 
-  _asTaskChatBlock(task) {
+  _asTaskChatBlock(task: TaskRecord): TaskChatBlock {
     return {
       type: "task",
       taskId: task.id,
@@ -1010,7 +1422,7 @@ export class TaskRuntime {
     };
   }
 
-  _captureSnapshot(taskLike = {}, extra = {}) {
+  _captureSnapshot(taskLike: TaskInput | TaskRecord = {}, extra: Record<string, unknown> = {}): TaskSnapshot {
     const runnerPayload = taskLike?.runner?.payload || {};
     const sessionPath = runnerPayload.runtimeSessionPath || taskLike.sessionPath || this._engine.currentSessionPath || null;
     const runtimeSession = sessionPath ? this._engine.getSessionByPath?.(sessionPath) : null;
@@ -1046,7 +1458,7 @@ export class TaskRuntime {
     };
   }
 
-  _refreshTaskSnapshot(taskId, extra = {}) {
+  _refreshTaskSnapshot(taskId: string, extra: Record<string, unknown> = {}): TaskRecord | null {
     const task = this._store.get(taskId);
     if (!task) return null;
     return this._store.update(taskId, {
@@ -1054,7 +1466,7 @@ export class TaskRuntime {
     });
   }
 
-  _recordTaskActivity(task) {
+  _recordTaskActivity(task: TaskRecord | null | undefined): void {
     if (!task?.id) return;
     if (task.metadata?.activityRecorded) return;
 
@@ -1072,7 +1484,7 @@ export class TaskRuntime {
       || (task.runner?.kind === "plan"
         ? (isZh() ? "规划任务" : "Planning task")
         : (isZh() ? "后台任务" : "Background task"));
-    const entry = {
+    const entry: TaskActivityEntry = {
       id: `task-${task.id}`,
       type,
       label: task.title || null,
@@ -1094,7 +1506,7 @@ export class TaskRuntime {
 
     const store = this._engine.getActivityStore?.(task.agentId);
     store?.add?.(entry);
-    this._store.update(task.id, (current) => ({
+    this._store.update(task.id, (current: TaskRecord) => ({
       metadata: {
         ...(current.metadata || {}),
         activityRecorded: true,
@@ -1103,7 +1515,7 @@ export class TaskRuntime {
     this._hub?.eventBus?.emit({ type: "activity_update", activity: entry }, null);
   }
 
-  _emitTaskUpdate(taskId) {
+  _emitTaskUpdate(taskId: string): void {
     const task = this._store.get(taskId);
     if (!task) return;
     this._hub?.eventBus?.emit({ type: "task_update", task: this._asTaskChatBlock(task) }, task.sessionPath || null);
