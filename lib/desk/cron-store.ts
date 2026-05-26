@@ -1,5 +1,5 @@
 /**
- * cron-store.js — 定时任务存储
+ * cron-store.ts — 定时任务存储
  *
  * 管理 cron job 的 CRUD 和运行历史。
  * 调度逻辑在 cron-scheduler.js，这里只负责持久化。
@@ -15,15 +15,69 @@
 import fs from "fs";
 import path from "path";
 
+export interface Job {
+  id: string;
+  type: "at" | "every" | "cron";
+  schedule: string | number;
+  prompt: string;
+  mode: string;
+  label: string;
+  model: string;
+  workspace: string;
+  enabled: boolean;
+  consecutiveErrors: number;
+  createdAt: string;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+}
+
+export interface RunRecord {
+  status: string;
+  startedAt: string;
+  finishedAt: string;
+  error?: string;
+  timestamp: string;
+  [key: string]: any;
+}
+
+export interface AddJobOptions {
+  type: "at" | "every" | "cron";
+  schedule: string | number;
+  prompt: string;
+  mode?: string;
+  label?: string;
+  model?: string;
+  workspace?: string;
+}
+
+export interface UpdateJobPatch {
+  label?: string;
+  model?: string;
+  schedule?: string | number;
+  prompt?: string;
+  enabled?: boolean;
+  workspace?: string;
+}
+
+interface JobsData {
+  jobs: Job[];
+  nextNum: number;
+}
+
 export class CronStore {
   /** 退避表（毫秒）：0/1m/5m/15m/60m */
   static BACKOFF = [0, 60_000, 300_000, 900_000, 3_600_000];
 
+  private _jobsPath: string;
+  private _runsDir: string;
+  private _jobs: Job[];
+  private _nextNum: number;
+
   /**
-   * @param {string} jobsPath - cron-jobs.json 路径
-   * @param {string} runsDir  - cron-runs/ 目录路径
+   * @param jobsPath - cron-jobs.json 路径
+   * @param runsDir  - cron-runs/ 目录路径
    */
-  constructor(jobsPath, runsDir) {
+  constructor(jobsPath: string, runsDir: string) {
     this._jobsPath = jobsPath;
     this._runsDir = runsDir;
     this._jobs = [];
@@ -35,11 +89,11 @@ export class CronStore {
   //  持久化
   // ════════════════════════════
 
-  _load() {
-    let raw;
+  private _load(): void {
+    let raw: string;
     try {
       raw = fs.readFileSync(this._jobsPath, "utf-8");
-    } catch (err) {
+    } catch (err: any) {
       if (err.code === "ENOENT") {
         // 首次启动，文件不存在，静默处理
         this._jobs = [];
@@ -52,7 +106,7 @@ export class CronStore {
       return;
     }
 
-    let data;
+    let data: JobsData;
     try {
       data = JSON.parse(raw);
     } catch {
@@ -78,7 +132,7 @@ export class CronStore {
     for (const job of this._jobs) {
       // model 对象转 string
       if (typeof job.model === "object" && job.model !== null) {
-        job.model = job.model.id || "";
+        job.model = (job.model as any).id || "";
         dirty = true;
       }
       if (job.workspace === undefined) {
@@ -101,7 +155,7 @@ export class CronStore {
     }
   }
 
-  _save() {
+  private _save(): void {
     fs.mkdirSync(path.dirname(this._jobsPath), { recursive: true });
     const data = JSON.stringify({
       jobs: this._jobs,
@@ -119,17 +173,10 @@ export class CronStore {
 
   /**
    * 添加任务
-   * @param {object} opts
-   * @param {"at"|"every"|"cron"} opts.type - 调度类型
-   * @param {string|number} opts.schedule - 调度参数
-   * @param {string} opts.prompt - 执行时的 prompt
-   * @param {string} [opts.mode="isolated"] - 执行模式
-   * @param {string} [opts.label] - 显示标签
-   * @param {string} [opts.model] - 指定模型（为空则用 agent 默认模型）
-   * @param {string} [opts.workspace] - 指定工作目录（为空则用当前默认工作区）
-   * @returns {object} 新建的 job
+   * @param opts - 任务配置
+   * @returns 新建的 job
    */
-  addJob({ type, schedule, prompt, mode = "isolated", label = "", model = "", workspace = "" }) {
+  addJob({ type, schedule, prompt, mode = "isolated", label = "", model = "", workspace = "" }: AddJobOptions): Job {
     // type 枚举校验
     const VALID_TYPES = new Set(["at", "every", "cron"]);
     if (!VALID_TYPES.has(type)) {
@@ -138,13 +185,13 @@ export class CronStore {
 
     // every 类型最小间隔 clamp
     if (type === "every") {
-      const ms = typeof schedule === "number" ? schedule : parseInt(schedule, 10);
+      const ms = typeof schedule === "number" ? schedule : parseInt(schedule as string, 10);
       if (ms < 60000) schedule = 60000;
     }
 
     // at 类型校验
     if (type === "at") {
-      const target = new Date(schedule);
+      const target = new Date(schedule as string);
       if (isNaN(target.getTime())) {
         throw new Error(`无效的 at schedule: "${schedule}"，无法解析为日期`);
       }
@@ -156,14 +203,14 @@ export class CronStore {
     const id = `job_${this._nextNum++}`;
     const now = new Date().toISOString();
 
-    const job = {
+    const job: Job = {
       id,
       type,
       schedule,
       prompt,
       mode,
       label: label || prompt.slice(0, 30),
-      model: (typeof model === "object" && model !== null ? model.id : model) || "",
+      model: (typeof model === "object" && model !== null ? (model as any).id : model) || "",
       workspace: String(workspace || "").trim(),
       enabled: true,
       consecutiveErrors: 0,
@@ -179,10 +226,10 @@ export class CronStore {
 
   /**
    * 删除任务
-   * @param {string} id
-   * @returns {boolean}
+   * @param id - 任务 ID
+   * @returns 是否成功删除
    */
-  removeJob(id) {
+  removeJob(id: string): boolean {
     const idx = this._jobs.findIndex(j => j.id === id);
     if (idx === -1) return false;
     this._jobs.splice(idx, 1);
@@ -192,29 +239,29 @@ export class CronStore {
 
   /**
    * 获取单个任务
-   * @param {string} id
-   * @returns {object|null}
+   * @param id - 任务 ID
+   * @returns 任务对象或 null
    */
-  getJob(id) {
+  getJob(id: string): Job | null {
     return this._jobs.find(j => j.id === id) || null;
   }
 
   /**
    * 列出所有任务（每次从磁盘重读，确保跨实例的写入都能被感知）
-   * @returns {object[]}
+   * @returns 任务数组
    */
-  listJobs() {
+  listJobs(): Job[] {
     this._load();
     return [...this._jobs];
   }
 
   /**
    * 更新任务字段
-   * @param {string} id
-   * @param {object} partial
-   * @returns {object|null}
+   * @param id - 任务 ID
+   * @param partial - 部分更新字段
+   * @returns 更新后的任务或 null
    */
-  updateJob(id, partial) {
+  updateJob(id: string, partial: UpdateJobPatch): Job | null {
     const job = this._jobs.find(j => j.id === id);
     if (!job) return null;
 
@@ -222,13 +269,13 @@ export class CronStore {
 
     for (const key of Object.keys(partial)) {
       if (!ALLOWED.has(key)) continue;
-      let value = partial[key];
+      let value = (partial as any)[key];
 
       if (key === "model" && typeof value === "object" && value !== null) {
-        value = value.id || "";
+        value = (value as any).id || "";
       }
 
-      job[key] = value;
+      (job as any)[key] = value;
     }
 
     // schedule 变更时重新计算 nextRunAt
@@ -242,10 +289,10 @@ export class CronStore {
 
   /**
    * 切换任务启用/禁用
-   * @param {string} id
-   * @returns {object|null}
+   * @param id - 任务 ID
+   * @returns 更新后的任务或 null
    */
-  toggleJob(id) {
+  toggleJob(id: string): Job | null {
     const job = this._jobs.find(j => j.id === id);
     if (!job) return null;
     job.enabled = !job.enabled;
@@ -259,11 +306,10 @@ export class CronStore {
 
   /**
    * 标记任务已执行，更新 lastRunAt + nextRunAt
-   * @param {string} id
-   * @param {object} [opts]
-   * @param {boolean} [opts.success=true] - 是否执行成功
+   * @param id - 任务 ID
+   * @param opts - 执行选项
    */
-  markRun(id, { success = true } = {}) {
+  markRun(id: string, { success = true }: { success?: boolean } = {}): void {
     const job = this._jobs.find(j => j.id === id);
     if (!job) return;
     const now = new Date().toISOString();
@@ -295,10 +341,10 @@ export class CronStore {
 
   /**
    * 记录一次运行
-   * @param {string} jobId
-   * @param {object} run - { status, startedAt, finishedAt, error? }
+   * @param jobId - 任务 ID
+   * @param run - 运行记录
    */
-  logRun(jobId, run) {
+  logRun(jobId: string, run: RunRecord): void {
     const filePath = path.join(this._runsDir, `${jobId}.jsonl`);
     const line = JSON.stringify({ ...run, timestamp: new Date().toISOString() }) + "\n";
     fs.mkdirSync(this._runsDir, { recursive: true });
@@ -316,11 +362,11 @@ export class CronStore {
 
   /**
    * 读取运行历史
-   * @param {string} jobId
-   * @param {number} [limit=20]
-   * @returns {object[]}
+   * @param jobId - 任务 ID
+   * @param limit - 限制数量
+   * @returns 运行记录数组
    */
-  getRunHistory(jobId, limit = 20) {
+  getRunHistory(jobId: string, limit = 20): RunRecord[] {
     const filePath = path.join(this._runsDir, `${jobId}.jsonl`);
     try {
       const raw = fs.readFileSync(filePath, "utf-8");
@@ -340,32 +386,32 @@ export class CronStore {
 
   /**
    * 计算下次执行时间
-   * @param {"at"|"every"|"cron"} type
-   * @param {string|number} schedule
-   * @param {string} fromISO - 基准时间（ISO string）
-   * @returns {string|null} ISO string
+   * @param type - 调度类型
+   * @param schedule - 调度参数
+   * @param fromISO - 基准时间（ISO string）
+   * @returns ISO string 或 null
    */
-  _calcNextRun(type, schedule, fromISO) {
+  private _calcNextRun(type: "at" | "every" | "cron", schedule: string | number, fromISO: string): string | null {
     const from = new Date(fromISO);
 
     switch (type) {
       case "at": {
         // 一次性：schedule 就是目标时间
-        const target = new Date(schedule);
+        const target = new Date(schedule as string);
         if (isNaN(target.getTime())) return null;
         return target > from ? target.toISOString() : null;
       }
 
       case "every": {
         // 间隔：从现在起 schedule 毫秒后
-        const ms = typeof schedule === "number" ? schedule : parseInt(schedule, 10);
+        const ms = typeof schedule === "number" ? schedule : parseInt(schedule as string, 10);
         if (isNaN(ms) || ms <= 0) return null;
         return new Date(from.getTime() + ms).toISOString();
       }
 
       case "cron": {
         // 完整 5 字段 cron 解析
-        return this._parseSimpleCron(schedule, from);
+        return this._parseSimpleCron(schedule as string, from);
       }
 
       default:
@@ -379,11 +425,11 @@ export class CronStore {
    * 字段：分(0-59) 时(0-23) 日(1-31) 月(1-12) 周(0-6, 0=周日, 7也=周日)
    * 语法：数字 | * | *\/N | N-M | N-M/S | N,M,...
    *
-   * @param {string} expr - cron 表达式
-   * @param {Date} from - 基准时间
-   * @returns {string|null}
+   * @param expr - cron 表达式
+   * @param from - 基准时间
+   * @returns ISO string 或 null
    */
-  _parseSimpleCron(expr, from) {
+  private _parseSimpleCron(expr: string, from: Date): string | null {
     const parts = expr.trim().split(/\s+/);
     if (parts.length < 5) return null;
 
@@ -395,7 +441,7 @@ export class CronStore {
       [0, 6],   // 周（0=周日）
     ];
 
-    const fields = [];
+    const fields: Set<number>[] = [];
     for (let i = 0; i < 5; i++) {
       const set = this._parseCronField(parts[i], ranges[i][0], ranges[i][1], i === 4);
       if (!set) return null;
@@ -425,14 +471,14 @@ export class CronStore {
 
   /**
    * 解析单个 cron 字段为值集合
-   * @param {string} field - 字段字符串
-   * @param {number} min - 最小值
-   * @param {number} max - 最大值
-   * @param {boolean} isWeekday - 是否为周字段（7→0）
-   * @returns {Set<number>|null}
+   * @param field - 字段字符串
+   * @param min - 最小值
+   * @param max - 最大值
+   * @param isWeekday - 是否为周字段（7→0）
+   * @returns 值集合或 null
    */
-  _parseCronField(field, min, max, isWeekday = false) {
-    const values = new Set();
+  private _parseCronField(field: string, min: number, max: number, isWeekday = false): Set<number> | null {
+    const values = new Set<number>();
 
     for (const segment of field.split(",")) {
       // */N — 步进
@@ -475,12 +521,12 @@ export class CronStore {
   }
 
   /** 任务数量 */
-  get size() {
+  get size(): number {
     return this._jobs.length;
   }
 
   /** 启用的任务数量 */
-  get enabledCount() {
+  get enabledCount(): number {
     return this._jobs.filter(j => j.enabled).length;
   }
 }
