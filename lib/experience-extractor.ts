@@ -1,5 +1,5 @@
 /**
- * experience-extractor.js — session 结束后台经验提取
+ * experience-extractor.ts — session 结束后台经验提取
  *
  * 与 deep-memory.js 同构：从 session summary 中提取操作教训，
  * 写入经验分类文件。由 memory-ticker 的 notifySessionEnd 调用。
@@ -9,21 +9,44 @@ import { recordEntry } from "./tools/experience.js";
 import { callText } from "../core/llm-client.js";
 import { getLocale } from "../server/i18n.js";
 
+export interface ExperienceExtractorModel {
+  model: string;
+  api: string;
+  api_key: string;
+  base_url: string;
+  [key: string]: unknown;
+}
+
+export interface ExtractSessionExperiencesResult {
+  extracted: number;
+}
+
+interface ExtractedExperienceEntry {
+  category: string;
+  content: string;
+  [key: string]: unknown;
+}
+
+function isExtractedExperienceEntry(value: unknown): value is ExtractedExperienceEntry {
+  if (!value || typeof value !== "object") return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry.category === "string" &&
+    typeof entry.content === "string" &&
+    entry.category.trim().length > 0 &&
+    entry.content.trim().length > 0
+  );
+}
+
 /**
  * 从 session summary 中提取经验教训
- *
- * @param {string} summaryText - session 摘要文本
- * @param {string} experienceDir - experience/ 目录路径
- * @param {string} indexPath - experience.md 索引路径
- * @param {{ model: string, api: string, api_key: string, base_url: string }} resolvedModel
- * @returns {Promise<{ extracted: number }>}
  */
 export async function extractSessionExperiences(
-  summaryText,
-  experienceDir,
-  indexPath,
-  resolvedModel,
-) {
+  summaryText: string,
+  experienceDir: string,
+  indexPath: string,
+  resolvedModel: ExperienceExtractorModel,
+): Promise<ExtractSessionExperiencesResult> {
   if (!summaryText || summaryText.trim().length < 100) {
     return { extracted: 0 };
   }
@@ -44,7 +67,7 @@ export async function extractSessionExperiences(
   const fenceMatch = raw.match(/^```(?:json)?\s*\n([\s\S]*?)\n\s*```\s*$/);
   const jsonStr = (fenceMatch ? fenceMatch[1] : raw).trim();
 
-  let entries;
+  let entries: unknown;
   try {
     entries = JSON.parse(jsonStr);
     if (!Array.isArray(entries)) return { extracted: 0 };
@@ -55,15 +78,7 @@ export async function extractSessionExperiences(
 
   let extracted = 0;
   for (const entry of entries) {
-    if (
-      !entry ||
-      typeof entry.category !== "string" ||
-      typeof entry.content !== "string" ||
-      !entry.category.trim() ||
-      !entry.content.trim()
-    ) {
-      continue;
-    }
+    if (!isExtractedExperienceEntry(entry)) continue;
 
     const result = recordEntry(
       experienceDir,
@@ -83,7 +98,7 @@ export async function extractSessionExperiences(
   return { extracted };
 }
 
-function buildExtractionPrompt() {
+function buildExtractionPrompt(): string {
   const isZh = getLocale().startsWith("zh");
 
   if (isZh) {
