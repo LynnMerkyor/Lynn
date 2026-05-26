@@ -1,5 +1,5 @@
 /**
- * cron-scheduler.js — Cron 调度器
+ * cron-scheduler.ts — Cron 调度器
  *
  * 确定性代码层：每分钟检查一次到期任务，到期时回调执行。
  * 调度逻辑不涉及 LLM，只有执行回调才会创建 session 调 LLM。
@@ -10,21 +10,68 @@
 
 import { debugLog } from "../debug-log.js";
 
+/** Cron 任务接口 */
+export interface CronJob {
+  id: string;
+  label: string;
+  enabled: boolean;
+  nextRunAt: string | null;
+}
+
+/** Cron 存储接口子集（仅限调度器使用的部分） */
+export interface CronStoreSubset {
+  listJobs(): CronJob[];
+  logRun(jobId: string, run: CronRun): void;
+  markRun(jobId: string, options?: { success: boolean }): void;
+}
+
+/** Cron 运行记录 */
+export interface CronRun {
+  status: "success" | "error" | "skipped";
+  startedAt: string;
+  finishedAt: string;
+  error?: string;
+}
+
+/** 任务执行结果 */
+export interface JobDoneResult {
+  status: "success" | "error" | "skipped";
+  error?: string;
+}
+
+interface CronExecutionError extends Error {
+  skipped?: boolean;
+}
+
+/** 调度器回调 */
+export interface SchedulerCallbacks {
+  executeJob: (job: CronJob) => Promise<void>;
+  abortJob?: (jobId: string) => void;
+  onJobDone?: (job: CronJob, result: JobDoneResult) => void;
+}
+
+/** 调度器接口 */
+export interface CronScheduler {
+  start(): void;
+  stop(): Promise<void>;
+  checkJobs(): Promise<void>;
+}
+
 /**
  * 创建 Cron 调度器
- *
- * @param {object} opts
- * @param {import('./cron-store.js').CronStore} opts.cronStore
- * @param {(job: object) => Promise<void>} opts.executeJob - 执行回调（由 engine 提供）
- * @param {(jobId: string) => void} [opts.abortJob] - 超时时 abort 正在执行的任务
- * @param {(job: object, result: object) => void} [opts.onJobDone] - 执行完成通知
- * @returns {{ start, stop, checkJobs }}
  */
-export function createCronScheduler({ cronStore, executeJob, abortJob, onJobDone }) {
+export function createCronScheduler({
+  cronStore,
+  executeJob,
+  abortJob,
+  onJobDone,
+}: {
+  cronStore: CronStoreSubset;
+} & SchedulerCallbacks): CronScheduler {
   const CHECK_INTERVAL = 60_000; // 每分钟检查一次
-  let _timer = null;
+  let _timer: NodeJS.Timeout | null = null;
   let _checking = false;
-  let _checkPromise = null;
+  let _checkPromise: Promise<void> | null = null;
 
   /**
    * 检查所有到期任务并执行
@@ -57,7 +104,7 @@ export function createCronScheduler({ cronStore, executeJob, abortJob, onJobDone
         const EXEC_TIMEOUT = 5 * 60 * 1000; // 5 分钟超时
         try {
           {
-            let timer;
+            let timer: NodeJS.Timeout | undefined;
             try {
               await Promise.race([
                 executeJob(job),
@@ -69,7 +116,7 @@ export function createCronScheduler({ cronStore, executeJob, abortJob, onJobDone
                 }),
               ]);
             } finally {
-              clearTimeout(timer);
+              if (timer) clearTimeout(timer);
             }
           }
           const finishedAt = new Date().toISOString();
@@ -82,26 +129,30 @@ export function createCronScheduler({ cronStore, executeJob, abortJob, onJobDone
           onJobDone?.(job, { status: "success" });
         } catch (err) {
           const finishedAt = new Date().toISOString();
+          const error: CronExecutionError = err instanceof Error
+            ? err as CronExecutionError
+            : new Error(String(err));
 
-          if (err.skipped) {
+          if (error.skipped) {
             // 跳过：不推进 nextRunAt，下次 check 时重试
             cronStore.logRun(job.id, { status: "skipped", startedAt, finishedAt });
-            debugLog()?.log("cron", `job skipped ${job.id}: ${err.message}`);
+            debugLog()?.log("cron", `job skipped ${job.id}: ${error.message}`);
             onJobDone?.(job, { status: "skipped" });
           } else {
             // 真正失败：记录并推进 nextRunAt（含退避）
-            cronStore.logRun(job.id, { status: "error", startedAt, finishedAt, error: err.message });
+            cronStore.logRun(job.id, { status: "error", startedAt, finishedAt, error: error.message });
             cronStore.markRun(job.id, { success: false });
 
-            console.error(`\x1b[90m[cron] 任务失败 ${job.id}: ${err.message}\x1b[0m`);
-            debugLog()?.error("cron", `job failed ${job.id}: ${err.message}`);
-            onJobDone?.(job, { status: "error", error: err.message });
+            console.error(`\x1b[90m[cron] 任务失败 ${job.id}: ${error.message}\x1b[0m`);
+            debugLog()?.error("cron", `job failed ${job.id}: ${error.message}`);
+            onJobDone?.(job, { status: "error", error: error.message });
           }
         }
       }
     } catch (err) {
-      console.error(`\x1b[90m[cron] checkJobs 错误: ${err.message}\x1b[0m`);
-      debugLog()?.error("cron", `checkJobs error: ${err.message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`\x1b[90m[cron] checkJobs 错误: ${message}\x1b[0m`);
+      debugLog()?.error("cron", `checkJobs error: ${message}`);
     } finally {
       _checking = false;
     }
