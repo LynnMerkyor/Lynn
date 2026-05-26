@@ -22,16 +22,41 @@ import {
 import fs from "fs";
 import path from "path";
 
-/**
- * 创建频道工具
- * @param {object} opts
- * @param {string} opts.channelsDir - 频道目录路径
- * @param {string} opts.agentsDir - agents 父目录
- * @param {string} opts.agentId - 当前 agent ID
- * @param {() => Array<{id: string, name: string}>} opts.listAgents - 列出所有 agent
- * @returns {import('@mariozechner/pi-coding-agent').ToolDefinition}
- */
-export function createChannelTool({ channelsDir, agentsDir, agentId, listAgents, onPost }) {
+type ChannelAction = "read" | "post" | "create" | "list";
+
+interface AgentRef {
+  id: string;
+  name: string;
+}
+
+interface ChannelToolOptions {
+  channelsDir: string;
+  agentsDir: string;
+  agentId: string;
+  listAgents?: () => AgentRef[];
+  onPost?: (channelId: string, agentId: string) => void;
+}
+
+interface ChannelToolParams {
+  action: ChannelAction | string;
+  channel?: string;
+  content?: string;
+  name?: string;
+  members?: string[];
+  intro?: string;
+  count?: number;
+}
+
+type ChannelToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+export function createChannelTool({ channelsDir, agentsDir, agentId, onPost }: ChannelToolOptions) {
   return {
     name: "channel",
     label: t("toolDef.channel.label"),
@@ -61,7 +86,7 @@ export function createChannelTool({ channelsDir, agentsDir, agentId, listAgents,
       })),
     }),
 
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: ChannelToolParams): Promise<ChannelToolResult> => {
       switch (params.action) {
         case "read": {
           if (!params.channel) {
@@ -149,8 +174,8 @@ export function createChannelTool({ channelsDir, agentsDir, agentId, listAgents,
             };
           } catch (err) {
             return {
-              content: [{ type: "text", text: t("error.channelCreateFailed", { msg: err.message }) }],
-              details: { action: "create", error: err.message },
+              content: [{ type: "text", text: t("error.channelCreateFailed", { msg: errorMessage(err) }) }],
+              details: { action: "create", error: errorMessage(err) },
             };
           }
         }

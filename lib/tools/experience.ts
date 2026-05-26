@@ -13,6 +13,25 @@ import { t } from "../../server/i18n.js";
 import fs from "node:fs";
 import path from "node:path";
 
+interface RecordEntryResult {
+  added: boolean;
+  reason?: string;
+}
+
+interface RecallExperienceParams {
+  category?: string;
+}
+
+interface RecordExperienceParams {
+  category: string;
+  content: string;
+}
+
+type ExperienceToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
 // ── 共享存储操作（导出给 extractor 复用）──
 
 /**
@@ -23,14 +42,14 @@ import path from "node:path";
  *   - description：各条目前 ~20 字拼接，分号分隔
  *   - 路径引用：→ experience/{文件名}
  */
-export function rebuildIndex(experienceDir, indexPath) {
+export function rebuildIndex(experienceDir: string, indexPath: string): void {
   if (!fs.existsSync(experienceDir)) {
     // 目录不存在 → 清空索引
     try { fs.writeFileSync(indexPath, "", "utf-8"); } catch {}
     return;
   }
 
-  let files;
+  let files: string[];
   try {
     files = fs.readdirSync(experienceDir).filter((f) => f.endsWith(".md")).sort();
   } catch {
@@ -42,7 +61,7 @@ export function rebuildIndex(experienceDir, indexPath) {
     return;
   }
 
-  const blocks = [];
+  const blocks: string[] = [];
 
   for (const file of files) {
     const category = file.replace(/\.md$/, "");
@@ -75,7 +94,12 @@ export function rebuildIndex(experienceDir, indexPath) {
  *
  * @returns {{ added: boolean, reason?: string }}
  */
-export function recordEntry(experienceDir, indexPath, category, content) {
+export function recordEntry(
+  experienceDir: string,
+  indexPath: string,
+  category: string,
+  content: string,
+): RecordEntryResult {
   // 确保目录存在
   if (!fs.existsSync(experienceDir)) {
     fs.mkdirSync(experienceDir, { recursive: true });
@@ -107,11 +131,8 @@ export function recordEntry(experienceDir, indexPath, category, content) {
 // ── 工具工厂 ──
 
 /**
- * 创建 recall_experience + record_experience 工具
- * @param {string} agentDir - agent 数据目录
- * @returns {import('@mariozechner/pi-coding-agent').ToolDefinition[]}
  */
-export function createExperienceTools(agentDir) {
+export function createExperienceTools(agentDir: string) {
   const experienceDir = path.join(agentDir, "experience");
   const indexPath = path.join(agentDir, "experience.md");
 
@@ -124,7 +145,10 @@ export function createExperienceTools(agentDir) {
         Type.String({ description: t("toolDef.experience.recallCategoryDesc") }),
       ),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (
+      _toolCallId: string,
+      params: RecallExperienceParams,
+    ): Promise<ExperienceToolResult> => {
       const category = params.category?.trim();
 
       if (!category) {
@@ -172,7 +196,10 @@ export function createExperienceTools(agentDir) {
         description: t("toolDef.experience.recordContentDesc"),
       }),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (
+      _toolCallId: string,
+      params: RecordExperienceParams,
+    ): Promise<ExperienceToolResult> => {
       const category = params.category.replace(/^#+\s*/, "").trim();
       const content = params.content.trim();
 
@@ -206,7 +233,7 @@ export function createExperienceTools(agentDir) {
 
 // ── 内部工具 ──
 
-function readFile(filePath) {
+function readFile(filePath: string): string {
   try {
     return fs.readFileSync(filePath, "utf-8");
   } catch {
