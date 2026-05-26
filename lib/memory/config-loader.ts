@@ -13,21 +13,44 @@
 import fs from "fs";
 import YAML from "js-yaml";
 
+export type ConfigObject = Record<string, unknown>;
+
+export interface ApiBlock {
+  provider: string;
+  api_key: string;
+  base_url: string;
+  api?: string;
+}
+
+interface CacheEntry {
+  cached: ConfigObject & {
+    api: ApiBlock;
+    embedding_api: ApiBlock | null;
+    utility_api: ApiBlock | null;
+  };
+  cachedRaw: unknown;
+}
+
 // 按路径缓存，防止跨 agent 污染
-const _cache = new Map(); // configPath → { cached, cachedRaw }
+const _cache = new Map<string, CacheEntry>(); // configPath → { cached, cachedRaw }
+
+function isRecord(value: unknown): value is ConfigObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 /**
  * 解析一个 API 区块（仅返回 config.yaml 中的原始值）
  * @private
  */
-function resolveApi(block) {
+function resolveApi(block: unknown): ApiBlock | null {
   if (!block) return null;
+  const raw = isRecord(block) ? block : {};
 
   return {
-    provider: typeof block?.provider === "string" ? block.provider.trim() : "",
-    api_key: block?.api_key || "",
-    base_url: block?.base_url || "",
-    api: block?.api || "",
+    provider: typeof raw.provider === "string" ? raw.provider.trim() : "",
+    api_key: typeof raw.api_key === "string" ? raw.api_key : "",
+    base_url: typeof raw.base_url === "string" ? raw.base_url : "",
+    api: typeof raw.api === "string" ? raw.api : "",
   };
 }
 
@@ -36,11 +59,12 @@ function resolveApi(block) {
  * @param {string} configPath - config.yaml 的路径
  * @returns {object} 解析后的配置对象，包含 api 和 embedding_api
  */
-export function loadConfig(configPath) {
+export function loadConfig(configPath: string): CacheEntry["cached"] {
   const entry = _cache.get(configPath);
   if (entry) return entry.cached;
 
-  const raw = YAML.load(fs.readFileSync(configPath, "utf-8"));
+  const loaded = YAML.load(fs.readFileSync(configPath, "utf-8"));
+  const raw = isRecord(loaded) ? loaded : {};
   const cachedRaw = structuredClone(raw);  // 保存原始配置（resolve 前）
 
   // API 通道（仅提取 config.yaml 中的原始值，UI 展示用）
@@ -64,7 +88,7 @@ export function loadConfig(configPath) {
 }
 
 /** 清除缓存（指定路径或全部） */
-export function clearConfigCache(configPath) {
+export function clearConfigCache(configPath?: string): void {
   if (configPath) {
     _cache.delete(configPath);
   } else {
@@ -73,7 +97,7 @@ export function clearConfigCache(configPath) {
 }
 
 /** 返回原始配置（未经 resolveApi 处理）。需要传 configPath 来定位缓存 */
-export function getRawConfig(configPath) {
+export function getRawConfig(configPath?: string): unknown {
   if (configPath) {
     return _cache.get(configPath)?.cachedRaw ?? null;
   }
@@ -89,7 +113,7 @@ export function getRawConfig(configPath) {
  * 只合并 plain object，数组和原始值直接覆盖
  * source[key] === null 时删除 target[key]（用于供应商删除等场景）
  */
-function deepMerge(target, source) {
+function deepMerge(target: ConfigObject, source: ConfigObject): ConfigObject {
   const out = { ...target };
   for (const key of Object.keys(source)) {
     const sv = source[key];
@@ -99,8 +123,7 @@ function deepMerge(target, source) {
       continue;
     }
     const tv = target[key];
-    if (sv && typeof sv === "object" && !Array.isArray(sv)
-        && tv && typeof tv === "object" && !Array.isArray(tv)) {
+    if (isRecord(sv) && isRecord(tv)) {
       out[key] = deepMerge(tv, sv);
     } else {
       out[key] = sv;
@@ -115,9 +138,10 @@ function deepMerge(target, source) {
  * @param {string} configPath - config.yaml 路径
  * @param {object} partial - 要更新的字段（深度合并）
  */
-export function saveConfig(configPath, partial) {
+export function saveConfig(configPath: string, partial: ConfigObject): void {
   // 始终从磁盘重新读取，防止并发编辑丢失
-  const current = YAML.load(fs.readFileSync(configPath, "utf-8")) || {};
+  const loaded = YAML.load(fs.readFileSync(configPath, "utf-8"));
+  const current = isRecord(loaded) ? loaded : {};
   const merged = deepMerge(current, partial);
 
   const header =
