@@ -8,7 +8,11 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-const vectorInterfacePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../lib/memory/vector-interface.js");
+const vectorInterfaceDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../lib/memory");
+const vectorInterfaceTsPath = path.join(vectorInterfaceDir, "vector-interface.ts");
+const vectorInterfacePath = fs.existsSync(vectorInterfaceTsPath)
+  ? vectorInterfaceTsPath
+  : path.join(vectorInterfaceDir, "vector-interface.js");
 const { createVectorRetriever } = await import(vectorInterfacePath);
 
 function chunkText(text, chunkSize = 800, overlap = 100) {

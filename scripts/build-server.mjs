@@ -44,6 +44,7 @@ import path from "path";
 import { execSync } from "child_process";
 import { fileURLToPath, pathToFileURL } from "url";
 import { builtinModules } from "module";
+import { build as esbuild } from "esbuild";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -235,17 +236,37 @@ for (const dir of LIB_TEMPLATE_DIRS) {
 // unpacked server resources at runtime, so dynamic imports from plugins cannot
 // rely on Vite-bundled modules only.
 const LIB_RUNTIME_FILES = [
-  path.join("memory", "vector-interface.js"),
+  {
+    src: path.join("memory", "vector-interface.ts"),
+    dest: path.join("memory", "vector-interface.js"),
+    compile: true,
+  },
 ];
-for (const rel of LIB_RUNTIME_FILES) {
-  const src = path.join(ROOT, "lib", rel);
-  const dest = path.join(libOutDir, rel);
+for (const entry of LIB_RUNTIME_FILES) {
+  const relSrc = typeof entry === "string" ? entry : entry.src;
+  const relDest = typeof entry === "string" ? entry : entry.dest;
+  const src = path.join(ROOT, "lib", relSrc);
+  const dest = path.join(libOutDir, relDest);
   if (fs.existsSync(src)) {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(src, dest);
-    console.log(`[build-server]   lib/${rel}`);
+    if (typeof entry === "object" && entry.compile) {
+      await esbuild({
+        entryPoints: [src],
+        outfile: dest,
+        bundle: true,
+        platform: "node",
+        format: "esm",
+        target: "node22",
+        minify: false,
+        sourcemap: false,
+        logLevel: "silent",
+      });
+    } else {
+      fs.copyFileSync(src, dest);
+    }
+    console.log(`[build-server]   lib/${relDest}`);
   } else {
-    console.warn(`[build-server] ⚠ lib/${rel} not found, skipping`);
+    console.warn(`[build-server] ⚠ lib/${relSrc} not found, skipping`);
   }
 }
 
