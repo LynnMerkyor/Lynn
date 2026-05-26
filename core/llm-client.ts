@@ -5,21 +5,88 @@ import {
   readSignedClientAgentHeaders,
 } from './client-agent-identity.js';
 import { getPooledDispatcher } from '../shared/http-pool.js';
+import type {
+  LLMApi,
+  LLMContentBlock,
+  LLMMessage,
+  LLMRequest,
+  LLMResponse,
+  ToolCall,
+} from './types.js';
+import type { ClientAgentHeaders } from './client-agent-identity.js';
 
-/** @typedef {import("./types.js").LLMApi} LLMApi */
-/** @typedef {import("./types.js").LLMContentBlock} LLMContentBlock */
-/** @typedef {import("./types.js").LLMMessage} LLMMessage */
-/** @typedef {import("./types.js").LLMRequest} LLMRequest */
-/** @typedef {import("./types.js").LLMResponse} LLMResponse */
-/** @typedef {import("./types.js").ToolCall} ToolCall */
+type DisplayableTextType = "text" | "output_text" | "input_text" | "refusal";
+type ResponseKind = "text" | "reasoning_only" | "non_displayable_content" | "empty";
 
-const DISPLAYABLE_TEXT_TYPES = new Set(["text", "output_text", "input_text", "refusal"]);
+type ContentStats = {
+  textParts: string[];
+  reasoningBlockCount: number;
+  nonDisplayableBlockCount: number;
+};
 
-/**
- * @param {string | LLMContentBlock | null | undefined} value
- * @returns {string}
- */
-function extractTextValue(value) {
+type ResponseAnalysis = {
+  text: string;
+  responseKind: ResponseKind;
+  reasoningBlockCount: number;
+  nonDisplayableBlockCount: number;
+};
+
+type SseJsonEvent = {
+  id?: unknown;
+  model?: unknown;
+  choices?: unknown;
+  [key: string]: unknown;
+};
+
+type StreamChoice = {
+  finish_reason?: unknown;
+  delta?: unknown;
+  message?: unknown;
+  [key: string]: unknown;
+};
+
+type StreamMessageDelta = Partial<LLMMessage> & {
+  content?: LLMMessage["content"];
+  reasoning?: unknown;
+  reasoning_content?: unknown;
+  tool_calls?: unknown;
+};
+
+type ClientAgentRequestMetadata = {
+  method: "POST";
+  pathname: "/v1/messages" | "/responses" | "/chat/completions";
+};
+
+type NormalizedMessage = {
+  role: LLMMessage["role"];
+  content: string | undefined;
+};
+
+type LlmRequestBody = Record<string, unknown>;
+type FetchInitWithDispatcher = RequestInit & {
+  dispatcher?: ReturnType<typeof getPooledDispatcher> | undefined;
+};
+
+type LlmRateLimitedError = AppError & {
+  _retryAfterMs?: number;
+};
+
+const DISPLAYABLE_TEXT_TYPES: ReadonlySet<string> = new Set<DisplayableTextType>([
+  "text",
+  "output_text",
+  "input_text",
+  "refusal",
+]);
+
+function createContentStats(): ContentStats {
+  return {
+    textParts: [],
+    reasoningBlockCount: 0,
+    nonDisplayableBlockCount: 0,
+  };
+}
+
+function extractTextValue(value: string | LLMContentBlock | null | undefined): string {
   if (typeof value === "string") return value;
   if (!value || typeof value !== "object") return "";
   if (typeof value.text === "string") return value.text;
@@ -32,29 +99,19 @@ function extractTextValue(value) {
   return "";
 }
 
-/**
- * @param {unknown} block
- * @returns {boolean}
- */
-function isReasoningLikeBlock(block) {
+function isReasoningLikeBlock(block: unknown): boolean {
   if (!block || typeof block !== "object") return false;
-  const type = String(block.type || "").toLowerCase();
+  const record = block as LLMContentBlock;
+  const type = String(record.type || "").toLowerCase();
   return type.includes("thinking")
     || type.includes("reasoning")
-    || typeof block.thinking === "string"
-    || typeof block.reasoning === "string"
-    || typeof block.reasoning_content === "string";
+    || typeof record.thinking === "string"
+    || typeof record.reasoning === "string"
+    || typeof record.reasoning_content === "string";
 }
 
-/**
- * @param {LLMMessage["content"]} content
- */
-function collectContentStats(content) {
-  const stats = {
-    textParts: [],
-    reasoningBlockCount: 0,
-    nonDisplayableBlockCount: 0,
-  };
+function collectContentStats(content: LLMMessage["content"]): ContentStats {
+  const stats = createContentStats();
 
   if (typeof content === "string") {
     const text = content.trim();
@@ -92,15 +149,15 @@ function collectContentStats(content) {
   return stats;
 }
 
-function mergeContentStats(target, source) {
+function mergeContentStats(target: ContentStats, source: ContentStats): void {
   target.textParts.push(...source.textParts);
   target.reasoningBlockCount += source.reasoningBlockCount;
   target.nonDisplayableBlockCount += source.nonDisplayableBlockCount;
 }
 
-function finalizeResponseAnalysis(stats) {
+function finalizeResponseAnalysis(stats: ContentStats): ResponseAnalysis {
   const text = stripInternalProgressTags(stats.textParts.join("\n")).trim();
-  const responseKind = text
+  const responseKind: ResponseKind = text
     ? "text"
     : stats.reasoningBlockCount > 0
       ? "reasoning_only"
@@ -115,35 +172,28 @@ function finalizeResponseAnalysis(stats) {
   };
 }
 
-function stripInternalProgressTags(value) {
+function stripInternalProgressTags(value: unknown): string {
   return String(value || "")
     .replace(/<lynn_tool_progress\b[^>]*>(?:<\/lynn_tool_progress>)?/giu, "")
     .replace(/<\/lynn_tool_progress>/giu, "");
 }
 
-/**
- * @param {LLMApi} api
- * @param {LLMResponse | null} data
- */
-function analyzeLlmResponse(api, data) {
+function analyzeLlmResponse(api: LLMApi, data: LLMResponse | null): ResponseAnalysis {
   if (api === "anthropic-messages") {
     return finalizeResponseAnalysis(collectContentStats(data?.content));
   }
 
   if (api === "openai-responses" || api === "openai-codex-responses") {
-    const stats = {
-      textParts: [],
-      reasoningBlockCount: 0,
-      nonDisplayableBlockCount: 0,
-    };
+    const stats = createContentStats();
 
     if (typeof data?.output_text === "string" && data.output_text.trim()) {
       stats.textParts.push(data.output_text.trim());
     }
 
     for (const item of Array.isArray(data?.output) ? data.output : []) {
-      if (item?.type === "message" && item?.role === "assistant") {
-        mergeContentStats(stats, collectContentStats(item.content));
+      const record = item && typeof item === "object" ? item as LLMMessage & LLMContentBlock : null;
+      if (record?.type === "message" && record?.role === "assistant") {
+        mergeContentStats(stats, collectContentStats(record.content));
       } else if (isReasoningLikeBlock(item)) {
         stats.reasoningBlockCount += 1;
       } else if (item && typeof item === "object") {
@@ -154,11 +204,7 @@ function analyzeLlmResponse(api, data) {
     return finalizeResponseAnalysis(stats);
   }
 
-  const stats = {
-    textParts: [],
-    reasoningBlockCount: 0,
-    nonDisplayableBlockCount: 0,
-  };
+  const stats = createContentStats();
   const message = data?.choices?.[0]?.message;
   if (message) {
     mergeContentStats(stats, collectContentStats(message.content));
@@ -181,9 +227,9 @@ function analyzeLlmResponse(api, data) {
   return finalizeResponseAnalysis(stats);
 }
 
-function parseSseJsonEvents(rawText) {
-  const events = [];
-  let dataLines = [];
+function parseSseJsonEvents(rawText: string): SseJsonEvent[] {
+  const events: SseJsonEvent[] = [];
+  let dataLines: string[] = [];
 
   const flush = () => {
     if (dataLines.length === 0) return;
@@ -191,7 +237,7 @@ function parseSseJsonEvents(rawText) {
     dataLines = [];
     if (!payload || payload === "[DONE]") return;
     try {
-      events.push(JSON.parse(payload));
+      events.push(JSON.parse(payload) as SseJsonEvent);
     } catch {
       // Ignore malformed telemetry/non-JSON SSE payloads; visible model output
       // is carried by OpenAI-compatible JSON data chunks.
@@ -211,11 +257,7 @@ function parseSseJsonEvents(rawText) {
   return events;
 }
 
-/**
- * @param {string[]} parts
- * @param {LLMMessage["content"]} value
- */
-function appendDeltaContent(parts, value) {
+function appendDeltaContent(parts: string[], value: LLMMessage["content"]): void {
   if (typeof value === "string") {
     if (value) parts.push(value);
     return;
@@ -224,20 +266,16 @@ function appendDeltaContent(parts, value) {
   if (stats.textParts.length > 0) parts.push(stats.textParts.join("\n"));
 }
 
-/**
- * @param {string} rawText
- * @returns {LLMResponse | null}
- */
-function normalizeOpenAIStreamPayload(rawText) {
+function normalizeOpenAIStreamPayload(rawText: string): LLMResponse | null {
   const events = parseSseJsonEvents(rawText);
   if (events.length === 0) return null;
 
   let id = "";
   let model = "";
-  let finishReason = null;
-  const contentParts = [];
-  const reasoningParts = [];
-  const toolCalls = [];
+  let finishReason: unknown = null;
+  const contentParts: string[] = [];
+  const reasoningParts: string[] = [];
+  const toolCalls: ToolCall[] = [];
 
   for (const event of events) {
     if (!event || typeof event !== "object") continue;
@@ -246,21 +284,26 @@ function normalizeOpenAIStreamPayload(rawText) {
 
     const choice = Array.isArray(event.choices) ? event.choices[0] : null;
     if (!choice || typeof choice !== "object") continue;
-    if (choice.finish_reason) finishReason = choice.finish_reason;
+    const streamChoice = choice as StreamChoice;
+    if (streamChoice.finish_reason) finishReason = streamChoice.finish_reason;
 
-    const delta = choice.delta && typeof choice.delta === "object" ? choice.delta : null;
-    const message = choice.message && typeof choice.message === "object" ? choice.message : null;
+    const delta = streamChoice.delta && typeof streamChoice.delta === "object"
+      ? streamChoice.delta as StreamMessageDelta
+      : null;
+    const message = streamChoice.message && typeof streamChoice.message === "object"
+      ? streamChoice.message as StreamMessageDelta
+      : null;
     if (delta) {
       appendDeltaContent(contentParts, delta.content);
       if (typeof delta.reasoning_content === "string") reasoningParts.push(delta.reasoning_content);
       if (typeof delta.reasoning === "string") reasoningParts.push(delta.reasoning);
-      if (Array.isArray(delta.tool_calls)) toolCalls.push(...delta.tool_calls);
+      if (Array.isArray(delta.tool_calls)) toolCalls.push(...delta.tool_calls as ToolCall[]);
     }
     if (message) {
       appendDeltaContent(contentParts, message.content);
       if (typeof message.reasoning_content === "string") reasoningParts.push(message.reasoning_content);
       if (typeof message.reasoning === "string") reasoningParts.push(message.reasoning);
-      if (Array.isArray(message.tool_calls)) toolCalls.push(...message.tool_calls);
+      if (Array.isArray(message.tool_calls)) toolCalls.push(...message.tool_calls as ToolCall[]);
     }
   }
 
@@ -269,7 +312,7 @@ function normalizeOpenAIStreamPayload(rawText) {
     model,
     choices: [{
       index: 0,
-      finish_reason: finishReason || "stop",
+      finish_reason: (finishReason || "stop") as string,
       message: {
         role: "assistant",
         content: contentParts.join("").trim(),
@@ -280,14 +323,9 @@ function normalizeOpenAIStreamPayload(rawText) {
   };
 }
 
-/**
- * @param {string} rawText
- * @param {string} contentType
- * @returns {LLMResponse | null}
- */
-function parseLlmResponsePayload(rawText, contentType) {
+function parseLlmResponsePayload(rawText: string, contentType: string): LLMResponse | null {
   try {
-    return rawText ? JSON.parse(rawText) : null;
+    return rawText ? JSON.parse(rawText) as LLMResponse : null;
   } catch {
     if (/text\/event-stream/iu.test(contentType || "") || /^\s*data:/mu.test(rawText || "")) {
       const streamed = normalizeOpenAIStreamPayload(rawText);
@@ -298,7 +336,7 @@ function parseLlmResponsePayload(rawText, contentType) {
 }
 
 /**
- * core/llm-client.js — 统一的非流式 LLM 调用入口
+ * core/llm-client.ts — 统一的非流式 LLM 调用入口
  *
  * 直接 HTTP POST（非流式），不走 Pi SDK 的 completeSimple（强制流式）。
  * Pi SDK completeSimple 对 DashScope 等供应商有 20-40x 延迟膨胀（stream SSE 首 token 慢），
@@ -313,8 +351,6 @@ function parseLlmResponsePayload(rawText, contentType) {
 /**
  * 统一非流式文本生成。
  *
- * @param {LLMRequest} opts
- * @returns {Promise<string>} 生成的文本
  */
 export async function callText({
   api,
@@ -331,18 +367,18 @@ export async function callText({
   timeoutMs,
   signal,
   requestHeaders = null,
-}) {
+}: LLMRequest): Promise<string> {
   // T3: 推理模型自动延长超时（reasoning 模型 TTFT 通常 20-40 秒）
   const effectiveTimeoutMs = timeoutMs ?? (reasoning ? 90_000 : 60_000);
   // ── 1. 消息归一化：提取 system 消息合并到 systemPrompt ──
   let mergedSystem = systemPrompt || "";
-  const normalizedMessages = [];
+  const normalizedMessages: NormalizedMessage[] = [];
   for (const m of messages) {
     if (m.role === "system") {
       const text = typeof m.content === "string"
         ? m.content
         : Array.isArray(m.content)
-          ? m.content.map(c => c.text || "").join("")
+          ? m.content.map(c => typeof c === "string" ? "" : c.text || "").join("")
           : "";
       if (text) mergedSystem += (mergedSystem ? "\n" : "") + text;
     } else {
@@ -356,14 +392,18 @@ export async function callText({
     ? AbortSignal.any([signal, timeoutSignal])
     : timeoutSignal;
 
-  const clientAgentHeaders = {
+  const clientAgentRequestMetadata: ClientAgentRequestMetadata = {
+    method: "POST",
+    pathname: api === "anthropic-messages"
+      ? "/v1/messages"
+      : (api === "openai-responses" || api === "openai-codex-responses")
+        ? "/responses"
+        : "/chat/completions",
+  };
+  const clientAgentHeaders: ClientAgentHeaders = {
     ...readSignedClientAgentHeaders({
-      method: "POST",
-      pathname: api === "anthropic-messages"
-        ? "/v1/messages"
-        : (api === "openai-responses" || api === "openai-codex-responses")
-          ? "/responses"
-          : "/chat/completions",
+      method: clientAgentRequestMetadata.method,
+      pathname: clientAgentRequestMetadata.pathname,
     }),
     ...(requestHeaders || {}),
   };
@@ -371,7 +411,9 @@ export async function callText({
   // ── 3. 按协议构造请求 ──
   const base = (baseUrl || "").replace(/\/+$/, "");
   const dispatcher = getPooledDispatcher(base);
-  let endpoint, headers, body;
+  let endpoint: string;
+  let headers: Record<string, string>;
+  let body: LlmRequestBody;
 
   if (api === "anthropic-messages") {
     // Anthropic Messages API：baseUrl + /v1/messages（和 Pi SDK Anthropic provider 一致）
@@ -407,7 +449,7 @@ export async function callText({
     headers = { "Content-Type": "application/json", ...clientAgentHeaders };
     if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
-    const allMessages = [];
+    const allMessages: NormalizedMessage[] = [];
     if (mergedSystem) allMessages.push({ role: "system", content: mergedSystem });
     allMessages.push(...normalizedMessages);
     body = {
@@ -418,7 +460,7 @@ export async function callText({
   }
 
   // ── 4. 发送请求（带自动重试） ──
-  return withRetry(async () => {
+  return withRetry<string>(async () => {
     const SLOW_THRESHOLD_MS = 15_000;
     const slowTimer = setTimeout(() => {
       errorBus.report(new AppError('LLM_SLOW_RESPONSE', {
@@ -426,15 +468,17 @@ export async function callText({
       }));
     }, SLOW_THRESHOLD_MS);
 
-    const res = await fetch(endpoint, {
+    const requestInit: FetchInitWithDispatcher = {
       method: "POST",
       headers,
       body: JSON.stringify(body),
       signal: combinedSignal,
       dispatcher: dispatcher || undefined,
-    }).catch(err => {
+    };
+    const res = await fetch(endpoint, requestInit).catch((err: unknown) => {
       clearTimeout(slowTimer);
-      if (err.name === "AbortError" || err.name === "TimeoutError") {
+      const errorName = (err as { name?: string }).name;
+      if (errorName === "AbortError" || errorName === "TimeoutError") {
         throw new AppError('LLM_TIMEOUT', { context: { model }, cause: err });
       }
       throw err;
@@ -446,7 +490,7 @@ export async function callText({
       ? (res.headers.get("content-type") || "")
       : "";
     clearTimeout(slowTimer);
-    let data;
+    let data: LLMResponse | null;
     try {
       data = parseLlmResponsePayload(rawText, contentType);
     } catch {
@@ -459,7 +503,7 @@ export async function callText({
             typeof res.headers?.get === "function" ? (res.headers.get('retry-after') || '0') : '0',
             10,
           );
-          const err = new AppError('LLM_RATE_LIMITED', { context: { model, retryAfterMs: retryAfterSec > 0 ? retryAfterSec * 1000 : undefined } });
+          const err = new AppError('LLM_RATE_LIMITED', { context: { model, retryAfterMs: retryAfterSec > 0 ? retryAfterSec * 1000 : undefined } }) as LlmRateLimitedError;
           if (retryAfterSec > 0) err._retryAfterMs = retryAfterSec * 1000;
           throw err;
         }
@@ -477,7 +521,7 @@ export async function callText({
           typeof res.headers?.get === "function" ? (res.headers.get('retry-after') || '0') : '0',
           10,
         );
-        const err = new AppError('LLM_RATE_LIMITED', { context: { model, retryAfterMs: retryAfterSec > 0 ? retryAfterSec * 1000 : undefined } });
+        const err = new AppError('LLM_RATE_LIMITED', { context: { model, retryAfterMs: retryAfterSec > 0 ? retryAfterSec * 1000 : undefined } }) as LlmRateLimitedError;
         if (retryAfterSec > 0) err._retryAfterMs = retryAfterSec * 1000;
         throw err;
       }
@@ -517,5 +561,5 @@ export async function callText({
     baseDelayMs: 1000,
     maxDelayMs: 15000,
     signal: combinedSignal,
-  });
+  }) as Promise<string>;
 }
