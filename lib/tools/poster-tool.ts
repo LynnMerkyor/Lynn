@@ -12,11 +12,45 @@ import { t } from "../../server/i18n.js";
 
 let _counter = 0;
 
-function safeFilename(title) {
+type PosterTheme = "dark" | "light" | "gradient" | "minimal";
+type PosterSize = "a4" | "wide" | "square" | "phone";
+
+interface PosterToolParams {
+  title: string;
+  subtitle?: string;
+  theme?: PosterTheme | string;
+  content: string;
+  footer?: string;
+  size?: PosterSize | string;
+}
+
+type PosterToolOptions = {
+  getDeskDir?: () => string | null | undefined;
+};
+
+type PosterToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+interface PosterSizeSpec {
+  w: string;
+  h: string;
+}
+
+interface PosterThemeSpec {
+  bg: string;
+  text: string;
+  accent: string;
+  sub: string;
+  gradient: string;
+}
+
+function safeFilename(title: string): string {
   return title.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim().slice(0, 80) || "poster";
 }
 
-function escapeHtml(value = "") {
+function escapeHtml(value: unknown = ""): string {
   return String(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -25,7 +59,7 @@ function escapeHtml(value = "") {
     .replace(/'/g, "&#39;");
 }
 
-export function createPosterTool({ getDeskDir } = {}) {
+export function createPosterTool({ getDeskDir }: PosterToolOptions = {}) {
   return {
     name: "create_poster",
     label: t("toolDef.poster.label"),
@@ -42,26 +76,26 @@ export function createPosterTool({ getDeskDir } = {}) {
         description: "Poster size: a4 (portrait), wide (16:9), square (1:1), phone (9:16)",
       })),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: PosterToolParams): Promise<PosterToolResult> => {
       const theme = params.theme || "dark";
       const size = params.size || "a4";
 
-      const SIZES = {
+      const SIZES: Record<PosterSize, PosterSizeSpec> = {
         a4: { w: "794px", h: "1123px" },
         wide: { w: "1920px", h: "1080px" },
         square: { w: "1080px", h: "1080px" },
         phone: { w: "1080px", h: "1920px" },
       };
 
-      const THEMES = {
+      const THEMES: Record<PosterTheme, PosterThemeSpec> = {
         dark: { bg: "#0a0e1a", text: "#e2e8f0", accent: "#f59e0b", sub: "#94a3b8", gradient: "linear-gradient(135deg, #0a0e1a, #1a1a2e)" },
         light: { bg: "#ffffff", text: "#1e293b", accent: "#2563eb", sub: "#64748b", gradient: "linear-gradient(135deg, #f8fafc, #e2e8f0)" },
         gradient: { bg: "#0f172a", text: "#ffffff", accent: "#f472b6", sub: "#c4b5fd", gradient: "linear-gradient(135deg, #667eea, #764ba2, #f093fb)" },
         minimal: { bg: "#fafafa", text: "#18181b", accent: "#dc2626", sub: "#71717a", gradient: "linear-gradient(180deg, #fafafa, #f4f4f5)" },
       };
 
-      const T = THEMES[theme] || THEMES.dark;
-      const S = SIZES[size] || SIZES.a4;
+      const T = THEMES[theme as PosterTheme] || THEMES.dark;
+      const S = SIZES[size as PosterSize] || SIZES.a4;
       const title = escapeHtml(params.title || "");
       const subtitle = escapeHtml(params.subtitle || "");
       const footer = escapeHtml(params.footer || "");
