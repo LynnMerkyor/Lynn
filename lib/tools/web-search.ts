@@ -11,24 +11,124 @@ import { loadConfig } from "../memory/config-loader.js";
 import { t, getLocale } from "../../server/i18n.js";
 import { safeParseResponse } from "../../shared/safe-parse.js";
 
-let _configPath = null;
-let _searchConfigResolver = null;
+type SearchScene = "general" | "docs" | "finance" | "sports" | "realtime" | "research" | string;
 
-function normalizeSearxngBaseUrl(raw) {
+export interface SearchResultItem {
+  title: string;
+  url: string;
+  snippet: string;
+  [key: string]: unknown;
+}
+
+interface SearchPlan {
+  scene: SearchScene;
+  expandedQuery: string;
+  preferFresh: boolean;
+  preferDocs: boolean;
+  suggestDeepRead: boolean;
+  preferredSources: string[];
+  requiresSpecializedData: boolean;
+  shouldCrossVerify: boolean;
+}
+
+interface SearchConfig {
+  provider?: string;
+  base_url?: string;
+  api_key?: string;
+}
+
+interface AgentConfig {
+  search?: SearchConfig;
+}
+
+interface InitWebSearchOptions {
+  searchConfigResolver?: () => SearchConfig | null | undefined;
+}
+
+interface SearchProviderOptions {
+  base_url?: string;
+  scene?: SearchScene;
+  sceneHint?: string;
+}
+
+interface SearchRunOptions {
+  sceneHint?: string;
+}
+
+interface SearchRunResult {
+  results: SearchResultItem[];
+  provider: string;
+  plan: SearchPlan;
+  [key: string]: unknown;
+}
+
+interface WebSearchToolParams {
+  query?: string;
+  maxResults?: number;
+}
+
+type WebSearchToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+type SearchProvider = (
+  query: string,
+  maxResults: number,
+  apiKey: string,
+  opts?: SearchProviderOptions,
+) => Promise<SearchResultItem[]>;
+
+interface TavilyResponse {
+  results?: Array<{ title?: string; url?: string; content?: string }>;
+}
+
+interface SerperResponse {
+  organic?: Array<{ title?: string; link?: string; snippet?: string }>;
+}
+
+interface BraveResponse {
+  web?: { results?: Array<{ title?: string; url?: string; description?: string }> };
+}
+
+interface SearxngResponse {
+  results?: Array<{ title?: string; url?: string; content?: string; snippet?: string }>;
+}
+
+let _configPath: string | null = null;
+let _searchConfigResolver: (() => SearchConfig | null | undefined) | null = null;
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function normalizeSearxngBaseUrl(raw: unknown): string {
   const trimmed = String(raw || "").trim();
   if (!trimmed) return "";
   const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   return withProtocol.replace(/\/+$/, "");
 }
 
-export function initWebSearch(configPath, opts = {}) {
+export function initWebSearch(configPath: string, opts: InitWebSearchOptions = {}): void {
   _configPath = configPath;
   if (opts.searchConfigResolver) _searchConfigResolver = opts.searchConfigResolver;
 }
 
-function dedupeResults(results) {
-  const seen = new Set();
-  return (results || []).filter((item) => {
+function toSearchResultItem(item: Partial<SearchResultItem> | null | undefined): SearchResultItem {
+  return {
+    title: String(item?.title || ""),
+    url: String(item?.url || ""),
+    snippet: String(item?.snippet || ""),
+  };
+}
+
+function hasSearchResultIdentity(item: Partial<SearchResultItem> | null | undefined): item is SearchResultItem {
+  return !!(item?.title && item?.url);
+}
+
+function dedupeResults(results: Array<Partial<SearchResultItem> | null | undefined> | null | undefined): SearchResultItem[] {
+  const seen = new Set<string>();
+  return (results || []).map(toSearchResultItem).filter((item) => {
     const url = String(item?.url || "").trim();
     if (!url || seen.has(url)) return false;
     seen.add(url);
@@ -36,15 +136,15 @@ function dedupeResults(results) {
   });
 }
 
-function containsAny(text, patterns) {
+function containsAny(text: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
 
-function isZhLocale() {
+function isZhLocale(): boolean {
   return String(getLocale?.() || "").startsWith("zh");
 }
 
-function getHostname(rawUrl) {
+function getHostname(rawUrl: unknown): string {
   try {
     return new URL(String(rawUrl || "")).hostname.replace(/^www\./i, "");
   } catch {
@@ -52,7 +152,7 @@ function getHostname(rawUrl) {
   }
 }
 
-function getSourceLabel(hostname) {
+function getSourceLabel(hostname: unknown): string {
   const host = String(hostname || "").toLowerCase();
   if (!host) return "";
   if (host.includes("finance.sina.com.cn") || host.includes("sina.com.cn")) return "新浪财经";
@@ -65,10 +165,10 @@ function getSourceLabel(hostname) {
   if (host.includes("dongqiudi.com")) return "懂球帝";
   if (host.includes("sports.sina.com.cn")) return "新浪体育";
   if (host.includes("sports.qq.com")) return "腾讯体育";
-  return hostname;
+  return String(hostname || "");
 }
 
-function classifySearchScene(query) {
+function classifySearchScene(query: unknown): SearchScene {
   const text = String(query || "").trim().toLowerCase();
   if (!text) return "general";
 
@@ -105,7 +205,7 @@ function classifySearchScene(query) {
   return "general";
 }
 
-function expandQueryForScene(query, scene) {
+function expandQueryForScene(query: unknown, scene: SearchScene): string {
   const raw = String(query || "").trim();
   if (!raw) return raw;
   const text = raw.toLowerCase();
@@ -143,7 +243,7 @@ function expandQueryForScene(query, scene) {
   return raw;
 }
 
-function buildSearchPlan(query, sceneHint = "") {
+function buildSearchPlan(query: string, sceneHint = ""): SearchPlan {
   const forcedSceneRaw = String(sceneHint || "").trim().toLowerCase();
   const forcedScene = ({
     news: "realtime",
@@ -174,7 +274,7 @@ function buildSearchPlan(query, sceneHint = "") {
   };
 }
 
-function buildPlanNotice(plan) {
+function buildPlanNotice(plan: SearchPlan | null | undefined): string {
   const zh = isZhLocale();
   if (!plan) return "";
 
@@ -209,7 +309,7 @@ function buildPlanNotice(plan) {
 // Provider: Tavily
 // ════════════════════════════════════════
 
-async function searchTavily(query, maxResults, apiKey) {
+async function searchTavily(query: string, maxResults: number, apiKey: string): Promise<SearchResultItem[]> {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: {
@@ -223,7 +323,7 @@ async function searchTavily(query, maxResults, apiKey) {
     }),
   });
 
-  const data = await safeParseResponse(res, null);
+  const data = await safeParseResponse<TavilyResponse>(res, null);
   if (!data) throw new Error(`Tavily API ${res.status}`);
 
   return (data.results || []).map((r) => ({
@@ -237,7 +337,7 @@ async function searchTavily(query, maxResults, apiKey) {
 // Provider: Serper (Google)
 // ════════════════════════════════════════
 
-async function searchSerper(query, maxResults, apiKey) {
+async function searchSerper(query: string, maxResults: number, apiKey: string): Promise<SearchResultItem[]> {
   const res = await fetch("https://google.serper.dev/search", {
     method: "POST",
     headers: {
@@ -247,7 +347,7 @@ async function searchSerper(query, maxResults, apiKey) {
     body: JSON.stringify({ q: query, num: maxResults }),
   });
 
-  const data = await safeParseResponse(res, null);
+  const data = await safeParseResponse<SerperResponse>(res, null);
   if (!data) throw new Error(`Serper API ${res.status}`);
 
   return (data.organic || []).slice(0, maxResults).map((r) => ({
@@ -261,8 +361,8 @@ async function searchSerper(query, maxResults, apiKey) {
 // Provider: Brave Search
 // ════════════════════════════════════════
 
-async function searchBrave(query, maxResults, apiKey) {
-  const params = new URLSearchParams({ q: query, count: maxResults });
+async function searchBrave(query: string, maxResults: number, apiKey: string): Promise<SearchResultItem[]> {
+  const params = new URLSearchParams({ q: query, count: String(maxResults) });
   const res = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
     headers: {
       "Accept": "application/json",
@@ -271,7 +371,7 @@ async function searchBrave(query, maxResults, apiKey) {
     },
   });
 
-  const data = await safeParseResponse(res, null);
+  const data = await safeParseResponse<BraveResponse>(res, null);
   if (!data) throw new Error(`Brave API ${res.status}`);
 
   return (data.web?.results || []).slice(0, maxResults).map((r) => ({
@@ -281,7 +381,12 @@ async function searchBrave(query, maxResults, apiKey) {
   }));
 }
 
-async function searchSearxng(query, maxResults, _apiKey, opts = {}) {
+async function searchSearxng(
+  query: string,
+  maxResults: number,
+  _apiKey: string,
+  opts: SearchProviderOptions = {},
+): Promise<SearchResultItem[]> {
   const baseUrl = normalizeSearxngBaseUrl(opts.base_url);
   if (!baseUrl) throw new Error("searXNG base URL is required");
   const scene = opts.scene || "general";
@@ -315,7 +420,7 @@ async function searchSearxng(query, maxResults, _apiKey, opts = {}) {
     },
   });
 
-  const data = await safeParseResponse(res, null);
+  const data = await safeParseResponse<SearxngResponse>(res, null);
   if (!data) throw new Error(`searXNG ${res.status}`);
 
   const results = Array.isArray(data.results) ? data.results : [];
@@ -327,17 +432,17 @@ async function searchSearxng(query, maxResults, _apiKey, opts = {}) {
     title: r.title || r.url || "",
     url: r.url || "",
     snippet: r.content || r.snippet || "",
-  })).filter((r) => r.title && r.url));
+  })).filter(hasSearchResultIdentity));
 }
 
-const PROVIDERS = {
+const PROVIDERS: Record<string, SearchProvider> = {
   tavily: searchTavily,
   serper: searchSerper,
   brave: searchBrave,
   searxng: searchSearxng,
 };
 
-function stripHtml(value) {
+function stripHtml(value: unknown): string {
   return String(value || "")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -351,7 +456,7 @@ function stripHtml(value) {
     .trim();
 }
 
-function resolveDuckDuckGoHref(rawHref) {
+function resolveDuckDuckGoHref(rawHref: string | undefined): string {
   if (!rawHref) return "";
   try {
     const parsed = new URL(rawHref, "https://duckduckgo.com");
@@ -362,7 +467,7 @@ function resolveDuckDuckGoHref(rawHref) {
   }
 }
 
-export async function searchDuckDuckGoHtml(query, maxResults) {
+export async function searchDuckDuckGoHtml(query: string, maxResults: number): Promise<SearchResultItem[]> {
   const params = new URLSearchParams({ q: query, kl: "cn-zh" });
   const res = await fetch(`https://html.duckduckgo.com/html/?${params.toString()}`, {
     headers: {
@@ -393,7 +498,7 @@ export async function searchDuckDuckGoHtml(query, maxResults) {
   return dedupeResults(results);
 }
 
-export async function searchBingHtml(query, maxResults) {
+export async function searchBingHtml(query: string, maxResults: number): Promise<SearchResultItem[]> {
   const params = new URLSearchParams({ q: query, mkt: "zh-CN" });
   const res = await fetch(`https://cn.bing.com/search?${params.toString()}`, {
     headers: {
@@ -421,7 +526,7 @@ export async function searchBingHtml(query, maxResults) {
         snippet: stripHtml(snippetMatch?.[1] || ""),
       };
     })
-    .filter((item) => item?.title && item?.url)
+    .filter(hasSearchResultIdentity)
     .slice(0, maxResults);
 
   if (results.length === 0) {
@@ -431,7 +536,7 @@ export async function searchBingHtml(query, maxResults) {
   return dedupeResults(results);
 }
 
-function normalizeNoKeySearchVariants(rawQuery, expandedQuery) {
+function normalizeNoKeySearchVariants(rawQuery: unknown, expandedQuery: unknown): string[] {
   const raw = String(rawQuery || "").trim();
   const expanded = String(expandedQuery || "").trim();
   const simplified = raw
@@ -447,7 +552,7 @@ function normalizeNoKeySearchVariants(rawQuery, expandedQuery) {
  * @param {string} apiKey - 要验证的 key
  * @returns {Promise<boolean>}
  */
-export async function verifySearchKey(provider, apiKey, opts = {}) {
+export async function verifySearchKey(provider: string, apiKey: string, opts: SearchProviderOptions = {}): Promise<boolean> {
   const fn = PROVIDERS[provider];
   if (!fn) throw new Error(`Unknown provider: ${provider}`);
   // 用一个简短查询测试 key 是否可用
@@ -455,10 +560,10 @@ export async function verifySearchKey(provider, apiKey, opts = {}) {
   return true;
 }
 
-async function doSearch(query, maxResults, opts = {}) {
+async function doSearch(query: string, maxResults: number, opts: SearchRunOptions = {}): Promise<SearchRunResult> {
   const plan = buildSearchPlan(query, opts.sceneHint);
 
-  const errors = [];
+  const errors: string[] = [];
   const noKeyVariants = normalizeNoKeySearchVariants(query, plan.expandedQuery);
   for (const variant of noKeyVariants) {
     try {
@@ -468,7 +573,7 @@ async function doSearch(query, maxResults, opts = {}) {
         plan,
       };
     } catch (fallbackErr) {
-      errors.push(t("error.searchFailed", { msg: fallbackErr.message }));
+      errors.push(t("error.searchFailed", { msg: errorMessage(fallbackErr) }));
     }
   }
 
@@ -480,7 +585,7 @@ async function doSearch(query, maxResults, opts = {}) {
         plan,
       };
     } catch (fallbackErr) {
-      errors.push(t("error.searchFailed", { msg: fallbackErr.message }));
+      errors.push(t("error.searchFailed", { msg: errorMessage(fallbackErr) }));
     }
   }
 
@@ -489,13 +594,13 @@ async function doSearch(query, maxResults, opts = {}) {
   let baseUrl = "";
   let apiKey = "";
   if (_searchConfigResolver) {
-    const resolved = _searchConfigResolver();
+    const resolved = _searchConfigResolver() || {};
     provider = resolved.provider || "";
     baseUrl = resolved.base_url || "";
     apiKey = resolved.api_key || "";
   }
   if (!provider || !apiKey) {
-    const cfg = _configPath ? loadConfig(_configPath) : {};
+    const cfg = (_configPath ? loadConfig(_configPath) : {}) as AgentConfig;
     const searchCfg = cfg.search || {};
     if (!provider) provider = searchCfg.provider || "";
     if (!baseUrl) baseUrl = searchCfg.base_url || "";
@@ -521,14 +626,18 @@ async function doSearch(query, maxResults, opts = {}) {
         plan,
       };
     } catch (err) {
-      errors.push(t("error.searchFailed", { msg: err.message }));
+      errors.push(t("error.searchFailed", { msg: errorMessage(err) }));
     }
   }
 
   throw new Error(errors[0] || t("error.searchProviderNotConfigured"));
 }
 
-export async function runSearchQuery(query, maxResults = 5, opts = {}) {
+export async function runSearchQuery(
+  query: string,
+  maxResults = 5,
+  opts: SearchRunOptions = {},
+): Promise<SearchRunResult> {
   return doSearch(query, maxResults, opts);
 }
 
@@ -547,7 +656,7 @@ export function createWebSearchTool() {
         Type.Number({ description: t("toolDef.webSearch.maxResultsDesc"), default: 5 })
       ),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: WebSearchToolParams): Promise<WebSearchToolResult> => {
       const query = params.query?.trim();
       if (!query) {
         return {
@@ -596,7 +705,7 @@ export function createWebSearchTool() {
         };
       } catch (err) {
         return {
-          content: [{ type: "text", text: t("error.searchError", { msg: err.message }) }],
+          content: [{ type: "text", text: t("error.searchError", { msg: errorMessage(err) }) }],
           details: {},
         };
       }
