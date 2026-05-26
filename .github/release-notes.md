@@ -1,33 +1,31 @@
-# Lynn v0.79.3 Release Notes
+# Lynn v0.79.4 Release Notes
 
-> 发布日期:2026-05-25 · 代号:"TypeScript 安全迁移版"
+> 发布日期:2026-05-26 · 代号:"Runtime TypeScript 工具链版"
 
-v0.79.3 是 V0.79 线的架构安全推进版。默认本地模型策略不变:继续推荐 **Qwen3.5-9B Q4_K_M imatrix MTP**,4B 只作为低配降级并保留 thinking-on 风险提示。本版重点是把更多运行热路径迁进 TypeScript 边界,同时保持发版风险可控。
+v0.79.4 是 V0.79 线的运行时架构加固版。默认本地模型策略不变:继续推荐 **Qwen3.5-9B Q4_K_M imatrix MTP**,4B 只作为低配降级并保留 thinking-on 风险提示。本版重点是把工具链、实时信息和记忆检索叶子路径迁进 TypeScript,让发布前的静态门禁能覆盖更多真实热路径。
 
 ## 重点更新
 
-- `server/chat` 多个叶子 helper 迁到 TS:artifact recovery、stream event emitter、turn state、tool summary、local Qwen direct runner、voice fallback orchestrator 等。
-- `server/routes` 轻量路由和 `shared` runtime 工具继续迁 TS,减少字符串 typo、隐式 `unknown` 和跨模块协议漂移。
-- `brain-v2-mirror` TS island 保持稳定,本轮不改生产 fallback 行为。
-- `core/session-coordinator.js`、`core/engine.js` 等大文件已评估但暂不合入,避免为追求 JS 占比牺牲 V0.79.3 稳定性。
-- macOS Apple Silicon / Intel DMG 已完成签名、公证、staple 和 Gatekeeper 校验;Windows 继续提供签名 NSIS 安装包。
+- `lib/tools` 全量迁入 TypeScript:web search、realtime info/weather/news/sports、stock market、stock research、browser、channel/experience、install skill、snapshot restore 等工具现在都有类型边界。
+- 记忆检索叶子路径继续收紧:`memory-search`、`user-profile` 和 `HybridRetriever` 已迁到 TS,并保留聚焦回归测试。
+- Web/market/realtime 工具返回结构更清晰,Deep Research、本地工具调用和 chat/tool tiering 之间的协议漂移风险降低。
+- `brain-v2-mirror`、`server/chat`、`shared` 的 V0.79.2/V0.79.3 TS 基建保持稳定,本版不改变生产 fallback 行为。
+- 大中枢 JS 文件已列入 V0.79.5+ 单独波次:本次故意不动 `chat.js`、`voice-ws.js`、`engine.js`、`agent.js`、`session-coordinator.js`,避免在发布包中混入高风险中心重构。
 
 ## 回归门禁
 
 - `npm run typecheck:runtime` ✓
 - `npm run typecheck` ✓
-- Targeted regression:10 files / 70 passed ✓
-- Full `npm test`:185 files / 1463 passed / 1 skipped ✓
-- Build gates:server / main / renderer ✓
-- Release package gates:macOS Apple Silicon / Intel signed + notarized + stapled DMG, Windows signed NSIS installer, static release regression 37/37, live smoke `Failed:0; blocker:0; critical:0` ✓
+- Full `npm test`:193 files / 1497 passed / 1 skipped ✓
+- Build/package/notarization gates:macOS Apple Silicon / Intel DMG and Windows installer are rebuilt through the release gate for this version.
 
 ## English Summary
 
-v0.79.3 is an architecture-hardening release for the V0.79 line. The local model policy is unchanged:Qwen3.5-9B Q4_K_M imatrix MTP remains the recommended default, while 4B remains a low-config downgrade with its thinking-on risk documented.
+v0.79.4 is a runtime architecture-hardening release for the V0.79 line. The local model policy is unchanged:Qwen3.5-9B Q4_K_M imatrix MTP remains the recommended default, while 4B remains a low-config downgrade with its thinking-on risk documented.
 
 Highlights:
-- More `server/chat`, `server/routes`, and `shared` runtime helpers now have TypeScript boundaries.
-- Chat/artifact hot paths such as stream emitters, turn state, tool summary, local Qwen direct runner, and voice fallback are easier to maintain.
-- Large core files were intentionally deferred to keep this release stable.
-- macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
-- Package gates passed for Apple Silicon DMG, Intel DMG, Windows installer, static release regression, and live smoke.
+- `lib/tools` is now fully typed: web search, realtime info/weather/news/sports, stock market, stock research, browser, channel/experience, install skill, snapshot restore, and related helpers now have TS boundaries.
+- Memory retrieval leaf paths such as `memory-search`, `user-profile`, and `HybridRetriever` moved to TypeScript with focused regressions.
+- Web, market, and realtime contracts are safer across Deep Research, local tools, and chat/tool tiering.
+- Large central JS files are intentionally deferred to V0.79.5+ so this package stays stable.
+- Release gates cover runtime typecheck, full TypeScript typecheck, full Vitest, and package/notarization validation for this release.

@@ -37,7 +37,22 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.79.3</strong> · 2026-05-25 · TypeScript safety migration + notarized package <em>(latest)</em></summary>
+<summary><strong>v0.79.4</strong> · 2026-05-26 · Runtime TypeScript toolchain release <em>(latest)</em></summary>
+
+**V0.79 runtime architecture hardening release**:
+- 🧱 **A full toolchain slice is now typed**:`lib/tools` has moved fully to TypeScript, including web search, realtime info/weather/news/sports, stock market, stock research, browser, install skill, snapshot restore, and related helpers.
+- 🧠 **Memory retrieval leaf paths are tighter**:`memory-search`, `user-profile`, and `HybridRetriever` now have TS boundaries, reducing implicit object contracts in local memory and profile lookups.
+- 🌐 **Realtime contracts are safer**:weather, search, stock, and news tool result shapes are clearer across Deep Research, local tools, and chat/tool tiering.
+- 🧭 **Local model policy unchanged**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model; 4B remains a low-config downgrade with the thinking-on risk documented.
+- 🧪 **Central files are deferred to V0.79.5+**:`chat.js`, `voice-ws.js`, `engine.js`, `agent.js`, and `session-coordinator.js` stay out of this package to keep release risk low.
+- ✅ **Release gate**:V0.79.4 passed `typecheck:runtime`, full `typecheck`, full `npm test`, and package/notarization gates.
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.4)
+
+</details>
+
+<details>
+<summary><strong>v0.79.3</strong> · 2026-05-25 · TypeScript safety migration + notarized package</summary>
 
 **V0.79 architecture hardening release**:
 - 🧱 **TypeScript migration keeps moving**:`server/chat` leaf helpers, lightweight `server/routes` modules, and shared runtime utilities are now typed, reducing string typos and unguarded `unknown` values in hot paths.
@@ -646,11 +661,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.79.3 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.79.4 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.79.3 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.79.4 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -713,7 +728,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.79.3 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.79.4 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |
