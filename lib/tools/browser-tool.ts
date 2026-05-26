@@ -59,7 +59,7 @@ type BrowserToolResult = {
 interface BrowserStatusFields {
   running: boolean;
   url: string | null;
-  thumbnail?: string;
+  thumbnail?: string | null;
 }
 
 interface BrowserActionLogEntry {
