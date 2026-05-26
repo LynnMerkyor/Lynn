@@ -16,15 +16,96 @@
 import path from "path";
 import { t } from "../../server/i18n.js";
 import { createSnapshot, isDangerousCommand } from "./snapshot.js";
+import type { PathGuardOperation } from "./path-guard.js";
 
-function blockedResult(reason) {
+interface ToolContent {
+  type?: string;
+  text?: string;
+}
+
+interface ToolResult {
+  isError?: boolean;
+  content?: ToolContent[];
+}
+
+interface ToolLike {
+  parameters?: ParameterSchema;
+  execute: (...args: never[]) => Promise<ToolResult>;
+}
+
+interface ParameterSchema {
+  properties?: Record<string, unknown>;
+  required?: unknown;
+  [key: string]: unknown;
+}
+
+interface GuardLike {
+  check: (absolutePath: string, operation: PathGuardOperation) => { allowed: boolean; reason?: string };
+}
+
+interface AllowlistLike {
+  check: (entryOrCategory: unknown, identifier?: unknown, options?: { path?: string | null; trustedRoot?: string | null }) => boolean;
+  add: (entryOrCategory: unknown, identifier?: unknown, options?: { trustedRoot?: string | null }) => boolean;
+}
+
+interface ConfirmResult {
+  action?: string;
+}
+
+interface ConfirmStoreLike {
+  create: (
+    kind: string,
+    payload: Record<string, unknown>,
+    sessionPath?: string | null,
+  ) => { confirmId: string; promise: Promise<ConfirmResult> };
+}
+
+interface AuthOptions {
+  mode?: "authorized" | string;
+  agentId?: string;
+  allowlist?: AllowlistLike;
+  sessionAllowlist?: AllowlistLike;
+  confirmStore?: unknown;
+  sessionPath?: string | null;
+  getSessionPath?: () => string | null | undefined;
+  emitEvent?: (...args: unknown[]) => unknown;
+  trustedRoots?: string[] | null;
+}
+
+interface AuthorizationRequest {
+  category: string;
+  identifier: string;
+  command: string;
+  reason: string;
+  description: string;
+  allowlist?: AllowlistLike;
+  sessionAllowlist?: AllowlistLike;
+  confirmStore?: unknown;
+  sessionPath?: string | null;
+  emitEvent?: (...args: unknown[]) => unknown;
+  path?: string | null;
+  trustedRoots?: string[] | null;
+}
+
+type PreflightEntry = [RegExp, () => string, string, string, (() => string)?];
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+function isConfirmStore(value: unknown): value is ConfirmStoreLike {
+  return !!value && typeof value === "object" && typeof (value as { create?: unknown }).create === "function";
+}
+
+function blockedResult(reason: string): ToolResult {
   return {
     isError: true,
     content: [{ type: "text", text: t("sandbox.blocked", { reason }) }],
   };
 }
 
-function missingBashCommandResult() {
+function missingBashCommandResult(): ToolResult {
   return {
     isError: true,
     content: [{
@@ -34,7 +115,7 @@ function missingBashCommandResult() {
   };
 }
 
-function blockedBroadHomeSearchResult(command) {
+function blockedBroadHomeSearchResult(command: unknown): ToolResult {
   return {
     isError: true,
     content: [{
@@ -48,7 +129,7 @@ function blockedBroadHomeSearchResult(command) {
   };
 }
 
-export function normalizeBashCommandForExecution(command) {
+export function normalizeBashCommandForExecution(command: unknown): string {
   const text = String(command || "");
   const trimmed = text.trim();
   if (!trimmed) return text;
@@ -60,8 +141,10 @@ export function normalizeBashCommandForExecution(command) {
   return text.replace(/^(\s*)mkdir\s+/i, "$1mkdir -p ");
 }
 
-function normalizeBashParams(params) {
-  const next = params && typeof params === "object" && !Array.isArray(params) ? { ...params } : {};
+function normalizeBashParams(params: unknown): Record<string, unknown> {
+  const next: Record<string, unknown> = params && typeof params === "object" && !Array.isArray(params)
+    ? { ...(params as Record<string, unknown>) }
+    : {};
   if (typeof next.command === "string" && next.command.trim()) {
     next.command = normalizeBashCommandForExecution(next.command);
     return next;
@@ -77,7 +160,7 @@ function normalizeBashParams(params) {
   return next;
 }
 
-export function looksLikeBroadHomeSearchCommand(command) {
+export function looksLikeBroadHomeSearchCommand(command: unknown): boolean {
   const text = String(command || "").trim();
   if (!/^find\s+/i.test(text)) return false;
   const home = process.env.HOME || osHomeFallback();
@@ -94,13 +177,13 @@ export function looksLikeBroadHomeSearchCommand(command) {
   return true;
 }
 
-function osHomeFallback() {
+function osHomeFallback(): string {
   return process.platform === "win32"
     ? (process.env.USERPROFILE || "")
     : (process.env.HOME || "");
 }
 
-function buildBashParameterSchema(parameters = {}) {
+function buildBashParameterSchema(parameters: ParameterSchema = {}): ParameterSchema {
   const properties = parameters && typeof parameters.properties === "object"
     ? { ...parameters.properties }
     : {};
@@ -122,7 +205,7 @@ function buildBashParameterSchema(parameters = {}) {
   };
 
   const required = Array.isArray(parameters.required)
-    ? parameters.required.filter((key) => key !== "command")
+    ? parameters.required.filter((key): key is string => typeof key === "string" && key !== "command")
     : undefined;
 
   return {
@@ -132,29 +215,29 @@ function buildBashParameterSchema(parameters = {}) {
   };
 }
 
-function resolvePath(rawPath, cwd) {
-  if (!rawPath) return null;
+function resolvePath(rawPath: unknown, cwd: string): string | null {
+  if (typeof rawPath !== "string" || !rawPath) return null;
   return path.isAbsolute(rawPath) ? rawPath : path.resolve(cwd, rawPath);
 }
 
-function normalizePathKey(p) {
+function normalizePathKey(p: string): string {
   return process.platform === "win32" ? p.toLowerCase() : p;
 }
 
-function isInsideRoot(targetPath, rootPath) {
+function isInsideRoot(targetPath: string, rootPath: string): boolean {
   const target = normalizePathKey(path.resolve(targetPath));
   const root = normalizePathKey(path.resolve(rootPath));
   return target === root || target.startsWith(root + path.sep);
 }
 
-function findTrustedRootForPath(targetPath, trustedRoots = []) {
+function findTrustedRootForPath(targetPath: string | null | undefined, trustedRoots: string[] | null | undefined = []): string | null {
   if (!targetPath) return null;
   const matches = (trustedRoots || []).filter((root) => isInsideRoot(targetPath, root));
   if (matches.length === 0) return null;
   return matches.sort((a, b) => b.length - a.length)[0];
 }
 
-const PREFLIGHT_UNIX = [
+const PREFLIGHT_UNIX: PreflightEntry[] = [
   [/\bsudo\s/, () => t("sandbox.noSudo"), "elevated_command", "sudo",
     () => t("sandbox.authDesc.sudo")],
   [/\bsu\s+\w/, () => t("sandbox.noSu"), "elevated_command", "su",
@@ -165,7 +248,7 @@ const PREFLIGHT_UNIX = [
     () => t("sandbox.authDesc.chown")],
 ];
 
-const PREFLIGHT_WIN32 = [
+const PREFLIGHT_WIN32: PreflightEntry[] = [
   [/\bdel\s+\/s/i, () => t("sandbox.noDelRecursive"), "elevated_command", "del_recursive",
     () => t("sandbox.authDesc.delRecursive")],
   [/\brmdir\s+\/s/i, () => t("sandbox.noRmdirRecursive"), "elevated_command", "rmdir_recursive",
@@ -192,7 +275,7 @@ const PREFLIGHT_WIN32 = [
     () => t("sandbox.authDesc.wmic")],
 ];
 
-const PREFLIGHT_DELETE = [
+const PREFLIGHT_DELETE: PreflightEntry[] = [
   [/\brm\s+(?:-[^\s]*\s+)?(?:["']?~?[/.]|["']?[^|;&\n\r]+)/i,
     () => t("sandbox.noDeleteFiles"),
     "delete_files", "rm",
@@ -221,7 +304,7 @@ const PREFLIGHT_DELETE = [
 
 // ── ClawAegis: 数据外传检测（跨平台） ──
 
-const PREFLIGHT_EXFIL = [
+const PREFLIGHT_EXFIL: PreflightEntry[] = [
   [/curl\s.*-[dF]\s.*[@<]/, () => t("sandbox.exfilCurlUpload") || "检测到 curl 上传本地文件",
     "data_exfiltration", "curl_upload",
     () => t("sandbox.authDesc.exfilCurlUpload") || "curl 正在上传本地文件到远程服务器"],
@@ -248,7 +331,7 @@ const PREFLIGHT_EXFIL = [
     () => t("sandbox.authDesc.exfilPyServer") || "Python HTTP 服务器可能暴露当前目录下的所有文件"],
 ];
 
-const PREFLIGHT_INSTALL = [
+const PREFLIGHT_INSTALL: PreflightEntry[] = [
   [/\b(?:brew\s+(?:install|upgrade)|apt(?:-get)?\s+install|yum\s+install|dnf\s+install|pacman\s+-S|pip3?\s+install|npm\s+install(?:\s+-g)?|pnpm\s+add(?:\s+-g)?|yarn\s+(?:global\s+add|add)|cargo\s+install|go\s+install|uv\s+tool\s+install|uvx\b)/i,
     () => "即将安装或升级软件/依赖",
     "package_install", "package_install",
@@ -270,8 +353,8 @@ const UNIX_ABS_PATH = /(?:^|\s)(\/[^\s"'|<>&;]+)/g;
 const QUOTED_PATH = /["']([A-Za-z]:[\\\/][^"']+)["']/g;
 const QUOTED_UNIX_PATH = /["'](\/[^"']+)["']/g;
 
-function extractPaths(command) {
-  const paths = new Set();
+function extractPaths(command: string): string[] {
+  const paths = new Set<string>();
   for (const re of [WIN_ABS_PATH, QUOTED_PATH]) {
     for (const m of command.matchAll(re)) {
       paths.add(m[1] || m[0]);
@@ -288,12 +371,12 @@ function extractPaths(command) {
   return [...paths];
 }
 
-function isPathInside(childPath, parentPath) {
+function isPathInside(childPath: string, parentPath: string): boolean {
   const rel = path.relative(path.resolve(parentPath), path.resolve(childPath));
   return rel === "" || (!!rel && !rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
-function shouldSnapshotCommandCwd(command, cwd) {
+function shouldSnapshotCommandCwd(command: string, cwd?: string | null): boolean {
   if (!cwd || !isDangerousCommand(command)) return false;
   const paths = extractPaths(command);
 
@@ -315,7 +398,7 @@ async function requestAuthorization({
   allowlist, sessionAllowlist, confirmStore, sessionPath, emitEvent,
   path: targetPath,
   trustedRoots = [],
-}) {
+}: AuthorizationRequest): Promise<{ allowed: boolean }> {
   const trustedRoot = targetPath ? findTrustedRootForPath(targetPath, trustedRoots) : null;
 
   if (sessionAllowlist?.check({ category, identifier, path: targetPath, trustedRoot })) {
@@ -326,7 +409,7 @@ async function requestAuthorization({
     return { allowed: true };
   }
 
-  if (!confirmStore) {
+  if (!isConfirmStore(confirmStore)) {
     return { allowed: false };
   }
 
@@ -374,10 +457,21 @@ async function requestAuthorization({
   return { allowed: false };
 }
 
-export function wrapPathTool(tool, guard, operation, cwd, authOpts) {
+export function wrapPathTool(
+  tool: ToolLike,
+  guard: GuardLike,
+  operation: PathGuardOperation,
+  cwd: string,
+  authOpts?: AuthOptions,
+): ToolLike {
+  const execute = tool.execute.bind(tool) as (
+    toolCallId: string,
+    params: Record<string, unknown>,
+    ...rest: unknown[]
+  ) => Promise<ToolResult>;
   return {
     ...tool,
-    execute: async (toolCallId, params, ...rest) => {
+    execute: async (toolCallId: string, params: Record<string, unknown>, ...rest: unknown[]) => {
       const rawPath = params.path;
       const absolutePath = resolvePath(rawPath, cwd);
       const checkPath = absolutePath || cwd;
@@ -389,7 +483,7 @@ export function wrapPathTool(tool, guard, operation, cwd, authOpts) {
             category: `path_${operation}`,
             identifier: checkPath,
             command: `${operation} ${rawPath || cwd}`,
-            reason: result.reason,
+            reason: result.reason || "restricted",
             description: t("sandbox.authDesc.pathOp", { op: operation, path: rawPath || cwd }),
             allowlist: authOpts.allowlist,
             sessionAllowlist: authOpts.sessionAllowlist,
@@ -400,22 +494,32 @@ export function wrapPathTool(tool, guard, operation, cwd, authOpts) {
             trustedRoots: authOpts.trustedRoots,
           });
           if (authResult.allowed) {
-            return tool.execute(toolCallId, params, ...rest);
+            return execute(toolCallId, params, ...rest);
           }
         }
-        return blockedResult(result.reason);
+        return blockedResult(result.reason || "restricted");
       }
 
-      return tool.execute(toolCallId, params, ...rest);
+      return execute(toolCallId, params, ...rest);
     },
-  };
+  } as ToolLike;
 }
 
-export function wrapBashTool(tool, guard, cwd, authOpts) {
+export function wrapBashTool(
+  tool: ToolLike,
+  guard?: GuardLike,
+  cwd?: string,
+  authOpts?: AuthOptions,
+): ToolLike {
+  const execute = tool.execute.bind(tool) as (
+    toolCallId: string,
+    params: Record<string, unknown>,
+    ...rest: unknown[]
+  ) => Promise<ToolResult>;
   return {
     ...tool,
     parameters: buildBashParameterSchema(tool.parameters),
-    execute: async (toolCallId, params, ...rest) => {
+    execute: async (toolCallId: string, params: Record<string, unknown>, ...rest: unknown[]) => {
       params = normalizeBashParams(params);
       if (typeof params.command !== "string" || !params.command.trim()) {
         return missingBashCommandResult();
@@ -452,12 +556,12 @@ export function wrapBashTool(tool, guard, cwd, authOpts) {
       // ── Auto-snapshot: 危险命令授权通过后再快照工作区 ──
       // 快照可能扫描大量文件；必须放在授权之后，否则用户会先等快照，
       // 看不到删除/提权确认卡片，表现为“没弹窗、没反馈”。
-      if (shouldSnapshotDangerousCommand) {
+      if (shouldSnapshotDangerousCommand && cwd) {
         try {
           const agentId = authOpts?.agentId || "default";
           createSnapshot(cwd, agentId, `dangerous command: ${params.command.slice(0, 80)}`);
         } catch (err) {
-          console.warn("[snapshot] auto-snapshot failed:", err.message);
+          console.warn("[snapshot] auto-snapshot failed:", errorMessage(err));
         }
       }
 
@@ -490,18 +594,18 @@ export function wrapBashTool(tool, guard, cwd, authOpts) {
       }
 
       try {
-        const result = await tool.execute(toolCallId, params, ...rest);
+        const result = await execute(toolCallId, params, ...rest);
         const text = result?.content?.[0]?.text;
         if (text && text.includes("Operation not permitted")) {
-          result.content[0].text += "\n\n" + t("sandbox.writeRestricted");
+          result.content![0].text += "\n\n" + t("sandbox.writeRestricted");
         }
         return result;
       } catch (err) {
-        if (err.message?.includes("Operation not permitted")) {
+        if (err instanceof Error && err.message?.includes("Operation not permitted")) {
           err.message += "\n\n" + t("sandbox.writeRestricted");
         }
         throw err;
       }
     },
-  };
+  } as ToolLike;
 }
