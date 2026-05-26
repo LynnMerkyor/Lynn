@@ -1,5 +1,5 @@
 /**
- * inferred-profile.js — 辩证式用户画像
+ * inferred-profile.ts — 辩证式用户画像
  *
  * 在 UserProfile 的统计层之上，补一层轻量语义推断：
  * - 输入：session 摘要 + 现有画像
@@ -30,7 +30,64 @@ const ALLOWED_DIMENSIONS = new Set([
   "project_goal",
 ]);
 
-function createEmptyProfile() {
+type Dimension = "tech_preference" | "code_style" | "work_pattern" | "communication" | "domain_knowledge" | "project_goal";
+
+interface TraitInput {
+  dimension?: string;
+  value?: string;
+  new_value?: string;
+  confidence?: number;
+  evidence_strength?: number;
+  evidenceCount?: number;
+}
+
+interface GoalInput {
+  goal?: string;
+  value?: string;
+  confidence?: number;
+  evidence_strength?: number;
+  evidenceCount?: number;
+}
+
+interface Trait {
+  dimension: Dimension;
+  value: string;
+  confidence: number;
+  evidenceCount: number;
+  lastUpdated: string;
+}
+
+interface Goal {
+  goal: string;
+  confidence: number;
+  evidenceCount: number;
+  lastUpdated: string;
+}
+
+interface Profile {
+  version: number;
+  updatedAt: string | null;
+  traits: Trait[];
+  goals: Goal[];
+}
+
+interface Delta {
+  new_traits?: TraitInput[];
+  updated_traits?: (TraitInput & { direction?: string })[];
+  new_goals?: GoalInput[];
+  updated_goals?: (GoalInput & { direction?: string })[];
+}
+
+interface ResolvedModel {
+  model: string;
+  provider: string;
+  api: string;
+  api_key?: string;
+  base_url: string;
+  requestHeaders?: Record<string, string> | null;
+}
+
+function createEmptyProfile(): Profile {
   return {
     version: PROFILE_VERSION,
     updatedAt: null,
@@ -39,15 +96,15 @@ function createEmptyProfile() {
   };
 }
 
-function clamp(value, min, max) {
+function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function normalizeText(value) {
+function normalizeText(value: unknown): string {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
 
-function safeReadJson(filePath, fallback) {
+function safeReadJson(filePath: string, fallback: Profile | null): Profile | null {
   try {
     if (!fs.existsSync(filePath)) return fallback;
     return JSON.parse(fs.readFileSync(filePath, "utf-8"));
@@ -56,7 +113,7 @@ function safeReadJson(filePath, fallback) {
   }
 }
 
-function extractJsonPayload(raw) {
+function extractJsonPayload(raw: unknown): Delta | null {
   const text = String(raw || "").trim();
   if (!text) return null;
   const fenceMatch = text.match(/^```(?:json)?\s*\n([\s\S]*?)\n\s*```\s*$/);
@@ -77,8 +134,8 @@ function extractJsonPayload(raw) {
   }
 }
 
-function normalizeTrait(input, nowIso) {
-  const dimension = normalizeText(input?.dimension).toLowerCase();
+function normalizeTrait(input: TraitInput, nowIso: string): Trait | null {
+  const dimension = normalizeText(input?.dimension).toLowerCase() as Dimension;
   const value = normalizeText(input?.value || input?.new_value);
   const confidence = clamp(Number(input?.confidence ?? input?.evidence_strength ?? 0), 0, 1);
   const evidenceCount = Math.max(1, Number(input?.evidenceCount || 1));
@@ -92,7 +149,7 @@ function normalizeTrait(input, nowIso) {
   };
 }
 
-function normalizeGoal(input, nowIso) {
+function normalizeGoal(input: GoalInput, nowIso: string): Goal | null {
   const goal = normalizeText(input?.goal || input?.value);
   const confidence = clamp(Number(input?.confidence ?? input?.evidence_strength ?? 0), 0, 1);
   const evidenceCount = Math.max(1, Number(input?.evidenceCount || 1));
@@ -105,7 +162,7 @@ function normalizeGoal(input, nowIso) {
   };
 }
 
-function summarizeExisting(profile) {
+function summarizeExisting(profile: Profile): { traits: Array<{ dimension: string; value: string; confidence: number; evidenceCount: number }>; goals: Array<{ goal: string; confidence: number; evidenceCount: number }> } {
   const traits = (profile?.traits || []).map((trait) => ({
     dimension: trait.dimension,
     value: trait.value,
@@ -120,7 +177,7 @@ function summarizeExisting(profile) {
   return { traits, goals };
 }
 
-function buildInferencePrompt(existing) {
+function buildInferencePrompt(existing: { traits: Array<{ dimension: string; value: string; confidence: number; evidenceCount: number }>; goals: Array<{ goal: string; confidence: number; evidenceCount: number }> }): string {
   const isZh = getLocale().startsWith("zh");
   if (isZh) {
     return `你是一个用户建模系统。根据对话摘要，推断用户的稳定偏好与当前目标。
@@ -149,7 +206,7 @@ ${JSON.stringify(existing, null, 2)}
 1. 只推断有明确证据的稳定偏好与目标，不要猜测。
 2. dimension 只能是：tech_preference, code_style, work_pattern, communication, domain_knowledge, project_goal。
 3. evidence_strength 取 0 到 1：单次提及 0.3，反复出现 0.7，明确声明 0.9。
-4. 对现有画像一致则用 direction=\"confirm\"；如果明显冲突才用 \"contradict\"。
+4. 对现有画像一致则用 direction="confirm"；如果明显冲突才用 "contradict"。
 5. 不推断敏感信息：年龄、性别、政治、宗教、民族、联系方式、住址。
 6. 没有新信息就返回空数组。`;
   }
@@ -186,12 +243,15 @@ Return strict JSON, no markdown:
 }
 
 export class InferredProfile {
-  constructor({ profilePath }) {
+  private _profilePath: string;
+  private _profile: Profile | null = null;
+
+  constructor({ profilePath }: { profilePath: string }) {
     this._profilePath = profilePath;
     this._profile = null;
   }
 
-  _load() {
+  private _load(): Profile {
     if (this._profile) return this._profile;
     const raw = safeReadJson(this._profilePath, null);
     this._profile = {
@@ -203,17 +263,17 @@ export class InferredProfile {
     return this._profile;
   }
 
-  _save() {
+  private _save(): void {
     if (!this._profile) return;
     try {
       fs.mkdirSync(path.dirname(this._profilePath), { recursive: true });
       fs.writeFileSync(this._profilePath, JSON.stringify(this._profile, null, 2), "utf-8");
     } catch (err) {
-      console.error(`[inferred-profile] save failed: ${err.message}`);
+      console.error(`[inferred-profile] save failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  _mergeTrait(target, update, direction, nowIso) {
+  private _mergeTrait(target: Profile, update: Trait, direction: string, nowIso: string): void {
     const existing = target.traits.find((item) => item.dimension === update.dimension);
     if (!existing) {
       target.traits.push({
@@ -247,7 +307,7 @@ export class InferredProfile {
     existing.lastUpdated = nowIso;
   }
 
-  _mergeGoal(target, update, direction, nowIso) {
+  private _mergeGoal(target: Profile, update: Goal, direction: string, nowIso: string): void {
     const existing = target.goals.find((item) => normalizeText(item.goal) === normalizeText(update.goal));
     if (!existing) {
       target.goals.push({
@@ -280,7 +340,7 @@ export class InferredProfile {
     existing.lastUpdated = nowIso;
   }
 
-  _prune(profile) {
+  private _prune(profile: Profile): void {
     profile.traits = (profile.traits || [])
       .filter((item) => normalizeText(item.value) && Number(item.confidence || 0) >= MIN_CONFIDENCE_TO_KEEP)
       .sort((a, b) => Number(b.confidence || 0) - Number(a.confidence || 0));
@@ -289,7 +349,7 @@ export class InferredProfile {
       .sort((a, b) => Number(b.confidence || 0) - Number(a.confidence || 0));
   }
 
-  applyInference(delta) {
+  applyInference(delta: Delta): Profile {
     const profile = this._load();
     const nowIso = new Date().toISOString();
 
@@ -326,7 +386,7 @@ export class InferredProfile {
     return profile;
   }
 
-  async inferFromSession(summaryText, resolvedModel) {
+  async inferFromSession(summaryText: string, resolvedModel: ResolvedModel): Promise<Profile | null> {
     if (!summaryText || summaryText.trim().length < MIN_SUMMARY_LENGTH) return null;
     if (!resolvedModel?.model || !resolvedModel?.api || !resolvedModel?.base_url) return null;
 
@@ -351,7 +411,7 @@ export class InferredProfile {
     return this.applyInference(parsed);
   }
 
-  formatForPrompt(isZh) {
+  formatForPrompt(isZh: boolean): string {
     const profile = this._load();
     const traits = (profile.traits || [])
       .filter((item) => Number(item.confidence || 0) >= MIN_CONFIDENCE_TO_PROMPT)
@@ -374,7 +434,7 @@ export class InferredProfile {
     return parts.join("\n");
   }
 
-  getRawProfile() {
+  getRawProfile(): Profile {
     return this._load();
   }
 }
