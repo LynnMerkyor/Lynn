@@ -8,6 +8,7 @@ import fs from "fs";
 import fsp from "fs/promises";
 import path from "path";
 import YAML from "js-yaml";
+import type { DumpOptions } from "js-yaml";
 import { Agent } from "./agent.js";
 import { safeReadYAMLSync } from "../shared/safe-fs.js";
 import { createModuleLogger } from "../lib/debug-log.js";
@@ -149,17 +150,21 @@ interface AgentScanEntry {
 }
 
 const log = createModuleLogger("agent-mgr");
+const YAML_DUMP_OPTIONS = {
+  lineWidth: 120,
+  noRefs: true,
+  quotingType: '"',
+} as unknown as DumpOptions;
 
-function firstExistingPath(...paths: string[]): string | null {
+function firstExistingPath(...paths: Array<string | null | undefined>): string | null {
   for (const p of paths) {
-    if (fs.existsSync(p)) return p;
+    if (p && fs.existsSync(p)) return p;
   }
   return null;
 }
 
-function normalizeYuanType(yuan: string): string {
-  // Simple normalization - keep the original implementation
-  return yuan.toLowerCase();
+function normalizeYuanType(yuan: unknown): string {
+  return String(yuan || "").trim().toLowerCase();
 }
 
 export class AgentManager {
@@ -260,7 +265,7 @@ export class AgentManager {
         if (changed) {
           fs.writeFileSync(
             configPath,
-            YAML.dump(cfg, { lineWidth: 120, quotingType: '"' }),
+            YAML.dump(cfg, YAML_DUMP_OPTIONS),
             "utf-8",
           );
           repaired += 1;
@@ -473,14 +478,14 @@ export class AgentManager {
         cfg.models = cfg.models || {};
         (cfg.models as Record<string, unknown>).chat = primaryChat;
       }
-      configYamlOut = YAML.dump(cfg, { lineWidth: 120, quotingType: '"' });
+      configYamlOut = YAML.dump(cfg, YAML_DUMP_OPTIONS);
     } catch (e: any) {
       log.warn(`createAgent: YAML 模板解析失败，回退字符串替换: ${e.message}`);
       const safeName = name.trim().replace(/"/g, '\\"');
       let config = templateConfig.replace(/name: Lynn/, `name: "${safeName}"`);
       config = config.replace(/yuan: hanako/, `yuan: ${yuanType}`);
       if (userName) {
-        config = config.replace(/user:\s*\n\s+name:\s*"/, `user:\n  name: "${userName}"`);
+        config = config.replace(/user:\s*\n\s+name:\s*""/, `user:\n  name: "${userName}"`);
       }
       if (primaryChat) {
         config = config.replace(/chat: ""/, `chat: "${primaryChat}"`);
