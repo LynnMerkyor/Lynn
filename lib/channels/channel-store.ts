@@ -1,5 +1,5 @@
 /**
- * channel-store.js — 频道 MD 文件的读写层
+ * channel-store.ts — 频道 MD 文件的读写层
  *
  * 频道 = 一个 MD 文件，frontmatter 记元数据，正文是消息流。
  * 每个 agent 的 channels.md 记录她加入了哪些频道、读到哪了（bookmark = 时间戳）。
@@ -12,19 +12,73 @@ import path from "path";
 import crypto from "crypto";
 import { getLocale, t } from "../../server/i18n.js";
 
+export type ChannelTimestamp = string;
+export type ChannelId = string;
+export type FrontmatterScalar = string | number | boolean | null | undefined;
+export type FrontmatterValue = FrontmatterScalar | string[];
+export type FrontmatterRecord = Record<string, FrontmatterValue>;
+
+export interface ChannelMeta extends FrontmatterRecord {
+  id?: string;
+  name?: string;
+  description?: string;
+  members?: string[];
+  archived?: string | boolean;
+  archivedAt?: string;
+}
+
+export interface ChannelMessage {
+  sender: string;
+  timestamp: ChannelTimestamp;
+  body: string;
+}
+
+export interface ParsedChannel {
+  meta: ChannelMeta;
+  messages: ChannelMessage[];
+}
+
+export interface CreateChannelOptions {
+  id?: string;
+  name?: string;
+  description?: string;
+  members: string[];
+  intro?: string;
+}
+
+export interface CreateChannelResult {
+  filePath: string;
+  id: ChannelId;
+}
+
+export interface AppendMessageResult {
+  timestamp: ChannelTimestamp;
+}
+
+export type SelfName = string | string[];
+export type BookmarkValue = ChannelTimestamp | "never";
+export type BookmarkMap = Map<string, BookmarkValue>;
+
+export interface FormatMessagesOptions {
+  tokenBudget?: number;
+  maxCharsPerMsg?: number;
+}
+
+type FrontmatterMutator = (meta: ChannelMeta) => boolean;
+
 // ═══════════════════════════════════════
 //  文件锁（进程内互斥，防止并发读写同一文件）
 // ═══════════════════════════════════════
 
-const _fileLocks = new Map(); // filePath → Promise
+const _fileLocks = new Map<string, Promise<unknown>>(); // filePath → Promise
 
 /**
  * 对指定文件加锁执行 fn（串行化同文件的并发操作）
  * 不同文件之间不互相阻塞
  */
-function withFileLock(filePath, fn) {
+function withFileLock<T>(filePath: string, fn: () => T | Promise<T>): Promise<Awaited<T>> {
   const prev = _fileLocks.get(filePath) || Promise.resolve();
-  const next = prev.then(fn, fn); // 无论前一个成功失败都继续
+  const next = prev.then(fn, fn) as Promise<Awaited<T>>; // 无论前一个成功失败都继续
   _fileLocks.set(filePath, next);
   // 清理已完成的锁（防止 Map 无限增长）
   next.then(() => {
@@ -45,9 +99,9 @@ const MSG_HEADER_RE = /^### (.+?) \| (\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?)$
  * @param {string} content - 频道 MD 文件的全文
  * @returns {{ meta: object, messages: Array<{sender: string, timestamp: string, body: string}> }}
  */
-export function parseChannel(content) {
+export function parseChannel(content: string): ParsedChannel {
   const lines = content.split("\n");
-  let meta = {};
+  let meta: ChannelMeta = {};
   let bodyStart = 0;
 
   // 解析 frontmatter（--- ... ---）
@@ -67,9 +121,9 @@ export function parseChannel(content) {
   }
 
   // 解析消息流
-  const messages = [];
-  let current = null;
-  const bodyLines = [];
+  const messages: ChannelMessage[] = [];
+  let current: ChannelMessage | null = null;
+  const bodyLines: string[] = [];
 
   for (let i = bodyStart; i < lines.length; i++) {
     const line = lines[i];
@@ -103,13 +157,13 @@ export function parseChannel(content) {
  * 简易 frontmatter 解析（不依赖 YAML 库）
  * 支持：key: value、key: [a, b, c]
  */
-function parseFrontmatter(lines) {
-  const result = {};
+function parseFrontmatter(lines: string[]): ChannelMeta {
+  const result: ChannelMeta = {};
   for (const line of lines) {
     const colonIdx = line.indexOf(":");
     if (colonIdx < 0) continue;
     const key = line.slice(0, colonIdx).trim();
-    let val = line.slice(colonIdx + 1).trim();
+    let val: FrontmatterValue = line.slice(colonIdx + 1).trim();
 
     // 数组：[a, b, c]
     if (val.startsWith("[") && val.endsWith("]")) {
@@ -123,7 +177,7 @@ function parseFrontmatter(lines) {
 /**
  * 将 meta 对象序列化为 frontmatter 字符串
  */
-function serializeFrontmatter(meta) {
+function serializeFrontmatter(meta: FrontmatterRecord): string {
   const lines = ["---"];
   for (const [key, val] of Object.entries(meta)) {
     if (Array.isArray(val)) {
@@ -145,7 +199,7 @@ function serializeFrontmatter(meta) {
  * @param {string} [customId] - 用户自定义 ID（如 "crew"），省略则自动生成
  * @returns {string} 带 ch_ 前缀的 ID
  */
-export function generateChannelId(customId) {
+export function generateChannelId(customId?: string): ChannelId {
   const base = customId || crypto.randomUUID().slice(0, 6);
   return base.startsWith("ch_") ? base : `ch_${base}`;
 }
@@ -161,7 +215,10 @@ export function generateChannelId(customId) {
  * @param {string} [opts.intro] - 频道介绍（作为第一条系统消息）
  * @returns {{ filePath: string, id: string }}
  */
-export function createChannel(channelsDir, { id, name, description, members, intro }) {
+export function createChannel(
+  channelsDir: string,
+  { id, name, description, members, intro }: CreateChannelOptions,
+): CreateChannelResult {
   fs.mkdirSync(channelsDir, { recursive: true });
   const channelId = id ? (id.startsWith("ch_") ? id : `ch_${id}`) : generateChannelId();
   const filePath = path.join(channelsDir, `${channelId}.md`);
@@ -170,7 +227,7 @@ export function createChannel(channelsDir, { id, name, description, members, int
     throw new Error(t("error.channelAlreadyExists", { id: channelId }));
   }
 
-  const meta = { id: channelId, members };
+  const meta: ChannelMeta = { id: channelId, members };
   if (name) meta.name = name;
   if (description) meta.description = description;
   const parts = [serializeFrontmatter(meta), ""];
@@ -191,7 +248,7 @@ export function createChannel(channelsDir, { id, name, description, members, int
  * @param {string} body - 消息正文
  * @returns {{ timestamp: string }} 写入的时间戳
  */
-export function appendMessage(filePath, sender, body) {
+export function appendMessage(filePath: string, sender: string, body: string): AppendMessageResult {
   const ts = formatTimestamp(new Date());
   const block = `\n### ${sender} | ${ts}\n\n${body.trim()}\n\n---\n`;
   fs.appendFileSync(filePath, block, "utf-8");
@@ -205,7 +262,7 @@ export function appendMessage(filePath, sender, body) {
  * @param {string|string[]} [selfName] - 自己的名字/ID（跳过自己发的消息，支持数组同时匹配多个）
  * @returns {Array<{sender: string, timestamp: string, body: string}>}
  */
-export function getNewMessages(filePath, bookmark, selfName) {
+export function getNewMessages(filePath: string, bookmark?: string | null, selfName?: SelfName): ChannelMessage[] {
   if (!fs.existsSync(filePath)) return [];
 
   const content = fs.readFileSync(filePath, "utf-8");
@@ -234,7 +291,7 @@ export function getNewMessages(filePath, bookmark, selfName) {
  * @param {string|string[]} [selfName] - 自己的名字/ID（跳过自己发的消息，支持数组同时匹配多个）
  * @returns {Array<{sender: string, timestamp: string, body: string}>}
  */
-export function getRecentMessages(filePath, count = 10, selfName) {
+export function getRecentMessages(filePath: string, count = 10, selfName?: SelfName): ChannelMessage[] {
   if (!fs.existsSync(filePath)) return [];
 
   const content = fs.readFileSync(filePath, "utf-8");
@@ -252,7 +309,7 @@ export function getRecentMessages(filePath, count = 10, selfName) {
  * @param {string} filePath - 频道 MD 文件路径
  * @returns {string[]}
  */
-export function getChannelMembers(filePath) {
+export function getChannelMembers(filePath: string): string[] {
   if (!fs.existsSync(filePath)) return [];
   const content = fs.readFileSync(filePath, "utf-8");
   const { meta } = parseChannel(content);
@@ -264,7 +321,7 @@ export function getChannelMembers(filePath) {
  * @param {string} filePath - 频道 MD 文件路径
  * @returns {object}
  */
-export function getChannelMeta(filePath) {
+export function getChannelMeta(filePath: string): ChannelMeta {
   if (!fs.existsSync(filePath)) return {};
   const content = fs.readFileSync(filePath, "utf-8");
   const { meta } = parseChannel(content);
@@ -276,7 +333,7 @@ export function getChannelMeta(filePath) {
  * @param {string} filePath - 频道 MD 文件路径
  * @returns {boolean}
  */
-export function isChannelArchived(filePath) {
+export function isChannelArchived(filePath: string): boolean {
   const meta = getChannelMeta(filePath);
   return meta.archived === true || meta.archived === "true";
 }
@@ -287,7 +344,7 @@ export function isChannelArchived(filePath) {
  * @param {boolean} [archived=true] - 是否归档
  * @returns {boolean}
  */
-export function setChannelArchived(filePath, archived = true) {
+export function setChannelArchived(filePath: string, archived = true): boolean {
   if (!fs.existsSync(filePath)) return false;
   let changed = false;
   rewriteFrontmatter(filePath, (meta) => {
@@ -311,9 +368,9 @@ export function setChannelArchived(filePath, archived = true) {
  * @param {string} filePath - 频道 MD 文件路径
  * @param {string} memberId - 新成员 ID
  */
-export function addChannelMember(filePath, memberId) {
+export function addChannelMember(filePath: string, memberId: string): void {
   rewriteFrontmatter(filePath, (meta) => {
-    const members = Array.isArray(meta.members) ? meta.members : [];
+    const members: string[] = Array.isArray(meta.members) ? meta.members : [];
     if (members.includes(memberId)) return false; // 已存在，不写
     members.push(memberId);
     meta.members = members;
@@ -326,10 +383,10 @@ export function addChannelMember(filePath, memberId) {
  * @param {string} filePath - 频道 MD 文件路径
  * @param {string} memberId - 要移除的成员 ID
  */
-export function removeChannelMember(filePath, memberId) {
+export function removeChannelMember(filePath: string, memberId: string): void {
   if (!fs.existsSync(filePath)) return;
   rewriteFrontmatter(filePath, (meta) => {
-    const members = Array.isArray(meta.members) ? meta.members : [];
+    const members: string[] = Array.isArray(meta.members) ? meta.members : [];
     const idx = members.indexOf(memberId);
     if (idx < 0) return false; // 不在成员列表中，不写
     members.splice(idx, 1);
@@ -347,7 +404,7 @@ export function removeChannelMember(filePath, memberId) {
  * @param {string} filePath - 频道 MD 文件路径
  * @param {(meta: object) => boolean} mutator - 修改 meta 对象，返回 true 表示需要写入
  */
-function rewriteFrontmatter(filePath, mutator) {
+function rewriteFrontmatter(filePath: string, mutator: FrontmatterMutator): void {
   const content = fs.readFileSync(filePath, "utf-8");
   const { meta } = parseChannel(content);
 
@@ -376,7 +433,7 @@ function rewriteFrontmatter(filePath, mutator) {
  * 删除频道文件
  * @param {string} filePath - 频道 MD 文件路径
  */
-export function deleteChannel(filePath) {
+export function deleteChannel(filePath: string): void {
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
   }
@@ -402,8 +459,8 @@ const BOOKMARK_RE = /^- (.+?) \(last: (.+?)\)$/;
  * @param {string} channelsMdPath - agent 的 channels.md 路径
  * @returns {Map<string, string>} channelName → lastReadTimestamp
  */
-export function readBookmarks(channelsMdPath) {
-  const bookmarks = new Map();
+export function readBookmarks(channelsMdPath: string): BookmarkMap {
+  const bookmarks: BookmarkMap = new Map();
   if (!fs.existsSync(channelsMdPath)) return bookmarks;
 
   const content = fs.readFileSync(channelsMdPath, "utf-8");
@@ -422,7 +479,7 @@ export function readBookmarks(channelsMdPath) {
  * @param {string} channelName - 频道名
  * @param {string} timestamp - 新的已读时间戳
  */
-export function updateBookmark(channelsMdPath, channelName, timestamp) {
+export function updateBookmark(channelsMdPath: string, channelName: string, timestamp: string): void {
   const bookmarks = readBookmarks(channelsMdPath);
   bookmarks.set(channelName, timestamp);
   writeBookmarks(channelsMdPath, bookmarks);
@@ -433,7 +490,7 @@ export function updateBookmark(channelsMdPath, channelName, timestamp) {
  * @param {string} channelsMdPath - agent 的 channels.md 路径
  * @param {string} channelName - 频道名
  */
-export function addBookmarkEntry(channelsMdPath, channelName) {
+export function addBookmarkEntry(channelsMdPath: string, channelName: string): void {
   const bookmarks = readBookmarks(channelsMdPath);
   if (!bookmarks.has(channelName)) {
     bookmarks.set(channelName, "never");
@@ -446,7 +503,7 @@ export function addBookmarkEntry(channelsMdPath, channelName) {
  * @param {string} channelsMdPath - agent 的 channels.md 路径
  * @param {string} channelName - 要移除的频道名
  */
-export function removeBookmarkEntry(channelsMdPath, channelName) {
+export function removeBookmarkEntry(channelsMdPath: string, channelName: string): void {
   const bookmarks = readBookmarks(channelsMdPath);
   if (bookmarks.has(channelName)) {
     bookmarks.delete(channelName);
@@ -457,7 +514,7 @@ export function removeBookmarkEntry(channelsMdPath, channelName) {
 /**
  * 将 bookmark map 写回 channels.md
  */
-function writeBookmarks(channelsMdPath, bookmarks) {
+function writeBookmarks(channelsMdPath: string, bookmarks: BookmarkMap): void {
   const lines = ["# 频道", ""];
   for (const [name, ts] of bookmarks) {
     lines.push(`- ${name} (last: ${ts})`);
@@ -479,7 +536,7 @@ function writeBookmarks(channelsMdPath, bookmarks) {
  * @param {Date} date
  * @returns {string}
  */
-function formatTimestamp(date) {
+function formatTimestamp(date: Date): string {
   const y = date.getFullYear();
   const mo = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
@@ -500,11 +557,14 @@ function formatTimestamp(date) {
  * @param {number} [opts.maxCharsPerMsg=800] - 单条消息最大字符数
  * @returns {string}
  */
-export function formatMessagesForLLM(messages, { tokenBudget = 4000, maxCharsPerMsg = 800 } = {}) {
+export function formatMessagesForLLM(
+  messages: ChannelMessage[],
+  { tokenBudget = 4000, maxCharsPerMsg = 800 }: FormatMessagesOptions = {},
+): string {
   if (messages.length === 0) return getLocale().startsWith("zh") ? "(没有新消息)" : "(no new messages)";
   const charBudget = tokenBudget * 2; // 粗估：1 token ≈ 2 字符
   const truncLabel = getLocale().startsWith("zh") ? "\n[...已截断]" : "\n[...truncated]";
-  const result = [];
+  const result: string[] = [];
   let totalChars = 0;
 
   // 从最新消息倒序填充
