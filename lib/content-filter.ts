@@ -1,5 +1,5 @@
 /**
- * content-filter.js — 基于 DFA（确定有限自动机）的高性能内容安全过滤
+ * content-filter.ts — 基于 DFA（确定有限自动机）的高性能内容安全过滤
  *
  * 启动时加载 17 类关键词库到 Trie 树，对输入/输出文本做实时过滤。
  * 支持三级处置：BLOCK（屏蔽） / WARN（警告） / LOG（记录）
@@ -19,9 +19,46 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, 'content-filter-data');
 
+export type ContentFilterCategoryLevel = 'block' | 'warn' | 'log';
+export type ContentFilterResultLevel = 'pass' | ContentFilterCategoryLevel;
+export type ContentFilterCategoryLevels = Partial<Record<string, ContentFilterCategoryLevel>>;
+
+export type ContentFilterOptions = {
+  dataDir?: string;
+};
+
+export type ContentFilterMatch = {
+  word: string;
+  category: string;
+  level: ContentFilterCategoryLevel;
+  position: number;
+};
+
+export type ContentFilterCheckResult = {
+  blocked: boolean;
+  level: ContentFilterResultLevel;
+  matches: ContentFilterMatch[];
+};
+
+export type ContentFilterFilterResult = {
+  filtered: string;
+  matches: ContentFilterMatch[];
+};
+
+export type ContentFilterCategoryStats = {
+  name: string;
+  count: number;
+};
+
+export type ContentFilterStats = {
+  loaded: boolean;
+  totalWords: number;
+  categories: Record<string, ContentFilterCategoryStats>;
+};
+
 // ── 三级处置策略 ──
 
-const CATEGORY_LEVELS = {
+const CATEGORY_LEVELS: ContentFilterCategoryLevels = {
   '01-political-subversion':   'block',
   '02-national-security':      'block',
   '03-extremism-terrorism':    'block',
@@ -44,7 +81,7 @@ const CATEGORY_LEVELS = {
 // ── Trie 节点 ──
 
 // 上下文白名单模式：当输入包含这些教育/学术/求助性短语时，短敏感词不触发拦截
-const SAFE_CONTEXT_PATTERNS = [
+const SAFE_CONTEXT_PATTERNS: RegExp[] = [
   /如何帮助|如何应对|如何防[护范止]|如何保护|如何预防/,
   /什么是.{0,6}[？?]|的定义|的概念|的含义|的区别|的原因|怎么看/,
   /请.{0,4}介绍|请.{0,4}分析|请.{0,4}解释|客观分析|客观看待/,
@@ -59,7 +96,7 @@ const SAFE_CONTEXT_PATTERNS = [
 ];
 
 // 在教育语境中豁免的短词（这些词单独出现时是高频误拦源）
-const CONTEXTUAL_EXEMPT_WORDS = new Set([
+const CONTEXTUAL_EXEMPT_WORDS = new Set<string>([
   '政府', '恐怖主义', '毒品', '自杀', '自残', '暴力', '赌博',
   '色情', '诽谤', '歧视', '侵权', '犯罪', '校园霸凌',
   '暴力犯罪', '暴力事件', '名誉损害', '维权', '危机干预',
@@ -67,16 +104,21 @@ const CONTEXTUAL_EXEMPT_WORDS = new Set([
   '复制',
 ]);
 
-function isAsciiTokenChar(char) {
+function isAsciiTokenChar(char: string | undefined): boolean {
   return /[a-z0-9]/i.test(char || '');
 }
 
-function shouldSkipEmbeddedAsciiShortWord(text, start, end, word) {
+function shouldSkipEmbeddedAsciiShortWord(text: string, start: number, end: number, word: string): boolean {
   if (!/^[a-z0-9]{1,4}$/i.test(word || '')) return false;
   return isAsciiTokenChar(text[start - 1]) || isAsciiTokenChar(text[end]);
 }
 
 class TrieNode {
+  declare children: Map<string, TrieNode>;
+  declare isEnd: boolean;
+  declare category: string | null;
+  declare level: ContentFilterCategoryLevel | null;
+
   constructor() {
     this.children = new Map();
     this.isEnd = false;
@@ -88,7 +130,13 @@ class TrieNode {
 // ── 核心过滤器 ──
 
 export class ContentFilter {
-  constructor(opts = {}) {
+  declare _root: TrieNode;
+  declare _dataDir: string;
+  declare _wordCount: number;
+  declare _categories: Map<string, ContentFilterCategoryStats>;
+  declare _loaded: boolean;
+
+  constructor(opts: ContentFilterOptions = {}) {
     this._root = new TrieNode();
     this._dataDir = opts.dataDir || DATA_DIR;
     this._wordCount = 0;
@@ -99,7 +147,7 @@ export class ContentFilter {
   /**
    * 初始化：加载词库到 Trie 树
    */
-  async init() {
+  async init(): Promise<void> {
     if (this._loaded) return;
     const t0 = performance.now();
 
@@ -132,13 +180,13 @@ export class ContentFilter {
   /**
    * 插入关键词到 Trie
    */
-  _insert(word, category, level) {
+  _insert(word: string, category: string, level: ContentFilterCategoryLevel): void {
     let node = this._root;
     for (const char of word) {
       if (!node.children.has(char)) {
         node.children.set(char, new TrieNode());
       }
-      node = node.children.get(char);
+      node = node.children.get(char)!;
     }
     node.isEnd = true;
     // block > warn > log 优先级
@@ -148,7 +196,7 @@ export class ContentFilter {
     }
   }
 
-  _levelPriority(level) {
+  _levelPriority(level: ContentFilterResultLevel | null): number {
     if (level === 'block') return 3;
     if (level === 'warn') return 2;
     return 1;
@@ -160,7 +208,7 @@ export class ContentFilter {
    * @param {string} text - 待检查文本
    * @returns {{ blocked: boolean, level: 'pass'|'log'|'warn'|'block', matches: Array<{ word: string, category: string, level: string, position: number }> }}
    */
-  check(text) {
+  check(text: string): ContentFilterCheckResult {
     if (!this._loaded || !text) {
       return { blocked: false, level: 'pass', matches: [] };
     }
@@ -175,15 +223,15 @@ export class ContentFilter {
     // 上下文白名单：教育/学术/求助/客观讨论语境放行短敏感词
     const isEducationalContext = SAFE_CONTEXT_PATTERNS.some(p => p.test(normalizedText));
 
-    const matches = [];
-    let maxLevel = 'pass';
+    const matches: ContentFilterMatch[] = [];
+    let maxLevel: ContentFilterResultLevel = 'pass';
 
     for (let i = 0; i < normalizedText.length; i++) {
       let node = this._root;
       let j = i;
 
       while (j < normalizedText.length && node.children.has(normalizedText[j])) {
-        node = node.children.get(normalizedText[j]);
+        node = node.children.get(normalizedText[j])!;
         j++;
 
         if (node.isEnd) {
@@ -199,16 +247,16 @@ export class ContentFilter {
             continue;
           }
 
-          const match = {
+          const match: ContentFilterMatch = {
             word: text.slice(i, j),  // 保留原始大小写
-            category: node.category,
-            level: node.level,
+            category: node.category!,
+            level: node.level!,
             position: i,
           };
           matches.push(match);
 
           if (this._levelPriority(node.level) > this._levelPriority(maxLevel)) {
-            maxLevel = node.level;
+            maxLevel = node.level!;
           }
         }
       }
@@ -227,7 +275,7 @@ export class ContentFilter {
    * @param {string} text - 原始文本
    * @returns {{ filtered: string, matches: Array }}
    */
-  filter(text) {
+  filter(text: string): ContentFilterFilterResult {
     const result = this.check(text);
     if (result.matches.length === 0) {
       return { filtered: text, matches: [] };
@@ -236,7 +284,7 @@ export class ContentFilter {
     // 按位置排序，从后往前替换（避免位移）
     const sorted = [...result.matches].sort((a, b) => b.position - a.position);
     let filtered = text;
-    const replaced = new Set();
+    const replaced = new Set<string>();
 
     for (const match of sorted) {
       const key = `${match.position}:${match.word.length}`;
@@ -253,11 +301,11 @@ export class ContentFilter {
   /**
    * 获取统计信息
    */
-  get stats() {
+  get stats(): ContentFilterStats {
     return {
       loaded: this._loaded,
       totalWords: this._wordCount,
-      categories: Object.fromEntries(this._categories),
+      categories: Object.fromEntries(this._categories) as Record<string, ContentFilterCategoryStats>,
     };
   }
 }
