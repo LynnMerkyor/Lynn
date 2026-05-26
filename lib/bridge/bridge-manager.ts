@@ -1,5 +1,5 @@
 /**
- * bridge-manager.js — 外部平台接入管理器
+ * bridge-manager.ts — 外部平台接入管理器
  *
  * 统一管理 Telegram / 飞书等外部消息平台的生命周期。
  * 每个平台一个 adapter，共享 engine 的 _executeExternalMessage()。
@@ -17,27 +17,298 @@ import { downloadMedia, bufferToBase64, detectMime, splitMediaFromOutput, format
 import { AppError } from "../../shared/errors.js";
 import { errorBus } from "../../shared/error-bus.js";
 
+const BRIDGE_PLATFORMS = ["telegram", "feishu", "qq", "wechat"] as const;
+type BridgePlatform = typeof BRIDGE_PLATFORMS[number];
+type BridgeStatus = "connecting" | "connected" | "disconnected" | "error" | (string & {});
+type BridgeRole = "owner" | "guest";
+
+interface TelegramCredentials {
+  token: string;
+}
+
+interface FeishuCredentials {
+  appId: string;
+  appSecret: string;
+}
+
+interface QQCredentials {
+  appID: string;
+  appSecret: string;
+  dmGuildMap?: Record<string, string>;
+}
+
+interface WechatCredentials {
+  botToken: string;
+  hanaHome: string;
+}
+
+type BridgeCredentials =
+  | TelegramCredentials
+  | FeishuCredentials
+  | QQCredentials
+  | WechatCredentials;
+
+export interface BridgePlatformConfig {
+  enabled?: boolean;
+  token?: string;
+  appId?: string;
+  appSecret?: string;
+  appID?: string;
+  dmGuildMap?: Record<string, string>;
+  botToken?: string;
+  _hanaHome?: string;
+}
+
+interface BridgeOwnerRouting {
+  owner?: Record<string, string>;
+  allowlist?: Record<string, string[]>;
+}
+
+interface BridgePreferences {
+  bridge?: Partial<Record<BridgePlatform, BridgePlatformConfig>> & BridgeOwnerRouting;
+  [key: string]: unknown;
+}
+
+export interface BridgeAttachment {
+  type: "image" | "audio" | "video" | "file" | (string & {});
+  url?: string;
+  platformRef?: string;
+  _messageId?: string;
+  filename?: string;
+  mimeType?: string;
+  duration?: number;
+  size?: number;
+  width?: number;
+  height?: number;
+}
+
+export interface BridgeMessagePayload {
+  platform?: string;
+  chatId: string;
+  userId?: string;
+  sessionKey: string;
+  text: string;
+  senderName?: string | null;
+  avatarUrl?: string | null;
+  isGroup?: boolean;
+  attachments?: BridgeAttachment[];
+  _msgId?: string;
+}
+
+interface BridgeMessageMeta {
+  name?: string | null;
+  avatarUrl?: string | null;
+  userId?: string;
+}
+
+interface BridgePromptImage {
+  type: "image";
+  data: string;
+  mimeType: string;
+}
+
+interface ResolvedAttachments {
+  images: BridgePromptImage[];
+  textNotes: string;
+}
+
+interface SplitMediaResult {
+  text: string;
+  mediaUrls: string[];
+}
+
+interface BridgeAdapterCapabilities {
+  proactive?: boolean;
+}
+
+export interface BridgeAdapter {
+  capabilities?: BridgeAdapterCapabilities;
+  sendReply(chatId: string, text: string, ...args: unknown[]): Promise<unknown>;
+  sendBlockReply?(chatId: string, text: string, ...args: unknown[]): Promise<unknown>;
+  sendDraft?(chatId: string, text: string): Promise<unknown>;
+  sendMedia?(chatId: string, source: string): Promise<unknown>;
+  sendMediaBuffer?(chatId: string, buffer: Buffer, meta: { mime: string; filename: string }): Promise<unknown>;
+  downloadImage?(platformRef: string): Promise<Buffer>;
+  downloadFile?(messageId: string, fileKey: string): Promise<Buffer>;
+  resolveOwnerChatId?(userId: string): string | null | undefined;
+  canReply?(chatId: string): boolean;
+  stop(): void | Promise<void>;
+  getMe?(): Promise<unknown>;
+}
+
+type BridgeMessageHandler = (msg: BridgeMessagePayload) => void | Promise<void>;
+
+interface BridgeAdapterHooks {
+  onEvent?: (evt: unknown) => void;
+  onQqDmGuild?: (userId: string, guildId: string) => void;
+  onStatus?: (status: BridgeStatus, error?: string) => void;
+}
+
+interface AdapterRegistryEntry {
+  create(
+    creds: BridgeCredentials,
+    onMessage: BridgeMessageHandler,
+    hooks: BridgeAdapterHooks,
+  ): BridgeAdapter | Promise<BridgeAdapter>;
+  getCredentials(cfg: BridgePlatformConfig): BridgeCredentials | null;
+  ownerSessionKey(userId: string): string;
+}
+
+interface BridgePlatformEntry {
+  adapter: BridgeAdapter | null;
+  status: BridgeStatus;
+  error?: string | null;
+}
+
+interface PendingBridgeEntry {
+  lines: string[];
+  attachments: BridgeAttachment[];
+  platform: string;
+  chatId: string;
+  senderName?: string | null;
+  avatarUrl?: string | null;
+  userId?: string;
+  isGroup?: boolean;
+  isOwner: boolean;
+  agentId?: string | null;
+  timer?: NodeJS.Timeout;
+}
+
+interface BridgeMessageLogEntry {
+  platform: string;
+  direction: "in" | "out";
+  sessionKey: string;
+  sender: string;
+  text: string;
+  isGroup?: boolean;
+  ts: number;
+}
+
+interface BridgeExternalErrorReply {
+  __bridgeError: true;
+  message?: string;
+}
+
+type BridgeExternalReply = string | BridgeExternalErrorReply | null | undefined;
+
+interface BridgeHubSendOptions {
+  sessionKey: string;
+  agentId?: string | null;
+  role: BridgeRole;
+  meta?: BridgeMessageMeta;
+  isGroup: boolean;
+  systemAppend?: string;
+  onDelta?: (delta: string) => void;
+  images?: BridgePromptImage[];
+}
+
+interface BridgeHub {
+  eventBus: {
+    emit(evt: unknown, target: unknown): void;
+  };
+  send(prompt: string, opts: BridgeHubSendOptions): Promise<string | null | undefined>;
+}
+
+interface BridgeEngine {
+  agentName: string;
+  currentAgentId?: string | null;
+  lynnHome: string;
+  agent?: {
+    deskManager?: {
+      homePath?: string;
+    };
+  };
+  getPreferences(): BridgePreferences;
+  savePreferences(prefs: BridgePreferences): void;
+  isBridgeSessionStreaming(sessionKey: string): boolean;
+  abortBridgeSession(sessionKey: string): Promise<unknown>;
+  steerBridgeSession(sessionKey: string, text: string): boolean;
+}
+
+export interface BridgeManagerDeps {
+  engine: BridgeEngine;
+  hub: BridgeHub;
+}
+
+export interface BridgeProactiveResult {
+  platform: string;
+  chatId: string;
+  sessionKey: string;
+}
+
+function isBridgePlatform(platform: string): platform is BridgePlatform {
+  return (BRIDGE_PLATFORMS as readonly string[]).includes(platform);
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function isBridgeErrorReply(reply: BridgeExternalReply): reply is BridgeExternalErrorReply {
+  return !!reply && typeof reply === "object" && reply.__bridgeError === true;
+}
+
+const makeTelegramAdapter = createTelegramAdapter as unknown as (opts: {
+  token: string;
+  onMessage: BridgeMessageHandler;
+  onStatus?: BridgeAdapterHooks["onStatus"];
+}) => BridgeAdapter;
+
+const makeFeishuAdapter = createFeishuAdapter as unknown as (opts: {
+  appId: string;
+  appSecret: string;
+  onMessage: BridgeMessageHandler;
+  onStatus?: BridgeAdapterHooks["onStatus"];
+}) => Promise<BridgeAdapter>;
+
+const makeQQAdapter = createQQAdapter as unknown as (opts: {
+  appID: string;
+  appSecret: string;
+  onMessage: BridgeMessageHandler;
+  dmGuildMap?: Record<string, string>;
+  onDmGuildDiscovered?: BridgeAdapterHooks["onQqDmGuild"];
+  onStatus?: BridgeAdapterHooks["onStatus"];
+}) => BridgeAdapter;
+
+const makeWechatAdapter = createWechatAdapter as unknown as (opts: {
+  botToken: string;
+  hanaHome: string;
+  onMessage: BridgeMessageHandler;
+  onStatus?: BridgeAdapterHooks["onStatus"];
+}) => BridgeAdapter;
+
 // ── Adapter Registry ─────────────────────────────────────
 // 每个平台注册：create 工厂、凭证提取、owner sessionKey 构造。
 // 新增平台只需在此注册 + 提供 adapter 文件。
-const ADAPTER_REGISTRY = {
+const ADAPTER_REGISTRY: Record<BridgePlatform, AdapterRegistryEntry> = {
   telegram: {
-    create: (creds, onMessage, hooks) => createTelegramAdapter({ token: creds.token, onMessage, onStatus: hooks?.onStatus }),
+    create: (creds, onMessage, hooks) => {
+      const telegramCreds = creds as TelegramCredentials;
+      return makeTelegramAdapter({ token: telegramCreds.token, onMessage, onStatus: hooks?.onStatus });
+    },
     getCredentials: (cfg) => cfg?.enabled && cfg?.token ? { token: cfg.token } : null,
     ownerSessionKey: (userId) => `tg_dm_${userId}`,
   },
   feishu: {
-    create: (creds, onMessage, hooks) => createFeishuAdapter({ appId: creds.appId, appSecret: creds.appSecret, onMessage, onStatus: hooks?.onStatus }),
+    create: (creds, onMessage, hooks) => {
+      const feishuCreds = creds as FeishuCredentials;
+      return makeFeishuAdapter({ appId: feishuCreds.appId, appSecret: feishuCreds.appSecret, onMessage, onStatus: hooks?.onStatus });
+    },
     getCredentials: (cfg) => cfg?.enabled && cfg?.appId && cfg?.appSecret ? { appId: cfg.appId, appSecret: cfg.appSecret } : null,
     ownerSessionKey: (userId) => `fs_dm_${userId}`,
   },
   qq: {
-    create: (creds, onMessage, hooks) => createQQAdapter({
-      appID: creds.appID, appSecret: creds.appSecret, onMessage,
-      dmGuildMap: creds.dmGuildMap,
-      onDmGuildDiscovered: hooks?.onQqDmGuild,
-      onStatus: hooks?.onStatus,
-    }),
+    create: (creds, onMessage, hooks) => {
+      const qqCreds = creds as QQCredentials;
+      return makeQQAdapter({
+        appID: qqCreds.appID,
+        appSecret: qqCreds.appSecret,
+        onMessage,
+        dmGuildMap: qqCreds.dmGuildMap,
+        onDmGuildDiscovered: hooks?.onQqDmGuild,
+        onStatus: hooks?.onStatus,
+      });
+    },
     getCredentials: (cfg) => {
       const secret = cfg?.appSecret || cfg?.token; // 兼容旧版 token 字段
       return cfg?.enabled && cfg?.appID && secret
@@ -47,12 +318,15 @@ const ADAPTER_REGISTRY = {
     ownerSessionKey: (userId) => `qq_dm_${userId}`,
   },
   wechat: {
-    create: (creds, onMessage, hooks) => createWechatAdapter({
-      botToken: creds.botToken,
-      hanaHome: creds.hanaHome,
-      onMessage,
-      onStatus: hooks?.onStatus,
-    }),
+    create: (creds, onMessage, hooks) => {
+      const wechatCreds = creds as WechatCredentials;
+      return makeWechatAdapter({
+        botToken: wechatCreds.botToken,
+        hanaHome: wechatCreds.hanaHome,
+        onMessage,
+        onStatus: hooks?.onStatus,
+      });
+    },
     getCredentials: (cfg) => cfg?.enabled && cfg?.botToken ? { botToken: cfg.botToken, hanaHome: cfg._hanaHome || "" } : null,
     ownerSessionKey: (userId) => `wx_dm_${userId}`,
   },
@@ -74,11 +348,11 @@ const BRIDGE_IDENTITY_LEAK_PATTERNS = [
   /(?:主路|备援|底层模型).{0,120}(?:4090|5090|27B[-\s]*FP8|Claude|Anthropic)/isu,
 ];
 
-function containsBridgeIdentityLeak(text) {
+function containsBridgeIdentityLeak(text: string): boolean {
   return BRIDGE_IDENTITY_LEAK_PATTERNS.some((pattern) => pattern.test(text));
 }
 
-function bridgeIdentityFallback() {
+function bridgeIdentityFallback(): string {
   return "我是 Lynn，由 Lynn 团队提供的 AI 助手；具体运行线路会动态调整。";
 }
 
@@ -86,23 +360,22 @@ function bridgeIdentityFallback() {
  * 增量剥离 <mood>, <pulse>, <reflect>, <tool_code> 标签。
  * 两态状态机（NORMAL / IN_TAG），支持标签跨 delta。
  */
-const STRIP_TAGS = ["mood", "pulse", "reflect", "tool_code"];
+const STRIP_TAGS = ["mood", "pulse", "reflect", "tool_code"] as const;
+type StripTag = typeof STRIP_TAGS[number];
 
 class StreamCleaner {
-  constructor() {
-    this._buf = "";
-    this._inTag = false;
-    this._tagName = null;
-    this.cleaned = "";
-    /** 流式过程中提取到的媒体 URL */
-    this.extractedMedia = [];
-    this._inCodeFence = false;
-    /** 媒体拦截的行缓冲（处理 delta 分片边界） */
-    this._lineBuf = "";
-  }
+  private _buf = "";
+  private _inTag = false;
+  private _tagName: StripTag | null = null;
+  cleaned = "";
+  /** 流式过程中提取到的媒体 URL */
+  extractedMedia: string[] = [];
+  private _inCodeFence = false;
+  /** 媒体拦截的行缓冲（处理 delta 分片边界） */
+  private _lineBuf = "";
 
   /** 喂入 delta，返回可发送的干净文本增量（可能为空） */
-  feed(delta) {
+  feed(delta: string): string {
     this._buf += delta;
     let out = "";
 
@@ -117,7 +390,7 @@ class StreamCleaner {
         this._tagName = null;
       } else {
         // 寻找最近的开标签
-        let best = null;
+        let best: StripTag | null = null;
         let bestIdx = Infinity;
         for (const tag of STRIP_TAGS) {
           const open = `<${tag}>`;
@@ -158,7 +431,7 @@ class StreamCleaner {
    * 使用行缓冲处理 delta 分片边界（如 "MED" + "IA:https://..."）。
    * 只有遇到换行时才处理完整行，未完成的行 hold 在 _lineBuf 中。
    */
-  _interceptMedia(text) {
+  private _interceptMedia(text: string): string {
     if (!text) return text;
 
     // 把新文本追加到行缓冲
@@ -166,9 +439,9 @@ class StreamCleaner {
 
     // 按换行拆分：最后一段如果没有换行，留在 _lineBuf 等下一个 delta
     const parts = this._lineBuf.split("\n");
-    this._lineBuf = parts.pop(); // 最后一段（可能不完整）留着
+    this._lineBuf = parts.pop() ?? ""; // 最后一段（可能不完整）留着
 
-    const cleaned = [];
+    const cleaned: string[] = [];
     for (const line of parts) {
       const processed = this._processLine(line);
       if (processed !== null) cleaned.push(processed);
@@ -178,7 +451,7 @@ class StreamCleaner {
   }
 
   /** 处理一行完整文本，返回 null 表示该行被媒体拦截移除 */
-  _processLine(line) {
+  private _processLine(line: string): string | null {
     const trimmed = line.trim();
     // 追踪 code fence 状态
     if (trimmed.startsWith("```")) {
@@ -211,7 +484,7 @@ class StreamCleaner {
   }
 
   /** 流结束时 flush 行缓冲中剩余的不完整行 */
-  flushLineBuf() {
+  flushLineBuf(): string {
     if (!this._lineBuf) return "";
     const line = this._lineBuf;
     this._lineBuf = "";
@@ -231,24 +504,23 @@ class StreamCleaner {
  *   结构块结束后恢复逐行发送
  */
 class BlockChunker {
-  /**
-   * @param {object} opts
-   * @param {(text: string) => Promise<void>} opts.onFlush  发送一条消息
-   * @param {number} [opts.maxChars=2000]  安全上限：无换行时强制 flush
-   */
-  constructor({ onFlush, maxChars = 2000 }) {
+  private readonly _onFlush: (text: string) => Promise<void>;
+  private readonly _maxChars: number;
+  private _buf = "";
+  private _flushing: Promise<void> = Promise.resolve();
+  private _inCodeFence = false;
+  private _structured = false;
+  private _inSection = false;
+  private _sectionHasContent = false;
+  private _currentLine = "";
+
+  constructor({ onFlush, maxChars = 2000 }: { onFlush: (text: string) => Promise<void>; maxChars?: number }) {
     this._onFlush = onFlush;
     this._maxChars = maxChars;
-    this._buf = "";
-    this._flushing = Promise.resolve();
-    this._inCodeFence = false;
-    this._structured = false;
-    this._inSection = false;
-    this._currentLine = "";
   }
 
   /** 喂入清理后的文本增量 */
-  feed(text) {
+  feed(text: string): void {
     for (let i = 0; i < text.length; i++) {
       const ch = text[i];
       this._buf += ch;
@@ -265,7 +537,7 @@ class BlockChunker {
   }
 
   /** 流结束：flush 剩余 buffer */
-  async finish() {
+  async finish(): Promise<void> {
     await this._flushing;
     const rest = this._buf.trim();
     if (rest) {
@@ -275,7 +547,7 @@ class BlockChunker {
     this._currentLine = "";
   }
 
-  _onLineEnd(line) {
+  private _onLineEnd(line: string): void {
     const stripped = line.replace(/\n$/, '');
     const trimmed = stripped.trim();
     const isEmpty = trimmed === '';
@@ -345,30 +617,30 @@ class BlockChunker {
   }
 
   /** flush 整个 buf */
-  _flushBuf() {
+  private _flushBuf(): void {
     const content = this._buf.trim();
     this._buf = "";
     if (content) {
-      this._flushing = this._flushing.then(() => this._onFlush(content)).catch((err) => {
-        console.error("[BlockChunker] flush error:", err.message);
+      this._flushing = this._flushing.then(() => this._onFlush(content)).catch((err: unknown) => {
+        console.error("[BlockChunker] flush error:", errorMessage(err));
       });
     }
   }
 
   /** flush buf 前 cutAt 个字符，保留剩余 */
-  _flushAt(cutAt) {
+  private _flushAt(cutAt: number): void {
     const content = this._buf.slice(0, cutAt).trim();
     this._buf = this._buf.slice(cutAt);
     if (content) {
-      this._flushing = this._flushing.then(() => this._onFlush(content)).catch((err) => {
-        console.error("[BlockChunker] flush error:", err.message);
+      this._flushing = this._flushing.then(() => this._onFlush(content)).catch((err: unknown) => {
+        console.error("[BlockChunker] flush error:", errorMessage(err));
       });
     }
   }
 }
 
 /** 生成紧凑时间标记：<t>MM-DD HH:mm</t> */
-function timeTag(ts = Date.now()) {
+function timeTag(ts = Date.now()): string {
   const d = new Date(ts);
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
@@ -378,20 +650,23 @@ function timeTag(ts = Date.now()) {
 }
 
 export class BridgeManager {
-  /**
-   * @param {object} opts
-   * @param {import('../../core/engine.js').HanaEngine} opts.engine
-   * @param {import('../../hub/index.js').Hub} opts.hub
-   */
-  constructor({ engine, hub }) {
+  engine: BridgeEngine;
+  _hub: BridgeHub;
+  _platforms: Map<string, BridgePlatformEntry>;
+  _pending: Map<string, PendingBridgeEntry>;
+  _processing: Set<string>;
+  _messageLog: BridgeMessageLogEntry[];
+  _messageLogMax: number;
+  blockStreaming: boolean;
+
+  constructor({ engine, hub }: BridgeManagerDeps) {
     this.engine = engine;
     this._hub = hub;
-    /** @type {Map<string, { adapter, status: string, error?: string }>} */
-    this._platforms = new Map();
+    this._platforms = new Map<string, BridgePlatformEntry>();
     /** per-sessionKey 消息缓冲（debounce + abort） */
-    this._pending = new Map();
+    this._pending = new Map<string, PendingBridgeEntry>();
     /** per-sessionKey 处理锁（防止 debounce 触发和 abort 重发并发） */
-    this._processing = new Set();
+    this._processing = new Set<string>();
     /** 最近消息环形缓冲（最多 200 条） */
     this._messageLog = [];
     this._messageLogMax = 200;
@@ -408,11 +683,12 @@ export class BridgeManager {
   }
 
   /** 读取 preferences 中的 bridge 配置，自动启动已启用的平台 */
-  autoStart() {
+  autoStart(): void {
     const prefs = this.engine.getPreferences();
     const bridge = prefs.bridge || {};
 
-    for (const [platform, spec] of Object.entries(ADAPTER_REGISTRY)) {
+    for (const platform of BRIDGE_PLATFORMS) {
+      const spec = ADAPTER_REGISTRY[platform];
       const cfg = bridge[platform] || {};
       if (platform === "wechat") cfg._hanaHome = this.engine.lynnHome;
       const creds = spec.getCredentials(cfg);
@@ -422,12 +698,10 @@ export class BridgeManager {
 
   /**
    * 从 preferences 配置启动平台（route 层用，不需要知道凭证结构）
-   * @param {string} platform
-   * @param {object} cfg - prefs.bridge[platform] 的完整配置
    */
-  startPlatformFromConfig(platform, cfg) {
+  startPlatformFromConfig(platform: string, cfg: BridgePlatformConfig): void {
+    if (!isBridgePlatform(platform)) return;
     const spec = ADAPTER_REGISTRY[platform];
-    if (!spec) return;
     if (platform === "wechat") cfg._hanaHome = this.engine.lynnHome;
     const creds = spec.getCredentials(cfg);
     if (creds) this.startPlatform(platform, creds);
@@ -435,18 +709,16 @@ export class BridgeManager {
 
   /**
    * 启动指定平台
-   * @param {string} platform
-   * @param {object} credentials
    */
-  async startPlatform(platform, credentials) {
+  async startPlatform(platform: string, credentials: BridgeCredentials): Promise<void> {
     this.stopPlatform(platform);
 
+    if (!isBridgePlatform(platform)) throw new Error(`Unknown platform: ${platform}`);
     const spec = ADAPTER_REGISTRY[platform];
-    if (!spec) throw new Error(`Unknown platform: ${platform}`);
 
     try {
-      const onMessage = (msg) => this._handleMessage(platform, msg);
-      const hooks = {
+      const onMessage: BridgeMessageHandler = (msg) => this._handleMessage(platform, msg);
+      const hooks: BridgeAdapterHooks = {
         onEvent: (evt) => this._hub.eventBus.emit(evt, null),
         onQqDmGuild: (userId, guildId) => this._persistQqDmGuild(userId, guildId),
         onStatus: (status, error) => {
@@ -467,20 +739,21 @@ export class BridgeManager {
       debugLog()?.log("bridge", `${platform} started`);
 
       this._emitStatus(platform, initialStatus);
-    } catch (err) {
-      console.error(`[bridge] ${platform} 启动失败:`, err.message);
-      debugLog()?.error("bridge", `${platform} start failed: ${err.message}`);
-      this._platforms.set(platform, { adapter: null, status: "error", error: err.message });
-      this._emitStatus(platform, "error", err.message);
+    } catch (err: unknown) {
+      const msg = errorMessage(err);
+      console.error(`[bridge] ${platform} 启动失败:`, msg);
+      debugLog()?.error("bridge", `${platform} start failed: ${msg}`);
+      this._platforms.set(platform, { adapter: null, status: "error", error: msg });
+      this._emitStatus(platform, "error", msg);
     }
   }
 
   /** 持久化 QQ userId→guildId 映射到 preferences */
-  _persistQqDmGuild(userId, guildId) {
+  _persistQqDmGuild(userId: string, guildId: string): void {
     try {
       const prefs = this.engine.getPreferences();
       const qq = prefs.bridge?.qq || {};
-      const map = qq.dmGuildMap || {};
+      const map: Record<string, string> = qq.dmGuildMap || {};
       if (map[userId] === guildId) return;
       map[userId] = guildId;
       qq.dmGuildMap = map;
@@ -490,14 +763,14 @@ export class BridgeManager {
       // 立即写入（PreferencesManager 内存缓存保证高效）。
       // 旧实现 debounce flush 时重新 getPreferences() 导致丢失累积修改。
       this.engine.savePreferences(prefs);
-    } catch (err) {
-      console.error("[bridge] persist QQ dmGuildMap failed:", err.message);
+    } catch (err: unknown) {
+      console.error("[bridge] persist QQ dmGuildMap failed:", errorMessage(err));
       errorBus.report(new AppError('BRIDGE_SEND_FAILED', { cause: err, context: { platform: 'qq', operation: 'flush dmGuildMap' } }));
     }
   }
 
   /** 停止指定平台 */
-  stopPlatform(platform) {
+  stopPlatform(platform: string): void {
     const entry = this._platforms.get(platform);
     if (!entry) return;
 
@@ -511,7 +784,7 @@ export class BridgeManager {
   }
 
   /** 停止所有平台 */
-  stopAll() {
+  stopAll(): void {
     const platforms = [...this._platforms.keys()];
     for (const platform of platforms) {
       this.stopPlatform(platform);
@@ -519,8 +792,8 @@ export class BridgeManager {
   }
 
   /** 获取所有平台状态 */
-  getStatus() {
-    const result = {};
+  getStatus(): Record<string, { status: BridgeStatus; error: string | null }> {
+    const result: Record<string, { status: BridgeStatus; error: string | null }> = {};
     for (const [platform, entry] of this._platforms) {
       result[platform] = { status: entry.status, error: entry.error || null };
     }
@@ -533,10 +806,11 @@ export class BridgeManager {
    * 群聊：直接发送，不 debounce 不 abort（轻量 guest 快速回复）
    * 私聊：debounce 聚合 → 如正在处理则 abort → 合并发送
    */
-  async _handleMessage(platform, msg) {
+  async _handleMessage(platform: string, msg: BridgeMessagePayload): Promise<void> {
     const { sessionKey, text, senderName, avatarUrl, userId, isGroup, chatId, attachments } = msg;
     const entry = this._platforms.get(platform);
     if (!entry?.adapter) return;
+    const safeAttachments = attachments ?? [];
 
     // ── 白名单检查：如果配置了白名单，拒绝非白名单用户 ──
     if (!this._isAllowed(platform, userId)) {
@@ -544,13 +818,13 @@ export class BridgeManager {
       return;
     }
 
-    const hasAttachments = attachments?.length > 0;
-    debugLog()?.log("bridge", `← ${platform} ${isGroup ? "group" : "dm"} (${text.length} chars${hasAttachments ? `, ${attachments.length} attachment(s)` : ""})`);
+    const hasAttachments = safeAttachments.length > 0;
+    debugLog()?.log("bridge", `← ${platform} ${isGroup ? "group" : "dm"} (${text.length} chars${hasAttachments ? `, ${safeAttachments.length} attachment(s)` : ""})`);
 
     // 广播收到的消息
     this._pushMessage({
       platform, direction: "in", sessionKey,
-      sender: senderName || "用户", text: text || (hasAttachments ? `[${attachments.length} 个附件]` : ""),
+      sender: senderName || "用户", text: text || (hasAttachments ? `[${safeAttachments.length} 个附件]` : ""),
       isGroup, ts: Date.now(),
     });
 
@@ -584,7 +858,7 @@ export class BridgeManager {
       this._pending.set(sessionKey, pending);
     }
     pending.lines.push(line);
-    if (hasAttachments) pending.attachments.push(...attachments);
+    if (hasAttachments) pending.attachments.push(...safeAttachments);
     Object.assign(pending, { platform, chatId, senderName, avatarUrl, userId, isGroup, isOwner });
 
     const isActive = this.engine.isBridgeSessionStreaming(sessionKey);
@@ -596,17 +870,17 @@ export class BridgeManager {
   /**
    * 下载附件 Buffer（通用：优先 URL 直接下载，否则走 adapter 平台 API）
    */
-  async _downloadAttachment(adapter, att) {
-    if (att.url) return downloadMedia(att.url);
+  async _downloadAttachment(adapter: BridgeAdapter | null | undefined, att: BridgeAttachment): Promise<Buffer | null> {
+    if (att.url) return downloadMedia(att.url) as Promise<Buffer>;
     if (att.platformRef && att._messageId && adapter?.downloadFile) {
       return adapter.downloadFile(att._messageId, att.platformRef);
     }
     return null;
   }
 
-  async _resolveAttachments(platform, attachments) {
-    const images = [];
-    const notes = [];
+  async _resolveAttachments(platform: string, attachments?: BridgeAttachment[]): Promise<ResolvedAttachments> {
+    const images: BridgePromptImage[] = [];
+    const notes: string[] = [];
     if (!attachments?.length) return { images, textNotes: "" };
 
     const entry = this._platforms.get(platform);
@@ -615,9 +889,9 @@ export class BridgeManager {
     for (const att of attachments) {
       try {
         if (att.type === "image") {
-          let buffer;
+          let buffer: Buffer | null | undefined;
           if (att.url) {
-            buffer = await downloadMedia(att.url);
+            buffer = await downloadMedia(att.url) as Buffer;
           } else if (att.platformRef && adapter?.downloadImage) {
             buffer = await adapter.downloadImage(att.platformRef);
           }
@@ -641,8 +915,8 @@ export class BridgeManager {
             notes.push(`[收到文件: ${filename}${size}]`);
           }
         }
-      } catch (err) {
-        debugLog()?.warn("bridge", `附件解析失败: ${err.message}`);
+      } catch (err: unknown) {
+        debugLog()?.warn("bridge", `附件解析失败: ${errorMessage(err)}`);
         notes.push(`[附件加载失败: ${att.filename || att.type}]`);
       }
     }
@@ -653,7 +927,7 @@ export class BridgeManager {
    * 尝试将文件附件作为文本读取。
    * 仅对文本类扩展名且大小 ≤ 1MB 的文件生效，返回 string 或 null。
    */
-  async _tryReadTextFile(adapter, att) {
+  async _tryReadTextFile(adapter: BridgeAdapter | null | undefined, att: BridgeAttachment): Promise<string | null> {
     const TEXT_EXTENSIONS = new Set([
       "txt", "md", "markdown", "json", "csv", "tsv", "xml", "yaml", "yml",
       "toml", "ini", "cfg", "conf", "log", "sql", "sh", "bash", "zsh",
@@ -682,13 +956,20 @@ export class BridgeManager {
       if (sample.includes(0x00)) return null;
 
       return buffer.toString("utf-8");
-    } catch (err) {
-      debugLog()?.warn("bridge", `文件文本读取失败: ${err.message}`);
+    } catch (err: unknown) {
+      debugLog()?.warn("bridge", `文件文本读取失败: ${errorMessage(err)}`);
       return null;
     }
   }
 
-  async _flushGroupMessage(platform, chatId, sessionKey, line, meta, attachments) {
+  async _flushGroupMessage(
+    platform: string,
+    chatId: string,
+    sessionKey: string,
+    line: string,
+    meta: BridgeMessageMeta,
+    attachments?: BridgeAttachment[],
+  ): Promise<void> {
     const entry = this._platforms.get(platform);
     if (!entry?.adapter) return;
 
@@ -713,11 +994,11 @@ export class BridgeManager {
       if (reply && entry?.adapter) {
         const cleaned = this._cleanReplyForPlatform(reply);
         // batch 模式：提取媒体
-        const { text: textOnly, mediaUrls } = splitMediaFromOutput(cleaned);
+        const { text: textOnly, mediaUrls } = splitMediaFromOutput(cleaned) as SplitMediaResult;
         if (textOnly.trim()) await entry.adapter.sendReply(chatId, textOnly);
         for (const url of mediaUrls) {
           try { await this._sendMediaItem(entry.adapter, chatId, url); }
-          catch (err) { debugLog()?.warn("bridge", `media send failed: ${err.message} (${url.slice(0, 60)})`); }
+          catch (err: unknown) { debugLog()?.warn("bridge", `media send failed: ${errorMessage(err)} (${url.slice(0, 60)})`); }
         }
         debugLog()?.log("bridge", `→ ${platform} group reply (${cleaned.length} chars)`);
         this._pushMessage({
@@ -726,10 +1007,11 @@ export class BridgeManager {
           isGroup: true, ts: Date.now(),
         });
       }
-    } catch (err) {
-      if (!err.message?.includes("aborted")) {
-        console.error(`[bridge] ${platform} 群聊消息处理失败:`, err.message);
-        debugLog()?.error("bridge", `${platform} group message failed: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = errorMessage(err);
+      if (!msg.includes("aborted")) {
+        console.error(`[bridge] ${platform} 群聊消息处理失败:`, msg);
+        debugLog()?.error("bridge", `${platform} group message failed: ${msg}`);
       }
     }
   }
@@ -737,7 +1019,7 @@ export class BridgeManager {
   /**
    * debounce 到期：合并缓冲消息并发送给 LLM
    */
-  async _flushPending(sessionKey) {
+  async _flushPending(sessionKey: string): Promise<void> {
     const pending = this._pending.get(sessionKey);
     if (!pending || pending.lines.length === 0) return;
 
@@ -775,8 +1057,8 @@ export class BridgeManager {
     const useBlockStream = canStream && this.blockStreaming;
     const useDraft = canStream && !this.blockStreaming && !!adapter?.sendDraft;
 
-    let cleaner = null;
-    let chunker = null;
+    let cleaner: StreamCleaner | null = null;
+    let chunker: BlockChunker | null = null;
     let blockSentAny = false;
     let lastDraftTs = 0;
     let draftFailed = false;
@@ -788,13 +1070,14 @@ export class BridgeManager {
       chunker = new BlockChunker({
         onFlush: async (text) => {
           blockSentAny = true;
-          await adapter.sendBlockReply(chatId, text);
+          await adapter!.sendBlockReply!(chatId, text);
         },
       });
     }
 
-    const onDelta = canStream ? (_delta) => {
+    const onDelta: ((delta: string) => void) | undefined = canStream ? (_delta: string) => {
       if (useBlockStream) {
+        if (!cleaner || !chunker) return;
         const inc = cleaner.feed(_delta);
         if (inc) chunker.feed(inc);
       } else if (useDraft) {
@@ -805,12 +1088,12 @@ export class BridgeManager {
         if (now - lastDraftTs < THROTTLE) return;
         if (!cleaner.cleaned.trim()) return;
         lastDraftTs = now;
-        adapter.sendDraft(chatId, cleaner.cleaned).catch(() => { draftFailed = true; });
+        adapter!.sendDraft!(chatId, cleaner.cleaned).catch(() => { draftFailed = true; });
       }
     } : undefined;
 
     try {
-      const reply = await this._hub.send(merged, {
+      let reply = await this._hub.send(merged, {
         sessionKey,
         agentId,
         role: isOwner ? "owner" : "guest",
@@ -819,10 +1102,10 @@ export class BridgeManager {
         systemAppend: BRIDGE_IDENTITY_GUARD,
         onDelta,
         images: images.length ? images : undefined,
-      });
+      }) as BridgeExternalReply;
 
       // bridge-session 返回 error 标记时，发送简短错误提示给用户
-      if (reply && typeof reply === "object" && reply.__bridgeError) {
+      if (isBridgeErrorReply(reply)) {
         if (adapter) {
           const errMsg = `[Error] ${reply.message || "Unable to process message"}`;
           try { await adapter.sendReply(chatId, errMsg); } catch {}
@@ -830,9 +1113,9 @@ export class BridgeManager {
         reply = null;
       }
 
-      if (reply && adapter) {
+      if (typeof reply === "string" && reply && adapter) {
         const cleaned = this._cleanReplyForPlatform(reply);
-        let allMediaUrls = [];
+        let allMediaUrls: string[] = [];
 
         // flush StreamCleaner 行缓冲中剩余的不完整行
         if (cleaner) {
@@ -855,12 +1138,12 @@ export class BridgeManager {
           allMediaUrls = cleaner.extractedMedia || [];
           const textOnly = cleaner.cleaned.trim();
           if (textOnly) {
-            try { await adapter.sendDraft(chatId, textOnly); }
+            try { await adapter.sendDraft!(chatId, textOnly); }
             catch { await adapter.sendReply(chatId, textOnly); }
           }
         } else {
           // batch 模式：提取媒体
-          const { text: textOnly, mediaUrls } = splitMediaFromOutput(cleaned);
+          const { text: textOnly, mediaUrls } = splitMediaFromOutput(cleaned) as SplitMediaResult;
           allMediaUrls = mediaUrls;
           if (textOnly.trim()) await adapter.sendReply(chatId, textOnly);
         }
@@ -868,7 +1151,7 @@ export class BridgeManager {
         // 统一发送所有提取到的媒体
         for (const url of allMediaUrls) {
           try { await this._sendMediaItem(adapter, chatId, url); }
-          catch (err) { debugLog()?.warn("bridge", `media send failed: ${err.message} (${url.slice(0, 60)})`); }
+          catch (err: unknown) { debugLog()?.warn("bridge", `media send failed: ${errorMessage(err)} (${url.slice(0, 60)})`); }
         }
 
         debugLog()?.log("bridge", `→ ${platform} reply (${cleaned.length} chars, mode: ${useBlockStream ? "block" : useDraft ? "draft" : "batch"}${allMediaUrls.length ? `, ${allMediaUrls.length} media` : ""})`);
@@ -878,10 +1161,11 @@ export class BridgeManager {
           isGroup, ts: Date.now(),
         });
       }
-    } catch (err) {
-      if (!err.message?.includes("aborted")) {
-        console.error(`[bridge] ${platform} 消息处理失败:`, err.message);
-        debugLog()?.error("bridge", `${platform} message handling failed: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = errorMessage(err);
+      if (!msg.includes("aborted")) {
+        console.error(`[bridge] ${platform} 消息处理失败:`, msg);
+        debugLog()?.error("bridge", `${platform} message handling failed: ${msg}`);
       }
     } finally {
       // 确保 chunker 的异步 flush 链完成，即使 hub.send 中途抛错
@@ -903,7 +1187,7 @@ export class BridgeManager {
    * 发送单个媒体项（URL 或本地路径）到平台
    * 本地路径走 sendMediaBuffer，URL 走 sendMedia
    */
-  async _sendMediaItem(adapter, chatId, source) {
+  async _sendMediaItem(adapter: BridgeAdapter, chatId: string, source: string): Promise<void> {
     const isLocal = path.isAbsolute(source) || source.startsWith("file://");
     if (isLocal && adapter.sendMediaBuffer) {
       const buffer = await downloadMedia(source); // downloadMedia 已有路径安全校验
@@ -918,11 +1202,11 @@ export class BridgeManager {
   }
 
   /** 判断消息发送者是否为 owner */
-  _isOwner(platform, userId) {
+  _isOwner(platform: string, userId?: string): boolean {
     if (!userId) return false;
     const prefs = this.engine.getPreferences();
     const ownerId = prefs.bridge?.owner?.[platform];
-    return ownerId && ownerId === userId;
+    return !!ownerId && ownerId === userId;
   }
 
   /**
@@ -934,7 +1218,7 @@ export class BridgeManager {
    *
    * @returns {boolean} true 表示允许处理该消息
    */
-  _isAllowed(platform, userId) {
+  _isAllowed(platform: string, userId?: string): boolean {
     const prefs = this.engine.getPreferences();
     const list = prefs.bridge?.allowlist?.[platform];
     // 未配置白名单 → 放行所有
@@ -942,7 +1226,7 @@ export class BridgeManager {
     // owner 始终放行
     if (this._isOwner(platform, userId)) return true;
     // 检查白名单
-    return list.includes(userId);
+    return !!userId && list.includes(userId);
   }
 
   /**
@@ -951,7 +1235,7 @@ export class BridgeManager {
    * - 去除 <tool_code> 标签
    * - 去除 pulse / reflect 区块
    */
-  _cleanReplyForPlatform(text) {
+  _cleanReplyForPlatform(text: string): string {
     let cleaned = text;
     // 内省标签：backtick 和 XML 两种格式
     cleaned = cleaned.replace(/```(?:mood|pulse|reflect)[\s\S]*?```\n*/gi, "");
@@ -967,10 +1251,8 @@ export class BridgeManager {
    * 主动发送消息给 owner（不需要用户先发消息）
    * 用于心跳/cron 升级到 IM 的场景。
    *
-   * @param {string} text - 要发送的文本（会自动 clean mood/pulse 标签）
-   * @returns {{ platform: string, chatId: string } | null} 发送成功返回平台信息，失败返回 null
    */
-  async sendProactive(text) {
+  async sendProactive(text: string): Promise<BridgeProactiveResult | null> {
     const prefs = this.engine.getPreferences();
     const ownerIds = prefs.bridge?.owner || {};
     const cleaned = this._cleanReplyForPlatform(text);
@@ -991,7 +1273,7 @@ export class BridgeManager {
         continue;
       }
 
-      const spec = ADAPTER_REGISTRY[platform];
+      const spec = isBridgePlatform(platform) ? ADAPTER_REGISTRY[platform] : null;
       try {
         await entry.adapter.sendReply(chatId, cleaned);
         debugLog()?.log("bridge", `→ ${platform} proactive to owner (${cleaned.length} chars)`);
@@ -1004,9 +1286,10 @@ export class BridgeManager {
         });
 
         return { platform, chatId, sessionKey };
-      } catch (err) {
-        console.error(`[bridge] proactive send failed (${platform}): ${err.message}`);
-        debugLog()?.error("bridge", `proactive send failed (${platform}): ${err.message}`);
+      } catch (err: unknown) {
+        const msg = errorMessage(err);
+        console.error(`[bridge] proactive send failed (${platform}): ${msg}`);
+        debugLog()?.error("bridge", `proactive send failed (${platform}): ${msg}`);
       }
     }
 
@@ -1015,11 +1298,8 @@ export class BridgeManager {
 
   /**
    * 从桌面端发送本地文件到 bridge 平台
-   * @param {string} platform
-   * @param {string} chatId
-   * @param {string} filePath - 已校验过安全性的本地文件路径
    */
-  async sendMediaFile(platform, chatId, filePath) {
+  async sendMediaFile(platform: string, chatId: string, filePath: string): Promise<void> {
     const entry = this._platforms.get(platform);
     if (!entry?.adapter) throw new Error(`platform ${platform} not connected`);
 
@@ -1046,7 +1326,7 @@ export class BridgeManager {
   }
 
   /** 广播状态到前端（通过 Hub EventBus） */
-  _emitStatus(platform, status, error) {
+  _emitStatus(platform: string, status: BridgeStatus, error?: string | null): void {
     this._hub.eventBus.emit(
       { type: "bridge_status", platform, status, error: error || null },
       null,
@@ -1054,7 +1334,7 @@ export class BridgeManager {
   }
 
   /** 记录消息并广播到前端 */
-  _pushMessage(entry) {
+  _pushMessage(entry: BridgeMessageLogEntry): void {
     this._messageLog.push(entry);
     if (this._messageLog.length > this._messageLogMax) {
       this._messageLog.shift();
@@ -1066,7 +1346,7 @@ export class BridgeManager {
   }
 
   /** 获取最近消息日志（供 REST API 使用） */
-  getMessages(limit = 50) {
+  getMessages(limit = 50): BridgeMessageLogEntry[] {
     return this._messageLog.slice(-limit);
   }
 }
