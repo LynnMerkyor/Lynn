@@ -24,7 +24,7 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 
 const GUARDED_FILES = [
   "core/session-coordinator.js",
-  "core/bridge-session-manager.js",
+  "core/bridge-session-manager.ts",
 ];
 
 function readSource(relPath) {
@@ -108,7 +108,7 @@ describe("[VISION-ARG-FIX] pi-sdk prompt image-argument regression guard", () =>
     const hasOptionsSig = /prompt\s*\(\s*input\s*:\s*string\s*,\s*(?:options|opts)\?\s*:/.test(src);
     expect(
       hasArraySig || hasOptionsSig,
-      "@mariozechner/pi-agent-core 的 prompt() 签名已变为全新格式。请重新审视 core/session-coordinator.js 和 core/bridge-session-manager.js 的 toSessionPromptOptions 逻辑。",
+      "@mariozechner/pi-agent-core 的 prompt() 签名已变为全新格式。请重新审视 core/session-coordinator.js 和 core/bridge-session-manager.ts 的 toSessionPromptOptions 逻辑。",
     ).toBe(true);
   });
 });

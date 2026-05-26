@@ -11,6 +11,15 @@ import {
   SessionManager,
   SettingsManager,
 } from "@mariozechner/pi-coding-agent";
+import type {
+  AgentSession,
+  AgentSessionEvent,
+  CreateAgentSessionOptions,
+  PromptOptions,
+  ResourceLoader,
+  ToolDefinition,
+} from "@mariozechner/pi-coding-agent";
+import type { Api, ImageContent, Model } from "@mariozechner/pi-ai";
 import { debugLog } from "../lib/debug-log.js";
 import { READ_ONLY_BUILTIN_TOOLS } from "./config-coordinator.js";
 import { t, getLocale } from "../server/i18n.js";
@@ -46,14 +55,154 @@ const LOCAL_QWEN35_MODEL_IDS = new Set([
   "qwen35-9b-q4km-imatrix",
 ]);
 
-function isLocalQwen35Model(modelOrId, provider) {
+interface BridgeModel extends Model<Api> {
+  [key: string]: unknown;
+}
+
+type BridgeTool = { name: string; [key: string]: unknown };
+type BridgeModelRef = string | { id?: string | null; provider?: string | null; [key: string]: unknown } | null | undefined;
+type BridgeOwnerModelReason = "missing_current" | "agent_chat_brain" | "brain_default_for_bridge" | "brain_default_for_bridge_unavailable";
+
+interface BridgeOwnerModelResolution {
+  model: BridgeModel | null;
+  reason: BridgeOwnerModelReason;
+}
+
+export interface BridgeIndexEntry {
+  file?: string;
+  name?: string;
+  avatarUrl?: string;
+  userId?: string;
+  [key: string]: unknown;
+}
+
+export type BridgeIndex = Record<string, string | BridgeIndexEntry>;
+export type BridgeMessageMeta = Omit<BridgeIndexEntry, "file">;
+
+export interface BridgePromptInputImage {
+  type?: "image" | string;
+  data: string;
+  mimeType?: string | null;
+  [key: string]: unknown;
+}
+
+interface BridgePromptImage extends ImageContent {
+  source: {
+    type: "base64";
+    mediaType: string;
+    data: string;
+  };
+}
+
+export interface BridgePromptOptions extends Omit<PromptOptions, "images"> {
+  images: BridgePromptImage[];
+}
+
+export interface BridgeExternalMessageOptions {
+  guest?: boolean;
+  contextTag?: string;
+  systemAppend?: string;
+  onDelta?: (delta: string, capturedText: string) => void;
+  agentId?: string;
+  images?: BridgePromptInputImage[];
+}
+
+export interface BridgeExternalMessageError {
+  __bridgeError: true;
+  message: string;
+}
+
+export type BridgeExternalMessageResult = string | BridgeExternalMessageError;
+
+interface BridgeAgentConfig {
+  models?: {
+    chat?: BridgeModelRef;
+    overrides?: unknown;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+interface BridgeAgent {
+  sessionDir: string;
+  yuanPrompt?: string;
+  publicIshiki?: string;
+  userName?: string;
+  agentName?: string;
+  config?: BridgeAgentConfig;
+  [key: string]: unknown;
+}
+
+interface BridgePreferences {
+  bridge?: {
+    readOnly?: boolean;
+    [key: string]: unknown;
+  };
+  thinking_level?: string;
+  [key: string]: unknown;
+}
+
+interface BridgeModelManager {
+  availableModels: BridgeModel[];
+  authStorage?: CreateAgentSessionOptions["authStorage"];
+  modelRegistry?: CreateAgentSessionOptions["modelRegistry"];
+  resolveThinkingLevel(level: string, model: BridgeModel): string;
+}
+
+interface BridgeToolsBuildOptions {
+  workspace?: string;
+  getSessionPath?: () => string | null;
+}
+
+interface BridgeToolsResult {
+  tools: BridgeTool[];
+  customTools?: ToolDefinition[];
+}
+
+export interface BridgeSessionManagerDeps {
+  getAgent: () => BridgeAgent;
+  getAgentById?: (id: string) => BridgeAgent | null | undefined;
+  getModelManager: () => BridgeModelManager;
+  getResourceLoader: () => ResourceLoader;
+  getPreferences: () => BridgePreferences;
+  buildTools: (cwd: string, customTools?: unknown, opts?: BridgeToolsBuildOptions) => BridgeToolsResult;
+  getHomeCwd: () => string | null | undefined;
+  resolveModelOverrides?: (model: unknown, overrides: unknown) => { vision?: boolean } | null | undefined;
+}
+
+type BridgeSessionOptions = Pick<
+  BridgeCreateAgentSessionOptions,
+  "model" | "thinkingLevel" | "resourceLoader" | "tools" | "customTools" | "settingsManager"
+>;
+
+type BridgeCreateAgentSessionOptions = Omit<
+  CreateAgentSessionOptions,
+  "model" | "thinkingLevel" | "tools" | "customTools"
+> & {
+  model: BridgeModel;
+  thinkingLevel?: string;
+  tools?: BridgeTool[];
+  customTools?: ToolDefinition[];
+  requestHeaders?: Record<string, string>;
+  requestMetadata?: Record<string, unknown>;
+};
+
+const createBridgeAgentSession = createAgentSession as (
+  options: BridgeCreateAgentSessionOptions,
+) => ReturnType<typeof createAgentSession>;
+
+function isLocalQwen35Model(modelOrId: BridgeModelRef, provider?: string | null): boolean {
   const modelId = typeof modelOrId === "object" ? modelOrId?.id : modelOrId;
   const modelProvider = typeof modelOrId === "object" ? modelOrId?.provider : provider;
   return LOCAL_QWEN35_PROVIDER_IDS.has(String(modelProvider || "").trim())
     || LOCAL_QWEN35_MODEL_IDS.has(String(modelId || "").trim());
 }
 
-function resolveBridgeOwnerModel(availableModels, ownerModelId, ownerProvider) {
+function resolveBridgeOwnerModel(
+  availableModels: BridgeModel[],
+  ownerModelId: string,
+  ownerProvider?: string,
+): BridgeOwnerModelResolution {
   const requestedLocal = isLocalQwen35Model(ownerModelId, ownerProvider);
   const currentModel = findModel(availableModels, ownerModelId, ownerProvider);
   if (!currentModel && !requestedLocal) {
@@ -81,15 +230,15 @@ function resolveBridgeOwnerModel(availableModels, ownerModelId, ownerProvider) {
   };
 }
 
-function getSteerPrefix() {
+function getSteerPrefix(): string {
   const isZh = getLocale().startsWith("zh");
   return isZh ? "（插话，无需 MOOD）\n" : "(Interjection, no MOOD needed)\n";
 }
 
-function toSessionPromptOptions(images) {
+function toSessionPromptOptions(images?: BridgePromptInputImage[]): BridgePromptOptions | undefined {
   if (!images?.length) return undefined;
   return {
-    images: images.map((img) => ({
+    images: images.map((img): BridgePromptImage => ({
       type: "image",
       // pi-coding-agent 文档使用 source.base64，
       // 但下游 pi-ai 仍会从顶层 data/mimeType 取值。
@@ -105,7 +254,7 @@ function toSessionPromptOptions(images) {
   };
 }
 
-function buildGuestSafetyPrompt(ownerName = "User") {
+function buildGuestSafetyPrompt(ownerName = "User"): string {
   const isZh = getLocale().startsWith("zh");
   if (isZh) {
     return [
@@ -136,32 +285,38 @@ function buildGuestSafetyPrompt(ownerName = "User") {
   ].join("\n");
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+interface BridgeAttemptOptions {
+  streamDeltas?: boolean;
+}
+
+interface BridgeAttemptResult {
+  capturedText: string;
+  sawToolCall: boolean;
+}
+
 export class BridgeSessionManager {
-  /**
-   * @param {object} deps - 注入依赖（不持有 engine 引用）
-   * @param {() => object} deps.getAgent - 返回当前 agent（需 sessionDir, yuanPrompt）
-   * @param {(id: string) => object|null} deps.getAgentById - 按 ID 获取 agent
-   * @param {() => import('./model-manager.js').ModelManager} deps.getModelManager
-   * @param {() => object} deps.getResourceLoader
-   * @param {() => object} deps.getPreferences
-   * @param {(cwd: string, customTools?, opts?) => {tools: any[], customTools: any[]}} deps.buildTools
-   * @param {() => string} deps.getHomeCwd
-   */
-  constructor(deps) {
+  private readonly _deps: BridgeSessionManagerDeps;
+  private readonly _activeSessions: Map<string, AgentSession>;
+
+  constructor(deps: BridgeSessionManagerDeps) {
     this._deps = deps;
     this._activeSessions = new Map();
   }
 
   /** 活跃 bridge sessions（供 bridge-manager abort 用） */
-  get activeSessions() { return this._activeSessions; }
+  get activeSessions(): Map<string, AgentSession> { return this._activeSessions; }
 
   /** 指定 bridge session 是否正在 streaming */
-  isSessionStreaming(sessionKey) {
+  isSessionStreaming(sessionKey: string): boolean {
     return this._activeSessions.get(sessionKey)?.isStreaming ?? false;
   }
 
   /** abort 指定 bridge session（如果正在 streaming） */
-  async abortSession(sessionKey) {
+  async abortSession(sessionKey: string): Promise<boolean> {
     const session = this._activeSessions.get(sessionKey);
     if (!session?.isStreaming) return false;
     await session.abort();
@@ -169,7 +324,7 @@ export class BridgeSessionManager {
   }
 
   /** bridge 索引文件路径 */
-  _indexPath(agent) {
+  _indexPath(agent?: BridgeAgent): string {
     const a = agent || this._deps.getAgent();
     return path.join(a.sessionDir, "bridge", "bridge-sessions.json");
   }
@@ -178,7 +333,7 @@ export class BridgeSessionManager {
    * 启动时 sanity check：扫描 bridge-index，清理孤儿条目
    * （有 file 引用但 JSONL 文件已不存在的）
    */
-  reconcile() {
+  reconcile(): void {
     const index = this.readIndex();
     const bridgeDir = path.join(this._deps.getAgent().sessionDir, "bridge");
     let cleaned = 0;
@@ -203,12 +358,12 @@ export class BridgeSessionManager {
   }
 
   /** 读取 bridge session 索引 */
-  readIndex(agent) {
-    return safeReadJSON(this._indexPath(agent), {});
+  readIndex(agent?: BridgeAgent): BridgeIndex {
+    return safeReadJSON<BridgeIndex, BridgeIndex>(this._indexPath(agent), {});
   }
 
   /** 写入 bridge session 索引 */
-  writeIndex(index, agent) {
+  writeIndex(index: BridgeIndex, agent?: BridgeAgent): void {
     const dir = path.dirname(this._indexPath(agent));
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(this._indexPath(agent), JSON.stringify(index, null, 2) + "\n", "utf-8");
@@ -216,13 +371,13 @@ export class BridgeSessionManager {
 
   /**
    * 执行外部平台消息：找到或创建持久 session，prompt 并捕获回复文本
-   * @param {string} prompt - 格式化后的用户消息
-   * @param {string} sessionKey - 会话标识（如 tg_dm_12345）
-   * @param {object} [meta] - 元数据（name, avatarUrl, userId）
-   * @param {object} [opts] - { guest: boolean, contextTag?: string, systemAppend?: string, onDelta? }
-   * @returns {Promise<string|null>} agent 的回复文本
    */
-  async executeExternalMessage(prompt, sessionKey, meta, opts = {}) {
+  async executeExternalMessage(
+    prompt: string,
+    sessionKey: string,
+    meta?: BridgeMessageMeta | null,
+    opts: BridgeExternalMessageOptions = {},
+  ): Promise<BridgeExternalMessageResult> {
     // 优先用调用方传入的 agentId，避免 debounce 窗口内切 agent 导致路由到错误 agent
     const agent = (opts.agentId && this._deps.getAgentById?.(opts.agentId)) || this._deps.getAgent();
     const mm = this._deps.getModelManager();
@@ -238,7 +393,7 @@ export class BridgeSessionManager {
     const existingPath = existingFile ? path.join(bridgeDir, existingFile) : null;
 
     try {
-      let mgr;
+      let mgr: SessionManager | null = null;
       if (existingPath) {
         try {
           mgr = SessionManager.open(existingPath, sessionDir);
@@ -251,7 +406,7 @@ export class BridgeSessionManager {
         mgr = SessionManager.create(homeCwd, sessionDir);
       }
 
-      let sessionOpts;
+      let sessionOpts: BridgeSessionOptions;
       // MEDIA 协议指令（追加到 bridge 场景的系统提示）
       const mediaInstruction = "当你需要发送媒体文件（图片、视频、音频、文件）时，在回复中单独一行写 MEDIA:<url>，例如：\nMEDIA:https://example.com/photo.jpg\n不要把 MEDIA: 写在代码块里。一行一个。";
 
@@ -272,14 +427,14 @@ export class BridgeSessionManager {
         ].join("\n");
         const parts = [yuanBase, pubIshiki, lynnIdentityPrompt, guestSafetyPrompt, opts.contextTag, opts.systemAppend, mediaInstruction].filter(Boolean);
         const guestPrompt = parts.join("\n\n");
-        const tempResourceLoader = Object.create(this._deps.getResourceLoader());
+        const tempResourceLoader = Object.create(this._deps.getResourceLoader()) as ResourceLoader;
         tempResourceLoader.getSystemPrompt = () => guestPrompt;
         tempResourceLoader.getSkills = () => ({ skills: [], diagnostics: [] });
 
         // 使用 agent 配置的模型，而非 defaultModel
         const chatRef = agent.config?.models?.chat;
         const chatModelId = typeof chatRef === "object" ? chatRef?.id : chatRef;
-        const chatProvider = typeof chatRef === "object" ? chatRef?.provider : undefined;
+        const chatProvider = typeof chatRef === "object" ? chatRef?.provider || undefined : undefined;
         if (!chatModelId) {
           throw new Error(t("error.bridgeAgentNoChatModel", { name: agent.agentName }));
         }
@@ -324,7 +479,7 @@ export class BridgeSessionManager {
         // 使用 agent 配置的模型
         const ownerRef = agent.config?.models?.chat;
         const ownerModelId = typeof ownerRef === "object" ? ownerRef?.id : ownerRef;
-        const ownerProvider = typeof ownerRef === "object" ? ownerRef?.provider : undefined;
+        const ownerProvider = typeof ownerRef === "object" ? ownerRef?.provider || undefined : undefined;
         if (!ownerModelId) {
           throw new Error(t("error.bridgeAgentNoChatModel", { name: agent.agentName }));
         }
@@ -345,9 +500,9 @@ export class BridgeSessionManager {
 
         // 包装 resourceLoader 追加 MEDIA 协议指令
         const baseRL = this._deps.getResourceLoader();
-        const ownerRL = Object.create(baseRL);
-        const baseGetSP = baseRL.getSystemPrompt.bind(baseRL);
-        ownerRL.getSystemPrompt = (...args) => {
+        const ownerRL = Object.create(baseRL) as ResourceLoader;
+        const baseGetSP = baseRL.getSystemPrompt.bind(baseRL) as (...args: unknown[]) => string | undefined;
+        ownerRL.getSystemPrompt = (...args: unknown[]) => {
           const sp = baseGetSP(...args);
           return [sp, opts.systemAppend, mediaInstruction].filter(Boolean).join("\n\n");
         };
@@ -368,7 +523,7 @@ export class BridgeSessionManager {
         pathname: "/chat/completions",
       });
       const clientAgentMetadata = buildClientAgentMetadata(clientAgentKey);
-      const { session } = await createAgentSession({
+      const { session } = await createBridgeAgentSession({
         cwd: homeCwd,
         sessionManager: mgr,
         authStorage: mm.authStorage,
@@ -387,14 +542,17 @@ export class BridgeSessionManager {
       }
       this._activeSessions.set(sessionKey, session);
       const effectivePrompt = normalizeVisionPromptText(prompt, promptImages, { locale: getLocale() });
-      const routeIntent = classifyRouteIntent(effectivePrompt, { imagesCount: promptImages?.length || 0 });
+      void classifyRouteIntent(effectivePrompt, { imagesCount: promptImages?.length || 0 });
       // [VISION-ARG-FIX v0.76.6] session.prompt() 需要 options.images，且图片块走 source.base64。
       const _promptOpts = toSessionPromptOptions(promptImages);
 
-      const runBridgeAttempt = async (attemptPrompt, { streamDeltas = true } = {}) => {
+      const runBridgeAttempt = async (
+        attemptPrompt: string,
+        { streamDeltas = true }: BridgeAttemptOptions = {},
+      ): Promise<BridgeAttemptResult> => {
         let capturedText = "";
         let sawToolCall = false;
-        const unsub = session.subscribe((event) => {
+        const unsub = session.subscribe((event: AgentSessionEvent) => {
           if (event.type === "message_update") {
             const sub = event.assistantMessageEvent;
             if (sub?.type === "text_delta") {
@@ -435,9 +593,9 @@ export class BridgeSessionManager {
         if (!existingFile) {
           index[sessionKey] = { file: fileName, ...(meta || {}) };
         } else if (meta) {
-          const entry = typeof index[sessionKey] === "string"
-            ? { file: index[sessionKey] }
-            : index[sessionKey];
+          const entry: BridgeIndexEntry = typeof raw === "string"
+            ? { file: raw }
+            : raw ?? { file: existingFile };
           Object.assign(entry, meta);
           index[sessionKey] = entry;
         }
@@ -446,31 +604,27 @@ export class BridgeSessionManager {
 
       return String(capturedText || "").trim();
     } catch (err) {
-      console.error(`[bridge-session] external message failed (${sessionKey}):`, err.message);
-      return { __bridgeError: true, message: err.message };
+      const message = errorMessage(err);
+      console.error(`[bridge-session] external message failed (${sessionKey}):`, message);
+      return { __bridgeError: true, message };
     }
   }
 
   /**
    * 向正在 streaming 的 bridge session 注入 steer 消息
-   * @param {string} sessionKey
-   * @param {string} text
-   * @returns {boolean} 是否成功注入
+   * @returns 是否成功注入
    */
-  steerSession(sessionKey, text) {
+  steerSession(sessionKey: string, text: string): boolean {
     const session = this._activeSessions.get(sessionKey);
     if (!session?.isStreaming) return false;
-    session.steer(getSteerPrefix() + text);
+    void session.steer(getSteerPrefix() + text);
     return true;
   }
 
   /**
    * 往指定 bridge session 追加一条 assistant 消息（不触发 LLM）
-   * @param {string} sessionKey - bridge session 标识
-   * @param {string} text - 要追加的 assistant 消息文本
-   * @returns {boolean}
    */
-  injectMessage(sessionKey, text) {
+  injectMessage(sessionKey: string, text: string): boolean {
     try {
       const index = this.readIndex();
       const raw = index[sessionKey];
@@ -488,21 +642,22 @@ export class BridgeSessionManager {
       }
 
       const mgr = SessionManager.open(sessionPath, path.dirname(sessionPath));
-      mgr.appendMessage({
+      const assistantMessage = {
         role: "assistant",
         content: [{ type: "text", text }],
-      });
+      } as Parameters<SessionManager["appendMessage"]>[0];
+      mgr.appendMessage(assistantMessage);
 
       debugLog()?.log("bridge-session", `injected message to ${sessionKey} (${text.length} chars)`);
       return true;
     } catch (err) {
-      console.error(`[bridge-session] injectMessage failed: ${err.message}`);
+      console.error(`[bridge-session] injectMessage failed: ${errorMessage(err)}`);
       return false;
     }
   }
 
   /** 创建 bridge 专用 settings：按模型上下文窗口自适应保留最近上下文 */
-  _createSettings(model) {
+  _createSettings(model: BridgeModel): SettingsManager {
     return SettingsManager.inMemory({
       compaction: resolveCompactionSettings(model),
     });
