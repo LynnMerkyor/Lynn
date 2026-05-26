@@ -30,8 +30,7 @@ interface ReadToolParams {
 }
 
 interface ReadToolLike {
-  execute: (toolCallId: unknown, params: ReadToolParams, ...rest: unknown[]) => Promise<unknown>;
-  [key: string]: unknown;
+  execute: (...args: never[]) => Promise<unknown>;
 }
 
 // ── xlsx → 纯文本 ──
@@ -190,10 +189,14 @@ async function suggestFuzzyPath(
  * 而不是循环调 read 撞同一个 ENOENT。
  */
 export function wrapReadToolWithFuzzy<T extends ReadToolLike>(tool: T, cwd: string | null | undefined): T {
-  const origExecute = tool.execute.bind(tool);
+  const origExecute = tool.execute.bind(tool) as (
+    toolCallId: string,
+    params: ReadToolParams,
+    ...rest: unknown[]
+  ) => Promise<unknown>;
   return {
     ...tool,
-    execute: async (toolCallId, params, ...rest) => {
+    execute: async (toolCallId: string, params: ReadToolParams, ...rest: unknown[]) => {
       try {
         return await origExecute(toolCallId, params, ...rest);
       } catch (err) {

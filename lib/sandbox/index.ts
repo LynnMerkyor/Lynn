@@ -32,11 +32,13 @@ import {
   createFindTool,
   createLsTool,
 } from "@mariozechner/pi-coding-agent";
+import type { SandboxPolicyMode } from "./policy.js";
+import type { SecurityAllowlist as SecurityAllowlistType, SessionAllowlist as SessionAllowlistType } from "./allowlist.js";
 
 /** 全局单例白名单（跨 session 共享） */
-let _globalAllowlist = null;
+let _globalAllowlist: SecurityAllowlistType | null = null;
 
-function getGlobalAllowlist(lynnHome) {
+function getGlobalAllowlist(lynnHome: string): SecurityAllowlistType {
   if (!_globalAllowlist) {
     _globalAllowlist = new SecurityAllowlist(lynnHome);
   }
@@ -44,19 +46,38 @@ function getGlobalAllowlist(lynnHome) {
 }
 
 /** 导出白名单单例（供 API 路由使用） */
-export function getAllowlist(lynnHome) {
+export function getAllowlist(lynnHome: string): SecurityAllowlistType {
   return getGlobalAllowlist(lynnHome);
 }
 
-const _sessionAllowlists = new Map();
+const _sessionAllowlists = new Map<string, SessionAllowlistType>();
 
-function getSessionAllowlist(getSessionPath) {
+function getSessionAllowlist(getSessionPath?: () => string | null | undefined): SessionAllowlistType {
   const sessionPath = getSessionPath?.() || null;
   if (!sessionPath) return new SessionAllowlist();
-  if (!_sessionAllowlists.has(sessionPath)) {
-    _sessionAllowlists.set(sessionPath, new SessionAllowlist());
-  }
-  return _sessionAllowlists.get(sessionPath);
+  const existing = _sessionAllowlists.get(sessionPath);
+  if (existing) return existing;
+  const allowlist = new SessionAllowlist();
+  _sessionAllowlists.set(sessionPath, allowlist);
+  return allowlist;
+}
+
+type SandboxMode = SandboxPolicyMode | "authorized";
+
+interface CreateSandboxedToolsOptions {
+  agentDir: string;
+  workspace: string | null;
+  trustedRoots?: string[] | null;
+  lynnHome: string;
+  mode: SandboxMode;
+  confirmStore?: unknown;
+  emitEvent?: (...args: unknown[]) => unknown;
+  getSessionPath?: () => string | null | undefined;
+}
+
+interface CreateSandboxedToolsResult {
+  tools: unknown[];
+  customTools: unknown[];
 }
 
 /**
@@ -76,14 +97,21 @@ function getSessionAllowlist(getSessionPath) {
  * @param {function} [opts.getSessionPath]  获取当前 sessionPath（authorized 模式需要）
  * @returns {{ tools: object[], customTools: object[] }}
  */
-export function createSandboxedTools(cwd, customTools, { agentDir, workspace, trustedRoots, lynnHome, mode, confirmStore, emitEvent, getSessionPath }) {
+export function createSandboxedTools(
+  cwd: string,
+  customTools: unknown[],
+  { agentDir, workspace, trustedRoots, lynnHome, mode, confirmStore, emitEvent, getSessionPath }: CreateSandboxedToolsOptions,
+): CreateSandboxedToolsResult {
   const wrapperOpts = {
     agentId: basename(agentDir || "") || "default",
   };
   // authorized 模式保留执行模式的自由访问，只对危险 bash 命令弹确认卡片。
   // safe/plan 才进入 OS 沙盒 + PathGuard 严格限制。
-  const policyMode = mode === "authorized" ? "full-access" : mode;
+  const policyMode: SandboxPolicyMode = mode === "authorized" ? "full-access" : mode;
   const policy = deriveSandboxPolicy({ agentDir, workspace, trustedRoots, lynnHome, mode: policyMode });
+  const policyTrustedRoots = policy.mode === "standard"
+    ? policy.trustedRoots
+    : (trustedRoots || (workspace ? [workspace] : []));
   const authOpts = mode === "authorized" ? {
     ...wrapperOpts,
     mode: "authorized",
@@ -92,15 +120,15 @@ export function createSandboxedTools(cwd, customTools, { agentDir, workspace, tr
     confirmStore,
     getSessionPath,
     emitEvent,
-    trustedRoots: policy.trustedRoots || trustedRoots || (workspace ? [workspace] : []),
+    trustedRoots: policyTrustedRoots,
   } : undefined;
 
   // 增强 readFile：xlsx 解析 + 编码检测，保留 PI SDK 默认的 access / detectImageMimeType
-  const IMAGE_MIMES = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp" };
+  const IMAGE_MIMES: Record<string, string> = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp" };
   const readOps = {
     readFile: createEnhancedReadFile(),
-    access: (p) => fsAccess(p, constants.R_OK),
-    detectImageMimeType: async (p) => IMAGE_MIMES[extname(p).toLowerCase()] || undefined,
+    access: (p: string) => fsAccess(p, constants.R_OK),
+    detectImageMimeType: async (p: string) => IMAGE_MIMES[extname(p).toLowerCase()] || undefined,
   };
 
   // full-access: 不包装，直接返回原始工具
