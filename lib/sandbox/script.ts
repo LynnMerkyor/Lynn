@@ -11,7 +11,15 @@ import crypto from "crypto";
 
 const PREFIX = ".hana-sandbox-";
 
-function tempPath(ext) {
+interface ScriptFile {
+  scriptPath: string;
+}
+
+interface ProfileFile {
+  profilePath: string;
+}
+
+function tempPath(ext: string): string {
   const id = crypto.randomUUID().slice(0, 8);
   return path.join(os.tmpdir(), `${PREFIX}${id}${ext}`);
 }
@@ -20,7 +28,7 @@ function tempPath(ext) {
  * 把 bash 命令写进临时脚本
  * @returns {{ scriptPath: string }}
  */
-export function writeScript(command, cwd) {
+export function writeScript(command: string, cwd: string): ScriptFile {
   const scriptPath = tempPath(".sh");
   const content = `#!/bin/bash\ncd ${JSON.stringify(cwd)}\n${command}\n`;
   fs.writeFileSync(scriptPath, content, { mode: 0o700 });
@@ -31,7 +39,7 @@ export function writeScript(command, cwd) {
  * 把 Seatbelt profile 写进临时文件
  * @returns {{ profilePath: string }}
  */
-export function writeProfile(profileContent) {
+export function writeProfile(profileContent: string): ProfileFile {
   const profilePath = tempPath(".sb");
   fs.writeFileSync(profilePath, profileContent, { mode: 0o600 });
   return { profilePath };
@@ -40,7 +48,7 @@ export function writeProfile(profileContent) {
 /**
  * 清理临时文件（静默忽略错误）
  */
-export function cleanup(...paths) {
+export function cleanup(...paths: fs.PathLike[]): void {
   for (const p of paths) {
     try { fs.unlinkSync(p); } catch {}
   }
