@@ -22,7 +22,31 @@ import path from "path";
  * }
  */
 
-const EMPTY_PROFILE = {
+interface UserProfileData {
+  sessionCount: number;
+  toolUsage: Record<string, number>;
+  languages: Record<string, number>;
+  hourDistribution: number[];
+  totalTurns: number;
+  updatedAt: string | null;
+}
+
+interface UserProfileOptions {
+  profilePath: string;
+}
+
+interface SessionStats {
+  toolUsage?: Record<string, number>;
+  languages?: Record<string, number>;
+  hour?: number | null;
+  turnCount?: number;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+const EMPTY_PROFILE: UserProfileData = {
   sessionCount: 0,
   toolUsage: {},
   languages: {},
@@ -35,11 +59,14 @@ const EMPTY_PROFILE = {
 const MIN_SESSIONS_FOR_OUTPUT = 3;
 
 export class UserProfile {
+  private _profilePath: string;
+  private _profile: UserProfileData | null;
+
   /**
    * @param {object} opts
    * @param {string} opts.profilePath - user-profile.json 路径
    */
-  constructor({ profilePath }) {
+  constructor({ profilePath }: UserProfileOptions) {
     this._profilePath = profilePath;
     this._profile = null; // lazy load
   }
@@ -47,12 +74,12 @@ export class UserProfile {
   /**
    * 加载 profile（lazy + 内存缓存）
    */
-  _load() {
+  _load(): UserProfileData {
     if (this._profile) return this._profile;
 
     try {
       if (fs.existsSync(this._profilePath)) {
-        this._profile = JSON.parse(fs.readFileSync(this._profilePath, "utf-8"));
+        this._profile = JSON.parse(fs.readFileSync(this._profilePath, "utf-8")) as UserProfileData;
         // 确保字段完整（兼容旧版本）
         this._profile = { ...EMPTY_PROFILE, ...this._profile };
       } else {
@@ -68,14 +95,14 @@ export class UserProfile {
   /**
    * 保存 profile 到磁盘
    */
-  _save() {
+  _save(): void {
     if (!this._profile) return;
     try {
       const dir = path.dirname(this._profilePath);
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(this._profilePath, JSON.stringify(this._profile, null, 2), "utf-8");
     } catch (err) {
-      console.error(`[user-profile] save failed: ${err.message}`);
+      console.error(`[user-profile] save failed: ${errorMessage(err)}`);
     }
   }
 
@@ -84,7 +111,7 @@ export class UserProfile {
    *
    * @param {{ toolUsage: Record<string, number>, languages: Record<string, number>, hour: number|null, turnCount: number }} stats
    */
-  updateFromSession(stats) {
+  updateFromSession(stats?: SessionStats | null): void {
     if (!stats) return;
 
     const profile = this._load();
@@ -126,7 +153,7 @@ export class UserProfile {
    * @param {boolean} isZh - 是否中文
    * @returns {string} - 格式化文本（空字符串表示无需注入）
    */
-  formatForPrompt(isZh) {
+  formatForPrompt(isZh: boolean): string {
     const profile = this._load();
 
     if (profile.sessionCount < MIN_SESSIONS_FOR_OUTPUT) return "";
@@ -184,7 +211,7 @@ export class UserProfile {
   /**
    * 获取原始 profile 数据（调试/API 用）
    */
-  getRawProfile() {
+  getRawProfile(): UserProfileData {
     return this._load();
   }
 }
