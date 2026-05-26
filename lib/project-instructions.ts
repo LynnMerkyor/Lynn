@@ -1,5 +1,5 @@
 /**
- * project-instructions.js — 项目级指令加载器
+ * project-instructions.ts — 项目级指令加载器
  *
  * 从工作目录向上扫描，收集多层级的项目指令文件（类似 Codex AGENTS.md）。
  * 兼容 Lynn / Codex / Claude Code / Cursor 的配置文件格式。
@@ -23,21 +23,39 @@ const INSTRUCTION_FILES = [
 /** 扫描停止边界 */
 const STOP_MARKERS = [".git", "package.json", "Cargo.toml", "go.mod", "pyproject.toml"];
 
+export interface ProjectInstructionLayer {
+  dir: string;
+  file: string;
+  content: string;
+}
+
+export interface ProjectInstructionOptions {
+  maxDepth?: number;
+  maxTotalBytes?: number;
+}
+
+export interface ProjectInstructionLoadResult {
+  layers: ProjectInstructionLayer[];
+  merged: string;
+}
+
 /**
  * 从 cwd 向上扫描，收集所有层级的项目指令
  *
- * @param {string} cwd - 当前工作目录
- * @param {object} [opts]
- * @param {number} [opts.maxDepth=10] - 最大向上扫描层数
- * @param {number} [opts.maxTotalBytes=16384] - 合并后最大字节数
- * @returns {{ layers: Array<{ dir: string, file: string, content: string }>, merged: string }}
+ * @param cwd - 当前工作目录
+ * @param opts
+ * @param opts.maxDepth - 最大向上扫描层数
+ * @param opts.maxTotalBytes - 合并后最大字节数
  */
-export function loadProjectInstructions(cwd, opts = {}) {
+export function loadProjectInstructions(
+  cwd: string | null | undefined,
+  opts: ProjectInstructionOptions = {},
+): ProjectInstructionLoadResult {
   const { maxDepth = 10, maxTotalBytes = 16384 } = opts;
   if (!cwd) return { layers: [], merged: "" };
 
   const homeDir = os.homedir();
-  const layers = [];
+  const layers: ProjectInstructionLayer[] = [];
   let current = path.resolve(cwd);
   let depth = 0;
   let foundRoot = false;
@@ -101,11 +119,11 @@ export function loadProjectInstructions(cwd, opts = {}) {
 
 /**
  * 为 system prompt 格式化项目指令
- * @param {string} cwd
- * @param {boolean} isZh
- * @returns {string} 可直接注入 system prompt 的文本，空串表示无指令
+ * @param cwd
+ * @param isZh
+ * @returns 可直接注入 system prompt 的文本，空串表示无指令
  */
-export function formatProjectInstructions(cwd, isZh) {
+export function formatProjectInstructions(cwd: string | null | undefined, isZh: boolean): string {
   const { merged, layers } = loadProjectInstructions(cwd);
   if (!merged) return "";
 
