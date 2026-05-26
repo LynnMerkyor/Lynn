@@ -111,7 +111,7 @@ describe('Local Qwen provider UX guards', () => {
   });
 
   it('keeps external bridge owner replies on Brain when foreground chat uses a local model', () => {
-    const bridge = read('core/bridge-session-manager.js');
+    const bridge = read('core/bridge-session-manager.ts');
     expect(bridge).toContain('BRAIN_DEFAULT_MODEL_ID');
     expect(bridge).toContain('LOCAL_QWEN35_PROVIDER_IDS');
     expect(bridge).toContain('resolveBridgeOwnerModel');
