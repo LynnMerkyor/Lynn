@@ -20,60 +20,188 @@ import {
 import { findModel } from "../shared/model-ref.js";
 import { getUserFacingRoleModelLabel, resolveRoleDefaultModel } from "../shared/assistant-role-models.js";
 
+// TypeScript Interfaces
+interface AgentManagerDependencies {
+  agentsDir: string;
+  productDir: string;
+  userDir: string;
+  channelsDir: string;
+  getPrefs: () => PreferencesManager;
+  getModels: () => ModelManager;
+  getHub: () => HubInterface | null;
+  getSkills: () => SkillManager;
+  getSearchConfig: () => SearchConfig;
+  resolveUtilityConfig: () => UtilityExecutionConfig;
+  getSharedModels: () => SharedModels;
+  getChannelManager: () => ChannelManager;
+  getSessionCoordinator: () => SessionCoordinator;
+  getEngine?: () => EngineInterface | null;
+  getResourceLoader?: () => ResourceLoader | null;
+}
+
+interface PreferencesManager {
+  getPreferences(): PreferencesData;
+  savePreferences(prefs: PreferencesData): void;
+  getPrimaryAgent(): string | null;
+  savePrimaryAgent(agentId: string): void;
+}
+
+interface PreferencesData {
+  bridge?: {
+    owner?: Record<string, unknown>;
+  };
+  agentOrder?: string[];
+  [key: string]: unknown;
+}
+
+interface ModelManager {
+  availableModels: ResolvedModel[];
+  defaultModel: ResolvedModel | null;
+  resolveModelWithCredentials(bareId: string): ResolvedModel | null;
+  inferModelProvider(modelId: string): string | null;
+  providerRegistry: ProviderRegistry;
+}
+
+interface ProviderRegistry {
+  getAllProvidersRaw?(): Record<string, { models?: unknown[] }>;
+}
+
+interface ResolvedModel {
+  id: string;
+  provider?: string | null;
+  [key: string]: unknown;
+}
+
+interface HubInterface {
+  scheduler?: {
+    startAgentCron(agentId: string): void;
+    removeAgentCron(agentId: string): void;
+  };
+  dmRouter?: {
+    handleNewDm(fromId: string, toId: string): void;
+  };
+  eventBus?: {
+    emit(event: { type: string; title: string; body: string }, context: null): void;
+  };
+  pauseForAgentSwitch(): Promise<void>;
+  resumeAfterAgentSwitch(): void;
+}
+
+interface SkillManager {
+  syncAgentSkills(agent: Agent): void;
+  reload(resourceLoader: ResourceLoader | null, agents: Map<string, Agent>): Promise<void>;
+}
+
+interface SearchConfig {
+  [key: string]: unknown;
+}
+
+interface UtilityExecutionConfig {
+  [key: string]: unknown;
+}
+
+interface SharedModels {
+  [key: string]: unknown;
+}
+
+interface ChannelManager {
+  setupChannelsForNewAgent(agentId: string): void;
+  cleanupAgentFromChannels(agentId: string): void;
+}
+
+interface SessionCoordinator {
+  createSession(sessionId?: string | null, cwd?: string, memoryEnabled?: boolean): Promise<unknown>;
+  _sessions: Map<string, unknown>;
+}
+
+interface EngineInterface {
+  [key: string]: unknown;
+}
+
+interface ResourceLoader {
+  [key: string]: unknown;
+}
+
+interface AgentInfo {
+  id: string;
+  name: string;
+  yuan: string;
+  tier: string;
+  expertSlug: string | null;
+  identity: string;
+  hasAvatar: boolean;
+}
+
+interface AgentListCache {
+  raw: AgentInfo[];
+  ts: number;
+}
+
+interface CreateAgentOptions {
+  name: string;
+  id?: string;
+  yuan: string;
+}
+
+interface AgentScanEntry {
+  name: string;
+  isDirectory(): boolean;
+}
+
 const log = createModuleLogger("agent-mgr");
 
-function firstExistingPath(...paths) {
+function firstExistingPath(...paths: string[]): string | null {
   for (const p of paths) {
     if (fs.existsSync(p)) return p;
   }
   return null;
 }
 
+function normalizeYuanType(yuan: string): string {
+  // Simple normalization - keep the original implementation
+  return yuan.toLowerCase();
+}
+
 export class AgentManager {
-  /**
-   * @param {object} deps
-   * @param {string} deps.agentsDir
-   * @param {string} deps.productDir
-   * @param {string} deps.userDir
-   * @param {string} deps.channelsDir
-   * @param {() => import('./preferences-manager.js').PreferencesManager} deps.getPrefs
-   * @param {() => import('./model-manager.js').ModelManager} deps.getModels
-   * @param {() => object|null} deps.getHub
-   * @param {() => import('./skill-manager.js').SkillManager} deps.getSkills
-   * @param {() => object} deps.getSearchConfig
-   * @param {() => object} deps.resolveUtilityConfig
-   * @param {() => object} deps.getSharedModels
-   * @param {() => import('./channel-manager.js').ChannelManager} deps.getChannelManager
-   * @param {() => import('./session-coordinator.js').SessionCoordinator} deps.getSessionCoordinator
-   */
-  constructor(deps) {
+  private _d: AgentManagerDependencies;
+  private _agents: Map<string, Agent>;
+  private _activeAgentId: string | null;
+  private _switching: boolean;
+  private _switchingFull: boolean;
+  private _activityStores: Map<string, ActivityStore>;
+  private _agentListCache: AgentListCache | null;
+
+  static AGENT_LIST_TTL = 30_000; // 30 秒
+
+  constructor(deps: AgentManagerDependencies) {
     this._d = deps;
     this._agents = new Map();
     this._activeAgentId = null;
     this._switching = false;
+    this._switchingFull = false;
     this._activityStores = new Map();
     this._agentListCache = null;       // { raw: [{id,name,yuan,identity}], ts: number }
   }
 
   /** 清除 listAgents 缓存（agent 增删改时调用） */
-  invalidateAgentListCache() { this._agentListCache = null; }
+  invalidateAgentListCache(): void { this._agentListCache = null; }
 
-  get agents() { return this._agents; }
-  get activeAgentId() { return this._activeAgentId; }
-  set activeAgentId(id) { this._activeAgentId = id; }
-  get switching() { return this._switching; }
+  get agents(): Map<string, Agent> { return this._agents; }
+  get activeAgentId(): string | null { return this._activeAgentId; }
+  set activeAgentId(id: string | null) { this._activeAgentId = id; }
+  get switching(): boolean { return this._switching; }
 
   /** 当前焦点 agent */
-  get agent() { return this._agents.get(this._activeAgentId); }
+  get agent(): Agent | null { return this._agents.get(this._activeAgentId ?? "") || null; }
 
   /** 按 ID 获取 agent */
-  getAgent(agentId) { return this._agents.get(agentId) || null; }
+  getAgent(agentId: string): Agent | null { return this._agents.get(agentId) || null; }
 
   // ── Activity Store（per-agent 懒缓存） ──
 
-  get activityStores() { return this._activityStores; }
+  get activityStores(): Map<string, ActivityStore> { return this._activityStores; }
 
-  getActivityStore(agentId) {
+  getActivityStore(agentId: string): ActivityStore {
     let store = this._activityStores.get(agentId);
     if (!store) {
       const agDir = path.join(this._d.agentsDir, agentId);
@@ -86,7 +214,7 @@ export class AgentManager {
     return store;
   }
 
-  _repairExpertAgentConfigs() {
+  private _repairExpertAgentConfigs(): void {
     const models = this._d.getModels();
     let repaired = 0;
 
@@ -95,35 +223,35 @@ export class AgentManager {
       if (!fs.existsSync(configPath)) continue;
 
       try {
-        const cfg = safeReadYAMLSync(configPath, {}, YAML);
-        const isExpert = cfg?.agent?.tier === "expert" || !!cfg?.expert?.slug;
+        const cfg = safeReadYAMLSync(configPath, {}, YAML) as Record<string, unknown>;
+        const isExpert = ((cfg?.agent as Record<string, unknown>)?.tier === "expert" || !!(cfg?.expert as Record<string, unknown>)?.slug);
         if (!isExpert) continue;
 
         let changed = false;
 
-        if (cfg?.agent?.yuan === "ming") {
-          cfg.agent = { ...(cfg.agent || {}), yuan: "lynn" };
+        if ((cfg?.agent as Record<string, unknown>)?.yuan === "ming") {
+          (cfg.agent as Record<string, unknown>) = { ...((cfg.agent as Record<string, unknown>) || {}), yuan: "lynn" };
           changed = true;
         }
 
         // ── 1. 修复缺失的 provider ──
-        const rawChat = cfg?.models?.chat;
-        const chatModelId = typeof rawChat === "object" ? rawChat?.id : rawChat;
-        const chatProviderInModel = typeof rawChat === "object" ? rawChat?.provider : "";
-        const currentProvider = cfg?.api?.provider || chatProviderInModel || "";
+        const rawChat = (cfg?.models as Record<string, unknown>)?.chat;
+        const chatModelId = typeof rawChat === "object" ? (rawChat as Record<string, unknown>)?.id : rawChat;
+        const chatProviderInModel = typeof rawChat === "object" ? (rawChat as Record<string, unknown>)?.provider : "";
+        const currentProvider = (cfg?.api as Record<string, unknown>)?.provider || chatProviderInModel || "";
         if (chatModelId && !currentProvider) {
-          let inferredProvider = models.inferModelProvider(chatModelId);
+          let inferredProvider = models.inferModelProvider(chatModelId as string);
           if (!inferredProvider) {
             const rawProviders = models.providerRegistry?.getAllProvidersRaw?.() || {};
             inferredProvider = Object.entries(rawProviders).find(([, raw]) =>
-              Array.isArray(raw?.models) && raw.models.some((m) => (typeof m === "object" ? m.id : m) === chatModelId)
+              Array.isArray((raw as Record<string, unknown>)?.models) && ((raw as Record<string, unknown>)?.models as Array<unknown>)?.some((m: unknown) => (typeof m === "object" ? (m as Record<string, unknown>)?.id : m) === chatModelId)
             )?.[0] || "";
           }
           if (inferredProvider) {
-            cfg.api = { ...(cfg.api || {}), provider: inferredProvider };
+            cfg.api = { ...((cfg.api as Record<string, unknown>) || {}), provider: inferredProvider };
             if (typeof rawChat === "object") {
               cfg.models = cfg.models || {};
-              cfg.models.chat = { ...rawChat, provider: rawChat.provider || inferredProvider };
+              (cfg.models as Record<string, unknown>).chat = { ...(rawChat as Record<string, unknown>), provider: (rawChat as Record<string, unknown>)?.provider || inferredProvider };
             }
             changed = true;
           }
@@ -132,14 +260,14 @@ export class AgentManager {
         if (changed) {
           fs.writeFileSync(
             configPath,
-            YAML.dump(cfg, { lineWidth: 120, noRefs: true, quotingType: '"' }),
+            YAML.dump(cfg, { lineWidth: 120, quotingType: '"' }),
             "utf-8",
           );
           repaired += 1;
         }
 
         // ── 2. 修复缺失/错误的专家头像：从预设目录同步 ──
-        const slug = cfg?.expert?.slug;
+        const slug = (cfg?.expert as Record<string, unknown>)?.slug as string;
         if (slug && this._d.productDir) {
           const presetAvatarsDir = fs.existsSync(path.join(this._d.productDir, "lib", "experts", "presets", slug, "avatars"))
             ? path.join(this._d.productDir, "lib", "experts", "presets", slug, "avatars")
@@ -162,11 +290,11 @@ export class AgentManager {
                 }
               }
             }
-          } catch (avatarErr) {
+          } catch (avatarErr: any) {
             log.warn(`同步专家头像失败 (${entry.name}): ${avatarErr.message}`);
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         log.warn(`修复专家配置失败 (${entry.name}): ${err.message}`);
       }
     }
@@ -180,17 +308,17 @@ export class AgentManager {
 
   // ── Init ──
 
-  async initAllAgents(log, startId) {
+  async initAllAgents(log: (msg: string) => void, startId: string): Promise<void> {
     this._activeAgentId = startId;
 
     const sharedModels = this._d.getSharedModels();
     const getOwnerIds = () => this._d.getPrefs().getPreferences()?.bridge?.owner || {};
-    const resolveModel = (bareId) =>
-      this._d.getModels().resolveModelWithCredentials(bareId);
+    const resolveModel = (bareId: string, agentConfig: object) =>
+      this._d.getModels().resolveModelWithCredentials(bareId) as object;
 
     this._repairExpertAgentConfigs();
     const entries = this._scanAgentDirs();
-    const initOne = async (agentId) => {
+    const initOne = async (agentId: string) => {
       const agentDir = path.join(this._d.agentsDir, agentId);
       const ag = this._createAgentInstance(agentDir, getOwnerIds);
       await ag.init(
@@ -210,7 +338,8 @@ export class AgentManager {
       const results = await Promise.allSettled(others.map(id => initOne(id)));
       for (let i = 0; i < results.length; i++) {
         if (results[i].status === "rejected") {
-          console.error(`[agent-manager] agent "${others[i]}" init 失败: ${results[i].reason?.message}`);
+          const rejectedResult = results[i] as PromiseRejectedResult;
+          console.error(`[agent-manager] agent "${others[i]}" init 失败: ${rejectedResult.reason?.message}`);
         }
       }
     }
@@ -219,9 +348,7 @@ export class AgentManager {
 
   // ── List ──
 
-  static AGENT_LIST_TTL = 30_000; // 30 秒
-
-  listAgents() {
+  listAgents(): AgentInfo[] {
     const now = Date.now();
     if (!this._agentListCache || now - this._agentListCache.ts > AgentManager.AGENT_LIST_TTL) {
       const raw = this._agents.size > 0
@@ -250,16 +377,16 @@ export class AgentManager {
     return agents;
   }
 
-  _listLoadedAgents() {
-    const agents = [];
+  private _listLoadedAgents(): AgentInfo[] {
+    const agents: AgentInfo[] = [];
     for (const [id, ag] of this._agents.entries()) {
-      const cfg = ag?.config || {};
+      const cfg = ag?.config || {} as Record<string, unknown>;
       agents.push({
         id,
-        name: cfg.agent?.name || ag?.agentName || id,
-        yuan: cfg.agent?.yuan || "hanako",
-        tier: cfg.agent?.tier || "local",
-        expertSlug: cfg.expert?.slug || null,
+        name: ((cfg.agent as Record<string, unknown>)?.name as string) || ag?.agentName || id,
+        yuan: ((cfg.agent as Record<string, unknown>)?.yuan as string) || "hanako",
+        tier: ((cfg.agent as Record<string, unknown>)?.tier as string) || "local",
+        expertSlug: ((cfg.expert as Record<string, unknown>)?.slug as string) || null,
         identity: "",
         hasAvatar: false,
       });
@@ -268,15 +395,15 @@ export class AgentManager {
   }
 
   /** 扫盘读取所有 agent 元数据（I/O 密集，由缓存保护） */
-  _scanAgentList() {
+  private _scanAgentList(): AgentInfo[] {
     const entries = fs.readdirSync(this._d.agentsDir, { withFileTypes: true });
-    const agents = [];
+    const agents: AgentInfo[] = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const configPath = path.join(this._d.agentsDir, entry.name, "config.yaml");
       if (!fs.existsSync(configPath)) continue;
       try {
-        const cfg = safeReadYAMLSync(configPath, {}, YAML);
+        const cfg = safeReadYAMLSync(configPath, {}, YAML) as Record<string, unknown>;
         let identity = "";
         try {
           const idMd = fs.readFileSync(path.join(this._d.agentsDir, entry.name, "identity.md"), "utf-8");
@@ -291,10 +418,10 @@ export class AgentManager {
         } catch {}
         agents.push({
           id: entry.name,
-          name: cfg.agent?.name || entry.name,
-          yuan: cfg.agent?.yuan || "hanako",
-          tier: cfg.agent?.tier || "local",
-          expertSlug: cfg.expert?.slug || null,
+          name: (cfg.agent as Record<string, unknown>)?.name as string || entry.name,
+          yuan: (cfg.agent as Record<string, unknown>)?.yuan as string || "hanako",
+          tier: (cfg.agent as Record<string, unknown>)?.tier as string || "local",
+          expertSlug: (cfg.expert as Record<string, unknown>)?.slug as string || null,
           identity,
           hasAvatar,
         });
@@ -305,7 +432,7 @@ export class AgentManager {
 
   // ── Create ──
 
-  async createAgent({ name, id, yuan }) {
+  async createAgent({ name, id, yuan }: CreateAgentOptions): Promise<{ id: string; name: string }> {
     if (!name?.trim()) throw new Error(t("error.agentNameEmpty"));
 
     const agentId = id?.trim() || await this._generateAgentId(name);
@@ -329,31 +456,31 @@ export class AgentManager {
     const normalizedYuan = normalizeYuanType(yuan);
     const VALID_YUAN = ["hanako", "butter", "lynn", "kong"];
     const yuanType = VALID_YUAN.includes(normalizedYuan) ? normalizedYuan : "hanako";
-    const primaryChat = currentAgent?.config?.models?.chat || this._d.getModels().defaultModel?.id || "";
+    const primaryChat = ((currentAgent?.config?.models as Record<string, unknown>)?.chat as string) || this._d.getModels().defaultModel?.id || "";
 
-    let configYamlOut;
+    let configYamlOut: string;
     try {
-      const cfg = YAML.load(templateConfig);
+      const cfg = YAML.load(templateConfig) as Record<string, unknown>;
       if (!cfg || typeof cfg !== "object") throw new Error("invalid template");
       cfg.agent = cfg.agent || {};
-      cfg.agent.name = name.trim();
-      cfg.agent.yuan = yuanType;
+      (cfg.agent as Record<string, unknown>).name = name.trim();
+      (cfg.agent as Record<string, unknown>).yuan = yuanType;
       if (userName) {
         cfg.user = cfg.user || {};
-        cfg.user.name = userName;
+        (cfg.user as Record<string, unknown>).name = userName;
       }
       if (primaryChat) {
         cfg.models = cfg.models || {};
-        cfg.models.chat = primaryChat;
+        (cfg.models as Record<string, unknown>).chat = primaryChat;
       }
-      configYamlOut = YAML.dump(cfg, { lineWidth: 120, noRefs: true, quotingType: '"' });
-    } catch (e) {
+      configYamlOut = YAML.dump(cfg, { lineWidth: 120, quotingType: '"' });
+    } catch (e: any) {
       log.warn(`createAgent: YAML 模板解析失败，回退字符串替换: ${e.message}`);
       const safeName = name.trim().replace(/"/g, '\\"');
       let config = templateConfig.replace(/name: Lynn/, `name: "${safeName}"`);
       config = config.replace(/yuan: hanako/, `yuan: ${yuanType}`);
       if (userName) {
-        config = config.replace(/user:\s*\n\s+name:\s*""/, `user:\n  name: "${userName}"`);
+        config = config.replace(/user:\s*\n\s+name:\s*"/, `user:\n  name: "${userName}"`);
       }
       if (primaryChat) {
         config = config.replace(/chat: ""/, `chat: "${primaryChat}"`);
@@ -397,7 +524,7 @@ export class AgentManager {
     }
 
     // 可选文件：确保存在（即使为空），避免运行时 ENOENT
-    const touchIfMissing = (p) => { if (!fs.existsSync(p)) fs.writeFileSync(p, '', 'utf-8'); };
+    const touchIfMissing = (p: string) => { if (!fs.existsSync(p)) fs.writeFileSync(p, '', 'utf-8'); };
     touchIfMissing(path.join(agentDir, 'pinned.md'));
 
     // 频道系统
@@ -406,11 +533,11 @@ export class AgentManager {
     // 初始化并加入长驻 Map
     const getOwnerIds = () => this._d.getPrefs().getPreferences()?.bridge?.owner || {};
     const ag = this._createAgentInstance(agentDir, getOwnerIds);
-    const resolveModel = (bareId) =>
-      this._d.getModels().resolveModelWithCredentials(bareId);
+    const resolveModel = (bareId: string, agentConfig: object) =>
+      this._d.getModels().resolveModelWithCredentials(bareId) as object;
     try {
       await ag.init(() => {}, this._d.getSharedModels(), resolveModel);
-    } catch (err) {
+    } catch (err: any) {
       // init 失败：回滚已创建的目录，防止孤儿残留
       try { fs.rmSync(agentDir, { recursive: true, force: true }); } catch {}
       throw err;
@@ -424,7 +551,7 @@ export class AgentManager {
     // 注入 DM 回调
     const dmRouter = hub?.dmRouter;
     if (dmRouter) {
-      ag._dmSentHandler = (fromId, toId) => dmRouter.handleNewDm(fromId, toId);
+      (ag as any)._dmSentHandler = (fromId: string, toId: string) => dmRouter.handleNewDm(fromId, toId);
     }
 
     this.invalidateAgentListCache();
@@ -434,7 +561,7 @@ export class AgentManager {
 
   // ── Switch ──
 
-  async switchAgentOnly(agentId) {
+  async switchAgentOnly(agentId: string): Promise<void> {
     if (this._switching) throw new Error(t("error.agentSwitching"));
     if (!this._agents.has(agentId)) {
       const loaded = await this.ensureAgentLoaded(agentId);
@@ -455,14 +582,14 @@ export class AgentManager {
       clearConfigCache();
       this._activeAgentId = agentId;
 
-      const chatRef = this.agent.config.models?.chat;
-      const agentRole = this.agent.config?.agent?.yuan || this.agent.yuan || null;
+      const chatRef = ((this.agent?.config?.models as Record<string, unknown>)?.chat);
+      const agentRole = ((this.agent?.config?.agent as Record<string, unknown>)?.yuan as string) || (this.agent as any)?.yuan || null;
       const roleLabel = getUserFacingRoleModelLabel(agentRole, "chat") || "角色默认模型";
-      const preferredId = typeof chatRef === "object" ? chatRef?.id : chatRef;
-      const preferredProvider = typeof chatRef === "object" ? chatRef?.provider : undefined;
+      const preferredId = typeof chatRef === "object" ? (chatRef as Record<string, unknown>)?.id : chatRef;
+      const preferredProvider = typeof chatRef === "object" ? (chatRef as Record<string, unknown>)?.provider : undefined;
       const models = this._d.getModels();
       if (preferredId) {
-        const model = findModel(models.availableModels, preferredId, preferredProvider);
+        const model = findModel(models.availableModels, preferredId as string, preferredProvider as string);
         if (!model) {
           const roleDefaultModel = resolveRoleDefaultModel(models.availableModels, agentRole);
           if (!roleDefaultModel) {
@@ -479,8 +606,8 @@ export class AgentManager {
         }
       }
       // 未配 models.chat 的 agent 继承当前 defaultModel
-      log.log(`agent switched to ${this.agent.agentName} (${agentId}), model=${roleLabel}`);
-    } catch (err) {
+      log.log(`agent switched to ${this.agent?.agentName} (${agentId}), model=${roleLabel}`);
+    } catch (err: any) {
       this._activeAgentId = prevAgentId;
       try { this._d.getHub()?.resumeAfterAgentSwitch(); } catch {}
       throw err;
@@ -489,7 +616,7 @@ export class AgentManager {
     }
   }
 
-  async switchAgent(agentId) {
+  async switchAgent(agentId: string): Promise<void> {
     // switchAgentOnly 内部有 _switching 锁，但 createSession 不在锁范围内
     // 用额外的 _switchingFull 标志保护整个流程，防止快速连续切换导致 session 用错 agent 配置
     if (this._switchingFull) throw new Error(t("error.agentSwitching"));
@@ -498,16 +625,16 @@ export class AgentManager {
       await this.switchAgentOnly(agentId);
       const hub = this._d.getHub();
       hub?.resumeAfterAgentSwitch();
-      this._d.getSkills().syncAgentSkills(this.agent);
+      this._d.getSkills().syncAgentSkills(this.agent!);
       this._d.getPrefs().savePrimaryAgent(agentId);
       await this._d.getSessionCoordinator().createSession();
-      log.log(`已切换到助手: ${this.agent.agentName} (${agentId})`);
+      log.log(`已切换到助手: ${this.agent?.agentName} (${agentId})`);
     } finally {
       this._switchingFull = false;
     }
   }
 
-  async createSessionForAgent(agentId, cwd, memoryEnabled = true) {
+  async createSessionForAgent(agentId: string, cwd: string, memoryEnabled = true): Promise<unknown> {
     if (agentId && agentId !== this._activeAgentId) {
       await this.switchAgentOnly(agentId);
     }
@@ -516,7 +643,7 @@ export class AgentManager {
 
   // ── Delete ──
 
-  async deleteAgent(agentId) {
+  async deleteAgent(agentId: string): Promise<void> {
     if (agentId === this._activeAgentId) {
       throw new Error(t("error.agentDeleteActive"));
     }
@@ -537,7 +664,7 @@ export class AgentManager {
     // 频道清理
     try {
       this._d.getChannelManager().cleanupAgentFromChannels(agentId);
-    } catch (err) {
+    } catch (err: any) {
       log.error(`频道清理失败 (${agentId}): ${err.message}`);
     }
 
@@ -546,7 +673,7 @@ export class AgentManager {
     const prefs = this._d.getPrefs();
     const primaryId = prefs.getPrimaryAgent();
     if (primaryId === agentId) {
-      prefs.savePrimaryAgent(this._activeAgentId);
+      prefs.savePrimaryAgent(this._activeAgentId!);
     }
 
     const order = prefs.getPreferences()?.agentOrder || [];
@@ -563,7 +690,7 @@ export class AgentManager {
 
   // ── Utility ──
 
-  setPrimaryAgent(agentId) {
+  setPrimaryAgent(agentId: string): void {
     const agentDir = path.join(this._d.agentsDir, agentId);
     if (!fs.existsSync(path.join(agentDir, "config.yaml"))) {
       throw new Error(t("error.agentNotExists", { id: agentId }));
@@ -571,7 +698,7 @@ export class AgentManager {
     this._d.getPrefs().savePrimaryAgent(agentId);
   }
 
-  async ensureAgentLoaded(agentId, logFn = () => {}) {
+  async ensureAgentLoaded(agentId: string, logFn: (msg: string) => void = () => {}): Promise<Agent | null> {
     if (!agentId) return null;
     const existing = this._agents.get(agentId);
     if (existing) return existing;
@@ -583,8 +710,8 @@ export class AgentManager {
 
     const getOwnerIds = () => this._d.getPrefs().getPreferences()?.bridge?.owner || {};
     const ag = this._createAgentInstance(agentDir, getOwnerIds);
-    const resolveModel = (bareId) =>
-      this._d.getModels().resolveModelWithCredentials(bareId);
+    const resolveModel = (bareId: string, agentConfig: object) =>
+      this._d.getModels().resolveModelWithCredentials(bareId) as object;
 
     await ag.init(logFn, this._d.getSharedModels(), resolveModel);
     this._agents.set(agentId, ag);
@@ -593,14 +720,14 @@ export class AgentManager {
     const hub = this._d.getHub();
     hub?.scheduler?.startAgentCron(agentId);
     if (hub?.dmRouter) {
-      ag._dmSentHandler = (fromId, toId) => hub.dmRouter.handleNewDm(fromId, toId);
+      (ag as any)._dmSentHandler = (fromId: string, toId: string) => hub.dmRouter!.handleNewDm(fromId, toId);
     }
 
     this.invalidateAgentListCache();
     return ag;
   }
 
-  agentIdFromSessionPath(sessionPath) {
+  agentIdFromSessionPath(sessionPath: string): string | null {
     const rel = path.relative(this._d.agentsDir, sessionPath);
     if (rel.startsWith("..")) return null;
     return rel.split(path.sep)[0] || null;
@@ -608,12 +735,12 @@ export class AgentManager {
 
   // ── Dispose ──
 
-  async disposeAll(sessionCoord) {
+  async disposeAll(sessionCoord: SessionCoordinator): Promise<void> {
     // 对所有缓存 session 做 final 滚动摘要（带超时保护）
     const entries = sessionCoord ? [...sessionCoord._sessions.entries()] : [];
     if (entries.length > 0) {
       const summaryPromises = entries.map(([sp, entry]) => {
-        const agent = this._agents.get(entry.agentId) || this.agent;
+        const agent = this._agents.get((entry as any).agentId) || this.agent;
         return Promise.race([
           agent?._memoryTicker?.notifySessionEnd(sp) ?? Promise.resolve(),
           new Promise(r => setTimeout(r, 4000)),
@@ -629,15 +756,15 @@ export class AgentManager {
 
   // ── Internal ──
 
-  _scanAgentDirs() {
+  private _scanAgentDirs(): AgentScanEntry[] {
     try {
       return fs.readdirSync(this._d.agentsDir, { withFileTypes: true })
         .filter(e => e.isDirectory() && fs.existsSync(path.join(this._d.agentsDir, e.name, "config.yaml")));
     } catch { return []; }
   }
 
-  _createAgentInstance(agentDir, getOwnerIds) {
-    const ag = new Agent({
+  private _createAgentInstance(agentDir: string, getOwnerIds: () => Record<string, unknown>): Agent {
+    const ag = new (Agent as any)({
       agentDir,
       productDir: this._d.productDir,
       userDir: this._d.userDir,
@@ -645,23 +772,23 @@ export class AgentManager {
       agentsDir: this._d.agentsDir,
       searchConfigResolver: () => this._d.getSearchConfig(),
     });
-    ag._getOwnerIds = getOwnerIds;
-    ag._engine = this._d.getEngine?.() || null;
-    ag._onInstallCallback = async (skillName) => {
+    (ag as any)._getOwnerIds = getOwnerIds;
+    (ag as any)._engine = this._d.getEngine?.() || null;
+    (ag as any)._onInstallCallback = async (skillName: string) => {
       const skills = this._d.getSkills();
-      await skills.reload(this._d.getResourceLoader?.(), this._agents);
+      await skills.reload(this._d.getResourceLoader?.() as ResourceLoader | null, this._agents);
       const enabled = new Set(ag.config?.skills?.enabled || []);
       enabled.add(skillName);
       ag.updateConfig({ skills: { enabled: [...enabled] } });
       skills.syncAgentSkills(ag);
     };
-    ag._notifyHandler = (title, body) => {
+    (ag as any)._notifyHandler = (title: string, body: string) => {
       this._d.getHub()?.eventBus?.emit({ type: "notification", title, body }, null);
     };
     return ag;
   }
 
-  async _generateAgentId(name) {
+  private async _generateAgentId(name: string): Promise<string> {
     let utilConfig;
     try {
       utilConfig = this._d.resolveUtilityConfig();
