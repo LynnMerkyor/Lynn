@@ -8,13 +8,28 @@
 import { Type } from "@sinclair/typebox";
 import { t } from "../../server/i18n.js";
 
-/**
- * @param {object} opts
- * @param {string} opts.agentId - 当前 agent ID
- * @param {() => Array<{id: string}>} opts.listAgents - 列出可用 agent
- * @param {(toId: string, text: string, opts?: object) => Promise<string|null>} opts.onMessage - 实际发送实现（由 Hub 注入）
- */
-export function createMessageAgentTool({ agentId, listAgents, onMessage }) {
+type AgentRef = {
+  id: string;
+};
+
+type MessageAgentToolOptions = {
+  agentId: string;
+  listAgents: () => AgentRef[];
+  onMessage: (toId: string, text: string, opts?: { maxRounds?: number }) => Promise<string | null>;
+};
+
+type MessageAgentParams = {
+  to: string;
+  message: string;
+  max_rounds?: number;
+};
+
+type MessageAgentToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details?: Record<string, unknown>;
+};
+
+export function createMessageAgentTool({ agentId, listAgents, onMessage }: MessageAgentToolOptions) {
   return {
     name: "message_agent",
     label: t("toolDef.messageAgent.label"),
@@ -26,7 +41,7 @@ export function createMessageAgentTool({ agentId, listAgents, onMessage }) {
         description: t("toolDef.messageAgent.maxTurnsDesc"),
       })),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: MessageAgentParams): Promise<MessageAgentToolResult> => {
       if (params.to === agentId) {
         return { content: [{ type: "text", text: t("error.cannotSelfDm") }] };
       }

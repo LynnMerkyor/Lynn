@@ -11,19 +11,32 @@ import fs from "node:fs";
 import path from "node:path";
 import { scrubPII } from "../pii-guard.js";
 
+type PinMemoryParams = {
+  content: string;
+};
+
+type UnpinMemoryParams = {
+  keyword: string;
+};
+
+type PinnedMemoryToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
 /**
  * 创建 pin_memory + unpin_memory 工具
  * @param {string} agentDir - agent 数据目录（pinned.md 在这里）
  * @returns {[import('@mariozechner/pi-coding-agent').ToolDefinition, import('@mariozechner/pi-coding-agent').ToolDefinition]}
  */
-export function createPinnedMemoryTools(agentDir) {
+export function createPinnedMemoryTools(agentDir: string) {
   const pinnedPath = path.join(agentDir, "pinned.md");
 
   const readPinned = () => {
     try { return fs.readFileSync(pinnedPath, "utf-8"); } catch { return ""; }
   };
 
-  const writePinned = (content) => {
+  const writePinned = (content: string) => {
     fs.writeFileSync(pinnedPath, content, "utf-8");
   };
 
@@ -34,7 +47,7 @@ export function createPinnedMemoryTools(agentDir) {
     parameters: Type.Object({
       content: Type.String({ description: t("toolDef.pinnedMemory.pinContentDesc") }),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: PinMemoryParams): Promise<PinnedMemoryToolResult> => {
       const { cleaned, detected } = scrubPII(params.content);
       if (detected.length > 0) {
         console.warn(`[pin_memory] PII detected (${detected.join(", ")}), redacted before storage`);
@@ -71,7 +84,7 @@ export function createPinnedMemoryTools(agentDir) {
     parameters: Type.Object({
       keyword: Type.String({ description: t("toolDef.pinnedMemory.unpinKeywordDesc") }),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: UnpinMemoryParams): Promise<PinnedMemoryToolResult> => {
       const existing = readPinned();
       if (!existing.trim()) {
         return {

@@ -10,6 +10,20 @@ import { t } from "../../server/i18n.js";
 
 let _counter = 0;
 
+type ArtifactType = "html" | "code" | "markdown";
+
+interface ArtifactParams {
+  type: ArtifactType;
+  title: string;
+  content: string;
+  language?: string;
+}
+
+interface TextToolResult {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+}
+
 export function createArtifactTool() {
   return {
     name: "create_artifact",
@@ -28,7 +42,7 @@ export function createArtifactTool() {
         }),
       ),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: ArtifactParams): Promise<TextToolResult> => {
       const artifactId = `art-${Date.now()}-${++_counter}`;
       return {
         content: [{ type: "text", text: t("error.artifactCreated", { title: params.title }) }],

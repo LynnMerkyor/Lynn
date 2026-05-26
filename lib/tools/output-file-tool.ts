@@ -12,8 +12,25 @@ import path from "path";
 import { Type } from "@sinclair/typebox";
 import { t } from "../../server/i18n.js";
 
+type PresentFilesParams = {
+  filepaths?: string[];
+  filePath?: string;
+  label?: string;
+};
+
+type PresentedFile = {
+  filePath: string;
+  label: string;
+  ext: string;
+};
+
+type PresentFilesToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
 /** 修正 LLM 常见的路径问题：转义空格、URL 编码、多余引号 */
-function sanitizePath(p) {
+function sanitizePath(p: string): string {
   p = p.trim().replace(/^["']|["']$/g, "");
   p = p.replace(/\\ /g, " ");
   if (p.includes("%20")) {
@@ -36,7 +53,7 @@ export function createPresentFilesTool() {
       filePath: Type.Optional(Type.String({ description: t("toolDef.outputFile.filePathDesc") })),
       label: Type.Optional(Type.String({ description: t("toolDef.outputFile.labelDesc") })),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: PresentFilesParams): Promise<PresentFilesToolResult> => {
       // 统一为路径数组：优先使用 filepaths，兼容 filePath
       let paths = params.filepaths;
       if (!paths || paths.length === 0) {
@@ -50,8 +67,8 @@ export function createPresentFilesTool() {
         }
       }
 
-      const results = [];
-      const errors = [];
+      const results: PresentedFile[] = [];
+      const errors: string[] = [];
 
       for (const raw of paths) {
         const fp = sanitizePath(raw);

@@ -15,10 +15,32 @@ import fs from "fs";
 import path from "path";
 import { appendMessage } from "../channels/channel-store.js";
 
+type AgentRef = {
+  id: string;
+  name: string;
+};
+
+type DmToolOptions = {
+  agentId: string;
+  agentsDir: string;
+  listAgents: () => AgentRef[];
+  onDmSent?: (fromId: string, toId: string) => void;
+};
+
+type DmParams = {
+  to: string;
+  message: string;
+};
+
+type DmToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details?: Record<string, unknown>;
+};
+
 /**
  * 确保 DM 文件存在，不存在则创建（含 frontmatter）
  */
-function ensureDmFile(dmDir, peerId) {
+function ensureDmFile(dmDir: string, peerId: string): string {
   fs.mkdirSync(dmDir, { recursive: true });
   const filePath = path.join(dmDir, `${peerId}.md`);
   if (!fs.existsSync(filePath)) {
@@ -27,14 +49,7 @@ function ensureDmFile(dmDir, peerId) {
   return filePath;
 }
 
-/**
- * @param {object} opts
- * @param {string} opts.agentId - 当前 agent ID
- * @param {string} opts.agentsDir - agents 根目录
- * @param {() => Array<{id: string, name: string}>} opts.listAgents
- * @param {(fromId: string, toId: string) => void} [opts.onDmSent] - 发送后回调（触发 DM Router）
- */
-export function createDmTool({ agentId, agentsDir, listAgents, onDmSent }) {
+export function createDmTool({ agentId, agentsDir, listAgents, onDmSent }: DmToolOptions) {
   return {
     name: "dm",
     label: t("toolDef.dm.label"),
@@ -44,7 +59,7 @@ export function createDmTool({ agentId, agentsDir, listAgents, onDmSent }) {
       message: Type.String({ description: t("toolDef.dm.messageDesc") }),
     }),
 
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: DmParams): Promise<DmToolResult> => {
       if (params.to === agentId) {
         return { content: [{ type: "text", text: t("error.cannotSelfDm") }] };
       }

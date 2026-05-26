@@ -9,14 +9,34 @@
 import { Type } from "@sinclair/typebox";
 import { t } from "../../server/i18n.js";
 import { runAgentSession } from "../../hub/agent-executor.js";
+import type { HanaEngine } from "../../core/engine.js";
 
-/**
- * @param {object} opts
- * @param {string} opts.agentId - 当前 agent ID
- * @param {() => Array<{id: string, name: string}>} opts.listAgents
- * @param {import('../../core/engine.js').HanaEngine} opts.engine
- */
-export function createAskAgentTool({ agentId, listAgents, engine }) {
+type AgentRef = {
+  id: string;
+  name: string;
+};
+
+type AskAgentToolOptions = {
+  agentId: string;
+  listAgents: () => AgentRef[];
+  engine: HanaEngine;
+};
+
+type AskAgentParams = {
+  agent: string;
+  task: string;
+};
+
+type AskAgentToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details?: Record<string, unknown>;
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+export function createAskAgentTool({ agentId, listAgents, engine }: AskAgentToolOptions) {
   return {
     name: "ask_agent",
     label: t("toolDef.askAgent.label"),
@@ -26,7 +46,11 @@ export function createAskAgentTool({ agentId, listAgents, engine }) {
       task: Type.String({ description: t("toolDef.askAgent.taskDesc") }),
     }),
 
-    execute: async (_toolCallId, params, signal) => {
+    execute: async (
+      _toolCallId: string,
+      params: AskAgentParams,
+      signal?: AbortSignal,
+    ): Promise<AskAgentToolResult> => {
       if (params.agent === agentId) {
         return { content: [{ type: "text", text: t("error.cannotCallSelf") }] };
       }
@@ -60,7 +84,7 @@ export function createAskAgentTool({ agentId, listAgents, engine }) {
         };
       } catch (err) {
         return {
-          content: [{ type: "text", text: t("error.agentCallFailed", { name: target.name, msg: err.message }) }],
+          content: [{ type: "text", text: t("error.agentCallFailed", { name: target.name, msg: errorMessage(err) }) }],
         };
       }
     },
