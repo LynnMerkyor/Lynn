@@ -31,12 +31,70 @@ const MAX_SKILL_SIZE = 50_000; // 50KB
 
 const SAFE_SKILL_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
+interface UtilityConfig {
+  utility?: string;
+  api_key?: string;
+  base_url?: string;
+  api?: string;
+  utility_allow_missing_api_key?: boolean;
+}
+
+interface LearnSkillsConfig {
+  enabled?: boolean;
+  allow_github_fetch?: boolean;
+  min_stars?: number;
+  safety_review?: boolean;
+}
+
+interface AgentConfigLike {
+  capabilities?: {
+    learn_skills?: LearnSkillsConfig;
+  };
+}
+
+interface GithubRepoInfo {
+  stargazers_count?: number;
+}
+
+interface ParsedGithubUrl {
+  owner: string;
+  repo: string;
+  subpath: string;
+}
+
+type SafetyReviewResult =
+  | { safe: true; reason?: undefined }
+  | { safe: false; reason: string };
+
+interface InstallSkillToolOptions {
+  agentDir: string;
+  getConfig: () => AgentConfigLike | null | undefined;
+  resolveUtilityConfig: () => UtilityConfig | null | undefined;
+  onInstalled?: (skillName: string) => Promise<void> | void;
+}
+
+interface InstallSkillParams {
+  github_url?: string;
+  skill_content?: string;
+  skill_name?: string;
+  reason: string;
+}
+
+type InstallSkillToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: Record<string, unknown>;
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /**
  * 校验 skill 名称：仅允许字母数字下划线短横线，防止路径穿越
  */
-export function sanitizeSkillName(raw) {
+export function sanitizeSkillName(raw: unknown): string | null {
   if (!raw) return null;
-  const trimmed = raw.trim();
+  const trimmed = String(raw).trim();
   if (!SAFE_SKILL_NAME.test(trimmed)) return null;
   return trimmed;
 }
@@ -45,7 +103,7 @@ export function sanitizeSkillName(raw) {
  * 从 SKILL.md 内容中提取 frontmatter 的 name 字段
  * 支持 --- yaml --- 和 <!-- name: xxx --> 两种格式
  */
-function extractSkillName(content) {
+function extractSkillName(content: string): string | null {
   // YAML frontmatter
   const yamlMatch = content.match(/^---[\s\S]*?^name:\s*(.+?)\s*$/m);
   if (yamlMatch) return yamlMatch[1].trim().replace(/["']/g, "");
@@ -67,7 +125,7 @@ function extractSkillName(content) {
  *   https://github.com/owner/repo
  *   https://github.com/owner/repo/tree/main/path/to/skill
  */
-function parseGithubUrl(url) {
+function parseGithubUrl(url: string): ParsedGithubUrl | null {
   try {
     const u = new URL(url);
     if (u.hostname !== "github.com") return null;
@@ -91,7 +149,10 @@ function parseGithubUrl(url) {
  * 通过 utility model 做安全审查
  * 返回 { safe: boolean, reason?: string }
  */
-export async function safetyReview(skillContent, resolveUtilityConfig) {
+export async function safetyReview(
+  skillContent: string,
+  resolveUtilityConfig: () => UtilityConfig | null | undefined,
+): Promise<SafetyReviewResult> {
   const isZh = getLocale().startsWith("zh");
 
   // 大小上限检查
@@ -110,7 +171,7 @@ export async function safetyReview(skillContent, resolveUtilityConfig) {
   }
 
   const { utility, api_key, base_url, api, utility_allow_missing_api_key = false } = utilCfg;
-  if ((!api_key && !utility_allow_missing_api_key) || !base_url || !api) {
+  if (!utility || (!api_key && !utility_allow_missing_api_key) || !base_url || !api) {
     return { safe: false, reason: t("error.installSkillUtilityIncomplete") };
   }
 
@@ -176,7 +237,12 @@ ${skillContent}`;
  * @param {() => object} opts.resolveUtilityConfig  返回 { utility, api_key, base_url }
  * @param {(skillName: string) => Promise<void>} opts.onInstalled  安装完成后的回调
  */
-export function createInstallSkillTool({ agentDir, getConfig, resolveUtilityConfig, onInstalled }) {
+export function createInstallSkillTool({
+  agentDir,
+  getConfig,
+  resolveUtilityConfig,
+  onInstalled,
+}: InstallSkillToolOptions) {
   return {
     name: "install_skill",
     label: t("toolDef.installSkill.label"),
@@ -193,7 +259,7 @@ export function createInstallSkillTool({ agentDir, getConfig, resolveUtilityConf
       ),
       reason: Type.String({ description: t("toolDef.installSkill.reasonDesc") }),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId: string, params: InstallSkillParams): Promise<InstallSkillToolResult> => {
       const cfg = getConfig();
       const learnCfg = cfg?.capabilities?.learn_skills || {};
       const enabled = learnCfg.enabled !== false;
@@ -243,11 +309,11 @@ export function createInstallSkillTool({ agentDir, getConfig, resolveUtilityConf
               details: {},
             };
           }
-          const repoData = await apiRes.json();
+          const repoData = await apiRes.json() as GithubRepoInfo;
           stars = repoData.stargazers_count || 0;
         } catch (err) {
           return {
-            content: [{ type: "text", text: t("error.installSkillGithubApiError", { msg: err.message }) }],
+            content: [{ type: "text", text: t("error.installSkillGithubApiError", { msg: errorMessage(err) }) }],
             details: {},
           };
         }
