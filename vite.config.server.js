@@ -6,7 +6,7 @@ const nodeBuiltins = builtinModules.flatMap((m) => [m, `node:${m}`]);
 export default defineConfig({
   build: {
     lib: {
-      entry: "server/index.js",
+      entry: "server/index.ts",
       formats: ["es"],
       fileName: () => "index.js",
     },

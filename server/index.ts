@@ -2,7 +2,7 @@
  * Lynn Server — HTTP + WebSocket API
  *
  * 启动方式：
- *   node server/index.js              （独立运行）
+ *   node --import tsx server/index.ts （开发独立运行）
  *   Electron main.js fork 启动        （桌面应用内嵌）
  *
  * 当通过 fork() 启动时，会通过 IPC 通知父进程端口号。
@@ -12,6 +12,7 @@ import fs from "fs";
 import { setMaxListeners } from "events";
 import os from "os";
 import path from "path";
+import type { AddressInfo } from "net";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
@@ -70,9 +71,14 @@ import { startCLI } from "./cli.js";
 import { fromRoot } from "../shared/hana-root.js";
 
 const productDir = fromRoot("lib");
+type AnyRecord = Record<string, any>;
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err || "unknown error");
+}
 
 // 用户数据存放在 ~/.lynn/（打包后与产品代码分离）
-// 开发时可通过 LYNN_HOME 环境变量隔离数据目录，如：LYNN_HOME=~/.lynn-dev node server/index.js
+// 开发时可通过 LYNN_HOME 环境变量隔离数据目录，如：LYNN_HOME=~/.lynn-dev node --import tsx server/index.ts
 const lynnHome = process.env.LYNN_HOME
   ? path.resolve(process.env.LYNN_HOME.replace(/^~/, os.homedir()))
   : process.env.HANA_HOME
@@ -96,7 +102,18 @@ try {
   // Version is informational; keep startup moving if package metadata is unavailable.
 }
 
-const startupState = {
+const startupState: {
+  stage: string;
+  engineReady: boolean;
+  routeReady: boolean;
+  ready: boolean;
+  pluginsReady: boolean;
+  schedulersReady: boolean;
+  pendingTasksResumed: boolean;
+  bridgeReady: boolean;
+  error: string | null;
+  startedAt: number;
+} = {
   stage: "engine",
   engineReady: false,
   routeReady: false,
@@ -113,7 +130,7 @@ const startupState = {
 console.log("[server] ② 创建 HanaEngine...");
 const engine = new HanaEngine({ lynnHome, productDir });
 console.log("[server] ② HanaEngine 构造完成，开始 init...");
-await engine.init((msg) => console.log(`[server] ${msg}`));
+await (engine as any).init((msg: string) => console.log(`[server] ${msg}`));
 startupState.engineReady = true;
 console.log("[server] ② engine.init 完成");
 dlog.log("server", "engine initialized");
@@ -140,13 +157,13 @@ dlog.header(appVersion, {
 });
 
 // ── 初始化 Hub（调度中枢，包装 engine） ──
-const hub = new Hub({ engine });
+const hub = new Hub({ engine: engine as any });
 
 // ── 后台任务运行器（review findings -> execute 等异步任务） ──
-const taskRuntime = new TaskRuntime({ hub, engine, lynnHome });
+const taskRuntime = new TaskRuntime({ hub: hub as any, engine: engine as any, lynnHome });
 
 // 加载 i18n
-loadLocale(engine.config?.locale);
+loadLocale(typeof engine.config?.locale === "string" ? engine.config.locale : undefined);
 
 // ── 启动令牌（阻止本机其他程序随意访问） ──
 const SERVER_TOKEN = process.env.HANA_TOKEN || crypto.randomBytes(16).toString("hex");
@@ -167,7 +184,7 @@ app.use("*", async (c, next) => {
   }
   c.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  if (c.req.method === "OPTIONS") return c.text("", 204);
+  if (c.req.method === "OPTIONS") return c.text("", 204 as any);
 
   // 验证 token：优先 Authorization header，WebSocket 走 Sec-WebSocket-Protocol，
   // 浏览器资源请求允许走同源 cookie，避免把 token 暴露在 URL。
@@ -177,7 +194,7 @@ app.use("*", async (c, next) => {
     protocolHeader: isUpgrade ? c.req.header("sec-websocket-protocol") : "",
     cookieHeader: c.req.header("cookie"),
   });
-  if (token !== SERVER_TOKEN) return c.json({ error: "forbidden" }, 403);
+  if (token !== SERVER_TOKEN) return c.json({ error: "forbidden" }, 403 as any);
 
   const url = new URL(c.req.url);
   const pathName = url.pathname;
@@ -217,61 +234,63 @@ app.onError((err, c) => {
   });
   return c.json(
     { error: { code: appErr.code, message: appErr.message, traceId: appErr.traceId } },
-    appErr.httpStatus
+    appErr.httpStatus as any
   );
 });
 
 // ── 阻塞式确认存储 ──
 const confirmStore = new ConfirmStore();
 engine.setConfirmStore(confirmStore);
-taskRuntime.bindConfirmStore(confirmStore);
+taskRuntime.bindConfirmStore(confirmStore as any);
 
 // ── 外部平台接入管理器 ──
-const bridgeManager = new BridgeManager({ engine, hub });
-hub.bridgeManager = bridgeManager;
+const routeEngine = engine as any;
+const routeHub = hub as any;
+const bridgeManager = new BridgeManager({ engine: routeEngine, hub: routeHub });
+routeHub.bridgeManager = bridgeManager;
 
 const {
   restRoute: chatRestRoute,
   wsRoute: chatWsRoute,
   broadcast: chatBroadcast,
   editRollbackStore,
-} = createChatRoute(engine, hub, { upgradeWebSocket });
-engine.editRollbackStore = editRollbackStore;
+} = createChatRoute(routeEngine, routeHub, { upgradeWebSocket });
+routeEngine.editRollbackStore = editRollbackStore;
 app.route("/api", chatRestRoute);
 app.route("", chatWsRoute);
 
 // Lynn V0.79 Jarvis Runtime Voice WS (parallel to chat WS)
-const { wsRoute: voiceWsRoute } = createVoiceWsRoute(engine, hub, { upgradeWebSocket });
+const { wsRoute: voiceWsRoute } = createVoiceWsRoute(routeEngine, routeHub, { upgradeWebSocket, engine: routeEngine, hub: routeHub } as any);
 app.route("", voiceWsRoute);
-app.route("/api", createReviewRoute(engine, { broadcast: chatBroadcast, taskRuntime }));
-app.route("/api", createTasksRoute(taskRuntime, engine));
-app.route("/api", createAppStateRoute(engine, { taskRuntime }));
-app.route("/api", createDebugRoute(engine));
-app.route("/api", createTranslateRoute(engine));
-app.route("/api", createDeepResearchRoute(engine));
-app.route("/api", createLocalQwen35Route(engine));
-app.route("/api", createSessionsRoute(engine));
-app.route("/api", createModelsRoute(engine));
-app.route("/api", createConfigRoute(engine));
-app.route("/api", createUploadRoute(engine));
-app.route("/api", createProvidersRoute(engine));
-app.route("/api", createAvatarRoute(engine));
-app.route("/api", createAgentsRoute(engine));
-app.route("/api", createDeskRoute(engine, hub));
-app.route("/api", createSkillsRoute(engine));
-app.route("/api", createMcpRoute(engine));
-app.route("/api", createChannelsRoute(engine, hub));
-app.route("/api", createDmRoute(engine));
-app.route("/api", createFsRoute(engine));
-app.route("/api", createPreferencesRoute(engine));
-app.route("/api", createBridgeRoute(engine, bridgeManager));
-app.route("/api", createAuthRoute(engine));
-app.route("/api", createDiaryRoute(engine));
-app.route("/api", createConfirmRoute(confirmStore, engine));
-app.route("/api", createPluginsRoute(engine));
-app.route("/api/tools", createToolsRoute(engine));
-app.route("/api/v1/audio", createAudioRoute(engine));
-app.route("/api", createExpertsRoute(engine));
+app.route("/api", createReviewRoute(routeEngine, { broadcast: chatBroadcast, taskRuntime }));
+app.route("/api", createTasksRoute(taskRuntime, routeEngine));
+app.route("/api", createAppStateRoute(routeEngine, { taskRuntime }));
+app.route("/api", createDebugRoute(routeEngine));
+app.route("/api", createTranslateRoute(routeEngine));
+app.route("/api", createDeepResearchRoute(routeEngine));
+app.route("/api", createLocalQwen35Route(routeEngine));
+app.route("/api", createSessionsRoute(routeEngine));
+app.route("/api", createModelsRoute(routeEngine));
+app.route("/api", createConfigRoute(routeEngine));
+app.route("/api", createUploadRoute(routeEngine));
+app.route("/api", createProvidersRoute(routeEngine));
+app.route("/api", createAvatarRoute(routeEngine));
+app.route("/api", createAgentsRoute(routeEngine));
+app.route("/api", createDeskRoute(routeEngine, routeHub));
+app.route("/api", createSkillsRoute(routeEngine));
+app.route("/api", createMcpRoute(routeEngine));
+app.route("/api", createChannelsRoute(routeEngine, routeHub));
+app.route("/api", createDmRoute(routeEngine));
+app.route("/api", createFsRoute(routeEngine));
+app.route("/api", createPreferencesRoute(routeEngine));
+app.route("/api", createBridgeRoute(routeEngine, bridgeManager));
+app.route("/api", createAuthRoute(routeEngine));
+app.route("/api", createDiaryRoute(routeEngine));
+app.route("/api", createConfirmRoute(confirmStore, routeEngine));
+app.route("/api", createPluginsRoute(routeEngine));
+app.route("/api/tools", createToolsRoute(routeEngine));
+app.route("/api/v1/audio", createAudioRoute(routeEngine));
+app.route("/api", createExpertsRoute(routeEngine));
 startupState.routeReady = true;
 // internal-browser WS — see unified upgrade handler in server startup below
 
@@ -318,8 +337,8 @@ app.get("/api/brain/diagnose", async (c) => {
     registering: engine._brainRegistrationPending ?? false,
     reachable: false,
     latencyMs: 0,
-    error: null,
-    url: null,
+    error: null as string | null,
+    url: null as string | null,
   };
   try {
     const { readSignedClientAgentHeaders } = await import("../core/client-agent-identity.js");
@@ -328,7 +347,7 @@ app.get("/api/brain/diagnose", async (c) => {
       "Content-Type": "application/json",
       ...readSignedClientAgentHeaders({ method: "POST", pathname: "/chat/completions" }),
     };
-    let lastError = null;
+    let lastError: string | null = null;
     for (const baseUrl of BRAIN_PROVIDER_BASE_URLS) {
       const start = Date.now();
       try {
@@ -352,23 +371,25 @@ app.get("/api/brain/diagnose", async (c) => {
         }
         lastError = `HTTP ${res.status}`;
       } catch (err) {
-        lastError = err.message;
+        lastError = errMessage(err);
       }
     }
     result.error = lastError;
   } catch (err) {
-    result.error = err.message;
+    result.error = errMessage(err);
   }
   return c.json(result);
 });
 
 // 前端日志上报（desktop 端把错误 POST 到 server 写进持久化日志）
 app.post("/api/log", async (c) => {
-  const { level, module, message } = await safeJson(c);
+  const { level, module, message } = await safeJson(c) as AnyRecord;
   if (!message) return c.json({ ok: false });
-  if (level === "error") dlog.error(module || "desktop", message);
-  else if (level === "warn") dlog.warn(module || "desktop", message);
-  else dlog.log(module || "desktop", message);
+  const logModule = typeof module === "string" ? module : "desktop";
+  const logMessage = String(message);
+  if (level === "error") dlog.error(logModule, logMessage);
+  else if (level === "warn") dlog.warn(logModule, logMessage);
+  else dlog.log(logModule, logMessage);
   return c.json({ ok: true });
 });
 
@@ -377,7 +398,7 @@ app.get("/api/plan-mode", async (c) => {
   return c.json({ enabled: engine.planMode });
 });
 app.post("/api/plan-mode", async (c) => {
-  const { enabled } = await safeJson(c);
+  const { enabled } = await safeJson(c) as AnyRecord;
   engine.setPlanMode(!!enabled);
   return c.json({ ok: true, enabled: engine.planMode });
 });
@@ -387,7 +408,7 @@ app.get("/api/security-mode", async (c) => {
   return c.json({ mode: engine.securityMode });
 });
 app.post("/api/security-mode", async (c) => {
-  const { mode } = await safeJson(c);
+  const { mode } = await safeJson(c) as AnyRecord;
   engine.setSecurityMode(mode);
   return c.json({ ok: true, mode: engine.securityMode });
 });
@@ -418,16 +439,16 @@ app.post("/api/shutdown", async (c) => {
 });
 
 // ── 启动服务器 ──
-const port = parseInt(process.env.HANA_PORT) || 0; // 0 = OS 分配
+const port = parseInt(process.env.HANA_PORT || "0", 10) || 0; // 0 = OS 分配
 const host = "127.0.0.1";
 
-let server;
+let server: any;
 try {
   server = serve({ fetch: app.fetch, port, hostname: host });
 
   // @hono/node-server 的 serve() 内部调用 server.listen()，
   // port=0 时需等 listening 事件才能拿到实际端口
-  await new Promise((resolve) => {
+  await new Promise<void>((resolve) => {
     if (server.listening) resolve();
     else server.on("listening", resolve);
   });
@@ -457,7 +478,7 @@ try {
       dlog.log("server", "background startup initialized");
     } catch (err) {
       startupState.stage = "error";
-      startupState.error = err?.message || String(err);
+      startupState.error = errMessage(err);
       dlog.error("server", `background startup failed: ${startupState.error}`);
       console.error("[server] background startup failed:", err);
     }
@@ -472,7 +493,7 @@ try {
   // upgrades before they reach Hono's handler.
   const browserWss = new WebSocketServer({ noServer: true });
 
-  server.on("upgrade", (req, socket, head) => {
+  server.on("upgrade", (req: any, socket: any, head: any) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
     if (url.pathname !== "/internal/browser") return; // let Hono handle it
 
@@ -486,37 +507,37 @@ try {
       socket.destroy();
       return;
     }
-    browserWss.handleUpgrade(req, socket, head, (ws) => {
-      browserWss.emit("connection", ws, req);
+    (browserWss as any).handleUpgrade(req, socket, head, (ws: any) => {
+      (browserWss as any).emit("connection", ws, req);
     });
   });
 
-  browserWss.on("connection", (ws) => {
+  browserWss.on("connection", (ws: any) => {
     const bm = BrowserManager.instance();
-    bm.setWsTransport(ws);
+    bm.setWsTransport(ws as any);
 
     // 调试：记录浏览器 WS 消息往返
     const _bwsLogPath = path.join(os.homedir(), ".lynn", "browser-ws.log");
-    let _bwsStream;
+    let _bwsStream: fs.WriteStream | null = null;
     try { _bwsStream = fs.createWriteStream(_bwsLogPath, { flags: "a" }); } catch { /* debug log is best effort */ }
-    const _bwsLog = (line) => { try { _bwsStream?.write(`${new Date().toISOString()} ${line}\n`); } catch { /* debug log is best effort */ } };
+    const _bwsLog = (line: string) => { try { _bwsStream?.write(`${new Date().toISOString()} ${line}\n`); } catch { /* debug log is best effort */ } };
     _bwsLog("browser WS connected");
     const origSend = ws.send.bind(ws);
-    ws.send = function(data, ...args) {
+    ws.send = function(data: any, ...args: any[]) {
       try { const m = JSON.parse(data); _bwsLog(`→ cmd=${m.cmd || m.type} id=${m.id || "?"}`); } catch { /* binary/non-JSON frame */ }
       return origSend(data, ...args);
     };
-    ws.on("message", (data) => {
+    ws.on("message", (data: any) => {
       try { const m = JSON.parse(data); _bwsLog(`← type=${m.type} id=${m.id || "?"} error=${m.error || "none"}`); } catch { /* binary/non-JSON frame */ }
     });
 
     ws.on("close", () => {
-      if (bm._transport?._ws === ws) bm.setWsTransport(null);
+      if ((bm as any)._transport?._ws === ws) bm.setWsTransport(null);
       console.log("[server] Electron browser control WS disconnected");
     });
-    ws.on("error", (err) => {
+    ws.on("error", (err: Error) => {
       console.error("[server] Electron browser control WS error:", err.message);
-      if (bm._transport?._ws === ws) bm.setWsTransport(null);
+      if ((bm as any)._transport?._ws === ws) bm.setWsTransport(null);
     });
     console.log("[server] Electron browser control WS connected");
   });
@@ -524,9 +545,9 @@ try {
   // Inject Hono WS for chat and other WS routes, but skip /internal/browser
   // to prevent double-handling the same upgrade request
   injectWebSocket({
-    on(event, handler) {
+    on(event: string, handler: (...args: any[]) => void) {
       if (event === "upgrade") {
-        server.on("upgrade", (req, socket, head) => {
+        server.on("upgrade", (req: any, socket: any, head: any) => {
           const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
           if (url.pathname === "/internal/browser") return; // already handled above
           handler(req, socket, head);
@@ -535,10 +556,10 @@ try {
         server.on(event, handler);
       }
     },
-  });
+  } as any);
 
-  const address = server.address();
-  const actualPort = address.port;
+  const address = server.address() as AddressInfo | string | null;
+  const actualPort = typeof address === "object" && address ? address.port : port;
 
   console.log(`[server] Lynn Server 运行在 http://${host}:${actualPort}`);
   dlog.log("server", `listening on :${actualPort}`);
@@ -557,7 +578,7 @@ try {
       },
     }));
   } catch (e) {
-    console.error("[server] 写入 server-info.json 失败:", e.message);
+    console.error("[server] 写入 server-info.json 失败:", errMessage(e));
   }
 
   // 通知就绪（server-info.json 已在上方写入，无需额外动作）
@@ -574,7 +595,7 @@ try {
   }
 
 } catch (err) {
-  console.error("[server] 启动失败:", err.message);
+  console.error("[server] 启动失败:", errMessage(err));
   process.exit(1);
 }
 
@@ -609,7 +630,7 @@ async function gracefulShutdown() {
         console.log("[server] 浏览器已挂起（冷保存保留）");
       }
     } catch (e) {
-      console.error("[server] 浏览器挂起失败:", e.message);
+      console.error("[server] 浏览器挂起失败:", errMessage(e));
     }
 
     // 3. 停止外部平台
@@ -621,8 +642,8 @@ async function gracefulShutdown() {
     console.log("[server] Hub + Engine 已清理");
     dlog.log("server", "hub + engine disposed");
   } catch (err) {
-    console.error("[server] 关闭出错:", err.message);
-    dlog.error("server", `shutdown error: ${err.message}`);
+    console.error("[server] 关闭出错:", errMessage(err));
+    dlog.error("server", `shutdown error: ${errMessage(err)}`);
   }
 
   clearTimeout(forceTimer);
@@ -636,7 +657,7 @@ if (process.platform === "win32") process.on("SIGBREAK", gracefulShutdown);
 
 // 全局未捕获错误（写入持久化日志，防止崩溃无痕）
 let _stdoutBroken = false;
-function _safeConsoleError(...args) {
+function _safeConsoleError(...args: unknown[]) {
   if (_stdoutBroken) return;
   try {
     console.error(...args);
@@ -646,10 +667,11 @@ function _safeConsoleError(...args) {
 }
 
 process.on("uncaughtException", (err) => {
-  if (err?.code === "EPIPE" || err?.code === "ERR_IPC_CHANNEL_CLOSED") {
+  const code = (err as NodeJS.ErrnoException | undefined)?.code;
+  if (code === "EPIPE" || code === "ERR_IPC_CHANNEL_CLOSED") {
     if (!_stdoutBroken) {
       _stdoutBroken = true;
-      dlog.error("server", `stdout pipe broken (${err.code}), suppressing further console output`);
+      dlog.error("server", `stdout pipe broken (${code}), suppressing further console output`);
     }
     return;
   }
