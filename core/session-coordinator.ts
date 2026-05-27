@@ -48,18 +48,82 @@ import { buildScenarioContractHintForText } from "../shared/scenario-contracts.j
 import {
   isNativeToolCallingDisabled,
 } from "../shared/model-tool-capabilities.js";
+import type { ResolvedModel } from "./types.js";
 
 const log = createModuleLogger("session");
 
-function warnMemoryNotifySessionEnd(context, sessionPath, err) {
-  const message = err?.message || String(err || "unknown error");
+type AnyRecord = Record<string, any>;
+type ToolLike = AnyRecord & { name: string };
+type AgentLike = AnyRecord;
+type SessionLike = AnyRecord;
+type ModelLike = ResolvedModel | AnyRecord | null;
+type PromptImage = { data: string; mimeType?: string };
+type PromptOptions = AnyRecord & {
+  images?: PromptImage[];
+  turnInstruction?: string;
+  disableTools?: boolean;
+};
+type SessionEntry = AnyRecord & {
+  session: SessionLike;
+  agentId: string;
+  memoryEnabled?: boolean;
+  planMode?: boolean;
+  securityMode?: string;
+  modelId?: string | null;
+  modelProvider?: string | null;
+  nativeToolCallingDisabled?: boolean;
+  lastTouchedAt: number;
+  unsub: () => void;
+  activeMcpServers?: string[] | null;
+  compactionCount?: number;
+  relayInProgress?: boolean;
+};
+type SessionCoordinatorDeps = AnyRecord & {
+  agentsDir: string;
+  getAgent: () => AgentLike;
+  getActiveAgentId: () => string;
+  getModels: () => AnyRecord;
+  getResourceLoader: () => AnyRecord;
+  getSkills?: () => AnyRecord | null;
+  buildTools: (cwd: string, customTools?: unknown, opts?: AnyRecord) => { tools: ToolLike[]; customTools: ToolLike[] };
+  emitEvent: (event: AnyRecord, sessionPath: string | null | undefined) => void;
+  emitDevLog?: (message: string, level?: string) => void;
+  getHomeCwd: () => string | null | undefined;
+  agentIdFromSessionPath: (sessionPath: string) => string | null | undefined;
+  switchAgentOnly: (id: string) => Promise<unknown>;
+  getConfig: () => AnyRecord;
+  getPrefs: () => AnyRecord;
+  getAgents: () => Map<string, AgentLike>;
+  getActivityStore: (agentId: string) => AnyRecord | null;
+  getAgentById: (agentId: string) => AgentLike | null | undefined;
+  listAgents: () => AgentLike[];
+};
+type SessionTitleCacheEntry = { titles: Record<string, string>; ts: number };
+type IsolatedExecutionOptions = AnyRecord & {
+  agentId?: string;
+  signal?: AbortSignal;
+  persist?: string;
+  cwd?: string;
+  dryRun?: boolean;
+  model?: ModelLike;
+  toolFilter?: string[];
+  builtinFilter?: string[];
+  validateCommand?: unknown[];
+};
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err || "unknown error");
+}
+
+function warnMemoryNotifySessionEnd(context: string, sessionPath: string | null | undefined, err: unknown) {
+  const message = errMessage(err);
   log.warn(`memory notifySessionEnd failed during ${context} · session=${sessionPath} · ${message}`);
 }
 
-function notifyMemorySessionEnd(agent, sessionPath, context) {
+function notifyMemorySessionEnd(agent: AgentLike | null | undefined, sessionPath: string, context: string) {
   const promise = agent?._memoryTicker?.notifySessionEnd(sessionPath);
   if (!promise?.catch) return promise;
-  return promise.catch((err) => warnMemoryNotifySessionEnd(context, sessionPath, err));
+  return promise.catch((err: unknown) => warnMemoryNotifySessionEnd(context, sessionPath, err));
 }
 
 function shouldExposeVerboseModelRouting() {
@@ -81,7 +145,7 @@ function getSteerPrefix() {
   return isZh ? "（插话，无需 MOOD）\n" : "(Interjection, no MOOD needed)\n";
 }
 
-function buildKnownFolderAliasPrompt(isZh) {
+function buildKnownFolderAliasPrompt(isZh: boolean) {
   const home = os.homedir();
   const downloads = path.join(home, "Downloads");
   const desktop = path.join(home, "Desktop");
@@ -101,12 +165,12 @@ function buildKnownFolderAliasPrompt(isZh) {
       ].join(" ");
 }
 
-function buildRouteAndScenarioHint(text, routeIntent, opts = {}) {
+function buildRouteAndScenarioHint(text: string, routeIntent: string, opts: { locale?: string; imagesCount?: number } = {}) {
   const locale = opts.locale || getLocale();
   return buildRouteIntentSystemHint(routeIntent, locale);
 }
 
-function buildScenarioHintContext(text, opts = {}) {
+function buildScenarioHintContext(text: string, opts: { locale?: string; imagesCount?: number; attachmentsCount?: number; audioCount?: number } = {}) {
   return buildScenarioContractHintForText(text, {
     locale: opts.locale || getLocale(),
     imagesCount: opts.imagesCount || 0,
@@ -119,10 +183,10 @@ function shouldInjectLocalRoutePromptHints() {
   return false;
 }
 
-function toSessionPromptOptions(images) {
+function toSessionPromptOptions(images?: PromptImage[]) {
   if (!images?.length) return undefined;
   return {
-    images: images.map((img) => ({
+    images: images.map((img: PromptImage) => ({
       type: "image",
       // pi-coding-agent 的 SDK 文档已切到 source.base64，
       // 但底层 pi-ai 目前仍按顶层 data/mimeType 读取图片。
@@ -161,16 +225,16 @@ const STANDARD_CUSTOM_TOOLS = new Set([
  * @param {"full"|"standard"|"minimal"|null} tier - null/undefined = full
  * @returns {Array}
  */
-function filterCustomToolsByTier(customTools, tier) {
+function filterCustomToolsByTier(customTools: ToolLike[], tier: string | null | undefined) {
   if (!tier || tier === "full") return customTools;
   if (tier === "none") return [];
   const allowed = tier === "minimal" ? MINIMAL_CUSTOM_TOOLS : STANDARD_CUSTOM_TOOLS;
-  return customTools.filter(t => allowed.has(t.name));
+  return customTools.filter((t: ToolLike) => allowed.has(t.name));
 }
 
 const OPENAI_RESPONSES_TOOL_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
-function isStrictToolNameModel(model) {
+function isStrictToolNameModel(model: ModelLike) {
   const provider = String(model?.provider || "").toLowerCase();
   const api = String(model?.api || "").toLowerCase();
   return provider === "openai"
@@ -180,7 +244,7 @@ function isStrictToolNameModel(model) {
     || api === "openai-codex-responses";
 }
 
-function sanitizeToolName(name) {
+function sanitizeToolName(name: unknown) {
   const sanitized = String(name || "tool")
     .replace(/[^a-zA-Z0-9_-]/g, "_")
     .replace(/_+/g, "_")
@@ -189,7 +253,7 @@ function sanitizeToolName(name) {
   return sanitized || "tool";
 }
 
-function normalizeCustomToolsForModel(customTools, model) {
+function normalizeCustomToolsForModel(customTools: ToolLike[], model: ModelLike) {
   if (!Array.isArray(customTools) || customTools.length === 0) return [];
   if (!isStrictToolNameModel(model)) return customTools;
 
@@ -216,15 +280,15 @@ function normalizeCustomToolsForModel(customTools, model) {
   return normalized;
 }
 
-function shouldSuppressClientToolSchema(model) {
+function shouldSuppressClientToolSchema(model: ModelLike) {
   return false;
 }
 
-function messageContentText(content) {
+function messageContentText(content: unknown) {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
-    .map((part) => {
+    .map((part: any) => {
       if (!part) return "";
       if (typeof part === "string") return part;
       if (typeof part.text === "string") return part.text;
@@ -235,7 +299,7 @@ function messageContentText(content) {
     .join("\n");
 }
 
-function isRecoverableProviderErrorMessage(message) {
+function isRecoverableProviderErrorMessage(message: AnyRecord | null | undefined) {
   if (!message || message.role !== "assistant") return false;
   if (message.stopReason !== "error") return false;
   const errorMessage = String(message.errorMessage || "");
@@ -243,20 +307,20 @@ function isRecoverableProviderErrorMessage(message) {
   return !messageContentText(message.content).trim();
 }
 
-function isInternalRetryPromptMessage(message) {
+function isInternalRetryPromptMessage(message: AnyRecord | null | undefined) {
   if (!message || message.role !== "user") return false;
   const text = messageContentText(message.content).trim();
   return text.startsWith("[系统提示] 这是空回复后的补救回答")
     || text.startsWith("[System] This is a recovery answer after an empty model turn");
 }
 
-function isTransientRecoveredToolPlaceholder(message) {
+function isTransientRecoveredToolPlaceholder(message: AnyRecord | null | undefined) {
   if (!message || message.role !== "assistant") return false;
   const text = messageContentText(message.content).trim();
   return text === "正在取回工具结果，稍后会整理成回答。";
 }
 
-function sanitizeMessagesBeforePrompt(messages) {
+function sanitizeMessagesBeforePrompt(messages: unknown) {
   if (!Array.isArray(messages) || messages.length === 0) {
     return { messages: Array.isArray(messages) ? messages : [], removed: 0 };
   }
@@ -276,7 +340,7 @@ function sanitizeMessagesBeforePrompt(messages) {
   return { messages: cleaned, removed };
 }
 
-function sanitizeActiveSessionContextForPrompt(session, sessionPath) {
+function sanitizeActiveSessionContextForPrompt(session: SessionLike | null | undefined, sessionPath: string | null | undefined) {
   const manager = session?.sessionManager;
   const replaceMessages = session?.agent?.replaceMessages;
   if (!manager?.buildSessionContext || typeof replaceMessages !== "function") return 0;
@@ -285,12 +349,12 @@ function sanitizeActiveSessionContextForPrompt(session, sessionPath) {
     const currentMessages = Array.isArray(context?.messages) ? context.messages : [];
     const { messages, removed } = sanitizeMessagesBeforePrompt(currentMessages);
     if (removed > 0 && messages.length > 0) {
-      replaceMessages.call(session.agent, messages);
+      replaceMessages.call(session?.agent, messages);
       log.warn(`[prompt] scrubbed ${removed} transient provider/retry message(s) from active context · session=${sessionPath || "unknown"}`);
     }
     return removed;
   } catch (err) {
-    log.warn(`[prompt] active context scrub failed · session=${sessionPath || "unknown"} · ${err?.message || err}`);
+    log.warn(`[prompt] active context scrub failed · session=${sessionPath || "unknown"} · ${errMessage(err)}`);
     return 0;
   }
 }
@@ -299,7 +363,7 @@ function sanitizeActiveSessionContextForPrompt(session, sessionPath) {
  * 推断模型的 toolTier
  * 优先使用 known-models.json 标注，fallback 按 context window 推断
  */
-function resolveToolTier(model) {
+function resolveToolTier(model: ModelLike) {
   if (!model) return null;
   if (isNativeToolCallingDisabled(model)) return "none";
   const tier = lookupToolTier(model.provider, model.id);
@@ -334,7 +398,7 @@ function createReplyIntegrityTracker() {
   return {
     replyText: "",
     sawToolCall: false,
-    handle(event) {
+    handle(event: AnyRecord) {
       if (event?.type === "message_update") {
         const sub = event.assistantMessageEvent;
         if (sub?.type === "text_delta") {
@@ -352,15 +416,15 @@ function createReplyIntegrityTracker() {
   };
 }
 
-function ensureValidReplyExecution(tracker) {
+function ensureValidReplyExecution(tracker: AnyRecord) {
   return;
 }
 
-function getBuiltinToolNames(tools) {
-  return tools.map((tool) => tool.name);
+function getBuiltinToolNames(tools: ToolLike[]) {
+  return tools.map((tool: ToolLike) => tool.name);
 }
 
-function buildSkillToolCompatibilityHint(skillName) {
+function buildSkillToolCompatibilityHint(skillName: string | null | undefined) {
   const isZh = getLocale().startsWith("zh");
   const toolNames = "read, write, edit, bash, grep, find, ls";
   if (isZh) {
@@ -381,7 +445,7 @@ function buildSkillToolCompatibilityHint(skillName) {
   ].join("\n");
 }
 
-function buildSkillHintContext(suggestions) {
+function buildSkillHintContext(suggestions: AnyRecord[]) {
   if (!Array.isArray(suggestions) || suggestions.length === 0) return "";
   const isZh = getLocale().startsWith("zh");
 
@@ -412,7 +476,7 @@ function buildSkillHintContext(suggestions) {
   if (isZh) {
     return [
       "【技能候选提示】当前请求很可能匹配以下已启用技能：",
-      ...suggestions.map((skill) => {
+      ...suggestions.map((skill: AnyRecord) => {
         const matches = skill.matchedTokens?.length ? `（命中：${skill.matchedTokens.join("、")}）` : "";
         return `- ${skill.name}${skill.description ? `：${skill.description}` : ""}${matches}`;
       }),
@@ -422,7 +486,7 @@ function buildSkillHintContext(suggestions) {
 
   return [
     "[Skill Hint] This request likely matches these enabled skills:",
-    ...suggestions.map((skill) => {
+    ...suggestions.map((skill: AnyRecord) => {
       const matches = skill.matchedTokens?.length ? ` (matched: ${skill.matchedTokens.join(", ")})` : "";
       return `- ${skill.name}${skill.description ? `: ${skill.description}` : ""}${matches}`;
     }),
@@ -430,7 +494,7 @@ function buildSkillHintContext(suggestions) {
   ].join("\n");
 }
 
-function shouldAttachSkillHint(routeIntent) {
+function shouldAttachSkillHint(routeIntent: string) {
   return normalizeRouteIntent(routeIntent) !== ROUTE_INTENTS.UTILITY;
 }
 
@@ -445,17 +509,17 @@ const SESSION_AUX_FILES = new Set([
   "session-titles.json",
 ]);
 
-function withTimeout(promise, ms, fallback) {
-  let timer;
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
   return Promise.race([
     promise.finally(() => clearTimeout(timer)),
-    new Promise((resolve) => {
+    new Promise<T>((resolve) => {
       timer = setTimeout(() => resolve(fallback), ms);
     }),
   ]);
 }
 
-async function listSessionFileSkeletons(sessionDir, agent) {
+async function listSessionFileSkeletons(sessionDir: string, agent: AgentLike) {
   const entries = await withTimeout(
     fsp.readdir(sessionDir, { withFileTypes: true }),
     SESSION_LIST_TIMEOUT_MS,
@@ -469,7 +533,7 @@ async function listSessionFileSkeletons(sessionDir, agent) {
     .sort()
     .slice(-SESSION_LIST_MAX_FILES);
 
-  const skeletons = await Promise.all(files.map(async (fileName) => {
+  const skeletons = await Promise.all(files.map(async (fileName: string) => {
     const sessionPath = path.join(sessionDir, fileName);
     const stat = await withTimeout(fsp.stat(sessionPath), SESSION_STAT_TIMEOUT_MS, null);
     return {
@@ -490,11 +554,11 @@ async function listSessionFileSkeletons(sessionDir, agent) {
   return skeletons.filter((entry) => entry.path);
 }
 
-function buildAtInjectionPromptHint(text) {
+function buildAtInjectionPromptHint(text: string) {
   if (!text || /@\S+/.test(text)) return "";
   if (/\[(附件|目录|参考文档|Git 上下文)\]/.test(text)) return "";
 
-  const files = [...new Set(Array.from(text.matchAll(FILE_MENTION_PATTERN)).map((match) => match[1]).filter(Boolean))].slice(0, 3);
+  const files = [...new Set(Array.from(text.matchAll(FILE_MENTION_PATTERN)).map((match: RegExpMatchArray) => match[1]).filter(Boolean))].slice(0, 3);
   if (files.length === 0) return "";
 
   const isZh = getLocale().startsWith("zh");
@@ -514,6 +578,17 @@ function buildAtInjectionPromptHint(text) {
 }
 
 export class SessionCoordinator {
+  _d: SessionCoordinatorDeps;
+  _pendingModel: ModelLike;
+  _session: SessionLike | null;
+  _sessionStarted: boolean;
+  _sessions: Map<string, SessionEntry>;
+  _headlessRefCount: number;
+  _titlesCache: Map<string, SessionTitleCacheEntry>;
+  _pendingPlanMode: boolean;
+  _pendingSecurityMode: string;
+  _contentFilter?: AnyRecord | null;
+
   /**
    * @param {object} deps
    * @param {string} deps.agentsDir
@@ -534,7 +609,7 @@ export class SessionCoordinator {
    * @param {(agentId) => object|null} deps.getAgentById
    * @param {() => object} deps.listAgents - 列出所有 agent
    */
-  constructor(deps) {
+  constructor(deps: SessionCoordinatorDeps) {
     this._d = deps;
     this._pendingModel = null;
     this._session = null;
@@ -552,7 +627,7 @@ export class SessionCoordinator {
   get sessionStarted() { return this._sessionStarted; }
   get sessions() { return this._sessions; }
 
-  setPendingModel(model) { this._pendingModel = model; }
+  setPendingModel(model: ModelLike) { this._pendingModel = model; }
   get pendingModel() { return this._pendingModel; }
 
   get currentSessionPath() {
@@ -561,7 +636,7 @@ export class SessionCoordinator {
 
   // ── Session 创建 / 切换 ──
 
-  async createSession(sessionMgr, cwd, memoryEnabled = true, model = null) {
+  async createSession(sessionMgr: AnyRecord | null = null, cwd?: string | null, memoryEnabled = true, model: ModelLike = null) {
     const t0 = Date.now();
     const effectiveCwd = cwd || this._d.getHomeCwd() || process.cwd();
     const agent = this._d.getAgent();
@@ -584,7 +659,7 @@ export class SessionCoordinator {
     creatingAgent.setMemoryEnabled(memoryEnabled);
 
     const baseResourceLoader = this._d.getResourceLoader();
-    const sessionEntry = {}; // populated after session creation; resourceLoader proxy references this
+    const sessionEntry = {} as SessionEntry; // populated after session creation; resourceLoader proxy references this
 
     // Wrap resourceLoader to dynamically inject security mode context and proactive recall into system prompt
     const resourceLoader = Object.create(baseResourceLoader, {
@@ -785,7 +860,7 @@ export class SessionCoordinator {
       },
     });
 
-    let sessionPathRef = null;
+    let sessionPathRef: string | null = null;
     const { tools: sessionTools, customTools: sessionCustomTools } = this._d.buildTools(effectiveCwd, null, {
       workspace: effectiveCwd,
       getSessionPath: () => sessionPathRef,
@@ -827,7 +902,7 @@ export class SessionCoordinator {
       customTools: effectiveCustomTools,
       ...(Object.keys(clientAgentHeaders).length > 0 && { requestHeaders: clientAgentHeaders }),
       ...(clientAgentMetadata && { requestMetadata: clientAgentMetadata }),
-    });
+    } as any);
     const elapsed = Date.now() - t0;
     log.log(`session created (${elapsed}ms), model=${effectiveModel?.name || "?"}`);
     this._session = session;
@@ -836,7 +911,7 @@ export class SessionCoordinator {
     // 事件转发
     const sessionPath = session.sessionManager?.getSessionFile?.();
     sessionPathRef = sessionPath || null;
-    const unsub = session.subscribe((event) => {
+    const unsub = session.subscribe((event: AnyRecord) => {
       const entryForEvent = this._sessions.get(mapKey);
       if (event?.type === "skill_activated" && sessionPath) {
         try {
@@ -871,6 +946,7 @@ export class SessionCoordinator {
         entryForEvent._toolFailDegraded = false;
 
         // ── ClawAegis 输入层：read 工具返回内容 prompt injection 扫描 ──
+        const toolIsError = Boolean(event.isError || event.result?.isError);
         const toolName = event.toolName || event.toolCall?.name || "";
         runReadToolPromptInjectionGuardrail(event, {
           logger: (message) => console.warn(message),
@@ -946,7 +1022,7 @@ export class SessionCoordinator {
     return session;
   }
 
-  async switchSession(sessionPath) {
+  async switchSession(sessionPath: string) {
     // 切到已有 session 时清空 pendingModel（用户的临时选择不应跟到别的 session）
     this._pendingModel = null;
 
@@ -958,7 +1034,7 @@ export class SessionCoordinator {
 
     // 从 session-meta.json 恢复记忆开关 & 模型
     let memoryEnabled = true;
-    let savedModelRef = null;  // {id, provider} or null
+    let savedModelRef: { id: string; provider?: string } | null = null;  // {id, provider} or null
     try {
       const metaPath = path.join(this._d.getAgent().sessionDir, "session-meta.json");
       const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
@@ -972,8 +1048,8 @@ export class SessionCoordinator {
         savedModelRef = { id: metaEntry.modelId, provider: "" };
       }
     } catch (err) {
-      if (err.code !== "ENOENT") {
-        log.warn(`session-meta.json 读取失败: ${err.message}`);
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        log.warn(`session-meta.json 读取失败: ${errMessage(err)}`);
       }
     }
 
@@ -1005,7 +1081,7 @@ export class SessionCoordinator {
       }
     }
     // 冷启动恢复：从 session-meta.json 解析 model，传给 createSession
-    let savedModel = null;
+    let savedModel: ModelLike = null;
     if (savedModelRef) {
       const models = this._d.getModels();
       savedModel = findModel(models.availableModels, savedModelRef.id, savedModelRef.provider || undefined);
@@ -1018,7 +1094,7 @@ export class SessionCoordinator {
     return this.createSession(sessionMgr, cwd, memoryEnabled, savedModel);
   }
 
-  async prompt(text, opts) {
+  async prompt(text: string, opts: PromptOptions = {}) {
     if (!this._session) throw new Error(t("error.noActiveSessionPrompt"));
     this._sessionStarted = true;
     const sp = this._session.sessionManager?.getSessionFile?.() ?? null;
@@ -1074,13 +1150,15 @@ export class SessionCoordinator {
     // 图片需转为 { images: [{ type: "image", source: { type: "base64", mediaType, data } }] }。
     const _promptOpts = toSessionPromptOptions(opts?.images);
     sanitizeActiveSessionContextForPrompt(this._session, sp);
-    const runPromptAttempt = async (attemptText) => {
+    const runPromptAttempt = async (attemptText: string) => {
       const tracker = createReplyIntegrityTracker();
-      const unsub = this._session.subscribe((event) => {
+      const activeSession = this._session;
+      if (!activeSession) throw new Error(t("error.noActiveSessionPrompt"));
+      const unsub = activeSession.subscribe((event: AnyRecord) => {
         tracker.handle(event);
       });
       try {
-        await this._session.prompt(attemptText, _promptOpts);
+        await activeSession.prompt(attemptText, _promptOpts);
         ensureValidReplyExecution(tracker);
         return tracker.replyText;
       } finally {
@@ -1121,7 +1199,7 @@ export class SessionCoordinator {
     }
   }
 
-  steer(text) {
+  steer(text: string) {
     if (!this._session?.isStreaming) return false;
     const sp = this._session.sessionManager?.getSessionFile?.();
     if (sp) {
@@ -1140,7 +1218,7 @@ export class SessionCoordinator {
 
   // ── Path 感知 API（Phase 2） ──
 
-  async promptSession(sessionPath, text, opts) {
+  async promptSession(sessionPath: string, text: string, opts: PromptOptions = {}) {
     const entry = this._sessions.get(sessionPath);
     if (!entry) throw new Error(t("error.sessionNotInCache", { path: sessionPath }));
     entry.lastTouchedAt = Date.now();
@@ -1187,9 +1265,9 @@ export class SessionCoordinator {
     // [VISION-ARG-FIX v0.76.6] session.prompt() 需要 options.images，且图片块走 source.base64。
     const _promptOpts = toSessionPromptOptions(opts?.images);
     sanitizeActiveSessionContextForPrompt(entry.session, sessionPath);
-    const runPromptAttempt = async (attemptText) => {
+    const runPromptAttempt = async (attemptText: string) => {
       const tracker = createReplyIntegrityTracker();
-      const unsub = entry.session.subscribe((event) => {
+      const unsub = entry.session.subscribe((event: AnyRecord) => {
         tracker.handle(event);
       });
       try {
@@ -1218,7 +1296,7 @@ export class SessionCoordinator {
     }
   }
 
-  async _runWithTurnToolsDisabled(sessionPath, entry, run) {
+  async _runWithTurnToolsDisabled(sessionPath: string, entry: SessionEntry, run: () => Promise<unknown>) {
     const session = entry?.session;
     if (!session || typeof session._buildRuntime !== "function") {
       return run();
@@ -1245,19 +1323,19 @@ export class SessionCoordinator {
     }
   }
 
-  _applyContentFilter(text, sessionPath) {
+  _applyContentFilter(text: string, sessionPath: string | null | undefined) {
     if (!this._contentFilter || !text) return null;
     const check = this._contentFilter.check(text);
     if (!check || !check.matches?.length || check.level === "pass") return check;
 
-    const categories = [...new Set(check.matches.map((m) => m.category).filter(Boolean))];
+    const categories = [...new Set(check.matches.map((m: AnyRecord) => m.category).filter(Boolean))];
     log.log(`[content-filter] ${check.level} input (${categories.join(", ")})`);
     this._d.emitEvent({
       type: "content_filtered",
       direction: "input",
       blocked: !!check.blocked,
       level: check.level,
-      matches: check.matches.map((m) => ({ category: m.category, level: m.level })),
+      matches: check.matches.map((m: AnyRecord) => ({ category: m.category, level: m.level })),
     }, sessionPath || null);
     this._d.emitDevLog?.(
       `内容过滤 ${check.level}: ${categories.join(", ") || "matched"}`,
@@ -1270,7 +1348,7 @@ export class SessionCoordinator {
     return check;
   }
 
-  steerSession(sessionPath, text) {
+  steerSession(sessionPath: string, text: string) {
     const entry = this._sessions.get(sessionPath);
     if (!entry?.session.isStreaming) return false;
     entry.lastTouchedAt = Date.now();
@@ -1278,7 +1356,7 @@ export class SessionCoordinator {
     return true;
   }
 
-  async abortSession(sessionPath) {
+  async abortSession(sessionPath: string) {
     const entry = this._sessions.get(sessionPath);
     if (!entry?.session.isStreaming) return false;
     await entry.session.abort();
@@ -1292,7 +1370,7 @@ export class SessionCoordinator {
     return this._sessions.get(sp)?.planMode ?? false;
   }
 
-  _buildSessionTools(entry, modeOverride = null) {
+  _buildSessionTools(entry: SessionEntry, modeOverride: string | null = null) {
     const cwd = entry.session?.sessionManager?.getCwd?.() || this._d.getHomeCwd() || process.cwd();
     const sessionPath = entry.session?.sessionManager?.getSessionFile?.() || null;
     const effectiveMode = normalizeSecurityMode(modeOverride || entry.securityMode || DEFAULT_SECURITY_MODE);
@@ -1306,7 +1384,7 @@ export class SessionCoordinator {
     });
   }
 
-  _applySessionToolRuntime(sessionPath, modeOverride = null) {
+  _applySessionToolRuntime(sessionPath: string, modeOverride: string | null = null) {
     const entry = this._sessions.get(sessionPath);
     if (!entry) return;
 
@@ -1337,9 +1415,9 @@ export class SessionCoordinator {
       log.log(`[model-tools] runtime using Brain V2 internal tool chain for ${modelRef?.provider || "?"}/${modelRef?.id || modelRef?.name || "?"}; client tool schema suppressed`);
       return;
     }
-    const baseToolsOverride = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
+    const baseToolsOverride = Object.fromEntries(tools.map((tool: ToolLike) => [tool.name, tool]));
     const normalizedCustomTools = normalizeCustomToolsForModel(customTools || [], modelRef);
-    const customNames = normalizedCustomTools.map((tool) => tool.name);
+    const customNames = normalizedCustomTools.map((tool: ToolLike) => tool.name);
     const activeToolNames = config.toolsRestricted
       ? [...READ_ONLY_BUILTIN_TOOLS, ...customNames]
       : [...getBuiltinToolNames(tools), ...customNames];
@@ -1353,7 +1431,7 @@ export class SessionCoordinator {
   }
 
   /** Set plan mode for the current (focused) session */
-  setPlanMode(enabled, allBuiltInTools) {
+  setPlanMode(enabled: boolean, allBuiltInTools?: ToolLike[]) {
     const targetMode = enabled ? SecurityMode.PLAN : SecurityMode.AUTHORIZED;
     const sp = this.currentSessionPath;
 
@@ -1362,7 +1440,7 @@ export class SessionCoordinator {
       this._pendingSecurityMode = targetMode;
       this._d.emitEvent({ type: "plan_mode", enabled: this._pendingPlanMode }, null);
       this._d.emitEvent({ type: "security_mode", mode: targetMode }, null);
-      this._d.emitDevLog(`Plan Mode: ${this._pendingPlanMode ? "ON (只读)" : "OFF (正常)"}`, "info");
+      this._d.emitDevLog?.(`Plan Mode: ${this._pendingPlanMode ? "ON (只读)" : "OFF (正常)"}`, "info");
       return;
     }
 
@@ -1371,7 +1449,7 @@ export class SessionCoordinator {
     this._pendingPlanMode = !!enabled;
     this._d.emitEvent({ type: "plan_mode", enabled: !!enabled }, sp);
     this._d.emitEvent({ type: "security_mode", mode: targetMode }, sp);
-    this._d.emitDevLog(`Plan Mode: ${enabled ? "ON (只读)" : "OFF (正常)"}`, "info");
+    this._d.emitDevLog?.(`Plan Mode: ${enabled ? "ON (只读)" : "OFF (正常)"}`, "info");
   }
 
   /** Get security mode for the current (focused) session */
@@ -1382,7 +1460,7 @@ export class SessionCoordinator {
   }
 
   /** Set security mode for the current (focused) session */
-  setSecurityMode(mode, allBuiltInTools) {
+  setSecurityMode(mode: string, allBuiltInTools?: ToolLike[]) {
     const effectiveMode = normalizeSecurityMode(mode);
     const sp = this.currentSessionPath;
 
@@ -1391,7 +1469,7 @@ export class SessionCoordinator {
       this._pendingPlanMode = effectiveMode === SecurityMode.PLAN;
       this._d.emitEvent({ type: "security_mode", mode: effectiveMode }, null);
       this._d.emitEvent({ type: "plan_mode", enabled: effectiveMode === SecurityMode.PLAN }, null);
-      this._d.emitDevLog(`Security Mode: ${effectiveMode}`, "info");
+      this._d.emitDevLog?.(`Security Mode: ${effectiveMode}`, "info");
       return;
     }
 
@@ -1404,7 +1482,7 @@ export class SessionCoordinator {
 
     this._d.emitEvent({ type: "security_mode", mode: effectiveMode }, sp);
     this._d.emitEvent({ type: "plan_mode", enabled: effectiveMode === SecurityMode.PLAN }, sp);
-    this._d.emitDevLog(`Security Mode: ${effectiveMode}`, "info");
+    this._d.emitDevLog?.(`Security Mode: ${effectiveMode}`, "info");
   }
 
   /** 获取当前焦点 session 的 modelId 快照 */
@@ -1428,7 +1506,7 @@ export class SessionCoordinator {
     return entry.modelId ? { id: entry.modelId, provider: "" } : null;
   }
 
-  async switchCurrentSessionModel(model) {
+  async switchCurrentSessionModel(model: ResolvedModel | null) {
     this._pendingModel = model || null;
     if (!model) return { appliedToSession: false, pendingOnly: false };
 
@@ -1455,7 +1533,7 @@ export class SessionCoordinator {
     return { appliedToSession: true, pendingOnly: false };
   }
 
-  async _maybeRouteAroundBrokenToolModel(entry, routeIntent, agent, sessionPath) {
+  async _maybeRouteAroundBrokenToolModel(entry: SessionEntry, routeIntent: string, agent: AgentLike, sessionPath: string) {
     return false;
   }
 
@@ -1473,7 +1551,7 @@ export class SessionCoordinator {
 
   // ── Session 关闭 ──
 
-  async closeSession(sessionPath) {
+  async closeSession(sessionPath: string) {
     const entry = this._sessions.get(sessionPath);
     if (entry) {
       const agent = this._d.getAgentById(entry.agentId) || this._d.getAgent();
@@ -1511,15 +1589,15 @@ export class SessionCoordinator {
 
   // ── Session 查询 ──
 
-  getSessionByPath(sessionPath) {
+  getSessionByPath(sessionPath: string) {
     return this._sessions.get(sessionPath)?.session ?? null;
   }
 
-  isSessionStreaming(sessionPath) {
+  isSessionStreaming(sessionPath: string) {
     return !!this.getSessionByPath(sessionPath)?.isStreaming;
   }
 
-  async abortSessionByPath(sessionPath) {
+  async abortSessionByPath(sessionPath: string) {
     const session = this.getSessionByPath(sessionPath);
     if (!session?.isStreaming) return false;
     await session.abort();
@@ -1527,14 +1605,14 @@ export class SessionCoordinator {
   }
 
   async listSessions() {
-    const allSessions = [];
+    const allSessions: AnyRecord[] = [];
     const agents = this._d.listAgents();
 
     for (const agent of agents) {
       const sessionDir = path.join(this._d.agentsDir, agent.id, "sessions");
       if (!fs.existsSync(sessionDir)) continue;
       try {
-        const indexed = await readSessionIndex(sessionDir);
+        const indexed = (await readSessionIndex(sessionDir)) as AnyRecord[];
         if (indexed.length > 0) {
           for (const entry of indexed) {
             const modified = entry.modified ? new Date(entry.modified) : new Date(0);
@@ -1551,8 +1629,8 @@ export class SessionCoordinator {
 
         const skeletons = await listSessionFileSkeletons(sessionDir, agent);
         for (const s of skeletons) allSessions.push(s);
-        await refreshSessionIndex(sessionDir, skeletons, { agent }).catch((err) => {
-          log.warn(`session index refresh failed · agent=${agent.id} · ${err?.message || err}`);
+        await refreshSessionIndex(sessionDir, skeletons, { agent }).catch((err: unknown) => {
+          log.warn(`session index refresh failed · agent=${agent.id} · ${errMessage(err)}`);
         });
       } catch {}
     }
@@ -1590,12 +1668,12 @@ export class SessionCoordinator {
         const skeletons = await listSessionFileSkeletons(sessionDir, agent);
         await refreshSessionIndex(sessionDir, skeletons, { agent });
       } catch (err) {
-        log.warn(`session index refresh skipped · agent=${agent.id} · ${err?.message || err}`);
+        log.warn(`session index refresh skipped · agent=${agent.id} · ${errMessage(err)}`);
       }
     }
   }
 
-  async saveSessionTitle(sessionPath, title) {
+  async saveSessionTitle(sessionPath: string, title: string) {
     const agentId = this._d.agentIdFromSessionPath(sessionPath);
     const sessionDir = agentId
       ? path.join(this._d.agentsDir, agentId, "sessions")
@@ -1608,19 +1686,19 @@ export class SessionCoordinator {
     this._titlesCache.set(sessionDir, { titles: { ...titles }, ts: Date.now() });
   }
 
-  async saveSessionMeta(sessionPath, meta) {
+  async saveSessionMeta(sessionPath: string, meta: AnyRecord) {
     const agentId = this._d.agentIdFromSessionPath(sessionPath);
     const sessionDir = agentId
       ? path.join(this._d.agentsDir, agentId, "sessions")
       : this._d.getAgent().sessionDir;
     const metaPath = path.join(sessionDir, "session-meta.json");
-    let allMeta = {};
+    let allMeta: Record<string, AnyRecord> = {};
     try { allMeta = JSON.parse(await fsp.readFile(metaPath, "utf-8")); } catch {}
     allMeta[sessionPath] = { ...(allMeta[sessionPath] || {}), ...meta };
     await fsp.writeFile(metaPath, JSON.stringify(allMeta, null, 2), "utf-8");
   }
 
-  async _loadSessionTitlesFor(sessionDir) {
+  async _loadSessionTitlesFor(sessionDir: string): Promise<Record<string, string>> {
     const cached = this._titlesCache.get(sessionDir);
     if (cached && Date.now() - cached.ts < SessionCoordinator._TITLES_TTL) {
       return { ...cached.titles };
@@ -1640,15 +1718,15 @@ export class SessionCoordinator {
 
   createSessionContext() {
     const models = this._d.getModels();
-    const skills = this._d.getSkills();
+    const skills = this._d.getSkills?.() || {};
     return {
       authStorage:    models.authStorage,
       modelRegistry:  models.modelRegistry,
       resourceLoader: this._d.getResourceLoader(),
       allSkills:      skills.allSkills,
-      getSkillsForAgent: (ag) => skills.getSkillsForAgent(ag),
-      buildTools:     (cwd, customTools, opts) => this._d.buildTools(cwd, customTools, opts),
-      resolveModel:   (agentConfig) => {
+      getSkillsForAgent: (ag: AgentLike) => skills.getSkillsForAgent?.(ag) || [],
+      buildTools:     (cwd: string, customTools?: unknown, opts?: AnyRecord) => this._d.buildTools(cwd, customTools, opts),
+      resolveModel:   (agentConfig: AnyRecord) => {
         const chatRef = agentConfig?.models?.chat;
         const agentRole = agentConfig?.agent?.yuan || null;
         const roleLabel = getUserFacingRoleModelLabel(agentRole, "chat") || "角色默认模型";
@@ -1681,7 +1759,7 @@ export class SessionCoordinator {
             return models.defaultModel;
           }
           if (shouldExposeVerboseModelRouting()) {
-            const available = models.availableModels.map(m => `${m.provider}/${m.id}`).join(", ");
+            const available = models.availableModels.map((m: AnyRecord) => `${m.provider}/${m.id}`).join(", ");
             const hasAuth = models.modelRegistry
               ? `hasAuth("${models.inferModelProvider?.(id) || "?"}")=unknown`
               : "no registry";
@@ -1696,7 +1774,7 @@ export class SessionCoordinator {
     };
   }
 
-  promoteActivitySession(activitySessionFile) {
+  promoteActivitySession(activitySessionFile: string) {
     const agent = this._d.getAgent();
     const oldPath = path.join(agent.agentDir, "activity", activitySessionFile);
     if (!fs.existsSync(oldPath)) return null;
@@ -1708,14 +1786,14 @@ export class SessionCoordinator {
       log.log(`promoted activity session: ${activitySessionFile}`);
       return newPath;
     } catch (err) {
-      log.error(`promoteActivitySession failed: ${err.message}`);
+      log.error(`promoteActivitySession failed: ${errMessage(err)}`);
       return null;
     }
   }
 
   // ── Isolated Execution ──
 
-  async executeIsolated(prompt, opts = {}) {
+  async executeIsolated(prompt: string, opts: IsolatedExecutionOptions = {}) {
     const targetAgent = opts.agentId ? this._d.getAgentById(opts.agentId) : this._d.getAgent();
     if (!targetAgent) throw new Error(t("error.agentNotInitialized", { id: opts.agentId }));
 
@@ -1728,8 +1806,8 @@ export class SessionCoordinator {
     const wasBrowserRunning = bm.isRunning;
     this._headlessRefCount++;
     if (this._headlessRefCount === 1) bm.setHeadless(true);
-    let tempSessionMgr;
-    let dryRunWorkspace = null;
+    let tempSessionMgr: AnyRecord | null = null;
+    let dryRunWorkspace: string | null = null;
     const cleanupTempSession = () => {
       const sp = tempSessionMgr?.getSessionFile?.();
       if (sp) {
@@ -1755,10 +1833,10 @@ export class SessionCoordinator {
       if (!resolvedModel) {
         const targetRole = targetAgent.config?.agent?.yuan || targetAgent.yuan || null;
         if (modelId) {
-          resolvedModel = findModel(models.availableModels, modelId, modelProvider);
+          resolvedModel = findModel(models.availableModels, modelId, modelProvider) as ModelLike;
         }
         if (!resolvedModel) {
-          resolvedModel = resolveRoleDefaultModel(models.availableModels, targetRole);
+          resolvedModel = resolveRoleDefaultModel(models.availableModels, targetRole) as ModelLike;
         }
         if (!resolvedModel) {
           // agent 未配 models.chat 或配置的模型不在可用列表：fallback 到当前默认模型
@@ -1792,7 +1870,7 @@ export class SessionCoordinator {
       const actCustomTools = suppressClientTools
         ? []
         : normalizeCustomToolsForModel(
-            allCustomTools.filter(t => allowSet.has(t.name)),
+            allCustomTools.filter((t: ToolLike) => allowSet.has(t.name)),
             execModel
           );
 
@@ -1800,20 +1878,20 @@ export class SessionCoordinator {
       const actTools = suppressClientTools
         ? []
         : (opts.builtinFilter
-            ? allBuiltinTools.filter(t => opts.builtinFilter.includes(t.name))
+            ? allBuiltinTools.filter((t: ToolLike) => opts.builtinFilter?.includes(t.name))
             : allBuiltinTools);
       if (suppressClientTools) {
         log.log(`[executeIsolated] using Brain V2 internal tool chain for ${execModel?.provider || "?"}/${execModel?.id || execModel?.name || "?"}; client tool schema suppressed`);
       }
 
       const agent = this._d.getAgent();
-      const skills = this._d.getSkills();
+      const skills = this._d.getSkills?.();
       const resourceLoader = this._d.getResourceLoader();
       const execResourceLoader = (targetAgent === agent)
         ? resourceLoader
         : Object.create(resourceLoader, {
             getSystemPrompt: { value: () => targetAgent.systemPrompt },
-            getSkills: { value: () => skills.getSkillsForAgent(targetAgent) },
+            getSkills: { value: () => skills?.getSkillsForAgent?.(targetAgent) || [] },
           });
 
       const clientAgentKey = readClientAgentKeyFromPreferencesFile();
@@ -1835,11 +1913,11 @@ export class SessionCoordinator {
         customTools: actCustomTools,
         ...(Object.keys(clientAgentHeaders).length > 0 && { requestHeaders: clientAgentHeaders }),
         ...(clientAgentMetadata && { requestMetadata: clientAgentMetadata }),
-      });
+      } as any);
 
-      const runPromptAttempt = async (attemptPrompt) => {
+      const runPromptAttempt = async (attemptPrompt: string) => {
         const tracker = createReplyIntegrityTracker();
-        const unsub = session.subscribe((event) => {
+        const unsub = session.subscribe((event: AnyRecord) => {
           tracker.handle(event);
         });
         try {
@@ -1891,12 +1969,12 @@ export class SessionCoordinator {
         ...(dryRunWorkspace ? { dryRun: { workspacePath: dryRunWorkspace, validation: dryRunValidation } } : {}),
       };
     } catch (err) {
-      log.error(`isolated execution failed: ${err.message}`);
+      log.error(`isolated execution failed: ${errMessage(err)}`);
       // 清理失败的临时 session 文件
       if (!opts.persist && tempSessionMgr) {
         cleanupTempSession();
       }
-      return { sessionPath: null, replyText: "", error: err.message };
+      return { sessionPath: null, replyText: "", error: errMessage(err) };
     } finally {
       this._headlessRefCount = Math.max(0, this._headlessRefCount - 1);
       if (this._headlessRefCount === 0) bm.setHeadless(false);
@@ -1908,9 +1986,9 @@ export class SessionCoordinator {
   }
 
   /** 创建 session 专用 settings（控制 compaction + max_completion_tokens） */
-  _createSettings(model) {
+  _createSettings(model: ModelLike) {
     return SettingsManager.inMemory({
-      compaction: resolveCompactionSettings(model),
+      compaction: resolveCompactionSettings(model as any),
     });
   }
 
@@ -1931,7 +2009,7 @@ export class SessionCoordinator {
     };
   }
 
-  _formatRelaySummaryContext(summaryText) {
+  _formatRelaySummaryContext(summaryText: string) {
     const summary = String(summaryText || "").trim().slice(0, SESSION_RELAY_SUMMARY_MAX_CHARS);
     if (!summary) return "";
     const isZh = getLocale().startsWith("zh");
@@ -1940,7 +2018,7 @@ export class SessionCoordinator {
       : `[Automatic Session Relay Summary]\nThe following is a handoff summary from the previous long-running session after repeated compactions. Use it as continuation context and do not quote it back unless the user asks for it:\n${summary}`;
   }
 
-  async _relaySession(sessionPath, compactionCount) {
+  async _relaySession(sessionPath: string, compactionCount: number) {
     const entry = this._sessions.get(sessionPath);
     if (!entry || entry.relayInProgress) return false;
 
@@ -1988,7 +2066,7 @@ export class SessionCoordinator {
       }, newSessionPath);
       return true;
     } catch (err) {
-      log.warn(`session relay failed: ${err.message}`);
+      log.warn(`session relay failed: ${errMessage(err)}`);
       return false;
     } finally {
       this._pendingPlanMode = prevPendingPlanMode;
@@ -2001,7 +2079,7 @@ export class SessionCoordinator {
     }
   }
 
-  async _prepareDryRunWorkspace(sourceDir) {
+  async _prepareDryRunWorkspace(sourceDir: string) {
     const src = path.resolve(sourceDir || process.cwd());
     const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "lynn-shadow-"));
     await fsp.cp(src, tempDir, {
@@ -2016,7 +2094,7 @@ export class SessionCoordinator {
     return tempDir;
   }
 
-  _runDryRunValidation(cwd, validateCommand) {
+  _runDryRunValidation(cwd: string, validateCommand: unknown[] | undefined) {
     if (!Array.isArray(validateCommand) || validateCommand.length === 0) return null;
     const [command, ...args] = validateCommand.map((item) => String(item));
     if (!command) return null;
