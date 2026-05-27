@@ -490,7 +490,7 @@ export function createMemoryTicker(opts: MemoryTickerOptions): MemoryTicker {
   // ── 公开 API ──
 
   /**
-   * 每轮对话结束后调用（由 engine.js 在 prompt() 返回后调用）
+   * 每轮对话结束后调用（由 engine.ts 在 prompt() 返回后调用）
    * @param {string} sessionPath - 当前 session 的 .jsonl 文件路径
    */
   function notifyTurn(sessionPath: string): void {

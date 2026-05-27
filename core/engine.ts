@@ -66,6 +66,41 @@ import {
 } from "../shared/assistant-role-models.js";
 import { prewarmHttpConnection } from "../shared/http-pool.js";
 
+type AnyRecord = Record<string, any>;
+type Logger = (message: string) => void;
+type ToolLike = AnyRecord & {
+  name: string;
+  execute?: (...args: any[]) => any;
+  parameters?: {
+    properties?: Record<string, { type?: string }>;
+    required?: string[];
+    [key: string]: any;
+  };
+  _guarded?: boolean;
+  _aliasOf?: string;
+};
+type EngineDirs = {
+  lynnHome: string;
+  productDir: string;
+  agentId?: string;
+};
+type ExternalSkillPath = {
+  dirPath: string;
+  label: string;
+  exists?: boolean;
+};
+type BuildToolsOptions = AnyRecord & {
+  activeMcpServers?: Set<string>;
+  agentDir?: string;
+  workspace?: string | null;
+  mode?: string;
+  getSessionPath?: () => string | null;
+};
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err || "unknown error");
+}
+
 function shouldExposeVerboseModelRouting() {
   const flag = String(process?.env?.LYNN_DEBUG_MODELS || process?.env?.DEBUG_MODEL_ROUTING || "").trim().toLowerCase();
   return flag === "1" || flag === "true" || process?.env?.NODE_ENV === "development";
@@ -77,7 +112,7 @@ function shouldExposeVerboseModelRouting() {
 // 2. 必填参数缺失时返回友好的 tool_result 而不是崩溃
 // 3. ClawAegis: 敏感路径检测（审计 + warning）
 
-function coerceParam(value, schema) {
+function coerceParam(value: any, schema?: { type?: string }) {
   if (value === undefined || value === null) return value;
   const type = schema?.type;
   if (!type) return value;
@@ -95,7 +130,7 @@ function coerceParam(value, schema) {
 
 // ── ClawAegis: 敏感路径/参数异常检测 ──
 
-const SENSITIVE_PATH_PATTERNS = [
+const SENSITIVE_PATH_PATTERNS: Array<[RegExp, string]> = [
   [/\.ssh[/\\]/i, "SSH 密钥目录"],
   [/\.gnupg[/\\]/i, "GPG 密钥目录"],
   [/\.aws[/\\]credentials/i, "AWS 凭证文件"],
@@ -112,7 +147,7 @@ const SENSITIVE_PATH_PATTERNS = [
   [/\/etc\/passwd/i, "系统用户文件"],
 ];
 
-function detectSensitiveParams(toolName, params) {
+function detectSensitiveParams(toolName: string, params: any) {
   if (!params) return null;
   const text = JSON.stringify(params);
   for (const [pattern, label] of SENSITIVE_PATH_PATTERNS) {
@@ -123,12 +158,12 @@ function detectSensitiveParams(toolName, params) {
   return null;
 }
 
-function wrapToolWithGuard(tool) {
+function wrapToolWithGuard(tool: ToolLike): ToolLike {
   if (!tool?.execute || tool._guarded) return tool;
   const originalExecute = tool.execute;
   const schema = tool.parameters;
 
-  const guardedExecute = async (toolCallId, params, ...rest) => {
+  const guardedExecute = async (toolCallId: any, params: any, ...rest: any[]) => {
     let fixedParams = params || {};
 
     // 类型强制转换
@@ -144,7 +179,7 @@ function wrapToolWithGuard(tool) {
 
     // 必填参数检查
     const required = schema?.required || [];
-    const missing = required.filter(k => fixedParams[k] === undefined || fixedParams[k] === null);
+    const missing = required.filter((k: string) => fixedParams[k] === undefined || fixedParams[k] === null);
     if (missing.length > 0) {
       return {
         content: [{ type: "text", text: `参数缺失 / Missing parameters: ${missing.join(", ")}。请补全后重试。` }],
@@ -192,9 +227,9 @@ const TOOL_ALIASES = {
   "message-agent": "message_agent",
 };
 
-function createToolAliases(customTools) {
-  const nameSet = new Set(customTools.map(t => t.name));
-  const aliases = [];
+function createToolAliases(customTools: ToolLike[]): ToolLike[] {
+  const nameSet = new Set(customTools.map((t: ToolLike) => t.name));
+  const aliases: ToolLike[] = [];
   for (const tool of customTools) {
     // 为每个工具创建别名（如果别名不和已有工具名冲突）
     for (const [alias, target] of Object.entries(TOOL_ALIASES)) {
@@ -208,13 +243,15 @@ function createToolAliases(customTools) {
 }
 
 export class HanaEngine {
+  [key: string]: any;
+
   /**
    * @param {object} dirs
    * @param {string} dirs.lynnHome
    * @param {string} dirs.productDir
    * @param {string} [dirs.agentId]
    */
-  constructor({ lynnHome, productDir, agentId }) {
+  constructor({ lynnHome, productDir, agentId }: EngineDirs) {
     this.lynnHome = lynnHome;
     this.productDir = productDir;
     this.agentsDir = path.join(lynnHome, "agents");
@@ -276,8 +313,8 @@ export class HanaEngine {
       getResourceLoader: () => this._resourceLoader,
       getMcpPromptContext: () => this._mcpManager?.getPromptContext?.() || "",
       getSkills: () => this._skills,
-      buildTools: (cwd, ct, opts) => this.buildTools(cwd, ct, opts),
-      emitEvent: (e, sp) => this._emitEvent(e, sp),
+      buildTools: (cwd, ct, opts) => this.buildTools(cwd, ct as ToolLike[] | undefined, opts as BuildToolsOptions) as any,
+      emitEvent: (e, sp) => this._emitEvent(e as unknown as AnyRecord, sp as string | null | undefined),
       emitDevLog: (t, l) => this.emitDevLog(t, l),
       getHomeCwd: () => this.homeCwd,
       agentIdFromSessionPath: (p) => this.agentIdFromSessionPath(p),
@@ -289,7 +326,7 @@ export class HanaEngine {
       getAgentById: (id) => this._agentMgr.getAgent(id),
       listAgents: () => this.listAgents(),
       getConfirmStore: () => this._confirmStore,
-      summarizeSessionRelay: (sessionPath, opts) => this.summarizeSessionRelay(sessionPath, opts),
+      summarizeSessionRelay: (sessionPath: string, opts: AnyRecord) => this.summarizeSessionRelay(sessionPath, opts),
     });
 
     // Initialize security mode from saved preference
@@ -310,7 +347,7 @@ export class HanaEngine {
       getSession: () => this._sessionCoord.session,
       getSessionCoordinator: () => this._sessionCoord,
       getHub: () => this._hub,
-      emitEvent: (e, sp) => this._emitEvent(e, sp),
+      emitEvent: (e, sp) => this._emitEvent(e as unknown as AnyRecord, sp as string | null | undefined),
       emitDevLog: (t, l) => this.emitDevLog(t, l),
       getCurrentModel: () => this.currentModel?.name,
     });
@@ -322,9 +359,9 @@ export class HanaEngine {
       getModelManager: () => this._models,
       getResourceLoader: () => this._resourceLoader,
       getPreferences: () => this._readPreferences(),
-      buildTools: (cwd, customTools, opts) => this.buildTools(cwd, customTools, opts),
+      buildTools: (cwd, customTools, opts) => this.buildTools(cwd, customTools as ToolLike[] | undefined, opts as BuildToolsOptions) as any,
       getHomeCwd: () => this.homeCwd,
-      resolveModelOverrides: (model, overrides) => this.resolveModelOverrides(model, overrides),
+      resolveModelOverrides: (model, overrides) => this.resolveModelOverrides(model as AnyRecord | null | undefined, overrides as Record<string, AnyRecord> | undefined),
     });
 
     // ── Plugin Manager ──
@@ -350,18 +387,18 @@ export class HanaEngine {
   // ════════════════════════════
 
   get agent() { return this._agentMgr.agent; }
-  getAgent(agentId) { return this._agentMgr.getAgent(agentId); }
+  getAgent(agentId: string) { return this._agentMgr.getAgent(agentId); }
   get currentAgentId() { return this._agentMgr.activeAgentId; }
   get confirmStore() { return this._confirmStore; }
 
-  emitSessionEvent(event) {
+  emitSessionEvent(event: AnyRecord) {
     this._emitEvent(event, this.currentSessionPath);
   }
 
-  setConfirmStore(store) {
+  setConfirmStore(store: AnyRecord | null) {
     this._confirmStore = store;
     if (store) {
-      store.onResolved = (confirmId, action) => {
+      store.onResolved = (confirmId: string, action: string) => {
         this._emitEvent({ type: "confirmation_resolved", confirmId, action }, null);
       };
     }
@@ -372,18 +409,18 @@ export class HanaEngine {
   get baseDir() { return this.agentDir; }
   get activityDir() { return path.join(this.agentDir, "activity"); }
   get activityStore() { return this.getActivityStore(this.currentAgentId); }
-  getActivityStore(agentId) { return this._agentMgr.getActivityStore(agentId); }
+  getActivityStore(agentId: string) { return this._agentMgr.getActivityStore(agentId); }
 
   get agents() { return this._agentMgr.agents; }
   listAgents() { return this._agentMgr.listAgents(); }
   invalidateAgentListCache() { this._agentMgr.invalidateAgentListCache(); }
-  async createAgent(opts) { return this._agentMgr.createAgent(opts); }
-  async ensureAgentLoaded(agentId, log = () => {}) { return this._agentMgr.ensureAgentLoaded(agentId, log); }
-  async switchAgent(agentId) { return this._agentMgr.switchAgent(agentId); }
-  async deleteAgent(agentId) { return this._agentMgr.deleteAgent(agentId); }
-  setPrimaryAgent(agentId) { return this._agentMgr.setPrimaryAgent(agentId); }
-  agentIdFromSessionPath(p) { return this._agentMgr.agentIdFromSessionPath(p); }
-  async createSessionForAgent(agentId, cwd, mem) { return this._agentMgr.createSessionForAgent(agentId, cwd, mem); }
+  async createAgent(opts: AnyRecord) { return this._agentMgr.createAgent(opts); }
+  async ensureAgentLoaded(agentId: string, log: Logger = () => {}) { return this._agentMgr.ensureAgentLoaded(agentId, log); }
+  async switchAgent(agentId: string) { return this._agentMgr.switchAgent(agentId); }
+  async deleteAgent(agentId: string) { return this._agentMgr.deleteAgent(agentId); }
+  setPrimaryAgent(agentId: string) { return this._agentMgr.setPrimaryAgent(agentId); }
+  agentIdFromSessionPath(p: string) { return this._agentMgr.agentIdFromSessionPath(p); }
+  async createSessionForAgent(agentId: string, cwd: string, mem: any) { return this._agentMgr.createSessionForAgent(agentId, cwd, mem); }
 
   // 向后兼容：agent 属性代理
   get agentName() { return this.agent.agentName; }
@@ -406,36 +443,36 @@ export class HanaEngine {
   get cwd() { return this._sessionCoord.session?.sessionManager?.getCwd?.() ?? process.cwd(); }
   get deskCwd() { return this._sessionCoord.session?.sessionManager?.getCwd?.() || this.homeCwd || null; }
 
-  async createSession(mgr, cwd, mem, model) { return this._sessionCoord.createSession(mgr, cwd, mem, model); }
-  async switchSession(p) { return this._sessionCoord.switchSession(p); }
+  async createSession(mgr: any, cwd: string, mem: any, model: any) { return this._sessionCoord.createSession(mgr, cwd, mem, model); }
+  async switchSession(p: string) { return this._sessionCoord.switchSession(p); }
   /** @deprecated Phase 2: 使用 promptSession(path, text, opts) */
-  async prompt(text, opts) { return this._sessionCoord.prompt(text, opts); }
+  async prompt(text: string, opts?: AnyRecord) { return this._sessionCoord.prompt(text, opts); }
   /** @deprecated Phase 2: 使用 abortSession(path) */
   async abort() { return this._sessionCoord.abort(); }
   /** @deprecated Phase 2: 使用 steerSession(path, text) */
-  steer(text) { return this._sessionCoord.steer(text); }
+  steer(text: string) { return this._sessionCoord.steer(text); }
 
   // ── Path 感知 API（Phase 2） ──
-  async promptSession(p, text, opts) { return this._sessionCoord.promptSession(p, text, opts); }
-  steerSession(p, text) { return this._sessionCoord.steerSession(p, text); }
-  async abortSession(p) { return this._sessionCoord.abortSession(p); }
+  async promptSession(p: string, text: string, opts?: AnyRecord) { return this._sessionCoord.promptSession(p, text, opts); }
+  steerSession(p: string, text: string) { return this._sessionCoord.steerSession(p, text); }
+  async abortSession(p: string) { return this._sessionCoord.abortSession(p); }
   get focusSessionPath() { return this._sessionCoord.currentSessionPath; }
-  getMessages(p) { return this._sessionCoord.getSessionByPath(p)?.messages ?? []; }
+  getMessages(p: string) { return this._sessionCoord.getSessionByPath(p)?.messages ?? []; }
 
   async abortAllStreaming() { return this._sessionCoord.abortAllStreaming(); }
-  isBridgeSessionStreaming(key) { return this._bridge?.isSessionStreaming(key) ?? false; }
-  async abortBridgeSession(key) { return this._bridge?.abortSession(key) ?? false; }
-  steerBridgeSession(key, text) { return this._bridge?.steerSession(key, text) ?? false; }
-  async closeSession(p) { return this._sessionCoord.closeSession(p); }
-  getSessionByPath(p) { return this._sessionCoord.getSessionByPath(p); }
-  isSessionStreaming(p) { return this._sessionCoord.isSessionStreaming(p); }
-  async abortSessionByPath(p) { return this._sessionCoord.abortSessionByPath(p); }
+  isBridgeSessionStreaming(key: string) { return this._bridge?.isSessionStreaming(key) ?? false; }
+  async abortBridgeSession(key: string) { return this._bridge?.abortSession(key) ?? false; }
+  steerBridgeSession(key: string, text: string) { return this._bridge?.steerSession(key, text) ?? false; }
+  async closeSession(p: string) { return this._sessionCoord.closeSession(p); }
+  getSessionByPath(p: string) { return this._sessionCoord.getSessionByPath(p); }
+  isSessionStreaming(p: string) { return this._sessionCoord.isSessionStreaming(p); }
+  async abortSessionByPath(p: string) { return this._sessionCoord.abortSessionByPath(p); }
   async listSessions() { return this._sessionCoord.listSessions(); }
-  async saveSessionTitle(p, t) { return this._sessionCoord.saveSessionTitle(p, t); }
-  async saveSessionMeta(p, meta) { return this._sessionCoord.saveSessionMeta(p, meta); }
+  async saveSessionTitle(p: string, t: string) { return this._sessionCoord.saveSessionTitle(p, t); }
+  async saveSessionMeta(p: string, meta: AnyRecord) { return this._sessionCoord.saveSessionMeta(p, meta); }
   createSessionContext() { return this._sessionCoord.createSessionContext(); }
-  promoteActivitySession(f) { return this._sessionCoord.promoteActivitySession(f); }
-  async executeIsolated(prompt, opts) { return this._sessionCoord.executeIsolated(prompt, opts); }
+  promoteActivitySession(f: string) { return this._sessionCoord.promoteActivitySession(f); }
+  async executeIsolated(prompt: string, opts?: AnyRecord) { return this._sessionCoord.executeIsolated(prompt, opts); }
 
   // ════════════════════════════
   //  Config 代理（→ ConfigCoordinator）
@@ -470,7 +507,7 @@ export class HanaEngine {
    * @param {object} [overrides] - 可选，指定 override map。不传则用当前 focus agent 的 config。
    *   bridge session 需要传入对应 agent 的 overrides，因为 bridge session 可能不属于 focus agent。
    */
-  resolveModelOverrides(model, overrides) {
+  resolveModelOverrides(model: AnyRecord | null | undefined, overrides?: Record<string, AnyRecord>) {
     if (!model) return null;
     // v0.77.7 (2026-05-05): brain provider 默认 reasoning=true 让 Pi SDK 透传
     // Lynn ThinkingLevelButton 'off' → Pi SDK reasoning_effort: 'off'
@@ -492,75 +529,75 @@ export class HanaEngine {
   }
 
   getHomeFolder() { return this._configCoord.getHomeFolder(); }
-  setHomeFolder(f) { return this._configCoord.setHomeFolder(f); }
+  setHomeFolder(f: string | null) { return this._configCoord.setHomeFolder(f); }
   getTrustedRoots() { return this._configCoord.getTrustedRoots(); }
-  setTrustedRoots(r) { return this._configCoord.setTrustedRoots(r); }
+  setTrustedRoots(r: string[]) { return this._configCoord.setTrustedRoots(r); }
   getSharedModels() { return this._configCoord.getSharedModels(); }
-  setSharedModels(p) { return this._configCoord.setSharedModels(p); }
+  setSharedModels(p: AnyRecord) { return this._configCoord.setSharedModels(p); }
   getSearchConfig() { return this._configCoord.getSearchConfig(); }
-  setSearchConfig(p) { return this._configCoord.setSearchConfig(p); }
+  setSearchConfig(p: AnyRecord) { return this._configCoord.setSearchConfig(p); }
   getUtilityApi() { return this._configCoord.getUtilityApi(); }
-  setUtilityApi(p) { return this._configCoord.setUtilityApi(p); }
+  setUtilityApi(p: AnyRecord) { return this._configCoord.setUtilityApi(p); }
   resolveUtilityConfig() { return this._configCoord.resolveUtilityConfig(); }
   readAgentOrder() { return this._configCoord.readAgentOrder(); }
-  saveAgentOrder(o) { return this._configCoord.saveAgentOrder(o); }
+  saveAgentOrder(o: string[]) { return this._configCoord.saveAgentOrder(o); }
   async syncModelsAndRefresh() { return this._configCoord.syncAndRefresh(); }
-  setPendingModel(id, provider) { return this._configCoord.setPendingModel(id, provider); }
-  setDefaultModel(id, provider) { return this._configCoord.setDefaultModel(id, provider); }
+  setPendingModel(id: string, provider?: string) { return this._configCoord.setPendingModel(id, provider); }
+  setDefaultModel(id: string, provider?: string) { return this._configCoord.setDefaultModel(id, provider); }
   getThinkingLevel() { return this._configCoord.getThinkingLevel(); }
-  setThinkingLevel(l) { return this._configCoord.setThinkingLevel(l); }
+  setThinkingLevel(l: string) { return this._configCoord.setThinkingLevel(l); }
   getSandbox() { return this._prefs.getSandbox(); }
-  setSandbox(v) { this._prefs.setSandbox(v); }
+  setSandbox(v: boolean) { this._prefs.setSandbox(v); }
   getSecurityModePreference() { return this._prefs.getSecurityMode(); }
-  setSecurityModePreference(v) { this._prefs.setSecurityMode(v); }
+  setSecurityModePreference(v: string) { this._prefs.setSecurityMode(v); }
   getLearnSkills() { return this._prefs.getLearnSkills(); }
-  setLearnSkills(p) { this._prefs.setLearnSkills(p); }
+  setLearnSkills(p: boolean) { this._prefs.setLearnSkills(p); }
   getLocale() { return this._prefs.getLocale(); }
-  setLocale(l) { this._prefs.setLocale(l); }
+  setLocale(l: string) { this._prefs.setLocale(l); }
   getTimezone() { return this._prefs.getTimezone(); }
-  setTimezone(tz) { this._prefs.setTimezone(tz); }
+  setTimezone(tz: string) { this._prefs.setTimezone(tz); }
   getUpdateChannel() { return this._prefs.getUpdateChannel(); }
-  setUpdateChannel(ch) { this._prefs.setUpdateChannel(ch); }
-  setMemoryEnabled(v) { return this._configCoord.setMemoryEnabled(v); }
-  setMemoryMasterEnabled(id, v) { return this._configCoord.setMemoryMasterEnabled(id, v); }
+  setUpdateChannel(ch: string) { this._prefs.setUpdateChannel(ch); }
+  setMemoryEnabled(v: boolean) { return this._configCoord.setMemoryEnabled(v); }
+  setMemoryMasterEnabled(id: string, v: boolean) { return this._configCoord.setMemoryMasterEnabled(id, v); }
   persistSessionMeta() { return this._configCoord.persistSessionMeta(); }
-  setPlanMode(enabled) { return this._sessionCoord.setPlanMode(enabled, allBuiltInTools); }
-  setSecurityMode(mode) {
+  setPlanMode(enabled: boolean) { return this._sessionCoord.setPlanMode(enabled, allBuiltInTools); }
+  setSecurityMode(mode: string) {
     this._sessionCoord.setSecurityMode(mode, allBuiltInTools);
     // Persist default mode preference
     this._prefs.setSecurityMode(mode);
   }
-  async updateConfig(p) { return this._configCoord.updateConfig(p); }
+  async updateConfig(p: AnyRecord) { return this._configCoord.updateConfig(p); }
 
   getPreferences() { return this._readPreferences(); }
-  savePreferences(p) { return this._writePreferences(p); }
+  savePreferences(p: AnyRecord) { return this._writePreferences(p); }
 
   // ════════════════════════════
   //  Channel 代理（→ ChannelManager）
   // ════════════════════════════
 
-  createChannel(opts) { return this._channels.createChannel(opts); }
-  deleteChannelByName(n) { return this._channels.deleteChannelByName(n); }
-  archiveChannelByName(n) { return this._channels.archiveChannelByName(n); }
-  async triggerChannelTriage(n, o) { return this._channels.triggerChannelTriage(n, o); }
+  createChannel(opts: AnyRecord) { return this._channels.createChannel(opts); }
+  deleteChannelByName(n: string) { return this._channels.deleteChannelByName(n); }
+  archiveChannelByName(n: string) { return this._channels.archiveChannelByName(n); }
+  async triggerChannelTriage(n: string, o?: AnyRecord) { return this._channels.triggerChannelTriage(n, o); }
 
   // ════════════════════════════
   //  Expert 代理（→ ExpertManager）
   // ════════════════════════════
 
   get expertManager() { return this._expertMgr; }
-  listExperts(locale) { return this._expertMgr.listExperts(locale); }
-  getExpert(slug, locale) { return this._expertMgr.getExpert(slug, locale); }
-  async spawnExpert(slug, opts) { return this._expertMgr.spawnExpert(slug, opts); }
+  listExperts(locale?: string) { return this._expertMgr.listExperts(locale); }
+  getExpert(slug: string, locale?: string) { return this._expertMgr.getExpert(slug, locale); }
+  async spawnExpert(slug: string, opts?: AnyRecord) { return this._expertMgr.spawnExpert(slug, opts); }
 
   // ════════════════════════════
   //  Bridge 代理（→ BridgeSessionManager）
   // ════════════════════════════
 
   getBridgeIndex() { return this._bridge.readIndex(); }
-  saveBridgeIndex(i) { return this._bridge.writeIndex(i); }
-  async executeExternalMessage(p, sk, m, o) { return this._bridge.executeExternalMessage(p, sk, m, o); }
-  injectBridgeMessage(sk, t) { return this._bridge.injectMessage(sk, t); }
+  saveBridgeIndex(i: AnyRecord) { return this._bridge.writeIndex(i); }
+  async executeExternalMessage(p: string, sk: string, m: AnyRecord, o?: AnyRecord) { return this._bridge.executeExternalMessage(p, sk, m, o); }
+  injectBridgeMessage(sk: string, t: string) { return this._bridge.injectMessage(sk, t); }
 
   // ════════════════════════════
   //  Skills（→ SkillManager）
@@ -568,11 +605,11 @@ export class HanaEngine {
 
   _syncAgentSkills() { this._skills.syncAgentSkills(this.agent); }
   _syncAllAgentSkills() { for (const ag of this._agentMgr.agents.values()) this._skills.syncAgentSkills(ag); }
-  getAllSkills(agentId) {
+  getAllSkills(agentId?: string) {
     const ag = agentId ? this._agentMgr.getAgent(agentId) : this.agent;
     return this._skills.getAllSkills(ag || this.agent);
   }
-  _getSkillsForAgent(ag) { return this._skills.getSkillsForAgent(ag); }
+  _getSkillsForAgent(ag: AnyRecord) { return this._skills.getSkillsForAgent(ag); }
   get skillsDir() { return this._skills.skillsDir; }
   get userSkillsDir() { return this._skills.skillsDir; }
   get learnedSkillsDir() { return path.join(this.agent.agentDir, "learned-skills"); }
@@ -610,7 +647,7 @@ export class HanaEngine {
   }
 
   /** 更新外部技能路径 + 同步 ResourceLoader + 重载 */
-  async setExternalSkillPaths(paths) {
+  async setExternalSkillPaths(paths: string[]) {
     this._prefs.setExternalSkillPaths(paths);
     const merged = this._mergeExternalPaths(paths);
     // 1. 更新 SkillManager（数据 + watcher，不 reload）
@@ -622,15 +659,15 @@ export class HanaEngine {
   }
 
   /** 合并自动发现 + 用户配置的外部路径（去重） */
-  _mergeExternalPaths(userConfiguredPaths) {
+  _mergeExternalPaths(userConfiguredPaths: string[]): ExternalSkillPath[] {
     // 每次合并时重新检测目录是否存在（不依赖初始化快照）
     for (const d of this._discoveredExternalPaths || []) {
       d.exists = fs.existsSync(d.dirPath);
     }
     const discovered = (this._discoveredExternalPaths || [])
-      .filter(d => d.exists)
-      .map(d => ({ dirPath: d.dirPath, label: d.label }));
-    const userParsed = (userConfiguredPaths || []).map(p => ({
+      .filter((d: ExternalSkillPath) => d.exists)
+      .map((d: ExternalSkillPath) => ({ dirPath: d.dirPath, label: d.label }));
+    const userParsed = (userConfiguredPaths || []).map((p: string) => ({
       dirPath: path.resolve(p),
       label: path.basename(path.dirname(p)),
     }));
@@ -649,11 +686,11 @@ export class HanaEngine {
   //  Model 代理
   // ════════════════════════════
 
-  _resolveThinkingLevel(l, model = null) { return this._models.resolveThinkingLevel(l, model); }
-  _resolveExecutionModel(r) { return this._models.resolveExecutionModel(r); }
-  _resolveProviderCredentials(p) { return this._models.resolveProviderCredentials(p); }
-  resolveProviderCredentials(p) { return this._resolveProviderCredentials(p); }
-  _inferModelProvider(id) { return this._models.inferModelProvider(id); }
+  _resolveThinkingLevel(l: string, model: AnyRecord | null = null) { return this._models.resolveThinkingLevel(l, model); }
+  _resolveExecutionModel(r: AnyRecord) { return this._models.resolveExecutionModel(r); }
+  _resolveProviderCredentials(p: string) { return this._models.resolveProviderCredentials(p); }
+  resolveProviderCredentials(p: string) { return this._resolveProviderCredentials(p); }
+  _inferModelProvider(id: string) { return this._models.inferModelProvider(id); }
   async refreshAvailableModels() { return this._models.refreshAvailable(); }
 
   static SHARED_MODEL_KEYS = SHARED_MODEL_KEYS;
@@ -662,7 +699,7 @@ export class HanaEngine {
   //  生命周期
   // ════════════════════════════
 
-  async init(log = () => {}) {
+  async init(log: Logger = () => {}) {
     const startupTimer = Date.now();
 
     // 0. Config scope 迁移（全局字段从 agent config → preferences）
@@ -704,7 +741,7 @@ export class HanaEngine {
       }
       this._models.providerRegistry.reload();
     } catch (err) {
-      log(`[init] seed Brain provider failed: ${err.message}`);
+      log(`[init] seed Brain provider failed: ${errMessage(err)}`);
     }
 
     // 0d. 将本机 Lynn 身份注册到 Brain 服务，后续请求走签名头鉴权
@@ -733,7 +770,7 @@ export class HanaEngine {
             return true;
           } catch (err) {
             lastError = err;
-            log(`[init] Brain device registration attempt ${attempt} failed via ${baseUrl}: ${err.message}`);
+            log(`[init] Brain device registration attempt ${attempt} failed via ${baseUrl}: ${errMessage(err)}`);
           }
         }
         if (attempt < 2) {
@@ -741,11 +778,11 @@ export class HanaEngine {
         }
       }
 
-      log(`[init] Brain device registration skipped: ${lastError?.message || "unknown error"}`);
+      log(`[init] Brain device registration skipped: ${errMessage(lastError)}`);
       return false;
     })()
-      .catch((err) => {
-        log(`[init] Brain device registration crashed: ${err.message}`);
+      .catch((err: unknown) => {
+        log(`[init] Brain device registration crashed: ${errMessage(err)}`);
         return false;
       })
       .finally(() => {
@@ -793,7 +830,7 @@ export class HanaEngine {
           await this._agentMgr.deleteAgent(agentId);
           cleanedCount += 1;
         } catch (err) {
-          log(`[init] 清理孤儿频道专家失败 (${agentId}): ${err.message}`);
+          log(`[init] 清理孤儿频道专家失败 (${agentId}): ${errMessage(err)}`);
         }
       }
       if (cleanedCount > 0) {
@@ -830,7 +867,7 @@ export class HanaEngine {
 
     const HIDDEN_SKILLS = new Set(["skills-translate-temp"]);
     this._skills.init(this._resourceLoader, this._agentMgr.agents, HIDDEN_SKILLS);
-    const extCount = this._skills.allSkills.filter(s => s.source === "external").length;
+    const extCount = this._skills.allSkills.filter((s: AnyRecord) => s.source === "external").length;
     log(`[init] 3/5 ResourceLoader 完成 (${Date.now() - t_rl}ms, ${this._skills.allSkills.length} skills${extCount ? `, ${extCount} external` : ""})`);
 
     this._resourceLoader.getSystemPrompt = () => this.agent.systemPrompt;
@@ -843,7 +880,7 @@ export class HanaEngine {
     this._configCoord.normalizeUtilityApiPreferences(log);
     const availableModels = this._models.availableModels;
     if (shouldExposeVerboseModelRouting()) {
-      log(`[init] 4/5 找到 ${availableModels.length} 个模型: ${availableModels.map(m => `${m.provider}/${m.id}`).join(", ")}`);
+      log(`[init] 4/5 找到 ${availableModels.length} 个模型: ${availableModels.map((m: AnyRecord) => `${m.provider}/${m.id}`).join(", ")}`);
     } else {
       log(`[init] 4/5 找到 ${availableModels.length} 个可用模型`);
     }
@@ -899,7 +936,7 @@ export class HanaEngine {
         log(`✿ MCP: ${this._mcpManager.serverCount} server(s), ${this._mcpManager.toolCount} tool(s)`);
       }
     } catch (err) {
-      log(`[init] MCP init failed (non-fatal): ${err.message}`);
+      log(`[init] MCP init failed (non-fatal): ${errMessage(err)}`);
       this._mcpManager = null;
     }
 
@@ -919,12 +956,12 @@ export class HanaEngine {
           method: "GET",
           headers,
           timeoutMs: 3000,
-        }).catch((err) => {
-          log(`[init] Brain prewarm skipped: ${err.message}`);
+        }).catch((err: unknown) => {
+          log(`[init] Brain prewarm skipped: ${errMessage(err)}`);
         });
       }
     } catch (err) {
-      log(`[init] Brain prewarm skipped: ${err.message}`);
+      log(`[init] Brain prewarm skipped: ${errMessage(err)}`);
     }
 
     // 7b. 内容安全过滤器
@@ -936,7 +973,7 @@ export class HanaEngine {
       this._sessionCoord._contentFilter = this._contentFilter;
       log(`✿ 内容过滤器已加载 (${this._contentFilter.stats.totalWords} 词)`);
     } catch (err) {
-      log(`[init] content filter init failed (non-fatal): ${err.message}`);
+      log(`[init] content filter init failed (non-fatal): ${errMessage(err)}`);
       this._contentFilter = null;
     }
 
@@ -963,7 +1000,7 @@ export class HanaEngine {
    * Initialize plugin system. Called after Hub construction (EventBus available).
    * @param {import('../hub/event-bus.js').EventBus} bus
    */
-  async initPlugins(bus) {
+  async initPlugins(bus: AnyRecord) {
     const builtinPluginsDir = path.join(this.productDir, "..", "plugins");
     const userPluginsDir = path.join(this.lynnHome, "plugins");
     const pluginDataDir = path.join(this.lynnHome, "plugin-data");
@@ -989,7 +1026,7 @@ export class HanaEngine {
   get mcpManager() { return this._mcpManager; }
 
   // [2026-04-17] MCP 按需激活 API (供 session-coordinator + UI 调用)
-  activateMcpServer(sessionPath, serverName) {
+  activateMcpServer(sessionPath: string, serverName: string) {
     if (!this._sessionCoord) return false;
     const entry = this._sessionCoord._sessions?.get(sessionPath);
     if (!entry) return false;
@@ -999,7 +1036,7 @@ export class HanaEngine {
     this._emitEvent({ type: 'mcp_activation_changed', sessionPath, serverName, active: true }, sessionPath);
     return true;
   }
-  deactivateMcpServer(sessionPath, serverName) {
+  deactivateMcpServer(sessionPath: string, serverName: string) {
     if (!this._sessionCoord) return false;
     const entry = this._sessionCoord._sessions?.get(sessionPath);
     if (!entry?.activeMcpServers) return false;
@@ -1008,7 +1045,7 @@ export class HanaEngine {
     this._emitEvent({ type: 'mcp_activation_changed', sessionPath, serverName, active: false }, sessionPath);
     return true;
   }
-  getSessionActiveMcp(sessionPath) {
+  getSessionActiveMcp(sessionPath: string) {
     const entry = this._sessionCoord?._sessions?.get(sessionPath);
     return entry?.activeMcpServers ? [...entry.activeMcpServers] : [];
   }
@@ -1017,21 +1054,21 @@ export class HanaEngine {
   //  工具构建
   // ════════════════════════════
 
-  buildTools(cwd, customTools, opts = {}) {
-    const ct = customTools || this.agent.tools;
+  buildTools(cwd: string, customTools?: ToolLike[], opts: BuildToolsOptions = {}) {
+    const ct: ToolLike[] = customTools || this.agent.tools || [];
     // Append plugin tools + MCP tools
-    const pluginTools = this._pluginManager?.getAllTools() || [];
+    const pluginTools: ToolLike[] = this._pluginManager?.getAllTools() || [];
 
     // [2026-04-17] MCP 按需激活：默认不加载 MCP 工具，避免 tools 数量膨胀拖慢模型
     // 用户可在 session 里通过 activateMcpServer(name) 或 UI 开关激活
     const prefs = this._readPreferences?.() || {};
     const mcpAutoLoad = prefs.mcpAutoLoad === true; // default false
     const sessionActiveMcp = opts.activeMcpServers; // Set<string> | undefined
-    let mcpTools = [];
+    let mcpTools: ToolLike[] = [];
     if (this._mcpManager) {
       if (sessionActiveMcp && sessionActiveMcp.size > 0) {
         // 仅 session 激活的 server 的工具
-        mcpTools = (this._mcpManager.getTools() || []).filter(tool => {
+        mcpTools = (this._mcpManager.getTools() || []).filter((tool: ToolLike) => {
           const m = (tool.name || '').match(/^mcp__([^_]+(?:_[^_]+)*?)__/);
           return m && sessionActiveMcp.has(m[1]);
         });
@@ -1049,7 +1086,7 @@ export class HanaEngine {
     const sandboxEnabled = this._readPreferences().sandbox !== false;
 
     // Derive sandbox mode from security mode
-    let effectiveMode;
+    let effectiveMode: string;
     if (opts.mode) {
       effectiveMode = opts.mode;
     } else if (!sandboxEnabled) {
@@ -1057,7 +1094,7 @@ export class HanaEngine {
     } else {
       // Use security mode config to determine sandbox behavior
       const secMode = this.securityMode;
-      const secConfig = SECURITY_MODE_CONFIG[secMode];
+      const secConfig = SECURITY_MODE_CONFIG[secMode as keyof typeof SECURITY_MODE_CONFIG];
       effectiveMode = secConfig ? secConfig.sandboxMode : "standard";
     }
 
@@ -1066,16 +1103,17 @@ export class HanaEngine {
       workspace: effectiveWorkspace,
       trustedRoots: this.getTrustedRoots(),
       lynnHome: this.lynnHome,
-      mode: effectiveMode,
+      mode: effectiveMode as any,
       confirmStore: this._confirmStore,
-      emitEvent: (e, sp) => this._emitEvent(e, sp),
+      emitEvent: ((e: unknown, sp: unknown) => this._emitEvent(e as AnyRecord, sp as string | null | undefined)) as any,
       getSessionPath: opts.getSessionPath,
     });
 
     // P2a: 给 customTools 包参数校验 Guard
-    result.customTools = (result.customTools || []).map(wrapToolWithGuard);
+    const guardedTools = ((result.customTools || []) as ToolLike[]).map(wrapToolWithGuard);
+    result.customTools = guardedTools;
     // P2b: 注册工具名别名（弱模型常见拼写错误兜底）
-    const aliases = createToolAliases(result.customTools);
+    const aliases = createToolAliases(guardedTools);
     if (aliases.length > 0) result.customTools = [...result.customTools, ...aliases];
     return result;
   }
@@ -1084,19 +1122,19 @@ export class HanaEngine {
   //  事件系统
   // ════════════════════════════
 
-  setEventBus(bus) {
+  setEventBus(bus: AnyRecord) {
     for (const fn of this._listeners) bus.subscribe(fn);
     this._listeners.clear();
     this._eventBus = bus;
   }
 
-  subscribe(listener) {
+  subscribe(listener: (...args: any[]) => void) {
     if (this._eventBus) return this._eventBus.subscribe(listener);
     this._listeners.add(listener);
     return () => this._listeners.delete(listener);
   }
 
-  _emitEvent(event, sessionPath) {
+  _emitEvent(event: AnyRecord, sessionPath: string | null | undefined) {
     if (this._eventBus) {
       this._eventBus.emit(event, sessionPath);
     } else {
@@ -1106,9 +1144,9 @@ export class HanaEngine {
     }
   }
 
-  emitEvent(event, sessionPath) { this._emitEvent(event, sessionPath); }
+  emitEvent(event: AnyRecord, sessionPath?: string | null) { this._emitEvent(event, sessionPath); }
 
-  emitDevLog(text, level = "info") {
+  emitDevLog(text: string, level = "info") {
     const entry = { text, level, ts: Date.now() };
     this._devLogs.push(entry);
     if (this._devLogs.length > this._devLogsMax) {
@@ -1152,19 +1190,19 @@ export class HanaEngine {
     });
   }
 
-  async summarizeTitle(ut, at, opts) {
+  async summarizeTitle(ut: string, at: string, opts?: AnyRecord) {
     return _summarizeTitle(this.resolveUtilityConfig(), ut, at, opts);
   }
 
-  async translateSkillNames(names, lang) {
+  async translateSkillNames(names: string[], lang: string) {
     return _translateSkillNames(this.resolveUtilityConfig(), names, lang);
   }
 
-  async summarizeActivity(sp) {
+  async summarizeActivity(sp: string) {
     return _summarizeActivity(this.resolveUtilityConfig(), sp, (msg) => this.emitDevLog(msg));
   }
 
-  async summarizeActivityQuick(activityId) {
+  async summarizeActivityQuick(activityId: string) {
     let entry = null, foundAgentId = null;
     for (const [agId] of this._agentMgr.agents) {
       const store = this.getActivityStore(agId);
@@ -1176,7 +1214,7 @@ export class HanaEngine {
     return _summarizeActivityQuick(this.resolveUtilityConfig(), sessionPath);
   }
 
-  async summarizeSessionRelay(sessionPath, opts = {}) {
+  async summarizeSessionRelay(sessionPath: string, opts: AnyRecord = {}) {
     return _summarizeSessionRelay(this.resolveUtilityConfig(), sessionPath, opts);
   }
 
@@ -1206,9 +1244,9 @@ export class HanaEngine {
   // ════════════════════════════
 
   _readPreferences() { return this._prefs.getPreferences(); }
-  _writePreferences(prefs) { return this._prefs.savePreferences(prefs); }
+  _writePreferences(prefs: AnyRecord) { return this._prefs.savePreferences(prefs); }
   _readPrimaryAgent() { return this._prefs.getPrimaryAgent(); }
-  _savePrimaryAgent(agentId) { return this._prefs.savePrimaryAgent(agentId); }
+  _savePrimaryAgent(agentId: string) { return this._prefs.savePrimaryAgent(agentId); }
 
   // ════════════════════════════
   //  巡检工具白名单（向后兼容静态引用）

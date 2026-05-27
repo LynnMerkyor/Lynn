@@ -310,7 +310,7 @@ app.get("/api/health", async (c) => {
       translateRoute: true,
       toolsRoute: true,
       ttsBridgeTool: Boolean(
-        engine.pluginManager?.getAllTools?.()?.some((tool) => tool?.name === "tts-bridge.tts_speak"),
+        engine.pluginManager?.getAllTools?.()?.some((tool: { name?: string }) => tool?.name === "tts-bridge.tts_speak"),
       ),
     },
     brainRegistered: engine._brainRegistered ?? false,
