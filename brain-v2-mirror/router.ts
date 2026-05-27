@@ -8,7 +8,11 @@
 import { universalOrder, getProvider, isInCooldown, markUnhealthy } from './provider-registry.js';
 import { getAdapter } from './wire-adapter/index.js';
 import { isServerTool, executeServerTool, mergeWithServerTools } from './tool-exec/index.js';
+import { applySearchContext, createSearchRequestCache } from './search-context.js';
 import { errorMessage, type ChatMessage, type FallbackEntry, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
+
+// search-context.js is intentionally untyped (.ts @ts-nocheck) — keep these as opaque types here.
+type SearchRequestCache = Map<string, string>;
 
 type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio'>>;
 type ProviderError = Error & { suppressBody?: boolean; cooldownMs?: number };
@@ -80,7 +84,8 @@ async function runRound({
   log,
   extraBody,
   reasoningEffort,
-}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'>): Promise<RunRoundResult> {
+  requestCache,
+}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache }): Promise<RunRoundResult> {
   const errors: Array<{ providerId: ProviderId; error: string }> = [];
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
   // (例:"MiMo → Spark fallback"),不再让 cascade decision 对 UI 不可见。
@@ -133,7 +138,25 @@ async function runRound({
     const toolCallsAcc: ToolCall[] = [];
     try {
       log && log('info', `→ provider ${providerId}`);
-      for await (const chunk of adapter({ provider, messages, tools, signal, log, extraBody, reasoningEffort })) {
+      // Search Context Broker: 在非 native_search provider 上做 MiMo pre-search inject。
+      // flag-gated (BRAIN_V2_PRE_SEARCH=1)、失败不阻断 (search-context 内部已 try/catch)、
+      // request 级缓存避免 fallback 链重复搜。
+      const searchCtx = await applySearchContext({ messages, provider, signal, log, requestCache });
+      const effectiveMessages = searchCtx.messages as ChatMessage[];
+      if (searchCtx.meta?.applied) {
+        await onChunk(
+          {
+            type: 'pre_search',
+            source: 'mimo',
+            query: searchCtx.meta.query,
+            hit: !!searchCtx.meta.hit,
+            ms: searchCtx.meta.ms ?? 0,
+            cached: searchCtx.meta.cached ?? null,
+          },
+          { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
+        );
+      }
+      for await (const chunk of adapter({ provider, messages: effectiveMessages, tools, signal, log, extraBody, reasoningEffort })) {
         anyEmit = true;
         if (chunk.type === 'content') {
           contentAccum += chunk.delta;
@@ -219,12 +242,15 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   let lastProviderId: ProviderId | null = null;
   let iter = 0;
   const maxIter = MAX_ITERATIONS > 0 ? MAX_ITERATIONS : Infinity;
+  // Per-request 搜索缓存:同一 turn 内 fallback 链(spark→deepseek→glm)不重复搜
+  const requestCache = createSearchRequestCache() as SearchRequestCache;
 
   while (iter < maxIter) {
     iter++;
     const result = await runRound({
       messages: workingMessages, tools: mergedTools, capabilityRequired,
       signal, onChunk, log, extraBody, reasoningEffort,
+      requestCache,
     });
     lastProviderId = result.providerId;
 
