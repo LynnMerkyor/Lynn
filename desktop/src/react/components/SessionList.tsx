@@ -15,6 +15,7 @@ import type { Session, Agent } from '../types';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
 import { lookupKnownModel } from '../utils/known-models';
 import { isDisplayDefaultModel } from '../utils/brain-models';
+import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import styles from './SessionList.module.css';
 
 // ── Platform icons ──
@@ -417,6 +418,7 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
   const [editValue, setEditValue] = useState('');
   const [labelEditing, setLabelEditing] = useState(false);
   const [labelValue, setLabelValue] = useState('');
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const labelInputRef = useRef<HTMLInputElement>(null);
 
@@ -427,13 +429,20 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
     switchSession(s.path);
   }, [s.path, editing, disabled]);
 
-  const handleArchive = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    archiveSession(s.path);
-  }, [s.path]);
+  const handleArchive = useCallback(() => {
+    const sessionLabel = s.title || s.firstMessage || t('session.untitled');
+    useStore.getState().setPendingConfirm({
+      title: t('session.archive'),
+      message: t('session.archiveConfirm', { name: sessionLabel }),
+      tone: 'danger',
+      confirmLabel: t('session.archive'),
+      onConfirm: () => {
+        archiveSession(s.path);
+      },
+    });
+  }, [s.path, s.title, s.firstMessage, t]);
 
-  const startEditLabels = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const startEditLabels = useCallback(() => {
     setLabelValue(Array.isArray(s.labels) ? s.labels.join(', ') : '');
     setLabelEditing(true);
   }, [s.labels]);
@@ -463,8 +472,7 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
     }
   }, [labelValue, s.labels, s.path]);
 
-  const handlePin = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handlePin = useCallback(async () => {
     try {
       await hanaFetch('/api/sessions/pin', {
         method: 'POST',
@@ -480,11 +488,29 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
     }
   }, [s.path, s.pinned]);
 
-  const startRename = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const startRename = useCallback(() => {
     setEditValue(s.title || s.firstMessage || '');
     setEditing(true);
   }, [s.title, s.firstMessage]);
+
+  const openCtxMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
+
+  const menuItems = useMemo<ContextMenuItem[]>(() => {
+    if (!ctxMenu) return [];
+    return [
+      { label: t('session.rename'), action: startRename },
+      { label: s.pinned ? t('session.unpin') : t('session.pin'), action: () => { void handlePin(); } },
+      { label: t('session.editLabels'), action: startEditLabels },
+      { divider: true },
+      { label: t('session.archive'), danger: true, action: handleArchive },
+    ];
+  }, [ctxMenu, s.pinned, t, startRename, handlePin, startEditLabels, handleArchive]);
 
   const commitRename = useCallback(() => {
     const trimmed = editValue.trim();
@@ -539,12 +565,24 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
 
   return (
     <button
-      className={`${styles.sessionItem}${isActive ? ` ${styles.sessionItemActive}` : ''}`}
+      className={`${styles.sessionItem}${isActive ? ` ${styles.sessionItemActive}` : ''}${s.pinned ? ` ${styles.sessionItemPinned}` : ''}`}
       data-session-path={s.path}
       onClick={handleClick}
+      onContextMenu={openCtxMenu}
       disabled={disabled}
     >
       <div className={styles.sessionItemHeader}>
+        {s.pinned && (
+          <span
+            className={styles.sessionPinnedIndicator}
+            title={t('session.pinned')}
+            aria-hidden
+          >
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+            </svg>
+          </span>
+        )}
         {s.agentId && (
           <AgentBadge agentId={s.agentId} agentName={s.agentName} agents={agents} />
         )}
@@ -564,28 +602,22 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
             {s.title || s.firstMessage || t('session.untitled')}
           </div>
         )}
-      </div>
-
-      {!editing && (
-        <div className={styles.sessionRenameBtn} title={t('session.rename')} onClick={startRename}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-          </svg>
-        </div>
-      )}
-
-      <div className={`${styles.sessionPinBtn}${s.pinned ? ` ${styles.sessionPinActive}` : ''}`} title={s.pinned ? 'Unpin' : 'Pin'} onClick={handlePin}>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2L12 12" /><path d="M18 6L12 12L6 6" /><line x1="5" y1="21" x2="19" y2="21" />
-        </svg>
-      </div>
-
-      <div className={styles.sessionArchiveBtn} title="Archive" onClick={handleArchive}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="21 8 21 21 3 21 3 8" />
-          <rect x="1" y="3" width="22" height="5" />
-          <line x1="10" y1="12" x2="14" y2="12" />
-        </svg>
+        {!editing && !labelEditing && (
+          <span
+            className={styles.sessionMenuBtn}
+            title={t('session.menuTrigger')}
+            onClick={openCtxMenu}
+            role="button"
+            aria-haspopup="menu"
+            aria-expanded={ctxMenu !== null}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <circle cx="5" cy="12" r="1.6" />
+              <circle cx="12" cy="12" r="1.6" />
+              <circle cx="19" cy="12" r="1.6" />
+            </svg>
+          </span>
+        )}
       </div>
 
       <div className={styles.sessionItemMeta}>
@@ -628,12 +660,6 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
         </div>
       )}
 
-      {!editing && !labelEditing && (
-        <div className={styles.sessionLabelBtn} title={t('session.editLabels') || '编辑标签'} onClick={startEditLabels}>
-          #
-        </div>
-      )}
-
       {browserUrl && (
         <span className={styles.sessionBrowserBadge} title={browserUrl}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -642,6 +668,10 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
             <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
           </svg>
         </span>
+      )}
+
+      {ctxMenu && (
+        <ContextMenu items={menuItems} position={ctxMenu} onClose={closeCtxMenu} />
       )}
     </button>
   );

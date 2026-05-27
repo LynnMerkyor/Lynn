@@ -133,7 +133,13 @@
     "archiveFailed": "歸檔 session 失敗",
     "rename": "重新命名",
     "editLabels": "編輯標籤",
-    "labelsPlaceholder": "標籤，以逗號分隔"
+    "labelsPlaceholder": "標籤，以逗號分隔",
+    "pin": "置頂",
+    "unpin": "取消置頂",
+    "pinned": "已置頂",
+    "archive": "歸檔",
+    "archiveConfirm": "歸檔「{name}」？歸檔後將不在列表中顯示，歷史記錄會保留。",
+    "menuTrigger": "更多操作"
   },
   "common": {
     "on": "開",
