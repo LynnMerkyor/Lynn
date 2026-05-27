@@ -37,17 +37,17 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.79.4</strong> · 2026-05-26 · Runtime TypeScript toolchain release <em>(latest)</em></summary>
+<summary><strong>v0.79.5</strong> · 2026-05-27 · Core Agent Runtime TS release <em>(latest)</em></summary>
 
-**V0.79 runtime architecture hardening release**:
-- 🧱 **A full toolchain slice is now typed**:`lib/tools` has moved fully to TypeScript, including web search, realtime info/weather/news/sports, stock market, stock research, browser, install skill, snapshot restore, and related helpers.
-- 🧠 **Memory retrieval leaf paths are tighter**:`memory-search`, `user-profile`, and `HybridRetriever` now have TS boundaries, reducing implicit object contracts in local memory and profile lookups.
-- 🌐 **Realtime contracts are safer**:weather, search, stock, and news tool result shapes are clearer across Deep Research, local tools, and chat/tool tiering.
+**V0.79 core runtime TypeScript migration release**:
+- 🧠 **Agent runtime now has TS gates**:`core/agent` moved to TypeScript, covering identity, config, memory, tools, Desk, Cron, skill install, and system prompt assembly boundaries.
+- 🧭 **Session coordinator is typed**:session switching, tool events, vision-argument regressions, and model isolation are covered by focused tests.
+- 🧱 **Server runtime keeps tightening**:server entrypoint, provider plugins, AEC client, CLI, config/skills/sessions, agents/review/research, voice/desk/local-model routes are now in runtime typecheck.
 - 🧭 **Local model policy unchanged**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model; 4B remains a low-config downgrade with the thinking-on risk documented.
-- 🧪 **Central files are deferred to V0.79.5+**:`chat.js`, `voice-ws.js`, `engine.js`, `agent.js`, and `session-coordinator.js` stay out of this package to keep release risk low.
-- ✅ **Release gate**:V0.79.4 passed `typecheck:runtime`, full `typecheck`, full `npm test`, and package/notarization gates.
+- 🧪 **Highest-risk hubs remain staged**:`core/engine` and `server/routes/chat` are left for a separate wave so this release stays stable.
+- ✅ **Release gate**:V0.79.5 passed `typecheck:runtime`, full `typecheck`, full `npm test`, release static regression, and package/notarization gates.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.4)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.5)
 
 </details>
 
@@ -661,11 +661,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.79.4 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.79.5 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.79.4 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.79.5 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -728,7 +728,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.79.4 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.79.5 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

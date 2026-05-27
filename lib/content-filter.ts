@@ -113,6 +113,11 @@ function shouldSkipEmbeddedAsciiShortWord(text: string, start: number, end: numb
   return isAsciiTokenChar(text[start - 1]) || isAsciiTokenChar(text[end]);
 }
 
+function shouldSkipEmbeddedNumericWord(text: string, start: number, end: number, word: string): boolean {
+  if (!/^\d+(?:[.-]\d+)+$/.test(word || '')) return false;
+  return /\d/.test(text[start - 1] || '') || /\d/.test(text[end] || '');
+}
+
 class TrieNode {
   declare children: Map<string, TrieNode>;
   declare isEnd: boolean;
@@ -241,6 +246,9 @@ export class ContentFilter {
           // 英文短词库容易误伤普通单词子串，例如 sm 命中 small、kill 命中 skill。
           // 短英文敏感词必须以独立 token 出现，避免正常英文翻译/写作被 block。
           if (shouldSkipEmbeddedAsciiShortWord(normalizedText, i, j, matchedWord)) {
+            continue;
+          }
+          if (shouldSkipEmbeddedNumericWord(normalizedText, i, j, matchedWord)) {
             continue;
           }
           if (isEducationalContext && wordLen <= 4 && CONTEXTUAL_EXEMPT_WORDS.has(matchedWord)) {

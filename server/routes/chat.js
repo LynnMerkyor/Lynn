@@ -32,6 +32,10 @@ import {
 import { AppError } from "../../shared/errors.js";
 import { errorBus } from "../../shared/error-bus.js";
 import {
+  BRAIN_DEFAULT_MODEL_ID,
+  BRAIN_PROVIDER_ID,
+} from "../../shared/brain-provider.js";
+import {
   clearPersistedFinalAnswerPollTimer,
   clearReturnedTurnFinalizationTimer,
   clearSilentBrainAbortTimer,
@@ -129,6 +133,13 @@ function resolveEditSnapshotPath(session, engine, rawPath) {
 
   const cwd = session?.sessionManager?.getCwd?.() || engine.cwd || process.cwd();
   return path.resolve(cwd, trimmed);
+}
+
+function resolveBrainFallbackModel(engine) {
+  const models = Array.isArray(engine?.availableModels) ? engine.availableModels : [];
+  return models.find((model) => model?.provider === BRAIN_PROVIDER_ID && model?.id === BRAIN_DEFAULT_MODEL_ID)
+    || models.find((model) => model?.provider === BRAIN_PROVIDER_ID)
+    || null;
 }
 
 export function createChatRoute(engine, hub, { upgradeWebSocket }) {
@@ -671,6 +682,87 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     if (opts.debugLabel) {
       debugLog()?.log("ws", `[LOCAL-QWEN35-DIRECT v1] closed · ${opts.debugLabel} · ${sessionPath}`);
     }
+  }
+
+  async function switchCurrentSessionToBrainFallback(sessionPath, ss, reason, modelInfo = {}) {
+    const brainModel = resolveBrainFallbackModel(engine);
+    if (!brainModel) {
+      debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] no brain fallback model available · reason=${reason} · ${sessionPath}`);
+      return null;
+    }
+    if (engine.currentSessionPath && engine.currentSessionPath !== sessionPath) {
+      debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] session is no longer focused; cannot switch current model · reason=${reason} · ${sessionPath}`);
+      return null;
+    }
+    const switcher = engine?._sessionCoord?.switchCurrentSessionModel;
+    if (typeof switcher !== "function") {
+      debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] session model switcher unavailable · reason=${reason} · ${sessionPath}`);
+      return null;
+    }
+    await switcher.call(engine._sessionCoord, brainModel);
+    emitStreamEvent(sessionPath, ss, {
+      type: "provider_meta",
+      activeProvider: BRAIN_PROVIDER_ID,
+      fallbackFrom: [{
+        id: String(modelInfo?.provider || LOCAL_QWEN35_PROVIDER_ID),
+        reason,
+      }],
+    });
+    emitStreamEvent(sessionPath, ss, { type: "model_hint", model: `${BRAIN_PROVIDER_ID}/${brainModel.id || BRAIN_DEFAULT_MODEL_ID}` });
+    debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] switched session to brain fallback · reason=${reason} · model=${brainModel.id || ""} · ${sessionPath}`);
+    return brainModel;
+  }
+
+  async function continueTurnViaHub(sessionPath, ss, text, {
+    images,
+    streamToken,
+    disableTools,
+    turnInstruction,
+    returnedOpenReason = "hub_send_returned_open_safety_timeout",
+    returnedClosedReason = "hub_send_returned_closed_without_turn_end",
+  } = {}) {
+    scheduleSilentBrainAbort(sessionPath, ss);
+    await hub.send(
+      text,
+      images
+        ? { images, sessionPath, streamToken, disableTools, turnInstruction }
+        : { sessionPath, streamToken, disableTools, turnInstruction },
+    );
+    if (!ss.isStreaming) {
+      if (hasToolExecutionInFlight(ss)) {
+        scheduleToolFinalizationFallback(sessionPath, ss);
+        debugLog()?.log("ws", `[HUB-SEND v2] returned while tool is still in flight count=${ss.activeToolCallCount || 0}, recovered=${!!ss.recoveredBashInFlight}; defer close · ${sessionPath}`);
+      } else {
+        clearTurnTimers(ss);
+        if (!finalizeReturnedTurnWithoutStream(sessionPath, ss, returnedClosedReason)) {
+          broadcast({ type: "status", isStreaming: false, sessionPath });
+        }
+      }
+    } else if (!hasToolExecutionInFlight(ss) && finalizeReturnedTurnWithoutStream(sessionPath, ss, "hub_send_returned_open_without_turn_end", { requirePersistedText: true })) {
+      // finalized from the persisted non-streaming assistant message
+    } else {
+      scheduleReturnedTurnFinalizationFallback(sessionPath, ss, returnedOpenReason);
+      debugLog()?.log("ws", `hub.send returned while server stream remains open · ${sessionPath}`);
+    }
+  }
+
+  async function fallbackLocalQwen35DirectToBrain({ sessionPath, ss, promptText, effectivePromptText, modelInfo, msg, streamToken, disableTools, turnInstruction, reason }) {
+    if (ss.hasOutput || ss.hasThinking) {
+      return false;
+    }
+    const fallbackModel = await switchCurrentSessionToBrainFallback(sessionPath, ss, reason, modelInfo);
+    if (!fallbackModel) return false;
+    ss.streamSource = "brain_fallback";
+    ss.effectivePromptText = effectivePromptText || promptText;
+    await continueTurnViaHub(sessionPath, ss, effectivePromptText || promptText, {
+      images: msg?.images,
+      streamToken,
+      disableTools,
+      turnInstruction,
+      returnedOpenReason: `local_qwen35_${reason}_fallback_open_safety_timeout`,
+      returnedClosedReason: `local_qwen35_${reason}_fallback_closed_without_turn_end`,
+    });
+    return true;
   }
 
   async function streamLocalQwen35DirectBridge(sessionPath, ss, originalPromptText, effectivePromptText, modelInfo = {}, opts = {}) {
@@ -1506,13 +1598,27 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                     });
                   } catch (directErr) {
                     debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] failed · ${directErr?.message || directErr} · ${promptSessionPath}`);
-                    closeStreamWithVisibleFallback(
-                      promptSessionPath,
+                    const fallbackOk = await fallbackLocalQwen35DirectToBrain({
+                      sessionPath: promptSessionPath,
                       ss,
-                      "",
-                      "local_qwen35_direct_failed",
-                      { trustedFallback: true },
-                    );
+                      promptText,
+                      effectivePromptText,
+                      modelInfo: currentModelInfo,
+                      msg,
+                      streamToken,
+                      disableTools: disableTurnTools,
+                      turnInstruction: noToolTurnInstruction,
+                      reason: "local_qwen35_direct_failed",
+                    });
+                    if (!fallbackOk) {
+                      closeStreamWithVisibleFallback(
+                        promptSessionPath,
+                        ss,
+                        "",
+                        "local_qwen35_direct_failed",
+                        { trustedFallback: true },
+                      );
+                    }
                   }
                   return;
                 }
@@ -1597,13 +1703,27 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                       });
                     } catch (directErr) {
                       debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v2] failed after prefetch · ${directErr?.message || directErr} · ${promptSessionPath}`);
-                      closeStreamWithVisibleFallback(
-                        promptSessionPath,
+                      const fallbackOk = await fallbackLocalQwen35DirectToBrain({
+                        sessionPath: promptSessionPath,
                         ss,
-                        "",
-                        "local_qwen35_direct_after_prefetch_failed",
-                        { trustedFallback: true },
-                      );
+                        promptText,
+                        effectivePromptText,
+                        modelInfo: currentModelInfo,
+                        msg,
+                        streamToken,
+                        disableTools: disableTurnTools,
+                        turnInstruction: noToolTurnInstruction,
+                        reason: "local_qwen35_direct_after_prefetch_failed",
+                      });
+                      if (!fallbackOk) {
+                        closeStreamWithVisibleFallback(
+                          promptSessionPath,
+                          ss,
+                          "",
+                          "local_qwen35_direct_after_prefetch_failed",
+                          { trustedFallback: true },
+                        );
+                      }
                     }
                     return;
                   }

@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.79.4-brightgreen" alt="Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.79.5-brightgreen" alt="Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -44,17 +44,17 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 ## 🆕 近期更新
 
 <details>
-<summary><strong>v0.79.4</strong> · 2026-05-26 · Runtime TypeScript 工具链版 <em>(最新)</em></summary>
+<summary><strong>v0.79.5</strong> · 2026-05-27 · Core Agent Runtime TS 版 <em>(最新)</em></summary>
 
-**V0.79 运行时架构加固版**:
-- 🧱 **工具链 TS 化完成一整块**:`lib/tools` 全量迁入 TypeScript,web search、realtime info/weather/news/sports、stock market、stock research、browser、install skill、snapshot restore 等工具都有类型边界。
-- 🧠 **记忆检索叶子路径收紧**:`memory-search`、`user-profile` 和 `HybridRetriever` 迁到 TS,让本地记忆检索与 profile 读取少依赖隐式对象约定。
-- 🌐 **实时信息协议更稳**:天气、搜索、股票和新闻等工具返回结构更明确,Deep Research、本地工具调用和 chat/tool tiering 之间的协议漂移风险降低。
+**V0.79 核心运行时 TypeScript 迁移版**:
+- 🧠 **Agent runtime 进入 TS 门禁**:`core/agent` 迁入 TypeScript,身份、配置、记忆、工具、Desk、Cron、Skill install 和 system prompt 组装路径都有显式边界。
+- 🧭 **Session coordinator TS 化**:会话切换、工具事件、视觉参数回归和模型隔离路径通过聚焦测试覆盖。
+- 🧱 **Server runtime 继续收紧**:server 入口、provider plugins、AEC client、CLI、config/skills/sessions、agents/review/research、voice/desk/local model routes 已进入 runtime typecheck。
 - 🧭 **本地模型口径不变**:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;4B 保持低配降级,继续提示 thinking-on 风险。
-- 🧪 **中心大文件留给 V0.79.5+**:`chat.js`、`voice-ws.js`、`engine.js`、`agent.js`、`session-coordinator.js` 不塞进本次包,保持发布风险可控。
-- ✅ **发布门禁**:V0.79.4 合入后通过 `typecheck:runtime`、全量 `typecheck`、全量 `npm test` 与打包公证门禁。
+- 🧪 **高风险中枢继续分批**:`core/engine` 与 `server/routes/chat` 不在本版大改,避免把发版风险集中到单个包。
+- ✅ **发布门禁**:V0.79.5 合入后通过 `typecheck:runtime`、全量 `typecheck`、全量 `npm test`、release static regression 与打包公证门禁。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.4)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.5)
 
 </details>
 
@@ -904,11 +904,11 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.79.4 的 Apple Silicon / Intel DMG 均已签名、公证、stapled,并通过 Gatekeeper 校验。
+**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.79.5 的 Apple Silicon / Intel DMG 均已签名、公证、stapled,并通过 Gatekeeper 校验。
 
 **Windows**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.exe`，直接运行。
 
-> **Windows SmartScreen 提示：** V0.79.4 安装包已完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
+> **Windows SmartScreen 提示：** V0.79.5 安装包已完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
 Linux 版本计划中。
 
@@ -976,7 +976,7 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（V0.79.4 签名 + 公证 DMG） |
+| macOS (Apple Silicon) | 已支持（V0.79.5 签名 + 公证 DMG） |
 | macOS (Intel) | 已支持 |
 | Windows x64 | Beta |
 | Linux | 计划中 |
@@ -1038,7 +1038,7 @@ npm run dist:local            # 本地打包（macOS DMG，跳过公证）
 
 ### Q5：Windows 能用吗？
 
-可以。V0.79.4 的 **Windows 安装包已完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均已签名、公证并通过 Gatekeeper 校验。
+可以。V0.79.5 的 **Windows 安装包已完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均已签名、公证并通过 Gatekeeper 校验。
 
 ### Q6：能改模型吗？接自己的 API？
 

@@ -38,4 +38,12 @@ describe("ContentFilter", () => {
 
     expect(result.blocked).toBe(true);
   });
+
+  it("does not block decimal weather temperatures that contain sensitive numeric fragments", async () => {
+    const filter = await createFilter();
+    const result = filter.check("明天 2026-05-28: 雷暴 26.4~32.3°C。");
+
+    expect(result.blocked).toBe(false);
+    expect(result.matches.some((match) => String(match.word) === "6.4")).toBe(false);
+  });
 });
