@@ -24,20 +24,35 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createRequire } from "module";
 
+export interface AecProcessorConfig {
+  sampleRate?: number;
+  enableNs?: boolean;
+}
+
+export type AecProcessorHandle = object;
+
+interface AecNativeModule {
+  available?: boolean;
+  createProcessor(config: Required<AecProcessorConfig>): AecProcessorHandle;
+  processRender(handle: AecProcessorHandle, farEnd: Float32Array): void;
+  processCapture(handle: AecProcessorHandle, nearEnd: Float32Array): Float32Array;
+  info?: unknown;
+}
+
 const requireCjs = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-function resolveNativeDir() {
+function resolveNativeDir(): string {
   if (process.env.LYNN_AEC_NATIVE_DIR) return process.env.LYNN_AEC_NATIVE_DIR;
   // 开发模式:server/clients/aec/ → ../../../desktop/native-modules/aec/
   return path.resolve(__dirname, "..", "..", "..", "desktop", "native-modules", "aec");
 }
 
-let nativeModule = null;
-let loadError = null;
+let nativeModule: AecNativeModule | null = null;
+let loadError: unknown = null;
 try {
   const dir = resolveNativeDir();
-  nativeModule = requireCjs(path.join(dir, "index.js"));
+  nativeModule = requireCjs(path.join(dir, "index.js")) as AecNativeModule;
 } catch (err) {
   loadError = err;
   nativeModule = null;
@@ -48,20 +63,15 @@ const isAvailable = !!(nativeModule && nativeModule.available);
 export const aecAvailable = isAvailable;
 export const aecLoadError = loadError;
 
-/**
- * 创建 AEC processor 句柄。
- * @param {{sampleRate?:number, enableNs?:boolean}} cfg
- * @returns {object|null} handle,available=false 时返回 null
- */
-export function createAecProcessor(cfg = {}) {
+export function createAecProcessor(cfg: AecProcessorConfig = {}): AecProcessorHandle | null {
   if (!isAvailable) return null;
   try {
-    return nativeModule.createProcessor({
+    return nativeModule?.createProcessor({
       sampleRate: cfg.sampleRate || 16000,
       enableNs: cfg.enableNs !== false,
-    });
+    }) || null;
   } catch (err) {
-    console.warn("[aec] createProcessor failed:", err?.message || err);
+    console.warn("[aec] createProcessor failed:", err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -70,20 +80,22 @@ export function createAecProcessor(cfg = {}) {
  * 喂 far-end (TTS reference) PCM 一帧 10ms (160 samples Float32 @ 16kHz)。
  * 必须在 processCapture 之前调用(API 顺序约束,见 lib.rs 注释)。
  */
-export function aecProcessRender(handle, farEnd) {
+export function aecProcessRender(handle: AecProcessorHandle | null | undefined, farEnd: Float32Array): void {
   if (!handle || !nativeModule) return;
   nativeModule.processRender(handle, farEnd);
 }
 
 /**
  * 喂 near-end (mic) PCM 一帧 10ms (160 samples Float32),返回清掉 echo 的 PCM。
- * @returns {Float32Array}
  */
-export function aecProcessCapture(handle, nearEnd) {
+export function aecProcessCapture(
+  handle: AecProcessorHandle | null | undefined,
+  nearEnd: Float32Array,
+): Float32Array {
   if (!handle || !nativeModule) return nearEnd;
   return nativeModule.processCapture(handle, nearEnd);
 }
 
-export function aecInfo() {
+export function aecInfo(): unknown {
   return nativeModule?.info || null;
 }
