@@ -35,6 +35,7 @@ import { createSERProvider, EMOTION_LLM_HINT } from "../clients/ser/index.js";
 import { createTTSFallbackProvider } from "../clients/tts/index.js";
 import { enrichHealthWithTier } from "../chat/voice-fallback-orchestrator.js";
 import { aecAvailable as defaultAecAvailable, createAecProcessor as defaultCreateAecProcessor, aecProcessRender as defaultAecRender, aecProcessCapture as defaultAecCapture } from "../clients/aec/index.js";
+import type { VoiceHealthPayload, VoiceProviderHealth } from "../chat/voice-fallback-orchestrator.js";
 
 // 协议常量
 export const FRAME = {
@@ -55,7 +56,7 @@ export const FRAME = {
   // 2026-05-01 P0-① 增量 TTS:LLM token streaming → incremental sentence splitter →
   // 已 SPEAKING 时直接 append 新 segments,不创建新 turn,首音节延迟从 ~3s 砍到 ~0.9s。
   SPEAK_TEXT_APPEND: 0x33,
-};
+} as const;
 
 export const STATE = {
   IDLE: "idle",
@@ -63,7 +64,205 @@ export const STATE = {
   THINKING: "thinking",
   SPEAKING: "speaking",
   DEGRADED: "degraded",
-};
+} as const;
+
+type JsonRecord = Record<string, unknown>;
+type VoiceState = typeof STATE[keyof typeof STATE];
+type FrameCode = typeof FRAME[keyof typeof FRAME];
+type BinaryInput = Buffer | ArrayBuffer | Uint8Array | null | undefined;
+
+interface VoiceFrame {
+  type: number;
+  flags: number;
+  seq: number;
+  payload: Buffer;
+}
+
+interface DecodedPcmAudio {
+  pcm: Buffer;
+  sampleRate: number;
+  channels: number;
+  bitsPerSample: number;
+}
+
+interface VadConfig {
+  enabled: boolean;
+  speechRms: number;
+  silenceRms: number;
+  minSpeechFrames: number;
+  endSilenceFrames: number;
+}
+
+interface ProviderHealth {
+  name: string;
+  ok: boolean;
+  fallbackOk: boolean;
+  degraded: boolean;
+  error?: string;
+}
+
+interface HealthProvider {
+  name?: string;
+  health?: () => unknown | Promise<unknown>;
+}
+
+interface AsrResult {
+  text?: unknown;
+  fallbackUsed?: boolean;
+  primaryError?: unknown;
+}
+
+interface AsrProvider extends HealthProvider {
+  transcribe(audio: Buffer, opts?: JsonRecord): AsrResult | Promise<AsrResult>;
+}
+
+interface EmotionResult extends JsonRecord {
+  tag?: string;
+}
+
+interface SerProvider extends HealthProvider {
+  warmup?: () => unknown | Promise<unknown>;
+  classify?: (audio: Buffer, opts?: JsonRecord) => unknown | Promise<unknown>;
+}
+
+interface TtsPiece extends JsonRecord {
+  audio?: BinaryInput;
+  audioBuffer?: BinaryInput;
+  buffer?: BinaryInput;
+  path?: string;
+  fallbackUsed?: boolean;
+  primaryError?: unknown;
+}
+
+interface TtsProvider extends HealthProvider {
+  synthesize(segment: string, opts?: JsonRecord): TtsPiece | Promise<TtsPiece>;
+  synthesizeStream?: (segment: string, opts: JsonRecord) => AsyncIterable<TtsPiece>;
+}
+
+interface VoiceEngine {
+  config?: {
+    voice?: {
+      asr?: JsonRecord;
+      ser?: JsonRecord;
+      tts?: JsonRecord;
+    };
+  };
+  executeIsolated?: (prompt: string, opts: { signal?: AbortSignal }) => Promise<{ error?: unknown; replyText?: unknown } | null | undefined>;
+  voiceReply?: (transcript: string, opts: { signal?: AbortSignal }) => Promise<unknown>;
+}
+
+interface VoiceSocket {
+  readyState: number;
+  send(data: Buffer): unknown;
+}
+
+type BrainRunner = (input: {
+  transcript: string;
+  emotion?: EmotionResult | null;
+  engine: VoiceEngine;
+  hub: unknown;
+  signal?: AbortSignal;
+}) => Promise<unknown>;
+
+type SaveInterruptedTurn = (input: JsonRecord) => Promise<unknown> | unknown;
+type AecProcessorHandle = object | null | undefined;
+type AecRender = (handle: AecProcessorHandle, samples: Float32Array) => unknown;
+type AecCapture = (handle: AecProcessorHandle, samples: Float32Array) => Float32Array;
+
+interface AecDeps {
+  createProcessor?: (opts: JsonRecord) => AecProcessorHandle | null;
+  processRender?: AecRender;
+  processCapture?: AecCapture;
+}
+
+interface VoiceSessionDeps {
+  engine: VoiceEngine;
+  hub: unknown;
+  asrProvider?: AsrProvider | null;
+  serProvider?: SerProvider | null;
+  ttsProvider?: TtsProvider | null;
+  brainRunner?: BrainRunner | null;
+  healthOnOpen?: boolean;
+  vadConfig?: Partial<VadConfig>;
+  mode?: string;
+  saveInterruptedTurn?: SaveInterruptedTurn | null;
+  aec?: AecDeps | null;
+}
+
+interface CurrentReplyPlayed {
+  fullText: string;
+  segments: string[];
+  playedSegments: string[];
+  startedAt: number;
+}
+
+interface PendingInterruptedReply {
+  text: string;
+  segmentsPlayed: number;
+  totalSegments: number;
+  startedAt: number;
+  interruptedAt: number;
+}
+
+interface ErleRecord {
+  dir: string;
+  sessionId: string;
+  micChunks: Buffer[];
+  ttsChunks: Buffer[];
+  startTs: number;
+}
+
+interface CreateVoiceWsRouteDeps extends VoiceSessionDeps {
+  upgradeWebSocket: (factory: (c: VoiceRouteContext) => JsonRecord) => unknown;
+}
+
+interface VoiceRouteContext {
+  req?: {
+    query?: (name: string) => string | undefined;
+  };
+}
+
+interface VoiceMessageEvent {
+  data: ArrayBuffer | Buffer | string;
+}
+
+interface VoiceErrorEvent {
+  message?: string;
+}
+
+interface TtsStreamError extends Error {
+  yieldedAny?: boolean;
+}
+
+function asRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as JsonRecord
+    : null;
+}
+
+function toBuffer(value: BinaryInput): Buffer {
+  if (!value) return Buffer.alloc(0);
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof ArrayBuffer) return Buffer.from(new Uint8Array(value));
+  return Buffer.from(value);
+}
+
+function asEmotion(value: unknown): EmotionResult | null {
+  const record = asRecord(value);
+  return record ? record as EmotionResult : null;
+}
+
+function asTtsPiece(value: unknown): TtsPiece {
+  return (asRecord(value) || {}) as TtsPiece;
+}
+
+function errorMessage(err: unknown, fallback = ""): string {
+  return err instanceof Error ? err.message : (fallback || String(err || ""));
+}
+
+function errorName(err: unknown): string {
+  return err instanceof Error ? err.name : "";
+}
 
 const PCM_SAMPLE_RATE = 16000;
 const PCM_TTS_CHUNK_BYTES = 3200; // 100ms @ 16kHz Int16 mono
@@ -89,8 +288,8 @@ const DEFAULT_VAD_CONFIG = Object.freeze({
  * @param {Buffer|ArrayBuffer} data
  * @returns {{type:number,flags:number,seq:number,payload:Buffer}|null}
  */
-export function parseFrame(data) {
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+export function parseFrame(data: BinaryInput): VoiceFrame | null {
+  const buf = toBuffer(data);
   if (buf.length < 4) return null;
   return {
     type: buf.readUInt8(0),
@@ -108,8 +307,8 @@ export function parseFrame(data) {
  * @param {Buffer|Uint8Array} payload
  * @returns {Buffer}
  */
-export function makeFrame(type, flags, seq, payload) {
-  const payloadBuf = Buffer.isBuffer(payload) ? payload : Buffer.from(payload || []);
+export function makeFrame(type: FrameCode | number, flags: number, seq: number, payload?: BinaryInput): Buffer {
+  const payloadBuf = toBuffer(payload);
   const buf = Buffer.alloc(4 + payloadBuf.length);
   buf.writeUInt8(type, 0);
   buf.writeUInt8(flags, 1);
@@ -118,20 +317,20 @@ export function makeFrame(type, flags, seq, payload) {
   return buf;
 }
 
-function makeStateFrame(seq, state) {
+function makeStateFrame(seq: number, state: VoiceState): Buffer {
   return makeFrame(FRAME.STATE_CHANGE, 0, seq, Buffer.from(state, "utf-8"));
 }
 
-function makeTranscriptFrame(type, seq, text) {
-  return makeFrame(type, 0, seq, Buffer.from(text, "utf-8"));
+function makeTranscriptFrame(type: FrameCode | number, seq: number, text: unknown): Buffer {
+  return makeFrame(type, 0, seq, Buffer.from(String(text || ""), "utf-8"));
 }
 
-function makeJsonFrame(type, seq, value) {
+function makeJsonFrame(type: FrameCode | number, seq: number, value: unknown): Buffer {
   return makeFrame(type, 0, seq, Buffer.from(JSON.stringify(value ?? {}), "utf-8"));
 }
 
-export function pcm16Rms(pcmBuffer) {
-  const buf = Buffer.isBuffer(pcmBuffer) ? pcmBuffer : Buffer.from(pcmBuffer || []);
+export function pcm16Rms(pcmBuffer: BinaryInput): number {
+  const buf = toBuffer(pcmBuffer);
   const samples = Math.floor(buf.length / 2);
   if (!samples) return 0;
   let sumSq = 0;
@@ -142,7 +341,7 @@ export function pcm16Rms(pcmBuffer) {
   return Math.sqrt(sumSq / samples);
 }
 
-function normalizeVadConfig(config = {}) {
+function normalizeVadConfig(config: Partial<VadConfig> = {}): VadConfig {
   return {
     ...DEFAULT_VAD_CONFIG,
     ...config,
@@ -150,8 +349,8 @@ function normalizeVadConfig(config = {}) {
   };
 }
 
-export function pcm16ToWav(pcmBuffer, { sampleRate = PCM_SAMPLE_RATE, channels = 1 } = {}) {
-  const pcm = Buffer.isBuffer(pcmBuffer) ? pcmBuffer : Buffer.from(pcmBuffer || []);
+export function pcm16ToWav(pcmBuffer: BinaryInput, { sampleRate = PCM_SAMPLE_RATE, channels = 1 }: { sampleRate?: number; channels?: number } = {}): Buffer {
+  const pcm = toBuffer(pcmBuffer);
   const header = Buffer.alloc(44);
   const byteRate = sampleRate * channels * 2;
   const blockAlign = channels * 2;
@@ -171,12 +370,12 @@ export function pcm16ToWav(pcmBuffer, { sampleRate = PCM_SAMPLE_RATE, channels =
   return Buffer.concat([header, pcm]);
 }
 
-export function extractPcm16FromWav(audioBuffer) {
+export function extractPcm16FromWav(audioBuffer: BinaryInput): Buffer {
   return decodePcm16Audio(audioBuffer).pcm;
 }
 
-export function decodePcm16Audio(audioBuffer) {
-  const buf = Buffer.isBuffer(audioBuffer) ? audioBuffer : Buffer.from(audioBuffer || []);
+export function decodePcm16Audio(audioBuffer: BinaryInput): DecodedPcmAudio {
+  const buf = toBuffer(audioBuffer);
   if (buf.length < 12 || buf.subarray(0, 4).toString("ascii") !== "RIFF" || buf.subarray(8, 12).toString("ascii") !== "WAVE") {
     return { pcm: buf, sampleRate: PCM_SAMPLE_RATE, channels: 1, bitsPerSample: 16 };
   }
@@ -195,15 +394,15 @@ export function decodePcm16Audio(audioBuffer) {
       sampleRate = buf.readUInt32LE(dataStart + 4) || PCM_SAMPLE_RATE;
       bitsPerSample = buf.readUInt16LE(dataStart + 14) || 16;
     } else if (chunkId === "data") {
-      pcm = buf.subarray(dataStart, dataEnd);
+      pcm = Buffer.from(buf.subarray(dataStart, dataEnd));
     }
     offset = dataStart + chunkSize + (chunkSize % 2);
   }
   return { pcm: pcm.length ? pcm : buf, sampleRate, channels, bitsPerSample };
 }
 
-function downmixPcm16ToMono(pcmBuffer, channels = 1) {
-  const pcm = Buffer.isBuffer(pcmBuffer) ? pcmBuffer : Buffer.from(pcmBuffer || []);
+function downmixPcm16ToMono(pcmBuffer: BinaryInput, channels = 1): Buffer {
+  const pcm = toBuffer(pcmBuffer);
   if (channels <= 1) return pcm;
   const frames = Math.floor(pcm.length / 2 / channels);
   const mono = Buffer.alloc(frames * 2);
@@ -217,8 +416,8 @@ function downmixPcm16ToMono(pcmBuffer, channels = 1) {
   return mono;
 }
 
-function resamplePcm16Mono(pcmBuffer, fromRate, toRate = PCM_SAMPLE_RATE) {
-  const pcm = Buffer.isBuffer(pcmBuffer) ? pcmBuffer : Buffer.from(pcmBuffer || []);
+function resamplePcm16Mono(pcmBuffer: BinaryInput, fromRate: number, toRate = PCM_SAMPLE_RATE): Buffer {
+  const pcm = toBuffer(pcmBuffer);
   if (!pcm.length || !fromRate || fromRate === toRate) return pcm;
   const inSamples = Math.floor(pcm.length / 2);
   const outSamples = Math.max(1, Math.round(inSamples * toRate / fromRate));
@@ -235,7 +434,7 @@ function resamplePcm16Mono(pcmBuffer, fromRate, toRate = PCM_SAMPLE_RATE) {
   return out;
 }
 
-export function normalizeTtsAudioToPcm16Mono16k(audioBuffer) {
+export function normalizeTtsAudioToPcm16Mono16k(audioBuffer: BinaryInput): Buffer {
   const decoded = decodePcm16Audio(audioBuffer);
   if (decoded.bitsPerSample !== 16) {
     throw new Error(`unsupported TTS WAV bit depth: ${decoded.bitsPerSample}`);
@@ -248,7 +447,7 @@ export function normalizeTtsAudioToPcm16Mono16k(audioBuffer) {
  * 2026-05-01 P1-① — Int16 LE Buffer 读 N samples → Float32Array(归一到 [-1, 1])
  * 用于 native AEC 输入(WebRTC ProcessRender/ProcessCapture 接受 Float32)。
  */
-export function bufferInt16LEToFloat32(buf, sampleCount, byteOffset = 0) {
+export function bufferInt16LEToFloat32(buf: Buffer, sampleCount: number, byteOffset = 0): Float32Array {
   const out = new Float32Array(sampleCount);
   for (let i = 0; i < sampleCount; i += 1) {
     const offset = byteOffset + i * 2;
@@ -262,7 +461,7 @@ export function bufferInt16LEToFloat32(buf, sampleCount, byteOffset = 0) {
   return out;
 }
 
-export function float32ToInt16LEBuffer(samples) {
+export function float32ToInt16LEBuffer(samples: Float32Array | number[]): Buffer {
   const out = Buffer.alloc(samples.length * 2);
   for (let i = 0; i < samples.length; i += 1) {
     const s = Math.max(-1, Math.min(1, samples[i] || 0));
@@ -280,13 +479,17 @@ export function float32ToInt16LEBuffer(samples) {
  * 保留最近 N ms。
  */
 class TtsReferenceQueue {
-  constructor({ maxSamples = PCM_SAMPLE_RATE * 10 } = {}) {
+  maxSamples: number;
+  bytes: Buffer;
+
+  constructor({ maxSamples = PCM_SAMPLE_RATE * 10 }: { maxSamples?: number } = {}) {
     this.maxSamples = maxSamples; // 默认 10s 上限
     this.bytes = Buffer.alloc(0);
   }
-  push(int16Bytes) {
-    if (!int16Bytes?.length) return;
-    this.bytes = Buffer.concat([this.bytes, int16Bytes]);
+  push(int16Bytes: BinaryInput): void {
+    const bytes = toBuffer(int16Bytes);
+    if (!bytes.length) return;
+    this.bytes = Buffer.concat([this.bytes, bytes]);
     const maxBytes = this.maxSamples * 2;
     if (this.bytes.length > maxBytes) {
       this.bytes = this.bytes.subarray(this.bytes.length - maxBytes);
@@ -306,7 +509,7 @@ class TtsReferenceQueue {
    * trimSamples>0:queue 充足时多丢 trimSamples 老 reference,等于"reference 提前
    * trimMs ms 入 process_render",经验值 60-100ms 适合普通有线/WiFi 环境。
    */
-  take(sampleCount, trimSamples = 0) {
+  take(sampleCount: number, trimSamples = 0): Buffer {
     const wantBytes = sampleCount * 2;
     if (trimSamples > 0) {
       // 仅在 queue 累积充足时才丢老,避免 take 出全 0 padding
@@ -327,8 +530,8 @@ class TtsReferenceQueue {
     partial.copy(padded, 0);
     return padded;
   }
-  size() { return this.bytes.length / 2; }
-  clear() { this.bytes = Buffer.alloc(0); }
+  size(): number { return this.bytes.length / 2; }
+  clear(): void { this.bytes = Buffer.alloc(0); }
 }
 
 /**
@@ -339,7 +542,12 @@ class TtsReferenceQueue {
  * 内部按 10ms (160 samples) 拆,for each pair:processRender(ref) + processCapture(mic)
  * 任何步骤抛 → 退化返回原 mic Buffer(不阻塞主链)。
  */
-export function aecProcessFrame100ms(handle, micBuf, refBuf, deps = {}) {
+export function aecProcessFrame100ms(
+  handle: AecProcessorHandle | null,
+  micBuf: Buffer,
+  refBuf: Buffer,
+  deps: { processRender?: AecRender; processCapture?: AecCapture } = {},
+): Buffer {
   if (!handle) return micBuf;
   const render = deps.processRender || defaultAecRender;
   const capture = deps.processCapture || defaultAecCapture;
@@ -352,13 +560,13 @@ export function aecProcessFrame100ms(handle, micBuf, refBuf, deps = {}) {
       const refFrame = bufferInt16LEToFloat32(refBuf, samplesPerFrame, s * 2);
       const micFrame = bufferInt16LEToFloat32(micBuf, samplesPerFrame, s * 2);
       render(handle, refFrame);
-      const out = capture(handle, micFrame);
+    const out = capture(handle, micFrame) || micFrame;
       const outBytes = float32ToInt16LEBuffer(out);
       outBytes.copy(cleaned, s * 2);
     }
     return cleaned;
   } catch (err) {
-    debugLog()?.warn("voice-ws", `aec process frame failed: ${err?.message || err}`);
+    debugLog()?.warn("voice-ws", `aec process frame failed: ${errorMessage(err)}`);
     return micBuf;
   }
 }
@@ -371,10 +579,10 @@ export function aecProcessFrame100ms(handle, micBuf, refBuf, deps = {}) {
  * 入参:16kHz mono WAV buffer(pcm16ToWav 产物)
  * 出参:同格式 WAV buffer,长度 ≤ 4s;如果原长 ≤ 4s 原样返回
  */
-export function extractEmotionSegment(wavBuffer, {
+export function extractEmotionSegment(wavBuffer: Buffer, {
   headSeconds = 1,
   tailSeconds = 3,
-} = {}) {
+}: { headSeconds?: number; tailSeconds?: number } = {}): Buffer {
   const targetSeconds = headSeconds + tailSeconds;
   const decoded = decodePcm16Audio(wavBuffer);
   const sampleRate = decoded.sampleRate || PCM_SAMPLE_RATE;
@@ -391,7 +599,7 @@ export function extractEmotionSegment(wavBuffer, {
   return pcm16ToWav(merged, { sampleRate });
 }
 
-export function cleanTextForTts(text) {
+export function cleanTextForTts(text: unknown): string {
   return stripEmojiForTts(String(text || "")
     .replace(/```[\s\S]*?```/g, "代码块略过。")
     .replace(/`([^`]+)`/g, "$1")
@@ -408,10 +616,10 @@ export function cleanTextForTts(text) {
     .trim());
 }
 
-function splitSegmentByLength(text, maxChars = TTS_MAX_SEGMENT_CHARS) {
+function splitSegmentByLength(text: unknown, maxChars = TTS_MAX_SEGMENT_CHARS): string[] {
   const value = String(text || "").trim();
   if (!value) return [];
-  const out = [];
+  const out: string[] = [];
   let remaining = value;
   while (remaining.length > maxChars) {
     const window = remaining.slice(0, maxChars);
@@ -431,11 +639,11 @@ function splitSegmentByLength(text, maxChars = TTS_MAX_SEGMENT_CHARS) {
   return out.filter(Boolean);
 }
 
-export function splitTextForTts(text, { maxChars = TTS_MAX_SEGMENT_CHARS } = {}) {
+export function splitTextForTts(text: unknown, { maxChars = TTS_MAX_SEGMENT_CHARS }: { maxChars?: number } = {}): string[] {
   const value = cleanTextForTts(text);
   if (!value) return [];
   const parts = value.match(/[^。！？!?；;]+[。！？!?；;]?/g) || [value];
-  const out = [];
+  const out: string[] = [];
   for (const part of parts.map((p) => p.trim()).filter(Boolean)) {
     if (part.length <= maxChars) {
       out.push(part);
@@ -446,33 +654,34 @@ export function splitTextForTts(text, { maxChars = TTS_MAX_SEGMENT_CHARS } = {})
   return out;
 }
 
-function chunkBuffer(buf, chunkBytes = PCM_TTS_CHUNK_BYTES) {
-  const chunks = [];
+function chunkBuffer(buf: Buffer, chunkBytes = PCM_TTS_CHUNK_BYTES): Buffer[] {
+  const chunks: Buffer[] = [];
   for (let i = 0; i < buf.length; i += chunkBytes) {
     chunks.push(buf.subarray(i, Math.min(i + chunkBytes, buf.length)));
   }
   return chunks;
 }
 
-function normalizeProviderHealth(provider, value) {
+function normalizeProviderHealth(provider: HealthProvider | null | undefined, value: unknown): ProviderHealth {
   const name = provider?.name || "unknown";
   if (value === undefined || value === null) return { name, ok: true, fallbackOk: false, degraded: false };
   if (typeof value === "boolean") return { name, ok: value, fallbackOk: false, degraded: !value };
-  if (typeof value === "object") {
-    const ok = "ok" in value ? !!value.ok : !!value;
-    const fallbackOk = !!value.fallbackOk;
+  const record = asRecord(value);
+  if (record) {
+    const ok = "ok" in record ? !!record.ok : true;
+    const fallbackOk = !!record.fallbackOk;
     return {
       name,
       ok,
       fallbackOk,
-      degraded: !!value.degraded || (!ok && fallbackOk),
-      error: typeof value.error === "string" ? value.error : undefined,
+      degraded: !!record.degraded || (!ok && fallbackOk),
+      error: typeof record.error === "string" ? record.error : undefined,
     };
   }
   return { name, ok: !!value, fallbackOk: false, degraded: !value };
 }
 
-async function providerHealthStatus(provider) {
+async function providerHealthStatus(provider: HealthProvider | null | undefined): Promise<ProviderHealth> {
   if (!provider || typeof provider.health !== "function") {
     return normalizeProviderHealth(provider, true);
   }
@@ -484,13 +693,16 @@ async function providerHealthStatus(provider) {
       ok: false,
       fallbackOk: false,
       degraded: true,
-      error: err?.message || String(err),
+      error: errorMessage(err),
     };
   }
 }
 
-function buildVoicePrompt(transcript, emotion = null) {
-  const emotionHint = emotion?.tag ? EMOTION_LLM_HINT[emotion.tag] : null;
+function buildVoicePrompt(transcript: string, emotion: EmotionResult | null = null): string {
+  const tag = typeof emotion?.tag === "string" ? emotion.tag : "";
+  const emotionHint = tag && Object.prototype.hasOwnProperty.call(EMOTION_LLM_HINT, tag)
+    ? EMOTION_LLM_HINT[tag as keyof typeof EMOTION_LLM_HINT]
+    : null;
   return [
     "你正在用语音和用户对话。请用自然、简短、口语化的中文回答。",
     "除非用户明确要求,不要输出长列表。需要工具时可以正常使用 Lynn 的工具能力。",
@@ -500,7 +712,7 @@ function buildVoicePrompt(transcript, emotion = null) {
   ].filter(Boolean).join("\n");
 }
 
-export function resolveVoiceRuntimeAsrConfig(config = {}) {
+export function resolveVoiceRuntimeAsrConfig(config: JsonRecord = {}): JsonRecord {
   const provider = String(config.provider || "").trim();
   if (!provider || provider === "sensevoice") {
     return {
@@ -517,7 +729,7 @@ export function resolveVoiceRuntimeAsrConfig(config = {}) {
  * 用于 interrupted T2 阶段:如果打断后用户只发出咳嗽/笑声/拟声词,
  * 则回滚 interrupt,不污染对话历史。
  */
-export function isSemanticTranscript(text) {
+export function isSemanticTranscript(text: unknown): boolean {
   const value = String(text || "").trim();
   if (!value) return false;
   if (value.length < 2) return false;
@@ -527,11 +739,11 @@ export function isSemanticTranscript(text) {
   return true;
 }
 
-function escapeRegExp(value) {
+function escapeRegExp(value: unknown): string {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export function normalizeVoiceTranscript(text) {
+export function normalizeVoiceTranscript(text: unknown): string {
   let value = String(text || "").replace(/\s+/g, " ").trim();
   if (!value) return "";
   value = value.replace(/^(?:嗯|呃|啊|那个|就是)[，,。.\s]*/g, "");
@@ -554,25 +766,33 @@ export function normalizeVoiceTranscript(text) {
   return value.trim();
 }
 
-async function defaultBrainRunner({ transcript, emotion, engine, signal }) {
+async function defaultBrainRunner({ transcript, emotion, engine, signal }: {
+  transcript: string;
+  emotion?: EmotionResult | null;
+  engine: VoiceEngine;
+  signal?: AbortSignal;
+}): Promise<string> {
   if (typeof engine?.executeIsolated === "function") {
     const result = await engine.executeIsolated(buildVoicePrompt(transcript, emotion), { signal });
-    if (result?.error) throw new Error(result.error);
-    return result?.replyText || "";
+    if (result?.error) throw new Error(String(result.error));
+    return String(result?.replyText || "");
   }
   if (typeof engine?.voiceReply === "function") {
-    return await engine.voiceReply(transcript, { signal });
+    return String(await engine.voiceReply(transcript, { signal }) || "");
   }
   return "";
 }
 
-async function waitForCurrentTurnEmotion(emotionPromise, timeoutMs = EMOTION_CURRENT_TURN_WAIT_MS) {
+async function waitForCurrentTurnEmotion(
+  emotionPromise: Promise<EmotionResult | null> | null | undefined,
+  timeoutMs = EMOTION_CURRENT_TURN_WAIT_MS,
+): Promise<EmotionResult | null> {
   if (!emotionPromise) return null;
-  let timer = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
   try {
-    return await Promise.race([
+    return await Promise.race<EmotionResult | null>([
       emotionPromise,
-      new Promise((resolve) => {
+      new Promise<null>((resolve) => {
         timer = setTimeout(() => resolve(null), timeoutMs);
       }),
     ]);
@@ -585,13 +805,64 @@ async function waitForCurrentTurnEmotion(emotionPromise, timeoutMs = EMOTION_CUR
  * Voice session — 单条 WS 连接的状态封装
  */
 class VoiceSession {
-  constructor(ws, { engine, hub, asrProvider, serProvider, ttsProvider, brainRunner, healthOnOpen = true, vadConfig = {}, mode = "direct", saveInterruptedTurn = null, aec = null }) {
+  ws: VoiceSocket;
+  engine: VoiceEngine;
+  hub: unknown;
+  asrProvider: AsrProvider;
+  serProvider: SerProvider;
+  ttsProvider: TtsProvider;
+  brainRunner: BrainRunner;
+  saveInterruptedTurn: SaveInterruptedTurn | null;
+  mode: "chat" | "direct";
+  healthOnOpen: boolean;
+  state: VoiceState;
+  outSeq: number;
+  lastInSeq: number;
+  utteranceBuffer: Buffer[];
+  totalBufferedSamples: number;
+  maxBufferedSamples: number;
+  transcriptPartial: string;
+  startTs: number;
+  pcmFramesIn: number;
+  bytesIn: number;
+  bytesOut: number;
+  processingTurn: Promise<unknown> | null;
+  turnAbort: AbortController | null;
+  turnGeneration: number;
+  pendingInterruptedReply: PendingInterruptedReply | null;
+  currentReplyPlayed: CurrentReplyPlayed | null;
+  activeSpeakingQueue: string[] | null;
+  pendingAppendQueue: string[];
+  aecProcessor: AecProcessorHandle | null;
+  aecRender: AecRender;
+  aecCapture: AecCapture;
+  referenceQueue: TtsReferenceQueue;
+  aecReferenceTrimSamples: number;
+  vadConfig: VadConfig;
+  vadSpeechFrames: number;
+  vadSilenceFrames: number;
+  vadArmed: boolean;
+  erleRecord: ErleRecord | null;
+
+  constructor(ws: VoiceSocket, {
+    engine,
+    hub,
+    asrProvider,
+    serProvider,
+    ttsProvider,
+    brainRunner,
+    healthOnOpen = true,
+    vadConfig = {},
+    mode = "direct",
+    saveInterruptedTurn = null,
+    aec = null,
+  }: VoiceSessionDeps) {
     this.ws = ws;
     this.engine = engine;
     this.hub = hub;
-    this.asrProvider = asrProvider || createASRFallbackProvider(resolveVoiceRuntimeAsrConfig(engine?.config?.voice?.asr || {}));
-    this.serProvider = serProvider || createSERProvider(engine?.config?.voice?.ser || {});
-    this.ttsProvider = ttsProvider || createTTSFallbackProvider(engine?.config?.voice?.tts || {});
+    this.asrProvider = (asrProvider || createASRFallbackProvider(resolveVoiceRuntimeAsrConfig(engine?.config?.voice?.asr || {}))) as AsrProvider;
+    this.serProvider = (serProvider || createSERProvider(engine?.config?.voice?.ser || {})) as SerProvider;
+    this.ttsProvider = (ttsProvider || createTTSFallbackProvider(engine?.config?.voice?.tts || {})) as TtsProvider;
     this.brainRunner = brainRunner || defaultBrainRunner;
     this.saveInterruptedTurn = saveInterruptedTurn; // DS 反馈 #3 T2 阶段的可注入钩子
     this.mode = mode === "chat" ? "chat" : "direct";
@@ -638,13 +909,13 @@ class VoiceSession {
         this.aecProcessor = aecCreate({ sampleRate: PCM_SAMPLE_RATE, enableNs: true }) || null;
       } catch (err) {
         this.aecProcessor = null;
-        debugLog()?.warn("voice-ws", `aec processor init failed: ${err?.message || err}`);
+        debugLog()?.warn("voice-ws", `aec processor init failed: ${errorMessage(err)}`);
       }
     } else {
       this.aecProcessor = null;
     }
-    this.aecRender = aecDeps?.processRender || defaultAecRender;
-    this.aecCapture = aecDeps?.processCapture || defaultAecCapture;
+    this.aecRender = aecDeps?.processRender || defaultAecRender as AecRender;
+    this.aecCapture = aecDeps?.processCapture || defaultAecCapture as AecCapture;
     this.referenceQueue = new TtsReferenceQueue();
     // 2026-05-01 修 1 — reference vs mic 时序校准,默认 0(信 WebRTC estimator
     // 自学习 delay);环境抖动严重 ERLE < 15dB 时设 60-100 即可。负值 / NaN → 退 0。
@@ -671,20 +942,20 @@ class VoiceSession {
     } : null;
   }
 
-  setState(state) {
+  setState(state: VoiceState): void {
     if (this.state === state) return;
     this.state = state;
     this.send(makeStateFrame(this.outSeq++, state));
     debugLog()?.log("voice-ws", `state → ${state}`);
   }
 
-  send(buf) {
+  send(buf: Buffer): void {
     if (this.ws.readyState !== 1) return;
     this.ws.send(buf);
     this.bytesOut += buf.length;
   }
 
-  async checkHealth() {
+  async checkHealth(): Promise<boolean> {
     const [asr, ser, tts] = await Promise.all([
       providerHealthStatus(this.asrProvider),
       providerHealthStatus(this.serProvider),
@@ -693,10 +964,14 @@ class VoiceSession {
     // SER is an optional side chain: emotion failure must not block the voice
     // turn or make Lynn look degraded when ASR/TTS are healthy.
     const ok = asr.ok && tts.ok;
-    const rawHealth = {
+    const rawHealth: VoiceHealthPayload = {
       ok,
       degraded: !ok || asr.degraded || tts.degraded,
-      providers: { asr, ser, tts },
+      providers: {
+        asr: asr as unknown as VoiceProviderHealth,
+        ser: ser as unknown as VoiceProviderHealth,
+        tts: tts as unknown as VoiceProviderHealth,
+      },
     };
     // DS V4 Pro 反馈 #5 · Phase 2.5 降级编排:附加 tier + Orb 颜色 + 文案
     const health = enrichHealthWithTier(rawHealth);
@@ -707,22 +982,22 @@ class VoiceSession {
       // pending; don't let that late probe visually interrupt a valid
       // speaking/thinking state. The explicit HEALTH_STATUS frame still carries
       // the degraded detail for diagnostics.
-      if (![STATE.SPEAKING, STATE.THINKING].includes(this.state)) {
+      if (this.state !== STATE.SPEAKING && this.state !== STATE.THINKING) {
         this.setState(STATE.DEGRADED);
       }
-      debugLog()?.warn("voice-ws", `provider health degraded · tier=${health.tier} asr=${asr.ok}/${asr.fallbackOk} ser=${ser.ok}/${ser.fallbackOk} tts=${tts.ok}/${tts.fallbackOk}`);
+      debugLog()?.warn("voice-ws", `provider health degraded · tier=${health?.tier ?? "?"} asr=${asr.ok}/${asr.fallbackOk} ser=${ser.ok}/${ser.fallbackOk} tts=${tts.ok}/${tts.fallbackOk}`);
     }
     return ok;
   }
 
-  onOpen() {
+  onOpen(): void {
     if (this.healthOnOpen) {
       void this.checkHealth();
       void this.serProvider?.warmup?.();
     }
   }
 
-  async onAudio(frame) {
+  async onAudio(frame: VoiceFrame): Promise<void> {
     // 计 seq 顺序
     const expectedSeq = (this.lastInSeq + 1) & 0xffff;
     if (this.lastInSeq !== -1 && frame.seq !== expectedSeq) {
@@ -767,7 +1042,7 @@ class VoiceSession {
     this.updateEnergyVad(micPayload);
   }
 
-  updateEnergyVad(pcmPayload) {
+  updateEnergyVad(pcmPayload: Buffer): void {
     const cfg = this.vadConfig;
     if (!cfg.enabled || this.processingTurn || this.state !== STATE.LISTENING) return;
 
@@ -794,7 +1069,7 @@ class VoiceSession {
     }
   }
 
-  async endOfTurn() {
+  async endOfTurn(): Promise<unknown> {
     if (this.processingTurn) return this.processingTurn;
     if (this.state === STATE.IDLE) return;
     if (this.utteranceBuffer.length === 0) {
@@ -812,10 +1087,10 @@ class VoiceSession {
     this.processingTurn = this.processTurn(wavAudio)
       .catch((err) => {
         if (this.isStaleTurn(generation) || this.isIntentionalAbort(err)) {
-          debugLog()?.log("voice-ws", `turn aborted: ${err?.message || err || "stale turn"}`);
+          debugLog()?.log("voice-ws", `turn aborted: ${errorMessage(err, "stale turn")}`);
           return;
         }
-        debugLog()?.error("voice-ws", `turn failed: ${err?.message || err}`);
+        debugLog()?.error("voice-ws", `turn failed: ${errorMessage(err)}`);
         this.send(makeTranscriptFrame(FRAME.TRANSCRIPT_FINAL, this.outSeq++, ""));
         this.setState(STATE.DEGRADED);
       })
@@ -828,7 +1103,7 @@ class VoiceSession {
     return this.processingTurn;
   }
 
-  async processTurn(wavAudio) {
+  async processTurn(wavAudio: Buffer): Promise<void> {
     this.turnAbort = new AbortController();
     const signal = this.turnAbort.signal;
 
@@ -843,19 +1118,20 @@ class VoiceSession {
     this.send(makeTranscriptFrame(FRAME.TRANSCRIPT_PARTIAL, this.outSeq++, "理解中…"));
 
     const emotionPromise = this.serProvider?.classify
-      ? this.serProvider.classify(extractEmotionSegment(wavAudio), { filename: "voice.wav" })
-        .then((emotion) => {
-          if (!signal.aborted) this.send(makeJsonFrame(FRAME.EMOTION, this.outSeq++, emotion));
-          return emotion;
+      ? Promise.resolve(this.serProvider.classify(extractEmotionSegment(wavAudio), { filename: "voice.wav" }))
+        .then((emotion: unknown) => {
+          const normalizedEmotion = asEmotion(emotion);
+          if (!signal.aborted) this.send(makeJsonFrame(FRAME.EMOTION, this.outSeq++, normalizedEmotion));
+          return normalizedEmotion;
         })
-        .catch((err) => {
-          debugLog()?.warn("voice-ws", `emotion classify failed: ${err?.message || err}`);
+        .catch((err: unknown) => {
+          debugLog()?.warn("voice-ws", `emotion classify failed: ${errorMessage(err)}`);
           return null;
         })
       : Promise.resolve(null);
 
     const asrResult = await this.asrProvider.transcribe(wavAudio, { language: "zh", filename: "voice.wav" });
-    if (signal.aborted) return;
+    if (signal?.aborted) return;
     if (asrResult?.fallbackUsed) {
       this.setState(STATE.DEGRADED);
       debugLog()?.warn("voice-ws", `asr fallback used: ${asrResult.primaryError || "primary failed"}`);
@@ -882,7 +1158,7 @@ class VoiceSession {
    *     transcript 咳嗽/无意义  → 回滚丢弃,不污染上下文
    *   pendingInterruptedReply 不存在 → no-op
    */
-  async resolveInterruptedReply(transcript) {
+  async resolveInterruptedReply(transcript: string): Promise<void> {
     const pending = this.pendingInterruptedReply;
     if (!pending) return;
     this.pendingInterruptedReply = null;
@@ -907,11 +1183,11 @@ class VoiceSession {
       });
       debugLog()?.log("voice-ws", `T2 saved: interrupted reply persisted (played ${pending.segmentsPlayed}/${pending.totalSegments})`);
     } catch (err) {
-      debugLog()?.warn("voice-ws", `T2 save failed: ${err?.message || err}`);
+      debugLog()?.warn("voice-ws", `T2 save failed: ${errorMessage(err)}`);
     }
   }
 
-  async processTextTurn(text) {
+  async processTextTurn(text: unknown): Promise<unknown> {
     if (this.processingTurn) return this.processingTurn;
     const transcript = normalizeVoiceTranscript(text);
     if (!transcript) {
@@ -922,10 +1198,10 @@ class VoiceSession {
     this.processingTurn = this.processDirectTranscript(transcript)
       .catch((err) => {
         if (this.isStaleTurn(generation) || this.isIntentionalAbort(err)) {
-          debugLog()?.log("voice-ws", `text turn aborted: ${err?.message || err || "stale turn"}`);
+          debugLog()?.log("voice-ws", `text turn aborted: ${errorMessage(err, "stale turn")}`);
           return;
         }
-        debugLog()?.error("voice-ws", `text turn failed: ${err?.message || err}`);
+        debugLog()?.error("voice-ws", `text turn failed: ${errorMessage(err)}`);
         this.setState(STATE.DEGRADED);
       })
       .finally(() => {
@@ -937,11 +1213,11 @@ class VoiceSession {
     return this.processingTurn;
   }
 
-  async processDirectTranscript(transcript) {
+  async processDirectTranscript(transcript: string): Promise<void> {
     this.turnAbort = new AbortController();
     const signal = this.turnAbort.signal;
     await this.checkHealth();
-    if (signal.aborted) return;
+    if (signal?.aborted) return;
     this.setState(STATE.THINKING);
     this.send(makeTranscriptFrame(FRAME.TRANSCRIPT_FINAL, this.outSeq++, transcript));
     if (this.mode === "chat") {
@@ -951,7 +1227,7 @@ class VoiceSession {
     await this.respondToTranscript(transcript, { emotion: null, signal });
   }
 
-  async processSpeakTextTurn(text) {
+  async processSpeakTextTurn(text: unknown): Promise<unknown> {
     if (this.processingTurn) return this.processingTurn;
     const value = String(text || "").trim();
     if (!value) {
@@ -964,10 +1240,10 @@ class VoiceSession {
     this.processingTurn = this.speakText(value, { signal, emitAssistantReply: true })
       .catch((err) => {
         if (this.isStaleTurn(generation) || this.isIntentionalAbort(err)) {
-          debugLog()?.log("voice-ws", `speak text aborted: ${err?.message || err || "stale turn"}`);
+          debugLog()?.log("voice-ws", `speak text aborted: ${errorMessage(err, "stale turn")}`);
           return;
         }
-        debugLog()?.error("voice-ws", `speak text failed: ${err?.message || err}`);
+        debugLog()?.error("voice-ws", `speak text failed: ${errorMessage(err)}`);
         this.setState(STATE.DEGRADED);
       })
       .finally(() => {
@@ -979,7 +1255,10 @@ class VoiceSession {
     return this.processingTurn;
   }
 
-  async respondToTranscript(transcript, { emotion = null, signal } = {}) {
+  async respondToTranscript(
+    transcript: string,
+    { emotion = null, signal }: { emotion?: EmotionResult | null; signal?: AbortSignal } = {},
+  ): Promise<void> {
     if (!transcript) {
       this.setState(STATE.IDLE);
       return;
@@ -991,7 +1270,7 @@ class VoiceSession {
       hub: this.hub,
       signal,
     }) || "").trim();
-    if (signal.aborted) return;
+    if (signal?.aborted) return;
     const segments = splitTextForTts(replyText);
     if (segments.length === 0) {
       this.setState(STATE.IDLE);
@@ -1000,7 +1279,10 @@ class VoiceSession {
     await this.speakText(replyText, { signal, emitAssistantReply: true });
   }
 
-  async speakText(text, { signal = null, emitAssistantReply = true } = {}) {
+  async speakText(
+    text: unknown,
+    { signal, emitAssistantReply = true }: { signal?: AbortSignal; emitAssistantReply?: boolean } = {},
+  ): Promise<void> {
     const replyText = String(text || "").trim();
     if (!replyText) {
       this.setState(STATE.IDLE);
@@ -1038,6 +1320,7 @@ class VoiceSession {
         // 优先消费 active queue
         if (this.activeSpeakingQueue.length > 0) {
           const segment = this.activeSpeakingQueue.shift();
+          if (!segment) continue;
           await this.processSpeakingSegment(segment, signal, supportsStream);
           continue;
         }
@@ -1066,7 +1349,7 @@ class VoiceSession {
     }
   }
 
-  async processSpeakingSegment(segment, signal, supportsStream) {
+  async processSpeakingSegment(segment: string, signal: AbortSignal | undefined, supportsStream: boolean): Promise<void> {
     try {
       if (supportsStream) {
         await this.streamSegmentToPcm(segment, signal);
@@ -1075,9 +1358,9 @@ class VoiceSession {
       }
     } catch (err) {
       // 2026-05-01 修 3:stream 路径已 yield 部分 PCM 后失败 → 不切小重试
-      if (err?.yieldedAny) {
+      if (asRecord(err)?.yieldedAny) {
         this.setState(STATE.DEGRADED);
-        debugLog()?.warn("voice-ws", `tts stream failed mid-segment after yielding PCM, no retry: ${err?.message || err}`);
+        debugLog()?.warn("voice-ws", `tts stream failed mid-segment after yielding PCM, no retry: ${errorMessage(err)}`);
         throw err;
       }
       const smallerMax = Math.max(TTS_RETRY_MIN_SEGMENT_CHARS, Math.ceil(segment.length / 2));
@@ -1085,13 +1368,13 @@ class VoiceSession {
         ? splitTextForTts(segment, { maxChars: smallerMax }).filter((s) => s && s !== segment)
         : [];
       if (smaller.length > 1) {
-        debugLog()?.warn("voice-ws", `tts segment failed, retrying as ${smaller.length} smaller chunks: ${err?.message || err}`);
-        this.activeSpeakingQueue.unshift(...smaller);
+        debugLog()?.warn("voice-ws", `tts segment failed, retrying as ${smaller.length} smaller chunks: ${errorMessage(err)}`);
+        this.activeSpeakingQueue?.unshift(...smaller);
         return;
       }
       throw err;
     }
-    if (!signal?.aborted) {
+    if (!signal?.aborted && this.currentReplyPlayed) {
       this.currentReplyPlayed.playedSegments.push(segment);
     }
   }
@@ -1101,7 +1384,7 @@ class VoiceSession {
    *   ① ERLE 双轨录 ttsChunks
    *   ② P1-① reference queue push(供 onAudio 时 AEC processRender 用)
    */
-  emitTtsPcmChunk(chunk) {
+  emitTtsPcmChunk(chunk: Buffer): void {
     this.send(makeFrame(FRAME.PCM_TTS, 0, this.outSeq++, chunk));
     if (this.erleRecord) {
       this.erleRecord.ttsChunks.push(Buffer.from(chunk));
@@ -1111,11 +1394,13 @@ class VoiceSession {
     }
   }
 
-  async streamSegmentToPcm(segment, signal) {
+  async streamSegmentToPcm(segment: string, signal?: AbortSignal): Promise<void> {
     let yieldedAny = false;
     let degradedFlagged = false;
     try {
-      for await (const piece of this.ttsProvider.synthesizeStream(segment, {
+      const stream = this.ttsProvider.synthesizeStream;
+      if (!stream) return;
+      for await (const piece of stream.call(this.ttsProvider, segment, {
         speed: 1.0,
         signal,
         timeoutMs: TTS_SEGMENT_TIMEOUT_MS,
@@ -1142,20 +1427,21 @@ class VoiceSession {
     } catch (err) {
       // 2026-05-01 修 3:stream 中途失败时已 yield PCM 不能撤回,切小重试会让用户
       // 重听段落;打 yieldedAny 标记给 caller,caller 决定是否切小重试。
-      err.yieldedAny = yieldedAny;
-      throw err;
+      const wrapped: TtsStreamError = err instanceof Error ? err : new Error(String(err));
+      wrapped.yieldedAny = yieldedAny;
+      throw wrapped;
     }
   }
 
   /**
    * 旧 batch 路径(provider 不支持 stream 时):整段 synthesize → 切 PCM 一次性推
    */
-  async batchSegmentToPcm(segment, signal) {
-    const speech = await this.ttsProvider.synthesize(segment, {
+  async batchSegmentToPcm(segment: string, signal?: AbortSignal): Promise<void> {
+    const speech = asTtsPiece(await this.ttsProvider.synthesize(segment, {
       speed: 1.0,
       signal,
       timeoutMs: TTS_SEGMENT_TIMEOUT_MS,
-    });
+    }));
     if (speech?.fallbackUsed) {
       this.setState(STATE.DEGRADED);
       debugLog()?.warn("voice-ws", `tts fallback used: ${speech.primaryError || "primary failed"}`);
@@ -1181,7 +1467,7 @@ class VoiceSession {
    *     残段不该让 server 重新发声压过用户输入。
    *   IDLE 且无 processingTurn → fresh speakText(兼容旧路径)。
    */
-  appendSpeakText(text) {
+  appendSpeakText(text: unknown): void {
     const value = String(text || "").trim();
     if (!value) return;
     const segments = splitTextForTts(value);
@@ -1216,7 +1502,7 @@ class VoiceSession {
     void this.processSpeakTextTurn(value);
   }
 
-  onPing(frame) {
+  onPing(frame: VoiceFrame): void {
     // 原 payload 直接回(含 client_send_ts,client 计算 RTT)
     this.send(makeFrame(FRAME.PONG, 0, frame.seq, frame.payload));
   }
@@ -1226,7 +1512,7 @@ class VoiceSession {
    *   仅执行截断 + 快照已播放部分到 pendingInterruptedReply
    *   不写对话历史 — 等 ASR final 后由 resolveInterruptedReply 决策
    */
-  onInterrupt() {
+  onInterrupt(): void {
     if (this.state === STATE.SPEAKING || this.state === STATE.THINKING) {
       // 快照已播放 segments(仅 SPEAKING 态有意义;THINKING 态 currentReplyPlayed=null)
       if (this.currentReplyPlayed && Array.isArray(this.currentReplyPlayed.playedSegments) && this.currentReplyPlayed.playedSegments.length > 0) {
@@ -1253,21 +1539,21 @@ class VoiceSession {
     }
   }
 
-  isStaleTurn(generation) {
+  isStaleTurn(generation: number): boolean {
     return generation !== this.turnGeneration;
   }
 
-  isIntentionalAbort(err) {
-    return err?.name === "AbortError";
+  isIntentionalAbort(err: unknown): boolean {
+    return errorName(err) === "AbortError";
   }
 
-  resetVad() {
+  resetVad(): void {
     this.vadSpeechFrames = 0;
     this.vadSilenceFrames = 0;
     this.vadArmed = false;
   }
 
-  onClose() {
+  onClose(): void {
     const elapsed = (Date.now() - this.startTs) / 1000;
     debugLog()?.log("voice-ws",
       `session closed after ${elapsed.toFixed(1)}s, ` +
@@ -1290,7 +1576,7 @@ class VoiceSession {
           `tts ${(ttsPcm.length / 32000).toFixed(1)}s → ${ttsPath}`,
         );
       } catch (err) {
-        debugLog()?.warn("voice-ws", `ERLE record write failed: ${err?.message || err}`);
+        debugLog()?.warn("voice-ws", `ERLE record write failed: ${errorMessage(err)}`);
       }
     }
   }
@@ -1304,21 +1590,21 @@ class VoiceSession {
  * @param {object} ctx - { upgradeWebSocket, asrProvider?, serProvider?, ttsProvider?, brainRunner? }
  * @returns {{wsRoute: Hono}}
  */
-export function createVoiceWsRoute(engine, hub, { upgradeWebSocket, ...deps }) {
+export function createVoiceWsRoute(engine: VoiceEngine, hub: unknown, { upgradeWebSocket, ...deps }: CreateVoiceWsRouteDeps) {
   const wsRoute = new Hono();
 
-  wsRoute.get("/voice-ws", upgradeWebSocket((_c) => {
-    let session = null;
+  const voiceHandler = upgradeWebSocket((_c: VoiceRouteContext) => {
+    let session: VoiceSession | null = null;
     const mode = _c?.req?.query?.("mode") || deps.mode || "direct";
 
     return {
-      onOpen(_event, ws) {
-        session = new VoiceSession(ws, { engine, hub, ...deps, mode });
+      onOpen(_event: unknown, ws: VoiceSocket) {
+        session = new VoiceSession(ws, { ...deps, engine, hub, mode });
         session.onOpen();
         debugLog()?.log("voice-ws", "client connected");
       },
 
-      onMessage(event, _ws) {
+      onMessage(event: VoiceMessageEvent, _ws: VoiceSocket) {
         if (!session) return;
 
         // 二进制帧
@@ -1365,11 +1651,13 @@ export function createVoiceWsRoute(engine, hub, { upgradeWebSocket, ...deps }) {
         }
       },
 
-      onError(event) {
-        debugLog()?.log("voice-ws", `error: ${event?.message || event}`);
+      onError(event: VoiceErrorEvent | unknown) {
+        debugLog()?.log("voice-ws", `error: ${asRecord(event)?.message || event}`);
       },
     };
-  }));
+  }) as never;
+
+  wsRoute.get("/voice-ws", voiceHandler);
 
   return { wsRoute };
 }

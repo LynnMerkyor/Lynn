@@ -32,7 +32,198 @@ const MODEL_DISPLAY_NAME = "Qwen3.5-9B Q4_K_M imatrix MTP";
 const MODEL_FILE_NAME = "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf";
 const MODEL_ROOT_NAME = "Qwen3.5-9B";
 
-function defaultState() {
+type JsonRecord = Record<string, unknown>;
+
+type LocalQwen35State = {
+  modelRoot: string;
+  providerConfig: string;
+  pidFile: string;
+  logFile: string;
+  host: string;
+  port: string;
+};
+
+type ProviderModelConfig = string | {
+  id?: string;
+  name?: string;
+  context?: number;
+  maxOutput?: number;
+  [key: string]: unknown;
+};
+
+type RawProviderConfig = {
+  models?: ProviderModelConfig[];
+  [key: string]: unknown;
+};
+
+type LocalQwen35ProviderRegistry = {
+  saveProvider(providerId: string, config: RawProviderConfig): unknown;
+  getAllProvidersRaw?(): Record<string, RawProviderConfig | undefined>;
+};
+
+type LocalQwen35RouteEngine = {
+  providerRegistry: LocalQwen35ProviderRegistry;
+  syncModelsAndRefresh?: () => Promise<unknown> | unknown;
+  refreshAvailableModels?: () => Promise<unknown> | unknown;
+  setPendingModel?: (modelId: string, providerId: string) => Promise<unknown> | unknown;
+};
+
+type FetchWithTimeoutOptions = RequestInit & {
+  timeoutMs?: number;
+};
+
+type MetricSummary = {
+  prompt_tokens_total: number | null;
+  predicted_tokens_total: number | null;
+  requests_total: number | null;
+};
+
+type SlotSummary = {
+  id: unknown;
+  state: unknown;
+  prompt_tokens: unknown;
+  predicted_tokens: unknown;
+  progress: number | null;
+};
+
+type SlotsSummary = {
+  total: number;
+  busy: number;
+  slots: SlotSummary[];
+};
+
+type RuntimeDetails = {
+  base_url: string;
+  gui_url: string;
+  pid: number | null;
+  pid_file: string;
+  process_alive: boolean;
+  endpoint_running_any: boolean;
+  listen_pids: number[];
+  command_pids: number[];
+  pids: number[];
+  endpoint_running: boolean;
+  endpoint_loading: boolean;
+  endpoint_occupied: boolean;
+  serves_default_model: boolean;
+  health_status: number;
+  health: unknown;
+  model_ids: string[];
+  foreign_model_ids: string[];
+  slots: SlotsSummary | null;
+  metrics: MetricSummary | null;
+  metrics_available: boolean;
+  checked_at: string;
+};
+
+type RuntimeCache = {
+  at: number;
+  value: RuntimeDetails | null;
+  inflight: Promise<RuntimeDetails> | null;
+};
+
+type Python3CheckResult =
+  | { ok: true }
+  | { ok: false; error: string; detail: string; raw: string };
+
+type SetupBody = {
+  authorized?: boolean;
+  yesUserAuthorized?: boolean;
+  variant?: string;
+  start?: boolean;
+  installRuntime?: boolean;
+};
+
+type SetupJobStatus = "running" | "succeeded" | "failed";
+
+type SetupJob = {
+  id: string;
+  status: SetupJobStatus;
+  started_at: string;
+  finished_at: string | null;
+  log_file: string;
+  provider_id: string;
+  model: string;
+  exit_code: number | null;
+  result: unknown;
+  registered?: boolean;
+  register_error?: string | null;
+  stdout_tail?: string;
+  stderr_tail?: string;
+};
+
+type RegisterProviderOptions = {
+  activate?: boolean;
+};
+
+type JobProgress = {
+  phase: string;
+  source?: string | null;
+  percent?: number | null;
+  downloaded?: string;
+  total?: string;
+  elapsed?: string;
+  eta?: string;
+  speed?: string;
+  tail?: string[];
+  message: string;
+};
+
+type DecoratedSetupJob = SetupJob & {
+  progress: JobProgress | null;
+};
+
+type DeriveProviderStateInput = {
+  runtime?: Partial<RuntimeDetails> | null;
+  status?: unknown;
+  registered?: boolean;
+  job?: { status?: SetupJobStatus } | null;
+};
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asRecord(value: unknown): JsonRecord {
+  return isRecord(value) ? value : {};
+}
+
+function isPositiveFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function errorOutput(err: unknown, key: "stdout" | "stderr"): string {
+  if (!isRecord(err)) return "";
+  const value = err[key];
+  if (typeof value === "string") return value;
+  if (Buffer.isBuffer(value)) return value.toString("utf8");
+  return "";
+}
+
+function jsonRecordArray(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function getNestedRecord(value: unknown, key: string): JsonRecord {
+  return asRecord(asRecord(value)[key]);
+}
+
+function getPlanObserved(value: unknown): JsonRecord {
+  const root = asRecord(value);
+  const plan = asRecord(root.plan);
+  return asRecord(plan.observed ?? root.observed);
+}
+
+function extractHealthErrorMessage(value: unknown): string {
+  const message = getNestedRecord(value, "error").message;
+  return typeof message === "string" ? message : "";
+}
+
+function defaultState(): LocalQwen35State {
   const home = os.homedir();
   return {
     modelRoot: process.env.LYNN_LOCAL_QWEN35_MODEL_ROOT || path.join(home, "Models", "Lynn", MODEL_ROOT_NAME),
@@ -44,12 +235,12 @@ function defaultState() {
   };
 }
 
-function expectedModelPath(state = defaultState(), _variant = "imatrix") {
+function expectedModelPath(state: LocalQwen35State = defaultState(), _variant = "imatrix"): string {
   // 2026-05-25: 默认回到 9B MTP;4B 仅作为显式 downgrade,不能误匹配成默认。
   return path.join(state.modelRoot, "q4_k_m", MODEL_FILE_NAME);
 }
 
-function candidateModelPaths(state = defaultState()) {
+function candidateModelPaths(state: LocalQwen35State = defaultState()): string[] {
   const home = os.homedir();
   return [
     expectedModelPath(state, "imatrix"),
@@ -61,7 +252,7 @@ function candidateModelPaths(state = defaultState()) {
   ];
 }
 
-function installedModelPath(state = defaultState()) {
+function installedModelPath(state: LocalQwen35State = defaultState()): string | null {
   for (const candidate of candidateModelPaths(state)) {
     try {
       if (candidate && fs.existsSync(candidate)) return candidate;
@@ -72,18 +263,18 @@ function installedModelPath(state = defaultState()) {
   return null;
 }
 
-function endpointRoot(state = defaultState()) {
+function endpointRoot(state: LocalQwen35State = defaultState()): string {
   return `http://${state.host}:${state.port}`;
 }
 
-function bootstrapPath() {
+function bootstrapPath(): string | null {
   const explicit = process.env.LYNN_QWEN35_BOOTSTRAP;
   if (explicit && fs.existsSync(explicit)) return explicit;
   const candidate = fromRoot("scripts", "local_qwen35_9b_client_bootstrap.py");
   return fs.existsSync(candidate) ? candidate : null;
 }
 
-function commonArgs(state, variant = "imatrix") {
+function commonArgs(state: LocalQwen35State, variant = "imatrix"): string[] {
   return [
     "--variant", variant,
     "--host", state.host,
@@ -95,7 +286,7 @@ function commonArgs(state, variant = "imatrix") {
   ];
 }
 
-function readPidFile(file) {
+function readPidFile(file: string): number | null {
   try {
     const raw = fs.readFileSync(file, "utf8").trim();
     const pid = Number(raw.split(/\s+/)[0]);
@@ -105,7 +296,7 @@ function readPidFile(file) {
   }
 }
 
-function isPidAlive(pid) {
+function isPidAlive(pid: number | null | undefined): boolean {
   if (!pid) return false;
   try {
     process.kill(pid, 0);
@@ -115,7 +306,7 @@ function isPidAlive(pid) {
   }
 }
 
-async function listenerPids(port) {
+async function listenerPids(port: string): Promise<number[]> {
   try {
     const { stdout } = await execFileAsync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], {
       timeout: 2_000,
@@ -124,17 +315,17 @@ async function listenerPids(port) {
     return stdout
       .split(/\s+/)
       .map((value) => Number(value))
-      .filter((pid) => Number.isFinite(pid) && pid > 0);
-  } catch (err) {
-    const stdout = String(err?.stdout || "");
+      .filter(isPositiveFiniteNumber);
+  } catch (err: unknown) {
+    const stdout = errorOutput(err, "stdout");
     return stdout
       .split(/\s+/)
       .map((value) => Number(value))
-      .filter((pid) => Number.isFinite(pid) && pid > 0);
+      .filter(isPositiveFiniteNumber);
   }
 }
 
-async function qwen35ProcessPids(state = defaultState()) {
+async function qwen35ProcessPids(state: LocalQwen35State = defaultState()): Promise<number[]> {
   const modelPaths = candidateModelPaths(state);
   try {
     const { stdout } = await execFileAsync("ps", ["-axo", "pid=,command="], {
@@ -143,7 +334,7 @@ async function qwen35ProcessPids(state = defaultState()) {
     });
     return stdout
       .split("\n")
-      .map((line) => {
+      .map((line): number | null => {
         const match = line.trim().match(/^(\d+)\s+(.+)$/);
         if (!match) return null;
         const pid = Number(match[1]);
@@ -156,23 +347,24 @@ async function qwen35ProcessPids(state = defaultState()) {
           || /qwen35-9b-q4km/i.test(command);
         return mentionsPort || mentionsModel ? pid : null;
       })
-      .filter((pid) => Number.isFinite(pid) && pid > 0);
+      .filter(isPositiveFiniteNumber);
   } catch {
     return [];
   }
 }
 
-async function fetchWithTimeout(url, options = {}) {
+async function fetchWithTimeout(url: string, options: FetchWithTimeoutOptions = {}): Promise<Response> {
+  const { timeoutMs = 900, ...fetchOptions } = options;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 900);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { signal: controller.signal, ...options });
+    return await fetch(url, { ...fetchOptions, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function fetchJsonMaybe(url, timeoutMs = 900) {
+async function fetchJsonMaybe(url: string, timeoutMs = 900): Promise<unknown | null> {
   try {
     const res = await fetchWithTimeout(url, { timeoutMs });
     if (!res.ok) return null;
@@ -182,11 +374,11 @@ async function fetchJsonMaybe(url, timeoutMs = 900) {
   }
 }
 
-async function fetchJsonStatus(url, timeoutMs = 900) {
+async function fetchJsonStatus(url: string, timeoutMs = 900): Promise<{ ok: boolean; status: number; json: unknown | null }> {
   try {
     const res = await fetchWithTimeout(url, { timeoutMs });
     const text = await res.text().catch(() => "");
-    let json = null;
+    let json: unknown | null = null;
     if (text) {
       try { json = JSON.parse(text); } catch {
         // Some llama.cpp endpoints return text during loading; keep status only.
@@ -198,7 +390,7 @@ async function fetchJsonStatus(url, timeoutMs = 900) {
   }
 }
 
-async function fetchTextMaybe(url, timeoutMs = 900) {
+async function fetchTextMaybe(url: string, timeoutMs = 900): Promise<string | null> {
   try {
     const res = await fetchWithTimeout(url, { timeoutMs });
     if (!res.ok) return null;
@@ -208,15 +400,18 @@ async function fetchTextMaybe(url, timeoutMs = 900) {
   }
 }
 
-function summarizeSlots(slots) {
+function summarizeSlots(slots: unknown): SlotsSummary | null {
   if (!Array.isArray(slots)) return null;
-  const summaries = slots.map((slot) => ({
-    id: slot.id ?? slot.id_slot ?? null,
-    state: slot.state ?? null,
-    prompt_tokens: slot.n_prompt_tokens_processed ?? slot.n_prompt_tokens ?? slot.prompt_tokens ?? null,
-    predicted_tokens: slot.n_decoded ?? slot.n_predict ?? slot.predicted_tokens ?? null,
-    progress: typeof slot.progress === "number" ? slot.progress : null,
-  }));
+  const summaries = slots.map((rawSlot): SlotSummary => {
+    const slot = asRecord(rawSlot);
+    return {
+      id: slot.id ?? slot.id_slot ?? null,
+      state: slot.state ?? null,
+      prompt_tokens: slot.n_prompt_tokens_processed ?? slot.n_prompt_tokens ?? slot.prompt_tokens ?? null,
+      predicted_tokens: slot.n_decoded ?? slot.n_predict ?? slot.predicted_tokens ?? null,
+      progress: typeof slot.progress === "number" ? slot.progress : null,
+    };
+  });
   return {
     total: summaries.length,
     busy: summaries.filter((slot) => slot.state && !String(slot.state).toLowerCase().includes("idle")).length,
@@ -224,9 +419,9 @@ function summarizeSlots(slots) {
   };
 }
 
-function parseMetrics(text) {
+function parseMetrics(text: string | null): MetricSummary | null {
   if (!text) return null;
-  const pick = (patterns) => {
+  const pick = (patterns: RegExp[]): number | null => {
     for (const pattern of patterns) {
       const match = text.match(pattern);
       if (match) {
@@ -257,9 +452,9 @@ function parseMetrics(text) {
 // 多组件 polling (StatusBar 15s / ProviderStatusBadge 12s / InputArea 15s / LocalModelDownloadStep 1.5s)
 // 同时 hit 这条 route。加 1500ms 内存 cache + inflight dedup,避免 N 个并发 caller 各自 spawn lsof/ps。
 const _RUNTIME_CACHE_TTL_MS = 1500;
-let _runtimeCache = { at: 0, value: null, inflight: null };
+let _runtimeCache: RuntimeCache = { at: 0, value: null, inflight: null };
 
-async function _computeRuntimeDetails() {
+async function _computeRuntimeDetails(): Promise<RuntimeDetails> {
   const state = defaultState();
   const root = endpointRoot(state);
   const pidFromFile = readPidFile(state.pidFile);
@@ -275,9 +470,9 @@ async function _computeRuntimeDetails() {
     fetchJsonMaybe(`${root}/slots`),
     fetchTextMaybe(`${root}/metrics`),
   ]);
-  const modelIds = Array.isArray(models?.data)
-    ? models.data.map((item) => item?.id).filter(Boolean)
-    : [];
+  const modelIds = jsonRecordArray(asRecord(models).data)
+    .map((item) => item.id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
   const health = healthStatus.ok ? healthStatus.json : null;
   const rawEndpointRunning = healthStatus.ok === true;
   const servesDefaultModel = modelIds.includes(MODEL_ID);
@@ -285,7 +480,7 @@ async function _computeRuntimeDetails() {
   const defaultProcessAlive = isPidAlive(pidFromFile) || commandPids.some((candidate) => isPidAlive(candidate));
   const endpointRunning = rawEndpointRunning && servesDefaultModel;
   const endpointLoading = !rawEndpointRunning && defaultProcessAlive
-    && (healthStatus.status === 503 || /loading/i.test(String(healthStatus.json?.error?.message || "")) || commandPids.length > 0);
+    && (healthStatus.status === 503 || /loading/i.test(extractHealthErrorMessage(healthStatus.json)) || commandPids.length > 0);
   return {
     base_url: `${root}/v1`,
     gui_url: root,
@@ -311,7 +506,7 @@ async function _computeRuntimeDetails() {
   };
 }
 
-async function runtimeDetails({ force = false } = {}) {
+async function runtimeDetails({ force = false }: { force?: boolean } = {}): Promise<RuntimeDetails> {
   const now = Date.now();
   if (!force && _runtimeCache.value && (now - _runtimeCache.at) < _RUNTIME_CACHE_TTL_MS) {
     return _runtimeCache.value;
@@ -333,7 +528,7 @@ function _invalidateRuntimeCache() {
   _runtimeCache = { at: 0, value: null, inflight: null };
 }
 
-function fastReadyPlan(runtime, _variant = "imatrix") {
+function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): JsonRecord {
   const state = defaultState();
   const totalMemoryGib = os.totalmem() / (1024 ** 3);
   const isMac = process.platform === "darwin";
@@ -419,7 +614,7 @@ function fastReadyPlan(runtime, _variant = "imatrix") {
   };
 }
 
-function parseJson(text) {
+function parseJson(text: string): unknown | null {
   try { return JSON.parse(text); } catch {
     // Bootstrap logs may wrap the final JSON; scan for the last object below.
   }
@@ -435,7 +630,7 @@ function parseJson(text) {
   return null;
 }
 
-function readLogTail(file, maxBytes = 96 * 1024) {
+function readLogTail(file: string, maxBytes = 96 * 1024): string {
   if (!file || !fs.existsSync(file)) return "";
   try {
     const stat = fs.statSync(file);
@@ -450,7 +645,7 @@ function readLogTail(file, maxBytes = 96 * 1024) {
   }
 }
 
-function parseDownloadProgress(text) {
+function parseDownloadProgress(text: string): JobProgress | null {
   const chunks = text.split(/\r|\n/).map((line) => line.trim()).filter(Boolean);
   const downloadRegex = /Downloading\s+\[[^\]]+\]:\s*(\d{1,3})%\|[^|]*\|\s*([^/\s]+)\/([^\s]+)\s*\[([^<\]]+)<([^,\]]+),\s*([^\]]+)\]/;
   for (let i = chunks.length - 1; i >= 0; i -= 1) {
@@ -471,7 +666,7 @@ function parseDownloadProgress(text) {
   return null;
 }
 
-function parseJobProgress(job) {
+function parseJobProgress(job: SetupJob): JobProgress | null {
   if (!job?.log_file) return null;
   const text = readLogTail(job.log_file);
   if (!text) return null;
@@ -483,8 +678,8 @@ function parseJobProgress(job) {
   if (download) return { ...download, tail };
 
   let phase = "准备本地模型";
-  let percent = null;
-  let source = null;
+  let percent: number | null = null;
+  let source: string | null = null;
   if (/installing llama\.cpp|Installing llama\.cpp|Pouring llama\.cpp/i.test(text)) {
     phase = "安装 llama.cpp";
     percent = 10;
@@ -523,7 +718,7 @@ function parseJobProgress(job) {
   };
 }
 
-function decorateJob(job) {
+function decorateJob(job: SetupJob | null): DecoratedSetupJob | null {
   if (!job) return null;
   return {
     ...job,
@@ -532,24 +727,24 @@ function decorateJob(job) {
 }
 
 // Cache python3 availability check across requests (resets on process restart)
-let _python3CheckResult = null;
-async function ensurePython3() {
+let _python3CheckResult: Python3CheckResult | null = null;
+async function ensurePython3(): Promise<Python3CheckResult> {
   if (_python3CheckResult !== null) return _python3CheckResult;
   try {
     await execFileAsync("python3", ["--version"], { timeout: 5_000 });
     _python3CheckResult = { ok: true };
-  } catch (err) {
+  } catch (err: unknown) {
     _python3CheckResult = {
       ok: false,
       error: "python3_not_found",
       detail: "python3 executable not in PATH. On macOS install via Homebrew (brew install python3) or python.org installer. Lynn local model setup needs python3 to run the bootstrap script.",
-      raw: err.message,
+      raw: errorMessage(err),
     };
   }
   return _python3CheckResult;
 }
 
-async function plan(variant = "imatrix") {
+async function plan(variant = "imatrix"): Promise<JsonRecord> {
   const bootstrap = bootstrapPath();
   const state = defaultState();
   if (!bootstrap) {
@@ -564,7 +759,6 @@ async function plan(variant = "imatrix") {
   const pyCheck = await ensurePython3();
   if (!pyCheck.ok) {
     return {
-      ok: false,
       provider_id: PROVIDER_ID,
       fallback_provider: "brain",
       ...pyCheck,
@@ -581,21 +775,21 @@ async function plan(variant = "imatrix") {
       provider_id: PROVIDER_ID,
       model: MODEL_ID,
       bootstrap,
-      plan: parseJson(stdout),
+      plan: parseJson(String(stdout)),
     };
-  } catch (err) {
+  } catch (err: unknown) {
     return {
       ok: false,
       provider_id: PROVIDER_ID,
       bootstrap,
-      error: err.message,
-      stdout: err.stdout || "",
-      stderr: err.stderr || "",
+      error: errorMessage(err),
+      stdout: errorOutput(err, "stdout"),
+      stderr: errorOutput(err, "stderr"),
     };
   }
 }
 
-async function registerProvider(engine, options = {}) {
+async function registerProvider(engine: LocalQwen35RouteEngine, options: RegisterProviderOptions = {}): Promise<boolean> {
   const state = defaultState();
   engine.providerRegistry.saveProvider(PROVIDER_ID, {
     display_name: "本地 Qwen3.5-9B",
@@ -617,21 +811,22 @@ async function registerProvider(engine, options = {}) {
   return true;
 }
 
-function isReadyPlan(planData) {
-  const observed = planData?.plan?.observed || planData?.observed || {};
+function isReadyPlan(planData: unknown): boolean {
+  const observed = getPlanObserved(planData);
   return observed.endpoint_running === true
     && !!observed.gguf
     && !!observed.llama_server;
 }
 
-function isProviderRegistered(engine) {
+function isProviderRegistered(engine: LocalQwen35RouteEngine): boolean {
   const raw = engine.providerRegistry?.getAllProvidersRaw?.() || {};
   const entry = raw[PROVIDER_ID];
-  return !!entry?.models?.some?.((m) => (typeof m === "object" ? m.id : m) === MODEL_ID);
+  return !!entry?.models?.some?.((m) => (typeof m === "object" && m !== null ? m.id : m) === MODEL_ID);
 }
 
-export function deriveLocalQwen35ProviderState({ runtime, status, registered, job } = {}) {
-  const observed = status?.plan?.observed || status?.observed || {};
+export function deriveLocalQwen35ProviderState({ runtime, status, registered, job }: DeriveProviderStateInput = {}) {
+  const observed = getPlanObserved(status);
+  const statusRecord = asRecord(status);
   const hasObservedGguf = Object.prototype.hasOwnProperty.call(observed, "gguf");
   const hasObservedLlamaServer = Object.prototype.hasOwnProperty.call(observed, "llama_server");
   const gguf = hasObservedGguf ? observed.gguf : installedModelPath(defaultState());
@@ -681,13 +876,13 @@ export function deriveLocalQwen35ProviderState({ runtime, status, registered, jo
       reason: "llama_server_missing",
     };
   }
-  if (status?.ok === false) {
+  if (statusRecord.ok === false) {
     return {
       state: "unavailable",
       severity: "error",
       canSwitch: false,
       canSetup: true,
-      reason: status?.error || "status_error",
+      reason: typeof statusRecord.error === "string" ? statusRecord.error : "status_error",
     };
   }
   return {
@@ -699,9 +894,9 @@ export function deriveLocalQwen35ProviderState({ runtime, status, registered, jo
   };
 }
 
-export function createLocalQwen35Route(engine) {
+export function createLocalQwen35Route(engine: LocalQwen35RouteEngine): Hono {
   const route = new Hono();
-  let job = null;
+  let job: SetupJob | null = null;
 
   route.get("/local-qwen35-9b/status", async (c) => {
     const runtime = await runtimeDetails();
@@ -720,7 +915,7 @@ export function createLocalQwen35Route(engine) {
   });
 
   route.post("/local-qwen35-9b/setup", async (c) => {
-    const body = await safeJson(c);
+    const body = await safeJson<SetupBody>(c);
     const authorized = body.authorized === true || body.yesUserAuthorized === true;
     if (!authorized) {
       return c.json({
@@ -746,7 +941,7 @@ export function createLocalQwen35Route(engine) {
     if (body.start !== false) args.push("--start");
     if (body.installRuntime === false) args.push("--no-install-runtime");
 
-    job = {
+    const runningJob: SetupJob = {
       id: "local-qwen35-9b-setup-" + Date.now(),
       status: "running",
       started_at: new Date().toISOString(),
@@ -757,11 +952,12 @@ export function createLocalQwen35Route(engine) {
       exit_code: null,
       result: null,
     };
+    job = runningJob;
 
     const child = spawn("python3", args, { cwd: fromRoot(), stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
-    const append = (chunk) => {
+    const append = (chunk: string) => {
       try { fs.appendFileSync(logFile, chunk); } catch {
         // Best effort logging; setup should continue if the log file is unavailable.
       }
@@ -770,23 +966,24 @@ export function createLocalQwen35Route(engine) {
     child.stderr.on("data", (buf) => { const s = buf.toString(); stderr += s; append(s); });
     child.on("exit", async (code) => {
       const result = parseJson(stdout);
+      const resultStatus = asRecord(result).status;
       let registered = false;
-      let registerError = null;
-      const finalStatus = code === 0 && !isReadyPlan(result?.status)
+      let registerError: string | null = null;
+      const finalStatus = code === 0 && !isReadyPlan(resultStatus)
         ? await plan(body.variant || "imatrix").catch(() => null)
         : null;
-      if (code === 0 && (isReadyPlan(result?.status) || isReadyPlan(finalStatus))) {
+      if (code === 0 && (isReadyPlan(resultStatus) || isReadyPlan(finalStatus))) {
         try {
           await registerProvider(engine, { activate: true });
           registered = true;
-        } catch (err) {
-          registerError = err.message;
+        } catch (err: unknown) {
+          registerError = errorMessage(err);
         }
       } else if (code === 0) {
         registerError = "endpoint_not_ready";
       }
       job = {
-        ...job,
+        ...runningJob,
         status: code === 0 && !registerError ? "succeeded" : "failed",
         finished_at: new Date().toISOString(),
         exit_code: code,
@@ -821,7 +1018,7 @@ export function createLocalQwen35Route(engine) {
     const targets = new Set([
       ...before.pids,
       readPidFile(state.pidFile),
-    ].filter((pid) => Number.isFinite(pid) && pid > 0));
+    ].filter(isPositiveFiniteNumber));
 
     for (const pid of targets) {
       try { process.kill(pid, "SIGTERM"); } catch {
