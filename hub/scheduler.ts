@@ -12,45 +12,173 @@
 import fs from "fs";
 import path from "path";
 import { createHeartbeat } from "../lib/desk/heartbeat.js";
-import { createCronScheduler } from "../lib/desk/cron-scheduler.js";
-import { CronStore } from "../lib/desk/cron-store.js";
+import { createCronScheduler, type CronScheduler } from "../lib/desk/cron-scheduler.js";
+import { CronStore, type Job } from "../lib/desk/cron-store.js";
 import { appendRecentExecutionToJian } from "../lib/desk/jian-runtime.js";
 import { getLocale } from "../server/i18n.js";
+import type { Hub } from "./index.js";
+
+type HeartbeatController = ReturnType<typeof createHeartbeat>;
+type CronSchedulerOptions = Parameters<typeof createCronScheduler>[0];
+
+interface DeskFile {
+  name: string;
+  isDir?: boolean;
+  mtime?: string | number;
+}
+
+type SchedulerJob = Job & {
+  skipped?: boolean;
+};
+
+interface SkippedCronError extends Error {
+  skipped?: boolean;
+}
+
+interface ActivityResult {
+  sessionPath?: string | null;
+  error?: string | null;
+  replyText?: string | null;
+}
+
+interface ActivityEntry {
+  id: string;
+  type: string;
+  jobId: string | null;
+  label: string | null;
+  agentId: string;
+  agentName: string;
+  workspace: string | null;
+  startedAt: number;
+  finishedAt: number;
+  outputFile: string | null;
+  summary: string;
+  sessionFile: string | null;
+  status: "done" | "error";
+  error: string | null;
+}
+
+interface SchedulerAgent {
+  agentName?: string;
+  deskDir: string;
+  deskManager?: unknown;
+  cronStore?: CronStore;
+  config?: {
+    desk?: {
+      heartbeat_interval?: number;
+      heartbeat_enabled?: boolean;
+    };
+    locale?: string;
+  };
+}
+
+interface ActivityStore {
+  add(entry: ActivityEntry): void;
+}
+
+type SchedulerEngine = {
+  agentsDir: string;
+  currentAgentId: string;
+  homeCwd: string;
+  agent: SchedulerAgent;
+  getAgent(agentId: string): SchedulerAgent | null | undefined;
+  listDeskFiles(): DeskFile[];
+  emitDevLog(text: string, level?: string): void;
+  executeIsolated(prompt: string, opts: Record<string, unknown>): Promise<ActivityResult>;
+  summarizeActivity(sessionPath: string): Promise<string | null | undefined>;
+  getActivityStore(agentId: string): ActivityStore;
+};
+
+interface ActivityOptions {
+  jobId?: string | null;
+  model?: string;
+  cwd?: string;
+  signal?: AbortSignal;
+  quiet?: boolean;
+  [key: string]: unknown;
+}
+
+interface ActivityNotification {
+  title: string;
+  body: string;
+}
+
+interface BuildActivityNotificationOptions {
+  entry: ActivityEntry;
+  failed: boolean;
+  error?: string | null;
+  locale: string;
+}
+
+interface QuietPatrolNoopOptions {
+  assistantText: string;
+  toolCalls: string[];
+}
+
+interface QuietActivitySummaryOptions extends QuietPatrolNoopOptions {
+  label?: string | null;
+  locale: string;
+}
+
+interface CronResultDocumentOptions {
+  isZh: boolean;
+  label?: string | null;
+  startedAt: number;
+  finishedAt: number;
+  cwd: string;
+  body: string;
+  error?: string | null;
+}
+
+interface PersistCronResultFileOptions {
+  cwd: string;
+  label?: string | null;
+  locale: string;
+  startedAt: number;
+  finishedAt: number;
+  sessionPath?: string | null;
+  summary?: string | null;
+  error?: string | null;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 export class Scheduler {
-  /**
-   * @param {object} opts
-   * @param {import('./index.js').Hub} opts.hub
-   */
-  constructor({ hub }) {
+  private readonly _hub: Hub;
+  private _heartbeat: HeartbeatController | null;
+  private readonly _agentCrons: Map<string, CronScheduler>;
+  private readonly _executingJobs: Map<string, AbortController>;
+
+  constructor({ hub }: { hub: Hub }) {
     this._hub = hub;
     this._heartbeat = null;
     this._agentCrons = new Map(); // agentId → CronScheduler
     this._executingJobs = new Map(); // jobId → AbortController（per-job 锁 + abort 控制）
   }
 
-  /** @returns {import('../core/engine.js').HanaEngine} */
-  get _engine() { return this._hub.engine; }
+  get _engine(): SchedulerEngine { return this._hub.engine as unknown as SchedulerEngine; }
 
   /** 暴露 heartbeat（给 desk route 的 triggerNow 用） */
-  get heartbeat() { return this._heartbeat; }
+  get heartbeat(): HeartbeatController | null { return this._heartbeat; }
 
   /** 暴露某个 agent 的 cronScheduler */
-  getCronScheduler(agentId) {
+  getCronScheduler(agentId?: string | null): CronScheduler | null {
     return this._agentCrons.get(agentId ?? this._engine.currentAgentId) ?? null;
   }
 
   /** @deprecated 兼容旧访问 */
-  get cronScheduler() { return this.getCronScheduler(); }
+  get cronScheduler(): CronScheduler | null { return this.getCronScheduler(); }
 
   // ──────────── 生命周期 ────────────
 
-  start() {
+  start(): void {
     this.startHeartbeat();
     this._startAllCrons();
   }
 
-  async stop() {
+  async stop(): Promise<void> {
     await this.stopHeartbeat();
     for (const sched of this._agentCrons.values()) {
       await sched.stop();
@@ -59,23 +187,23 @@ export class Scheduler {
   }
 
   /** 启动某个 agent 的 cron（幂等，已有则跳过） */
-  startAgentCron(agentId) { this._startAgentCron(agentId); }
+  startAgentCron(agentId: string): void { this._startAgentCron(agentId); }
 
   /** 立即执行一次指定 cron 任务（不改调度，仅手动触发） */
-  triggerCronJob(agentId, jobId) {
+  triggerCronJob(agentId: string, jobId: string): SchedulerJob {
     const agent = this._engine.getAgent(agentId);
-    const job = agent?.cronStore?.getJob?.(jobId);
+    const job = agent?.cronStore?.getJob?.(jobId) as SchedulerJob | undefined;
     if (!job) throw new Error(`cron job not found: ${jobId}`);
     if (!job.enabled) throw new Error(`cron job disabled: ${jobId}`);
     if (this._executingJobs.has(job.id)) throw new Error(`cron job already running: ${jobId}`);
     void this._executeCronJobForAgent(agentId, job).catch((err) => {
-      console.error(`\x1b[90m[scheduler] 手动执行 cron 失败 ${job.id}: ${err.message}\x1b[0m`);
+      console.error(`\x1b[90m[scheduler] 手动执行 cron 失败 ${job.id}: ${errorMessage(err)}\x1b[0m`);
     });
     return job;
   }
 
   /** 停止并移除某个 agent 的 cron */
-  async removeAgentCron(agentId) {
+  async removeAgentCron(agentId: string): Promise<void> {
     const sched = this._agentCrons.get(agentId);
     if (sched) {
       await sched.stop();
@@ -84,12 +212,12 @@ export class Scheduler {
   }
 
   /** Agent 切换：只重建 heartbeat，cron 不中断 */
-  async reloadHeartbeat() {
+  async reloadHeartbeat(): Promise<void> {
     await this.stopHeartbeat();
     this.startHeartbeat();
   }
 
-  startHeartbeat() {
+  startHeartbeat(): void {
     const engine = this._engine;
     const agent = engine.agent;
     if (!agent.deskManager || !agent.cronStore) return;
@@ -97,7 +225,7 @@ export class Scheduler {
     const hbInterval = agent.config?.desk?.heartbeat_interval;
     const hbEnabled = agent.config?.desk?.heartbeat_enabled !== false;
     this._heartbeat = createHeartbeat({
-      getDeskFiles: () => engine.listDeskFiles(),
+      getDeskFiles: (): DeskFile[] => engine.listDeskFiles(),
       getWorkspacePath: () => engine.homeCwd,
       registryPath: path.join(agent.deskDir, "jian-registry.json"),
       overwatchPath: path.join(agent.deskDir, "overwatch.md"),
@@ -132,7 +260,7 @@ export class Scheduler {
     if (hbEnabled) this._heartbeat.start();
   }
 
-  async stopHeartbeat() {
+  async stopHeartbeat(): Promise<void> {
     if (this._heartbeat) {
       await this._heartbeat.stop();
       this._heartbeat = null;
@@ -141,7 +269,7 @@ export class Scheduler {
 
   // ──────────── Per-agent Cron ────────────
 
-  _startAllCrons() {
+  private _startAllCrons(): void {
     const engine = this._engine;
     let entries;
     try {
@@ -153,13 +281,13 @@ export class Scheduler {
     }
   }
 
-  _startAgentCron(agentId) {
+  private _startAgentCron(agentId: string): void {
     if (this._agentCrons.has(agentId)) return;
     const engine = this._engine;
     const agentDir = path.join(engine.agentsDir, agentId);
     const deskDir = path.join(agentDir, "desk");
 
-    let cronStore;
+    let cronStore: CronStore;
     try {
       cronStore = new CronStore(
         path.join(deskDir, "cron-jobs.json"),
@@ -168,8 +296,8 @@ export class Scheduler {
     } catch { return; }
 
     const sched = createCronScheduler({
-      cronStore,
-      executeJob: (job) => this._executeCronJobForAgent(agentId, job),
+      cronStore: cronStore as unknown as CronSchedulerOptions["cronStore"],
+      executeJob: (job) => this._executeCronJobForAgent(agentId, job as SchedulerJob),
       abortJob: (jobId) => {
         const ac = this._executingJobs.get(jobId);
         if (ac) { ac.abort(); console.log(`\x1b[90m[scheduler] cron abort ${jobId} (timeout)\x1b[0m`); }
@@ -192,11 +320,11 @@ export class Scheduler {
    * 执行某个 agent 的 cron 任务（active 或非 active 均可）
    * 同一 agent 同时只运行一个 cron，防止并发写冲突
    */
-  async _executeCronJobForAgent(agentId, job) {
+  async _executeCronJobForAgent(agentId: string, job: SchedulerJob): Promise<void> {
     // per-job 锁：同一 job 不并发，但同一 agent 的不同 job 可以并行
     if (this._executingJobs.has(job.id)) {
       console.log(`\x1b[90m[scheduler] cron 跳过 ${job.id}：上一次仍在执行\x1b[0m`);
-      const err = new Error(`cron job ${job.id} 仍在执行，跳过`);
+      const err = new Error(`cron job ${job.id} 仍在执行，跳过`) as SkippedCronError;
       err.skipped = true;
       throw err;
     }
@@ -237,7 +365,13 @@ export class Scheduler {
   /**
    * 执行活动（任意 agent，统一走 executeIsolated）
    */
-  async _executeActivityForAgent(agentId, prompt, type, label, opts = {}) {
+  async _executeActivityForAgent(
+    agentId: string,
+    prompt: string,
+    type: "cron" | "heartbeat",
+    label?: string | null,
+    opts: ActivityOptions = {},
+  ): Promise<void> {
     const engine = this._engine;
     const agentDir = path.join(engine.agentsDir, agentId);
     const activityDir = path.join(agentDir, "activity");
@@ -271,16 +405,16 @@ export class Scheduler {
     }
 
     // 生成摘要。安静巡检只用本地摘要，避免为“后台无声任务”再烧一次摘要模型。
-    let summary = null;
+    let summary: string | null = null;
     if (quiet) {
       summary = buildQuietActivitySummary({ assistantText, toolCalls, label, locale: getLocale() });
     } else if (typeof sessionPath === "string" && sessionPath) {
       try {
-        summary = await engine.summarizeActivity(sessionPath);
+        summary = await engine.summarizeActivity(sessionPath) || null;
       } catch {}
     }
 
-    let outputFile = null;
+    let outputFile: string | null = null;
     const jianDir = typeof restOpts.cwd === "string" && restOpts.cwd.trim()
       ? restOpts.cwd.trim()
       : null;
@@ -297,14 +431,14 @@ export class Scheduler {
           error,
         });
       } catch (err) {
-        engine.emitDevLog(`[${type}] 写入任务结果文件失败: ${err.message}`, "error");
+        engine.emitDevLog(`[${type}] 写入任务结果文件失败: ${errorMessage(err)}`, "error");
       }
     }
 
-    const entry = {
+    const entry: ActivityEntry = {
       id,
       type,
-      jobId: restOpts.jobId || null,
+      jobId: typeof restOpts.jobId === "string" ? restOpts.jobId : null,
       label: label || null,
       agentId,
       agentName,
@@ -347,7 +481,7 @@ export class Scheduler {
           locale: getLocale(),
         });
       } catch (err) {
-        engine.emitDevLog(`[${type}] 写回笺失败: ${err.message}`, "error");
+        engine.emitDevLog(`[${type}] 写回笺失败: ${errorMessage(err)}`, "error");
       }
     }
 
@@ -384,23 +518,28 @@ export class Scheduler {
   /**
    * active agent 的心跳活动（保留向后兼容）
    */
-  _executeActivity(prompt, type, label, opts = {}) {
+  _executeActivity(prompt: string, type: "cron" | "heartbeat", label?: string | null, opts: ActivityOptions = {}): Promise<void> {
     return this._executeActivityForAgent(this._engine.currentAgentId, prompt, type, label, opts);
   }
 }
 
-function normalizeJobPrompt(prompt) {
+function normalizeJobPrompt(prompt: unknown): string {
   return String(prompt || "")
     .replace(/^根据笺里的定时待办执行：/u, "")
     .replace(/^Execute this scheduled jian task:\s*/u, "")
     .trim();
 }
 
-function isZhTask(text) {
+function isZhTask(text: unknown): boolean {
   return /[\u3400-\u9fff]/u.test(String(text || ""));
 }
 
-function buildActivityNotification({ entry, failed, error, locale }) {
+function buildActivityNotification({
+  entry,
+  failed,
+  error,
+  locale,
+}: BuildActivityNotificationOptions): ActivityNotification | null {
   const isZh = String(locale || "").startsWith("zh");
   const genericHeartbeat = isZh ? "日常巡检" : "routine patrol";
   const genericCron = isZh ? "定时任务" : "cron job";
@@ -434,14 +573,14 @@ function buildActivityNotification({ entry, failed, error, locale }) {
   return null;
 }
 
-function compactNotificationBody(text, isZh) {
+function compactNotificationBody(text: unknown, isZh: boolean): string {
   const raw = String(text || "").replace(/\s+/g, " ").trim();
   if (!raw) return "";
   const max = isZh ? 44 : 72;
   return raw.length > max ? `${raw.slice(0, max)}…` : raw;
 }
 
-function sanitizeResultFilePart(value, fallback = "task-result") {
+function sanitizeResultFilePart(value: unknown, fallback = "task-result"): string {
   const cleaned = String(value || "")
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")
     .replace(/\s+/g, " ")
@@ -450,16 +589,20 @@ function sanitizeResultFilePart(value, fallback = "task-result") {
   return cleaned || fallback;
 }
 
-function formatResultTimestamp(ts) {
-  const date = new Date(ts || Date.now());
-  const pad = (value) => String(value).padStart(2, "0");
+function formatResultTimestamp(ts: unknown): string {
+  const input = typeof ts === "string" || typeof ts === "number" || ts instanceof Date
+    ? ts
+    : Date.now();
+  const date = new Date(input);
+  const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
-function extractAssistantResultText(sessionPath) {
-  if (!sessionPath || !fs.existsSync(sessionPath)) return "";
+function extractAssistantResultText(sessionPath: unknown): string {
+  const filePath = typeof sessionPath === "string" ? sessionPath : "";
+  if (!filePath || !fs.existsSync(filePath)) return "";
   try {
-    const raw = fs.readFileSync(sessionPath, "utf-8");
+    const raw = fs.readFileSync(filePath, "utf-8");
     let lastAssistantText = "";
     for (const line of raw.split("\n")) {
       if (!line.trim()) continue;
@@ -469,10 +612,10 @@ function extractAssistantResultText(sessionPath) {
       } catch {
         continue;
       }
-      if (parsed?.type !== "message" || !parsed.message || parsed.message.role !== "assistant") continue;
+      if (!isSessionAssistantMessage(parsed)) continue;
       const msg = parsed.message;
       const content = Array.isArray(msg.content)
-        ? msg.content.filter((block) => block?.type === "text" && block.text).map((block) => block.text).join("")
+        ? msg.content.filter(isTextBlock).map((block) => block.text).join("")
         : (typeof msg.content === "string" ? msg.content : "");
       const normalized = String(content || "").trim();
       if (normalized) lastAssistantText = normalized;
@@ -483,11 +626,12 @@ function extractAssistantResultText(sessionPath) {
   }
 }
 
-function extractActivityToolCalls(sessionPath) {
-  if (!sessionPath || !fs.existsSync(sessionPath)) return [];
-  const names = [];
+function extractActivityToolCalls(sessionPath: unknown): string[] {
+  const filePath = typeof sessionPath === "string" ? sessionPath : "";
+  if (!filePath || !fs.existsSync(filePath)) return [];
+  const names: string[] = [];
   try {
-    const raw = fs.readFileSync(sessionPath, "utf-8");
+    const raw = fs.readFileSync(filePath, "utf-8");
     for (const line of raw.split("\n")) {
       if (!line.trim()) continue;
       let parsed = null;
@@ -496,10 +640,10 @@ function extractActivityToolCalls(sessionPath) {
       } catch {
         continue;
       }
-      if (parsed?.type !== "message" || parsed.message?.role !== "assistant") continue;
+      if (!isSessionAssistantMessage(parsed)) continue;
       const content = Array.isArray(parsed.message.content) ? parsed.message.content : [];
       for (const block of content) {
-        if ((block?.type === "tool_use" || block?.type === "toolCall") && block.name) {
+        if (isToolCallBlock(block)) {
           names.push(block.name);
         }
       }
@@ -508,12 +652,13 @@ function extractActivityToolCalls(sessionPath) {
   return [...new Set(names)];
 }
 
-function cleanupActivitySession(sessionPath) {
-  if (!sessionPath || !fs.existsSync(sessionPath)) return;
-  try { fs.unlinkSync(sessionPath); } catch {}
+function cleanupActivitySession(sessionPath: unknown): void {
+  const filePath = typeof sessionPath === "string" ? sessionPath : "";
+  if (!filePath || !fs.existsSync(filePath)) return;
+  try { fs.unlinkSync(filePath); } catch {}
 }
 
-function isQuietPatrolNoop({ assistantText, toolCalls }) {
+function isQuietPatrolNoop({ assistantText, toolCalls }: QuietPatrolNoopOptions): boolean {
   if (toolCalls.length > 0) return false;
   const text = String(assistantText || "").replace(/\s+/g, " ").trim();
   if (!text) return true;
@@ -525,7 +670,12 @@ function isQuietPatrolNoop({ assistantText, toolCalls }) {
   return noopSignal.test(text) || text.length <= 80;
 }
 
-function buildQuietActivitySummary({ assistantText, toolCalls, label, locale }) {
+function buildQuietActivitySummary({
+  assistantText,
+  toolCalls,
+  label,
+  locale,
+}: QuietActivitySummaryOptions): string {
   const isZh = String(locale || "").startsWith("zh");
   if (toolCalls.length > 0) {
     const tools = toolCalls.slice(0, 3).join(isZh ? "、" : ", ");
@@ -542,7 +692,15 @@ function buildQuietActivitySummary({ assistantText, toolCalls, label, locale }) 
   return clean.length > max ? `${clean.slice(0, max)}…` : clean;
 }
 
-function buildCronResultDocument({ isZh, label, startedAt, finishedAt, cwd, body, error }) {
+function buildCronResultDocument({
+  isZh,
+  label,
+  startedAt,
+  finishedAt,
+  cwd,
+  body,
+  error,
+}: CronResultDocumentOptions): string {
   const lines = [
     `# ${isZh ? "自动任务结果" : "Automation Result"}`,
     "",
@@ -558,7 +716,16 @@ function buildCronResultDocument({ isZh, label, startedAt, finishedAt, cwd, body
   return `${lines.join("\n")}`.replace(/\n{3,}/g, "\n\n");
 }
 
-function persistCronResultFile({ cwd, label, locale, startedAt, finishedAt, sessionPath, summary, error }) {
+function persistCronResultFile({
+  cwd,
+  label,
+  locale,
+  startedAt,
+  finishedAt,
+  sessionPath,
+  summary,
+  error,
+}: PersistCronResultFileOptions): string | null {
   if (!cwd || !fs.existsSync(cwd)) return null;
   const isZh = String(locale || "").startsWith("zh");
   const folderName = isZh ? "Lynn-自动任务结果" : "Lynn-Automation-Results";
@@ -578,4 +745,31 @@ function persistCronResultFile({ cwd, label, locale, startedAt, finishedAt, sess
   });
   fs.writeFileSync(filePath, doc, "utf-8");
   return filePath;
+}
+
+interface SessionAssistantMessage {
+  type: "message";
+  message: {
+    role: "assistant";
+    content?: unknown;
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object";
+}
+
+function isSessionAssistantMessage(value: unknown): value is SessionAssistantMessage {
+  if (!isRecord(value) || value.type !== "message" || !isRecord(value.message)) return false;
+  return value.message.role === "assistant";
+}
+
+function isTextBlock(value: unknown): value is { type: "text"; text: string } {
+  return isRecord(value) && value.type === "text" && typeof value.text === "string";
+}
+
+function isToolCallBlock(value: unknown): value is { type: "tool_use" | "toolCall"; name: string } {
+  return isRecord(value)
+    && (value.type === "tool_use" || value.type === "toolCall")
+    && typeof value.name === "string";
 }
