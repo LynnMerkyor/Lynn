@@ -9,11 +9,103 @@
 
 import fs from "fs";
 import path from "path";
-import { createAgentSession, SessionManager, SettingsManager } from "@mariozechner/pi-coding-agent";
+import {
+  createAgentSession,
+  SessionManager,
+  SettingsManager,
+  type AgentSession,
+  type AgentSessionEvent,
+  type AuthStorage,
+  type CreateAgentSessionOptions,
+  type ModelRegistry,
+  type ResourceLoader,
+  type ToolDefinition,
+} from "@mariozechner/pi-coding-agent";
 import { debugLog } from "../lib/debug-log.js";
 import { t } from "../server/i18n.js";
 
-function toAbortReason(signal) {
+type SessionModel = NonNullable<CreateAgentSessionOptions["model"]>;
+type BuiltInTool = NonNullable<CreateAgentSessionOptions["tools"]>[number];
+type AgentModel = SessionModel | { id: string; provider?: string; name?: string };
+
+interface AgentRuntime {
+  agentDir: string;
+  personality?: string;
+  systemPrompt?: string;
+  tools?: unknown;
+  config?: Record<string, unknown> | null;
+}
+
+interface BuiltTools {
+  tools: BuiltInTool[];
+  customTools?: ToolDefinition[];
+}
+
+interface SessionContext {
+  resourceLoader: ResourceLoader;
+  authStorage: AuthStorage;
+  modelRegistry: ModelRegistry;
+  getSkillsForAgent: (agent: AgentRuntime) => unknown;
+  buildTools: (
+    cwd: string,
+    customTools: unknown,
+    opts: {
+      agentDir: string;
+      workspace?: string | null;
+      getSessionPath: () => string | null;
+    },
+  ) => BuiltTools;
+  resolveModel: (agentConfig?: Record<string, unknown> | null) => AgentModel;
+}
+
+interface AgentEngine {
+  homeCwd?: string | null;
+  getAgent: (agentId: string) => AgentRuntime | null | undefined;
+  ensureAgentLoaded?: (agentId: string) => Promise<AgentRuntime | null | undefined>;
+  createSessionContext: () => SessionContext;
+}
+
+export interface AgentSessionRound {
+  text: string;
+  capture?: boolean;
+}
+
+export interface RunAgentSessionOptions {
+  engine: unknown;
+  signal?: AbortSignal;
+  sessionSuffix?: string;
+  systemAppend?: string;
+  keepSession?: boolean;
+  noMemory?: boolean;
+  noTools?: boolean;
+  readOnly?: boolean;
+  onSessionReady?: (sessionPath: string | null) => void;
+  sessionPath?: string | null;
+  cwdOverride?: string | null;
+  modelOverride?: AgentModel | null;
+}
+
+type TextDeltaEvent = AgentSessionEvent & {
+  type: "message_update";
+  assistantMessageEvent?: {
+    type?: string;
+    delta?: string;
+  };
+};
+
+function asAgentEngine(engine: unknown): AgentEngine {
+  const candidate = engine as Partial<AgentEngine> | null | undefined;
+  if (
+    !candidate
+    || typeof candidate.getAgent !== "function"
+    || typeof candidate.createSessionContext !== "function"
+  ) {
+    throw new Error("runAgentSession requires an engine with getAgent() and createSessionContext()");
+  }
+  return candidate as AgentEngine;
+}
+
+function toAbortReason(signal?: AbortSignal): Error | DOMException {
   if (!signal) return new DOMException("Aborted", "AbortError");
   const reason = signal.reason;
   if (reason instanceof Error) return reason;
@@ -21,7 +113,7 @@ function toAbortReason(signal) {
   return new DOMException("Aborted", "AbortError");
 }
 
-async function promptWithSignal(session, text, signal) {
+async function promptWithSignal(session: AgentSession, text: string, signal?: AbortSignal): Promise<void> {
   if (!signal) {
     await session.prompt(text);
     return;
@@ -31,7 +123,7 @@ async function promptWithSignal(session, text, signal) {
     throw toAbortReason(signal);
   }
 
-  let onAbort;
+  let onAbort: (() => void) | undefined;
   const promptPromise = Promise.resolve(session.prompt(text));
   promptPromise.catch(() => {});
   const abortPromise = new Promise((_, reject) => {
@@ -45,36 +137,34 @@ async function promptWithSignal(session, text, signal) {
   try {
     await Promise.race([promptPromise, abortPromise]);
   } finally {
-    signal.removeEventListener("abort", onAbort);
+    if (onAbort) signal.removeEventListener("abort", onAbort);
   }
 }
 
-/**
- * 以指定 agentId 的身份跑一次临时会话。
- *
- * @param {string} agentId
- * @param {Array<{text: string, capture?: boolean}>} rounds  按序执行的 prompts
- * @param {object} opts
- * @param {import('../core/engine.js').HanaEngine} opts.engine
- * @param {AbortSignal} [opts.signal]
- * @param {string} [opts.sessionSuffix="temp"]
- * @param {string} [opts.systemAppend] - 追加到 system prompt 末尾
- * @param {boolean} [opts.keepSession=false] - 是否保留 session 文件
- * @param {boolean} [opts.noMemory=false] - 不注入记忆，只用 personality
- * @param {boolean} [opts.noTools=false] - 不注入工具
- * @param {boolean} [opts.readOnly=false] - 只读模式（只保留读取类工具，排除写/编辑/ask_agent/dm 等）
- * @param {(sessionPath: string|null) => void} [opts.onSessionReady] - session 创建后立即回调
- * @param {string|null} [opts.sessionPath=null] - 继续已有 session 文件
- * @param {string|null} [opts.cwdOverride=null] - 覆盖默认 cwd
- * @param {{id: string, provider?: string, name?: string}|null} [opts.modelOverride=null] - 临时覆盖本次 session 使用的模型
- * @returns {Promise<string>}  capture 轮的输出（已去掉 MOOD 块）
- */
-export async function runAgentSession(agentId, rounds, { engine, signal, sessionSuffix = "temp", systemAppend, keepSession = false, noMemory = false, noTools = false, readOnly = false, onSessionReady, sessionPath = null, cwdOverride = null, modelOverride = null } = {}) {
+export async function runAgentSession(
+  agentId: string,
+  rounds: AgentSessionRound[],
+  {
+    engine,
+    signal,
+    sessionSuffix = "temp",
+    systemAppend,
+    keepSession = false,
+    noMemory = false,
+    noTools = false,
+    readOnly = false,
+    onSessionReady,
+    sessionPath = null,
+    cwdOverride = null,
+    modelOverride = null,
+  }: RunAgentSessionOptions = { engine: null },
+): Promise<string> {
+  const runtimeEngine = asAgentEngine(engine);
   // 1. 从长驻 Map 获取 Agent 实例
-  let agent = engine.getAgent(agentId);
-  if (!agent && typeof engine.ensureAgentLoaded === "function") {
+  let agent = runtimeEngine.getAgent(agentId);
+  if (!agent && typeof runtimeEngine.ensureAgentLoaded === "function") {
     try {
-      agent = await engine.ensureAgentLoaded(agentId);
+      agent = await runtimeEngine.ensureAgentLoaded(agentId);
     } catch {}
   }
   if (!agent) {
@@ -83,17 +173,17 @@ export async function runAgentSession(agentId, rounds, { engine, signal, session
   const agentDir = agent.agentDir;
 
   // 2. 临时 ResourceLoader
-  const ctx = engine.createSessionContext();
+  const ctx = runtimeEngine.createSessionContext();
   const tempResourceLoader = Object.create(ctx.resourceLoader);
 
   // noMemory 模式：只用 personality（identity + yuan + ishiki），不注入记忆/用户档案等
   const basePrompt = noMemory ? agent.personality : agent.systemPrompt;
   tempResourceLoader.getSystemPrompt = () =>
-    systemAppend ? `${basePrompt}\n\n${systemAppend}` : basePrompt;
+    systemAppend ? `${basePrompt || ""}\n\n${systemAppend}` : (basePrompt || "");
   tempResourceLoader.getSkills = () => ctx.getSkillsForAgent(agent);
 
   // 3. 临时 session
-  const cwd = cwdOverride || engine.homeCwd || process.cwd();
+  const cwd = cwdOverride || runtimeEngine.homeCwd || process.cwd();
   const defaultSessionDir = path.join(agentDir, "sessions", sessionSuffix);
   const sessionDir = sessionPath ? path.dirname(sessionPath) : defaultSessionDir;
   fs.mkdirSync(sessionDir, { recursive: true });
@@ -102,27 +192,28 @@ export async function runAgentSession(agentId, rounds, { engine, signal, session
     : SessionManager.create(cwd, sessionDir);
 
   // 工具模式：noTools = 无工具，readOnly = 只读工具，默认 = 全部
-  let tools, customTools;
+  let tools: BuiltInTool[];
+  let customTools: ToolDefinition[];
   if (noTools) {
     tools = [];
     customTools = [];
   } else {
     const built = ctx.buildTools(cwd, agent.tools, {
       agentDir,
-      workspace: engine.homeCwd,
+      workspace: runtimeEngine.homeCwd,
       getSessionPath: () => tempSessionMgr?.getSessionFile?.() || null,
     });
     if (readOnly) {
       const READ_ONLY_BUILTIN = ["read", "grep", "find", "ls"];
       const READ_ONLY_CUSTOM = ["search_memory", "recall_experience", "web_search", "web_fetch"];
-      tools = built.tools.filter(t => READ_ONLY_BUILTIN.includes(t.name));
-      customTools = (built.customTools || []).filter(t => READ_ONLY_CUSTOM.includes(t.name));
+      tools = built.tools.filter(tool => READ_ONLY_BUILTIN.includes(tool.name));
+      customTools = (built.customTools || []).filter(tool => READ_ONLY_CUSTOM.includes(tool.name));
     } else {
       tools = built.tools;
-      customTools = built.customTools;
+      customTools = built.customTools || [];
     }
   }
-  const model = modelOverride || ctx.resolveModel(agent.config);
+  const model = (modelOverride || ctx.resolveModel(agent.config)) as SessionModel;
   const { session } = await createAgentSession({
     cwd,
     sessionManager: tempSessionMgr,
@@ -147,10 +238,10 @@ export async function runAgentSession(agentId, rounds, { engine, signal, session
   // 4. 文本捕获
   let capturedText = "";
   let isCapturing = false;
-  const unsub = session.subscribe((event) => {
+  const unsub = session.subscribe((event: AgentSessionEvent) => {
     if (!isCapturing) return;
     if (event.type === "message_update") {
-      const sub = event.assistantMessageEvent;
+      const sub = (event as TextDeltaEvent).assistantMessageEvent;
       if (sub?.type === "text_delta") capturedText += sub.delta || "";
     }
   });
