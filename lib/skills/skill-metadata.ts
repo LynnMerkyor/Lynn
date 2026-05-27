@@ -2,13 +2,19 @@ import yaml from "js-yaml";
 
 const MAX_DESCRIPTION_LENGTH = 1024;
 
-function normalizeName(value, fallbackName) {
+export interface SkillMetadata {
+  name: string;
+  description: string;
+  disableModelInvocation: boolean;
+}
+
+function normalizeName(value: unknown, fallbackName: string): string {
   if (typeof value !== "string") return fallbackName;
   const trimmed = value.trim();
   return trimmed || fallbackName;
 }
 
-function normalizeDescription(value) {
+function normalizeDescription(value: unknown): string {
   if (typeof value !== "string") return "";
   const collapsed = value.replace(/\s+/g, " ").trim();
   if (!collapsed) return "";
@@ -21,8 +27,8 @@ function normalizeDescription(value) {
  * Parse SKILL.md frontmatter using the same trust boundary as the upstream spec:
  * only YAML frontmatter contributes metadata, never arbitrary body content.
  */
-export function parseSkillMetadata(content, fallbackName = "") {
-  const meta = {
+export function parseSkillMetadata(content: unknown, fallbackName = ""): SkillMetadata {
+  const meta: SkillMetadata = {
     name: fallbackName,
     description: "",
     disableModelInvocation: false,
@@ -35,10 +41,11 @@ export function parseSkillMetadata(content, fallbackName = "") {
   try {
     const parsed = yaml.load(match[1]);
     if (!parsed || typeof parsed !== "object") return meta;
+    const record = parsed as Record<string, unknown>;
     return {
-      name: normalizeName(parsed.name, fallbackName),
-      description: normalizeDescription(parsed.description),
-      disableModelInvocation: parsed["disable-model-invocation"] === true,
+      name: normalizeName(record.name, fallbackName),
+      description: normalizeDescription(record.description),
+      disableModelInvocation: record["disable-model-invocation"] === true,
     };
   } catch {
     return meta;

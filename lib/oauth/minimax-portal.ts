@@ -10,6 +10,13 @@
  *   3. 轮询 POST /oauth/token 直到授权完成
  */
 import crypto from "crypto";
+import type {
+  Api,
+  Model,
+  OAuthCredentials,
+  OAuthLoginCallbacks,
+  OAuthProviderInterface,
+} from "@mariozechner/pi-ai";
 
 const MINIMAX_CONFIG = {
   cn: {
@@ -22,18 +29,81 @@ const MINIMAX_CONFIG = {
   },
 };
 
+type MiniMaxRegion = keyof typeof MINIMAX_CONFIG;
+
+interface PkcePair {
+  verifier: string;
+  challenge: string;
+}
+
+interface MiniMaxEndpoints {
+  codeEndpoint: string;
+  tokenEndpoint: string;
+  clientId: string;
+}
+
+interface DeviceCodeRequest {
+  challenge: string;
+  state: string;
+  region: MiniMaxRegion;
+}
+
+interface MiniMaxDeviceCodeResponse {
+  user_code?: string;
+  verification_uri?: string;
+  interval?: number;
+  expired_in?: number;
+  state?: string;
+  error?: string;
+}
+
+interface MiniMaxDeviceCodeSuccess extends MiniMaxDeviceCodeResponse {
+  user_code: string;
+  verification_uri: string;
+}
+
+interface TokenPollRequest {
+  userCode: string;
+  verifier: string;
+  region: MiniMaxRegion;
+}
+
+interface MiniMaxTokenResponse {
+  status?: string;
+  access_token?: string;
+  refresh_token?: string;
+  expired_in?: number;
+  resource_url?: string;
+  base_resp?: {
+    status_msg?: string;
+  };
+}
+
+type TokenPollResult =
+  | { status: "pending" }
+  | { status: "error"; message: string }
+  | {
+      status: "success";
+      token: {
+        access: string;
+        refresh: string;
+        expires: number;
+        resourceUrl?: string;
+      };
+    };
+
 const SCOPE = "group_id profile model.completion";
 const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:user_code";
 
 // ── helpers ──
 
-function generatePKCE() {
+function generatePKCE(): PkcePair {
   const verifier = crypto.randomBytes(32).toString("base64url");
   const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
   return { verifier, challenge };
 }
 
-function getEndpoints(region = "cn") {
+function getEndpoints(region: MiniMaxRegion = "cn"): MiniMaxEndpoints {
   const cfg = MINIMAX_CONFIG[region];
   return {
     codeEndpoint: `${cfg.baseUrl}/oauth/code`,
@@ -42,7 +112,7 @@ function getEndpoints(region = "cn") {
   };
 }
 
-async function requestDeviceCode({ challenge, state, region }) {
+async function requestDeviceCode({ challenge, state, region }: DeviceCodeRequest): Promise<MiniMaxDeviceCodeSuccess> {
   const ep = getEndpoints(region);
   const res = await fetch(ep.codeEndpoint, {
     method: "POST",
@@ -65,17 +135,17 @@ async function requestDeviceCode({ challenge, state, region }) {
     throw new Error(`MiniMax OAuth code request failed: ${await res.text()}`);
   }
 
-  const data = await res.json();
+  const data = await res.json() as MiniMaxDeviceCodeResponse;
   if (!data.user_code || !data.verification_uri) {
     throw new Error(data.error || "MiniMax OAuth: incomplete code response");
   }
   if (data.state !== state) {
     throw new Error("MiniMax OAuth: state mismatch");
   }
-  return data;
+  return data as MiniMaxDeviceCodeSuccess;
 }
 
-async function pollForToken({ userCode, verifier, region }) {
+async function pollForToken({ userCode, verifier, region }: TokenPollRequest): Promise<TokenPollResult> {
   const ep = getEndpoints(region);
   const res = await fetch(ep.tokenEndpoint, {
     method: "POST",
@@ -92,8 +162,8 @@ async function pollForToken({ userCode, verifier, region }) {
   });
 
   const text = await res.text();
-  let payload;
-  try { payload = JSON.parse(text); } catch { payload = null; }
+  let payload: MiniMaxTokenResponse | null;
+  try { payload = JSON.parse(text) as MiniMaxTokenResponse; } catch { payload = null; }
 
   if (!res.ok) {
     return { status: "error", message: payload?.base_resp?.status_msg || text };
@@ -124,12 +194,12 @@ async function pollForToken({ userCode, verifier, region }) {
 
 // ── OAuthProviderInterface ──
 
-export const minimaxOAuthProvider = {
+export const minimaxOAuthProvider: OAuthProviderInterface = {
   id: "minimax",
   name: "MiniMax",
 
-  async login(callbacks) {
-    const region = "cn";
+  async login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
+    const region: MiniMaxRegion = "cn";
     const { verifier, challenge } = generatePKCE();
     const state = crypto.randomBytes(16).toString("base64url");
 
@@ -147,7 +217,7 @@ export const minimaxOAuthProvider = {
 
     // 轮询直到用户授权或超时
     let interval = oauth.interval || 2000;
-    const expireTime = oauth.expired_in;
+    const expireTime = oauth.expired_in || 0;
 
     while (Date.now() < expireTime) {
       if (callbacks.signal?.aborted) {
@@ -177,7 +247,7 @@ export const minimaxOAuthProvider = {
     throw new Error("MiniMax OAuth timed out");
   },
 
-  async refreshToken(credentials) {
+  async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
     const ep = getEndpoints("cn");
     const res = await fetch(ep.tokenEndpoint, {
       method: "POST",
@@ -196,7 +266,7 @@ export const minimaxOAuthProvider = {
       throw new Error(`MiniMax token refresh failed: ${await res.text()}`);
     }
 
-    const data = await res.json();
+    const data = await res.json() as MiniMaxTokenResponse;
     if (!data.access_token) {
       throw new Error("MiniMax refresh: no access token returned");
     }
@@ -208,7 +278,7 @@ export const minimaxOAuthProvider = {
     };
   },
 
-  getApiKey(credentials) {
+  getApiKey(credentials: OAuthCredentials): string {
     return credentials.access;
   },
 
@@ -216,11 +286,11 @@ export const minimaxOAuthProvider = {
    * 用 auth.json 里的 resourceUrl 覆盖内置模型的 baseUrl
    * 解决中国版（minimaxi.com）和国际版（minimax.io）域名不一致的问题
    */
-  modifyModels(models, credentials) {
+  modifyModels(models: Model<Api>[], credentials: OAuthCredentials): Model<Api>[] {
     if (!credentials?.resourceUrl) return models;
     return models.map(m => {
       if (m.provider !== "minimax") return m;
-      return { ...m, baseUrl: credentials.resourceUrl };
+      return { ...m, baseUrl: credentials.resourceUrl as string };
     });
   },
 };

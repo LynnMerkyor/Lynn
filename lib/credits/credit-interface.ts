@@ -9,31 +9,22 @@
 export class CreditInterface {
   /**
    * 获取用户积分余额
-   * @param {string} userId
-   * @returns {Promise<number>}
    */
-  async getBalance(userId) {
+  async getBalance(userId: string): Promise<number> {
     return Infinity; // 本地模式：无限积分
   }
 
   /**
    * 消耗积分
-   * @param {string} userId
-   * @param {number} amount
-   * @param {string} reason - 消费原因（如 "expert:financial-analyst"）
-   * @returns {Promise<boolean>} - 是否成功
    */
-  async consume(userId, amount, reason) {
+  async consume(userId: string, amount: number, reason: string): Promise<boolean> {
     return true; // 本地模式：始终成功
   }
 
   /**
    * 检查是否有足够积分
-   * @param {string} userId
-   * @param {number} amount
-   * @returns {Promise<boolean>}
    */
-  async canAfford(userId, amount) {
+  async canAfford(userId: string, amount: number): Promise<boolean> {
     return true; // 本地模式：始终可以
   }
 }

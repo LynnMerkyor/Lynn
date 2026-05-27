@@ -16,7 +16,24 @@
 import { checkDirs } from "./checks/dirs.js";
 import { checkFactsDb } from "./checks/facts-db.js";
 import { checkConfigYaml } from "./checks/config-yaml.js";
-const checks = [
+
+export interface CompatCheckContext {
+  agentDir: string;
+  lynnHome: string;
+  log?: (msg: string) => void;
+}
+
+interface CompatCheckResult {
+  fixed?: boolean;
+  message?: string;
+}
+
+interface CompatCheck {
+  name: string;
+  run(ctx: CompatCheckContext): CompatCheckResult | undefined | Promise<CompatCheckResult | undefined>;
+}
+
+const checks: CompatCheck[] = [
   { name: "dirs", run: checkDirs },
   { name: "facts-db", run: checkFactsDb },
   { name: "config-yaml", run: checkConfigYaml },
@@ -25,12 +42,8 @@ const checks = [
 /**
  * 执行所有兼容性检查
  *
- * @param {object} ctx
- * @param {string} ctx.agentDir    当前 agent 目录
- * @param {string} ctx.lynnHome  ~/.lynn 根目录
- * @param {(msg: string) => void} [ctx.log]  日志函数
  */
-export async function runCompatChecks(ctx) {
+export async function runCompatChecks(ctx: CompatCheckContext): Promise<void> {
   const log = ctx.log || (() => {});
   let passed = 0;
   let fixed = 0;
@@ -44,7 +57,7 @@ export async function runCompatChecks(ctx) {
       }
       passed++;
     } catch (err) {
-      console.error(`[compat] ${check.name} 检查失败（不影响启动）: ${err.message}`);
+      console.error(`[compat] ${check.name} 检查失败（不影响启动）: ${(err as Error).message}`);
     }
   }
 

@@ -8,16 +8,64 @@ import fs from "fs";
 import path from "path";
 import YAML from "js-yaml";
 
+export interface ExpertI18nText {
+  en?: string;
+  zh?: string;
+  ja?: string;
+  [locale: string]: string | undefined;
+}
+
+export interface ExpertModelBinding {
+  preferred: string;
+  fallback?: string;
+  [key: string]: unknown;
+}
+
+export interface ExpertCreditCost {
+  per_session: number;
+  per_extra_round?: number;
+  [key: string]: unknown;
+}
+
+export interface ExpertPreset {
+  slug: string;
+  name: ExpertI18nText;
+  icon: string;
+  category: string;
+  tier: "expert";
+  model_binding: ExpertModelBinding;
+  credit_cost: ExpertCreditCost;
+  skills: string[];
+  description: ExpertI18nText;
+  _dir: string;
+  _identity: string;
+  _ishiki: string;
+}
+
+interface ExpertYamlConfig {
+  slug?: unknown;
+  name?: unknown;
+  icon?: unknown;
+  category?: unknown;
+  model_binding?: unknown;
+  credit_cost?: unknown;
+  skills?: unknown;
+  description?: unknown;
+}
+
+function asExpertYamlConfig(value: unknown): ExpertYamlConfig | null {
+  if (!value || typeof value !== "object") return null;
+  return value as ExpertYamlConfig;
+}
+
 /**
  * 扫描预设目录，返回所有专家预设配置
- * @param {string} presetsDir - 预设目录路径（如 lib/experts/presets/）
- * @returns {Array<object>} - 专家预设数组
  */
-export function loadPresets(presetsDir) {
+export function loadPresets(presetsDir: string): ExpertPreset[] {
   if (!fs.existsSync(presetsDir)) return [];
 
   const entries = fs.readdirSync(presetsDir, { withFileTypes: true });
-  const presets = [];
+  const presets: ExpertPreset[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -29,7 +77,7 @@ export function loadPresets(presetsDir) {
 
     try {
       const raw = fs.readFileSync(expertYamlPath, "utf-8");
-      const config = YAML.load(raw);
+      const config = asExpertYamlConfig(YAML.load(raw));
 
       if (!config?.slug) {
         console.warn(`[expert-loader] 跳过 ${entry.name}：缺少 slug`);
@@ -49,7 +97,7 @@ export function loadPresets(presetsDir) {
       } catch {}
 
       // 读取专家技能目录
-      const skillNames = [];
+      const skillNames: string[] = [];
       const skillsDir = path.join(expertDir, "skills");
       if (fs.existsSync(skillsDir)) {
         try {
@@ -63,27 +111,27 @@ export function loadPresets(presetsDir) {
       }
 
       presets.push({
-        slug: config.slug,
-        name: config.name || { en: entry.name },
-        icon: config.icon || "🤖",
-        category: config.category || "general",
+        slug: config.slug as string,
+        name: (config.name || { en: entry.name }) as ExpertI18nText,
+        icon: (config.icon || "🤖") as string,
+        category: (config.category || "general") as string,
         tier: "expert",
-        model_binding: config.model_binding || {
+        model_binding: (config.model_binding || {
           preferred: "claude-sonnet-4",
           fallback: "claude-sonnet-4",
-        },
-        credit_cost: config.credit_cost || {
+        }) as ExpertModelBinding,
+        credit_cost: (config.credit_cost || {
           per_session: 20,
           per_extra_round: 5,
-        },
-        skills: config.skills || skillNames,
-        description: config.description || {},
+        }) as ExpertCreditCost,
+        skills: (config.skills || skillNames) as string[],
+        description: (config.description || {}) as ExpertI18nText,
         _dir: expertDir,
         _identity: identity,
         _ishiki: ishiki,
       });
     } catch (err) {
-      console.warn(`[expert-loader] 加载 ${entry.name} 失败: ${err.message}`);
+      console.warn(`[expert-loader] 加载 ${entry.name} 失败: ${(err as { message: unknown }).message}`);
     }
   }
 
@@ -92,11 +140,8 @@ export function loadPresets(presetsDir) {
 
 /**
  * 根据 slug 加载单个专家预设
- * @param {string} presetsDir
- * @param {string} slug
- * @returns {object|null}
  */
-export function loadPresetBySlug(presetsDir, slug) {
+export function loadPresetBySlug(presetsDir: string, slug: string): ExpertPreset | null {
   const all = loadPresets(presetsDir);
   return all.find(p => p.slug === slug) || null;
 }

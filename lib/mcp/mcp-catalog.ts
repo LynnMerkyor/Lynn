@@ -1,4 +1,51 @@
-export const MCP_BUILTIN_SERVERS = {
+export type McpCatalogTransport = "stdio" | "sse" | "http";
+
+export interface McpBuiltinCredentialField {
+  key: string;
+  label: string;
+  placeholder: string;
+  secret: boolean;
+}
+
+export interface McpHttpCatalogConfig {
+  transport: "http";
+  url: string;
+  headers: Record<string, string>;
+}
+
+export interface McpSseCatalogConfig {
+  transport: "sse";
+  url: string;
+  headers: Record<string, string>;
+  messageUrl?: string;
+}
+
+export interface McpStdioCatalogConfig {
+  transport: "stdio";
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  cwd?: string;
+}
+
+export type McpBuiltinCatalogConfig =
+  | McpHttpCatalogConfig
+  | McpSseCatalogConfig
+  | McpStdioCatalogConfig;
+
+export interface McpBuiltinServerCatalogEntry {
+  name: string;
+  label: string;
+  group: string;
+  description: string;
+  docsUrl: string;
+  transport: McpCatalogTransport;
+  config: McpBuiltinCatalogConfig;
+  credentialFields: McpBuiltinCredentialField[];
+  hint: string;
+}
+
+export const MCP_BUILTIN_SERVERS: Record<string, McpBuiltinServerCatalogEntry> = {
   "tencent-docs": {
     name: "tencent-docs",
     label: "腾讯文档",
@@ -150,7 +197,7 @@ export const MCP_BUILTIN_SERVERS = {
   },
 };
 
-export const MCP_DISCOVERY_PATHS = [
+export const MCP_DISCOVERY_PATHS: string[] = [
   ".cursor/mcp.json",
   ".codex/mcp.json",
   ".vscode/mcp.json",

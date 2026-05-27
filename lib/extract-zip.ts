@@ -6,7 +6,7 @@
 
 import { execFileSync } from "child_process";
 
-export function extractZip(zipPath, destDir) {
+export function extractZip(zipPath: string, destDir: string): void {
   if (process.platform === "win32") {
     execFileSync("powershell.exe", [
       "-NoProfile", "-NonInteractive", "-Command",

@@ -13,16 +13,52 @@ import path from "path";
 import { scrubPII } from "../pii-guard.js";
 import { getLogicalDay } from "../time-utils.js";
 import { callText } from "../../core/llm-client.js";
-import { getLocale, t } from "../../server/i18n.js";
+import { getLocale } from "../../server/i18n.js";
+import type { ActivityEntry, ActivityStore } from "../desk/activity-store.js";
+import type { SessionSummaryManager } from "../memory/session-summary.js";
+import type { LLMApi, ModelId, ProviderId } from "../../core/types.js";
+
+interface DiaryResolvedModel {
+  model: ModelId;
+  provider?: ProviderId;
+  api: LLMApi;
+  api_key: string;
+  base_url: string;
+}
+
+interface WriteDiaryOptions {
+  summaryManager: SessionSummaryManager;
+  resolvedModel: DiaryResolvedModel;
+  agentPersonality: string;
+  memory: string;
+  userName: string;
+  agentName: string;
+  cwd: string;
+  activityStore?: ActivityStore | null;
+  configPath?: string;
+  model?: string;
+}
+
+type WriteDiaryResult =
+  | { filePath: string; content: string; logicalDate: string }
+  | { error: string };
+
+type DiaryActivityEntry = ActivityEntry & {
+  startedAt?: number;
+  type?: string;
+  label?: string;
+  status?: string;
+  summary?: string;
+};
 
 /** 解析日记存储目录：优先已存在的「日记/」，否则用「diary/」 */
-export function resolveDiaryDir(cwd) {
+export function resolveDiaryDir(cwd: string): string {
   const zhDir = path.join(cwd, "日记");
   return fs.existsSync(zhDir) ? zhDir : path.join(cwd, "diary");
 }
 
 /** 日记写作指导（内联，不走 skill 系统，避免 agent 误调用） */
-function buildDiaryPrompt() {
+function buildDiaryPrompt(): string {
   const isZh = getLocale().startsWith("zh");
   if (isZh) {
     return `# 写作要求
@@ -107,16 +143,12 @@ export { getLogicalDay } from "../time-utils.js";
 
 /**
  * 收集时间范围内的活动记录（巡检 + 定时任务）
- * @param {import('../desk/activity-store.js').ActivityStore|null} store
- * @param {Date} rangeStart
- * @param {Date} rangeEnd
- * @returns {string}
  */
-function collectActivities(store, rangeStart, rangeEnd) {
+function collectActivities(store: ActivityStore | null | undefined, rangeStart: Date, rangeEnd: Date): string {
   if (!store) return "";
   const startMs = rangeStart.getTime();
   const endMs = rangeEnd.getTime();
-  const entries = store.list().filter(e => {
+  const entries = (store.list() as DiaryActivityEntry[]).filter(e => {
     const t = e.startedAt || 0;
     return t >= startMs && t <= endMs;
   });
@@ -125,7 +157,7 @@ function collectActivities(store, rangeStart, rangeEnd) {
   const isZh = getLocale().startsWith("zh");
   return entries.map(e => {
     const locale = isZh ? "zh-CN" : "en-US";
-    const time = new Date(e.startedAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
+    const time = new Date(e.startedAt as number).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
     const type = e.type === "heartbeat"
       ? (isZh ? "巡检" : "patrol")
       : (isZh ? `定时任务:${e.label || ""}` : `cron:${e.label || ""}`);
@@ -137,20 +169,8 @@ function collectActivities(store, rangeStart, rangeEnd) {
 
 /**
  * 生成日记
- *
- * @param {object} opts
- * @param {import('../memory/session-summary.js').SessionSummaryManager} opts.summaryManager
- * @param {string} opts.configPath
- * @param {string} opts.model - 模型名（建议 utility_large）
- * @param {string} opts.agentPersonality - agent 的人格 prompt（identity + yuan + ishiki）
- * @param {string} opts.memory - agent 的 memory.md 内容
- * @param {string} opts.userName
- * @param {string} opts.agentName
- * @param {string} opts.cwd - 工作空间目录路径
- * @param {import('../desk/activity-store.js').ActivityStore} [opts.activityStore] - 活动记录（巡检+定时任务）
- * @returns {Promise<{ filePath: string, content: string, logicalDate: string } | { error: string }>}
  */
-export async function writeDiary(opts) {
+export async function writeDiary(opts: WriteDiaryOptions): Promise<WriteDiaryResult> {
   const {
     summaryManager, resolvedModel,
     agentPersonality, memory, userName, agentName,
@@ -240,8 +260,8 @@ export async function writeDiary(opts) {
       timeoutMs: 120_000,
     });
   } catch (err) {
-    console.error(`[diary] LLM API error: ${err.message}`);
-    return { error: isZh ? `LLM 调用失败: ${err.message}` : `LLM call failed: ${err.message}` };
+    console.error(`[diary] LLM API error: ${(err as Error).message}`);
+    return { error: isZh ? `LLM 调用失败: ${(err as Error).message}` : `LLM call failed: ${(err as Error).message}` };
   }
 
   // 剥离 MOOD / pulse / reflect 等标签块（system prompt 的人格要求可能导致 LLM 输出这些）
