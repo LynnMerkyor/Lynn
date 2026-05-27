@@ -11,11 +11,20 @@
 import fs from "fs";
 import path from "path";
 
-/**
- * 创建 Desk 管理器
- * @param {string} deskDir - desk 目录路径（{agentDir}/desk/）
- */
-export function createDeskManager(deskDir) {
+export interface PluginWorkspace {
+  pluginId: string;
+  absPath: string;
+}
+
+export interface DeskManager {
+  deskDir: string;
+  pluginsDir: string;
+  ensureDir(): void;
+  ensurePluginWorkspace(pluginId: string): string;
+  listPluginWorkspaces(): PluginWorkspace[];
+}
+
+export function createDeskManager(deskDir: string): DeskManager {
   const runsDir = path.join(deskDir, "cron-runs");
   const pluginsDir = path.join(deskDir, "plugins");
 
@@ -35,22 +44,13 @@ export function createDeskManager(deskDir) {
       fs.mkdirSync(pluginsDir, { recursive: true });
     },
 
-    /**
-     * 获取/创建某个插件的独立工作区
-     * @param {string} pluginId
-     * @returns {string} 插件工作区绝对路径
-     */
-    ensurePluginWorkspace(pluginId) {
+    ensurePluginWorkspace(pluginId: string): string {
       const dir = path.join(pluginsDir, pluginId);
       fs.mkdirSync(dir, { recursive: true });
       return dir;
     },
 
-    /**
-     * 列出所有插件工作区
-     * @returns {Array<{pluginId: string, absPath: string}>}
-     */
-    listPluginWorkspaces() {
+    listPluginWorkspaces(): PluginWorkspace[] {
       if (!fs.existsSync(pluginsDir)) return [];
       return fs.readdirSync(pluginsDir, { withFileTypes: true })
         .filter(e => e.isDirectory() && !e.name.startsWith("."))
