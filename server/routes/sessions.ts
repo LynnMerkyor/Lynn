@@ -10,6 +10,7 @@ import { safeJson } from "../hono-helpers.js";
 import { t } from "../i18n.js";
 import { BrowserManager } from "../../lib/browser/browser-manager.js";
 import { isToolCallBlock, getToolArgs } from "../../core/llm-utils.js";
+import type { ContentBlock } from "../../core/llm-utils.js";
 import { sanitizeBrainIdentityDisclosureText } from "../../shared/brain-provider.js";
 import { stripPseudoToolCallMarkup } from "../../shared/pseudo-tool-call.js";
 import {
@@ -18,6 +19,130 @@ import {
 } from "../chat/artifact-recovery.js";
 import { normalizeArtifactPayload } from "../chat/artifact-shape.js";
 
+type JsonRecord = Record<string, unknown>;
+
+interface SessionModelRef {
+  id?: string | null;
+  provider?: string | null;
+}
+
+interface SessionAgent {
+  config?: { skills?: { enabled?: unknown[] } };
+  agentDir?: string;
+}
+
+interface SessionsEngine {
+  agentsDir: string;
+  agentDir?: string;
+  agentName?: string;
+  agent?: SessionAgent;
+  currentAgentId?: string;
+  currentSessionPath?: string | null;
+  messages?: SessionMessage[];
+  homeCwd?: string;
+  cwd?: string;
+  config: { cwd_history?: unknown[]; [key: string]: unknown };
+  planMode?: unknown;
+  securityMode?: unknown;
+  memoryModelUnavailableReason?: unknown;
+  currentModel?: SessionModelRef | null;
+  memoryEnabled?: boolean;
+  getAgent?(agentId: string): SessionAgent | null | undefined;
+  createSessionForAgent(agentId: string, cwd?: string, memoryEnabled?: boolean): Promise<unknown> | unknown;
+  createSession(agentId?: string | null, cwd?: string, memoryEnabled?: boolean): Promise<{ sessionManager?: { getSessionFile?(): string | null } } | void> | { sessionManager?: { getSessionFile?(): string | null } } | void;
+  persistSessionMeta(): unknown;
+  updateConfig(partial: JsonRecord): Promise<unknown> | unknown;
+  switchSession(sessionPath: string): Promise<unknown> | unknown;
+  isSessionStreaming(sessionPath?: string | null): boolean;
+  saveSessionTitle(sessionPath: string, title: string): Promise<unknown> | unknown;
+  saveSessionMeta(sessionPath: string, meta: JsonRecord): Promise<unknown> | unknown;
+  closeSession(sessionPath?: string | null): Promise<unknown> | unknown;
+}
+
+interface SessionMessage {
+  role?: string;
+  content?: unknown;
+  model?: string;
+  provider?: string;
+  details?: JsonRecord;
+  toolName?: string;
+  toolCallId?: string;
+}
+
+interface ExtractedImage {
+  data: unknown;
+  mimeType: string;
+}
+
+interface ExtractedToolUse {
+  name: string;
+  args?: JsonRecord;
+}
+
+interface ExtractedContent {
+  text: string;
+  thinking: string;
+  toolUses: ExtractedToolUse[];
+  images: ExtractedImage[];
+}
+
+interface SessionListEntry {
+  path: string;
+  title?: string | null;
+  firstMessage?: string;
+  modified?: string | number | Date | null;
+  messageCount?: number;
+  cwd?: string | null;
+  agentId?: string | null;
+  agentName?: string | null;
+  modelId?: string | null;
+  modelProvider?: string | null;
+  labels?: unknown[];
+}
+
+interface VisibleMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  images?: ExtractedImage[];
+  thinking?: string;
+  toolCalls?: ExtractedToolUse[];
+  model?: string | null;
+}
+
+interface FileOutputPreview {
+  afterIndex: number;
+  files: unknown;
+}
+
+interface FileDiffPreview {
+  afterIndex: number;
+  filePath: string;
+  diff: unknown;
+  linesAdded: number;
+  linesRemoved: number;
+  rollbackId?: string;
+}
+
+type ArtifactPreview = JsonRecord & { afterIndex: number };
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function errorStack(err: unknown): string {
+  return err instanceof Error && err.stack ? err.stack : "";
+}
+
+function asRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" ? value as JsonRecord : {};
+}
+
+function stringField(record: JsonRecord, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === "string" ? value : undefined;
+}
+
 /**
  * 从 Pi SDK 的 content 块数组中提取纯文本 + thinking + tool_use 调用
  * content 可能是 string 或 [{type: "text", text: "..."}, {type: "thinking", thinking: "..."}, ...]
@@ -25,7 +150,7 @@ import { normalizeArtifactPayload } from "../chat/artifact-shape.js";
  */
 const TOOL_ARG_SUMMARY_KEYS = ["file_path", "path", "command", "pattern", "url", "query", "key", "value", "action", "type", "schedule", "prompt", "label"];
 
-function formatMessageModelRef(message = {}) {
+function formatMessageModelRef(message: Pick<SessionMessage, "model" | "provider"> = {}): string | null {
   const model = typeof message.model === "string" ? message.model.trim() : "";
   if (!model) return null;
   const provider = typeof message.provider === "string" ? message.provider.trim() : "";
@@ -33,8 +158,8 @@ function formatMessageModelRef(message = {}) {
 }
 
 /** 从文本中提取并剥离 <think>...</think> 标签 */
-function stripThinkTags(raw) {
-  const thinkParts = [];
+function stripThinkTags(raw: string): { text: string; thinkContent: string } {
+  const thinkParts: string[] = [];
   const text = raw.replace(/<think>([\s\S]*?)<\/think>\n*/g, (_, inner) => {
     thinkParts.push(inner.trim());
     return "";
@@ -42,7 +167,10 @@ function stripThinkTags(raw) {
   return { text, thinkContent: thinkParts.join("\n") };
 }
 
-function extractTextContent(content, { stripThink = false, stripPseudoToolCalls = false } = {}) {
+function extractTextContent(
+  content: unknown,
+  { stripThink = false, stripPseudoToolCalls = false }: { stripThink?: boolean; stripPseudoToolCalls?: boolean } = {},
+): ExtractedContent {
   if (typeof content === "string") {
     if (stripThink) {
       const { text, thinkContent } = stripThinkTags(content);
@@ -61,28 +189,44 @@ function extractTextContent(content, { stripThink = false, stripPseudoToolCalls 
     };
   }
   if (!Array.isArray(content)) return { text: "", thinking: "", toolUses: [], images: [] };
-  const rawText = content
+  const blocks = content as ContentBlock[];
+  const rawText = blocks
     .filter(block => block.type === "text" && block.text)
-    .map(block => block.text)
+    .map(block => String(block.text || ""))
     .join("");
-  const images = content
-    .filter(block => block.type === "image" && (block.data || block.source?.data))
-    .map(block => ({ data: block.data || block.source.data, mimeType: block.mimeType || block.source?.media_type || "image/png" }));
+  const images = blocks
+    .filter(block => {
+      const record = block as ContentBlock & JsonRecord;
+      const source = asRecord(record.source);
+      return block.type === "image" && (record.data || source.data);
+    })
+    .map(block => {
+      const record = block as ContentBlock & JsonRecord;
+      const source = asRecord(record.source);
+      return {
+        data: record.data || source.data,
+        mimeType: String(record.mimeType || source.media_type || "image/png"),
+      };
+    });
   const { text, thinkContent } = stripThink ? stripThinkTags(rawText) : { text: rawText, thinkContent: "" };
   const thinking = [
     thinkContent,
-    ...content
-      .filter(block => block.type === "thinking" && block.thinking)
-      .map(block => block.thinking),
+    ...blocks
+      .filter(block => {
+        const record = block as ContentBlock & JsonRecord;
+        return block.type === "thinking" && record.thinking;
+      })
+      .map(block => String((block as ContentBlock & JsonRecord).thinking || "")),
   ].filter(Boolean).join("\n");
-  const toolUses = content
+  const toolUses = blocks
     .filter(isToolCallBlock)
     .map(block => {
-      const args = {};
+      const args: JsonRecord = {};
       const params = getToolArgs(block);
       if (params && typeof params === "object") {
+        const record = params as JsonRecord;
         for (const k of TOOL_ARG_SUMMARY_KEYS) {
-          if (params[k] !== undefined) args[k] = params[k];
+          if (record[k] !== undefined) args[k] = record[k];
         }
       }
       return { name: block.name, args: Object.keys(args).length ? args : undefined };
@@ -100,7 +244,7 @@ function extractTextContent(content, { stripThink = false, stripPseudoToolCalls 
  * engine.messages 可能只是当前上下文窗口，切回页面时会导致旧消息缺失。
  * 读文件失败时再退回内存态，避免历史接口直接空白。
  */
-async function loadSessionHistoryMessages(engine, explicitPath) {
+async function loadSessionHistoryMessages(engine: SessionsEngine, explicitPath?: string | null): Promise<SessionMessage[]> {
   const sessionPath = explicitPath || engine.currentSessionPath;
   if (sessionPath) {
     try {
@@ -108,7 +252,7 @@ async function loadSessionHistoryMessages(engine, explicitPath) {
       // memory/indexing work can saturate that queue and make the chat view wait
       // for 30s even when the session file itself is tiny.
       const raw = readFileSync(sessionPath, "utf-8");
-      const messages = [];
+      const messages: SessionMessage[] = [];
 
       for (const line of raw.split("\n")) {
         if (!line.trim()) continue;
@@ -135,13 +279,13 @@ async function loadSessionHistoryMessages(engine, explicitPath) {
  * 校验 sessionPath 是否在合法范围内，防止路径穿越
  * baseDir 可以是 sessionDir（单 agent）或 agentsDir（跨 agent）
  */
-function isValidSessionPath(sessionPath, baseDir) {
+function isValidSessionPath(sessionPath: string, baseDir: string): boolean {
   const resolved = path.resolve(sessionPath);
   const base = path.resolve(baseDir);
   return resolved.startsWith(base + path.sep) || resolved === base;
 }
 
-function normalizeLegacyWorkspaceCwd(cwd) {
+function normalizeLegacyWorkspaceCwd(cwd: unknown): string | null {
   const raw = String(cwd || "").trim();
   if (!raw) return null;
   const oldRoot = "/Users/lynn/openhanako";
@@ -157,7 +301,7 @@ function normalizeLegacyWorkspaceCwd(cwd) {
   return raw;
 }
 
-function ensureSessionFileOnDisk(sessionPath) {
+function ensureSessionFileOnDisk(sessionPath?: string | null): boolean {
   if (!sessionPath) return false;
   try {
     const dir = path.dirname(sessionPath);
@@ -165,12 +309,12 @@ function ensureSessionFileOnDisk(sessionPath) {
     if (!existsSync(sessionPath)) writeFileSync(sessionPath, "", "utf-8");
     return true;
   } catch (err) {
-    console.warn("[sessions] failed to materialize session file:", err?.message || err);
+    console.warn("[sessions] failed to materialize session file:", errorMessage(err));
     return false;
   }
 }
 
-async function fastListCurrentAgentSessions(engine) {
+async function fastListCurrentAgentSessions(engine: SessionsEngine): Promise<SessionListEntry[]> {
   const agentId = engine.currentAgentId || path.basename(engine.agentDir || "");
   const agentName = engine.agentName || agentId || null;
   const currentPath = engine.currentSessionPath;
@@ -194,15 +338,15 @@ async function fastListCurrentAgentSessions(engine) {
   }];
 }
 
-function formatSessionDate(value) {
+function formatSessionDate(value: unknown): string | null {
   if (!value) return null;
   if (typeof value === "string") return value;
+  if (typeof value === "number") return new Date(value).toISOString();
   if (value instanceof Date) return value.toISOString();
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  return null;
 }
 
-export function createSessionsRoute(engine) {
+export function createSessionsRoute(engine: SessionsEngine): Hono {
   const route = new Hono();
 
   // 列出所有 agent 的历史 session
@@ -223,7 +367,7 @@ export function createSessionsRoute(engine) {
         labels: Array.isArray(s.labels) ? s.labels : [],
       })));
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -242,11 +386,11 @@ export function createSessionsRoute(engine) {
 
       // 提取可显示的消息（user/assistant 文本 + 文件/artifact 工具结果）
       // 每条消息带稳定 id（原始 sourceMessages 索引）
-      const allMessages = [];
-      const fileOutputs = [];
-      const fileDiffs = [];
-      const artifacts = [];
-      const artifactKeys = new Set();
+      const allMessages: VisibleMessage[] = [];
+      const fileOutputs: FileOutputPreview[] = [];
+      const fileDiffs: FileDiffPreview[] = [];
+      const artifacts: ArtifactPreview[] = [];
+      const artifactKeys = new Set<string>();
       let globalIdx = 0;
 
       for (const m of sourceMessages) {
@@ -283,8 +427,9 @@ export function createSessionsRoute(engine) {
             });
           }
         } else if (m.role === "toolResult") {
-          const d = m.details || {};
-          if ((m.toolName === "present_files" || m.toolName === "create_docx" || m.toolName === "create_pptx" || m.toolName === "create_report" || m.toolName === "create_poster") && d.files?.length) {
+          const d = asRecord(m.details);
+          const files = d.files;
+          if ((m.toolName === "present_files" || m.toolName === "create_docx" || m.toolName === "create_pptx" || m.toolName === "create_report" || m.toolName === "create_poster") && Array.isArray(files) && files.length) {
             fileOutputs.push({ afterIndex: allMessages.length - 1, files: d.files });
           }
           if ((m.toolName === "edit" || m.toolName === "edit-diff") && d.diff) {
@@ -292,7 +437,7 @@ export function createSessionsRoute(engine) {
             const toolCalls = assistantMsg?.toolCalls || [];
             const matchingToolCall = [...toolCalls].reverse().find(tc => tc.name === m.toolName);
             const args = matchingToolCall?.args || {};
-            const diffFilePath = args.file_path || args.path || "";
+            const diffFilePath = String(args.file_path || args.path || "");
             let linesAdded = 0;
             let linesRemoved = 0;
             for (const line of String(d.diff).split("\n")) {
@@ -326,7 +471,7 @@ export function createSessionsRoute(engine) {
       }
 
       // 分页：只在有 before 参数时切片，否则返回全量
-      let messages;
+      let messages: VisibleMessage[];
       let hasMore = false;
       let slicedFileOutputs = fileOutputs;
       let slicedFileDiffs = fileDiffs;
@@ -364,15 +509,17 @@ export function createSessionsRoute(engine) {
 
       return c.json({ messages, todos, fileOutputs: slicedFileOutputs, fileDiffs: slicedFileDiffs, artifacts: slicedArtifacts, hasMore });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // 新建 session（可选指定工作目录和 agentId）
   route.post("/sessions/new", async (c) => {
     try {
-      const body = await safeJson(c);
-      const { cwd, memoryEnabled, agentId } = body;
+      const body = asRecord(await safeJson(c));
+      const cwd = stringField(body, "cwd");
+      const agentId = stringField(body, "agentId");
+      const memoryEnabled = body.memoryEnabled;
       const memFlag = memoryEnabled !== false; // 默认 true
       console.log("[sessions] 新建 session", {
         hasCwd: !!cwd,
@@ -416,15 +563,15 @@ export function createSessionsRoute(engine) {
         currentModelProvider: engine.currentModel?.provider || null,
       });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // 切换 session（支持跨 agent）
   route.post("/sessions/switch", async (c) => {
     try {
-      const body = await safeJson(c);
-      const { path: sessionPath } = body;
+      const body = asRecord(await safeJson(c));
+      const sessionPath = stringField(body, "path");
       if (!sessionPath) {
         return c.json({ error: t("error.missingParam", { param: "path" }) }, 400);
       }
@@ -444,7 +591,7 @@ export function createSessionsRoute(engine) {
 
       return c.json({
         ok: true,
-        messageCount: engine.messages.length,
+        messageCount: (engine.messages || []).length,
         memoryEnabled: engine.memoryEnabled,
         planMode: engine.planMode,
         securityMode: engine.securityMode,
@@ -459,7 +606,7 @@ export function createSessionsRoute(engine) {
         currentModelProvider: engine.currentModel?.provider || null,
       });
     } catch (err) {
-      const errDetail = `${err.message}\n${err.stack || ""}`;
+      const errDetail = `${errorMessage(err)}\n${errorStack(err)}`;
       console.error("[sessions/switch] error:", errDetail);
       try {
         const logDir = path.join(homedir(), ".lynn");
@@ -468,7 +615,7 @@ export function createSessionsRoute(engine) {
       } catch {
         // Logging failures should not mask the original switch error.
       }
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -480,8 +627,8 @@ export function createSessionsRoute(engine) {
 
   // 关闭指定 session 的浏览器
   route.post("/browser/close-session", async (c) => {
-    const body = await safeJson(c);
-    const { sessionPath } = body;
+    const body = asRecord(await safeJson(c));
+    const sessionPath = stringField(body, "sessionPath");
     if (!sessionPath) return c.json({ error: "missing sessionPath" });
     const bm = BrowserManager.instance();
     await bm.closeBrowserForSession(sessionPath);
@@ -491,8 +638,9 @@ export function createSessionsRoute(engine) {
   // 重命名 session
   route.post("/sessions/rename", async (c) => {
     try {
-      const body = await safeJson(c);
-      const { path: sessionPath, title } = body;
+      const body = asRecord(await safeJson(c));
+      const sessionPath = stringField(body, "path");
+      const title = stringField(body, "title");
       if (!sessionPath) {
         return c.json({ error: t("error.missingParam", { param: "path" }) }, 400);
       }
@@ -505,15 +653,16 @@ export function createSessionsRoute(engine) {
       await engine.saveSessionTitle(sessionPath, title.trim());
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // 置顶/取消置顶 session
   route.post("/sessions/pin", async (c) => {
     try {
-      const body = await safeJson(c);
-      const { path: sessionPath, pinned } = body;
+      const body = asRecord(await safeJson(c));
+      const sessionPath = stringField(body, "path");
+      const pinned = body.pinned;
       if (!sessionPath) {
         return c.json({ error: t("error.missingParam", { param: "path" }) }, 400);
       }
@@ -523,15 +672,16 @@ export function createSessionsRoute(engine) {
       await engine.saveSessionMeta(sessionPath, { pinned: !!pinned });
       return c.json({ ok: true, pinned: !!pinned });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // 设置 session 标签
   route.post("/sessions/labels", async (c) => {
     try {
-      const body = await safeJson(c);
-      const { path: sessionPath, labels } = body;
+      const body = asRecord(await safeJson(c));
+      const sessionPath = stringField(body, "path");
+      const labels = body.labels;
       if (!sessionPath) {
         return c.json({ error: t("error.missingParam", { param: "path" }) }, 400);
       }
@@ -548,15 +698,15 @@ export function createSessionsRoute(engine) {
       await engine.saveSessionMeta(sessionPath, { labels: normalized });
       return c.json({ ok: true, labels: normalized });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // 清理过期归档 session
   route.post("/sessions/cleanup", async (c) => {
     try {
-      const body = await safeJson(c);
-      const { maxAgeDays = 90 } = body;
+      const body = asRecord(await safeJson(c));
+      const maxAgeDays = typeof body.maxAgeDays === "number" ? body.maxAgeDays : 90;
       const cutoff = Date.now() - maxAgeDays * 86400000;
       let deleted = 0;
 
@@ -584,15 +734,15 @@ export function createSessionsRoute(engine) {
 
       return c.json({ ok: true, deleted, maxAgeDays });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // 归档 session（支持跨 agent）
   route.post("/sessions/archive", async (c) => {
     try {
-      const body = await safeJson(c);
-      const { path: sessionPath } = body;
+      const body = asRecord(await safeJson(c));
+      const sessionPath = stringField(body, "path");
       if (!sessionPath) {
         return c.json({ error: t("error.missingParam", { param: "path" }) }, 400);
       }
@@ -622,7 +772,7 @@ export function createSessionsRoute(engine) {
 
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -631,9 +781,12 @@ export function createSessionsRoute(engine) {
     try {
       await engine.closeSession(engine.currentSessionPath);
       const session = await engine.createSession(null, engine.homeCwd);
-      return c.json({ ok: true, path: session.sessionManager?.getSessionFile?.() || null });
+      const sessionRecord = asRecord(session);
+      const sessionManager = asRecord(sessionRecord.sessionManager);
+      const getSessionFile = sessionManager.getSessionFile;
+      return c.json({ ok: true, path: typeof getSessionFile === "function" ? getSessionFile() : null });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -658,7 +811,7 @@ export function createSessionsRoute(engine) {
         agentId: engine.currentAgentId,
         modelId: engine.currentModel?.id || null,
         modelProvider: engine.currentModel?.provider || null,
-        messageCount: engine.messages.length,
+        messageCount: (engine.messages || []).length,
         memoryEnabled: engine.memoryEnabled,
         cwd: engine.cwd,
       };
@@ -668,7 +821,7 @@ export function createSessionsRoute(engine) {
 
       return c.json({ ok: true, checkpoint: cpFile });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 

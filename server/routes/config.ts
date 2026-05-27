@@ -14,35 +14,160 @@ import { InferredProfile } from "../../lib/memory/inferred-profile.js";
 import { MemoryExclusions } from "../../lib/memory/memory-exclusions.js";
 import { splitByScope, injectGlobalFields } from '../../shared/config-scope.js';
 
-export function createConfigRoute(engine) {
+type JsonRecord = Record<string, unknown>;
+
+type ApiBlockName = "api" | "embedding_api" | "utility_api";
+
+type ProviderModelPayload = string | {
+  id?: string;
+  name?: string;
+  context?: number | null;
+  maxOutput?: number | null;
+  [key: string]: unknown;
+};
+
+interface RawProviderConfig {
+  base_url?: string;
+  api?: string;
+  api_key?: string;
+  models?: ProviderModelPayload[];
+  [key: string]: unknown;
+}
+
+interface ProviderRegistryEntry {
+  baseUrl?: string;
+  api?: string;
+}
+
+interface ProviderRegistryLike {
+  getAllProvidersRaw(): Record<string, RawProviderConfig>;
+  get(name: string): ProviderRegistryEntry | null | undefined;
+  removeProvider(name: string): unknown;
+  saveProvider(name: string, data: unknown): unknown;
+  reload(): unknown;
+}
+
+interface MemoryRecord {
+  id?: number | string;
+  fact?: unknown;
+  content?: unknown;
+  tags?: unknown;
+  time?: string | null;
+  date?: string | null;
+  created_at?: string | null;
+  session_id?: string | null;
+  source?: string | null;
+  [key: string]: unknown;
+}
+
+type MemoryUpdate = {
+  category?: unknown;
+  confidence?: unknown;
+  evidence?: unknown;
+};
+
+type MemoryImportEntry = {
+  fact: unknown;
+  tags: unknown;
+  time: unknown;
+  session_id: unknown;
+};
+
+interface FactStoreLike {
+  exportAll(): MemoryRecord[];
+  clearAll(): unknown;
+  delete(id: number): boolean;
+  updateFact(id: number, updates: MemoryUpdate): MemoryRecord | null;
+  importAll(entries: MemoryImportEntry[]): unknown;
+  close?(): unknown;
+}
+
+interface ConfigRouteEngine {
+  [key: string]: unknown;
+  config: JsonRecord;
+  configPath: string;
+  agentDir: string;
+  userDir: string;
+  agentsDir: string;
+  memoryMdPath: string;
+  availableModels: unknown[];
+  agent: {
+    agentDir: string;
+    systemPrompt?: string;
+  };
+  factStore: FactStoreLike;
+  inferredProfile?: {
+    getRawProfile?: () => unknown;
+  };
+  providerRegistry: ProviderRegistryLike;
+  updateConfig(partial: JsonRecord): Promise<unknown> | unknown;
+  syncModelsAndRefresh(): Promise<unknown> | unknown;
+  setSearchConfig(search: { provider: string; api_key: string; base_url: string }): unknown;
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asRecord(value: unknown): JsonRecord {
+  return isRecord(value) ? value : {};
+}
+
+function hasOwn(record: JsonRecord, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function hasErrorCode(err: unknown, code: string): boolean {
+  return isRecord(err) && err.code === code;
+}
+
+function rawApiBlock(raw: unknown, blockName: ApiBlockName): JsonRecord {
+  if (!isRecord(raw)) return {};
+  return asRecord(raw[blockName]);
+}
+
+function stringField(record: JsonRecord, key: string): string {
+  const value = record[key];
+  return typeof value === "string" ? value : "";
+}
+
+export function createConfigRoute(engine: ConfigRouteEngine): Hono {
   const route = new Hono();
 
   // 读取配置（脱敏：隐藏 API key，附带 _raw 原始结构 + providers）
   route.get("/config", async (c) => {
     try {
-      const config = { ...engine.config };
-      const raw = getRawConfig(engine.configPath) || {};
+      const config: JsonRecord = { ...engine.config };
+      const raw = getRawConfig(engine.configPath);
 
       // 本地应用，直接返回完整 key（前端用 type="password" 控制显隐）
 
       // 附带原始配置结构（未经 fallback 解析，让前端知道用户显式设了什么）
+      const rawApi = rawApiBlock(raw, "api");
+      const rawEmbeddingApi = rawApiBlock(raw, "embedding_api");
+      const rawUtilityApi = rawApiBlock(raw, "utility_api");
       config._raw = {
-        api: { provider: raw.api?.provider || "", base_url: raw.api?.base_url || "" },
-        embedding_api: { provider: raw.embedding_api?.provider || "", base_url: raw.embedding_api?.base_url || "" },
-        utility_api: { provider: raw.utility_api?.provider || "", base_url: raw.utility_api?.base_url || "" },
+        api: { provider: stringField(rawApi, "provider"), base_url: stringField(rawApi, "base_url") },
+        embedding_api: { provider: stringField(rawEmbeddingApi, "provider"), base_url: stringField(rawEmbeddingApi, "base_url") },
+        utility_api: { provider: stringField(rawUtilityApi, "provider"), base_url: stringField(rawUtilityApi, "base_url") },
       };
 
       // 供应商列表（附带 model_count）
       const rawProviders = engine.providerRegistry.getAllProvidersRaw();
-      const providerEntries = {};
+      const providerEntries: Record<string, JsonRecord> = {};
       for (const [name, p] of Object.entries(rawProviders)) {
         const entry = engine.providerRegistry.get(name);
+        const models = Array.isArray(p.models) ? p.models : [];
         providerEntries[name] = {
           base_url: p.base_url || entry?.baseUrl || "",
           api: p.api || entry?.api || "",
           api_key: p.api_key || "",
-          models: p.models || [],
-          model_count: (p.models || []).length,
+          models,
+          model_count: models.length,
         };
       }
       config.providers = providerEntries;
@@ -51,32 +176,36 @@ export function createConfigRoute(engine) {
       injectGlobalFields(config, engine);
       // cwd_history 过滤（agent-scope，但需要 existsSync 验证）
       if (Array.isArray(config.cwd_history)) {
-        config.cwd_history = config.cwd_history.filter(p => existsSync(p));
+        config.cwd_history = config.cwd_history.filter((p) => typeof p === "string" && existsSync(p));
       }
 
       return c.json(config);
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // 更新配置
   route.put("/config", async (c) => {
     try {
-      const partial = await safeJson(c);
-      if (!partial || typeof partial !== "object") {
+      const partial = await safeJson<unknown>(c);
+      if (!isRecord(partial)) {
         return c.json({ error: t("error.invalidJson") }, 400);
       }
       // ── schema-driven 全局字段分流 ──
       const { global: globalFields, agent: agentPartial } = splitByScope(partial);
       for (const { setter, value } of globalFields) {
-        engine[setter](value);
+        const setValue = engine[setter];
+        if (typeof setValue !== "function") {
+          throw new Error(`${setter} is not a function`);
+        }
+        setValue.call(engine, value);
       }
 
       // providers 块 → 全局 added-models.yaml
       let providersChanged = false;
       if (agentPartial.providers) {
-        for (const [name, data] of Object.entries(agentPartial.providers)) {
+        for (const [name, data] of Object.entries(Object(agentPartial.providers))) {
           if (data === null) {
             engine.providerRegistry.removeProvider(name);
           } else {
@@ -88,17 +217,18 @@ export function createConfigRoute(engine) {
       }
 
       // 内联 API 凭证 → 全局 added-models.yaml 对应条目
-      const rawConfig = getRawConfig(engine.configPath) || {};
-      for (const blockName of ["api", "embedding_api", "utility_api"]) {
+      const rawConfig = getRawConfig(engine.configPath);
+      for (const blockName of ["api", "embedding_api", "utility_api"] as const) {
         const block = agentPartial[blockName];
-        if (block?.api_key || block?.base_url) {
+        if (isRecord(block) && (block.api_key || block.base_url)) {
+          const rawBlock = rawApiBlock(rawConfig, blockName);
           const provName = typeof block.provider === "string" && block.provider.trim()
             ? block.provider.trim()
-            : (rawConfig?.[blockName]?.provider || "").trim();
+            : stringField(rawBlock, "provider").trim();
           if (!provName) {
             return c.json({ error: `${blockName}.provider is required when saving credentials` }, 400);
           }
-          const provUpdate = {};
+          const provUpdate: JsonRecord = {};
           if (block.api_key) provUpdate.api_key = block.api_key;
           if (block.base_url) provUpdate.base_url = block.base_url;
           engine.providerRegistry.saveProvider(provName, provUpdate);
@@ -110,13 +240,13 @@ export function createConfigRoute(engine) {
 
       // providers 变更后确保运行时刷新
       if (providersChanged) {
-        engine.providerRegistry?.reload();
+        engine.providerRegistry.reload();
         // 立即 sync models，不管后面有没有别的 config 字段
         try {
           await engine.syncModelsAndRefresh();
           debugLog()?.log("api", `syncModelsAndRefresh OK after provider change (${engine.availableModels.length} models)`);
         } catch (e) {
-          console.error("[config] syncModelsAndRefresh failed:", e.message);
+          console.error("[config] syncModelsAndRefresh failed:", errorMessage(e));
         }
       }
 
@@ -132,8 +262,8 @@ export function createConfigRoute(engine) {
       await engine.updateConfig(agentPartial);
       return c.json({ ok: true });
     } catch (err) {
-      debugLog()?.error("api", `PUT /api/config failed: ${err.message}`);
-      return c.json({ error: err.message }, 500);
+      debugLog()?.error("api", `PUT /api/config failed: ${errorMessage(err)}`);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -145,7 +275,7 @@ export function createConfigRoute(engine) {
       const limit = Number(c.req.query("limit")) || 100;
       return c.json({ entries: readAuditLog(limit) });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -155,7 +285,7 @@ export function createConfigRoute(engine) {
     try {
       return c.json({ content: engine.agent.systemPrompt || "" });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -168,15 +298,15 @@ export function createConfigRoute(engine) {
       const content = await fs.readFile(ishikiPath, "utf-8");
       return c.json({ content });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // 保存 ishiki.md 内容，并触发 system prompt 重建
   route.put("/ishiki", async (c) => {
     try {
-      const body = await safeJson(c);
-      const { content } = body;
+      const body = asRecord(await safeJson<unknown>(c));
+      const content = body.content;
       if (typeof content !== "string") {
         return c.json({ error: "content must be a string" }, 400);
       }
@@ -187,8 +317,8 @@ export function createConfigRoute(engine) {
       await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
-      debugLog()?.error("api", `PUT /api/ishiki failed: ${err.message}`);
-      return c.json({ error: err.message }, 500);
+      debugLog()?.error("api", `PUT /api/ishiki failed: ${errorMessage(err)}`);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -200,15 +330,15 @@ export function createConfigRoute(engine) {
       const content = await fs.readFile(identityPath, "utf-8");
       return c.json({ content });
     } catch (err) {
-      if (err.code === "ENOENT") return c.json({ content: "" });
-      return c.json({ error: err.message }, 500);
+      if (hasErrorCode(err, "ENOENT")) return c.json({ content: "" });
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   route.put("/identity", async (c) => {
     try {
-      const body = await safeJson(c);
-      const { content } = body;
+      const body = asRecord(await safeJson<unknown>(c));
+      const content = body.content;
       if (typeof content !== "string") {
         return c.json({ error: "content must be a string" }, 400);
       }
@@ -218,8 +348,8 @@ export function createConfigRoute(engine) {
       await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
-      debugLog()?.error("api", `PUT /api/identity failed: ${err.message}`);
-      return c.json({ error: err.message }, 500);
+      debugLog()?.error("api", `PUT /api/identity failed: ${errorMessage(err)}`);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -233,16 +363,16 @@ export function createConfigRoute(engine) {
       return c.json({ content });
     } catch (err) {
       // 文件不存在时返回空字符串（user.md 是可选的）
-      if (err.code === "ENOENT") return c.json({ content: "" });
-      return c.json({ error: err.message }, 500);
+      if (hasErrorCode(err, "ENOENT")) return c.json({ content: "" });
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // 保存 user.md 内容，并触发 system prompt 重建
   route.put("/user-profile", async (c) => {
     try {
-      const body = await safeJson(c);
-      const { content } = body;
+      const body = asRecord(await safeJson<unknown>(c));
+      const content = body.content;
       if (typeof content !== "string") {
         return c.json({ error: "content must be a string" }, 400);
       }
@@ -252,8 +382,8 @@ export function createConfigRoute(engine) {
       await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
-      debugLog()?.error("api", `PUT /api/user-profile failed: ${err.message}`);
-      return c.json({ error: err.message }, 500);
+      debugLog()?.error("api", `PUT /api/user-profile failed: ${errorMessage(err)}`);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -267,7 +397,7 @@ export function createConfigRoute(engine) {
       try {
         content = await fs.readFile(pinnedPath, "utf-8");
       } catch (err) {
-        if (err.code === "ENOENT") return c.json({ pins: [] });
+        if (hasErrorCode(err, "ENOENT")) return c.json({ pins: [] });
         throw err;
       }
       const pins = content
@@ -277,15 +407,15 @@ export function createConfigRoute(engine) {
         .map(line => line.replace(/^-\s*/, ""));
       return c.json({ pins });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // 保存 pinned.md（覆盖写入），触发 system prompt 重建
   route.put("/pinned", async (c) => {
     try {
-      const body = await safeJson(c);
-      const { pins } = body;
+      const body = asRecord(await safeJson<unknown>(c));
+      const pins = body.pins;
       if (!Array.isArray(pins)) {
         return c.json({ error: "pins must be an array" }, 400);
       }
@@ -302,8 +432,8 @@ export function createConfigRoute(engine) {
       await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
-      debugLog()?.error("api", `PUT /api/pinned failed: ${err.message}`);
-      return c.json({ error: err.message }, 500);
+      debugLog()?.error("api", `PUT /api/pinned failed: ${errorMessage(err)}`);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -315,7 +445,7 @@ export function createConfigRoute(engine) {
    * 否则临时打开那个 agent 的 facts.db。
    * 返回 { store, isTemp }，调用方用完 isTemp===true 的 store 需要 close。
    */
-  function getStoreForAgent(agentId) {
+  function getStoreForAgent(agentId?: string): { store: FactStoreLike; isTemp: boolean } {
     const activeId = path.basename(engine.agent.agentDir);
     if (!agentId || agentId === activeId) {
       return { store: engine.factStore, isTemp: false };
@@ -325,14 +455,14 @@ export function createConfigRoute(engine) {
     }
     const dbPath = path.join(engine.agentsDir, agentId, "memory", "facts.db");
     try {
-      const store = new FactStore(dbPath);
+      const store = new FactStore(dbPath) as unknown as FactStoreLike;
       return { store, isTemp: true };
     } catch (err) {
-      throw new Error(`Cannot open fact DB for agent "${agentId}": ${err.message}`);
+      throw new Error(`Cannot open fact DB for agent "${agentId}": ${errorMessage(err)}`);
     }
   }
 
-  function getInferredProfileForAgent(agentId) {
+  function getInferredProfileForAgent(agentId?: string): unknown {
     const activeId = path.basename(engine.agent.agentDir);
     if (!agentId || agentId === activeId) {
       return engine.inferredProfile?.getRawProfile?.() || null;
@@ -345,7 +475,7 @@ export function createConfigRoute(engine) {
     return profile.getRawProfile();
   }
 
-  function getMemoryExclusionsForAgent(agentId) {
+  function getMemoryExclusionsForAgent(agentId?: string): MemoryExclusions {
     const activeId = path.basename(engine.agent.agentDir);
     const baseDir = (!agentId || agentId === activeId)
       ? path.join(engine.agent.agentDir, "memory")
@@ -355,7 +485,7 @@ export function createConfigRoute(engine) {
     });
   }
 
-  function groupMemoriesByDate(memories, days = 30) {
+  function groupMemoriesByDate(memories: MemoryRecord[], days: string | number = 30): Array<{ date: string; items: MemoryRecord[] }> {
     const normalizedDays = Number.isFinite(Number(days)) ? Math.max(1, Number(days)) : 30;
     const cutoff = Date.now() - normalizedDays * 24 * 60 * 60 * 1000;
     const rows = [...(memories || [])]
@@ -371,11 +501,11 @@ export function createConfigRoute(engine) {
         return bTime - aTime;
       });
 
-    const groups = new Map();
+    const groups = new Map<string, MemoryRecord[]>();
     for (const item of rows) {
       const key = String(item.time || item.created_at || "").slice(0, 10) || "unknown";
       if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push({
+      groups.get(key)?.push({
         ...item,
         sourceType: item.source || "conversation",
       });
@@ -386,20 +516,20 @@ export function createConfigRoute(engine) {
 
   // 获取所有元事实
   route.get("/memories", async (c) => {
-    let tempStore = null;
+    let tempStore: FactStoreLike | null = null;
     try {
       const { store, isTemp } = getStoreForAgent(c.req.query("agentId"));
       if (isTemp) tempStore = store;
       return c.json({ memories: store.exportAll() });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     } finally {
-      tempStore?.close();
+      tempStore?.close?.();
     }
   });
 
   route.get("/memories/timeline", async (c) => {
-    let tempStore = null;
+    let tempStore: FactStoreLike | null = null;
     try {
       const agentId = c.req.query("agentId");
       const days = c.req.query("days") || "30";
@@ -416,9 +546,9 @@ export function createConfigRoute(engine) {
         exclusions,
       });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     } finally {
-      tempStore?.close();
+      tempStore?.close?.();
     }
   });
 
@@ -433,7 +563,7 @@ export function createConfigRoute(engine) {
       const content = await fs.readFile(mdPath, "utf-8").catch(() => "");
       return c.json({ content });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -455,13 +585,13 @@ export function createConfigRoute(engine) {
       if (!agentId || agentId === activeId) await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // 清除所有记忆（facts.db + memory.md）
   route.delete("/memories", async (c) => {
-    let tempStore = null;
+    let tempStore: FactStoreLike | null = null;
     try {
       const agentId = c.req.query("agentId");
       const { store, isTemp } = getStoreForAgent(agentId);
@@ -476,14 +606,14 @@ export function createConfigRoute(engine) {
       if (!isTemp) await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     } finally {
-      tempStore?.close();
+      tempStore?.close?.();
     }
   });
 
   route.delete("/memories/:id", async (c) => {
-    let tempStore = null;
+    let tempStore: FactStoreLike | null = null;
     try {
       const agentId = c.req.query("agentId");
       const { store, isTemp } = getStoreForAgent(agentId);
@@ -493,20 +623,20 @@ export function createConfigRoute(engine) {
       debugLog()?.log("api", `DELETE /api/memories/${c.req.param("id")} agent=${agentId || path.basename(engine.agent.agentDir)}`);
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     } finally {
-      tempStore?.close();
+      tempStore?.close?.();
     }
   });
 
   route.patch("/memories/:id", async (c) => {
-    let tempStore = null;
+    let tempStore: FactStoreLike | null = null;
     try {
-      const body = await safeJson(c);
-      const updates = {};
-      if (Object.prototype.hasOwnProperty.call(body, "category")) updates.category = body.category;
-      if (Object.prototype.hasOwnProperty.call(body, "confidence")) updates.confidence = body.confidence;
-      if (Object.prototype.hasOwnProperty.call(body, "evidence")) updates.evidence = body.evidence;
+      const body = asRecord(await safeJson<unknown>(c));
+      const updates: MemoryUpdate = {};
+      if (hasOwn(body, "category")) updates.category = body.category;
+      if (hasOwn(body, "confidence")) updates.confidence = body.confidence;
+      if (hasOwn(body, "evidence")) updates.evidence = body.evidence;
       if (Object.keys(updates).length === 0) {
         return c.json({ error: "no supported fields provided" }, 400);
       }
@@ -519,9 +649,9 @@ export function createConfigRoute(engine) {
       debugLog()?.log("api", `PATCH /api/memories/${c.req.param("id")} agent=${agentId || path.basename(engine.agent.agentDir)}`);
       return c.json({ ok: true, memory: updated });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     } finally {
-      tempStore?.close();
+      tempStore?.close?.();
     }
   });
 
@@ -530,26 +660,26 @@ export function createConfigRoute(engine) {
       const exclusions = getMemoryExclusionsForAgent(c.req.query("agentId")).list();
       return c.json(exclusions);
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   route.post("/memories/exclusions", async (c) => {
     try {
-      const body = await safeJson(c);
+      const body = asRecord(await safeJson<unknown>(c));
       const phrase = typeof body.phrase === "string" ? body.phrase.trim() : "";
       if (!phrase) return c.json({ error: "phrase is required" }, 400);
       const exclusions = getMemoryExclusionsForAgent(c.req.query("agentId"));
       exclusions.addPhrase(phrase);
       return c.json({ ok: true, exclusions: exclusions.list() });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   route.delete("/memories/exclusions", async (c) => {
     try {
-      const body = await safeJson(c);
+      const body = asRecord(await safeJson<unknown>(c));
       const phrase = typeof body.phrase === "string" ? body.phrase.trim() : "";
       if (!phrase) return c.json({ error: "phrase is required" }, 400);
       const exclusions = getMemoryExclusionsForAgent(c.req.query("agentId"));
@@ -557,13 +687,13 @@ export function createConfigRoute(engine) {
       if (!removed) return c.json({ error: "phrase not found" }, 404);
       return c.json({ ok: true, exclusions: exclusions.list() });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   // 导出记忆（JSON）
   route.get("/memories/export", async (c) => {
-    let tempStore = null;
+    let tempStore: FactStoreLike | null = null;
     try {
       const { store, isTemp } = getStoreForAgent(c.req.query("agentId"));
       if (isTemp) tempStore = store;
@@ -573,17 +703,17 @@ export function createConfigRoute(engine) {
         facts: store.exportAll(),
       });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     } finally {
-      tempStore?.close();
+      tempStore?.close?.();
     }
   });
 
   // 导入记忆（直接写入，无需 embedding）
   route.post("/memories/import", async (c) => {
-    let tempStore = null;
+    let tempStore: FactStoreLike | null = null;
     try {
-      const body = await safeJson(c);
+      const body = asRecord(await safeJson<unknown>(c));
       const { facts, memories } = body;
       // 兼容 v1 导出格式（memories 字段）和 v2 格式（facts 字段）
       const entries = facts || memories;
@@ -592,10 +722,10 @@ export function createConfigRoute(engine) {
       }
 
       const importEntries = entries.map((e) => ({
-        fact: e.fact || e.content || "",
-        tags: e.tags || [],
-        time: e.time || e.date || null,
-        session_id: e.session_id || "imported",
+        fact: isRecord(e) ? e.fact || e.content || "" : "",
+        tags: isRecord(e) ? e.tags || [] : [],
+        time: isRecord(e) ? e.time || e.date || null : null,
+        session_id: isRecord(e) ? e.session_id || "imported" : "imported",
       }));
 
       const { store, isTemp } = getStoreForAgent(c.req.query("agentId"));
@@ -604,17 +734,19 @@ export function createConfigRoute(engine) {
       debugLog()?.log("api", `POST /api/memories/import: ${importEntries.length} entries`);
       return c.json({ ok: true, imported: importEntries.length });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     } finally {
-      tempStore?.close();
+      tempStore?.close?.();
     }
   });
 
   // ── 搜索 API Key 验证 ──
 
   route.post("/search/verify", async (c) => {
-    const body = await safeJson(c);
-    const { provider, api_key, base_url } = body;
+    const body = asRecord(await safeJson<unknown>(c));
+    const provider = typeof body.provider === "string" ? body.provider : "";
+    const api_key = typeof body.api_key === "string" ? body.api_key : "";
+    const base_url = typeof body.base_url === "string" ? body.base_url : "";
     if (!provider) {
       return c.json({ ok: false, error: "provider is required" }, 400);
     }
@@ -632,8 +764,8 @@ export function createConfigRoute(engine) {
       debugLog()?.log("api", `POST /api/search/verify provider=${provider} (ok)`);
       return c.json({ ok: true });
     } catch (err) {
-      debugLog()?.warn("api", `POST /api/search/verify provider=${provider} failed: ${err.message}`);
-      return c.json({ ok: false, error: err.message });
+      debugLog()?.warn("api", `POST /api/search/verify provider=${provider} failed: ${errorMessage(err)}`);
+      return c.json({ ok: false, error: errorMessage(err) });
     }
   });
 
