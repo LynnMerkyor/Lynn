@@ -6,6 +6,7 @@
  */
 import { createHash } from "crypto";
 import fs from "fs";
+import { createRequire } from "module";
 import path from "path";
 import { loadConfig, saveConfig } from "../lib/memory/config-loader.js";
 import { safeReadFile, safeReadJSON } from "../shared/safe-fs.js";
@@ -52,14 +53,152 @@ import { READ_ONLY_BUILTIN_TOOLS } from "./config-coordinator.js";
 import { formatSkillsForPrompt } from "@mariozechner/pi-coding-agent";
 import { runCompatChecks } from "../lib/compat/index.js";
 
+type AnyRecord = Record<string, any>;
+type LogFn = (msg: string) => void;
+type ToolLike = AnyRecord;
+type SearchConfigResolver = (...args: any[]) => any;
+type ResolveModelFn = (bareId: string, agentConfig: object) => object | null;
+
+interface AgentOptions {
+  agentDir: string;
+  productDir: string;
+  userDir: string;
+  channelsDir?: string | null;
+  agentsDir?: string | null;
+  searchConfigResolver?: SearchConfigResolver | null;
+}
+
+interface SharedModels {
+  utility?: string | null;
+  utility_large?: string | null;
+  [key: string]: unknown;
+}
+
+interface AgentConfig extends AnyRecord {
+  locale?: string;
+  user?: { name?: string; [key: string]: any };
+  agent?: { name?: string; yuan?: string; [key: string]: any };
+  memory?: {
+    enabled?: boolean;
+    base_importance?: number;
+    hit_bonus?: number;
+    compile_threshold?: number;
+    [key: string]: any;
+  };
+  models?: {
+    chat?: string | null;
+    utility?: string | null;
+    utility_large?: string | null;
+    embedding_dimensions?: number;
+    [key: string]: any;
+  };
+  skills?: { enabled?: string[]; [key: string]: any };
+  desk?: { cron_auto_approve?: boolean; [key: string]: any };
+  capabilities?: AnyRecord;
+  search?: AnyRecord;
+}
+
+interface AgentEngineLike extends AnyRecord {
+  cwd?: string;
+  homeCwd?: string;
+  confirmStore?: unknown;
+  currentSessionPath?: string | null;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+const require = createRequire(import.meta.url);
+
 export class Agent {
+  agentDir: string;
+  productDir: string;
+  userDir: string;
+  channelsDir: string | null;
+  agentsDir: string | null;
+  configPath: string;
+  factsDbPath: string;
+  memoryMdPath: string;
+  todayMdPath: string;
+  weekMdPath: string;
+  longtermMdPath: string;
+  factsMdPath: string;
+  activeTaskPath: string;
+  summariesDir: string;
+  sessionDir: string;
+  deskDir: string;
+  userName: string;
+  agentName: string;
+
+  _searchConfigResolver: SearchConfigResolver | null;
+  _config: AgentConfig;
+  _factStore: AnyRecord | null;
+  _summaryManager: AnyRecord | null;
+  _memoryTicker: AnyRecord | null;
+  _memorySearchTool: ToolLike | null;
+  _webSearchTool: ToolLike | null;
+  _webFetchTool: ToolLike | null;
+  _stockMarketTool: ToolLike | null;
+  _weatherTool: ToolLike | null;
+  _liveNewsTool: ToolLike | null;
+  _sportsScoreTool: ToolLike | null;
+  _staticPromptCache: string | null;
+  _staticPromptDeps: string | null;
+  _todoTool: ToolLike | null;
+  _restoreSnapshotTool: ToolLike | null;
+  _pinnedMemoryTools: ToolLike[];
+  _experienceTools: ToolLike[];
+  _activeTaskTool: ToolLike | null;
+  _memoryMasterEnabled: boolean;
+  _memorySessionEnabled: boolean;
+  _enabledSkills: unknown[];
+  _systemPrompt: string;
+  _proactiveRecall: AnyRecord | null;
+  _projectMemory: AnyRecord | null;
+  _userProfile: AnyRecord | null;
+  _inferredProfile: AnyRecord | null;
+  _memoryExclusions: AnyRecord | null;
+  _skillDistiller: AnyRecord | null;
+  _activeTaskMemory: AnyRecord | null;
+  _deskManager: AnyRecord | null;
+  _cronStore: AnyRecord | null;
+  _cronTool: ToolLike | null;
+  _presentFilesTool: ToolLike | null;
+  _artifactTool: ToolLike | null;
+  _pptxTool: ToolLike | null;
+  _reportTool: ToolLike | null;
+  _docxTool: ToolLike | null;
+  _posterTool: ToolLike | null;
+  _stockResearchTool: ToolLike | null;
+  _channelTool: ToolLike | null;
+  _askAgentTool: ToolLike | null;
+  _dmTool: ToolLike | null;
+  _browserTool: ToolLike | null;
+  _notifyTool: ToolLike | null;
+  _installSkillTool: ToolLike | null;
+  _updateSettingsTool: ToolLike | null;
+  _delegateTool: ToolLike | null;
+  _retriever: AnyRecord | null;
+  _utilityModel: string | null;
+  _memoryModel: string | null;
+  _resolvedUtilityModel: AnyRecord | null;
+  _resolvedMemoryModel: AnyRecord | null;
+  _memoryModelUnavailableReason: string | null;
+  _engine: AgentEngineLike | null;
+  _disposing: boolean;
+  _notifyHandler: ((title: string, body?: string) => void) | null;
+  _channelPostHandler: ((channelName: string, senderId: string) => void) | null;
+  _dmSentHandler: ((fromId: string, toId: string) => void) | null;
+  _onInstallCallback: ((skillName: string) => unknown | Promise<unknown>) | null;
+
   /**
    * @param {object} opts
    * @param {string} opts.agentDir   - 这个助手的数据目录（yuan, ishiki, config, memory, avatars）
    * @param {string} opts.productDir - 产品模板目录（ishiki.example.md, yuan 模板等）
    * @param {string} opts.userDir    - 用户数据目录（user.md, 用户头像）—— 跨助手共享
    */
-  constructor({ agentDir, productDir, userDir, channelsDir, agentsDir, searchConfigResolver }) {
+  constructor({ agentDir, productDir, userDir, channelsDir, agentsDir, searchConfigResolver }: AgentOptions) {
     this.agentDir = agentDir;
     this.productDir = productDir;
     this.userDir = userDir;
@@ -85,7 +224,7 @@ export class Agent {
     this.agentName = "Lynn";
 
     // 运行时状态
-    this._config = null;
+    this._config = {};
     this._factStore = null;
     this._summaryManager = null;
     this._memoryTicker = null;
@@ -101,6 +240,7 @@ export class Agent {
     this._staticPromptCache = null;  // { hash, text }
     this._staticPromptDeps = null;   // identity+yuan+ishiki+skills 的 hash
     this._todoTool = null;
+    this._restoreSnapshotTool = null;
     this._pinnedMemoryTools = [];
     this._experienceTools = [];
     this._activeTaskTool = null;
@@ -124,9 +264,31 @@ export class Agent {
     this._cronTool = null;
     this._presentFilesTool = null;
     this._artifactTool = null;
+    this._pptxTool = null;
+    this._reportTool = null;
+    this._docxTool = null;
+    this._posterTool = null;
+    this._stockResearchTool = null;
     this._channelTool = null;
+    this._askAgentTool = null;
+    this._dmTool = null;
     this._browserTool = null;
     this._notifyTool = null;
+    this._installSkillTool = null;
+    this._updateSettingsTool = null;
+    this._delegateTool = null;
+    this._retriever = null;
+    this._utilityModel = null;
+    this._memoryModel = null;
+    this._resolvedUtilityModel = null;
+    this._resolvedMemoryModel = null;
+    this._memoryModelUnavailableReason = null;
+    this._engine = null;
+    this._disposing = false;
+    this._notifyHandler = null;
+    this._channelPostHandler = null;
+    this._dmSentHandler = null;
+    this._onInstallCallback = null;
   }
 
   // ════════════════════════════
@@ -139,7 +301,7 @@ export class Agent {
    * @param {object} [sharedModels] - 全局共享模型配置（由 engine 传入）
    * @param {(bareId: string, agentConfig: object) => object} [resolveModel] - 统一模型解析回调
    */
-  async init(log = () => {}, sharedModels = {}, resolveModel = null) {
+  async init(log: LogFn = () => {}, sharedModels: SharedModels = {}, resolveModel: ResolveModelFn | null = null) {
     // 0. 兼容性检查（目录、数据库、配置文件）
     await runCompatChecks({
       agentDir: this.agentDir,
@@ -160,9 +322,9 @@ export class Agent {
 
     // 3. 初始化各模块
     log(`  [agent] 3. initWebSearch...`);
-    initWebSearch(this.configPath, {
-      searchConfigResolver: this._searchConfigResolver,
-    });
+    initWebSearch(this.configPath, this._searchConfigResolver
+      ? { searchConfigResolver: this._searchConfigResolver as any }
+      : {});
     log(`  [agent] 3. 模块初始化完成`);
 
     // 4. 记忆 v2：FactStore + SessionSummaryManager + ticker
@@ -182,13 +344,13 @@ export class Agent {
     if (!fs.existsSync(migrationDone) && fs.existsSync(oldMemoriesPath)) {
       try {
         log(`  [agent] 4. v1→v2 迁移: 发现旧 memories.db，开始迁移...`);
-        const Database = (await import("better-sqlite3")).default;
+        const Database = require("better-sqlite3") as any;
         const oldDb = new Database(oldMemoriesPath, { readonly: true });
-        const rows = oldDb.prepare("SELECT content, tags, date, created_at FROM memories").all();
+        const rows = oldDb.prepare("SELECT content, tags, date, created_at FROM memories").all() as AnyRecord[];
         oldDb.close();
 
         if (rows.length > 0) {
-          const facts = rows.map(row => ({
+          const facts = rows.map((row: AnyRecord) => ({
             fact: row.content,
             tags: (() => { try { return JSON.parse(row.tags); } catch { return []; } })(),
             time: row.date ? row.date + "T00:00" : null,
@@ -200,9 +362,10 @@ export class Agent {
         // 写迁移标记，防止重复迁移
         fs.writeFileSync(migrationDone, new Date().toISOString());
       } catch (err) {
-        console.error(`[agent] v1→v2 迁移失败（不影响启动）: ${err.message}`);
+        const message = errorMessage(err);
+        console.error(`[agent] v1→v2 迁移失败（不影响启动）: ${message}`);
         // 迁移失败也写标记，避免每次启动重试
-        try { fs.writeFileSync(migrationDone, `failed: ${err.message}`); } catch {}
+        try { fs.writeFileSync(migrationDone, `failed: ${message}`); } catch {}
       }
     }
 
@@ -231,9 +394,10 @@ export class Agent {
       try {
         this._resolvedMemoryModel = resolveModel(this._memoryModel, this._config);
       } catch (err) {
-        this._memoryModelUnavailableReason = err.message;
-        console.warn(`[memory] 记忆系统未启动：大工具模型（utility_large）解析失败 — ${err.message}`);
-        this._engine?.emitDevLog?.(`记忆系统未启动：大工具模型解析失败 — ${err.message}`, "error");
+        const message = errorMessage(err);
+        this._memoryModelUnavailableReason = message;
+        console.warn(`[memory] 记忆系统未启动：大工具模型（utility_large）解析失败 — ${message}`);
+        this._engine?.emitDevLog?.(`记忆系统未启动：大工具模型解析失败 — ${message}`, "error");
       }
     } else if (!this._memoryModel) {
       this._memoryModelUnavailableReason = "utility_large 未配置";
@@ -245,7 +409,7 @@ export class Agent {
       try {
         this._resolvedUtilityModel = resolveModel(this._utilityModel, this._config);
       } catch (err) {
-        console.warn(`[memory] 用户画像推断未启动：工具模型（utility）解析失败 — ${err.message}`);
+        console.warn(`[memory] 用户画像推断未启动：工具模型（utility）解析失败 — ${errorMessage(err)}`);
       }
     }
 
@@ -257,7 +421,7 @@ export class Agent {
         factStore: this._factStore,
         getResolvedMemoryModel: () => this._resolvedMemoryModel,
         getMemoryMasterEnabled: () => this._memoryMasterEnabled,
-        isSessionMemoryEnabled: (sessionPath) => this.isSessionMemoryEnabledFor(sessionPath),
+        isSessionMemoryEnabled: (sessionPath: string | null | undefined) => this.isSessionMemoryEnabledFor(sessionPath),
         getProjectMemory: () => this._projectMemory,
         getUserProfile: () => this._userProfile,
         getInferredProfile: () => this._inferredProfile,
@@ -277,15 +441,15 @@ export class Agent {
         factsMdPath: this.factsMdPath,
         experienceDir: path.join(this.agentDir, "experience"),
         experienceIndexPath: path.join(this.agentDir, "experience.md"),
-      });
+      } as any);
       log(`  [agent] 4. memoryTicker 创建完成`);
 
       // 5. 后台跑首次 tick（不阻塞启动，memory.md 已有上次编译结果）
       log(`  [agent] 5. 后台 tick...`);
       this._memoryTicker.tick().then(() => {
         log(`✿ 记忆整理完成`);
-      }).catch((err) => {
-        console.error(`[记忆] 启动 tick 出错：${err.message}`);
+      }).catch((err: unknown) => {
+        console.error(`[记忆] 启动 tick 出错：${errorMessage(err)}`);
       });
 
       // 6. 启动定时调度
@@ -296,7 +460,7 @@ export class Agent {
 
     // Phase 4: 混合检索器（标签 + FTS + 本地向量）
     const retriever = new HybridRetriever({
-      factStore: this._factStore,
+      factStore: this._factStore as any,
       vectorConfig: {
         type: 'tfidf-local',
         dbPath: path.join(this.agentDir, 'memory', 'vectors.db'),
@@ -304,13 +468,13 @@ export class Agent {
       },
     });
     this._retriever = retriever;
-    retriever.rebuildIndex().catch((err) => {
-      console.warn(`[memory] vector index rebuild failed: ${err.message}`);
+    retriever.rebuildIndex().catch((err: unknown) => {
+      console.warn(`[memory] vector index rebuild failed: ${errorMessage(err)}`);
     });
 
     // 7. 创建工具（记忆 + 通用）
     log(`  [agent] 7. 创建工具...`);
-    this._memorySearchTool = createMemorySearchTool(this._factStore, { retriever });
+    this._memorySearchTool = createMemorySearchTool(this._factStore as any, { retriever: retriever as any });
     this._webSearchTool = createWebSearchTool();
     this._webFetchTool = createWebFetchTool();
     this._stockMarketTool = createStockMarketTool();
@@ -321,7 +485,7 @@ export class Agent {
     this._restoreSnapshotTool = createRestoreSnapshotTool(path.basename(this.agentDir));
     this._pinnedMemoryTools = createPinnedMemoryTools(this.agentDir);
     this._experienceTools = createExperienceTools(this.agentDir);
-    this._activeTaskTool = createActiveTaskTool(this._activeTaskMemory, {
+    this._activeTaskTool = createActiveTaskTool(this._activeTaskMemory as any, {
       onUpdated: () => {
         this._systemPrompt = this.buildSystemPrompt();
       },
@@ -329,7 +493,7 @@ export class Agent {
 
     // Phase 1: 主动记忆召回
     this._proactiveRecall = new ProactiveRecall({
-      factStore: this._factStore,
+      factStore: this._factStore as any,
       experienceDir: path.join(this.agentDir, "experience"),
       experienceIndexPath: path.join(this.agentDir, "experience.md"),
       isMemoryEnabled: () => this.memoryEnabled,
@@ -353,7 +517,7 @@ export class Agent {
     });
     this._skillDistiller = new SkillDistiller({
       agentDir: this.agentDir,
-      factStore: this._factStore,
+      factStore: this._factStore as any,
       listExistingSkills: () => this._engine?.getAllSkills(path.basename(this.agentDir)) || [],
       resolveDistillModel: () => this._resolvedMemoryModel || this._resolvedUtilityModel,
       resolveSafetyModel: () => this._resolvedUtilityModel || this._resolvedMemoryModel,
@@ -378,9 +542,9 @@ export class Agent {
       path.join(this.deskDir, "cron-jobs.json"),
       path.join(this.deskDir, "cron-runs"),
     );
-    this._cronTool = createCronTool(this._cronStore, {
+    this._cronTool = createCronTool(this._cronStore as any, {
       getAutoApprove: () => this._config?.desk?.cron_auto_approve !== false,
-      confirmStore: this._engine?.confirmStore,
+      confirmStore: this._engine?.confirmStore as any,
       emitEvent: (event) => this._engine?._emitEvent(event, this._engine?._sessionCoord?.currentSessionPath),
       getSessionPath: () => this._engine?._sessionCoord?.currentSessionPath,
     });
@@ -401,19 +565,20 @@ export class Agent {
       getEngine: () => this._engine,
       getConfirmStore: () => this._engine?.confirmStore,
       getSessionPath: () => this._engine?.currentSessionPath,
-      emitEvent: (event) => this._engine?.emitSessionEvent(event),
-    });
+      emitEvent: (event: unknown) => this._engine?.emitSessionEvent(event),
+    } as any);
 
     // 9. 频道工具 + 私信工具（需要 channelsDir 和 agentsDir）
     if (this.channelsDir && this.agentsDir) {
       const agentId = path.basename(this.agentDir);
+      const agentsDir = this.agentsDir;
       const listAgents = () => {
         try {
-          return fs.readdirSync(this.agentsDir, { withFileTypes: true })
-            .filter(e => e.isDirectory() && fs.existsSync(path.join(this.agentsDir, e.name, "config.yaml")))
+          return fs.readdirSync(agentsDir, { withFileTypes: true })
+            .filter(e => e.isDirectory() && fs.existsSync(path.join(agentsDir, e.name, "config.yaml")))
             .map(e => {
               try {
-                const raw = fs.readFileSync(path.join(this.agentsDir, e.name, "config.yaml"), "utf-8");
+                const raw = fs.readFileSync(path.join(agentsDir, e.name, "config.yaml"), "utf-8");
                 const nameMatch = raw.match(/^\s*name:\s*(.+)$/m);
                 return { id: e.name, name: nameMatch?.[1]?.trim() || e.name };
               } catch { return { id: e.name, name: e.name }; }
@@ -434,7 +599,7 @@ export class Agent {
       this._askAgentTool = createAskAgentTool({
         agentId,
         listAgents,
-        engine: this._engine,
+        engine: this._engine as any,
       });
 
       this._dmTool = createDmTool({
@@ -580,28 +745,28 @@ export class Agent {
   // ════════════════════════════
 
   /** 设置 per-session 记忆开关（持久化由 engine 负责） */
-  setMemoryEnabled(val) {
+  setMemoryEnabled(val: unknown) {
     this._memorySessionEnabled = !!val;
     this._systemPrompt = this.buildSystemPrompt();
   }
 
   /** 查询指定 session 的持久化记忆开关，缺省视为开启 */
-  isSessionMemoryEnabledFor(sessionPath) {
+  isSessionMemoryEnabledFor(sessionPath?: string | null) {
     if (!sessionPath) return this._memorySessionEnabled;
     const metaPath = path.join(this.sessionDir, "session-meta.json");
-    const meta = safeReadJSON(metaPath, {});
+    const meta = safeReadJSON(metaPath, {}) as Record<string, { memoryEnabled?: boolean } | undefined>;
     return meta[path.basename(sessionPath)]?.memoryEnabled !== false;
   }
 
   /** 设置 agent 级别记忆总开关（同时重载 config 以获取 disabledSince/reenableAt） */
-  setMemoryMasterEnabled(val) {
+  setMemoryMasterEnabled(val: unknown) {
     this._memoryMasterEnabled = !!val;
     this._config = loadConfig(this.configPath);
     this._systemPrompt = this.buildSystemPrompt();
   }
 
   /** 设置当前启用的 skill 列表（由 engine._syncAgentSkills 调用） */
-  setEnabledSkills(skills) {
+  setEnabledSkills(skills: unknown[]) {
     this._enabledSkills = skills || [];
     this._systemPrompt = this.buildSystemPrompt();
   }
@@ -617,12 +782,12 @@ export class Agent {
    * @param {string} [cwd] - 当前工作目录（Phase 2 用）
    * @returns {Promise<string>} - 注入文本（空字符串表示无需注入）
    */
-  async recallForMessage(userMessage, cwd) {
+  async recallForMessage(userMessage: string, cwd?: string) {
     if (!this._proactiveRecall || !this.memoryEnabled) return "";
 
     try {
       // Phase 2: 获取项目标签
-      const projectTags = [];
+      const projectTags: string[] = [];
       if (this._projectMemory && cwd) {
         const profile = this._projectMemory.getProfile(cwd);
         if (profile?.detected) {
@@ -638,7 +803,7 @@ export class Agent {
       const isZh = String(this._config.locale || "").startsWith("zh");
       return this._proactiveRecall.formatForInjection(result, isZh);
     } catch (err) {
-      console.error(`[agent] recallForMessage failed: ${err.message}`);
+      console.error(`[agent] recallForMessage failed: ${errorMessage(err)}`);
       return "";
     }
   }
@@ -657,7 +822,7 @@ export class Agent {
    * 更新配置（写入 config.yaml 并刷新受影响的模块）
    * @param {object} partial - 要合并的配置片段
    */
-  updateConfig(partial) {
+  updateConfig(partial: AgentConfig) {
     // 写入磁盘 + 重新加载
     saveConfig(this.configPath, partial);
     this._config = loadConfig(this.configPath);
@@ -679,9 +844,9 @@ export class Agent {
 
     // 刷新受影响的模块
     if (partial.search) {
-      initWebSearch(this.configPath, {
-      searchConfigResolver: this._searchConfigResolver,
-    });
+      initWebSearch(this.configPath, this._searchConfigResolver
+        ? { searchConfigResolver: this._searchConfigResolver as any }
+        : {});
     }
 
     // 重建 system prompt
@@ -695,11 +860,11 @@ export class Agent {
   /** 返回纯人格 prompt（identity + yuan + ishiki），不含记忆、用户档案等 */
   get personality() {
     const isZh = String(this._config.locale || "").startsWith("zh");
-    const fill = (text) => text
+    const fill = (text: string) => text
       .replace(/\{\{userName\}\}/g, this.userName)
       .replace(/\{\{agentName\}\}/g, this.agentName)
       .replace(/\{\{agentId\}\}/g, path.basename(this.agentDir));
-    const readFile = (p) => safeReadFile(p, "");
+    const readFile = (p: string) => safeReadFile(p, "");
     const langDir = isZh ? "" : "en/";
     const yuanType = this._config?.agent?.yuan === "ming" ? "lynn" : (this._config?.agent?.yuan || "hanako");
     const identityMd = readFile(path.join(this.agentDir, "identity.md"))
@@ -715,7 +880,7 @@ export class Agent {
   }
 
   /** 读取 yuan 模板（能力定义） */
-  _readYuan() {
+  _readYuan(): string {
     const rawYuan = this._config?.agent?.yuan || "hanako";
     const yuanType = rawYuan === "ming" ? "lynn" : rawYuan;
     const isZh = String(this._config.locale || "").startsWith("zh");
@@ -725,9 +890,9 @@ export class Agent {
   }
 
   /** 读取对外意识（public-ishiki.md），guest 会话使用 */
-  _readPublicIshiki() {
-    const readFile = (p) => safeReadFile(p, "");
-    const fill = (text) => text
+  _readPublicIshiki(): string {
+    const readFile = (p: string) => safeReadFile(p, "");
+    const fill = (text: string) => text
       .replace(/\{\{userName\}\}/g, this.userName)
       .replace(/\{\{agentName\}\}/g, this.agentName)
       .replace(/\{\{agentId\}\}/g, path.basename(this.agentDir));
@@ -743,9 +908,9 @@ export class Agent {
   }
 
   /** 组装 system prompt（静态/动态分层缓存） */
-  buildSystemPrompt() {
+  buildSystemPrompt(): string {
     const isZh = String(this._config.locale || "").startsWith("zh");
-    const readFile = (filePath) => safeReadFile(filePath, "");
+    const readFile = (filePath: string) => safeReadFile(filePath, "");
 
     // ── 静态部分（identity + yuan + ishiki + skills + 固定规则，可缓存） ──
     const staticParts = this._buildStaticPrompt(isZh);
@@ -760,12 +925,12 @@ export class Agent {
   }
 
   /** 静态 prompt（personality + 固定规则 + skills），config 不变时缓存复用 */
-  _buildStaticPrompt(isZh) {
+  _buildStaticPrompt(isZh: boolean): string {
     const rawYuan = this._config?.agent?.yuan || "hanako";
     const yuanType = rawYuan === "ming" ? "lynn" : rawYuan;
     if (!this._readYuan()) throw new Error(`Cannot find yuan "${yuanType}". Check lib/yuan/`);
     const ishiki = this.personality;
-    const skillsText = this._enabledSkills?.length > 0 ? formatSkillsForPrompt(this._enabledSkills) : "";
+    const skillsText = this._enabledSkills?.length > 0 ? formatSkillsForPrompt(this._enabledSkills as any) : "";
     const learnCfg = this._engine?.getLearnSkills?.() || this._config?.capabilities?.learn_skills || {};
 
     // 缓存 key：基于实际静态 prompt 依赖做哈希，避免“长度相同但内容变化”时命中脏缓存
@@ -931,9 +1096,9 @@ export class Agent {
   }
 
   /** 动态 prompt（memory + user.md + pinned + 项目/用户画像），每次实时读取 */
-  _buildDynamicPrompt(isZh, readFile) {
-    const section = (title, content) => ["", "---", "", title, "", content];
-    const parts = [];
+  _buildDynamicPrompt(isZh: boolean, readFile: (filePath: string) => string): string {
+    const section = (title: string, content: string): string[] => ["", "---", "", title, "", content];
+    const parts: string[] = [];
 
     const userMd = readFile(path.join(this.userDir, "user.md"));
     const pinnedMd = readFile(path.join(this.agentDir, "pinned.md"));
