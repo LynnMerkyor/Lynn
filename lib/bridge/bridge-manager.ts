@@ -14,12 +14,18 @@ import { createFeishuAdapter } from "./feishu-adapter.js";
 import { createQQAdapter } from "./qq-adapter.js";
 import { createWechatAdapter } from "./wechat-adapter.js";
 import { downloadMedia, bufferToBase64, detectMime, splitMediaFromOutput, formatSize, setMediaLocalRoots } from "./media-utils.js";
+import type {
+  BridgeAdapter,
+  BridgeAttachment,
+  BridgeMessageHandler,
+  BridgeMessagePayload,
+  BridgeStatus,
+} from "./adapter-types.js";
 import { AppError } from "../../shared/errors.js";
 import { errorBus } from "../../shared/error-bus.js";
 
 const BRIDGE_PLATFORMS = ["telegram", "feishu", "qq", "wechat"] as const;
 type BridgePlatform = typeof BRIDGE_PLATFORMS[number];
-type BridgeStatus = "connecting" | "connected" | "disconnected" | "error" | (string & {});
 type BridgeRole = "owner" | "guest";
 
 interface TelegramCredentials {
@@ -69,31 +75,7 @@ interface BridgePreferences {
   [key: string]: unknown;
 }
 
-export interface BridgeAttachment {
-  type: "image" | "audio" | "video" | "file" | (string & {});
-  url?: string;
-  platformRef?: string;
-  _messageId?: string;
-  filename?: string;
-  mimeType?: string;
-  duration?: number;
-  size?: number;
-  width?: number;
-  height?: number;
-}
-
-export interface BridgeMessagePayload {
-  platform?: string;
-  chatId: string;
-  userId?: string;
-  sessionKey: string;
-  text: string;
-  senderName?: string | null;
-  avatarUrl?: string | null;
-  isGroup?: boolean;
-  attachments?: BridgeAttachment[];
-  _msgId?: string;
-}
+export type { BridgeAdapter, BridgeAttachment, BridgeMessagePayload, BridgeStatus } from "./adapter-types.js";
 
 interface BridgeMessageMeta {
   name?: string | null;
@@ -116,27 +98,6 @@ interface SplitMediaResult {
   text: string;
   mediaUrls: string[];
 }
-
-interface BridgeAdapterCapabilities {
-  proactive?: boolean;
-}
-
-export interface BridgeAdapter {
-  capabilities?: BridgeAdapterCapabilities;
-  sendReply(chatId: string, text: string, ...args: unknown[]): Promise<unknown>;
-  sendBlockReply?(chatId: string, text: string, ...args: unknown[]): Promise<unknown>;
-  sendDraft?(chatId: string, text: string): Promise<unknown>;
-  sendMedia?(chatId: string, source: string): Promise<unknown>;
-  sendMediaBuffer?(chatId: string, buffer: Buffer, meta: { mime: string; filename: string }): Promise<unknown>;
-  downloadImage?(platformRef: string): Promise<Buffer>;
-  downloadFile?(messageId: string, fileKey: string): Promise<Buffer>;
-  resolveOwnerChatId?(userId: string): string | null | undefined;
-  canReply?(chatId: string): boolean;
-  stop(): void | Promise<void>;
-  getMe?(): Promise<unknown>;
-}
-
-type BridgeMessageHandler = (msg: BridgeMessagePayload) => void | Promise<void>;
 
 interface BridgeAdapterHooks {
   onEvent?: (evt: unknown) => void;
@@ -248,19 +209,6 @@ function isBridgeErrorReply(reply: BridgeExternalReply): reply is BridgeExternal
   return !!reply && typeof reply === "object" && reply.__bridgeError === true;
 }
 
-const makeTelegramAdapter = createTelegramAdapter as unknown as (opts: {
-  token: string;
-  onMessage: BridgeMessageHandler;
-  onStatus?: BridgeAdapterHooks["onStatus"];
-}) => BridgeAdapter;
-
-const makeFeishuAdapter = createFeishuAdapter as unknown as (opts: {
-  appId: string;
-  appSecret: string;
-  onMessage: BridgeMessageHandler;
-  onStatus?: BridgeAdapterHooks["onStatus"];
-}) => Promise<BridgeAdapter>;
-
 const makeQQAdapter = createQQAdapter as unknown as (opts: {
   appID: string;
   appSecret: string;
@@ -284,7 +232,7 @@ const ADAPTER_REGISTRY: Record<BridgePlatform, AdapterRegistryEntry> = {
   telegram: {
     create: (creds, onMessage, hooks) => {
       const telegramCreds = creds as TelegramCredentials;
-      return makeTelegramAdapter({ token: telegramCreds.token, onMessage, onStatus: hooks?.onStatus });
+      return createTelegramAdapter({ token: telegramCreds.token, onMessage, onStatus: hooks?.onStatus });
     },
     getCredentials: (cfg) => cfg?.enabled && cfg?.token ? { token: cfg.token } : null,
     ownerSessionKey: (userId) => `tg_dm_${userId}`,
@@ -292,7 +240,7 @@ const ADAPTER_REGISTRY: Record<BridgePlatform, AdapterRegistryEntry> = {
   feishu: {
     create: (creds, onMessage, hooks) => {
       const feishuCreds = creds as FeishuCredentials;
-      return makeFeishuAdapter({ appId: feishuCreds.appId, appSecret: feishuCreds.appSecret, onMessage, onStatus: hooks?.onStatus });
+      return createFeishuAdapter({ appId: feishuCreds.appId, appSecret: feishuCreds.appSecret, onMessage, onStatus: hooks?.onStatus });
     },
     getCredentials: (cfg) => cfg?.enabled && cfg?.appId && cfg?.appSecret ? { appId: cfg.appId, appSecret: cfg.appSecret } : null,
     ownerSessionKey: (userId) => `fs_dm_${userId}`,
