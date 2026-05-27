@@ -52,7 +52,7 @@ describe('composer controls regression', () => {
     const panel = read('desktop/src/react/components/input/DeepResearchPanel.tsx');
     const inputArea = read('desktop/src/react/components/InputArea.tsx');
     const formatter = read('desktop/src/react/components/input/deep-research.ts');
-    const serverFormatter = read('server/routes/deep-research.js');
+    const serverFormatter = read('server/routes/deep-research.ts');
     const joined = [panel, inputArea, formatter, serverFormatter].join('\n');
 
     expect(joined).toContain('深度调研');

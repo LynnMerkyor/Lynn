@@ -30,27 +30,121 @@ import { saveConfig, clearConfigCache } from "../../lib/memory/config-loader.js"
 import { rebuildIndex } from "../../lib/tools/experience.js";
 import { splitByScope, injectGlobalFields } from '../../shared/config-scope.js';
 
-// ── 工具函数 ──
+type JsonRecord = Record<string, unknown>;
 
-function validateId(id) {
-  return id && !id.includes("..") && !id.includes("/") && !id.includes("\\");
+type AgentCreateBody = {
+  name?: unknown;
+  id?: unknown;
+  yuan?: unknown;
+};
+
+type AgentIdBody = {
+  id?: unknown;
+};
+
+type AgentOrderBody = {
+  order?: unknown;
+};
+
+type AvatarUploadBody = {
+  data?: unknown;
+};
+
+type MarkdownBody = {
+  content?: unknown;
+};
+
+type PinnedBody = {
+  pins?: unknown;
+};
+
+type ApiBlockName = "api" | "embedding_api" | "utility_api";
+
+type ProviderRegistryEntry = {
+  baseUrl?: unknown;
+  api?: unknown;
+};
+
+type RawProviderConfig = {
+  base_url?: unknown;
+  api?: unknown;
+  api_key?: unknown;
+  models?: unknown;
+  [key: string]: unknown;
+};
+
+type ProviderRegistryLike = {
+  getAllProvidersRaw(): Record<string, RawProviderConfig>;
+  get(name: string): ProviderRegistryEntry | null | undefined;
+  removeProvider(name: string): unknown;
+  saveProvider(name: string, data: unknown): unknown;
+  reload?: () => unknown;
+};
+
+type LoadedAgentLike = {
+  config?: JsonRecord;
+  updateConfig?: (partial: JsonRecord) => unknown;
+};
+
+type AgentsRouteEngine = {
+  [key: string]: unknown;
+  agentsDir: string;
+  currentAgentId?: string;
+  agentName?: string;
+  providerRegistry: ProviderRegistryLike;
+  listAgents(): unknown[];
+  createAgent(input: { name: string; id?: string; yuan?: unknown }): JsonRecord | Promise<JsonRecord>;
+  switchAgent(id: string): unknown | Promise<unknown>;
+  deleteAgent(id: string): unknown | Promise<unknown>;
+  setPrimaryAgent(id: string): unknown;
+  saveAgentOrder(order: unknown[]): unknown;
+  invalidateAgentListCache(): unknown;
+  updateConfig(partial: JsonRecord): unknown | Promise<unknown>;
+  getAgent?: (id: string) => LoadedAgentLike | null | undefined;
+  setMemoryMasterEnabled(id: string, enabled: boolean): unknown;
+};
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function agentDir(engine, id) {
+function asRecord(value: unknown): JsonRecord {
+  return isRecord(value) ? value : {};
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function hasErrorCode(err: unknown, code: string): boolean {
+  return err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === code;
+}
+
+function hasNumericLength(value: unknown): value is { length: number } {
+  return typeof (value as { length?: unknown } | null | undefined)?.length === "number";
+}
+
+// ── 工具函数 ──
+
+function validateId(id: string | undefined): id is string {
+  return typeof id === "string" && id.length > 0 && !id.includes("..") && !id.includes("/") && !id.includes("\\");
+}
+
+function agentDir(engine: AgentsRouteEngine, id: string): string {
   return path.join(engine.agentsDir, id);
 }
 
-function agentExists(engine, id) {
+function agentExists(engine: AgentsRouteEngine, id: string): boolean {
   return fsSync.existsSync(path.join(agentDir(engine, id), "config.yaml"));
 }
 
-function isActiveAgent(engine, id) {
+function isActiveAgent(engine: AgentsRouteEngine, id: string): boolean {
   return id === engine.currentAgentId;
 }
 
 // 本地应用，API key 不做掩码，前端用 type="password" 控制显隐
 
-export function createAgentsRoute(engine) {
+export function createAgentsRoute(engine: AgentsRouteEngine): Hono {
   const route = new Hono();
 
   // ════════════════════════════
@@ -61,29 +155,37 @@ export function createAgentsRoute(engine) {
     try {
       return c.json({ agents: engine.listAgents() });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
   route.post("/agents", async (c) => {
     try {
-      const body = await safeJson(c);
+      const body = await safeJson<AgentCreateBody>(c);
       const { name, id, yuan } = body;
-      if (!name?.trim()) {
+      if (typeof name !== "string" || !name.trim()) {
         return c.json({ error: "name is required" }, 400);
       }
-      const result = await engine.createAgent({ name, id, yuan });
+      const result = await engine.createAgent({
+        name,
+        id: typeof id === "string" ? id : undefined,
+        yuan,
+      });
       return c.json({ ok: true, ...result });
     } catch (err) {
-      return c.json({ error: err.message }, err.message.includes("已存在") ? 409 : 500);
+      const message = errorMessage(err);
+      if (message.includes("已存在")) {
+        return c.json({ error: message }, 409);
+      }
+      return c.json({ error: message }, 500);
     }
   });
 
   route.post("/agents/switch", async (c) => {
     try {
-      const body = await safeJson(c);
+      const body = await safeJson<AgentIdBody>(c);
       const { id } = body;
-      if (!id?.trim() || !validateId(id)) {
+      if (typeof id !== "string" || !id.trim() || !validateId(id)) {
         return c.json({ error: "invalid id" }, 400);
       }
       await engine.switchAgent(id);
@@ -95,7 +197,7 @@ export function createAgentsRoute(engine) {
         },
       });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -106,24 +208,28 @@ export function createAgentsRoute(engine) {
       await engine.deleteAgent(id);
       return c.json({ ok: true });
     } catch (err) {
-      const code = err.message.includes("不能删除当前") ? 400
-        : err.message.includes("不存在") ? 404
-        : 500;
-      return c.json({ error: err.message }, code);
+      const message = errorMessage(err);
+      if (message.includes("不能删除当前")) {
+        return c.json({ error: message }, 400);
+      }
+      if (message.includes("不存在")) {
+        return c.json({ error: message }, 404);
+      }
+      return c.json({ error: message }, 500);
     }
   });
 
   route.put("/agents/primary", async (c) => {
     try {
-      const body = await safeJson(c);
+      const body = await safeJson<AgentIdBody>(c);
       const { id } = body;
-      if (!id?.trim()) {
+      if (typeof id !== "string" || !id.trim()) {
         return c.json({ error: "id is required" }, 400);
       }
       engine.setPrimaryAgent(id);
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -133,7 +239,7 @@ export function createAgentsRoute(engine) {
 
   route.put("/agents/order", async (c) => {
     try {
-      const body = await safeJson(c);
+      const body = await safeJson<AgentOrderBody>(c);
       const { order } = body;
       if (!Array.isArray(order)) {
         return c.json({ error: "order must be an array" }, 400);
@@ -141,7 +247,7 @@ export function createAgentsRoute(engine) {
       engine.saveAgentOrder(order);
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -155,10 +261,10 @@ export function createAgentsRoute(engine) {
       return c.json({ error: "invalid id" }, 400);
     }
     const avatarPath = path.join(agentDir(engine, id), "avatars");
-    const mimeMap = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" };
+    const mimeMap = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" } satisfies Record<string, string>;
     // 先找 agent.* 再找 avatar.*（兼容专家头像预设）
     for (const name of ["agent", "avatar"]) {
-      for (const ext of ["png", "jpg", "jpeg", "webp"]) {
+      for (const ext of ["png", "jpg", "jpeg", "webp"] as const) {
         const p = path.join(avatarPath, `${name}.${ext}`);
         try {
           await fs.access(p);
@@ -179,7 +285,7 @@ export function createAgentsRoute(engine) {
     if (!validateId(id) || !agentExists(engine, id)) {
       return c.json({ error: "agent not found" }, 404);
     }
-    const body = await safeJson(c);
+    const body = await safeJson<AvatarUploadBody>(c);
     const { data } = body;
     if (!data || typeof data !== "string") {
       return c.json({ error: "data (base64) is required" }, 400);
@@ -225,28 +331,31 @@ export function createAgentsRoute(engine) {
     try {
       const configPath = path.join(agentDir(engine, id), "config.yaml");
       // 直接解析 YAML，不走 loadConfig 全局缓存
-      const config = YAML.load(await fs.readFile(configPath, "utf-8")) || {};
+      const config = asRecord(YAML.load(await fs.readFile(configPath, "utf-8")));
       const loadedAgent = typeof engine.getAgent === "function" ? engine.getAgent(id) : null;
 
       if (loadedAgent?.config) {
         const runtimeConfig = loadedAgent.config;
         config.models = {
-          ...(runtimeConfig.models || {}),
-          ...(config.models || {}),
+          ...asRecord(runtimeConfig.models),
+          ...asRecord(config.models),
         };
         config.api = {
-          ...(runtimeConfig.api || {}),
-          ...(config.api || {}),
+          ...asRecord(runtimeConfig.api),
+          ...asRecord(config.api),
         };
       }
 
       // API key 不做掩码（本地应用，前端用 type="password" 控制显隐）
 
       // 附带 raw 结构
+      const api = asRecord(config.api);
+      const embeddingApi = asRecord(config.embedding_api);
+      const utilityApi = asRecord(config.utility_api);
       config._raw = {
-        api: { provider: config.api?.provider || "", base_url: config.api?.base_url || "" },
-        embedding_api: { provider: config.embedding_api?.provider || "", base_url: config.embedding_api?.base_url || "" },
-        utility_api: { provider: config.utility_api?.provider || "", base_url: config.utility_api?.base_url || "" },
+        api: { provider: api.provider || "", base_url: api.base_url || "" },
+        embedding_api: { provider: embeddingApi.provider || "", base_url: embeddingApi.base_url || "" },
+        utility_api: { provider: utilityApi.provider || "", base_url: utilityApi.base_url || "" },
       };
 
       // 自动注入全局字段（schema-driven，替代手写逐个注入）
@@ -255,15 +364,16 @@ export function createAgentsRoute(engine) {
       // 供应商列表
       try {
         const rawProviders = engine.providerRegistry.getAllProvidersRaw();
-        const providerEntries = {};
+        const providerEntries: Record<string, JsonRecord> = {};
         for (const [name, p] of Object.entries(rawProviders)) {
           const entry = engine.providerRegistry.get(name);
+          const models = p.models || [];
           providerEntries[name] = {
             base_url: p.base_url || entry?.baseUrl || "",
             api: p.api || entry?.api || "",
             api_key: p.api_key || "",
-            models: p.models || [],
-            model_count: (p.models || []).length,
+            models,
+            model_count: hasNumericLength(models) ? models.length : 0,
           };
         }
         config.providers = providerEntries;
@@ -273,7 +383,7 @@ export function createAgentsRoute(engine) {
 
       return c.json(config);
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -283,19 +393,23 @@ export function createAgentsRoute(engine) {
       return c.json({ error: "agent not found" }, 404);
     }
     try {
-      const partial = await safeJson(c);
+      const partial = await safeJson<JsonRecord>(c);
       if (!partial || typeof partial !== "object") {
         return c.json({ error: "invalid JSON body" }, 400);
       }
       // ── schema-driven 全局字段分流 ──
       const { global: globalFields, agent: agentPartial } = splitByScope(partial);
       for (const { setter, value } of globalFields) {
-        engine[setter](value);
+        const setterFn = engine[setter];
+        if (typeof setterFn !== "function") {
+          throw new TypeError(`${setter} is not a function`);
+        }
+        setterFn.call(engine, value);
       }
 
       // providers 块 → 全局 added-models.yaml
       let providersChanged = false;
-      if (agentPartial.providers) {
+      if (agentPartial.providers && typeof agentPartial.providers === "object") {
         for (const [name, data] of Object.entries(agentPartial.providers)) {
           if (data === null) {
             engine.providerRegistry.removeProvider(name);
@@ -308,18 +422,19 @@ export function createAgentsRoute(engine) {
       }
 
       // 内联 API 凭证 → 全局 added-models.yaml 对应条目
-      for (const blockName of ["api", "embedding_api", "utility_api"]) {
+      for (const blockName of ["api", "embedding_api", "utility_api"] satisfies ApiBlockName[]) {
         const block = agentPartial[blockName];
-        if (block?.api_key || block?.base_url) {
+        if (isRecord(block) && (block.api_key || block.base_url)) {
           const cfgPath = path.join(agentDir(engine, id), "config.yaml");
-          const agentCfg = YAML.load(fsSync.readFileSync(cfgPath, "utf-8")) || {};
+          const agentCfg = asRecord(YAML.load(fsSync.readFileSync(cfgPath, "utf-8")));
+          const existingBlock = asRecord(agentCfg[blockName]);
           const provName = typeof block.provider === "string" && block.provider.trim()
             ? block.provider.trim()
-            : (agentCfg[blockName]?.provider || "").trim();
+            : (typeof existingBlock.provider === "string" ? existingBlock.provider : "").trim();
           if (!provName) {
             return c.json({ error: `${blockName}.provider is required when saving credentials` }, 400);
           }
-          const provUpdate = {};
+          const provUpdate: JsonRecord = {};
           if (block.api_key) provUpdate.api_key = block.api_key;
           if (block.base_url) provUpdate.base_url = block.base_url;
           engine.providerRegistry.saveProvider(provName, provUpdate);
@@ -332,7 +447,7 @@ export function createAgentsRoute(engine) {
       // providers 变更后确保运行时刷新
       if (providersChanged) {
         clearConfigCache();
-        engine.providerRegistry?.reload();
+        engine.providerRegistry.reload?.();
       }
 
       // providers 是全局状态，变更后无论编辑的是哪个 agent，运行时都要刷新
@@ -345,12 +460,13 @@ export function createAgentsRoute(engine) {
       }
 
       // 记忆总开关：写入时间戳（用于过滤关闭期间的 session）
-      if (agentPartial.memory && "enabled" in agentPartial.memory) {
+      const memory = agentPartial.memory;
+      if (isRecord(memory) && "enabled" in memory) {
         const now = new Date().toISOString();
-        if (agentPartial.memory.enabled === false) {
-          agentPartial.memory.disabledSince = now;
+        if (memory.enabled === false) {
+          memory.disabledSince = now;
         } else {
-          agentPartial.memory.reenableAt = now;
+          memory.reenableAt = now;
         }
       }
 
@@ -367,12 +483,12 @@ export function createAgentsRoute(engine) {
         }
       }
       // 记忆总开关：无论是否 active agent，都需要刷新运行时状态（因为 ticker 后台在跑）
-      if (agentPartial.memory && "enabled" in agentPartial.memory) {
-        engine.setMemoryMasterEnabled(id, agentPartial.memory.enabled !== false);
+      if (isRecord(memory) && "enabled" in memory) {
+        engine.setMemoryMasterEnabled(id, memory.enabled !== false);
       }
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -389,8 +505,8 @@ export function createAgentsRoute(engine) {
       const content = await fs.readFile(path.join(agentDir(engine, id), "identity.md"), "utf-8");
       return c.json({ content });
     } catch (err) {
-      if (err.code === "ENOENT") return c.json({ content: "" });
-      return c.json({ error: err.message }, 500);
+      if (hasErrorCode(err, "ENOENT")) return c.json({ content: "" });
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -400,7 +516,7 @@ export function createAgentsRoute(engine) {
       return c.json({ error: "agent not found" }, 404);
     }
     try {
-      const body = await safeJson(c);
+      const body = await safeJson<MarkdownBody>(c);
       const { content } = body;
       if (typeof content !== "string") {
         return c.json({ error: "content must be a string" }, 400);
@@ -410,7 +526,7 @@ export function createAgentsRoute(engine) {
       if (isActiveAgent(engine, id)) await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -427,8 +543,8 @@ export function createAgentsRoute(engine) {
       const content = await fs.readFile(path.join(agentDir(engine, id), "ishiki.md"), "utf-8");
       return c.json({ content });
     } catch (err) {
-      if (err.code === "ENOENT") return c.json({ content: "" });
-      return c.json({ error: err.message }, 500);
+      if (hasErrorCode(err, "ENOENT")) return c.json({ content: "" });
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -438,7 +554,7 @@ export function createAgentsRoute(engine) {
       return c.json({ error: "agent not found" }, 404);
     }
     try {
-      const body = await safeJson(c);
+      const body = await safeJson<MarkdownBody>(c);
       const { content } = body;
       if (typeof content !== "string") {
         return c.json({ error: "content must be a string" }, 400);
@@ -447,7 +563,7 @@ export function createAgentsRoute(engine) {
       if (isActiveAgent(engine, id)) await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -464,8 +580,8 @@ export function createAgentsRoute(engine) {
       const content = await fs.readFile(path.join(agentDir(engine, id), "public-ishiki.md"), "utf-8");
       return c.json({ content });
     } catch (err) {
-      if (err.code === "ENOENT") return c.json({ content: "" });
-      return c.json({ error: err.message }, 500);
+      if (hasErrorCode(err, "ENOENT")) return c.json({ content: "" });
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -475,7 +591,7 @@ export function createAgentsRoute(engine) {
       return c.json({ error: "agent not found" }, 404);
     }
     try {
-      const body = await safeJson(c);
+      const body = await safeJson<MarkdownBody>(c);
       const { content } = body;
       if (typeof content !== "string") {
         return c.json({ error: "content must be a string" }, 400);
@@ -484,7 +600,7 @@ export function createAgentsRoute(engine) {
       if (isActiveAgent(engine, id)) await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -506,8 +622,8 @@ export function createAgentsRoute(engine) {
         .map(line => line.replace(/^-\s*/, ""));
       return c.json({ pins });
     } catch (err) {
-      if (err.code === "ENOENT") return c.json({ pins: [] });
-      return c.json({ error: err.message }, 500);
+      if (hasErrorCode(err, "ENOENT")) return c.json({ pins: [] });
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -517,7 +633,7 @@ export function createAgentsRoute(engine) {
       return c.json({ error: "agent not found" }, 404);
     }
     try {
-      const body = await safeJson(c);
+      const body = await safeJson<PinnedBody>(c);
       const { pins } = body;
       if (!Array.isArray(pins)) {
         return c.json({ error: "pins must be an array" }, 400);
@@ -532,7 +648,7 @@ export function createAgentsRoute(engine) {
       if (isActiveAgent(engine, id)) await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -552,7 +668,7 @@ export function createAgentsRoute(engine) {
       const files = (await fs.readdir(expDir)).filter((f) => f.endsWith(".md")).sort();
       if (files.length === 0) return c.json({ content: "" });
 
-      const blocks = [];
+      const blocks: string[] = [];
       for (const file of files) {
         const category = file.replace(/\.md$/, "");
         const body = await fs.readFile(path.join(expDir, file), "utf-8");
@@ -560,8 +676,8 @@ export function createAgentsRoute(engine) {
       }
       return c.json({ content: blocks.join("\n\n") + "\n" });
     } catch (err) {
-      if (err.code === "ENOENT") return c.json({ content: "" });
-      return c.json({ error: err.message }, 500);
+      if (hasErrorCode(err, "ENOENT")) return c.json({ content: "" });
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 
@@ -571,7 +687,7 @@ export function createAgentsRoute(engine) {
       return c.json({ error: "agent not found" }, 404);
     }
     try {
-      const body = await safeJson(c);
+      const body = await safeJson<MarkdownBody>(c);
       const { content } = body;
       if (typeof content !== "string") {
         return c.json({ error: "content must be a string" }, 400);
@@ -582,8 +698,8 @@ export function createAgentsRoute(engine) {
       const indexPath = path.join(dir, "experience.md");
 
       // 解析合并 markdown → 按 ^# 分割成分类
-      const categories = new Map();
-      let currentCat = null;
+      const categories = new Map<string, string[]>();
+      let currentCat: string | null = null;
       const lines = content.split("\n");
 
       for (const line of lines) {
@@ -592,7 +708,7 @@ export function createAgentsRoute(engine) {
           currentCat = headingMatch[1].trim();
           if (!categories.has(currentCat)) categories.set(currentCat, []);
         } else if (currentCat !== null) {
-          categories.get(currentCat).push(line);
+          categories.get(currentCat)?.push(line);
         }
       }
 
@@ -600,7 +716,7 @@ export function createAgentsRoute(engine) {
       await fs.mkdir(expDir, { recursive: true });
 
       // 写入各分类文件
-      const newFiles = new Set();
+      const newFiles = new Set<string>();
       for (const [cat, catLines] of categories) {
         const catBody = catLines.join("\n").trim();
         if (!catBody) continue;
@@ -627,7 +743,7 @@ export function createAgentsRoute(engine) {
       if (isActiveAgent(engine, id)) await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err.message }, 500);
+      return c.json({ error: errorMessage(err) }, 500);
     }
   });
 

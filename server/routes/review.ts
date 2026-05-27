@@ -15,7 +15,7 @@
 import fs from "fs";
 import path from "path";
 import { Hono } from "hono";
-import { runAgentSession } from "../../hub/agent-executor.js";
+import { runAgentSession, type AgentSessionRound, type RunAgentSessionOptions } from "../../hub/agent-executor.js";
 import { getLocale } from "../i18n.js";
 import { buildReviewFollowUp, parseStructuredReview } from "../review-result.js";
 import { buildReviewFollowUpTaskPrompt, buildReviewFollowUpTaskTitle } from "../review-follow-up.js";
@@ -25,26 +25,295 @@ import {
   getUserFacingRoleModelLabel,
 } from "../../shared/assistant-role-models.js";
 
-const REVIEWER_YUANS = new Set(["hanako", "butter"]);
+type ReviewerKind = "hanako" | "butter";
+type ReviewProgressStage = "packing_context" | "reviewing" | "structuring" | "done";
+type ReviewVerdict = "pass" | "concerns" | "blocker";
+type JsonRecord = Record<string, unknown>;
+
+interface RuntimeAgentLike {
+  id?: string;
+  yuan?: string;
+  tier?: string;
+  agentName?: string;
+  config?: {
+    agent?: {
+      yuan?: string;
+      tier?: string;
+    };
+    api?: {
+      provider?: string | null;
+    };
+    models?: {
+      chat?: string | {
+        id?: string | null;
+        provider?: string | null;
+      } | null;
+    };
+  };
+  updateConfig?: (patch: unknown) => unknown;
+}
+
+interface AgentListItem {
+  id: string;
+  name?: string;
+  yuan?: string;
+  tier?: string;
+  hasAvatar?: boolean;
+}
+
+interface ModelLike {
+  id?: string | null;
+  provider?: string | null;
+  [key: string]: unknown;
+}
+
+interface UtilityConfigLike {
+  utility_large?: string | null;
+  utility_large_provider?: string | null;
+  utility_large_fallbacks?: Array<{ model?: string | null; provider?: string | null }>;
+  utility?: string | null;
+  utility_provider?: string | null;
+  utility_fallbacks?: Array<{ model?: string | null; provider?: string | null }>;
+}
+
+interface ReviewPreferences {
+  review?: {
+    defaultReviewer?: unknown;
+    hanakoReviewerId?: unknown;
+    butterReviewerId?: unknown;
+  };
+  [key: string]: unknown;
+}
+
+interface ReviewConfig {
+  defaultReviewer: ReviewerKind;
+  hanakoReviewerId: string | null;
+  butterReviewerId: string | null;
+}
+
+interface ReviewCandidate {
+  id: string;
+  name: string;
+  displayName: string;
+  yuan: ReviewerKind;
+  hasAvatar: boolean;
+  isCurrent: boolean;
+  modelId: string | null;
+  modelProvider: string | null;
+}
+
+interface GroupedReviewCandidates {
+  hanako: ReviewCandidate[];
+  butter: ReviewCandidate[];
+}
+
+interface BuiltReviewConfig extends ReviewConfig {
+  candidates: GroupedReviewCandidates;
+  resolvedReviewer: (ReviewCandidate & { reviewerName: string }) | null;
+}
+
+interface ReviewRouteEngine {
+  currentAgentId?: string | null;
+  currentSessionPath?: string | null;
+  deskCwd?: string | null;
+  homeCwd?: string | null;
+  currentModel?: ModelLike | null;
+  availableModels?: ModelLike[];
+  getPreferences?: () => ReviewPreferences;
+  savePreferences?: (prefs: ReviewPreferences) => unknown;
+  listAgents?: () => AgentListItem[];
+  getAgent?: (id: string) => RuntimeAgentLike | null | undefined;
+  createAgent?: (opts: { name: string; yuan: ReviewerKind }) => Promise<{ id?: string | null } | null | undefined>;
+  ensureAgentLoaded?: (id: string) => Promise<RuntimeAgentLike | null | undefined>;
+  invalidateAgentListCache?: () => unknown;
+  resolveUtilityConfig?: () => UtilityConfigLike | null | undefined;
+}
+
+interface BroadcastPayload extends JsonRecord {
+  type: string;
+}
+
+type BroadcastFn = (payload: BroadcastPayload) => unknown;
+
+interface ReviewTaskRuntime {
+  createReviewFollowUpTask(input: JsonRecord): unknown;
+}
+
+interface CreateReviewRouteOptions {
+  broadcast?: BroadcastFn;
+  taskRuntime?: ReviewTaskRuntime | null;
+}
+
+interface CodedError extends Error {
+  code?: string;
+}
+
+interface ReviewRunResult {
+  content: string;
+  fallbackNote: string | null;
+  errorCode: string | null;
+  usedModelId: string | null;
+  usedModelProvider: string | null;
+  usedModelLabel: string | null;
+}
+
+interface StructuredReviewFinding {
+  severity?: string;
+  title?: string;
+  detail?: string;
+  suggestion?: string;
+  filePath?: string;
+}
+
+interface StructuredReviewLike extends JsonRecord {
+  summary?: string;
+  verdict?: ReviewVerdict | string;
+  findings?: StructuredReviewFinding[];
+  nextStep?: string;
+  workflowGate?: string;
+}
+
+interface SessionContextPack {
+  userText: string;
+  assistantText: string;
+  toolUses: Array<{ name: string; argsPreview: string }>;
+  recentMessages: Array<{ role: string; text: string }>;
+}
+
+interface ReviewContextPack {
+  request: string;
+  gitContext: { sessionPath: string; sessionFile: string } | null;
+  sessionContext: SessionContextPack | null;
+  workspacePath?: string;
+}
+
+interface FollowUpContextPackShape {
+  request?: string;
+  workspacePath?: string;
+  sessionContext?: {
+    userText?: string;
+    assistantText?: string;
+  };
+}
+
+interface ReviewerShapePatch {
+  yuan?: ReviewerKind;
+  tier?: "local" | "reviewer";
+}
+
+interface ReviewFollowUpBody extends JsonRecord {
+  structuredReview?: unknown;
+  sessionPath?: unknown;
+  followUpPrompt?: unknown;
+  contextPack?: unknown;
+  reviewerName?: unknown;
+  sourceResponse?: unknown;
+  executionResolution?: unknown;
+  reviewId?: unknown;
+}
+
+interface ReviewConfigBody extends JsonRecord {
+  defaultReviewer?: unknown;
+  hanakoReviewerId?: unknown;
+  butterReviewerId?: unknown;
+}
+
+interface ReviewRequestBody extends JsonRecord {
+  context?: unknown;
+  reviewerKind?: unknown;
+}
+
+interface ReviewProgressEmitterArgs {
+  broadcast: BroadcastFn;
+  reviewId: string;
+  sessionPath: string | null;
+  reviewer: ReviewCandidate;
+}
+
+interface ToolUseBlock extends JsonRecord {
+  type?: unknown;
+  input?: unknown;
+  arguments?: unknown;
+  name?: unknown;
+}
+
+interface SessionMessageBlock extends JsonRecord {
+  type?: unknown;
+  text?: unknown;
+}
+
+interface SessionMessageRecord extends JsonRecord {
+  type?: unknown;
+  message?: {
+    role?: unknown;
+    content?: unknown;
+  };
+}
+
+const REVIEWER_YUANS = new Set<ReviewerKind>(["hanako", "butter"]);
 const BUILT_IN_REVIEWER_IDS = new Set(["hanako", "butter"]);
-const REVIEW_PROGRESS_STAGES = ["packing_context", "reviewing", "structuring", "done"];
+const REVIEW_PROGRESS_STAGES: ReviewProgressStage[] = ["packing_context", "reviewing", "structuring", "done"];
 const MAX_CONTEXT_PREVIEW_CHARS = 2200;
 const MAX_SESSION_LINES = 120;
 const MAX_TOOL_ITEMS = 10;
 const REVIEW_EXEC_TIMEOUT_MS = 45_000;
 const REVIEW_FALLBACK_TIMEOUT_MS = 22_000;
 
-function stripThinkTags(raw) {
+function asRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as JsonRecord
+    : null;
+}
+
+function asStructuredReview(value: unknown): StructuredReviewLike | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const findings = Array.isArray(record.findings)
+    ? record.findings
+        .map((finding) => asRecord(finding))
+        .filter((finding): finding is JsonRecord => !!finding)
+        .map((finding) => ({
+          severity: typeof finding.severity === "string" ? finding.severity : undefined,
+          title: typeof finding.title === "string" ? finding.title : undefined,
+          detail: typeof finding.detail === "string" ? finding.detail : undefined,
+          suggestion: typeof finding.suggestion === "string" ? finding.suggestion : undefined,
+          filePath: typeof finding.filePath === "string" ? finding.filePath : undefined,
+        }))
+    : undefined;
+  return {
+    ...record,
+    summary: typeof record.summary === "string" ? record.summary : undefined,
+    verdict: typeof record.verdict === "string" ? record.verdict : undefined,
+    findings,
+    nextStep: typeof record.nextStep === "string" ? record.nextStep : undefined,
+    workflowGate: typeof record.workflowGate === "string" ? record.workflowGate : undefined,
+  };
+}
+
+function errorMessage(err: unknown, fallback = ""): string {
+  return err instanceof Error ? err.message : (fallback || String(err || ""));
+}
+
+function errorName(err: unknown): string {
+  return err instanceof Error ? err.name : "";
+}
+
+function errorCode(err: unknown): string | null {
+  const record = asRecord(err);
+  return typeof record?.code === "string" ? record.code : null;
+}
+
+function stripThinkTags(raw: unknown): string {
   return String(raw || "")
     .replace(/<think>[\s\S]*?<\/think>\n*/gi, "")
     .trim();
 }
 
-function isZh() {
+function isZh(): boolean {
   return getLocale().startsWith("zh");
 }
 
-function buildReviewSystemAppend() {
+function buildReviewSystemAppend(): string {
   if (isZh()) {
     return [
       "你现在是 Review 角色。另一个 Agent 刚刚完成了一项任务，用户请求你复查。",
@@ -78,21 +347,21 @@ function buildReviewSystemAppend() {
   ].join("\n");
 }
 
-function normalizeReviewerKind(kind) {
+function normalizeReviewerKind(kind: unknown): ReviewerKind {
   return kind === "butter" ? "butter" : "hanako";
 }
 
-function normalizeReviewerId(value) {
+function normalizeReviewerId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
 }
 
-function reviewerDisplayName(yuan) {
+function reviewerDisplayName(yuan: ReviewerKind | string | null | undefined): string {
   return yuan === "butter" ? "Butter" : "Hanako";
 }
 
-function ensureReviewerAgentShape(engine, kind, reviewerId) {
+function ensureReviewerAgentShape(engine: ReviewRouteEngine, kind: ReviewerKind, reviewerId: unknown): boolean {
   const agentId = normalizeReviewerId(reviewerId);
   if (!agentId || typeof engine.getAgent !== "function") return false;
 
@@ -101,7 +370,7 @@ function ensureReviewerAgentShape(engine, kind, reviewerId) {
 
   const currentYuan = String(agent?.config?.agent?.yuan || agent?.yuan || "").trim().toLowerCase();
   const currentTier = String(agent?.config?.agent?.tier || agent?.tier || "").trim().toLowerCase();
-  const nextAgent = {};
+  const nextAgent: ReviewerShapePatch = {};
   const isBuiltInReviewer = BUILT_IN_REVIEWER_IDS.has(agentId);
 
   if (currentYuan !== kind) nextAgent.yuan = kind;
@@ -121,7 +390,7 @@ function ensureReviewerAgentShape(engine, kind, reviewerId) {
   }
 }
 
-function normalizeReviewConfig(prefs = {}) {
+function normalizeReviewConfig(prefs: ReviewPreferences = {}): ReviewConfig {
   const raw = prefs.review && typeof prefs.review === "object" ? prefs.review : {};
   return {
     defaultReviewer: normalizeReviewerKind(raw.defaultReviewer),
@@ -130,7 +399,7 @@ function normalizeReviewConfig(prefs = {}) {
   };
 }
 
-function getAgentModel(agent) {
+function getAgentModel(agent: RuntimeAgentLike | null | undefined): { modelId: string | null; modelProvider: string | null } {
   const raw = agent?.config?.models?.chat;
   if (typeof raw === "object" && raw) {
     return {
@@ -145,17 +414,17 @@ function getAgentModel(agent) {
   };
 }
 
-function isTimeoutLikeError(err) {
-  const name = String(err?.name || "");
-  const message = String(err?.message || "");
+function isTimeoutLikeError(err: unknown): boolean {
+  const name = errorName(err);
+  const message = errorMessage(err);
   return name === "AbortError"
     || /aborted due to timeout/i.test(message)
     || /\btimeout\b/i.test(message);
 }
 
-function isRetryableReviewError(err) {
+function isRetryableReviewError(err: unknown): boolean {
   if (isTimeoutLikeError(err)) return true;
-  const message = String(err?.message || "");
+  const message = errorMessage(err);
   if (/review returned no output|没有产出可显示的复查结果|no review output/i.test(message)) return true;
   return /\b(429|500|502|503|504)\b/.test(message)
     || /rate limit/i.test(message)
@@ -165,19 +434,19 @@ function isRetryableReviewError(err) {
     || /ECONNRESET|ETIMEDOUT|EAI_AGAIN/i.test(message);
 }
 
-function hasMeaningfulReviewOutput(content) {
+function hasMeaningfulReviewOutput(content: unknown): content is string {
   return typeof content === "string" && content.trim().length > 0;
 }
 
-function createReviewNoOutputError() {
-  const err = new Error(isZh()
+function createReviewNoOutputError(): CodedError {
+  const err: CodedError = new Error(isZh()
     ? "这次复查没有产出可显示的复查结果。"
     : "This review returned no output.");
   err.code = "review_no_output";
   return err;
 }
 
-function getAvailableModel(engine, modelId, providerId = null) {
+function getAvailableModel(engine: ReviewRouteEngine, modelId: string | null | undefined, providerId: string | null = null): ModelLike | null {
   if (!modelId) return null;
   const models = Array.isArray(engine.availableModels) ? engine.availableModels : [];
   return models.find((model) => model.id === modelId && (!providerId || model.provider === providerId))
@@ -185,7 +454,12 @@ function getAvailableModel(engine, modelId, providerId = null) {
     || null;
 }
 
-function reviewModelDisplayLabel(reviewer, modelId, providerId, fallbackLabel = null) {
+function reviewModelDisplayLabel(
+  reviewer: Pick<ReviewCandidate, "yuan"> | { yuan?: string | null } | null | undefined,
+  modelId: string | null | undefined,
+  providerId: string | null | undefined,
+  fallbackLabel: string | null = null,
+): string | null {
   const alias = getUserFacingModelAlias({
     modelId,
     provider: providerId,
@@ -198,8 +472,8 @@ function reviewModelDisplayLabel(reviewer, modelId, providerId, fallbackLabel = 
     || null;
 }
 
-function buildReviewFallbackCandidates(engine, reviewer) {
-  const candidates = [];
+function buildReviewFallbackCandidates(engine: ReviewRouteEngine, reviewer: ReviewCandidate): ModelLike[] {
+  const candidates: ModelLike[] = [];
   const seen = new Set();
   const runtimeAgent = engine.getAgent?.(reviewer.id);
   const reviewerModel = runtimeAgent ? getAgentModel(runtimeAgent) : null;
@@ -207,7 +481,7 @@ function buildReviewFallbackCandidates(engine, reviewer) {
     seen.add(`${reviewerModel.modelProvider || ""}/${reviewerModel.modelId}`);
   }
 
-  const pushCandidate = (model) => {
+  const pushCandidate = (model: ModelLike | null | undefined) => {
     if (!model?.id || !model?.provider) return;
     const key = `${model.provider}/${model.id}`;
     if (seen.has(key)) return;
@@ -237,7 +511,7 @@ function buildReviewFallbackCandidates(engine, reviewer) {
   return candidates;
 }
 
-function formatReviewFailureMessage(err, attemptedModels = []) {
+function formatReviewFailureMessage(err: unknown, attemptedModels: string[] = []): string {
   const modelHint = attemptedModels.length
     ? (isZh()
         ? ` 已自动尝试 ${attemptedModels.length} 个备用复查模型`
@@ -256,16 +530,21 @@ function formatReviewFailureMessage(err, attemptedModels = []) {
       : `This review could not finish right now.${modelHint} The service still looks unstable. Retry later or continue discussing the original answer.`;
   }
 
-  if (String(err?.code || "") === "review_no_output" || /no review output|没有产出可显示的复查结果/i.test(String(err?.message || ""))) {
+  if (errorCode(err) === "review_no_output" || /no review output|没有产出可显示的复查结果/i.test(errorMessage(err))) {
     return isZh()
       ? `这次复查没有生成可显示的结论。${modelHint} 但仍然没有拿到有效输出。你可以稍后重试，或先继续讨论原回答。`
       : `This review did not produce a usable result.${modelHint} You can retry later or continue discussing the original answer.`;
   }
 
-  return String(err?.message || (isZh() ? "复查失败" : "Review failed"));
+  return errorMessage(err, isZh() ? "复查失败" : "Review failed");
 }
 
-async function runReviewerSessionWithFallback(engine, reviewer, rounds, opts) {
+async function runReviewerSessionWithFallback(
+  engine: ReviewRouteEngine,
+  reviewer: ReviewCandidate,
+  rounds: AgentSessionRound[],
+  opts: RunAgentSessionOptions,
+): Promise<ReviewRunResult> {
   const runtimeAgent = engine.getAgent?.(reviewer.id);
   const reviewerModel = runtimeAgent ? getAgentModel(runtimeAgent) : null;
   const originalModel = reviewerModel?.modelId
@@ -295,7 +574,7 @@ async function runReviewerSessionWithFallback(engine, reviewer, rounds, opts) {
     if (!isRetryableReviewError(err)) throw err;
 
     const candidates = buildReviewFallbackCandidates(engine, reviewer);
-    const attemptedModels = [];
+    const attemptedModels: string[] = [];
     let lastError = err;
 
     for (const candidate of candidates) {
@@ -310,7 +589,7 @@ async function runReviewerSessionWithFallback(engine, reviewer, rounds, opts) {
         const content = await runAgentSession(reviewer.id, rounds, {
           ...opts,
           signal: AbortSignal.timeout(REVIEW_FALLBACK_TIMEOUT_MS),
-          modelOverride: candidate,
+          modelOverride: candidate as RunAgentSessionOptions["modelOverride"],
         });
         if (!hasMeaningfulReviewOutput(content)) {
           throw createReviewNoOutputError();
@@ -338,19 +617,19 @@ async function runReviewerSessionWithFallback(engine, reviewer, rounds, opts) {
       }
     }
 
-    const wrapped = new Error(formatReviewFailureMessage(lastError, attemptedModels));
+    const wrapped: CodedError = new Error(formatReviewFailureMessage(lastError, attemptedModels));
     wrapped.code = isTimeoutLikeError(lastError) ? "review_timeout" : "review_retry_failed";
     throw wrapped;
   }
 }
 
-function listReviewCandidates(engine) {
+function listReviewCandidates(engine: ReviewRouteEngine): ReviewCandidate[] {
   const agents = engine.listAgents?.() || [];
   return agents
     .filter((agent) => agent?.tier !== "expert")
-    .filter((agent) => REVIEWER_YUANS.has(agent?.yuan))
+    .filter((agent): agent is AgentListItem & { id: string; yuan: ReviewerKind } => REVIEWER_YUANS.has(agent?.yuan as ReviewerKind))
     .map((agent) => {
-      const runtimeAgent = engine.getAgent(agent.id);
+      const runtimeAgent = engine.getAgent?.(agent.id);
       const { modelId, modelProvider } = getAgentModel(runtimeAgent);
       return {
         id: agent.id,
@@ -365,14 +644,19 @@ function listReviewCandidates(engine) {
     });
 }
 
-function groupCandidatesByYuan(candidates) {
+function groupCandidatesByYuan(candidates: ReviewCandidate[]): GroupedReviewCandidates {
   return {
     hanako: candidates.filter((candidate) => candidate.yuan === "hanako"),
     butter: candidates.filter((candidate) => candidate.yuan === "butter"),
   };
 }
 
-function resolveReviewer(groupedCandidates, kind, config, currentAgentId) {
+function resolveReviewer(
+  groupedCandidates: GroupedReviewCandidates,
+  kind: ReviewerKind,
+  config: ReviewConfig,
+  currentAgentId: string | null | undefined,
+): ReviewCandidate | null {
   const candidates = (groupedCandidates[kind] || []).filter((candidate) => candidate.id !== currentAgentId);
   const preferredId = kind === "hanako" ? config.hanakoReviewerId : config.butterReviewerId;
 
@@ -384,7 +668,7 @@ function resolveReviewer(groupedCandidates, kind, config, currentAgentId) {
   return candidates[0] || null;
 }
 
-export function buildReviewConfig(engine) {
+export function buildReviewConfig(engine: ReviewRouteEngine): BuiltReviewConfig {
   const prefs = engine.getPreferences?.() || {};
   const config = normalizeReviewConfig(prefs);
   const candidates = groupCandidatesByYuan(listReviewCandidates(engine));
@@ -397,7 +681,7 @@ export function buildReviewConfig(engine) {
   };
 }
 
-async function ensureDefaultReviewerAgents(engine) {
+async function ensureDefaultReviewerAgents(engine: ReviewRouteEngine): Promise<BuiltReviewConfig> {
   if (typeof engine.createAgent !== "function") return buildReviewConfig(engine);
 
   const prefs = engine.getPreferences?.() || {};
@@ -407,13 +691,14 @@ async function ensureDefaultReviewerAgents(engine) {
   repaired = ensureReviewerAgentShape(engine, "butter", normalizedConfig.butterReviewerId || "butter") || repaired;
 
   let config = repaired ? buildReviewConfig(engine) : buildReviewConfig(engine);
-  const missingKinds = ["hanako", "butter"].filter((kind) => {
+  const reviewerKinds: ReviewerKind[] = ["hanako", "butter"];
+  const missingKinds = reviewerKinds.filter((kind) => {
     return !resolveReviewer(config.candidates, kind, config, engine.currentAgentId);
   });
 
   if (missingKinds.length === 0) return config;
 
-  const nextBindings = {};
+  const nextBindings: Partial<Pick<ReviewConfig, "hanakoReviewerId" | "butterReviewerId">> = {};
   for (const kind of missingKinds) {
     try {
       const created = await engine.createAgent({
@@ -425,7 +710,7 @@ async function ensureDefaultReviewerAgents(engine) {
         nextBindings[kind === "butter" ? "butterReviewerId" : "hanakoReviewerId"] = created.id;
       }
     } catch (err) {
-      console.warn("[review] failed to create reviewer agent:", err?.message || err);
+      console.warn("[review] failed to create reviewer agent:", errorMessage(err));
     }
   }
 
@@ -436,7 +721,7 @@ async function ensureDefaultReviewerAgents(engine) {
   return config;
 }
 
-function saveReviewConfig(engine, partial = {}) {
+function saveReviewConfig(engine: ReviewRouteEngine, partial: Partial<ReviewConfig> = {}): BuiltReviewConfig {
   const prefs = engine.getPreferences?.() || {};
   const current = normalizeReviewConfig(prefs);
   const next = {
@@ -450,7 +735,7 @@ function saveReviewConfig(engine, partial = {}) {
   return buildReviewConfig(engine);
 }
 
-function reviewerMissingMessage(kind) {
+function reviewerMissingMessage(kind: ReviewerKind): string {
   if (isZh()) {
     return kind === "butter"
       ? "还没有可用的 Butter 审查人。请先在设置 > 工作 中创建或绑定 Butter reviewer。"
@@ -462,14 +747,16 @@ function reviewerMissingMessage(kind) {
     : "No Hanako reviewer is available yet. Create or assign one in Settings > Work first.";
 }
 
-function validateReviewerSelection(candidates, reviewerId, yuan) {
+function validateReviewerSelection(candidates: ReviewCandidate[], reviewerId: string | null | undefined, yuan: ReviewerKind): boolean {
   if (!reviewerId) return true;
   return candidates.some((candidate) => candidate.id === reviewerId && candidate.yuan === yuan && !candidate.isCurrent);
 }
 
-function createReviewProgressEmitter({ broadcast, reviewId, sessionPath, reviewer }) {
-  return (stage, extra = {}) => {
-    const safeStage = REVIEW_PROGRESS_STAGES.includes(stage) ? stage : "reviewing";
+function createReviewProgressEmitter({ broadcast, reviewId, sessionPath, reviewer }: ReviewProgressEmitterArgs) {
+  return (stage: unknown, extra: JsonRecord = {}) => {
+    const safeStage: ReviewProgressStage = typeof stage === "string" && (REVIEW_PROGRESS_STAGES as string[]).includes(stage)
+      ? stage as ReviewProgressStage
+      : "reviewing";
     broadcast({
       type: "review_progress",
       reviewId,
@@ -485,19 +772,20 @@ function createReviewProgressEmitter({ broadcast, reviewId, sessionPath, reviewe
   };
 }
 
-function cleanPreviewText(value, maxChars = MAX_CONTEXT_PREVIEW_CHARS) {
+function cleanPreviewText(value: unknown, maxChars = MAX_CONTEXT_PREVIEW_CHARS): string {
   if (typeof value !== "string") return "";
   const compact = value.replace(/\r\n?/g, "\n").trim();
   if (compact.length <= maxChars) return compact;
   return `${compact.slice(0, maxChars).trim()}\n…`;
 }
 
-function summarizeToolUseBlocks(content) {
+function summarizeToolUseBlocks(content: unknown): Array<{ name: string; argsPreview: string }> {
   if (!Array.isArray(content)) return [];
-  const toolUses = [];
+  const toolUses: Array<{ name: string; argsPreview: string }> = [];
   for (const block of content) {
-    if (!block || (block.type !== "tool_use" && block.type !== "toolCall")) continue;
-    const rawArgs = block.input || block.arguments;
+    const record = asRecord(block) as ToolUseBlock | null;
+    if (!record || (record.type !== "tool_use" && record.type !== "toolCall")) continue;
+    const rawArgs = record.input || record.arguments;
     let argsPreview = "";
     if (rawArgs && typeof rawArgs === "object") {
       const entries = Object.entries(rawArgs)
@@ -510,7 +798,7 @@ function summarizeToolUseBlocks(content) {
       argsPreview = entries.join(", ");
     }
     toolUses.push({
-      name: block.name || "unknown_tool",
+      name: typeof record.name === "string" ? record.name : "unknown_tool",
       argsPreview,
     });
     if (toolUses.length >= MAX_TOOL_ITEMS) break;
@@ -518,30 +806,33 @@ function summarizeToolUseBlocks(content) {
   return toolUses;
 }
 
-function buildSessionContextPack(sessionPath) {
+function buildSessionContextPack(sessionPath: string | null | undefined): SessionContextPack | null {
   if (!sessionPath || !fs.existsSync(sessionPath)) return null;
   try {
     const raw = fs.readFileSync(sessionPath, "utf-8");
     const lines = raw.split("\n").filter(Boolean).slice(-MAX_SESSION_LINES);
-    const entries = [];
+    const entries: Array<{ role: string; text: string }> = [];
     let assistantText = "";
     let userText = "";
-    let toolUses = [];
+    let toolUses: Array<{ name: string; argsPreview: string }> = [];
 
     for (const line of lines) {
       if (entries.length >= MAX_SESSION_LINES) break;
-      let parsed;
+      let parsed: SessionMessageRecord;
       try {
-        parsed = JSON.parse(line);
+        parsed = JSON.parse(line) as SessionMessageRecord;
       } catch {
         continue;
       }
-      if (parsed?.type !== "message" || !parsed.message) continue;
+      if (parsed.type !== "message" || !parsed.message) continue;
       const msg = parsed.message;
-      const role = msg.role || "unknown";
+      const role = typeof msg.role === "string" ? msg.role : "unknown";
       const content = Array.isArray(msg.content) ? msg.content : [];
       const text = content
-        .filter((block) => block?.type === "text" && typeof block.text === "string")
+        .filter((block): block is SessionMessageBlock & { text: string } => {
+          const record = asRecord(block) as SessionMessageBlock | null;
+          return record?.type === "text" && typeof record.text === "string";
+        })
         .map((block) => block.text)
         .join("\n")
         .trim();
@@ -565,7 +856,7 @@ function buildSessionContextPack(sessionPath) {
   }
 }
 
-function buildReviewContextPack(context, engine) {
+function buildReviewContextPack(context: string, engine: ReviewRouteEngine): ReviewContextPack {
   const sessionPath = engine.currentSessionPath || null;
   const gitContext = sessionPath
     ? {
@@ -585,7 +876,7 @@ function buildReviewContextPack(context, engine) {
   };
 }
 
-function formatContextPack(contextPack) {
+function formatContextPack(contextPack: ReviewContextPack): string {
   const lines = [];
   if (isZh()) {
     lines.push("[用户要求复查的内容]");
@@ -651,7 +942,26 @@ function formatContextPack(contextPack) {
   return lines.join("\n").trim();
 }
 
-export function createReviewRoute(engine, { broadcast, taskRuntime = null } = {}) {
+function normalizeFollowUpContextPack(value: unknown): FollowUpContextPackShape | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const sessionContextRecord = asRecord(record.sessionContext);
+  return {
+    ...(typeof record.request === "string" ? { request: record.request } : {}),
+    ...(typeof record.workspacePath === "string" ? { workspacePath: record.workspacePath } : {}),
+    ...(sessionContextRecord ? {
+      sessionContext: {
+        ...(typeof sessionContextRecord.userText === "string" ? { userText: sessionContextRecord.userText } : {}),
+        ...(typeof sessionContextRecord.assistantText === "string" ? { assistantText: sessionContextRecord.assistantText } : {}),
+      },
+    } : {}),
+  };
+}
+
+export function createReviewRoute(
+  engine: ReviewRouteEngine,
+  { broadcast = () => undefined, taskRuntime = null }: CreateReviewRouteOptions = {},
+) {
   const route = new Hono();
 
   route.post("/review/follow-up-task", async (c) => {
@@ -659,8 +969,8 @@ export function createReviewRoute(engine, { broadcast, taskRuntime = null } = {}
       return c.json({ error: isZh() ? "任务运行器不可用" : "Task runtime unavailable" }, 503);
     }
 
-    const body = await c.req.json().catch(() => ({}));
-    const structuredReview = body?.structuredReview;
+    const body = (asRecord(await c.req.json().catch(() => ({}))) || {}) as ReviewFollowUpBody;
+    const structuredReview = asStructuredReview(body.structuredReview);
     const findings = Array.isArray(structuredReview?.findings) ? structuredReview.findings : [];
     if (!structuredReview || findings.length === 0) {
       return c.json({ error: isZh() ? "缺少可执行的 review 发现项" : "Missing executable review findings" }, 400);
@@ -670,7 +980,7 @@ export function createReviewRoute(engine, { broadcast, taskRuntime = null } = {}
       ? body.sessionPath.trim()
       : (engine.currentSessionPath || null);
     const followUpPrompt = typeof body.followUpPrompt === "string" ? body.followUpPrompt : null;
-    const contextPack = body.contextPack && typeof body.contextPack === "object" ? body.contextPack : null;
+    const contextPack = normalizeFollowUpContextPack(body.contextPack);
     const reviewerName = typeof body.reviewerName === "string" ? body.reviewerName : null;
     const sourceResponse = typeof body.sourceResponse === "string" ? body.sourceResponse : null;
     const executionResolution = typeof body.executionResolution === "string" ? body.executionResolution : null;
@@ -678,10 +988,10 @@ export function createReviewRoute(engine, { broadcast, taskRuntime = null } = {}
     const prompt = buildReviewFollowUpTaskPrompt({
       structuredReview,
       contextPack,
-      followUpPrompt,
-      reviewerName,
-      sourceResponse,
-      executionResolution,
+      followUpPrompt: followUpPrompt ?? undefined,
+      reviewerName: reviewerName ?? undefined,
+      sourceResponse: sourceResponse ?? undefined,
+      executionResolution: executionResolution ?? undefined,
     }, { zh: isZh() });
 
     const task = taskRuntime.createReviewFollowUpTask({
@@ -707,7 +1017,7 @@ export function createReviewRoute(engine, { broadcast, taskRuntime = null } = {}
 
   route.put("/review/config", async (c) => {
     await ensureDefaultReviewerAgents(engine);
-    const body = await c.req.json().catch(() => ({}));
+    const body = (asRecord(await c.req.json().catch(() => ({}))) || {}) as ReviewConfigBody;
     const candidates = listReviewCandidates(engine);
     const defaultReviewer = body.defaultReviewer === undefined
       ? undefined
@@ -737,7 +1047,7 @@ export function createReviewRoute(engine, { broadcast, taskRuntime = null } = {}
   });
 
   route.post("/review", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
+    const body = (asRecord(await c.req.json().catch(() => ({}))) || {}) as ReviewRequestBody;
     const { context } = body;
 
     if (!context || typeof context !== "string") {
@@ -772,7 +1082,7 @@ export function createReviewRoute(engine, { broadcast, taskRuntime = null } = {}
       }
     } catch (err) {
       return c.json({
-        error: err?.message || (isZh() ? "复查人初始化失败" : "Reviewer initialization failed"),
+        error: errorMessage(err, isZh() ? "复查人初始化失败" : "Reviewer initialization failed"),
         reviewerKind,
         code: "reviewer_agent_init_failed",
       }, 500);
@@ -861,9 +1171,9 @@ export function createReviewRoute(engine, { broadcast, taskRuntime = null } = {}
         });
       } catch (err) {
         emitProgress("done", {
-          error: err?.message || "Review failed",
+          error: errorMessage(err, "Review failed"),
           workflowGate: "follow_up",
-          errorCode: err?.code || null,
+          errorCode: errorCode(err),
         });
         broadcast({
           type: "review_result",
@@ -879,7 +1189,7 @@ export function createReviewRoute(engine, { broadcast, taskRuntime = null } = {}
           reviewerModelProvider: null,
           content: "",
           error: formatReviewFailureMessage(err),
-          errorCode: err?.code || null,
+          errorCode: errorCode(err),
         });
       }
     })();

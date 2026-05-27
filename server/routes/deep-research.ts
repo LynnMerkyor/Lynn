@@ -7,6 +7,8 @@ import { BRAIN_API_ROOT, BRAIN_BACKUP_API_ROOT, isBrainProvider } from "../../sh
 import { findModel } from "../../shared/model-ref.js";
 import { callText } from "../../core/llm-client.js";
 import { artifactToolArguments, normalizeArtifactPayload } from "../chat/artifact-shape.js";
+import type { ArtifactPayload } from "../chat/artifact-shape.js";
+import type { LLMApi, ModelId, ProviderId } from "../../core/types.js";
 
 export const DEFAULT_DEEP_RESEARCH_TIMEOUT_MS = 180_000;
 const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
@@ -14,22 +16,182 @@ const LOCAL_QWEN35_MODEL_ID = "qwen35-9b-q4km-imatrix";
 const LOCAL_QWEN35_BASE_URL = "http://127.0.0.1:18099/v1";
 const LOCAL_DEEP_RESEARCH_MAX_TOKENS = 32_768;
 
-function normalizeBaseUrl(rawValue) {
+type JsonRecord = Record<string, unknown>;
+
+type DeepResearchMessage = {
+  role: string;
+  content: string;
+};
+
+type DeepResearchBody = {
+  messages?: unknown;
+  prompt?: unknown;
+  query?: unknown;
+  text?: unknown;
+  provider?: unknown;
+  modelProvider?: unknown;
+  model?: unknown;
+  modelId?: unknown;
+  candidates?: unknown;
+  baseUrl?: unknown;
+  localBaseUrl?: unknown;
+  sourceLabel?: unknown;
+  max_tokens?: unknown;
+  timeoutMs?: unknown;
+  sessionPath?: unknown;
+};
+
+type DeepResearchMetaEvent = JsonRecord & {
+  type?: unknown;
+};
+
+type DeepResearchParsed = {
+  ok: true;
+  text: string;
+  reasoning?: string;
+  finishReason: unknown | null;
+  winnerProviderId: string | null | undefined;
+  winnerModelId?: string;
+  sourceLabel?: string;
+  metaEvents: DeepResearchMetaEvent[];
+  usage: unknown | null;
+  artifact?: ArtifactPayload;
+};
+
+type PersistResult =
+  | { persisted: false; persistError?: string }
+  | { persisted: true; persistedSessionPath: string };
+
+type DeepResearchModel = {
+  id: string;
+  provider?: string | null;
+  name?: string | null;
+  api?: LLMApi | null;
+  baseUrl?: string | null;
+  [key: string]: unknown;
+};
+
+type DeepResearchCredentials = {
+  api_key?: string;
+  base_url?: string;
+  api?: LLMApi;
+};
+
+type OAuthCredential = {
+  type?: unknown;
+  resourceUrl?: unknown;
+};
+
+type DeepResearchProviderEntry = {
+  authType?: unknown;
+};
+
+type DeepResearchEngine = {
+  availableModels?: DeepResearchModel[];
+  resolveProviderCredentials?: (provider: string | null | undefined) => DeepResearchCredentials | null | undefined;
+  authStorage?: {
+    get?: (provider: string | null | undefined) => OAuthCredential | null | undefined;
+    getApiKey?: (provider: string | null | undefined) => Promise<string | null | undefined> | string | null | undefined;
+  };
+  providerRegistry?: {
+    get?: (provider: string | null | undefined) => DeepResearchProviderEntry | null | undefined;
+  };
+  agentsDir?: string | null;
+};
+
+type FetchImpl = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+type DeepResearchRouteOptions = {
+  fetchImpl?: FetchImpl;
+};
+
+type DirectModelConfig = {
+  provider: string | null | undefined;
+  model: string;
+  api: LLMApi;
+  apiKey: string;
+  baseUrl: string;
+  sourceLabel: string;
+};
+
+type RunDeepResearchArgs = {
+  fetchImpl: FetchImpl;
+  messages: DeepResearchMessage[];
+  signal: AbortSignal;
+  timeoutMs: number;
+  maxTokens: unknown;
+  baseUrl?: unknown;
+  providerId?: string;
+  modelId?: string;
+  sourceLabel?: string;
+  enableThinking?: boolean;
+};
+
+type RunDirectModelArgs = {
+  engine: DeepResearchEngine;
+  messages: DeepResearchMessage[];
+  signal: AbortSignal;
+  timeoutMs: number;
+  maxTokens: unknown;
+  body: DeepResearchBody;
+  disableThinking?: boolean;
+};
+
+type LocalStreamState = {
+  text: string;
+  reasoning: string;
+  finishReason: unknown | null;
+  usage: unknown | null;
+};
+
+type UpstreamFailure = {
+  status: number;
+  message: string;
+  baseUrl: string;
+  endpoint: string;
+};
+
+type ErrorLike = Error & {
+  code?: unknown;
+  status?: number;
+};
+
+function isRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readRecord(value: unknown): JsonRecord | null {
+  return isRecord(value) ? value : null;
+}
+
+function readErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === "AbortError";
+}
+
+function readErrorCode(err: unknown): unknown {
+  return isRecord(err) ? err.code : undefined;
+}
+
+function normalizeBaseUrl(rawValue: unknown): string {
   const value = String(rawValue || "").trim().replace(/\/+$/, "");
   if (!value) return "";
   if (/^https?:\/\//i.test(value)) return value;
   return `http://${value}`;
 }
 
-function unique(values) {
+function unique(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))];
 }
 
-export function resolveDeepResearchBaseUrl(value) {
+export function resolveDeepResearchBaseUrl(value: unknown): string {
   return resolveDeepResearchBaseUrls(value)[0] || "";
 }
 
-export function resolveDeepResearchBaseUrls(value) {
+export function resolveDeepResearchBaseUrls(value: unknown): string[] {
   const explicit = normalizeBaseUrl(value);
   if (explicit) return [explicit];
 
@@ -49,11 +211,11 @@ export function resolveDeepResearchBaseUrls(value) {
   ]);
 }
 
-export function buildDeepResearchEndpoint(baseUrl) {
+export function buildDeepResearchEndpoint(baseUrl: unknown): string {
   return buildDeepResearchEndpointCandidates(baseUrl)[0] || "";
 }
 
-export function buildDeepResearchEndpointCandidates(baseUrl) {
+export function buildDeepResearchEndpointCandidates(baseUrl: unknown): string[] {
   const normalized = normalizeBaseUrl(baseUrl);
   if (!normalized) return [];
 
@@ -77,20 +239,20 @@ export function buildDeepResearchEndpointCandidates(baseUrl) {
   return [`${normalized}/v2/deep-research/completions`];
 }
 
-function parseJsonLine(line) {
+function parseJsonLine(line: string): unknown {
   try {
-    return JSON.parse(line);
+    return JSON.parse(line) as unknown;
   } catch {
     return null;
   }
 }
 
-export function parseDeepResearchSse(rawText) {
-  const textParts = [];
-  const metaEvents = [];
-  let finishReason = null;
-  let winnerProviderId = null;
-  let usage = null;
+export function parseDeepResearchSse(rawText: unknown): DeepResearchParsed {
+  const textParts: string[] = [];
+  const metaEvents: DeepResearchMetaEvent[] = [];
+  let finishReason: unknown | null = null;
+  let winnerProviderId: string | null = null;
+  let usage: unknown | null = null;
 
   for (const rawLine of String(rawText || "").split(/\r?\n/u)) {
     const line = rawLine.trim();
@@ -98,28 +260,32 @@ export function parseDeepResearchSse(rawText) {
     const data = line.slice(5).trim();
     if (!data || data === "[DONE]") continue;
 
-    const payload = parseJsonLine(data);
+    const payload = readRecord(parseJsonLine(data));
     if (!payload) {
       metaEvents.push({ type: "parse_error", raw: data.slice(0, 300) });
       continue;
     }
 
-    if (payload.object === "deep-research.meta" || payload.type || payload.meta?.event) {
-      const eventType = payload.type || payload.meta?.event || null;
+    const payloadMeta = readRecord(payload.meta);
+    const eventType = payload.type || payloadMeta?.event || null;
+    if (payload.object === "deep-research.meta" || payload.type || payloadMeta?.event) {
       const normalizedMeta = {
         ...payload,
         type: eventType || payload.type,
       };
       metaEvents.push(normalizedMeta);
       if (eventType === "winner-picked") {
-        winnerProviderId = payload.providerId || payload.winnerProviderId || payload.meta?.winnerProviderId || payload.meta?.providerId || winnerProviderId;
+        const nextWinner = payload.providerId || payload.winnerProviderId || payloadMeta?.winnerProviderId || payloadMeta?.providerId;
+        winnerProviderId = typeof nextWinner === "string" ? nextWinner : winnerProviderId;
       }
       continue;
     }
 
-    const choice = Array.isArray(payload.choices) ? payload.choices[0] : null;
-    const deltaContent = choice?.delta?.content;
-    const messageContent = choice?.message?.content;
+    const choice = Array.isArray(payload.choices) ? readRecord(payload.choices[0]) : null;
+    const delta = readRecord(choice?.delta);
+    const message = readRecord(choice?.message);
+    const deltaContent = delta?.content;
+    const messageContent = message?.content;
     if (typeof deltaContent === "string") textParts.push(deltaContent);
     else if (typeof messageContent === "string") textParts.push(messageContent);
     if (choice?.finish_reason) finishReason = choice.finish_reason;
@@ -136,10 +302,10 @@ export function parseDeepResearchSse(rawText) {
   };
 }
 
-function normalizeMessages(body) {
+function normalizeMessages(body: DeepResearchBody): DeepResearchMessage[] {
   if (Array.isArray(body.messages) && body.messages.length) {
     return body.messages
-      .filter((message) => message && typeof message === "object")
+      .filter(isRecord)
       .map((message) => ({
         role: String(message.role || "user"),
         content: typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? ""),
@@ -151,7 +317,7 @@ function normalizeMessages(body) {
   return prompt ? [{ role: "user", content: prompt }] : [];
 }
 
-function shouldRunLocalDeepResearch(body) {
+function shouldRunLocalDeepResearch(body: DeepResearchBody): boolean {
   const provider = String(body?.provider || body?.modelProvider || "").trim();
   const candidates = Array.isArray(body?.candidates)
     ? body.candidates.map((candidate) => String(candidate || "").trim()).filter(Boolean)
@@ -159,21 +325,21 @@ function shouldRunLocalDeepResearch(body) {
   return /^local-qwen35-/u.test(provider) || candidates.some((candidate) => /^local-qwen35-/u.test(candidate));
 }
 
-function buildLocalChatCompletionsEndpoint(rawBaseUrl) {
+function buildLocalChatCompletionsEndpoint(rawBaseUrl: unknown): string {
   const normalized = normalizeBaseUrl(rawBaseUrl || process.env.LOCAL_QWEN35_BASE_URL || LOCAL_QWEN35_BASE_URL);
   if (!normalized) return `${LOCAL_QWEN35_BASE_URL}/chat/completions`;
   if (/\/chat\/completions$/iu.test(normalized)) return normalized;
   return `${normalized.replace(/\/+$/u, "")}/chat/completions`;
 }
 
-function parseOpenAiStreamLine(data, state) {
+function parseOpenAiStreamLine(data: string, state: LocalStreamState): void {
   if (!data || data === "[DONE]") return;
-  const payload = parseJsonLine(data);
+  const payload = readRecord(parseJsonLine(data));
   if (!payload) return;
   if (payload.usage) state.usage = payload.usage;
-  const choice = Array.isArray(payload.choices) ? payload.choices[0] : null;
-  const delta = choice?.delta || {};
-  const message = choice?.message || {};
+  const choice = Array.isArray(payload.choices) ? readRecord(payload.choices[0]) : null;
+  const delta = readRecord(choice?.delta) || {};
+  const message = readRecord(choice?.message) || {};
   if (typeof delta.content === "string") state.text += delta.content;
   if (typeof message.content === "string") state.text += message.content;
   const reasoning = delta.reasoning_content || delta.reasoning || delta.thinking || message.reasoning_content || "";
@@ -181,12 +347,12 @@ function parseOpenAiStreamLine(data, state) {
   if (choice?.finish_reason) state.finishReason = choice.finish_reason;
 }
 
-function buildLocalDeepResearchMessages(messages, enableThinking) {
+function buildLocalDeepResearchMessages(messages: DeepResearchMessage[], enableThinking: boolean): DeepResearchMessage[] {
   if (enableThinking !== false) return messages;
   return buildNoThinkMessages(messages);
 }
 
-function buildNoThinkMessages(messages) {
+function buildNoThinkMessages(messages: DeepResearchMessage[]): DeepResearchMessage[] {
   const next = messages.map((message) => ({ ...message }));
   for (let i = next.length - 1; i >= 0; i -= 1) {
     if (next[i]?.role !== "user") continue;
@@ -211,7 +377,7 @@ async function runLocalDeepResearch({
   modelId,
   sourceLabel,
   enableThinking = true,
-}) {
+}: RunDeepResearchArgs): Promise<DeepResearchParsed> {
   const endpoint = buildLocalChatCompletionsEndpoint(baseUrl);
   const localTimeoutMs = Math.max(timeoutMs || DEFAULT_DEEP_RESEARCH_TIMEOUT_MS, 300_000);
   const controller = new AbortController();
@@ -242,7 +408,7 @@ async function runLocalDeepResearch({
       throw new Error(`local deep research failed: HTTP ${res.status}${raw ? ` ${raw.slice(0, 500)}` : ""}`);
     }
 
-    const state = { text: "", reasoning: "", finishReason: null, usage: null };
+    const state: LocalStreamState = { text: "", reasoning: "", finishReason: null, usage: null };
     const decoder = new TextDecoder();
     let buffer = "";
     let done = false;
@@ -283,7 +449,7 @@ async function runLocalDeepResearch({
   }
 }
 
-async function runLocalDeepResearchWithFallback(args) {
+async function runLocalDeepResearchWithFallback(args: RunDeepResearchArgs): Promise<DeepResearchParsed> {
   const first = await runLocalDeepResearch({ ...args, enableThinking: true });
   if (String(first.text || "").trim()) return first;
   const retry = await runLocalDeepResearch({ ...args, enableThinking: false });
@@ -303,27 +469,27 @@ async function runLocalDeepResearchWithFallback(args) {
   };
 }
 
-async function resolveDirectModelConfig(engine, body) {
+async function resolveDirectModelConfig(engine: DeepResearchEngine, body: DeepResearchBody): Promise<DirectModelConfig | null> {
   const provider = String(body?.provider || body?.modelProvider || "").trim();
   const modelId = String(body?.model || body?.modelId || "").trim();
   if (!provider || !modelId || isBrainProvider(provider) || /^local-qwen35-/u.test(provider)) return null;
 
   const model = findModel(engine?.availableModels || [], modelId, provider);
   if (!model) {
-    const err = new Error(`selected model not found: ${provider}/${modelId}`);
+    const err: ErrorLike = new Error(`selected model not found: ${provider}/${modelId}`);
     err.status = 404;
     throw err;
   }
 
   const creds = engine.resolveProviderCredentials?.(model.provider) || {};
   const oauthCred = engine.authStorage?.get?.(model.provider);
-  const oauthBaseUrl = oauthCred?.type === "oauth" ? oauthCred.resourceUrl : "";
+  const oauthBaseUrl = oauthCred?.type === "oauth" ? String(oauthCred.resourceUrl || "") : "";
   const baseUrl = creds.base_url || oauthBaseUrl || model.baseUrl || "";
   const api = creds.api || model.api || "openai-completions";
   let apiKey = creds.api_key || "";
   if (!apiKey) {
     try {
-      apiKey = await engine.authStorage?.getApiKey?.(model.provider);
+      apiKey = String(await engine.authStorage?.getApiKey?.(model.provider) || "");
     } catch {
       // Some providers intentionally allow missing keys; validate below.
     }
@@ -331,12 +497,12 @@ async function resolveDirectModelConfig(engine, body) {
   const providerEntry = engine.providerRegistry?.get?.(model.provider);
   const allowMissingApiKey = providerEntry?.authType === "none";
   if (!baseUrl) {
-    const err = new Error(`selected provider has no base_url: ${model.provider}`);
+    const err: ErrorLike = new Error(`selected provider has no base_url: ${model.provider}`);
     err.status = 400;
     throw err;
   }
   if (!apiKey && !allowMissingApiKey) {
-    const err = new Error(`selected provider has no api_key: ${model.provider}`);
+    const err: ErrorLike = new Error(`selected provider has no api_key: ${model.provider}`);
     err.status = 401;
     throw err;
   }
@@ -351,21 +517,30 @@ async function resolveDirectModelConfig(engine, body) {
   };
 }
 
-function shouldRetryDirectModelWithoutThinking(err) {
-  return err?.code === "LLM_EMPTY_RESPONSE"
-    || /reasoning content without a final visible answer/iu.test(String(err?.message || ""))
-    || /empty or non-displayable content/iu.test(String(err?.message || ""));
+function shouldRetryDirectModelWithoutThinking(err: unknown): boolean {
+  const message = readErrorMessage(err);
+  return readErrorCode(err) === "LLM_EMPTY_RESPONSE"
+    || /reasoning content without a final visible answer/iu.test(message)
+    || /empty or non-displayable content/iu.test(message);
 }
 
-async function runDirectModelDeepResearch({ engine, messages, signal, timeoutMs, maxTokens, body, disableThinking = false }) {
+async function runDirectModelDeepResearch({
+  engine,
+  messages,
+  signal,
+  timeoutMs,
+  maxTokens,
+  body,
+  disableThinking = false,
+}: RunDirectModelArgs): Promise<DeepResearchParsed | null> {
   const config = await resolveDirectModelConfig(engine, body);
   if (!config) return null;
   const text = await callText({
     api: config.api,
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
-    model: config.model,
-    provider: config.provider,
+    model: config.model as ModelId,
+    provider: config.provider == null ? undefined : config.provider as ProviderId,
     messages: disableThinking ? buildNoThinkMessages(messages) : messages,
     temperature: 0.2,
     quirks: disableThinking ? ["enable_thinking"] : [],
@@ -393,34 +568,35 @@ async function runDirectModelDeepResearch({ engine, messages, signal, timeoutMs,
   };
 }
 
-async function runDirectModelDeepResearchWithFallback(args) {
+async function runDirectModelDeepResearchWithFallback(args: RunDirectModelArgs): Promise<DeepResearchParsed | null> {
   try {
     return await runDirectModelDeepResearch(args);
   } catch (err) {
     if (!shouldRetryDirectModelWithoutThinking(err)) throw err;
     const retry = await runDirectModelDeepResearch({ ...args, disableThinking: true });
+    if (!retry) return retry;
     return {
       ...retry,
       metaEvents: [
         {
           type: "selected-model-deep-research-retry",
           reason: "empty-visible-answer",
-          firstErrorCode: err?.code || null,
+          firstErrorCode: readErrorCode(err) || null,
         },
-        ...(retry.metaEvents || []),
+        ...(retry?.metaEvents || []),
       ],
     };
   }
 }
 
-function isValidSessionPath(sessionPath, agentsDir) {
+function isValidSessionPath(sessionPath: string, agentsDir: string | null | undefined): boolean {
   if (!sessionPath || !agentsDir || !sessionPath.endsWith(".jsonl")) return false;
   const resolved = path.resolve(sessionPath);
   const base = path.resolve(agentsDir);
   return resolved.startsWith(base + path.sep);
 }
 
-function formatDeepResearchResultText(parsed) {
+function formatDeepResearchResultText(parsed: DeepResearchParsed): string {
   const text = String(parsed?.text || "").trim();
   const label = String(parsed?.sourceLabel || parsed?.winnerModelId || parsed?.winnerProviderId || "").trim();
   const source = label ? ` · 输出来源：${label}` : "";
@@ -433,7 +609,7 @@ function formatDeepResearchResultText(parsed) {
   ].filter(Boolean).join("\n");
 }
 
-function escapeHtml(raw) {
+function escapeHtml(raw: unknown): string {
   return String(raw || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -442,12 +618,18 @@ function escapeHtml(raw) {
     .replace(/'/g, "&#39;");
 }
 
-function safeArtifactTitle(raw) {
+function safeArtifactTitle(raw: unknown): string {
   const text = String(raw || "").replace(/\s+/g, " ").trim();
   return text ? text.slice(0, 48) : "深度调研报告";
 }
 
-function buildDeepResearchArtifact({ messages, parsed }) {
+function buildDeepResearchArtifact({
+  messages,
+  parsed,
+}: {
+  messages: DeepResearchMessage[];
+  parsed: DeepResearchParsed;
+}): ArtifactPayload | null {
   if (parsed?.artifact && typeof parsed.artifact === "object") {
     const artifact = normalizeArtifactPayload(parsed.artifact, {
       fallbackIdPrefix: "deep-research",
@@ -500,7 +682,13 @@ function buildDeepResearchArtifact({ messages, parsed }) {
   }, { defaultTitle: "深度调研报告" });
 }
 
-function buildDeepResearchSessionEntries({ messages, parsed }) {
+function buildDeepResearchSessionEntries({
+  messages,
+  parsed,
+}: {
+  messages: DeepResearchMessage[];
+  parsed: DeepResearchParsed;
+}): JsonRecord[] {
   const now = Date.now();
   const timestamp = new Date(now).toISOString();
   const userText = messages.filter((message) => message.role === "user").at(-1)?.content
@@ -509,7 +697,7 @@ function buildDeepResearchSessionEntries({ messages, parsed }) {
   const userId = randomUUID().slice(0, 8);
   const assistantId = randomUUID().slice(0, 8);
   const artifact = buildDeepResearchArtifact({ messages, parsed });
-  const assistantContent = [{ type: "text", text: formatDeepResearchResultText(parsed) }];
+  const assistantContent: JsonRecord[] = [{ type: "text", text: formatDeepResearchResultText(parsed) }];
   if (artifact) {
     const args = artifactToolArguments(artifact);
     assistantContent.push({
@@ -548,7 +736,12 @@ function buildDeepResearchSessionEntries({ messages, parsed }) {
   ];
 }
 
-function persistDeepResearchExchange(engine, body, messages, parsed) {
+function persistDeepResearchExchange(
+  engine: DeepResearchEngine,
+  body: DeepResearchBody,
+  messages: DeepResearchMessage[],
+  parsed: DeepResearchParsed,
+): PersistResult {
   const sessionPath = String(body?.sessionPath || "").trim();
   if (!sessionPath) return { persisted: false };
   if (!isValidSessionPath(sessionPath, engine?.agentsDir)) {
@@ -560,21 +753,21 @@ function persistDeepResearchExchange(engine, body, messages, parsed) {
     fs.appendFileSync(sessionPath, block, "utf8");
     return { persisted: true, persistedSessionPath: sessionPath };
   } catch (err) {
-    return { persisted: false, persistError: err?.message || String(err) };
+    return { persisted: false, persistError: readErrorMessage(err) };
   }
 }
 
-function withDeepResearchArtifact(payload, messages) {
+function withDeepResearchArtifact(payload: DeepResearchParsed, messages: DeepResearchMessage[]): DeepResearchParsed {
   const artifact = buildDeepResearchArtifact({ messages, parsed: payload });
   return artifact ? { ...payload, artifact } : payload;
 }
 
-export function createDeepResearchRoute(engine, options = {}) {
+export function createDeepResearchRoute(engine: DeepResearchEngine, options: DeepResearchRouteOptions = {}): Hono {
   const route = new Hono();
   const fetchImpl = options.fetchImpl || globalThis.fetch;
 
   route.post("/deep-research", async (c) => {
-    const body = await safeJson(c, {});
+    const body = await safeJson<DeepResearchBody>(c, {});
     const messages = normalizeMessages(body);
     if (!messages.length) {
       return c.json({ error: "missing_prompt" }, 400);
@@ -639,7 +832,7 @@ export function createDeepResearchRoute(engine, options = {}) {
         ...(Number.isFinite(Number(body.max_tokens)) ? { max_tokens: Number(body.max_tokens) } : {}),
       };
 
-      let lastFailure = null;
+      let lastFailure: UpstreamFailure | null = null;
       for (const candidateBaseUrl of baseUrls) {
         for (const endpoint of buildDeepResearchEndpointCandidates(candidateBaseUrl)) {
           try {
@@ -676,10 +869,10 @@ export function createDeepResearchRoute(engine, options = {}) {
               source: "brain-v2-deep-research",
             });
           } catch (err) {
-            if (err?.name === "AbortError") throw err;
+            if (isAbortError(err)) throw err;
             lastFailure = {
               status: 0,
-              message: err?.message || String(err),
+              message: readErrorMessage(err),
               baseUrl: candidateBaseUrl,
               endpoint,
             };
@@ -696,10 +889,10 @@ export function createDeepResearchRoute(engine, options = {}) {
         attemptedBaseUrls: baseUrls,
       }, 502);
     } catch (err) {
-      const isAbort = err?.name === "AbortError";
+      const isAbort = isAbortError(err);
       return c.json({
         error: isAbort ? "deep_research_timeout" : "deep_research_request_failed",
-        message: err?.message || String(err),
+        message: readErrorMessage(err),
         baseUrl,
       }, isAbort ? 504 : 502);
     } finally {
