@@ -9,12 +9,14 @@ import { universalOrder, getProvider, isInCooldown, markUnhealthy } from './prov
 import { getAdapter } from './wire-adapter/index.js';
 import { isServerTool, executeServerTool, mergeWithServerTools } from './tool-exec/index.js';
 import { applySearchContext, createSearchRequestCache } from './search-context.js';
+import { applyAudioTranscribe, createAudioRequestCache } from './audio-transcribe.js';
 import { errorMessage, type ChatMessage, type FallbackEntry, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
 
-// search-context.js is intentionally untyped (.ts @ts-nocheck) — keep these as opaque types here.
+// search-context.js / audio-transcribe.js are intentionally untyped (.ts @ts-nocheck) — keep these as opaque types here.
 type SearchRequestCache = Map<string, string>;
+type AudioRequestCache = Map<string, string>;
 
-type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio'>>;
+type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio' | 'video'>>;
 type ProviderError = Error & { suppressBody?: boolean; cooldownMs?: number };
 type RunRoundResult = {
   ok: true;
@@ -85,7 +87,8 @@ async function runRound({
   extraBody,
   reasoningEffort,
   requestCache,
-}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache }): Promise<RunRoundResult> {
+  audioCache,
+}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache }): Promise<RunRoundResult> {
   const errors: Array<{ providerId: ProviderId; error: string }> = [];
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
   // (例:"MiMo → Spark fallback"),不再让 cascade decision 对 UI 不可见。
@@ -99,6 +102,7 @@ async function runRound({
     }
     if (capabilityRequired?.vision && !provider.capability.vision) continue;
     if (capabilityRequired?.audio && !provider.capability.audio) continue;
+    if (capabilityRequired?.video && !provider.capability.video) continue;
     // Capability check only: providers that declare no tool support are skipped for tool-attached requests.
     if (Array.isArray(tools) && tools.length > 0 && provider.capability && provider.capability.tools === false) {
       log && log('info', `provider ${providerId} skipped: tool-call request but capability.tools=false`);
@@ -142,7 +146,7 @@ async function runRound({
       // flag-gated (BRAIN_V2_PRE_SEARCH=1)、失败不阻断 (search-context 内部已 try/catch)、
       // request 级缓存避免 fallback 链重复搜。
       const searchCtx = await applySearchContext({ messages, provider, signal, log, requestCache });
-      const effectiveMessages = searchCtx.messages as ChatMessage[];
+      let effectiveMessages = searchCtx.messages as ChatMessage[];
       if (searchCtx.meta?.applied) {
         await onChunk(
           {
@@ -152,6 +156,22 @@ async function runRound({
             hit: !!searchCtx.meta.hit,
             ms: searchCtx.meta.ms ?? 0,
             cached: searchCtx.meta.cached ?? null,
+          },
+          { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
+        );
+      }
+      // Audio Transcribe Fallback: provider 无 audio capability 但消息含 audio 时,Whisper 转录降级。
+      // flag-gated (BRAIN_V2_AUDIO_FALLBACK=1),失败不阻断,per-request 缓存防重复转录。
+      const audioCtx = await applyAudioTranscribe({ messages: effectiveMessages, provider, signal, log, requestCache: audioCache });
+      effectiveMessages = audioCtx.messages as ChatMessage[];
+      if (audioCtx.meta?.applied) {
+        await onChunk(
+          {
+            type: 'audio_fallback',
+            source: String(audioCtx.meta.source ?? 'whisper'),
+            transcripts: Number(audioCtx.meta.transcripts ?? 0),
+            total: Number(audioCtx.meta.total ?? 0),
+            ms: Number(audioCtx.meta.ms ?? 0),
           },
           { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
         );
@@ -220,17 +240,22 @@ async function runRound({
 }
 
 export async function run({ messages, tools, capabilityRequired, signal, onChunk, log, extraBody, reasoningEffort }: RouterRunOptions): Promise<RouterRunResult> {
-  // Capability pre-flight — vision/audio capability gate, friendly error if no provider supports
-  if (capabilityRequired && (capabilityRequired.vision || capabilityRequired.audio)) {
+  // Capability pre-flight — vision/audio/video capability gate, friendly error if no provider supports
+  if (capabilityRequired && (capabilityRequired.vision || capabilityRequired.audio || capabilityRequired.video)) {
     const anySupports = universalOrder.some((id) => {
       const p = getProvider(id);
       if (!p) return false;
       if (capabilityRequired.vision && !p.capability.vision) return false;
       if (capabilityRequired.audio && !p.capability.audio) return false;
+      if (capabilityRequired.video && !p.capability.video) return false;
       return true;
     });
     if (!anySupports) {
-      const missing = [capabilityRequired.vision && 'vision', capabilityRequired.audio && 'audio'].filter(Boolean).join('+');
+      const missing = [
+        capabilityRequired.vision && 'vision',
+        capabilityRequired.audio && 'audio',
+        capabilityRequired.video && 'video',
+      ].filter(Boolean).join('+');
       const err = new Error(`CAPABILITY_NOT_SUPPORTED: no provider supports ${missing} in current build`) as Error & { code: string };
       err.code = 'CAPABILITY_NOT_SUPPORTED';
       throw err;
@@ -244,6 +269,8 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   const maxIter = MAX_ITERATIONS > 0 ? MAX_ITERATIONS : Infinity;
   // Per-request 搜索缓存:同一 turn 内 fallback 链(spark→deepseek→glm)不重复搜
   const requestCache = createSearchRequestCache() as SearchRequestCache;
+  // Per-request audio 转录缓存:fallback 链不重复转录同一段音频
+  const audioCache = createAudioRequestCache() as AudioRequestCache;
 
   while (iter < maxIter) {
     iter++;
@@ -251,6 +278,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       messages: workingMessages, tools: mergedTools, capabilityRequired,
       signal, onChunk, log, extraBody, reasoningEffort,
       requestCache,
+      audioCache,
     });
     lastProviderId = result.providerId;
 
@@ -321,7 +349,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
 }
 
 export function detectCapability(messages?: ChatMessage[]): CapabilityRequired {
-  const result = { vision: false, audio: false };
+  const result = { vision: false, audio: false, video: false };
   for (const m of (messages || [])) {
     const c = m.content;
     if (!Array.isArray(c)) continue;
@@ -330,6 +358,7 @@ export function detectCapability(messages?: ChatMessage[]): CapabilityRequired {
       const typedPart = part as { type?: string };
       if (typedPart.type === 'image_url' || typedPart.type === 'input_image') result.vision = true;
       if (typedPart.type === 'input_audio' || typedPart.type === 'audio_url') result.audio = true;
+      if (typedPart.type === 'video_url' || typedPart.type === 'input_video') result.video = true;
     }
   }
   return result;
