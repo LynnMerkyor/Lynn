@@ -5,9 +5,82 @@
  * 和 Electron 前端走完全一样的协议。
  */
 import readline from "readline";
-import WebSocket from "ws";
+import WebSocket, { type RawData } from "ws";
 import { t } from "./i18n.js";
 import { safeParseJSON } from "../shared/safe-parse.js";
+
+interface StartCLIOptions {
+  port: number | string;
+  token?: string;
+  agentName: string;
+  userName: string;
+}
+
+type CliMessage =
+  | { type: "text_delta"; delta?: string }
+  | { type: "mood_start" }
+  | { type: "mood_text"; delta?: string }
+  | { type: "mood_end" }
+  | { type: "thinking_start" }
+  | { type: "thinking_delta" }
+  | { type: "thinking_end" }
+  | { type: "tool_start"; name?: string }
+  | { type: "tool_end"; success?: boolean }
+  | { type: "turn_end" }
+  | { type: "error"; message?: string }
+  | { type: "session_title" }
+  | { type: "status" };
+
+interface ApiOptions extends Omit<RequestInit, "headers" | "body"> {
+  headers?: Record<string, string>;
+  body?: BodyInit | Record<string, unknown> | null;
+}
+
+type WebSocketCtor = new (address: string, protocols: string[]) => WebSocket;
+
+interface ModelListResponse {
+  current?: string;
+  models?: Array<{ name: string }>;
+}
+
+interface HealthResponse {
+  model?: string;
+  agent?: string;
+}
+
+interface ConfigResponse {
+  agent?: { name?: string; yuan?: string };
+  user?: { name?: string };
+  locale?: string;
+  api?: { model?: string };
+}
+
+interface AgentListResponse {
+  currentAgentId?: string;
+  agents?: Array<{ id: string; name: string }>;
+}
+
+interface AgentSwitchResponse {
+  error?: string;
+  agentName?: string;
+}
+
+interface SessionSummary {
+  title?: string;
+  firstMessage?: string;
+  modified?: string | number | Date;
+}
+
+interface DeskJianResponse {
+  content?: string;
+}
+
+interface DeskFilesResponse {
+  error?: string;
+  basePath?: string;
+  subdir?: string;
+  files?: Array<{ name: string; isDir?: boolean; size?: number }>;
+}
 
 // ── 终端颜色 ──
 const c = {
@@ -23,38 +96,41 @@ const c = {
   red: "\x1b[31m",
 };
 
-export function startCLI({ port, token, agentName, userName }) {
+export function startCLI({ port, token, agentName, userName }: StartCLIOptions): void {
   const wsUrl = `ws://127.0.0.1:${port}/ws`;
   const wsProtocols = token ? ["hana-cli", `token.${token}`] : ["hana-cli"];
   const apiBase = `http://127.0.0.1:${port}`;
 
-  let ws = null;
+  let ws: WebSocket | null = null;
   let isStreaming = false;
   let currentMood = "";
 
   // ── HTTP 工具 ──
-  async function api(path, opts = {}) {
-    const headers = { "Authorization": `Bearer ${token}`, ...opts.headers };
-    if (opts.body && typeof opts.body === "object") {
+  async function api<T = unknown>(path: string, opts: ApiOptions = {}): Promise<T> {
+    const headers: Record<string, string> = { "Authorization": `Bearer ${token}`, ...opts.headers };
+    let body = opts.body;
+    if (body && typeof body === "object" && !(body instanceof ArrayBuffer) && !(body instanceof Blob) && !(body instanceof FormData) && !(body instanceof URLSearchParams) && typeof body !== "string") {
       headers["Content-Type"] = "application/json";
-      opts.body = JSON.stringify(opts.body);
+      body = JSON.stringify(body);
     }
-    const res = await fetch(`${apiBase}${path}`, { ...opts, headers });
-    return res.json();
+    const { body: _body, headers: _headers, ...requestInit } = opts;
+    const res = await fetch(`${apiBase}${path}`, { ...requestInit, body: body as BodyInit | null | undefined, headers });
+    return res.json() as Promise<T>;
   }
 
   // ── WebSocket ──
-  function connect() {
-    ws = new WebSocket(wsUrl, wsProtocols);
+  function connect(): void {
+    const WebSocketClient = WebSocket as unknown as WebSocketCtor;
+    ws = new WebSocketClient(wsUrl, wsProtocols);
 
     ws.on("open", () => {
       showPrompt();
     });
 
-    ws.on("message", (data) => {
+    ws.on("message", (data: RawData) => {
       const msg = safeParseJSON(data.toString(), null);
       if (!msg) return;
-      handleMessage(msg);
+      handleMessage(msg as CliMessage);
     });
 
     ws.on("close", () => {
@@ -63,20 +139,20 @@ ${c.dim}${t("cli.disconnected")}${c.reset}`);
       process.exit(0);
     });
 
-    ws.on("error", (err) => {
+    ws.on("error", (err: Error) => {
       console.error(`${c.red}${t("cli.wsError", { msg: err.message })}${c.reset}`);
     });
   }
 
   // ── 消息处理 ──
-  function handleMessage(msg) {
+  function handleMessage(msg: CliMessage): void {
     switch (msg.type) {
       case "text_delta":
         if (!isStreaming) {
           isStreaming = true;
           process.stdout.write("\n");
         }
-        process.stdout.write(msg.delta);
+        process.stdout.write(msg.delta || "");
         break;
 
       case "mood_start":
@@ -84,7 +160,7 @@ ${c.dim}${t("cli.disconnected")}${c.reset}`);
         break;
 
       case "mood_text":
-        currentMood += msg.delta;
+        currentMood += msg.delta || "";
         break;
 
       case "mood_end":
@@ -113,7 +189,7 @@ ${c.dim}${t("cli.disconnected")}${c.reset}`);
         break;
 
       case "tool_start":
-        process.stdout.write(`\n${c.dim}  ⚙ ${msg.name}${c.reset}`);
+        process.stdout.write(`\n${c.dim}  ⚙ ${msg.name || ""}${c.reset}`);
         break;
 
       case "tool_end":
@@ -131,7 +207,7 @@ ${c.dim}${t("cli.disconnected")}${c.reset}`);
 
       case "error":
         process.stdout.write(`
-${c.red}${t("cli.error", { msg: msg.message })}${c.reset}
+${c.red}${t("cli.error", { msg: msg.message || "" })}${c.reset}
 `);
         isStreaming = false;
         showPrompt();
@@ -154,7 +230,7 @@ ${c.red}${t("cli.error", { msg: msg.message })}${c.reset}
     prompt: "",
   });
 
-  function showPrompt() {
+  function showPrompt(): void {
     process.stdout.write(`${c.cyan}${userName}${c.reset} ${c.dim}›${c.reset} `);
   }
 
@@ -169,7 +245,7 @@ ${c.red}${t("cli.error", { msg: msg.message })}${c.reset}
 
       // ESC
       if (keyStr === "\x1b" && isStreaming) {
-        ws.send(JSON.stringify({ type: "abort" }));
+        ws?.send(JSON.stringify({ type: "abort" }));
         process.stdout.write(`
 ${c.dim}${t("cli.interrupted")}${c.reset}
 `);
@@ -181,7 +257,7 @@ ${c.dim}${t("cli.interrupted")}${c.reset}
       // Ctrl+C
       if (keyStr === "\x03") {
         if (isStreaming) {
-          ws.send(JSON.stringify({ type: "abort" }));
+          ws?.send(JSON.stringify({ type: "abort" }));
           isStreaming = false;
           process.stdout.write(`
 ${c.dim}${t("cli.interrupted")}${c.reset}
@@ -207,7 +283,7 @@ ${c.dim}${t("cli.goodbye")}${c.reset}`);
     });
   }
 
-  rl.on("line", async (input) => {
+  rl.on("line", async (input: string) => {
     const line = input.trim();
     if (!line) {
       showPrompt();
@@ -224,11 +300,11 @@ ${c.dim}${t("cli.goodbye")}${c.reset}`);
     }
 
     // 发送消息
-    ws.send(JSON.stringify({ type: "prompt", text: line }));
+    ws?.send(JSON.stringify({ type: "prompt", text: line }));
   });
 
   // ── 斜杠命令 ──
-  async function handleCommand(line) {
+  async function handleCommand(line: string): Promise<void> {
     const [cmd, ...args] = line.slice(1).split(/\s+/);
 
     switch (cmd) {
@@ -258,7 +334,7 @@ ${c.bold}${t("cli.helpTitle")}${c.reset}
 
       case "model": {
         if (args[0] === "set") {
-          const data = await api("/api/models");
+          const data = await api<ModelListResponse>("/api/models");
           const models = data.models || [];
           if (!models.length) {
             console.log(`${c.yellow}${t("cli.noModels")}${c.reset}`);
@@ -271,7 +347,7 @@ ${c.bold}${t("cli.helpTitle")}${c.reset}
             console.log(`  ${c.dim}${i + 1}.${c.reset} ${m.name}${current}`);
           });
           process.stdout.write(`\n${t("cli.selectModel")}`);
-          rl.once("line", async (answer) => {
+          rl.once("line", async (answer: string) => {
             const idx = parseInt(answer.trim()) - 1;
             if (idx >= 0 && idx < models.length) {
               await api("/api/models/set", {
@@ -286,14 +362,14 @@ ${c.bold}${t("cli.helpTitle")}${c.reset}
           });
           return;
         }
-        const data = await api("/api/health");
+        const data = await api<HealthResponse>("/api/health");
         console.log(`${c.dim}${t("cli.currentModelLabel")}${c.reset} ${data.model || t("cli.noModel")}`);
         showPrompt();
         break;
       }
 
       case "config": {
-        const data = await api("/api/config");
+        const data = await api<ConfigResponse>("/api/config");
         console.log(`\n${c.bold}${t("cli.currentConfig")}${c.reset}`);
         console.log(`  ${c.dim}Agent:${c.reset}  ${data.agent?.name || "Lynn"}`);
         console.log(`  ${c.dim}Yuan:${c.reset}   ${data.agent?.yuan || "hanako"}`);
@@ -311,7 +387,7 @@ ${c.bold}${t("cli.helpTitle")}${c.reset}
           console.log(`${c.green}${t("cli.sessionCreated")}${c.reset}`);
           showPrompt();
         } else if (args[0] === "list") {
-          const sessions = await api("/api/sessions");
+          const sessions = await api<SessionSummary[]>("/api/sessions");
           if (!sessions.length) {
             console.log(`${c.dim}${t("cli.noSessions")}${c.reset}`);
           } else {
@@ -333,7 +409,7 @@ ${c.bold}${t("cli.helpTitle")}${c.reset}
 
       case "agent": {
         if (args[0] === "list") {
-          const data = await api("/api/agents");
+          const data = await api<AgentListResponse>("/api/agents");
           console.log(`\n${c.bold}${t("cli.agentList")}${c.reset}`);
           for (const a of data.agents || []) {
             const current = a.id === data.currentAgentId ? ` ${c.green}${t("cli.currentModel")}${c.reset}` : "";
@@ -342,7 +418,7 @@ ${c.bold}${t("cli.helpTitle")}${c.reset}
           console.log();
           showPrompt();
         } else if (args[0] === "switch" && args[1]) {
-          const result = await api("/api/agents/switch", {
+          const result = await api<AgentSwitchResponse>("/api/agents/switch", {
             method: "POST",
             body: { id: args[1] },
           });
@@ -354,7 +430,7 @@ ${c.bold}${t("cli.helpTitle")}${c.reset}
           }
           showPrompt();
         } else {
-          const data = await api("/api/health");
+          const data = await api<HealthResponse>("/api/health");
           console.log(`${c.dim}${t("cli.currentAgent")}${c.reset} ${data.agent || agentName}`);
           showPrompt();
         }
@@ -364,7 +440,7 @@ ${c.bold}${t("cli.helpTitle")}${c.reset}
       case "jian": {
         const subdir = args.join(" ");
         const query = subdir ? `?subdir=${encodeURIComponent(subdir)}` : "";
-        const data = await api(`/api/desk/jian${query}`);
+        const data = await api<DeskJianResponse>(`/api/desk/jian${query}`);
         if (data.content) {
           console.log(`\n${c.dim}── ${t("cli.jianTitle")}${subdir ? ` (${subdir})` : ""} ──${c.reset}`);
           console.log(data.content);
@@ -378,7 +454,7 @@ ${c.bold}${t("cli.helpTitle")}${c.reset}
       case "ls": {
         const subdir = args.join(" ");
         const query = subdir ? `?subdir=${encodeURIComponent(subdir)}` : "";
-        const data = await api(`/api/desk/files${query}`);
+        const data = await api<DeskFilesResponse>(`/api/desk/files${query}`);
         if (data.error) {
           console.log(`${c.red}${data.error}${c.reset}`);
         } else if (!data.files?.length) {
@@ -387,7 +463,7 @@ ${c.bold}${t("cli.helpTitle")}${c.reset}
           console.log(`\n${c.dim}${data.basePath}${subdir ? "/" + data.subdir : ""}${c.reset}`);
           for (const f of data.files) {
             const icon = f.isDir ? "📁" : "  ";
-            const size = f.isDir ? "" : `  ${c.dim}${formatSize(f.size)}${c.reset}`;
+            const size = f.isDir ? "" : `  ${c.dim}${formatSize(f.size || 0)}${c.reset}`;
             console.log(`  ${icon} ${f.name}${size}`);
           }
           console.log();
@@ -415,7 +491,7 @@ ${c.bold}${t("cli.helpTitle")}${c.reset}
             console.log(`${c.red}${t("cli.catFailed", { status: res.status })}${c.reset}`);
           }
         } catch (err) {
-          console.log(`${c.red}${t("cli.error", { msg: err.message })}${c.reset}`);
+          console.log(`${c.red}${t("cli.error", { msg: err instanceof Error ? err.message : String(err) })}${c.reset}`);
         }
         showPrompt();
         break;
@@ -433,7 +509,7 @@ ${c.bold}${t("cli.helpTitle")}${c.reset}
   connect();
 }
 
-function formatSize(bytes) {
+function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
   return `${(bytes / 1024 / 1024).toFixed(1)}M`;
