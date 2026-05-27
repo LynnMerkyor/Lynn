@@ -8,6 +8,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import type { BridgeAdapter, BridgeAttachment, BridgeMessageHandler, BridgeStatusHandler, SendMediaBufferMeta } from "./adapter-types.js";
 
 const DEFAULT_BASE_URL = "https://ilinkai.weixin.qq.com";
 const CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
@@ -22,24 +23,97 @@ const MSG_CHUNK_LIMIT = 4000;
 
 // ── iLink 消息类型常量 ──
 
-const MessageItemType = { TEXT: 1, IMAGE: 2, VOICE: 3, FILE: 4, VIDEO: 5 };
+const MessageItemType = { TEXT: 1, IMAGE: 2, VOICE: 3, FILE: 4, VIDEO: 5 } as const;
 const MessageType = { USER: 1, BOT: 2 };
 const MessageState = { FINISH: 2 };
 const UploadMediaType = { IMAGE: 1, VIDEO: 2, FILE: 3 };
 
+type WechatApiBody = Record<string, unknown>;
+
+interface WechatApiResponse extends Record<string, unknown> {
+  ret?: number;
+  errcode?: number;
+  errmsg?: string;
+  get_updates_buf?: string;
+  msgs?: WechatInboundMessage[];
+  upload_param?: string;
+}
+
+interface WechatMediaRef {
+  encrypt_query_param?: string;
+  aes_key?: string;
+  encrypt_type?: number;
+}
+
+interface WechatMessageItem {
+  type?: number;
+  text_item?: { text?: unknown };
+  voice_item?: { text?: string };
+  image_item?: {
+    aeskey?: string;
+    media?: WechatMediaRef;
+    mid_size?: number;
+  };
+  file_item?: {
+    file_name?: string;
+    media?: WechatMediaRef;
+  };
+  video_item?: {
+    media?: WechatMediaRef;
+  };
+  ref_msg?: {
+    title?: string;
+    message_item?: WechatMessageItem;
+  };
+}
+
+interface WechatInboundMessage {
+  from_user_id?: string;
+  context_token?: string;
+  item_list?: WechatMessageItem[];
+}
+
+interface WechatContextToken {
+  token: string;
+  ts: number;
+}
+
+interface UploadedMedia {
+  filekey: string;
+  downloadParam: string;
+  aeskey: string;
+  fileSize: number;
+  fileSizeCiphertext: number;
+}
+
+interface WechatAdapterOptions {
+  botToken: string;
+  hanaHome?: string;
+  onMessage: BridgeMessageHandler;
+  onStatus?: BridgeStatusHandler;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === "AbortError";
+}
+
 // ── AES-128-ECB 加解密 ──
 
-function encryptAesEcb(plaintext, key) {
+function encryptAesEcb(plaintext: Buffer, key: Buffer) {
   const cipher = crypto.createCipheriv("aes-128-ecb", key, null);
   return Buffer.concat([cipher.update(plaintext), cipher.final()]);
 }
 
-function decryptAesEcb(ciphertext, key) {
+function decryptAesEcb(ciphertext: Buffer, key: Buffer) {
   const decipher = crypto.createDecipheriv("aes-128-ecb", key, null);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 }
 
-function aesEcbPaddedSize(plaintextSize) {
+function aesEcbPaddedSize(plaintextSize: number): number {
   return Math.ceil((plaintextSize + 1) / 16) * 16;
 }
 
@@ -47,7 +121,7 @@ function aesEcbPaddedSize(plaintextSize) {
  * 解析 aes_key：base64 → 16 字节原始 key
  * 两种编码：base64(raw 16 bytes) 或 base64(hex string 32 chars)
  */
-function parseAesKey(aesKeyBase64) {
+function parseAesKey(aesKeyBase64: string): Buffer {
   const decoded = Buffer.from(aesKeyBase64, "base64");
   if (decoded.length === 16) return decoded;
   if (decoded.length === 32 && /^[0-9a-fA-F]{32}$/.test(decoded.toString("ascii"))) {
@@ -58,12 +132,12 @@ function parseAesKey(aesKeyBase64) {
 
 // ── iLink HTTP API ──
 
-function randomWechatUin() {
+function randomWechatUin(): string {
   const uint32 = crypto.randomBytes(4).readUInt32BE(0);
   return Buffer.from(String(uint32), "utf-8").toString("base64");
 }
 
-function buildHeaders(token) {
+function buildHeaders(token?: string | null): Record<string, string> {
   return {
     "Content-Type": "application/json",
     "AuthorizationType": "ilink_bot_token",
@@ -75,7 +149,7 @@ function buildHeaders(token) {
 /**
  * @param {AbortSignal} [parentSignal] - 外部 signal（adapter 级别），用于 stop() 中断所有请求
  */
-async function apiPost(baseUrl, endpoint, body, token, timeoutMs, parentSignal) {
+async function apiPost(baseUrl: string, endpoint: string, body: WechatApiBody, token: string, timeoutMs?: number, parentSignal?: AbortSignal): Promise<WechatApiResponse> {
   const url = new URL(endpoint, baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs || 15_000);
@@ -94,7 +168,7 @@ async function apiPost(baseUrl, endpoint, body, token, timeoutMs, parentSignal) 
     clearTimeout(timer);
     const text = await res.text();
     if (!res.ok) throw new Error(`${endpoint} HTTP ${res.status}: ${text}`);
-    return JSON.parse(text);
+    return JSON.parse(text) as WechatApiResponse;
   } catch (err) {
     clearTimeout(timer);
     throw err;
@@ -105,17 +179,17 @@ async function apiPost(baseUrl, endpoint, body, token, timeoutMs, parentSignal) 
 
 // ── Cursor 持久化 ──
 
-function hash8(str) {
+function hash8(str: string): string {
   return crypto.createHash("sha256").update(str).digest("hex").slice(0, 8);
 }
 
-function resolveSyncBufPath(hanaHome, botToken) {
+function resolveSyncBufPath(hanaHome: string, botToken: string): string {
   const dir = path.join(hanaHome, "bridge", "wechat");
   fs.mkdirSync(dir, { recursive: true });
   return path.join(dir, `sync-${hash8(botToken)}.json`);
 }
 
-function loadSyncBuf(filePath) {
+function loadSyncBuf(filePath: string): string {
   try {
     if (fs.existsSync(filePath)) {
       const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
@@ -125,7 +199,7 @@ function loadSyncBuf(filePath) {
   return "";
 }
 
-function saveSyncBuf(filePath, buf) {
+function saveSyncBuf(filePath: string, buf: string): void {
   try {
     fs.writeFileSync(filePath, JSON.stringify({ get_updates_buf: buf }), "utf-8");
   } catch { /* ignore */ }
@@ -133,17 +207,17 @@ function saveSyncBuf(filePath, buf) {
 
 // ── CDN URL ──
 
-function buildCdnDownloadUrl(encryptedQueryParam) {
+function buildCdnDownloadUrl(encryptedQueryParam: string): string {
   return `${CDN_BASE_URL}/download?encrypted_query_param=${encodeURIComponent(encryptedQueryParam)}`;
 }
 
-function buildCdnUploadUrl(uploadParam, filekey) {
+function buildCdnUploadUrl(uploadParam: string, filekey: string): string {
   return `${CDN_BASE_URL}/upload?encrypted_query_param=${encodeURIComponent(uploadParam)}&filekey=${encodeURIComponent(filekey)}`;
 }
 
 // ── 消息文本提取 ──
 
-function extractText(itemList) {
+function extractText(itemList?: WechatMessageItem[]): string {
   if (!itemList?.length) return "";
   for (const item of itemList) {
     if (item.type === MessageItemType.TEXT && item.text_item?.text != null) {
@@ -151,10 +225,10 @@ function extractText(itemList) {
       const ref = item.ref_msg;
       if (!ref) return text;
       if (ref.message_item && isMediaItem(ref.message_item)) return text;
-      const parts = [];
+      const parts: string[] = [];
       if (ref.title) parts.push(ref.title);
       if (ref.message_item) {
-        const refBody = extractText([ref.message_item]);
+        const refBody: string = extractText([ref.message_item]);
         if (refBody) parts.push(refBody);
       }
       if (!parts.length) return text;
@@ -167,8 +241,10 @@ function extractText(itemList) {
   return "";
 }
 
-function isMediaItem(item) {
-  return [MessageItemType.IMAGE, MessageItemType.VIDEO, MessageItemType.FILE, MessageItemType.VOICE].includes(item.type);
+function isMediaItem(item: WechatMessageItem): boolean {
+  const mediaTypes: readonly number[] = [MessageItemType.IMAGE, MessageItemType.VIDEO, MessageItemType.FILE, MessageItemType.VOICE];
+  return typeof item.type === "number"
+    && mediaTypes.includes(item.type);
 }
 
 // ── Adapter 主函数 ──
@@ -180,30 +256,30 @@ function isMediaItem(item) {
  * @param {(msg: object) => void} opts.onMessage
  * @param {(status: string, error?: string) => void} [opts.onStatus]
  */
-export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus }) {
+export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus }: WechatAdapterOptions): BridgeAdapter {
   const baseUrl = DEFAULT_BASE_URL;
   let generation = 0;
   let abortController = new AbortController();
-  const timers = new Set();
-  const contextCache = new Map(); // chatId → { token, ts }
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const contextCache = new Map<string, WechatContextToken>(); // chatId → { token, ts }
 
   const syncBufPath = hanaHome ? resolveSyncBufPath(hanaHome, botToken) : null;
   let getUpdatesBuf = syncBufPath ? loadSyncBuf(syncBufPath) : "";
 
   /** apiPost 带上当前 abortController.signal，stop() 时自动中断所有请求 */
-  function api(endpoint, body, timeoutMs) {
+  function api(endpoint: string, body: WechatApiBody, timeoutMs?: number): Promise<WechatApiResponse> {
     return apiPost(baseUrl, endpoint, body, botToken, timeoutMs, abortController.signal);
   }
 
   // ── 定时器管理 ──
 
-  function addTimer(fn, delay) {
+  function addTimer(fn: () => void, delay: number): ReturnType<typeof setTimeout> {
     const id = setTimeout(() => { timers.delete(id); fn(); }, delay);
     timers.add(id);
     return id;
   }
 
-  function guardedSleep(ms, myGen) {
+  function guardedSleep(ms: number, myGen: number): Promise<boolean> {
     return new Promise((resolve) => {
       const id = setTimeout(() => { timers.delete(id); resolve(myGen === generation); }, ms);
       timers.add(id);
@@ -212,11 +288,11 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
 
   // ── context_token 管理 ──
 
-  function setContextToken(chatId, token) {
+  function setContextToken(chatId: string, token: string): void {
     contextCache.set(chatId, { token, ts: Date.now() });
   }
 
-  function getContextToken(chatId) {
+  function getContextToken(chatId: string): string | null {
     const entry = contextCache.get(chatId);
     if (!entry) return null;
     if (Date.now() - entry.ts > CONTEXT_TOKEN_TTL_MS) {
@@ -228,7 +304,7 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
 
   // ── 发送消息 ──
 
-  async function sendText(chatId, text, contextToken) {
+  async function sendText(chatId: string, text: string, contextToken: string | null): Promise<void> {
     if (!contextToken) throw new Error("微信: 需要对方最近发过消息才能回复");
     await api("ilink/bot/sendmessage", {
       msg: {
@@ -246,7 +322,7 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
 
   // ── CDN 媒体上传 ──
 
-  async function uploadMedia(buffer, toUserId, mediaType) {
+  async function uploadMedia(buffer: Buffer, toUserId: string, mediaType: number): Promise<UploadedMedia> {
     const rawsize = buffer.length;
     const rawfilemd5 = crypto.createHash("md5").update(buffer).digest("hex");
     const filesize = aesEcbPaddedSize(rawsize);
@@ -264,7 +340,8 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
     if (!uploadResp.upload_param) throw new Error("getUploadUrl 未返回 upload_param");
 
     const ciphertext = encryptAesEcb(buffer, aeskey);
-    const cdnUrl = buildCdnUploadUrl(uploadResp.upload_param, filekey);
+    const uploadParam = typeof uploadResp.upload_param === "string" ? uploadResp.upload_param : "";
+    const cdnUrl = buildCdnUploadUrl(uploadParam, filekey);
     const cdnRes = await fetch(cdnUrl, {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream" },
@@ -277,8 +354,8 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
     return { filekey, downloadParam, aeskey: aeskey.toString("hex"), fileSize: rawsize, fileSizeCiphertext: filesize };
   }
 
-  async function sendImageMessage(chatId, uploaded, contextToken, caption) {
-    const items = [];
+  async function sendImageMessage(chatId: string, uploaded: UploadedMedia, contextToken: string, caption: string): Promise<void> {
+    const items: WechatMessageItem[] = [];
     if (caption) items.push({ type: MessageItemType.TEXT, text_item: { text: caption } });
     items.push({
       type: MessageItemType.IMAGE,
@@ -304,7 +381,7 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
     }
   }
 
-  async function sendFileMessage(chatId, uploaded, contextToken, filename) {
+  async function sendFileMessage(chatId: string, uploaded: UploadedMedia, contextToken: string, filename: string): Promise<void> {
     await api("ilink/bot/sendmessage", {
       msg: {
         from_user_id: "", to_user_id: chatId,
@@ -330,7 +407,7 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
 
   // ── 入站消息处理 ──
 
-  function handleInbound(msg) {
+  function handleInbound(msg: WechatInboundMessage): void {
     const fromUserId = msg.from_user_id || "";
     if (!fromUserId || fromUserId.endsWith("@im.bot")) return;
 
@@ -339,7 +416,7 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
     }
 
     const text = extractText(msg.item_list);
-    const attachments = [];
+    const attachments: BridgeAttachment[] = [];
 
     for (const item of msg.item_list || []) {
       if (item.type === MessageItemType.IMAGE && item.image_item?.media?.encrypt_query_param) {
@@ -415,7 +492,7 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
 
   // ── 长轮询主循环 ──
 
-  async function pollLoop() {
+  async function pollLoop(): Promise<void> {
     const myGen = generation;
     let consecutiveFailures = 0;
 
@@ -460,12 +537,12 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
 
         for (const msg of resp.msgs || []) {
           try { handleInbound(msg); } catch (err) {
-            console.error("[wechat] handleInbound error:", err.message);
+            console.error("[wechat] handleInbound error:", errorMessage(err));
           }
         }
       } catch (err) {
         if (myGen !== generation) return;
-        if (err.name === "AbortError") continue; // 长轮询超时，正常
+        if (isAbortError(err)) continue; // 长轮询超时，正常
         consecutiveFailures++;
         const delay = BACKOFF_DELAYS[Math.min(consecutiveFailures - 1, BACKOFF_DELAYS.length - 1)];
         const alive = await guardedSleep(delay, myGen);
@@ -476,8 +553,9 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
 
   // 启动轮询
   pollLoop().catch((err) => {
-    console.error("[wechat] pollLoop crashed:", err.message);
-    onStatus?.("error", err.message);
+    const msg = errorMessage(err);
+    console.error("[wechat] pollLoop crashed:", msg);
+    onStatus?.("error", msg);
   });
 
   // ── 返回 adapter 对象 ──
@@ -485,11 +563,11 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
   return {
     capabilities: { proactive: false },
 
-    canReply(chatId) {
+    canReply(chatId: string): boolean {
       return !!getContextToken(chatId);
     },
 
-    async sendReply(chatId, text) {
+    async sendReply(chatId: string, text: string): Promise<void> {
       const ctx = getContextToken(chatId);
       if (!ctx) throw new Error("微信: 需要对方最近发过消息才能回复");
       // 长文本分段
@@ -501,7 +579,7 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
     // 不提供 sendBlockReply：iLink API 对连续发消息有速率限制，
     // block streaming 模式下后续消息会被丢弃。走 batch 模式一次性发完更稳。
 
-    async sendMedia(chatId, url) {
+    async sendMedia(chatId: string, url: string): Promise<void> {
       const ctx = getContextToken(chatId);
       if (!ctx) throw new Error("微信: 需要对方最近发过消息才能回复");
       // 下载远程文件
@@ -519,7 +597,7 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
       }
     },
 
-    async sendMediaBuffer(chatId, buffer, { mime, filename }) {
+    async sendMediaBuffer(chatId: string, buffer: Buffer, { mime, filename }: SendMediaBufferMeta): Promise<void> {
       const ctx = getContextToken(chatId);
       if (!ctx) throw new Error("微信: 需要对方最近发过消息才能回复");
       const isImage = mime?.startsWith("image/");
@@ -532,8 +610,8 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
       }
     },
 
-    async downloadImage(platformRef) {
-      const { encrypt_query_param, aes_key } = JSON.parse(platformRef);
+    async downloadImage(platformRef: string): Promise<Buffer> {
+      const { encrypt_query_param, aes_key } = JSON.parse(platformRef) as { encrypt_query_param: string; aes_key?: string };
       const cdnUrl = buildCdnDownloadUrl(encrypt_query_param);
       const res = await fetch(cdnUrl);
       if (!res.ok) throw new Error(`CDN download failed: ${res.status}`);
@@ -543,7 +621,7 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
       return decryptAesEcb(encrypted, key);
     },
 
-    stop() {
+    stop(): void {
       generation++;
       abortController.abort();
       abortController = new AbortController();
@@ -563,7 +641,7 @@ export function createWechatAdapter({ botToken, hanaHome, onMessage, onStatus })
         }
         return { ok: true, platform: "wechat" };
       } catch (err) {
-        throw new Error(`微信 token 验证失败: ${err.message}`);
+        throw new Error(`微信 token 验证失败: ${errorMessage(err)}`);
       }
     },
   };

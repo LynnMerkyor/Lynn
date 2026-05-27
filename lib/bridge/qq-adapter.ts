@@ -7,8 +7,9 @@
  * 凭证：appID + appSecret，从 QQ 机器人开放平台获取。
  */
 
-import WebSocket from "ws";
+import WebSocket, { type RawData } from "ws";
 import { debugLog } from "../debug-log.js";
+import type { BridgeAdapter, BridgeAttachment, BridgeMessageHandler, BridgeStatusHandler, SendMediaBufferMeta } from "./adapter-types.js";
 
 const API_BASE = "https://api.sgroup.qq.com";
 const TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken";
@@ -33,22 +34,91 @@ const INTENTS = {
   GROUP_AND_C2C: 1 << 25,
 };
 
-/**
- * @param {object} opts
- * @param {string} opts.appID
- * @param {string} opts.appSecret
- * @param {(msg: object) => void} opts.onMessage
- * @param {Record<string,string>} [opts.dmGuildMap]
- * @param {(userId: string, guildId: string) => void} [opts.onDmGuildDiscovered]
- * @param {(status: string, error?: string) => void} [opts.onStatus]
- */
-export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmGuildDiscovered, onStatus }) {
-  let accessToken = null;
+type QQHttpMethod = "GET" | "POST";
+
+interface QQAdapterOptions {
+  appID: string;
+  appSecret: string;
+  onMessage: BridgeMessageHandler;
+  dmGuildMap?: Record<string, string>;
+  onDmGuildDiscovered?: (userId: string, guildId: string) => void;
+  onStatus?: BridgeStatusHandler;
+}
+
+interface QQTokenResponse {
+  access_token?: string;
+  expires_in?: number;
+  [key: string]: unknown;
+}
+
+interface QQGatewayResponse {
+  url?: string;
+  [key: string]: unknown;
+}
+
+interface QQAttachmentRaw {
+  content_type?: string;
+  url?: string;
+  filename?: string;
+  size?: number;
+  width?: number;
+  height?: number;
+}
+
+interface QQAuthor {
+  id?: string;
+  user_openid?: string;
+  member_openid?: string;
+  username?: string;
+}
+
+interface QQEventData {
+  id?: string;
+  content?: string;
+  attachments?: QQAttachmentRaw[];
+  author?: QQAuthor;
+  group_openid?: string;
+  channel_id?: string;
+  guild_id?: string;
+}
+
+interface QQPayload {
+  op?: number;
+  d?: QQEventData & { heartbeat_interval?: number; session_id?: string };
+  s?: number;
+  t?: string;
+}
+
+type QQApiBody = Record<string, unknown>;
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function rawDataToString(raw: RawData): string {
+  if (typeof raw === "string") return raw;
+  if (Buffer.isBuffer(raw)) return raw.toString("utf-8");
+  if (Array.isArray(raw)) return Buffer.concat(raw).toString("utf-8");
+  if (ArrayBuffer.isView(raw)) return Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString("utf-8");
+  return Buffer.from(raw).toString("utf-8");
+}
+
+function safeString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function safeExtFromUrl(url: string): string {
+  try { return new URL(url).pathname.split(".").pop()?.toLowerCase() || ""; }
+  catch { return ""; }
+}
+
+export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmGuildDiscovered, onStatus }: QQAdapterOptions): BridgeAdapter {
+  let accessToken: string | null = null;
   let tokenExpiresAt = 0;
-  let ws = null;
-  let heartbeatTimer = null;
-  let lastSeq = null;
-  let sessionId = null;
+  let ws: WebSocket | null = null;
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let lastSeq: number | null = null;
+  let sessionId: string | null = null;
   let stopped = false;
   let reconnectAttempts = 0;
   let heartbeatAckReceived = true;
@@ -58,13 +128,13 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
 
   // ── Token 管理 ──
 
-  async function refreshToken() {
+  async function refreshToken(): Promise<string> {
     const res = await fetch(TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ appId: appID, clientSecret: appSecret }),
     });
-    const data = await res.json();
+    const data = await res.json() as QQTokenResponse;
     if (!data.access_token) {
       throw new Error(`Failed to get access_token: ${JSON.stringify(data)}`);
     }
@@ -74,7 +144,7 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
     return accessToken;
   }
 
-  async function getToken() {
+  async function getToken(): Promise<string> {
     // 提前 5 分钟刷新
     if (!accessToken || Date.now() > tokenExpiresAt - 5 * 60 * 1000) {
       return refreshToken();
@@ -84,7 +154,7 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
 
   // ── API 请求 ──
 
-  async function apiRequest(method, path, body) {
+  async function apiRequest<T extends Record<string, unknown> = Record<string, unknown>>(method: QQHttpMethod, path: string, body?: QQApiBody): Promise<T> {
     const token = await getToken();
     const res = await fetch(`${API_BASE}${path}`, {
       method,
@@ -98,16 +168,17 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
       const text = await res.text().catch(() => "");
       throw new Error(`QQ API [${path}] ${res.status}: ${text.slice(0, 200)}`);
     }
-    return res.json();
+    return await res.json() as T;
   }
 
   // ── WebSocket ──
 
-  async function connect() {
+  async function connect(): Promise<void> {
     if (stopped) return;
     try {
       const token = await getToken();
-      const { url } = await apiRequest("GET", "/gateway");
+      const { url } = await apiRequest<QQGatewayResponse>("GET", "/gateway");
+      if (!url) throw new Error("QQ gateway missing url");
 
       ws = new WebSocket(url);
 
@@ -118,8 +189,8 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
       });
 
       ws.on("message", (raw) => {
-        let payload;
-        try { payload = JSON.parse(raw); } catch { return; }
+        let payload: QQPayload;
+        try { payload = JSON.parse(rawDataToString(raw)) as QQPayload; } catch { return; }
         handlePayload(payload, token);
       });
 
@@ -130,24 +201,26 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
       });
 
       ws.on("error", (err) => {
-        console.error("[qq] WebSocket error:", err.message);
-        debugLog()?.error("bridge", `[qq] WebSocket error: ${err.message}`);
-        onStatus?.("error", err.message);
+        const msg = errorMessage(err);
+        console.error("[qq] WebSocket error:", msg);
+        debugLog()?.error("bridge", `[qq] WebSocket error: ${msg}`);
+        onStatus?.("error", msg);
       });
     } catch (err) {
-      console.error("[qq] 连接失败:", err.message);
-      onStatus?.("error", err.message);
+      const msg = errorMessage(err);
+      console.error("[qq] 连接失败:", msg);
+      onStatus?.("error", msg);
       if (!stopped) scheduleReconnect();
     }
   }
 
-  function handlePayload(payload, token) {
+  function handlePayload(payload: QQPayload, token: string): void {
     const { op, d, s, t } = payload;
     if (s) lastSeq = s;
 
     switch (op) {
       case OP.HELLO:
-        startHeartbeat(d.heartbeat_interval);
+        startHeartbeat(d?.heartbeat_interval || 45_000);
         // 鉴权
         if (sessionId) {
           // Resume
@@ -167,14 +240,14 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
 
       case OP.DISPATCH:
         if (t === "READY") {
-          sessionId = d.session_id;
+          sessionId = d?.session_id || null;
           debugLog()?.log("bridge", `[qq] 鉴权成功，session: ${sessionId}`);
           onStatus?.("connected");
         } else if (t === "RESUMED") {
           debugLog()?.log("bridge", "[qq] 会话已恢复");
           onStatus?.("connected");
         } else {
-          handleEvent(t, d);
+          if (t && d) handleEvent(t, d);
         }
         break;
 
@@ -197,8 +270,8 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
   }
 
   /** 从 QQ v2 API 事件的 data.attachments 提取统一附件 */
-  function extractAttachments(data) {
-    const attachments = [];
+  function extractAttachments(data: QQEventData): BridgeAttachment[] {
+    const attachments: BridgeAttachment[] = [];
     if (data.attachments?.length) {
       for (const att of data.attachments) {
         const ct = att.content_type || "";
@@ -215,18 +288,20 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
     return attachments;
   }
 
-  function handleEvent(type, data) {
+  function handleEvent(type: string, data: QQEventData): void {
     // C2C 私信
     if (type === "C2C_MESSAGE_CREATE") {
-      const text = (data.content || "").trim();
+      const text = safeString(data.content).trim();
       const attachments = extractAttachments(data);
       if (!text && !attachments.length) return;
       if (text.length > MAX_MSG_SIZE) return;
+      const userId = data.author?.user_openid || data.author?.id;
+      if (!userId) return;
       onMessage({
         platform: "qq",
-        chatId: data.author?.user_openid || data.author?.id,
-        userId: data.author?.user_openid || data.author?.id,
-        sessionKey: `qq_dm_${data.author?.user_openid || data.author?.id}`,
+        chatId: userId,
+        userId,
+        sessionKey: `qq_dm_${userId}`,
         text: text.slice(0, MAX_MSG_SIZE),
         senderName: data.author?.username || "User",
         isGroup: false,
@@ -240,6 +315,7 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
       const attachments = extractAttachments(data);
       if (!text && !attachments.length) return;
       if (text.length > MAX_MSG_SIZE) return;
+      if (!data.group_openid) return;
       onMessage({
         platform: "qq",
         chatId: data.group_openid,
@@ -257,6 +333,7 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
       let text = (data.content || "").replace(/<@!?\d+>/g, "").trim();
       const attachments = extractAttachments(data);
       if (!text && !attachments.length) return;
+      if (!data.channel_id) return;
       onMessage({
         platform: "qq",
         chatId: data.channel_id,
@@ -271,10 +348,11 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
     }
     // 频道私信
     else if (type === "DIRECT_MESSAGE_CREATE") {
-      const text = (data.content || "").trim();
+      const text = safeString(data.content).trim();
       const attachments = extractAttachments(data);
       if (!text && !attachments.length) return;
       const chatId = data.guild_id;
+      if (!chatId) return;
       if (data.author?.id && chatId) {
         if (userGuildMap.get(data.author.id) !== chatId) {
           userGuildMap.set(data.author.id, chatId);
@@ -295,13 +373,13 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
     }
   }
 
-  function wsSend(data) {
+  function wsSend(data: QQApiBody): void {
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(data));
     }
   }
 
-  function startHeartbeat(interval) {
+  function startHeartbeat(interval: number): void {
     stopHeartbeat();
     heartbeatAckReceived = true;
     heartbeatTimer = setInterval(() => {
@@ -315,14 +393,14 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
     }, interval);
   }
 
-  function stopHeartbeat() {
+  function stopHeartbeat(): void {
     if (heartbeatTimer) {
       clearInterval(heartbeatTimer);
       heartbeatTimer = null;
     }
   }
 
-  function scheduleReconnect() {
+  function scheduleReconnect(): void {
     if (stopped) return;
     // 如果上次连接保活超过 5 分钟，说明不是启动阶段频繁失败，重置计数
     if (lastConnectedAt && Date.now() - lastConnectedAt > 5 * 60 * 1000) {
@@ -346,8 +424,9 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
       tokenRefreshFailures = 0;
     } catch (err) {
       tokenRefreshFailures++;
-      console.error(`[qq] token 刷新失败（连续第 ${tokenRefreshFailures} 次）:`, err.message);
-      debugLog()?.error("bridge", `[qq] token 刷新失败: ${err.message}`);
+      const msg = errorMessage(err);
+      console.error(`[qq] token 刷新失败（连续第 ${tokenRefreshFailures} 次）:`, msg);
+      debugLog()?.error("bridge", `[qq] token 刷新失败: ${msg}`);
       if (tokenRefreshFailures >= 3) {
         onStatus?.("error", `Token 连续 ${tokenRefreshFailures} 次刷新失败`);
       }
@@ -356,47 +435,49 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
 
   let lastBlockTs = 0;
 
-  return {
-    async sendReply(chatId, text, _msgId) {
-      const MAX = 2000;
-      for (let i = 0; i < text.length; i += MAX) {
-        const chunk = text.slice(i, i + MAX);
-        const body = { content: chunk, msg_type: 0 };
-        if (_msgId) body.msg_id = _msgId;
+  async function sendReply(chatId: string, text: string, _msgId?: string): Promise<void> {
+    const MAX = 2000;
+    for (let i = 0; i < text.length; i += MAX) {
+      const chunk = text.slice(i, i + MAX);
+      const body: QQApiBody = { content: chunk, msg_type: 0 };
+      if (_msgId) body.msg_id = _msgId;
 
-        // 尝试 C2C → 群聊 → 频道，根据 chatId 格式判断
-        // v2 API: C2C 用 user_openid，群用 group_openid，频道用 channel_id
+      // 尝试 C2C → 群聊 → 频道，根据 chatId 格式判断
+      // v2 API: C2C 用 user_openid，群用 group_openid，频道用 channel_id
+      try {
+        await apiRequest("POST", `/v2/users/${chatId}/messages`, body);
+      } catch (e1) {
         try {
-          await apiRequest("POST", `/v2/users/${chatId}/messages`, body);
-        } catch (e1) {
+          await apiRequest("POST", `/v2/groups/${chatId}/messages`, body);
+        } catch (e2) {
           try {
-            await apiRequest("POST", `/v2/groups/${chatId}/messages`, body);
-          } catch (e2) {
-            try {
-              await apiRequest("POST", `/channels/${chatId}/messages`, { content: chunk, ...(_msgId ? { msg_id: _msgId } : {}) });
-            } catch (e3) {
-              debugLog()?.error("bridge", `[qq] 消息发送全部失败 chatId=${chatId}: C2C=${e1.message}, Group=${e2.message}, Channel=${e3.message}`);
-              throw e3;
-            }
+            await apiRequest("POST", `/channels/${chatId}/messages`, { content: chunk, ...(_msgId ? { msg_id: _msgId } : {}) });
+          } catch (e3) {
+            debugLog()?.error("bridge", `[qq] 消息发送全部失败 chatId=${chatId}: C2C=${errorMessage(e1)}, Group=${errorMessage(e2)}, Channel=${errorMessage(e3)}`);
+            throw e3;
           }
         }
       }
-    },
+    }
+  }
 
-    async sendBlockReply(chatId, text, _msgId) {
+  return {
+    sendReply,
+
+    async sendBlockReply(chatId: string, text: string, _msgId?: string) {
       const now = Date.now();
       const elapsed = now - lastBlockTs;
       const delay = 800 + Math.random() * 1200;
       if (lastBlockTs && elapsed < delay) {
         await new Promise((r) => setTimeout(r, delay - elapsed));
       }
-      await this.sendReply(chatId, text, _msgId);
+      await sendReply(chatId, text, _msgId);
       lastBlockTs = Date.now();
     },
 
     /** 发送媒体（两步上传：先上传获取 file_info，再发送富媒体消息） */
-    async sendMedia(chatId, url) {
-      const ext = (() => { try { return new URL(url).pathname.split(".").pop()?.toLowerCase() || ""; } catch { return ""; } })();
+    async sendMedia(chatId: string, url: string) {
+      const ext = safeExtFromUrl(url);
       const imageExts = ["jpg", "jpeg", "png", "gif", "webp"];
       const videoExts = ["mp4", "mov"];
       const audioExts = ["mp3", "ogg", "wav", "silk", "amr"];
@@ -408,7 +489,7 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
       else if (audioExts.includes(ext)) fileType = 3;
 
       const uploadBody = { file_type: fileType, url, srv_send_msg: false };
-      let fileInfo;
+      let fileInfo: unknown;
       // Step 1: 上传（C2C → Group fallback）
       try {
         const res = await apiRequest("POST", `/v2/users/${chatId}/files`, uploadBody);
@@ -418,7 +499,7 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
           const res = await apiRequest("POST", `/v2/groups/${chatId}/files`, uploadBody);
           fileInfo = res.file_info;
         } catch (err) {
-          debugLog()?.error("bridge", `[qq] 媒体上传失败: ${err.message}`);
+          debugLog()?.error("bridge", `[qq] 媒体上传失败: ${errorMessage(err)}`);
           throw err;
         }
       }
@@ -430,14 +511,14 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
         try {
           await apiRequest("POST", `/v2/groups/${chatId}/messages`, msgBody);
         } catch (err) {
-          debugLog()?.error("bridge", `[qq] 富媒体消息发送失败: ${err.message}`);
+          debugLog()?.error("bridge", `[qq] 富媒体消息发送失败: ${errorMessage(err)}`);
           throw err;
         }
       }
     },
 
     /** 发送本地 Buffer（桌面端推送文件用，尝试 base64 上传） */
-    async sendMediaBuffer(chatId, buffer, { mime, filename }) {
+    async sendMediaBuffer(chatId: string, buffer: Buffer, { mime, filename }: SendMediaBufferMeta) {
       const imageExts = ["jpg", "jpeg", "png", "gif", "webp"];
       const videoExts = ["mp4", "mov"];
       const audioExts = ["mp3", "ogg", "wav", "silk", "amr"];
@@ -450,7 +531,7 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
 
       // 尝试用 file_data (base64) 上传
       const uploadBody = { file_type: fileType, file_data: buffer.toString("base64"), srv_send_msg: false };
-      let fileInfo;
+      let fileInfo: unknown;
       try {
         const res = await apiRequest("POST", `/v2/users/${chatId}/files`, uploadBody);
         fileInfo = res.file_info;
@@ -460,8 +541,9 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
           fileInfo = res.file_info;
         } catch (err) {
           // base64 上传不被支持，抛错让调用方知道（不静默 fallback 避免伪成功）
-          debugLog()?.warn("bridge", `[qq] sendMediaBuffer base64 上传失败: ${err.message}`);
-          throw new Error(`QQ base64 上传不支持: ${err.message}`);
+          const msg = errorMessage(err);
+          debugLog()?.warn("bridge", `[qq] sendMediaBuffer base64 上传失败: ${msg}`);
+          throw new Error(`QQ base64 上传不支持: ${msg}`);
         }
       }
       const msgBody = { msg_type: 7, media: { file_info: fileInfo }, content: " " };
@@ -471,13 +553,13 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
         try {
           await apiRequest("POST", `/v2/groups/${chatId}/messages`, msgBody);
         } catch (err) {
-          debugLog()?.error("bridge", `[qq] sendMediaBuffer 发送失败: ${err.message}`);
+          debugLog()?.error("bridge", `[qq] sendMediaBuffer 发送失败: ${errorMessage(err)}`);
           throw err;
         }
       }
     },
 
-    stop() {
+    stop(): void {
       stopped = true;
       stopHeartbeat();
       clearInterval(tokenRefreshTimer);
@@ -491,7 +573,7 @@ export function createQQAdapter({ appID, appSecret, onMessage, dmGuildMap, onDmG
       return apiRequest("GET", "/users/@me");
     },
 
-    resolveOwnerChatId(userId) {
+    resolveOwnerChatId(userId: string): string | null {
       return userGuildMap.get(userId) || null;
     },
   };
