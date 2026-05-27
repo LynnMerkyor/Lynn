@@ -13,15 +13,71 @@ const DEFAULTS = {
   timeoutMs: 3000,
 };
 
-export function parseArgs(argv = []) {
-  const opts = {
+export interface VoiceRuntimeSmokeOptions {
+  asrUrl: string;
+  serUrl: string;
+  ttsUrl: string;
+  text: string;
+  voice: string;
+  timeoutMs: number;
+  audioPath: string | null;
+  includeEdge: boolean;
+  synthesizeTts: boolean;
+  json: boolean;
+  help: boolean;
+}
+
+type PartialVoiceRuntimeSmokeOptions = Partial<VoiceRuntimeSmokeOptions>;
+
+type StepResult = Record<string, unknown> & {
+  ok: boolean;
+  ms?: number;
+  error?: string;
+};
+
+type ServiceCheck = {
+  name: string;
+  url?: string;
+  skipped?: boolean;
+  reason?: string;
+  health?: StepResult;
+  inference?: StepResult;
+  note?: string;
+};
+
+type Services = {
+  qwen3Asr: ServiceCheck;
+  emotion2vec: ServiceCheck;
+  cosyvoice2: ServiceCheck;
+  edgeTts: ServiceCheck;
+};
+
+type SmokeResult = {
+  ok: boolean;
+  checkedAt: string;
+  config: {
+    asrUrl: string;
+    serUrl: string;
+    ttsUrl: string;
+    audioPath: string | null;
+    includeEdge: boolean;
+    synthesizeTts: boolean;
+    timeoutMs: number;
+  };
+  services: Services;
+};
+
+type TimedStepFn = () => Promise<Record<string, unknown> & { ok: boolean }>;
+
+export function parseArgs(argv: string[] = []): VoiceRuntimeSmokeOptions {
+  const opts: VoiceRuntimeSmokeOptions = {
     ...DEFAULTS,
     audioPath: null,
     includeEdge: false,
     synthesizeTts: true,
     json: true,
     help: false,
-  };
+  } satisfies VoiceRuntimeSmokeOptions;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -57,7 +113,7 @@ export function parseArgs(argv = []) {
   return opts;
 }
 
-export function usage() {
+export function usage(): string {
   return [
     "Usage: npm run voice:smoke -- [options]",
     "",
@@ -81,7 +137,7 @@ export function usage() {
   ].join("\n");
 }
 
-export async function runVoiceRuntimeSmoke(options = {}) {
+export async function runVoiceRuntimeSmoke(options: PartialVoiceRuntimeSmokeOptions = {}): Promise<SmokeResult> {
   const opts = {
     ...DEFAULTS,
     audioPath: null,
@@ -90,14 +146,15 @@ export async function runVoiceRuntimeSmoke(options = {}) {
     ...options,
   };
   const checkedAt = new Date().toISOString();
-  const services = {};
+  const services = {} as Services;
+  const audioPath = opts.audioPath;
 
   services.qwen3Asr = await checkHttpService({
     name: "qwen3-asr",
     url: opts.asrUrl,
     timeoutMs: opts.timeoutMs,
-    infer: opts.audioPath
-      ? () => postAudio(`${trimUrl(opts.asrUrl)}/transcribe`, opts.audioPath, opts.timeoutMs)
+    infer: audioPath
+      ? () => postAudio(`${trimUrl(opts.asrUrl)}/transcribe`, audioPath, opts.timeoutMs)
       : null,
   });
 
@@ -105,8 +162,8 @@ export async function runVoiceRuntimeSmoke(options = {}) {
     name: "emotion2vec-plus",
     url: opts.serUrl,
     timeoutMs: opts.timeoutMs,
-    infer: opts.audioPath
-      ? () => postAudio(`${trimUrl(opts.serUrl)}/classify`, opts.audioPath, opts.timeoutMs)
+    infer: audioPath
+      ? () => postAudio(`${trimUrl(opts.serUrl)}/classify`, audioPath, opts.timeoutMs)
       : null,
   });
 
@@ -140,17 +197,17 @@ export async function runVoiceRuntimeSmoke(options = {}) {
     services.qwen3Asr.inference,
     services.emotion2vec.inference,
     services.cosyvoice2.inference,
-  ].filter(Boolean).every((step) => step.ok);
-  const optionalOk = !opts.includeEdge || services.edgeTts.health?.ok;
+  ].filter((step): step is StepResult => Boolean(step)).every((step) => step.ok);
+  const optionalOk = !opts.includeEdge || services.edgeTts.health?.ok === true;
 
   return {
-    ok: mandatoryOk && inferenceOk && optionalOk,
+    ok: Boolean(mandatoryOk && inferenceOk && optionalOk),
     checkedAt,
     config: {
       asrUrl: opts.asrUrl,
       serUrl: opts.serUrl,
       ttsUrl: opts.ttsUrl,
-      audioPath: opts.audioPath ? path.resolve(opts.audioPath) : null,
+      audioPath: audioPath ? path.resolve(audioPath) : null,
       includeEdge: !!opts.includeEdge,
       synthesizeTts: !!opts.synthesizeTts,
       timeoutMs: opts.timeoutMs,
@@ -159,8 +216,13 @@ export async function runVoiceRuntimeSmoke(options = {}) {
   };
 }
 
-async function checkHttpService({ name, url, timeoutMs, infer }) {
-  const service = {
+async function checkHttpService({ name, url, timeoutMs, infer }: {
+  name: string;
+  url: string;
+  timeoutMs: number;
+  infer?: TimedStepFn | null;
+}): Promise<ServiceCheck> {
+  const service: ServiceCheck = {
     name,
     url: trimUrl(url),
     health: await timedStep(async () => {
@@ -177,7 +239,7 @@ async function checkHttpService({ name, url, timeoutMs, infer }) {
   return service;
 }
 
-async function checkEdgeTts({ text, timeoutMs }) {
+async function checkEdgeTts({ text, timeoutMs }: { text: string; timeoutMs: number }): Promise<ServiceCheck> {
   const provider = createEdgeTtsProvider({ timeout_ms: timeoutMs });
   const health = await timedStep(async () => ({ ok: await provider.health() }));
   return {
@@ -187,7 +249,7 @@ async function checkEdgeTts({ text, timeoutMs }) {
   };
 }
 
-async function postAudio(url, audioPath, timeoutMs) {
+async function postAudio(url: string, audioPath: string, timeoutMs: number): Promise<StepResult> {
   const abs = path.resolve(audioPath);
   const bytes = fs.readFileSync(abs);
   const form = new FormData();
@@ -202,7 +264,11 @@ async function postAudio(url, audioPath, timeoutMs) {
   };
 }
 
-async function postTts(url, { text, voice, timeoutMs }) {
+async function postTts(url: string, { text, voice, timeoutMs }: {
+  text: string;
+  voice: string;
+  timeoutMs: number;
+}): Promise<StepResult> {
   const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -224,12 +290,12 @@ async function postTts(url, { text, voice, timeoutMs }) {
   };
 }
 
-async function fetchWithTimeout(url, init = {}, timeoutMs) {
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs: number): Promise<Response> {
   const timeout = AbortSignal.timeout(timeoutMs);
   return fetch(url, { ...init, signal: init.signal || timeout });
 }
 
-async function timedStep(fn) {
+async function timedStep(fn: TimedStepFn): Promise<StepResult> {
   const start = performance.now();
   try {
     const result = await fn();
@@ -237,16 +303,16 @@ async function timedStep(fn) {
       ...result,
       ms: Math.round(performance.now() - start),
     };
-  } catch (err) {
+  } catch (err: unknown) {
     return {
       ok: false,
-      error: err?.message || String(err),
+      error: err instanceof Error ? err.message : String(err),
       ms: Math.round(performance.now() - start),
     };
   }
 }
 
-async function readJsonOrPreview(res) {
+async function readJsonOrPreview(res: Response): Promise<unknown> {
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
     return await res.json();
@@ -254,12 +320,12 @@ async function readJsonOrPreview(res) {
   return responsePreview(res);
 }
 
-async function responsePreview(res) {
+async function responsePreview(res: Response): Promise<string> {
   const text = await res.text().catch(() => "");
   return text.slice(0, 240);
 }
 
-function guessAudioMime(file) {
+function guessAudioMime(file: string): string {
   const ext = path.extname(file).toLowerCase();
   if (ext === ".wav") return "audio/wav";
   if (ext === ".mp3") return "audio/mpeg";
@@ -267,12 +333,12 @@ function guessAudioMime(file) {
   return "audio/webm";
 }
 
-function trimUrl(url) {
+function trimUrl(url: string): string {
   return String(url || "").replace(/\/+$/, "");
 }
 
-function printPretty(result) {
-  const rows = [
+function printPretty(result: SmokeResult): void {
+  const rows: Array<[string, ServiceCheck]> = [
     ["Qwen3-ASR", result.services.qwen3Asr],
     ["emotion2vec+", result.services.emotion2vec],
     ["CosyVoice2", result.services.cosyvoice2],
@@ -290,7 +356,7 @@ function printPretty(result) {
   }
 }
 
-async function main() {
+async function main(): Promise<void> {
   try {
     const opts = parseArgs(process.argv.slice(2));
     if (opts.help) {
@@ -301,8 +367,8 @@ async function main() {
     if (!opts.json) printPretty(result);
     console.log(JSON.stringify(result, null, 2));
     process.exitCode = result.ok ? 0 : 1;
-  } catch (err) {
-    console.error(err?.message || String(err));
+  } catch (err: unknown) {
+    console.error(err instanceof Error ? err.message : String(err));
     console.error("");
     console.error(usage());
     process.exitCode = 2;

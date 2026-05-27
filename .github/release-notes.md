@@ -1,39 +1,41 @@
-# Lynn v0.79.5 Release Notes
+# Lynn v0.79.6 Release Notes
 
-> 发布日期:2026-05-27 · 代号:"Core Agent Runtime TS 版"
+> 发布日期:2026-05-28 · 代号:"Chat Route TS + Stability Gate"
 
-v0.79.5 是 V0.79 线的核心运行时 TypeScript 迁移版。默认本地模型策略不变:继续推荐 **Qwen3.5-9B Q4_K_M imatrix MTP**,4B 只作为低配降级并保留 thinking-on 风险提示。本版重点把 `core/agent`、`core/session-coordinator` 和 server 入口等核心路径纳入 TypeScript 门禁,在不触碰 `core/engine` / `server/routes/chat` 这两个最大中枢的前提下,继续降低运行时协议漂移风险。
+v0.79.6 是 V0.79 线的中枢 TypeScript 与稳定性收口版。默认本地模型策略不变:继续推荐 **Qwen3.5-9B Q4_K_M imatrix MTP**,4B 只作为低配降级并保留 thinking-on 风险提示。本版重点完成 `server/routes/chat` 的 TypeScript 迁移,并修复实时工具或长回合成功执行后聊天框可能空正文的兜底体验。
 
 ## 重点更新
 
-- `core/agent` 迁入 TypeScript:Agent 身份、配置、记忆、工具、Desk、Cron、Skill install 和 system prompt 组装路径现在有显式边界。
-- `core/session-coordinator` 迁入 TypeScript:会话切换、工具事件、视觉参数回归和模型隔离路径通过聚焦测试覆盖。
-- Server 入口与多组 runtime route 继续 TS 化:provider plugins、AEC client、CLI、config/skills/sessions、agents/review/research、voice/desk/local model routes 已进入 runtime typecheck。
-- 保持高风险中心文件分批推进:`core/engine` 与 `server/routes/chat` 不在本版大改,避免把发版风险集中到单个包。
-- TS 覆盖继续提升:tracked source 口径 TS/TSX 约 58.38%,TS-vs-JS 约 73.90%。
+- `server/routes/chat` 迁入 TypeScript:stream、tool fallback、本地 Qwen direct path、turn finalization 和硬超时兜底进入 runtime typecheck。
+- 空正文兜底修复:实时工具成功但模型没有吐出可见正文时,会优先展示工具摘要;长回合硬超时会给出本地 Office 计算兜底,避免用户看到空白回答。
+- 会话列表 UX 收紧:会话操作合并到右键/`...` 菜单,归档增加确认,置顶状态常驻可见。
+- MiMo 搜索上下文灰度:非 native-search provider 可以通过 `BRAIN_V2_PRE_SEARCH=1` 复用 MiMo 搜索上下文;默认关闭,不改变稳定路径。
+- 本地模型口径不变:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;4B 保持低配降级并提示 thinking-on 风险。
 
 ## 回归门禁
 
-- `npm run typecheck:runtime` ✓
 - `npm run typecheck` ✓
-- Full `npm test`:193 files / 1500 passed / 1 skipped ✓
+- `npm run typecheck:runtime` ✓
+- Full `npm test`:194 files / 1519 passed / 1 skipped ✓
+- `npm run build:server` / `npm run build:main` / `npm run build:renderer` ✓
 - Release static regression:37/37 passed ✓
+- Electron UI smoke:home / short / tools / long-code passed ✓
+- Packaged-server live regression:37/37 passed, blocker 0, critical 0 ✓
 - Build/package/notarization gates:macOS Apple Silicon / Intel DMG and Windows installer are rebuilt through the release gate for this version.
-- macOS DMG final validation:Developer ID signed, notarized, stapled, Gatekeeper accepted ✓
 
 ## SHA256
 
-- `Lynn-0.79.5-macOS-Apple-Silicon.dmg`: `f676bd6d186fadb5c65b656c0a4e5f1d9e0884530e9f4ce7e62a7131501685c4`
-- `Lynn-0.79.5-macOS-Intel.dmg`: `66d477367784fd40174900de4a0cc9018570daaee5b71be6db236232b0add185`
-- `Lynn-0.79.5-Windows-Setup.exe`: `193349638c54bc0b7328e3d60fcaac327f67bad8a9bac4af59422e969fbab0ce`
+- `Lynn-0.79.6-macOS-Apple-Silicon.dmg`: `c1b4771744a81afa9efac636ff59f0a404811d488be4f7288fa60e3fc5393c70`
+- `Lynn-0.79.6-macOS-Intel.dmg`: `a005bf8a0416eeba03d069cf725bcebd554c7f00be8986cca19460d374157a0b`
+- `Lynn-0.79.6-Windows-Setup.exe`: `680c21dccf054f640294b1864f46d38099c8bbbbcb9f05788f886979c2412f71`
 
 ## English Summary
 
-v0.79.5 is a core runtime TypeScript migration release for the V0.79 line. The local model policy is unchanged:Qwen3.5-9B Q4_K_M imatrix MTP remains the recommended default, while 4B remains a low-config downgrade with its thinking-on risk documented.
+v0.79.6 is a central TypeScript and stability release for the V0.79 line. The local model policy is unchanged:Qwen3.5-9B Q4_K_M imatrix MTP remains the recommended default, while 4B remains a low-config downgrade with its thinking-on risk documented.
 
 Highlights:
-- `core/agent` is now TypeScript:agent identity, config, memory, tools, Desk, Cron, skill install, and system prompt assembly have explicit boundaries.
-- `core/session-coordinator` moved to TypeScript with focused regressions for session switching, tool events, vision arguments, and model isolation.
-- Server entrypoints and runtime route groups continue moving to TypeScript, including provider plugins, AEC client, CLI, config/skills/sessions, agents/review/research, voice/desk/local-model routes.
-- High-risk central files stay staged:`core/engine` and `server/routes/chat` are intentionally left for a separate wave.
-- TS coverage continues to improve:about 58.38% TS/TSX by tracked source lines, or about 73.90% when comparing TypeScript against JavaScript-like source only.
+- `server/routes/chat` moved to TypeScript, bringing stream handling, tool fallback, local Qwen direct path, turn finalization, and hard-timeout fallback into runtime typecheck.
+- Empty-answer fallback is hardened:when realtime tools succeed but the model emits no visible answer, Lynn surfaces the tool summary; long hard-timeout turns get a local Office-calculation fallback.
+- Session list UX now uses a right-click / `...` menu, archive confirmation, and persistent pinned-session affordances.
+- MiMo search context is available behind `BRAIN_V2_PRE_SEARCH=1` for non-native-search providers; the default stable path is unchanged.
+- Local model onboarding remains Qwen3.5-9B by default, with 4B kept as the low-config downgrade.

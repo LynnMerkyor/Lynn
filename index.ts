@@ -14,6 +14,28 @@ import path from "path";
 const projectRoot = import.meta.dirname;
 const productDir = projectRoot + "/lib";
 
+type AnyRecord = Record<string, any>;
+type CliEvent = AnyRecord & {
+  type?: string;
+  assistantMessageEvent?: AnyRecord & {
+    type?: string;
+    delta?: string;
+    error?: unknown;
+    toolCall?: AnyRecord;
+  };
+  toolCall?: AnyRecord;
+  toolResults?: Array<AnyRecord>;
+  output?: string;
+};
+type MoodEvent = {
+  type: "text" | "mood_start" | "mood_text" | "mood_end";
+  data?: string;
+};
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err || "unknown error");
+}
+
 // 用户数据目录：优先 LYNN_HOME，兼容 HANA_HOME，默认 ~/.lynn
 const lynnHome = process.env.LYNN_HOME
   ? path.resolve(process.env.LYNN_HOME.replace(/^~/, os.homedir()))
@@ -26,12 +48,12 @@ process.env.LYNN_HOME = lynnHome;
 ensureFirstRun(lynnHome, productDir);
 
 // ── 初始化引擎 ──
-const engine = new HanaEngine({ lynnHome, productDir });
+const engine = new HanaEngine({ lynnHome, productDir }) as any;
 
 try {
-  await engine.init((msg) => console.log(msg));
+  await engine.init((msg: string) => console.log(msg));
 } catch (err) {
-  console.error("启动失败:", err.message);
+  console.error("启动失败:", errMessage(err));
   console.error("\n可能的原因：");
   console.error(`  1. ${path.join(lynnHome, "models.json")} 格式不对`);
   console.error("  2. API key 不对");
@@ -59,7 +81,7 @@ const thinkingHints = [
   `${agentName} 正在认真想`,
   `${agentName} 脑子转啊转`,
 ];
-let thinkingTimer = null;
+let thinkingTimer: ReturnType<typeof setInterval> | null = null;
 let thinkingFrame = 0;
 let thinkingDots = 0;
 
@@ -89,14 +111,15 @@ function stopThinkingAnim() {
 const moodParser = new MoodParser();
 
 // 订阅引擎事件 → CLI 渲染
-engine.subscribe((event) => {
+engine.subscribe((event: CliEvent) => {
   if (event.type === "message_update") {
-    const sub = event.assistantMessageEvent?.type;
+    const assistantEvent = event.assistantMessageEvent;
+    const sub = assistantEvent?.type;
     if (sub === "text_delta") {
       stopThinkingAnim();
-      const delta = event.assistantMessageEvent.delta;
+      const delta = assistantEvent?.delta || "";
 
-      moodParser.feed(delta, (evt) => {
+      moodParser.feed(delta, (evt: MoodEvent) => {
         if (evt.type === "text") {
           process.stdout.write(`${hanaColor}${evt.data}${resetColor}`);
         } else if (evt.type === "mood_start") {
@@ -113,11 +136,11 @@ engine.subscribe((event) => {
       stopThinkingAnim();
       process.stdout.write(`\n\x1b[36m⚙ 调用工具...\x1b[0m`);
     } else if (sub === "toolcall_end") {
-      const tool = event.assistantMessageEvent.toolCall;
+      const tool = assistantEvent?.toolCall;
       const argKeys = tool?.input && typeof tool.input === "object" ? Object.keys(tool.input) : [];
       console.log(`\x1b[36m ✓ ${tool?.name || "unknown"}(${argKeys.length ? `keys=${argKeys.join(",")}` : ""})\x1b[0m`);
     } else if (sub === "error") {
-      console.error("\n\x1b[31m[模型返回错误]\x1b[0m", event.assistantMessageEvent.error);
+      console.error("\n\x1b[31m[模型返回错误]\x1b[0m", assistantEvent?.error);
     }
   } else if (event.type === "tool_execution_start") {
     const name = event.toolCall?.name || "";
@@ -144,18 +167,18 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-process.stdin.on("keypress", (ch, key) => {
+process.stdin.on("keypress", (_ch: string, key: readline.Key) => {
   if (key && key.name === "escape") {
     rl.write(null, { ctrl: true, name: "u" });
   }
 });
 
-function promptLine(text) {
+function promptLine(text: string): Promise<string> {
   return new Promise((resolve) => rl.question(text, resolve));
 }
 
 const ask = () => {
-  rl.question(`\n\x1b[38;2;126;172;181m${userName} > \x1b[0m`, async (input) => {
+  rl.question(`\n\x1b[38;2;126;172;181m${userName} > \x1b[0m`, async (input: string) => {
     const trimmed = input.trim();
 
     if (trimmed === "/quit" || trimmed === "/exit") {
@@ -167,12 +190,12 @@ const ask = () => {
 
     if (trimmed === "/model") {
       console.log("\n可用模型：");
-      available.forEach((m, i) => {
+      available.forEach((m: AnyRecord, i: number) => {
         const cur = engine.currentModel;
         const current = (m.id === cur?.id && m.provider === cur?.provider) ? " ← 当前" : "";
         console.log(`  ${i + 1}. ${m.name} (${m.provider})${current}`);
       });
-      rl.question("\n选择模型编号 > ", async (num) => {
+      rl.question("\n选择模型编号 > ", async (num: string) => {
         const idx = parseInt(num) - 1;
         if (idx >= 0 && idx < available.length) {
           await engine.setPendingModel(available[idx].id, available[idx].provider);
@@ -251,7 +274,7 @@ const ask = () => {
           console.log("\n取消切换");
         }
       } catch (err) {
-        console.error(`\n[session 列表出错] ${err.message}`);
+        console.error(`\n[session 列表出错] ${errMessage(err)}`);
       }
       ask();
       return;
@@ -287,7 +310,7 @@ const ask = () => {
       moodParser.reset();
       console.log(`\n\x1b[38;2;125;28;74m${agentName} >\x1b[0m `);
       await engine.prompt(trimmed);
-      moodParser.flush((evt) => {
+      moodParser.flush((evt: MoodEvent) => {
         if (evt.type === "text") {
           process.stdout.write(`${hanaColor}${evt.data}${resetColor}`);
         } else if (evt.type === "mood_text") {
@@ -296,7 +319,7 @@ const ask = () => {
       });
       console.log("");
     } catch (err) {
-      console.error("\n[出错了]", err.message);
+      console.error("\n[出错了]", errMessage(err));
     }
 
     ask();

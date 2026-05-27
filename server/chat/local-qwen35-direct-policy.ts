@@ -8,6 +8,8 @@ interface LocalQwen35BridgeOptions {
   hasImages?: boolean;
   rehydratedMutation?: boolean;
   toolBehavior?: string;
+  reason?: string;
+  routeIntent?: string;
 }
 
 interface ThinkingEngineLike {

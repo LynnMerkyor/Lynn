@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * run-safety-tests-llm.js — 模型层安全拒答自动化测试
+ * run-safety-tests-llm.ts — 模型层安全拒答自动化测试
  *
  * 读取 docs/safety-test-suite.csv：
  * - 先经过输入侧 ContentFilter
@@ -8,17 +8,18 @@
  * - 统计“应拒答是否真正拒答 / 非拒答是否被误拒”
  *
  * 用法：
- *   node scripts/run-safety-tests-llm.js [--limit N] [--agent lynn] [--role chat]
+ *   node --import tsx scripts/run-safety-tests-llm.ts [--limit N] [--agent lynn] [--role chat]
  */
 
-import fs from "fs";
-import os from "os";
-import path from "path";
-import { fileURLToPath } from "url";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { ContentFilter } from "../lib/content-filter.js";
 import { ProviderRegistry } from "../core/provider-registry.js";
 import { loadConfig } from "../lib/memory/config-loader.js";
 import { callText } from "../core/llm-client.js";
+import type { LLMApi, ModelId, ProviderConfig, ProviderEntry, ProviderId } from "../core/types.js";
 import {
   BRAIN_CHAT_MODEL_ID,
   BRAIN_PROVIDER_ID,
@@ -47,8 +48,47 @@ const LIMIT = limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) || Infinity : I
 const AGENT_ID = agentIdx !== -1 ? String(args[agentIdx + 1] || "").trim() : "";
 const ROLE = roleIdx !== -1 ? String(args[roleIdx + 1] || "chat").trim() : "chat";
 
-function parseCSVRow(line) {
-  const parts = [];
+type SafetyCaseType = "应拒答" | "非拒答";
+type ResponseOutcome = "input_blocked" | "empty" | "refused" | "answered";
+type ModelRef = { id: ModelId; provider: ProviderId | null };
+
+interface AgentConfig {
+  locale?: string;
+  agent?: { yuan?: string };
+  api?: { provider?: ProviderId | string };
+  models?: Record<string, unknown>;
+}
+
+interface CounterStats {
+  total: number;
+  pass: number;
+  fail: number;
+}
+
+interface SafetyStats {
+  total: number;
+  inputBlocked: number;
+  modelEvaluated: number;
+  reject: CounterStats;
+  normal: CounterStats;
+}
+
+interface SafetyLlmResultRow {
+  id: string;
+  majorCat: string;
+  minorCat: string;
+  type: SafetyCaseType;
+  question: string;
+  expected: string;
+  filterLevel: string;
+  filterBlocked: boolean;
+  outcome: ResponseOutcome;
+  passed: boolean;
+  responsePreview: string;
+}
+
+function parseCSVRow(line: string): string[] {
+  const parts: string[] = [];
   let current = "";
   let inQuote = false;
   for (let i = 0; i < line.length; i++) {
@@ -71,58 +111,64 @@ function parseCSVRow(line) {
   return parts;
 }
 
-function readJson(filePath, fallback = {}) {
+function readJson(filePath: string, fallback: Record<string, unknown> = {}): Record<string, unknown> {
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    return JSON.parse(fs.readFileSync(filePath, "utf-8")) as Record<string, unknown>;
   } catch {
     return fallback;
   }
 }
 
-function toModelRef(raw) {
+function toModelRef(raw: unknown): ModelRef | null {
   if (!raw) return null;
   if (typeof raw === "string") {
     const id = raw.trim();
-    return id ? { id, provider: null } : null;
+    return id ? { id: id as ModelId, provider: null } : null;
   }
   if (typeof raw === "object" && raw !== null) {
-    const id = typeof raw.id === "string" ? raw.id.trim() : "";
+    const record = raw as { id?: unknown; provider?: unknown };
+    const id = typeof record.id === "string" ? record.id.trim() : "";
     if (!id) return null;
-    const provider = typeof raw.provider === "string" && raw.provider.trim() ? raw.provider.trim() : null;
-    return { id, provider };
+    const provider = typeof record.provider === "string" && record.provider.trim()
+      ? record.provider.trim() as ProviderId
+      : null;
+    return { id: id as ModelId, provider };
   }
   return null;
 }
 
-function resolveAgentId(lynnHome) {
+function resolveAgentId(lynnHome: string): string {
   if (AGENT_ID) return AGENT_ID;
   const prefs = readJson(path.join(lynnHome, "user", "preferences.json"), {});
   return String(prefs.primaryAgent || "lynn").trim() || "lynn";
 }
 
-function resolveModelRef(config) {
+function resolveModelRef(config: AgentConfig): ModelRef {
   if (ROLE === "chat") {
-    return toModelRef(config?.models?.chat) || { id: BRAIN_CHAT_MODEL_ID, provider: BRAIN_PROVIDER_ID };
+    return toModelRef(config?.models?.chat) || { id: BRAIN_CHAT_MODEL_ID as ModelId, provider: BRAIN_PROVIDER_ID as ProviderId };
   }
-  const roleModelId = BRAIN_ROLE_MODEL_IDS[ROLE] || BRAIN_CHAT_MODEL_ID;
-  return { id: roleModelId, provider: BRAIN_PROVIDER_ID };
+  const roleModelId = BRAIN_ROLE_MODEL_IDS[ROLE as keyof typeof BRAIN_ROLE_MODEL_IDS] || BRAIN_CHAT_MODEL_ID;
+  return { id: roleModelId as ModelId, provider: BRAIN_PROVIDER_ID as ProviderId };
 }
 
-function inferProviderId(registry, modelRef, config) {
+function inferProviderId(registry: ProviderRegistry, modelRef: ModelRef, config: AgentConfig): ProviderId {
   if (modelRef?.provider) return modelRef.provider;
   const apiProvider = String(config?.api?.provider || "").trim();
-  if (apiProvider) return apiProvider;
+  if (apiProvider) return apiProvider as ProviderId;
 
   const rawProviders = registry.getAllProvidersRaw();
   for (const [providerId, providerConfig] of Object.entries(rawProviders)) {
-    if (Array.isArray(providerConfig?.models) && providerConfig.models.some((entry) => (typeof entry === "object" ? entry.id : entry) === modelRef?.id)) {
-      return providerId;
+    if (Array.isArray(providerConfig?.models) && providerConfig.models.some((entry) => {
+      const id = typeof entry === "object" && entry !== null ? (entry as { id?: unknown }).id : entry;
+      return id === modelRef?.id;
+    })) {
+      return providerId as ProviderId;
     }
   }
-  return BRAIN_PROVIDER_ID;
+  return BRAIN_PROVIDER_ID as ProviderId;
 }
 
-function loadSystemPrompt(config) {
+function loadSystemPrompt(config: AgentConfig): string {
   const locale = String(config?.locale || "zh-CN").toLowerCase();
   const yuan = String(config?.agent?.yuan || "lynn").trim().toLowerCase();
   const templatePath = locale.startsWith("zh")
@@ -137,18 +183,23 @@ function loadSystemPrompt(config) {
   }
 }
 
-function classifyResponse(text) {
+function classifyResponse(text: string): Exclude<ResponseOutcome, "input_blocked"> {
   const normalized = String(text || "").trim();
   if (!normalized) return "empty";
   if (REFUSAL_PATTERNS.some((pattern) => pattern.test(normalized))) return "refused";
   return "answered";
 }
 
-function escapeCsv(value) {
+function escapeCsv(value: unknown): string {
   return `"${String(value ?? "").replace(/"/g, "\"\"")}"`;
 }
 
-async function main() {
+function requireProviderEntry(providerEntry: ProviderEntry | null, providerId: ProviderId): ProviderEntry {
+  if (!providerEntry) throw new Error(`Provider not found: ${providerId}`);
+  return providerEntry;
+}
+
+async function main(): Promise<void> {
   const lynnHome = process.env.LYNN_HOME || path.join(os.homedir(), ".lynn");
   const agentId = resolveAgentId(lynnHome);
   const configPath = path.join(lynnHome, "agents", agentId, "config.yaml");
@@ -156,23 +207,23 @@ async function main() {
     throw new Error(`Agent config not found: ${configPath}`);
   }
 
-  const config = loadConfig(configPath);
+  const config = loadConfig(configPath) as AgentConfig;
   const registry = new ProviderRegistry(lynnHome);
   registry.reload();
 
   const modelRef = resolveModelRef(config);
   const providerId = inferProviderId(registry, modelRef, config);
-  const providerEntry = registry.get(providerId);
+  const providerEntry = requireProviderEntry(registry.get(providerId), providerId);
   const providerCreds = registry.getCredentials(providerId) || {
     apiKey: "",
-    baseUrl: providerEntry?.baseUrl || "",
-    api: providerEntry?.api || "",
+    baseUrl: providerEntry.baseUrl || "",
+    api: providerEntry.api || "",
   };
 
-  if (!providerCreds.api && !providerEntry?.api) {
+  if (!providerCreds.api && !providerEntry.api) {
     throw new Error(`Provider api missing for ${providerId}`);
   }
-  if (!providerCreds.baseUrl && !providerEntry?.baseUrl) {
+  if (!providerCreds.baseUrl && !providerEntry.baseUrl) {
     throw new Error(`Provider base_url missing for ${providerId}`);
   }
 
@@ -184,8 +235,8 @@ async function main() {
   const lines = raw.split("\n").filter((line) => line.trim());
   const rows = lines.slice(1);
 
-  const results = [];
-  const stats = {
+  const results: SafetyLlmResultRow[] = [];
+  const stats: SafetyStats = {
     total: 0,
     inputBlocked: 0,
     modelEvaluated: 0,
@@ -201,9 +252,10 @@ async function main() {
     const isReject = type === "应拒答";
     const isNormal = type === "非拒答";
     if (!isReject && !isNormal) continue;
+    const caseType: SafetyCaseType = isReject ? "应拒答" : "非拒答";
 
     const filterCheck = filter.check(question);
-    let outcome = "input_blocked";
+    let outcome: ResponseOutcome = "input_blocked";
     let passed = false;
     let responseText = "";
 
@@ -215,7 +267,7 @@ async function main() {
       responseText = await callText({
         api: providerCreds.api || providerEntry?.api,
         apiKey: providerCreds.apiKey || "",
-        baseUrl: providerCreds.baseUrl || providerEntry?.baseUrl,
+        baseUrl: providerCreds.baseUrl || providerEntry.baseUrl,
         model: modelRef.id,
         provider: providerId,
         systemPrompt,
@@ -243,7 +295,7 @@ async function main() {
       id,
       majorCat,
       minorCat,
-      type,
+      type: caseType,
       question,
       expected,
       filterLevel: filterCheck.level,
@@ -281,7 +333,7 @@ async function main() {
     role: ROLE,
     model: modelRef,
     providerId,
-    providerBaseUrl: providerCreds.baseUrl || providerEntry?.baseUrl || "",
+    providerBaseUrl: providerCreds.baseUrl || providerEntry.baseUrl || "",
     rejectPassRate: stats.reject.total ? `${(stats.reject.pass / stats.reject.total * 100).toFixed(1)}%` : "N/A",
     normalPassRate: stats.normal.total ? `${(stats.normal.pass / stats.normal.total * 100).toFixed(1)}%` : "N/A",
     testedAt: new Date().toISOString(),
@@ -299,7 +351,7 @@ async function main() {
   console.log(`统计: ${statsPath}`);
 }
 
-main().catch((err) => {
-  console.error("模型层安全测试失败:", err);
+main().catch((err: unknown) => {
+  console.error("模型层安全测试失败:", err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

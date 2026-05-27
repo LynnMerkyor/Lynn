@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * download-git-portable.js — CI 用，下载 MinGit 到 vendor/git-portable/
+ * download-git-portable.ts — CI 用，下载 MinGit 到 vendor/git-portable/
  *
- * Windows 打包前运行：node scripts/download-git-portable.js
+ * Windows 打包前运行：node --import tsx scripts/download-git-portable.ts
  * electron-builder 的 extraResources 会把 vendor/git-portable/ 打进安装包的 resources/git/
  */
 
-import fs from "fs";
-import path from "path";
-import { execFileSync } from "child_process";
-import { fileURLToPath } from "url";
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -20,7 +20,7 @@ const MINGIT_VERSION = "2.47.1";
 const MINGIT_URL = `https://github.com/git-for-windows/git/releases/download/v${MINGIT_VERSION}.windows.1/MinGit-${MINGIT_VERSION}-busybox-64-bit.zip`;
 const ZIP_PATH = path.join(ROOT, "vendor", `mingit-${MINGIT_VERSION}.zip`);
 
-async function main() {
+async function main(): Promise<void> {
   // 已存在则跳过
   if (fs.existsSync(path.join(VENDOR_DIR, "cmd", "git.exe"))) {
     console.log(`[download-git-portable] MinGit ${MINGIT_VERSION} already present, skipping.`);
@@ -52,7 +52,8 @@ async function main() {
   console.log(`[download-git-portable] MinGit ${MINGIT_VERSION} ready at ${VENDOR_DIR}`);
 }
 
-main().catch((err) => {
-  console.error("[download-git-portable] Failed:", err.message);
+main().catch((err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error("[download-git-portable] Failed:", message);
   process.exit(1);
 });

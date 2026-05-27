@@ -91,7 +91,15 @@
     "switchFailed": "세션 전환 실패",
     "createFailed": "세션 생성 실패",
     "archiveFailed": "세션 보관 실패",
-    "rename": "이름 변경"
+    "rename": "이름 변경",
+    "editLabels": "라벨 편집",
+    "labelsPlaceholder": "라벨 (쉼표로 구분)",
+    "pin": "고정",
+    "unpin": "고정 해제",
+    "pinned": "고정됨",
+    "archive": "보관",
+    "archiveConfirm": "「{name}」을(를) 보관하시겠습니까? 목록에서 숨겨지지만 기록은 유지됩니다.",
+    "menuTrigger": "더보기"
   },
   "common": {
     "on": "켜기",

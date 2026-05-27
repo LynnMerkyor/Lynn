@@ -48,6 +48,7 @@ import {
   isStaleEmptySessionStream,
   resetCompletedTurnState,
 } from "../chat/stream-state.js";
+import type { SessionLike } from "../chat/stream-state.js";
 import {
   TOOL_USE_BEHAVIOR,
   buildNoToolTurnPrompt,
@@ -57,6 +58,7 @@ import {
 import { extractText } from "../chat/content-utils.js";
 import { buildCodeVerificationPostscript } from "../chat/code-verification-postscript.js";
 import { createEditRollbackStore } from "../chat/edit-rollback-store.js";
+import { buildLocalOfficeDirectAnswer } from "../chat/local-office-answer.js";
 import { createTokenBucketRateLimiter } from "../chat/rate-limit.js";
 import {
   appendTextToLatestAssistantInMemory,
@@ -109,23 +111,27 @@ import { createStreamEmitters } from "../chat/stream-emitters.js";
 import { createChatRouteContext } from "../chat/chat-route-context.js";
 import { generateSessionTitle } from "../chat/title-generator.js";
 
-function hasStreamEvent(ss, type) {
-  return Array.isArray(ss?.events) && ss.events.some((entry) => entry?.event?.type === type);
+type TimerHandle = ReturnType<typeof setTimeout>;
+type IntervalHandle = ReturnType<typeof setInterval>;
+type AnyRecord = Record<string, any>;
+
+function hasStreamEvent(ss: any, type: any) {
+  return Array.isArray(ss?.events) && ss.events.some((entry: any) => entry?.event?.type === type);
 }
 
-function hasScheduledInternalRetry(ss) {
+function hasScheduledInternalRetry(ss: any) {
   return !!(ss?.internalRetryPending || ss?.internalRetryInFlight);
 }
 
-function hasToolExecutionInFlight(ss) {
+function hasToolExecutionInFlight(ss: any) {
   return !!(ss?.recoveredBashInFlight || Number(ss?.activeToolCallCount || 0) > 0);
 }
 
-function hasDifferentActiveStreamToken(ss, streamToken) {
+function hasDifferentActiveStreamToken(ss: any, streamToken: any) {
   return Boolean(streamToken && ss?.activeStreamToken && ss.activeStreamToken !== streamToken);
 }
 
-function resolveEditSnapshotPath(session, engine, rawPath) {
+function resolveEditSnapshotPath(session: any, engine: any, rawPath: any) {
   if (typeof rawPath !== "string") return null;
   const trimmed = rawPath.trim();
   if (!trimmed || trimmed.includes("\0")) return null;
@@ -135,20 +141,20 @@ function resolveEditSnapshotPath(session, engine, rawPath) {
   return path.resolve(cwd, trimmed);
 }
 
-function resolveBrainFallbackModel(engine) {
+function resolveBrainFallbackModel(engine: any) {
   const models = Array.isArray(engine?.availableModels) ? engine.availableModels : [];
-  return models.find((model) => model?.provider === BRAIN_PROVIDER_ID && model?.id === BRAIN_DEFAULT_MODEL_ID)
-    || models.find((model) => model?.provider === BRAIN_PROVIDER_ID)
+  return models.find((model: any) => model?.provider === BRAIN_PROVIDER_ID && model?.id === BRAIN_DEFAULT_MODEL_ID)
+    || models.find((model: any) => model?.provider === BRAIN_PROVIDER_ID)
     || null;
 }
 
-export function createChatRoute(engine, hub, { upgradeWebSocket }) {
+export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any) {
   const routeContext = createChatRouteContext(engine, hub, { upgradeWebSocket });
   const restRoute = new Hono();
   const wsRoute = new Hono();
 
   let activeWsClients = 0;
-  let disconnectAbortTimer = null;
+  let disconnectAbortTimer: TimerHandle | null = null;
   const DISCONNECT_ABORT_GRACE_MS = 15_000;
   const TURN_HARD_ABORT_MS = Number(process.env.LYNN_TURN_HARD_ABORT_MS || 120_000);
   const TURN_LONG_RESEARCH_HARD_ABORT_MS = Number(process.env.LYNN_TURN_LONG_RESEARCH_HARD_ABORT_MS || 240_000);
@@ -158,23 +164,23 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
 
   const { sessionState, getState } = createSessionStateStore();
   const lifecycleHooks = createLifecycleHooks({
-    onError: (err, meta) => {
+    onError: (err: any, meta: any) => {
       debugLog()?.warn("ws", `lifecycle hook failed · event=${meta?.eventName || "unknown"} · ${err?.message || err}`);
     },
   });
-  lifecycleHooks.tap("prompt_start", ({ sessionPath, routeIntent, streamToken }) => {
+  lifecycleHooks.tap("prompt_start", ({ sessionPath, routeIntent, streamToken }: any) => {
     debugLog()?.span("prompt_start", { sessionPath, routeIntent, streamToken }, { module: "ws", level: "DEBUG" });
   });
-  lifecycleHooks.tap("tool_start", ({ sessionPath, toolName }) => {
+  lifecycleHooks.tap("tool_start", ({ sessionPath, toolName }: any) => {
     debugLog()?.span("tool_start", { sessionPath, toolName }, { module: "ws", level: "DEBUG" });
   });
-  lifecycleHooks.tap("tool_end", ({ sessionPath, toolName, success }) => {
+  lifecycleHooks.tap("tool_end", ({ sessionPath, toolName, success }: any) => {
     debugLog()?.span("tool_end", { sessionPath, toolName, success }, { module: "ws", level: "DEBUG" });
   });
-  lifecycleHooks.tap("turn_end", ({ sessionPath, hasOutput, hasToolCall }) => {
+  lifecycleHooks.tap("turn_end", ({ sessionPath, hasOutput, hasToolCall }: any) => {
     debugLog()?.span("turn_end", { sessionPath, hasOutput, hasToolCall }, { module: "ws", level: "DEBUG" });
   });
-  lifecycleHooks.tap("turn_close", ({ sessionPath, reason }) => {
+  lifecycleHooks.tap("turn_close", ({ sessionPath, reason }: any) => {
     debugLog()?.span("turn_close", { sessionPath, reason }, { module: "ws", level: "INFO" });
   });
 
@@ -197,13 +203,13 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     }, DISCONNECT_ABORT_GRACE_MS);
   }
 
-  async function releaseStaleSessionStream(sessionPath, ss) {
+  async function releaseStaleSessionStream(sessionPath: any, ss: any) {
     if (!sessionPath || !ss) return false;
     const isInternalRetryStream = ss.streamSource === "internal_retry";
     clearTurnTimers(ss);
     try {
       await engine.abortSessionByPath?.(sessionPath);
-    } catch (err) {
+    } catch (err: any) {
       console.warn("[chat] failed to abort stale session stream:", err?.message || err);
     }
     if (ss.isStreaming) {
@@ -235,12 +241,12 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
-  async function closeBusySessionBeforeNextPrompt(sessionPath, ss) {
+  async function closeBusySessionBeforeNextPrompt(sessionPath: any, ss: any) {
     if (!sessionPath || !ss) return false;
     clearTurnTimers(ss);
     try {
       await engine.abortSessionByPath?.(sessionPath);
-    } catch (err) {
+    } catch (err: any) {
       console.warn("[chat] failed to abort busy session stream:", err?.message || err);
     }
     if (ss.isThinking) {
@@ -258,7 +264,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
-  function closeStreamWithVisibleFallback(sessionPath, ss, text, reason, opts = {}) {
+  function closeStreamWithVisibleFallback(sessionPath: any, ss: any, text: any, reason: any, opts: any = {}) {
     if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
     ss._turnClosed = true;
     ss.internalRetryPending = false;
@@ -288,11 +294,11 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
-  function normalizeVisibleForCompare(text) {
+  function normalizeVisibleForCompare(text: any) {
     return String(text || "").replace(/\s+/g, " ").trim();
   }
 
-  function isMeaningfulPersistedFinalText(finalText, ss) {
+  function isMeaningfulPersistedFinalText(finalText: any, ss: any) {
     const final = normalizeVisibleForCompare(finalText);
     if (!final) return false;
     const visible = normalizeVisibleForCompare(ss?.visibleTextAcc || "");
@@ -302,7 +308,31 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
-  function finalizeReturnedTurnWithoutStream(sessionPath, ss, reason, opts = {}) {
+  function buildEmptyTurnFallbackText(ss: any, reason: any = "") {
+    if (!ss || ss.hasOutput) return "";
+    const toolFallback = String(ss.realtimeToolFallbackText || "").trim();
+    if (toolFallback) return toolFallback;
+    if (reason === "hard_turn_timeout" && !ss.hasToolCall) {
+      return buildLocalOfficeDirectAnswer(ss.originalPromptText || ss.effectivePromptText || "");
+    }
+    return "";
+  }
+
+  function buildRealtimeToolFallbackText(toolName: any, event: any) {
+    const name = String(toolName || event?.toolName || "");
+    if (!["stock_market", "weather", "live_news", "sports_score"].includes(name)) return "";
+    const text = extractText(event?.result?.content || "").trim();
+    if (!text) return "";
+    if (name === "stock_market") {
+      const disclaimer = /不构成投资建议|not investment advice/i.test(text)
+        ? ""
+        : "\n\n说明：以上是工具返回的最近可用行情摘要，不构成投资建议；关键价格、时间戳和来源请以交易所、券商或专门行情源交叉核验。";
+      return `${text}${disclaimer}`;
+    }
+    return text;
+  }
+
+  function finalizeReturnedTurnWithoutStream(sessionPath: any, ss: any, reason: any, opts: any = {}) {
     if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
     if (hasToolExecutionInFlight(ss)) return false;
     if (!opts.ignoreInternalRetry && hasScheduledInternalRetry(ss)) return false;
@@ -314,7 +344,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return closeStreamWithVisibleFallback(sessionPath, ss, finalText, reason);
   }
 
-  function scheduleReturnedTurnFinalizationFallback(sessionPath, ss, reason) {
+  function scheduleReturnedTurnFinalizationFallback(sessionPath: any, ss: any, reason: any) {
     clearReturnedTurnFinalizationTimer(ss);
     if (!sessionPath || !ss || !RETURNED_TURN_FINALIZATION_GRACE_MS) return false;
     const streamToken = ss.activeStreamToken || null;
@@ -339,7 +369,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
-  function schedulePersistedFinalAnswerPoll(sessionPath, ss) {
+  function schedulePersistedFinalAnswerPoll(sessionPath: any, ss: any) {
     clearPersistedFinalAnswerPollTimer(ss);
     if (!sessionPath || !ss) return false;
     const streamToken = ss.activeStreamToken || null;
@@ -369,7 +399,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
-  function scheduleTurnHardAbort(sessionPath, ss) {
+  function scheduleTurnHardAbort(sessionPath: any, ss: any) {
     clearTurnHardAbortTimer(ss);
     if (!sessionPath || !ss || !TURN_HARD_ABORT_MS) return;
     const streamToken = ss.activeStreamToken || null;
@@ -387,12 +417,18 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       if (hasDifferentActiveStreamToken(ss, streamToken) || ss.hasError || hasStreamEvent(ss, "turn_end")) return;
       ss._lastTurnAborted = true;
       Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
-      closeStreamWithVisibleFallback(sessionPath, ss, "", "hard_turn_timeout");
+      closeStreamWithVisibleFallback(
+        sessionPath,
+        ss,
+        buildEmptyTurnFallbackText(ss, "hard_turn_timeout"),
+        "hard_turn_timeout",
+        { trustedFallback: true },
+      );
     }, timeoutMs);
     if (ss.turnHardAbortTimer.unref) ss.turnHardAbortTimer.unref();
   }
 
-  function scheduleToolFinalizationFallback(sessionPath, ss) {
+  function scheduleToolFinalizationFallback(sessionPath: any, ss: any) {
     clearToolFinalizationTimer(ss);
     if (!sessionPath || !ss || !TOOL_FINALIZATION_GRACE_MS) return;
     const streamToken = ss.activeStreamToken || null;
@@ -454,14 +490,15 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       closeStreamWithVisibleFallback(
         sessionPath,
         ss,
-        "",
+        buildEmptyTurnFallbackText(ss, "tool_finalization_timeout"),
         "tool_finalization_timeout",
+        { trustedFallback: true },
       );
     }, TOOL_FINALIZATION_GRACE_MS);
     if (ss.toolFinalizationTimer.unref) ss.toolFinalizationTimer.unref();
   }
 
-  function scheduleToolAuthorizationFallback(sessionPath, ss) {
+  function scheduleToolAuthorizationFallback(sessionPath: any, ss: any) {
     clearToolAuthorizationTimer(ss);
     clearToolAuthorizationPollTimer(ss);
     if (!sessionPath || !ss || !TOOL_AUTHORIZATION_GRACE_MS || !ss.isStreaming || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return;
@@ -503,22 +540,22 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     if (ss.toolAuthorizationTimer.unref) ss.toolAuthorizationTimer.unref();
   }
 
-  function scheduleSilentBrainAbort(sessionPath, ss) {
+  function scheduleSilentBrainAbort(sessionPath: any, ss: any) {
     clearSilentBrainAbortTimer(ss);
   }
 
-  const clients = new Set();
+  const clients = new Set<any>();
 
   const editRollbackStore = createEditRollbackStore({ maxSnapshots: 200 });
 
-  function broadcast(msg) {
+  function broadcast(msg: any) {
     for (const client of clients) {
-      wsSend(client, msg);
+      wsSend(client as any, msg);
     }
   }
 
   // 浏览器缩略图 30s 定时刷新
-  let _browserThumbTimer = null;
+  let _browserThumbTimer: IntervalHandle | null = null;
   function startBrowserThumbPoll() {
     if (_browserThumbTimer) return;
     _browserThumbTimer = setInterval(async () => {
@@ -534,7 +571,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     if (_browserThumbTimer) { clearInterval(_browserThumbTimer); _browserThumbTimer = null; }
   }
 
-  function emitFileOutputsFromDetails(sessionPath, ss, details = {}) {
+  function emitFileOutputsFromDetails(sessionPath: any, ss: any, details: any = {}) {
     const files = Array.isArray(details.files) ? [...details.files] : [];
     if (files.length === 0 && details.filePath) {
       files.push({ filePath: details.filePath, label: details.label, ext: details.ext || "" });
@@ -559,7 +596,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return emitted;
   }
 
-  function emitRecoveredArtifact(sessionPath, ss, artifact, source = "toolcall") {
+  function emitRecoveredArtifact(sessionPath: any, ss: any, artifact: any, source: any = "toolcall") {
     if (!ss || !artifact?.content) return false;
     ss.recoveredArtifactKeys = ss.recoveredArtifactKeys || new Set();
     const key = artifactPreviewDedupeKey(artifact);
@@ -567,31 +604,31 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     ss.recoveredArtifactKeys.add(key);
     ss.hasOutput = true;
     emitStreamEvent(sessionPath, ss, artifact);
-    debugLog()?.info("ws", `recovered artifact from ${source} · tool=${artifact.recoveredFromTool || "unknown"} · title=${artifact.title || ""} · session=${sessionPath || "unknown"}`);
+    debugLog()?.log("ws", `recovered artifact from ${source} · tool=${artifact.recoveredFromTool || "unknown"} · title=${artifact.title || ""} · session=${sessionPath || "unknown"}`);
     return true;
   }
 
-  function maybeRecoverArtifactFromMessageUpdate(sessionPath, ss, event, source = "message_update") {
+  function maybeRecoverArtifactFromMessageUpdate(sessionPath: any, ss: any, event: any, source: any = "message_update") {
     const sub = event?.assistantMessageEvent;
     const preview = artifactPreviewFromToolCall(sub?.toolCall);
     return preview ? emitRecoveredArtifact(sessionPath, ss, preview, source) : false;
   }
 
-  function closeStreamAfterError(sessionPath, ss) {
+  function closeStreamAfterError(sessionPath: any, ss: any) {
     if (!sessionPath || !ss || hasStreamEvent(ss, "turn_end")) return;
     if (!ss.hasOutput && !ss.hasToolCall) ss._lastTurnAborted = true;
     closeStreamWithVisibleFallback(sessionPath, ss, "", "model_tool_error");
   }
 
-  function maybeGenerateFirstTurnTitle(sessionPath, ss) {
+  function maybeGenerateFirstTurnTitle(sessionPath: any, ss: any) {
     if (!sessionPath || !ss || ss.titleRequested) return;
 
     const session = engine.getSessionByPath(sessionPath);
     const messages = Array.isArray(session?.messages) ? session.messages : [];
-    const userMsgCount = messages.filter(m => m.role === "user").length;
+    const userMsgCount = messages.filter((m: any) => m.role === "user").length;
     if (userMsgCount !== 1) return;
 
-    const assistantMsg = messages.find(m => m.role === "assistant");
+    const assistantMsg = messages.find((m: any) => m.role === "assistant");
     const assistantText = (ss.titlePreview || extractText(assistantMsg?.content)).trim();
     if (!assistantText) return;
 
@@ -599,9 +636,9 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     generateSessionTitle(engine, broadcast, {
       sessionPath,
       assistantTextHint: assistantText,
-    }).then((ok) => {
+    }).then((ok: any) => {
       if (!ok) ss.titleRequested = false;
-    }).catch((err) => {
+    }).catch((err: any) => {
       ss.titleRequested = false;
       console.error("[chat] generateSessionTitle error:", err.message);
     });
@@ -618,12 +655,12 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     broadcast,
     hasStreamEvent,
     hasToolExecutionInFlight,
-    scheduleToolFinalizationFallback,
-    clearToolFinalizationTimer,
-    maybeGenerateFirstTurnTitle,
+    scheduleToolFinalizationFallback: (sessionPath, ss) => scheduleToolFinalizationFallback(sessionPath, ss as SessionLike),
+    clearToolFinalizationTimer: (ss) => clearToolFinalizationTimer(ss as SessionLike),
+    maybeGenerateFirstTurnTitle: (sessionPath, ss) => maybeGenerateFirstTurnTitle(sessionPath, ss),
   });
 
-  function maybeAppendCodeVerificationPostscript(sessionPath, ss) {
+  function maybeAppendCodeVerificationPostscript(sessionPath: any, ss: any) {
     if (!sessionPath || !ss) return false;
     const addition = buildCodeVerificationPostscript(
       `${ss.originalPromptText || ""}\n${ss.effectivePromptText || ""}`,
@@ -637,7 +674,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
-  function emitLocalThinkingDelta(sessionPath, ss, delta) {
+  function emitLocalThinkingDelta(sessionPath: any, ss: any, delta: any) {
     const text = String(delta || "");
     if (!text) return;
     if (!ss.isThinking) {
@@ -649,17 +686,17 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     emitStreamEvent(sessionPath, ss, { type: "thinking_delta", delta: text });
   }
 
-  function startLocalQwen35WarmupFeedback(sessionPath, _ss) {
+  function startLocalQwen35WarmupFeedback(sessionPath: any, _ss: any) {
     debugLog()?.log("ws", `[LOCAL-QWEN35-DIRECT v3] warmup started outside model stream · ${sessionPath}`);
     return () => {};
   }
 
-  function startLocalQwen35PrefetchFeedback(sessionPath, ss, toolName, promptText) {
+  function startLocalQwen35PrefetchFeedback(sessionPath: any, ss: any, toolName: any, promptText: any) {
     debugLog()?.log("ws", `[LOCAL-QWEN35-DIRECT v3] prefetch started outside model stream · tool=${toolName || ""} · ${sessionPath} · prompt=${String(promptText || "").slice(0, 80)}`);
     return () => {};
   }
 
-  function closeLocalQwen35DirectTurn(sessionPath, ss, opts = {}) {
+  function closeLocalQwen35DirectTurn(sessionPath: any, ss: any, opts: any = {}) {
     clearTurnTimers(ss);
     if (ss.isThinking) {
       ss.isThinking = false;
@@ -684,7 +721,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     }
   }
 
-  async function switchCurrentSessionToBrainFallback(sessionPath, ss, reason, modelInfo = {}) {
+  async function switchCurrentSessionToBrainFallback(sessionPath: any, ss: any, reason: any, modelInfo: any = {}) {
     const brainModel = resolveBrainFallbackModel(engine);
     if (!brainModel) {
       debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] no brain fallback model available · reason=${reason} · ${sessionPath}`);
@@ -713,14 +750,14 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return brainModel;
   }
 
-  async function continueTurnViaHub(sessionPath, ss, text, {
+  async function continueTurnViaHub(sessionPath: any, ss: any, text: any, {
     images,
     streamToken,
     disableTools,
     turnInstruction,
     returnedOpenReason = "hub_send_returned_open_safety_timeout",
     returnedClosedReason = "hub_send_returned_closed_without_turn_end",
-  } = {}) {
+  }: any = {}) {
     scheduleSilentBrainAbort(sessionPath, ss);
     await hub.send(
       text,
@@ -746,7 +783,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     }
   }
 
-  async function fallbackLocalQwen35DirectToBrain({ sessionPath, ss, promptText, effectivePromptText, modelInfo, msg, streamToken, disableTools, turnInstruction, reason }) {
+  async function fallbackLocalQwen35DirectToBrain({ sessionPath, ss, promptText, effectivePromptText, modelInfo, msg, streamToken, disableTools, turnInstruction, reason }: any) {
     if (ss.hasOutput || ss.hasThinking) {
       return false;
     }
@@ -765,7 +802,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
-  async function streamLocalQwen35DirectBridge(sessionPath, ss, originalPromptText, effectivePromptText, modelInfo = {}, opts = {}) {
+  async function streamLocalQwen35DirectBridge(sessionPath: any, ss: any, originalPromptText: any, effectivePromptText: any, modelInfo: any = {}, opts: any = {}) {
     const startedAt = Date.now();
     const localProviderId = String(modelInfo?.provider || LOCAL_QWEN35_PROVIDER_ID);
     const localModelId = String(modelInfo?.modelId || modelInfo?.id || LOCAL_QWEN35_MODEL_ID);
@@ -791,13 +828,13 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       ? Number(opts.earlyCloseVisibleChars)
       : 0;
 
-    const buildAttemptMessages = (attemptEnableThinking) => {
+    const buildAttemptMessages = (attemptEnableThinking: any) => {
       const attemptMessages = buildLocalQwen35DirectMessages(sessionPath, originalPromptText, effectivePromptText);
       if (!attemptEnableThinking) appendNoThinkHintToLastUserMessage(attemptMessages);
       return attemptMessages;
     };
 
-    const runAttempt = async ({ attemptEnableThinking, attemptMaxTokens, attemptTimeoutMs, allowEarlyClose }) => {
+    const runAttempt = async ({ attemptEnableThinking, attemptMaxTokens, attemptTimeoutMs, allowEarlyClose }: any) => {
       const attemptMessages = buildAttemptMessages(attemptEnableThinking);
       const attempt = await streamLocalQwen35Completion({
         endpoint: LOCAL_QWEN35_DIRECT_ENDPOINT,
@@ -812,12 +849,12 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
             stopWarmupOnce();
           }
         },
-        onUsage: (nextUsage) => { usage = nextUsage; },
-        onReasoningDelta: (reasoningDelta) => {
+        onUsage: (nextUsage: any) => { usage = nextUsage; },
+        onReasoningDelta: (reasoningDelta: any) => {
           reasoningText += reasoningDelta;
           emitLocalThinkingDelta(sessionPath, ss, reasoningDelta);
         },
-        onContentDelta: (contentDelta) => {
+        onContentDelta: (contentDelta: any) => {
           if (ss.isThinking) {
             ss.isThinking = false;
             emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
@@ -879,7 +916,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     return true;
   }
 
-  function isAssistantStreamScopedEvent(event) {
+  function isAssistantStreamScopedEvent(event: any) {
     return event?.type === "message_update"
       || event?.type === "tool_execution_start"
       || event?.type === "tool_execution_end"
@@ -891,7 +928,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
   }
 
   // 单订阅：事件只写入一次，再按需广播到所有连接中的客户端。
-  hub.subscribe((event, sessionPath) => {
+  hub.subscribe((event: any, sessionPath: any) => {
     const isActive = sessionPath === engine.currentSessionPath;
     const ss = sessionPath ? sessionState.get(sessionPath) : null;
 
@@ -969,7 +1006,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
             const originalContent = fs.readFileSync(resolvedPath, "utf-8");
             editRollbackStore.setPending(event.toolCallId, {
               sessionPath,
-              streamToken: ss.activeStreamToken || null,
+              streamToken: typeof ss.activeStreamToken === "string" ? ss.activeStreamToken : null,
               cwd: session?.sessionManager?.getCwd?.() || engine.cwd || process.cwd(),
               filePath: resolvedPath,
               originalContent,
@@ -981,10 +1018,11 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       }
 
       const rawArgs = normalizeToolArgsForSummary(event.toolName || "", event.args);
-      let args;
+      let args: AnyRecord | undefined;
       if (rawArgs && typeof rawArgs === "object") {
         args = {};
-        for (const k of TOOL_ARG_SUMMARY_KEYS) { if (rawArgs[k] !== undefined) args[k] = rawArgs[k]; }
+        const rawArgRecord = rawArgs as AnyRecord;
+        for (const k of TOOL_ARG_SUMMARY_KEYS) { if (rawArgRecord[k] !== undefined) args[k] = rawArgRecord[k]; }
       }
       emitStreamEvent(sessionPath, ss, { type: "tool_start", name: event.toolName || "", args });
       lifecycleHooks.run("tool_start", {
@@ -1015,7 +1053,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
       try {
         const __key = event.toolCallId || event.toolName || "";
         const __t = ss.__slowToolTimers?.get(__key);
-        if (__t) { clearTimeout(__t); ss.__slowToolTimers.delete(__key); }
+        if (__t) { clearTimeout(__t); ss.__slowToolTimers?.delete(__key); }
       } catch {
         // Timer cleanup should never fail the tool result path.
       }
@@ -1047,6 +1085,8 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
 
       if (!toolIsError) {
         rememberSuccessfulTool(ss, toolName, toolSummary, normalizedArgs);
+        const realtimeToolFallback = buildRealtimeToolFallbackText(toolName, event);
+        if (realtimeToolFallback) ss.realtimeToolFallbackText = realtimeToolFallback;
       } else {
         rememberFailedTool(ss, toolName);
       }
@@ -1088,14 +1128,14 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
         const d = event.result?.details || {};
         const artifact = normalizeArtifactPayload(d, { messageType: "artifact" });
         if (artifact) {
-          emitStreamEvent(sessionPath, ss, artifact);
+          emitStreamEvent(sessionPath, ss, artifact as AnyRecord);
         }
       }
 
       if (event.toolName === "browser") {
         const d = event.result?.details || {};
         if (d.action === "screenshot" && event.result?.content) {
-          const imgBlock = event.result.content.find(c => c.type === "image");
+          const imgBlock = event.result.content.find((c: any) => c.type === "image");
           if (imgBlock?.data) {
             emitStreamEvent(sessionPath, ss, {
               type: "browser_screenshot",
@@ -1105,7 +1145,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
           }
         }
 
-        const statusMsg = {
+        const statusMsg: AnyRecord = {
           type: "browser_status",
           running: d.running ?? false,
           url: d.url || null,
@@ -1310,26 +1350,26 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
   // ── WebSocket 路由 ──
 
   wsRoute.get("/ws",
-    routeContext.upgradeWebSocket((_c) => {
+    routeContext.upgradeWebSocket((_c: any) => {
       let closed = false;
 
       return {
-        onOpen(event, ws) {
+        onOpen(event: any, ws: any) {
           activeWsClients++;
           clients.add(ws);
           cancelDisconnectAbort();
           debugLog()?.log("ws", "client connected");
         },
 
-        onMessage(event, ws) {
-          const msg = wsParse(event.data);
+        onMessage(event: any, ws: any) {
+          const msg: AnyRecord | null = wsParse(event.data) as AnyRecord | null;
           if (!msg) return;
 
           (async () => {
             if (msg.type === "abort") {
               const abortPath = msg.sessionPath || engine.currentSessionPath;
               if (engine.isSessionStreaming(abortPath)) {
-                try { await hub.abort(abortPath); } catch (err) { console.warn("[chat] abort failed:", err?.message || err); }
+                try { await hub.abort(abortPath); } catch (err: any) { console.warn("[chat] abort failed:", err?.message || err); }
               }
               return;
             }
@@ -1350,8 +1390,8 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
               const ss = sessionState.get(currentPath);
               if (ss) {
                 const resumed = resumeSessionStream(ss, {
-                  streamId: msg.streamId,
-                  sinceSeq: msg.sinceSeq,
+                  streamId: typeof msg.streamId === "string" ? msg.streamId : null,
+                  sinceSeq: Number(msg.sinceSeq || 0),
                 });
                 wsSend(ws, {
                   type: "stream_resume",
@@ -1369,7 +1409,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                   type: "stream_resume",
                   sessionPath: currentPath,
                   streamId: null,
-                  sinceSeq: Number.isFinite(msg.sinceSeq) ? Math.max(0, msg.sinceSeq) : 0,
+                  sinceSeq: Number.isFinite(Number(msg.sinceSeq)) ? Math.max(0, Number(msg.sinceSeq)) : 0,
                   nextSeq: 1,
                   reset: false,
                   truncated: false,
@@ -1420,7 +1460,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                   contextWindow: usage?.contextWindow ?? null,
                   percent: usage?.percent ?? null,
                 });
-              } catch (err) {
+              } catch (err: any) {
                 const errMsg = err.message || "";
                 if (errMsg.includes("Already compacted") || errMsg.includes("Nothing to compact")) {
                   broadcast({ type: "compaction_end", sessionPath: compactPath });
@@ -1539,6 +1579,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 ss.hasToolCall = false;
                 ss.hasThinking = false;
                 ss.hasError = false;
+                ss.realtimeToolFallbackText = "";
                 ss.persistedAssistantTextBaseline = countPersistedAssistantVisibleTexts(
                   engine.getSessionByPath(promptSessionPath),
                   promptSessionPath,
@@ -1569,14 +1610,14 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                   routeIntent: ss.routeIntent,
                   streamToken,
                 });
-                const currentModelInfo = resolveCurrentModelInfo(engine);
+                const currentModelInfo: AnyRecord = resolveCurrentModelInfo(engine) as AnyRecord;
                 const initialToolUse = resolveInitialToolUseBehavior(promptText, { modelInfo: currentModelInfo });
                 const budgetContext = initialToolUse.budgetContext || "";
                 let effectivePromptText = initialToolUse.effectivePromptText || promptText;
                 let disableTurnTools = !!initialToolUse.disableTools;
                 effectivePromptText = attachLocalQwen35BenchContext(effectivePromptText, currentModelInfo);
                 if (ss._rehydratedEffectivePrompt) {
-                  effectivePromptText = ss._rehydratedEffectivePrompt;
+                  effectivePromptText = String(ss._rehydratedEffectivePrompt);
                   disableTurnTools = false;
                   ss._rehydratedEffectivePrompt = null;
                 }
@@ -1596,7 +1637,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                       enableThinking: localEnableThinking,
                       maxTokens: resolveLocalQwen35DirectMaxTokens(promptText, localEnableThinking),
                     });
-                  } catch (directErr) {
+                  } catch (directErr: any) {
                     debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] failed · ${directErr?.message || directErr} · ${promptSessionPath}`);
                     const fallbackOk = await fallbackLocalQwen35DirectToBrain({
                       sessionPath: promptSessionPath,
@@ -1670,7 +1711,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                       });
                       rememberFailedTool(ss, toolName);
                     }
-                  } catch (prefetchErr) {
+                  } catch (prefetchErr: any) {
                     emitStreamEvent(promptSessionPath, ss, {
                       type: "tool_end",
                       name: toolName,
@@ -1701,7 +1742,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                         timeoutMs: 45_000,
                         earlyCloseVisibleChars: 240,
                       });
-                    } catch (directErr) {
+                    } catch (directErr: any) {
                       debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v2] failed after prefetch · ${directErr?.message || directErr} · ${promptSessionPath}`);
                       const fallbackOk = await fallbackLocalQwen35DirectToBrain({
                         sessionPath: promptSessionPath,
@@ -1755,7 +1796,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                   scheduleReturnedTurnFinalizationFallback(promptSessionPath, ss, "hub_send_returned_open_safety_timeout");
                   debugLog()?.log("ws", `hub.send returned while server stream remains open · ${promptSessionPath}`);
                 }
-              } catch (err) {
+              } catch (err: any) {
                 clearTurnTimers(ss);
                 const aborted = err.message?.includes("aborted");
                 if (!aborted) {
@@ -1771,7 +1812,7 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 }
               }
             }
-          })().catch((err) => {
+          })().catch((err: any) => {
             const appErr = AppError.wrap(err);
             errorBus.report(appErr, { context: { wsMessageType: msg.type } });
             if (!appErr.message?.includes('aborted')) {
@@ -1780,13 +1821,13 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
           });
         },
 
-        onError(event, _ws) {
+        onError(event: any, _ws: any) {
           const err = event.error || event;
           console.error("[ws] error:", err.message || err);
           debugLog()?.error("ws", err.message || String(err));
         },
 
-        onClose(event, ws) {
+        onClose(event: any, ws: any) {
           if (closed) return;
           closed = true;
           activeWsClients = Math.max(0, activeWsClients - 1);

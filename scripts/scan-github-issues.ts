@@ -11,7 +11,26 @@ const now = new Date();
 const today = now.toISOString().slice(0, 10);
 const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-function runGh(args) {
+interface GitHubLabel {
+  name?: string;
+}
+
+interface GitHubAuthor {
+  login?: string;
+}
+
+interface GitHubIssue {
+  number: number;
+  title: string;
+  author?: GitHubAuthor | null;
+  labels?: Array<GitHubLabel | string>;
+  updatedAt: string;
+  createdAt: string;
+  url: string;
+  comments: number;
+}
+
+function runGh(args: string[]): string {
   return execFileSync("gh", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
@@ -30,25 +49,28 @@ function runGh(args) {
   });
 }
 
-function formatLabels(labels = []) {
+function formatLabels(labels: Array<GitHubLabel | string> = []): string {
   if (!labels.length) return "无";
-  return labels.map((label) => label.name || label).filter(Boolean).join(", ") || "无";
+  return labels
+    .map((label) => (typeof label === "string" ? label : label.name))
+    .filter(Boolean)
+    .join(", ") || "无";
 }
 
-function formatAuthor(author) {
+function formatAuthor(author?: GitHubAuthor | null): string {
   return author?.login || "unknown";
 }
 
-function issueLine(issue) {
+function issueLine(issue: GitHubIssue): string {
   return `- [#${issue.number}](${issue.url}) ${issue.title} · @${formatAuthor(issue.author)} · labels: ${formatLabels(issue.labels)} · comments: ${issue.comments}`;
 }
 
-function isAfter(value, boundary) {
+function isAfter(value: string, boundary: Date): boolean {
   const date = new Date(value);
   return Number.isFinite(date.getTime()) && date >= boundary;
 }
 
-function buildDigest(issues) {
+function buildDigest(issues: GitHubIssue[]): string {
   const newIssues = issues.filter((issue) => isAfter(issue.createdAt, since));
   const updatedIssues = issues.filter((issue) => isAfter(issue.updatedAt, since));
   const unlabeledIssues = issues.filter((issue) => !Array.isArray(issue.labels) || issue.labels.length === 0);
@@ -96,7 +118,7 @@ function buildDigest(issues) {
   return sections.join("\n");
 }
 
-function notify(title, message) {
+function notify(title: string, message: string): void {
   if (process.argv.includes("--no-notify")) return;
   spawnSync("osascript", [
     "-e",
@@ -104,7 +126,7 @@ function notify(title, message) {
   ], { stdio: "ignore" });
 }
 
-function main() {
+function main(): void {
   fs.mkdirSync(outDir, { recursive: true });
   const raw = runGh([
     "issue",
@@ -118,7 +140,7 @@ function main() {
     "--json",
     "number,title,author,labels,updatedAt,createdAt,url,comments",
   ]);
-  const issues = JSON.parse(raw);
+  const issues = JSON.parse(raw) as GitHubIssue[];
   const digest = buildDigest(issues);
   const outputPath = path.join(outDir, `issues-${today}.md`);
   const latestPath = path.join(outDir, "latest.md");

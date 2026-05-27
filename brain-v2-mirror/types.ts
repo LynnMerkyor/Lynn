@@ -72,6 +72,7 @@ export type StreamChunk =
   | { type: 'tool_call_delta'; delta: ToolCallDelta[] }
   | { type: 'finish'; reason: string }
   | { type: 'tool_progress'; event: 'start' | 'end'; name: string; ms?: number; ok?: boolean }
+  | { type: 'pre_search'; source: 'mimo'; query: string; hit: boolean; ms: number; cached: 'request' | 'lru' | null }
   | ({ type: 'error'; error: string } & Record<string, unknown>);
 
 export interface HmacSignaturePayload {

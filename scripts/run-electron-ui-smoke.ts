@@ -5,8 +5,9 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
+import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 
@@ -21,26 +22,68 @@ const SCENARIOS = [
   { id: "long-code", expect: ["UI_SMOKE_LONG_CODE", "calculateTotal"] },
 ];
 
+type Scenario = typeof SCENARIOS[number];
+
+interface DebugPage {
+  type?: string;
+  url?: string;
+  webSocketDebuggerUrl?: string;
+}
+
+type PendingCall = {
+  resolve: (value: Record<string, unknown>) => void;
+  reject: (reason?: unknown) => void;
+};
+
+interface CdpResponse {
+  id?: number;
+  result?: Record<string, unknown>;
+  error?: { message?: string };
+  exceptionDetails?: { text?: string };
+}
+
+interface RuntimeEvaluateResult extends Record<string, unknown> {
+  exceptionDetails?: { text?: string };
+  result?: { value?: unknown };
+}
+
+interface Snapshot {
+  scenario?: string;
+  visibleText?: string;
+  overflowX: number;
+  hasRoot: boolean;
+  hasSidebar: boolean;
+  hasTitlebar: boolean;
+}
+
+interface ScenarioResult {
+  id: string;
+  ok: boolean;
+  failures: string[];
+  screenshot: string;
+}
+
 function nowStamp() {
   return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
-async function getFreePort() {
+async function getFreePort(): Promise<number> {
   return await new Promise((resolve, reject) => {
     const server = net.createServer();
     server.on("error", reject);
     server.listen(0, "127.0.0.1", () => {
-      const port = server.address().port;
+      const address = server.address() as AddressInfo;
+      const port = address.port;
       server.close(() => resolve(port));
     });
   });
 }
 
-async function wait(ms) {
+async function wait(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function terminateProcess(child, timeoutMs = 3000) {
+async function terminateProcess(child: ChildProcess | null, timeoutMs = 3000): Promise<void> {
   if (!child || child.exitCode !== null || child.signalCode !== null) return;
 
   const exited = new Promise((resolve) => {
@@ -65,24 +108,24 @@ async function terminateProcess(child, timeoutMs = 3000) {
   } catch {}
 }
 
-async function fetchJson(url, timeoutMs = 1000) {
+async function fetchJson<T = unknown>(url: string, timeoutMs = 1000): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
+    return await res.json() as T;
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function waitForDebugPage(port, timeoutMs = 20000) {
+async function waitForDebugPage(port: number, timeoutMs = 20000): Promise<DebugPage> {
   const deadline = Date.now() + timeoutMs;
-  let lastError = null;
+  let lastError: unknown = null;
   while (Date.now() < deadline) {
     try {
-      const pages = await fetchJson(`http://127.0.0.1:${port}/json/list`);
+      const pages = await fetchJson<DebugPage[]>(`http://127.0.0.1:${port}/json/list`);
       const page = pages.find((item) => String(item.url || "").includes("index.html"))
         || pages.find((item) => item.type === "page" && item.webSocketDebuggerUrl);
       if (page?.webSocketDebuggerUrl) return page;
@@ -91,18 +134,23 @@ async function waitForDebugPage(port, timeoutMs = 20000) {
     }
     await wait(250);
   }
-  throw new Error(`Electron debug page not available${lastError ? `: ${lastError.message}` : ""}`);
+  const suffix = lastError instanceof Error ? `: ${lastError.message}` : "";
+  throw new Error(`Electron debug page not available${suffix}`);
 }
 
 class CdpClient {
-  constructor(wsUrl) {
+  ws: WebSocket;
+  nextId: number;
+  pending: Map<number, PendingCall>;
+
+  constructor(wsUrl: string) {
     this.ws = new WebSocket(wsUrl);
     this.nextId = 1;
     this.pending = new Map();
     this.ws.on("message", (raw) => {
-      let msg = null;
+      let msg: CdpResponse;
       try {
-        msg = JSON.parse(raw.toString());
+        msg = JSON.parse(raw.toString()) as CdpResponse;
       } catch {
         return;
       }
@@ -115,15 +163,15 @@ class CdpClient {
     });
   }
 
-  async open() {
+  async open(): Promise<void> {
     if (this.ws.readyState === WebSocket.OPEN) return;
-    await new Promise((resolve, reject) => {
-      this.ws.once("open", resolve);
-      this.ws.once("error", reject);
+    await new Promise<void>((resolve, reject) => {
+      this.ws.on("open", () => resolve());
+      this.ws.on("error", (error) => reject(error));
     });
   }
 
-  call(method, params = {}) {
+  call(method: string, params: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
     const id = this.nextId++;
     const payload = JSON.stringify({ id, method, params });
     return new Promise((resolve, reject) => {
@@ -137,26 +185,26 @@ class CdpClient {
     });
   }
 
-  async evaluate(expression) {
+  async evaluate(expression: string): Promise<unknown> {
     const result = await this.call("Runtime.evaluate", {
       expression,
       awaitPromise: true,
       returnByValue: true,
-    });
+    }) as RuntimeEvaluateResult;
     if (result.exceptionDetails) {
       throw new Error(result.exceptionDetails.text || "Runtime.evaluate failed");
     }
     return result.result?.value;
   }
 
-  close() {
+  close(): void {
     try {
       this.ws.close();
     } catch {}
   }
 }
 
-async function waitForExpression(cdp, expression, timeoutMs = 15000) {
+async function waitForExpression(cdp: CdpClient, expression: string, timeoutMs = 15000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const value = await cdp.evaluate(expression).catch(() => false);
@@ -166,8 +214,8 @@ async function waitForExpression(cdp, expression, timeoutMs = 15000) {
   throw new Error(`Timed out waiting for expression: ${expression}`);
 }
 
-function assertScenario(id, snapshot, expectedTexts) {
-  const failures = [];
+function assertScenario(id: string, snapshot: Snapshot, expectedTexts: string[]): string[] {
+  const failures: string[] = [];
   const text = String(snapshot.visibleText || "");
   if (snapshot.scenario !== id) failures.push(`scenario did not apply: expected ${id}, got ${snapshot.scenario || "(none)"}`);
   if (snapshot.overflowX > 2) failures.push(`horizontal overflow: ${snapshot.overflowX}px`);
@@ -180,7 +228,7 @@ function assertScenario(id, snapshot, expectedTexts) {
   return failures;
 }
 
-async function main() {
+async function main(): Promise<void> {
   const rendererEntry = path.join(ROOT, "desktop", "dist-renderer", "index.html");
   try {
     await fs.access(rendererEntry);
@@ -210,14 +258,15 @@ async function main() {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-  const logs = [];
+  const logs: string[] = [];
   child.stdout?.on("data", (chunk) => logs.push(chunk.toString()));
   child.stderr?.on("data", (chunk) => logs.push(`[stderr] ${chunk.toString()}`));
 
-  const results = [];
-  let cdp = null;
+  const results: ScenarioResult[] = [];
+  let cdp: CdpClient | null = null;
   try {
     const page = await waitForDebugPage(debugPort);
+    if (!page.webSocketDebuggerUrl) throw new Error("Electron debug page missing webSocketDebuggerUrl");
     cdp = new CdpClient(page.webSocketDebuggerUrl);
     await cdp.open();
     await cdp.call("Runtime.enable");
@@ -247,14 +296,14 @@ async function main() {
           hasSidebar: !!document.querySelector('.sidebar'),
           hasTitlebar: !!document.querySelector('.titlebar'),
         };
-      })()`);
+      })()`) as Snapshot;
       const failures = assertScenario(scenario.id, snapshot, scenario.expect);
       const screenshot = await cdp.call("Page.captureScreenshot", {
         format: "png",
         captureBeyondViewport: false,
-      });
+      }) as { data?: string };
       const screenshotPath = path.join(outputDir, `${scenario.id}.png`);
-      await fs.writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
+      await fs.writeFile(screenshotPath, Buffer.from(String(screenshot.data || ""), "base64"));
       results.push({
         id: scenario.id,
         ok: failures.length === 0,
@@ -278,7 +327,8 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(`[ui-smoke] ${error.stack || error.message}`);
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? (error.stack || error.message) : String(error);
+  console.error(`[ui-smoke] ${message}`);
   process.exit(1);
 });

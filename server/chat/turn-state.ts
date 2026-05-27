@@ -1,5 +1,7 @@
 import { MoodParser, XingParser, ThinkTagParser, LynnProgressParser } from "../../core/events.js";
 import { createSessionStreamState } from "../session-stream-store.js";
+import type { SessionStreamEntry } from "../session-stream-store.js";
+import type { ToolSuccessRecord } from "./tool-summary.js";
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 type IntervalHandle = ReturnType<typeof setInterval>;
@@ -10,7 +12,7 @@ interface SessionStreamStateFields {
   isStreaming: boolean;
   startedAt: number;
   endedAt: number;
-  events: unknown[];
+  events: SessionStreamEntry[];
   maxEvents: number;
 }
 
@@ -26,6 +28,7 @@ export interface ChatTurnState extends SessionStreamStateFields {
   activeToolCallCount: number;
   activeToolCallStartedAt: number | null;
   lastToolExecutionActivity: number;
+  recoveredBashInFlight?: boolean;
   hasThinking: boolean;
   hasError: boolean;
   titleRequested: boolean;
@@ -50,9 +53,11 @@ export interface ChatTurnState extends SessionStreamStateFields {
   internalRetryOriginalVisibleLen: number;
   internalRetryHadVisibleBeforeReset: boolean;
   successfulToolCount: number;
-  lastSuccessfulTools: unknown[];
+  lastSuccessfulTools: ToolSuccessRecord[];
   hasFailedTool: boolean;
-  lastFailedTools: unknown[];
+  lastFailedTools: string[];
+  realtimeToolFallbackText?: string;
+  __slowToolTimers?: Map<string, TimerHandle>;
   toolFailedFallbackRetryAttempted: boolean;
   toolFinalizationRetryAttempted: boolean;
   silentBrainAbortTimer: TimerHandle | null;

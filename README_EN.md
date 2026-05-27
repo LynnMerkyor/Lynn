@@ -37,17 +37,17 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.79.5</strong> · 2026-05-27 · Core Agent Runtime TS release <em>(latest)</em></summary>
+<summary><strong>v0.79.6</strong> · 2026-05-28 · Chat Route TS + release stability <em>(latest)</em></summary>
 
-**V0.79 core runtime TypeScript migration release**:
-- 🧠 **Agent runtime now has TS gates**:`core/agent` moved to TypeScript, covering identity, config, memory, tools, Desk, Cron, skill install, and system prompt assembly boundaries.
-- 🧭 **Session coordinator is typed**:session switching, tool events, vision-argument regressions, and model isolation are covered by focused tests.
-- 🧱 **Server runtime keeps tightening**:server entrypoint, provider plugins, AEC client, CLI, config/skills/sessions, agents/review/research, voice/desk/local-model routes are now in runtime typecheck.
+**V0.79 central TypeScript and stability release**:
+- 🧱 **Chat route is now TypeScript**:`server/routes/chat` moved from JS to TypeScript, bringing stream handling, tool fallback, local Qwen direct path, and turn finalization into runtime typecheck.
+- 🧯 **Empty-answer fallback hardened**:when a realtime tool or long turn stalls, Lynn now prefers a visible tool summary or local Office calculation fallback instead of leaving the assistant bubble blank.
 - 🧭 **Local model policy unchanged**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model; 4B remains a low-config downgrade with the thinking-on risk documented.
-- 🧪 **Highest-risk hubs remain staged**:`core/engine` and `server/routes/chat` are left for a separate wave so this release stays stable.
-- ✅ **Release gate**:V0.79.5 passed `typecheck:runtime`, full `typecheck`, full `npm test`, release static regression, and package/notarization gates.
+- 🖱️ **Session list UX tightened**:session actions now live in a right-click / `...` menu, archive asks for confirmation, and pinned sessions are persistently visible.
+- 🔎 **Gated MiMo search context**:non-native-search providers can reuse MiMo search context behind a feature flag; the default path remains unchanged.
+- ✅ **Release gate**:V0.79.6 passed `typecheck:runtime`, full `typecheck`, full `npm test`, release static/UI/live regressions, and package/notarization gates.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.5)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.6)
 
 </details>
 
@@ -359,7 +359,7 @@ Related repositories:
 - 🎙️ **B-mode press-and-lock**: hold 600ms to lock continuous recording, tap again to stop
 - 🔌 **Provider Registry framework**: Alibaba stack as default + 4 BYOK fallbacks (Faster Whisper / OpenAI Whisper / Azure / Edge TTS)
 - 🔧 **CSP media-src fix**: vite CSP_PROFILES now allows `blob:` URLs to be loaded by Audio elements (the actual blocker for this release)
-- 🛠️ **vite hono external**: vite.config.server.js fix so plugin dynamic imports resolve correctly
+- 🛠️ **vite hono external**: server Vite config fix so plugin dynamic imports resolve correctly
 - 🪟 **IME stability**: Chinese input candidate switching no longer jitters; thinking blocks collapsed by default
 - 📦 **3-platform notarization**: macOS Apple Silicon + Intel + Windows all notarized, mirror site synced
 
@@ -661,11 +661,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.79.5 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.79.6 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.79.5 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.79.6 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -728,7 +728,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.79.5 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.79.6 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

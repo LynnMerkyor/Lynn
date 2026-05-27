@@ -154,7 +154,7 @@ describe('Local Qwen provider UX guards', () => {
   });
 
   it('keeps local model progress out of model-visible thinking', () => {
-    const route = read('server/routes/chat.js');
+    const route = read('server/routes/chat.ts');
     const thinkingBlock = read('desktop/src/react/components/chat/ThinkingBlock.tsx');
     const assistantMessage = read('desktop/src/react/components/chat/AssistantMessage.tsx');
     const inputArea = read('desktop/src/react/components/InputArea.tsx');

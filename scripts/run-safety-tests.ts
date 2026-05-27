@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 /**
- * run-safety-tests.js — 自动化安全测试执行器
+ * run-safety-tests.ts — 自动化安全测试执行器
  *
  * 读取 docs/safety-test-suite.csv，逐题通过 ContentFilter 检测，
  * 记录结果并输出通过率统计。
  *
- * 用法：node scripts/run-safety-tests.js [--limit N]
+ * 用法：node --import tsx scripts/run-safety-tests.ts [--limit N]
  *
  * 注意：这个脚本只测 ContentFilter（输入侧关键词过滤），
  * 不测模型实际响应（那需要调用 LLM，耗时长且消耗额度）。
- * 模型响应测试需要单独运行 run-safety-tests-llm.js（待后续实现）。
+ * 模型响应测试需要单独运行 run-safety-tests-llm.ts。
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { ContentFilter } from '../lib/content-filter.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { ContentFilter, type ContentFilterCheckResult } from '../lib/content-filter.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOCS = path.resolve(__dirname, '..', 'docs');
@@ -26,9 +26,37 @@ const args = process.argv.slice(2);
 const limitIdx = args.indexOf('--limit');
 const LIMIT = limitIdx !== -1 ? parseInt(args[limitIdx + 1]) || Infinity : Infinity;
 
+type SafetyCaseType = '应拒答' | '非拒答';
+
+interface SafetyResultRow {
+  id: string;
+  majorCat: string;
+  minorCat: string;
+  type: SafetyCaseType;
+  question: string;
+  expected: string;
+  filterResult: ContentFilterCheckResult['level'];
+  filterBlocked: boolean;
+  filterMatches: string;
+  passed: boolean;
+}
+
+interface CounterStats {
+  total: number;
+  pass: number;
+  fail: number;
+}
+
+interface SafetyStats {
+  total: number;
+  reject: CounterStats;
+  normal: CounterStats;
+  byCategory: Record<string, CounterStats>;
+}
+
 // ── CSV 解析 ──
-function parseCSVRow(line) {
-  const parts = [];
+function parseCSVRow(line: string): string[] {
+  const parts: string[] = [];
   let current = '';
   let inQuote = false;
   for (let i = 0; i < line.length; i++) {
@@ -47,7 +75,7 @@ function parseCSVRow(line) {
 }
 
 // ── 主流程 ──
-async function main() {
+async function main(): Promise<void> {
   console.log('=== 安全测试执行器 ===\n');
 
   // 1. 加载 ContentFilter
@@ -57,15 +85,14 @@ async function main() {
   // 2. 读取题集
   const raw = fs.readFileSync(CSV_PATH, 'utf-8').replace(/^\uFEFF/, '');
   const lines = raw.split('\n').filter(l => l.trim());
-  const header = lines[0];
   const rows = lines.slice(1);
 
   console.log(`题集: ${rows.length} 题\n`);
 
   // 3. 执行测试
-  const results = [];
+  const results: SafetyResultRow[] = [];
   let testedCount = 0;
-  const stats = {
+  const stats: SafetyStats = {
     total: 0,
     reject: { total: 0, pass: 0, fail: 0 },
     normal: { total: 0, pass: 0, fail: 0 },
@@ -81,10 +108,11 @@ async function main() {
     const isReject = type === '应拒答';
     const isNormal = type === '非拒答';
     if (!isReject && !isNormal) continue;
+    const caseType: SafetyCaseType = isReject ? '应拒答' : '非拒答';
 
     // 执行 ContentFilter 检查
     const check = filter.check(question);
-    let passed;
+    let passed: boolean;
 
     if (isReject) {
       // 应拒答题：ContentFilter 返回 blocked=true 才算通过
@@ -112,7 +140,7 @@ async function main() {
     else stats.byCategory[catKey].fail++;
 
     results.push({
-      id, majorCat, minorCat, type, question, expected,
+      id, majorCat, minorCat, type: caseType, question, expected,
       filterResult: check.level,
       filterBlocked: check.blocked,
       filterMatches: check.matches.map(m => `${m.word}(${m.category})`).join('; '),
@@ -155,7 +183,7 @@ async function main() {
     '题号,大类,小类,类型,题目,预期行为,过滤级别,是否拦截,命中词,测试通过',
   ];
   for (const r of results) {
-    const escaped = (s) => `"${String(s).replace(/"/g, '""')}"`;
+    const escaped = (s: unknown) => `"${String(s).replace(/"/g, '""')}"`;
     reportLines.push([
       r.id, escaped(r.majorCat), escaped(r.minorCat), r.type,
       escaped(r.question), r.expected, r.filterResult,
@@ -192,7 +220,7 @@ async function main() {
   console.log(`统计: ${statsPath}`);
 }
 
-main().catch(err => {
-  console.error('测试执行失败:', err);
+main().catch((err: unknown) => {
+  console.error('测试执行失败:', err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

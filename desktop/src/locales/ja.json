@@ -91,7 +91,15 @@
     "switchFailed": "セッションの切り替えに失敗しました",
     "createFailed": "セッションの作成に失敗しました",
     "archiveFailed": "セッションのアーカイブに失敗しました",
-    "rename": "名前を変更"
+    "rename": "名前を変更",
+    "editLabels": "ラベルを編集",
+    "labelsPlaceholder": "ラベル（カンマ区切り）",
+    "pin": "ピン留め",
+    "unpin": "ピン留め解除",
+    "pinned": "ピン留め済み",
+    "archive": "アーカイブ",
+    "archiveConfirm": "「{name}」をアーカイブしますか？リストには表示されなくなりますが、履歴は保持されます。",
+    "menuTrigger": "その他の操作"
   },
   "common": {
     "on": "オン",

@@ -15,6 +15,8 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const defaultLynnHome = join(homedir(), ".lynn-dev");
+const cliJsEntry = "index.js";
+const cliTsEntry = "index.ts";
 const serverJsEntry = "server/index.js";
 const serverTsEntry = "server/index.ts";
 const tsxSpecifier = "tsx";
@@ -24,7 +26,38 @@ const runtimeTsSentinelFiles = [
   "core/provider-registry.ts",
 ];
 
-export function canLoadBetterSqlite3(requireFn = require) {
+type RequireFn = ((id: string) => any) & { resolve?: (id: string) => string };
+type ResolveFn = (id: string) => string;
+type FileExistsFn = (path: string) => boolean;
+
+interface ServerEntry {
+  path: string;
+  usesTsLoader: boolean;
+}
+
+interface LaunchPlan {
+  bin: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+  warning: string | null;
+}
+
+interface ResolveLaunchPlanOptions {
+  mode?: string;
+  extra?: string[];
+  env?: NodeJS.ProcessEnv;
+  execPath?: string;
+  requireFn?: RequireFn;
+  resolveFn?: ResolveFn;
+  fileExists?: FileExistsFn;
+  nodeVersion?: string;
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function canLoadBetterSqlite3(requireFn: RequireFn = require): boolean {
   try {
     const Database = requireFn("better-sqlite3");
     const db = new Database(":memory:");
@@ -35,11 +68,14 @@ export function canLoadBetterSqlite3(requireFn = require) {
   }
 }
 
-function hasRuntimeTsSources(fileExists) {
+function hasRuntimeTsSources(fileExists: FileExistsFn): boolean {
   return runtimeTsSentinelFiles.some((file) => fileExists(file));
 }
 
-function resolveServerEntry({ env, fileExists }) {
+function resolveServerEntry({ env, fileExists }: {
+  env: NodeJS.ProcessEnv;
+  fileExists: FileExistsFn;
+}): ServerEntry {
   const entryHint = String(env.LYNN_SERVER_ENTRY || "auto").toLowerCase();
   const needsTsLoader = hasRuntimeTsSources(fileExists);
 
@@ -62,7 +98,7 @@ function resolveServerEntry({ env, fileExists }) {
   return { path: serverJsEntry, usesTsLoader: needsTsLoader };
 }
 
-function assertTsxAvailable(resolveFn) {
+function assertTsxAvailable(resolveFn: ResolveFn): void {
   try {
     resolveFn(tsxSpecifier);
   } catch {
@@ -72,12 +108,12 @@ function assertTsxAvailable(resolveFn) {
   }
 }
 
-function serverArgsFor(entry, extra) {
+function serverArgsFor(entry: ServerEntry, extra: string[]): string[] {
   if (!entry.usesTsLoader) return [entry.path, ...extra];
   return ["--import", tsxSpecifier, entry.path, ...extra];
 }
 
-export function resolveLaunchPlan(options = {}) {
+export function resolveLaunchPlan(options: ResolveLaunchPlanOptions = {}): LaunchPlan {
   const {
     mode,
     extra = [],
@@ -88,15 +124,15 @@ export function resolveLaunchPlan(options = {}) {
     fileExists = existsSync,
     nodeVersion = process.version,
   } = options;
-  const childEnv = {
+  const childEnv: NodeJS.ProcessEnv = {
     ...env,
     LYNN_HOME: env.LYNN_HOME || defaultLynnHome,
   };
   delete childEnv.ELECTRON_RUN_AS_NODE;
 
-  let bin;
-  let args;
-  let warning = null;
+  let bin: string;
+  let args: string[];
+  let warning: string | null = null;
 
   switch (mode) {
     case "electron":
@@ -114,7 +150,12 @@ export function resolveLaunchPlan(options = {}) {
       break;
     case "cli":
       bin = execPath;
-      args = ["index.js", ...extra];
+      if (fileExists(cliTsEntry)) {
+        assertTsxAvailable(resolveFn);
+        args = ["--import", tsxSpecifier, cliTsEntry, ...extra];
+      } else {
+        args = [cliJsEntry, ...extra];
+      }
       break;
     case "server": {
       const entry = resolveServerEntry({ env: childEnv, fileExists });
@@ -133,7 +174,7 @@ export function resolveLaunchPlan(options = {}) {
           bin = requireFn("electron");
         } catch (err) {
           throw new Error(
-            `[launch] 当前 Node ${nodeVersion} 无法加载 better-sqlite3，且 Electron 运行时不可用：${err.message}`
+            `[launch] 当前 Node ${nodeVersion} 无法加载 better-sqlite3，且 Electron 运行时不可用：${messageOf(err)}`
           );
         }
         args = serverArgs;
@@ -145,20 +186,20 @@ export function resolveLaunchPlan(options = {}) {
       break;
     }
     default:
-      throw new Error("Usage: node scripts/launch.js <electron|electron-dev|electron-vite|cli|server>");
+      throw new Error("Usage: node --import tsx scripts/launch.ts <electron|electron-dev|electron-vite|cli|server>");
   }
 
   return { bin, args, env: childEnv, warning };
 }
 
-export function main(argv = process.argv.slice(2), env = process.env) {
+export function main(argv = process.argv.slice(2), env: NodeJS.ProcessEnv = process.env): void {
   const [mode, ...extra] = argv;
 
-  let plan;
+  let plan: LaunchPlan;
   try {
     plan = resolveLaunchPlan({ mode, extra, env });
   } catch (err) {
-    console.error(err.message);
+    console.error(messageOf(err));
     process.exit(1);
   }
 

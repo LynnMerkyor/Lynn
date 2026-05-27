@@ -180,7 +180,7 @@ function runWithTargetNode(cmd, opts = {}) {
 // 产出到 dist-server-bundle/，然后复制到 outDir/bundle/
 console.log("[build-server] running Vite bundle...");
 const viteBundleDir = path.join(ROOT, "dist-server-bundle");
-execSync(`"${hostNodeBin}" "${path.join(ROOT, "node_modules", "vite", "bin", "vite.js")}" build --config vite.config.server.js`, {
+execSync(`"${hostNodeBin}" "${path.join(ROOT, "node_modules", "vite", "bin", "vite.js")}" build --config vite.config.server.ts`, {
   cwd: ROOT,
   stdio: "inherit",
 });
@@ -318,16 +318,20 @@ for (const file of SCRIPT_RUNTIME_FILES) {
 console.log("[build-server] resource files copied");
 
 // ── 4. External dependencies ──
-// 从 vite.config.server.js 的 external 列表自动派生需要安装的包。
+// 从 vite.config.server.ts 的 external 列表自动派生需要安装的包。
 // 规则：external ∩ rootPkg.dependencies = 需要安装的包。
 // 这消除了手动维护两个列表导致的遗漏（如 #242 ws 缺失）。
 const rootPkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
 
-// defineConfig 是纯 identity 函数，import 安全无副作用
-const viteConfig = (await import("../vite.config.server.js")).default;
+const { loadConfigFromFile } = await import("vite");
+const loadedViteConfig = await loadConfigFromFile(
+  { command: "build", mode: "production" },
+  path.join(ROOT, "vite.config.server.ts"),
+);
+const viteConfig = loadedViteConfig?.config;
 const viteExternals = viteConfig.build?.rollupOptions?.external;
 if (!Array.isArray(viteExternals)) {
-  throw new Error("[build-server] vite.config.server.js external must be an array");
+  throw new Error("[build-server] vite.config.server.ts external must be an array");
 }
 
 const builtinSet = new Set(builtinModules.flatMap(m => [m, `node:${m}`]));
