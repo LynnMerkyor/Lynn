@@ -1,5 +1,6 @@
 /**
  * tts-speak.js — 文本转语音工具（v0.77 真实实现）
+ * @typedef {import("../../_types").PluginToolContext} PluginToolContext
  */
 import fs from "fs";
 import path from "path";
@@ -67,6 +68,10 @@ export async function normalizeSpeechText(value) {
   return normalizeChineseTtsTextImpl(value);
 }
 
+/**
+ * @param {{ text: string; voice?: string; speed?: number; filename?: string }} params
+ * @param {Partial<PluginToolContext>} ctx
+ */
 export async function execute(params, ctx = {}) {
   const { text, voice, speed, filename } = params;
   const { log = console, config } = ctx;
