@@ -37,17 +37,17 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.79.6</strong> · 2026-05-28 · Chat Route TS + release stability <em>(latest)</em></summary>
+<summary><strong>v0.79.7</strong> · 2026-05-28 · LynnEngine TS + final central runtime cleanup <em>(latest)</em></summary>
 
-**V0.79 central TypeScript and stability release**:
-- 🧱 **Chat route is now TypeScript**:`server/routes/chat` moved from JS to TypeScript, bringing stream handling, tool fallback, local Qwen direct path, and turn finalization into runtime typecheck.
-- 🧯 **Empty-answer fallback hardened**:when a realtime tool or long turn stalls, Lynn now prefers a visible tool summary or local Office calculation fallback instead of leaving the assistant bubble blank.
+**V0.79 final central TypeScript cleanup release**:
+- 🧱 **LynnEngine facade is now TypeScript**:`core/engine` moved from JS to TypeScript, bringing agent/session/config/model/plugin composition into runtime typecheck.
+- 🔁 **Legacy import compatibility**:existing `HanaEngine` imports remain available as a `LynnEngine` alias, so plugins and older code do not need an immediate rename.
+- 🧰 **Tool safety boundaries are typed**:tool guards, tool aliases, on-demand MCP activation, sandbox options, and event dispatch now have typed wrappers.
+- 🧭 **Earlier central migrations remain gated**:`server/routes/chat`, `core/session-coordinator`, and `core/agent` stay covered by the same release gate.
 - 🧭 **Local model policy unchanged**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model; 4B remains a low-config downgrade with the thinking-on risk documented.
-- 🖱️ **Session list UX tightened**:session actions now live in a right-click / `...` menu, archive asks for confirmation, and pinned sessions are persistently visible.
-- 🔎 **Gated MiMo search context**:non-native-search providers can reuse MiMo search context behind a feature flag; the default path remains unchanged.
-- ✅ **Release gate**:V0.79.6 passed `typecheck:runtime`, full `typecheck`, full `npm test`, release static/UI/live regressions, and package/notarization gates.
+- ✅ **Release gate**:V0.79.7 passed `typecheck:runtime`, full `typecheck`, full `npm test`, release static/UI/live regressions, and package/notarization gates.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.6)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.7)
 
 </details>
 
@@ -661,11 +661,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.79.6 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.79.7 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.79.6 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.79.7 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -682,7 +682,7 @@ Lynn uses the OpenAI-compatible protocol, so any provider that supports it will 
 ## Architecture
 
 ```
-core/           Engine layer (HanaEngine Thin Facade + 8 Managers + 2 Coordinators)
+core/           Engine layer (LynnEngine Thin Facade + 8 Managers + 2 Coordinators)
 lib/            Core libraries
   ├── memory/     Memory system (fact store, vector retrieval, deep memory, skill distillation)
   ├── tools/      Tool suite (browser, search, cron, delegate, skill install — 17 tools)
@@ -705,7 +705,7 @@ scripts/        Build tools (server bundler, launcher, signing)
 tests/          Vitest test suite
 ```
 
-**Engine layer**: `HanaEngine` is a Thin Facade holding AgentManager, SessionCoordinator, ConfigCoordinator, ModelManager, PreferencesManager, SkillManager, ChannelManager, BridgeSessionManager, ExpertManager, and PluginManager — exposing a unified API.
+**Engine layer**: `LynnEngine` is a Thin Facade holding AgentManager, SessionCoordinator, ConfigCoordinator, ModelManager, PreferencesManager, SkillManager, ChannelManager, BridgeSessionManager, ExpertManager, and PluginManager — exposing a unified API.
 
 **Hub**: Runs independently of the active chat session. Handles heartbeat patrol, scheduled tasks (per-agent concurrent cron), channel routing, agent-to-agent communication (with hard round limits + cooldown to prevent infinite loops), and DM routing.
 
@@ -728,7 +728,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.79.6 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.79.7 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

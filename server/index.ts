@@ -19,7 +19,7 @@ import { createNodeWebSocket } from "@hono/node-ws";
 import { WebSocketServer } from "ws";
 import { AppError } from "../shared/errors.js";
 import { errorBus } from "../shared/error-bus.js";
-import { HanaEngine } from "../core/engine.js";
+import { LynnEngine } from "../core/engine.js";
 import { ensureFirstRun } from "../core/first-run.js";
 import { initDebugLog } from "../lib/debug-log.js";
 import { safeJson } from "./hono-helpers.js";
@@ -127,9 +127,9 @@ const startupState: {
 };
 
 // ── 初始化引擎 ──
-console.log("[server] ② 创建 HanaEngine...");
-const engine = new HanaEngine({ lynnHome, productDir });
-console.log("[server] ② HanaEngine 构造完成，开始 init...");
+console.log("[server] ② 创建 LynnEngine...");
+const engine = new LynnEngine({ lynnHome, productDir });
+console.log("[server] ② LynnEngine 构造完成，开始 init...");
 await (engine as any).init((msg: string) => console.log(`[server] ${msg}`));
 startupState.engineReady = true;
 console.log("[server] ② engine.init 完成");

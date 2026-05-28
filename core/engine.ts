@@ -1,5 +1,5 @@
 /**
- * HanaEngine — Lynn 的核心引擎（Thin Facade）
+ * LynnEngine — Lynn 的核心引擎（Thin Facade）
  *
  * 持有所有 Manager，对外暴露统一 API。
  * 具体逻辑委托给：
@@ -46,6 +46,7 @@ import {
 } from "./llm-utils.js";
 import { debugLog } from "../lib/debug-log.js";
 import { createSandboxedTools } from "../lib/sandbox/index.js";
+import { ContentFilter } from "../lib/content-filter.js";
 import { t } from "../server/i18n.js";
 import {
   SECURITY_MODE_CONFIG,
@@ -242,7 +243,7 @@ function createToolAliases(customTools: ToolLike[]): ToolLike[] {
   return aliases;
 }
 
-export class HanaEngine {
+export class LynnEngine {
   [key: string]: any;
 
   /**
@@ -403,7 +404,6 @@ export class HanaEngine {
       };
     }
   }
-
   // 向后兼容 getter
   get agentDir() { return this.agent?.agentDir || path.join(this.agentsDir, this.currentAgentId); }
   get baseDir() { return this.agentDir; }
@@ -966,7 +966,6 @@ export class HanaEngine {
 
     // 7b. 内容安全过滤器
     try {
-      const { ContentFilter } = await import("../lib/content-filter.js");
       this._contentFilter = new ContentFilter();
       await this._contentFilter.init();
       // 注入到 SessionCoordinator
@@ -1260,3 +1259,6 @@ export class HanaEngine {
     "present_files", "message_agent",
   ];
 }
+
+// Backward-compatible export for older imports and plugin type references.
+export { LynnEngine as HanaEngine };

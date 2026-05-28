@@ -14,10 +14,9 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fromRoot } from '../shared/hana-root.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, 'content-filter-data');
+const DATA_DIR = fromRoot('lib', 'content-filter-data');
 
 export type ContentFilterCategoryLevel = 'block' | 'warn' | 'log';
 export type ContentFilterResultLevel = 'pass' | ContentFilterCategoryLevel;

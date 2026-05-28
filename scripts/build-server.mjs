@@ -31,6 +31,7 @@
  *       identity-templates/
  *       ishiki-templates/
  *       public-ishiki-templates/
+ *       content-filter-data/
  *       yuan/
  *       experts/
  *     desktop/src/locales/    ← i18n 资源
@@ -219,6 +220,7 @@ const LIB_TEMPLATE_DIRS = [
   "identity-templates",
   "ishiki-templates",
   "public-ishiki-templates",
+  "content-filter-data",
   "yuan",
   "experts",
 ];

@@ -9,7 +9,7 @@
 import { Type } from "@sinclair/typebox";
 import { t } from "../../server/i18n.js";
 import { runAgentSession } from "../../hub/agent-executor.js";
-import type { HanaEngine } from "../../core/engine.js";
+import type { LynnEngine } from "../../core/engine.js";
 
 type AgentRef = {
   id: string;
@@ -19,7 +19,7 @@ type AgentRef = {
 type AskAgentToolOptions = {
   agentId: string;
   listAgents: () => AgentRef[];
-  engine: HanaEngine;
+  engine: LynnEngine;
 };
 
 type AskAgentParams = {
