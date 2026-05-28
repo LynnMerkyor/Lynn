@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Brain v2 · Audio Transcribe Fallback Middleware
 //
 // 当 router 选中的 provider 不支持原生 audio(capability.audio === false),但 messages
@@ -25,22 +24,85 @@
 //   - 不替换 system / assistant message 的 audio part(只转 user 消息)
 
 import { createHash } from 'node:crypto';
+import type { ChatMessage, LogFn, Provider } from './types.js';
 
 const FLAG = 'BRAIN_V2_AUDIO_FALLBACK';
 const WHISPER_URL_ENV = 'LYNN_WHISPER_URL';
 const OPENAI_KEY_ENV = 'OPENAI_API_KEY';
 const OPENAI_BASE_ENV = 'OPENAI_BASE';
 
-export function createAudioRequestCache() {
+export type AudioRequestCache = Map<string, string>;
+
+export type AudioRef =
+  | {
+      mi: number;
+      pi: number;
+      kind: 'b64';
+      data: string;
+      format: string;
+    }
+  | {
+      mi: number;
+      pi: number;
+      kind: 'url';
+      url: string;
+    };
+
+export type AudioFallbackSkipReason =
+  | 'flag-off'
+  | 'provider-native-audio'
+  | 'no-audio-content'
+  | 'all-failed';
+
+export type AudioFallbackMeta =
+  | { applied: false; skipReason: AudioFallbackSkipReason; attempted?: number; ms?: number }
+  | { applied: true; transcripts: number; total: number; ms: number; source: TranscriptSource };
+
+export interface ApplyAudioTranscribeOptions {
+  messages?: ChatMessage[];
+  provider?: Provider | null;
+  signal?: AbortSignal;
+  log?: LogFn | null;
+  requestCache?: AudioRequestCache;
+}
+
+export interface ApplyAudioTranscribeResult {
+  messages?: ChatMessage[];
+  meta: AudioFallbackMeta;
+}
+
+type TranscriptSource = 'cache' | 'whisper-custom' | 'openai-whisper';
+
+interface FetchedAudio {
+  buffer: Buffer;
+  filename: string;
+  mime: string;
+}
+
+interface WhisperJsonResponse {
+  text?: unknown;
+}
+
+function bufferToArrayBuffer(buffer: Buffer): ArrayBuffer {
+  const arrayBuffer = new ArrayBuffer(buffer.byteLength);
+  new Uint8Array(arrayBuffer).set(buffer);
+  return arrayBuffer;
+}
+
+export function createAudioRequestCache(): AudioRequestCache {
   return new Map();
 }
 
-function hashAudioRef(audioRef) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hashAudioRef(audioRef: string): string {
   return createHash('sha256').update(String(audioRef)).digest('hex').slice(0, 32);
 }
 
-function extractAudioParts(messages) {
-  const refs = [];
+function extractAudioParts(messages?: ChatMessage[]): AudioRef[] {
+  const refs: AudioRef[] = [];
   if (!Array.isArray(messages)) return refs;
   for (let mi = 0; mi < messages.length; mi++) {
     const m = messages[mi];
@@ -49,15 +111,20 @@ function extractAudioParts(messages) {
     if (!Array.isArray(c)) continue;
     for (let pi = 0; pi < c.length; pi++) {
       const part = c[pi];
-      if (!part || typeof part !== 'object') continue;
+      if (!isRecord(part)) continue;
       const t = part.type;
       if (t === 'input_audio') {
         // OpenAI 标准:{ data: base64, format: 'mp3'|'wav'|... }
-        const data = part.input_audio?.data;
-        const format = part.input_audio?.format || 'mp3';
+        const inputAudio = part.input_audio;
+        if (!isRecord(inputAudio)) continue;
+        const data = typeof inputAudio.data === 'string' ? inputAudio.data : '';
+        const format = typeof inputAudio.format === 'string' ? inputAudio.format : 'mp3';
         if (data) refs.push({ mi, pi, kind: 'b64', data, format });
       } else if (t === 'audio_url') {
-        const url = typeof part.audio_url === 'string' ? part.audio_url : part.audio_url?.url;
+        const audioUrl = part.audio_url;
+        const url = typeof audioUrl === 'string'
+          ? audioUrl
+          : (isRecord(audioUrl) && typeof audioUrl.url === 'string' ? audioUrl.url : '');
         if (url) refs.push({ mi, pi, kind: 'url', url });
       }
     }
@@ -65,7 +132,7 @@ function extractAudioParts(messages) {
   return refs;
 }
 
-async function fetchAudioBuffer(ref) {
+async function fetchAudioBuffer(ref: AudioRef): Promise<FetchedAudio> {
   if (ref.kind === 'b64') {
     return { buffer: Buffer.from(ref.data, 'base64'), filename: `audio.${ref.format}`, mime: `audio/${ref.format}` };
   }
@@ -94,10 +161,10 @@ async function fetchAudioBuffer(ref) {
  * 期望 endpoint 兼容 OpenAI:POST /audio/transcriptions multipart,form field 'file'
  * + 'model'(可选)→ JSON { text }。
  */
-async function transcribeViaWhisper({ buffer, filename, mime }, signal) {
+async function transcribeViaWhisper({ buffer, filename, mime }: FetchedAudio, signal?: AbortSignal): Promise<string> {
   const customUrl = process.env[WHISPER_URL_ENV] || '';
-  let endpoint;
-  let headers = {};
+  let endpoint: string;
+  const headers: Record<string, string> = {};
 
   if (customUrl) {
     endpoint = customUrl.replace(/\/+$/, '') + '/audio/transcriptions';
@@ -110,7 +177,7 @@ async function transcribeViaWhisper({ buffer, filename, mime }, signal) {
   }
 
   const form = new FormData();
-  form.append('file', new Blob([buffer], { type: mime }), filename);
+  form.append('file', new Blob([bufferToArrayBuffer(buffer)], { type: mime }), filename);
   form.append('model', 'whisper-1');
   form.append('response_format', 'json');
 
@@ -119,17 +186,18 @@ async function transcribeViaWhisper({ buffer, filename, mime }, signal) {
     const txt = await res.text().catch(() => '');
     throw new Error(`whisper HTTP ${res.status} ${txt.slice(0, 200)}`);
   }
-  const data = await res.json();
+  const data = await res.json() as WhisperJsonResponse;
   const text = String(data?.text || '').trim();
   if (!text) throw new Error('whisper empty transcript');
   return text;
 }
 
-function replaceAudioPart(messages, ref, transcript) {
+function replaceAudioPart(messages: ChatMessage[], ref: AudioRef, transcript: string): ChatMessage[] {
   // Deep clone 浅层(只动我们要改的 part)
   const newMessages = messages.map((m, mi) => {
     if (mi !== ref.mi) return m;
-    const newContent = m.content.map((part, pi) => {
+    const content = Array.isArray(m.content) ? m.content : [];
+    const newContent = content.map((part, pi) => {
       if (pi !== ref.pi) return part;
       return {
         type: 'text',
@@ -146,7 +214,7 @@ function replaceAudioPart(messages, ref, transcript) {
  * meta.applied === true 时,caller(router)可以 emit audio_fallback SSE chunk
  * 让 UI 显示"已用 Whisper 转录"。
  */
-export async function applyAudioTranscribe(opts) {
+export async function applyAudioTranscribe(opts: ApplyAudioTranscribeOptions): Promise<ApplyAudioTranscribeResult> {
   const { messages, provider, signal, log, requestCache } = opts;
 
   // 1. Feature flag
@@ -166,16 +234,17 @@ export async function applyAudioTranscribe(opts) {
   }
 
   // 4. 转录(逐个,带 per-request 缓存)
-  let workingMessages = messages;
+  const sourceMessages = messages || [];
+  let workingMessages: ChatMessage[] = sourceMessages;
   let transcripts = 0;
   const t0 = Date.now();
-  const usedSources = [];
+  const usedSources: TranscriptSource[] = [];
 
   for (const ref of refs) {
     const key = hashAudioRef(ref.kind === 'b64' ? ref.data : ref.url);
-    let text = null;
+    let text: string | null = null;
     if (requestCache && requestCache.has(key)) {
-      text = requestCache.get(key);
+      text = requestCache.get(key) || null;
       usedSources.push('cache');
     } else {
       try {
@@ -185,7 +254,7 @@ export async function applyAudioTranscribe(opts) {
         usedSources.push(process.env[WHISPER_URL_ENV] ? 'whisper-custom' : 'openai-whisper');
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        log && log('warn', `audio-transcribe: failed ref kind=${ref.kind}: ${msg.slice(0, 200)}`);
+        log?.('warn', `audio-transcribe: failed ref kind=${ref.kind}: ${msg.slice(0, 200)}`);
         continue; // 跳过这个 ref,留原 audio part(adapter 自己处理)
       }
     }
@@ -202,10 +271,10 @@ export async function applyAudioTranscribe(opts) {
     };
   }
 
-  log && log('info', `audio-transcribe: replaced ${transcripts}/${refs.length} audio parts (${ms}ms, sources=${usedSources.join(',')})`);
+  log?.('info', `audio-transcribe: replaced ${transcripts}/${refs.length} audio parts (${ms}ms, sources=${usedSources.join(',')})`);
   return {
     messages: workingMessages,
-    meta: { applied: true, transcripts, total: refs.length, ms, source: usedSources[0] },
+    meta: { applied: true, transcripts, total: refs.length, ms, source: usedSources[0] || 'openai-whisper' },
   };
 }
 
