@@ -52,7 +52,7 @@ describe("v0.77 Plugin + Desk Integration", () => {
     const destLib = path.join(tempRoot, "lib", "memory");
     fs.mkdirSync(destLib, { recursive: true });
     for (const f of fs.readdirSync(srcLib)) {
-      if (f.endsWith(".js")) fs.copyFileSync(path.join(srcLib, f), path.join(destLib, f));
+      if (f.endsWith(".js") || f.endsWith(".ts")) fs.copyFileSync(path.join(srcLib, f), path.join(destLib, f));
     }
   });
 

@@ -1,5 +1,5 @@
 /**
- * Shared constants — 从 core/engine.js 提取
+ * Shared constants — 从 core/engine.ts 提取
  */
 import {
   codingTools,

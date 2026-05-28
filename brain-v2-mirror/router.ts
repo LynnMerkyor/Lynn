@@ -8,9 +8,12 @@
 import { universalOrder, getProvider, isInCooldown, markUnhealthy } from './provider-registry.js';
 import { getAdapter } from './wire-adapter/index.js';
 import { isServerTool, executeServerTool, mergeWithServerTools } from './tool-exec/index.js';
+import { applySearchContext, createSearchRequestCache, type SearchRequestCache } from './search-context.js';
+import { applyAudioTranscribe, createAudioRequestCache } from './audio-transcribe.js';
 import { errorMessage, type ChatMessage, type FallbackEntry, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
 
-type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio'>>;
+type AudioRequestCache = Map<string, string>;
+type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio' | 'video'>>;
 type ProviderError = Error & { suppressBody?: boolean; cooldownMs?: number };
 type RunRoundResult = {
   ok: true;
@@ -80,7 +83,9 @@ async function runRound({
   log,
   extraBody,
   reasoningEffort,
-}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'>): Promise<RunRoundResult> {
+  requestCache,
+  audioCache,
+}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache }): Promise<RunRoundResult> {
   const errors: Array<{ providerId: ProviderId; error: string }> = [];
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
   // (例:"MiMo → Spark fallback"),不再让 cascade decision 对 UI 不可见。
@@ -94,6 +99,7 @@ async function runRound({
     }
     if (capabilityRequired?.vision && !provider.capability.vision) continue;
     if (capabilityRequired?.audio && !provider.capability.audio) continue;
+    if (capabilityRequired?.video && !provider.capability.video) continue;
     // Capability check only: providers that declare no tool support are skipped for tool-attached requests.
     if (Array.isArray(tools) && tools.length > 0 && provider.capability && provider.capability.tools === false) {
       log && log('info', `provider ${providerId} skipped: tool-call request but capability.tools=false`);
@@ -133,7 +139,36 @@ async function runRound({
     const toolCallsAcc: ToolCall[] = [];
     try {
       log && log('info', `→ provider ${providerId}`);
-      for await (const chunk of adapter({ provider, messages, tools, signal, log, extraBody, reasoningEffort })) {
+      const searchContext = await applySearchContext({ messages, provider, signal, log, requestCache });
+      let effectiveMessages = searchContext.messages || messages;
+      if (searchContext.meta.applied) {
+        await onChunk(
+          {
+            type: 'pre_search',
+            source: 'mimo',
+            query: searchContext.meta.query,
+            hit: searchContext.meta.hit,
+            ms: searchContext.meta.ms,
+            cached: searchContext.meta.cached,
+          },
+          { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
+        );
+      }
+      const audioContext = await applyAudioTranscribe({ messages: effectiveMessages, provider, signal, log, requestCache: audioCache });
+      effectiveMessages = audioContext.messages || effectiveMessages;
+      if (audioContext.meta?.applied) {
+        await onChunk(
+          {
+            type: 'audio_fallback',
+            source: String(audioContext.meta.source ?? 'whisper'),
+            transcripts: Number(audioContext.meta.transcripts ?? 0),
+            total: Number(audioContext.meta.total ?? 0),
+            ms: Number(audioContext.meta.ms ?? 0),
+          },
+          { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
+        );
+      }
+      for await (const chunk of adapter({ provider, messages: effectiveMessages, tools, signal, log, extraBody, reasoningEffort })) {
         anyEmit = true;
         if (chunk.type === 'content') {
           contentAccum += chunk.delta;
@@ -197,17 +232,22 @@ async function runRound({
 }
 
 export async function run({ messages, tools, capabilityRequired, signal, onChunk, log, extraBody, reasoningEffort }: RouterRunOptions): Promise<RouterRunResult> {
-  // Capability pre-flight — vision/audio capability gate, friendly error if no provider supports
-  if (capabilityRequired && (capabilityRequired.vision || capabilityRequired.audio)) {
+  // Capability pre-flight — vision/audio/video capability gate, friendly error if no provider supports
+  if (capabilityRequired && (capabilityRequired.vision || capabilityRequired.audio || capabilityRequired.video)) {
     const anySupports = universalOrder.some((id) => {
       const p = getProvider(id);
       if (!p) return false;
       if (capabilityRequired.vision && !p.capability.vision) return false;
       if (capabilityRequired.audio && !p.capability.audio) return false;
+      if (capabilityRequired.video && !p.capability.video) return false;
       return true;
     });
     if (!anySupports) {
-      const missing = [capabilityRequired.vision && 'vision', capabilityRequired.audio && 'audio'].filter(Boolean).join('+');
+      const missing = [
+        capabilityRequired.vision && 'vision',
+        capabilityRequired.audio && 'audio',
+        capabilityRequired.video && 'video',
+      ].filter(Boolean).join('+');
       const err = new Error(`CAPABILITY_NOT_SUPPORTED: no provider supports ${missing} in current build`) as Error & { code: string };
       err.code = 'CAPABILITY_NOT_SUPPORTED';
       throw err;
@@ -219,12 +259,16 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   let lastProviderId: ProviderId | null = null;
   let iter = 0;
   const maxIter = MAX_ITERATIONS > 0 ? MAX_ITERATIONS : Infinity;
+  const requestCache = createSearchRequestCache();
+  const audioCache = createAudioRequestCache() as AudioRequestCache;
 
   while (iter < maxIter) {
     iter++;
     const result = await runRound({
       messages: workingMessages, tools: mergedTools, capabilityRequired,
       signal, onChunk, log, extraBody, reasoningEffort,
+      requestCache,
+      audioCache,
     });
     lastProviderId = result.providerId;
 
@@ -295,7 +339,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
 }
 
 export function detectCapability(messages?: ChatMessage[]): CapabilityRequired {
-  const result = { vision: false, audio: false };
+  const result = { vision: false, audio: false, video: false };
   for (const m of (messages || [])) {
     const c = m.content;
     if (!Array.isArray(c)) continue;
@@ -304,6 +348,7 @@ export function detectCapability(messages?: ChatMessage[]): CapabilityRequired {
       const typedPart = part as { type?: string };
       if (typedPart.type === 'image_url' || typedPart.type === 'input_image') result.vision = true;
       if (typedPart.type === 'input_audio' || typedPart.type === 'audio_url') result.audio = true;
+      if (typedPart.type === 'input_video' || typedPart.type === 'video_url') result.video = true;
     }
   }
   return result;

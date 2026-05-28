@@ -42,12 +42,91 @@
     font-family: var(--font-serif);
 }
 
-.welcomeDaySummary {
+.welcomeDaySummaryEmpty {
     font-size: 0.72rem;
     color: var(--text-muted);
     letter-spacing: 0.03em;
     opacity: 0.85;
     margin-top: -2px;
+}
+
+/* ── Day summary chips ── */
+.daySummaryChips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: center;
+    margin-top: 2px;
+    animation: daySummaryChipsIn 0.22s var(--ease-out);
+}
+
+@keyframes daySummaryChipsIn {
+    from { opacity: 0; transform: translateY(2px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.daySummaryChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-height: 24px;
+    padding: 2px 0.55rem 2px 0.45rem;
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.7rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform 0.12s var(--ease-out), border-color 0.12s var(--ease-out), background 0.12s var(--ease-out), color 0.12s var(--ease-out);
+    -webkit-app-region: no-drag;
+}
+
+.daySummaryChip:hover {
+    transform: translateY(-1px);
+    border-color: rgba(var(--accent-rgb), 0.32);
+    background: color-mix(in srgb, var(--bg-card) 80%, rgba(var(--accent-rgb), 0.14));
+    color: var(--accent);
+}
+
+.daySummaryChip:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.28);
+}
+
+.daySummaryChipIcon {
+    display: inline-flex;
+    align-items: center;
+    opacity: 0.75;
+}
+
+.daySummaryChip:hover .daySummaryChipIcon {
+    opacity: 1;
+}
+
+.daySummaryChipCount {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.daySummaryChip:hover .daySummaryChipCount {
+    color: var(--accent);
+}
+
+.daySummaryChipLabel {
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+}
+
+/* Per-kind subtle accent — done is muted, automation/sessions/todos lean accent */
+.daySummaryChip_done {
+    color: color-mix(in srgb, var(--text-muted) 80%, var(--text));
+}
+
+.daySummaryChip_done .daySummaryChipCount {
+    color: color-mix(in srgb, var(--text-muted) 50%, var(--text));
 }
 
 

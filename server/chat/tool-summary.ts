@@ -8,7 +8,7 @@ interface ToolSummaryLike {
   outputPreview?: unknown;
 }
 
-interface ToolSuccessRecord {
+export interface ToolSuccessRecord {
   name: string;
   command: string;
   filePath: string;

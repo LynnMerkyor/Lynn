@@ -28,7 +28,7 @@ import { run, detectCapability, __testing__ } from '../router.js';
 function makeProvider(id, capability = {}) {
   return {
     id, wire: 'mock', endpoint: 'http://mock', apiKey: 'k', model: 'm',
-    capability: { vision: false, audio: false, tools: true, thinking: true, ...capability },
+    capability: { vision: false, audio: false, video: false, tools: true, thinking: true, ...capability },
   };
 }
 
@@ -48,6 +48,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  delete process.env.BRAIN_V2_PRE_SEARCH;
+  delete process.env.MIMO_SEARCH_KEY;
 });
 
 describe('Router', () => {
@@ -176,6 +178,52 @@ describe('Router', () => {
     await run({ messages: [{ role: 'user', content: 'q' }], onChunk: async (c, meta) => metas.push(meta) });
     expect(metas.every(m => m.providerId === 'p-mimo')).toBe(true);
   });
+
+  it('injects pre-search context before the selected non-native provider runs', async () => {
+    process.env.BRAIN_V2_PRE_SEARCH = '1';
+    process.env.MIMO_SEARCH_KEY = 'test-mimo';
+    mockState.cooldown.add('p-mimo');
+    mockState.providers['p-spark'] = makeProvider('p-spark', { native_search: false });
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '',
+      json: async () => ({
+        choices: [{
+          message: {
+            content: '杭州今日有小雨。',
+            annotations: [{ type: 'url_citation', title: 'weather', url: 'https://weather.example', summary: 'rain' }],
+          },
+        }],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    let adapterMessages = null;
+    mockState.adapterFn = async function* ({ messages }) {
+      adapterMessages = messages;
+      yield { type: 'content', delta: 'ok' };
+    };
+
+    const chunks = [];
+    const metas = [];
+    const result = await run({
+      messages: [{ role: 'user', content: '今天天气怎么样' }],
+      onChunk: async (chunk, meta) => {
+        chunks.push(chunk);
+        metas.push(meta);
+      },
+    });
+
+    expect(result.providerId).toBe('p-spark');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(chunks.map(c => c.type)).toEqual(['pre_search', 'content']);
+    expect(chunks[0]).toMatchObject({ source: 'mimo', hit: true, cached: null });
+    expect(metas[0].fallback_from).toEqual([{ id: 'p-mimo', reason: 'cooldown' }]);
+    expect(adapterMessages).toHaveLength(2);
+    expect(adapterMessages[0].role).toBe('system');
+    expect(String(adapterMessages[0].content)).toContain('【实时信息上下文】');
+    expect(adapterMessages[1].role).toBe('user');
+  });
 });
 
 describe('detectCapability', () => {
@@ -183,19 +231,46 @@ describe('detectCapability', () => {
     const cap = detectCapability([{ role: 'user', content: [{ type: 'text', text: 'q' }, { type: 'image_url', image_url: { url: 'data:...' } }] }]);
     expect(cap.vision).toBe(true);
     expect(cap.audio).toBe(false);
+    expect(cap.video).toBe(false);
   });
   it('detects audio from input_audio content part', () => {
     const cap = detectCapability([{ role: 'user', content: [{ type: 'input_audio', input_audio: {} }] }]);
     expect(cap.audio).toBe(true);
+    expect(cap.video).toBe(false);
+  });
+  it('detects video from video_url content part', () => {
+    const cap = detectCapability([{ role: 'user', content: [{ type: 'video_url', video_url: { url: 'https://x.mp4' } }] }]);
+    expect(cap.video).toBe(true);
+    expect(cap.vision).toBe(false);
+    expect(cap.audio).toBe(false);
+  });
+  it('detects video from input_video content part', () => {
+    const cap = detectCapability([{ role: 'user', content: [{ type: 'input_video', video_url: 'https://x.mp4' }] }]);
+    expect(cap.video).toBe(true);
+  });
+  it('detects all three (mixed multimodal)', () => {
+    const cap = detectCapability([{
+      role: 'user',
+      content: [
+        { type: 'text', text: 'hi' },
+        { type: 'image_url', image_url: { url: 'data:...' } },
+        { type: 'input_audio', input_audio: {} },
+        { type: 'video_url', video_url: { url: 'https://x.mp4' } },
+      ],
+    }]);
+    expect(cap.vision).toBe(true);
+    expect(cap.audio).toBe(true);
+    expect(cap.video).toBe(true);
   });
   it('returns false for plain text', () => {
     const cap = detectCapability([{ role: 'user', content: 'just text' }]);
     expect(cap.vision).toBe(false);
     expect(cap.audio).toBe(false);
+    expect(cap.video).toBe(false);
   });
   it('handles empty messages array', () => {
-    expect(detectCapability([])).toEqual({ vision: false, audio: false });
-    expect(detectCapability(null)).toEqual({ vision: false, audio: false });
+    expect(detectCapability([])).toEqual({ vision: false, audio: false, video: false });
+    expect(detectCapability(null)).toEqual({ vision: false, audio: false, video: false });
   });
 });
 

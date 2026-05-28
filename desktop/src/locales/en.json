@@ -175,7 +175,13 @@
     "archiveFailed": "Failed to archive session",
     "rename": "Rename",
     "editLabels": "Edit labels",
-    "labelsPlaceholder": "Labels, comma separated"
+    "labelsPlaceholder": "Labels, comma separated",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "pinned": "Pinned",
+    "archive": "Archive",
+    "archiveConfirm": "Archive “{name}”? It will be hidden from the list but history is kept.",
+    "menuTrigger": "More actions"
   },
   "common": {
     "on": "On",

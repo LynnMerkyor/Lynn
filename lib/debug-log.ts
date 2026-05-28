@@ -1,0 +1,401 @@
+/**
+ * debug-log.ts — 持久化调试日志
+ *
+ * 每次 server 启动时创建一个日志文件（按时间戳命名），
+ * 运行期间追加写入，关闭后下次启动写新的。
+ *
+ * 格式：[HH:MM:SS.mmm] [LEVEL] [MODULE] message
+ * 路径：~/.lynn/logs/YYYY-MM-DD_HH-MM-SS.log
+ */
+
+import fs from "fs";
+import path from "path";
+import os from "os";
+
+const LEVEL_VALUES = Object.freeze({
+  TRACE: 10,
+  DEBUG: 20,
+  INFO: 30,
+  WARN: 40,
+  ERROR: 50,
+  SILENT: Infinity,
+});
+
+type LogLevel = keyof typeof LEVEL_VALUES;
+
+interface LogFilter {
+  defaultLevel: LogLevel;
+  modules: Map<string, LogLevel>;
+}
+
+interface DedupState {
+  level: LogLevel | null;
+  module: string | null;
+  msg: string | null;
+  count: number;
+}
+
+interface HeaderInfo {
+  model?: unknown;
+  agent?: unknown;
+  agentId?: unknown;
+  utilityModel?: unknown;
+  channelsDir?: unknown;
+  [key: string]: unknown;
+}
+
+type SpanFields = Record<string, unknown> & { module?: unknown };
+
+interface SpanOptions {
+  module?: string;
+  level?: LogLevel;
+}
+
+export interface ModuleLogger {
+  trace(msg: unknown): void;
+  debug(msg: unknown): void;
+  log(msg: unknown): void;
+  warn(msg: unknown): void;
+  error(msg: unknown): void;
+}
+
+function normalizeLevel(level: unknown, fallback: LogLevel = "INFO"): LogLevel {
+  const key = String(level || "").trim().toUpperCase();
+  return LEVEL_VALUES[key as LogLevel] != null ? key as LogLevel : fallback;
+}
+
+function parseLogFilter(raw: unknown): LogFilter {
+  const filter: LogFilter = { defaultLevel: "INFO", modules: new Map<string, LogLevel>() };
+  const source = String(raw || "").trim();
+  if (!source) return filter;
+
+  for (const part of source.split(",").map((item) => item.trim()).filter(Boolean)) {
+    const eq = part.indexOf("=");
+    if (eq === -1) {
+      filter.defaultLevel = normalizeLevel(part, filter.defaultLevel);
+      continue;
+    }
+    const name = part.slice(0, eq).trim();
+    const level = normalizeLevel(part.slice(eq + 1), filter.defaultLevel);
+    if (!name || name === "*") filter.defaultLevel = level;
+    else filter.modules.set(name, level);
+  }
+  return filter;
+}
+
+function stableValue(value: unknown): string {
+  if (value == null) return String(value);
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+export class DebugLog {
+  private _filePath: string;
+  private _logDir: string;
+  private _size: number;
+  private _truncated: boolean;
+  private _filter: LogFilter;
+  private _dedup: DedupState;
+
+  /**
+   * @param logDir - 日志目录路径（如 ~/.lynn/logs）
+   */
+  constructor(logDir: string) {
+    fs.mkdirSync(logDir, { recursive: true });
+
+    const now = new Date();
+    const ts = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("-") + "_" + [
+      String(now.getHours()).padStart(2, "0"),
+      String(now.getMinutes()).padStart(2, "0"),
+      String(now.getSeconds()).padStart(2, "0"),
+    ].join("-");
+
+    this._filePath = path.join(logDir, `${ts}.log`);
+    this._logDir = logDir;
+    this._size = 0;
+    this._truncated = false;
+    this._filter = parseLogFilter(process.env.LYNN_LOG || "");
+
+    // 去重状态：记录上一条写入的内容
+    this._dedup = { level: null, module: null, msg: null, count: 0 };
+
+    // 清理超过 7 天的旧日志
+    this._cleanup(7);
+  }
+
+  get filePath(): string { return this._filePath; }
+
+  /**
+   * 写启动头部信息
+   * @param version - 应用版本号
+   * @param info - 启动信息
+   */
+  header(version: string, info: HeaderInfo = {}): void {
+    const lines = [
+      "═".repeat(60),
+      `Lynn v${version} — started at ${new Date().toISOString()}`,
+      "═".repeat(60),
+    ];
+
+    if (info.model) lines.push(`Model: ${info.model}`);
+    if (info.agent) lines.push(`Agent: ${info.agent} (${info.agentId || "?"})`);
+    if (info.utilityModel) lines.push(`Utility: ${info.utilityModel}`);
+    if (info.channelsDir) lines.push("Channels: configured");
+
+    lines.push("─".repeat(60), "");
+
+    fs.appendFileSync(this._filePath, lines.join("\n") + "\n", "utf-8");
+  }
+
+  /**
+   * 写关闭标记
+   */
+  close(): void {
+    this._flushDedup();
+    this._write("INFO", "system", "Server shutting down");
+    fs.appendFileSync(this._filePath, "\n" + "═".repeat(60) + "\n", "utf-8");
+  }
+
+  /** INFO 级别日志 */
+  log(module: string, msg: unknown): void {
+    this._write("INFO", module, msg);
+  }
+
+  /** TRACE 级别日志 */
+  trace(module: string, msg: unknown): void {
+    this._write("TRACE", module, msg);
+  }
+
+  /** DEBUG 级别日志 */
+  debug(module: string, msg: unknown): void {
+    this._write("DEBUG", module, msg);
+  }
+
+  /** ERROR 级别日志 */
+  error(module: string, msg: unknown): void {
+    this._write("ERROR", module, msg);
+  }
+
+  /** WARN 级别日志 */
+  warn(module: string, msg: unknown): void {
+    this._write("WARN", module, msg);
+  }
+
+  span(name: string, fields: SpanFields = {}, opts: SpanOptions = {}): void {
+    const module = opts.module || fields.module || "span";
+    const level = normalizeLevel(opts.level || "INFO");
+    const payload = Object.entries(fields || {})
+      .filter(([key]) => key !== "module")
+      .map(([key, value]) => `${key}=${stableValue(value)}`)
+      .join(" ");
+    this._write(level, module, payload ? `[span:${name}] ${payload}` : `[span:${name}]`);
+  }
+
+  /**
+   * 读取最近 N 行日志
+   * @param n - 行数
+   * @returns 最近的日志行
+   */
+  tail(n = 100): string[] {
+    try {
+      const content = fs.readFileSync(this._filePath, "utf-8");
+      const lines = content.split("\n");
+      return lines.slice(-n);
+    } catch {
+      return [];
+    }
+  }
+
+  /** 对消息做隐私清洗后写入（含去重判断） */
+  _write(level: unknown, module: unknown, msg: unknown): void {
+    const normalizedLevel = normalizeLevel(level);
+    const normalizedModule = String(module || "app");
+    if (!this._shouldWrite(normalizedLevel, normalizedModule)) return;
+
+    const cleaned = this._scrub(String(msg));
+
+    // 去重：与上一条完全相同则只计数
+    const d = this._dedup;
+    if (d.level === normalizedLevel && d.module === normalizedModule && d.msg === cleaned) {
+      d.count++;
+      return;
+    }
+
+    // 有积压的重复条目，先补写一行摘要
+    this._flushDedup();
+
+    // 更新去重状态
+    this._dedup = { level: normalizedLevel, module: normalizedModule, msg: cleaned, count: 1 };
+
+    this._append(normalizedLevel, normalizedModule, cleaned);
+  }
+
+  _shouldWrite(level: LogLevel, module: string): boolean {
+    const threshold = this._filter.modules.get(module) || this._filter.defaultLevel;
+    return LEVEL_VALUES[level] >= LEVEL_VALUES[threshold];
+  }
+
+  /** 把积压的"重复 N 次"补写进文件 */
+  _flushDedup(): void {
+    const d = this._dedup;
+    if (d.count > 1) {
+      this._append("INFO", "dedup", `⤷ 上条重复 ${d.count} 次`);
+    }
+    this._dedup = { level: null, module: null, msg: null, count: 0 };
+  }
+
+  /** 底层写入（单文件上限 5MB，超限后写一次截断通知再静默丢弃） */
+  _append(level: LogLevel, module: string, msg: string): void {
+    const MAX = 5 * 1024 * 1024;
+
+    if (this._truncated) return;
+
+    if (this._size >= MAX) {
+      try {
+        const notice = "\n[日志已达 5MB 上限，后续内容已截断]\n";
+        fs.appendFileSync(this._filePath, notice, "utf-8");
+      } catch { /* ignore */ }
+      this._truncated = true;
+      return;
+    }
+
+    const now = new Date();
+    const time = [
+      String(now.getHours()).padStart(2, "0"),
+      String(now.getMinutes()).padStart(2, "0"),
+      String(now.getSeconds()).padStart(2, "0"),
+    ].join(":") + "." + String(now.getMilliseconds()).padStart(3, "0");
+
+    const line = `[${time}] [${level}] [${module}] ${msg}\n`;
+
+    try {
+      fs.appendFileSync(this._filePath, line, "utf-8");
+      this._size += Buffer.byteLength(line, "utf-8");
+    } catch {
+      // 写日志失败不应阻塞业务
+    }
+  }
+
+  /** 隐私清洗：移除或遮盖可识别用户身份的信息 */
+  _scrub(msg: string): string {
+    // 1. home 目录路径 → ~（最无损的替换，仅隐藏用户名）
+    const home = os.homedir();
+    if (home) msg = msg.split(home).join("~");
+
+    // 2. URL 内嵌凭证：https://user:pass@host → https://***@host
+    msg = msg.replace(/https?:\/\/[^:@\s/]+:[^@\s/]+@/gi, (m) => {
+      const proto = m.match(/^https?:\/\//i)?.[0] ?? "";
+      const host = m.slice(m.lastIndexOf("@"));
+      return `${proto}***${host}`;
+    });
+
+    // 3. Bearer token
+    msg = msg.replace(/Bearer\s+[A-Za-z0-9\-._~+/]+=*/g, "Bearer ***");
+
+    // 4. key=/token=/secret= 后跟的值
+    msg = msg.replace(
+      /\b(api_key|apikey|api-key|token|secret|password|passwd|Authorization)\s*[=:]\s*\S+/gi,
+      (_, k: string) => `${k}=***`
+    );
+
+    // 5. Telegram bot token 格式: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+    msg = msg.replace(/\b\d{8,}:[A-Za-z0-9_-]{30,}\b/g, "[bot-token]");
+
+    // 6. 独立的长随机串（40 字符以上的 base64/hex，非路径、非 URL）
+    msg = msg.replace(/(?<![/\w])[A-Za-z0-9+/]{40,}={0,2}(?![/\w])/g, "[token]");
+
+    // 7. 电子邮件地址
+    msg = msg.replace(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, "[email]");
+
+    return msg;
+  }
+
+  /** 清理超过 maxDays 天的旧日志 */
+  _cleanup(maxDays: number): void {
+    try {
+      const cutoff = Date.now() - maxDays * 24 * 60 * 60 * 1000;
+      const files = fs.readdirSync(this._logDir).filter(f => f.endsWith(".log"));
+
+      for (const f of files) {
+        const filePath = path.join(this._logDir, f);
+        const stat = fs.statSync(filePath);
+        if (stat.mtimeMs < cutoff) {
+          fs.unlinkSync(filePath);
+        }
+      }
+    } catch {
+      // 清理失败不影响运行
+    }
+  }
+}
+
+// ── 全局单例 ──
+
+let _instance: DebugLog | null = null;
+
+/**
+ * 初始化全局日志实例
+ * @param logDir - 日志目录路径
+ * @returns DebugLog 实例
+ */
+export function initDebugLog(logDir: string): DebugLog {
+  _instance = new DebugLog(logDir);
+  return _instance;
+}
+
+/**
+ * 获取全局日志实例
+ * @returns DebugLog 实例或 null
+ */
+export function debugLog(): DebugLog | null {
+  return _instance;
+}
+
+/**
+ * 创建模块专用日志器
+ *
+ * 同时写 console + 持久日志文件，统一替代散落的 console.error / debugLog()?.log()。
+ *
+ * @param module - 模块标识（如 "engine", "bridge", "session"）
+ * @returns 模块日志器
+ *
+ * @example
+ * const log = createModuleLogger("bridge");
+ * log.error("connection failed");
+ * // console: [bridge] connection failed
+ * // file:    [HH:MM:SS.mmm] [ERROR] [bridge] connection failed
+ */
+export function createModuleLogger(module: string): ModuleLogger {
+  return {
+    trace(msg: unknown): void {
+      _instance?.trace(module, msg);
+    },
+    debug(msg: unknown): void {
+      _instance?.debug(module, msg);
+    },
+    log(msg: unknown): void {
+      const cleaned = _instance ? _instance._scrub(String(msg)) : msg;
+      console.log(`[${module}] ${cleaned}`);
+      _instance?.log(module, msg);
+    },
+    warn(msg: unknown): void {
+      const cleaned = _instance ? _instance._scrub(String(msg)) : msg;
+      console.warn(`[${module}] ${cleaned}`);
+      _instance?.warn(module, msg);
+    },
+    error(msg: unknown): void {
+      const cleaned = _instance ? _instance._scrub(String(msg)) : msg;
+      console.error(`[${module}] ${cleaned}`);
+      _instance?.error(module, msg);
+    },
+  };
+}

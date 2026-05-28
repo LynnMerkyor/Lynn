@@ -1,14 +1,11 @@
-import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 import * as localModelIpcContract from "../shared/local-model-ipc.js";
 import { LocalModelIpcErrorReason } from "../shared/local-model-ipc.js";
 
-const require = createRequire(import.meta.url);
-
 const {
   BACKEND_ACTIONS,
   createLocalModelManagerMain,
-} = require("../desktop/local-model-manager-main.cjs");
+} = await import("../desktop/local-model-manager-main.ts");
 
 function makeBackend(overrides = {}) {
   const backend = {};

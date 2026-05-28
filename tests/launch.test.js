@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { canLoadBetterSqlite3, resolveLaunchPlan } from "../scripts/launch.js";
+import { canLoadBetterSqlite3, resolveLaunchPlan } from "../scripts/launch.ts";
 
 const serverFiles = (...paths) => vi.fn((path) => paths.includes(path));
 
@@ -199,6 +199,32 @@ describe("scripts/launch", () => {
       resolveFn,
       fileExists: serverFiles("server/index.ts"),
     })).toThrow("TypeScript server sources require dev dependency `tsx`");
+    expect(resolveFn).toHaveBeenCalledWith("tsx");
+  });
+
+  it("uses tsx for the TypeScript CLI entry when index.ts exists", () => {
+    const requireFn = vi.fn((id) => {
+      throw new Error(`unexpected module: ${id}`);
+    });
+    const resolveFn = vi.fn((id) => {
+      if (id === "tsx") return "/repo/node_modules/tsx/dist/cli.mjs";
+      throw new Error(`unexpected module: ${id}`);
+    });
+
+    const plan = resolveLaunchPlan({
+      mode: "cli",
+      extra: ["--smoke"],
+      env: {},
+      execPath: "/usr/local/bin/node",
+      requireFn,
+      resolveFn,
+      fileExists: serverFiles("index.ts"),
+    });
+
+    expect(plan.bin).toBe("/usr/local/bin/node");
+    expect(plan.args).toEqual(["--import", "tsx", "index.ts", "--smoke"]);
+    expect(plan.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+    expect(plan.warning).toBeNull();
     expect(resolveFn).toHaveBeenCalledWith("tsx");
   });
 });

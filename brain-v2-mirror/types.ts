@@ -10,6 +10,8 @@ export type ProviderIdLiteral =
 
 export type ModelIdLiteral =
   | 'mimo-v2.5-pro'
+  | 'mimo-v2.5'
+  | 'mimo-v2-omni'
   | 'qwen36-35b-a3b-apex-mtp'
   | 'deepseek-v4-flash'
   | 'deepseek-v4-pro'
@@ -23,6 +25,7 @@ export type WireName = 'mimo' | 'sglang' | 'openai' | 'openai-compat';
 export interface ProviderCapability {
   vision: boolean;
   audio: boolean;
+  video: boolean;
   tools: boolean;
   thinking: boolean;
   native_search: boolean;
@@ -72,6 +75,8 @@ export type StreamChunk =
   | { type: 'tool_call_delta'; delta: ToolCallDelta[] }
   | { type: 'finish'; reason: string }
   | { type: 'tool_progress'; event: 'start' | 'end'; name: string; ms?: number; ok?: boolean }
+  | { type: 'pre_search'; source: 'mimo'; query: string; hit: boolean; ms: number; cached: 'request' | 'lru' | null }
+  | { type: 'audio_fallback'; source: string; transcripts: number; total: number; ms: number }
   | ({ type: 'error'; error: string } & Record<string, unknown>);
 
 export interface HmacSignaturePayload {
@@ -85,7 +90,7 @@ export interface HmacSignaturePayload {
 export interface RouterRunOptions {
   messages?: ChatMessage[];
   tools?: ToolDefinition[] | null;
-  capabilityRequired?: Partial<Pick<ProviderCapability, 'vision' | 'audio'>>;
+  capabilityRequired?: Partial<Pick<ProviderCapability, 'vision' | 'audio' | 'video'>>;
   signal?: AbortSignal;
   onChunk: (chunk: StreamChunk, meta: ChunkMeta) => void | Promise<void>;
   log?: LogFn;

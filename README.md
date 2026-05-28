@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.79.4-brightgreen" alt="Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.79.7-brightgreen" alt="Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -44,17 +44,17 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 ## 🆕 近期更新
 
 <details>
-<summary><strong>v0.79.4</strong> · 2026-05-26 · Runtime TypeScript 工具链版 <em>(最新)</em></summary>
+<summary><strong>v0.79.7</strong> · 2026-05-28 · LynnEngine TS + 最后中枢收口 <em>(最新)</em></summary>
 
-**V0.79 运行时架构加固版**:
-- 🧱 **工具链 TS 化完成一整块**:`lib/tools` 全量迁入 TypeScript,web search、realtime info/weather/news/sports、stock market、stock research、browser、install skill、snapshot restore 等工具都有类型边界。
-- 🧠 **记忆检索叶子路径收紧**:`memory-search`、`user-profile` 和 `HybridRetriever` 迁到 TS,让本地记忆检索与 profile 读取少依赖隐式对象约定。
-- 🌐 **实时信息协议更稳**:天气、搜索、股票和新闻等工具返回结构更明确,Deep Research、本地工具调用和 chat/tool tiering 之间的协议漂移风险降低。
+**V0.79 最后中枢 TypeScript 收口版**:
+- 🧱 **LynnEngine 门面迁入 TS**:`core/engine` 已从 JS 迁入 TypeScript,agent/session/config/model/plugin 组合入口进入 runtime typecheck。
+- 🔁 **兼容旧入口**:历史 `HanaEngine` import 保留为 `LynnEngine` 的别名,插件和旧代码无需立即改动。
+- 🧰 **工具安全边界纳入类型检查**:tool guard、工具别名、MCP 按需激活、sandbox 参数和事件广播边界补齐类型外壳。
+- 🧭 **前序中枢迁移保持稳定**:`server/routes/chat`、`core/session-coordinator` 与 `core/agent` 仍在同一 release gate 下回归。
 - 🧭 **本地模型口径不变**:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;4B 保持低配降级,继续提示 thinking-on 风险。
-- 🧪 **中心大文件留给 V0.79.5+**:`chat.js`、`voice-ws.js`、`engine.js`、`agent.js`、`session-coordinator.js` 不塞进本次包,保持发布风险可控。
-- ✅ **发布门禁**:V0.79.4 合入后通过 `typecheck:runtime`、全量 `typecheck`、全量 `npm test` 与打包公证门禁。
+- ✅ **发布门禁**:V0.79.7 合入后通过 `typecheck:runtime`、全量 `typecheck`、全量 `npm test`、release static/UI/live regression 与打包公证门禁。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.4)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.7)
 
 </details>
 
@@ -465,7 +465,7 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 - 🎙️ **B 模式长按锁定**: 长按 600ms 锁定连续录音,再点结束
 - 🔌 **Provider Registry 框架**: 阿里全家桶默认 + 4 个 BYOK 备选(Faster Whisper / OpenAI Whisper / Azure / Edge TTS)
 - 🔧 **CSP media-src 修复**: vite CSP_PROFILES 让 `blob:` URL 能被 Audio 元素加载(本次 release 真凶)
-- 🛠️ **vite hono external**: vite.config.server.js 让 plugin 动态 import 解析正常
+- 🛠️ **vite hono external**: server Vite config 让 plugin 动态 import 解析正常
 - 🪟 **IME 不抖**: 中文输入候选切换稳定;thinking block 默认折叠
 - 📦 **3 平台公证**: macOS Apple Silicon + Intel + Windows 全打公证,镜像站同步
 
@@ -904,11 +904,11 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.79.4 的 Apple Silicon / Intel DMG 均已签名、公证、stapled,并通过 Gatekeeper 校验。
+**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.79.7 的 Apple Silicon / Intel DMG 均已签名、公证、stapled,并通过 Gatekeeper 校验。
 
 **Windows**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.exe`，直接运行。
 
-> **Windows SmartScreen 提示：** V0.79.4 安装包已完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
+> **Windows SmartScreen 提示：** V0.79.7 安装包已完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
 Linux 版本计划中。
 
@@ -925,7 +925,7 @@ Linux 版本计划中。
 ## 架构
 
 ```
-core/           引擎层（HanaEngine Thin Facade + 10 个 Manager/Coordinator）
+core/           引擎层（LynnEngine Thin Facade + 10 个 Manager/Coordinator）
 lib/            核心库
   ├── memory/     记忆系统（15 个文件，5000+ 行）
   │   ├── fact-store.js        SQLite + FTS5 + 关系图（765 行）
@@ -949,7 +949,7 @@ scripts/        构建工具（server 打包、启动器、签名）
 tests/          Vitest 测试
 ```
 
-**引擎层**：`HanaEngine` Thin Facade 持有 AgentManager、SessionCoordinator、ConfigCoordinator、ModelManager、PreferencesManager、SkillManager、ChannelManager、BridgeSessionManager、ExpertManager、PluginManager，对外统一 API。
+**引擎层**：`LynnEngine` Thin Facade 持有 AgentManager、SessionCoordinator、ConfigCoordinator、ModelManager、PreferencesManager、SkillManager、ChannelManager、BridgeSessionManager、ExpertManager、PluginManager，对外统一 API。
 
 **Hub**：独立于聊天会话运行，负责心跳巡检、Cron（per-agent 并发）、频道路由、Agent 间通信（含防无限循环硬上限 + 冷却期）、DM 路由。
 
@@ -976,7 +976,7 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（V0.79.4 签名 + 公证 DMG） |
+| macOS (Apple Silicon) | 已支持（V0.79.7 签名 + 公证 DMG） |
 | macOS (Intel) | 已支持 |
 | Windows x64 | Beta |
 | Linux | 计划中 |
@@ -1038,7 +1038,7 @@ npm run dist:local            # 本地打包（macOS DMG，跳过公证）
 
 ### Q5：Windows 能用吗？
 
-可以。V0.79.4 的 **Windows 安装包已完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均已签名、公证并通过 Gatekeeper 校验。
+可以。V0.79.7 的 **Windows 安装包已完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均已签名、公证并通过 Gatekeeper 校验。
 
 ### Q6：能改模型吗？接自己的 API？
 

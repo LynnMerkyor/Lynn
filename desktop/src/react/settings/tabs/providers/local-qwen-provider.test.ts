@@ -25,7 +25,7 @@ describe('Local Qwen provider UX guards', () => {
   });
 
   it('advertises the local ladder (9B default → 4B downgrade → 35B 24GB+ Q4_K_M imatrix) with objective metrics', () => {
-    const source = read('server/routes/local-qwen35.js');
+    const source = read('server/routes/local-qwen35.ts');
     expect(source).not.toContain('qwen36-27b-q4km-imatrix');
     // 9B is the default local onboarding model.
     expect(source).toContain('local-qwen35-9b-q4km-imatrix');
@@ -111,7 +111,7 @@ describe('Local Qwen provider UX guards', () => {
   });
 
   it('keeps external bridge owner replies on Brain when foreground chat uses a local model', () => {
-    const bridge = read('core/bridge-session-manager.js');
+    const bridge = read('core/bridge-session-manager.ts');
     expect(bridge).toContain('BRAIN_DEFAULT_MODEL_ID');
     expect(bridge).toContain('LOCAL_QWEN35_PROVIDER_IDS');
     expect(bridge).toContain('resolveBridgeOwnerModel');
@@ -143,7 +143,7 @@ describe('Local Qwen provider UX guards', () => {
   it('uses the Lynn imatrix 9B MTP artifact for the default local download', () => {
     const profiles = read('desktop/llamacpp-profiles.cjs');
     const downloader = read('desktop/model-downloader.cjs');
-    const route = read('server/routes/local-qwen35.js');
+    const route = read('server/routes/local-qwen35.ts');
     expect(profiles).toContain('Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf');
     expect(profiles).toContain('0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4');
     expect(downloader).toContain('Merkyor/Qwen3.5-9B-GGUF-imatrix');
@@ -154,7 +154,7 @@ describe('Local Qwen provider UX guards', () => {
   });
 
   it('keeps local model progress out of model-visible thinking', () => {
-    const route = read('server/routes/chat.js');
+    const route = read('server/routes/chat.ts');
     const thinkingBlock = read('desktop/src/react/components/chat/ThinkingBlock.tsx');
     const assistantMessage = read('desktop/src/react/components/chat/AssistantMessage.tsx');
     const inputArea = read('desktop/src/react/components/InputArea.tsx');
