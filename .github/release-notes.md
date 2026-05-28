@@ -1,36 +1,33 @@
-# Lynn v0.79.8 Release Notes
+# Lynn v0.79.9 Release Notes
 
-> 发布日期:2026-05-28 · 代号:"Chat Runtime Split + CosyVoice Streaming"
+> 发布日期:2026-05-29 · 代号:"Risk Boundary Split + Search Source UI"
 
-v0.79.8 是 V0.79 线的稳定性与维护成本下降版本。本版不改变默认本地模型策略:继续推荐 **Qwen3.5-9B Q4_K_M imatrix MTP**,4B 仍作为低配降级并保留 thinking-on 风险提示。重点是把聊天中枢拆到稳定边界,并接入 Spark CosyVoice 2 真流式 TTS 与巡检。
+v0.79.9 是 V0.79 线的收尾稳定版。本版不新增模型策略,重点是把 V0.80 前最容易拖慢迭代的中枢巨文件拆到稳定边界,同时补齐搜索工具的服务端 key 隔离和来源展示。
 
 ## 重点更新
 
-- `server/routes/chat.ts` 从中枢巨文件拆到 500 行以内,请求归一化、hub 事件转发、prompt turn runner、WebSocket 控制、tool finalizer 与本地模型 bridge 分别落到 `server/chat/*`。
-- CosyVoice 2 成为 TTS 默认推荐路径:Spark 侧 `lynn-tts.service` 固化 GPU 启动参数,插件支持 `/audio/speech/stream`,聊天内喇叭优先走 reader + PCM 真流式播放。
-- TTS 兼容性增强:`/audio/stream` 保留为兼容入口,MiMo TTS token-plan endpoint 与双认证头修正,Edge/CosyVoice/MiMo fallback 描述统一。
-- 巡检增强:`scripts/brain-tools-inspection.mjs` 增加 CosyVoice health + 轻量真实合成 probe,避免只看进程存活而漏掉 CUDA/cuBLAS 问题。
-- 中枢重构保持行为稳定:聊天 route 继续覆盖 provider/fallback metadata、本地模型 direct path、tool turn 兜底、visible text flush 与 release regression。
-- 本地模型升级窗口:旧版 Qwen3.5-9B Q4_K_M GGUF 会被识别为“可升级到 9B MTP”,不会再被误判为默认就绪；新版 9B/35B 下载入口均指向 ModelScope MTP 仓库,启动默认保持 MTP + thinking-on。
+- 五个风险中枢继续拆分:`InputArea` 抽出 composer、submit area、本地 Qwen 状态栈和状态控制器;`stock-market` 抽出 core helpers 与 quote fetchers;`mcp-client` 抽出 config 与 transport connection helpers;`bridge-manager` 抽出 streaming 与 attachment helpers;`engine/agent` 抽出 tool runtime 与 dynamic prompt builder。
+- 搜索工具默认优先走 brain v2 本地 proxy,MiMo/GLM 搜索 key 只留在服务端,客户端不再持有平台侧付费搜索 key。
+- web_search 工具结果支持综合答案与可折叠来源面板,用户可以在聊天内展开查看每个搜索源、命中条目、摘要与失败原因。
+- 本地模型升级窗口继续完善:9B/35B 下载入口指向 ModelScope MTP 新模型,旧版 9B GGUF 会提示可升级,不会误判为当前默认推荐模型。
+- 模型卡继续保持默认 9B MTP + thinking-on;35B/9B MTP 路径标注 DGX Spark TPS 口径,4B 仍作为低配降级并保留 thinking-on 风险提示。
+- 回归覆盖补强:新增或更新 composer replacement、local Qwen status、stock-market、MCP builtin、bridge handle-message、session event、engine tool runtime、agent dynamic prompt、web-search 和 search sources UI 测试。
 
 ## 回归门禁
 
-- `npm run release:gate` ✓
-- Full `npm test`:215 files / 1640 passed / 1 skipped ✓
+- Full `npm test`:226 files / 1679 passed / 1 skipped ✓
 - `npm run typecheck` ✓
 - `npm run typecheck:runtime` ✓
 - `npm run build:server` / `npm run build:main` / `npm run build:renderer` ✓
-- Release static regression:37/37 passed ✓
-- Electron UI smoke:home / short / tools / long-code passed ✓
-- Spark CosyVoice probe:`lynn-tts.service` active/enabled,health OK,`你好` synth 200 / 13868 bytes / 0.835s ✓
+- Focused web-search + source UI gate:25/25 passed ✓
+- Release regression and packaging/notarization gate are run as part of the final v0.79.9 publish flow.
 
 ## English Summary
 
-v0.79.8 focuses on stability and lower maintenance cost rather than new product surface. The local model policy is unchanged:Qwen3.5-9B Q4_K_M imatrix MTP remains the recommended default, with 4B kept as the low-config downgrade.
+v0.79.9 is the final stability-focused release in the V0.79 line. It does not change the model policy. Instead, it reduces maintenance risk before V0.80 by splitting the largest remaining runtime/UI centers and by making web search safer and more inspectable.
 
 Highlights:
-- `server/routes/chat.ts` is now under 500 lines, with request normalization, hub event forwarding, prompt turn running, WebSocket control, tool finalization, and local model bridging split into stable `server/chat/*` modules.
-- Spark CosyVoice 2 is now the recommended TTS path. The Spark service is pinned through `lynn-tts.service`, while the desktop chat speaker uses a real streaming reader + PCM playback path.
-- TTS compatibility improved with `/audio/stream` as an alias, token-plan MiMo TTS endpoint handling, and clearer Edge/CosyVoice/MiMo fallback behavior.
-- `brain-tools-inspection.mjs` now probes CosyVoice through both health and real lightweight synthesis so CUDA/cuBLAS failures are caught before users click the speaker button.
-- Local model upgrades now have an explicit revision window:older Qwen3.5-9B Q4_K_M GGUF files are shown as upgrade candidates instead of default-ready models, while the 9B/35B download entries point to the new ModelScope MTP repositories and keep MTP + thinking-on as the startup default.
+- Five risk-heavy centers were split into smaller boundaries: `InputArea`, `stock-market`, `mcp-client`, `bridge-manager`, and `engine/agent`.
+- Web search now prefers the brain v2 localhost proxy first, keeping MiMo/GLM paid search keys server-side instead of exposing them to the desktop client.
+- Chat tool cards can render a collapsible source panel for web search, including synthesized answers, source hits, summaries, and per-source failures.
+- Local model upgrade behavior remains explicit:9B/35B downloads point to the new ModelScope MTP models, older 9B GGUF files are shown as upgrade candidates, and 9B MTP remains the default thinking-on local model.

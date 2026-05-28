@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.79.8-brightgreen" alt="Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.79.9-brightgreen" alt="Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -44,16 +44,16 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 ## 🆕 近期更新
 
 <details>
-<summary><strong>v0.79.8</strong> · 2026-05-28 · Chat Runtime Split + CosyVoice Streaming <em>(最新)</em></summary>
+<summary><strong>v0.79.9</strong> · 2026-05-29 · Risk Boundary Split + Search Source UI <em>(最新)</em></summary>
 
 **稳定性与维护成本下降版**:
-- 🧩 **聊天中枢拆分**:`server/routes/chat.ts` 已压到 500 行以内,request normalizer、hub event forwarder、prompt turn runner、WebSocket control、tool finalizer 和 local model bridge 分别落到 `server/chat/*`。
-- 🔊 **CosyVoice 真流式 TTS**:Spark `lynn-tts.service` 固化 GPU 启动参数,聊天喇叭优先走 reader + PCM 播放,失败自动回退原文件路径。
-- 🧪 **TTS 巡检补强**:`brain-tools-inspection` 增加 CosyVoice health + 真实轻量合成 probe,并修正 MiMo TTS token-plan endpoint / 双认证头。
-- 🧭 **本地模型升级窗口**:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;旧版 9B GGUF 会显示为“可升级到 9B MTP”,不会误判为默认就绪。9B/35B 下载入口指向 ModelScope MTP 仓库,启动默认保持 MTP + thinking-on。
-- ✅ **发布门禁**:V0.79.8 候选已通过 `npm run release:gate`:typecheck、runtime typecheck、全量 vitest、三段构建、static regression 与 Electron UI smoke。
+- 🧩 **五个高风险中枢拆分**:`InputArea`、`stock-market`、`mcp-client`、`bridge-manager`、`engine/agent` 已拆出稳定边界,降低后续改动冲突和回归面。
+- 🔎 **搜索工具更可解释**:web search 默认优先走 brain v2 本地 proxy,MiMo/GLM key 不进客户端;聊天工具卡支持展开查看综合答案与搜索源。
+- 🧭 **本地模型升级窗口**:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;旧版 9B GGUF 会显示为“可升级到 9B MTP”,不会误判为默认就绪。9B/35B 下载入口指向 ModelScope MTP 仓库,启动默认保持 MTP + thinking-on,并在模型卡标注 DGX Spark TPS 区间。
+- 🛡️ **中枢回归继续收紧**:session event、tool runtime、dynamic prompt、MCP transport、bridge streaming/attachment 和搜索源摘要都补了 focused tests。
+- ✅ **发布门禁**:V0.79.9 候选已通过 typecheck、runtime typecheck、全量 vitest、三段构建与 release regression 门禁。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.8)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.9)
 
 </details>
 
