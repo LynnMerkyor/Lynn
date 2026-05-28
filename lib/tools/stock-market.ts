@@ -9,109 +9,26 @@ import { Type } from "@sinclair/typebox";
 import { getLocale, t } from "../../server/i18n.js";
 import { runSearchQuery, type SearchResultItem } from "./web-search.js";
 import { fetchWebContent } from "./web-fetch.js";
+import type {
+  ConceptQuotes,
+  ConceptResolution,
+  GoldSignals,
+  LooseRecord,
+  MarketCollection,
+  MarketKind,
+  MarketQuote,
+  MarketSource,
+  NamedPrice,
+  PriceRange,
+  StockMarketToolParams,
+  ToolTextResult,
+} from "./stock-market-types.js";
 
 const DEFAULT_FETCH_COUNT = 2;
 const GOLD_FETCH_COUNT = 8;
 const MAX_FETCH_LENGTH = 3600;
 const MAX_LINES_PER_SOURCE = 4;
 const STOOQ_TIMEOUT_MS = 6500;
-
-type MarketKind = string;
-type LooseRecord = Record<string, any>;
-
-type ToolTextResult = {
-  content: Array<{ type: "text"; text: string }>;
-  details: Record<string, unknown>;
-};
-
-interface StockMarketToolParams {
-  query?: string;
-  kind?: string;
-  market?: string;
-  symbol?: string;
-}
-
-interface MarketQuote {
-  symbol?: string;
-  stooqSymbol?: string;
-  name?: string;
-  date?: string;
-  time?: string;
-  open?: string;
-  high?: string;
-  low?: string;
-  close?: string;
-  previousClose?: string;
-  previous?: string;
-  change?: string;
-  pct?: string;
-  volume?: string;
-  amount?: string;
-  amountText?: string;
-  turnoverRate?: string;
-  pe?: string;
-  source?: string;
-  url?: string;
-  currency?: string;
-  price?: string;
-}
-
-interface NamedPrice {
-  name: string;
-  price: string;
-  date?: string;
-}
-
-interface PriceRange {
-  min: number;
-  minName: string;
-  max: number;
-  maxName: string;
-}
-
-interface GoldSignals {
-  jewelry: NamedPrice[];
-  jewelryRange: PriceRange | null;
-  bars: NamedPrice[];
-  barRange: PriceRange | null;
-  recovery: NamedPrice[];
-  goldRecovery: NamedPrice | null;
-  date: string;
-  sgeLines: string[];
-  shuibeiLines: string[];
-  internationalLines: string[];
-}
-
-interface MarketSource extends Partial<SearchResultItem> {
-  title?: string;
-  url?: string;
-  snippet?: string;
-  lines?: string[];
-  goldSignals?: GoldSignals | null;
-  source?: string;
-  host?: string;
-  timestamp?: string;
-  date?: string;
-}
-
-interface MarketCollection {
-  provider: string;
-  plan: { scene?: string } | null;
-  sources: MarketSource[];
-  directQuotes: MarketQuote[];
-}
-
-interface ConceptResolution {
-  marketHint: string;
-  symbols: string[];
-  sources: MarketSource[];
-}
-
-interface ConceptQuotes {
-  marketHint?: string;
-  sources: MarketSource[];
-  directQuotes: MarketQuote[];
-}
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
