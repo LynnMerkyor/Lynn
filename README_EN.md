@@ -43,7 +43,7 @@ Related repositories:
 - 🧩 **Chat runtime split**:`server/routes/chat.ts` is now under 500 lines, with request normalization, hub event forwarding, prompt turn running, WebSocket control, tool finalization, and local model bridging split into `server/chat/*`.
 - 🔊 **True streaming CosyVoice TTS**:Spark `lynn-tts.service` pins the GPU startup path, while the chat speaker prefers reader + PCM streaming playback and falls back to the file-based path when needed.
 - 🧪 **TTS inspection hardened**:`brain-tools-inspection` now checks CosyVoice through both health and a real lightweight synthesis probe, and MiMo TTS uses the token-plan endpoint with both auth headers.
-- 🧭 **Local model policy unchanged**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model; 4B remains a low-config downgrade with the thinking-on risk documented.
+- 🧭 **Local model upgrade window**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model; older 9B GGUF files now show as upgrade candidates instead of default-ready models. The 9B/35B download entries point to the ModelScope MTP repositories, and startup keeps MTP + thinking-on by default.
 - ✅ **Release gate**:the V0.79.8 candidate passed `npm run release:gate`:typecheck, runtime typecheck, full vitest, server/main/renderer builds, static regression, and Electron UI smoke.
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.8)

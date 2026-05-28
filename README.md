@@ -50,7 +50,7 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 - 🧩 **聊天中枢拆分**:`server/routes/chat.ts` 已压到 500 行以内,request normalizer、hub event forwarder、prompt turn runner、WebSocket control、tool finalizer 和 local model bridge 分别落到 `server/chat/*`。
 - 🔊 **CosyVoice 真流式 TTS**:Spark `lynn-tts.service` 固化 GPU 启动参数,聊天喇叭优先走 reader + PCM 播放,失败自动回退原文件路径。
 - 🧪 **TTS 巡检补强**:`brain-tools-inspection` 增加 CosyVoice health + 真实轻量合成 probe,并修正 MiMo TTS token-plan endpoint / 双认证头。
-- 🧭 **本地模型口径不变**:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;4B 保持低配降级,继续提示 thinking-on 风险。
+- 🧭 **本地模型升级窗口**:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;旧版 9B GGUF 会显示为“可升级到 9B MTP”,不会误判为默认就绪。9B/35B 下载入口指向 ModelScope MTP 仓库,启动默认保持 MTP + thinking-on。
 - ✅ **发布门禁**:V0.79.8 候选已通过 `npm run release:gate`:typecheck、runtime typecheck、全量 vitest、三段构建、static regression 与 Electron UI smoke。
 
 [完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.8)
