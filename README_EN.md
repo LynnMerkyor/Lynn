@@ -37,7 +37,21 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.79.7</strong> · 2026-05-28 · LynnEngine TS + final central runtime cleanup <em>(latest)</em></summary>
+<summary><strong>v0.79.8</strong> · 2026-05-28 · Chat Runtime Split + CosyVoice Streaming <em>(latest)</em></summary>
+
+**Stability and maintenance-cost release**:
+- 🧩 **Chat runtime split**:`server/routes/chat.ts` is now under 500 lines, with request normalization, hub event forwarding, prompt turn running, WebSocket control, tool finalization, and local model bridging split into `server/chat/*`.
+- 🔊 **True streaming CosyVoice TTS**:Spark `lynn-tts.service` pins the GPU startup path, while the chat speaker prefers reader + PCM streaming playback and falls back to the file-based path when needed.
+- 🧪 **TTS inspection hardened**:`brain-tools-inspection` now checks CosyVoice through both health and a real lightweight synthesis probe, and MiMo TTS uses the token-plan endpoint with both auth headers.
+- 🧭 **Local model policy unchanged**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model; 4B remains a low-config downgrade with the thinking-on risk documented.
+- ✅ **Release gate**:the V0.79.8 candidate passed `npm run release:gate`:typecheck, runtime typecheck, full vitest, server/main/renderer builds, static regression, and Electron UI smoke.
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.8)
+
+</details>
+
+<details>
+<summary><strong>v0.79.7</strong> · 2026-05-28 · LynnEngine TS + final central runtime cleanup</summary>
 
 **V0.79 final central TypeScript cleanup release**:
 - 🧱 **LynnEngine facade is now TypeScript**:`core/engine` moved from JS to TypeScript, bringing agent/session/config/model/plugin composition into runtime typecheck.
