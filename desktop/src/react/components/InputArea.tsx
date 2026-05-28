@@ -48,6 +48,17 @@ import {
   runRiskLabel,
 } from './input/run-risk';
 import {
+  deriveLocalQwenRuntimeState,
+  LOCAL_QWEN35_ENDPOINT,
+  LOCAL_QWEN35_MODEL_ID,
+  LOCAL_QWEN35_PROVIDER_ID,
+  LOCAL_QWEN_PROMPT_DELAY_MS,
+  LOCAL_QWEN_PROMPT_DISMISS_KEY,
+  LOCAL_QWEN_PROMPT_SHOWN_KEY,
+  todayKey,
+  type LocalQwen35RuntimeStatus,
+} from './input/local-qwen-status';
+import {
   fileToWorkingSet,
   getComposerSessionKey,
 } from '../utils/composer-state';
@@ -113,83 +124,6 @@ function WritingModeToggle() {
 }
 
 const FILE_CONTEXT_PATTERN = /\b([A-Za-z0-9_./-]+\.(?:tsx?|jsx?|css|json|md|py|rs|go|java|vue|svelte|swift|kt|kts|c|cc|cpp|h|hpp|m|mm|sql|yaml|yml|toml|sh))\b/i;
-const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN35_MODEL_ID = 'qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN35_ENDPOINT = 'http://127.0.0.1:18099/v1';
-const LOCAL_QWEN_PROMPT_DISMISS_KEY = 'lynn-local-model-prompt-dismissed-date';
-const LOCAL_QWEN_PROMPT_SHOWN_KEY = 'lynn-local-model-prompt-shown-date';
-// 2026-05-24 U3 fix: 60s 太晚,新装用户多半在 60s 内就关或换 provider 了,根本看不到安装 banner。
-// 8s 是综合考虑(避免开屏即弹太突兀 + 用户能注意到)。
-const LOCAL_QWEN_PROMPT_DELAY_MS = 8_000;
-
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-type LocalQwen35RuntimeStatus = {
-  ok?: boolean;
-  registered_provider?: boolean;
-  runtime?: {
-    base_url?: string;
-    gui_url?: string;
-    pid?: number | null;
-    endpoint_running?: boolean;
-    endpoint_running_any?: boolean;
-    endpoint_loading?: boolean;
-    endpoint_occupied?: boolean;
-    serves_default_model?: boolean;
-    process_alive?: boolean;
-    health_status?: number;
-    model_ids?: string[];
-    foreign_model_ids?: string[];
-    slots?: {
-      total?: number;
-      busy?: number;
-    } | null;
-    metrics?: {
-      prompt_tokens_total?: number | null;
-      predicted_tokens_total?: number | null;
-      requests_total?: number | null;
-      predicted_tps?: number | null;
-      tps_window_seconds?: number | null;
-    } | null;
-    metrics_available?: boolean;
-  };
-  plan?: {
-    base_url?: string;
-    observed?: {
-      endpoint_running?: boolean;
-      endpoint_loading?: boolean;
-      endpoint_occupied?: boolean;
-      served_model_ids?: string[];
-      gguf?: string | null;
-      llama_server?: string | null;
-    };
-    plan?: {
-      base_url?: string;
-      observed?: {
-        endpoint_running?: boolean;
-        endpoint_loading?: boolean;
-        endpoint_occupied?: boolean;
-        served_model_ids?: string[];
-        gguf?: string | null;
-        llama_server?: string | null;
-      };
-      hardware?: {
-        can_enable?: boolean;
-        recommended_runtime?: {
-          label?: string;
-        };
-      };
-    };
-    hardware?: {
-      can_enable?: boolean;
-      recommended_runtime?: {
-        label?: string;
-      };
-    };
-  };
-};
 
 function InputAreaInner() {
   const { t } = useI18n();
@@ -313,82 +247,25 @@ function InputAreaInner() {
     () => models.find(m => m.id === LOCAL_QWEN35_MODEL_ID && m.provider === LOCAL_QWEN35_PROVIDER_ID),
     [models],
   );
-  const localQwenServedModelIds = localQwenStatus?.runtime?.model_ids
-    || localQwenStatus?.plan?.observed?.served_model_ids
-    || localQwenStatus?.plan?.plan?.observed?.served_model_ids
-    || [];
-  const localQwenDefaultServed = localQwenStatus?.runtime?.serves_default_model === true
-    || localQwenServedModelIds.includes(LOCAL_QWEN35_MODEL_ID);
-  const localQwenEndpointOccupied = localQwenStatus?.runtime?.endpoint_occupied === true
-    || localQwenStatus?.plan?.observed?.endpoint_occupied === true
-    || localQwenStatus?.plan?.plan?.observed?.endpoint_occupied === true
-    || ((localQwenStatus?.runtime?.endpoint_running_any === true || localQwenStatus?.runtime?.endpoint_running === true)
-      && localQwenServedModelIds.length > 0
-      && !localQwenDefaultServed);
-  const localQwenRunning = localQwenDefaultServed && (
-    localQwenStatus?.runtime?.endpoint_running === true
-    || localQwenStatus?.plan?.observed?.endpoint_running === true
-    || localQwenStatus?.plan?.plan?.observed?.endpoint_running === true
-  );
-  const localQwenRuntimeLoading = !localQwenEndpointOccupied && (
-    localQwenStatus?.runtime?.endpoint_loading === true
-    || localQwenStatus?.runtime?.process_alive === true
-    || localQwenStatus?.plan?.observed?.endpoint_loading === true
-    || localQwenStatus?.plan?.plan?.observed?.endpoint_loading === true
-  );
-  const localQwenLoading = !localQwenRunning && (
-    localQwenOptimisticStarting
-      || localQwenRuntimeLoading
-  );
-  const localQwenStarting = !localQwenRunning && localQwenOptimisticStarting && !localQwenRuntimeLoading;
-  const localQwenActive = localQwenRunning || localQwenLoading || localQwenEndpointOccupied;
-  const localQwenCurrent = currentModelInfo?.id === LOCAL_QWEN35_MODEL_ID && currentModelInfo?.provider === LOCAL_QWEN35_PROVIDER_ID;
+  const localQwenRuntime = deriveLocalQwenRuntimeState(localQwenStatus, localQwenOptimisticStarting, currentModelInfo);
+  const localQwenServedModelIds = localQwenRuntime.servedModelIds;
+  const localQwenEndpointOccupied = localQwenRuntime.endpointOccupied;
+  const localQwenRunning = localQwenRuntime.running;
+  const localQwenLoading = localQwenRuntime.loading;
+  const localQwenActive = localQwenRuntime.active;
+  const localQwenCurrent = localQwenRuntime.current;
   const localQwenStatusVisible = localQwenActive && !localQwenDismissed;
-  const localQwenEndpoint = localQwenStatus?.runtime?.base_url
-    || localQwenStatus?.plan?.base_url
-    || localQwenStatus?.plan?.plan?.base_url
-    || 'http://127.0.0.1:18099/v1';
-  const localQwenRuntimeLabel = localQwenStatus?.plan?.hardware?.recommended_runtime?.label
-    || localQwenStatus?.plan?.plan?.hardware?.recommended_runtime?.label
-    || '本机 32K';
-  const localQwenCanEnable = (localQwenStatus?.plan?.hardware?.can_enable
-    ?? localQwenStatus?.plan?.plan?.hardware?.can_enable) !== false;
-  const localQwenHasModel = !!(localQwenStatus?.plan?.observed?.gguf || localQwenStatus?.plan?.plan?.observed?.gguf);
-  const localQwenHasRuntime = !localQwenEndpointOccupied
-    && !!(localQwenStatus?.plan?.observed?.llama_server || localQwenStatus?.plan?.plan?.observed?.llama_server);
+  const localQwenEndpoint = localQwenRuntime.endpoint;
+  const localQwenRuntimeLabel = localQwenRuntime.runtimeLabel;
+  const localQwenCanEnable = localQwenRuntime.canEnable;
+  const localQwenHasModel = localQwenRuntime.hasModel;
+  const localQwenHasRuntime = localQwenRuntime.hasRuntime;
   const localQwenRecommended = localQwenPromptReady && !!localQwenStatus?.ok && localQwenCanEnable && !localQwenActive && !localQwenDismissed && !localQwenSnoozed;
-  const localQwenMetricTokens = Math.round(
-    Number(localQwenStatus?.runtime?.metrics?.predicted_tokens_total || 0)
-      + Number(localQwenStatus?.runtime?.metrics?.prompt_tokens_total || 0),
-  );
-  const localQwenMetricsReady = localQwenStatus?.runtime?.metrics_available === true;
-  const localQwenPredictedTpsValue = localQwenStatus?.runtime?.metrics?.predicted_tps;
-  const localQwenPredictedTps = typeof localQwenPredictedTpsValue === 'number'
-    && Number.isFinite(localQwenPredictedTpsValue)
-    ? localQwenPredictedTpsValue
-    : null;
-  const localQwenTpsSummary = localQwenPredictedTps !== null
-    ? `当前 ${localQwenPredictedTps.toFixed(localQwenPredictedTps >= 10 ? 0 : 1)} tok/s`
-    : null;
-  const localQwenSlotSummary = useMemo(() => {
-    const slots = localQwenStatus?.runtime?.slots;
-    if (!slots?.total) return null;
-    const busy = slots.busy || 0;
-    const idle = Math.max(0, slots.total - busy);
-    return busy > 0 ? `生成中 ${busy}/${slots.total}` : `可用 ${idle}/${slots.total}`;
-  }, [localQwenStatus?.runtime?.slots]);
-  const localQwenBusySlots = Number(localQwenStatus?.runtime?.slots?.busy || 0);
-  const localQwenMetricSummary = localQwenMetricsReady
-    ? (localQwenMetricTokens > 0 ? `服务累计处理 ${localQwenMetricTokens.toLocaleString()} tokens` : '服务暂无 token 统计')
-    : '运行统计同步中';
-  const localQwenColdStartLikely = localQwenRunning && localQwenCurrent && localQwenBusySlots > 0 && localQwenMetricTokens < 800;
-  const localQwenWarmupStage = localQwenRunning
-    ? 'ready'
-    : localQwenStarting
-      ? 'launching'
-      : localQwenLoading
-        ? 'loading'
-        : 'checking';
+  const localQwenTpsSummary = localQwenRuntime.tpsSummary;
+  const localQwenSlotSummary = localQwenRuntime.slotSummary;
+  const localQwenMetricSummary = localQwenRuntime.metricSummary;
+  const localQwenColdStartLikely = localQwenRuntime.coldStartLikely;
+  const localQwenWarmupStage = localQwenRuntime.warmupStage;
   const localQwenWarmupTitle = localQwenEndpointOccupied
     ? '检测到 Qwen3.5-4B 降级端点正在运行'
     : localQwenRunning
