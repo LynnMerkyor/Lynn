@@ -22,7 +22,6 @@ import { createLifecycleHooks } from "../chat/lifecycle-hooks.js";
 import { classifyRouteIntent } from "../../shared/task-route-intent.js";
 import {
   buildVisionUnsupportedMessage,
-  normalizeVisionPromptText,
 } from "../../shared/vision-prompt.js";
 import {
   beginSessionStream,
@@ -59,7 +58,6 @@ import {
   appendTextToLatestAssistantRecord,
   countPersistedAssistantMessages,
   countPersistedAssistantVisibleTexts,
-  ensureSessionFileOnDisk,
 } from "../chat/session-persistence.js";
 import {
   LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS,
@@ -94,6 +92,12 @@ import { createChatRouteContext } from "../chat/chat-route-context.js";
 import { generateSessionTitle } from "../chat/title-generator.js";
 import { createToolTurnFinalizer } from "../chat/tool-turn-finalizer.js";
 import { createLocalModelBridge } from "../chat/local-model-bridge.js";
+import {
+  createPromptSession,
+  normalizePromptRequest,
+  resolveCreatedPromptSessionPath,
+  validatePromptImages,
+} from "../chat/request-normalizer.js";
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 type IntervalHandle = ReturnType<typeof setInterval>;
@@ -1009,38 +1013,23 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
                 wsSend(ws, { type: "error", message: "Rate limit exceeded. Please wait before sending another message." });
                 return;
               }
-              if (msg.images?.length) {
-                const ALLOWED_MIME = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
-                const MAX_IMAGES = 10;
-                const MAX_BYTES = 20 * 1024 * 1024;
-                if (msg.images.length > MAX_IMAGES) {
-                  wsSend(ws, { type: "error", message: t("error.maxImages", { max: MAX_IMAGES }) });
-                  return;
-                }
-                for (const img of msg.images) {
-                  if (!img?.mimeType || !ALLOWED_MIME.has(img.mimeType)) {
-                    wsSend(ws, { type: "error", message: t("error.unsupportedImageFormat", { mime: img?.mimeType || "unknown" }) });
-                    return;
-                  }
-                  if (img.data && img.data.length > MAX_BYTES) {
-                    wsSend(ws, { type: "error", message: t("error.imageTooLarge") });
-                    return;
-                  }
-                }
+              const imageValidation = validatePromptImages(msg.images, t);
+              if (!imageValidation.ok) {
+                wsSend(ws, { type: "error", message: imageValidation.message || t("error.imageTooLarge") });
+                return;
               }
               const _resolved = engine.resolveModelOverrides(engine.currentModel);
               if (msg.images?.length && _resolved?.vision === false) {
                 wsSend(ws, { type: "error", message: buildVisionUnsupportedMessage({ locale: getLocale() }) });
                 return;
               }
-              const promptText = normalizeVisionPromptText(msg.text || "", msg.images, { locale: getLocale() });
-              debugLog()?.log("ws", `user message (${promptText.length} chars, ${msg.images?.length || 0} images)`);
               let promptSessionPath = msg.sessionPath || engine.currentSessionPath;
               if (!promptSessionPath) {
-                const createdSession = await engine.createSession(null, engine.homeCwd || process.cwd());
-                promptSessionPath = createdSession?.sessionManager?.getSessionFile?.() || engine.currentSessionPath || "";
+                const createdSession = await createPromptSession(engine);
+                promptSessionPath = resolveCreatedPromptSessionPath(createdSession, engine);
               }
-              ensureSessionFileOnDisk(promptSessionPath);
+              const { promptText } = normalizePromptRequest(msg, promptSessionPath, { locale: getLocale() });
+              debugLog()?.log("ws", `user message (${promptText.length} chars, ${msg.images?.length || 0} images)`);
               const ss = getState(promptSessionPath);
               if (!ss) {
                 wsSend(ws, { type: "error", message: t("error.noActiveSession") });
