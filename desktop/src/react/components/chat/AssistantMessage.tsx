@@ -2,7 +2,7 @@
  * AssistantMessage — 助手消息，遍历 ContentBlock 按类型渲染
  */
 
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { MarkdownContent } from './MarkdownContent';
 import { ImageBlock } from './ImageBlock';
 import { MoodBlock } from './MoodBlock';
@@ -10,6 +10,7 @@ import { ThinkingBlock } from './ThinkingBlock';
 import { ExecutionTraceBlock } from './ExecutionTraceBlock';
 import { SettingsConfirmCard } from './SettingsConfirmCard';
 import { AuthorizationCard } from './AuthorizationCard';
+import { TtsControlButton } from './TtsControlButton';
 import type { ChatMessage, ContentBlock } from '../../stores/chat-types';
 import { useStore } from '../../stores';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
@@ -20,7 +21,6 @@ import { isBundledLynnAvatarSrc, yuanFallbackAvatar } from '../../utils/agent-he
 import { buildRetryDraftFromMessage } from '../../utils/composer-state';
 import { formatCompactModelLabel } from '../../utils/brain-models';
 import { resendPromptRequest } from '../../stores/prompt-actions';
-import { playTtsSpeechStream } from '../../services/tts-stream-playback';
 import styles from './Chat.module.css';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -133,87 +133,6 @@ function providerRouteTitle(route?: ChatMessage['providerRoute'] | null): string
   return `备用链路已切换到 ${active}。跳过：${details}`;
 }
 
-type TtsPlaybackController = {
-  stop: () => void;
-  finished: Promise<void>;
-};
-
-/**
- * 播放 TTS 生成的音频文件。走 IPC readFileBase64 + WebAudio 而非 HTTP — 因为:
- *  1) HTMLAudioElement 不会自动带 Bearer token,直接 audio.src = http://... 会被 server 403
- *  2) Hono c.body(fs.createReadStream) 对 Node Readable Stream 兼容性问题,Audio 解码失败
- *  3) WebAudio 直接解码 ArrayBuffer,绕开 <audio> 对 blob/data source 的兼容性差异
- *
- * [TTS-STOPPABLE v1 · 2026-05-02] 返回 controller{stop, finished} 让 UI 中断长音频播报。
- */
-async function playAudioHttpUrl(audioPath: string): Promise<TtsPlaybackController> {
-  if (!audioPath) throw new Error('音频路径无效');
-  const base64 = await window.hana?.readFileBase64?.(audioPath);
-  if (!base64) throw new Error('读取音频文件失败（检查路径白名单）');
-
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-  const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
-  if (AudioContextCtor) {
-    const audioContext = new AudioContextCtor();
-    if (audioContext.state === 'suspended') {
-      await audioContext.resume();
-    }
-    const buffer = await audioContext.decodeAudioData(bytes.buffer.slice(0));
-    const source = audioContext.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioContext.destination);
-    let stopped = false;
-    const finished = new Promise<void>((resolve) => {
-      source.onended = () => {
-        void audioContext.close().catch(() => {});
-        resolve();
-      };
-    });
-    try {
-      source.start(0);
-    } catch (err) {
-      void audioContext.close().catch(() => {});
-      throw err;
-    }
-    const stop = () => {
-      if (stopped) return;
-      stopped = true;
-      try { source.stop(0); } catch { /* source may already be stopped */ }
-    };
-    return { stop, finished };
-  }
-
-  // Very old WebViews only: fallback to HTMLAudioElement.
-  const ext = audioPath.toLowerCase().endsWith('.mp3') ? 'mpeg' : audioPath.toLowerCase().endsWith('.aiff') ? 'aiff' : 'wav';
-  const blob = new Blob([bytes], { type: `audio/${ext}` });
-  const objectUrl = URL.createObjectURL(blob);
-  const audio = new Audio(objectUrl);
-  let stopped = false;
-  const cleanup = () => URL.revokeObjectURL(objectUrl);
-  const finished = new Promise<void>((resolve, reject) => {
-    audio.onended = () => { cleanup(); resolve(); };
-    audio.onerror = () => {
-      const code = audio.error?.code;
-      const codeMap: Record<number, string> = { 1: 'aborted', 2: 'network', 3: 'decode', 4: 'src-not-supported' };
-      cleanup();
-      // aborted = user-initiated stop, treat as resolve
-      if (code === 1 || stopped) resolve();
-      else reject(new Error(`audio error: ${codeMap[code || 0] || code}`));
-    };
-    audio.play().catch((err) => { cleanup(); reject(err); });
-  });
-  const stop = () => {
-    if (stopped) return;
-    stopped = true;
-    try { audio.pause(); audio.currentTime = 0; } catch { /* best-effort playback stop */ }
-    cleanup();
-  };
-  return { stop, finished };
-}
-
 function summarizeToolState(blocks: ContentBlock[]): { running: number; total: number; activeLabel: string } {
   let running = 0;
   let total = 0;
@@ -277,9 +196,6 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
   const agentAvatarUrl = useStore(s => s.agentAvatarUrl);
   const sessionAgent = useStore(s => s.sessionAgent);
   const addToast = useStore(s => s.addToast);
-  const ttsAutoPrefetch = useStore(s => s.ttsAutoPrefetch);
-  const ttsStreamingEnabled = useStore(s => s.ttsStreamingEnabled);
-  const ttsBrowserFallbackEnabled = useStore(s => s.ttsBrowserFallbackEnabled);
   const [avatarFailed, setAvatarFailed] = useState(false);
 
   const displayName = sessionAgent?.name || agentName;
@@ -369,65 +285,6 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
   const [pendingReviewId, setPendingReviewId] = useState<string | null>(null);
   const [reviewConfig, setReviewConfig] = useState<ReviewConfigResponse | null>(null);
   const [reviewConfigLoaded, setReviewConfigLoaded] = useState(false);
-  const [ttsAudioPath, setTtsAudioPath] = useState<string | null>(null);
-  // [TTS-STOPPABLE v1 · 2026-05-02] 长音频中断控制
-  const [ttsPlaying, setTtsPlaying] = useState(false);
-  const ttsControllerRef = useRef<TtsPlaybackController | null>(null);
-  const stopTtsPlayback = useCallback(() => {
-    const ctrl = ttsControllerRef.current;
-    ttsControllerRef.current = null;
-    setTtsPlaying(false);
-    try { ctrl?.stop(); } catch { /* best-effort playback stop */ }
-  }, []);
-  // 卸载时清理:防止用户切换/删除消息时音频还在跑
-  useEffect(() => () => stopTtsPlayback(), [stopTtsPlayback]);
-
-  // ── P0 [2026-05-28]: TTS pre-synth on streaming end ──────────────
-  // streaming 结束时,如果用户开了自动预合成 + 内容 > 50 字,后台
-  // fire-and-forget 调 tts_speak 把音频烤进 plugin cache。用户点喇叭时大概率
-  // 直接缓存命中,即时播放(0 等待)。短内容(<50字)不触发避免烧 quota。
-  const prefetchFiredRef = useRef(false);
-  useEffect(() => {
-    if (isStreamMsg) return;                          // 还在 streaming,等
-    if (prefetchFiredRef.current) return;             // 已 fire 过(防重)
-    if (!plainText || plainText.length < 50) return;  // 太短,不值得 prefetch
-    if (!ttsAutoPrefetch) return;
-    prefetchFiredRef.current = true;
-    // Fire-and-forget,失败也不影响用户体验
-    hanaFetch('/api/tools/tts-bridge.tts_speak', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: plainText.slice(0, 3000),
-        filename: `msg_${message.id?.slice(-8) || Date.now()}`,
-      }),
-      timeout: 60_000,
-    })
-      .then(res => res.json())
-      .then(data => {
-        const audioPath = data?.details?.path || data?.result?.details?.path;
-        if (audioPath) setTtsAudioPath(audioPath);  // 预设 path 让用户点喇叭直接走 startPlayback 分支
-      })
-      .catch(() => { /* silent */ });
-  }, [isStreamMsg, plainText, message.id, ttsAutoPrefetch]);
-
-  // ── P2 [2026-05-28]: Browser SpeechSynthesis instant fallback ──
-  // Shift+click 喇叭 → 浏览器原生 TTS,TTFB <50ms,完全本地。音色弱但 draft 朗读 OK
-  const speakViaBrowser = useCallback((text: string) => {
-    try {
-      const u = new SpeechSynthesisUtterance(text);
-      // 中文 / 英文 自动选择
-      const isZh = /[一-鿿]/.test(text.slice(0, 100));
-      u.lang = isZh ? 'zh-CN' : 'en-US';
-      u.rate = 1.0;
-      window.speechSynthesis.cancel();  // 清掉前一个
-      window.speechSynthesis.speak(u);
-      return true;
-    } catch (e) {
-      console.warn('[tts] browser SpeechSynthesis failed:', e);
-      return false;
-    }
-  }, []);
   const [translateTarget, setTranslateTarget] = useState('英文');
   const [translatedText, setTranslatedText] = useState<string | null>(null);
   const [translateBusy, setTranslateBusy] = useState(false);
@@ -797,118 +654,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
                   }
                 </svg>
               </button>
-              <button
-                className={styles.msgCopyBtn}
-                onClick={async (e) => {
-                  // P2 [2026-05-28]: Shift+click → 浏览器原生 SpeechSynthesis(TTFB <50ms,本地)
-                  if (e.shiftKey && ttsBrowserFallbackEnabled) {
-                    if (window.speechSynthesis.speaking) {
-                      window.speechSynthesis.cancel();
-                      addToast('已停止浏览器朗读', 'info');
-                      return;
-                    }
-                    const ok = speakViaBrowser(plainText.slice(0, 3000));
-                    if (ok) addToast('浏览器朗读中(Shift+点击停止)', 'info');
-                    else addToast('浏览器 TTS 不可用', 'error');
-                    return;
-                  }
-                  // [TTS-STOPPABLE v1 · 2026-05-02] toggle:正在朗读 → 立即停;否则启动播放
-                  if (ttsPlaying) {
-                    stopTtsPlayback();
-                    addToast('已停止朗读', 'info');
-                    return;
-                  }
-                  const startPlayback = async (audioPath: string, toastText: string) => {
-                    const controller = await playAudioHttpUrl(audioPath);
-                    ttsControllerRef.current = controller;
-                    setTtsPlaying(true);
-                    addToast(toastText, 'success');
-                    controller.finished.finally(() => {
-                      // 播完或被 stop 后清状态(stopTtsPlayback 已先清,此处兜底)
-                      if (ttsControllerRef.current === controller) {
-                        ttsControllerRef.current = null;
-                        setTtsPlaying(false);
-                      }
-                    });
-                  };
-                  const startStreamPlayback = async () => {
-                    const controller = await playTtsSpeechStream({
-                      text: plainText.slice(0, 3000),
-                      filename: `msg_${message.id?.slice(-8) || Date.now()}`,
-                    });
-                    ttsControllerRef.current = controller;
-                    setTtsPlaying(true);
-                    addToast('正在流式朗读 · 再按一次停止', 'success');
-                    controller.finished.finally(() => {
-                      if (ttsControllerRef.current === controller) {
-                        ttsControllerRef.current = null;
-                        setTtsPlaying(false);
-                      }
-                    });
-                  };
-                  try {
-                    if (ttsAudioPath) {
-                      try {
-                        await startPlayback(ttsAudioPath, '正在朗读 · 再按一次停止');
-                        return;
-                      } catch {
-                        setTtsAudioPath(null);
-                      }
-                    }
-                    if (ttsStreamingEnabled) {
-                      try {
-                        await startStreamPlayback();
-                        return;
-                      } catch (streamErr) {
-                        console.warn('[tts] stream playback unavailable, falling back to file TTS:', streamErr);
-                      }
-                    }
-                    addToast('准备朗读…', 'info');
-                    const res = await hanaFetch('/api/tools/tts-bridge.tts_speak', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        text: plainText.slice(0, 3000),
-                        filename: `msg_${message.id?.slice(-8) || Date.now()}`,
-                      }),
-                      timeout: 60_000,
-                    });
-                    const data = await res.json();
-                    const audioPath = data?.details?.path || data?.result?.details?.path;
-                    if (!audioPath) {
-                      addToast('TTS 返回缺失 path', 'error');
-                      return;
-                    }
-                    setTtsAudioPath(audioPath);
-                    try {
-                      const cached = data?.details?.cached || data?.result?.details?.cached;
-                      await startPlayback(audioPath, cached ? '正在朗读（已缓存）· 再按一次停止' : '正在朗读 · 再按一次停止 · 右键换音色');
-                    } catch (err: any) {
-                      addToast(`播放失败：${err?.message || err}。音频已保存，可在 Voice 设置里检查服务状态。`, 'error');
-                    }
-                  } catch (err) {
-                    addToast(String(err), 'error');
-                  }
-                }}
-                title={ttsPlaying ? '停止朗读' : (t('chat.speak') || '朗读 · Shift+点击=即时浏览器朗读 · 右键音色设置')}
-                aria-label={ttsPlaying ? '停止朗读' : (t('chat.speak') || '朗读')}
-                aria-pressed={ttsPlaying}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  window.hana?.openSettings?.('voice');
-                }}
-              >
-                {ttsPlaying ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="6" y="6" width="12" height="12" rx="1.5" />
-                  </svg>
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
-                  </svg>
-                )}
-              </button>
+              <TtsControlButton plainText={plainText} messageId={message.id} isStreamingMessage={isStreamMsg} />
               {isLastAssistant && (
                 <button className={styles.msgCopyBtn} onClick={handleRetry} title={t('chat.retry') || 'Retry'} aria-label={t('chat.retry') || 'Retry'}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
