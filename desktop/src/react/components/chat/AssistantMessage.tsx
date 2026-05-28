@@ -539,7 +539,11 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
             </span>
           )}
           {providerFallbackLabel && (
-            <span className={`${styles.avatarMeta} ${styles.providerRouteMeta}`} title={providerFallbackTitle}>
+            <span
+              className={`${styles.avatarMeta} ${styles.providerRouteMeta}`}
+              data-fallback="true"
+              title={providerFallbackTitle}
+            >
               {providerFallbackLabel}
             </span>
           )}

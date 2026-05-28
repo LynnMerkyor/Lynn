@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const component = fs.readFileSync("desktop/src/react/components/chat/ToolGroupBlock.tsx", "utf8");
+const assistantMessage = fs.readFileSync("desktop/src/react/components/chat/AssistantMessage.tsx", "utf8");
 const css = fs.readFileSync("desktop/src/react/components/chat/Chat.module.css", "utf8");
 
 describe("web search sources UI", () => {
@@ -16,5 +17,11 @@ describe("web search sources UI", () => {
     expect(css).toContain(".searchSourcesPanel");
     expect(css).toContain(".searchSourcesSummary");
     expect(css).toContain(".searchSourceItem a");
+  });
+
+  it("visually distinguishes provider fallback metadata from the model label", () => {
+    expect(assistantMessage).toContain("data-fallback=\"true\"");
+    expect(css).toContain(".providerRouteMeta[data-fallback=\"true\"]");
+    expect(css).toContain(".providerRouteMeta[data-fallback=\"true\"]::before");
   });
 });

@@ -201,6 +201,7 @@
 }
 
 .providerRouteMeta {
+    gap: 0.24rem;
     max-width: min(280px, 42vw);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -208,6 +209,20 @@
     color: var(--text);
     border-color: rgba(var(--accent-rgb), 0.22);
     background: rgba(var(--accent-rgb), 0.07);
+}
+
+.providerRouteMeta[data-fallback="true"] {
+    color: var(--warning, #9a5a00);
+    border-color: rgba(var(--warning-rgb, 194, 126, 30), 0.34);
+    background: rgba(var(--warning-rgb, 194, 126, 30), 0.1);
+}
+
+.providerRouteMeta[data-fallback="true"]::before {
+    content: '↳';
+    flex: 0 0 auto;
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    line-height: 1;
 }
 
 .avatarMetaWarn {
