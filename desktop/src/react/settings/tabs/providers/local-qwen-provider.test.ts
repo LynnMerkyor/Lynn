@@ -123,6 +123,17 @@ describe('Local Qwen provider UX guards', () => {
     expect(bridge).toContain('"sports_score"');
   });
 
+  it('keeps local provider refresh callbacks stable to avoid status refresh flicker', () => {
+    const providersTab = read('desktop/src/react/settings/tabs/ProvidersTab.tsx');
+    const detail = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
+    expect(providersTab).toContain('const refreshProviders = useCallback');
+    expect(providersTab).toContain('onRefresh={refreshProviders}');
+    expect(providersTab).not.toContain('onRefresh={async () => { await loadSettingsConfig(); await loadSummary(); }}');
+    expect(detail).toContain('lastEndpointRefreshKeyRef');
+    expect(detail).toContain("|| 'default-running'");
+    expect(detail).toContain('lastEndpointRefreshKeyRef.current !== modelKey');
+  });
+
   it('uses platform-stable status dots instead of emoji status icons', () => {
     const badge = read('desktop/src/react/components/ProviderStatusBadge.tsx');
     const styles = read('desktop/src/styles.css');

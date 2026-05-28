@@ -181,6 +181,11 @@ export function ProvidersTab() {
     } catch { /* swallow */ }
   }, []);
 
+  const refreshProviders = useCallback(async () => {
+    await loadSettingsConfig();
+    await loadSummary();
+  }, [loadSummary]);
+
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
   useEffect(() => {
@@ -366,7 +371,7 @@ export function ProvidersTab() {
                 providerConfig={providers[selected]}
                 isPresetSetup={!existing && !!preset}
                 presetInfo={preset}
-                onRefresh={async () => { await loadSettingsConfig(); await loadSummary(); }}
+                onRefresh={refreshProviders}
               />
             );
           })() : (

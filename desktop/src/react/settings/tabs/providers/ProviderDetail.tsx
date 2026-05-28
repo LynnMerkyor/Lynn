@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSettingsStore, type ProviderSummary } from '../../store';
 import { hanaFetch } from '../../api';
 import { t } from '../../helpers';
@@ -257,6 +257,7 @@ type LocalQwen35Status = {
 function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const { showToast } = useSettingsStore();
   const llamaState = useLlamacppState();
+  const lastEndpointRefreshKeyRef = useRef<string | null>(null);
   const [status, setStatus] = useState<LocalQwen35Status | null>(null);
   const [loading, setLoading] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
@@ -274,9 +275,16 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       const data = await res.json();
       setStatus(data);
       if (data?.registered_provider && data?.plan?.observed?.endpoint_running) {
-        platform?.settingsChanged?.('models-changed');
-        window.dispatchEvent(new CustomEvent('models-changed'));
-        void onRefresh();
+        const modelKey = [
+          data?.runtime?.pid,
+          ...(data?.runtime?.model_ids || data?.plan?.observed?.served_model_ids || []),
+        ].filter(Boolean).join(':') || 'default-running';
+        if (lastEndpointRefreshKeyRef.current !== modelKey) {
+          lastEndpointRefreshKeyRef.current = modelKey;
+          platform?.settingsChanged?.('models-changed');
+          window.dispatchEvent(new CustomEvent('models-changed'));
+          void onRefresh();
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
