@@ -153,6 +153,35 @@ export function sortSessionEntriesByModified(sessions: AnyRecord[]) {
   return sessions;
 }
 
+export async function listCoordinatorSessions(opts: {
+  agentsDir: string;
+  agents: AgentLike[];
+  currentPath?: string | null;
+  sessionStarted: boolean;
+  currentSession?: SessionLike | null;
+  currentEntry?: SessionEntryLike | null;
+  activeAgentId: string;
+  activeAgent: AgentLike;
+  onIndexRefreshError?: (agent: AgentLike, err: unknown) => void;
+}) {
+  const allSessions = await collectAgentSessionEntries({
+    agentsDir: opts.agentsDir,
+    agents: opts.agents,
+    onIndexRefreshError: opts.onIndexRefreshError,
+  });
+  const currentEntry = buildCurrentSessionListEntry({
+    currentPath: opts.currentPath,
+    sessionStarted: opts.sessionStarted,
+    allSessions,
+    currentSession: opts.currentSession,
+    currentEntry: opts.currentEntry,
+    activeAgentId: opts.activeAgentId,
+    activeAgent: opts.activeAgent,
+  });
+  if (currentEntry) allSessions.unshift(currentEntry);
+  return sortSessionEntriesByModified(allSessions);
+}
+
 export function evictSessionCacheEntries(opts: {
   sessions: Map<string, SessionEntryLike>;
   currentKey: string;

@@ -4,6 +4,7 @@ import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   evictSessionCacheEntries,
+  listCoordinatorSessions,
   listSessionFileSkeletons,
 } from "../core/session-list-cache.js";
 
@@ -70,5 +71,33 @@ describe("session list/cache helpers", () => {
     expect(sessions.has("current")).toBe(true);
     expect(unsubOld).toHaveBeenCalledTimes(1);
     expect(notifySessionEnd).toHaveBeenCalledWith({ id: "a1" }, "old", "cache eviction");
+  });
+
+  it("lists coordinator sessions with an in-flight current session", async () => {
+    const root = tempDir();
+    const sessionDir = path.join(root, "agent-a", "sessions");
+    fs.mkdirSync(sessionDir, { recursive: true });
+    const oldPath = path.join(sessionDir, "old.jsonl");
+    fs.writeFileSync(oldPath, "{}\n");
+
+    const currentPath = path.join(sessionDir, "current.jsonl");
+    const sessions = await listCoordinatorSessions({
+      agentsDir: root,
+      agents: [{ id: "agent-a", name: "Agent A" }],
+      currentPath,
+      sessionStarted: true,
+      currentSession: { sessionManager: { getCwd: () => "/tmp/workspace" } },
+      currentEntry: { modelId: "model-a", modelProvider: "provider-a" },
+      activeAgentId: "agent-a",
+      activeAgent: { id: "agent-a", agentName: "Agent A" },
+    });
+
+    expect(sessions[0]).toMatchObject({
+      path: currentPath,
+      cwd: "/tmp/workspace",
+      modelId: "model-a",
+      modelProvider: "provider-a",
+    });
+    expect(sessions.some((session) => session.path === oldPath)).toBe(true);
   });
 });
