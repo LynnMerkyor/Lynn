@@ -59,6 +59,12 @@ import {
   type LocalQwen35RuntimeStatus,
 } from './input/local-qwen-status';
 import {
+  formatVisionUnsupportedMessage,
+  isImageLikeFile,
+  modelDisplayName,
+  modelSupportsVision,
+} from './input/multimodal-guard';
+import {
   fileToWorkingSet,
   getComposerSessionKey,
 } from '../utils/composer-state';
@@ -196,7 +202,14 @@ function InputAreaInner() {
   const selectorModels = effectiveModels;
   const noModelsAtAll = selectorModels.length === 0;
   const showModelConfigHint = noModelsAtAll || (models.length <= 1 && !currentModelRef?.id);
-  const supportsVision = activeModelInfo?.vision !== false && activeModelInfo !== null;
+  const supportsVision = modelSupportsVision(activeModelInfo);
+  const warnVisionUnsupported = useCallback(() => {
+    const modelLabel = modelDisplayName(activeModelInfo);
+    const locale = String((window as { i18n?: { locale?: string } }).i18n?.locale || '');
+    const message = formatVisionUnsupportedMessage(modelLabel, locale);
+    showSidebarToast(message, 6500, 'warning', 'vision-unsupported-image');
+    setInlineNotice(message);
+  }, [activeModelInfo, setInlineNotice]);
   const translatedInlineNotice = useMemo(() => {
     if (!inlineNotice) return null;
     return resolveUiI18nText(inlineNotice);
@@ -1190,12 +1203,20 @@ function InputAreaInner() {
   const handleFileInputChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    let warnedVisionUnsupported = false;
     for (const file of Array.from(files)) {
       if (useStore.getState().attachedFiles.length >= 9) break;
+      if (!supportsVision && isImageLikeFile(file)) {
+        if (!warnedVisionUnsupported) {
+          warnVisionUnsupported();
+          warnedVisionUnsupported = true;
+        }
+        continue;
+      }
       const filePath = await window.platform?.getFilePath?.(file);
       if (filePath) {
         addAttachedFile({ path: filePath, name: file.name });
-      } else if (file.type.startsWith('image/')) {
+      } else if (isImageLikeFile(file)) {
         const reader = new FileReader();
         reader.onload = () => {
           const dataUrl = reader.result as string;
@@ -1215,7 +1236,7 @@ function InputAreaInner() {
       }
     }
     e.target.value = '';
-  }, [addAttachedFile]);
+  }, [addAttachedFile, supportsVision, warnVisionUnsupported]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
@@ -1231,6 +1252,7 @@ function InputAreaInner() {
     if (!imageItem) return;
     if (!supportsVision) {
       e.preventDefault();
+      warnVisionUnsupported();
       return;
     }
     e.preventDefault();
@@ -1251,7 +1273,7 @@ function InputAreaInner() {
       });
     };
     reader.readAsDataURL(file);
-  }, [addAttachedFile, insertPastedTextIntoComposer, t, supportsVision]);
+  }, [addAttachedFile, insertPastedTextIntoComposer, t, supportsVision, warnVisionUnsupported]);
 
   useEffect(() => {
     hanaFetch('/api/config')

@@ -12,6 +12,13 @@ import { useStore } from './stores';
 import { hanaFetch } from './hooks/use-hana-fetch';
 import { toSlash, baseName } from './utils/format';
 import { sendPrompt } from './stores/prompt-actions';
+import {
+  formatVisionUnsupportedMessage,
+  isImageLikeFile,
+  modelDisplayName,
+  modelSupportsVision,
+} from './components/input/multimodal-guard';
+import type { Model } from './types';
 
 declare function t(key: string, vars?: Record<string, string | number>): string;
 
@@ -47,12 +54,35 @@ async function handleDrop(e: React.DragEvent): Promise<void> {
 
   let srcPaths: string[] = [];
   const nameMap: Record<string, string> = {};
+  const currentModelRef = store.currentModel;
+  const activeModel = currentModelRef
+    ? store.models.find((m: Model) => m.id === currentModelRef.id && (m.provider || '') === (currentModelRef.provider || '')) ?? {
+        id: currentModelRef.id,
+        provider: currentModelRef.provider,
+        name: currentModelRef.id,
+      }
+    : null;
+  const supportsVision = modelSupportsVision(activeModel);
+  let skippedVisionImages = false;
   for (const file of Array.from(files)) {
+    if (!supportsVision && isImageLikeFile(file)) {
+      skippedVisionImages = true;
+      continue;
+    }
     const filePath = await window.platform?.getFilePath?.(file);
     if (filePath) {
       srcPaths.push(filePath);
       nameMap[filePath] = file.name;
     }
+  }
+  if (skippedVisionImages) {
+    const locale = String((window as { i18n?: { locale?: string } }).i18n?.locale || '');
+    store.addToast(
+      formatVisionUnsupportedMessage(modelDisplayName(activeModel), locale),
+      'warning',
+      6500,
+      { dedupeKey: 'vision-unsupported-image' },
+    );
   }
   if (srcPaths.length === 0) return;
 
