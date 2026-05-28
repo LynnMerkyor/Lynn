@@ -40,10 +40,10 @@ describe('composer controls regression', () => {
   });
 
   it('keeps the model chooser visually attached to the send button', () => {
-    const inputArea = read('desktop/src/react/components/InputArea.tsx');
+    const submitArea = read('desktop/src/react/components/input/SubmitArea.tsx');
     const inputCss = read('desktop/src/react/components/input/InputArea.module.css');
 
-    expect(inputArea).toContain("styles['send-controls']");
+    expect(submitArea).toContain("styles['send-controls']");
     expect(cssBlock(inputCss, '.send-controls')).toContain('display: inline-flex');
     expect(cssBlock(inputCss, '.send-controls')).toContain('gap: 0.34rem');
   });
@@ -62,11 +62,12 @@ describe('composer controls regression', () => {
 
   it('keeps the deep research button as an explicit mode before running', () => {
     const inputArea = read('desktop/src/react/components/InputArea.tsx');
+    const submitArea = read('desktop/src/react/components/input/SubmitArea.tsx');
 
     expect(inputArea).toContain('setDeepResearchOpen((open) => !open)');
     expect(inputArea).toContain('deepResearchOpen && text');
     expect(inputArea).toContain('深研已启动');
-    expect(inputArea).toContain('aria-pressed={deepResearchOpen}');
+    expect(submitArea).toContain('aria-pressed={deepResearchOpen}');
   });
 
   it('shows a left-to-right waiting sweep while the assistant is thinking', () => {

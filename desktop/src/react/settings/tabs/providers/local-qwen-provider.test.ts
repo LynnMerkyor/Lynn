@@ -137,6 +137,8 @@ describe('Local Qwen provider UX guards', () => {
   it('surfaces local llama.cpp realtime TPS without replacing cumulative token stats', () => {
     const route = read('server/routes/local-qwen35.ts');
     const inputArea = read('desktop/src/react/components/InputArea.tsx');
+    const localQwenController = read('desktop/src/react/components/input/useLocalQwenStatusController.ts');
+    const localQwenStack = read('desktop/src/react/components/input/LocalQwenStatusStack.tsx');
     const localStatus = read('desktop/src/react/components/input/local-qwen-status.ts');
     const statusBar = read('desktop/src/react/components/StatusBar.tsx');
     const providerDetail = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
@@ -149,8 +151,8 @@ describe('Local Qwen provider UX guards', () => {
     expect(localStatus).toContain('当前 ${predictedTps');
     expect(localStatus).toContain('服务累计处理');
     expect(inputArea).toContain('localQwenTpsSummary');
-    expect(inputArea).toContain('等待下一次采样');
-    expect(inputArea).toContain('intervalMs = localQwenActive ? 3_000 : 15_000');
+    expect(localQwenStack).toContain('等待下一次采样');
+    expect(localQwenController).toContain('intervalMs = active ? 3_000 : 15_000');
     expect(statusBar).toContain('formatTps');
     expect(statusBar).toContain('当前 ${tps}');
     expect(providerDetail).toContain('formatLocalTps');
@@ -221,6 +223,8 @@ describe('Local Qwen provider UX guards', () => {
     const thinkingBlock = read('desktop/src/react/components/chat/ThinkingBlock.tsx');
     const assistantMessage = read('desktop/src/react/components/chat/AssistantMessage.tsx');
     const inputArea = read('desktop/src/react/components/InputArea.tsx');
+    const localQwenController = read('desktop/src/react/components/input/useLocalQwenStatusController.ts');
+    const localQwenStack = read('desktop/src/react/components/input/LocalQwenStatusStack.tsx');
     const localStatus = read('desktop/src/react/components/input/local-qwen-status.ts');
     expect(localBridge).toContain('startLocalQwen35WarmupFeedback');
     expect(localBridge).toContain('startLocalQwen35PrefetchFeedback');
@@ -237,9 +241,9 @@ describe('Local Qwen provider UX guards', () => {
     expect(thinkingBlock).toContain('本地模型正在本机生成答案');
     expect(thinkingBlock).toContain('首次启动后的第一问可能较慢');
     expect(thinkingBlock).not.toContain('马上给出结果');
-    expect(inputArea).toContain('本地端点已就绪，正在生成首个回答');
-    expect(inputArea).toContain('首次暖机提示');
-    expect(inputArea).toContain('本地 Qwen3.5-9B 刚启动时要加载权重和预热上下文');
+    expect(localQwenController).toContain('本地端点已就绪，正在生成首个回答');
+    expect(localQwenStack).toContain('首次暖机提示');
+    expect(localQwenStack).toContain('本地 Qwen3.5-9B 刚启动时要加载权重和预热上下文');
     expect(localStatus).toContain('服务累计处理');
     expect(read('desktop/src/react/components/StatusBar.tsx')).toContain('服务累计处理');
     expect(read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx')).toContain('服务累计处理');
