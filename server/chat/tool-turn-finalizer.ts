@@ -1,0 +1,358 @@
+import { debugLog } from "../../lib/debug-log.js";
+import { finishSessionStream } from "../session-stream-store.js";
+import { buildLocalOfficeDirectAnswer } from "./local-office-answer.js";
+import { extractText } from "./content-utils.js";
+import {
+  clearPersistedFinalAnswerPollTimer,
+  clearReturnedTurnFinalizationTimer,
+  clearSilentBrainAbortTimer,
+  clearToolAuthorizationPollTimer,
+  clearToolAuthorizationTimer,
+  clearToolFinalizationTimer,
+  clearTurnHardAbortTimer,
+  clearTurnTimers,
+  resetCompletedTurnState,
+} from "./stream-state.js";
+import {
+  extractLatestAssistantVisibleText,
+  extractLatestAssistantVisibleTextAfter,
+} from "./session-persistence.js";
+
+export interface ToolTurnFinalizerDeps {
+  engine: any;
+  editRollbackStore: any;
+  lifecycleHooks: any;
+  broadcast: (msg: any) => void;
+  emitStreamEvent: (sessionPath: string, ss: any, event: any) => void;
+  emitTrustedVisibleTextDelta: (sessionPath: string, ss: any, delta: unknown) => boolean;
+  emitVisibleTextDelta: (sessionPath: string, ss: any, delta: unknown) => void;
+  flushBufferedAssistantText: (sessionPath: string, ss: any) => void;
+  flushBufferedToolVisibleText: (sessionPath: string, ss: any, finalText?: string) => void;
+  maybeAppendCodeVerificationPostscript: (sessionPath: string, ss: any) => boolean;
+  hasStreamEvent: (ss: any, type: string) => boolean;
+  hasScheduledInternalRetry: (ss: any) => boolean;
+  hasToolExecutionInFlight: (ss: any) => boolean;
+  hasDifferentActiveStreamToken: (ss: any, streamToken: any) => boolean;
+  timeouts: {
+    returnedTurnFinalizationGraceMs: number;
+    turnHardAbortMs: number;
+    turnLongResearchHardAbortMs: number;
+    toolFinalizationGraceMs: number;
+    toolAuthorizationGraceMs: number;
+  };
+}
+
+export function createToolTurnFinalizer({
+  engine,
+  editRollbackStore,
+  lifecycleHooks,
+  broadcast,
+  emitStreamEvent,
+  emitTrustedVisibleTextDelta,
+  emitVisibleTextDelta,
+  flushBufferedAssistantText,
+  flushBufferedToolVisibleText,
+  maybeAppendCodeVerificationPostscript,
+  hasStreamEvent,
+  hasScheduledInternalRetry,
+  hasToolExecutionInFlight,
+  hasDifferentActiveStreamToken,
+  timeouts,
+}: ToolTurnFinalizerDeps) {
+  function closeStreamWithVisibleFallback(sessionPath: any, ss: any, text: any, reason: any, opts: any = {}) {
+    if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
+    ss._turnClosed = true;
+    ss.internalRetryPending = false;
+    ss.internalRetryInFlight = false;
+    ss.internalRetryReason = "";
+    clearTurnTimers(ss);
+    editRollbackStore.discardPendingForSession(sessionPath, ss.activeStreamToken || null);
+    if (ss.isThinking) {
+      ss.isThinking = false;
+      emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
+    }
+    if (text && (!ss.hasOutput || opts.appendEvenIfHasOutput)) {
+      const prefix = ss.hasOutput && opts.appendEvenIfHasOutput ? "\n\n" : "";
+      if (opts.trustedFallback) {
+        emitTrustedVisibleTextDelta(sessionPath, ss, prefix + text);
+      } else {
+        emitVisibleTextDelta(sessionPath, ss, prefix + text);
+      }
+    }
+    maybeAppendCodeVerificationPostscript(sessionPath, ss);
+    emitStreamEvent(sessionPath, ss, { type: "turn_end" });
+    lifecycleHooks.run("turn_close", { sessionPath, ss, reason, forced: true });
+    broadcast({ type: "status", isStreaming: false, sessionPath });
+    finishSessionStream(ss);
+    resetCompletedTurnState(ss);
+    debugLog()?.warn("ws", `[TURN-CLOSE-FALLBACK v1] closed stream · reason=${reason} · session=${sessionPath}`);
+    return true;
+  }
+
+  function normalizeVisibleForCompare(text: any) {
+    return String(text || "").replace(/\s+/g, " ").trim();
+  }
+
+  function isMeaningfulPersistedFinalText(finalText: any, ss: any) {
+    const final = normalizeVisibleForCompare(finalText);
+    if (!final) return false;
+    const visible = normalizeVisibleForCompare(ss?.visibleTextAcc || "");
+    if (!visible) return true;
+    if (final === visible) return false;
+    if (final.length <= visible.length + 20 && (final.includes(visible) || visible.includes(final))) return false;
+    return true;
+  }
+
+  function buildEmptyTurnFallbackText(ss: any, reason: any = "") {
+    if (!ss || ss.hasOutput) return "";
+    const toolFallback = String(ss.realtimeToolFallbackText || "").trim();
+    if (toolFallback) return toolFallback;
+    if (reason === "hard_turn_timeout" && !ss.hasToolCall) {
+      return buildLocalOfficeDirectAnswer(ss.originalPromptText || ss.effectivePromptText || "");
+    }
+    return "";
+  }
+
+  function buildRealtimeToolFallbackText(toolName: any, event: any) {
+    const name = String(toolName || event?.toolName || "");
+    if (!["stock_market", "weather", "live_news", "sports_score"].includes(name)) return "";
+    const text = extractText(event?.result?.content || "").trim();
+    if (!text) return "";
+    if (name === "stock_market") {
+      const disclaimer = /不构成投资建议|not investment advice/i.test(text)
+        ? ""
+        : "\n\n说明：以上是工具返回的最近可用行情摘要，不构成投资建议；关键价格、时间戳和来源请以交易所、券商或专门行情源交叉核验。";
+      return `${text}${disclaimer}`;
+    }
+    return text;
+  }
+
+  function finalizeReturnedTurnWithoutStream(sessionPath: any, ss: any, reason: any, opts: any = {}) {
+    if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
+    if (hasToolExecutionInFlight(ss)) return false;
+    if (!opts.ignoreInternalRetry && hasScheduledInternalRetry(ss)) return false;
+    const session = engine.getSessionByPath(sessionPath);
+    const finalText = !ss.hasOutput
+      ? extractLatestAssistantVisibleText(session, sessionPath)
+      : "";
+    if (opts.requirePersistedText && !ss.hasOutput && !finalText) return false;
+    return closeStreamWithVisibleFallback(sessionPath, ss, finalText, reason);
+  }
+
+  function scheduleReturnedTurnFinalizationFallback(sessionPath: any, ss: any, reason: any) {
+    clearReturnedTurnFinalizationTimer(ss);
+    if (!sessionPath || !ss || !timeouts.returnedTurnFinalizationGraceMs) return false;
+    const streamToken = ss.activeStreamToken || null;
+    ss.returnedTurnFinalizationTimer = setTimeout(() => {
+      ss.returnedTurnFinalizationTimer = null;
+      if (
+        hasDifferentActiveStreamToken(ss, streamToken) ||
+        ss.hasError ||
+        ss._turnClosed ||
+        hasStreamEvent(ss, "turn_end") ||
+        hasToolExecutionInFlight(ss) ||
+        hasScheduledInternalRetry(ss)
+      ) {
+        return;
+      }
+      finalizeReturnedTurnWithoutStream(sessionPath, ss, reason, { requirePersistedText: true });
+    }, timeouts.returnedTurnFinalizationGraceMs);
+    if (ss.returnedTurnFinalizationTimer.unref) ss.returnedTurnFinalizationTimer.unref();
+    return true;
+  }
+
+  function schedulePersistedFinalAnswerPoll(sessionPath: any, ss: any) {
+    clearPersistedFinalAnswerPollTimer(ss);
+    if (!sessionPath || !ss) return false;
+    const streamToken = ss.activeStreamToken || null;
+    ss.persistedFinalAnswerPollTimer = setInterval(() => {
+      if (
+        hasDifferentActiveStreamToken(ss, streamToken) ||
+        ss.hasError ||
+        ss.hasOutput ||
+        ss._turnClosed ||
+        hasStreamEvent(ss, "turn_end") ||
+        hasScheduledInternalRetry(ss)
+      ) {
+        clearPersistedFinalAnswerPollTimer(ss);
+        return;
+      }
+      if (hasToolExecutionInFlight(ss)) return;
+      const finalText = extractLatestAssistantVisibleTextAfter(
+        engine.getSessionByPath(sessionPath),
+        sessionPath,
+        ss.persistedAssistantTextBaseline || 0,
+      );
+      if (finalText) {
+        closeStreamWithVisibleFallback(sessionPath, ss, finalText, "persisted_final_answer_poll");
+      }
+    }, 1000);
+    if (ss.persistedFinalAnswerPollTimer.unref) ss.persistedFinalAnswerPollTimer.unref();
+    return true;
+  }
+
+  function scheduleTurnHardAbort(sessionPath: any, ss: any) {
+    clearTurnHardAbortTimer(ss);
+    if (!sessionPath || !ss || !timeouts.turnHardAbortMs) return;
+    const streamToken = ss.activeStreamToken || null;
+    const originalOrEffectivePrompt = `${ss.originalPromptText || ""}\n${ss.effectivePromptText || ""}`;
+    const isLongResearchTurn =
+      /(?:深度|深入|完整|系统性|多维度|全面|调研|研究|研报|报告|分析报告|形成\s*docx|docx\s*格式|来源包括|但不限于|学术界|咨询领域|小红书|抖音|快手|视频号|公众号)/i.test(originalOrEffectivePrompt);
+    const timeoutMs = isLongResearchTurn
+      ? Math.max(timeouts.turnHardAbortMs, timeouts.turnLongResearchHardAbortMs || timeouts.turnHardAbortMs)
+      : timeouts.turnHardAbortMs;
+    if (isLongResearchTurn && timeoutMs !== timeouts.turnHardAbortMs) {
+      debugLog()?.log("ws", `[TURN-HARD-ABORT v2] long research turn timeout=${timeoutMs}ms · session=${sessionPath}`);
+    }
+    ss.turnHardAbortTimer = setTimeout(() => {
+      ss.turnHardAbortTimer = null;
+      if (hasDifferentActiveStreamToken(ss, streamToken) || ss.hasError || hasStreamEvent(ss, "turn_end")) return;
+      ss._lastTurnAborted = true;
+      Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
+      closeStreamWithVisibleFallback(
+        sessionPath,
+        ss,
+        buildEmptyTurnFallbackText(ss, "hard_turn_timeout"),
+        "hard_turn_timeout",
+        { trustedFallback: true },
+      );
+    }, timeoutMs);
+    if (ss.turnHardAbortTimer.unref) ss.turnHardAbortTimer.unref();
+  }
+
+  function scheduleToolFinalizationFallback(sessionPath: any, ss: any): void {
+    clearToolFinalizationTimer(ss);
+    if (!sessionPath || !ss || !timeouts.toolFinalizationGraceMs) return;
+    const streamToken = ss.activeStreamToken || null;
+    ss.toolFinalizationTimer = setTimeout(() => {
+      ss.toolFinalizationTimer = null;
+      if (
+        hasDifferentActiveStreamToken(ss, streamToken) ||
+        ss.hasError ||
+        hasStreamEvent(ss, "turn_end")
+      ) {
+        return;
+      }
+      if (hasToolExecutionInFlight(ss)) {
+        flushBufferedAssistantText(sessionPath, ss);
+        const toolStartedAt = Number.isFinite(ss.activeToolCallStartedAt)
+          ? ss.activeToolCallStartedAt
+          : (Number.isFinite(ss.lastToolExecutionActivity) ? ss.lastToolExecutionActivity : Date.now());
+        const toolAgeMs = Date.now() - toolStartedAt;
+        if ((ss.hasOutput || ss.hasBufferedVisibleTextDuringTool) && toolAgeMs >= timeouts.toolFinalizationGraceMs) {
+          const finalText = extractLatestAssistantVisibleTextAfter(
+            engine.getSessionByPath(sessionPath),
+            sessionPath,
+            ss.persistedAssistantTextBaseline || 0,
+          );
+          ss.activeToolCallCount = 0;
+          ss.activeToolCallStartedAt = null;
+          ss.recoveredBashInFlight = false;
+          flushBufferedToolVisibleText(
+            sessionPath,
+            ss,
+            isMeaningfulPersistedFinalText(finalText, ss) ? finalText : "",
+          );
+          debugLog()?.warn("ws", `[TOOL-MISSING-END-FENCE v1] closing turn with visible output despite missing tool_end · age=${toolAgeMs}ms · session=${sessionPath}`);
+          Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
+          closeStreamWithVisibleFallback(
+            sessionPath,
+            ss,
+            "",
+            "tool_missing_end_after_output",
+          );
+          return;
+        }
+        scheduleToolFinalizationFallback(sessionPath, ss);
+        return;
+      }
+      Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
+      if (ss.hasBufferedVisibleTextDuringTool && !ss.hasOutput) {
+        const finalText = extractLatestAssistantVisibleTextAfter(
+          engine.getSessionByPath(sessionPath),
+          sessionPath,
+          ss.persistedAssistantTextBaseline || 0,
+        );
+        flushBufferedToolVisibleText(
+          sessionPath,
+          ss,
+          isMeaningfulPersistedFinalText(finalText, ss) ? finalText : "",
+        );
+      }
+      closeStreamWithVisibleFallback(
+        sessionPath,
+        ss,
+        buildEmptyTurnFallbackText(ss, "tool_finalization_timeout"),
+        "tool_finalization_timeout",
+        { trustedFallback: true },
+      );
+    }, timeouts.toolFinalizationGraceMs);
+    if (ss.toolFinalizationTimer.unref) ss.toolFinalizationTimer.unref();
+  }
+
+  function scheduleToolAuthorizationFallback(sessionPath: any, ss: any): void {
+    clearToolAuthorizationTimer(ss);
+    clearToolAuthorizationPollTimer(ss);
+    if (!sessionPath || !ss || !timeouts.toolAuthorizationGraceMs || !ss.isStreaming || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return;
+    clearSilentBrainAbortTimer(ss);
+    const streamToken = ss.activeStreamToken || null;
+    ss.toolAuthorizationPollTimer = setInterval(() => {
+      if (
+        hasDifferentActiveStreamToken(ss, streamToken) ||
+        ss.hasError ||
+        hasStreamEvent(ss, "turn_end")
+      ) {
+        clearToolAuthorizationPollTimer(ss);
+        return;
+      }
+      const finalText = extractLatestAssistantVisibleText(engine.getSessionByPath(sessionPath), sessionPath);
+      if (isMeaningfulPersistedFinalText(finalText, ss)) {
+        if (hasToolExecutionInFlight(ss)) return;
+        closeStreamWithVisibleFallback(sessionPath, ss, finalText, "tool_authorization_persisted_final");
+      }
+    }, 1000);
+    if (ss.toolAuthorizationPollTimer.unref) ss.toolAuthorizationPollTimer.unref();
+    ss.toolAuthorizationTimer = setTimeout(() => {
+      ss.toolAuthorizationTimer = null;
+      if (hasDifferentActiveStreamToken(ss, streamToken) || ss.hasError || hasStreamEvent(ss, "turn_end")) return;
+      if (hasToolExecutionInFlight(ss)) {
+        scheduleToolAuthorizationFallback(sessionPath, ss);
+        return;
+      }
+      Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
+      const finalText = extractLatestAssistantVisibleText(engine.getSessionByPath(sessionPath), sessionPath);
+      const meaningfulFinalText = isMeaningfulPersistedFinalText(finalText, ss) ? finalText : "";
+      closeStreamWithVisibleFallback(
+        sessionPath,
+        ss,
+        meaningfulFinalText || "",
+        "tool_authorization_timeout",
+      );
+    }, timeouts.toolAuthorizationGraceMs);
+    if (ss.toolAuthorizationTimer.unref) ss.toolAuthorizationTimer.unref();
+  }
+
+  function scheduleSilentBrainAbort(_sessionPath: any, ss: any): void {
+    clearSilentBrainAbortTimer(ss);
+  }
+
+  function closeStreamAfterError(sessionPath: any, ss: any) {
+    if (!sessionPath || !ss || hasStreamEvent(ss, "turn_end")) return;
+    if (!ss.hasOutput && !ss.hasToolCall) ss._lastTurnAborted = true;
+    closeStreamWithVisibleFallback(sessionPath, ss, "", "model_tool_error");
+  }
+
+  return {
+    buildRealtimeToolFallbackText,
+    closeStreamAfterError,
+    closeStreamWithVisibleFallback,
+    finalizeReturnedTurnWithoutStream,
+    isMeaningfulPersistedFinalText,
+    schedulePersistedFinalAnswerPoll,
+    scheduleReturnedTurnFinalizationFallback,
+    scheduleSilentBrainAbort,
+    scheduleToolAuthorizationFallback,
+    scheduleToolFinalizationFallback,
+    scheduleTurnHardAbort,
+  };
+}

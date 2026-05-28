@@ -36,13 +36,8 @@ import {
   BRAIN_PROVIDER_ID,
 } from "../../shared/brain-provider.js";
 import {
-  clearPersistedFinalAnswerPollTimer,
-  clearReturnedTurnFinalizationTimer,
-  clearSilentBrainAbortTimer,
-  clearToolAuthorizationPollTimer,
   clearToolAuthorizationTimer,
   clearToolFinalizationTimer,
-  clearTurnHardAbortTimer,
   clearTurnTimers,
   createSessionStateStore,
   isStaleEmptySessionStream,
@@ -58,7 +53,6 @@ import {
 import { extractText } from "../chat/content-utils.js";
 import { buildCodeVerificationPostscript } from "../chat/code-verification-postscript.js";
 import { createEditRollbackStore } from "../chat/edit-rollback-store.js";
-import { buildLocalOfficeDirectAnswer } from "../chat/local-office-answer.js";
 import { createTokenBucketRateLimiter } from "../chat/rate-limit.js";
 import {
   appendTextToLatestAssistantInMemory,
@@ -66,20 +60,11 @@ import {
   countPersistedAssistantMessages,
   countPersistedAssistantVisibleTexts,
   ensureSessionFileOnDisk,
-  extractLatestAssistantVisibleText,
-  extractLatestAssistantVisibleTextAfter,
-  persistLocalQwen35DirectTurn,
 } from "../chat/session-persistence.js";
 import {
-  LOCAL_QWEN35_DIRECT_ENDPOINT,
-  LOCAL_QWEN35_EMPTY_CONTENT_FALLBACK_MESSAGE,
-  LOCAL_QWEN35_DIRECT_MAX_TOKENS,
   LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS,
-  appendNoThinkHintToLastUserMessage,
-  buildLocalQwen35DirectMessages,
   resolveLocalQwen35DirectMaxTokens,
   resolveLocalQwen35DirectThinking,
-  shouldRetryLocalQwen35WithoutThinking,
   shouldUseLocalQwen35DirectBridge,
 } from "../chat/local-qwen35-direct-policy.js";
 import {
@@ -90,12 +75,9 @@ import {
   rememberSuccessfulTool,
   summarizeToolExecution,
 } from "../chat/tool-summary.js";
-import { streamLocalQwen35Completion } from "../chat/local-qwen35-direct-runner.js";
 import {
   attachLocalQwen35BenchContext,
   isLocalQwen35Model,
-  LOCAL_QWEN35_MODEL_ID,
-  LOCAL_QWEN35_PROVIDER_ID,
 } from "../chat/local-qwen35-bench-context.js";
 import {
   artifactPreviewDedupeKey,
@@ -106,10 +88,12 @@ import {
   consumeMutationConfirmation,
   recordPendingDeleteRequest,
 } from "../chat/turn-retry-policy.js";
-import { extractProviderRouteMeta } from "../chat/provider-route-meta.js";
-import { createStreamEmitters } from "../chat/stream-emitters.js";
+import { extractProviderRouteMeta } from "../chat/provider-meta.js";
+import { createStreamEmitters } from "../chat/stream-events.js";
 import { createChatRouteContext } from "../chat/chat-route-context.js";
 import { generateSessionTitle } from "../chat/title-generator.js";
+import { createToolTurnFinalizer } from "../chat/tool-turn-finalizer.js";
+import { createLocalModelBridge } from "../chat/local-model-bridge.js";
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 type IntervalHandle = ReturnType<typeof setInterval>;
@@ -185,6 +169,18 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
   });
 
   const checkRateLimit = createTokenBucketRateLimiter({ capacity: 5, refillMs: 10_000 });
+
+  type ToolTurnFinalizers = ReturnType<typeof createToolTurnFinalizer>;
+  let buildRealtimeToolFallbackText: ToolTurnFinalizers["buildRealtimeToolFallbackText"] = () => "";
+  let closeStreamAfterError: ToolTurnFinalizers["closeStreamAfterError"] = () => {};
+  let closeStreamWithVisibleFallback: ToolTurnFinalizers["closeStreamWithVisibleFallback"] = () => false;
+  let finalizeReturnedTurnWithoutStream: ToolTurnFinalizers["finalizeReturnedTurnWithoutStream"] = () => false;
+  let schedulePersistedFinalAnswerPoll: ToolTurnFinalizers["schedulePersistedFinalAnswerPoll"] = () => false;
+  let scheduleReturnedTurnFinalizationFallback: ToolTurnFinalizers["scheduleReturnedTurnFinalizationFallback"] = () => false;
+  let scheduleSilentBrainAbort: ToolTurnFinalizers["scheduleSilentBrainAbort"] = () => {};
+  let scheduleToolAuthorizationFallback: ToolTurnFinalizers["scheduleToolAuthorizationFallback"] = () => {};
+  let scheduleToolFinalizationFallback: ToolTurnFinalizers["scheduleToolFinalizationFallback"] = () => {};
+  let scheduleTurnHardAbort: ToolTurnFinalizers["scheduleTurnHardAbort"] = () => {};
 
   function cancelDisconnectAbort() {
     if (disconnectAbortTimer) {
@@ -264,286 +260,6 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
     return true;
   }
 
-  function closeStreamWithVisibleFallback(sessionPath: any, ss: any, text: any, reason: any, opts: any = {}) {
-    if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
-    ss._turnClosed = true;
-    ss.internalRetryPending = false;
-    ss.internalRetryInFlight = false;
-    ss.internalRetryReason = "";
-    clearTurnTimers(ss);
-    editRollbackStore.discardPendingForSession(sessionPath, ss.activeStreamToken || null);
-    if (ss.isThinking) {
-      ss.isThinking = false;
-      emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-    }
-    if (text && (!ss.hasOutput || opts.appendEvenIfHasOutput)) {
-      const prefix = ss.hasOutput && opts.appendEvenIfHasOutput ? "\n\n" : "";
-      if (opts.trustedFallback) {
-        emitTrustedVisibleTextDelta(sessionPath, ss, prefix + text);
-      } else {
-        emitVisibleTextDelta(sessionPath, ss, prefix + text);
-      }
-    }
-    maybeAppendCodeVerificationPostscript(sessionPath, ss);
-    emitStreamEvent(sessionPath, ss, { type: "turn_end" });
-    lifecycleHooks.run("turn_close", { sessionPath, ss, reason, forced: true });
-    broadcast({ type: "status", isStreaming: false, sessionPath });
-    finishSessionStream(ss);
-    resetCompletedTurnState(ss);
-    debugLog()?.warn("ws", `[TURN-CLOSE-FALLBACK v1] closed stream · reason=${reason} · session=${sessionPath}`);
-    return true;
-  }
-
-  function normalizeVisibleForCompare(text: any) {
-    return String(text || "").replace(/\s+/g, " ").trim();
-  }
-
-  function isMeaningfulPersistedFinalText(finalText: any, ss: any) {
-    const final = normalizeVisibleForCompare(finalText);
-    if (!final) return false;
-    const visible = normalizeVisibleForCompare(ss?.visibleTextAcc || "");
-    if (!visible) return true;
-    if (final === visible) return false;
-    if (final.length <= visible.length + 20 && (final.includes(visible) || visible.includes(final))) return false;
-    return true;
-  }
-
-  function buildEmptyTurnFallbackText(ss: any, reason: any = "") {
-    if (!ss || ss.hasOutput) return "";
-    const toolFallback = String(ss.realtimeToolFallbackText || "").trim();
-    if (toolFallback) return toolFallback;
-    if (reason === "hard_turn_timeout" && !ss.hasToolCall) {
-      return buildLocalOfficeDirectAnswer(ss.originalPromptText || ss.effectivePromptText || "");
-    }
-    return "";
-  }
-
-  function buildRealtimeToolFallbackText(toolName: any, event: any) {
-    const name = String(toolName || event?.toolName || "");
-    if (!["stock_market", "weather", "live_news", "sports_score"].includes(name)) return "";
-    const text = extractText(event?.result?.content || "").trim();
-    if (!text) return "";
-    if (name === "stock_market") {
-      const disclaimer = /不构成投资建议|not investment advice/i.test(text)
-        ? ""
-        : "\n\n说明：以上是工具返回的最近可用行情摘要，不构成投资建议；关键价格、时间戳和来源请以交易所、券商或专门行情源交叉核验。";
-      return `${text}${disclaimer}`;
-    }
-    return text;
-  }
-
-  function finalizeReturnedTurnWithoutStream(sessionPath: any, ss: any, reason: any, opts: any = {}) {
-    if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
-    if (hasToolExecutionInFlight(ss)) return false;
-    if (!opts.ignoreInternalRetry && hasScheduledInternalRetry(ss)) return false;
-    const session = engine.getSessionByPath(sessionPath);
-    const finalText = !ss.hasOutput
-      ? extractLatestAssistantVisibleText(session, sessionPath)
-      : "";
-    if (opts.requirePersistedText && !ss.hasOutput && !finalText) return false;
-    return closeStreamWithVisibleFallback(sessionPath, ss, finalText, reason);
-  }
-
-  function scheduleReturnedTurnFinalizationFallback(sessionPath: any, ss: any, reason: any) {
-    clearReturnedTurnFinalizationTimer(ss);
-    if (!sessionPath || !ss || !RETURNED_TURN_FINALIZATION_GRACE_MS) return false;
-    const streamToken = ss.activeStreamToken || null;
-    ss.returnedTurnFinalizationTimer = setTimeout(() => {
-      ss.returnedTurnFinalizationTimer = null;
-      if (
-        hasDifferentActiveStreamToken(ss, streamToken) ||
-        ss.hasError ||
-        ss._turnClosed ||
-        hasStreamEvent(ss, "turn_end") ||
-        hasToolExecutionInFlight(ss) ||
-        hasScheduledInternalRetry(ss)
-      ) {
-        return;
-      }
-      // hub.send may return before the provider SSE has delivered final text.
-      // Do not synthesize or strip output here; only finalize when there is
-      // already persisted assistant text to show.
-      finalizeReturnedTurnWithoutStream(sessionPath, ss, reason, { requirePersistedText: true });
-    }, RETURNED_TURN_FINALIZATION_GRACE_MS);
-    if (ss.returnedTurnFinalizationTimer.unref) ss.returnedTurnFinalizationTimer.unref();
-    return true;
-  }
-
-  function schedulePersistedFinalAnswerPoll(sessionPath: any, ss: any) {
-    clearPersistedFinalAnswerPollTimer(ss);
-    if (!sessionPath || !ss) return false;
-    const streamToken = ss.activeStreamToken || null;
-    ss.persistedFinalAnswerPollTimer = setInterval(() => {
-      if (
-        hasDifferentActiveStreamToken(ss, streamToken) ||
-        ss.hasError ||
-        ss.hasOutput ||
-        ss._turnClosed ||
-        hasStreamEvent(ss, "turn_end") ||
-        hasScheduledInternalRetry(ss)
-      ) {
-        clearPersistedFinalAnswerPollTimer(ss);
-        return;
-      }
-      if (hasToolExecutionInFlight(ss)) return;
-      const finalText = extractLatestAssistantVisibleTextAfter(
-        engine.getSessionByPath(sessionPath),
-        sessionPath,
-        ss.persistedAssistantTextBaseline || 0,
-      );
-      if (finalText) {
-        closeStreamWithVisibleFallback(sessionPath, ss, finalText, "persisted_final_answer_poll");
-      }
-    }, 1000);
-    if (ss.persistedFinalAnswerPollTimer.unref) ss.persistedFinalAnswerPollTimer.unref();
-    return true;
-  }
-
-  function scheduleTurnHardAbort(sessionPath: any, ss: any) {
-    clearTurnHardAbortTimer(ss);
-    if (!sessionPath || !ss || !TURN_HARD_ABORT_MS) return;
-    const streamToken = ss.activeStreamToken || null;
-    const originalOrEffectivePrompt = `${ss.originalPromptText || ""}\n${ss.effectivePromptText || ""}`;
-    const isLongResearchTurn =
-      /(?:深度|深入|完整|系统性|多维度|全面|调研|研究|研报|报告|分析报告|形成\s*docx|docx\s*格式|来源包括|但不限于|学术界|咨询领域|小红书|抖音|快手|视频号|公众号)/i.test(originalOrEffectivePrompt);
-    const timeoutMs = isLongResearchTurn
-      ? Math.max(TURN_HARD_ABORT_MS, TURN_LONG_RESEARCH_HARD_ABORT_MS || TURN_HARD_ABORT_MS)
-      : TURN_HARD_ABORT_MS;
-    if (isLongResearchTurn && timeoutMs !== TURN_HARD_ABORT_MS) {
-      debugLog()?.log("ws", `[TURN-HARD-ABORT v2] long research turn timeout=${timeoutMs}ms · session=${sessionPath}`);
-    }
-    ss.turnHardAbortTimer = setTimeout(() => {
-      ss.turnHardAbortTimer = null;
-      if (hasDifferentActiveStreamToken(ss, streamToken) || ss.hasError || hasStreamEvent(ss, "turn_end")) return;
-      ss._lastTurnAborted = true;
-      Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
-      closeStreamWithVisibleFallback(
-        sessionPath,
-        ss,
-        buildEmptyTurnFallbackText(ss, "hard_turn_timeout"),
-        "hard_turn_timeout",
-        { trustedFallback: true },
-      );
-    }, timeoutMs);
-    if (ss.turnHardAbortTimer.unref) ss.turnHardAbortTimer.unref();
-  }
-
-  function scheduleToolFinalizationFallback(sessionPath: any, ss: any) {
-    clearToolFinalizationTimer(ss);
-    if (!sessionPath || !ss || !TOOL_FINALIZATION_GRACE_MS) return;
-    const streamToken = ss.activeStreamToken || null;
-    ss.toolFinalizationTimer = setTimeout(() => {
-      ss.toolFinalizationTimer = null;
-      if (
-        hasDifferentActiveStreamToken(ss, streamToken) ||
-        ss.hasError ||
-        hasStreamEvent(ss, "turn_end")
-      ) {
-        return;
-      }
-      if (hasToolExecutionInFlight(ss)) {
-        flushBufferedAssistantText(sessionPath, ss);
-        const toolStartedAt = Number.isFinite(ss.activeToolCallStartedAt)
-          ? ss.activeToolCallStartedAt
-          : (Number.isFinite(ss.lastToolExecutionActivity) ? ss.lastToolExecutionActivity : Date.now());
-        const toolAgeMs = Date.now() - toolStartedAt;
-        if ((ss.hasOutput || ss.hasBufferedVisibleTextDuringTool) && toolAgeMs >= TOOL_FINALIZATION_GRACE_MS) {
-          const finalText = extractLatestAssistantVisibleTextAfter(
-            engine.getSessionByPath(sessionPath),
-            sessionPath,
-            ss.persistedAssistantTextBaseline || 0,
-          );
-          ss.activeToolCallCount = 0;
-          ss.activeToolCallStartedAt = null;
-          ss.recoveredBashInFlight = false;
-          flushBufferedToolVisibleText(
-            sessionPath,
-            ss,
-            isMeaningfulPersistedFinalText(finalText, ss) ? finalText : "",
-          );
-          debugLog()?.warn("ws", `[TOOL-MISSING-END-FENCE v1] closing turn with visible output despite missing tool_end · age=${toolAgeMs}ms · session=${sessionPath}`);
-          Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
-          closeStreamWithVisibleFallback(
-            sessionPath,
-            ss,
-            "",
-            "tool_missing_end_after_output",
-          );
-          return;
-        }
-        scheduleToolFinalizationFallback(sessionPath, ss);
-        return;
-      }
-      Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
-      if (ss.hasBufferedVisibleTextDuringTool && !ss.hasOutput) {
-        const finalText = extractLatestAssistantVisibleTextAfter(
-          engine.getSessionByPath(sessionPath),
-          sessionPath,
-          ss.persistedAssistantTextBaseline || 0,
-        );
-        flushBufferedToolVisibleText(
-          sessionPath,
-          ss,
-          isMeaningfulPersistedFinalText(finalText, ss) ? finalText : "",
-        );
-      }
-      closeStreamWithVisibleFallback(
-        sessionPath,
-        ss,
-        buildEmptyTurnFallbackText(ss, "tool_finalization_timeout"),
-        "tool_finalization_timeout",
-        { trustedFallback: true },
-      );
-    }, TOOL_FINALIZATION_GRACE_MS);
-    if (ss.toolFinalizationTimer.unref) ss.toolFinalizationTimer.unref();
-  }
-
-  function scheduleToolAuthorizationFallback(sessionPath: any, ss: any) {
-    clearToolAuthorizationTimer(ss);
-    clearToolAuthorizationPollTimer(ss);
-    if (!sessionPath || !ss || !TOOL_AUTHORIZATION_GRACE_MS || !ss.isStreaming || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return;
-    clearSilentBrainAbortTimer(ss);
-    const streamToken = ss.activeStreamToken || null;
-    ss.toolAuthorizationPollTimer = setInterval(() => {
-      if (
-        hasDifferentActiveStreamToken(ss, streamToken) ||
-        ss.hasError ||
-        hasStreamEvent(ss, "turn_end")
-      ) {
-        clearToolAuthorizationPollTimer(ss);
-        return;
-      }
-      const finalText = extractLatestAssistantVisibleText(engine.getSessionByPath(sessionPath), sessionPath);
-      if (isMeaningfulPersistedFinalText(finalText, ss)) {
-        if (hasToolExecutionInFlight(ss)) return;
-        closeStreamWithVisibleFallback(sessionPath, ss, finalText, "tool_authorization_persisted_final");
-      }
-    }, 1000);
-    if (ss.toolAuthorizationPollTimer.unref) ss.toolAuthorizationPollTimer.unref();
-    ss.toolAuthorizationTimer = setTimeout(() => {
-      ss.toolAuthorizationTimer = null;
-      if (hasDifferentActiveStreamToken(ss, streamToken) || ss.hasError || hasStreamEvent(ss, "turn_end")) return;
-      if (hasToolExecutionInFlight(ss)) {
-        scheduleToolAuthorizationFallback(sessionPath, ss);
-        return;
-      }
-      Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
-      const finalText = extractLatestAssistantVisibleText(engine.getSessionByPath(sessionPath), sessionPath);
-      const meaningfulFinalText = isMeaningfulPersistedFinalText(finalText, ss) ? finalText : "";
-      closeStreamWithVisibleFallback(
-        sessionPath,
-        ss,
-        meaningfulFinalText || "",
-        "tool_authorization_timeout",
-      );
-    }, TOOL_AUTHORIZATION_GRACE_MS);
-    if (ss.toolAuthorizationTimer.unref) ss.toolAuthorizationTimer.unref();
-  }
-
-  function scheduleSilentBrainAbort(sessionPath: any, ss: any) {
-    clearSilentBrainAbortTimer(ss);
-  }
-
   const clients = new Set<any>();
 
   const editRollbackStore = createEditRollbackStore({ maxSnapshots: 200 });
@@ -614,12 +330,6 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
     return preview ? emitRecoveredArtifact(sessionPath, ss, preview, source) : false;
   }
 
-  function closeStreamAfterError(sessionPath: any, ss: any) {
-    if (!sessionPath || !ss || hasStreamEvent(ss, "turn_end")) return;
-    if (!ss.hasOutput && !ss.hasToolCall) ss._lastTurnAborted = true;
-    closeStreamWithVisibleFallback(sessionPath, ss, "", "model_tool_error");
-  }
-
   function maybeGenerateFirstTurnTitle(sessionPath: any, ss: any) {
     if (!sessionPath || !ss || ss.titleRequested) return;
 
@@ -674,247 +384,61 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
     return true;
   }
 
-  function emitLocalThinkingDelta(sessionPath: any, ss: any, delta: any) {
-    const text = String(delta || "");
-    if (!text) return;
-    if (!ss.isThinking) {
-      ss.isThinking = true;
-      ss.hasThinking = true;
-      emitStreamEvent(sessionPath, ss, { type: "thinking_start" });
-    }
-    ss.hasThinking = true;
-    emitStreamEvent(sessionPath, ss, { type: "thinking_delta", delta: text });
-  }
+  ({
+    buildRealtimeToolFallbackText,
+    closeStreamAfterError,
+    closeStreamWithVisibleFallback,
+    finalizeReturnedTurnWithoutStream,
+    schedulePersistedFinalAnswerPoll,
+    scheduleReturnedTurnFinalizationFallback,
+    scheduleSilentBrainAbort,
+    scheduleToolAuthorizationFallback,
+    scheduleToolFinalizationFallback,
+    scheduleTurnHardAbort,
+  } = createToolTurnFinalizer({
+    engine,
+    editRollbackStore,
+    lifecycleHooks,
+    broadcast,
+    emitStreamEvent,
+    emitTrustedVisibleTextDelta,
+    emitVisibleTextDelta,
+    flushBufferedAssistantText,
+    flushBufferedToolVisibleText,
+    maybeAppendCodeVerificationPostscript,
+    hasStreamEvent,
+    hasScheduledInternalRetry,
+    hasToolExecutionInFlight,
+    hasDifferentActiveStreamToken,
+    timeouts: {
+      returnedTurnFinalizationGraceMs: RETURNED_TURN_FINALIZATION_GRACE_MS,
+      turnHardAbortMs: TURN_HARD_ABORT_MS,
+      turnLongResearchHardAbortMs: TURN_LONG_RESEARCH_HARD_ABORT_MS,
+      toolFinalizationGraceMs: TOOL_FINALIZATION_GRACE_MS,
+      toolAuthorizationGraceMs: TOOL_AUTHORIZATION_GRACE_MS,
+    },
+  }));
 
-  function startLocalQwen35WarmupFeedback(sessionPath: any, _ss: any) {
-    debugLog()?.log("ws", `[LOCAL-QWEN35-DIRECT v3] warmup started outside model stream · ${sessionPath}`);
-    return () => {};
-  }
-
-  function startLocalQwen35PrefetchFeedback(sessionPath: any, ss: any, toolName: any, promptText: any) {
-    debugLog()?.log("ws", `[LOCAL-QWEN35-DIRECT v3] prefetch started outside model stream · tool=${toolName || ""} · ${sessionPath} · prompt=${String(promptText || "").slice(0, 80)}`);
-    return () => {};
-  }
-
-  function closeLocalQwen35DirectTurn(sessionPath: any, ss: any, opts: any = {}) {
-    clearTurnTimers(ss);
-    if (ss.isThinking) {
-      ss.isThinking = false;
-      emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-    }
-    emitStreamEvent(sessionPath, ss, { type: "model_hint", model: `${LOCAL_QWEN35_PROVIDER_ID}/${LOCAL_QWEN35_MODEL_ID}` });
-    maybeAppendCodeVerificationPostscript(sessionPath, ss);
-    emitStreamEvent(sessionPath, ss, { type: "turn_end" });
-    lifecycleHooks.run("turn_end", {
-      ss,
-      sessionPath,
-      hasOutput: ss.hasOutput,
-      hasToolCall: ss.hasToolCall,
-      direct: true,
-      source: "local_qwen35_direct",
-    });
-    broadcast({ type: "status", isStreaming: false, sessionPath });
-    finishSessionStream(ss);
-    resetCompletedTurnState(ss);
-    if (opts.debugLabel) {
-      debugLog()?.log("ws", `[LOCAL-QWEN35-DIRECT v1] closed · ${opts.debugLabel} · ${sessionPath}`);
-    }
-  }
-
-  async function switchCurrentSessionToBrainFallback(sessionPath: any, ss: any, reason: any, modelInfo: any = {}) {
-    const brainModel = resolveBrainFallbackModel(engine);
-    if (!brainModel) {
-      debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] no brain fallback model available · reason=${reason} · ${sessionPath}`);
-      return null;
-    }
-    if (engine.currentSessionPath && engine.currentSessionPath !== sessionPath) {
-      debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] session is no longer focused; cannot switch current model · reason=${reason} · ${sessionPath}`);
-      return null;
-    }
-    const switcher = engine?._sessionCoord?.switchCurrentSessionModel;
-    if (typeof switcher !== "function") {
-      debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] session model switcher unavailable · reason=${reason} · ${sessionPath}`);
-      return null;
-    }
-    await switcher.call(engine._sessionCoord, brainModel);
-    emitStreamEvent(sessionPath, ss, {
-      type: "provider_meta",
-      activeProvider: BRAIN_PROVIDER_ID,
-      fallbackFrom: [{
-        id: String(modelInfo?.provider || LOCAL_QWEN35_PROVIDER_ID),
-        reason,
-      }],
-    });
-    emitStreamEvent(sessionPath, ss, { type: "model_hint", model: `${BRAIN_PROVIDER_ID}/${brainModel.id || BRAIN_DEFAULT_MODEL_ID}` });
-    debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] switched session to brain fallback · reason=${reason} · model=${brainModel.id || ""} · ${sessionPath}`);
-    return brainModel;
-  }
-
-  async function continueTurnViaHub(sessionPath: any, ss: any, text: any, {
-    images,
-    streamToken,
-    disableTools,
-    turnInstruction,
-    returnedOpenReason = "hub_send_returned_open_safety_timeout",
-    returnedClosedReason = "hub_send_returned_closed_without_turn_end",
-  }: any = {}) {
-    scheduleSilentBrainAbort(sessionPath, ss);
-    await hub.send(
-      text,
-      images
-        ? { images, sessionPath, streamToken, disableTools, turnInstruction }
-        : { sessionPath, streamToken, disableTools, turnInstruction },
-    );
-    if (!ss.isStreaming) {
-      if (hasToolExecutionInFlight(ss)) {
-        scheduleToolFinalizationFallback(sessionPath, ss);
-        debugLog()?.log("ws", `[HUB-SEND v2] returned while tool is still in flight count=${ss.activeToolCallCount || 0}, recovered=${!!ss.recoveredBashInFlight}; defer close · ${sessionPath}`);
-      } else {
-        clearTurnTimers(ss);
-        if (!finalizeReturnedTurnWithoutStream(sessionPath, ss, returnedClosedReason)) {
-          broadcast({ type: "status", isStreaming: false, sessionPath });
-        }
-      }
-    } else if (!hasToolExecutionInFlight(ss) && finalizeReturnedTurnWithoutStream(sessionPath, ss, "hub_send_returned_open_without_turn_end", { requirePersistedText: true })) {
-      // finalized from the persisted non-streaming assistant message
-    } else {
-      scheduleReturnedTurnFinalizationFallback(sessionPath, ss, returnedOpenReason);
-      debugLog()?.log("ws", `hub.send returned while server stream remains open · ${sessionPath}`);
-    }
-  }
-
-  async function fallbackLocalQwen35DirectToBrain({ sessionPath, ss, promptText, effectivePromptText, modelInfo, msg, streamToken, disableTools, turnInstruction, reason }: any) {
-    if (ss.hasOutput || ss.hasThinking) {
-      return false;
-    }
-    const fallbackModel = await switchCurrentSessionToBrainFallback(sessionPath, ss, reason, modelInfo);
-    if (!fallbackModel) return false;
-    ss.streamSource = "brain_fallback";
-    ss.effectivePromptText = effectivePromptText || promptText;
-    await continueTurnViaHub(sessionPath, ss, effectivePromptText || promptText, {
-      images: msg?.images,
-      streamToken,
-      disableTools,
-      turnInstruction,
-      returnedOpenReason: `local_qwen35_${reason}_fallback_open_safety_timeout`,
-      returnedClosedReason: `local_qwen35_${reason}_fallback_closed_without_turn_end`,
-    });
-    return true;
-  }
-
-  async function streamLocalQwen35DirectBridge(sessionPath: any, ss: any, originalPromptText: any, effectivePromptText: any, modelInfo: any = {}, opts: any = {}) {
-    const startedAt = Date.now();
-    const localProviderId = String(modelInfo?.provider || LOCAL_QWEN35_PROVIDER_ID);
-    const localModelId = String(modelInfo?.modelId || modelInfo?.id || LOCAL_QWEN35_MODEL_ID);
-    const enableThinking = opts.enableThinking !== false;
-    const maxTokens = Number.isFinite(Number(opts.maxTokens)) && Number(opts.maxTokens) > 0
-      ? Number(opts.maxTokens)
-      : LOCAL_QWEN35_DIRECT_MAX_TOKENS;
-    let assistantText = "";
-    let reasoningText = "";
-    let usage = null;
-    const stopWarmupFeedback = startLocalQwen35WarmupFeedback(sessionPath, ss);
-    let warmupStopped = false;
-    const stopWarmupOnce = () => {
-      if (warmupStopped) return;
-      warmupStopped = true;
-      stopWarmupFeedback();
-    };
-    let firstModelDeltaSeen = false;
-    const timeoutMs = Number.isFinite(Number(opts.timeoutMs)) && Number(opts.timeoutMs) > 0
-      ? Number(opts.timeoutMs)
-      : (enableThinking ? 150_000 : 60_000);
-    const earlyCloseVisibleChars = Number.isFinite(Number(opts.earlyCloseVisibleChars)) && Number(opts.earlyCloseVisibleChars) > 0
-      ? Number(opts.earlyCloseVisibleChars)
-      : 0;
-
-    const buildAttemptMessages = (attemptEnableThinking: any) => {
-      const attemptMessages = buildLocalQwen35DirectMessages(sessionPath, originalPromptText, effectivePromptText);
-      if (!attemptEnableThinking) appendNoThinkHintToLastUserMessage(attemptMessages);
-      return attemptMessages;
-    };
-
-    const runAttempt = async ({ attemptEnableThinking, attemptMaxTokens, attemptTimeoutMs, allowEarlyClose }: any) => {
-      const attemptMessages = buildAttemptMessages(attemptEnableThinking);
-      const attempt = await streamLocalQwen35Completion({
-        endpoint: LOCAL_QWEN35_DIRECT_ENDPOINT,
-        model: localModelId,
-        messages: attemptMessages,
-        enableThinking: attemptEnableThinking,
-        maxTokens: attemptMaxTokens,
-        timeoutMs: attemptTimeoutMs,
-        onFirstDelta: () => {
-          if (!firstModelDeltaSeen) {
-            firstModelDeltaSeen = true;
-            stopWarmupOnce();
-          }
-        },
-        onUsage: (nextUsage: any) => { usage = nextUsage; },
-        onReasoningDelta: (reasoningDelta: any) => {
-          reasoningText += reasoningDelta;
-          emitLocalThinkingDelta(sessionPath, ss, reasoningDelta);
-        },
-        onContentDelta: (contentDelta: any) => {
-          if (ss.isThinking) {
-            ss.isThinking = false;
-            emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-          }
-          assistantText += contentDelta;
-          feedAssistantVisibleText(sessionPath, ss, contentDelta);
-        },
-        shouldStopEarly: () => (
-          !!(allowEarlyClose && earlyCloseVisibleChars && assistantText.trim().length >= earlyCloseVisibleChars)
-        ),
-      });
-      if (attempt.timedOutAfterVisibleOutput) {
-        debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] timed out after visible output · chars=${attempt.assistantText.length} timeout=${attemptTimeoutMs}ms · ${sessionPath}`);
-      }
-      return attempt;
-    };
-
-    const firstAttempt = await runAttempt({
-      attemptEnableThinking: enableThinking,
-      attemptMaxTokens: maxTokens,
-      attemptTimeoutMs: timeoutMs,
-      allowEarlyClose: true,
-    });
-    if (shouldRetryLocalQwen35WithoutThinking({
-      enableThinking,
-      assistantText: firstAttempt.assistantText,
-      reasoningText: firstAttempt.reasoningText,
-    })) {
-      if (ss.isThinking) {
-        ss.isThinking = false;
-        emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-      }
-      debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] thinking-only output, retrying with thinking-off · reasoningChars=${firstAttempt.reasoningText.length} · ${sessionPath}`);
-      const retryAttempt = await runAttempt({
-        attemptEnableThinking: false,
-        attemptMaxTokens: resolveLocalQwen35DirectMaxTokens(originalPromptText, false),
-        attemptTimeoutMs: 60_000,
-        allowEarlyClose: false,
-      });
-      if (!retryAttempt.assistantText.trim()) {
-        assistantText += LOCAL_QWEN35_EMPTY_CONTENT_FALLBACK_MESSAGE;
-        feedAssistantVisibleText(sessionPath, ss, LOCAL_QWEN35_EMPTY_CONTENT_FALLBACK_MESSAGE);
-      }
-    }
-    stopWarmupOnce();
-    // Local llama.cpp streams may finish with a short final chunk still held by
-    // the ThinkTag/Mood/Xing parsers. Flush before turn_end so the real model
-    // output is visible immediately instead of only appearing after reload.
-    flushBufferedAssistantText(sessionPath, ss);
-    persistLocalQwen35DirectTurn(sessionPath, originalPromptText, assistantText, {
-      reasoningText,
-      usage,
-      provider: localProviderId,
-      model: localModelId,
-    });
-    closeLocalQwen35DirectTurn(sessionPath, ss, {
-      debugLabel: `chars=${assistantText.length} ms=${Date.now() - startedAt}`,
-    });
-    return true;
-  }
+  const {
+    fallbackLocalQwen35DirectToBrain,
+    startLocalQwen35PrefetchFeedback,
+    streamLocalQwen35DirectBridge,
+  } = createLocalModelBridge({
+    engine,
+    hub,
+    lifecycleHooks,
+    broadcast,
+    emitStreamEvent,
+    feedAssistantVisibleText,
+    flushBufferedAssistantText,
+    maybeAppendCodeVerificationPostscript,
+    resolveBrainFallbackModel,
+    hasToolExecutionInFlight,
+    scheduleSilentBrainAbort,
+    scheduleToolFinalizationFallback,
+    scheduleReturnedTurnFinalizationFallback,
+    finalizeReturnedTurnWithoutStream,
+  });
 
   function isAssistantStreamScopedEvent(event: any) {
     return event?.type === "message_update"
