@@ -6,10 +6,7 @@
  * 不持有 engine 引用，通过构造器注入依赖。
  */
 import fs from "fs";
-import fsp from "fs/promises";
-import os from "os";
 import path from "path";
-import { spawnSync } from "child_process";
 import {
   createAgentSession,
   SessionManager,
@@ -85,6 +82,10 @@ import {
   saveSessionTitleFile,
   type SessionTitleCacheEntry,
 } from "./session-title-meta.js";
+import {
+  prepareDryRunWorkspace,
+  runDryRunValidation,
+} from "./session-dry-run.js";
 import type { ResolvedModel } from "./types.js";
 
 const log = createModuleLogger("session");
@@ -175,19 +176,6 @@ export const PATROL_TOOLS_DEFAULT = [
   "todo", "notify",
   "present_files", "message_agent",
 ];
-
-const DRY_RUN_COPY_IGNORES = new Set([
-  ".git",
-  "node_modules",
-  ".next",
-  "dist",
-  "build",
-  ".turbo",
-  ".cache",
-  ".venv",
-  "venv",
-  "__pycache__",
-]);
 
 export class SessionCoordinator {
   _d: SessionCoordinatorDeps;
@@ -1602,36 +1590,10 @@ export class SessionCoordinator {
   }
 
   async _prepareDryRunWorkspace(sourceDir: string) {
-    const src = path.resolve(sourceDir || process.cwd());
-    const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "lynn-shadow-"));
-    await fsp.cp(src, tempDir, {
-      recursive: true,
-      dereference: false,
-      filter: (itemPath) => {
-        const base = path.basename(itemPath);
-        if (itemPath === src) return true;
-        return !DRY_RUN_COPY_IGNORES.has(base);
-      },
-    });
-    return tempDir;
+    return prepareDryRunWorkspace(sourceDir);
   }
 
   _runDryRunValidation(cwd: string, validateCommand: unknown[] | undefined) {
-    if (!Array.isArray(validateCommand) || validateCommand.length === 0) return null;
-    const [command, ...args] = validateCommand.map((item) => String(item));
-    if (!command) return null;
-    const result = spawnSync(command, args, {
-      cwd,
-      encoding: "utf-8",
-      maxBuffer: 1024 * 1024,
-    });
-    return {
-      command,
-      args,
-      exitCode: result.status ?? 0,
-      signal: result.signal || null,
-      stdout: (result.stdout || "").trim().slice(0, 4000),
-      stderr: (result.stderr || "").trim().slice(0, 4000),
-    };
+    return runDryRunValidation(cwd, validateCommand);
   }
 }
