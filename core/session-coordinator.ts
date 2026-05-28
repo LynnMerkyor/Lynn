@@ -86,7 +86,13 @@ import {
   prepareDryRunWorkspace,
   runDryRunValidation,
 } from "./session-dry-run.js";
+import {
+  prepareIsolatedToolRuntime,
+  resolveIsolatedExecutionModel,
+} from "./session-isolated-runtime.js";
 import type { ResolvedModel } from "./types.js";
+
+export { PATROL_TOOLS_DEFAULT } from "./session-isolated-runtime.js";
 
 const log = createModuleLogger("session");
 
@@ -167,15 +173,6 @@ function shouldExposeVerboseModelRouting() {
   const flag = String(process?.env?.LYNN_DEBUG_MODELS || process?.env?.DEBUG_MODEL_ROUTING || "").trim().toLowerCase();
   return flag === "1" || flag === "true" || process?.env?.NODE_ENV === "development";
 }
-
-/** 巡检/定时任务默认工具白名单 */
-export const PATROL_TOOLS_DEFAULT = [
-  "search_memory", "pin_memory", "unpin_memory",
-  "recall_experience", "record_experience",
-  "web_search", "web_fetch",
-  "todo", "notify",
-  "present_files", "message_agent",
-];
 
 export class SessionCoordinator {
   _d: SessionCoordinatorDeps;
@@ -1351,63 +1348,32 @@ export class SessionCoordinator {
       }
       const execCwd = dryRunWorkspace || baseExecCwd;
       const models = this._d.getModels();
-      const agentPreferredRef = targetAgent.config?.models?.chat;
-      const modelId = opts.model ? null
-        : (typeof agentPreferredRef === "object" ? agentPreferredRef?.id : agentPreferredRef);
-      const modelProvider = opts.model ? undefined
-        : (typeof agentPreferredRef === "object" ? agentPreferredRef?.provider : undefined);
-      let resolvedModel = opts.model;
+      const resolved = resolveIsolatedExecutionModel({
+        explicitModel: opts.model,
+        targetAgent,
+        availableModels: models.availableModels,
+        defaultModel: models.defaultModel,
+      });
+      const resolvedModel = resolved.model;
       if (!resolvedModel) {
-        const targetRole = targetAgent.config?.agent?.yuan || targetAgent.yuan || null;
-        if (modelId) {
-          resolvedModel = findModel(models.availableModels, modelId, modelProvider) as ModelLike;
-        }
-        if (!resolvedModel) {
-          resolvedModel = resolveRoleDefaultModel(models.availableModels, targetRole) as ModelLike;
-        }
-        if (!resolvedModel) {
-          // agent 未配 models.chat 或配置的模型不在可用列表：fallback 到当前默认模型
-          resolvedModel = models.defaultModel;
-        }
-        if (!resolvedModel) {
-          log.error(`[executeIsolated] agent "${targetAgent.agentName}" 未指定 models.chat，也没有可用的默认模型`);
-          throw new Error(t("error.executeIsolatedNoModel", { name: targetAgent.agentName }));
-        }
-        if (modelId && resolvedModel.id !== modelId) {
-          log.log(`[executeIsolated] 模型 "${modelId}" 不可用，fallback → ${resolvedModel.id}`);
-        }
+        log.error(`[executeIsolated] agent "${targetAgent.agentName}" 未指定 models.chat，也没有可用的默认模型`);
+        throw new Error(t("error.executeIsolatedNoModel", { name: targetAgent.agentName }));
+      }
+      if (resolved.usedFallback && resolved.requestedModelId) {
+        log.log(`[executeIsolated] 模型 "${resolved.requestedModelId}" 不可用，fallback → ${resolvedModel.id}`);
       }
       const execModel = models.resolveExecutionModel(resolvedModel);
       tempSessionMgr = SessionManager.create(execCwd, sessionDir);
-      const { tools: allBuiltinTools, customTools: allCustomTools } = this._d.buildTools(
+      const isolatedTools = prepareIsolatedToolRuntime({
         execCwd,
-        targetAgent.tools,
-        {
-          agentDir: targetAgent.agentDir,
-          workspace: execCwd,
-          getSessionPath: () => tempSessionMgr?.getSessionFile?.() || null,
-        }
-      );
-
-      const patrolAllowed = opts.toolFilter
-        || targetAgent.config?.desk?.patrol_tools
-        || PATROL_TOOLS_DEFAULT;
-      const allowSet = new Set(patrolAllowed);
-      const suppressClientTools = shouldSuppressClientToolSchema(execModel);
-      const actCustomTools = suppressClientTools
-        ? []
-        : normalizeCustomToolsForModel(
-            allCustomTools.filter((t: ToolLike) => allowSet.has(t.name)),
-            execModel
-          );
-
-      // builtin tools 过滤：传入 builtinFilter 时只保留白名单内的 builtin 工具
-      const actTools = suppressClientTools
-        ? []
-        : (opts.builtinFilter
-            ? allBuiltinTools.filter((t: ToolLike) => opts.builtinFilter?.includes(t.name))
-            : allBuiltinTools);
-      if (suppressClientTools) {
+        targetAgent,
+        execModel,
+        buildTools: this._d.buildTools,
+        getSessionPath: () => tempSessionMgr?.getSessionFile?.() || null,
+        toolFilter: opts.toolFilter,
+        builtinFilter: opts.builtinFilter,
+      });
+      if (isolatedTools.suppressClientTools) {
         log.log(`[executeIsolated] using Brain V2 internal tool chain for ${execModel?.provider || "?"}/${execModel?.id || execModel?.name || "?"}; client tool schema suppressed`);
       }
 
@@ -1436,8 +1402,8 @@ export class SessionCoordinator {
         model: execModel,
         thinkingLevel: models.resolveThinkingLevel(this._d.getPrefs().getThinkingLevel(), execModel),
         resourceLoader: execResourceLoader,
-        tools: actTools,
-        customTools: actCustomTools,
+        tools: isolatedTools.tools,
+        customTools: isolatedTools.customTools,
         ...(Object.keys(clientAgentHeaders).length > 0 && { requestHeaders: clientAgentHeaders }),
         ...(clientAgentMetadata && { requestMetadata: clientAgentMetadata }),
       } as any);
