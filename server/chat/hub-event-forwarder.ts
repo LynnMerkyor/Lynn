@@ -1,7 +1,4 @@
 import fs from "fs";
-import path from "path";
-import { readFile } from "node:fs/promises";
-import { BrowserManager } from "../../lib/browser/browser-manager.js";
 import { debugLog } from "../../lib/debug-log.js";
 import { finishSessionStream } from "../session-stream-store.js";
 import {
@@ -16,15 +13,21 @@ import {
   rememberSuccessfulTool,
   summarizeToolExecution,
 } from "./tool-summary.js";
-import {
-  artifactPreviewDedupeKey,
-  artifactPreviewFromToolCall,
-} from "./artifact-recovery.js";
 import { normalizeArtifactPayload } from "./artifact-shape.js";
+import { createBrowserThumbnailPoller } from "./hub-browser-poll.js";
+import {
+  emitFileOutputFromPath as emitFileOutputFromPathBase,
+  emitFileOutputsFromDetails as emitFileOutputsFromDetailsBase,
+  maybeRecoverArtifactFromMessageUpdate as maybeRecoverArtifactFromMessageUpdateBase,
+} from "./hub-event-artifacts.js";
+import {
+  isAssistantStreamScopedEvent,
+  resolveEditSnapshotPath,
+} from "./hub-event-utils.js";
+import { emitModelHintFromSessionTail } from "./model-hint-recovery.js";
 import { extractProviderRouteMeta } from "./provider-meta.js";
 
 type AnyRecord = Record<string, any>;
-type IntervalHandle = ReturnType<typeof setInterval>;
 
 export interface HubEventForwarderDeps {
   hub: any;
@@ -46,27 +49,6 @@ export interface HubEventForwarderDeps {
   hasToolExecutionInFlight: (ss: any) => boolean;
 }
 
-function resolveEditSnapshotPath(session: any, engine: any, rawPath: any) {
-  if (typeof rawPath !== "string") return null;
-  const trimmed = rawPath.trim();
-  if (!trimmed || trimmed.includes("\0")) return null;
-  if (path.isAbsolute(trimmed)) return path.resolve(trimmed);
-
-  const cwd = session?.sessionManager?.getCwd?.() || engine.cwd || process.cwd();
-  return path.resolve(cwd, trimmed);
-}
-
-function isAssistantStreamScopedEvent(event: any) {
-  return event?.type === "message_update"
-    || event?.type === "tool_execution_start"
-    || event?.type === "tool_execution_end"
-    || event?.type === "turn_end"
-    || event?.type === "provider_meta"
-    || event?.type === "provider_update"
-    || event?.type === "lynn.provider"
-    || event?.object === "lynn.provider";
-}
-
 export function createHubEventForwarder({
   hub,
   engine,
@@ -86,68 +68,18 @@ export function createHubEventForwarder({
   hasStreamEvent,
   hasToolExecutionInFlight,
 }: HubEventForwarderDeps) {
-  let browserThumbTimer: IntervalHandle | null = null;
-
-  function startBrowserThumbPoll() {
-    if (browserThumbTimer) return;
-    browserThumbTimer = setInterval(async () => {
-      const browser = BrowserManager.instance();
-      if (!browser.isRunning) { stopBrowserThumbPoll(); return; }
-      const thumbnail = await browser.thumbnail();
-      if (thumbnail) {
-        broadcast({ type: "browser_status", running: true, url: browser.currentUrl, thumbnail });
-      }
-    }, 30_000);
-  }
-
-  function stopBrowserThumbPoll() {
-    if (browserThumbTimer) {
-      clearInterval(browserThumbTimer);
-      browserThumbTimer = null;
-    }
-  }
+  const browserThumbPoll = createBrowserThumbnailPoller(broadcast);
 
   function emitFileOutputsFromDetails(sessionPath: any, ss: any, details: any = {}) {
-    const files = Array.isArray(details.files) ? [...details.files] : [];
-    if (files.length === 0 && details.filePath) {
-      files.push({ filePath: details.filePath, label: details.label, ext: details.ext || "" });
-    }
-    if (!ss.emittedFileOutputPaths || typeof ss.emittedFileOutputPaths.has !== "function") {
-      ss.emittedFileOutputPaths = new Set();
-    }
-    let emitted = 0;
-    for (const f of files) {
-      if (!f?.filePath) continue;
-      const key = path.resolve(String(f.filePath));
-      if (ss.emittedFileOutputPaths.has(key)) continue;
-      ss.emittedFileOutputPaths.add(key);
-      emitStreamEvent(sessionPath, ss, {
-        type: "file_output",
-        filePath: f.filePath,
-        label: f.label || path.basename(f.filePath),
-        ext: f.ext || path.extname(f.filePath).replace(/^\./, ""),
-      });
-      emitted += 1;
-    }
-    return emitted;
+    return emitFileOutputsFromDetailsBase(sessionPath, ss, emitStreamEvent, details);
   }
 
-  function emitRecoveredArtifact(sessionPath: any, ss: any, artifact: any, source: any = "toolcall") {
-    if (!ss || !artifact?.content) return false;
-    ss.recoveredArtifactKeys = ss.recoveredArtifactKeys || new Set();
-    const key = artifactPreviewDedupeKey(artifact);
-    if (ss.recoveredArtifactKeys.has(key)) return false;
-    ss.recoveredArtifactKeys.add(key);
-    ss.hasOutput = true;
-    emitStreamEvent(sessionPath, ss, artifact);
-    debugLog()?.log("ws", `recovered artifact from ${source} · tool=${artifact.recoveredFromTool || "unknown"} · title=${artifact.title || ""} · session=${sessionPath || "unknown"}`);
-    return true;
+  function emitFileOutputFromPath(sessionPath: any, ss: any, filePath: any) {
+    return emitFileOutputFromPathBase(sessionPath, ss, emitStreamEvent, filePath);
   }
 
   function maybeRecoverArtifactFromMessageUpdate(sessionPath: any, ss: any, event: any, source: any = "message_update") {
-    const sub = event?.assistantMessageEvent;
-    const preview = artifactPreviewFromToolCall(sub?.toolCall);
-    return preview ? emitRecoveredArtifact(sessionPath, ss, preview, source) : false;
+    return maybeRecoverArtifactFromMessageUpdateBase(sessionPath, ss, emitStreamEvent, event, source);
   }
 
   return hub.subscribe((event: any, sessionPath: any) => {
@@ -330,11 +262,7 @@ export function createHubEventForwarder({
       }
 
       if (event.toolName === "write" && !toolIsError && toolSummary.filePath) {
-        emitFileOutputsFromDetails(sessionPath, ss, {
-          filePath: toolSummary.filePath,
-          label: path.basename(toolSummary.filePath),
-          ext: path.extname(toolSummary.filePath).replace(/^\./, ""),
-        });
+        emitFileOutputFromPath(sessionPath, ss, toolSummary.filePath);
       }
 
       if ((event.toolName === "edit" || event.toolName === "edit-diff") && rawDetails.diff && !toolIsError) {
@@ -378,8 +306,8 @@ export function createHubEventForwarder({
         };
         if (d.thumbnail) statusMsg.thumbnail = d.thumbnail;
         emitStreamEvent(sessionPath, ss, statusMsg);
-        if (statusMsg.running) startBrowserThumbPoll();
-        else stopBrowserThumbPoll();
+        if (statusMsg.running) browserThumbPoll.start();
+        else browserThumbPoll.stop();
       }
 
       if (event.toolName === "cron") {
@@ -522,29 +450,7 @@ export function createHubEventForwarder({
       maybeAppendCodeVerificationPostscript(sessionPath, ss);
       emitStreamEvent(sessionPath, ss, { type: "turn_end" });
       broadcast({ type: "status", isStreaming: false, sessionPath });
-      (async () => {
-        try {
-          const raw = await readFile(sessionPath, "utf-8").catch(() => "");
-          if (!raw) return;
-          const lines = raw.split("\n").filter(Boolean);
-          for (let i = lines.length - 1; i >= 0; i--) {
-            try {
-              const entry = JSON.parse(lines[i]);
-              const mm = entry?.message;
-              if (mm?.role === "assistant" && mm.model) {
-                const model = String(mm.model || "").trim();
-                const provider = String(mm.provider || "").trim();
-                emitStreamEvent(sessionPath, ss, { type: "model_hint", model: provider ? `${provider}/${model}` : model });
-                return;
-              }
-            } catch {
-              // Skip malformed JSONL rows.
-            }
-          }
-        } catch {
-          // Model hint recovery is best-effort.
-        }
-      })();
+      void emitModelHintFromSessionTail(sessionPath, ss, emitStreamEvent);
       finishSessionStream(ss);
       if (ss.progressMarkerCount > 0 && !ss.hasToolCall) {
         debugLog()?.warn("ws", `observed ${ss.progressMarkerCount} hallucinated <lynn_tool_progress> markers (no real tool_call) · session=${sessionPath}`);
