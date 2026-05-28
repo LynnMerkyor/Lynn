@@ -301,7 +301,7 @@ export class SessionCoordinator {
     const mapKey = sessionPath || `_anon_${Date.now()}`;
     const unsub = session.subscribe(createSessionEventHandler({
       mapKey,
-      sessionPath,
+      sessionPath: sessionPath || null,
       sessions: this._sessions,
       getCurrentSessionPath: () => this.currentSessionPath,
       getAgent: () => this._d.getAgent(),
