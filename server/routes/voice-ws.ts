@@ -35,204 +35,42 @@ import { createSERProvider, EMOTION_LLM_HINT } from "../clients/ser/index.js";
 import { createTTSFallbackProvider } from "../clients/tts/index.js";
 import { enrichHealthWithTier } from "../chat/voice-fallback-orchestrator.js";
 import { aecAvailable as defaultAecAvailable, createAecProcessor as defaultCreateAecProcessor, aecProcessRender as defaultAecRender, aecProcessCapture as defaultAecCapture } from "../clients/aec/index.js";
+import { FRAME, STATE } from "../chat/voice-ws-types.js";
 import type { VoiceHealthPayload, VoiceProviderHealth } from "../chat/voice-fallback-orchestrator.js";
+import type {
+  AecCapture,
+  AecProcessorHandle,
+  AecRender,
+  AsrProvider,
+  BinaryInput,
+  BrainRunner,
+  CreateVoiceWsRouteDeps,
+  CurrentReplyPlayed,
+  DecodedPcmAudio,
+  EmotionResult,
+  ErleRecord,
+  FrameCode,
+  HealthProvider,
+  JsonRecord,
+  PendingInterruptedReply,
+  ProviderHealth,
+  SaveInterruptedTurn,
+  SerProvider,
+  TtsPiece,
+  TtsProvider,
+  TtsStreamError,
+  VadConfig,
+  VoiceEngine,
+  VoiceErrorEvent,
+  VoiceFrame,
+  VoiceMessageEvent,
+  VoiceRouteContext,
+  VoiceSessionDeps,
+  VoiceSocket,
+  VoiceState,
+} from "../chat/voice-ws-types.js";
 
-// 协议常量
-export const FRAME = {
-  PCM_AUDIO: 0x01,
-  PCM_TTS: 0x02,
-  PING: 0x10,
-  PONG: 0x11,
-  TRANSCRIPT_PARTIAL: 0x12,
-  TRANSCRIPT_FINAL: 0x13,
-  EMOTION: 0x14,
-  STATE_CHANGE: 0x15,
-  HEALTH_STATUS: 0x16,
-  ASSISTANT_REPLY: 0x17,
-  INTERRUPT: 0x20,
-  END_OF_TURN: 0x30,
-  TEXT_TURN: 0x31,
-  SPEAK_TEXT: 0x32,
-  // 2026-05-01 P0-① 增量 TTS:LLM token streaming → incremental sentence splitter →
-  // 已 SPEAKING 时直接 append 新 segments,不创建新 turn,首音节延迟从 ~3s 砍到 ~0.9s。
-  SPEAK_TEXT_APPEND: 0x33,
-} as const;
-
-export const STATE = {
-  IDLE: "idle",
-  LISTENING: "listening",
-  THINKING: "thinking",
-  SPEAKING: "speaking",
-  DEGRADED: "degraded",
-} as const;
-
-type JsonRecord = Record<string, unknown>;
-type VoiceState = typeof STATE[keyof typeof STATE];
-type FrameCode = typeof FRAME[keyof typeof FRAME];
-type BinaryInput = Buffer | ArrayBuffer | Uint8Array | null | undefined;
-
-interface VoiceFrame {
-  type: number;
-  flags: number;
-  seq: number;
-  payload: Buffer;
-}
-
-interface DecodedPcmAudio {
-  pcm: Buffer;
-  sampleRate: number;
-  channels: number;
-  bitsPerSample: number;
-}
-
-interface VadConfig {
-  enabled: boolean;
-  speechRms: number;
-  silenceRms: number;
-  minSpeechFrames: number;
-  endSilenceFrames: number;
-}
-
-interface ProviderHealth {
-  name: string;
-  ok: boolean;
-  fallbackOk: boolean;
-  degraded: boolean;
-  error?: string;
-}
-
-interface HealthProvider {
-  name?: string;
-  health?: () => unknown | Promise<unknown>;
-}
-
-interface AsrResult {
-  text?: unknown;
-  fallbackUsed?: boolean;
-  primaryError?: unknown;
-}
-
-interface AsrProvider extends HealthProvider {
-  transcribe(audio: Buffer, opts?: JsonRecord): AsrResult | Promise<AsrResult>;
-}
-
-interface EmotionResult extends JsonRecord {
-  tag?: string;
-}
-
-interface SerProvider extends HealthProvider {
-  warmup?: () => unknown | Promise<unknown>;
-  classify?: (audio: Buffer, opts?: JsonRecord) => unknown | Promise<unknown>;
-}
-
-interface TtsPiece extends JsonRecord {
-  audio?: BinaryInput;
-  audioBuffer?: BinaryInput;
-  buffer?: BinaryInput;
-  path?: string;
-  fallbackUsed?: boolean;
-  primaryError?: unknown;
-}
-
-interface TtsProvider extends HealthProvider {
-  synthesize(segment: string, opts?: JsonRecord): TtsPiece | Promise<TtsPiece>;
-  synthesizeStream?: (segment: string, opts: JsonRecord) => AsyncIterable<TtsPiece>;
-}
-
-interface VoiceEngine {
-  config?: {
-    voice?: {
-      asr?: JsonRecord;
-      ser?: JsonRecord;
-      tts?: JsonRecord;
-    };
-  };
-  executeIsolated?: (prompt: string, opts: { signal?: AbortSignal }) => Promise<{ error?: unknown; replyText?: unknown } | null | undefined>;
-  voiceReply?: (transcript: string, opts: { signal?: AbortSignal }) => Promise<unknown>;
-}
-
-interface VoiceSocket {
-  readyState: number;
-  send(data: Buffer): unknown;
-}
-
-type BrainRunner = (input: {
-  transcript: string;
-  emotion?: EmotionResult | null;
-  engine: VoiceEngine;
-  hub: unknown;
-  signal?: AbortSignal;
-}) => Promise<unknown>;
-
-type SaveInterruptedTurn = (input: JsonRecord) => Promise<unknown> | unknown;
-type AecProcessorHandle = object | null | undefined;
-type AecRender = (handle: AecProcessorHandle, samples: Float32Array) => unknown;
-type AecCapture = (handle: AecProcessorHandle, samples: Float32Array) => Float32Array;
-
-interface AecDeps {
-  createProcessor?: (opts: JsonRecord) => AecProcessorHandle | null;
-  processRender?: AecRender;
-  processCapture?: AecCapture;
-}
-
-interface VoiceSessionDeps {
-  engine: VoiceEngine;
-  hub: unknown;
-  asrProvider?: AsrProvider | null;
-  serProvider?: SerProvider | null;
-  ttsProvider?: TtsProvider | null;
-  brainRunner?: BrainRunner | null;
-  healthOnOpen?: boolean;
-  vadConfig?: Partial<VadConfig>;
-  mode?: string;
-  saveInterruptedTurn?: SaveInterruptedTurn | null;
-  aec?: AecDeps | null;
-}
-
-interface CurrentReplyPlayed {
-  fullText: string;
-  segments: string[];
-  playedSegments: string[];
-  startedAt: number;
-}
-
-interface PendingInterruptedReply {
-  text: string;
-  segmentsPlayed: number;
-  totalSegments: number;
-  startedAt: number;
-  interruptedAt: number;
-}
-
-interface ErleRecord {
-  dir: string;
-  sessionId: string;
-  micChunks: Buffer[];
-  ttsChunks: Buffer[];
-  startTs: number;
-}
-
-interface CreateVoiceWsRouteDeps extends VoiceSessionDeps {
-  upgradeWebSocket: (factory: (c: VoiceRouteContext) => JsonRecord) => unknown;
-}
-
-interface VoiceRouteContext {
-  req?: {
-    query?: (name: string) => string | undefined;
-  };
-}
-
-interface VoiceMessageEvent {
-  data: ArrayBuffer | Buffer | string;
-}
-
-interface VoiceErrorEvent {
-  message?: string;
-}
-
-interface TtsStreamError extends Error {
-  yieldedAny?: boolean;
-}
+export { FRAME, STATE };
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
