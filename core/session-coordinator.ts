@@ -13,7 +13,6 @@ import {
 import { createModuleLogger } from "../lib/debug-log.js";
 import { t, getLocale } from "../server/i18n.js";
 import { findModel } from "../shared/model-ref.js";
-import { runReadToolPromptInjectionGuardrail } from "./claw-aegis-guardrails.js";
 import {
   SecurityMode,
   DEFAULT_SECURITY_MODE,
@@ -87,6 +86,7 @@ import {
   prepareCachedSessionSwitch,
   resolveColdStartSwitchModel,
 } from "./session-switch-runtime.js";
+import { createSessionEventHandler } from "./session-event-handler.js";
 import type { ResolvedModel } from "./types.js";
 
 export { PATROL_TOOLS_DEFAULT } from "./session-isolated-runtime.js";
@@ -298,65 +298,20 @@ export class SessionCoordinator {
     // 事件转发
     const sessionPath = session.sessionManager?.getSessionFile?.();
     sessionPathRef = sessionPath || null;
-    const unsub = session.subscribe((event: AnyRecord) => {
-      const entryForEvent = this._sessions.get(mapKey);
-      if (event?.type === "skill_activated" && sessionPath) {
-        try {
-          const eventAgent = entryForEvent ? this._d.getAgentById(entryForEvent.agentId) : this._d.getAgent();
-          eventAgent?._skillDistiller?.recordSkillActivation({
-            skillName: event.skillName,
-            skillFilePath: event.skillFilePath,
-            sessionPath,
-          });
-        } catch {
-          // non-fatal: skill activation telemetry must not break the session
-        }
-      }
-      if (event?.type === "auto_compaction_end" && entryForEvent) {
-        entryForEvent.compactionCount = (entryForEvent.compactionCount || 0) + 1;
-        const relayCfg = this._resolveSessionRelayConfig();
-        if (
-          relayCfg.enabled
-          && entryForEvent.compactionCount >= relayCfg.compactionThreshold
-          && !entryForEvent.relayInProgress
-          && mapKey === this.currentSessionPath
-        ) {
-          void this._relaySession(mapKey, entryForEvent.compactionCount);
-        }
-      }
-      // 工具失败只记录事件本身，不再向后续上下文注入“停止使用工具”等
-      // 指令。模型是否继续调用工具应由模型和真实工具结果决定。
-      if (event?.type === "tool_execution_end" && entryForEvent) {
-        entryForEvent._toolFailCount = Boolean(event.isError || event.result?.isError)
-          ? (entryForEvent._toolFailCount || 0) + 1
-          : 0;
-        entryForEvent._toolFailDegraded = false;
-
-        // ── ClawAegis 输入层：read 工具返回内容 prompt injection 扫描 ──
-        const toolIsError = Boolean(event.isError || event.result?.isError);
-        const toolName = event.toolName || event.toolCall?.name || "";
-        runReadToolPromptInjectionGuardrail(event, {
-          logger: (message) => console.warn(message),
-        });
-
-        // ── ClawAegis 输出层：输出验证（AI 声称 vs 实际结果） ──
-        if (toolIsError && entryForEvent) {
-          const errText = event.result?.content?.[0]?.text || "";
-          if (/no such file|not found|ENOENT/i.test(errText) || /permission denied|EACCES/i.test(errText)) {
-            // 记录操作失败详情，下一轮 context 中可供 AI 参考
-            const isZhV = getLocale().startsWith("zh");
-            const failHint = isZhV
-              ? `【注意】上一步 ${toolName} 执行失败：${errText.slice(0, 120)}。请检查路径或权限是否正确。`
-              : `[Note] Previous ${toolName} failed: ${errText.slice(0, 120)}. Please verify path or permissions.`;
-            entryForEvent._lastRecallContext = failHint;
-          }
-        }
-      }
-      this._d.emitEvent(event, sessionPath);
-    });
+    const mapKey = sessionPath || `_anon_${Date.now()}`;
+    const unsub = session.subscribe(createSessionEventHandler({
+      mapKey,
+      sessionPath,
+      sessions: this._sessions,
+      getCurrentSessionPath: () => this.currentSessionPath,
+      getAgent: () => this._d.getAgent(),
+      getAgentById: (agentId) => this._d.getAgentById(agentId),
+      resolveSessionRelayConfig: () => this._resolveSessionRelayConfig(),
+      relaySession: (path, compactionCount) => this._relaySession(path, compactionCount),
+      emitEvent: (event, path) => this._d.emitEvent(event, path),
+    }));
 
     // 存入 map（SessionEntry）— sessionEntry is the same object the resourceLoader proxy references
-    const mapKey = sessionPath || `_anon_${Date.now()}`;
     const old = this._sessions.get(mapKey);
     if (old) old.unsub();
 
