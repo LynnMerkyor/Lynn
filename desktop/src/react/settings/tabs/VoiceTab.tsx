@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSettingsStore } from '../store';
+import { useStore } from '../../stores';
 import { autoSaveConfig } from '../helpers';
 import { SelectWidget } from '../widgets/SelectWidget';
 import { KeyInput } from '../widgets/KeyInput';
@@ -94,10 +95,13 @@ export function VoiceTab() {
   const [ttsKey, setTtsKey] = useState(voice.tts?.api_key || '');
   const [ttsBaseUrl, setTtsBaseUrl] = useState(voice.tts?.base_url || '');
   const [ttsVoice, setTtsVoice] = useState(voice.tts?.default_voice || defaultTtsVoice(voice.tts?.provider || 'cosyvoice'));
-  // P0 [2026-05-28]: 流结束自动预合成,用户点喇叭即时播放(缓存命中)
-  const [ttsAutoPrefetch, setTtsAutoPrefetch] = useState(() => {
-    try { return localStorage.getItem('lynn-tts-auto-prefetch') === '1'; } catch { return false; }
-  });
+  const ttsAutoPrefetch = useStore((s) => s.ttsAutoPrefetch);
+  const ttsStreamingEnabled = useStore((s) => s.ttsStreamingEnabled);
+  const ttsBrowserFallbackEnabled = useStore((s) => s.ttsBrowserFallbackEnabled);
+  const setTtsAutoPrefetch = useStore((s) => s.setTtsAutoPrefetch);
+  const setTtsStreamingEnabled = useStore((s) => s.setTtsStreamingEnabled);
+  const setTtsBrowserFallbackEnabled = useStore((s) => s.setTtsBrowserFallbackEnabled);
+  const setTtsProviderPreference = useStore((s) => s.setTtsProviderPreference);
   // MiMo voice clone / design
   const [mimoVoiceClonePath, setMimoVoiceClonePath] = useState<string>(String(voice.tts?.voice_clone_audio_path || ''));
   const [mimoVoiceDescription, setMimoVoiceDescription] = useState<string>(String(voice.tts?.voice_description || ''));
@@ -115,13 +119,14 @@ export function VoiceTab() {
     setAsrBaseUrl(v.asr?.base_url || '');
     const nextTtsProvider = v.tts?.provider || 'cosyvoice';
     setTtsProvider(nextTtsProvider);
+    setTtsProviderPreference(nextTtsProvider);
     setTtsKey(v.tts?.api_key || '');
     setTtsBaseUrl(v.tts?.base_url || '');
     setTtsVoice(v.tts?.default_voice || defaultTtsVoice(nextTtsProvider));
     setMimoVoiceClonePath(String(v.tts?.voice_clone_audio_path || ''));
     setMimoVoiceDescription(String(v.tts?.voice_description || ''));
     setLanguage(v.language || 'auto');
-  }, [settingsConfig?.voice]);
+  }, [settingsConfig?.voice, setTtsProviderPreference]);
 
   useEffect(() => {
     let cancelled = false;
@@ -276,6 +281,7 @@ export function VoiceTab() {
             value={ttsProvider}
             onChange={(v) => {
               setTtsProvider(v);
+              setTtsProviderPreference(v);
               setTtsVoice(defaultTtsVoice(v));
             }}
           />
@@ -355,11 +361,7 @@ export function VoiceTab() {
             <input
               type="checkbox"
               checked={ttsAutoPrefetch}
-              onChange={(e) => {
-                const v = e.target.checked;
-                setTtsAutoPrefetch(v);
-                try { localStorage.setItem('lynn-tts-auto-prefetch', v ? '1' : '0'); } catch { /* localStorage may be unavailable */ }
-              }}
+              onChange={(e) => setTtsAutoPrefetch(e.target.checked)}
             />
             <span>消息流结束后自动预合成语音(点喇叭即时播放)</span>
           </label>
@@ -367,6 +369,34 @@ export function VoiceTab() {
             开启后:每条 ≥50 字回复在 streaming 结束时后台 TTS 一次,缓存到磁盘。点喇叭命中缓存 0 等待。
             注意:每条都烧 TTS quota,MiMo/OpenAI 收费 provider 慎开。CosyVoice/Edge 免费可开。
             ⚡ Shift+点击 喇叭 = 浏览器原生即时朗读(本地,&lt;50ms,无 quota)。
+          </span>
+        </div>
+
+        <div className={styles['settings-field']}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={ttsStreamingEnabled}
+              onChange={(e) => setTtsStreamingEnabled(e.target.checked)}
+            />
+            <span>优先使用流式播放(可用时更快开声)</span>
+          </label>
+          <span className={styles['settings-field-hint']}>
+            CosyVoice 支持真流式时会优先边合成边播放;失败会自动回退到普通文件合成。
+          </span>
+        </div>
+
+        <div className={styles['settings-field']}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={ttsBrowserFallbackEnabled}
+              onChange={(e) => setTtsBrowserFallbackEnabled(e.target.checked)}
+            />
+            <span>允许 Shift+点击使用浏览器即时朗读</span>
+          </label>
+          <span className={styles['settings-field-hint']}>
+            完全本地、无 quota,适合快速听草稿;关闭后 Shift+点击会按普通朗读处理。
           </span>
         </div>
 

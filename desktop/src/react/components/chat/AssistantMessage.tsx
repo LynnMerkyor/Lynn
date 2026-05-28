@@ -277,6 +277,9 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
   const agentAvatarUrl = useStore(s => s.agentAvatarUrl);
   const sessionAgent = useStore(s => s.sessionAgent);
   const addToast = useStore(s => s.addToast);
+  const ttsAutoPrefetch = useStore(s => s.ttsAutoPrefetch);
+  const ttsStreamingEnabled = useStore(s => s.ttsStreamingEnabled);
+  const ttsBrowserFallbackEnabled = useStore(s => s.ttsBrowserFallbackEnabled);
   const [avatarFailed, setAvatarFailed] = useState(false);
 
   const displayName = sessionAgent?.name || agentName;
@@ -380,7 +383,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
   useEffect(() => () => stopTtsPlayback(), [stopTtsPlayback]);
 
   // ── P0 [2026-05-28]: TTS pre-synth on streaming end ──────────────
-  // streaming 结束时,如果用户开了 lynn-tts-auto-prefetch + 内容 > 50 字,后台
+  // streaming 结束时,如果用户开了自动预合成 + 内容 > 50 字,后台
   // fire-and-forget 调 tts_speak 把音频烤进 plugin cache。用户点喇叭时大概率
   // 直接缓存命中,即时播放(0 等待)。短内容(<50字)不触发避免烧 quota。
   const prefetchFiredRef = useRef(false);
@@ -388,9 +391,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
     if (isStreamMsg) return;                          // 还在 streaming,等
     if (prefetchFiredRef.current) return;             // 已 fire 过(防重)
     if (!plainText || plainText.length < 50) return;  // 太短,不值得 prefetch
-    let enabled = false;
-    try { enabled = localStorage.getItem('lynn-tts-auto-prefetch') === '1'; } catch { /* localStorage may be unavailable */ }
-    if (!enabled) return;
+    if (!ttsAutoPrefetch) return;
     prefetchFiredRef.current = true;
     // Fire-and-forget,失败也不影响用户体验
     hanaFetch('/api/tools/tts-bridge.tts_speak', {
@@ -408,7 +409,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
         if (audioPath) setTtsAudioPath(audioPath);  // 预设 path 让用户点喇叭直接走 startPlayback 分支
       })
       .catch(() => { /* silent */ });
-  }, [isStreamMsg, plainText, message.id]);
+  }, [isStreamMsg, plainText, message.id, ttsAutoPrefetch]);
 
   // ── P2 [2026-05-28]: Browser SpeechSynthesis instant fallback ──
   // Shift+click 喇叭 → 浏览器原生 TTS,TTFB <50ms,完全本地。音色弱但 draft 朗读 OK
@@ -800,7 +801,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
                 className={styles.msgCopyBtn}
                 onClick={async (e) => {
                   // P2 [2026-05-28]: Shift+click → 浏览器原生 SpeechSynthesis(TTFB <50ms,本地)
-                  if (e.shiftKey) {
+                  if (e.shiftKey && ttsBrowserFallbackEnabled) {
                     if (window.speechSynthesis.speaking) {
                       window.speechSynthesis.cancel();
                       addToast('已停止浏览器朗读', 'info');
@@ -854,11 +855,13 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
                         setTtsAudioPath(null);
                       }
                     }
-                    try {
-                      await startStreamPlayback();
-                      return;
-                    } catch (streamErr) {
-                      console.warn('[tts] stream playback unavailable, falling back to file TTS:', streamErr);
+                    if (ttsStreamingEnabled) {
+                      try {
+                        await startStreamPlayback();
+                        return;
+                      } catch (streamErr) {
+                        console.warn('[tts] stream playback unavailable, falling back to file TTS:', streamErr);
+                      }
                     }
                     addToast('准备朗读…', 'info');
                     const res = await hanaFetch('/api/tools/tts-bridge.tts_speak', {
