@@ -1,17 +1,17 @@
 {
   "id": "tts-bridge",
   "name": "TTS Bridge",
-  "version": "0.3.0",
-  "description": "文本转语音桥接：默认 Edge TTS（免费在线、流式低延迟），可选 macOS say（本地）、CosyVoice 2、OpenAI TTS、MiMo V2.5 TTS。MiMo 支持音色克隆（上传一段你的声音）和文字定制音色，自动路由切换。生成音频保存到书桌，支持 Bridge 多平台推送。",
+  "version": "0.3.1",
+  "description": "文本转语音桥接：默认 CosyVoice 2（Spark 本地服务、短文本低延迟、真流式、零 token 成本），可选 Edge TTS、macOS say、OpenAI TTS、MiMo V2.5 TTS。MiMo 支持音色克隆（上传一段你的声音）和文字定制音色，自动路由切换。生成音频保存到书桌，支持 Bridge 多平台推送。",
   "contributes": {
     "configuration": {
       "properties": {
         "provider": {
           "type": "string",
           "title": "TTS Provider",
-          "default": "edge",
+          "default": "cosyvoice",
           "enum": ["edge", "say", "cosyvoice", "openai", "mimo"],
-          "description": "语音合成服务来源。edge 微软 Edge 在线 TTS（免费，需网络，流式低延迟，推荐默认）；say macOS 本地（离线，仅 Mac）；cosyvoice 阿里 CosyVoice 2（本地服务）；openai OpenAI TTS API；mimo 小米 MiMo V2.5 TTS（preset 8 音色 + voicedesign + voiceclone，24kHz wav，文档明示流式未上线）。⚠️ 若填写下面的『音色克隆音频路径』或『音色文字描述』，会自动覆盖此项强制走 mimo。"
+          "description": "语音合成服务来源。cosyvoice 阿里 CosyVoice 2（Spark 本地服务，真流式，默认推荐）；edge 微软 Edge 在线 TTS（免费，需网络，备用）；say macOS 本地（离线，仅 Mac）；openai OpenAI TTS API；mimo 小米 MiMo V2.5 TTS（preset 8 音色 + voicedesign + voiceclone，24kHz wav，文档明示流式未上线）。⚠️ 若填写下面的『音色克隆音频路径』或『音色文字描述』，会自动覆盖此项强制走 mimo。"
         },
         "default_voice": {
           "type": "string",

@@ -10,7 +10,7 @@ import { synthesize } from "../lib/tts-engine.js";
 
 export const name = "tts_speak";
 export const description =
-  "将指定文本转为语音音频文件，保存到书桌。支持 Edge TTS（免费在线）和 macOS say（本地）。" +
+  "将指定文本转为语音音频文件，保存到书桌。默认 CosyVoice 2（Spark 本地服务），支持 Edge TTS、macOS say、OpenAI 和 MiMo。" +
   "适合有声书、长文朗读、定时播报等场景。";
 export const parameters = Type.Object({
   text: Type.String({ description: "要朗读的文本内容。建议不超过 3000 字；更长文本请分段调用。" }),
@@ -53,7 +53,7 @@ function localNormalizeChineseTtsText(value) {
 
 let normalizeChineseTtsTextImpl = null;
 
-async function normalizeSpeechText(value) {
+export async function normalizeSpeechText(value) {
   if (!normalizeChineseTtsTextImpl) {
     try {
       const mod = await import("../../../shared/tts-text-normalizer.js");

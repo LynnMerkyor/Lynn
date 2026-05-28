@@ -13,8 +13,8 @@ const ASR_PROVIDERS = [
 ];
 
 const TTS_PROVIDERS = [
-  { value: 'edge', label: 'Edge TTS (免费在线・流式低延迟・默认推荐)' },
-  { value: 'cosyvoice', label: 'CosyVoice (阿里 · 本地服务)' },
+  { value: 'cosyvoice', label: 'CosyVoice (Spark · 真流式 · 默认推荐)' },
+  { value: 'edge', label: 'Edge TTS (免费在线・备用)' },
   { value: 'mimo', label: 'MiMo V2.5 TTS (preset / 文字定制 / 音色克隆)' },
   { value: 'openai', label: 'OpenAI TTS API (BYOK)' },
   { value: 'say', label: 'macOS say (本地离线)' },
@@ -51,6 +51,12 @@ const LANGUAGES = [
   { value: 'ko', label: '한국어' },
 ];
 
+function defaultTtsVoice(provider: string): string {
+  if (provider === 'cosyvoice') return '中文女';
+  if (provider === 'mimo') return '冰糖';
+  return 'zh-CN-XiaoxiaoNeural';
+}
+
 type ShortcutStatus = {
   ok: boolean;
   accelerator: string | null;
@@ -84,10 +90,10 @@ export function VoiceTab() {
   const [asrKey, setAsrKey] = useState(voice.asr?.api_key || '');
   const [asrBaseUrl, setAsrBaseUrl] = useState(voice.asr?.base_url || '');
 
-  const [ttsProvider, setTtsProvider] = useState(voice.tts?.provider || 'edge');
+  const [ttsProvider, setTtsProvider] = useState(voice.tts?.provider || 'cosyvoice');
   const [ttsKey, setTtsKey] = useState(voice.tts?.api_key || '');
   const [ttsBaseUrl, setTtsBaseUrl] = useState(voice.tts?.base_url || '');
-  const [ttsVoice, setTtsVoice] = useState(voice.tts?.default_voice || 'zh-CN-XiaoxiaoNeural');
+  const [ttsVoice, setTtsVoice] = useState(voice.tts?.default_voice || defaultTtsVoice(voice.tts?.provider || 'cosyvoice'));
   // P0 [2026-05-28]: 流结束自动预合成,用户点喇叭即时播放(缓存命中)
   const [ttsAutoPrefetch, setTtsAutoPrefetch] = useState(() => {
     try { return localStorage.getItem('lynn-tts-auto-prefetch') === '1'; } catch { return false; }
@@ -107,10 +113,11 @@ export function VoiceTab() {
     setAsrProvider(v.asr?.provider || 'sensevoice');
     setAsrKey(v.asr?.api_key || '');
     setAsrBaseUrl(v.asr?.base_url || '');
-    setTtsProvider(v.tts?.provider || 'edge');
+    const nextTtsProvider = v.tts?.provider || 'cosyvoice';
+    setTtsProvider(nextTtsProvider);
     setTtsKey(v.tts?.api_key || '');
     setTtsBaseUrl(v.tts?.base_url || '');
-    setTtsVoice(v.tts?.default_voice || 'zh-CN-XiaoxiaoNeural');
+    setTtsVoice(v.tts?.default_voice || defaultTtsVoice(nextTtsProvider));
     setMimoVoiceClonePath(String(v.tts?.voice_clone_audio_path || ''));
     setMimoVoiceDescription(String(v.tts?.voice_description || ''));
     setLanguage(v.language || 'auto');
@@ -267,7 +274,10 @@ export function VoiceTab() {
           <SelectWidget
             options={TTS_PROVIDERS}
             value={ttsProvider}
-            onChange={(v) => setTtsProvider(v)}
+            onChange={(v) => {
+              setTtsProvider(v);
+              setTtsVoice(defaultTtsVoice(v));
+            }}
           />
         </div>
 
@@ -296,9 +306,9 @@ export function VoiceTab() {
           )}
           <span className={styles['settings-field-hint']}>
             {ttsProvider === 'cosyvoice'
-              ? 'CosyVoice 2 部署在 Spark,内置音色:中文女 / 中文男 / 英文女 / 英文男 / 日语男 / 韩语女 / 粤语女(默认推荐)'
+              ? 'CosyVoice 2 部署在 Spark,短文本低延迟,支持真流式播放。内置音色:中文女 / 中文男 / 英文女 / 英文男 / 日语男 / 韩语女 / 粤语女。'
               : ttsProvider === 'edge'
-              ? 'Edge TTS 使用 Neural 音色 ID,如 zh-CN-XiaoxiaoNeural,流式低延迟'
+              ? 'Edge TTS 使用 Neural 音色 ID,如 zh-CN-XiaoxiaoNeural,适合作为网络备用。'
               : ttsProvider === 'mimo'
               ? 'MiMo V2.5 TTS 8 个 preset 音色;若填下面的克隆路径/文字定制会自动切到 voiceclone/voicedesign,覆盖此 preset 选择'
               : ttsProvider === 'openai'
@@ -355,7 +365,7 @@ export function VoiceTab() {
           </label>
           <span className={styles['settings-field-hint']}>
             开启后:每条 ≥50 字回复在 streaming 结束时后台 TTS 一次,缓存到磁盘。点喇叭命中缓存 0 等待。
-            注意:每条都烧 TTS quota,MiMo/OpenAI 收费 provider 慎开。Edge 免费可开。
+            注意:每条都烧 TTS quota,MiMo/OpenAI 收费 provider 慎开。CosyVoice/Edge 免费可开。
             ⚡ Shift+点击 喇叭 = 浏览器原生即时朗读(本地,&lt;50ms,无 quota)。
           </span>
         </div>

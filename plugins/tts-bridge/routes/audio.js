@@ -7,6 +7,30 @@ import { Hono } from "hono";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { synthesizeStream } from "../lib/tts-engine.js";
+import { normalizeSpeechText } from "../tools/tts-speak.js";
+
+function voiceForProvider(provider, requestedVoice, defaultVoice) {
+  if (provider === "say") return "";
+  if (provider === "edge") {
+    if (String(requestedVoice || defaultVoice || "").startsWith("zh-")) return requestedVoice || defaultVoice;
+    return "zh-CN-XiaoxiaoNeural";
+  }
+  return requestedVoice || defaultVoice;
+}
+
+function resolveVoiceConfig(ctx) {
+  const engineConfig = ctx.engine?.config || {};
+  const voiceConfig = engineConfig.voice?.tts || {};
+  return {
+    provider: voiceConfig.provider || ctx.config?.get?.("provider") || "cosyvoice",
+    default_voice: voiceConfig.default_voice || ctx.config?.get?.("default_voice") || "中文女",
+    base_url: voiceConfig.base_url || ctx.config?.get?.("base_url") || "",
+    api_key: voiceConfig.api_key || ctx.config?.get?.("api_key") || "",
+    voice_clone_audio_path: voiceConfig.voice_clone_audio_path || ctx.config?.get?.("voice_clone_audio_path") || "",
+    voice_description: voiceConfig.voice_description || ctx.config?.get?.("voice_description") || "",
+  };
+}
 
 export default function registerAudioRoutes(app, ctx) {
   const audioDirs = [
@@ -36,5 +60,35 @@ export default function registerAudioRoutes(app, ctx) {
     c.header("Accept-Ranges", "bytes");
     c.header("Cache-Control", "private, max-age=3600");
     return c.body(fs.createReadStream(filePath));
+  });
+
+  app.post("/audio/speech/stream", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const text = String(body.text || "").trim();
+    if (!text) return c.json({ error: "tts_stream_empty_text" }, 400);
+
+    const voiceConfig = resolveVoiceConfig(ctx);
+    const provider = voiceConfig.provider || "cosyvoice";
+    if (provider !== "cosyvoice") {
+      return c.json({ error: "tts_stream_unavailable", provider }, 409);
+    }
+
+    try {
+      const speechText = await normalizeSpeechText(text).then((value) => String(value || "").slice(0, 3000));
+      const result = await synthesizeStream({
+        text: speechText,
+        voice: voiceForProvider(provider, body.voice, voiceConfig.default_voice),
+        speed: body.speed || voiceConfig.speed || 1,
+        provider,
+        config: voiceConfig,
+      });
+      c.header("Content-Type", result.mimeType || "audio/wav");
+      c.header("Cache-Control", "no-store");
+      c.header("X-Lynn-TTS-Provider", result.provider || provider);
+      return c.body(result.stream);
+    } catch (err) {
+      ctx.log?.warn?.("tts_speak_stream failed:", err?.message || err);
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 502);
+    }
   });
 }

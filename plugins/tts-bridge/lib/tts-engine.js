@@ -9,7 +9,15 @@
 
 import { createTTSProvider } from "./tts-registry.js";
 
-export async function synthesize({ text, voice, speed, outPath, provider = "edge" }) {
+export async function synthesize({ text, voice, speed, outPath, provider = "cosyvoice" }) {
   const tts = createTTSProvider({ provider });
   return tts.synthesize({ text, voice, speed, outPath });
+}
+
+export async function synthesizeStream({ text, voice, speed, provider = "cosyvoice", config = {} }) {
+  const tts = createTTSProvider({ ...config, provider });
+  if (typeof tts.synthesizeStream !== "function") {
+    throw new Error(`TTS provider "${provider}" does not support streaming`);
+  }
+  return tts.synthesizeStream({ text, voice, speed });
 }
