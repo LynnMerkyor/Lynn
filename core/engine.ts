@@ -45,11 +45,9 @@ import {
   summarizeSessionRelay as _summarizeSessionRelay,
 } from "./llm-utils.js";
 import { debugLog } from "../lib/debug-log.js";
-import { createSandboxedTools } from "../lib/sandbox/index.js";
 import { ContentFilter } from "../lib/content-filter.js";
 import { t } from "../server/i18n.js";
 import {
-  SECURITY_MODE_CONFIG,
   normalizeSecurityMode,
 } from "../shared/security-mode.js";
 import {
@@ -66,20 +64,15 @@ import {
   getUserFacingRoleModelLabel,
 } from "../shared/assistant-role-models.js";
 import { prewarmHttpConnection } from "../shared/http-pool.js";
+import {
+  buildEngineToolRuntime,
+  selectMcpTools,
+  type BuildToolsOptions,
+  type ToolLike,
+} from "./engine-tool-runtime.js";
 
 type AnyRecord = Record<string, any>;
 type Logger = (message: string) => void;
-type ToolLike = AnyRecord & {
-  name: string;
-  execute?: (...args: any[]) => any;
-  parameters?: {
-    properties?: Record<string, { type?: string }>;
-    required?: string[];
-    [key: string]: any;
-  };
-  _guarded?: boolean;
-  _aliasOf?: string;
-};
 type EngineDirs = {
   lynnHome: string;
   productDir: string;
@@ -90,13 +83,6 @@ type ExternalSkillPath = {
   label: string;
   exists?: boolean;
 };
-type BuildToolsOptions = AnyRecord & {
-  activeMcpServers?: Set<string>;
-  agentDir?: string;
-  workspace?: string | null;
-  mode?: string;
-  getSessionPath?: () => string | null;
-};
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err || "unknown error");
@@ -105,142 +91,6 @@ function errMessage(err: unknown): string {
 function shouldExposeVerboseModelRouting() {
   const flag = String(process?.env?.LYNN_DEBUG_MODELS || process?.env?.DEBUG_MODEL_ROUTING || "").trim().toLowerCase();
   return flag === "1" || flag === "true" || process?.env?.NODE_ENV === "development";
-}
-
-// ── P2a: Tool Guard Wrapper ──
-// 给 customTool 的 execute 包一层参数校验：
-// 1. 参数类型强制转换（"true"→true, "123"→123）
-// 2. 必填参数缺失时返回友好的 tool_result 而不是崩溃
-// 3. ClawAegis: 敏感路径检测（审计 + warning）
-
-function coerceParam(value: any, schema?: { type?: string }) {
-  if (value === undefined || value === null) return value;
-  const type = schema?.type;
-  if (!type) return value;
-  if (type === "number" || type === "integer") {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : value;
-  }
-  if (type === "boolean") {
-    if (value === "true" || value === 1) return true;
-    if (value === "false" || value === 0) return false;
-    return value;
-  }
-  return value;
-}
-
-// ── ClawAegis: 敏感路径/参数异常检测 ──
-
-const SENSITIVE_PATH_PATTERNS: Array<[RegExp, string]> = [
-  [/\.ssh[/\\]/i, "SSH 密钥目录"],
-  [/\.gnupg[/\\]/i, "GPG 密钥目录"],
-  [/\.aws[/\\]credentials/i, "AWS 凭证文件"],
-  [/\.env$/i, "环境变量文件"],
-  [/\.env\.\w+$/i, "环境变量文件"],
-  [/\.npmrc$/i, "npm token 文件"],
-  [/\.pypirc$/i, "PyPI token 文件"],
-  [/\bid_rsa\b|\bid_ed25519\b|\bid_ecdsa\b/i, "SSH 私钥文件"],
-  [/\.kube[/\\]config/i, "Kubernetes 配置"],
-  [/\.docker[/\\]config\.json/i, "Docker 凭证"],
-  [/keychain|keystore|\.p12$|\.pfx$/i, "密钥库文件"],
-  [/\.git[/\\]config$/i, "Git 配置（可能含 token）"],
-  [/\/etc\/shadow/i, "系统密码文件"],
-  [/\/etc\/passwd/i, "系统用户文件"],
-];
-
-function detectSensitiveParams(toolName: string, params: any) {
-  if (!params) return null;
-  const text = JSON.stringify(params);
-  for (const [pattern, label] of SENSITIVE_PATH_PATTERNS) {
-    if (pattern.test(text)) {
-      return { label, toolName, matched: text.match(pattern)?.[0] };
-    }
-  }
-  return null;
-}
-
-function wrapToolWithGuard(tool: ToolLike): ToolLike {
-  if (!tool?.execute || tool._guarded) return tool;
-  const originalExecute = tool.execute;
-  const schema = tool.parameters;
-
-  const guardedExecute = async (toolCallId: any, params: any, ...rest: any[]) => {
-    let fixedParams = params || {};
-
-    // 类型强制转换
-    if (schema?.properties && typeof fixedParams === "object") {
-      const coerced = { ...fixedParams };
-      for (const [key, propSchema] of Object.entries(schema.properties)) {
-        if (key in coerced) {
-          coerced[key] = coerceParam(coerced[key], propSchema);
-        }
-      }
-      fixedParams = coerced;
-    }
-
-    // 必填参数检查
-    const required = schema?.required || [];
-    const missing = required.filter((k: string) => fixedParams[k] === undefined || fixedParams[k] === null);
-    if (missing.length > 0) {
-      return {
-        content: [{ type: "text", text: `参数缺失 / Missing parameters: ${missing.join(", ")}。请补全后重试。` }],
-      };
-    }
-
-    // ClawAegis: 敏感路径检测
-    const sensitive = detectSensitiveParams(tool.name, fixedParams);
-    if (sensitive) {
-      console.warn(`[ClawAegis] 敏感路径检测: tool=${sensitive.toolName} target=${sensitive.label} match=${sensitive.matched}`);
-      // 不阻断，但在结果前追加 warning
-      const result = await originalExecute(toolCallId, fixedParams, ...rest);
-      const warningText = `⚠️ 安全提示：检测到访问${sensitive.label}（${sensitive.matched}）。请确认这是用户明确要求的操作。如非必要，不要读取或传输此类文件内容。`;
-      if (result?.content?.[0]?.type === "text") {
-        result.content[0].text = warningText + "\n\n" + result.content[0].text;
-      }
-      return result;
-    }
-
-    return originalExecute(toolCallId, fixedParams, ...rest);
-  };
-
-  return { ...tool, execute: guardedExecute, _guarded: true };
-}
-
-// ── P2b: Tool Name Aliases ──
-// 弱模型常见的工具名拼写错误 → 正确名映射
-const TOOL_ALIASES = {
-  "web-search": "web_search",
-  "websearch": "web_search",
-  "web-fetch": "web_fetch",
-  "webfetch": "web_fetch",
-  "search-memory": "search_memory",
-  "searchmemory": "search_memory",
-  "pin-memory": "pin_memory",
-  "unpin-memory": "unpin_memory",
-  "recall-experience": "recall_experience",
-  "record-experience": "record_experience",
-  "present-files": "present_files",
-  "presentfiles": "present_files",
-  "create-artifact": "create_artifact",
-  "install-skill": "install_skill",
-  "update-settings": "update_settings",
-  "ask-agent": "ask_agent",
-  "message-agent": "message_agent",
-};
-
-function createToolAliases(customTools: ToolLike[]): ToolLike[] {
-  const nameSet = new Set(customTools.map((t: ToolLike) => t.name));
-  const aliases: ToolLike[] = [];
-  for (const tool of customTools) {
-    // 为每个工具创建别名（如果别名不和已有工具名冲突）
-    for (const [alias, target] of Object.entries(TOOL_ALIASES)) {
-      if (target === tool.name && !nameSet.has(alias)) {
-        aliases.push({ ...tool, name: alias, _aliasOf: tool.name });
-        nameSet.add(alias);
-      }
-    }
-  }
-  return aliases;
 }
 
 export class LynnEngine {
@@ -1055,66 +905,34 @@ export class LynnEngine {
 
   buildTools(cwd: string, customTools?: ToolLike[], opts: BuildToolsOptions = {}) {
     const ct: ToolLike[] = customTools || this.agent.tools || [];
-    // Append plugin tools + MCP tools
     const pluginTools: ToolLike[] = this._pluginManager?.getAllTools() || [];
-
-    // [2026-04-17] MCP 按需激活：默认不加载 MCP 工具，避免 tools 数量膨胀拖慢模型
-    // 用户可在 session 里通过 activateMcpServer(name) 或 UI 开关激活
     const prefs = this._readPreferences?.() || {};
-    const mcpAutoLoad = prefs.mcpAutoLoad === true; // default false
-    const sessionActiveMcp = opts.activeMcpServers; // Set<string> | undefined
-    let mcpTools: ToolLike[] = [];
-    if (this._mcpManager) {
-      if (sessionActiveMcp && sessionActiveMcp.size > 0) {
-        // 仅 session 激活的 server 的工具
-        mcpTools = (this._mcpManager.getTools() || []).filter((tool: ToolLike) => {
-          const m = (tool.name || '').match(/^mcp__([^_]+(?:_[^_]+)*?)__/);
-          return m && sessionActiveMcp.has(m[1]);
-        });
-      } else if (mcpAutoLoad) {
-        // 全量加载（向后兼容：用户在 preferences 里显式开启）
-        mcpTools = this._mcpManager.getTools() || [];
-      }
-      // else: default — 不加载 MCP 工具
-    }
-
-    const allTools = [...ct, ...pluginTools, ...mcpTools];
+    const mcpTools = selectMcpTools(
+      this._mcpManager?.getTools?.() || [],
+      opts.activeMcpServers,
+      prefs.mcpAutoLoad === true,
+    );
 
     const effectiveAgentDir = opts.agentDir || this.agent.agentDir;
     const effectiveWorkspace = opts.workspace !== undefined ? opts.workspace : this.homeCwd;
     const sandboxEnabled = this._readPreferences().sandbox !== false;
 
-    // Derive sandbox mode from security mode
-    let effectiveMode: string;
-    if (opts.mode) {
-      effectiveMode = opts.mode;
-    } else if (!sandboxEnabled) {
-      effectiveMode = "full-access";
-    } else {
-      // Use security mode config to determine sandbox behavior
-      const secMode = this.securityMode;
-      const secConfig = SECURITY_MODE_CONFIG[secMode as keyof typeof SECURITY_MODE_CONFIG];
-      effectiveMode = secConfig ? secConfig.sandboxMode : "standard";
-    }
-
-    const result = createSandboxedTools(cwd, allTools, {
+    return buildEngineToolRuntime({
+      cwd,
+      customTools: ct,
+      pluginTools,
+      mcpTools,
       agentDir: effectiveAgentDir,
       workspace: effectiveWorkspace,
+      sandboxEnabled,
+      securityMode: this.securityMode,
+      explicitMode: opts.mode,
       trustedRoots: this.getTrustedRoots(),
       lynnHome: this.lynnHome,
-      mode: effectiveMode as any,
       confirmStore: this._confirmStore,
-      emitEvent: ((e: unknown, sp: unknown) => this._emitEvent(e as AnyRecord, sp as string | null | undefined)) as any,
+      emitEvent: (e, sp) => this._emitEvent(e as AnyRecord, sp as string | null | undefined),
       getSessionPath: opts.getSessionPath,
     });
-
-    // P2a: 给 customTools 包参数校验 Guard
-    const guardedTools = ((result.customTools || []) as ToolLike[]).map(wrapToolWithGuard);
-    result.customTools = guardedTools;
-    // P2b: 注册工具名别名（弱模型常见拼写错误兜底）
-    const aliases = createToolAliases(guardedTools);
-    if (aliases.length > 0) result.customTools = [...result.customTools, ...aliases];
-    return result;
   }
 
   // ════════════════════════════
