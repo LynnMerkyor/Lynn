@@ -44,12 +44,6 @@
           "title": "MiMo API Key (仅 mimo provider 需要)",
           "default": "",
           "description": "MiMo Token Plan API key（tp-* 前缀）。也可通过环境变量 MIMO_TTS_KEY / MIMO_SEARCH_KEY 配置。"
-        },
-        "auto_tts_for_long_text": {
-          "type": "boolean",
-          "title": "Auto TTS for Long Text",
-          "default": false,
-          "description": "当 Agent 输出超过 500 字时，自动询问是否生成语音摘要。（v0.77 计划中，当前不生效）"
         }
       }
     }
