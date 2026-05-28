@@ -65,15 +65,14 @@ import {
 } from "./session-tool-runtime.js";
 import {
   MAX_CACHED_SESSIONS,
-  buildCurrentSessionListEntry,
-  collectAgentSessionEntries,
   evictSessionCacheEntries,
+  listCoordinatorSessions,
   refreshMissingSessionIndexes,
-  sortSessionEntriesByModified,
 } from "./session-list-cache.js";
 import {
   formatRelaySummaryContext,
   resolveSessionRelayConfig,
+  runSessionRelay,
 } from "./session-relay.js";
 import { promoteActivitySessionFile } from "./session-activity.js";
 import {
@@ -1195,26 +1194,19 @@ export class SessionCoordinator {
   }
 
   async listSessions() {
-    const allSessions = await collectAgentSessionEntries({
+    return listCoordinatorSessions({
       agentsDir: this._d.agentsDir,
       agents: this._d.listAgents(),
+      currentPath: this.currentSessionPath,
+      sessionStarted: this._sessionStarted,
+      currentSession: this._session,
+      currentEntry: this.currentSessionPath ? this._sessions.get(this.currentSessionPath) : null,
+      activeAgentId: this._d.getActiveAgentId(),
+      activeAgent: this._d.getAgent(),
       onIndexRefreshError: (agent, err) => {
         log.warn(`session index refresh failed · agent=${agent.id} · ${errMessage(err)}`);
       },
     });
-    const currentPath = this.currentSessionPath;
-    const currentEntry = buildCurrentSessionListEntry({
-      currentPath,
-      sessionStarted: this._sessionStarted,
-      allSessions,
-      currentSession: this._session,
-      currentEntry: currentPath ? this._sessions.get(currentPath) : null,
-      activeAgentId: this._d.getActiveAgentId(),
-      activeAgent: this._d.getAgent(),
-    });
-    if (currentEntry) allSessions.unshift(currentEntry);
-
-    return sortSessionEntriesByModified(allSessions);
   }
 
   async _refreshSessionIndexesInBackground() {
@@ -1495,64 +1487,43 @@ export class SessionCoordinator {
   }
 
   async _relaySession(sessionPath: string, compactionCount: number) {
-    const entry = this._sessions.get(sessionPath);
-    if (!entry || entry.relayInProgress) return false;
-
-    const relayCfg = this._resolveSessionRelayConfig();
-    if (!relayCfg.enabled || sessionPath !== this.currentSessionPath) return false;
-
     const prevPendingPlanMode = this._pendingPlanMode;
     const prevPendingSecurityMode = this._pendingSecurityMode;
-    entry.relayInProgress = true;
-    try {
-      const summary = await this._d.summarizeSessionRelay?.(sessionPath, {
-        maxTokens: relayCfg.summaryMaxTokens,
-      });
-      if (!summary) return false;
-
-      const models = this._d.getModels();
-      const model = entry.modelId
-        ? findModel(models.availableModels, entry.modelId, entry.modelProvider || undefined)
-        : (this._session?.model || models.currentModel);
-      const cwd = entry.session?.sessionManager?.getCwd?.() || this._d.getHomeCwd() || process.cwd();
-
-      this._pendingPlanMode = !!entry.planMode;
-      this._pendingSecurityMode = entry.securityMode || DEFAULT_SECURITY_MODE;
-
-      const nextSession = await this.createSession(null, cwd, entry.memoryEnabled !== false, model);
-      const newSessionPath = nextSession?.sessionManager?.getSessionFile?.() || this.currentSessionPath;
-      const newEntry = newSessionPath ? this._sessions.get(newSessionPath) : null;
-      if (!newEntry || !newSessionPath) return false;
-
-      newEntry._relaySummaryContext = this._formatRelaySummaryContext(summary);
-      newEntry.compactionCount = 0;
-      newEntry.securityMode = entry.securityMode || DEFAULT_SECURITY_MODE;
-      newEntry.planMode = !!entry.planMode;
-      newEntry.memoryEnabled = entry.memoryEnabled !== false;
-      this._applySessionToolRuntime(newSessionPath, newEntry.securityMode);
-
-      this._d.emitEvent({
-        type: "session_relay",
-        oldSessionPath: sessionPath,
-        newSessionPath,
-        summary,
-        summaryTokens: summary.length,
-        compactionCount,
-        reason: "auto_compaction_limit",
-      }, newSessionPath);
-      return true;
-    } catch (err) {
-      log.warn(`session relay failed: ${errMessage(err)}`);
-      return false;
-    } finally {
-      this._pendingPlanMode = prevPendingPlanMode;
-      this._pendingSecurityMode = prevPendingSecurityMode;
-      const current = this._sessions.get(sessionPath);
-      if (current) {
-        current.relayInProgress = false;
-        current.compactionCount = 0;
-      }
-    }
+    return runSessionRelay({
+      sessionPath,
+      compactionCount,
+      sessions: this._sessions,
+      currentSessionPath: this.currentSessionPath,
+      getCurrentSessionPath: () => this.currentSessionPath,
+      relayConfig: this._resolveSessionRelayConfig(),
+      defaultSecurityMode: DEFAULT_SECURITY_MODE,
+      summarize: async (path, options) => (
+        this._d.summarizeSessionRelay
+          ? await this._d.summarizeSessionRelay(path, options)
+          : null
+      ),
+      resolveModel: (entry) => {
+        const models = this._d.getModels();
+        return entry.modelId
+          ? findModel(models.availableModels, entry.modelId, entry.modelProvider || undefined)
+          : (this._session?.model || models.currentModel);
+      },
+      resolveCwd: (entry) => entry.session?.sessionManager?.getCwd?.() || this._d.getHomeCwd() || process.cwd(),
+      createSession: async ({ entry, cwd, memoryEnabled, model }) => {
+        this._pendingPlanMode = !!entry.planMode;
+        this._pendingSecurityMode = entry.securityMode || DEFAULT_SECURITY_MODE;
+        try {
+          return await this.createSession(null, cwd, memoryEnabled, model as ModelLike);
+        } finally {
+          this._pendingPlanMode = prevPendingPlanMode;
+          this._pendingSecurityMode = prevPendingSecurityMode;
+        }
+      },
+      formatSummaryContext: (summary) => this._formatRelaySummaryContext(summary),
+      applySessionToolRuntime: (path, mode) => this._applySessionToolRuntime(path, mode),
+      emitEvent: (event, path) => this._d.emitEvent(event, path),
+      onError: (err) => log.warn(`session relay failed: ${errMessage(err)}`),
+    });
   }
 
   async _prepareDryRunWorkspace(sourceDir: string) {
