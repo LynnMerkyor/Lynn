@@ -21,6 +21,23 @@ export interface ToolCallSummary {
   lineCount?: number;
   totalLines?: number;
   truncated?: boolean;
+  searchProvider?: string;
+  searchSummary?: string;
+  searchSources?: ToolSearchSourceTrace[];
+}
+
+export interface ToolSearchResultItem {
+  title?: string;
+  url?: string;
+  snippet?: string;
+}
+
+export interface ToolSearchSourceTrace {
+  name?: string;
+  ok?: boolean;
+  error?: string;
+  summary?: string;
+  items?: ToolSearchResultItem[];
 }
 
 export interface ToolCall {

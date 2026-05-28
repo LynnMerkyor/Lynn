@@ -46,6 +46,23 @@ export interface ToolPublicSummary {
   truncated?: boolean;
   matchCount?: number;
   lineCount?: number;
+  searchProvider?: string;
+  searchSummary?: string;
+  searchSources?: SearchSourceTrace[];
+}
+
+interface SearchResultTraceItem {
+  title?: string;
+  url?: string;
+  snippet?: string;
+}
+
+interface SearchSourceTrace {
+  name?: string;
+  ok?: boolean;
+  error?: string;
+  summary?: string;
+  items?: SearchResultTraceItem[];
 }
 
 export interface ToolExecutionSummaryResult {
@@ -130,6 +147,33 @@ export function buildPrefetchToolSummary(context: unknown): ToolPublicSummary {
   return outputPreview ? { outputPreview } : {};
 }
 
+function compactText(value: unknown, max = 240): string | undefined {
+  const text = String(value || "").trim();
+  return text ? text.slice(0, max) : undefined;
+}
+
+function sanitizeSearchSources(raw: unknown): SearchSourceTrace[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 8).map((source) => {
+    const record = (source && typeof source === "object") ? source as ToolArgs : {};
+    const rawItems = Array.isArray(record.items) ? record.items : [];
+    return {
+      name: compactText(record.name, 48),
+      ok: Boolean(record.ok),
+      error: compactText(record.error, 180),
+      summary: compactText(record.summary, 360),
+      items: rawItems.slice(0, 6).map((item) => {
+        const itemRecord = (item && typeof item === "object") ? item as ToolArgs : {};
+        return {
+          title: compactText(itemRecord.title, 140),
+          url: compactText(itemRecord.url, 400),
+          snippet: compactText(itemRecord.snippet, 220),
+        };
+      }).filter((item) => item.title || item.url || item.snippet),
+    };
+  }).filter((source) => source.name || source.summary || source.error || source.items?.length);
+}
+
 export function summarizeToolExecution(event: ToolExecutionEvent | null | undefined): ToolExecutionSummaryResult {
   const rawDetails = event?.result?.details || {};
   const toolName = event?.toolName || "";
@@ -173,6 +217,12 @@ export function summarizeToolExecution(event: ToolExecutionEvent | null | undefi
   } else if (toolName === "web_search") {
     const text = extractText(event?.result?.content as Parameters<typeof extractText>[0]);
     if (text) summary.outputPreview = text.slice(0, 200);
+    const provider = compactText(rawDetails.provider, 80);
+    const searchSummary = compactText(rawDetails.summary, 800);
+    const searchSources = sanitizeSearchSources(rawDetails.sources);
+    if (provider) summary.searchProvider = provider;
+    if (searchSummary) summary.searchSummary = searchSummary;
+    if (searchSources.length) summary.searchSources = searchSources;
   } else if (toolName === "read") {
     summary.filePath = (normalizedArgs.file_path || normalizedArgs.path || "") as string;
     const text = extractText(event?.result?.content as Parameters<typeof extractText>[0]);

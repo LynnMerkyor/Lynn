@@ -1821,6 +1821,137 @@
     word-break: break-word;
 }
 
+.searchSourcesPanel {
+    margin-top: 8px;
+    border-top: 1px solid var(--line-subtle, rgba(0,0,0,0.08));
+    padding-top: 7px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.searchSourcesSummary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--accent);
+    font-size: 0.74rem;
+    font-weight: 650;
+    list-style: none;
+}
+
+.searchSourcesSummary::-webkit-details-marker {
+    display: none;
+}
+
+.searchSourcesSummary::before {
+    content: '›';
+    display: inline-block;
+    transition: transform 0.16s ease;
+    color: var(--text-muted);
+}
+
+.searchSourcesPanel[open] .searchSourcesSummary::before {
+    transform: rotate(90deg);
+}
+
+.searchSourcesCount {
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.68rem;
+}
+
+.searchSourcesBody {
+    display: grid;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.searchSourcesSynthesis {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    color: var(--text);
+    background: var(--surface-raised, rgba(255,255,255,0.6));
+    border: 1px solid var(--line-subtle, rgba(0,0,0,0.08));
+    border-radius: var(--radius-sm);
+    padding: 7px 9px;
+    line-height: 1.45;
+}
+
+.searchSourcesProvider {
+    flex-shrink: 0;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+}
+
+.searchSourceGroup {
+    border: 1px solid var(--line-subtle, rgba(0,0,0,0.08));
+    border-radius: var(--radius-sm);
+    padding: 7px 9px;
+    background: var(--surface-raised, rgba(255,255,255,0.55));
+}
+
+.searchSourceGroup[data-ok="false"] {
+    opacity: 0.72;
+}
+
+.searchSourceHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--text);
+    font-weight: 650;
+    font-size: 0.72rem;
+}
+
+.searchSourceError {
+    color: var(--danger, #b45309);
+    font-weight: 500;
+}
+
+.searchSourceSummaryText {
+    margin-top: 5px;
+    color: var(--text-light);
+    line-height: 1.45;
+}
+
+.searchSourceList {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+}
+
+.searchSourceItem {
+    min-width: 0;
+}
+
+.searchSourceItem a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.searchSourceItem a:hover {
+    text-decoration: underline;
+}
+
+.searchSourceHost {
+    margin-left: 6px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+}
+
+.searchSourceItem p {
+    margin: 2px 0 0;
+    color: var(--text-light);
+    line-height: 1.4;
+}
+
 /* ── 思考折叠块 ── */
 
 .thinkingBlock {

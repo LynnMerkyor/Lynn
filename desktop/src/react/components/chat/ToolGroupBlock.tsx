@@ -6,7 +6,7 @@ import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import styles from './Chat.module.css';
 import { extractToolDetail } from '../../utils/message-parser';
 import { useStore } from '../../stores';
-import type { ToolCall, ToolCallSummary } from '../../stores/chat-types';
+import type { ToolCall, ToolCallSummary, ToolSearchSourceTrace } from '../../stores/chat-types';
 
 interface Props {
   tools: ToolCall[];
@@ -121,7 +121,8 @@ const ToolIndicator = memo(function ToolIndicator({ tool }: { tool: ToolCall }) 
   const tag = tool.args?.agentId as string | undefined;
 
   // 是否有可展示的输出预览
-  const hasOutput = tool.done && tool.summary?.outputPreview;
+  const hasSearchSources = tool.name === 'web_search' && !!tool.summary?.searchSources?.length;
+  const hasOutput = tool.done && (!!tool.summary?.outputPreview || hasSearchSources);
 
   return (
     <div className={styles.toolIndicatorWrap}>
@@ -212,7 +213,8 @@ const ToolSummaryInfo = memo(function ToolSummaryInfo({ name, summary }: { name:
 
 const ToolOutputPreview = memo(function ToolOutputPreview({ name, summary }: { name: string; summary: ToolCallSummary }) {
   const preview = summary.outputPreview || '';
-  if (!preview) return null;
+  const searchSources = name === 'web_search' ? (summary.searchSources || []) : [];
+  if (!preview && searchSources.length === 0) return null;
 
   // bash: terminal-style output
   if (name === 'bash') {
@@ -240,10 +242,97 @@ const ToolOutputPreview = memo(function ToolOutputPreview({ name, summary }: { n
     );
   }
 
-  // web_search / default: plain preview
+  if (name === 'web_search') {
+    return (
+      <div className={styles.toolOutputPreview}>
+        {preview && <div className={styles.toolOutputText}>{preview}</div>}
+        <SearchSourcesPanel
+          provider={summary.searchProvider}
+          summary={summary.searchSummary}
+          sources={searchSources}
+        />
+      </div>
+    );
+  }
+
+  // default: plain preview
   return (
     <div className={styles.toolOutputPreview}>
       <div className={styles.toolOutputText}>{preview}</div>
     </div>
+  );
+});
+
+function sourceDisplayName(source: ToolSearchSourceTrace): string {
+  const name = String(source.name || '').trim();
+  if (!name) return 'source';
+  if (name.toLowerCase() === 'mimo') return 'MiMo';
+  if (name.toLowerCase() === 'zhipu') return 'GLM';
+  return name;
+}
+
+function hostLabel(url?: string): string {
+  try {
+    return new URL(String(url || '')).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+const SearchSourcesPanel = memo(function SearchSourcesPanel({ provider, summary, sources }: {
+  provider?: string;
+  summary?: string;
+  sources: ToolSearchSourceTrace[];
+}) {
+  const visibleSources = sources.filter((source) => source.name || source.summary || source.error || source.items?.length);
+  if (!summary && visibleSources.length === 0) return null;
+  const itemCount = visibleSources.reduce((sum, source) => sum + (source.items?.length || 0), 0);
+  const zh = String(document?.documentElement?.lang || '').startsWith('zh');
+
+  return (
+    <details className={styles.searchSourcesPanel}>
+      <summary className={styles.searchSourcesSummary}>
+        <span>{zh ? '查看搜索源' : 'View search sources'}</span>
+        <span className={styles.searchSourcesCount}>
+          {visibleSources.length}{zh ? ' 个来源' : ' sources'}{itemCount ? ` · ${itemCount} links` : ''}
+        </span>
+      </summary>
+      <div className={styles.searchSourcesBody}>
+        {(summary || provider) && (
+          <div className={styles.searchSourcesSynthesis}>
+            {provider && <span className={styles.searchSourcesProvider}>{provider}</span>}
+            {summary && <span>{summary}</span>}
+          </div>
+        )}
+        {visibleSources.map((source, index) => (
+          <div key={`${source.name || 'source'}-${index}`} className={styles.searchSourceGroup} data-ok={source.ok === false ? 'false' : 'true'}>
+            <div className={styles.searchSourceHeader}>
+              <span>{sourceDisplayName(source)}</span>
+              {source.ok === false && <span className={styles.searchSourceError}>{source.error || (zh ? '不可用' : 'unavailable')}</span>}
+            </div>
+            {source.summary && <div className={styles.searchSourceSummaryText}>{source.summary}</div>}
+            {!!source.items?.length && (
+              <ul className={styles.searchSourceList}>
+                {source.items.map((item, itemIndex) => {
+                  const url = String(item.url || '').trim();
+                  const title = String(item.title || hostLabel(url) || url || (zh ? '搜索结果' : 'Search result')).trim();
+                  return (
+                    <li key={`${url || title}-${itemIndex}`} className={styles.searchSourceItem}>
+                      {url ? (
+                        <a href={url} target="_blank" rel="noreferrer">{title}</a>
+                      ) : (
+                        <span>{title}</span>
+                      )}
+                      {url && <span className={styles.searchSourceHost}>{hostLabel(url)}</span>}
+                      {item.snippet && <p>{item.snippet}</p>}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        ))}
+      </div>
+    </details>
   );
 });
