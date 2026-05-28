@@ -20,7 +20,6 @@ import { BrowserManager } from "../lib/browser/browser-manager.js";
 import { t, getLocale } from "../server/i18n.js";
 import { READ_ONLY_BUILTIN_TOOLS } from "./config-coordinator.js";
 import { findModel } from "../shared/model-ref.js";
-import { lookupToolTier } from "../shared/known-models.js";
 import { runReadToolPromptInjectionGuardrail } from "./claw-aegis-guardrails.js";
 import { SESSION_INDEX_FILENAME, readSessionIndex, refreshSessionIndex } from "./session-index.js";
 import {
@@ -48,6 +47,18 @@ import { buildScenarioContractHintForText } from "../shared/scenario-contracts.j
 import {
   isNativeToolCallingDisabled,
 } from "../shared/model-tool-capabilities.js";
+import {
+  createReplyIntegrityTracker,
+  ensureValidReplyExecution,
+  sanitizeActiveSessionContextForPrompt,
+} from "./session-prompt-sanitizer.js";
+import {
+  filterCustomToolsByTier,
+  getBuiltinToolNames,
+  normalizeCustomToolsForModel,
+  resolveToolTier,
+  shouldSuppressClientToolSchema,
+} from "./session-tool-runtime.js";
 import type { ResolvedModel } from "./types.js";
 
 const log = createModuleLogger("session");
@@ -202,177 +213,7 @@ function toSessionPromptOptions(images?: PromptImage[]) {
   };
 }
 
-// ── Tool Tiering（P0：按模型能力裁剪自定义工具集） ──
-
-const MINIMAL_CUSTOM_TOOLS = new Set([
-  "web_search", "web_fetch", "stock_market", "weather", "live_news", "sports_score",
-  "knowledge_query", // v0.77 rag-core: 小模型也支持轻量知识库查询
-]);
-
-const STANDARD_CUSTOM_TOOLS = new Set([
-  "web_search", "web_fetch", "stock_market", "weather", "live_news", "sports_score", "todo", "present_files", "create_docx", "create_report", "notify",
-  "search_memory", "pin_memory", "unpin_memory",
-  "recall_experience", "record_experience",
-  // v0.77 插件工具（standard 档开放）
-  "knowledge_index", "knowledge_query", // rag-core
-  "tts_speak",                         // tts-bridge
-  "generate_image",                    // flux-studio
-]);
-
-/**
- * 按 toolTier 裁剪自定义工具列表
- * @param {Array} customTools
- * @param {"full"|"standard"|"minimal"|null} tier - null/undefined = full
- * @returns {Array}
- */
-function filterCustomToolsByTier(customTools: ToolLike[], tier: string | null | undefined) {
-  if (!tier || tier === "full") return customTools;
-  if (tier === "none") return [];
-  const allowed = tier === "minimal" ? MINIMAL_CUSTOM_TOOLS : STANDARD_CUSTOM_TOOLS;
-  return customTools.filter((t: ToolLike) => allowed.has(t.name));
-}
-
-const OPENAI_RESPONSES_TOOL_NAME_RE = /^[a-zA-Z0-9_-]+$/;
-
-function isStrictToolNameModel(model: ModelLike) {
-  const provider = String(model?.provider || "").toLowerCase();
-  const api = String(model?.api || "").toLowerCase();
-  return provider === "openai"
-    || provider === "openai-codex"
-    || provider === "openai-codex-oauth"
-    || api === "openai-responses"
-    || api === "openai-codex-responses";
-}
-
-function sanitizeToolName(name: unknown) {
-  const sanitized = String(name || "tool")
-    .replace(/[^a-zA-Z0-9_-]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 64);
-  return sanitized || "tool";
-}
-
-function normalizeCustomToolsForModel(customTools: ToolLike[], model: ModelLike) {
-  if (!Array.isArray(customTools) || customTools.length === 0) return [];
-  if (!isStrictToolNameModel(model)) return customTools;
-
-  const seen = new Set();
-  let changed = 0;
-  const normalized = customTools.map((tool) => {
-    const originalName = String(tool?.name || "");
-    let nextName = sanitizeToolName(originalName);
-    let suffix = 2;
-    while (seen.has(nextName)) {
-      const base = nextName.slice(0, Math.max(1, 64 - String(suffix).length - 1));
-      nextName = `${base}_${suffix}`;
-      suffix += 1;
-    }
-    seen.add(nextName);
-    if (OPENAI_RESPONSES_TOOL_NAME_RE.test(originalName) && originalName === nextName) return tool;
-    changed += 1;
-    return { ...tool, name: nextName, _aliasOf: originalName };
-  });
-
-  if (changed > 0) {
-    log.warn(`[model-tools] normalized ${changed}/${customTools.length} tool name(s) for ${model?.provider || "?"}/${model?.id || model?.name || "?"}`);
-  }
-  return normalized;
-}
-
-function shouldSuppressClientToolSchema(model: ModelLike) {
-  return false;
-}
-
-function messageContentText(content: unknown) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .map((part: any) => {
-      if (!part) return "";
-      if (typeof part === "string") return part;
-      if (typeof part.text === "string") return part.text;
-      if (typeof part.content === "string") return part.content;
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n");
-}
-
-function isRecoverableProviderErrorMessage(message: AnyRecord | null | undefined) {
-  if (!message || message.role !== "assistant") return false;
-  if (message.stopReason !== "error") return false;
-  const errorMessage = String(message.errorMessage || "");
-  if (/all providers failed/i.test(errorMessage)) return true;
-  return !messageContentText(message.content).trim();
-}
-
-function isInternalRetryPromptMessage(message: AnyRecord | null | undefined) {
-  if (!message || message.role !== "user") return false;
-  const text = messageContentText(message.content).trim();
-  return text.startsWith("[系统提示] 这是空回复后的补救回答")
-    || text.startsWith("[System] This is a recovery answer after an empty model turn");
-}
-
-function isTransientRecoveredToolPlaceholder(message: AnyRecord | null | undefined) {
-  if (!message || message.role !== "assistant") return false;
-  const text = messageContentText(message.content).trim();
-  return text === "正在取回工具结果，稍后会整理成回答。";
-}
-
-function sanitizeMessagesBeforePrompt(messages: unknown) {
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return { messages: Array.isArray(messages) ? messages : [], removed: 0 };
-  }
-  const cleaned = [];
-  let removed = 0;
-  for (const message of messages) {
-    if (
-      isRecoverableProviderErrorMessage(message) ||
-      isInternalRetryPromptMessage(message) ||
-      isTransientRecoveredToolPlaceholder(message)
-    ) {
-      removed += 1;
-      continue;
-    }
-    cleaned.push(message);
-  }
-  return { messages: cleaned, removed };
-}
-
-function sanitizeActiveSessionContextForPrompt(session: SessionLike | null | undefined, sessionPath: string | null | undefined) {
-  const manager = session?.sessionManager;
-  const replaceMessages = session?.agent?.replaceMessages;
-  if (!manager?.buildSessionContext || typeof replaceMessages !== "function") return 0;
-  try {
-    const context = manager.buildSessionContext();
-    const currentMessages = Array.isArray(context?.messages) ? context.messages : [];
-    const { messages, removed } = sanitizeMessagesBeforePrompt(currentMessages);
-    if (removed > 0 && messages.length > 0) {
-      replaceMessages.call(session?.agent, messages);
-      log.warn(`[prompt] scrubbed ${removed} transient provider/retry message(s) from active context · session=${sessionPath || "unknown"}`);
-    }
-    return removed;
-  } catch (err) {
-    log.warn(`[prompt] active context scrub failed · session=${sessionPath || "unknown"} · ${errMessage(err)}`);
-    return 0;
-  }
-}
-
-/**
- * 推断模型的 toolTier
- * 优先使用 known-models.json 标注，fallback 按 context window 推断
- */
-function resolveToolTier(model: ModelLike) {
-  if (!model) return null;
-  if (isNativeToolCallingDisabled(model)) return "none";
-  const tier = lookupToolTier(model.provider, model.id);
-  if (tier) return tier;
-  // fallback: context < 32K → minimal
-  const cw = model.contextWindow;
-  if (cw && cw < 32_000) return "minimal";
-  return null;
-}
+// ── Session cache / relay constants ──
 
 const MAX_CACHED_SESSIONS = 20;
 const SESSION_RELAY_SUMMARY_MAX_CHARS = 4000;
@@ -393,36 +234,6 @@ const DRY_RUN_COPY_IGNORES = new Set([
   "venv",
   "__pycache__",
 ]);
-
-function createReplyIntegrityTracker() {
-  return {
-    replyText: "",
-    sawToolCall: false,
-    handle(event: AnyRecord) {
-      if (event?.type === "message_update") {
-        const sub = event.assistantMessageEvent;
-        if (sub?.type === "text_delta") {
-          this.replyText += sub.delta || "";
-        } else if (sub?.type === "toolcall_start" || sub?.type === "toolcall_end") {
-          this.sawToolCall = true;
-        }
-        return;
-      }
-
-      if (event?.type === "tool_execution_start" || event?.type === "tool_execution_end") {
-        this.sawToolCall = true;
-      }
-    },
-  };
-}
-
-function ensureValidReplyExecution(tracker: AnyRecord) {
-  return;
-}
-
-function getBuiltinToolNames(tools: ToolLike[]) {
-  return tools.map((tool: ToolLike) => tool.name);
-}
 
 function buildSkillToolCompatibilityHint(skillName: string | null | undefined) {
   const isZh = getLocale().startsWith("zh");
