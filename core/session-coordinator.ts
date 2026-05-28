@@ -21,7 +21,6 @@ import { t, getLocale } from "../server/i18n.js";
 import { READ_ONLY_BUILTIN_TOOLS } from "./config-coordinator.js";
 import { findModel } from "../shared/model-ref.js";
 import { runReadToolPromptInjectionGuardrail } from "./claw-aegis-guardrails.js";
-import { SESSION_INDEX_FILENAME, readSessionIndex, refreshSessionIndex } from "./session-index.js";
 import {
   SecurityMode,
   DEFAULT_SECURITY_MODE,
@@ -67,6 +66,18 @@ import {
   resolveToolTier,
   shouldSuppressClientToolSchema,
 } from "./session-tool-runtime.js";
+import {
+  MAX_CACHED_SESSIONS,
+  buildCurrentSessionListEntry,
+  collectAgentSessionEntries,
+  evictSessionCacheEntries,
+  refreshMissingSessionIndexes,
+  sortSessionEntriesByModified,
+} from "./session-list-cache.js";
+import {
+  formatRelaySummaryContext,
+  resolveSessionRelayConfig,
+} from "./session-relay.js";
 import type { ResolvedModel } from "./types.js";
 
 const log = createModuleLogger("session");
@@ -159,15 +170,6 @@ export const PATROL_TOOLS_DEFAULT = [
   "present_files", "message_agent",
 ];
 
-// ── Session cache / relay constants ──
-
-const MAX_CACHED_SESSIONS = 20;
-const SESSION_RELAY_SUMMARY_MAX_CHARS = 4000;
-const DEFAULT_SESSION_RELAY = {
-  enabled: true,
-  compactionThreshold: 3,
-  summaryMaxTokens: 800,
-};
 const DRY_RUN_COPY_IGNORES = new Set([
   ".git",
   "node_modules",
@@ -180,60 +182,6 @@ const DRY_RUN_COPY_IGNORES = new Set([
   "venv",
   "__pycache__",
 ]);
-
-const SESSION_LIST_TIMEOUT_MS = 700;
-const SESSION_STAT_TIMEOUT_MS = 250;
-const SESSION_LIST_MAX_FILES = 600;
-const SESSION_AUX_FILES = new Set([
-  SESSION_INDEX_FILENAME,
-  "session-meta.json",
-  "session-titles.json",
-]);
-
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
-  return Promise.race([
-    promise.finally(() => clearTimeout(timer)),
-    new Promise<T>((resolve) => {
-      timer = setTimeout(() => resolve(fallback), ms);
-    }),
-  ]);
-}
-
-async function listSessionFileSkeletons(sessionDir: string, agent: AgentLike) {
-  const entries = await withTimeout(
-    fsp.readdir(sessionDir, { withFileTypes: true }),
-    SESSION_LIST_TIMEOUT_MS,
-    [],
-  );
-  if (!Array.isArray(entries) || entries.length === 0) return [];
-
-  const files = entries
-    .filter((entry) => entry.isFile?.() && entry.name.endsWith(".jsonl") && !SESSION_AUX_FILES.has(entry.name))
-    .map((entry) => entry.name)
-    .sort()
-    .slice(-SESSION_LIST_MAX_FILES);
-
-  const skeletons = await Promise.all(files.map(async (fileName: string) => {
-    const sessionPath = path.join(sessionDir, fileName);
-    const stat = await withTimeout(fsp.stat(sessionPath), SESSION_STAT_TIMEOUT_MS, null);
-    return {
-      path: sessionPath,
-      title: null,
-      firstMessage: "",
-      modified: stat?.mtime || new Date(0),
-      messageCount: 0,
-      cwd: "",
-      agentId: agent.id,
-      agentName: agent.name,
-      modelId: null,
-      modelProvider: null,
-      pinned: false,
-      labels: [],
-    };
-  }));
-  return skeletons.filter((entry) => entry.path);
-}
 
 export class SessionCoordinator {
   _d: SessionCoordinatorDeps;
@@ -662,20 +610,15 @@ export class SessionCoordinator {
     this._applySessionToolRuntime(mapKey, initialSecurityMode);
 
     // LRU 淘汰：按 lastTouchedAt 排序，跳过 streaming 和焦点 session
-    if (this._sessions.size > MAX_CACHED_SESSIONS) {
-      const focusPath = this.currentSessionPath;
-      const candidates = [...this._sessions.entries()]
-        .filter(([key, e]) => key !== mapKey && key !== focusPath && !e.session.isStreaming)
-        .sort((a, b) => a[1].lastTouchedAt - b[1].lastTouchedAt);
-      for (const [key, entry] of candidates) {
-        // 记忆收尾（fire-and-forget，淘汰场景不阻塞）
-        const agent = this._d.getAgentById(entry.agentId) || this._d.getAgent();
-        notifyMemorySessionEnd(agent, key, "cache eviction");
-        entry.unsub();
-        this._sessions.delete(key);
-        if (this._sessions.size <= MAX_CACHED_SESSIONS) break;
-      }
-    }
+    evictSessionCacheEntries({
+      sessions: this._sessions,
+      currentKey: mapKey,
+      focusPath: this.currentSessionPath,
+      maxSessions: MAX_CACHED_SESSIONS,
+      getAgentById: (agentId) => this._d.getAgentById(agentId),
+      getFallbackAgent: () => this._d.getAgent(),
+      notifySessionEnd: notifyMemorySessionEnd,
+    });
 
     return session;
   }
@@ -1263,72 +1206,36 @@ export class SessionCoordinator {
   }
 
   async listSessions() {
-    const allSessions: AnyRecord[] = [];
-    const agents = this._d.listAgents();
-
-    for (const agent of agents) {
-      const sessionDir = path.join(this._d.agentsDir, agent.id, "sessions");
-      if (!fs.existsSync(sessionDir)) continue;
-      try {
-        const indexed = (await readSessionIndex(sessionDir)) as AnyRecord[];
-        if (indexed.length > 0) {
-          for (const entry of indexed) {
-            const modified = entry.modified ? new Date(entry.modified) : new Date(0);
-            allSessions.push({
-              ...entry,
-              modified: Number.isNaN(modified.getTime()) ? new Date(0) : modified,
-              agentId: entry.agentId || agent.id,
-              agentName: entry.agentName || agent.name,
-              labels: Array.isArray(entry.labels) ? entry.labels.filter(Boolean) : [],
-            });
-          }
-          continue;
-        }
-
-        const skeletons = await listSessionFileSkeletons(sessionDir, agent);
-        for (const s of skeletons) allSessions.push(s);
-        await refreshSessionIndex(sessionDir, skeletons, { agent }).catch((err: unknown) => {
-          log.warn(`session index refresh failed · agent=${agent.id} · ${errMessage(err)}`);
-        });
-      } catch {}
-    }
-
+    const allSessions = await collectAgentSessionEntries({
+      agentsDir: this._d.agentsDir,
+      agents: this._d.listAgents(),
+      onIndexRefreshError: (agent, err) => {
+        log.warn(`session index refresh failed · agent=${agent.id} · ${errMessage(err)}`);
+      },
+    });
     const currentPath = this.currentSessionPath;
-    const activeAgentId = this._d.getActiveAgentId();
-    if (currentPath && this._sessionStarted && !allSessions.find(s => s.path === currentPath)) {
-      const currentEntry = this._sessions.get(currentPath);
-      allSessions.unshift({
-        path: currentPath,
-        title: null,
-        firstMessage: "",
-        modified: new Date(),
-        messageCount: 0,
-        cwd: this._session?.sessionManager?.getCwd?.() || "",
-        agentId: activeAgentId,
-        agentName: this._d.getAgent().agentName,
-        modelId: currentEntry?.modelId || null,
-        modelProvider: currentEntry?.modelProvider || null,
-      });
-    }
+    const currentEntry = buildCurrentSessionListEntry({
+      currentPath,
+      sessionStarted: this._sessionStarted,
+      allSessions,
+      currentSession: this._session,
+      currentEntry: currentPath ? this._sessions.get(currentPath) : null,
+      activeAgentId: this._d.getActiveAgentId(),
+      activeAgent: this._d.getAgent(),
+    });
+    if (currentEntry) allSessions.unshift(currentEntry);
 
-    allSessions.sort((a, b) => b.modified - a.modified);
-    return allSessions;
+    return sortSessionEntriesByModified(allSessions);
   }
 
   async _refreshSessionIndexesInBackground() {
-    const agents = this._d.listAgents();
-    for (const agent of agents) {
-      const sessionDir = path.join(this._d.agentsDir, agent.id, "sessions");
-      if (!fs.existsSync(sessionDir)) continue;
-      try {
-        const existing = await readSessionIndex(sessionDir);
-        if (existing.length > 0) continue;
-        const skeletons = await listSessionFileSkeletons(sessionDir, agent);
-        await refreshSessionIndex(sessionDir, skeletons, { agent });
-      } catch (err) {
+    await refreshMissingSessionIndexes({
+      agentsDir: this._d.agentsDir,
+      agents: this._d.listAgents(),
+      onError: (agent, err) => {
         log.warn(`session index refresh skipped · agent=${agent.id} · ${errMessage(err)}`);
-      }
-    }
+      },
+    });
   }
 
   async saveSessionTitle(sessionPath: string, title: string) {
@@ -1652,28 +1559,11 @@ export class SessionCoordinator {
 
   _resolveSessionRelayConfig() {
     const raw = this._d.getPrefs?.().getSessionRelay?.() || {};
-    // 动态 relay 阈值：小窗口模型更早触发接力
-    let defaultThreshold = DEFAULT_SESSION_RELAY.compactionThreshold;
-    try {
-      const model = this._session?.model;
-      const cw = resolveModelContextWindow(model);
-      if (cw && cw < 16_000) defaultThreshold = 1;
-      else if (cw && cw < 32_000) defaultThreshold = 2;
-    } catch {}
-    return {
-      enabled: raw.enabled !== false,
-      compactionThreshold: Number(raw.compaction_threshold) > 0 ? Number(raw.compaction_threshold) : defaultThreshold,
-      summaryMaxTokens: Number(raw.summary_max_tokens) > 0 ? Number(raw.summary_max_tokens) : DEFAULT_SESSION_RELAY.summaryMaxTokens,
-    };
+    return resolveSessionRelayConfig(raw, this._session?.model);
   }
 
   _formatRelaySummaryContext(summaryText: string) {
-    const summary = String(summaryText || "").trim().slice(0, SESSION_RELAY_SUMMARY_MAX_CHARS);
-    if (!summary) return "";
-    const isZh = getLocale().startsWith("zh");
-    return isZh
-      ? `【上一个会话的自动接力摘要】\n以下是上一段长会话在压缩多次后的交接摘要。请把它当作继续工作的背景，不要逐字复述给用户，除非用户明确询问：\n${summary}`
-      : `[Automatic Session Relay Summary]\nThe following is a handoff summary from the previous long-running session after repeated compactions. Use it as continuation context and do not quote it back unless the user asks for it:\n${summary}`;
+    return formatRelaySummaryContext(summaryText, getLocale());
   }
 
   async _relaySession(sessionPath: string, compactionCount: number) {
