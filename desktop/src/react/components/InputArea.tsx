@@ -19,6 +19,7 @@ import { AttachedFilesBar } from './input/AttachedFilesBar';
 import { SecurityModeSelector } from './input/SecurityModeSelector';
 import { ContextRing } from './input/ContextRing';
 import { WritingModeToggle } from './input/WritingModeToggle';
+import { LocalQwenStatusStack } from './input/LocalQwenStatusStack';
 import { ThinkingLevelButton } from './input/ThinkingLevelButton';
 import { ModelSelector } from './input/ModelSelector';
 import { SlashCommandMenu } from './input/SlashCommandMenu';
@@ -1493,120 +1494,44 @@ function InputAreaInner() {
       {!slashBusy && !compacting && !inlineError && !inlineNotice && slashResult && (
         <div className={styles['slash-busy-bar']}><span>{slashResult.text}</span></div>
       )}
-      {localQwenStatusVisible && (
-        <div className={styles['local-model-status-stack']}>
-          <div className={localQwenStatusBarClass}>
-            <div className={styles['local-model-status-left']}>
-              <span className={styles['local-model-status-dot']} aria-hidden="true" />
-              <div className={styles['local-model-status-copy']}>
-                <strong>{localQwenWarmupTitle}</strong>
-                <span>{localQwenWarmupCopy}</span>
-              </div>
-            </div>
-            <div className={styles['local-model-status-meta']}>
-              <span>llama.cpp</span>
-              {localQwenTpsSummary && <span>{localQwenTpsSummary}</span>}
-              <span>{localQwenMetricSummary}</span>
-              {localQwenSlotSummary && <span>{localQwenSlotSummary}</span>}
-              <span>{localQwenEndpoint.replace(/^https?:\/\//, '')}</span>
-            </div>
-            <div className={styles['local-model-status-actions']}>
-              {localQwenRunning && localQwenModel && !localQwenCurrent && (
-                <button type="button" onClick={switchToLocalQwen}>切换</button>
-              )}
-              <button type="button" onClick={() => refreshLocalQwenStatus(true)}>刷新</button>
-              <button type="button" onClick={openLocalQwenDashboard} aria-expanded={localQwenPanelOpen}>状态</button>
-              {localQwenActive && <button type="button" onClick={stopLocalQwen}>停止</button>}
-              <button type="button" onClick={dismissLocalQwenStatus} aria-label="收起本地模型状态">×</button>
-            </div>
-          </div>
-          {!localQwenEndpointOccupied && (localQwenColdStartLikely || (localQwenActive && !localQwenRunning)) && (
-            <div className={styles['local-model-warmup-note']} role="status" aria-live="polite">
-              <strong>首次暖机提示</strong>
-              <span>本地 Qwen3.5-9B 刚启动时要加载权重和预热上下文，第一问可能 10-20 秒；暖好后同一会话会明显更快。</span>
-            </div>
-          )}
-          {localQwenPanelOpen && (
-            <div className={styles['local-model-status-panel']} role="status" aria-live="polite">
-              <div className={styles['local-model-status-panel-head']}>
-                <div>
-                  <strong>本地 Qwen3.5-9B</strong>
-                  <span>{localQwenEndpointOccupied
-                    ? '当前端口由 4B 降级/兼容端点占用，默认 9B 尚未启动'
-                    : 'Q4_K_M imatrix · MTP 加速 · thinking-on 稳定性优先'}</span>
-                </div>
-                <button type="button" onClick={() => setLocalQwenPanelOpen(false)} aria-label="收起本地模型状态">×</button>
-              </div>
-              <div className={styles['local-model-status-panel-grid']}>
-                <span><b>端点</b>{localQwenEndpoint}</span>
-                <span><b>进程</b>{localQwenStatus?.runtime?.pid ? `PID ${localQwenStatus.runtime.pid}` : localQwenLoading ? '加载中' : '运行中'}</span>
-                <span><b>速度</b>{localQwenTpsSummary || '等待下一次采样'}</span>
-                <span><b>任务槽</b>{localQwenEndpointOccupied ? '非默认端点' : (localQwenSlotSummary || '可用 1/1')}</span>
-                <span><b>统计</b>{localQwenMetricSummary}</span>
-                {localQwenEndpointOccupied && (
-                  <span><b>当前模型</b>{localQwenServedModelIds.join(', ') || '非 9B'}</span>
-                )}
-              </div>
-              <p>{localQwenEndpointOccupied
-                ? '这不是默认 9B 引导模型。需要启用默认 9B 时，先停止当前本地端点。'
-                : '退出 Lynn 时会自动停止本地模型；需要马上释放内存时点“停止”。'}</p>
-            </div>
-          )}
-        </div>
-      )}
-      {localQwenActive && localQwenDismissed && (
-        <button
-          type="button"
-          className={styles['local-model-status-restore']}
-          onClick={() => {
-            setLocalQwenDismissed(false);
-            setLocalQwenPanelOpen(true);
-          }}
-        >
-          <span className={styles['local-model-status-dot']} aria-hidden="true" />
-          <strong>{localQwenEndpointOccupied ? '4B 降级端点正在运行' : (localQwenRunning ? '本地 Qwen3.5-9B 正在运行' : '本地 Qwen3.5-9B 正在加载')}</strong>
-          <span>显示状态</span>
-        </button>
-      )}
-      {!localQwenActive && localQwenModel && localQwenHasModel && localQwenHasRuntime && !localQwenDismissed && (
-        <div className={`${styles['local-model-status-bar']} ${styles['local-model-status-bar-muted']}`}>
-          <div className={styles['local-model-status-left']}>
-            <span className={styles['local-model-status-dot-muted']} aria-hidden="true" />
-            <div className={styles['local-model-status-copy']}>
-              <strong>{localQwenCurrent ? '当前本地 Qwen3.5-9B 未启动' : '本地 Qwen3.5-9B 未运行'}</strong>
-              <span>
-                {localQwenCurrent
-                  ? '你已选择本地模型。点击启动后，Lynn 会拉起 llama.cpp 并继续使用当前模型。'
-                  : '模型文件已就绪。点击启动后，Lynn 会自动拉起本地端点。'}
-              </span>
-            </div>
-          </div>
-          <div className={styles['local-model-status-actions']}>
-            <button type="button" onClick={startLocalQwen}>启动</button>
-            <button type="button" onClick={() => refreshLocalQwenStatus(true)}>刷新</button>
-            <button type="button" onClick={dismissLocalQwenStatus} aria-label="收起本地模型状态">×</button>
-          </div>
-        </div>
-      )}
-      {localQwenRecommended && (!localQwenModel || !localQwenHasModel || !localQwenHasRuntime) && (
-        <div className={`${styles['local-model-status-bar']} ${styles['local-model-status-bar-recommend']}`}>
-          <div className={styles['local-model-status-left']}>
-            <span className={styles['local-model-status-dot']} aria-hidden="true" />
-            <div className={styles['local-model-status-copy']}>
-              <strong>可安装本地 Qwen3.5-9B</strong>
-              <span>
-                {localQwenHasModel && localQwenHasRuntime
-                  ? '模型和 llama.cpp 已就绪，授权后即可启动本地离线端点。'
-                  : 'Qwen3.5-9B Q4_K_M imatrix MTP · 5.78GB / 5.38GiB · 32K 上下文；授权后自动准备，当前模型照常保留。'}
-              </span>
-            </div>
-          </div>
-          <div className={styles['local-model-status-actions']}>
-            <button type="button" onClick={openLocalQwenSettings}>安装本地模型</button>
-            <button type="button" onClick={snoozeLocalQwenPrompt}>稍后</button>
-          </div>
-        </div>
-      )}
+      <LocalQwenStatusStack
+        status={localQwenStatus}
+        visible={localQwenStatusVisible}
+        active={localQwenActive}
+        dismissed={localQwenDismissed}
+        panelOpen={localQwenPanelOpen}
+        statusBarClass={localQwenStatusBarClass}
+        warmupTitle={localQwenWarmupTitle}
+        warmupCopy={localQwenWarmupCopy}
+        endpoint={localQwenEndpoint}
+        endpointOccupied={localQwenEndpointOccupied}
+        running={localQwenRunning}
+        loading={localQwenLoading}
+        current={localQwenCurrent}
+        coldStartLikely={localQwenColdStartLikely}
+        canSwitch={!!(localQwenRunning && localQwenModel && !localQwenCurrent)}
+        canShowStopped={!!(!localQwenActive && localQwenModel && localQwenHasModel && localQwenHasRuntime && !localQwenDismissed)}
+        canShowInstallPrompt={!!(localQwenRecommended && (!localQwenModel || !localQwenHasModel || !localQwenHasRuntime))}
+        hasModel={localQwenHasModel}
+        hasRuntime={localQwenHasRuntime}
+        tpsSummary={localQwenTpsSummary}
+        metricSummary={localQwenMetricSummary}
+        slotSummary={localQwenSlotSummary}
+        servedModelIds={localQwenServedModelIds}
+        onSwitch={switchToLocalQwen}
+        onRefresh={() => refreshLocalQwenStatus(true)}
+        onOpenDashboard={openLocalQwenDashboard}
+        onStop={stopLocalQwen}
+        onDismiss={dismissLocalQwenStatus}
+        onRestore={() => {
+          setLocalQwenDismissed(false);
+          setLocalQwenPanelOpen(true);
+        }}
+        onStart={startLocalQwen}
+        onOpenSettings={openLocalQwenSettings}
+        onSnooze={snoozeLocalQwenPrompt}
+        onSetPanelOpen={setLocalQwenPanelOpen}
+      />
       {(quotedSelection || sessionTodos.length > 0) && (
         <div className={styles['input-context-row']}>
           <div className={styles['input-context-left']}>
