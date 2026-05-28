@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.79.7-brightgreen" alt="Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.79.8-brightgreen" alt="Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -44,7 +44,21 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 ## 🆕 近期更新
 
 <details>
-<summary><strong>v0.79.7</strong> · 2026-05-28 · LynnEngine TS + 最后中枢收口 <em>(最新)</em></summary>
+<summary><strong>v0.79.8</strong> · 2026-05-28 · Chat Runtime Split + CosyVoice Streaming <em>(最新)</em></summary>
+
+**稳定性与维护成本下降版**:
+- 🧩 **聊天中枢拆分**:`server/routes/chat.ts` 已压到 500 行以内,request normalizer、hub event forwarder、prompt turn runner、WebSocket control、tool finalizer 和 local model bridge 分别落到 `server/chat/*`。
+- 🔊 **CosyVoice 真流式 TTS**:Spark `lynn-tts.service` 固化 GPU 启动参数,聊天喇叭优先走 reader + PCM 播放,失败自动回退原文件路径。
+- 🧪 **TTS 巡检补强**:`brain-tools-inspection` 增加 CosyVoice health + 真实轻量合成 probe,并修正 MiMo TTS token-plan endpoint / 双认证头。
+- 🧭 **本地模型口径不变**:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;4B 保持低配降级,继续提示 thinking-on 风险。
+- ✅ **发布门禁**:V0.79.8 候选已通过 `npm run release:gate`:typecheck、runtime typecheck、全量 vitest、三段构建、static regression 与 Electron UI smoke。
+
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.8)
+
+</details>
+
+<details>
+<summary><strong>v0.79.7</strong> · 2026-05-28 · LynnEngine TS + 最后中枢收口</summary>
 
 **V0.79 最后中枢 TypeScript 收口版**:
 - 🧱 **LynnEngine 门面迁入 TS**:`core/engine` 已从 JS 迁入 TypeScript,agent/session/config/model/plugin 组合入口进入 runtime typecheck。

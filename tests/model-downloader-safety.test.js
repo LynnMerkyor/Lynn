@@ -1,4 +1,5 @@
 import { createRequire } from "module";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
@@ -105,7 +106,7 @@ describe("model downloader safety boundary", () => {
   });
 
   it("rejects unsafe target paths before any network request can start", () => {
-    expect(validateModelTargetPath("/tmp/model.gguf")).toBe("/tmp/model.gguf");
+    expect(validateModelTargetPath("/tmp/model.gguf")).toBe(path.resolve("/tmp/model.gguf"));
     expect(() => validateModelTargetPath("/tmp/model.bin")).toThrow(/must-end-with-gguf/);
     expect(() => new ModelDownloader({
       target: "/tmp/model.bin",

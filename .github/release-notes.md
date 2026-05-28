@@ -1,40 +1,34 @@
-# Lynn v0.79.7 Release Notes
+# Lynn v0.79.8 Release Notes
 
-> 发布日期:2026-05-28 · 代号:"LynnEngine TS + Final Central Runtime"
+> 发布日期:2026-05-28 · 代号:"Chat Runtime Split + CosyVoice Streaming"
 
-v0.79.7 是 V0.79 线最后一块中枢 TypeScript 收口版。默认本地模型策略不变:继续推荐 **Qwen3.5-9B Q4_K_M imatrix MTP**,4B 只作为低配降级并保留 thinking-on 风险提示。本版重点完成 `core/engine` LynnEngine 门面的 TypeScript 迁移,让 agent/session/config/model/plugin 组合入口进入 runtime typecheck。
+v0.79.8 是 V0.79 线的稳定性与维护成本下降版本。本版不改变默认本地模型策略:继续推荐 **Qwen3.5-9B Q4_K_M imatrix MTP**,4B 仍作为低配降级并保留 thinking-on 风险提示。重点是把聊天中枢拆到稳定边界,并接入 Spark CosyVoice 2 真流式 TTS 与巡检。
 
 ## 重点更新
 
-- `core/engine` 迁入 TypeScript:LynnEngine facade、manager 组合、Brain 注册预热、插件初始化、MCP 激活和事件广播进入 runtime typecheck;旧 `HanaEngine` import 保留兼容别名。
-- 工具安全边界类型化:tool guard、工具名 alias、sandbox 参数、confirm store 和 session event dispatch 增加 typed wrapper。
-- 前序中枢迁移继续受门禁覆盖:`server/routes/chat`、`core/session-coordinator`、`core/agent` 和 runtime TS 配置一起回归。
-- 本地模型口径不变:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;4B 保持低配降级并提示 thinking-on 风险。
+- `server/routes/chat.ts` 从中枢巨文件拆到 500 行以内,请求归一化、hub 事件转发、prompt turn runner、WebSocket 控制、tool finalizer 与本地模型 bridge 分别落到 `server/chat/*`。
+- CosyVoice 2 成为 TTS 默认推荐路径:Spark 侧 `lynn-tts.service` 固化 GPU 启动参数,插件支持 `/audio/speech/stream`,聊天内喇叭优先走 reader + PCM 真流式播放。
+- TTS 兼容性增强:`/audio/stream` 保留为兼容入口,MiMo TTS token-plan endpoint 与双认证头修正,Edge/CosyVoice/MiMo fallback 描述统一。
+- 巡检增强:`scripts/brain-tools-inspection.mjs` 增加 CosyVoice health + 轻量真实合成 probe,避免只看进程存活而漏掉 CUDA/cuBLAS 问题。
+- 中枢重构保持行为稳定:聊天 route 继续覆盖 provider/fallback metadata、本地模型 direct path、tool turn 兜底、visible text flush 与 release regression。
 
 ## 回归门禁
 
+- `npm run release:gate` ✓
+- Full `npm test`:197 files / 1575 passed / 1 skipped ✓
 - `npm run typecheck` ✓
 - `npm run typecheck:runtime` ✓
-- Focused content-filter/session regression:2 files / 20 passed ✓
-- Full `npm test`:194 files / 1519 passed / 1 skipped ✓
 - `npm run build:server` / `npm run build:main` / `npm run build:renderer` ✓
 - Release static regression:37/37 passed ✓
 - Electron UI smoke:home / short / tools / long-code passed ✓
-- Packaged-server live regression:9/9 passed, failed 0, blocker 0, critical 0 ✓
-- Build/package/notarization gates:macOS Apple Silicon / Intel DMG and Windows installer rebuilt; both macOS DMGs are signed, notarized, stapled, and Gatekeeper accepted.
-
-## SHA256
-
-- `Lynn-0.79.7-macOS-Apple-Silicon.dmg`: `2e23467ccab289c7a7f26431b403cb69b3b23d302995a74413fe721ce30023e3`
-- `Lynn-0.79.7-macOS-Intel.dmg`: `7ebc086c7eedc311a71ed3b6ef82caece722a06235d51e472a6c2f5d9c94258d`
-- `Lynn-0.79.7-Windows-Setup.exe`: `038bc1d9a5c9f81a6bfef9a49c990b08620e025af71c13e2735741f8505a5fcc`
+- Spark CosyVoice probe:`lynn-tts.service` active/enabled,health OK,`你好` synth 200 / 13868 bytes / 0.835s ✓
 
 ## English Summary
 
-v0.79.7 is the final central TypeScript cleanup release for the V0.79 line. The local model policy is unchanged:Qwen3.5-9B Q4_K_M imatrix MTP remains the recommended default, while 4B remains a low-config downgrade with its thinking-on risk documented.
+v0.79.8 focuses on stability and lower maintenance cost rather than new product surface. The local model policy is unchanged:Qwen3.5-9B Q4_K_M imatrix MTP remains the recommended default, with 4B kept as the low-config downgrade.
 
 Highlights:
-- `core/engine` moved to TypeScript, bringing the LynnEngine facade, manager composition, Brain registration prewarm, plugin init, MCP activation, and event dispatch into runtime typecheck; legacy `HanaEngine` imports remain supported through a compatibility alias.
-- Tool safety boundaries now have typed wrappers:tool guards, tool-name aliases, sandbox options, confirm store, and session events.
-- Earlier central migrations remain covered by the same gate:`server/routes/chat`, `core/session-coordinator`, `core/agent`, and runtime TS config are tested together.
-- Local model onboarding remains Qwen3.5-9B by default, with 4B kept as the low-config downgrade.
+- `server/routes/chat.ts` is now under 500 lines, with request normalization, hub event forwarding, prompt turn running, WebSocket control, tool finalization, and local model bridging split into stable `server/chat/*` modules.
+- Spark CosyVoice 2 is now the recommended TTS path. The Spark service is pinned through `lynn-tts.service`, while the desktop chat speaker uses a real streaming reader + PCM playback path.
+- TTS compatibility improved with `/audio/stream` as an alias, token-plan MiMo TTS endpoint handling, and clearer Edge/CosyVoice/MiMo fallback behavior.
+- `brain-tools-inspection.mjs` now probes CosyVoice through both health and real lightweight synthesis so CUDA/cuBLAS failures are caught before users click the speaker button.

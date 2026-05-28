@@ -20,6 +20,7 @@ import { isBundledLynnAvatarSrc, yuanFallbackAvatar } from '../../utils/agent-he
 import { buildRetryDraftFromMessage } from '../../utils/composer-state';
 import { formatCompactModelLabel } from '../../utils/brain-models';
 import { resendPromptRequest } from '../../stores/prompt-actions';
+import { playTtsSpeechStream } from '../../services/tts-stream-playback';
 import styles from './Chat.module.css';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -829,6 +830,21 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
                       }
                     });
                   };
+                  const startStreamPlayback = async () => {
+                    const controller = await playTtsSpeechStream({
+                      text: plainText.slice(0, 3000),
+                      filename: `msg_${message.id?.slice(-8) || Date.now()}`,
+                    });
+                    ttsControllerRef.current = controller;
+                    setTtsPlaying(true);
+                    addToast('正在流式朗读 · 再按一次停止', 'success');
+                    controller.finished.finally(() => {
+                      if (ttsControllerRef.current === controller) {
+                        ttsControllerRef.current = null;
+                        setTtsPlaying(false);
+                      }
+                    });
+                  };
                   try {
                     if (ttsAudioPath) {
                       try {
@@ -837,6 +853,12 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
                       } catch {
                         setTtsAudioPath(null);
                       }
+                    }
+                    try {
+                      await startStreamPlayback();
+                      return;
+                    } catch (streamErr) {
+                      console.warn('[tts] stream playback unavailable, falling back to file TTS:', streamErr);
                     }
                     addToast('准备朗读…', 'info');
                     const res = await hanaFetch('/api/tools/tts-bridge.tts_speak', {

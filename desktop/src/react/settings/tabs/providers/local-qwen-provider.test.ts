@@ -155,19 +155,21 @@ describe('Local Qwen provider UX guards', () => {
 
   it('keeps local model progress out of model-visible thinking', () => {
     const route = read('server/routes/chat.ts');
+    const localBridge = read('server/chat/local-model-bridge.ts');
+    const chatRuntime = `${route}\n${localBridge}`;
     const thinkingBlock = read('desktop/src/react/components/chat/ThinkingBlock.tsx');
     const assistantMessage = read('desktop/src/react/components/chat/AssistantMessage.tsx');
     const inputArea = read('desktop/src/react/components/InputArea.tsx');
-    expect(route).toContain('startLocalQwen35WarmupFeedback');
-    expect(route).toContain('startLocalQwen35PrefetchFeedback');
-    expect(route).not.toContain('本地 4B 已接到任务，正在连接本机 llama.cpp。');
-    expect(route).not.toContain('正在查询实时天气数据');
-    expect(route).not.toContain('首次启动会加载 4B 权重');
-    expect(route).not.toContain('这不是常态，后续回答通常会明显更快');
-    expect(route).not.toContain('刚启动后的第一问，本地 4B 正在暖机');
-    expect(route).not.toContain('正在预热本地上下文');
-    expect(route).not.toContain('还在等待首字');
-    expect(route).not.toContain('这次工具耗时偏长');
+    expect(localBridge).toContain('startLocalQwen35WarmupFeedback');
+    expect(localBridge).toContain('startLocalQwen35PrefetchFeedback');
+    expect(chatRuntime).not.toContain('本地 4B 已接到任务，正在连接本机 llama.cpp。');
+    expect(chatRuntime).not.toContain('正在查询实时天气数据');
+    expect(chatRuntime).not.toContain('首次启动会加载 4B 权重');
+    expect(chatRuntime).not.toContain('这不是常态，后续回答通常会明显更快');
+    expect(chatRuntime).not.toContain('刚启动后的第一问，本地 4B 正在暖机');
+    expect(chatRuntime).not.toContain('正在预热本地上下文');
+    expect(chatRuntime).not.toContain('还在等待首字');
+    expect(chatRuntime).not.toContain('这次工具耗时偏长');
     expect(assistantMessage).toContain('modelLabel={agentModelLabel}');
     expect(thinkingBlock).toContain('isLocalModelThinking');
     expect(thinkingBlock).toContain('本地模型正在本机生成答案');

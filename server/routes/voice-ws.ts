@@ -35,216 +35,73 @@ import { createSERProvider, EMOTION_LLM_HINT } from "../clients/ser/index.js";
 import { createTTSFallbackProvider } from "../clients/tts/index.js";
 import { enrichHealthWithTier } from "../chat/voice-fallback-orchestrator.js";
 import { aecAvailable as defaultAecAvailable, createAecProcessor as defaultCreateAecProcessor, aecProcessRender as defaultAecRender, aecProcessCapture as defaultAecCapture } from "../clients/aec/index.js";
+import {
+  PCM_SAMPLE_RATE,
+  bufferInt16LEToFloat32,
+  chunkBuffer,
+  decodePcm16Audio,
+  extractPcm16FromWav,
+  float32ToInt16LEBuffer,
+  makeFrame,
+  makeJsonFrame,
+  makeStateFrame,
+  makeTranscriptFrame,
+  normalizeTtsAudioToPcm16Mono16k,
+  parseFrame,
+  pcm16Rms,
+  pcm16ToWav,
+  toBuffer,
+} from "../chat/voice-audio-codec.js";
+import { FRAME, STATE } from "../chat/voice-ws-types.js";
 import type { VoiceHealthPayload, VoiceProviderHealth } from "../chat/voice-fallback-orchestrator.js";
+import type {
+  AecCapture,
+  AecProcessorHandle,
+  AecRender,
+  AsrProvider,
+  BinaryInput,
+  BrainRunner,
+  CreateVoiceWsRouteDeps,
+  CurrentReplyPlayed,
+  EmotionResult,
+  ErleRecord,
+  HealthProvider,
+  JsonRecord,
+  PendingInterruptedReply,
+  ProviderHealth,
+  SaveInterruptedTurn,
+  SerProvider,
+  TtsPiece,
+  TtsProvider,
+  TtsStreamError,
+  VadConfig,
+  VoiceEngine,
+  VoiceErrorEvent,
+  VoiceFrame,
+  VoiceMessageEvent,
+  VoiceRouteContext,
+  VoiceSessionDeps,
+  VoiceSocket,
+  VoiceState,
+} from "../chat/voice-ws-types.js";
 
-// 协议常量
-export const FRAME = {
-  PCM_AUDIO: 0x01,
-  PCM_TTS: 0x02,
-  PING: 0x10,
-  PONG: 0x11,
-  TRANSCRIPT_PARTIAL: 0x12,
-  TRANSCRIPT_FINAL: 0x13,
-  EMOTION: 0x14,
-  STATE_CHANGE: 0x15,
-  HEALTH_STATUS: 0x16,
-  ASSISTANT_REPLY: 0x17,
-  INTERRUPT: 0x20,
-  END_OF_TURN: 0x30,
-  TEXT_TURN: 0x31,
-  SPEAK_TEXT: 0x32,
-  // 2026-05-01 P0-① 增量 TTS:LLM token streaming → incremental sentence splitter →
-  // 已 SPEAKING 时直接 append 新 segments,不创建新 turn,首音节延迟从 ~3s 砍到 ~0.9s。
-  SPEAK_TEXT_APPEND: 0x33,
-} as const;
-
-export const STATE = {
-  IDLE: "idle",
-  LISTENING: "listening",
-  THINKING: "thinking",
-  SPEAKING: "speaking",
-  DEGRADED: "degraded",
-} as const;
-
-type JsonRecord = Record<string, unknown>;
-type VoiceState = typeof STATE[keyof typeof STATE];
-type FrameCode = typeof FRAME[keyof typeof FRAME];
-type BinaryInput = Buffer | ArrayBuffer | Uint8Array | null | undefined;
-
-interface VoiceFrame {
-  type: number;
-  flags: number;
-  seq: number;
-  payload: Buffer;
-}
-
-interface DecodedPcmAudio {
-  pcm: Buffer;
-  sampleRate: number;
-  channels: number;
-  bitsPerSample: number;
-}
-
-interface VadConfig {
-  enabled: boolean;
-  speechRms: number;
-  silenceRms: number;
-  minSpeechFrames: number;
-  endSilenceFrames: number;
-}
-
-interface ProviderHealth {
-  name: string;
-  ok: boolean;
-  fallbackOk: boolean;
-  degraded: boolean;
-  error?: string;
-}
-
-interface HealthProvider {
-  name?: string;
-  health?: () => unknown | Promise<unknown>;
-}
-
-interface AsrResult {
-  text?: unknown;
-  fallbackUsed?: boolean;
-  primaryError?: unknown;
-}
-
-interface AsrProvider extends HealthProvider {
-  transcribe(audio: Buffer, opts?: JsonRecord): AsrResult | Promise<AsrResult>;
-}
-
-interface EmotionResult extends JsonRecord {
-  tag?: string;
-}
-
-interface SerProvider extends HealthProvider {
-  warmup?: () => unknown | Promise<unknown>;
-  classify?: (audio: Buffer, opts?: JsonRecord) => unknown | Promise<unknown>;
-}
-
-interface TtsPiece extends JsonRecord {
-  audio?: BinaryInput;
-  audioBuffer?: BinaryInput;
-  buffer?: BinaryInput;
-  path?: string;
-  fallbackUsed?: boolean;
-  primaryError?: unknown;
-}
-
-interface TtsProvider extends HealthProvider {
-  synthesize(segment: string, opts?: JsonRecord): TtsPiece | Promise<TtsPiece>;
-  synthesizeStream?: (segment: string, opts: JsonRecord) => AsyncIterable<TtsPiece>;
-}
-
-interface VoiceEngine {
-  config?: {
-    voice?: {
-      asr?: JsonRecord;
-      ser?: JsonRecord;
-      tts?: JsonRecord;
-    };
-  };
-  executeIsolated?: (prompt: string, opts: { signal?: AbortSignal }) => Promise<{ error?: unknown; replyText?: unknown } | null | undefined>;
-  voiceReply?: (transcript: string, opts: { signal?: AbortSignal }) => Promise<unknown>;
-}
-
-interface VoiceSocket {
-  readyState: number;
-  send(data: Buffer): unknown;
-}
-
-type BrainRunner = (input: {
-  transcript: string;
-  emotion?: EmotionResult | null;
-  engine: VoiceEngine;
-  hub: unknown;
-  signal?: AbortSignal;
-}) => Promise<unknown>;
-
-type SaveInterruptedTurn = (input: JsonRecord) => Promise<unknown> | unknown;
-type AecProcessorHandle = object | null | undefined;
-type AecRender = (handle: AecProcessorHandle, samples: Float32Array) => unknown;
-type AecCapture = (handle: AecProcessorHandle, samples: Float32Array) => Float32Array;
-
-interface AecDeps {
-  createProcessor?: (opts: JsonRecord) => AecProcessorHandle | null;
-  processRender?: AecRender;
-  processCapture?: AecCapture;
-}
-
-interface VoiceSessionDeps {
-  engine: VoiceEngine;
-  hub: unknown;
-  asrProvider?: AsrProvider | null;
-  serProvider?: SerProvider | null;
-  ttsProvider?: TtsProvider | null;
-  brainRunner?: BrainRunner | null;
-  healthOnOpen?: boolean;
-  vadConfig?: Partial<VadConfig>;
-  mode?: string;
-  saveInterruptedTurn?: SaveInterruptedTurn | null;
-  aec?: AecDeps | null;
-}
-
-interface CurrentReplyPlayed {
-  fullText: string;
-  segments: string[];
-  playedSegments: string[];
-  startedAt: number;
-}
-
-interface PendingInterruptedReply {
-  text: string;
-  segmentsPlayed: number;
-  totalSegments: number;
-  startedAt: number;
-  interruptedAt: number;
-}
-
-interface ErleRecord {
-  dir: string;
-  sessionId: string;
-  micChunks: Buffer[];
-  ttsChunks: Buffer[];
-  startTs: number;
-}
-
-interface CreateVoiceWsRouteDeps extends VoiceSessionDeps {
-  upgradeWebSocket: (factory: (c: VoiceRouteContext) => JsonRecord) => unknown;
-}
-
-interface VoiceRouteContext {
-  req?: {
-    query?: (name: string) => string | undefined;
-  };
-}
-
-interface VoiceMessageEvent {
-  data: ArrayBuffer | Buffer | string;
-}
-
-interface VoiceErrorEvent {
-  message?: string;
-}
-
-interface TtsStreamError extends Error {
-  yieldedAny?: boolean;
-}
+export { FRAME, STATE };
+export {
+  bufferInt16LEToFloat32,
+  decodePcm16Audio,
+  extractPcm16FromWav,
+  float32ToInt16LEBuffer,
+  makeFrame,
+  normalizeTtsAudioToPcm16Mono16k,
+  parseFrame,
+  pcm16Rms,
+  pcm16ToWav,
+};
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as JsonRecord
     : null;
-}
-
-function toBuffer(value: BinaryInput): Buffer {
-  if (!value) return Buffer.alloc(0);
-  if (Buffer.isBuffer(value)) return value;
-  if (value instanceof ArrayBuffer) return Buffer.from(new Uint8Array(value));
-  return Buffer.from(value);
 }
 
 function asEmotion(value: unknown): EmotionResult | null {
@@ -264,8 +121,6 @@ function errorName(err: unknown): string {
   return err instanceof Error ? err.name : "";
 }
 
-const PCM_SAMPLE_RATE = 16000;
-const PCM_TTS_CHUNK_BYTES = 3200; // 100ms @ 16kHz Int16 mono
 // 2026-05-01 P1-① — native AEC 强制 10ms 帧粒度(WebRTC API 约束,见 lib.rs)
 const AEC_SAMPLES_PER_FRAME = 160;
 const TTS_MAX_SEGMENT_CHARS = 80;
@@ -283,192 +138,12 @@ const DEFAULT_VAD_CONFIG = Object.freeze({
   endSilenceFrames: 5, // 500ms trailing silence
 });
 
-/**
- * 解析二进制帧
- * @param {Buffer|ArrayBuffer} data
- * @returns {{type:number,flags:number,seq:number,payload:Buffer}|null}
- */
-export function parseFrame(data: BinaryInput): VoiceFrame | null {
-  const buf = toBuffer(data);
-  if (buf.length < 4) return null;
-  return {
-    type: buf.readUInt8(0),
-    flags: buf.readUInt8(1),
-    seq: buf.readUInt16BE(2),
-    payload: buf.subarray(4),
-  };
-}
-
-/**
- * 构造二进制帧
- * @param {number} type
- * @param {number} flags
- * @param {number} seq
- * @param {Buffer|Uint8Array} payload
- * @returns {Buffer}
- */
-export function makeFrame(type: FrameCode | number, flags: number, seq: number, payload?: BinaryInput): Buffer {
-  const payloadBuf = toBuffer(payload);
-  const buf = Buffer.alloc(4 + payloadBuf.length);
-  buf.writeUInt8(type, 0);
-  buf.writeUInt8(flags, 1);
-  buf.writeUInt16BE(seq & 0xffff, 2);
-  payloadBuf.copy(buf, 4);
-  return buf;
-}
-
-function makeStateFrame(seq: number, state: VoiceState): Buffer {
-  return makeFrame(FRAME.STATE_CHANGE, 0, seq, Buffer.from(state, "utf-8"));
-}
-
-function makeTranscriptFrame(type: FrameCode | number, seq: number, text: unknown): Buffer {
-  return makeFrame(type, 0, seq, Buffer.from(String(text || ""), "utf-8"));
-}
-
-function makeJsonFrame(type: FrameCode | number, seq: number, value: unknown): Buffer {
-  return makeFrame(type, 0, seq, Buffer.from(JSON.stringify(value ?? {}), "utf-8"));
-}
-
-export function pcm16Rms(pcmBuffer: BinaryInput): number {
-  const buf = toBuffer(pcmBuffer);
-  const samples = Math.floor(buf.length / 2);
-  if (!samples) return 0;
-  let sumSq = 0;
-  for (let offset = 0; offset + 1 < buf.length; offset += 2) {
-    const s = buf.readInt16LE(offset) / 32768;
-    sumSq += s * s;
-  }
-  return Math.sqrt(sumSq / samples);
-}
-
 function normalizeVadConfig(config: Partial<VadConfig> = {}): VadConfig {
   return {
     ...DEFAULT_VAD_CONFIG,
     ...config,
     enabled: config.enabled !== false,
   };
-}
-
-export function pcm16ToWav(pcmBuffer: BinaryInput, { sampleRate = PCM_SAMPLE_RATE, channels = 1 }: { sampleRate?: number; channels?: number } = {}): Buffer {
-  const pcm = toBuffer(pcmBuffer);
-  const header = Buffer.alloc(44);
-  const byteRate = sampleRate * channels * 2;
-  const blockAlign = channels * 2;
-  header.write("RIFF", 0);
-  header.writeUInt32LE(36 + pcm.length, 4);
-  header.write("WAVE", 8);
-  header.write("fmt ", 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20); // PCM
-  header.writeUInt16LE(channels, 22);
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(byteRate, 28);
-  header.writeUInt16LE(blockAlign, 32);
-  header.writeUInt16LE(16, 34);
-  header.write("data", 36);
-  header.writeUInt32LE(pcm.length, 40);
-  return Buffer.concat([header, pcm]);
-}
-
-export function extractPcm16FromWav(audioBuffer: BinaryInput): Buffer {
-  return decodePcm16Audio(audioBuffer).pcm;
-}
-
-export function decodePcm16Audio(audioBuffer: BinaryInput): DecodedPcmAudio {
-  const buf = toBuffer(audioBuffer);
-  if (buf.length < 12 || buf.subarray(0, 4).toString("ascii") !== "RIFF" || buf.subarray(8, 12).toString("ascii") !== "WAVE") {
-    return { pcm: buf, sampleRate: PCM_SAMPLE_RATE, channels: 1, bitsPerSample: 16 };
-  }
-  let sampleRate = PCM_SAMPLE_RATE;
-  let channels = 1;
-  let bitsPerSample = 16;
-  let pcm = Buffer.alloc(0);
-  let offset = 12;
-  while (offset + 8 <= buf.length) {
-    const chunkId = buf.subarray(offset, offset + 4).toString("ascii");
-    const chunkSize = buf.readUInt32LE(offset + 4);
-    const dataStart = offset + 8;
-    const dataEnd = Math.min(dataStart + chunkSize, buf.length);
-    if (chunkId === "fmt " && chunkSize >= 16) {
-      channels = Math.max(1, buf.readUInt16LE(dataStart + 2));
-      sampleRate = buf.readUInt32LE(dataStart + 4) || PCM_SAMPLE_RATE;
-      bitsPerSample = buf.readUInt16LE(dataStart + 14) || 16;
-    } else if (chunkId === "data") {
-      pcm = Buffer.from(buf.subarray(dataStart, dataEnd));
-    }
-    offset = dataStart + chunkSize + (chunkSize % 2);
-  }
-  return { pcm: pcm.length ? pcm : buf, sampleRate, channels, bitsPerSample };
-}
-
-function downmixPcm16ToMono(pcmBuffer: BinaryInput, channels = 1): Buffer {
-  const pcm = toBuffer(pcmBuffer);
-  if (channels <= 1) return pcm;
-  const frames = Math.floor(pcm.length / 2 / channels);
-  const mono = Buffer.alloc(frames * 2);
-  for (let i = 0; i < frames; i += 1) {
-    let sum = 0;
-    for (let ch = 0; ch < channels; ch += 1) {
-      sum += pcm.readInt16LE((i * channels + ch) * 2);
-    }
-    mono.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(sum / channels))), i * 2);
-  }
-  return mono;
-}
-
-function resamplePcm16Mono(pcmBuffer: BinaryInput, fromRate: number, toRate = PCM_SAMPLE_RATE): Buffer {
-  const pcm = toBuffer(pcmBuffer);
-  if (!pcm.length || !fromRate || fromRate === toRate) return pcm;
-  const inSamples = Math.floor(pcm.length / 2);
-  const outSamples = Math.max(1, Math.round(inSamples * toRate / fromRate));
-  const out = Buffer.alloc(outSamples * 2);
-  for (let i = 0; i < outSamples; i += 1) {
-    const src = i * fromRate / toRate;
-    const i0 = Math.min(inSamples - 1, Math.floor(src));
-    const i1 = Math.min(inSamples - 1, i0 + 1);
-    const t = src - i0;
-    const s0 = pcm.readInt16LE(i0 * 2);
-    const s1 = pcm.readInt16LE(i1 * 2);
-    out.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(s0 + (s1 - s0) * t))), i * 2);
-  }
-  return out;
-}
-
-export function normalizeTtsAudioToPcm16Mono16k(audioBuffer: BinaryInput): Buffer {
-  const decoded = decodePcm16Audio(audioBuffer);
-  if (decoded.bitsPerSample !== 16) {
-    throw new Error(`unsupported TTS WAV bit depth: ${decoded.bitsPerSample}`);
-  }
-  const mono = downmixPcm16ToMono(decoded.pcm, decoded.channels);
-  return resamplePcm16Mono(mono, decoded.sampleRate, PCM_SAMPLE_RATE);
-}
-
-/**
- * 2026-05-01 P1-① — Int16 LE Buffer 读 N samples → Float32Array(归一到 [-1, 1])
- * 用于 native AEC 输入(WebRTC ProcessRender/ProcessCapture 接受 Float32)。
- */
-export function bufferInt16LEToFloat32(buf: Buffer, sampleCount: number, byteOffset = 0): Float32Array {
-  const out = new Float32Array(sampleCount);
-  for (let i = 0; i < sampleCount; i += 1) {
-    const offset = byteOffset + i * 2;
-    if (offset + 1 < buf.length) {
-      const s = buf.readInt16LE(offset);
-      out[i] = s < 0 ? s / 0x8000 : s / 0x7fff;
-    } else {
-      out[i] = 0;
-    }
-  }
-  return out;
-}
-
-export function float32ToInt16LEBuffer(samples: Float32Array | number[]): Buffer {
-  const out = Buffer.alloc(samples.length * 2);
-  for (let i = 0; i < samples.length; i += 1) {
-    const s = Math.max(-1, Math.min(1, samples[i] || 0));
-    const v = s < 0 ? Math.round(s * 0x8000) : Math.round(s * 0x7fff);
-    out.writeInt16LE(Math.max(-32768, Math.min(32767, v)), i * 2);
-  }
-  return out;
 }
 
 /**
@@ -560,7 +235,7 @@ export function aecProcessFrame100ms(
       const refFrame = bufferInt16LEToFloat32(refBuf, samplesPerFrame, s * 2);
       const micFrame = bufferInt16LEToFloat32(micBuf, samplesPerFrame, s * 2);
       render(handle, refFrame);
-    const out = capture(handle, micFrame) || micFrame;
+      const out = capture(handle, micFrame) || micFrame;
       const outBytes = float32ToInt16LEBuffer(out);
       outBytes.copy(cleaned, s * 2);
     }
@@ -652,14 +327,6 @@ export function splitTextForTts(text: unknown, { maxChars = TTS_MAX_SEGMENT_CHAR
     out.push(...splitSegmentByLength(part, maxChars));
   }
   return out;
-}
-
-function chunkBuffer(buf: Buffer, chunkBytes = PCM_TTS_CHUNK_BYTES): Buffer[] {
-  const chunks: Buffer[] = [];
-  for (let i = 0; i < buf.length; i += chunkBytes) {
-    chunks.push(buf.subarray(i, Math.min(i + chunkBytes, buf.length)));
-  }
-  return chunks;
 }
 
 function normalizeProviderHealth(provider: HealthProvider | null | undefined, value: unknown): ProviderHealth {
