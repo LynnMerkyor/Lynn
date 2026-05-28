@@ -8,22 +8,12 @@ import { Hono } from "hono";
 import { wsSend, wsParse } from "../ws-protocol.js";
 import { debugLog } from "../../lib/debug-log.js";
 import { t, getLocale } from "../i18n.js";
-import {
-  createLifecycleHooks,
-} from "../chat/lifecycle-hooks.js";
-import {
-  buildVisionUnsupportedMessage,
-} from "../../shared/vision-prompt.js";
-import {
-  resumeSessionStream,
-  finishSessionStream,
-} from "../session-stream-store.js";
+import { createLifecycleHooks } from "../chat/lifecycle-hooks.js";
+import { buildVisionUnsupportedMessage } from "../../shared/vision-prompt.js";
+import { finishSessionStream } from "../session-stream-store.js";
 import { AppError } from "../../shared/errors.js";
 import { errorBus } from "../../shared/error-bus.js";
-import {
-  BRAIN_DEFAULT_MODEL_ID,
-  BRAIN_PROVIDER_ID,
-} from "../../shared/brain-provider.js";
+import { BRAIN_DEFAULT_MODEL_ID, BRAIN_PROVIDER_ID } from "../../shared/brain-provider.js";
 import {
   clearToolFinalizationTimer,
   clearTurnTimers,
@@ -47,14 +37,10 @@ import { createChatRouteContext } from "../chat/chat-route-context.js";
 import { generateSessionTitle } from "../chat/title-generator.js";
 import { createToolTurnFinalizer } from "../chat/tool-turn-finalizer.js";
 import { createLocalModelBridge } from "../chat/local-model-bridge.js";
-import {
-  createPromptSession,
-  normalizePromptRequest,
-  resolveCreatedPromptSessionPath,
-  validatePromptImages,
-} from "../chat/request-normalizer.js";
+import { createPromptSession, normalizePromptRequest, resolveCreatedPromptSessionPath, validatePromptImages } from "../chat/request-normalizer.js";
 import { createHubEventForwarder } from "../chat/hub-event-forwarder.js";
 import { createPromptTurnRunner } from "../chat/prompt-turn-runner.js";
+import { createWsControlHandler } from "../chat/ws-control-handler.js";
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 type AnyRecord = Record<string, any>;
@@ -372,6 +358,13 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
     hasToolExecutionInFlight,
   });
 
+  const handleWsControlMessage = createWsControlHandler({
+    engine,
+    hub,
+    sessionState,
+    broadcast,
+  });
+
   // ── WebSocket 路由 ──
 
   wsRoute.get("/ws",
@@ -391,12 +384,12 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
           if (!msg) return;
 
           (async () => {
-            if (msg.type === "abort") {
-              const abortPath = msg.sessionPath || engine.currentSessionPath;
-              if (engine.isSessionStreaming(abortPath)) {
-                try { await hub.abort(abortPath); } catch (err: any) { console.warn("[chat] abort failed:", err?.message || err); }
-              }
-              return;
+            if (msg.type === "abort"
+              || msg.type === "resume_stream"
+              || msg.type === "context_usage"
+              || msg.type === "compact"
+              || msg.type === "toggle_plan_mode") {
+              if (await handleWsControlMessage(msg, ws)) return;
             }
 
             if (msg.type === "steer" && msg.text) {
@@ -408,101 +401,6 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
               }
               debugLog()?.log("ws", `steer missed, falling back to prompt`);
               msg.type = "prompt";
-            }
-
-            if (msg.type === "resume_stream") {
-              const currentPath = msg.sessionPath || engine.currentSessionPath;
-              const ss = sessionState.get(currentPath);
-              if (ss) {
-                const resumed = resumeSessionStream(ss, {
-                  streamId: typeof msg.streamId === "string" ? msg.streamId : null,
-                  sinceSeq: Number(msg.sinceSeq || 0),
-                });
-                wsSend(ws, {
-                  type: "stream_resume",
-                  sessionPath: currentPath,
-                  streamId: resumed.streamId,
-                  sinceSeq: resumed.sinceSeq,
-                  nextSeq: resumed.nextSeq,
-                  reset: resumed.reset,
-                  truncated: resumed.truncated,
-                  isStreaming: resumed.isStreaming,
-                  events: resumed.events,
-                });
-              } else {
-                wsSend(ws, {
-                  type: "stream_resume",
-                  sessionPath: currentPath,
-                  streamId: null,
-                  sinceSeq: Number.isFinite(Number(msg.sinceSeq)) ? Math.max(0, Number(msg.sinceSeq)) : 0,
-                  nextSeq: 1,
-                  reset: false,
-                  truncated: false,
-                  isStreaming: false,
-                  events: [],
-                });
-              }
-              return;
-            }
-
-            if (msg.type === "context_usage") {
-              const usagePath = msg.sessionPath || engine.currentSessionPath;
-              const usageSession = engine.getSessionByPath(usagePath);
-              const usage = usageSession?.getContextUsage?.();
-              wsSend(ws, {
-                type: "context_usage",
-                sessionPath: usagePath,
-                tokens: usage?.tokens ?? null,
-                contextWindow: usage?.contextWindow ?? null,
-                percent: usage?.percent ?? null,
-              });
-              return;
-            }
-
-            if (msg.type === "compact") {
-              const compactPath = msg.sessionPath || engine.currentSessionPath;
-              const session = engine.getSessionByPath(compactPath);
-              if (!session) {
-                wsSend(ws, { type: "error", message: t("error.noActiveSession") });
-                return;
-              }
-              if (session.isCompacting) {
-                wsSend(ws, { type: "error", message: t("error.compacting") });
-                return;
-              }
-              if (engine.isSessionStreaming(compactPath)) {
-                wsSend(ws, { type: "error", message: t("error.waitForReply") });
-                return;
-              }
-              broadcast({ type: "compaction_start", sessionPath: compactPath });
-              try {
-                await session.compact();
-                const usage = session.getContextUsage?.();
-                broadcast({
-                  type: "compaction_end",
-                  sessionPath: compactPath,
-                  tokens: usage?.tokens ?? null,
-                  contextWindow: usage?.contextWindow ?? null,
-                  percent: usage?.percent ?? null,
-                });
-              } catch (err: any) {
-                const errMsg = err.message || "";
-                if (errMsg.includes("Already compacted") || errMsg.includes("Nothing to compact")) {
-                  broadcast({ type: "compaction_end", sessionPath: compactPath });
-                } else {
-                  broadcast({ type: "compaction_end", sessionPath: compactPath });
-                  wsSend(ws, { type: "error", message: t("error.compactFailed", { msg: errMsg }) });
-                }
-              }
-              return;
-            }
-
-            if (msg.type === "toggle_plan_mode") {
-              const current = engine.planMode;
-              engine.setPlanMode(!current);
-              broadcast({ type: "plan_mode", enabled: !current });
-              broadcast({ type: "security_mode", mode: !current ? "plan" : "authorized" });
-              return;
             }
 
             if (msg.type === "prompt" && (msg.text || msg.images?.length)) {
