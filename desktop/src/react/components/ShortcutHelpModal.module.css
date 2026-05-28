@@ -1,0 +1,132 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 24, 30, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 48px));
+  overflow: auto;
+  border: 1px solid rgba(80, 124, 150, 0.22);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-primary, #fff) 96%, transparent);
+  box-shadow: 0 22px 60px rgba(20, 34, 46, 0.24);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 14px;
+  border-bottom: 1px solid rgba(80, 124, 150, 0.14);
+}
+
+.title {
+  margin: 0;
+  color: var(--text-primary, #28323a);
+  font-size: 20px;
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  color: var(--text-secondary, #6d7780);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.close {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(80, 124, 150, 0.24);
+  border-radius: 50%;
+  color: var(--text-secondary, #64717d);
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--text-primary, #28323a);
+  border-color: rgba(80, 124, 150, 0.42);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  padding: 20px 24px 24px;
+}
+
+.section {
+  min-width: 0;
+}
+
+.sectionTitle {
+  margin: 0 0 10px;
+  color: var(--text-primary, #2c3740);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.list {
+  display: grid;
+  gap: 8px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(112px, auto) 1fr;
+  gap: 12px;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(80, 124, 150, 0.06);
+}
+
+.keys {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.key {
+  min-width: 24px;
+  padding: 3px 7px;
+  border: 1px solid rgba(80, 124, 150, 0.22);
+  border-radius: 6px;
+  color: var(--text-primary, #2c3740);
+  background: rgba(255, 255, 255, 0.8);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.desc {
+  min-width: 0;
+  color: var(--text-secondary, #596672);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+@media (max-width: 720px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+
+  .row {
+    grid-template-columns: 1fr;
+  }
+}

@@ -6,13 +6,14 @@
  * 从 sidebar-shim.ts 的 initSidebar / updateLayout / toggleSidebar 迁移。
  */
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../stores';
 import { createNewSession } from '../stores/session-actions';
 import { closePreview } from '../stores/artifact-actions';
 import { toggleJianSidebar } from '../stores/desk-actions';
 import { enterWritingMode, exitWritingMode } from '../hooks/use-writing-preview';
 import { getWebSocket } from '../services/websocket';
+import { ShortcutHelpModal } from './ShortcutHelpModal';
 
 const CHAT_MIN_WIDTH = 400;
 
@@ -95,6 +96,8 @@ export function toggleSidebar(forceOpen?: boolean): void {
 
 export function SidebarLayout() {
   const initDone = useRef(false);
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const closeShortcutHelp = useCallback(() => setShortcutHelpOpen(false), []);
 
   useEffect(() => {
     if (initDone.current) return;
@@ -128,6 +131,13 @@ export function SidebarLayout() {
     // 键盘快捷键
     const onKeydown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+
+      // Cmd+? → 快捷键和 slash 命令帮助。多数键盘会表现为 Cmd+Shift+/。
+      if (mod && (e.key === '?' || (e.shiftKey && e.key === '/'))) {
+        e.preventDefault();
+        setShortcutHelpOpen(true);
+        return;
+      }
 
       // Cmd+K → 侧边栏可见时搜索 session，否则聚焦输入框
       if (mod && e.key.toLowerCase() === 'k') {
@@ -223,6 +233,5 @@ export function SidebarLayout() {
     };
   }, []);
 
-  // 不渲染任何 DOM，只提供行为
-  return null;
+  return <ShortcutHelpModal open={shortcutHelpOpen} onClose={closeShortcutHelp} />;
 }
