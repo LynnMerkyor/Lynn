@@ -97,6 +97,28 @@
     background: var(--accent-light);
 }
 
+/* Pinned session: 左侧细 accent 条,常驻可见,扫一眼就能识别 */
+.sessionItemPinned {
+    position: relative;
+}
+
+.sessionItemPinned::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+.sessionItemPinned.sessionItemActive::before {
+    opacity: 0.7;
+}
+
 .sessionItemTitle {
     font-size: 0.8rem;
     color: var(--text);
@@ -124,7 +146,6 @@
     flex-wrap: wrap;
     gap: 4px;
     margin-top: 5px;
-    margin-right: 72px;
 }
 
 .sessionLabelChip {
@@ -141,7 +162,6 @@
 
 .sessionLabelInput {
     margin-top: 5px;
-    margin-right: 72px;
     font-size: 0.68rem;
     color: var(--text);
     background: var(--overlay-subtle);
@@ -149,7 +169,7 @@
     border-radius: var(--radius-sm);
     padding: 4px 7px;
     outline: none;
-    width: calc(100% - 72px);
+    width: 100%;
     min-width: 0;
     font-family: inherit;
 }
@@ -166,41 +186,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: calc(100% - 96px);
-}
-
-/* 重命名按钮 */
-.sessionRenameBtn {
-    position: absolute;
-    bottom: 4px;
-    right: 76px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    background: none;
-    border: none;
-    border-radius: 3px;
-    color: var(--text-muted);
-    cursor: pointer;
-    opacity: 0;
-    transition: all 0.15s;
-    z-index: 1;
-}
-
-.sessionRenameBtn svg {
-    pointer-events: none;
-}
-
-.sessionItem:hover .sessionRenameBtn {
-    opacity: 0.5;
-}
-
-.sessionRenameBtn:hover {
-    opacity: 1 !important;
-    background: var(--accent-light);
-    color: var(--accent);
+    max-width: 100%;
 }
 
 /* 重命名输入框 */
@@ -218,79 +204,55 @@
     font-family: inherit;
 }
 
-/* Pin 按钮激活态 */
-.sessionPinActive {
-    opacity: 0.7 !important;
-    color: var(--accent);
-}
-
-.sessionPinBtn,
-.sessionLabelBtn,
-.sessionArchiveBtn {
-    position: absolute;
-    bottom: 4px;
-    display: flex;
+/* 常驻 pin 角标(在 list 中一眼可见,不再需要 hover) */
+.sessionPinnedIndicator {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 12px;
+    height: 12px;
+    color: var(--accent);
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.sessionItemActive .sessionPinnedIndicator {
+    opacity: 0.95;
+}
+
+/* 单一 kebab 触发(替代原 4 个浮动按钮) */
+.sessionMenuBtn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
     background: none;
     border: none;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
     cursor: pointer;
     opacity: 0;
-    transition: all 0.15s;
-    z-index: 1;
+    transition: opacity 0.12s var(--ease-out), background 0.12s var(--ease-out), color 0.12s var(--ease-out);
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
 }
 
-.sessionPinBtn {
-    right: 52px;
-    color: var(--text-muted);
-}
-
-.sessionLabelBtn {
-    right: 28px;
-    color: var(--text-muted);
-    font-size: 0.76rem;
-    font-weight: 700;
-}
-
-.sessionArchiveBtn {
-    right: 4px;
-    color: var(--danger);
-}
-
-.sessionPinBtn svg,
-.sessionLabelBtn svg,
-.sessionArchiveBtn svg {
+.sessionMenuBtn svg {
     pointer-events: none;
 }
 
-.sessionItem:hover .sessionPinBtn,
-.sessionItem:hover .sessionLabelBtn,
-.sessionItem:hover .sessionArchiveBtn,
-.sessionItem:active .sessionPinBtn,
-.sessionItem:active .sessionLabelBtn,
-.sessionItem:active .sessionArchiveBtn,
-.sessionItem:focus-within .sessionPinBtn,
-.sessionItem:focus-within .sessionLabelBtn,
-.sessionItem:focus-within .sessionArchiveBtn,
-.sessionItemActive .sessionPinBtn,
-.sessionItemActive .sessionLabelBtn,
-.sessionItemActive .sessionArchiveBtn {
-    opacity: 0.5;
+.sessionItem:hover .sessionMenuBtn,
+.sessionItem:focus-within .sessionMenuBtn,
+.sessionItemActive .sessionMenuBtn {
+    opacity: 0.6;
 }
 
-.sessionPinBtn:hover,
-.sessionLabelBtn:hover {
+.sessionMenuBtn:hover {
     opacity: 1 !important;
     background: var(--accent-light);
     color: var(--accent);
-}
-
-.sessionArchiveBtn:hover {
-    opacity: 1 !important;
-    background: rgba(var(--danger-rgb), 0.08);
 }
 
 /* streaming 呼吸动画 */
@@ -353,7 +315,11 @@
     gap: 0.35rem;
     min-width: 0;
     overflow: hidden;
-    padding-right: 96px;
+}
+
+.sessionItemHeader .sessionItemTitle {
+    flex: 1;
+    min-width: 0;
 }
 
 /* 日期分组标签 */

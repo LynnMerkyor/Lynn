@@ -31,6 +31,7 @@
  *       identity-templates/
  *       ishiki-templates/
  *       public-ishiki-templates/
+ *       content-filter-data/
  *       yuan/
  *       experts/
  *     desktop/src/locales/    ← i18n 资源
@@ -44,6 +45,7 @@ import path from "path";
 import { execSync } from "child_process";
 import { fileURLToPath, pathToFileURL } from "url";
 import { builtinModules } from "module";
+import { build as esbuild } from "esbuild";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -179,7 +181,7 @@ function runWithTargetNode(cmd, opts = {}) {
 // 产出到 dist-server-bundle/，然后复制到 outDir/bundle/
 console.log("[build-server] running Vite bundle...");
 const viteBundleDir = path.join(ROOT, "dist-server-bundle");
-execSync(`"${hostNodeBin}" "${path.join(ROOT, "node_modules", "vite", "bin", "vite.js")}" build --config vite.config.server.js`, {
+execSync(`"${hostNodeBin}" "${path.join(ROOT, "node_modules", "vite", "bin", "vite.js")}" build --config vite.config.server.ts`, {
   cwd: ROOT,
   stdio: "inherit",
 });
@@ -218,6 +220,7 @@ const LIB_TEMPLATE_DIRS = [
   "identity-templates",
   "ishiki-templates",
   "public-ishiki-templates",
+  "content-filter-data",
   "yuan",
   "experts",
 ];
@@ -235,17 +238,37 @@ for (const dir of LIB_TEMPLATE_DIRS) {
 // unpacked server resources at runtime, so dynamic imports from plugins cannot
 // rely on Vite-bundled modules only.
 const LIB_RUNTIME_FILES = [
-  path.join("memory", "vector-interface.js"),
+  {
+    src: path.join("memory", "vector-interface.ts"),
+    dest: path.join("memory", "vector-interface.js"),
+    compile: true,
+  },
 ];
-for (const rel of LIB_RUNTIME_FILES) {
-  const src = path.join(ROOT, "lib", rel);
-  const dest = path.join(libOutDir, rel);
+for (const entry of LIB_RUNTIME_FILES) {
+  const relSrc = typeof entry === "string" ? entry : entry.src;
+  const relDest = typeof entry === "string" ? entry : entry.dest;
+  const src = path.join(ROOT, "lib", relSrc);
+  const dest = path.join(libOutDir, relDest);
   if (fs.existsSync(src)) {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(src, dest);
-    console.log(`[build-server]   lib/${rel}`);
+    if (typeof entry === "object" && entry.compile) {
+      await esbuild({
+        entryPoints: [src],
+        outfile: dest,
+        bundle: true,
+        platform: "node",
+        format: "esm",
+        target: "node22",
+        minify: false,
+        sourcemap: false,
+        logLevel: "silent",
+      });
+    } else {
+      fs.copyFileSync(src, dest);
+    }
+    console.log(`[build-server]   lib/${relDest}`);
   } else {
-    console.warn(`[build-server] ⚠ lib/${rel} not found, skipping`);
+    console.warn(`[build-server] ⚠ lib/${relSrc} not found, skipping`);
   }
 }
 
@@ -297,16 +320,20 @@ for (const file of SCRIPT_RUNTIME_FILES) {
 console.log("[build-server] resource files copied");
 
 // ── 4. External dependencies ──
-// 从 vite.config.server.js 的 external 列表自动派生需要安装的包。
+// 从 vite.config.server.ts 的 external 列表自动派生需要安装的包。
 // 规则：external ∩ rootPkg.dependencies = 需要安装的包。
 // 这消除了手动维护两个列表导致的遗漏（如 #242 ws 缺失）。
 const rootPkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
 
-// defineConfig 是纯 identity 函数，import 安全无副作用
-const viteConfig = (await import("../vite.config.server.js")).default;
+const { loadConfigFromFile } = await import("vite");
+const loadedViteConfig = await loadConfigFromFile(
+  { command: "build", mode: "production" },
+  path.join(ROOT, "vite.config.server.ts"),
+);
+const viteConfig = loadedViteConfig?.config;
 const viteExternals = viteConfig.build?.rollupOptions?.external;
 if (!Array.isArray(viteExternals)) {
-  throw new Error("[build-server] vite.config.server.js external must be an array");
+  throw new Error("[build-server] vite.config.server.ts external must be an array");
 }
 
 const builtinSet = new Set(builtinModules.flatMap(m => [m, `node:${m}`]));

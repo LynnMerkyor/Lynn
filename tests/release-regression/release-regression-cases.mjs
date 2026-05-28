@@ -307,7 +307,7 @@ export const RELEASE_CASES = [
       "desktop/src/react/stores/streaming-slice.ts",
       "desktop/src/react/smoke-fixture.ts",
       "shared/ws-events.ts",
-      "scripts/run-electron-ui-smoke.mjs",
+      "scripts/run-electron-ui-smoke.ts",
     ],
   },
 ];

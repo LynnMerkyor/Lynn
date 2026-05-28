@@ -10,11 +10,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../stores';
 import { hanaUrl } from '../hooks/use-hana-fetch';
 import { useI18n } from '../hooks/use-i18n';
-import { loadDeskFiles } from '../stores/desk-actions';
+import { loadDeskFiles, toggleJianSidebar } from '../stores/desk-actions';
 import { clearChat } from '../stores/agent-actions';
 import { sendPrompt } from '../stores/prompt-actions';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
 import { ProviderStatusBadge } from './ProviderStatusBadge';
+import { toggleSidebar } from './SidebarLayout';
 import styles from './Welcome.module.css';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- store setState 回调 (s: any) */
@@ -99,22 +100,52 @@ function WelcomeInner() {
   const deskJianContent = useStore(s => s.deskJianContent);
   const automationCount = useStore(s => s.automationCount);
   const sessions = useStore(s => s.sessions);
-  const daySummary = useMemo(() => {
-    const parts: string[] = [];
+  const daySummaryChips = useMemo<DaySummaryChip[]>(() => {
     const text = String(deskJianContent || '');
-    const todos = text.match(/^- \[ \] /gm);
-    const done = text.match(/^- \[[xX]\] /gm);
+    const todoCount = (text.match(/^- \[ \] /gm) ?? []).length;
+    const doneCount = (text.match(/^- \[[xX]\] /gm) ?? []).length;
     const isZh = (locale || '').startsWith('zh');
-    if (todos?.length) parts.push(isZh ? `${todos.length} 项待办` : `${todos.length} pending`);
-    if (done?.length) parts.push(isZh ? `${done.length} 项已完成` : `${done.length} done`);
-    if (automationCount > 0) parts.push(isZh ? `${automationCount} 个自动任务` : `${automationCount} automations`);
-    if (sessions.length > 0) parts.push(isZh ? `${sessions.length} 个对话` : `${sessions.length} chats`);
-    // #30: empty-state nudge for fresh users (0 todos / 0 done / 0 automations / 0 sessions)
-    if (parts.length === 0) {
-      parts.push(isZh ? '问点什么开始吧 ✿' : 'Ask me anything to get started ✿');
+    const items: DaySummaryChip[] = [];
+    if (todoCount > 0) {
+      items.push({
+        kind: 'todos',
+        count: todoCount,
+        label: isZh ? '待办' : 'pending',
+        action: 'jian',
+      });
     }
-    return parts.join(' · ');
+    if (doneCount > 0) {
+      items.push({
+        kind: 'done',
+        count: doneCount,
+        label: isZh ? '已完成' : 'done',
+        action: 'jian',
+      });
+    }
+    if (automationCount > 0) {
+      items.push({
+        kind: 'automation',
+        count: automationCount,
+        label: isZh ? '自动任务' : 'automations',
+        action: 'automation',
+      });
+    }
+    if (sessions.length > 0) {
+      items.push({
+        kind: 'sessions',
+        count: sessions.length,
+        label: isZh ? '对话' : 'chats',
+        action: 'sessions',
+      });
+    }
+    return items;
   }, [deskJianContent, automationCount, sessions.length, locale]);
+
+  const daySummaryEmptyHint = useMemo(() => {
+    if (daySummaryChips.length > 0) return '';
+    const isZh = (locale || '').startsWith('zh');
+    return isZh ? '问点什么开始吧 ✿' : 'Ask me anything to get started ✿';
+  }, [daySummaryChips.length, locale]);
 
   const displayAgent = useMemo(() => {
     const sel = selectedAgentId || currentAgentId;
@@ -152,7 +183,7 @@ function WelcomeInner() {
         name={displayName}
       />
       <p className={styles.welcomeText}>{greeting}</p>
-      {daySummary && <p className={styles.welcomeDaySummary}>{daySummary}</p>}
+      <DaySummaryChips chips={daySummaryChips} emptyHint={daySummaryEmptyHint} />
       <ProviderStatusBadge />
       <QuickActions displayName={displayName} selectedFolder={selectedFolder} />
       <FolderPicker
@@ -162,6 +193,84 @@ function WelcomeInner() {
       />
       <MemoryToggle enabled={memoryEnabled} t={t} />
       <span className={styles.focusHint}>{t('welcome.focusHint')}</span>
+    </div>
+  );
+}
+
+type DaySummaryAction = 'jian' | 'automation' | 'sessions';
+type DaySummaryKind = 'todos' | 'done' | 'automation' | 'sessions';
+interface DaySummaryChip {
+  kind: DaySummaryKind;
+  count: number;
+  label: string;
+  action: DaySummaryAction;
+}
+
+function ChipIcon({ kind }: { kind: DaySummaryKind }) {
+  switch (kind) {
+    case 'todos':
+      return (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <rect x="3" y="3" width="18" height="18" rx="3" />
+        </svg>
+      );
+    case 'done':
+      return (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <rect x="3" y="3" width="18" height="18" rx="3" />
+          <polyline points="8 12 11 15 16 9" />
+        </svg>
+      );
+    case 'automation':
+      return (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <polygon points="13 2 4 14 12 14 11 22 20 10 12 10 13 2" />
+        </svg>
+      );
+    case 'sessions':
+      return (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+        </svg>
+      );
+  }
+}
+
+function runDaySummaryAction(action: DaySummaryAction) {
+  switch (action) {
+    case 'jian':
+      toggleJianSidebar(true);
+      return;
+    case 'automation':
+      useStore.getState().setActivePanel('automation');
+      return;
+    case 'sessions':
+      toggleSidebar(true);
+      return;
+  }
+}
+
+function DaySummaryChips({ chips, emptyHint }: { chips: DaySummaryChip[]; emptyHint: string }) {
+  if (chips.length === 0) {
+    if (!emptyHint) return null;
+    return <p className={styles.welcomeDaySummaryEmpty}>{emptyHint}</p>;
+  }
+  return (
+    <div className={styles.daySummaryChips} role="group" aria-label="day-summary">
+      {chips.map((chip) => (
+        <button
+          key={chip.kind}
+          type="button"
+          className={`${styles.daySummaryChip} ${styles[`daySummaryChip_${chip.kind}`] ?? ''}`}
+          onClick={() => runDaySummaryAction(chip.action)}
+        >
+          <span className={styles.daySummaryChipIcon}>
+            <ChipIcon kind={chip.kind} />
+          </span>
+          <span className={styles.daySummaryChipCount}>{chip.count}</span>
+          <span className={styles.daySummaryChipLabel}>{chip.label}</span>
+        </button>
+      ))}
     </div>
   );
 }

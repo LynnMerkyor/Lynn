@@ -8,6 +8,7 @@
 import { universalOrder, getProvider, isInCooldown, markUnhealthy } from './provider-registry.js';
 import { getAdapter } from './wire-adapter/index.js';
 import { isServerTool, executeServerTool, mergeWithServerTools } from './tool-exec/index.js';
+import { applySearchContext, createSearchRequestCache, type SearchRequestCache } from './search-context.js';
 import { errorMessage, type ChatMessage, type FallbackEntry, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
 
 type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio'>>;
@@ -80,7 +81,8 @@ async function runRound({
   log,
   extraBody,
   reasoningEffort,
-}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'>): Promise<RunRoundResult> {
+  requestCache,
+}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache }): Promise<RunRoundResult> {
   const errors: Array<{ providerId: ProviderId; error: string }> = [];
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
   // (例:"MiMo → Spark fallback"),不再让 cascade decision 对 UI 不可见。
@@ -133,7 +135,22 @@ async function runRound({
     const toolCallsAcc: ToolCall[] = [];
     try {
       log && log('info', `→ provider ${providerId}`);
-      for await (const chunk of adapter({ provider, messages, tools, signal, log, extraBody, reasoningEffort })) {
+      const searchContext = await applySearchContext({ messages, provider, signal, log, requestCache });
+      const effectiveMessages = searchContext.messages || messages;
+      if (searchContext.meta.applied) {
+        await onChunk(
+          {
+            type: 'pre_search',
+            source: 'mimo',
+            query: searchContext.meta.query,
+            hit: searchContext.meta.hit,
+            ms: searchContext.meta.ms,
+            cached: searchContext.meta.cached,
+          },
+          { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
+        );
+      }
+      for await (const chunk of adapter({ provider, messages: effectiveMessages, tools, signal, log, extraBody, reasoningEffort })) {
         anyEmit = true;
         if (chunk.type === 'content') {
           contentAccum += chunk.delta;
@@ -219,12 +236,14 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   let lastProviderId: ProviderId | null = null;
   let iter = 0;
   const maxIter = MAX_ITERATIONS > 0 ? MAX_ITERATIONS : Infinity;
+  const requestCache = createSearchRequestCache();
 
   while (iter < maxIter) {
     iter++;
     const result = await runRound({
       messages: workingMessages, tools: mergedTools, capabilityRequired,
       signal, onChunk, log, extraBody, reasoningEffort,
+      requestCache,
     });
     lastProviderId = result.providerId;
 

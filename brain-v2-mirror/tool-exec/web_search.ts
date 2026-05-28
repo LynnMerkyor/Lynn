@@ -48,7 +48,7 @@ async function searchZhipu(query, signal) {
   return out.trim();
 }
 
-async function searchMimo(query, signal) {
+export async function searchMimo(query, signal) {
   const key = envOr('MIMO_SEARCH_KEY');
   if (!key) throw new Error('MIMO_SEARCH_KEY missing');
   const base = envOr('MIMO_SEARCH_BASE', 'https://token-plan-cn.xiaomimimo.com/v1');

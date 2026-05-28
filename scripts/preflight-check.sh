@@ -43,12 +43,16 @@ else
   echo "✓ APPLE_NOTARY_PROFILE=$APPLE_NOTARY_PROFILE"
 fi
 
-# 4. Check mirror URLs in generate-update-manifest.mjs
-if grep -q 'github.com' scripts/generate-update-manifest.mjs 2>/dev/null; then
-  echo "⚠️  generate-update-manifest.mjs may contain github.com URLs (should be Tencent mirror)"
+# 4. Check mirror URLs in generate-update-manifest.ts.
+# GitHub releaseUrl is allowed for notes; binary asset URLs must use the mirror.
+if ! grep -q 'download.merkyorlynn.com/downloads' scripts/generate-update-manifest.ts 2>/dev/null; then
+  echo "⚠️  generate-update-manifest.ts missing Tencent mirror download base"
+  FAIL=1
+elif grep -q 'github.com/.*/releases/download' scripts/generate-update-manifest.ts 2>/dev/null; then
+  echo "⚠️  generate-update-manifest.ts may contain GitHub asset download URLs (should be Tencent mirror)"
   FAIL=1
 else
-  echo "✓ generate-update-manifest.mjs uses Tencent mirror"
+  echo "✓ generate-update-manifest.ts uses Tencent mirror for binary assets"
 fi
 
 # 5. Verify dist-server exists

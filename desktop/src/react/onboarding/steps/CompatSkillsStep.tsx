@@ -1,7 +1,7 @@
 /**
  * CompatSkillsStep.tsx — 检测外部 AI 工具的 skills,主动提示启用
  *
- * 自动扫 ~/.claude/skills 等 10 个目录(core/engine.js WELL_KNOWN_SKILL_PATHS)。
+ * 自动扫 ~/.claude/skills 等 10 个目录(core/constants.ts WELL_KNOWN_SKILL_PATHS)。
  * 若未发现任何 external skill,自动 skip 到 Tutorial,用户无感知。
  */
 

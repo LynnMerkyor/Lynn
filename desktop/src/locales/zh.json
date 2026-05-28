@@ -177,7 +177,13 @@
     "archiveFailed": "归档 session 失败",
     "rename": "重命名",
     "editLabels": "编辑标签",
-    "labelsPlaceholder": "标签，用逗号分隔"
+    "labelsPlaceholder": "标签，用逗号分隔",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "pinned": "已置顶",
+    "archive": "归档",
+    "archiveConfirm": "归档「{name}」？归档后将不在列表中显示，历史记录会保留。",
+    "menuTrigger": "更多操作"
   },
   "common": {
     "on": "开",

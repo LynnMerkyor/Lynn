@@ -1,39 +1,40 @@
-# Lynn v0.79.4 Release Notes
+# Lynn v0.79.7 Release Notes
 
-> 发布日期:2026-05-26 · 代号:"Runtime TypeScript 工具链版"
+> 发布日期:2026-05-28 · 代号:"LynnEngine TS + Final Central Runtime"
 
-v0.79.4 是 V0.79 线的运行时架构加固版。默认本地模型策略不变:继续推荐 **Qwen3.5-9B Q4_K_M imatrix MTP**,4B 只作为低配降级并保留 thinking-on 风险提示。本版重点是把工具链、实时信息和记忆检索叶子路径迁进 TypeScript,让发布前的静态门禁能覆盖更多真实热路径。
+v0.79.7 是 V0.79 线最后一块中枢 TypeScript 收口版。默认本地模型策略不变:继续推荐 **Qwen3.5-9B Q4_K_M imatrix MTP**,4B 只作为低配降级并保留 thinking-on 风险提示。本版重点完成 `core/engine` LynnEngine 门面的 TypeScript 迁移,让 agent/session/config/model/plugin 组合入口进入 runtime typecheck。
 
 ## 重点更新
 
-- `lib/tools` 全量迁入 TypeScript:web search、realtime info/weather/news/sports、stock market、stock research、browser、channel/experience、install skill、snapshot restore 等工具现在都有类型边界。
-- 记忆检索叶子路径继续收紧:`memory-search`、`user-profile` 和 `HybridRetriever` 已迁到 TS,并保留聚焦回归测试。
-- Web/market/realtime 工具返回结构更清晰,Deep Research、本地工具调用和 chat/tool tiering 之间的协议漂移风险降低。
-- `brain-v2-mirror`、`server/chat`、`shared` 的 V0.79.2/V0.79.3 TS 基建保持稳定,本版不改变生产 fallback 行为。
-- 大中枢 JS 文件已列入 V0.79.5+ 单独波次:本次故意不动 `chat.js`、`voice-ws.js`、`engine.js`、`agent.js`、`session-coordinator.js`,避免在发布包中混入高风险中心重构。
+- `core/engine` 迁入 TypeScript:LynnEngine facade、manager 组合、Brain 注册预热、插件初始化、MCP 激活和事件广播进入 runtime typecheck;旧 `HanaEngine` import 保留兼容别名。
+- 工具安全边界类型化:tool guard、工具名 alias、sandbox 参数、confirm store 和 session event dispatch 增加 typed wrapper。
+- 前序中枢迁移继续受门禁覆盖:`server/routes/chat`、`core/session-coordinator`、`core/agent` 和 runtime TS 配置一起回归。
+- 本地模型口径不变:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;4B 保持低配降级并提示 thinking-on 风险。
 
 ## 回归门禁
 
-- `npm run typecheck:runtime` ✓
 - `npm run typecheck` ✓
-- Full `npm test`:193 files / 1497 passed / 1 skipped ✓
-- Release preflight:0 blocker / 0 critical / 0 failed ✓
-- Build/package/notarization gates:macOS Apple Silicon / Intel DMG and Windows installer are rebuilt through the release gate for this version.
-- macOS DMG final validation:Developer ID signed, notarized, stapled, Gatekeeper accepted ✓
+- `npm run typecheck:runtime` ✓
+- Focused content-filter/session regression:2 files / 20 passed ✓
+- Full `npm test`:194 files / 1519 passed / 1 skipped ✓
+- `npm run build:server` / `npm run build:main` / `npm run build:renderer` ✓
+- Release static regression:37/37 passed ✓
+- Electron UI smoke:home / short / tools / long-code passed ✓
+- Packaged-server live regression:9/9 passed, failed 0, blocker 0, critical 0 ✓
+- Build/package/notarization gates:macOS Apple Silicon / Intel DMG and Windows installer rebuilt; both macOS DMGs are signed, notarized, stapled, and Gatekeeper accepted.
 
 ## SHA256
 
-- `Lynn-0.79.4-macOS-Apple-Silicon.dmg`: `266ec90f133a6d134b0a423c090263a5fa529ca4470eb32d178ed984178a7055`
-- `Lynn-0.79.4-macOS-Intel.dmg`: `1c9b912dcec801f29a119216b76f6ca129b3523f583b425ba4b1e37033e17dfd`
-- `Lynn-0.79.4-Windows-Setup.exe`: `78392be4bede67a2b9308906f3203092d44aafb36b4acaeeee5ebf2a56ab8e8c`
+- `Lynn-0.79.7-macOS-Apple-Silicon.dmg`: `2e23467ccab289c7a7f26431b403cb69b3b23d302995a74413fe721ce30023e3`
+- `Lynn-0.79.7-macOS-Intel.dmg`: `7ebc086c7eedc311a71ed3b6ef82caece722a06235d51e472a6c2f5d9c94258d`
+- `Lynn-0.79.7-Windows-Setup.exe`: `038bc1d9a5c9f81a6bfef9a49c990b08620e025af71c13e2735741f8505a5fcc`
 
 ## English Summary
 
-v0.79.4 is a runtime architecture-hardening release for the V0.79 line. The local model policy is unchanged:Qwen3.5-9B Q4_K_M imatrix MTP remains the recommended default, while 4B remains a low-config downgrade with its thinking-on risk documented.
+v0.79.7 is the final central TypeScript cleanup release for the V0.79 line. The local model policy is unchanged:Qwen3.5-9B Q4_K_M imatrix MTP remains the recommended default, while 4B remains a low-config downgrade with its thinking-on risk documented.
 
 Highlights:
-- `lib/tools` is now fully typed: web search, realtime info/weather/news/sports, stock market, stock research, browser, channel/experience, install skill, snapshot restore, and related helpers now have TS boundaries.
-- Memory retrieval leaf paths such as `memory-search`, `user-profile`, and `HybridRetriever` moved to TypeScript with focused regressions.
-- Web, market, and realtime contracts are safer across Deep Research, local tools, and chat/tool tiering.
-- Large central JS files are intentionally deferred to V0.79.5+ so this package stays stable.
-- Release gates cover runtime typecheck, full TypeScript typecheck, full Vitest, and package/notarization validation for this release.
+- `core/engine` moved to TypeScript, bringing the LynnEngine facade, manager composition, Brain registration prewarm, plugin init, MCP activation, and event dispatch into runtime typecheck; legacy `HanaEngine` imports remain supported through a compatibility alias.
+- Tool safety boundaries now have typed wrappers:tool guards, tool-name aliases, sandbox options, confirm store, and session events.
+- Earlier central migrations remain covered by the same gate:`server/routes/chat`, `core/session-coordinator`, `core/agent`, and runtime TS config are tested together.
+- Local model onboarding remains Qwen3.5-9B by default, with 4B kept as the low-config downgrade.

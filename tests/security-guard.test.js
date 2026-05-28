@@ -119,9 +119,9 @@ describe("formatInjectionWarning", () => {
   });
 });
 
-// ── 敏感路径检测（engine.js 的 detectSensitiveParams） ──
+// ── 敏感路径检测（engine.ts 的 detectSensitiveParams） ──
 
-// 因为 detectSensitiveParams 是 engine.js 内部函数，这里测试核心正则逻辑
+// 因为 detectSensitiveParams 是 engine.ts 内部函数，这里测试核心正则逻辑
 describe("sensitive path patterns", () => {
   const SENSITIVE_PATH_PATTERNS = [
     [/\.ssh[/\\]/i, "SSH 密钥目录"],

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { parseArgs, runVoiceRuntimeSmoke, usage } from "../scripts/voice-runtime-smoke.mjs";
+import { parseArgs, runVoiceRuntimeSmoke, usage } from "../scripts/voice-runtime-smoke.ts";
 
 describe("voice-runtime-smoke script", () => {
   let originalFetch;
