@@ -78,6 +78,13 @@ import {
   formatRelaySummaryContext,
   resolveSessionRelayConfig,
 } from "./session-relay.js";
+import { promoteActivitySessionFile } from "./session-activity.js";
+import {
+  loadSessionTitlesFor,
+  saveSessionMetaFile,
+  saveSessionTitleFile,
+  type SessionTitleCacheEntry,
+} from "./session-title-meta.js";
 import type { ResolvedModel } from "./types.js";
 
 const log = createModuleLogger("session");
@@ -128,7 +135,6 @@ type SessionCoordinatorDeps = AnyRecord & {
   getAgentById: (agentId: string) => AgentLike | null | undefined;
   listAgents: () => AgentLike[];
 };
-type SessionTitleCacheEntry = { titles: Record<string, string>; ts: number };
 type IsolatedExecutionOptions = AnyRecord & {
   agentId?: string;
   signal?: AbortSignal;
@@ -226,8 +232,6 @@ export class SessionCoordinator {
     this._pendingPlanMode = false;
     this._pendingSecurityMode = DEFAULT_SECURITY_MODE;
   }
-
-  static _TITLES_TTL = 60_000; // 60 秒
 
   get session() { return this._session; }
   get sessionStarted() { return this._sessionStarted; }
@@ -1239,44 +1243,24 @@ export class SessionCoordinator {
   }
 
   async saveSessionTitle(sessionPath: string, title: string) {
-    const agentId = this._d.agentIdFromSessionPath(sessionPath);
-    const sessionDir = agentId
-      ? path.join(this._d.agentsDir, agentId, "sessions")
-      : this._d.getAgent().sessionDir;
-    const titlePath = path.join(sessionDir, "session-titles.json");
-    const titles = await this._loadSessionTitlesFor(sessionDir);
-    titles[sessionPath] = title;
-    await fsp.writeFile(titlePath, JSON.stringify(titles, null, 2), "utf-8");
-    // 更新缓存
-    this._titlesCache.set(sessionDir, { titles: { ...titles }, ts: Date.now() });
+    await saveSessionTitleFile(sessionPath, title, {
+      agentsDir: this._d.agentsDir,
+      currentAgent: this._d.getAgent(),
+      agentIdFromSessionPath: this._d.agentIdFromSessionPath,
+      titlesCache: this._titlesCache,
+    });
   }
 
   async saveSessionMeta(sessionPath: string, meta: AnyRecord) {
-    const agentId = this._d.agentIdFromSessionPath(sessionPath);
-    const sessionDir = agentId
-      ? path.join(this._d.agentsDir, agentId, "sessions")
-      : this._d.getAgent().sessionDir;
-    const metaPath = path.join(sessionDir, "session-meta.json");
-    let allMeta: Record<string, AnyRecord> = {};
-    try { allMeta = JSON.parse(await fsp.readFile(metaPath, "utf-8")); } catch {}
-    allMeta[sessionPath] = { ...(allMeta[sessionPath] || {}), ...meta };
-    await fsp.writeFile(metaPath, JSON.stringify(allMeta, null, 2), "utf-8");
+    await saveSessionMetaFile(sessionPath, meta, {
+      agentsDir: this._d.agentsDir,
+      currentAgent: this._d.getAgent(),
+      agentIdFromSessionPath: this._d.agentIdFromSessionPath,
+    });
   }
 
   async _loadSessionTitlesFor(sessionDir: string): Promise<Record<string, string>> {
-    const cached = this._titlesCache.get(sessionDir);
-    if (cached && Date.now() - cached.ts < SessionCoordinator._TITLES_TTL) {
-      return { ...cached.titles };
-    }
-    try {
-      const raw = await fsp.readFile(path.join(sessionDir, "session-titles.json"), "utf-8");
-      const titles = JSON.parse(raw);
-      this._titlesCache.set(sessionDir, { titles, ts: Date.now() });
-      return { ...titles };
-    } catch {
-      this._titlesCache.set(sessionDir, { titles: {}, ts: Date.now() });
-      return {};
-    }
+    return loadSessionTitlesFor(sessionDir, this._titlesCache);
   }
 
   // ── Session Context ──
@@ -1340,20 +1324,10 @@ export class SessionCoordinator {
   }
 
   promoteActivitySession(activitySessionFile: string) {
-    const agent = this._d.getAgent();
-    const oldPath = path.join(agent.agentDir, "activity", activitySessionFile);
-    if (!fs.existsSync(oldPath)) return null;
-
-    const newPath = path.join(agent.sessionDir, activitySessionFile);
-    try {
-      fs.renameSync(oldPath, newPath);
-      agent._memoryTicker?.notifyPromoted(newPath);
-      log.log(`promoted activity session: ${activitySessionFile}`);
-      return newPath;
-    } catch (err) {
-      log.error(`promoteActivitySession failed: ${errMessage(err)}`);
-      return null;
-    }
+    return promoteActivitySessionFile(activitySessionFile, this._d.getAgent(), {
+      onPromoted: () => log.log(`promoted activity session: ${activitySessionFile}`),
+      onError: (err) => log.error(`promoteActivitySession failed: ${errMessage(err)}`),
+    });
   }
 
   // ── Isolated Execution ──
