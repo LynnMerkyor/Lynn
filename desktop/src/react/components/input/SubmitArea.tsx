@@ -1,0 +1,141 @@
+import type { ChangeEvent, MutableRefObject } from 'react';
+import type { ThinkingLevel } from '../../stores/model-slice';
+import { ContextRing } from './ContextRing';
+import { ModelSelector } from './ModelSelector';
+import { SecurityModeSelector } from './SecurityModeSelector';
+import { SendButton } from './SendButton';
+import { TaskModePicker } from './TaskModePicker';
+import { ThinkingLevelButton } from './ThinkingLevelButton';
+import { WritingModeToggle } from './WritingModeToggle';
+import styles from './InputArea.module.css';
+
+interface SubmitAreaProps {
+  fileInputRef: MutableRefObject<HTMLInputElement | null>;
+  thinkingLevel: ThinkingLevel;
+  modelXhigh: boolean;
+  showThinkingControl: boolean;
+  selectorModels: any[];
+  isStreaming: boolean;
+  localQwenRunning: boolean;
+  localQwenLoading: boolean;
+  showModelConfigHint: boolean;
+  deepResearchOpen: boolean;
+  deepResearchBusy: boolean;
+  canSteer: boolean;
+  canSend: boolean;
+  sendDisabledTitle?: string;
+  t: (key: string) => string;
+  onAttachClick: () => void;
+  onFileInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onVoiceClick: () => void;
+  onDeepResearchToggle: () => void;
+  onThinkingLevelChange: (level: ThinkingLevel) => void;
+  onOpenProvidersSettings: () => void;
+  onSend: () => void;
+  onSteer: () => void;
+  onStop: () => void;
+}
+
+export function SubmitArea({
+  fileInputRef,
+  thinkingLevel,
+  modelXhigh,
+  showThinkingControl,
+  selectorModels,
+  isStreaming,
+  localQwenRunning,
+  localQwenLoading,
+  showModelConfigHint,
+  deepResearchOpen,
+  deepResearchBusy,
+  canSteer,
+  canSend,
+  sendDisabledTitle,
+  t,
+  onAttachClick,
+  onFileInputChange,
+  onVoiceClick,
+  onDeepResearchToggle,
+  onThinkingLevelChange,
+  onOpenProvidersSettings,
+  onSend,
+  onSteer,
+  onStop,
+}: SubmitAreaProps) {
+  return (
+    <div className={styles['input-bottom-bar']}>
+      <div className={styles['input-actions']}>
+        <button type="button" className={styles['attach-btn']} onClick={onAttachClick} title={t('input.attachFile') || '添加附件'}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+        </button>
+        <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={onFileInputChange} />
+        <button
+          type="button"
+          className={styles['attach-btn']}
+          onClick={onVoiceClick}
+          title="Lynn 语音"
+          aria-label="打开 Lynn 语音"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <path d="M12 19v3" />
+            <path d="M8 22h8" />
+          </svg>
+        </button>
+        <TaskModePicker />
+        <button
+          type="button"
+          className={`${styles['deep-research-pill']} ${deepResearchOpen ? styles['deep-research-pill-active'] : ''}`}
+          onClick={onDeepResearchToggle}
+          disabled={deepResearchBusy}
+          title="深度调研：生成可预览 HTML 报告"
+          aria-pressed={deepResearchOpen}
+          aria-label="深度调研"
+        >
+          <span className={styles['deep-research-pill-mark']}>⌁</span>
+          <span>深研</span>
+        </button>
+        <SecurityModeSelector />
+        <WritingModeToggle />
+      </div>
+      <div className={styles['input-controls']}>
+        {showThinkingControl && (
+          <ThinkingLevelButton level={thinkingLevel} onChange={onThinkingLevelChange} modelXhigh={modelXhigh} />
+        )}
+        <ContextRing />
+        <div className={styles['send-controls']}>
+          <ModelSelector
+            models={selectorModels}
+            disabled={isStreaming}
+            localQwenRunning={localQwenRunning}
+            localQwenLoading={localQwenLoading}
+          />
+          {showModelConfigHint && (
+            <button
+              type="button"
+              className={styles['model-upgrade-btn']}
+              onClick={onOpenProvidersSettings}
+              title={t('input.embeddedModel.upgradeTitle')}
+            >
+              <span className={styles['model-upgrade-icon']}>✦</span>
+              <span className={styles['model-upgrade-copy']}>
+                <span className={styles['model-upgrade-title']}>{t('input.embeddedModel.upgrade')}</span>
+                <span className={styles['model-upgrade-subtitle']}>{t('input.embeddedModel.hint')}</span>
+              </span>
+            </button>
+          )}
+          <SendButton
+            isStreaming={isStreaming}
+            canSteer={canSteer}
+            disabled={isStreaming ? false : !canSend}
+            title={sendDisabledTitle}
+            onSend={onSend}
+            onSteer={onSteer}
+            onStop={onStop}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

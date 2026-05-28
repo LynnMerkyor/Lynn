@@ -16,17 +16,12 @@ import { sendPrompt, submitPromptTask } from '../stores/prompt-actions';
 import type { ThinkingLevel } from '../stores/model-slice';
 import { TodoDisplay } from './input/TodoDisplay';
 import { AttachedFilesBar } from './input/AttachedFilesBar';
-import { SecurityModeSelector } from './input/SecurityModeSelector';
-import { ContextRing } from './input/ContextRing';
-import { WritingModeToggle } from './input/WritingModeToggle';
+import { ComposerTextarea } from './input/ComposerTextarea';
+import { SubmitArea } from './input/SubmitArea';
 import { LocalQwenStatusStack } from './input/LocalQwenStatusStack';
-import { ThinkingLevelButton } from './input/ThinkingLevelButton';
-import { ModelSelector } from './input/ModelSelector';
 import { SlashCommandMenu } from './input/SlashCommandMenu';
 import { AtMentionMenu } from './input/AtMentionMenu';
-import { SendButton } from './input/SendButton';
 import { QuotedSelectionCard } from './input/QuotedSelectionCard';
-import { TaskModePicker } from './input/TaskModePicker';
 import { DeepResearchPanel } from './input/DeepResearchPanel';
 import { JARVIS_RUNTIME_START_EVENT } from '../services/jarvis-runtime-events';
 import { loadModels } from '../utils/ui-helpers';
@@ -1618,103 +1613,50 @@ function InputAreaInner() {
         />
       )}
       <div className={`${styles['input-wrapper']} ${styles[`input-wrapper-${securityMode}`] || ''}`}>
-        <textarea ref={textareaRef} id="inputBox" className={styles['input-box']} placeholder={placeholder}
-          aria-label={t('input.placeholder') || '输入消息'}
-          rows={1} spellCheck={false} value={inputValue}
-          onChange={e => handleInputChange(e.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste}
-          onFocus={() => setTextareaFocused(true)}
-          onBlur={() => setTextareaFocused(false)}
-          onCompositionStart={() => { isComposing.current = true; }}
-          onCompositionEnd={(e) => {
-            isComposing.current = false;
-            const next = e.currentTarget.value;
+        <ComposerTextarea
+          textareaRef={textareaRef}
+          isComposing={isComposing}
+          value={inputValue}
+          placeholder={placeholder}
+          inputLargeSummary={inputLargeSummary}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          onFocusChange={setTextareaFocused}
+          onCompositionValue={(next) => {
             setInputValue(next);
             setComposerText(next);
-            // 组合事件结束的同一 tick 里继续改 textarea 布局，macOS IME
-            // 偶发会把候选窗坐标缓存成屏幕左下角。延后一帧再补高度。
-            requestAnimationFrame(() => {
-              const el = textareaRef.current;
-              if (!el || isComposing.current) return;
-              el.style.height = 'auto';
-              el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-            });
-          }} />
-        {inputLargeSummary && (
-          <div className={styles['input-large-summary']} title="已保留完整输入内容，发送时会完整提交">
-            <span className={styles['input-large-summary-dot']} />
-            <span>已载入长文本</span>
-            <strong>{inputLargeSummary}</strong>
-          </div>
-        )}
-        <div className={styles['input-bottom-bar']}>
-          <div className={styles['input-actions']}>
-            <button type="button" className={styles['attach-btn']} onClick={handleAttachClick} title={t('input.attachFile') || '添加附件'}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            </button>
-            <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleFileInputChange} />
-            <button
-              type="button"
-              className={styles['attach-btn']}
-              onClick={handleVoiceClick}
-              title="Lynn 语音"
-              aria-label="打开 Lynn 语音"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <path d="M12 19v3" />
-                <path d="M8 22h8" />
-              </svg>
-            </button>
-            <TaskModePicker />
-            <button
-              type="button"
-              className={`${styles['deep-research-pill']} ${deepResearchOpen ? styles['deep-research-pill-active'] : ''}`}
-              onClick={() => {
-                setDeepResearchOpen((open) => !open);
-                requestInputFocus();
-              }}
-              disabled={deepResearchBusy}
-              title="深度调研：生成可预览 HTML 报告"
-              aria-pressed={deepResearchOpen}
-              aria-label="深度调研"
-            >
-              <span className={styles['deep-research-pill-mark']}>⌁</span>
-              <span>深研</span>
-            </button>
-            <SecurityModeSelector />
-            <WritingModeToggle />
-          </div>
-          <div className={styles['input-controls']}>
-            {activeModelInfo?.reasoning !== false && (
-              <ThinkingLevelButton level={thinkingLevel} onChange={setThinkingLevel} modelXhigh={currentModelInfo?.xhigh ?? false} />
-            )}
-            <ContextRing />
-            <div className={styles['send-controls']}>
-              <ModelSelector
-                models={selectorModels}
-                disabled={isStreaming}
-                localQwenRunning={localQwenRunning}
-                localQwenLoading={localQwenLoading}
-              />
-              {showModelConfigHint && (
-                <button
-                  type="button"
-                  className={styles['model-upgrade-btn']}
-                  onClick={openProvidersSettings}
-                  title={t('input.embeddedModel.upgradeTitle')}
-                >
-                  <span className={styles['model-upgrade-icon']}>✦</span>
-                  <span className={styles['model-upgrade-copy']}>
-                    <span className={styles['model-upgrade-title']}>{t('input.embeddedModel.upgrade')}</span>
-                    <span className={styles['model-upgrade-subtitle']}>{t('input.embeddedModel.hint')}</span>
-                  </span>
-                </button>
-              )}
-              <SendButton isStreaming={isStreaming} canSteer={canSteer} disabled={isStreaming ? false : !canSend} title={sendDisabledTitle} onSend={handleSend} onSteer={handleSteer} onStop={handleStop} />
-            </div>
-          </div>
-        </div>
+          }}
+        />
+        <SubmitArea
+          fileInputRef={fileInputRef}
+          thinkingLevel={thinkingLevel}
+          modelXhigh={currentModelInfo?.xhigh ?? false}
+          showThinkingControl={activeModelInfo?.reasoning !== false}
+          selectorModels={selectorModels}
+          isStreaming={isStreaming}
+          localQwenRunning={localQwenRunning}
+          localQwenLoading={localQwenLoading}
+          showModelConfigHint={showModelConfigHint}
+          deepResearchOpen={deepResearchOpen}
+          deepResearchBusy={deepResearchBusy}
+          canSteer={canSteer}
+          canSend={canSend}
+          sendDisabledTitle={sendDisabledTitle}
+          t={t}
+          onAttachClick={handleAttachClick}
+          onFileInputChange={handleFileInputChange}
+          onVoiceClick={handleVoiceClick}
+          onDeepResearchToggle={() => {
+            setDeepResearchOpen((open) => !open);
+            requestInputFocus();
+          }}
+          onThinkingLevelChange={setThinkingLevel}
+          onOpenProvidersSettings={openProvidersSettings}
+          onSend={handleSend}
+          onSteer={handleSteer}
+          onStop={handleStop}
+        />
       </div>
     </>
   );
