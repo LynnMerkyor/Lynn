@@ -12,6 +12,8 @@ export function SendButton({ isStreaming, canSteer, disabled, title, onSend, onS
 }) {
   const { t } = useI18n();
   const zh = String(document?.documentElement?.lang || '').startsWith('zh');
+  const sendTitle = title || (zh ? '发送 (Enter)' : 'Send (Enter)');
+  const stopTitle = zh ? '停止生成' : 'Stop generation';
 
   // 三态：send | steer+stop | stop
   if (!isStreaming) {
@@ -19,7 +21,7 @@ export function SendButton({ isStreaming, canSteer, disabled, title, onSend, onS
       <button
         className={styles['send-btn']}
         disabled={disabled}
-        title={title}
+        title={sendTitle}
         onClick={onSend}
       >
         <span className={styles['send-label']}>
@@ -52,6 +54,7 @@ export function SendButton({ isStreaming, canSteer, disabled, title, onSend, onS
       <button
         className={`${styles['send-btn']} ${styles['is-streaming']}`}
         onClick={onStop}
+        title={stopTitle}
       >
         <span className={styles['send-label']}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">

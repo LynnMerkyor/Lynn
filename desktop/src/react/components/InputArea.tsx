@@ -43,6 +43,11 @@ import {
   type DeepResearchArtifact,
 } from './input/deep-research';
 import {
+  buildRunCommandPrompt,
+  deriveRunRisk,
+  runRiskLabel,
+} from './input/run-risk';
+import {
   fileToWorkingSet,
   getComposerSessionKey,
 } from '../utils/composer-state';
@@ -105,28 +110,6 @@ function WritingModeToggle() {
       </svg>
     </button>
   );
-}
-
-function deriveRunRisk(command: string): 'low' | 'medium' | 'high' {
-  const normalized = command.trim().toLowerCase();
-  if (/\b(rm|sudo|chmod|chown|mv|scp|ssh|docker\s+rm|git\s+push|npm\s+publish)\b/.test(normalized)) {
-    return 'high';
-  }
-  if (/\b(git|npm|pnpm|yarn|bun|cargo|go|python|node|uv|make|brew|curl|wget)\b/.test(normalized)) {
-    return 'medium';
-  }
-  return 'low';
-}
-
-function runRiskLabel(risk: 'low' | 'medium' | 'high', t: (key: string, vars?: Record<string, string | number>) => string): string {
-  if (risk === 'high') return t('markdown.runRisk.high') || '高风险';
-  if (risk === 'medium') return t('markdown.runRisk.medium') || '中风险';
-  return t('markdown.runRisk.low') || '低风险';
-}
-
-function buildRunCommandPrompt(command: string, cwd: string | null): string {
-  const cwdLine = cwd ? `当前工作目录：${cwd}\n` : '';
-  return `请直接在终端执行下面的命令，并基于真实结果回复。不要只解释命令本身。\n${cwdLine}\n\`\`\`sh\n${command.trim()}\n\`\`\``;
 }
 
 const FILE_CONTEXT_PATTERN = /\b([A-Za-z0-9_./-]+\.(?:tsx?|jsx?|css|json|md|py|rs|go|java|vue|svelte|swift|kt|kts|c|cc|cpp|h|hpp|m|mm|sql|yaml|yml|toml|sh))\b/i;
