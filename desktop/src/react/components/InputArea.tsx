@@ -65,6 +65,7 @@ import {
   modelSupportsVision,
 } from './input/multimodal-guard';
 import { detectInlineFileSuggestion } from './input/file-context-suggestions';
+import { computeComposerTextUpdate, type ComposerInsertMode } from './input/composer-text';
 import {
   fileToWorkingSet,
   getComposerSessionKey,
@@ -961,48 +962,32 @@ function InputAreaInner() {
       : serverStartingLabel)
     : undefined;
 
-  const insertTextIntoComposer = useCallback((text: string) => {
-    const incoming = String(text || '');
-    if (!incoming) return;
-
-    const el = textareaRef.current;
-    const current = useStore.getState().composerText;
-    const start = el ? el.selectionStart : current.length;
-    const end = el ? el.selectionEnd : current.length;
-    const needsSpacer = current && start === current.length && !current.endsWith('\n') ? '\n\n' : '';
-    const insert = start === current.length ? `${needsSpacer}${incoming}` : incoming;
-    const next = `${current.slice(0, start)}${insert}${current.slice(end)}`;
-    const caret = start + insert.length;
-
-    setComposerText(next);
-    requestInputFocus();
-    requestAnimationFrame(() => {
-      const target = textareaRef.current;
-      if (!target) return;
-      target.focus();
-      target.setSelectionRange(caret, caret);
-    });
-  }, [requestInputFocus, setComposerText]);
-
-  const insertPastedTextIntoComposer = useCallback((text: string) => {
+  const setComposerTextFromEvent = useCallback((
+    text: string,
+    options: { mode?: ComposerInsertMode; appendSpacer?: boolean } = {},
+  ) => {
     const incoming = String(text || '');
     if (!incoming) return;
 
     const el = textareaRef.current;
     const current = el?.value ?? useStore.getState().composerText;
-    const start = el ? el.selectionStart : current.length;
-    const end = el ? el.selectionEnd : current.length;
-    const next = `${current.slice(0, start)}${incoming}${current.slice(end)}`;
-    const caret = start + incoming.length;
+    const update = computeComposerTextUpdate({
+      current,
+      incoming,
+      selectionStart: el?.selectionStart ?? current.length,
+      selectionEnd: el?.selectionEnd ?? current.length,
+      mode: options.mode,
+      appendSpacer: options.appendSpacer,
+    });
 
-    setInputValue(next);
-    setComposerText(next);
+    setInputValue(update.next);
+    setComposerText(update.next);
     requestInputFocus();
     requestAnimationFrame(() => {
       const target = textareaRef.current;
       if (!target) return;
       target.focus();
-      target.setSelectionRange(caret, caret);
+      target.setSelectionRange(update.caretStart, update.caretEnd);
       if (!isComposing.current) {
         target.style.height = 'auto';
         target.style.height = Math.min(target.scrollHeight, 120) + 'px';
@@ -1012,12 +997,25 @@ function InputAreaInner() {
 
   useEffect(() => {
     const handlePasteToInput = (event: Event) => {
-      const detail = (event as CustomEvent<{ text?: string }>).detail || {};
-      insertTextIntoComposer(detail.text || '');
+      const detail = (event as CustomEvent<{ text?: string; editResend?: boolean }>).detail || {};
+      const current = textareaRef.current?.value ?? useStore.getState().composerText;
+      const editResend = !!detail.editResend;
+      if (editResend && current.trim() && current.trim() !== String(detail.text || '').trim()) {
+        useStore.getState().addToast?.('已用上一条消息替换当前输入。', 'info', 3600, {
+          dedupeKey: 'edit-resend-replaced-draft',
+        });
+      }
+      setComposerTextFromEvent(detail.text || '', {
+        mode: editResend ? 'replace' : 'insert',
+        appendSpacer: !editResend,
+      });
+      if (editResend) {
+        setInlineNotice('已载入上一条消息。修改后按 Enter 重新发送。');
+      }
     };
     window.addEventListener('hana-paste-to-input', handlePasteToInput);
     return () => window.removeEventListener('hana-paste-to-input', handlePasteToInput);
-  }, [insertTextIntoComposer]);
+  }, [setComposerTextFromEvent, setInlineNotice]);
 
   useEffect(() => {
     const handleRunCommand = (event: Event) => {
@@ -1197,7 +1195,7 @@ function InputAreaInner() {
 
     if (text) {
       e.preventDefault();
-      insertPastedTextIntoComposer(text);
+      setComposerTextFromEvent(text);
       return;
     }
 
@@ -1225,7 +1223,7 @@ function InputAreaInner() {
       });
     };
     reader.readAsDataURL(file);
-  }, [addAttachedFile, insertPastedTextIntoComposer, t, supportsVision, warnVisionUnsupported]);
+  }, [addAttachedFile, setComposerTextFromEvent, t, supportsVision, warnVisionUnsupported]);
 
   useEffect(() => {
     hanaFetch('/api/config')
