@@ -167,6 +167,8 @@ type LocalQwen35RuntimeStatus = {
       prompt_tokens_total?: number | null;
       predicted_tokens_total?: number | null;
       requests_total?: number | null;
+      predicted_tps?: number | null;
+      tps_window_seconds?: number | null;
     } | null;
     metrics_available?: boolean;
   };
@@ -377,6 +379,14 @@ function InputAreaInner() {
       + Number(localQwenStatus?.runtime?.metrics?.prompt_tokens_total || 0),
   );
   const localQwenMetricsReady = localQwenStatus?.runtime?.metrics_available === true;
+  const localQwenPredictedTpsValue = localQwenStatus?.runtime?.metrics?.predicted_tps;
+  const localQwenPredictedTps = typeof localQwenPredictedTpsValue === 'number'
+    && Number.isFinite(localQwenPredictedTpsValue)
+    ? localQwenPredictedTpsValue
+    : null;
+  const localQwenTpsSummary = localQwenPredictedTps !== null
+    ? `当前 ${localQwenPredictedTps.toFixed(localQwenPredictedTps >= 10 ? 0 : 1)} tok/s`
+    : null;
   const localQwenSlotSummary = useMemo(() => {
     const slots = localQwenStatus?.runtime?.slots;
     if (!slots?.total) return null;
@@ -582,9 +592,10 @@ function InputAreaInner() {
 
   useEffect(() => {
     void refreshLocalQwenStatus();
-    const id = window.setInterval(refreshLocalQwenStatus, 15_000);
+    const intervalMs = localQwenActive ? 3_000 : 15_000;
+    const id = window.setInterval(refreshLocalQwenStatus, intervalMs);
     return () => window.clearInterval(id);
-  }, [refreshLocalQwenStatus]);
+  }, [localQwenActive, refreshLocalQwenStatus]);
 
   useEffect(() => {
     const id = window.setTimeout(() => setLocalQwenPromptReady(true), LOCAL_QWEN_PROMPT_DELAY_MS);
@@ -1662,6 +1673,7 @@ function InputAreaInner() {
             </div>
             <div className={styles['local-model-status-meta']}>
               <span>llama.cpp</span>
+              {localQwenTpsSummary && <span>{localQwenTpsSummary}</span>}
               <span>{localQwenMetricSummary}</span>
               {localQwenSlotSummary && <span>{localQwenSlotSummary}</span>}
               <span>{localQwenEndpoint.replace(/^https?:\/\//, '')}</span>
@@ -1696,6 +1708,7 @@ function InputAreaInner() {
               <div className={styles['local-model-status-panel-grid']}>
                 <span><b>端点</b>{localQwenEndpoint}</span>
                 <span><b>进程</b>{localQwenStatus?.runtime?.pid ? `PID ${localQwenStatus.runtime.pid}` : localQwenLoading ? '加载中' : '运行中'}</span>
+                <span><b>速度</b>{localQwenTpsSummary || '等待下一次采样'}</span>
                 <span><b>任务槽</b>{localQwenEndpointOccupied ? '非默认端点' : (localQwenSlotSummary || '可用 1/1')}</span>
                 <span><b>统计</b>{localQwenMetricSummary}</span>
                 {localQwenEndpointOccupied && (

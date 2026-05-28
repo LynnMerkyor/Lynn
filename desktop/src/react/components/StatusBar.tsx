@@ -20,6 +20,8 @@ type LocalQwenStatus = {
     metrics?: {
       prompt_tokens_total?: number | null;
       predicted_tokens_total?: number | null;
+      predicted_tps?: number | null;
+      tps_window_seconds?: number | null;
     } | null;
   } | null;
   plan?: {
@@ -34,6 +36,12 @@ function isLocalQwenModel(model: { id: string; provider: string } | null): boole
   return model?.provider === LOCAL_QWEN_PROVIDER_ID && model.id === LOCAL_QWEN_MODEL_ID;
 }
 
+function formatTps(value: number | null | undefined): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  const digits = value >= 10 ? 0 : 1;
+  return `${value.toFixed(digits)} tok/s`;
+}
+
 function formatLocalQwenTag(status: LocalQwenStatus | null): string {
   const endpointRunning = status?.runtime?.endpoint_running === true
     || status?.plan?.observed?.endpoint_running === true;
@@ -46,9 +54,11 @@ function formatLocalQwenTag(status: LocalQwenStatus | null): string {
     const promptTokens = Number(status?.runtime?.metrics?.prompt_tokens_total || 0);
     const predictedTokens = Number(status?.runtime?.metrics?.predicted_tokens_total || 0);
     const totalTokens = Math.round(promptTokens + predictedTokens);
-    return totalTokens > 0
-      ? `本地 Qwen3.5-9B 正在运行 · 服务累计处理 ${totalTokens.toLocaleString()} tokens`
-      : '本地 Qwen3.5-9B 正在运行';
+    const tps = formatTps(status?.runtime?.metrics?.predicted_tps);
+    const parts = ['本地 Qwen3.5-9B 正在运行'];
+    if (tps) parts.push(`当前 ${tps}`);
+    if (totalTokens > 0) parts.push(`服务累计处理 ${totalTokens.toLocaleString()} tokens`);
+    return parts.join(' · ');
   }
   if (endpointLoading) return '本地 Qwen3.5-9B 正在加载';
   return '本地 Qwen3.5-9B 已选择 · 模型未启动';
@@ -109,7 +119,7 @@ export function StatusBar() {
       }
     };
     void refresh();
-    const id = window.setInterval(refresh, 15_000);
+    const id = window.setInterval(refresh, 3_000);
     return () => {
       cancelled = true;
       window.clearInterval(id);

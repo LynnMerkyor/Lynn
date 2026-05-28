@@ -28,6 +28,11 @@ function isDefaultQwen35MtpFileName(fileName: string) {
     || /qwen3\.?5-?9b.*q4_?k_?m.*mtp.*\.gguf$/i.test(fileName);
 }
 
+function formatLocalTps(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return `${value.toFixed(value >= 10 ? 0 : 1)} tok/s`;
+}
+
 type LocalActionStatus = {
   kind: 'info' | 'success' | 'error';
   text: string;
@@ -193,6 +198,8 @@ type LocalQwen35Status = {
       prompt_tokens_total?: number | null;
       predicted_tokens_total?: number | null;
       requests_total?: number | null;
+      predicted_tps?: number | null;
+      tps_window_seconds?: number | null;
     } | null;
     metrics_available?: boolean;
     slots?: {
@@ -386,6 +393,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       + Number(runtimeStats?.metrics?.predicted_tokens_total || 0),
   );
   const runtimeMetricsReady = runtimeStats?.metrics_available === true;
+  const runtimeTpsLabel = formatLocalTps(runtimeStats?.metrics?.predicted_tps);
   const slotLabel = (() => {
     const slots = runtimeStats?.slots;
     if (!slots?.total) return null;
@@ -412,6 +420,14 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     }, 2000);
     return () => window.clearInterval(id);
   }, [jobRunning, loadStatus]);
+
+  useEffect(() => {
+    if (!endpointRunning && !endpointForeign) return undefined;
+    const id = window.setInterval(() => {
+      loadStatus(true);
+    }, 3000);
+    return () => window.clearInterval(id);
+  }, [endpointForeign, endpointRunning, loadStatus]);
 
   const authorizeAndSetup = async () => {
     const profile = runtime.label ? `\n\n推荐配置：${runtime.label}，上下文 ${runtime.ctx_size || 8192}，并发 ${runtime.parallel || 1}` : '';
@@ -714,6 +730,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         {(endpointActive || endpointForeign) && runtimeStats?.pid && <span>PID {runtimeStats.pid}</span>}
         {endpointForeign && <span>停止后可启用默认 9B</span>}
         {endpointLoading && <span>模型权重加载中</span>}
+        {endpointRunning && <span>{runtimeTpsLabel ? `当前 ${runtimeTpsLabel}` : '速度等待采样'}</span>}
         {endpointRunning && <span>{runtimeMetricsReady ? `服务累计处理 ${runtimeTokens.toLocaleString()} tokens` : '运行统计同步中'}</span>}
         {endpointRunning && slotLabel && <span>{slotLabel}</span>}
         <span>{plan.base_url || 'http://127.0.0.1:18099/v1'}</span>

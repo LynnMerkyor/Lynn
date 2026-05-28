@@ -76,6 +76,8 @@ type MetricSummary = {
   prompt_tokens_total: number | null;
   predicted_tokens_total: number | null;
   requests_total: number | null;
+  predicted_tps: number | null;
+  tps_window_seconds: number | null;
 };
 
 type SlotSummary = {
@@ -445,6 +447,8 @@ function parseMetrics(text: string | null): MetricSummary | null {
       /(?:^|\n)llamacpp:requests_total\s+([0-9.]+)/,
       /(?:^|\n).*requests.*total\s+([0-9.]+)/i,
     ]),
+    predicted_tps: null,
+    tps_window_seconds: null,
   };
 }
 
@@ -453,6 +457,39 @@ function parseMetrics(text: string | null): MetricSummary | null {
 // 同时 hit 这条 route。加 1500ms 内存 cache + inflight dedup,避免 N 个并发 caller 各自 spawn lsof/ps。
 const _RUNTIME_CACHE_TTL_MS = 1500;
 let _runtimeCache: RuntimeCache = { at: 0, value: null, inflight: null };
+let _metricRateSample: {
+  pid: number | null;
+  at: number;
+  predictedTokens: number | null;
+} | null = null;
+
+function withMetricRates(metrics: MetricSummary | null, pid: number | null): MetricSummary | null {
+  if (!metrics) return null;
+  const now = Date.now();
+  const predictedTokens = typeof metrics.predicted_tokens_total === "number" ? metrics.predicted_tokens_total : null;
+  let predictedTps: number | null = null;
+  let windowSeconds: number | null = null;
+  if (
+    predictedTokens !== null
+    && _metricRateSample
+    && _metricRateSample.pid === pid
+    && typeof _metricRateSample.predictedTokens === "number"
+    && predictedTokens >= _metricRateSample.predictedTokens
+  ) {
+    const elapsed = (now - _metricRateSample.at) / 1000;
+    if (elapsed >= 0.5 && elapsed <= 60) {
+      const raw = (predictedTokens - _metricRateSample.predictedTokens) / elapsed;
+      predictedTps = Number.isFinite(raw) ? Number(raw.toFixed(1)) : null;
+      windowSeconds = Number(elapsed.toFixed(1));
+    }
+  }
+  _metricRateSample = { pid, at: now, predictedTokens };
+  return {
+    ...metrics,
+    predicted_tps: predictedTps,
+    tps_window_seconds: windowSeconds,
+  };
+}
 
 async function _computeRuntimeDetails(): Promise<RuntimeDetails> {
   const state = defaultState();
@@ -500,7 +537,7 @@ async function _computeRuntimeDetails(): Promise<RuntimeDetails> {
     model_ids: modelIds,
     foreign_model_ids: endpointOccupied ? modelIds : [],
     slots: summarizeSlots(slots),
-    metrics: parseMetrics(metricsText),
+    metrics: withMetricRates(parseMetrics(metricsText), pid),
     metrics_available: !!metricsText,
     checked_at: new Date().toISOString(),
   };

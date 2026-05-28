@@ -134,6 +134,30 @@ describe('Local Qwen provider UX guards', () => {
     expect(detail).toContain('lastEndpointRefreshKeyRef.current !== modelKey');
   });
 
+  it('surfaces local llama.cpp realtime TPS without replacing cumulative token stats', () => {
+    const route = read('server/routes/local-qwen35.ts');
+    const inputArea = read('desktop/src/react/components/InputArea.tsx');
+    const statusBar = read('desktop/src/react/components/StatusBar.tsx');
+    const providerDetail = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
+    expect(route).toContain('predicted_tps');
+    expect(route).toContain('tps_window_seconds');
+    expect(route).toContain('tokens_predicted_total');
+    expect(route).toContain('withMetricRates(parseMetrics(metricsText), pid)');
+    expect(inputArea).toContain('localQwenTpsSummary');
+    expect(inputArea).toContain('等待下一次采样');
+    expect(inputArea).toContain('当前 ${localQwenPredictedTps');
+    expect(inputArea).toContain('intervalMs = localQwenActive ? 3_000 : 15_000');
+    expect(statusBar).toContain('formatTps');
+    expect(statusBar).toContain('当前 ${tps}');
+    expect(providerDetail).toContain('formatLocalTps');
+    expect(providerDetail).toContain('速度等待采样');
+    expect(providerDetail).toContain('setInterval(() =>');
+    expect(providerDetail).toContain('}, 3000)');
+    expect(inputArea).toContain('服务累计处理');
+    expect(statusBar).toContain('服务累计处理');
+    expect(providerDetail).toContain('服务累计处理');
+  });
+
   it('uses platform-stable status dots instead of emoji status icons', () => {
     const badge = read('desktop/src/react/components/ProviderStatusBadge.tsx');
     const styles = read('desktop/src/styles.css');
