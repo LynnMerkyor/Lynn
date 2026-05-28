@@ -62,7 +62,7 @@ export default function registerAudioRoutes(app, ctx) {
     return c.body(fs.createReadStream(filePath));
   });
 
-  app.post("/audio/speech/stream", async (c) => {
+  const handleSpeechStream = async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const text = String(body.text || "").trim();
     if (!text) return c.json({ error: "tts_stream_empty_text" }, 400);
@@ -90,5 +90,8 @@ export default function registerAudioRoutes(app, ctx) {
       ctx.log?.warn?.("tts_speak_stream failed:", err?.message || err);
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 502);
     }
-  });
+  };
+
+  app.post("/audio/speech/stream", handleSpeechStream);
+  app.post("/audio/stream", handleSpeechStream);
 }

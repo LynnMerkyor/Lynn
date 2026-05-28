@@ -95,6 +95,26 @@ describe("tts-bridge audio stream route", () => {
     expect(new Uint8Array(await res.arrayBuffer()).length).toBeGreaterThan(40);
   });
 
+  it("keeps /audio/stream as a compatibility alias for the speech stream", async () => {
+    global.fetch = vi.fn(async () => okStreamResponse());
+    const app = new Hono();
+    registerAudioRoutes(app, {
+      dataDir: "",
+      config: { get: (key) => key === "provider" ? "cosyvoice" : undefined },
+      engine: { config: { voice: { tts: { provider: "cosyvoice", base_url: "http://tts.local" } } } },
+      log: { warn: vi.fn() },
+    });
+
+    const res = await app.request("/audio/stream", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "兼容旧流式入口" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("audio/wav");
+  });
+
   it("returns 409 when the selected provider cannot stream", async () => {
     const app = new Hono();
     registerAudioRoutes(app, {

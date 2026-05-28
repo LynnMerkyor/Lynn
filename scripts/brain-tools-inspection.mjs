@@ -303,9 +303,14 @@ async function probeMimoMultimodal(kind) {
 }
 
 async function probeMimoTTS() {
-  // MiMo TTS: api.xiaomimimo.com (不是 token-plan endpoint!)+ api-key 头
-  // 文档:https://platform.xiaomimimo.com/docs/zh-CN/usage-guide/speech-synthesis-v2.5
-  const ttsBase = process.env.MIMO_TTS_BASE || 'https://api.xiaomimimo.com/v1';
+  // MiMo TTS endpoint 优先级跟 tts-bridge provider 对齐。
+  // tp-* token-plan key 在 consumer endpoint 会 401,因此优先复用 token-plan base。
+  const ttsBase = (
+    process.env.MIMO_TTS_BASE ||
+    process.env.MIMO_BASE ||
+    process.env.MIMO_SEARCH_BASE ||
+    'https://api.xiaomimimo.com/v1'
+  ).replace(/\/+$/, '');
   const ttsKey = process.env.MIMO_TTS_KEY || process.env.MIMO_SEARCH_KEY || process.env.MIMO_KEY || '';
   if (!ttsKey) {
     return { ok: false, skipped: true, reason: 'MIMO TTS key not configured' };
@@ -318,10 +323,14 @@ async function probeMimoTTS() {
     ],
     audio: { format: 'wav', voice: '冰糖' },
   };
-  const url = ttsBase.replace(/\/+$/, '') + '/chat/completions';
+  const url = ttsBase + '/chat/completions';
   const r = await timedFetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'api-key': ttsKey },
+    headers: {
+      'Content-Type': 'application/json',
+      'api-key': ttsKey,
+      Authorization: 'Bearer ' + ttsKey,
+    },
     body: JSON.stringify(body),
   }, 30_000);
 
@@ -337,6 +346,66 @@ async function probeMimoTTS() {
     return { ok: true, ms: r.ms, bytes: Math.floor(audioData.length * 0.75) };
   } catch (e) {
     return { ok: false, ms: r.ms, reason: 'parse fail: ' + e.message };
+  }
+}
+
+async function probeCosyVoice() {
+  const base = (process.env.LYNN_COSYVOICE_URL || 'http://localhost:18021').replace(/\/+$/, '');
+
+  const health = await timedFetch(base + '/health', { method: 'GET' }, 5_000);
+  if (!health.ok) {
+    return {
+      ok: false,
+      ms: health.ms,
+      reason: `health HTTP ${health.status} ${(health.body || health.error || '').slice(0, 150)}`,
+    };
+  }
+
+  let healthInfo;
+  try {
+    healthInfo = JSON.parse(health.body);
+  } catch {
+    return { ok: false, ms: health.ms, reason: 'health response not JSON' };
+  }
+  if (healthInfo?.status && healthInfo.status !== 'ok') {
+    return { ok: false, ms: health.ms, reason: `health status not ok: ${JSON.stringify(healthInfo).slice(0, 120)}` };
+  }
+
+  const t0 = Date.now();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new Error('timeout')), 15_000);
+  try {
+    const res = await fetch(base + '/v1/audio/speech', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'cosyvoice2',
+        input: '你好',
+        voice: '中文女',
+        response_format: 'wav',
+      }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const ms = Date.now() - t0;
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      return { ok: false, ms, reason: `synth HTTP ${res.status} ${errText.slice(0, 200)}` };
+    }
+    const bytes = (await res.arrayBuffer()).byteLength;
+    if (bytes < 1000) {
+      return { ok: false, ms, reason: `synth returned suspiciously small wav (${bytes}B)` };
+    }
+    return {
+      ok: true,
+      ms,
+      bytes,
+      speakers: Array.isArray(healthInfo?.speakers) ? healthInfo.speakers.length : undefined,
+      model: healthInfo?.model || 'unknown',
+    };
+  } catch (e) {
+    clearTimeout(timer);
+    return { ok: false, ms: Date.now() - t0, reason: e?.message || String(e) };
   }
 }
 
@@ -431,6 +500,15 @@ function formatReport(rows, brain, mm) {
     if (mm.image) lines.push(fmt('image', mm.image));
     if (mm.audio) lines.push(fmt('audio', mm.audio));
     if (mm.tts) lines.push(fmt('tts', mm.tts));
+    if (mm.cosyvoice) {
+      const r = mm.cosyvoice;
+      const ms = r.ms != null ? r.ms + 'ms' : '--';
+      let st;
+      if (r.skipped) st = `⊝ skip (${r.reason})`;
+      else if (r.ok) st = `✓ OK (${r.bytes}B wav, model=${r.model})`;
+      else st = `✗ ${r.reason}`;
+      lines.push('cosyvoice'.padEnd(16) + ms.padEnd(10) + st);
+    }
   }
   return lines.join('\n');
 }
@@ -468,6 +546,9 @@ async function main() {
     process.stderr.write('  testing MiMo TTS probe...   ');
     mm.tts = await probeMimoTTS();
     process.stderr.write(mm.tts.ok ? `OK ${mm.tts.ms}ms\n` : mm.tts.skipped ? `skip\n` : `FAIL ${mm.tts.reason}\n`);
+    process.stderr.write('  testing CosyVoice probe...  ');
+    mm.cosyvoice = await probeCosyVoice();
+    process.stderr.write(mm.cosyvoice.ok ? `OK ${mm.cosyvoice.ms}ms (${mm.cosyvoice.bytes}B wav)\n` : `FAIL ${mm.cosyvoice.reason}\n`);
   }
 
   const report = formatReport(rows, brain, mm);

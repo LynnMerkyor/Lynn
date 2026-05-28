@@ -28,6 +28,7 @@ export function createCosyVoiceProvider(config = {}) {
   return {
     name: "cosyvoice",
     label: "CosyVoice 2 (阿里・推荐)",
+    supportsStreaming: true,
 
     async synthesize({ text, voice, speed, outPath }) {
       if (!text || !text.trim()) {
