@@ -29,7 +29,7 @@ It reads a task brief, emits Fleet JSONL events, and can wrap external agents.
 Lynn worker run --brief task.md --worktree . --mock --jsonl
 Lynn worker run --brief task.md --worktree . --agent codex-cli --jsonl
 Lynn worker run --brief task.md --worktree . --agent claude-code --jsonl
-Lynn worker run --brief task.md --worktree . --agent opencode-cli --jsonl
+Lynn worker run --brief task.md --worktree . --agent opencode --jsonl
 Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 Lynn worker run --brief task.md --worktree . --agent kimi-cli --jsonl
 ```
