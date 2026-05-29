@@ -198,6 +198,7 @@ async function readCodeLine(prompt: string, mode: ChatMode, options: { placehold
     const cleanup = () => {
       input.off("data", onData);
       input.setRawMode(rawBefore);
+      input.pause();
     };
     const redraw = () => {
       const visible = buffer ? buffer : placeholder ? dim(placeholder, color) : "";
@@ -207,6 +208,16 @@ async function readCodeLine(prompt: string, mode: ChatMode, options: { placehold
     redraw();
     const onData = (chunk: Buffer) => {
       const text = chunk.toString("utf8");
+      const newlineIndex = text.search(/[\r\n]/);
+      if (newlineIndex >= 0) {
+        const beforeNewline = text.slice(0, newlineIndex);
+        const printableBeforeNewline = Array.from(beforeNewline).filter((char) => char >= " " && char !== "\u007f").join("");
+        buffer += printableBeforeNewline;
+        output.write(`\r${" ".repeat(clearWidth())}\r${prompt}${buffer}\n`);
+        cleanup();
+        resolve(buffer);
+        return;
+      }
       if (text === "\u0003") {
         output.write(`\r${" ".repeat(clearWidth())}\r^C\n`);
         cleanup();
@@ -217,12 +228,6 @@ async function readCodeLine(prompt: string, mode: ChatMode, options: { placehold
         output.write(`\r${" ".repeat(clearWidth())}\r\n`);
         cleanup();
         resolve(null);
-        return;
-      }
-      if (text === "\r" || text === "\n") {
-        output.write(`\r${" ".repeat(clearWidth())}\r${prompt}${buffer}\n`);
-        cleanup();
-        resolve(buffer);
         return;
       }
       if (text === "\u001b[Z") {
