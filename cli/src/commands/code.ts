@@ -25,7 +25,7 @@ import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type C
 import { renderProvidersInfo, resolveProvidersInfo } from "./providers.js";
 import { readVersionInfo } from "../version.js";
 import { buildImageContentParts } from "../media.js";
-import { appendSessionLine, appendSessionMetadata, appendSessionTurn, readSessionLines, resolveDataDir } from "../session/store.js";
+import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, readSessionLines, resolveDataDir } from "../session/store.js";
 import { renderRuntimeInstructionFrame, stableRuntimePrefix, type RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
 
 const pExecFile = promisify(execFile);
@@ -417,10 +417,10 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const mode = await resolveCodeMode(args);
   const cliProvider = await resolveCliProviderProfile(args);
-  const resumePath = getStringFlag(args.flags, "resume");
+  const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
+  const resumePath = await resolveCodeResumePath(getStringFlag(args.flags, "resume"), dataDir);
   const resumeMessages = resumePath ? await loadResumeMessages(resumePath) : [];
   const saveSession = hasFlag(args.flags, "save-session", "session") || !!process.env.LYNN_CLI_SAVE_SESSION || !!resumePath;
-  const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   const sessionPath = getStringFlag(args.flags, "session") || resumePath;
   const title = getStringFlag(args.flags, "title") || task;
   let liveSessionPath = sessionPath;
@@ -550,6 +550,17 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     process.stdout.write(renderAssistantBlock(renderMarkdown(final.trim() || "(no answer)", supportsColor(output)), renderCodeFooter({ context, mode, mockBrain, reasoning, fallbackProvider: cliProvider?.profile })));
   }
   return 0;
+}
+
+async function resolveCodeResumePath(raw: string | null, dataDir: string): Promise<string | null> {
+  if (!raw) return null;
+  const value = raw.trim();
+  if (value === "last" || value === "latest") {
+    const latest = await latestSessionPath(dataDir);
+    if (!latest) throw new Error("No CLI session found to resume. Run with --save-session first.");
+    return latest;
+  }
+  return value;
 }
 
 function renderAssistantBlock(text: string, footer?: string): string {

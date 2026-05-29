@@ -268,6 +268,61 @@ describe("code agent loop", () => {
     expect(lines.at(-1)?.data?.resumedFrom).toBe(sessionPath);
   });
 
+  it("resumes the latest saved CLI session with --resume last", async () => {
+    const dataDir = path.join(tmp, "latest-data");
+    await appendSessionTurn({
+      dataDir,
+      cwd: tmp,
+      title: "older",
+      prompt: "older prompt",
+      assistant: "older assistant",
+      modelProvider: "mock",
+      modelId: "mock-brain",
+    });
+    const latestPath = await appendSessionTurn({
+      dataDir,
+      cwd: tmp,
+      title: "latest",
+      prompt: "latest prompt",
+      assistant: "latest assistant marker",
+      modelProvider: "mock",
+      modelId: "mock-brain",
+    });
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer((body) => {
+        const parsed = body as { messages?: Array<{ role?: string; content?: unknown }> };
+        expect(JSON.stringify(parsed.messages)).toContain("latest assistant marker");
+        expect(JSON.stringify(parsed.messages)).not.toContain("older assistant");
+        return "Resumed latest session.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "continue latest",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--resume",
+          "last",
+          "--data-dir",
+          dataDir,
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain('"type":"session.resumed"');
+    expect(output).toContain(JSON.stringify(latestPath).slice(1, -1));
+  });
+
   it("checkpoints tool-loop turns while a code session is running", async () => {
     const dataDir = path.join(tmp, "checkpoint-data");
     const original = process.stdout.write;

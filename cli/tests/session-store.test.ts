@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appendSessionLine, appendSessionMetadata, appendSessionTurn, listSessions, readSessionLines, sessionIndexPath } from "../src/session/store.js";
+import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, listSessions, readSessionLines, sessionIndexPath } from "../src/session/store.js";
 
 let tmp = "";
 
@@ -85,5 +85,23 @@ describe("CLI session store", () => {
       modelProvider: "brain",
       modelId: "lynn-brain-router",
     });
+  });
+
+  it("returns the latest session path from the index", async () => {
+    const first = await appendSessionTurn({
+      dataDir: tmp,
+      cwd: "/repo",
+      prompt: "first",
+      assistant: "done",
+    });
+    const second = await appendSessionTurn({
+      dataDir: tmp,
+      cwd: "/repo",
+      prompt: "second",
+      assistant: "done",
+    });
+
+    expect(first).not.toBe(second);
+    await expect(latestSessionPath(tmp)).resolves.toBe(second);
   });
 });

@@ -182,3 +182,8 @@ export async function listSessions(dataDir: string): Promise<CliSessionIndexEntr
   const entries = await readIndex(dataDir);
   return entries.sort((a, b) => String(b.modified || "").localeCompare(String(a.modified || "")));
 }
+
+export async function latestSessionPath(dataDir: string): Promise<string | null> {
+  const latest = (await listSessions(dataDir))[0];
+  return latest?.path || null;
+}
