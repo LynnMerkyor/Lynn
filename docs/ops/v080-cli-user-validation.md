@@ -265,14 +265,26 @@ In the GUI:
 - Worker cards must surface permission-sensitive events: writes, shell commands, denied actions, forbidden files, and center locks.
 - Cancel/retry must not silently escalate permissions.
 
-### Future Implementation Checklist
+### Implemented Permission Baseline
 
-- Add `Lynn permissions` to read and print the effective permission profile.
+- `Lynn permissions` reads and prints the effective CLI permission profile.
+- `Lynn permissions set --approval ... --sandbox ...` writes the shared local
+  profile at `~/.lynn/permissions/cli.json`.
+- CLI flags override env/profile/default for one process only.
+- Fleet reads the same profile through `/api/fleet/permissions` and shows the
+  effective mode before dispatching a worker.
+- Code tools have release-gate tests for read-only denial, workspace path escapes,
+  write/shell approval, and YOLO/full-access warning text.
+
+Remaining hardening:
+
 - Add a shared permission profile type under `shared/`.
-- Serialize runtime instruction frames per provider capability; never assume mid-conversation `role: "system"` works outside opted-in Anthropic adapters.
+- Serialize runtime instruction frames per provider capability; never assume
+  mid-conversation `role: "system"` works outside opted-in Anthropic adapters.
 - Store GUI defaults in the Lynn data directory, not only localStorage.
-- Make CLI, GUI Fleet, and server Fleet resolve permissions through one helper.
-- Add release-gate tests for read-only denial, workspace write allow, and YOLO warning text.
+  Fleet already reads the CLI-compatible profile once present.
+- Make CLI, GUI Fleet, and server Fleet resolve permissions through one helper
+  instead of parallel readers.
 
 ## Tier 5: GUI Fleet Integration
 
