@@ -29,6 +29,9 @@ describe("worker-run scaffold", () => {
     const brief = parseWorkerBrief([
       "# Task: Split input",
       "",
+      "## Task Type",
+      "code",
+      "",
       "## Objective",
       "Make InputArea smaller.",
       "",
@@ -44,6 +47,7 @@ describe("worker-run scaffold", () => {
     ].join("\n"));
 
     expect(brief.title).toBe("Task: Split input");
+    expect(brief.taskType).toBe("code");
     expect(brief.objective).toBe("Make InputArea smaller.");
     expect(brief.owned).toEqual([
       "desktop/src/react/components/InputArea.tsx",
@@ -51,6 +55,33 @@ describe("worker-run scaffold", () => {
     ]);
     expect(brief.forbidden).toEqual(["server/**"]);
     expect(brief.tests).toEqual(["npm run typecheck"]);
+  });
+
+  it("parses MiMo vision task metadata from GUI Fleet briefs", () => {
+    const brief = parseWorkerBrief([
+      "# Task: Ground UI",
+      "",
+      "## Task Type",
+      "- ground",
+      "",
+      "## Image",
+      "- screenshots/login.png",
+      "",
+      "## Objective",
+      "Find the login button.",
+      "",
+      "## Owned files",
+      "- desktop/src/react/**",
+      "",
+      "## Forbidden files",
+      "- server/**",
+      "",
+      "## Test commands",
+      "- npm run typecheck",
+    ].join("\n"));
+
+    expect(brief.taskType).toBe("ground");
+    expect(brief.image).toBe("screenshots/login.png");
   });
 
   it("parses fleet JSONL event lines", () => {
@@ -284,6 +315,81 @@ describe("worker-run scaffold", () => {
     const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; tool?: string; summary?: string });
     expect(text).toContain("lynn");
     expect(lines.some((line) => line.type === "shell.started")).toBe(true);
+    expect(lines.some((line) => line.type === "worker.finished" && line.summary === "lynn-cli worker completed")).toBe(true);
+  });
+
+  it("runs MiMo vision workers through the Brain multimodal path", async () => {
+    const repo = await makeTempGitRepo();
+    await fs.writeFile(path.join(repo, "shot.png"), Buffer.from("89504e470d0a1a0a", "hex"));
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: ground screenshot",
+      "",
+      "## Task Type",
+      "ground",
+      "",
+      "## Image",
+      "shot.png",
+      "",
+      "## Objective",
+      "Find the submit button.",
+      "",
+      "## Owned files",
+      "- desktop/src/react/**",
+      "",
+      "## Forbidden files",
+      "- server/**",
+      "",
+      "## Test commands",
+      "- npm test",
+    ].join("\n"));
+    let body = "";
+    const server = http.createServer((req, res) => {
+      if (req.url === "/v1/chat/completions" && req.method === "POST") {
+        req.on("data", (chunk) => { body += String(chunk); });
+        req.on("end", () => {
+          res.writeHead(200, { "content-type": "text/event-stream" });
+          res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: "{\"x\":0.5,\"y\":0.5,\"confidence\":0.9}" } }] })}\n\ndata: [DONE]\n\n`);
+        });
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("server did not bind");
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const code = await runWorker(parseArgs([
+        "worker",
+        "run",
+        "--brief",
+        briefPath,
+        "--worktree",
+        repo,
+        "--agent",
+        "mimo-vl",
+        "--brain-url",
+        `http://127.0.0.1:${address.port}`,
+      ]));
+      expect(code).toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    expect(body).toContain("data:image/png;base64");
+    expect(body).toContain("Find the submit button");
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; agent?: string; text?: string; summary?: string });
+    expect(lines.some((line) => line.type === "worker.started" && line.agent === "mimo-vl")).toBe(true);
+    expect(lines.some((line) => line.type === "assistant.delta" && line.text?.includes("\"x\""))).toBe(true);
     expect(lines.some((line) => line.type === "worker.finished" && line.summary === "lynn-cli worker completed")).toBe(true);
   });
 });

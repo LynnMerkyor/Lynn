@@ -14,7 +14,7 @@ describe("fleet-events protocol", () => {
       schemaVersion: FLEET_EVENT_SCHEMA_VERSION,
       type: "worker.started",
       workerId: "w1",
-      agent: "codex-cli",
+      agent: "mimo-vl",
       cwd: "/repo",
       worktree: "/repo/worktrees/w1",
       branch: "cli-1/task",

@@ -36,6 +36,9 @@ export type FleetWorkerStatus =
 
 export type FleetAgentKind =
   | "lynn-cli"
+  | "mimo-vl"
+  | "mimo-pro"
+  | "mimo-fast"
   | "codex-cli"
   | "claude-internal"
   | "claude-code"

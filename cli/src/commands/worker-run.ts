@@ -10,7 +10,11 @@ import {
   validateFleetWorkerEvent,
 } from "../../../shared/fleet-events.js";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
+import { streamBrainChat } from "../brain-client.js";
+import { buildImageContentParts } from "../media.js";
+import { parseReasoningOptions } from "../reasoning.js";
 import { runCode } from "./code.js";
+import { buildVisionPrompt, type VisionCommand } from "./vision.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 
 export interface WorkerBrief {
@@ -19,6 +23,8 @@ export interface WorkerBrief {
   owned: string[];
   forbidden: string[];
   tests: string[];
+  taskType: "code" | VisionCommand;
+  image?: string;
 }
 
 export interface WorkerDiffSummary {
@@ -49,13 +55,27 @@ function bulletValues(lines: readonly string[]): string[] {
     .filter(Boolean);
 }
 
+function firstSectionValue(markdown: string, title: string): string {
+  return sectionLines(markdown, title)
+    .map((line) => line.trim().replace(/^[-*]\s+/, ""))
+    .filter(Boolean)[0] || "";
+}
+
+function normalizeTaskType(raw: string): WorkerBrief["taskType"] {
+  const value = raw.trim().toLowerCase();
+  if (value === "see" || value === "ground" || value === "ui2code") return value;
+  return "code";
+}
+
 export function parseWorkerBrief(markdown: string): WorkerBrief {
   const title = markdown.split(/\r?\n/).find((line) => line.startsWith("# "))?.slice(2).trim() || "Untitled worker task";
   const objective = sectionLines(markdown, "Objective").join("\n").trim();
   const owned = bulletValues(sectionLines(markdown, "Owned files"));
   const forbidden = bulletValues(sectionLines(markdown, "Forbidden files"));
   const tests = bulletValues(sectionLines(markdown, "Test commands"));
-  return { title, objective, owned, forbidden, tests };
+  const taskType = normalizeTaskType(firstSectionValue(markdown, "Task Type") || firstSectionValue(markdown, "Type"));
+  const image = firstSectionValue(markdown, "Image") || firstSectionValue(markdown, "Screenshot") || undefined;
+  return { title, objective, owned, forbidden, tests, taskType, image };
 }
 
 function emit(event: FleetWorkerEvent): void {
@@ -289,6 +309,10 @@ function buildLynnCodeWorkerTask(brief: WorkerBrief): string {
   return [
     `Fleet task: ${brief.title}`,
     "",
+    "Task type:",
+    brief.taskType,
+    "",
+    ...(brief.image ? ["Image:", brief.image, ""] : []),
     "Objective:",
     brief.objective || brief.title,
     "",
@@ -303,6 +327,14 @@ function buildLynnCodeWorkerTask(brief: WorkerBrief): string {
     "",
     "Stay inside the owned files. Do not touch forbidden files. Prefer apply_patch for edits.",
   ].join("\n");
+}
+
+function isBuiltInLynnWorker(agent: string): boolean {
+  return agent === "lynn-cli" || agent === "mimo-vl" || agent === "mimo-pro" || agent === "mimo-fast";
+}
+
+function isVisionTask(taskType: WorkerBrief["taskType"]): taskType is VisionCommand {
+  return taskType === "see" || taskType === "ground" || taskType === "ui2code";
 }
 
 async function runLynnCliWorker(input: {
@@ -336,6 +368,56 @@ async function runLynnCliWorker(input: {
   return exitCode;
 }
 
+async function runLynnVisionWorker(input: {
+  args: ParsedArgs;
+  brief: WorkerBrief;
+  worktree: string;
+  workerId: string;
+  agent: string;
+}): Promise<number> {
+  if (!isVisionTask(input.brief.taskType)) return runLynnCliWorker(input);
+  if (!input.brief.image) {
+    emit({
+      type: "worker.error",
+      workerId: input.workerId,
+      agent: input.agent,
+      code: "vision_image_missing",
+      message: "MiMo vision worker requires an Image section in the brief",
+      recoverable: true,
+    });
+    return 2;
+  }
+
+  const imagePath = path.isAbsolute(input.brief.image) ? input.brief.image : path.resolve(input.worktree, input.brief.image);
+  const prompt = buildVisionPrompt(input.brief.taskType, input.brief.objective || input.brief.title);
+  const content = await buildImageContentParts(imagePath, prompt);
+  const brainUrl = getStringFlag(input.args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
+  const reasoning = parseReasoningOptions(input.args);
+  emit({ type: "shell.started", workerId: input.workerId, agent: input.agent, command: `Lynn ${input.brief.taskType}`, approval: "auto" });
+  const started = Date.now();
+  try {
+    for await (const event of streamBrainChat({
+      brainUrl,
+      reasoning,
+      messages: [{ role: "user", content }],
+    })) {
+      if (event.type === "assistant.delta") emit({ type: "assistant.delta", workerId: input.workerId, agent: input.agent, text: event.text });
+      else if (event.type === "reasoning.delta") emit({ type: "reasoning.delta", workerId: input.workerId, agent: input.agent, text: event.text, hidden: event.hidden });
+      else if (event.type === "provider") emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: `provider: ${event.activeProvider}`, data: event });
+      else if (event.type === "tool_progress") emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: `${event.name}: ${event.event}`, data: event });
+      else if (event.type === "usage") emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: "usage", data: event.usage });
+      else if (event.type === "brain.error") throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
+    }
+    emit({ type: "shell.finished", workerId: input.workerId, agent: input.agent, command: `Lynn ${input.brief.taskType}`, ok: true, exitCode: 0, ms: Date.now() - started });
+    return 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emit({ type: "worker.error", workerId: input.workerId, agent: input.agent, code: "vision_worker_failed", message, recoverable: true });
+    emit({ type: "shell.finished", workerId: input.workerId, agent: input.agent, command: `Lynn ${input.brief.taskType}`, ok: false, exitCode: 1, ms: Date.now() - started });
+    return 1;
+  }
+}
+
 export async function runWorker(args: ParsedArgs): Promise<number> {
   const subcommand = args.positionals[0] || "";
   if (subcommand && subcommand !== "run") {
@@ -366,8 +448,10 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
   emit({ type: "worker.progress", workerId, agent, message: mock ? `Mock worker loaded: ${brief.title}` : `Worker loaded: ${brief.title}` });
 
   const externalCommand = getStringFlag(args.flags, "agent-command") || buildDefaultAgentCommand(agent, path.resolve(briefPath), path.resolve(worktree), markdown);
-  if (!mock && agent === "lynn-cli") {
-    const exitCode = await runLynnCliWorker({ args, brief, worktree, workerId, agent });
+  if (!mock && isBuiltInLynnWorker(agent)) {
+    const exitCode = isVisionTask(brief.taskType)
+      ? await runLynnVisionWorker({ args, brief, worktree, workerId, agent })
+      : await runLynnCliWorker({ args, brief, worktree, workerId, agent });
     await emitGitDiff(workerId, agent, worktree);
     emit({ type: "worker.finished", workerId, agent, ok: exitCode === 0, exitCode, summary: exitCode === 0 ? "lynn-cli worker completed" : "lynn-cli worker failed" });
     return exitCode;
