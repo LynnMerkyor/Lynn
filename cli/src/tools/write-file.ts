@@ -5,7 +5,7 @@ import type { ClientToolResult, ToolRunContext } from "./types.js";
 
 export async function writeFileTool(ctx: ToolRunContext, inputPath: string, text: string): Promise<ClientToolResult> {
   if (ctx.approval !== "yolo") {
-    throw new Error("write_file requires --approval yolo in the v0.80 scaffold");
+    throw new Error("write_file requires YOLO approval. Run /mode yolo in interactive code mode or pass --approval yolo.");
   }
   const filePath = await resolveInsideWorkspace(ctx.cwd, inputPath);
   await fs.mkdir(path.dirname(filePath), { recursive: true });

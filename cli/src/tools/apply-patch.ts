@@ -16,7 +16,7 @@ function appendLimited(current: string, next: string): string {
 export async function applyPatchTool(ctx: ToolRunContext, patch: string): Promise<ClientToolResult> {
   if (!patch.trim()) throw new Error("--text or positional patch is required for apply_patch");
   if (ctx.approval !== "yolo") {
-    throw new Error("apply_patch requires --approval yolo in the v0.80 scaffold");
+    throw new Error("apply_patch requires YOLO approval. Run /mode yolo in interactive code mode or pass --approval yolo.");
   }
   if (/^\s*\*\*\* Begin Patch/m.test(patch)) {
     return applyCodexPatch(ctx, patch);

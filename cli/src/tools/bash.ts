@@ -13,7 +13,7 @@ function appendLimited(current: string, next: string): string {
 export async function bashTool(ctx: ToolRunContext, command: string): Promise<ClientToolResult> {
   if (!command) throw new Error("--command is required for bash");
   if (ctx.approval !== "yolo") {
-    throw new Error("bash requires --approval yolo in the v0.80 scaffold");
+    throw new Error("bash requires YOLO approval. Run /mode yolo in interactive code mode or pass --approval yolo.");
   }
   return new Promise((resolve) => {
     const child = spawn(command, {
