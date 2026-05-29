@@ -239,6 +239,7 @@ checks.push(run("implicit chat with global flags", ["--mock-brain"], { stdinLine
 }));
 
 checks.push(runBareTtyStartupSmoke());
+checks.push(runCodeBareTtyStartupSmoke());
 
 checks.push(run("chat brain offline recovery", ["chat", "--brain-url", "http://127.0.0.1:1"], { stdinLines: ["hi", "/exit"] }).then((r) => {
   assertIncludes(r.name, r.stdout, "Brain 离线");
@@ -613,6 +614,32 @@ async function runBareTtyStartupSmoke() {
   const marker = fs.existsSync(markerPath) ? fs.readFileSync(markerPath, "utf8") : "";
   await fs.promises.rm(markerPath, { force: true });
   assertIncludes("bare TTY startup", marker, "LYNN_TTY_SMOKE_OK");
+}
+
+async function runCodeBareTtyStartupSmoke() {
+  if (!(await hasExpect())) {
+    process.stderr.write("[cli-smoke] skipping code bare TTY startup smoke: expect not found\n");
+    return;
+  }
+  const markerPath = path.join(os.tmpdir(), `lynn-code-tty-smoke-${process.pid}.txt`);
+  await fs.promises.rm(markerPath, { force: true });
+  const script = [
+    "set timeout 5",
+    "spawn $env(NODE_BIN) $env(CLI_BIN) code --mock-brain",
+    "expect \"Lynn Code\"",
+    "expect \"› \"",
+    "send \"/exit\\r\"",
+    "expect eof",
+    "set marker [open $env(MARKER_PATH) w]",
+    "puts $marker \"LYNN_CODE_TTY_SMOKE_OK\"",
+    "close $marker",
+  ].join("\n");
+  await runProcess("code bare TTY startup", "expect", ["-c", script], {
+    env: { NODE_BIN: nodeBin, CLI_BIN: cliBin, MARKER_PATH: markerPath, LYNN_CLI_BRAIN_TIMEOUT_MS: "50" },
+  });
+  const marker = fs.existsSync(markerPath) ? fs.readFileSync(markerPath, "utf8") : "";
+  await fs.promises.rm(markerPath, { force: true });
+  assertIncludes("code bare TTY startup", marker, "LYNN_CODE_TTY_SMOKE_OK");
 }
 
 function hasExpect() {
