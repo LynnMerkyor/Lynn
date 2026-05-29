@@ -4,7 +4,7 @@ import { runChat } from "./commands/chat.js";
 import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
 import { runPrompt } from "./commands/prompt.js";
-import { runProviders } from "./commands/providers.js";
+import { activeRouteLabel, resolveProvidersInfo, runProviders } from "./commands/providers.js";
 import { runSessions } from "./commands/sessions.js";
 import { runWorker } from "./commands/worker-run.js";
 import { usage } from "./help.js";
@@ -14,7 +14,12 @@ import { readVersionInfo } from "./version.js";
 
 async function main(argv = process.argv.slice(2)): Promise<number> {
   if (argv.length === 0) {
-    process.stdout.write(`${renderStartupBanner()}\n`);
+    const providerInfo = await resolveProvidersInfo({ command: "providers", positionals: [], flags: {} }, 500);
+    process.stdout.write(`${renderStartupBanner({
+      brainUrl: providerInfo.brainUrl,
+      byokLabel: providerInfo.byokEntry,
+      modelLabel: activeRouteLabel(providerInfo),
+    })}\n`);
     if (process.stdin.isTTY && process.stdout.isTTY) {
       return runChat({ command: "chat", positionals: [], flags: {} }, { intro: false });
     }

@@ -41,7 +41,7 @@ export function providersInfo(partial: Partial<ProvidersInfo> = {}): ProvidersIn
 }
 
 export function renderProvidersInfo(info: ProvidersInfo): string {
-  const active = [info.activeProvider, info.activeModel].filter(Boolean).join(" / ") || info.defaultRoute;
+  const active = activeRouteLabel(info);
   const serverLine = info.server.url
     ? `${info.server.status} · ${info.server.url}${info.server.version ? ` · v${info.server.version}` : ""}`
     : `${info.server.status}${info.server.message ? ` · ${info.server.message}` : ""}`;
@@ -65,7 +65,11 @@ export function renderProvidersInfo(info: ProvidersInfo): string {
   ].join("\n");
 }
 
-export async function resolveProvidersInfo(args: ParsedArgs): Promise<ProvidersInfo> {
+export function activeRouteLabel(info: Pick<ProvidersInfo, "activeProvider" | "activeModel" | "defaultRoute">): string {
+  return [info.activeProvider, info.activeModel].filter(Boolean).join(" / ") || info.defaultRoute;
+}
+
+export async function resolveProvidersInfo(args: ParsedArgs, timeoutMs = 1500): Promise<ProvidersInfo> {
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   const dataDir = getStringFlag(args.flags, "data-dir");
   const serverUrl = getStringFlag(args.flags, "server-url") || process.env.LYNN_SERVER_URL || "";
@@ -89,8 +93,8 @@ export async function resolveProvidersInfo(args: ParsedArgs): Promise<ProvidersI
 
   try {
     const [summary, config] = await Promise.all([
-      fetchLocalServerJson<ProviderSummaryResponse>(lookup, "/api/providers/summary"),
-      fetchLocalServerJson<Record<string, unknown>>(lookup, "/api/config").catch(() => null),
+      fetchLocalServerJson<ProviderSummaryResponse>(lookup, "/api/providers/summary", timeoutMs),
+      fetchLocalServerJson<Record<string, unknown>>(lookup, "/api/config", timeoutMs).catch(() => null),
     ]);
     return {
       ...base,

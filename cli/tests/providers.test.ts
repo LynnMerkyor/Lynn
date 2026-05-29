@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { renderProvidersInfo, runProviders } from "../src/commands/providers.js";
+import { activeRouteLabel, renderProvidersInfo, runProviders } from "../src/commands/providers.js";
 
 describe("providers command", () => {
   it("renders BYOK guidance without exposing keys", () => {
@@ -58,5 +58,16 @@ describe("providers command", () => {
 
     expect(output).toContain("Default route");
     expect(output).toContain("BYOK");
+  });
+
+  it("formats the active route for the startup banner", () => {
+    expect(activeRouteLabel({
+      defaultRoute: "MiMo via local Brain router (auto)",
+      activeProvider: "mimo",
+      activeModel: "mimo-v2.5-pro",
+    })).toBe("mimo / mimo-v2.5-pro");
+    expect(activeRouteLabel({
+      defaultRoute: "MiMo via local Brain router (auto)",
+    })).toBe("MiMo via local Brain router (auto)");
   });
 });
