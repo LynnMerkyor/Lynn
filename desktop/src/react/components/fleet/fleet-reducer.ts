@@ -41,6 +41,14 @@ export interface FleetViolation {
   severity?: FleetSeverity;
 }
 
+export interface FleetToolRun {
+  name: string;
+  argsPreview?: string;
+  running: boolean;
+  ok?: boolean;
+  ms?: number;
+}
+
 export interface FleetVisualResultView {
   taskType: 'see' | 'ground' | 'ui2code';
   image?: string;
@@ -70,6 +78,7 @@ export interface FleetWorkerView {
   diffStat: { files: number; insertions: number; deletions: number } | null;
   /** Path currently being written (last file.changed while running); cleared on git.diff/finish. */
   activeFile?: string;
+  tools: FleetToolRun[];
   tests: FleetTestResult[];
   gate: { ok: boolean; summary: string } | null;
   violations: FleetViolation[];
@@ -99,6 +108,7 @@ export function createWorkerView(workerId: string, agent?: string): FleetWorkerV
     reasoningChunks: 0,
     changedFiles: [],
     diffStat: null,
+    tools: [],
     tests: [],
     gate: null,
     violations: [],
@@ -113,6 +123,20 @@ function upsertChangedFile(list: FleetChangedFile[], file: FleetChangedFile): Fl
   if (idx === -1) return [...list, { ...file }];
   const copy = list.slice();
   copy[idx] = { ...copy[idx], ...file };
+  return copy;
+}
+
+function finishToolRun(list: FleetToolRun[], name: string, ok: boolean, ms?: number): FleetToolRun[] {
+  let idx = -1;
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i].running && list[i].name === name) {
+      idx = i;
+      break;
+    }
+  }
+  if (idx === -1) return [...list, { name, running: false, ok, ms }];
+  const copy = list.slice();
+  copy[idx] = { ...copy[idx], running: false, ok, ms };
   return copy;
 }
 
@@ -166,9 +190,11 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
       next.reasoningChunks = prev.reasoningChunks + 1;
       return next;
     case 'tool.started':
+      next.tools = [...prev.tools, { name: ev.name, argsPreview: ev.argsPreview, running: true }];
       next.log = [...prev.log, `tool ${ev.name}${ev.argsPreview ? ` ${ev.argsPreview}` : ''}`];
       return next;
     case 'tool.finished':
+      next.tools = finishToolRun(prev.tools, ev.name, ev.ok, ev.ms);
       next.log = [...prev.log, `tool ${ev.name} ${ev.ok ? 'ok' : 'fail'}${ev.ms != null ? ` ${ev.ms}ms` : ''}`];
       return next;
     case 'shell.started':

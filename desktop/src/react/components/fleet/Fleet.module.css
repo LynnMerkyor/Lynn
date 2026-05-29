@@ -140,6 +140,7 @@
 }
 
 .workerTests,
+.workerTools,
 .workerFiles {
   margin: 6px 0 0;
   padding-left: 16px;
@@ -147,13 +148,50 @@
 }
 
 .workerTests li,
+.workerTools li,
 .workerFiles li {
   font-family: var(--mono-font, monospace);
   opacity: 0.85;
 }
 
+.workerTools li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
 .workerTests li[data-ok='fail'] {
   color: #e74c3c;
+}
+
+.workerTools li[data-ok='run'] {
+  color: #3498db;
+}
+
+.workerTools li[data-ok='ok'] {
+  color: #27ae60;
+}
+
+.workerTools li[data-ok='fail'] {
+  color: #e74c3c;
+}
+
+.toolName {
+  font-weight: 600;
+}
+
+.toolArgs {
+  opacity: 0.65;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolStatus {
+  margin-left: auto;
+  opacity: 0.75;
+  white-space: nowrap;
 }
 
 .workerFiles li[data-forbidden='1'] {

@@ -102,6 +102,7 @@ export function WorkerCard({
   const canOpen = !!onOpenWorktree && !!worker.worktree;
   const canCopy = worker.log.length > 0;
   const hasActions = canCancel || canRetry || canOpen || canCopy;
+  const recentTools = worker.tools.slice(-6);
   const visualResult = worker.visualResult;
   const visualTaskType = worker.taskType ?? visualResult?.taskType;
   const visualImage = worker.image ?? visualResult?.image;
@@ -247,6 +248,24 @@ export function WorkerCard({
                 <div className={s.diffMeta}>no diff yet (worktree not materialized until the worker really runs)</div>
               )}
             </div>
+          )}
+
+          {recentTools.length > 0 && (
+            <ul className={s.workerTools}>
+              {recentTools.map((tool, idx) => {
+                const state = tool.running ? 'run' : tool.ok ? 'ok' : 'fail';
+                return (
+                  <li key={`${tool.name}-${idx}`} data-ok={state}>
+                    <span className={s.toolName}>{tool.name}</span>
+                    {tool.argsPreview ? <span className={s.toolArgs}>{tool.argsPreview}</span> : null}
+                    <span className={s.toolStatus}>
+                      {tool.running ? 'running…' : tool.ok ? 'ok' : 'failed'}
+                      {!tool.running && tool.ms != null ? ` · ${tool.ms}ms` : ''}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
           )}
 
           {worker.tests.length > 0 && (

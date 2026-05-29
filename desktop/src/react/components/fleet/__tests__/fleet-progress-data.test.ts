@@ -70,4 +70,39 @@ describe('worker.progress data (vision + runner context)', () => {
       files: [{ path: 'desktop/src/react/App.tsx', kind: 'suggested' }],
     });
   });
+
+  it('tracks tool started and finished events as structured tool runs', () => {
+    let v = createWorkerView('w1');
+    v = reduceFleetWorker(v, {
+      type: 'tool.started',
+      workerId: 'w1',
+      name: 'read_file',
+      argsPreview: '{"path":"README.md"}',
+    });
+    expect(v.tools).toEqual([
+      { name: 'read_file', argsPreview: '{"path":"README.md"}', running: true },
+    ]);
+
+    v = reduceFleetWorker(v, {
+      type: 'tool.finished',
+      workerId: 'w1',
+      name: 'read_file',
+      ok: true,
+      ms: 12,
+    });
+    expect(v.tools).toEqual([
+      { name: 'read_file', argsPreview: '{"path":"README.md"}', running: false, ok: true, ms: 12 },
+    ]);
+  });
+
+  it('records unmatched tool finished events without losing failures', () => {
+    const v = reduceFleetWorker(createWorkerView('w1'), {
+      type: 'tool.finished',
+      workerId: 'w1',
+      name: 'bash',
+      ok: false,
+      ms: 33,
+    });
+    expect(v.tools).toEqual([{ name: 'bash', running: false, ok: false, ms: 33 }]);
+  });
 });
