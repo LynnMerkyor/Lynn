@@ -1,0 +1,67 @@
+import { describe, expect, it } from "vitest";
+import {
+  FLEET_EVENT_SCHEMA_VERSION,
+  FLEET_WORKER_EVENT_TYPES,
+  isFleetWorkerEventType,
+  makeFleetProgressEvent,
+  parseFleetJsonLine,
+  validateFleetWorkerEvent,
+} from "../fleet-events.js";
+
+describe("fleet-events protocol", () => {
+  it("accepts a valid worker.started event", () => {
+    const result = validateFleetWorkerEvent({
+      schemaVersion: FLEET_EVENT_SCHEMA_VERSION,
+      type: "worker.started",
+      workerId: "w1",
+      agent: "codex-cli",
+      cwd: "/repo",
+      worktree: "/repo/worktrees/w1",
+      branch: "cli-1/task",
+      pid: 123,
+    });
+
+    expect(result).toEqual({ ok: true, errors: [] });
+  });
+
+  it("rejects missing required fields", () => {
+    const result = validateFleetWorkerEvent({
+      type: "test.finished",
+      command: "npm test",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join("\n")).toContain("ok");
+  });
+
+  it("parses valid JSONL lines", () => {
+    const parsed = parseFleetJsonLine(JSON.stringify({
+      type: "worker.finished",
+      ok: true,
+      exitCode: 0,
+      summary: "done",
+    }));
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.event?.type).toBe("worker.finished");
+  });
+
+  it("keeps invalid JSON as a recoverable parse result", () => {
+    const parsed = parseFleetJsonLine("not-json");
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.raw).toBe("not-json");
+    expect(parsed.errors[0]).toContain("invalid fleet JSONL");
+  });
+
+  it("exposes known event types and progress helper", () => {
+    expect(FLEET_WORKER_EVENT_TYPES).toContain("worker.violation");
+    expect(isFleetWorkerEventType("git.diff")).toBe(true);
+    expect(isFleetWorkerEventType("unknown")).toBe(false);
+    expect(makeFleetProgressEvent("hello", { workerId: "w2" })).toEqual({
+      type: "worker.progress",
+      message: "hello",
+      workerId: "w2",
+    });
+  });
+});
