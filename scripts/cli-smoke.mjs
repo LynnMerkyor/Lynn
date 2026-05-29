@@ -368,6 +368,20 @@ async function runStepFunByokFallbackSmoke() {
     if (!seen) throw new Error("StepFun BYOK smoke did not call the provider");
     if (seen.auth !== "Bearer step-smoke-key") throw new Error(`StepFun BYOK smoke used wrong auth: ${seen.auth}`);
     if (seen.body.model !== "step-3.7-flash") throw new Error(`StepFun BYOK smoke used wrong model: ${seen.body.model}`);
+    const chat = await run("stepfun chat byok fallback", [
+      "chat",
+      "--data-dir",
+      byokDataDir,
+      "--preset",
+      "stepfun",
+      "--base-url",
+      baseUrl,
+      "--api-key",
+      "step-smoke-key",
+      "--brain-url",
+      "http://127.0.0.1:1",
+    ], { stdinLines: ["hello from chat", "/exit"], env: { LYNN_CLI_BRAIN_TIMEOUT_MS: "50" } });
+    assertIncludes(chat.name, chat.stdout, "ok from stepfun");
   } finally {
     await new Promise((resolve) => server.close(() => resolve()));
   }
