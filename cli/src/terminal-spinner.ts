@@ -1,3 +1,5 @@
+import { cyan, supportsColor } from "./terminal-style.js";
+
 export class TerminalSpinner {
   private timer: ReturnType<typeof setInterval> | null = null;
   private frame = 0;
@@ -24,10 +26,17 @@ export class TerminalSpinner {
   }
 
   private render(): void {
-    const width = 18;
-    const pos = this.frame % (width + 1);
-    const bar = Array.from({ length: width }, (_, i) => (i === pos ? "█" : i === pos - 1 || i === pos + 1 ? "▓" : "░")).join("");
-    this.stream.write(`\r${this.label} ${bar}`);
+    const width = 28;
+    const pos = this.frame % (width + 5);
+    const color = supportsColor(this.stream);
+    const bar = Array.from({ length: width }, (_, i) => {
+      const distance = Math.abs(i - pos);
+      if (distance === 0) return "█";
+      if (distance === 1) return "▓";
+      if (distance === 2) return "▒";
+      return "·";
+    }).join("");
+    this.stream.write(`\r${this.label} ${cyan(bar, color)}`);
     this.frame += 1;
   }
 }

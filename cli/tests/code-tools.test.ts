@@ -154,13 +154,13 @@ describe("code tools", () => {
   it("renders an interactive code-mode intro with MiMo route and permission mode", () => {
     const intro = renderCodeIntro({ approval: "ask", sandbox: "workspace-write" });
 
-    expect(intro).toContain("Lynn code mode");
+    expect(intro).toContain(">_ Lynn Code");
     expect(intro).toContain("MiMo via local Brain router");
     expect(intro).toContain("ask / workspace-write");
     expect(intro).toContain("Shift+Tab");
     expect(intro).toContain("think:");
     expect(intro).toContain("/fast");
-    expect(intro).toContain("apply_patch");
+    expect(intro).toContain("patch");
     expect(intro).toContain("/mode yolo");
   });
 
@@ -176,7 +176,7 @@ describe("code tools", () => {
     expect(header).toContain("MiMo via local Brain router");
     expect(header).toContain("/repo");
     expect(header).toContain("ask / workspace-write");
-    expect(header).toContain("reasoning auto");
+    expect(header).toContain("think auto");
     expect(header).toContain("max steps 8");
   });
 

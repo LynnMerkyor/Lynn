@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { readVersionInfo } from "./version.js";
 
-function displayCwd(cwd: string): string {
+export function displayCwd(cwd: string): string {
   const home = os.homedir();
   const relative = path.relative(home, cwd);
   if (!relative) return "~";
@@ -10,12 +10,12 @@ function displayCwd(cwd: string): string {
   return cwd;
 }
 
-function padLine(label: string, value: string, hint?: string): string {
+export function padLine(label: string, value: string, hint?: string): string {
   const left = `${label}:`.padEnd(11, " ");
   return `${left}${value}${hint ? `   ${hint}` : ""}`;
 }
 
-function box(lines: string[]): string {
+export function box(lines: string[]): string {
   const width = Math.max(...lines.map((line) => line.length), 43);
   const top = `╭${"─".repeat(width + 2)}╮`;
   const bottom = `╰${"─".repeat(width + 2)}╯`;

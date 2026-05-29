@@ -7,6 +7,7 @@ import { renderProvidersInfo, resolveProvidersInfo } from "./providers.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
+import { dangerLine, red, supportsColor } from "../terminal-style.js";
 
 export async function runChat(args: ParsedArgs, options: { intro?: boolean; brainReachable?: boolean } = {}): Promise<number> {
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
@@ -58,7 +59,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     }
     if (text.startsWith("/mode ")) {
       const result = applyModeCommand(mode, text.slice(6).trim());
-      output.write(`${result}\nmode: ${renderMode(mode)}\n\n`);
+      output.write(renderInteractiveModeChange(result, mode, supportsColor(output)));
       return "continue";
     }
     if (text === "/model" || text === "/providers") {
@@ -199,6 +200,13 @@ export function toggleMode(mode: ChatMode): string {
   return applyModeCommand(mode, "yolo");
 }
 
+function renderInteractiveModeChange(message: string, mode: ChatMode, color: boolean): string {
+  const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
+  const label = dangerous ? red(renderMode(mode), color) : renderMode(mode);
+  const warning = dangerous ? `\n${dangerLine("YOLO mode enabled: local edits and shell commands will not ask again.", color)}` : "";
+  return `✓ ${message}\nmode: ${label}${warning}\n\n`;
+}
+
 export function applyReasoningCommand(current: ReturnType<typeof parseReasoningOptions>, raw: string): { reasoning: ReturnType<typeof parseReasoningOptions>; message: string } {
   const value = raw.toLowerCase();
   if (value === "off" || value === "auto" || value === "low" || value === "medium" || value === "high" || value === "xhigh") {
@@ -218,7 +226,7 @@ export function installModeHotkey({ input, output, readlineInterface, mode }: Mo
   const onKeypress = (_chunk: string, key: KeypressLike) => {
     if (!isModeToggleKeypress(key)) return;
     const message = toggleMode(mode);
-    output.write(`\n${message}\nmode: ${renderMode(mode)}\n`);
+    output.write(`\n${renderInteractiveModeChange(message, mode, supportsColor(output))}`);
   };
   input.on("keypress", onKeypress);
   return () => {

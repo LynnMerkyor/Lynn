@@ -10,6 +10,8 @@ import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } 
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
+import { bold, dangerLine, red, supportsColor } from "../terminal-style.js";
+import { box, displayCwd, padLine } from "../startup.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
 import { applyModeCommand, applyReasoningCommand, installModeHotkey, renderMode, type ChatMode } from "./chat.js";
@@ -104,10 +106,10 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   let reasoning = parseReasoningOptions(args);
   const rl = readline.createInterface({ input, output, terminal: true });
   const cleanupModeHotkey = installModeHotkey({ input, output, readlineInterface: rl, mode });
-  output.write(renderCodeIntro(mode, reasoning));
+  output.write(renderCodeIntro(mode, reasoning, { color: supportsColor(output) }));
   try {
     for (;;) {
-      const raw = await rl.question("code> ");
+      const raw = await rl.question("› ");
       const text = raw.trim();
       if (!text) continue;
       if (text === "/exit" || text === "/quit") break;
@@ -121,22 +123,22 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       }
       if (text === "/fast") {
         reasoning = { ...reasoning, effort: "off" };
-        output.write("Fast mode enabled: MiMo/Brain thinking is off for quick coding turns.\n\n");
+        output.write("✓ fast mode · thinking off\n\n");
         continue;
       }
       if (text === "/think") {
         reasoning = { ...reasoning, effort: "high" };
-        output.write("Thinking mode enabled: reasoning effort is high.\n\n");
+        output.write("✓ thinking mode · high\n\n");
         continue;
       }
       if (text === "/reasoning") {
-        output.write(`reasoning: ${reasoning.effort} · display ${reasoning.display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.\n\n`);
+        output.write(`think: ${reasoning.effort} / display ${reasoning.display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.\n\n`);
         continue;
       }
       if (text.startsWith("/reasoning ")) {
         const result = applyReasoningCommand(reasoning, text.slice(11).trim());
         reasoning = result.reasoning;
-        output.write(`${result.message}\nreasoning: ${reasoning.effort} · display ${reasoning.display}\n\n`);
+        output.write(`✓ ${result.message}\nthink: ${reasoning.effort} / display ${reasoning.display}\n\n`);
         continue;
       }
       if (text === "/mode") {
@@ -145,7 +147,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       }
       if (text.startsWith("/mode ")) {
         const result = applyModeCommand(mode, text.slice(6).trim());
-        output.write(`${result}\nmode: ${renderMode(mode)}\n\n`);
+        output.write(renderModeChange(result, mode, supportsColor(output)));
         continue;
       }
       const taskArgs: ParsedArgs = {
@@ -174,17 +176,42 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   return 0;
 }
 
-export function renderCodeIntro(mode: ChatMode, reasoning = parseReasoningOptions({ command: "code", positionals: [], flags: {} })): string {
-  return [
-    "Lynn code mode",
-    "model: MiMo via local Brain router (auto)",
-    `mode:  ${renderMode(mode)}   /mode or Shift+Tab to change`,
-    `think: ${reasoning.effort} / display ${reasoning.display}   /fast or /think`,
-    "tools: read_file, grep, glob, apply_patch, bash, write_file",
+export function renderCodeIntro(
+  mode: ChatMode,
+  reasoning = parseReasoningOptions({ command: "code", positionals: [], flags: {} }),
+  options: { color?: boolean } = {},
+): string {
+  const color = !!options.color;
+  const renderedMode = mode.approval === "yolo" || mode.sandbox === "danger-full-access"
+    ? red(renderMode(mode), color)
+    : renderMode(mode);
+  const lines = [
+    `>_ ${bold("Lynn Code", color)}`,
     "",
-    "Type a coding task, /tools, /fast, /think, /mode yolo, /help, or /exit.",
+    padLine("model", "MiMo via local Brain router", "/model"),
+    padLine("mode", renderedMode, "Shift+Tab"),
+    padLine("think", `${reasoning.effort} / display ${reasoning.display}`, "/fast /think"),
+    padLine("tools", "read, grep, glob, patch, shell", "/tools"),
+    padLine("directory", displayCwd(process.cwd())),
+  ];
+  return [
+    box(lines),
+    "",
+    mode.approval === "yolo" || mode.sandbox === "danger-full-access"
+      ? `  ${dangerLine("YOLO mode can edit files and run shell commands without asking.", color)}`
+      : "  Tip: Type a coding task. Use /fast for speed, /think for deeper MiMo reasoning.",
+    "       /mode yolo enables local edits and shell commands; /exit leaves.",
     "",
   ].join("\n");
+}
+
+function renderModeChange(message: string, mode: ChatMode, color: boolean): string {
+  const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
+  const modeLabel = dangerous ? red(renderMode(mode), color) : renderMode(mode);
+  const warning = dangerous
+    ? `\n${dangerLine("YOLO mode enabled: local edits and shell commands will not ask again.", color)}`
+    : "";
+  return `✓ ${message}\nmode: ${modeLabel}${warning}\n\n`;
 }
 
 export function renderCodeTaskHeader(inputData: {
@@ -197,9 +224,10 @@ export function renderCodeTaskHeader(inputData: {
 }): string {
   const route = inputData.mockBrain ? "mock Brain" : "MiMo via local Brain router";
   return [
-    `Lynn code · ${route}`,
-    `cwd: ${inputData.cwd}`,
-    `mode: ${inputData.approval} / ${inputData.sandbox} · reasoning ${inputData.reasoning.effort} · max steps ${inputData.maxSteps}`,
+    `╭─ Lynn code · ${route}`,
+    `│ cwd: ${inputData.cwd}`,
+    `│ mode: ${inputData.approval} / ${inputData.sandbox} · think ${inputData.reasoning.effort} · max steps ${inputData.maxSteps}`,
+    "╰─",
     "",
   ].join("\n");
 }
