@@ -4,6 +4,7 @@ import { type ParsedArgs, getStringFlag, hasFlag } from "../args.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { fetchLocalServerJson, readLocalServerInfo, type LocalServerLookup } from "../local-server.js";
 import {
+  deleteCliProviderProfile,
   providerProfilePath,
   readCliProviderProfile,
   redactApiKey,
@@ -200,6 +201,28 @@ export async function runProviders(args: ParsedArgs, json = hasFlag(args.flags, 
     if (json) writeJsonLine({ type: "providers.test", ts: nowIso(), source: resolved.source, ...result });
     else process.stdout.write(`${renderProviderTestResult(result)}\n`);
     return result.ok ? 0 : 1;
+  }
+
+  if (subcommand === "unset" || subcommand === "clear" || subcommand === "reset") {
+    const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
+    const result = await deleteCliProviderProfile(dataDir);
+    const payload = {
+      type: "providers.unset",
+      ts: nowIso(),
+      ok: true,
+      deleted: result.deleted,
+      path: result.path,
+    };
+    if (json) writeJsonLine(payload);
+    else {
+      process.stdout.write([
+        result.deleted ? t("providers.unset.deleted") : t("providers.unset.missing"),
+        `${t("providers.unset.path")}: ${result.path}`,
+        "",
+        t("providers.unset.hint"),
+      ].join("\n") + "\n");
+    }
+    return 0;
   }
 
   if (subcommand === "set") {

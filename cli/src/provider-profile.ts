@@ -59,6 +59,17 @@ export async function writeCliProviderProfile(dataDir: string, profile: CliProvi
   await fs.chmod(target, 0o600).catch(() => undefined);
 }
 
+export async function deleteCliProviderProfile(dataDir: string): Promise<{ path: string; deleted: boolean }> {
+  const target = providerProfilePath(dataDir);
+  try {
+    await fs.stat(target);
+    await fs.rm(target, { force: true });
+    return { path: target, deleted: true };
+  } catch {
+    return { path: target, deleted: false };
+  }
+}
+
 export function validateCliProviderProfile(profile: CliProviderProfile): CliProviderProfile {
   const provider = profile.provider.trim() || "openai-compatible";
   const baseUrl = normalizeBaseUrl(profile.baseUrl);

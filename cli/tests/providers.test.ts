@@ -182,6 +182,64 @@ describe("providers command", () => {
     expect(output).not.toContain("sk-secret-1234");
   });
 
+  it("unsets the CLI BYOK provider so the CLI returns to the default Brain route", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-provider-unset-"));
+    await writeCliProviderProfile(dataDir, {
+      provider: "openai-compatible",
+      baseUrl: "https://api.example.com/v1",
+      model: "example-model",
+      apiKey: "sk-secret-1234",
+    });
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runProviders(parseArgs([
+        "providers",
+        "unset",
+        "--data-dir",
+        dataDir,
+      ]), false)).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    await expect(readCliProviderProfile(dataDir)).resolves.toBeNull();
+    expect(output).toContain("Cleared CLI-only BYOK provider");
+    expect(output).toContain(providerProfilePath(dataDir));
+    expect(output).not.toContain("sk-secret-1234");
+  });
+
+  it("prints JSON when unsetting a missing CLI BYOK provider", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-provider-unset-json-"));
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runProviders(parseArgs([
+        "providers",
+        "unset",
+        "--data-dir",
+        dataDir,
+        "--json",
+      ]))).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    const event = JSON.parse(output) as { type: string; deleted: boolean; path: string };
+    expect(event.type).toBe("providers.unset");
+    expect(event.deleted).toBe(false);
+    expect(event.path).toBe(providerProfilePath(dataDir));
+  });
+
   it("supports MiMo as a CLI BYOK preset without bundling a key", async () => {
     const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-mimo-"));
     const original = process.stdout.write;
