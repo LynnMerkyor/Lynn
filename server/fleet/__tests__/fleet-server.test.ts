@@ -159,6 +159,28 @@ describe("spawnWorker", () => {
       recoverable: true,
     }));
   });
+
+  it("does not duplicate worker_exit when the worker already emitted a terminal error", async () => {
+    const events: Array<{ type: string; code?: string; message?: string; recoverable?: boolean }> = [];
+    spawnWorker({
+      command: process.execPath,
+      args: ["-e", "process.stdout.write(JSON.stringify({type:'worker.error', code:'tool_failed', message:'tool failed', recoverable:true})); process.exit(2)"],
+      cwd: process.cwd(),
+      env: process.env,
+      workerId: "w-terminal-error",
+    }, (event) => events.push(event as { type: string; code?: string; message?: string; recoverable?: boolean }));
+
+    await waitFor(() => events.some((event) => event.type === "worker.progress" && event.message?.includes("exited")));
+
+    expect(events.filter((event) => event.type === "worker.error")).toEqual([
+      expect.objectContaining({
+        type: "worker.error",
+        code: "tool_failed",
+        message: "tool failed",
+        recoverable: true,
+      }),
+    ]);
+  });
 });
 
 describe("worktree porcelain parser", () => {

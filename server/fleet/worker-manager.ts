@@ -148,10 +148,18 @@ export function spawnWorker(opts: SpawnWorkerOptions, onEvent: (e: FleetWorkerEv
     stdio: ["ignore", "pipe", "pipe"],
   });
   const parse = createLineParser(opts.workerId);
+  let sawWorkerTerminalEvent = false;
+
+  function emitParsedEvent(event: FleetWorkerEvent): void {
+    if (event.type === "worker.finished" || event.type === "worker.error") {
+      sawWorkerTerminalEvent = true;
+    }
+    onEvent(event);
+  }
 
   child.stdout?.setEncoding("utf8");
   child.stdout?.on("data", (chunk: string) => {
-    for (const e of parse(chunk)) onEvent(e);
+    for (const e of parse(chunk)) emitParsedEvent(e);
   });
   child.stderr?.setEncoding("utf8");
   child.stderr?.on("data", (chunk: string) => {
@@ -167,8 +175,8 @@ export function spawnWorker(opts: SpawnWorkerOptions, onEvent: (e: FleetWorkerEv
     });
   });
   child.on("close", (code: number | null) => {
-    for (const e of parse.flush()) onEvent(e);
-    if (typeof code === "number" && code !== 0) {
+    for (const e of parse.flush()) emitParsedEvent(e);
+    if (typeof code === "number" && code !== 0 && !sawWorkerTerminalEvent) {
       onEvent({
         type: "worker.error",
         workerId: opts.workerId,
