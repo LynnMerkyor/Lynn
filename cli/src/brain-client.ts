@@ -165,14 +165,19 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
   }, request.reasoning);
 
   let response: Response;
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), brainRequestTimeoutMs(!!request.fallbackProvider));
   try {
     response = await fetch(new URL("/v1/chat/completions", request.brainUrl), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
+      signal: abort.signal,
     });
   } catch (error) {
     throw new BrainConnectionError(request.brainUrl, error);
+  } finally {
+    clearTimeout(timer);
   }
   if (!response.ok || !response.body) {
     throw new Error(`Brain request failed: ${response.status} ${response.statusText}`.trim());
@@ -247,6 +252,13 @@ export function chatCompletionsUrl(baseUrl: string): URL {
   const cleanPath = url.pathname.replace(/\/+$/, "");
   url.pathname = cleanPath.endsWith("/chat/completions") ? cleanPath : `${cleanPath}/chat/completions`;
   return url;
+}
+
+function brainRequestTimeoutMs(hasFallbackProvider: boolean): number {
+  const raw = process.env.LYNN_CLI_BRAIN_TIMEOUT_MS;
+  const parsed = raw ? Number(raw) : NaN;
+  if (Number.isFinite(parsed) && parsed > 0) return Math.max(250, Math.min(30_000, parsed));
+  return hasFallbackProvider ? 1200 : 5000;
 }
 
 function providerHeaders(provider: CliProviderProfile): Record<string, string> {

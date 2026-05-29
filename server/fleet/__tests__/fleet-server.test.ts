@@ -5,6 +5,7 @@ import { createLineParser } from "../worker-manager.js";
 import { parseWorktreePorcelain } from "../worktree-manager.js";
 import { FleetHub, type FleetBrief } from "../fleet-hub.js";
 import { resolveCliCommand, cliRuntimeAvailable } from "../worker-command.js";
+import { DEFAULT_FLEET_REGISTRY } from "../registry.js";
 
 describe("forbidden-guard", () => {
   it("matches ** across segments and * within one", () => {
@@ -61,6 +62,15 @@ describe("worktree porcelain parser", () => {
 });
 
 describe("FleetHub.dispatch", () => {
+  it("exposes StepFun 3.7 Flash as an enabled Lynn worker profile", () => {
+    expect(DEFAULT_FLEET_REGISTRY.find((agent) => agent.id === "stepfun-flash")).toMatchObject({
+      label: "StepFun 3.7 Flash (fast coding)",
+      bin: "lynn",
+      supportsJsonl: true,
+      enabled: true,
+    });
+  });
+
   it("registers a worker and broadcasts started -> claims -> progress as fleet:event", async () => {
     const sent: Array<{ type: string; event: { type: string } }> = [];
     const hub = new FleetHub("/repo", (m) => sent.push(m as { type: string; event: { type: string } }), () => "T");

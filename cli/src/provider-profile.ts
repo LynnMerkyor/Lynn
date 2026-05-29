@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getStringFlag, type ParsedArgs } from "./args.js";
+import { resolveProviderPreset } from "./provider-presets.js";
 import { resolveDataDir } from "./session/store.js";
 
 export interface CliProviderProfile {
@@ -71,20 +72,24 @@ export function validateCliProviderProfile(profile: CliProviderProfile): CliProv
 
 export async function resolveCliProviderProfile(args: ParsedArgs): Promise<ResolvedCliProviderProfile | null> {
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
+  const fileProfile = await readCliProviderProfile(dataDir);
   const flagProfile = readFlagProviderProfile(args);
-  if (flagProfile) return { profile: validateCliProviderProfile(flagProfile), source: "flags" };
+  if (flagProfile) {
+    const storedApiKey = matchingStoredApiKey(flagProfile, fileProfile);
+    return { profile: validateCliProviderProfile({ ...flagProfile, apiKey: flagProfile.apiKey || storedApiKey }), source: "flags" };
+  }
   const envProfile = readEnvProviderProfile();
   if (envProfile) return { profile: validateCliProviderProfile(envProfile), source: "env" };
-  const fileProfile = await readCliProviderProfile(dataDir);
   return fileProfile ? { profile: fileProfile, source: "file" } : null;
 }
 
 export function readFlagProviderProfile(args: ParsedArgs): CliProviderProfile | null {
-  const baseUrl = getStringFlag(args.flags, "base-url", "api-base");
-  const model = getStringFlag(args.flags, "model");
+  const preset = resolveProviderPreset(getStringFlag(args.flags, "preset"));
+  const baseUrl = getStringFlag(args.flags, "base-url", "api-base") || preset?.baseUrl || null;
+  const model = getStringFlag(args.flags, "model") || preset?.model || null;
   const apiKey = getStringFlag(args.flags, "api-key");
-  const provider = getStringFlag(args.flags, "provider") || "openai-compatible";
-  if (!baseUrl && !model && !apiKey) return null;
+  const provider = getStringFlag(args.flags, "provider") || preset?.provider || "openai-compatible";
+  if (!baseUrl && !model && !apiKey && !preset) return null;
   return {
     provider,
     baseUrl: baseUrl || "",
@@ -109,4 +114,12 @@ export function readEnvProviderProfile(env: NodeJS.ProcessEnv = process.env): Cl
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function matchingStoredApiKey(flagProfile: CliProviderProfile, fileProfile: CliProviderProfile | null): string | undefined {
+  if (!fileProfile?.apiKey) return undefined;
+  if (fileProfile.provider !== flagProfile.provider) return undefined;
+  if (normalizeBaseUrl(fileProfile.baseUrl) !== normalizeBaseUrl(flagProfile.baseUrl)) return undefined;
+  if (fileProfile.model !== flagProfile.model) return undefined;
+  return fileProfile.apiKey;
 }

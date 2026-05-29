@@ -396,7 +396,7 @@ function buildLynnCodeWorkerTask(brief: WorkerBrief): string {
 }
 
 function isBuiltInLynnWorker(agent: string): boolean {
-  return agent === "lynn-cli" || agent === "mimo-vl" || agent === "mimo-pro" || agent === "mimo-fast";
+  return agent === "lynn-cli" || agent === "mimo-vl" || agent === "mimo-pro" || agent === "mimo-fast" || agent === "stepfun-flash";
 }
 
 function isVisionTask(taskType: WorkerBrief["taskType"]): taskType is VisionCommand {
@@ -425,6 +425,10 @@ async function runLynnCliWorker(input: {
   if (reasoning) flags.reasoning = reasoning;
   const showReasoning = getStringFlag(input.args.flags, "show-reasoning");
   if (showReasoning) flags["show-reasoning"] = showReasoning;
+  const preset = workerProviderPreset(input.agent);
+  if (preset && !getStringFlag(input.args.flags, "preset") && !getStringFlag(input.args.flags, "base-url", "api-base") && !getStringFlag(input.args.flags, "model")) {
+    flags.preset = preset;
+  }
   copyProviderFlags(input.args.flags, flags);
   const exitCode = await runCode({ command: "code", positionals: [task], flags });
   const ok = exitCode === 0;
@@ -433,6 +437,11 @@ async function runLynnCliWorker(input: {
     emit({ type: "worker.error", workerId: input.workerId, agent: input.agent, code: "worker_exit_nonzero", message: `lynn-cli worker exited with ${exitCode}`, recoverable: true });
   }
   return exitCode;
+}
+
+export function workerProviderPreset(agent: string): string | null {
+  if (agent === "stepfun-flash") return "stepfun";
+  return null;
 }
 
 async function runLynnVisionWorker(input: {
@@ -501,7 +510,7 @@ async function runLynnVisionWorker(input: {
 }
 
 function copyProviderFlags(from: Record<string, string | boolean>, to: Record<string, string | boolean>): void {
-  for (const key of ["provider", "base-url", "api-base", "api-key", "model", "data-dir"]) {
+  for (const key of ["provider", "preset", "base-url", "api-base", "api-key", "model", "data-dir"]) {
     const value = from[key];
     if (typeof value === "string" && value) to[key] = value;
   }

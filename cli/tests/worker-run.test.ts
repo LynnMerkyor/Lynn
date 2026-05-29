@@ -13,6 +13,7 @@ import {
   parseWorkerBrief,
   parseWorkerEventLine,
   runWorker,
+  workerProviderPreset,
 } from "../src/commands/worker-run.js";
 import { parseArgs } from "../src/args.js";
 
@@ -148,6 +149,11 @@ describe("worker-run scaffold", () => {
 
   it("returns null for unknown default worker agents", () => {
     expect(buildDefaultAgentCommand("custom", "/tmp/task.md", "/tmp/wt", "task")).toBeNull();
+  });
+
+  it("maps StepFun Fleet workers to the StepFun BYOK preset", () => {
+    expect(workerProviderPreset("stepfun-flash")).toBe("stepfun");
+    expect(workerProviderPreset("lynn-cli")).toBeNull();
   });
 
   it("collects git diff summaries from a worktree", async () => {

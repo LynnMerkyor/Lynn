@@ -24,6 +24,7 @@ export const DEFAULT_FLEET_REGISTRY: FleetAgentEntry[] = [
   { id: "mimo-vl", label: "MiMo Vision (mimo-v2.5)", bin: "lynn", supportsJsonl: true, enabled: true },
   { id: "mimo-pro", label: "MiMo Pro (long-endurance)", bin: "lynn", supportsJsonl: true, enabled: true },
   { id: "mimo-fast", label: "MiMo Fast", bin: "lynn", supportsJsonl: true, enabled: true },
+  { id: "stepfun-flash", label: "StepFun 3.7 Flash (fast coding)", bin: "lynn", supportsJsonl: true, enabled: true },
   { id: "codex-cli", label: "Codex", bin: "codex", supportsJsonl: true, enabled: true },
   { id: "claude-internal", label: "Claude (internal)", bin: "claude-internal", supportsJsonl: false, enabled: true },
   { id: "claude-code", label: "Claude Code", bin: "claude", supportsJsonl: true, enabled: true },

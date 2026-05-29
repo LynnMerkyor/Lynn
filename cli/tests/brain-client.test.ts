@@ -137,6 +137,52 @@ describe("brain-client stream parser", () => {
     }
   });
 
+  it("times out a stalled local Brain quickly when BYOK fallback is available", async () => {
+    const stalledBrain = http.createServer((_request, _response) => {
+      // Intentionally never respond; the CLI must not hang before trying BYOK.
+    });
+    const provider = http.createServer((request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"fast fallback\"}}]}",
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"));
+    });
+    await new Promise<void>((resolve) => stalledBrain.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const oldTimeout = process.env.LYNN_CLI_BRAIN_TIMEOUT_MS;
+    process.env.LYNN_CLI_BRAIN_TIMEOUT_MS = "25";
+    try {
+      const brainAddress = stalledBrain.address();
+      const providerAddress = provider.address();
+      if (!brainAddress || typeof brainAddress === "string") throw new Error("brain test server failed to listen");
+      if (!providerAddress || typeof providerAddress === "string") throw new Error("provider test server failed to listen");
+      const events = [];
+      for await (const event of streamBrainChat({
+        brainUrl: `http://127.0.0.1:${brainAddress.port}`,
+        prompt: "hello",
+        reasoning: { effort: "auto", display: "auto" },
+        fallbackProvider: {
+          provider: "openai-compatible",
+          baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`,
+          model: "test-model",
+          apiKey: "sk-test",
+        },
+      })) {
+        events.push(event);
+      }
+      expect(events).toContainEqual({ type: "assistant.delta", text: "fast fallback" });
+    } finally {
+      if (oldTimeout === undefined) delete process.env.LYNN_CLI_BRAIN_TIMEOUT_MS;
+      else process.env.LYNN_CLI_BRAIN_TIMEOUT_MS = oldTimeout;
+      await new Promise<void>((resolve) => stalledBrain.close(() => resolve()));
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
+  });
+
   it("builds chat completion URLs from base URLs", () => {
     expect(chatCompletionsUrl("https://api.example.com/v1").toString()).toBe("https://api.example.com/v1/chat/completions");
     expect(chatCompletionsUrl("https://api.example.com/v1/chat/completions").toString()).toBe("https://api.example.com/v1/chat/completions");

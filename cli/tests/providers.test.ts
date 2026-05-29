@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "../src/args.js";
 import { activeRouteLabel, renderProvidersInfo, runProviders } from "../src/commands/providers.js";
-import { providerProfilePath, readCliProviderProfile } from "../src/provider-profile.js";
+import { providerProfilePath, readCliProviderProfile, resolveCliProviderProfile } from "../src/provider-profile.js";
 import { setLang } from "../src/i18n.js";
 
 beforeEach(() => setLang("en"));
@@ -154,6 +154,49 @@ describe("providers command", () => {
       baseUrl: "https://api.stepfun.com/step_plan/v1",
       model: "step-3.7-flash",
       apiKey: "step-secret",
+    });
+    await expect(resolveCliProviderProfile(parseArgs([
+      "code",
+      "review this",
+      "--data-dir",
+      dataDir,
+      "--preset",
+      "stepfun",
+    ]))).resolves.toMatchObject({
+      source: "flags",
+      profile: {
+        provider: "openai-compatible",
+        baseUrl: "https://api.stepfun.com/step_plan/v1",
+        model: "step-3.7-flash",
+        apiKey: "step-secret",
+      },
+    });
+  });
+
+  it("does not reuse a stored key for a different provider preset", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-provider-key-"));
+    await fs.mkdir(path.dirname(providerProfilePath(dataDir)), { recursive: true });
+    await fs.writeFile(providerProfilePath(dataDir), JSON.stringify({
+      provider: "openai-compatible",
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-chat",
+      apiKey: "deepseek-secret",
+    }), "utf8");
+
+    await expect(resolveCliProviderProfile(parseArgs([
+      "code",
+      "review this",
+      "--data-dir",
+      dataDir,
+      "--preset",
+      "stepfun",
+    ]))).resolves.toMatchObject({
+      source: "flags",
+      profile: {
+        baseUrl: "https://api.stepfun.com/step_plan/v1",
+        model: "step-3.7-flash",
+        apiKey: undefined,
+      },
     });
   });
 });

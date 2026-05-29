@@ -36,6 +36,7 @@ const FALLBACK_AGENTS: AgentEntry[] = [
   { id: 'mimo-vl', label: 'MiMo Vision (mimo-v2.5)', enabled: true },
   { id: 'mimo-pro', label: 'MiMo Pro (long-endurance)', enabled: true },
   { id: 'mimo-fast', label: 'MiMo Fast', enabled: true },
+  { id: 'stepfun-flash', label: 'StepFun 3.7 Flash (fast coding)', enabled: true },
   { id: 'codex-cli', label: 'Codex', enabled: true },
   { id: 'claude-code', label: 'Claude Code', enabled: true },
   { id: 'claude-internal', label: 'Claude (internal)', enabled: true },

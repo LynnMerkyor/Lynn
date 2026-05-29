@@ -14,30 +14,7 @@ import {
 } from "../provider-profile.js";
 import { resolveDataDir } from "../session/store.js";
 import { t } from "../i18n.js";
-
-interface ProviderPreset {
-  provider: string;
-  baseUrl: string;
-  model: string;
-}
-
-const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
-  stepfun: {
-    provider: "openai-compatible",
-    baseUrl: "https://api.stepfun.com/step_plan/v1",
-    model: "step-3.7-flash",
-  },
-  deepseek: {
-    provider: "openai-compatible",
-    baseUrl: "https://api.deepseek.com/v1",
-    model: "deepseek-chat",
-  },
-  openai: {
-    provider: "openai-compatible",
-    baseUrl: "https://api.openai.com/v1",
-    model: "gpt-4o",
-  },
-};
+import { resolveProviderPreset } from "../provider-presets.js";
 
 export interface ProvidersInfo {
   defaultRoute: string;
@@ -287,15 +264,6 @@ function hasProviderSetFlags(args: ParsedArgs): boolean {
     || getStringFlag(args.flags, "api-key")
     || getStringFlag(args.flags, "model")
   );
-}
-
-export function resolveProviderPreset(name: string | null): ProviderPreset | null {
-  if (!name) return null;
-  const preset = PROVIDER_PRESETS[name.trim().toLowerCase()];
-  if (!preset) {
-    throw new Error(`unknown provider preset: ${name}. Available presets: ${Object.keys(PROVIDER_PRESETS).join(", ")}`);
-  }
-  return preset;
 }
 
 async function askWithDefault(rl: readline.Interface, label: string, defaultValue: string): Promise<string> {
