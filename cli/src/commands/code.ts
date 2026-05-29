@@ -420,7 +420,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   const resumePath = await resolveCodeResumePath(getStringFlag(args.flags, "resume"), dataDir);
   const resumeMessages = resumePath ? await loadResumeMessages(resumePath) : [];
-  const saveSession = hasFlag(args.flags, "save-session", "session") || !!process.env.LYNN_CLI_SAVE_SESSION || !!resumePath;
+  const saveSession = shouldSaveCodeSession(args, { json, mockBrain, resumePath });
   const sessionPath = getStringFlag(args.flags, "session") || resumePath;
   const title = getStringFlag(args.flags, "title") || task;
   let liveSessionPath = sessionPath;
@@ -557,10 +557,22 @@ async function resolveCodeResumePath(raw: string | null, dataDir: string): Promi
   const value = raw.trim();
   if (value === "last" || value === "latest") {
     const latest = await latestSessionPath(dataDir);
-    if (!latest) throw new Error("No CLI session found to resume. Run with --save-session first.");
+    if (!latest) throw new Error("No CLI session found to resume. Run a human code task or pass --save-session first.");
     return latest;
   }
   return value;
+}
+
+function shouldSaveCodeSession(args: ParsedArgs, inputData: { json: boolean; mockBrain: boolean; resumePath: string | null }): boolean {
+  if (hasFlag(args.flags, "no-save-session", "no-session")) return false;
+  if (hasFlag(args.flags, "save-session", "session")) return true;
+  const env = process.env.LYNN_CLI_SAVE_SESSION?.trim().toLowerCase();
+  if (env === "0" || env === "false" || env === "off" || env === "no") return false;
+  if (env) return true;
+  if (inputData.resumePath) return true;
+  // Human code turns should be recoverable by default, like Codex/Claude Code.
+  // JSON/scripted and mock smoke paths stay side-effect-light unless explicitly opted in.
+  return !inputData.json && !inputData.mockBrain;
 }
 
 function renderAssistantBlock(text: string, footer?: string): string {

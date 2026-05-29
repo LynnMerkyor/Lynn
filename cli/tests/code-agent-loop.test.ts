@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import { runCode } from "../src/commands/code.js";
-import { appendSessionTurn } from "../src/session/store.js";
+import { appendSessionTurn, sessionIndexPath } from "../src/session/store.js";
 
 let tmp = "";
 
@@ -365,5 +365,69 @@ describe("code agent loop", () => {
     expect(lines[2]?.content).toContain("hello.txt");
     expect(lines[3]?.content).toContain("I read hello.txt");
     expect(lines.at(-1)?.data).toMatchObject({ kind: "code_task" });
+  });
+
+  it("autosaves human code tasks by default for resumable long runs", async () => {
+    const dataDir = path.join(tmp, "autosave-data");
+    const original = process.stdout.write;
+    const originalErr = process.stderr.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    try {
+      await withBrainServer(() => "Autosaved task complete.", async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "autosave this human task",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--data-dir",
+          dataDir,
+          "--max-steps",
+          "1",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+      process.stderr.write = originalErr;
+    }
+
+    const index = JSON.parse(await fs.readFile(sessionIndexPath(dataDir), "utf8")) as { sessions: Array<{ path: string; title: string }> };
+    expect(index.sessions).toHaveLength(1);
+    expect(index.sessions[0]?.title).toBe("autosave this human task");
+    const lines = (await fs.readFile(index.sessions[0]!.path, "utf8")).trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; content?: string; data?: Record<string, unknown> });
+    expect(lines.map((line) => line.type)).toEqual(["user", "assistant", "metadata"]);
+    expect(lines[1]?.content).toContain("Autosaved task complete");
+  });
+
+  it("allows human code autosave to be disabled explicitly", async () => {
+    const dataDir = path.join(tmp, "no-autosave-data");
+    const original = process.stdout.write;
+    const originalErr = process.stderr.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    try {
+      await withBrainServer(() => "No autosave requested.", async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "do not save this human task",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--data-dir",
+          dataDir,
+          "--no-save-session",
+          "--max-steps",
+          "1",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+      process.stderr.write = originalErr;
+    }
+
+    await expect(fs.stat(sessionIndexPath(dataDir))).rejects.toThrow();
   });
 });

@@ -47,7 +47,8 @@ export function usage(): string {
       "  --approval ask|on-failure|never|yolo",
       "  --sandbox read-only|workspace-write|danger-full-access",
       "  --max-steps 1..20",
-      "  --save-session --resume <session.jsonl> --data-dir ~/.lynn",
+      "  --save-session --no-save-session --resume <session.jsonl> --data-dir ~/.lynn",
+      "  Lynn code 人类交互默认保存断点;JSON/脚本模式需显式 --save-session",
       "  --agent-command \"custom worker command\"",
     ].join("\n");
   }
@@ -96,7 +97,8 @@ export function usage(): string {
     "  --approval ask|on-failure|never|yolo",
     "  --sandbox read-only|workspace-write|danger-full-access",
     "  --max-steps 1..20",
-    "  --save-session --resume <session.jsonl> --data-dir ~/.lynn",
+    "  --save-session --no-save-session --resume <session.jsonl> --data-dir ~/.lynn",
+    "  Lynn code human turns autosave checkpoints; JSON/script mode requires --save-session",
     "  --agent-command \"custom worker command\"",
   ].join("\n");
 }
