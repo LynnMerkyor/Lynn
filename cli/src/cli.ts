@@ -4,6 +4,7 @@ import { runAgents } from "./commands/agents.js";
 import { runChat } from "./commands/chat.js";
 import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
+import { runPermissions } from "./commands/permissions.js";
 import { runPrompt } from "./commands/prompt.js";
 import { activeRouteLabel, resolveProvidersInfo, runProviders } from "./commands/providers.js";
 import { runSessions } from "./commands/sessions.js";
@@ -53,6 +54,9 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     case "providers": {
       return runProviders(args, json);
+    }
+    case "permissions": {
+      return runPermissions(args, json);
     }
     case "model": {
       return runProviders(args, json);

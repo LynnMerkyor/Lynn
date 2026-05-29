@@ -12,6 +12,7 @@ const cliBin = path.join(root, "cli", "bin", "lynn.mjs");
 const missingDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-missing");
 const sessionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-sessions");
 const toolDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-tools");
+const visionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-vision");
 const briefPath = path.join(root, "cli", "fixtures", "worker-brief.md");
 
 function run(name, args, options = {}) {
@@ -74,6 +75,10 @@ await fs.promises.mkdir(sessionDataDir, { recursive: true });
 await fs.promises.rm(toolDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(toolDataDir, { recursive: true });
 await fs.promises.writeFile(path.join(toolDataDir, "hello.txt"), "hello\n", "utf8");
+await fs.promises.rm(visionDataDir, { recursive: true, force: true });
+await fs.promises.mkdir(visionDataDir, { recursive: true });
+const smokePng = path.join(visionDataDir, "smoke.png");
+await fs.promises.writeFile(smokePng, Buffer.from("89504e470d0a1a0a", "hex"));
 
 const checks = [];
 
@@ -95,6 +100,13 @@ checks.push(run("providers", ["providers", "--data-dir", missingDataDir]).then((
   assertIncludes(r.name, r.stdout, "Provider keys stay");
   assertNotIncludes(r.name, r.stdout, "sk-");
   assertNotIncludes(r.name, r.stdout.toLowerCase(), "api_key");
+}));
+
+checks.push(run("permissions", ["permissions", "--data-dir", missingDataDir]).then((r) => {
+  assertIncludes(r.name, r.stdout, "Lynn CLI Permissions");
+  assertIncludes(r.name, r.stdout, "approval: ask");
+  assertIncludes(r.name, r.stdout, "sandbox:  workspace-write");
+  assertIncludes(r.name, r.stdout, "GUI profile");
 }));
 
 checks.push(run("mock prompt", ["-p", "你好", "--mock-brain"]).then((r) => {
@@ -159,6 +171,17 @@ checks.push(run("code read-only blocks writes", [
 
 checks.push(run("code task mock", ["code", "review the current diff", "--mock-brain"]).then((r) => {
   assertIncludes(r.name, r.stdout, "Mock Lynn code task");
+}));
+
+checks.push(run("vision see mock", ["see", smokePng, "describe this UI", "--mock-brain"]).then((r) => {
+  assertIncludes(r.name, r.stdout, "Mock Lynn see");
+  assertIncludes(r.name, r.stdout, "describe this UI");
+}));
+
+checks.push(run("vision ground mock json", ["ground", smokePng, "Submit button", "--mock-brain", "--json"]).then((r) => {
+  assertIncludes(r.name, r.stdout, '"type":"vision.started"');
+  assertIncludes(r.name, r.stdout, '"command":"ground"');
+  assertIncludes(r.name, r.stdout, '"type":"vision.finished"');
 }));
 
 checks.push(run("mock chat", ["chat", "--mock-brain"], { stdinLines: ["/mode yolo", "hi", "/exit"] }).then((r) => {

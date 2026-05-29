@@ -14,6 +14,7 @@ export function usage(): string {
     "  Lynn agents [--json]",
     "  Lynn model [--json]",
     "  Lynn providers [--json]",
+    "  Lynn permissions [--json]",
     "  Lynn worker run --brief task.md --worktree path --jsonl --mock",
     "  Lynn code \"review the current diff\"",
     "  Lynn see screenshot.png [question]",
