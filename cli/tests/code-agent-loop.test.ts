@@ -400,6 +400,43 @@ describe("code agent loop", () => {
     expect(output).toContain("Stopped after the maximum tool steps");
   });
 
+  it("emits a resumable checkpoint command when max steps exhaust with session saving", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-resume-hint-"));
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer(() => JSON.stringify({ tool: "read_file", args: { path: "hello.txt" } }), async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "keep inspecting hello",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--max-steps",
+          "1",
+          "--json",
+          "--save-session",
+          "--data-dir",
+          dataDir,
+        ]))).resolves.toBe(2);
+      });
+    } finally {
+      process.stdout.write = original;
+      await fs.rm(dataDir, { recursive: true, force: true });
+    }
+
+    expect(output).toContain('"code":"max_steps_reached"');
+    expect(output).toContain('"sessionPath"');
+    expect(output).toContain('"resumeCommand"');
+    expect(output).toContain("Lynn code --resume");
+    expect(output).toContain("--long");
+  });
+
   it("sends attached images through code mode for multimodal MiMo tasks", async () => {
     const image = path.join(tmp, "shot.png");
     await fs.writeFile(image, Buffer.from("89504e470d0a1a0a", "hex"));

@@ -520,6 +520,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     sandbox: mode.sandbox,
     timeoutMs: timeoutMs(args),
   };
+  let savedSessionPath: string | null = null;
   if (saveSession) {
     liveSessionPath = await appendSessionLine({
       dataDir,
@@ -577,7 +578,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
         if (json) writeJsonLine({ type: "session.checkpoint", ts: nowIso(), path: liveSessionPath, line: "assistant" });
       }
     }
-    const savedPath = liveSessionPath || await appendSessionTurn({
+    savedSessionPath = liveSessionPath || await appendSessionTurn({
       dataDir,
       sessionPath,
       cwd: context.cwd,
@@ -589,7 +590,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     });
     await appendSessionMetadata({
       dataDir,
-      sessionPath: savedPath,
+      sessionPath: savedSessionPath,
       data: {
         kind: "code_task",
         cwd: context.cwd,
@@ -600,8 +601,11 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
         resumedFrom: resumePath || null,
       },
     });
-    if (json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
+    if (json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedSessionPath });
   }
+  const resumeCommand = final.maxStepsReached && savedSessionPath
+    ? resumeCommandForSession(savedSessionPath)
+    : null;
   if (json) {
     if (final.text.trim()) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: final.text });
     writeJsonLine({
@@ -611,9 +615,15 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
       contentReturned: !!final.text.trim(),
       ...(final.usageSummary ? { usageSummary: final.usageSummary } : {}),
       ...(final.maxStepsReached ? { code: "max_steps_reached" } : {}),
+      ...(savedSessionPath ? { sessionPath: savedSessionPath } : {}),
+      ...(resumeCommand ? { resumeCommand } : {}),
     });
   } else {
-    process.stdout.write(renderAssistantBlock(renderMarkdown(final.text.trim() || "(no answer)", supportsColor(output)), renderCodeFooter({
+    const answer = [
+      renderMarkdown(final.text.trim() || "(no answer)", supportsColor(output)),
+      resumeCommand ? t("code.resume.maxSteps", { command: resumeCommand }) : "",
+    ].filter(Boolean).join("\n\n");
+    process.stdout.write(renderAssistantBlock(answer, renderCodeFooter({
       context,
       mode,
       mockBrain,
@@ -623,6 +633,15 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     })));
   }
   return final.maxStepsReached ? 2 : 0;
+}
+
+export function resumeCommandForSession(sessionPath: string): string {
+  return `Lynn code --resume ${shellQuote(sessionPath)} --long "继续这个任务"`;
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 async function resolveCodeResumePath(raw: string | null, dataDir: string): Promise<string | null> {

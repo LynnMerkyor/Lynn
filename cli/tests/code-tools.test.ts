@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { buildCodeRuntimeFrames, canPromptForDangerousTool, codeToolDefinitions, createStreamingToolCallAccumulator, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeToolRequest, parseCodeToolRequests, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
+import { buildCodeRuntimeFrames, canPromptForDangerousTool, codeToolDefinitions, createStreamingToolCallAccumulator, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeToolRequest, parseCodeToolRequests, renderCodeIntro, renderCodeTaskHeader, resumeCommandForSession, runCode } from "../src/commands/code.js";
 import { stableRuntimePrefix } from "../../shared/runtime-instruction-frames.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
@@ -251,6 +251,11 @@ describe("code tools", () => {
 
     expect(formatted.length).toBeLessThan(500);
     expect(formatted).toContain("truncated this tool result");
+  });
+
+  it("quotes resume commands so checkpoint paths can be pasted safely", () => {
+    expect(resumeCommandForSession("/tmp/lynn/session.jsonl")).toBe('Lynn code --resume /tmp/lynn/session.jsonl --long "继续这个任务"');
+    expect(resumeCommandForSession("/tmp/lynn dir/session's.jsonl")).toBe('Lynn code --resume \'/tmp/lynn dir/session\'\\\'\'s.jsonl\' --long "继续这个任务"');
   });
 
   it("keeps cacheable code instructions separate from dynamic permission state", () => {
