@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { buildCodeRuntimeFrames, canPromptForDangerousTool, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeToolRequest, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
+import { buildCodeRuntimeFrames, canPromptForDangerousTool, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeToolRequest, parseCodeToolRequests, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
 import { stableRuntimePrefix } from "../../shared/runtime-instruction-frames.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
@@ -114,6 +114,23 @@ describe("code tools", () => {
       tool: "read_file",
       args: { path: "README.md" },
     });
+  });
+
+  it("parses every OpenAI-style tool call in one model turn", () => {
+    const requests = parseCodeToolRequests(JSON.stringify({
+      tool_calls: [
+        { type: "function", function: { name: "read_file", arguments: "{\"path\":\"README.md\"}" } },
+        { type: "function", function: { name: "grep", arguments: { query: "MiMo", path: "docs" } } },
+      ],
+    }));
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0]).toMatchObject({ tool: "read_file", args: { path: "README.md" } });
+    expect(requests[1]).toMatchObject({ tool: "grep", args: { query: "MiMo", path: "docs" } });
+    expect(parseCodeToolRequest(JSON.stringify({ tool_calls: [
+      { type: "function", function: { name: "read_file", arguments: "{\"path\":\"README.md\"}" } },
+      { type: "function", function: { name: "grep", arguments: { query: "MiMo" } } },
+    ] }))).toMatchObject({ tool: "read_file" });
   });
 
   it("normalizes common coding-agent tool name and argument aliases", () => {

@@ -684,55 +684,62 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
     });
     messages.push({ role: "assistant", content: assistantText });
     if (inputData.onCheckpoint && assistantText.trim()) await inputData.onCheckpoint({ type: "assistant", content: assistantText });
-    const toolRequest = parseCodeToolRequest(assistantText);
-    if (!toolRequest) {
+    const toolRequests = parseCodeToolRequests(assistantText);
+    if (!toolRequests.length) {
       finalText = assistantText;
       break;
     }
-    const fingerprint = toolRequestFingerprint(toolRequest);
-    const previous = seenToolRequests.get(fingerprint) || 0;
-    seenToolRequests.set(fingerprint, previous + 1);
-    if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
-    else renderClientToolStart(toolRequest);
-    let toolResult: ClientToolResult;
-    if (previous > 0) {
-      toolResult = {
-        ok: false,
-        tool: toolRequest.tool,
-        error: "Repeated identical tool request suppressed by Lynn CLI. Use a different tool, different arguments, or answer with the information already available.",
-      };
-      if (inputData.json) {
-        writeJsonLine({ type: "code.tool.loop_guard", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest), repeats: previous + 1 });
-      }
-    } else {
-      try {
-        const effectiveApproval = await resolveToolApproval({
-          tool: toolRequest.tool,
-          approval: inputData.toolCtx.approval,
-          cwd: inputData.toolCtx.cwd,
-          json: inputData.json,
-          input: inputData.input,
-          output: inputData.output,
-          preview: formatDangerousToolPreview(toolRequest.tool, toolRequest.args, supportsColor(inputData.output)),
-          session: approvalSession,
-        });
-        toolResult = await runClientTool({ ...inputData.toolCtx, approval: effectiveApproval }, {
-          name: toolRequest.tool,
-          ...toolRequest.args,
-        });
-      } catch (error) {
+    const toolResultSections: string[] = [];
+    for (const toolRequest of toolRequests) {
+      const fingerprint = toolRequestFingerprint(toolRequest);
+      const previous = seenToolRequests.get(fingerprint) || 0;
+      seenToolRequests.set(fingerprint, previous + 1);
+      if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
+      else renderClientToolStart(toolRequest);
+      let toolResult: ClientToolResult;
+      if (previous > 0) {
         toolResult = {
           ok: false,
           tool: toolRequest.tool,
-          error: error instanceof Error ? error.message : String(error),
+          error: "Repeated identical tool request suppressed by Lynn CLI. Use a different tool, different arguments, or answer with the information already available.",
         };
+        if (inputData.json) {
+          writeJsonLine({ type: "code.tool.loop_guard", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest), repeats: previous + 1 });
+        }
+      } else {
+        try {
+          const effectiveApproval = await resolveToolApproval({
+            tool: toolRequest.tool,
+            approval: inputData.toolCtx.approval,
+            cwd: inputData.toolCtx.cwd,
+            json: inputData.json,
+            input: inputData.input,
+            output: inputData.output,
+            preview: formatDangerousToolPreview(toolRequest.tool, toolRequest.args, supportsColor(inputData.output)),
+            session: approvalSession,
+          });
+          toolResult = await runClientTool({ ...inputData.toolCtx, approval: effectiveApproval }, {
+            name: toolRequest.tool,
+            ...toolRequest.args,
+          });
+        } catch (error) {
+          toolResult = {
+            ok: false,
+            tool: toolRequest.tool,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
       }
+      if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
+      else renderClientToolResult(toolResult);
+      toolResultSections.push([
+        `Tool result for ${toolRequest.tool}:`,
+        formatToolResultForLoop(toolResult),
+      ].join("\n"));
     }
-    if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
-    else renderClientToolResult(toolResult);
     const toolResultMessage = [
-      `Tool result for ${toolRequest.tool}:`,
-      formatToolResultForLoop(toolResult),
+      toolResultSections.length === 1 ? "Tool results:" : `Tool results for ${toolResultSections.length} requested tools:`,
+      ...toolResultSections,
       "Continue. If no more tools are needed, give the final answer.",
     ].join("\n");
     messages.push({
@@ -893,36 +900,51 @@ async function collectBrainText(inputData: {
 }
 
 export function parseCodeToolRequest(text: string): CodeToolRequest | null {
+  return parseCodeToolRequests(text)[0] ?? null;
+}
+
+export function parseCodeToolRequests(text: string): CodeToolRequest[] {
+  const requests: CodeToolRequest[] = [];
+  const seen = new Set<string>();
   for (const candidate of extractJsonCandidates(text)) {
     try {
       const parsed = JSON.parse(candidate) as unknown;
       for (const payload of toolPayloadCandidates(parsed)) {
-        const rawToolName = typeof payload.tool === "string"
-          ? payload.tool
-          : typeof payload.name === "string"
-            ? payload.name
-            : "";
-        if (!rawToolName) continue;
-        const toolName = normalizeClientToolName(rawToolName);
-        if (!toolName) continue;
-        const args = normalizeToolArgAliases(toolName, normalizeToolArgs(payload));
-        return {
-          tool: toolName,
-          args: {
-            path: stringArg(args.path),
-            text: stringArg(args.text ?? args.content ?? args.patch),
-            query: stringArg(args.query),
-            pattern: stringArg(args.pattern),
-            command: stringArg(args.command),
-            maxBytes: numberArg(args.maxBytes ?? args.max_bytes),
-          },
-        };
+        const request = normalizeToolPayload(payload);
+        if (!request) continue;
+        const fingerprint = toolRequestFingerprint(request);
+        if (seen.has(fingerprint)) continue;
+        seen.add(fingerprint);
+        requests.push(request);
       }
     } catch {
       // Try the next candidate.
     }
   }
-  return null;
+  return requests;
+}
+
+function normalizeToolPayload(payload: Record<string, unknown>): CodeToolRequest | null {
+  const rawToolName = typeof payload.tool === "string"
+    ? payload.tool
+    : typeof payload.name === "string"
+      ? payload.name
+      : "";
+  if (!rawToolName) return null;
+  const toolName = normalizeClientToolName(rawToolName);
+  if (!toolName) return null;
+  const args = normalizeToolArgAliases(toolName, normalizeToolArgs(payload));
+  return {
+    tool: toolName,
+    args: {
+      path: stringArg(args.path),
+      text: stringArg(args.text ?? args.content ?? args.patch),
+      query: stringArg(args.query),
+      pattern: stringArg(args.pattern),
+      command: stringArg(args.command),
+      maxBytes: numberArg(args.maxBytes ?? args.max_bytes),
+    },
+  };
 }
 
 const TOOL_NAME_ALIASES: Record<string, ClientToolName> = {

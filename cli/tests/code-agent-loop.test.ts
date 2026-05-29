@@ -124,6 +124,51 @@ describe("code agent loop", () => {
     expect(output).toContain("Changed hello.txt");
   });
 
+  it("executes multiple model-requested tool calls from one turn", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    let toolResultTurn = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer((body, count) => {
+        if (count === 1) {
+          return JSON.stringify({
+            tool_calls: [
+              { type: "function", function: { name: "read_file", arguments: "{\"path\":\"hello.txt\"}" } },
+              { type: "function", function: { name: "glob", arguments: "{\"pattern\":\"*.txt\"}" } },
+            ],
+          });
+        }
+        toolResultTurn = JSON.stringify(body);
+        return "I read hello.txt and listed text files.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "inspect hello with two tools",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--max-steps",
+          "3",
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output.match(/"type":"code\.tool\.requested"/g)).toHaveLength(2);
+    expect(output.match(/"type":"code\.tool\.result"/g)).toHaveLength(2);
+    expect(toolResultTurn).toContain("Tool result for read_file");
+    expect(toolResultTurn).toContain("Tool result for glob");
+    expect(toolResultTurn).toContain("hello.txt");
+    expect(output).toContain("I read hello.txt and listed text files");
+  });
+
   it("feeds failed tool results back so the model can repair and continue", async () => {
     const badPatch = [
       "*** Begin Patch",
