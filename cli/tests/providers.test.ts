@@ -51,6 +51,9 @@ describe("providers command", () => {
 
     expect(output).toContain("\"type\":\"providers.info\"");
     expect(output).toContain("MiMo");
+    expect(output).toContain("\"name\":\"stepfun\"");
+    expect(output).toContain("\"model\":\"step-3.7-flash\"");
+    expect(output).not.toContain("apiKey");
   });
 
   it("makes model a providers alias", async () => {

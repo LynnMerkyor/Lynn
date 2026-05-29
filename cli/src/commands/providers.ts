@@ -17,6 +17,7 @@ import { resolveDataDir } from "../session/store.js";
 import { t } from "../i18n.js";
 import { listProviderPresets, resolveProviderPreset } from "../provider-presets.js";
 import { chatCompletionsUrl } from "../brain-client.js";
+import type { ProviderPreset } from "../provider-presets.js";
 
 export interface ProvidersInfo {
   defaultRoute: string;
@@ -38,6 +39,7 @@ export interface ProvidersInfo {
     path?: string;
   };
   providers: ProviderLine[];
+  presets?: Array<{ name: string } & ProviderPreset>;
 }
 
 export interface ProviderLine {
@@ -69,6 +71,7 @@ export function providersInfo(partial: Partial<ProvidersInfo> = {}): ProvidersIn
     brainUrl: process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790",
     server: { status: "missing", message: "Lynn client GUI server-info.json not found" },
     providers: [],
+    presets: listProviderPresets(),
     ...partial,
   };
 }
