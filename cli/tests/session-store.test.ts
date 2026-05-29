@@ -2,8 +2,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, listSessions, readSessionLines, sessionIndexPath } from "../src/session/store.js";
+import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, listSessions, readSessionLines, resolveDataDir, sessionIndexPath } from "../src/session/store.js";
 
+const originalDataDir = process.env.LYNN_DATA_DIR;
+const originalHome = process.env.LYNN_HOME;
 let tmp = "";
 
 beforeEach(async () => {
@@ -12,6 +14,10 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await fs.rm(tmp, { recursive: true, force: true });
+  if (originalDataDir === undefined) delete process.env.LYNN_DATA_DIR;
+  else process.env.LYNN_DATA_DIR = originalDataDir;
+  if (originalHome === undefined) delete process.env.LYNN_HOME;
+  else process.env.LYNN_HOME = originalHome;
 });
 
 describe("CLI session store", () => {
@@ -119,5 +125,21 @@ describe("CLI session store", () => {
     const prompts = new Set(sessions.map((session) => session.firstMessage));
     expect(sessions).toHaveLength(12);
     expect(prompts.size).toBe(12);
+  });
+});
+
+describe("CLI data directory resolution", () => {
+  it("uses LYNN_HOME as the shared client/CLI home when LYNN_DATA_DIR is unset", () => {
+    delete process.env.LYNN_DATA_DIR;
+    process.env.LYNN_HOME = "~/.lynn-test-home";
+
+    expect(resolveDataDir()).toBe(path.join(os.homedir(), ".lynn-test-home"));
+  });
+
+  it("keeps LYNN_DATA_DIR higher priority than LYNN_HOME", () => {
+    process.env.LYNN_DATA_DIR = "/tmp/lynn-data-dir";
+    process.env.LYNN_HOME = "/tmp/lynn-home";
+
+    expect(resolveDataDir()).toBe("/tmp/lynn-data-dir");
   });
 });

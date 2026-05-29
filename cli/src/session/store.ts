@@ -42,6 +42,7 @@ export interface CliSessionIndexPayload {
 export function resolveDataDir(explicit?: string | null): string {
   if (explicit?.trim()) return path.resolve(explicit);
   if (process.env.LYNN_DATA_DIR?.trim()) return path.resolve(process.env.LYNN_DATA_DIR);
+  if (process.env.LYNN_HOME?.trim()) return path.resolve(process.env.LYNN_HOME.replace(/^~/, os.homedir()));
   return path.join(os.homedir(), ".lynn");
 }
 
