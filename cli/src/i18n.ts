@@ -48,7 +48,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "startup.label.directory": "目录",
     "startup.hint.model": "/model 切换",
     "startup.hint.mode": "Shift+Tab 切换",
-    "startup.byok.default": "Lynn 客户端设置 > Providers",
+    "startup.byok.default": "客户端 Providers",
     "status.chat.prefix": "MiMo/Brain",
     "offline.body":
       "默认 MiMo 路由暂不可用(本地 Brain 离线)。你仍然可以配置 CLI-only BYOK 使用任意 OpenAI 兼容模型:\n" +
@@ -181,7 +181,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "startup.label.directory": "directory",
     "startup.hint.model": "/model to change",
     "startup.hint.mode": "Shift+Tab to toggle",
-    "startup.byok.default": "client GUI Settings > Providers",
+    "startup.byok.default": "client Providers",
     "status.chat.prefix": "MiMo/Brain",
     "offline.body":
       "Default MiMo route unavailable (local Brain offline). You can still configure CLI-only BYOK for any OpenAI-compatible model:\n" +

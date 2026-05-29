@@ -29,6 +29,23 @@ describe("startup banner", () => {
     expect(output).toContain("lynn help");
   });
 
+  it("keeps the default banner compact for narrow terminals", () => {
+    setLang("zh");
+    const output = renderStartupBanner({
+      brainStatus: "offline",
+      modelLabel: "MiMo",
+      showTips: false,
+    });
+
+    expect(output).toContain("模型:");
+    expect(output).toContain("MiMo");
+    expect(output).toContain("BYOK:");
+    expect(output).toContain("客户端 Providers");
+    expect(output).toContain("Lynn providers");
+    expect(output).not.toContain("MiMo via local Brain router");
+    expect(Math.max(...output.split("\n").map(visibleLength))).toBeLessThanOrEqual(76);
+  });
+
   it("can render a compact banner without tips", () => {
     const output = renderStartupBanner({
       brainStatus: "offline",

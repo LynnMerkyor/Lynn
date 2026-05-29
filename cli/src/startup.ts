@@ -91,7 +91,7 @@ export function renderStartupBanner(input: {
 } = {}): string {
   const version = readVersionInfo().version;
   const brainUrl = input.brainUrl || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
-  const modelLabel = input.modelLabel || process.env.LYNN_CLI_MODEL_LABEL || "MiMo via Brain router (auto)";
+  const modelLabel = input.modelLabel || process.env.LYNN_CLI_MODEL_LABEL || "MiMo";
   const byokLabel = input.byokLabel || process.env.LYNN_CLI_BYOK_LABEL || t("startup.byok.default");
   const brainLabel = input.brainStatus && input.brainStatus !== "unknown"
     ? `${input.brainStatus} · ${brainUrl}`
@@ -100,7 +100,7 @@ export function renderStartupBanner(input: {
     `Lynn CLI (v${version})`,
     "",
     padLine(t("startup.label.model"), modelLabel, t("startup.hint.model")),
-    padLine(t("startup.label.mode"), input.modeLabel || "ask / workspace-write", t("startup.hint.mode")),
+    padLine(t("startup.label.mode"), compactModeLabel(input.modeLabel || "ask / workspace-write"), t("startup.hint.mode")),
     padLine(t("startup.label.byok"), byokLabel, "Lynn providers"),
     padLine(t("startup.label.brain"), brainLabel),
     padLine(t("startup.label.directory"), displayCwd(input.cwd || process.cwd())),
@@ -110,4 +110,10 @@ export function renderStartupBanner(input: {
     out.push("", t("tips.banner"));
   }
   return out.join("\n");
+}
+
+function compactModeLabel(value: string): string {
+  return value
+    .replace(/\bworkspace-write\b/g, "workspace")
+    .replace(/\bdanger-full-access\b/g, "yolo");
 }

@@ -132,7 +132,9 @@ function startupModelLabel(info: ProvidersInfo, brainReachable: boolean): string
   if (!brainReachable && info.cliProvider?.configured && info.cliProvider.profile) {
     return `CLI BYOK: ${info.cliProvider.profile.model}`;
   }
-  return activeRouteLabel(info);
+  const label = activeRouteLabel(info);
+  if (/^MiMo via .*Brain router/i.test(label)) return "MiMo";
+  return label;
 }
 
 main().then((code) => {

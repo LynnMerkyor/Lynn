@@ -98,11 +98,12 @@ checks.push(run("version", ["version"]).then((r) => {
 
 checks.push(run("startup banner", []).then((r) => {
   assertIncludes(r.name, r.stdout, "Lynn CLI");
-  assertIncludes(r.name, r.stdout, "MiMo via");
-  assertIncludes(r.name, r.stdout, "ask / workspace-write");
+  assertIncludes(r.name, r.stdout, "MiMo");
+  assertIncludes(r.name, r.stdout, "ask / workspace");
   assertIncludes(r.name, r.stdout, "Shift+Tab");
   assertIncludes(r.name, r.stdout, "offline");
   assertIncludes(r.name, r.stdout, "Lynn providers");
+  assertNotIncludes(r.name, r.stdout, "MiMo via local Brain router");
 }));
 
 checks.push(run("providers", ["providers", "--data-dir", missingDataDir]).then((r) => {
