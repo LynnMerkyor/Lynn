@@ -9,6 +9,7 @@ import {
   buildDefaultAgentCommand,
   buildWorkerPrompt,
   collectGitDiff,
+  extractGroundingBoxes,
   parseWorkerBrief,
   parseWorkerEventLine,
   runWorker,
@@ -82,6 +83,17 @@ describe("worker-run scaffold", () => {
 
     expect(brief.taskType).toBe("ground");
     expect(brief.image).toBe("screenshots/login.png");
+  });
+
+  it("extracts normalized grounding boxes from MiMo JSON text", () => {
+    expect(extractGroundingBoxes('```json\n{"x":0.25,"y":0.5,"w":0.2,"h":0.1,"confidence":0.88,"label":"submit"}\n```')).toEqual([{
+      label: "submit",
+      x: 0.25,
+      y: 0.5,
+      width: 0.2,
+      height: 0.1,
+      confidence: 0.88,
+    }]);
   });
 
   it("parses fleet JSONL event lines", () => {
@@ -394,6 +406,7 @@ describe("worker-run scaffold", () => {
       summary?: string;
       taskType?: string;
       image?: string;
+      boxes?: Array<{ x: number; y: number; confidence?: number }>;
     });
     expect(lines.some((line) => line.type === "worker.started" && line.agent === "mimo-vl")).toBe(true);
     expect(lines.some((line) => line.type === "assistant.delta" && line.text?.includes("\"x\""))).toBe(true);
@@ -402,6 +415,8 @@ describe("worker-run scaffold", () => {
       && line.taskType === "ground"
       && line.image === "shot.png"
       && line.summary?.includes("\"confidence\"")
+      && line.boxes?.[0]?.x === 0.5
+      && line.boxes?.[0]?.confidence === 0.9
     ))).toBe(true);
     expect(lines.some((line) => line.type === "worker.finished" && line.summary === "lynn-cli worker completed")).toBe(true);
   });

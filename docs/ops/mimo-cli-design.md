@@ -131,7 +131,33 @@ lynn-mimo run --resume <runId>
 | reasoning visibility (table stakes) | yes | partial | yes |
 | voice (deferred to Jarvis) | later | no | no |
 
-## 8. Execution / landing direction
+## 8. Backend policy: MiMo default, StepFun fast coding worker candidate
+
+The default user-facing route stays **MiMo through Lynn Brain** because it is the
+widest capability bundle (vision, search, long context, cache economics, native
+tooling). However, v0.80 should treat **StepFun step-3.7-flash** as a serious
+Fleet/backend option for fast coding work, not as a footnote.
+
+Verified from live CLI coding trials (2026-05-30):
+
+| Backend | Evidence | Proposed role |
+|---|---|---|
+| MiMo | broad multimodal/search/cache/grounding stack; native route in Brain | default route and capability headline |
+| StepFun `step-3.7-flash` | ~215 TPS observed; CodeBuddy production CLI solved 6/6 real coding tasks across Python/JS/TS/Rust with edit + run-test loops | fast coding worker / BYOK preset / Fleet backend candidate |
+| DeepSeek V4 Pro | strong reasoning and cache economy, slower but reliable | heavy reasoning fallback / BYOK preset |
+| Spark APEX-MTP | local/private fallback | offline/private fallback |
+
+Policy:
+- Do **not** silently replace the default route. Users should understand why MiMo is
+  the default and why StepFun may be faster for code.
+- Add StepFun as an explicit BYOK/provider preset once the provider UX has presets
+  (base URL + API key + model name), and as a Fleet agent/backend option.
+- In Fleet, expose it as a "fast coding worker" profile, separate from `mimo-vl`
+  (vision/grounding) and `mimo-pro` (long multimodal task).
+- Keep the interface OpenAI-compatible: `baseUrl`, `apiKey`, `model`. No provider key
+  is bundled into the client.
+
+## 9. Execution / landing direction
 
 ### Where it lands (this is NOT a from-scratch separate CLI)
 The 5 pillars are how the MiMo-default CLI (that the CLI lane is building in `cli/**`)
@@ -168,7 +194,7 @@ brain (done) + the existing CLI + the fleet, coordinated across lanes - not a re
 - the Fleet worker + GUI screenshot brief is B-line (me).
 - brain routing is done - reuse, do not re-implement.
 
-## 9. Decision log + open questions
+## 10. Decision log + open questions
 
 Decided (user, 2026-05-29): five pillars (multimodal, endurance, cache, search,
 grounding+structured-calling); voice deferred to the Jarvis lane; capability-led not
@@ -180,8 +206,10 @@ Open:
 - Q3 screenshot capture: rely on user-passed image, or add an OS capture tool?
 - Q4 endurance checkpoint format + location; reuse vs the Fleet task runtime.
 - Q5 is the MiMo CLI a `lynn` mode/profile or a separate `lynn-mimo` entry point?
+- Q6 should StepFun be shipped first as a documented BYOK preset, a Fleet worker kind,
+  or both?
 
-## 10. Sources
+## 11. Sources
 
 - [MiMo-VL Technical Report (arXiv 2506.03569)](https://arxiv.org/abs/2506.03569) - OSWorld-G 56.1 > UI-TARS; OlympiadBench 59.4.
 - [XiaomiMiMo/MiMo-VL-7B-RL (HF)](https://huggingface.co/XiaomiMiMo/MiMo-VL-7B-RL)
