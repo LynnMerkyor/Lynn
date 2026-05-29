@@ -835,20 +835,41 @@ function extractJsonCandidates(text: string): string[] {
   if (fence?.[1]) out.push(fence[1].trim());
   const trimmed = text.trim();
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) out.push(trimmed);
-  const start = text.indexOf("{");
-  if (start >= 0) {
-    let depth = 0;
-    for (let i = start; i < text.length; i += 1) {
-      const char = text[i];
-      if (char === "{") depth += 1;
-      if (char === "}") depth -= 1;
-      if (depth === 0) {
-        out.push(text.slice(start, i + 1));
-        break;
-      }
-    }
+  for (let start = text.indexOf("{"); start >= 0; start = text.indexOf("{", start + 1)) {
+    const candidate = scanJsonObject(text, start);
+    if (candidate) out.push(candidate);
   }
   return [...new Set(out)];
+}
+
+function scanJsonObject(text: string, start: number): string | null {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i += 1) {
+    const char = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+    if (char === "{") depth += 1;
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i + 1);
+      if (depth < 0) return null;
+    }
+  }
+  return null;
 }
 
 function stringArg(value: unknown): string | undefined {

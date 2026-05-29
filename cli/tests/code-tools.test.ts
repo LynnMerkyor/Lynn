@@ -104,6 +104,18 @@ describe("code tools", () => {
     });
   });
 
+  it("parses tool JSON embedded after prose when strings contain braces", () => {
+    const request = parseCodeToolRequest([
+      "I need to patch this.",
+      '{"tool":"apply_patch","args":{"patch":"diff --git a/a.ts b/a.ts\\n@@\\n-export const x = \\"{\\";\\n+export const x = \\"}\\";\\n"}}',
+    ].join("\n"));
+
+    expect(request).toMatchObject({
+      tool: "apply_patch",
+      args: { text: expect.stringContaining('export const x = "}"') },
+    });
+  });
+
   it("caps tool result text before feeding it back to the model", () => {
     const formatted = formatToolResultForLoop({
       ok: true,
