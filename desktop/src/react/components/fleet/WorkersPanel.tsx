@@ -18,6 +18,7 @@ import { detectFleetConflicts } from './fleet-conflicts';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import type { CliEnvStatus } from '../../types';
 import type { FleetWorkerView } from './fleet-reducer';
+import { resolveWorkerWorktreePath } from './worktree-path';
 
 const STATUS_SHORT: Record<string, string> = {
   running: 'running',
@@ -85,9 +86,8 @@ export function WorkersPanel() {
   };
 
   const openWorktree = (worker: FleetWorkerView) => {
-    if (!worker.worktree) return;
-    const abs = worker.cwd ? `${worker.cwd.replace(/\/+$/, '')}/${worker.worktree}` : worker.worktree;
-    window.hana?.openFolder?.(abs);
+    const target = resolveWorkerWorktreePath(worker);
+    if (target) window.hana?.openFolder?.(target);
   };
 
   const fetchFileDiff = async (workerId: string, file: string): Promise<string> => {
@@ -127,7 +127,7 @@ export function WorkersPanel() {
       <div className={fp.floatingPanelInner} onClick={(e) => e.stopPropagation()}>
         <div className={fp.floatingPanelHeader}>
           <span className={fp.floatingPanelTitle}>Workers</span>
-          <button className={fp.floatingPanelClose} onClick={close} aria-label="close">
+          <button className={fp.floatingPanelClose} type="button" onClick={close} aria-label="close">
             ×
           </button>
         </div>
@@ -139,14 +139,14 @@ export function WorkersPanel() {
             </div>
           )}
           <div className={s.fleetToolbar}>
-            <button className={s.fleetBtn} onClick={() => setShowForm((v) => !v)}>
+            <button className={s.fleetBtn} type="button" onClick={() => setShowForm((v) => !v)}>
               {showForm ? 'Close form' : 'Dispatch worker'}
             </button>
-            <button className={s.fleetBtn} onClick={playMock}>
+            <button className={s.fleetBtn} type="button" onClick={playMock}>
               Play mock worker
             </button>
             {finishedCount > 0 && (
-              <button className={s.fleetBtn} onClick={clearFinishedWorkers}>
+              <button className={s.fleetBtn} type="button" onClick={clearFinishedWorkers}>
                 Clear finished ({finishedCount})
               </button>
             )}

@@ -209,22 +209,22 @@ export function WorkerCard({
       {hasActions && (
         <div className={s.workerActions}>
           {canCancel && (
-            <button className={s.fleetBtn} onClick={() => onCancel?.(worker.workerId)}>
+            <button className={s.fleetBtn} type="button" onClick={() => onCancel?.(worker.workerId)}>
               Cancel
             </button>
           )}
           {canRetry && (
-            <button className={s.fleetBtn} onClick={() => onRetry?.(worker.workerId)}>
+            <button className={s.fleetBtn} type="button" onClick={() => onRetry?.(worker.workerId)}>
               Retry
             </button>
           )}
           {canOpen && (
-            <button className={s.fleetBtn} onClick={() => onOpenWorktree?.(worker)}>
+            <button className={s.fleetBtn} type="button" onClick={() => onOpenWorktree?.(worker)}>
               Open worktree
             </button>
           )}
           {canCopy && (
-            <button className={s.fleetBtn} onClick={copyLogs}>
+            <button className={s.fleetBtn} type="button" onClick={copyLogs}>
               {copied ? 'Copied' : 'Copy logs'}
             </button>
           )}
