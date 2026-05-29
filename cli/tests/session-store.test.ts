@@ -104,4 +104,20 @@ describe("CLI session store", () => {
     expect(first).not.toBe(second);
     await expect(latestSessionPath(tmp)).resolves.toBe(second);
   });
+
+  it("serializes concurrent session index updates", async () => {
+    await Promise.all(Array.from({ length: 12 }, (_, index) => appendSessionTurn({
+      dataDir: tmp,
+      cwd: "/repo",
+      prompt: `task ${index}`,
+      assistant: "done",
+      modelProvider: "mock",
+      modelId: "mock-brain",
+    })));
+
+    const sessions = await listSessions(tmp);
+    const prompts = new Set(sessions.map((session) => session.firstMessage));
+    expect(sessions).toHaveLength(12);
+    expect(prompts.size).toBe(12);
+  });
 });

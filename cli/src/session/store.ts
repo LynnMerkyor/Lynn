@@ -77,9 +77,39 @@ async function writeIndex(dataDir: string, entries: CliSessionIndexEntry[]): Pro
     sessions: entries,
   };
   const target = sessionIndexPath(dataDir);
-  const tmp = `${target}.tmp`;
+  const tmp = `${target}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
   await fs.writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   await fs.rename(tmp, target);
+}
+
+async function withIndexLock<T>(dataDir: string, run: () => Promise<T>): Promise<T> {
+  const dir = cliSessionDir(dataDir);
+  await fs.mkdir(dir, { recursive: true });
+  const lockPath = `${sessionIndexPath(dataDir)}.lock`;
+  let handle: fs.FileHandle | null = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      handle = await fs.open(lockPath, "wx");
+      break;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") throw error;
+      await sleep(Math.min(250, 10 + attempt * 5));
+    }
+  }
+  if (!handle) {
+    throw new Error(`timed out waiting for session index lock: ${lockPath}`);
+  }
+  try {
+    return await run();
+  } finally {
+    await handle.close().catch(() => undefined);
+    await fs.unlink(lockPath).catch(() => undefined);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function readSessionLines(sessionPath: string): Promise<CliSessionLine[]> {
@@ -109,25 +139,27 @@ export async function appendSessionTurn(input: {
   ];
   await fs.appendFile(target, lines.map((line) => JSON.stringify(line)).join("\n") + "\n", "utf8");
 
-  const existing = await readIndex(input.dataDir);
-  const old = existing.find((entry) => path.resolve(entry.path) === path.resolve(target));
-  const messageCount = (old?.messageCount || 0) + 2;
-  const entry: CliSessionIndexEntry = {
-    path: target,
-    title: input.title || old?.title || input.prompt.slice(0, 80) || null,
-    firstMessage: old?.firstMessage || input.prompt,
-    modified: new Date().toISOString(),
-    messageCount,
-    cwd: input.cwd,
-    agentId: CLI_AGENT_ID,
-    agentName: "Lynn CLI",
-    modelId: input.modelId || old?.modelId || null,
-    modelProvider: input.modelProvider || old?.modelProvider || null,
-    pinned: old?.pinned || false,
-    labels: Array.isArray(old?.labels) ? old.labels : [],
-  };
-  const next = [entry, ...existing.filter((candidate) => path.resolve(candidate.path) !== path.resolve(target))];
-  await writeIndex(input.dataDir, next);
+  await withIndexLock(input.dataDir, async () => {
+    const existing = await readIndex(input.dataDir);
+    const old = existing.find((entry) => path.resolve(entry.path) === path.resolve(target));
+    const messageCount = (old?.messageCount || 0) + 2;
+    const entry: CliSessionIndexEntry = {
+      path: target,
+      title: input.title || old?.title || input.prompt.slice(0, 80) || null,
+      firstMessage: old?.firstMessage || input.prompt,
+      modified: new Date().toISOString(),
+      messageCount,
+      cwd: input.cwd,
+      agentId: CLI_AGENT_ID,
+      agentName: "Lynn CLI",
+      modelId: input.modelId || old?.modelId || null,
+      modelProvider: input.modelProvider || old?.modelProvider || null,
+      pinned: old?.pinned || false,
+      labels: Array.isArray(old?.labels) ? old.labels : [],
+    };
+    const next = [entry, ...existing.filter((candidate) => path.resolve(candidate.path) !== path.resolve(target))];
+    await writeIndex(input.dataDir, next);
+  });
   return target;
 }
 
@@ -148,27 +180,29 @@ export async function appendSessionLine(input: {
   };
   await fs.appendFile(target, `${JSON.stringify(line)}\n`, "utf8");
 
-  const existing = await readIndex(input.dataDir);
-  const old = existing.find((entry) => path.resolve(entry.path) === path.resolve(target));
-  const isMessage = line.type === "user" || line.type === "assistant";
-  const messageCount = (old?.messageCount || 0) + (isMessage ? 1 : 0);
-  const firstMessage = old?.firstMessage || (line.type === "user" && line.content ? line.content : input.title || "");
-  const entry: CliSessionIndexEntry = {
-    path: target,
-    title: input.title || old?.title || (line.content || "").slice(0, 80) || null,
-    firstMessage,
-    modified: new Date().toISOString(),
-    messageCount,
-    cwd: input.cwd,
-    agentId: CLI_AGENT_ID,
-    agentName: "Lynn CLI",
-    modelId: input.modelId || old?.modelId || null,
-    modelProvider: input.modelProvider || old?.modelProvider || null,
-    pinned: old?.pinned || false,
-    labels: Array.isArray(old?.labels) ? old.labels : [],
-  };
-  const next = [entry, ...existing.filter((candidate) => path.resolve(candidate.path) !== path.resolve(target))];
-  await writeIndex(input.dataDir, next);
+  await withIndexLock(input.dataDir, async () => {
+    const existing = await readIndex(input.dataDir);
+    const old = existing.find((entry) => path.resolve(entry.path) === path.resolve(target));
+    const isMessage = line.type === "user" || line.type === "assistant";
+    const messageCount = (old?.messageCount || 0) + (isMessage ? 1 : 0);
+    const firstMessage = old?.firstMessage || (line.type === "user" && line.content ? line.content : input.title || "");
+    const entry: CliSessionIndexEntry = {
+      path: target,
+      title: input.title || old?.title || (line.content || "").slice(0, 80) || null,
+      firstMessage,
+      modified: new Date().toISOString(),
+      messageCount,
+      cwd: input.cwd,
+      agentId: CLI_AGENT_ID,
+      agentName: "Lynn CLI",
+      modelId: input.modelId || old?.modelId || null,
+      modelProvider: input.modelProvider || old?.modelProvider || null,
+      pinned: old?.pinned || false,
+      labels: Array.isArray(old?.labels) ? old.labels : [],
+    };
+    const next = [entry, ...existing.filter((candidate) => path.resolve(candidate.path) !== path.resolve(target))];
+    await writeIndex(input.dataDir, next);
+  });
   return target;
 }
 
