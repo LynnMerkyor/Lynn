@@ -103,6 +103,12 @@ export function WorkersPanel() {
     });
   };
 
+  const resumeWorker = (workerId: string) => {
+    void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/retry?resume=1`, { method: 'POST' }).catch(() => {
+      /* server broadcasts the resumed worker; ignore transport errors here */
+    });
+  };
+
   const openWorktree = (worker: FleetWorkerView) => {
     if (!worker.worktree) return;
     const abs = worker.cwd ? `${worker.cwd.replace(/\/+$/, '')}/${worker.worktree}` : worker.worktree;
@@ -255,6 +261,7 @@ export function WorkersPanel() {
                   worker={w}
                   onCancel={cancelWorker}
                   onRetry={retryWorker}
+                  onResume={resumeWorker}
                   onOpenWorktree={openWorktree}
                   onDismiss={removeWorker}
                   fetchFileDiff={fetchFileDiff}

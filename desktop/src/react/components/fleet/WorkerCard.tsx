@@ -41,6 +41,7 @@ export function WorkerCard({
   worker,
   onCancel,
   onRetry,
+  onResume,
   onOpenWorktree,
   onDismiss,
   fetchFileDiff,
@@ -50,6 +51,7 @@ export function WorkerCard({
   worker: FleetWorkerView;
   onCancel?: (workerId: string) => void;
   onRetry?: (workerId: string) => void;
+  onResume?: (workerId: string) => void;
   onOpenWorktree?: (worker: FleetWorkerView) => void;
   onDismiss?: (workerId: string) => void;
   fetchFileDiff?: (workerId: string, file: string) => Promise<string>;
@@ -99,9 +101,10 @@ export function WorkerCard({
 
   const canCancel = !!onCancel && ['queued', 'running', 'waiting_approval', 'blocked'].includes(worker.status);
   const canRetry = !!onRetry && ['failed', 'cancelled', 'blocked', 'completed'].includes(worker.status);
+  const canResume = !!onResume && !!worker.checkpoint?.path && ['failed', 'cancelled', 'blocked', 'completed'].includes(worker.status);
   const canOpen = !!onOpenWorktree && !!worker.worktree;
   const canCopy = worker.log.length > 0;
-  const hasActions = canCancel || canRetry || canOpen || canCopy;
+  const hasActions = canCancel || canRetry || canResume || canOpen || canCopy;
   const recentTools = worker.tools.slice(-6);
   const visualResult = worker.visualResult;
   const visualTaskType = worker.taskType ?? visualResult?.taskType;
@@ -311,6 +314,11 @@ export function WorkerCard({
           {canRetry && (
             <button className={s.fleetBtn} onClick={() => onRetry?.(worker.workerId)}>
               Retry
+            </button>
+          )}
+          {canResume && (
+            <button className={s.fleetBtn} onClick={() => onResume?.(worker.workerId)} title={worker.checkpoint?.path}>
+              Resume
             </button>
           )}
           {canOpen && (

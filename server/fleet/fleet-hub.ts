@@ -29,6 +29,8 @@ export interface FleetBrief {
   /** Vision dispatch (Pillar 1): the task kind and the image the worker should see. */
   taskType?: "code" | "see" | "ground" | "ui2code";
   image?: string;
+  /** Optional CLI session checkpoint used to resume a long-running worker. */
+  resumePath?: string;
 }
 
 export interface FleetWorkerRecord {
@@ -70,6 +72,7 @@ function defaultWriteBrief(brief: FleetBrief, workerId: string): string {
   ];
   if (brief.taskType) lines.push(``, `## Task Type`, brief.taskType);
   if (brief.image) lines.push(``, `## Image`, brief.image);
+  if (brief.resumePath) lines.push(``, `## Resume`, brief.resumePath);
   lines.push(``, `## Objective`, brief.objective || "(none)", ``, `## Owned files`);
   for (const f of brief.owned) lines.push(`- ${f}`);
   lines.push(``, `## Forbidden files`);
@@ -259,10 +262,11 @@ export class FleetHub {
   }
 
   /** Re-dispatch a worker's brief as a fresh worker (recovery). */
-  async retry(id: string): Promise<FleetWorkerRecord | null> {
+  async retry(id: string, opts: { resumeFromCheckpoint?: boolean } = {}): Promise<FleetWorkerRecord | null> {
     const rec = this.workers.get(id);
     if (!rec) return null;
-    return this.dispatch(rec.brief);
+    const checkpoint = opts.resumeFromCheckpoint ? latestCheckpointPath(rec.events) : undefined;
+    return this.dispatch(checkpoint ? { ...rec.brief, resumePath: checkpoint } : rec.brief);
   }
 
   /** Read-only single-file diff for the GUI drawer; never escapes the worktree. */
@@ -282,4 +286,15 @@ export class FleetHub {
       return { file, diff: "" };
     }
   }
+}
+
+function latestCheckpointPath(events: FleetWorkerEvent[]): string | undefined {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (event.type !== "worker.progress") continue;
+    if (event.message !== "session saved" && !event.message.startsWith("checkpoint:")) continue;
+    const data = event.data as { path?: unknown } | undefined;
+    if (typeof data?.path === "string" && data.path) return data.path;
+  }
+  return undefined;
 }

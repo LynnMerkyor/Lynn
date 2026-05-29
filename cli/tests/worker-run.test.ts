@@ -69,6 +69,9 @@ describe("worker-run scaffold", () => {
       "## Image",
       "- screenshots/login.png",
       "",
+      "## Resume",
+      "- /tmp/lynn-session.jsonl",
+      "",
       "## Objective",
       "Find the login button.",
       "",
@@ -84,6 +87,7 @@ describe("worker-run scaffold", () => {
 
     expect(brief.taskType).toBe("ground");
     expect(brief.image).toBe("screenshots/login.png");
+    expect(brief.resumePath).toBe("/tmp/lynn-session.jsonl");
   });
 
   it("extracts normalized grounding boxes from MiMo JSON text", () => {

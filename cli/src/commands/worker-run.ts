@@ -27,6 +27,7 @@ export interface WorkerBrief {
   tests: string[];
   taskType: "code" | VisionCommand;
   image?: string;
+  resumePath?: string;
 }
 
 export function extractGroundingBoxes(text: string): FleetVisualBox[] {
@@ -141,7 +142,8 @@ export function parseWorkerBrief(markdown: string): WorkerBrief {
   const tests = bulletValues(sectionLines(markdown, "Test commands"));
   const taskType = normalizeTaskType(firstSectionValue(markdown, "Task Type") || firstSectionValue(markdown, "Type"));
   const image = firstSectionValue(markdown, "Image") || firstSectionValue(markdown, "Screenshot") || undefined;
-  return { title, objective, owned, forbidden, tests, taskType, image };
+  const resumePath = firstSectionValue(markdown, "Resume") || firstSectionValue(markdown, "Session") || undefined;
+  return { title, objective, owned, forbidden, tests, taskType, image, resumePath };
 }
 
 function emit(event: FleetWorkerEvent): void {
@@ -425,6 +427,11 @@ async function runLynnCliWorker(input: {
   if (reasoning) flags.reasoning = reasoning;
   const showReasoning = getStringFlag(input.args.flags, "show-reasoning");
   if (showReasoning) flags["show-reasoning"] = showReasoning;
+  if (input.brief.resumePath) {
+    flags.resume = path.isAbsolute(input.brief.resumePath)
+      ? input.brief.resumePath
+      : path.resolve(input.worktree, input.brief.resumePath);
+  }
   const preset = workerProviderPreset(input.agent);
   if (preset && !getStringFlag(input.args.flags, "preset") && !getStringFlag(input.args.flags, "base-url", "api-base") && !getStringFlag(input.args.flags, "model")) {
     flags.preset = preset;

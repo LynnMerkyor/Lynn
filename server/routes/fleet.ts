@@ -51,7 +51,8 @@ export function createFleetRoute(hub: FleetHub): Hono {
   });
 
   route.post("/fleet/workers/:id/retry", async (c) => {
-    const worker = await hub.retry(c.req.param("id"));
+    const resume = c.req.query("resume") === "1" || c.req.query("resume") === "true";
+    const worker = await hub.retry(c.req.param("id"), { resumeFromCheckpoint: resume });
     if (!worker) return c.json({ error: "worker not found" }, 404);
     return c.json({ ok: true, worker });
   });

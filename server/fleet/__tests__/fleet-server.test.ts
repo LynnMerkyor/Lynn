@@ -243,6 +243,22 @@ describe("FleetHub.retry", () => {
     const hub = new FleetHub("/repo", () => {}, () => "T");
     expect(await hub.retry("nope")).toBeNull();
   });
+
+  it("can re-dispatch from the latest session checkpoint", async () => {
+    const hub = new FleetHub("/repo", () => {}, () => "T");
+    const first = await hub.dispatch(sampleBrief);
+    first.events.push({
+      type: "worker.progress",
+      workerId: first.workerId,
+      message: "checkpoint: assistant",
+      data: { path: "/tmp/lynn-session.jsonl", line: "assistant" },
+    });
+
+    const resumed = await hub.retry(first.workerId, { resumeFromCheckpoint: true });
+
+    expect(resumed).not.toBeNull();
+    expect(resumed?.brief.resumePath).toBe("/tmp/lynn-session.jsonl");
+  });
 });
 
 describe("FleetHub.getWorkerFileDiff path guard", () => {
@@ -405,5 +421,27 @@ describe("FleetHub real spawn", () => {
 
     expect(briefText).toContain("## Task Type\nground");
     expect(briefText).toContain("## Image\nscreenshots/login.png");
+  });
+
+  it("writes resume metadata in the brief format parsed by Lynn CLI", async () => {
+    let briefText = "";
+    const hub = new FleetHub("/repo", () => {}, () => "T", {
+      available: () => true,
+      createWorktree: async () => {},
+      resolveCommand: (args) => ({ command: "node", args, env: {}, source: "dev" }),
+      spawn: (opts) => {
+        const briefIndex = opts.args.indexOf("--brief");
+        if (briefIndex >= 0) {
+          briefText = fs.readFileSync(opts.args[briefIndex + 1], "utf8");
+        }
+        return { workerId: opts.workerId, pid: 123, kill: () => {} };
+      },
+    });
+    await hub.dispatch({
+      ...sampleBrief,
+      resumePath: "/tmp/lynn-session.jsonl",
+    });
+
+    expect(briefText).toContain("## Resume\n/tmp/lynn-session.jsonl");
   });
 });
