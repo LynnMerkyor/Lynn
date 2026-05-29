@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld("hana", {
   appReady: () => ipcRenderer.invoke("app-ready"),
   // llama.cpp local 推理 (Lynn V0.79 默认本地模型)
   llamacppGetState: () => ipcRenderer.invoke("llamacpp:state"),
+  cliEnvStatus: () => ipcRenderer.invoke("cli:status"),
   llamacppStartDownload: (payload) => ipcRenderer.invoke("llamacpp:start-download", payload || {}),
   llamacppStop: () => ipcRenderer.invoke("llamacpp:stop"),
   llamacppPauseDownload: () => ipcRenderer.invoke("llamacpp:pause-download"),

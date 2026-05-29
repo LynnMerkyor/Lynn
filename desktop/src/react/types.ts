@@ -237,9 +237,18 @@ export interface GlobalShortcutStatus {
   errors?: Record<string, string>;
 }
 
+export interface CliEnvStatus {
+  ready: boolean;
+  node: { path: string; source: 'bundled' | 'electron' | 'system'; version: string | null };
+  cli: { path: string | null; present: boolean };
+  systemNode: { path: string; version: string | null; major: number | null } | null;
+  minNodeMajor: number;
+}
+
 export interface PlatformApi {
   getServerPort(): Promise<string>;
   getServerToken(): Promise<string>;
+  cliEnvStatus?(): Promise<CliEnvStatus>;
   setWakeLock?(reason: string, active: boolean): Promise<{ active: boolean; blockerId: number | null; reasons: string[] }>;
   getWakeLockState?(): Promise<{ active: boolean; blockerId: number | null; reasons: string[] }>;
   openSettings(target?: string | SettingsNavigationTarget): void;

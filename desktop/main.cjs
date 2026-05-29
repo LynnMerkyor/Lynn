@@ -20,6 +20,7 @@ const { normalizeConfiguredShortcut, registerFirstAvailableGlobalShortcut } = re
 const { VoiceTunnelManager } = require("./voice-tunnel-manager.cjs");
 const { LlamaCppManager } = require("./llamacpp-manager.cjs");
 const { ModelDownloader } = require("./model-downloader.cjs");
+const { getCliEnvStatus } = require("./cli-env-manager.cjs");
 const {
   MODEL_DOWNLOADER_SOURCES,
   buildLlamacppArgsForAlias,
@@ -2532,6 +2533,7 @@ async function checkForUpdates() {
 wrapIpcHandler("get-server-port", () => serverPort);
 wrapIpcHandler("get-server-token", () => serverToken);
 wrapIpcHandler("get-app-version", () => app.getVersion());
+wrapIpcHandler("cli:status", () => getCliEnvStatus());
 wrapIpcHandler("wake-lock-set", (_event, payload = {}) => (
   setWakeLockReason(payload.reason, !!payload.active)
 ));

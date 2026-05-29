@@ -239,3 +239,15 @@
   font-size: 12px;
   font-family: var(--mono-font, monospace);
 }
+
+.cliEnv {
+  margin: 0 4px 8px;
+  font-size: 11px;
+  font-family: var(--mono-font, monospace);
+  opacity: 0.7;
+}
+
+.cliEnv[data-ready='1'] {
+  color: #2ecc71;
+  opacity: 0.9;
+}
