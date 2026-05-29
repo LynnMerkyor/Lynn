@@ -254,7 +254,38 @@ const shown = await run("sessions show", ["sessions", "show", savedPath, "--json
 assertIncludes(shown.name, shown.stdout, '"type":"sessions.show"');
 assertIncludes(shown.name, shown.stdout, "remember this");
 
+await runCodeResumeSmoke();
+await runCodeImageByokSmoke();
+
 console.log("[cli-smoke] all checks passed");
+
+async function runCodeResumeSmoke() {
+  const codeSession = await run("code session save", [
+    "code",
+    "remember this code task",
+    "--mock-brain",
+    "--save-session",
+    "--data-dir",
+    sessionDataDir,
+    "--json",
+  ]);
+  assertIncludes(codeSession.name, codeSession.stdout, '"type":"session.saved"');
+  const codeSavedLine = codeSession.stdout.split(/\r?\n/).find((line) => line.includes('"type":"session.saved"'));
+  const codeSavedPath = codeSavedLine ? JSON.parse(codeSavedLine).path : "";
+  if (!codeSavedPath) throw new Error(`code session save did not return a path\n${codeSession.stdout}`);
+  const resumed = await run("code session resume", [
+    "code",
+    "--resume",
+    codeSavedPath,
+    "continue that code task",
+    "--mock-brain",
+    "--data-dir",
+    sessionDataDir,
+    "--json",
+  ]);
+  assertIncludes(resumed.name, resumed.stdout, '"type":"session.resumed"');
+  assertIncludes(resumed.name, resumed.stdout, '"type":"session.saved"');
+}
 
 async function runStepFunByokFallbackSmoke() {
   let seen = null;
@@ -312,6 +343,59 @@ async function runStepFunByokFallbackSmoke() {
     if (!seen) throw new Error("StepFun BYOK smoke did not call the provider");
     if (seen.auth !== "Bearer step-smoke-key") throw new Error(`StepFun BYOK smoke used wrong auth: ${seen.auth}`);
     if (seen.body.model !== "step-3.7-flash") throw new Error(`StepFun BYOK smoke used wrong model: ${seen.body.model}`);
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve()));
+  }
+}
+
+async function runCodeImageByokSmoke() {
+  let seen = null;
+  const server = http.createServer((request, response) => {
+    if (request.url !== "/v1/chat/completions" || request.method !== "POST") {
+      response.writeHead(404);
+      response.end();
+      return;
+    }
+    let body = "";
+    request.on("data", (chunk) => { body += String(chunk); });
+    request.on("end", () => {
+      seen = { auth: request.headers.authorization, body: JSON.parse(body) };
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"image ok\"}}]}",
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("image BYOK smoke server failed to listen");
+    const result = await run("code image byok", [
+      "code",
+      "review attached UI",
+      "--image",
+      smokePng,
+      "--base-url",
+      `http://127.0.0.1:${address.port}/v1`,
+      "--api-key",
+      "image-smoke-key",
+      "--model",
+      "vision-test-model",
+      "--brain-url",
+      "http://127.0.0.1:1",
+      "--json",
+      "--max-steps",
+      "1",
+    ], { env: { LYNN_CLI_BRAIN_TIMEOUT_MS: "50" } });
+    assertIncludes(result.name, result.stdout, '"text":"image ok"');
+    if (!seen) throw new Error("code image BYOK smoke did not call the provider");
+    if (seen.auth !== "Bearer image-smoke-key") throw new Error(`code image BYOK smoke used wrong auth: ${seen.auth}`);
+    if (seen.body.model !== "vision-test-model") throw new Error(`code image BYOK smoke used wrong model: ${seen.body.model}`);
+    const messageText = JSON.stringify(seen.body.messages || []);
+    if (!messageText.includes("data:image/png;base64")) throw new Error("code image BYOK smoke did not send image content");
   } finally {
     await new Promise((resolve) => server.close(() => resolve()));
   }
