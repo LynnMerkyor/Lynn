@@ -28,6 +28,7 @@ export function usage(): string {
     "  --reasoning auto|off|low|medium|high|xhigh",
     "  --show-reasoning auto|always|never",
     "  --brain-url http://127.0.0.1:8790",
+    "  --server-url http://127.0.0.1:3000",
     "  --approval ask|on-failure|never|yolo",
     "  --sandbox read-only|workspace-write|danger-full-access",
     "  --save-session --data-dir ~/.lynn",

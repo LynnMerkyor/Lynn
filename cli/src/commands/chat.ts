@@ -2,7 +2,7 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
-import { providersInfo, renderProvidersInfo } from "./providers.js";
+import { renderProvidersInfo, resolveProvidersInfo } from "./providers.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 
@@ -26,7 +26,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean } = {
         continue;
       }
       if (text === "/model" || text === "/providers") {
-        output.write(`${renderProvidersInfo(providersInfo())}\n\n`);
+        output.write(`${renderProvidersInfo(await resolveProvidersInfo(args))}\n\n`);
         continue;
       }
       if (text === "/clear") {

@@ -37,6 +37,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "print",
       "prompt",
       "brain-url",
+      "server-url",
       "brief",
       "task",
       "worktree",

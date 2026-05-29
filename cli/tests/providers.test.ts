@@ -9,15 +9,24 @@ describe("providers command", () => {
       byokEntry: "Open Lynn GUI > Settings > Providers",
       keyPolicy: "Provider keys stay private.",
       brainUrl: "http://127.0.0.1:8790",
+      server: { status: "ok", url: "http://127.0.0.1:3000" },
+      activeProvider: "openai",
+      activeModel: "gpt-5.5",
+      providers: [
+        { id: "openai", displayName: "OpenAI", type: "api-key", configured: true, modelCount: 2 },
+        { id: "deepseek", displayName: "DeepSeek", type: "api-key", configured: false, modelCount: 1 },
+      ],
     });
 
     expect(output).toContain("Lynn Providers / BYOK");
     expect(output).toContain("MiMo");
+    expect(output).toContain("OpenAI");
+    expect(output).not.toContain("secret");
     expect(output).toContain("Settings > Providers");
     expect(output).not.toContain("sk-");
   });
 
-  it("prints JSON when requested", () => {
+  it("prints JSON when requested", async () => {
     const original = process.stdout.write;
     let output = "";
     process.stdout.write = ((chunk: string | Uint8Array) => {
@@ -25,7 +34,7 @@ describe("providers command", () => {
       return true;
     }) as typeof process.stdout.write;
     try {
-      expect(runProviders(parseArgs(["providers", "--json"]))).toBe(0);
+      await expect(runProviders(parseArgs(["providers", "--json", "--data-dir", "/tmp/lynn-cli-missing-test"]))).resolves.toBe(0);
     } finally {
       process.stdout.write = original;
     }
@@ -34,7 +43,7 @@ describe("providers command", () => {
     expect(output).toContain("MiMo");
   });
 
-  it("makes model a providers alias", () => {
+  it("makes model a providers alias", async () => {
     const original = process.stdout.write;
     let output = "";
     process.stdout.write = ((chunk: string | Uint8Array) => {
@@ -42,7 +51,7 @@ describe("providers command", () => {
       return true;
     }) as typeof process.stdout.write;
     try {
-      expect(runProviders(parseArgs(["model"]))).toBe(0);
+      await expect(runProviders(parseArgs(["model", "--data-dir", "/tmp/lynn-cli-missing-test"]))).resolves.toBe(0);
     } finally {
       process.stdout.write = original;
     }
