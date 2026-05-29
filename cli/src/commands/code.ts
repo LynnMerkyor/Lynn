@@ -15,6 +15,7 @@ import { box, displayCwd, padLine } from "../startup.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
 import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type ChatMode } from "./chat.js";
+import { renderProvidersInfo, resolveProvidersInfo } from "./providers.js";
 import { readVersionInfo } from "../version.js";
 
 const pExecFile = promisify(execFile);
@@ -148,6 +149,10 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       if (text.startsWith("/mode ")) {
         const result = applyModeCommand(mode, text.slice(6).trim());
         output.write(renderModeChange(result, mode, supportsColor(output)));
+        continue;
+      }
+      if (text === "/model" || text === "/providers") {
+        output.write(`${renderProvidersInfo(await resolveProvidersInfo(args))}\n\n`);
         continue;
       }
       const taskArgs: ParsedArgs = {
@@ -314,6 +319,8 @@ function renderCodeHelp(): string {
     "/fast low-latency MiMo/Brain replies",
     "/think deeper MiMo/Brain reasoning",
     "/reasoning show or set reasoning mode",
+    "/model show current Brain/BYOK route",
+    "/providers show provider and BYOK setup",
     "/mode show permission mode",
     "/mode ask guarded workspace-write mode",
     "/mode yolo allow local writes and shell commands",
