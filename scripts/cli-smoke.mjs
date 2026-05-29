@@ -110,7 +110,7 @@ checks.push(run("providers", ["providers", "--data-dir", missingDataDir]).then((
   assertIncludes(r.name, r.stdout, "Lynn Providers / BYOK");
   assertIncludes(r.name, r.stdout, "Provider key");
   assertNotIncludes(r.name, r.stdout, "sk-");
-  assertNotIncludes(r.name, r.stdout.toLowerCase(), "api_key");
+  assertIncludes(r.name, r.stdout, "LYNN_CLI_PRESET=stepfun");
 }));
 
 checks.push(run("provider presets", ["providers", "presets"]).then((r) => {

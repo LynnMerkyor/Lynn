@@ -102,6 +102,7 @@ export function renderProvidersInfo(info: ProvidersInfo): string {
     "  Lynn providers set --base-url https://api.example.com/v1 --api-key <api-key> --model model-id",
     "  Lynn providers set --preset mimo --api-key <api-key>",
     "  Lynn providers set --preset stepfun --api-key <api-key>",
+    "  LYNN_CLI_PRESET=stepfun LYNN_CLI_API_KEY=<api-key> Lynn -p \"hello\"",
     "  Lynn providers test",
     "  Lynn providers presets",
     t("providers.routeHint"),
