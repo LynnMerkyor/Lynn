@@ -122,6 +122,15 @@ checks.push(run("provider presets", ["providers", "presets"]).then((r) => {
   assertNotIncludes(r.name, r.stdout, "sk-");
 }));
 
+checks.push(run("worker agents", ["agents"]).then((r) => {
+  assertIncludes(r.name, r.stdout, "Lynn worker agents");
+  assertIncludes(r.name, r.stdout, "mimo-vl");
+  assertIncludes(r.name, r.stdout, "stepfun-flash");
+  assertIncludes(r.name, r.stdout, "profile");
+  assertIncludes(r.name, r.stdout, "external");
+  assertIncludes(r.name, r.stdout, "CodeBuddy");
+}));
+
 checks.push(run("permissions", ["permissions", "--data-dir", missingDataDir]).then((r) => {
   assertIncludes(r.name, r.stdout, "Lynn CLI Permissions");
   assertIncludes(r.name, r.stdout, "approval: ask");
