@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { renderPermissions, resolveEffectivePermissions } from "../src/permissions.js";
+import { renderPermissions, resolveEffectivePermissions, savePermissionProfile } from "../src/permissions.js";
 
 let tmp = "";
 
@@ -59,5 +59,51 @@ describe("CLI permission profile", () => {
     expect(permissions.source).toBe("flags");
     expect(renderPermissions(permissions)).toContain("WARNING");
   });
-});
 
+  it("writes the shared CLI/GUI permission profile", async () => {
+    const saved = await savePermissionProfile(parseArgs([
+      "permissions",
+      "set",
+      "--data-dir",
+      tmp,
+      "--approval",
+      "yolo",
+      "--sandbox",
+      "danger-full-access",
+    ]));
+
+    expect(saved.saved).toBe(true);
+    expect(saved.profilePath).toBe(path.join(tmp, "permissions", "cli.json"));
+
+    const permissions = await resolveEffectivePermissions(parseArgs(["permissions", "--data-dir", tmp]));
+    expect(permissions.approval).toBe("yolo");
+    expect(permissions.sandbox).toBe("danger-full-access");
+    expect(permissions.source).toBe("gui-profile");
+  });
+
+  it("preserves unspecified fields when updating the shared profile", async () => {
+    await savePermissionProfile(parseArgs([
+      "permissions",
+      "set",
+      "--data-dir",
+      tmp,
+      "--approval",
+      "never",
+      "--sandbox",
+      "read-only",
+    ]));
+
+    await savePermissionProfile(parseArgs([
+      "permissions",
+      "set",
+      "--data-dir",
+      tmp,
+      "--approval",
+      "ask",
+    ]));
+
+    const permissions = await resolveEffectivePermissions(parseArgs(["permissions", "--data-dir", tmp]));
+    expect(permissions.approval).toBe("ask");
+    expect(permissions.sandbox).toBe("read-only");
+  });
+});

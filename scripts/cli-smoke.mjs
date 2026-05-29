@@ -10,6 +10,7 @@ const root = process.cwd();
 const nodeBin = process.execPath;
 const cliBin = path.join(root, "cli", "bin", "lynn.mjs");
 const missingDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-missing");
+const permissionSetDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-permissions-set");
 const sessionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-sessions");
 const toolDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-tools");
 const visionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-vision");
@@ -70,6 +71,8 @@ if (!fs.existsSync(cliBin)) {
 
 await fs.promises.rm(missingDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(missingDataDir, { recursive: true });
+await fs.promises.rm(permissionSetDataDir, { recursive: true, force: true });
+await fs.promises.mkdir(permissionSetDataDir, { recursive: true });
 await fs.promises.rm(sessionDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(sessionDataDir, { recursive: true });
 await fs.promises.rm(toolDataDir, { recursive: true, force: true });
@@ -107,6 +110,22 @@ checks.push(run("permissions", ["permissions", "--data-dir", missingDataDir]).th
   assertIncludes(r.name, r.stdout, "approval: ask");
   assertIncludes(r.name, r.stdout, "sandbox:  workspace-write");
   assertIncludes(r.name, r.stdout, "GUI profile");
+}));
+
+checks.push(run("permissions set shared profile", [
+  "permissions",
+  "set",
+  "--data-dir",
+  permissionSetDataDir,
+  "--approval",
+  "yolo",
+  "--sandbox",
+  "danger-full-access",
+]).then(async (r) => {
+  assertIncludes(r.name, r.stdout, "Saved CLI permission profile");
+  const profile = await fs.promises.readFile(path.join(permissionSetDataDir, "permissions", "cli.json"), "utf8");
+  assertIncludes(r.name, profile, '"approval": "yolo"');
+  assertIncludes(r.name, profile, '"sandbox": "danger-full-access"');
 }));
 
 checks.push(run("mock prompt", ["-p", "你好", "--mock-brain"]).then((r) => {

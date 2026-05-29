@@ -19,6 +19,10 @@ export interface EffectivePermissions extends PermissionProfile {
   guiProfileFound: boolean;
 }
 
+export interface SavedPermissions extends EffectivePermissions {
+  saved: true;
+}
+
 export async function resolveEffectivePermissions(args: ParsedArgs): Promise<EffectivePermissions> {
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   const profilePath = path.join(dataDir, "permissions", "cli.json");
@@ -44,6 +48,27 @@ export async function resolveEffectivePermissions(args: ParsedArgs): Promise<Eff
     dataDir,
     profilePath,
     guiProfileFound: !!guiProfile,
+  };
+}
+
+export async function savePermissionProfile(args: ParsedArgs): Promise<SavedPermissions> {
+  const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
+  const profilePath = path.join(dataDir, "permissions", "cli.json");
+  const current = await readPermissionProfile(profilePath);
+  const approval = normalizeApproval(getStringFlag(args.flags, "approval")) || current?.approval || "ask";
+  const sandbox = normalizeSandbox(getStringFlag(args.flags, "sandbox")) || current?.sandbox || "workspace-write";
+
+  await fs.mkdir(path.dirname(profilePath), { recursive: true });
+  await fs.writeFile(profilePath, `${JSON.stringify({ approval, sandbox }, null, 2)}\n`, "utf8");
+
+  return {
+    approval,
+    sandbox,
+    source: "gui-profile",
+    dataDir,
+    profilePath,
+    guiProfileFound: true,
+    saved: true,
   };
 }
 
