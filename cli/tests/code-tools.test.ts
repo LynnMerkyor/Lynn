@@ -54,6 +54,13 @@ describe("code tools", () => {
     await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "bash", command: "pwd" })).rejects.toThrow("approval yolo");
   });
 
+  it("times out long-running bash commands", async () => {
+    const result = await runClientTool({ cwd: tmp, approval: "yolo", timeoutMs: 50 }, { name: "bash", command: "node -e \"setTimeout(()=>{}, 1000)\"" });
+
+    expect(result.ok).toBe(false);
+    expect(result.output).toMatchObject({ timedOut: true });
+  });
+
   it("runs code command list-tools", async () => {
     const original = process.stdout.write;
     let output = "";

@@ -1,6 +1,15 @@
 import { spawn } from "node:child_process";
 import type { ClientToolResult, ToolRunContext } from "./types.js";
 
+const DEFAULT_TIMEOUT_MS = 120_000;
+const MAX_STREAM_BYTES = 1_000_000;
+
+function appendLimited(current: string, next: string): string {
+  const combined = current + next;
+  if (Buffer.byteLength(combined, "utf8") <= MAX_STREAM_BYTES) return combined;
+  return combined.slice(-MAX_STREAM_BYTES);
+}
+
 export async function bashTool(ctx: ToolRunContext, command: string): Promise<ClientToolResult> {
   if (!command) throw new Error("--command is required for bash");
   if (ctx.approval !== "yolo") {
@@ -14,13 +23,19 @@ export async function bashTool(ctx: ToolRunContext, command: string): Promise<Cl
     });
     let stdout = "";
     let stderr = "";
-    child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
-    child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, ctx.timeoutMs || DEFAULT_TIMEOUT_MS);
+    child.stdout?.on("data", (chunk) => { stdout = appendLimited(stdout, String(chunk)); });
+    child.stderr?.on("data", (chunk) => { stderr = appendLimited(stderr, String(chunk)); });
     child.on("close", (code) => {
+      clearTimeout(timeout);
       resolve({
-        ok: code === 0,
+        ok: code === 0 && !timedOut,
         tool: "bash",
-        output: { command, exitCode: code ?? null, stdout, stderr },
+        output: { command, exitCode: code ?? null, timedOut, stdout, stderr },
       });
     });
   });

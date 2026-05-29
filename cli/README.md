@@ -65,3 +65,13 @@ task brief with Lynn's guardrails prepended. The current templates are:
 Fleet still validates claimed ownership, forbidden globs, and resulting diffs on
 the Lynn side; worker CLI flags only prevent the external agent from stalling on
 interactive approval prompts.
+
+## Code tools
+
+`Lynn code --tool bash` and `write_file` require `--approval yolo`. Bash commands
+default to a 120 second timeout and cap captured stdout/stderr to keep stuck
+commands from blocking Fleet workers:
+
+```bash
+Lynn code --tool bash --command "npm test" --approval yolo --timeout-ms 300000 --json
+```

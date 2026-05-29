@@ -21,6 +21,14 @@ function cwd(args: ParsedArgs): string {
   return getStringFlag(args.flags, "cwd") || process.cwd();
 }
 
+function timeoutMs(args: ParsedArgs): number | undefined {
+  const raw = getStringFlag(args.flags, "timeout-ms", "timeout");
+  if (!raw) return undefined;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error("--timeout-ms must be a positive integer");
+  return parsed;
+}
+
 export async function runCode(args: ParsedArgs): Promise<number> {
   const json = hasFlag(args.flags, "json", "jsonl");
   if (hasFlag(args.flags, "list-tools")) {
@@ -41,7 +49,7 @@ export async function runCode(args: ParsedArgs): Promise<number> {
   }
 
   const result = await runClientTool(
-    { cwd: cwd(args), approval: approval(args) },
+    { cwd: cwd(args), approval: approval(args), timeoutMs: timeoutMs(args) },
     {
       name: tool,
       path: getStringFlag(args.flags, "path") || undefined,

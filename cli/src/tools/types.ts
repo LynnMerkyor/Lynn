@@ -10,6 +10,7 @@ export interface ClientToolResult {
 export interface ToolRunContext {
   cwd: string;
   approval: "ask" | "on-failure" | "never" | "yolo";
+  timeoutMs?: number;
 }
 
 export interface ClientToolDefinition {
