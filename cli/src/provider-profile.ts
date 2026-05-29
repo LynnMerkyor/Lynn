@@ -99,10 +99,11 @@ export function readFlagProviderProfile(args: ParsedArgs): CliProviderProfile | 
 }
 
 export function readEnvProviderProfile(env: NodeJS.ProcessEnv = process.env): CliProviderProfile | null {
-  const baseUrl = env.LYNN_CLI_BASE_URL || env.OPENAI_BASE_URL || "";
-  const model = env.LYNN_CLI_MODEL || "";
+  const preset = resolveProviderPreset(env.LYNN_CLI_PRESET || env.OPENAI_COMPATIBLE_PRESET || null);
+  const baseUrl = env.LYNN_CLI_BASE_URL || env.OPENAI_BASE_URL || preset?.baseUrl || "";
+  const model = env.LYNN_CLI_MODEL || preset?.model || "";
   const apiKey = env.LYNN_CLI_API_KEY || env.OPENAI_API_KEY || "";
-  const provider = env.LYNN_CLI_PROVIDER || "openai-compatible";
+  const provider = env.LYNN_CLI_PROVIDER || preset?.provider || "openai-compatible";
   if (!baseUrl || !model) return null;
   return {
     provider,

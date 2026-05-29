@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import {
   providerProfilePath,
+  readEnvProviderProfile,
   readCliProviderProfile,
   redactApiKey,
   resolveCliProviderProfile,
@@ -70,5 +71,27 @@ describe("CLI provider profile", () => {
     expect(redactApiKey("sk-1234567890")).toBe("sk-1…7890");
     expect(redactApiKey("short")).toBe("********");
     expect(redactApiKey(undefined)).toBe("(none)");
+  });
+
+  it("resolves CLI provider presets from environment for node-only installs", () => {
+    expect(readEnvProviderProfile({
+      LYNN_CLI_PRESET: "stepfun",
+      LYNN_CLI_API_KEY: "step-secret",
+    })).toEqual({
+      provider: "openai-compatible",
+      baseUrl: "https://api.stepfun.com/step_plan/v1",
+      model: "step-3.7-flash",
+      apiKey: "step-secret",
+    });
+
+    expect(readEnvProviderProfile({
+      LYNN_CLI_PRESET: "mimo",
+      LYNN_CLI_MODEL: "mimo-v2.5",
+      LYNN_CLI_API_KEY: "mimo-secret",
+    })).toMatchObject({
+      baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+      model: "mimo-v2.5",
+      apiKey: "mimo-secret",
+    });
   });
 });
