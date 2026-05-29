@@ -13,8 +13,19 @@ export function resolvePrompt(args: ParsedArgs): string {
   return getStringFlag(args.flags, "p", "print", "prompt") || args.positionals.join(" ").trim();
 }
 
+export function mergePromptAndStdin(prompt: string, stdinText: string): string {
+  const cleanPrompt = prompt.trim();
+  const cleanStdin = stdinText.trim();
+  if (cleanPrompt === "-") return cleanStdin;
+  if (!cleanStdin) return cleanPrompt;
+  if (!cleanPrompt) return cleanStdin;
+  return `${cleanPrompt}\n\n--- stdin ---\n${cleanStdin}`;
+}
+
 export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): Promise<number> {
-  const prompt = resolvePrompt(args);
+  const rawPrompt = resolvePrompt(args);
+  const stdinText = await readPromptStdin(rawPrompt);
+  const prompt = mergePromptAndStdin(rawPrompt, stdinText);
   if (!prompt) {
     throw new Error("prompt is required");
   }
@@ -64,6 +75,19 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
     process.stdout.write("\n");
   }
   return 0;
+}
+
+async function readPromptStdin(prompt: string): Promise<string> {
+  if (prompt.trim() !== "-" && process.stdin.isTTY) return "";
+  try {
+    let text = "";
+    for await (const chunk of process.stdin) {
+      text += String(chunk);
+    }
+    return text;
+  } catch {
+    return "";
+  }
 }
 
 function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; renderReasoning: boolean }): void {

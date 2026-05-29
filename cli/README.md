@@ -15,6 +15,8 @@ Lynn "summarize this repo"
 Lynn -p "summarize this repo" --json
 Lynn exec "review the current diff" --reasoning auto --show-reasoning auto
 Lynn chat
+cat README.md | Lynn "summarize this file"
+Lynn - < README.md
 ```
 
 `Lynn` is the primary command. Lowercase `lynn` is kept as a compatibility
