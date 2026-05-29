@@ -3,6 +3,7 @@ import path from "node:path";
 import { getStringFlag, type ParsedArgs } from "./args.js";
 import { resolveDataDir } from "./session/store.js";
 import type { ToolRunContext } from "./tools/types.js";
+import { t } from "./i18n.js";
 
 export type ApprovalMode = ToolRunContext["approval"];
 export type SandboxMode = NonNullable<ToolRunContext["sandbox"]>;
@@ -74,19 +75,19 @@ export async function savePermissionProfile(args: ParsedArgs): Promise<SavedPerm
 
 export function renderPermissions(perms: EffectivePermissions): string {
   const warning = perms.approval === "yolo" || perms.sandbox === "danger-full-access"
-    ? "\nWARNING: YOLO/full-access mode can edit files and run shell commands without another prompt."
+    ? `\n${t("permissions.warning")}`
     : "";
   return [
-    "Lynn CLI Permissions",
+    t("permissions.title"),
     "",
-    `approval: ${perms.approval}`,
-    `sandbox:  ${perms.sandbox}`,
-    `source:   ${perms.source}`,
-    `data dir: ${perms.dataDir}`,
-    `profile:  ${perms.guiProfileFound ? perms.profilePath : `${perms.profilePath} (not found)`}`,
+    `${t("permissions.approval")}: ${perms.approval}`,
+    `${t("permissions.sandbox")}:  ${perms.sandbox}`,
+    `${t("permissions.source")}:   ${perms.source}`,
+    `${t("permissions.dataDir")}: ${perms.dataDir}`,
+    `${t("permissions.profile")}:  ${perms.guiProfileFound ? perms.profilePath : t("permissions.profile.missing", { path: perms.profilePath })}`,
     "",
-    "Precedence: CLI flags > env > client GUI profile > default.",
-    "Client GUI interop: future Settings > Permissions will write this profile file.",
+    t("permissions.precedence"),
+    t("permissions.interop"),
     warning,
   ].filter(Boolean).join("\n");
 }

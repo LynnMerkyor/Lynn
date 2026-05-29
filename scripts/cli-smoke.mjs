@@ -141,10 +141,10 @@ checks.push(run("worker agents", ["agents"]).then((r) => {
 }));
 
 checks.push(run("permissions", ["permissions", "--data-dir", missingDataDir]).then((r) => {
-  assertIncludes(r.name, r.stdout, "Lynn CLI Permissions");
-  assertIncludes(r.name, r.stdout, "approval: ask");
-  assertIncludes(r.name, r.stdout, "sandbox:  workspace-write");
-  assertIncludes(r.name, r.stdout, "GUI profile");
+  assertIncludes(r.name, r.stdout, "Lynn CLI 权限");
+  assertIncludes(r.name, r.stdout, "审批: ask");
+  assertIncludes(r.name, r.stdout, "沙盒:  workspace-write");
+  assertIncludes(r.name, r.stdout, "客户端权限配置");
 }));
 
 checks.push(run("doctor offline guidance", ["doctor", "--offline", "--data-dir", missingDataDir]).then((r) => {
@@ -165,7 +165,7 @@ checks.push(run("permissions set shared profile", [
   "--sandbox",
   "danger-full-access",
 ]).then(async (r) => {
-  assertIncludes(r.name, r.stdout, "Saved CLI permission profile");
+  assertIncludes(r.name, r.stdout, "已保存 CLI 权限配置");
   const profile = await fs.promises.readFile(path.join(permissionSetDataDir, "permissions", "cli.json"), "utf8");
   assertIncludes(r.name, profile, '"approval": "yolo"');
   assertIncludes(r.name, profile, '"sandbox": "danger-full-access"');
