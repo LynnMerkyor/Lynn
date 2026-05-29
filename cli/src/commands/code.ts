@@ -21,8 +21,8 @@ import { t } from "../i18n.js";
 import { resolveCliProviderProfile, type CliProviderProfile } from "../provider-profile.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
-import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type ChatMode } from "./chat.js";
-import { renderProvidersInfo, resolveProvidersInfo } from "./providers.js";
+import { applyModeCommand, applyReasoningCommand, buildChatProviderArgs, renderMode, shouldRefreshProviderRoute, shouldShowProviderSetUsage, toggleMode, type ChatMode } from "./chat.js";
+import { renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { readVersionInfo } from "../version.js";
 import { buildImageContentParts } from "../media.js";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, readSessionLines, resolveDataDir } from "../session/store.js";
@@ -129,11 +129,29 @@ export async function runCode(args: ParsedArgs): Promise<number> {
 async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   const mode = await resolveCodeMode(args);
   let reasoning = parseReasoningOptions(args);
-  const cliProvider = await resolveCliProviderProfile(args);
+  let cliProvider = await resolveCliProviderProfile(args);
   output.write(renderCodeIntro(mode, reasoning, { color: supportsColor(output), modelLabel: codeRouteLabel(false, cliProvider?.profile) }));
   const histFile = historyPath();
   const history = loadHistory(histFile);
-  const slashCommands = ["/exit", "/quit", "/help", "/tools", "/fast", "/think", "/reasoning", "/mode", "/model", "/providers"];
+  const slashCommands = [
+    "/exit",
+    "/quit",
+    "/help",
+    "/tools",
+    "/fast",
+    "/think",
+    "/reasoning",
+    "/mode",
+    "/model",
+    "/byok",
+    "/providers",
+    "/providers set",
+    "/providers unset",
+    "/providers test",
+    "/providers presets",
+    "/byok set",
+    "/byok unset",
+  ];
   try {
     for (;;) {
       const raw = await readCodeLine("› ", mode, {
@@ -184,8 +202,35 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
         output.write(renderModeChange(result, mode, supportsColor(output)));
         continue;
       }
-      if (text === "/model" || text === "/providers") {
+      if (text === "/model" || text === "/providers" || text === "/byok") {
         output.write(`${renderProvidersInfo(await resolveProvidersInfo(args))}\n\n`);
+        continue;
+      }
+      const providerCommand = buildChatProviderArgs(text, args);
+      if (providerCommand) {
+        if (shouldShowProviderSetUsage(providerCommand)) {
+          output.write(`${t("chat.providers.setUsage")}\n\n`);
+          continue;
+        }
+        const previousRoute = codeRouteLabel(false, cliProvider?.profile);
+        try {
+          const code = await runProviders(providerCommand, false);
+          if (shouldRefreshProviderRoute(providerCommand)) {
+            cliProvider = await resolveCliProviderProfile(providerCommand) || await resolveCliProviderProfile(args);
+            const nextRoute = codeRouteLabel(false, cliProvider?.profile);
+            const changed = previousRoute !== nextRoute;
+            output.write(`\n${t(changed ? "chat.providers.routeReloaded" : "chat.providers.routeUnchanged", { route: nextRoute })}\n\n`);
+          } else if (code === 0) {
+            output.write("\n");
+          }
+        } catch (error) {
+          const message = formatBrainRecoveryHint(error);
+          errorOutput.write(`• ${message}\n`);
+        }
+        continue;
+      }
+      if (text.startsWith("/providers ") || text.startsWith("/byok ")) {
+        output.write(`${t("chat.providers.usage")}\n\n`);
         continue;
       }
       const taskArgs: ParsedArgs = {

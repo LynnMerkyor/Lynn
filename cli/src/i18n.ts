@@ -111,6 +111,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/reasoning 查看或设置推理模式\n" +
       "/model 查看当前 Brain/BYOK 路由\n" +
       "/providers 查看提供方和 BYOK 设置\n" +
+      "/providers set --base-url ... --api-key ... --model ... 配置 CLI BYOK\n" +
+      "/providers unset 清除 CLI BYOK\n" +
+      "/providers test 测试 CLI BYOK\n" +
       "/mode 查看权限模式\n" +
       "/mode ask 守护模式(workspace-write)\n" +
       "/mode yolo 允许本地写入和 shell 命令",
@@ -282,6 +285,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/reasoning show or set reasoning mode\n" +
       "/model show current Brain/BYOK route\n" +
       "/providers show provider and BYOK setup\n" +
+      "/providers set --base-url ... --api-key ... --model ... configure CLI BYOK\n" +
+      "/providers unset clear CLI BYOK\n" +
+      "/providers test test CLI BYOK\n" +
       "/mode show permission mode\n" +
       "/mode ask guarded workspace-write mode\n" +
       "/mode yolo allow local writes and shell commands",
