@@ -1,15 +1,17 @@
 /**
  * WorkersPanel — the GUI command deck for the CLI Worker Fleet (B-line, MVP shell).
  *
- * v0.80 step 2: renders the worker board and can replay a mock worker JSONL stream
- * through the same `applyFleetEvent` path the live WS handler will use later, so
- * swapping the mock for a real `lynn worker run --jsonl` stream is a drop-in.
+ * - "Dispatch worker" opens the Task Brief form -> POST /api/fleet/dispatch; the
+ *   server FleetHub streams fleet events back over the WS into this board.
+ * - "Play mock worker" replays a fixture stream through the same applyFleetEvent
+ *   path the live WS uses, so the board is demoable without a running worker.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../stores';
 import fp from '../FloatingPanels.module.css';
 import s from './Fleet.module.css';
 import { WorkerCard } from './WorkerCard';
+import { TaskBriefForm } from './TaskBriefForm';
 import { playFleetFixture } from './playback';
 import { MOCK_WORKER_JSONL } from './fixtures';
 
@@ -19,6 +21,7 @@ export function WorkersPanel() {
   const applyFleetEvent = useStore((st) => st.applyFleetEvent);
   const resetFleet = useStore((st) => st.resetFleet);
   const cancelRef = useRef<null | (() => void)>(null);
+  const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -47,11 +50,17 @@ export function WorkersPanel() {
         </div>
         <div className={fp.floatingPanelBody}>
           <div className={s.fleetToolbar}>
+            <button className={s.fleetBtn} onClick={() => setShowForm((v) => !v)}>
+              {showForm ? 'Close form' : 'Dispatch worker'}
+            </button>
             <button className={s.fleetBtn} onClick={playMock}>
               Play mock worker
             </button>
             <span className={s.fleetHint}>{fleetWorkers.length} worker(s)</span>
           </div>
+
+          {showForm && <TaskBriefForm onClose={() => setShowForm(false)} />}
+
           {fleetWorkers.length === 0 ? (
             <div className={s.fleetEmpty}>No workers yet. Dispatch one, or play a mock stream.</div>
           ) : (

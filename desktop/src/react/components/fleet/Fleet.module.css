@@ -140,3 +140,57 @@
   margin-top: 6px;
   color: #e74c3c;
 }
+
+/* Task brief form */
+.briefForm {
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.formRow {
+  display: flex;
+  gap: 12px;
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.formLabel {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.formInput,
+.formTextarea {
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #3a3a3a);
+  background: var(--input-bg, rgba(0, 0, 0, 0.2));
+  color: inherit;
+  font-family: inherit;
+}
+
+.formTextarea {
+  resize: vertical;
+  font-family: var(--mono-font, monospace);
+}
+
+.formActions {
+  display: flex;
+  gap: 8px;
+}
+
+.formError {
+  color: #e74c3c;
+  font-size: 12px;
+}

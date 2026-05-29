@@ -6,14 +6,11 @@
 import { useEffect, useState } from 'react';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import s from './Fleet.module.css';
-import { DEFAULT_FLEET_SCOPE_PRESET, FLEET_SCOPE_PRESETS, buildPresetDefaults } from './brief-presets';
 
 interface AgentEntry {
   id: string;
   label: string;
   enabled: boolean;
-  available?: boolean;
-  availability?: string;
 }
 
 const FALLBACK_AGENTS: AgentEntry[] = [
@@ -33,16 +30,14 @@ function toLines(value: string): string[] {
 
 export function TaskBriefForm({ onClose }: { onClose: () => void }) {
   const [agents, setAgents] = useState<AgentEntry[]>(FALLBACK_AGENTS);
-  const [presetId, setPresetId] = useState(DEFAULT_FLEET_SCOPE_PRESET.id);
   const [title, setTitle] = useState('');
   const [agent, setAgent] = useState('claude-code');
   const [objective, setObjective] = useState('');
-  const initialDefaults = buildPresetDefaults(DEFAULT_FLEET_SCOPE_PRESET, '');
-  const [owned, setOwned] = useState(initialDefaults.owned);
-  const [forbidden, setForbidden] = useState(initialDefaults.forbidden);
-  const [tests, setTests] = useState(initialDefaults.tests);
-  const [branch, setBranch] = useState(initialDefaults.branch);
-  const [worktree, setWorktree] = useState(initialDefaults.worktree);
+  const [owned, setOwned] = useState('');
+  const [forbidden, setForbidden] = useState('server/**\nbrain-v2-mirror/**');
+  const [tests, setTests] = useState('npm run typecheck');
+  const [branch, setBranch] = useState('');
+  const [worktree, setWorktree] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -52,13 +47,7 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
       .then((r) => r.json())
       .then((d) => {
         if (alive && Array.isArray(d.agents)) {
-          const nextAgents = d.agents.filter((a: AgentEntry) => a.enabled);
-          setAgents(nextAgents);
-          const selected = nextAgents.find((a: AgentEntry) => a.id === agent);
-          if (selected?.available === false) {
-            const fallback = nextAgents.find((a: AgentEntry) => a.available !== false) ?? nextAgents[0];
-            if (fallback) setAgent(fallback.id);
-          }
+          setAgents(d.agents.filter((a: AgentEntry) => a.enabled));
         }
       })
       .catch(() => {
@@ -67,25 +56,7 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
     return () => {
       alive = false;
     };
-  }, [agent]);
-
-  const applyPreset = (nextPresetId: string, nextTitle = title) => {
-    const preset = FLEET_SCOPE_PRESETS.find((p) => p.id === nextPresetId) ?? DEFAULT_FLEET_SCOPE_PRESET;
-    const defaults = buildPresetDefaults(preset, nextTitle);
-    setPresetId(preset.id);
-    setOwned(defaults.owned);
-    setForbidden(defaults.forbidden);
-    setTests(defaults.tests);
-    setBranch(defaults.branch);
-    setWorktree(defaults.worktree);
-  };
-
-  const refreshGeneratedNames = () => {
-    const preset = FLEET_SCOPE_PRESETS.find((p) => p.id === presetId) ?? DEFAULT_FLEET_SCOPE_PRESET;
-    const defaults = buildPresetDefaults(preset, title);
-    setBranch(defaults.branch);
-    setWorktree(defaults.worktree);
-  };
+  }, []);
 
   const submit = async () => {
     setError(null);
@@ -122,38 +93,19 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
   return (
     <div className={s.briefForm}>
       <div className={s.formField}>
-        <label className={s.formLabel}>Scope preset</label>
-        <select className={s.formInput} value={presetId} onChange={(e) => applyPreset(e.target.value)}>
-          {FLEET_SCOPE_PRESETS.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-        <div className={s.formHint}>{FLEET_SCOPE_PRESETS.find((p) => p.id === presetId)?.description}</div>
-      </div>
-      <div className={s.formField}>
         <label className={s.formLabel}>Title</label>
-        <input
-          className={s.formInput}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={refreshGeneratedNames}
-          placeholder="Split ComposerTextarea"
-        />
+        <input className={s.formInput} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Split ComposerTextarea" />
       </div>
       <div className={s.formRow}>
         <div className={s.formField}>
           <label className={s.formLabel}>Agent</label>
           <select className={s.formInput} value={agent} onChange={(e) => setAgent(e.target.value)}>
             {agents.map((a) => (
-              <option key={a.id} value={a.id} disabled={a.available === false}>
+              <option key={a.id} value={a.id}>
                 {a.label}
-                {a.available === false ? ' (not found)' : ''}
               </option>
             ))}
           </select>
-          <div className={s.formHint}>{agents.find((a) => a.id === agent)?.availability ?? 'ready'}</div>
         </div>
         <div className={s.formField}>
           <label className={s.formLabel}>Branch</label>
@@ -190,9 +142,6 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
       </div>
       {error && <div className={s.formError}>{error}</div>}
       <div className={s.formActions}>
-        <button className={s.fleetBtn} onClick={refreshGeneratedNames} disabled={busy || !title} type="button">
-          Regenerate names
-        </button>
         <button className={s.fleetBtn} onClick={submit} disabled={busy || !title || !branch || !worktree}>
           {busy ? 'Dispatching…' : 'Dispatch worker'}
         </button>

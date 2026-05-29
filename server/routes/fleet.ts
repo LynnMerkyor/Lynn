@@ -6,7 +6,7 @@
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { FleetHub, type FleetBrief } from "../fleet/fleet-hub.js";
-import { DEFAULT_FLEET_REGISTRY, withFleetRegistryAvailability } from "../fleet/registry.js";
+import { DEFAULT_FLEET_REGISTRY } from "../fleet/registry.js";
 
 function validateBrief(b: Partial<FleetBrief>): string[] {
   const errs: string[] = [];
@@ -22,7 +22,7 @@ function validateBrief(b: Partial<FleetBrief>): string[] {
 export function createFleetRoute(hub: FleetHub): Hono {
   const route = new Hono();
 
-  route.get("/fleet/registry", (c) => c.json({ agents: withFleetRegistryAvailability(DEFAULT_FLEET_REGISTRY) }));
+  route.get("/fleet/registry", (c) => c.json({ agents: DEFAULT_FLEET_REGISTRY }));
 
   route.get("/fleet/workers", (c) => c.json({ workers: hub.listWorkers() }));
 
@@ -44,21 +44,6 @@ export function createFleetRoute(hub: FleetHub): Hono {
     const ok = hub.cancel(c.req.param("id"));
     if (!ok) return c.json({ error: "worker not found" }, 404);
     return c.json({ ok: true });
-  });
-
-  route.post("/fleet/workers/:id/retry", async (c) => {
-    const worker = await hub.retry(c.req.param("id"));
-    if (!worker) return c.json({ error: "worker not found" }, 404);
-    return c.json({ ok: true, worker });
-  });
-
-  route.get("/fleet/workers/:id/diff", async (c) => {
-    const filePath = c.req.query("path") || c.req.query("file") || "";
-    if (!filePath) return c.json({ error: "path is required" }, 400);
-    const result = await hub.getWorkerFileDiff(c.req.param("id"), filePath);
-    if (!result) return c.json({ error: "worker not found" }, 404);
-    if (result.error) return c.json({ error: result.error }, 400);
-    return c.json({ ok: true, path: filePath, file: filePath, diff: result.diff });
   });
 
   return route;
