@@ -211,6 +211,7 @@ async function* streamDirectProviderChat(request: BrainChatRequest, provider: Cl
   const body = applyReasoningToBody({
     model: provider.model,
     stream: true,
+    stream_options: { include_usage: true },
     messages,
   }, request.reasoning);
   let response: Response;

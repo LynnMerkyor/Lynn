@@ -64,6 +64,28 @@ describe("brain-client stream parser", () => {
     ]);
   });
 
+  it("parses OpenAI-compatible stream usage chunks", () => {
+    expect(parseBrainStreamPayload(JSON.stringify({
+      choices: [],
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 20,
+        total_tokens: 120,
+        prompt_cache_hit_tokens: 80,
+      },
+    }))).toEqual([
+      {
+        type: "usage",
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 20,
+          total_tokens: 120,
+          prompt_cache_hit_tokens: 80,
+        },
+      },
+    ]);
+  });
+
   it("requires prompt or messages", async () => {
     await expect(async () => {
       for await (const _event of streamBrainChat({ brainUrl: "http://127.0.0.1:1", reasoning: { effort: "auto", display: "auto" } })) {
@@ -104,6 +126,7 @@ describe("brain-client stream parser", () => {
         expect(JSON.parse(body)).toMatchObject({
           model: "test-model",
           stream: true,
+          stream_options: { include_usage: true },
           reasoning_effort: "off",
           extra_body: { enable_thinking: false },
         });
