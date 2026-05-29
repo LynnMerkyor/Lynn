@@ -120,6 +120,34 @@
   font-weight: 600;
 }
 
+.changeSummary {
+  margin-top: 6px;
+  font-family: var(--mono-font, monospace);
+  opacity: 0.85;
+}
+
+.fileVerb {
+  opacity: 0.55;
+}
+
+.fileIns {
+  color: #2ecc71;
+}
+
+.fileDel {
+  color: #e74c3c;
+}
+
+.workerFiles li[data-active='1'] {
+  font-style: italic;
+  opacity: 1;
+}
+
+.workerFiles li[data-active='1'] .fileVerb {
+  color: #f1c40f;
+  opacity: 1;
+}
+
 .workerLog {
   margin-top: 6px;
   padding: 6px 8px;
