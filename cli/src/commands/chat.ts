@@ -138,7 +138,7 @@ interface KeypressLike {
   sequence?: string;
 }
 
-interface ModeHotkeyStreams {
+export interface ModeHotkeyStreams {
   input: NodeJS.ReadStream;
   output: NodeJS.WriteStream;
   readlineInterface: unknown;
@@ -213,7 +213,7 @@ export function applyReasoningCommand(current: ReturnType<typeof parseReasoningO
   return { reasoning: current, message: `Unknown reasoning mode: ${raw || "(empty)"}.` };
 }
 
-function installModeHotkey({ input, output, readlineInterface, mode }: ModeHotkeyStreams): () => void {
+export function installModeHotkey({ input, output, readlineInterface, mode }: ModeHotkeyStreams): () => void {
   emitKeypressEvents(input, readlineInterface as Parameters<typeof emitKeypressEvents>[1]);
   const onKeypress = (_chunk: string, key: KeypressLike) => {
     if (!isModeToggleKeypress(key)) return;

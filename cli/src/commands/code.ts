@@ -12,7 +12,7 @@ import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
-import { applyModeCommand, applyReasoningCommand, renderMode, type ChatMode } from "./chat.js";
+import { applyModeCommand, applyReasoningCommand, installModeHotkey, renderMode, type ChatMode } from "./chat.js";
 
 const pExecFile = promisify(execFile);
 
@@ -103,6 +103,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   const mode = codeModeFromArgs(args);
   let reasoning = parseReasoningOptions(args);
   const rl = readline.createInterface({ input, output, terminal: true });
+  const cleanupModeHotkey = installModeHotkey({ input, output, readlineInterface: rl, mode });
   output.write(renderCodeIntro(mode, reasoning));
   try {
     for (;;) {
@@ -167,6 +168,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       output.write("\n");
     }
   } finally {
+    cleanupModeHotkey();
     rl.close();
   }
   return 0;
@@ -176,7 +178,7 @@ export function renderCodeIntro(mode: ChatMode, reasoning = parseReasoningOption
   return [
     "Lynn code mode",
     "model: MiMo via local Brain router (auto)",
-    `mode:  ${renderMode(mode)}   /mode to change`,
+    `mode:  ${renderMode(mode)}   /mode or Shift+Tab to change`,
     `think: ${reasoning.effort} / display ${reasoning.display}   /fast or /think`,
     "tools: read_file, grep, glob, apply_patch, bash, write_file",
     "",
