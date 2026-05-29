@@ -8,6 +8,7 @@ import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { formatBrainRecoveryHint, streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
 import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
+import { resolveEffectivePermissions } from "../permissions.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { dangerLine, dim, red, supportsColor } from "../terminal-style.js";
@@ -73,9 +74,10 @@ export async function runCode(args: ParsedArgs): Promise<number> {
   }
 
   const toolCwd = cwd(args);
+  const toolMode = await resolveCodeMode(args);
   const toolApproval = await resolveToolApproval({
     tool,
-    approval: approval(args),
+    approval: toolMode.approval,
     cwd: toolCwd,
     json,
     input,
@@ -87,7 +89,7 @@ export async function runCode(args: ParsedArgs): Promise<number> {
     }),
   });
   const result = await runClientTool(
-    { cwd: toolCwd, approval: toolApproval, sandbox: sandbox(args), timeoutMs: timeoutMs(args) },
+    { cwd: toolCwd, approval: toolApproval, sandbox: toolMode.sandbox, timeoutMs: timeoutMs(args) },
     {
       name: tool,
       path: getStringFlag(args.flags, "path") || undefined,
@@ -104,7 +106,7 @@ export async function runCode(args: ParsedArgs): Promise<number> {
 }
 
 async function runCodeInteractive(args: ParsedArgs): Promise<number> {
-  const mode = codeModeFromArgs(args);
+  const mode = await resolveCodeMode(args);
   let reasoning = parseReasoningOptions(args);
   output.write(renderCodeIntro(mode, reasoning, { color: supportsColor(output) }));
   try {
@@ -328,12 +330,11 @@ function renderCodeHelp(): string {
   ].join("\n");
 }
 
-function codeModeFromArgs(args: ParsedArgs): ChatMode {
-  const rawApproval = approval(args);
-  const rawSandbox = getStringFlag(args.flags, "sandbox");
+async function resolveCodeMode(args: ParsedArgs): Promise<ChatMode> {
+  const permissions = await resolveEffectivePermissions(args);
   return {
-    approval: rawApproval,
-    sandbox: rawSandbox === "read-only" || rawSandbox === "danger-full-access" ? rawSandbox : "workspace-write",
+    approval: permissions.approval,
+    sandbox: permissions.sandbox,
   };
 }
 
@@ -388,11 +389,12 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
   const reasoning = parseReasoningOptions(args);
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
+  const mode = await resolveCodeMode(args);
   if (!json && !options.compact) {
     errorOutput.write(renderCodeTaskHeader({
       cwd: context.cwd,
-      approval: approval(args),
-      sandbox: sandbox(args) || "workspace-write",
+      approval: mode.approval,
+      sandbox: mode.sandbox,
       reasoning,
       maxSteps: maxSteps(args),
       mockBrain,
@@ -406,15 +408,15 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
       writeJsonLine({ type: "assistant.delta", ts: nowIso(), text });
       writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true });
     } else {
-      process.stdout.write(renderAssistantBlock(text, renderCodeFooter({ context, args, reasoning })));
+      process.stdout.write(renderAssistantBlock(text, renderCodeFooter({ context, mode, mockBrain, reasoning })));
     }
     return 0;
   }
 
   const toolCtx: ToolRunContext = {
     cwd: cwd(args),
-    approval: approval(args),
-    sandbox: sandbox(args),
+    approval: mode.approval,
+    sandbox: mode.sandbox,
     timeoutMs: timeoutMs(args),
   };
   const final = await runCodeAgentLoop({
@@ -432,7 +434,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     if (final.trim()) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: final });
     writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true, contentReturned: !!final.trim() });
   } else {
-    process.stdout.write(renderAssistantBlock(final.trim() || "(no answer)", renderCodeFooter({ context, args, reasoning })));
+    process.stdout.write(renderAssistantBlock(final.trim() || "(no answer)", renderCodeFooter({ context, mode, mockBrain, reasoning })));
   }
   return 0;
 }
@@ -445,12 +447,13 @@ function renderAssistantBlock(text: string, footer?: string): string {
 
 function renderCodeFooter(inputData: {
   context: CodeContext;
-  args: ParsedArgs;
+  mode: ChatMode;
+  mockBrain: boolean;
   reasoning: ReturnType<typeof parseReasoningOptions>;
 }): string {
   const color = supportsColor(output);
-  const model = hasFlag(inputData.args.flags, "mock-brain", "mock") ? "mock Brain" : "MiMo";
-  const mode = `${approval(inputData.args)} / ${sandbox(inputData.args)}`;
+  const model = inputData.mockBrain ? "mock Brain" : "MiMo";
+  const mode = renderMode(inputData.mode);
   return dim(`${model} · ${displayCwd(inputData.context.cwd)} · ${mode} · think ${inputData.reasoning.effort}`, color);
 }
 

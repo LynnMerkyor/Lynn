@@ -151,6 +151,42 @@ describe("code tools", () => {
     expect(output).toContain("\"timedOut\":true");
   });
 
+  it("uses saved CLI permission profile for direct code tools", async () => {
+    await fs.mkdir(path.join(tmp, "permissions"), { recursive: true });
+    await fs.writeFile(path.join(tmp, "permissions", "cli.json"), JSON.stringify({
+      approval: "yolo",
+      sandbox: "danger-full-access",
+    }));
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runCode(parseArgs([
+        "code",
+        "--tool",
+        "write_file",
+        "--path",
+        "out.txt",
+        "--text",
+        "profile ok",
+        "--cwd",
+        tmp,
+        "--data-dir",
+        tmp,
+        "--json",
+      ]))).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    await expect(fs.readFile(path.join(tmp, "out.txt"), "utf8")).resolves.toBe("profile ok");
+    expect(output).toContain("\"ok\":true");
+  });
+
   it("runs code command list-tools", async () => {
     const original = process.stdout.write;
     let output = "";
