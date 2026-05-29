@@ -32,9 +32,9 @@ Current pricing posture:
 For source testers:
 
 ```bash
-cd /private/tmp/lynn-v080-cli-core
+cd /path/to/Lynn
 npm --prefix cli install
-npm --prefix cli run build
+npm run build:cli
 ```
 
 If the terminal command was just linked or updated:
@@ -61,7 +61,7 @@ Lynn doctor --offline
 Lynn -p "你好" --mock-brain
 Lynn code --list-tools
 Lynn code "review the current diff" --mock-brain
-Lynn worker run --brief /private/tmp/lynn-v080-cli-core/cli/fixtures/worker-brief.md --worktree /private/tmp/lynn-v080-cli-core --mock --jsonl
+Lynn worker run --brief cli/fixtures/worker-brief.md --worktree . --mock --jsonl
 ```
 
 Vision smoke:
@@ -82,6 +82,8 @@ Expected:
 - `Lynn code` lists `read_file`, `grep`, `glob`, `apply_patch`, `bash`, and `write_file`.
 - Worker JSONL contains `worker.started`, `worker.claims`, `test.finished`, `git.diff`, and `worker.finished`.
 - Vision commands print `Mock Lynn see`, `vision.started`, or `Mock Lynn ui2code`.
+- `Lynn ground ... --json` emits `vision.result` with normalized `boxes` when the
+  model returns grounding JSON.
 
 ## Tier 1: Brain Offline Recovery And CLI-only BYOK
 
@@ -159,7 +161,9 @@ Lynn ui2code ~/Desktop/mockup.png "implement this as React"
 Expected:
 
 - `see` returns a UI-aware description, not generic image alt text.
-- `ground --json` starts with a machine-readable coordinate object or a clear refusal if the model cannot localize.
+- `ground --json` streams the model answer and emits a machine-readable
+  `vision.result` event with normalized boxes (`x`, `y`, optional `width`,
+  `height`, `confidence`) or an empty `boxes` array if the model cannot localize.
 - `ui2code` produces an implementation plan with component boundaries, layout, states, and accessibility notes.
 
 ## Tier 3b: StepFun Fast Coding Worker
