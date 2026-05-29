@@ -138,6 +138,43 @@ describe("fleet HTTP route", () => {
     expect(sent.map((m) => m.event.type)).toEqual(["worker.started", "worker.claims", "worker.progress"]);
   });
 
+  it("dispatches through HTTP and streams a real Lynn CLI worker", async () => {
+    const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
+    const cliBin = path.join(repoRoot, "cli/bin/lynn.mjs");
+    const cliSrc = path.join(repoRoot, "cli/src/cli.ts");
+    const briefPath = path.join(repoRoot, "cli/fixtures/worker-brief.md");
+    const useBuiltCli = fs.existsSync(cliBin);
+    const cliEntry = useBuiltCli ? cliBin : cliSrc;
+    const nodePrefix = useBuiltCli ? [] : ["--import", "tsx"];
+    const sent: Array<{ type: string; event: { type: string; workerId?: string; ok?: boolean } }> = [];
+    const app = new Hono();
+    const hub = new FleetHub(repoRoot, (m) => sent.push(m as { type: string; event: { type: string; workerId?: string; ok?: boolean } }), () => "T", {
+      available: () => true,
+      createWorktree: async () => {},
+      writeBrief: () => briefPath,
+      resolveCommand: (args) => ({
+        command: process.execPath,
+        args: [...nodePrefix, cliEntry, ...args, "--mock"],
+        env: { ...process.env, NO_COLOR: "1" },
+        source: "dev",
+      }),
+    });
+    app.route("/api", createFleetRoute(hub));
+
+    const res = await app.request("/api/fleet/dispatch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...sampleBrief, worktree: repoRoot }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.worker).toMatchObject({ spawned: true });
+
+    await waitFor(() => sent.some((m) => m.event.type === "worker.finished"));
+    expect(sent.every((m) => m.type === "fleet:event")).toBe(true);
+    expect(sent.some((m) => m.event.type === "worker.finished" && m.event.workerId === data.worker.workerId && m.event.ok === true)).toBe(true);
+  });
+
   it("rejects incomplete dispatch briefs before reaching FleetHub", async () => {
     const app = new Hono();
     const hub = new FleetHub("/repo", () => {}, () => "T");
