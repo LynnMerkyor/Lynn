@@ -1,3 +1,4 @@
+import { emitKeypressEvents } from "node:readline";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
@@ -13,11 +14,14 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   const mode = resolveMode(args);
   const messages: ChatMessage[] = [];
   const rl = readline.createInterface({ input, output, terminal: input.isTTY && output.isTTY });
+  const cleanupModeHotkey = input.isTTY && output.isTTY
+    ? installModeHotkey({ input, output, readlineInterface: rl, mode })
+    : () => {};
 
   if (options.intro !== false) {
-    output.write(`Lynn chat. Type /exit to leave, /clear to reset context, /model to review route, /mode to review permissions.\nmode: ${renderMode(mode)}\n\n`);
+    output.write(`Lynn chat. Type /exit to leave, /clear to reset context, /model to review route, /mode to review permissions.\nmode: ${renderMode(mode)} (Shift+Tab toggles YOLO)\n\n`);
   } else if (options.brainReachable === false && !mockBrain) {
-    output.write(`Brain offline. Start the Lynn GUI, then send again. Use /providers for BYOK, /mode for permissions, /exit to leave.\nmode: ${renderMode(mode)}\n\n`);
+    output.write(`Brain offline. Start the Lynn GUI, then send again. Use /providers for BYOK, /mode for permissions, /exit to leave.\nmode: ${renderMode(mode)} (Shift+Tab toggles YOLO)\n\n`);
   }
   async function handleText(raw: string): Promise<"continue" | "break"> {
     const text = raw.trim();
@@ -28,7 +32,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       return "continue";
     }
     if (text === "/mode") {
-      output.write(`mode: ${renderMode(mode)}\nUse /mode yolo for full local tool permission, or /mode ask to return to guarded mode. Shift+Tab toggle is planned for the full TUI pass.\n\n`);
+      output.write(`mode: ${renderMode(mode)}\nUse /mode yolo for full local tool permission, /mode ask for guarded mode, or Shift+Tab to toggle.\n\n`);
       return "continue";
     }
     if (text.startsWith("/mode ")) {
@@ -92,14 +96,28 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       }
     }
   } finally {
+    cleanupModeHotkey();
     rl.close();
   }
   return 0;
 }
 
-interface ChatMode {
+export interface ChatMode {
   approval: "ask" | "on-failure" | "never" | "yolo";
   sandbox: "read-only" | "workspace-write" | "danger-full-access";
+}
+
+interface KeypressLike {
+  name?: string;
+  shift?: boolean;
+  sequence?: string;
+}
+
+interface ModeHotkeyStreams {
+  input: NodeJS.ReadStream;
+  output: NodeJS.WriteStream;
+  readlineInterface: unknown;
+  mode: ChatMode;
 }
 
 function resolveMode(args: ParsedArgs): ChatMode {
@@ -143,6 +161,30 @@ export function applyModeCommand(mode: ChatMode, raw: string): string {
     return "Danger-full-access mode enabled.";
   }
   return `Unknown mode: ${raw || "(empty)"}. Try /mode ask or /mode yolo.`;
+}
+
+export function isModeToggleKeypress(key: KeypressLike | undefined): boolean {
+  return !!key && (key.sequence === "\u001b[Z" || (key.name === "tab" && key.shift === true));
+}
+
+export function toggleMode(mode: ChatMode): string {
+  if (mode.approval === "yolo" || mode.sandbox === "danger-full-access") {
+    return applyModeCommand(mode, "ask");
+  }
+  return applyModeCommand(mode, "yolo");
+}
+
+function installModeHotkey({ input, output, readlineInterface, mode }: ModeHotkeyStreams): () => void {
+  emitKeypressEvents(input, readlineInterface as Parameters<typeof emitKeypressEvents>[1]);
+  const onKeypress = (_chunk: string, key: KeypressLike) => {
+    if (!isModeToggleKeypress(key)) return;
+    const message = toggleMode(mode);
+    output.write(`\n${message}\nmode: ${renderMode(mode)}\n`);
+  };
+  input.on("keypress", onKeypress);
+  return () => {
+    input.off("keypress", onKeypress);
+  };
 }
 
 export function formatChatError(error: unknown): string {

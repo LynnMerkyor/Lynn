@@ -42,7 +42,7 @@ export function renderStartupBanner(input: {
     `>_ Lynn CLI (v${version})`,
     "",
     padLine("model", modelLabel, "/model to change"),
-    padLine("mode", input.modeLabel || "ask / workspace-write", "/mode to change"),
+    padLine("mode", input.modeLabel || "ask / workspace-write", "Shift+Tab to toggle"),
     padLine("BYOK", byokLabel, "Lynn providers"),
     padLine("brain", brainLabel),
     padLine("directory", displayCwd(input.cwd || process.cwd())),

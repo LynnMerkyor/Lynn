@@ -81,6 +81,7 @@ checks.push(run("startup banner", []).then((r) => {
   assertIncludes(r.name, r.stdout, ">_ Lynn CLI");
   assertIncludes(r.name, r.stdout, "MiMo via");
   assertIncludes(r.name, r.stdout, "mode:");
+  assertIncludes(r.name, r.stdout, "Shift+Tab");
   assertIncludes(r.name, r.stdout, "offline");
   assertIncludes(r.name, r.stdout, "Lynn providers");
 }));

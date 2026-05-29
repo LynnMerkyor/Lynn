@@ -14,7 +14,7 @@ describe("startup banner", () => {
     expect(output).toContain("model:");
     expect(output).toContain("Brain router");
     expect(output).toContain("mode:");
-    expect(output).toContain("/mode to change");
+    expect(output).toContain("Shift+Tab to toggle");
     expect(output).toContain("BYOK:");
     expect(output).toContain("Lynn providers");
     expect(output).toContain("brain:");
