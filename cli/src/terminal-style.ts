@@ -14,10 +14,14 @@ export function cyan(text: string, enabled: boolean): string {
   return enabled ? `\x1b[36m${text}\x1b[0m` : text;
 }
 
+export function dim(text: string, enabled: boolean): string {
+  return enabled ? `\x1b[2m${text}\x1b[0m` : text;
+}
+
 export function bold(text: string, enabled: boolean): string {
   return enabled ? `\x1b[1m${text}\x1b[0m` : text;
 }
 
 export function dangerLine(text: string, enabled: boolean): string {
-  return red(`⚠ ${text}`, enabled);
+  return red(`!! ${text}`, enabled);
 }

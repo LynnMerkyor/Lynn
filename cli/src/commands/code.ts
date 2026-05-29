@@ -10,7 +10,7 @@ import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } 
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
-import { dangerLine, red, supportsColor } from "../terminal-style.js";
+import { dangerLine, dim, red, supportsColor } from "../terminal-style.js";
 import { box, displayCwd, padLine } from "../startup.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
@@ -108,7 +108,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   output.write(renderCodeIntro(mode, reasoning, { color: supportsColor(output) }));
   try {
     for (;;) {
-      const raw = await readCodeLine("", mode);
+      const raw = await readCodeLine("", mode, { placeholder: "Describe a coding task, or type /help" });
       if (raw === null) break;
       const text = raw.trim();
       if (!text) continue;
@@ -175,7 +175,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   return 0;
 }
 
-async function readCodeLine(prompt: string, mode: ChatMode): Promise<string | null> {
+async function readCodeLine(prompt: string, mode: ChatMode, options: { placeholder?: string } = {}): Promise<string | null> {
   if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== "function") {
     const rl = readline.createInterface({ input, output, terminal: false });
     try {
@@ -189,33 +189,38 @@ async function readCodeLine(prompt: string, mode: ChatMode): Promise<string | nu
   const rawBefore = input.isRaw;
   input.setRawMode(true);
   input.resume();
-  output.write(prompt);
 
   return await new Promise<string | null>((resolve) => {
     let buffer = "";
+    const color = supportsColor(output);
+    const placeholder = options.placeholder || "";
+    const clearWidth = () => Math.max(80, typeof output.columns === "number" ? output.columns : 0, prompt.length + buffer.length + placeholder.length + 8);
     const cleanup = () => {
       input.off("data", onData);
       input.setRawMode(rawBefore);
     };
     const redraw = () => {
-      output.write(`\r${" ".repeat(Math.max(80, prompt.length + buffer.length + 8))}\r${prompt}${buffer}`);
+      const visible = buffer ? buffer : placeholder ? dim(placeholder, color) : "";
+      output.write(`\r${" ".repeat(clearWidth())}\r${prompt}${visible}`);
+      if (!buffer && placeholder) output.write(`\r${prompt}`);
     };
+    redraw();
     const onData = (chunk: Buffer) => {
       const text = chunk.toString("utf8");
       if (text === "\u0003") {
-        output.write("^C\n");
+        output.write(`\r${" ".repeat(clearWidth())}\r^C\n`);
         cleanup();
         resolve(null);
         return;
       }
       if (text === "\u0004") {
-        output.write("\n");
+        output.write(`\r${" ".repeat(clearWidth())}\r\n`);
         cleanup();
         resolve(null);
         return;
       }
       if (text === "\r" || text === "\n") {
-        output.write("\n");
+        output.write(`\r${" ".repeat(clearWidth())}\r${prompt}${buffer}\n`);
         cleanup();
         resolve(buffer);
         return;
@@ -237,7 +242,7 @@ async function readCodeLine(prompt: string, mode: ChatMode): Promise<string | nu
       const printable = Array.from(text).filter((char) => char >= " " && char !== "\u007f").join("");
       if (!printable) return;
       buffer += printable;
-      output.write(printable);
+      redraw();
     };
     input.on("data", onData);
   });
@@ -286,10 +291,13 @@ export function renderCodeTaskHeader(inputData: {
 }): string {
   const route = inputData.mockBrain ? "mock Brain" : "MiMo via local Brain router";
   return [
-    `╭─ Lynn code · ${route}`,
-    `│ cwd: ${inputData.cwd}`,
-    `│ mode: ${inputData.approval} / ${inputData.sandbox} · think ${inputData.reasoning.effort} · max steps ${inputData.maxSteps}`,
-    "╰─",
+    box([
+      `Lynn Code · ${route}`,
+      "",
+      padLine("directory", displayCwd(inputData.cwd)),
+      padLine("mode", `${inputData.approval} / ${inputData.sandbox}`),
+      padLine("think", `${inputData.reasoning.effort} · max steps ${inputData.maxSteps}`),
+    ]),
     "",
   ].join("\n");
 }

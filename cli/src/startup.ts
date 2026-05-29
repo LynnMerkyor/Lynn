@@ -24,7 +24,7 @@ function padVisible(value: string, width: number): string {
 }
 
 export function box(lines: string[]): string {
-  const width = Math.max(...lines.map((line) => visibleLength(line)), 43);
+  const width = Math.max(...lines.map((line) => visibleLength(line)), 51);
   const top = `╭${"─".repeat(width + 2)}╮`;
   const bottom = `╰${"─".repeat(width + 2)}╯`;
   const body = lines.map((line) => `│ ${padVisible(line, width)} │`);

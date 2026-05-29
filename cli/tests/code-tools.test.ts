@@ -160,6 +160,14 @@ describe("code tools", () => {
     expect(intro).toContain("/fast");
     expect(intro).toContain("/think");
     expect(intro).toContain("/mode yolo");
+    expect(intro).not.toContain(">_");
+  });
+
+  it("renders a clear danger warning for YOLO mode", () => {
+    const intro = renderCodeIntro({ approval: "yolo", sandbox: "danger-full-access" });
+
+    expect(intro).toContain("YOLO mode can edit files");
+    expect(intro).toContain("!!");
   });
 
   it("renders a code task header with route, cwd, mode, reasoning, and step budget", () => {
@@ -174,7 +182,8 @@ describe("code tools", () => {
     expect(header).toContain("MiMo via local Brain router");
     expect(header).toContain("/repo");
     expect(header).toContain("ask / workspace-write");
-    expect(header).toContain("think auto");
+    expect(header).toContain("think:");
+    expect(header).toContain("auto");
     expect(header).toContain("max steps 8");
   });
 
