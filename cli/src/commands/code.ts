@@ -5,16 +5,17 @@ import { promisify } from "node:util";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output, stderr as errorOutput } from "node:process";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
-import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
+import { formatBrainRecoveryHint, streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
 import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
-import { bold, dangerLine, red, supportsColor } from "../terminal-style.js";
+import { dangerLine, red, supportsColor } from "../terminal-style.js";
 import { box, displayCwd, padLine } from "../startup.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
 import { applyModeCommand, applyReasoningCommand, installModeHotkey, renderMode, type ChatMode } from "./chat.js";
+import { readVersionInfo } from "../version.js";
 
 const pExecFile = promisify(execFile);
 
@@ -164,7 +165,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       try {
         await runCodeTask(taskArgs, text, false);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = formatBrainRecoveryHint(error);
         errorOutput.write(`Lynn code error: ${message}\n`);
       }
       output.write("\n");
@@ -185,13 +186,12 @@ export function renderCodeIntro(
   const renderedMode = mode.approval === "yolo" || mode.sandbox === "danger-full-access"
     ? red(renderMode(mode), color)
     : renderMode(mode);
+  const version = readVersionInfo().version;
   const lines = [
-    `>_ ${bold("Lynn Code", color)}`,
+    `Lynn Code (${version})`,
     "",
-    padLine("model", "MiMo via local Brain router", "/model"),
+    padLine("model", "MiMo", "/model to change"),
     padLine("mode", renderedMode, "Shift+Tab"),
-    padLine("think", `${reasoning.effort} / display ${reasoning.display}`, "/fast /think"),
-    padLine("tools", "read, grep, glob, patch, shell", "/tools"),
     padLine("directory", displayCwd(process.cwd())),
   ];
   return [
@@ -199,8 +199,7 @@ export function renderCodeIntro(
     "",
     mode.approval === "yolo" || mode.sandbox === "danger-full-access"
       ? `  ${dangerLine("YOLO mode can edit files and run shell commands without asking.", color)}`
-      : "  Tip: Type a coding task. Use /fast for speed, /think for deeper MiMo reasoning.",
-    "       /mode yolo enables local edits and shell commands; /exit leaves.",
+      : "  Tip: Use /fast for quick edits, /think for deeper MiMo reasoning, or /mode yolo to allow local edits.",
     "",
   ].join("\n");
 }

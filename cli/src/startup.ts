@@ -15,11 +15,19 @@ export function padLine(label: string, value: string, hint?: string): string {
   return `${left}${value}${hint ? `   ${hint}` : ""}`;
 }
 
+function visibleLength(value: string): number {
+  return value.replace(/\x1b\[[0-9;]*m/g, "").length;
+}
+
+function padVisible(value: string, width: number): string {
+  return `${value}${" ".repeat(Math.max(0, width - visibleLength(value)))}`;
+}
+
 export function box(lines: string[]): string {
-  const width = Math.max(...lines.map((line) => line.length), 43);
+  const width = Math.max(...lines.map((line) => visibleLength(line)), 43);
   const top = `╭${"─".repeat(width + 2)}╮`;
   const bottom = `╰${"─".repeat(width + 2)}╯`;
-  const body = lines.map((line) => `│ ${line.padEnd(width, " ")} │`);
+  const body = lines.map((line) => `│ ${padVisible(line, width)} │`);
   return [top, ...body, bottom].join("\n");
 }
 

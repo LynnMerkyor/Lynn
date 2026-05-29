@@ -31,6 +31,13 @@ export class BrainConnectionError extends Error {
   }
 }
 
+export function formatBrainRecoveryHint(error: unknown): string {
+  if (error instanceof BrainConnectionError) {
+    return `Brain offline (${error.brainUrl}). Start Lynn GUI, or use --mock-brain for local smoke tests.`;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function checkBrainReachable(brainUrl: string, timeoutMs = 350): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
