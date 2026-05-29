@@ -463,6 +463,36 @@
   margin-top: 8px;
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.approveBtn,
+.discardBtn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.approveBtn {
+  color: #0f5b2f;
+  background: rgba(46, 204, 113, 0.18);
+  border-color: rgba(46, 204, 113, 0.4);
+}
+
+.approveBtn:hover {
+  background: rgba(46, 204, 113, 0.26);
+}
+
+.discardBtn {
+  color: #8f2a1b;
+  background: rgba(231, 76, 60, 0.13);
+  border-color: rgba(231, 76, 60, 0.32);
+}
+
+.discardBtn:hover {
+  background: rgba(231, 76, 60, 0.22);
 }
 
 .conflictBanner {

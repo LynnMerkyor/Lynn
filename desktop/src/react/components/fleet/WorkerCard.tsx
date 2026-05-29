@@ -42,6 +42,8 @@ export function WorkerCard({
   onCancel,
   onRetry,
   onResume,
+  onApprove,
+  onDiscard,
   onOpenWorktree,
   onDismiss,
   fetchFileDiff,
@@ -52,6 +54,8 @@ export function WorkerCard({
   onCancel?: (workerId: string) => void;
   onRetry?: (workerId: string) => void;
   onResume?: (workerId: string) => void;
+  onApprove?: (workerId: string) => void;
+  onDiscard?: (workerId: string) => void;
   onOpenWorktree?: (worker: FleetWorkerView) => void;
   onDismiss?: (workerId: string) => void;
   fetchFileDiff?: (workerId: string, file: string) => Promise<string>;
@@ -100,11 +104,13 @@ export function WorkerCard({
   };
 
   const canCancel = !!onCancel && ['queued', 'running', 'waiting_approval', 'blocked'].includes(worker.status);
+  const canApprove = !!onApprove && worker.status === 'waiting_approval' && !worker.hasForbiddenEdit && worker.gate?.ok !== false;
+  const canDiscard = !!onDiscard && ['waiting_approval', 'blocked', 'failed', 'completed', 'cancelled'].includes(worker.status);
   const canRetry = !!onRetry && ['failed', 'cancelled', 'blocked', 'completed'].includes(worker.status);
   const canResume = !!onResume && !!worker.checkpoint?.path && ['failed', 'cancelled', 'blocked', 'completed'].includes(worker.status);
   const canOpen = !!onOpenWorktree && !!worker.worktree;
   const canCopy = worker.log.length > 0;
-  const hasActions = canCancel || canRetry || canResume || canOpen || canCopy;
+  const hasActions = canCancel || canApprove || canDiscard || canRetry || canResume || canOpen || canCopy;
   const recentTools = worker.tools.slice(-6);
   const visualResult = worker.visualResult;
   const visualTaskType = worker.taskType ?? visualResult?.taskType;
@@ -309,6 +315,16 @@ export function WorkerCard({
           {canCancel && (
             <button className={s.fleetBtn} onClick={() => onCancel?.(worker.workerId)}>
               Cancel
+            </button>
+          )}
+          {canApprove && (
+            <button className={s.approveBtn} onClick={() => onApprove?.(worker.workerId)}>
+              Approve
+            </button>
+          )}
+          {canDiscard && (
+            <button className={s.discardBtn} onClick={() => onDiscard?.(worker.workerId)}>
+              Discard
             </button>
           )}
           {canRetry && (

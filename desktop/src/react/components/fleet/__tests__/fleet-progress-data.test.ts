@@ -47,6 +47,25 @@ describe('worker.progress data (vision + runner context)', () => {
     expect(v.runner).toBeUndefined();
   });
 
+  it('captures review progress actions as terminal statuses', () => {
+    let v = createWorkerView('w1');
+    v = reduceFleetWorker(v, {
+      type: 'worker.progress',
+      workerId: 'w1',
+      message: 'review approved',
+      data: { kind: 'review', action: 'approved' },
+    });
+    expect(v.status).toBe('completed');
+
+    v = reduceFleetWorker(v, {
+      type: 'worker.progress',
+      workerId: 'w1',
+      message: 'review discarded',
+      data: { kind: 'review', action: 'discarded' },
+    });
+    expect(v.status).toBe('cancelled');
+  });
+
   it('captures structured worker.visual_result events', () => {
     let v = createWorkerView('w1', 'mimo-vl');
     v = reduceFleetWorker(v, {

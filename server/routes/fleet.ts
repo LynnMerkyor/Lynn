@@ -83,6 +83,20 @@ export function createFleetRoute(hub: FleetHub, options: FleetRouteOptions = {})
     return c.json({ ok: true, worker });
   });
 
+  route.post("/fleet/workers/:id/approve", (c) => {
+    const result = hub.approve(c.req.param("id"));
+    if (!result) return c.json({ error: "worker not found" }, 404);
+    if (!result.ok) return c.json({ error: result.error || "worker cannot be approved" }, 409);
+    return c.json({ ok: true });
+  });
+
+  route.post("/fleet/workers/:id/discard", async (c) => {
+    const result = await hub.discard(c.req.param("id"));
+    if (!result) return c.json({ error: "worker not found" }, 404);
+    if (!result.ok) return c.json({ error: result.error || "worker cannot be discarded" }, 409);
+    return c.json({ ok: true });
+  });
+
   route.get("/fleet/workers/:id/diff", async (c) => {
     const file = c.req.query("file");
     if (!file) return c.json({ error: "file query param required" }, 400);

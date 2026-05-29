@@ -498,6 +498,75 @@ describe("FleetHub.retry", () => {
   });
 });
 
+describe("FleetHub review actions", () => {
+  it("approves a clean worker waiting for review", async () => {
+    const sent: Array<{ event: { type: string; message?: string } }> = [];
+    const hub = new FleetHub("/repo", (m) => sent.push(m as { event: { type: string; message?: string } }), () => "T", {
+      available: () => true,
+      createWorktree: async () => {},
+      writeBrief: () => "/tmp/brief.md",
+      resolveCommand: (args) => ({ command: "node", args, env: {}, source: "dev" }),
+      spawn: (opts, onEvent) => {
+        onEvent({ type: "worker.finished", workerId: opts.workerId, ok: true, exitCode: 0, summary: "ready" });
+        return { workerId: opts.workerId, pid: 123, kill: () => {} };
+      },
+    });
+
+    const rec = await hub.dispatch(sampleBrief);
+    expect(hub.getWorker(rec.workerId)?.status).toBe("waiting_approval");
+    expect(hub.approve(rec.workerId)).toEqual({ ok: true });
+    expect(hub.getWorker(rec.workerId)?.status).toBe("completed");
+    expect(sent).toContainEqual(expect.objectContaining({
+      event: expect.objectContaining({ type: "worker.progress", message: "review approved" }),
+    }));
+  });
+
+  it("rejects approve for blocked workers", async () => {
+    const hub = new FleetHub("/repo", () => {}, () => "T");
+    const rec = await hub.dispatch(sampleBrief);
+    rec.status = "blocked";
+
+    expect(hub.approve(rec.workerId)).toMatchObject({ ok: false, error: expect.stringContaining("blocked") });
+  });
+
+  it("discards reviewed work and removes the worktree when possible", async () => {
+    const removed: string[] = [];
+    const sent: Array<{ event: { type: string; message?: string } }> = [];
+    const hub = new FleetHub("/repo", (m) => sent.push(m as { event: { type: string; message?: string } }), () => "T", {
+      removeWorktree: async (p) => { removed.push(p); },
+    });
+    const rec = await hub.dispatch(sampleBrief);
+    rec.status = "waiting_approval";
+
+    expect(await hub.discard(rec.workerId)).toEqual({ ok: true });
+    expect(removed).toEqual([sampleBrief.worktree]);
+    expect(hub.getWorker(rec.workerId)?.status).toBe("cancelled");
+    expect(sent).toContainEqual(expect.objectContaining({
+      event: expect.objectContaining({ type: "worker.progress", message: "review discarded" }),
+    }));
+  });
+});
+
+describe("fleet review HTTP route", () => {
+  it("approves and discards workers through REST endpoints", async () => {
+    const app = new Hono();
+    const hub = new FleetHub("/repo", () => {}, () => "T", {
+      removeWorktree: async () => {},
+    });
+    app.route("/api", createFleetRoute(hub, { registry: availableSampleRegistry }));
+
+    const rec = await hub.dispatch(sampleBrief);
+    rec.status = "waiting_approval";
+    const approved = await app.request(`/api/fleet/workers/${rec.workerId}/approve`, { method: "POST" });
+    expect(approved.status).toBe(200);
+    expect(hub.getWorker(rec.workerId)?.status).toBe("completed");
+
+    const discarded = await app.request(`/api/fleet/workers/${rec.workerId}/discard`, { method: "POST" });
+    expect(discarded.status).toBe(200);
+    expect(hub.getWorker(rec.workerId)?.status).toBe("cancelled");
+  });
+});
+
 describe("FleetHub.getWorkerFileDiff path guard", () => {
   it("rejects path traversal without touching git", async () => {
     const hub = new FleetHub("/repo", () => {}, () => "T");

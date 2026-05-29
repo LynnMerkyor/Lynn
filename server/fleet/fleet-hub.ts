@@ -61,6 +61,7 @@ export interface FleetHubDeps {
   writeBrief?: (brief: FleetBrief, workerId: string) => string;
   spawn?: (opts: { command: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv; workerId: string }, onEvent: (e: FleetWorkerEvent) => void) => WorkerHandle;
   createWorktree?: (relPath: string, branch: string, baseRef: string) => Promise<void>;
+  removeWorktree?: (worktreePath: string) => Promise<void>;
 }
 
 /** Reject absolute paths and `..` traversal before handing a file path to git. */
@@ -296,6 +297,59 @@ export class FleetHub {
     return this.dispatch(checkpoint ? { ...rec.brief, resumePath: checkpoint } : rec.brief);
   }
 
+  /** Mark a reviewed worker as accepted. This is intentionally not a git merge. */
+  approve(id: string): { ok: boolean; error?: string } | null {
+    const rec = this.workers.get(id);
+    if (!rec) return null;
+    if (rec.status !== "waiting_approval") {
+      return { ok: false, error: `worker is ${rec.status}, not waiting_approval` };
+    }
+    this.emit(id, {
+      type: "worker.progress",
+      ts: this.now(),
+      workerId: id,
+      message: "review approved",
+      data: { kind: "review", action: "approved" },
+    });
+    return { ok: true };
+  }
+
+  /** Discard a reviewed worker and remove its worktree when possible. */
+  async discard(id: string): Promise<{ ok: boolean; error?: string } | null> {
+    const rec = this.workers.get(id);
+    if (!rec) return null;
+    if (["queued", "running"].includes(rec.status)) {
+      return { ok: false, error: `worker is ${rec.status}; cancel it before discarding` };
+    }
+    const worktreePath = rec.brief.worktree;
+    try {
+      const remove = this.deps.removeWorktree ?? ((p: string) => this.worktrees.remove(p, true));
+      await remove(worktreePath);
+      this.emit(id, {
+        type: "worker.progress",
+        ts: this.now(),
+        workerId: id,
+        message: "worktree discarded",
+      });
+    } catch (e) {
+      this.emit(id, {
+        type: "worker.progress",
+        ts: this.now(),
+        workerId: id,
+        message: `worktree discard failed: ${e instanceof Error ? e.message : String(e)}`,
+        level: "warning",
+      });
+    }
+    this.emit(id, {
+      type: "worker.progress",
+      ts: this.now(),
+      workerId: id,
+      message: "review discarded",
+      data: { kind: "review", action: "discarded" },
+    });
+    return { ok: true };
+  }
+
   /** Read-only single-file diff for the GUI drawer; never escapes the worktree. */
   async getWorkerFileDiff(
     id: string,
@@ -317,6 +371,11 @@ export class FleetHub {
 
 function statusAfterEvent(current: string, event: FleetWorkerEvent): FleetWorkerStatus | string {
   if (event.type === "worker.started") return "running";
+  if (event.type === "worker.progress") {
+    const data = event.data as { kind?: unknown; action?: unknown } | undefined;
+    if (data?.kind === "review" && data.action === "approved") return "completed";
+    if (data?.kind === "review" && data.action === "discarded") return "cancelled";
+  }
   if (event.type === "worker.violation" && (event.code === "forbidden_file" || event.code === "center_lock")) return "blocked";
   if (event.type === "gate.finished" && !event.ok) return "failed";
   if (event.type === "worker.finished") return event.ok ? (current === "blocked" ? "blocked" : "waiting_approval") : "failed";

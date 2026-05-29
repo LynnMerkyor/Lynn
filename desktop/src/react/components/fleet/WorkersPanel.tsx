@@ -109,6 +109,18 @@ export function WorkersPanel() {
     });
   };
 
+  const approveWorker = (workerId: string) => {
+    void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/approve`, { method: 'POST' }).catch(() => {
+      /* server broadcasts the review result; ignore transport errors here */
+    });
+  };
+
+  const discardWorker = (workerId: string) => {
+    void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/discard`, { method: 'POST' }).catch(() => {
+      /* server broadcasts the review result; ignore transport errors here */
+    });
+  };
+
   const openWorktree = (worker: FleetWorkerView) => {
     if (!worker.worktree) return;
     const abs = worker.cwd ? `${worker.cwd.replace(/\/+$/, '')}/${worker.worktree}` : worker.worktree;
@@ -262,6 +274,8 @@ export function WorkersPanel() {
                   onCancel={cancelWorker}
                   onRetry={retryWorker}
                   onResume={resumeWorker}
+                  onApprove={approveWorker}
+                  onDiscard={discardWorker}
                   onOpenWorktree={openWorktree}
                   onDismiss={removeWorker}
                   fetchFileDiff={fetchFileDiff}
