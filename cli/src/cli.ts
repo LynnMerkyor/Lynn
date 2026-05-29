@@ -7,6 +7,7 @@ import { renderDoctor, runDoctor } from "./commands/doctor.js";
 import { runPrompt } from "./commands/prompt.js";
 import { activeRouteLabel, resolveProvidersInfo, runProviders } from "./commands/providers.js";
 import { runSessions } from "./commands/sessions.js";
+import { runVisionCommand } from "./commands/vision.js";
 import { runWorker } from "./commands/worker-run.js";
 import { usage } from "./help.js";
 import { writeJsonLine } from "./jsonl.js";
@@ -68,6 +69,11 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     case "code": {
       return runCode(args);
+    }
+    case "see":
+    case "ground":
+    case "ui2code": {
+      return runVisionCommand(args, args.command, json);
     }
     case "sessions": {
       return runSessions(args, json);

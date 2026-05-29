@@ -1,4 +1,5 @@
 import { applyReasoningToBody, type ReasoningOptions } from "./reasoning.js";
+import type { ChatContentPart } from "./media.js";
 
 export interface BrainChatRequest {
   brainUrl: string;
@@ -9,7 +10,7 @@ export interface BrainChatRequest {
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: string | ChatContentPart[];
 }
 
 export type BrainStreamEvent =
