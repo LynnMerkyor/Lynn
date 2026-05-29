@@ -70,11 +70,16 @@ export async function* streamBrainChat(request: BrainChatRequest): AsyncGenerato
     messages,
   }, request.reasoning);
 
-  const response = await fetch(new URL("/v1/chat/completions", request.brainUrl), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(new URL("/v1/chat/completions", request.brainUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    throw new Error(formatBrainConnectionError(request.brainUrl, error));
+  }
   if (!response.ok || !response.body) {
     throw new Error(`Brain request failed: ${response.status} ${response.statusText}`.trim());
   }
@@ -96,4 +101,13 @@ export async function* streamBrainChat(request: BrainChatRequest): AsyncGenerato
   for (const payload of parseSsePayloads(buffer)) {
     for (const event of parseBrainStreamPayload(payload)) yield event;
   }
+}
+
+function formatBrainConnectionError(brainUrl: string, error: unknown): string {
+  const detail = error instanceof Error && error.message ? ` (${error.message})` : "";
+  return [
+    `Could not reach Lynn Brain at ${brainUrl}${detail}.`,
+    "Start the Lynn GUI so the local Brain/router is running, or pass --brain-url to another compatible endpoint.",
+    "For CLI-only smoke tests, use --mock-brain.",
+  ].join(" ");
 }

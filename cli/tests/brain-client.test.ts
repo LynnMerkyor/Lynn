@@ -39,6 +39,14 @@ describe("brain-client stream parser", () => {
       }
     }).rejects.toThrow("requires a prompt or messages");
   });
+
+  it("explains how to recover when Brain is unreachable", async () => {
+    await expect(async () => {
+      for await (const _event of streamBrainChat({ brainUrl: "http://127.0.0.1:1", prompt: "hello", reasoning: { effort: "auto", display: "auto" } })) {
+        // no-op
+      }
+    }).rejects.toThrow("Start the Lynn GUI");
+  });
 });
 
 describe("reasoning options", () => {

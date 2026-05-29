@@ -29,6 +29,8 @@ Options:
 const steps = [
   ["Typecheck renderer/main", "npm", ["run", "typecheck"]],
   ["Typecheck runtime", "npm", ["run", "typecheck:runtime"]],
+  ["Build CLI", "npm", ["run", "build:cli"]],
+  ["CLI smoke", "node", ["scripts/cli-smoke.mjs"]],
   ...(!has("--quick") ? [["Vitest full suite", "npm", ["test", "--", "--reporter=dot"]]] : []),
   ...(!has("--no-build") ? [
     ["Build server bundle", "npm", ["run", "build:server"]],
