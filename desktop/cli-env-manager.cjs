@@ -42,11 +42,14 @@ function resolveCliRuntime(opts = {}) {
   const platform = opts.platform || process.platform;
   const execPath = opts.execPath || process.execPath;
   const resourcesPath = opts.resourcesPath != null ? opts.resourcesPath : process.resourcesPath || "";
+  const appRoot = opts.appRoot || path.join(__dirname, "..");
   const fileExists = opts.fileExists || defaultFileExists;
 
   // Bundled CLI (extraResources: cli/dist -> resources/cli/lynn.mjs).
-  const cliEntry = resourcesPath ? path.join(resourcesPath, "cli", "lynn.mjs") : "";
-  const cliPresent = fileExists(cliEntry);
+  const bundledCliEntry = resourcesPath ? path.join(resourcesPath, "cli", "lynn.mjs") : "";
+  const devCliEntry = path.join(appRoot, "cli", "bin", "lynn.mjs");
+  const cliEntry = fileExists(bundledCliEntry) ? bundledCliEntry : fileExists(devCliEntry) ? devCliEntry : "";
+  const cliPresent = !!cliEntry;
 
   // Prefer a REAL bundled node (the mac/linux server bundle ships one).
   // Windows ships lynn-server.exe (a SEA, not a general node) -> not usable here.

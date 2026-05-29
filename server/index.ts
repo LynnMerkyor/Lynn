@@ -250,6 +250,16 @@ const routeHub = hub as any;
 const bridgeManager = new BridgeManager({ engine: routeEngine, hub: routeHub });
 routeHub.bridgeManager = bridgeManager;
 
+function parseFleetRunnerArgsPrefix(value?: string): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 const {
   restRoute: chatRestRoute,
   wsRoute: chatWsRoute,
@@ -265,7 +275,11 @@ const { wsRoute: voiceWsRoute } = createVoiceWsRoute(routeEngine, routeHub, { up
 app.route("", voiceWsRoute);
 app.route("/api", createReviewRoute(routeEngine, { broadcast: chatBroadcast, taskRuntime }));
 app.route("/api", createTasksRoute(taskRuntime, routeEngine));
-const fleetHub = new FleetHub(process.cwd(), chatBroadcast);
+const fleetHub = new FleetHub(process.cwd(), chatBroadcast, undefined, {
+  runnerCommand: process.env.LYNN_FLEET_RUNNER_COMMAND || process.env.LYNN_CLI_BIN || "Lynn",
+  runnerArgsPrefix: parseFleetRunnerArgsPrefix(process.env.LYNN_FLEET_RUNNER_ARGS_PREFIX),
+  runnerEnv: process.env.LYNN_FLEET_RUNNER_ELECTRON_AS_NODE === "1" ? { ELECTRON_RUN_AS_NODE: "1" } : {},
+});
 app.route("/api", createFleetRoute(fleetHub));
 app.route("/api", createAppStateRoute(routeEngine, { taskRuntime }));
 app.route("/api", createDebugRoute(routeEngine));

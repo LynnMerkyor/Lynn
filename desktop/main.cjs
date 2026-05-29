@@ -20,7 +20,7 @@ const { normalizeConfiguredShortcut, registerFirstAvailableGlobalShortcut } = re
 const { VoiceTunnelManager } = require("./voice-tunnel-manager.cjs");
 const { LlamaCppManager } = require("./llamacpp-manager.cjs");
 const { ModelDownloader } = require("./model-downloader.cjs");
-const { getCliEnvStatus } = require("./cli-env-manager.cjs");
+const { getCliEnvStatus, getWorkerSpawnCommand } = require("./cli-env-manager.cjs");
 const {
   MODEL_DOWNLOADER_SOURCES,
   buildLlamacppArgsForAlias,
@@ -988,6 +988,14 @@ async function startServer() {
   _serverLogs = [];
 
   const serverEnv = { ...process.env, LYNN_HOME: lynnHome };
+  const cliSpawn = getWorkerSpawnCommand();
+  if (cliSpawn) {
+    serverEnv.LYNN_FLEET_RUNNER_COMMAND = cliSpawn.command;
+    serverEnv.LYNN_FLEET_RUNNER_ARGS_PREFIX = JSON.stringify(cliSpawn.args || []);
+    if (cliSpawn.env?.ELECTRON_RUN_AS_NODE) {
+      serverEnv.LYNN_FLEET_RUNNER_ELECTRON_AS_NODE = "1";
+    }
+  }
 
   // 2026-05-01 P1-① — 把 native AEC 模块路径注入 server,让 server 端
   // server/clients/aec/index.js 直接 require .node(零 IPC,reference signal 时序对齐)。

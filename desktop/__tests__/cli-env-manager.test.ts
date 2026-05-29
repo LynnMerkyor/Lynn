@@ -41,10 +41,23 @@ describe('resolveCliRuntime', () => {
       platform: 'darwin',
       execPath: '/e',
       resourcesPath: '/res',
+      appRoot: '/app',
       fileExists: existsIn(['/res/server/node']),
     });
     expect(rt.cliPresent).toBe(false);
     expect(rt.canRunInApp).toBe(false);
+  });
+
+  it('finds the dev CLI build when extraResources is absent', () => {
+    const rt = resolveCliRuntime({
+      platform: 'darwin',
+      execPath: '/e',
+      resourcesPath: '/res',
+      appRoot: '/repo',
+      fileExists: existsIn(['/res/server/node', '/repo/cli/bin/lynn.mjs']),
+    });
+    expect(rt.cliEntry).toBe('/repo/cli/bin/lynn.mjs');
+    expect(rt.canRunInApp).toBe(true);
   });
 });
 

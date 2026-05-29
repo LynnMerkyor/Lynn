@@ -89,7 +89,9 @@ describe("FleetHub.dispatch", () => {
       () => "T",
       {
         createWorktree: false,
-        runnerCommand: "Lynn",
+        runnerCommand: "/node",
+        runnerArgsPrefix: ["/cli/lynn.mjs"],
+        runnerEnv: { ELECTRON_RUN_AS_NODE: "1" },
         spawnWorker: (opts, onEvent) => {
           spawned.push(opts);
           queueMicrotask(() => {
@@ -117,10 +119,11 @@ describe("FleetHub.dispatch", () => {
 
     expect(spawned).toHaveLength(1);
     const call = spawned[0]!;
-    expect(call.command).toBe("Lynn");
-    expect(call.args.slice(0, 2)).toEqual(["worker", "run"]);
+    expect(call.command).toBe("/node");
+    expect(call.args.slice(0, 3)).toEqual(["/cli/lynn.mjs", "worker", "run"]);
     expect(call.args).toContain("--id");
     expect(call.args).toContain(rec.workerId);
+    expect(call.env?.ELECTRON_RUN_AS_NODE).toBe("1");
     expect(hub.getWorker(rec.workerId)?.status).toBe("completed");
     expect(sent.some((m) => m.event.type === "worker.finished")).toBe(true);
   });

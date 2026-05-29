@@ -42,6 +42,8 @@ export type FleetSpawnWorker = (opts: SpawnWorkerOptions, onEvent: (e: FleetWork
 export interface FleetHubOptions {
   mode?: "spawn" | "stub";
   runnerCommand?: string;
+  runnerArgsPrefix?: string[];
+  runnerEnv?: NodeJS.ProcessEnv;
   spawnWorker?: FleetSpawnWorker;
   createWorktree?: boolean;
 }
@@ -53,6 +55,8 @@ export class FleetHub {
   readonly worktrees: WorktreeManager;
   private readonly mode: "spawn" | "stub";
   private readonly runnerCommand: string;
+  private readonly runnerArgsPrefix: string[];
+  private readonly runnerEnv: NodeJS.ProcessEnv;
   private readonly spawnWorker: FleetSpawnWorker;
   private readonly createWorktree: boolean;
 
@@ -65,6 +69,8 @@ export class FleetHub {
     this.worktrees = new WorktreeManager(repoRoot);
     this.mode = options.mode ?? "spawn";
     this.runnerCommand = options.runnerCommand || process.env.LYNN_CLI_BIN || "Lynn";
+    this.runnerArgsPrefix = options.runnerArgsPrefix || [];
+    this.runnerEnv = options.runnerEnv || {};
     this.spawnWorker = options.spawnWorker || spawnWorker;
     this.createWorktree = options.createWorktree ?? true;
   }
@@ -157,6 +163,7 @@ export class FleetHub {
       }
       const briefPath = await writeFleetBrief(workerId, brief);
       const args = [
+        ...this.runnerArgsPrefix,
         "worker",
         "run",
         "--brief",
@@ -177,6 +184,7 @@ export class FleetHub {
         workerId,
         env: {
           ...process.env,
+          ...this.runnerEnv,
           LYNN_NO_MODEL_DOWNLOADS: "1",
         },
       }, (event) => this.handleWorkerEvent(workerId, event));
