@@ -146,6 +146,7 @@ function readOptionalStdin(firstChunkTimeoutMs: number): Promise<string> {
       process.stdin.off("data", onData);
       process.stdin.off("end", onEnd);
       process.stdin.off("error", onEnd);
+      process.stdin.pause();
       resolve(text);
     };
     const onData = (chunk: Buffer | string) => {
