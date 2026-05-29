@@ -7,16 +7,19 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  DEFAULT_PERMISSION_PROFILE,
+  normalizePermissionProfile,
+  type LynnApprovalMode,
+  type LynnSandboxMode,
+} from "../../shared/permission-profile.js";
 
 export interface PermissionStatus {
   exists: boolean;
   path: string;
-  approval: string;
-  sandbox: string;
+  approval: LynnApprovalMode;
+  sandbox: LynnSandboxMode;
 }
-
-const DEFAULT_APPROVAL = "ask";
-const DEFAULT_SANDBOX = "workspace-write";
 
 export function permissionProfilePath(home?: string): string {
   const raw = home || process.env.LYNN_HOME || path.join(os.homedir(), ".lynn");
@@ -30,14 +33,14 @@ export async function readPermissionStatus(
   const p = opts.profilePath ?? permissionProfilePath();
   const read = opts.readFile ?? ((f: string) => fs.readFile(f, "utf8"));
   try {
-    const parsed = JSON.parse(await read(p)) as { approval?: string; sandbox?: string };
+    const parsed = normalizePermissionProfile(JSON.parse(await read(p)));
     return {
       exists: true,
       path: p,
-      approval: parsed.approval || DEFAULT_APPROVAL,
-      sandbox: parsed.sandbox || DEFAULT_SANDBOX,
+      approval: parsed.approval,
+      sandbox: parsed.sandbox,
     };
   } catch {
-    return { exists: false, path: p, approval: DEFAULT_APPROVAL, sandbox: DEFAULT_SANDBOX };
+    return { exists: false, path: p, ...DEFAULT_PERMISSION_PROFILE };
   }
 }

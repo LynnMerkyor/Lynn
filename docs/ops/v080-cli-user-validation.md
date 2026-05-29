@@ -270,6 +270,8 @@ In the GUI:
 - `Lynn permissions` reads and prints the effective CLI permission profile.
 - `Lynn permissions set --approval ... --sandbox ...` writes the shared local
   profile at `~/.lynn/permissions/cli.json`.
+- `shared/permission-profile.ts` owns the approval/sandbox value contract used by
+  CLI and server Fleet, so malformed profile fields normalize the same way.
 - CLI flags override env/profile/default for one process only.
 - Fleet reads the same profile through `/api/fleet/permissions` and shows the
   effective mode before dispatching a worker.
@@ -278,7 +280,6 @@ In the GUI:
 
 Remaining hardening:
 
-- Add a shared permission profile type under `shared/`.
 - Serialize runtime instruction frames per provider capability; never assume
   mid-conversation `role: "system"` works outside opted-in Anthropic adapters.
 - Store GUI defaults in the Lynn data directory, not only localStorage.

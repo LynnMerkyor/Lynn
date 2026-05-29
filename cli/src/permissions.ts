@@ -2,16 +2,22 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { getStringFlag, type ParsedArgs } from "./args.js";
 import { resolveDataDir } from "./session/store.js";
-import type { ToolRunContext } from "./tools/types.js";
 import { t } from "./i18n.js";
+import {
+  DEFAULT_PERMISSION_PROFILE,
+  isFullAccessPermission,
+  normalizeApprovalMode,
+  normalizePermissionProfile,
+  normalizeSandboxMode,
+  type LynnApprovalMode,
+  type LynnPermissionProfile,
+  type LynnSandboxMode,
+} from "../../shared/permission-profile.js";
 
-export type ApprovalMode = ToolRunContext["approval"];
-export type SandboxMode = NonNullable<ToolRunContext["sandbox"]>;
+export type ApprovalMode = LynnApprovalMode;
+export type SandboxMode = LynnSandboxMode;
 
-export interface PermissionProfile {
-  approval: ApprovalMode;
-  sandbox: SandboxMode;
-}
+export type PermissionProfile = LynnPermissionProfile;
 
 export interface EffectivePermissions extends PermissionProfile {
   source: "flags" | "env" | "gui-profile" | "default";
@@ -32,8 +38,8 @@ export async function resolveEffectivePermissions(args: ParsedArgs): Promise<Eff
   const flagApproval = normalizeApproval(getStringFlag(args.flags, "approval"));
   const flagSandbox = normalizeSandbox(getStringFlag(args.flags, "sandbox"));
 
-  const approval = flagApproval || envProfile.approval || guiProfile?.approval || "ask";
-  const sandbox = flagSandbox || envProfile.sandbox || guiProfile?.sandbox || "workspace-write";
+  const approval = flagApproval || envProfile.approval || guiProfile?.approval || DEFAULT_PERMISSION_PROFILE.approval;
+  const sandbox = flagSandbox || envProfile.sandbox || guiProfile?.sandbox || DEFAULT_PERMISSION_PROFILE.sandbox;
   const source = flagApproval || flagSandbox
     ? "flags"
     : envProfile.approval || envProfile.sandbox
@@ -56,8 +62,8 @@ export async function savePermissionProfile(args: ParsedArgs): Promise<SavedPerm
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   const profilePath = path.join(dataDir, "permissions", "cli.json");
   const current = await readPermissionProfile(profilePath);
-  const approval = normalizeApproval(getStringFlag(args.flags, "approval")) || current?.approval || "ask";
-  const sandbox = normalizeSandbox(getStringFlag(args.flags, "sandbox")) || current?.sandbox || "workspace-write";
+  const approval = normalizeApproval(getStringFlag(args.flags, "approval")) || current?.approval || DEFAULT_PERMISSION_PROFILE.approval;
+  const sandbox = normalizeSandbox(getStringFlag(args.flags, "sandbox")) || current?.sandbox || DEFAULT_PERMISSION_PROFILE.sandbox;
 
   await fs.mkdir(path.dirname(profilePath), { recursive: true });
   await fs.writeFile(profilePath, `${JSON.stringify({ approval, sandbox }, null, 2)}\n`, "utf8");
@@ -74,7 +80,7 @@ export async function savePermissionProfile(args: ParsedArgs): Promise<SavedPerm
 }
 
 export function renderPermissions(perms: EffectivePermissions): string {
-  const warning = perms.approval === "yolo" || perms.sandbox === "danger-full-access"
+  const warning = isFullAccessPermission(perms)
     ? `\n${t("permissions.warning")}`
     : "";
   return [
@@ -94,13 +100,7 @@ export function renderPermissions(perms: EffectivePermissions): string {
 
 async function readPermissionProfile(profilePath: string): Promise<PermissionProfile | null> {
   try {
-    const parsed = JSON.parse(await fs.readFile(profilePath, "utf8")) as Partial<PermissionProfile>;
-    const approval = normalizeApproval(parsed.approval);
-    const sandbox = normalizeSandbox(parsed.sandbox);
-    return {
-      approval: approval || "ask",
-      sandbox: sandbox || "workspace-write",
-    };
+    return normalizePermissionProfile(JSON.parse(await fs.readFile(profilePath, "utf8")));
   } catch {
     return null;
   }
@@ -116,11 +116,9 @@ function readEnvProfile(): Partial<PermissionProfile> {
 }
 
 function normalizeApproval(value: unknown): ApprovalMode | null {
-  if (value === "ask" || value === "on-failure" || value === "never" || value === "yolo") return value;
-  return null;
+  return normalizeApprovalMode(value);
 }
 
 function normalizeSandbox(value: unknown): SandboxMode | null {
-  if (value === "read-only" || value === "workspace-write" || value === "danger-full-access") return value;
-  return null;
+  return normalizeSandboxMode(value);
 }
