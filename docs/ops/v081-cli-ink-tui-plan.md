@@ -27,7 +27,7 @@
 | `cli/src/history.ts` | 持久历史 + `HistoryNavigator` | `<InputBox>` 的 ↑/↓ |
 | `cli/src/completion.ts` | slash Tab 补全(`completeSlash`) | `<InputBox>` 的 Tab |
 | `cli/src/i18n.ts` | zh 默认 + `t()` | 所有组件文案 |
-| `cli/src/startup.ts` `visibleLength` | CJK 终端列宽 | 状态栏 / box 对齐(Ink 的 measureElement 不算 CJK,需要它) |
+| `cli/src/startup.ts` `displayWidth` / `visibleLength` | CJK 终端列宽 | 状态栏 / box 对齐(Ink 的 measureElement 不算 CJK,需要它) |
 | `cli/src/terminal-style.ts` | ANSI 颜色 + `supportsColor` | NO_COLOR 回退 |
 
 **关键**:逻辑都在纯函数里,Ink 只是换"渲染外壳",不是重写逻辑。
@@ -64,7 +64,7 @@
 ## 7. 风险 / 待决
 - **依赖体积**:react+ink 打进 `bin/lynn.mjs` 后体积(需实测;若过大考虑 lazy-load 仅 TTY 时引入)。
 - **Ink vs 自写 ANSI TUI**:Ink 省事但引 react;自写 alternate-screen TUI 可保零依赖但工作量大。**建议 Ink**(plan 原选型),但这是 §2.1 的产品决策点。
-- **CJK 宽度**:Ink 布局默认按 string length,CJK 会错位 → 必须接 `visibleLength`(已就位)或 patch Ink 的 measure。
+- **CJK 宽度**:Ink 布局默认按 string length,CJK 会错位 → 必须接 `displayWidth` / `visibleLength`(已就位)或 patch Ink 的 measure。
 - **谁来写**:`cli/**` 是 Codex 的 lane → **Codex 主导**;Claude 可供组件/动画实现或 review;用户定依赖决策。
 
 ## 8. 验收
