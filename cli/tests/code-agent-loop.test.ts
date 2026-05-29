@@ -168,6 +168,58 @@ describe("code agent loop", () => {
     expect(output).toContain("Reviewed the screenshot");
   });
 
+  it("runs code mode through CLI BYOK when local Brain is offline", async () => {
+    const provider = http.createServer((request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      expect(request.headers.authorization).toBe("Bearer sk-code-test");
+      let body = "";
+      request.on("data", (chunk) => {
+        body += String(chunk);
+      });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as { model?: string; stream?: boolean; messages?: Array<{ role?: string; content?: unknown }> };
+        expect(parsed.model).toBe("code-model");
+        expect(parsed.stream).toBe(true);
+        expect(JSON.stringify(parsed.messages)).toContain("summarize hello");
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end(sse("BYOK code route answered."));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runCode(parseArgs([
+        "code",
+        "summarize hello",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-code-test",
+        "--model",
+        "code-model",
+        "--max-steps",
+        "1",
+        "--json",
+      ]))).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
+
+    expect(output).toContain("BYOK code route answered");
+  });
+
   it("resumes a saved code session and appends the continuation", async () => {
     const dataDir = path.join(tmp, "data");
     const sessionPath = await appendSessionTurn({
