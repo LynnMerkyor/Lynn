@@ -322,6 +322,7 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
     }
     case 'gate.finished':
       next.gate = { ok: ev.ok, summary: ev.summary };
+      if (!ev.ok) next.status = 'failed';
       return next;
     case 'worker.violation':
       next.violations = [...prev.violations, { code: ev.code, message: ev.message, path: ev.path, severity: ev.severity }];

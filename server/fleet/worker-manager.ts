@@ -117,6 +117,16 @@ export function mapKnownCliJsonLine(line: string, workerId: string): FleetWorker
       summary: "code run finished",
     };
   }
+  if (type === "code.task.finished") {
+    const ok = parsed.ok !== false;
+    const code = typeof parsed.code === "string" ? parsed.code : "";
+    return {
+      type: "gate.finished",
+      workerId,
+      ok,
+      summary: ok ? "code task finished" : `code task failed${code ? `: ${code}` : ""}`,
+    };
+  }
   return null;
 }
 

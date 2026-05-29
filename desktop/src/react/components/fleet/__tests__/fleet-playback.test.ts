@@ -48,4 +48,25 @@ describe('fleet mock playback', () => {
     } as never);
     expect(list).toEqual([]);
   });
+
+  it('marks a worker failed when a gate finishes unsuccessfully', () => {
+    let list: FleetWorkerView[] = [];
+    list = applyFleetEventToList(list, {
+      type: 'worker.started',
+      workerId: 'w-gate-fail',
+      agent: 'lynn-cli',
+      cwd: '/repo',
+      worktree: '/repo/wt',
+      branch: 'fleet/test',
+    });
+    list = applyFleetEventToList(list, {
+      type: 'gate.finished',
+      workerId: 'w-gate-fail',
+      ok: false,
+      summary: 'code task failed: max_steps_reached',
+    });
+
+    expect(list[0].gate).toEqual({ ok: false, summary: 'code task failed: max_steps_reached' });
+    expect(list[0].status).toBe('failed');
+  });
 });

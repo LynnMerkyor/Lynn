@@ -105,6 +105,12 @@ describe("worker line parser", () => {
       workerId: "w2",
       ok: true,
     });
+    expect(mapKnownCliJsonLine('{"type":"code.task.finished","ok":false,"code":"max_steps_reached"}', "w2")).toMatchObject({
+      type: "gate.finished",
+      workerId: "w2",
+      ok: false,
+      summary: "code task failed: max_steps_reached",
+    });
     expect(mapKnownCliJsonLine('{"type":"code.unknown"}', "w2")).toBeNull();
   });
 
