@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import http from "node:http";
 import { BrainConnectionError, chatCompletionsUrl, checkBrainReachable, parseBrainStreamPayload, parseSsePayloads, streamBrainChat } from "../src/brain-client.js";
 import { parseArgs } from "../src/args.js";
 import { applyReasoningToBody, parseReasoningOptions, shouldRenderReasoning } from "../src/reasoning.js";
+import { setLang } from "../src/i18n.js";
+
+beforeEach(() => setLang("en"));
+afterEach(() => setLang(null));
 
 describe("brain-client stream parser", () => {
   it("extracts SSE data payloads", () => {

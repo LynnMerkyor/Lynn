@@ -1,6 +1,7 @@
 import { applyReasoningToBody, type ReasoningOptions } from "./reasoning.js";
 import type { ChatContentPart } from "./media.js";
 import type { CliProviderProfile } from "./provider-profile.js";
+import { t } from "./i18n.js";
 
 export interface BrainChatRequest {
   brainUrl: string;
@@ -36,7 +37,7 @@ export class BrainConnectionError extends Error {
 
 export function formatBrainRecoveryHint(error: unknown): string {
   if (error instanceof BrainConnectionError) {
-    return `Brain offline. Start the Lynn client GUI for MiMo, configure CLI BYOK with Lynn providers set, or run with --mock-brain.`;
+    return t("brain.recovery.offline");
   }
   return error instanceof Error ? error.message : String(error);
 }
@@ -270,8 +271,8 @@ function providerHeaders(provider: CliProviderProfile): Record<string, string> {
 function formatBrainConnectionError(brainUrl: string, error: unknown): string {
   const detail = error instanceof Error && error.message ? ` (${error.message})` : "";
   return [
-    `Could not reach Lynn Brain at ${brainUrl}${detail}.`,
-    "Start the Lynn client GUI so the local Brain/router is running, or pass --brain-url to another compatible endpoint.",
-    "For CLI-only use, run Lynn providers set with your BYOK endpoint; for smoke tests, use --mock-brain.",
+    t("brain.connection.error", { brainUrl, detail }),
+    t("brain.connection.recovery"),
+    t("brain.connection.byok"),
   ].join(" ");
 }

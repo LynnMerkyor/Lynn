@@ -236,8 +236,8 @@ checks.push(run("stepfun worker mock", ["worker", "run", "--brief", briefPath, "
 }));
 
 checks.push(run("brain unreachable recovery", ["-p", "你好", "--brain-url", "http://127.0.0.1:1"], { expectFailure: true }).then((r) => {
-  assertIncludes(r.name, r.stderr, "Could not reach Lynn Brain");
-  assertIncludes(r.name, r.stderr, "Start the Lynn client GUI");
+  assertIncludes(r.name, r.stderr, "无法连接 Lynn Brain");
+  assertIncludes(r.name, r.stderr, "Lynn 客户端");
   assertIncludes(r.name, r.stderr, "--mock-brain");
 }));
 
