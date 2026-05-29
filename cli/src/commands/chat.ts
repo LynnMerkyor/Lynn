@@ -8,6 +8,7 @@ import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { dangerLine, red, supportsColor } from "../terminal-style.js";
+import { renderStartupBanner } from "../startup.js";
 
 export async function runChat(args: ParsedArgs, options: { intro?: boolean; brainReachable?: boolean } = {}): Promise<number> {
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
@@ -21,7 +22,12 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     : () => {};
 
   if (options.intro !== false) {
-    output.write(`Lynn chat. Type /exit to leave, /clear to reset context, /model to review route, /mode to review permissions.\nmode: ${renderMode(mode)} (Shift+Tab toggles YOLO)\n\n`);
+    output.write(`${renderStartupBanner({
+      brainUrl,
+      brainStatus: "unknown",
+      modeLabel: renderMode(mode),
+      modelLabel: "MiMo via Brain router (auto)",
+    })}\n\n`);
   } else if (options.brainReachable === false && !mockBrain) {
     output.write(`Brain offline. Start the Lynn GUI, then send again. Use /providers for BYOK, /mode for permissions, /exit to leave.\nmode: ${renderMode(mode)} (Shift+Tab toggles YOLO)\n\n`);
   }
@@ -117,7 +123,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       }
     } else {
       for (;;) {
-        const text = await rl.question("> ");
+        const text = await rl.question("");
         if (await handleText(text) === "break") break;
       }
     }
