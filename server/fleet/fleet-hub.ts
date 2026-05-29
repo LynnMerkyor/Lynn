@@ -48,6 +48,11 @@ export interface FleetHubOptions {
   createWorktree?: boolean;
 }
 
+function isSafeRelPath(p: string): boolean {
+  if (!p || path.isAbsolute(p)) return false;
+  return !p.split(/[\\/]/).includes("..");
+}
+
 export class FleetHub {
   private workers = new Map<string, FleetWorkerRecord>();
   private handles = new Map<string, WorkerHandle>();
@@ -153,12 +158,31 @@ export class FleetHub {
     return true;
   }
 
+  async retry(id: string): Promise<FleetWorkerRecord | null> {
+    const rec = this.workers.get(id);
+    if (!rec) return null;
+    return this.dispatch(rec.brief);
+  }
+
   async fileDiff(id: string, filePath: string): Promise<string | null> {
     const rec = this.workers.get(id);
     if (!rec) return null;
     const worktreePath = resolveFromRepo(this.repoRoot, rec.brief.worktree);
     return this.worktrees.fileDiff(worktreePath, filePath);
   }
+
+  async getWorkerFileDiff(id: string, filePath: string): Promise<{ file: string; diff: string; error?: string } | null> {
+    const rec = this.workers.get(id);
+    if (!rec) return null;
+    if (!isSafeRelPath(filePath)) return { file: filePath, diff: "", error: "invalid path" };
+    try {
+      const diff = await this.fileDiff(id, filePath);
+      return { file: filePath, diff: diff || "" };
+    } catch (error) {
+      return { file: filePath, diff: "", error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
 
   private async startWorker(rec: FleetWorkerRecord): Promise<void> {
     const { brief, workerId, agent } = rec;
