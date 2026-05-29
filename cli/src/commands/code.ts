@@ -577,14 +577,17 @@ async function collectBrainText(inputData: {
 export function parseCodeToolRequest(text: string): CodeToolRequest | null {
   for (const candidate of extractJsonCandidates(text)) {
     try {
-      const parsed = JSON.parse(candidate) as { tool?: unknown; args?: unknown };
-      if (typeof parsed.tool !== "string") continue;
-      if (!CLIENT_TOOL_DEFINITIONS.some((definition) => definition.name === parsed.tool)) continue;
-      const args = parsed.args && typeof parsed.args === "object" && !Array.isArray(parsed.args)
-        ? parsed.args as Record<string, unknown>
-        : {};
+      const parsed = JSON.parse(candidate) as Record<string, unknown>;
+      const toolName = typeof parsed.tool === "string"
+        ? parsed.tool
+        : typeof parsed.name === "string"
+          ? parsed.name
+          : "";
+      if (!toolName) continue;
+      if (!CLIENT_TOOL_DEFINITIONS.some((definition) => definition.name === toolName)) continue;
+      const args = normalizeToolArgs(parsed);
       return {
-        tool: parsed.tool as ClientToolName,
+        tool: toolName as ClientToolName,
         args: {
           path: stringArg(args.path),
           text: stringArg(args.text ?? args.content ?? args.patch),
@@ -599,6 +602,23 @@ export function parseCodeToolRequest(text: string): CodeToolRequest | null {
     }
   }
   return null;
+}
+
+function normalizeToolArgs(parsed: Record<string, unknown>): Record<string, unknown> {
+  const explicit = parsed.args ?? parsed.arguments;
+  if (explicit && typeof explicit === "object" && !Array.isArray(explicit)) {
+    return explicit as Record<string, unknown>;
+  }
+  if (typeof explicit === "string") {
+    try {
+      const decoded = JSON.parse(explicit) as unknown;
+      if (decoded && typeof decoded === "object" && !Array.isArray(decoded)) return decoded as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  const { tool: _tool, name: _name, args: _args, arguments: _arguments, ...topLevelArgs } = parsed;
+  return topLevelArgs;
 }
 
 function extractJsonCandidates(text: string): string[] {

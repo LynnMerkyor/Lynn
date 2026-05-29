@@ -84,6 +84,21 @@ describe("code tools", () => {
     expect(parseCodeToolRequest("Here is a normal answer.")).toBeNull();
   });
 
+  it("parses common OpenAI-style and top-level tool JSON variants", () => {
+    expect(parseCodeToolRequest('{"name":"grep","arguments":{"query":"MiMo"}}')).toMatchObject({
+      tool: "grep",
+      args: { query: "MiMo" },
+    });
+    expect(parseCodeToolRequest('{"name":"read_file","arguments":"{\\"path\\":\\"README.md\\"}"}')).toMatchObject({
+      tool: "read_file",
+      args: { path: "README.md" },
+    });
+    expect(parseCodeToolRequest('{"tool":"bash","command":"pwd"}')).toMatchObject({
+      tool: "bash",
+      args: { command: "pwd" },
+    });
+  });
+
   it("times out long-running bash commands", async () => {
     const result = await runClientTool({ cwd: tmp, approval: "yolo", timeoutMs: 50 }, { name: "bash", command: "node -e \"setTimeout(()=>{}, 1000)\"" });
 
