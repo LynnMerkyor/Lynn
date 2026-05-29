@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createWorkerView, reduceFleetWorker } from '../fleet-reducer';
+import { createWorkerView, reduceFleetWorker, summarizeFleetUsage } from '../fleet-reducer';
 
 // The server attaches structured context to worker.progress.data (an existing
 // protocol field) for B1 vision + B3 runner, so the GUI can render them without a
@@ -104,5 +104,29 @@ describe('worker.progress data (vision + runner context)', () => {
       ms: 33,
     });
     expect(v.tools).toEqual([{ name: 'bash', running: false, ok: false, ms: 33 }]);
+  });
+
+  it('summarizes usage progress data for token and cache visibility', () => {
+    expect(summarizeFleetUsage({
+      prompt_tokens: 1000,
+      completion_tokens: 120,
+      total_tokens: 1120,
+      prompt_cache_hit_tokens: 850,
+    })).toMatchObject({
+      summary: '1120 tok · in 1000 · out 120 · cache 850 (85%)',
+      cacheRatio: 85,
+    });
+
+    let v = createWorkerView('w1');
+    v = reduceFleetWorker(v, {
+      type: 'worker.progress',
+      workerId: 'w1',
+      message: 'usage',
+      data: {
+        prompt_cache_hit_tokens: 90,
+        prompt_cache_miss_tokens: 10,
+      },
+    });
+    expect(v.usage).toMatchObject({ summary: 'cache 90 (90%)', cacheRatio: 90 });
   });
 });

@@ -49,6 +49,16 @@ export interface FleetToolRun {
   ms?: number;
 }
 
+export interface FleetUsageView {
+  summary: string;
+  total?: number;
+  prompt?: number;
+  completion?: number;
+  cacheHit?: number;
+  cacheMiss?: number;
+  cacheRatio?: number;
+}
+
 export interface FleetVisualResultView {
   taskType: 'see' | 'ground' | 'ui2code';
   image?: string;
@@ -79,6 +89,7 @@ export interface FleetWorkerView {
   /** Path currently being written (last file.changed while running); cleared on git.diff/finish. */
   activeFile?: string;
   tools: FleetToolRun[];
+  usage?: FleetUsageView;
   tests: FleetTestResult[];
   gate: { ok: boolean; summary: string } | null;
   violations: FleetViolation[];
@@ -140,6 +151,31 @@ function finishToolRun(list: FleetToolRun[], name: string, ok: boolean, ms?: num
   return copy;
 }
 
+function numberValue(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+export function summarizeFleetUsage(data: unknown): FleetUsageView | undefined {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
+  const record = data as Record<string, unknown>;
+  const prompt = numberValue(record, 'prompt_tokens');
+  const completion = numberValue(record, 'completion_tokens');
+  const total = numberValue(record, 'total_tokens');
+  const cacheHit = numberValue(record, 'prompt_cache_hit_tokens');
+  const cacheMiss = numberValue(record, 'prompt_cache_miss_tokens');
+  const cacheBase = prompt && prompt > 0 ? prompt : cacheHit != null && cacheMiss != null ? cacheHit + cacheMiss : undefined;
+  const cacheRatio = cacheHit != null && cacheBase && cacheBase > 0 ? Math.round((cacheHit / cacheBase) * 100) : undefined;
+  const parts = [
+    total != null ? `${total} tok` : undefined,
+    prompt != null ? `in ${prompt}` : undefined,
+    completion != null ? `out ${completion}` : undefined,
+    cacheHit != null ? `cache ${cacheHit}${cacheRatio != null ? ` (${cacheRatio}%)` : ''}` : undefined,
+  ].filter((part): part is string => !!part);
+  if (!parts.length) return undefined;
+  return { summary: parts.join(' · '), total, prompt, completion, cacheHit, cacheMiss, cacheRatio };
+}
+
 /** Fold one event into a worker view, returning a new view (immutable). */
 export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): FleetWorkerView {
   const next: FleetWorkerView = { ...prev, lastTs: ev.ts ?? prev.lastTs };
@@ -169,6 +205,9 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
         } else if (data.kind === 'runner') {
           next.runner = { mode: data.mode ?? 'spawned', source: data.source, pid: data.pid };
         }
+      }
+      if (ev.message === 'usage') {
+        next.usage = summarizeFleetUsage(ev.data) ?? prev.usage;
       }
       return next;
     }

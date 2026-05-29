@@ -335,6 +335,15 @@
   color: #c79a12;
 }
 
+.usageChip {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(52, 152, 219, 0.14);
+  color: #2f83bd;
+  font-family: var(--mono-font, monospace);
+}
+
 .statusChip {
   margin-left: 6px;
   font-size: 11px;

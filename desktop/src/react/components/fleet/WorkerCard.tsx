@@ -127,6 +127,7 @@ export function WorkerCard({
         <span className={s.workerAgent}>{worker.agent ?? 'worker'}</span>
         <span className={s.workerBranch}>{worker.branch ?? worker.workerId}</span>
         {worker.reasoningChunks > 0 && <span className={s.reasoningChip}>reasoning x{worker.reasoningChunks}</span>}
+        {worker.usage && <span className={s.usageChip}>{worker.usage.summary}</span>}
         {worker.hasForbiddenEdit && (
           <span className={s.badgeScope} title="out-of-scope edit">
             out-of-scope
