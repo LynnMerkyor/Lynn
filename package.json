@@ -39,7 +39,7 @@
     "dist:win": "npm run release:preflight && npm run build:server:win && electron-builder --win nsis --x64",
     "test": "vitest run",
     "test:cli": "npm run build:cli && node scripts/cli-smoke.mjs",
-    "test:cli-fleet": "npm --prefix cli test -- code-tools code-agent-loop worker-run providers brain-render status-bar && npm test -- --run server/fleet/__tests__/fleet-server.test.ts desktop/src/react/components/fleet/__tests__ --reporter=dot && node scripts/cli-longrun-smoke.mjs",
+    "test:cli-fleet": "npm --prefix cli test -- code-tools code-agent-loop worker-run providers brain-render status-bar vision && npm test -- --run server/fleet/__tests__/fleet-server.test.ts desktop/src/react/components/fleet/__tests__ --reporter=dot && node scripts/cli-longrun-smoke.mjs",
     "voice:smoke": "node --import tsx scripts/voice-runtime-smoke.ts",
     "test:release": "node scripts/run-release-regression.mjs --mode all --level release",
     "test:release:smoke": "node scripts/run-release-regression.mjs --mode all --level smoke",
