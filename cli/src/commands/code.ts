@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output, stderr as errorOutput } from "node:process";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
-import { formatBrainRecoveryHint, streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
+import { formatBrainRecoveryHint, streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
 import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { resolveEffectivePermissions } from "../permissions.js";
@@ -24,6 +24,7 @@ import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/
 import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type ChatMode } from "./chat.js";
 import { renderProvidersInfo, resolveProvidersInfo } from "./providers.js";
 import { readVersionInfo } from "../version.js";
+import { buildImageContentParts } from "../media.js";
 
 const pExecFile = promisify(execFile);
 
@@ -452,6 +453,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     toolCtx,
     input,
     output: errorOutput,
+    imagePath: getStringFlag(args.flags, "image", "shot") || undefined,
   });
   if (json) {
     if (final.trim()) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: final });
@@ -492,6 +494,7 @@ interface CodeAgentLoopInput {
   toolCtx: ToolRunContext;
   input: NodeJS.ReadStream;
   output: NodeJS.WriteStream;
+  imagePath?: string;
 }
 
 interface CodeToolRequest {
@@ -507,7 +510,11 @@ interface CodeToolRequest {
 }
 
 async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> {
-  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+  const initialPrompt = buildCodePrompt(inputData.task, inputData.context, inputData.imagePath);
+  const initialContent = inputData.imagePath
+    ? await buildImageContentParts(inputData.imagePath, initialPrompt)
+    : initialPrompt;
+  const messages: ChatMessage[] = [
     {
       role: "system",
       content: [
@@ -523,7 +530,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
         "Never download models, datasets, training packs, BF16, or GGUF files to the local Mac.",
       ].join("\n"),
     },
-    { role: "user", content: buildCodePrompt(inputData.task, inputData.context) },
+    { role: "user", content: initialContent },
   ];
   let finalText = "";
   const approvalSession = { approveAll: false };
@@ -628,7 +635,7 @@ function stableObject(value: Record<string, unknown>): Record<string, unknown> {
 async function collectBrainText(inputData: {
   brainUrl: string;
   fallbackProvider?: CliProviderProfile;
-  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  messages: ChatMessage[];
   reasoning: ReturnType<typeof parseReasoningOptions>;
   json: boolean;
   label: string;
@@ -843,13 +850,14 @@ async function readPackageScripts(repoCwd: string): Promise<Record<string, strin
   }
 }
 
-function buildCodePrompt(task: string, context: CodeContext): string {
+function buildCodePrompt(task: string, context: CodeContext, imagePath?: string): string {
   const scripts = Object.entries(context.packageScripts)
     .slice(0, 20)
     .map(([name, command]) => `- ${name}: ${command}`)
     .join("\n") || "(none)";
   return [
     `Task: ${task}`,
+    imagePath ? `Attached image: ${imagePath}` : "",
     "",
     `CWD: ${context.cwd}`,
     "",
@@ -864,7 +872,7 @@ function buildCodePrompt(task: string, context: CodeContext): string {
     "",
     "Package scripts:",
     scripts,
-  ].join("\n");
+  ].filter((line, index, all) => line || all[index - 1] !== "").join("\n");
 }
 
 function renderMockCodeTask(task: string, context: CodeContext): string {

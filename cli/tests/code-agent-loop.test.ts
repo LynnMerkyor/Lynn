@@ -130,4 +130,40 @@ describe("code agent loop", () => {
     expect(output).toContain("Repeated identical tool request suppressed");
     expect(output).toContain("I already have the file content");
   });
+
+  it("sends attached images through code mode for multimodal MiMo tasks", async () => {
+    const image = path.join(tmp, "shot.png");
+    await fs.writeFile(image, Buffer.from("89504e470d0a1a0a", "hex"));
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer((body) => {
+        const parsed = body as { messages?: Array<{ content?: unknown }> };
+        const firstUser = parsed.messages?.find((message) => Array.isArray(message.content));
+        expect(firstUser).toBeTruthy();
+        expect(JSON.stringify(firstUser?.content)).toContain("data:image/png;base64");
+        return "Reviewed the screenshot.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "review this UI",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--image",
+          image,
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain("Reviewed the screenshot");
+  });
 });
