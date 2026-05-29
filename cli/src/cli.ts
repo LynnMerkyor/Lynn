@@ -36,6 +36,10 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   const args = parseArgs(argv);
   const json = hasFlag(args.flags, "json", "jsonl");
 
+  if (isImplicitChatInvocation(args)) {
+    return runChat({ ...args, command: "chat" });
+  }
+
   switch (args.command) {
     case "version": {
       const info = readVersionInfo();
@@ -101,6 +105,27 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
       });
     }
   }
+}
+
+function isImplicitChatInvocation(args: ReturnType<typeof parseArgs>): boolean {
+  if (args.command !== "help") return false;
+  if (hasFlag(args.flags, "help", "h", "version", "v")) return false;
+  return hasFlag(
+    args.flags,
+    "mock-brain",
+    "mock",
+    "brain-url",
+    "reasoning",
+    "show-reasoning",
+    "approval",
+    "sandbox",
+    "base-url",
+    "api-base",
+    "api-key",
+    "model",
+    "preset",
+    "data-dir",
+  );
 }
 
 function startupModelLabel(info: ProvidersInfo, brainReachable: boolean): string {

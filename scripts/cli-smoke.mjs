@@ -220,6 +220,10 @@ checks.push(run("mock chat", ["chat", "--mock-brain"], { stdinLines: ["/mode yol
   assertIncludes(r.name, r.stdout, "hi");
 }));
 
+checks.push(run("implicit chat with global flags", ["--mock-brain"], { stdinLines: ["hi", "/exit"] }).then((r) => {
+  assertIncludes(r.name, r.stdout, "模拟回复:hi");
+}));
+
 checks.push(run("chat brain offline recovery", ["chat", "--brain-url", "http://127.0.0.1:1"], { stdinLines: ["hi", "/exit"] }).then((r) => {
   assertIncludes(r.name, r.stdout, "Brain 离线");
   assertIncludes(r.name, r.stdout, "Lynn");
