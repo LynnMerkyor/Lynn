@@ -175,7 +175,7 @@ function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; render
     } else if (event.type === "provider" || event.type === "tool_progress" || event.type === "brain.error") {
       writeJsonLine({ ...event, ts: nowIso() });
     } else if (event.type === "usage") {
-      writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage });
+      writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage, durationMs: opts.startedAt ? Date.now() - opts.startedAt : undefined });
     }
     return;
   }

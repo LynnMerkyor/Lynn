@@ -818,7 +818,7 @@ async function collectBrainText(inputData: {
       if (event.type === "reasoning.delta" && renderReasoning) process.stderr.write(dim(event.text, supportsColor(process.stderr)));
       if (event.type === "assistant.delta") text += event.text;
       if (inputData.json && (event.type === "provider" || event.type === "tool_progress" || event.type === "brain.error" || event.type === "usage")) {
-        if (event.type === "usage") writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage });
+        if (event.type === "usage") writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage, durationMs: Date.now() - startedAt });
         else writeJsonLine({ ...event, ts: nowIso() });
       }
       if (!inputData.json && event.type !== "assistant.delta" && event.type !== "reasoning.delta") {

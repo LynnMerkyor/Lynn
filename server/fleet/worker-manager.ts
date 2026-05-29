@@ -82,7 +82,7 @@ export function mapKnownCliJsonLine(line: string, workerId: string): FleetWorker
     };
   }
   if (type === "usage") {
-    return makeFleetProgressEvent("usage", { workerId, data: parsed.usage });
+    return makeFleetProgressEvent("usage", { workerId, data: normalizeUsageData(parsed) });
   }
   if (type === "session.checkpoint") {
     const lineType = typeof parsed.line === "string" ? parsed.line : "turn";
@@ -100,6 +100,18 @@ export function mapKnownCliJsonLine(line: string, workerId: string): FleetWorker
     };
   }
   return null;
+}
+
+function normalizeUsageData(parsed: Record<string, unknown>): unknown {
+  const usage = parsed.usage;
+  const durationMs = typeof parsed.durationMs === "number" && Number.isFinite(parsed.durationMs)
+    ? parsed.durationMs
+    : typeof parsed.duration_ms === "number" && Number.isFinite(parsed.duration_ms)
+      ? parsed.duration_ms
+      : undefined;
+  if (durationMs === undefined) return usage;
+  if (!usage || typeof usage !== "object" || Array.isArray(usage)) return { duration_ms: durationMs };
+  return { ...(usage as Record<string, unknown>), duration_ms: durationMs };
 }
 
 function previewJson(value: unknown): string | undefined {

@@ -112,9 +112,11 @@ describe('worker.progress data (vision + runner context)', () => {
       completion_tokens: 120,
       total_tokens: 1120,
       prompt_cache_hit_tokens: 850,
+      duration_ms: 2000,
     })).toMatchObject({
-      summary: '1120 tok · in 1000 · out 120 · cache 850 (85%)',
+      summary: '1120 tok · in 1000 · out 120 · cache 850 (85%) · 60.0 TPS',
       cacheRatio: 85,
+      tps: 60,
     });
 
     let v = createWorkerView('w1');
@@ -125,8 +127,10 @@ describe('worker.progress data (vision + runner context)', () => {
       data: {
         prompt_cache_hit_tokens: 90,
         prompt_cache_miss_tokens: 10,
+        completion_tokens: 44,
+        durationMs: 200,
       },
     });
-    expect(v.usage).toMatchObject({ summary: 'cache 90 (90%)', cacheRatio: 90 });
+    expect(v.usage).toMatchObject({ summary: 'out 44 · cache 90 (90%) · 220 TPS', cacheRatio: 90, tps: 220 });
   });
 });

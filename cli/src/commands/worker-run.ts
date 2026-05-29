@@ -487,7 +487,7 @@ async function runLynnVisionWorker(input: {
       else if (event.type === "reasoning.delta") emit({ type: "reasoning.delta", workerId: input.workerId, agent: input.agent, text: event.text, hidden: event.hidden });
       else if (event.type === "provider") emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: `provider: ${event.activeProvider}`, data: event });
       else if (event.type === "tool_progress") emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: `${event.name}: ${event.event}`, data: event });
-      else if (event.type === "usage") emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: "usage", data: event.usage });
+      else if (event.type === "usage") emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: "usage", data: usageWithDuration(event.usage, Date.now() - started) });
       else if (event.type === "brain.error") throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
     }
     emit({
@@ -514,6 +514,11 @@ function copyProviderFlags(from: Record<string, string | boolean>, to: Record<st
     const value = from[key];
     if (typeof value === "string" && value) to[key] = value;
   }
+}
+
+function usageWithDuration(usage: unknown, durationMs: number): unknown {
+  if (!usage || typeof usage !== "object" || Array.isArray(usage)) return { duration_ms: durationMs };
+  return { ...(usage as Record<string, unknown>), duration_ms: durationMs };
 }
 
 export async function runWorker(args: ParsedArgs): Promise<number> {

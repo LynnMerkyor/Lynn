@@ -94,10 +94,10 @@ describe("worker line parser", () => {
   it("uses translated code JSON events in the streaming line parser", () => {
     const parse = createLineParser("w3");
     const events = parse(
-      '{"type":"code.tool.requested","tool":"apply_patch","args":{"patch":"*** Begin Patch"}}\n{"type":"usage","usage":{"total_tokens":42}}\n',
+      '{"type":"code.tool.requested","tool":"apply_patch","args":{"patch":"*** Begin Patch"}}\n{"type":"usage","durationMs":200,"usage":{"total_tokens":42,"completion_tokens":44}}\n',
     );
     expect(events[0]).toMatchObject({ type: "tool.started", workerId: "w3", name: "apply_patch" });
-    expect(events[1]).toMatchObject({ type: "worker.progress", workerId: "w3", message: "usage", data: { total_tokens: 42 } });
+    expect(events[1]).toMatchObject({ type: "worker.progress", workerId: "w3", message: "usage", data: { total_tokens: 42, completion_tokens: 44, duration_ms: 200 } });
   });
 });
 

@@ -57,6 +57,8 @@ export interface FleetUsageView {
   cacheHit?: number;
   cacheMiss?: number;
   cacheRatio?: number;
+  durationMs?: number;
+  tps?: number;
 }
 
 export interface FleetVisualResultView {
@@ -164,6 +166,13 @@ export function summarizeFleetUsage(data: unknown): FleetUsageView | undefined {
   const total = numberValue(record, 'total_tokens');
   const cacheHit = numberValue(record, 'prompt_cache_hit_tokens');
   const cacheMiss = numberValue(record, 'prompt_cache_miss_tokens');
+  const durationMs = numberValue(record, 'duration_ms') ?? numberValue(record, 'durationMs');
+  const explicitTps = numberValue(record, 'tokens_per_second') ?? numberValue(record, 'tps');
+  const tps = explicitTps != null
+    ? explicitTps
+    : completion != null && durationMs != null && durationMs > 0
+      ? completion / (durationMs / 1000)
+      : undefined;
   const cacheBase = prompt && prompt > 0 ? prompt : cacheHit != null && cacheMiss != null ? cacheHit + cacheMiss : undefined;
   const cacheRatio = cacheHit != null && cacheBase && cacheBase > 0 ? Math.round((cacheHit / cacheBase) * 100) : undefined;
   const parts = [
@@ -171,9 +180,16 @@ export function summarizeFleetUsage(data: unknown): FleetUsageView | undefined {
     prompt != null ? `in ${prompt}` : undefined,
     completion != null ? `out ${completion}` : undefined,
     cacheHit != null ? `cache ${cacheHit}${cacheRatio != null ? ` (${cacheRatio}%)` : ''}` : undefined,
+    tps != null && Number.isFinite(tps) ? `${formatFleetTps(tps)} TPS` : undefined,
   ].filter((part): part is string => !!part);
   if (!parts.length) return undefined;
-  return { summary: parts.join(' · '), total, prompt, completion, cacheHit, cacheMiss, cacheRatio };
+  return { summary: parts.join(' · '), total, prompt, completion, cacheHit, cacheMiss, cacheRatio, durationMs, tps };
+}
+
+function formatFleetTps(value: number): string {
+  if (value >= 100) return String(Math.round(value));
+  if (value >= 10) return value.toFixed(1);
+  return value.toFixed(2);
 }
 
 /** Fold one event into a worker view, returning a new view (immutable). */
