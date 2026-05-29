@@ -4,6 +4,7 @@ import { createLineParser } from "../worker-manager.js";
 import type { SpawnWorkerOptions } from "../worker-manager.js";
 import { parseWorktreePorcelain } from "../worktree-manager.js";
 import { FleetHub, type FleetBrief } from "../fleet-hub.js";
+import { DEFAULT_FLEET_REGISTRY, withFleetRegistryAvailability } from "../registry.js";
 
 describe("forbidden-guard", () => {
   it("matches ** across segments and * within one", () => {
@@ -56,6 +57,18 @@ describe("worktree porcelain parser", () => {
     const list = parseWorktreePorcelain(out);
     expect(list).toHaveLength(2);
     expect(list[1]).toEqual({ path: "/repo/wt-1", head: "def", branch: "cli-1/x" });
+  });
+});
+
+describe("fleet registry availability", () => {
+  it("marks the bundled Lynn CLI available and missing external CLIs unavailable", () => {
+    const agents = withFleetRegistryAvailability(DEFAULT_FLEET_REGISTRY, {
+      pathEnv: "/bin",
+      fileExists: (file) => file === "/bin/codex",
+    });
+    expect(agents.find((a) => a.id === "lynn-cli")).toMatchObject({ available: true, availability: "bundled" });
+    expect(agents.find((a) => a.id === "codex-cli")).toMatchObject({ available: true, availability: "/bin/codex" });
+    expect(agents.find((a) => a.id === "claude-code")).toMatchObject({ available: false, availability: "not found on PATH" });
   });
 });
 

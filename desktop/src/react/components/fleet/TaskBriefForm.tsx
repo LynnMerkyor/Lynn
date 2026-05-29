@@ -12,6 +12,8 @@ interface AgentEntry {
   id: string;
   label: string;
   enabled: boolean;
+  available?: boolean;
+  availability?: string;
 }
 
 const FALLBACK_AGENTS: AgentEntry[] = [
@@ -50,7 +52,13 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
       .then((r) => r.json())
       .then((d) => {
         if (alive && Array.isArray(d.agents)) {
-          setAgents(d.agents.filter((a: AgentEntry) => a.enabled));
+          const nextAgents = d.agents.filter((a: AgentEntry) => a.enabled);
+          setAgents(nextAgents);
+          const selected = nextAgents.find((a: AgentEntry) => a.id === agent);
+          if (selected?.available === false) {
+            const fallback = nextAgents.find((a: AgentEntry) => a.available !== false) ?? nextAgents[0];
+            if (fallback) setAgent(fallback.id);
+          }
         }
       })
       .catch(() => {
@@ -59,7 +67,7 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [agent]);
 
   const applyPreset = (nextPresetId: string, nextTitle = title) => {
     const preset = FLEET_SCOPE_PRESETS.find((p) => p.id === nextPresetId) ?? DEFAULT_FLEET_SCOPE_PRESET;
@@ -139,11 +147,13 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
           <label className={s.formLabel}>Agent</label>
           <select className={s.formInput} value={agent} onChange={(e) => setAgent(e.target.value)}>
             {agents.map((a) => (
-              <option key={a.id} value={a.id}>
+              <option key={a.id} value={a.id} disabled={a.available === false}>
                 {a.label}
+                {a.available === false ? ' (not found)' : ''}
               </option>
             ))}
           </select>
+          <div className={s.formHint}>{agents.find((a) => a.id === agent)?.availability ?? 'ready'}</div>
         </div>
         <div className={s.formField}>
           <label className={s.formLabel}>Branch</label>
