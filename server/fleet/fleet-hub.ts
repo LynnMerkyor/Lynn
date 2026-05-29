@@ -196,6 +196,9 @@ export class FleetHub {
   }
 
   private handleWorkerEvent(workerId: string, event: FleetWorkerEvent): void {
+    if ((event.type === "worker.started" || event.type === "worker.claims") && hasEvent(this.workers.get(workerId), event.type)) {
+      return;
+    }
     this.emit(workerId, event);
     if (event.type === "worker.finished" || event.type === "worker.error") {
       this.handles.delete(workerId);
@@ -268,4 +271,8 @@ function statusAfterEvent(current: FleetWorkerStatus, event: FleetWorkerEvent): 
   if (event.type === "worker.violation") return "blocked";
   if (current === "queued" && event.type !== "worker.started") return "running";
   return current;
+}
+
+function hasEvent(rec: FleetWorkerRecord | undefined, type: FleetWorkerEvent["type"]): boolean {
+  return !!rec?.events.some((event) => event.type === type);
 }

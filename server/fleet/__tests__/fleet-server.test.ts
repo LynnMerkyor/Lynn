@@ -95,6 +95,8 @@ describe("FleetHub.dispatch", () => {
         spawnWorker: (opts, onEvent) => {
           spawned.push(opts);
           queueMicrotask(() => {
+            onEvent({ type: "worker.started", workerId: opts.workerId, cwd: "/repo", worktree: "worktrees/fleet-test", branch: "fleet/test" });
+            onEvent({ type: "worker.claims", workerId: opts.workerId, owned: ["cli/**"], forbidden: ["server/**"] });
             onEvent({ type: "worker.finished", workerId: opts.workerId, ok: true, exitCode: 0, summary: "done" });
           });
           return { workerId: opts.workerId, pid: 123, kill: () => undefined };
@@ -125,6 +127,8 @@ describe("FleetHub.dispatch", () => {
     expect(call.args).toContain(rec.workerId);
     expect(call.env?.ELECTRON_RUN_AS_NODE).toBe("1");
     expect(hub.getWorker(rec.workerId)?.status).toBe("completed");
+    expect(hub.getWorker(rec.workerId)?.events.filter((e) => e.type === "worker.started")).toHaveLength(1);
+    expect(hub.getWorker(rec.workerId)?.events.filter((e) => e.type === "worker.claims")).toHaveLength(1);
     expect(sent.some((m) => m.event.type === "worker.finished")).toBe(true);
   });
 });
