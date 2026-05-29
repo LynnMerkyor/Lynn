@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { canPromptForDangerousTool, isDangerousClientTool, parseCodeToolRequest, renderCodeIntro, runCode } from "../src/commands/code.js";
+import { canPromptForDangerousTool, isDangerousClientTool, parseCodeToolRequest, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
 
@@ -163,17 +163,36 @@ describe("code tools", () => {
     expect(intro).toContain("/mode yolo");
   });
 
+  it("renders a code task header with route, cwd, mode, reasoning, and step budget", () => {
+    const header = renderCodeTaskHeader({
+      cwd: "/repo",
+      approval: "ask",
+      sandbox: "workspace-write",
+      reasoning: { effort: "auto", display: "auto" },
+      maxSteps: 8,
+    });
+
+    expect(header).toContain("MiMo via local Brain router");
+    expect(header).toContain("/repo");
+    expect(header).toContain("ask / workspace-write");
+    expect(header).toContain("reasoning auto");
+    expect(header).toContain("max steps 8");
+  });
+
   it("runs a read-only code task with repository context", async () => {
     const original = process.stdout.write;
+    const originalErr = process.stderr.write;
     let output = "";
     process.stdout.write = ((chunk: string | Uint8Array) => {
       output += String(chunk);
       return true;
     }) as typeof process.stdout.write;
+    process.stderr.write = (() => true) as typeof process.stderr.write;
     try {
       await expect(runCode(parseArgs(["code", "review current diff", "--cwd", tmp, "--mock-brain"]))).resolves.toBe(0);
     } finally {
       process.stdout.write = original;
+      process.stderr.write = originalErr;
     }
     expect(output).toContain("Mock Lynn code task: review current diff");
     expect(output).toContain("CWD:");

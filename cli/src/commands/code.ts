@@ -185,6 +185,23 @@ export function renderCodeIntro(mode: ChatMode, reasoning = parseReasoningOption
   ].join("\n");
 }
 
+export function renderCodeTaskHeader(inputData: {
+  cwd: string;
+  approval: ToolRunContext["approval"];
+  sandbox: NonNullable<ToolRunContext["sandbox"]>;
+  reasoning: ReturnType<typeof parseReasoningOptions>;
+  maxSteps: number;
+  mockBrain?: boolean;
+}): string {
+  const route = inputData.mockBrain ? "mock Brain" : "MiMo via local Brain router";
+  return [
+    `Lynn code · ${route}`,
+    `cwd: ${inputData.cwd}`,
+    `mode: ${inputData.approval} / ${inputData.sandbox} · reasoning ${inputData.reasoning.effort} · max steps ${inputData.maxSteps}`,
+    "",
+  ].join("\n");
+}
+
 function renderCodeHelp(): string {
   return [
     "/exit leave code mode",
@@ -259,6 +276,16 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean): Promi
   const reasoning = parseReasoningOptions(args);
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
+  if (!json) {
+    errorOutput.write(renderCodeTaskHeader({
+      cwd: context.cwd,
+      approval: approval(args),
+      sandbox: sandbox(args) || "workspace-write",
+      reasoning,
+      maxSteps: maxSteps(args),
+      mockBrain,
+    }));
+  }
   if (json) writeJsonLine({ type: "code.task.started", ts: nowIso(), task, context });
 
   if (mockBrain) {
