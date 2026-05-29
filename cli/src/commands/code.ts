@@ -108,7 +108,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   output.write(renderCodeIntro(mode, reasoning, { color: supportsColor(output) }));
   try {
     for (;;) {
-      const raw = await readCodeLine("› ", mode);
+      const raw = await readCodeLine("", mode);
       if (raw === null) break;
       const text = raw.trim();
       if (!text) continue;
