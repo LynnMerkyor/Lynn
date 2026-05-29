@@ -138,7 +138,8 @@ widest capability bundle (vision, search, long context, cache economics, native
 tooling). However, v0.80 should treat **StepFun step-3.7-flash** as a serious
 Fleet/backend option for fast coding work, not as a footnote.
 
-Verified from live CLI/eval trials (2026-05-30):
+Verified from live CLI/eval trials (2026-05-30). See
+`docs/ops/stepfun-37-flash-eval-20260530.md` for the archived evidence.
 
 | Backend | Evidence | Proposed role |
 |---|---|---|
