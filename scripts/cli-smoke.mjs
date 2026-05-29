@@ -331,6 +331,23 @@ async function runStepFunByokFallbackSmoke() {
       "step-smoke-key",
       "--json",
     ]);
+    const tested = await run("stepfun provider test", [
+      "providers",
+      "test",
+      "--data-dir",
+      byokDataDir,
+      "--preset",
+      "stepfun",
+      "--base-url",
+      baseUrl,
+      "--api-key",
+      "step-smoke-key",
+      "--json",
+    ]);
+    assertIncludes(tested.name, tested.stdout, '"type":"providers.test"');
+    assertIncludes(tested.name, tested.stdout, '"ok":true');
+    assertIncludes(tested.name, tested.stdout, '"model":"step-3.7-flash"');
+    assertNotIncludes(tested.name, tested.stdout, "step-smoke-key");
     const result = await run("stepfun byok fallback", [
       "-p",
       "say ok",
