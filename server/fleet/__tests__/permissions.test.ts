@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import path from "node:path";
+import { resolveFleetDataDir } from "../data-dir.js";
 import { readPermissionStatus, permissionProfilePath } from "../permissions.js";
 
 describe("readPermissionStatus", () => {
@@ -29,6 +31,11 @@ describe("readPermissionStatus", () => {
   });
 
   it("permissionProfilePath honors an explicit home", () => {
-    expect(permissionProfilePath("/home/u/.lynn")).toBe("/home/u/.lynn/permissions/cli.json");
+    expect(permissionProfilePath("/home/u/.lynn")).toBe(path.resolve("/home/u/.lynn/permissions/cli.json"));
+  });
+
+  it("resolveFleetDataDir follows the same LYNN_DATA_DIR precedence as the CLI", () => {
+    expect(resolveFleetDataDir(null, { LYNN_DATA_DIR: "/tmp/lynn-data", LYNN_HOME: "/tmp/lynn-home" })).toBe(path.resolve("/tmp/lynn-data"));
+    expect(resolveFleetDataDir(null, { LYNN_HOME: "/tmp/lynn-home" })).toBe(path.resolve("/tmp/lynn-home"));
   });
 });

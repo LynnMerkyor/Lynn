@@ -8,6 +8,7 @@
 import type { FleetAgentKind } from "../../shared/fleet-events.js";
 import fs from "node:fs";
 import path from "node:path";
+import { resolveFleetDataDir } from "./data-dir.js";
 
 export interface FleetAgentEntry {
   // Keep `| string` so local custom worker ids can be registered without changing
@@ -77,7 +78,7 @@ export function resolveFleetRegistry(opts: ResolveFleetRegistryOptions = {}): Fl
 }
 
 export function configuredCliProviderPreset(opts: { lynnHome?: string; readFileSync?: (file: string, encoding: BufferEncoding) => string } = {}): string | null {
-  const lynnHome = opts.lynnHome || process.env.LYNN_HOME || path.join(process.env.HOME || "", ".lynn");
+  const lynnHome = resolveFleetDataDir(opts.lynnHome);
   const readFileSync = opts.readFileSync || fs.readFileSync;
   try {
     const parsed = JSON.parse(readFileSync(path.join(lynnHome, "providers", "cli.json"), "utf8")) as {

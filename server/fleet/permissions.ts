@@ -5,7 +5,6 @@
  * the user's shell config. Defaults to "guarded mode" when no profile exists.
  */
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import {
   DEFAULT_PERMISSION_PROFILE,
@@ -13,6 +12,7 @@ import {
   type LynnApprovalMode,
   type LynnSandboxMode,
 } from "../../shared/permission-profile.js";
+import { resolveFleetDataDir } from "./data-dir.js";
 
 export interface PermissionStatus {
   exists: boolean;
@@ -22,9 +22,7 @@ export interface PermissionStatus {
 }
 
 export function permissionProfilePath(home?: string): string {
-  const raw = home || process.env.LYNN_HOME || path.join(os.homedir(), ".lynn");
-  const base = raw.startsWith("~") ? path.join(os.homedir(), raw.slice(1)) : raw;
-  return path.join(base, "permissions", "cli.json");
+  return path.join(resolveFleetDataDir(home), "permissions", "cli.json");
 }
 
 export async function readPermissionStatus(
