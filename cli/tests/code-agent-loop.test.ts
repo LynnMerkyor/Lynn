@@ -124,6 +124,67 @@ describe("code agent loop", () => {
     expect(output).toContain("Changed hello.txt");
   });
 
+  it("feeds failed tool results back so the model can repair and continue", async () => {
+    const badPatch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-not the current content",
+      "+broken",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const goodPatch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+recovered",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const original = process.stdout.write;
+    let output = "";
+    let repairTurn = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer((body, count) => {
+        if (count === 1) return JSON.stringify({ tool: "apply_patch", args: { patch: badPatch } });
+        if (count === 2) {
+          repairTurn = JSON.stringify(body);
+          return JSON.stringify({ tool: "apply_patch", args: { patch: goodPatch } });
+        }
+        return "Recovered after reading the failed patch result.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "fix hello",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--approval",
+          "yolo",
+          "--max-steps",
+          "4",
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    const text = await fs.readFile(path.join(tmp, "hello.txt"), "utf8");
+    expect(text).toContain("recovered");
+    expect(repairTurn).toContain("context not found");
+    expect(output).toContain('"ok":false');
+    expect(output).toContain('"ok":true');
+    expect(output).toContain("Recovered after reading the failed patch result");
+  });
+
   it("suppresses repeated identical tool requests during the loop", async () => {
     const original = process.stdout.write;
     let output = "";
