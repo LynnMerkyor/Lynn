@@ -263,6 +263,7 @@ assertIncludes(shown.name, shown.stdout, "remember this");
 
 await runCodeResumeSmoke();
 await runCodeImageByokSmoke();
+await runStepFunWorkerByokSmoke();
 
 console.log("[cli-smoke] all checks passed");
 
@@ -420,6 +421,63 @@ async function runCodeImageByokSmoke() {
     if (seen.body.model !== "vision-test-model") throw new Error(`code image BYOK smoke used wrong model: ${seen.body.model}`);
     const messageText = JSON.stringify(seen.body.messages || []);
     if (!messageText.includes("data:image/png;base64")) throw new Error("code image BYOK smoke did not send image content");
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve()));
+  }
+}
+
+async function runStepFunWorkerByokSmoke() {
+  let seen = null;
+  const server = http.createServer((request, response) => {
+    if (request.url !== "/v1/chat/completions" || request.method !== "POST") {
+      response.writeHead(404);
+      response.end();
+      return;
+    }
+    let body = "";
+    request.on("data", (chunk) => { body += String(chunk); });
+    request.on("end", () => {
+      seen = { auth: request.headers.authorization, body: JSON.parse(body) };
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"stepfun worker ok\"}}]}",
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("StepFun worker smoke server failed to listen");
+    const result = await run("stepfun worker byok", [
+      "worker",
+      "run",
+      "--brief",
+      briefPath,
+      "--worktree",
+      root,
+      "--agent",
+      "stepfun-flash",
+      "--preset",
+      "stepfun",
+      "--base-url",
+      `http://127.0.0.1:${address.port}/v1`,
+      "--api-key",
+      "step-worker-key",
+      "--brain-url",
+      "http://127.0.0.1:1",
+      "--max-steps",
+      "1",
+      "--jsonl",
+    ], { env: { LYNN_CLI_BRAIN_TIMEOUT_MS: "50" } });
+    assertIncludes(result.name, result.stdout, '"agent":"stepfun-flash"');
+    assertIncludes(result.name, result.stdout, '"type":"worker.finished"');
+    assertIncludes(result.name, result.stdout, '"summary":"lynn-cli worker completed"');
+    if (!seen) throw new Error("StepFun worker smoke did not call the provider");
+    if (seen.auth !== "Bearer step-worker-key") throw new Error(`StepFun worker smoke used wrong auth: ${seen.auth}`);
+    if (seen.body.model !== "step-3.7-flash") throw new Error(`StepFun worker smoke used wrong model: ${seen.body.model}`);
   } finally {
     await new Promise((resolve) => server.close(() => resolve()));
   }
