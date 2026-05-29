@@ -752,6 +752,28 @@ function copyProviderFlags(from: Record<string, string | boolean>, to: Record<st
   }
 }
 
+function canRunDefaultExternalWorker(permissions: PermissionProfile): boolean {
+  return permissions.approval === "yolo" && permissions.sandbox === "danger-full-access";
+}
+
+function emitExternalWorkerPermissionError(workerId: string, agent: string, permissions: PermissionProfile): void {
+  emit({
+    type: "worker.error",
+    workerId,
+    agent,
+    code: "external_worker_requires_yolo",
+    message: `default external worker adapter requires --approval yolo --sandbox danger-full-access (current: ${permissions.approval}/${permissions.sandbox})`,
+    recoverable: true,
+  });
+  emit({
+    type: "gate.finished",
+    workerId,
+    agent,
+    ok: false,
+    summary: "external worker blocked before launch: explicit YOLO/full-access approval required",
+  });
+}
+
 function usageWithDuration(usage: unknown, durationMs: number): unknown {
   if (!usage || typeof usage !== "object" || Array.isArray(usage)) return { duration_ms: durationMs };
   return { ...(usage as Record<string, unknown>), duration_ms: durationMs };
@@ -790,7 +812,8 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
   emit({ type: "worker.claims", workerId, agent, owned: brief.owned, forbidden: brief.forbidden, centerLocks: brief.centerLocks });
   emit({ type: "worker.progress", workerId, agent, message: mock ? `Mock worker loaded: ${brief.title}` : `Worker loaded: ${brief.title}` });
 
-  const externalCommand = getStringFlag(args.flags, "agent-command") || buildDefaultAgentCommand(agent, path.resolve(briefPath), path.resolve(worktree), markdown);
+  const explicitAgentCommand = getStringFlag(args.flags, "agent-command");
+  const externalCommand = explicitAgentCommand || buildDefaultAgentCommand(agent, path.resolve(briefPath), path.resolve(worktree), markdown);
   if (!mock && isBuiltInLynnWorker(agent)) {
     const exitCode = isVisionTask(brief.taskType)
       ? await runLynnVisionWorker({ args, brief, worktree, workerId, agent, permissions })
@@ -802,6 +825,10 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
     return finalExit;
   }
   if (!mock && externalCommand) {
+    if (!explicitAgentCommand && !canRunDefaultExternalWorker(permissions)) {
+      emitExternalWorkerPermissionError(workerId, agent, permissions);
+      return 2;
+    }
     const exitCode = await runExternalWorker({ command: externalCommand, worktree, workerId, agent });
     const scopeOk = await emitGitDiff(workerId, agent, worktree, brief, diffBaseline);
     const testsOk = await runBriefTests(workerId, agent, worktree, brief.tests);

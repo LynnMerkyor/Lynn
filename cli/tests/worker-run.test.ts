@@ -239,6 +239,60 @@ describe("worker-run scaffold", () => {
     expect(buildDefaultAgentCommand("custom", "/tmp/task.md", "/tmp/wt", "task")).toBeNull();
   });
 
+  it("blocks default external worker adapters unless YOLO/full-access is explicit", async () => {
+    const repo = await makeTempGitRepo();
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: external guarded",
+      "",
+      "## Objective",
+      "Try to run an external worker.",
+      "",
+      "## Owned files",
+      "- **",
+      "",
+      "## Forbidden files",
+      "- server/**",
+    ].join("\n"));
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const code = await runWorker(parseArgs([
+        "worker",
+        "run",
+        "--brief",
+        briefPath,
+        "--worktree",
+        repo,
+        "--agent",
+        "codex-cli",
+      ]));
+      expect(code).toBe(2);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as {
+      type: string;
+      code?: string;
+      ok?: boolean;
+      summary?: string;
+    });
+    expect(lines).toContainEqual(expect.objectContaining({
+      type: "worker.error",
+      code: "external_worker_requires_yolo",
+    }));
+    expect(lines).toContainEqual(expect.objectContaining({
+      type: "gate.finished",
+      ok: false,
+      summary: expect.stringContaining("explicit YOLO"),
+    }));
+  });
+
   it("maps StepFun Fleet workers to the StepFun BYOK preset", () => {
     expect(workerProviderPreset("stepfun-flash")).toBe("stepfun");
     expect(workerProviderPreset("lynn-cli")).toBeNull();
