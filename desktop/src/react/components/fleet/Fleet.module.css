@@ -344,6 +344,15 @@
   font-family: var(--mono-font, monospace);
 }
 
+.checkpointChip {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(46, 204, 113, 0.13);
+  color: #23864f;
+  font-family: var(--mono-font, monospace);
+}
+
 .statusChip {
   margin-left: 6px;
   font-size: 11px;

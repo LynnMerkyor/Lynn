@@ -146,4 +146,23 @@ describe('worker.progress data (vision + runner context)', () => {
       tps: 200,
     });
   });
+
+  it('tracks session checkpoints for long-running workers', () => {
+    let v = createWorkerView('w1');
+    v = reduceFleetWorker(v, {
+      type: 'worker.progress',
+      workerId: 'w1',
+      message: 'checkpoint: assistant',
+      data: { path: '/tmp/session.jsonl', line: 'assistant' },
+    });
+    expect(v.checkpoint).toEqual({ path: '/tmp/session.jsonl', line: 'assistant' });
+
+    v = reduceFleetWorker(v, {
+      type: 'worker.progress',
+      workerId: 'w1',
+      message: 'session saved',
+      data: { path: '/tmp/session.jsonl' },
+    });
+    expect(v.checkpoint).toEqual({ path: '/tmp/session.jsonl', line: undefined });
+  });
 });

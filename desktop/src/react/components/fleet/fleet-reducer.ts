@@ -24,6 +24,8 @@ interface FleetProgressData {
   mode?: 'stub' | 'spawned';
   source?: 'bundled' | 'electron' | 'dev';
   pid?: number;
+  path?: string;
+  line?: string;
 }
 
 export interface FleetTestResult {
@@ -61,6 +63,11 @@ export interface FleetUsageView {
   tps?: number;
 }
 
+export interface FleetCheckpointView {
+  path?: string;
+  line?: string;
+}
+
 export interface FleetVisualResultView {
   taskType: 'see' | 'ground' | 'ui2code';
   image?: string;
@@ -92,6 +99,7 @@ export interface FleetWorkerView {
   activeFile?: string;
   tools: FleetToolRun[];
   usage?: FleetUsageView;
+  checkpoint?: FleetCheckpointView;
   tests: FleetTestResult[];
   gate: { ok: boolean; summary: string } | null;
   violations: FleetViolation[];
@@ -236,6 +244,9 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
           if (data.image) next.image = data.image;
         } else if (data.kind === 'runner') {
           next.runner = { mode: data.mode ?? 'spawned', source: data.source, pid: data.pid };
+        }
+        if ((ev.message.startsWith('checkpoint:') || ev.message === 'session saved') && (data.path || data.line)) {
+          next.checkpoint = { path: data.path, line: data.line };
         }
       }
       if (ev.message === 'usage') {

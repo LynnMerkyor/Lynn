@@ -128,6 +128,11 @@ export function WorkerCard({
         <span className={s.workerBranch}>{worker.branch ?? worker.workerId}</span>
         {worker.reasoningChunks > 0 && <span className={s.reasoningChip}>reasoning x{worker.reasoningChunks}</span>}
         {worker.usage && <span className={s.usageChip}>{worker.usage.summary}</span>}
+        {worker.checkpoint && (
+          <span className={s.checkpointChip} title={worker.checkpoint.path ?? 'session checkpoint'}>
+            checkpoint{worker.checkpoint.line ? `:${worker.checkpoint.line}` : ''}
+          </span>
+        )}
         {worker.hasForbiddenEdit && (
           <span className={s.badgeScope} title="out-of-scope edit">
             out-of-scope
