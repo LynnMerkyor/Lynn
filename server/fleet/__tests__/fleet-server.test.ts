@@ -110,7 +110,10 @@ describe("FleetHub.dispatch", () => {
     };
 
     const rec = await hub.dispatch(brief);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const deadline = Date.now() + 1000;
+    while (spawned.length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
 
     expect(spawned).toHaveLength(1);
     const call = spawned[0]!;
