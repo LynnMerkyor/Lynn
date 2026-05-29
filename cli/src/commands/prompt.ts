@@ -1,7 +1,8 @@
-import { getStringFlag, type ParsedArgs } from "../args.js";
+import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
+import { appendSessionTurn, resolveDataDir } from "../session/store.js";
 
 export interface PromptOptions {
   json?: boolean;
@@ -19,6 +20,10 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   }
   const reasoning = parseReasoningOptions(args);
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
+  const saveSession = hasFlag(args.flags, "save-session", "session") || !!process.env.LYNN_CLI_SAVE_SESSION;
+  const sessionPath = getStringFlag(args.flags, "session");
+  const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
+  const title = getStringFlag(args.flags, "title");
 
   if (options.json) {
     writeJsonLine({ type: "run.started", ts: nowIso(), prompt, reasoning });
@@ -32,9 +37,14 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
     } else {
       process.stdout.write(`${text}\n`);
     }
+    if (saveSession) {
+      const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: process.cwd(), title, prompt, assistant: text, modelProvider: "mock", modelId: "mock-brain" });
+      if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
+    }
     return 0;
   }
 
+  let assistant = "";
   let sawReasoning = false;
   for await (const event of streamBrainChat({ brainUrl, prompt, reasoning })) {
     handleBrainEvent(event, {
@@ -42,6 +52,11 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       renderReasoning: shouldRenderReasoning(reasoning.display, !!options.json),
     });
     if (event.type === "reasoning.delta") sawReasoning = true;
+    if (event.type === "assistant.delta") assistant += event.text;
+  }
+  if (saveSession) {
+    const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: process.cwd(), title, prompt, assistant, modelProvider: "brain", modelId: "lynn-brain-router" });
+    if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
   }
   if (options.json) {
     writeJsonLine({ type: "run.finished", ts: nowIso(), ok: true, reasoningReturned: sawReasoning });

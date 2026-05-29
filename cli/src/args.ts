@@ -55,6 +55,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "max-bytes",
       "text",
       "content",
+      "data-dir",
+      "session",
+      "title",
     ].includes(name);
     if (takesValue && next && !next.startsWith("-")) {
       flags[name] = next;

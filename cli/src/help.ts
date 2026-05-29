@@ -10,6 +10,8 @@ export function usage(): string {
     "  lynn worker run --brief task.md --worktree path --jsonl --mock",
     "  lynn code --list-tools",
     "  lynn code --tool read_file --path README.md --json",
+    "  lynn sessions list --json",
+    "  lynn sessions show <path>",
     "",
     "Common flags:",
     "  --reasoning auto|off|low|medium|high|xhigh",
@@ -17,5 +19,6 @@ export function usage(): string {
     "  --brain-url http://127.0.0.1:8790",
     "  --approval ask|on-failure|never|yolo",
     "  --sandbox read-only|workspace-write|danger-full-access",
+    "  --save-session --data-dir ~/.lynn",
   ].join("\n");
 }

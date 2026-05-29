@@ -2,6 +2,7 @@ import { parseArgs, hasFlag } from "./args.js";
 import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
 import { runPrompt } from "./commands/prompt.js";
+import { runSessions } from "./commands/sessions.js";
 import { runWorker } from "./commands/worker-run.js";
 import { usage } from "./help.js";
 import { writeJsonLine } from "./jsonl.js";
@@ -36,6 +37,9 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     case "code": {
       return runCode(args);
+    }
+    case "sessions": {
+      return runSessions(args, json);
     }
     case "help":
     case "--help":
