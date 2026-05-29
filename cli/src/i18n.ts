@@ -76,6 +76,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/clear 清空上下文\n" +
       "/model 查看当前模型 / BYOK 路由\n" +
       "/providers 查看提供方和 BYOK 设置\n" +
+      "/providers set --base-url ... --api-key ... --model ... 配置 CLI BYOK\n" +
+      "/providers unset 清除 CLI BYOK\n" +
+      "/providers test 测试 CLI BYOK\n" +
       "/fast 低延迟回复\n" +
       "/think 深度推理\n" +
       "/reasoning 查看或设置推理模式\n" +
@@ -84,6 +87,20 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/help 显示命令",
     "chat.reasoning.show": "reasoning:{effort} · display {display}\n用 /fast、/think 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
     "chat.mode.show": "mode:{mode}\n用 /mode yolo 开启本地写入/命令权限,/mode ask 回到守护模式,或 Shift+Tab 切换。",
+    "chat.providers.usage":
+      "用法:\n" +
+      "  /providers                     查看当前路由\n" +
+      "  /providers set --base-url https://api.example.com/v1 --api-key <key> --model model-id\n" +
+      "  /providers set --preset stepfun --api-key <key>\n" +
+      "  /providers unset               清除 CLI BYOK\n" +
+      "  /providers test                测试 CLI BYOK",
+    "chat.providers.setUsage":
+      "请在一行里给出 OpenAI 兼容三步配置:\n" +
+      "  /providers set --base-url https://api.example.com/v1 --api-key <key> --model model-id\n" +
+      "或使用 preset:\n" +
+      "  /providers set --preset stepfun --api-key <key>",
+    "chat.providers.routeReloaded": "✓ 当前聊天路由已刷新:{route}",
+    "chat.providers.routeUnchanged": "✓ Provider 配置已处理;当前聊天路由仍是:{route}",
     "code.fast": "✓ 快速模式 · 思考关闭",
     "code.think": "✓ 思考模式 · 高",
     "code.help":
@@ -230,6 +247,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/clear reset context\n" +
       "/model show model/BYOK route\n" +
       "/providers show BYOK setup\n" +
+      "/providers set --base-url ... --api-key ... --model ... configure CLI BYOK\n" +
+      "/providers unset clear CLI BYOK\n" +
+      "/providers test test CLI BYOK\n" +
       "/fast low-latency replies\n" +
       "/think deeper reasoning\n" +
       "/reasoning show or set reasoning mode\n" +
@@ -238,6 +258,20 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/help show commands",
     "chat.reasoning.show": "reasoning: {effort} · display {display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.",
     "chat.mode.show": "mode: {mode}\nUse /mode yolo for full local tool permission, /mode ask for guarded mode, or Shift+Tab to toggle.",
+    "chat.providers.usage":
+      "Usage:\n" +
+      "  /providers                     show current route\n" +
+      "  /providers set --base-url https://api.example.com/v1 --api-key <key> --model model-id\n" +
+      "  /providers set --preset stepfun --api-key <key>\n" +
+      "  /providers unset               clear CLI BYOK\n" +
+      "  /providers test                test CLI BYOK",
+    "chat.providers.setUsage":
+      "Provide the OpenAI-compatible three-step setup in one line:\n" +
+      "  /providers set --base-url https://api.example.com/v1 --api-key <key> --model model-id\n" +
+      "or use a preset:\n" +
+      "  /providers set --preset stepfun --api-key <key>",
+    "chat.providers.routeReloaded": "✓ Chat route refreshed: {route}",
+    "chat.providers.routeUnchanged": "✓ Provider command handled; chat route is still: {route}",
     "code.fast": "✓ fast mode · thinking off",
     "code.think": "✓ thinking mode · high",
     "code.help":

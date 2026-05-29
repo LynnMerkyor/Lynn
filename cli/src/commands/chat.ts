@@ -1,9 +1,9 @@
 import { emitKeypressEvents } from "node:readline";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
+import { getStringFlag, hasFlag, parseArgs, type ParsedArgs } from "../args.js";
 import { BrainConnectionError, streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
-import { renderProvidersInfo, resolveProvidersInfo } from "./providers.js";
+import { renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
@@ -26,7 +26,14 @@ export const CHAT_SLASH_COMMANDS = [
   "/reasoning",
   "/mode",
   "/model",
+  "/byok",
   "/providers",
+  "/providers set",
+  "/providers unset",
+  "/providers test",
+  "/providers presets",
+  "/byok set",
+  "/byok unset",
   "/clear",
 ];
 
@@ -40,7 +47,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   let reasoning = parseReasoningOptions(args);
   const mode = await resolveChatMode(args);
-  const cliProvider = await resolveCliProviderProfile(args);
+  let cliProvider = await resolveCliProviderProfile(args);
   const messages: ChatMessage[] = [];
   const histFile = historyPath();
   const rl = readline.createInterface({
@@ -103,8 +110,34 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       output.write(renderInteractiveModeChange(result, mode, supportsColor(output)));
       return "continue";
     }
-    if (text === "/model" || text === "/providers") {
+    if (text === "/model" || text === "/providers" || text === "/byok") {
       output.write(`${renderProvidersInfo(await resolveProvidersInfo(args))}\n\n`);
+      return "continue";
+    }
+    const providerCommand = buildChatProviderArgs(text, args);
+    if (providerCommand) {
+      if (shouldShowProviderSetUsage(providerCommand)) {
+        output.write(`${t("chat.providers.setUsage")}\n\n`);
+        return "continue";
+      }
+      const previousRoute = chatRouteLabel(cliProvider?.profile);
+      try {
+        const code = await runProviders(providerCommand, false);
+        if (shouldRefreshProviderRoute(providerCommand)) {
+          cliProvider = await resolveCliProviderProfile(providerCommand) || await resolveCliProviderProfile(args);
+          const nextRoute = chatRouteLabel(cliProvider?.profile);
+          const changed = previousRoute !== nextRoute;
+          output.write(`\n${t(changed ? "chat.providers.routeReloaded" : "chat.providers.routeUnchanged", { route: nextRoute })}\n\n`);
+        } else if (code === 0) {
+          output.write("\n");
+        }
+      } catch (error) {
+        output.write(`${formatChatError(error)}\n\n`);
+      }
+      return "continue";
+    }
+    if (text.startsWith("/providers ") || text.startsWith("/byok ")) {
+      output.write(`${t("chat.providers.usage")}\n\n`);
       return "continue";
     }
     if (text === "/clear") {
@@ -216,8 +249,76 @@ export function renderMode(mode: ChatMode): string {
 }
 
 export function chatRouteLabel(provider?: { provider: string; model: string } | null): string {
-  if (provider) return `MiMo / CLI BYOK: ${provider.model}`;
+  if (provider) return `CLI BYOK: ${provider.model}`;
   return "MiMo via Brain router (auto)";
+}
+
+export function splitChatCommandLine(raw: string): string[] {
+  const tokens: string[] = [];
+  let current = "";
+  let quote: "'" | "\"" | null = null;
+  let escaping = false;
+  for (const char of raw.trim()) {
+    if (escaping) {
+      current += char;
+      escaping = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = null;
+      else current += char;
+      continue;
+    }
+    if (char === "'" || char === "\"") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+  if (escaping) current += "\\";
+  if (current) tokens.push(current);
+  return tokens;
+}
+
+export function buildChatProviderArgs(raw: string, baseArgs: ParsedArgs): ParsedArgs | null {
+  const tokens = splitChatCommandLine(raw);
+  const head = tokens[0]?.toLowerCase();
+  if (head !== "/providers" && head !== "/byok") return null;
+  const rest = tokens.slice(1);
+  const subcommand = (rest[0] || "").toLowerCase();
+  if (!["set", "unset", "clear", "reset", "test", "presets"].includes(subcommand)) return null;
+  const parsed = parseArgs(["providers", ...rest]);
+  const dataDir = getStringFlag(baseArgs.flags, "data-dir");
+  if (dataDir && !getStringFlag(parsed.flags, "data-dir")) parsed.flags["data-dir"] = dataDir;
+  return parsed;
+}
+
+export function shouldRefreshProviderRoute(args: ParsedArgs): boolean {
+  const subcommand = (args.positionals[0] || "").toLowerCase();
+  return subcommand === "set" || subcommand === "unset" || subcommand === "clear" || subcommand === "reset";
+}
+
+export function shouldShowProviderSetUsage(args: ParsedArgs): boolean {
+  const subcommand = (args.positionals[0] || "").toLowerCase();
+  if (subcommand !== "set") return false;
+  return !(
+    getStringFlag(args.flags, "provider")
+    || getStringFlag(args.flags, "preset")
+    || getStringFlag(args.flags, "base-url", "api-base")
+    || getStringFlag(args.flags, "api-key")
+    || getStringFlag(args.flags, "model")
+  );
 }
 
 export function renderOfflineChatHint(_mode: ChatMode, _brainUrl = "http://127.0.0.1:8790", provider?: { provider: string; model: string } | null): string {

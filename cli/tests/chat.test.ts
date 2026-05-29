@@ -3,7 +3,22 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { applyModeCommand, applyReasoningCommand, chatRouteLabel, completeChatInput, formatChatError, isModeToggleKeypress, renderMode, renderOfflineChatHint, resolveChatMode, toggleMode } from "../src/commands/chat.js";
+import {
+  applyModeCommand,
+  applyReasoningCommand,
+  buildChatProviderArgs,
+  chatRouteLabel,
+  completeChatInput,
+  formatChatError,
+  isModeToggleKeypress,
+  renderMode,
+  renderOfflineChatHint,
+  resolveChatMode,
+  shouldRefreshProviderRoute,
+  shouldShowProviderSetUsage,
+  splitChatCommandLine,
+  toggleMode,
+} from "../src/commands/chat.js";
 import { BrainConnectionError } from "../src/brain-client.js";
 import { setLang } from "../src/i18n.js";
 
@@ -91,7 +106,7 @@ describe("chat mode controls", () => {
   });
 
   it("surfaces CLI BYOK fallback in the chat startup route label", () => {
-    expect(chatRouteLabel({ provider: "openai-compatible", model: "step-3.7-flash" })).toBe("MiMo / CLI BYOK: step-3.7-flash");
+    expect(chatRouteLabel({ provider: "openai-compatible", model: "step-3.7-flash" })).toBe("CLI BYOK: step-3.7-flash");
     expect(chatRouteLabel(null)).toBe("MiMo via Brain router (auto)");
   });
 
@@ -121,11 +136,52 @@ describe("chat mode controls", () => {
   });
 
   it("offers slash completion in chat mode", () => {
-    expect(completeChatInput("/prov")).toEqual([["/providers"], "/prov"]);
+    expect(completeChatInput("/prov")).toEqual([
+      ["/providers", "/providers set", "/providers unset", "/providers test", "/providers presets"],
+      "/prov",
+    ]);
+    expect(completeChatInput("/providers s")).toEqual([["/providers set"], "/providers s"]);
     expect(completeChatInput("/")).toMatchObject([
-      expect.arrayContaining(["/help", "/mode", "/providers"]),
+      expect.arrayContaining(["/help", "/mode", "/providers", "/byok"]),
       "/",
     ]);
     expect(completeChatInput("hello")).toEqual([[], "hello"]);
+  });
+
+  it("splits chat provider commands with quoted values", () => {
+    expect(splitChatCommandLine('/providers set --base-url "https://api.example.com/v1" --model "step-3.7-flash"')).toEqual([
+      "/providers",
+      "set",
+      "--base-url",
+      "https://api.example.com/v1",
+      "--model",
+      "step-3.7-flash",
+    ]);
+    expect(splitChatCommandLine("/providers set --api-key sk\\ test")).toEqual([
+      "/providers",
+      "set",
+      "--api-key",
+      "sk test",
+    ]);
+  });
+
+  it("builds provider subcommands from chat without losing data-dir", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-chat-provider-"));
+    try {
+      const base = parseArgs(["chat", "--data-dir", dataDir]);
+      const command = buildChatProviderArgs("/providers set --preset stepfun --api-key step-key", base);
+
+      expect(command?.command).toBe("providers");
+      expect(command?.positionals).toEqual(["set"]);
+      expect(command?.flags["preset"]).toBe("stepfun");
+      expect(command?.flags["api-key"]).toBe("step-key");
+      expect(command?.flags["data-dir"]).toBe(dataDir);
+      expect(shouldRefreshProviderRoute(command!)).toBe(true);
+      expect(shouldShowProviderSetUsage(command!)).toBe(false);
+      expect(shouldShowProviderSetUsage(buildChatProviderArgs("/providers set", base)!)).toBe(true);
+      expect(buildChatProviderArgs("/providers wat", base)).toBeNull();
+    } finally {
+      await fs.rm(dataDir, { recursive: true, force: true });
+    }
   });
 });
