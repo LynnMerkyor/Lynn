@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appendSessionMetadata, appendSessionTurn, listSessions, readSessionLines, sessionIndexPath } from "../src/session/store.js";
+import { appendSessionLine, appendSessionMetadata, appendSessionTurn, listSessions, readSessionLines, sessionIndexPath } from "../src/session/store.js";
 
 let tmp = "";
 
@@ -52,5 +52,38 @@ describe("CLI session store", () => {
 
     const lines = await readSessionLines(sessionPath);
     expect(lines.at(-1)).toMatchObject({ type: "metadata", data: { kind: "code_task", toolCount: 2 } });
+  });
+
+  it("updates the session index while appending incremental checkpoint lines", async () => {
+    let sessionPath = await appendSessionLine({
+      dataDir: tmp,
+      cwd: "/repo",
+      title: "checkpointed task",
+      line: { type: "user", content: "start task" },
+      modelProvider: "brain",
+      modelId: "lynn-brain-router",
+    });
+    sessionPath = await appendSessionLine({
+      dataDir: tmp,
+      sessionPath,
+      cwd: "/repo",
+      title: "checkpointed task",
+      line: { type: "assistant", content: "{\"tool\":\"read_file\"}" },
+      modelProvider: "brain",
+      modelId: "lynn-brain-router",
+    });
+
+    const lines = await readSessionLines(sessionPath);
+    const sessions = await listSessions(tmp);
+
+    expect(lines.map((line) => line.type)).toEqual(["user", "assistant"]);
+    expect(sessions[0]).toMatchObject({
+      path: sessionPath,
+      title: "checkpointed task",
+      firstMessage: "start task",
+      messageCount: 2,
+      modelProvider: "brain",
+      modelId: "lynn-brain-router",
+    });
   });
 });

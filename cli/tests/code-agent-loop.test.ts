@@ -215,4 +215,48 @@ describe("code agent loop", () => {
     expect(lines.filter((line) => line.type === "user")).toHaveLength(2);
     expect(lines.at(-1)?.data?.resumedFrom).toBe(sessionPath);
   });
+
+  it("checkpoints tool-loop turns while a code session is running", async () => {
+    const dataDir = path.join(tmp, "checkpoint-data");
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer((_body, count) => count === 1
+        ? JSON.stringify({ tool: "read_file", args: { path: "hello.txt" } })
+        : "I read hello.txt and found hello.",
+      async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "inspect hello with checkpoints",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--save-session",
+          "--data-dir",
+          dataDir,
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    const savedLine = output.split(/\r?\n/).find((line) => line.includes('"type":"session.saved"'));
+    const savedPath = savedLine ? JSON.parse(savedLine).path as string : "";
+    expect(savedPath).toBeTruthy();
+    const lines = (await fs.readFile(savedPath, "utf8")).trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; content?: string; data?: Record<string, unknown> });
+
+    expect(output).toContain('"type":"session.checkpoint"');
+    expect(lines.map((line) => line.type)).toEqual(["user", "assistant", "user", "assistant", "metadata"]);
+    expect(lines[1]?.content).toContain('"tool":"read_file"');
+    expect(lines[2]?.content).toContain("Tool result for read_file");
+    expect(lines[2]?.content).toContain("hello.txt");
+    expect(lines[3]?.content).toContain("I read hello.txt");
+    expect(lines.at(-1)?.data).toMatchObject({ kind: "code_task" });
+  });
 });

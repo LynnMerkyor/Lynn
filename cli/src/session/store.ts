@@ -131,6 +131,47 @@ export async function appendSessionTurn(input: {
   return target;
 }
 
+export async function appendSessionLine(input: {
+  dataDir: string;
+  sessionPath?: string | null;
+  cwd: string;
+  title?: string | null;
+  line: Omit<CliSessionLine, "ts"> & { ts?: string };
+  modelId?: string | null;
+  modelProvider?: string | null;
+}): Promise<string> {
+  const target = input.sessionPath ? path.resolve(input.sessionPath) : newSessionPath(input.dataDir);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  const line: CliSessionLine = {
+    ...input.line,
+    ts: input.line.ts || new Date().toISOString(),
+  };
+  await fs.appendFile(target, `${JSON.stringify(line)}\n`, "utf8");
+
+  const existing = await readIndex(input.dataDir);
+  const old = existing.find((entry) => path.resolve(entry.path) === path.resolve(target));
+  const isMessage = line.type === "user" || line.type === "assistant";
+  const messageCount = (old?.messageCount || 0) + (isMessage ? 1 : 0);
+  const firstMessage = old?.firstMessage || (line.type === "user" && line.content ? line.content : input.title || "");
+  const entry: CliSessionIndexEntry = {
+    path: target,
+    title: input.title || old?.title || (line.content || "").slice(0, 80) || null,
+    firstMessage,
+    modified: new Date().toISOString(),
+    messageCount,
+    cwd: input.cwd,
+    agentId: CLI_AGENT_ID,
+    agentName: "Lynn CLI",
+    modelId: input.modelId || old?.modelId || null,
+    modelProvider: input.modelProvider || old?.modelProvider || null,
+    pinned: old?.pinned || false,
+    labels: Array.isArray(old?.labels) ? old.labels : [],
+  };
+  const next = [entry, ...existing.filter((candidate) => path.resolve(candidate.path) !== path.resolve(target))];
+  await writeIndex(input.dataDir, next);
+  return target;
+}
+
 export async function appendSessionMetadata(input: CliSessionMetadataInput): Promise<void> {
   const target = path.resolve(input.sessionPath);
   await fs.mkdir(path.dirname(target), { recursive: true });

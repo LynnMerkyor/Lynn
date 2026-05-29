@@ -25,7 +25,7 @@ import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type C
 import { renderProvidersInfo, resolveProvidersInfo } from "./providers.js";
 import { readVersionInfo } from "../version.js";
 import { buildImageContentParts } from "../media.js";
-import { appendSessionMetadata, appendSessionTurn, readSessionLines, resolveDataDir } from "../session/store.js";
+import { appendSessionLine, appendSessionMetadata, appendSessionTurn, readSessionLines, resolveDataDir } from "../session/store.js";
 import { renderRuntimeInstructionFrame, stableRuntimePrefix, type RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
 
 const pExecFile = promisify(execFile);
@@ -423,6 +423,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   const sessionPath = getStringFlag(args.flags, "session") || resumePath;
   const title = getStringFlag(args.flags, "title") || task;
+  let liveSessionPath = sessionPath;
   if (!json && !options.compact) {
     errorOutput.write(renderCodeTaskHeader({
       cwd: context.cwd,
@@ -461,6 +462,18 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     sandbox: mode.sandbox,
     timeoutMs: timeoutMs(args),
   };
+  if (saveSession) {
+    liveSessionPath = await appendSessionLine({
+      dataDir,
+      sessionPath: liveSessionPath,
+      cwd: context.cwd,
+      title,
+      line: { type: "user", content: task },
+      modelProvider: cliProvider?.profile.provider || "brain",
+      modelId: cliProvider?.profile.model || "lynn-brain-router",
+    });
+    if (json) writeJsonLine({ type: "session.checkpoint", ts: nowIso(), path: liveSessionPath, line: "user" });
+  }
   const final = await runCodeAgentLoop({
     task,
     context,
@@ -474,9 +487,39 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     output: errorOutput,
     imagePath: getStringFlag(args.flags, "image", "shot") || undefined,
     resumeMessages,
+    onCheckpoint: saveSession && liveSessionPath
+      ? async (line) => {
+          liveSessionPath = await appendSessionLine({
+            dataDir,
+            sessionPath: liveSessionPath,
+            cwd: context.cwd,
+            title,
+            line,
+            modelProvider: cliProvider?.profile.provider || "brain",
+            modelId: cliProvider?.profile.model || "lynn-brain-router",
+          });
+          if (json) writeJsonLine({ type: "session.checkpoint", ts: nowIso(), path: liveSessionPath, line: line.type });
+        }
+      : undefined,
   });
   if (saveSession) {
-    const savedPath = await appendSessionTurn({
+    if (liveSessionPath && final.trim()) {
+      const existingLines = await readSessionLines(liveSessionPath).catch(() => []);
+      const lastMessage = [...existingLines].reverse().find((line) => line.type === "assistant" || line.type === "user");
+      if (!(lastMessage?.type === "assistant" && lastMessage.content === final)) {
+        liveSessionPath = await appendSessionLine({
+          dataDir,
+          sessionPath: liveSessionPath,
+          cwd: context.cwd,
+          title,
+          line: { type: "assistant", content: final },
+          modelProvider: cliProvider?.profile.provider || "brain",
+          modelId: cliProvider?.profile.model || "lynn-brain-router",
+        });
+        if (json) writeJsonLine({ type: "session.checkpoint", ts: nowIso(), path: liveSessionPath, line: "assistant" });
+      }
+    }
+    const savedPath = liveSessionPath || await appendSessionTurn({
       dataDir,
       sessionPath,
       cwd: context.cwd,
@@ -547,6 +590,7 @@ interface CodeAgentLoopInput {
   output: NodeJS.WriteStream;
   imagePath?: string;
   resumeMessages?: ChatMessage[];
+  onCheckpoint?: (line: { type: "user" | "assistant"; content: string }) => Promise<void>;
 }
 
 interface CodeToolRequest {
@@ -591,6 +635,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
       label: step === 0 ? t("spinner.coding") : t("spinner.reviewing"),
     });
     messages.push({ role: "assistant", content: assistantText });
+    if (inputData.onCheckpoint && assistantText.trim()) await inputData.onCheckpoint({ type: "assistant", content: assistantText });
     const toolRequest = parseCodeToolRequest(assistantText);
     if (!toolRequest) {
       finalText = assistantText;
@@ -637,14 +682,16 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
     }
     if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
     else renderClientToolResult(toolResult);
+    const toolResultMessage = [
+      `Tool result for ${toolRequest.tool}:`,
+      formatToolResultForLoop(toolResult),
+      "Continue. If no more tools are needed, give the final answer.",
+    ].join("\n");
     messages.push({
       role: "user",
-      content: [
-        `Tool result for ${toolRequest.tool}:`,
-        formatToolResultForLoop(toolResult),
-        "Continue. If no more tools are needed, give the final answer.",
-      ].join("\n"),
+      content: toolResultMessage,
     });
+    if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: toolResultMessage });
   }
   if (!finalText) {
     finalText = "Stopped after the maximum tool steps. Review the emitted tool results before continuing.";
