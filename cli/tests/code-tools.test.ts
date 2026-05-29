@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { canPromptForDangerousTool, isDangerousClientTool, parseCodeToolRequest, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
+import { canPromptForDangerousTool, formatToolResultForLoop, isDangerousClientTool, parseCodeToolRequest, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
 import { setLang } from "../src/i18n.js";
@@ -101,6 +101,17 @@ describe("code tools", () => {
       tool: "bash",
       args: { command: "pwd" },
     });
+  });
+
+  it("caps tool result text before feeding it back to the model", () => {
+    const formatted = formatToolResultForLoop({
+      ok: true,
+      tool: "bash",
+      output: { stdout: "x".repeat(5000) },
+    }, 200);
+
+    expect(formatted.length).toBeLessThan(500);
+    expect(formatted).toContain("truncated this tool result");
   });
 
   it("times out long-running bash commands", async () => {

@@ -584,12 +584,29 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
     }
     if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
     else renderClientToolResult(toolResult);
-    messages.push({ role: "user", content: `Tool result for ${toolRequest.tool}:\n${JSON.stringify(toolResult, null, 2)}\nContinue. If no more tools are needed, give the final answer.` });
+    messages.push({
+      role: "user",
+      content: [
+        `Tool result for ${toolRequest.tool}:`,
+        formatToolResultForLoop(toolResult),
+        "Continue. If no more tools are needed, give the final answer.",
+      ].join("\n"),
+    });
   }
   if (!finalText) {
     finalText = "Stopped after the maximum tool steps. Review the emitted tool results before continuing.";
   }
   return finalText;
+}
+
+export function formatToolResultForLoop(result: ClientToolResult, maxChars = 12_000): string {
+  const json = JSON.stringify(result, null, 2);
+  if (json.length <= maxChars) return json;
+  return [
+    json.slice(0, maxChars),
+    "",
+    `[Lynn CLI truncated this tool result from ${json.length} chars to ${maxChars} chars to keep the long-running coding loop stable. Use a narrower grep/read_file request if more detail is needed.]`,
+  ].join("\n");
 }
 
 function toolRequestFingerprint(request: CodeToolRequest): string {
