@@ -16,6 +16,7 @@ const sessionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-sessions");
 const toolDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-tools");
 const visionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-vision");
 const byokDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-byok");
+const mimoByokDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-mimo-byok");
 const briefPath = path.join(root, "cli", "fixtures", "worker-brief.md");
 
 function run(name, args, options = {}) {
@@ -84,6 +85,8 @@ await fs.promises.rm(visionDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(visionDataDir, { recursive: true });
 await fs.promises.rm(byokDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(byokDataDir, { recursive: true });
+await fs.promises.rm(mimoByokDataDir, { recursive: true, force: true });
+await fs.promises.mkdir(mimoByokDataDir, { recursive: true });
 const smokePng = path.join(visionDataDir, "smoke.png");
 await fs.promises.writeFile(smokePng, Buffer.from("89504e470d0a1a0a", "hex"));
 
@@ -263,6 +266,7 @@ for (const check of checks) {
 }
 
 await runStepFunByokFallbackSmoke();
+await runMiMoByokFallbackSmoke();
 
 const saved = await run("session save", ["-p", "remember this", "--mock-brain", "--save-session", "--data-dir", sessionDataDir, "--json"]);
 assertIncludes(saved.name, saved.stdout, '"type":"session.saved"');
@@ -400,6 +404,84 @@ async function runStepFunByokFallbackSmoke() {
       "http://127.0.0.1:1",
     ], { stdinLines: ["hello from chat", "/exit"], env: { LYNN_CLI_BRAIN_TIMEOUT_MS: "50" } });
     assertIncludes(chat.name, chat.stdout, "ok from stepfun");
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve()));
+  }
+}
+
+async function runMiMoByokFallbackSmoke() {
+  let seen = null;
+  const server = http.createServer((request, response) => {
+    if (request.url !== "/v1/chat/completions" || request.method !== "POST") {
+      response.writeHead(404);
+      response.end();
+      return;
+    }
+    let body = "";
+    request.on("data", (chunk) => { body += String(chunk); });
+    request.on("end", () => {
+      seen = { auth: request.headers.authorization, body: JSON.parse(body) };
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"ok from mimo\"}}]}",
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("MiMo BYOK smoke server failed to listen");
+    const baseUrl = `http://127.0.0.1:${address.port}/v1`;
+    await run("mimo preset save", [
+      "providers",
+      "set",
+      "--data-dir",
+      mimoByokDataDir,
+      "--preset",
+      "mimo",
+      "--api-key",
+      "mimo-smoke-key",
+      "--json",
+    ]);
+    const tested = await run("mimo provider test", [
+      "providers",
+      "test",
+      "--data-dir",
+      mimoByokDataDir,
+      "--preset",
+      "mimo",
+      "--base-url",
+      baseUrl,
+      "--api-key",
+      "mimo-smoke-key",
+      "--json",
+    ]);
+    assertIncludes(tested.name, tested.stdout, '"type":"providers.test"');
+    assertIncludes(tested.name, tested.stdout, '"ok":true');
+    assertIncludes(tested.name, tested.stdout, '"model":"mimo-v2.5-pro"');
+    assertNotIncludes(tested.name, tested.stdout, "mimo-smoke-key");
+    const result = await run("mimo byok fallback", [
+      "-p",
+      "say ok",
+      "--data-dir",
+      mimoByokDataDir,
+      "--preset",
+      "mimo",
+      "--base-url",
+      baseUrl,
+      "--api-key",
+      "mimo-smoke-key",
+      "--brain-url",
+      "http://127.0.0.1:1",
+      "--json",
+    ], { env: { LYNN_CLI_BRAIN_TIMEOUT_MS: "50" } });
+    assertIncludes(result.name, result.stdout, '"text":"ok from mimo"');
+    if (!seen) throw new Error("MiMo BYOK smoke did not call the provider");
+    if (seen.auth !== "Bearer mimo-smoke-key") throw new Error(`MiMo BYOK smoke used wrong auth: ${seen.auth}`);
+    if (seen.body.model !== "mimo-v2.5-pro") throw new Error(`MiMo BYOK smoke used wrong model: ${seen.body.model}`);
   } finally {
     await new Promise((resolve) => server.close(() => resolve()));
   }
