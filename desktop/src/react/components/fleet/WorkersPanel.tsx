@@ -171,7 +171,7 @@ export function WorkersPanel() {
           {cliEnv && (
             <div className={s.cliEnv} data-ready={cliEnv.ready ? '1' : '0'}>
               CLI runtime: Node {cliEnv.node.version ?? '?'} ({cliEnv.node.source})
-              {cliEnv.ready ? ' · ready' : cliEnv.cli.present ? '' : ' · CLI bundle pending integration'}
+              {cliEnv.ready ? ' · ready' : cliEnv.cli.present ? '' : ' · CLI runtime unavailable'}
             </div>
           )}
           {perm && (

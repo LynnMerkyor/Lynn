@@ -4,8 +4,8 @@
  * dispatch() really spawns `lynn worker run --jsonl` when a CLI runtime is resolvable
  * (worker-command.ts: env from desktop main, or a dev cli build), streaming the
  * worker's JSONL events over the existing server WebSocket ({ type: "fleet:event" }).
- * When no CLI runtime is available (cli/** not yet integrated), it falls back to a
- * stub broadcast so the GUI board still demos. Worktree creation + spawn + the brief
+ * When no CLI runtime is available, it falls back to a demo broadcast so the GUI
+ * board still works. Worktree creation + spawn + the brief
  * file are injectable for tests.
  */
 import type { FleetWorkerEvent, FleetAgentKind } from "../../shared/fleet-events.js";
@@ -176,7 +176,7 @@ export class FleetHub {
     rec.status = "running";
 
     // Real spawn path: only when a CLI runtime is resolvable (env from main, or a dev
-    // cli build). Until cli/** is integrated this is false and we use the stub below.
+    // cli build). Otherwise the board falls back to a demo runner below.
     if (this.available()) {
       try {
         const create =
@@ -226,12 +226,12 @@ export class FleetHub {
       }
     }
 
-    // Stub fallback (no CLI runtime yet): keep the board demoable.
+    // Demo fallback (no CLI runtime): keep the board inspectable and testable.
     this.emit(workerId, {
       type: "worker.progress",
       ts: this.now(),
       workerId,
-      message: "stub - CLI bundle pending",
+      message: "demo runner - CLI runtime unavailable",
       data: { kind: "runner", mode: "stub" },
     });
     return rec;

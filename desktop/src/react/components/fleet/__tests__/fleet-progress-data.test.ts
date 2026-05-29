@@ -33,7 +33,7 @@ describe('worker.progress data (vision + runner context)', () => {
     v = reduceFleetWorker(v, {
       type: 'worker.progress',
       workerId: 'w1',
-      message: 'stub - CLI bundle pending',
+      message: 'demo runner - CLI runtime unavailable',
       data: { kind: 'runner', mode: 'stub' },
     });
     expect(v.runner?.mode).toBe('stub');

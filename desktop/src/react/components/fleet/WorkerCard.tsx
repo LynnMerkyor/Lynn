@@ -153,7 +153,7 @@ export function WorkerCard({
         <div className={s.runnerLine} data-mode={worker.runner.mode}>
           runner:{' '}
           {worker.runner.mode === 'stub'
-            ? 'stub - CLI bundle pending'
+            ? 'demo runner - CLI runtime unavailable'
             : `spawned${runnerSourceLabel ? ` via ${runnerSourceLabel}` : ''}${
                 worker.runner.pid != null ? ` (pid ${worker.runner.pid})` : ''
               }`}
