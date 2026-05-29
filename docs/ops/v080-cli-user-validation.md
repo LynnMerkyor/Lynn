@@ -150,6 +150,8 @@ Destructive or write-capable behavior must be tested only in a temporary worktre
 
 The CLI and GUI must eventually share one permission model. The GUI is the visual authority; the CLI is a local execution surface that can temporarily override the active mode for one command.
 
+Permission changes, tool guardrails, cacheable context, and Fleet locks must be represented as Lynn runtime instruction frames, not raw provider-specific `role: "system"` messages. See `shared/runtime-instruction-frames.ts`.
+
 ### Canonical Permission Levels
 
 | User-facing mode | CLI flag | Local file writes | Shell commands | Intended use |
@@ -172,6 +174,7 @@ Sandbox levels:
 - GUI Settings stores the default permission profile for the current user.
 - CLI loads the same profile from the Lynn data directory when no explicit flag is passed.
 - CLI flags override the profile for that process only.
+- CLI and GUI changes produce runtime instruction frames such as `permission_state`, `runtime_policy`, or `tool_guard`.
 - GUI Fleet workers inherit the GUI profile unless the dispatch form explicitly changes it.
 - Worker JSONL must include the effective permission mode in `worker.claims` or an equivalent startup event.
 - Server-side Fleet must re-check forbidden globs and center-file locks even if a worker claims it behaved.
@@ -208,6 +211,7 @@ In the GUI:
 
 - Add `Lynn permissions` to read and print the effective permission profile.
 - Add a shared permission profile type under `shared/`.
+- Serialize runtime instruction frames per provider capability; never assume mid-conversation `role: "system"` works outside opted-in Anthropic adapters.
 - Store GUI defaults in the Lynn data directory, not only localStorage.
 - Make CLI, GUI Fleet, and server Fleet resolve permissions through one helper.
 - Add release-gate tests for read-only denial, workspace write allow, and YOLO warning text.
