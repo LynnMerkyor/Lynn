@@ -218,6 +218,19 @@ describe("FleetHub.dispatch", () => {
     });
   });
 
+  it("exposes Qwen and Kimi as enabled stream-json worker profiles", () => {
+    expect(DEFAULT_FLEET_REGISTRY.find((agent) => agent.id === "qwen-cli")).toMatchObject({
+      bin: "qwen",
+      supportsJsonl: true,
+      enabled: true,
+    });
+    expect(DEFAULT_FLEET_REGISTRY.find((agent) => agent.id === "kimi-cli")).toMatchObject({
+      bin: "kimi",
+      supportsJsonl: true,
+      enabled: true,
+    });
+  });
+
   it("registers a worker and broadcasts started -> claims -> progress as fleet:event", async () => {
     const sent: Array<{ type: string; event: { type: string } }> = [];
     const hub = new FleetHub("/repo", (m) => sent.push(m as { type: string; event: { type: string } }), () => "T");

@@ -42,6 +42,7 @@ const FALLBACK_AGENTS: AgentEntry[] = [
   { id: 'claude-code', label: 'Claude Code', enabled: true },
   { id: 'claude-internal', label: 'Claude (internal)', enabled: true },
   { id: 'qwen-cli', label: 'Qwen', enabled: true },
+  { id: 'kimi-cli', label: 'Kimi', enabled: true },
   { id: 'codebuddy', label: 'CodeBuddy', enabled: true },
 ];
 
