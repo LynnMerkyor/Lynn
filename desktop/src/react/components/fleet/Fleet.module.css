@@ -138,6 +138,24 @@
   color: #e74c3c;
 }
 
+.fileButton {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.fileButton:hover {
+  opacity: 0.8;
+}
+
 .workerFiles li[data-active='1'] {
   font-style: italic;
   opacity: 1;
@@ -256,4 +274,34 @@
 .cliEnv[data-ready='1'] {
   color: #2ecc71;
   opacity: 0.9;
+}
+
+.diffDrawer {
+  margin-top: 12px;
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  background: var(--card-bg, rgba(255, 255, 255, 0.02));
+  overflow: hidden;
+}
+
+.diffDrawerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color, #333);
+  font-size: 12px;
+  font-family: var(--mono-font, monospace);
+}
+
+.diffPre {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  font-family: var(--mono-font, monospace);
+  white-space: pre;
 }

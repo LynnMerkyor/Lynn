@@ -153,6 +153,13 @@ export class FleetHub {
     return true;
   }
 
+  async fileDiff(id: string, filePath: string): Promise<string | null> {
+    const rec = this.workers.get(id);
+    if (!rec) return null;
+    const worktreePath = resolveFromRepo(this.repoRoot, rec.brief.worktree);
+    return this.worktrees.fileDiff(worktreePath, filePath);
+  }
+
   private async startWorker(rec: FleetWorkerRecord): Promise<void> {
     const { brief, workerId, agent } = rec;
     try {

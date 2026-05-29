@@ -34,9 +34,11 @@ function fileVerb(file: FleetChangedFile, active: boolean): string {
 export function WorkerCard({
   worker,
   onCancel,
+  onViewDiff,
 }: {
   worker: FleetWorkerView;
   onCancel?: (workerId: string) => void;
+  onViewDiff?: (workerId: string, path: string) => void;
 }) {
   const { diffStat } = worker;
   const fileCount = diffStat?.files ?? worker.changedFiles.length;
@@ -75,7 +77,14 @@ export function WorkerCard({
             const hasCounts = f.insertions != null || f.deletions != null;
             return (
               <li key={f.path} data-forbidden={f.forbidden ? '1' : '0'} data-active={active ? '1' : '0'}>
-                <span className={s.fileVerb}>{fileVerb(f, active)}</span> {f.path}
+                <span className={s.fileVerb}>{fileVerb(f, active)}</span>{' '}
+                {onViewDiff ? (
+                  <button className={s.fileButton} onClick={() => onViewDiff(worker.workerId, f.path)} title="View diff">
+                    {f.path}
+                  </button>
+                ) : (
+                  f.path
+                )}
                 {hasCounts && (
                   <>
                     {' '}

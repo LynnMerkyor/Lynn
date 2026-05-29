@@ -4,6 +4,8 @@
  * One worktree per worker; changed-files/diff feed the scope guard + the GUI.
  */
 import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { promisify } from "node:util";
 
 const pExecFile = promisify(execFile);
@@ -68,6 +70,17 @@ export class WorktreeManager {
     return { files, insertions, deletions };
   }
 
+  async fileDiff(worktreePath: string, filePath: string, baseRef = "HEAD"): Promise<string> {
+    assertSafeRelativePath(filePath);
+    const diff = await runGit(["diff", baseRef, "--", filePath], worktreePath).catch(() => "");
+    if (diff) return diff;
+    const untracked = await runGit(["ls-files", "--others", "--exclude-standard", "--", filePath], worktreePath).catch(() => "");
+    if (untracked.split("\n").map((line) => line.trim()).includes(filePath)) {
+      return renderUntrackedFileDiff(worktreePath, filePath);
+    }
+    return "";
+  }
+
   async list(): Promise<WorktreeInfo[]> {
     const out = await runGit(["worktree", "list", "--porcelain"], this.repoRoot).catch(() => "");
     return parseWorktreePorcelain(out);
@@ -78,6 +91,39 @@ export class WorktreeManager {
     if (force) args.push("--force");
     await runGit(args, this.repoRoot);
   }
+}
+
+function assertSafeRelativePath(filePath: string): void {
+  if (!filePath || filePath.includes("\0") || path.isAbsolute(filePath)) {
+    throw new Error("invalid file path");
+  }
+  const normalized = path.normalize(filePath);
+  if (normalized === ".." || normalized.startsWith(`..${path.sep}`)) {
+    throw new Error("file path escapes worktree");
+  }
+}
+
+async function renderUntrackedFileDiff(worktreePath: string, filePath: string): Promise<string> {
+  const root = await fs.realpath(worktreePath);
+  const target = path.resolve(root, filePath);
+  const relative = path.relative(root, target);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error("file path escapes worktree");
+  }
+  const stat = await fs.lstat(target);
+  if (!stat.isFile()) {
+    return `diff --git a/${filePath} b/${filePath}\nnew file mode 000000\n--- /dev/null\n+++ b/${filePath}\n@@\n+(untracked non-regular file omitted)\n`;
+  }
+  const text = await fs.readFile(target, "utf8");
+  const body = text.split(/\r?\n/).map((line) => `+${line}`).join("\n");
+  return [
+    `diff --git a/${filePath} b/${filePath}`,
+    "new file mode 100644",
+    "--- /dev/null",
+    `+++ b/${filePath}`,
+    "@@",
+    body,
+  ].join("\n");
 }
 
 /** Pure parser for `git worktree list --porcelain` output (exported for tests). */

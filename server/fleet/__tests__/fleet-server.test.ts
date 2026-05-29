@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { matchAnyGlob, evaluateScope, annotateChangedFiles } from "../forbidden-guard.js";
 import { createLineParser } from "../worker-manager.js";
 import type { SpawnWorkerOptions } from "../worker-manager.js";
-import { parseWorktreePorcelain } from "../worktree-manager.js";
+import { parseWorktreePorcelain, WorktreeManager } from "../worktree-manager.js";
 import { FleetHub, type FleetBrief } from "../fleet-hub.js";
 import { DEFAULT_FLEET_REGISTRY, withFleetRegistryAvailability } from "../registry.js";
+
+const execFileAsync = promisify(execFile);
+
+async function makeGitRepo(): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-fleet-server-"));
+  await execFileAsync("git", ["init"], { cwd: dir });
+  return dir;
+}
 
 describe("forbidden-guard", () => {
   it("matches ** across segments and * within one", () => {
@@ -57,6 +70,20 @@ describe("worktree porcelain parser", () => {
     const list = parseWorktreePorcelain(out);
     expect(list).toHaveLength(2);
     expect(list[1]).toEqual({ path: "/repo/wt-1", head: "def", branch: "cli-1/x" });
+  });
+
+  it("renders tracked and untracked file diffs safely", async () => {
+    const repo = await makeGitRepo();
+    await fs.writeFile(path.join(repo, "tracked.txt"), "old\n");
+    await execFileAsync("git", ["add", "tracked.txt"], { cwd: repo });
+    await execFileAsync("git", ["commit", "-m", "init"], { cwd: repo, env: { ...process.env, GIT_AUTHOR_NAME: "Test", GIT_AUTHOR_EMAIL: "test@example.com", GIT_COMMITTER_NAME: "Test", GIT_COMMITTER_EMAIL: "test@example.com" } });
+    await fs.writeFile(path.join(repo, "tracked.txt"), "new\n");
+    await fs.writeFile(path.join(repo, "new.txt"), "hello\n");
+    const manager = new WorktreeManager(repo);
+
+    await expect(manager.fileDiff(repo, "../escape")).rejects.toThrow("escapes worktree");
+    expect(await manager.fileDiff(repo, "tracked.txt")).toContain("-old");
+    expect(await manager.fileDiff(repo, "new.txt")).toContain("new file mode");
   });
 });
 

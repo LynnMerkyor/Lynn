@@ -18,6 +18,14 @@ import { detectFleetConflicts } from './fleet-conflicts';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import type { CliEnvStatus } from '../../types';
 
+interface DiffPreviewState {
+  workerId: string;
+  path: string;
+  loading: boolean;
+  diff?: string;
+  error?: string;
+}
+
 export function WorkersPanel() {
   const activePanel = useStore((st) => st.activePanel);
   const fleetWorkers = useStore((st) => st.fleetWorkers);
@@ -26,6 +34,7 @@ export function WorkersPanel() {
   const cancelRef = useRef<null | (() => void)>(null);
   const [showForm, setShowForm] = useState(false);
   const [cliEnv, setCliEnv] = useState<CliEnvStatus | null>(null);
+  const [diffPreview, setDiffPreview] = useState<DiffPreviewState | null>(null);
 
   useEffect(() => {
     return () => {
@@ -57,6 +66,17 @@ export function WorkersPanel() {
     void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/cancel`, { method: 'POST' }).catch(() => {
       /* server broadcasts the cancel result; ignore transport errors here */
     });
+  };
+
+  const viewDiff = (workerId: string, filePath: string) => {
+    setDiffPreview({ workerId, path: filePath, loading: true });
+    void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/diff?path=${encodeURIComponent(filePath)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        setDiffPreview({ workerId, path: filePath, loading: false, diff: data.diff || '(no diff)' });
+      })
+      .catch((e) => setDiffPreview({ workerId, path: filePath, loading: false, error: e instanceof Error ? e.message : String(e) }));
   };
 
   const conflicts = detectFleetConflicts(fleetWorkers);
@@ -126,8 +146,22 @@ export function WorkersPanel() {
           ) : (
             <div className={s.fleetBoard}>
               {fleetWorkers.map((w) => (
-                <WorkerCard key={w.workerId} worker={w} onCancel={cancelWorker} />
+                <WorkerCard key={w.workerId} worker={w} onCancel={cancelWorker} onViewDiff={viewDiff} />
               ))}
+            </div>
+          )}
+
+          {diffPreview && (
+            <div className={s.diffDrawer}>
+              <div className={s.diffDrawerHead}>
+                <span>Diff · {diffPreview.path}</span>
+                <button className={s.fleetBtn} onClick={() => setDiffPreview(null)}>
+                  Close
+                </button>
+              </div>
+              <pre className={s.diffPre}>
+                {diffPreview.loading ? 'Loading diff…' : diffPreview.error ? `Error: ${diffPreview.error}` : diffPreview.diff}
+              </pre>
             </div>
           )}
         </div>

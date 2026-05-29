@@ -46,6 +46,19 @@ export function createFleetRoute(hub: FleetHub): Hono {
     return c.json({ ok: true });
   });
 
+  route.get("/fleet/workers/:id/diff", async (c) => {
+    const filePath = c.req.query("path") || "";
+    if (!filePath) return c.json({ error: "path is required" }, 400);
+    try {
+      const diff = await hub.fileDiff(c.req.param("id"), filePath);
+      if (diff == null) return c.json({ error: "worker not found" }, 404);
+      return c.json({ ok: true, path: filePath, diff });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return c.json({ error: message }, 400);
+    }
+  });
+
   return route;
 }
 
