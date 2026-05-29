@@ -1,5 +1,9 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyModeCommand, applyReasoningCommand, completeChatInput, formatChatError, isModeToggleKeypress, renderMode, renderOfflineChatHint, toggleMode } from "../src/commands/chat.js";
+import { parseArgs } from "../src/args.js";
+import { applyModeCommand, applyReasoningCommand, completeChatInput, formatChatError, isModeToggleKeypress, renderMode, renderOfflineChatHint, resolveChatMode, toggleMode } from "../src/commands/chat.js";
 import { BrainConnectionError } from "../src/brain-client.js";
 import { setLang } from "../src/i18n.js";
 
@@ -30,6 +34,24 @@ describe("chat mode controls", () => {
     expect(renderMode(mode)).toBe("yolo / danger-full-access");
     expect(toggleMode(mode)).toBe("Guarded mode enabled.");
     expect(renderMode(mode)).toBe("ask / workspace-write");
+  });
+
+  it("uses the shared CLI/client permission profile for chat startup mode", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-chat-perms-"));
+    try {
+      await fs.mkdir(path.join(dataDir, "permissions"), { recursive: true });
+      await fs.writeFile(
+        path.join(dataDir, "permissions", "cli.json"),
+        JSON.stringify({ approval: "yolo", sandbox: "danger-full-access" }),
+        "utf8",
+      );
+
+      const mode = await resolveChatMode(parseArgs(["chat", "--data-dir", dataDir]));
+
+      expect(renderMode(mode)).toBe("yolo / danger-full-access");
+    } finally {
+      await fs.rm(dataDir, { recursive: true, force: true });
+    }
   });
 
   it("localizes mode command receipts and danger warning", () => {

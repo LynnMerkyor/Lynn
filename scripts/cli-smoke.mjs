@@ -12,6 +12,7 @@ const nodeBin = process.execPath;
 const cliBin = path.join(root, "cli", "bin", "lynn.mjs");
 const missingDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-missing");
 const permissionSetDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-permissions-set");
+const chatPermissionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-chat-permissions");
 const sessionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-sessions");
 const toolDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-tools");
 const visionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-vision");
@@ -76,6 +77,13 @@ await fs.promises.rm(missingDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(missingDataDir, { recursive: true });
 await fs.promises.rm(permissionSetDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(permissionSetDataDir, { recursive: true });
+await fs.promises.rm(chatPermissionDataDir, { recursive: true, force: true });
+await fs.promises.mkdir(path.join(chatPermissionDataDir, "permissions"), { recursive: true });
+await fs.promises.writeFile(
+  path.join(chatPermissionDataDir, "permissions", "cli.json"),
+  `${JSON.stringify({ approval: "yolo", sandbox: "danger-full-access" }, null, 2)}\n`,
+  "utf8",
+);
 await fs.promises.rm(sessionDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(sessionDataDir, { recursive: true });
 await fs.promises.rm(toolDataDir, { recursive: true, force: true });
@@ -161,6 +169,15 @@ checks.push(run("permissions set shared profile", [
   const profile = await fs.promises.readFile(path.join(permissionSetDataDir, "permissions", "cli.json"), "utf8");
   assertIncludes(r.name, profile, '"approval": "yolo"');
   assertIncludes(r.name, profile, '"sandbox": "danger-full-access"');
+}));
+
+checks.push(run("chat uses shared permission profile", [
+  "chat",
+  "--mock-brain",
+  "--data-dir",
+  chatPermissionDataDir,
+], { stdinLines: ["/mode", "/exit"] }).then((r) => {
+  assertIncludes(r.name, r.stdout, "yolo / danger-full-access");
 }));
 
 checks.push(run("mock prompt", ["-p", "你好", "--mock-brain"]).then((r) => {

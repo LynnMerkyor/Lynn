@@ -15,6 +15,7 @@ import { t } from "../i18n.js";
 import { MarkdownStream } from "../markdown.js";
 import { appendHistory, historyPath, loadHistory } from "../history.js";
 import { completeSlash } from "../completion.js";
+import { resolveEffectivePermissions } from "../permissions.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/exit",
@@ -38,7 +39,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   let reasoning = parseReasoningOptions(args);
-  const mode = resolveMode(args);
+  const mode = await resolveChatMode(args);
   const cliProvider = await resolveCliProviderProfile(args);
   const messages: ChatMessage[] = [];
   const histFile = historyPath();
@@ -201,12 +202,11 @@ export interface ModeHotkeyStreams {
   mode: ChatMode;
 }
 
-function resolveMode(args: ParsedArgs): ChatMode {
-  const approval = getStringFlag(args.flags, "approval");
-  const sandbox = getStringFlag(args.flags, "sandbox");
+export async function resolveChatMode(args: ParsedArgs): Promise<ChatMode> {
+  const permissions = await resolveEffectivePermissions(args);
   return {
-    approval: approval === "on-failure" || approval === "never" || approval === "yolo" ? approval : "ask",
-    sandbox: sandbox === "read-only" || sandbox === "danger-full-access" ? sandbox : "workspace-write",
+    approval: permissions.approval,
+    sandbox: permissions.sandbox,
   };
 }
 
