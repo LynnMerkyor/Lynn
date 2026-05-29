@@ -97,4 +97,37 @@ describe("code agent loop", () => {
     expect(output).toContain('"tool":"apply_patch"');
     expect(output).toContain("Changed hello.txt");
   });
+
+  it("suppresses repeated identical tool requests during the loop", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer((_body, count) => {
+        if (count <= 2) return JSON.stringify({ tool: "read_file", args: { path: "hello.txt" } });
+        return "I already have the file content and can answer now.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "inspect hello",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--max-steps",
+          "4",
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain('"type":"code.tool.loop_guard"');
+    expect(output).toContain("Repeated identical tool request suppressed");
+    expect(output).toContain("I already have the file content");
+  });
 });

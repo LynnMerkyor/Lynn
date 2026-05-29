@@ -527,6 +527,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
   ];
   let finalText = "";
   const approvalSession = { approveAll: false };
+  const seenToolRequests = new Map<string, number>();
   for (let step = 0; step < inputData.maxSteps; step += 1) {
     const assistantText = await collectBrainText({
       brainUrl: inputData.brainUrl,
@@ -542,30 +543,44 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
       finalText = assistantText;
       break;
     }
+    const fingerprint = toolRequestFingerprint(toolRequest);
+    const previous = seenToolRequests.get(fingerprint) || 0;
+    seenToolRequests.set(fingerprint, previous + 1);
     if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
     else renderClientToolStart(toolRequest);
     let toolResult: ClientToolResult;
-    try {
-      const effectiveApproval = await resolveToolApproval({
-        tool: toolRequest.tool,
-        approval: inputData.toolCtx.approval,
-        cwd: inputData.toolCtx.cwd,
-        json: inputData.json,
-        input: inputData.input,
-        output: inputData.output,
-        preview: formatDangerousToolPreview(toolRequest.tool, toolRequest.args, supportsColor(inputData.output)),
-        session: approvalSession,
-      });
-      toolResult = await runClientTool({ ...inputData.toolCtx, approval: effectiveApproval }, {
-        name: toolRequest.tool,
-        ...toolRequest.args,
-      });
-    } catch (error) {
+    if (previous > 0) {
       toolResult = {
         ok: false,
         tool: toolRequest.tool,
-        error: error instanceof Error ? error.message : String(error),
+        error: "Repeated identical tool request suppressed by Lynn CLI. Use a different tool, different arguments, or answer with the information already available.",
       };
+      if (inputData.json) {
+        writeJsonLine({ type: "code.tool.loop_guard", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest), repeats: previous + 1 });
+      }
+    } else {
+      try {
+        const effectiveApproval = await resolveToolApproval({
+          tool: toolRequest.tool,
+          approval: inputData.toolCtx.approval,
+          cwd: inputData.toolCtx.cwd,
+          json: inputData.json,
+          input: inputData.input,
+          output: inputData.output,
+          preview: formatDangerousToolPreview(toolRequest.tool, toolRequest.args, supportsColor(inputData.output)),
+          session: approvalSession,
+        });
+        toolResult = await runClientTool({ ...inputData.toolCtx, approval: effectiveApproval }, {
+          name: toolRequest.tool,
+          ...toolRequest.args,
+        });
+      } catch (error) {
+        toolResult = {
+          ok: false,
+          tool: toolRequest.tool,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
     }
     if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
     else renderClientToolResult(toolResult);
@@ -575,6 +590,22 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
     finalText = "Stopped after the maximum tool steps. Review the emitted tool results before continuing.";
   }
   return finalText;
+}
+
+function toolRequestFingerprint(request: CodeToolRequest): string {
+  return JSON.stringify({
+    tool: request.tool,
+    args: stableObject(request.args as Record<string, unknown>),
+  });
+}
+
+function stableObject(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => [k, v && typeof v === "object" && !Array.isArray(v) ? stableObject(v as Record<string, unknown>) : v]),
+  );
 }
 
 async function collectBrainText(inputData: {

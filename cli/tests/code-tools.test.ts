@@ -129,6 +129,29 @@ describe("code tools", () => {
     expect(text).toContain("lynn");
   });
 
+  it("applies Codex-style Begin Patch updates and additions", async () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: src/hello.ts",
+      "@@",
+      "-export const hello = 'world';",
+      "+export const hello = 'codex';",
+      "*** Add File: src/new.ts",
+      "+export const added = true;",
+      "*** End Patch",
+      "",
+    ].join("\n");
+
+    const result = await runClientTool({ cwd: tmp, approval: "yolo" }, { name: "apply_patch", text: patch });
+    const hello = await fs.readFile(path.join(tmp, "src", "hello.ts"), "utf8");
+    const added = await fs.readFile(path.join(tmp, "src", "new.ts"), "utf8");
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toMatchObject({ format: "codex-patch", files: ["src/hello.ts", "src/new.ts"] });
+    expect(hello).toContain("codex");
+    expect(added).toContain("added");
+  });
+
   it("parses CLI timeout flags for bash tools", async () => {
     const original = process.stdout.write;
     let output = "";
