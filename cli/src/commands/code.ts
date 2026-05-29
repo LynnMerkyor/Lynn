@@ -14,7 +14,7 @@ import { dangerLine, red, supportsColor } from "../terminal-style.js";
 import { box, displayCwd, padLine } from "../startup.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
-import { applyModeCommand, applyReasoningCommand, installModeHotkey, renderMode, type ChatMode } from "./chat.js";
+import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type ChatMode } from "./chat.js";
 import { readVersionInfo } from "../version.js";
 
 const pExecFile = promisify(execFile);
@@ -105,12 +105,11 @@ export async function runCode(args: ParsedArgs): Promise<number> {
 async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   const mode = codeModeFromArgs(args);
   let reasoning = parseReasoningOptions(args);
-  const rl = readline.createInterface({ input, output, terminal: true });
-  const cleanupModeHotkey = installModeHotkey({ input, output, readlineInterface: rl, mode });
   output.write(renderCodeIntro(mode, reasoning, { color: supportsColor(output) }));
   try {
     for (;;) {
-      const raw = await rl.question("› ");
+      const raw = await readCodeLine("› ", mode);
+      if (raw === null) break;
       const text = raw.trim();
       if (!text) continue;
       if (text === "/exit" || text === "/quit") break;
@@ -163,18 +162,85 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
         },
       };
       try {
-        await runCodeTask(taskArgs, text, false);
+        await runCodeTask(taskArgs, text, false, { compact: true });
       } catch (error) {
         const message = formatBrainRecoveryHint(error);
-        errorOutput.write(`Lynn code error: ${message}\n`);
+        errorOutput.write(`• ${message}\n`);
       }
       output.write("\n");
     }
   } finally {
-    cleanupModeHotkey();
-    rl.close();
+    // no-op; readCodeLine restores raw mode per prompt
   }
   return 0;
+}
+
+async function readCodeLine(prompt: string, mode: ChatMode): Promise<string | null> {
+  if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== "function") {
+    const rl = readline.createInterface({ input, output, terminal: false });
+    try {
+      const line = await rl.question(prompt);
+      return line;
+    } finally {
+      rl.close();
+    }
+  }
+
+  const rawBefore = input.isRaw;
+  input.setRawMode(true);
+  input.resume();
+  output.write(prompt);
+
+  return await new Promise<string | null>((resolve) => {
+    let buffer = "";
+    const cleanup = () => {
+      input.off("data", onData);
+      input.setRawMode(rawBefore);
+    };
+    const redraw = () => {
+      output.write(`\r${" ".repeat(Math.max(80, prompt.length + buffer.length + 8))}\r${prompt}${buffer}`);
+    };
+    const onData = (chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+      if (text === "\u0003") {
+        output.write("^C\n");
+        cleanup();
+        resolve(null);
+        return;
+      }
+      if (text === "\u0004") {
+        output.write("\n");
+        cleanup();
+        resolve(null);
+        return;
+      }
+      if (text === "\r" || text === "\n") {
+        output.write("\n");
+        cleanup();
+        resolve(buffer);
+        return;
+      }
+      if (text === "\u001b[Z") {
+        const message = toggleMode(mode);
+        output.write(`\n${renderModeChange(message, mode, supportsColor(output))}`);
+        redraw();
+        return;
+      }
+      if (text === "\u007f" || text === "\b") {
+        if (buffer.length) {
+          buffer = Array.from(buffer).slice(0, -1).join("");
+          redraw();
+        }
+        return;
+      }
+      if (text.startsWith("\u001b")) return;
+      const printable = Array.from(text).filter((char) => char >= " " && char !== "\u007f").join("");
+      if (!printable) return;
+      buffer += printable;
+      output.write(printable);
+    };
+    input.on("data", onData);
+  });
 }
 
 export function renderCodeIntro(
@@ -183,23 +249,21 @@ export function renderCodeIntro(
   options: { color?: boolean } = {},
 ): string {
   const color = !!options.color;
-  const renderedMode = mode.approval === "yolo" || mode.sandbox === "danger-full-access"
-    ? red(renderMode(mode), color)
-    : renderMode(mode);
   const version = readVersionInfo().version;
   const lines = [
-    `Lynn Code (${version})`,
+    `>_ Lynn Code (${version})`,
     "",
     padLine("model", "MiMo", "/model to change"),
-    padLine("mode", renderedMode, "Shift+Tab"),
     padLine("directory", displayCwd(process.cwd())),
   ];
+  const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
   return [
     box(lines),
     "",
-    mode.approval === "yolo" || mode.sandbox === "danger-full-access"
+    dangerous
       ? `  ${dangerLine("YOLO mode can edit files and run shell commands without asking.", color)}`
       : "  Tip: Use /fast for quick edits, /think for deeper MiMo reasoning, or /mode yolo to allow local edits.",
+    `       ${dangerous ? red(renderMode(mode), color) : renderMode(mode)} · ${reasoning.effort} · ${displayCwd(process.cwd())}`,
     "",
   ].join("\n");
 }
@@ -300,12 +364,12 @@ interface CodeContext {
   packageScripts: Record<string, string>;
 }
 
-async function runCodeTask(args: ParsedArgs, task: string, json: boolean): Promise<number> {
+async function runCodeTask(args: ParsedArgs, task: string, json: boolean, options: { compact?: boolean } = {}): Promise<number> {
   const context = await collectCodeContext(cwd(args));
   const reasoning = parseReasoningOptions(args);
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
-  if (!json) {
+  if (!json && !options.compact) {
     errorOutput.write(renderCodeTaskHeader({
       cwd: context.cwd,
       approval: approval(args),

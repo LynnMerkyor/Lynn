@@ -33,7 +33,7 @@ export class BrainConnectionError extends Error {
 
 export function formatBrainRecoveryHint(error: unknown): string {
   if (error instanceof BrainConnectionError) {
-    return `Brain offline (${error.brainUrl}). Start Lynn GUI, or use --mock-brain for local smoke tests.`;
+    return `Brain offline. Start Lynn GUI, or run with --mock-brain.`;
   }
   return error instanceof Error ? error.message : String(error);
 }
