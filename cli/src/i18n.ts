@@ -51,10 +51,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "startup.byok.default": "Lynn 客户端设置 > Providers",
     "status.chat.prefix": "MiMo/Brain",
     "offline.body":
-      "Brain 离线 —— 打开 Lynn 客户端即可使用默认 MiMo 路由,或:\n" +
+      "默认 MiMo 路由暂不可用(本地 Brain 离线)。你仍然可以配置 CLI-only BYOK 使用任意 OpenAI 兼容模型:\n" +
       "  lynn doctor --offline       自检环境\n" +
       "  lynn providers              查看 / 配置 BYOK\n" +
       '  lynn -p "你好" --mock-brain   离线试用',
+    "offline.body.byok": "本地 Brain 离线;将直接使用 CLI BYOK provider:{provider} / {model}。",
+    "chat.error.brainOffline": "默认 MiMo 路由不可用:本地 Brain 离线。打开 Lynn 客户端即可使用默认 MiMo,或运行 /providers 配置 CLI-only BYOK。({brainUrl})",
     "code.placeholder": "描述一个编码任务,或输入 /help",
     "code.tip": "提示:/fast 快速编辑,/think 深度推理,/mode yolo 允许本地改动。",
     "code.route.mock": "模拟 Brain",
@@ -145,10 +147,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "startup.byok.default": "client GUI Settings > Providers",
     "status.chat.prefix": "MiMo/Brain",
     "offline.body":
-      "Brain offline — open the Lynn client for the default MiMo route, or:\n" +
+      "Default MiMo route unavailable (local Brain offline). You can still configure CLI-only BYOK for any OpenAI-compatible model:\n" +
       "  lynn doctor --offline       check setup\n" +
       "  lynn providers              view / configure BYOK\n" +
       '  lynn -p "hello" --mock-brain   try it offline',
+    "offline.body.byok": "Local Brain is offline; using CLI BYOK provider directly: {provider} / {model}.",
+    "chat.error.brainOffline": "Default MiMo route unavailable: local Brain is offline. Open the Lynn client for default MiMo, or run /providers to configure CLI-only BYOK. ({brainUrl})",
     "code.placeholder": "Describe a coding task, or type /help",
     "code.tip": "Tip: /fast for quick edits, /think for deeper reasoning, /mode yolo to allow local edits.",
     "code.route.mock": "mock Brain",

@@ -35,18 +35,29 @@ describe("chat mode controls", () => {
   it("renders a short Brain recovery message for interactive chat", () => {
     const message = formatChatError(new BrainConnectionError("http://127.0.0.1:8790", new Error("fetch failed")));
 
-    expect(message).toContain("Brain offline");
-    expect(message).toContain("start the Lynn client GUI");
+    expect(message).toContain("local Brain is offline");
+    expect(message).toContain("CLI-only BYOK");
     expect(message).not.toContain("For CLI-only smoke tests");
   });
 
   it("renders a one-shot offline hint for bare startup", () => {
     const hint = renderOfflineChatHint({ approval: "ask", sandbox: "workspace-write" }, "http://127.0.0.1:8790");
 
-    expect(hint).toContain("Brain offline");
-    expect(hint).toContain("Lynn client");
+    expect(hint).toContain("local Brain offline");
+    expect(hint).toContain("CLI-only BYOK");
     expect(hint).toContain("lynn providers");
     expect(hint).toContain("--mock-brain");
+  });
+
+  it("renders CLI BYOK as usable when Brain is offline", () => {
+    const hint = renderOfflineChatHint(
+      { approval: "ask", sandbox: "workspace-write" },
+      "http://127.0.0.1:8790",
+      { provider: "openai-compatible", model: "deepseek-chat" },
+    );
+
+    expect(hint).toContain("using CLI BYOK provider directly");
+    expect(hint).toContain("deepseek-chat");
   });
 
   it("updates reasoning mode for fast and deep MiMo turns", () => {

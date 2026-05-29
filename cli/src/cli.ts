@@ -14,17 +14,18 @@ import { usage } from "./help.js";
 import { writeJsonLine } from "./jsonl.js";
 import { renderStartupBanner } from "./startup.js";
 import { readVersionInfo } from "./version.js";
+import type { ProvidersInfo } from "./commands/providers.js";
 
 async function main(argv = process.argv.slice(2)): Promise<number> {
   if (argv.length === 0) {
     const providerInfo = await resolveProvidersInfo({ command: "providers", positionals: [], flags: {} }, 500);
     const brainReachable = await checkBrainReachable(providerInfo.brainUrl, 300);
-    process.stdout.write(`${renderStartupBanner({
-      brainUrl: providerInfo.brainUrl,
-      brainStatus: brainReachable ? "online" : "offline",
-      modelLabel: activeRouteLabel(providerInfo),
-      showTips: brainReachable,
-    })}\n`);
+      process.stdout.write(`${renderStartupBanner({
+        brainUrl: providerInfo.brainUrl,
+        brainStatus: brainReachable ? "online" : "offline",
+        modelLabel: startupModelLabel(providerInfo, brainReachable),
+        showTips: brainReachable,
+      })}\n`);
     if (process.stdin.isTTY && process.stdout.isTTY) {
       // Always enter the REPL. If Brain is offline, runChat prints recovery
       // guidance per turn instead of dropping the next user input into zsh.
@@ -100,6 +101,13 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
       });
     }
   }
+}
+
+function startupModelLabel(info: ProvidersInfo, brainReachable: boolean): string {
+  if (!brainReachable && info.cliProvider?.configured && info.cliProvider.profile) {
+    return `CLI BYOK: ${info.cliProvider.profile.model}`;
+  }
+  return activeRouteLabel(info);
 }
 
 main().then((code) => {

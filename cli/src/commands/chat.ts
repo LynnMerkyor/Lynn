@@ -34,7 +34,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       modelLabel: "MiMo via Brain router (auto)",
     })}\n\n`);
   } else if (options.brainReachable === false && !mockBrain) {
-    output.write(`${renderOfflineChatHint(mode, brainUrl)}\n`);
+    output.write(`${renderOfflineChatHint(mode, brainUrl, cliProvider?.profile)}\n\n`);
   }
   async function handleText(raw: string): Promise<"continue" | "break"> {
     const text = raw.trim();
@@ -141,8 +141,9 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
         if (await handleText(line) === "break") break;
       }
     } else {
+      const prompt = "› ";
       for (;;) {
-        const text = await rl.question("");
+        const text = await rl.question(prompt);
         if (await handleText(text) === "break") break;
       }
     }
@@ -184,9 +185,10 @@ export function renderMode(mode: ChatMode): string {
   return `${mode.approval} / ${mode.sandbox}`;
 }
 
-export function renderOfflineChatHint(_mode: ChatMode, _brainUrl = "http://127.0.0.1:8790"): string {
+export function renderOfflineChatHint(_mode: ChatMode, _brainUrl = "http://127.0.0.1:8790", provider?: { provider: string; model: string } | null): string {
   // The startup banner already shows brain URL + mode; keep this hint concise and
   // non-redundant — just the localized next steps.
+  if (provider) return t("offline.body.byok", { provider: provider.provider, model: provider.model });
   return t("offline.body");
 }
 
@@ -267,7 +269,7 @@ export function installModeHotkey({ input, output, readlineInterface, mode }: Mo
 
 export function formatChatError(error: unknown): string {
   if (error instanceof BrainConnectionError) {
-    return `Brain offline: start the Lynn client GUI for MiMo, or run /providers to configure CLI BYOK. (${error.brainUrl})`;
+    return t("chat.error.brainOffline", { brainUrl: error.brainUrl });
   }
   const message = error instanceof Error ? error.message : String(error);
   return `Lynn error: ${message}`;
