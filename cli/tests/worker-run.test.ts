@@ -9,6 +9,7 @@ import {
   buildDefaultAgentCommand,
   buildWorkerPrompt,
   collectGitDiff,
+  externalJsonEvents,
   extractGroundingBoxes,
   parseWorkerBrief,
   parseWorkerEventLine,
@@ -110,6 +111,40 @@ describe("worker-run scaffold", () => {
 
     expect(parsed.ok).toBe(true);
     expect(parsed.event?.type).toBe("worker.progress");
+  });
+
+  it("normalizes external CLI stream-json assistant and tool events", () => {
+    expect(externalJsonEvents(JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "text", text: "hello" }] },
+    }), "w1", "codebuddy")).toEqual([
+      { type: "assistant.delta", workerId: "w1", agent: "codebuddy", text: "hello" },
+    ]);
+    expect(externalJsonEvents(JSON.stringify({
+      type: "reasoning",
+      text: "thinking",
+    }), "w1", "codebuddy")).toEqual([
+      { type: "reasoning.delta", workerId: "w1", agent: "codebuddy", text: "thinking", hidden: true },
+    ]);
+    expect(externalJsonEvents(JSON.stringify({
+      type: "tool_use",
+      name: "Read",
+      input: { file: "README.md" },
+    }), "w1", "codebuddy")).toEqual([
+      { type: "tool.started", workerId: "w1", agent: "codebuddy", name: "Read", argsPreview: "{\"file\":\"README.md\"}" },
+    ]);
+    expect(externalJsonEvents(JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "tool_use", name: "Edit", input: { file: "a.ts" } },
+          { type: "tool_result", name: "Edit", is_error: false },
+        ],
+      },
+    }), "w1", "codebuddy")).toEqual([
+      { type: "tool.started", workerId: "w1", agent: "codebuddy", name: "Edit", argsPreview: "{\"file\":\"a.ts\"}" },
+      { type: "tool.finished", workerId: "w1", agent: "codebuddy", name: "Edit", ok: true },
+    ]);
   });
 
   it("injects Lynn worker guardrails into external prompts", () => {
@@ -342,6 +377,35 @@ describe("worker-run scaffold", () => {
     expect(lines.some((line) => line.type === "shell.started")).toBe(true);
     expect(lines.some((line) => line.type === "worker.progress" && line.message === "external hello")).toBe(true);
     expect(lines.at(-1)?.type).toBe("worker.finished");
+  });
+
+  it("wraps external worker stream-json as assistant deltas", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const code = await runWorker(parseArgs([
+        "worker",
+        "run",
+        "--brief",
+        workerBriefPath,
+        "--worktree",
+        process.cwd(),
+        "--agent",
+        "custom",
+        "--agent-command",
+        "node -e \"console.log(JSON.stringify({type:'assistant',message:{content:[{type:'text',text:'external answer'}]}}))\"",
+      ]));
+      expect(code).toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; text?: string });
+    expect(lines.some((line) => line.type === "assistant.delta" && line.text === "external answer")).toBe(true);
   });
 
   it("emits real git diff after an external worker changes files", async () => {
