@@ -11,8 +11,10 @@ local file/shell orchestration.
 ```bash
 Lynn version
 Lynn doctor --offline
+Lynn "summarize this repo"
 Lynn -p "summarize this repo" --json
 Lynn exec "review the current diff" --reasoning auto --show-reasoning auto
+Lynn chat
 ```
 
 `Lynn` is the primary command. Lowercase `lynn` is kept as a compatibility

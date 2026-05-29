@@ -1,4 +1,5 @@
 import { parseArgs, hasFlag } from "./args.js";
+import { runChat } from "./commands/chat.js";
 import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
 import { runPrompt } from "./commands/prompt.js";
@@ -24,6 +25,9 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
       if (json) writeJsonLine({ type: "doctor", ...result });
       else process.stdout.write(`${renderDoctor(result)}\n`);
       return result.ok ? 0 : 2;
+    }
+    case "chat": {
+      return runChat(args);
     }
     case "prompt":
     case "exec": {
@@ -51,7 +55,10 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
       if (args.command === "-p" || args.command === "--print") {
         return runPrompt(args, { json, mockBrain: hasFlag(args.flags, "mock-brain", "mock") });
       }
-      throw new Error(`unknown command: ${args.command}\n\n${usage()}`);
+      return runPrompt({ ...args, command: "prompt", positionals: [args.command, ...args.positionals] }, {
+        json,
+        mockBrain: hasFlag(args.flags, "mock-brain", "mock"),
+      });
     }
   }
 }

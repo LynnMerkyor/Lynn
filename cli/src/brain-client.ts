@@ -2,8 +2,14 @@ import { applyReasoningToBody, type ReasoningOptions } from "./reasoning.js";
 
 export interface BrainChatRequest {
   brainUrl: string;
-  prompt: string;
+  prompt?: string;
+  messages?: ChatMessage[];
   reasoning: ReasoningOptions;
+}
+
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
 }
 
 export type BrainStreamEvent =
@@ -54,10 +60,14 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
 }
 
 export async function* streamBrainChat(request: BrainChatRequest): AsyncGenerator<BrainStreamEvent> {
+  const messages = request.messages || (request.prompt ? [{ role: "user" as const, content: request.prompt }] : []);
+  if (!messages.length) {
+    throw new Error("Brain request requires a prompt or messages");
+  }
   const body = applyReasoningToBody({
     model: "lynn-brain-router",
     stream: true,
-    messages: [{ role: "user", content: request.prompt }],
+    messages,
   }, request.reasoning);
 
   const response = await fetch(new URL("/v1/chat/completions", request.brainUrl), {

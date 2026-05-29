@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBrainStreamPayload, parseSsePayloads } from "../src/brain-client.js";
+import { parseBrainStreamPayload, parseSsePayloads, streamBrainChat } from "../src/brain-client.js";
 import { parseArgs } from "../src/args.js";
 import { applyReasoningToBody, parseReasoningOptions, shouldRenderReasoning } from "../src/reasoning.js";
 
@@ -30,6 +30,14 @@ describe("brain-client stream parser", () => {
       { type: "reasoning.delta", text: "think", hidden: true },
       { type: "assistant.delta", text: "answer" },
     ]);
+  });
+
+  it("requires prompt or messages", async () => {
+    await expect(async () => {
+      for await (const _event of streamBrainChat({ brainUrl: "http://127.0.0.1:1", reasoning: { effort: "auto", display: "auto" } })) {
+        // no-op
+      }
+    }).rejects.toThrow("requires a prompt or messages");
   });
 });
 
