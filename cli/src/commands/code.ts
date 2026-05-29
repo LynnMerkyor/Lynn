@@ -123,7 +123,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   const slashCommands = ["/exit", "/quit", "/help", "/tools", "/fast", "/think", "/reasoning", "/mode", "/model", "/providers"];
   try {
     for (;;) {
-      const raw = await readCodeLine("", mode, {
+      const raw = await readCodeLine("› ", mode, {
         placeholder: t("code.placeholder"),
         history: new HistoryNavigator(history),
         completions: slashCommands,
