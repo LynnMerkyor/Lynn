@@ -47,7 +47,7 @@ export function renderStartupBanner(input: {
     ? `${input.brainStatus} · ${brainUrl}`
     : brainUrl;
   const lines = [
-    `>_ Lynn CLI (v${version})`,
+    `Lynn CLI (v${version})`,
     "",
     padLine("model", modelLabel, "/model to change"),
     padLine("mode", input.modeLabel || "ask / workspace-write", "Shift+Tab to toggle"),

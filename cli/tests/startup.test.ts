@@ -10,7 +10,7 @@ describe("startup banner", () => {
       modelLabel: "Brain router (auto)",
     });
 
-    expect(output).toContain(">_ Lynn CLI");
+    expect(output).toContain("Lynn CLI");
     expect(output).toContain("model:");
     expect(output).toContain("Brain router");
     expect(output).toContain("mode:");
