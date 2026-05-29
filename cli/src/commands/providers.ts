@@ -15,6 +15,7 @@ import {
 import { resolveDataDir } from "../session/store.js";
 import { t } from "../i18n.js";
 import { listProviderPresets, resolveProviderPreset } from "../provider-presets.js";
+import { chatCompletionsUrl } from "../brain-client.js";
 
 export interface ProvidersInfo {
   defaultRoute: string;
@@ -46,6 +47,17 @@ export interface ProviderLine {
   modelCount: number;
   oauth?: boolean;
   codingPlan?: boolean;
+}
+
+export interface ProviderTestResult {
+  ok: boolean;
+  provider: string;
+  baseUrl: string;
+  model: string;
+  ms: number;
+  status?: number;
+  error?: string;
+  contentPreview?: string;
 }
 
 export function providersInfo(partial: Partial<ProvidersInfo> = {}): ProvidersInfo {
@@ -89,6 +101,7 @@ export function renderProvidersInfo(info: ProvidersInfo): string {
     t("providers.cliNote"),
     "  Lynn providers set --base-url https://api.example.com/v1 --api-key <api-key> --model model-id",
     "  Lynn providers set --preset stepfun --api-key <api-key>",
+    "  Lynn providers test",
     "  Lynn providers presets",
     t("providers.routeHint"),
   ].join("\n");
@@ -154,7 +167,8 @@ export async function resolveProvidersInfo(args: ParsedArgs, timeoutMs = 1500): 
 }
 
 export async function runProviders(args: ParsedArgs, json = hasFlag(args.flags, "json", "jsonl")): Promise<number> {
-  if ((args.positionals[0] || "").toLowerCase() === "presets") {
+  const subcommand = (args.positionals[0] || "").toLowerCase();
+  if (subcommand === "presets") {
     const presets = listProviderPresets();
     if (json) {
       writeJsonLine({ type: "providers.presets", ts: nowIso(), presets });
@@ -164,7 +178,29 @@ export async function runProviders(args: ParsedArgs, json = hasFlag(args.flags, 
     return 0;
   }
 
-  if ((args.positionals[0] || "").toLowerCase() === "set") {
+  if (subcommand === "test") {
+    const resolved = await resolveCliProviderProfile(args);
+    if (!resolved) {
+      const payload = {
+        type: "providers.test",
+        ts: nowIso(),
+        ok: false,
+        error: t("providers.test.noProfile"),
+      };
+      if (json) writeJsonLine(payload);
+      else process.stdout.write(`${payload.error}\n\n${t("providers.test.hint")}\n`);
+      return 2;
+    }
+    const result = await testCliProviderProfile(
+      resolved.profile,
+      Number(getStringFlag(args.flags, "timeout-ms") || 10_000),
+    );
+    if (json) writeJsonLine({ type: "providers.test", ts: nowIso(), source: resolved.source, ...result });
+    else process.stdout.write(`${renderProviderTestResult(result)}\n`);
+    return result.ok ? 0 : 1;
+  }
+
+  if (subcommand === "set") {
     const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
     const existing = await readCliProviderProfile(dataDir);
     const interactiveProfile = await maybePromptProviderProfile(args, existing, json);
@@ -207,6 +243,75 @@ export async function runProviders(args: ParsedArgs, json = hasFlag(args.flags, 
     process.stdout.write(`${renderProvidersInfo(info)}\n`);
   }
   return 0;
+}
+
+export async function testCliProviderProfile(profile: CliProviderProfile, timeoutMs = 10_000): Promise<ProviderTestResult> {
+  const started = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(250, Math.min(timeoutMs, 60_000)));
+  try {
+    const response = await fetch(chatCompletionsUrl(profile.baseUrl), {
+      method: "POST",
+      headers: providerTestHeaders(profile),
+      body: JSON.stringify({
+        model: profile.model,
+        stream: false,
+        max_tokens: 1,
+        messages: [{ role: "user", content: "ping" }],
+      }),
+      signal: controller.signal,
+    });
+    const text = await response.text().catch(() => "");
+    const ms = Date.now() - started;
+    if (!response.ok) {
+      return {
+        ok: false,
+        provider: profile.provider,
+        baseUrl: profile.baseUrl,
+        model: profile.model,
+        ms,
+        status: response.status,
+        error: `${response.status} ${response.statusText}${text ? ` · ${text.slice(0, 240)}` : ""}`.trim(),
+      };
+    }
+    return {
+      ok: true,
+      provider: profile.provider,
+      baseUrl: profile.baseUrl,
+      model: profile.model,
+      ms,
+      status: response.status,
+      contentPreview: providerTestContentPreview(text),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      provider: profile.provider,
+      baseUrl: profile.baseUrl,
+      model: profile.model,
+      ms: Date.now() - started,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function renderProviderTestResult(result: ProviderTestResult): string {
+  const route = `${result.provider} / ${result.model} @ ${result.baseUrl}`;
+  if (result.ok) {
+    return [
+      `${t("providers.test.ok")}: ${route}`,
+      `${t("providers.test.latency")}: ${result.ms}ms${result.status ? ` · HTTP ${result.status}` : ""}`,
+      result.contentPreview ? `${t("providers.test.preview")}: ${result.contentPreview}` : "",
+    ].filter(Boolean).join("\n");
+  }
+  return [
+    `${t("providers.test.fail")}: ${route}`,
+    `${t("providers.test.latency")}: ${result.ms}ms${result.status ? ` · HTTP ${result.status}` : ""}`,
+    `${t("providers.test.error")}: ${result.error || "unknown error"}`,
+    t("providers.test.hint"),
+  ].join("\n");
 }
 
 export function renderProviderPresets(presets = listProviderPresets()): string {
@@ -254,6 +359,25 @@ function sanitizeProviderSummary(response: ProviderSummaryResponse): ProviderLin
       };
     })
     .sort((a, b) => Number(b.configured) - Number(a.configured) || a.displayName.localeCompare(b.displayName));
+}
+
+function providerTestHeaders(profile: CliProviderProfile): Record<string, string> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (profile.apiKey) headers.authorization = `Bearer ${profile.apiKey}`;
+  return headers;
+}
+
+function providerTestContentPreview(text: string): string | undefined {
+  if (!text.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(text) as {
+      choices?: Array<{ message?: { content?: unknown }; text?: unknown }>;
+    };
+    const content = parsed.choices?.find(Boolean)?.message?.content ?? parsed.choices?.find(Boolean)?.text;
+    return typeof content === "string" && content.trim() ? content.trim().slice(0, 80) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function maybePromptProviderProfile(args: ParsedArgs, existing: CliProviderProfile | null, json: boolean): Promise<CliProviderProfile | null> {

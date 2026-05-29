@@ -137,6 +137,13 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "providers.presets.about": "说明",
     "providers.presets.use": "使用",
     "providers.presets.note": "Preset 只填 API URL 和模型名;API key 仍需用户自己提供,不会内置。",
+    "providers.test.ok": "Provider 测试通过",
+    "providers.test.fail": "Provider 测试失败",
+    "providers.test.latency": "延迟",
+    "providers.test.preview": "预览",
+    "providers.test.error": "错误",
+    "providers.test.noProfile": "还没有 CLI BYOK provider 配置。",
+    "providers.test.hint": "先运行: Lynn providers set --base-url https://api.example.com/v1 --api-key <api-key> --model model-id",
   },
   en: {
     "tips.banner":
@@ -239,6 +246,13 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "providers.presets.about": "about",
     "providers.presets.use": "use",
     "providers.presets.note": "Presets fill only API URL and model name; users still provide their own API key.",
+    "providers.test.ok": "Provider test OK",
+    "providers.test.fail": "Provider test failed",
+    "providers.test.latency": "latency",
+    "providers.test.preview": "preview",
+    "providers.test.error": "error",
+    "providers.test.noProfile": "No CLI BYOK provider is configured yet.",
+    "providers.test.hint": "Run: Lynn providers set --base-url https://api.example.com/v1 --api-key <api-key> --model model-id",
   },
 };
 

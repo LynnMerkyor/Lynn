@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "../src/args.js";
 import { activeRouteLabel, renderProviderPresets, renderProvidersInfo, runProviders } from "../src/commands/providers.js";
-import { providerProfilePath, readCliProviderProfile, resolveCliProviderProfile } from "../src/provider-profile.js";
+import { providerProfilePath, readCliProviderProfile, resolveCliProviderProfile, writeCliProviderProfile } from "../src/provider-profile.js";
 import { setLang } from "../src/i18n.js";
 
 beforeEach(() => setLang("en"));
@@ -244,4 +245,67 @@ describe("providers command", () => {
       },
     });
   });
+
+  it("tests a configured CLI BYOK provider without printing the raw key", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-provider-test-"));
+    const server = http.createServer(async (request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      expect(request.headers.authorization).toBe("Bearer sk-provider-test-secret");
+      const body = await readRequestBody(request);
+      expect(body).toContain("\"model\":\"test-model\"");
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ choices: [{ message: { content: "ok" } }] }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("provider test server did not listen");
+    await writeCliProviderProfile(dataDir, {
+      provider: "openai-compatible",
+      baseUrl: `http://127.0.0.1:${address.port}/v1`,
+      model: "test-model",
+      apiKey: "sk-provider-test-secret",
+    });
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runProviders(parseArgs(["providers", "test", "--data-dir", dataDir]), false)).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    expect(output).toContain("Provider test OK");
+    expect(output).toContain("test-model");
+    expect(output).toContain("preview: ok");
+    expect(output).not.toContain("sk-provider-test-secret");
+  });
+
+  it("returns a nonzero provider test result when no CLI BYOK profile exists", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-provider-missing-"));
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runProviders(parseArgs(["providers", "test", "--data-dir", dataDir]), false)).resolves.toBe(2);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain("No CLI BYOK provider is configured yet");
+    expect(output).toContain("providers set");
+  });
 });
+
+async function readRequestBody(request: http.IncomingMessage): Promise<string> {
+  let body = "";
+  for await (const chunk of request) body += String(chunk);
+  return body;
+}
