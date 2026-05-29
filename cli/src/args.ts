@@ -51,6 +51,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "tool",
       "path",
       "image",
+      "images",
       "shot",
       "command",
       "timeout-ms",

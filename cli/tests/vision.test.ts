@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import { runVisionCommand, buildVisionPrompt } from "../src/commands/vision.js";
-import { buildImageContentParts, inferImageMime } from "../src/media.js";
+import { buildImageContentParts, buildImagesContentParts, inferImageMime, parseImageList } from "../src/media.js";
 import { setLang } from "../src/i18n.js";
 
 let tmp = "";
@@ -32,6 +32,17 @@ describe("MiMo vision commands", () => {
     expect(parts[1].type).toBe("image_url");
     expect(JSON.stringify(parts[1])).toContain("data:image/png;base64");
     expect(inferImageMime("a.webp")).toBe("image/webp");
+  });
+
+  it("builds multiple image content parts for comparison tasks", async () => {
+    const second = path.join(tmp, "second.png");
+    await fs.writeFile(second, Buffer.from("89504e470d0a1a0a", "hex"));
+
+    const parts = await buildImagesContentParts([png, second], "compare");
+
+    expect(parts[0]).toEqual({ type: "text", text: "compare" });
+    expect(parts.filter((part) => part.type === "image_url")).toHaveLength(2);
+    expect(parseImageList(`${png}, ${second}`)).toEqual([png, second]);
   });
 
   it("renders grounding prompt as normalized JSON-first instruction", () => {
@@ -115,6 +126,51 @@ describe("MiMo vision commands", () => {
     expect(JSON.stringify(parsed.messages?.[0]?.content)).toContain("data:image/png;base64");
     expect(output).toContain("\"activeProvider\":\"cli-byok:openai-compatible\"");
     expect(output).toContain("\"text\":\"vision byok ok\"");
+  });
+
+  it("passes --images as multiple multimodal parts", async () => {
+    const second = path.join(tmp, "second.png");
+    await fs.writeFile(second, Buffer.from("89504e470d0a1a0a", "hex"));
+    let body = "";
+    const provider = http.createServer((request, response) => {
+      request.on("data", (chunk) => {
+        body += String(chunk);
+      });
+      request.on("end", () => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end(`data: ${JSON.stringify({ choices: [{ delta: { content: "multi image ok" } }] })}\n\ndata: [DONE]\n\n`);
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const original = process.stdout.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    try {
+      await expect(runVisionCommand(parseArgs([
+        "see",
+        "compare these",
+        "--images",
+        `${png},${second}`,
+        "--json",
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-vision-test",
+        "--model",
+        "vision-model",
+      ]), "see")).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
+
+    const parsed = JSON.parse(body) as { messages?: Array<{ content?: unknown }> };
+    const content = parsed.messages?.[0]?.content;
+    expect(Array.isArray(content) ? content.filter((part) => (part as { type?: string }).type === "image_url") : []).toHaveLength(2);
   });
 
   it("emits structured grounding boxes in json mode", async () => {

@@ -473,6 +473,39 @@ describe("code agent loop", () => {
     expect(output).toContain("Reviewed the screenshot");
   });
 
+  it("sends multiple attached images through code mode", async () => {
+    const first = path.join(tmp, "first.png");
+    const second = path.join(tmp, "second.png");
+    await fs.writeFile(first, Buffer.from("89504e470d0a1a0a", "hex"));
+    await fs.writeFile(second, Buffer.from("89504e470d0a1a0a", "hex"));
+    const original = process.stdout.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    try {
+      await withBrainServer((body) => {
+        const parsed = body as { messages?: Array<{ content?: unknown }> };
+        const firstUser = parsed.messages?.find((message) => Array.isArray(message.content));
+        const content = Array.isArray(firstUser?.content) ? firstUser.content : [];
+        expect(content.filter((part) => (part as { type?: string }).type === "image_url")).toHaveLength(2);
+        expect(JSON.stringify(content)).toContain("Attached images:");
+        return "Compared both screenshots.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "compare these UIs",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--images",
+          `${first},${second}`,
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+  });
+
   it("runs code mode through CLI BYOK when local Brain is offline", async () => {
     const provider = http.createServer((request, response) => {
       expect(request.url).toBe("/v1/chat/completions");

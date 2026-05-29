@@ -2,7 +2,7 @@ import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
 import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
-import { buildImageContentParts } from "../media.js";
+import { buildImagesContentParts, parseImageList } from "../media.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
@@ -12,19 +12,19 @@ import { extractGroundingBoxes } from "../vision-result.js";
 export type VisionCommand = "see" | "ground" | "ui2code";
 
 export async function runVisionCommand(args: ParsedArgs, command: VisionCommand, json = hasFlag(args.flags, "json", "jsonl")): Promise<number> {
-  const imagePath = getStringFlag(args.flags, "image", "shot") || args.positionals[0] || "";
-  if (!imagePath) throw new Error(t("vision.error.imageRequired", { command }));
-  const userText = args.positionals.slice(1).join(" ").trim() || getStringFlag(args.flags, "prompt", "p") || "";
+  const { imagePaths, userText } = resolveVisionInput(args);
+  const imagePath = imagePaths[0] || "";
+  if (!imagePaths.length) throw new Error(t("vision.error.imageRequired", { command }));
   const prompt = buildVisionPrompt(command, userText);
   const reasoning = parseReasoningOptions(args);
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const cliProvider = await resolveCliProviderProfile(args);
 
-  if (json) writeJsonLine({ type: "vision.started", ts: nowIso(), command, image: imagePath, prompt, reasoning });
+  if (json) writeJsonLine({ type: "vision.started", ts: nowIso(), command, image: imagePath, images: imagePaths, prompt, reasoning });
 
   if (mockBrain) {
-    const text = `${t("mock.vision", { command, path: imagePath })}${userText ? ` · ${userText}` : ""}`;
+    const text = `${t("mock.vision", { command, path: imagePaths.join(", ") })}${userText ? ` · ${userText}` : ""}`;
     if (json) {
       writeJsonLine({ type: "assistant.delta", ts: nowIso(), text });
       writeJsonLine({ type: "vision.finished", ts: nowIso(), ok: true });
@@ -34,7 +34,7 @@ export async function runVisionCommand(args: ParsedArgs, command: VisionCommand,
     return 0;
   }
 
-  const content = await buildImageContentParts(imagePath, prompt);
+  const content = await buildImagesContentParts(imagePaths, prompt);
   let answer = "";
   const renderState: HumanBrainRenderState = {};
   const spinner = new TerminalSpinner(process.stderr, command === "ground" ? t("spinner.grounding") : t("spinner.seeing"));
@@ -58,12 +58,30 @@ export async function runVisionCommand(args: ParsedArgs, command: VisionCommand,
   }
   if (json) {
     if (command === "ground") {
-      writeJsonLine({ type: "vision.result", ts: nowIso(), command, image: imagePath, boxes: extractGroundingBoxes(answer) });
+      writeJsonLine({ type: "vision.result", ts: nowIso(), command, image: imagePath, images: imagePaths, boxes: extractGroundingBoxes(answer) });
     }
-    writeJsonLine({ type: "vision.finished", ts: nowIso(), ok: true, contentReturned: !!answer.trim() });
+    writeJsonLine({ type: "vision.finished", ts: nowIso(), ok: true, images: imagePaths, contentReturned: !!answer.trim() });
   }
   else process.stdout.write("\n");
   return 0;
+}
+
+function resolveVisionInput(args: ParsedArgs): { imagePaths: string[]; userText: string } {
+  const fromFlags = [
+    ...parseImageList(getStringFlag(args.flags, "images")),
+    ...parseImageList(getStringFlag(args.flags, "image", "shot")),
+  ];
+  if (fromFlags.length) {
+    return {
+      imagePaths: fromFlags,
+      userText: args.positionals.join(" ").trim() || getStringFlag(args.flags, "prompt", "p") || "",
+    };
+  }
+  const [first, ...rest] = args.positionals;
+  return {
+    imagePaths: first ? [first] : [],
+    userText: rest.join(" ").trim() || getStringFlag(args.flags, "prompt", "p") || "",
+  };
 }
 
 export function buildVisionPrompt(command: VisionCommand, userText: string): string {

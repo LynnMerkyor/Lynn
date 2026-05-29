@@ -24,7 +24,7 @@ import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/
 import { applyModeCommand, applyReasoningCommand, buildChatProviderArgs, renderMode, shouldRefreshProviderRoute, shouldShowProviderSetUsage, toggleMode, type ChatMode } from "./chat.js";
 import { renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { readVersionInfo } from "../version.js";
-import { buildImageContentParts } from "../media.js";
+import { buildImagesContentParts, parseImageList } from "../media.js";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, readSessionLines, resolveDataDir } from "../session/store.js";
 import { renderRuntimeInstructionFrame, stableRuntimePrefix, type RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
 
@@ -508,7 +508,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     }
     if (saveSession) {
       const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: context.cwd, title, prompt: task, assistant: text, modelProvider: "mock", modelId: "mock-brain" });
-      await appendSessionMetadata({ dataDir, sessionPath: savedPath, data: { kind: "code_task", mock: true, cwd: context.cwd, image: getStringFlag(args.flags, "image", "shot") || null, resumedFrom: resumePath || null } });
+      await appendSessionMetadata({ dataDir, sessionPath: savedPath, data: { kind: "code_task", mock: true, cwd: context.cwd, images: codeImagePaths(args), resumedFrom: resumePath || null } });
       if (json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
     }
     return 0;
@@ -544,7 +544,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     toolCtx,
     input,
     output: errorOutput,
-    imagePath: getStringFlag(args.flags, "image", "shot") || undefined,
+    imagePaths: codeImagePaths(args),
     resumeMessages,
     onCheckpoint: saveSession && liveSessionPath
       ? async (line) => {
@@ -594,7 +594,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
       data: {
         kind: "code_task",
         cwd: context.cwd,
-        image: getStringFlag(args.flags, "image", "shot") || null,
+        images: codeImagePaths(args),
         reasoning,
         maxSteps: stepBudget,
         maxStepsReached: final.maxStepsReached,
@@ -710,7 +710,7 @@ interface CodeAgentLoopInput {
   toolCtx: ToolRunContext;
   input: NodeJS.ReadStream;
   output: NodeJS.WriteStream;
-  imagePath?: string;
+  imagePaths?: string[];
   resumeMessages?: ChatMessage[];
   onCheckpoint?: (line: { type: "user" | "assistant"; content: string }) => Promise<void>;
 }
@@ -735,9 +735,9 @@ interface CodeAgentLoopResult {
 
 async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgentLoopResult> {
   const frames = buildCodeRuntimeFrames(inputData);
-  const initialPrompt = buildCodePrompt(inputData.task, inputData.context, inputData.imagePath);
-  const initialContent = inputData.imagePath
-    ? await buildImageContentParts(inputData.imagePath, initialPrompt)
+  const initialPrompt = buildCodePrompt(inputData.task, inputData.context, inputData.imagePaths);
+  const initialContent = inputData.imagePaths?.length
+    ? await buildImagesContentParts(inputData.imagePaths, initialPrompt)
     : initialPrompt;
   const messages: ChatMessage[] = [
     {
@@ -1444,14 +1444,21 @@ async function readPackageScripts(repoCwd: string): Promise<Record<string, strin
   }
 }
 
-function buildCodePrompt(task: string, context: CodeContext, imagePath?: string): string {
+function codeImagePaths(args: ParsedArgs): string[] {
+  return [
+    ...parseImageList(getStringFlag(args.flags, "images")),
+    ...parseImageList(getStringFlag(args.flags, "image", "shot")),
+  ];
+}
+
+function buildCodePrompt(task: string, context: CodeContext, imagePaths?: readonly string[]): string {
   const scripts = Object.entries(context.packageScripts)
     .slice(0, 20)
     .map(([name, command]) => `- ${name}: ${command}`)
     .join("\n") || "(none)";
   return [
     `Task: ${task}`,
-    imagePath ? `Attached image: ${imagePath}` : "",
+    imagePaths?.length ? `Attached images: ${imagePaths.join(", ")}` : "",
     "",
     `CWD: ${context.cwd}`,
     "",
