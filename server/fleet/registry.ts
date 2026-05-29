@@ -8,9 +8,8 @@
 import type { FleetAgentKind } from "../../shared/fleet-events.js";
 
 export interface FleetAgentEntry {
-  // mimo-vl / mimo-pro / mimo-fast are not yet in the shared FleetAgentKind union;
-  // the CLI lane (owns shared/fleet-events.ts) should promote them. `| string` keeps
-  // this registry buildable in the meantime without editing the shared protocol.
+  // Keep `| string` so local custom worker ids can be registered without changing
+  // the shared protocol for every experiment.
   id: FleetAgentKind | string;
   label: string;
   bin: string;

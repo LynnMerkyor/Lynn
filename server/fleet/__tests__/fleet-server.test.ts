@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
 import { matchAnyGlob, evaluateScope, annotateChangedFiles } from "../forbidden-guard.js";
 import { createLineParser } from "../worker-manager.js";
 import { parseWorktreePorcelain } from "../worktree-manager.js";
@@ -187,5 +188,31 @@ describe("FleetHub real spawn", () => {
     const rec = await hub.dispatch(sampleBrief);
     expect(rec.spawned).toBe(false);
     expect(sent.map((m) => m.event.type)).toEqual(["worker.started", "worker.claims", "worker.progress"]);
+  });
+
+  it("writes visual task metadata in the brief format parsed by Lynn CLI", async () => {
+    let briefText = "";
+    const hub = new FleetHub("/repo", () => {}, () => "T", {
+      available: () => true,
+      createWorktree: async () => {},
+      resolveCommand: (args) => ({ command: "node", args, env: {} }),
+      spawn: (opts) => {
+        const briefIndex = opts.args.indexOf("--brief");
+        if (briefIndex >= 0) {
+          briefText = fs.readFileSync(opts.args[briefIndex + 1], "utf8");
+        }
+        return { workerId: opts.workerId, pid: 123, kill: () => {} };
+      },
+    });
+    await hub.dispatch({
+      ...sampleBrief,
+      agent: "mimo-vl",
+      taskType: "ground",
+      image: "screenshots/login.png",
+      objective: "Find the login button.",
+    });
+
+    expect(briefText).toContain("## Task Type\nground");
+    expect(briefText).toContain("## Image\nscreenshots/login.png");
   });
 });

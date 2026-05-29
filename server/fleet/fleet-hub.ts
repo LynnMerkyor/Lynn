@@ -68,8 +68,8 @@ function defaultWriteBrief(brief: FleetBrief, workerId: string): string {
     ``,
     `Worker: ${brief.agent} | Branch: ${brief.branch} | Worktree: ${brief.worktree}`,
   ];
-  if (brief.taskType) lines.push(`Task type: ${brief.taskType}`);
-  if (brief.image) lines.push(`Image: ${brief.image}`);
+  if (brief.taskType) lines.push(``, `## Task Type`, brief.taskType);
+  if (brief.image) lines.push(``, `## Image`, brief.image);
   lines.push(``, `## Objective`, brief.objective || "(none)", ``, `## Owned files`);
   for (const f of brief.owned) lines.push(`- ${f}`);
   lines.push(``, `## Forbidden files`);
