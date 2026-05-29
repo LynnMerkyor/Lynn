@@ -882,27 +882,29 @@ async function collectBrainText(inputData: {
 export function parseCodeToolRequest(text: string): CodeToolRequest | null {
   for (const candidate of extractJsonCandidates(text)) {
     try {
-      const parsed = JSON.parse(candidate) as Record<string, unknown>;
-      const rawToolName = typeof parsed.tool === "string"
-        ? parsed.tool
-        : typeof parsed.name === "string"
-          ? parsed.name
-          : "";
-      if (!rawToolName) continue;
-      const toolName = normalizeClientToolName(rawToolName);
-      if (!toolName) continue;
-      const args = normalizeToolArgAliases(toolName, normalizeToolArgs(parsed));
-      return {
-        tool: toolName,
-        args: {
-          path: stringArg(args.path),
-          text: stringArg(args.text ?? args.content ?? args.patch),
-          query: stringArg(args.query),
-          pattern: stringArg(args.pattern),
-          command: stringArg(args.command),
-          maxBytes: numberArg(args.maxBytes ?? args.max_bytes),
-        },
-      };
+      const parsed = JSON.parse(candidate) as unknown;
+      for (const payload of toolPayloadCandidates(parsed)) {
+        const rawToolName = typeof payload.tool === "string"
+          ? payload.tool
+          : typeof payload.name === "string"
+            ? payload.name
+            : "";
+        if (!rawToolName) continue;
+        const toolName = normalizeClientToolName(rawToolName);
+        if (!toolName) continue;
+        const args = normalizeToolArgAliases(toolName, normalizeToolArgs(payload));
+        return {
+          tool: toolName,
+          args: {
+            path: stringArg(args.path),
+            text: stringArg(args.text ?? args.content ?? args.patch),
+            query: stringArg(args.query),
+            pattern: stringArg(args.pattern),
+            command: stringArg(args.command),
+            maxBytes: numberArg(args.maxBytes ?? args.max_bytes),
+          },
+        };
+      }
     } catch {
       // Try the next candidate.
     }
@@ -949,8 +951,34 @@ function normalizeClientToolName(raw: string): ClientToolName | null {
   return TOOL_NAME_ALIASES[key] ?? null;
 }
 
+function toolPayloadCandidates(value: unknown): Record<string, unknown>[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const parsed = value as Record<string, unknown>;
+  const candidates: Record<string, unknown>[] = [parsed];
+  const fn = parsed.function;
+  if (fn && typeof fn === "object" && !Array.isArray(fn)) {
+    const functionCall = fn as Record<string, unknown>;
+    candidates.push({ name: functionCall.name, arguments: functionCall.arguments });
+  }
+  const toolCalls = parsed.tool_calls ?? parsed.toolCalls;
+  if (Array.isArray(toolCalls)) {
+    for (const call of toolCalls) {
+      if (!call || typeof call !== "object" || Array.isArray(call)) continue;
+      const record = call as Record<string, unknown>;
+      const callFn = record.function;
+      if (callFn && typeof callFn === "object" && !Array.isArray(callFn)) {
+        const functionCall = callFn as Record<string, unknown>;
+        candidates.push({ name: functionCall.name, arguments: functionCall.arguments });
+      } else {
+        candidates.push(record);
+      }
+    }
+  }
+  return candidates;
+}
+
 function normalizeToolArgs(parsed: Record<string, unknown>): Record<string, unknown> {
-  const explicit = parsed.args ?? parsed.arguments;
+  const explicit = parsed.args ?? parsed.arguments ?? parsed.input ?? parsed.parameters;
   if (explicit && typeof explicit === "object" && !Array.isArray(explicit)) {
     return explicit as Record<string, unknown>;
   }
@@ -962,7 +990,7 @@ function normalizeToolArgs(parsed: Record<string, unknown>): Record<string, unkn
       return {};
     }
   }
-  const { tool: _tool, name: _name, args: _args, arguments: _arguments, ...topLevelArgs } = parsed;
+  const { tool: _tool, name: _name, args: _args, arguments: _arguments, input: _input, parameters: _parameters, function: _function, tool_calls: _toolCalls, toolCalls: _toolCallsCamel, ...topLevelArgs } = parsed;
   return topLevelArgs;
 }
 

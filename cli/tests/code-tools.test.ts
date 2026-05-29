@@ -102,6 +102,18 @@ describe("code tools", () => {
       tool: "bash",
       args: { command: "pwd" },
     });
+    expect(parseCodeToolRequest('{"name":"read_file","input":{"path":"cli/src/cli.ts"}}')).toMatchObject({
+      tool: "read_file",
+      args: { path: "cli/src/cli.ts" },
+    });
+    expect(parseCodeToolRequest('{"function":{"name":"glob","arguments":"{\\"pattern\\":\\"**/*.ts\\",\\"path\\":\\"cli/src\\"}"}}')).toMatchObject({
+      tool: "glob",
+      args: { pattern: "**/*.ts", path: "cli/src" },
+    });
+    expect(parseCodeToolRequest('{"tool_calls":[{"type":"function","function":{"name":"read_file","arguments":"{\\"path\\":\\"README.md\\"}"}}]}')).toMatchObject({
+      tool: "read_file",
+      args: { path: "README.md" },
+    });
   });
 
   it("normalizes common coding-agent tool name and argument aliases", () => {
