@@ -2,6 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+declare const __LYNN_CLI_NAME__: string | undefined;
+declare const __LYNN_CLI_VERSION__: string | undefined;
+
 export interface VersionInfo {
   name: string;
   version: string;
@@ -27,6 +30,13 @@ export function readVersionInfo(): VersionInfo {
     } catch {
       // Try the next candidate; bundled CLI path differs from source path.
     }
+  }
+
+  if (typeof __LYNN_CLI_VERSION__ === "string" && __LYNN_CLI_VERSION__) {
+    return {
+      name: typeof __LYNN_CLI_NAME__ === "string" && __LYNN_CLI_NAME__ ? __LYNN_CLI_NAME__ : "@lynn/cli",
+      version: __LYNN_CLI_VERSION__,
+    };
   }
 
   return { name: "@lynn/cli", version: "0.0.0-dev" };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBrainStreamPayload, parseSsePayloads, streamBrainChat } from "../src/brain-client.js";
+import { BrainConnectionError, checkBrainReachable, parseBrainStreamPayload, parseSsePayloads, streamBrainChat } from "../src/brain-client.js";
 import { parseArgs } from "../src/args.js";
 import { applyReasoningToBody, parseReasoningOptions, shouldRenderReasoning } from "../src/reasoning.js";
 
@@ -46,6 +46,18 @@ describe("brain-client stream parser", () => {
         // no-op
       }
     }).rejects.toThrow("Start the Lynn GUI");
+  });
+
+  it("uses a typed error for unreachable Brain", async () => {
+    await expect(async () => {
+      for await (const _event of streamBrainChat({ brainUrl: "http://127.0.0.1:1", prompt: "hello", reasoning: { effort: "auto", display: "auto" } })) {
+        // no-op
+      }
+    }).rejects.toBeInstanceOf(BrainConnectionError);
+  });
+
+  it("returns false when the Brain health probe cannot connect", async () => {
+    await expect(checkBrainReachable("http://127.0.0.1:1", 50)).resolves.toBe(false);
   });
 });
 

@@ -18,6 +18,32 @@ export type BrainStreamEvent =
   | { type: "usage"; usage: unknown }
   | { type: "done"; finishReason?: string | null };
 
+export class BrainConnectionError extends Error {
+  readonly brainUrl: string;
+
+  constructor(brainUrl: string, cause: unknown) {
+    super(formatBrainConnectionError(brainUrl, cause));
+    this.name = "BrainConnectionError";
+    this.brainUrl = brainUrl;
+  }
+}
+
+export async function checkBrainReachable(brainUrl: string, timeoutMs = 350): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(new URL("/health", brainUrl), {
+      method: "GET",
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function parseSsePayloads(chunk: string): string[] {
   const payloads: string[] = [];
   for (const block of chunk.split(/\n\n+/)) {
@@ -78,7 +104,7 @@ export async function* streamBrainChat(request: BrainChatRequest): AsyncGenerato
       body: JSON.stringify(body),
     });
   } catch (error) {
-    throw new Error(formatBrainConnectionError(request.brainUrl, error));
+    throw new BrainConnectionError(request.brainUrl, error);
   }
   if (!response.ok || !response.body) {
     throw new Error(`Brain request failed: ${response.status} ${response.statusText}`.trim());

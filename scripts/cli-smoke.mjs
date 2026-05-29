@@ -10,6 +10,7 @@ const root = process.cwd();
 const nodeBin = process.execPath;
 const cliBin = path.join(root, "cli", "bin", "lynn.mjs");
 const missingDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-missing");
+const sessionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-sessions");
 const briefPath = path.join(root, "cli", "fixtures", "worker-brief.md");
 
 function run(name, args, options = {}) {
@@ -17,7 +18,7 @@ function run(name, args, options = {}) {
     const child = spawn(nodeBin, [cliBin, ...args], {
       cwd: root,
       env: { ...process.env, ...(options.env || {}) },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
@@ -32,6 +33,20 @@ function run(name, args, options = {}) {
         reject(new Error(`${name} failed with exit ${code}\nstdout:\n${stdout}\nstderr:\n${stderr}`));
       }
     });
+    if (Array.isArray(options.stdinLines)) {
+      let index = 0;
+      const writeNext = () => {
+        if (index >= options.stdinLines.length) {
+          child.stdin.end();
+          return;
+        }
+        child.stdin.write(`${options.stdinLines[index]}\n`);
+        index += 1;
+        setTimeout(writeNext, 25);
+      };
+      setTimeout(writeNext, 25);
+    } else if (typeof options.stdin === "string") child.stdin.end(options.stdin);
+    else child.stdin.end();
   });
 }
 
@@ -53,6 +68,8 @@ if (!fs.existsSync(cliBin)) {
 
 await fs.promises.rm(missingDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(missingDataDir, { recursive: true });
+await fs.promises.rm(sessionDataDir, { recursive: true, force: true });
+await fs.promises.mkdir(sessionDataDir, { recursive: true });
 
 const checks = [];
 
@@ -63,6 +80,8 @@ checks.push(run("version", ["version"]).then((r) => {
 checks.push(run("startup banner", []).then((r) => {
   assertIncludes(r.name, r.stdout, ">_ Lynn CLI");
   assertIncludes(r.name, r.stdout, "MiMo via");
+  assertIncludes(r.name, r.stdout, "mode:");
+  assertIncludes(r.name, r.stdout, "offline");
   assertIncludes(r.name, r.stdout, "Lynn providers");
 }));
 
@@ -75,6 +94,30 @@ checks.push(run("providers", ["providers", "--data-dir", missingDataDir]).then((
 
 checks.push(run("mock prompt", ["-p", "你好", "--mock-brain"]).then((r) => {
   assertIncludes(r.name, r.stdout, "Mock Lynn response: 你好");
+}));
+
+checks.push(run("code list tools", ["code", "--list-tools"]).then((r) => {
+  assertIncludes(r.name, r.stdout, "read_file");
+  assertIncludes(r.name, r.stdout, "grep");
+}));
+
+checks.push(run("code read file", ["code", "--tool", "read_file", "--path", "README.md", "--json"]).then((r) => {
+  assertIncludes(r.name, r.stdout, '"type":"code.tool.result"');
+  assertIncludes(r.name, r.stdout, '"ok":true');
+}));
+
+checks.push(run("code task mock", ["code", "review the current diff", "--mock-brain"]).then((r) => {
+  assertIncludes(r.name, r.stdout, "Mock Lynn code task");
+}));
+
+checks.push(run("mock chat", ["chat", "--mock-brain"], { stdinLines: ["/mode yolo", "hi", "/exit"] }).then((r) => {
+  assertIncludes(r.name, r.stdout, "YOLO mode enabled");
+  assertIncludes(r.name, r.stdout, "Mock Lynn response: hi");
+}));
+
+checks.push(run("chat brain offline recovery", ["chat", "--brain-url", "http://127.0.0.1:1"], { stdinLines: ["hi", "/exit"] }).then((r) => {
+  assertIncludes(r.name, r.stdout, "Brain offline");
+  assertIncludes(r.name, r.stdout, "start the Lynn GUI");
 }));
 
 checks.push(run("mock worker", ["worker", "run", "--brief", briefPath, "--worktree", root, "--mock", "--jsonl"]).then((r) => {
@@ -91,5 +134,19 @@ checks.push(run("brain unreachable recovery", ["-p", "你好", "--brain-url", "h
 for (const check of checks) {
   await check;
 }
+
+const saved = await run("session save", ["-p", "remember this", "--mock-brain", "--save-session", "--data-dir", sessionDataDir, "--json"]);
+assertIncludes(saved.name, saved.stdout, '"type":"session.saved"');
+const savedLine = saved.stdout.split(/\r?\n/).find((line) => line.includes('"type":"session.saved"'));
+const savedPath = savedLine ? JSON.parse(savedLine).path : "";
+if (!savedPath) throw new Error(`session save did not return a path\n${saved.stdout}`);
+
+const listed = await run("sessions list", ["sessions", "list", "--data-dir", sessionDataDir, "--json"]);
+assertIncludes(listed.name, listed.stdout, '"type":"sessions.list"');
+assertIncludes(listed.name, listed.stdout, savedPath);
+
+const shown = await run("sessions show", ["sessions", "show", savedPath, "--json"]);
+assertIncludes(shown.name, shown.stdout, '"type":"sessions.show"');
+assertIncludes(shown.name, shown.stdout, "remember this");
 
 console.log("[cli-smoke] all checks passed");

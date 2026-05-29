@@ -26,6 +26,8 @@ function box(lines: string[]): string {
 export function renderStartupBanner(input: {
   cwd?: string;
   brainUrl?: string;
+  brainStatus?: "online" | "offline" | "unknown";
+  modeLabel?: string;
   modelLabel?: string;
   byokLabel?: string;
 } = {}): string {
@@ -33,12 +35,16 @@ export function renderStartupBanner(input: {
   const brainUrl = input.brainUrl || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   const modelLabel = input.modelLabel || process.env.LYNN_CLI_MODEL_LABEL || "MiMo via Brain router (auto)";
   const byokLabel = input.byokLabel || process.env.LYNN_CLI_BYOK_LABEL || "GUI Settings > Providers";
+  const brainLabel = input.brainStatus && input.brainStatus !== "unknown"
+    ? `${input.brainStatus} · ${brainUrl}`
+    : brainUrl;
   const lines = [
     `>_ Lynn CLI (v${version})`,
     "",
     padLine("model", modelLabel, "/model to change"),
+    padLine("mode", input.modeLabel || "ask / workspace-write", "/mode to change"),
     padLine("BYOK", byokLabel, "Lynn providers"),
-    padLine("brain", brainUrl),
+    padLine("brain", brainLabel),
     padLine("directory", displayCwd(input.cwd || process.cwd())),
   ];
   return [

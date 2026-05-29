@@ -1,4 +1,5 @@
 import { parseArgs, hasFlag } from "./args.js";
+import { checkBrainReachable } from "./brain-client.js";
 import { runAgents } from "./commands/agents.js";
 import { runChat } from "./commands/chat.js";
 import { runCode } from "./commands/code.js";
@@ -15,13 +16,15 @@ import { readVersionInfo } from "./version.js";
 async function main(argv = process.argv.slice(2)): Promise<number> {
   if (argv.length === 0) {
     const providerInfo = await resolveProvidersInfo({ command: "providers", positionals: [], flags: {} }, 500);
+    const brainReachable = await checkBrainReachable(providerInfo.brainUrl, 300);
     process.stdout.write(`${renderStartupBanner({
       brainUrl: providerInfo.brainUrl,
+      brainStatus: brainReachable ? "online" : "offline",
       byokLabel: providerInfo.byokEntry,
       modelLabel: activeRouteLabel(providerInfo),
     })}\n`);
     if (process.stdin.isTTY && process.stdout.isTTY) {
-      return runChat({ command: "chat", positionals: [], flags: {} }, { intro: false });
+      return runChat({ command: "chat", positionals: [], flags: {} }, { intro: false, brainReachable });
     }
     return 0;
   }
