@@ -313,4 +313,37 @@ describe("code tools", () => {
     expect(output).toContain("Mock code task: review current diff");
     expect(output).toContain("Directory:");
   });
+
+  it("saves code tasks as GUI-compatible CLI sessions", async () => {
+    const original = process.stdout.write;
+    const originalErr = process.stderr.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    try {
+      await expect(runCode(parseArgs([
+        "code",
+        "save this task",
+        "--cwd",
+        tmp,
+        "--mock-brain",
+        "--save-session",
+        "--data-dir",
+        tmp,
+        "--json",
+      ]))).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+      process.stderr.write = originalErr;
+    }
+
+    expect(output).toContain("session.saved");
+    const index = JSON.parse(await fs.readFile(path.join(tmp, "agents", "cli", "sessions", "session-index.json"), "utf8")) as { sessions: Array<{ path: string }> };
+    const lines = (await fs.readFile(index.sessions[0].path, "utf8")).trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; data?: { kind?: string } });
+    expect(lines.map((line) => line.type)).toEqual(["user", "assistant", "metadata"]);
+    expect(lines.at(-1)?.data?.kind).toBe("code_task");
+  });
 });

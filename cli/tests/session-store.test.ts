@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appendSessionTurn, listSessions, readSessionLines, sessionIndexPath } from "../src/session/store.js";
+import { appendSessionMetadata, appendSessionTurn, listSessions, readSessionLines, sessionIndexPath } from "../src/session/store.js";
 
 let tmp = "";
 
@@ -35,5 +35,22 @@ describe("CLI session store", () => {
     expect(sessions).toHaveLength(1);
     expect(sessions[0]?.agentId).toBe("cli");
     expect(sessions[0]?.path).toBe(sessionPath);
+  });
+
+  it("appends metadata lines for resumable code tasks", async () => {
+    const sessionPath = await appendSessionTurn({
+      dataDir: tmp,
+      cwd: "/repo",
+      prompt: "change file",
+      assistant: "done",
+    });
+    await appendSessionMetadata({
+      dataDir: tmp,
+      sessionPath,
+      data: { kind: "code_task", toolCount: 2 },
+    });
+
+    const lines = await readSessionLines(sessionPath);
+    expect(lines.at(-1)).toMatchObject({ type: "metadata", data: { kind: "code_task", toolCount: 2 } });
   });
 });

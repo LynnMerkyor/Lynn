@@ -25,6 +25,7 @@ import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type C
 import { renderProvidersInfo, resolveProvidersInfo } from "./providers.js";
 import { readVersionInfo } from "../version.js";
 import { buildImageContentParts } from "../media.js";
+import { appendSessionMetadata, appendSessionTurn, resolveDataDir } from "../session/store.js";
 
 const pExecFile = promisify(execFile);
 
@@ -413,6 +414,10 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const mode = await resolveCodeMode(args);
   const cliProvider = await resolveCliProviderProfile(args);
+  const saveSession = hasFlag(args.flags, "save-session", "session") || !!process.env.LYNN_CLI_SAVE_SESSION;
+  const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
+  const sessionPath = getStringFlag(args.flags, "session");
+  const title = getStringFlag(args.flags, "title") || task;
   if (!json && !options.compact) {
     errorOutput.write(renderCodeTaskHeader({
       cwd: context.cwd,
@@ -432,6 +437,11 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
       writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true });
     } else {
       process.stdout.write(renderAssistantBlock(text, renderCodeFooter({ context, mode, mockBrain, reasoning })));
+    }
+    if (saveSession) {
+      const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: context.cwd, title, prompt: task, assistant: text, modelProvider: "mock", modelId: "mock-brain" });
+      await appendSessionMetadata({ dataDir, sessionPath: savedPath, data: { kind: "code_task", mock: true, cwd: context.cwd, image: getStringFlag(args.flags, "image", "shot") || null } });
+      if (json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
     }
     return 0;
   }
@@ -455,6 +465,30 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     output: errorOutput,
     imagePath: getStringFlag(args.flags, "image", "shot") || undefined,
   });
+  if (saveSession) {
+    const savedPath = await appendSessionTurn({
+      dataDir,
+      sessionPath,
+      cwd: context.cwd,
+      title,
+      prompt: task,
+      assistant: final,
+      modelProvider: cliProvider?.profile.provider || "brain",
+      modelId: cliProvider?.profile.model || "lynn-brain-router",
+    });
+    await appendSessionMetadata({
+      dataDir,
+      sessionPath: savedPath,
+      data: {
+        kind: "code_task",
+        cwd: context.cwd,
+        image: getStringFlag(args.flags, "image", "shot") || null,
+        reasoning,
+        maxSteps: maxSteps(args),
+      },
+    });
+    if (json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
+  }
   if (json) {
     if (final.trim()) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: final });
     writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true, contentReturned: !!final.trim() });

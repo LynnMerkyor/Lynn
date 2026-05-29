@@ -12,6 +12,12 @@ export interface CliSessionLine {
   data?: Record<string, unknown>;
 }
 
+export interface CliSessionMetadataInput {
+  dataDir: string;
+  sessionPath: string;
+  data: Record<string, unknown>;
+}
+
 export interface CliSessionIndexEntry {
   path: string;
   title: string | null;
@@ -123,6 +129,12 @@ export async function appendSessionTurn(input: {
   const next = [entry, ...existing.filter((candidate) => path.resolve(candidate.path) !== path.resolve(target))];
   await writeIndex(input.dataDir, next);
   return target;
+}
+
+export async function appendSessionMetadata(input: CliSessionMetadataInput): Promise<void> {
+  const target = path.resolve(input.sessionPath);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.appendFile(target, `${JSON.stringify({ type: "metadata", ts: new Date().toISOString(), data: input.data } satisfies CliSessionLine)}\n`, "utf8");
 }
 
 export async function listSessions(dataDir: string): Promise<CliSessionIndexEntry[]> {
