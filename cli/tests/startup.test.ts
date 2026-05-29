@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { box, renderStartupBanner, visibleLength } from "../src/startup.js";
+import { box, displayWidth, renderStartupBanner, visibleLength } from "../src/startup.js";
 import { setLang } from "../src/i18n.js";
 
 describe("startup banner", () => {
@@ -20,7 +20,7 @@ describe("startup banner", () => {
     expect(output).toContain("mode:");
     expect(output).toContain("Shift+Tab to toggle");
     expect(output).toContain("BYOK:");
-    expect(output).toContain("Lynn providers");
+    expect(output).toContain("lynn providers");
     expect(output).toContain("brain:");
     expect(output).toContain("offline");
     expect(output).toContain("http://127.0.0.1:8790");
@@ -88,6 +88,7 @@ describe("startup banner", () => {
   it("measures CJK characters as double-width for aligned boxes", () => {
     expect(visibleLength("模型")).toBe(4);
     expect(visibleLength("\u001b[31m模型\u001b[0m")).toBe(4);
+    expect(displayWidth("模型:abc")).toBe(8);
     const rendered = box(["模型: MiMo", "目录: ~/项目"]);
     const body = rendered.split("\n").slice(1, -1);
     expect(body.every((line) => visibleLength(line) === visibleLength(body[0]))).toBe(true);

@@ -12,39 +12,36 @@ export function displayCwd(cwd: string): string {
 }
 
 export function padLine(label: string, value: string, hint?: string): string {
-  const left = padVisible(`${label}:`, 11);
+  const labelText = `${label}:`;
+  const left = `${labelText}${" ".repeat(Math.max(0, 11 - displayWidth(labelText)))}`;
   return `${left}${value}${hint ? `   ${hint}` : ""}`;
 }
 
-export function visibleLength(value: string): number {
+function isWideChar(code: number): boolean {
+  return (
+    (code >= 0x1100 && code <= 0x115f) ||
+    (code >= 0x2329 && code <= 0x232a) ||
+    (code >= 0x2e80 && code <= 0xa4cf) ||
+    (code >= 0xac00 && code <= 0xd7a3) ||
+    (code >= 0xf900 && code <= 0xfaff) ||
+    (code >= 0xfe30 && code <= 0xfe4f) ||
+    (code >= 0xff00 && code <= 0xff60) ||
+    (code >= 0xffe0 && code <= 0xffe6) ||
+    (code >= 0x1f300 && code <= 0x1faff) ||
+    (code >= 0x20000 && code <= 0x3fffd)
+  );
+}
+
+/** Visible width in terminal columns: strips ANSI, counts CJK / wide chars as 2. */
+export function displayWidth(value: string): number {
+  const stripped = value.replace(/\x1b\[[0-9;]*m/g, "");
   let width = 0;
-  for (const char of value.replace(/\x1b\[[0-9;]*m/g, "")) {
-    width += charWidth(char);
-  }
+  for (const ch of stripped) width += isWideChar(ch.codePointAt(0) ?? 0) ? 2 : 1;
   return width;
 }
 
-function charWidth(char: string): number {
-  const code = char.codePointAt(0) || 0;
-  if (code === 0) return 0;
-  if (code < 32 || (code >= 0x7f && code < 0xa0)) return 0;
-  if (
-    code >= 0x1100 && (
-      code <= 0x115f ||
-      code === 0x2329 ||
-      code === 0x232a ||
-      (code >= 0x2e80 && code <= 0xa4cf && code !== 0x303f) ||
-      (code >= 0xac00 && code <= 0xd7a3) ||
-      (code >= 0xf900 && code <= 0xfaff) ||
-      (code >= 0xfe10 && code <= 0xfe19) ||
-      (code >= 0xfe30 && code <= 0xfe6f) ||
-      (code >= 0xff00 && code <= 0xff60) ||
-      (code >= 0xffe0 && code <= 0xffe6)
-    )
-  ) {
-    return 2;
-  }
-  return 1;
+export function visibleLength(value: string): number {
+  return displayWidth(value);
 }
 
 function padVisible(value: string, width: number): string {
@@ -107,29 +104,23 @@ export function renderStartupBanner(input: {
 } = {}): string {
   const version = readVersionInfo().version;
   const brainUrl = input.brainUrl || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
-  const modelLabel = input.modelLabel || process.env.LYNN_CLI_MODEL_LABEL || "MiMo";
-  const byokLabel = input.byokLabel || process.env.LYNN_CLI_BYOK_LABEL || t("startup.byok.default");
+  const modelLabel = input.modelLabel || process.env.LYNN_CLI_MODEL_LABEL || t("banner.model.default");
+  const byokLabel = input.byokLabel || process.env.LYNN_CLI_BYOK_LABEL || t("banner.byok.default");
   const brainLabel = input.brainStatus && input.brainStatus !== "unknown"
     ? `${input.brainStatus} · ${brainUrl}`
     : brainUrl;
   const lines = [
     `Lynn CLI (v${version})`,
     "",
-    padLine(t("startup.label.model"), modelLabel, t("startup.hint.model")),
-    padLine(t("startup.label.mode"), compactModeLabel(input.modeLabel || "ask / workspace-write"), t("startup.hint.mode")),
-    padLine(t("startup.label.byok"), byokLabel, "Lynn providers"),
-    padLine(t("startup.label.brain"), brainLabel),
-    padLine(t("startup.label.directory"), displayCwd(input.cwd || process.cwd())),
+    padLine(t("banner.label.model"), modelLabel, t("banner.hint.model")),
+    padLine(t("banner.label.mode"), input.modeLabel || "ask / workspace-write", t("banner.hint.mode")),
+    padLine(t("banner.label.byok"), byokLabel, t("banner.hint.providers")),
+    padLine(t("banner.label.brain"), brainLabel),
+    padLine(t("banner.label.dir"), displayCwd(input.cwd || process.cwd())),
   ];
   const out = [box(lines)];
   if (input.showTips !== false) {
     out.push("", t("tips.banner"));
   }
   return out.join("\n");
-}
-
-function compactModeLabel(value: string): string {
-  return value
-    .replace(/\bworkspace-write\b/g, "workspace")
-    .replace(/\bdanger-full-access\b/g, "yolo");
 }

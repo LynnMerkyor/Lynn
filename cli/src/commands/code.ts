@@ -367,8 +367,8 @@ export function renderCodeIntro(
   const lines = [
     `Lynn Code (${version})`,
     "",
-    padLine(t("startup.label.model"), options.modelLabel || "MiMo", t("startup.hint.model")),
-    padLine(t("startup.label.directory"), displayCwd(process.cwd())),
+    padLine(t("banner.label.model"), options.modelLabel || "MiMo", t("banner.hint.model")),
+    padLine(t("banner.label.dir"), displayCwd(process.cwd())),
   ];
   const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
   return [
@@ -404,8 +404,8 @@ export function renderCodeTaskHeader(inputData: {
     box([
       `Lynn Code · ${route}`,
       "",
-      padLine(t("startup.label.directory"), displayCwd(inputData.cwd)),
-      padLine(t("startup.label.mode"), `${inputData.approval} / ${inputData.sandbox}`),
+      padLine(t("banner.label.dir"), displayCwd(inputData.cwd)),
+      padLine(t("banner.label.mode"), `${inputData.approval} / ${inputData.sandbox}`),
       padLine(t("code.label.think"), `${inputData.reasoning.effort} · ${t("code.maxsteps", { n: inputData.maxSteps })}`),
     ]),
     "",
