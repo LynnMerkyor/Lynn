@@ -24,6 +24,20 @@ describe("fleet-events protocol", () => {
     expect(result).toEqual({ ok: true, errors: [] });
   });
 
+  it("accepts StepFun as a first-class Fleet worker agent", () => {
+    const result = validateFleetWorkerEvent({
+      schemaVersion: FLEET_EVENT_SCHEMA_VERSION,
+      type: "worker.started",
+      workerId: "w-stepfun",
+      agent: "stepfun-flash",
+      cwd: "/repo",
+      worktree: "/repo/worktrees/stepfun",
+      branch: "fleet/stepfun",
+    });
+
+    expect(result).toEqual({ ok: true, errors: [] });
+  });
+
   it("rejects missing required fields", () => {
     const result = validateFleetWorkerEvent({
       type: "test.finished",

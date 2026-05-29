@@ -40,6 +40,7 @@ export type FleetAgentKind =
   | "mimo-vl"
   | "mimo-pro"
   | "mimo-fast"
+  | "stepfun-flash"
   | "codex-cli"
   | "claude-internal"
   | "claude-code"
