@@ -2,6 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import readline from "node:readline/promises";
+import { stdin as input, stderr as errorOutput } from "node:process";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
@@ -49,8 +51,17 @@ export async function runCode(args: ParsedArgs): Promise<number> {
     return 0;
   }
 
+  const toolCwd = cwd(args);
+  const toolApproval = await resolveToolApproval({
+    tool,
+    approval: approval(args),
+    cwd: toolCwd,
+    json,
+    input,
+    output: errorOutput,
+  });
   const result = await runClientTool(
-    { cwd: cwd(args), approval: approval(args), timeoutMs: timeoutMs(args) },
+    { cwd: toolCwd, approval: toolApproval, timeoutMs: timeoutMs(args) },
     {
       name: tool,
       path: getStringFlag(args.flags, "path") || undefined,
@@ -64,6 +75,42 @@ export async function runCode(args: ParsedArgs): Promise<number> {
   if (json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...result });
   else process.stdout.write(`${JSON.stringify(result.output, null, 2)}\n`);
   return result.ok ? 0 : 1;
+}
+
+interface ToolApprovalRequest {
+  tool: ClientToolName;
+  approval: "ask" | "on-failure" | "never" | "yolo";
+  cwd: string;
+  json: boolean;
+  input: NodeJS.ReadStream;
+  output: NodeJS.WriteStream;
+}
+
+export function isDangerousClientTool(tool: ClientToolName): boolean {
+  return !!CLIENT_TOOL_DEFINITIONS.find((definition) => definition.name === tool)?.dangerous;
+}
+
+export function canPromptForDangerousTool(inputStream: Pick<NodeJS.ReadStream, "isTTY">, outputStream: Pick<NodeJS.WriteStream, "isTTY">, json: boolean): boolean {
+  return !json && !!inputStream.isTTY && !!outputStream.isTTY;
+}
+
+async function resolveToolApproval(request: ToolApprovalRequest): Promise<ToolApprovalRequest["approval"]> {
+  if (!isDangerousClientTool(request.tool)) return request.approval;
+  if (request.approval === "yolo") return "yolo";
+  if (request.approval === "never") {
+    throw new Error(`${request.tool} requires approval; current mode is never`);
+  }
+  if (!canPromptForDangerousTool(request.input, request.output, request.json)) {
+    throw new Error(`${request.tool} requires --approval yolo or an interactive confirmation`);
+  }
+  const rl = readline.createInterface({ input: request.input, output: request.output, terminal: true });
+  try {
+    const answer = await rl.question(`Allow ${request.tool} in ${request.cwd}? [y/N] `);
+    if (/^(y|yes)$/i.test(answer.trim())) return "yolo";
+    throw new Error(`${request.tool} cancelled by user`);
+  } finally {
+    rl.close();
+  }
 }
 
 interface CodeContext {

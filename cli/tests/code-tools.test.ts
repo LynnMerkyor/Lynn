@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { runCode } from "../src/commands/code.js";
+import { canPromptForDangerousTool, isDangerousClientTool, runCode } from "../src/commands/code.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
 
@@ -52,6 +52,16 @@ describe("code tools", () => {
   it("requires yolo approval for writes and bash", async () => {
     await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "write_file", path: "out.txt", text: "x" })).rejects.toThrow("approval yolo");
     await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "bash", command: "pwd" })).rejects.toThrow("approval yolo");
+  });
+
+  it("knows which client tools need confirmation", () => {
+    expect(isDangerousClientTool("read_file")).toBe(false);
+    expect(isDangerousClientTool("grep")).toBe(false);
+    expect(isDangerousClientTool("write_file")).toBe(true);
+    expect(isDangerousClientTool("bash")).toBe(true);
+    expect(canPromptForDangerousTool({ isTTY: true }, { isTTY: true }, false)).toBe(true);
+    expect(canPromptForDangerousTool({ isTTY: true }, { isTTY: true }, true)).toBe(false);
+    expect(canPromptForDangerousTool({ isTTY: false }, { isTTY: true }, false)).toBe(false);
   });
 
   it("times out long-running bash commands", async () => {
