@@ -51,6 +51,7 @@ export async function applyPatchTool(ctx: ToolRunContext, patch: string): Promis
 interface CodexPatchFile {
   kind: "add" | "delete" | "update";
   file: string;
+  moveTo?: string;
   lines: string[];
 }
 
@@ -69,9 +70,17 @@ async function applyCodexPatch(ctx: ToolRunContext, patch: string): Promise<Clie
       changedFiles.push(filePatch.file);
     } else {
       const original = await fs.readFile(target, "utf8");
-      const next = applyCodexUpdate(original, filePatch.lines, filePatch.file);
-      await fs.writeFile(target, next, "utf8");
-      changedFiles.push(filePatch.file);
+      const next = filePatch.lines.length ? applyCodexUpdate(original, filePatch.lines, filePatch.file) : original;
+      if (filePatch.moveTo) {
+        const movedTarget = await resolveInsideWorkspace(ctx.cwd, filePatch.moveTo);
+        await fs.mkdir(path.dirname(movedTarget), { recursive: true });
+        await fs.writeFile(movedTarget, next, "utf8");
+        if (path.resolve(movedTarget) !== path.resolve(target)) await fs.unlink(target);
+        changedFiles.push(filePatch.moveTo);
+      } else {
+        await fs.writeFile(target, next, "utf8");
+        changedFiles.push(filePatch.file);
+      }
     }
   }
   return {
@@ -104,8 +113,12 @@ function parseCodexPatch(patch: string): CodexPatchFile[] {
       continue;
     }
     if (!current) continue;
-    if (line.startsWith("*** Move to:")) {
-      throw new Error("codex patch move operations are not supported yet");
+    const move = line.match(/^\*\*\* Move to: (.+)$/);
+    if (move) {
+      if (current.kind !== "update") throw new Error("codex patch move operations require an update file header");
+      current.moveTo = String(move[1] || "").trim();
+      if (!current.moveTo) throw new Error("codex patch move target is missing a path");
+      continue;
     }
     current.lines.push(line);
   }

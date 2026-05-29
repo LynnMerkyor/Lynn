@@ -310,6 +310,27 @@ describe("code tools", () => {
     expect(added).toContain("added");
   });
 
+  it("applies Codex-style Begin Patch file moves", async () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: src/hello.ts",
+      "*** Move to: src/greeting.ts",
+      "@@",
+      "-export const hello = 'world';",
+      "+export const hello = 'moved';",
+      "*** End Patch",
+      "",
+    ].join("\n");
+
+    const result = await runClientTool({ cwd: tmp, approval: "yolo" }, { name: "apply_patch", text: patch });
+    const moved = await fs.readFile(path.join(tmp, "src", "greeting.ts"), "utf8");
+
+    await expect(fs.access(path.join(tmp, "src", "hello.ts"))).rejects.toThrow();
+    expect(result.ok).toBe(true);
+    expect(result.output).toMatchObject({ format: "codex-patch", files: ["src/greeting.ts"] });
+    expect(moved).toContain("moved");
+  });
+
   it("parses CLI timeout flags for bash tools", async () => {
     const original = process.stdout.write;
     let output = "";
