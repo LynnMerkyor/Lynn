@@ -8,6 +8,8 @@ describe('TaskBriefForm payload', () => {
       agent: 'mimo-vl',
       taskType: 'ground',
       image: 'screenshots/login.png',
+      approval: 'yolo',
+      sandbox: 'workspace-write',
       objective: 'Find the login button.',
       owned: 'desktop/src/react/**\n',
       forbidden: 'server/**',
@@ -32,6 +34,8 @@ describe('TaskBriefForm payload', () => {
       agent: 'codex-cli',
       taskType: 'code',
       image: '   ',
+      approval: 'ask',
+      sandbox: 'read-only',
       objective: 'Split InputArea.',
       owned: 'desktop/src/react/components/input/**',
       forbidden: 'server/**',
@@ -42,6 +46,7 @@ describe('TaskBriefForm payload', () => {
 
     expect(payload).not.toHaveProperty('image');
     expect(payload.taskType).toBe('code');
+    expect(payload).toMatchObject({ approval: 'ask', sandbox: 'read-only' });
     expect(payload.testCommands).toEqual([]);
   });
 

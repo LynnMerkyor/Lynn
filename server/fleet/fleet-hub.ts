@@ -8,7 +8,12 @@
  * board still works. Worktree creation + spawn + the brief
  * file are injectable for tests.
  */
-import type { FleetWorkerEvent, FleetAgentKind } from "../../shared/fleet-events.js";
+import type {
+  FleetWorkerEvent,
+  FleetAgentKind,
+  FleetApprovalMode,
+  FleetSandboxMode,
+} from "../../shared/fleet-events.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -31,6 +36,9 @@ export interface FleetBrief {
   image?: string;
   /** Optional CLI session checkpoint used to resume a long-running worker. */
   resumePath?: string;
+  /** Explicit worker permission profile. Fleet never hides an autonomous YOLO run. */
+  approval?: FleetApprovalMode;
+  sandbox?: FleetSandboxMode;
 }
 
 export interface FleetWorkerRecord {
@@ -73,6 +81,11 @@ function defaultWriteBrief(brief: FleetBrief, workerId: string): string {
   if (brief.taskType) lines.push(``, `## Task Type`, brief.taskType);
   if (brief.image) lines.push(``, `## Image`, brief.image);
   if (brief.resumePath) lines.push(``, `## Resume`, brief.resumePath);
+  if (brief.approval || brief.sandbox) {
+    lines.push(``, `## Permissions`);
+    if (brief.approval) lines.push(`- approval: ${brief.approval}`);
+    if (brief.sandbox) lines.push(`- sandbox: ${brief.sandbox}`);
+  }
   lines.push(``, `## Objective`, brief.objective || "(none)", ``, `## Owned files`);
   for (const f of brief.owned) lines.push(`- ${f}`);
   lines.push(``, `## Forbidden files`);
@@ -153,6 +166,8 @@ export class FleetHub {
       cwd: this.repoRoot,
       worktree: brief.worktree,
       branch: brief.branch,
+      approval: brief.approval,
+      sandbox: brief.sandbox,
     });
     this.emit(workerId, {
       type: "worker.claims",
@@ -206,6 +221,8 @@ export class FleetHub {
         workerId,
         "--jsonl",
       ];
+      if (brief.approval) workerArgs.push("--approval", brief.approval);
+      if (brief.sandbox) workerArgs.push("--sandbox", brief.sandbox);
       const cmd = this.resolve(workerArgs);
       if (cmd) {
         const spawn = this.deps.spawn ?? spawnWorker;

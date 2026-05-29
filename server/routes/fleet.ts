@@ -8,6 +8,10 @@ import { safeJson } from "../hono-helpers.js";
 import { FleetHub, type FleetBrief } from "../fleet/fleet-hub.js";
 import { resolveFleetRegistry } from "../fleet/registry.js";
 import { readPermissionStatus } from "../fleet/permissions.js";
+import type { FleetApprovalMode, FleetSandboxMode } from "../../shared/fleet-events.js";
+
+const APPROVALS = new Set<FleetApprovalMode>(["ask", "on-failure", "never", "yolo"]);
+const SANDBOXES = new Set<FleetSandboxMode>(["read-only", "workspace-write", "danger-full-access"]);
 
 function validateBrief(b: Partial<FleetBrief>): string[] {
   const errs: string[] = [];
@@ -17,6 +21,8 @@ function validateBrief(b: Partial<FleetBrief>): string[] {
   if (!b.worktree) errs.push("worktree is required");
   if (!Array.isArray(b.owned)) errs.push("owned[] is required");
   if (!Array.isArray(b.forbidden)) errs.push("forbidden[] is required");
+  if (b.approval && !APPROVALS.has(b.approval)) errs.push("approval is invalid");
+  if (b.sandbox && !SANDBOXES.has(b.sandbox)) errs.push("sandbox is invalid");
   return errs;
 }
 

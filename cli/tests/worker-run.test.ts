@@ -244,6 +244,56 @@ describe("worker-run scaffold", () => {
     expect(workerProviderPreset("lynn-cli")).toBeNull();
   });
 
+  it("emits the effective permission profile on worker start instead of hiding YOLO defaults", async () => {
+    const repo = await makeTempGitRepo();
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-worker-perms-"));
+    await fs.mkdir(path.join(dataDir, "permissions"), { recursive: true });
+    await fs.writeFile(path.join(dataDir, "permissions", "cli.json"), JSON.stringify({ approval: "never", sandbox: "read-only" }), "utf8");
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: inspect only",
+      "",
+      "## Objective",
+      "Read the repo.",
+      "",
+      "## Owned files",
+      "- **",
+      "",
+      "## Forbidden files",
+      "- /",
+    ].join("\n"));
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const code = await runWorker(parseArgs([
+        "worker",
+        "run",
+        "--brief",
+        briefPath,
+        "--worktree",
+        repo,
+        "--mock",
+        "--data-dir",
+        dataDir,
+      ]));
+      expect(code).toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    const started = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as {
+      type: string;
+      approval?: string;
+      sandbox?: string;
+    }).find((line) => line.type === "worker.started");
+    expect(started).toMatchObject({ approval: "never", sandbox: "read-only" });
+  });
+
   it("applies concrete defaults for MiMo Fleet worker profiles", () => {
     expect(workerProfileDefaults("mimo-fast")).toEqual({ reasoning: "off", maxSteps: "6" });
     expect(workerProfileDefaults("mimo-pro")).toEqual({ reasoning: "high", maxSteps: "100", long: true });

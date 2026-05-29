@@ -17,6 +17,7 @@ import { runCode } from "./code.js";
 import { buildVisionPrompt, type VisionCommand } from "./vision.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
+import { resolveEffectivePermissions, type PermissionProfile } from "../permissions.js";
 export { extractGroundingBoxes } from "../vision-result.js";
 import { extractGroundingBoxes } from "../vision-result.js";
 
@@ -536,6 +537,7 @@ async function runLynnCliWorker(input: {
   worktree: string;
   workerId: string;
   agent: string;
+  permissions: PermissionProfile;
 }): Promise<number> {
   const task = buildLynnCodeWorkerTask(input.brief);
   emit({ type: "shell.started", workerId: input.workerId, agent: input.agent, command: "Lynn code", approval: "auto" });
@@ -543,7 +545,8 @@ async function runLynnCliWorker(input: {
   const profileDefaults = workerProfileDefaults(input.agent);
   const flags: Record<string, string | boolean> = {
     cwd: input.worktree,
-    approval: getStringFlag(input.args.flags, "approval") || "yolo",
+    approval: getStringFlag(input.args.flags, "approval") || input.permissions.approval,
+    sandbox: getStringFlag(input.args.flags, "sandbox") || input.permissions.sandbox,
     "max-steps": getStringFlag(input.args.flags, "max-steps", "steps") || profileDefaults.maxSteps || "8",
     "save-session": true,
     title: input.brief.title,
@@ -586,6 +589,7 @@ async function runLynnVisionWorker(input: {
   worktree: string;
   workerId: string;
   agent: string;
+  permissions: PermissionProfile;
 }): Promise<number> {
   if (!isVisionTask(input.brief.taskType)) return runLynnCliWorker(input);
   if (!input.brief.image) {
@@ -680,6 +684,7 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
   if (!briefPath) throw new Error("--brief is required");
   const markdown = await fs.readFile(briefPath, "utf8");
   const brief = parseWorkerBrief(markdown);
+  const permissions = await resolveEffectivePermissions(args);
 
   emit({
     type: "worker.started",
@@ -689,6 +694,8 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
     worktree,
     branch,
     pid: process.pid,
+    approval: permissions.approval,
+    sandbox: permissions.sandbox,
   });
   emit({ type: "worker.claims", workerId, agent, owned: brief.owned, forbidden: brief.forbidden });
   emit({ type: "worker.progress", workerId, agent, message: mock ? `Mock worker loaded: ${brief.title}` : `Worker loaded: ${brief.title}` });
@@ -696,8 +703,8 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
   const externalCommand = getStringFlag(args.flags, "agent-command") || buildDefaultAgentCommand(agent, path.resolve(briefPath), path.resolve(worktree), markdown);
   if (!mock && isBuiltInLynnWorker(agent)) {
     const exitCode = isVisionTask(brief.taskType)
-      ? await runLynnVisionWorker({ args, brief, worktree, workerId, agent })
-      : await runLynnCliWorker({ args, brief, worktree, workerId, agent });
+      ? await runLynnVisionWorker({ args, brief, worktree, workerId, agent, permissions })
+      : await runLynnCliWorker({ args, brief, worktree, workerId, agent, permissions });
     await emitGitDiff(workerId, agent, worktree);
     emit({ type: "worker.finished", workerId, agent, ok: exitCode === 0, exitCode, summary: exitCode === 0 ? "lynn-cli worker completed" : "lynn-cli worker failed" });
     return exitCode;

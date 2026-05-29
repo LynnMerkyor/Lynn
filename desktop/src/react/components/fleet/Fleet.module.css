@@ -427,6 +427,12 @@
   opacity: 0.58;
 }
 
+.formDangerHint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #d97706;
+}
+
 .formInput,
 .formTextarea {
   font-size: 12px;

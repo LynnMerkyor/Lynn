@@ -20,12 +20,16 @@ interface AgentEntry {
 }
 
 type FleetTaskType = 'code' | 'see' | 'ground' | 'ui2code';
+type FleetApprovalMode = 'ask' | 'on-failure' | 'never' | 'yolo';
+type FleetSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
 
 interface FleetDispatchFormState {
   title: string;
   agent: string;
   taskType: FleetTaskType;
   image: string;
+  approval: FleetApprovalMode;
+  sandbox: FleetSandboxMode;
   objective: string;
   owned: string;
   forbidden: string;
@@ -73,6 +77,8 @@ export function buildFleetDispatchPayload(state: FleetDispatchFormState) {
     agent: state.agent,
     taskType: state.taskType,
     ...(state.image.trim() ? { image: state.image.trim() } : {}),
+    approval: state.approval,
+    sandbox: state.sandbox,
     objective: state.objective,
     owned: toLines(state.owned),
     forbidden: toLines(state.forbidden),
@@ -88,6 +94,8 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
   const [agent, setAgent] = useState(DEFAULT_FLEET_AGENT);
   const [scopePresetId, setScopePresetId] = useState(DEFAULT_FLEET_SCOPE_PRESET.id);
   const [taskType, setTaskType] = useState<FleetTaskType>('code');
+  const [approval, setApproval] = useState<FleetApprovalMode>('ask');
+  const [sandbox, setSandbox] = useState<FleetSandboxMode>('workspace-write');
   const [fanOut, setFanOut] = useState<string[]>([]);
   const [image, setImage] = useState('');
   const [objective, setObjective] = useState('');
@@ -115,6 +123,27 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
       })
       .catch(() => {
         /* keep fallback list */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    hanaFetch('/api/fleet/permissions')
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        if (d?.approval === 'ask' || d?.approval === 'on-failure' || d?.approval === 'never' || d?.approval === 'yolo') {
+          setApproval(d.approval);
+        }
+        if (d?.sandbox === 'read-only' || d?.sandbox === 'workspace-write' || d?.sandbox === 'danger-full-access') {
+          setSandbox(d.sandbox);
+        }
+      })
+      .catch(() => {
+        /* keep guarded defaults */
       });
     return () => {
       alive = false;
@@ -156,6 +185,8 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
           agent: target,
           taskType,
           image,
+          approval,
+          sandbox,
           objective,
           owned: writesFiles ? owned : '',
           forbidden: writesFiles ? forbidden : '',
@@ -259,6 +290,35 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
           <div className={s.formHint}>The path is passed to `Lynn worker run`; the CLI reads the image locally and routes it through MiMo vision.</div>
         </div>
       )}
+      <div className={s.formRow}>
+        <div className={s.formField}>
+          <label className={s.formLabel}>Approval</label>
+          <select className={s.formInput} value={approval} onChange={(e) => setApproval(e.target.value as FleetApprovalMode)}>
+            <option value="ask">ask (guarded)</option>
+            <option value="on-failure">on-failure</option>
+            <option value="never">never (read/check only)</option>
+            <option value="yolo">yolo (autonomous edits)</option>
+          </select>
+          <div className={approval === 'yolo' ? s.formDangerHint : s.formHint}>
+            {approval === 'yolo'
+              ? 'YOLO lets the worker edit files and run shell tools without another prompt.'
+              : 'Non-interactive workers may stop before dangerous edits unless approval is yolo.'}
+          </div>
+        </div>
+        <div className={s.formField}>
+          <label className={s.formLabel}>Sandbox</label>
+          <select className={s.formInput} value={sandbox} onChange={(e) => setSandbox(e.target.value as FleetSandboxMode)}>
+            <option value="read-only">read-only</option>
+            <option value="workspace-write">workspace-write</option>
+            <option value="danger-full-access">danger-full-access</option>
+          </select>
+          <div className={sandbox === 'danger-full-access' ? s.formDangerHint : s.formHint}>
+            {sandbox === 'danger-full-access'
+              ? 'Full filesystem access is only for trusted local worktrees.'
+              : 'Workspace-write keeps edits scoped to the assigned worktree.'}
+          </div>
+        </div>
+      </div>
       <div className={s.formRow}>
         <div className={s.formField}>
           <label className={s.formLabel}>Branch</label>

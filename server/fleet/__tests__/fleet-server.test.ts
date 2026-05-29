@@ -254,8 +254,8 @@ describe("FleetHub.dispatch", () => {
   });
 
   it("registers a worker and broadcasts started -> claims -> progress as fleet:event", async () => {
-    const sent: Array<{ type: string; event: { type: string } }> = [];
-    const hub = new FleetHub("/repo", (m) => sent.push(m as { type: string; event: { type: string } }), () => "T");
+    const sent: Array<{ type: string; event: { type: string; approval?: string; sandbox?: string } }> = [];
+    const hub = new FleetHub("/repo", (m) => sent.push(m as { type: string; event: { type: string; approval?: string; sandbox?: string } }), () => "T");
     const brief: FleetBrief = {
       title: "split ComposerTextarea",
       agent: "claude-code",
@@ -264,6 +264,8 @@ describe("FleetHub.dispatch", () => {
       forbidden: ["server/**"],
       branch: "cli-2/inputarea",
       worktree: "worktrees/cli-2",
+      approval: "yolo",
+      sandbox: "workspace-write",
     };
     const rec = await hub.dispatch(brief);
 
@@ -271,6 +273,7 @@ describe("FleetHub.dispatch", () => {
     expect(hub.listWorkers()).toHaveLength(1);
     expect(sent.every((m) => m.type === "fleet:event")).toBe(true);
     expect(sent.map((m) => m.event.type)).toEqual(["worker.started", "worker.claims", "worker.progress"]);
+    expect(sent[0].event).toMatchObject({ approval: "yolo", sandbox: "workspace-write" });
   });
 });
 
@@ -531,11 +534,13 @@ describe("FleetHub real spawn", () => {
 
   it("writes visual task metadata in the brief format parsed by Lynn CLI", async () => {
     let briefText = "";
+    let spawnedArgs: string[] = [];
     const hub = new FleetHub("/repo", () => {}, () => "T", {
       available: () => true,
       createWorktree: async () => {},
       resolveCommand: (args) => ({ command: "node", args, env: {}, source: "dev" }),
       spawn: (opts) => {
+        spawnedArgs = opts.args;
         const briefIndex = opts.args.indexOf("--brief");
         if (briefIndex >= 0) {
           briefText = fs.readFileSync(opts.args[briefIndex + 1], "utf8");
@@ -549,10 +554,14 @@ describe("FleetHub real spawn", () => {
       taskType: "ground",
       image: "screenshots/login.png",
       objective: "Find the login button.",
+      approval: "yolo",
+      sandbox: "workspace-write",
     });
 
     expect(briefText).toContain("## Task Type\nground");
     expect(briefText).toContain("## Image\nscreenshots/login.png");
+    expect(briefText).toContain("## Permissions\n- approval: yolo\n- sandbox: workspace-write");
+    expect(spawnedArgs).toEqual(expect.arrayContaining(["--approval", "yolo", "--sandbox", "workspace-write"]));
   });
 
   it("writes resume metadata in the brief format parsed by Lynn CLI", async () => {
