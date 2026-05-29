@@ -197,6 +197,12 @@
   opacity: 0.7;
 }
 
+.formHint {
+  font-size: 11px;
+  opacity: 0.58;
+  line-height: 1.4;
+}
+
 .formInput,
 .formTextarea {
   font-size: 12px;

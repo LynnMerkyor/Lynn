@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import s from './Fleet.module.css';
+import { DEFAULT_FLEET_SCOPE_PRESET, FLEET_SCOPE_PRESETS, buildPresetDefaults } from './brief-presets';
 
 interface AgentEntry {
   id: string;
@@ -30,14 +31,16 @@ function toLines(value: string): string[] {
 
 export function TaskBriefForm({ onClose }: { onClose: () => void }) {
   const [agents, setAgents] = useState<AgentEntry[]>(FALLBACK_AGENTS);
+  const [presetId, setPresetId] = useState(DEFAULT_FLEET_SCOPE_PRESET.id);
   const [title, setTitle] = useState('');
   const [agent, setAgent] = useState('claude-code');
   const [objective, setObjective] = useState('');
-  const [owned, setOwned] = useState('');
-  const [forbidden, setForbidden] = useState('server/**\nbrain-v2-mirror/**');
-  const [tests, setTests] = useState('npm run typecheck');
-  const [branch, setBranch] = useState('');
-  const [worktree, setWorktree] = useState('');
+  const initialDefaults = buildPresetDefaults(DEFAULT_FLEET_SCOPE_PRESET, '');
+  const [owned, setOwned] = useState(initialDefaults.owned);
+  const [forbidden, setForbidden] = useState(initialDefaults.forbidden);
+  const [tests, setTests] = useState(initialDefaults.tests);
+  const [branch, setBranch] = useState(initialDefaults.branch);
+  const [worktree, setWorktree] = useState(initialDefaults.worktree);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -57,6 +60,24 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
       alive = false;
     };
   }, []);
+
+  const applyPreset = (nextPresetId: string, nextTitle = title) => {
+    const preset = FLEET_SCOPE_PRESETS.find((p) => p.id === nextPresetId) ?? DEFAULT_FLEET_SCOPE_PRESET;
+    const defaults = buildPresetDefaults(preset, nextTitle);
+    setPresetId(preset.id);
+    setOwned(defaults.owned);
+    setForbidden(defaults.forbidden);
+    setTests(defaults.tests);
+    setBranch(defaults.branch);
+    setWorktree(defaults.worktree);
+  };
+
+  const refreshGeneratedNames = () => {
+    const preset = FLEET_SCOPE_PRESETS.find((p) => p.id === presetId) ?? DEFAULT_FLEET_SCOPE_PRESET;
+    const defaults = buildPresetDefaults(preset, title);
+    setBranch(defaults.branch);
+    setWorktree(defaults.worktree);
+  };
 
   const submit = async () => {
     setError(null);
@@ -93,8 +114,25 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
   return (
     <div className={s.briefForm}>
       <div className={s.formField}>
+        <label className={s.formLabel}>Scope preset</label>
+        <select className={s.formInput} value={presetId} onChange={(e) => applyPreset(e.target.value)}>
+          {FLEET_SCOPE_PRESETS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+        <div className={s.formHint}>{FLEET_SCOPE_PRESETS.find((p) => p.id === presetId)?.description}</div>
+      </div>
+      <div className={s.formField}>
         <label className={s.formLabel}>Title</label>
-        <input className={s.formInput} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Split ComposerTextarea" />
+        <input
+          className={s.formInput}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={refreshGeneratedNames}
+          placeholder="Split ComposerTextarea"
+        />
       </div>
       <div className={s.formRow}>
         <div className={s.formField}>
@@ -142,6 +180,9 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
       </div>
       {error && <div className={s.formError}>{error}</div>}
       <div className={s.formActions}>
+        <button className={s.fleetBtn} onClick={refreshGeneratedNames} disabled={busy || !title} type="button">
+          Regenerate names
+        </button>
         <button className={s.fleetBtn} onClick={submit} disabled={busy || !title || !branch || !worktree}>
           {busy ? 'Dispatching…' : 'Dispatch worker'}
         </button>
