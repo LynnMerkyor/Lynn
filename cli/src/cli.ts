@@ -29,8 +29,10 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
         showTips: brainReachable,
       })}\n`);
     if (process.stdin.isTTY && process.stdout.isTTY) {
-      // Always enter the REPL. If Brain is offline, runChat prints recovery
-      // guidance per turn instead of dropping the next user input into zsh.
+      // Always enter the interactive REPL — even when the Brain is offline.
+      // runChat prints the offline hint, then each message returns an actionable
+      // recovery line (configure BYOK / start the client) instead of dropping the
+      // user back to the shell (which made `Lynn` look like it "doesn't work").
       return runChat({ command: "chat", positionals: [], flags: {} }, { intro: false, brainReachable });
     }
     return 0;
