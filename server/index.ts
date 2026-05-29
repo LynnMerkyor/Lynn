@@ -55,6 +55,7 @@ import { createExpertsRoute } from "./routes/experts.js";
 import { createMcpRoute } from "./routes/mcp.js";
 import { createReviewRoute } from "./routes/review.js";
 import { createTasksRoute } from "./routes/tasks.js";
+import { createFleetRoute, FleetHub } from "./routes/fleet.js";
 import { createAppStateRoute } from "./routes/app-state.js";
 import { createDebugRoute } from "./routes/debug.js";
 import { createTranslateRoute } from "./routes/translate.js";
@@ -264,6 +265,8 @@ const { wsRoute: voiceWsRoute } = createVoiceWsRoute(routeEngine, routeHub, { up
 app.route("", voiceWsRoute);
 app.route("/api", createReviewRoute(routeEngine, { broadcast: chatBroadcast, taskRuntime }));
 app.route("/api", createTasksRoute(taskRuntime, routeEngine));
+const fleetHub = new FleetHub(process.cwd(), chatBroadcast);
+app.route("/api", createFleetRoute(fleetHub));
 app.route("/api", createAppStateRoute(routeEngine, { taskRuntime }));
 app.route("/api", createDebugRoute(routeEngine));
 app.route("/api", createTranslateRoute(routeEngine));
