@@ -56,6 +56,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "query",
       "pattern",
       "max-bytes",
+      "max-steps",
+      "steps",
       "text",
       "content",
       "data-dir",

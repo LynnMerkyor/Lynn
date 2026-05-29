@@ -10,6 +10,7 @@ import {
   validateFleetWorkerEvent,
 } from "../../../shared/fleet-events.js";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
+import { runCode } from "./code.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 
 export interface WorkerBrief {
@@ -284,6 +285,57 @@ async function runExternalWorker(input: {
   return exitCode;
 }
 
+function buildLynnCodeWorkerTask(brief: WorkerBrief): string {
+  return [
+    `Fleet task: ${brief.title}`,
+    "",
+    "Objective:",
+    brief.objective || brief.title,
+    "",
+    "Owned files:",
+    ...(brief.owned.length ? brief.owned.map((p) => `- ${p}`) : ["- (not specified)"]),
+    "",
+    "Forbidden files:",
+    ...(brief.forbidden.length ? brief.forbidden.map((p) => `- ${p}`) : ["- (none)"]),
+    "",
+    "Test commands expected by the task:",
+    ...(brief.tests.length ? brief.tests.map((cmd) => `- ${cmd}`) : ["- (not specified)"]),
+    "",
+    "Stay inside the owned files. Do not touch forbidden files. Prefer apply_patch for edits.",
+  ].join("\n");
+}
+
+async function runLynnCliWorker(input: {
+  args: ParsedArgs;
+  brief: WorkerBrief;
+  worktree: string;
+  workerId: string;
+  agent: string;
+}): Promise<number> {
+  const task = buildLynnCodeWorkerTask(input.brief);
+  emit({ type: "shell.started", workerId: input.workerId, agent: input.agent, command: "Lynn code", approval: "auto" });
+  const started = Date.now();
+  const flags: Record<string, string | boolean> = {
+    cwd: input.worktree,
+    approval: getStringFlag(input.args.flags, "approval") || "yolo",
+    "max-steps": getStringFlag(input.args.flags, "max-steps", "steps") || "8",
+    json: true,
+  };
+  const brainUrl = getStringFlag(input.args.flags, "brain-url");
+  if (brainUrl) flags["brain-url"] = brainUrl;
+  const reasoning = getStringFlag(input.args.flags, "reasoning");
+  if (reasoning) flags.reasoning = reasoning;
+  const showReasoning = getStringFlag(input.args.flags, "show-reasoning");
+  if (showReasoning) flags["show-reasoning"] = showReasoning;
+  const exitCode = await runCode({ command: "code", positionals: [task], flags });
+  const ok = exitCode === 0;
+  emit({ type: "shell.finished", workerId: input.workerId, agent: input.agent, command: "Lynn code", ok, exitCode, ms: Date.now() - started });
+  if (!ok) {
+    emit({ type: "worker.error", workerId: input.workerId, agent: input.agent, code: "worker_exit_nonzero", message: `lynn-cli worker exited with ${exitCode}`, recoverable: true });
+  }
+  return exitCode;
+}
+
 export async function runWorker(args: ParsedArgs): Promise<number> {
   const subcommand = args.positionals[0] || "";
   if (subcommand && subcommand !== "run") {
@@ -314,6 +366,12 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
   emit({ type: "worker.progress", workerId, agent, message: mock ? `Mock worker loaded: ${brief.title}` : `Worker loaded: ${brief.title}` });
 
   const externalCommand = getStringFlag(args.flags, "agent-command") || buildDefaultAgentCommand(agent, path.resolve(briefPath), path.resolve(worktree), markdown);
+  if (!mock && agent === "lynn-cli") {
+    const exitCode = await runLynnCliWorker({ args, brief, worktree, workerId, agent });
+    await emitGitDiff(workerId, agent, worktree);
+    emit({ type: "worker.finished", workerId, agent, ok: exitCode === 0, exitCode, summary: exitCode === 0 ? "lynn-cli worker completed" : "lynn-cli worker failed" });
+    return exitCode;
+  }
   if (!mock && externalCommand) {
     const exitCode = await runExternalWorker({ command: externalCommand, worktree, workerId, agent });
     await emitGitDiff(workerId, agent, worktree);

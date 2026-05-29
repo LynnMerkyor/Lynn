@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -201,5 +202,88 @@ describe("worker-run scaffold", () => {
       { path: "brief.md", action: "add", insertions: 0, deletions: 0 },
       { path: "worker-output.txt", action: "add", insertions: 0, deletions: 0 },
     ]);
+  });
+
+  it("runs the built-in lynn-cli worker through the Brain-backed code loop", async () => {
+    const repo = await makeTempGitRepo();
+    await fs.writeFile(path.join(repo, "hello.txt"), "hello\n", "utf8");
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: patch file",
+      "",
+      "## Objective",
+      "Change hello to lynn.",
+      "",
+      "## Owned files",
+      "- hello.txt",
+      "",
+      "## Forbidden files",
+      "- server/**",
+      "",
+      "## Test commands",
+      "- npm test",
+    ].join("\n"));
+    const patch = [
+      "diff --git a/hello.txt b/hello.txt",
+      "--- a/hello.txt",
+      "+++ b/hello.txt",
+      "@@ -1 +1 @@",
+      "-hello",
+      "+lynn",
+      "",
+    ].join("\n");
+    let calls = 0;
+    const server = http.createServer((req, res) => {
+      if (req.url === "/v1/chat/completions" && req.method === "POST") {
+        req.resume();
+        calls += 1;
+        const content = calls === 1
+          ? JSON.stringify({ tool: "apply_patch", args: { patch } })
+          : "Patched hello.txt.";
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.end(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`);
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("server did not bind");
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const code = await runWorker(parseArgs([
+        "worker",
+        "run",
+        "--brief",
+        briefPath,
+        "--worktree",
+        repo,
+        "--agent",
+        "lynn-cli",
+        "--brain-url",
+        `http://127.0.0.1:${address.port}`,
+        "--approval",
+        "yolo",
+        "--max-steps",
+        "3",
+      ]));
+      expect(code).toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    const text = await fs.readFile(path.join(repo, "hello.txt"), "utf8");
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; tool?: string; summary?: string });
+    expect(text).toContain("lynn");
+    expect(lines.some((line) => line.type === "shell.started")).toBe(true);
+    expect(lines.some((line) => line.type === "worker.finished" && line.summary === "lynn-cli worker completed")).toBe(true);
   });
 });
