@@ -6,14 +6,14 @@ export function extractGroundingBoxes(text: string): FleetVisualBox[] {
     text,
   ];
   for (const candidate of candidates) {
-    const raw = firstJsonValue(candidate);
-    if (!raw) continue;
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      const boxes = normalizeVisualBoxes(parsed);
-      if (boxes.length) return boxes;
-    } catch {
-      // Try the next candidate.
+    for (const raw of jsonValues(candidate)) {
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        const boxes = normalizeVisualBoxes(parsed);
+        if (boxes.length) return boxes;
+      } catch {
+        // Try the next candidate.
+      }
     }
   }
   return [];
@@ -50,12 +50,17 @@ function normalizeVisualBox(value: unknown): FleetVisualBox[] {
   }];
 }
 
-function firstJsonValue(text: string): string | null {
-  const objectStart = text.indexOf("{");
-  const arrayStart = text.indexOf("[");
-  const starts = [objectStart, arrayStart].filter((index) => index >= 0);
-  if (!starts.length) return null;
-  const start = Math.min(...starts);
+function jsonValues(text: string): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] !== "{" && text[i] !== "[") continue;
+    const raw = balancedJsonValueAt(text, i);
+    if (raw) values.push(raw);
+  }
+  return values;
+}
+
+function balancedJsonValueAt(text: string, start: number): string | null {
   const opening = text[start];
   const closing = opening === "{" ? "}" : "]";
   let depth = 0;
