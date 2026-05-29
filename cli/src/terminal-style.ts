@@ -14,6 +14,10 @@ export function cyan(text: string, enabled: boolean): string {
   return enabled ? `\x1b[36m${text}\x1b[0m` : text;
 }
 
+export function brightCyan(text: string, enabled: boolean): string {
+  return enabled ? `\x1b[1;36m${text}\x1b[0m` : text;
+}
+
 export function green(text: string, enabled: boolean): string {
   return enabled ? `\x1b[32m${text}\x1b[0m` : text;
 }

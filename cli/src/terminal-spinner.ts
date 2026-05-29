@@ -1,5 +1,18 @@
-import { cyan, supportsColor } from "./terminal-style.js";
+import { brightCyan, cyan, dim, supportsColor } from "./terminal-style.js";
 import { t } from "./i18n.js";
+import { visibleLength } from "./startup.js";
+
+export function renderSweepFrame(width: number, frame: number, color: boolean): string {
+  const safeWidth = Math.max(8, width);
+  const head = (frame % (safeWidth + 8)) - 4;
+  return Array.from({ length: safeWidth }, (_, i) => {
+    const distance = Math.abs(i - head);
+    if (distance === 0) return brightCyan("━", color);
+    if (distance <= 1) return cyan("━", color);
+    if (distance <= 3) return dim("─", color);
+    return " ";
+  }).join("");
+}
 
 export class TerminalSpinner {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -27,16 +40,9 @@ export class TerminalSpinner {
   }
 
   private render(): void {
-    const width = Math.min(48, Math.max(24, this.clearWidth() - this.label.length - 5));
-    const pos = this.frame % (width + 8);
+    const width = Math.min(42, Math.max(18, this.clearWidth() - visibleLength(this.label) - 5));
     const color = supportsColor(this.stream);
-    const bar = Array.from({ length: width }, (_, i) => {
-      const distance = Math.abs(i - pos);
-      if (distance <= 1) return "━";
-      if (distance <= 3) return "─";
-      return " ";
-    }).join("");
-    this.stream.write(`\r${this.label} ${cyan(bar, color)}`);
+    this.stream.write(`\r${this.label} ${renderSweepFrame(width, this.frame, color)}`);
     this.frame += 1;
   }
 
