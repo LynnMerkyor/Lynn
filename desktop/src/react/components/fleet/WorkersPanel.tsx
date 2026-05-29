@@ -14,6 +14,8 @@ import { WorkerCard } from './WorkerCard';
 import { TaskBriefForm } from './TaskBriefForm';
 import { playFleetFixture } from './playback';
 import { MOCK_WORKER_JSONL } from './fixtures';
+import { detectFleetConflicts } from './fleet-conflicts';
+import { hanaFetch } from '../../hooks/use-hana-fetch';
 
 export function WorkersPanel() {
   const activePanel = useStore((st) => st.activePanel);
@@ -38,6 +40,14 @@ export function WorkersPanel() {
     resetFleet();
     cancelRef.current = playFleetFixture(MOCK_WORKER_JSONL, applyFleetEvent, { intervalMs: 250 });
   };
+
+  const cancelWorker = (workerId: string) => {
+    void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/cancel`, { method: 'POST' }).catch(() => {
+      /* server broadcasts the cancel result; ignore transport errors here */
+    });
+  };
+
+  const conflicts = detectFleetConflicts(fleetWorkers);
 
   const totals = fleetWorkers.reduce(
     (acc, w) => {
@@ -82,12 +92,23 @@ export function WorkersPanel() {
 
           {showForm && <TaskBriefForm onClose={() => setShowForm(false)} />}
 
+          {conflicts.length > 0 && (
+            <div className={s.conflictBanner}>
+              <strong>⚠ {conflicts.length} conflict(s)</strong>
+              {conflicts.map((c) => (
+                <div key={`${c.kind}:${c.path}`}>
+                  {c.kind === 'center-lock' ? 'center-lock' : 'overlap'} · {c.path} · {c.workerIds.join(', ')}
+                </div>
+              ))}
+            </div>
+          )}
+
           {fleetWorkers.length === 0 ? (
             <div className={s.fleetEmpty}>No workers yet. Dispatch one, or play a mock stream.</div>
           ) : (
             <div className={s.fleetBoard}>
               {fleetWorkers.map((w) => (
-                <WorkerCard key={w.workerId} worker={w} />
+                <WorkerCard key={w.workerId} worker={w} onCancel={cancelWorker} />
               ))}
             </div>
           )}

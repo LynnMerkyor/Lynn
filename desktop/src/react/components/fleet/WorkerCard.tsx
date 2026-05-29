@@ -31,7 +31,13 @@ function fileVerb(file: FleetChangedFile, active: boolean): string {
   return 'edited';
 }
 
-export function WorkerCard({ worker }: { worker: FleetWorkerView }) {
+export function WorkerCard({
+  worker,
+  onCancel,
+}: {
+  worker: FleetWorkerView;
+  onCancel?: (workerId: string) => void;
+}) {
   const { diffStat } = worker;
   const fileCount = diffStat?.files ?? worker.changedFiles.length;
   const hasChanges = worker.changedFiles.length > 0 || diffStat != null;
@@ -106,6 +112,14 @@ export function WorkerCard({ worker }: { worker: FleetWorkerView }) {
       {worker.error && (
         <div className={s.workerError}>
           error {worker.error.code}: {worker.error.message}
+        </div>
+      )}
+
+      {onCancel && ['queued', 'running', 'waiting_approval', 'blocked'].includes(worker.status) && (
+        <div className={s.workerActions}>
+          <button className={s.fleetBtn} onClick={() => onCancel(worker.workerId)}>
+            Cancel
+          </button>
         </div>
       )}
     </div>
