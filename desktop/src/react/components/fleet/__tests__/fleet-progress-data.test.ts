@@ -46,4 +46,28 @@ describe('worker.progress data (vision + runner context)', () => {
     expect(v.taskType).toBeUndefined();
     expect(v.runner).toBeUndefined();
   });
+
+  it('captures structured worker.visual_result events', () => {
+    let v = createWorkerView('w1', 'mimo-vl');
+    v = reduceFleetWorker(v, {
+      type: 'worker.visual_result',
+      workerId: 'w1',
+      agent: 'mimo-vl',
+      taskType: 'ground',
+      image: '/shot.png',
+      summary: 'Button is at bottom right.',
+      boxes: [{ label: 'Submit', x: 0.7, y: 0.8, width: 0.1, height: 0.05 }],
+      files: [{ path: 'desktop/src/react/App.tsx', kind: 'suggested' }],
+    });
+
+    expect(v.taskType).toBe('ground');
+    expect(v.image).toBe('/shot.png');
+    expect(v.visualResult).toEqual({
+      taskType: 'ground',
+      image: '/shot.png',
+      summary: 'Button is at bottom right.',
+      boxes: [{ label: 'Submit', x: 0.7, y: 0.8, width: 0.1, height: 0.05 }],
+      files: [{ path: 'desktop/src/react/App.tsx', kind: 'suggested' }],
+    });
+  });
 });

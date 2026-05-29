@@ -387,9 +387,79 @@ describe("worker-run scaffold", () => {
 
     expect(body).toContain("data:image/png;base64");
     expect(body).toContain("Find the submit button");
-    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; agent?: string; text?: string; summary?: string });
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as {
+      type: string;
+      agent?: string;
+      text?: string;
+      summary?: string;
+      taskType?: string;
+      image?: string;
+    });
     expect(lines.some((line) => line.type === "worker.started" && line.agent === "mimo-vl")).toBe(true);
     expect(lines.some((line) => line.type === "assistant.delta" && line.text?.includes("\"x\""))).toBe(true);
+    expect(lines.some((line) => (
+      line.type === "worker.visual_result"
+      && line.taskType === "ground"
+      && line.image === "shot.png"
+      && line.summary?.includes("\"confidence\"")
+    ))).toBe(true);
     expect(lines.some((line) => line.type === "worker.finished" && line.summary === "lynn-cli worker completed")).toBe(true);
+  });
+
+  it("emits mock visual results for visual briefs", async () => {
+    const repo = await makeTempGitRepo();
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: describe screenshot",
+      "",
+      "## Task Type",
+      "see",
+      "",
+      "## Image",
+      "shot.png",
+      "",
+      "## Objective",
+      "Describe the screen.",
+      "",
+      "## Owned files",
+      "- desktop/src/react/**",
+      "",
+      "## Forbidden files",
+      "- server/**",
+      "",
+      "## Test commands",
+      "- npm test",
+    ].join("\n"));
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const code = await runWorker(parseArgs([
+        "worker",
+        "run",
+        "--brief",
+        briefPath,
+        "--worktree",
+        repo,
+        "--agent",
+        "mimo-vl",
+        "--mock",
+      ]));
+      expect(code).toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; taskType?: string; image?: string; summary?: string });
+    expect(lines.some((line) => (
+      line.type === "worker.visual_result"
+      && line.taskType === "see"
+      && line.image === "shot.png"
+      && line.summary === "mock see result for shot.png"
+    ))).toBe(true);
   });
 });

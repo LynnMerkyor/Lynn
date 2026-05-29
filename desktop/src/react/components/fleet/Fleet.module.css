@@ -484,6 +484,24 @@
   white-space: nowrap;
 }
 
+.structuredTag {
+  margin-left: 8px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(46, 204, 113, 0.15);
+  color: #2e9f59;
+  white-space: nowrap;
+}
+
+.visualMetaLine {
+  margin-top: 4px;
+  font-size: 11px;
+  font-family: var(--mono-font, monospace);
+  opacity: 0.72;
+  overflow-wrap: anywhere;
+}
+
 /* B2: CLI permission profile badge */
 .permBadge {
   margin: 0 4px 8px;

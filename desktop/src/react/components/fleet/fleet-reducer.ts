@@ -12,6 +12,8 @@ import type {
   FleetApprovalMode,
   FleetSandboxMode,
   FleetSeverity,
+  FleetVisualBox,
+  FleetVisualResultFile,
 } from '../../../../../shared/fleet-events.js';
 
 /** Structured payload the server attaches to worker.progress.data (B1 vision / B3 runner). */
@@ -37,6 +39,14 @@ export interface FleetViolation {
   message: string;
   path?: string;
   severity?: FleetSeverity;
+}
+
+export interface FleetVisualResultView {
+  taskType: 'see' | 'ground' | 'ui2code';
+  image?: string;
+  summary: string;
+  boxes?: FleetVisualBox[];
+  files?: FleetVisualResultFile[];
 }
 
 /** Accumulated, render-ready state for a single worker. */
@@ -70,6 +80,7 @@ export interface FleetWorkerView {
   /** Vision dispatch context (from a worker.progress data:{kind:'vision'} event). */
   taskType?: 'code' | 'see' | 'ground' | 'ui2code';
   image?: string;
+  visualResult?: FleetVisualResultView;
   /** How the worker was launched (from a worker.progress data:{kind:'runner'} event). */
   runner?: { mode: 'stub' | 'spawned'; source?: 'bundled' | 'electron' | 'dev'; pid?: number };
   lastTs?: string;
@@ -137,6 +148,17 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
       }
       return next;
     }
+    case 'worker.visual_result':
+      next.taskType = ev.taskType;
+      if (ev.image) next.image = ev.image;
+      next.visualResult = {
+        taskType: ev.taskType,
+        image: ev.image,
+        summary: ev.summary,
+        boxes: ev.boxes,
+        files: ev.files,
+      };
+      return next;
     case 'assistant.delta':
       next.assistant = prev.assistant + ev.text;
       return next;

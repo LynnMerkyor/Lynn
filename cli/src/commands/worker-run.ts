@@ -395,19 +395,31 @@ async function runLynnVisionWorker(input: {
   const reasoning = parseReasoningOptions(input.args);
   emit({ type: "shell.started", workerId: input.workerId, agent: input.agent, command: `Lynn ${input.brief.taskType}`, approval: "auto" });
   const started = Date.now();
+  let assistantText = "";
   try {
     for await (const event of streamBrainChat({
       brainUrl,
       reasoning,
       messages: [{ role: "user", content }],
     })) {
-      if (event.type === "assistant.delta") emit({ type: "assistant.delta", workerId: input.workerId, agent: input.agent, text: event.text });
+      if (event.type === "assistant.delta") {
+        assistantText += event.text;
+        emit({ type: "assistant.delta", workerId: input.workerId, agent: input.agent, text: event.text });
+      }
       else if (event.type === "reasoning.delta") emit({ type: "reasoning.delta", workerId: input.workerId, agent: input.agent, text: event.text, hidden: event.hidden });
       else if (event.type === "provider") emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: `provider: ${event.activeProvider}`, data: event });
       else if (event.type === "tool_progress") emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: `${event.name}: ${event.event}`, data: event });
       else if (event.type === "usage") emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: "usage", data: event.usage });
       else if (event.type === "brain.error") throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
     }
+    emit({
+      type: "worker.visual_result",
+      workerId: input.workerId,
+      agent: input.agent,
+      taskType: input.brief.taskType,
+      image: input.brief.image,
+      summary: assistantText.trim() || "MiMo vision worker completed without visible text.",
+    });
     emit({ type: "shell.finished", workerId: input.workerId, agent: input.agent, command: `Lynn ${input.brief.taskType}`, ok: true, exitCode: 0, ms: Date.now() - started });
     return 0;
   } catch (error) {
@@ -466,6 +478,17 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
   for (const command of brief.tests) {
     emit({ type: "test.started", workerId, agent, command });
     emit({ type: "test.finished", workerId, agent, command, ok: true, summary: mock ? "mock pass" : "not run in scaffold", ms: 0 });
+  }
+
+  if (mock && isVisionTask(brief.taskType)) {
+    emit({
+      type: "worker.visual_result",
+      workerId,
+      agent,
+      taskType: brief.taskType,
+      image: brief.image,
+      summary: `mock ${brief.taskType} result for ${brief.image || "image"}`,
+    });
   }
 
   emit({

@@ -102,7 +102,8 @@ export function WorkerCard({
   const canCopy = worker.log.length > 0;
   const hasActions = canCancel || canRetry || canOpen || canCopy;
   const isVision = !!worker.taskType && worker.taskType !== 'code';
-  const visualText = (worker.assistant.trim() || worker.finished?.summary || '').trim();
+  const visualResult = worker.visualResult;
+  const visualText = (visualResult?.summary || worker.assistant.trim() || worker.finished?.summary || '').trim();
   const rs = worker.runner?.source;
   const runnerSourceLabel =
     rs === 'bundled' ? 'bundled Node' : rs === 'electron' ? 'Electron-as-node' : rs === 'dev' ? 'dev CLI' : rs;
@@ -155,7 +156,17 @@ export function WorkerCard({
           {visualText ? (
             <div className={s.visualResultBody}>
               {visualText}
-              <span className={s.unstructuredTag}>unstructured preview</span>
+              <span className={visualResult ? s.structuredTag : s.unstructuredTag}>
+                {visualResult ? 'structured result' : 'unstructured preview'}
+              </span>
+              {visualResult?.boxes?.length ? (
+                <div className={s.visualMetaLine}>boxes: {visualResult.boxes.length}</div>
+              ) : null}
+              {visualResult?.files?.length ? (
+                <div className={s.visualMetaLine}>
+                  files: {visualResult.files.map((file) => `${file.kind}:${file.path}`).join(', ')}
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className={s.visualResultPending}>waiting for result…</div>
