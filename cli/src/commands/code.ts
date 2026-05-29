@@ -3,14 +3,16 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import readline from "node:readline/promises";
-import { stdin as input, stderr as errorOutput } from "node:process";
+import { stdin as input, stdout as output, stderr as errorOutput } from "node:process";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
+import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
+import { applyModeCommand, renderMode, type ChatMode } from "./chat.js";
 
 const pExecFile = promisify(execFile);
 
@@ -30,6 +32,12 @@ function timeoutMs(args: ParsedArgs): number | undefined {
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) throw new Error("--timeout-ms must be a positive integer");
   return parsed;
+}
+
+function sandbox(args: ParsedArgs): ToolRunContext["sandbox"] {
+  const value = getStringFlag(args.flags, "sandbox");
+  if (value === "read-only" || value === "danger-full-access") return value;
+  return "workspace-write";
 }
 
 function maxSteps(args: ParsedArgs): number {
@@ -53,6 +61,7 @@ export async function runCode(args: ParsedArgs): Promise<number> {
   if (!tool) {
     const task = args.positionals.join(" ").trim();
     if (task) return runCodeTask(args, task, json);
+    if (!json && input.isTTY && output.isTTY) return runCodeInteractive(args);
     const message = "code mode ready; pass a task, --list-tools, or --tool <name>";
     if (json) writeJsonLine({ type: "code.ready", ts: nowIso(), message, cwd: cwd(args) });
     else process.stdout.write(`${message}\n`);
@@ -67,9 +76,14 @@ export async function runCode(args: ParsedArgs): Promise<number> {
     json,
     input,
     output: errorOutput,
+    preview: formatDangerousToolPreview(tool, {
+      path: getStringFlag(args.flags, "path") || undefined,
+      text: getStringFlag(args.flags, "text", "content") || args.positionals.join(" ") || undefined,
+      command: getStringFlag(args.flags, "command") || args.positionals.join(" ") || undefined,
+    }),
   });
   const result = await runClientTool(
-    { cwd: toolCwd, approval: toolApproval, timeoutMs: timeoutMs(args) },
+    { cwd: toolCwd, approval: toolApproval, sandbox: sandbox(args), timeoutMs: timeoutMs(args) },
     {
       name: tool,
       path: getStringFlag(args.flags, "path") || undefined,
@@ -85,6 +99,88 @@ export async function runCode(args: ParsedArgs): Promise<number> {
   return result.ok ? 0 : 1;
 }
 
+async function runCodeInteractive(args: ParsedArgs): Promise<number> {
+  const mode = codeModeFromArgs(args);
+  const rl = readline.createInterface({ input, output, terminal: true });
+  output.write(renderCodeIntro(mode));
+  try {
+    for (;;) {
+      const raw = await rl.question("code> ");
+      const text = raw.trim();
+      if (!text) continue;
+      if (text === "/exit" || text === "/quit") break;
+      if (text === "/help") {
+        output.write(renderCodeHelp());
+        continue;
+      }
+      if (text === "/tools") {
+        output.write(`${CLIENT_TOOL_DEFINITIONS.map((tool) => `${tool.name}${tool.dangerous ? " (approval required)" : ""}: ${tool.description}`).join("\n")}\n\n`);
+        continue;
+      }
+      if (text === "/mode") {
+        output.write(`mode: ${renderMode(mode)}\nUse /mode yolo for full local tool permission or /mode ask for guarded mode.\n\n`);
+        continue;
+      }
+      if (text.startsWith("/mode ")) {
+        const result = applyModeCommand(mode, text.slice(6).trim());
+        output.write(`${result}\nmode: ${renderMode(mode)}\n\n`);
+        continue;
+      }
+      const taskArgs: ParsedArgs = {
+        ...args,
+        positionals: [text],
+        flags: {
+          ...args.flags,
+          approval: mode.approval,
+          sandbox: mode.sandbox,
+        },
+      };
+      try {
+        await runCodeTask(taskArgs, text, false);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errorOutput.write(`Lynn code error: ${message}\n`);
+      }
+      output.write("\n");
+    }
+  } finally {
+    rl.close();
+  }
+  return 0;
+}
+
+export function renderCodeIntro(mode: ChatMode): string {
+  return [
+    "Lynn code mode",
+    "model: MiMo via local Brain router (auto)",
+    `mode:  ${renderMode(mode)}   /mode to change`,
+    "tools: read_file, grep, glob, apply_patch, bash, write_file",
+    "",
+    "Type a coding task, /tools, /mode yolo, /help, or /exit.",
+    "",
+  ].join("\n");
+}
+
+function renderCodeHelp(): string {
+  return [
+    "/exit leave code mode",
+    "/tools list local coding tools",
+    "/mode show permission mode",
+    "/mode ask guarded workspace-write mode",
+    "/mode yolo allow local writes and shell commands",
+    "",
+  ].join("\n");
+}
+
+function codeModeFromArgs(args: ParsedArgs): ChatMode {
+  const rawApproval = approval(args);
+  const rawSandbox = getStringFlag(args.flags, "sandbox");
+  return {
+    approval: rawApproval,
+    sandbox: rawSandbox === "read-only" || rawSandbox === "danger-full-access" ? rawSandbox : "workspace-write",
+  };
+}
+
 interface ToolApprovalRequest {
   tool: ClientToolName;
   approval: "ask" | "on-failure" | "never" | "yolo";
@@ -92,6 +188,7 @@ interface ToolApprovalRequest {
   json: boolean;
   input: NodeJS.ReadStream;
   output: NodeJS.WriteStream;
+  preview?: string;
 }
 
 export function isDangerousClientTool(tool: ClientToolName): boolean {
@@ -113,6 +210,7 @@ async function resolveToolApproval(request: ToolApprovalRequest): Promise<ToolAp
   }
   const rl = readline.createInterface({ input: request.input, output: request.output, terminal: true });
   try {
+    if (request.preview) request.output.write(`${request.preview}\n`);
     const answer = await rl.question(`Allow ${request.tool} in ${request.cwd}? [y/N] `);
     if (/^(y|yes)$/i.test(answer.trim())) return "yolo";
     throw new Error(`${request.tool} cancelled by user`);
@@ -150,6 +248,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean): Promi
   const toolCtx: ToolRunContext = {
     cwd: cwd(args),
     approval: approval(args),
+    sandbox: sandbox(args),
     timeoutMs: timeoutMs(args),
   };
   const final = await runCodeAgentLoop({
@@ -202,6 +301,8 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
       role: "system",
       content: [
         "You are Lynn CLI code mode.",
+        "The default online route is MiMo through the local Lynn Brain router.",
+        "MiMo is good at Chinese/English mixed product work; keep responses in the user's language.",
         "You help with repository-level coding tasks from the terminal.",
         "You may request local tools using exactly one JSON object and no prose:",
         '{"tool":"read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',
@@ -229,7 +330,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
       break;
     }
     if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
-    else process.stderr.write(`\nTool: ${toolRequest.tool}\n`);
+    else renderClientToolStart(toolRequest);
     let toolResult: ClientToolResult;
     try {
       const effectiveApproval = await resolveToolApproval({
@@ -239,6 +340,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
         json: inputData.json,
         input: inputData.input,
         output: inputData.output,
+        preview: formatDangerousToolPreview(toolRequest.tool, toolRequest.args),
       });
       toolResult = await runClientTool({ ...inputData.toolCtx, approval: effectiveApproval }, {
         name: toolRequest.tool,
@@ -252,7 +354,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
       };
     }
     if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
-    else process.stderr.write(`${toolResult.ok ? "ok" : "failed"}: ${toolResult.error || summarizeToolOutput(toolResult.output)}\n`);
+    else renderClientToolResult(toolResult);
     messages.push({ role: "user", content: `Tool result for ${toolRequest.tool}:\n${JSON.stringify(toolResult, null, 2)}\nContinue. If no more tools are needed, give the final answer.` });
   }
   if (!finalText) {
@@ -270,6 +372,7 @@ async function collectBrainText(inputData: {
 }): Promise<string> {
   let text = "";
   const spinner = new TerminalSpinner(process.stderr, inputData.label);
+  const renderState: HumanBrainRenderState = {};
   if (!inputData.json) spinner.start();
   try {
     for await (const event of streamBrainChat({
@@ -283,6 +386,21 @@ async function collectBrainText(inputData: {
       }
       if (event.type === "reasoning.delta" && renderReasoning) process.stderr.write(event.text);
       if (event.type === "assistant.delta") text += event.text;
+      if (inputData.json && (event.type === "provider" || event.type === "tool_progress" || event.type === "brain.error" || event.type === "usage")) {
+        if (event.type === "usage") writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage });
+        else writeJsonLine({ ...event, ts: nowIso() });
+      }
+      if (!inputData.json && event.type !== "assistant.delta" && event.type !== "reasoning.delta") {
+        if (event.type === "usage") {
+          const summary = summarizeUsage(event.usage);
+          if (summary) process.stderr.write(`usage: ${summary}\n`);
+        } else {
+          renderBrainEventForHuman(event, renderState, process.stderr);
+        }
+      }
+      if (event.type === "brain.error") {
+        throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
+      }
     }
   } finally {
     spinner.stop();
@@ -364,6 +482,43 @@ function summarizeToolOutput(output: unknown): string {
   const text = typeof output === "string" ? output : JSON.stringify(output);
   if (!text) return "(no output)";
   return text.length > 500 ? `${text.slice(0, 500)}...` : text;
+}
+
+function renderClientToolStart(request: CodeToolRequest): void {
+  const target = request.args.path || request.args.query || request.args.pattern || request.args.command || "";
+  const suffix = target ? ` ${oneLine(target, 96)}` : "";
+  process.stderr.write(`\n╭─ tool ${request.tool}${suffix}\n`);
+}
+
+function renderClientToolResult(result: ClientToolResult): void {
+  const symbol = result.ok ? "✓" : "×";
+  const detail = result.error || summarizeToolOutput(result.output);
+  process.stderr.write(`╰─ ${symbol} ${oneLine(detail, 120)}\n`);
+}
+
+function formatDangerousToolPreview(tool: ClientToolName, args: { path?: string; text?: string; command?: string }): string {
+  if (!isDangerousClientTool(tool)) return "";
+  if (tool === "apply_patch") {
+    const patch = args.text || "";
+    const lines = patch.split(/\r?\n/).slice(0, 24).join("\n");
+    return [
+      "Patch preview:",
+      lines || "(empty patch)",
+      patch.split(/\r?\n/).length > 24 ? "... (truncated)" : "",
+    ].filter(Boolean).join("\n");
+  }
+  if (tool === "write_file") {
+    return `Write preview: ${args.path || "(unknown path)"}\n${oneLine(args.text || "", 500)}`;
+  }
+  if (tool === "bash") {
+    return `Command preview: ${args.command || "(empty command)"}`;
+  }
+  return "";
+}
+
+function oneLine(value: string, max: number): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
 async function collectCodeContext(repoCwd: string): Promise<CodeContext> {

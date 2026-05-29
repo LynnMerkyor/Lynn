@@ -1,5 +1,6 @@
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
+import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { appendSessionTurn, resolveDataDir } from "../session/store.js";
@@ -58,6 +59,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
 
   let assistant = "";
   let sawReasoning = false;
+  const renderState: HumanBrainRenderState = {};
   const spinner = new TerminalSpinner(process.stderr);
   if (!options.json) spinner.start();
   try {
@@ -69,7 +71,11 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       handleBrainEvent(event, {
         json: !!options.json,
         renderReasoning,
+        renderState,
       });
+      if (event.type === "brain.error") {
+        throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
+      }
       if (event.type === "reasoning.delta") sawReasoning = true;
       if (event.type === "assistant.delta") assistant += event.text;
     }
@@ -101,9 +107,11 @@ async function readPromptStdin(prompt: string): Promise<string> {
   }
 }
 
-function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; renderReasoning: boolean }): void {
+function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; renderReasoning: boolean; renderState: HumanBrainRenderState }): void {
   if (opts.json) {
     if (event.type === "assistant.delta" || event.type === "reasoning.delta") {
+      writeJsonLine({ ...event, ts: nowIso() });
+    } else if (event.type === "provider" || event.type === "tool_progress" || event.type === "brain.error") {
       writeJsonLine({ ...event, ts: nowIso() });
     } else if (event.type === "usage") {
       writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage });
@@ -115,5 +123,10 @@ function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; render
     process.stdout.write(event.text);
   } else if (event.type === "reasoning.delta" && opts.renderReasoning) {
     process.stderr.write(event.text);
+  } else if (event.type === "usage") {
+    const summary = summarizeUsage(event.usage);
+    if (summary) process.stderr.write(`\nusage: ${summary}\n`);
+  } else {
+    renderBrainEventForHuman(event, opts.renderState, process.stderr);
   }
 }

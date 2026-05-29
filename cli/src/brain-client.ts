@@ -15,6 +15,9 @@ export interface ChatMessage {
 export type BrainStreamEvent =
   | { type: "assistant.delta"; text: string }
   | { type: "reasoning.delta"; text: string; hidden?: boolean }
+  | { type: "provider"; activeProvider: string; fallbackFrom?: Array<{ id: string; reason?: string }> }
+  | { type: "tool_progress"; event: string; name: string; ms?: number; ok?: boolean }
+  | { type: "brain.error"; error: string; code?: string }
   | { type: "usage"; usage: unknown }
   | { type: "done"; finishReason?: string | null };
 
@@ -60,6 +63,11 @@ export function parseSsePayloads(chunk: string): string[] {
 export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
   if (!payload || payload === "[DONE]") return [{ type: "done" }];
   const parsed = JSON.parse(payload) as {
+    object?: string;
+    meta?: { active_provider?: unknown; fallback_from?: unknown };
+    tool_progress?: { event?: unknown; name?: unknown; ms?: unknown; ok?: unknown };
+    error?: unknown;
+    code?: unknown;
     choices?: Array<{
       delta?: { content?: unknown; reasoning_content?: unknown; reasoning?: unknown };
       finish_reason?: string | null;
@@ -67,6 +75,40 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
     usage?: unknown;
   };
   const events: BrainStreamEvent[] = [];
+  if (parsed.object === "lynn.provider") {
+    const activeProvider = typeof parsed.meta?.active_provider === "string" ? parsed.meta.active_provider : "";
+    const fallbackFrom = Array.isArray(parsed.meta?.fallback_from)
+      ? parsed.meta.fallback_from
+          .filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === "object")
+          .map((entry) => ({
+            id: typeof entry.id === "string" ? entry.id : "",
+            reason: typeof entry.reason === "string" ? entry.reason : undefined,
+          }))
+          .filter((entry) => entry.id)
+      : undefined;
+    if (activeProvider) events.push({ type: "provider", activeProvider, fallbackFrom });
+  }
+  if (parsed.object === "lynn.tool_progress") {
+    const progress = parsed.tool_progress || {};
+    const event = typeof progress.event === "string" ? progress.event : "";
+    const name = typeof progress.name === "string" ? progress.name : "";
+    if (event && name) {
+      events.push({
+        type: "tool_progress",
+        event,
+        name,
+        ms: typeof progress.ms === "number" ? progress.ms : undefined,
+        ok: typeof progress.ok === "boolean" ? progress.ok : undefined,
+      });
+    }
+  }
+  if (parsed.object === "lynn.error") {
+    events.push({
+      type: "brain.error",
+      error: typeof parsed.error === "string" ? parsed.error : "Brain returned an error",
+      code: typeof parsed.code === "string" ? parsed.code : undefined,
+    });
+  }
   for (const choice of parsed.choices || []) {
     const delta = choice.delta || {};
     if (typeof delta.reasoning_content === "string" && delta.reasoning_content) {

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { canPromptForDangerousTool, isDangerousClientTool, parseCodeToolRequest, runCode } from "../src/commands/code.js";
+import { canPromptForDangerousTool, isDangerousClientTool, parseCodeToolRequest, renderCodeIntro, runCode } from "../src/commands/code.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
 
@@ -53,6 +53,12 @@ describe("code tools", () => {
     await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "write_file", path: "out.txt", text: "x" })).rejects.toThrow("approval yolo");
     await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "apply_patch", text: "diff --git a/x b/x\n" })).rejects.toThrow("approval yolo");
     await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "bash", command: "pwd" })).rejects.toThrow("approval yolo");
+  });
+
+  it("blocks dangerous tools in read-only sandbox even with yolo approval", async () => {
+    await expect(runClientTool({ cwd: tmp, approval: "yolo", sandbox: "read-only" }, { name: "write_file", path: "out.txt", text: "x" })).rejects.toThrow("read-only sandbox");
+    await expect(runClientTool({ cwd: tmp, approval: "yolo", sandbox: "read-only" }, { name: "apply_patch", text: "diff --git a/x b/x\n" })).rejects.toThrow("read-only sandbox");
+    await expect(runClientTool({ cwd: tmp, approval: "yolo", sandbox: "read-only" }, { name: "bash", command: "pwd" })).rejects.toThrow("read-only sandbox");
   });
 
   it("knows which client tools need confirmation", () => {
@@ -143,6 +149,16 @@ describe("code tools", () => {
       process.stdout.write = original;
     }
     expect(output).toContain("code.tools");
+  });
+
+  it("renders an interactive code-mode intro with MiMo route and permission mode", () => {
+    const intro = renderCodeIntro({ approval: "ask", sandbox: "workspace-write" });
+
+    expect(intro).toContain("Lynn code mode");
+    expect(intro).toContain("MiMo via local Brain router");
+    expect(intro).toContain("ask / workspace-write");
+    expect(intro).toContain("apply_patch");
+    expect(intro).toContain("/mode yolo");
   });
 
   it("runs a read-only code task with repository context", async () => {

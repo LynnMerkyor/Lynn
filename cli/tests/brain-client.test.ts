@@ -32,6 +32,33 @@ describe("brain-client stream parser", () => {
     ]);
   });
 
+  it("parses Lynn provider, tool progress, and error SSE payloads", () => {
+    expect(parseBrainStreamPayload(JSON.stringify({
+      object: "lynn.provider",
+      meta: {
+        active_provider: "mimo",
+        fallback_from: [{ id: "spark", reason: "probe-failed" }],
+      },
+    }))).toEqual([
+      { type: "provider", activeProvider: "mimo", fallbackFrom: [{ id: "spark", reason: "probe-failed" }] },
+    ]);
+
+    expect(parseBrainStreamPayload(JSON.stringify({
+      object: "lynn.tool_progress",
+      tool_progress: { event: "end", name: "web_search", ms: 120, ok: true },
+    }))).toEqual([
+      { type: "tool_progress", event: "end", name: "web_search", ms: 120, ok: true },
+    ]);
+
+    expect(parseBrainStreamPayload(JSON.stringify({
+      object: "lynn.error",
+      error: "tool_storm_limit",
+      code: "tool_storm_limit",
+    }))).toEqual([
+      { type: "brain.error", error: "tool_storm_limit", code: "tool_storm_limit" },
+    ]);
+  });
+
   it("requires prompt or messages", async () => {
     await expect(async () => {
       for await (const _event of streamBrainChat({ brainUrl: "http://127.0.0.1:1", reasoning: { effort: "auto", display: "auto" } })) {

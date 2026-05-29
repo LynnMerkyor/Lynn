@@ -138,6 +138,25 @@ checks.push(run("code apply patch", [
   assertIncludes(r.name, text, "lynn");
 }));
 
+checks.push(run("code read-only blocks writes", [
+  "code",
+  "--cwd",
+  toolDataDir,
+  "--tool",
+  "write_file",
+  "--path",
+  "blocked.txt",
+  "--text",
+  "nope",
+  "--approval",
+  "yolo",
+  "--sandbox",
+  "read-only",
+  "--json",
+], { expectFailure: true }).then((r) => {
+  assertIncludes(r.name, r.stderr, "read-only sandbox");
+}));
+
 checks.push(run("code task mock", ["code", "review the current diff", "--mock-brain"]).then((r) => {
   assertIncludes(r.name, r.stdout, "Mock Lynn code task");
 }));

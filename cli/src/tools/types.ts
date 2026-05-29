@@ -10,6 +10,7 @@ export interface ClientToolResult {
 export interface ToolRunContext {
   cwd: string;
   approval: "ask" | "on-failure" | "never" | "yolo";
+  sandbox?: "read-only" | "workspace-write" | "danger-full-access";
   timeoutMs?: number;
 }
 

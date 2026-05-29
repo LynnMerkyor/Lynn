@@ -6,6 +6,7 @@ import { BrainConnectionError, streamBrainChat, type BrainStreamEvent, type Chat
 import { renderProvidersInfo, resolveProvidersInfo } from "./providers.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
+import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 
 export async function runChat(args: ParsedArgs, options: { intro?: boolean; brainReachable?: boolean } = {}): Promise<number> {
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
@@ -59,6 +60,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     }
 
     let assistant = "";
+    const renderState: HumanBrainRenderState = {};
     const spinner = new TerminalSpinner(process.stderr);
     const renderReasoning = shouldRenderReasoning(reasoning.display, false);
     try {
@@ -67,8 +69,11 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
         if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
           spinner.stop();
         }
-        if (renderChatEvent(event, renderReasoning)) {
+        if (renderChatEvent(event, renderReasoning, renderState)) {
           assistant += event.text;
+        }
+        if (event.type === "brain.error") {
+          throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
         }
       }
     } catch (error) {
@@ -195,13 +200,18 @@ export function formatChatError(error: unknown): string {
   return `Lynn error: ${message}`;
 }
 
-function renderChatEvent(event: BrainStreamEvent, renderReasoning: boolean): event is { type: "assistant.delta"; text: string } {
+function renderChatEvent(event: BrainStreamEvent, renderReasoning: boolean, renderState: HumanBrainRenderState): event is { type: "assistant.delta"; text: string } {
   if (event.type === "assistant.delta") {
     output.write(event.text);
     return true;
   }
   if (event.type === "reasoning.delta" && renderReasoning) {
     process.stderr.write(event.text);
+  } else if (event.type === "usage") {
+    const summary = summarizeUsage(event.usage);
+    if (summary) process.stderr.write(`\nusage: ${summary}\n`);
+  } else {
+    renderBrainEventForHuman(event, renderState, process.stderr);
   }
   return false;
 }
