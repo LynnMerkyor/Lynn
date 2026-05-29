@@ -14,7 +14,7 @@ import {
 } from "../provider-profile.js";
 import { resolveDataDir } from "../session/store.js";
 import { t } from "../i18n.js";
-import { resolveProviderPreset } from "../provider-presets.js";
+import { listProviderPresets, resolveProviderPreset } from "../provider-presets.js";
 
 export interface ProvidersInfo {
   defaultRoute: string;
@@ -89,6 +89,7 @@ export function renderProvidersInfo(info: ProvidersInfo): string {
     t("providers.cliNote"),
     "  Lynn providers set --base-url https://api.example.com/v1 --api-key <api-key> --model model-id",
     "  Lynn providers set --preset stepfun --api-key <api-key>",
+    "  Lynn providers presets",
     t("providers.routeHint"),
   ].join("\n");
 }
@@ -153,6 +154,16 @@ export async function resolveProvidersInfo(args: ParsedArgs, timeoutMs = 1500): 
 }
 
 export async function runProviders(args: ParsedArgs, json = hasFlag(args.flags, "json", "jsonl")): Promise<number> {
+  if ((args.positionals[0] || "").toLowerCase() === "presets") {
+    const presets = listProviderPresets();
+    if (json) {
+      writeJsonLine({ type: "providers.presets", ts: nowIso(), presets });
+    } else {
+      process.stdout.write(`${renderProviderPresets(presets)}\n`);
+    }
+    return 0;
+  }
+
   if ((args.positionals[0] || "").toLowerCase() === "set") {
     const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
     const existing = await readCliProviderProfile(dataDir);
@@ -196,6 +207,22 @@ export async function runProviders(args: ParsedArgs, json = hasFlag(args.flags, 
     process.stdout.write(`${renderProvidersInfo(info)}\n`);
   }
   return 0;
+}
+
+export function renderProviderPresets(presets = listProviderPresets()): string {
+  return [
+    t("providers.presets.title"),
+    "",
+    ...presets.flatMap((preset) => [
+      `${preset.name}`,
+      `  ${t("providers.presets.model")}: ${preset.model}`,
+      `  ${t("providers.presets.url")}:   ${preset.baseUrl}`,
+      `  ${t("providers.presets.about")}: ${preset.description}`,
+      `  ${t("providers.presets.use")}:   Lynn providers set --preset ${preset.name} --api-key <api-key>`,
+      "",
+    ]),
+    t("providers.presets.note"),
+  ].join("\n").trimEnd();
 }
 
 interface ProviderSummaryResponse {

@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "../src/args.js";
-import { activeRouteLabel, renderProvidersInfo, runProviders } from "../src/commands/providers.js";
+import { activeRouteLabel, renderProviderPresets, renderProvidersInfo, runProviders } from "../src/commands/providers.js";
 import { providerProfilePath, readCliProviderProfile, resolveCliProviderProfile } from "../src/provider-profile.js";
 import { setLang } from "../src/i18n.js";
 
@@ -83,6 +83,51 @@ describe("providers command", () => {
     expect(output).toContain("当前路由");
     expect(output).toContain("默认模型");
     expect(output).toContain("三步配置 BYOK");
+  });
+
+  it("lists CLI BYOK presets so users can discover cloud backends", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runProviders(parseArgs(["providers", "presets"]))).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain("stepfun");
+    expect(output).toContain("step-3.7-flash");
+    expect(output).toContain("Lynn providers set --preset stepfun --api-key <api-key>");
+  });
+
+  it("prints provider presets as JSON when requested", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runProviders(parseArgs(["providers", "presets", "--json"]))).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain("\"type\":\"providers.presets\"");
+    expect(output).toContain("\"name\":\"stepfun\"");
+    expect(output).not.toContain("apiKey");
+  });
+
+  it("renders provider presets without embedding keys", () => {
+    const rendered = renderProviderPresets();
+
+    expect(rendered).toContain("StepFun");
+    expect(rendered).toContain("step-3.7-flash");
+    expect(rendered).toContain("<api-key>");
+    expect(rendered).not.toContain("sk-");
   });
 
   it("formats the active route for the startup banner", () => {

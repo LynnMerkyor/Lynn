@@ -131,6 +131,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "providers.routeHint": "用 Lynn model 或聊天里的 /model 查看路由;用 --brain-url 指向其他本地端点。",
     "providers.saved": "已保存 CLI BYOK provider。",
     "providers.savedHint": "当 Lynn 客户端/Brain 离线时,Lynn CLI 会用这个 provider 作为直接 fallback。",
+    "providers.presets.title": "Lynn CLI BYOK Presets",
+    "providers.presets.model": "模型",
+    "providers.presets.url": "URL",
+    "providers.presets.about": "说明",
+    "providers.presets.use": "使用",
+    "providers.presets.note": "Preset 只填 API URL 和模型名;API key 仍需用户自己提供,不会内置。",
   },
   en: {
     "tips.banner":
@@ -227,6 +233,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "providers.routeHint": "Use Lynn model or /model in chat to review this route. Use --brain-url to point at another local endpoint.",
     "providers.saved": "Saved CLI BYOK provider.",
     "providers.savedHint": "When Lynn client GUI/Brain is offline, Lynn CLI will use this provider as a direct fallback.",
+    "providers.presets.title": "Lynn CLI BYOK Presets",
+    "providers.presets.model": "model",
+    "providers.presets.url": "URL",
+    "providers.presets.about": "about",
+    "providers.presets.use": "use",
+    "providers.presets.note": "Presets fill only API URL and model name; users still provide their own API key.",
   },
 };
 

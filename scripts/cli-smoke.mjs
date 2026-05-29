@@ -109,6 +109,13 @@ checks.push(run("providers", ["providers", "--data-dir", missingDataDir]).then((
   assertNotIncludes(r.name, r.stdout.toLowerCase(), "api_key");
 }));
 
+checks.push(run("provider presets", ["providers", "presets"]).then((r) => {
+  assertIncludes(r.name, r.stdout, "stepfun");
+  assertIncludes(r.name, r.stdout, "step-3.7-flash");
+  assertIncludes(r.name, r.stdout, "Lynn providers set --preset stepfun --api-key <api-key>");
+  assertNotIncludes(r.name, r.stdout, "sk-");
+}));
+
 checks.push(run("permissions", ["permissions", "--data-dir", missingDataDir]).then((r) => {
   assertIncludes(r.name, r.stdout, "Lynn CLI Permissions");
   assertIncludes(r.name, r.stdout, "approval: ask");
