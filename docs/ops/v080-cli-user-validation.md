@@ -1,6 +1,6 @@
 # Lynn CLI v0.80 User Validation Plan
 
-Date: 2026-05-29
+Date: 2026-05-30
 
 This is the user-facing validation plan for the v0.80 CLI track. The goal is not to prove every future Fleet feature; it is to make sure a tester can install, launch, understand, and recover from the CLI without reading source code.
 
@@ -17,7 +17,10 @@ Current default model route:
 
 - Model: MiMo through the local Brain router.
 - Brain URL: `http://127.0.0.1:8790`.
-- BYOK setup: Lynn GUI > Settings > Providers, plus future CLI helper commands.
+- GUI route: install/open the Lynn client GUI; Settings > Providers controls the
+  local Brain route.
+- CLI-only route: configure a user-owned OpenAI-compatible endpoint with
+  `Lynn providers set` or a preset such as `mimo` / `stepfun`.
 
 Current pricing posture:
 
@@ -73,11 +76,14 @@ Lynn ui2code /tmp/lynn-cli-smoke.png --mock-brain
 Expected:
 
 - No command requires network.
+- `doctor --offline` reports that the local Brain check was skipped, shows
+  `cli-byok`, lists available presets, and suggests:
+  `Lynn providers set --preset mimo --api-key <api-key>`.
 - `Lynn code` lists `read_file`, `grep`, `glob`, `apply_patch`, `bash`, and `write_file`.
 - Worker JSONL contains `worker.started`, `worker.claims`, `test.finished`, `git.diff`, and `worker.finished`.
 - Vision commands print `Mock Lynn see`, `vision.started`, or `Mock Lynn ui2code`.
 
-## Tier 1: Brain Offline Recovery
+## Tier 1: Brain Offline Recovery And CLI-only BYOK
 
 With the GUI closed:
 
@@ -91,6 +97,36 @@ Expected:
 - The command must not dump a stack trace.
 - It should say Brain is offline and tell the user to start Lynn GUI or use `--mock-brain`.
 - `Lynn code` should keep a clean prompt and remain exit-able with `/exit` or Ctrl-D.
+
+Then configure a CLI-only BYOK endpoint. This is the required path for users who
+install only `@lynn/cli` and do not run the Lynn client GUI:
+
+```bash
+Lynn providers presets
+Lynn providers set --preset mimo --api-key <token-plan-key>
+Lynn providers set --preset stepfun --api-key <stepfun-key>
+Lynn providers
+Lynn doctor --offline
+```
+
+Generic OpenAI-compatible setup must also work:
+
+```bash
+Lynn providers set \
+  --base-url https://api.example.com/v1 \
+  --api-key <api-key> \
+  --model model-id
+```
+
+Expected:
+
+- `mimo` preset fills `https://token-plan-cn.xiaomimimo.com/v1` and
+  `mimo-v2.5-pro`.
+- `stepfun` preset fills `https://api.stepfun.com/step_plan/v1` and
+  `step-3.7-flash`.
+- `Lynn providers` and `Lynn doctor --offline` never print raw API keys.
+- Once configured, `Lynn -p`, `Lynn chat`, `Lynn code`, and built-in workers may
+  use the CLI BYOK profile when the local Brain is offline.
 
 ## Tier 2: GUI Online Route
 
@@ -125,6 +161,24 @@ Expected:
 - `see` returns a UI-aware description, not generic image alt text.
 - `ground --json` starts with a machine-readable coordinate object or a clear refusal if the model cannot localize.
 - `ui2code` produces an implementation plan with component boundaries, layout, states, and accessibility notes.
+
+## Tier 3b: StepFun Fast Coding Worker
+
+StepFun is not the default route. It is a BYOK fast/high-quality coding backend
+for CLI-only use and Fleet workers.
+
+```bash
+Lynn providers set --preset stepfun --api-key <stepfun-key>
+Lynn worker run --brief task.md --worktree /path/to/worktree --agent stepfun-flash --jsonl
+```
+
+Expected:
+
+- Worker startup reports `stepfun-flash` as the agent/backend.
+- The worker uses the `stepfun` preset only when the user supplied their own key.
+- Fleet still enforces owned/forbidden globs and center-file locks.
+- StepFun results are treated as cloud BYOK output, not as the free local MiMo
+  default route.
 
 ## Tier 4: Coding Mode
 
@@ -251,8 +305,9 @@ Current alpha can be free for validation, but the CLI must preserve the followin
 
 - `Lynn providers` lists configured provider status without printing secrets.
 - CLI supports `--brain-url` so advanced users can point to a compatible router.
-- GUI remains the first BYOK setup surface.
-- A later CLI command can open or print setup guidance for provider keys.
+- GUI remains the best default BYOK setup surface for the local Brain route.
+- `Lynn providers set` is the supported CLI-only BYOK setup surface for users who
+  install only `@lynn/cli`.
 - Quota-sensitive modes should be explicit: fast mode, thinking mode, vision mode, and worker mode.
 
 ## Acceptance Bar
