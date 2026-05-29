@@ -157,6 +157,8 @@ describe("code tools", () => {
     expect(intro).toContain("Lynn code mode");
     expect(intro).toContain("MiMo via local Brain router");
     expect(intro).toContain("ask / workspace-write");
+    expect(intro).toContain("think:");
+    expect(intro).toContain("/fast");
     expect(intro).toContain("apply_patch");
     expect(intro).toContain("/mode yolo");
   });

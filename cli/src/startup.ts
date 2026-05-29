@@ -51,6 +51,7 @@ export function renderStartupBanner(input: {
     box(lines),
     "",
     "  Tip: Lynn -p \"prompt\" uses the local Brain router, which defaults to MiMo unless you change it.",
+    "       In chat/code, use /fast for low latency or /think for deeper reasoning.",
     "       Use Lynn providers for BYOK setup, or Lynn help to see every command.",
   ].join("\n");
 }

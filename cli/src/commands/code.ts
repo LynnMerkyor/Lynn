@@ -12,7 +12,7 @@ import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
-import { applyModeCommand, renderMode, type ChatMode } from "./chat.js";
+import { applyModeCommand, applyReasoningCommand, renderMode, type ChatMode } from "./chat.js";
 
 const pExecFile = promisify(execFile);
 
@@ -101,8 +101,9 @@ export async function runCode(args: ParsedArgs): Promise<number> {
 
 async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   const mode = codeModeFromArgs(args);
+  let reasoning = parseReasoningOptions(args);
   const rl = readline.createInterface({ input, output, terminal: true });
-  output.write(renderCodeIntro(mode));
+  output.write(renderCodeIntro(mode, reasoning));
   try {
     for (;;) {
       const raw = await rl.question("code> ");
@@ -115,6 +116,26 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       }
       if (text === "/tools") {
         output.write(`${CLIENT_TOOL_DEFINITIONS.map((tool) => `${tool.name}${tool.dangerous ? " (approval required)" : ""}: ${tool.description}`).join("\n")}\n\n`);
+        continue;
+      }
+      if (text === "/fast") {
+        reasoning = { ...reasoning, effort: "off" };
+        output.write("Fast mode enabled: MiMo/Brain thinking is off for quick coding turns.\n\n");
+        continue;
+      }
+      if (text === "/think") {
+        reasoning = { ...reasoning, effort: "high" };
+        output.write("Thinking mode enabled: reasoning effort is high.\n\n");
+        continue;
+      }
+      if (text === "/reasoning") {
+        output.write(`reasoning: ${reasoning.effort} · display ${reasoning.display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.\n\n`);
+        continue;
+      }
+      if (text.startsWith("/reasoning ")) {
+        const result = applyReasoningCommand(reasoning, text.slice(11).trim());
+        reasoning = result.reasoning;
+        output.write(`${result.message}\nreasoning: ${reasoning.effort} · display ${reasoning.display}\n\n`);
         continue;
       }
       if (text === "/mode") {
@@ -133,6 +154,8 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
           ...args.flags,
           approval: mode.approval,
           sandbox: mode.sandbox,
+          reasoning: reasoning.effort,
+          "show-reasoning": reasoning.display,
         },
       };
       try {
@@ -149,14 +172,15 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   return 0;
 }
 
-export function renderCodeIntro(mode: ChatMode): string {
+export function renderCodeIntro(mode: ChatMode, reasoning = parseReasoningOptions({ command: "code", positionals: [], flags: {} })): string {
   return [
     "Lynn code mode",
     "model: MiMo via local Brain router (auto)",
     `mode:  ${renderMode(mode)}   /mode to change`,
+    `think: ${reasoning.effort} / display ${reasoning.display}   /fast or /think`,
     "tools: read_file, grep, glob, apply_patch, bash, write_file",
     "",
-    "Type a coding task, /tools, /mode yolo, /help, or /exit.",
+    "Type a coding task, /tools, /fast, /think, /mode yolo, /help, or /exit.",
     "",
   ].join("\n");
 }
@@ -165,6 +189,9 @@ function renderCodeHelp(): string {
   return [
     "/exit leave code mode",
     "/tools list local coding tools",
+    "/fast low-latency MiMo/Brain replies",
+    "/think deeper MiMo/Brain reasoning",
+    "/reasoning show or set reasoning mode",
     "/mode show permission mode",
     "/mode ask guarded workspace-write mode",
     "/mode yolo allow local writes and shell commands",

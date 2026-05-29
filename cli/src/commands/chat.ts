@@ -11,7 +11,7 @@ import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } 
 export async function runChat(args: ParsedArgs, options: { intro?: boolean; brainReachable?: boolean } = {}): Promise<number> {
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
-  const reasoning = parseReasoningOptions(args);
+  let reasoning = parseReasoningOptions(args);
   const mode = resolveMode(args);
   const messages: ChatMessage[] = [];
   const rl = readline.createInterface({ input, output, terminal: input.isTTY && output.isTTY });
@@ -29,7 +29,27 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     if (!text) return "continue";
     if (text === "/exit" || text === "/quit") return "break";
     if (text === "/help") {
-      output.write("/exit leave chat\n/clear reset context\n/model show model/BYOK route\n/providers show BYOK setup\n/mode show permission mode\n/mode ask|yolo|read-only|workspace|danger change permission mode\n/help show commands\n\n");
+      output.write("/exit leave chat\n/clear reset context\n/model show model/BYOK route\n/providers show BYOK setup\n/fast low-latency replies\n/think deeper reasoning\n/reasoning show or set reasoning mode\n/mode show permission mode\n/mode ask|yolo|read-only|workspace|danger change permission mode\n/help show commands\n\n");
+      return "continue";
+    }
+    if (text === "/fast") {
+      reasoning = { ...reasoning, effort: "off" };
+      output.write("Fast mode enabled: MiMo/Brain thinking is off for short low-latency replies.\n\n");
+      return "continue";
+    }
+    if (text === "/think") {
+      reasoning = { ...reasoning, effort: "high" };
+      output.write("Thinking mode enabled: reasoning effort is high.\n\n");
+      return "continue";
+    }
+    if (text === "/reasoning") {
+      output.write(`reasoning: ${reasoning.effort} · display ${reasoning.display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.\n\n`);
+      return "continue";
+    }
+    if (text.startsWith("/reasoning ")) {
+      const result = applyReasoningCommand(reasoning, text.slice(11).trim());
+      reasoning = result.reasoning;
+      output.write(`${result.message}\nreasoning: ${reasoning.effort} · display ${reasoning.display}\n\n`);
       return "continue";
     }
     if (text === "/mode") {
@@ -177,6 +197,20 @@ export function toggleMode(mode: ChatMode): string {
     return applyModeCommand(mode, "ask");
   }
   return applyModeCommand(mode, "yolo");
+}
+
+export function applyReasoningCommand(current: ReturnType<typeof parseReasoningOptions>, raw: string): { reasoning: ReturnType<typeof parseReasoningOptions>; message: string } {
+  const value = raw.toLowerCase();
+  if (value === "off" || value === "auto" || value === "low" || value === "medium" || value === "high" || value === "xhigh") {
+    return { reasoning: { ...current, effort: value }, message: `Reasoning effort set to ${value}.` };
+  }
+  if (value === "show" || value === "always") {
+    return { reasoning: { ...current, display: "always" }, message: "Reasoning display set to always." };
+  }
+  if (value === "hide" || value === "never") {
+    return { reasoning: { ...current, display: "never" }, message: "Reasoning display set to never." };
+  }
+  return { reasoning: current, message: `Unknown reasoning mode: ${raw || "(empty)"}.` };
 }
 
 function installModeHotkey({ input, output, readlineInterface, mode }: ModeHotkeyStreams): () => void {
