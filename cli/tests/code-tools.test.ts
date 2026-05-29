@@ -31,6 +31,15 @@ describe("code tools", () => {
     await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "read_file", path: "../secret" })).rejects.toThrow("escapes workspace");
   });
 
+  it("blocks symlink escapes for read and write tools", async () => {
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-outside-"));
+    await fs.writeFile(path.join(outside, "secret.txt"), "nope", "utf8");
+    await fs.symlink(outside, path.join(tmp, "linked-out"));
+
+    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "read_file", path: "linked-out/secret.txt" })).rejects.toThrow("escapes workspace");
+    await expect(runClientTool({ cwd: tmp, approval: "yolo" }, { name: "write_file", path: "linked-out/new.txt", text: "nope" })).rejects.toThrow("escapes workspace");
+  });
+
   it("greps and globs workspace files", async () => {
     const grep = await runClientTool({ cwd: tmp, approval: "ask" }, { name: "grep", query: "world", path: "src" });
     const glob = await runClientTool({ cwd: tmp, approval: "ask" }, { name: "glob", pattern: "**/*.ts" });
