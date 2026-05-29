@@ -384,18 +384,20 @@ async function maybePromptProviderProfile(args: ParsedArgs, existing: CliProvide
   if (json || !input.isTTY || !output.isTTY || hasProviderSetFlags(args)) return null;
   const rl = readline.createInterface({ input, output, terminal: true });
   try {
-    output.write("Lynn CLI BYOK setup (OpenAI-compatible)\n");
-    output.write("\nStep 1/3: API URL\n");
-    output.write("Paste the OpenAI-compatible base URL from your provider docs. It usually ends with /v1.\n");
-    output.write("Examples: https://api.openai.com/v1, https://api.deepseek.com/v1, https://dashscope.aliyuncs.com/compatible-mode/v1\n");
-    const baseUrl = await askWithDefault(rl, "API URL", existing?.baseUrl || "https://api.openai.com/v1");
-    output.write("\nStep 2/3: API Key\n");
-    output.write("Create or copy an API key from your provider console. Lynn stores it locally and redacts it in terminal output.\n");
-    const apiKeyPrompt = existing?.apiKey ? `API Key [keep ${redactApiKey(existing.apiKey)}] ` : "API Key ";
+    output.write(`${t("providers.wizard.title")}\n`);
+    output.write(`\n${t("providers.wizard.step1")}\n`);
+    output.write(`${t("providers.wizard.step1.help")}\n`);
+    output.write(`${t("providers.wizard.step1.examples")}\n`);
+    const baseUrl = await askWithDefault(rl, t("providers.wizard.baseUrl"), existing?.baseUrl || "https://api.openai.com/v1");
+    output.write(`\n${t("providers.wizard.step2")}\n`);
+    output.write(`${t("providers.wizard.step2.help")}\n`);
+    const apiKeyPrompt = existing?.apiKey
+      ? t("providers.wizard.apiKey.keep", { key: redactApiKey(existing.apiKey) })
+      : `${t("providers.wizard.apiKey")} `;
     const apiKeyAnswer = (await rl.question(apiKeyPrompt)).trim();
-    output.write("\nStep 3/3: Model name\n");
-    output.write("Copy the exact model id from your provider's model list, for example gpt-4o, deepseek-chat, qwen-plus, or your custom model id.\n");
-    const model = await askWithDefault(rl, "Model name", existing?.model || "");
+    output.write(`\n${t("providers.wizard.step3")}\n`);
+    output.write(`${t("providers.wizard.step3.help")}\n`);
+    const model = await askWithDefault(rl, t("providers.wizard.model"), existing?.model || "");
     return {
       provider: existing?.provider || "openai-compatible",
       baseUrl,
