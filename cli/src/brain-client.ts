@@ -19,6 +19,7 @@ export interface ChatMessage {
 export type BrainStreamEvent =
   | { type: "assistant.delta"; text: string }
   | { type: "reasoning.delta"; text: string; hidden?: boolean }
+  | { type: "tool_call.delta"; index: number; id?: string; name?: string; arguments?: string }
   | { type: "provider"; activeProvider: string; fallbackFrom?: Array<{ id: string; reason?: string }> }
   | { type: "tool_progress"; event: string; name: string; ms?: number; ok?: boolean }
   | { type: "brain.error"; error: string; code?: string }
@@ -92,7 +93,15 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
     error?: unknown;
     code?: unknown;
     choices?: Array<{
-      delta?: { content?: unknown; reasoning_content?: unknown; reasoning?: unknown };
+      delta?: {
+        content?: unknown;
+        reasoning_content?: unknown;
+        reasoning?: unknown;
+        tool_calls?: unknown;
+        toolCalls?: unknown;
+        function_call?: unknown;
+        functionCall?: unknown;
+      };
       finish_reason?: string | null;
     }>;
     usage?: unknown;
@@ -142,11 +151,45 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
     if (typeof delta.content === "string" && delta.content) {
       events.push({ type: "assistant.delta", text: delta.content });
     }
+    for (const toolCall of parseToolCallDeltas(delta)) events.push(toolCall);
     if (choice.finish_reason) {
       events.push({ type: "done", finishReason: choice.finish_reason });
     }
   }
   if (parsed.usage) events.push({ type: "usage", usage: parsed.usage });
+  return events;
+}
+
+function parseToolCallDeltas(delta: Record<string, unknown>): Array<Extract<BrainStreamEvent, { type: "tool_call.delta" }>> {
+  const events: Array<Extract<BrainStreamEvent, { type: "tool_call.delta" }>> = [];
+  const toolCalls = delta.tool_calls ?? delta.toolCalls;
+  if (Array.isArray(toolCalls)) {
+    for (const [fallbackIndex, raw] of toolCalls.entries()) {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+      const record = raw as Record<string, unknown>;
+      const fn = record.function && typeof record.function === "object" && !Array.isArray(record.function)
+        ? record.function as Record<string, unknown>
+        : {};
+      const index = typeof record.index === "number" && Number.isFinite(record.index) ? record.index : fallbackIndex;
+      events.push({
+        type: "tool_call.delta",
+        index,
+        id: typeof record.id === "string" ? record.id : undefined,
+        name: typeof fn.name === "string" ? fn.name : typeof record.name === "string" ? record.name : undefined,
+        arguments: typeof fn.arguments === "string" ? fn.arguments : typeof record.arguments === "string" ? record.arguments : undefined,
+      });
+    }
+  }
+  const functionCall = delta.function_call ?? delta.functionCall;
+  if (functionCall && typeof functionCall === "object" && !Array.isArray(functionCall)) {
+    const fn = functionCall as Record<string, unknown>;
+    events.push({
+      type: "tool_call.delta",
+      index: 0,
+      name: typeof fn.name === "string" ? fn.name : undefined,
+      arguments: typeof fn.arguments === "string" ? fn.arguments : undefined,
+    });
+  }
   return events;
 }
 

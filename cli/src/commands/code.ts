@@ -886,6 +886,7 @@ async function collectBrainText(inputData: {
 }): Promise<BrainTextResult> {
   let text = "";
   let usageSummary: string | null = null;
+  const streamedToolCalls = createStreamingToolCallAccumulator();
   const spinner = new TerminalSpinner(process.stderr, inputData.label);
   const renderState: HumanBrainRenderState = {};
   const startedAt = Date.now();
@@ -903,6 +904,7 @@ async function collectBrainText(inputData: {
       }
       if (event.type === "reasoning.delta" && renderReasoning) process.stderr.write(dim(event.text, supportsColor(process.stderr)));
       if (event.type === "assistant.delta") text += event.text;
+      if (event.type === "tool_call.delta") streamedToolCalls.append(event);
       if (inputData.json && (event.type === "provider" || event.type === "tool_progress" || event.type === "brain.error" || event.type === "usage")) {
         if (event.type === "usage") writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage, durationMs: Date.now() - startedAt });
         else writeJsonLine({ ...event, ts: nowIso() });
@@ -924,6 +926,10 @@ async function collectBrainText(inputData: {
     }
   } finally {
     spinner.stop();
+  }
+  if (streamedToolCalls.hasCalls()) {
+    const toolCallText = streamedToolCalls.toJsonText();
+    text = text.trim() ? `${text}\n${toolCallText}` : toolCallText;
   }
   return { text, usageSummary };
 }
@@ -951,6 +957,45 @@ export function parseCodeToolRequests(text: string): CodeToolRequest[] {
     }
   }
   return requests;
+}
+
+export interface StreamingToolCallAccumulator {
+  append(event: Extract<BrainStreamEvent, { type: "tool_call.delta" }>): void;
+  toJsonText(): string;
+  hasCalls(): boolean;
+}
+
+export function createStreamingToolCallAccumulator(): StreamingToolCallAccumulator {
+  const calls = new Map<number, { id?: string; name?: string; arguments: string }>();
+  return {
+    append(event) {
+      const current = calls.get(event.index) || { arguments: "" };
+      calls.set(event.index, {
+        id: event.id || current.id,
+        name: event.name || current.name,
+        arguments: current.arguments + (event.arguments || ""),
+      });
+    },
+    hasCalls() {
+      return calls.size > 0;
+    },
+    toJsonText() {
+      if (!calls.size) return "";
+      return JSON.stringify({
+        tool_calls: [...calls.entries()]
+          .sort(([a], [b]) => a - b)
+          .map(([index, call]) => ({
+            index,
+            id: call.id,
+            type: "function",
+            function: {
+              name: call.name,
+              arguments: call.arguments,
+            },
+          })),
+      });
+    },
+  };
 }
 
 function normalizeToolPayload(payload: Record<string, unknown>): CodeToolRequest | null {

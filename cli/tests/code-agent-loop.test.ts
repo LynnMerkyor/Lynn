@@ -27,6 +27,14 @@ function sse(content: string): string {
   ].join("\n");
 }
 
+function rawSsePayloads(payloads: string[]): string {
+  return [
+    ...payloads.flatMap((payload) => [`data: ${payload}`, ""]),
+    "data: [DONE]",
+    "",
+  ].join("\n");
+}
+
 async function withBrainServer(handler: (body: unknown, count: number) => string, run: (url: string) => Promise<void>): Promise<void> {
   let count = 0;
   const server = http.createServer((req, res) => {
@@ -37,6 +45,32 @@ async function withBrainServer(handler: (body: unknown, count: number) => string
         count += 1;
         res.writeHead(200, { "content-type": "text/event-stream" });
         res.end(sse(handler(JSON.parse(raw), count)));
+      });
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("server failed to bind");
+  try {
+    await run(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+async function withRawBrainServer(handler: (body: unknown, count: number) => string, run: (url: string) => Promise<void>): Promise<void> {
+  let count = 0;
+  const server = http.createServer((req, res) => {
+    if (req.url === "/v1/chat/completions" && req.method === "POST") {
+      let raw = "";
+      req.on("data", (chunk) => { raw += String(chunk); });
+      req.on("end", () => {
+        count += 1;
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.end(handler(JSON.parse(raw), count));
       });
       return;
     }
@@ -167,6 +201,71 @@ describe("code agent loop", () => {
     expect(toolResultTurn).toContain("Tool result for glob");
     expect(toolResultTurn).toContain("hello.txt");
     expect(output).toContain("I read hello.txt and listed text files");
+  });
+
+  it("executes OpenAI streamed tool_call deltas from BYOK-style providers", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    let toolResultTurn = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withRawBrainServer((body, count) => {
+        if (count === 1) {
+          return rawSsePayloads([
+            JSON.stringify({
+              choices: [{
+                delta: {
+                  tool_calls: [{
+                    index: 0,
+                    id: "call_1",
+                    type: "function",
+                    function: { name: "read_file", arguments: "{\"path\":" },
+                  }],
+                },
+              }],
+            }),
+            JSON.stringify({
+              choices: [{
+                delta: {
+                  tool_calls: [{
+                    index: 0,
+                    function: { arguments: "\"hello.txt\"}" },
+                  }],
+                },
+              }],
+            }),
+            JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] }),
+          ]);
+        }
+        toolResultTurn = JSON.stringify(body);
+        return rawSsePayloads([
+          JSON.stringify({ choices: [{ delta: { content: "Read streamed tool call result." } }] }),
+        ]);
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "inspect hello via streamed tool call",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--max-steps",
+          "3",
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain('"type":"code.tool.requested"');
+    expect(output).toContain('"tool":"read_file"');
+    expect(toolResultTurn).toContain("Tool result for read_file");
+    expect(toolResultTurn).toContain("hello.txt");
+    expect(output).toContain("Read streamed tool call result");
   });
 
   it("feeds failed tool results back so the model can repair and continue", async () => {

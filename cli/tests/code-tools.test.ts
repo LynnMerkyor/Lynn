@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { buildCodeRuntimeFrames, canPromptForDangerousTool, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeToolRequest, parseCodeToolRequests, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
+import { buildCodeRuntimeFrames, canPromptForDangerousTool, createStreamingToolCallAccumulator, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeToolRequest, parseCodeToolRequests, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
 import { stableRuntimePrefix } from "../../shared/runtime-instruction-frames.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
@@ -131,6 +131,18 @@ describe("code tools", () => {
       { type: "function", function: { name: "read_file", arguments: "{\"path\":\"README.md\"}" } },
       { type: "function", function: { name: "grep", arguments: { query: "MiMo" } } },
     ] }))).toMatchObject({ tool: "read_file" });
+  });
+
+  it("assembles streamed OpenAI tool call deltas into parseable tool JSON", () => {
+    const calls = createStreamingToolCallAccumulator();
+    calls.append({ type: "tool_call.delta", index: 0, id: "call_1", name: "read_file", arguments: "{\"path\":" });
+    calls.append({ type: "tool_call.delta", index: 0, arguments: "\"README.md\"}" });
+    calls.append({ type: "tool_call.delta", index: 1, name: "grep", arguments: "{\"query\":\"MiMo\"}" });
+
+    expect(parseCodeToolRequests(calls.toJsonText())).toEqual([
+      { tool: "read_file", args: { path: "README.md", text: undefined, query: undefined, pattern: undefined, command: undefined, maxBytes: undefined } },
+      { tool: "grep", args: { path: undefined, text: undefined, query: "MiMo", pattern: undefined, command: undefined, maxBytes: undefined } },
+    ]);
   });
 
   it("normalizes common coding-agent tool name and argument aliases", () => {

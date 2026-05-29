@@ -37,6 +37,33 @@ describe("brain-client stream parser", () => {
     ]);
   });
 
+  it("parses OpenAI-style streamed tool call deltas", () => {
+    expect(parseBrainStreamPayload(JSON.stringify({
+      choices: [{
+        delta: {
+          tool_calls: [{
+            index: 0,
+            id: "call_1",
+            type: "function",
+            function: { name: "read_file", arguments: "{\"path\":" },
+          }],
+        },
+      }],
+    }))).toEqual([
+      { type: "tool_call.delta", index: 0, id: "call_1", name: "read_file", arguments: "{\"path\":" },
+    ]);
+
+    expect(parseBrainStreamPayload(JSON.stringify({
+      choices: [{
+        delta: {
+          function_call: { name: "grep", arguments: "{\"query\":\"MiMo\"}" },
+        },
+      }],
+    }))).toEqual([
+      { type: "tool_call.delta", index: 0, name: "grep", arguments: "{\"query\":\"MiMo\"}" },
+    ]);
+  });
+
   it("parses Lynn provider, tool progress, and error SSE payloads", () => {
     expect(parseBrainStreamPayload(JSON.stringify({
       object: "lynn.provider",
