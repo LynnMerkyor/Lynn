@@ -403,9 +403,11 @@ describe("worker-run scaffold", () => {
     }
 
     const text = await fs.readFile(path.join(repo, "hello.txt"), "utf8");
-    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; tool?: string; summary?: string });
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; tool?: string; summary?: string; path?: string });
     expect(text).toContain("lynn");
     expect(lines.some((line) => line.type === "shell.started")).toBe(true);
+    expect(lines.some((line) => line.type === "session.checkpoint")).toBe(true);
+    expect(lines.some((line) => line.type === "session.saved" && line.path)).toBe(true);
     expect(lines.some((line) => line.type === "worker.finished" && line.summary === "lynn-cli worker completed")).toBe(true);
   });
 

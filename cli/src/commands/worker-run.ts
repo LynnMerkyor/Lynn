@@ -427,6 +427,8 @@ async function runLynnCliWorker(input: {
     cwd: input.worktree,
     approval: getStringFlag(input.args.flags, "approval") || "yolo",
     "max-steps": getStringFlag(input.args.flags, "max-steps", "steps") || profileDefaults.maxSteps || "8",
+    "save-session": true,
+    title: input.brief.title,
     json: true,
   };
   const brainUrl = getStringFlag(input.args.flags, "brain-url");
