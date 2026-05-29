@@ -147,6 +147,46 @@ describe("worker-run scaffold", () => {
     ]);
   });
 
+  it("normalizes Codex-style item command events into shell events", () => {
+    expect(externalJsonEvents(JSON.stringify({
+      type: "item.started",
+      item: { type: "command_execution", command: "npm test" },
+    }), "w1", "codex-cli")).toEqual([
+      { type: "shell.started", workerId: "w1", agent: "codex-cli", command: "npm test", approval: "auto" },
+    ]);
+    expect(externalJsonEvents(JSON.stringify({
+      type: "item.completed",
+      item: { type: "command_execution", command: "npm test", exit_code: 0 },
+    }), "w1", "codex-cli")).toEqual([
+      { type: "shell.finished", workerId: "w1", agent: "codex-cli", command: "npm test", exitCode: 0, ok: true },
+    ]);
+  });
+
+  it("normalizes nested item assistant and reasoning text", () => {
+    expect(externalJsonEvents(JSON.stringify({
+      type: "item.completed",
+      item: { type: "assistant_message", text: "done" },
+    }), "w1", "codex-cli")).toEqual([
+      { type: "assistant.delta", workerId: "w1", agent: "codex-cli", text: "done" },
+    ]);
+    expect(externalJsonEvents(JSON.stringify({
+      type: "item.completed",
+      data: { item: { type: "reasoning", content: "thinking" } },
+    }), "w1", "codex-cli")).toEqual([
+      { type: "reasoning.delta", workerId: "w1", agent: "codex-cli", text: "thinking", hidden: true },
+    ]);
+  });
+
+  it("normalizes object-valued tool fields from external CLIs", () => {
+    expect(externalJsonEvents(JSON.stringify({
+      type: "tool_call",
+      tool: { name: "apply_patch" },
+      arguments: { file: "a.ts" },
+    }), "w1", "qwen-cli")).toEqual([
+      { type: "tool.started", workerId: "w1", agent: "qwen-cli", name: "apply_patch", argsPreview: "{\"file\":\"a.ts\"}" },
+    ]);
+  });
+
   it("injects Lynn worker guardrails into external prompts", () => {
     const prompt = buildWorkerPrompt("## Objective\nDo the work.");
 

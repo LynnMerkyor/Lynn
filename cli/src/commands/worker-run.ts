@@ -273,6 +273,7 @@ export function externalJsonEvents(line: string, workerId: string, agent: string
       out.push({ type: "assistant.delta", workerId, agent, text });
     }
   }
+  out.push(...externalItemEvents(record, workerId, agent));
   out.push(...externalToolEvents(record, workerId, agent));
   if (!out.length && type) {
     out.push({ type: "worker.progress", workerId, agent, message: `external:${type}`, data: record });
@@ -309,6 +310,10 @@ function externalToolName(record: Record<string, unknown>): string {
   for (const key of ["tool", "toolName", "name"]) {
     const value = record[key];
     if (typeof value === "string" && value.trim() && /tool|call|bash|edit|read|write|grep|glob/i.test(String(record.type || value))) return value;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const name = (value as Record<string, unknown>).name;
+      if (typeof name === "string" && name.trim()) return name;
+    }
   }
   const toolUse = record.tool_use ?? record.toolUse;
   if (toolUse && typeof toolUse === "object" && !Array.isArray(toolUse)) {
@@ -316,6 +321,34 @@ function externalToolName(record: Record<string, unknown>): string {
     if (typeof name === "string" && name.trim()) return name;
   }
   return "";
+}
+
+function externalItemEvents(record: Record<string, unknown>, workerId: string, agent: string): FleetWorkerEvent[] {
+  const item = nestedRecord(record.item) ?? nestedRecord(nestedRecord(record.data)?.item);
+  if (!item) return [];
+  const out: FleetWorkerEvent[] = [];
+  const topType = typeof record.type === "string" ? record.type.toLowerCase() : "";
+  const itemType = String(item.type || item.kind || "").toLowerCase();
+  const text = externalText(item);
+  if (text && /reason|thinking|thought/.test(itemType || topType)) {
+    out.push({ type: "reasoning.delta", workerId, agent, text, hidden: true });
+  } else if (text && /assistant|message|response|answer/.test(itemType || topType)) {
+    out.push({ type: "assistant.delta", workerId, agent, text });
+  }
+  const command = stringField(item, ["command", "cmd", "shell", "input"]);
+  if (command && /command|shell|bash|exec|terminal/.test(itemType || topType)) {
+    if (/start|running|created|begin/.test(topType) || /start|running|created|begin/.test(String(item.status || "").toLowerCase())) {
+      out.push({ type: "shell.started", workerId, agent, command, approval: "auto" });
+    } else if (/complete|completed|finish|finished|done|end/.test(topType) || "exit_code" in item || "exitCode" in item) {
+      const exitCode = numberField(item, ["exit_code", "exitCode", "code"]) ?? 0;
+      out.push({ type: "shell.finished", workerId, agent, command, exitCode, ok: exitCode === 0 });
+    }
+  }
+  const output = stringField(item, ["output", "stdout", "stderr"]);
+  if (output && /output|stdout|stderr/.test(itemType || topType)) {
+    out.push({ type: "shell.output", workerId, agent, stream: item.stderr ? "stderr" : "stdout", text: output });
+  }
+  return out;
 }
 
 function externalToolEvents(record: Record<string, unknown>, workerId: string, agent: string): FleetWorkerEvent[] {
@@ -346,6 +379,27 @@ function externalToolEvents(record: Record<string, unknown>, workerId: string, a
 
 function externalArgsPreview(record: Record<string, unknown>): string | undefined {
   return previewValue(record.args ?? record.arguments ?? record.input);
+}
+
+function nestedRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function stringField(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "";
+}
+
+function numberField(record: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = record[key];
+    const number = typeof value === "number" ? value : typeof value === "string" ? Number.parseInt(value, 10) : Number.NaN;
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
 }
 
 function previewValue(value: unknown): string | undefined {
