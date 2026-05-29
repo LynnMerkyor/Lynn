@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import { runCode } from "../src/commands/code.js";
+import { appendSessionTurn } from "../src/session/store.js";
 
 let tmp = "";
 
@@ -165,5 +166,53 @@ describe("code agent loop", () => {
     }
 
     expect(output).toContain("Reviewed the screenshot");
+  });
+
+  it("resumes a saved code session and appends the continuation", async () => {
+    const dataDir = path.join(tmp, "data");
+    const sessionPath = await appendSessionTurn({
+      dataDir,
+      cwd: tmp,
+      title: "resume me",
+      prompt: "Read hello.txt and remember it says hello.",
+      assistant: "I read hello.txt. It says hello.",
+      modelProvider: "mock",
+      modelId: "mock-brain",
+    });
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer((body) => {
+        const parsed = body as { messages?: Array<{ role?: string; content?: unknown }> };
+        expect(JSON.stringify(parsed.messages)).toContain("It says hello");
+        return "Continued from the saved session.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "continue",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--resume",
+          sessionPath,
+          "--data-dir",
+          dataDir,
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    const lines = (await fs.readFile(sessionPath, "utf8")).trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; content?: string; data?: { resumedFrom?: string | null } });
+    expect(output).toContain('"type":"session.resumed"');
+    expect(output).toContain('"type":"session.saved"');
+    expect(lines.filter((line) => line.type === "user")).toHaveLength(2);
+    expect(lines.at(-1)?.data?.resumedFrom).toBe(sessionPath);
   });
 });

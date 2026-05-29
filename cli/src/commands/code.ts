@@ -25,7 +25,7 @@ import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type C
 import { renderProvidersInfo, resolveProvidersInfo } from "./providers.js";
 import { readVersionInfo } from "../version.js";
 import { buildImageContentParts } from "../media.js";
-import { appendSessionMetadata, appendSessionTurn, resolveDataDir } from "../session/store.js";
+import { appendSessionMetadata, appendSessionTurn, readSessionLines, resolveDataDir } from "../session/store.js";
 import { renderRuntimeInstructionFrame, stableRuntimePrefix, type RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
 
 const pExecFile = promisify(execFile);
@@ -415,9 +415,11 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const mode = await resolveCodeMode(args);
   const cliProvider = await resolveCliProviderProfile(args);
-  const saveSession = hasFlag(args.flags, "save-session", "session") || !!process.env.LYNN_CLI_SAVE_SESSION;
+  const resumePath = getStringFlag(args.flags, "resume");
+  const resumeMessages = resumePath ? await loadResumeMessages(resumePath) : [];
+  const saveSession = hasFlag(args.flags, "save-session", "session") || !!process.env.LYNN_CLI_SAVE_SESSION || !!resumePath;
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
-  const sessionPath = getStringFlag(args.flags, "session");
+  const sessionPath = getStringFlag(args.flags, "session") || resumePath;
   const title = getStringFlag(args.flags, "title") || task;
   if (!json && !options.compact) {
     errorOutput.write(renderCodeTaskHeader({
@@ -429,7 +431,10 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
       mockBrain,
     }));
   }
-  if (json) writeJsonLine({ type: "code.task.started", ts: nowIso(), task, context });
+  if (json) {
+    writeJsonLine({ type: "code.task.started", ts: nowIso(), task, context });
+    if (resumePath) writeJsonLine({ type: "session.resumed", ts: nowIso(), path: resumePath, messages: resumeMessages.length });
+  }
 
   if (mockBrain) {
     const text = renderMockCodeTask(task, context);
@@ -441,7 +446,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     }
     if (saveSession) {
       const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: context.cwd, title, prompt: task, assistant: text, modelProvider: "mock", modelId: "mock-brain" });
-      await appendSessionMetadata({ dataDir, sessionPath: savedPath, data: { kind: "code_task", mock: true, cwd: context.cwd, image: getStringFlag(args.flags, "image", "shot") || null } });
+      await appendSessionMetadata({ dataDir, sessionPath: savedPath, data: { kind: "code_task", mock: true, cwd: context.cwd, image: getStringFlag(args.flags, "image", "shot") || null, resumedFrom: resumePath || null } });
       if (json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
     }
     return 0;
@@ -465,6 +470,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     input,
     output: errorOutput,
     imagePath: getStringFlag(args.flags, "image", "shot") || undefined,
+    resumeMessages,
   });
   if (saveSession) {
     const savedPath = await appendSessionTurn({
@@ -486,6 +492,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
         image: getStringFlag(args.flags, "image", "shot") || null,
         reasoning,
         maxSteps: maxSteps(args),
+        resumedFrom: resumePath || null,
       },
     });
     if (json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
@@ -530,6 +537,7 @@ interface CodeAgentLoopInput {
   input: NodeJS.ReadStream;
   output: NodeJS.WriteStream;
   imagePath?: string;
+  resumeMessages?: ChatMessage[];
 }
 
 interface CodeToolRequest {
@@ -558,6 +566,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
     ...frames
       .filter((frame) => !frame.stable || !frame.cacheable)
       .map((frame) => ({ role: "user" as const, content: renderRuntimeInstructionFrame(frame) })),
+    ...(inputData.resumeMessages || []),
     { role: "user", content: initialContent },
   ];
   let finalText = "";
@@ -632,6 +641,29 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
     finalText = "Stopped after the maximum tool steps. Review the emitted tool results before continuing.";
   }
   return finalText;
+}
+
+export async function loadResumeMessages(sessionPath: string, maxChars = 24_000): Promise<ChatMessage[]> {
+  const lines = await readSessionLines(sessionPath);
+  const turns = lines
+    .filter((line) => (line.type === "user" || line.type === "assistant") && typeof line.content === "string" && line.content.trim())
+    .map((line) => ({ role: line.type as "user" | "assistant", content: String(line.content) }));
+  const selected: ChatMessage[] = [];
+  let chars = 0;
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const turn = turns[i];
+    const len = turn.content.length;
+    if (selected.length && chars + len > maxChars) break;
+    selected.unshift(turn);
+    chars += len;
+  }
+  if (selected.length < turns.length) {
+    selected.unshift({
+      role: "user",
+      content: `[Lynn CLI resumed this coding task from ${sessionPath}. Earlier transcript turns were compacted to keep the continuation stable; ask the user or inspect files if missing details matter.]`,
+    });
+  }
+  return selected;
 }
 
 export function formatToolResultForLoop(result: ClientToolResult, maxChars = 12_000): string {

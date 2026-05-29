@@ -23,6 +23,7 @@ export function usage(): string {
       "  Lynn permissions set --approval ask|yolo --sandbox workspace-write|danger-full-access",
       "  Lynn worker run --brief task.md --worktree path --jsonl --mock",
       "  Lynn code \"review the current diff\"",
+      "  Lynn code --resume <session.jsonl> \"继续上次任务\"",
       "  Lynn see screenshot.png [问题]",
       "  Lynn ground screenshot.png \"提交按钮\" --json",
       "  Lynn ui2code mockup.png",
@@ -43,7 +44,7 @@ export function usage(): string {
       "  --approval ask|on-failure|never|yolo",
       "  --sandbox read-only|workspace-write|danger-full-access",
       "  --max-steps 1..20",
-      "  --save-session --data-dir ~/.lynn",
+      "  --save-session --resume <session.jsonl> --data-dir ~/.lynn",
       "  --agent-command \"custom worker command\"",
     ].join("\n");
   }
@@ -68,6 +69,7 @@ export function usage(): string {
     "  Lynn permissions set --approval ask|yolo --sandbox workspace-write|danger-full-access",
     "  Lynn worker run --brief task.md --worktree path --jsonl --mock",
     "  Lynn code \"review the current diff\"",
+    "  Lynn code --resume <session.jsonl> \"continue the task\"",
     "  Lynn see screenshot.png [question]",
     "  Lynn ground screenshot.png \"Submit button\" --json",
     "  Lynn ui2code mockup.png",
@@ -88,7 +90,7 @@ export function usage(): string {
     "  --approval ask|on-failure|never|yolo",
     "  --sandbox read-only|workspace-write|danger-full-access",
     "  --max-steps 1..20",
-    "  --save-session --data-dir ~/.lynn",
+    "  --save-session --resume <session.jsonl> --data-dir ~/.lynn",
     "  --agent-command \"custom worker command\"",
   ].join("\n");
 }
