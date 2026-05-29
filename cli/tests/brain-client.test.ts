@@ -97,7 +97,12 @@ describe("brain-client stream parser", () => {
         body += String(chunk);
       });
       request.on("end", () => {
-        expect(JSON.parse(body)).toMatchObject({ model: "test-model", stream: true });
+        expect(JSON.parse(body)).toMatchObject({
+          model: "test-model",
+          stream: true,
+          reasoning_effort: "off",
+          extra_body: { enable_thinking: false },
+        });
         response.writeHead(200, { "content-type": "text/event-stream" });
         response.end([
           "data: {\"choices\":[{\"delta\":{\"content\":\"hello from byok\"}}]}",
@@ -115,7 +120,7 @@ describe("brain-client stream parser", () => {
       for await (const event of streamBrainChat({
         brainUrl: "http://127.0.0.1:1",
         prompt: "hello",
-        reasoning: { effort: "auto", display: "auto" },
+        reasoning: { effort: "off", display: "auto" },
         fallbackProvider: {
           provider: "openai-compatible",
           baseUrl: `http://127.0.0.1:${address.port}/v1`,

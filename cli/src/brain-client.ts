@@ -202,11 +202,11 @@ async function* streamDirectProviderChat(request: BrainChatRequest, provider: Cl
   if (!messages.length) {
     throw new Error("Provider request requires a prompt or messages");
   }
-  const body = {
+  const body = applyReasoningToBody({
     model: provider.model,
     stream: true,
     messages,
-  };
+  }, request.reasoning);
   let response: Response;
   try {
     response = await fetch(chatCompletionsUrl(provider.baseUrl), {
