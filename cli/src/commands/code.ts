@@ -26,6 +26,7 @@ import { renderProvidersInfo, resolveProvidersInfo } from "./providers.js";
 import { readVersionInfo } from "../version.js";
 import { buildImageContentParts } from "../media.js";
 import { appendSessionMetadata, appendSessionTurn, resolveDataDir } from "../session/store.js";
+import { renderRuntimeInstructionFrame, stableRuntimePrefix, type RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
 
 const pExecFile = promisify(execFile);
 
@@ -544,6 +545,7 @@ interface CodeToolRequest {
 }
 
 async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> {
+  const frames = buildCodeRuntimeFrames(inputData);
   const initialPrompt = buildCodePrompt(inputData.task, inputData.context, inputData.imagePath);
   const initialContent = inputData.imagePath
     ? await buildImageContentParts(inputData.imagePath, initialPrompt)
@@ -551,19 +553,11 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: [
-        "You are Lynn CLI code mode.",
-        "The default online route is MiMo through the local Lynn Brain router.",
-        "MiMo is good at Chinese/English mixed product work; keep responses in the user's language.",
-        "You help with repository-level coding tasks from the terminal.",
-        "You may request local tools using exactly one JSON object and no prose:",
-        '{"tool":"read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',
-        "Prefer read_file, grep, and glob before editing. Use apply_patch for edits when possible.",
-        "When you are done, answer normally with a concise summary and tests run.",
-        "Do not claim you edited files unless a tool actually changed them.",
-        "Never download models, datasets, training packs, BF16, or GGUF files to the local Mac.",
-      ].join("\n"),
+      content: stableRuntimePrefix(frames),
     },
+    ...frames
+      .filter((frame) => !frame.stable || !frame.cacheable)
+      .map((frame) => ({ role: "user" as const, content: renderRuntimeInstructionFrame(frame) })),
     { role: "user", content: initialContent },
   ];
   let finalText = "";
@@ -648,6 +642,49 @@ export function formatToolResultForLoop(result: ClientToolResult, maxChars = 12_
     "",
     `[Lynn CLI truncated this tool result from ${json.length} chars to ${maxChars} chars to keep the long-running coding loop stable. Use a narrower grep/read_file request if more detail is needed.]`,
   ].join("\n");
+}
+
+export function buildCodeRuntimeFrames(inputData: Pick<CodeAgentLoopInput, "context" | "toolCtx">): RuntimeInstructionFrame[] {
+  return [
+    {
+      kind: "base_system",
+      source: "cli",
+      text: [
+        "You are Lynn CLI code mode.",
+        "The default online route is MiMo through the local Lynn Brain router.",
+        "MiMo is good at Chinese/English mixed product work; keep responses in the user's language.",
+        "You help with repository-level coding tasks from the terminal.",
+        "You may request local tools using exactly one JSON object and no prose:",
+        '{"tool":"read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',
+        "Prefer read_file, grep, and glob before editing. Use apply_patch for edits when possible.",
+        "When you are done, answer normally with a concise summary and tests run.",
+        "Do not claim you edited files unless a tool actually changed them.",
+        "Never download models, datasets, training packs, BF16, or GGUF files to the local Mac.",
+      ].join("\n"),
+    },
+    {
+      kind: "cacheable_context",
+      source: "cli",
+      title: "Repository context",
+      text: `Repository root: ${inputData.context.cwd}`,
+    },
+    {
+      kind: "permission_state",
+      source: "cli",
+      title: "Current tool permissions",
+      text: `approval=${inputData.toolCtx.approval} sandbox=${inputData.toolCtx.sandbox || "workspace-write"}`,
+      stable: false,
+      cacheable: false,
+    },
+    {
+      kind: "tool_guard",
+      source: "cli",
+      title: "Local tool guard",
+      text: "Local tools can read and edit only inside the current workspace. Dangerous tools require approval unless YOLO mode is active.",
+      stable: false,
+      cacheable: false,
+    },
+  ];
 }
 
 function toolRequestFingerprint(request: CodeToolRequest): string {

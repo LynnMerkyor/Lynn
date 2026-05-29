@@ -3,7 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { canPromptForDangerousTool, formatToolResultForLoop, isDangerousClientTool, parseCodeToolRequest, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
+import { buildCodeRuntimeFrames, canPromptForDangerousTool, formatToolResultForLoop, isDangerousClientTool, parseCodeToolRequest, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
+import { stableRuntimePrefix } from "../../shared/runtime-instruction-frames.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
 import { setLang } from "../src/i18n.js";
@@ -112,6 +113,28 @@ describe("code tools", () => {
 
     expect(formatted.length).toBeLessThan(500);
     expect(formatted).toContain("truncated this tool result");
+  });
+
+  it("keeps cacheable code instructions separate from dynamic permission state", () => {
+    const frames = buildCodeRuntimeFrames({
+      context: {
+        cwd: "/repo",
+        gitStatus: "",
+        gitDiffStat: "",
+        topFiles: [],
+        packageScripts: {},
+      },
+      toolCtx: {
+        cwd: "/repo",
+        approval: "ask",
+        sandbox: "workspace-write",
+      },
+    });
+    const prefix = stableRuntimePrefix(frames);
+
+    expect(prefix).toContain("base_system:");
+    expect(prefix).toContain("cacheable_context:Repository root: /repo");
+    expect(prefix).not.toContain("approval=ask");
   });
 
   it("times out long-running bash commands", async () => {
