@@ -35,6 +35,18 @@ export class BrainConnectionError extends Error {
   }
 }
 
+export class BrainUnavailableError extends Error {
+  readonly brainUrl: string;
+  readonly status: number;
+
+  constructor(brainUrl: string, status: number, statusText: string) {
+    super(`Brain request failed: ${status} ${statusText}`.trim());
+    this.name = "BrainUnavailableError";
+    this.brainUrl = brainUrl;
+    this.status = status;
+  }
+}
+
 export function formatBrainRecoveryHint(error: unknown): string {
   if (error instanceof BrainConnectionError) {
     return t("brain.recovery.offline");
@@ -146,7 +158,7 @@ export async function* streamLynnChat(request: BrainChatRequest): AsyncGenerator
   try {
     yield* streamBrainOnlyChat(request);
   } catch (error) {
-    if (error instanceof BrainConnectionError && request.fallbackProvider) {
+    if ((error instanceof BrainConnectionError || error instanceof BrainUnavailableError) && request.fallbackProvider) {
       yield* streamDirectProviderChat(request, request.fallbackProvider);
       return;
     }
@@ -180,8 +192,14 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
   } finally {
     clearTimeout(timer);
   }
-  if (!response.ok || !response.body) {
+  if (!response.ok) {
+    if (isRecoverableBrainStatus(response.status)) {
+      throw new BrainUnavailableError(request.brainUrl, response.status, response.statusText);
+    }
     throw new Error(`Brain request failed: ${response.status} ${response.statusText}`.trim());
+  }
+  if (!response.body) {
+    throw new BrainUnavailableError(request.brainUrl, response.status, "missing response body");
   }
 
   const decoder = new TextDecoder();
@@ -261,6 +279,10 @@ function brainRequestTimeoutMs(hasFallbackProvider: boolean): number {
   const parsed = raw ? Number(raw) : NaN;
   if (Number.isFinite(parsed) && parsed > 0) return Math.max(250, Math.min(30_000, parsed));
   return hasFallbackProvider ? 1200 : 5000;
+}
+
+function isRecoverableBrainStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
 }
 
 function providerHeaders(provider: CliProviderProfile): Record<string, string> {

@@ -321,6 +321,10 @@ const sampleBrief: FleetBrief = {
   worktree: "worktrees/cli-1",
 };
 
+const availableSampleRegistry = () => [
+  { id: "codex-cli", label: "Codex", bin: "codex", supportsJsonl: true, enabled: true, available: true, availability: "/usr/bin/codex" },
+];
+
 describe("fleet HTTP route", () => {
   it("dispatches a worker through POST /fleet/dispatch", async () => {
     const sent: Array<{ type: string; event: { type: string } }> = [];
@@ -328,7 +332,7 @@ describe("fleet HTTP route", () => {
     const hub = new FleetHub("/repo", (m) => sent.push(m as { type: string; event: { type: string } }), () => "T", {
       available: () => false,
     });
-    app.route("/api", createFleetRoute(hub));
+    app.route("/api", createFleetRoute(hub, { registry: availableSampleRegistry }));
 
     const res = await app.request("/api/fleet/dispatch", {
       method: "POST",
@@ -365,7 +369,7 @@ describe("fleet HTTP route", () => {
         source: "dev",
       }),
     });
-    app.route("/api", createFleetRoute(hub));
+    app.route("/api", createFleetRoute(hub, { registry: availableSampleRegistry }));
 
     const res = await app.request("/api/fleet/dispatch", {
       method: "POST",
@@ -379,6 +383,34 @@ describe("fleet HTTP route", () => {
     await waitFor(() => sent.some((m) => m.event.type === "worker.finished"));
     expect(sent.every((m) => m.type === "fleet:event")).toBe(true);
     expect(sent.some((m) => m.event.type === "worker.finished" && m.event.workerId === data.worker.workerId && m.event.ok === true)).toBe(true);
+  });
+
+  it("rejects dispatch when the requested worker is not available", async () => {
+    const app = new Hono();
+    const hub = new FleetHub("/repo", () => {}, () => "T");
+    app.route("/api", createFleetRoute(hub, {
+      registry: () => [
+        {
+          id: "stepfun-flash",
+          label: "StepFun 3.7 Flash",
+          bin: "lynn",
+          supportsJsonl: true,
+          enabled: true,
+          available: false,
+          availability: "requires: Lynn providers set --preset stepfun --api-key <api-key>",
+        },
+      ],
+    }));
+
+    const res = await app.request("/api/fleet/dispatch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...sampleBrief, agent: "stepfun-flash" }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: expect.stringContaining("requires: Lynn providers set --preset stepfun") });
+    expect(hub.listWorkers()).toHaveLength(0);
   });
 
   it("rejects incomplete dispatch briefs before reaching FleetHub", async () => {
@@ -513,6 +545,7 @@ describe("FleetHub real spawn", () => {
     });
     const rec = await hub.dispatch(sampleBrief);
     expect(rec.spawned).toBe(true);
+    expect(rec.status).toBe("waiting_approval");
     expect(spawnCalls).toHaveLength(1);
     expect(spawnCalls[0].command).toBe("node");
     expect(spawnCalls[0].args).toContain("worker");
@@ -554,6 +587,24 @@ describe("FleetHub real spawn", () => {
     expect(sent.some((m) => m.event.type === "worker.progress" && /spawned via/.test(m.event.message ?? ""))).toBe(true);
     expect(sent.some((m) => m.event.type === "worker.finished" && m.event.workerId === rec.workerId && m.event.ok === true)).toBe(true);
     expect(rec.events.some((event) => event.type === "worker.finished")).toBe(true);
+    expect(hub.getWorker(rec.workerId)?.status).toBe("waiting_approval");
+  });
+
+  it("updates REST worker status after terminal worker errors", async () => {
+    const hub = new FleetHub("/repo", () => {}, () => "T", {
+      available: () => true,
+      createWorktree: async () => {},
+      writeBrief: () => "/tmp/brief.md",
+      resolveCommand: (args) => ({ command: "node", args, env: {}, source: "dev" }),
+      spawn: (opts, onEvent) => {
+        onEvent({ type: "worker.error", workerId: opts.workerId, code: "tool_failed", message: "tool failed", recoverable: true });
+        return { workerId: opts.workerId, pid: 123, kill: () => {} };
+      },
+    });
+
+    const rec = await hub.dispatch(sampleBrief);
+
+    expect(hub.getWorker(rec.workerId)?.status).toBe("failed");
   });
 
   it("falls back to a stub broadcast when no CLI runtime (cli/** not integrated yet)", async () => {

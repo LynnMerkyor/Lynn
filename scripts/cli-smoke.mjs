@@ -115,8 +115,8 @@ checks.push(run("startup banner", []).then((r) => {
 }));
 
 checks.push(run("providers", ["providers", "--data-dir", missingDataDir]).then((r) => {
-  assertIncludes(r.name, r.stdout, "Lynn Providers / BYOK");
-  assertIncludes(r.name, r.stdout, "Provider key");
+  assertIncludes(r.name, r.stdout, "Lynn 提供方 / BYOK");
+  assertIncludes(r.name, r.stdout, "供应商密钥");
   assertNotIncludes(r.name, r.stdout, "sk-");
   assertIncludes(r.name, r.stdout, "LYNN_CLI_PRESET=stepfun");
 }));
@@ -770,6 +770,34 @@ async function runStepFunWorkerByokSmoke() {
     if (!seen) throw new Error("StepFun worker smoke did not call the provider");
     if (seen.auth !== "Bearer step-worker-key") throw new Error(`StepFun worker smoke used wrong auth: ${seen.auth}`);
     if (seen.body.model !== "step-3.7-flash") throw new Error(`StepFun worker smoke used wrong model: ${seen.body.model}`);
+    seen = null;
+    const envOnlyResult = await run("stepfun worker env byok", [
+      "worker",
+      "run",
+      "--brief",
+      briefPath,
+      "--worktree",
+      root,
+      "--agent",
+      "stepfun-flash",
+      "--brain-url",
+      "http://127.0.0.1:1",
+      "--max-steps",
+      "1",
+      "--jsonl",
+    ], {
+      env: {
+        LYNN_CLI_BRAIN_TIMEOUT_MS: "50",
+        LYNN_CLI_PRESET: "stepfun",
+        LYNN_CLI_BASE_URL: `http://127.0.0.1:${address.port}/v1`,
+        LYNN_CLI_API_KEY: "step-worker-env-key",
+      },
+    });
+    assertIncludes(envOnlyResult.name, envOnlyResult.stdout, '"agent":"stepfun-flash"');
+    assertIncludes(envOnlyResult.name, envOnlyResult.stdout, '"type":"worker.finished"');
+    if (!seen) throw new Error("StepFun worker env smoke did not call the provider");
+    if (seen.auth !== "Bearer step-worker-env-key") throw new Error(`StepFun worker env smoke used wrong auth: ${seen.auth}`);
+    if (seen.body.model !== "step-3.7-flash") throw new Error(`StepFun worker env smoke used wrong model: ${seen.body.model}`);
   } finally {
     await new Promise((resolve) => server.close(() => resolve()));
   }

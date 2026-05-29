@@ -6,7 +6,7 @@
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { FleetHub, type FleetBrief } from "../fleet/fleet-hub.js";
-import { configuredCliProviderPreset, resolveFleetRegistry } from "../fleet/registry.js";
+import { configuredCliProviderPreset, resolveFleetRegistry, type FleetAgentEntry } from "../fleet/registry.js";
 import { readPermissionStatus } from "../fleet/permissions.js";
 import type { FleetApprovalMode, FleetSandboxMode } from "../../shared/fleet-events.js";
 
@@ -26,10 +26,28 @@ function validateBrief(b: Partial<FleetBrief>): string[] {
   return errs;
 }
 
-export function createFleetRoute(hub: FleetHub): Hono {
-  const route = new Hono();
+export interface FleetRouteOptions {
+  registry?: () => FleetAgentEntry[];
+}
 
-  route.get("/fleet/registry", (c) => c.json({ agents: resolveFleetRegistry({ configuredPreset: configuredCliProviderPreset() }) }));
+function defaultRegistry(): FleetAgentEntry[] {
+  return resolveFleetRegistry({ configuredPreset: configuredCliProviderPreset() });
+}
+
+function unavailableAgentError(agent: string, registry: FleetAgentEntry[]): string | null {
+  const entry = registry.find((candidate) => candidate.id === agent);
+  if (!entry) return `unknown worker agent: ${agent}`;
+  if (!entry.enabled || entry.available === false) {
+    return `${agent} unavailable: ${entry.availability || "disabled"}`;
+  }
+  return null;
+}
+
+export function createFleetRoute(hub: FleetHub, options: FleetRouteOptions = {}): Hono {
+  const route = new Hono();
+  const registry = options.registry || defaultRegistry;
+
+  route.get("/fleet/registry", (c) => c.json({ agents: registry() }));
 
   // B2: read-only CLI permission profile (approval / sandbox) for the GUI badge.
   route.get("/fleet/permissions", async (c) => c.json(await readPermissionStatus()));
@@ -46,6 +64,8 @@ export function createFleetRoute(hub: FleetHub): Hono {
     const body = await safeJson<Partial<FleetBrief>>(c);
     const errors = validateBrief(body);
     if (errors.length) return c.json({ error: errors.join("; ") }, 400);
+    const agentError = unavailableAgentError(String(body.agent), registry());
+    if (agentError) return c.json({ error: agentError }, 409);
     const worker = await hub.dispatch(body as FleetBrief);
     return c.json({ ok: true, worker });
   });

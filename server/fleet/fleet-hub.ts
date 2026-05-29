@@ -13,6 +13,7 @@ import type {
   FleetAgentKind,
   FleetApprovalMode,
   FleetSandboxMode,
+  FleetWorkerStatus,
 } from "../../shared/fleet-events.js";
 import fs from "node:fs";
 import os from "node:os";
@@ -130,7 +131,10 @@ export class FleetHub {
 
   private emit(workerId: string, event: FleetWorkerEvent): void {
     const rec = this.workers.get(workerId);
-    if (rec) rec.events.push(event);
+    if (rec) {
+      rec.events.push(event);
+      rec.status = statusAfterEvent(rec.status, event);
+    }
     this.broadcast({ type: "fleet:event", event });
   }
 
@@ -303,6 +307,15 @@ export class FleetHub {
       return { file, diff: "" };
     }
   }
+}
+
+function statusAfterEvent(current: string, event: FleetWorkerEvent): FleetWorkerStatus | string {
+  if (event.type === "worker.started") return "running";
+  if (event.type === "worker.violation" && (event.code === "forbidden_file" || event.code === "center_lock")) return "blocked";
+  if (event.type === "gate.finished" && !event.ok) return "failed";
+  if (event.type === "worker.finished") return event.ok ? (current === "blocked" ? "blocked" : "waiting_approval") : "failed";
+  if (event.type === "worker.error") return event.code === "cancelled" ? "cancelled" : "failed";
+  return current;
 }
 
 function latestCheckpointPath(events: FleetWorkerEvent[]): string | undefined {

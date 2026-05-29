@@ -210,6 +210,50 @@ describe("brain-client stream parser", () => {
     }
   });
 
+  it("falls back to CLI BYOK when local Brain returns a recoverable 5xx", async () => {
+    const brokenBrain = http.createServer((_request, response) => {
+      response.writeHead(503, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: "brain warming up" }));
+    });
+    const provider = http.createServer((request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"fallback after 503\"}}]}",
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"));
+    });
+    await new Promise<void>((resolve) => brokenBrain.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    try {
+      const brainAddress = brokenBrain.address();
+      const providerAddress = provider.address();
+      if (!brainAddress || typeof brainAddress === "string") throw new Error("brain test server failed to listen");
+      if (!providerAddress || typeof providerAddress === "string") throw new Error("provider test server failed to listen");
+      const events = [];
+      for await (const event of streamBrainChat({
+        brainUrl: `http://127.0.0.1:${brainAddress.port}`,
+        prompt: "hello",
+        reasoning: { effort: "auto", display: "auto" },
+        fallbackProvider: {
+          provider: "openai-compatible",
+          baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`,
+          model: "test-model",
+          apiKey: "sk-test",
+        },
+      })) {
+        events.push(event);
+      }
+      expect(events).toContainEqual({ type: "assistant.delta", text: "fallback after 503" });
+      expect(events).toContainEqual({ type: "provider", activeProvider: "cli-byok:openai-compatible", fallbackFrom: [{ id: "brain", reason: "offline" }] });
+    } finally {
+      await new Promise<void>((resolve) => brokenBrain.close(() => resolve()));
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
+  });
+
   it("builds chat completion URLs from base URLs", () => {
     expect(chatCompletionsUrl("https://api.example.com/v1").toString()).toBe("https://api.example.com/v1/chat/completions");
     expect(chatCompletionsUrl("https://api.example.com/v1/chat/completions").toString()).toBe("https://api.example.com/v1/chat/completions");

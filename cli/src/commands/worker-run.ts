@@ -16,7 +16,7 @@ import { parseReasoningOptions } from "../reasoning.js";
 import { runCode } from "./code.js";
 import { buildVisionPrompt, type VisionCommand } from "./vision.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
-import { resolveCliProviderProfile } from "../provider-profile.js";
+import { readEnvProviderProfile, resolveCliProviderProfile } from "../provider-profile.js";
 import { resolveEffectivePermissions, type PermissionProfile } from "../permissions.js";
 export { extractGroundingBoxes } from "../vision-result.js";
 import { extractGroundingBoxes } from "../vision-result.js";
@@ -565,7 +565,7 @@ async function runLynnCliWorker(input: {
       : path.resolve(input.worktree, input.brief.resumePath);
   }
   const preset = workerProviderPreset(input.agent);
-  if (preset && !getStringFlag(input.args.flags, "preset") && !getStringFlag(input.args.flags, "base-url", "api-base") && !getStringFlag(input.args.flags, "model")) {
+  if (preset && !readEnvProviderProfile() && !getStringFlag(input.args.flags, "preset") && !getStringFlag(input.args.flags, "base-url", "api-base") && !getStringFlag(input.args.flags, "model")) {
     flags.preset = preset;
   }
   copyProviderFlags(input.args.flags, flags);

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import {
   providerProfilePath,
@@ -15,6 +15,22 @@ import {
 async function tempDir(): Promise<string> {
   return await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-provider-"));
 }
+
+const originalPreset = process.env.LYNN_CLI_PRESET;
+const originalApiKey = process.env.LYNN_CLI_API_KEY;
+const originalBaseUrl = process.env.LYNN_CLI_BASE_URL;
+const originalModel = process.env.LYNN_CLI_MODEL;
+
+afterEach(() => {
+  if (originalPreset === undefined) delete process.env.LYNN_CLI_PRESET;
+  else process.env.LYNN_CLI_PRESET = originalPreset;
+  if (originalApiKey === undefined) delete process.env.LYNN_CLI_API_KEY;
+  else process.env.LYNN_CLI_API_KEY = originalApiKey;
+  if (originalBaseUrl === undefined) delete process.env.LYNN_CLI_BASE_URL;
+  else process.env.LYNN_CLI_BASE_URL = originalBaseUrl;
+  if (originalModel === undefined) delete process.env.LYNN_CLI_MODEL;
+  else process.env.LYNN_CLI_MODEL = originalModel;
+});
 
 describe("CLI provider profile", () => {
   it("stores CLI BYOK provider config under the Lynn data dir", async () => {
@@ -92,6 +108,29 @@ describe("CLI provider profile", () => {
       baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
       model: "mimo-v2.5",
       apiKey: "mimo-secret",
+    });
+  });
+
+  it("hydrates matching flag presets with env API keys for Fleet worker profiles", async () => {
+    const dataDir = await tempDir();
+    process.env.LYNN_CLI_PRESET = "stepfun";
+    process.env.LYNN_CLI_API_KEY = "step-env-secret";
+
+    const resolved = await resolveCliProviderProfile(parseArgs([
+      "worker",
+      "run",
+      "--data-dir",
+      dataDir,
+      "--preset",
+      "stepfun",
+    ]));
+
+    expect(resolved?.source).toBe("flags");
+    expect(resolved?.profile).toMatchObject({
+      provider: "openai-compatible",
+      baseUrl: "https://api.stepfun.com/step_plan/v1",
+      model: "step-3.7-flash",
+      apiKey: "step-env-secret",
     });
   });
 });

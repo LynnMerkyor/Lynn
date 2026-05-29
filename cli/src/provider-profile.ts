@@ -73,12 +73,12 @@ export function validateCliProviderProfile(profile: CliProviderProfile): CliProv
 export async function resolveCliProviderProfile(args: ParsedArgs): Promise<ResolvedCliProviderProfile | null> {
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   const fileProfile = await readCliProviderProfile(dataDir);
+  const envProfile = readEnvProviderProfile();
   const flagProfile = readFlagProviderProfile(args);
   if (flagProfile) {
-    const storedApiKey = matchingStoredApiKey(flagProfile, fileProfile);
-    return { profile: validateCliProviderProfile({ ...flagProfile, apiKey: flagProfile.apiKey || storedApiKey }), source: "flags" };
+    const fallbackApiKey = matchingStoredApiKey(flagProfile, fileProfile) || matchingEnvApiKey(flagProfile, envProfile) || envApiKey();
+    return { profile: validateCliProviderProfile({ ...flagProfile, apiKey: flagProfile.apiKey || fallbackApiKey }), source: "flags" };
   }
-  const envProfile = readEnvProviderProfile();
   if (envProfile) return { profile: validateCliProviderProfile(envProfile), source: "env" };
   return fileProfile ? { profile: fileProfile, source: "file" } : null;
 }
@@ -123,4 +123,16 @@ function matchingStoredApiKey(flagProfile: CliProviderProfile, fileProfile: CliP
   if (normalizeBaseUrl(fileProfile.baseUrl) !== normalizeBaseUrl(flagProfile.baseUrl)) return undefined;
   if (fileProfile.model !== flagProfile.model) return undefined;
   return fileProfile.apiKey;
+}
+
+function matchingEnvApiKey(flagProfile: CliProviderProfile, envProfile: CliProviderProfile | null): string | undefined {
+  if (!envProfile?.apiKey) return undefined;
+  if (envProfile.provider !== flagProfile.provider) return undefined;
+  if (normalizeBaseUrl(envProfile.baseUrl) !== normalizeBaseUrl(flagProfile.baseUrl)) return undefined;
+  if (envProfile.model !== flagProfile.model) return undefined;
+  return envProfile.apiKey;
+}
+
+function envApiKey(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.LYNN_CLI_API_KEY || env.OPENAI_API_KEY || undefined;
 }
