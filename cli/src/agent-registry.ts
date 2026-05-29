@@ -8,17 +8,22 @@ export interface CliAgentEntry {
   enabled: boolean;
   available: boolean;
   availability: string;
+  kind: "built-in" | "external";
 }
 
-const AGENTS: Array<Omit<CliAgentEntry, "available" | "availability">> = [
-  { id: "lynn-cli", label: "Lynn CLI", bin: "Lynn", enabled: true },
-  { id: "codex-cli", label: "Codex", bin: "codex", enabled: true },
-  { id: "claude-code", label: "Claude Code", bin: "claude", enabled: true },
-  { id: "claude-internal", label: "Claude (internal)", bin: "claude-internal", enabled: true },
-  { id: "qwen-cli", label: "Qwen", bin: "qwen", enabled: true },
-  { id: "kimi-cli", label: "Kimi", bin: "kimi", enabled: true },
-  { id: "opencode", label: "OpenCode", bin: "opencode", enabled: true },
-  { id: "codebuddy", label: "CodeBuddy", bin: "codebuddy", enabled: true },
+const AGENTS: Array<Omit<CliAgentEntry, "available" | "availability"> & { profileHint?: string }> = [
+  { id: "lynn-cli", label: "Lynn CLI", bin: "Lynn", enabled: true, kind: "built-in", profileHint: "current binary" },
+  { id: "mimo-vl", label: "MiMo Vision (mimo-v2.5)", bin: "Lynn", enabled: true, kind: "built-in", profileHint: "built-in profile - vision" },
+  { id: "mimo-pro", label: "MiMo Pro (long endurance)", bin: "Lynn", enabled: true, kind: "built-in", profileHint: "built-in profile - long task" },
+  { id: "mimo-fast", label: "MiMo Fast", bin: "Lynn", enabled: true, kind: "built-in", profileHint: "built-in profile - fast" },
+  { id: "stepfun-flash", label: "StepFun 3.7 Flash", bin: "Lynn", enabled: true, kind: "built-in", profileHint: "built-in profile - BYOK preset stepfun" },
+  { id: "codex-cli", label: "Codex", bin: "codex", enabled: true, kind: "external" },
+  { id: "claude-code", label: "Claude Code", bin: "claude", enabled: true, kind: "external" },
+  { id: "claude-internal", label: "Claude (internal)", bin: "claude-internal", enabled: true, kind: "external" },
+  { id: "qwen-cli", label: "Qwen", bin: "qwen", enabled: true, kind: "external" },
+  { id: "kimi-cli", label: "Kimi", bin: "kimi", enabled: true, kind: "external" },
+  { id: "opencode", label: "OpenCode", bin: "opencode", enabled: true, kind: "external" },
+  { id: "codebuddy", label: "CodeBuddy", bin: "codebuddy", enabled: true, kind: "external" },
 ];
 
 export interface DetectCliAgentsOptions {
@@ -32,8 +37,9 @@ export function detectCliAgents(opts: DetectCliAgentsOptions = {}): CliAgentEntr
   const pathEnv = opts.pathEnv ?? process.env.PATH ?? "";
   const fileExists = opts.fileExists ?? defaultFileExists;
   return AGENTS.map((agent) => {
-    if (agent.id === "lynn-cli") {
-      return { ...agent, available: true, availability: "current binary" };
+    if (agent.kind === "built-in") {
+      const { profileHint: _profileHint, ...entry } = agent;
+      return { ...entry, available: true, availability: agent.profileHint || "current binary" };
     }
     const found = findCommand(agent.bin, { pathEnv, platform, fileExists });
     return {
