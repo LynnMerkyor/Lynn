@@ -9,11 +9,21 @@ export interface BrainChatRequest {
   messages?: ChatMessage[];
   reasoning: ReasoningOptions;
   fallbackProvider?: CliProviderProfile | null;
+  tools?: ChatToolDefinition[];
 }
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string | ChatContentPart[];
+}
+
+export interface ChatToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description?: string;
+    parameters?: unknown;
+  };
 }
 
 export type BrainStreamEvent =
@@ -217,6 +227,7 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
   const body = applyReasoningToBody({
     model: "lynn-brain-router",
     stream: true,
+    ...(request.tools?.length ? { tools: request.tools, tool_choice: "auto" } : {}),
     messages,
   }, request.reasoning);
 
@@ -273,6 +284,7 @@ async function* streamDirectProviderChat(request: BrainChatRequest, provider: Cl
     model: provider.model,
     stream: true,
     stream_options: { include_usage: true },
+    ...(request.tools?.length ? { tools: request.tools, tool_choice: "auto" } : {}),
     messages,
   }, request.reasoning);
   let response: Response;

@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output, stderr as errorOutput } from "node:process";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
-import { formatBrainRecoveryHint, streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
+import { formatBrainRecoveryHint, streamBrainChat, type BrainStreamEvent, type ChatMessage, type ChatToolDefinition } from "../brain-client.js";
 import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { resolveEffectivePermissions } from "../permissions.js";
@@ -942,6 +942,7 @@ async function collectBrainText(inputData: {
       reasoning: inputData.reasoning,
       messages: inputData.messages,
       fallbackProvider: inputData.fallbackProvider,
+      tools: codeToolDefinitions(),
     })) {
       const renderReasoning = shouldRenderReasoning(inputData.reasoning.display, inputData.json);
       if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
@@ -977,6 +978,92 @@ async function collectBrainText(inputData: {
     text = text.trim() ? `${text}\n${toolCallText}` : toolCallText;
   }
   return { text, usageSummary };
+}
+
+export function codeToolDefinitions(): ChatToolDefinition[] {
+  return [
+    {
+      type: "function",
+      function: {
+        name: "read_file",
+        description: "Read a UTF-8 text file inside the current workspace.",
+        parameters: objectSchema({
+          path: stringSchema("Workspace-relative file path."),
+          maxBytes: numberSchema("Optional maximum bytes to read."),
+        }, ["path"]),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "grep",
+        description: "Search files in the workspace for a text or regex query.",
+        parameters: objectSchema({
+          query: stringSchema("Search query or regular expression."),
+          path: stringSchema("Optional workspace-relative directory or file to search."),
+        }, ["query"]),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "glob",
+        description: "List workspace files matching a glob pattern.",
+        parameters: objectSchema({
+          pattern: stringSchema("Glob pattern, for example **/*.ts."),
+          path: stringSchema("Optional workspace-relative directory to search."),
+        }, ["pattern"]),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "apply_patch",
+        description: "Apply a patch inside the workspace. Prefer this for edits.",
+        parameters: objectSchema({
+          text: stringSchema("Patch text. Supports Codex *** Begin Patch format or unified diff."),
+        }, ["text"]),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "write_file",
+        description: "Write a full text file inside the workspace. Use sparingly; prefer apply_patch for edits.",
+        parameters: objectSchema({
+          path: stringSchema("Workspace-relative file path."),
+          text: stringSchema("Full file content to write."),
+        }, ["path", "text"]),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "bash",
+        description: "Run a shell command in the workspace, usually for tests or inspection.",
+        parameters: objectSchema({
+          command: stringSchema("Shell command to run."),
+        }, ["command"]),
+      },
+    },
+  ];
+}
+
+function objectSchema(properties: Record<string, unknown>, required: string[] = []): Record<string, unknown> {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties,
+    required,
+  };
+}
+
+function stringSchema(description: string): Record<string, unknown> {
+  return { type: "string", description };
+}
+
+function numberSchema(description: string): Record<string, unknown> {
+  return { type: "number", description };
 }
 
 export function parseCodeToolRequest(text: string): CodeToolRequest | null {

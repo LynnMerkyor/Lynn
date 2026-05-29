@@ -214,6 +214,13 @@ describe("code agent loop", () => {
     try {
       await withRawBrainServer((body, count) => {
         if (count === 1) {
+          expect(body).toMatchObject({
+            tools: expect.arrayContaining([
+              expect.objectContaining({ type: "function", function: expect.objectContaining({ name: "read_file" }) }),
+              expect.objectContaining({ type: "function", function: expect.objectContaining({ name: "apply_patch" }) }),
+            ]),
+            tool_choice: "auto",
+          });
           return rawSsePayloads([
             JSON.stringify({
               choices: [{

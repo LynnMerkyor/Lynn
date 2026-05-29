@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { buildCodeRuntimeFrames, canPromptForDangerousTool, createStreamingToolCallAccumulator, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeToolRequest, parseCodeToolRequests, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
+import { buildCodeRuntimeFrames, canPromptForDangerousTool, codeToolDefinitions, createStreamingToolCallAccumulator, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeToolRequest, parseCodeToolRequests, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
 import { stableRuntimePrefix } from "../../shared/runtime-instruction-frames.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
@@ -75,6 +75,23 @@ describe("code tools", () => {
     expect(canPromptForDangerousTool({ isTTY: true }, { isTTY: true }, false)).toBe(true);
     expect(canPromptForDangerousTool({ isTTY: true }, { isTTY: true }, true)).toBe(false);
     expect(canPromptForDangerousTool({ isTTY: false }, { isTTY: true }, false)).toBe(false);
+  });
+
+  it("exposes local coding tools as OpenAI-compatible function tools", () => {
+    const tools = codeToolDefinitions();
+
+    expect(tools.map((tool) => tool.function.name)).toEqual([
+      "read_file",
+      "grep",
+      "glob",
+      "apply_patch",
+      "write_file",
+      "bash",
+    ]);
+    expect(tools.find((tool) => tool.function.name === "apply_patch")?.function.parameters).toMatchObject({
+      type: "object",
+      required: ["text"],
+    });
   });
 
   it("parses model-requested tool JSON", () => {
