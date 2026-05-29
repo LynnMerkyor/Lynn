@@ -202,6 +202,13 @@ export function SidebarCapabilityBar() {
       label: `${tt('sidebar.capability.automation', '自动任务')} ${automationCount || 0}`,
       onClick: openAutomationPanel,
     },
+    {
+      key: 'fleet',
+      label: tt('sidebar.capability.fleet', 'Workers'),
+      onClick: () => {
+        useStore.setState({ welcomeVisible: false, activePanel: 'fleet' });
+      },
+    },
     ...(changesSummary.linesAdded + changesSummary.linesRemoved > 0 ? [{
       key: 'changes',
       label: `+${changesSummary.linesAdded} -${changesSummary.linesRemoved}`,

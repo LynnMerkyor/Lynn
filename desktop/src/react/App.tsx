@@ -15,6 +15,7 @@ const ActivityPanel = lazy(() => import('./components/ActivityPanel').then(m => 
 const AutomationPanel = lazy(() => import('./components/AutomationPanel').then(m => ({ default: m.AutomationPanel })));
 const BridgePanel = lazy(() => import('./components/BridgePanel').then(m => ({ default: m.BridgePanel })));
 const ChangesPanel = lazy(() => import('./components/ChangesPanel').then(m => ({ default: m.ChangesPanel })));
+const WorkersPanel = lazy(() => import('./components/fleet/WorkersPanel').then(m => ({ default: m.WorkersPanel })));
 const PreviewPanel = lazy(() => import('./components/PreviewPanel').then(m => ({ default: m.PreviewPanel })));
 const SkillViewerOverlay = lazy(() => import('./components/SkillViewerOverlay').then(m => ({ default: m.SkillViewerOverlay })));
 import { DiagnosticsPanel } from './components/debug/DiagnosticsPanel';
@@ -451,6 +452,7 @@ function App() {
             {activePanel === 'changes' && <ChangesPanel />}
             {activePanel === 'automation' && <AutomationPanel />}
             {activePanel === 'bridge' && <BridgePanel />}
+            {activePanel === 'fleet' && <WorkersPanel />}
           </Suspense>
         </MainContent>
 
