@@ -54,11 +54,23 @@ function sandbox(args: ParsedArgs): ToolRunContext["sandbox"] {
   return "workspace-write";
 }
 
-function maxSteps(args: ParsedArgs): number {
+const DEFAULT_MAX_STEPS = 8;
+const STANDARD_MAX_STEPS = 20;
+const LONG_MAX_STEPS = 1000;
+
+export function isLongRun(args: ParsedArgs): boolean {
+  return hasFlag(args.flags, "long", "endurance");
+}
+
+export function maxSteps(args: ParsedArgs): number {
   const raw = getStringFlag(args.flags, "max-steps", "steps");
-  if (!raw) return 8;
+  if (!raw) return DEFAULT_MAX_STEPS;
   const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 20) throw new Error("--max-steps must be an integer from 1 to 20");
+  const cap = isLongRun(args) ? LONG_MAX_STEPS : STANDARD_MAX_STEPS;
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > cap) {
+    const hint = isLongRun(args) ? "" : " (pass --long for endurance runs up to 1000 steps)";
+    throw new Error(`--max-steps must be an integer from 1 to ${cap}${hint}`);
+  }
   return parsed;
 }
 
@@ -413,6 +425,7 @@ interface CodeContext {
 async function runCodeTask(args: ParsedArgs, task: string, json: boolean, options: { compact?: boolean } = {}): Promise<number> {
   const context = await collectCodeContext(cwd(args));
   const reasoning = parseReasoningOptions(args);
+  const stepBudget = maxSteps(args);
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const mode = await resolveCodeMode(args);
@@ -430,7 +443,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
       approval: mode.approval,
       sandbox: mode.sandbox,
       reasoning,
-      maxSteps: maxSteps(args),
+      maxSteps: stepBudget,
       mockBrain,
       fallbackProvider: cliProvider?.profile,
     }));
@@ -481,7 +494,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     fallbackProvider: cliProvider?.profile,
     reasoning,
     json,
-    maxSteps: maxSteps(args),
+    maxSteps: stepBudget,
     toolCtx,
     input,
     output: errorOutput,
@@ -537,7 +550,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
         cwd: context.cwd,
         image: getStringFlag(args.flags, "image", "shot") || null,
         reasoning,
-        maxSteps: maxSteps(args),
+        maxSteps: stepBudget,
         maxStepsReached: final.maxStepsReached,
         resumedFrom: resumePath || null,
       },

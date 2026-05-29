@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { runCode } from "../src/commands/code.js";
+import { maxSteps, runCode } from "../src/commands/code.js";
 import { appendSessionTurn, sessionIndexPath } from "../src/session/store.js";
 
 let tmp = "";
@@ -54,6 +54,31 @@ async function withBrainServer(handler: (body: unknown, count: number) => string
 }
 
 describe("code agent loop", () => {
+  it("keeps normal coding turns capped at 20 steps unless long-run mode is explicit", () => {
+    expect(maxSteps(parseArgs(["code", "task"]))).toBe(8);
+    expect(maxSteps(parseArgs(["code", "task", "--max-steps", "20"]))).toBe(20);
+    expect(() => maxSteps(parseArgs(["code", "task", "--max-steps", "21"]))).toThrow(/--long/);
+  });
+
+  it("allows endurance coding turns to opt into a 1000 step budget", () => {
+    expect(maxSteps(parseArgs(["code", "task", "--long", "--max-steps", "1000"]))).toBe(1000);
+    expect(maxSteps(parseArgs(["code", "task", "--endurance", "--steps", "250"]))).toBe(250);
+    expect(() => maxSteps(parseArgs(["code", "task", "--long", "--max-steps", "1001"]))).toThrow(/1 to 1000/);
+  });
+
+  it("validates max steps before the mock brain shortcut", async () => {
+    await expect(runCode(parseArgs([
+      "code",
+      "mock task",
+      "--cwd",
+      tmp,
+      "--mock-brain",
+      "--max-steps",
+      "21",
+      "--json",
+    ]))).rejects.toThrow(/--long/);
+  });
+
   it("executes a model-requested apply_patch tool and feeds the result back", async () => {
     const patch = [
       "diff --git a/hello.txt b/hello.txt",

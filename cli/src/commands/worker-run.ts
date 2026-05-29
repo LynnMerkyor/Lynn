@@ -405,10 +405,11 @@ function isVisionTask(taskType: WorkerBrief["taskType"]): taskType is VisionComm
   return taskType === "see" || taskType === "ground" || taskType === "ui2code";
 }
 
-export function workerProfileDefaults(agent: string): { reasoning?: "off" | "high" | "xhigh"; maxSteps?: string } {
+export function workerProfileDefaults(agent: string): { reasoning?: "off" | "high" | "xhigh"; maxSteps?: string; long?: boolean } {
   if (agent === "mimo-fast") return { reasoning: "off", maxSteps: "6" };
-  if (agent === "mimo-pro") return { reasoning: "high", maxSteps: "20" };
+  if (agent === "mimo-pro") return { reasoning: "high", maxSteps: "100", long: true };
   if (agent === "mimo-vl") return { reasoning: "high" };
+  if (agent === "stepfun-flash") return { reasoning: "high", maxSteps: "100", long: true };
   return {};
 }
 
@@ -431,6 +432,7 @@ async function runLynnCliWorker(input: {
     title: input.brief.title,
     json: true,
   };
+  if (profileDefaults.long || hasFlag(input.args.flags, "long", "endurance")) flags.long = true;
   const brainUrl = getStringFlag(input.args.flags, "brain-url");
   if (brainUrl) flags["brain-url"] = brainUrl;
   const reasoning = getStringFlag(input.args.flags, "reasoning") || profileDefaults.reasoning;
