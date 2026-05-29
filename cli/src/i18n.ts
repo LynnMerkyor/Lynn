@@ -64,8 +64,35 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "chat.fast": "✓ 快速模式 · 思考关闭(低延迟短回复)",
     "chat.think": "✓ 思考模式 · 推理强度高",
     "chat.cleared": "✓ 上下文已清空",
+    "chat.help":
+      "/exit 退出聊天\n" +
+      "/clear 清空上下文\n" +
+      "/model 查看当前模型 / BYOK 路由\n" +
+      "/providers 查看提供方和 BYOK 设置\n" +
+      "/fast 低延迟回复\n" +
+      "/think 深度推理\n" +
+      "/reasoning 查看或设置推理模式\n" +
+      "/mode 查看权限模式\n" +
+      "/mode ask|yolo|read-only|workspace|danger 切换权限\n" +
+      "/help 显示命令",
+    "chat.reasoning.show": "reasoning:{effort} · display {display}\n用 /fast、/think 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
+    "chat.mode.show": "mode:{mode}\n用 /mode yolo 开启本地写入/命令权限,/mode ask 回到守护模式,或 Shift+Tab 切换。",
     "code.fast": "✓ 快速模式 · 思考关闭",
     "code.think": "✓ 思考模式 · 高",
+    "code.help":
+      "/exit 退出 code 模式\n" +
+      "/tools 查看本地编码工具\n" +
+      "/fast 低延迟 MiMo/Brain 回复\n" +
+      "/think 深度 MiMo/Brain 推理\n" +
+      "/reasoning 查看或设置推理模式\n" +
+      "/model 查看当前 Brain/BYOK 路由\n" +
+      "/providers 查看提供方和 BYOK 设置\n" +
+      "/mode 查看权限模式\n" +
+      "/mode ask 守护模式(workspace-write)\n" +
+      "/mode yolo 允许本地写入和 shell 命令",
+    "code.reasoning.show": "think:{effort} / display {display}\n用 /fast、/think 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
+    "code.mode.show": "mode:{mode}\n用 /mode yolo 开启本地工具权限,/mode ask 回到守护模式。",
+    "tool.approval.suffix": " (需要确认)",
     "approval.prompt": "允许 {tool} 在 {cwd} 执行?[y/n/a](a = 本次会话全部允许) ",
     "mock.response": "模拟回复:{text}",
     "mock.code": "模拟编码任务:{task}",
@@ -125,8 +152,35 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "chat.fast": "✓ fast mode · thinking off (short, low-latency replies)",
     "chat.think": "✓ thinking mode · reasoning high",
     "chat.cleared": "✓ context cleared",
+    "chat.help":
+      "/exit leave chat\n" +
+      "/clear reset context\n" +
+      "/model show model/BYOK route\n" +
+      "/providers show BYOK setup\n" +
+      "/fast low-latency replies\n" +
+      "/think deeper reasoning\n" +
+      "/reasoning show or set reasoning mode\n" +
+      "/mode show permission mode\n" +
+      "/mode ask|yolo|read-only|workspace|danger change permission mode\n" +
+      "/help show commands",
+    "chat.reasoning.show": "reasoning: {effort} · display {display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.",
+    "chat.mode.show": "mode: {mode}\nUse /mode yolo for full local tool permission, /mode ask for guarded mode, or Shift+Tab to toggle.",
     "code.fast": "✓ fast mode · thinking off",
     "code.think": "✓ thinking mode · high",
+    "code.help":
+      "/exit leave code mode\n" +
+      "/tools list local coding tools\n" +
+      "/fast low-latency MiMo/Brain replies\n" +
+      "/think deeper MiMo/Brain reasoning\n" +
+      "/reasoning show or set reasoning mode\n" +
+      "/model show current Brain/BYOK route\n" +
+      "/providers show provider and BYOK setup\n" +
+      "/mode show permission mode\n" +
+      "/mode ask guarded workspace-write mode\n" +
+      "/mode yolo allow local writes and shell commands",
+    "code.reasoning.show": "think: {effort} / display {display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.",
+    "code.mode.show": "mode: {mode}\nUse /mode yolo for full local tool permission or /mode ask for guarded mode.",
+    "tool.approval.suffix": " (approval required)",
     "approval.prompt": "Allow {tool} in {cwd}? [y/n/a] (a = allow all this session) ",
     "mock.response": "Mock reply: {text}",
     "mock.code": "Mock code task: {task}",

@@ -1,7 +1,7 @@
 import { parseArgs, hasFlag } from "./args.js";
 import { checkBrainReachable } from "./brain-client.js";
 import { runAgents } from "./commands/agents.js";
-import { renderOfflineChatHint, runChat } from "./commands/chat.js";
+import { runChat } from "./commands/chat.js";
 import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
 import { runPermissions } from "./commands/permissions.js";
@@ -26,10 +26,8 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
       showTips: brainReachable,
     })}\n`);
     if (process.stdin.isTTY && process.stdout.isTTY) {
-      if (!brainReachable) {
-        process.stdout.write(`${renderOfflineChatHint({ approval: "ask", sandbox: "workspace-write" }, providerInfo.brainUrl)}\n`);
-        return 2;
-      }
+      // Always enter the REPL. If Brain is offline, runChat prints recovery
+      // guidance per turn instead of dropping the next user input into zsh.
       return runChat({ command: "chat", positionals: [], flags: {} }, { intro: false, brainReachable });
     }
     return 0;
