@@ -14,6 +14,7 @@ Lynn doctor --offline
 Lynn "summarize this repo"
 Lynn -p "summarize this repo" --json
 Lynn exec "review the current diff" --reasoning auto --show-reasoning auto
+Lynn code "review the current diff"
 Lynn chat
 cat README.md | Lynn "summarize this file"
 Lynn - < README.md

@@ -12,6 +12,7 @@ export function usage(): string {
     "  Lynn exec \"task\" --json [--mock-brain]",
     "  Lynn chat",
     "  Lynn worker run --brief task.md --worktree path --jsonl --mock",
+    "  Lynn code \"review the current diff\"",
     "  Lynn code --list-tools",
     "  Lynn code --tool read_file --path README.md --json",
     "  Lynn sessions list --json",
