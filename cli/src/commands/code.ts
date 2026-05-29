@@ -141,12 +141,12 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       }
       if (text === "/fast") {
         reasoning = { ...reasoning, effort: "off" };
-        output.write("✓ fast mode · thinking off\n\n");
+        output.write(`${t("code.fast")}\n\n`);
         continue;
       }
       if (text === "/think") {
         reasoning = { ...reasoning, effort: "high" };
-        output.write("✓ thinking mode · high\n\n");
+        output.write(`${t("code.think")}\n\n`);
         continue;
       }
       if (text === "/reasoning") {
@@ -302,8 +302,8 @@ export function renderCodeIntro(
   const lines = [
     `Lynn Code (${version})`,
     "",
-    padLine("model", "MiMo", "/model to change"),
-    padLine("directory", displayCwd(process.cwd())),
+    padLine(t("startup.label.model"), "MiMo", t("startup.hint.model")),
+    padLine(t("startup.label.directory"), displayCwd(process.cwd())),
   ];
   const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
   return [
@@ -333,14 +333,14 @@ export function renderCodeTaskHeader(inputData: {
   maxSteps: number;
   mockBrain?: boolean;
 }): string {
-  const route = inputData.mockBrain ? "mock Brain" : "MiMo via local Brain router";
+  const route = inputData.mockBrain ? t("code.route.mock") : t("code.route.brain");
   return [
     box([
       `Lynn Code · ${route}`,
       "",
-      padLine("directory", displayCwd(inputData.cwd)),
-      padLine("mode", `${inputData.approval} / ${inputData.sandbox}`),
-      padLine("think", `${inputData.reasoning.effort} · max steps ${inputData.maxSteps}`),
+      padLine(t("startup.label.directory"), displayCwd(inputData.cwd)),
+      padLine(t("startup.label.mode"), `${inputData.approval} / ${inputData.sandbox}`),
+      padLine(t("code.label.think"), `${inputData.reasoning.effort} · ${t("code.maxsteps", { n: inputData.maxSteps })}`),
     ]),
     "",
   ].join("\n");

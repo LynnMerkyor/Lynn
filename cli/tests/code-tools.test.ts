@@ -242,6 +242,25 @@ describe("code tools", () => {
     expect(header).toContain("max steps 8");
   });
 
+  it("localizes code intro and task header labels in Chinese", () => {
+    setLang("zh");
+    const intro = renderCodeIntro({ approval: "ask", sandbox: "workspace-write" });
+    const header = renderCodeTaskHeader({
+      cwd: "/repo",
+      approval: "ask",
+      sandbox: "workspace-write",
+      reasoning: { effort: "auto", display: "auto" },
+      maxSteps: 8,
+      mockBrain: true,
+    });
+
+    expect(intro).toContain("模型:");
+    expect(intro).toContain("目录:");
+    expect(header).toContain("模拟 Brain");
+    expect(header).toContain("思考:");
+    expect(header).toContain("最多 8 步");
+  });
+
   it("runs a read-only code task with repository context", async () => {
     const original = process.stdout.write;
     const originalErr = process.stderr.write;
