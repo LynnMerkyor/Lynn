@@ -125,6 +125,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     const spinner = new TerminalSpinner(process.stderr);
     const renderReasoning = shouldRenderReasoning(reasoning.display, false);
     const md = new MarkdownStream((s) => output.write(s), supportsColor(output));
+    const turnStarted = Date.now();
     try {
       spinner.start();
       for await (const event of streamBrainChat({ brainUrl, messages, reasoning, fallbackProvider: cliProvider?.profile })) {
@@ -135,8 +136,8 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
           md.push(event.text);
           assistant += event.text;
         } else {
-          if (event.type === "usage") latestUsage = summarizeUsage(event.usage);
-          renderChatEvent(event, renderReasoning, renderState);
+          if (event.type === "usage") latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - turnStarted });
+          renderChatEvent(event, renderReasoning, renderState, turnStarted);
         }
         if (event.type === "brain.error") {
           throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
@@ -303,7 +304,7 @@ export function formatChatError(error: unknown): string {
   return `Lynn error: ${message}`;
 }
 
-function renderChatEvent(event: BrainStreamEvent, renderReasoning: boolean, renderState: HumanBrainRenderState): event is { type: "assistant.delta"; text: string } {
+function renderChatEvent(event: BrainStreamEvent, renderReasoning: boolean, renderState: HumanBrainRenderState, startedAt = Date.now()): event is { type: "assistant.delta"; text: string } {
   if (event.type === "assistant.delta") {
     output.write(event.text);
     return true;
@@ -311,7 +312,7 @@ function renderChatEvent(event: BrainStreamEvent, renderReasoning: boolean, rend
   if (event.type === "reasoning.delta" && renderReasoning) {
     process.stderr.write(dim(event.text, supportsColor(process.stderr)));
   } else if (event.type === "usage") {
-    const summary = summarizeUsage(event.usage);
+    const summary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt });
     if (summary) process.stderr.write(`\nusage: ${summary}\n`);
   } else {
     renderBrainEventForHuman(event, renderState, process.stderr);

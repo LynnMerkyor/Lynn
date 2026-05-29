@@ -802,6 +802,7 @@ async function collectBrainText(inputData: {
   let text = "";
   const spinner = new TerminalSpinner(process.stderr, inputData.label);
   const renderState: HumanBrainRenderState = {};
+  const startedAt = Date.now();
   if (!inputData.json) spinner.start();
   try {
     for await (const event of streamBrainChat({
@@ -822,7 +823,7 @@ async function collectBrainText(inputData: {
       }
       if (!inputData.json && event.type !== "assistant.delta" && event.type !== "reasoning.delta") {
         if (event.type === "usage") {
-          const summary = summarizeUsage(event.usage);
+          const summary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt });
           if (summary) process.stderr.write(`usage: ${summary}\n`);
         } else {
           renderBrainEventForHuman(event, renderState, process.stderr);

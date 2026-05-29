@@ -37,6 +37,7 @@ export async function runVisionCommand(args: ParsedArgs, command: VisionCommand,
   let answer = "";
   const renderState: HumanBrainRenderState = {};
   const spinner = new TerminalSpinner(process.stderr, command === "ground" ? "Lynn is grounding" : "Lynn is seeing");
+  const startedAt = Date.now();
   if (!json) spinner.start();
   try {
     for await (const event of streamBrainChat({
@@ -47,7 +48,7 @@ export async function runVisionCommand(args: ParsedArgs, command: VisionCommand,
     })) {
       const renderReasoning = shouldRenderReasoning(reasoning.display, json);
       if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) spinner.stop();
-      renderVisionEvent(event, { json, renderReasoning, renderState });
+      renderVisionEvent(event, { json, renderReasoning, renderState, startedAt });
       if (event.type === "assistant.delta") answer += event.text;
       if (event.type === "brain.error") throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
     }
@@ -84,7 +85,7 @@ export function buildVisionPrompt(command: VisionCommand, userText: string): str
   ].filter(Boolean).join("\n");
 }
 
-function renderVisionEvent(event: BrainStreamEvent, opts: { json: boolean; renderReasoning: boolean; renderState: HumanBrainRenderState }): void {
+function renderVisionEvent(event: BrainStreamEvent, opts: { json: boolean; renderReasoning: boolean; renderState: HumanBrainRenderState; startedAt?: number }): void {
   if (opts.json) {
     if (event.type === "assistant.delta" || event.type === "reasoning.delta") writeJsonLine({ ...event, ts: nowIso() });
     else if (event.type === "provider" || event.type === "tool_progress" || event.type === "brain.error") writeJsonLine({ ...event, ts: nowIso() });
@@ -94,7 +95,7 @@ function renderVisionEvent(event: BrainStreamEvent, opts: { json: boolean; rende
   if (event.type === "assistant.delta") process.stdout.write(event.text);
   else if (event.type === "reasoning.delta" && opts.renderReasoning) process.stderr.write(event.text);
   else if (event.type === "usage") {
-    const summary = summarizeUsage(event.usage);
+    const summary = summarizeUsage(event.usage, { durationMs: opts.startedAt ? Date.now() - opts.startedAt : undefined });
     if (summary) process.stderr.write(`\nusage: ${summary}\n`);
   } else {
     renderBrainEventForHuman(event, opts.renderState, process.stderr);

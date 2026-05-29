@@ -66,6 +66,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   let modelId = "lynn-brain-router";
   const renderState: HumanBrainRenderState = {};
   const spinner = new TerminalSpinner(process.stderr);
+  const startedAt = Date.now();
   if (!options.json) spinner.start();
   try {
     for await (const event of streamBrainChat({ brainUrl, prompt, reasoning, fallbackProvider: cliProvider?.profile })) {
@@ -77,6 +78,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
         json: !!options.json,
         renderReasoning,
         renderState,
+        startedAt,
       });
       if (event.type === "brain.error") {
         throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
@@ -166,7 +168,7 @@ function readOptionalStdin(firstChunkTimeoutMs: number): Promise<string> {
   });
 }
 
-function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; renderReasoning: boolean; renderState: HumanBrainRenderState }): void {
+function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; renderReasoning: boolean; renderState: HumanBrainRenderState; startedAt?: number }): void {
   if (opts.json) {
     if (event.type === "assistant.delta" || event.type === "reasoning.delta") {
       writeJsonLine({ ...event, ts: nowIso() });
@@ -183,7 +185,7 @@ function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; render
   } else if (event.type === "reasoning.delta" && opts.renderReasoning) {
     process.stderr.write(event.text);
   } else if (event.type === "usage") {
-    const summary = summarizeUsage(event.usage);
+    const summary = summarizeUsage(event.usage, { durationMs: opts.startedAt ? Date.now() - opts.startedAt : undefined });
     if (summary) process.stderr.write(`\nusage: ${summary}\n`);
   } else {
     renderBrainEventForHuman(event, opts.renderState, process.stderr);

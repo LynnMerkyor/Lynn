@@ -36,22 +36,42 @@ export function renderBrainEventForHuman(
   }
 }
 
-export function summarizeUsage(usage: unknown): string | null {
+export interface UsageSummaryOptions {
+  durationMs?: number;
+}
+
+export function summarizeUsage(usage: unknown, options: UsageSummaryOptions = {}): string | null {
   if (!usage || typeof usage !== "object" || Array.isArray(usage)) return null;
   const record = usage as Record<string, unknown>;
   const prompt = numberValue(record.prompt_tokens);
   const completion = numberValue(record.completion_tokens);
   const total = numberValue(record.total_tokens);
   const cacheHit = numberValue(record.prompt_cache_hit_tokens);
+  const cacheMiss = numberValue(record.prompt_cache_miss_tokens);
+  const cacheRatio = cacheHit !== null && prompt !== null && prompt > 0
+    ? `${Math.round((cacheHit / prompt) * 100)}%`
+    : cacheHit !== null && cacheMiss !== null && cacheHit + cacheMiss > 0
+      ? `${Math.round((cacheHit / (cacheHit + cacheMiss)) * 100)}%`
+      : null;
+  const tps = completion !== null && options.durationMs && options.durationMs > 0
+    ? completion / (options.durationMs / 1000)
+    : null;
   const parts = [
     total !== null ? `${total} tokens` : null,
     prompt !== null ? `in ${prompt}` : null,
     completion !== null ? `out ${completion}` : null,
-    cacheHit !== null ? `cache ${cacheHit}` : null,
+    cacheHit !== null ? `cache ${cacheHit}${cacheRatio ? ` (${cacheRatio})` : ""}` : null,
+    tps !== null && Number.isFinite(tps) ? `${formatTps(tps)} TPS` : null,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
 }
 
 function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function formatTps(value: number): string {
+  if (value >= 100) return String(Math.round(value));
+  if (value >= 10) return value.toFixed(1);
+  return value.toFixed(2);
 }
