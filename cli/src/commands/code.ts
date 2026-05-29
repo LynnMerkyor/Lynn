@@ -929,7 +929,10 @@ function normalizeToolArgs(parsed: Record<string, unknown>): Record<string, unkn
 function normalizeToolArgAliases(tool: ClientToolName, args: Record<string, unknown>): Record<string, unknown> {
   const normalized = { ...args };
   const path = firstArg(args.path, args.file, args.filepath, args.filePath, args.filename, args.target);
-  const text = firstArg(args.text, args.content, args.body, args.data, args.patch, args.diff);
+  const oldText = firstArg(args.old_string, args.oldString, args.old_text, args.oldText, args.search, args.original);
+  const newText = firstArg(args.new_string, args.newString, args.new_text, args.newText, args.replacement, args.replace);
+  const editPatch = buildCodexEditPatch(path, oldText, newText);
+  const text = firstArg(args.text, args.content, args.body, args.data, args.patch, args.diff, editPatch);
   const command = firstArg(args.command, args.cmd, args.shell, args.script);
   const query = firstArg(args.query, args.pattern, args.search, args.regex);
   const pattern = firstArg(args.pattern, args.glob, args.query);
@@ -952,6 +955,20 @@ function normalizeToolArgAliases(tool: ClientToolName, args: Record<string, unkn
 
 function firstArg(...values: unknown[]): unknown {
   return values.find((value) => value !== undefined && value !== null);
+}
+
+function buildCodexEditPatch(path: unknown, oldText: unknown, newText: unknown): string | undefined {
+  if (typeof path !== "string" || typeof oldText !== "string" || typeof newText !== "string") return undefined;
+  if (!path.trim() || !oldText) return undefined;
+  return [
+    "*** Begin Patch",
+    `*** Update File: ${path.trim()}`,
+    "@@",
+    ...oldText.replace(/\r\n/g, "\n").split("\n").map((line) => `-${line}`),
+    ...newText.replace(/\r\n/g, "\n").split("\n").map((line) => `+${line}`),
+    "*** End Patch",
+    "",
+  ].join("\n");
 }
 
 function extractJsonCandidates(text: string): string[] {

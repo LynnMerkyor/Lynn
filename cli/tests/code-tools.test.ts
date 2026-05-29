@@ -127,6 +127,51 @@ describe("code tools", () => {
     });
   });
 
+  it("translates edit_file old/new strings into a guarded Codex patch", () => {
+    const request = parseCodeToolRequest(JSON.stringify({
+      tool: "edit_file",
+      args: {
+        path: "src/hello.ts",
+        old_string: "export const hello = 'world';",
+        new_string: "export const hello = 'lynn';",
+      },
+    }));
+
+    expect(request).toMatchObject({
+      tool: "apply_patch",
+      args: {
+        text: [
+          "*** Begin Patch",
+          "*** Update File: src/hello.ts",
+          "@@",
+          "-export const hello = 'world';",
+          "+export const hello = 'lynn';",
+          "*** End Patch",
+          "",
+        ].join("\n"),
+      },
+    });
+  });
+
+  it("executes translated edit_file old/new strings through apply_patch approval", async () => {
+    const request = parseCodeToolRequest(JSON.stringify({
+      tool: "edit_file",
+      args: {
+        path: "src/hello.ts",
+        old_string: "export const hello = 'world';",
+        new_string: "export const hello = 'agent';",
+      },
+    }));
+    expect(request?.tool).toBe("apply_patch");
+    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: request!.tool, ...request!.args })).rejects.toThrow("approval yolo");
+
+    const result = await runClientTool({ cwd: tmp, approval: "yolo" }, { name: request!.tool, ...request!.args });
+    const text = await fs.readFile(path.join(tmp, "src", "hello.ts"), "utf8");
+
+    expect(result.ok).toBe(true);
+    expect(text).toContain("'agent'");
+  });
+
   it("parses tool JSON embedded after prose when strings contain braces", () => {
     const request = parseCodeToolRequest([
       "I need to patch this.",
