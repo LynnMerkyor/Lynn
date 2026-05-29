@@ -58,6 +58,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "data-dir",
       "session",
       "title",
+      "agent-command",
     ].includes(name);
     if (takesValue && next && !next.startsWith("-")) {
       flags[name] = next;

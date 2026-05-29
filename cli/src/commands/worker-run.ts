@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import {
   FLEET_EVENT_SCHEMA_VERSION,
   type FleetWorkerEvent,
@@ -54,6 +55,89 @@ function emit(event: FleetWorkerEvent): void {
   writeJsonLine(enriched);
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function defaultAgentCommand(agent: string, briefPath: string, worktree: string, taskText: string): string | null {
+  switch (agent) {
+    case "claude-internal":
+      return `claude-internal -p ${shellQuote(taskText)} --add-dir ${shellQuote(worktree)} --output-format stream-json`;
+    case "claude-code":
+      return `claude -p ${shellQuote(taskText)} --add-dir ${shellQuote(worktree)} --output-format stream-json --verbose --include-partial-messages`;
+    case "codex-cli":
+      return `codex exec --cd ${shellQuote(worktree)} --file ${shellQuote(briefPath)} --json`;
+    case "qwen-cli":
+      return `qwen -p ${shellQuote(taskText)}`;
+    case "kimi-cli":
+      return `kimi --print ${shellQuote(taskText)}`;
+    default:
+      return null;
+  }
+}
+
+function mergeEventDefaults(event: FleetWorkerEvent, workerId: string, agent: string): FleetWorkerEvent {
+  return { workerId, agent, ...event } as FleetWorkerEvent;
+}
+
+async function runExternalWorker(input: {
+  command: string;
+  worktree: string;
+  workerId: string;
+  agent: string;
+}): Promise<number> {
+  emit({ type: "shell.started", workerId: input.workerId, agent: input.agent, command: input.command, approval: "auto" });
+  const child = spawn(input.command, {
+    cwd: input.worktree,
+    shell: true,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      LYNN_WORKER_ID: input.workerId,
+      LYNN_WORKER_AGENT: input.agent,
+      LYNN_NO_MODEL_DOWNLOADS: "1",
+    },
+  });
+
+  const started = Date.now();
+  const handleLine = (line: string, stream: "stdout" | "stderr"): void => {
+    if (!line.trim()) return;
+    const parsed = parseFleetJsonLine(line);
+    if (parsed.ok && parsed.event) {
+      emit(mergeEventDefaults(parsed.event, input.workerId, input.agent));
+    } else {
+      emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: line, level: stream === "stderr" ? "warning" : "info" });
+    }
+  };
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout?.on("data", (chunk) => {
+    stdout += String(chunk);
+    const lines = stdout.split(/\r?\n/);
+    stdout = lines.pop() || "";
+    lines.forEach((line) => handleLine(line, "stdout"));
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderr += String(chunk);
+    const lines = stderr.split(/\r?\n/);
+    stderr = lines.pop() || "";
+    lines.forEach((line) => handleLine(line, "stderr"));
+  });
+
+  const exitCode = await new Promise<number>((resolve) => {
+    child.on("close", (code) => resolve(code ?? 1));
+  });
+  handleLine(stdout, "stdout");
+  handleLine(stderr, "stderr");
+  const ok = exitCode === 0;
+  emit({ type: "shell.finished", workerId: input.workerId, agent: input.agent, command: input.command, ok, exitCode, ms: Date.now() - started });
+  if (!ok) {
+    emit({ type: "worker.error", workerId: input.workerId, agent: input.agent, code: "worker_exit_nonzero", message: `worker exited with ${exitCode}`, recoverable: true });
+  }
+  return exitCode;
+}
+
 export async function runWorker(args: ParsedArgs): Promise<number> {
   const subcommand = args.positionals[0] || "";
   if (subcommand && subcommand !== "run") {
@@ -82,6 +166,22 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
   });
   emit({ type: "worker.claims", workerId, agent, owned: brief.owned, forbidden: brief.forbidden });
   emit({ type: "worker.progress", workerId, agent, message: mock ? `Mock worker loaded: ${brief.title}` : `Worker loaded: ${brief.title}` });
+
+  const externalCommand = getStringFlag(args.flags, "agent-command") || defaultAgentCommand(agent, path.resolve(briefPath), path.resolve(worktree), markdown);
+  if (!mock && externalCommand) {
+    const exitCode = await runExternalWorker({ command: externalCommand, worktree, workerId, agent });
+    emit({
+      type: "git.diff",
+      workerId,
+      agent,
+      files: 0,
+      insertions: 0,
+      deletions: 0,
+      changedFiles: [],
+    });
+    emit({ type: "worker.finished", workerId, agent, ok: exitCode === 0, exitCode, summary: exitCode === 0 ? "external worker completed" : "external worker failed" });
+    return exitCode;
+  }
 
   for (const command of brief.tests) {
     emit({ type: "test.started", workerId, agent, command });

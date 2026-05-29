@@ -20,5 +20,6 @@ export function usage(): string {
     "  --approval ask|on-failure|never|yolo",
     "  --sandbox read-only|workspace-write|danger-full-access",
     "  --save-session --data-dir ~/.lynn",
+    "  --agent-command \"custom worker command\"",
   ].join("\n");
 }
