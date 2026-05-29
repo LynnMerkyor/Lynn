@@ -3,6 +3,7 @@ import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { appendSessionTurn, resolveDataDir } from "../session/store.js";
+import { TerminalSpinner } from "../terminal-spinner.js";
 
 export interface PromptOptions {
   json?: boolean;
@@ -57,13 +58,23 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
 
   let assistant = "";
   let sawReasoning = false;
-  for await (const event of streamBrainChat({ brainUrl, prompt, reasoning })) {
-    handleBrainEvent(event, {
-      json: !!options.json,
-      renderReasoning: shouldRenderReasoning(reasoning.display, !!options.json),
-    });
-    if (event.type === "reasoning.delta") sawReasoning = true;
-    if (event.type === "assistant.delta") assistant += event.text;
+  const spinner = new TerminalSpinner(process.stderr);
+  if (!options.json) spinner.start();
+  try {
+    for await (const event of streamBrainChat({ brainUrl, prompt, reasoning })) {
+      const renderReasoning = shouldRenderReasoning(reasoning.display, !!options.json);
+      if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
+        spinner.stop();
+      }
+      handleBrainEvent(event, {
+        json: !!options.json,
+        renderReasoning,
+      });
+      if (event.type === "reasoning.delta") sawReasoning = true;
+      if (event.type === "assistant.delta") assistant += event.text;
+    }
+  } finally {
+    spinner.stop();
   }
   if (saveSession) {
     const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: process.cwd(), title, prompt, assistant, modelProvider: "brain", modelId: "lynn-brain-router" });

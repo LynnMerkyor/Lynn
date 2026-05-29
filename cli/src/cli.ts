@@ -4,13 +4,19 @@ import { runChat } from "./commands/chat.js";
 import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
 import { runPrompt } from "./commands/prompt.js";
+import { runProviders } from "./commands/providers.js";
 import { runSessions } from "./commands/sessions.js";
 import { runWorker } from "./commands/worker-run.js";
 import { usage } from "./help.js";
 import { writeJsonLine } from "./jsonl.js";
+import { renderStartupBanner } from "./startup.js";
 import { readVersionInfo } from "./version.js";
 
 async function main(argv = process.argv.slice(2)): Promise<number> {
+  if (argv.length === 0) {
+    process.stdout.write(`${renderStartupBanner()}\n`);
+    return 0;
+  }
   const args = parseArgs(argv);
   const json = hasFlag(args.flags, "json", "jsonl");
 
@@ -32,6 +38,12 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     case "agents": {
       return runAgents(args, json);
+    }
+    case "providers": {
+      return runProviders(args, json);
+    }
+    case "model": {
+      return runProviders(args, json);
     }
     case "prompt":
     case "exec": {

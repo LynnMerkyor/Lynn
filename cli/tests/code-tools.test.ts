@@ -61,6 +61,32 @@ describe("code tools", () => {
     expect(result.output).toMatchObject({ timedOut: true });
   });
 
+  it("parses CLI timeout flags for bash tools", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runCode(parseArgs([
+        "code",
+        "--tool",
+        "bash",
+        "--command",
+        "node -e \"setTimeout(()=>{}, 1000)\"",
+        "--approval",
+        "yolo",
+        "--timeout-ms",
+        "50",
+        "--json",
+      ]))).resolves.toBe(1);
+    } finally {
+      process.stdout.write = original;
+    }
+    expect(output).toContain("\"timedOut\":true");
+  });
+
   it("runs code command list-tools", async () => {
     const original = process.stdout.write;
     let output = "";

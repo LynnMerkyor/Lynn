@@ -50,6 +50,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "tool",
       "path",
       "command",
+      "timeout-ms",
+      "timeout",
       "query",
       "pattern",
       "max-bytes",

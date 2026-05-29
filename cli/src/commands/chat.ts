@@ -2,7 +2,9 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
+import { providersInfo, renderProvidersInfo } from "./providers.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
+import { TerminalSpinner } from "../terminal-spinner.js";
 
 export async function runChat(args: ParsedArgs): Promise<number> {
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
@@ -18,7 +20,11 @@ export async function runChat(args: ParsedArgs): Promise<number> {
       if (!text) continue;
       if (text === "/exit" || text === "/quit") break;
       if (text === "/help") {
-        output.write("/exit leave chat\n/clear reset context\n/help show commands\n\n");
+        output.write("/exit leave chat\n/clear reset context\n/model show model/BYOK route\n/providers show BYOK setup\n/help show commands\n\n");
+        continue;
+      }
+      if (text === "/model" || text === "/providers") {
+        output.write(`${renderProvidersInfo(providersInfo())}\n\n`);
         continue;
       }
       if (text === "/clear") {
@@ -36,17 +42,26 @@ export async function runChat(args: ParsedArgs): Promise<number> {
       }
 
       let assistant = "";
+      const spinner = new TerminalSpinner(process.stderr);
+      const renderReasoning = shouldRenderReasoning(reasoning.display, false);
       try {
+        spinner.start();
         for await (const event of streamBrainChat({ brainUrl, messages, reasoning })) {
-          if (renderChatEvent(event, shouldRenderReasoning(reasoning.display, false))) {
+          if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
+            spinner.stop();
+          }
+          if (renderChatEvent(event, renderReasoning)) {
             assistant += event.text;
           }
         }
       } catch (error) {
+        spinner.stop();
         messages.pop();
         const message = error instanceof Error ? error.message : String(error);
         output.write(`\nLynn error: ${message}\n\n`);
         continue;
+      } finally {
+        spinner.stop();
       }
       messages.push({ role: "assistant", content: assistant });
       output.write("\n\n");

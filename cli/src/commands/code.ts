@@ -6,6 +6,7 @@ import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
+import { TerminalSpinner } from "../terminal-spinner.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName } from "../tools/types.js";
 
@@ -92,28 +93,38 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean): Promi
   }
 
   let sawContent = false;
-  for await (const event of streamBrainChat({
-    brainUrl,
-    reasoning,
-    messages: [
-      {
-        role: "system",
-        content: [
-          "You are Lynn CLI code mode.",
-          "You help with repository-level coding tasks from the terminal.",
-          "Be concise, name files precisely, and suggest exact commands.",
-          "Do not claim you edited files unless a tool actually changed them.",
-          "Never download models, datasets, training packs, BF16, or GGUF files to the local Mac.",
-        ].join("\n"),
-      },
-      { role: "user", content: buildCodePrompt(task, context) },
-    ],
-  })) {
-    handleCodeBrainEvent(event, {
-      json,
-      renderReasoning: shouldRenderReasoning(reasoning.display, json),
-    });
-    if (event.type === "assistant.delta") sawContent = true;
+  const spinner = new TerminalSpinner(process.stderr, "Lynn is reviewing");
+  if (!json) spinner.start();
+  try {
+    for await (const event of streamBrainChat({
+      brainUrl,
+      reasoning,
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You are Lynn CLI code mode.",
+            "You help with repository-level coding tasks from the terminal.",
+            "Be concise, name files precisely, and suggest exact commands.",
+            "Do not claim you edited files unless a tool actually changed them.",
+            "Never download models, datasets, training packs, BF16, or GGUF files to the local Mac.",
+          ].join("\n"),
+        },
+        { role: "user", content: buildCodePrompt(task, context) },
+      ],
+    })) {
+      const renderReasoning = shouldRenderReasoning(reasoning.display, json);
+      if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
+        spinner.stop();
+      }
+      handleCodeBrainEvent(event, {
+        json,
+        renderReasoning,
+      });
+      if (event.type === "assistant.delta") sawContent = true;
+    }
+  } finally {
+    spinner.stop();
   }
   if (json) writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true, contentReturned: sawContent });
   else process.stdout.write("\n");
