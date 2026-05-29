@@ -6,6 +6,7 @@
   "description": "Lynn command line interface and worker runner",
   "license": "Apache-2.0",
   "bin": {
+    "Lynn": "./bin/lynn.mjs",
     "lynn": "./bin/lynn.mjs"
   },
   "files": [

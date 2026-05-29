@@ -9,30 +9,33 @@ local file/shell orchestration.
 ## Quick start
 
 ```bash
-lynn version
-lynn doctor --offline
-lynn -p "summarize this repo" --json
-lynn exec "review the current diff" --reasoning auto --show-reasoning auto
+Lynn version
+Lynn doctor --offline
+Lynn -p "summarize this repo" --json
+Lynn exec "review the current diff" --reasoning auto --show-reasoning auto
 ```
+
+`Lynn` is the primary command. Lowercase `lynn` is kept as a compatibility
+alias for scripts and terminal muscle memory.
 
 ## Worker mode
 
-`lynn worker run` is the stable adapter between Lynn GUI Fleet and coding CLIs.
+`Lynn worker run` is the stable adapter between Lynn GUI Fleet and coding CLIs.
 It reads a task brief, emits Fleet JSONL events, and can wrap external agents.
 
 ```bash
-lynn worker run --brief task.md --worktree . --mock --jsonl
-lynn worker run --brief task.md --worktree . --agent codex-cli --jsonl
-lynn worker run --brief task.md --worktree . --agent claude-code --jsonl
-lynn worker run --brief task.md --worktree . --agent opencode-cli --jsonl
-lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
-lynn worker run --brief task.md --worktree . --agent kimi-cli --jsonl
+Lynn worker run --brief task.md --worktree . --mock --jsonl
+Lynn worker run --brief task.md --worktree . --agent codex-cli --jsonl
+Lynn worker run --brief task.md --worktree . --agent claude-code --jsonl
+Lynn worker run --brief task.md --worktree . --agent opencode-cli --jsonl
+Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
+Lynn worker run --brief task.md --worktree . --agent kimi-cli --jsonl
 ```
 
 For one-off adapters, pass `--agent-command`:
 
 ```bash
-lynn worker run --brief task.md --worktree . \
+Lynn worker run --brief task.md --worktree . \
   --agent custom \
   --agent-command "node ./scripts/my-worker.mjs" \
   --jsonl
