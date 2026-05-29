@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyModeCommand, applyReasoningCommand, formatChatError, isModeToggleKeypress, renderMode, renderOfflineChatHint, toggleMode } from "../src/commands/chat.js";
+import { applyModeCommand, applyReasoningCommand, completeChatInput, formatChatError, isModeToggleKeypress, renderMode, renderOfflineChatHint, toggleMode } from "../src/commands/chat.js";
 import { BrainConnectionError } from "../src/brain-client.js";
 import { setLang } from "../src/i18n.js";
 
@@ -74,5 +74,14 @@ describe("chat mode controls", () => {
 
     expect(applyReasoningCommand(current, "high").message).toContain("推理强度");
     expect(applyReasoningCommand(current, "show").message).toContain("始终");
+  });
+
+  it("offers slash completion in chat mode", () => {
+    expect(completeChatInput("/prov")).toEqual([["/providers"], "/prov"]);
+    expect(completeChatInput("/")).toMatchObject([
+      expect.arrayContaining(["/help", "/mode", "/providers"]),
+      "/",
+    ]);
+    expect(completeChatInput("hello")).toEqual([[], "hello"]);
   });
 });

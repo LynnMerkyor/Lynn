@@ -13,6 +13,26 @@ import { renderStatusBar } from "../status-bar.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
 import { t } from "../i18n.js";
 import { MarkdownStream } from "../markdown.js";
+import { appendHistory, historyPath, loadHistory } from "../history.js";
+import { completeSlash } from "../completion.js";
+
+export const CHAT_SLASH_COMMANDS = [
+  "/exit",
+  "/quit",
+  "/help",
+  "/fast",
+  "/think",
+  "/reasoning",
+  "/mode",
+  "/model",
+  "/providers",
+  "/clear",
+];
+
+export function completeChatInput(line: string): [string[], string] {
+  const result = completeSlash(line, CHAT_SLASH_COMMANDS);
+  return [result.matches, line];
+}
 
 export async function runChat(args: ParsedArgs, options: { intro?: boolean; brainReachable?: boolean } = {}): Promise<number> {
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
@@ -21,7 +41,14 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   const mode = resolveMode(args);
   const cliProvider = await resolveCliProviderProfile(args);
   const messages: ChatMessage[] = [];
-  const rl = readline.createInterface({ input, output, terminal: input.isTTY && output.isTTY });
+  const histFile = historyPath();
+  const rl = readline.createInterface({
+    input,
+    output,
+    terminal: input.isTTY && output.isTTY,
+    completer: completeChatInput,
+    history: loadHistory(histFile).reverse(),
+  });
   const cleanupModeHotkey = input.isTTY && output.isTTY
     ? installModeHotkey({ input, output, readlineInterface: rl, mode })
     : () => {};
@@ -39,6 +66,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   async function handleText(raw: string): Promise<"continue" | "break"> {
     const text = raw.trim();
     if (!text) return "continue";
+    appendHistory(text, histFile);
     if (text === "/exit" || text === "/quit") return "break";
     if (text === "/help") {
       output.write(`${t("chat.help")}\n\n`);
