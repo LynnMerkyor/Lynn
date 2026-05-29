@@ -406,7 +406,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
       writeJsonLine({ type: "assistant.delta", ts: nowIso(), text });
       writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true });
     } else {
-      process.stdout.write(`${text}\n`);
+      process.stdout.write(renderAssistantBlock(text, renderCodeFooter({ context, args, reasoning })));
     }
     return 0;
   }
@@ -432,9 +432,26 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     if (final.trim()) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: final });
     writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true, contentReturned: !!final.trim() });
   } else {
-    process.stdout.write(final.trim() ? `${final}\n` : "\n");
+    process.stdout.write(renderAssistantBlock(final.trim() || "(no answer)", renderCodeFooter({ context, args, reasoning })));
   }
   return 0;
+}
+
+function renderAssistantBlock(text: string, footer?: string): string {
+  const lines = text.replace(/\s+$/g, "").split(/\r?\n/);
+  const body = lines.map((line, index) => `${index === 0 ? "• " : "  "}${line}`).join("\n");
+  return `${body}${footer ? `\n\n${footer}` : ""}\n`;
+}
+
+function renderCodeFooter(inputData: {
+  context: CodeContext;
+  args: ParsedArgs;
+  reasoning: ReturnType<typeof parseReasoningOptions>;
+}): string {
+  const color = supportsColor(output);
+  const model = hasFlag(inputData.args.flags, "mock-brain", "mock") ? "mock Brain" : "MiMo";
+  const mode = `${approval(inputData.args)} / ${sandbox(inputData.args)}`;
+  return dim(`${model} · ${displayCwd(inputData.context.cwd)} · ${mode} · think ${inputData.reasoning.effort}`, color);
 }
 
 interface CodeAgentLoopInput {
