@@ -1,0 +1,19 @@
+export function usage(): string {
+  return [
+    "Lynn CLI",
+    "",
+    "Usage:",
+    "  lynn version",
+    "  lynn doctor [--offline]",
+    "  lynn -p \"prompt\" [--mock-brain] [--json]",
+    "  lynn exec \"task\" --json [--mock-brain]",
+    "  lynn worker run --brief task.md --worktree path --jsonl --mock",
+    "",
+    "Common flags:",
+    "  --reasoning auto|off|low|medium|high|xhigh",
+    "  --show-reasoning auto|always|never",
+    "  --brain-url http://127.0.0.1:8790",
+    "  --approval ask|on-failure|never|yolo",
+    "  --sandbox read-only|workspace-write|danger-full-access",
+  ].join("\n");
+}
