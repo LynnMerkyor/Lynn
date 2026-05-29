@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { matchAnyGlob, evaluateScope, annotateChangedFiles } from "../forbidden-guard.js";
-import { createLineParser } from "../worker-manager.js";
+import { createLineParser, mapKnownCliJsonLine } from "../worker-manager.js";
 import { parseWorktreePorcelain } from "../worktree-manager.js";
 import { FleetHub, type FleetBrief } from "../fleet-hub.js";
 import { resolveCliCommand, cliRuntimeAvailable } from "../worker-command.js";
@@ -61,6 +61,43 @@ describe("worker line parser", () => {
     expect(events[0]).toMatchObject({ type: "worker.progress", message: "a", workerId: "w1" });
     expect(events[1]).toMatchObject({ type: "tool.started", name: "read", workerId: "w1" });
     expect(events[2]).toMatchObject({ type: "worker.progress", message: "plain log line", workerId: "w1" });
+  });
+
+  it("translates nested Lynn code JSON events into fleet events", () => {
+    expect(mapKnownCliJsonLine('{"type":"code.tool.requested","tool":"read_file","args":{"path":"README.md"}}', "w2")).toMatchObject({
+      type: "tool.started",
+      workerId: "w2",
+      name: "read_file",
+      argsPreview: expect.stringContaining("README.md"),
+    });
+    expect(mapKnownCliJsonLine('{"type":"code.tool.result","tool":"read_file","ok":true,"ms":12}', "w2")).toMatchObject({
+      type: "tool.finished",
+      workerId: "w2",
+      name: "read_file",
+      ok: true,
+      ms: 12,
+    });
+    expect(mapKnownCliJsonLine('{"type":"session.checkpoint","line":"assistant","path":"/tmp/session.jsonl"}', "w2")).toMatchObject({
+      type: "worker.progress",
+      workerId: "w2",
+      message: "checkpoint: assistant",
+      data: { path: "/tmp/session.jsonl", line: "assistant" },
+    });
+    expect(mapKnownCliJsonLine('{"type":"run.finished","ok":true}', "w2")).toMatchObject({
+      type: "gate.finished",
+      workerId: "w2",
+      ok: true,
+    });
+    expect(mapKnownCliJsonLine('{"type":"code.unknown"}', "w2")).toBeNull();
+  });
+
+  it("uses translated code JSON events in the streaming line parser", () => {
+    const parse = createLineParser("w3");
+    const events = parse(
+      '{"type":"code.tool.requested","tool":"apply_patch","args":{"patch":"*** Begin Patch"}}\n{"type":"usage","usage":{"total_tokens":42}}\n',
+    );
+    expect(events[0]).toMatchObject({ type: "tool.started", workerId: "w3", name: "apply_patch" });
+    expect(events[1]).toMatchObject({ type: "worker.progress", workerId: "w3", message: "usage", data: { total_tokens: 42 } });
   });
 });
 

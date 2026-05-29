@@ -43,13 +43,72 @@ export function createLineParser(workerId: string): (chunk: string) => FleetWork
         if (parsed.ok && parsed.event) {
           out.push(parsed.event.workerId ? parsed.event : { ...parsed.event, workerId });
         } else {
-          out.push(makeFleetProgressEvent(trimmed, { workerId }));
+          out.push(mapKnownCliJsonLine(trimmed, workerId) ?? makeFleetProgressEvent(trimmed, { workerId }));
         }
       }
       nl = buf.indexOf("\n");
     }
     return out;
   };
+}
+
+export function mapKnownCliJsonLine(line: string, workerId: string): FleetWorkerEvent | null {
+  let parsed: Record<string, unknown>;
+  try {
+    const value = JSON.parse(line) as unknown;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    parsed = value as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const type = typeof parsed.type === "string" ? parsed.type : "";
+  if (type === "code.tool.requested") {
+    const name = typeof parsed.tool === "string" ? parsed.tool : "tool";
+    return {
+      type: "tool.started",
+      workerId,
+      name,
+      argsPreview: previewJson(parsed.args),
+    };
+  }
+  if (type === "code.tool.result") {
+    const name = typeof parsed.tool === "string" ? parsed.tool : "tool";
+    return {
+      type: "tool.finished",
+      workerId,
+      name,
+      ok: parsed.ok === true,
+      ms: typeof parsed.ms === "number" ? parsed.ms : undefined,
+    };
+  }
+  if (type === "usage") {
+    return makeFleetProgressEvent("usage", { workerId, data: parsed.usage });
+  }
+  if (type === "session.checkpoint") {
+    const lineType = typeof parsed.line === "string" ? parsed.line : "turn";
+    return makeFleetProgressEvent(`checkpoint: ${lineType}`, { workerId, data: { path: parsed.path, line: parsed.line } });
+  }
+  if (type === "session.saved") {
+    return makeFleetProgressEvent("session saved", { workerId, data: { path: parsed.path } });
+  }
+  if (type === "run.finished") {
+    return {
+      type: "gate.finished",
+      workerId,
+      ok: parsed.ok !== false,
+      summary: "code run finished",
+    };
+  }
+  return null;
+}
+
+function previewJson(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  try {
+    return JSON.stringify(value).slice(0, 240);
+  } catch {
+    return undefined;
+  }
 }
 
 export function spawnWorker(opts: SpawnWorkerOptions, onEvent: (e: FleetWorkerEvent) => void): WorkerHandle {
