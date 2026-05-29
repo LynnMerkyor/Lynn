@@ -45,7 +45,7 @@ function resolveCliRuntime(opts = {}) {
   const appRoot = opts.appRoot || path.join(__dirname, "..");
   const fileExists = opts.fileExists || defaultFileExists;
 
-  // Bundled CLI (extraResources: cli/dist -> resources/cli/lynn.mjs).
+  // Bundled CLI (extraResources: cli/bin/lynn.mjs -> resources/cli/lynn.mjs).
   const bundledCliEntry = resourcesPath ? path.join(resourcesPath, "cli", "lynn.mjs") : "";
   const devCliEntry = path.join(appRoot, "cli", "bin", "lynn.mjs");
   const cliEntry = fileExists(bundledCliEntry) ? bundledCliEntry : fileExists(devCliEntry) ? devCliEntry : "";
