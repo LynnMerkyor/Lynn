@@ -190,7 +190,19 @@ export class FleetHub {
       }
       const writeBrief = this.deps.writeBrief ?? defaultWriteBrief;
       const briefPath = writeBrief(brief, workerId);
-      const workerArgs = ["worker", "run", "--brief", briefPath, "--worktree", brief.worktree, "--jsonl"];
+      const workerArgs = [
+        "worker",
+        "run",
+        "--brief",
+        briefPath,
+        "--worktree",
+        brief.worktree,
+        "--agent",
+        String(brief.agent),
+        "--id",
+        workerId,
+        "--jsonl",
+      ];
       const cmd = this.resolve(workerArgs);
       if (cmd) {
         const spawn = this.deps.spawn ?? spawnWorker;

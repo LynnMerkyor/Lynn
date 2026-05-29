@@ -1,11 +1,22 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { matchAnyGlob, evaluateScope, annotateChangedFiles } from "../forbidden-guard.js";
 import { createLineParser } from "../worker-manager.js";
 import { parseWorktreePorcelain } from "../worktree-manager.js";
 import { FleetHub, type FleetBrief } from "../fleet-hub.js";
 import { resolveCliCommand, cliRuntimeAvailable } from "../worker-command.js";
 import { DEFAULT_FLEET_REGISTRY } from "../registry.js";
+
+async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error("timed out waiting for fleet event");
+}
 
 describe("forbidden-guard", () => {
   it("matches ** across segments and * within one", () => {
@@ -206,7 +217,42 @@ describe("FleetHub real spawn", () => {
     expect(spawnCalls[0].args).toContain("worker");
     expect(spawnCalls[0].args).toContain("--jsonl");
     expect(spawnCalls[0].args).toContain("--brief");
+    expect(spawnCalls[0].args).toContain("--id");
+    expect(spawnCalls[0].args).toContain("w1");
+    expect(spawnCalls[0].args).toContain("--agent");
+    expect(spawnCalls[0].args).toContain("codex-cli");
     expect(sent.map((m) => m.event.type)).toContain("worker.finished");
+  });
+
+  it("streams JSONL from the real Lynn CLI worker process", async () => {
+    const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
+    const cliBin = path.join(repoRoot, "cli/bin/lynn.mjs");
+    const cliSrc = path.join(repoRoot, "cli/src/cli.ts");
+    const briefPath = path.join(repoRoot, "cli/fixtures/worker-brief.md");
+    const useBuiltCli = fs.existsSync(cliBin);
+    const cliEntry = useBuiltCli ? cliBin : cliSrc;
+    const nodePrefix = useBuiltCli ? [] : ["--import", "tsx"];
+    const sent: Array<{ type: string; event: { type: string; workerId?: string; message?: string; ok?: boolean } }> = [];
+    const hub = new FleetHub(repoRoot, (m) => sent.push(m as { type: string; event: { type: string; workerId?: string; message?: string; ok?: boolean } }), () => "T", {
+      available: () => true,
+      createWorktree: async () => {},
+      writeBrief: () => briefPath,
+      resolveCommand: (args) => ({
+        command: process.execPath,
+        args: [...nodePrefix, cliEntry, ...args, "--mock"],
+        env: { ...process.env, NO_COLOR: "1" },
+        source: "dev",
+      }),
+    });
+
+    const rec = await hub.dispatch({ ...sampleBrief, worktree: repoRoot });
+    await waitFor(() => sent.some((m) => m.event.type === "worker.finished"));
+
+    expect(rec.spawned).toBe(true);
+    expect(sent.every((m) => m.type === "fleet:event")).toBe(true);
+    expect(sent.some((m) => m.event.type === "worker.progress" && /spawned via/.test(m.event.message ?? ""))).toBe(true);
+    expect(sent.some((m) => m.event.type === "worker.finished" && m.event.workerId === rec.workerId && m.event.ok === true)).toBe(true);
+    expect(rec.events.some((event) => event.type === "worker.finished")).toBe(true);
   });
 
   it("falls back to a stub broadcast when no CLI runtime (cli/** not integrated yet)", async () => {
