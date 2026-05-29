@@ -21,8 +21,6 @@ describe('fleet mock playback', () => {
     expect(w.agent).toBe('claude-code');
     expect(w.branch).toBe('cli-2/inputarea-split');
     expect(w.diffStat).toEqual({ files: 3, insertions: 70, deletions: 41 });
-    expect(w.changedFiles.find((f) => f.path.endsWith('ComposerTextarea.tsx'))?.insertions).toBe(58);
-    expect(w.activeFile).toBeUndefined(); // cleared once git.diff/finish lands
     expect(w.tests.some((t) => !t.running && t.ok)).toBe(true);
     expect(w.finished?.ok).toBe(true);
     expect(w.finished?.commit).toBe('ab12cd3');

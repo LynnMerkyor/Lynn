@@ -48,8 +48,6 @@ export interface FleetWorkerView {
   reasoningChunks: number;
   changedFiles: FleetChangedFile[];
   diffStat: { files: number; insertions: number; deletions: number } | null;
-  /** Path currently being written (last file.changed while running); cleared on git.diff/finish. */
-  activeFile?: string;
   tests: FleetTestResult[];
   gate: { ok: boolean; summary: string } | null;
   violations: FleetViolation[];
@@ -135,7 +133,6 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
       return next;
     case 'file.changed':
       next.changedFiles = upsertChangedFile(prev.changedFiles, { path: ev.path, action: ev.action });
-      next.activeFile = ev.path;
       return next;
     case 'git.diff': {
       next.diffStat = { files: ev.files, insertions: ev.insertions, deletions: ev.deletions };
@@ -145,7 +142,6 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
         next.changedFiles = merged;
       }
       next.hasForbiddenEdit = prev.hasForbiddenEdit || next.changedFiles.some((f) => f.forbidden === true);
-      next.activeFile = undefined;
       return next;
     }
     case 'test.started':
@@ -179,13 +175,11 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
       next.finished = { ok: ev.ok, exitCode: ev.exitCode, summary: ev.summary, commit: ev.commit };
       // done means "ready for review" -> waiting_approval, unless a breach already blocked it.
       next.status = ev.ok ? (prev.status === 'blocked' ? 'blocked' : 'waiting_approval') : 'failed';
-      next.activeFile = undefined;
       return next;
     case 'worker.error':
       next.error = { code: ev.code, message: ev.message, recoverable: ev.recoverable };
       next.log = [...prev.log, `error ${ev.code}: ${ev.message}`];
-      if (ev.code === 'cancelled') next.status = 'cancelled';
-      else if (!ev.recoverable) next.status = 'failed';
+      if (!ev.recoverable) next.status = 'failed';
       return next;
     default: {
       const _exhaustive: never = ev;
