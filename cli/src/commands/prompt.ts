@@ -5,6 +5,7 @@ import { nowIso, writeJsonLine } from "../jsonl.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { appendSessionTurn, resolveDataDir } from "../session/store.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
+import { resolveCliProviderProfile } from "../provider-profile.js";
 
 export interface PromptOptions {
   json?: boolean;
@@ -37,6 +38,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   const sessionPath = getStringFlag(args.flags, "session");
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   const title = getStringFlag(args.flags, "title");
+  const cliProvider = await resolveCliProviderProfile(args);
 
   if (options.json) {
     writeJsonLine({ type: "run.started", ts: nowIso(), prompt, reasoning });
@@ -59,11 +61,13 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
 
   let assistant = "";
   let sawReasoning = false;
+  let modelProvider = "brain";
+  let modelId = "lynn-brain-router";
   const renderState: HumanBrainRenderState = {};
   const spinner = new TerminalSpinner(process.stderr);
   if (!options.json) spinner.start();
   try {
-    for await (const event of streamBrainChat({ brainUrl, prompt, reasoning })) {
+    for await (const event of streamBrainChat({ brainUrl, prompt, reasoning, fallbackProvider: cliProvider?.profile })) {
       const renderReasoning = shouldRenderReasoning(reasoning.display, !!options.json);
       if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
         spinner.stop();
@@ -76,6 +80,15 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       if (event.type === "brain.error") {
         throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
       }
+      if (event.type === "provider") {
+        if (event.activeProvider.startsWith("cli-byok:") && cliProvider) {
+          modelProvider = cliProvider.profile.provider;
+          modelId = cliProvider.profile.model;
+        } else {
+          modelProvider = event.activeProvider;
+          modelId = "lynn-brain-router";
+        }
+      }
       if (event.type === "reasoning.delta") sawReasoning = true;
       if (event.type === "assistant.delta") assistant += event.text;
     }
@@ -83,7 +96,16 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
     spinner.stop();
   }
   if (saveSession) {
-    const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: process.cwd(), title, prompt, assistant, modelProvider: "brain", modelId: "lynn-brain-router" });
+    const savedPath = await appendSessionTurn({
+      dataDir,
+      sessionPath,
+      cwd: process.cwd(),
+      title,
+      prompt,
+      assistant,
+      modelProvider,
+      modelId,
+    });
     if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
   }
   if (options.json) {
@@ -96,6 +118,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
 
 async function readPromptStdin(prompt: string): Promise<string> {
   if (prompt.trim() !== "-" && process.stdin.isTTY) return "";
+  if (prompt.trim() !== "-") return readOptionalStdin(100);
   try {
     let text = "";
     for await (const chunk of process.stdin) {
@@ -105,6 +128,41 @@ async function readPromptStdin(prompt: string): Promise<string> {
   } catch {
     return "";
   }
+}
+
+function readOptionalStdin(firstChunkTimeoutMs: number): Promise<string> {
+  return new Promise((resolve) => {
+    let text = "";
+    let settled = false;
+    let sawData = false;
+    let timer: NodeJS.Timeout | null = setTimeout(() => finish(), firstChunkTimeoutMs);
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      process.stdin.off("data", onData);
+      process.stdin.off("end", onEnd);
+      process.stdin.off("error", onEnd);
+      resolve(text);
+    };
+    const onData = (chunk: Buffer | string) => {
+      sawData = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      text += String(chunk);
+    };
+    const onEnd = () => finish();
+    process.stdin.on("data", onData);
+    process.stdin.once("end", onEnd);
+    process.stdin.once("error", onEnd);
+    process.stdin.resume();
+    if (sawData && timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  });
 }
 
 function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; renderReasoning: boolean; renderState: HumanBrainRenderState }): void {

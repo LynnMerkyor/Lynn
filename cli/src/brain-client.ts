@@ -1,11 +1,13 @@
 import { applyReasoningToBody, type ReasoningOptions } from "./reasoning.js";
 import type { ChatContentPart } from "./media.js";
+import type { CliProviderProfile } from "./provider-profile.js";
 
 export interface BrainChatRequest {
   brainUrl: string;
   prompt?: string;
   messages?: ChatMessage[];
   reasoning: ReasoningOptions;
+  fallbackProvider?: CliProviderProfile | null;
 }
 
 export interface ChatMessage {
@@ -34,7 +36,7 @@ export class BrainConnectionError extends Error {
 
 export function formatBrainRecoveryHint(error: unknown): string {
   if (error instanceof BrainConnectionError) {
-    return `Brain offline. Start Lynn GUI, or run with --mock-brain.`;
+    return `Brain offline. Start the Lynn client GUI for MiMo, configure CLI BYOK with Lynn providers set, or run with --mock-brain.`;
   }
   return error instanceof Error ? error.message : String(error);
 }
@@ -136,6 +138,22 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
 }
 
 export async function* streamBrainChat(request: BrainChatRequest): AsyncGenerator<BrainStreamEvent> {
+  yield* streamLynnChat(request);
+}
+
+export async function* streamLynnChat(request: BrainChatRequest): AsyncGenerator<BrainStreamEvent> {
+  try {
+    yield* streamBrainOnlyChat(request);
+  } catch (error) {
+    if (error instanceof BrainConnectionError && request.fallbackProvider) {
+      yield* streamDirectProviderChat(request, request.fallbackProvider);
+      return;
+    }
+    throw error;
+  }
+}
+
+async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<BrainStreamEvent> {
   const messages = request.messages || (request.prompt ? [{ role: "user" as const, content: request.prompt }] : []);
   if (!messages.length) {
     throw new Error("Brain request requires a prompt or messages");
@@ -179,11 +197,69 @@ export async function* streamBrainChat(request: BrainChatRequest): AsyncGenerato
   }
 }
 
+async function* streamDirectProviderChat(request: BrainChatRequest, provider: CliProviderProfile): AsyncGenerator<BrainStreamEvent> {
+  const messages = request.messages || (request.prompt ? [{ role: "user" as const, content: request.prompt }] : []);
+  if (!messages.length) {
+    throw new Error("Provider request requires a prompt or messages");
+  }
+  const body = {
+    model: provider.model,
+    stream: true,
+    messages,
+  };
+  let response: Response;
+  try {
+    response = await fetch(chatCompletionsUrl(provider.baseUrl), {
+      method: "POST",
+      headers: providerHeaders(provider),
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    throw new Error(`CLI BYOK provider request failed (${provider.provider}): ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!response.ok || !response.body) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`CLI BYOK provider request failed: ${response.status} ${response.statusText}${detail ? ` · ${detail.slice(0, 240)}` : ""}`.trim());
+  }
+
+  yield { type: "provider", activeProvider: `cli-byok:${provider.provider}`, fallbackFrom: [{ id: "brain", reason: "offline" }] };
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+    buffer += decoder.decode(chunk, { stream: true });
+    const split = buffer.split(/\n\n+/);
+    buffer = split.pop() || "";
+    for (const block of split) {
+      for (const payload of parseSsePayloads(`${block}\n\n`)) {
+        for (const event of parseBrainStreamPayload(payload)) yield event;
+      }
+    }
+  }
+  buffer += decoder.decode();
+  for (const payload of parseSsePayloads(buffer)) {
+    for (const event of parseBrainStreamPayload(payload)) yield event;
+  }
+}
+
+export function chatCompletionsUrl(baseUrl: string): URL {
+  const url = new URL(baseUrl);
+  const cleanPath = url.pathname.replace(/\/+$/, "");
+  url.pathname = cleanPath.endsWith("/chat/completions") ? cleanPath : `${cleanPath}/chat/completions`;
+  return url;
+}
+
+function providerHeaders(provider: CliProviderProfile): Record<string, string> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (provider.apiKey) headers.authorization = `Bearer ${provider.apiKey}`;
+  return headers;
+}
+
 function formatBrainConnectionError(brainUrl: string, error: unknown): string {
   const detail = error instanceof Error && error.message ? ` (${error.message})` : "";
   return [
     `Could not reach Lynn Brain at ${brainUrl}${detail}.`,
-    "Start the Lynn GUI so the local Brain/router is running, or pass --brain-url to another compatible endpoint.",
-    "For CLI-only smoke tests, use --mock-brain.",
+    "Start the Lynn client GUI so the local Brain/router is running, or pass --brain-url to another compatible endpoint.",
+    "For CLI-only use, run Lynn providers set with your BYOK endpoint; for smoke tests, use --mock-brain.",
   ].join(" ");
 }

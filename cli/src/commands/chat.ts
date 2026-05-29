@@ -9,12 +9,14 @@ import { TerminalSpinner } from "../terminal-spinner.js";
 import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { dangerLine, red, supportsColor } from "../terminal-style.js";
 import { renderStartupBanner } from "../startup.js";
+import { resolveCliProviderProfile } from "../provider-profile.js";
 
 export async function runChat(args: ParsedArgs, options: { intro?: boolean; brainReachable?: boolean } = {}): Promise<number> {
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   let reasoning = parseReasoningOptions(args);
   const mode = resolveMode(args);
+  const cliProvider = await resolveCliProviderProfile(args);
   const messages: ChatMessage[] = [];
   const rl = readline.createInterface({ input, output, terminal: input.isTTY && output.isTTY });
   const cleanupModeHotkey = input.isTTY && output.isTTY
@@ -92,7 +94,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     const renderReasoning = shouldRenderReasoning(reasoning.display, false);
     try {
       spinner.start();
-      for await (const event of streamBrainChat({ brainUrl, messages, reasoning })) {
+      for await (const event of streamBrainChat({ brainUrl, messages, reasoning, fallbackProvider: cliProvider?.profile })) {
         if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
           spinner.stop();
         }
@@ -167,13 +169,14 @@ export function renderMode(mode: ChatMode): string {
 
 export function renderOfflineChatHint(mode: ChatMode, brainUrl = "http://127.0.0.1:8790"): string {
   return [
-    "Brain offline. Start the Lynn GUI to use MiMo through the local Brain router.",
+    "Brain offline. Install/open the Lynn client GUI to use and configure the default MiMo route.",
     `brain: ${brainUrl}`,
     `mode:  ${renderMode(mode)}`,
     "",
     "Next:",
     "  Lynn doctor --offline",
     "  Lynn providers",
+    "  Lynn providers set --base-url https://api.example.com/v1 --api-key <api-key> --model model-id",
     "  Lynn -p \"hello\" --mock-brain",
   ].join("\n");
 }
@@ -255,7 +258,7 @@ export function installModeHotkey({ input, output, readlineInterface, mode }: Mo
 
 export function formatChatError(error: unknown): string {
   if (error instanceof BrainConnectionError) {
-    return `Brain offline: start the Lynn GUI so the local router is running, then retry. Use /providers for BYOK or /exit to leave. (${error.brainUrl})`;
+    return `Brain offline: start the Lynn client GUI for MiMo, or run /providers to configure CLI BYOK. (${error.brainUrl})`;
   }
   const message = error instanceof Error ? error.message : String(error);
   return `Lynn error: ${message}`;

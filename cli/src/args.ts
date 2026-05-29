@@ -66,6 +66,11 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "session",
       "title",
       "agent-command",
+      "provider",
+      "base-url",
+      "api-base",
+      "api-key",
+      "model",
     ].includes(name);
     if (takesValue && next && !next.startsWith("-")) {
       flags[name] = next;

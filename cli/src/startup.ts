@@ -43,7 +43,7 @@ export function renderStartupBanner(input: {
   const version = readVersionInfo().version;
   const brainUrl = input.brainUrl || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   const modelLabel = input.modelLabel || process.env.LYNN_CLI_MODEL_LABEL || "MiMo via Brain router (auto)";
-  const byokLabel = input.byokLabel || process.env.LYNN_CLI_BYOK_LABEL || "GUI Settings > Providers";
+  const byokLabel = input.byokLabel || process.env.LYNN_CLI_BYOK_LABEL || "client GUI Settings > Providers";
   const brainLabel = input.brainStatus && input.brainStatus !== "unknown"
     ? `${input.brainStatus} · ${brainUrl}`
     : brainUrl;
@@ -60,9 +60,9 @@ export function renderStartupBanner(input: {
   if (input.showTips !== false) {
     out.push(
       "",
-      "  Tip: Lynn -p \"prompt\" uses the local Brain router, which defaults to MiMo unless you change it.",
+      "  Tip: Lynn -p \"prompt\" uses the local Brain router, which defaults to MiMo configured in the Lynn client GUI.",
       "       In chat/code, use /fast for low latency or /think for deeper reasoning.",
-      "       Use Lynn providers for BYOK setup, or Lynn help to see every command.",
+      "       Use Lynn providers for CLI-only BYOK setup, or Lynn help to see every command.",
     );
   }
   return out.join("\n");

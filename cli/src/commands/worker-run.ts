@@ -16,6 +16,7 @@ import { parseReasoningOptions } from "../reasoning.js";
 import { runCode } from "./code.js";
 import { buildVisionPrompt, type VisionCommand } from "./vision.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
+import { resolveCliProviderProfile } from "../provider-profile.js";
 
 export interface WorkerBrief {
   title: string;
@@ -359,6 +360,7 @@ async function runLynnCliWorker(input: {
   if (reasoning) flags.reasoning = reasoning;
   const showReasoning = getStringFlag(input.args.flags, "show-reasoning");
   if (showReasoning) flags["show-reasoning"] = showReasoning;
+  copyProviderFlags(input.args.flags, flags);
   const exitCode = await runCode({ command: "code", positionals: [task], flags });
   const ok = exitCode === 0;
   emit({ type: "shell.finished", workerId: input.workerId, agent: input.agent, command: "Lynn code", ok, exitCode, ms: Date.now() - started });
@@ -393,6 +395,7 @@ async function runLynnVisionWorker(input: {
   const content = await buildImageContentParts(imagePath, prompt);
   const brainUrl = getStringFlag(input.args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   const reasoning = parseReasoningOptions(input.args);
+  const cliProvider = await resolveCliProviderProfile(input.args);
   emit({ type: "shell.started", workerId: input.workerId, agent: input.agent, command: `Lynn ${input.brief.taskType}`, approval: "auto" });
   const started = Date.now();
   let assistantText = "";
@@ -401,6 +404,7 @@ async function runLynnVisionWorker(input: {
       brainUrl,
       reasoning,
       messages: [{ role: "user", content }],
+      fallbackProvider: cliProvider?.profile,
     })) {
       if (event.type === "assistant.delta") {
         assistantText += event.text;
@@ -427,6 +431,13 @@ async function runLynnVisionWorker(input: {
     emit({ type: "worker.error", workerId: input.workerId, agent: input.agent, code: "vision_worker_failed", message, recoverable: true });
     emit({ type: "shell.finished", workerId: input.workerId, agent: input.agent, command: `Lynn ${input.brief.taskType}`, ok: false, exitCode: 1, ms: Date.now() - started });
     return 1;
+  }
+}
+
+function copyProviderFlags(from: Record<string, string | boolean>, to: Record<string, string | boolean>): void {
+  for (const key of ["provider", "base-url", "api-base", "api-key", "model", "data-dir"]) {
+    const value = from[key];
+    if (typeof value === "string" && value) to[key] = value;
   }
 }
 

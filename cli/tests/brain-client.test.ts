@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { BrainConnectionError, checkBrainReachable, parseBrainStreamPayload, parseSsePayloads, streamBrainChat } from "../src/brain-client.js";
+import http from "node:http";
+import { BrainConnectionError, chatCompletionsUrl, checkBrainReachable, parseBrainStreamPayload, parseSsePayloads, streamBrainChat } from "../src/brain-client.js";
 import { parseArgs } from "../src/args.js";
 import { applyReasoningToBody, parseReasoningOptions, shouldRenderReasoning } from "../src/reasoning.js";
 
@@ -72,7 +73,7 @@ describe("brain-client stream parser", () => {
       for await (const _event of streamBrainChat({ brainUrl: "http://127.0.0.1:1", prompt: "hello", reasoning: { effort: "auto", display: "auto" } })) {
         // no-op
       }
-    }).rejects.toThrow("Start the Lynn GUI");
+    }).rejects.toThrow("Start the Lynn client GUI");
   });
 
   it("uses a typed error for unreachable Brain", async () => {
@@ -85,6 +86,55 @@ describe("brain-client stream parser", () => {
 
   it("returns false when the Brain health probe cannot connect", async () => {
     await expect(checkBrainReachable("http://127.0.0.1:1", 50)).resolves.toBe(false);
+  });
+
+  it("falls back to a CLI BYOK OpenAI-compatible provider when Brain is offline", async () => {
+    const server = http.createServer((request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      expect(request.headers.authorization).toBe("Bearer sk-test");
+      let body = "";
+      request.on("data", (chunk) => {
+        body += String(chunk);
+      });
+      request.on("end", () => {
+        expect(JSON.parse(body)).toMatchObject({ model: "test-model", stream: true });
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"hello from byok\"}}]}",
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("test server failed to listen");
+      const events = [];
+      for await (const event of streamBrainChat({
+        brainUrl: "http://127.0.0.1:1",
+        prompt: "hello",
+        reasoning: { effort: "auto", display: "auto" },
+        fallbackProvider: {
+          provider: "openai-compatible",
+          baseUrl: `http://127.0.0.1:${address.port}/v1`,
+          model: "test-model",
+          apiKey: "sk-test",
+        },
+      })) {
+        events.push(event);
+      }
+      expect(events).toContainEqual({ type: "assistant.delta", text: "hello from byok" });
+      expect(events).toContainEqual({ type: "provider", activeProvider: "cli-byok:openai-compatible", fallbackFrom: [{ id: "brain", reason: "offline" }] });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("builds chat completion URLs from base URLs", () => {
+    expect(chatCompletionsUrl("https://api.example.com/v1").toString()).toBe("https://api.example.com/v1/chat/completions");
+    expect(chatCompletionsUrl("https://api.example.com/v1/chat/completions").toString()).toBe("https://api.example.com/v1/chat/completions");
   });
 });
 

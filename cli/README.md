@@ -2,9 +2,10 @@
 
 Terminal and worker-runner interface for Lynn v0.80.
 
-This package is intentionally thin: provider keys and model routing stay in the
-local Lynn server / Brain chain. The CLI handles terminal UX, worker JSONL, and
-local file/shell orchestration.
+This package is intentionally thin. When the Lynn client GUI is running, model routing uses
+the local Lynn server / Brain chain and defaults to MiMo. When the client GUI is not
+running, the CLI can fall back to a user-owned OpenAI-compatible BYOK endpoint.
+The CLI handles terminal UX, worker JSONL, and local file/shell orchestration.
 
 ## Quick start
 
@@ -23,9 +24,42 @@ Lynn - < README.md
 `Lynn` is the primary command. Lowercase `lynn` is kept as a compatibility
 alias for scripts and terminal muscle memory.
 
+## CLI-only BYOK fallback
+
+MiMo default routing is provided by the local Lynn client GUI / Brain server. A
+standalone npm install cannot ship Lynn's server-side keys. For CLI-only use,
+configure your own OpenAI-compatible endpoint:
+
+```bash
+Lynn providers set
+```
+
+The interactive setup asks for three standard OpenAI-compatible fields:
+
+1. API URL - copy the base URL from your provider docs. It usually ends with
+   `/v1`, for example `https://api.openai.com/v1`.
+2. API Key - create or copy it from your provider console.
+3. Model name - copy the exact model id from the provider's model list.
+
+For scripts, pass the same fields as flags:
+
+```bash
+Lynn providers set \
+  --base-url https://api.example.com/v1 \
+  --api-key <api-key> \
+  --model model-id
+```
+
+The profile is stored in `~/.lynn/providers/cli.json` with the key redacted in
+terminal output. `Lynn -p`, `Lynn chat`, `Lynn code`, and built-in Lynn workers
+try the local Brain first; if it is offline, they use this BYOK provider.
+
+For full MiMo default routing, web search, GUI Fleet, and provider management,
+install and open the Lynn client GUI.
+
 ## Worker mode
 
-`Lynn worker run` is the stable adapter between Lynn GUI Fleet and coding CLIs.
+`Lynn worker run` is the stable adapter between Lynn client GUI Fleet and coding CLIs.
 It reads a task brief, emits Fleet JSONL events, and can wrap external agents.
 
 ```bash

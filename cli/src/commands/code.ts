@@ -13,6 +13,7 @@ import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { dangerLine, dim, red, supportsColor } from "../terminal-style.js";
 import { box, displayCwd, padLine } from "../startup.js";
+import { resolveCliProviderProfile, type CliProviderProfile } from "../provider-profile.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
 import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type ChatMode } from "./chat.js";
@@ -390,6 +391,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const mode = await resolveCodeMode(args);
+  const cliProvider = await resolveCliProviderProfile(args);
   if (!json && !options.compact) {
     errorOutput.write(renderCodeTaskHeader({
       cwd: context.cwd,
@@ -423,6 +425,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     task,
     context,
     brainUrl,
+    fallbackProvider: cliProvider?.profile,
     reasoning,
     json,
     maxSteps: maxSteps(args),
@@ -434,7 +437,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     if (final.trim()) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: final });
     writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true, contentReturned: !!final.trim() });
   } else {
-    process.stdout.write(renderAssistantBlock(final.trim() || "(no answer)", renderCodeFooter({ context, mode, mockBrain, reasoning })));
+    process.stdout.write(renderAssistantBlock(final.trim() || "(no answer)", renderCodeFooter({ context, mode, mockBrain, reasoning, fallbackProvider: cliProvider?.profile })));
   }
   return 0;
 }
@@ -450,9 +453,10 @@ function renderCodeFooter(inputData: {
   mode: ChatMode;
   mockBrain: boolean;
   reasoning: ReturnType<typeof parseReasoningOptions>;
+  fallbackProvider?: CliProviderProfile;
 }): string {
   const color = supportsColor(output);
-  const model = inputData.mockBrain ? "mock Brain" : "MiMo";
+  const model = inputData.mockBrain ? "mock Brain" : inputData.fallbackProvider ? `${inputData.fallbackProvider.provider}/${inputData.fallbackProvider.model}` : "MiMo";
   const mode = renderMode(inputData.mode);
   return dim(`${model} · ${displayCwd(inputData.context.cwd)} · ${mode} · think ${inputData.reasoning.effort}`, color);
 }
@@ -461,6 +465,7 @@ interface CodeAgentLoopInput {
   task: string;
   context: CodeContext;
   brainUrl: string;
+  fallbackProvider?: CliProviderProfile;
   reasoning: ReturnType<typeof parseReasoningOptions>;
   json: boolean;
   maxSteps: number;
@@ -504,6 +509,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
   for (let step = 0; step < inputData.maxSteps; step += 1) {
     const assistantText = await collectBrainText({
       brainUrl: inputData.brainUrl,
+      fallbackProvider: inputData.fallbackProvider,
       messages,
       reasoning: inputData.reasoning,
       json: inputData.json,
@@ -551,6 +557,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
 
 async function collectBrainText(inputData: {
   brainUrl: string;
+  fallbackProvider?: CliProviderProfile;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   reasoning: ReturnType<typeof parseReasoningOptions>;
   json: boolean;
@@ -565,6 +572,7 @@ async function collectBrainText(inputData: {
       brainUrl: inputData.brainUrl,
       reasoning: inputData.reasoning,
       messages: inputData.messages,
+      fallbackProvider: inputData.fallbackProvider,
     })) {
       const renderReasoning = shouldRenderReasoning(inputData.reasoning.display, inputData.json);
       if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {

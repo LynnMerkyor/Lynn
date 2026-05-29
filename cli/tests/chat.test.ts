@@ -32,7 +32,7 @@ describe("chat mode controls", () => {
     const message = formatChatError(new BrainConnectionError("http://127.0.0.1:8790", new Error("fetch failed")));
 
     expect(message).toContain("Brain offline");
-    expect(message).toContain("start the Lynn GUI");
+    expect(message).toContain("start the Lynn client GUI");
     expect(message).not.toContain("For CLI-only smoke tests");
   });
 
@@ -40,7 +40,7 @@ describe("chat mode controls", () => {
     const hint = renderOfflineChatHint({ approval: "ask", sandbox: "workspace-write" }, "http://127.0.0.1:8790");
 
     expect(hint).toContain("Brain offline");
-    expect(hint).toContain("Lynn GUI");
+    expect(hint).toContain("Lynn client GUI");
     expect(hint).toContain("Lynn providers");
     expect(hint).toContain("--mock-brain");
   });

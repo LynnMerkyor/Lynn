@@ -85,8 +85,8 @@ export function renderPermissions(perms: EffectivePermissions): string {
     `data dir: ${perms.dataDir}`,
     `profile:  ${perms.guiProfileFound ? perms.profilePath : `${perms.profilePath} (not found)`}`,
     "",
-    "Precedence: CLI flags > env > GUI profile > default.",
-    "GUI interop: future GUI Settings > Permissions will write this profile file.",
+    "Precedence: CLI flags > env > client GUI profile > default.",
+    "Client GUI interop: future Settings > Permissions will write this profile file.",
     warning,
   ].filter(Boolean).join("\n");
 }

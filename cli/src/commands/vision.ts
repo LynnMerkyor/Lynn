@@ -5,6 +5,7 @@ import { nowIso, writeJsonLine } from "../jsonl.js";
 import { buildImageContentParts } from "../media.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
+import { resolveCliProviderProfile } from "../provider-profile.js";
 
 export type VisionCommand = "see" | "ground" | "ui2code";
 
@@ -16,6 +17,7 @@ export async function runVisionCommand(args: ParsedArgs, command: VisionCommand,
   const reasoning = parseReasoningOptions(args);
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
+  const cliProvider = await resolveCliProviderProfile(args);
 
   if (json) writeJsonLine({ type: "vision.started", ts: nowIso(), command, image: imagePath, prompt, reasoning });
 
@@ -40,6 +42,7 @@ export async function runVisionCommand(args: ParsedArgs, command: VisionCommand,
       brainUrl,
       reasoning,
       messages: [{ role: "user", content }],
+      fallbackProvider: cliProvider?.profile,
     })) {
       const renderReasoning = shouldRenderReasoning(reasoning.display, json);
       if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) spinner.stop();

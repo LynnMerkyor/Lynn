@@ -30,7 +30,7 @@ export async function readLocalServerInfo(dataDir?: string | null): Promise<Loca
   } catch (error) {
     const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code) : "";
     return code === "ENOENT"
-      ? { status: "missing", message: "Lynn GUI server-info.json not found" }
+      ? { status: "missing", message: "Lynn client GUI server-info.json not found" }
       : { status: "invalid", message: error instanceof Error ? error.message : String(error) };
   }
 
