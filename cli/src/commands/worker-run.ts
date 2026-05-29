@@ -405,6 +405,13 @@ function isVisionTask(taskType: WorkerBrief["taskType"]): taskType is VisionComm
   return taskType === "see" || taskType === "ground" || taskType === "ui2code";
 }
 
+export function workerProfileDefaults(agent: string): { reasoning?: "off" | "high" | "xhigh"; maxSteps?: string } {
+  if (agent === "mimo-fast") return { reasoning: "off", maxSteps: "6" };
+  if (agent === "mimo-pro") return { reasoning: "high", maxSteps: "20" };
+  if (agent === "mimo-vl") return { reasoning: "high" };
+  return {};
+}
+
 async function runLynnCliWorker(input: {
   args: ParsedArgs;
   brief: WorkerBrief;
@@ -415,15 +422,16 @@ async function runLynnCliWorker(input: {
   const task = buildLynnCodeWorkerTask(input.brief);
   emit({ type: "shell.started", workerId: input.workerId, agent: input.agent, command: "Lynn code", approval: "auto" });
   const started = Date.now();
+  const profileDefaults = workerProfileDefaults(input.agent);
   const flags: Record<string, string | boolean> = {
     cwd: input.worktree,
     approval: getStringFlag(input.args.flags, "approval") || "yolo",
-    "max-steps": getStringFlag(input.args.flags, "max-steps", "steps") || "8",
+    "max-steps": getStringFlag(input.args.flags, "max-steps", "steps") || profileDefaults.maxSteps || "8",
     json: true,
   };
   const brainUrl = getStringFlag(input.args.flags, "brain-url");
   if (brainUrl) flags["brain-url"] = brainUrl;
-  const reasoning = getStringFlag(input.args.flags, "reasoning");
+  const reasoning = getStringFlag(input.args.flags, "reasoning") || profileDefaults.reasoning;
   if (reasoning) flags.reasoning = reasoning;
   const showReasoning = getStringFlag(input.args.flags, "show-reasoning");
   if (showReasoning) flags["show-reasoning"] = showReasoning;
@@ -475,7 +483,14 @@ async function runLynnVisionWorker(input: {
   const prompt = buildVisionPrompt(input.brief.taskType, input.brief.objective || input.brief.title);
   const content = await buildImageContentParts(imagePath, prompt);
   const brainUrl = getStringFlag(input.args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
-  const reasoning = parseReasoningOptions(input.args);
+  const profileDefaults = workerProfileDefaults(input.agent);
+  const reasoning = parseReasoningOptions({
+    ...input.args,
+    flags: {
+      ...input.args.flags,
+      ...(getStringFlag(input.args.flags, "reasoning") ? {} : profileDefaults.reasoning ? { reasoning: profileDefaults.reasoning } : {}),
+    },
+  });
   const cliProvider = await resolveCliProviderProfile(input.args);
   emit({ type: "shell.started", workerId: input.workerId, agent: input.agent, command: `Lynn ${input.brief.taskType}`, approval: "auto" });
   const started = Date.now();

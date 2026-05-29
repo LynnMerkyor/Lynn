@@ -13,6 +13,7 @@ import {
   parseWorkerBrief,
   parseWorkerEventLine,
   runWorker,
+  workerProfileDefaults,
   workerProviderPreset,
 } from "../src/commands/worker-run.js";
 import { parseArgs } from "../src/args.js";
@@ -158,6 +159,74 @@ describe("worker-run scaffold", () => {
   it("maps StepFun Fleet workers to the StepFun BYOK preset", () => {
     expect(workerProviderPreset("stepfun-flash")).toBe("stepfun");
     expect(workerProviderPreset("lynn-cli")).toBeNull();
+  });
+
+  it("applies concrete defaults for MiMo Fleet worker profiles", () => {
+    expect(workerProfileDefaults("mimo-fast")).toEqual({ reasoning: "off", maxSteps: "6" });
+    expect(workerProfileDefaults("mimo-pro")).toEqual({ reasoning: "high", maxSteps: "20" });
+    expect(workerProfileDefaults("mimo-vl")).toEqual({ reasoning: "high" });
+    expect(workerProfileDefaults("lynn-cli")).toEqual({});
+  });
+
+  it("runs mimo-fast workers with thinking disabled unless overridden", async () => {
+    const repo = await makeTempGitRepo();
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: quick answer",
+      "",
+      "## Objective",
+      "Answer quickly.",
+      "",
+      "## Owned files",
+      "- cli/**",
+      "",
+      "## Forbidden files",
+      "- server/**",
+      "",
+      "## Test commands",
+      "- npm test",
+    ].join("\n"));
+    let body = "";
+    const server = http.createServer((req, res) => {
+      if (req.url === "/v1/chat/completions" && req.method === "POST") {
+        req.on("data", (chunk) => { body += String(chunk); });
+        req.on("end", () => {
+          res.writeHead(200, { "content-type": "text/event-stream" });
+          res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: "Fast worker done." } }] })}\n\ndata: [DONE]\n\n`);
+        });
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("server did not bind");
+
+    const original = process.stdout.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    try {
+      const code = await runWorker(parseArgs([
+        "worker",
+        "run",
+        "--brief",
+        briefPath,
+        "--worktree",
+        repo,
+        "--agent",
+        "mimo-fast",
+        "--brain-url",
+        `http://127.0.0.1:${address.port}`,
+      ]));
+      expect(code).toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    const parsed = JSON.parse(body) as { reasoning_effort?: string; extra_body?: { enable_thinking?: boolean } };
+    expect(parsed.reasoning_effort).toBe("off");
+    expect(parsed.extra_body?.enable_thinking).toBe(false);
   });
 
   it("collects git diff summaries from a worktree", async () => {
