@@ -235,6 +235,8 @@ checks.push(run("implicit chat with global flags", ["--mock-brain"], { stdinLine
   assertIncludes(r.name, r.stdout, "模拟回复:hi");
 }));
 
+checks.push(runBareTtyStartupSmoke());
+
 checks.push(run("chat brain offline recovery", ["chat", "--brain-url", "http://127.0.0.1:1"], { stdinLines: ["hi", "/exit"] }).then((r) => {
   assertIncludes(r.name, r.stdout, "Brain 离线");
   assertIncludes(r.name, r.stdout, "Lynn");
@@ -503,6 +505,60 @@ async function runVisionByokSmoke() {
   } finally {
     await new Promise((resolve) => server.close(() => resolve()));
   }
+}
+
+async function runBareTtyStartupSmoke() {
+  if (!(await hasExpect())) {
+    process.stderr.write("[cli-smoke] skipping bare TTY startup smoke: expect not found\n");
+    return;
+  }
+  const markerPath = path.join(os.tmpdir(), `lynn-cli-tty-smoke-${process.pid}.txt`);
+  await fs.promises.rm(markerPath, { force: true });
+  const script = [
+    "set timeout 5",
+    "spawn $env(NODE_BIN) $env(CLI_BIN)",
+    "expect \"Lynn CLI\"",
+    "expect \"› \"",
+    "send \"/exit\\r\"",
+    "expect eof",
+    "set marker [open $env(MARKER_PATH) w]",
+    "puts $marker \"LYNN_TTY_SMOKE_OK\"",
+    "close $marker",
+  ].join("\n");
+  await runProcess("bare TTY startup", "expect", ["-c", script], {
+    env: { NODE_BIN: nodeBin, CLI_BIN: cliBin, MARKER_PATH: markerPath, LYNN_CLI_BRAIN_TIMEOUT_MS: "50" },
+  });
+  const marker = fs.existsSync(markerPath) ? fs.readFileSync(markerPath, "utf8") : "";
+  await fs.promises.rm(markerPath, { force: true });
+  assertIncludes("bare TTY startup", marker, "LYNN_TTY_SMOKE_OK");
+}
+
+function hasExpect() {
+  return new Promise((resolve) => {
+    const child = spawn("expect", ["-v"], { stdio: "ignore" });
+    child.on("error", () => resolve(false));
+    child.on("close", (code) => resolve(code === 0));
+  });
+}
+
+function runProcess(name, command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: root,
+      env: { ...process.env, ...(options.env || {}) },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+    child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      const result = { name, code, stdout, stderr };
+      if (code === 0) resolve(result);
+      else reject(new Error(`${name} failed with exit ${code}\nstdout:\n${stdout}\nstderr:\n${stderr}`));
+    });
+  });
 }
 
 async function runStepFunWorkerByokSmoke() {
