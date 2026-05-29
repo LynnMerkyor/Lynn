@@ -138,12 +138,12 @@ widest capability bundle (vision, search, long context, cache economics, native
 tooling). However, v0.80 should treat **StepFun step-3.7-flash** as a serious
 Fleet/backend option for fast coding work, not as a footnote.
 
-Verified from live CLI coding trials (2026-05-30):
+Verified from live CLI/eval trials (2026-05-30):
 
 | Backend | Evidence | Proposed role |
 |---|---|---|
 | MiMo | broad multimodal/search/cache/grounding stack; native route in Brain | default route and capability headline |
-| StepFun `step-3.7-flash` | ~215 TPS observed; CodeBuddy production CLI solved 6/6 real coding tasks across Python/JS/TS/Rust with edit + run-test loops | fast coding worker / BYOK preset / Fleet backend candidate |
+| StepFun `step-3.7-flash` | ~215-220 TPS observed; CodeBuddy production CLI solved 6/6 real coding tasks across Python/JS/TS/Rust with edit + run-test loops; GPQA Diamond 198 = **59.60%** (63.10% excl parse-fail), ahead of current 35B APEX fallback (45-50%) | recommended fast/high-quality cloud coding worker / BYOK preset / Fleet backend candidate |
 | DeepSeek V4 Pro | strong reasoning and cache economy, slower but reliable | heavy reasoning fallback / BYOK preset |
 | Spark APEX-MTP | local/private fallback | offline/private fallback |
 
@@ -154,6 +154,9 @@ Policy:
   (base URL + API key + model name), and as a Fleet agent/backend option.
 - In Fleet, expose it as a "fast coding worker" profile, separate from `mimo-vl`
   (vision/grounding) and `mimo-pro` (long multimodal task).
+- Keep local 35B/Spark ahead in privacy/zero-cost local routing, but do not present it
+  as higher quality than StepFun for cloud coding fallback. The ranking is:
+  local/privacy first when needed; StepFun for fast cloud coding quality.
 - Keep the interface OpenAI-compatible: `baseUrl`, `apiKey`, `model`. No provider key
   is bundled into the client.
 
