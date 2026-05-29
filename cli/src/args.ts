@@ -67,6 +67,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "session",
       "title",
       "agent-command",
+      "preset",
       "provider",
       "base-url",
       "api-base",

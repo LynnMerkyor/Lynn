@@ -15,6 +15,30 @@ import {
 import { resolveDataDir } from "../session/store.js";
 import { t } from "../i18n.js";
 
+interface ProviderPreset {
+  provider: string;
+  baseUrl: string;
+  model: string;
+}
+
+const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
+  stepfun: {
+    provider: "openai-compatible",
+    baseUrl: "https://api.stepfun.com/step_plan/v1",
+    model: "step-3.7-flash",
+  },
+  deepseek: {
+    provider: "openai-compatible",
+    baseUrl: "https://api.deepseek.com/v1",
+    model: "deepseek-chat",
+  },
+  openai: {
+    provider: "openai-compatible",
+    baseUrl: "https://api.openai.com/v1",
+    model: "gpt-4o",
+  },
+};
+
 export interface ProvidersInfo {
   defaultRoute: string;
   byokEntry: string;
@@ -87,6 +111,7 @@ export function renderProvidersInfo(info: ProvidersInfo): string {
     t("providers.clientNote"),
     t("providers.cliNote"),
     "  Lynn providers set --base-url https://api.example.com/v1 --api-key <api-key> --model model-id",
+    "  Lynn providers set --preset stepfun --api-key <api-key>",
     t("providers.routeHint"),
   ].join("\n");
 }
@@ -155,11 +180,12 @@ export async function runProviders(args: ParsedArgs, json = hasFlag(args.flags, 
     const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
     const existing = await readCliProviderProfile(dataDir);
     const interactiveProfile = await maybePromptProviderProfile(args, existing, json);
+    const preset = resolveProviderPreset(getStringFlag(args.flags, "preset"));
     const profile = validateCliProviderProfile({
-      provider: getStringFlag(args.flags, "provider") || interactiveProfile?.provider || existing?.provider || "openai-compatible",
-      baseUrl: getStringFlag(args.flags, "base-url", "api-base") || interactiveProfile?.baseUrl || existing?.baseUrl || "",
+      provider: getStringFlag(args.flags, "provider") || interactiveProfile?.provider || preset?.provider || existing?.provider || "openai-compatible",
+      baseUrl: getStringFlag(args.flags, "base-url", "api-base") || interactiveProfile?.baseUrl || preset?.baseUrl || existing?.baseUrl || "",
       apiKey: getStringFlag(args.flags, "api-key") || interactiveProfile?.apiKey || existing?.apiKey,
-      model: getStringFlag(args.flags, "model") || interactiveProfile?.model || existing?.model || "",
+      model: getStringFlag(args.flags, "model") || interactiveProfile?.model || preset?.model || existing?.model || "",
     });
     await writeCliProviderProfile(dataDir, profile);
     const payload = {
@@ -256,10 +282,20 @@ async function maybePromptProviderProfile(args: ParsedArgs, existing: CliProvide
 function hasProviderSetFlags(args: ParsedArgs): boolean {
   return !!(
     getStringFlag(args.flags, "provider")
+    || getStringFlag(args.flags, "preset")
     || getStringFlag(args.flags, "base-url", "api-base")
     || getStringFlag(args.flags, "api-key")
     || getStringFlag(args.flags, "model")
   );
+}
+
+export function resolveProviderPreset(name: string | null): ProviderPreset | null {
+  if (!name) return null;
+  const preset = PROVIDER_PRESETS[name.trim().toLowerCase()];
+  if (!preset) {
+    throw new Error(`unknown provider preset: ${name}. Available presets: ${Object.keys(PROVIDER_PRESETS).join(", ")}`);
+  }
+  return preset;
 }
 
 async function askWithDefault(rl: readline.Interface, label: string, defaultValue: string): Promise<string> {

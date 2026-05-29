@@ -129,4 +129,31 @@ describe("providers command", () => {
     expect(output).toContain("sk-s…1234");
     expect(output).not.toContain("sk-secret-1234");
   });
+
+  it("supports StepFun as a CLI BYOK preset without bundling a key", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-stepfun-"));
+    const original = process.stdout.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    try {
+      await expect(runProviders(parseArgs([
+        "providers",
+        "set",
+        "--data-dir",
+        dataDir,
+        "--preset",
+        "stepfun",
+        "--api-key",
+        "step-secret",
+      ]), false)).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    await expect(readCliProviderProfile(dataDir)).resolves.toMatchObject({
+      provider: "openai-compatible",
+      baseUrl: "https://api.stepfun.com/step_plan/v1",
+      model: "step-3.7-flash",
+      apiKey: "step-secret",
+    });
+  });
 });
