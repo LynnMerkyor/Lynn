@@ -9,6 +9,7 @@ export interface CliAgentEntry {
   available: boolean;
   availability: string;
   kind: "built-in" | "external";
+  requiresPreset?: string;
 }
 
 const AGENTS: Array<Omit<CliAgentEntry, "available" | "availability"> & { profileHint?: string }> = [
@@ -16,7 +17,7 @@ const AGENTS: Array<Omit<CliAgentEntry, "available" | "availability"> & { profil
   { id: "mimo-vl", label: "MiMo Vision (mimo-v2.5)", bin: "Lynn", enabled: true, kind: "built-in", profileHint: "built-in profile - vision" },
   { id: "mimo-pro", label: "MiMo Pro (long endurance)", bin: "Lynn", enabled: true, kind: "built-in", profileHint: "built-in profile - long task" },
   { id: "mimo-fast", label: "MiMo Fast", bin: "Lynn", enabled: true, kind: "built-in", profileHint: "built-in profile - fast" },
-  { id: "stepfun-flash", label: "StepFun 3.7 Flash", bin: "Lynn", enabled: true, kind: "built-in", profileHint: "built-in profile - BYOK preset stepfun" },
+  { id: "stepfun-flash", label: "StepFun 3.7 Flash", bin: "Lynn", enabled: true, kind: "built-in", profileHint: "built-in profile - BYOK preset stepfun", requiresPreset: "stepfun" },
   { id: "codex-cli", label: "Codex", bin: "codex", enabled: true, kind: "external" },
   { id: "claude-code", label: "Claude Code", bin: "claude", enabled: true, kind: "external" },
   { id: "claude-internal", label: "Claude (internal)", bin: "claude-internal", enabled: true, kind: "external" },
@@ -30,6 +31,7 @@ export interface DetectCliAgentsOptions {
   pathEnv?: string;
   platform?: NodeJS.Platform;
   fileExists?: (file: string) => boolean;
+  configuredPreset?: string | null;
 }
 
 export function detectCliAgents(opts: DetectCliAgentsOptions = {}): CliAgentEntry[] {
@@ -39,6 +41,13 @@ export function detectCliAgents(opts: DetectCliAgentsOptions = {}): CliAgentEntr
   return AGENTS.map((agent) => {
     if (agent.kind === "built-in") {
       const { profileHint: _profileHint, ...entry } = agent;
+      if (agent.requiresPreset && agent.requiresPreset !== opts.configuredPreset) {
+        return {
+          ...entry,
+          available: false,
+          availability: `requires: Lynn providers set --preset ${agent.requiresPreset} --api-key <api-key>`,
+        };
+      }
       return { ...entry, available: true, availability: agent.profileHint || "current binary" };
     }
     const found = findCommand(agent.bin, { pathEnv, platform, fileExists });

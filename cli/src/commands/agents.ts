@@ -1,9 +1,13 @@
 import type { ParsedArgs } from "../args.js";
 import { detectCliAgents } from "../agent-registry.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
+import { presetNameForProviderProfile } from "../provider-presets.js";
+import { resolveCliProviderProfile } from "../provider-profile.js";
 
-export function runAgents(_args: ParsedArgs, json: boolean): number {
-  const agents = detectCliAgents();
+export async function runAgents(args: ParsedArgs, json: boolean): Promise<number> {
+  const profile = await resolveCliProviderProfile(args);
+  const configuredPreset = presetNameForProviderProfile(profile?.profile);
+  const agents = detectCliAgents({ configuredPreset });
   if (json) {
     writeJsonLine({ type: "agents", ts: nowIso(), agents });
     return 0;

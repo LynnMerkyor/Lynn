@@ -8,7 +8,7 @@ import { createLineParser, mapKnownCliJsonLine, spawnWorker } from "../worker-ma
 import { parseWorktreePorcelain } from "../worktree-manager.js";
 import { FleetHub, type FleetBrief } from "../fleet-hub.js";
 import { resolveCliCommand, cliRuntimeAvailable } from "../worker-command.js";
-import { DEFAULT_FLEET_REGISTRY, resolveFleetRegistry } from "../registry.js";
+import { DEFAULT_FLEET_REGISTRY, configuredCliProviderPreset, resolveFleetRegistry } from "../registry.js";
 import { createFleetRoute } from "../../routes/fleet.js";
 
 async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
@@ -206,7 +206,41 @@ describe("FleetHub.dispatch", () => {
       bin: "lynn",
       supportsJsonl: true,
       enabled: true,
+      requiresPreset: "stepfun",
     });
+  });
+
+  it("does not mark StepFun workers available until the CLI BYOK preset is configured", () => {
+    expect(resolveFleetRegistry({ pathEnv: "", configuredPreset: null }).find((agent) => agent.id === "stepfun-flash")).toMatchObject({
+      enabled: true,
+      available: false,
+      availability: "requires: Lynn providers set --preset stepfun --api-key <api-key>",
+    });
+
+    expect(resolveFleetRegistry({ pathEnv: "", configuredPreset: "stepfun" }).find((agent) => agent.id === "stepfun-flash")).toMatchObject({
+      enabled: true,
+      available: true,
+      availability: "bundled Lynn CLI runtime",
+    });
+  });
+
+  it("detects the configured StepFun CLI provider preset from the Lynn home profile", () => {
+    expect(configuredCliProviderPreset({
+      lynnHome: "/tmp/lynn",
+      readFileSync: () => JSON.stringify({
+        baseUrl: "https://api.stepfun.com/step_plan/v1/",
+        model: "step-3.7-flash",
+        apiKey: "sk-step",
+      }),
+    })).toBe("stepfun");
+
+    expect(configuredCliProviderPreset({
+      lynnHome: "/tmp/lynn",
+      readFileSync: () => JSON.stringify({
+        baseUrl: "https://api.stepfun.com/step_plan/v1",
+        model: "step-3.7-flash",
+      }),
+    })).toBeNull();
   });
 
   it("exposes CodeBuddy as an enabled external worker profile", () => {

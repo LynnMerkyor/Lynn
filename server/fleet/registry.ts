@@ -19,6 +19,7 @@ export interface FleetAgentEntry {
   enabled: boolean;
   available?: boolean;
   availability?: string;
+  requiresPreset?: string;
 }
 
 export const DEFAULT_FLEET_REGISTRY: FleetAgentEntry[] = [
@@ -28,7 +29,7 @@ export const DEFAULT_FLEET_REGISTRY: FleetAgentEntry[] = [
   { id: "mimo-vl", label: "MiMo Vision (mimo-v2.5)", bin: "lynn", supportsJsonl: true, enabled: true },
   { id: "mimo-pro", label: "MiMo Pro (long-endurance)", bin: "lynn", supportsJsonl: true, enabled: true },
   { id: "mimo-fast", label: "MiMo Fast", bin: "lynn", supportsJsonl: true, enabled: true },
-  { id: "stepfun-flash", label: "StepFun 3.7 Flash (fast coding)", bin: "lynn", supportsJsonl: true, enabled: true },
+  { id: "stepfun-flash", label: "StepFun 3.7 Flash (fast coding)", bin: "lynn", supportsJsonl: true, enabled: true, requiresPreset: "stepfun" },
   { id: "codex-cli", label: "Codex", bin: "codex", supportsJsonl: true, enabled: true },
   { id: "claude-internal", label: "Claude (internal)", bin: "claude-internal", supportsJsonl: false, enabled: true },
   { id: "claude-code", label: "Claude Code", bin: "claude", supportsJsonl: true, enabled: true },
@@ -43,6 +44,7 @@ export interface ResolveFleetRegistryOptions {
   pathEnv?: string;
   platform?: NodeJS.Platform;
   fileExists?: (file: string) => boolean;
+  configuredPreset?: string | null;
 }
 
 export function resolveFleetRegistry(opts: ResolveFleetRegistryOptions = {}): FleetAgentEntry[] {
@@ -51,6 +53,13 @@ export function resolveFleetRegistry(opts: ResolveFleetRegistryOptions = {}): Fl
   const fileExists = opts.fileExists ?? defaultFileExists;
   return DEFAULT_FLEET_REGISTRY.map((entry) => {
     if (!entry.enabled) return { ...entry, available: false, availability: "disabled" };
+    if (entry.requiresPreset && entry.requiresPreset !== opts.configuredPreset) {
+      return {
+        ...entry,
+        available: false,
+        availability: `requires: Lynn providers set --preset ${entry.requiresPreset} --api-key <api-key>`,
+      };
+    }
     if (entry.bin === "lynn") {
       return { ...entry, available: true, availability: "bundled Lynn CLI runtime" };
     }
@@ -65,6 +74,27 @@ export function resolveFleetRegistry(opts: ResolveFleetRegistryOptions = {}): Fl
       availability: found || "not found on PATH",
     };
   });
+}
+
+export function configuredCliProviderPreset(opts: { lynnHome?: string; readFileSync?: (file: string, encoding: BufferEncoding) => string } = {}): string | null {
+  const lynnHome = opts.lynnHome || process.env.LYNN_HOME || path.join(process.env.HOME || "", ".lynn");
+  const readFileSync = opts.readFileSync || fs.readFileSync;
+  try {
+    const parsed = JSON.parse(readFileSync(path.join(lynnHome, "providers", "cli.json"), "utf8")) as {
+      baseUrl?: unknown;
+      model?: unknown;
+      apiKey?: unknown;
+    };
+    const baseUrl = typeof parsed.baseUrl === "string" ? parsed.baseUrl.replace(/\/+$/, "") : "";
+    const model = typeof parsed.model === "string" ? parsed.model : "";
+    const apiKey = typeof parsed.apiKey === "string" ? parsed.apiKey.trim() : "";
+    if (!apiKey) return null;
+    if (baseUrl === "https://api.stepfun.com/step_plan/v1" && model === "step-3.7-flash") return "stepfun";
+    if (baseUrl === "https://token-plan-cn.xiaomimimo.com/v1" && model.startsWith("mimo-")) return "mimo";
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function findCommand(

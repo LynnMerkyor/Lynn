@@ -46,3 +46,13 @@ export function listProviderPresets(): Array<{ name: string } & ProviderPreset> 
     .map(([name, preset]) => ({ name, ...preset }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
+
+export function presetNameForProviderProfile(profile: Pick<ProviderPreset, "baseUrl" | "model"> | null | undefined): string | null {
+  if (!profile) return null;
+  const baseUrl = profile.baseUrl.trim().replace(/\/+$/, "");
+  const model = profile.model.trim();
+  for (const [name, preset] of Object.entries(PROVIDER_PRESETS)) {
+    if (preset.baseUrl.replace(/\/+$/, "") === baseUrl && preset.model === model) return name;
+  }
+  return null;
+}
