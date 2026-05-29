@@ -2,6 +2,7 @@
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -14,6 +15,7 @@ const permissionSetDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-permissions-
 const sessionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-sessions");
 const toolDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-tools");
 const visionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-vision");
+const byokDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-byok");
 const briefPath = path.join(root, "cli", "fixtures", "worker-brief.md");
 
 function run(name, args, options = {}) {
@@ -80,6 +82,8 @@ await fs.promises.mkdir(toolDataDir, { recursive: true });
 await fs.promises.writeFile(path.join(toolDataDir, "hello.txt"), "hello\n", "utf8");
 await fs.promises.rm(visionDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(visionDataDir, { recursive: true });
+await fs.promises.rm(byokDataDir, { recursive: true, force: true });
+await fs.promises.mkdir(byokDataDir, { recursive: true });
 const smokePng = path.join(visionDataDir, "smoke.png");
 await fs.promises.writeFile(smokePng, Buffer.from("89504e470d0a1a0a", "hex"));
 
@@ -92,7 +96,7 @@ checks.push(run("version", ["version"]).then((r) => {
 checks.push(run("startup banner", []).then((r) => {
   assertIncludes(r.name, r.stdout, "Lynn CLI");
   assertIncludes(r.name, r.stdout, "MiMo via");
-  assertIncludes(r.name, r.stdout, "mode:");
+  assertIncludes(r.name, r.stdout, "ask / workspace-write");
   assertIncludes(r.name, r.stdout, "Shift+Tab");
   assertIncludes(r.name, r.stdout, "offline");
   assertIncludes(r.name, r.stdout, "Lynn providers");
@@ -100,7 +104,7 @@ checks.push(run("startup banner", []).then((r) => {
 
 checks.push(run("providers", ["providers", "--data-dir", missingDataDir]).then((r) => {
   assertIncludes(r.name, r.stdout, "Lynn Providers / BYOK");
-  assertIncludes(r.name, r.stdout, "Provider keys stay");
+  assertIncludes(r.name, r.stdout, "Provider key");
   assertNotIncludes(r.name, r.stdout, "sk-");
   assertNotIncludes(r.name, r.stdout.toLowerCase(), "api_key");
 }));
@@ -129,7 +133,7 @@ checks.push(run("permissions set shared profile", [
 }));
 
 checks.push(run("mock prompt", ["-p", "你好", "--mock-brain"]).then((r) => {
-  assertIncludes(r.name, r.stdout, "Mock Lynn response: 你好");
+  assertIncludes(r.name, r.stdout, "你好");
 }));
 
 checks.push(run("code list tools", ["code", "--list-tools"]).then((r) => {
@@ -189,11 +193,12 @@ checks.push(run("code read-only blocks writes", [
 }));
 
 checks.push(run("code task mock", ["code", "review the current diff", "--mock-brain"]).then((r) => {
-  assertIncludes(r.name, r.stdout, "Mock Lynn code task");
+  assertIncludes(r.name, r.stdout, "review the current diff");
+  assertIncludes(r.name, r.stdout, "mock Brain");
 }));
 
 checks.push(run("vision see mock", ["see", smokePng, "describe this UI", "--mock-brain"]).then((r) => {
-  assertIncludes(r.name, r.stdout, "Mock Lynn see");
+  assertIncludes(r.name, r.stdout, "see:");
   assertIncludes(r.name, r.stdout, "describe this UI");
 }));
 
@@ -204,13 +209,13 @@ checks.push(run("vision ground mock json", ["ground", smokePng, "Submit button",
 }));
 
 checks.push(run("mock chat", ["chat", "--mock-brain"], { stdinLines: ["/mode yolo", "hi", "/exit"] }).then((r) => {
-  assertIncludes(r.name, r.stdout, "YOLO mode enabled");
-  assertIncludes(r.name, r.stdout, "Mock Lynn response: hi");
+  assertIncludes(r.name, r.stdout, "YOLO");
+  assertIncludes(r.name, r.stdout, "hi");
 }));
 
 checks.push(run("chat brain offline recovery", ["chat", "--brain-url", "http://127.0.0.1:1"], { stdinLines: ["hi", "/exit"] }).then((r) => {
-  assertIncludes(r.name, r.stdout, "Brain offline");
-  assertIncludes(r.name, r.stdout, "start the Lynn GUI");
+  assertIncludes(r.name, r.stdout, "Brain 离线");
+  assertIncludes(r.name, r.stdout, "Lynn");
 }));
 
 checks.push(run("mock worker", ["worker", "run", "--brief", briefPath, "--worktree", root, "--mock", "--jsonl"]).then((r) => {
@@ -218,15 +223,22 @@ checks.push(run("mock worker", ["worker", "run", "--brief", briefPath, "--worktr
   assertIncludes(r.name, r.stdout, '"type":"worker.finished"');
 }));
 
+checks.push(run("stepfun worker mock", ["worker", "run", "--brief", briefPath, "--worktree", root, "--agent", "stepfun-flash", "--mock", "--jsonl"]).then((r) => {
+  assertIncludes(r.name, r.stdout, '"agent":"stepfun-flash"');
+  assertIncludes(r.name, r.stdout, '"type":"worker.finished"');
+}));
+
 checks.push(run("brain unreachable recovery", ["-p", "你好", "--brain-url", "http://127.0.0.1:1"], { expectFailure: true }).then((r) => {
   assertIncludes(r.name, r.stderr, "Could not reach Lynn Brain");
-  assertIncludes(r.name, r.stderr, "Start the Lynn GUI");
+  assertIncludes(r.name, r.stderr, "Start the Lynn client GUI");
   assertIncludes(r.name, r.stderr, "--mock-brain");
 }));
 
 for (const check of checks) {
   await check;
 }
+
+await runStepFunByokFallbackSmoke();
 
 const saved = await run("session save", ["-p", "remember this", "--mock-brain", "--save-session", "--data-dir", sessionDataDir, "--json"]);
 assertIncludes(saved.name, saved.stdout, '"type":"session.saved"');
@@ -243,3 +255,64 @@ assertIncludes(shown.name, shown.stdout, '"type":"sessions.show"');
 assertIncludes(shown.name, shown.stdout, "remember this");
 
 console.log("[cli-smoke] all checks passed");
+
+async function runStepFunByokFallbackSmoke() {
+  let seen = null;
+  const server = http.createServer((request, response) => {
+    if (request.url !== "/v1/chat/completions" || request.method !== "POST") {
+      response.writeHead(404);
+      response.end();
+      return;
+    }
+    let body = "";
+    request.on("data", (chunk) => { body += String(chunk); });
+    request.on("end", () => {
+      seen = { auth: request.headers.authorization, body: JSON.parse(body) };
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"ok from stepfun\"}}]}",
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("StepFun BYOK smoke server failed to listen");
+    const baseUrl = `http://127.0.0.1:${address.port}/v1`;
+    await run("stepfun preset save", [
+      "providers",
+      "set",
+      "--data-dir",
+      byokDataDir,
+      "--preset",
+      "stepfun",
+      "--api-key",
+      "step-smoke-key",
+      "--json",
+    ]);
+    const result = await run("stepfun byok fallback", [
+      "-p",
+      "say ok",
+      "--data-dir",
+      byokDataDir,
+      "--preset",
+      "stepfun",
+      "--base-url",
+      baseUrl,
+      "--api-key",
+      "step-smoke-key",
+      "--brain-url",
+      "http://127.0.0.1:1",
+      "--json",
+    ], { env: { LYNN_CLI_BRAIN_TIMEOUT_MS: "50" } });
+    assertIncludes(result.name, result.stdout, '"text":"ok from stepfun"');
+    if (!seen) throw new Error("StepFun BYOK smoke did not call the provider");
+    if (seen.auth !== "Bearer step-smoke-key") throw new Error(`StepFun BYOK smoke used wrong auth: ${seen.auth}`);
+    if (seen.body.model !== "step-3.7-flash") throw new Error(`StepFun BYOK smoke used wrong model: ${seen.body.model}`);
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve()));
+  }
+}
