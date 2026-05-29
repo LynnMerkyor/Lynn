@@ -32,7 +32,30 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
     const name = flagName(token);
     const next = argv[i + 1];
-    const takesValue = ["p", "print", "prompt", "brain-url", "brief", "task", "worktree", "id", "agent", "reasoning", "show-reasoning", "approval", "sandbox", "cwd"].includes(name);
+    const takesValue = [
+      "p",
+      "print",
+      "prompt",
+      "brain-url",
+      "brief",
+      "task",
+      "worktree",
+      "id",
+      "agent",
+      "reasoning",
+      "show-reasoning",
+      "approval",
+      "sandbox",
+      "cwd",
+      "tool",
+      "path",
+      "command",
+      "query",
+      "pattern",
+      "max-bytes",
+      "text",
+      "content",
+    ].includes(name);
     if (takesValue && next && !next.startsWith("-")) {
       flags[name] = next;
       i += 1;

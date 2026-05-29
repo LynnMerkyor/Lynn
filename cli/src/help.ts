@@ -8,6 +8,8 @@ export function usage(): string {
     "  lynn -p \"prompt\" [--mock-brain] [--json]",
     "  lynn exec \"task\" --json [--mock-brain]",
     "  lynn worker run --brief task.md --worktree path --jsonl --mock",
+    "  lynn code --list-tools",
+    "  lynn code --tool read_file --path README.md --json",
     "",
     "Common flags:",
     "  --reasoning auto|off|low|medium|high|xhigh",

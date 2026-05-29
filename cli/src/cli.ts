@@ -1,4 +1,5 @@
 import { parseArgs, hasFlag } from "./args.js";
+import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
 import { runPrompt } from "./commands/prompt.js";
 import { runWorker } from "./commands/worker-run.js";
@@ -32,6 +33,9 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     case "worker": {
       return runWorker(args);
+    }
+    case "code": {
+      return runCode(args);
     }
     case "help":
     case "--help":
