@@ -43,11 +43,16 @@ export interface UsageSummaryOptions {
 export function summarizeUsage(usage: unknown, options: UsageSummaryOptions = {}): string | null {
   if (!usage || typeof usage !== "object" || Array.isArray(usage)) return null;
   const record = usage as Record<string, unknown>;
-  const prompt = numberValue(record.prompt_tokens);
-  const completion = numberValue(record.completion_tokens);
-  const total = numberValue(record.total_tokens);
-  const cacheHit = numberValue(record.prompt_cache_hit_tokens);
-  const cacheMiss = numberValue(record.prompt_cache_miss_tokens);
+  const prompt = firstNumber(record, ["prompt_tokens", "input_tokens"]);
+  const completion = firstNumber(record, ["completion_tokens", "output_tokens"]);
+  const total = firstNumber(record, ["total_tokens"]) ?? (prompt !== null && completion !== null ? prompt + completion : null);
+  const cacheHit = firstNumber(record, [
+    "prompt_cache_hit_tokens",
+    "cached_tokens",
+    "cache_read_input_tokens",
+    "prompt_tokens_details.cached_tokens",
+  ]);
+  const cacheMiss = firstNumber(record, ["prompt_cache_miss_tokens", "cache_creation_input_tokens"]);
   const cacheRatio = cacheHit !== null && prompt !== null && prompt > 0
     ? `${Math.round((cacheHit / prompt) * 100)}%`
     : cacheHit !== null && cacheMiss !== null && cacheHit + cacheMiss > 0
@@ -68,6 +73,18 @@ export function summarizeUsage(usage: unknown, options: UsageSummaryOptions = {}
 
 function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function firstNumber(record: Record<string, unknown>, paths: string[]): number | null {
+  for (const path of paths) {
+    const value = path.split(".").reduce<unknown>((acc, part) => {
+      if (!acc || typeof acc !== "object" || Array.isArray(acc)) return undefined;
+      return (acc as Record<string, unknown>)[part];
+    }, record);
+    const numeric = numberValue(value);
+    if (numeric !== null) return numeric;
+  }
+  return null;
 }
 
 function formatTps(value: number): string {

@@ -26,4 +26,12 @@ describe("brain render usage summary", () => {
       total_tokens: 15,
     })).toBe("15 tokens · in 10 · out 5");
   });
+
+  it("understands OpenAI-compatible nested cached token shapes", () => {
+    expect(summarizeUsage({
+      input_tokens: 1000,
+      output_tokens: 200,
+      prompt_tokens_details: { cached_tokens: 750 },
+    }, { durationMs: 1000 })).toBe("1200 tokens · in 1000 · out 200 · cache 750 (75%) · 200 TPS");
+  });
 });

@@ -158,14 +158,30 @@ function numberValue(record: Record<string, unknown>, key: string): number | und
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function firstNumber(record: Record<string, unknown>, paths: string[]): number | undefined {
+  for (const path of paths) {
+    const value = path.split('.').reduce<unknown>((acc, part) => {
+      if (!acc || typeof acc !== 'object' || Array.isArray(acc)) return undefined;
+      return (acc as Record<string, unknown>)[part];
+    }, record);
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return undefined;
+}
+
 export function summarizeFleetUsage(data: unknown): FleetUsageView | undefined {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
   const record = data as Record<string, unknown>;
-  const prompt = numberValue(record, 'prompt_tokens');
-  const completion = numberValue(record, 'completion_tokens');
-  const total = numberValue(record, 'total_tokens');
-  const cacheHit = numberValue(record, 'prompt_cache_hit_tokens');
-  const cacheMiss = numberValue(record, 'prompt_cache_miss_tokens');
+  const prompt = firstNumber(record, ['prompt_tokens', 'input_tokens']);
+  const completion = firstNumber(record, ['completion_tokens', 'output_tokens']);
+  const total = firstNumber(record, ['total_tokens']) ?? (prompt != null && completion != null ? prompt + completion : undefined);
+  const cacheHit = firstNumber(record, [
+    'prompt_cache_hit_tokens',
+    'cached_tokens',
+    'cache_read_input_tokens',
+    'prompt_tokens_details.cached_tokens',
+  ]);
+  const cacheMiss = firstNumber(record, ['prompt_cache_miss_tokens', 'cache_creation_input_tokens']);
   const durationMs = numberValue(record, 'duration_ms') ?? numberValue(record, 'durationMs');
   const explicitTps = numberValue(record, 'tokens_per_second') ?? numberValue(record, 'tps');
   const tps = explicitTps != null

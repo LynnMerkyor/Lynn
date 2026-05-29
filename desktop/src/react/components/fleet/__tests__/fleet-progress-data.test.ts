@@ -133,4 +133,17 @@ describe('worker.progress data (vision + runner context)', () => {
     });
     expect(v.usage).toMatchObject({ summary: 'out 44 · cache 90 (90%) · 220 TPS', cacheRatio: 90, tps: 220 });
   });
+
+  it('summarizes nested cached-token provider usage shapes', () => {
+    expect(summarizeFleetUsage({
+      input_tokens: 1000,
+      output_tokens: 200,
+      prompt_tokens_details: { cached_tokens: 750 },
+      duration_ms: 1000,
+    })).toMatchObject({
+      summary: '1200 tok · in 1000 · out 200 · cache 750 (75%) · 200 TPS',
+      cacheRatio: 75,
+      tps: 200,
+    });
+  });
 });
