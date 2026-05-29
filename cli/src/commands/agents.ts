@@ -3,6 +3,7 @@ import { detectCliAgents } from "../agent-registry.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { presetNameForProviderProfile } from "../provider-presets.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
+import { t } from "../i18n.js";
 
 export async function runAgents(args: ParsedArgs, json: boolean): Promise<number> {
   const profile = await resolveCliProviderProfile(args);
@@ -13,13 +14,13 @@ export async function runAgents(args: ParsedArgs, json: boolean): Promise<number
     return 0;
   }
 
-  const lines = ["Lynn worker agents", ""];
+  const lines = [t("agents.title"), ""];
   for (const agent of agents) {
     const status = agent.available ? "OK" : "--";
     const kind = agent.kind === "built-in" ? "profile" : "external";
     lines.push(`${status} ${agent.id.padEnd(16)} ${kind.padEnd(8)} ${agent.label.padEnd(30)} ${agent.availability}`);
   }
-  lines.push("", "Tip: built-in profiles run through Lynn worker run; external agents must be installed on PATH.");
+  lines.push("", t("agents.tip"));
   process.stdout.write(`${lines.join("\n")}\n`);
   return 0;
 }
