@@ -211,7 +211,7 @@ export interface SessionAgent {
 }
 
 // ── 浮动面板类型 ──
-export type ActivePanel = 'activity' | 'automation' | 'bridge' | 'changes' | null;
+export type ActivePanel = 'activity' | 'automation' | 'bridge' | 'changes' | 'fleet' | null;
 export type TabType = 'chat' | 'channels';
 
 // ── Platform API 类型声明 ──

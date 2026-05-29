@@ -1,0 +1,142 @@
+/* Worker Fleet panel styling (B-line, MVP). Layout + the out-of-scope red flag. */
+
+.fleetToolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px 12px;
+}
+
+.fleetBtn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #3a3a3a);
+  background: var(--button-bg, #2a2a2a);
+  color: inherit;
+  cursor: pointer;
+}
+
+.fleetBtn:hover {
+  background: var(--button-hover-bg, #343434);
+}
+
+.fleetHint {
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.fleetEmpty {
+  padding: 24px 8px;
+  font-size: 13px;
+  opacity: 0.6;
+  text-align: center;
+}
+
+.fleetBoard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.workerCard {
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  background: var(--card-bg, rgba(255, 255, 255, 0.02));
+}
+
+.workerCard[data-blocked='1'] {
+  border-color: #c0392b;
+  box-shadow: inset 3px 0 0 0 #c0392b;
+}
+
+.workerHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workerAgent {
+  font-weight: 600;
+}
+
+.workerBranch {
+  opacity: 0.7;
+  font-family: var(--mono-font, monospace);
+}
+
+.workerStatus {
+  margin-left: auto;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+
+.workerCard[data-status='failed'] .workerStatus {
+  color: #e74c3c;
+}
+
+.workerCard[data-status='waiting_approval'] .workerStatus {
+  color: #27ae60;
+}
+
+.badgeScope {
+  font-size: 11px;
+  color: #fff;
+  background: #c0392b;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.workerDiff {
+  margin-top: 6px;
+  font-family: var(--mono-font, monospace);
+  opacity: 0.8;
+}
+
+.workerTests,
+.workerFiles {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  list-style: none;
+}
+
+.workerTests li,
+.workerFiles li {
+  font-family: var(--mono-font, monospace);
+  opacity: 0.85;
+}
+
+.workerTests li[data-ok='fail'] {
+  color: #e74c3c;
+}
+
+.workerFiles li[data-forbidden='1'] {
+  color: #e74c3c;
+  font-weight: 600;
+}
+
+.workerLog {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--code-bg, rgba(0, 0, 0, 0.25));
+  font-family: var(--mono-font, monospace);
+  font-size: 11px;
+  opacity: 0.8;
+  white-space: pre-wrap;
+}
+
+.workerFinished {
+  margin-top: 6px;
+  color: #27ae60;
+}
+
+.workerError {
+  margin-top: 6px;
+  color: #e74c3c;
+}
