@@ -7,12 +7,13 @@ import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
 import { t } from "../i18n.js";
+import { extractGroundingBoxes } from "../vision-result.js";
 
 export type VisionCommand = "see" | "ground" | "ui2code";
 
 export async function runVisionCommand(args: ParsedArgs, command: VisionCommand, json = hasFlag(args.flags, "json", "jsonl")): Promise<number> {
   const imagePath = getStringFlag(args.flags, "image", "shot") || args.positionals[0] || "";
-  if (!imagePath) throw new Error(`${command} requires an image path`);
+  if (!imagePath) throw new Error(t("vision.error.imageRequired", { command }));
   const userText = args.positionals.slice(1).join(" ").trim() || getStringFlag(args.flags, "prompt", "p") || "";
   const prompt = buildVisionPrompt(command, userText);
   const reasoning = parseReasoningOptions(args);
@@ -36,7 +37,7 @@ export async function runVisionCommand(args: ParsedArgs, command: VisionCommand,
   const content = await buildImageContentParts(imagePath, prompt);
   let answer = "";
   const renderState: HumanBrainRenderState = {};
-  const spinner = new TerminalSpinner(process.stderr, command === "ground" ? "Lynn is grounding" : "Lynn is seeing");
+  const spinner = new TerminalSpinner(process.stderr, command === "ground" ? t("spinner.grounding") : t("spinner.seeing"));
   const startedAt = Date.now();
   if (!json) spinner.start();
   try {
@@ -55,7 +56,12 @@ export async function runVisionCommand(args: ParsedArgs, command: VisionCommand,
   } finally {
     spinner.stop();
   }
-  if (json) writeJsonLine({ type: "vision.finished", ts: nowIso(), ok: true, contentReturned: !!answer.trim() });
+  if (json) {
+    if (command === "ground") {
+      writeJsonLine({ type: "vision.result", ts: nowIso(), command, image: imagePath, boxes: extractGroundingBoxes(answer) });
+    }
+    writeJsonLine({ type: "vision.finished", ts: nowIso(), ok: true, contentReturned: !!answer.trim() });
+  }
   else process.stdout.write("\n");
   return 0;
 }

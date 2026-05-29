@@ -116,4 +116,59 @@ describe("MiMo vision commands", () => {
     expect(output).toContain("\"activeProvider\":\"cli-byok:openai-compatible\"");
     expect(output).toContain("\"text\":\"vision byok ok\"");
   });
+
+  it("emits structured grounding boxes in json mode", async () => {
+    const provider = http.createServer((request, response) => {
+      request.resume();
+      request.on("end", () => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end([
+          `data: ${JSON.stringify({ choices: [{ delta: { content: '{"x":0.25,"y":0.5,"w":0.2,"h":0.1,"confidence":0.88,"label":"submit"}' } }] })}`,
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runVisionCommand(parseArgs([
+        "ground",
+        png,
+        "Submit",
+        "--json",
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-vision-test",
+        "--model",
+        "vision-model",
+      ]), "ground")).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
+
+    const events = output.trim().split(/\n+/).map((line) => JSON.parse(line) as { type?: string; boxes?: unknown[] });
+    const result = events.find((event) => event.type === "vision.result");
+    expect(result?.boxes).toEqual([{
+      label: "submit",
+      x: 0.25,
+      y: 0.5,
+      width: 0.2,
+      height: 0.1,
+      confidence: 0.88,
+    }]);
+  });
 });

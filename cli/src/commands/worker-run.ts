@@ -5,7 +5,6 @@ import { promisify } from "node:util";
 import {
   FLEET_EVENT_SCHEMA_VERSION,
   type FleetChangedFile,
-  type FleetVisualBox,
   type FleetWorkerEvent,
   parseFleetJsonLine,
   validateFleetWorkerEvent,
@@ -18,6 +17,8 @@ import { runCode } from "./code.js";
 import { buildVisionPrompt, type VisionCommand } from "./vision.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
+export { extractGroundingBoxes } from "../vision-result.js";
+import { extractGroundingBoxes } from "../vision-result.js";
 
 export interface WorkerBrief {
   title: string;
@@ -28,70 +29,6 @@ export interface WorkerBrief {
   taskType: "code" | VisionCommand;
   image?: string;
   resumePath?: string;
-}
-
-export function extractGroundingBoxes(text: string): FleetVisualBox[] {
-  const candidates = [
-    ...Array.from(text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi), (match) => match[1] || ""),
-    text,
-  ];
-  for (const candidate of candidates) {
-    const raw = firstJsonObject(candidate);
-    if (!raw) continue;
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
-      const x = asNumber(parsed.x);
-      const y = asNumber(parsed.y);
-      if (x === null || y === null) continue;
-      const width = asNumber(parsed.width ?? parsed.w);
-      const height = asNumber(parsed.height ?? parsed.h);
-      const confidence = asNumber(parsed.confidence ?? parsed.conf);
-      return [{
-        label: typeof parsed.label === "string" ? parsed.label : typeof parsed.reason === "string" ? parsed.reason : "target",
-        x: clamp01(x),
-        y: clamp01(y),
-        ...(width === null ? {} : { width: clamp01(width) }),
-        ...(height === null ? {} : { height: clamp01(height) }),
-        ...(confidence === null ? {} : { confidence: clamp01(confidence) }),
-      }];
-    } catch {
-      // Try the next candidate.
-    }
-  }
-  return [];
-}
-
-function firstJsonObject(text: string): string | null {
-  const start = text.indexOf("{");
-  if (start < 0) return null;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < text.length; i += 1) {
-    const ch = text[i];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (ch === "\\") escaped = true;
-      else if (ch === "\"") inString = false;
-      continue;
-    }
-    if (ch === "\"") inString = true;
-    else if (ch === "{") depth += 1;
-    else if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) return text.slice(start, i + 1);
-    }
-  }
-  return null;
-}
-
-function asNumber(value: unknown): number | null {
-  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
-  return Number.isFinite(n) ? n : null;
-}
-
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value));
 }
 
 export interface WorkerDiffSummary {
