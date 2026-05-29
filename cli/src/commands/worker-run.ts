@@ -67,6 +67,7 @@ function defaultAgentCommand(agent: string, briefPath: string, worktree: string,
       return `claude -p ${shellQuote(taskText)} --add-dir ${shellQuote(worktree)} --output-format stream-json --verbose --include-partial-messages`;
     case "codex-cli":
       return `codex exec --cd ${shellQuote(worktree)} --file ${shellQuote(briefPath)} --json`;
+    case "opencode":
     case "opencode-cli":
     case "open-code":
       return `opencode run --format json ${shellQuote(taskText)}`;

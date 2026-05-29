@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { matchAnyGlob, evaluateScope, annotateChangedFiles } from "../forbidden-guard.js";
 import { createLineParser } from "../worker-manager.js";
+import type { SpawnWorkerOptions } from "../worker-manager.js";
 import { parseWorktreePorcelain } from "../worktree-manager.js";
 import { FleetHub, type FleetBrief } from "../fleet-hub.js";
 
@@ -61,7 +62,7 @@ describe("worktree porcelain parser", () => {
 describe("FleetHub.dispatch", () => {
   it("registers a worker and broadcasts started -> claims -> progress as fleet:event", async () => {
     const sent: Array<{ type: string; event: { type: string } }> = [];
-    const hub = new FleetHub("/repo", (m) => sent.push(m as { type: string; event: { type: string } }), () => "T");
+    const hub = new FleetHub("/repo", (m) => sent.push(m as { type: string; event: { type: string } }), () => "T", { mode: "stub" });
     const brief: FleetBrief = {
       title: "split ComposerTextarea",
       agent: "claude-code",
@@ -77,5 +78,47 @@ describe("FleetHub.dispatch", () => {
     expect(hub.listWorkers()).toHaveLength(1);
     expect(sent.every((m) => m.type === "fleet:event")).toBe(true);
     expect(sent.map((m) => m.event.type)).toEqual(["worker.started", "worker.claims", "worker.progress"]);
+  });
+
+  it("spawns Lynn worker run in integration mode", async () => {
+    const sent: Array<{ type: string; event: { type: string } }> = [];
+    const spawned: SpawnWorkerOptions[] = [];
+    const hub = new FleetHub(
+      "/repo",
+      (m) => sent.push(m as { type: string; event: { type: string } }),
+      () => "T",
+      {
+        createWorktree: false,
+        runnerCommand: "Lynn",
+        spawnWorker: (opts, onEvent) => {
+          spawned.push(opts);
+          queueMicrotask(() => {
+            onEvent({ type: "worker.finished", workerId: opts.workerId, ok: true, exitCode: 0, summary: "done" });
+          });
+          return { workerId: opts.workerId, pid: 123, kill: () => undefined };
+        },
+      },
+    );
+    const brief: FleetBrief = {
+      title: "real spawn",
+      agent: "lynn-cli",
+      objective: "run a real worker adapter",
+      owned: ["cli/**"],
+      forbidden: ["server/**"],
+      branch: "fleet/test",
+      worktree: "worktrees/fleet-test",
+    };
+
+    const rec = await hub.dispatch(brief);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(spawned).toHaveLength(1);
+    const call = spawned[0]!;
+    expect(call.command).toBe("Lynn");
+    expect(call.args.slice(0, 2)).toEqual(["worker", "run"]);
+    expect(call.args).toContain("--id");
+    expect(call.args).toContain(rec.workerId);
+    expect(hub.getWorker(rec.workerId)?.status).toBe("completed");
+    expect(sent.some((m) => m.event.type === "worker.finished")).toBe(true);
   });
 });

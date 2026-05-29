@@ -16,13 +16,13 @@ export interface FleetAgentEntry {
 }
 
 export const DEFAULT_FLEET_REGISTRY: FleetAgentEntry[] = [
-  { id: "lynn-cli", label: "Lynn CLI", bin: "lynn", supportsJsonl: true, enabled: true },
+  { id: "lynn-cli", label: "Lynn CLI", bin: "Lynn", supportsJsonl: true, enabled: true },
   { id: "codex-cli", label: "Codex", bin: "codex", supportsJsonl: true, enabled: true },
   { id: "claude-internal", label: "Claude (internal)", bin: "claude-internal", supportsJsonl: false, enabled: true },
   { id: "claude-code", label: "Claude Code", bin: "claude", supportsJsonl: true, enabled: true },
   { id: "qwen-cli", label: "Qwen", bin: "qwen", supportsJsonl: false, enabled: true },
   { id: "kimi-cli", label: "Kimi", bin: "kimi", supportsJsonl: false, enabled: false },
   { id: "codebuddy", label: "CodeBuddy", bin: "codebuddy", supportsJsonl: false, enabled: false },
-  { id: "opencode", label: "OpenCode", bin: "opencode", supportsJsonl: false, enabled: false },
+  { id: "opencode", label: "OpenCode", bin: "opencode", supportsJsonl: true, enabled: false },
   { id: "custom", label: "Custom", bin: "", supportsJsonl: false, enabled: false },
 ];
