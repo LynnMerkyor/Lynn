@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import s from './Fleet.module.css';
+import { DEFAULT_FLEET_SCOPE_PRESET, FLEET_SCOPE_PRESETS, buildPresetDefaults } from './brief-presets';
 
 interface AgentEntry {
   id: string;
@@ -43,6 +44,9 @@ const FALLBACK_AGENTS: AgentEntry[] = [
   { id: 'qwen-cli', label: 'Qwen', enabled: true },
 ];
 
+const DEFAULT_FLEET_AGENT = 'lynn-cli';
+const INITIAL_SCOPE_DEFAULTS = buildPresetDefaults(DEFAULT_FLEET_SCOPE_PRESET, '');
+
 function toLines(value: string): string[] {
   return value
     .split('\n')
@@ -72,16 +76,17 @@ export function buildFleetDispatchPayload(state: FleetDispatchFormState) {
 export function TaskBriefForm({ onClose }: { onClose: () => void }) {
   const [agents, setAgents] = useState<AgentEntry[]>(FALLBACK_AGENTS);
   const [title, setTitle] = useState('');
-  const [agent, setAgent] = useState('claude-code');
+  const [agent, setAgent] = useState(DEFAULT_FLEET_AGENT);
+  const [scopePresetId, setScopePresetId] = useState(DEFAULT_FLEET_SCOPE_PRESET.id);
   const [taskType, setTaskType] = useState<FleetTaskType>('code');
   const [fanOut, setFanOut] = useState<string[]>([]);
   const [image, setImage] = useState('');
   const [objective, setObjective] = useState('');
-  const [owned, setOwned] = useState('');
-  const [forbidden, setForbidden] = useState('server/**\nbrain-v2-mirror/**');
-  const [tests, setTests] = useState('npm run typecheck');
-  const [branch, setBranch] = useState('');
-  const [worktree, setWorktree] = useState('');
+  const [owned, setOwned] = useState(INITIAL_SCOPE_DEFAULTS.owned);
+  const [forbidden, setForbidden] = useState(INITIAL_SCOPE_DEFAULTS.forbidden);
+  const [tests, setTests] = useState(INITIAL_SCOPE_DEFAULTS.tests);
+  const [branch, setBranch] = useState(INITIAL_SCOPE_DEFAULTS.branch);
+  const [worktree, setWorktree] = useState(INITIAL_SCOPE_DEFAULTS.worktree);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -112,7 +117,18 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
   const setTaskKind = (value: FleetTaskType) => {
     setTaskType(value);
     if (isVisionTask(value) && !agent.startsWith('mimo-')) setAgent('mimo-vl');
-    if (value === 'code' && agent === 'mimo-vl') setAgent('lynn-cli');
+    if (value === 'code' && agent === 'mimo-vl') setAgent(DEFAULT_FLEET_AGENT);
+  };
+
+  const applyScopePreset = (presetId: string) => {
+    const preset = FLEET_SCOPE_PRESETS.find((p) => p.id === presetId) || DEFAULT_FLEET_SCOPE_PRESET;
+    const defaults = buildPresetDefaults(preset, title);
+    setScopePresetId(preset.id);
+    setOwned(defaults.owned);
+    setForbidden(defaults.forbidden);
+    setTests(defaults.tests);
+    setBranch(defaults.branch);
+    setWorktree(defaults.worktree);
   };
 
   const submit = async () => {
@@ -177,6 +193,20 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
             <option value="ground">MiMo ground UI element</option>
             <option value="ui2code">MiMo UI to code</option>
           </select>
+        </div>
+      </div>
+
+      <div className={s.formField}>
+        <label className={s.formLabel}>Scope preset</label>
+        <select className={s.formInput} value={scopePresetId} onChange={(e) => applyScopePreset(e.target.value)}>
+          {FLEET_SCOPE_PRESETS.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.label}
+            </option>
+          ))}
+        </select>
+        <div className={s.formHint}>
+          {FLEET_SCOPE_PRESETS.find((preset) => preset.id === scopePresetId)?.description || DEFAULT_FLEET_SCOPE_PRESET.description}
         </div>
       </div>
 
