@@ -1,5 +1,7 @@
 import { getStringFlag, type ParsedArgs } from "../args.js";
+import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
+import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 
 export interface PromptOptions {
   json?: boolean;
@@ -15,9 +17,11 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   if (!prompt) {
     throw new Error("prompt is required");
   }
+  const reasoning = parseReasoningOptions(args);
+  const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
 
   if (options.json) {
-    writeJsonLine({ type: "run.started", ts: nowIso(), prompt });
+    writeJsonLine({ type: "run.started", ts: nowIso(), prompt, reasoning });
   }
 
   if (options.mockBrain) {
@@ -31,5 +35,35 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
     return 0;
   }
 
-  throw new Error("Brain streaming is not implemented yet; use --mock-brain for scaffold smoke tests");
+  let sawReasoning = false;
+  for await (const event of streamBrainChat({ brainUrl, prompt, reasoning })) {
+    handleBrainEvent(event, {
+      json: !!options.json,
+      renderReasoning: shouldRenderReasoning(reasoning.display, !!options.json),
+    });
+    if (event.type === "reasoning.delta") sawReasoning = true;
+  }
+  if (options.json) {
+    writeJsonLine({ type: "run.finished", ts: nowIso(), ok: true, reasoningReturned: sawReasoning });
+  } else {
+    process.stdout.write("\n");
+  }
+  return 0;
+}
+
+function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; renderReasoning: boolean }): void {
+  if (opts.json) {
+    if (event.type === "assistant.delta" || event.type === "reasoning.delta") {
+      writeJsonLine({ ...event, ts: nowIso() });
+    } else if (event.type === "usage") {
+      writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage });
+    }
+    return;
+  }
+
+  if (event.type === "assistant.delta") {
+    process.stdout.write(event.text);
+  } else if (event.type === "reasoning.delta" && opts.renderReasoning) {
+    process.stderr.write(event.text);
+  }
 }
