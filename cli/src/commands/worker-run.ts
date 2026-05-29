@@ -1,8 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import {
   FLEET_EVENT_SCHEMA_VERSION,
+  type FleetChangedFile,
   type FleetWorkerEvent,
   parseFleetJsonLine,
   validateFleetWorkerEvent,
@@ -17,6 +19,15 @@ export interface WorkerBrief {
   forbidden: string[];
   tests: string[];
 }
+
+export interface WorkerDiffSummary {
+  files: number;
+  insertions: number;
+  deletions: number;
+  changedFiles: FleetChangedFile[];
+}
+
+const execFileAsync = promisify(execFile);
 
 function sectionLines(markdown: string, title: string): string[] {
   const lines = markdown.split(/\r?\n/);
@@ -142,6 +153,79 @@ function mergeEventDefaults(event: FleetWorkerEvent, workerId: string, agent: st
   return { workerId, agent, ...event } as FleetWorkerEvent;
 }
 
+function actionFromStatus(code: string): FleetChangedFile["action"] {
+  if (code.includes("R")) return "rename";
+  if (code.includes("D")) return "delete";
+  if (code.includes("A") || code.includes("?")) return "add";
+  return "edit";
+}
+
+function parseStatusPath(raw: string): string {
+  const pathPart = raw.slice(3).trim();
+  const renameTarget = pathPart.split(" -> ").pop();
+  return renameTarget || pathPart;
+}
+
+function parseNumstat(raw: string): Map<string, { insertions: number; deletions: number }> {
+  const out = new Map<string, { insertions: number; deletions: number }>();
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const [insertionsRaw, deletionsRaw, ...pathParts] = line.split(/\t/);
+    const filePath = pathParts.join("\t").trim();
+    if (!filePath) continue;
+    const insertions = Number.parseInt(insertionsRaw || "0", 10);
+    const deletions = Number.parseInt(deletionsRaw || "0", 10);
+    out.set(filePath, {
+      insertions: Number.isFinite(insertions) ? insertions : 0,
+      deletions: Number.isFinite(deletions) ? deletions : 0,
+    });
+  }
+  return out;
+}
+
+async function gitOutput(worktree: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", ["-C", worktree, ...args], { maxBuffer: 10 * 1024 * 1024 });
+  return String(stdout);
+}
+
+export async function collectGitDiff(worktree: string): Promise<WorkerDiffSummary> {
+  const [statusRaw, unstagedNumstatRaw, stagedNumstatRaw] = await Promise.all([
+    gitOutput(worktree, ["status", "--porcelain=v1"]),
+    gitOutput(worktree, ["diff", "--numstat"]),
+    gitOutput(worktree, ["diff", "--cached", "--numstat"]),
+  ]);
+  const numstat = new Map([...parseNumstat(unstagedNumstatRaw), ...parseNumstat(stagedNumstatRaw)]);
+  const changedFiles: FleetChangedFile[] = [];
+  for (const line of statusRaw.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const code = line.slice(0, 2);
+    const filePath = parseStatusPath(line);
+    const stats = numstat.get(filePath) || { insertions: 0, deletions: 0 };
+    changedFiles.push({
+      path: filePath,
+      action: actionFromStatus(code),
+      insertions: stats.insertions,
+      deletions: stats.deletions,
+    });
+  }
+  return {
+    files: changedFiles.length,
+    insertions: changedFiles.reduce((sum, file) => sum + (file.insertions || 0), 0),
+    deletions: changedFiles.reduce((sum, file) => sum + (file.deletions || 0), 0),
+    changedFiles,
+  };
+}
+
+async function emitGitDiff(workerId: string, agent: string, worktree: string): Promise<void> {
+  try {
+    emit({ type: "git.diff", workerId, agent, ...(await collectGitDiff(worktree)) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emit({ type: "worker.progress", workerId, agent, level: "warning", message: `git diff inspection failed: ${message}` });
+    emit({ type: "git.diff", workerId, agent, files: 0, insertions: 0, deletions: 0, changedFiles: [] });
+  }
+}
+
 async function runExternalWorker(input: {
   command: string;
   worktree: string;
@@ -232,15 +316,7 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
   const externalCommand = getStringFlag(args.flags, "agent-command") || buildDefaultAgentCommand(agent, path.resolve(briefPath), path.resolve(worktree), markdown);
   if (!mock && externalCommand) {
     const exitCode = await runExternalWorker({ command: externalCommand, worktree, workerId, agent });
-    emit({
-      type: "git.diff",
-      workerId,
-      agent,
-      files: 0,
-      insertions: 0,
-      deletions: 0,
-      changedFiles: [],
-    });
+    await emitGitDiff(workerId, agent, worktree);
     emit({ type: "worker.finished", workerId, agent, ok: exitCode === 0, exitCode, summary: exitCode === 0 ? "external worker completed" : "external worker failed" });
     return exitCode;
   }
