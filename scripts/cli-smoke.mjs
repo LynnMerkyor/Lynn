@@ -95,6 +95,24 @@ await fs.promises.rm(byokDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(byokDataDir, { recursive: true });
 await fs.promises.rm(mimoByokDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(mimoByokDataDir, { recursive: true });
+const stepfunWorkerBriefPath = path.join(byokDataDir, "stepfun-worker-brief.md");
+await fs.promises.writeFile(stepfunWorkerBriefPath, [
+  "# Task: StepFun smoke worker",
+  "",
+  "## Objective",
+  "Return a short response through the worker protocol.",
+  "",
+  "## Owned files",
+  "- cli/**",
+  "",
+  "## Forbidden files",
+  "- server/**",
+  "- desktop/src/react/**",
+  "",
+  "## Test commands",
+  "- node -e \"process.exit(0)\"",
+  "",
+].join("\n"), "utf8");
 const smokePng = path.join(visionDataDir, "smoke.png");
 await fs.promises.writeFile(smokePng, Buffer.from("89504e470d0a1a0a", "hex"));
 
@@ -747,7 +765,7 @@ async function runStepFunWorkerByokSmoke() {
       "worker",
       "run",
       "--brief",
-      briefPath,
+      stepfunWorkerBriefPath,
       "--worktree",
       root,
       "--agent",
@@ -775,7 +793,7 @@ async function runStepFunWorkerByokSmoke() {
       "worker",
       "run",
       "--brief",
-      briefPath,
+      stepfunWorkerBriefPath,
       "--worktree",
       root,
       "--agent",

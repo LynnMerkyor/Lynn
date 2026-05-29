@@ -91,6 +91,10 @@ function defaultWriteBrief(brief: FleetBrief, workerId: string): string {
   for (const f of brief.owned) lines.push(`- ${f}`);
   lines.push(``, `## Forbidden files`);
   for (const f of brief.forbidden) lines.push(`- ${f}`);
+  if (brief.centerLocks?.length) {
+    lines.push(``, `## Center locks`);
+    for (const f of brief.centerLocks) lines.push(`- ${f}`);
+  }
   if (brief.testCommands?.length) {
     lines.push(``, `## Test commands`);
     for (const c of brief.testCommands) lines.push(`- ${c}`);
@@ -203,12 +207,14 @@ export class FleetHub {
         await create(brief.worktree, brief.branch, "HEAD");
       } catch (e) {
         this.emit(workerId, {
-          type: "worker.progress",
+          type: "worker.error",
           ts: this.now(),
           workerId,
-          message: `worktree not created (${e instanceof Error ? e.message : String(e)})`,
-          level: "warning",
+          code: "worktree_create_failed",
+          message: `worktree not created: ${e instanceof Error ? e.message : String(e)}`,
+          recoverable: true,
         });
+        return rec;
       }
       const writeBrief = this.deps.writeBrief ?? defaultWriteBrief;
       const briefPath = writeBrief(brief, workerId);

@@ -19,8 +19,8 @@ import {
 } from "../src/commands/worker-run.js";
 import { parseArgs } from "../src/args.js";
 
-const workerBriefPath = new URL("../fixtures/worker-brief.md", import.meta.url).pathname;
 const execFileAsync = promisify(execFile);
+const PASS_TEST_COMMAND = "node -e \"process.exit(0)\"";
 
 async function makeTempGitRepo(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-worker-run-"));
@@ -318,7 +318,7 @@ describe("worker-run scaffold", () => {
       "- server/**",
       "",
       "## Test commands",
-      "- npm test",
+      `- ${PASS_TEST_COMMAND}`,
     ].join("\n"));
     let body = "";
     const server = http.createServer((req, res) => {
@@ -379,7 +379,7 @@ describe("worker-run scaffold", () => {
       "- server/**",
       "",
       "## Test commands",
-      "- npm test",
+      `- ${PASS_TEST_COMMAND}`,
     ].join("\n"));
     let body = "";
     const server = http.createServer((req, res) => {
@@ -439,6 +439,20 @@ describe("worker-run scaffold", () => {
   });
 
   it("wraps external worker output as fleet progress", async () => {
+    const repo = await makeTempGitRepo();
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: external output",
+      "",
+      "## Objective",
+      "Emit output.",
+      "",
+      "## Owned files",
+      "- worker-output.txt",
+      "",
+      "## Forbidden files",
+      "- server/**",
+    ].join("\n"));
     const original = process.stdout.write;
     let output = "";
     process.stdout.write = ((chunk: string | Uint8Array) => {
@@ -450,9 +464,9 @@ describe("worker-run scaffold", () => {
         "worker",
         "run",
         "--brief",
-        workerBriefPath,
+        briefPath,
         "--worktree",
-        process.cwd(),
+        repo,
         "--agent",
         "custom",
         "--agent-command",
@@ -470,6 +484,20 @@ describe("worker-run scaffold", () => {
   });
 
   it("wraps external worker stream-json as assistant deltas", async () => {
+    const repo = await makeTempGitRepo();
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: external json",
+      "",
+      "## Objective",
+      "Emit JSON.",
+      "",
+      "## Owned files",
+      "- worker-output.txt",
+      "",
+      "## Forbidden files",
+      "- server/**",
+    ].join("\n"));
     const original = process.stdout.write;
     let output = "";
     process.stdout.write = ((chunk: string | Uint8Array) => {
@@ -481,9 +509,9 @@ describe("worker-run scaffold", () => {
         "worker",
         "run",
         "--brief",
-        workerBriefPath,
+        briefPath,
         "--worktree",
-        process.cwd(),
+        repo,
         "--agent",
         "custom",
         "--agent-command",
@@ -514,7 +542,7 @@ describe("worker-run scaffold", () => {
       "- server/**",
       "",
       "## Test commands",
-      "- npm test",
+      `- ${PASS_TEST_COMMAND}`,
     ].join("\n"));
 
     const original = process.stdout.write;
@@ -544,9 +572,119 @@ describe("worker-run scaffold", () => {
     const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; changedFiles?: Array<{ path: string; action: string }> });
     const diff = lines.find((line) => line.type === "git.diff");
     expect(diff?.changedFiles).toEqual([
-      { path: "brief.md", action: "add", insertions: 0, deletions: 0 },
       { path: "worker-output.txt", action: "add", insertions: 0, deletions: 0 },
     ]);
+  });
+
+  it("blocks real workers that change forbidden files", async () => {
+    const repo = await makeTempGitRepo();
+    await fs.mkdir(path.join(repo, "server"), { recursive: true });
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: stay in scope",
+      "",
+      "## Objective",
+      "Do not touch server files.",
+      "",
+      "## Owned files",
+      "- worker-output.txt",
+      "",
+      "## Forbidden files",
+      "- server/**",
+      "",
+      "## Test commands",
+      `- ${PASS_TEST_COMMAND}`,
+    ].join("\n"));
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const code = await runWorker(parseArgs([
+        "worker",
+        "run",
+        "--brief",
+        briefPath,
+        "--worktree",
+        repo,
+        "--agent",
+        "custom",
+        "--agent-command",
+        "node -e \"require('fs').writeFileSync('server/secret.txt','bad')\"",
+      ]));
+      expect(code).toBe(1);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as {
+      type: string;
+      code?: string;
+      path?: string;
+      ok?: boolean;
+      changedFiles?: Array<{ path: string; forbidden?: boolean }>;
+    });
+    expect(lines).toContainEqual(expect.objectContaining({ type: "worker.violation", code: "forbidden_file", path: "server/" }));
+    expect(lines.find((line) => line.type === "git.diff")?.changedFiles).toContainEqual(expect.objectContaining({ path: "server/", forbidden: true }));
+    expect(lines.at(-1)).toMatchObject({ type: "worker.finished", ok: false });
+  });
+
+  it("runs real worker test commands and fails the gate on test failure", async () => {
+    const repo = await makeTempGitRepo();
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: failing test",
+      "",
+      "## Objective",
+      "Run the failing test.",
+      "",
+      "## Owned files",
+      "- worker-output.txt",
+      "",
+      "## Forbidden files",
+      "- server/**",
+      "",
+      "## Test commands",
+      "- node -e \"process.exit(3)\"",
+    ].join("\n"));
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const code = await runWorker(parseArgs([
+        "worker",
+        "run",
+        "--brief",
+        briefPath,
+        "--worktree",
+        repo,
+        "--agent",
+        "custom",
+        "--agent-command",
+        "node -e \"require('fs').writeFileSync('worker-output.txt','hello')\"",
+      ]));
+      expect(code).toBe(1);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as {
+      type: string;
+      ok?: boolean;
+      command?: string;
+      summary?: string;
+    });
+    expect(lines).toContainEqual(expect.objectContaining({ type: "test.started", command: "node -e \"process.exit(3)\"" }));
+    expect(lines).toContainEqual(expect.objectContaining({ type: "test.finished", ok: false }));
+    expect(lines).toContainEqual(expect.objectContaining({ type: "gate.finished", ok: false }));
+    expect(lines.at(-1)).toMatchObject({ type: "worker.finished", ok: false });
   });
 
   it("runs the built-in lynn-cli worker through the Brain-backed code loop", async () => {
@@ -566,7 +704,7 @@ describe("worker-run scaffold", () => {
       "- server/**",
       "",
       "## Test commands",
-      "- npm test",
+      `- ${PASS_TEST_COMMAND}`,
     ].join("\n"));
     const patch = [
       "diff --git a/hello.txt b/hello.txt",
@@ -657,7 +795,7 @@ describe("worker-run scaffold", () => {
       "- server/**",
       "",
       "## Test commands",
-      "- npm test",
+      `- ${PASS_TEST_COMMAND}`,
     ].join("\n"));
     let body = "";
     const server = http.createServer((req, res) => {

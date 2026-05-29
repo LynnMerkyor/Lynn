@@ -653,6 +653,28 @@ describe("FleetHub real spawn", () => {
     expect(sent.map((m) => m.event.type)).toEqual(["worker.started", "worker.claims", "worker.progress"]);
   });
 
+  it("aborts real spawn when worktree creation fails", async () => {
+    const sent: Array<{ event: { type: string; code?: string } }> = [];
+    let spawned = false;
+    const hub = new FleetHub("/repo", (m) => sent.push(m as { event: { type: string; code?: string } }), () => "T", {
+      available: () => true,
+      createWorktree: async () => { throw new Error("branch exists"); },
+      resolveCommand: (args) => ({ command: "node", args, env: {}, source: "dev" }),
+      spawn: () => {
+        spawned = true;
+        return { workerId: "w", pid: 123, kill: () => {} };
+      },
+    });
+
+    const rec = await hub.dispatch(sampleBrief);
+
+    expect(spawned).toBe(false);
+    expect(hub.getWorker(rec.workerId)?.status).toBe("failed");
+    expect(sent).toContainEqual(expect.objectContaining({
+      event: expect.objectContaining({ type: "worker.error", code: "worktree_create_failed" }),
+    }));
+  });
+
   it("writes visual task metadata in the brief format parsed by Lynn CLI", async () => {
     let briefText = "";
     let spawnedArgs: string[] = [];

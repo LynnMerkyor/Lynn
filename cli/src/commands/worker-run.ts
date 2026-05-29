@@ -9,6 +9,7 @@ import {
   parseFleetJsonLine,
   validateFleetWorkerEvent,
 } from "../../../shared/fleet-events.js";
+import { annotateChangedFiles, evaluateScope } from "../../../shared/fleet-scope.js";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat } from "../brain-client.js";
 import { buildImageContentParts } from "../media.js";
@@ -26,6 +27,7 @@ export interface WorkerBrief {
   objective: string;
   owned: string[];
   forbidden: string[];
+  centerLocks: string[];
   tests: string[];
   taskType: "code" | VisionCommand;
   image?: string;
@@ -77,11 +79,16 @@ export function parseWorkerBrief(markdown: string): WorkerBrief {
   const objective = sectionLines(markdown, "Objective").join("\n").trim();
   const owned = bulletValues(sectionLines(markdown, "Owned files"));
   const forbidden = bulletValues(sectionLines(markdown, "Forbidden files"));
+  const centerLocks = [
+    ...bulletValues(sectionLines(markdown, "Center locks")),
+    ...bulletValues(sectionLines(markdown, "Center locked files")),
+    ...bulletValues(sectionLines(markdown, "Center-locked files")),
+  ];
   const tests = bulletValues(sectionLines(markdown, "Test commands"));
   const taskType = normalizeTaskType(firstSectionValue(markdown, "Task Type") || firstSectionValue(markdown, "Type"));
   const image = firstSectionValue(markdown, "Image") || firstSectionValue(markdown, "Screenshot") || undefined;
   const resumePath = firstSectionValue(markdown, "Resume") || firstSectionValue(markdown, "Session") || undefined;
-  return { title, objective, owned, forbidden, tests, taskType, image, resumePath };
+  return { title, objective, owned, forbidden, centerLocks, tests, taskType, image, resumePath };
 }
 
 function emit(event: FleetWorkerEvent): void {
@@ -390,7 +397,7 @@ async function gitOutput(worktree: string, args: string[]): Promise<string> {
   return String(stdout);
 }
 
-export async function collectGitDiff(worktree: string): Promise<WorkerDiffSummary> {
+export async function collectGitDiff(worktree: string, ignorePaths: ReadonlySet<string> = new Set()): Promise<WorkerDiffSummary> {
   const [statusRaw, unstagedNumstatRaw, stagedNumstatRaw] = await Promise.all([
     gitOutput(worktree, ["status", "--porcelain=v1"]),
     gitOutput(worktree, ["diff", "--numstat"]),
@@ -402,6 +409,7 @@ export async function collectGitDiff(worktree: string): Promise<WorkerDiffSummar
     if (!line.trim()) continue;
     const code = line.slice(0, 2);
     const filePath = parseStatusPath(line);
+    if (ignorePaths.has(filePath)) continue;
     const stats = numstat.get(filePath) || { insertions: 0, deletions: 0 };
     changedFiles.push({
       path: filePath,
@@ -418,14 +426,92 @@ export async function collectGitDiff(worktree: string): Promise<WorkerDiffSummar
   };
 }
 
-async function emitGitDiff(workerId: string, agent: string, worktree: string): Promise<void> {
+async function collectDiffBaseline(worktree: string): Promise<Set<string>> {
   try {
-    emit({ type: "git.diff", workerId, agent, ...(await collectGitDiff(worktree)) });
+    return new Set((await collectGitDiff(worktree)).changedFiles.map((file) => file.path));
+  } catch {
+    return new Set();
+  }
+}
+
+async function emitGitDiff(workerId: string, agent: string, worktree: string, brief?: Pick<WorkerBrief, "forbidden" | "centerLocks">, baseline: ReadonlySet<string> = new Set()): Promise<boolean> {
+  try {
+    const diff = await collectGitDiff(worktree, baseline);
+    const changedPaths = diff.changedFiles.map((file) => file.path);
+    const verdict = evaluateScope(changedPaths, brief?.forbidden || [], brief?.centerLocks || []);
+    emit({
+      type: "git.diff",
+      workerId,
+      agent,
+      ...diff,
+      changedFiles: annotateChangedFiles(diff.changedFiles, brief?.forbidden || [], brief?.centerLocks || []),
+    });
+    for (const filePath of verdict.forbiddenPaths) {
+      emit({
+        type: "worker.violation",
+        workerId,
+        agent,
+        code: "forbidden_file",
+        path: filePath,
+        message: `worker changed forbidden file: ${filePath}`,
+        severity: "error",
+      });
+    }
+    for (const filePath of verdict.centerLockPaths) {
+      emit({
+        type: "worker.violation",
+        workerId,
+        agent,
+        code: "center_lock",
+        path: filePath,
+        message: `worker changed center-locked file: ${filePath}`,
+        severity: "error",
+      });
+    }
+    return verdict.ok;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     emit({ type: "worker.progress", workerId, agent, level: "warning", message: `git diff inspection failed: ${message}` });
     emit({ type: "git.diff", workerId, agent, files: 0, insertions: 0, deletions: 0, changedFiles: [] });
+    return true;
   }
+}
+
+async function runCommand(command: string, cwd: string): Promise<{ ok: boolean; exitCode: number; ms: number; summary: string }> {
+  const started = Date.now();
+  const child = spawn(command, {
+    cwd,
+    shell: true,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, LYNN_NO_MODEL_DOWNLOADS: "1" },
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+  child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+  const exitCode = await new Promise<number>((resolve) => {
+    child.on("error", () => resolve(1));
+    child.on("close", (code) => resolve(code ?? 1));
+  });
+  const output = `${stdout}${stderr}`.trim().split(/\r?\n/).filter(Boolean).slice(-6).join("\n");
+  return {
+    ok: exitCode === 0,
+    exitCode,
+    ms: Date.now() - started,
+    summary: output || `exit ${exitCode}`,
+  };
+}
+
+async function runBriefTests(workerId: string, agent: string, worktree: string, tests: readonly string[]): Promise<boolean> {
+  let ok = true;
+  for (const command of tests) {
+    emit({ type: "test.started", workerId, agent, command });
+    const result = await runCommand(command, worktree);
+    if (!result.ok) ok = false;
+    emit({ type: "test.finished", workerId, agent, command, ok: result.ok, summary: result.summary, ms: result.ms });
+  }
+  if (tests.length) emit({ type: "gate.finished", workerId, agent, ok, summary: ok ? "all test commands passed" : "one or more test commands failed" });
+  return ok;
 }
 
 async function runExternalWorker(input: {
@@ -507,6 +593,9 @@ function buildLynnCodeWorkerTask(brief: WorkerBrief): string {
     "",
     "Forbidden files:",
     ...(brief.forbidden.length ? brief.forbidden.map((p) => `- ${p}`) : ["- (none)"]),
+    "",
+    "Center-locked files:",
+    ...(brief.centerLocks.length ? brief.centerLocks.map((p) => `- ${p}`) : ["- (none)"]),
     "",
     "Test commands expected by the task:",
     ...(brief.tests.length ? brief.tests.map((cmd) => `- ${cmd}`) : ["- (not specified)"]),
@@ -685,6 +774,7 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
   const markdown = await fs.readFile(briefPath, "utf8");
   const brief = parseWorkerBrief(markdown);
   const permissions = await resolveEffectivePermissions(args);
+  const diffBaseline = await collectDiffBaseline(worktree);
 
   emit({
     type: "worker.started",
@@ -697,7 +787,7 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
     approval: permissions.approval,
     sandbox: permissions.sandbox,
   });
-  emit({ type: "worker.claims", workerId, agent, owned: brief.owned, forbidden: brief.forbidden });
+  emit({ type: "worker.claims", workerId, agent, owned: brief.owned, forbidden: brief.forbidden, centerLocks: brief.centerLocks });
   emit({ type: "worker.progress", workerId, agent, message: mock ? `Mock worker loaded: ${brief.title}` : `Worker loaded: ${brief.title}` });
 
   const externalCommand = getStringFlag(args.flags, "agent-command") || buildDefaultAgentCommand(agent, path.resolve(briefPath), path.resolve(worktree), markdown);
@@ -705,15 +795,19 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
     const exitCode = isVisionTask(brief.taskType)
       ? await runLynnVisionWorker({ args, brief, worktree, workerId, agent, permissions })
       : await runLynnCliWorker({ args, brief, worktree, workerId, agent, permissions });
-    await emitGitDiff(workerId, agent, worktree);
-    emit({ type: "worker.finished", workerId, agent, ok: exitCode === 0, exitCode, summary: exitCode === 0 ? "lynn-cli worker completed" : "lynn-cli worker failed" });
-    return exitCode;
+    const scopeOk = await emitGitDiff(workerId, agent, worktree, brief, diffBaseline);
+    const testsOk = await runBriefTests(workerId, agent, worktree, brief.tests);
+    const finalExit = exitCode === 0 && scopeOk && testsOk ? 0 : 1;
+    emit({ type: "worker.finished", workerId, agent, ok: finalExit === 0, exitCode: finalExit, summary: finalExit === 0 ? "lynn-cli worker completed" : "lynn-cli worker failed" });
+    return finalExit;
   }
   if (!mock && externalCommand) {
     const exitCode = await runExternalWorker({ command: externalCommand, worktree, workerId, agent });
-    await emitGitDiff(workerId, agent, worktree);
-    emit({ type: "worker.finished", workerId, agent, ok: exitCode === 0, exitCode, summary: exitCode === 0 ? "external worker completed" : "external worker failed" });
-    return exitCode;
+    const scopeOk = await emitGitDiff(workerId, agent, worktree, brief, diffBaseline);
+    const testsOk = await runBriefTests(workerId, agent, worktree, brief.tests);
+    const finalExit = exitCode === 0 && scopeOk && testsOk ? 0 : 1;
+    emit({ type: "worker.finished", workerId, agent, ok: finalExit === 0, exitCode: finalExit, summary: finalExit === 0 ? "external worker completed" : "external worker failed" });
+    return finalExit;
   }
 
   for (const command of brief.tests) {
