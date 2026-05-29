@@ -59,7 +59,8 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       brainUrl,
       brainStatus: "unknown",
       modeLabel: renderMode(mode),
-      modelLabel: "MiMo via Brain router (auto)",
+      modelLabel: chatRouteLabel(cliProvider?.profile),
+      byokLabel: cliProvider?.profile ? t("startup.byok.cliFallback") : undefined,
     })}\n\n`);
   } else if (options.brainReachable === false && !mockBrain) {
     output.write(`${renderOfflineChatHint(mode, brainUrl, cliProvider?.profile)}\n\n`);
@@ -212,6 +213,11 @@ export async function resolveChatMode(args: ParsedArgs): Promise<ChatMode> {
 
 export function renderMode(mode: ChatMode): string {
   return `${mode.approval} / ${mode.sandbox}`;
+}
+
+export function chatRouteLabel(provider?: { provider: string; model: string } | null): string {
+  if (provider) return `MiMo / CLI BYOK: ${provider.model}`;
+  return "MiMo via Brain router (auto)";
 }
 
 export function renderOfflineChatHint(_mode: ChatMode, _brainUrl = "http://127.0.0.1:8790", provider?: { provider: string; model: string } | null): string {

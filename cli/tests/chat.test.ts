@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { applyModeCommand, applyReasoningCommand, completeChatInput, formatChatError, isModeToggleKeypress, renderMode, renderOfflineChatHint, resolveChatMode, toggleMode } from "../src/commands/chat.js";
+import { applyModeCommand, applyReasoningCommand, chatRouteLabel, completeChatInput, formatChatError, isModeToggleKeypress, renderMode, renderOfflineChatHint, resolveChatMode, toggleMode } from "../src/commands/chat.js";
 import { BrainConnectionError } from "../src/brain-client.js";
 import { setLang } from "../src/i18n.js";
 
@@ -88,6 +88,20 @@ describe("chat mode controls", () => {
 
     expect(hint).toContain("using CLI BYOK provider directly");
     expect(hint).toContain("deepseek-chat");
+  });
+
+  it("surfaces CLI BYOK fallback in the chat startup route label", () => {
+    expect(chatRouteLabel({ provider: "openai-compatible", model: "step-3.7-flash" })).toBe("MiMo / CLI BYOK: step-3.7-flash");
+    expect(chatRouteLabel(null)).toBe("MiMo via Brain router (auto)");
+  });
+
+  it("renders CLI BYOK fallback in startup copy", () => {
+    setLang("zh");
+    const provider = { provider: "openai-compatible", model: "step-3.7-flash" };
+    const hint = renderOfflineChatHint({ approval: "ask", sandbox: "workspace-write" }, "http://127.0.0.1:8790", provider);
+
+    expect(chatRouteLabel(provider)).toContain("step-3.7-flash");
+    expect(hint).toContain("step-3.7-flash");
   });
 
   it("updates reasoning mode for fast and deep MiMo turns", () => {

@@ -15,6 +15,7 @@ import { writeJsonLine } from "./jsonl.js";
 import { renderStartupBanner } from "./startup.js";
 import { readVersionInfo } from "./version.js";
 import type { ProvidersInfo } from "./commands/providers.js";
+import { t } from "./i18n.js";
 
 async function main(argv = process.argv.slice(2)): Promise<number> {
   if (argv.length === 0) {
@@ -24,6 +25,7 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
         brainUrl: providerInfo.brainUrl,
         brainStatus: brainReachable ? "online" : "offline",
         modelLabel: startupModelLabel(providerInfo, brainReachable),
+        byokLabel: providerInfo.cliProvider?.configured ? t("startup.byok.cliFallback") : undefined,
         showTips: brainReachable,
       })}\n`);
     if (process.stdin.isTTY && process.stdout.isTTY) {
