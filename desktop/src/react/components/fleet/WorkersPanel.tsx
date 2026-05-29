@@ -39,6 +39,18 @@ export function WorkersPanel() {
     cancelRef.current = playFleetFixture(MOCK_WORKER_JSONL, applyFleetEvent, { intervalMs: 250 });
   };
 
+  const totals = fleetWorkers.reduce(
+    (acc, w) => {
+      if (w.diffStat) {
+        acc.files += w.diffStat.files;
+        acc.ins += w.diffStat.insertions;
+        acc.del += w.diffStat.deletions;
+      }
+      return acc;
+    },
+    { files: 0, ins: 0, del: 0 },
+  );
+
   return (
     <div className={fp.floatingPanel} onClick={close}>
       <div className={fp.floatingPanelInner} onClick={(e) => e.stopPropagation()}>
@@ -56,7 +68,16 @@ export function WorkersPanel() {
             <button className={s.fleetBtn} onClick={playMock}>
               Play mock worker
             </button>
-            <span className={s.fleetHint}>{fleetWorkers.length} worker(s)</span>
+            <span className={s.fleetHint}>
+              {fleetWorkers.length} worker(s)
+              {totals.files > 0 && (
+                <>
+                  {' · '}
+                  {totals.files} files <span className={s.fileIns}>+{totals.ins}</span>{' '}
+                  <span className={s.fileDel}>-{totals.del}</span>
+                </>
+              )}
+            </span>
           </div>
 
           {showForm && <TaskBriefForm onClose={() => setShowForm(false)} />}
