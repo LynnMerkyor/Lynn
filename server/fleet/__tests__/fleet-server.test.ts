@@ -209,6 +209,15 @@ describe("FleetHub.dispatch", () => {
     });
   });
 
+  it("exposes CodeBuddy as an enabled external worker profile", () => {
+    expect(DEFAULT_FLEET_REGISTRY.find((agent) => agent.id === "codebuddy")).toMatchObject({
+      label: "CodeBuddy",
+      bin: "codebuddy",
+      supportsJsonl: true,
+      enabled: true,
+    });
+  });
+
   it("registers a worker and broadcasts started -> claims -> progress as fleet:event", async () => {
     const sent: Array<{ type: string; event: { type: string } }> = [];
     const hub = new FleetHub("/repo", (m) => sent.push(m as { type: string; event: { type: string } }), () => "T");

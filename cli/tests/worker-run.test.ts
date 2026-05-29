@@ -135,6 +135,7 @@ describe("worker-run scaffold", () => {
     const claude = buildDefaultAgentCommand("claude-code", "/tmp/task.md", "/tmp/wt", "task");
     const qwen = buildDefaultAgentCommand("qwen-cli", "/tmp/task.md", "/tmp/wt", "task");
     const kimi = buildDefaultAgentCommand("kimi-cli", "/tmp/task.md", "/tmp/wt", "task");
+    const codebuddy = buildDefaultAgentCommand("codebuddy", "/tmp/task.md", "/tmp/wt", "task");
 
     expect(claude).toContain("claude -p");
     expect(claude).toContain("--add-dir '/tmp/wt'");
@@ -150,6 +151,13 @@ describe("worker-run scaffold", () => {
     expect(kimi).toContain("--print");
     expect(kimi).toContain("--output-format stream-json");
     expect(kimi).toContain("--afk");
+
+    expect(codebuddy).toContain("codebuddy -p");
+    expect(codebuddy).toContain("--output-format stream-json");
+    expect(codebuddy).toContain("--include-partial-messages");
+    expect(codebuddy).toContain("--add-dir '/tmp/wt'");
+    expect(codebuddy).toContain("--permission-mode bypassPermissions");
+    expect(codebuddy).toContain("-y");
   });
 
   it("returns null for unknown default worker agents", () => {

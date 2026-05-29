@@ -233,6 +233,18 @@ export function buildDefaultAgentCommand(agent: string, briefPath: string, workt
         "-p",
         shellQuote(prompt),
       ].join(" ");
+    case "codebuddy":
+      return [
+        "codebuddy",
+        "-p",
+        "--output-format stream-json",
+        "--include-partial-messages",
+        "--add-dir",
+        shellQuote(worktree),
+        "--permission-mode bypassPermissions",
+        "-y",
+        shellQuote(prompt),
+      ].join(" ");
     default:
       return null;
   }

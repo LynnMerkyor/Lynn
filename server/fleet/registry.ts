@@ -30,7 +30,7 @@ export const DEFAULT_FLEET_REGISTRY: FleetAgentEntry[] = [
   { id: "claude-code", label: "Claude Code", bin: "claude", supportsJsonl: true, enabled: true },
   { id: "qwen-cli", label: "Qwen", bin: "qwen", supportsJsonl: false, enabled: true },
   { id: "kimi-cli", label: "Kimi", bin: "kimi", supportsJsonl: false, enabled: false },
-  { id: "codebuddy", label: "CodeBuddy", bin: "codebuddy", supportsJsonl: false, enabled: false },
+  { id: "codebuddy", label: "CodeBuddy", bin: "codebuddy", supportsJsonl: true, enabled: true },
   { id: "opencode", label: "OpenCode", bin: "opencode", supportsJsonl: false, enabled: false },
   { id: "custom", label: "Custom", bin: "", supportsJsonl: false, enabled: false },
 ];
