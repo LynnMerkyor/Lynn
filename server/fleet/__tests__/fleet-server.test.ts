@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { matchAnyGlob, evaluateScope, annotateChangedFiles } from "../forbidden-guard.js";
-import { createLineParser, mapKnownCliJsonLine } from "../worker-manager.js";
+import { createLineParser, mapKnownCliJsonLine, spawnWorker } from "../worker-manager.js";
 import { parseWorktreePorcelain } from "../worktree-manager.js";
 import { FleetHub, type FleetBrief } from "../fleet-hub.js";
 import { resolveCliCommand, cliRuntimeAvailable } from "../worker-command.js";
@@ -98,6 +98,28 @@ describe("worker line parser", () => {
     );
     expect(events[0]).toMatchObject({ type: "tool.started", workerId: "w3", name: "apply_patch" });
     expect(events[1]).toMatchObject({ type: "worker.progress", workerId: "w3", message: "usage", data: { total_tokens: 42, completion_tokens: 44, duration_ms: 200 } });
+  });
+});
+
+describe("spawnWorker", () => {
+  it("emits a recoverable worker error when the process exits non-zero", async () => {
+    const events: Array<{ type: string; code?: string; message?: string; recoverable?: boolean }> = [];
+    spawnWorker({
+      command: process.execPath,
+      args: ["-e", "process.exit(2)"],
+      cwd: process.cwd(),
+      env: process.env,
+      workerId: "w-exit",
+    }, (event) => events.push(event as { type: string; code?: string; message?: string; recoverable?: boolean }));
+
+    await waitFor(() => events.some((event) => event.type === "worker.error"));
+
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "worker.error",
+      code: "worker_exit",
+      message: "worker process exited with code 2",
+      recoverable: true,
+    }));
   });
 });
 

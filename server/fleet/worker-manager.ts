@@ -149,6 +149,15 @@ export function spawnWorker(opts: SpawnWorkerOptions, onEvent: (e: FleetWorkerEv
     });
   });
   child.on("close", (code: number | null) => {
+    if (typeof code === "number" && code !== 0) {
+      onEvent({
+        type: "worker.error",
+        workerId: opts.workerId,
+        code: "worker_exit",
+        message: `worker process exited with code ${code}`,
+        recoverable: true,
+      });
+    }
     onEvent(makeFleetProgressEvent(`worker process exited (${code ?? "?"})`, { workerId: opts.workerId }));
   });
 
