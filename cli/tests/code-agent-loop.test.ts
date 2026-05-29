@@ -382,6 +382,65 @@ describe("code agent loop", () => {
     expect(output).toContain("BYOK code route answered");
   });
 
+  it("carries cache/TPS usage into the final JSON task summary", async () => {
+    const server = http.createServer((req, res) => {
+      if (req.url === "/v1/chat/completions" && req.method === "POST") {
+        req.resume();
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.end([
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "Usage-aware answer." } }] })}`,
+          "",
+          `data: ${JSON.stringify({
+            choices: [],
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 20,
+              total_tokens: 120,
+              prompt_cache_hit_tokens: 80,
+            },
+          })}`,
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("usage server failed to bind");
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runCode(parseArgs([
+        "code",
+        "answer with usage",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        `http://127.0.0.1:${address.port}`,
+        "--json",
+      ]))).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    const finished = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as {
+      type: string;
+      usageSummary?: string;
+    }).find((line) => line.type === "code.task.finished");
+    expect(finished?.usageSummary).toContain("120 tokens");
+    expect(finished?.usageSummary).toContain("cache 80 (80%)");
+    expect(finished?.usageSummary).toContain("TPS");
+  });
+
   it("resumes a saved code session and appends the continuation", async () => {
     const dataDir = path.join(tmp, "data");
     const sessionPath = await appendSessionTurn({

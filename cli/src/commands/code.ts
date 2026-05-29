@@ -564,10 +564,18 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
       ts: nowIso(),
       ok: !final.maxStepsReached,
       contentReturned: !!final.text.trim(),
+      ...(final.usageSummary ? { usageSummary: final.usageSummary } : {}),
       ...(final.maxStepsReached ? { code: "max_steps_reached" } : {}),
     });
   } else {
-    process.stdout.write(renderAssistantBlock(renderMarkdown(final.text.trim() || "(no answer)", supportsColor(output)), renderCodeFooter({ context, mode, mockBrain, reasoning, fallbackProvider: cliProvider?.profile })));
+    process.stdout.write(renderAssistantBlock(renderMarkdown(final.text.trim() || "(no answer)", supportsColor(output)), renderCodeFooter({
+      context,
+      mode,
+      mockBrain,
+      reasoning,
+      fallbackProvider: cliProvider?.profile,
+      usage: final.usageSummary,
+    })));
   }
   return final.maxStepsReached ? 2 : 0;
 }
@@ -607,11 +615,18 @@ function renderCodeFooter(inputData: {
   mockBrain: boolean;
   reasoning: ReturnType<typeof parseReasoningOptions>;
   fallbackProvider?: CliProviderProfile;
+  usage?: string | null;
 }): string {
   const color = supportsColor(output);
   const model = inputData.mockBrain ? "mock Brain" : inputData.fallbackProvider ? `${inputData.fallbackProvider.provider}/${inputData.fallbackProvider.model}` : "MiMo";
   const mode = renderMode(inputData.mode);
-  return dim(`${model} · ${displayCwd(inputData.context.cwd)} · ${mode} · think ${inputData.reasoning.effort}`, color);
+  return dim([
+    model,
+    displayCwd(inputData.context.cwd),
+    mode,
+    `think ${inputData.reasoning.effort}`,
+    inputData.usage,
+  ].filter(Boolean).join(" · "), color);
 }
 
 function codeRouteLabel(mockBrain: boolean, fallbackProvider?: CliProviderProfile): string {
@@ -651,6 +666,7 @@ interface CodeToolRequest {
 interface CodeAgentLoopResult {
   text: string;
   maxStepsReached: boolean;
+  usageSummary: string | null;
 }
 
 async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgentLoopResult> {
@@ -671,10 +687,11 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
     { role: "user", content: initialContent },
   ];
   let finalText = "";
+  let latestUsageSummary: string | null = null;
   const approvalSession = { approveAll: false };
   const seenToolRequests = new Map<string, number>();
   for (let step = 0; step < inputData.maxSteps; step += 1) {
-    const assistantText = await collectBrainText({
+    const result = await collectBrainText({
       brainUrl: inputData.brainUrl,
       fallbackProvider: inputData.fallbackProvider,
       messages,
@@ -682,6 +699,8 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
       json: inputData.json,
       label: step === 0 ? t("spinner.coding") : t("spinner.reviewing"),
     });
+    const assistantText = result.text;
+    latestUsageSummary = result.usageSummary || latestUsageSummary;
     messages.push({ role: "assistant", content: assistantText });
     if (inputData.onCheckpoint && assistantText.trim()) await inputData.onCheckpoint({ type: "assistant", content: assistantText });
     const toolRequests = parseCodeToolRequests(assistantText);
@@ -756,6 +775,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
   return {
     text: finalText,
     maxStepsReached,
+    usageSummary: latestUsageSummary,
   };
 }
 
@@ -851,6 +871,11 @@ function stableObject(value: Record<string, unknown>): Record<string, unknown> {
   );
 }
 
+interface BrainTextResult {
+  text: string;
+  usageSummary: string | null;
+}
+
 async function collectBrainText(inputData: {
   brainUrl: string;
   fallbackProvider?: CliProviderProfile;
@@ -858,8 +883,9 @@ async function collectBrainText(inputData: {
   reasoning: ReturnType<typeof parseReasoningOptions>;
   json: boolean;
   label: string;
-}): Promise<string> {
+}): Promise<BrainTextResult> {
   let text = "";
+  let usageSummary: string | null = null;
   const spinner = new TerminalSpinner(process.stderr, inputData.label);
   const renderState: HumanBrainRenderState = {};
   const startedAt = Date.now();
@@ -884,10 +910,13 @@ async function collectBrainText(inputData: {
       if (!inputData.json && event.type !== "assistant.delta" && event.type !== "reasoning.delta") {
         if (event.type === "usage") {
           const summary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt });
+          usageSummary = summary || usageSummary;
           if (summary) process.stderr.write(`usage: ${summary}\n`);
         } else {
           renderBrainEventForHuman(event, renderState, process.stderr);
         }
+      } else if (inputData.json && event.type === "usage") {
+        usageSummary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt }) || usageSummary;
       }
       if (event.type === "brain.error") {
         throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
@@ -896,7 +925,7 @@ async function collectBrainText(inputData: {
   } finally {
     spinner.stop();
   }
-  return text;
+  return { text, usageSummary };
 }
 
 export function parseCodeToolRequest(text: string): CodeToolRequest | null {
