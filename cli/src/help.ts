@@ -6,6 +6,8 @@ export function usage(): string {
     "  Lynn version",
     "  Lynn doctor [--offline]",
     "  Lynn \"prompt\"",
+    "  cat file.txt | Lynn \"summarize this\"",
+    "  Lynn - < file.txt",
     "  Lynn -p \"prompt\" [--mock-brain] [--json]",
     "  Lynn exec \"task\" --json [--mock-brain]",
     "  Lynn chat",
