@@ -38,6 +38,7 @@ export function renderStartupBanner(input: {
   modeLabel?: string;
   modelLabel?: string;
   byokLabel?: string;
+  showTips?: boolean;
 } = {}): string {
   const version = readVersionInfo().version;
   const brainUrl = input.brainUrl || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
@@ -55,11 +56,14 @@ export function renderStartupBanner(input: {
     padLine("brain", brainLabel),
     padLine("directory", displayCwd(input.cwd || process.cwd())),
   ];
-  return [
-    box(lines),
-    "",
-    "  Tip: Lynn -p \"prompt\" uses the local Brain router, which defaults to MiMo unless you change it.",
-    "       In chat/code, use /fast for low latency or /think for deeper reasoning.",
-    "       Use Lynn providers for BYOK setup, or Lynn help to see every command.",
-  ].join("\n");
+  const out = [box(lines)];
+  if (input.showTips !== false) {
+    out.push(
+      "",
+      "  Tip: Lynn -p \"prompt\" uses the local Brain router, which defaults to MiMo unless you change it.",
+      "       In chat/code, use /fast for low latency or /think for deeper reasoning.",
+      "       Use Lynn providers for BYOK setup, or Lynn help to see every command.",
+    );
+  }
+  return out.join("\n");
 }

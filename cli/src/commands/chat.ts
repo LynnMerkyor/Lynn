@@ -29,7 +29,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       modelLabel: "MiMo via Brain router (auto)",
     })}\n\n`);
   } else if (options.brainReachable === false && !mockBrain) {
-    output.write(`Brain offline. Start the Lynn GUI, then send again. Use /providers for BYOK, /mode for permissions, /exit to leave.\nmode: ${renderMode(mode)} (Shift+Tab toggles YOLO)\n\n`);
+    output.write(`${renderOfflineChatHint(mode, brainUrl)}\n`);
   }
   async function handleText(raw: string): Promise<"continue" | "break"> {
     const text = raw.trim();
@@ -163,6 +163,19 @@ function resolveMode(args: ParsedArgs): ChatMode {
 
 export function renderMode(mode: ChatMode): string {
   return `${mode.approval} / ${mode.sandbox}`;
+}
+
+export function renderOfflineChatHint(mode: ChatMode, brainUrl = "http://127.0.0.1:8790"): string {
+  return [
+    "Brain offline. Start the Lynn GUI to use MiMo through the local Brain router.",
+    `brain: ${brainUrl}`,
+    `mode:  ${renderMode(mode)}`,
+    "",
+    "Next:",
+    "  Lynn doctor --offline",
+    "  Lynn providers",
+    "  Lynn -p \"hello\" --mock-brain",
+  ].join("\n");
 }
 
 export function applyModeCommand(mode: ChatMode, raw: string): string {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyModeCommand, applyReasoningCommand, formatChatError, isModeToggleKeypress, renderMode, toggleMode } from "../src/commands/chat.js";
+import { applyModeCommand, applyReasoningCommand, formatChatError, isModeToggleKeypress, renderMode, renderOfflineChatHint, toggleMode } from "../src/commands/chat.js";
 import { BrainConnectionError } from "../src/brain-client.js";
 
 describe("chat mode controls", () => {
@@ -34,6 +34,15 @@ describe("chat mode controls", () => {
     expect(message).toContain("Brain offline");
     expect(message).toContain("start the Lynn GUI");
     expect(message).not.toContain("For CLI-only smoke tests");
+  });
+
+  it("renders a one-shot offline hint for bare startup", () => {
+    const hint = renderOfflineChatHint({ approval: "ask", sandbox: "workspace-write" }, "http://127.0.0.1:8790");
+
+    expect(hint).toContain("Brain offline");
+    expect(hint).toContain("Lynn GUI");
+    expect(hint).toContain("Lynn providers");
+    expect(hint).toContain("--mock-brain");
   });
 
   it("updates reasoning mode for fast and deep MiMo turns", () => {

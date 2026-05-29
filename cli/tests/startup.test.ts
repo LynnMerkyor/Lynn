@@ -24,4 +24,15 @@ describe("startup banner", () => {
     expect(output).toContain("~");
     expect(output).toContain("Lynn help");
   });
+
+  it("can render a compact banner without tips", () => {
+    const output = renderStartupBanner({
+      brainStatus: "offline",
+      showTips: false,
+    });
+
+    expect(output).toContain("Lynn CLI");
+    expect(output).toContain("brain:");
+    expect(output).not.toContain("Tip:");
+  });
 });
