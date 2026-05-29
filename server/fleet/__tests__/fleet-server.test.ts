@@ -8,7 +8,7 @@ import { createLineParser, mapKnownCliJsonLine, spawnWorker } from "../worker-ma
 import { parseWorktreePorcelain } from "../worktree-manager.js";
 import { FleetHub, type FleetBrief } from "../fleet-hub.js";
 import { resolveCliCommand, cliRuntimeAvailable } from "../worker-command.js";
-import { DEFAULT_FLEET_REGISTRY } from "../registry.js";
+import { DEFAULT_FLEET_REGISTRY, resolveFleetRegistry } from "../registry.js";
 import { createFleetRoute } from "../../routes/fleet.js";
 
 async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
@@ -228,6 +228,28 @@ describe("FleetHub.dispatch", () => {
       bin: "kimi",
       supportsJsonl: true,
       enabled: true,
+    });
+  });
+
+  it("marks external worker profiles unavailable when their binaries are not on PATH", () => {
+    const registry = resolveFleetRegistry({
+      pathEnv: "/bin",
+      fileExists: (file) => file === "/bin/qwen",
+    });
+
+    expect(registry.find((agent) => agent.id === "lynn-cli")).toMatchObject({
+      enabled: true,
+      available: true,
+    });
+    expect(registry.find((agent) => agent.id === "qwen-cli")).toMatchObject({
+      enabled: true,
+      available: true,
+      availability: "/bin/qwen",
+    });
+    expect(registry.find((agent) => agent.id === "kimi-cli")).toMatchObject({
+      enabled: false,
+      available: false,
+      availability: "not found on PATH",
     });
   });
 

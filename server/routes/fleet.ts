@@ -6,7 +6,7 @@
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { FleetHub, type FleetBrief } from "../fleet/fleet-hub.js";
-import { DEFAULT_FLEET_REGISTRY } from "../fleet/registry.js";
+import { resolveFleetRegistry } from "../fleet/registry.js";
 import { readPermissionStatus } from "../fleet/permissions.js";
 
 function validateBrief(b: Partial<FleetBrief>): string[] {
@@ -23,7 +23,7 @@ function validateBrief(b: Partial<FleetBrief>): string[] {
 export function createFleetRoute(hub: FleetHub): Hono {
   const route = new Hono();
 
-  route.get("/fleet/registry", (c) => c.json({ agents: DEFAULT_FLEET_REGISTRY }));
+  route.get("/fleet/registry", (c) => c.json({ agents: resolveFleetRegistry() }));
 
   // B2: read-only CLI permission profile (approval / sandbox) for the GUI badge.
   route.get("/fleet/permissions", async (c) => c.json(await readPermissionStatus()));
