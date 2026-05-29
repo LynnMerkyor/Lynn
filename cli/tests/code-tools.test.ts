@@ -154,10 +154,9 @@ describe("code tools", () => {
   it("renders an interactive code-mode intro with MiMo route and permission mode", () => {
     const intro = renderCodeIntro({ approval: "ask", sandbox: "workspace-write" });
 
-    expect(intro).toContain(">_ Lynn Code");
+    expect(intro).toContain("Lynn Code");
     expect(intro).toContain("MiMo");
     expect(intro).toContain("directory:");
-    expect(intro).toContain("ask / workspace-write");
     expect(intro).toContain("/fast");
     expect(intro).toContain("/think");
     expect(intro).toContain("/mode yolo");

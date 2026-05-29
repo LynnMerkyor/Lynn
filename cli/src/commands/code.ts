@@ -251,7 +251,7 @@ export function renderCodeIntro(
   const color = !!options.color;
   const version = readVersionInfo().version;
   const lines = [
-    `>_ Lynn Code (${version})`,
+    `Lynn Code (${version})`,
     "",
     padLine("model", "MiMo", "/model to change"),
     padLine("directory", displayCwd(process.cwd())),
@@ -263,7 +263,6 @@ export function renderCodeIntro(
     dangerous
       ? `  ${dangerLine("YOLO mode can edit files and run shell commands without asking.", color)}`
       : "  Tip: Use /fast for quick edits, /think for deeper MiMo reasoning, or /mode yolo to allow local edits.",
-    `       ${dangerous ? red(renderMode(mode), color) : renderMode(mode)} · ${reasoning.effort} · ${displayCwd(process.cwd())}`,
     "",
   ].join("\n");
 }
