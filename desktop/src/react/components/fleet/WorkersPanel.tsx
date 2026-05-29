@@ -16,6 +16,7 @@ import { playFleetFixture } from './playback';
 import { MOCK_WORKER_JSONL } from './fixtures';
 import { detectFleetConflicts } from './fleet-conflicts';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
+import type { CliEnvStatus } from '../../types';
 
 export function WorkersPanel() {
   const activePanel = useStore((st) => st.activePanel);
@@ -24,12 +25,23 @@ export function WorkersPanel() {
   const resetFleet = useStore((st) => st.resetFleet);
   const cancelRef = useRef<null | (() => void)>(null);
   const [showForm, setShowForm] = useState(false);
+  const [cliEnv, setCliEnv] = useState<CliEnvStatus | null>(null);
 
   useEffect(() => {
     return () => {
       if (cancelRef.current) cancelRef.current();
     };
   }, []);
+
+  useEffect(() => {
+    if (activePanel !== 'fleet') return;
+    let alive = true;
+    const p = window.hana?.cliEnvStatus?.();
+    if (p) p.then((st) => { if (alive) setCliEnv(st); }).catch(() => { /* ipc unavailable */ });
+    return () => {
+      alive = false;
+    };
+  }, [activePanel]);
 
   if (activePanel !== 'fleet') return null;
 
@@ -71,6 +83,12 @@ export function WorkersPanel() {
           </button>
         </div>
         <div className={fp.floatingPanelBody}>
+          {cliEnv && (
+            <div className={s.cliEnv} data-ready={cliEnv.ready ? '1' : '0'}>
+              CLI runtime: Node {cliEnv.node.version ?? '?'} ({cliEnv.node.source})
+              {cliEnv.ready ? ' · ready' : cliEnv.cli.present ? '' : ' · CLI bundle pending integration'}
+            </div>
+          )}
           <div className={s.fleetToolbar}>
             <button className={s.fleetBtn} onClick={() => setShowForm((v) => !v)}>
               {showForm ? 'Close form' : 'Dispatch worker'}

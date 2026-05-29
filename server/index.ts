@@ -275,15 +275,7 @@ const { wsRoute: voiceWsRoute } = createVoiceWsRoute(routeEngine, routeHub, { up
 app.route("", voiceWsRoute);
 app.route("/api", createReviewRoute(routeEngine, { broadcast: chatBroadcast, taskRuntime }));
 app.route("/api", createTasksRoute(taskRuntime, routeEngine));
-<<<<<<< HEAD
-const fleetHub = new FleetHub(process.cwd(), chatBroadcast, undefined, {
-  runnerCommand: process.env.LYNN_FLEET_RUNNER_COMMAND || process.env.LYNN_CLI_BIN || "Lynn",
-  runnerArgsPrefix: parseFleetRunnerArgsPrefix(process.env.LYNN_FLEET_RUNNER_ARGS_PREFIX),
-  runnerEnv: process.env.LYNN_FLEET_RUNNER_ELECTRON_AS_NODE === "1" ? { ELECTRON_RUN_AS_NODE: "1" } : {},
-});
-=======
 const fleetHub = new FleetHub(process.cwd(), chatBroadcast);
->>>>>>> aa2257d (feat(fleet): server fleet hub + dispatch form + live event wiring (B-line))
 app.route("/api", createFleetRoute(fleetHub));
 app.route("/api", createAppStateRoute(routeEngine, { taskRuntime }));
 app.route("/api", createDebugRoute(routeEngine));
