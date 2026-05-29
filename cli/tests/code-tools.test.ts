@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { buildCodeRuntimeFrames, canPromptForDangerousTool, formatToolResultForLoop, isDangerousClientTool, parseCodeToolRequest, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
+import { buildCodeRuntimeFrames, canPromptForDangerousTool, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeToolRequest, renderCodeIntro, renderCodeTaskHeader, runCode } from "../src/commands/code.js";
 import { stableRuntimePrefix } from "../../shared/runtime-instruction-frames.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
@@ -128,25 +128,40 @@ describe("code tools", () => {
   });
 
   it("keeps cacheable code instructions separate from dynamic permission state", () => {
+    const baseContext = {
+      cwd: "/repo",
+      gitStatus: "",
+      gitDiffStat: "",
+      topFiles: [],
+      packageScripts: {},
+    };
     const frames = buildCodeRuntimeFrames({
-      context: {
-        cwd: "/repo",
-        gitStatus: "",
-        gitDiffStat: "",
-        topFiles: [],
-        packageScripts: {},
-      },
+      context: baseContext,
       toolCtx: {
         cwd: "/repo",
         approval: "ask",
         sandbox: "workspace-write",
       },
     });
+    const yoloFrames = buildCodeRuntimeFrames({
+      context: {
+        ...baseContext,
+      },
+      toolCtx: {
+        cwd: "/repo",
+        approval: "yolo",
+        sandbox: "danger-full-access",
+      },
+    });
     const prefix = stableRuntimePrefix(frames);
+    const yoloPrefix = stableRuntimePrefix(yoloFrames);
 
     expect(prefix).toContain("base_system:");
     expect(prefix).toContain("cacheable_context:Repository root: /repo");
     expect(prefix).not.toContain("approval=ask");
+    expect(prefix).toBe(yoloPrefix);
+    expect(frames.find((frame) => frame.kind === "permission_state")).toMatchObject({ stable: false, cacheable: false });
+    expect(frames.find((frame) => frame.kind === "tool_guard")).toMatchObject({ stable: false, cacheable: false });
   });
 
   it("times out long-running bash commands", async () => {
@@ -405,5 +420,26 @@ describe("code tools", () => {
     const lines = (await fs.readFile(index.sessions[0].path, "utf8")).trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; data?: { kind?: string } });
     expect(lines.map((line) => line.type)).toEqual(["user", "assistant", "metadata"]);
     expect(lines.at(-1)?.data?.kind).toBe("code_task");
+  });
+
+  it("compacts older saved turns when resuming long-running code sessions", async () => {
+    const sessionFile = path.join(tmp, "long-session.jsonl");
+    const turns = [
+      { type: "user", content: "old user " + "u".repeat(120) },
+      { type: "assistant", content: "old assistant " + "a".repeat(120) },
+      { type: "user", content: "latest user detail" },
+      { type: "assistant", content: "latest assistant detail" },
+    ];
+    await fs.writeFile(sessionFile, turns.map((line) => JSON.stringify(line)).join("\n") + "\n", "utf8");
+
+    const resumed = await loadResumeMessages(sessionFile, 80);
+
+    expect(resumed[0]).toMatchObject({
+      role: "user",
+      content: expect.stringContaining("Earlier transcript turns were compacted"),
+    });
+    expect(JSON.stringify(resumed)).not.toContain("old assistant");
+    expect(JSON.stringify(resumed)).toContain("latest user detail");
+    expect(JSON.stringify(resumed)).toContain("latest assistant detail");
   });
 });
