@@ -294,6 +294,31 @@ describe("code tools", () => {
     expect(intro).toContain("!!");
   });
 
+  it("renders CLI BYOK route in code intro and task header", () => {
+    const provider = {
+      provider: "openai-compatible",
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "sk-test",
+      model: "step-3.7-flash",
+    };
+    const intro = renderCodeIntro(
+      { approval: "ask", sandbox: "workspace-write" },
+      { effort: "auto", display: "auto" },
+      { modelLabel: `CLI BYOK: ${provider.provider} / ${provider.model}` },
+    );
+    const header = renderCodeTaskHeader({
+      cwd: "/repo",
+      approval: "ask",
+      sandbox: "workspace-write",
+      reasoning: { effort: "auto", display: "auto" },
+      maxSteps: 8,
+      fallbackProvider: provider,
+    });
+
+    expect(intro).toContain("CLI BYOK: openai-compatible / step-3.7-flash");
+    expect(header).toContain("CLI BYOK: openai-compatible / step-3.7-flash");
+  });
+
   it("renders a code task header with route, cwd, mode, reasoning, and step budget", () => {
     const header = renderCodeTaskHeader({
       cwd: "/repo",

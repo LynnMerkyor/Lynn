@@ -117,7 +117,8 @@ export async function runCode(args: ParsedArgs): Promise<number> {
 async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   const mode = await resolveCodeMode(args);
   let reasoning = parseReasoningOptions(args);
-  output.write(renderCodeIntro(mode, reasoning, { color: supportsColor(output) }));
+  const cliProvider = await resolveCliProviderProfile(args);
+  output.write(renderCodeIntro(mode, reasoning, { color: supportsColor(output), modelLabel: codeRouteLabel(false, cliProvider?.profile) }));
   const histFile = historyPath();
   const history = loadHistory(histFile);
   const slashCommands = ["/exit", "/quit", "/help", "/tools", "/fast", "/think", "/reasoning", "/mode", "/model", "/providers"];
@@ -298,14 +299,14 @@ async function readCodeLine(prompt: string, mode: ChatMode, options: { placehold
 export function renderCodeIntro(
   mode: ChatMode,
   reasoning = parseReasoningOptions({ command: "code", positionals: [], flags: {} }),
-  options: { color?: boolean } = {},
+  options: { color?: boolean; modelLabel?: string } = {},
 ): string {
   const color = !!options.color;
   const version = readVersionInfo().version;
   const lines = [
     `Lynn Code (${version})`,
     "",
-    padLine(t("startup.label.model"), "MiMo", t("startup.hint.model")),
+    padLine(t("startup.label.model"), options.modelLabel || "MiMo", t("startup.hint.model")),
     padLine(t("startup.label.directory"), displayCwd(process.cwd())),
   ];
   const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
@@ -335,8 +336,9 @@ export function renderCodeTaskHeader(inputData: {
   reasoning: ReturnType<typeof parseReasoningOptions>;
   maxSteps: number;
   mockBrain?: boolean;
+  fallbackProvider?: CliProviderProfile;
 }): string {
-  const route = inputData.mockBrain ? t("code.route.mock") : t("code.route.brain");
+  const route = codeRouteLabel(!!inputData.mockBrain, inputData.fallbackProvider);
   return [
     box([
       `Lynn Code · ${route}`,
@@ -429,6 +431,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
       reasoning,
       maxSteps: maxSteps(args),
       mockBrain,
+      fallbackProvider: cliProvider?.profile,
     }));
   }
   if (json) {
@@ -523,6 +526,12 @@ function renderCodeFooter(inputData: {
   const model = inputData.mockBrain ? "mock Brain" : inputData.fallbackProvider ? `${inputData.fallbackProvider.provider}/${inputData.fallbackProvider.model}` : "MiMo";
   const mode = renderMode(inputData.mode);
   return dim(`${model} · ${displayCwd(inputData.context.cwd)} · ${mode} · think ${inputData.reasoning.effort}`, color);
+}
+
+function codeRouteLabel(mockBrain: boolean, fallbackProvider?: CliProviderProfile): string {
+  if (mockBrain) return t("code.route.mock");
+  if (fallbackProvider) return `CLI BYOK: ${fallbackProvider.provider} / ${fallbackProvider.model}`;
+  return t("code.route.brain");
 }
 
 interface CodeAgentLoopInput {
