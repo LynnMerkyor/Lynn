@@ -27,5 +27,5 @@ export function bold(text: string, enabled: boolean): string {
 }
 
 export function dangerLine(text: string, enabled: boolean): string {
-  return red(`!! ${text}`, enabled);
+  return red(text, enabled);
 }

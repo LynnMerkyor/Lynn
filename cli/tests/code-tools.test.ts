@@ -385,8 +385,16 @@ describe("code tools", () => {
   it("renders a clear danger warning for YOLO mode", () => {
     const intro = renderCodeIntro({ approval: "yolo", sandbox: "danger-full-access" });
 
+    expect(intro).toContain("DANGER:");
     expect(intro).toContain("YOLO mode can edit files");
-    expect(intro).toContain("!!");
+  });
+
+  it("localizes the YOLO danger warning", () => {
+    setLang("zh");
+    const intro = renderCodeIntro({ approval: "yolo", sandbox: "danger-full-access" });
+
+    expect(intro).toContain("危险:");
+    expect(intro).toContain("shell 命令");
   });
 
   it("renders CLI BYOK route in code intro and task header", () => {

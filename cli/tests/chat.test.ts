@@ -32,6 +32,14 @@ describe("chat mode controls", () => {
     expect(renderMode(mode)).toBe("ask / workspace-write");
   });
 
+  it("localizes mode command receipts and danger warning", () => {
+    setLang("zh");
+    const mode = { approval: "ask" as const, sandbox: "workspace-write" as const };
+
+    expect(applyModeCommand(mode, "yolo")).toContain("YOLO 模式");
+    expect(applyModeCommand(mode, "wat")).toContain("未知权限模式");
+  });
+
   it("renders a short Brain recovery message for interactive chat", () => {
     const message = formatChatError(new BrainConnectionError("http://127.0.0.1:8790", new Error("fetch failed")));
 

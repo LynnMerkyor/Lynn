@@ -226,29 +226,29 @@ export function applyModeCommand(mode: ChatMode, raw: string): string {
   if (value === "yolo") {
     mode.approval = "yolo";
     mode.sandbox = "danger-full-access";
-    return "YOLO mode enabled.";
+    return t("mode.yolo.enabled");
   }
   if (value === "ask" || value === "guarded") {
     mode.approval = "ask";
     mode.sandbox = "workspace-write";
-    return "Guarded mode enabled.";
+    return t("mode.ask.enabled");
   }
   if (value === "read-only" || value === "readonly") {
     mode.approval = "ask";
     mode.sandbox = "read-only";
-    return "Read-only mode enabled.";
+    return t("mode.readonly.enabled");
   }
   if (value === "workspace" || value === "workspace-write") {
     mode.approval = "ask";
     mode.sandbox = "workspace-write";
-    return "Workspace-write mode enabled.";
+    return t("mode.workspace.enabled");
   }
   if (value === "danger" || value === "danger-full-access") {
     mode.approval = "yolo";
     mode.sandbox = "danger-full-access";
-    return "Danger-full-access mode enabled.";
+    return t("mode.danger.enabled");
   }
-  return `Unknown mode: ${raw || "(empty)"}. Try /mode ask or /mode yolo.`;
+  return t("mode.unknown", { raw: raw || "(empty)" });
 }
 
 export function isModeToggleKeypress(key: KeypressLike | undefined): boolean {
@@ -265,7 +265,7 @@ export function toggleMode(mode: ChatMode): string {
 function renderInteractiveModeChange(message: string, mode: ChatMode, color: boolean): string {
   const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
   const label = dangerous ? red(renderMode(mode), color) : renderMode(mode);
-  const warning = dangerous ? `\n${dangerLine("YOLO mode enabled: local edits and shell commands will not ask again.", color)}` : "";
+  const warning = dangerous ? `\n${dangerLine(t("mode.danger.warning"), color)}` : "";
   return `✓ ${message}\nmode: ${label}${warning}\n\n`;
 }
 

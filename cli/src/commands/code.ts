@@ -314,7 +314,7 @@ export function renderCodeIntro(
     box(lines),
     "",
     dangerous
-      ? `  ${dangerLine("YOLO mode can edit files and run shell commands without asking.", color)}`
+      ? `  ${dangerLine(t("code.danger.warning"), color)}`
       : `  ${t("code.tip")}`,
     "",
   ].join("\n");
@@ -324,7 +324,7 @@ function renderModeChange(message: string, mode: ChatMode, color: boolean): stri
   const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
   const modeLabel = dangerous ? red(renderMode(mode), color) : renderMode(mode);
   const warning = dangerous
-    ? `\n${dangerLine("YOLO mode enabled: local edits and shell commands will not ask again.", color)}`
+    ? `\n${dangerLine(t("mode.danger.warning"), color)}`
     : "";
   return `✓ ${message}\nmode: ${modeLabel}${warning}\n\n`;
 }
