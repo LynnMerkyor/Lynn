@@ -15,6 +15,9 @@ import { readVersionInfo } from "./version.js";
 async function main(argv = process.argv.slice(2)): Promise<number> {
   if (argv.length === 0) {
     process.stdout.write(`${renderStartupBanner()}\n`);
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      return runChat({ command: "chat", positionals: [], flags: {} }, { intro: false });
+    }
     return 0;
   }
   const args = parseArgs(argv);

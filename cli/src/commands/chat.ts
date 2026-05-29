@@ -6,14 +6,16 @@ import { providersInfo, renderProvidersInfo } from "./providers.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 
-export async function runChat(args: ParsedArgs): Promise<number> {
+export async function runChat(args: ParsedArgs, options: { intro?: boolean } = {}): Promise<number> {
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   const reasoning = parseReasoningOptions(args);
   const messages: ChatMessage[] = [];
   const rl = readline.createInterface({ input, output, terminal: true });
 
-  output.write("Lynn chat. Type /exit to leave, /clear to reset context.\n\n");
+  if (options.intro !== false) {
+    output.write("Lynn chat. Type /exit to leave, /clear to reset context, /model to review route.\n\n");
+  }
   try {
     for (;;) {
       const text = (await rl.question("> ")).trim();
