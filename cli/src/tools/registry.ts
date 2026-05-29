@@ -1,5 +1,6 @@
 import { readFileTool } from "./read-file.js";
 import { writeFileTool } from "./write-file.js";
+import { applyPatchTool } from "./apply-patch.js";
 import { grepTool } from "./grep.js";
 import { globTool } from "./glob.js";
 import { bashTool } from "./bash.js";
@@ -23,6 +24,8 @@ export async function runClientTool(ctx: ToolRunContext, input: ToolRunInput): P
       return readFileTool(ctx, input.path || ".", input.maxBytes);
     case "write_file":
       return writeFileTool(ctx, input.path || "", input.text || "");
+    case "apply_patch":
+      return applyPatchTool(ctx, input.text || "");
     case "grep":
       return grepTool(ctx, input.query || "", input.path || ".");
     case "glob":

@@ -11,6 +11,7 @@ const nodeBin = process.execPath;
 const cliBin = path.join(root, "cli", "bin", "lynn.mjs");
 const missingDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-missing");
 const sessionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-sessions");
+const toolDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-tools");
 const briefPath = path.join(root, "cli", "fixtures", "worker-brief.md");
 
 function run(name, args, options = {}) {
@@ -70,6 +71,9 @@ await fs.promises.rm(missingDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(missingDataDir, { recursive: true });
 await fs.promises.rm(sessionDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(sessionDataDir, { recursive: true });
+await fs.promises.rm(toolDataDir, { recursive: true, force: true });
+await fs.promises.mkdir(toolDataDir, { recursive: true });
+await fs.promises.writeFile(path.join(toolDataDir, "hello.txt"), "hello\n", "utf8");
 
 const checks = [];
 
@@ -99,12 +103,39 @@ checks.push(run("mock prompt", ["-p", "你好", "--mock-brain"]).then((r) => {
 
 checks.push(run("code list tools", ["code", "--list-tools"]).then((r) => {
   assertIncludes(r.name, r.stdout, "read_file");
+  assertIncludes(r.name, r.stdout, "apply_patch");
   assertIncludes(r.name, r.stdout, "grep");
 }));
 
 checks.push(run("code read file", ["code", "--tool", "read_file", "--path", "README.md", "--json"]).then((r) => {
   assertIncludes(r.name, r.stdout, '"type":"code.tool.result"');
   assertIncludes(r.name, r.stdout, '"ok":true');
+}));
+
+checks.push(run("code apply patch", [
+  "code",
+  "--cwd",
+  toolDataDir,
+  "--tool",
+  "apply_patch",
+  "--approval",
+  "yolo",
+  "--text",
+  [
+    "diff --git a/hello.txt b/hello.txt",
+    "--- a/hello.txt",
+    "+++ b/hello.txt",
+    "@@ -1 +1 @@",
+    "-hello",
+    "+lynn",
+    "",
+  ].join("\n"),
+  "--json",
+]).then(async (r) => {
+  assertIncludes(r.name, r.stdout, '"tool":"apply_patch"');
+  assertIncludes(r.name, r.stdout, '"ok":true');
+  const text = await fs.promises.readFile(path.join(toolDataDir, "hello.txt"), "utf8");
+  assertIncludes(r.name, text, "lynn");
 }));
 
 checks.push(run("code task mock", ["code", "review the current diff", "--mock-brain"]).then((r) => {

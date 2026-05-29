@@ -29,8 +29,9 @@ export function usage(): string {
     "  --show-reasoning auto|always|never",
     "  --brain-url http://127.0.0.1:8790",
     "  --server-url http://127.0.0.1:3000",
-    "  --approval ask|on-failure|never|yolo",
-    "  --sandbox read-only|workspace-write|danger-full-access",
+  "  --approval ask|on-failure|never|yolo",
+  "  --sandbox read-only|workspace-write|danger-full-access",
+  "  --max-steps 1..20",
     "  --save-session --data-dir ~/.lynn",
     "  --agent-command \"custom worker command\"",
   ].join("\n");

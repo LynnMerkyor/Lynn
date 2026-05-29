@@ -10,7 +10,7 @@ import { nowIso, writeJsonLine } from "../jsonl.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
-import type { ClientToolName } from "../tools/types.js";
+import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
 
 const pExecFile = promisify(execFile);
 
@@ -29,6 +29,14 @@ function timeoutMs(args: ParsedArgs): number | undefined {
   if (!raw) return undefined;
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) throw new Error("--timeout-ms must be a positive integer");
+  return parsed;
+}
+
+function maxSteps(args: ParsedArgs): number {
+  const raw = getStringFlag(args.flags, "max-steps", "steps");
+  if (!raw) return 8;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 20) throw new Error("--max-steps must be an integer from 1 to 20");
   return parsed;
 }
 
@@ -139,43 +147,223 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean): Promi
     return 0;
   }
 
-  let sawContent = false;
-  const spinner = new TerminalSpinner(process.stderr, "Lynn is reviewing");
-  if (!json) spinner.start();
+  const toolCtx: ToolRunContext = {
+    cwd: cwd(args),
+    approval: approval(args),
+    timeoutMs: timeoutMs(args),
+  };
+  const final = await runCodeAgentLoop({
+    task,
+    context,
+    brainUrl,
+    reasoning,
+    json,
+    maxSteps: maxSteps(args),
+    toolCtx,
+    input,
+    output: errorOutput,
+  });
+  if (json) {
+    if (final.trim()) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: final });
+    writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true, contentReturned: !!final.trim() });
+  } else {
+    process.stdout.write(final.trim() ? `${final}\n` : "\n");
+  }
+  return 0;
+}
+
+interface CodeAgentLoopInput {
+  task: string;
+  context: CodeContext;
+  brainUrl: string;
+  reasoning: ReturnType<typeof parseReasoningOptions>;
+  json: boolean;
+  maxSteps: number;
+  toolCtx: ToolRunContext;
+  input: NodeJS.ReadStream;
+  output: NodeJS.WriteStream;
+}
+
+interface CodeToolRequest {
+  tool: ClientToolName;
+  args: {
+    path?: string;
+    text?: string;
+    query?: string;
+    pattern?: string;
+    command?: string;
+    maxBytes?: number;
+  };
+}
+
+async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> {
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    {
+      role: "system",
+      content: [
+        "You are Lynn CLI code mode.",
+        "You help with repository-level coding tasks from the terminal.",
+        "You may request local tools using exactly one JSON object and no prose:",
+        '{"tool":"read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',
+        "Prefer read_file, grep, and glob before editing. Use apply_patch for edits when possible.",
+        "When you are done, answer normally with a concise summary and tests run.",
+        "Do not claim you edited files unless a tool actually changed them.",
+        "Never download models, datasets, training packs, BF16, or GGUF files to the local Mac.",
+      ].join("\n"),
+    },
+    { role: "user", content: buildCodePrompt(inputData.task, inputData.context) },
+  ];
+  let finalText = "";
+  for (let step = 0; step < inputData.maxSteps; step += 1) {
+    const assistantText = await collectBrainText({
+      brainUrl: inputData.brainUrl,
+      messages,
+      reasoning: inputData.reasoning,
+      json: inputData.json,
+      label: step === 0 ? "Lynn is coding" : "Lynn is reviewing tool output",
+    });
+    messages.push({ role: "assistant", content: assistantText });
+    const toolRequest = parseCodeToolRequest(assistantText);
+    if (!toolRequest) {
+      finalText = assistantText;
+      break;
+    }
+    if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
+    else process.stderr.write(`\nTool: ${toolRequest.tool}\n`);
+    let toolResult: ClientToolResult;
+    try {
+      const effectiveApproval = await resolveToolApproval({
+        tool: toolRequest.tool,
+        approval: inputData.toolCtx.approval,
+        cwd: inputData.toolCtx.cwd,
+        json: inputData.json,
+        input: inputData.input,
+        output: inputData.output,
+      });
+      toolResult = await runClientTool({ ...inputData.toolCtx, approval: effectiveApproval }, {
+        name: toolRequest.tool,
+        ...toolRequest.args,
+      });
+    } catch (error) {
+      toolResult = {
+        ok: false,
+        tool: toolRequest.tool,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+    if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
+    else process.stderr.write(`${toolResult.ok ? "ok" : "failed"}: ${toolResult.error || summarizeToolOutput(toolResult.output)}\n`);
+    messages.push({ role: "user", content: `Tool result for ${toolRequest.tool}:\n${JSON.stringify(toolResult, null, 2)}\nContinue. If no more tools are needed, give the final answer.` });
+  }
+  if (!finalText) {
+    finalText = "Stopped after the maximum tool steps. Review the emitted tool results before continuing.";
+  }
+  return finalText;
+}
+
+async function collectBrainText(inputData: {
+  brainUrl: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  reasoning: ReturnType<typeof parseReasoningOptions>;
+  json: boolean;
+  label: string;
+}): Promise<string> {
+  let text = "";
+  const spinner = new TerminalSpinner(process.stderr, inputData.label);
+  if (!inputData.json) spinner.start();
   try {
     for await (const event of streamBrainChat({
-      brainUrl,
-      reasoning,
-      messages: [
-        {
-          role: "system",
-          content: [
-            "You are Lynn CLI code mode.",
-            "You help with repository-level coding tasks from the terminal.",
-            "Be concise, name files precisely, and suggest exact commands.",
-            "Do not claim you edited files unless a tool actually changed them.",
-            "Never download models, datasets, training packs, BF16, or GGUF files to the local Mac.",
-          ].join("\n"),
-        },
-        { role: "user", content: buildCodePrompt(task, context) },
-      ],
+      brainUrl: inputData.brainUrl,
+      reasoning: inputData.reasoning,
+      messages: inputData.messages,
     })) {
-      const renderReasoning = shouldRenderReasoning(reasoning.display, json);
+      const renderReasoning = shouldRenderReasoning(inputData.reasoning.display, inputData.json);
       if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
         spinner.stop();
       }
-      handleCodeBrainEvent(event, {
-        json,
-        renderReasoning,
-      });
-      if (event.type === "assistant.delta") sawContent = true;
+      if (event.type === "reasoning.delta" && renderReasoning) process.stderr.write(event.text);
+      if (event.type === "assistant.delta") text += event.text;
     }
   } finally {
     spinner.stop();
   }
-  if (json) writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true, contentReturned: sawContent });
-  else process.stdout.write("\n");
-  return 0;
+  return text;
+}
+
+export function parseCodeToolRequest(text: string): CodeToolRequest | null {
+  for (const candidate of extractJsonCandidates(text)) {
+    try {
+      const parsed = JSON.parse(candidate) as { tool?: unknown; args?: unknown };
+      if (typeof parsed.tool !== "string") continue;
+      if (!CLIENT_TOOL_DEFINITIONS.some((definition) => definition.name === parsed.tool)) continue;
+      const args = parsed.args && typeof parsed.args === "object" && !Array.isArray(parsed.args)
+        ? parsed.args as Record<string, unknown>
+        : {};
+      return {
+        tool: parsed.tool as ClientToolName,
+        args: {
+          path: stringArg(args.path),
+          text: stringArg(args.text ?? args.content ?? args.patch),
+          query: stringArg(args.query),
+          pattern: stringArg(args.pattern),
+          command: stringArg(args.command),
+          maxBytes: numberArg(args.maxBytes ?? args.max_bytes),
+        },
+      };
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  return null;
+}
+
+function extractJsonCandidates(text: string): string[] {
+  const out: string[] = [];
+  const fence = text.match(/```(?:json|lynn-tool|tool)?\s*([\s\S]*?)```/i);
+  if (fence?.[1]) out.push(fence[1].trim());
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) out.push(trimmed);
+  const start = text.indexOf("{");
+  if (start >= 0) {
+    let depth = 0;
+    for (let i = start; i < text.length; i += 1) {
+      const char = text[i];
+      if (char === "{") depth += 1;
+      if (char === "}") depth -= 1;
+      if (depth === 0) {
+        out.push(text.slice(start, i + 1));
+        break;
+      }
+    }
+  }
+  return [...new Set(out)];
+}
+
+function stringArg(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function numberArg(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function redactToolArgs(request: CodeToolRequest): Record<string, unknown> {
+  const args = { ...request.args } as Record<string, unknown>;
+  for (const key of ["text", "command"]) {
+    if (typeof args[key] === "string" && args[key].length > 500) {
+      args[key] = `${args[key].slice(0, 500)}...`;
+    }
+  }
+  return args;
+}
+
+function summarizeToolOutput(output: unknown): string {
+  const text = typeof output === "string" ? output : JSON.stringify(output);
+  if (!text) return "(no output)";
+  return text.length > 500 ? `${text.slice(0, 500)}...` : text;
 }
 
 async function collectCodeContext(repoCwd: string): Promise<CodeContext> {
