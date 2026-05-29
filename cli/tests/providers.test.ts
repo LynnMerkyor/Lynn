@@ -573,7 +573,10 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
       await expect(runProviders(parseArgs(["providers", "test", "--data-dir", dataDir]), false)).resolves.toBe(0);
     } finally {
       process.stdout.write = original;
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      });
     }
 
     expect(output).toContain("Provider test OK");

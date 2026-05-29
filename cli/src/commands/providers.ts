@@ -2,6 +2,7 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { type ParsedArgs, getStringFlag, hasFlag } from "../args.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
+import { t } from "../i18n.js";
 import { fetchLocalServerJson, readLocalServerInfo, type LocalServerLookup } from "../local-server.js";
 import {
   deleteCliProviderProfile,
@@ -14,7 +15,6 @@ import {
   type CliProviderProfile,
 } from "../provider-profile.js";
 import { resolveDataDir } from "../session/store.js";
-import { t } from "../i18n.js";
 import { listProviderPresets, resolveProviderPreset } from "../provider-presets.js";
 import { chatCompletionsUrl } from "../brain-client.js";
 import type { ProviderPreset } from "../provider-presets.js";
@@ -65,8 +65,8 @@ export interface ProviderTestResult {
 
 export function providersInfo(partial: Partial<ProvidersInfo> = {}): ProvidersInfo {
   return {
-    defaultRoute: "MiMo via local Brain router (auto)",
-    byokEntry: t("providers.byok.default"),
+    defaultRoute: t("providers.route.default"),
+    byokEntry: t("providers.byok.gui"),
     keyPolicy: t("providers.keyPolicy"),
     brainUrl: process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790",
     server: { status: "missing", message: "Lynn client GUI server-info.json not found" },
@@ -132,7 +132,7 @@ export async function resolveProvidersInfo(args: ParsedArgs, timeoutMs = 1500): 
     brainUrl,
     byokEntry: resolvedCliProvider
       ? t("providers.byok.configured")
-      : t("providers.byok.missing"),
+      : t("providers.byok.unconfigured"),
     server: {
       status: lookup.status,
       url: lookup.url,
