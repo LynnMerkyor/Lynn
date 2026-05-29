@@ -15,6 +15,8 @@ interface AgentEntry {
   id: string;
   label: string;
   enabled: boolean;
+  available?: boolean;
+  availability?: string;
 }
 
 type FleetTaskType = 'code' | 'see' | 'ground' | 'ui2code';
@@ -60,6 +62,11 @@ function isVisionTask(taskType: FleetTaskType): boolean {
   return taskType === 'see' || taskType === 'ground' || taskType === 'ui2code';
 }
 
+export function agentOptionLabel(agent: AgentEntry): string {
+  if (agent.enabled) return agent.label;
+  return `${agent.label} (${agent.availability || 'unavailable'})`;
+}
+
 export function buildFleetDispatchPayload(state: FleetDispatchFormState) {
   return {
     title: state.title,
@@ -98,7 +105,12 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
       .then((r) => r.json())
       .then((d) => {
         if (alive && Array.isArray(d.agents)) {
-          setAgents(d.agents.filter((a: AgentEntry) => a.enabled));
+          const nextAgents = d.agents as AgentEntry[];
+          setAgents(nextAgents);
+          if (!nextAgents.some((a) => a.id === agent && a.enabled)) {
+            const fallback = nextAgents.find((a) => a.enabled);
+            if (fallback) setAgent(fallback.id);
+          }
         }
       })
       .catch(() => {
@@ -181,11 +193,12 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
           <label className={s.formLabel}>Agent</label>
           <select className={s.formInput} value={agent} onChange={(e) => setAgent(e.target.value)}>
             {agents.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.label}
+              <option key={a.id} value={a.id} disabled={!a.enabled}>
+                {agentOptionLabel(a)}
               </option>
             ))}
           </select>
+          <div className={s.formHint}>{agents.find((a) => a.id === agent)?.availability || 'Ready'}</div>
         </div>
         <div className={s.formField}>
           <label className={s.formLabel}>Task type</label>
@@ -217,7 +230,7 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
           <label className={s.formLabel}>Fan out to (parallel, optional)</label>
           <div className={s.fanOutRow}>
             {agents
-              .filter((a) => a.id !== agent)
+              .filter((a) => a.id !== agent && a.enabled)
               .map((a) => (
                 <label key={a.id} className={s.fanOutChip}>
                   <input

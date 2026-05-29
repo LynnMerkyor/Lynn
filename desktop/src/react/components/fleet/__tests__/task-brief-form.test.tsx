@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildFleetDispatchPayload } from '../TaskBriefForm';
+import { agentOptionLabel, buildFleetDispatchPayload } from '../TaskBriefForm';
 
 describe('TaskBriefForm payload', () => {
   it('includes MiMo vision task type and image path for Fleet dispatch', () => {
@@ -44,5 +44,9 @@ describe('TaskBriefForm payload', () => {
     expect(payload.taskType).toBe('code');
     expect(payload.testCommands).toEqual([]);
   });
-});
 
+  it('labels unavailable agents with their availability hint', () => {
+    expect(agentOptionLabel({ id: 'kimi-cli', label: 'Kimi', enabled: false, availability: 'not found on PATH' })).toBe('Kimi (not found on PATH)');
+    expect(agentOptionLabel({ id: 'codex-cli', label: 'Codex', enabled: true, availability: '/bin/codex' })).toBe('Codex');
+  });
+});
