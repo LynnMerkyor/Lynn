@@ -36,14 +36,17 @@ export interface FleetLineParser {
 export function createLineParser(workerId: string): FleetLineParser {
   let buf = "";
 
-  function parseLine(line: string): FleetWorkerEvent | null {
+  function parseLine(line: string): FleetWorkerEvent[] {
     const trimmed = line.trim();
-    if (!trimmed) return null;
+    if (!trimmed) return [];
     const parsed = parseFleetJsonLine(trimmed);
     if (parsed.ok && parsed.event) {
-      return parsed.event.workerId ? parsed.event : { ...parsed.event, workerId };
+      return [parsed.event.workerId ? parsed.event : { ...parsed.event, workerId }];
     }
-    return mapKnownCliJsonLine(trimmed, workerId) ?? makeFleetProgressEvent(trimmed, { workerId });
+    const mapped = mapKnownCliJsonLine(trimmed, workerId);
+    if (Array.isArray(mapped)) return mapped;
+    if (mapped) return [mapped];
+    return [makeFleetProgressEvent(trimmed, { workerId })];
   }
 
   const parse = ((chunk: string): FleetWorkerEvent[] => {
@@ -53,8 +56,7 @@ export function createLineParser(workerId: string): FleetLineParser {
     while (nl !== -1) {
       const line = buf.slice(0, nl);
       buf = buf.slice(nl + 1);
-      const event = parseLine(line);
-      if (event) out.push(event);
+      out.push(...parseLine(line));
       nl = buf.indexOf("\n");
     }
     return out;
@@ -63,14 +65,13 @@ export function createLineParser(workerId: string): FleetLineParser {
   parse.flush = (): FleetWorkerEvent[] => {
     const line = buf;
     buf = "";
-    const event = parseLine(line);
-    return event ? [event] : [];
+    return parseLine(line);
   };
 
   return parse;
 }
 
-export function mapKnownCliJsonLine(line: string, workerId: string): FleetWorkerEvent | null {
+export function mapKnownCliJsonLine(line: string, workerId: string): FleetWorkerEvent | FleetWorkerEvent[] | null {
   let parsed: Record<string, unknown>;
   try {
     const value = JSON.parse(line) as unknown;
@@ -120,12 +121,24 @@ export function mapKnownCliJsonLine(line: string, workerId: string): FleetWorker
   if (type === "code.task.finished") {
     const ok = parsed.ok !== false;
     const code = typeof parsed.code === "string" ? parsed.code : "";
-    return {
+    const finishedEvent: FleetWorkerEvent = {
       type: "gate.finished",
       workerId,
       ok,
       summary: ok ? "code task finished" : `code task failed${code ? `: ${code}` : ""}`,
     };
+    const sessionPath = typeof parsed.sessionPath === "string" && parsed.sessionPath ? parsed.sessionPath : "";
+    const resumeCommand = typeof parsed.resumeCommand === "string" && parsed.resumeCommand ? parsed.resumeCommand : "";
+    if (!sessionPath && !resumeCommand) return finishedEvent;
+    const checkpointEvent = makeFleetProgressEvent("session saved", {
+      workerId,
+      data: {
+        ...(sessionPath ? { path: sessionPath } : {}),
+        ...(resumeCommand ? { resumeCommand } : {}),
+        ...(code ? { code } : {}),
+      },
+    });
+    return [checkpointEvent, finishedEvent];
   }
   return null;
 }

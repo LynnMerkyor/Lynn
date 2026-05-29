@@ -111,6 +111,24 @@ describe("worker line parser", () => {
       ok: false,
       summary: "code task failed: max_steps_reached",
     });
+    expect(mapKnownCliJsonLine('{"type":"code.task.finished","ok":false,"code":"max_steps_reached","sessionPath":"/tmp/session.jsonl","resumeCommand":"Lynn code --resume /tmp/session.jsonl"}', "w2")).toEqual([
+      expect.objectContaining({
+        type: "worker.progress",
+        workerId: "w2",
+        message: "session saved",
+        data: {
+          path: "/tmp/session.jsonl",
+          resumeCommand: "Lynn code --resume /tmp/session.jsonl",
+          code: "max_steps_reached",
+        },
+      }),
+      expect.objectContaining({
+        type: "gate.finished",
+        workerId: "w2",
+        ok: false,
+        summary: "code task failed: max_steps_reached",
+      }),
+    ]);
     expect(mapKnownCliJsonLine('{"type":"code.unknown"}', "w2")).toBeNull();
   });
 
@@ -121,6 +139,24 @@ describe("worker line parser", () => {
     );
     expect(events[0]).toMatchObject({ type: "tool.started", workerId: "w3", name: "apply_patch" });
     expect(events[1]).toMatchObject({ type: "worker.progress", workerId: "w3", message: "usage", data: { total_tokens: 42, completion_tokens: 44, duration_ms: 200 } });
+  });
+
+  it("keeps resumable code task failures visible to the Fleet recovery UI", () => {
+    const parse = createLineParser("w-resume");
+    const events = parse('{"type":"code.task.finished","ok":false,"code":"max_steps_reached","sessionPath":"/tmp/lynn-session.jsonl","resumeCommand":"Lynn code --resume /tmp/lynn-session.jsonl"}\n');
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "worker.progress",
+        workerId: "w-resume",
+        message: "session saved",
+        data: expect.objectContaining({ path: "/tmp/lynn-session.jsonl" }),
+      }),
+      expect.objectContaining({
+        type: "gate.finished",
+        workerId: "w-resume",
+        ok: false,
+      }),
+    ]);
   });
 });
 
