@@ -63,6 +63,23 @@ describe("worker line parser", () => {
     expect(events[2]).toMatchObject({ type: "worker.progress", message: "plain log line", workerId: "w1" });
   });
 
+  it("flushes a final JSON event without a trailing newline", () => {
+    const parse = createLineParser("w-flush");
+    expect(parse('{"type":"worker.finished","ok":true,"exitCode":0,"summary":"done"}')).toEqual([]);
+    expect(parse.flush()).toEqual([
+      expect.objectContaining({ type: "worker.finished", workerId: "w-flush", ok: true, exitCode: 0, summary: "done" }),
+    ]);
+    expect(parse.flush()).toEqual([]);
+  });
+
+  it("flushes a final non-JSON line as progress", () => {
+    const parse = createLineParser("w-log");
+    expect(parse("final log line")).toEqual([]);
+    expect(parse.flush()).toEqual([
+      expect.objectContaining({ type: "worker.progress", workerId: "w-log", message: "final log line" }),
+    ]);
+  });
+
   it("translates nested Lynn code JSON events into fleet events", () => {
     expect(mapKnownCliJsonLine('{"type":"code.tool.requested","tool":"read_file","args":{"path":"README.md"}}', "w2")).toMatchObject({
       type: "tool.started",
@@ -102,6 +119,27 @@ describe("worker line parser", () => {
 });
 
 describe("spawnWorker", () => {
+  it("emits a final worker event even when stdout has no trailing newline", async () => {
+    const events: Array<{ type: string; workerId?: string; ok?: boolean }> = [];
+    spawnWorker({
+      command: process.execPath,
+      args: ["-e", "process.stdout.write(JSON.stringify({type:'worker.finished', ok:true, exitCode:0, summary:'done'}))"],
+      cwd: process.cwd(),
+      env: process.env,
+      workerId: "w-no-newline",
+    }, (event) => events.push(event as { type: string; workerId?: string; ok?: boolean }));
+
+    await waitFor(() => events.some((event) => event.type === "worker.finished"));
+
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "worker.finished",
+      workerId: "w-no-newline",
+      ok: true,
+      exitCode: 0,
+      summary: "done",
+    }));
+  });
+
   it("emits a recoverable worker error when the process exits non-zero", async () => {
     const events: Array<{ type: string; code?: string; message?: string; recoverable?: boolean }> = [];
     spawnWorker({

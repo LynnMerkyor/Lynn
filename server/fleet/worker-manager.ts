@@ -23,33 +23,51 @@ export interface WorkerHandle {
   kill: () => void;
 }
 
+export interface FleetLineParser {
+  (chunk: string): FleetWorkerEvent[];
+  flush: () => FleetWorkerEvent[];
+}
+
 /**
  * Stateful line splitter: feed it raw stdout chunks, get back complete fleet
  * events. Each parsed event is stamped with `workerId` if the worker omitted it;
  * malformed lines become progress events.
  */
-export function createLineParser(workerId: string): (chunk: string) => FleetWorkerEvent[] {
+export function createLineParser(workerId: string): FleetLineParser {
   let buf = "";
-  return (chunk: string): FleetWorkerEvent[] => {
+
+  function parseLine(line: string): FleetWorkerEvent | null {
+    const trimmed = line.trim();
+    if (!trimmed) return null;
+    const parsed = parseFleetJsonLine(trimmed);
+    if (parsed.ok && parsed.event) {
+      return parsed.event.workerId ? parsed.event : { ...parsed.event, workerId };
+    }
+    return mapKnownCliJsonLine(trimmed, workerId) ?? makeFleetProgressEvent(trimmed, { workerId });
+  }
+
+  const parse = ((chunk: string): FleetWorkerEvent[] => {
     buf += chunk;
     const out: FleetWorkerEvent[] = [];
     let nl = buf.indexOf("\n");
     while (nl !== -1) {
       const line = buf.slice(0, nl);
       buf = buf.slice(nl + 1);
-      const trimmed = line.trim();
-      if (trimmed) {
-        const parsed = parseFleetJsonLine(trimmed);
-        if (parsed.ok && parsed.event) {
-          out.push(parsed.event.workerId ? parsed.event : { ...parsed.event, workerId });
-        } else {
-          out.push(mapKnownCliJsonLine(trimmed, workerId) ?? makeFleetProgressEvent(trimmed, { workerId }));
-        }
-      }
+      const event = parseLine(line);
+      if (event) out.push(event);
       nl = buf.indexOf("\n");
     }
     return out;
+  }) as FleetLineParser;
+
+  parse.flush = (): FleetWorkerEvent[] => {
+    const line = buf;
+    buf = "";
+    const event = parseLine(line);
+    return event ? [event] : [];
   };
+
+  return parse;
 }
 
 export function mapKnownCliJsonLine(line: string, workerId: string): FleetWorkerEvent | null {
@@ -149,6 +167,7 @@ export function spawnWorker(opts: SpawnWorkerOptions, onEvent: (e: FleetWorkerEv
     });
   });
   child.on("close", (code: number | null) => {
+    for (const e of parse.flush()) onEvent(e);
     if (typeof code === "number" && code !== 0) {
       onEvent({
         type: "worker.error",
