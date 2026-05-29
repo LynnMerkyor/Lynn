@@ -56,4 +56,12 @@ describe("chat mode controls", () => {
     expect(applyReasoningCommand(current, "high").reasoning).toMatchObject({ effort: "high" });
     expect(applyReasoningCommand(current, "show").reasoning).toMatchObject({ display: "always" });
   });
+
+  it("localizes reasoning command receipts", () => {
+    setLang("zh");
+    const current = { effort: "auto" as const, display: "auto" as const };
+
+    expect(applyReasoningCommand(current, "high").message).toContain("推理强度");
+    expect(applyReasoningCommand(current, "show").message).toContain("始终");
+  });
 });
