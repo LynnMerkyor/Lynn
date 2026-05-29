@@ -137,6 +137,23 @@ function getWorkerSpawnCommand(extraArgs = [], opts = {}) {
   return { command: rt.node, args: [rt.cliEntry, ...extraArgs], env };
 }
 
+/**
+ * Env block handed to the local Lynn server so server/fleet can spawn the same
+ * bundled CLI runtime without depending on PATH. Kept separate from
+ * getWorkerSpawnCommand() because the server needs a stable contract, not a
+ * partially materialized command line.
+ */
+function getWorkerSpawnServerEnv(opts = {}) {
+  const rt = resolveCliRuntime(opts);
+  if (!rt.cliEntry) return {};
+  const env = {
+    LYNN_CLI_NODE: rt.node,
+    LYNN_CLI_ENTRY: rt.cliEntry,
+  };
+  if (rt.electronAsNode) env.LYNN_CLI_ELECTRON_AS_NODE = "1";
+  return env;
+}
+
 module.exports = {
   MIN_NODE_MAJOR,
   parseNodeMajor,
@@ -144,4 +161,5 @@ module.exports = {
   detectSystemNode,
   getCliEnvStatus,
   getWorkerSpawnCommand,
+  getWorkerSpawnServerEnv,
 };

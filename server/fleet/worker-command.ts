@@ -52,8 +52,31 @@ function resolveEntry(opts: ResolveOpts): { node: string; entry: string; electro
   return null;
 }
 
+function resolveLegacyRunner(
+  workerArgs: string[],
+  opts: ResolveOpts,
+): ResolvedCommand | null {
+  const env = opts.env ?? process.env;
+  const command = env.LYNN_FLEET_RUNNER_COMMAND;
+  if (!command) return null;
+  let prefix: string[] = [];
+  try {
+    const parsed = JSON.parse(env.LYNN_FLEET_RUNNER_ARGS_PREFIX || "[]");
+    if (Array.isArray(parsed) && parsed.every((arg) => typeof arg === "string")) {
+      prefix = parsed;
+    }
+  } catch {
+    prefix = [];
+  }
+  const resolvedEnv = { ...env };
+  if (env.LYNN_FLEET_RUNNER_ELECTRON_AS_NODE === "1") {
+    resolvedEnv.ELECTRON_RUN_AS_NODE = "1";
+  }
+  return { command, args: [...prefix, ...workerArgs], env: resolvedEnv };
+}
+
 export function cliRuntimeAvailable(opts: ResolveOpts = {}): boolean {
-  return resolveEntry(opts) !== null;
+  return resolveEntry(opts) !== null || resolveLegacyRunner([], opts) !== null;
 }
 
 export interface ResolvedCommand {
@@ -64,7 +87,7 @@ export interface ResolvedCommand {
 
 export function resolveCliCommand(workerArgs: string[], opts: ResolveOpts = {}): ResolvedCommand | null {
   const r = resolveEntry(opts);
-  if (!r) return null;
+  if (!r) return resolveLegacyRunner(workerArgs, opts);
   const env = { ...(opts.env ?? process.env) };
   if (r.electronAsNode) env.ELECTRON_RUN_AS_NODE = "1";
   return { command: r.node, args: [r.entry, ...workerArgs], env };

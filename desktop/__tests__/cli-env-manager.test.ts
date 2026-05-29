@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 // cli-env-manager is a CommonJS main-process module (.cjs); load it via Node's
 // require (vite's resolver does not include .cjs in its default extensions).
 const nodeRequire = createRequire(import.meta.url);
-const { resolveCliRuntime, detectSystemNode, parseNodeMajor, getWorkerSpawnCommand } =
+const { resolveCliRuntime, detectSystemNode, parseNodeMajor, getWorkerSpawnCommand, getWorkerSpawnServerEnv } =
   nodeRequire('../cli-env-manager.cjs');
 
 const existsIn = (set: string[]) => (p: string) => set.includes(p);
@@ -111,5 +111,45 @@ describe('getWorkerSpawnCommand', () => {
     expect(cmd.command).toBe('C:/Lynn/Lynn.exe');
     expect(cmd.args).toEqual(['C:/res/cli/lynn.mjs', 'worker', 'run', '--jsonl']);
     expect(cmd.env.ELECTRON_RUN_AS_NODE).toBe('1');
+  });
+});
+
+describe('getWorkerSpawnServerEnv', () => {
+  it('returns the server-side fleet env contract for bundled node', () => {
+    const env = getWorkerSpawnServerEnv({
+      platform: 'darwin',
+      execPath: '/Applications/Lynn.app/Contents/MacOS/Lynn',
+      resourcesPath: '/res',
+      fileExists: existsIn(['/res/server/node', '/res/cli/lynn.mjs']),
+    });
+    expect(env).toEqual({
+      LYNN_CLI_NODE: '/res/server/node',
+      LYNN_CLI_ENTRY: '/res/cli/lynn.mjs',
+    });
+  });
+
+  it('marks electron-as-node for the server on platforms without bundled node', () => {
+    const env = getWorkerSpawnServerEnv({
+      platform: 'win32',
+      execPath: 'C:/Lynn/Lynn.exe',
+      resourcesPath: 'C:/res',
+      fileExists: (p: string) => p === 'C:/res/cli/lynn.mjs',
+    });
+    expect(env).toMatchObject({
+      LYNN_CLI_NODE: 'C:/Lynn/Lynn.exe',
+      LYNN_CLI_ENTRY: 'C:/res/cli/lynn.mjs',
+      LYNN_CLI_ELECTRON_AS_NODE: '1',
+    });
+  });
+
+  it('returns an empty env block before the CLI bundle is shipped', () => {
+    expect(
+      getWorkerSpawnServerEnv({
+        platform: 'darwin',
+        execPath: '/e',
+        resourcesPath: '/res',
+        fileExists: () => false,
+      }),
+    ).toEqual({});
   });
 });

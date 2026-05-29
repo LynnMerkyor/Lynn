@@ -137,6 +137,25 @@ describe("worker-command resolveCliCommand", () => {
     expect(cmd && cmd.env.ELECTRON_RUN_AS_NODE).toBe("1");
   });
 
+  it("keeps the legacy fleet runner env compatible during branch integration", () => {
+    const cmd = resolveCliCommand(["worker", "run", "--jsonl"], {
+      env: {
+        LYNN_FLEET_RUNNER_COMMAND: "/Lynn",
+        LYNN_FLEET_RUNNER_ARGS_PREFIX: JSON.stringify(["/res/cli/lynn.mjs"]),
+        LYNN_FLEET_RUNNER_ELECTRON_AS_NODE: "1",
+      },
+      fileExists: () => false,
+    });
+    expect(cliRuntimeAvailable({
+      env: { LYNN_FLEET_RUNNER_COMMAND: "/Lynn", LYNN_FLEET_RUNNER_ARGS_PREFIX: "[]" },
+      fileExists: () => false,
+    })).toBe(true);
+    expect(cmd).not.toBeNull();
+    expect(cmd && cmd.command).toBe("/Lynn");
+    expect(cmd && cmd.args).toEqual(["/res/cli/lynn.mjs", "worker", "run", "--jsonl"]);
+    expect(cmd && cmd.env.ELECTRON_RUN_AS_NODE).toBe("1");
+  });
+
   it("falls back to a dev cli build under the repo", () => {
     const cmd = resolveCliCommand(["worker", "run"], {
       repoRoot: "/repo",
