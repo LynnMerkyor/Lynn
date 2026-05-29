@@ -59,22 +59,80 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
-function defaultAgentCommand(agent: string, briefPath: string, worktree: string, taskText: string): string | null {
+const WORKER_GUARDRAIL = [
+  "You are running as a Lynn Fleet worker.",
+  "Follow the task brief exactly and keep all edits inside the assigned worktree and owned files.",
+  "Do not download model weights, BF16/GGUF files, datasets, training packages, or large binary artifacts to this Mac.",
+  "Report progress concisely; Lynn will inspect git diff, tests, and scope after you finish.",
+].join("\n");
+
+export function buildWorkerPrompt(taskText: string): string {
+  return `${WORKER_GUARDRAIL}\n\n${taskText}`;
+}
+
+export function buildDefaultAgentCommand(agent: string, briefPath: string, worktree: string, taskText: string): string | null {
+  const prompt = buildWorkerPrompt(taskText);
   switch (agent) {
     case "claude-internal":
-      return `claude-internal -p ${shellQuote(taskText)} --add-dir ${shellQuote(worktree)} --output-format stream-json`;
+      return [
+        "claude-internal",
+        "-p",
+        shellQuote(prompt),
+        "--add-dir",
+        shellQuote(worktree),
+        "--output-format stream-json",
+        "--include-partial-messages",
+        "--permission-mode bypassPermissions",
+      ].join(" ");
     case "claude-code":
-      return `claude -p ${shellQuote(taskText)} --add-dir ${shellQuote(worktree)} --output-format stream-json --verbose --include-partial-messages`;
+      return [
+        "claude",
+        "-p",
+        shellQuote(prompt),
+        "--add-dir",
+        shellQuote(worktree),
+        "--output-format stream-json",
+        "--verbose",
+        "--include-partial-messages",
+        "--dangerously-skip-permissions",
+      ].join(" ");
     case "codex-cli":
-      return `codex exec --cd ${shellQuote(worktree)} --file ${shellQuote(briefPath)} --json`;
+      return [
+        "codex exec",
+        "--cd",
+        shellQuote(worktree),
+        "--json",
+        "--dangerously-bypass-approvals-and-sandbox",
+        shellQuote(prompt),
+      ].join(" ");
     case "opencode":
     case "opencode-cli":
     case "open-code":
-      return `opencode run --format json ${shellQuote(taskText)}`;
+      return `opencode run --format json --cwd ${shellQuote(worktree)} ${shellQuote(prompt)}`;
     case "qwen-cli":
-      return `qwen -p ${shellQuote(taskText)}`;
+      return [
+        "qwen",
+        "-p",
+        shellQuote(prompt),
+        "--add-dir",
+        shellQuote(worktree),
+        "--output-format stream-json",
+        "--include-partial-messages",
+        "--approval-mode yolo",
+        "--yolo",
+      ].join(" ");
     case "kimi-cli":
-      return `kimi --print ${shellQuote(taskText)}`;
+      return [
+        "kimi",
+        "--work-dir",
+        shellQuote(worktree),
+        "--print",
+        "--output-format stream-json",
+        "--yolo",
+        "--afk",
+        "-p",
+        shellQuote(prompt),
+      ].join(" ");
     default:
       return null;
   }
@@ -171,7 +229,7 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
   emit({ type: "worker.claims", workerId, agent, owned: brief.owned, forbidden: brief.forbidden });
   emit({ type: "worker.progress", workerId, agent, message: mock ? `Mock worker loaded: ${brief.title}` : `Worker loaded: ${brief.title}` });
 
-  const externalCommand = getStringFlag(args.flags, "agent-command") || defaultAgentCommand(agent, path.resolve(briefPath), path.resolve(worktree), markdown);
+  const externalCommand = getStringFlag(args.flags, "agent-command") || buildDefaultAgentCommand(agent, path.resolve(briefPath), path.resolve(worktree), markdown);
   if (!mock && externalCommand) {
     const exitCode = await runExternalWorker({ command: externalCommand, worktree, workerId, agent });
     emit({

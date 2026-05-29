@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { runWorker, parseWorkerBrief, parseWorkerEventLine } from "../src/commands/worker-run.js";
+import {
+  buildDefaultAgentCommand,
+  buildWorkerPrompt,
+  parseWorkerBrief,
+  parseWorkerEventLine,
+  runWorker,
+} from "../src/commands/worker-run.js";
 import { parseArgs } from "../src/args.js";
 
 const workerBriefPath = new URL("../fixtures/worker-brief.md", import.meta.url).pathname;
@@ -41,6 +47,50 @@ describe("worker-run scaffold", () => {
 
     expect(parsed.ok).toBe(true);
     expect(parsed.event?.type).toBe("worker.progress");
+  });
+
+  it("injects Lynn worker guardrails into external prompts", () => {
+    const prompt = buildWorkerPrompt("## Objective\nDo the work.");
+
+    expect(prompt).toContain("Lynn Fleet worker");
+    expect(prompt).toContain("Do not download model weights");
+    expect(prompt).toContain("## Objective\nDo the work.");
+  });
+
+  it("builds Codex worker commands without relying on invalid --file flags", () => {
+    const command = buildDefaultAgentCommand("codex-cli", "/tmp/task brief.md", "/tmp/work tree", "hello 'world'");
+
+    expect(command).toContain("codex exec");
+    expect(command).toContain("--cd '/tmp/work tree'");
+    expect(command).toContain("--json");
+    expect(command).toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(command).not.toContain("--file");
+    expect(command).toContain("hello '\\''world'\\'''");
+  });
+
+  it("builds non-interactive Claude, Qwen, and Kimi worker commands", () => {
+    const claude = buildDefaultAgentCommand("claude-code", "/tmp/task.md", "/tmp/wt", "task");
+    const qwen = buildDefaultAgentCommand("qwen-cli", "/tmp/task.md", "/tmp/wt", "task");
+    const kimi = buildDefaultAgentCommand("kimi-cli", "/tmp/task.md", "/tmp/wt", "task");
+
+    expect(claude).toContain("claude -p");
+    expect(claude).toContain("--add-dir '/tmp/wt'");
+    expect(claude).toContain("--output-format stream-json");
+    expect(claude).toContain("--dangerously-skip-permissions");
+
+    expect(qwen).toContain("qwen -p");
+    expect(qwen).toContain("--add-dir '/tmp/wt'");
+    expect(qwen).toContain("--approval-mode yolo");
+    expect(qwen).toContain("--yolo");
+
+    expect(kimi).toContain("kimi --work-dir '/tmp/wt'");
+    expect(kimi).toContain("--print");
+    expect(kimi).toContain("--output-format stream-json");
+    expect(kimi).toContain("--afk");
+  });
+
+  it("returns null for unknown default worker agents", () => {
+    expect(buildDefaultAgentCommand("custom", "/tmp/task.md", "/tmp/wt", "task")).toBeNull();
   });
 
   it("wraps external worker output as fleet progress", async () => {

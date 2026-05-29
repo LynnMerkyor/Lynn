@@ -49,3 +49,19 @@ Lynn worker run --brief task.md --worktree . \
 External workers receive `LYNN_WORKER_ID`, `LYNN_WORKER_AGENT`, and
 `LYNN_NO_MODEL_DOWNLOADS=1`. Lines that already match Fleet JSONL are forwarded;
 plain stdout/stderr lines are wrapped as `worker.progress` events.
+
+Built-in worker adapters are non-interactive by default and receive the full
+task brief with Lynn's guardrails prepended. The current templates are:
+
+| Agent | Command shape |
+| --- | --- |
+| `codex-cli` | `codex exec --cd <worktree> --json --dangerously-bypass-approvals-and-sandbox <brief>` |
+| `claude-code` | `claude -p <brief> --add-dir <worktree> --output-format stream-json --include-partial-messages --dangerously-skip-permissions` |
+| `claude-internal` | `claude-internal -p <brief> --add-dir <worktree> --output-format stream-json --include-partial-messages --permission-mode bypassPermissions` |
+| `qwen-cli` | `qwen -p <brief> --add-dir <worktree> --output-format stream-json --include-partial-messages --approval-mode yolo --yolo` |
+| `kimi-cli` | `kimi --work-dir <worktree> --print --output-format stream-json --yolo --afk -p <brief>` |
+| `opencode` | `opencode run --format json --cwd <worktree> <brief>` |
+
+Fleet still validates claimed ownership, forbidden globs, and resulting diffs on
+the Lynn side; worker CLI flags only prevent the external agent from stalling on
+interactive approval prompts.
