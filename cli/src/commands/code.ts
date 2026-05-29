@@ -843,16 +843,17 @@ export function parseCodeToolRequest(text: string): CodeToolRequest | null {
   for (const candidate of extractJsonCandidates(text)) {
     try {
       const parsed = JSON.parse(candidate) as Record<string, unknown>;
-      const toolName = typeof parsed.tool === "string"
+      const rawToolName = typeof parsed.tool === "string"
         ? parsed.tool
         : typeof parsed.name === "string"
           ? parsed.name
           : "";
+      if (!rawToolName) continue;
+      const toolName = normalizeClientToolName(rawToolName);
       if (!toolName) continue;
-      if (!CLIENT_TOOL_DEFINITIONS.some((definition) => definition.name === toolName)) continue;
-      const args = normalizeToolArgs(parsed);
+      const args = normalizeToolArgAliases(toolName, normalizeToolArgs(parsed));
       return {
-        tool: toolName as ClientToolName,
+        tool: toolName,
         args: {
           path: stringArg(args.path),
           text: stringArg(args.text ?? args.content ?? args.patch),
@@ -867,6 +868,45 @@ export function parseCodeToolRequest(text: string): CodeToolRequest | null {
     }
   }
   return null;
+}
+
+const TOOL_NAME_ALIASES: Record<string, ClientToolName> = {
+  read_file: "read_file",
+  read: "read_file",
+  open_file: "read_file",
+  read_path: "read_file",
+  view_file: "read_file",
+  cat: "read_file",
+  write_file: "write_file",
+  write: "write_file",
+  create_file: "write_file",
+  save_file: "write_file",
+  edit_file: "apply_patch",
+  edit: "apply_patch",
+  patch: "apply_patch",
+  apply_patch: "apply_patch",
+  apply_diff: "apply_patch",
+  apply_patch_file: "apply_patch",
+  grep: "grep",
+  search: "grep",
+  search_files: "grep",
+  ripgrep: "grep",
+  rg: "grep",
+  glob: "glob",
+  list_files: "glob",
+  find_files: "glob",
+  ls: "glob",
+  bash: "bash",
+  shell: "bash",
+  run_shell: "bash",
+  run_bash: "bash",
+  terminal: "bash",
+  exec: "bash",
+};
+
+function normalizeClientToolName(raw: string): ClientToolName | null {
+  const key = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return TOOL_NAME_ALIASES[key] ?? null;
 }
 
 function normalizeToolArgs(parsed: Record<string, unknown>): Record<string, unknown> {
@@ -884,6 +924,34 @@ function normalizeToolArgs(parsed: Record<string, unknown>): Record<string, unkn
   }
   const { tool: _tool, name: _name, args: _args, arguments: _arguments, ...topLevelArgs } = parsed;
   return topLevelArgs;
+}
+
+function normalizeToolArgAliases(tool: ClientToolName, args: Record<string, unknown>): Record<string, unknown> {
+  const normalized = { ...args };
+  const path = firstArg(args.path, args.file, args.filepath, args.filePath, args.filename, args.target);
+  const text = firstArg(args.text, args.content, args.body, args.data, args.patch, args.diff);
+  const command = firstArg(args.command, args.cmd, args.shell, args.script);
+  const query = firstArg(args.query, args.pattern, args.search, args.regex);
+  const pattern = firstArg(args.pattern, args.glob, args.query);
+  const dir = firstArg(args.path, args.dir, args.directory, args.cwd, args.folder);
+
+  if ((tool === "read_file" || tool === "write_file") && path !== undefined) normalized.path = path;
+  if (tool === "write_file" && text !== undefined) normalized.text = text;
+  if (tool === "apply_patch" && text !== undefined) normalized.text = text;
+  if (tool === "bash" && command !== undefined) normalized.command = command;
+  if (tool === "grep") {
+    if (query !== undefined) normalized.query = query;
+    if (dir !== undefined) normalized.path = dir;
+  }
+  if (tool === "glob") {
+    if (pattern !== undefined) normalized.pattern = pattern;
+    if (dir !== undefined) normalized.path = dir;
+  }
+  return normalized;
+}
+
+function firstArg(...values: unknown[]): unknown {
+  return values.find((value) => value !== undefined && value !== null);
 }
 
 function extractJsonCandidates(text: string): string[] {

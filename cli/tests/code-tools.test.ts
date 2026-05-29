@@ -104,6 +104,29 @@ describe("code tools", () => {
     });
   });
 
+  it("normalizes common coding-agent tool name and argument aliases", () => {
+    expect(parseCodeToolRequest('{"tool":"edit_file","args":{"diff":"*** Begin Patch\\n*** End Patch"}}')).toMatchObject({
+      tool: "apply_patch",
+      args: { text: "*** Begin Patch\n*** End Patch" },
+    });
+    expect(parseCodeToolRequest('{"name":"run_bash","arguments":{"cmd":"npm test"}}')).toMatchObject({
+      tool: "bash",
+      args: { command: "npm test" },
+    });
+    expect(parseCodeToolRequest('{"tool":"read","args":{"file":"README.md"}}')).toMatchObject({
+      tool: "read_file",
+      args: { path: "README.md" },
+    });
+    expect(parseCodeToolRequest('{"tool":"write","args":{"file":"notes.txt","content":"hello"}}')).toMatchObject({
+      tool: "write_file",
+      args: { path: "notes.txt", text: "hello" },
+    });
+    expect(parseCodeToolRequest('{"tool":"list_files","args":{"glob":"src/**/*.ts","dir":"cli"}}')).toMatchObject({
+      tool: "glob",
+      args: { pattern: "src/**/*.ts", path: "cli" },
+    });
+  });
+
   it("parses tool JSON embedded after prose when strings contain braces", () => {
     const request = parseCodeToolRequest([
       "I need to patch this.",
