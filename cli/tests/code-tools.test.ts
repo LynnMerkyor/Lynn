@@ -59,4 +59,20 @@ describe("code tools", () => {
     }
     expect(output).toContain("code.tools");
   });
+
+  it("runs a read-only code task with repository context", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runCode(parseArgs(["code", "review current diff", "--cwd", tmp, "--mock-brain"]))).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+    expect(output).toContain("Mock Lynn code task: review current diff");
+    expect(output).toContain("CWD:");
+  });
 });
