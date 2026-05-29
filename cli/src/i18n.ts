@@ -7,10 +7,8 @@
  * would otherwise get an all-English CLI. English is an explicit opt-in via
  * `LYNN_LANG=en` (or `LYNN_LOCALE=en`).
  *
- * Scope note: only the first-impression / interactive surfaces are localized in
- * this pass (startup tips, offline hint, code placeholder/tip, mock output,
- * spinner labels). `lynn help` usage text and deep error strings stay English for
- * now — tracked as a follow-up.
+ * Scope note: this intentionally covers the first-impression / interactive
+ * surfaces without pulling in a full i18n framework.
  */
 
 export type Lang = "zh" | "en";
@@ -43,6 +41,15 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       '提示:lynn -p "问题" 走本地 Brain 路由(默认 MiMo,在 Lynn 客户端配置)。\n' +
       "     聊天 / 代码里用 /fast 低延迟,/think 深度推理。\n" +
       "     lynn providers 配置 CLI 专用 BYOK,lynn help 查看全部命令。",
+    "startup.label.model": "模型",
+    "startup.label.mode": "权限",
+    "startup.label.byok": "BYOK",
+    "startup.label.brain": "Brain",
+    "startup.label.directory": "目录",
+    "startup.hint.model": "/model 切换",
+    "startup.hint.mode": "Shift+Tab 切换",
+    "startup.byok.default": "Lynn 客户端设置 > Providers",
+    "status.chat.prefix": "MiMo/Brain",
     "offline.body":
       "Brain 离线 —— 打开 Lynn 客户端即可使用默认 MiMo 路由,或:\n" +
       "  lynn doctor --offline       自检环境\n" +
@@ -61,12 +68,40 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "spinner.thinking": "Lynn 思考中",
     "spinner.coding": "Lynn 编码中",
     "spinner.reviewing": "Lynn 正在查看工具输出",
+    "providers.title": "Lynn Providers / BYOK",
+    "providers.currentRoute": "当前路由",
+    "providers.defaultRoute": "默认路由",
+    "providers.brainUrl": "Brain URL",
+    "providers.localServer": "客户端服务",
+    "providers.byokEntry": "BYOK 入口",
+    "providers.cliByok": "CLI BYOK",
+    "providers.configured": "已配置",
+    "providers.none": "暂未检测到",
+    "providers.byok.default": "打开 Lynn 客户端 > 设置 > Providers",
+    "providers.byok.missing": "安装/打开 Lynn 客户端 > 设置 > Providers 配置默认路由;或运行 Lynn providers set 配置 CLI-only BYOK",
+    "providers.byok.configured": "已配置 CLI BYOK fallback;默认 Brain 路由仍由 Lynn 客户端设置 > Providers 控制",
+    "providers.keyPolicy": "Provider key 保存在 Lynn 设置/服务端存储中;CLI 不会打印或暴露它们。",
+    "providers.defaultNote": "默认模型: CLI 通过本地 Brain/router 使用 MiMo,需安装并打开 Lynn 客户端。",
+    "providers.clientNote": "没有客户端时,CLI-only 模式不能修改默认模型设置。",
+    "providers.cliNote": "CLI-only: 可用 OpenAI 兼容三步配置 BYOK:",
+    "providers.routeHint": "用 Lynn model 或聊天里的 /model 查看路由;用 --brain-url 指向其他本地端点。",
+    "providers.saved": "已保存 CLI BYOK provider。",
+    "providers.savedHint": "当 Lynn 客户端/Brain 离线时,Lynn CLI 会用这个 provider 作为直接 fallback。",
   },
   en: {
     "tips.banner":
       'Tip: lynn -p "prompt" uses the local Brain router (MiMo by default, configured in the Lynn client).\n' +
       "     In chat / code, use /fast for low latency or /think for deeper reasoning.\n" +
       "     Run lynn providers for CLI-only BYOK, or lynn help to see every command.",
+    "startup.label.model": "model",
+    "startup.label.mode": "mode",
+    "startup.label.byok": "BYOK",
+    "startup.label.brain": "brain",
+    "startup.label.directory": "directory",
+    "startup.hint.model": "/model to change",
+    "startup.hint.mode": "Shift+Tab to toggle",
+    "startup.byok.default": "client GUI Settings > Providers",
+    "status.chat.prefix": "MiMo/Brain",
     "offline.body":
       "Brain offline — open the Lynn client for the default MiMo route, or:\n" +
       "  lynn doctor --offline       check setup\n" +
@@ -85,6 +120,25 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "spinner.thinking": "Lynn is thinking",
     "spinner.coding": "Lynn is coding",
     "spinner.reviewing": "Lynn is reviewing tool output",
+    "providers.title": "Lynn Providers / BYOK",
+    "providers.currentRoute": "Current route",
+    "providers.defaultRoute": "Default route",
+    "providers.brainUrl": "Brain URL",
+    "providers.localServer": "Local server",
+    "providers.byokEntry": "BYOK entry",
+    "providers.cliByok": "CLI BYOK",
+    "providers.configured": "Configured",
+    "providers.none": "none detected yet",
+    "providers.byok.default": "Open Lynn client GUI > Settings > Providers",
+    "providers.byok.missing": "Install/open Lynn client GUI > Settings > Providers for default route, or run Lynn providers set for CLI-only BYOK",
+    "providers.byok.configured": "CLI BYOK fallback configured; client GUI Settings > Providers controls the default Brain route",
+    "providers.keyPolicy": "Provider keys stay in Lynn settings/server storage; the CLI does not print or store them.",
+    "providers.defaultNote": "Default model: CLI uses MiMo through the local Brain/router when the Lynn client GUI is installed, running, and configured.",
+    "providers.clientNote": "Without the client GUI, default model settings cannot be changed from CLI-only mode.",
+    "providers.cliNote": "CLI-only: set a BYOK OpenAI-compatible endpoint with:",
+    "providers.routeHint": "Use Lynn model or /model in chat to review this route. Use --brain-url to point at another local endpoint.",
+    "providers.saved": "Saved CLI BYOK provider.",
+    "providers.savedHint": "When Lynn client GUI/Brain is offline, Lynn CLI will use this provider as a direct fallback.",
   },
 };
 

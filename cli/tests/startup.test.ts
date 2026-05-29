@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { box, renderStartupBanner } from "../src/startup.js";
+import { box, renderStartupBanner, visibleLength } from "../src/startup.js";
 import { setLang } from "../src/i18n.js";
 
 describe("startup banner", () => {
@@ -48,5 +48,13 @@ describe("startup banner", () => {
       ...rendered.split("\n").map((line) => line.replace(/\x1b\[[0-9;]*m/g, "").length),
     );
     expect(widest).toBeLessThanOrEqual(76);
+  });
+
+  it("measures CJK characters as double-width for aligned boxes", () => {
+    expect(visibleLength("模型")).toBe(4);
+    expect(visibleLength("\u001b[31m模型\u001b[0m")).toBe(4);
+    const rendered = box(["模型: MiMo", "目录: ~/项目"]);
+    const body = rendered.split("\n").slice(1, -1);
+    expect(body.every((line) => visibleLength(line) === visibleLength(body[0]))).toBe(true);
   });
 });

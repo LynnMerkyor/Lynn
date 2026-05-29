@@ -13,6 +13,7 @@ import {
   type CliProviderProfile,
 } from "../provider-profile.js";
 import { resolveDataDir } from "../session/store.js";
+import { t } from "../i18n.js";
 
 export interface ProvidersInfo {
   defaultRoute: string;
@@ -49,8 +50,8 @@ export interface ProviderLine {
 export function providersInfo(partial: Partial<ProvidersInfo> = {}): ProvidersInfo {
   return {
     defaultRoute: "MiMo via local Brain router (auto)",
-    byokEntry: "Open Lynn client GUI > Settings > Providers",
-    keyPolicy: "Provider keys stay in Lynn settings/server storage; the CLI does not print or store them.",
+    byokEntry: t("providers.byok.default"),
+    keyPolicy: t("providers.keyPolicy"),
     brainUrl: process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790",
     server: { status: "missing", message: "Lynn client GUI server-info.json not found" },
     providers: [],
@@ -68,25 +69,25 @@ export function renderProvidersInfo(info: ProvidersInfo): string {
     ? `${info.cliProvider.profile.provider} / ${info.cliProvider.profile.model} @ ${info.cliProvider.profile.baseUrl} (${info.cliProvider.source || "file"}, key ${redactApiKey(info.cliProvider.profile.apiKey)})`
     : `not set${info.cliProvider?.path ? ` · ${info.cliProvider.path}` : ""}`;
   return [
-    "Lynn Providers / BYOK",
+    t("providers.title"),
     "",
-    `Current route: ${active}`,
-    `Default route: ${info.defaultRoute}`,
-    `Brain URL:      ${info.brainUrl}`,
-    `Local server:   ${serverLine}`,
-    `BYOK entry:     ${info.byokEntry}`,
-    `CLI BYOK:       ${cliProviderLine}`,
+    `${t("providers.currentRoute")}: ${active}`,
+    `${t("providers.defaultRoute")}: ${info.defaultRoute}`,
+    `${t("providers.brainUrl")}:      ${info.brainUrl}`,
+    `${t("providers.localServer")}:   ${serverLine}`,
+    `${t("providers.byokEntry")}:     ${info.byokEntry}`,
+    `${t("providers.cliByok")}:       ${cliProviderLine}`,
     configured.length > 0
-      ? `Configured:    ${configured.slice(0, 6).map((p) => `${p.displayName}${p.modelCount ? ` (${p.modelCount})` : ""}`).join(", ")}${configured.length > 6 ? ` +${configured.length - 6}` : ""}`
-      : "Configured:    none detected yet",
+      ? `${t("providers.configured")}:    ${configured.slice(0, 6).map((p) => `${p.displayName}${p.modelCount ? ` (${p.modelCount})` : ""}`).join(", ")}${configured.length > 6 ? ` +${configured.length - 6}` : ""}`
+      : `${t("providers.configured")}:    ${t("providers.none")}`,
     "",
     info.keyPolicy,
     "",
-    "Default model: CLI uses MiMo through the local Brain/router when the Lynn client GUI is installed, running, and configured.",
-    "Without the client GUI, default model settings cannot be changed from CLI-only mode.",
-    "CLI-only: set a BYOK OpenAI-compatible endpoint with:",
+    t("providers.defaultNote"),
+    t("providers.clientNote"),
+    t("providers.cliNote"),
     "  Lynn providers set --base-url https://api.example.com/v1 --api-key <api-key> --model model-id",
-    "Use Lynn model or /model in chat to review this route. Use --brain-url to point at another local endpoint.",
+    t("providers.routeHint"),
   ].join("\n");
 }
 
@@ -108,8 +109,8 @@ export async function resolveProvidersInfo(args: ParsedArgs, timeoutMs = 1500): 
   const base = providersInfo({
     brainUrl,
     byokEntry: resolvedCliProvider
-      ? "CLI BYOK fallback configured; client GUI Settings > Providers controls the default Brain route"
-      : "Install/open Lynn client GUI > Settings > Providers for default route, or run Lynn providers set for CLI-only BYOK",
+      ? t("providers.byok.configured")
+      : t("providers.byok.missing"),
     server: {
       status: lookup.status,
       url: lookup.url,
@@ -173,14 +174,14 @@ export async function runProviders(args: ParsedArgs, json = hasFlag(args.flags, 
     if (json) writeJsonLine(payload);
     else {
       process.stdout.write([
-        "Saved CLI BYOK provider.",
+        t("providers.saved"),
         `provider: ${profile.provider}`,
         `model:    ${profile.model}`,
         `baseUrl:  ${profile.baseUrl}`,
         `apiKey:   ${redactApiKey(profile.apiKey)}`,
         `path:     ${providerProfilePath(dataDir)}`,
         "",
-        "When Lynn client GUI/Brain is offline, Lynn CLI will use this provider as a direct fallback.",
+        t("providers.savedHint"),
       ].join("\n") + "\n");
     }
     return 0;

@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "../src/args.js";
 import { activeRouteLabel, renderProvidersInfo, runProviders } from "../src/commands/providers.js";
 import { providerProfilePath, readCliProviderProfile } from "../src/provider-profile.js";
+import { setLang } from "../src/i18n.js";
+
+beforeEach(() => setLang("en"));
+afterEach(() => setLang(null));
 
 describe("providers command", () => {
   it("renders BYOK guidance without exposing keys", () => {
@@ -63,6 +67,22 @@ describe("providers command", () => {
 
     expect(output).toContain("Default route");
     expect(output).toContain("BYOK");
+  });
+
+  it("renders localized provider guidance in Chinese", () => {
+    setLang("zh");
+    const output = renderProvidersInfo({
+      defaultRoute: "MiMo via local Brain router (auto)",
+      byokEntry: "Lynn 客户端 > 设置 > Providers",
+      keyPolicy: "Provider keys stay private.",
+      brainUrl: "http://127.0.0.1:8790",
+      server: { status: "missing" },
+      providers: [],
+    });
+
+    expect(output).toContain("当前路由");
+    expect(output).toContain("默认模型");
+    expect(output).toContain("三步配置 BYOK");
   });
 
   it("formats the active route for the startup banner", () => {

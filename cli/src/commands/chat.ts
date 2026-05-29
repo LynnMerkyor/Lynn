@@ -9,6 +9,7 @@ import { TerminalSpinner } from "../terminal-spinner.js";
 import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { dangerLine, dim, red, supportsColor } from "../terminal-style.js";
 import { renderStartupBanner } from "../startup.js";
+import { renderStatusBar } from "../status-bar.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
 import { t } from "../i18n.js";
 import { MarkdownStream } from "../markdown.js";
@@ -91,6 +92,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     }
 
     let assistant = "";
+    let latestUsage: string | null = null;
     const renderState: HumanBrainRenderState = {};
     const spinner = new TerminalSpinner(process.stderr);
     const renderReasoning = shouldRenderReasoning(reasoning.display, false);
@@ -105,6 +107,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
           md.push(event.text);
           assistant += event.text;
         } else {
+          if (event.type === "usage") latestUsage = summarizeUsage(event.usage);
           renderChatEvent(event, renderReasoning, renderState);
         }
         if (event.type === "brain.error") {
@@ -121,7 +124,14 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     }
     md.end();
     messages.push({ role: "assistant", content: assistant });
-    output.write("\n\n");
+    output.write(`\n${renderStatusBar({
+      model: renderState.provider || t("status.chat.prefix"),
+      cwd: process.cwd(),
+      mode: renderMode(mode),
+      reasoning: reasoning.effort,
+      usage: latestUsage,
+      color: supportsColor(output),
+    })}\n\n`);
     return "continue";
   }
 
