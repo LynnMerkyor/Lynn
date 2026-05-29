@@ -1,4 +1,5 @@
 import { parseArgs, hasFlag } from "./args.js";
+import { runAgents } from "./commands/agents.js";
 import { runChat } from "./commands/chat.js";
 import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
@@ -28,6 +29,9 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     case "chat": {
       return runChat(args);
+    }
+    case "agents": {
+      return runAgents(args, json);
     }
     case "prompt":
     case "exec": {

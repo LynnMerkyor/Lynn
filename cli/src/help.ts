@@ -11,6 +11,7 @@ export function usage(): string {
     "  Lynn -p \"prompt\" [--mock-brain] [--json]",
     "  Lynn exec \"task\" --json [--mock-brain]",
     "  Lynn chat",
+    "  Lynn agents [--json]",
     "  Lynn worker run --brief task.md --worktree path --jsonl --mock",
     "  Lynn code \"review the current diff\"",
     "  Lynn code --list-tools",
