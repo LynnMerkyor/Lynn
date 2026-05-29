@@ -503,16 +503,16 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
       : undefined,
   });
   if (saveSession) {
-    if (liveSessionPath && final.trim()) {
+    if (liveSessionPath && final.text.trim()) {
       const existingLines = await readSessionLines(liveSessionPath).catch(() => []);
       const lastMessage = [...existingLines].reverse().find((line) => line.type === "assistant" || line.type === "user");
-      if (!(lastMessage?.type === "assistant" && lastMessage.content === final)) {
+      if (!(lastMessage?.type === "assistant" && lastMessage.content === final.text)) {
         liveSessionPath = await appendSessionLine({
           dataDir,
           sessionPath: liveSessionPath,
           cwd: context.cwd,
           title,
-          line: { type: "assistant", content: final },
+          line: { type: "assistant", content: final.text },
           modelProvider: cliProvider?.profile.provider || "brain",
           modelId: cliProvider?.profile.model || "lynn-brain-router",
         });
@@ -525,7 +525,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
       cwd: context.cwd,
       title,
       prompt: task,
-      assistant: final,
+      assistant: final.text,
       modelProvider: cliProvider?.profile.provider || "brain",
       modelId: cliProvider?.profile.model || "lynn-brain-router",
     });
@@ -538,18 +538,25 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
         image: getStringFlag(args.flags, "image", "shot") || null,
         reasoning,
         maxSteps: maxSteps(args),
+        maxStepsReached: final.maxStepsReached,
         resumedFrom: resumePath || null,
       },
     });
     if (json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
   }
   if (json) {
-    if (final.trim()) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: final });
-    writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true, contentReturned: !!final.trim() });
+    if (final.text.trim()) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: final.text });
+    writeJsonLine({
+      type: "code.task.finished",
+      ts: nowIso(),
+      ok: !final.maxStepsReached,
+      contentReturned: !!final.text.trim(),
+      ...(final.maxStepsReached ? { code: "max_steps_reached" } : {}),
+    });
   } else {
-    process.stdout.write(renderAssistantBlock(renderMarkdown(final.trim() || "(no answer)", supportsColor(output)), renderCodeFooter({ context, mode, mockBrain, reasoning, fallbackProvider: cliProvider?.profile })));
+    process.stdout.write(renderAssistantBlock(renderMarkdown(final.text.trim() || "(no answer)", supportsColor(output)), renderCodeFooter({ context, mode, mockBrain, reasoning, fallbackProvider: cliProvider?.profile })));
   }
-  return 0;
+  return final.maxStepsReached ? 2 : 0;
 }
 
 async function resolveCodeResumePath(raw: string | null, dataDir: string): Promise<string | null> {
@@ -628,7 +635,12 @@ interface CodeToolRequest {
   };
 }
 
-async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> {
+interface CodeAgentLoopResult {
+  text: string;
+  maxStepsReached: boolean;
+}
+
+async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgentLoopResult> {
   const frames = buildCodeRuntimeFrames(inputData);
   const initialPrompt = buildCodePrompt(inputData.task, inputData.context, inputData.imagePath);
   const initialContent = inputData.imagePath
@@ -716,10 +728,15 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<string> 
     });
     if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: toolResultMessage });
   }
+  let maxStepsReached = false;
   if (!finalText) {
+    maxStepsReached = true;
     finalText = "Stopped after the maximum tool steps. Review the emitted tool results before continuing.";
   }
-  return finalText;
+  return {
+    text: finalText,
+    maxStepsReached,
+  };
 }
 
 export async function loadResumeMessages(sessionPath: string, maxChars = 24_000): Promise<ChatMessage[]> {

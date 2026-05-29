@@ -132,6 +132,37 @@ describe("code agent loop", () => {
     expect(output).toContain("I already have the file content");
   });
 
+  it("returns a non-zero result when the tool loop exhausts max steps", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer(() => JSON.stringify({ tool: "read_file", args: { path: "hello.txt" } }), async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "keep inspecting hello",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--max-steps",
+          "1",
+          "--json",
+        ]))).resolves.toBe(2);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain('"type":"code.tool.requested"');
+    expect(output).toContain('"ok":false');
+    expect(output).toContain('"code":"max_steps_reached"');
+    expect(output).toContain("Stopped after the maximum tool steps");
+  });
+
   it("sends attached images through code mode for multimodal MiMo tasks", async () => {
     const image = path.join(tmp, "shot.png");
     await fs.writeFile(image, Buffer.from("89504e470d0a1a0a", "hex"));
