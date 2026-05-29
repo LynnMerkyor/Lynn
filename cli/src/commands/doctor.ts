@@ -1,4 +1,7 @@
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
+import { listProviderPresets } from "../provider-presets.js";
+import { providerProfilePath, readCliProviderProfile, redactApiKey } from "../provider-profile.js";
+import { resolveDataDir } from "../session/store.js";
 import { readVersionInfo } from "../version.js";
 
 export interface DoctorResult {
@@ -7,15 +10,32 @@ export interface DoctorResult {
   node: string;
   brainUrl: string;
   brain: "ok" | "skipped" | "unreachable";
+  cliProvider: {
+    configured: boolean;
+    path: string;
+    provider?: string;
+    baseUrl?: string;
+    model?: string;
+    apiKey?: string;
+  };
+  presets: string[];
   checks: Array<{ name: string; ok: boolean; message: string }>;
 }
 
 export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
   const version = readVersionInfo();
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
+  const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
+  const profile = await readCliProviderProfile(dataDir);
+  const profilePath = providerProfilePath(dataDir);
+  const presets = listProviderPresets().map((preset) => `${preset.name}:${preset.model}`);
   const checks: DoctorResult["checks"] = [
     { name: "node", ok: true, message: process.version },
     { name: "cwd", ok: true, message: process.cwd() },
+    profile
+      ? { name: "cli-byok", ok: true, message: `${profile.provider} / ${profile.model} @ ${profile.baseUrl} (key ${redactApiKey(profile.apiKey)})` }
+      : { name: "cli-byok", ok: true, message: `not configured (${profilePath}); try: Lynn providers set --preset mimo --api-key <api-key>` },
+    { name: "presets", ok: true, message: presets.join(", ") },
   ];
 
   let brain: DoctorResult["brain"] = "skipped";
@@ -43,6 +63,15 @@ export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
     node: process.version,
     brainUrl,
     brain,
+    cliProvider: {
+      configured: !!profile,
+      path: profilePath,
+      provider: profile?.provider,
+      baseUrl: profile?.baseUrl,
+      model: profile?.model,
+      apiKey: profile ? redactApiKey(profile.apiKey) : undefined,
+    },
+    presets,
     checks,
   };
 }
