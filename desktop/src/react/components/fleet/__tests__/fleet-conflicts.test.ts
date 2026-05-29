@@ -47,4 +47,12 @@ describe('cancel maps to cancelled status', () => {
     v = reduceFleetWorker(v, { type: 'worker.error', workerId: 'w1', code: 'cancelled', message: 'cancelled by user', recoverable: false });
     expect(v.status).toBe('cancelled');
   });
+
+  it('recoverable worker errors still move the card to failed for retry', () => {
+    let v = createWorkerView('w1');
+    v = reduceFleetWorker(v, { type: 'worker.started', workerId: 'w1', cwd: '/r', worktree: 'wt', branch: 'b' });
+    v = reduceFleetWorker(v, { type: 'worker.error', workerId: 'w1', code: 'worker_exit', message: 'worker exited', recoverable: true });
+    expect(v.status).toBe('failed');
+    expect(v.error).toMatchObject({ code: 'worker_exit', recoverable: true });
+  });
 });

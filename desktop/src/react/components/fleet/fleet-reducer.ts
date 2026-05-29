@@ -340,7 +340,7 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
       next.error = { code: ev.code, message: ev.message, recoverable: ev.recoverable };
       next.log = [...prev.log, `error ${ev.code}: ${ev.message}`];
       if (ev.code === 'cancelled') next.status = 'cancelled';
-      else if (!ev.recoverable) next.status = 'failed';
+      else next.status = 'failed';
       return next;
     default: {
       const _exhaustive: never = ev;
