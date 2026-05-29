@@ -99,8 +99,11 @@ describe("providers command", () => {
       process.stdout.write = original;
     }
 
+    expect(output).toContain("mimo");
+    expect(output).toContain("mimo-v2.5-pro");
     expect(output).toContain("stepfun");
     expect(output).toContain("step-3.7-flash");
+    expect(output).toContain("Lynn providers set --preset mimo --api-key <api-key>");
     expect(output).toContain("Lynn providers set --preset stepfun --api-key <api-key>");
   });
 
@@ -118,6 +121,7 @@ describe("providers command", () => {
     }
 
     expect(output).toContain("\"type\":\"providers.presets\"");
+    expect(output).toContain("\"name\":\"mimo\"");
     expect(output).toContain("\"name\":\"stepfun\"");
     expect(output).not.toContain("apiKey");
   });
@@ -125,6 +129,8 @@ describe("providers command", () => {
   it("renders provider presets without embedding keys", () => {
     const rendered = renderProviderPresets();
 
+    expect(rendered).toContain("MiMo");
+    expect(rendered).toContain("mimo-v2.5-pro");
     expect(rendered).toContain("StepFun");
     expect(rendered).toContain("step-3.7-flash");
     expect(rendered).toContain("<api-key>");
@@ -174,6 +180,49 @@ describe("providers command", () => {
     expect(output).toContain(providerProfilePath(dataDir));
     expect(output).toContain("sk-s…1234");
     expect(output).not.toContain("sk-secret-1234");
+  });
+
+  it("supports MiMo as a CLI BYOK preset without bundling a key", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-mimo-"));
+    const original = process.stdout.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    try {
+      await expect(runProviders(parseArgs([
+        "providers",
+        "set",
+        "--data-dir",
+        dataDir,
+        "--preset",
+        "mimo",
+        "--api-key",
+        "mimo-secret",
+      ]), false)).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    await expect(readCliProviderProfile(dataDir)).resolves.toMatchObject({
+      provider: "openai-compatible",
+      baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+      model: "mimo-v2.5-pro",
+      apiKey: "mimo-secret",
+    });
+    await expect(resolveCliProviderProfile(parseArgs([
+      "code",
+      "review this",
+      "--data-dir",
+      dataDir,
+      "--preset",
+      "mimo",
+    ]))).resolves.toMatchObject({
+      source: "flags",
+      profile: {
+        provider: "openai-compatible",
+        baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+        model: "mimo-v2.5-pro",
+        apiKey: "mimo-secret",
+      },
+    });
   });
 
   it("supports StepFun as a CLI BYOK preset without bundling a key", async () => {

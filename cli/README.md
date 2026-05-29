@@ -50,6 +50,15 @@ Lynn providers set \
   --model model-id
 ```
 
+Common presets fill the API URL and model name while still requiring your own
+key:
+
+```bash
+Lynn providers set --preset mimo --api-key <token-plan-key>
+Lynn providers set --preset stepfun --api-key <stepfun-key>
+Lynn providers presets
+```
+
 The profile is stored in `~/.lynn/providers/cli.json` with the key redacted in
 terminal output. `Lynn -p`, `Lynn chat`, `Lynn code`, and built-in Lynn workers
 try the local Brain first; if it is offline, they use this BYOK provider.
