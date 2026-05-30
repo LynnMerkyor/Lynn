@@ -107,6 +107,7 @@ function shellQuote(value: string): string {
 const WORKER_GUARDRAIL = [
   "You are running as a Lynn Fleet worker.",
   "Follow the task brief exactly and keep all edits inside the assigned worktree and owned files.",
+  "Some Fleet briefs are answer-only smoke or coordination tasks. If the brief explicitly says not to inspect files, not to run tools, or to reply/output exactly, answer directly and finish without repository exploration.",
   "Do not download model weights, BF16/GGUF files, datasets, training packages, or large binary artifacts to this Mac.",
   "Report progress concisely; Lynn will inspect git diff, tests, and scope after you finish.",
 ].join("\n");
@@ -621,6 +622,23 @@ function isBuiltInLynnWorker(agent: string): boolean {
   return agent === "lynn-cli" || agent === "mimo-vl" || agent === "mimo-pro" || agent === "mimo-fast" || agent === "stepfun-flash";
 }
 
+export function isAnswerOnlyWorkerBrief(brief: Pick<WorkerBrief, "title" | "objective" | "tests">): boolean {
+  if (brief.tests.length) return false;
+  const text = `${brief.title}\n${brief.objective}`.toLowerCase();
+  return [
+    /\breply exactly\b/,
+    /\boutput exactly\b/,
+    /\banswer only\b/,
+    /\bno tools?\b/,
+    /\bwithout tools?\b/,
+    /\bdo not\b[\s\S]{0,80}\b(inspect|read|run|use|call|edit|modify)\b[\s\S]{0,80}\b(tool|tools|file|files|command|commands|repo|repository)\b/,
+    /只回复/,
+    /只输出/,
+    /不要[\s\S]{0,40}(工具|读文件|读取|运行|修改|编辑|检查)/,
+    /无需[\s\S]{0,40}(工具|读文件|读取|运行|修改|编辑|检查)/,
+  ].some((pattern) => pattern.test(text));
+}
+
 function isVisionTask(taskType: WorkerBrief["taskType"]): taskType is "see" | "ground" {
   return taskType === "see" || taskType === "ground";
 }
@@ -641,6 +659,10 @@ async function runLynnCliWorker(input: {
   agent: string;
   permissions: PermissionProfile;
 }): Promise<number> {
+  if (isAnswerOnlyWorkerBrief(input.brief)) {
+    return runLynnAnswerOnlyWorker(input);
+  }
+
   const task = buildLynnCodeWorkerTask(input.brief);
   emit({ type: "shell.started", workerId: input.workerId, agent: input.agent, command: "Lynn code", approval: "auto" });
   const started = Date.now();
@@ -685,9 +707,83 @@ async function runLynnCliWorker(input: {
   return exitCode;
 }
 
+async function runLynnAnswerOnlyWorker(input: {
+  args: ParsedArgs;
+  brief: WorkerBrief;
+  worktree: string;
+  workerId: string;
+  agent: string;
+  permissions: PermissionProfile;
+}): Promise<number> {
+  emit({ type: "shell.started", workerId: input.workerId, agent: input.agent, command: "Lynn answer", approval: "auto" });
+  const started = Date.now();
+  const brainUrl = getStringFlag(input.args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
+  const profileDefaults = workerProfileDefaults(input.agent);
+  const reasoning = parseReasoningOptions({
+    ...input.args,
+    flags: {
+      ...input.args.flags,
+      ...(getStringFlag(input.args.flags, "reasoning") ? {} : profileDefaults.reasoning ? { reasoning: profileDefaults.reasoning } : {}),
+    },
+  });
+  const cliProvider = await resolveCliProviderProfile(argsWithWorkerPreset(input.args, input.agent));
+  let assistantText = "";
+  try {
+    for await (const event of streamBrainChat({
+      brainUrl,
+      reasoning,
+      prompt: buildAnswerOnlyWorkerPrompt(input.brief),
+      fallbackProvider: cliProvider?.profile,
+    })) {
+      if (event.type === "assistant.delta") {
+        assistantText += event.text;
+        emit({ type: "assistant.delta", workerId: input.workerId, agent: input.agent, text: event.text });
+      } else if (event.type === "reasoning.delta") {
+        emit({ type: "reasoning.delta", workerId: input.workerId, agent: input.agent, text: event.text, hidden: event.hidden });
+      } else if (event.type === "provider") {
+        emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: `provider: ${event.activeProvider}`, data: event });
+      } else if (event.type === "usage") {
+        emit({ type: "worker.progress", workerId: input.workerId, agent: input.agent, message: "usage", data: usageWithDuration(event.usage, Date.now() - started) });
+      } else if (event.type === "brain.error") {
+        throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
+      }
+    }
+    const ok = !!assistantText.trim();
+    emit({ type: "shell.finished", workerId: input.workerId, agent: input.agent, command: "Lynn answer", ok, exitCode: ok ? 0 : 1, ms: Date.now() - started });
+    if (!ok) {
+      emit({ type: "worker.error", workerId: input.workerId, agent: input.agent, code: "answer_worker_empty", message: "answer-only worker returned no visible text", recoverable: true });
+    }
+    return ok ? 0 : 1;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emit({ type: "worker.error", workerId: input.workerId, agent: input.agent, code: "answer_worker_failed", message, recoverable: true });
+    emit({ type: "shell.finished", workerId: input.workerId, agent: input.agent, command: "Lynn answer", ok: false, exitCode: 1, ms: Date.now() - started });
+    return 1;
+  }
+}
+
+function buildAnswerOnlyWorkerPrompt(brief: WorkerBrief): string {
+  return [
+    "You are a Lynn Fleet worker handling an answer-only task.",
+    "Do not inspect files. Do not call tools. Do not run commands.",
+    "Follow the objective exactly. If it asks for an exact phrase, output only that phrase.",
+    "",
+    `Title: ${brief.title}`,
+    "",
+    "Objective:",
+    brief.objective || brief.title,
+  ].join("\n");
+}
+
 export function workerProviderPreset(agent: string): string | null {
   if (agent === "stepfun-flash") return "stepfun";
   return null;
+}
+
+function argsWithWorkerPreset(args: ParsedArgs, agent: string): ParsedArgs {
+  const preset = workerProviderPreset(agent);
+  if (!preset || readEnvProviderProfile() || getStringFlag(args.flags, "preset") || getStringFlag(args.flags, "base-url", "api-base") || getStringFlag(args.flags, "model")) return args;
+  return { ...args, flags: { ...args.flags, preset } };
 }
 
 async function runLynnVisionWorker(input: {

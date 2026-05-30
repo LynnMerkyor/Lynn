@@ -11,6 +11,7 @@ import {
   collectGitDiff,
   externalJsonEvents,
   extractGroundingBoxes,
+  isAnswerOnlyWorkerBrief,
   parseWorkerBrief,
   parseWorkerEventLine,
   runWorker,
@@ -355,6 +356,24 @@ describe("worker-run scaffold", () => {
     expect(workerProfileDefaults("mimo-vl")).toEqual({ reasoning: "high" });
     expect(workerProfileDefaults("stepfun-flash")).toEqual({ reasoning: "high", maxSteps: "100", long: true });
     expect(workerProfileDefaults("lynn-cli")).toEqual({});
+  });
+
+  it("detects answer-only Fleet briefs that should not enter the tool loop", () => {
+    expect(isAnswerOnlyWorkerBrief(parseWorkerBrief([
+      "# Task: smoke",
+      "",
+      "## Objective",
+      "Reply exactly `worker ok` and finish. Do not inspect files and do not run tools.",
+    ].join("\n")))).toBe(true);
+    expect(isAnswerOnlyWorkerBrief(parseWorkerBrief([
+      "# Task: patch file",
+      "",
+      "## Objective",
+      "Change hello to lynn.",
+      "",
+      "## Test commands",
+      "- npm test",
+    ].join("\n")))).toBe(false);
   });
 
   it("runs mimo-fast workers with thinking disabled unless overridden", async () => {
@@ -900,6 +919,76 @@ describe("worker-run scaffold", () => {
     expect(lines.some((line) => line.type === "shell.started")).toBe(true);
     expect(lines.some((line) => line.type === "session.checkpoint")).toBe(true);
     expect(lines.some((line) => line.type === "session.saved" && line.path)).toBe(true);
+    expect(lines.some((line) => line.type === "worker.finished" && line.summary === "lynn-cli worker completed")).toBe(true);
+  });
+
+  it("runs answer-only built-in workers without exposing local tools", async () => {
+    const repo = await makeTempGitRepo();
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: worker smoke",
+      "",
+      "## Objective",
+      "Reply exactly `worker ok` and finish. Do not inspect files and do not run tools.",
+      "",
+      "## Owned files",
+      "- cli/**",
+      "",
+      "## Forbidden files",
+      "- server/**",
+    ].join("\n"));
+    let requestBody = "";
+    const server = http.createServer((req, res) => {
+      if (req.url === "/v1/chat/completions" && req.method === "POST") {
+        req.on("data", (chunk) => { requestBody += String(chunk); });
+        req.on("end", () => {
+          res.writeHead(200, { "content-type": "text/event-stream" });
+          res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: "worker ok" } }] })}\n\ndata: [DONE]\n\n`);
+        });
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("server did not bind");
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const code = await runWorker(parseArgs([
+        "worker",
+        "run",
+        "--brief",
+        briefPath,
+        "--worktree",
+        repo,
+        "--agent",
+        "lynn-cli",
+        "--brain-url",
+        `http://127.0.0.1:${address.port}`,
+        "--approval",
+        "yolo",
+        "--max-steps",
+        "3",
+      ]));
+      expect(code).toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    const parsedBody = JSON.parse(requestBody) as { tools?: unknown; messages?: Array<{ content?: unknown }> };
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; command?: string; text?: string; summary?: string });
+    expect(parsedBody.tools).toBeUndefined();
+    expect(JSON.stringify(parsedBody.messages)).toContain("Do not inspect files. Do not call tools. Do not run commands.");
+    expect(lines.some((line) => line.type === "shell.started" && line.command === "Lynn answer")).toBe(true);
+    expect(lines.some((line) => line.type === "assistant.delta" && line.text === "worker ok")).toBe(true);
     expect(lines.some((line) => line.type === "worker.finished" && line.summary === "lynn-cli worker completed")).toBe(true);
   });
 
