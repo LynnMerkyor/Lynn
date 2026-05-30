@@ -26,7 +26,7 @@ import { renderProvidersInfo, resolveProvidersInfo, runProviders } from "./provi
 import { readVersionInfo } from "../version.js";
 import { buildImagesContentParts, parseImageList } from "../media.js";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, readSessionLines, resolveDataDir } from "../session/store.js";
-import { renderRuntimeInstructionFrame, stableRuntimePrefix, type RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
+import { normalizeRuntimeInstructionFrame, renderRuntimeInstructionFrame, stableRuntimePrefix, type RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
 
 const pExecFile = promisify(execFile);
 
@@ -762,6 +762,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
       content: stableRuntimePrefix(frames),
     },
     ...frames
+      .map((frame) => normalizeRuntimeInstructionFrame(frame))
       .filter((frame) => !frame.stable || !frame.cacheable)
       .map((frame) => ({ role: "user" as const, content: renderRuntimeInstructionFrame(frame) })),
     ...(inputData.resumeMessages || []),

@@ -339,6 +339,51 @@ describe("code agent loop", () => {
     expect(output).toContain("Read streamed tool call result");
   });
 
+  it("keeps runtime instruction frames OpenAI-compatible across resumed code turns", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-runtime-frames-"));
+    const sessionPath = await appendSessionTurn({
+      dataDir,
+      cwd: tmp,
+      title: "Prior task",
+      prompt: "Earlier user request",
+      assistant: "Earlier assistant answer",
+      modelProvider: "test",
+      modelId: "test-model",
+    });
+    const original = process.stdout.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    try {
+      await withBrainServer((body) => {
+        const parsed = body as { messages?: Array<{ role?: string; content?: unknown }> };
+        const roles = parsed.messages?.map((message) => message.role) || [];
+        expect(roles[0]).toBe("system");
+        expect(roles.slice(1)).not.toContain("system");
+        expect(roles).toContain("assistant");
+        expect(roles.at(-1)).toBe("user");
+        const dynamicFrames = parsed.messages?.slice(1, 3).map((message) => String(message.content || "")).join("\n") || "";
+        expect(dynamicFrames).toContain("lynn_runtime_frame");
+        expect(dynamicFrames).toContain("approval=ask sandbox=workspace-write");
+        expect(dynamicFrames).toContain("Local tool guard");
+        return "Runtime frame ordering is compatible.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "continue safely",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--resume",
+          sessionPath,
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+      await fs.rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("feeds failed tool results back so the model can repair and continue", async () => {
     const badPatch = [
       "*** Begin Patch",
