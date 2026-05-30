@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { buildCodeRuntimeFrames, canPromptForDangerousTool, codeTaskPrompt, codeToolDefinitions, createStreamingToolCallAccumulator, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeResumeSlash, parseCodeToolRequest, parseCodeToolRequests, renderCodeIntro, renderCodeTaskHeader, resumeCommandForSession, runCode, withLongRunCodeFlags } from "../src/commands/code.js";
+import { buildCodeRuntimeFrames, canPromptForDangerousTool, codeTaskPrompt, codeToolDefinitions, createStreamingToolCallAccumulator, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeResumeSlash, parseCodeToolRequest, parseCodeToolRequests, renderCodeHeadlessHelp, renderCodeIntro, renderCodeTaskHeader, resumeCommandForSession, runCode, withLongRunCodeFlags } from "../src/commands/code.js";
 import { stableRuntimePrefix } from "../../shared/runtime-instruction-frames.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
@@ -654,6 +654,28 @@ describe("code tools", () => {
     expect(output).toContain('"type":"code.task.started"');
     expect(output).toContain('"task":"headless agent task"');
     expect(output).toContain('"type":"code.task.finished"');
+    expect(output).not.toContain("code mode ready");
+  });
+
+  it("renders copyable headless help for agent callers", async () => {
+    const help = renderCodeHeadlessHelp();
+    expect(help).toContain("Lynn code -p \"fix tests");
+    expect(help).toContain("--approval yolo --sandbox workspace-write");
+    expect(help).toContain("Lynn worker run --brief task.md");
+    expect(help).toContain("code.tool.ledger");
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runCode(parseArgs(["code", "--help"]))).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+    expect(output).toContain("Lynn code headless / CLI Fleet");
     expect(output).not.toContain("code mode ready");
   });
 

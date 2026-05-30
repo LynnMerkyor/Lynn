@@ -108,6 +108,12 @@ export function maxSteps(args: ParsedArgs): number {
 
 export async function runCode(args: ParsedArgs): Promise<number> {
   const json = hasFlag(args.flags, "json", "jsonl");
+  if (hasFlag(args.flags, "help", "h")) {
+    const text = renderCodeHeadlessHelp();
+    if (json) writeJsonLine({ type: "code.help", ts: nowIso(), text });
+    else process.stdout.write(`${text}\n`);
+    return 0;
+  }
   if (hasFlag(args.flags, "list-tools")) {
     const payload = { type: "code.tools", ts: nowIso(), tools: CLIENT_TOOL_DEFINITIONS };
     if (json) writeJsonLine(payload);
@@ -169,6 +175,44 @@ export function codeTaskPrompt(args: ParsedArgs): string {
     getStringFlag(args.flags, "p", "print", "prompt", "task"),
     args.positionals.join(" ").trim(),
   ].filter((part): part is string => !!part && !!part.trim()).join("\n\n").trim();
+}
+
+export function renderCodeHeadlessHelp(): string {
+  const build = readVersionInfo().build || "<release-build>";
+  return [
+    "Lynn code headless / CLI Fleet",
+    "",
+    "用途:",
+    "  - 给人用: Lynn code",
+    "  - 给其他智能体 / CI / GUI Fleet 用: Lynn code -p \"任务\" --json --cwd /repo",
+    "",
+    "安装(Node.js 20 LTS 或 22 LTS + npm):",
+    `  npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=${build}`,
+    "",
+    "静默调用(处理完直接退出,不进入 TUI):",
+    "  Lynn code -p \"review the current diff\" --json --cwd /repo",
+    "  Lynn code -p \"fix tests, run the suite, summarize the diff\" \\",
+    "    --json --cwd /worktree --approval yolo --sandbox workspace-write --save-session",
+    "",
+    "长任务/断点续跑:",
+    "  Lynn code -p \"complete the migration until tests pass\" \\",
+    "    --json --cwd /worktree --approval yolo --sandbox workspace-write \\",
+    "    --long --max-steps 1000 --save-session",
+    "  Lynn code --resume <session.jsonl> -p \"continue\" --json --long",
+    "",
+    "GUI Fleet worker(JSONL 事件流):",
+    "  Lynn worker run --brief task.md --worktree /worktree \\",
+    "    --jsonl --approval yolo --sandbox workspace-write",
+    "  Lynn worker run --brief task.md --worktree /worktree \\",
+    "    --agent custom --agent-command \"your-cli --json\" --jsonl",
+    "",
+    "规则:",
+    "  - 自动化调用只解析 --json / --jsonl,不要解析人类 TUI。",
+    "  - 总是传 --cwd 或 --worktree。",
+    "  - --approval yolo 只用于隔离 git worktree;它表示零逐条审批。",
+    "  - code.tool.ledger 是链式工具结果的 source-of-truth。",
+    "  - code.task.finished.resumeCommand 存在时,按它继续。",
+  ].join("\n");
 }
 
 async function runCodeInteractive(args: ParsedArgs): Promise<number> {

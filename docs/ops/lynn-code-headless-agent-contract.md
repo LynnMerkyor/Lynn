@@ -21,7 +21,8 @@ This is the short contract another coding agent should read first:
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # Install or update Lynn CLI.
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=16f653a
+BUILD=$(node -e "fetch('https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.json').then(r=>r.json()).then(j=>console.log(j.build))")
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=$BUILD"
 
 # Verify the binary without needing a model backend.
 Lynn version

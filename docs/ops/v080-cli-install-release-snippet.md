@@ -13,7 +13,8 @@ for other coding agents to parse.
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update Lynn CLI from the CDN.
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=16f653a
+BUILD=$(node -e "fetch('https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.json').then(r=>r.json()).then(j=>console.log(j.build))")
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=$BUILD"
 
 # 3. Launch.
 Lynn          # interactive chat TUI
