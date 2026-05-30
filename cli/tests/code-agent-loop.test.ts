@@ -588,12 +588,15 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
       await withBrainServer((body) => {
         const parsed = body as { messages?: Array<{ role?: string; content?: unknown }> };
         const roles = parsed.messages?.map((message) => message.role) || [];
+        const contents = parsed.messages?.map((message) => String(message.content || "")) || [];
         expect(roles[0]).toBe("system");
         expect(roles.slice(1)).not.toContain("system");
         expect(roles).toContain("assistant");
         expect(roles.at(-1)).toBe("user");
-        const dynamicFrames = parsed.messages?.slice(1, 3).map((message) => String(message.content || "")).join("\n") || "";
-        expect(dynamicFrames).toContain("lynn_runtime_frame");
+        const assistantIndex = roles.indexOf("assistant");
+        const dynamicIndex = contents.findIndex((content) => content.includes("approval=ask sandbox=workspace-write"));
+        expect(dynamicIndex).toBeGreaterThan(assistantIndex);
+        const dynamicFrames = contents.filter((content) => content.includes("lynn_runtime_frame")).join("\n");
         expect(dynamicFrames).toContain("approval=ask sandbox=workspace-write");
         expect(dynamicFrames).toContain("Local tool guard");
         return "Runtime frame ordering is compatible.";

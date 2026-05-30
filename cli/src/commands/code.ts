@@ -765,16 +765,17 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
   const initialContent = inputData.imagePaths?.length
     ? await buildImagesContentParts(inputData.imagePaths, initialPrompt)
     : initialPrompt;
+  const volatileRuntimeMessages: ChatMessage[] = frames
+    .map((frame) => normalizeRuntimeInstructionFrame(frame))
+    .filter((frame) => !frame.stable || !frame.cacheable)
+    .map((frame) => ({ role: "user" as const, content: renderRuntimeInstructionFrame(frame) }));
   const messages: ChatMessage[] = [
     {
       role: "system",
       content: stableRuntimePrefix(frames),
     },
-    ...frames
-      .map((frame) => normalizeRuntimeInstructionFrame(frame))
-      .filter((frame) => !frame.stable || !frame.cacheable)
-      .map((frame) => ({ role: "user" as const, content: renderRuntimeInstructionFrame(frame) })),
     ...(inputData.resumeMessages || []),
+    ...volatileRuntimeMessages,
     { role: "user", content: initialContent },
   ];
   let finalText = "";
