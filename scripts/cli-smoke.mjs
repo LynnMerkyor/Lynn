@@ -27,7 +27,7 @@ function run(name, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(nodeBin, [cliBin, ...args], {
       cwd: root,
-      env: { ...process.env, ...(options.env || {}) },
+      env: { ...process.env, LYNN_CLI_UPDATE_CHECK: "0", ...(options.env || {}) },
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";
@@ -901,7 +901,7 @@ function runProcess(name, command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: root,
-      env: { ...process.env, ...(options.env || {}) },
+      env: { ...process.env, LYNN_CLI_UPDATE_CHECK: "0", ...(options.env || {}) },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
