@@ -12,6 +12,7 @@ import { resolveCliProviderProfile } from "./provider-profile.js";
 import { CLIENT_TOOL_DEFINITIONS } from "./tools/types.js";
 import { t } from "./i18n.js";
 import { InkDiffText, InkMarkdown } from "./ink-markdown.js";
+import { handleInkProviderCommand } from "./ink-provider-commands.js";
 
 type CodeItem =
   | { id: number; kind: "user"; text: string }
@@ -201,6 +202,16 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       const message = applyModeCommand(next, text.slice(6).trim());
       setMode(next);
       pushItem({ kind: "system", text: message, tone: next.approval === "yolo" ? "danger" : "success" });
+      return;
+    }
+    const providerCommand = await handleInkProviderCommand(text, props.args);
+    if (providerCommand.handled) {
+      if (providerCommand.refreshedProvider !== undefined) {
+        setProvider(providerCommand.refreshedProvider
+          ? `CLI BYOK: ${providerCommand.refreshedProvider.provider} / ${providerCommand.refreshedProvider.model}`
+          : props.modelLabel);
+      }
+      pushItem({ kind: "system", text: providerCommand.message });
       return;
     }
 

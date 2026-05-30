@@ -12,6 +12,7 @@ import { resolveEffectivePermissions } from "./permissions.js";
 import { displayCwd } from "./startup.js";
 import { CHAT_SLASH_COMMANDS, applyModeCommand, applyReasoningCommand, chatRouteLabel, renderMode, type ChatMode } from "./commands/chat.js";
 import { InkMarkdown } from "./ink-markdown.js";
+import { handleInkProviderCommand } from "./ink-provider-commands.js";
 
 type Turn = {
   id: number;
@@ -58,6 +59,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
   const [frame, setFrame] = useState(0);
   const [reasoning, setReasoning] = useState(props.initialReasoning);
   const [mode, setMode] = useState(props.initialMode);
+  const [fallbackProvider, setFallbackProvider] = useState<CliProviderProfile | null>(props.fallbackProvider || null);
   const [provider, setProvider] = useState(chatRouteLabel(props.fallbackProvider));
   const [usage, setUsage] = useState<string | null>(null);
   const [history] = useState(() => new HistoryNavigator(loadHistory(historyPath())));
@@ -88,6 +90,8 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
         setUsage,
         setReasoning,
         setMode,
+        fallbackProvider,
+        setFallbackProvider,
         appExit: app.exit,
         messages,
         props,
@@ -199,6 +203,8 @@ async function submitInput(inputData: {
   setUsage: (value: string | null) => void;
   setReasoning: (value: ReasoningOptions) => void;
   setMode: (value: ChatMode) => void;
+  fallbackProvider: CliProviderProfile | null;
+  setFallbackProvider: (value: CliProviderProfile | null) => void;
   appExit: () => void;
   messages: ChatMessage[];
   props: InkChatProps;
@@ -243,6 +249,15 @@ async function submitInput(inputData: {
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("chat.help") }]);
     return;
   }
+  const providerCommand = await handleInkProviderCommand(text, inputData.props.args);
+  if (providerCommand.handled) {
+    if (providerCommand.refreshedProvider !== undefined) {
+      inputData.setFallbackProvider(providerCommand.refreshedProvider);
+      inputData.setProvider(chatRouteLabel(providerCommand.refreshedProvider));
+    }
+    inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: providerCommand.message }]);
+    return;
+  }
 
   const userTurn: Turn = { id: Date.now(), role: "user", text };
   const assistantId = userTurn.id + 1;
@@ -265,7 +280,7 @@ async function submitInput(inputData: {
       brainUrl: inputData.props.brainUrl,
       messages: inputData.messages,
       reasoning: inputData.reasoning,
-      fallbackProvider: inputData.props.fallbackProvider,
+      fallbackProvider: inputData.fallbackProvider,
     })) {
       if (event.type === "provider") inputData.setProvider(event.activeProvider);
       if (event.type === "usage") inputData.setUsage(summarizeUsage(event.usage, { durationMs: Date.now() - startedAt }));
