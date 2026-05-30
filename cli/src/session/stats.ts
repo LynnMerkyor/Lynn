@@ -1,4 +1,5 @@
 import type { CliSessionLine } from "./store.js";
+import { normalizeUsageTelemetry } from "../usage-telemetry.js";
 
 export interface CliUsageRecord {
   usage: unknown;
@@ -64,21 +65,16 @@ export function computeSessionStats(lines: readonly CliSessionLine[]): CliSessio
   let totalDurationMs = 0;
 
   for (const record of usages) {
-    const usage = objectRecord(record.usage);
-    if (!usage) continue;
-    const prompt = firstNumber(usage, ["prompt_tokens", "input_tokens"]) ?? 0;
-    const completion = firstNumber(usage, ["completion_tokens", "output_tokens"]) ?? 0;
-    const total = firstNumber(usage, ["total_tokens"]) ?? prompt + completion;
+    const telemetry = normalizeUsageTelemetry(record.usage, { durationMs: record.durationMs });
+    if (!telemetry) continue;
+    const prompt = telemetry.promptTokens ?? 0;
+    const completion = telemetry.completionTokens ?? 0;
+    const total = telemetry.totalTokens ?? prompt + completion;
     promptTokens += prompt;
     completionTokens += completion;
     totalTokens += total;
-    cacheHitTokens += firstNumber(usage, [
-      "prompt_cache_hit_tokens",
-      "cached_tokens",
-      "cache_read_input_tokens",
-      "prompt_tokens_details.cached_tokens",
-    ]) ?? 0;
-    cacheMissTokens += firstNumber(usage, ["prompt_cache_miss_tokens", "cache_creation_input_tokens"]) ?? 0;
+    cacheHitTokens += telemetry.cacheHitTokens ?? 0;
+    cacheMissTokens += telemetry.cacheMissTokens ?? telemetry.cacheWriteTokens ?? 0;
     if (typeof record.durationMs === "number" && Number.isFinite(record.durationMs) && record.durationMs > 0) {
       totalDurationMs += record.durationMs;
     }

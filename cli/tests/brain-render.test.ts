@@ -16,7 +16,7 @@ describe("brain render usage summary", () => {
       completion_tokens: 10,
       prompt_cache_hit_tokens: 90,
       prompt_cache_miss_tokens: 10,
-    }, { durationMs: 1000 })).toBe("out 10 · cache 90 (90%) · 10.0 TPS");
+    }, { durationMs: 1000 })).toBe("out 10 · cache 90 · miss 10 (90%) · 10.0 TPS");
   });
 
   it("keeps the old compact token summary when timing and cache fields are absent", () => {
