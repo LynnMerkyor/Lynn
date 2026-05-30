@@ -23,6 +23,7 @@ import {
   toggleMode,
 } from "../src/commands/chat.js";
 import { BrainConnectionError } from "../src/brain-client.js";
+import { writeCliProviderProfile } from "../src/provider-profile.js";
 import { setLang } from "../src/i18n.js";
 
 const cliRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -256,6 +257,122 @@ describe("chat mode controls", () => {
     expect(result.stderr).toContain("6 tokens");
     expect(JSON.parse(requestBody)).toMatchObject({
       model: "chat-model",
+      stream: true,
+      messages: [{ role: "user", content: "hi" }],
+    });
+  });
+
+  pythonIt("lets bare Lynn use CLI BYOK in a TTY when Brain is offline", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-bare-chat-byok-"));
+    let requestBody = "";
+    const provider = http.createServer((request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      expect(request.headers.authorization).toBe("Bearer sk-bare-chat");
+      request.on("data", (chunk) => {
+        requestBody += String(chunk);
+      });
+      request.on("end", () => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"bare byok ok\"}}],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3,\"total_tokens\":5}}",
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    await writeCliProviderProfile(dataDir, {
+      provider: "openai-compatible",
+      baseUrl: `http://127.0.0.1:${address.port}/v1`,
+      apiKey: "sk-bare-chat",
+      model: "bare-model",
+    });
+
+    const script = `
+import os
+import pty
+import select
+import subprocess
+import sys
+import time
+
+node_bin, cwd, data_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+master, slave = pty.openpty()
+env = os.environ.copy()
+env["NO_COLOR"] = "1"
+env["LYNN_LANG"] = "en"
+env["LYNN_DATA_DIR"] = data_dir
+env["LYNN_BRAIN_URL"] = "http://127.0.0.1:1"
+proc = subprocess.Popen(
+    [node_bin, "--import", "tsx", "src/cli.ts"],
+    cwd=cwd,
+    stdin=slave,
+    stdout=slave,
+    stderr=slave,
+    env=env,
+    close_fds=True,
+)
+os.close(slave)
+buf = b""
+sent_prompt = False
+sent_exit = False
+deadline = time.time() + 10
+while time.time() < deadline:
+    readable, _, _ = select.select([master], [], [], 0.1)
+    if readable:
+        try:
+            chunk = os.read(master, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        buf += chunk
+        text = buf.decode("utf-8", errors="replace")
+        if (not sent_prompt) and ("using CLI BYOK provider directly" in text) and (">" in text or "\\u203a" in text):
+            os.write(master, b"hi\\r")
+            sent_prompt = True
+        elif sent_prompt and (not sent_exit) and "bare byok ok" in text and (">" in text or "\\u203a" in text):
+            os.write(master, b"/exit\\r")
+            sent_exit = True
+    if sent_exit and proc.poll() is not None:
+        break
+if proc.poll() is None:
+    proc.terminate()
+    try:
+        proc.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+sys.stdout.write(buf.decode("utf-8", errors="replace"))
+sys.exit(proc.returncode if proc.returncode is not None else 124)
+`;
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn("python3", ["-c", script, process.execPath, cliRoot, dataDir], {
+        cwd: cliRoot,
+        env: { ...process.env },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+      child.on("error", reject);
+      child.on("close", (code) => resolve({ code, stdout, stderr }));
+    });
+    await new Promise<void>((resolve) => provider.close(() => resolve()));
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("CLI BYOK fallback");
+    expect(result.stdout).toContain("using CLI BYOK provider directly");
+    expect(result.stdout).toContain("bare byok ok");
+    expect(result.stdout).not.toContain("sk-bare-chat");
+    expect(JSON.parse(requestBody)).toMatchObject({
+      model: "bare-model",
       stream: true,
       messages: [{ role: "user", content: "hi" }],
     });
