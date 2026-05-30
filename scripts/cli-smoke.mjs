@@ -437,6 +437,10 @@ async function runStepFunByokFallbackSmoke() {
     if (!seen) throw new Error("StepFun BYOK smoke did not call the provider");
     if (seen.auth !== "Bearer step-smoke-key") throw new Error(`StepFun BYOK smoke used wrong auth: ${seen.auth}`);
     if (seen.body.model !== "step-3.7-flash") throw new Error(`StepFun BYOK smoke used wrong model: ${seen.body.model}`);
+    if ("extra_body" in seen.body) throw new Error(`StepFun BYOK smoke leaked SDK-only extra_body: ${JSON.stringify(seen.body.extra_body)}`);
+    if (seen.body.reasoning_effort === "off" || seen.body.reasoning_effort === "auto") {
+      throw new Error(`StepFun BYOK smoke leaked UI-only reasoning_effort: ${seen.body.reasoning_effort}`);
+    }
     seen = null;
     const envResult = await run("stepfun env preset fallback", [
       "-p",
@@ -456,6 +460,10 @@ async function runStepFunByokFallbackSmoke() {
     if (!seen) throw new Error("StepFun env preset smoke did not call the provider");
     if (seen.auth !== "Bearer step-smoke-key") throw new Error(`StepFun env preset smoke used wrong auth: ${seen.auth}`);
     if (seen.body.model !== "step-3.7-flash") throw new Error(`StepFun env preset smoke used wrong model: ${seen.body.model}`);
+    if ("extra_body" in seen.body) throw new Error(`StepFun env preset smoke leaked SDK-only extra_body: ${JSON.stringify(seen.body.extra_body)}`);
+    if (seen.body.reasoning_effort === "off" || seen.body.reasoning_effort === "auto") {
+      throw new Error(`StepFun env preset smoke leaked UI-only reasoning_effort: ${seen.body.reasoning_effort}`);
+    }
     const chat = await run("stepfun chat byok fallback", [
       "chat",
       "--data-dir",
