@@ -6,6 +6,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { completeAtMention, extractMentionPrefix } from "./completion.js";
 
 const IGNORE_DIRS = new Set([
   ".git",
@@ -55,4 +56,10 @@ export function listMentionCandidates(cwd: string, token: string, limit = 50): s
     return a.localeCompare(b);
   });
   return out.slice(0, limit);
+}
+
+export function completeMentionInput(input: string, cwd: string): { completed: string; matches: string[] } | null {
+  const mention = extractMentionPrefix(input);
+  if (!mention) return null;
+  return completeAtMention(input, listMentionCandidates(cwd, mention.token));
 }

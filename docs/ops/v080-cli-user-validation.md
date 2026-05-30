@@ -15,7 +15,7 @@ The v0.80 CLI is a companion to the Lynn GUI:
 
 Current default model route:
 
-- Model: MiMo through the local Brain router.
+- Model: StepFun 3.7 Flash high+32K -> MiMo V2.5 Pro -> Spark Qwen 3.6 35B A3B through the local Brain router.
 - Brain URL: `http://127.0.0.1:8790`.
 - GUI route: install/open the Lynn client GUI; Settings > Providers controls the
   local Brain route.
@@ -168,10 +168,12 @@ Expected:
   `height`, `confidence`) or an empty `boxes` array if the model cannot localize.
 - `ui2code` produces an implementation plan with component boundaries, layout, states, and accessibility notes.
 
-## Tier 3b: StepFun Fast Coding Worker
+## Tier 3b: StepFun Default Fast Coding Route
 
-StepFun is not the default route. It is a BYOK fast/high-quality coding backend
-for CLI-only use and Fleet workers.
+StepFun 3.7 Flash is the default text/coding route when the local Brain is
+online. MiMo remains the multimodal fallback, and Spark remains the local
+zero-cost fallback. CLI-only users can configure the same StepFun backend with
+BYOK when they do not run the Lynn client GUI.
 
 ```bash
 Lynn providers set --preset stepfun --api-key <stepfun-key>
@@ -181,10 +183,11 @@ Lynn worker run --brief task.md --worktree /path/to/worktree --agent stepfun-fla
 Expected:
 
 - Worker startup reports `stepfun-flash` as the agent/backend.
-- The worker uses the `stepfun` preset only when the user supplied their own key.
+- Brain-online workers use the local Brain route by default; Brain-offline
+  workers use the `stepfun` preset only when the user supplied their own key.
 - Fleet still enforces owned/forbidden globs and center-file locks.
-- StepFun results are treated as cloud BYOK output, not as the free local MiMo
-  default route.
+- StepFun output is always labeled as cloud output so users understand quota and
+  routing; MiMo and Spark fallback should remain visible in route metadata.
 
 ## Tier 4: Coding Mode
 
@@ -198,7 +201,7 @@ Manual checks:
 
 - Startup should look like a clean Codex-style terminal card, not a command dump.
 - No left-side decorative `>` title marker in the card.
-- `/fast` toggles quick MiMo mode.
+- `/fast` toggles low-latency coding mode.
 - `/think` toggles deeper reasoning.
 - `/mode yolo` shows a strong local-permission warning.
 - Shift+Tab cycles permission mode.

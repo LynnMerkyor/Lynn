@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { listMentionCandidates } from "../src/mentions.js";
+import { completeMentionInput, listMentionCandidates } from "../src/mentions.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-mentions-"));
 fs.mkdirSync(path.join(root, "src"));
@@ -34,5 +34,23 @@ describe("listMentionCandidates", () => {
   it("never escapes the workspace root", () => {
     expect(listMentionCandidates(root, "../")).toEqual([]);
     expect(listMentionCandidates(root, "../../etc/pas")).toEqual([]);
+  });
+
+  it("completes @-mentions from the supplied cwd instead of the shell cwd", () => {
+    const shellCwd = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-mention-shell-"));
+    const targetCwd = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-mention-target-"));
+    try {
+      fs.writeFileSync(path.join(shellCwd, "wrong.ts"), "");
+      fs.writeFileSync(path.join(targetCwd, "right.ts"), "");
+
+      expect(completeMentionInput("read @r", targetCwd)).toEqual({
+        completed: "read @right.ts ",
+        matches: ["right.ts"],
+      });
+      expect(listMentionCandidates(shellCwd, "r")).toEqual([]);
+    } finally {
+      fs.rmSync(shellCwd, { recursive: true, force: true });
+      fs.rmSync(targetCwd, { recursive: true, force: true });
+    }
   });
 });
