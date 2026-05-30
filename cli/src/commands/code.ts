@@ -6,7 +6,7 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output, stderr as errorOutput } from "node:process";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { formatBrainRecoveryHint, streamBrainChat, type BrainStreamEvent, type ChatAssistantToolCall, type ChatMessage, type ChatToolDefinition } from "../brain-client.js";
-import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
+import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { resolveEffectivePermissions } from "../permissions.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
@@ -1126,6 +1126,9 @@ async function collectBrainText(inputData: {
         if (event.type === "usage") writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage, durationMs: Date.now() - startedAt });
         else writeJsonLine({ ...event, ts: nowIso() });
       }
+      if (event.type === "brain.error") {
+        throw new Error(formatBrainErrorForHuman(event.error, event.code));
+      }
       if (!inputData.json && event.type !== "assistant.delta" && event.type !== "reasoning.delta") {
         if (event.type === "usage") {
           const summary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt });
@@ -1136,9 +1139,6 @@ async function collectBrainText(inputData: {
         }
       } else if (inputData.json && event.type === "usage") {
         usageSummary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt }) || usageSummary;
-      }
-      if (event.type === "brain.error") {
-        throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
       }
     }
   } finally {

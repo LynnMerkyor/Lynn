@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeUsage } from "../src/brain-render.js";
+import { formatBrainErrorForHuman, summarizeUsage } from "../src/brain-render.js";
 
 describe("brain render usage summary", () => {
   it("shows tokens, cache hit ratio, and TPS when usage timing is available", () => {
@@ -33,5 +33,13 @@ describe("brain render usage summary", () => {
       output_tokens: 200,
       prompt_tokens_details: { cached_tokens: 750 },
     }, { durationMs: 1000 })).toBe("1200 tokens · in 1000 · out 200 · cache 750 (75%) · 200 TPS");
+  });
+});
+
+describe("formatBrainErrorForHuman", () => {
+  it("turns all-providers-failed into an actionable setup hint", () => {
+    const text = formatBrainErrorForHuman("all providers failed");
+    expect(text).toContain("provider");
+    expect(text).toContain("Lynn providers set --preset stepfun");
   });
 });

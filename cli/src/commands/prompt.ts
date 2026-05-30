@@ -1,6 +1,6 @@
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
-import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
+import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { appendSessionTurn, resolveDataDir } from "../session/store.js";
@@ -84,15 +84,23 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
         spinner.stop();
       }
+      if (event.type === "brain.error") {
+        if (options.json) {
+          handleBrainEvent(event, {
+            json: true,
+            renderReasoning,
+            renderState,
+            startedAt,
+          });
+        }
+        throw new Error(formatBrainErrorForHuman(event.error, event.code));
+      }
       handleBrainEvent(event, {
         json: !!options.json,
         renderReasoning,
         renderState,
         startedAt,
       });
-      if (event.type === "brain.error") {
-        throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
-      }
       if (event.type === "provider") {
         if (event.activeProvider.startsWith("cli-byok:") && cliProvider) {
           modelProvider = cliProvider.profile.provider;

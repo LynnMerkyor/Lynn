@@ -6,7 +6,7 @@ import { BrainConnectionError, streamBrainChat, type BrainStreamEvent, type Chat
 import { renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
-import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
+import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { dangerLine, dim, red, supportsColor } from "../terminal-style.js";
 import { renderStartupBanner } from "../startup.js";
 import { renderStatusBar } from "../status-bar.js";
@@ -171,15 +171,15 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
         if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
           spinner.stop();
         }
+        if (event.type === "brain.error") {
+          throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
+        }
         if (event.type === "assistant.delta") {
           md.push(event.text);
           assistant += event.text;
         } else {
           if (event.type === "usage") latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - turnStarted });
           renderChatEvent(event, renderReasoning, renderState, turnStarted);
-        }
-        if (event.type === "brain.error") {
-          throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
         }
       }
     } catch (error) {
@@ -437,6 +437,7 @@ export function formatChatError(error: unknown): string {
     return t("chat.error.brainOffline", { brainUrl: error.brainUrl });
   }
   const message = error instanceof Error ? error.message : String(error);
+  if (/all providers failed/i.test(message)) return formatBrainErrorForHuman(message);
   return `Lynn error: ${message}`;
 }
 

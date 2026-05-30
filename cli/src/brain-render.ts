@@ -1,4 +1,5 @@
 import type { BrainStreamEvent } from "./brain-client.js";
+import { t } from "./i18n.js";
 
 export interface HumanBrainRenderState {
   provider?: string;
@@ -32,8 +33,13 @@ export function renderBrainEventForHuman(
     return;
   }
   if (event.type === "brain.error") {
-    stream.write(`\nBrain error: ${event.error}${event.code ? ` (${event.code})` : ""}\n`);
+    stream.write(`\n${formatBrainErrorForHuman(event.error, event.code)}\n`);
   }
+}
+
+export function formatBrainErrorForHuman(error: string, code?: string): string {
+  if (/all providers failed/i.test(error)) return t("brain.error.allProvidersFailed");
+  return `Brain error: ${error}${code ? ` (${code})` : ""}`;
 }
 
 export interface UsageSummaryOptions {

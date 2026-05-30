@@ -1,6 +1,6 @@
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
-import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
+import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { buildImagesContentParts, parseImageList } from "../media.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
@@ -49,9 +49,12 @@ export async function runVisionCommand(args: ParsedArgs, command: VisionCommand,
     })) {
       const renderReasoning = shouldRenderReasoning(reasoning.display, json);
       if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) spinner.stop();
+      if (event.type === "brain.error") {
+        if (json) renderVisionEvent(event, { json, renderReasoning, renderState, startedAt });
+        throw new Error(formatBrainErrorForHuman(event.error, event.code));
+      }
       renderVisionEvent(event, { json, renderReasoning, renderState, startedAt });
       if (event.type === "assistant.delta") answer += event.text;
-      if (event.type === "brain.error") throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
     }
   } finally {
     spinner.stop();
