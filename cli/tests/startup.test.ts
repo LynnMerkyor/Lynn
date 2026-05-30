@@ -20,13 +20,13 @@ describe("startup banner", () => {
     expect(output).toContain("mode:");
     expect(output).toContain("Shift+Tab to toggle");
     expect(output).toContain("BYOK:");
-    expect(output).toContain("lynn providers");
+    expect(output).toContain("Lynn providers");
     expect(output).toContain("brain:");
     expect(output).toContain("offline");
     expect(output).toContain("http://127.0.0.1:8790");
     expect(output).toContain("directory:");
     expect(output).toContain("~");
-    expect(output).toContain("lynn help");
+    expect(output).toContain("Lynn help");
   });
 
   it("keeps the default banner compact for narrow terminals", () => {

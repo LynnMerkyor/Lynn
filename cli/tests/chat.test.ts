@@ -97,7 +97,7 @@ describe("chat mode controls", () => {
 
     expect(hint).toContain("local Brain offline");
     expect(hint).toContain("CLI-only BYOK");
-    expect(hint).toContain("lynn providers");
+    expect(hint).toContain("Lynn providers");
     expect(hint).toContain("--mock-brain");
   });
 
