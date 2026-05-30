@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
@@ -26,6 +26,7 @@ import { BrainConnectionError } from "../src/brain-client.js";
 import { setLang } from "../src/i18n.js";
 
 const cliRoot = fileURLToPath(new URL("..", import.meta.url));
+const pythonIt = hasPython3() ? it : it.skip;
 
 beforeEach(() => setLang("en"));
 afterEach(() => setLang(null));
@@ -259,4 +260,89 @@ describe("chat mode controls", () => {
       messages: [{ role: "user", content: "hi" }],
     });
   });
+
+  pythonIt("keeps bare Lynn in a TTY REPL when Brain is offline", async () => {
+    const script = `
+import os
+import pty
+import select
+import subprocess
+import sys
+import time
+
+node_bin, cwd = sys.argv[1], sys.argv[2]
+master, slave = pty.openpty()
+env = os.environ.copy()
+env["NO_COLOR"] = "1"
+env["LYNN_LANG"] = "en"
+env["LYNN_BRAIN_URL"] = "http://127.0.0.1:1"
+proc = subprocess.Popen(
+    [node_bin, "--import", "tsx", "src/cli.ts"],
+    cwd=cwd,
+    stdin=slave,
+    stdout=slave,
+    stderr=slave,
+    env=env,
+    close_fds=True,
+)
+os.close(slave)
+buf = b""
+sent_exit = False
+deadline = time.time() + 8
+while time.time() < deadline:
+    readable, _, _ = select.select([master], [], [], 0.1)
+    if readable:
+        try:
+            chunk = os.read(master, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        buf += chunk
+        text = buf.decode("utf-8", errors="replace")
+        if (not sent_exit) and (">" in text or "\\u203a" in text) and "local Brain offline" in text:
+            os.write(master, b"/exit\\r")
+            sent_exit = True
+    if sent_exit and proc.poll() is not None:
+        break
+if proc.poll() is None:
+    proc.terminate()
+    try:
+        proc.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+sys.stdout.write(buf.decode("utf-8", errors="replace"))
+sys.exit(proc.returncode if proc.returncode is not None else 124)
+`;
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn("python3", ["-c", script, process.execPath, cliRoot], {
+        cwd: cliRoot,
+        env: { ...process.env },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+      child.on("error", reject);
+      child.on("close", (code) => resolve({ code, stdout, stderr }));
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Lynn CLI");
+    expect(result.stdout).toContain("local Brain offline");
+    expect(result.stdout).toContain("›");
+    expect(result.stdout).not.toContain("Aborted with Ctrl+D");
+    expect(result.stderr).toBe("");
+  });
 });
+
+function hasPython3(): boolean {
+  try {
+    execFileSync("python3", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
