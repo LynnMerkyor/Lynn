@@ -143,6 +143,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
     "/reasoning",
     "/mode",
     "/model",
+    "/setup",
     "/byok",
     "/providers",
     "/providers set",

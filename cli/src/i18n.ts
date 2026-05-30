@@ -75,6 +75,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/exit 退出聊天\n" +
       "/clear 清空上下文\n" +
       "/model 查看当前模型 / BYOK 路由\n" +
+      "/setup 打开 CLI-only BYOK 三步向导\n" +
       "/providers 查看提供方和 BYOK 设置\n" +
       "/providers set --base-url ... --api-key ... --model ... 配置 CLI BYOK\n" +
       "/providers unset 清除 CLI BYOK\n" +
@@ -110,6 +111,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/think 深度 MiMo/Brain 推理\n" +
       "/reasoning 查看或设置推理模式\n" +
       "/model 查看当前 Brain/BYOK 路由\n" +
+      "/setup 打开 CLI-only BYOK 三步向导\n" +
       "/providers 查看提供方和 BYOK 设置\n" +
       "/providers set --base-url ... --api-key ... --model ... 配置 CLI BYOK\n" +
       "/providers unset 清除 CLI BYOK\n" +
@@ -250,6 +252,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/exit leave chat\n" +
       "/clear reset context\n" +
       "/model show model/BYOK route\n" +
+      "/setup open the CLI-only BYOK three-step wizard\n" +
       "/providers show BYOK setup\n" +
       "/providers set --base-url ... --api-key ... --model ... configure CLI BYOK\n" +
       "/providers unset clear CLI BYOK\n" +
@@ -285,6 +288,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/think deeper MiMo/Brain reasoning\n" +
       "/reasoning show or set reasoning mode\n" +
       "/model show current Brain/BYOK route\n" +
+      "/setup open the CLI-only BYOK three-step wizard\n" +
       "/providers show provider and BYOK setup\n" +
       "/providers set --base-url ... --api-key ... --model ... configure CLI BYOK\n" +
       "/providers unset clear CLI BYOK\n" +

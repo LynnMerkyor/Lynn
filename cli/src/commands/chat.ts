@@ -26,6 +26,7 @@ export const CHAT_SLASH_COMMANDS = [
   "/reasoning",
   "/mode",
   "/model",
+  "/setup",
   "/byok",
   "/providers",
   "/providers set",
@@ -294,7 +295,13 @@ export function splitChatCommandLine(raw: string): string[] {
 export function buildChatProviderArgs(raw: string, baseArgs: ParsedArgs): ParsedArgs | null {
   const tokens = splitChatCommandLine(raw);
   const head = tokens[0]?.toLowerCase();
-  if (head !== "/providers" && head !== "/byok") return null;
+  if (head !== "/providers" && head !== "/byok" && head !== "/setup") return null;
+  if (head === "/setup") {
+    const parsed = parseArgs(["providers", "set", ...tokens.slice(1).filter((value) => value.toLowerCase() !== "set")]);
+    const dataDir = getStringFlag(baseArgs.flags, "data-dir");
+    if (dataDir && !getStringFlag(parsed.flags, "data-dir")) parsed.flags["data-dir"] = dataDir;
+    return parsed;
+  }
   const rest = tokens.slice(1);
   const subcommand = (rest[0] || "").toLowerCase();
   if (!["set", "unset", "clear", "reset", "test", "presets"].includes(subcommand)) return null;

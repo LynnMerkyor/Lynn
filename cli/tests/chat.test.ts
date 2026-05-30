@@ -149,7 +149,7 @@ describe("chat mode controls", () => {
     ]);
     expect(completeChatInput("/providers s")).toEqual([["/providers set"], "/providers s"]);
     expect(completeChatInput("/")).toMatchObject([
-      expect.arrayContaining(["/help", "/mode", "/providers", "/byok"]),
+      expect.arrayContaining(["/help", "/mode", "/providers", "/byok", "/setup"]),
       "/",
     ]);
     expect(completeChatInput("hello")).toEqual([[], "hello"]);
@@ -189,6 +189,14 @@ describe("chat mode controls", () => {
       expect(shouldShowProviderSetUsage(buildChatProviderArgs("/providers set", base)!, true)).toBe(false);
       expect(shouldShowProviderSetUsage(buildChatProviderArgs("/byok set", base)!)).toBe(true);
       expect(shouldShowProviderSetUsage(buildChatProviderArgs("/byok set", base)!, true)).toBe(false);
+      const setupCommand = buildChatProviderArgs("/setup --preset stepfun --api-key step-key", base);
+      expect(setupCommand?.command).toBe("providers");
+      expect(setupCommand?.positionals).toEqual(["set"]);
+      expect(setupCommand?.flags["preset"]).toBe("stepfun");
+      expect(setupCommand?.flags["api-key"]).toBe("step-key");
+      expect(setupCommand?.flags["data-dir"]).toBe(dataDir);
+      expect(shouldShowProviderSetUsage(buildChatProviderArgs("/setup", base)!)).toBe(true);
+      expect(shouldShowProviderSetUsage(buildChatProviderArgs("/setup", base)!, true)).toBe(false);
       expect(buildChatProviderArgs("/providers wat", base)).toBeNull();
     } finally {
       await fs.rm(dataDir, { recursive: true, force: true });
