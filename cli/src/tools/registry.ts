@@ -5,6 +5,7 @@ import { grepTool } from "./grep.js";
 import { globTool } from "./glob.js";
 import { bashTool } from "./bash.js";
 import { CLIENT_TOOL_DEFINITIONS, type ClientToolName, type ClientToolResult, type ToolRunContext } from "./types.js";
+import { normalizePlanItems } from "../plan-tool.js";
 
 export { CLIENT_TOOL_DEFINITIONS };
 
@@ -15,6 +16,7 @@ export interface ToolRunInput {
   query?: string;
   pattern?: string;
   command?: string;
+  plan?: unknown;
   maxBytes?: number;
   offset?: number;
 }
@@ -36,6 +38,12 @@ export async function runClientTool(ctx: ToolRunContext, input: ToolRunInput): P
       return globTool(ctx, input.pattern || "**", input.path || ".");
     case "bash":
       return bashTool(ctx, input.command || "");
+    case "update_plan":
+      return {
+        ok: true,
+        tool: "update_plan",
+        output: { items: normalizePlanItems(input.plan) },
+      };
     default:
       throw new Error(`unknown client tool: ${String(input.name)}`);
   }

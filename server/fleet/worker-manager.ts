@@ -101,6 +101,13 @@ export function mapKnownCliJsonLine(line: string, workerId: string): FleetWorker
       ms: typeof parsed.ms === "number" ? parsed.ms : undefined,
     };
   }
+  if (type === "code.plan.updated") {
+    const count = Array.isArray(parsed.items) ? parsed.items.length : 0;
+    return makeFleetProgressEvent(`plan updated${count ? ` (${count})` : ""}`, {
+      workerId,
+      data: { kind: "plan", items: parsed.items },
+    });
+  }
   if (type === "usage") {
     return makeFleetProgressEvent("usage", { workerId, data: normalizeUsageData(parsed) });
   }

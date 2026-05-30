@@ -22,6 +22,7 @@ import { t } from "../i18n.js";
 import { resolveCliProviderProfile, type CliProviderProfile } from "../provider-profile.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
+import { normalizePlanItems, renderPlanItems, type CodePlanItem } from "../plan-tool.js";
 import { applyModeCommand, applyReasoningCommand, buildChatProviderArgs, renderMode, shouldRefreshProviderRoute, shouldShowProviderSetUsage, toggleMode, type ChatMode } from "./chat.js";
 import { renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { readVersionInfo } from "../version.js";
@@ -691,6 +692,7 @@ export type CodeAgentEvent =
   | { type: "tool.requested"; tool: ClientToolName; args: CodeToolRequest["args"]; preview?: string }
   | { type: "tool.result"; result: ClientToolResult }
   | { type: "tool.loop_guard"; tool: ClientToolName; repeats: number }
+  | { type: "plan.updated"; items: CodePlanItem[] }
   | { type: "task.finished"; ok: boolean; text: string; usageSummary: string | null; maxStepsReached?: boolean }
   | { type: "error"; message: string };
 
@@ -707,6 +709,7 @@ interface CodeToolRequest {
     command?: string;
     maxBytes?: number;
     offset?: number;
+    plan?: unknown;
   };
 }
 
@@ -743,6 +746,7 @@ function isReadOnlyToolRequest(request: CodeToolRequest): boolean {
 }
 
 function observeClientToolRequest(state: ClientToolStormState, request: CodeToolRequest): ClientToolStormVerdict {
+  if (request.tool === "update_plan") return { suppress: false, repeatCount: 1 };
   const readOnly = isReadOnlyToolRequest(request);
   if (!readOnly) {
     state.recent = state.recent.filter((entry) => !entry.readOnly);
@@ -820,7 +824,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
       if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
       const preview = formatDangerousToolPreview(toolRequest.tool, toolRequest.args, supportsColor(inputData.output));
       inputData.onEvent?.({ type: "tool.requested", tool: toolRequest.tool, args: redactToolArgs(toolRequest) as CodeToolRequest["args"], preview });
-      if (!inputData.json && !inputData.onEvent) renderClientToolStart(toolRequest);
+      if (!inputData.json && !inputData.onEvent && toolRequest.tool !== "update_plan") renderClientToolStart(toolRequest);
       let toolResult: ClientToolResult;
       if (stormVerdict.suppress) {
         toolResult = {
@@ -886,9 +890,15 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
           };
         }
       }
+      if (toolRequest.tool === "update_plan") {
+        const items = normalizePlanItems(toolRequest.args.plan);
+        if (inputData.json) writeJsonLine({ type: "code.plan.updated", ts: nowIso(), items });
+        inputData.onEvent?.({ type: "plan.updated", items });
+        if (!inputData.json && !inputData.onEvent) process.stderr.write(`${renderPlanItems(items)}\n`);
+      }
       if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
       inputData.onEvent?.({ type: "tool.result", result: toolResult });
-      if (!inputData.json && !inputData.onEvent) renderClientToolResult(toolResult);
+      if (!inputData.json && !inputData.onEvent && toolRequest.tool !== "update_plan") renderClientToolResult(toolResult);
       toolResultSections.push([
         `Tool result for ${toolRequest.tool}:`,
         formatToolResultForLoop(toolResult),
@@ -1062,7 +1072,8 @@ export function buildCodeRuntimeFrames(inputData: Pick<CodeAgentLoopInput, "cont
         "StepFun is the fast text/code route; MiMo remains the image/audio/video route. Keep responses in the user's language.",
         "You help with repository-level coding tasks from the terminal.",
         "You may request local tools using exactly one JSON object and no prose:",
-        '{"tool":"read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',
+        '{"tool":"update_plan|read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',
+        "For non-trivial tasks, first call update_plan/TodoWrite with items and statuses pending/in_progress/completed, then update it as work progresses.",
         "Prefer read_file, grep, and glob before editing. Use apply_patch for edits when possible.",
         "When you are done, answer normally with a concise summary and tests run.",
         "Do not claim you edited files unless a tool actually changed them.",
@@ -1195,6 +1206,28 @@ async function collectBrainText(inputData: {
 
 export function codeToolDefinitions(): ChatToolDefinition[] {
   return [
+    {
+      type: "function",
+      function: {
+        name: "update_plan",
+        description: "Update the visible task plan. Use this before and during multi-step coding work.",
+        parameters: objectSchema({
+          items: {
+            type: "array",
+            description: "Plan items in execution order.",
+            items: objectSchema({
+              id: stringSchema("Optional stable item id, for example S0 or C1."),
+              content: stringSchema("Task step description."),
+              status: {
+                type: "string",
+                enum: ["pending", "in_progress", "completed"],
+                description: "Current state for this step.",
+              },
+            }, ["content", "status"]),
+          },
+        }, ["items"]),
+      },
+    },
     {
       type: "function",
       function: {
@@ -1399,6 +1432,7 @@ function normalizeToolPayload(payload: Record<string, unknown>): CodeToolRequest
       command: stringArg(args.command),
       maxBytes: numberArg(args.maxBytes ?? args.max_bytes),
       offset: numberArg(args.offset ?? args.start_offset ?? args.startOffset),
+      plan: args.plan,
     },
   };
 }
@@ -1435,6 +1469,12 @@ const TOOL_NAME_ALIASES: Record<string, ClientToolName> = {
   run_bash: "bash",
   terminal: "bash",
   exec: "bash",
+  update_plan: "update_plan",
+  todowrite: "update_plan",
+  todo_write: "update_plan",
+  update_todos: "update_plan",
+  todo: "update_plan",
+  plan: "update_plan",
 };
 
 function normalizeClientToolName(raw: string): ClientToolName | null {
@@ -1501,6 +1541,9 @@ function normalizeToolArgAliases(tool: ClientToolName, args: Record<string, unkn
   if (tool === "write_file" && text !== undefined) normalized.text = text;
   if (tool === "apply_patch" && text !== undefined) normalized.text = text;
   if (tool === "bash" && command !== undefined) normalized.command = command;
+  if (tool === "update_plan") {
+    normalized.plan = firstArg(args.plan, args.items, args.todos, args.tasks, args.steps, args);
+  }
   if (tool === "grep") {
     if (query !== undefined) normalized.query = query;
     if (dir !== undefined) normalized.path = dir;

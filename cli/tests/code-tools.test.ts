@@ -117,6 +117,7 @@ describe("code tools", () => {
     const tools = codeToolDefinitions();
 
     expect(tools.map((tool) => tool.function.name)).toEqual([
+      "update_plan",
       "read_file",
       "grep",
       "glob",
@@ -127,6 +128,10 @@ describe("code tools", () => {
     expect(tools.find((tool) => tool.function.name === "apply_patch")?.function.parameters).toMatchObject({
       type: "object",
       required: ["text"],
+    });
+    expect(tools.find((tool) => tool.function.name === "update_plan")?.function.parameters).toMatchObject({
+      type: "object",
+      required: ["items"],
     });
   });
 
@@ -203,6 +208,10 @@ describe("code tools", () => {
   });
 
   it("normalizes common coding-agent tool name and argument aliases", () => {
+    expect(parseCodeToolRequest('{"tool":"TodoWrite","args":{"todos":[{"content":"Explore code","status":"in_progress"}]}}')).toMatchObject({
+      tool: "update_plan",
+      args: { plan: [{ content: "Explore code", status: "in_progress" }] },
+    });
     expect(parseCodeToolRequest('{"tool":"edit_file","args":{"diff":"*** Begin Patch\\n*** End Patch"}}')).toMatchObject({
       tool: "apply_patch",
       args: { text: "*** Begin Patch\n*** End Patch" },
@@ -222,6 +231,19 @@ describe("code tools", () => {
     expect(parseCodeToolRequest('{"tool":"list_files","args":{"glob":"src/**/*.ts","dir":"cli"}}')).toMatchObject({
       tool: "glob",
       args: { pattern: "src/**/*.ts", path: "cli" },
+    });
+  });
+
+  it("runs update_plan as a non-mutating internal tool", async () => {
+    const result = await runClientTool({ cwd: tmp, approval: "ask", sandbox: "read-only" }, {
+      name: "update_plan",
+      plan: [{ content: "Inspect files", status: "in_progress" }],
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      tool: "update_plan",
+      output: { items: [{ content: "Inspect files", status: "in_progress" }] },
     });
   });
 

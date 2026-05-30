@@ -13,18 +13,22 @@ import { CLIENT_TOOL_DEFINITIONS } from "./tools/types.js";
 import { t } from "./i18n.js";
 import { InkDiffText, InkMarkdown } from "./ink-markdown.js";
 import { handleInkProviderCommand } from "./ink-provider-commands.js";
+import type { CodePlanItem } from "./plan-tool.js";
+import { InkInputLine } from "./ink-input-line.js";
 
 type CodeItem =
   | { id: number; kind: "user"; text: string }
   | { id: number; kind: "assistant"; text: string }
   | { id: number; kind: "system"; text: string; tone?: "normal" | "danger" | "success" }
-  | { id: number; kind: "tool"; title: string; detail?: string; ok?: boolean };
+  | { id: number; kind: "tool"; title: string; detail?: string; ok?: boolean }
+  | { id: number; kind: "plan"; items: CodePlanItem[] };
 
 type NewCodeItem =
   | { kind: "user"; text: string }
   | { kind: "assistant"; text: string }
   | { kind: "system"; text: string; tone?: "normal" | "danger" | "success" }
-  | { kind: "tool"; title: string; detail?: string; ok?: boolean };
+  | { kind: "tool"; title: string; detail?: string; ok?: boolean }
+  | { kind: "plan"; items: CodePlanItem[] };
 
 interface InkCodeProps {
   args: ParsedArgs;
@@ -257,7 +261,9 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       pushItem({ kind: "tool", title: `tool ${event.tool}`, detail: event.preview || formatToolArgs(event.args) });
     }
     if (event.type === "tool.loop_guard") pushItem({ kind: "tool", title: `loop guard ${event.tool}`, detail: `${event.repeats} repeats`, ok: false });
+    if (event.type === "plan.updated") pushItem({ kind: "plan", items: event.items });
     if (event.type === "tool.result") {
+      if (event.result.tool === "update_plan") return;
       pushItem({ kind: "tool", title: event.result.tool, detail: event.result.error || summarizeOutput(event.result.output), ok: event.result.ok });
     }
     if (event.type === "task.finished" && event.maxStepsReached) {
@@ -283,10 +289,13 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       React.createElement(Text, null, " "),
       React.createElement(InkSweep, { width: 28, frame }),
     ) : null,
-    approval ? React.createElement(ApprovalPrompt, { approval }) : React.createElement(Box, { marginTop: 1, borderStyle: "single", borderColor: danger ? "red" : "gray", paddingX: 1 },
-      React.createElement(Text, { color: danger ? "red" : "white" }, `› ${input || t("code.placeholder")}`),
-    ),
     React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(process.cwd())} · ${renderMode(mode)} · think ${reasoning.effort}${usage ? ` · ${usage}` : ""}`),
+    approval ? React.createElement(ApprovalPrompt, { approval }) : React.createElement(InkInputLine, {
+      value: input,
+      placeholder: t("code.placeholder"),
+      danger,
+      commands: CODE_SLASH_COMMANDS,
+    }),
   );
 }
 
@@ -300,7 +309,17 @@ function CodeItemView({ item }: { item: CodeItem }): React.ReactElement {
       item.detail ? React.createElement(InkDiffText, { text: item.detail }) : null,
     );
   }
+  if (item.kind === "plan") return React.createElement(PlanView, { items: item.items });
   return React.createElement(Text, { color: item.tone === "danger" ? "red" : item.tone === "success" ? "green" : "gray" }, item.text);
+}
+
+function PlanView({ items }: { items: CodePlanItem[] }): React.ReactElement {
+  return React.createElement(Box, { borderStyle: "round", borderColor: "gray", paddingX: 1, flexDirection: "column" },
+    React.createElement(Text, { color: "cyan", bold: true }, "TodoWrite · Update todos"),
+    ...items.map((item, index) => React.createElement(Text, { key: item.id || index, color: item.status === "completed" ? "green" : item.status === "in_progress" ? "yellow" : "gray" },
+      `${item.status === "completed" ? "✓" : item.status === "in_progress" ? "●" : "○"} ${item.id || `P${index + 1}`}: ${item.content}`,
+    )),
+  );
 }
 
 function ApprovalPrompt({ approval }: { approval: ApprovalState }): React.ReactElement {

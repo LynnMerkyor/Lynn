@@ -346,6 +346,44 @@ describe("code agent loop", () => {
     expect(events.some((event) => event.type === "task.finished" && event.ok)).toBe(true);
   });
 
+  it("emits visible plan updates from TodoWrite-style tool calls", async () => {
+    const events: CodeAgentEvent[] = [];
+    await withBrainServer((_body, count) => count === 1
+      ? JSON.stringify({
+          tool: "TodoWrite",
+          args: {
+            todos: [
+              { id: "S0", content: "探索代码库结构", status: "completed" },
+              { id: "C1", content: "实现修复", status: "in_progress" },
+            ],
+          },
+        })
+      : "Plan noted; continuing with the task.",
+    async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "plan first",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--max-steps",
+        "3",
+      ]), "plan first", (event) => {
+        events.push(event);
+      })).resolves.toBe(0);
+    });
+
+    expect(events).toContainEqual({
+      type: "plan.updated",
+      items: [
+        { id: "S0", content: "探索代码库结构", status: "completed" },
+        { id: "C1", content: "实现修复", status: "in_progress" },
+      ],
+    });
+    expect(events.some((event) => event.type === "tool.result" && event.result.tool === "update_plan")).toBe(true);
+  });
+
   pythonIt("uses the Ink code shell for mock coding turns and Shift+Tab mode toggle", async () => {
     const script = `
 import os

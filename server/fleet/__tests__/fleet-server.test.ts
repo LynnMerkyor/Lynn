@@ -104,6 +104,12 @@ describe("worker line parser", () => {
       ok: true,
       ms: 12,
     });
+    expect(mapKnownCliJsonLine('{"type":"code.plan.updated","items":[{"content":"Inspect","status":"in_progress"}]}', "w2")).toMatchObject({
+      type: "worker.progress",
+      workerId: "w2",
+      message: "plan updated (1)",
+      data: { kind: "plan", items: [{ content: "Inspect", status: "in_progress" }] },
+    });
     expect(mapKnownCliJsonLine('{"type":"session.checkpoint","line":"assistant","path":"/tmp/session.jsonl"}', "w2")).toMatchObject({
       type: "worker.progress",
       workerId: "w2",

@@ -30,6 +30,16 @@ describe("Ink provider commands", () => {
     expect(result.refreshedProvider).toBeUndefined();
   });
 
+  it("renders model route info inside Ink instead of sending /model to the model", async () => {
+    const { args } = await makeBaseArgs();
+
+    const result = await handleInkProviderCommand("/model", args);
+
+    expect(result.handled).toBe(true);
+    expect(result.message).toContain("Current route");
+    expect(result.message).toContain("Default route");
+  });
+
   it("prints set usage for bare interactive provider setup commands", async () => {
     const { args, dataDir } = await makeBaseArgs();
 

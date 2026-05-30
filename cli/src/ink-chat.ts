@@ -13,6 +13,7 @@ import { displayCwd } from "./startup.js";
 import { CHAT_SLASH_COMMANDS, applyModeCommand, applyReasoningCommand, chatRouteLabel, renderMode, type ChatMode } from "./commands/chat.js";
 import { InkMarkdown } from "./ink-markdown.js";
 import { handleInkProviderCommand } from "./ink-provider-commands.js";
+import { InkInputLine } from "./ink-input-line.js";
 
 type Turn = {
   id: number;
@@ -144,10 +145,13 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
         React.createElement(InkSweep, { width: 28, frame }),
       )
       : null,
-    React.createElement(Box, { marginTop: 1, borderStyle: "single", borderColor: mode.approval === "yolo" ? "red" : "gray", paddingX: 1 },
-      React.createElement(Text, { color: mode.approval === "yolo" ? "red" : "white" }, `› ${input || t("chat.placeholder")}`),
-    ),
     React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(process.cwd())} · ${renderMode(mode)} · think ${reasoning.effort}${usage ? ` · ${usage}` : ""}`),
+    React.createElement(InkInputLine, {
+      value: input,
+      placeholder: t("chat.placeholder"),
+      danger: mode.approval === "yolo" || mode.sandbox === "danger-full-access",
+      commands: CHAT_SLASH_COMMANDS,
+    }),
   );
 }
 
