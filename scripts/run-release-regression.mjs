@@ -116,12 +116,19 @@ async function runStaticChecks({ level }) {
   const checks = [];
   const pkg = JSON.parse(await fs.readFile(path.join(ROOT, "package.json"), "utf8"));
   const version = pkg.version;
+  const cliPkg = JSON.parse(await fs.readFile(path.join(ROOT, "cli", "package.json"), "utf8"));
 
   const requiredScripts = [
     "test",
     "build:server",
     "build:main",
     "build:renderer",
+    "build:cli",
+    "test:cli",
+    "test:cli-install",
+    "test:cli-install:remote",
+    "test:cli-fleet",
+    "test:packaged-cli",
     "test:release",
     "test:release:ui",
     "release:preflight",
@@ -141,6 +148,38 @@ async function runStaticChecks({ level }) {
     "blocker",
     Boolean(pkg.scripts?.dist && pkg.scripts.dist.includes("release:preflight")),
     "package.json dist runs release:preflight before packaging",
+  ));
+  checks.push(makeCheck(
+    "static-release-preflight-cli",
+    "blocker",
+    Boolean(pkg.scripts?.["release:preflight"]
+      && pkg.scripts["release:preflight"].includes("test:cli")
+      && pkg.scripts["release:preflight"].includes("test:cli-install")
+      && pkg.scripts["release:preflight"].includes("test:cli-fleet")),
+    "release:preflight runs CLI smoke, install, and Fleet gates",
+    String(pkg.scripts?.["release:preflight"] || ""),
+  ));
+
+  checks.push(makeCheck(
+    "static-cli-version-sync",
+    "blocker",
+    cliPkg.version === version,
+    `cli/package.json version equals package version ${version}`,
+    cliPkg.version ? `cli=${cliPkg.version}` : "missing cli version",
+  ));
+  checks.push(makeCheck(
+    "static-cli-package-bin",
+    "blocker",
+    cliPkg.bin?.Lynn === "./bin/lynn.mjs",
+    "CLI package installs the Lynn command",
+    JSON.stringify(cliPkg.bin || {}),
+  ));
+  checks.push(makeCheck(
+    "static-cli-node-engine",
+    "blocker",
+    String(cliPkg.engines?.node || "").includes(">=20"),
+    "CLI package declares Node.js 20+ requirement",
+    JSON.stringify(cliPkg.engines || {}),
   ));
 
   const manifestPath = path.join(ROOT, ".github", "update-manifest.json");
@@ -253,6 +292,37 @@ async function runStaticChecks({ level }) {
     readmeBadgeVersion === version,
     `README.md version badge equals package version ${version}`,
     readmeBadgeVersion ? `badge=${readmeBadgeVersion}` : "badge not found",
+  ));
+
+  const cliReadme = await readTextIfExists(path.join(ROOT, "cli", "README.md"));
+  checks.push(makeCheck(
+    "static-cli-readme-install",
+    "blocker",
+    cliReadme.includes("Node.js 20 LTS")
+      && cliReadme.includes("npm install -g --force")
+      && cliReadme.includes("lynn-cli-latest.tgz")
+      && cliReadme.includes("Lynn code -p"),
+    "cli/README.md documents Node requirement, CDN install, and headless code usage",
+  ));
+  const headlessContract = await readTextIfExists(path.join(ROOT, "docs", "ops", "lynn-code-headless-agent-contract.md"));
+  checks.push(makeCheck(
+    "static-cli-headless-contract",
+    "blocker",
+    headlessContract.includes("Lynn code -p")
+      && headlessContract.includes("--approval yolo")
+      && headlessContract.includes("--sandbox workspace-write")
+      && headlessContract.includes("Lynn worker run"),
+    "headless/Fleet contract documents non-interactive Lynn code usage",
+  ));
+  const installSnippet = await readTextIfExists(path.join(ROOT, "docs", "ops", "v080-cli-install-release-snippet.md"));
+  checks.push(makeCheck(
+    "static-cli-mirror-snippet",
+    "blocker",
+    installSnippet.includes("Node.js 20 LTS")
+      && installSnippet.includes("lynn-cli-latest.json")
+      && installSnippet.includes("lynn-cli-latest.tgz")
+      && installSnippet.includes("Lynn agents"),
+    "CLI mirror/release snippet includes Node requirement, CDN install, and launch commands",
   ));
 
   return checks.filter((check) => level === "nightly" || severityRank(check.severity) >= 2);

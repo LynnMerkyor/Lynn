@@ -9,14 +9,14 @@
     <title>Lynn 下载 | macOS 与 Windows 安装包</title>
     <meta
       name="description"
-      content="下载 Lynn 的 macOS Apple Silicon、macOS Intel 和 Windows 安装包。v0.79.9 默认本地 Qwen3.5-9B MTP，并完成 V0.80 前五个高风险中枢拆分。"
+      content="下载 Lynn 的 macOS Apple Silicon、macOS Intel、Windows 安装包与 Lynn CLI。v0.80.0 新增 CLI Worker Fleet、StepFun/MiMo Brain 路由和显式启用的本地 9B。"
     />
     <meta name="theme-color" content="#f7f1e6" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Lynn 下载 | macOS 与 Windows 安装包" />
     <meta
       property="og:description"
-      content="下载 Lynn 的 macOS Apple Silicon、macOS Intel 和 Windows 安装包。v0.79.9 默认本地 Qwen3.5-9B MTP，并完成 V0.80 前五个高风险中枢拆分。"
+      content="下载 Lynn 的 macOS Apple Silicon、macOS Intel、Windows 安装包与 Lynn CLI。v0.80.0 新增 CLI Worker Fleet、StepFun/MiMo Brain 路由和显式启用的本地 9B。"
     />
     <meta property="og:image" content="../.github/assets/screenshot-main-20260407-v3.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -37,7 +37,7 @@
           <a href="./index.html#features">功能</a>
           <a href="./index.html#scenes">场景</a>
           <a href="./download.html" aria-current="page">下载</a>
-          <a href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.9" target="_blank" rel="noreferrer">Release</a>
+          <a href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.0" target="_blank" rel="noreferrer">Release</a>
         </nav>
       </header>
 
@@ -47,8 +47,8 @@
             <span class="eyebrow">Lynn 下载页</span>
             <h1>选择适合你设备的版本</h1>
             <p class="lead">
-              当前版本 <strong id="release-version">0.79.9</strong>。
-              下载后即可开始使用 Lynn 的默认模型、桌面记忆、自动任务、多 Agent 协作和本地 Qwen3.5-9B MTP。
+              当前版本 <strong id="release-version">0.80.0</strong>。
+              下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作、CLI Worker Fleet 和显式启用的本地 Qwen3.5-9B MTP。
             </p>
             <div class="platform-callout" id="platform-callout">
               系统识别中…
@@ -119,7 +119,7 @@
             </article>
             <article class="requirement-card">
               <h3>网络与模型</h3>
-              <p>可直接使用 Lynn 默认模型，也可以在设置 → 模型中一键安装本地 Qwen3.5-9B，离线、无 API Key、对话留在本机。</p>
+              <p>可直接使用 Lynn 默认 Brain 路由，也可以在设置 → 模型中显式启用本地 Qwen3.5-9B。CLI 需要 Node.js 20 LTS 或 22 LTS。</p>
             </article>
           </div>
         </section>
@@ -149,18 +149,16 @@
           <div class="release-card">
             <h2>本次版本重点</h2>
             <ul>
-              <li>默认本地模型保持 Qwen3.5-9B Q4_K_M imatrix MTP</li>
-              <li>4B 作为低配降级,明确提示 thinking-on 可能长思考后无正文</li>
-              <li>Deep Research 继续生成聊天内可点击预览的 HTML 报告</li>
-              <li>InputArea、stock-market、mcp-client、bridge-manager、engine/agent 拆出稳定边界</li>
-              <li>web_search 默认优先走 brain v2 本地 proxy,付费搜索 key 不进客户端</li>
-              <li>搜索工具卡可展开查看综合答案、搜索源和失败来源</li>
-              <li>模型升级窗口保留 9B/35B MTP thinking-on 默认启动口径</li>
-              <li>全量测试、类型检查和构建门禁通过后发布</li>
+              <li>Lynn CLI / Lynn Code 新增 Ink TUI、JSONL headless 模式和 Fleet worker adapter</li>
+              <li>GUI Fleet 支持多 worker 派单、日志、diff、gate、合并与远端 push 闭环</li>
+              <li>Brain 默认路由为 StepFun 3.7 Flash high+32K → MiMo → Spark Qwen 3.6 35B A3B</li>
+              <li>链式工具、搜索、tool-storm、长任务续跑和 cache-friendly context layers 加固</li>
+              <li>本地 Qwen3.5-9B MTP 改为显式启用,不会随启动自动占用约 6GB 显存/统一内存</li>
+              <li>CLI 镜像安装、headless agent contract 和 packaged CLI 门禁进入发布流程</li>
             </ul>
             <a
               class="button button-secondary"
-              href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.9"
+              href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.0"
               target="_blank"
               rel="noreferrer"
             >查看完整 Release</a>
@@ -172,7 +170,7 @@
         <div class="footer-links">
           <a href="./index.html">产品介绍</a>
           <a href="https://github.com/MerkyorLynn/Lynn" target="_blank" rel="noreferrer">GitHub</a>
-          <a href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.9" target="_blank" rel="noreferrer">Release</a>
+          <a href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.0" target="_blank" rel="noreferrer">Release</a>
           <a href="#faq">常见问题</a>
         </div>
         <div class="footer-meta">
@@ -182,6 +180,6 @@
       </footer>
     </div>
 
-    <script src="./app.js?v=0.79.9"></script>
+    <script src="./app.js?v=0.80.0"></script>
   </body>
 </html>

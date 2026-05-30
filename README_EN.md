@@ -35,24 +35,70 @@ Related repositories:
 
 > Note:the 27B Lynn-native NVFP4 artifact is an internal/vertical runtime artifact for Lynn Engine. General users should start with the V4 / V Flash BF16, NVFP4 v8-RTN, or Q4_K_M variants.
 
-## 🔭 V0.80 Preview: GUI + CLI Worker Fleet
+## 🔭 V0.80: GUI + CLI Worker Fleet
 
 V0.80 brings Lynn back to the programming battlefield, but not as another single CLI or IDE plugin. The direction is to make **the GUI a command center for multiple CLI agents**: split tasks, dispatch workers, inspect logs and diffs, run gates, then merge or discard the result from one visual workflow.
 
 This is not Lynn stepping away from code. It is the opposite:code tasks, research tasks, and business tasks should share the same orchestration layer.
 
 - **GUI command center**:create tasks in the desktop app, assign workers, watch stdout/stderr, inspect diffs, see tests, and catch forbidden-file edits.
-- **CLI Worker Fleet**:dispatch Codex, Claude Code, Qwen, codebuddy, or custom CLIs. Each worker runs in its own worktree.
--- **Task protocol**: generate task briefs with owned files, forbidden files, done criteria, test commands, and commit rules.
+- **CLI Worker Fleet**:dispatch Codex, Claude Code, Qwen, codebuddy, Kimi, opencode, or custom CLIs. Each worker runs in its own worktree.
+- **Task protocol**: generate task briefs with owned files, forbidden files, done criteria, test commands, and commit rules.
 - **Merge Queue**: completed worker output enters a human review queue for cherry-pick, merge, abandon, and release-gate runs.
-- **`@lynn/cli`**:V0.80 will also ship a public npm CLI package with `lynn -p`, `lynn code`, `lynn doctor`, and `lynn worker run`, usable directly in terminals and callable by the GUI.
+- **`@lynn/cli`**:V0.80 ships a public npm CLI package with `Lynn -p`, `Lynn code`, `Lynn agents`, and `Lynn worker run`, usable directly in terminals and callable by the GUI.
 
 Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.80 targets the next layer: **when you have 3-5 CLI agents, multiple worktrees, coding work and business work running in parallel, who coordinates, reviews, and ships the work?**
+
+### CLI Quick Install
+
+```bash
+# 1. Node requirement: Node.js 20 LTS or 22 LTS with npm.
+# macOS: brew install node@20
+# macOS/Linux: nvm install 20 && nvm use 20
+# Windows: winget install OpenJS.NodeJS.LTS
+
+# 2. Install or update from the Lynn mirror.
+BUILD=$(node -e "fetch('https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.json').then(r=>r.json()).then(j=>console.log(j.build))")
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=$BUILD"
+
+# 3. Launch.
+Lynn          # interactive chat TUI
+Lynn code     # coding-agent TUI
+Lynn agents   # copyable headless/Fleet commands for other agents
+```
+
+Machine-call contract:
+
+```bash
+Lynn code -p "fix tests, run the suite, summarize the diff" \
+  --json \
+  --cwd /path/to/worktree \
+  --approval yolo \
+  --sandbox workspace-write \
+  --save-session
+```
+
+Agents should parse JSONL, not the human Ink TUI. See [`docs/ops/lynn-code-headless-agent-contract.md`](docs/ops/lynn-code-headless-agent-contract.md).
 
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.79.9</strong> · 2026-05-29 · Risk Boundary Split + Search Source UI <em>(latest)</em></summary>
+<summary><strong>v0.80.0</strong> · 2026-05-30 · CLI Worker Fleet + StepFun/MiMo Brain Route <em>(latest)</em></summary>
+
+**Lynn's programming-focused release**:
+- **Lynn CLI / Lynn Code**:new `@lynn/cli` package with Ink TUI, markdown/code rendering, real diff preview, multimodal input, `Lynn code -p ... --json`, and `Lynn agents`.
+- **GUI Worker Fleet**:fan-out tasks to multiple CLI workers, inspect logs/diffs/tests/gates, and perform gated merges.
+- **Brain V2 route**:StepFun 3.7 Flash high+32K → MiMo V2.5 Pro/Omni → Spark Qwen 3.6 35B A3B.
+- **Long-run stability**:tool-result reinforcement, chain-tool hints, tool-storm guard, session checkpointing, frame repair, git snapshots, and stable context layers.
+- **Local 9B opt-in**:Qwen3.5-9B MTP no longer auto-starts on app launch; users explicitly enable it when they want local inference.
+- **Release gates**:CLI install docs, mirror tarball, packaged CLI runtime, and headless agent contract are part of the release checks.
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.0)
+
+</details>
+
+<details>
+<summary><strong>v0.79.9</strong> · 2026-05-29 · Risk Boundary Split + Search Source UI</summary>
 
 **Final V0.79 stability release**:
 - 🧩 **Five risk-heavy centers split**:`InputArea`, `stock-market`, `mcp-client`, `bridge-manager`, and `engine/agent` now have clearer module boundaries, reducing future conflict and regression risk.
@@ -735,11 +781,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.79.9 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.80.0 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.79.9 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.80.0 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -748,7 +794,7 @@ Linux builds are planned.
 Two paths on first launch:
 
 - **Quick Start**: Enter your name → set permissions → jump right in. A built-in default model works out of the box — no API key required.
-- **Local model**: Settings → Models → Local Qwen3.5-9B imatrix MTP (default, 5.38 GB / 24GB VRAM or unified memory recommended) / 4B imatrix downgrade / 35B Q4_K_M imatrix (24GB high-end, 21 GB). Lynn downloads the Q4_K_M GGUF, prepares llama.cpp, starts the local endpoint, and switches to it automatically after authorization.
+- **Local model**: Settings → Models → Local Qwen3.5-9B imatrix MTP (5.38 GB / 24GB VRAM or unified memory recommended) / 4B imatrix downgrade / 35B Q4_K_M imatrix (24GB high-end, 21 GB). V0.80 makes local GGUF explicit opt-in: Lynn starts llama.cpp only after the user enables it, so app launch does not automatically claim about 6GB of VRAM or unified memory.
 - **Advanced Setup**: Enter your name → connect your own provider (API key + base URL) → choose a **chat model** and a **utility model** → pick a theme → set permissions → enter.
 
 Lynn uses the OpenAI-compatible protocol, so any provider that supports it will work (OpenAI, DeepSeek, Qwen, local models via Ollama, SiliconFlow, etc.). Some providers (e.g. MiniMax) also support OAuth login. All model settings can be adjusted later in Settings.
@@ -802,7 +848,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.79.9 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.80.0 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

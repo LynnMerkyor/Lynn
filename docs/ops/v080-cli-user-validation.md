@@ -49,7 +49,7 @@ Expected:
 Lynn version
 ```
 
-prints `@lynn/cli 0.80.0-alpha.0`.
+prints `@lynn/cli 0.80.0`.
 
 ## Tier 0: Offline Smoke
 

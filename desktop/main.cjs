@@ -3515,7 +3515,9 @@ function stopVoiceTunnel() {
 wrapIpcHandler("voice-tunnel-status", () => (voiceTunnel ? voiceTunnel.getStatus() : { stopped: true }));
 
 // ─────────────────────────────────────────────────────────────
-// llama.cpp local 推理守护(2026-05-20 战略 pivot 后默认本地推理底层)
+// llama.cpp local inference runtime(2026-05-20). It is now strictly opt-in:
+// querying state and downloading models must not claim VRAM until the user
+// explicitly starts a local GGUF.
 //   - 找 ~/.lynn/llamacpp/bin/llama-server[.exe] + ~/.lynn/models/<default>.gguf
 //   - 任一缺 → emit needs-binary / needs-model state,UI 触发 Phase 2 download
 //   - spawn + 健康监控 + crash auto-restart,跟 Lynn 生命周期绑
@@ -3548,18 +3550,21 @@ function ipcError(reason, payload = {}) {
 }
 
 function parseStartDownloadPayload(payload) {
-  if (payload == null) return { ok: true, modelId: undefined };
+  if (payload == null) return { ok: true, modelId: undefined, startAfterDownload: false };
   if (typeof payload === "string") {
     const modelId = payload.trim();
-    return modelId ? validateLocalModelId(modelId) : { ok: true, modelId: undefined };
+    const parsed = modelId ? validateLocalModelId(modelId) : { ok: true, modelId: undefined };
+    return parsed.ok === false ? parsed : { ...parsed, startAfterDownload: false };
   }
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return ipcError("invalid-payload");
   }
-  if (payload.modelId == null) return { ok: true, modelId: undefined };
+  const startAfterDownload = payload.startAfterDownload === true || process.env.LYNN_LOCAL_MODEL_AUTO_START === "1";
+  if (payload.modelId == null) return { ok: true, modelId: undefined, startAfterDownload };
   if (typeof payload.modelId !== "string") return ipcError("invalid-model-id");
   const modelId = payload.modelId.trim();
-  return modelId ? validateLocalModelId(modelId) : { ok: true, modelId: undefined };
+  const parsed = modelId ? validateLocalModelId(modelId) : { ok: true, modelId: undefined };
+  return parsed.ok === false ? parsed : { ...parsed, startAfterDownload };
 }
 
 function validateLocalModelId(modelId) {
@@ -3794,8 +3799,8 @@ wrapIpcHandler(LOCAL_MODEL_IPC.startDownload, async (event, payload = {}) => {
       const doneState = decorateDownloadState(profile, { ...downloader.getState(), state: "done", target });
       lastModelDownloadState = doneState;
       broadcastToAllWindows(LOCAL_MODEL_IPC.downloadState, doneState);
-      if (profile.autoStart) {
-        // default local model on disk — bounce llamacpp so it picks it up
+      if (parsedPayload.startAfterDownload || profile.autoStart) {
+        // Explicit local model startup — bounce llamacpp so it picks the model up.
         // #18: 1500ms conservative wait (was 600ms) + port-busy probe before spawn.
         // Manager.stop() SIGTERMs the child but only SIGKILLs after 5s;
         // we wait long enough for the typical clean exit, then verify the bind port is free
@@ -4019,10 +4024,21 @@ app.whenReady().then(async () => {
     //     macOS 已有 launchd watchdog 时自动 standby + 仅监控;Win/Linux 接管 spawn。
     startVoiceTunnel();
 
-    // 2c. 2026-05-20 — 启动 llama.cpp local 推理守护(默认本地推理底层)
-    //     找 ~/.lynn/llamacpp/bin + ~/.lynn/models/<default>.gguf,任一缺 → needs-install
-    //     state 报 UI 引导首次安装。已 install → spawn llama-server + health 监控。
-    startLlamacpp();
+    // 2c. Local GGUF is opt-in. Qwen3.5-9B occupies several GB of VRAM/UMA,
+    // so app startup must never spawn llama.cpp unless the user explicitly
+    // enabled it or an operator sets LYNN_LOCAL_MODEL_AUTO_START=1.
+    if (process.env.LYNN_LOCAL_MODEL_AUTO_START === "1") {
+      startLlamacpp();
+    } else {
+      lastLlamacppState = {
+        status: "stopped",
+        stopped: true,
+        healthy: false,
+        reason: "explicit-start-required",
+        ts: Date.now(),
+      };
+      console.log("[llamacpp] startup auto-start disabled; waiting for explicit user action");
+    }
 
     // #11: 2026-05-22 — resume-download relaunch hint
     // If a `.part` file exists in ~/.lynn/models/, surface it to UI so user can resume

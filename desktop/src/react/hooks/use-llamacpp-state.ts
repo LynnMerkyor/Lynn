@@ -75,7 +75,7 @@ export interface LlamaCppStateSnapshot {
   needsBinary: boolean;
   needsModel: boolean;
   download: DownloadState;
-  startDownload: (payload?: { modelId?: string }) => Promise<{ ok: boolean; alreadyRunning?: boolean; reason?: string; detail?: string }>;
+  startDownload: (payload?: { modelId?: string; startAfterDownload?: boolean }) => Promise<{ ok: boolean; alreadyRunning?: boolean; reason?: string; detail?: string }>;
   pauseDownload: () => Promise<{ ok: boolean; reason?: string }>;
   cancelDownload: () => Promise<{ ok: boolean; reason?: string }>;
 }
@@ -175,9 +175,9 @@ export function useLlamacppState(): LlamaCppStateSnapshot {
     };
   }, []);
 
-  const startDownload = useCallback(async (payload?: { modelId?: string }): Promise<{ ok: boolean; alreadyRunning?: boolean; reason?: string; detail?: string }> => {
+  const startDownload = useCallback(async (payload?: { modelId?: string; startAfterDownload?: boolean }): Promise<{ ok: boolean; alreadyRunning?: boolean; reason?: string; detail?: string }> => {
     const platform = (window as unknown as {
-      platform?: { llamacppStartDownload?: (payload?: { modelId?: string }) => Promise<{ ok: boolean; alreadyRunning?: boolean; reason?: string; detail?: string }> }
+      platform?: { llamacppStartDownload?: (payload?: { modelId?: string; startAfterDownload?: boolean }) => Promise<{ ok: boolean; alreadyRunning?: boolean; reason?: string; detail?: string }> }
     }).platform;
     try {
       const result = await platform?.llamacppStartDownload?.(payload);
