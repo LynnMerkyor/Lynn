@@ -108,13 +108,13 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   const [mode, setMode] = useState(props.initialMode);
   const [usage, setUsage] = useState<string | null>(null);
   const [provider, setProvider] = useState(props.modelLabel);
-  const contextInfo = React.useMemo(() => analyzePastedContext(input), [input]);
   const [approval, setApproval] = useState<ApprovalState | null>(null);
   const approvalResolve = useRef<((value: "approve" | "approve_all" | "deny") => void) | null>(null);
   const [history] = useState(() => new HistoryNavigator(loadHistory(historyPath())));
   const assistantId = useRef<number | null>(null);
   const dataDir = React.useMemo(() => resolveDataDir(typeof props.args.flags["data-dir"] === "string" ? props.args.flags["data-dir"] : null), [props.args.flags]);
   const effectiveCwd = getStringFlag(props.args.flags, "cwd") || process.cwd();
+  const contextInfo = React.useMemo(() => analyzePastedContext(input, effectiveCwd), [input, effectiveCwd]);
 
   useEffect(() => {
     if (!busy) return;
