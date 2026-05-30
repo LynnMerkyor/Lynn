@@ -12,21 +12,21 @@ The CLI handles terminal UX, worker JSONL, and local file/shell orchestration.
 Install from the Lynn Tencent mirror:
 
 ```bash
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0-alpha.0.tgz
+npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0-alpha.0.tgz
 
 # Rolling preview build for testers:
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz
+npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz
 ```
 
-`--force` is intentional for preview testers: it lets npm replace an older
-`Lynn` / `lynn` shim instead of failing with `EEXIST` when the command was
-already installed.
+The package installs the `Lynn` command. If you installed an older preview that
+also created a lowercase `lynn` shim, remove that old shim once or reinstall
+with `--force`.
 
 If npm dependency downloads are slow in mainland China, keep the Lynn tarball URL
 as-is and add a registry mirror for third-party dependencies:
 
 ```bash
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz \
+npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -42,8 +42,9 @@ cat README.md | Lynn "summarize this file"
 Lynn - < README.md
 ```
 
-`Lynn` is the primary command. Lowercase `lynn` is kept as a compatibility
-alias for scripts and terminal muscle memory.
+`Lynn` is the primary command. The npm package intentionally avoids installing a
+separate lowercase `lynn` binary because macOS default filesystems are
+case-insensitive and npm cannot safely create both shims in the same prefix.
 
 ## CLI-only BYOK fallback
 

@@ -68,6 +68,14 @@ async function existingBin(installDir, names) {
   throw new Error(`[cli-install-smoke] none of these CLI bins exist: ${names.join(", ")}`);
 }
 
+async function assertNoLiteralLowercaseShim(dir) {
+  if (process.platform === "win32") return;
+  const entries = await fs.readdir(dir).catch(() => []);
+  if (entries.includes("lynn")) {
+    throw new Error(`[cli-install-smoke] unexpected lowercase lynn shim in ${dir}; npm cannot install Lynn/lynn safely on case-insensitive filesystems`);
+  }
+}
+
 await fs.access(path.join(cliRoot, "package.json")).catch(() => {
   throw new Error("[cli-install-smoke] missing cli/package.json; run from repo root");
 });
@@ -92,24 +100,21 @@ try {
   await fs.writeFile(path.join(installDir, "package.json"), JSON.stringify({ private: true, type: "module" }, null, 2), "utf8");
   await run("npm install packed CLI", "npm", ["install", "--silent", "--omit=dev", tarball], { cwd: installDir });
 
-  // Global testers often already have an older lynn shim in PATH. The public
-  // install command intentionally uses --force so npm replaces that shim
-  // instead of failing with EEXIST.
-  await fs.writeFile(path.join(globalDir, "bin", "lynn"), "#!/bin/sh\necho stale\n", { mode: 0o755 });
-  await run("npm global install packed CLI", "npm", ["install", "--global", "--force", "--silent", "--omit=dev", "--prefix", globalDir, tarball], { cwd: installDir });
+  await run("npm global install packed CLI", "npm", ["install", "--global", "--silent", "--omit=dev", "--prefix", globalDir, tarball], { cwd: installDir });
   const globalLynn = process.platform === "win32"
-    ? path.join(globalDir, "lynn.cmd")
-    : path.join(globalDir, "bin", "lynn");
-  const globalVersion = await run("global lynn version", globalLynn, ["version"], { cwd: installDir });
+    ? path.join(globalDir, "Lynn.cmd")
+    : path.join(globalDir, "bin", "Lynn");
+  await assertNoLiteralLowercaseShim(path.join(globalDir, "bin"));
+  const globalVersion = await run("global Lynn version", globalLynn, ["version"], { cwd: installDir });
   assertIncludes(globalVersion.name, globalVersion.stdout, "@lynn/cli");
 
-  const lowerBin = await existingBin(installDir, ["lynn"]);
-  const lynnBin = await existingBin(installDir, ["Lynn", "lynn"]);
+  await assertNoLiteralLowercaseShim(path.join(installDir, "node_modules", ".bin"));
+  const lynnBin = await existingBin(installDir, ["Lynn"]);
 
   const version = await run("Lynn version", lynnBin, ["version"], { cwd: installDir });
   assertIncludes(version.name, version.stdout, "@lynn/cli");
 
-  const doctor = await run("lynn doctor offline", lowerBin, ["doctor", "--offline"], { cwd: installDir, env: { LYNN_DATA_DIR: dataDir } });
+  const doctor = await run("Lynn doctor offline", lynnBin, ["doctor", "--offline"], { cwd: installDir, env: { LYNN_DATA_DIR: dataDir } });
   assertIncludes(doctor.name, doctor.stdout, "OK node");
   assertIncludes(doctor.name, doctor.stdout, "brain: skipped");
 

@@ -38,9 +38,9 @@ type Vars = Record<string, string | number>;
 const STRINGS: Record<Lang, Record<string, string>> = {
   zh: {
     "tips.banner":
-      '提示:lynn -p "问题" 走本地 Brain 路由(默认 StepFun 3.7 Flash high+32K,MiMo V2.5 Pro 第二兜底)。\n' +
+      '提示:Lynn -p "问题" 走本地 Brain 路由(默认 StepFun 3.7 Flash high+32K,MiMo V2.5 Pro 第二兜底)。\n' +
       "     聊天 / 代码里用 /fast 低延迟,/think 深度推理。\n" +
-      "     lynn providers 配置 CLI 专用 BYOK,lynn help 查看全部命令。",
+      "     Lynn providers 配置 CLI 专用 BYOK,Lynn help 查看全部命令。",
     "startup.label.model": "模型",
     "startup.label.mode": "权限",
     "startup.label.byok": "BYOK",
@@ -54,10 +54,10 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "status.chat.prefix": "MiMo/Brain",
     "offline.body":
       "默认 StepFun 3.7 Flash→MiMo V2.5 Pro 路由暂不可用(本地 Brain 离线)。你可以直接启动本地 Brain,或配置 CLI-only BYOK:\n" +
-      "  lynn brain start             启动本地 Brain/router\n" +
-      "  lynn doctor --offline       自检环境\n" +
-      "  lynn providers              查看 / 配置 BYOK\n" +
-      '  lynn -p "你好" --mock-brain   离线试用',
+      "  Lynn brain start             启动本地 Brain/router\n" +
+      "  Lynn doctor --offline       自检环境\n" +
+      "  Lynn providers              查看 / 配置 BYOK\n" +
+      '  Lynn -p "你好" --mock-brain   离线试用',
     "offline.body.byok": "本地 Brain 离线;将直接使用 CLI BYOK provider:{provider} / {model}。",
     "chat.error.brainOffline": "默认 StepFun 3.7 Flash→MiMo V2.5 Pro 路由不可用:本地 Brain 离线。在终端运行 Lynn brain start 或打开 Lynn 客户端即可使用默认高速路由;也可运行 /providers 配置 CLI-only BYOK。({brainUrl})",
     "brain.recovery.offline": "Brain 离线。运行 Lynn brain start 或打开 Lynn 客户端使用默认 StepFun 3.7 Flash→MiMo V2.5 Pro 路由;也可运行 Lynn providers set --preset stepfun 配置 CLI-only BYOK,或用 --mock-brain 做离线试用。",
@@ -206,7 +206,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "providers.byok.default": "打开 Lynn 客户端 > 设置 > Providers",
     "providers.byok.gui": "打开 Lynn 客户端 设置 > Providers",
     "providers.byok.missing": "安装/打开 Lynn 客户端 > 设置 > Providers 配置默认路由;或运行 Lynn providers set 配置 CLI-only BYOK",
-    "providers.byok.unconfigured": "安装 / 打开 Lynn 客户端 设置 > Providers 配置默认路由,或运行 lynn providers set 配置 CLI-only BYOK",
+    "providers.byok.unconfigured": "安装 / 打开 Lynn 客户端 设置 > Providers 配置默认路由,或运行 Lynn providers set 配置 CLI-only BYOK",
     "providers.byok.configured": "已配置 CLI BYOK fallback;默认 Brain 路由仍由 Lynn 客户端设置 > Providers 控制",
     "providers.keyPolicy": "供应商密钥保存在 Lynn 客户端设置或 CLI 本地配置文件中;终端只显示脱敏值。",
     "providers.route.default": "StepFun 3.7 Flash → MiMo V2.5 Pro → Spark Qwen 3.6 35B A3B · 经本地 Brain 路由(自动)",
@@ -267,9 +267,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
   },
   en: {
     "tips.banner":
-      'Tip: lynn -p "prompt" uses the local Brain router (StepFun 3.7 Flash high+32K first, MiMo V2.5 Pro second).\n' +
+      'Tip: Lynn -p "prompt" uses the local Brain router (StepFun 3.7 Flash high+32K first, MiMo V2.5 Pro second).\n' +
       "     In chat / code, use /fast for low latency or /think for deeper reasoning.\n" +
-      "     Run lynn providers for CLI-only BYOK, or lynn help to see every command.",
+      "     Run Lynn providers for CLI-only BYOK, or Lynn help to see every command.",
     "startup.label.model": "model",
     "startup.label.mode": "mode",
     "startup.label.byok": "BYOK",
@@ -283,10 +283,10 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "status.chat.prefix": "MiMo/Brain",
     "offline.body":
       "Default StepFun 3.7 Flash→MiMo V2.5 Pro route unavailable (local Brain offline). Start the local Brain, or configure CLI-only BYOK:\n" +
-      "  lynn brain start             start local Brain/router\n" +
-      "  lynn doctor --offline       check setup\n" +
-      "  lynn providers              view / configure BYOK\n" +
-      '  lynn -p "hello" --mock-brain   try it offline',
+      "  Lynn brain start             start local Brain/router\n" +
+      "  Lynn doctor --offline       check setup\n" +
+      "  Lynn providers              view / configure BYOK\n" +
+      '  Lynn -p "hello" --mock-brain   try it offline',
     "offline.body.byok": "Local Brain is offline; using CLI BYOK provider directly: {provider} / {model}.",
     "chat.error.brainOffline": "Default StepFun 3.7 Flash→MiMo V2.5 Pro route unavailable: local Brain is offline. Run Lynn brain start in your terminal or open the Lynn client for the default fast route; run /providers to configure CLI-only BYOK. ({brainUrl})",
     "brain.recovery.offline": "Brain offline. Run Lynn brain start or open the Lynn client for StepFun 3.7 Flash→MiMo V2.5 Pro; configure CLI BYOK with Lynn providers set --preset stepfun, or run with --mock-brain.",
@@ -435,7 +435,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "providers.byok.default": "Open Lynn client GUI > Settings > Providers",
     "providers.byok.gui": "Open Lynn client GUI > Settings > Providers",
     "providers.byok.missing": "Install/open Lynn client GUI > Settings > Providers for default route, or run Lynn providers set for CLI-only BYOK",
-    "providers.byok.unconfigured": "Install/open Lynn client GUI > Settings > Providers for default route, or run lynn providers set for CLI-only BYOK",
+    "providers.byok.unconfigured": "Install/open Lynn client GUI > Settings > Providers for default route, or run Lynn providers set for CLI-only BYOK",
     "providers.byok.configured": "CLI BYOK fallback configured; client GUI Settings > Providers controls the default Brain route",
     "providers.keyPolicy": "Provider keys stay in Lynn client settings or the local CLI profile; terminal output shows only redacted values.",
     "providers.route.default": "StepFun 3.7 Flash → MiMo V2.5 Pro → Spark Qwen 3.6 35B A3B via local Brain router (auto)",
