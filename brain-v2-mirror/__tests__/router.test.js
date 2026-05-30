@@ -92,6 +92,28 @@ describe('Router', () => {
     expect(mockState.cooldown.has('p-mimo')).toBe(true);  // HTTP error 2192 markUnhealthy
   });
 
+  it('falls back on HTTP 429 rate limit and cools down the limited provider', async () => {
+    let callIdx = 0;
+    const chunks = [];
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      callIdx++;
+      if (callIdx === 1) throw new Error('p-mimo HTTP 429: rate limited');
+      yield { type: 'content', delta: 'fallback after rate limit' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const r = await run({
+      messages: [{ role: 'user', content: 'q' }],
+      onChunk: async c => chunks.push(c),
+    });
+
+    expect(r.providerId).toBe('p-spark');
+    expect(mockState.adapterCalls).toEqual(['p-mimo', 'p-spark']);
+    expect(mockState.cooldown.has('p-mimo')).toBe(true);
+    expect(chunks.find((c) => c.type === 'content')?.delta).toBe('fallback after rate limit');
+  });
+
   it('empty-emit single hit: still tries next but no cooldown (P1#4 threshold=2)', async () => {
     let callIdx = 0;
     mockState.adapterFn = async function* ({ provider }) {
