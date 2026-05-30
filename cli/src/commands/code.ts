@@ -727,6 +727,7 @@ interface CodeToolRequest {
     pattern?: string;
     command?: string;
     maxBytes?: number;
+    offset?: number;
   };
 }
 
@@ -1035,6 +1036,7 @@ export function codeToolDefinitions(): ChatToolDefinition[] {
         parameters: objectSchema({
           path: stringSchema("Workspace-relative file path."),
           maxBytes: numberSchema("Optional maximum bytes to read."),
+          offset: numberSchema("Optional byte offset for continuing a previous read."),
         }, ["path"]),
       },
     },
@@ -1229,6 +1231,7 @@ function normalizeToolPayload(payload: Record<string, unknown>): CodeToolRequest
       pattern: stringArg(args.pattern),
       command: stringArg(args.command),
       maxBytes: numberArg(args.maxBytes ?? args.max_bytes),
+      offset: numberArg(args.offset ?? args.start_offset ?? args.startOffset),
     },
   };
 }

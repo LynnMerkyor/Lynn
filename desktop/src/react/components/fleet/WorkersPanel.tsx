@@ -19,6 +19,7 @@ import { hanaFetch } from '../../hooks/use-hana-fetch';
 import type { CliEnvStatus } from '../../types';
 import type { FleetWorkerView } from './fleet-reducer';
 import { sortWorkersByAttention } from './fleet-sort';
+import { resolveWorkerWorktreePath } from './worktree-path';
 
 const STATUS_SHORT: Record<string, string> = {
   running: 'running',
@@ -141,9 +142,8 @@ export function WorkersPanel() {
   };
 
   const openWorktree = (worker: FleetWorkerView) => {
-    if (!worker.worktree) return;
-    const abs = worker.cwd ? `${worker.cwd.replace(/\/+$/, '')}/${worker.worktree}` : worker.worktree;
-    window.hana?.openFolder?.(abs);
+    const abs = resolveWorkerWorktreePath(worker);
+    if (abs) window.hana?.openFolder?.(abs);
   };
 
   const fetchFileDiff = async (workerId: string, file: string): Promise<string> => {

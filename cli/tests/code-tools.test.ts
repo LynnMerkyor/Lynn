@@ -32,6 +32,28 @@ describe("code tools", () => {
     expect(String((result.output as { text: string }).text)).toContain("hello");
   });
 
+  it("can continue reading a large file from a byte offset", async () => {
+    await fs.writeFile(path.join(tmp, "src/large.txt"), "0123456789abcdef", "utf8");
+
+    const first = await runClientTool({ cwd: tmp, approval: "ask" }, { name: "read_file", path: "src/large.txt", maxBytes: 6 });
+    expect(first.output).toMatchObject({
+      text: "012345",
+      offset: 0,
+      nextOffset: 6,
+      truncated: true,
+      bytes: 6,
+    });
+
+    const second = await runClientTool({ cwd: tmp, approval: "ask" }, { name: "read_file", path: "src/large.txt", maxBytes: 6, offset: 6 });
+    expect(second.output).toMatchObject({
+      text: "6789ab",
+      offset: 6,
+      nextOffset: 12,
+      truncated: true,
+      bytes: 6,
+    });
+  });
+
   it("blocks path traversal", async () => {
     await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "read_file", path: "../secret" })).rejects.toThrow("escapes workspace");
   });
@@ -167,8 +189,8 @@ describe("code tools", () => {
     calls.append({ type: "tool_call.delta", index: 1, name: "grep", arguments: "{\"query\":\"MiMo\"}" });
 
     expect(parseCodeToolRequests(calls.toJsonText())).toEqual([
-      { tool: "read_file", args: { path: "README.md", text: undefined, query: undefined, pattern: undefined, command: undefined, maxBytes: undefined } },
-      { tool: "grep", args: { path: undefined, text: undefined, query: "MiMo", pattern: undefined, command: undefined, maxBytes: undefined } },
+      { tool: "read_file", args: { path: "README.md", text: undefined, query: undefined, pattern: undefined, command: undefined, maxBytes: undefined, offset: undefined } },
+      { tool: "grep", args: { path: undefined, text: undefined, query: "MiMo", pattern: undefined, command: undefined, maxBytes: undefined, offset: undefined } },
     ]);
     expect(calls.toToolCalls()).toEqual([
       { id: "call_1", name: "read_file", arguments: "{\"path\":\"README.md\"}" },

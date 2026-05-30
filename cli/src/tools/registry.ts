@@ -16,6 +16,7 @@ export interface ToolRunInput {
   pattern?: string;
   command?: string;
   maxBytes?: number;
+  offset?: number;
 }
 
 export async function runClientTool(ctx: ToolRunContext, input: ToolRunInput): Promise<ClientToolResult> {
@@ -24,7 +25,7 @@ export async function runClientTool(ctx: ToolRunContext, input: ToolRunInput): P
   }
   switch (input.name) {
     case "read_file":
-      return readFileTool(ctx, input.path || ".", input.maxBytes);
+      return readFileTool(ctx, input.path || ".", input.maxBytes, input.offset);
     case "write_file":
       return writeFileTool(ctx, input.path || "", input.text || "");
     case "apply_patch":
