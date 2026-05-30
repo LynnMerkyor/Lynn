@@ -208,7 +208,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       }
       const providerCommand = buildChatProviderArgs(text, args);
       if (providerCommand) {
-        if (shouldShowProviderSetUsage(providerCommand)) {
+        if (shouldShowProviderSetUsage(providerCommand, input.isTTY && output.isTTY)) {
           output.write(`${t("chat.providers.setUsage")}\n\n`);
           continue;
         }

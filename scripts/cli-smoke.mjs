@@ -152,7 +152,7 @@ checks.push(run("provider presets", ["providers", "presets"]).then((r) => {
   assertNotIncludes(r.name, r.stdout, "sk-");
 }));
 
-checks.push(run("setup alias saves BYOK", [
+const setupAliasCheck = run("setup alias saves BYOK", [
   "setup",
   "--data-dir",
   setupDataDir,
@@ -169,16 +169,17 @@ checks.push(run("setup alias saves BYOK", [
   assertNotIncludes(r.name, r.stdout, "setup-smoke-key");
   const profile = JSON.parse(await fs.promises.readFile(path.join(setupDataDir, "providers", "cli.json"), "utf8"));
   if (profile.apiKey !== "setup-smoke-key") throw new Error("setup alias did not save the raw key locally");
-}));
+});
+checks.push(setupAliasCheck);
 
-checks.push(run("byok alias tests saved provider", [
+checks.push(setupAliasCheck.then(() => run("byok alias tests saved provider", [
   "byok",
   "test",
   "--data-dir",
   setupDataDir,
   "--timeout-ms",
   "50",
-], { expectFailure: true }).then((r) => {
+], { expectFailure: true })).then((r) => {
   assertIncludes(r.name, r.stdout, "Provider 测试失败");
   assertNotIncludes(r.name, r.stdout, "setup-smoke-key");
 }));

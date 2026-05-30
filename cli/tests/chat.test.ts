@@ -186,6 +186,9 @@ describe("chat mode controls", () => {
       expect(shouldRefreshProviderRoute(command!)).toBe(true);
       expect(shouldShowProviderSetUsage(command!)).toBe(false);
       expect(shouldShowProviderSetUsage(buildChatProviderArgs("/providers set", base)!)).toBe(true);
+      expect(shouldShowProviderSetUsage(buildChatProviderArgs("/providers set", base)!, true)).toBe(false);
+      expect(shouldShowProviderSetUsage(buildChatProviderArgs("/byok set", base)!)).toBe(true);
+      expect(shouldShowProviderSetUsage(buildChatProviderArgs("/byok set", base)!, true)).toBe(false);
       expect(buildChatProviderArgs("/providers wat", base)).toBeNull();
     } finally {
       await fs.rm(dataDir, { recursive: true, force: true });

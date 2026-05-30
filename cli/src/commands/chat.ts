@@ -116,7 +116,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     }
     const providerCommand = buildChatProviderArgs(text, args);
     if (providerCommand) {
-      if (shouldShowProviderSetUsage(providerCommand)) {
+      if (shouldShowProviderSetUsage(providerCommand, input.isTTY && output.isTTY)) {
         output.write(`${t("chat.providers.setUsage")}\n\n`);
         return "continue";
       }
@@ -309,9 +309,10 @@ export function shouldRefreshProviderRoute(args: ParsedArgs): boolean {
   return subcommand === "set" || subcommand === "unset" || subcommand === "clear" || subcommand === "reset";
 }
 
-export function shouldShowProviderSetUsage(args: ParsedArgs): boolean {
+export function shouldShowProviderSetUsage(args: ParsedArgs, interactive = false): boolean {
   const subcommand = (args.positionals[0] || "").toLowerCase();
   if (subcommand !== "set") return false;
+  if (interactive) return false;
   return !(
     getStringFlag(args.flags, "provider")
     || getStringFlag(args.flags, "preset")
