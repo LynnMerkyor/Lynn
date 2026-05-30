@@ -212,7 +212,12 @@ describe('Router', () => {
     const chunks = [];
     const metas = [];
     const result = await run({
-      messages: [{ role: 'user', content: '今天天气怎么样' }],
+      messages: [
+        { role: 'system', content: 'persona must stay at prefix' },
+        { role: 'user', content: '你好' },
+        { role: 'assistant', content: '你好' },
+        { role: 'user', content: '今天天气怎么样' },
+      ],
       onChunk: async (chunk, meta) => {
         chunks.push(chunk);
         metas.push(meta);
@@ -224,11 +229,15 @@ describe('Router', () => {
     expect(chunks.map(c => c.type)).toEqual(['pre_search', 'content']);
     expect(chunks[0]).toMatchObject({ source: 'mimo', hit: true, cached: null });
     expect(metas[0].fallback_from).toEqual([{ id: 'p-mimo', reason: 'cooldown' }]);
-    expect(adapterMessages).toHaveLength(2);
-    expect(adapterMessages[0].role).toBe('user');
-    expect(String(adapterMessages[0].content)).toContain('<lynn_runtime_frame');
-    expect(String(adapterMessages[0].content)).toContain('【实时信息上下文】');
-    expect(adapterMessages[1].role).toBe('user');
+    expect(adapterMessages).toHaveLength(5);
+    expect(adapterMessages.map(m => m.role)).toEqual(['system', 'user', 'assistant', 'user', 'user']);
+    expect(adapterMessages.filter(m => m.role === 'system')).toHaveLength(1);
+    expect(adapterMessages[0].content).toBe('persona must stay at prefix');
+    expect(adapterMessages[3].role).toBe('user');
+    expect(String(adapterMessages[3].content)).toContain('<lynn_runtime_frame');
+    expect(String(adapterMessages[3].content)).toContain('【实时信息上下文】');
+    expect(adapterMessages[4].role).toBe('user');
+    expect(adapterMessages[4].content).toBe('今天天气怎么样');
   });
 
   it('suppresses repeated server tool calls when storm detection is enabled', async () => {
