@@ -4,13 +4,20 @@
  * the live `fleet:*` WS events later (ws-message-handler).
  */
 import type { FleetWorkerEvent } from '../../../../shared/fleet-events.js';
-import { applyFleetEventToList, type FleetWorkerView } from '../components/fleet/fleet-reducer';
+import {
+  applyFleetEventToList,
+  hydrateFleetWorkers,
+  type FleetWorkerRecordSnapshot,
+  type FleetWorkerView,
+} from '../components/fleet/fleet-reducer';
 
 export interface FleetSlice {
   /** Active + recent workers, in arrival order. */
   fleetWorkers: FleetWorkerView[];
   /** Fold one worker event into the matching view (creates it on worker.started). */
   applyFleetEvent: (event: FleetWorkerEvent) => void;
+  /** Rebuild the board from FleetHub snapshots after the panel opens or reconnects. */
+  hydrateFleetWorkers: (workers: FleetWorkerRecordSnapshot[]) => void;
   /** Remove a single worker from the board. */
   removeWorker: (workerId: string) => void;
   /** Drop completed/cancelled/failed workers to declutter the board. */
@@ -26,6 +33,7 @@ export const createFleetSlice = (
 ): FleetSlice => ({
   fleetWorkers: [],
   applyFleetEvent: (event) => set((s) => ({ fleetWorkers: applyFleetEventToList(s.fleetWorkers, event) })),
+  hydrateFleetWorkers: (workers) => set({ fleetWorkers: hydrateFleetWorkers(workers) }),
   removeWorker: (workerId) => set((s) => ({ fleetWorkers: s.fleetWorkers.filter((w) => w.workerId !== workerId) })),
   clearFinishedWorkers: () =>
     set((s) => ({ fleetWorkers: s.fleetWorkers.filter((w) => !TERMINAL_STATUSES.includes(w.status)) })),

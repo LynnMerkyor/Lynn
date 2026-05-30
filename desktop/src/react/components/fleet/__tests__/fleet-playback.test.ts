@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { collectFleetEvents } from '../playback';
-import { applyFleetEventToList, type FleetWorkerView } from '../fleet-reducer';
+import { applyFleetEventToList, hydrateFleetWorkers, type FleetWorkerView } from '../fleet-reducer';
 import { MOCK_WORKER_ID, MOCK_WORKER_JSONL } from '../fixtures';
 
 describe('fleet mock playback', () => {
@@ -68,5 +68,31 @@ describe('fleet mock playback', () => {
 
     expect(list[0].gate).toEqual({ ok: false, summary: 'code task failed: max_steps_reached' });
     expect(list[0].status).toBe('failed');
+  });
+
+  it('hydrates worker views from FleetHub record snapshots', () => {
+    const { events } = collectFleetEvents(MOCK_WORKER_JSONL);
+    const views = hydrateFleetWorkers([
+      {
+        workerId: MOCK_WORKER_ID,
+        agent: 'claude-code',
+        status: 'blocked',
+        events,
+      },
+      {
+        workerId: 'w-empty',
+        agent: 'lynn-cli',
+        status: 'running',
+        events: [],
+      },
+    ]);
+
+    expect(views).toHaveLength(2);
+    expect(views[0]).toMatchObject({
+      workerId: MOCK_WORKER_ID,
+      status: 'blocked',
+      diffStat: { files: 3, insertions: 70, deletions: 41 },
+    });
+    expect(views[1]).toMatchObject({ workerId: 'w-empty', agent: 'lynn-cli', status: 'running' });
   });
 });

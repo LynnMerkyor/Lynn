@@ -121,6 +121,13 @@ export interface FleetWorkerView {
   lastTs?: string;
 }
 
+export interface FleetWorkerRecordSnapshot {
+  workerId: string;
+  agent?: string;
+  status?: string;
+  events?: FleetWorkerEvent[];
+}
+
 export function createWorkerView(workerId: string, agent?: string): FleetWorkerView {
   return {
     workerId,
@@ -142,6 +149,20 @@ export function createWorkerView(workerId: string, agent?: string): FleetWorkerV
     error: null,
     finished: null,
   };
+}
+
+const FLEET_STATUSES = new Set<FleetWorkerStatus>([
+  'queued',
+  'running',
+  'waiting_approval',
+  'blocked',
+  'completed',
+  'failed',
+  'cancelled',
+]);
+
+function normalizeFleetStatus(status: string | undefined): FleetWorkerStatus | undefined {
+  return status && FLEET_STATUSES.has(status as FleetWorkerStatus) ? (status as FleetWorkerStatus) : undefined;
 }
 
 function upsertChangedFile(list: FleetChangedFile[], file: FleetChangedFile): FleetChangedFile[] {
@@ -372,4 +393,22 @@ export function applyFleetEventToList(list: FleetWorkerView[], ev: FleetWorkerEv
   const copy = list.slice();
   copy[idx] = reduceFleetWorker(list[idx], ev);
   return copy;
+}
+
+/** Rebuild the board from the server's FleetHub snapshots after a GUI reload/open. */
+export function hydrateFleetWorkers(records: FleetWorkerRecordSnapshot[]): FleetWorkerView[] {
+  let list: FleetWorkerView[] = [];
+  for (const rec of records) {
+    const before = list.length;
+    for (const ev of rec.events ?? []) list = applyFleetEventToList(list, ev);
+    if (list.length === before) list = [...list, createWorkerView(rec.workerId, rec.agent)];
+    const idx = list.findIndex((w) => w.workerId === rec.workerId);
+    const status = normalizeFleetStatus(rec.status);
+    if (idx >= 0 && status) {
+      const copy = list.slice();
+      copy[idx] = { ...copy[idx], status };
+      list = copy;
+    }
+  }
+  return list;
 }

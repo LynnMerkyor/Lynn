@@ -31,6 +31,7 @@ export function WorkersPanel() {
   const activePanel = useStore((st) => st.activePanel);
   const fleetWorkers = useStore((st) => st.fleetWorkers);
   const applyFleetEvent = useStore((st) => st.applyFleetEvent);
+  const hydrateFleetWorkers = useStore((st) => st.hydrateFleetWorkers);
   const resetFleet = useStore((st) => st.resetFleet);
   const removeWorker = useStore((st) => st.removeWorker);
   const clearFinishedWorkers = useStore((st) => st.clearFinishedWorkers);
@@ -49,6 +50,14 @@ export function WorkersPanel() {
   useEffect(() => {
     if (activePanel !== 'fleet') return;
     let alive = true;
+    hanaFetch('/api/fleet/workers')
+      .then((r) => r.json())
+      .then((d) => {
+        if (alive && Array.isArray(d?.workers)) hydrateFleetWorkers(d.workers);
+      })
+      .catch(() => {
+        /* route unavailable; live WS/mock playback still works */
+      });
     const p = window.hana?.cliEnvStatus?.();
     if (p) p.then((st) => { if (alive) setCliEnv(st); }).catch(() => { /* ipc unavailable */ });
     return () => {
