@@ -718,6 +718,42 @@ interface CollectedToolCall {
   arguments: string;
 }
 
+interface ClientToolStormState {
+  recent: Array<{ fingerprint: string; readOnly: boolean }>;
+}
+
+interface ClientToolStormVerdict {
+  suppress: boolean;
+  repeatCount: number;
+}
+
+const TOOL_STORM_WINDOW = 8;
+
+function createClientToolStormState(): ClientToolStormState {
+  return { recent: [] };
+}
+
+function isReadOnlyToolRequest(request: CodeToolRequest): boolean {
+  return request.tool === "read_file" || request.tool === "grep" || request.tool === "glob";
+}
+
+function observeClientToolRequest(state: ClientToolStormState, request: CodeToolRequest): ClientToolStormVerdict {
+  const readOnly = isReadOnlyToolRequest(request);
+  if (!readOnly) {
+    state.recent = state.recent.filter((entry) => !entry.readOnly);
+  }
+  const fingerprint = toolRequestFingerprint(request);
+  const previous = state.recent.filter((entry) => entry.fingerprint === fingerprint).length;
+  if (previous > 0) {
+    return { suppress: true, repeatCount: previous + 1 };
+  }
+  state.recent.push({ fingerprint, readOnly });
+  if (state.recent.length > TOOL_STORM_WINDOW) {
+    state.recent.splice(0, state.recent.length - TOOL_STORM_WINDOW);
+  }
+  return { suppress: false, repeatCount: 1 };
+}
+
 async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgentLoopResult> {
   const frames = buildCodeRuntimeFrames(inputData);
   const initialPrompt = buildCodePrompt(inputData.task, inputData.context, inputData.imagePaths);
@@ -739,7 +775,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
   let finalText = "";
   let latestUsageSummary: string | null = null;
   const approvalSession = { approveAll: false };
-  const seenToolRequests = new Map<string, number>();
+  const toolStorm = createClientToolStormState();
   for (let step = 0; step < inputData.maxSteps; step += 1) {
     const label = step === 0 ? t("spinner.coding") : t("spinner.reviewing");
     inputData.onEvent?.({ type: "step.started", step, label });
@@ -780,24 +816,22 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
     }
     const toolResultSections: string[] = [];
     for (const toolRequest of toolRequests) {
-      const fingerprint = toolRequestFingerprint(toolRequest);
-      const previous = seenToolRequests.get(fingerprint) || 0;
-      seenToolRequests.set(fingerprint, previous + 1);
+      const stormVerdict = observeClientToolRequest(toolStorm, toolRequest);
       if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
       const preview = formatDangerousToolPreview(toolRequest.tool, toolRequest.args, supportsColor(inputData.output));
       inputData.onEvent?.({ type: "tool.requested", tool: toolRequest.tool, args: redactToolArgs(toolRequest) as CodeToolRequest["args"], preview });
       if (!inputData.json && !inputData.onEvent) renderClientToolStart(toolRequest);
       let toolResult: ClientToolResult;
-      if (previous > 0) {
+      if (stormVerdict.suppress) {
         toolResult = {
           ok: false,
           tool: toolRequest.tool,
           error: "Repeated identical tool request suppressed by Lynn CLI. Use a different tool, different arguments, or answer with the information already available.",
         };
         if (inputData.json) {
-          writeJsonLine({ type: "code.tool.loop_guard", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest), repeats: previous + 1 });
+          writeJsonLine({ type: "code.tool.loop_guard", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest), repeats: stormVerdict.repeatCount });
         }
-        inputData.onEvent?.({ type: "tool.loop_guard", tool: toolRequest.tool, repeats: previous + 1 });
+        inputData.onEvent?.({ type: "tool.loop_guard", tool: toolRequest.tool, repeats: stormVerdict.repeatCount });
       } else {
         try {
           let effectiveApproval: ToolApprovalRequest["approval"];

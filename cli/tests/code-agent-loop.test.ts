@@ -710,6 +710,52 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
     expect(output).toContain("I already have the file content");
   });
 
+  it("allows a verification read after a mutating edit", async () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+changed",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer((_body, count) => {
+        if (count === 1) return JSON.stringify({ tool: "read_file", args: { path: "hello.txt" } });
+        if (count === 2) return JSON.stringify({ tool: "apply_patch", args: { patch } });
+        if (count === 3) return JSON.stringify({ tool: "read_file", args: { path: "hello.txt" } });
+        return "Verified changed content.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "change hello and verify",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--approval",
+          "yolo",
+          "--max-steps",
+          "5",
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).not.toContain('"type":"code.tool.loop_guard"');
+    expect(output).toContain("Verified changed content.");
+    await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("changed\n");
+  });
+
   it("returns a non-zero result when the tool loop exhausts max steps", async () => {
     const original = process.stdout.write;
     let output = "";
