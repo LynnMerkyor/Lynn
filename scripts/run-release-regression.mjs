@@ -330,10 +330,12 @@ async function runStaticChecks({ level }) {
     "blocker",
     downloadPage.includes("Node.js 20 LTS")
       && downloadPage.includes("npm install -g --force")
-      && downloadPage.includes("lynn-cli-latest.tgz")
+      && downloadPage.includes("lynn-cli-0.80.0.tgz")
       && downloadPage.includes("Lynn code")
-      && downloadPage.includes("Lynn agents"),
-    "site/download.html shows Node requirement, CLI install, and launch commands",
+      && downloadPage.includes("Lynn agents")
+      && downloadPage.includes("data-copy-target=\"cli-install\"")
+      && !downloadPage.includes("data-download-key=\"macArm\" href=\"#\""),
+    "site/download.html shows Node requirement, CLI install/copy, launch commands, and no dead macOS download link",
   ));
 
   return checks.filter((check) => level === "nightly" || severityRank(check.severity) >= 2);

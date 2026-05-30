@@ -37,7 +37,7 @@
           <a href="./index.html#features">功能</a>
           <a href="./index.html#scenes">场景</a>
           <a href="./download.html" aria-current="page">下载</a>
-          <a href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.0" target="_blank" rel="noreferrer">Release</a>
+          <a href="https://github.com/MerkyorLynn/Lynn/releases" target="_blank" rel="noreferrer">Release</a>
         </nav>
       </header>
 
@@ -69,7 +69,13 @@
               <li>公证状态：正式发布前完成 Apple notarization</li>
               <li>下载大小：约 173 MiB</li>
             </ul>
-            <a class="button button-primary" data-download-key="macArm" href="#">下载 Apple Silicon 版</a>
+            <a
+              class="button button-primary"
+              data-download-key="macArm"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.80.0-macOS-arm64.dmg"
+              target="_blank"
+              rel="noreferrer"
+            >下载 Apple Silicon 版</a>
           </article>
 
           <article class="download-card" data-platform-card="mac-intel">
@@ -77,14 +83,20 @@
               <span class="pill pill-soft">适用于 Intel Mac</span>
               <h2>macOS Intel</h2>
             </div>
-            <p>适用于 Intel 芯片的 Mac。正式发布包会完成 Developer ID 签名、公证、stapled,适合仍在使用 Intel 机型的用户。</p>
+            <p>适用于 Intel 芯片的 Mac。v0.80.0 Intel 安装包上传后会同步到镜像站；如果当前镜像还未出现，请先从 GitHub Release 选择可用安装包。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
               <li>签名状态：Developer ID 签名</li>
               <li>公证状态：正式发布前完成 Apple notarization</li>
-              <li>下载大小：约 180 MiB</li>
+              <li>状态：镜像站待同步</li>
             </ul>
-            <a class="button button-primary" data-download-key="macIntel" href="#">下载 Intel 版</a>
+            <a
+              class="button button-secondary"
+              data-download-key="macIntel"
+              href="https://github.com/MerkyorLynn/Lynn/releases"
+              target="_blank"
+              rel="noreferrer"
+            >查看 Intel 备用入口</a>
           </article>
 
           <article class="download-card" data-platform-card="windows">
@@ -92,14 +104,20 @@
               <span class="pill pill-warm">Windows 安装版</span>
               <h2>Windows</h2>
             </div>
-            <p>正式发布提供代码签名的 `Setup.exe` 安装包。首次运行时，Windows SmartScreen 仍可能因为新版应用声誉积累不足而提示确认。</p>
+            <p>正式发布提供代码签名的 `Setup.exe` 安装包。v0.80.0 Windows 安装包上传后会同步到镜像站；如果当前镜像还未出现，请先从 GitHub Release 选择可用安装包。</p>
             <ul>
               <li>文件格式：`.exe`</li>
               <li>安装方式：图形安装向导</li>
               <li>说明：正式发布前完成 Windows 代码签名</li>
-              <li>下载大小：约 195 MiB</li>
+              <li>状态：镜像站待同步</li>
             </ul>
-            <a class="button button-primary" data-download-key="windows" href="#">下载 Windows 安装版</a>
+            <a
+              class="button button-secondary"
+              data-download-key="windows"
+              href="https://github.com/MerkyorLynn/Lynn/releases"
+              target="_blank"
+              rel="noreferrer"
+            >查看 Windows 备用入口</a>
           </article>
         </section>
 
@@ -117,7 +135,9 @@
               <h3>1. 先准备 Node 环境</h3>
               <p>如果机器已经有 Node 20+ 和 npm，可以直接跳到下一步。</p>
             </div>
-            <pre><code># macOS(Homebrew)
+            <div class="code-copy-block">
+              <button class="copy-button" type="button" data-copy-target="node-install">复制</button>
+              <pre><code id="node-install"># macOS(Homebrew)
 brew install node@20
 
 # macOS / Linux(nvm)
@@ -125,15 +145,18 @@ nvm install 20 && nvm use 20
 
 # Windows
 winget install OpenJS.NodeJS.LTS</code></pre>
+            </div>
           </div>
           <div class="cli-install-card cli-install-card-strong">
             <div class="cli-install-copy">
               <span class="pill pill-warm">首次安装 / 覆盖升级</span>
-              <h3>2. 安装最新版 Lynn CLI</h3>
-              <p>这条命令始终安装镜像站上的最新版。已经装过旧版时也用同一条命令覆盖升级。</p>
+              <h3>2. 安装 Lynn CLI</h3>
+              <p>第一次安装和覆盖旧版本都用这条命令。`--force` 可以覆盖旧的 `lynn/Lynn` 命令软链接,避免 npm 提示 EEXIST。</p>
             </div>
-            <pre><code>BUILD=$(node -e "fetch('https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.json').then(r=>r.json()).then(j=>console.log(j.build))")
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=$BUILD"</code></pre>
+            <div class="code-copy-block">
+              <button class="copy-button" type="button" data-copy-target="cli-install">复制</button>
+              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0.tgz</code></pre>
+            </div>
           </div>
           <div class="cli-install-card">
             <div class="cli-install-copy">
@@ -141,7 +164,9 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
               <h3>3. 启动 Lynn</h3>
               <p>默认走本地 Lynn Brain 路由；如果只想给其他智能体或脚本调用，请使用 `Lynn code -p ... --json`。</p>
             </div>
-            <pre><code>Lynn                 # 交互式聊天 TUI
+            <div class="code-copy-block">
+              <button class="copy-button" type="button" data-copy-target="cli-start">复制</button>
+              <pre><code id="cli-start">Lynn                 # 交互式聊天 TUI
 Lynn code            # 编码 agent TUI
 Lynn agents          # 输出可复制的 Fleet / 其他 CLI 调用方式
 
@@ -152,6 +177,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
   --approval yolo \
   --sandbox workspace-write \
   --save-session</code></pre>
+            </div>
           </div>
         </section>
 
@@ -210,7 +236,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             </ul>
             <a
               class="button button-secondary"
-              href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.0"
+              href="https://github.com/MerkyorLynn/Lynn/releases"
               target="_blank"
               rel="noreferrer"
             >查看完整 Release</a>
@@ -222,7 +248,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
         <div class="footer-links">
           <a href="./index.html">产品介绍</a>
           <a href="https://github.com/MerkyorLynn/Lynn" target="_blank" rel="noreferrer">GitHub</a>
-          <a href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.0" target="_blank" rel="noreferrer">Release</a>
+          <a href="https://github.com/MerkyorLynn/Lynn/releases" target="_blank" rel="noreferrer">Release</a>
           <a href="#faq">常见问题</a>
         </div>
         <div class="footer-meta">

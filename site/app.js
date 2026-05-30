@@ -1,13 +1,11 @@
 const RELEASE = {
   version: "0.80.0",
-  releasePage: "https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.0",
+  releasePage: "https://github.com/MerkyorLynn/Lynn/releases",
   assets: {
     macArm:
-      "https://download.merkyorlynn.com/downloads/Lynn-0.80.0-macOS-Apple-Silicon.dmg",
-    macIntel:
-      "https://download.merkyorlynn.com/downloads/Lynn-0.80.0-macOS-Intel.dmg",
-    windows:
-      "https://download.merkyorlynn.com/downloads/Lynn-0.80.0-Windows-Setup.exe",
+      "https://download.merkyorlynn.com/downloads/Lynn-0.80.0-macOS-arm64.dmg",
+    macIntel: "https://github.com/MerkyorLynn/Lynn/releases",
+    windows: "https://github.com/MerkyorLynn/Lynn/releases",
   },
 };
 
@@ -73,5 +71,27 @@ function applyPlatformHint() {
   }
 }
 
+function applyCopyButtons() {
+  document.querySelectorAll("[data-copy-target]").forEach((button) => {
+    const targetId = button.getAttribute("data-copy-target");
+    const target = targetId ? document.getElementById(targetId) : null;
+    if (!target) return;
+    button.addEventListener("click", async () => {
+      const text = target.textContent || "";
+      try {
+        await navigator.clipboard.writeText(text);
+        const previous = button.textContent;
+        button.textContent = "已复制";
+        window.setTimeout(() => {
+          button.textContent = previous || "复制";
+        }, 1400);
+      } catch {
+        button.textContent = "手动复制";
+      }
+    });
+  });
+}
+
 applyReleaseData();
 applyPlatformHint();
+applyCopyButtons();
