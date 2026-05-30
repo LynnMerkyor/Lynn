@@ -639,6 +639,9 @@ describe("FleetHub.retry", () => {
     const again = await hub.retry(first.workerId);
     expect(again).not.toBeNull();
     expect(again && again.workerId).not.toBe(first.workerId);
+    expect(again?.brief.branch).toBe("cli-1/x-retry-2");
+    expect(again?.brief.worktree).toBe("worktrees/cli-1-retry-2");
+    expect(again?.brief.objective).toBe(first.brief.objective);
     expect(hub.listWorkers()).toHaveLength(2);
   });
 
@@ -661,6 +664,8 @@ describe("FleetHub.retry", () => {
 
     expect(resumed).not.toBeNull();
     expect(resumed?.brief.resumePath).toBe("/tmp/lynn-session.jsonl");
+    expect(resumed?.brief.branch).toBe("cli-1/x-retry-2");
+    expect(resumed?.brief.worktree).toBe("worktrees/cli-1-retry-2");
   });
 });
 

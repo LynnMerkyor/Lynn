@@ -304,7 +304,8 @@ export class FleetHub {
     const rec = this.workers.get(id);
     if (!rec) return null;
     const checkpoint = opts.resumeFromCheckpoint ? latestCheckpointPath(rec.events) : undefined;
-    return this.dispatch(checkpoint ? { ...rec.brief, resumePath: checkpoint } : rec.brief);
+    const retryBrief = freshRetryBrief(rec.brief, this.seq + 1);
+    return this.dispatch(checkpoint ? { ...retryBrief, resumePath: checkpoint } : retryBrief);
   }
 
   /** Mark a reviewed worker as accepted. This is intentionally not a git merge. */
@@ -445,6 +446,24 @@ export class FleetHub {
 function reviewCommitMessage(rec: FleetWorkerRecord): string {
   const title = rec.brief.title.replace(/\s+/g, " ").trim().slice(0, 80) || "worker changes";
   return `fleet(${rec.agent}): ${title}\n\nWorker: ${rec.workerId}\nBranch: ${rec.brief.branch}`;
+}
+
+function freshRetryBrief(brief: FleetBrief, nextSeq: number): FleetBrief {
+  const suffix = `retry-${Math.max(1, nextSeq)}`;
+  return {
+    ...brief,
+    branch: appendRetrySuffix(brief.branch, suffix),
+    worktree: appendRetrySuffix(brief.worktree, suffix),
+  };
+}
+
+function appendRetrySuffix(value: string, suffix: string): string {
+  if (!value) return suffix;
+  const index = Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\"));
+  if (index < 0) return `${value}-${suffix}`;
+  const prefix = value.slice(0, index + 1);
+  const base = value.slice(index + 1) || "worker";
+  return `${prefix}${base}-${suffix}`;
 }
 
 function statusAfterEvent(current: string, event: FleetWorkerEvent): FleetWorkerStatus | string {
