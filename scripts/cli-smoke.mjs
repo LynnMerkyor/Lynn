@@ -245,7 +245,8 @@ checks.push(run("permissions", ["permissions", "--data-dir", missingDataDir]).th
 
 checks.push(run("doctor offline guidance", ["doctor", "--offline", "--data-dir", missingDataDir]).then((r) => {
   assertIncludes(r.name, r.stdout, "cli-byok");
-  assertIncludes(r.name, r.stdout, "Lynn providers set --preset mimo --api-key <api-key>");
+  assertIncludes(r.name, r.stdout, "optional CLI-only BYOK");
+  assertIncludes(r.name, r.stdout, "Lynn providers set --preset stepfun --api-key <api-key>");
   assertIncludes(r.name, r.stdout, "mimo:mimo-v2.5-pro");
   assertIncludes(r.name, r.stdout, "stepfun:step-3.7-flash");
   assertNotIncludes(r.name, r.stdout, "sk-");

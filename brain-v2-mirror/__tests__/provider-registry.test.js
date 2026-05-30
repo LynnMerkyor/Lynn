@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getProvider, PROVIDERS, providerOrderForCapability, universalOrder } from '../provider-registry.js';
+import { getProvider, getProviderStatusSnapshot, PROVIDERS, providerOrderForCapability, universalOrder } from '../provider-registry.js';
 
 describe('provider registry', () => {
   it('keeps StepFun in the intended universal fallback position', () => {
@@ -48,5 +48,16 @@ describe('provider registry', () => {
     expect(universalOrder.map(String).slice(0, 2)).toEqual(['step-3.7-flash', 'mimo']);
     expect(visionOrder).not.toContain('apex-spark-i-balanced');
     expect(visionOrder).not.toContain('deepseek-chat');
+  });
+
+  it('exposes a sanitized provider status snapshot without leaking keys', () => {
+    const snapshot = getProviderStatusSnapshot();
+    const step = snapshot.providers.find((provider) => provider.id === 'step-3.7-flash');
+    const spark = snapshot.providers.find((provider) => provider.id === 'apex-spark-i-balanced');
+
+    expect(snapshot.route.slice(0, 2)).toEqual(['step-3.7-flash', 'mimo']);
+    expect(step).toMatchObject({ id: 'step-3.7-flash', credential: expect.any(String), inRoute: true });
+    expect(spark).toMatchObject({ credential: 'not_required', configured: true, local: true });
+    expect(JSON.stringify(snapshot)).not.toContain('apiKey');
   });
 });

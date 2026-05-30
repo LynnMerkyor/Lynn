@@ -3,6 +3,7 @@ import { listProviderPresets } from "../provider-presets.js";
 import { providerProfilePath, readCliProviderProfile, redactApiKey } from "../provider-profile.js";
 import { resolveDataDir } from "../session/store.js";
 import { readVersionInfo } from "../version.js";
+import { brainRouteHeadReady, fetchBrainProviderStatus, summarizeBrainProviderStatus, type BrainProviderStatus } from "../brain-status.js";
 
 export interface DoctorResult {
   ok: boolean;
@@ -10,6 +11,7 @@ export interface DoctorResult {
   node: string;
   brainUrl: string;
   brain: "ok" | "skipped" | "unreachable";
+  brainProviders?: BrainProviderStatus | null;
   cliProvider: {
     configured: boolean;
     path: string;
@@ -34,11 +36,12 @@ export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
     { name: "cwd", ok: true, message: process.cwd() },
     profile
       ? { name: "cli-byok", ok: true, message: `${profile.provider} / ${profile.model} @ ${profile.baseUrl} (key ${redactApiKey(profile.apiKey)})` }
-      : { name: "cli-byok", ok: true, message: `not configured (${profilePath}); try: Lynn providers set --preset mimo --api-key <api-key>` },
+      : { name: "cli-byok", ok: true, message: `not configured (${profilePath}); optional CLI-only BYOK: Lynn providers set --preset stepfun --api-key <api-key>` },
     { name: "presets", ok: true, message: presets.join(", ") },
   ];
 
   let brain: DoctorResult["brain"] = "skipped";
+  let brainProviders: BrainProviderStatus | null = null;
   if (!hasFlag(args.flags, "offline")) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 1500);
@@ -46,6 +49,15 @@ export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
       const res = await fetch(new URL("/health", brainUrl), { signal: ctrl.signal });
       brain = res.ok ? "ok" : "unreachable";
       checks.push({ name: "brain", ok: res.ok, message: `${res.status} ${res.statusText}`.trim() });
+      if (res.ok) {
+        const providerStatus = await fetchBrainProviderStatus(brainUrl, 1500);
+        brainProviders = providerStatus;
+        checks.push({
+          name: "brain-route",
+          ok: brainRouteHeadReady(providerStatus),
+          message: summarizeBrainProviderStatus(providerStatus),
+        });
+      }
     } catch (error) {
       brain = "unreachable";
       const message = error instanceof Error ? error.message : String(error);
@@ -63,6 +75,7 @@ export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
     node: process.version,
     brainUrl,
     brain,
+    brainProviders,
     cliProvider: {
       configured: !!profile,
       path: profilePath,

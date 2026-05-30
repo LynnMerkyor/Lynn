@@ -17,6 +17,7 @@ import {
 import { resolveDataDir } from "../session/store.js";
 import { listProviderPresets, resolveProviderPreset } from "../provider-presets.js";
 import { chatCompletionsUrl } from "../brain-client.js";
+import { fetchBrainProviderStatus, summarizeBrainProviderStatus, type BrainProviderStatus } from "../brain-status.js";
 import type { ProviderPreset } from "../provider-presets.js";
 
 export interface ProvidersInfo {
@@ -24,6 +25,7 @@ export interface ProvidersInfo {
   byokEntry: string;
   keyPolicy: string;
   brainUrl: string;
+  brainProviders?: BrainProviderStatus | null;
   server: {
     status: LocalServerLookup["status"] | "disabled";
     url?: string;
@@ -91,6 +93,7 @@ export function renderProvidersInfo(info: ProvidersInfo): string {
     `${t("providers.currentRoute")}: ${active}`,
     `${t("providers.defaultRoute")}: ${info.defaultRoute}`,
     `${t("providers.brainUrl")}:      ${info.brainUrl}`,
+    `${t("providers.brainRoute")}:    ${summarizeBrainProviderStatus(info.brainProviders || null)}`,
     `${t("providers.localServer")}:   ${serverLine}`,
     `${t("providers.byokEntry")}:     ${info.byokEntry}`,
     `${t("providers.cliByok")}:       ${cliProviderLine}`,
@@ -130,6 +133,7 @@ export async function resolveProvidersInfo(args: ParsedArgs, timeoutMs = 1500): 
   const resolvedCliProvider = await resolveCliProviderProfile(args);
   const base = providersInfo({
     brainUrl,
+    brainProviders: await fetchBrainProviderStatus(brainUrl, timeoutMs),
     byokEntry: resolvedCliProvider
       ? t("providers.byok.configured")
       : t("providers.byok.unconfigured"),

@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import 'dotenv/config';
 import './perf-init.js';
 import { run as routerRun, detectCapability } from './router.js';
+import { getProviderStatusSnapshot } from './provider-registry.js';
 import { makeSSEEmitter } from './stream-bridge.js';
 import { verifySignedRequest, AuthError } from './auth.js';
 import { errorMessage, errorName, type ChatMessage, type ToolDefinition } from './types.js';
@@ -351,6 +352,17 @@ async function handleWebSearch(req: IncomingMessage, res: ServerResponse, _pathn
 }
 // [/web-search proxy v1 handler]
 
+async function handleProviderStatus(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const remote = req.socket?.remoteAddress || '';
+  if (!isLocalRequestAddress(remote)) {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'local_only', remote }));
+    return;
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+  res.end(JSON.stringify(getProviderStatusSnapshot()));
+}
+
 async function handleLocalQwen35(req: IncomingMessage, res: ServerResponse, pathname: string, method: 'GET' | 'POST'): Promise<void> {
   const remote = req.socket?.remoteAddress || '';
   if (!isLocalRequestAddress(remote)) {
@@ -461,6 +473,10 @@ const server = http.createServer(async (req, res) => {
   }
   // [/web-search proxy v1 route]
 
+  if (req.method === 'GET' && (url.pathname === '/v2/providers/status' || url.pathname === '/v1/providers/status')) {
+    return handleProviderStatus(req, res);
+  }
+
   if ((url.pathname === '/v2/local-qwen35-9b/plan' || url.pathname === '/v2/local-qwen35-9b/status' || url.pathname === '/v1/local-qwen35-9b/status') && req.method === 'GET') {
     return handleLocalQwen35(req, res, url.pathname, 'GET');
   }
@@ -478,7 +494,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       brain: 'v2', version: VERSION,
-      endpoints: ['POST /v1/chat/completions', 'POST /v2/chat/completions', 'POST /api/v1/chat/completions', 'POST /v1/web-search', 'GET /v2/local-qwen35-9b/status', 'POST /v2/local-qwen35-9b/setup', 'GET /health'],
+      endpoints: ['POST /v1/chat/completions', 'POST /v2/chat/completions', 'POST /api/v1/chat/completions', 'GET /v1/providers/status', 'POST /v1/web-search', 'GET /v2/local-qwen35-9b/status', 'POST /v2/local-qwen35-9b/setup', 'GET /health'],
     }));
     return;
   }

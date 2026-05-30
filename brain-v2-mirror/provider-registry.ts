@@ -147,6 +147,54 @@ export function clearUnhealthy(providerId: ProviderId): void {
 }
 export function getProvider(id: ProviderId | string): Provider | null { return PROVIDERS[id as ProviderId] || null; }
 
+export type ProviderCredentialStatus = 'set' | 'missing' | 'not_required';
+
+export interface ProviderStatusSnapshotEntry {
+  id: string;
+  model: string;
+  endpoint: string;
+  wire: string;
+  capability: Provider['capability'];
+  credential: ProviderCredentialStatus;
+  configured: boolean;
+  local: boolean;
+  inRoute: boolean;
+}
+
+export interface ProviderStatusSnapshot {
+  ok: true;
+  route: string[];
+  providers: ProviderStatusSnapshotEntry[];
+}
+
+function credentialStatus(provider: Provider): ProviderCredentialStatus {
+  if (provider.apiKey === 'none' || provider.health_path) return 'not_required';
+  return provider.apiKey ? 'set' : 'missing';
+}
+
+export function getProviderStatusSnapshot(capabilityRequired?: { vision?: boolean; audio?: boolean; video?: boolean }): ProviderStatusSnapshot {
+  const route = providerOrderForCapability(capabilityRequired).map(String);
+  const routeSet = new Set(route);
+  return {
+    ok: true,
+    route,
+    providers: Object.values(PROVIDERS).map((provider) => {
+      const credential = credentialStatus(provider);
+      return {
+        id: String(provider.id),
+        model: String(provider.model),
+        endpoint: provider.endpoint,
+        wire: provider.wire,
+        capability: provider.capability,
+        credential,
+        configured: credential !== 'missing',
+        local: provider.apiKey === 'none' || Boolean(provider.health_path),
+        inRoute: routeSet.has(String(provider.id)),
+      };
+    }),
+  };
+}
+
 // C21: snapshot for /v2/state metrics endpoint
 export function getCooldownState(): Record<string, { remainingMs: number; reason: string }> {
   const now = Date.now();
