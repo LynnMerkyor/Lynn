@@ -222,7 +222,17 @@ export async function* streamBrainChat(request: BrainChatRequest): AsyncGenerato
 
 export async function* streamLynnChat(request: BrainChatRequest): AsyncGenerator<BrainStreamEvent> {
   try {
-    yield* streamBrainOnlyChat(request);
+    let sawAssistantOutput = false;
+    for await (const event of streamBrainOnlyChat(request)) {
+      if (event.type === "assistant.delta" || event.type === "reasoning.delta" || event.type === "tool_call.delta") {
+        sawAssistantOutput = true;
+      }
+      if (event.type === "brain.error" && request.fallbackProvider && !sawAssistantOutput && isRecoverableBrainStreamError(event)) {
+        yield* streamDirectProviderChat(request, request.fallbackProvider);
+        return;
+      }
+      yield event;
+    }
   } catch (error) {
     if ((error instanceof BrainConnectionError || error instanceof BrainUnavailableError) && request.fallbackProvider) {
       yield* streamDirectProviderChat(request, request.fallbackProvider);
@@ -230,6 +240,10 @@ export async function* streamLynnChat(request: BrainChatRequest): AsyncGenerator
     }
     throw error;
   }
+}
+
+function isRecoverableBrainStreamError(event: Extract<BrainStreamEvent, { type: "brain.error" }>): boolean {
+  return /all providers failed/i.test(event.error) || event.code === "all_providers_failed";
 }
 
 async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<BrainStreamEvent> {
