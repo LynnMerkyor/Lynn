@@ -52,13 +52,14 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "startup.byok.cliFallback": "CLI BYOK 兜底",
     "status.chat.prefix": "StepFun/Brain",
     "offline.body":
-      "默认 StepFun→MiMo 路由暂不可用(本地 Brain 离线)。你仍然可以配置 CLI-only BYOK 使用任意 OpenAI 兼容模型:\n" +
+      "默认 StepFun→MiMo 路由暂不可用(本地 Brain 离线)。你可以直接启动本地 Brain,或配置 CLI-only BYOK:\n" +
+      "  lynn brain start             启动本地 Brain/router\n" +
       "  lynn doctor --offline       自检环境\n" +
       "  lynn providers              查看 / 配置 BYOK\n" +
       '  lynn -p "你好" --mock-brain   离线试用',
     "offline.body.byok": "本地 Brain 离线;将直接使用 CLI BYOK provider:{provider} / {model}。",
-    "chat.error.brainOffline": "默认 StepFun→MiMo 路由不可用:本地 Brain 离线。打开 Lynn 客户端即可使用默认高速路由,或运行 /providers 配置 CLI-only BYOK。({brainUrl})",
-    "brain.recovery.offline": "Brain 离线。打开 Lynn 客户端使用默认 StepFun→MiMo 路由,运行 Lynn providers set --preset stepfun 配置 CLI-only BYOK,或用 --mock-brain 做离线试用。",
+    "chat.error.brainOffline": "默认 StepFun→MiMo 路由不可用:本地 Brain 离线。在终端运行 Lynn brain start 或打开 Lynn 客户端即可使用默认高速路由;也可运行 /providers 配置 CLI-only BYOK。({brainUrl})",
+    "brain.recovery.offline": "Brain 离线。运行 Lynn brain start 或打开 Lynn 客户端使用默认 StepFun→MiMo 路由;也可运行 Lynn providers set --preset stepfun 配置 CLI-only BYOK,或用 --mock-brain 做离线试用。",
     "brain.connection.error": "无法连接 Lynn Brain:{brainUrl}{detail}。",
     "brain.connection.recovery": "打开 Lynn 客户端以启动本地 Brain/router,或用 --brain-url 指向其他兼容端点。",
     "brain.connection.byok": "CLI-only 使用方式:运行 Lynn providers set 配置 BYOK 端点;冒烟测试用 --mock-brain。",
@@ -245,13 +246,14 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "startup.byok.cliFallback": "CLI BYOK fallback",
     "status.chat.prefix": "StepFun/Brain",
     "offline.body":
-      "Default StepFun→MiMo route unavailable (local Brain offline). You can still configure CLI-only BYOK for any OpenAI-compatible model:\n" +
+      "Default StepFun→MiMo route unavailable (local Brain offline). Start the local Brain, or configure CLI-only BYOK:\n" +
+      "  lynn brain start             start local Brain/router\n" +
       "  lynn doctor --offline       check setup\n" +
       "  lynn providers              view / configure BYOK\n" +
       '  lynn -p "hello" --mock-brain   try it offline',
     "offline.body.byok": "Local Brain is offline; using CLI BYOK provider directly: {provider} / {model}.",
-    "chat.error.brainOffline": "Default StepFun→MiMo route unavailable: local Brain is offline. Open the Lynn client for the default fast route, or run /providers to configure CLI-only BYOK. ({brainUrl})",
-    "brain.recovery.offline": "Brain offline. Start the Lynn client GUI for StepFun→MiMo, configure CLI BYOK with Lynn providers set --preset stepfun, or run with --mock-brain.",
+    "chat.error.brainOffline": "Default StepFun→MiMo route unavailable: local Brain is offline. Run Lynn brain start in your terminal or open the Lynn client for the default fast route; run /providers to configure CLI-only BYOK. ({brainUrl})",
+    "brain.recovery.offline": "Brain offline. Run Lynn brain start or open the Lynn client for StepFun→MiMo; configure CLI BYOK with Lynn providers set --preset stepfun, or run with --mock-brain.",
     "brain.connection.error": "Could not reach Lynn Brain at {brainUrl}{detail}.",
     "brain.connection.recovery": "Start the Lynn client GUI so the local Brain/router is running, or pass --brain-url to another compatible endpoint.",
     "brain.connection.byok": "For CLI-only use, run Lynn providers set with your BYOK endpoint; for smoke tests, use --mock-brain.",

@@ -24,6 +24,7 @@ describe("cli i18n", () => {
     setLang("zh");
     expect(t("mock.response", { text: "你好" })).toBe("模拟回复:你好");
     expect(t("offline.body")).toContain("离线");
+    expect(t("offline.body")).toContain("lynn brain start");
     expect(t("code.placeholder")).toContain("编码任务");
   });
 
