@@ -226,6 +226,20 @@ async function runStaticChecks({ level }) {
         `manifest binary asset URLs include package version ${version}`,
         versionMismatches.join("\n"),
       ));
+      checks.push(makeCheck(
+        "static-manifest-macos-arm64-name",
+        "blocker",
+        String(manifest.stable.assets["darwin-arm64"] || "").includes(`Lynn-${version}-macOS-arm64.dmg`),
+        "manifest darwin-arm64 URL matches the signed electron-builder artifact name",
+        String(manifest.stable.assets["darwin-arm64"] || ""),
+      ));
+      checks.push(makeCheck(
+        "static-manifest-no-legacy-macos-name",
+        "blocker",
+        !assetUrls.some((url) => /Apple-Silicon|macOS-Intel/.test(url)),
+        "manifest does not reference legacy renamed macOS artifacts",
+        assetUrls.filter((url) => /Apple-Silicon|macOS-Intel/.test(url)).join("\n"),
+      ));
     }
   } else {
     checks.push(makeCheck("static-manifest-present", "critical", false, ".github/update-manifest.json exists"));

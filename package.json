@@ -57,7 +57,7 @@
     "build:server": "node scripts/build-server.mjs",
     "build:server:win": "node scripts/build-server.mjs win32 x64",
     "release:manifest": "node --import tsx scripts/generate-update-manifest.ts",
-    "release:finalize-mac": "APPLE_NOTARY_PROFILE=${APPLE_NOTARY_PROFILE:-hanako-notary} scripts/finalize-macos-dmg.sh dist/Lynn-${npm_package_version}-macOS-Apple-Silicon.dmg dist/Lynn-${npm_package_version}-macOS-Intel.dmg",
+    "release:finalize-mac": "APPLE_NOTARY_PROFILE=${APPLE_NOTARY_PROFILE:-hanako-notary} scripts/finalize-macos-dmg.sh dist/Lynn-${npm_package_version}-macOS-arm64.dmg dist/Lynn-${npm_package_version}-macOS-x64.dmg",
     "lint": "eslint desktop/src/ server/",
     "test:watch": "vitest",
     "postinstall": "node scripts/patch-pi-sdk.cjs"
