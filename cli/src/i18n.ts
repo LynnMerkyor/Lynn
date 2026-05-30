@@ -293,6 +293,11 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "permissions.precedence": "优先级:CLI 参数 > 环境变量 > Lynn 客户端权限配置 > 默认值。",
     "permissions.interop": "客户端互通:Lynn 客户端 Settings > Permissions 会写入同一份 profile。",
     "permissions.warning": "警告:YOLO/full-access 模式会直接编辑文件并运行 shell 命令,不再逐次询问。",
+    "update.available": "发现 Lynn CLI 新版本 {version}{build}。现在更新吗? [y/N]",
+    "update.installing": "正在更新 Lynn CLI...当前会话会继续使用现有版本。",
+    "update.installed": "Lynn CLI 已更新。新开一个终端或重新运行 Lynn 即可使用新版。",
+    "update.failed": "Lynn CLI 更新失败:{message}。当前版本不受影响,稍后可再试。",
+    "update.skipped": "已跳过更新,继续使用当前版本。",
   },
   en: {
     "tips.banner":
@@ -551,6 +556,11 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "permissions.precedence": "Precedence: CLI flags > env > Lynn client permission profile > default.",
     "permissions.interop": "Client interop: Lynn client Settings > Permissions writes the same profile.",
     "permissions.warning": "WARNING: YOLO/full-access mode can edit files and run shell commands without another prompt.",
+    "update.available": "Lynn CLI {version}{build} is available. Update now? [y/N]",
+    "update.installing": "Updating Lynn CLI... this session continues on the current version.",
+    "update.installed": "Lynn CLI updated. Open a new terminal or run Lynn again to use it.",
+    "update.failed": "Lynn CLI update failed: {message}. The current version is unchanged; try again later.",
+    "update.skipped": "Skipped update; continuing with the current version.",
   },
 };
 

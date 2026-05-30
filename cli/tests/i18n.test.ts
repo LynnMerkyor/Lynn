@@ -27,6 +27,7 @@ describe("cli i18n", () => {
     expect(t("offline.body")).toContain("Lynn brain start");
     expect(t("code.placeholder")).toContain("/yolo");
     expect(t("chat.placeholder")).toContain("静默黑灯");
+    expect(t("update.failed", { message: "network" })).toContain("当前版本不受影响");
   });
 
   it("falls back to the English string when a key is missing in zh", () => {

@@ -3,12 +3,26 @@ import { build } from "esbuild";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const outfile = path.join(root, "bin", "lynn.mjs");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const inkDevtoolsStub = path.join(root, "scripts", "ink-devtools-stub.mjs");
+
+function gitBuildId() {
+  if (process.env.LYNN_CLI_BUILD) return process.env.LYNN_CLI_BUILD;
+  try {
+    return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+      cwd: path.resolve(root, ".."),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "";
+  }
+}
 
 fs.mkdirSync(path.dirname(outfile), { recursive: true });
 
@@ -23,6 +37,7 @@ await build({
   define: {
     __LYNN_CLI_NAME__: JSON.stringify(packageJson.name || "@lynn/cli"),
     __LYNN_CLI_VERSION__: JSON.stringify(packageJson.version || "0.0.0-dev"),
+    __LYNN_CLI_BUILD__: JSON.stringify(gitBuildId()),
     "process.env.DEV": JSON.stringify("false"),
   },
   external: [],

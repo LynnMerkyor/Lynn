@@ -4,6 +4,13 @@ import { nowIso, writeJsonLine } from "../jsonl.js";
 import { presetNameForProviderProfile } from "../provider-presets.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
 import { t } from "../i18n.js";
+import { readVersionInfo } from "../version.js";
+
+function installUrl(): string {
+  const build = readVersionInfo().build;
+  const suffix = build ? `?build=${encodeURIComponent(build)}` : "";
+  return `https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz${suffix}`;
+}
 
 export async function runAgents(args: ParsedArgs, json: boolean): Promise<number> {
   const profile = await resolveCliProviderProfile(args);
@@ -23,7 +30,7 @@ export async function runAgents(args: ParsedArgs, json: boolean): Promise<number
   lines.push("", t("agents.headless.title"));
   lines.push(`  ${t("agents.node.prereq")}`);
   lines.push(`  ${t("agents.install.title")}`);
-  lines.push(`  npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz`);
+  lines.push(`  npm install -g --force ${installUrl()}`);
   lines.push("");
   lines.push(`  ${t("agents.launch.title")}`);
   lines.push(`  Lynn`);

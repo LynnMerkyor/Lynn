@@ -18,6 +18,7 @@ import { renderStartupBanner } from "./startup.js";
 import { installPipeErrorHandler } from "./stdio.js";
 import { classifyTaskRoute, codeArgsForRoute, visionArgsForRoute } from "./task-classifier.js";
 import { readVersionInfo } from "./version.js";
+import { maybePromptForCliUpdate } from "./self-update.js";
 import type { ProvidersInfo } from "./commands/providers.js";
 import { t } from "./i18n.js";
 
@@ -28,6 +29,7 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     const providerInfo = await resolveProvidersInfo({ command: "providers", positionals: [], flags: {} }, 500);
     const brainReachable = await checkBrainReachable(providerInfo.brainUrl, 300);
     if (process.stdin.isTTY && process.stdout.isTTY) {
+      await maybePromptForCliUpdate({ command: "chat", positionals: [], flags: { ink: true } }, readVersionInfo());
       if (process.env.LYNN_CLI_LEGACY_TUI !== "1") {
         return runChat({ command: "chat", positionals: [], flags: { ink: true } }, { intro: false, brainReachable });
       }
@@ -55,6 +57,7 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   }
   const args = parseArgs(argv);
   const json = hasFlag(args.flags, "json", "jsonl");
+  await maybePromptForCliUpdate(args, readVersionInfo());
 
   if (shouldResumeCodeInvocation(args)) {
     return runCode(resumeCodeArgs(args));
