@@ -152,7 +152,7 @@ describe("chat mode controls", () => {
       expect.arrayContaining(["/help", "/mode", "/providers", "/byok", "/setup"]),
       "/",
     ]);
-    expect(completeChatInput("/model s")).toEqual([["/model stepfun"], "/model s"]);
+    expect(completeChatInput("/model s")).toEqual([["/model stepfun", "/model spark"], "/model s"]);
     expect(completeChatInput("hello")).toEqual([[], "hello"]);
   });
 

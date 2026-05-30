@@ -1,7 +1,7 @@
 import { stdin as input, stdout as output } from "node:process";
 import { getStringFlag, hasFlag, parseArgs, type ParsedArgs } from "../args.js";
 import { BrainConnectionError, streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
-import { renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
+import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
@@ -29,7 +29,7 @@ export const CHAT_SLASH_COMMANDS = [
   "/model",
   "/model mimo",
   "/model stepfun",
-  "/model deepseek",
+  "/model spark",
   "/setup",
   "/byok",
   "/providers",
@@ -117,7 +117,11 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       output.write(renderInteractiveModeChange(result, mode, supportsColor(output)));
       return "continue";
     }
-    if (text === "/model" || text === "/providers" || text === "/byok") {
+    if (text === "/model") {
+      output.write(`${renderBrainModelChoices(await resolveProvidersInfo(args))}\n\n`);
+      return "continue";
+    }
+    if (text === "/providers" || text === "/byok") {
       output.write(`${renderProvidersInfo(await resolveProvidersInfo(args))}\n\n`);
       return "continue";
     }

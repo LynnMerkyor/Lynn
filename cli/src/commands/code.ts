@@ -24,7 +24,7 @@ import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
 import { normalizePlanItems, renderPlanItems, type CodePlanItem } from "../plan-tool.js";
 import { applyModeCommand, applyReasoningCommand, buildChatProviderArgs, renderMode, shouldRefreshProviderRoute, shouldShowProviderSetUsage, toggleMode, type ChatMode } from "./chat.js";
-import { renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
+import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { readVersionInfo } from "../version.js";
 import { buildImagesContentParts, parseImageList } from "../media.js";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, readSessionLines, resolveDataDir } from "../session/store.js";
@@ -154,7 +154,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
     "/model",
     "/model mimo",
     "/model stepfun",
-    "/model deepseek",
+    "/model spark",
     "/setup",
     "/byok",
     "/providers",
@@ -215,7 +215,11 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
         output.write(renderModeChange(result, mode, supportsColor(output)));
         continue;
       }
-      if (text === "/model" || text === "/providers" || text === "/byok") {
+      if (text === "/model") {
+        output.write(`${renderBrainModelChoices(await resolveProvidersInfo(args))}\n\n`);
+        continue;
+      }
+      if (text === "/providers" || text === "/byok") {
         output.write(`${renderProvidersInfo(await resolveProvidersInfo(args))}\n\n`);
         continue;
       }

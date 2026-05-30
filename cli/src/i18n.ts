@@ -77,7 +77,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "chat.help":
       "/exit 退出聊天\n" +
       "/clear 清空上下文\n" +
-      "/model 查看当前模型 / BYOK 路由; /model stepfun|mimo 快速切换 CLI BYOK preset\n" +
+      "/model 查看 Brain 三段模型路由; /model mimo|stepfun|spark 快速切换 CLI BYOK preset\n" +
       "/setup 打开 CLI-only BYOK 三步向导\n" +
       "/providers 查看提供方和 BYOK 设置\n" +
       "/providers set --base-url ... --api-key ... --model ... 配置 CLI BYOK\n" +
@@ -113,7 +113,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/fast 低延迟 MiMo/Brain 回复\n" +
       "/think 深度 MiMo/Brain 推理\n" +
       "/reasoning 查看或设置推理模式\n" +
-      "/model 查看当前 Brain/BYOK 路由; /model stepfun|mimo 快速切换 CLI BYOK preset\n" +
+      "/model 查看 Brain 三段模型路由; /model mimo|stepfun|spark 快速切换 CLI BYOK preset\n" +
       "/setup 打开 CLI-only BYOK 三步向导\n" +
       "/providers 查看提供方和 BYOK 设置\n" +
       "/providers set --base-url ... --api-key ... --model ... 配置 CLI BYOK\n" +
@@ -195,6 +195,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "providers.clientNote": "没有客户端时,CLI-only 模式不能修改默认模型设置。",
     "providers.cliNote": "CLI-only: 可用 OpenAI 兼容三步配置 BYOK:",
     "providers.routeHint": "用 Lynn model 或聊天里的 /model 查看路由;用 --brain-url 指向其他本地端点。",
+    "models.title": "Lynn 模型 / Brain 路由",
+    "models.defaultOrder": "默认 Brain V2 顺序:",
+    "models.currentRoute": "当前 CLI 路由",
+    "models.brainRoute": "Brain 实时路由",
+    "models.note.fixed": "默认 Brain V2 顺序固定为 MiMo V2.5 Pro → StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B。",
+    "models.note.byok": "CLI-only BYOK 可用这三个全称 preset;不配置 BYOK 时由本地 Brain 自动路由:",
     "providers.saved": "已保存 CLI BYOK provider。",
     "providers.savedHint": "当 Lynn 客户端/Brain 离线时,Lynn CLI 会用这个 provider 作为直接 fallback。",
     "providers.unset.deleted": "已清除 CLI-only BYOK provider。",
@@ -281,7 +287,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "chat.help":
       "/exit leave chat\n" +
       "/clear reset context\n" +
-      "/model show model/BYOK route; /model stepfun|mimo quickly switches CLI BYOK preset\n" +
+      "/model show the three Brain model choices; /model mimo|stepfun|spark switches CLI BYOK preset\n" +
       "/setup open the CLI-only BYOK three-step wizard\n" +
       "/providers show BYOK setup\n" +
       "/providers set --base-url ... --api-key ... --model ... configure CLI BYOK\n" +
@@ -317,7 +323,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/fast low-latency MiMo/Brain replies\n" +
       "/think deeper MiMo/Brain reasoning\n" +
       "/reasoning show or set reasoning mode\n" +
-      "/model show current Brain/BYOK route; /model stepfun|mimo quickly switches CLI BYOK preset\n" +
+      "/model show the three Brain model choices; /model mimo|stepfun|spark switches CLI BYOK preset\n" +
       "/setup open the CLI-only BYOK three-step wizard\n" +
       "/providers show provider and BYOK setup\n" +
       "/providers set --base-url ... --api-key ... --model ... configure CLI BYOK\n" +
@@ -399,6 +405,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "providers.clientNote": "Without the client GUI, default model settings cannot be changed from CLI-only mode.",
     "providers.cliNote": "CLI-only: set a BYOK OpenAI-compatible endpoint with:",
     "providers.routeHint": "Use Lynn model or /model in chat to review this route. Use --brain-url to point at another local endpoint.",
+    "models.title": "Lynn Models / Brain Route",
+    "models.defaultOrder": "Default Brain V2 order:",
+    "models.currentRoute": "Current CLI route",
+    "models.brainRoute": "Live Brain route",
+    "models.note.fixed": "Default Brain V2 order is fixed as MiMo V2.5 Pro -> StepFun 3.7 Flash -> Spark Qwen 3.6 35B A3B.",
+    "models.note.byok": "CLI-only BYOK can use these three full-name presets; without BYOK, local Brain routes automatically:",
     "providers.saved": "Saved CLI BYOK provider.",
     "providers.savedHint": "When Lynn client GUI/Brain is offline, Lynn CLI will use this provider as a direct fallback.",
     "providers.unset.deleted": "Cleared CLI-only BYOK provider.",

@@ -156,6 +156,8 @@ function presetApiKey(presetName: string | null, env: NodeJS.ProcessEnv): string
       return env.MIMO_API_KEY || env.MIMO_SEARCH_KEY || undefined;
     case "stepfun":
       return env.STEPFUN_API_KEY || env.STEP_API_KEY || undefined;
+    case "spark":
+      return env.SPARK_API_KEY || env.APEX_SPARK_API_KEY || undefined;
     case "deepseek":
       return env.DEEPSEEK_API_KEY || undefined;
     case "openai":

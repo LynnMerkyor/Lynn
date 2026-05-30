@@ -36,8 +36,10 @@ describe("Ink provider commands", () => {
     const result = await handleInkProviderCommand("/model", args);
 
     expect(result.handled).toBe(true);
-    expect(result.message).toContain("Current route");
-    expect(result.message).toContain("Default route");
+    expect(result.message).toContain("Lynn Models / Brain Route");
+    expect(result.message).toContain("MiMo V2.5 Pro");
+    expect(result.message).toContain("StepFun 3.7 Flash");
+    expect(result.message).toContain("Spark Qwen 3.6 35B A3B");
   });
 
   it("normalizes full-width slash for model route commands", async () => {
@@ -46,7 +48,7 @@ describe("Ink provider commands", () => {
     const result = await handleInkProviderCommand("／model", args);
 
     expect(result.handled).toBe(true);
-    expect(result.message).toContain("Current route");
+    expect(result.message).toContain("MiMo V2.5 Pro");
   });
 
   it("prints set usage for bare interactive provider setup commands", async () => {

@@ -15,6 +15,7 @@ import { InkDiffText, InkMarkdown } from "./ink-markdown.js";
 import { handleInkProviderCommand } from "./ink-provider-commands.js";
 import type { CodePlanItem } from "./plan-tool.js";
 import { InkInputLine } from "./ink-input-line.js";
+import { analyzePastedContext, appendPastedText, summarizePastedContext } from "./pasted-context.js";
 
 type CodeItem =
   | { id: number; kind: "user"; text: string }
@@ -60,6 +61,9 @@ const CODE_SLASH_COMMANDS = [
   "/mode",
   "/mode yolo",
   "/model",
+  "/model mimo",
+  "/model stepfun",
+  "/model spark",
   "/providers",
   "/providers set",
 ];
@@ -93,6 +97,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   const [mode, setMode] = useState(props.initialMode);
   const [usage, setUsage] = useState<string | null>(null);
   const [provider, setProvider] = useState(props.modelLabel);
+  const contextInfo = React.useMemo(() => analyzePastedContext(input), [input]);
   const [approval, setApproval] = useState<ApprovalState | null>(null);
   const approvalResolve = useRef<((value: "approve" | "approve_all" | "deny") => void) | null>(null);
   const [history] = useState(() => new HistoryNavigator(loadHistory(historyPath())));
@@ -142,7 +147,16 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       return;
     }
     const newlineIndex = value.search(/[\r\n]/);
-    if (key.return || newlineIndex >= 0) {
+    if (!key.return && newlineIndex >= 0) {
+      const lines = value.replace(/\r\n?/g, "\n").split("\n");
+      if (!lines.slice(1).some((line) => line.length > 0)) {
+        void submitInput(`${input}${lines[0] || ""}`);
+        return;
+      }
+      setInput((current) => appendPastedText(current, value));
+      return;
+    }
+    if (key.return) {
       const prefix = newlineIndex >= 0 ? value.slice(0, newlineIndex) : "";
       void submitInput(`${input}${prefix}`);
       return;
@@ -299,6 +313,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       placeholder: t("code.placeholder"),
       danger,
       commands: CODE_SLASH_COMMANDS,
+      contextSummary: contextInfo.hasContext ? summarizePastedContext(contextInfo) : "",
     }),
   );
 }

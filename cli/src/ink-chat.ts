@@ -16,6 +16,8 @@ import { InkMarkdown } from "./ink-markdown.js";
 import { handleInkProviderCommand } from "./ink-provider-commands.js";
 import { InkInputLine } from "./ink-input-line.js";
 import { refreshCliRuntimeSystemMessage, resetCliRuntimeMessages } from "./runtime-context.js";
+import { analyzePastedContext, appendPastedText, summarizePastedContext } from "./pasted-context.js";
+import { buildImagesContentParts } from "./media.js";
 
 type Turn = {
   id: number;
@@ -57,6 +59,7 @@ export async function runInkChat(args: ParsedArgs): Promise<number> {
 function InkChatApp(props: InkChatProps): React.ReactElement {
   const app = useApp();
   const [input, setInput] = useState("");
+  const contextInfo = useMemo(() => analyzePastedContext(input), [input]);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
   const [frame, setFrame] = useState(0);
@@ -81,7 +84,32 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
       return;
     }
     const newlineIndex = value.search(/[\r\n]/);
-    if (key.return || newlineIndex >= 0) {
+    if (!key.return && newlineIndex >= 0) {
+      const lines = value.replace(/\r\n?/g, "\n").split("\n");
+      if (!lines.slice(1).some((line) => line.length > 0)) {
+        void submitInput({
+          text: `${input}${lines[0] || ""}`,
+          setInput,
+          setTurns,
+          setBusy,
+          setProvider,
+          setUsage,
+          setReasoning,
+          setMode,
+          fallbackProvider,
+          setFallbackProvider,
+          appExit: app.exit,
+          messages,
+          props,
+          reasoning,
+          mode,
+        });
+        return;
+      }
+      setInput((current) => appendPastedText(current, value));
+      return;
+    }
+    if (key.return) {
       const prefix = newlineIndex >= 0 ? value.slice(0, newlineIndex) : "";
       const submitted = `${input}${prefix}`;
       void submitInput({
@@ -153,15 +181,19 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
       placeholder: t("chat.placeholder"),
       danger: mode.approval === "yolo" || mode.sandbox === "danger-full-access",
       commands: CHAT_SLASH_COMMANDS,
+      contextSummary: contextInfo.hasContext ? summarizePastedContext(contextInfo) : "",
     }),
   );
 }
 
 function TurnView({ turn }: { turn: Turn }): React.ReactElement {
   if (turn.role === "user") {
-    return React.createElement(Box, { marginTop: 1 },
-      React.createElement(Text, { color: "gray" }, "› "),
-      React.createElement(Text, null, turn.text),
+    return React.createElement(Box, { marginTop: 1, flexDirection: "column" },
+      React.createElement(Box, null,
+        React.createElement(Text, { color: "gray" }, "› "),
+        React.createElement(Text, null, turn.text),
+      ),
+      turn.meta ? React.createElement(Text, { color: "cyan" }, `  ${turn.meta}`) : null,
     );
   }
   if (turn.role === "system") {
@@ -276,14 +308,28 @@ async function submitInput(inputData: {
     return;
   }
 
-  const userTurn: Turn = { id: Date.now(), role: "user", text };
+  const context = analyzePastedContext(text);
+  const promptText = context.text || (context.imageRefs.length ? "请分析这些图片。" : text);
+  let userContent: ChatMessage["content"] = promptText;
+  const contextSummary = context.hasContext ? summarizePastedContext(context) : "";
+  if (context.imageRefs.length) {
+    try {
+      userContent = await buildImagesContentParts(context.imageRefs.map((ref) => ref.path), promptText);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: `图片上下文无法读取:${message}`, error: true }]);
+      return;
+    }
+  }
+
+  const userTurn: Turn = { id: Date.now(), role: "user", text: promptText, meta: contextSummary };
   const assistantId = userTurn.id + 1;
   inputData.setTurns((current) => [...current, userTurn, { id: assistantId, role: "assistant", text: "", pending: true }]);
-  inputData.messages.push({ role: "user", content: text });
+  inputData.messages.push({ role: "user", content: userContent });
   inputData.setBusy(true);
 
   if (inputData.props.mockBrain) {
-    const answer = t("mock.response", { text });
+    const answer = t("mock.response", { text: promptText });
     inputData.messages.push({ role: "assistant", content: answer });
     inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, text: answer, pending: false, meta: "mock Brain" } : turn));
     inputData.setBusy(false);

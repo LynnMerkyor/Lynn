@@ -9,9 +9,10 @@ export interface InkInputLineProps {
   placeholder: string;
   danger?: boolean;
   commands?: string[];
+  contextSummary?: string;
 }
 
-export function InkInputLine({ value, placeholder, danger, commands = [] }: InkInputLineProps): React.ReactElement {
+export function InkInputLine({ value, placeholder, danger, commands = [], contextSummary = "" }: InkInputLineProps): React.ReactElement {
   const { stdout } = useStdout();
   const prompt = "› ";
   const width = Math.max(20, (stdout.columns || 80) - 2);
@@ -23,6 +24,7 @@ export function InkInputLine({ value, placeholder, danger, commands = [] }: InkI
   const borderColor = danger ? "red" : "gray";
   return React.createElement(Box, { marginTop: 1, flexDirection: "column" },
     palette ? React.createElement(Text, { color: "gray" }, palette) : null,
+    contextSummary ? React.createElement(Text, { color: "cyan" }, `已加入本轮上下文: ${contextSummary}`) : null,
     React.createElement(Box, { borderStyle: "single", borderColor, paddingX: 1 },
       React.createElement(Text, { color: "white" }, prompt),
       React.createElement(Text, { color: value ? "white" : "gray" }, visibleText),

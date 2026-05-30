@@ -65,6 +65,34 @@ export interface ProviderTestResult {
   contentPreview?: string;
 }
 
+export interface BrainModelChoice {
+  id: "mimo" | "stepfun" | "spark";
+  name: string;
+  routeRole: string;
+  capability: string;
+}
+
+export const BRAIN_MODEL_CHOICES: BrainModelChoice[] = [
+  {
+    id: "mimo",
+    name: "MiMo V2.5 Pro",
+    routeRole: "1 / default head",
+    capability: "multimodal + native search + large quota",
+  },
+  {
+    id: "stepfun",
+    name: "StepFun 3.7 Flash",
+    routeRole: "2 / fast fallback",
+    capability: "high TPS text + coding",
+  },
+  {
+    id: "spark",
+    name: "Spark Qwen 3.6 35B A3B",
+    routeRole: "3 / local fallback",
+    capability: "local privacy + zero API cost",
+  },
+];
+
 export function providersInfo(partial: Partial<ProvidersInfo> = {}): ProvidersInfo {
   return {
     defaultRoute: t("providers.route.default"),
@@ -76,6 +104,25 @@ export function providersInfo(partial: Partial<ProvidersInfo> = {}): ProvidersIn
     presets: listProviderPresets(),
     ...partial,
   };
+}
+
+export function renderBrainModelChoices(info: ProvidersInfo): string {
+  const current = activeRouteLabel(info);
+  return [
+    t("models.title"),
+    "",
+    t("models.defaultOrder"),
+    ...BRAIN_MODEL_CHOICES.map((choice) => `  ${choice.id.padEnd(7)} ${choice.name.padEnd(26)} ${choice.routeRole} · ${choice.capability}`),
+    "",
+    `${t("models.currentRoute")}: ${current}`,
+    `${t("models.brainRoute")}:   ${summarizeBrainProviderStatus(info.brainProviders || null)}`,
+    "",
+    t("models.note.fixed"),
+    t("models.note.byok"),
+    "  /model mimo     MiMo V2.5 Pro",
+    "  /model stepfun  StepFun 3.7 Flash",
+    "  /model spark    Spark Qwen 3.6 35B A3B",
+  ].join("\n");
 }
 
 export function renderProvidersInfo(info: ProvidersInfo): string {

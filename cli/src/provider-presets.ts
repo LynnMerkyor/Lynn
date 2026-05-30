@@ -18,6 +18,12 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
     model: "step-3.7-flash",
     description: "StepFun 3.7 Flash fast text/coding fallback backend",
   },
+  spark: {
+    provider: "openai-compatible",
+    baseUrl: "http://127.0.0.1:18098/v1",
+    model: "qwen36-35b-a3b-apex-mtp",
+    description: "Spark Qwen 3.6 35B A3B local fallback route",
+  },
   deepseek: {
     provider: "openai-compatible",
     baseUrl: "https://api.deepseek.com/v1",

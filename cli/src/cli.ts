@@ -7,7 +7,7 @@ import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
 import { runPermissions } from "./commands/permissions.js";
 import { runPrompt } from "./commands/prompt.js";
-import { activeRouteLabel, resolveProvidersInfo, runProviders } from "./commands/providers.js";
+import { activeRouteLabel, renderBrainModelChoices, resolveProvidersInfo, runProviders } from "./commands/providers.js";
 import { runSessions } from "./commands/sessions.js";
 import { runVisionCommand } from "./commands/vision.js";
 import { runWorker } from "./commands/worker-run.js";
@@ -98,6 +98,10 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
       return runPermissions(args, json);
     }
     case "model": {
+      if (!args.positionals.length && !json) {
+        process.stdout.write(`${renderBrainModelChoices(await resolveProvidersInfo(args))}\n`);
+        return 0;
+      }
       return runProviders(providerModelArgs(args), json);
     }
     case "prompt":
