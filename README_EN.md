@@ -8,7 +8,8 @@
 
 <h1 align="center">Lynn</h1>
 
-<p align="center">A personal AI agent with memory and soul</p>
+<p align="center"><strong>GUI command center · CLI Worker Fleet · Long-term memory · Multi-agent collaboration</strong></p>
+<p align="center">An open-source desktop AI agent whose GUI command center dispatches multiple coding CLIs (Codex / Claude / Qwen ...) in parallel - coding, research, and business in one visual workspace, not another chat box</p>
 
 <p align="center"><a href="README.md">中文版 (默认)</a> | <strong>English</strong></p>
 
@@ -34,10 +35,83 @@ Related repositories:
 
 > Note:the 27B Lynn-native NVFP4 artifact is an internal/vertical runtime artifact for Lynn Engine. General users should start with the V4 / V Flash BF16, NVFP4 v8-RTN, or Q4_K_M variants.
 
+## 🔭 V0.80: GUI + CLI Worker Fleet
+
+V0.80 brings Lynn back to the programming battlefield, but not as another single CLI or IDE plugin. The direction is to make **the GUI a command center for multiple CLI agents**: split tasks, dispatch workers, inspect logs and diffs, run gates, then merge or discard the result from one visual workflow.
+
+This is not Lynn stepping away from code. It is the opposite:code tasks, research tasks, and business tasks should share the same orchestration layer.
+
+- **GUI command center**:create tasks in the desktop app, assign workers, watch stdout/stderr, inspect diffs, see tests, and catch forbidden-file edits.
+- **CLI Worker Fleet**:dispatch Codex, Claude Code, Qwen, codebuddy, Kimi, opencode, or custom CLIs. Each worker runs in its own worktree.
+- **Task protocol**: generate task briefs with owned files, forbidden files, done criteria, test commands, and commit rules.
+- **Merge Queue**: completed worker output enters a human review queue for cherry-pick, merge, abandon, and release-gate runs.
+- **`@lynn/cli`**:V0.80 ships a public npm CLI package with `Lynn -p`, `Lynn code`, `Lynn agents`, and `Lynn worker run`, usable directly in terminals and callable by the GUI.
+
+Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.80 targets the next layer: **when you have 3-5 CLI agents, multiple worktrees, coding work and business work running in parallel, who coordinates, reviews, and ships the work?**
+
+### CLI Quick Install
+
+```bash
+# 1. Node requirement: Node.js 20 LTS or 22 LTS with npm.
+# macOS: brew install node@20
+# macOS/Linux: nvm install 20 && nvm use 20
+# Windows: winget install OpenJS.NodeJS.LTS
+
+# 2. Install or update from the Lynn mirror.
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0.tgz
+
+# 3. Launch.
+Lynn          # interactive chat TUI
+Lynn code     # coding-agent TUI
+Lynn agents   # copyable headless/Fleet commands for other agents
+```
+
+Machine-call contract:
+
+```bash
+Lynn code -p "fix tests, run the suite, summarize the diff" \
+  --json \
+  --cwd /path/to/worktree \
+  --approval yolo \
+  --sandbox workspace-write \
+  --save-session
+```
+
+Agents should parse JSONL, not the human Ink TUI. See [`docs/ops/lynn-code-headless-agent-contract.md`](docs/ops/lynn-code-headless-agent-contract.md).
+
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.79.8</strong> · 2026-05-28 · Chat Runtime Split + CosyVoice Streaming <em>(latest)</em></summary>
+<summary><strong>v0.80.0</strong> · 2026-05-30 · CLI Worker Fleet + StepFun/MiMo Brain Route <em>(latest)</em></summary>
+
+**Lynn's programming-focused release**:
+- **Lynn CLI / Lynn Code**:new `@lynn/cli` package with Ink TUI, markdown/code rendering, real diff preview, multimodal input, `Lynn code -p ... --json`, and `Lynn agents`.
+- **GUI Worker Fleet**:fan-out tasks to multiple CLI workers, inspect logs/diffs/tests/gates, and perform gated merges.
+- **Brain V2 route**:StepFun 3.7 Flash high+32K → MiMo V2.5 Pro/Omni → Spark Qwen 3.6 35B A3B.
+- **Long-run stability**:tool-result reinforcement, chain-tool hints, tool-storm guard, session checkpointing, frame repair, git snapshots, and stable context layers.
+- **Local 9B opt-in**:Qwen3.5-9B MTP no longer auto-starts on app launch; users explicitly enable it when they want local inference.
+- **Release gates**:CLI install docs, mirror tarball, packaged CLI runtime, and headless agent contract are part of the release checks.
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.0)
+
+</details>
+
+<details>
+<summary><strong>v0.79.9</strong> · 2026-05-29 · Risk Boundary Split + Search Source UI</summary>
+
+**Final V0.79 stability release**:
+- 🧩 **Five risk-heavy centers split**:`InputArea`, `stock-market`, `mcp-client`, `bridge-manager`, and `engine/agent` now have clearer module boundaries, reducing future conflict and regression risk.
+- 🔎 **Safer, inspectable search**:web search prefers the brain v2 localhost proxy first, keeping MiMo/GLM paid search keys server-side; chat tool cards can expand synthesized answers and search sources.
+- 🧭 **Local model upgrade window**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model. Older 9B GGUF files now show as upgrade candidates, and 9B/35B download entries point to the ModelScope MTP repositories with MTP + thinking-on kept as default.
+- 🛡️ **Runtime regression coverage tightened**:composer replacement, local Qwen status, stock-market, MCP transport, bridge streaming/attachment, session events, engine tool runtime, agent dynamic prompt, web-search, and search source UI all gained or updated focused tests.
+- ✅ **Release gate**:V0.79.9 passed typecheck, runtime typecheck, full vitest, release static/live regressions, UI smoke, macOS signing/notarization/stapling/Gatekeeper validation, and Windows installer signing.
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.9)
+
+</details>
+
+<details>
+<summary><strong>v0.79.8</strong> · 2026-05-28 · Chat Runtime Split + CosyVoice Streaming</summary>
 
 **Stability and maintenance-cost release**:
 - 🧩 **Chat runtime split**:`server/routes/chat.ts` is now under 500 lines, with request normalization, hub event forwarding, prompt turn running, WebSocket control, tool finalization, and local model bridging split into `server/chat/*`.
@@ -455,12 +529,43 @@ Related repositories:
 
 ## What is Lynn
 
-Lynn is a personal AI agent that is easier to use than traditional coding agents. It has memory, personality, and can act autonomously. Multiple agents can work together on your machine.
+Lynn is a personal AI agent for the desktop: it has memory, personality, writing tools, autonomous work loops, and now a path toward orchestrating coding work.
 
-As an assistant, it is gentle: no complex configuration files, no obscure jargon. Lynn is designed not just for coders, but for everyone who works at a computer.
-As a tool, it is powerful: it remembers important facts you've shared, operates your computer, browses the web, searches for information, reads and writes files, executes code, manages schedules, and can even learn new skills on its own.
+Early Lynn focused on bringing agent workflows out of the terminal so writers, researchers, operators, students, founders, and non-programmers could actually use them. Starting with V0.80, that direction expands rather than retreats: programming tasks, research tasks, and business tasks should be coordinated from the same GUI.
 
-This project started from a simple goal: narrow the gap between most people and AI agents, and bring powerful agent capabilities beyond the command line. That shaped two priorities for Lynn: make Agents feel more human to talk to, and make everyday desktop work easier through better tooling and workflows. Lynn also comes with a more approachable GUI.
+If you use Claude Code, Codex, or Cursor, Lynn should feel familiar but one layer higher. It is not just one agent in one terminal. It is a command center for multiple CLI workers, multiple worktrees, multiple models, and multiple tasks. If you have never used those tools, you can still start from the GUI and gradually hand coding, documents, research, and automation work to Lynn.
+
+## Who Lynn is for
+
+**Good fit**
+
+- Writers and researchers who want long-term memory, writing diffs, and deep research.
+- Operators, founders, and product teams that need recurring work, reports, cross-platform messaging, and local file tasks.
+- Developers and technical leads who want to coordinate several CLI agents across several worktrees and gates.
+- Teams that want code work and business work to share one review and acceptance surface.
+- People who want a desktop AI workspace instead of another browser tab.
+
+**Not the best fit**
+
+- If you only want code completion, use Cursor / your IDE.
+- If you only want a single terminal agent, Claude Code, Codex CLI, or Gemini CLI may be simpler.
+- If you are building a multi-tenant hosted agent service, use a server-first framework.
+
+Lynn does not replace Cursor. Cursor owns the editor loop. Lynn owns the orchestration layer around the loop:dispatch workers, review diffs, run gates, merge results, write reports, and keep memory across the whole process.
+
+## Lynn vs Cursor / Claude Code
+
+|  | **Lynn V0.80** | Cursor | Claude Code / Codex CLI |
+|---|---|---|---|
+| Core shape | **GUI command center + CLI Worker Fleet** | IDE coding flow | Single CLI agent |
+| Parallel work | **Multiple workers / worktrees / merge queue** | Limited | Manually managed |
+| Code acceptance | **GUI diff + tests + release gate** | Inside IDE | Terminal output |
+| Long-term memory | **6-layer persistent memory** | Session-level | Session-level |
+| Writing and research | **Word-level diff + Deep Research** | Weak | Weak |
+| Built-in keyless route | **Brain provider pool** | Subscription/API required | Provider key required |
+| Multi-agent/persona | **Yuan templates + agent desks** | No | No |
+| Platform bridges | **Feishu / Telegram / WeChat / QQ** | No | No |
+| License | **Apache 2.0** | Closed commercial | Closed/commercial or mixed |
 
 ## Not a Tool — A Companion
 
@@ -675,11 +780,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.79.7 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.80.0 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.79.7 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.80.0 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -688,7 +793,7 @@ Linux builds are planned.
 Two paths on first launch:
 
 - **Quick Start**: Enter your name → set permissions → jump right in. A built-in default model works out of the box — no API key required.
-- **Local model**: Settings → Models → Local Qwen3.5-9B imatrix MTP (default, 5.38 GB / 24GB VRAM or unified memory recommended) / 4B imatrix downgrade / 35B Q4_K_M imatrix (24GB high-end, 21 GB). Lynn downloads the Q4_K_M GGUF, prepares llama.cpp, starts the local endpoint, and switches to it automatically after authorization.
+- **Local model**: Settings → Models → Local Qwen3.5-9B imatrix MTP (5.38 GB / 24GB VRAM or unified memory recommended) / 4B imatrix downgrade / 35B Q4_K_M imatrix (24GB high-end, 21 GB). V0.80 makes local GGUF explicit opt-in: Lynn starts llama.cpp only after the user enables it, so app launch does not automatically claim about 6GB of VRAM or unified memory.
 - **Advanced Setup**: Enter your name → connect your own provider (API key + base URL) → choose a **chat model** and a **utility model** → pick a theme → set permissions → enter.
 
 Lynn uses the OpenAI-compatible protocol, so any provider that supports it will work (OpenAI, DeepSeek, Qwen, local models via Ollama, SiliconFlow, etc.). Some providers (e.g. MiniMax) also support OAuth login. All model settings can be adjusted later in Settings.
@@ -742,7 +847,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.79.7 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.80.0 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

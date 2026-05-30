@@ -43,7 +43,7 @@ const LLAMACPP_BASE_PROFILES = Object.freeze({
     expectedSize: 5_780_090_944,
     expectedSha256: "0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4",
     parallelSegments: 2,
-    autoStart: true,
+    autoStart: false,
     sources: MODEL_DOWNLOADER_SOURCES,
   },
   // 35B APEX-MTP high-end tier. Old Q4_K_M ids remain aliases so existing UI

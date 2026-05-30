@@ -433,10 +433,10 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     const profile = runtime.label ? `\n\n推荐配置：${runtime.label}，上下文 ${runtime.ctx_size || 8192}，并发 ${runtime.parallel || 1}` : '';
     const warning = hardwareWarnings.length ? `\n\n注意：${hardwareWarnings.join(' ')}` : '';
     const setupText = hasModel && hasRuntime
-      ? 'Lynn 将启动本地 Qwen3.5-9B MTP 模型服务，并切换为本地模型。'
+      ? 'Lynn 将按你的确认启动本地 Qwen3.5-9B MTP 模型服务，并切换为本地模型。启动会占用约 6GB 显存/统一内存。'
       : needsMtpUpgrade
-        ? 'Lynn 将保留旧版 9B 文件，并下载新版 Qwen3.5-9B MTP；完成后会启动 MTP 端点。\n\n模型约 5.78GB / 5.38GiB；旧文件不会被删除，你可以稍后手动清理。'
-        : 'Lynn 将在本机安装或定位 llama.cpp，下载 Qwen3.5-9B Q4_K_M imatrix MTP，并启动本地模型服务。\n\n模型约 5.78GB / 5.38GiB；新版 MTP 在 DGX Spark 单流从 36.61 提升到 60.95 TPS，thinking-on 和工具调用稳定性强于 4B。完成后可离线使用，不需要 API Key，不上传对话。';
+        ? 'Lynn 将保留旧版 9B 文件，并下载新版 Qwen3.5-9B MTP；这是显式启用流程，完成后会启动 MTP 端点。\n\n模型约 5.78GB / 5.38GiB；旧文件不会被删除，你可以稍后手动清理。启动会占用约 6GB 显存/统一内存。'
+        : 'Lynn 将在本机安装或定位 llama.cpp，下载 Qwen3.5-9B Q4_K_M imatrix MTP，并启动本地模型服务。\n\n模型约 5.78GB / 5.38GiB；新版 MTP 在 DGX Spark 单流从 36.61 提升到 60.95 TPS，thinking-on 和工具调用稳定性强于 4B。完成后可离线使用，不需要 API Key，不上传对话。启动会占用约 6GB 显存/统一内存。';
     const ok = window.confirm(`${setupText}${profile}${warning}\n\n继续吗？`);
     if (!ok) return;
     if (platform?.llamacppStartDownload) {
@@ -444,39 +444,42 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         setActionStatus({
           kind: 'info',
           text: hasModel
-            ? '正在启动默认 Qwen3.5-9B；如果模型文件已完整，Lynn 会直接校验并拉起本地端点。'
+            ? '正在启动本地 Qwen3.5-9B；如果模型文件已完整，Lynn 会直接校验并拉起本地端点。'
             : needsMtpUpgrade
-              ? '正在升级到默认 Qwen3.5-9B MTP；旧版文件会保留，新版校验完成后自动启动。'
-              : '正在下载默认 Qwen3.5-9B，进度会留在当前页面；下载完成后会自动启动本地端点。',
+              ? '正在升级到本地 Qwen3.5-9B MTP；旧版文件会保留，新版校验完成后按本次授权启动。'
+              : '正在下载本地 Qwen3.5-9B，进度会留在当前页面；下载完成后按本次授权启动本地端点。',
         });
       try {
-        const res = await platform.llamacppStartDownload({ modelId: 'qwen35-9b-q4km-imatrix' });
+        const res = await platform.llamacppStartDownload({
+          modelId: 'qwen35-9b-q4km-imatrix',
+          startAfterDownload: true,
+        });
         if (!res?.ok) throw new Error(localModelActionErrorText(res?.reason, res?.detail));
         showToast(
           res.alreadyRunning
-            ? '默认 9B 已在下载/启动队列中。'
+            ? '本地 9B 已在下载/启动队列中。'
             : hasModel
-              ? '默认 Qwen3.5-9B 正在启动。'
+              ? '本地 Qwen3.5-9B 正在启动。'
               : needsMtpUpgrade
-                ? '默认 Qwen3.5-9B MTP 升级已开始。'
-                : '默认 Qwen3.5-9B 已开始下载。',
+                ? '本地 Qwen3.5-9B MTP 升级已开始。'
+                : '本地 Qwen3.5-9B 已开始下载。',
           'info',
         );
         setActionStatus({
           kind: 'info',
           text: res.alreadyRunning
-            ? '默认 9B 已在下载/启动队列中，进度会自动刷新。'
+            ? '本地 9B 已在下载/启动队列中，进度会自动刷新。'
             : hasModel
               ? '启动任务已提交。加载完成后会自动切换为本地模型。'
-              : needsMtpUpgrade
-                ? '新版 MTP 下载已启动，校验完成后会自动启动本地端点。'
-                : '默认 9B 下载已启动，校验完成后会自动启动本地端点。',
+            : needsMtpUpgrade
+              ? '新版 MTP 下载已启动，校验完成后会自动启动本地端点。'
+                : '本地 9B 下载已启动，校验完成后会自动启动本地端点。',
         });
         await onRefresh();
         window.setTimeout(loadStatus, 1500);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        showToast('默认 9B 启动失败：' + msg, 'error');
+        showToast('本地 9B 启动失败：' + msg, 'error');
         setActionStatus({ kind: 'error', text: `任务未启动：${msg}` });
       } finally {
         setSettingUp(false);

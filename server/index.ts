@@ -55,6 +55,7 @@ import { createExpertsRoute } from "./routes/experts.js";
 import { createMcpRoute } from "./routes/mcp.js";
 import { createReviewRoute } from "./routes/review.js";
 import { createTasksRoute } from "./routes/tasks.js";
+import { createFleetRoute, FleetHub } from "./routes/fleet.js";
 import { createAppStateRoute } from "./routes/app-state.js";
 import { createDebugRoute } from "./routes/debug.js";
 import { createTranslateRoute } from "./routes/translate.js";
@@ -249,6 +250,16 @@ const routeHub = hub as any;
 const bridgeManager = new BridgeManager({ engine: routeEngine, hub: routeHub });
 routeHub.bridgeManager = bridgeManager;
 
+function parseFleetRunnerArgsPrefix(value?: string): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 const {
   restRoute: chatRestRoute,
   wsRoute: chatWsRoute,
@@ -264,6 +275,8 @@ const { wsRoute: voiceWsRoute } = createVoiceWsRoute(routeEngine, routeHub, { up
 app.route("", voiceWsRoute);
 app.route("/api", createReviewRoute(routeEngine, { broadcast: chatBroadcast, taskRuntime }));
 app.route("/api", createTasksRoute(taskRuntime, routeEngine));
+const fleetHub = new FleetHub(process.cwd(), chatBroadcast);
+app.route("/api", createFleetRoute(fleetHub));
 app.route("/api", createAppStateRoute(routeEngine, { taskRuntime }));
 app.route("/api", createDebugRoute(routeEngine));
 app.route("/api", createTranslateRoute(routeEngine));

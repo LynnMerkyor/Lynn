@@ -21,6 +21,7 @@ import { createSecuritySlice, type SecuritySlice } from './security-slice';
 import { createStartupSlice, type StartupSlice } from './startup-slice';
 import { createTaskModeSlice, type TaskModeSlice } from './task-mode-slice';
 import { createVoiceSlice, type VoiceSlice } from './voice-slice';
+import { createFleetSlice, type FleetSlice } from './fleet-slice';
 
 export type StoreState = ConnectionSlice &
   SessionSlice &
@@ -42,7 +43,8 @@ export type StoreState = ConnectionSlice &
   SecuritySlice &
   StartupSlice &
   TaskModeSlice &
-  VoiceSlice;
+  VoiceSlice &
+  FleetSlice;
 
 export const useStore = create<StoreState>()((set, _get, _api) => ({
   ...createConnectionSlice(set),
@@ -66,6 +68,7 @@ export const useStore = create<StoreState>()((set, _get, _api) => ({
   ...createStartupSlice(set),
   ...createTaskModeSlice(set),
   ...createVoiceSlice(set),
+  ...createFleetSlice(set),
 }));
 
 export { useShallow };
@@ -93,4 +96,5 @@ export type {
   StartupSlice,
   TaskModeSlice,
   VoiceSlice,
+  FleetSlice,
 };

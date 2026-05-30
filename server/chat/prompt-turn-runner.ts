@@ -20,6 +20,7 @@ import { attachLocalQwen35BenchContext, isLocalQwen35Model } from "./local-qwen3
 import { buildPrefetchToolSummary, rememberFailedTool, rememberSuccessfulTool } from "./tool-summary.js";
 import { buildReportResearchContext } from "./report-research-context.js";
 import { consumeMutationConfirmation, recordPendingDeleteRequest } from "./turn-retry-policy.js";
+import { buildLocalOfficeDirectAnswer } from "./local-office-answer.js";
 import {
   appendTextToLatestAssistantInMemory,
   appendTextToLatestAssistantRecord,
@@ -80,6 +81,17 @@ export function createPromptTurnRunner({
   hasStreamEvent,
   hasToolExecutionInFlight,
 }: PromptTurnRunnerDeps) {
+  function buildClosedEmptyTurnFallback(ss: AnyRecord) {
+    const toolFallback = String(ss?.realtimeToolFallbackText || "").trim();
+    if (toolFallback) return toolFallback;
+    const deterministic = buildLocalOfficeDirectAnswer(ss?.originalPromptText || ss?.effectivePromptText || "");
+    if (deterministic) return deterministic;
+    if (ss?.hasToolCall) {
+      return "工具已经完成执行，但模型没有返回最终总结。请查看上方工具结果；如果需要，我可以基于这些结果继续整理成简短回答。";
+    }
+    return "";
+  }
+
   return async function runPromptTurn({
     ws,
     msg,
@@ -325,9 +337,14 @@ export function createPromptTurnRunner({
           scheduleToolFinalizationFallback(promptSessionPath, ss);
           debugLog()?.log("ws", `[HUB-SEND v2] returned while tool is still in flight count=${ss.activeToolCallCount || 0}, recovered=${!!ss.recoveredBashInFlight}; defer close · ${promptSessionPath}`);
         } else {
-          clearTurnTimers(ss);
           if (!finalizeReturnedTurnWithoutStream(promptSessionPath, ss, "hub_send_returned_closed_without_turn_end")) {
-            broadcast({ type: "status", isStreaming: false, sessionPath: promptSessionPath });
+            const fallbackText = buildClosedEmptyTurnFallback(ss);
+            if (fallbackText) {
+              closeStreamWithVisibleFallback(promptSessionPath, ss, fallbackText, "hub_send_returned_closed_empty_fallback", { trustedFallback: true });
+            } else {
+              clearTurnTimers(ss);
+              broadcast({ type: "status", isStreaming: false, sessionPath: promptSessionPath });
+            }
           }
         }
       } else if (!hasToolExecutionInFlight(ss) && finalizeReturnedTurnWithoutStream(promptSessionPath, ss, "hub_send_returned_open_without_turn_end", { requirePersistedText: true })) {

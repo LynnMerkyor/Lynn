@@ -8,13 +8,19 @@
 # 最小阻断门禁：适合 hotpatch 前
 npm run test:release:smoke
 
-# 正式发版门禁：默认推荐
+# 正式发版门禁：static + live 全量回归；需要本机 Lynn 服务已经运行
 npm run test:release
+
+# 打包前静态门禁：不要求 live server，dist / dist:win 会自动跑
+npm run test:release:static
+
+# live 回归：打包后或启动 Lynn 服务后单独跑
+npm run test:release:live
 
 # 桌面 UI smoke：需要先完成 renderer build
 npm run test:release:ui
 
-# 一键发版前检查：单测 + 类型 + 构建 + live gate + UI smoke
+# 一键发版前检查：单测 + 类型 + 构建 + release static gate + UI smoke
 npm run release:preflight
 
 # 正式 macOS/Windows 打包会先强制执行 release:preflight
@@ -25,7 +31,7 @@ npm run dist:win
 npm run test:release:nightly
 ```
 
-默认读取 `~/.lynn/server-info.json` 并连接当前本机 Lynn。开发版可指定：
+`test:release:static` 只扫仓库和发布资产，不连接模型或本机服务。`test:release` / `test:release:live` 会读取 `~/.lynn/server-info.json` 并连接当前本机 Lynn。开发版可指定：
 
 ```bash
 LYNN_HOME=~/.lynn-dev npm run test:release
@@ -101,11 +107,12 @@ V8/V9 benchmark 主要衡量模型能力和路由质量；release regression 主
 3. `npm run build:server`
 4. `npm run build:main`
 5. `npm run build:renderer`
-6. `npm run test:release`
+6. `npm run test:release:static`
 7. `npm run test:release:ui`
-8. 人工 UI Gate
-9. 平台打包、公证、manifest、镜像站更新（`dist` / `dist:win` 会先跑 `release:preflight`）
-10. 真实安装包 smoke
+8. 平台打包、公证、manifest、镜像站更新（`dist` / `dist:win` 会先跑 `release:preflight`）
+9. 真实安装包 smoke
+10. 启动打包后的 Lynn 服务后跑 `npm run test:release:live`
+11. 人工 UI Gate
 
 不要用裸 `/v1/chat/completions` 结果替代 `test:release`。裸模型端点测不到 Lynn 的 WebSocket、事件解析、UI 渲染、工具卡片和跨 prompt fence。
 

@@ -1,0 +1,31 @@
+{
+  "name": "@lynn/cli",
+  "version": "0.80.0",
+  "private": false,
+  "type": "module",
+  "description": "Lynn command line interface and worker runner",
+  "license": "Apache-2.0",
+  "bin": {
+    "Lynn": "./bin/lynn.mjs"
+  },
+  "files": [
+    "bin/",
+    "scripts/preinstall.mjs",
+    "package.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "preinstall": "node scripts/preinstall.mjs",
+    "prepack": "npm run build",
+    "test": "vitest run tests --reporter=dot",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ink": "6.4.0",
+    "react": "19.2.6"
+  }
+}

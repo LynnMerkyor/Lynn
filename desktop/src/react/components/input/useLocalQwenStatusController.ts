@@ -302,7 +302,10 @@ export function useLocalQwenStatusController({
       setDismissed(false);
       markLoading();
       scheduleRefreshBurst();
-      const managerStart = await window.platform?.llamacppStartDownload?.({ modelId: 'qwen35-9b-q4km-imatrix' });
+      const managerStart = await window.platform?.llamacppStartDownload?.({
+        modelId: 'qwen35-9b-q4km-imatrix',
+        startAfterDownload: true,
+      });
       if (managerStart) {
         if (managerStart.ok === false) {
           throw new Error(managerStart.reason || 'llamacpp_manager_start_failed');

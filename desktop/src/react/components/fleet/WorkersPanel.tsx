@@ -1,0 +1,322 @@
+/**
+ * WorkersPanel — the GUI command deck for the CLI Worker Fleet (B-line, MVP shell).
+ *
+ * - "Dispatch worker" opens the Task Brief form -> POST /api/fleet/dispatch; the
+ *   server FleetHub streams fleet events back over the WS into this board.
+ * - "Play mock worker" replays a fixture stream through the same applyFleetEvent
+ *   path the live WS uses, so the board is demoable without a running worker.
+ */
+import { useEffect, useRef, useState } from 'react';
+import { useStore } from '../../stores';
+import fp from '../FloatingPanels.module.css';
+import s from './Fleet.module.css';
+import { WorkerCard } from './WorkerCard';
+import { TaskBriefForm } from './TaskBriefForm';
+import { playFleetFixture } from './playback';
+import { MOCK_WORKER_JSONL } from './fixtures';
+import { detectFleetConflicts } from './fleet-conflicts';
+import { hanaFetch } from '../../hooks/use-hana-fetch';
+import type { CliEnvStatus } from '../../types';
+import type { FleetWorkerView } from './fleet-reducer';
+import { sortWorkersByAttention } from './fleet-sort';
+import { deriveGate } from './fleet-reducer';
+import { resolveWorkerWorktreePath } from './worktree-path';
+
+const STATUS_SHORT: Record<string, string> = {
+  running: 'running',
+  waiting_approval: 'review',
+  blocked: 'blocked',
+  failed: 'failed',
+};
+
+export function WorkersPanel() {
+  const activePanel = useStore((st) => st.activePanel);
+  const fleetWorkers = useStore((st) => st.fleetWorkers);
+  const applyFleetEvent = useStore((st) => st.applyFleetEvent);
+  const hydrateFleetWorkers = useStore((st) => st.hydrateFleetWorkers);
+  const resetFleet = useStore((st) => st.resetFleet);
+  const removeWorker = useStore((st) => st.removeWorker);
+  const clearFinishedWorkers = useStore((st) => st.clearFinishedWorkers);
+  const cancelRef = useRef<null | (() => void)>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [cliEnv, setCliEnv] = useState<CliEnvStatus | null>(null);
+  const [perm, setPerm] = useState<{ exists: boolean; approval: string; sandbox: string; path: string } | null>(null);
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    return () => {
+      if (cancelRef.current) cancelRef.current();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activePanel !== 'fleet') return;
+    let alive = true;
+    hanaFetch('/api/fleet/workers')
+      .then((r) => r.json())
+      .then((d) => {
+        if (alive && Array.isArray(d?.workers)) hydrateFleetWorkers(d.workers);
+      })
+      .catch(() => {
+        /* route unavailable; live WS/mock playback still works */
+      });
+    const p = window.hana?.cliEnvStatus?.();
+    if (p) p.then((st) => { if (alive) setCliEnv(st); }).catch(() => { /* ipc unavailable */ });
+    return () => {
+      alive = false;
+    };
+  }, [activePanel]);
+
+  useEffect(() => {
+    if (activePanel !== 'fleet') return;
+    let alive = true;
+    hanaFetch('/api/fleet/permissions')
+      .then((r) => r.json())
+      .then((d) => {
+        if (alive && d && typeof d.approval === 'string') setPerm(d);
+      })
+      .catch(() => {
+        /* route unavailable */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [activePanel]);
+
+  useEffect(() => {
+    if (activePanel !== 'fleet') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') useStore.getState().setActivePanel(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activePanel]);
+
+  if (activePanel !== 'fleet') return null;
+
+  const close = () => useStore.getState().setActivePanel(null);
+
+  const playMock = () => {
+    if (cancelRef.current) cancelRef.current();
+    resetFleet();
+    cancelRef.current = playFleetFixture(MOCK_WORKER_JSONL, applyFleetEvent, { intervalMs: 250 });
+  };
+
+  const cancelWorker = (workerId: string) => {
+    void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/cancel`, { method: 'POST' }).catch(() => {
+      /* server broadcasts the cancel result; ignore transport errors here */
+    });
+  };
+
+  const retryWorker = (workerId: string) => {
+    void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/retry`, { method: 'POST' }).catch(() => {
+      /* server broadcasts the new worker; ignore transport errors here */
+    });
+  };
+
+  const resumeWorker = (workerId: string) => {
+    void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/retry?resume=1`, { method: 'POST' }).catch(() => {
+      /* server broadcasts the resumed worker; ignore transport errors here */
+    });
+  };
+
+  const approveWorker = (workerId: string) => {
+    void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/approve`, { method: 'POST' }).catch(() => {
+      /* server broadcasts the review result; ignore transport errors here */
+    });
+  };
+
+  const integrateWorker = (workerId: string, opts: { force?: boolean; branch?: string; push?: boolean } = {}) => {
+    void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/integrate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branch: opts.branch || 'fleet/integration', force: !!opts.force, push: !!opts.push }),
+    }).catch(() => {
+      /* server broadcasts the integration result; ignore transport errors here */
+    });
+  };
+
+  const discardWorker = (workerId: string) => {
+    void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/discard`, { method: 'POST' }).catch(() => {
+      /* server broadcasts the review result; ignore transport errors here */
+    });
+  };
+
+  const openWorktree = (worker: FleetWorkerView) => {
+    const abs = resolveWorkerWorktreePath(worker);
+    if (abs) window.hana?.openFolder?.(abs);
+  };
+
+  const fetchFileDiff = async (workerId: string, file: string): Promise<string> => {
+    try {
+      const res = await hanaFetch(
+        `/api/fleet/workers/${encodeURIComponent(workerId)}/diff?file=${encodeURIComponent(file)}`,
+      );
+      const data = (await res.json()) as { diff?: string };
+      return typeof data.diff === 'string' ? data.diff : '';
+    } catch {
+      return '';
+    }
+  };
+
+  const conflicts = detectFleetConflicts(fleetWorkers);
+
+  const totals = fleetWorkers.reduce(
+    (acc, w) => {
+      if (w.diffStat) {
+        acc.files += w.diffStat.files;
+        acc.ins += w.diffStat.insertions;
+        acc.del += w.diffStat.deletions;
+      }
+      return acc;
+    },
+    { files: 0, ins: 0, del: 0 },
+  );
+
+  const statusCounts = fleetWorkers.reduce<Record<string, number>>((acc, w) => {
+    acc[w.status] = (acc[w.status] ?? 0) + 1;
+    return acc;
+  }, {});
+  const finishedCount = fleetWorkers.filter((w) => ['completed', 'cancelled', 'failed'].includes(w.status)).length;
+  const mergeable = fleetWorkers.filter((w) => w.review?.action === 'approved' && !!w.review.commit && deriveGate(w).passed);
+  const mergeApprovedToMain = () => {
+    for (const w of mergeable) integrateWorker(w.workerId, { branch: 'main', push: true });
+  };
+
+  const sorted = sortWorkersByAttention(fleetWorkers);
+  const allCollapsed = fleetWorkers.length > 0 && fleetWorkers.every((w) => collapsedIds.has(w.workerId));
+  const toggleCard = (id: string) =>
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = () => setCollapsedIds(allCollapsed ? new Set() : new Set(fleetWorkers.map((w) => w.workerId)));
+
+  return (
+    <div className={fp.floatingPanel} onClick={close}>
+      <div className={fp.floatingPanelInner} onClick={(e) => e.stopPropagation()}>
+        <div className={fp.floatingPanelHeader}>
+          <span className={fp.floatingPanelTitle}>Workers</span>
+          <button className={fp.floatingPanelClose} onClick={close} aria-label="close">
+            ×
+          </button>
+        </div>
+        <div className={fp.floatingPanelBody}>
+          {cliEnv && (
+            <div className={s.cliEnv} data-ready={cliEnv.ready ? '1' : '0'}>
+              CLI runtime: Node {cliEnv.node.version ?? '?'} ({cliEnv.node.source})
+              {cliEnv.ready ? ' · ready' : cliEnv.cli.present ? '' : ' · CLI runtime unavailable'}
+            </div>
+          )}
+          {perm && (
+            <div className={s.permBadge} data-default={perm.exists ? '0' : '1'}>
+              {perm.exists ? (
+                <>
+                  perms: {perm.approval} · {perm.sandbox}
+                </>
+              ) : (
+                <>
+                  default guarded mode (ask · workspace-write) ·{' '}
+                  <code className={s.permCmd}>lynn permissions set --approval ask --sandbox workspace-write</code>
+                </>
+              )}
+            </div>
+          )}
+          <div className={s.fleetToolbar}>
+            <button className={s.fleetBtn} onClick={() => setShowForm((v) => !v)}>
+              {showForm ? 'Close form' : 'Dispatch worker'}
+            </button>
+            <button className={s.fleetBtn} onClick={playMock}>
+              Play mock worker
+            </button>
+            {finishedCount > 0 && (
+              <button className={s.fleetBtn} onClick={clearFinishedWorkers}>
+                Clear finished ({finishedCount})
+              </button>
+            )}
+            {fleetWorkers.length > 1 && (
+              <button className={s.fleetBtn} onClick={toggleAll}>
+                {allCollapsed ? 'Expand all' : 'Collapse all'}
+              </button>
+            )}
+            {mergeable.length > 0 && (
+              <button className={s.fleetBtn} onClick={mergeApprovedToMain} title="Gated merge of every approved, passing worker into main">
+                Merge approved → main ({mergeable.length})
+              </button>
+            )}
+            <span className={s.fleetHint}>
+              {fleetWorkers.length} worker(s)
+              {(['running', 'waiting_approval', 'blocked', 'failed'] as const).map((st) =>
+                statusCounts[st] ? (
+                  <span key={st} className={s.statusChip} data-status={st}>
+                    {STATUS_SHORT[st]} {statusCounts[st]}
+                  </span>
+                ) : null,
+              )}
+              {totals.files > 0 && (
+                <>
+                  {' · '}
+                  {totals.files} files <span className={s.fileIns}>+{totals.ins}</span>{' '}
+                  <span className={s.fileDel}>-{totals.del}</span>
+                </>
+              )}
+            </span>
+          </div>
+
+          {showForm && <TaskBriefForm onClose={() => setShowForm(false)} />}
+
+          {conflicts.length > 0 && (
+            <div className={s.conflictBanner}>
+              <strong>⚠ {conflicts.length} conflict(s)</strong>
+              {conflicts.map((c) => (
+                <div key={`${c.kind}:${c.path}`}>
+                  {c.kind === 'center-lock' ? 'center-lock' : 'overlap'} · {c.path} · {c.workerIds.join(', ')}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {fleetWorkers.length === 0 ? (
+            <div className={s.fleetEmpty}>
+              <div className={s.emptyTitle}>No workers yet</div>
+              <p>Dispatch 3-5 CLI workers (codex / claude / qwen ...) into isolated git worktrees and supervise them here.</p>
+              <ol className={s.emptySteps}>
+                <li>
+                  <strong>Dispatch worker</strong> — write a brief: which files it owns, which are forbidden, the test commands.
+                </li>
+                <li>Each worker runs in its own worktree; this board shows its live log, per-file diff, and tests.</li>
+                <li>Out-of-scope edits and center-file conflicts are flagged red and block merge.</li>
+                <li>Cancel / retry / open the worktree from each card.</li>
+              </ol>
+              <p className={s.emptyHint}>
+                New here? Click <strong>Play mock worker</strong> to watch a simulated run end-to-end.
+              </p>
+            </div>
+          ) : (
+            <div className={s.fleetBoard} data-grid={fleetWorkers.length > 1 ? '1' : '0'}>
+              {sorted.map((w) => (
+                <WorkerCard
+                  key={w.workerId}
+                  worker={w}
+                  onCancel={cancelWorker}
+                  onRetry={retryWorker}
+                  onResume={resumeWorker}
+                  onApprove={approveWorker}
+                  onIntegrate={integrateWorker}
+                  onDiscard={discardWorker}
+                  onOpenWorktree={openWorktree}
+                  onDismiss={removeWorker}
+                  fetchFileDiff={fetchFileDiff}
+                  collapsed={collapsedIds.has(w.workerId)}
+                  onToggleCollapse={() => toggleCard(w.workerId)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

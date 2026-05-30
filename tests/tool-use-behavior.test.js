@@ -8,12 +8,13 @@ import {
 } from "../server/chat/tool-use-behavior.js";
 
 describe("tool-use behavior resolver", () => {
-  it("does not short-circuit local office prompts with handcrafted answers", () => {
+  it("keeps local office prompts in the model path while disabling tools", () => {
     const decision = resolveInitialToolUseBehavior("【DATA-01】华东 Q1 120 Q2 150；华南 Q1 90 Q2 81；华北 Q1 60 Q2 78（万元）。算环比增长率，给 3 条管理建议。");
 
     expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);
     expect(decision.directAnswer).toBeUndefined();
     expect(decision.reason).toBe("default");
+    expect(decision.disableTools).toBe(true);
   });
 
   it("prefetches realtime report context for non-brain models", () => {

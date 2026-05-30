@@ -258,7 +258,7 @@ export const RELEASE_CASES = [
         prompt: "【DATA-01】华东 Q1 120 Q2 150；华南 Q1 90 Q2 81；华北 Q1 60 Q2 78（万元）。算环比增长率，给 3 条管理建议。",
         minChars: 120,
         forbidTools: true,
-        mustMatch: ["25", /(?:[-−]\s*10|下降\s*10)/u, "30"],
+        mustMatch: ["25", /(?:[-−]\s*10|下降\s*10|下滑\s*10)/u, "30"],
       },
     ],
   },

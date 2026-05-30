@@ -5,7 +5,7 @@
 //
 // 2026-05-23 重构: 砍掉 ~500 行 synthesis + pseudo-tool detection + buffered content 干涉。
 
-import { universalOrder, getProvider, isInCooldown, markUnhealthy } from './provider-registry.js';
+import { providerOrderForCapability, getProvider, isInCooldown, markUnhealthy } from './provider-registry.js';
 import { getAdapter } from './wire-adapter/index.js';
 import { isServerTool, executeServerTool, mergeWithServerTools } from './tool-exec/index.js';
 import { applySearchContext, createSearchRequestCache, type SearchRequestCache } from './search-context.js';
@@ -40,6 +40,16 @@ function isProviderConfigured(provider: Provider | null): boolean {
 // Tool loop guard. Default raised to 50 — long research / agentic chains need 20-30 turns.
 // Set BRAIN_V2_MAX_ITERATIONS=0 for unlimited (only abort on real errors).
 const MAX_ITERATIONS = Number(process.env.BRAIN_V2_MAX_ITERATIONS || 50);
+// Chain tool hint: default-on guard for models that drift away from exact tool
+// results during multi-hop tool work. Set BRAIN_V2_CHAIN_TOOL_HINT=0 to opt out.
+const CHAIN_TOOL_HINT: ChatMessage = {
+  role: 'system',
+  content:
+    'When a task requires multiple tool calls, you MUST:\n' +
+    '1. Use the EXACT values returned by each tool — never estimate or use training knowledge for numeric results.\n' +
+    '2. Before each subsequent tool call, briefly restate what the previous tool returned.\n' +
+    '3. If a tool returns an error, report it honestly — do not substitute a plausible-sounding value.',
+};
 // P1#4: empty_response 不立即 cooldown。短期 cooldown,需累计 ≥ 2 次 transport-empty(零 SSE chunks)
 // 注: 此判断只看 transport 层 anyEmit,不窥探 content。一个 finish_reason=stop+空 content 不会触发。
 const EMPTY_RESPONSE_COOLDOWN_MS = Number(process.env.BRAIN_V2_EMPTY_COOLDOWN_MS || 30_000);
@@ -80,6 +90,29 @@ function localProbeTimeoutMs(provider: Provider): number {
   return Number.isFinite(configured) && configured > 0 ? configured : 1_500;
 }
 
+function shouldInjectChainToolHint(messages: ChatMessage[], tools: unknown[] | null | undefined): boolean {
+  return process.env.BRAIN_V2_CHAIN_TOOL_HINT !== '0'
+    && Array.isArray(tools)
+    && tools.length > 0
+    && messages[0]?.role !== 'system';
+}
+
+function shouldReinforceToolResults(): boolean {
+  return process.env.BRAIN_V2_TOOL_RESULT_REINFORCE !== '0'
+    && process.env.BRAIN_V2_CHAIN_TOOL_HINT !== '0';
+}
+
+function formatToolResultContent(toolName: string, result: unknown, stepIndex: number): string {
+  const raw = typeof result === 'string' ? result : JSON.stringify(result);
+  if (!shouldReinforceToolResults()) return raw;
+  return [
+    `[Lynn tool step ${stepIndex} completed] ${toolName} returned the exact result below.`,
+    'For any later calculation or comparison, use these exact returned values. Do not estimate or substitute from memory.',
+    '',
+    raw,
+  ].join('\n');
+}
+
 async function runRound({
   messages,
   tools,
@@ -96,7 +129,7 @@ async function runRound({
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
   // (例:"MiMo → Spark fallback"),不再让 cascade decision 对 UI 不可见。
   const fallbackChain: FallbackEntry[] = [];
-  for (const providerId of universalOrder) {
+  for (const providerId of providerOrderForCapability(capabilityRequired)) {
     const provider = getProvider(providerId);
     if (!provider) continue;
     if (!isProviderConfigured(provider)) {
@@ -240,7 +273,7 @@ async function runRound({
 export async function run({ messages, tools, capabilityRequired, signal, onChunk, log, extraBody, reasoningEffort }: RouterRunOptions): Promise<RouterRunResult> {
   // Capability pre-flight — vision/audio/video capability gate, friendly error if no provider supports
   if (capabilityRequired && (capabilityRequired.vision || capabilityRequired.audio || capabilityRequired.video)) {
-    const anySupports = universalOrder.some((id) => {
+    const anySupports = providerOrderForCapability(capabilityRequired).some((id) => {
       const p = getProvider(id);
       if (!p) return false;
       if (capabilityRequired.vision && !p.capability.vision) return false;
@@ -262,6 +295,10 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
 
   const mergedTools = mergeWithServerTools(tools);
   let workingMessages: ChatMessage[] = [...(messages || [])];
+  if (shouldInjectChainToolHint(workingMessages, mergedTools)) {
+    workingMessages = [CHAIN_TOOL_HINT, ...workingMessages];
+    log && log('info', '[chain-tool-hint] injected');
+  }
   let lastProviderId: ProviderId | null = null;
   let iter = 0;
   const maxIter = MAX_ITERATIONS > 0 ? MAX_ITERATIONS : Infinity;
@@ -270,6 +307,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   const toolStormConfig = readToolStormConfigFromEnv();
   const toolStormState = createToolStormState();
   const toolResultCompactionConfig = readToolResultCompactionConfigFromEnv();
+  let serverToolStepIndex = 0;
 
   while (iter < maxIter) {
     iter++;
@@ -357,7 +395,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       workingMessages.push({
         role: 'tool',
         tool_call_id: tc.id || ('tc-' + Math.random().toString(36).slice(2)),
-        content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
+        content: formatToolResultContent(tc.function.name, toolResult, ++serverToolStepIndex),
       });
       workingMessages = compactToolResults(workingMessages, toolResultCompactionConfig);
     }
@@ -400,4 +438,5 @@ export const __testing__ = {
   buildLocalProbeUrl,
   isLocalEndpoint,
   localProbeTimeoutMs,
+  shouldInjectChainToolHint,
 };

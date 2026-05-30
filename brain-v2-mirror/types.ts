@@ -3,6 +3,7 @@ export type Brand<T, Name extends string> = T & { readonly __brand: Name };
 export type ProviderIdLiteral =
   | 'mimo'
   | 'apex-spark-i-balanced'
+  | 'step-3.7-flash'
   | 'deepseek-chat'
   | 'deepseek-pro'
   | 'glm-5-turbo'
@@ -13,6 +14,7 @@ export type ModelIdLiteral =
   | 'mimo-v2.5'
   | 'mimo-v2-omni'
   | 'qwen36-35b-a3b-apex-mtp'
+  | 'step-3.7-flash'   // StepFun 198B-MoE/11B-A text/coding fallback, step_plan 端点
   | 'deepseek-v4-flash'
   | 'deepseek-v4-pro'
   | 'GLM-5-Turbo';
@@ -42,6 +44,8 @@ export interface Provider {
   health_path?: string;
   health_probe_ms?: number;
   default_thinking: boolean;
+  thinking_control?: 'qwen_chat_template';
+  default_reasoning_effort?: 'low' | 'medium' | 'high' | 'xhigh';
   authType?: 'none' | 'bearer';
   max_tokens?: number;
   temperature?: number;

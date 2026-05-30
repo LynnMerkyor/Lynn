@@ -116,12 +116,19 @@ async function runStaticChecks({ level }) {
   const checks = [];
   const pkg = JSON.parse(await fs.readFile(path.join(ROOT, "package.json"), "utf8"));
   const version = pkg.version;
+  const cliPkg = JSON.parse(await fs.readFile(path.join(ROOT, "cli", "package.json"), "utf8"));
 
   const requiredScripts = [
     "test",
     "build:server",
     "build:main",
     "build:renderer",
+    "build:cli",
+    "test:cli",
+    "test:cli-install",
+    "test:cli-install:remote",
+    "test:cli-fleet",
+    "test:packaged-cli",
     "test:release",
     "test:release:ui",
     "release:preflight",
@@ -141,6 +148,38 @@ async function runStaticChecks({ level }) {
     "blocker",
     Boolean(pkg.scripts?.dist && pkg.scripts.dist.includes("release:preflight")),
     "package.json dist runs release:preflight before packaging",
+  ));
+  checks.push(makeCheck(
+    "static-release-preflight-cli",
+    "blocker",
+    Boolean(pkg.scripts?.["release:preflight"]
+      && pkg.scripts["release:preflight"].includes("test:cli")
+      && pkg.scripts["release:preflight"].includes("test:cli-install")
+      && pkg.scripts["release:preflight"].includes("test:cli-fleet")),
+    "release:preflight runs CLI smoke, install, and Fleet gates",
+    String(pkg.scripts?.["release:preflight"] || ""),
+  ));
+
+  checks.push(makeCheck(
+    "static-cli-version-sync",
+    "blocker",
+    cliPkg.version === version,
+    `cli/package.json version equals package version ${version}`,
+    cliPkg.version ? `cli=${cliPkg.version}` : "missing cli version",
+  ));
+  checks.push(makeCheck(
+    "static-cli-package-bin",
+    "blocker",
+    cliPkg.bin?.Lynn === "./bin/lynn.mjs",
+    "CLI package installs the Lynn command",
+    JSON.stringify(cliPkg.bin || {}),
+  ));
+  checks.push(makeCheck(
+    "static-cli-node-engine",
+    "blocker",
+    String(cliPkg.engines?.node || "").includes(">=20"),
+    "CLI package declares Node.js 20+ requirement",
+    JSON.stringify(cliPkg.engines || {}),
   ));
 
   const manifestPath = path.join(ROOT, ".github", "update-manifest.json");
@@ -186,6 +225,20 @@ async function runStaticChecks({ level }) {
         versionMismatches.length === 0,
         `manifest binary asset URLs include package version ${version}`,
         versionMismatches.join("\n"),
+      ));
+      checks.push(makeCheck(
+        "static-manifest-macos-arm64-name",
+        "blocker",
+        String(manifest.stable.assets["darwin-arm64"] || "").includes(`Lynn-${version}-macOS-arm64.dmg`),
+        "manifest darwin-arm64 URL matches the signed electron-builder artifact name",
+        String(manifest.stable.assets["darwin-arm64"] || ""),
+      ));
+      checks.push(makeCheck(
+        "static-manifest-no-legacy-macos-name",
+        "blocker",
+        !assetUrls.some((url) => /Apple-Silicon|macOS-Intel/.test(url)),
+        "manifest does not reference legacy renamed macOS artifacts",
+        assetUrls.filter((url) => /Apple-Silicon|macOS-Intel/.test(url)).join("\n"),
       ));
     }
   } else {
@@ -253,6 +306,49 @@ async function runStaticChecks({ level }) {
     readmeBadgeVersion === version,
     `README.md version badge equals package version ${version}`,
     readmeBadgeVersion ? `badge=${readmeBadgeVersion}` : "badge not found",
+  ));
+
+  const cliReadme = await readTextIfExists(path.join(ROOT, "cli", "README.md"));
+  checks.push(makeCheck(
+    "static-cli-readme-install",
+    "blocker",
+    cliReadme.includes("Node.js 20 LTS")
+      && cliReadme.includes("npm install -g --force")
+      && cliReadme.includes(`lynn-cli-${version}.tgz`)
+      && cliReadme.includes("Lynn code -p"),
+    "cli/README.md documents Node requirement, CDN install, and headless code usage",
+  ));
+  const headlessContract = await readTextIfExists(path.join(ROOT, "docs", "ops", "lynn-code-headless-agent-contract.md"));
+  checks.push(makeCheck(
+    "static-cli-headless-contract",
+    "blocker",
+    headlessContract.includes("Lynn code -p")
+      && headlessContract.includes("--approval yolo")
+      && headlessContract.includes("--sandbox workspace-write")
+      && headlessContract.includes("Lynn worker run"),
+    "headless/Fleet contract documents non-interactive Lynn code usage",
+  ));
+  const installSnippet = await readTextIfExists(path.join(ROOT, "docs", "ops", "v080-cli-install-release-snippet.md"));
+  checks.push(makeCheck(
+    "static-cli-mirror-snippet",
+    "blocker",
+    installSnippet.includes("Node.js 20 LTS")
+      && installSnippet.includes(`lynn-cli-${version}.tgz`)
+      && installSnippet.includes("Lynn agents"),
+    "CLI mirror/release snippet includes Node requirement, CDN install, and launch commands",
+  ));
+  const downloadPage = await readTextIfExists(path.join(ROOT, "site", "download.html"));
+  checks.push(makeCheck(
+    "static-download-page-cli-install",
+    "blocker",
+    downloadPage.includes("Node.js 20 LTS")
+      && downloadPage.includes("npm install -g --force")
+      && downloadPage.includes(`lynn-cli-${version}.tgz`)
+      && downloadPage.includes("Lynn code")
+      && downloadPage.includes("Lynn agents")
+      && downloadPage.includes("data-copy-target=\"cli-install\"")
+      && !downloadPage.includes("data-download-key=\"macArm\" href=\"#\""),
+    "site/download.html shows Node requirement, CLI install/copy, launch commands, and no dead macOS download link",
   ));
 
   return checks.filter((check) => level === "nightly" || severityRank(check.severity) >= 2);
