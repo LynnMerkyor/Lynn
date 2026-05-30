@@ -1,5 +1,8 @@
 import http from "node:http";
 import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
@@ -75,6 +78,66 @@ describe("prompt stdin handling", () => {
     expect(output).toContain("\"text\":\"command byok ok\"");
     expect(output).toContain("\"activeProvider\":\"cli-byok:openai-compatible\"");
     expect(output).toContain("\"ok\":true");
+  });
+
+  it("passes prompt --image as multimodal content through CLI BYOK", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-prompt-image-"));
+    const image = path.join(tmp, "shot.png");
+    await fs.writeFile(image, Buffer.from("89504e470d0a1a0a", "hex"));
+    let body = "";
+    const provider = http.createServer((request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      request.on("data", (chunk) => {
+        body += String(chunk);
+      });
+      request.on("end", () => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"image prompt ok\"}}]}",
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runPrompt(parseArgs([
+        "-p",
+        "describe screenshot",
+        "--image",
+        image,
+        "--json",
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-command-test",
+        "--model",
+        "command-model",
+      ]), { json: true })).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+
+    const parsed = JSON.parse(body) as { messages?: Array<{ content?: unknown }> };
+    const content = parsed.messages?.[0]?.content;
+    expect(Array.isArray(content)).toBe(true);
+    expect(JSON.stringify(content)).toContain("data:image/png;base64");
+    expect(output).toContain("\"images\":[");
+    expect(output).toContain("\"text\":\"image prompt ok\"");
   });
 
   it("exits after prompt mode reads optional stdin in non-TTY command usage", async () => {

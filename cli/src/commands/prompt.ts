@@ -7,6 +7,7 @@ import { appendSessionTurn, resolveDataDir } from "../session/store.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
 import { t } from "../i18n.js";
+import { buildImagesContentParts, parseImageList } from "../media.js";
 
 export interface PromptOptions {
   json?: boolean;
@@ -40,9 +41,10 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   const title = getStringFlag(args.flags, "title");
   const cliProvider = await resolveCliProviderProfile(args);
+  const imagePaths = promptImagePaths(args);
 
   if (options.json) {
-    writeJsonLine({ type: "run.started", ts: nowIso(), prompt, reasoning });
+    writeJsonLine({ type: "run.started", ts: nowIso(), prompt, reasoning, ...(imagePaths.length ? { images: imagePaths } : {}) });
   }
 
   if (options.mockBrain) {
@@ -69,7 +71,15 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   const startedAt = Date.now();
   if (!options.json) spinner.start();
   try {
-    for await (const event of streamBrainChat({ brainUrl, prompt, reasoning, fallbackProvider: cliProvider?.profile })) {
+    const messages = imagePaths.length
+      ? [{ role: "user" as const, content: await buildImagesContentParts(imagePaths, prompt) }]
+      : undefined;
+    for await (const event of streamBrainChat({
+      brainUrl,
+      ...(messages ? { messages } : { prompt }),
+      reasoning,
+      fallbackProvider: cliProvider?.profile,
+    })) {
       const renderReasoning = shouldRenderReasoning(reasoning.display, !!options.json);
       if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
         spinner.stop();
@@ -117,6 +127,13 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
     process.stdout.write("\n");
   }
   return 0;
+}
+
+function promptImagePaths(args: ParsedArgs): string[] {
+  return [
+    ...parseImageList(getStringFlag(args.flags, "images")),
+    ...parseImageList(getStringFlag(args.flags, "image", "shot")),
+  ];
 }
 
 async function readPromptStdin(prompt: string): Promise<string> {
