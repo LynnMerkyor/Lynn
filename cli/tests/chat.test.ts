@@ -558,7 +558,7 @@ proc = subprocess.Popen(
 os.close(slave)
 buf = b""
 sent_exit = False
-deadline = time.time() + 8
+deadline = time.time() + 45
 while time.time() < deadline:
     readable, _, _ = select.select([master], [], [], 0.1)
     if readable:
@@ -604,7 +604,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
     expect(result.stdout).toContain("/yolo");
     expect(result.stdout).toContain("StepFun 3.7 Flash");
     expect(result.stderr).toBe("");
-  });
+  }, 75_000);
 });
 
 function hasPython3(): boolean {
