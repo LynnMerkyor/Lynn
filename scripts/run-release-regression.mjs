@@ -324,6 +324,17 @@ async function runStaticChecks({ level }) {
       && installSnippet.includes("Lynn agents"),
     "CLI mirror/release snippet includes Node requirement, CDN install, and launch commands",
   ));
+  const downloadPage = await readTextIfExists(path.join(ROOT, "site", "download.html"));
+  checks.push(makeCheck(
+    "static-download-page-cli-install",
+    "blocker",
+    downloadPage.includes("Node.js 20 LTS")
+      && downloadPage.includes("npm install -g --force")
+      && downloadPage.includes("lynn-cli-latest.tgz")
+      && downloadPage.includes("Lynn code")
+      && downloadPage.includes("Lynn agents"),
+    "site/download.html shows Node requirement, CLI install, and launch commands",
+  ));
 
   return checks.filter((check) => level === "nightly" || severityRank(check.severity) >= 2);
 }
