@@ -576,7 +576,7 @@ async function runStepFunByokFallbackSmoke() {
       "--brain-url",
       "http://127.0.0.1:1",
     ], { stdinLines: ["hello from chat", "/exit"], env: { LYNN_CLI_BRAIN_TIMEOUT_MS: "50" } });
-    assertIncludes(chat.name, chat.stdout, "CLI BYOK: step-3.7-flash");
+    assertIncludes(chat.name, chat.stdout, "CLI BYOK: StepFun 3.7 Flash (step-3.7-flash)");
     assertIncludes(chat.name, chat.stdout, "CLI BYOK");
     assertIncludes(chat.name, chat.stdout, "ok from stepfun");
   } finally {
