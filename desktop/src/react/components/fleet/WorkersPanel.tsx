@@ -124,6 +124,16 @@ export function WorkersPanel() {
     });
   };
 
+  const integrateWorker = (workerId: string) => {
+    void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/integrate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branch: 'fleet/integration' }),
+    }).catch(() => {
+      /* server broadcasts the integration result; ignore transport errors here */
+    });
+  };
+
   const discardWorker = (workerId: string) => {
     void hanaFetch(`/api/fleet/workers/${encodeURIComponent(workerId)}/discard`, { method: 'POST' }).catch(() => {
       /* server broadcasts the review result; ignore transport errors here */
@@ -284,6 +294,7 @@ export function WorkersPanel() {
                   onRetry={retryWorker}
                   onResume={resumeWorker}
                   onApprove={approveWorker}
+                  onIntegrate={integrateWorker}
                   onDiscard={discardWorker}
                   onOpenWorktree={openWorktree}
                   onDismiss={removeWorker}

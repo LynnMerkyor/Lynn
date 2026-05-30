@@ -43,6 +43,7 @@ export function WorkerCard({
   onRetry,
   onResume,
   onApprove,
+  onIntegrate,
   onDiscard,
   onOpenWorktree,
   onDismiss,
@@ -55,6 +56,7 @@ export function WorkerCard({
   onRetry?: (workerId: string) => void;
   onResume?: (workerId: string) => void;
   onApprove?: (workerId: string) => void;
+  onIntegrate?: (workerId: string) => void;
   onDiscard?: (workerId: string) => void;
   onOpenWorktree?: (worker: FleetWorkerView) => void;
   onDismiss?: (workerId: string) => void;
@@ -105,12 +107,13 @@ export function WorkerCard({
 
   const canCancel = !!onCancel && ['queued', 'running', 'waiting_approval', 'blocked'].includes(worker.status);
   const canApprove = !!onApprove && worker.status === 'waiting_approval' && !worker.hasForbiddenEdit && worker.gate?.ok !== false;
+  const canIntegrate = !!onIntegrate && worker.review?.action === 'approved' && !!worker.review.commit;
   const canDiscard = !!onDiscard && ['waiting_approval', 'blocked', 'failed', 'completed', 'cancelled'].includes(worker.status);
   const canRetry = !!onRetry && ['failed', 'cancelled', 'blocked', 'completed'].includes(worker.status);
   const canResume = !!onResume && !!worker.checkpoint?.path && ['failed', 'cancelled', 'blocked', 'completed'].includes(worker.status);
   const canOpen = !!onOpenWorktree && !!worker.worktree;
   const canCopy = worker.log.length > 0;
-  const hasActions = canCancel || canApprove || canDiscard || canRetry || canResume || canOpen || canCopy;
+  const hasActions = canCancel || canApprove || canIntegrate || canDiscard || canRetry || canResume || canOpen || canCopy;
   const recentTools = worker.tools.slice(-6);
   const visualResult = worker.visualResult;
   const visualTaskType = worker.taskType ?? visualResult?.taskType;
@@ -332,6 +335,11 @@ export function WorkerCard({
           {canApprove && (
             <button className={s.approveBtn} onClick={() => onApprove?.(worker.workerId)}>
               Approve
+            </button>
+          )}
+          {canIntegrate && (
+            <button className={s.approveBtn} onClick={() => onIntegrate?.(worker.workerId)} title="Cherry-pick into fleet/integration">
+              Integrate
             </button>
           )}
           {canDiscard && (
