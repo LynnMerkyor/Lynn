@@ -110,10 +110,11 @@ export function readFlagProviderProfile(args: ParsedArgs): CliProviderProfile | 
 }
 
 export function readEnvProviderProfile(env: NodeJS.ProcessEnv = process.env): CliProviderProfile | null {
-  const preset = resolveProviderPreset(env.LYNN_CLI_PRESET || env.OPENAI_COMPATIBLE_PRESET || null);
+  const presetName = env.LYNN_CLI_PRESET || env.OPENAI_COMPATIBLE_PRESET || null;
+  const preset = resolveProviderPreset(presetName);
   const baseUrl = env.LYNN_CLI_BASE_URL || env.OPENAI_BASE_URL || preset?.baseUrl || "";
   const model = env.LYNN_CLI_MODEL || preset?.model || "";
-  const apiKey = env.LYNN_CLI_API_KEY || env.OPENAI_API_KEY || "";
+  const apiKey = env.LYNN_CLI_API_KEY || presetApiKey(presetName, env) || env.OPENAI_API_KEY || "";
   const provider = env.LYNN_CLI_PROVIDER || preset?.provider || "openai-compatible";
   if (!baseUrl || !model) return null;
   return {
@@ -146,4 +147,19 @@ function matchingEnvApiKey(flagProfile: CliProviderProfile, envProfile: CliProvi
 
 function envApiKey(env: NodeJS.ProcessEnv = process.env): string | undefined {
   return env.LYNN_CLI_API_KEY || env.OPENAI_API_KEY || undefined;
+}
+
+function presetApiKey(presetName: string | null, env: NodeJS.ProcessEnv): string | undefined {
+  switch ((presetName || "").trim().toLowerCase()) {
+    case "mimo":
+      return env.MIMO_API_KEY || env.MIMO_SEARCH_KEY || undefined;
+    case "stepfun":
+      return env.STEPFUN_API_KEY || env.STEP_API_KEY || undefined;
+    case "deepseek":
+      return env.DEEPSEEK_API_KEY || undefined;
+    case "openai":
+      return env.OPENAI_API_KEY || undefined;
+    default:
+      return undefined;
+  }
 }

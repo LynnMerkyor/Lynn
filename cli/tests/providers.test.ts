@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "../src/args.js";
 import { activeRouteLabel, renderProviderPresets, renderProvidersInfo, runProviders } from "../src/commands/providers.js";
-import { providerProfilePath, readCliProviderProfile, resolveCliProviderProfile, writeCliProviderProfile } from "../src/provider-profile.js";
+import { providerProfilePath, readCliProviderProfile, readEnvProviderProfile, resolveCliProviderProfile, writeCliProviderProfile } from "../src/provider-profile.js";
 import { setLang } from "../src/i18n.js";
 
 beforeEach(() => setLang("en"));
@@ -353,6 +353,26 @@ describe("providers command", () => {
         model: "step-3.7-flash",
         apiKey: undefined,
       },
+    });
+  });
+
+  it("accepts preset-specific environment keys for CLI BYOK", async () => {
+    expect(readEnvProviderProfile({
+      LYNN_CLI_PRESET: "stepfun",
+      STEPFUN_API_KEY: "step-env-key",
+    })).toMatchObject({
+      baseUrl: "https://api.stepfun.com/step_plan/v1",
+      model: "step-3.7-flash",
+      apiKey: "step-env-key",
+    });
+
+    expect(readEnvProviderProfile({
+      LYNN_CLI_PRESET: "mimo",
+      MIMO_API_KEY: "mimo-env-key",
+    })).toMatchObject({
+      baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+      model: "mimo-v2.5-pro",
+      apiKey: "mimo-env-key",
     });
   });
 
