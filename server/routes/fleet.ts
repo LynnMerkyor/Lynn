@@ -83,11 +83,11 @@ export function createFleetRoute(hub: FleetHub, options: FleetRouteOptions = {})
     return c.json({ ok: true, worker });
   });
 
-  route.post("/fleet/workers/:id/approve", (c) => {
-    const result = hub.approve(c.req.param("id"));
+  route.post("/fleet/workers/:id/approve", async (c) => {
+    const result = await hub.approve(c.req.param("id"));
     if (!result) return c.json({ error: "worker not found" }, 404);
     if (!result.ok) return c.json({ error: result.error || "worker cannot be approved" }, 409);
-    return c.json({ ok: true });
+    return c.json({ ok: true, commit: result.commit, changed: result.changed });
   });
 
   route.post("/fleet/workers/:id/discard", async (c) => {

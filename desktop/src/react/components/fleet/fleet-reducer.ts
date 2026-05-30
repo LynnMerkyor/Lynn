@@ -25,6 +25,8 @@ interface FleetProgressData {
   source?: 'bundled' | 'electron' | 'dev';
   pid?: number;
   action?: 'approved' | 'discarded';
+  commit?: string;
+  changed?: boolean;
   path?: string;
   line?: string;
 }
@@ -114,6 +116,8 @@ export interface FleetWorkerView {
   visualResult?: FleetVisualResultView;
   /** How the worker was launched (from a worker.progress data:{kind:'runner'} event). */
   runner?: { mode: 'stub' | 'spawned'; source?: 'bundled' | 'electron' | 'dev'; pid?: number };
+  /** Review action result surfaced by Fleet approval/discard endpoints. */
+  review?: { action: 'approved' | 'discarded'; commit?: string; changed?: boolean };
   lastTs?: string;
 }
 
@@ -246,6 +250,9 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
         } else if (data.kind === 'runner') {
           next.runner = { mode: data.mode ?? 'spawned', source: data.source, pid: data.pid };
         } else if (data.kind === 'review') {
+          if (data.action === 'approved' || data.action === 'discarded') {
+            next.review = { action: data.action, commit: data.commit, changed: data.changed };
+          }
           if (data.action === 'approved') next.status = 'completed';
           if (data.action === 'discarded') next.status = 'cancelled';
         }

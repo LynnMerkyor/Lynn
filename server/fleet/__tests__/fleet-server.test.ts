@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { Hono } from "hono";
 import { matchAnyGlob, evaluateScope, annotateChangedFiles } from "../forbidden-guard.js";
 import { createLineParser, mapKnownCliJsonLine, spawnWorker } from "../worker-manager.js";
@@ -10,6 +13,13 @@ import { FleetHub, type FleetBrief } from "../fleet-hub.js";
 import { resolveCliCommand, cliRuntimeAvailable } from "../worker-command.js";
 import { DEFAULT_FLEET_REGISTRY, configuredCliProviderPreset, resolveFleetRegistry } from "../registry.js";
 import { createFleetRoute } from "../../routes/fleet.js";
+
+const pExecFile = promisify(execFile);
+
+async function execGit(args: string[], cwd: string): Promise<string> {
+  const { stdout } = await pExecFile("git", args, { cwd, maxBuffer: 16 * 1024 * 1024 });
+  return stdout.trim();
+}
 
 async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
   const start = Date.now();
@@ -232,6 +242,30 @@ describe("worktree porcelain parser", () => {
     const list = parseWorktreePorcelain(out);
     expect(list).toHaveLength(2);
     expect(list[1]).toEqual({ path: "/repo/wt-1", head: "def", branch: "cli-1/x" });
+  });
+});
+
+describe("worktree commit review helper", () => {
+  it("commits pending changes in a disposable worktree", async () => {
+    const { WorktreeManager } = await import("../worktree-manager.js");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-fleet-commit-"));
+    try {
+      await execGit(["init"], tmp);
+      await execGit(["config", "user.email", "fleet@example.test"], tmp);
+      await execGit(["config", "user.name", "Fleet Test"], tmp);
+      fs.writeFileSync(path.join(tmp, "README.md"), "one\n", "utf8");
+      await execGit(["add", "README.md"], tmp);
+      await execGit(["commit", "-m", "initial"], tmp);
+
+      fs.writeFileSync(path.join(tmp, "README.md"), "two\n", "utf8");
+      const result = await new WorktreeManager(tmp).commitAll(tmp, "fleet: approve test");
+
+      expect(result.changed).toBe(true);
+      expect(result.commit).toMatch(/^[0-9a-f]+$/);
+      expect(await execGit(["log", "-1", "--pretty=%s"], tmp)).toBe("fleet: approve test");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 
@@ -530,12 +564,17 @@ describe("FleetHub.retry", () => {
 
 describe("FleetHub review actions", () => {
   it("approves a clean worker waiting for review", async () => {
-    const sent: Array<{ event: { type: string; message?: string } }> = [];
+    const committed: Array<{ path: string; message: string }> = [];
+    const sent: Array<{ event: { type: string; message?: string; data?: unknown } }> = [];
     const hub = new FleetHub("/repo", (m) => sent.push(m as { event: { type: string; message?: string } }), () => "T", {
       available: () => true,
       createWorktree: async () => {},
       writeBrief: () => "/tmp/brief.md",
       resolveCommand: (args) => ({ command: "node", args, env: {}, source: "dev" }),
+      commitWorktree: async (worktreePath, message) => {
+        committed.push({ path: worktreePath, message });
+        return { changed: true, commit: "abc1234" };
+      },
       spawn: (opts, onEvent) => {
         onEvent({ type: "worker.finished", workerId: opts.workerId, ok: true, exitCode: 0, summary: "ready" });
         return { workerId: opts.workerId, pid: 123, kill: () => {} };
@@ -544,10 +583,42 @@ describe("FleetHub review actions", () => {
 
     const rec = await hub.dispatch(sampleBrief);
     expect(hub.getWorker(rec.workerId)?.status).toBe("waiting_approval");
-    expect(hub.approve(rec.workerId)).toEqual({ ok: true });
+    expect(await hub.approve(rec.workerId)).toEqual({ ok: true, changed: true, commit: "abc1234" });
+    expect(committed).toEqual([{
+      path: path.join("/repo", sampleBrief.worktree),
+      message: expect.stringContaining("fleet(codex-cli): t"),
+    }]);
     expect(hub.getWorker(rec.workerId)?.status).toBe("completed");
     expect(sent).toContainEqual(expect.objectContaining({
-      event: expect.objectContaining({ type: "worker.progress", message: "review approved" }),
+      event: expect.objectContaining({
+        type: "worker.progress",
+        message: "review approved: abc1234",
+        data: expect.objectContaining({ kind: "review", action: "approved", commit: "abc1234", changed: true }),
+      }),
+    }));
+  });
+
+  it("keeps workers in review when the approval commit fails", async () => {
+    const sent: Array<{ event: { type: string; message?: string; level?: string } }> = [];
+    const hub = new FleetHub("/repo", (m) => sent.push(m as { event: { type: string; message?: string; level?: string } }), () => "T", {
+      commitWorktree: async () => {
+        throw new Error("missing git identity");
+      },
+    });
+    const rec = await hub.dispatch(sampleBrief);
+    rec.status = "waiting_approval";
+
+    expect(await hub.approve(rec.workerId)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("missing git identity"),
+    });
+    expect(hub.getWorker(rec.workerId)?.status).toBe("waiting_approval");
+    expect(sent).toContainEqual(expect.objectContaining({
+      event: expect.objectContaining({
+        type: "worker.progress",
+        message: expect.stringContaining("review commit failed"),
+        level: "warning",
+      }),
     }));
   });
 
@@ -556,7 +627,7 @@ describe("FleetHub review actions", () => {
     const rec = await hub.dispatch(sampleBrief);
     rec.status = "blocked";
 
-    expect(hub.approve(rec.workerId)).toMatchObject({ ok: false, error: expect.stringContaining("blocked") });
+    expect(await hub.approve(rec.workerId)).toMatchObject({ ok: false, error: expect.stringContaining("blocked") });
   });
 
   it("discards reviewed work and removes the worktree when possible", async () => {
@@ -582,6 +653,7 @@ describe("fleet review HTTP route", () => {
     const app = new Hono();
     const hub = new FleetHub("/repo", () => {}, () => "T", {
       removeWorktree: async () => {},
+      commitWorktree: async () => ({ changed: false }),
     });
     app.route("/api", createFleetRoute(hub, { registry: availableSampleRegistry }));
 
@@ -589,6 +661,7 @@ describe("fleet review HTTP route", () => {
     rec.status = "waiting_approval";
     const approved = await app.request(`/api/fleet/workers/${rec.workerId}/approve`, { method: "POST" });
     expect(approved.status).toBe(200);
+    expect(await approved.json()).toMatchObject({ ok: true, changed: false });
     expect(hub.getWorker(rec.workerId)?.status).toBe("completed");
 
     const discarded = await app.request(`/api/fleet/workers/${rec.workerId}/discard`, { method: "POST" });

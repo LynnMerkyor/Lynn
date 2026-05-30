@@ -18,7 +18,7 @@ import type {
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { WorktreeManager } from "./worktree-manager.js";
+import { WorktreeManager, type WorktreeCommitResult } from "./worktree-manager.js";
 import { spawnWorker, type WorkerHandle } from "./worker-manager.js";
 import { cliRuntimeAvailable, resolveCliCommand, type ResolvedCommand } from "./worker-command.js";
 
@@ -62,6 +62,7 @@ export interface FleetHubDeps {
   spawn?: (opts: { command: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv; workerId: string }, onEvent: (e: FleetWorkerEvent) => void) => WorkerHandle;
   createWorktree?: (relPath: string, branch: string, baseRef: string) => Promise<void>;
   removeWorktree?: (worktreePath: string) => Promise<void>;
+  commitWorktree?: (worktreePath: string, message: string) => Promise<WorktreeCommitResult>;
 }
 
 /** Reject absolute paths and `..` traversal before handing a file path to git. */
@@ -298,20 +299,35 @@ export class FleetHub {
   }
 
   /** Mark a reviewed worker as accepted. This is intentionally not a git merge. */
-  approve(id: string): { ok: boolean; error?: string } | null {
+  async approve(id: string): Promise<{ ok: boolean; error?: string; commit?: string; changed?: boolean } | null> {
     const rec = this.workers.get(id);
     if (!rec) return null;
     if (rec.status !== "waiting_approval") {
       return { ok: false, error: `worker is ${rec.status}, not waiting_approval` };
     }
+    let result: WorktreeCommitResult = { changed: false };
+    try {
+      const commit = this.deps.commitWorktree ?? ((p: string, message: string) => this.worktrees.commitAll(p, message));
+      result = await commit(this.resolveWorktreePath(rec.brief.worktree), reviewCommitMessage(rec));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      this.emit(id, {
+        type: "worker.progress",
+        ts: this.now(),
+        workerId: id,
+        message: `review commit failed: ${message}`,
+        level: "warning",
+      });
+      return { ok: false, error: `review commit failed: ${message}` };
+    }
     this.emit(id, {
       type: "worker.progress",
       ts: this.now(),
       workerId: id,
-      message: "review approved",
-      data: { kind: "review", action: "approved" },
+      message: result.commit ? `review approved: ${result.commit}` : "review approved (no changes)",
+      data: { kind: "review", action: "approved", commit: result.commit, changed: result.changed },
     });
-    return { ok: true };
+    return { ok: true, commit: result.commit, changed: result.changed };
   }
 
   /** Discard a reviewed worker and remove its worktree when possible. */
@@ -367,6 +383,15 @@ export class FleetHub {
       return { file, diff: "" };
     }
   }
+
+  private resolveWorktreePath(worktreePath: string): string {
+    return path.isAbsolute(worktreePath) ? worktreePath : path.join(this.repoRoot, worktreePath);
+  }
+}
+
+function reviewCommitMessage(rec: FleetWorkerRecord): string {
+  const title = rec.brief.title.replace(/\s+/g, " ").trim().slice(0, 80) || "worker changes";
+  return `fleet(${rec.agent}): ${title}\n\nWorker: ${rec.workerId}\nBranch: ${rec.brief.branch}`;
 }
 
 function statusAfterEvent(current: string, event: FleetWorkerEvent): FleetWorkerStatus | string {

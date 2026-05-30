@@ -25,6 +25,11 @@ export interface DiffStat {
   deletions: number;
 }
 
+export interface WorktreeCommitResult {
+  changed: boolean;
+  commit?: string;
+}
+
 export class WorktreeManager {
   constructor(private repoRoot: string) {}
 
@@ -73,6 +78,19 @@ export class WorktreeManager {
     return runGit(["diff", baseRef, "--", file], worktreePath).catch(() => "");
   }
 
+  /** Stage and commit all current worktree changes. Does not merge into the main repo. */
+  async commitAll(worktreePath: string, message: string): Promise<WorktreeCommitResult> {
+    const status = await runGit(["status", "--porcelain"], worktreePath).catch(() => "");
+    if (!status.trim()) return { changed: false };
+
+    await runGit(["add", "-A"], worktreePath);
+    if (!(await hasStagedChanges(worktreePath))) return { changed: false };
+
+    await runGit(["commit", "-m", message], worktreePath);
+    const commit = await runGit(["rev-parse", "--short", "HEAD"], worktreePath);
+    return { changed: true, commit };
+  }
+
   async list(): Promise<WorktreeInfo[]> {
     const out = await runGit(["worktree", "list", "--porcelain"], this.repoRoot).catch(() => "");
     return parseWorktreePorcelain(out);
@@ -82,6 +100,18 @@ export class WorktreeManager {
     const args = ["worktree", "remove", worktreePath];
     if (force) args.push("--force");
     await runGit(args, this.repoRoot);
+  }
+}
+
+async function hasStagedChanges(cwd: string): Promise<boolean> {
+  try {
+    await pExecFile("git", ["diff", "--cached", "--quiet"], { cwd, maxBuffer: 16 * 1024 * 1024 });
+    return false;
+  } catch (err) {
+    if (typeof err === "object" && err && "code" in err && (err as { code?: unknown }).code === 1) {
+      return true;
+    }
+    throw err;
   }
 }
 

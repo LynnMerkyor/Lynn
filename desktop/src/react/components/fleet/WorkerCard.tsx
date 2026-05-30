@@ -302,6 +302,12 @@ export function WorkerCard({
             </div>
           )}
 
+          {worker.review?.action === 'approved' && (
+            <div className={s.workerFinished}>
+              approved{worker.review.commit ? ` · commit ${worker.review.commit}` : worker.review.changed === false ? ' · no changes' : ''}
+            </div>
+          )}
+
           {worker.error && (
             <div className={s.workerError}>
               error {worker.error.code}: {worker.error.message}

@@ -52,10 +52,11 @@ describe('worker.progress data (vision + runner context)', () => {
     v = reduceFleetWorker(v, {
       type: 'worker.progress',
       workerId: 'w1',
-      message: 'review approved',
-      data: { kind: 'review', action: 'approved' },
+      message: 'review approved: abc1234',
+      data: { kind: 'review', action: 'approved', commit: 'abc1234', changed: true },
     });
     expect(v.status).toBe('completed');
+    expect(v.review).toEqual({ action: 'approved', commit: 'abc1234', changed: true });
 
     v = reduceFleetWorker(v, {
       type: 'worker.progress',
