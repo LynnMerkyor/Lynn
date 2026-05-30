@@ -477,6 +477,82 @@ describe("worker-run scaffold", () => {
     expect(parsed.reasoning_effort).toBe("high");
   });
 
+  it("lets built-in workers use CLI-only BYOK when Brain is offline", async () => {
+    const repo = await makeTempGitRepo();
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: byok worker",
+      "",
+      "## Objective",
+      "Answer through the configured CLI provider.",
+      "",
+      "## Owned files",
+      "- cli/**",
+      "",
+      "## Forbidden files",
+      "- server/**",
+      "",
+      "## Test commands",
+      `- ${PASS_TEST_COMMAND}`,
+    ].join("\n"));
+    let body = "";
+    let auth = "";
+    const server = http.createServer((req, res) => {
+      if (req.url === "/v1/chat/completions" && req.method === "POST") {
+        auth = String(req.headers.authorization || "");
+        req.on("data", (chunk) => { body += String(chunk); });
+        req.on("end", () => {
+          res.writeHead(200, { "content-type": "text/event-stream" });
+          res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: "BYOK worker done." } }] })}\n\ndata: [DONE]\n\n`);
+        });
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("server did not bind");
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const code = await runWorker(parseArgs([
+        "worker",
+        "run",
+        "--brief",
+        briefPath,
+        "--worktree",
+        repo,
+        "--agent",
+        "lynn-cli",
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-worker-test",
+        "--model",
+        "worker-model",
+      ]));
+      expect(code).toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    const parsed = JSON.parse(body) as { model?: string; messages?: Array<{ role: string; content?: unknown }> };
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; summary?: string });
+    expect(auth).toBe("Bearer sk-worker-test");
+    expect(parsed.model).toBe("worker-model");
+    expect(parsed.messages?.some((message) => message.role === "user" && String(message.content).includes("byok worker"))).toBe(true);
+    expect(lines.some((line) => line.type === "worker.finished" && line.summary === "lynn-cli worker completed")).toBe(true);
+  });
+
   it("collects git diff summaries from a worktree", async () => {
     const repo = await makeTempGitRepo();
     await fs.writeFile(path.join(repo, "added.txt"), "hello\nworld\n");
