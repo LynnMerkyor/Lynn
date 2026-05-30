@@ -9,6 +9,23 @@ The CLI handles terminal UX, worker JSONL, and local file/shell orchestration.
 
 ## Quick start
 
+Install from the Lynn Tencent mirror:
+
+```bash
+npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0-alpha.0.tgz
+
+# Rolling preview build for testers:
+npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz
+```
+
+If npm dependency downloads are slow in mainland China, keep the Lynn tarball URL
+as-is and add a registry mirror for third-party dependencies:
+
+```bash
+npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz \
+  --registry=https://registry.npmmirror.com
+```
+
 ```bash
 Lynn version
 Lynn doctor --offline

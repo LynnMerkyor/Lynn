@@ -170,6 +170,21 @@ export function WorkerCard({
         </div>
       )}
 
+      {worker.planItems.length > 0 && (
+        <div className={s.planBox}>
+          <div className={s.planHead}>TodoWrite · Update todos</div>
+          <ul className={s.planList}>
+            {worker.planItems.map((item, index) => (
+              <li key={item.id || index} data-status={item.status}>
+                <span className={s.planGlyph}>{item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '●' : '○'}</span>
+                <span className={s.planId}>{item.id || `P${index + 1}`}</span>
+                <span className={s.planText}>{item.content}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {isVision && (
         <div className={s.visualResult}>
           <div className={s.visualResultHead}>

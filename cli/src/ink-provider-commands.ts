@@ -1,6 +1,7 @@
 import { type ParsedArgs } from "./args.js";
 import { buildChatProviderArgs, shouldRefreshProviderRoute, shouldShowProviderSetUsage } from "./commands/chat.js";
 import { renderProvidersInfo, resolveProvidersInfo, runProviders } from "./commands/providers.js";
+import { normalizeSlashInput } from "./completion.js";
 import { t } from "./i18n.js";
 import { resolveCliProviderProfile, type CliProviderProfile } from "./provider-profile.js";
 
@@ -11,7 +12,7 @@ export interface InkProviderCommandResult {
 }
 
 export async function handleInkProviderCommand(raw: string, baseArgs: ParsedArgs): Promise<InkProviderCommandResult> {
-  const text = raw.trim();
+  const text = normalizeSlashInput(raw.trim());
   if (text === "/model" || text === "/providers" || text === "/byok") {
     return {
       handled: true,

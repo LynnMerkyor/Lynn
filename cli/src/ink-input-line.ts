@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text, useCursor, useStdout } from "ink";
-import { completeSlash } from "./completion.js";
+import { completeSlash, normalizeSlashInput } from "./completion.js";
+import { t } from "./i18n.js";
 import { visibleLength } from "./startup.js";
 
 export interface InkInputLineProps {
@@ -16,17 +17,21 @@ export function InkInputLine({ value, placeholder, danger, commands = [] }: InkI
   const prompt = "› ";
   const width = Math.max(20, (stdout.columns || 80) - 2);
   const hint = slashHint(value, commands, width - visibleLength(prompt));
+  const palette = slashPalette(value, commands);
   const visibleText = value || placeholder;
   const cursorX = Math.min(width - 1, visibleLength(`${prompt}${value}`));
   const rawWidth = visibleLength(`${prompt}${visibleText}${hint ? ` ${hint}` : ""}`);
   const pad = Math.max(0, width - rawWidth);
   setCursorPosition({ x: cursorX, y: Number.MAX_SAFE_INTEGER });
   const backgroundColor = danger ? "red" : "gray";
-  return React.createElement(Box, { marginTop: 1 },
-    React.createElement(Text, { backgroundColor, color: "white" }, prompt),
-    React.createElement(Text, { backgroundColor, color: value ? "white" : "black" }, visibleText),
-    hint ? React.createElement(Text, { backgroundColor, color: "black" }, ` ${hint}`) : null,
-    pad ? React.createElement(Text, { backgroundColor }, " ".repeat(pad)) : null,
+  return React.createElement(Box, { marginTop: 1, flexDirection: "column" },
+    palette ? React.createElement(Text, { color: "gray" }, palette) : null,
+    React.createElement(Box, null,
+      React.createElement(Text, { backgroundColor, color: "white" }, prompt),
+      React.createElement(Text, { backgroundColor, color: value ? "white" : "black" }, visibleText),
+      hint ? React.createElement(Text, { backgroundColor, color: "black" }, ` ${hint}`) : null,
+      pad ? React.createElement(Text, { backgroundColor }, " ".repeat(pad)) : null,
+    ),
   );
 }
 
@@ -38,6 +43,47 @@ export function slashHint(input: string, commands: string[], maxWidth = 72): str
   const candidates = completion.matches.slice(0, suffix ? 4 : 5).join("  ");
   const hint = suffix ? `${suffix}    ${candidates}` : candidates;
   return truncateMiddle(hint, Math.max(8, maxWidth - visibleLength(input) - 4));
+}
+
+export function slashPalette(input: string, commands: string[], maxItems = 6): string {
+  const normalized = normalizeSlashInput(input);
+  if (!normalized.startsWith("/") || !commands.length) return "";
+  const completion = completeSlash(normalized, commands);
+  if (!completion.matches.length) return t("slash.unknown");
+  return completion.matches
+    .slice(0, maxItems)
+    .map((command) => `${command} ${slashCommandLabel(command)}`.trim())
+    .join("   ");
+}
+
+function slashCommandLabel(command: string): string {
+  const key = command.split(/\s+/)[0];
+  switch (key) {
+    case "/model":
+      return t("slash.label.model");
+    case "/providers":
+    case "/byok":
+    case "/setup":
+      return t("slash.label.providers");
+    case "/mode":
+      return t("slash.label.mode");
+    case "/fast":
+      return t("slash.label.fast");
+    case "/think":
+    case "/reasoning":
+      return t("slash.label.think");
+    case "/help":
+      return t("slash.label.help");
+    case "/exit":
+    case "/quit":
+      return t("slash.label.exit");
+    case "/tools":
+      return t("slash.label.tools");
+    case "/clear":
+      return t("slash.label.clear");
+    default:
+      return "";
+  }
 }
 
 function truncateMiddle(value: string, maxWidth: number): string {

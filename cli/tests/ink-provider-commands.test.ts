@@ -40,6 +40,15 @@ describe("Ink provider commands", () => {
     expect(result.message).toContain("Default route");
   });
 
+  it("normalizes full-width slash for model route commands", async () => {
+    const { args } = await makeBaseArgs();
+
+    const result = await handleInkProviderCommand("／model", args);
+
+    expect(result.handled).toBe(true);
+    expect(result.message).toContain("Current route");
+  });
+
   it("prints set usage for bare interactive provider setup commands", async () => {
     const { args, dataDir } = await makeBaseArgs();
 
@@ -77,6 +86,15 @@ describe("Ink provider commands", () => {
     const { args } = await makeBaseArgs();
 
     await expect(handleInkProviderCommand("hello", args)).resolves.toEqual({
+      handled: false,
+      message: "",
+    });
+  });
+
+  it("leaves unknown slash commands for the local unknown-command guard", async () => {
+    const { args } = await makeBaseArgs();
+
+    await expect(handleInkProviderCommand("/not-a-command", args)).resolves.toEqual({
       handled: false,
       message: "",
     });

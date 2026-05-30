@@ -33,6 +33,7 @@ const steps = [
   ["Typecheck runtime", "npm", ["run", "typecheck:runtime"]],
   ["Build CLI", "npm", ["run", "build:cli"]],
   ["CLI smoke", "node", ["scripts/cli-smoke.mjs"]],
+  ["CLI packed install smoke", "node", ["scripts/cli-install-smoke.mjs"]],
   ...(!has("--no-cli-fleet") ? [["CLI/Fleet focused regressions", "npm", ["run", "test:cli-fleet"]]] : []),
   ...(!has("--quick") ? [["Vitest full suite", "npm", ["test", "--", "--reporter=dot"]]] : []),
   ...(!has("--no-build") ? [

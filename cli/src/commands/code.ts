@@ -15,7 +15,7 @@ import { bold, dangerLine, dim, green, red, supportsColor } from "../terminal-st
 import { renderPatchPreview } from "../diff-format.js";
 import { renderMarkdown } from "../markdown.js";
 import { HistoryNavigator, appendHistory, historyPath, loadHistory } from "../history.js";
-import { completeSlash } from "../completion.js";
+import { completeSlash, normalizeSlashInput } from "../completion.js";
 import { readInteractiveLine } from "../interactive-line.js";
 import { box, displayCwd, padLine } from "../startup.js";
 import { t } from "../i18n.js";
@@ -173,7 +173,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
         completions: slashCommands,
       });
       if (raw === null) break;
-      const text = raw.trim();
+      const text = normalizeSlashInput(raw.trim());
       if (!text) continue;
       history.push(text);
       appendHistory(text, histFile);
@@ -244,6 +244,10 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       }
       if (text.startsWith("/providers ") || text.startsWith("/byok ")) {
         output.write(`${t("chat.providers.usage")}\n\n`);
+        continue;
+      }
+      if (text.startsWith("/")) {
+        output.write(`${t("slash.unknown")}\n\n`);
         continue;
       }
       const taskArgs: ParsedArgs = {

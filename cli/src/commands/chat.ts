@@ -12,7 +12,7 @@ import { resolveCliProviderProfile } from "../provider-profile.js";
 import { t } from "../i18n.js";
 import { MarkdownStream } from "../markdown.js";
 import { appendHistory, historyPath, loadHistory } from "../history.js";
-import { completeSlash } from "../completion.js";
+import { completeSlash, normalizeSlashInput } from "../completion.js";
 import { resolveEffectivePermissions } from "../permissions.js";
 import { HistoryNavigator } from "../history.js";
 import { readInteractiveLine } from "../interactive-line.js";
@@ -79,7 +79,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     output.write(`${renderOfflineChatHint(mode, brainUrl, cliProvider?.profile)}\n\n`);
   }
   async function handleText(raw: string): Promise<"continue" | "break"> {
-    const text = raw.trim();
+    const text = normalizeSlashInput(raw.trim());
     if (!text) return "continue";
     appendHistory(text, histFile);
     if (text === "/exit" || text === "/quit") return "break";
@@ -144,6 +144,10 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     }
     if (text.startsWith("/providers ") || text.startsWith("/byok ")) {
       output.write(`${t("chat.providers.usage")}\n\n`);
+      return "continue";
+    }
+    if (text.startsWith("/")) {
+      output.write(`${t("slash.unknown")}\n\n`);
       return "continue";
     }
     if (text === "/clear") {

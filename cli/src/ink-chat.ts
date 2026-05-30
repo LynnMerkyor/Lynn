@@ -6,6 +6,7 @@ import { formatBrainErrorForHuman, summarizeUsage } from "./brain-render.js";
 import { HistoryNavigator, appendHistory, historyPath, loadHistory } from "./history.js";
 import { t } from "./i18n.js";
 import { completeSlash } from "./completion.js";
+import { normalizeSlashInput } from "./completion.js";
 import { parseReasoningOptions, shouldRenderReasoning, type ReasoningOptions } from "./reasoning.js";
 import { resolveCliProviderProfile, type CliProviderProfile } from "./provider-profile.js";
 import { resolveEffectivePermissions } from "./permissions.js";
@@ -215,7 +216,7 @@ async function submitInput(inputData: {
   reasoning: ReasoningOptions;
   mode: ChatMode;
 }): Promise<void> {
-  const text = inputData.text.trim();
+  const text = normalizeSlashInput(inputData.text.trim());
   if (!text) return;
   inputData.setInput("");
   appendHistory(text, historyPath());
@@ -260,6 +261,10 @@ async function submitInput(inputData: {
       inputData.setProvider(chatRouteLabel(providerCommand.refreshedProvider));
     }
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: providerCommand.message }]);
+    return;
+  }
+  if (text.startsWith("/")) {
+    inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("slash.unknown") }]);
     return;
   }
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Text, render, useApp, useInput } from "ink";
 import { getStringFlag, hasFlag, type ParsedArgs } from "./args.js";
-import { completeSlash } from "./completion.js";
+import { completeSlash, normalizeSlashInput } from "./completion.js";
 import type { CodeAgentApprovalRequest, CodeAgentEvent } from "./commands/code.js";
 import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type ChatMode } from "./commands/chat.js";
 import { displayCwd } from "./startup.js";
@@ -169,7 +169,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   });
 
   const submitInput = async (raw: string) => {
-    const text = raw.trim();
+    const text = normalizeSlashInput(raw.trim());
     if (!text) return;
     setInput("");
     appendHistory(text, historyPath());
@@ -216,6 +216,10 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
           : props.modelLabel);
       }
       pushItem({ kind: "system", text: providerCommand.message });
+      return;
+    }
+    if (text.startsWith("/")) {
+      pushItem({ kind: "system", text: t("slash.unknown") });
       return;
     }
 

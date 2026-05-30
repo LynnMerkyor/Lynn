@@ -24,3 +24,8 @@ export function completeSlash(input: string, commands: string[]): { completed: s
   const prefix = commonPrefix(matches);
   return { completed: prefix.length > input.length ? prefix : input, matches };
 }
+
+export function normalizeSlashInput(input: string): string {
+  const trimmed = input.trimStart();
+  return trimmed.startsWith("／") ? `/${trimmed.slice(1)}` : trimmed;
+}

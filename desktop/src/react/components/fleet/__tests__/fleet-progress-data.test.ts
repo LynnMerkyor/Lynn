@@ -76,6 +76,52 @@ describe('worker.progress data (vision + runner context)', () => {
     expect(v.review).toEqual({ action: 'integrated', commit: 'def5678', sourceCommit: 'abc1234', branch: 'fleet/test', changed: true });
   });
 
+  it('captures TodoWrite plan progress data', () => {
+    let v = createWorkerView('w1');
+    v = reduceFleetWorker(v, {
+      type: 'worker.progress',
+      workerId: 'w1',
+      message: 'TodoWrite · Update todos',
+      data: {
+        kind: 'plan',
+        items: [
+          { id: 'S0', content: '探索代码库结构', status: 'completed' },
+          { id: 'C1', content: '实现修复', status: 'in_progress' },
+          { content: '运行门禁', status: 'pending' },
+        ],
+      },
+    });
+
+    expect(v.planItems).toEqual([
+      { id: 'S0', content: '探索代码库结构', status: 'completed' },
+      { id: 'C1', content: '实现修复', status: 'in_progress' },
+      { id: 'P3', content: '运行门禁', status: 'pending' },
+    ]);
+  });
+
+  it('normalizes loose TodoWrite status shapes', () => {
+    let v = createWorkerView('w1');
+    v = reduceFleetWorker(v, {
+      type: 'worker.progress',
+      workerId: 'w1',
+      message: 'TodoWrite',
+      data: {
+        kind: 'plan',
+        items: [
+          { title: 'done item', state: 'done' },
+          { text: 'active item', status: 'running' },
+          'loose string item',
+        ],
+      },
+    });
+
+    expect(v.planItems).toEqual([
+      { id: 'P1', content: 'done item', status: 'completed' },
+      { id: 'P2', content: 'active item', status: 'in_progress' },
+      { id: 'P3', content: 'loose string item', status: 'pending' },
+    ]);
+  });
+
   it('captures structured worker.visual_result events', () => {
     let v = createWorkerView('w1', 'mimo-vl');
     v = reduceFleetWorker(v, {

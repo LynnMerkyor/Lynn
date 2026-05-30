@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commonPrefix, completeSlash } from "../src/completion.js";
+import { commonPrefix, completeSlash, normalizeSlashInput } from "../src/completion.js";
 
 const CMDS = ["/exit", "/help", "/think", "/tools", "/mode", "/model"];
 
@@ -31,5 +31,12 @@ describe("commonPrefix", () => {
     expect(commonPrefix(["/mode", "/model"])).toBe("/mode");
     expect(commonPrefix(["/think", "/tools"])).toBe("/t");
     expect(commonPrefix([])).toBe("");
+  });
+});
+
+describe("normalizeSlashInput", () => {
+  it("keeps ASCII slash commands and normalizes full-width slash commands", () => {
+    expect(normalizeSlashInput("/model")).toBe("/model");
+    expect(normalizeSlashInput("／model")).toBe("/model");
   });
 });

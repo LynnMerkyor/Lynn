@@ -353,6 +353,64 @@
   font-family: var(--mono-font, monospace);
 }
 
+.planBox {
+  margin-top: 6px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(142, 168, 255, 0.22);
+  background: rgba(88, 116, 190, 0.08);
+}
+
+.planHead {
+  color: #77c7d8;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.planList {
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.planList li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  font-family: var(--mono-font, monospace);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.planList li[data-status='in_progress'] {
+  color: #f1c40f;
+}
+
+.planList li[data-status='completed'] {
+  color: #2ecc71;
+}
+
+.planGlyph {
+  width: 12px;
+  flex: none;
+  text-align: center;
+}
+
+.planId {
+  flex: none;
+  opacity: 0.7;
+}
+
+.planText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .statusChip {
   margin-left: 6px;
   font-size: 11px;

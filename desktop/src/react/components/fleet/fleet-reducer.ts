@@ -18,7 +18,7 @@ import type {
 
 /** Structured payload the server attaches to worker.progress.data (B1 vision / B3 runner). */
 interface FleetProgressData {
-  kind?: 'vision' | 'runner' | 'review';
+  kind?: 'vision' | 'runner' | 'review' | 'plan';
   taskType?: 'code' | 'see' | 'ground' | 'ui2code';
   image?: string;
   mode?: 'stub' | 'spawned';
@@ -31,6 +31,7 @@ interface FleetProgressData {
   changed?: boolean;
   path?: string;
   line?: string;
+  items?: unknown;
 }
 
 export interface FleetTestResult {
@@ -73,6 +74,14 @@ export interface FleetCheckpointView {
   line?: string;
 }
 
+export type FleetPlanStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface FleetPlanItemView {
+  content: string;
+  status: FleetPlanStatus;
+  id?: string;
+}
+
 export interface FleetVisualResultView {
   taskType: 'see' | 'ground' | 'ui2code';
   image?: string;
@@ -105,6 +114,7 @@ export interface FleetWorkerView {
   tools: FleetToolRun[];
   usage?: FleetUsageView;
   checkpoint?: FleetCheckpointView;
+  planItems: FleetPlanItemView[];
   tests: FleetTestResult[];
   gate: { ok: boolean; summary: string } | null;
   violations: FleetViolation[];
@@ -144,6 +154,7 @@ export function createWorkerView(workerId: string, agent?: string): FleetWorkerV
     changedFiles: [],
     diffStat: null,
     tools: [],
+    planItems: [],
     tests: [],
     gate: null,
     violations: [],
@@ -279,6 +290,8 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
           if (data.action === 'approved') next.status = 'completed';
           if (data.action === 'integrated') next.status = 'completed';
           if (data.action === 'discarded') next.status = 'cancelled';
+        } else if (data.kind === 'plan') {
+          next.planItems = normalizeFleetPlanItems(data.items);
         }
         if ((ev.message.startsWith('checkpoint:') || ev.message === 'session saved') && (data.path || data.line)) {
           next.checkpoint = { path: data.path, line: data.line };
@@ -383,6 +396,41 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
       return _exhaustive ? prev : prev;
     }
   }
+}
+
+export function normalizeFleetPlanItems(value: unknown): FleetPlanItemView[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item, index) => normalizeFleetPlanItem(item, index))
+    .filter((item): item is FleetPlanItemView => !!item);
+}
+
+function normalizeFleetPlanItem(value: unknown, index: number): FleetPlanItemView | null {
+  if (typeof value === 'string') {
+    const content = value.trim();
+    return content ? { content, status: 'pending', id: `P${index + 1}` } : null;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const content = firstString(record.content, record.text, record.title, record.task, record.step)?.trim();
+  if (!content) return null;
+  return {
+    content,
+    status: normalizeFleetPlanStatus(firstString(record.status, record.state)),
+    id: firstString(record.id, record.key, record.name) || `P${index + 1}`,
+  };
+}
+
+function normalizeFleetPlanStatus(value: string | undefined): FleetPlanStatus {
+  const key = (value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (key === 'in_progress' || key === 'doing' || key === 'active' || key === 'current' || key === 'running') return 'in_progress';
+  if (key === 'completed' || key === 'complete' || key === 'done' || key === 'finished' || key === 'success') return 'completed';
+  return 'pending';
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  const value = values.find((entry) => typeof entry === 'string' && entry.trim());
+  return typeof value === 'string' ? value : undefined;
 }
 
 /** Attribute an event to its worker (creating the view on first sight) and fold it in. */
