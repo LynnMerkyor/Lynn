@@ -87,6 +87,26 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
 
 机器调用请只解析 JSONL,不要解析人类 TUI。完整契约见 [`docs/ops/lynn-code-headless-agent-contract.md`](docs/ops/lynn-code-headless-agent-contract.md)。
 
+### Agent Quick Contract
+
+`Lynn` 也可以作为给 Codex / Claude Code / Qwen / Kimi 调用的 worker-runner。交互式 TUI 给人看;机器调用请用 `-p --json` 或 `worker run --jsonl`。
+
+```bash
+# 单次无交互任务,打印 JSON/JSONL 后退出。
+Lynn -p "总结这个 repo" --json
+git diff | Lynn code -p "审查这个 diff,只输出风险和测试建议" --json
+
+# Fleet worker:GUI Fleet 与各家 coding CLI 的统一适配器。
+Lynn worker run --brief task.md --worktree . --jsonl
+Lynn worker run --brief task.md --worktree . --agent codex-cli --jsonl
+Lynn worker run --brief task.md --worktree . --agent claude-code --jsonl
+Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
+```
+
+一个 `--agent` 把任务派给 Codex / Claude Code / Qwen / Kimi / CodeBuddy / OpenCode 或 Lynn 自身,统一吐 Fleet JSONL。安全边界守在 Lynn 侧(ownership / forbidden-glob / diff 校验 / gate),不依赖外部 worker 自觉。
+
+成功信号 = `gate.finished.ok`;硬失败 = `worker.violation` 或 `worker.error{recoverable:false}`。完整规范(BYOK 配置 / agent 适配表 / 全事件 schema / code tools)见 [`docs/ops/lynn-cli-agent-contract.md`](docs/ops/lynn-cli-agent-contract.md)。
+
 ## 🆕 近期更新
 
 <details>

@@ -1,97 +1,104 @@
 {
-  "collected_at": "2026-05-28T04:50:52+00:00",
+  "collected_at": "2026-05-30T04:34:57+00:00",
   "author": "nerkyor",
   "models": [
     {
       "id": "nerkyor/Lynn-V4-Flash-Distill-Qwen-35B-A3B-BF16-merged",
       "name": "Lynn-V4-Flash-Distill-Qwen-35B-A3B-BF16-merged",
-      "downloads_30d": 445,
+      "downloads_30d": 461,
       "likes": 1,
       "last_modified": "2026-05-15"
     },
     {
       "id": "nerkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
       "name": "Qwen3.6-35B-A3B-GGUF-imatrix",
-      "downloads_30d": 365,
+      "downloads_30d": 397,
       "likes": 0,
       "last_modified": "2026-05-21"
     },
     {
       "id": "nerkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF",
       "name": "Qwen3.6-35B-A3B-APEX-MTP-GGUF",
-      "downloads_30d": 318,
+      "downloads_30d": 347,
       "likes": 0,
       "last_modified": "2026-05-23"
     },
     {
       "id": "nerkyor/Qwen3.6-27B-NVFP4-v8-RTN",
       "name": "Qwen3.6-27B-NVFP4-v8-RTN",
-      "downloads_30d": 284,
+      "downloads_30d": 303,
       "likes": 1,
       "last_modified": "2026-05-11"
     },
     {
       "id": "nerkyor/Qwen3.6-35B-A3B-NVFP4-v8-RTN",
       "name": "Qwen3.6-35B-A3B-NVFP4-v8-RTN",
-      "downloads_30d": 270,
+      "downloads_30d": 287,
       "likes": 1,
       "last_modified": "2026-05-11"
     },
     {
-      "id": "nerkyor/Lynn-V4-Flash-Distill-Qwen-35B-A3B-Q4_K_M",
-      "name": "Lynn-V4-Flash-Distill-Qwen-35B-A3B-Q4_K_M",
-      "downloads_30d": 253,
-      "likes": 0,
-      "last_modified": "2026-05-17"
-    },
-    {
       "id": "nerkyor/Qwen3.5-9B-GGUF-imatrix",
       "name": "Qwen3.5-9B-GGUF-imatrix",
-      "downloads_30d": 242,
+      "downloads_30d": 268,
       "likes": 0,
       "last_modified": "2026-05-23"
     },
     {
-      "id": "nerkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix",
-      "name": "Qwen3-4B-Thinking-2507-GGUF-imatrix",
-      "downloads_30d": 205,
-      "likes": 0,
-      "last_modified": "2026-05-23"
-    },
-    {
-      "id": "nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B-Q4_K_M",
-      "name": "Lynn-V4-Pro-Distill-Qwen-35B-A3B-Q4_K_M",
-      "downloads_30d": 202,
+      "id": "nerkyor/Lynn-V4-Flash-Distill-Qwen-35B-A3B-Q4_K_M",
+      "name": "Lynn-V4-Flash-Distill-Qwen-35B-A3B-Q4_K_M",
+      "downloads_30d": 256,
       "likes": 0,
       "last_modified": "2026-05-17"
     },
     {
       "id": "nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B-NVFP4-v8-RTN",
       "name": "Lynn-V4-Pro-Distill-Qwen-35B-A3B-NVFP4-v8-RTN",
-      "downloads_30d": 202,
+      "downloads_30d": 218,
       "likes": 0,
       "last_modified": "2026-05-14"
     },
     {
+      "id": "nerkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix",
+      "name": "Qwen3-4B-Thinking-2507-GGUF-imatrix",
+      "downloads_30d": 213,
+      "likes": 0,
+      "last_modified": "2026-05-23"
+    },
+    {
+      "id": "nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B-Q4_K_M",
+      "name": "Lynn-V4-Pro-Distill-Qwen-35B-A3B-Q4_K_M",
+      "downloads_30d": 203,
+      "likes": 0,
+      "last_modified": "2026-05-17"
+    },
+    {
       "id": "nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B",
       "name": "Lynn-V4-Pro-Distill-Qwen-35B-A3B",
-      "downloads_30d": 142,
+      "downloads_30d": 161,
       "likes": 0,
       "last_modified": "2026-05-14"
     },
     {
       "id": "nerkyor/Qwen3.6-35B-A3B-NVFP4-modelopt",
       "name": "Qwen3.6-35B-A3B-NVFP4-modelopt",
-      "downloads_30d": 125,
+      "downloads_30d": 144,
       "likes": 1,
       "last_modified": "2026-05-12"
     },
     {
       "id": "nerkyor/Qwen3.5-4B-GGUF-imatrix",
       "name": "Qwen3.5-4B-GGUF-imatrix",
-      "downloads_30d": 110,
+      "downloads_30d": 126,
       "likes": 0,
       "last_modified": "2026-05-24"
+    },
+    {
+      "id": "nerkyor/Qwen3.5-9B-GGUF-imatrix-MTP",
+      "name": "Qwen3.5-9B-GGUF-imatrix-MTP",
+      "downloads_30d": 100,
+      "likes": 0,
+      "last_modified": "2026-05-28"
     },
     {
       "id": "nerkyor/Lynn-V4-Flash-Distill-Qwen-35B-A3B-NVFP4-v8-RTN",
@@ -108,6 +115,6 @@
       "last_modified": "2026-05-14"
     }
   ],
-  "total_models": 15,
-  "total_downloads_30d": 3177
+  "total_models": 16,
+  "total_downloads_30d": 3498
 }
