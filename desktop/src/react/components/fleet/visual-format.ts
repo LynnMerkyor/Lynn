@@ -30,3 +30,24 @@ export function groupVisualFiles(files: FleetVisualResultFile[]): Record<VisualF
   }
   return out;
 }
+
+export function visualImageSrc(image: string | null | undefined): string | null {
+  const raw = String(image || '').trim();
+  if (!raw) return null;
+  if (/^(https?:|data:image\/|file:\/\/)/i.test(raw)) return raw;
+  if (!raw.startsWith('/')) return null;
+  return `file://${raw.split('/').map((part) => encodeURIComponent(part)).join('/')}`;
+}
+
+export function visualBoxStyle(box: FleetVisualBox): Record<'left' | 'top' | 'width' | 'height', string> {
+  return {
+    left: `${clamp01(box.x) * 100}%`,
+    top: `${clamp01(box.y) * 100}%`,
+    width: `${clamp01(box.width ?? 0.04) * 100}%`,
+    height: `${clamp01(box.height ?? 0.04) * 100}%`,
+  };
+}
+
+function clamp01(value: number | undefined): number {
+  return Math.max(0, Math.min(1, Number.isFinite(value) ? Number(value) : 0));
+}

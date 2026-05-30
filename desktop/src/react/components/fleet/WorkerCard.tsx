@@ -8,7 +8,7 @@ import { useState } from 'react';
 import type { FleetWorkerView } from './fleet-reducer';
 import type { FleetChangedFile } from '../../../../../shared/fleet-events.js';
 import { classifyDiffLine } from './diff-format';
-import { formatVisualBox, groupVisualFiles, VISUAL_FILE_KINDS } from './visual-format';
+import { formatVisualBox, groupVisualFiles, visualBoxStyle, visualImageSrc, VISUAL_FILE_KINDS } from './visual-format';
 import s from './Fleet.module.css';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -118,6 +118,7 @@ export function WorkerCard({
   const visualResult = worker.visualResult;
   const visualTaskType = worker.taskType ?? visualResult?.taskType;
   const visualImage = worker.image ?? visualResult?.image;
+  const visualPreviewSrc = visualImageSrc(visualImage);
   const isVision = (!!visualTaskType && visualTaskType !== 'code') || !!visualResult;
   const visualText = (visualResult?.summary || worker.assistant.trim() || worker.finished?.summary || '').trim();
   const rs = worker.runner?.source;
@@ -177,6 +178,22 @@ export function WorkerCard({
           </div>
           {visualText ? (
             <div className={s.visualResultBody}>
+              {visualPreviewSrc ? (
+                <div className={s.visualPreview}>
+                  <img className={s.visualPreviewImage} src={visualPreviewSrc} alt={visualImage || 'visual result'} draggable={false} />
+                  {visualResult?.boxes?.map((b, i) => (
+                    <span
+                      key={`${b.label || 'box'}-${i}`}
+                      className={s.visualOverlayBox}
+                      style={visualBoxStyle(b)}
+                      title={formatVisualBox(b, i)}
+                      aria-label={formatVisualBox(b, i)}
+                    >
+                      <span className={s.visualOverlayLabel}>{b.label || `box ${i + 1}`}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               {visualText}
               <span className={visualResult ? s.structuredTag : s.unstructuredTag}>
                 {visualResult ? 'structured result' : 'unstructured preview'}
