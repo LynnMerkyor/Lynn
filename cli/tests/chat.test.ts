@@ -1,6 +1,9 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import http from "node:http";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import {
@@ -21,6 +24,8 @@ import {
 } from "../src/commands/chat.js";
 import { BrainConnectionError } from "../src/brain-client.js";
 import { setLang } from "../src/i18n.js";
+
+const cliRoot = fileURLToPath(new URL("..", import.meta.url));
 
 beforeEach(() => setLang("en"));
 afterEach(() => setLang(null));
@@ -183,5 +188,75 @@ describe("chat mode controls", () => {
     } finally {
       await fs.rm(dataDir, { recursive: true, force: true });
     }
+  });
+
+  it("runs interactive chat through CLI BYOK when Brain is offline", async () => {
+    let requestBody = "";
+    const provider = http.createServer((request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      expect(request.headers.authorization).toBe("Bearer sk-chat-test");
+      request.on("data", (chunk) => {
+        requestBody += String(chunk);
+      });
+      request.on("end", () => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"chat byok ok\"}}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":3,\"total_tokens\":6}}",
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        "--import",
+        "tsx",
+        "src/cli.ts",
+        "chat",
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-chat-test",
+        "--model",
+        "chat-model",
+      ], {
+        cwd: cliRoot,
+        env: { ...process.env, NO_COLOR: "1", LYNN_LANG: "en" },
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error("interactive chat did not exit"));
+      }, 5000);
+      child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+      child.on("error", reject);
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        resolve({ code, stdout, stderr });
+      });
+      child.stdin.write("hi\n/exit\n");
+      child.stdin.end();
+    });
+    await new Promise<void>((resolve) => provider.close(() => resolve()));
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("chat byok ok");
+    expect(result.stderr).toContain("route:  fallback: brain(offline) -> cli-byok:openai-compatible");
+    expect(result.stderr).toContain("6 tokens");
+    expect(JSON.parse(requestBody)).toMatchObject({
+      model: "chat-model",
+      stream: true,
+      messages: [{ role: "user", content: "hi" }],
+    });
   });
 });
