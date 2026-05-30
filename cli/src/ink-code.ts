@@ -20,6 +20,7 @@ import { analyzePastedContext, appendPastedText, summarizePastedContext } from "
 import { modelLabelWithId } from "./provider-presets.js";
 import { handleMemorySlashCommand } from "./session/memory.js";
 import { resolveDataDir } from "./session/store.js";
+import { addCodeInputMediaFlags, prepareCodeTaskInput } from "./code-input.js";
 
 type CodeItem =
   | { id: number; kind: "user"; text: string }
@@ -299,23 +300,24 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     text: string,
     transformFlags: (flags: Record<string, string | boolean>) => Record<string, string | boolean> = (flags) => flags,
   ) => {
-    pushItem({ kind: "user", text });
+    const prepared = prepareCodeTaskInput(text, effectiveCwd, t("chat.image.defaultPrompt"));
+    pushItem({ kind: "user", text: prepared.contextSummary ? `${prepared.task}\n${prepared.contextSummary}` : prepared.task });
     assistantId.current = Date.now() + 1;
     setItems((current) => [...current, { id: assistantId.current!, kind: "assistant" as const, text: "" }].slice(-14));
     setBusy(true);
     try {
       const taskArgs: ParsedArgs = {
         ...props.args,
-        positionals: [text],
-        flags: transformFlags({
+        positionals: [prepared.task],
+        flags: addCodeInputMediaFlags(transformFlags({
           ...props.args.flags,
           approval: mode.approval,
           sandbox: mode.sandbox,
           reasoning: reasoning.effort,
           "show-reasoning": reasoning.display,
-        }),
+        }), prepared.mediaPaths),
       };
-      await props.runTask(taskArgs, text, handleAgentEvent, { requestApproval });
+      await props.runTask(taskArgs, prepared.task, handleAgentEvent, { requestApproval });
     } catch (error) {
       pushItem({ kind: "system", text: error instanceof Error ? error.message : String(error), tone: "danger" });
     } finally {
