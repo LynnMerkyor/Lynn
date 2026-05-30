@@ -30,6 +30,8 @@ export const CHAT_SLASH_COMMANDS = [
   "/fast",
   "/think",
   "/reasoning",
+  "/yolo",
+  "/ask",
   "/mode",
   "/model",
   "/model mimo",
@@ -122,6 +124,11 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       const result = applyReasoningCommand(reasoning, text.slice(11).trim());
       reasoning = result.reasoning;
       output.write(`${result.message}\n${t("reasoning.state", { effort: reasoning.effort, display: reasoning.display })}\n\n`);
+      return "continue";
+    }
+    if (text === "/yolo" || text === "/ask") {
+      const result = applyModeCommand(mode, text.slice(1));
+      output.write(renderInteractiveModeChange(result, mode, supportsColor(output)));
       return "continue";
     }
     if (text === "/mode") {

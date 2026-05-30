@@ -67,7 +67,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "brain.error.allProvidersFailed": "默认 StepFun 3.7 Flash→MiMo V2.5 Pro 路由在线,但 Brain v2 当前没有可用 provider。请在 Lynn 客户端 Providers 配置 Brain 路由密钥；只有想让 CLI 脱离客户端单独使用时,才运行: Lynn providers set --preset stepfun --api-key <key>",
     "code.placeholder": "描述一个编码任务,或输入 /help",
     "chat.placeholder": "输入消息,或粘贴 / 拖入图片 / 音频 / 视频路径分析;/help 看命令",
-    "code.tip": "提示:/fast 快速编辑,/think 深度推理,/mode yolo 允许本地改动。",
+    "code.tip": "提示:/fast 快速编辑,/think 深度推理,/yolo 零审批允许本地改动。",
     "code.route.mock": "模拟 Brain",
     "code.route.brain": "经本地 Brain 路由的 StepFun 3.7 Flash→MiMo V2.5 Pro",
     "code.label.think": "思考",
@@ -91,10 +91,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/think 深度推理\n" +
       "/reasoning 查看或设置推理模式\n" +
       "/mode 查看权限模式\n" +
+      "/yolo 开启零审批 YOLO 模式(本地写入和 shell 命令)\n" +
+      "/ask 回到守护模式(workspace-write)\n" +
       "/mode ask|yolo|read-only|workspace|danger 切换权限\n" +
       "/help 显示命令",
     "chat.reasoning.show": "reasoning:{effort} · display {display}\n用 /fast、/think 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
-    "chat.mode.show": "mode:{mode}\n用 /mode yolo 开启本地写入/命令权限,/mode ask 回到守护模式,或 Shift+Tab 切换。",
+    "chat.mode.show": "mode:{mode}\n用 /yolo 开启零审批本地工具权限,/ask 回到守护模式,或 Shift+Tab 切换。",
     "chat.providers.usage":
       "用法:\n" +
       "  /providers                     查看当前路由\n" +
@@ -132,10 +134,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/providers unset 清除 CLI BYOK\n" +
       "/providers test 测试 CLI BYOK\n" +
       "/mode 查看权限模式\n" +
+      "/yolo 开启零审批 YOLO 模式(本地写入和 shell 命令)\n" +
+      "/ask 回到守护模式(workspace-write)\n" +
       "/mode ask 守护模式(workspace-write)\n" +
       "/mode yolo 允许本地写入和 shell 命令",
     "code.reasoning.show": "think:{effort} / display {display}\n用 /fast、/think 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
-    "code.mode.show": "mode:{mode}\n用 /mode yolo 开启本地工具权限,/mode ask 回到守护模式。",
+    "code.mode.show": "mode:{mode}\n用 /yolo 开启零审批本地工具权限,/ask 回到守护模式。",
     "code.resume.maxSteps": "已保存断点。继续: {command}",
     "code.resume.maxStepsFallback": "已到达步数上限。用 /resume 继续最近的长任务,或用 --resume <session.jsonl> --long。",
     "code.goal.usage": "用法:/goal <长任务描述>。它会开启 1000 步预算并自动保存断点。",
@@ -158,7 +162,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "mode.readonly.enabled": "只读模式已开启。",
     "mode.workspace.enabled": "工作区写入模式已开启。",
     "mode.danger.enabled": "危险全权限模式已开启。",
-    "mode.unknown": "未知权限模式:{raw}。试试 /mode ask 或 /mode yolo。",
+    "mode.unknown": "未知权限模式:{raw}。试试 /ask 或 /yolo。",
     "mode.danger.warning": "危险:YOLO 模式会直接编辑本地文件并运行 shell 命令,不再逐次询问。",
     "code.danger.warning": "危险:YOLO 模式可直接编辑文件并运行 shell 命令,不会逐次询问。",
     "reasoning.effortSet": "推理强度已设为 {value}。",
@@ -307,7 +311,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "brain.error.allProvidersFailed": "The default StepFun 3.7 Flash→MiMo V2.5 Pro route is online, but Brain v2 has no usable provider. Configure Brain route keys in the Lynn client Providers page; use Lynn providers set --preset stepfun --api-key <key> only for CLI-only BYOK without the client.",
     "code.placeholder": "Describe a coding task, or type /help",
     "chat.placeholder": "Type a message, or paste / drop an image / audio / video path to analyze; /help for commands",
-    "code.tip": "Tip: /fast for quick edits, /think for deeper reasoning, /mode yolo to allow local edits.",
+    "code.tip": "Tip: /fast for quick edits, /think for deeper reasoning, /yolo for zero-prompt local edits.",
     "code.route.mock": "mock Brain",
     "code.route.brain": "StepFun 3.7 Flash→MiMo V2.5 Pro via local Brain router",
     "code.label.think": "think",
@@ -331,10 +335,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/think deeper reasoning\n" +
       "/reasoning show or set reasoning mode\n" +
       "/mode show permission mode\n" +
+      "/yolo enable zero-prompt YOLO mode for local writes and shell commands\n" +
+      "/ask return to guarded workspace-write mode\n" +
       "/mode ask|yolo|read-only|workspace|danger change permission mode\n" +
       "/help show commands",
     "chat.reasoning.show": "reasoning: {effort} · display {display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.",
-    "chat.mode.show": "mode: {mode}\nUse /mode yolo for full local tool permission, /mode ask for guarded mode, or Shift+Tab to toggle.",
+    "chat.mode.show": "mode: {mode}\nUse /yolo for zero-prompt local tool permission, /ask for guarded mode, or Shift+Tab to toggle.",
     "chat.providers.usage":
       "Usage:\n" +
       "  /providers                     show current route\n" +
@@ -372,10 +378,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/providers unset clear CLI BYOK\n" +
       "/providers test test CLI BYOK\n" +
       "/mode show permission mode\n" +
+      "/yolo enable zero-prompt YOLO mode for local writes and shell commands\n" +
+      "/ask return to guarded workspace-write mode\n" +
       "/mode ask guarded workspace-write mode\n" +
       "/mode yolo allow local writes and shell commands",
     "code.reasoning.show": "think: {effort} / display {display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.",
-    "code.mode.show": "mode: {mode}\nUse /mode yolo for full local tool permission or /mode ask for guarded mode.",
+    "code.mode.show": "mode: {mode}\nUse /yolo for zero-prompt local tool permission or /ask for guarded mode.",
     "code.resume.maxSteps": "Checkpoint saved. Continue with: {command}",
     "code.resume.maxStepsFallback": "Step budget reached. Use /resume for the latest long task, or --resume <session.jsonl> --long.",
     "code.goal.usage": "Usage: /goal <long-running task>. It enables a 1000-step budget and automatic checkpoints.",
@@ -398,7 +406,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "mode.readonly.enabled": "Read-only mode enabled.",
     "mode.workspace.enabled": "Workspace-write mode enabled.",
     "mode.danger.enabled": "Danger-full-access mode enabled.",
-    "mode.unknown": "Unknown mode: {raw}. Try /mode ask or /mode yolo.",
+    "mode.unknown": "Unknown mode: {raw}. Try /ask or /yolo.",
     "mode.danger.warning": "DANGER: YOLO mode can edit local files and run shell commands without asking again.",
     "code.danger.warning": "DANGER: YOLO mode can edit files and run shell commands without asking.",
     "reasoning.effortSet": "Reasoning effort set to {value}.",

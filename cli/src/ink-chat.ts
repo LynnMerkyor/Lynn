@@ -217,7 +217,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
     React.createElement(Box, { borderStyle: "round", borderColor: "gray", paddingX: 1, flexDirection: "column" },
       React.createElement(Text, { bold: true }, "Lynn CLI"),
       React.createElement(Text, null, `模型: ${provider}`),
-      React.createElement(Text, null, `权限: ${renderMode(mode)}   Shift+Tab / /mode`),
+      React.createElement(Text, null, `权限: ${renderMode(mode)}   Shift+Tab / /yolo / /ask`),
       React.createElement(Text, null, `Brain: ${props.brainUrl}`),
       React.createElement(Text, null, `目录: ${displayCwd(effectiveCwd)}   cd / --cwd 切换`),
     ),
@@ -336,6 +336,13 @@ async function submitInput(inputData: {
     const result = applyReasoningCommand(inputData.reasoning, text.slice(11).trim());
     inputData.setReasoning(result.reasoning);
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: result.message }]);
+    return;
+  }
+  if (text === "/yolo" || text === "/ask") {
+    const next = { ...inputData.mode };
+    const message = applyModeCommand(next, text.slice(1));
+    inputData.setMode(next);
+    inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: message }]);
     return;
   }
   if (text.startsWith("/mode ")) {

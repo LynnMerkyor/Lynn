@@ -70,6 +70,8 @@ const CODE_SLASH_COMMANDS = [
   "/memory add",
   "/memory forget",
   "/cwd",
+  "/yolo",
+  "/ask",
   "/mode",
   "/mode yolo",
   "/model",
@@ -271,6 +273,13 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       await runCodeText(parsed.task, (flags) => withLongRunCodeFlags({ ...flags, resume: parsed.resume }));
       return;
     }
+    if (text === "/yolo" || text === "/ask") {
+      const next = { ...mode };
+      const message = applyModeCommand(next, text.slice(1));
+      setMode(next);
+      pushItem({ kind: "system", text: message, tone: next.approval === "yolo" ? "danger" : "success" });
+      return;
+    }
     if (text.startsWith("/mode ")) {
       const next = { ...mode };
       const message = applyModeCommand(next, text.slice(6).trim());
@@ -369,7 +378,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     React.createElement(Box, { borderStyle: "round", borderColor: danger ? "red" : "gray", paddingX: 1, flexDirection: "column" },
       React.createElement(Text, { bold: true }, "Lynn Code"),
       React.createElement(Text, null, `模型: ${provider}`),
-      React.createElement(Text, { color: danger ? "red" : undefined }, `权限: ${renderMode(mode)}   Shift+Tab / /mode`),
+      React.createElement(Text, { color: danger ? "red" : undefined }, `权限: ${renderMode(mode)}   Shift+Tab / /yolo / /ask`),
       React.createElement(Text, null, `目录: ${displayCwd(effectiveCwd)}   cd / --cwd 切换`),
     ),
     danger ? React.createElement(Text, { color: "red", bold: true }, "YOLO: local edits and shell commands are allowed") : null,

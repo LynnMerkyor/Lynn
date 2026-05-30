@@ -189,6 +189,8 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
     "/goal",
     "/resume",
     "/continue",
+    "/yolo",
+    "/ask",
     "/mode",
     "/model",
     "/model mimo",
@@ -298,6 +300,11 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       }
       if (text === "/mode") {
         output.write(`${t("code.mode.show", { mode: renderMode(mode) })}\n\n`);
+        continue;
+      }
+      if (text === "/yolo" || text === "/ask") {
+        const result = applyModeCommand(mode, text.slice(1));
+        output.write(renderModeChange(result, mode, supportsColor(output)));
         continue;
       }
       if (text.startsWith("/mode ")) {

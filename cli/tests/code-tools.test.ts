@@ -525,7 +525,7 @@ describe("code tools", () => {
     expect(intro).toContain("directory:");
     expect(intro).toContain("/fast");
     expect(intro).toContain("/think");
-    expect(intro).toContain("/mode yolo");
+    expect(intro).toContain("/yolo");
     expect(intro).not.toContain(">_");
   });
 
