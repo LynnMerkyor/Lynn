@@ -216,6 +216,7 @@ describe("worker-run scaffold", () => {
     expect(claude).toContain("--add-dir '/tmp/wt'");
     expect(claude).toContain("--output-format stream-json");
     expect(claude).toContain("--dangerously-skip-permissions");
+    expect(claude?.endsWith("\ntask'")).toBe(true);
 
     expect(qwen).toContain("qwen -p");
     expect(qwen).toContain("--add-dir '/tmp/wt'");

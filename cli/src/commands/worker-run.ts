@@ -122,24 +122,24 @@ export function buildDefaultAgentCommand(agent: string, briefPath: string, workt
       return [
         "claude-internal",
         "-p",
-        shellQuote(prompt),
         "--add-dir",
         shellQuote(worktree),
         "--output-format stream-json",
         "--include-partial-messages",
         "--permission-mode bypassPermissions",
+        shellQuote(prompt),
       ].join(" ");
     case "claude-code":
       return [
         "claude",
         "-p",
-        shellQuote(prompt),
         "--add-dir",
         shellQuote(worktree),
         "--output-format stream-json",
         "--verbose",
         "--include-partial-messages",
         "--dangerously-skip-permissions",
+        shellQuote(prompt),
       ].join(" ");
     case "codex-cli":
       return [
