@@ -38,7 +38,7 @@ export async function handleInkProviderCommand(raw: string, baseArgs: ParsedArgs
     : undefined;
   return {
     handled: true,
-    message: message.trim() || t("chat.providers.routeUnchanged", { route: refreshedProvider?.model || "MiMo→StepFun" }),
+    message: message.trim() || t("chat.providers.routeUnchanged", { route: refreshedProvider?.model || "MiMo V2.5 Pro→StepFun 3.7 Flash" }),
     refreshedProvider,
   };
 }

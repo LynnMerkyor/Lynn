@@ -505,7 +505,7 @@ describe("code tools", () => {
     expect(output).toContain("code.tools");
   });
 
-  it("renders an interactive code-mode intro with MiMo→StepFun route and permission mode", () => {
+  it("renders an interactive code-mode intro with full model route and permission mode", () => {
     const intro = renderCodeIntro({ approval: "ask", sandbox: "workspace-write" });
 
     expect(intro).toContain("Lynn Code");
@@ -555,7 +555,7 @@ describe("code tools", () => {
     });
 
     expect(intro).toContain("CLI BYOK: openai-compatible / step-3.7-flash");
-    expect(header).toContain("CLI BYOK: openai-compatible / step-3.7-flash");
+    expect(header).toContain("CLI BYOK: StepFun 3.7 Flash (step-3.7-flash)");
   });
 
   it("renders a code task header with route, cwd, mode, reasoning, and step budget", () => {
@@ -567,7 +567,7 @@ describe("code tools", () => {
       maxSteps: 8,
     });
 
-    expect(header).toContain("MiMo→StepFun via local Brain router");
+    expect(header).toContain("MiMo V2.5 Pro→StepFun 3.7 Flash via local Brain router");
     expect(header).toContain("/repo");
     expect(header).toContain("ask / workspace-write");
     expect(header).toContain("think:");

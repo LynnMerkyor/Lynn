@@ -1,3 +1,5 @@
+import { modelDisplayName } from "./provider-presets.js";
+
 export interface BrainProviderStatusEntry {
   id: string;
   model: string;
@@ -46,10 +48,11 @@ export function summarizeBrainProviderStatus(status: BrainProviderStatus | null)
   const byId = new Map(status.providers.map((provider) => [provider.id, provider]));
   const route = status.route.slice(0, 6).map((id) => {
     const provider = byId.get(id);
-    if (!provider) return `${id}:unknown`;
-    if (provider.credential === "set") return `${id}:key`;
-    if (provider.credential === "not_required") return `${id}:local`;
-    return `${id}:missing-key`;
+    const label = modelDisplayName(provider?.model || id);
+    if (!provider) return `${label}:unknown`;
+    if (provider.credential === "set") return `${label}:key`;
+    if (provider.credential === "not_required") return `${label}:local`;
+    return `${label}:missing-key`;
   });
   return route.join(" -> ");
 }
@@ -91,17 +94,21 @@ export function brainRouteReadiness(status: BrainProviderStatus | null): BrainRo
   const missingProviders = status.route.filter((id) => !byId.get(id)?.configured);
   const headReady = Boolean(byId.get(headId)?.configured);
   const usable = readyProviders.length > 0;
+  const labelFor = (id: string): string => {
+    const provider = byId.get(id);
+    return modelDisplayName(provider?.model || id);
+  };
 
   let detail = "";
   if (!usable) {
     detail = "no configured provider in route; configure MiMo/StepFun in the Lynn client or CLI BYOK";
   } else if (!headReady) {
-    detail = `head ${headId} not configured; fallback ready: ${readyProviders.join(", ")}`;
+    detail = `head ${labelFor(headId)} not configured; fallback ready: ${readyProviders.map(labelFor).join(", ")}`;
   } else {
-    const fallbacks = readyProviders.slice(1);
+    const fallbacks = readyProviders.slice(1).map(labelFor);
     detail = fallbacks.length > 0
-      ? `head ready: ${headId}; fallback ready: ${fallbacks.join(", ")}`
-      : `head ready: ${headId}`;
+      ? `head ready: ${labelFor(headId)}; fallback ready: ${fallbacks.join(", ")}`
+      : `head ready: ${labelFor(headId)}`;
   }
 
   return {

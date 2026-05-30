@@ -57,8 +57,8 @@ describe("doctor command", () => {
     expect(result.ok).toBe(true);
     expect(result.brainSmoke).toMatchObject({ ok: true, provider: "mimo" });
     expect(result.brainProviders?.route[0]).toBe("mimo");
-    expect(rendered).toContain("brain-route: mimo:key -> step-3.7-flash:missing-key -> apex-spark-i-balanced:local");
-    expect(rendered).toContain("head ready: mimo; fallback ready: apex-spark-i-balanced");
+    expect(rendered).toContain("brain-route: MiMo V2.5 Pro:key -> StepFun 3.7 Flash:missing-key -> Spark Qwen 3.6 35B A3B:local");
+    expect(rendered).toContain("head ready: MiMo V2.5 Pro; fallback ready: Spark Qwen 3.6 35B A3B");
     expect(rendered).toContain("brain-smoke: route returned assistant output via mimo");
   });
 

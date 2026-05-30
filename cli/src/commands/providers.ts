@@ -15,7 +15,7 @@ import {
   type CliProviderProfile,
 } from "../provider-profile.js";
 import { resolveDataDir } from "../session/store.js";
-import { listProviderPresets, resolveProviderPreset } from "../provider-presets.js";
+import { listProviderPresets, modelDisplayName, modelLabelWithId, resolveProviderPreset } from "../provider-presets.js";
 import { chatCompletionsUrl } from "../brain-client.js";
 import { fetchBrainProviderStatus, summarizeBrainProviderStatus, type BrainProviderStatus } from "../brain-status.js";
 import type { ProviderPreset } from "../provider-presets.js";
@@ -165,7 +165,11 @@ export function renderProvidersInfo(info: ProvidersInfo): string {
 }
 
 export function activeRouteLabel(info: Pick<ProvidersInfo, "activeProvider" | "activeModel" | "defaultRoute">): string {
-  return [info.activeProvider, info.activeModel].filter(Boolean).join(" / ") || info.defaultRoute;
+  if (info.activeModel === "lynn-brain-router") return t("providers.route.default");
+  if (info.activeModel) return modelLabelWithId(info.activeModel);
+  if (info.activeProvider === "brain" || info.activeProvider === "lynn-brain-router") return t("providers.route.default");
+  if (info.activeProvider) return modelDisplayName(info.activeProvider);
+  return info.defaultRoute;
 }
 
 export async function resolveProvidersInfo(args: ParsedArgs, timeoutMs = 1500): Promise<ProvidersInfo> {
@@ -399,8 +403,8 @@ export function renderProviderPresets(presets = listProviderPresets()): string {
     t("providers.presets.title"),
     "",
     ...presets.flatMap((preset) => [
-      `${preset.name}`,
-      `  ${t("providers.presets.model")}: ${preset.model}`,
+      `${preset.name} — ${preset.displayName}`,
+      `  ${t("providers.presets.model")}: ${modelLabelWithId(preset.model)}`,
       `  ${t("providers.presets.url")}:   ${preset.baseUrl}`,
       `  ${t("providers.presets.about")}: ${preset.description}`,
       `  ${t("providers.presets.use")}:   Lynn providers set --preset ${preset.name} --api-key <api-key>`,

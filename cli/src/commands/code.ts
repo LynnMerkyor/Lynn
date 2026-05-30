@@ -20,6 +20,7 @@ import { readInteractiveLine } from "../interactive-line.js";
 import { box, displayCwd, padLine } from "../startup.js";
 import { t } from "../i18n.js";
 import { resolveCliProviderProfile, type CliProviderProfile } from "../provider-profile.js";
+import { modelLabelWithId } from "../provider-presets.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "../tools/types.js";
 import { normalizePlanItems, renderPlanItems, type CodePlanItem } from "../plan-tool.js";
@@ -648,7 +649,7 @@ function renderCodeFooter(inputData: {
   usage?: string | null;
 }): string {
   const color = supportsColor(output);
-  const model = inputData.mockBrain ? "mock Brain" : inputData.fallbackProvider ? `${inputData.fallbackProvider.provider}/${inputData.fallbackProvider.model}` : "MiMo→StepFun";
+  const model = inputData.mockBrain ? "mock Brain" : inputData.fallbackProvider ? `CLI BYOK:${modelLabelWithId(inputData.fallbackProvider.model)}` : "MiMo V2.5 Pro→StepFun 3.7 Flash";
   const mode = renderMode(inputData.mode);
   return dim([
     model,
@@ -661,7 +662,7 @@ function renderCodeFooter(inputData: {
 
 function codeRouteLabel(mockBrain: boolean, fallbackProvider?: CliProviderProfile): string {
   if (mockBrain) return t("code.route.mock");
-  if (fallbackProvider) return `CLI BYOK: ${fallbackProvider.provider} / ${fallbackProvider.model}`;
+  if (fallbackProvider) return `CLI BYOK: ${modelLabelWithId(fallbackProvider.model)}`;
   return t("code.route.brain");
 }
 
@@ -1076,8 +1077,8 @@ export function buildCodeRuntimeFrames(inputData: Pick<CodeAgentLoopInput, "cont
       source: "cli",
       text: [
         "You are Lynn CLI code mode.",
-        "The default online route is MiMo first through the local Lynn Brain router, StepFun 3.7 Flash second for fast text/code fallback, and Spark third as local fallback.",
-        "MiMo is the head route and owns image/audio/video/search. Keep responses in the user's language.",
+        "The default online route is MiMo V2.5 Pro first through the local Lynn Brain router, StepFun 3.7 Flash second for fast text/code fallback, and Spark Qwen 3.6 35B A3B third as local fallback.",
+        "MiMo V2.5 Pro is the head route and owns image/audio/video/search. Keep responses in the user's language.",
         "You help with repository-level coding tasks from the terminal.",
         "You may request local tools using exactly one JSON object and no prose:",
         '{"tool":"update_plan|read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',

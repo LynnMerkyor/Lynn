@@ -236,9 +236,9 @@ function startupModelLabel(info: ProvidersInfo, brainReachable: boolean): string
     return `CLI BYOK: ${info.cliProvider.profile.model}`;
   }
   const label = activeRouteLabel(info);
-  if (/^brain\s*\/\s*lynn-brain-router/i.test(label)) return "MiMo → StepFun 3.7 Flash";
-  if (/^MiMo via .*Brain router/i.test(label)) return "MiMo";
-  if (/^StepFun.*MiMo/i.test(label)) return "MiMo → StepFun 3.7 Flash";
+  if (/^brain\s*\/\s*lynn-brain-router/i.test(label)) return "MiMo V2.5 Pro → StepFun 3.7 Flash";
+  if (/^MiMo via .*Brain router/i.test(label)) return "MiMo V2.5 Pro";
+  if (/^StepFun.*MiMo/i.test(label)) return "MiMo V2.5 Pro → StepFun 3.7 Flash";
   return label;
 }
 

@@ -150,7 +150,7 @@ describe("providers command", () => {
       defaultRoute: "MiMo via local Brain router (auto)",
       activeProvider: "mimo",
       activeModel: "mimo-v2.5-pro",
-    })).toBe("mimo / mimo-v2.5-pro");
+    })).toBe("MiMo V2.5 Pro (mimo-v2.5-pro)");
     expect(activeRouteLabel({
       defaultRoute: "MiMo via local Brain router (auto)",
     })).toBe("MiMo via local Brain router (auto)");

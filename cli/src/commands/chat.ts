@@ -17,6 +17,7 @@ import { resolveEffectivePermissions } from "../permissions.js";
 import { HistoryNavigator } from "../history.js";
 import { readInteractiveLine } from "../interactive-line.js";
 import { refreshCliRuntimeSystemMessage, resetCliRuntimeMessages } from "../runtime-context.js";
+import { modelDisplayName, modelLabelWithId } from "../provider-presets.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/exit",
@@ -205,7 +206,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     md.end();
     messages.push({ role: "assistant", content: assistant });
     output.write(`\n${renderStatusBar({
-      model: renderState.provider || t("status.chat.prefix"),
+      model: renderState.provider ? modelDisplayName(renderState.provider) : t("status.chat.prefix"),
       cwd: process.cwd(),
       mode: renderMode(mode),
       reasoning: reasoning.effort,
@@ -264,8 +265,8 @@ export function renderMode(mode: ChatMode): string {
 }
 
 export function chatRouteLabel(provider?: { provider: string; model: string } | null): string {
-  if (provider) return `CLI BYOK: ${provider.model}`;
-  return "MiMo → StepFun 3.7 Flash via Brain router (auto)";
+  if (provider) return `CLI BYOK: ${modelLabelWithId(provider.model)}`;
+  return "MiMo V2.5 Pro → StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B via Brain router (auto)";
 }
 
 export function splitChatCommandLine(raw: string): string[] {
