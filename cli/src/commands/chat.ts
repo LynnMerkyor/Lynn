@@ -16,6 +16,7 @@ import { completeSlash } from "../completion.js";
 import { resolveEffectivePermissions } from "../permissions.js";
 import { HistoryNavigator } from "../history.js";
 import { readInteractiveLine } from "../interactive-line.js";
+import { runInkChat } from "../ink-chat.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/exit",
@@ -47,6 +48,9 @@ export function completeChatInput(line: string): [string[], string] {
 }
 
 export async function runChat(args: ParsedArgs, options: { intro?: boolean; brainReachable?: boolean } = {}): Promise<number> {
+  if (input.isTTY && output.isTTY && hasFlag(args.flags, "ink", "tui") && process.env.LYNN_CLI_LEGACY_TUI !== "1") {
+    return runInkChat(args);
+  }
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
   let reasoning = parseReasoningOptions(args);

@@ -22,5 +22,9 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "ink": "^7.0.5",
+    "react": "^19.2.6"
   }
 }

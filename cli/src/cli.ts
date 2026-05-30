@@ -22,6 +22,10 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   if (argv.length === 0) {
     const providerInfo = await resolveProvidersInfo({ command: "providers", positionals: [], flags: {} }, 500);
     const brainReachable = await checkBrainReachable(providerInfo.brainUrl, 300);
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      if (process.env.LYNN_CLI_LEGACY_TUI !== "1") {
+        return runChat({ command: "chat", positionals: [], flags: { ink: true } }, { intro: false, brainReachable });
+      }
       process.stdout.write(`${renderStartupBanner({
         brainUrl: providerInfo.brainUrl,
         brainStatus: brainReachable ? "online" : "offline",
@@ -29,13 +33,19 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
         byokLabel: providerInfo.cliProvider?.configured ? t("startup.byok.cliFallback") : undefined,
         showTips: brainReachable,
       })}\n`);
-    if (process.stdin.isTTY && process.stdout.isTTY) {
       // Always enter the interactive REPL — even when the Brain is offline.
       // runChat prints the offline hint, then each message returns an actionable
       // recovery line (configure BYOK / start the client) instead of dropping the
       // user back to the shell (which made `Lynn` look like it "doesn't work").
       return runChat({ command: "chat", positionals: [], flags: {} }, { intro: false, brainReachable });
     }
+    process.stdout.write(`${renderStartupBanner({
+      brainUrl: providerInfo.brainUrl,
+      brainStatus: brainReachable ? "online" : "offline",
+      modelLabel: startupModelLabel(providerInfo, brainReachable),
+      byokLabel: providerInfo.cliProvider?.configured ? t("startup.byok.cliFallback") : undefined,
+      showTips: brainReachable,
+    })}\n`);
     return 0;
   }
   const args = parseArgs(argv);
