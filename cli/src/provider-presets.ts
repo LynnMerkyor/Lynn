@@ -16,7 +16,7 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
     provider: "openai-compatible",
     baseUrl: "https://api.stepfun.com/step_plan/v1",
     model: "step-3.7-flash",
-    description: "StepFun 3.7 Flash fast coding / multimodal cloud backend",
+    description: "StepFun 3.7 Flash fast text/coding fallback backend",
   },
   deepseek: {
     provider: "openai-compatible",

@@ -114,7 +114,7 @@ describe("chat mode controls", () => {
 
   it("surfaces CLI BYOK fallback in the chat startup route label", () => {
     expect(chatRouteLabel({ provider: "openai-compatible", model: "step-3.7-flash" })).toBe("CLI BYOK: step-3.7-flash");
-    expect(chatRouteLabel(null)).toBe("StepFun 3.7 Flash → MiMo via Brain router (auto)");
+    expect(chatRouteLabel(null)).toBe("MiMo → StepFun 3.7 Flash via Brain router (auto)");
   });
 
   it("renders CLI BYOK fallback in startup copy", () => {

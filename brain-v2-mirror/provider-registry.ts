@@ -41,8 +41,8 @@ const PROVIDER_DEFS = {
     thinking_control: 'qwen_chat_template',
   },
   // [step-3.7-flash v1] StepFun 云 198B-MoE/11B-A(step_plan 端点)。
-  // 2026-05-30 用户拍板:文本/编码首位走 StepFun 3.7 Flash(TPS/agentic 更优),
-  // 图片/音频/视频首位仍保留 MiMo,继续发挥 MiMo 多模态能力。
+  // 2026-05-30 用户拍板:6月4日前 MiMo Token Plan 配额最宽裕,Brain 头位恢复 MiMo;
+  // StepFun 3.7 Flash 作为高速文本/编码 fallback 第二位,Spark 第三位兜底。
   // reasoning-always(low/med/high 三档,无真 off);wire=openai(content + image_url + tools)。
   'step-3.7-flash': {
     id: providerId('step-3.7-flash'),
@@ -101,9 +101,9 @@ export const PROVIDERS: Record<string, Provider> = PROVIDER_DEFS;
 
 // universalOrder — 单一兜底链路,不按 prompt 内容分支
 export const universalOrder = [
-  providerId('step-3.7-flash'),        // 头位:StepFun 3.7 Flash,高 TPS + coding/agentic 优先
-  providerId('mimo'),                  // 第二位:MiMo 原生搜索/多模态/缓存,作为通用兜底
-  providerId('apex-spark-i-balanced'), // 本地零成本/隐私 fallback:Spark llama.cpp APEX-I-Balanced
+  providerId('mimo'),                  // 头位:MiMo Token Plan 配额充裕,原生搜索/多模态/缓存
+  providerId('step-3.7-flash'),        // 第二位:StepFun 3.7 Flash,高 TPS + coding/agentic fallback
+  providerId('apex-spark-i-balanced'), // 第三位:本地零成本/隐私 fallback,Spark llama.cpp APEX-I-Balanced
   providerId('deepseek-chat'),         // 云兜底 V4-flash
   providerId('deepseek-pro'),          // 云兜底 V4-pro
   providerId('glm-5-turbo'),           // 末位
@@ -111,16 +111,8 @@ export const universalOrder = [
 
 export function providerOrderForCapability(capabilityRequired?: { vision?: boolean; audio?: boolean; video?: boolean }): readonly ProviderId[] {
   if (capabilityRequired?.vision || capabilityRequired?.audio || capabilityRequired?.video) {
-    // 用户拍板 2026-05-30:普通文本/代码体验优先 StepFun 3.7 Flash;但图片/视觉首位保留 MiMo,
-    // 继续发挥 MiMo 的多模态 grounding/search/cache 能力。StepFun capability=false,会被 capability gate 跳过。
-    return [
-      providerId('mimo'),
-      providerId('step-3.7-flash'),
-      providerId('apex-spark-i-balanced'),
-      providerId('deepseek-chat'),
-      providerId('deepseek-pro'),
-      providerId('glm-5-turbo'),
-    ];
+    // 多模态同样以 MiMo 为首位。StepFun/Spark 的 capability=false,会被 capability gate 跳过。
+    return universalOrder;
   }
   return universalOrder;
 }

@@ -14,7 +14,7 @@ export type ModelIdLiteral =
   | 'mimo-v2.5'
   | 'mimo-v2-omni'
   | 'qwen36-35b-a3b-apex-mtp'
-  | 'step-3.7-flash'   // StepFun 198B-MoE/11B-A vision-language, step_plan 端点
+  | 'step-3.7-flash'   // StepFun 198B-MoE/11B-A text/coding fallback, step_plan 端点
   | 'deepseek-v4-flash'
   | 'deepseek-v4-pro'
   | 'GLM-5-Turbo';

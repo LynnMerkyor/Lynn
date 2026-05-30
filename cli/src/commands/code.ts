@@ -644,7 +644,7 @@ function renderCodeFooter(inputData: {
   usage?: string | null;
 }): string {
   const color = supportsColor(output);
-  const model = inputData.mockBrain ? "mock Brain" : inputData.fallbackProvider ? `${inputData.fallbackProvider.provider}/${inputData.fallbackProvider.model}` : "StepFun→MiMo";
+  const model = inputData.mockBrain ? "mock Brain" : inputData.fallbackProvider ? `${inputData.fallbackProvider.provider}/${inputData.fallbackProvider.model}` : "MiMo→StepFun";
   const mode = renderMode(inputData.mode);
   return dim([
     model,
@@ -1072,8 +1072,8 @@ export function buildCodeRuntimeFrames(inputData: Pick<CodeAgentLoopInput, "cont
       source: "cli",
       text: [
         "You are Lynn CLI code mode.",
-        "The default online route is StepFun 3.7 Flash first through the local Lynn Brain router, with MiMo as the multimodal fallback.",
-        "StepFun is the fast text/code route; MiMo remains the image/audio/video route. Keep responses in the user's language.",
+        "The default online route is MiMo first through the local Lynn Brain router, StepFun 3.7 Flash second for fast text/code fallback, and Spark third as local fallback.",
+        "MiMo is the head route and owns image/audio/video/search. Keep responses in the user's language.",
         "You help with repository-level coding tasks from the terminal.",
         "You may request local tools using exactly one JSON object and no prose:",
         '{"tool":"update_plan|read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',

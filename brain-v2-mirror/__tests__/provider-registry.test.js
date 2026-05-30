@@ -2,16 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { getProvider, getProviderStatusSnapshot, PROVIDERS, providerOrderForCapability, universalOrder } from '../provider-registry.js';
 
 describe('provider registry', () => {
-  it('keeps StepFun in the intended universal fallback position', () => {
+  it('keeps MiMo in the intended universal fallback head position', () => {
     expect(universalOrder.map(String).slice(0, 4)).toEqual([
-      'step-3.7-flash',
       'mimo',
+      'step-3.7-flash',
       'apex-spark-i-balanced',
       'deepseek-chat',
     ]);
   });
 
-  it('registers StepFun as a cloud text/tools head without native search', () => {
+  it('registers StepFun as a cloud text/tools fallback without native search', () => {
     const step = getProvider('step-3.7-flash');
     expect(step).toBeTruthy();
     expect(String(step.id)).toBe('step-3.7-flash');
@@ -37,7 +37,7 @@ describe('provider registry', () => {
     expect(getProvider('deepseek-chat').thinking_control).toBeUndefined();
   });
 
-  it('keeps MiMo as the only first-class vision route while text defaults to StepFun', () => {
+  it('keeps MiMo as the first-class vision and text route', () => {
     const visionOrder = providerOrderForCapability({ vision: true })
       .map((id) => PROVIDERS[id])
       .filter((provider) => provider?.capability?.vision)
@@ -45,7 +45,7 @@ describe('provider registry', () => {
 
     expect(visionOrder[0]).toBe('mimo');
     expect(visionOrder).not.toContain('step-3.7-flash');
-    expect(universalOrder.map(String).slice(0, 2)).toEqual(['step-3.7-flash', 'mimo']);
+    expect(universalOrder.map(String).slice(0, 2)).toEqual(['mimo', 'step-3.7-flash']);
     expect(visionOrder).not.toContain('apex-spark-i-balanced');
     expect(visionOrder).not.toContain('deepseek-chat');
   });
@@ -55,7 +55,7 @@ describe('provider registry', () => {
     const step = snapshot.providers.find((provider) => provider.id === 'step-3.7-flash');
     const spark = snapshot.providers.find((provider) => provider.id === 'apex-spark-i-balanced');
 
-    expect(snapshot.route.slice(0, 2)).toEqual(['step-3.7-flash', 'mimo']);
+    expect(snapshot.route.slice(0, 2)).toEqual(['mimo', 'step-3.7-flash']);
     expect(step).toMatchObject({ id: 'step-3.7-flash', credential: expect.any(String), inRoute: true });
     expect(spark).toMatchObject({ credential: 'not_required', configured: true, local: true });
     expect(JSON.stringify(snapshot)).not.toContain('apiKey');

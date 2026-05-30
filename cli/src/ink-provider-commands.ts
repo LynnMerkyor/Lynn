@@ -32,7 +32,7 @@ export async function handleInkProviderCommand(raw: string, baseArgs: ParsedArgs
     : undefined;
   return {
     handled: true,
-    message: message.trim() || t("chat.providers.routeUnchanged", { route: refreshedProvider?.model || "StepFun→MiMo" }),
+    message: message.trim() || t("chat.providers.routeUnchanged", { route: refreshedProvider?.model || "MiMo→StepFun" }),
     refreshedProvider,
   };
 }

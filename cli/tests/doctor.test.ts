@@ -31,7 +31,7 @@ describe("doctor command", () => {
       if (href.endsWith("/v1/providers/status")) {
         return new Response(JSON.stringify({
           ok: true,
-          route: ["step-3.7-flash", "mimo", "apex-spark-i-balanced"],
+          route: ["mimo", "step-3.7-flash", "apex-spark-i-balanced"],
           providers: [
             { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "missing", configured: false, local: false, inRoute: true },
             { id: "mimo", model: "mimo-v2.5-pro", endpoint: "https://token-plan-cn.xiaomimimo.com/v1", wire: "mimo", credential: "set", configured: true, local: false, inRoute: true },
@@ -56,9 +56,9 @@ describe("doctor command", () => {
     expect(result.brain).toBe("ok");
     expect(result.ok).toBe(true);
     expect(result.brainSmoke).toMatchObject({ ok: true, provider: "mimo" });
-    expect(result.brainProviders?.route[0]).toBe("step-3.7-flash");
-    expect(rendered).toContain("brain-route: step-3.7-flash:missing-key -> mimo:key -> apex-spark-i-balanced:local");
-    expect(rendered).toContain("head step-3.7-flash not configured; fallback ready: mimo, apex-spark-i-balanced");
+    expect(result.brainProviders?.route[0]).toBe("mimo");
+    expect(rendered).toContain("brain-route: mimo:key -> step-3.7-flash:missing-key -> apex-spark-i-balanced:local");
+    expect(rendered).toContain("head ready: mimo; fallback ready: apex-spark-i-balanced");
     expect(rendered).toContain("brain-smoke: route returned assistant output via mimo");
   });
 
@@ -69,7 +69,7 @@ describe("doctor command", () => {
       if (href.endsWith("/v1/providers/status")) {
         return new Response(JSON.stringify({
           ok: true,
-          route: ["step-3.7-flash", "mimo"],
+          route: ["mimo", "step-3.7-flash"],
           providers: [
             { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "missing", configured: false, local: false, inRoute: true },
             { id: "mimo", model: "mimo-v2.5-pro", endpoint: "https://token-plan-cn.xiaomimimo.com/v1", wire: "mimo", credential: "missing", configured: false, local: false, inRoute: true },
@@ -94,7 +94,7 @@ describe("doctor command", () => {
       if (href.endsWith("/v1/providers/status")) {
         return new Response(JSON.stringify({
           ok: true,
-          route: ["step-3.7-flash", "mimo"],
+          route: ["mimo", "step-3.7-flash"],
           providers: [
             { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "set", configured: true, local: false, inRoute: true },
             { id: "mimo", model: "mimo-v2.5-pro", endpoint: "https://token-plan-cn.xiaomimimo.com/v1", wire: "mimo", credential: "set", configured: true, local: false, inRoute: true },
