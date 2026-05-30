@@ -410,19 +410,21 @@ function providerTestContentPreview(text: string): string | undefined {
 
 async function maybePromptProviderProfile(args: ParsedArgs, existing: CliProviderProfile | null, json: boolean): Promise<CliProviderProfile | null> {
   if (json || !input.isTTY || !output.isTTY || hasProviderSetFlags(args)) return null;
-  const rl = readline.createInterface({ input, output, terminal: true });
+  let rl = readline.createInterface({ input, output, terminal: true });
   try {
     output.write(`${t("providers.wizard.title")}\n`);
     output.write(`\n${t("providers.wizard.step1")}\n`);
     output.write(`${t("providers.wizard.step1.help")}\n`);
     output.write(`${t("providers.wizard.step1.examples")}\n`);
     const baseUrl = await askWithDefault(rl, t("providers.wizard.baseUrl"), existing?.baseUrl || "https://api.openai.com/v1");
+    rl.close();
     output.write(`\n${t("providers.wizard.step2")}\n`);
     output.write(`${t("providers.wizard.step2.help")}\n`);
     const apiKeyPrompt = existing?.apiKey
       ? t("providers.wizard.apiKey.keep", { key: redactApiKey(existing.apiKey) })
       : `${t("providers.wizard.apiKey")} `;
-    const apiKeyAnswer = (await rl.question(apiKeyPrompt)).trim();
+    const apiKeyAnswer = (await askSecretLine(apiKeyPrompt)).trim();
+    rl = readline.createInterface({ input, output, terminal: true });
     output.write(`\n${t("providers.wizard.step3")}\n`);
     output.write(`${t("providers.wizard.step3.help")}\n`);
     const model = await askWithDefault(rl, t("providers.wizard.model"), existing?.model || "");
@@ -435,6 +437,44 @@ async function maybePromptProviderProfile(args: ParsedArgs, existing: CliProvide
   } finally {
     rl.close();
   }
+}
+
+function askSecretLine(label: string): Promise<string> {
+  return new Promise((resolve) => {
+    let buffer = "";
+    const wasRaw = input.isRaw;
+    const cleanup = () => {
+      input.off("data", onData);
+      if (typeof input.setRawMode === "function") input.setRawMode(wasRaw);
+      output.write("\n");
+    };
+    const finish = () => {
+      cleanup();
+      resolve(buffer);
+    };
+    const onData = (chunk: Buffer | string) => {
+      for (const ch of String(chunk)) {
+        if (ch === "\r" || ch === "\n") {
+          finish();
+          return;
+        }
+        if (ch === "\u0003" || ch === "\u0004") {
+          buffer = "";
+          finish();
+          return;
+        }
+        if (ch === "\u007f" || ch === "\b") {
+          buffer = buffer.slice(0, -1);
+          continue;
+        }
+        if (ch >= " ") buffer += ch;
+      }
+    };
+    if (typeof input.setRawMode === "function") input.setRawMode(true);
+    input.resume();
+    input.on("data", onData);
+    output.write(label);
+  });
 }
 
 function hasProviderSetFlags(args: ParsedArgs): boolean {

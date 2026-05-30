@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "../src/args.js";
 import { activeRouteLabel, renderProviderPresets, renderProvidersInfo, runProviders } from "../src/commands/providers.js";
 import { providerProfilePath, readCliProviderProfile, readEnvProviderProfile, resolveCliProviderProfile, writeCliProviderProfile } from "../src/provider-profile.js";
 import { setLang } from "../src/i18n.js";
+
+const cliRoot = fileURLToPath(new URL("..", import.meta.url));
+const pythonIt = hasPython3() ? it : it.skip;
 
 beforeEach(() => setLang("en"));
 afterEach(() => setLang(null));
@@ -329,6 +334,99 @@ describe("providers command", () => {
     });
   });
 
+  pythonIt("runs the interactive BYOK three-step wizard in a real TTY", async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-provider-wizard-"));
+    const script = `
+import os
+import pty
+import select
+import subprocess
+import sys
+import time
+
+node_bin, cwd, data_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+master, slave = pty.openpty()
+env = os.environ.copy()
+env["NO_COLOR"] = "1"
+env["LYNN_LANG"] = "en"
+proc = subprocess.Popen(
+    [node_bin, "--import", "tsx", "src/cli.ts", "providers", "set", "--data-dir", data_dir],
+    cwd=cwd,
+    stdin=slave,
+    stdout=slave,
+    stderr=slave,
+    env=env,
+    close_fds=True,
+)
+os.close(slave)
+buf = b""
+stage = 0
+deadline = time.time() + 8
+while time.time() < deadline:
+    readable, _, _ = select.select([master], [], [], 0.1)
+    if readable:
+        try:
+            chunk = os.read(master, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        buf += chunk
+        text = buf.decode("utf-8", errors="replace")
+        if stage == 0 and "API URL [" in text:
+            os.write(master, b"https://api.example.com/v1\\r")
+            stage = 1
+        elif stage == 1 and text.endswith("API Key "):
+            os.write(master, b"sk-wizard-secret\\r")
+            stage = 2
+        elif stage == 2 and "Model name" in text:
+            os.write(master, b"wizard-model\\r")
+            stage = 3
+    if proc.poll() is not None:
+        break
+if proc.poll() is None:
+    proc.terminate()
+    try:
+        proc.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+text = buf.decode("utf-8", errors="replace")
+if stage != 3:
+    sys.stderr.write(f"wizard did not complete, stage={stage}\\n")
+sys.stdout.write(text)
+sys.exit(proc.returncode if proc.returncode is not None else 124)
+`;
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn("python3", ["-c", script, process.execPath, cliRoot, dataDir], {
+        cwd: cliRoot,
+        env: { ...process.env },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+      child.on("error", reject);
+      child.on("close", (code) => resolve({ code, stdout, stderr }));
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("Step 1/3: API URL");
+    expect(result.stdout).toContain("Step 2/3: API Key");
+    expect(result.stdout).toContain("Step 3/3: Model name");
+    expect(result.stdout).toContain("Saved CLI BYOK provider");
+    expect(result.stdout).toContain("sk-w…cret");
+    expect(result.stdout).not.toContain("sk-wizard-secret");
+    await expect(readCliProviderProfile(dataDir)).resolves.toEqual({
+      provider: "openai-compatible",
+      baseUrl: "https://api.example.com/v1",
+      model: "wizard-model",
+      apiKey: "sk-wizard-secret",
+    });
+  });
+
   it("does not reuse a stored key for a different provider preset", async () => {
     const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-provider-key-"));
     await fs.mkdir(path.dirname(providerProfilePath(dataDir)), { recursive: true });
@@ -502,6 +600,15 @@ describe("providers command", () => {
     expect(output).toContain("providers set");
   });
 });
+
+function hasPython3(): boolean {
+  try {
+    execFileSync("python3", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function readRequestBody(request: http.IncomingMessage): Promise<string> {
   let body = "";
