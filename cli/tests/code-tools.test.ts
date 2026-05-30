@@ -641,4 +641,103 @@ describe("code tools", () => {
     expect(JSON.stringify(resumed)).toContain("latest user detail");
     expect(JSON.stringify(resumed)).toContain("latest assistant detail");
   });
+
+  it("keeps saved assistant tool calls and matching tool results together when resuming", async () => {
+    const sessionFile = path.join(tmp, "structured-tool-session.jsonl");
+    const turns = [
+      { type: "user", content: "inspect the file" },
+      {
+        type: "assistant",
+        content: "",
+        data: {
+          tool_calls: [{
+            id: "call_read",
+            type: "function",
+            function: { name: "read_file", arguments: "{\"path\":\"src/hello.ts\"}" },
+          }],
+        },
+      },
+      {
+        type: "tool",
+        content: "Tool result for read_file\nhello",
+        data: { tool_call_id: "call_read", name: "read_file" },
+      },
+      { type: "assistant", content: "I saw hello.ts." },
+    ];
+    await fs.writeFile(sessionFile, turns.map((line) => JSON.stringify(line)).join("\n") + "\n", "utf8");
+
+    const resumed = await loadResumeMessages(sessionFile, 2_000);
+
+    expect(resumed).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: "assistant",
+        tool_calls: [expect.objectContaining({ id: "call_read" })],
+      }),
+      expect.objectContaining({
+        role: "tool",
+        tool_call_id: "call_read",
+        content: expect.stringContaining("Tool result for read_file"),
+      }),
+    ]));
+  });
+
+  it("drops orphan tool results when resume compaction cuts off their assistant tool call", async () => {
+    const sessionFile = path.join(tmp, "orphan-tool-session.jsonl");
+    const turns = [
+      { type: "user", content: "old task" },
+      {
+        type: "assistant",
+        content: "",
+        data: {
+          tool_calls: [{
+            id: "call_big",
+            type: "function",
+            function: { name: "grep", arguments: JSON.stringify({ query: "needle".repeat(80) }) },
+          }],
+        },
+      },
+      {
+        type: "tool",
+        content: "short tool result that would have fit alone",
+        data: { tool_call_id: "call_big", name: "grep" },
+      },
+      { type: "user", content: "latest instruction" },
+    ];
+    await fs.writeFile(sessionFile, turns.map((line) => JSON.stringify(line)).join("\n") + "\n", "utf8");
+
+    const resumed = await loadResumeMessages(sessionFile, 80);
+
+    expect(resumed).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "user", content: "latest instruction" }),
+    ]));
+    expect(resumed.some((message) => message.role === "tool")).toBe(false);
+    expect(JSON.stringify(resumed)).not.toContain("call_big");
+  });
+
+  it("strips incomplete assistant tool calls from resumable history", async () => {
+    const sessionFile = path.join(tmp, "incomplete-tool-session.jsonl");
+    const turns = [
+      { type: "user", content: "try a tool" },
+      {
+        type: "assistant",
+        content: "I was about to inspect a file.",
+        data: {
+          tool_calls: [{
+            id: "call_missing",
+            type: "function",
+            function: { name: "read_file", arguments: "{\"path\":\"missing.ts\"}" },
+          }],
+        },
+      },
+      { type: "user", content: "continue safely" },
+    ];
+    await fs.writeFile(sessionFile, turns.map((line) => JSON.stringify(line)).join("\n") + "\n", "utf8");
+
+    const resumed = await loadResumeMessages(sessionFile, 2_000);
+    const assistant = resumed.find((message) => message.role === "assistant" && typeof message.content === "string" && message.content.includes("about to inspect"));
+
+    expect(assistant).toBeTruthy();
+    expect(assistant?.tool_calls).toBeUndefined();
+    expect(JSON.stringify(resumed)).not.toContain("call_missing");
+  });
 });

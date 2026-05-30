@@ -942,22 +942,63 @@ export async function loadResumeMessages(sessionPath: string, maxChars = 24_000)
       }
       return [];
     });
+  const groups = buildResumableMessageGroups(turns);
   const selected: ChatMessage[] = [];
   let chars = 0;
-  for (let i = turns.length - 1; i >= 0; i -= 1) {
-    const turn = turns[i];
-    const len = turn.content.length;
+  for (let i = groups.length - 1; i >= 0; i -= 1) {
+    const group = groups[i];
+    const len = group.reduce((sum, turn) => sum + resumeMessageCost(turn), 0);
     if (selected.length && chars + len > maxChars) break;
-    selected.unshift(turn);
+    selected.unshift(...group);
     chars += len;
   }
-  if (selected.length < turns.length) {
+  if (selected.length < turns.length || selected.length < groups.flat().length) {
     selected.unshift({
       role: "user",
       content: `[Lynn CLI resumed this coding task from ${sessionPath}. Earlier transcript turns were compacted to keep the continuation stable; ask the user or inspect files if missing details matter.]`,
     });
   }
   return selected;
+}
+
+function buildResumableMessageGroups(turns: ChatMessage[]): ChatMessage[][] {
+  const groups: ChatMessage[][] = [];
+  for (let i = 0; i < turns.length; i += 1) {
+    const turn = turns[i];
+    if (turn.role === "assistant" && turn.tool_calls?.length) {
+      const required = new Set(turn.tool_calls.map((toolCall) => toolCall.id));
+      const found = new Set<string>();
+      const tools: ChatMessage[] = [];
+      let j = i + 1;
+      while (j < turns.length) {
+        const candidate = turns[j];
+        if (candidate.role !== "tool" || !candidate.tool_call_id || !required.has(candidate.tool_call_id)) break;
+        tools.push(candidate);
+        found.add(candidate.tool_call_id);
+        j += 1;
+        if (found.size === required.size) break;
+      }
+      if (found.size === required.size) {
+        groups.push([turn, ...tools]);
+      } else if (typeof turn.content === "string" && turn.content.trim()) {
+        const { tool_calls: _toolCalls, ...assistantWithoutToolCalls } = turn;
+        groups.push([assistantWithoutToolCalls]);
+      }
+      i = Math.max(i, j - 1);
+      continue;
+    }
+    if (turn.role === "tool") continue;
+    groups.push([turn]);
+  }
+  return groups;
+}
+
+function resumeMessageCost(message: ChatMessage): number {
+  const contentCost = typeof message.content === "string"
+    ? message.content.length
+    : JSON.stringify(message.content).length;
+  const toolCallCost = message.tool_calls?.length ? JSON.stringify(message.tool_calls).length : 0;
+  return contentCost + toolCallCost;
 }
 
 function sessionToolCalls(value: unknown): ChatAssistantToolCall[] {
