@@ -115,8 +115,8 @@ function summarizeContextParts(options: {
       ? `${options.imageCount} 张图片`
       : `${options.imageCount} image${options.imageCount === 1 ? "" : "s"}`;
     const names = options.imageNames.slice(0, 3).join(", ");
-    const extra = options.imageNames.length > 2
-      ? (options.lang === "zh" ? ` 等 ${options.imageNames.length} 个文件` : ` +${options.imageNames.length - 2}`)
+    const extra = options.imageNames.length > 3
+      ? (options.lang === "zh" ? ` 等 ${options.imageNames.length} 个文件` : ` +${options.imageNames.length - 3}`)
       : "";
     parts.push(names ? `${label}: ${names}${extra}` : label);
   }
