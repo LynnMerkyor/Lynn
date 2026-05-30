@@ -225,7 +225,8 @@ describe('Router', () => {
     expect(chunks[0]).toMatchObject({ source: 'mimo', hit: true, cached: null });
     expect(metas[0].fallback_from).toEqual([{ id: 'p-mimo', reason: 'cooldown' }]);
     expect(adapterMessages).toHaveLength(2);
-    expect(adapterMessages[0].role).toBe('system');
+    expect(adapterMessages[0].role).toBe('user');
+    expect(String(adapterMessages[0].content)).toContain('<lynn_runtime_frame');
     expect(String(adapterMessages[0].content)).toContain('【实时信息上下文】');
     expect(adapterMessages[1].role).toBe('user');
   });
