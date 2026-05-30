@@ -31,6 +31,7 @@ import { buildImagesContentParts, parseImageList } from "../media.js";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, readSessionLines, resolveDataDir } from "../session/store.js";
 import { buildMemoryContextFrameSync } from "../session/memory.js";
 import { buildCodeContextMessages, computeCodeContextLayerDiagnostics } from "../context-layers.js";
+import { renderToolLedger, toolLedgerEntry, type ToolLedgerEntry } from "../tool-ledger.js";
 import type { RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
 
 const pExecFile = promisify(execFile);
@@ -803,6 +804,7 @@ export type CodeAgentEvent =
   | { type: "tool.progress"; message: string }
   | { type: "tool.requested"; tool: ClientToolName; args: CodeToolRequest["args"]; preview?: string }
   | { type: "tool.result"; result: ClientToolResult }
+  | { type: "tool.ledger"; text: string }
   | { type: "tool.loop_guard"; tool: ClientToolName; repeats: number }
   | { type: "plan.updated"; items: CodePlanItem[] }
   | { type: "session.resumed"; path: string; messages: number }
@@ -934,6 +936,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
       break;
     }
     const toolResultSections: string[] = [];
+    const toolLedgerEntries: ToolLedgerEntry[] = [];
     for (const toolRequest of toolRequests) {
       const stormVerdict = observeClientToolRequest(toolStorm, toolRequest);
       if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
@@ -1014,10 +1017,16 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
       if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
       inputData.onEvent?.({ type: "tool.result", result: toolResult });
       if (!inputData.json && !inputData.onEvent && toolRequest.tool !== "update_plan") renderClientToolResult(toolResult);
+      toolLedgerEntries.push(toolLedgerEntry(toolResult));
       toolResultSections.push([
         `Tool result for ${toolRequest.tool}:`,
         formatToolResultForLoop(toolResult),
       ].join("\n"));
+    }
+    const toolLedger = renderToolLedger(toolLedgerEntries, step);
+    if (toolLedger) {
+      if (inputData.json) writeJsonLine({ type: "code.tool.ledger", ts: nowIso(), step, text: toolLedger });
+      inputData.onEvent?.({ type: "tool.ledger", text: toolLedger });
     }
     if (structuredToolRequests.length) {
       for (let i = 0; i < structuredToolRequests.length; i += 1) {
@@ -1040,12 +1049,21 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
           });
         }
       }
+      if (toolLedger) {
+        const ledgerMessage = [
+          toolLedger,
+          "Continue from the ledger. If no more tools are needed, give the final answer.",
+        ].join("\n");
+        messages.push({ role: "user", content: ledgerMessage });
+        if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: ledgerMessage });
+      }
     } else {
       const toolResultMessage = [
         toolResultSections.length === 1 ? "Tool results:" : `Tool results for ${toolResultSections.length} requested tools:`,
         ...toolResultSections,
+        toolLedger,
         "Continue. If no more tools are needed, give the final answer.",
-      ].join("\n");
+      ].filter(Boolean).join("\n");
       messages.push({
         role: "user",
         content: toolResultMessage,
@@ -1230,6 +1248,7 @@ export function buildCodeRuntimeFrames(inputData: Pick<CodeAgentLoopInput, "cont
         '{"tool":"update_plan|read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',
         "For non-trivial tasks, first call update_plan/TodoWrite with items and statuses pending/in_progress/completed, then update it as work progresses.",
         "Prefer read_file, grep, and glob before editing. Use apply_patch for edits when possible.",
+        "For chained tool work, treat the latest <lynn_tool_ledger> as source-of-truth: carry exact values, paths, exit codes, and snippets forward instead of relying on memory.",
         "When you are done, answer normally with a concise summary and tests run.",
         "Do not claim you edited files unless a tool actually changed them.",
         "Never download models, datasets, training packs, BF16, or GGUF files to the local Mac.",

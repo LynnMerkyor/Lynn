@@ -60,6 +60,7 @@ afterEach(() => {
   delete process.env.BRAIN_V2_STORM_MAX;
   delete process.env.BRAIN_V2_TOOL_RESULT_CAP;
   delete process.env.BRAIN_V2_TOOL_RESULT_KEEP_LATEST;
+  delete process.env.BRAIN_V2_CHAIN_TOOL_HINT;
 });
 
 describe('Router', () => {
@@ -342,6 +343,40 @@ describe('Router', () => {
     expect(fourthRoundToolMessages[1].content).toContain('[brain-v2:tool-result-compacted]');
     expect(fourthRoundToolMessages[2].content).toContain('【单位换算】');
     expect(fourthRoundToolMessages[2].content).not.toContain('[brain-v2:tool-result-compacted]');
+  });
+
+  it('optionally injects a chain-tool hint only when tools are present and no system prompt exists', async () => {
+    process.env.BRAIN_V2_CHAIN_TOOL_HINT = '1';
+    let adapterMessages = null;
+    mockState.adapterFn = async function* ({ messages }) {
+      adapterMessages = messages;
+      yield { type: 'content', delta: 'ok' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    await run({ messages: [{ role: 'user', content: 'AAPL price times 100' }], tools: null, onChunk: async () => {} });
+
+    expect(adapterMessages[0]).toMatchObject({ role: 'system' });
+    expect(String(adapterMessages[0].content)).toContain('EXACT values returned by each tool');
+  });
+
+  it('does not inject the chain-tool hint over a caller-provided system prompt', async () => {
+    process.env.BRAIN_V2_CHAIN_TOOL_HINT = '1';
+    let adapterMessages = null;
+    mockState.adapterFn = async function* ({ messages }) {
+      adapterMessages = messages;
+      yield { type: 'content', delta: 'ok' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    await run({
+      messages: [{ role: 'system', content: 'caller system' }, { role: 'user', content: 'q' }],
+      tools: null,
+      onChunk: async () => {},
+    });
+
+    expect(adapterMessages[0].content).toBe('caller system');
+    expect(String(adapterMessages[0].content)).not.toContain('EXACT values returned by each tool');
   });
 });
 

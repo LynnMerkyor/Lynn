@@ -544,8 +544,11 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
 
     expect(output.match(/"type":"code\.tool\.requested"/g)).toHaveLength(2);
     expect(output.match(/"type":"code\.tool\.result"/g)).toHaveLength(2);
+    expect(output).toContain('"type":"code.tool.ledger"');
     expect(toolResultTurn).toContain("Tool result for read_file");
     expect(toolResultTurn).toContain("Tool result for glob");
+    expect(toolResultTurn).toContain("<lynn_tool_ledger");
+    expect(toolResultTurn).toContain("source-of-truth");
     expect(toolResultTurn).toContain("hello.txt");
     expect(output).toContain("I read hello.txt and listed text files");
   });
@@ -637,6 +640,10 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
         tool_call_id: "call_1",
         name: "read_file",
         content: expect.stringContaining("Tool result for read_file"),
+      }),
+      expect.objectContaining({
+        role: "user",
+        content: expect.stringContaining("<lynn_tool_ledger"),
       }),
     ]));
     expect(toolResultTurn).toContain("hello.txt");
@@ -747,6 +754,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
     const text = await fs.readFile(path.join(tmp, "hello.txt"), "utf8");
     expect(text).toContain("recovered");
     expect(repairTurn).toContain("context not found");
+    expect(repairTurn).toContain("<lynn_tool_ledger");
     expect(output).toContain('"ok":false');
     expect(output).toContain('"ok":true');
     expect(output).toContain("Recovered after reading the failed patch result");
