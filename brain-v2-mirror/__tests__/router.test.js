@@ -405,6 +405,42 @@ describe('Router', () => {
     expect(adapterMessages[0].content).toBe('caller system');
     expect(String(adapterMessages[0].content)).not.toContain('EXACT values returned by each tool');
   });
+
+  it('reinforces tool results when chain-tool hint is enabled', async () => {
+    process.env.BRAIN_V2_CHAIN_TOOL_HINT = '1';
+    let adapterRuns = 0;
+    const roundMessages = [];
+    mockState.adapterFn = async function* ({ messages }) {
+      adapterRuns += 1;
+      roundMessages.push(messages);
+      if (adapterRuns === 1) {
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: 'tc-chain-1',
+            type: 'function',
+            function: { name: 'unit_convert', arguments: '{"query":"100公里"}' },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: 'ok' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const result = await run({
+      messages: [{ role: 'user', content: '300美元换成人民币是多少' }],
+      onChunk: async () => {},
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    const toolMessage = roundMessages[1].find((message) => message.role === 'tool');
+    expect(toolMessage.content).toContain('[Lynn tool step 1 completed] unit_convert returned the exact result below.');
+    expect(toolMessage.content).toContain('use these exact returned values');
+    expect(toolMessage.content).toContain('【单位换算】');
+  });
 });
 
 describe('detectCapability', () => {

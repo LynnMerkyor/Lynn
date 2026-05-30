@@ -97,6 +97,22 @@ function shouldInjectChainToolHint(messages: ChatMessage[], tools: unknown[] | n
     && messages[0]?.role !== 'system';
 }
 
+function shouldReinforceToolResults(): boolean {
+  return process.env.BRAIN_V2_TOOL_RESULT_REINFORCE === '1'
+    || process.env.BRAIN_V2_CHAIN_TOOL_HINT === '1';
+}
+
+function formatToolResultContent(toolName: string, result: unknown, stepIndex: number): string {
+  const raw = typeof result === 'string' ? result : JSON.stringify(result);
+  if (!shouldReinforceToolResults()) return raw;
+  return [
+    `[Lynn tool step ${stepIndex} completed] ${toolName} returned the exact result below.`,
+    'For any later calculation or comparison, use these exact returned values. Do not estimate or substitute from memory.',
+    '',
+    raw,
+  ].join('\n');
+}
+
 async function runRound({
   messages,
   tools,
@@ -291,6 +307,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   const toolStormConfig = readToolStormConfigFromEnv();
   const toolStormState = createToolStormState();
   const toolResultCompactionConfig = readToolResultCompactionConfigFromEnv();
+  let serverToolStepIndex = 0;
 
   while (iter < maxIter) {
     iter++;
@@ -378,7 +395,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       workingMessages.push({
         role: 'tool',
         tool_call_id: tc.id || ('tc-' + Math.random().toString(36).slice(2)),
-        content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
+        content: formatToolResultContent(tc.function.name, toolResult, ++serverToolStepIndex),
       });
       workingMessages = compactToolResults(workingMessages, toolResultCompactionConfig);
     }
