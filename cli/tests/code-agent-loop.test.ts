@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import { maxSteps, runCode } from "../src/commands/code.js";
-import { appendSessionTurn, sessionIndexPath } from "../src/session/store.js";
+import { appendSessionTurn, readSessionLines, sessionIndexPath } from "../src/session/store.js";
 
 let tmp = "";
 
@@ -727,6 +727,103 @@ describe("code agent loop", () => {
     expect(output).toContain('"type":"session.saved"');
     expect(lines.filter((line) => line.type === "user")).toHaveLength(2);
     expect(lines.at(-1)?.data?.resumedFrom).toBe(sessionPath);
+  });
+
+  it("checkpoints structured tool calls so resume preserves tool results", async () => {
+    const dataDir = path.join(tmp, "structured-checkpoint-data");
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withRawBrainServer((_body, count) => {
+        expect(count).toBe(1);
+        return rawSsePayloads([
+          JSON.stringify({
+            choices: [{
+              delta: {
+                tool_calls: [{
+                  index: 0,
+                  id: "call_1",
+                  type: "function",
+                  function: { name: "read_file", arguments: "{\"path\":\"hello.txt\"}" },
+                }],
+              },
+            }],
+          }),
+          JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] }),
+        ]);
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "inspect hello with structured checkpoint",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--save-session",
+          "--data-dir",
+          dataDir,
+          "--max-steps",
+          "1",
+          "--json",
+        ]))).resolves.toBe(2);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    const savedLine = output.split(/\r?\n/).find((line) => line.includes('"type":"session.saved"'));
+    const savedPath = savedLine ? JSON.parse(savedLine).path as string : "";
+    expect(savedPath).toBeTruthy();
+    const lines = await readSessionLines(savedPath);
+    expect(lines).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "assistant",
+        data: expect.objectContaining({
+          tool_calls: [expect.objectContaining({
+            id: "call_1",
+            function: expect.objectContaining({ name: "read_file" }),
+          })],
+        }),
+      }),
+      expect.objectContaining({
+        type: "tool",
+        content: expect.stringContaining("Tool result for read_file"),
+        data: expect.objectContaining({ tool_call_id: "call_1", name: "read_file" }),
+      }),
+    ]));
+
+    let resumeBody = "";
+    const originalResumeStdout = process.stdout.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    try {
+      await withBrainServer((body) => {
+        resumeBody = JSON.stringify(body);
+        return "Resumed with structured tool context.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "continue structured checkpoint",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--resume",
+          savedPath,
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = originalResumeStdout;
+    }
+
+    expect(resumeBody).toContain('"tool_calls"');
+    expect(resumeBody).toContain('"role":"tool"');
+    expect(resumeBody).toContain('"tool_call_id":"call_1"');
+    expect(resumeBody).toContain("Tool result for read_file");
   });
 
   it("resumes the latest saved CLI session with --resume last", async () => {

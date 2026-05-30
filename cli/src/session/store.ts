@@ -6,7 +6,7 @@ export const CLI_AGENT_ID = "cli";
 export const SESSION_INDEX_FILENAME = "session-index.json";
 
 export interface CliSessionLine {
-  type: "user" | "assistant" | "metadata";
+  type: "user" | "assistant" | "tool" | "metadata";
   content?: string;
   ts: string;
   data?: Record<string, unknown>;

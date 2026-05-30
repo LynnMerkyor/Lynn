@@ -719,7 +719,7 @@ interface CodeAgentLoopInput {
   output: NodeJS.WriteStream;
   imagePaths?: string[];
   resumeMessages?: ChatMessage[];
-  onCheckpoint?: (line: { type: "user" | "assistant"; content: string }) => Promise<void>;
+  onCheckpoint?: (line: { type: "user" | "assistant" | "tool"; content: string; data?: Record<string, unknown> }) => Promise<void>;
 }
 
 interface CodeToolRequest {
@@ -791,7 +791,17 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
           tool_calls: assistantToolCallsForMessages(structuredToolRequests),
         }
       : { role: "assistant", content: assistantText });
-    if (inputData.onCheckpoint && assistantText.trim()) await inputData.onCheckpoint({ type: "assistant", content: assistantText });
+    if (inputData.onCheckpoint) {
+      if (structuredToolRequests.length) {
+        await inputData.onCheckpoint({
+          type: "assistant",
+          content: assistantText,
+          data: { tool_calls: assistantToolCallsForMessages(structuredToolRequests) },
+        });
+      } else if (assistantText.trim()) {
+        await inputData.onCheckpoint({ type: "assistant", content: assistantText });
+      }
+    }
     if (!toolRequests.length) {
       finalText = assistantText;
       break;
@@ -866,6 +876,16 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
           name: request.tool,
           content: section,
         });
+        if (inputData.onCheckpoint) {
+          await inputData.onCheckpoint({
+            type: "tool",
+            content: section,
+            data: {
+              tool_call_id: request.toolCallId,
+              name: request.tool,
+            },
+          });
+        }
       }
     } else {
       const toolResultMessage = [
@@ -895,8 +915,28 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
 export async function loadResumeMessages(sessionPath: string, maxChars = 24_000): Promise<ChatMessage[]> {
   const lines = await readSessionLines(sessionPath);
   const turns = lines
-    .filter((line) => (line.type === "user" || line.type === "assistant") && typeof line.content === "string" && line.content.trim())
-    .map((line) => ({ role: line.type as "user" | "assistant", content: String(line.content) }));
+    .flatMap((line): ChatMessage[] => {
+      if (line.type === "user" && typeof line.content === "string" && line.content.trim()) {
+        return [{ role: "user", content: line.content }];
+      }
+      if (line.type === "assistant") {
+        const toolCalls = sessionToolCalls(line.data?.tool_calls);
+        const content = typeof line.content === "string" ? line.content : "";
+        if (!content.trim() && !toolCalls.length) return [];
+        return [{
+          role: "assistant",
+          content,
+          ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
+        }];
+      }
+      if (line.type === "tool" && typeof line.content === "string" && line.content.trim()) {
+        const toolCallId = typeof line.data?.tool_call_id === "string" ? line.data.tool_call_id : "";
+        const name = typeof line.data?.name === "string" ? line.data.name : undefined;
+        if (!toolCallId) return [];
+        return [{ role: "tool", tool_call_id: toolCallId, name, content: line.content }];
+      }
+      return [];
+    });
   const selected: ChatMessage[] = [];
   let chars = 0;
   for (let i = turns.length - 1; i >= 0; i -= 1) {
@@ -913,6 +953,22 @@ export async function loadResumeMessages(sessionPath: string, maxChars = 24_000)
     });
   }
   return selected;
+}
+
+function sessionToolCalls(value: unknown): ChatAssistantToolCall[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is ChatAssistantToolCall => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const record = entry as Record<string, unknown>;
+    const fn = record.function;
+    return typeof record.id === "string"
+      && record.type === "function"
+      && !!fn
+      && typeof fn === "object"
+      && !Array.isArray(fn)
+      && typeof (fn as Record<string, unknown>).name === "string"
+      && typeof (fn as Record<string, unknown>).arguments === "string";
+  });
 }
 
 export function formatToolResultForLoop(result: ClientToolResult, maxChars = 12_000): string {
