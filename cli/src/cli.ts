@@ -1,6 +1,7 @@
 import { parseArgs, hasFlag, getStringFlag, type ParsedArgs } from "./args.js";
 import { checkBrainReachable } from "./brain-client.js";
 import { runAgents } from "./commands/agents.js";
+import { runBrain } from "./commands/brain.js";
 import { runChat } from "./commands/chat.js";
 import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
@@ -63,6 +64,9 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     case "chat": {
       return runChat(args);
+    }
+    case "brain": {
+      return runBrain(args);
     }
     case "agents": {
       return runAgents(args, json);
@@ -178,6 +182,7 @@ const TOP_LEVEL_COMMANDS = new Set([
   "version",
   "doctor",
   "chat",
+  "brain",
   "agents",
   "providers",
   "setup",
