@@ -195,4 +195,64 @@ describe("prompt stdin handling", () => {
     expect(result.stdout).toContain("\"text\":\"process exits\"");
     expect(result.stdout).toContain("\"ok\":true");
   });
+
+  it("exits quietly when downstream closes a JSON pipe early", async () => {
+    const provider = http.createServer((request, response) => {
+      request.resume();
+      request.on("end", () => {
+        const chunk = "x".repeat(4096);
+        const lines = Array.from({ length: 200 }, () => [
+          `data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}`,
+          "",
+        ]).flat();
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end([...lines, "data: [DONE]", ""].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const quote = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+    const cliCommand = [
+      quote(process.execPath),
+      "--import",
+      "tsx",
+      "src/cli.ts",
+      "-p",
+      quote("hello"),
+      "--json",
+      "--brain-url",
+      quote("http://127.0.0.1:1"),
+      "--base-url",
+      quote(`http://127.0.0.1:${address.port}/v1`),
+      "--api-key",
+      quote("sk-command-test"),
+      "--model",
+      quote("command-model"),
+    ].join(" ");
+
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn("bash", ["-lc", `${cliCommand} | head -n 1`], { cwd: cliRoot });
+      let stdout = "";
+      let stderr = "";
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error("CLI pipeline did not exit"));
+      }, 5000);
+      child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+      child.on("error", reject);
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        resolve({ code, stdout, stderr });
+      });
+    });
+    await new Promise<void>((resolve) => provider.close(() => resolve()));
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("\"type\":\"run.started\"");
+    expect(result.stderr).not.toContain("EPIPE");
+    expect(result.stderr).not.toContain("write EPIPE");
+  });
 });

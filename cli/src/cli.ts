@@ -14,11 +14,14 @@ import { runWorker } from "./commands/worker-run.js";
 import { usage } from "./help.js";
 import { writeJsonLine } from "./jsonl.js";
 import { renderStartupBanner } from "./startup.js";
+import { installPipeErrorHandler } from "./stdio.js";
 import { readVersionInfo } from "./version.js";
 import type { ProvidersInfo } from "./commands/providers.js";
 import { t } from "./i18n.js";
 
 async function main(argv = process.argv.slice(2)): Promise<number> {
+  installPipeErrorHandler();
+
   if (argv.length === 0) {
     const providerInfo = await resolveProvidersInfo({ command: "providers", positionals: [], flags: {} }, 500);
     const brainReachable = await checkBrainReachable(providerInfo.brainUrl, 300);
