@@ -3,7 +3,8 @@
 Terminal and worker-runner interface for Lynn v0.80.
 
 This package is intentionally thin. When the Lynn client GUI is running, model routing uses
-the local Lynn server / Brain chain and defaults to MiMo. When the client GUI is not
+the local Lynn server / Brain chain and defaults to StepFun 3.7 Flash high+32K,
+then MiMo V2.5 Pro, then Spark Qwen 3.6 35B A3B. When the client GUI is not
 running, the CLI can fall back to a user-owned OpenAI-compatible BYOK endpoint.
 The CLI handles terminal UX, worker JSONL, and local file/shell orchestration.
 
@@ -19,8 +20,8 @@ npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tg
 ```
 
 The package installs the `Lynn` command. If you installed an older preview that
-also created a lowercase `lynn` shim, remove that old shim once or reinstall
-with `--force`.
+also created a lowercase `lynn` shim, current builds clean the old Lynn-owned
+shim during global install before creating the `Lynn` command.
 
 If npm dependency downloads are slow in mainland China, keep the Lynn tarball URL
 as-is and add a registry mirror for third-party dependencies:
@@ -48,9 +49,10 @@ case-insensitive and npm cannot safely create both shims in the same prefix.
 
 ## CLI-only BYOK fallback
 
-MiMo default routing is provided by the local Lynn client GUI / Brain server. A
-standalone npm install cannot ship Lynn's server-side keys. For CLI-only use,
-configure your own OpenAI-compatible endpoint:
+The default StepFun -> MiMo -> Spark routing is provided by the local Lynn
+client GUI / Brain server. A standalone npm install cannot ship Lynn's
+server-side keys. For CLI-only use, configure your own OpenAI-compatible
+endpoint:
 
 ```bash
 Lynn providers set
@@ -85,8 +87,8 @@ The profile is stored in `~/.lynn/providers/cli.json` with the key redacted in
 terminal output. `Lynn -p`, `Lynn chat`, `Lynn code`, and built-in Lynn workers
 try the local Brain first; if it is offline, they use this BYOK provider.
 
-For full MiMo default routing, web search, GUI Fleet, and provider management,
-install and open the Lynn client GUI.
+For full default Brain routing, web search, Lynn client GUI Fleet, and provider
+management, install and open the Lynn client GUI.
 
 ## Worker mode
 
