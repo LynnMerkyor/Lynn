@@ -77,7 +77,9 @@ export function resolveFleetRegistry(opts: ResolveFleetRegistryOptions = {}): Fl
   });
 }
 
-export function configuredCliProviderPreset(opts: { lynnHome?: string; readFileSync?: (file: string, encoding: BufferEncoding) => string } = {}): string | null {
+export function configuredCliProviderPreset(opts: { lynnHome?: string; readFileSync?: (file: string, encoding: BufferEncoding) => string; env?: NodeJS.ProcessEnv } = {}): string | null {
+  const envPreset = configuredPresetFromEnv(opts.env ?? process.env);
+  if (envPreset) return envPreset;
   const lynnHome = resolveFleetDataDir(opts.lynnHome);
   const readFileSync = opts.readFileSync || fs.readFileSync;
   try {
@@ -96,6 +98,18 @@ export function configuredCliProviderPreset(opts: { lynnHome?: string; readFileS
   } catch {
     return null;
   }
+}
+
+function configuredPresetFromEnv(env: NodeJS.ProcessEnv): string | null {
+  const preset = env.LYNN_CLI_PRESET || env.OPENAI_COMPATIBLE_PRESET || "";
+  const apiKey = env.LYNN_CLI_API_KEY || env.OPENAI_API_KEY || "";
+  if (preset && apiKey.trim()) return preset.trim().toLowerCase();
+  const baseUrl = (env.LYNN_CLI_BASE_URL || env.OPENAI_BASE_URL || "").replace(/\/+$/, "");
+  const model = env.LYNN_CLI_MODEL || "";
+  if (!apiKey.trim()) return null;
+  if (baseUrl === "https://api.stepfun.com/step_plan/v1" && model === "step-3.7-flash") return "stepfun";
+  if (baseUrl === "https://token-plan-cn.xiaomimimo.com/v1" && model.startsWith("mimo-")) return "mimo";
+  return null;
 }
 
 function findCommand(

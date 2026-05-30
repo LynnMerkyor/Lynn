@@ -279,6 +279,36 @@ describe("FleetHub.dispatch", () => {
     })).toBeNull();
   });
 
+  it("detects StepFun and MiMo presets from node-only environment variables", () => {
+    expect(configuredCliProviderPreset({
+      env: {
+        LYNN_CLI_PRESET: "stepfun",
+        LYNN_CLI_API_KEY: "sk-step",
+      },
+      readFileSync: () => {
+        throw new Error("profile should not be read when env preset is complete");
+      },
+    })).toBe("stepfun");
+
+    expect(configuredCliProviderPreset({
+      env: {
+        LYNN_CLI_BASE_URL: "https://token-plan-cn.xiaomimimo.com/v1",
+        LYNN_CLI_MODEL: "mimo-v2.5-pro",
+        LYNN_CLI_API_KEY: "mimo-key",
+      },
+      readFileSync: () => "{}",
+    })).toBe("mimo");
+
+    expect(configuredCliProviderPreset({
+      env: {
+        LYNN_CLI_PRESET: "stepfun",
+      },
+      readFileSync: () => {
+        throw new Error("missing key should fall through to profile");
+      },
+    })).toBeNull();
+  });
+
   it("exposes CodeBuddy as an enabled external worker profile", () => {
     expect(DEFAULT_FLEET_REGISTRY.find((agent) => agent.id === "codebuddy")).toMatchObject({
       label: "CodeBuddy",
