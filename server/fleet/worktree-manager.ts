@@ -43,6 +43,8 @@ export class WorktreeManager {
   constructor(private repoRoot: string) {}
 
   async create(relPath: string, branch: string, baseRef = "HEAD"): Promise<WorktreeInfo> {
+    if (!isSafeRelPath(relPath)) throw new Error(`invalid worktree path: ${relPath}`);
+    if (!isSafeBranchName(branch)) throw new Error(`invalid branch: ${branch}`);
     await runGit(["worktree", "add", relPath, "-b", branch, baseRef], this.repoRoot);
     return { path: relPath, branch, head: await this.head(relPath) };
   }
@@ -84,6 +86,14 @@ export class WorktreeManager {
 
   /** `git diff` for a single file in the worktree (read-only; for the GUI diff drawer). */
   async fileDiff(worktreePath: string, file: string, baseRef = "HEAD"): Promise<string> {
+    const untracked = await runGit(["ls-files", "--others", "--exclude-standard", "--", file], worktreePath).catch(() => "");
+    if (untracked.split("\n").map((line) => line.trim()).includes(file)) {
+      const { stdout } = await pExecFile("git", ["diff", "--no-index", "--", "/dev/null", file], {
+        cwd: worktreePath,
+        maxBuffer: 16 * 1024 * 1024,
+      }).catch((error: { stdout?: string }) => ({ stdout: error.stdout || "" }));
+      return stdout.trim();
+    }
     return runGit(["diff", baseRef, "--", file], worktreePath).catch(() => "");
   }
 
@@ -172,6 +182,11 @@ function isSafeBranchName(branch: string): boolean {
   if (!branch || branch.startsWith("/") || branch.endsWith("/") || branch.includes("..")) return false;
   if (branch.includes("@{") || branch.endsWith(".lock")) return false;
   return /^[A-Za-z0-9._/-]+$/.test(branch);
+}
+
+function isSafeRelPath(p: string): boolean {
+  if (!p || path.isAbsolute(p)) return false;
+  return !p.split(/[\\/]/).includes("..");
 }
 
 /** Pure parser for `git worktree list --porcelain` output (exported for tests). */

@@ -21,6 +21,7 @@ export interface WorkerHandle {
   workerId: string;
   pid: number | undefined;
   kill: () => void;
+  cancelled: () => boolean;
 }
 
 export interface FleetLineParser {
@@ -172,6 +173,7 @@ export function spawnWorker(opts: SpawnWorkerOptions, onEvent: (e: FleetWorkerEv
   });
   const parse = createLineParser(opts.workerId);
   let sawWorkerTerminalEvent = false;
+  let cancelled = false;
 
   function emitParsedEvent(event: FleetWorkerEvent): void {
     if (event.type === "worker.finished" || event.type === "worker.error") {
@@ -199,6 +201,10 @@ export function spawnWorker(opts: SpawnWorkerOptions, onEvent: (e: FleetWorkerEv
   });
   child.on("close", (code: number | null) => {
     for (const e of parse.flush()) emitParsedEvent(e);
+    if (cancelled) {
+      onEvent(makeFleetProgressEvent(`worker process cancelled (${code ?? "?"})`, { workerId: opts.workerId }));
+      return;
+    }
     if (typeof code === "number" && code !== 0 && !sawWorkerTerminalEvent) {
       onEvent({
         type: "worker.error",
@@ -215,11 +221,13 @@ export function spawnWorker(opts: SpawnWorkerOptions, onEvent: (e: FleetWorkerEv
     workerId: opts.workerId,
     pid: child.pid,
     kill: () => {
+      cancelled = true;
       try {
         child.kill();
       } catch {
         /* already gone */
       }
     },
+    cancelled: () => cancelled,
   };
 }

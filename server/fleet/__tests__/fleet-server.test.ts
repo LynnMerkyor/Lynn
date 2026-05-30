@@ -233,6 +233,23 @@ describe("spawnWorker", () => {
       }),
     ]);
   });
+
+  it("does not turn a user-cancelled process into a worker_exit failure", async () => {
+    const events: Array<{ type: string; code?: string; message?: string }> = [];
+    const handle = spawnWorker({
+      command: process.execPath,
+      args: ["-e", "setInterval(() => {}, 1000)"],
+      cwd: process.cwd(),
+      env: process.env,
+      workerId: "w-cancel",
+    }, (event) => events.push(event as { type: string; code?: string; message?: string }));
+
+    handle.kill();
+    await waitFor(() => events.some((event) => event.type === "worker.progress" && event.message?.includes("cancelled")));
+
+    expect(handle.cancelled()).toBe(true);
+    expect(events.some((event) => event.type === "worker.error" && event.code === "worker_exit")).toBe(false);
+  });
 });
 
 describe("worktree porcelain parser", () => {
@@ -246,6 +263,36 @@ describe("worktree porcelain parser", () => {
 });
 
 describe("worktree commit review helper", () => {
+  it("rejects unsafe worktree paths and branch names before invoking git", async () => {
+    const { WorktreeManager } = await import("../worktree-manager.js");
+    const manager = new WorktreeManager(process.cwd());
+
+    await expect(manager.create("../outside", "fleet/safe")).rejects.toThrow("invalid worktree path");
+    await expect(manager.create("worktrees/safe", "../bad")).rejects.toThrow("invalid branch");
+  });
+
+  it("shows untracked files in the read-only diff drawer", async () => {
+    const { WorktreeManager } = await import("../worktree-manager.js");
+    const repo = await fs.promises.mkdtemp(path.join(os.tmpdir(), "lynn-fleet-diff-"));
+    try {
+      await execGit(["init"], repo);
+      await execGit(["config", "user.email", "fleet@example.test"], repo);
+      await execGit(["config", "user.name", "Fleet Test"], repo);
+      await fs.promises.writeFile(path.join(repo, "README.md"), "base\n", "utf8");
+      await execGit(["add", "README.md"], repo);
+      await execGit(["commit", "-m", "init"], repo);
+
+      await fs.promises.writeFile(path.join(repo, "new-file.txt"), "alpha\nbeta\n", "utf8");
+      const diff = await new WorktreeManager(repo).fileDiff(repo, "new-file.txt");
+
+      expect(diff).toContain("new-file.txt");
+      expect(diff).toContain("+alpha");
+      expect(diff).toContain("+beta");
+    } finally {
+      await fs.promises.rm(repo, { recursive: true, force: true });
+    }
+  });
+
   it("commits pending changes in a disposable worktree", async () => {
     const { WorktreeManager } = await import("../worktree-manager.js");
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-fleet-commit-"));
@@ -606,7 +653,7 @@ describe("FleetHub review actions", () => {
       },
       spawn: (opts, onEvent) => {
         onEvent({ type: "worker.finished", workerId: opts.workerId, ok: true, exitCode: 0, summary: "ready" });
-        return { workerId: opts.workerId, pid: 123, kill: () => {} };
+        return { workerId: opts.workerId, pid: 123, kill: () => {}, cancelled: () => false };
       },
     });
 
@@ -847,7 +894,7 @@ describe("FleetHub real spawn", () => {
         spawnCalls.push({ command: opts.command, args: opts.args });
         onEvent({ type: "worker.progress", workerId: opts.workerId, message: "running" });
         onEvent({ type: "worker.finished", workerId: opts.workerId, ok: true, exitCode: 0, summary: "done" });
-        return { workerId: opts.workerId, pid: 123, kill: () => {} };
+        return { workerId: opts.workerId, pid: 123, kill: () => {}, cancelled: () => false };
       },
     });
     const rec = await hub.dispatch(sampleBrief);
@@ -905,7 +952,7 @@ describe("FleetHub real spawn", () => {
       resolveCommand: (args) => ({ command: "node", args, env: {}, source: "dev" }),
       spawn: (opts, onEvent) => {
         onEvent({ type: "worker.error", workerId: opts.workerId, code: "tool_failed", message: "tool failed", recoverable: true });
-        return { workerId: opts.workerId, pid: 123, kill: () => {} };
+        return { workerId: opts.workerId, pid: 123, kill: () => {}, cancelled: () => false };
       },
     });
 
@@ -933,7 +980,7 @@ describe("FleetHub real spawn", () => {
       resolveCommand: (args) => ({ command: "node", args, env: {}, source: "dev" }),
       spawn: () => {
         spawned = true;
-        return { workerId: "w", pid: 123, kill: () => {} };
+        return { workerId: "w", pid: 123, kill: () => {}, cancelled: () => false };
       },
     });
 
@@ -959,7 +1006,7 @@ describe("FleetHub real spawn", () => {
         if (briefIndex >= 0) {
           briefText = fs.readFileSync(opts.args[briefIndex + 1], "utf8");
         }
-        return { workerId: opts.workerId, pid: 123, kill: () => {} };
+        return { workerId: opts.workerId, pid: 123, kill: () => {}, cancelled: () => false };
       },
     });
     await hub.dispatch({
@@ -989,7 +1036,7 @@ describe("FleetHub real spawn", () => {
         if (briefIndex >= 0) {
           briefText = fs.readFileSync(opts.args[briefIndex + 1], "utf8");
         }
-        return { workerId: opts.workerId, pid: 123, kill: () => {} };
+        return { workerId: opts.workerId, pid: 123, kill: () => {}, cancelled: () => false };
       },
     });
     await hub.dispatch({
