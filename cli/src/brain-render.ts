@@ -58,8 +58,8 @@ export function summarizeUsage(usage: unknown, options: UsageSummaryOptions = {}
     : cacheHit !== null && cacheMiss !== null && cacheHit + cacheMiss > 0
       ? `${Math.round((cacheHit / (cacheHit + cacheMiss)) * 100)}%`
       : null;
-  const tps = completion !== null && options.durationMs && options.durationMs > 0
-    ? completion / (options.durationMs / 1000)
+  const tps = completion !== null && options.durationMs !== undefined && options.durationMs >= 0
+    ? completion / (Math.max(1, options.durationMs) / 1000)
     : null;
   const parts = [
     total !== null ? `${total} tokens` : null,
