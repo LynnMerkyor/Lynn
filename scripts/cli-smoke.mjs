@@ -136,7 +136,10 @@ checks.push(run("startup banner", []).then((r) => {
   assertIncludes(r.name, r.stdout, "MiMo");
   assertIncludes(r.name, r.stdout, "ask / workspace");
   assertIncludes(r.name, r.stdout, "Shift+Tab");
-  assertIncludes(r.name, r.stdout, "offline");
+  assertIncludes(r.name, r.stdout, "Brain:");
+  if (!r.stdout.includes("offline") && !r.stdout.includes("online")) {
+    throw new Error(`${r.name} output did not include a Brain online/offline status\n${r.stdout}`);
+  }
   assertIncludes(r.name, r.stdout, "Lynn providers");
   assertNotIncludes(r.name, r.stdout, "MiMo via local Brain router");
 }));
@@ -839,6 +842,7 @@ async function runBareTtyByokSmoke() {
         NODE_BIN: nodeBin,
         CLI_BIN: cliBin,
         MARKER_PATH: markerPath,
+        LYNN_BRAIN_URL: "http://127.0.0.1:1",
         LYNN_CLI_BRAIN_TIMEOUT_MS: "50",
         LYNN_CLI_BASE_URL: `http://127.0.0.1:${address.port}/v1`,
         LYNN_CLI_API_KEY: "bare-tty-key",

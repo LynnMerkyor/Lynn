@@ -203,6 +203,7 @@ function startupModelLabel(info: ProvidersInfo, brainReachable: boolean): string
   }
   const label = activeRouteLabel(info);
   if (/^MiMo via .*Brain router/i.test(label)) return "MiMo";
+  if (/^StepFun.*MiMo/i.test(label)) return "StepFun 3.7 Flash → MiMo";
   return label;
 }
 

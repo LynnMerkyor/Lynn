@@ -40,16 +40,16 @@ const PROVIDER_DEFS = {
     default_thinking: false,
     thinking_control: 'qwen_chat_template',
   },
-  // [step-3.7-flash v1] StepFun 云 198B-MoE/11B-A vision-language(step_plan 端点)。
-  // universalOrder 第 3 位:Spark APEX 之后、DeepSeek 之前。vision=true → 排在 mimo 之后、
-  // apex/deepseek(无 vision)被跳过,自动成为图片 fallback 第 2 顺位。
+  // [step-3.7-flash v1] StepFun 云 198B-MoE/11B-A(step_plan 端点)。
+  // 2026-05-30 用户拍板:文本/编码首位走 StepFun 3.7 Flash(TPS/agentic 更优),
+  // 图片/音频/视频首位仍保留 MiMo,继续发挥 MiMo 多模态能力。
   // reasoning-always(low/med/high 三档,无真 off);wire=openai(content + image_url + tools)。
   'step-3.7-flash': {
     id: providerId('step-3.7-flash'),
     endpoint: env('STEP37_BASE', 'https://api.stepfun.com/step_plan/v1'),
     apiKey: env('STEP37_KEY', ''),
     model: envModel('STEP37_MODEL', 'step-3.7-flash'),
-    capability: { vision: true, audio: false, video: false, tools: true, thinking: true, native_search: false },
+    capability: { vision: false, audio: false, video: false, tools: true, thinking: true, native_search: false },
     wire: 'openai',
     cooldown_ms: 60_000,
     default_thinking: false,
@@ -101,13 +101,29 @@ export const PROVIDERS: Record<string, Provider> = PROVIDER_DEFS;
 
 // universalOrder — 单一兜底链路,不按 prompt 内容分支
 export const universalOrder = [
-  providerId('mimo'),                  // 头位:enable_search:true 内置搜索 + thinking + vision
-  providerId('apex-spark-i-balanced'), // MIMO fallback:Spark llama.cpp APEX-I-Balanced(127.0.0.1:18098 via frps)
-  providerId('step-3.7-flash'),        // 第3位:StepFun 云 198B-MoE vision(Spark 后 / DS 前;vision fallback 第2)
+  providerId('step-3.7-flash'),        // 头位:StepFun 3.7 Flash,高 TPS + coding/agentic 优先
+  providerId('mimo'),                  // 第二位:MiMo 原生搜索/多模态/缓存,作为通用兜底
+  providerId('apex-spark-i-balanced'), // 本地零成本/隐私 fallback:Spark llama.cpp APEX-I-Balanced
   providerId('deepseek-chat'),         // 云兜底 V4-flash
   providerId('deepseek-pro'),          // 云兜底 V4-pro
   providerId('glm-5-turbo'),           // 末位
 ] as const satisfies readonly ProviderId[];
+
+export function providerOrderForCapability(capabilityRequired?: { vision?: boolean; audio?: boolean; video?: boolean }): readonly ProviderId[] {
+  if (capabilityRequired?.vision || capabilityRequired?.audio || capabilityRequired?.video) {
+    // 用户拍板 2026-05-30:普通文本/代码体验优先 StepFun 3.7 Flash;但图片/视觉首位保留 MiMo,
+    // 继续发挥 MiMo 的多模态 grounding/search/cache 能力。StepFun capability=false,会被 capability gate 跳过。
+    return [
+      providerId('mimo'),
+      providerId('step-3.7-flash'),
+      providerId('apex-spark-i-balanced'),
+      providerId('deepseek-chat'),
+      providerId('deepseek-pro'),
+      providerId('glm-5-turbo'),
+    ];
+  }
+  return universalOrder;
+}
 
 // 健康/cooldown 状态(in-memory,不持久化)
 type CooldownState = { unhealthyUntil: number; reason: string };

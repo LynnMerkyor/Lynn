@@ -156,7 +156,7 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
       });
     }
   }
-  if (parsed.object === "lynn.error") {
+  if (parsed.object === "lynn.error" || (parsed.error && !parsed.choices)) {
     events.push({
       type: "brain.error",
       error: typeof parsed.error === "string" ? parsed.error : "Brain returned an error",

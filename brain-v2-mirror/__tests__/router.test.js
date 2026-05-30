@@ -11,6 +11,11 @@ const mockState = vi.hoisted(() => ({
 
 vi.mock('../provider-registry.js', () => ({
   universalOrder: ['p-mimo', 'p-spark', 'p-cloud', 'p-vision'],
+  providerOrderForCapability: (capabilityRequired) => (
+    capabilityRequired?.vision || capabilityRequired?.audio || capabilityRequired?.video
+      ? ['p-vision', 'p-mimo', 'p-spark', 'p-cloud']
+      : ['p-mimo', 'p-spark', 'p-cloud', 'p-vision']
+  ),
   getProvider: (id) => mockState.providers[id] || null,
   isInCooldown: (id) => mockState.cooldown.has(id),
   markUnhealthy: (id, reason) => mockState.cooldown.add(id),

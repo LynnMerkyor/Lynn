@@ -254,7 +254,7 @@ export function renderMode(mode: ChatMode): string {
 
 export function chatRouteLabel(provider?: { provider: string; model: string } | null): string {
   if (provider) return `CLI BYOK: ${provider.model}`;
-  return "MiMo via Brain router (auto)";
+  return "StepFun 3.7 Flash → MiMo via Brain router (auto)";
 }
 
 export function splitChatCommandLine(raw: string): string[] {

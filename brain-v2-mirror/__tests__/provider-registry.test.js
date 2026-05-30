@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { getProvider, PROVIDERS, universalOrder } from '../provider-registry.js';
+import { getProvider, PROVIDERS, providerOrderForCapability, universalOrder } from '../provider-registry.js';
 
 describe('provider registry', () => {
   it('keeps StepFun in the intended universal fallback position', () => {
     expect(universalOrder.map(String).slice(0, 4)).toEqual([
+      'step-3.7-flash',
       'mimo',
       'apex-spark-i-balanced',
-      'step-3.7-flash',
       'deepseek-chat',
     ]);
   });
 
-  it('registers StepFun as a cloud vision/tools fallback without native search', () => {
+  it('registers StepFun as a cloud text/tools head without native search', () => {
     const step = getProvider('step-3.7-flash');
     expect(step).toBeTruthy();
     expect(String(step.id)).toBe('step-3.7-flash');
@@ -22,7 +22,7 @@ describe('provider registry', () => {
     expect(step.default_thinking).toBe(false);
     expect(step.thinking_control).toBeUndefined();
     expect(step.capability).toMatchObject({
-      vision: true,
+      vision: false,
       audio: false,
       video: false,
       tools: true,
@@ -37,13 +37,15 @@ describe('provider registry', () => {
     expect(getProvider('deepseek-chat').thinking_control).toBeUndefined();
   });
 
-  it('makes StepFun the second vision-capable option after MiMo', () => {
-    const visionOrder = universalOrder
+  it('keeps MiMo as the only first-class vision route while text defaults to StepFun', () => {
+    const visionOrder = providerOrderForCapability({ vision: true })
       .map((id) => PROVIDERS[id])
       .filter((provider) => provider?.capability?.vision)
       .map((provider) => String(provider.id));
 
-    expect(visionOrder.slice(0, 2)).toEqual(['mimo', 'step-3.7-flash']);
+    expect(visionOrder[0]).toBe('mimo');
+    expect(visionOrder).not.toContain('step-3.7-flash');
+    expect(universalOrder.map(String).slice(0, 2)).toEqual(['step-3.7-flash', 'mimo']);
     expect(visionOrder).not.toContain('apex-spark-i-balanced');
     expect(visionOrder).not.toContain('deepseek-chat');
   });

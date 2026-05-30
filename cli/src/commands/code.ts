@@ -12,8 +12,9 @@ import { resolveEffectivePermissions } from "../permissions.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { bold, dangerLine, dim, green, red, supportsColor } from "../terminal-style.js";
-import { colorizePatch } from "../diff-format.js";
+import { renderPatchPreview } from "../diff-format.js";
 import { renderMarkdown } from "../markdown.js";
+import { renderInputBand } from "../tui-input.js";
 import { HistoryNavigator, appendHistory, historyPath, loadHistory } from "../history.js";
 import { completeSlash } from "../completion.js";
 import { box, displayCwd, padLine } from "../startup.js";
@@ -288,8 +289,7 @@ async function readCodeLine(prompt: string, mode: ChatMode, options: { placehold
       input.pause();
     };
     const redraw = () => {
-      const visible = buffer ? buffer : placeholder ? dim(placeholder, color) : "";
-      output.write(`\r${" ".repeat(clearWidth())}\r${prompt}${visible}`);
+      output.write(`\r${" ".repeat(clearWidth())}\r${renderInputBand({ prompt, value: buffer, placeholder, width: clearWidth(), color })}`);
       if (!buffer && placeholder) output.write(`\r${prompt}`);
     };
     redraw();
@@ -300,7 +300,7 @@ async function readCodeLine(prompt: string, mode: ChatMode, options: { placehold
         const beforeNewline = text.slice(0, newlineIndex);
         const printableBeforeNewline = Array.from(beforeNewline).filter((char) => char >= " " && char !== "\u007f").join("");
         buffer += printableBeforeNewline;
-        output.write(`\r${" ".repeat(clearWidth())}\r${prompt}${buffer}\n`);
+        output.write(`\r${" ".repeat(clearWidth())}\r${renderInputBand({ prompt, value: buffer, width: clearWidth(), color })}\n`);
         cleanup();
         resolve(buffer);
         return;
@@ -367,7 +367,7 @@ export function renderCodeIntro(
   const lines = [
     `Lynn Code (${version})`,
     "",
-    padLine(t("banner.label.model"), options.modelLabel || "MiMo", t("banner.hint.model")),
+    padLine(t("banner.label.model"), options.modelLabel || t("banner.model.default"), t("banner.hint.model")),
     padLine(t("banner.label.dir"), displayCwd(process.cwd())),
   ];
   const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
@@ -693,7 +693,7 @@ function renderCodeFooter(inputData: {
   usage?: string | null;
 }): string {
   const color = supportsColor(output);
-  const model = inputData.mockBrain ? "mock Brain" : inputData.fallbackProvider ? `${inputData.fallbackProvider.provider}/${inputData.fallbackProvider.model}` : "MiMo";
+  const model = inputData.mockBrain ? "mock Brain" : inputData.fallbackProvider ? `${inputData.fallbackProvider.provider}/${inputData.fallbackProvider.model}` : "StepFun→MiMo";
   const mode = renderMode(inputData.mode);
   return dim([
     model,
@@ -1034,8 +1034,8 @@ export function buildCodeRuntimeFrames(inputData: Pick<CodeAgentLoopInput, "cont
       source: "cli",
       text: [
         "You are Lynn CLI code mode.",
-        "The default online route is MiMo through the local Lynn Brain router.",
-        "MiMo is good at Chinese/English mixed product work; keep responses in the user's language.",
+        "The default online route is StepFun 3.7 Flash first through the local Lynn Brain router, with MiMo as the multimodal fallback.",
+        "StepFun is the fast text/code route; MiMo remains the image/audio/video route. Keep responses in the user's language.",
         "You help with repository-level coding tasks from the terminal.",
         "You may request local tools using exactly one JSON object and no prose:",
         '{"tool":"read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',
@@ -1572,7 +1572,7 @@ function formatDangerousToolPreview(tool: ClientToolName, args: { path?: string;
   if (tool === "apply_patch") {
     const patch = args.text || "";
     if (!patch.trim()) return dim("(empty patch)", color);
-    return `${bold("patch preview", color)}\n${colorizePatch(patch, color)}`;
+    return renderPatchPreview(patch, color);
   }
   if (tool === "write_file") {
     return `${bold("write preview", color)} ${args.path || "(unknown path)"}\n${green(oneLine(args.text || "", 500), color)}`;

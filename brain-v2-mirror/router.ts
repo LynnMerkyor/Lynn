@@ -5,7 +5,7 @@
 //
 // 2026-05-23 重构: 砍掉 ~500 行 synthesis + pseudo-tool detection + buffered content 干涉。
 
-import { universalOrder, getProvider, isInCooldown, markUnhealthy } from './provider-registry.js';
+import { providerOrderForCapability, getProvider, isInCooldown, markUnhealthy } from './provider-registry.js';
 import { getAdapter } from './wire-adapter/index.js';
 import { isServerTool, executeServerTool, mergeWithServerTools } from './tool-exec/index.js';
 import { applySearchContext, createSearchRequestCache, type SearchRequestCache } from './search-context.js';
@@ -96,7 +96,7 @@ async function runRound({
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
   // (例:"MiMo → Spark fallback"),不再让 cascade decision 对 UI 不可见。
   const fallbackChain: FallbackEntry[] = [];
-  for (const providerId of universalOrder) {
+  for (const providerId of providerOrderForCapability(capabilityRequired)) {
     const provider = getProvider(providerId);
     if (!provider) continue;
     if (!isProviderConfigured(provider)) {
@@ -240,7 +240,7 @@ async function runRound({
 export async function run({ messages, tools, capabilityRequired, signal, onChunk, log, extraBody, reasoningEffort }: RouterRunOptions): Promise<RouterRunResult> {
   // Capability pre-flight — vision/audio/video capability gate, friendly error if no provider supports
   if (capabilityRequired && (capabilityRequired.vision || capabilityRequired.audio || capabilityRequired.video)) {
-    const anySupports = universalOrder.some((id) => {
+    const anySupports = providerOrderForCapability(capabilityRequired).some((id) => {
       const p = getProvider(id);
       if (!p) return false;
       if (capabilityRequired.vision && !p.capability.vision) return false;

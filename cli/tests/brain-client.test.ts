@@ -89,6 +89,13 @@ describe("brain-client stream parser", () => {
     }))).toEqual([
       { type: "brain.error", error: "tool_storm_limit", code: "tool_storm_limit" },
     ]);
+
+    expect(parseBrainStreamPayload(JSON.stringify({
+      error: "all providers failed",
+      errors: [],
+    }))).toEqual([
+      { type: "brain.error", error: "all providers failed" },
+    ]);
   });
 
   it("parses OpenAI-compatible stream usage chunks", () => {

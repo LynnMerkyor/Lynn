@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyPatchLine, colorizePatch } from "../src/diff-format.js";
+import { classifyPatchLine, colorizePatch, renderPatchPreview, summarizePatch } from "../src/diff-format.js";
 
 describe("classifyPatchLine", () => {
   it("classifies add / del / hunk / meta / context", () => {
@@ -30,5 +30,30 @@ describe("colorizePatch", () => {
     const out = colorizePatch(patch, false, 3);
     expect(out.split("\n").length).toBe(4); // 3 shown + 1 marker
     expect(out).toContain("(+7 more lines)");
+  });
+});
+
+describe("summarizePatch", () => {
+  it("counts files, insertions, and deletions", () => {
+    const summary = summarizePatch([
+      "*** Begin Patch",
+      "*** Update File: src/a.ts",
+      "@@",
+      "-old",
+      "+new",
+      "*** Add File: src/b.ts",
+      "+hello",
+      "*** End Patch",
+    ].join("\n"));
+
+    expect(summary).toEqual({ files: ["src/a.ts", "src/b.ts"], insertions: 2, deletions: 1 });
+  });
+
+  it("renders a diff-like preview header with stats", () => {
+    const out = renderPatchPreview("*** Update File: a.ts\n-old\n+new", false);
+    expect(out).toContain("patch preview");
+    expect(out).toContain("a.ts");
+    expect(out).toContain("+1");
+    expect(out).toContain("-1");
   });
 });
