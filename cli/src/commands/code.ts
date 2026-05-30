@@ -1111,7 +1111,10 @@ async function collectBrainText(inputData: {
       }
       if (event.type === "reasoning.delta" && renderReasoning) {
         inputData.onEvent?.({ type: "reasoning.delta", text: event.text });
-        if (!inputData.onEvent) process.stderr.write(dim(event.text, supportsColor(process.stderr)));
+        if (!inputData.onEvent) {
+          if (inputData.json) writeJsonLine({ type: "reasoning.delta", ts: nowIso(), text: event.text, hidden: true });
+          else process.stderr.write(dim(event.text, supportsColor(process.stderr)));
+        }
       }
       if (event.type === "assistant.delta") {
         text += event.text;

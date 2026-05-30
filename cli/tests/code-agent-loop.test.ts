@@ -171,6 +171,45 @@ describe("code agent loop", () => {
     expect(output).toContain("Changed hello.txt");
   });
 
+  it("keeps code --json output machine-readable when reasoning deltas stream", async () => {
+    const originalOut = process.stdout.write;
+    const originalErr = process.stderr.write;
+    let output = "";
+    let stderr = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderr += String(chunk);
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      await withRawBrainServer(() => rawSsePayloads([
+        JSON.stringify({ choices: [{ delta: { reasoning_content: "think quietly" } }] }),
+        JSON.stringify({ choices: [{ delta: { content: "Done." } }] }),
+      ]), async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "answer without tools",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = originalOut;
+      process.stderr.write = originalErr;
+    }
+
+    expect(output).toContain('"type":"reasoning.delta"');
+    expect(output).toContain('"hidden":true');
+    expect(output).toContain('"type":"code.task.finished"');
+    expect(stderr).not.toContain("think quietly");
+  });
+
   it("emits approval_required for dangerous tools in non-interactive JSON mode", async () => {
     const patch = [
       "*** Begin Patch",
