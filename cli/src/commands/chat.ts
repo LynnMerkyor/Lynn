@@ -20,6 +20,8 @@ import { refreshCliRuntimeSystemMessage, resetCliRuntimeMessages } from "../runt
 import { modelDisplayName, modelLabelWithId } from "../provider-presets.js";
 import { buildImagesContentParts } from "../media.js";
 import { parseImagePromptCommand, summarizeImageRefs } from "../pasted-context.js";
+import { buildMemoryContextFrameSync, handleMemorySlashCommand } from "../session/memory.js";
+import { resolveDataDir } from "../session/store.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/exit",
@@ -33,6 +35,10 @@ export const CHAT_SLASH_COMMANDS = [
   "/model mimo",
   "/model stepfun",
   "/model spark",
+  "/memory",
+  "/memory add",
+  "/memory forget",
+  "/cwd",
   "/image",
   "/images",
   "/attach",
@@ -68,7 +74,9 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   let reasoning = parseReasoningOptions(args);
   const mode = await resolveChatMode(args);
   let cliProvider = await resolveCliProviderProfile(args);
-  const messages: ChatMessage[] = resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile));
+  const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
+  let memoryFrame = buildMemoryContextFrameSync(dataDir);
+  const messages: ChatMessage[] = resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile), memoryFrame);
   const histFile = historyPath();
   const history = loadHistory(histFile);
   const rl = !input.isTTY
@@ -159,7 +167,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
         if (shouldRefreshProviderRoute(providerCommand)) {
           cliProvider = await resolveCliProviderProfile(providerCommand) || await resolveCliProviderProfile(args);
           const nextRoute = chatRouteLabel(cliProvider?.profile);
-          refreshCliRuntimeSystemMessage(messages, nextRoute);
+          refreshCliRuntimeSystemMessage(messages, nextRoute, memoryFrame);
           const changed = previousRoute !== nextRoute;
           output.write(`\n${t(changed ? "chat.providers.routeReloaded" : "chat.providers.routeUnchanged", { route: nextRoute })}\n\n`);
         } else if (code === 0) {
@@ -175,8 +183,21 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       return "continue";
     }
     if (text === "/clear") {
-      messages.splice(0, messages.length, ...resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile)));
+      messages.splice(0, messages.length, ...resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile), memoryFrame));
       output.write(`${t("chat.cleared")}\n\n`);
+      return "continue";
+    }
+    if (text === "/cwd" || text === "/pwd") {
+      output.write(`${t("cwd.info", { cwd: process.cwd() })}\n\n`);
+      return "continue";
+    }
+    const memoryCommand = await handleMemorySlashCommand(text, dataDir);
+    if (memoryCommand?.handled) {
+      if (memoryCommand.changed) {
+        memoryFrame = buildMemoryContextFrameSync(dataDir);
+        refreshCliRuntimeSystemMessage(messages, chatRouteLabel(cliProvider?.profile), memoryFrame);
+      }
+      output.write(`${memoryCommand.message}\n\n`);
       return "continue";
     }
     if (text.startsWith("/")) {

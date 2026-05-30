@@ -5,6 +5,7 @@ import { runBrain } from "./commands/brain.js";
 import { runChat } from "./commands/chat.js";
 import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
+import { runMemory } from "./commands/memory.js";
 import { runPermissions } from "./commands/permissions.js";
 import { runPrompt } from "./commands/prompt.js";
 import { activeRouteLabel, renderBrainModelChoices, resolveProvidersInfo, runProviders } from "./commands/providers.js";
@@ -103,6 +104,9 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
         return 0;
       }
       return runProviders(providerModelArgs(args), json);
+    }
+    case "memory": {
+      return runMemory(args, json);
     }
     case "prompt":
     case "exec": {
@@ -217,6 +221,7 @@ const TOP_LEVEL_COMMANDS = new Set([
   "byok",
   "permissions",
   "model",
+  "memory",
   "goal",
   "prompt",
   "exec",

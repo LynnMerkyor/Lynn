@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Text, render, useApp, useInput } from "ink";
-import { hasFlag, type ParsedArgs } from "./args.js";
+import { getStringFlag, hasFlag, type ParsedArgs } from "./args.js";
 import { completeSlash, normalizeSlashInput } from "./completion.js";
 import { parseCodeResumeSlash, withLongRunCodeFlags, type CodeAgentApprovalRequest, type CodeAgentEvent } from "./commands/code.js";
 import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type ChatMode } from "./commands/chat.js";
@@ -17,6 +17,8 @@ import type { CodePlanItem } from "./plan-tool.js";
 import { InkInputLine } from "./ink-input-line.js";
 import { analyzePastedContext, appendPastedText, summarizePastedContext } from "./pasted-context.js";
 import { modelLabelWithId } from "./provider-presets.js";
+import { handleMemorySlashCommand } from "./session/memory.js";
+import { resolveDataDir } from "./session/store.js";
 
 type CodeItem =
   | { id: number; kind: "user"; text: string }
@@ -62,6 +64,10 @@ const CODE_SLASH_COMMANDS = [
   "/goal",
   "/resume",
   "/continue",
+  "/memory",
+  "/memory add",
+  "/memory forget",
+  "/cwd",
   "/mode",
   "/mode yolo",
   "/model",
@@ -106,6 +112,8 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   const approvalResolve = useRef<((value: "approve" | "approve_all" | "deny") => void) | null>(null);
   const [history] = useState(() => new HistoryNavigator(loadHistory(historyPath())));
   const assistantId = useRef<number | null>(null);
+  const dataDir = React.useMemo(() => resolveDataDir(typeof props.args.flags["data-dir"] === "string" ? props.args.flags["data-dir"] : null), [props.args.flags]);
+  const effectiveCwd = getStringFlag(props.args.flags, "cwd") || process.cwd();
 
   useEffect(() => {
     if (!busy) return;
@@ -207,6 +215,15 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     }
     if (text === "/help") {
       pushItem({ kind: "system", text: t("code.help") });
+      return;
+    }
+    if (text === "/cwd" || text === "/pwd") {
+      pushItem({ kind: "system", text: t("cwd.info", { cwd: effectiveCwd }) });
+      return;
+    }
+    const memoryCommand = await handleMemorySlashCommand(text, dataDir);
+    if (memoryCommand?.handled) {
+      pushItem({ kind: "system", text: memoryCommand.message, tone: memoryCommand.changed ? "success" : "normal" });
       return;
     }
     if (text === "/tools") {
@@ -337,7 +354,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       React.createElement(Text, { bold: true }, "Lynn Code"),
       React.createElement(Text, null, `模型: ${provider}`),
       React.createElement(Text, { color: danger ? "red" : undefined }, `权限: ${renderMode(mode)}   Shift+Tab / /mode`),
-      React.createElement(Text, null, `目录: ${displayCwd(process.cwd())}`),
+      React.createElement(Text, null, `目录: ${displayCwd(effectiveCwd)}   cd / --cwd 切换`),
     ),
     danger ? React.createElement(Text, { color: "red", bold: true }, "YOLO: local edits and shell commands are allowed") : null,
     React.createElement(Box, { marginTop: 1, flexDirection: "column" },
@@ -348,7 +365,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       React.createElement(Text, null, " "),
       React.createElement(InkSweep, { width: 28, frame }),
     ) : null,
-    React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(process.cwd())} · ${renderMode(mode)} · think ${reasoning.effort}${usage ? ` · ${usage}` : ""}`),
+    React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${usage ? ` · ${usage}` : ""}`),
     approval ? React.createElement(ApprovalPrompt, { approval }) : React.createElement(InkInputLine, {
       value: input,
       placeholder: t("code.placeholder"),

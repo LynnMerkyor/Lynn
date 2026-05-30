@@ -48,6 +48,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "startup.label.directory": "目录",
     "startup.hint.model": "/model 切换",
     "startup.hint.mode": "Shift+Tab 切换",
+    "startup.hint.dir": "cd / --cwd 切换",
     "startup.byok.default": "客户端 Providers",
     "startup.byok.cliFallback": "CLI BYOK 兜底",
     "status.chat.prefix": "MiMo/Brain",
@@ -78,6 +79,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/exit 退出聊天\n" +
       "/clear 清空上下文\n" +
       "/model 查看 Brain 三段模型路由; /model stepfun|mimo|spark 切换 StepFun 3.7 Flash / MiMo V2.5 Pro / Spark Qwen 3.6 35B A3B\n" +
+      "/memory 查看长期记忆; /memory add <事实> 保存长期事实; /memory forget <id> 删除\n" +
+      "/cwd 查看工作目录;默认是启动 Lynn 时终端所在目录,可先 cd 或用 --cwd 指定\n" +
       "/image <图片路径> [问题] 添加图片;也可以直接粘贴图片路径和多段文字\n" +
       "/setup 打开 CLI-only BYOK 三步向导\n" +
       "/providers 查看提供方和 BYOK 设置\n" +
@@ -120,6 +123,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/reasoning 查看或设置推理模式\n" +
       "/goal <任务> 长任务模式:1000 步预算 + 自动保存断点\n" +
       "/resume [last|session.jsonl] [说明] 继续上次长任务\n" +
+      "/memory 查看长期记忆; /memory add <事实> 保存长期事实; /memory forget <id> 删除\n" +
+      "/cwd 查看工作目录;默认是启动 Lynn 时终端所在目录,可先 cd 或用 --cwd 指定\n" +
       "/model 查看 Brain 三段模型路由; /model stepfun|mimo|spark 切换 StepFun 3.7 Flash / MiMo V2.5 Pro / Spark Qwen 3.6 35B A3B\n" +
       "/setup 打开 CLI-only BYOK 三步向导\n" +
       "/providers 查看提供方和 BYOK 设置\n" +
@@ -163,6 +168,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "slash.label.tools": "工具",
     "slash.label.clear": "清空",
     "slash.label.image": "图片",
+    "cwd.info": "工作目录:{cwd}\n默认是你启动 Lynn 时终端所在的目录。切换方式:\n  cd /path/to/project && Lynn\n  Lynn code --cwd /path/to/project \"任务\"",
     "banner.label.model": "模型",
     "banner.label.mode": "模式",
     "banner.label.byok": "BYOK",
@@ -270,6 +276,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "startup.label.directory": "directory",
     "startup.hint.model": "/model to change",
     "startup.hint.mode": "Shift+Tab to toggle",
+    "startup.hint.dir": "cd / --cwd",
     "startup.byok.default": "client Providers",
     "startup.byok.cliFallback": "CLI BYOK fallback",
     "status.chat.prefix": "MiMo/Brain",
@@ -300,6 +307,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/exit leave chat\n" +
       "/clear reset context\n" +
       "/model show the three Brain model choices; /model stepfun|mimo|spark switches StepFun 3.7 Flash / MiMo V2.5 Pro / Spark Qwen 3.6 35B A3B\n" +
+      "/memory show durable memory; /memory add <fact> save a durable fact; /memory forget <id> delete\n" +
+      "/cwd show working directory; default is the terminal directory where Lynn started, use cd or --cwd to change\n" +
       "/image <image-path> [prompt] attach images; pasted image paths and multi-line text work too\n" +
       "/setup open the CLI-only BYOK three-step wizard\n" +
       "/providers show BYOK setup\n" +
@@ -342,6 +351,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/reasoning show or set reasoning mode\n" +
       "/goal <task> long-running mode: 1000-step budget + automatic checkpoints\n" +
       "/resume [last|session.jsonl] [note] continue a saved long task\n" +
+      "/memory show durable memory; /memory add <fact> save a durable fact; /memory forget <id> delete\n" +
+      "/cwd show working directory; default is the terminal directory where Lynn started, use cd or --cwd to change\n" +
       "/model show the three Brain model choices; /model stepfun|mimo|spark switches StepFun 3.7 Flash / MiMo V2.5 Pro / Spark Qwen 3.6 35B A3B\n" +
       "/setup open the CLI-only BYOK three-step wizard\n" +
       "/providers show provider and BYOK setup\n" +
@@ -385,6 +396,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "slash.label.tools": "tools",
     "slash.label.clear": "clear",
     "slash.label.image": "image",
+    "cwd.info": "working directory:{cwd}\nDefault is the terminal directory where Lynn was started. To change it:\n  cd /path/to/project && Lynn\n  Lynn code --cwd /path/to/project \"task\"",
     "banner.label.model": "model",
     "banner.label.mode": "mode",
     "banner.label.byok": "BYOK",

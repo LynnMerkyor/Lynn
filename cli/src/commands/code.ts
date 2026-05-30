@@ -29,6 +29,7 @@ import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, run
 import { readVersionInfo } from "../version.js";
 import { buildImagesContentParts, parseImageList } from "../media.js";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, readSessionLines, resolveDataDir } from "../session/store.js";
+import { buildMemoryContextFrameSync } from "../session/memory.js";
 import { buildCodeContextMessages, computeCodeContextLayerDiagnostics } from "../context-layers.js";
 import type { RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
 
@@ -513,6 +514,7 @@ async function runCodeTask(
   const mode = await resolveCodeMode(args);
   const cliProvider = await resolveCliProviderProfile(args);
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
+  const memoryFrame = buildMemoryContextFrameSync(dataDir, task);
   const resumePath = await resolveCodeResumePath(getStringFlag(args.flags, "resume"), dataDir);
   const resumeMessages = resumePath ? await loadResumeMessages(resumePath) : [];
   const saveSession = shouldSaveCodeSession(args, { json, mockBrain, resumePath });
@@ -585,6 +587,7 @@ async function runCodeTask(
     output: errorOutput,
     imagePaths: codeImagePaths(args),
     resumeMessages,
+    memoryFrame,
     onEvent: options.onEvent,
     requestApproval: options.requestApproval,
     onCheckpoint: saveSession && liveSessionPath
@@ -639,7 +642,7 @@ async function runCodeTask(
         reasoning,
         maxSteps: stepBudget,
         maxStepsReached: final.maxStepsReached,
-        cacheDiagnostics: computeCodeContextLayerDiagnostics(buildCodeRuntimeFrames({ context, toolCtx }), resumeMessages.length),
+        cacheDiagnostics: computeCodeContextLayerDiagnostics(buildCodeRuntimeFrames({ context, toolCtx, memoryFrame }), resumeMessages.length),
         usageSummary: final.usageSummary,
         usageRecords: final.usageRecords,
         resumedFrom: resumePath || null,
@@ -765,6 +768,7 @@ interface CodeAgentLoopInput {
   output: NodeJS.WriteStream;
   imagePaths?: string[];
   resumeMessages?: ChatMessage[];
+  memoryFrame?: string;
   onCheckpoint?: (line: { type: "user" | "assistant" | "tool"; content: string; data?: Record<string, unknown> }) => Promise<void>;
   onEvent?: (event: CodeAgentEvent) => void;
   requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny">;
@@ -1168,7 +1172,7 @@ export function formatToolResultForLoop(result: ClientToolResult, maxChars = 12_
   ].join("\n");
 }
 
-export function buildCodeRuntimeFrames(inputData: Pick<CodeAgentLoopInput, "context" | "toolCtx">): RuntimeInstructionFrame[] {
+export function buildCodeRuntimeFrames(inputData: Pick<CodeAgentLoopInput, "context" | "toolCtx" | "memoryFrame">): RuntimeInstructionFrame[] {
   return [
     {
       kind: "base_system",
@@ -1193,6 +1197,12 @@ export function buildCodeRuntimeFrames(inputData: Pick<CodeAgentLoopInput, "cont
       title: "Repository context",
       text: `Repository root: ${inputData.context.cwd}`,
     },
+    ...(inputData.memoryFrame ? [{
+      kind: "cacheable_context" as const,
+      source: "cli",
+      title: "Durable memory",
+      text: inputData.memoryFrame,
+    }] : []),
     {
       kind: "permission_state",
       source: "cli",

@@ -18,6 +18,8 @@ import { InkInputLine } from "./ink-input-line.js";
 import { refreshCliRuntimeSystemMessage, resetCliRuntimeMessages } from "./runtime-context.js";
 import { analyzePastedContext, appendPastedText, parseImagePromptCommand, summarizeImageRefs, summarizePastedContext } from "./pasted-context.js";
 import { buildImagesContentParts } from "./media.js";
+import { buildMemoryContextFrameSync, handleMemorySlashCommand } from "./session/memory.js";
+import { resolveDataDir } from "./session/store.js";
 
 type Turn = {
   id: number;
@@ -69,7 +71,9 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
   const [provider, setProvider] = useState(chatRouteLabel(props.fallbackProvider));
   const [usage, setUsage] = useState<string | null>(null);
   const [history] = useState(() => new HistoryNavigator(loadHistory(historyPath())));
-  const messages = useMemo<ChatMessage[]>(() => resetCliRuntimeMessages(chatRouteLabel(props.fallbackProvider)), [props.fallbackProvider]);
+  const dataDir = useMemo(() => resolveDataDir(getStringFlag(props.args.flags, "data-dir")), [props.args.flags]);
+  const [memoryFrame, setMemoryFrame] = useState(() => buildMemoryContextFrameSync(dataDir));
+  const messages = useMemo<ChatMessage[]>(() => resetCliRuntimeMessages(chatRouteLabel(props.fallbackProvider), memoryFrame), [props.fallbackProvider]);
 
   useEffect(() => {
     if (!busy) return;
@@ -103,6 +107,9 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
           props,
           reasoning,
           mode,
+          dataDir,
+          memoryFrame,
+          setMemoryFrame,
         });
         return;
       }
@@ -138,6 +145,9 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
         props,
         reasoning,
         mode,
+        dataDir,
+        memoryFrame,
+        setMemoryFrame,
       });
       return;
     }
@@ -258,6 +268,9 @@ async function submitInput(inputData: {
   props: InkChatProps;
   reasoning: ReasoningOptions;
   mode: ChatMode;
+  dataDir: string;
+  memoryFrame: string;
+  setMemoryFrame: (value: string) => void;
 }): Promise<void> {
   const text = normalizeSlashInput(inputData.text.trim());
   if (!text) return;
@@ -298,8 +311,22 @@ async function submitInput(inputData: {
     return;
   }
   if (text === "/clear") {
-    inputData.messages.splice(0, inputData.messages.length, ...resetCliRuntimeMessages(chatRouteLabel(inputData.fallbackProvider)));
-    inputData.setTurns([]);
+      inputData.messages.splice(0, inputData.messages.length, ...resetCliRuntimeMessages(chatRouteLabel(inputData.fallbackProvider), inputData.memoryFrame));
+      inputData.setTurns([]);
+      return;
+    }
+  if (text === "/cwd" || text === "/pwd") {
+    inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("cwd.info", { cwd: process.cwd() }) }]);
+    return;
+  }
+  const memoryCommand = await handleMemorySlashCommand(text, inputData.dataDir);
+  if (memoryCommand?.handled) {
+    if (memoryCommand.changed) {
+      const nextMemoryFrame = buildMemoryContextFrameSync(inputData.dataDir);
+      inputData.setMemoryFrame(nextMemoryFrame);
+      refreshCliRuntimeSystemMessage(inputData.messages, chatRouteLabel(inputData.fallbackProvider), nextMemoryFrame);
+    }
+    inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: memoryCommand.message }]);
     return;
   }
   const providerCommand = await handleInkProviderCommand(text, inputData.props.args);
@@ -307,7 +334,7 @@ async function submitInput(inputData: {
     if (providerCommand.refreshedProvider !== undefined) {
       inputData.setFallbackProvider(providerCommand.refreshedProvider);
       const nextRoute = chatRouteLabel(providerCommand.refreshedProvider);
-      refreshCliRuntimeSystemMessage(inputData.messages, nextRoute);
+      refreshCliRuntimeSystemMessage(inputData.messages, nextRoute, inputData.memoryFrame);
       inputData.setProvider(nextRoute);
     }
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: providerCommand.message }]);

@@ -1,6 +1,6 @@
 import type { ChatMessage } from "./brain-client.js";
 
-export function buildCliRuntimeSystemMessage(routeLabel: string): ChatMessage {
+export function buildCliRuntimeSystemMessage(routeLabel: string, memoryFrame = ""): ChatMessage {
   return {
     role: "system",
     content: [
@@ -11,16 +11,17 @@ export function buildCliRuntimeSystemMessage(routeLabel: string): ChatMessage {
       "StepFun 3.7 Flash is the text/coding head route. MiMo V2.5 Pro owns image/audio/video and native search fallback.",
       "The user can change CLI-only BYOK with /model, /providers, or /setup; those slash commands are handled by Lynn locally.",
       "Answer in the user's language.",
+      memoryFrame,
     ].join("\n"),
   };
 }
 
-export function resetCliRuntimeMessages(routeLabel: string): ChatMessage[] {
-  return [buildCliRuntimeSystemMessage(routeLabel)];
+export function resetCliRuntimeMessages(routeLabel: string, memoryFrame = ""): ChatMessage[] {
+  return [buildCliRuntimeSystemMessage(routeLabel, memoryFrame)];
 }
 
-export function refreshCliRuntimeSystemMessage(messages: ChatMessage[], routeLabel: string): void {
-  const next = buildCliRuntimeSystemMessage(routeLabel);
+export function refreshCliRuntimeSystemMessage(messages: ChatMessage[], routeLabel: string, memoryFrame = ""): void {
+  const next = buildCliRuntimeSystemMessage(routeLabel, memoryFrame);
   if (messages[0]?.role === "system") {
     messages[0] = next;
     return;
