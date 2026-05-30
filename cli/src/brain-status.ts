@@ -15,6 +15,16 @@ export interface BrainProviderStatus {
   providers: BrainProviderStatusEntry[];
 }
 
+export interface BrainRouteReadiness {
+  usable: boolean;
+  headReady: boolean;
+  headId?: string;
+  readyProviders: string[];
+  missingProviders: string[];
+  summary: string;
+  message: string;
+}
+
 export async function fetchBrainProviderStatus(brainUrl: string, timeoutMs = 1500): Promise<BrainProviderStatus | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -45,7 +55,62 @@ export function summarizeBrainProviderStatus(status: BrainProviderStatus | null)
 }
 
 export function brainRouteHeadReady(status: BrainProviderStatus | null): boolean {
-  if (!status || !status.route.length) return false;
-  const head = status.providers.find((provider) => provider.id === status.route[0]);
-  return Boolean(head?.configured);
+  return brainRouteReadiness(status).headReady;
+}
+
+export function brainRouteUsable(status: BrainProviderStatus | null): boolean {
+  return brainRouteReadiness(status).usable;
+}
+
+export function brainRouteReadiness(status: BrainProviderStatus | null): BrainRouteReadiness {
+  const summary = summarizeBrainProviderStatus(status);
+  if (!status) {
+    return {
+      usable: false,
+      headReady: false,
+      readyProviders: [],
+      missingProviders: [],
+      summary,
+      message: summary,
+    };
+  }
+  if (!status.route.length) {
+    return {
+      usable: false,
+      headReady: false,
+      readyProviders: [],
+      missingProviders: [],
+      summary,
+      message: "provider route is empty",
+    };
+  }
+
+  const byId = new Map(status.providers.map((provider) => [provider.id, provider]));
+  const headId = status.route[0];
+  const readyProviders = status.route.filter((id) => byId.get(id)?.configured);
+  const missingProviders = status.route.filter((id) => !byId.get(id)?.configured);
+  const headReady = Boolean(byId.get(headId)?.configured);
+  const usable = readyProviders.length > 0;
+
+  let detail = "";
+  if (!usable) {
+    detail = "no configured provider in route; configure StepFun/MiMo in the Lynn client or CLI BYOK";
+  } else if (!headReady) {
+    detail = `head ${headId} not configured; fallback ready: ${readyProviders.join(", ")}`;
+  } else {
+    const fallbacks = readyProviders.slice(1);
+    detail = fallbacks.length > 0
+      ? `head ready: ${headId}; fallback ready: ${fallbacks.join(", ")}`
+      : `head ready: ${headId}`;
+  }
+
+  return {
+    usable,
+    headReady,
+    headId,
+    readyProviders,
+    missingProviders,
+    summary,
+    message: `${summary} (${detail})`,
+  };
 }

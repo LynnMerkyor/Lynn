@@ -46,8 +46,35 @@ describe("doctor command", () => {
     const rendered = renderDoctor(result);
 
     expect(result.brain).toBe("ok");
+    expect(result.ok).toBe(true);
     expect(result.brainProviders?.route[0]).toBe("step-3.7-flash");
     expect(rendered).toContain("brain-route: step-3.7-flash:missing-key -> mimo:key -> apex-spark-i-balanced:local");
+    expect(rendered).toContain("head step-3.7-flash not configured; fallback ready: mimo, apex-spark-i-balanced");
+  });
+
+  it("fails Brain route diagnostics when no provider in the route is configured", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: URL | string) => {
+      const href = String(url);
+      if (href.endsWith("/health")) return new Response(JSON.stringify({ ok: true }), { status: 200, statusText: "OK" });
+      if (href.endsWith("/v1/providers/status")) {
+        return new Response(JSON.stringify({
+          ok: true,
+          route: ["step-3.7-flash", "mimo"],
+          providers: [
+            { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "missing", configured: false, local: false, inRoute: true },
+            { id: "mimo", model: "mimo-v2.5-pro", endpoint: "https://token-plan-cn.xiaomimimo.com/v1", wire: "mimo", credential: "missing", configured: false, local: false, inRoute: true },
+          ],
+        }), { status: 200, statusText: "OK" });
+      }
+      return new Response("not found", { status: 404, statusText: "Not Found" });
+    }));
+
+    const result = await runDoctor(parseArgs(["doctor", "--brain-url", "http://127.0.0.1:8790"]));
+    const rendered = renderDoctor(result);
+
+    expect(result.ok).toBe(false);
+    expect(rendered).toContain("FAIL brain-route");
+    expect(rendered).toContain("no configured provider in route");
   });
 
   it("reports configured CLI BYOK without exposing the raw key", async () => {

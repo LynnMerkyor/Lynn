@@ -3,7 +3,7 @@ import { listProviderPresets } from "../provider-presets.js";
 import { providerProfilePath, readCliProviderProfile, redactApiKey } from "../provider-profile.js";
 import { resolveDataDir } from "../session/store.js";
 import { readVersionInfo } from "../version.js";
-import { brainRouteHeadReady, fetchBrainProviderStatus, summarizeBrainProviderStatus, type BrainProviderStatus } from "../brain-status.js";
+import { brainRouteReadiness, fetchBrainProviderStatus, type BrainProviderStatus } from "../brain-status.js";
 
 export interface DoctorResult {
   ok: boolean;
@@ -52,10 +52,11 @@ export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
       if (res.ok) {
         const providerStatus = await fetchBrainProviderStatus(brainUrl, 1500);
         brainProviders = providerStatus;
+        const readiness = brainRouteReadiness(providerStatus);
         checks.push({
           name: "brain-route",
-          ok: brainRouteHeadReady(providerStatus),
-          message: summarizeBrainProviderStatus(providerStatus),
+          ok: readiness.usable,
+          message: readiness.message,
         });
       }
     } catch (error) {
