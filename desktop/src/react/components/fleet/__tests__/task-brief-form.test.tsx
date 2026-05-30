@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agentOptionLabel, buildFleetDispatchPayload } from '../TaskBriefForm';
+import { agentOptionLabel, buildFleetDispatchPayload, externalTargetsNeedFullAccess, isExternalFleetAgent } from '../TaskBriefForm';
 
 describe('TaskBriefForm payload', () => {
   it('includes MiMo vision task type and image path for Fleet dispatch', () => {
@@ -53,5 +53,25 @@ describe('TaskBriefForm payload', () => {
   it('labels unavailable agents with their availability hint', () => {
     expect(agentOptionLabel({ id: 'kimi-cli', label: 'Kimi', enabled: false, availability: 'not found on PATH' })).toBe('Kimi (not found on PATH)');
     expect(agentOptionLabel({ id: 'codex-cli', label: 'Codex', enabled: true, availability: '/bin/codex' })).toBe('Codex');
+  });
+
+  it('requires explicit YOLO/full-access before launching external CLI adapters', () => {
+    expect(isExternalFleetAgent('codex-cli')).toBe(true);
+    expect(isExternalFleetAgent('mimo-pro')).toBe(false);
+    expect(externalTargetsNeedFullAccess({
+      targets: ['lynn-cli', 'codex-cli'],
+      approval: 'ask',
+      sandbox: 'workspace-write',
+    })).toBe(true);
+    expect(externalTargetsNeedFullAccess({
+      targets: ['lynn-cli', 'codex-cli'],
+      approval: 'yolo',
+      sandbox: 'danger-full-access',
+    })).toBe(false);
+    expect(externalTargetsNeedFullAccess({
+      targets: ['mimo-pro', 'stepfun-flash'],
+      approval: 'ask',
+      sandbox: 'workspace-write',
+    })).toBe(false);
   });
 });

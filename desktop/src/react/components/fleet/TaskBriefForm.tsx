@@ -54,6 +54,15 @@ const FALLBACK_AGENTS: AgentEntry[] = [
 
 const DEFAULT_FLEET_AGENT = 'lynn-cli';
 const INITIAL_SCOPE_DEFAULTS = buildPresetDefaults(DEFAULT_FLEET_SCOPE_PRESET, '');
+const EXTERNAL_AGENT_IDS = new Set([
+  'codex-cli',
+  'claude-code',
+  'claude-internal',
+  'qwen-cli',
+  'kimi-cli',
+  'codebuddy',
+  'opencode',
+]);
 
 function toLines(value: string): string[] {
   return value
@@ -69,6 +78,19 @@ function isVisionTask(taskType: FleetTaskType): boolean {
 export function agentOptionLabel(agent: AgentEntry): string {
   if (agent.enabled) return agent.label;
   return `${agent.label} (${agent.availability || 'unavailable'})`;
+}
+
+export function isExternalFleetAgent(agentId: string): boolean {
+  return EXTERNAL_AGENT_IDS.has(agentId);
+}
+
+export function externalTargetsNeedFullAccess(input: {
+  targets: string[];
+  approval: FleetApprovalMode;
+  sandbox: FleetSandboxMode;
+}): boolean {
+  return input.targets.some(isExternalFleetAgent)
+    && !(input.approval === 'yolo' && input.sandbox === 'danger-full-access');
 }
 
 export function buildFleetDispatchPayload(state: FleetDispatchFormState) {
@@ -153,9 +175,10 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
   const isVision = isVisionTask(taskType);
   const writesFiles = taskType === 'code' || taskType === 'ui2code';
   const targets = Array.from(new Set([agent, ...fanOut.filter((a) => a !== agent)]));
+  const needsExternalFullAccess = externalTargetsNeedFullAccess({ targets, approval, sandbox });
   const baseBranch = branch || (isVision ? `vision/${taskType}` : '');
   const baseWorktree = worktree || (isVision ? `worktrees/vision-${taskType}` : '');
-  const canSubmit = !!title.trim() && !!baseBranch.trim() && !!baseWorktree.trim() && (!isVision || !!image.trim());
+  const canSubmit = !!title.trim() && !!baseBranch.trim() && !!baseWorktree.trim() && (!isVision || !!image.trim()) && !needsExternalFullAccess;
 
   const setTaskKind = (value: FleetTaskType) => {
     setTaskType(value);
@@ -319,6 +342,12 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
+      {targets.some(isExternalFleetAgent) && (
+        <div className={needsExternalFullAccess ? s.formDangerHint : s.formHint}>
+          External CLI adapters run their own shell/process. To launch them from Fleet, explicitly set Approval=yolo and
+          Sandbox=danger-full-access. Built-in Lynn, MiMo, and StepFun workers can stay guarded.
+        </div>
+      )}
       <div className={s.formRow}>
         <div className={s.formField}>
           <label className={s.formLabel}>Branch</label>
