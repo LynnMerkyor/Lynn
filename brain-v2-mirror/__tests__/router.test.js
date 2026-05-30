@@ -61,6 +61,7 @@ afterEach(() => {
   delete process.env.BRAIN_V2_TOOL_RESULT_CAP;
   delete process.env.BRAIN_V2_TOOL_RESULT_KEEP_LATEST;
   delete process.env.BRAIN_V2_CHAIN_TOOL_HINT;
+  delete process.env.BRAIN_V2_TOOL_RESULT_REINFORCE;
 });
 
 describe('Router', () => {
@@ -372,8 +373,7 @@ describe('Router', () => {
     expect(fourthRoundToolMessages[2].content).not.toContain('[brain-v2:tool-result-compacted]');
   });
 
-  it('optionally injects a chain-tool hint only when tools are present and no system prompt exists', async () => {
-    process.env.BRAIN_V2_CHAIN_TOOL_HINT = '1';
+  it('injects a chain-tool hint by default when tools are present and no system prompt exists', async () => {
     let adapterMessages = null;
     mockState.adapterFn = async function* ({ messages }) {
       adapterMessages = messages;
@@ -387,8 +387,39 @@ describe('Router', () => {
     expect(String(adapterMessages[0].content)).toContain('EXACT values returned by each tool');
   });
 
+  it('allows opting out of the chain-tool hint and tool-result reinforcement', async () => {
+    process.env.BRAIN_V2_CHAIN_TOOL_HINT = '0';
+    let adapterRuns = 0;
+    const roundMessages = [];
+    mockState.adapterFn = async function* ({ messages }) {
+      adapterRuns += 1;
+      roundMessages.push(messages);
+      if (adapterRuns === 1) {
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: 'tc-chain-optout',
+            type: 'function',
+            function: { name: 'unit_convert', arguments: '{"query":"100公里"}' },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: 'ok' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    await run({ messages: [{ role: 'user', content: '100公里是多少米' }], onChunk: async () => {} });
+
+    expect(roundMessages[0][0]).toMatchObject({ role: 'user' });
+    const toolMessage = roundMessages[1].find((message) => message.role === 'tool');
+    expect(toolMessage.content).toContain('【单位换算】');
+    expect(toolMessage.content).not.toContain('[Lynn tool step');
+  });
+
   it('does not inject the chain-tool hint over a caller-provided system prompt', async () => {
-    process.env.BRAIN_V2_CHAIN_TOOL_HINT = '1';
     let adapterMessages = null;
     mockState.adapterFn = async function* ({ messages }) {
       adapterMessages = messages;
@@ -406,8 +437,7 @@ describe('Router', () => {
     expect(String(adapterMessages[0].content)).not.toContain('EXACT values returned by each tool');
   });
 
-  it('reinforces tool results when chain-tool hint is enabled', async () => {
-    process.env.BRAIN_V2_CHAIN_TOOL_HINT = '1';
+  it('reinforces tool results by default', async () => {
     let adapterRuns = 0;
     const roundMessages = [];
     mockState.adapterFn = async function* ({ messages }) {

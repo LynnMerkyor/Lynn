@@ -40,8 +40,8 @@ function isProviderConfigured(provider: Provider | null): boolean {
 // Tool loop guard. Default raised to 50 — long research / agentic chains need 20-30 turns.
 // Set BRAIN_V2_MAX_ITERATIONS=0 for unlimited (only abort on real errors).
 const MAX_ITERATIONS = Number(process.env.BRAIN_V2_MAX_ITERATIONS || 50);
-// Chain tool hint: opt-in guard for models that drift away from exact tool
-// results during multi-hop tool work. Default off to preserve BYOK equality.
+// Chain tool hint: default-on guard for models that drift away from exact tool
+// results during multi-hop tool work. Set BRAIN_V2_CHAIN_TOOL_HINT=0 to opt out.
 const CHAIN_TOOL_HINT: ChatMessage = {
   role: 'system',
   content:
@@ -91,15 +91,15 @@ function localProbeTimeoutMs(provider: Provider): number {
 }
 
 function shouldInjectChainToolHint(messages: ChatMessage[], tools: unknown[] | null | undefined): boolean {
-  return process.env.BRAIN_V2_CHAIN_TOOL_HINT === '1'
+  return process.env.BRAIN_V2_CHAIN_TOOL_HINT !== '0'
     && Array.isArray(tools)
     && tools.length > 0
     && messages[0]?.role !== 'system';
 }
 
 function shouldReinforceToolResults(): boolean {
-  return process.env.BRAIN_V2_TOOL_RESULT_REINFORCE === '1'
-    || process.env.BRAIN_V2_CHAIN_TOOL_HINT === '1';
+  return process.env.BRAIN_V2_TOOL_RESULT_REINFORCE !== '0'
+    && process.env.BRAIN_V2_CHAIN_TOOL_HINT !== '0';
 }
 
 function formatToolResultContent(toolName: string, result: unknown, stepIndex: number): string {
