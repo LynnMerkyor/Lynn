@@ -1,0 +1,6 @@
+src/
+tests/
+scripts/
+fixtures/
+tsconfig.json
+*.tgz

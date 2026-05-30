@@ -198,9 +198,14 @@ export function createToolTurnFinalizer({
     const originalOrEffectivePrompt = `${ss.originalPromptText || ""}\n${ss.effectivePromptText || ""}`;
     const isLongResearchTurn =
       /(?:深度|深入|完整|系统性|多维度|全面|调研|研究|研报|报告|分析报告|形成\s*docx|docx\s*格式|来源包括|但不限于|学术界|咨询领域|小红书|抖音|快手|视频号|公众号)/i.test(originalOrEffectivePrompt);
-    const timeoutMs = isLongResearchTurn
+    const deterministicFallbackText = buildLocalOfficeDirectAnswer(ss.originalPromptText || ss.effectivePromptText || "");
+    const localOfficeFallbackMs = Number(process.env.LYNN_LOCAL_OFFICE_FALLBACK_MS || 35_000);
+    const baseTimeoutMs = isLongResearchTurn
       ? Math.max(timeouts.turnHardAbortMs, timeouts.turnLongResearchHardAbortMs || timeouts.turnHardAbortMs)
       : timeouts.turnHardAbortMs;
+    const timeoutMs = deterministicFallbackText && !isLongResearchTurn
+      ? Math.min(baseTimeoutMs, Math.max(10_000, localOfficeFallbackMs))
+      : baseTimeoutMs;
     if (isLongResearchTurn && timeoutMs !== timeouts.turnHardAbortMs) {
       debugLog()?.log("ws", `[TURN-HARD-ABORT v2] long research turn timeout=${timeoutMs}ms · session=${sessionPath}`);
     }

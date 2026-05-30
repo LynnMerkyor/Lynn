@@ -41,7 +41,7 @@
       "downloadUrl": "https://download.merkyorlynn.com/download",
       "screenshot": "https://raw.githubusercontent.com/MerkyorLynn/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
       "image": "https://raw.githubusercontent.com/MerkyorLynn/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
-      "softwareVersion": "0.79.9",
+      "softwareVersion": "0.80.0",
       "datePublished": "2026-04-16",
       "fileSize": "180MB",
       "inLanguage": "zh-CN",
@@ -105,11 +105,11 @@
       <main>
         <section class="hero">
           <div class="hero-copy">
-            <span class="eyebrow">Lynn 0.79.9</span>
-            <h1>让 AI 不只会聊天，而是真的在你的电脑上一起工作。</h1>
+            <span class="eyebrow">Lynn 0.80.0</span>
+            <h1>用 GUI 调度多个 CLI Agent,让代码任务真正跑起来。</h1>
             <p class="lead">
               Lynn 是一个有心跳、有记忆、会主动行动、还能多 Agent 协作的桌面 AI
-              助手。它能记住重要事实、整理文件、巡检工作区、操作工具，也能一键启用本地 Qwen3.5-9B MTP。
+              助手。V0.80 新增 Lynn CLI / Lynn Code 和 GUI Worker Fleet,让 Codex、Claude Code、Qwen、Kimi 等 CLI 可以被统一派单、验收和收口。
             </p>
             <div class="hero-actions">
               <a class="button button-primary" href="./download.html">下载 Lynn</a>
@@ -118,7 +118,7 @@
             <div class="hero-points">
               <span>已支持 macOS Apple Silicon / Intel</span>
               <span>Windows 安装版可用</span>
-            <span>本地 9B MTP · 32K 上下文 · 无 API Key</span>
+            <span>CLI Worker Fleet · StepFun/MiMo Brain · 无 API Key</span>
             </div>
           </div>
 
@@ -152,8 +152,8 @@
             <p>不只回复你，还会调用工具、整理结果、继续推进任务。</p>
           </article>
           <article>
-            <strong>本地 9B MTP</strong>
-            <p>一键安装 Qwen3.5-9B Q4_K_M imatrix MTP，离线使用、无 API Key。</p>
+            <strong>Lynn CLI</strong>
+            <p>终端 TUI、无交互 JSONL、Headless worker 和 Fleet adapter 同步发布。</p>
           </article>
         </section>
 
@@ -162,7 +162,7 @@
             <span class="eyebrow">核心能力</span>
             <h2>比 Claude Code、Cursor、Codex 更像长期桌面伙伴</h2>
             <p>
-              Lynn 不是把大模型塞进聊天框，而是把记忆、计划、工具、复查和长期协作真正串起来。
+              Lynn 不是把大模型塞进聊天框，而是把记忆、计划、工具、复查、CLI worker 和长期协作真正串起来。
             </p>
           </div>
           <div class="feature-grid">
@@ -175,16 +175,16 @@
               <p>把便签、文件和自动任务放到同一个工作区，Lynn 会自己巡视、自己继续做事。</p>
             </article>
             <article class="feature-card">
-              <h3>多模型路由</h3>
-              <p>支持默认模型、自己的 API Key 和多供应商配置，任务失败时还能自动降级兜底。</p>
+              <h3>CLI Worker Fleet</h3>
+              <p>从 GUI 派发多个 CLI worker 到独立 worktree,统一查看日志、diff、测试和 gate。</p>
             </article>
             <article class="feature-card">
               <h3>复查闭环</h3>
               <p>由第二个 Agent 对答案和改动做复查，把发现的问题重新回注到执行链路。</p>
             </article>
             <article class="feature-card">
-              <h3>本地工具能力</h3>
-              <p>读写文件、执行命令、浏览网页、搜索信息、分析文档，都能走统一桌面壳层。</p>
+              <h3>多模型路由</h3>
+              <p>StepFun 3.7 Flash high+32K → MiMo → Spark Qwen 3.6 35B A3B,任务失败时自动降级兜底。</p>
             </article>
             <article class="feature-card">
               <h3>安全防护</h3>
@@ -233,7 +233,7 @@
           <div class="story-grid">
             <article class="story-card">
               <h3>快速设置</h3>
-              <p>新用户可以直接快速设置，不必先理解复杂的 API Key、供应商和路由配置。</p>
+              <p>新用户可以直接快速设置，不必先理解复杂的 API Key、供应商和路由配置。需要本地模型时再显式启用 9B。</p>
             </article>
             <article class="story-card">
               <h3>更像长期协作者</h3>
@@ -259,7 +259,7 @@
             <a class="button button-primary" href="./download.html">前往下载页</a>
             <a
               class="button button-secondary"
-              href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.9"
+              href="https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.0"
               target="_blank"
               rel="noreferrer"
             >查看 Release</a>
@@ -294,6 +294,6 @@
       </footer>
     </div>
 
-    <script src="./app.js?v=0.79.9"></script>
+    <script src="./app.js?v=0.80.0"></script>
   </body>
 </html>

@@ -6,6 +6,7 @@ export const FLEET_WORKER_EVENT_TYPES = Object.freeze([
   "worker.started",
   "worker.claims",
   "worker.progress",
+  "worker.visual_result",
   "assistant.delta",
   "reasoning.delta",
   "tool.started",
@@ -36,6 +37,10 @@ export type FleetWorkerStatus =
 
 export type FleetAgentKind =
   | "lynn-cli"
+  | "mimo-vl"
+  | "mimo-pro"
+  | "mimo-fast"
+  | "stepfun-flash"
   | "codex-cli"
   | "claude-internal"
   | "claude-code"
@@ -90,6 +95,30 @@ export interface FleetWorkerProgressEvent extends FleetEventBase<"worker.progres
   message: string;
   level?: FleetSeverity;
   data?: unknown;
+}
+
+export type FleetVisualTaskType = "see" | "ground" | "ui2code";
+
+export interface FleetVisualBox {
+  label?: string;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  confidence?: number;
+}
+
+export interface FleetVisualResultFile {
+  path: string;
+  kind: "created" | "modified" | "suggested";
+}
+
+export interface FleetWorkerVisualResultEvent extends FleetEventBase<"worker.visual_result"> {
+  taskType: FleetVisualTaskType;
+  summary: string;
+  image?: string;
+  boxes?: FleetVisualBox[];
+  files?: FleetVisualResultFile[];
 }
 
 export interface FleetAssistantDeltaEvent extends FleetEventBase<"assistant.delta"> {
@@ -181,6 +210,7 @@ export type FleetWorkerEvent =
   | FleetWorkerStartedEvent
   | FleetWorkerClaimsEvent
   | FleetWorkerProgressEvent
+  | FleetWorkerVisualResultEvent
   | FleetAssistantDeltaEvent
   | FleetReasoningDeltaEvent
   | FleetToolStartedEvent
@@ -213,6 +243,7 @@ export const FLEET_EVENT_REQUIRED_FIELDS = Object.freeze({
   "worker.started": ["workerId", "cwd", "worktree", "branch"],
   "worker.claims": ["owned", "forbidden"],
   "worker.progress": ["message"],
+  "worker.visual_result": ["taskType", "summary"],
   "assistant.delta": ["text"],
   "reasoning.delta": ["text"],
   "tool.started": ["name"],

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // 根据 package.json version 生成 .github/update-manifest.json。
-// 发布约定: arm64 → Apple-Silicon / x64 → Intel (见 feedback_macos_dmg_naming)。
+// 发布约定:跟 electron-builder artifactName 保持一致:
+//   Lynn-${version}-macOS-${arch}.dmg
 //
 // 用法:
 //   node --import tsx scripts/generate-update-manifest.ts
@@ -64,8 +65,8 @@ function buildAssetUrls(version: string) {
   // [HOTPATCH 2026-04-27 night] 真实下载 URL 全走腾讯镜像(CN 用户必经),不再用 GitHub。
   // default(fallback)指向镜像站 download.html 让用户自己选,不跳 GitHub release tag。
   return {
-    "darwin-arm64": `${MIRROR_DOWNLOAD_BASE}/Lynn-${version}-macOS-Apple-Silicon.dmg`,
-    "darwin-x64": `${MIRROR_DOWNLOAD_BASE}/Lynn-${version}-macOS-Intel.dmg`,
+    "darwin-arm64": `${MIRROR_DOWNLOAD_BASE}/Lynn-${version}-macOS-arm64.dmg`,
+    "darwin-x64": `${MIRROR_DOWNLOAD_BASE}/Lynn-${version}-macOS-x64.dmg`,
     "win32-x64": `${MIRROR_DOWNLOAD_BASE}/Lynn-${version}-Windows-Setup.exe`,
     default: "https://download.merkyorlynn.com/download.html",
   };

@@ -54,7 +54,20 @@ type OpenAICompatRequestBody = Record<string, unknown> & {
   tool_choice?: 'auto';
 };
 
+function shouldForwardReasoningEffort(provider: WireAdapterOptions['provider'], reasoningEffort?: string | null): boolean {
+  if (!reasoningEffort) return false;
+  if (provider.thinking_control === 'qwen_chat_template') return true;
+  return reasoningEffort !== 'auto'
+    && reasoningEffort !== 'off'
+    && reasoningEffort !== 'none'
+    && reasoningEffort !== 'disabled';
+}
+
 export async function* call({ provider, messages, tools, signal, extraBody, reasoningEffort }: WireAdapterOptions): AsyncGenerator<StreamChunk> {
+  const effectiveReasoningEffort =
+    provider.default_reasoning_effort && (!reasoningEffort || reasoningEffort === 'auto')
+      ? provider.default_reasoning_effort
+      : reasoningEffort;
   const body: OpenAICompatRequestBody = {
     model: provider.model,
     messages,
@@ -64,22 +77,23 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
     ...(extraBody && typeof extraBody === 'object' ? extraBody : {}),
   };
   // F11: reasoning_effort BYOK 透传 — server.js 抽到 arg,extraBody 没的话从 arg 回灌
-  if (reasoningEffort && !body.reasoning_effort) {
-    body.reasoning_effort = reasoningEffort;
+  if (shouldForwardReasoningEffort(provider, effectiveReasoningEffort) && !body.reasoning_effort) {
+    body.reasoning_effort = effectiveReasoningEffort;
   }
   // 2026-05-25: provider.default_thinking === false 时(例如 apex-spark Brain v2 fallback),
   // 默认关 thinking,跟 MiMo 行为对齐。避免短 max_tokens 工况下 35B 长 reasoning 吃光
   // 预算返回空 content。client 通过 reasoning_effort('low'/'medium'/'high'/'on')显式
   // opt-in,或 extraBody.chat_template_kwargs.enable_thinking 直接覆盖。
   if (provider.default_thinking === false
+      && provider.thinking_control === 'qwen_chat_template'
       && body?.chat_template_kwargs?.enable_thinking === undefined) {
     // F12: 'auto' or null → 智能 detect (短答 off / 长 think on)
     // 显式 'high'/'xhigh'/'on'/'medium'/'low' → 强制 on
     // 'off'/'none'/'disabled' → 强制 off
     let wantsThinking: boolean;
-    if (!reasoningEffort || reasoningEffort === 'auto') {
+    if (!effectiveReasoningEffort || effectiveReasoningEffort === 'auto') {
       wantsThinking = shouldAutoThink(messages);
-    } else if (reasoningEffort === 'off' || reasoningEffort === 'none' || reasoningEffort === 'disabled') {
+    } else if (effectiveReasoningEffort === 'off' || effectiveReasoningEffort === 'none' || effectiveReasoningEffort === 'disabled') {
       wantsThinking = false;
     } else {
       wantsThinking = true;

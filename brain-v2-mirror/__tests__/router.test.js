@@ -11,6 +11,11 @@ const mockState = vi.hoisted(() => ({
 
 vi.mock('../provider-registry.js', () => ({
   universalOrder: ['p-mimo', 'p-spark', 'p-cloud', 'p-vision'],
+  providerOrderForCapability: (capabilityRequired) => (
+    capabilityRequired?.vision || capabilityRequired?.audio || capabilityRequired?.video
+      ? ['p-vision', 'p-mimo', 'p-spark', 'p-cloud']
+      : ['p-mimo', 'p-spark', 'p-cloud', 'p-vision']
+  ),
   getProvider: (id) => mockState.providers[id] || null,
   isInCooldown: (id) => mockState.cooldown.has(id),
   markUnhealthy: (id, reason) => mockState.cooldown.add(id),
@@ -55,6 +60,8 @@ afterEach(() => {
   delete process.env.BRAIN_V2_STORM_MAX;
   delete process.env.BRAIN_V2_TOOL_RESULT_CAP;
   delete process.env.BRAIN_V2_TOOL_RESULT_KEEP_LATEST;
+  delete process.env.BRAIN_V2_CHAIN_TOOL_HINT;
+  delete process.env.BRAIN_V2_TOOL_RESULT_REINFORCE;
 });
 
 describe('Router', () => {
@@ -85,6 +92,28 @@ describe('Router', () => {
     expect(r.providerId).toBe('p-spark');
     expect(mockState.adapterCalls).toEqual(['p-mimo', 'p-spark']);
     expect(mockState.cooldown.has('p-mimo')).toBe(true);  // HTTP error 2192 markUnhealthy
+  });
+
+  it('falls back on HTTP 429 rate limit and cools down the limited provider', async () => {
+    let callIdx = 0;
+    const chunks = [];
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      callIdx++;
+      if (callIdx === 1) throw new Error('p-mimo HTTP 429: rate limited');
+      yield { type: 'content', delta: 'fallback after rate limit' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const r = await run({
+      messages: [{ role: 'user', content: 'q' }],
+      onChunk: async c => chunks.push(c),
+    });
+
+    expect(r.providerId).toBe('p-spark');
+    expect(mockState.adapterCalls).toEqual(['p-mimo', 'p-spark']);
+    expect(mockState.cooldown.has('p-mimo')).toBe(true);
+    expect(chunks.find((c) => c.type === 'content')?.delta).toBe('fallback after rate limit');
   });
 
   it('empty-emit single hit: still tries next but no cooldown (P1#4 threshold=2)', async () => {
@@ -165,6 +194,33 @@ describe('Router', () => {
     expect(mockState.adapterCalls).toEqual(['p-vision']);
   });
 
+  it('routes audio + video requests to a multimodal-capable provider (CLI omni input is consumed)', async () => {
+    // The omni provider gains audio/video so the capability gate can land on it.
+    mockState.providers['p-vision'] = makeProvider('p-vision', { vision: true, audio: true, video: true });
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'omni ok' };
+    };
+
+    const audio = await run({ messages: [{ role: 'user', content: 'transcribe this' }], capabilityRequired: { audio: true }, onChunk: async () => {} });
+    expect(audio.providerId).toBe('p-vision');
+
+    mockState.adapterCalls = [];
+    const video = await run({ messages: [{ role: 'user', content: 'watch this' }], capabilityRequired: { video: true }, onChunk: async () => {} });
+    expect(video.providerId).toBe('p-vision');
+    expect(mockState.adapterCalls).toEqual(['p-vision']);
+  });
+
+  it('errors loudly when an audio request has no audio-capable provider (no silent text fallback)', async () => {
+    // None of the default mock providers support audio → the gate must refuse,
+    // not quietly answer with a text-only model.
+    mockState.adapterFn = async function* () { yield { type: 'content', delta: 'should not run' }; };
+    await expect(
+      run({ messages: [{ role: 'user', content: 'transcribe' }], capabilityRequired: { audio: true }, onChunk: async () => {} }),
+    ).rejects.toThrow(/CAPABILITY_NOT_SUPPORTED/);
+    expect(mockState.adapterCalls).toEqual([]);
+  });
+
   it('throws when all providers fail with errors collected', async () => {
     mockState.adapterFn = async function* ({ provider }) {
       throw new Error(`${provider.id} dead`);
@@ -212,7 +268,12 @@ describe('Router', () => {
     const chunks = [];
     const metas = [];
     const result = await run({
-      messages: [{ role: 'user', content: '今天天气怎么样' }],
+      messages: [
+        { role: 'system', content: 'persona must stay at prefix' },
+        { role: 'user', content: '你好' },
+        { role: 'assistant', content: '你好' },
+        { role: 'user', content: '今天天气怎么样' },
+      ],
       onChunk: async (chunk, meta) => {
         chunks.push(chunk);
         metas.push(meta);
@@ -224,10 +285,15 @@ describe('Router', () => {
     expect(chunks.map(c => c.type)).toEqual(['pre_search', 'content']);
     expect(chunks[0]).toMatchObject({ source: 'mimo', hit: true, cached: null });
     expect(metas[0].fallback_from).toEqual([{ id: 'p-mimo', reason: 'cooldown' }]);
-    expect(adapterMessages).toHaveLength(2);
-    expect(adapterMessages[0].role).toBe('system');
-    expect(String(adapterMessages[0].content)).toContain('【实时信息上下文】');
-    expect(adapterMessages[1].role).toBe('user');
+    expect(adapterMessages).toHaveLength(5);
+    expect(adapterMessages.map(m => m.role)).toEqual(['system', 'user', 'assistant', 'user', 'user']);
+    expect(adapterMessages.filter(m => m.role === 'system')).toHaveLength(1);
+    expect(adapterMessages[0].content).toBe('persona must stay at prefix');
+    expect(adapterMessages[3].role).toBe('user');
+    expect(String(adapterMessages[3].content)).toContain('<lynn_runtime_frame');
+    expect(String(adapterMessages[3].content)).toContain('【实时信息上下文】');
+    expect(adapterMessages[4].role).toBe('user');
+    expect(adapterMessages[4].content).toBe('今天天气怎么样');
   });
 
   it('suppresses repeated server tool calls when storm detection is enabled', async () => {
@@ -305,6 +371,105 @@ describe('Router', () => {
     expect(fourthRoundToolMessages[1].content).toContain('[brain-v2:tool-result-compacted]');
     expect(fourthRoundToolMessages[2].content).toContain('【单位换算】');
     expect(fourthRoundToolMessages[2].content).not.toContain('[brain-v2:tool-result-compacted]');
+  });
+
+  it('injects a chain-tool hint by default when tools are present and no system prompt exists', async () => {
+    let adapterMessages = null;
+    mockState.adapterFn = async function* ({ messages }) {
+      adapterMessages = messages;
+      yield { type: 'content', delta: 'ok' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    await run({ messages: [{ role: 'user', content: 'AAPL price times 100' }], tools: null, onChunk: async () => {} });
+
+    expect(adapterMessages[0]).toMatchObject({ role: 'system' });
+    expect(String(adapterMessages[0].content)).toContain('EXACT values returned by each tool');
+  });
+
+  it('allows opting out of the chain-tool hint and tool-result reinforcement', async () => {
+    process.env.BRAIN_V2_CHAIN_TOOL_HINT = '0';
+    let adapterRuns = 0;
+    const roundMessages = [];
+    mockState.adapterFn = async function* ({ messages }) {
+      adapterRuns += 1;
+      roundMessages.push(messages);
+      if (adapterRuns === 1) {
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: 'tc-chain-optout',
+            type: 'function',
+            function: { name: 'unit_convert', arguments: '{"query":"100公里"}' },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: 'ok' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    await run({ messages: [{ role: 'user', content: '100公里是多少米' }], onChunk: async () => {} });
+
+    expect(roundMessages[0][0]).toMatchObject({ role: 'user' });
+    const toolMessage = roundMessages[1].find((message) => message.role === 'tool');
+    expect(toolMessage.content).toContain('【单位换算】');
+    expect(toolMessage.content).not.toContain('[Lynn tool step');
+  });
+
+  it('does not inject the chain-tool hint over a caller-provided system prompt', async () => {
+    let adapterMessages = null;
+    mockState.adapterFn = async function* ({ messages }) {
+      adapterMessages = messages;
+      yield { type: 'content', delta: 'ok' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    await run({
+      messages: [{ role: 'system', content: 'caller system' }, { role: 'user', content: 'q' }],
+      tools: null,
+      onChunk: async () => {},
+    });
+
+    expect(adapterMessages[0].content).toBe('caller system');
+    expect(String(adapterMessages[0].content)).not.toContain('EXACT values returned by each tool');
+  });
+
+  it('reinforces tool results by default', async () => {
+    let adapterRuns = 0;
+    const roundMessages = [];
+    mockState.adapterFn = async function* ({ messages }) {
+      adapterRuns += 1;
+      roundMessages.push(messages);
+      if (adapterRuns === 1) {
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: 'tc-chain-1',
+            type: 'function',
+            function: { name: 'unit_convert', arguments: '{"query":"100公里"}' },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: 'ok' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const result = await run({
+      messages: [{ role: 'user', content: '300美元换成人民币是多少' }],
+      onChunk: async () => {},
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    const toolMessage = roundMessages[1].find((message) => message.role === 'tool');
+    expect(toolMessage.content).toContain('[Lynn tool step 1 completed] unit_convert returned the exact result below.');
+    expect(toolMessage.content).toContain('use these exact returned values');
+    expect(toolMessage.content).toContain('【单位换算】');
   });
 });
 

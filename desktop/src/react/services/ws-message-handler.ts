@@ -218,6 +218,14 @@ export function handleServerMessage(msg: ServerEvent | any): void {
 
   // 非聊天渲染事件走传统 switch
   switch (msg.type) {
+    case 'fleet:event':
+      if (msg.event) useStore.getState().applyFleetEvent(msg.event);
+      break;
+
+    case 'fleet:reset':
+      useStore.getState().resetFleet();
+      break;
+
     case 'status':
       applySessionStreamingStatus(msg.sessionPath, !!msg.isStreaming);
       break;

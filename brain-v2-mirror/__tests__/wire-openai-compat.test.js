@@ -60,6 +60,29 @@ describe('OpenAI-compat wire adapter', () => {
     expect(body.max_tokens).toBe(8192);
   });
 
+  it('uses provider default reasoning effort and token budget for StepFun head route', async () => {
+    const stepProvider = {
+      id: 'step-3.7-flash',
+      endpoint: 'https://api.stepfun.com/step_plan/v1',
+      apiKey: 'sk-step',
+      model: 'step-3.7-flash',
+      capability: { vision: false, tools: true, thinking: true },
+      default_thinking: false,
+      default_reasoning_effort: 'high',
+      max_tokens: 32_768,
+    };
+    const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'hi' }), sseDone())));
+    await drain(callOpenAI({
+      provider: stepProvider,
+      messages: [{ role: 'user', content: '请分析一下这个架构问题' }],
+      reasoningEffort: 'auto',
+    }));
+    const body = JSON.parse(f.mock.calls[0][1].body);
+    expect(body.reasoning_effort).toBe('high');
+    expect(body.max_tokens).toBe(32_768);
+    expect(body.chat_template_kwargs).toBeUndefined();
+  });
+
   it('throws with provider.id in error message on 401', async () => {
     mockFetch(fail(401, 'invalid key'));
     await expect(drain(callOpenAI({ provider, messages: [{ role: 'user', content: 'q' }] }))).rejects.toThrow(/deepseek-chat HTTP 401/);
@@ -74,6 +97,7 @@ describe('OpenAI-compat wire adapter', () => {
       model: 'qwen36-35b-a3b-apex-mtp',
       capability: { vision: false, tools: true, thinking: true },
       default_thinking: false,
+      thinking_control: 'qwen_chat_template',
     };
 
     it('default_thinking:false → 注入 chat_template_kwargs.enable_thinking=false', async () => {
@@ -164,6 +188,53 @@ describe('OpenAI-compat wire adapter', () => {
       await drain(callOpenAI({ provider, messages: [{ role: 'user', content: 'q' }] }));
       const body = JSON.parse(f.mock.calls[0][1].body);
       expect(body.chat_template_kwargs).toBeUndefined();
+    });
+
+    it('default_thinking:false without qwen thinking_control does not leak chat_template_kwargs to cloud providers', async () => {
+      const stepProvider = {
+        id: 'step-3.7-flash',
+        endpoint: 'https://api.stepfun.com/step_plan/v1',
+        apiKey: 'sk-step',
+        model: 'step-3.7-flash',
+        capability: { vision: true, tools: true, thinking: true },
+        default_thinking: false,
+      };
+      const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'hi' }), sseDone())));
+      await drain(callOpenAI({
+        provider: stepProvider,
+        messages: [{ role: 'user', content: '你好' }],
+        reasoningEffort: 'auto',
+      }));
+      const body = JSON.parse(f.mock.calls[0][1].body);
+      expect(body.chat_template_kwargs).toBeUndefined();
+      expect(body.reasoning_effort).toBeUndefined();
+      expect(body.max_tokens).toBe(4096);
+    });
+
+    it('forwards explicit cloud reasoning effort but filters UI-only off/auto values', async () => {
+      const stepProvider = {
+        id: 'step-3.7-flash',
+        endpoint: 'https://api.stepfun.com/step_plan/v1',
+        apiKey: 'sk-step',
+        model: 'step-3.7-flash',
+        capability: { vision: true, tools: true, thinking: true },
+        default_thinking: false,
+      };
+      const high = mockFetch(ok(makeSSEBody(sseEvent({ content: 'hi' }), sseDone())));
+      await drain(callOpenAI({
+        provider: stepProvider,
+        messages: [{ role: 'user', content: '请分析这个问题' }],
+        reasoningEffort: 'high',
+      }));
+      expect(JSON.parse(high.mock.calls[0][1].body).reasoning_effort).toBe('high');
+
+      const off = mockFetch(ok(makeSSEBody(sseEvent({ content: 'hi' }), sseDone())));
+      await drain(callOpenAI({
+        provider: stepProvider,
+        messages: [{ role: 'user', content: 'q' }],
+        reasoningEffort: 'off',
+      }));
+      expect(JSON.parse(off.mock.calls[0][1].body).reasoning_effort).toBeUndefined();
     });
   });
 });

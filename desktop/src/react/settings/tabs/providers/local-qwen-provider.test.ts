@@ -69,11 +69,21 @@ describe('Local Qwen provider UX guards', () => {
   it('keeps local model IPC commands explicit and guarded', () => {
     const main = read('desktop/main.cjs');
     const preload = read('desktop/preload.cjs');
+    const profiles = read('desktop/llamacpp-profiles.cjs');
+    const controller = read('desktop/src/react/components/input/useLocalQwenStatusController.ts');
+    const detail = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
     expect(main).toContain('const LOCAL_MODEL_IPC = Object.freeze');
     expect(main).toContain('parseStartDownloadPayload');
     expect(main).toContain('download-boundary-invalid');
     expect(main).toContain('model-path-not-allowed');
     expect(main).toContain('isLocalModelPathAllowed');
+    expect(main).toContain('startup auto-start disabled');
+    expect(main).toContain('LYNN_LOCAL_MODEL_AUTO_START === "1"');
+    expect(main).toContain('parsedPayload.startAfterDownload || profile.autoStart');
+    expect(profiles).toContain('[DEFAULT_MODEL_ID]:');
+    expect(profiles).toContain('autoStart: false');
+    expect(controller).toContain('startAfterDownload: true');
+    expect(detail).toContain('startAfterDownload: true');
     expect(preload).toContain('llamacppStartDownload: (payload)');
     expect(preload).toContain('llamacppStartCustomModel: (modelPath)');
   });

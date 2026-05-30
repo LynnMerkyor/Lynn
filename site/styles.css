@@ -518,6 +518,86 @@ img {
   padding: 32px;
 }
 
+.cli-install-section {
+  padding-top: 18px;
+}
+
+.cli-install-card {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: stretch;
+  padding: 24px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(135deg, rgba(110, 151, 178, 0.1), rgba(255, 251, 244, 0.74)),
+    var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.cli-install-card-strong {
+  border-color: rgba(162, 111, 70, 0.26);
+  background:
+    linear-gradient(135deg, rgba(215, 155, 110, 0.16), rgba(255, 251, 244, 0.78)),
+    var(--surface);
+}
+
+.cli-install-copy h3 {
+  margin: 0 0 10px;
+  color: var(--heading);
+  font-size: 1.22rem;
+}
+
+.cli-install-copy p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.8;
+}
+
+.code-copy-block {
+  position: relative;
+  min-width: 0;
+}
+
+.copy-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  color: #eaf5f6;
+  background: rgba(255, 255, 255, 0.1);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.copy-button:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.cli-install-card pre {
+  margin: 0;
+  padding: 18px 72px 18px 18px;
+  overflow-x: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(62, 82, 96, 0.14);
+  color: #eef6f7;
+  background: #22303b;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.cli-install-card code {
+  font-family: "SFMono-Regular", "Cascadia Code", "Liberation Mono", Menlo, monospace;
+  font-size: 0.9rem;
+  line-height: 1.72;
+  white-space: pre;
+}
+
 .site-footer {
   display: flex;
   align-items: center;
@@ -550,7 +630,8 @@ img {
   .download-grid,
   .faq-list,
   .story-grid,
-  .requirement-grid {
+  .requirement-grid,
+  .cli-install-card {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -595,7 +676,8 @@ img {
   .scene-grid,
   .faq-list,
   .story-grid,
-  .requirement-grid {
+  .requirement-grid,
+  .cli-install-card {
     grid-template-columns: 1fr;
   }
 

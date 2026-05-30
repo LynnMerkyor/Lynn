@@ -211,7 +211,7 @@ export interface SessionAgent {
 }
 
 // ── 浮动面板类型 ──
-export type ActivePanel = 'activity' | 'automation' | 'bridge' | 'changes' | null;
+export type ActivePanel = 'activity' | 'automation' | 'bridge' | 'changes' | 'fleet' | null;
 export type TabType = 'chat' | 'channels';
 
 // ── Platform API 类型声明 ──
@@ -237,9 +237,18 @@ export interface GlobalShortcutStatus {
   errors?: Record<string, string>;
 }
 
+export interface CliEnvStatus {
+  ready: boolean;
+  node: { path: string; source: 'bundled' | 'electron' | 'system'; version: string | null };
+  cli: { path: string | null; present: boolean };
+  systemNode: { path: string; version: string | null; major: number | null } | null;
+  minNodeMajor: number;
+}
+
 export interface PlatformApi {
   getServerPort(): Promise<string>;
   getServerToken(): Promise<string>;
+  cliEnvStatus?(): Promise<CliEnvStatus>;
   setWakeLock?(reason: string, active: boolean): Promise<{ active: boolean; blockerId: number | null; reasons: string[] }>;
   getWakeLockState?(): Promise<{ active: boolean; blockerId: number | null; reasons: string[] }>;
   openSettings(target?: string | SettingsNavigationTarget): void;
@@ -254,7 +263,7 @@ export interface PlatformApi {
   llamacppOpenModelDir?(targetPath?: string | null): Promise<{ ok: boolean; path?: string; revealedPath?: string; error?: string | null }>;
   llamacppStartCustomModel?(modelPath: string): Promise<{ ok: boolean; modelId?: string; modelPath?: string; reason?: string; detail?: string }>;
   llamacppStop?(): Promise<{ ok: boolean; reason?: string }>;
-  llamacppStartDownload?(payload?: { modelId?: string }): Promise<{
+  llamacppStartDownload?(payload?: { modelId?: string; startAfterDownload?: boolean }): Promise<{
     ok: boolean;
     alreadyRunning?: boolean;
     alreadyIdle?: boolean;
