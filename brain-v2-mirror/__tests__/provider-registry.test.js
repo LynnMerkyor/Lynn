@@ -20,6 +20,7 @@ describe('provider registry', () => {
     expect(step.wire).toBe('openai');
     expect(step.cooldown_ms).toBe(60_000);
     expect(step.default_thinking).toBe(false);
+    expect(step.thinking_control).toBeUndefined();
     expect(step.capability).toMatchObject({
       vision: true,
       audio: false,
@@ -28,6 +29,12 @@ describe('provider registry', () => {
       thinking: true,
       native_search: false,
     });
+  });
+
+  it('keeps Qwen chat-template thinking control scoped to Spark only', () => {
+    expect(getProvider('apex-spark-i-balanced').thinking_control).toBe('qwen_chat_template');
+    expect(getProvider('step-3.7-flash').thinking_control).toBeUndefined();
+    expect(getProvider('deepseek-chat').thinking_control).toBeUndefined();
   });
 
   it('makes StepFun the second vision-capable option after MiMo', () => {

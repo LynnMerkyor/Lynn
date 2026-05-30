@@ -72,6 +72,7 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
   // 预算返回空 content。client 通过 reasoning_effort('low'/'medium'/'high'/'on')显式
   // opt-in,或 extraBody.chat_template_kwargs.enable_thinking 直接覆盖。
   if (provider.default_thinking === false
+      && provider.thinking_control === 'qwen_chat_template'
       && body?.chat_template_kwargs?.enable_thinking === undefined) {
     // F12: 'auto' or null → 智能 detect (短答 off / 长 think on)
     // 显式 'high'/'xhigh'/'on'/'medium'/'low' → 强制 on

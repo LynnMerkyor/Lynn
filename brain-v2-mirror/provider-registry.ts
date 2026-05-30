@@ -38,6 +38,7 @@ const PROVIDER_DEFS = {
     // 把 reasoning_content 吃光、content 空、用户拿到空答案。client 通过 reasoning_effort
     // (非 'off' / 'none')显式 opt-in 才走 thinking-on。
     default_thinking: false,
+    thinking_control: 'qwen_chat_template',
   },
   // [step-3.7-flash v1] StepFun 云 198B-MoE/11B-A vision-language(step_plan 端点)。
   // universalOrder 第 3 位:Spark APEX 之后、DeepSeek 之前。vision=true → 排在 mimo 之后、

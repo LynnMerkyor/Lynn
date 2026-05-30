@@ -74,6 +74,7 @@ describe('OpenAI-compat wire adapter', () => {
       model: 'qwen36-35b-a3b-apex-mtp',
       capability: { vision: false, tools: true, thinking: true },
       default_thinking: false,
+      thinking_control: 'qwen_chat_template',
     };
 
     it('default_thinking:false → 注入 chat_template_kwargs.enable_thinking=false', async () => {
@@ -164,6 +165,27 @@ describe('OpenAI-compat wire adapter', () => {
       await drain(callOpenAI({ provider, messages: [{ role: 'user', content: 'q' }] }));
       const body = JSON.parse(f.mock.calls[0][1].body);
       expect(body.chat_template_kwargs).toBeUndefined();
+    });
+
+    it('default_thinking:false without qwen thinking_control does not leak chat_template_kwargs to cloud providers', async () => {
+      const stepProvider = {
+        id: 'step-3.7-flash',
+        endpoint: 'https://api.stepfun.com/step_plan/v1',
+        apiKey: 'sk-step',
+        model: 'step-3.7-flash',
+        capability: { vision: true, tools: true, thinking: true },
+        default_thinking: false,
+      };
+      const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'hi' }), sseDone())));
+      await drain(callOpenAI({
+        provider: stepProvider,
+        messages: [{ role: 'user', content: '你好' }],
+        reasoningEffort: 'auto',
+      }));
+      const body = JSON.parse(f.mock.calls[0][1].body);
+      expect(body.chat_template_kwargs).toBeUndefined();
+      expect(body.reasoning_effort).toBe('auto');
+      expect(body.max_tokens).toBe(4096);
     });
   });
 });

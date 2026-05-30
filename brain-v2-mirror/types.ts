@@ -44,6 +44,7 @@ export interface Provider {
   health_path?: string;
   health_probe_ms?: number;
   default_thinking: boolean;
+  thinking_control?: 'qwen_chat_template';
   authType?: 'none' | 'bearer';
   max_tokens?: number;
   temperature?: number;
