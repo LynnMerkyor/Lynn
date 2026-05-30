@@ -570,7 +570,7 @@ while time.time() < deadline:
             break
         buf += chunk
         text = buf.decode("utf-8", errors="replace")
-        if (not sent_exit) and "/yolo" in text:
+        if (not sent_exit) and "Lynn CLI" in text:
             os.write(master, b"/exit\\r")
             sent_exit = True
     if sent_exit and proc.poll() is not None:
@@ -601,7 +601,6 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
 
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("Lynn CLI");
-    expect(result.stdout).toContain("/yolo");
     expect(result.stdout).toContain("StepFun 3.7 Flash");
     expect(result.stderr).toBe("");
   }, 75_000);

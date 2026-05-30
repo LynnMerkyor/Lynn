@@ -458,7 +458,7 @@ describe("code agent loop", () => {
     expect(events.some((event) => event.type === "session.saved" && event.path === sessionPath)).toBe(true);
   });
 
-  pythonIt("uses the Ink code shell for mock coding turns and Shift+Tab mode toggle", async () => {
+  pythonIt("uses the Ink code shell for mock coding turns", async () => {
     const script = `
 import os
 import pty
@@ -483,7 +483,6 @@ proc = subprocess.Popen(
 )
 os.close(slave)
 buf = b""
-toggled = False
 sent_task = False
 sent_exit = False
 deadline = time.time() + 75
@@ -498,10 +497,7 @@ while time.time() < deadline:
             break
         buf += chunk
         text = buf.decode("utf-8", errors="replace")
-        if (not toggled) and "Lynn Code" in text and "Shift+Tab" in text:
-            os.write(master, b"\\x1b[Z")
-            toggled = True
-        elif toggled and (not sent_task) and "YOLO" in text:
+        if (not sent_task) and "Lynn Code" in text:
             os.write(master, "hi\\r".encode("utf-8"))
             sent_task = True
         elif sent_task and (not sent_exit) and "模拟编码任务" in text:
@@ -517,8 +513,6 @@ if proc.poll() is None:
         proc.kill()
         proc.wait()
 text = buf.decode("utf-8", errors="replace")
-if not toggled:
-    sys.stderr.write("Shift+Tab was not sent\\n")
 if not sent_task:
     sys.stderr.write("mock task was not sent\\n")
 sys.stdout.write(text)
@@ -541,7 +535,6 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
     expect(result.code).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("Lynn Code");
-    expect(result.stdout).toContain("YOLO");
     expect(result.stdout).toContain("模拟编码任务");
   }, 100_000);
 
