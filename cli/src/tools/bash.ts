@@ -5,6 +5,8 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_STREAM_BYTES = 1_000_000;
 const WORKSPACE_BASH_ALLOWED = /^(npm|pnpm|yarn|bun|node|python3?|pytest|deno|cargo|rustc|go|git|rg|grep|find|ls|pwd|cat|sed|awk|wc|head|tail|sort|uniq|diff)\b/;
 const WORKSPACE_BASH_FORBIDDEN = [
+  /[;&|`]/,
+  /\$\(/,
   /\bsudo\b/,
   /\bcurl\b/,
   /\bwget\b/,
