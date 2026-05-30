@@ -346,6 +346,46 @@ describe("code agent loop", () => {
     expect(events.some((event) => event.type === "task.finished" && event.ok)).toBe(true);
   });
 
+  it("does not prompt for per-tool approval in yolo mode", async () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+yolo",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    let approvalCallbacks = 0;
+    await withBrainServer((_body, count) => count === 1
+      ? JSON.stringify({ tool: "apply_patch", args: { patch } })
+      : "YOLO patch applied.",
+    async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "patch without asking",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--approval",
+        "yolo",
+        "--sandbox",
+        "danger-full-access",
+        "--max-steps",
+        "3",
+      ]), "patch without asking", () => {}, {
+        requestApproval: async () => {
+          approvalCallbacks += 1;
+          return "deny";
+        },
+      })).resolves.toBe(0);
+    });
+
+    await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("yolo\n");
+    expect(approvalCallbacks).toBe(0);
+  });
+
   it("emits visible plan updates from TodoWrite-style tool calls", async () => {
     const events: CodeAgentEvent[] = [];
     await withBrainServer((_body, count) => count === 1
@@ -941,6 +981,37 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
     }
 
     expect(output).toContain("Reviewed the screenshot");
+  });
+
+  it("sends pasted media paths through headless code mode", async () => {
+    const image = path.join(tmp, "pasted-shot.png");
+    await fs.writeFile(image, Buffer.from("89504e470d0a1a0a", "hex"));
+    const original = process.stdout.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    try {
+      await withBrainServer((body) => {
+        const parsed = body as { messages?: Array<{ content?: unknown }> };
+        const firstUser = parsed.messages?.find((message) => Array.isArray(message.content));
+        const content = Array.isArray(firstUser?.content) ? firstUser.content : [];
+        expect(JSON.stringify(content)).toContain("data:image/png;base64");
+        expect(JSON.stringify(content)).toContain("Attached images:");
+        expect(JSON.stringify(content)).not.toContain("review this UI ./pasted-shot.png");
+        return "Reviewed pasted screenshot.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "-p",
+          "review this UI ./pasted-shot.png",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
   });
 
   it("sends multiple attached images through code mode", async () => {

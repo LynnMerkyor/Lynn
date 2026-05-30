@@ -33,6 +33,7 @@ import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSess
 import { buildMemoryContextFrameSync } from "../session/memory.js";
 import { buildCodeContextMessages, computeCodeContextLayerDiagnostics } from "../context-layers.js";
 import { renderToolLedger, toolLedgerEntry, type ToolLedgerEntry } from "../tool-ledger.js";
+import { prepareCodeTaskInput } from "../code-input.js";
 import type { RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
 
 const pExecFile = promisify(execFile);
@@ -516,6 +517,9 @@ async function runCodeTask(
   } = {},
 ): Promise<number> {
   const context = await collectCodeContext(cwd(args));
+  const preparedInput = prepareCodeTaskInput(task, context.cwd, t("chat.image.defaultPrompt"));
+  const taskText = preparedInput.task;
+  const mediaPaths = codeMediaPaths(args, preparedInput.mediaPaths);
   const reasoning = parseReasoningOptions(args);
   const stepBudget = maxSteps(args);
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
@@ -523,7 +527,7 @@ async function runCodeTask(
   const mode = await resolveCodeMode(args);
   const cliProvider = await resolveCliProviderProfile(args);
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
-  const memoryFrame = buildMemoryContextFrameSync(dataDir, task);
+  const memoryFrame = buildMemoryContextFrameSync(dataDir, taskText);
   const resumePath = await resolveCodeResumePath(getStringFlag(args.flags, "resume"), dataDir);
   const resumeMessages = resumePath ? await loadResumeMessages(resumePath) : [];
   const resumeDiag = resumePath ? summarizeResumeMessages(resumeMessages) : null;
@@ -531,7 +535,7 @@ async function runCodeTask(
   const resumePlan = resumePath ? extractLatestPlan(resumeMessages) : [];
   const saveSession = shouldSaveCodeSession(args, { json, mockBrain, resumePath });
   const sessionPath = getStringFlag(args.flags, "session") || resumePath;
-  const title = getStringFlag(args.flags, "title") || task;
+  const title = getStringFlag(args.flags, "title") || taskText;
   let liveSessionPath = sessionPath;
   if (!json && !options.compact && !options.onEvent) {
     errorOutput.write(renderCodeTaskHeader({
@@ -573,13 +577,13 @@ async function runCodeTask(
     }
   }
   if (json) {
-    writeJsonLine({ type: "code.task.started", ts: nowIso(), task, context });
+    writeJsonLine({ type: "code.task.started", ts: nowIso(), task: taskText, context, mediaPaths });
     if (resumePath) writeJsonLine({ type: "session.resumed", ts: nowIso(), path: resumePath, messages: resumeMessages.length, repairedTools: resumeDiag?.repairedTools ?? 0, compacted: resumeDiag?.compacted ?? false, tornLines: resumeDiag?.tornLines ?? 0, plan: resumePlan, gitSnapshot: resumeInfo?.gitSnapshot ?? null });
   }
   if (resumePath) options.onEvent?.({ type: "session.resumed", path: resumePath, messages: resumeMessages.length });
 
   if (mockBrain) {
-    const text = renderMockCodeTask(task, context);
+    const text = renderMockCodeTask(taskText, context);
     options.onEvent?.({ type: "assistant.delta", text });
     options.onEvent?.({ type: "task.finished", ok: true, text, usageSummary: null });
     if (json) {
@@ -589,8 +593,8 @@ async function runCodeTask(
       process.stdout.write(renderAssistantBlock(text, renderCodeFooter({ context, mode, mockBrain, reasoning })));
     }
     if (saveSession) {
-      const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: context.cwd, title, prompt: task, assistant: text, modelProvider: "mock", modelId: "mock-brain" });
-      await appendSessionMetadata({ dataDir, sessionPath: savedPath, data: { kind: "code_task", mock: true, cwd: context.cwd, images: codeImagePaths(args), resumedFrom: resumePath || null } });
+      const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: context.cwd, title, prompt: taskText, assistant: text, modelProvider: "mock", modelId: "mock-brain" });
+      await appendSessionMetadata({ dataDir, sessionPath: savedPath, data: { kind: "code_task", mock: true, cwd: context.cwd, images: mediaPaths, resumedFrom: resumePath || null } });
       options.onEvent?.({ type: "session.saved", path: savedPath });
       if (json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
     }
@@ -610,7 +614,7 @@ async function runCodeTask(
       sessionPath: liveSessionPath,
       cwd: context.cwd,
       title,
-      line: { type: "user", content: task },
+      line: { type: "user", content: taskText },
       modelProvider: cliProvider?.profile.provider || "brain",
       modelId: cliProvider?.profile.model || "lynn-brain-router",
     });
@@ -618,7 +622,7 @@ async function runCodeTask(
     options.onEvent?.({ type: "session.checkpoint", path: liveSessionPath, line: "user" });
   }
   const final = await runCodeAgentLoop({
-    task,
+    task: taskText,
     context,
     brainUrl,
     fallbackProvider: cliProvider?.profile,
@@ -628,7 +632,7 @@ async function runCodeTask(
     toolCtx,
     input,
     output: errorOutput,
-    imagePaths: codeImagePaths(args),
+    imagePaths: mediaPaths,
     resumeMessages,
     memoryFrame,
     onEvent: options.onEvent,
@@ -672,7 +676,7 @@ async function runCodeTask(
       sessionPath,
       cwd: context.cwd,
       title,
-      prompt: task,
+      prompt: taskText,
       assistant: final.text,
       modelProvider: cliProvider?.profile.provider || "brain",
       modelId: cliProvider?.profile.model || "lynn-brain-router",
@@ -690,7 +694,7 @@ async function runCodeTask(
       data: {
         kind: "code_task",
         cwd: context.cwd,
-        images: codeImagePaths(args),
+        images: mediaPaths,
         reasoning,
         maxSteps: stepBudget,
         maxStepsReached: final.maxStepsReached,
@@ -2023,6 +2027,17 @@ function codeImagePaths(args: ParsedArgs): string[] {
     ...parseImageList(getStringFlag(args.flags, "images")),
     ...parseImageList(getStringFlag(args.flags, "image", "shot")),
   ];
+}
+
+function codeMediaPaths(args: ParsedArgs, inlineMediaPaths: readonly string[] = []): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const mediaPath of [...codeImagePaths(args), ...inlineMediaPaths]) {
+    if (!mediaPath || seen.has(mediaPath)) continue;
+    seen.add(mediaPath);
+    out.push(mediaPath);
+  }
+  return out;
 }
 
 function buildCodePrompt(task: string, context: CodeContext, imagePaths?: readonly string[]): string {
