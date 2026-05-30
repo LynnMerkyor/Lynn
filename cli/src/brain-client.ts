@@ -2,6 +2,7 @@ import { applyReasoningToBody, type ReasoningOptions } from "./reasoning.js";
 import type { ChatContentPart } from "./media.js";
 import type { CliProviderProfile } from "./provider-profile.js";
 import { t } from "./i18n.js";
+import { signedBrainHeaders } from "./brain-auth.js";
 
 export interface BrainChatRequest {
   brainUrl: string;
@@ -249,7 +250,7 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
   try {
     response = await fetch(new URL("/v1/chat/completions", request.brainUrl), {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...signedBrainHeaders({ pathname: "/v1/chat/completions" }) },
       body: JSON.stringify(body),
       signal: abort.signal,
     });

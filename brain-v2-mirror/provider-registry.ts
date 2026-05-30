@@ -1,6 +1,6 @@
 // Brain v2 · Provider Registry
 // 原则:只做事实型(capability + 健康/cooldown),不做内容判断
-import 'dotenv/config';
+import './env-loader.js';
 import { envModel, providerId, type Provider, type ProviderId, type ProviderIdLiteral } from './types.js';
 
 const env = (k: string, d: string): string => process.env[k] || d;

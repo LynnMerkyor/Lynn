@@ -3,7 +3,7 @@
 import http from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import crypto from 'node:crypto';
-import 'dotenv/config';
+import './env-loader.js';
 import './perf-init.js';
 import { run as routerRun, detectCapability } from './router.js';
 import { getProviderStatusSnapshot } from './provider-registry.js';

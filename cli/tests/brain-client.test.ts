@@ -1,12 +1,30 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import { BrainConnectionError, chatCompletionsUrl, checkBrainReachable, parseBrainStreamPayload, parseSsePayloads, streamBrainChat } from "../src/brain-client.js";
 import { parseArgs } from "../src/args.js";
 import { applyReasoningToBody, parseReasoningOptions, shouldRenderReasoning } from "../src/reasoning.js";
 import { setLang } from "../src/i18n.js";
 
-beforeEach(() => setLang("en"));
-afterEach(() => setLang(null));
+let previousLynnHome: string | undefined;
+let testLynnHome: string | null = null;
+
+beforeEach(() => {
+  setLang("en");
+  previousLynnHome = process.env.LYNN_HOME;
+  testLynnHome = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-brain-client-"));
+  process.env.LYNN_HOME = testLynnHome;
+});
+
+afterEach(() => {
+  setLang(null);
+  if (previousLynnHome === undefined) delete process.env.LYNN_HOME;
+  else process.env.LYNN_HOME = previousLynnHome;
+  if (testLynnHome) fs.rmSync(testLynnHome, { recursive: true, force: true });
+  testLynnHome = null;
+});
 
 describe("brain-client stream parser", () => {
   it("extracts SSE data payloads", () => {

@@ -3,6 +3,7 @@
 // 模式:relaxed — missing headers → log warn, 允许通过(兼容旧客户端 / OpenHanako)
 import crypto from 'node:crypto';
 import { promises as fsp } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import type { HmacSignaturePayload, LogFn } from './types.js';
@@ -10,6 +11,7 @@ import type { HmacSignaturePayload, LogFn } from './types.js';
 const DEVICE_AUTH_WINDOW_MS = Number(process.env.DEVICE_AUTH_WINDOW_MS || 5 * 60 * 1000);
 const DEVICE_NONCE_TTL_MS = Number(process.env.DEVICE_NONCE_TTL_MS || 10 * 60 * 1000);
 const DEVICES_DIR = process.env.LOBSTER_DEVICES_DIR || '/opt/lobster-brain/data/devices';
+const USER_DEVICES_DIR = path.join(os.homedir(), '.lynn', 'brain-devices');
 
 // 2026-05-25 P2-3: nonce cache memory DoS 防护。
 // Map 默认无大小限制,未授权攻击者可在 device-lookup 前 spray 100k nonces/sec 撑爆内存。
@@ -34,19 +36,26 @@ type SignedRequestOptions = {
   log?: LogFn;
 };
 
-function deviceFilePath(key: string): string {
-  return path.join(DEVICES_DIR, `${key}.json`);
+function deviceDirs(): string[] {
+  return [...new Set([DEVICES_DIR, USER_DEVICES_DIR].filter(Boolean))];
+}
+
+async function loadDeviceRecord(key: string): Promise<{ device: Device; filePath: string } | null> {
+  for (const dir of deviceDirs()) {
+    const filePath = path.join(dir, `${key}.json`);
+    try {
+      const raw = await fsp.readFile(filePath, 'utf8');
+      return { device: JSON.parse(raw) as Device, filePath };
+    } catch (e) {
+      if (e && typeof e === 'object' && 'code' in e && e.code === 'ENOENT') continue;
+      throw e;
+    }
+  }
+  return null;
 }
 
 export async function loadDevice(key: string): Promise<Device | null> {
-  const filePath = deviceFilePath(key);
-  try {
-    const raw = await fsp.readFile(filePath, 'utf8');
-    return JSON.parse(raw) as Device;
-  } catch (e) {
-    if (e && typeof e === 'object' && 'code' in e && e.code === 'ENOENT') return null;
-    throw e;
-  }
+  return (await loadDeviceRecord(key))?.device || null;
 }
 
 export function buildClientSignaturePayload({ method = 'POST', pathname = '/chat/completions', timestamp, nonce, agentKey }: HmacSignaturePayload): string {
@@ -135,7 +144,8 @@ export async function verifySignedRequest(req: IncomingMessage, { pathname = '/v
   // 2026-05-25 P2-3: 把 device existence check 移到 rememberNonce 之前。
   // 未授权 agentKey spray nonces 时,直接在 loadDevice 阶段 reject,不会污染 _nonceCache。
   // 已注册 agent 的 nonce 仍正常 dedupe。
-  const device = await loadDevice(agentKey);
+  const deviceRecord = await loadDeviceRecord(agentKey);
+  const device = deviceRecord?.device;
   if (!device?.secret) throw new AuthError(401, 'device not registered');
 
   if (!rememberNonce(agentKey, nonce)) {
@@ -165,7 +175,9 @@ export async function verifySignedRequest(req: IncomingMessage, { pathname = '/v
   device.clientPlatform = String(h['x-lynn-client-platform'] || device.clientPlatform || '');
   device.updatedAt = device.lastSeenAt;
   // Don't await: best-effort persistence shouldn't block the request
-  fsp.writeFile(deviceFilePath(agentKey), JSON.stringify(device, null, 2), "utf8").catch(() => {});
+  if (deviceRecord?.filePath) {
+    fsp.writeFile(deviceRecord.filePath, JSON.stringify(device, null, 2), "utf8").catch(() => {});
+  }
 
   return device;
 }
