@@ -48,7 +48,12 @@ export function completeChatInput(line: string): [string[], string] {
 }
 
 export async function runChat(args: ParsedArgs, options: { intro?: boolean; brainReachable?: boolean } = {}): Promise<number> {
-  if (input.isTTY && output.isTTY && hasFlag(args.flags, "ink", "tui") && process.env.LYNN_CLI_LEGACY_TUI !== "1") {
+  if (
+    input.isTTY &&
+    output.isTTY &&
+    process.env.LYNN_CLI_LEGACY_TUI !== "1" &&
+    !hasFlag(args.flags, "no-ink", "legacy-tui")
+  ) {
     return runInkChat(args);
   }
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
