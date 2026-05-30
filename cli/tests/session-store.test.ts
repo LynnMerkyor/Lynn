@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, listSessions, readSessionLines, resolveDataDir, sessionIndexPath } from "../src/session/store.js";
+import { computeSessionStats } from "../src/session/stats.js";
 
 const originalDataDir = process.env.LYNN_DATA_DIR;
 const originalHome = process.env.LYNN_HOME;
@@ -58,6 +59,46 @@ describe("CLI session store", () => {
 
     const lines = await readSessionLines(sessionPath);
     expect(lines.at(-1)).toMatchObject({ type: "metadata", data: { kind: "code_task", toolCount: 2 } });
+  });
+
+  it("computes replay stats from stored usage records", async () => {
+    const sessionPath = await appendSessionLine({
+      dataDir: tmp,
+      cwd: "/repo",
+      line: { type: "tool", content: "Tool result", data: { name: "grep" } },
+    });
+    await appendSessionMetadata({
+      dataDir: tmp,
+      sessionPath,
+      data: {
+        usageRecords: [
+          {
+            usage: {
+              input_tokens: 10,
+              output_tokens: 5,
+              cached_tokens: 8,
+              cache_creation_input_tokens: 2,
+            },
+            durationMs: 500,
+          },
+        ],
+      },
+    });
+
+    const stats = computeSessionStats(await readSessionLines(sessionPath));
+
+    expect(stats).toMatchObject({
+      toolResults: 1,
+      usageRecords: 1,
+      promptTokens: 10,
+      completionTokens: 5,
+      totalTokens: 15,
+      cacheHitTokens: 8,
+      cacheMissTokens: 2,
+      tools: [{ name: "grep", count: 1 }],
+    });
+    expect(stats.cacheHitRatio).toBe(0.8);
+    expect(stats.avgTps).toBe(10);
   });
 
   it("updates the session index while appending incremental checkpoint lines", async () => {

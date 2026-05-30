@@ -550,6 +550,8 @@ async function runCodeTask(
         reasoning,
         maxSteps: stepBudget,
         maxStepsReached: final.maxStepsReached,
+        usageSummary: final.usageSummary,
+        usageRecords: final.usageRecords,
         resumedFrom: resumePath || null,
       },
     });
@@ -710,6 +712,7 @@ interface CodeAgentLoopResult {
   text: string;
   maxStepsReached: boolean;
   usageSummary: string | null;
+  usageRecords: Array<{ usage: unknown; durationMs: number }>;
 }
 
 interface CollectedToolCall {
@@ -774,6 +777,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
   ];
   let finalText = "";
   let latestUsageSummary: string | null = null;
+  const usageRecords: Array<{ usage: unknown; durationMs: number }> = [];
   const approvalSession = { approveAll: false };
   const toolStorm = createClientToolStormState();
   for (let step = 0; step < inputData.maxSteps; step += 1) {
@@ -790,6 +794,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
     });
     const assistantText = result.text;
     latestUsageSummary = result.usageSummary || latestUsageSummary;
+    usageRecords.push(...result.usageRecords);
     const structuredToolRequests = toolRequestsFromCollectedCalls(result.toolCalls, step);
     const toolRequests = structuredToolRequests.length ? structuredToolRequests : parseCodeToolRequests(assistantText);
     messages.push(structuredToolRequests.length
@@ -937,6 +942,7 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
     text: finalText,
     maxStepsReached,
     usageSummary: latestUsageSummary,
+    usageRecords,
   };
 }
 
@@ -1112,6 +1118,7 @@ function stableObject(value: Record<string, unknown>): Record<string, unknown> {
 interface BrainTextResult {
   text: string;
   usageSummary: string | null;
+  usageRecords: Array<{ usage: unknown; durationMs: number }>;
   toolCalls: CollectedToolCall[];
 }
 
@@ -1126,6 +1133,7 @@ async function collectBrainText(inputData: {
 }): Promise<BrainTextResult> {
   let text = "";
   let usageSummary: string | null = null;
+  const usageRecords: Array<{ usage: unknown; durationMs: number }> = [];
   const streamedToolCalls = createStreamingToolCallAccumulator();
   const spinner = new TerminalSpinner(process.stderr, inputData.label);
   const renderState: HumanBrainRenderState = {};
@@ -1157,6 +1165,7 @@ async function collectBrainText(inputData: {
       if (event.type === "tool_call.delta") streamedToolCalls.append(event);
       if (event.type === "provider") inputData.onEvent?.({ type: "provider", provider: event.activeProvider });
       if (event.type === "tool_progress") inputData.onEvent?.({ type: "tool.progress", message: [event.name, event.event].filter(Boolean).join(" ") });
+      if (event.type === "usage") usageRecords.push({ usage: event.usage, durationMs: Date.now() - startedAt });
       if (inputData.json && (event.type === "provider" || event.type === "tool_progress" || event.type === "brain.error" || event.type === "usage")) {
         if (event.type === "usage") writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage, durationMs: Date.now() - startedAt });
         else writeJsonLine({ ...event, ts: nowIso() });
@@ -1186,7 +1195,7 @@ async function collectBrainText(inputData: {
   } finally {
     spinner.stop();
   }
-  return { text, usageSummary, toolCalls: streamedToolCalls.toToolCalls() };
+  return { text, usageSummary, usageRecords, toolCalls: streamedToolCalls.toToolCalls() };
 }
 
 export function codeToolDefinitions(): ChatToolDefinition[] {

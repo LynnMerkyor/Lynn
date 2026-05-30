@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import { runSessions } from "../src/commands/sessions.js";
-import { appendSessionTurn } from "../src/session/store.js";
+import { appendSessionLine, appendSessionMetadata, appendSessionTurn } from "../src/session/store.js";
 
 let tmp = "";
 const originalDataDir = process.env.LYNN_DATA_DIR;
@@ -50,5 +50,56 @@ describe("sessions command", () => {
     expect(output).toContain("Lynn code --resume");
     expect(output).toContain(sessionPath);
     expect(output).not.toContain("[user] start");
+  });
+
+  it("prints replay stats from session JSONL usage metadata", async () => {
+    let sessionPath = await appendSessionLine({
+      dataDir: tmp,
+      cwd: "/repo",
+      title: "stats",
+      line: { type: "user", content: "inspect" },
+    });
+    sessionPath = await appendSessionLine({
+      dataDir: tmp,
+      sessionPath,
+      cwd: "/repo",
+      title: "stats",
+      line: { type: "tool", content: "Tool result", data: { name: "read_file" } },
+    });
+    sessionPath = await appendSessionLine({
+      dataDir: tmp,
+      sessionPath,
+      cwd: "/repo",
+      title: "stats",
+      line: { type: "assistant", content: "done" },
+    });
+    await appendSessionMetadata({
+      dataDir: tmp,
+      sessionPath,
+      data: {
+        kind: "code_task",
+        usageRecords: [
+          {
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 20,
+              total_tokens: 120,
+              prompt_cache_hit_tokens: 80,
+              prompt_cache_miss_tokens: 20,
+            },
+            durationMs: 1000,
+          },
+        ],
+      },
+    });
+
+    const output = await captureStdout(() => runSessions(parseArgs(["sessions", "stats", sessionPath]), false));
+
+    expect(output).toContain("Lynn session stats");
+    expect(output).toContain("turns: user 1");
+    expect(output).toContain("usage: 120 tokens");
+    expect(output).toContain("cache 80 (80%)");
+    expect(output).toContain("20.0 TPS");
+    expect(output).toContain("read_file x1");
   });
 });

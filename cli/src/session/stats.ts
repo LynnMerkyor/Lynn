@@ -1,0 +1,169 @@
+import type { CliSessionLine } from "./store.js";
+
+export interface CliUsageRecord {
+  usage: unknown;
+  durationMs?: number;
+}
+
+export interface CliSessionStats {
+  totalLines: number;
+  userTurns: number;
+  assistantTurns: number;
+  toolResults: number;
+  metadataLines: number;
+  usageRecords: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cacheHitTokens: number;
+  cacheMissTokens: number;
+  cacheHitRatio: number | null;
+  avgTps: number | null;
+  tools: Array<{ name: string; count: number }>;
+}
+
+export function computeSessionStats(lines: readonly CliSessionLine[]): CliSessionStats {
+  const toolCounts = new Map<string, number>();
+  const usages: CliUsageRecord[] = [];
+  let userTurns = 0;
+  let assistantTurns = 0;
+  let toolResults = 0;
+  let metadataLines = 0;
+
+  for (const line of lines) {
+    if (line.type === "user") userTurns += 1;
+    else if (line.type === "assistant") assistantTurns += 1;
+    else if (line.type === "tool") {
+      toolResults += 1;
+      const name = typeof line.data?.name === "string" ? line.data.name : "tool";
+      toolCounts.set(name, (toolCounts.get(name) || 0) + 1);
+    } else if (line.type === "metadata") {
+      metadataLines += 1;
+      const records = usageRecordsFromMetadata(line.data);
+      usages.push(...records);
+    }
+  }
+
+  let promptTokens = 0;
+  let completionTokens = 0;
+  let totalTokens = 0;
+  let cacheHitTokens = 0;
+  let cacheMissTokens = 0;
+  let totalDurationMs = 0;
+
+  for (const record of usages) {
+    const usage = objectRecord(record.usage);
+    if (!usage) continue;
+    const prompt = firstNumber(usage, ["prompt_tokens", "input_tokens"]) ?? 0;
+    const completion = firstNumber(usage, ["completion_tokens", "output_tokens"]) ?? 0;
+    const total = firstNumber(usage, ["total_tokens"]) ?? prompt + completion;
+    promptTokens += prompt;
+    completionTokens += completion;
+    totalTokens += total;
+    cacheHitTokens += firstNumber(usage, [
+      "prompt_cache_hit_tokens",
+      "cached_tokens",
+      "cache_read_input_tokens",
+      "prompt_tokens_details.cached_tokens",
+    ]) ?? 0;
+    cacheMissTokens += firstNumber(usage, ["prompt_cache_miss_tokens", "cache_creation_input_tokens"]) ?? 0;
+    if (typeof record.durationMs === "number" && Number.isFinite(record.durationMs) && record.durationMs > 0) {
+      totalDurationMs += record.durationMs;
+    }
+  }
+
+  const cacheTotal = cacheHitTokens + cacheMissTokens;
+  const cacheHitRatio = cacheTotal > 0
+    ? cacheHitTokens / cacheTotal
+    : promptTokens > 0 && cacheHitTokens > 0
+      ? cacheHitTokens / promptTokens
+      : null;
+  const avgTps = totalDurationMs > 0 && completionTokens > 0
+    ? completionTokens / (totalDurationMs / 1000)
+    : null;
+
+  return {
+    totalLines: lines.length,
+    userTurns,
+    assistantTurns,
+    toolResults,
+    metadataLines,
+    usageRecords: usages.length,
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    cacheHitTokens,
+    cacheMissTokens,
+    cacheHitRatio,
+    avgTps,
+    tools: [...toolCounts.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, count]) => ({ name, count })),
+  };
+}
+
+export function renderSessionStats(sessionPath: string, stats: CliSessionStats): string {
+  const tools = stats.tools.length
+    ? stats.tools.map((tool) => `${tool.name} x${tool.count}`).join(", ")
+    : "none";
+  const usage = stats.usageRecords > 0
+    ? [
+        `${stats.totalTokens} tokens`,
+        `in ${stats.promptTokens}`,
+        `out ${stats.completionTokens}`,
+        stats.cacheHitTokens || stats.cacheMissTokens
+          ? `cache ${stats.cacheHitTokens}${stats.cacheHitRatio !== null ? ` (${Math.round(stats.cacheHitRatio * 100)}%)` : ""}`
+          : null,
+        stats.avgTps !== null ? `${formatTps(stats.avgTps)} TPS` : null,
+      ].filter(Boolean).join(" · ")
+    : "no usage records";
+  return [
+    "Lynn session stats",
+    `path: ${sessionPath}`,
+    `turns: user ${stats.userTurns} · assistant ${stats.assistantTurns} · tool ${stats.toolResults} · metadata ${stats.metadataLines}`,
+    `usage: ${usage}`,
+    `tools: ${tools}`,
+  ].join("\n") + "\n";
+}
+
+function usageRecordsFromMetadata(data: Record<string, unknown> | undefined): CliUsageRecord[] {
+  if (!data) return [];
+  const records = data.usageRecords;
+  if (Array.isArray(records)) {
+    return records
+      .map((record) => objectRecord(record))
+      .filter((record): record is Record<string, unknown> => !!record)
+      .map((record) => ({
+        usage: record.usage,
+        durationMs: typeof record.durationMs === "number" ? record.durationMs : undefined,
+      }))
+      .filter((record) => record.usage !== undefined);
+  }
+  if (data.usage !== undefined) {
+    return [{ usage: data.usage, durationMs: typeof data.durationMs === "number" ? data.durationMs : undefined }];
+  }
+  return [];
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function firstNumber(record: Record<string, unknown>, paths: string[]): number | null {
+  for (const path of paths) {
+    const value = path.split(".").reduce<unknown>((acc, part) => {
+      if (!acc || typeof acc !== "object" || Array.isArray(acc)) return undefined;
+      return (acc as Record<string, unknown>)[part];
+    }, record);
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function formatTps(value: number): string {
+  if (value >= 100) return String(Math.round(value));
+  if (value >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}
