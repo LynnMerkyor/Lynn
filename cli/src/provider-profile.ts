@@ -87,7 +87,12 @@ export async function resolveCliProviderProfile(args: ParsedArgs): Promise<Resol
   const envProfile = readEnvProviderProfile();
   const flagProfile = readFlagProviderProfile(args);
   if (flagProfile) {
-    const fallbackApiKey = matchingStoredApiKey(flagProfile, fileProfile) || matchingEnvApiKey(flagProfile, envProfile) || envApiKey();
+    const presetName = getStringFlag(args.flags, "preset");
+    const fallbackApiKey =
+      matchingStoredApiKey(flagProfile, fileProfile)
+      || matchingEnvApiKey(flagProfile, envProfile)
+      || presetApiKey(presetName, process.env)
+      || genericEnvApiKey(presetName, process.env);
     return { profile: validateCliProviderProfile({ ...flagProfile, apiKey: flagProfile.apiKey || fallbackApiKey }), source: "flags" };
   }
   if (envProfile) return { profile: validateCliProviderProfile(envProfile), source: "env" };
@@ -114,7 +119,7 @@ export function readEnvProviderProfile(env: NodeJS.ProcessEnv = process.env): Cl
   const preset = resolveProviderPreset(presetName);
   const baseUrl = env.LYNN_CLI_BASE_URL || env.OPENAI_BASE_URL || preset?.baseUrl || "";
   const model = env.LYNN_CLI_MODEL || preset?.model || "";
-  const apiKey = env.LYNN_CLI_API_KEY || presetApiKey(presetName, env) || env.OPENAI_API_KEY || "";
+  const apiKey = env.LYNN_CLI_API_KEY || presetApiKey(presetName, env) || genericEnvApiKey(presetName, env) || "";
   const provider = env.LYNN_CLI_PROVIDER || preset?.provider || "openai-compatible";
   if (!baseUrl || !model) return null;
   return {
@@ -145,10 +150,6 @@ function matchingEnvApiKey(flagProfile: CliProviderProfile, envProfile: CliProvi
   return envProfile.apiKey;
 }
 
-function envApiKey(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  return env.LYNN_CLI_API_KEY || env.OPENAI_API_KEY || undefined;
-}
-
 function presetApiKey(presetName: string | null, env: NodeJS.ProcessEnv): string | undefined {
   switch ((presetName || "").trim().toLowerCase()) {
     case "mimo":
@@ -162,4 +163,10 @@ function presetApiKey(presetName: string | null, env: NodeJS.ProcessEnv): string
     default:
       return undefined;
   }
+}
+
+function genericEnvApiKey(presetName: string | null, env: NodeJS.ProcessEnv): string | undefined {
+  const normalizedPreset = (presetName || "").trim().toLowerCase();
+  if (normalizedPreset && normalizedPreset !== "openai") return undefined;
+  return env.OPENAI_API_KEY || undefined;
 }

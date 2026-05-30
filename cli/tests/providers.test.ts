@@ -356,6 +356,66 @@ describe("providers command", () => {
     });
   });
 
+  it("does not reuse generic OpenAI env keys for non-OpenAI presets", async () => {
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    try {
+      process.env.OPENAI_API_KEY = "sk-openai-only";
+
+      await expect(resolveCliProviderProfile(parseArgs([
+        "code",
+        "review this",
+        "--preset",
+        "stepfun",
+        "--data-dir",
+        await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-stepfun-key-")),
+      ]))).resolves.toMatchObject({
+        source: "flags",
+        profile: {
+          baseUrl: "https://api.stepfun.com/step_plan/v1",
+          model: "step-3.7-flash",
+          apiKey: undefined,
+        },
+      });
+
+      await expect(resolveCliProviderProfile(parseArgs([
+        "code",
+        "review this",
+        "--preset",
+        "mimo",
+        "--data-dir",
+        await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-mimo-key-")),
+      ]))).resolves.toMatchObject({
+        source: "flags",
+        profile: {
+          baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+          model: "mimo-v2.5-pro",
+          apiKey: undefined,
+        },
+      });
+
+      await expect(resolveCliProviderProfile(parseArgs([
+        "code",
+        "review this",
+        "--base-url",
+        "https://api.example.com/v1",
+        "--model",
+        "example-model",
+        "--data-dir",
+        await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-generic-key-")),
+      ]))).resolves.toMatchObject({
+        source: "flags",
+        profile: {
+          baseUrl: "https://api.example.com/v1",
+          model: "example-model",
+          apiKey: "sk-openai-only",
+        },
+      });
+    } finally {
+      if (previousOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAiKey;
+    }
+  });
+
   it("accepts preset-specific environment keys for CLI BYOK", async () => {
     expect(readEnvProviderProfile({
       LYNN_CLI_PRESET: "stepfun",
@@ -373,6 +433,15 @@ describe("providers command", () => {
       baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
       model: "mimo-v2.5-pro",
       apiKey: "mimo-env-key",
+    });
+
+    expect(readEnvProviderProfile({
+      LYNN_CLI_PRESET: "stepfun",
+      OPENAI_API_KEY: "sk-openai-only",
+    })).toMatchObject({
+      baseUrl: "https://api.stepfun.com/step_plan/v1",
+      model: "step-3.7-flash",
+      apiKey: undefined,
     });
   });
 
