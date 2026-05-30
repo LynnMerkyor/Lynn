@@ -63,7 +63,11 @@ function findCommand(
   bin: string,
   opts: Required<Pick<DetectCliAgentsOptions, "pathEnv" | "platform" | "fileExists">>,
 ): string | null {
-  const candidates = path.isAbsolute(bin) || bin.includes(path.sep) ? [bin] : opts.pathEnv.split(path.delimiter).filter(Boolean).map((dir) => path.join(dir, bin));
+  const pathApi = opts.platform === "win32" ? path.win32 : path.posix;
+  const delimiter = opts.platform === "win32" ? ";" : ":";
+  const candidates = pathApi.isAbsolute(bin) || bin.includes(pathApi.sep)
+    ? [bin]
+    : opts.pathEnv.split(delimiter).filter(Boolean).map((dir) => pathApi.join(dir, bin));
   const suffixes = opts.platform === "win32" ? ["", ".exe", ".cmd", ".bat"] : [""];
   for (const candidate of candidates) {
     for (const suffix of suffixes) {
