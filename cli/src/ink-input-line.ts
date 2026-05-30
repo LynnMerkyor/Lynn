@@ -38,15 +38,16 @@ export function InkInputLine({ value, placeholder, danger, commands = [], contex
 export function inputDisplayRows(value: string, hint: string, width: number, prompt = "› "): Array<{ prompt: string; text: string; hint: string; pad: number }> {
   const lines = value.split(/\n/);
   const rows = lines.length ? lines : [""];
+  const multiline = rows.length > 1;
   return rows.map((line, index) => {
     const rowPrompt = index === 0 ? prompt : "  ";
-    const rowHint = index === rows.length - 1 ? hint : "";
+    const rowHint = !multiline && index === rows.length - 1 ? hint : "";
     const rawWidth = visibleLength(`${rowPrompt}${line}${rowHint ? ` ${rowHint}` : ""}`);
     return {
       prompt: rowPrompt,
       text: line,
       hint: rowHint,
-      pad: Math.max(0, width - rawWidth),
+      pad: multiline ? 0 : Math.max(0, width - rawWidth),
     };
   });
 }

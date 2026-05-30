@@ -43,10 +43,12 @@ describe("Ink input slash hints", () => {
     expect(rows[1]).toMatchObject({ prompt: "  ", text: "第二行" });
   });
 
-  it("places slash hint on the last display row only", () => {
+  it("drops slash hints and right padding for multi-line input", () => {
     const rows = inputDisplayRows("/mod\nextra", "el", 20);
 
     expect(rows[0].hint).toBe("");
-    expect(rows[1].hint).toBe("el");
+    expect(rows[1].hint).toBe("");
+    expect(rows[0].pad).toBe(0);
+    expect(rows[1].pad).toBe(0);
   });
 });
