@@ -48,6 +48,12 @@ function assertNotIncludes(name, text, needle) {
   }
 }
 
+function assertNpmInstallClean(result) {
+  const combined = `${result.stdout}\n${result.stderr}`;
+  assertNotIncludes(result.name, combined, "EBADENGINE");
+  assertNotIncludes(result.name, combined, "EEXIST");
+}
+
 function binPath(installDir, name) {
   return process.platform === "win32"
     ? path.join(installDir, "node_modules", ".bin", `${name}.cmd`)
@@ -76,6 +82,16 @@ async function assertNoLiteralLowercaseShim(dir) {
   }
 }
 
+async function seedLegacyLowercaseShim(globalDir) {
+  if (process.platform === "win32") return;
+  const legacyPkgBin = path.join(globalDir, "lib", "node_modules", "@lynn", "cli", "bin");
+  await fs.mkdir(legacyPkgBin, { recursive: true });
+  await fs.writeFile(path.join(legacyPkgBin, "lynn.mjs"), "#!/usr/bin/env node\n", "utf8");
+  const legacyShim = path.join(globalDir, "bin", "lynn");
+  await fs.rm(legacyShim, { force: true });
+  await fs.symlink("../lib/node_modules/@lynn/cli/bin/lynn.mjs", legacyShim);
+}
+
 await fs.access(path.join(cliRoot, "package.json")).catch(() => {
   throw new Error("[cli-install-smoke] missing cli/package.json; run from repo root");
 });
@@ -98,9 +114,12 @@ try {
   await fs.access(tarball);
 
   await fs.writeFile(path.join(installDir, "package.json"), JSON.stringify({ private: true, type: "module" }, null, 2), "utf8");
-  await run("npm install packed CLI", "npm", ["install", "--silent", "--omit=dev", tarball], { cwd: installDir });
+  const localInstall = await run("npm install packed CLI", "npm", ["install", "--silent", "--omit=dev", tarball], { cwd: installDir });
+  assertNpmInstallClean(localInstall);
 
-  await run("npm global install packed CLI", "npm", ["install", "--global", "--silent", "--omit=dev", "--prefix", globalDir, tarball], { cwd: installDir });
+  await seedLegacyLowercaseShim(globalDir);
+  const globalInstall = await run("npm global install packed CLI", "npm", ["install", "--global", "--silent", "--omit=dev", "--prefix", globalDir, tarball], { cwd: installDir });
+  assertNpmInstallClean(globalInstall);
   const globalLynn = process.platform === "win32"
     ? path.join(globalDir, "Lynn.cmd")
     : path.join(globalDir, "bin", "Lynn");

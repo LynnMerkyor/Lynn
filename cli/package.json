@@ -10,11 +10,13 @@
   },
   "files": [
     "bin/",
+    "scripts/preinstall.mjs",
     "package.json",
     "README.md"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
+    "preinstall": "node scripts/preinstall.mjs",
     "prepack": "npm run build",
     "test": "vitest run tests --reporter=dot",
     "typecheck": "tsc --noEmit"
