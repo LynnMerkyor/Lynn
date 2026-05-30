@@ -12,6 +12,7 @@ import { appendSessionTurn, readSessionLines, sessionIndexPath } from "../src/se
 let tmp = "";
 const cliRoot = fileURLToPath(new URL("..", import.meta.url));
 const pythonIt = hasPython3() ? it : it.skip;
+const interactivePtyIt = process.env.CI === "true" ? it.skip : pythonIt;
 
 beforeEach(async () => {
   tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-agent-"));
@@ -458,7 +459,7 @@ describe("code agent loop", () => {
     expect(events.some((event) => event.type === "session.saved" && event.path === sessionPath)).toBe(true);
   });
 
-  pythonIt("uses the Ink code shell for mock coding turns", async () => {
+  interactivePtyIt("uses the Ink code shell for mock coding turns", async () => {
     const script = `
 import os
 import pty

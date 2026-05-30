@@ -28,6 +28,7 @@ import { setLang } from "../src/i18n.js";
 
 const cliRoot = fileURLToPath(new URL("..", import.meta.url));
 const pythonIt = hasPython3() ? it : it.skip;
+const interactivePtyIt = process.env.CI === "true" ? it.skip : pythonIt;
 
 beforeEach(() => setLang("en"));
 afterEach(() => setLang(null));
@@ -531,7 +532,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
     expect(result.stderr).toBe("");
   }, 45_000);
 
-  pythonIt("uses the Ink TUI for bare Lynn in a TTY", async () => {
+  interactivePtyIt("uses the Ink TUI for bare Lynn in a TTY", async () => {
     const script = `
 import os
 import pty
