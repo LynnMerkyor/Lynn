@@ -150,13 +150,14 @@ describe("brain-client stream parser", () => {
         body += String(chunk);
       });
       request.on("end", () => {
-        expect(JSON.parse(body)).toMatchObject({
+        const parsed = JSON.parse(body) as Record<string, unknown>;
+        expect(parsed).toMatchObject({
           model: "test-model",
           stream: true,
           stream_options: { include_usage: true },
-          reasoning_effort: "off",
-          extra_body: { enable_thinking: false },
         });
+        expect(parsed.reasoning_effort).toBeUndefined();
+        expect(parsed.extra_body).toBeUndefined();
         response.writeHead(200, { "content-type": "text/event-stream" });
         response.end([
           "data: {\"choices\":[{\"delta\":{\"content\":\"hello from byok\"}}]}",
@@ -186,6 +187,93 @@ describe("brain-client stream parser", () => {
       }
       expect(events).toContainEqual({ type: "assistant.delta", text: "hello from byok" });
       expect(events).toContainEqual({ type: "provider", activeProvider: "cli-byok:openai-compatible", fallbackFrom: [{ id: "brain", reason: "offline" }] });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("forwards explicit reasoning effort to CLI BYOK without SDK-only extra_body", async () => {
+    const server = http.createServer((request, response) => {
+      let body = "";
+      request.on("data", (chunk) => {
+        body += String(chunk);
+      });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as Record<string, unknown>;
+        expect(parsed.reasoning_effort).toBe("high");
+        expect(parsed.extra_body).toBeUndefined();
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"high effort fallback\"}}]}",
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("test server failed to listen");
+      const events = [];
+      for await (const event of streamBrainChat({
+        brainUrl: "http://127.0.0.1:1",
+        prompt: "hello",
+        reasoning: { effort: "high", display: "auto" },
+        fallbackProvider: {
+          provider: "openai-compatible",
+          baseUrl: `http://127.0.0.1:${address.port}/v1`,
+          model: "test-model",
+          apiKey: "sk-test",
+        },
+      })) {
+        events.push(event);
+      }
+      expect(events).toContainEqual({ type: "assistant.delta", text: "high effort fallback" });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("does not leak UI-only reasoning modes to StepFun-style CLI BYOK fallback", async () => {
+    const server = http.createServer((request, response) => {
+      let body = "";
+      request.on("data", (chunk) => {
+        body += String(chunk);
+      });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as Record<string, unknown>;
+        expect(parsed.model).toBe("step-3.7-flash");
+        expect(parsed.reasoning_effort).toBeUndefined();
+        expect(parsed.extra_body).toBeUndefined();
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"stepfun fallback\"}}]}",
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("test server failed to listen");
+      const events = [];
+      for await (const event of streamBrainChat({
+        brainUrl: "http://127.0.0.1:1",
+        prompt: "hello",
+        reasoning: { effort: "off", display: "auto" },
+        fallbackProvider: {
+          provider: "openai-compatible",
+          baseUrl: `http://127.0.0.1:${address.port}/step_plan/v1`,
+          model: "step-3.7-flash",
+          apiKey: "sk-test",
+        },
+      })) {
+        events.push(event);
+      }
+      expect(events).toContainEqual({ type: "assistant.delta", text: "stepfun fallback" });
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

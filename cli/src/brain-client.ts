@@ -292,7 +292,7 @@ async function* streamDirectProviderChat(request: BrainChatRequest, provider: Cl
   if (!messages.length) {
     throw new Error("Provider request requires a prompt or messages");
   }
-  const body = applyReasoningToBody({
+  const body = applyDirectProviderReasoningToBody({
     model: provider.model,
     stream: true,
     stream_options: { include_usage: true },
@@ -356,6 +356,12 @@ function providerHeaders(provider: CliProviderProfile): Record<string, string> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (provider.apiKey) headers.authorization = `Bearer ${provider.apiKey}`;
   return headers;
+}
+
+function applyDirectProviderReasoningToBody(body: Record<string, unknown>, options: ReasoningOptions): Record<string, unknown> {
+  if (options.effort === "auto" || options.effort === "off") return body;
+  body.reasoning_effort = options.effort;
+  return body;
 }
 
 function formatBrainConnectionError(brainUrl: string, error: unknown): string {
