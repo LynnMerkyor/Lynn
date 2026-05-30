@@ -152,6 +152,7 @@ describe("chat mode controls", () => {
       expect.arrayContaining(["/help", "/mode", "/providers", "/byok", "/setup"]),
       "/",
     ]);
+    expect(completeChatInput("/model s")).toEqual([["/model stepfun"], "/model s"]);
     expect(completeChatInput("hello")).toEqual([[], "hello"]);
   });
 
@@ -197,6 +198,16 @@ describe("chat mode controls", () => {
       expect(setupCommand?.flags["data-dir"]).toBe(dataDir);
       expect(shouldShowProviderSetUsage(buildChatProviderArgs("/setup", base)!)).toBe(true);
       expect(shouldShowProviderSetUsage(buildChatProviderArgs("/setup", base)!, true)).toBe(false);
+      const modelPreset = buildChatProviderArgs("/model stepfun --api-key step-key", base);
+      expect(modelPreset?.command).toBe("providers");
+      expect(modelPreset?.positionals).toEqual(["set"]);
+      expect(modelPreset?.flags["preset"]).toBe("stepfun");
+      expect(modelPreset?.flags["api-key"]).toBe("step-key");
+      const modelRaw = buildChatProviderArgs("/model step-3.7-flash --base-url https://api.stepfun.com/step_plan/v1 --api-key step-key", base);
+      expect(modelRaw?.positionals).toEqual(["set"]);
+      expect(modelRaw?.flags["model"]).toBe("step-3.7-flash");
+      expect(modelRaw?.flags["base-url"]).toBe("https://api.stepfun.com/step_plan/v1");
+      expect(buildChatProviderArgs("/model", base)).toBeNull();
       expect(buildChatProviderArgs("/providers wat", base)).toBeNull();
     } finally {
       await fs.rm(dataDir, { recursive: true, force: true });

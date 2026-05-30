@@ -19,6 +19,8 @@ const visionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-vision");
 const byokDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-byok");
 const mimoByokDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-mimo-byok");
 const setupDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-setup");
+const modelSwitchDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-model-switch");
+const byokPresetDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-byok-preset");
 const briefPath = path.join(root, "cli", "fixtures", "worker-brief.md");
 
 function run(name, args, options = {}) {
@@ -98,6 +100,10 @@ await fs.promises.rm(mimoByokDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(mimoByokDataDir, { recursive: true });
 await fs.promises.rm(setupDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(setupDataDir, { recursive: true });
+await fs.promises.rm(modelSwitchDataDir, { recursive: true, force: true });
+await fs.promises.mkdir(modelSwitchDataDir, { recursive: true });
+await fs.promises.rm(byokPresetDataDir, { recursive: true, force: true });
+await fs.promises.mkdir(byokPresetDataDir, { recursive: true });
 const stepfunWorkerBriefPath = path.join(byokDataDir, "stepfun-worker-brief.md");
 await fs.promises.writeFile(stepfunWorkerBriefPath, [
   "# Task: StepFun smoke worker",
@@ -182,6 +188,40 @@ checks.push(setupAliasCheck.then(() => run("byok alias tests saved provider", [
 ], { expectFailure: true })).then((r) => {
   assertIncludes(r.name, r.stdout, "Provider 测试失败");
   assertNotIncludes(r.name, r.stdout, "setup-smoke-key");
+}));
+
+checks.push(run("model preset shortcut saves BYOK", [
+  "model",
+  "stepfun",
+  "--data-dir",
+  modelSwitchDataDir,
+  "--api-key",
+  "model-shortcut-key",
+  "--json",
+]).then(async (r) => {
+  assertIncludes(r.name, r.stdout, '"type":"providers.saved"');
+  assertIncludes(r.name, r.stdout, '"model":"step-3.7-flash"');
+  assertNotIncludes(r.name, r.stdout, "model-shortcut-key");
+  const profile = JSON.parse(await fs.promises.readFile(path.join(modelSwitchDataDir, "providers", "cli.json"), "utf8"));
+  if (profile.model !== "step-3.7-flash") throw new Error("model shortcut did not save StepFun model");
+  if (profile.apiKey !== "model-shortcut-key") throw new Error("model shortcut did not save key");
+}));
+
+checks.push(run("byok preset shortcut saves BYOK", [
+  "byok",
+  "mimo",
+  "--data-dir",
+  byokPresetDataDir,
+  "--api-key",
+  "byok-preset-key",
+  "--json",
+]).then(async (r) => {
+  assertIncludes(r.name, r.stdout, '"type":"providers.saved"');
+  assertIncludes(r.name, r.stdout, '"model":"mimo-v2.5-pro"');
+  assertNotIncludes(r.name, r.stdout, "byok-preset-key");
+  const profile = JSON.parse(await fs.promises.readFile(path.join(byokPresetDataDir, "providers", "cli.json"), "utf8"));
+  if (profile.model !== "mimo-v2.5-pro") throw new Error("byok shortcut did not save MiMo model");
+  if (profile.apiKey !== "byok-preset-key") throw new Error("byok shortcut did not save key");
 }));
 
 checks.push(run("worker agents", ["agents"]).then((r) => {

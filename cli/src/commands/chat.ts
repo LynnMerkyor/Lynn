@@ -26,6 +26,9 @@ export const CHAT_SLASH_COMMANDS = [
   "/reasoning",
   "/mode",
   "/model",
+  "/model mimo",
+  "/model stepfun",
+  "/model deepseek",
   "/setup",
   "/byok",
   "/providers",
@@ -295,7 +298,25 @@ export function splitChatCommandLine(raw: string): string[] {
 export function buildChatProviderArgs(raw: string, baseArgs: ParsedArgs): ParsedArgs | null {
   const tokens = splitChatCommandLine(raw);
   const head = tokens[0]?.toLowerCase();
-  if (head !== "/providers" && head !== "/byok" && head !== "/setup") return null;
+  if (head !== "/providers" && head !== "/byok" && head !== "/setup" && head !== "/model") return null;
+  if (head === "/model") {
+    const rest = tokens.slice(1);
+    if (!rest.length) return null;
+    const subcommand = (rest[0] || "").toLowerCase();
+    const parsed = ["set", "unset", "clear", "reset", "test", "presets"].includes(subcommand)
+      ? parseArgs(["providers", ...rest])
+      : parseArgs(["providers", "set", ...rest.slice(rest[0]?.startsWith("-") ? 0 : 1)]);
+    if (subcommand && !["set", "unset", "clear", "reset", "test", "presets"].includes(subcommand) && !rest[0]?.startsWith("-")) {
+      if (getStringFlag(parsed.flags, "base-url", "api-base")) {
+        if (!getStringFlag(parsed.flags, "model")) parsed.flags.model = rest[0];
+      } else if (!getStringFlag(parsed.flags, "preset")) {
+        parsed.flags.preset = rest[0];
+      }
+    }
+    const dataDir = getStringFlag(baseArgs.flags, "data-dir");
+    if (dataDir && !getStringFlag(parsed.flags, "data-dir")) parsed.flags["data-dir"] = dataDir;
+    return parsed;
+  }
   if (head === "/setup") {
     const parsed = parseArgs(["providers", "set", ...tokens.slice(1).filter((value) => value.toLowerCase() !== "set")]);
     const dataDir = getStringFlag(baseArgs.flags, "data-dir");

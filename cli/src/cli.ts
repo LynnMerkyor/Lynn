@@ -1,4 +1,4 @@
-import { parseArgs, hasFlag } from "./args.js";
+import { parseArgs, hasFlag, getStringFlag, type ParsedArgs } from "./args.js";
 import { checkBrainReachable } from "./brain-client.js";
 import { runAgents } from "./commands/agents.js";
 import { runChat } from "./commands/chat.js";
@@ -65,24 +65,16 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
       return runProviders(args, json);
     }
     case "setup": {
-      return runProviders({
-        ...args,
-        command: "providers",
-        positionals: ["set", ...args.positionals.filter((value) => value !== "set")],
-      }, json);
+      return runProviders(providerSetupArgs(args), json);
     }
     case "byok": {
-      return runProviders({
-        ...args,
-        command: "providers",
-        positionals: providerAliasPositionals(args.positionals),
-      }, json);
+      return runProviders(providerSetupArgs(args), json);
     }
     case "permissions": {
       return runPermissions(args, json);
     }
     case "model": {
-      return runProviders(args, json);
+      return runProviders(providerModelArgs(args), json);
     }
     case "prompt":
     case "exec": {
@@ -153,12 +145,43 @@ function startupModelLabel(info: ProvidersInfo, brainReachable: boolean): string
   return label;
 }
 
-function providerAliasPositionals(positionals: string[]): string[] {
-  const head = (positionals[0] || "").toLowerCase();
-  if (head === "set" || head === "unset" || head === "clear" || head === "reset" || head === "test" || head === "presets") {
-    return positionals;
+function providerModelArgs(args: ParsedArgs): ParsedArgs {
+  const head = (args.positionals[0] || "").toLowerCase();
+  if (!head || head === "set" || head === "unset" || head === "clear" || head === "reset" || head === "test" || head === "presets") {
+    return { ...args, command: "providers" };
   }
-  return ["set", ...positionals];
+  const flags = { ...args.flags };
+  if (getStringFlag(flags, "base-url", "api-base")) {
+    if (!getStringFlag(flags, "model")) flags.model = args.positionals[0];
+  } else if (!getStringFlag(flags, "preset")) {
+    flags.preset = args.positionals[0];
+  }
+  return {
+    ...args,
+    command: "providers",
+    positionals: ["set", ...args.positionals.slice(1)],
+    flags,
+  };
+}
+
+function providerSetupArgs(args: ParsedArgs): ParsedArgs {
+  const head = (args.positionals[0] || "").toLowerCase();
+  if (!head) return { ...args, command: "providers", positionals: ["set"] };
+  if (head === "set" || head === "unset" || head === "clear" || head === "reset" || head === "test" || head === "presets") {
+    return { ...args, command: "providers" };
+  }
+  const flags = { ...args.flags };
+  if (getStringFlag(flags, "base-url", "api-base")) {
+    if (!getStringFlag(flags, "model")) flags.model = args.positionals[0];
+  } else if (!getStringFlag(flags, "preset")) {
+    flags.preset = args.positionals[0];
+  }
+  return {
+    ...args,
+    command: "providers",
+    positionals: ["set", ...args.positionals.slice(1)],
+    flags,
+  };
 }
 
 main().then((code) => {

@@ -74,7 +74,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "chat.help":
       "/exit 退出聊天\n" +
       "/clear 清空上下文\n" +
-      "/model 查看当前模型 / BYOK 路由\n" +
+      "/model 查看当前模型 / BYOK 路由; /model stepfun|mimo 快速切换 CLI BYOK preset\n" +
       "/setup 打开 CLI-only BYOK 三步向导\n" +
       "/providers 查看提供方和 BYOK 设置\n" +
       "/providers set --base-url ... --api-key ... --model ... 配置 CLI BYOK\n" +
@@ -110,7 +110,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/fast 低延迟 MiMo/Brain 回复\n" +
       "/think 深度 MiMo/Brain 推理\n" +
       "/reasoning 查看或设置推理模式\n" +
-      "/model 查看当前 Brain/BYOK 路由\n" +
+      "/model 查看当前 Brain/BYOK 路由; /model stepfun|mimo 快速切换 CLI BYOK preset\n" +
       "/setup 打开 CLI-only BYOK 三步向导\n" +
       "/providers 查看提供方和 BYOK 设置\n" +
       "/providers set --base-url ... --api-key ... --model ... 配置 CLI BYOK\n" +
@@ -251,7 +251,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "chat.help":
       "/exit leave chat\n" +
       "/clear reset context\n" +
-      "/model show model/BYOK route\n" +
+      "/model show model/BYOK route; /model stepfun|mimo quickly switches CLI BYOK preset\n" +
       "/setup open the CLI-only BYOK three-step wizard\n" +
       "/providers show BYOK setup\n" +
       "/providers set --base-url ... --api-key ... --model ... configure CLI BYOK\n" +
@@ -287,7 +287,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/fast low-latency MiMo/Brain replies\n" +
       "/think deeper MiMo/Brain reasoning\n" +
       "/reasoning show or set reasoning mode\n" +
-      "/model show current Brain/BYOK route\n" +
+      "/model show current Brain/BYOK route; /model stepfun|mimo quickly switches CLI BYOK preset\n" +
       "/setup open the CLI-only BYOK three-step wizard\n" +
       "/providers show provider and BYOK setup\n" +
       "/providers set --base-url ... --api-key ... --model ... configure CLI BYOK\n" +
