@@ -267,6 +267,35 @@ describe("worktree commit review helper", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  it("integrates an approved commit into a staging branch without switching the main checkout", async () => {
+    const { WorktreeManager } = await import("../worktree-manager.js");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-fleet-integrate-"));
+    try {
+      await execGit(["init"], tmp);
+      await execGit(["config", "user.email", "fleet@example.test"], tmp);
+      await execGit(["config", "user.name", "Fleet Test"], tmp);
+      fs.writeFileSync(path.join(tmp, "README.md"), "one\n", "utf8");
+      await execGit(["add", "README.md"], tmp);
+      await execGit(["commit", "-m", "initial"], tmp);
+      const mainBranch = await execGit(["branch", "--show-current"], tmp);
+
+      await execGit(["checkout", "-b", "worker/change"], tmp);
+      fs.writeFileSync(path.join(tmp, "README.md"), "two\n", "utf8");
+      await execGit(["commit", "-am", "worker change"], tmp);
+      const workerCommit = await execGit(["rev-parse", "--short", "HEAD"], tmp);
+      await execGit(["checkout", mainBranch], tmp);
+
+      const result = await new WorktreeManager(tmp).integrateCommit(workerCommit, "fleet/test-integration");
+
+      expect(result).toMatchObject({ branch: "fleet/test-integration", sourceCommit: workerCommit });
+      expect(result.commit).toMatch(/^[0-9a-f]+$/);
+      expect(await execGit(["branch", "--show-current"], tmp)).toBe(mainBranch);
+      expect(await execGit(["log", "-1", "--pretty=%s", "fleet/test-integration"], tmp)).toBe("worker change");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("FleetHub.dispatch", () => {
@@ -622,6 +651,50 @@ describe("FleetHub review actions", () => {
     }));
   });
 
+  it("integrates an approved worker commit into a staging branch", async () => {
+    const integrated: Array<{ commit: string; branch: string }> = [];
+    const sent: Array<{ event: { type: string; message?: string; data?: unknown } }> = [];
+    const hub = new FleetHub("/repo", (m) => sent.push(m as { event: { type: string; message?: string; data?: unknown } }), () => "T", {
+      integrateCommit: async (commit, branch) => {
+        integrated.push({ commit, branch });
+        return { branch, commit: "def5678", sourceCommit: commit };
+      },
+    });
+    const rec = await hub.dispatch(sampleBrief);
+    rec.events.push({
+      type: "worker.progress",
+      workerId: rec.workerId,
+      message: "review approved: abc1234",
+      data: { kind: "review", action: "approved", commit: "abc1234", changed: true },
+    });
+    rec.status = "completed";
+
+    expect(await hub.integrate(rec.workerId, "fleet/test")).toEqual({
+      ok: true,
+      branch: "fleet/test",
+      commit: "def5678",
+      sourceCommit: "abc1234",
+    });
+    expect(integrated).toEqual([{ commit: "abc1234", branch: "fleet/test" }]);
+    expect(sent).toContainEqual(expect.objectContaining({
+      event: expect.objectContaining({
+        type: "worker.progress",
+        message: "review integrated: fleet/test@def5678",
+        data: expect.objectContaining({ kind: "review", action: "integrated", commit: "def5678", sourceCommit: "abc1234", branch: "fleet/test" }),
+      }),
+    }));
+  });
+
+  it("rejects integrate before a worker is approved", async () => {
+    const hub = new FleetHub("/repo", () => {}, () => "T");
+    const rec = await hub.dispatch(sampleBrief);
+
+    expect(await hub.integrate(rec.workerId, "fleet/test")).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("no approved commit"),
+    });
+  });
+
   it("rejects approve for blocked workers", async () => {
     const hub = new FleetHub("/repo", () => {}, () => "T");
     const rec = await hub.dispatch(sampleBrief);
@@ -667,6 +740,32 @@ describe("fleet review HTTP route", () => {
     const discarded = await app.request(`/api/fleet/workers/${rec.workerId}/discard`, { method: "POST" });
     expect(discarded.status).toBe(200);
     expect(hub.getWorker(rec.workerId)?.status).toBe("cancelled");
+  });
+
+  it("integrates approved workers through REST endpoints", async () => {
+    const app = new Hono();
+    const hub = new FleetHub("/repo", () => {}, () => "T", {
+      integrateCommit: async (commit, branch) => ({ branch, commit: "def5678", sourceCommit: commit }),
+    });
+    app.route("/api", createFleetRoute(hub, { registry: availableSampleRegistry }));
+
+    const rec = await hub.dispatch(sampleBrief);
+    rec.events.push({
+      type: "worker.progress",
+      workerId: rec.workerId,
+      message: "review approved: abc1234",
+      data: { kind: "review", action: "approved", commit: "abc1234", changed: true },
+    });
+    rec.status = "completed";
+
+    const integrated = await app.request(`/api/fleet/workers/${rec.workerId}/integrate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch: "fleet/test" }),
+    });
+
+    expect(integrated.status).toBe(200);
+    expect(await integrated.json()).toEqual({ ok: true, branch: "fleet/test", commit: "def5678", sourceCommit: "abc1234" });
   });
 });
 

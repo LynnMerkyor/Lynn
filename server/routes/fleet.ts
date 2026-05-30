@@ -90,6 +90,19 @@ export function createFleetRoute(hub: FleetHub, options: FleetRouteOptions = {})
     return c.json({ ok: true, commit: result.commit, changed: result.changed });
   });
 
+  route.post("/fleet/workers/:id/integrate", async (c) => {
+    let body: { branch?: string } = {};
+    try {
+      body = await safeJson<{ branch?: string }>(c);
+    } catch {
+      body = {};
+    }
+    const result = await hub.integrate(c.req.param("id"), body.branch || "fleet/integration");
+    if (!result) return c.json({ error: "worker not found" }, 404);
+    if (!result.ok) return c.json({ error: result.error || "worker cannot be integrated" }, 409);
+    return c.json({ ok: true, branch: result.branch, commit: result.commit, sourceCommit: result.sourceCommit });
+  });
+
   route.post("/fleet/workers/:id/discard", async (c) => {
     const result = await hub.discard(c.req.param("id"));
     if (!result) return c.json({ error: "worker not found" }, 404);

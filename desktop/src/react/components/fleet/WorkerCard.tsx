@@ -308,6 +308,12 @@ export function WorkerCard({
             </div>
           )}
 
+          {worker.review?.action === 'integrated' && (
+            <div className={s.workerFinished}>
+              integrated{worker.review.branch ? ` · ${worker.review.branch}` : ''}{worker.review.commit ? ` @ ${worker.review.commit}` : ''}
+            </div>
+          )}
+
           {worker.error && (
             <div className={s.workerError}>
               error {worker.error.code}: {worker.error.message}

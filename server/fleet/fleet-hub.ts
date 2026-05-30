@@ -18,7 +18,7 @@ import type {
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { WorktreeManager, type WorktreeCommitResult } from "./worktree-manager.js";
+import { WorktreeManager, type WorktreeCommitResult, type WorktreeIntegrateResult } from "./worktree-manager.js";
 import { spawnWorker, type WorkerHandle } from "./worker-manager.js";
 import { cliRuntimeAvailable, resolveCliCommand, type ResolvedCommand } from "./worker-command.js";
 
@@ -63,6 +63,7 @@ export interface FleetHubDeps {
   createWorktree?: (relPath: string, branch: string, baseRef: string) => Promise<void>;
   removeWorktree?: (worktreePath: string) => Promise<void>;
   commitWorktree?: (worktreePath: string, message: string) => Promise<WorktreeCommitResult>;
+  integrateCommit?: (commit: string, branch: string) => Promise<WorktreeIntegrateResult>;
 }
 
 /** Reject absolute paths and `..` traversal before handing a file path to git. */
@@ -366,6 +367,50 @@ export class FleetHub {
     return { ok: true };
   }
 
+  /**
+   * Move an approved worker commit into a staging integration branch. This never
+   * merges into main; the target branch is explicit and defaults to fleet/integration.
+   */
+  async integrate(
+    id: string,
+    targetBranch = "fleet/integration",
+  ): Promise<{ ok: boolean; error?: string; branch?: string; commit?: string; sourceCommit?: string } | null> {
+    const rec = this.workers.get(id);
+    if (!rec) return null;
+    const sourceCommit = latestApprovedCommit(rec.events);
+    if (!sourceCommit) return { ok: false, error: "worker has no approved commit to integrate" };
+
+    try {
+      const integrate = this.deps.integrateCommit ?? ((commit: string, branch: string) => this.worktrees.integrateCommit(commit, branch));
+      const result = await integrate(sourceCommit, targetBranch);
+      this.emit(id, {
+        type: "worker.progress",
+        ts: this.now(),
+        workerId: id,
+        message: `review integrated: ${result.branch}@${result.commit}`,
+        data: {
+          kind: "review",
+          action: "integrated",
+          commit: result.commit,
+          sourceCommit: result.sourceCommit,
+          branch: result.branch,
+          changed: true,
+        },
+      });
+      return { ok: true, branch: result.branch, commit: result.commit, sourceCommit: result.sourceCommit };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      this.emit(id, {
+        type: "worker.progress",
+        ts: this.now(),
+        workerId: id,
+        message: `review integrate failed: ${message}`,
+        level: "warning",
+      });
+      return { ok: false, error: `review integrate failed: ${message}` };
+    }
+  }
+
   /** Read-only single-file diff for the GUI drawer; never escapes the worktree. */
   async getWorkerFileDiff(
     id: string,
@@ -399,6 +444,7 @@ function statusAfterEvent(current: string, event: FleetWorkerEvent): FleetWorker
   if (event.type === "worker.progress") {
     const data = event.data as { kind?: unknown; action?: unknown } | undefined;
     if (data?.kind === "review" && data.action === "approved") return "completed";
+    if (data?.kind === "review" && data.action === "integrated") return "completed";
     if (data?.kind === "review" && data.action === "discarded") return "cancelled";
   }
   if (event.type === "worker.violation" && (event.code === "forbidden_file" || event.code === "center_lock")) return "blocked";
@@ -415,6 +461,18 @@ function latestCheckpointPath(events: FleetWorkerEvent[]): string | undefined {
     if (event.message !== "session saved" && !event.message.startsWith("checkpoint:")) continue;
     const data = event.data as { path?: unknown } | undefined;
     if (typeof data?.path === "string" && data.path) return data.path;
+  }
+  return undefined;
+}
+
+function latestApprovedCommit(events: FleetWorkerEvent[]): string | undefined {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (event.type !== "worker.progress") continue;
+    const data = event.data as { kind?: unknown; action?: unknown; commit?: unknown } | undefined;
+    if (data?.kind === "review" && data.action === "approved" && typeof data.commit === "string" && data.commit) {
+      return data.commit;
+    }
   }
   return undefined;
 }

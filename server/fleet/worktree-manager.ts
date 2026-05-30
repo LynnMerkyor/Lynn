@@ -4,6 +4,9 @@
  * One worktree per worker; changed-files/diff feed the scope guard + the GUI.
  */
 import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { promisify } from "node:util";
 
 const pExecFile = promisify(execFile);
@@ -28,6 +31,12 @@ export interface DiffStat {
 export interface WorktreeCommitResult {
   changed: boolean;
   commit?: string;
+}
+
+export interface WorktreeIntegrateResult {
+  branch: string;
+  commit: string;
+  sourceCommit: string;
 }
 
 export class WorktreeManager {
@@ -91,6 +100,41 @@ export class WorktreeManager {
     return { changed: true, commit };
   }
 
+  /**
+   * Cherry-pick an approved worker commit into a staging branch from a temporary
+   * worktree, so the user's main checkout is never switched or dirtied.
+   */
+  async integrateCommit(
+    sourceCommit: string,
+    targetBranch = "fleet/integration",
+    baseRef = "HEAD",
+  ): Promise<WorktreeIntegrateResult> {
+    if (!isSafeBranchName(targetBranch)) throw new Error(`invalid target branch: ${targetBranch}`);
+    if (!/^[0-9a-f]{6,40}$/i.test(sourceCommit)) throw new Error(`invalid source commit: ${sourceCommit}`);
+
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-fleet-integrate-"));
+    let added = false;
+    try {
+      const exists = await branchExists(this.repoRoot, targetBranch);
+      await runGit(
+        exists
+          ? ["worktree", "add", tmp, targetBranch]
+          : ["worktree", "add", "-b", targetBranch, tmp, baseRef],
+        this.repoRoot,
+      );
+      added = true;
+      await runGit(["cherry-pick", sourceCommit], tmp);
+      const commit = await runGit(["rev-parse", "--short", "HEAD"], tmp);
+      return { branch: targetBranch, commit, sourceCommit };
+    } catch (e) {
+      if (added) await runGit(["cherry-pick", "--abort"], tmp).catch(() => "");
+      throw e;
+    } finally {
+      if (added) await runGit(["worktree", "remove", tmp, "--force"], this.repoRoot).catch(() => "");
+      await fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
   async list(): Promise<WorktreeInfo[]> {
     const out = await runGit(["worktree", "list", "--porcelain"], this.repoRoot).catch(() => "");
     return parseWorktreePorcelain(out);
@@ -100,6 +144,15 @@ export class WorktreeManager {
     const args = ["worktree", "remove", worktreePath];
     if (force) args.push("--force");
     await runGit(args, this.repoRoot);
+  }
+}
+
+async function branchExists(repoRoot: string, branch: string): Promise<boolean> {
+  try {
+    await runGit(["rev-parse", "--verify", `refs/heads/${branch}`], repoRoot);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -113,6 +166,12 @@ async function hasStagedChanges(cwd: string): Promise<boolean> {
     }
     throw err;
   }
+}
+
+function isSafeBranchName(branch: string): boolean {
+  if (!branch || branch.startsWith("/") || branch.endsWith("/") || branch.includes("..")) return false;
+  if (branch.includes("@{") || branch.endsWith(".lock")) return false;
+  return /^[A-Za-z0-9._/-]+$/.test(branch);
 }
 
 /** Pure parser for `git worktree list --porcelain` output (exported for tests). */

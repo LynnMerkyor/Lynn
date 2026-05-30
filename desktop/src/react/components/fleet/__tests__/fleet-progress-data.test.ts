@@ -65,6 +65,15 @@ describe('worker.progress data (vision + runner context)', () => {
       data: { kind: 'review', action: 'discarded' },
     });
     expect(v.status).toBe('cancelled');
+
+    v = reduceFleetWorker(v, {
+      type: 'worker.progress',
+      workerId: 'w1',
+      message: 'review integrated: fleet/test@def5678',
+      data: { kind: 'review', action: 'integrated', commit: 'def5678', sourceCommit: 'abc1234', branch: 'fleet/test', changed: true },
+    });
+    expect(v.status).toBe('completed');
+    expect(v.review).toEqual({ action: 'integrated', commit: 'def5678', sourceCommit: 'abc1234', branch: 'fleet/test', changed: true });
   });
 
   it('captures structured worker.visual_result events', () => {
