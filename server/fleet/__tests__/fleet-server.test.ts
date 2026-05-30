@@ -483,9 +483,11 @@ describe("FleetHub.dispatch", () => {
     });
   });
 
-  it("registers a worker and broadcasts started -> claims -> progress as fleet:event", async () => {
-    const sent: Array<{ type: string; event: { type: string; approval?: string; sandbox?: string } }> = [];
-    const hub = new FleetHub("/repo", (m) => sent.push(m as { type: string; event: { type: string; approval?: string; sandbox?: string } }), () => "T");
+  it("registers a worker and reports a recoverable error when no CLI runtime is available", async () => {
+    const sent: Array<{ type: string; event: { type: string; approval?: string; sandbox?: string; code?: string; recoverable?: boolean } }> = [];
+    const hub = new FleetHub("/repo", (m) => sent.push(m as { type: string; event: { type: string; approval?: string; sandbox?: string; code?: string; recoverable?: boolean } }), () => "T", {
+      available: () => false,
+    });
     const brief: FleetBrief = {
       title: "split ComposerTextarea",
       agent: "claude-code",
@@ -500,10 +502,13 @@ describe("FleetHub.dispatch", () => {
     const rec = await hub.dispatch(brief);
 
     expect(rec.workerId).toBe("w1");
+    expect(rec.spawned).toBe(false);
+    expect(hub.getWorker(rec.workerId)?.status).toBe("failed");
     expect(hub.listWorkers()).toHaveLength(1);
     expect(sent.every((m) => m.type === "fleet:event")).toBe(true);
-    expect(sent.map((m) => m.event.type)).toEqual(["worker.started", "worker.claims", "worker.progress"]);
+    expect(sent.map((m) => m.event.type)).toEqual(["worker.started", "worker.claims", "worker.progress", "worker.error"]);
     expect(sent[0].event).toMatchObject({ approval: "yolo", sandbox: "workspace-write" });
+    expect(sent.at(-1)?.event).toMatchObject({ code: "cli_runtime_unavailable", recoverable: true });
   });
 });
 
@@ -523,9 +528,9 @@ const availableSampleRegistry = () => [
 
 describe("fleet HTTP route", () => {
   it("dispatches a worker through POST /fleet/dispatch", async () => {
-    const sent: Array<{ type: string; event: { type: string } }> = [];
+    const sent: Array<{ type: string; event: { type: string; code?: string; recoverable?: boolean } }> = [];
     const app = new Hono();
-    const hub = new FleetHub("/repo", (m) => sent.push(m as { type: string; event: { type: string } }), () => "T", {
+    const hub = new FleetHub("/repo", (m) => sent.push(m as { type: string; event: { type: string; code?: string; recoverable?: boolean } }), () => "T", {
       available: () => false,
     });
     app.route("/api", createFleetRoute(hub, { registry: availableSampleRegistry }));
@@ -541,7 +546,8 @@ describe("fleet HTTP route", () => {
     expect(data.ok).toBe(true);
     expect(data.worker).toMatchObject({ workerId: "w1", brief: sampleBrief, spawned: false });
     expect(sent.every((m) => m.type === "fleet:event")).toBe(true);
-    expect(sent.map((m) => m.event.type)).toEqual(["worker.started", "worker.claims", "worker.progress"]);
+    expect(sent.map((m) => m.event.type)).toEqual(["worker.started", "worker.claims", "worker.progress", "worker.error"]);
+    expect(sent.at(-1)?.event).toMatchObject({ code: "cli_runtime_unavailable", recoverable: true });
   });
 
   it("dispatches through HTTP and streams a real Lynn CLI worker", async () => {
@@ -988,7 +994,13 @@ describe("FleetHub real spawn", () => {
     });
     const rec = await hub.dispatch(sampleBrief);
     expect(rec.spawned).toBe(false);
-    expect(sent.map((m) => m.event.type)).toEqual(["worker.started", "worker.claims", "worker.progress"]);
+    expect(hub.getWorker(rec.workerId)?.status).toBe("failed");
+    expect(sent.map((m) => m.event.type)).toEqual(["worker.started", "worker.claims", "worker.progress", "worker.error"]);
+    expect(sent.at(-1)?.event).toMatchObject({
+      type: "worker.error",
+      code: "cli_runtime_unavailable",
+      recoverable: true,
+    });
   });
 
   it("aborts real spawn when worktree creation fails", async () => {

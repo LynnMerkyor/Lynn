@@ -264,6 +264,14 @@ export class FleetHub {
       message: "demo runner - CLI runtime unavailable",
       data: { kind: "runner", mode: "stub" },
     });
+    this.emit(workerId, {
+      type: "worker.error",
+      ts: this.now(),
+      workerId,
+      code: "cli_runtime_unavailable",
+      message: "CLI runtime unavailable; build or bundle Lynn CLI before dispatching a real worker",
+      recoverable: true,
+    });
     return rec;
   }
 
