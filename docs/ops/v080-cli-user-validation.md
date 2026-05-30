@@ -145,7 +145,9 @@ Expected:
 
 - `doctor` reports Brain reachable.
 - `-p` returns content from the Brain route.
-- The visible model route should be MiMo by default unless changed in GUI settings.
+- The visible model route should be StepFun 3.7 Flash -> MiMo V2.5 Pro -> Spark
+  Qwen 3.6 35B A3B by default. Image/audio/video requests should visibly route
+  to MiMo via the Brain capability gate.
 - `providers` must not print raw provider keys.
 
 ## Tier 3: MiMo CLI Differentiators

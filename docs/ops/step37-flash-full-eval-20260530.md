@@ -4,7 +4,7 @@ Date: 2026-05-30 (过夜自主测评)
 Endpoint: `https://api.stepfun.com/step_plan/v1`(订阅 plan 档)
 Model: step-3.7-flash(198B MoE / ~11B active,vision-language,256K ctx,MTP-3)
 
-> 一句话:**step-3.7-flash 在速度、学术质量、agentic 工具、跨语言编码上全面强于 Lynn 现役 Spark 35B-APEX-MTP;唯一短板是云端有 plan 配额 + 无 native search(已被 Lynn 工具体系补齐)。已接入 Brain v2 第 3 顺位 + 图片 fallback 第 2,并配好 CodeBuddy。**
+> 一句话:**step-3.7-flash 在 high+32K 下速度、学术质量、agentic 工具、跨语言编码全面强于 Lynn 现役 Spark 35B-APEX-MTP,并反超 MiMo 的 GPQA/MMLU 评估。当前 Brain v2 默认路由是 StepFun 3.7 Flash high+32K -> MiMo V2.5 Pro -> Spark Qwen 3.6 35B A3B。MiMo 仍负责多模态/native search 兜底。**
 
 ---
 
@@ -25,21 +25,23 @@ Model: step-3.7-flash(198B MoE / ~11B active,vision-language,256K ctx,MTP-3)
 
 | Benchmark | think-on | think-off(fast-mode) | parse_fail |
 |---|---|---|---|
-| **MMLU 500**(5-shot) | **91.4%** | 86.6% | 0 |
-| **GPQA Diamond 198** | **59.6%**(excl-pf 63.1%) | 50.0% | on=11 / off=13 |
+| **MMLU 500**(5-shot, high+32K) | **92.20%** | 86.6% | 0 |
+| **GPQA Diamond 198**(high+32K) | **70.71%** | 50.0% | on=2 / off=13 |
 
-- thinking 增益:GPQA **+9.6pp**(硬科学推理),MMLU **+4.8pp**(知识)—— 难题上 thinking 价值更大
-- parse_fail 来自硬题 reasoning 吃满 16384 token 未输出字母(已用 reasoning-tail fallback 提取救回大部分)
+- thinking/预算增益:GPQA 从 medium+16K 的 59.6% 拉到 high+32K 的 **70.71%**,
+  parse_fail 从 11 降到 2。MMLU high+32K 为 **92.20%**。
+- 结论:旧 medium+16K 把 step-3.7 低估了;硬推理必须给 high + 32K。
 
 ### 对比 Lynn 现役模型(canonical)
 | 模型 | MMLU | GPQA Diamond |
 |---|---|---|
-| **step-3.7-flash(云)** | **91.4** | **59.6** |
+| **step-3.7-flash high+32K(云)** | **92.20** | **70.71** |
+| MiMo V2.5 Pro | 91.8 | 66.67 |
 | Qwen3.6-35B-A3B BF16 | 86.40 | 45.45 |
 | Qwen3.6-35B-A3B Q4_K_M | 83.00 | 50.00 |
 | Qwen3.5-9B Q4_K_M(本地默认) | 76.00 | 44.44 |
 
-**step-3.7-flash MMLU +5pp / GPQA +10–14pp,两项都明显高于 cascade 第 2 位的 35B-APEX。**
+**step-3.7-flash high+32K MMLU 与 GPQA 均反超 MiMo,且明显高于 35B-APEX。**
 
 ---
 
@@ -88,7 +90,10 @@ Model: step-3.7-flash(198B MoE / ~11B active,vision-language,256K ctx,MTP-3)
 
 ## 6. Brain v2 集成(已落地)
 
-- 代码:`claude/brain-step37-provider`(commit 9c7039f)—— universalOrder 第 3 位(Spark APEX 后 / DeepSeek 前),vision=true → 图片 fallback 第 2 顺位
+- 代码:`brain-v2-mirror/provider-registry.ts`—— universalOrder 头位:
+  `step-3.7-flash` -> `mimo` -> `apex-spark-i-balanced`。
+- StepFun 以 `default_reasoning_effort=high` + `max_tokens=32768` 运行;
+  `vision/audio/video=false`,所以多模态自动经 capability gate 落 MiMo。
 - brain.env:`STEP37_KEY/BASE/MODEL` 已配
 - 缺的 native search 由 Lynn 工具体系补齐:① tool-call 循环(step-3.7 调 web_search,Brain tool-exec 多源聚合执行,实测 5/5)② pre-search 注入(native_search=false 自动触发 MiMo 预搜索)
 - CodeBuddy:`~/.codebuddy/models.json` 已加 `custom-local:step-3.7-flash`(id 必须 = API 真名)
@@ -98,12 +103,12 @@ Model: step-3.7-flash(198B MoE / ~11B active,vision-language,256K ctx,MTP-3)
 ## 7. 最终定位
 
 ```
-质量:  step-3.7-flash (MMLU 91 / GPQA 60) > 35B-APEX (86/45) > 9B (76/44)
+质量:  step-3.7-flash high+32K (MMLU 92.2 / GPQA 70.7) > MiMo (91.8 / 66.7) > 35B-APEX (86/45) > 9B (76/44)
 速度:  step-3.7 (220) > 35B-APEX (79) > 9B本地 (78) > 本地Q3_K_M (26)
 编码:  step-3.7 36/36 全过(真 Lynn 代码 + 算法 + 5 语言)
 ```
 
-step-3.7-flash 作 Brain v2 cascade **第 3 顺位** 合理:质量速度都超第 2 位的 35B,但 35B 守第 2 因**本地零 API 成本 + 隐私 + 无 plan 配额风险**。step-3.7 是"Spark 也扛不住时的高质量快速云兜底"。
+step-3.7-flash 作 Brain v2 cascade **头位**合理:文本/编码又快又强。MiMo 作第二位,负责多模态/native search 与高额度兜底;Spark 作第三位,负责本地零成本/隐私兜底。
 
 **对 v0.80 lynn-cli / Worker Fleet:step-3.7-flash 是验证扎实的 fast coding backend**(220 TPS + 编码 36/36),CodeBuddy 已可直接用,可作 DeepSeek V4 Pro 之外的并行 worker 后端选项。
 

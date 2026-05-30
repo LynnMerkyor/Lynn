@@ -1,16 +1,22 @@
-# Lynn MiMo CLI - capability differentiation + execution plan
+# Lynn CLI - StepFun text head + MiMo capability fallback plan
 
 Date: 2026-05-29
 Branch: `claude/mimo-cli-design`
-Status: Design (pre-code review gate). Companion to `docs/ops/v0.80-gui-cli-worker-plan.md`.
-(Supersedes the earlier vision-only draft.)
+Status: Design, updated after StepFun high+32K evaluation. Companion to
+`docs/ops/v0.80-gui-cli-worker-plan.md`. (Supersedes the earlier vision-only and
+MiMo-default drafts.)
 
-> Thesis: the MiMo-default CLI must differentiate on MiMo's capability BREADTH, not by
-> out-optimizing a single text path. Reasonix / DeepSeek-TUI already win the
+> 2026-05-30 update: StepFun 3.7 Flash high+32K became the Brain v2 text/coding
+> head route after GPQA/MMLU/extra results. MiMo remains the second route and owns
+> multimodal/native-search capability fallback.
+
+> Thesis: the Lynn CLI should use StepFun for fast text/coding work and differentiate
+> on MiMo's capability BREADTH when the task needs vision/audio/video/search/grounding.
+> Reasonix / DeepSeek-TUI already win the
 > "optimize one DeepSeek text path" game (prefix cache, reasoning display, tool-storm
-> avoidance) - we cannot out-Reasonix them there. We win on what their models cannot
-> do at all. Five selling points, all grounded in verified MiMo facts, and mostly
-> already wired in brain v2.
+> avoidance) - we cannot out-Reasonix them there. We win by combining a fast
+> high-quality text head with MiMo's breadth. Five selling points, all grounded in
+> verified MiMo facts, and mostly already wired in brain v2.
 
 ## 1. The five selling points
 
@@ -79,7 +85,7 @@ models cannot do at all.
 | 4 search | `enable_search:true` wired | `wire-adapter/mimo.ts` |
 | 5 tool-storm | loop guard (model-agnostic) | `tool-storm.ts` |
 | 2 long-ctx | turn-end compaction | `context-compact.ts` |
-| all | capability gate, MiMo cascade head, retry | `router.ts` |
+| all | capability gate, StepFun text head, MiMo multimodal/search fallback, retry | `router.ts` |
 
 The CLI is a thin client. Genuinely new client surface (small):
 - image capture/encode into `image_url` content parts + grounding-output normalization
@@ -97,11 +103,13 @@ lynn MiMo mode / Fleet worker
         |  POST /v1/chat/completions  (+ web_search tool, multimodal parts)
         v
 brain v2 (already multimodal + search + tool-storm + compaction)
-  provider-registry.ts (mimo head, vision/audio/video on)
+  provider-registry.ts (stepfun text head; mimo vision/audio/video on)
   wire-adapter/mimo.ts (auto mimo-v2.5-pro <-> mimo-v2.5/omni; enable_search)
   router.ts (capability gate); tool-storm.ts; context-compact.ts
         v
-  MiMo OpenAI-compatible API (token-plan-cn.xiaomimimo.com/v1)  [+ Spark APEX fallback]
+  StepFun step_plan API for text/coding head
+  MiMo OpenAI-compatible API (token-plan-cn.xiaomimimo.com/v1) for multimodal/search
+  Spark APEX fallback for local/private/zero-cost
 ```
 
 ## 6. Command surface (illustrative)
@@ -131,41 +139,42 @@ lynn-mimo run --resume <runId>
 | reasoning visibility (table stakes) | yes | partial | yes |
 | voice (deferred to Jarvis) | later | no | no |
 
-## 8. Backend policy: MiMo default, StepFun fast coding worker candidate
+## 8. Backend policy: StepFun text head, MiMo capability fallback
 
-The default user-facing route stays **MiMo through Lynn Brain** because it is the
-widest capability bundle (vision, search, long context, cache economics, native
-tooling). However, v0.80 should treat **StepFun step-3.7-flash** as a serious
-Fleet/backend option for fast coding work, not as a footnote.
+The default Brain v2 route is now **StepFun 3.7 Flash high+32K -> MiMo V2.5 Pro
+-> Spark Qwen 3.6 35B A3B**. StepFun is the text/coding head because the high+32K
+run overturned the earlier medium+16K conclusion: it is both much faster and
+stronger on GPQA/MMLU. MiMo stays second because it is still the widest capability
+bundle (vision, audio, video, native search, long context, cache economics).
 
 Verified from live CLI/eval trials (2026-05-30). See
 `docs/ops/stepfun-37-flash-eval-20260530.md` for the archived evidence.
 
 | Backend | Evidence | Proposed role |
 |---|---|---|
-| MiMo | broad multimodal/search/cache/grounding stack; native route in Brain | default route and capability headline |
-| StepFun `step-3.7-flash` | ~215-220 TPS observed; CodeBuddy production CLI solved 6/6 real coding tasks across Python/JS/TS/Rust with edit + run-test loops; GPQA Diamond 198 = **59.60%** (63.10% excl parse-fail), ahead of current 35B APEX fallback (45-50%) | recommended fast/high-quality cloud coding worker / BYOK preset / Fleet backend candidate |
+| StepFun `step-3.7-flash` | ~215-220 TPS observed; CodeBuddy production CLI solved 36/36 coding battery; GPQA Diamond 198 high+32K = **70.71%**; MMLU 500 high+32K = **92.20%**; extra coding/tools = 21/21 | default text/coding head route + fast Fleet worker |
+| MiMo | broad multimodal/search/cache/grounding stack; native route in Brain; GPQA 66.67 / MMLU 91.8 | multimodal/native-search fallback and capability headline |
 | DeepSeek V4 Pro | strong reasoning and cache economy, slower but reliable | heavy reasoning fallback / BYOK preset |
 | Spark APEX-MTP | local/private fallback | offline/private fallback |
 
 Policy:
-- Do **not** silently replace the default route. Users should understand why MiMo is
-  the default and why StepFun may be faster for code.
-- Add StepFun as an explicit BYOK/provider preset once the provider UX has presets
+- Show the route clearly: StepFun handles text/coding; MiMo handles multimodal and
+  native-search fallback; Spark is local/private third fallback.
+- Keep StepFun as an explicit BYOK/provider preset for CLI-only users
   (base URL + API key + model name), and as a Fleet agent/backend option.
 - In Fleet, expose it as a "fast coding worker" profile, separate from `mimo-vl`
   (vision/grounding) and `mimo-pro` (long multimodal task).
 - Keep local 35B/Spark ahead in privacy/zero-cost local routing, but do not present it
-  as higher quality than StepFun for cloud coding fallback. The ranking is:
-  local/privacy first when needed; StepFun for fast cloud coding quality.
+  as higher quality than StepFun for cloud coding. The ranking is: StepFun for
+  quality+speed, MiMo for capability breadth, Spark for local/privacy/zero-cost.
 - Keep the interface OpenAI-compatible: `baseUrl`, `apiKey`, `model`. No provider key
   is bundled into the client.
 
 ## 9. Execution / landing direction
 
 ### Where it lands (this is NOT a from-scratch separate CLI)
-The 5 pillars are how the MiMo-default CLI (that the CLI lane is building in `cli/**`)
-becomes differentiated. Work splits across existing lanes:
+The 5 pillars are how the StepFun-head + MiMo-fallback CLI (that the CLI lane is
+building in `cli/**`) becomes differentiated. Work splits across existing lanes:
 
 - **brain v2 - mostly DONE**: multimodal routing, `enable_search`, tool-storm,
   compaction. Do not duplicate.

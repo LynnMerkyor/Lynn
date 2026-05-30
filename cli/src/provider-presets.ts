@@ -12,14 +12,14 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
     baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
     model: "mimo-v2.5-pro",
     displayName: "MiMo V2.5 Pro",
-    description: "MiMo V2.5 Pro Token Plan route (matches Lynn Brain default family)",
+    description: "MiMo V2.5 Pro Token Plan route (multimodal/native-search fallback in Lynn Brain)",
   },
   stepfun: {
     provider: "openai-compatible",
     baseUrl: "https://api.stepfun.com/step_plan/v1",
     model: "step-3.7-flash",
     displayName: "StepFun 3.7 Flash",
-    description: "StepFun 3.7 Flash fast text/coding fallback backend",
+    description: "StepFun 3.7 Flash fast text/coding head route",
   },
   spark: {
     provider: "openai-compatible",
