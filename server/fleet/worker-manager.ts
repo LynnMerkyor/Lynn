@@ -205,6 +205,15 @@ export function spawnWorker(opts: SpawnWorkerOptions, onEvent: (e: FleetWorkerEv
       onEvent(makeFleetProgressEvent(`worker process cancelled (${code ?? "?"})`, { workerId: opts.workerId }));
       return;
     }
+    if (code === 0 && !sawWorkerTerminalEvent) {
+      emitParsedEvent({
+        type: "worker.finished",
+        workerId: opts.workerId,
+        ok: true,
+        exitCode: 0,
+        summary: "worker process exited without final event",
+      });
+    }
     if (typeof code === "number" && code !== 0 && !sawWorkerTerminalEvent) {
       onEvent({
         type: "worker.error",

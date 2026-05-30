@@ -212,6 +212,26 @@ describe("spawnWorker", () => {
     }));
   });
 
+  it("emits worker.finished when a successful process forgets its final event", async () => {
+    const events: Array<{ type: string; summary?: string; ok?: boolean; exitCode?: number }> = [];
+    spawnWorker({
+      command: process.execPath,
+      args: ["-e", "process.stdout.write(JSON.stringify({type:'worker.progress', message:'almost done'}) + '\\n')"],
+      cwd: process.cwd(),
+      env: process.env,
+      workerId: "w-missing-final",
+    }, (event) => events.push(event as { type: string; summary?: string; ok?: boolean; exitCode?: number }));
+
+    await waitFor(() => events.some((event) => event.type === "worker.finished"));
+
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "worker.finished",
+      ok: true,
+      exitCode: 0,
+      summary: "worker process exited without final event",
+    }));
+  });
+
   it("does not duplicate worker_exit when the worker already emitted a terminal error", async () => {
     const events: Array<{ type: string; code?: string; message?: string; recoverable?: boolean }> = [];
     spawnWorker({
