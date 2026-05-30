@@ -88,7 +88,13 @@ export async function runCode(args: ParsedArgs): Promise<number> {
   if (!tool) {
     const task = args.positionals.join(" ").trim();
     if (task) return runCodeTask(args, task, json);
-    if (!json && input.isTTY && output.isTTY) return runCodeInteractive(args);
+    if (!json && input.isTTY && output.isTTY) {
+      if (process.env.LYNN_CLI_LEGACY_TUI !== "1" && !hasFlag(args.flags, "no-ink", "legacy-tui")) {
+        const { runInkCode } = await import("../ink-code.js");
+        return runInkCode(args, runCodeTaskWithEvents);
+      }
+      return runCodeInteractive(args);
+    }
     const message = "code mode ready; pass a task, --list-tools, or --tool <name>";
     if (json) writeJsonLine({ type: "code.ready", ts: nowIso(), message, cwd: cwd(args) });
     else process.stdout.write(`${message}\n`);
@@ -391,7 +397,25 @@ interface CodeContext {
   packageScripts: Record<string, string>;
 }
 
-async function runCodeTask(args: ParsedArgs, task: string, json: boolean, options: { compact?: boolean } = {}): Promise<number> {
+export async function runCodeTaskWithEvents(
+  args: ParsedArgs,
+  task: string,
+  onEvent: (event: CodeAgentEvent) => void,
+  options: { requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny"> } = {},
+): Promise<number> {
+  return runCodeTask(args, task, false, { compact: true, onEvent, requestApproval: options.requestApproval });
+}
+
+async function runCodeTask(
+  args: ParsedArgs,
+  task: string,
+  json: boolean,
+  options: {
+    compact?: boolean;
+    onEvent?: (event: CodeAgentEvent) => void;
+    requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny">;
+  } = {},
+): Promise<number> {
   const context = await collectCodeContext(cwd(args));
   const reasoning = parseReasoningOptions(args);
   const stepBudget = maxSteps(args);
@@ -406,7 +430,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
   const sessionPath = getStringFlag(args.flags, "session") || resumePath;
   const title = getStringFlag(args.flags, "title") || task;
   let liveSessionPath = sessionPath;
-  if (!json && !options.compact) {
+  if (!json && !options.compact && !options.onEvent) {
     errorOutput.write(renderCodeTaskHeader({
       cwd: context.cwd,
       approval: mode.approval,
@@ -424,10 +448,12 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
 
   if (mockBrain) {
     const text = renderMockCodeTask(task, context);
+    options.onEvent?.({ type: "assistant.delta", text });
+    options.onEvent?.({ type: "task.finished", ok: true, text, usageSummary: null });
     if (json) {
       writeJsonLine({ type: "assistant.delta", ts: nowIso(), text });
       writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true });
-    } else {
+    } else if (!options.onEvent) {
       process.stdout.write(renderAssistantBlock(text, renderCodeFooter({ context, mode, mockBrain, reasoning })));
     }
     if (saveSession) {
@@ -470,6 +496,8 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
     output: errorOutput,
     imagePaths: codeImagePaths(args),
     resumeMessages,
+    onEvent: options.onEvent,
+    requestApproval: options.requestApproval,
     onCheckpoint: saveSession && liveSessionPath
       ? async (line) => {
           liveSessionPath = await appendSessionLine({
@@ -530,6 +558,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
   const resumeCommand = final.maxStepsReached && savedSessionPath
     ? resumeCommandForSession(savedSessionPath)
     : null;
+  options.onEvent?.({ type: "task.finished", ok: !final.maxStepsReached, text: final.text, usageSummary: final.usageSummary, maxStepsReached: final.maxStepsReached });
   if (json) {
     if (final.text.trim()) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: final.text });
     writeJsonLine({
@@ -542,7 +571,7 @@ async function runCodeTask(args: ParsedArgs, task: string, json: boolean, option
       ...(savedSessionPath ? { sessionPath: savedSessionPath } : {}),
       ...(resumeCommand ? { resumeCommand } : {}),
     });
-  } else {
+  } else if (!options.onEvent) {
     const answer = [
       renderMarkdown(final.text.trim() || "(no answer)", supportsColor(output)),
       resumeCommand ? t("code.resume.maxSteps", { command: resumeCommand }) : "",
@@ -637,7 +666,29 @@ interface CodeAgentLoopInput {
   imagePaths?: string[];
   resumeMessages?: ChatMessage[];
   onCheckpoint?: (line: { type: "user" | "assistant" | "tool"; content: string; data?: Record<string, unknown> }) => Promise<void>;
+  onEvent?: (event: CodeAgentEvent) => void;
+  requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny">;
 }
+
+export interface CodeAgentApprovalRequest {
+  tool: ClientToolName;
+  args: CodeToolRequest["args"];
+  cwd: string;
+  preview?: string;
+}
+
+export type CodeAgentEvent =
+  | { type: "step.started"; step: number; label: string }
+  | { type: "provider"; provider: string }
+  | { type: "usage"; summary: string }
+  | { type: "reasoning.delta"; text: string }
+  | { type: "assistant.delta"; text: string }
+  | { type: "tool.progress"; message: string }
+  | { type: "tool.requested"; tool: ClientToolName; args: CodeToolRequest["args"]; preview?: string }
+  | { type: "tool.result"; result: ClientToolResult }
+  | { type: "tool.loop_guard"; tool: ClientToolName; repeats: number }
+  | { type: "task.finished"; ok: boolean; text: string; usageSummary: string | null; maxStepsReached?: boolean }
+  | { type: "error"; message: string };
 
 interface CodeToolRequest {
   toolCallId?: string;
@@ -690,13 +741,16 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
   const approvalSession = { approveAll: false };
   const seenToolRequests = new Map<string, number>();
   for (let step = 0; step < inputData.maxSteps; step += 1) {
+    const label = step === 0 ? t("spinner.coding") : t("spinner.reviewing");
+    inputData.onEvent?.({ type: "step.started", step, label });
     const result = await collectBrainText({
       brainUrl: inputData.brainUrl,
       fallbackProvider: inputData.fallbackProvider,
       messages,
       reasoning: inputData.reasoning,
       json: inputData.json,
-      label: step === 0 ? t("spinner.coding") : t("spinner.reviewing"),
+      label,
+      onEvent: inputData.onEvent,
     });
     const assistantText = result.text;
     latestUsageSummary = result.usageSummary || latestUsageSummary;
@@ -730,7 +784,9 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
       const previous = seenToolRequests.get(fingerprint) || 0;
       seenToolRequests.set(fingerprint, previous + 1);
       if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
-      else renderClientToolStart(toolRequest);
+      const preview = formatDangerousToolPreview(toolRequest.tool, toolRequest.args, supportsColor(inputData.output));
+      inputData.onEvent?.({ type: "tool.requested", tool: toolRequest.tool, args: redactToolArgs(toolRequest) as CodeToolRequest["args"], preview });
+      if (!inputData.json && !inputData.onEvent) renderClientToolStart(toolRequest);
       let toolResult: ClientToolResult;
       if (previous > 0) {
         toolResult = {
@@ -741,18 +797,37 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
         if (inputData.json) {
           writeJsonLine({ type: "code.tool.loop_guard", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest), repeats: previous + 1 });
         }
+        inputData.onEvent?.({ type: "tool.loop_guard", tool: toolRequest.tool, repeats: previous + 1 });
       } else {
         try {
-          const effectiveApproval = await resolveToolApproval({
-            tool: toolRequest.tool,
-            approval: inputData.toolCtx.approval,
-            cwd: inputData.toolCtx.cwd,
-            json: inputData.json,
-            input: inputData.input,
-            output: inputData.output,
-            preview: formatDangerousToolPreview(toolRequest.tool, toolRequest.args, supportsColor(inputData.output)),
-            session: approvalSession,
-          });
+          let effectiveApproval: ToolApprovalRequest["approval"];
+          if (
+            inputData.requestApproval &&
+            isDangerousClientTool(toolRequest.tool) &&
+            inputData.toolCtx.approval === "ask" &&
+            !approvalSession.approveAll
+          ) {
+            const decision = await inputData.requestApproval({
+              tool: toolRequest.tool,
+              args: redactToolArgs(toolRequest) as CodeToolRequest["args"],
+              cwd: inputData.toolCtx.cwd,
+              preview,
+            });
+            if (decision === "deny") throw new Error(`${toolRequest.tool} cancelled by user`);
+            if (decision === "approve_all") approvalSession.approveAll = true;
+            effectiveApproval = "yolo";
+          } else {
+            effectiveApproval = await resolveToolApproval({
+              tool: toolRequest.tool,
+              approval: inputData.toolCtx.approval,
+              cwd: inputData.toolCtx.cwd,
+              json: inputData.json,
+              input: inputData.input,
+              output: inputData.output,
+              preview,
+              session: approvalSession,
+            });
+          }
           toolResult = await runClientTool({ ...inputData.toolCtx, approval: effectiveApproval }, {
             name: toolRequest.tool,
             ...toolRequest.args,
@@ -778,7 +853,8 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
         }
       }
       if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
-      else renderClientToolResult(toolResult);
+      inputData.onEvent?.({ type: "tool.result", result: toolResult });
+      if (!inputData.json && !inputData.onEvent) renderClientToolResult(toolResult);
       toolResultSections.push([
         `Tool result for ${toolRequest.tool}:`,
         formatToolResultForLoop(toolResult),
@@ -1012,6 +1088,7 @@ async function collectBrainText(inputData: {
   reasoning: ReturnType<typeof parseReasoningOptions>;
   json: boolean;
   label: string;
+  onEvent?: (event: CodeAgentEvent) => void;
 }): Promise<BrainTextResult> {
   let text = "";
   let usageSummary: string | null = null;
@@ -1019,7 +1096,7 @@ async function collectBrainText(inputData: {
   const spinner = new TerminalSpinner(process.stderr, inputData.label);
   const renderState: HumanBrainRenderState = {};
   const startedAt = Date.now();
-  if (!inputData.json) spinner.start();
+  if (!inputData.json && !inputData.onEvent) spinner.start();
   try {
     for await (const event of streamBrainChat({
       brainUrl: inputData.brainUrl,
@@ -1032,9 +1109,17 @@ async function collectBrainText(inputData: {
       if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
         spinner.stop();
       }
-      if (event.type === "reasoning.delta" && renderReasoning) process.stderr.write(dim(event.text, supportsColor(process.stderr)));
-      if (event.type === "assistant.delta") text += event.text;
+      if (event.type === "reasoning.delta" && renderReasoning) {
+        inputData.onEvent?.({ type: "reasoning.delta", text: event.text });
+        if (!inputData.onEvent) process.stderr.write(dim(event.text, supportsColor(process.stderr)));
+      }
+      if (event.type === "assistant.delta") {
+        text += event.text;
+        inputData.onEvent?.({ type: "assistant.delta", text: event.text });
+      }
       if (event.type === "tool_call.delta") streamedToolCalls.append(event);
+      if (event.type === "provider") inputData.onEvent?.({ type: "provider", provider: event.activeProvider });
+      if (event.type === "tool_progress") inputData.onEvent?.({ type: "tool.progress", message: [event.name, event.event].filter(Boolean).join(" ") });
       if (inputData.json && (event.type === "provider" || event.type === "tool_progress" || event.type === "brain.error" || event.type === "usage")) {
         if (event.type === "usage") writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage, durationMs: Date.now() - startedAt });
         else writeJsonLine({ ...event, ts: nowIso() });
@@ -1046,12 +1131,19 @@ async function collectBrainText(inputData: {
         if (event.type === "usage") {
           const summary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt });
           usageSummary = summary || usageSummary;
-          if (summary) process.stderr.write(`usage: ${summary}\n`);
+          if (summary) {
+            inputData.onEvent?.({ type: "usage", summary });
+            if (!inputData.onEvent) process.stderr.write(`usage: ${summary}\n`);
+          }
         } else {
-          renderBrainEventForHuman(event, renderState, process.stderr);
+          if (!inputData.onEvent) renderBrainEventForHuman(event, renderState, process.stderr);
         }
       } else if (inputData.json && event.type === "usage") {
         usageSummary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt }) || usageSummary;
+      } else if (inputData.onEvent && event.type === "usage") {
+        const summary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt });
+        usageSummary = summary || usageSummary;
+        if (summary) inputData.onEvent({ type: "usage", summary });
       }
     }
   } finally {

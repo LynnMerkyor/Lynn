@@ -16,7 +16,6 @@ import { completeSlash } from "../completion.js";
 import { resolveEffectivePermissions } from "../permissions.js";
 import { HistoryNavigator } from "../history.js";
 import { readInteractiveLine } from "../interactive-line.js";
-import { runInkChat } from "../ink-chat.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/exit",
@@ -54,6 +53,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     process.env.LYNN_CLI_LEGACY_TUI !== "1" &&
     !hasFlag(args.flags, "no-ink", "legacy-tui")
   ) {
+    const { runInkChat } = await import("../ink-chat.js");
     return runInkChat(args);
   }
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");

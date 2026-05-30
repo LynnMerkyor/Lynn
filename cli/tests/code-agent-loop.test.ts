@@ -6,7 +6,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { maxSteps, runCode } from "../src/commands/code.js";
+import { maxSteps, runCode, runCodeTaskWithEvents, type CodeAgentEvent } from "../src/commands/code.js";
 import { appendSessionTurn, readSessionLines, sessionIndexPath } from "../src/session/store.js";
 
 let tmp = "";
@@ -258,6 +258,140 @@ describe("code agent loop", () => {
     expect(output).toContain('"type":"code.tool.result"');
     expect(output).toContain('"ok":true');
     expect(output).toContain("Patch applied after on-failure approval mode");
+  });
+
+  it("emits code agent events and uses UI approval callbacks", async () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+evented",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const events: CodeAgentEvent[] = [];
+    try {
+      await withBrainServer((_body, count) => count === 1
+        ? JSON.stringify({ tool: "apply_patch", args: { patch } })
+        : "Evented patch applied.",
+      async (brainUrl) => {
+        await expect(runCodeTaskWithEvents(parseArgs([
+          "code",
+          "change hello through event UI",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--approval",
+          "ask",
+          "--max-steps",
+          "3",
+        ]), "change hello through event UI", (event) => {
+          events.push(event);
+        }, {
+          requestApproval: async (request) => {
+            expect(request.tool).toBe("apply_patch");
+            expect(request.preview).toContain("patch preview");
+            return "approve_all";
+          },
+        })).resolves.toBe(0);
+      });
+    } finally {
+      // Nothing to restore; the event UI path must not patch stdout/stderr.
+    }
+
+    await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("evented\n");
+    expect(events.some((event) => event.type === "tool.requested" && event.tool === "apply_patch")).toBe(true);
+    expect(events.some((event) => event.type === "tool.result" && event.result.ok)).toBe(true);
+    expect(events.some((event) => event.type === "task.finished" && event.ok)).toBe(true);
+  });
+
+  pythonIt("uses the Ink code shell for mock coding turns and Shift+Tab mode toggle", async () => {
+    const script = `
+import os
+import pty
+import select
+import subprocess
+import sys
+import time
+
+node_bin, cwd, workspace = sys.argv[1], sys.argv[2], sys.argv[3]
+master, slave = pty.openpty()
+env = os.environ.copy()
+env["NO_COLOR"] = "1"
+env["LYNN_LANG"] = "zh"
+proc = subprocess.Popen(
+    [node_bin, "--import", "tsx", "src/cli.ts", "code", "--cwd", workspace, "--mock-brain"],
+    cwd=cwd,
+    stdin=slave,
+    stdout=slave,
+    stderr=slave,
+    env=env,
+    close_fds=True,
+)
+os.close(slave)
+buf = b""
+toggled = False
+sent_task = False
+sent_exit = False
+deadline = time.time() + 12
+while time.time() < deadline:
+    readable, _, _ = select.select([master], [], [], 0.1)
+    if readable:
+        try:
+            chunk = os.read(master, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        buf += chunk
+        text = buf.decode("utf-8", errors="replace")
+        if (not toggled) and "Lynn Code" in text and "Shift+Tab" in text:
+            os.write(master, b"\\x1b[Z")
+            toggled = True
+        elif toggled and (not sent_task) and "YOLO" in text:
+            os.write(master, "hi\\r".encode("utf-8"))
+            sent_task = True
+        elif sent_task and (not sent_exit) and "模拟编码任务" in text:
+            os.write(master, b"/exit\\r")
+            sent_exit = True
+    if sent_exit and proc.poll() is not None:
+        break
+if proc.poll() is None:
+    proc.terminate()
+    try:
+        proc.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+text = buf.decode("utf-8", errors="replace")
+if not toggled:
+    sys.stderr.write("Shift+Tab was not sent\\n")
+if not sent_task:
+    sys.stderr.write("mock task was not sent\\n")
+sys.stdout.write(text)
+sys.exit(proc.returncode if proc.returncode is not None else 124)
+`;
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn("python3", ["-c", script, process.execPath, cliRoot, tmp], {
+        cwd: cliRoot,
+        env: { ...process.env },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+      child.on("error", reject);
+      child.on("close", (code) => resolve({ code, stdout, stderr }));
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("Lynn Code");
+    expect(result.stdout).toContain("YOLO");
+    expect(result.stdout).toContain("模拟编码任务");
   });
 
   it("executes multiple model-requested tool calls from one turn", async () => {

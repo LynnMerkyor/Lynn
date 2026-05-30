@@ -1,0 +1,359 @@
+import React, { useEffect, useRef, useState } from "react";
+import { Box, Text, render, useApp, useInput } from "ink";
+import { getStringFlag, hasFlag, type ParsedArgs } from "./args.js";
+import { completeSlash } from "./completion.js";
+import type { CodeAgentApprovalRequest, CodeAgentEvent } from "./commands/code.js";
+import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type ChatMode } from "./commands/chat.js";
+import { displayCwd } from "./startup.js";
+import { HistoryNavigator, appendHistory, historyPath, loadHistory } from "./history.js";
+import { parseReasoningOptions, type ReasoningOptions } from "./reasoning.js";
+import { resolveEffectivePermissions } from "./permissions.js";
+import { resolveCliProviderProfile } from "./provider-profile.js";
+import { CLIENT_TOOL_DEFINITIONS } from "./tools/types.js";
+import { t } from "./i18n.js";
+
+type CodeItem =
+  | { id: number; kind: "user"; text: string }
+  | { id: number; kind: "assistant"; text: string }
+  | { id: number; kind: "system"; text: string; tone?: "normal" | "danger" | "success" }
+  | { id: number; kind: "tool"; title: string; detail?: string; ok?: boolean };
+
+type NewCodeItem =
+  | { kind: "user"; text: string }
+  | { kind: "assistant"; text: string }
+  | { kind: "system"; text: string; tone?: "normal" | "danger" | "success" }
+  | { kind: "tool"; title: string; detail?: string; ok?: boolean };
+
+interface InkCodeProps {
+  args: ParsedArgs;
+  initialReasoning: ReasoningOptions;
+  initialMode: ChatMode;
+  modelLabel: string;
+  runTask: CodeTaskRunner;
+}
+
+type CodeTaskRunner = (
+  args: ParsedArgs,
+  task: string,
+  onEvent: (event: CodeAgentEvent) => void,
+  options?: { requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny"> },
+) => Promise<number>;
+
+interface ApprovalState {
+  request: CodeAgentApprovalRequest;
+}
+
+const CODE_SLASH_COMMANDS = [
+  "/exit",
+  "/quit",
+  "/help",
+  "/tools",
+  "/fast",
+  "/think",
+  "/reasoning",
+  "/mode",
+  "/mode yolo",
+  "/model",
+  "/providers",
+  "/providers set",
+];
+
+export async function runInkCode(args: ParsedArgs, runTask: CodeTaskRunner): Promise<number> {
+  const permissions = await resolveEffectivePermissions(args);
+  const fallbackProvider = (await resolveCliProviderProfile(args))?.profile || null;
+  const modelLabel = hasFlag(args.flags, "mock-brain", "mock")
+    ? t("code.route.mock")
+    : fallbackProvider
+      ? `CLI BYOK: ${fallbackProvider.provider} / ${fallbackProvider.model}`
+      : t("code.route.brain");
+  const instance = render(React.createElement(InkCodeApp, {
+    args,
+    initialReasoning: parseReasoningOptions(args),
+    initialMode: { approval: permissions.approval, sandbox: permissions.sandbox },
+    modelLabel,
+    runTask,
+  }));
+  await instance.waitUntilExit();
+  return 0;
+}
+
+function InkCodeApp(props: InkCodeProps): React.ReactElement {
+  const app = useApp();
+  const [input, setInput] = useState("");
+  const [items, setItems] = useState<CodeItem[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [frame, setFrame] = useState(0);
+  const [reasoning, setReasoning] = useState(props.initialReasoning);
+  const [mode, setMode] = useState(props.initialMode);
+  const [usage, setUsage] = useState<string | null>(null);
+  const [provider, setProvider] = useState(props.modelLabel);
+  const [approval, setApproval] = useState<ApprovalState | null>(null);
+  const approvalResolve = useRef<((value: "approve" | "approve_all" | "deny") => void) | null>(null);
+  const [history] = useState(() => new HistoryNavigator(loadHistory(historyPath())));
+  const assistantId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setInterval(() => setFrame((value) => value + 1), 90);
+    return () => clearInterval(timer);
+  }, [busy]);
+
+  const requestApproval = (request: CodeAgentApprovalRequest): Promise<"approve" | "approve_all" | "deny"> => new Promise((resolve) => {
+    approvalResolve.current = resolve;
+    setApproval({ request });
+  });
+
+  const resolveApproval = (decision: "approve" | "approve_all" | "deny") => {
+    approvalResolve.current?.(decision);
+    approvalResolve.current = null;
+    setApproval(null);
+    const label = decision === "deny" ? "denied" : decision === "approve_all" ? "approved for this task" : "approved";
+    pushItem({ kind: "system", text: `tool ${label}`, tone: decision === "deny" ? "danger" : "success" });
+  };
+
+  const pushItem = (item: NewCodeItem) => {
+    setItems((current) => [...current, { ...item, id: Date.now() + Math.floor(Math.random() * 1000) } as CodeItem].slice(-14));
+  };
+
+  useInput((value, key) => {
+    if (approval) {
+      const text = value.toLowerCase();
+      if (text === "a") resolveApproval("approve_all");
+      else if (text === "y") resolveApproval("approve");
+      else if (text === "n" || key.escape || (key.ctrl && text === "c")) resolveApproval("deny");
+      return;
+    }
+    if (busy) return;
+    if (key.ctrl && value === "c") {
+      app.exit();
+      return;
+    }
+    if ((key.shift && key.tab) || value === "\u001b[Z") {
+      const next = { ...mode };
+      const message = toggleMode(next);
+      setMode(next);
+      pushItem({ kind: "system", text: message, tone: next.approval === "yolo" ? "danger" : "success" });
+      return;
+    }
+    const newlineIndex = value.search(/[\r\n]/);
+    if (key.return || newlineIndex >= 0) {
+      const prefix = newlineIndex >= 0 ? value.slice(0, newlineIndex) : "";
+      void submitInput(`${input}${prefix}`);
+      return;
+    }
+    if (key.backspace || key.delete) {
+      setInput((current) => Array.from(current).slice(0, -1).join(""));
+      return;
+    }
+    if (key.upArrow) {
+      setInput((current) => history.prev(current));
+      return;
+    }
+    if (key.downArrow) {
+      setInput(history.next());
+      return;
+    }
+    if (key.tab) {
+      const completion = completeSlash(input, CODE_SLASH_COMMANDS);
+      if (completion.matches.length > 1) pushItem({ kind: "system", text: completion.matches.join("  ") });
+      setInput(completion.completed);
+      return;
+    }
+    if (value) setInput((current) => current + value);
+  });
+
+  const submitInput = async (raw: string) => {
+    const text = raw.trim();
+    if (!text) return;
+    setInput("");
+    appendHistory(text, historyPath());
+    if (text === "/exit" || text === "/quit") {
+      app.exit();
+      return;
+    }
+    if (text === "/help") {
+      pushItem({ kind: "system", text: t("code.help") });
+      return;
+    }
+    if (text === "/tools") {
+      pushItem({ kind: "system", text: CLIENT_TOOL_DEFINITIONS.map((tool) => `${tool.name}${tool.dangerous ? t("tool.approval.suffix") : ""}: ${tool.description}`).join("\n") });
+      return;
+    }
+    if (text === "/fast") {
+      setReasoning((current) => ({ ...current, effort: "off" }));
+      pushItem({ kind: "system", text: t("code.fast"), tone: "success" });
+      return;
+    }
+    if (text === "/think") {
+      setReasoning((current) => ({ ...current, effort: "high" }));
+      pushItem({ kind: "system", text: t("code.think"), tone: "success" });
+      return;
+    }
+    if (text.startsWith("/reasoning ")) {
+      const result = applyReasoningCommand(reasoning, text.slice(11).trim());
+      setReasoning(result.reasoning);
+      pushItem({ kind: "system", text: result.message, tone: "success" });
+      return;
+    }
+    if (text.startsWith("/mode ")) {
+      const next = { ...mode };
+      const message = applyModeCommand(next, text.slice(6).trim());
+      setMode(next);
+      pushItem({ kind: "system", text: message, tone: next.approval === "yolo" ? "danger" : "success" });
+      return;
+    }
+
+    pushItem({ kind: "user", text });
+    assistantId.current = Date.now() + 1;
+    setItems((current) => [...current, { id: assistantId.current!, kind: "assistant" as const, text: "" }].slice(-14));
+    setBusy(true);
+    try {
+      const taskArgs: ParsedArgs = {
+        ...props.args,
+        positionals: [text],
+        flags: {
+          ...props.args.flags,
+          approval: mode.approval,
+          sandbox: mode.sandbox,
+          reasoning: reasoning.effort,
+          "show-reasoning": reasoning.display,
+        },
+      };
+      await props.runTask(taskArgs, text, handleAgentEvent, { requestApproval });
+    } catch (error) {
+      pushItem({ kind: "system", text: error instanceof Error ? error.message : String(error), tone: "danger" });
+    } finally {
+      setBusy(false);
+      assistantId.current = null;
+    }
+  };
+
+  const handleAgentEvent = (event: CodeAgentEvent) => {
+    if (event.type === "provider") setProvider(event.provider);
+    if (event.type === "usage") setUsage(event.summary);
+    if (event.type === "step.started") pushItem({ kind: "system", text: `${event.label} · step ${event.step + 1}` });
+    if (event.type === "reasoning.delta") {
+      pushItem({ kind: "system", text: event.text.slice(-180) });
+    }
+    if (event.type === "assistant.delta") {
+      const id = assistantId.current;
+      if (!id) return;
+      setItems((current) => current.map((item) => item.id === id && item.kind === "assistant" ? { ...item, text: `${item.text}${event.text}` } : item));
+    }
+    if (event.type === "tool.progress") pushItem({ kind: "system", text: event.message });
+    if (event.type === "tool.requested") {
+      pushItem({ kind: "tool", title: `tool ${event.tool}`, detail: event.preview || formatToolArgs(event.args) });
+    }
+    if (event.type === "tool.loop_guard") pushItem({ kind: "tool", title: `loop guard ${event.tool}`, detail: `${event.repeats} repeats`, ok: false });
+    if (event.type === "tool.result") {
+      pushItem({ kind: "tool", title: event.result.tool, detail: event.result.error || summarizeOutput(event.result.output), ok: event.result.ok });
+    }
+    if (event.type === "task.finished" && event.maxStepsReached) {
+      pushItem({ kind: "system", text: "max steps reached; use --resume/--long to continue", tone: "danger" });
+    }
+  };
+
+  const danger = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
+  const recent = items.slice(-12);
+  return React.createElement(Box, { flexDirection: "column", paddingX: 1 },
+    React.createElement(Box, { borderStyle: "round", borderColor: danger ? "red" : "gray", paddingX: 1, flexDirection: "column" },
+      React.createElement(Text, { bold: true }, "Lynn Code"),
+      React.createElement(Text, null, `模型: ${provider}`),
+      React.createElement(Text, { color: danger ? "red" : undefined }, `权限: ${renderMode(mode)}   Shift+Tab / /mode`),
+      React.createElement(Text, null, `目录: ${displayCwd(process.cwd())}`),
+    ),
+    danger ? React.createElement(Text, { color: "red", bold: true }, "YOLO: local edits and shell commands are allowed") : null,
+    React.createElement(Box, { marginTop: 1, flexDirection: "column" },
+      recent.length ? recent.map((item) => React.createElement(CodeItemView, { key: item.id, item })) : React.createElement(Text, { color: "gray" }, t("code.placeholder")),
+    ),
+    busy ? React.createElement(Box, { flexDirection: "row" },
+      React.createElement(InkShimmerText, { text: t("spinner.coding"), frame }),
+      React.createElement(Text, null, " "),
+      React.createElement(InkSweep, { width: 28, frame }),
+    ) : null,
+    approval ? React.createElement(ApprovalPrompt, { approval }) : React.createElement(Box, { marginTop: 1, borderStyle: "single", borderColor: danger ? "red" : "gray", paddingX: 1 },
+      React.createElement(Text, { color: danger ? "red" : "white" }, `› ${input || t("code.placeholder")}`),
+    ),
+    React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(process.cwd())} · ${renderMode(mode)} · think ${reasoning.effort}${usage ? ` · ${usage}` : ""}`),
+  );
+}
+
+function CodeItemView({ item }: { item: CodeItem }): React.ReactElement {
+  if (item.kind === "user") return React.createElement(Text, null, `› ${item.text}`);
+  if (item.kind === "assistant") return React.createElement(MarkdownText, { text: item.text || "…" });
+  if (item.kind === "tool") {
+    const color = item.ok === false ? "red" : item.ok === true ? "green" : "cyan";
+    return React.createElement(Box, { flexDirection: "column" },
+      React.createElement(Text, { color }, `${item.ok === false ? "×" : item.ok === true ? "✓" : "•"} ${item.title}`),
+      item.detail ? React.createElement(DiffishText, { text: item.detail }) : null,
+    );
+  }
+  return React.createElement(Text, { color: item.tone === "danger" ? "red" : item.tone === "success" ? "green" : "gray" }, item.text);
+}
+
+function ApprovalPrompt({ approval }: { approval: ApprovalState }): React.ReactElement {
+  return React.createElement(Box, { marginTop: 1, borderStyle: "double", borderColor: "red", paddingX: 1, flexDirection: "column" },
+    React.createElement(Text, { color: "red", bold: true }, `${approval.request.tool} requires approval`),
+    approval.request.preview ? React.createElement(DiffishText, { text: approval.request.preview }) : null,
+    React.createElement(Text, null, "y approve · a approve all for this task · n deny"),
+  );
+}
+
+function MarkdownText({ text }: { text: string }): React.ReactElement {
+  return React.createElement(Box, { flexDirection: "column" },
+    ...text.split(/\r?\n/).map((line, index) => {
+      if (/^#{1,6}\s+/.test(line)) return React.createElement(Text, { key: index, color: "cyan", bold: true }, line.replace(/^#{1,6}\s+/, ""));
+      if (/^\s*[-*]\s+/.test(line)) return React.createElement(Text, { key: index }, `• ${line.replace(/^\s*[-*]\s+/, "")}`);
+      return React.createElement(Text, { key: index }, line || " ");
+    }),
+  );
+}
+
+function DiffishText({ text }: { text: string }): React.ReactElement {
+  return React.createElement(Box, { flexDirection: "column" },
+    ...text.split(/\r?\n/).slice(0, 18).map((line, index) => {
+      if (line.startsWith("+")) return React.createElement(Text, { key: index, color: "green" }, line);
+      if (line.startsWith("-")) return React.createElement(Text, { key: index, color: "red" }, line);
+      if (line.startsWith("@@")) return React.createElement(Text, { key: index, color: "cyan" }, line);
+      if (line.startsWith("╭") || line.startsWith("***") || line.startsWith("diff ")) return React.createElement(Text, { key: index, color: "gray" }, line);
+      return React.createElement(Text, { key: index, color: "gray" }, line);
+    }),
+  );
+}
+
+function InkShimmerText({ text, frame }: { text: string; frame: number }): React.ReactElement {
+  const chars = Array.from(text);
+  const head = frame % (chars.length + 6);
+  return React.createElement(Text, null,
+    ...chars.map((char, index) => {
+      const distance = Math.abs(index - head);
+      if (distance === 0) return React.createElement(Text, { key: index, color: "cyan", bold: true }, char);
+      if (distance <= 1) return React.createElement(Text, { key: index, color: "cyan" }, char);
+      if (distance <= 3) return React.createElement(Text, { key: index, color: "gray" }, char);
+      return React.createElement(Text, { key: index }, char);
+    }),
+  );
+}
+
+function InkSweep({ width, frame }: { width: number; frame: number }): React.ReactElement {
+  const head = (frame % (width + 8)) - 4;
+  return React.createElement(Text, null,
+    ...Array.from({ length: width }, (_, index) => {
+      const distance = Math.abs(index - head);
+      if (distance === 0) return React.createElement(Text, { key: index, color: "cyan", bold: true }, "━");
+      if (distance <= 1) return React.createElement(Text, { key: index, color: "cyan" }, "━");
+      if (distance <= 3) return React.createElement(Text, { key: index, color: "gray" }, "─");
+      return React.createElement(Text, { key: index }, " ");
+    }),
+  );
+}
+
+function formatToolArgs(args: Record<string, unknown>): string {
+  return Object.entries(args).filter(([, value]) => value !== undefined).map(([key, value]) => `${key}: ${String(value)}`).join(" · ");
+}
+
+function summarizeOutput(output: unknown): string {
+  const text = typeof output === "string" ? output : JSON.stringify(output);
+  if (!text) return "(no output)";
+  return text.length > 400 ? `${text.slice(0, 400)}...` : text;
+}
