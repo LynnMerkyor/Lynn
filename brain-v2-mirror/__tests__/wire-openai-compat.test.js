@@ -184,8 +184,34 @@ describe('OpenAI-compat wire adapter', () => {
       }));
       const body = JSON.parse(f.mock.calls[0][1].body);
       expect(body.chat_template_kwargs).toBeUndefined();
-      expect(body.reasoning_effort).toBe('auto');
+      expect(body.reasoning_effort).toBeUndefined();
       expect(body.max_tokens).toBe(4096);
+    });
+
+    it('forwards explicit cloud reasoning effort but filters UI-only off/auto values', async () => {
+      const stepProvider = {
+        id: 'step-3.7-flash',
+        endpoint: 'https://api.stepfun.com/step_plan/v1',
+        apiKey: 'sk-step',
+        model: 'step-3.7-flash',
+        capability: { vision: true, tools: true, thinking: true },
+        default_thinking: false,
+      };
+      const high = mockFetch(ok(makeSSEBody(sseEvent({ content: 'hi' }), sseDone())));
+      await drain(callOpenAI({
+        provider: stepProvider,
+        messages: [{ role: 'user', content: '请分析这个问题' }],
+        reasoningEffort: 'high',
+      }));
+      expect(JSON.parse(high.mock.calls[0][1].body).reasoning_effort).toBe('high');
+
+      const off = mockFetch(ok(makeSSEBody(sseEvent({ content: 'hi' }), sseDone())));
+      await drain(callOpenAI({
+        provider: stepProvider,
+        messages: [{ role: 'user', content: 'q' }],
+        reasoningEffort: 'off',
+      }));
+      expect(JSON.parse(off.mock.calls[0][1].body).reasoning_effort).toBeUndefined();
     });
   });
 });

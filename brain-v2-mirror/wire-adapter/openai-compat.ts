@@ -54,6 +54,15 @@ type OpenAICompatRequestBody = Record<string, unknown> & {
   tool_choice?: 'auto';
 };
 
+function shouldForwardReasoningEffort(provider: WireAdapterOptions['provider'], reasoningEffort?: string | null): boolean {
+  if (!reasoningEffort) return false;
+  if (provider.thinking_control === 'qwen_chat_template') return true;
+  return reasoningEffort !== 'auto'
+    && reasoningEffort !== 'off'
+    && reasoningEffort !== 'none'
+    && reasoningEffort !== 'disabled';
+}
+
 export async function* call({ provider, messages, tools, signal, extraBody, reasoningEffort }: WireAdapterOptions): AsyncGenerator<StreamChunk> {
   const body: OpenAICompatRequestBody = {
     model: provider.model,
@@ -64,7 +73,7 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
     ...(extraBody && typeof extraBody === 'object' ? extraBody : {}),
   };
   // F11: reasoning_effort BYOK 透传 — server.js 抽到 arg,extraBody 没的话从 arg 回灌
-  if (reasoningEffort && !body.reasoning_effort) {
+  if (shouldForwardReasoningEffort(provider, reasoningEffort) && !body.reasoning_effort) {
     body.reasoning_effort = reasoningEffort;
   }
   // 2026-05-25: provider.default_thinking === false 时(例如 apex-spark Brain v2 fallback),
