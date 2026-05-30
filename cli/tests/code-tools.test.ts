@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { buildCodeRuntimeFrames, canPromptForDangerousTool, codeToolDefinitions, createStreamingToolCallAccumulator, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeToolRequest, parseCodeToolRequests, renderCodeIntro, renderCodeTaskHeader, resumeCommandForSession, runCode } from "../src/commands/code.js";
+import { buildCodeRuntimeFrames, canPromptForDangerousTool, codeToolDefinitions, createStreamingToolCallAccumulator, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeResumeSlash, parseCodeToolRequest, parseCodeToolRequests, renderCodeIntro, renderCodeTaskHeader, resumeCommandForSession, runCode, withLongRunCodeFlags } from "../src/commands/code.js";
 import { stableRuntimePrefix } from "../../shared/runtime-instruction-frames.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
@@ -318,6 +318,17 @@ describe("code tools", () => {
   it("quotes resume commands so checkpoint paths can be pasted safely", () => {
     expect(resumeCommandForSession("/tmp/lynn/session.jsonl")).toBe('Lynn code --resume /tmp/lynn/session.jsonl --long "继续这个任务"');
     expect(resumeCommandForSession("/tmp/lynn dir/session's.jsonl")).toBe('Lynn code --resume \'/tmp/lynn dir/session\'\\\'\'s.jsonl\' --long "继续这个任务"');
+  });
+
+  it("builds long-running code flags for goal mode without clobbering explicit step budgets", () => {
+    expect(withLongRunCodeFlags({})).toMatchObject({ long: true, "save-session": true, "max-steps": "1000" });
+    expect(withLongRunCodeFlags({ "max-steps": "42" })).toMatchObject({ long: true, "save-session": true, "max-steps": "42" });
+  });
+
+  it("parses interactive resume slash commands", () => {
+    expect(parseCodeResumeSlash("/resume")).toEqual({ resume: "last", task: "继续这个任务" });
+    expect(parseCodeResumeSlash("/continue 修完剩下的测试")).toEqual({ resume: "last", task: "修完剩下的测试" });
+    expect(parseCodeResumeSlash("/resume /tmp/lynn/session.jsonl 继续跑门禁")).toEqual({ resume: "/tmp/lynn/session.jsonl", task: "继续跑门禁" });
   });
 
   it("keeps cacheable code instructions separate from dynamic permission state", () => {

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Text, render, useApp, useInput } from "ink";
-import { getStringFlag, hasFlag, type ParsedArgs } from "./args.js";
+import { hasFlag, type ParsedArgs } from "./args.js";
 import { completeSlash, normalizeSlashInput } from "./completion.js";
-import type { CodeAgentApprovalRequest, CodeAgentEvent } from "./commands/code.js";
+import { parseCodeResumeSlash, withLongRunCodeFlags, type CodeAgentApprovalRequest, type CodeAgentEvent } from "./commands/code.js";
 import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type ChatMode } from "./commands/chat.js";
 import { displayCwd } from "./startup.js";
 import { HistoryNavigator, appendHistory, historyPath, loadHistory } from "./history.js";
@@ -16,6 +16,7 @@ import { handleInkProviderCommand } from "./ink-provider-commands.js";
 import type { CodePlanItem } from "./plan-tool.js";
 import { InkInputLine } from "./ink-input-line.js";
 import { analyzePastedContext, appendPastedText, summarizePastedContext } from "./pasted-context.js";
+import { modelLabelWithId } from "./provider-presets.js";
 
 type CodeItem =
   | { id: number; kind: "user"; text: string }
@@ -58,6 +59,9 @@ const CODE_SLASH_COMMANDS = [
   "/fast",
   "/think",
   "/reasoning",
+  "/goal",
+  "/resume",
+  "/continue",
   "/mode",
   "/mode yolo",
   "/model",
@@ -215,6 +219,22 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       pushItem({ kind: "system", text: result.message, tone: "success" });
       return;
     }
+    if (text === "/goal") {
+      pushItem({ kind: "system", text: t("code.goal.usage") });
+      return;
+    }
+    if (text.startsWith("/goal ")) {
+      const task = text.slice(6).trim();
+      pushItem({ kind: "system", text: t("code.goal.started"), tone: "success" });
+      await runCodeText(task, (flags) => withLongRunCodeFlags(flags));
+      return;
+    }
+    if (text === "/resume" || text === "/continue" || text.startsWith("/resume ") || text.startsWith("/continue ")) {
+      const parsed = parseCodeResumeSlash(text);
+      pushItem({ kind: "system", text: t("code.resume.started", { resume: parsed.resume }), tone: "success" });
+      await runCodeText(parsed.task, (flags) => withLongRunCodeFlags({ ...flags, resume: parsed.resume }));
+      return;
+    }
     if (text.startsWith("/mode ")) {
       const next = { ...mode };
       const message = applyModeCommand(next, text.slice(6).trim());
@@ -226,7 +246,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     if (providerCommand.handled) {
       if (providerCommand.refreshedProvider !== undefined) {
         setProvider(providerCommand.refreshedProvider
-          ? `CLI BYOK: ${providerCommand.refreshedProvider.provider} / ${providerCommand.refreshedProvider.model}`
+          ? `CLI BYOK: ${modelLabelWithId(providerCommand.refreshedProvider.model)}`
           : props.modelLabel);
       }
       pushItem({ kind: "system", text: providerCommand.message });
@@ -237,6 +257,13 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       return;
     }
 
+    await runCodeText(text);
+  };
+
+  const runCodeText = async (
+    text: string,
+    transformFlags: (flags: Record<string, string | boolean>) => Record<string, string | boolean> = (flags) => flags,
+  ) => {
     pushItem({ kind: "user", text });
     assistantId.current = Date.now() + 1;
     setItems((current) => [...current, { id: assistantId.current!, kind: "assistant" as const, text: "" }].slice(-14));
@@ -245,13 +272,13 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       const taskArgs: ParsedArgs = {
         ...props.args,
         positionals: [text],
-        flags: {
+        flags: transformFlags({
           ...props.args.flags,
           approval: mode.approval,
           sandbox: mode.sandbox,
           reasoning: reasoning.effort,
           "show-reasoning": reasoning.display,
-        },
+        }),
       };
       await props.runTask(taskArgs, text, handleAgentEvent, { requestApproval });
     } catch (error) {
@@ -285,7 +312,11 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       pushItem({ kind: "tool", title: event.result.tool, detail: event.result.error || summarizeOutput(event.result.output), ok: event.result.ok });
     }
     if (event.type === "task.finished" && event.maxStepsReached) {
-      pushItem({ kind: "system", text: "max steps reached; use --resume/--long to continue", tone: "danger" });
+      pushItem({
+        kind: "system",
+        text: event.resumeCommand ? t("code.resume.maxSteps", { command: event.resumeCommand }) : t("code.resume.maxStepsFallback"),
+        tone: "danger",
+      });
     }
   };
 

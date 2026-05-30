@@ -66,6 +66,30 @@ export function isLongRun(args: ParsedArgs): boolean {
   return hasFlag(args.flags, "long", "endurance");
 }
 
+export function withLongRunCodeFlags(flags: Record<string, string | boolean> = {}): Record<string, string | boolean> {
+  return {
+    ...flags,
+    long: flags.long ?? true,
+    "save-session": flags["save-session"] ?? true,
+    "max-steps": flags["max-steps"] ?? "1000",
+  };
+}
+
+export function parseCodeResumeSlash(raw: string): { resume: string; task: string } {
+  const text = raw.trim();
+  const body = text.replace(/^\/(?:resume|continue)\b/i, "").trim();
+  if (!body) return { resume: "last", task: "继续这个任务" };
+  const [first = "", ...rest] = body.split(/\s+/);
+  const looksLikeResumeRef = first === "last"
+    || first === "latest"
+    || first.endsWith(".jsonl")
+    || first.startsWith("/")
+    || first.startsWith("~")
+    || first.includes(path.sep);
+  if (!looksLikeResumeRef) return { resume: "last", task: body };
+  return { resume: first, task: rest.join(" ").trim() || "继续这个任务" };
+}
+
 export function maxSteps(args: ParsedArgs): number {
   const raw = getStringFlag(args.flags, "max-steps", "steps");
   if (!raw) return DEFAULT_MAX_STEPS;
@@ -151,6 +175,9 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
     "/fast",
     "/think",
     "/reasoning",
+    "/goal",
+    "/resume",
+    "/continue",
     "/mode",
     "/model",
     "/model mimo",
@@ -205,6 +232,57 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
         const result = applyReasoningCommand(reasoning, text.slice(11).trim());
         reasoning = result.reasoning;
         output.write(`✓ ${result.message}\n${t("code.reasoning.state", { effort: reasoning.effort, display: reasoning.display })}\n\n`);
+        continue;
+      }
+      if (text === "/goal") {
+        output.write(`${t("code.goal.usage")}\n\n`);
+        continue;
+      }
+      if (text.startsWith("/goal ")) {
+        const task = text.slice(6).trim();
+        output.write(`${t("code.goal.started")}\n\n`);
+        const taskArgs: ParsedArgs = {
+          ...args,
+          positionals: [task],
+          flags: withLongRunCodeFlags({
+            ...args.flags,
+            approval: mode.approval,
+            sandbox: mode.sandbox,
+            reasoning: reasoning.effort,
+            "show-reasoning": reasoning.display,
+          }),
+        };
+        try {
+          await runCodeTask(taskArgs, task, false, { compact: true });
+        } catch (error) {
+          const message = formatBrainRecoveryHint(error);
+          errorOutput.write(`• ${message}\n`);
+        }
+        output.write("\n");
+        continue;
+      }
+      if (text === "/resume" || text === "/continue" || text.startsWith("/resume ") || text.startsWith("/continue ")) {
+        const parsed = parseCodeResumeSlash(text);
+        output.write(`${t("code.resume.started", { resume: parsed.resume })}\n\n`);
+        const taskArgs: ParsedArgs = {
+          ...args,
+          positionals: [parsed.task],
+          flags: withLongRunCodeFlags({
+            ...args.flags,
+            resume: parsed.resume,
+            approval: mode.approval,
+            sandbox: mode.sandbox,
+            reasoning: reasoning.effort,
+            "show-reasoning": reasoning.display,
+          }),
+        };
+        try {
+          await runCodeTask(taskArgs, parsed.task, false, { compact: true });
+        } catch (error) {
+          const message = formatBrainRecoveryHint(error);
+          errorOutput.write(`• ${message}\n`);
+        }
+        output.write("\n");
         continue;
       }
       if (text === "/mode") {
@@ -572,7 +650,15 @@ async function runCodeTask(
   const resumeCommand = final.maxStepsReached && savedSessionPath
     ? resumeCommandForSession(savedSessionPath)
     : null;
-  options.onEvent?.({ type: "task.finished", ok: !final.maxStepsReached, text: final.text, usageSummary: final.usageSummary, maxStepsReached: final.maxStepsReached });
+  options.onEvent?.({
+    type: "task.finished",
+    ok: !final.maxStepsReached,
+    text: final.text,
+    usageSummary: final.usageSummary,
+    maxStepsReached: final.maxStepsReached,
+    resumeCommand: resumeCommand || undefined,
+    sessionPath: savedSessionPath,
+  });
   if (json) {
     if (final.text.trim()) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: final.text });
     writeJsonLine({
@@ -702,7 +788,7 @@ export type CodeAgentEvent =
   | { type: "tool.result"; result: ClientToolResult }
   | { type: "tool.loop_guard"; tool: ClientToolName; repeats: number }
   | { type: "plan.updated"; items: CodePlanItem[] }
-  | { type: "task.finished"; ok: boolean; text: string; usageSummary: string | null; maxStepsReached?: boolean }
+  | { type: "task.finished"; ok: boolean; text: string; usageSummary: string | null; maxStepsReached?: boolean; resumeCommand?: string; sessionPath?: string | null }
   | { type: "error"; message: string };
 
 interface CodeToolRequest {

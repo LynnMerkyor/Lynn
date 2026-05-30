@@ -113,6 +113,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/fast 低延迟 MiMo/Brain 回复\n" +
       "/think 深度 MiMo/Brain 推理\n" +
       "/reasoning 查看或设置推理模式\n" +
+      "/goal <任务> 长任务模式:1000 步预算 + 自动保存断点\n" +
+      "/resume [last|session.jsonl] [说明] 继续上次长任务\n" +
       "/model 查看 Brain 三段模型路由; /model mimo|stepfun|spark 切换 MiMo V2.5 Pro / StepFun 3.7 Flash / Spark Qwen 3.6 35B A3B\n" +
       "/setup 打开 CLI-only BYOK 三步向导\n" +
       "/providers 查看提供方和 BYOK 设置\n" +
@@ -125,6 +127,10 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "code.reasoning.show": "think:{effort} / display {display}\n用 /fast、/think 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
     "code.mode.show": "mode:{mode}\n用 /mode yolo 开启本地工具权限,/mode ask 回到守护模式。",
     "code.resume.maxSteps": "已保存断点。继续: {command}",
+    "code.resume.maxStepsFallback": "已到达步数上限。用 /resume 继续最近的长任务,或用 --resume <session.jsonl> --long。",
+    "code.goal.usage": "用法:/goal <长任务描述>。它会开启 1000 步预算并自动保存断点。",
+    "code.goal.started": "已进入长任务模式:1000 步预算 + 自动断点。",
+    "code.resume.started": "继续断点:{resume}",
     "tool.approval.suffix": " (需要确认)",
     "mode.yolo.enabled": "YOLO 模式已开启。",
     "mode.ask.enabled": "守护模式已开启。",
@@ -323,6 +329,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/fast low-latency MiMo/Brain replies\n" +
       "/think deeper MiMo/Brain reasoning\n" +
       "/reasoning show or set reasoning mode\n" +
+      "/goal <task> long-running mode: 1000-step budget + automatic checkpoints\n" +
+      "/resume [last|session.jsonl] [note] continue a saved long task\n" +
       "/model show the three Brain model choices; /model mimo|stepfun|spark switches MiMo V2.5 Pro / StepFun 3.7 Flash / Spark Qwen 3.6 35B A3B\n" +
       "/setup open the CLI-only BYOK three-step wizard\n" +
       "/providers show provider and BYOK setup\n" +
@@ -335,6 +343,10 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "code.reasoning.show": "think: {effort} / display {display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.",
     "code.mode.show": "mode: {mode}\nUse /mode yolo for full local tool permission or /mode ask for guarded mode.",
     "code.resume.maxSteps": "Checkpoint saved. Continue with: {command}",
+    "code.resume.maxStepsFallback": "Step budget reached. Use /resume for the latest long task, or --resume <session.jsonl> --long.",
+    "code.goal.usage": "Usage: /goal <long-running task>. It enables a 1000-step budget and automatic checkpoints.",
+    "code.goal.started": "Long-running mode enabled: 1000-step budget + automatic checkpoints.",
+    "code.resume.started": "Resuming checkpoint: {resume}",
     "tool.approval.suffix": " (approval required)",
     "mode.yolo.enabled": "YOLO mode enabled.",
     "mode.ask.enabled": "Guarded mode enabled.",
