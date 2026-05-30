@@ -2,7 +2,7 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { type ParsedArgs, getStringFlag, hasFlag } from "../args.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
-import { t } from "../i18n.js";
+import { currentLang, t } from "../i18n.js";
 import { fetchLocalServerJson, readLocalServerInfo, type LocalServerLookup } from "../local-server.js";
 import {
   deleteCliProviderProfile,
@@ -68,28 +68,28 @@ export interface ProviderTestResult {
 export interface BrainModelChoice {
   id: "mimo" | "stepfun" | "spark";
   name: string;
-  routeRole: string;
-  capability: string;
+  routeRole: { zh: string; en: string };
+  capability: { zh: string; en: string };
 }
 
 export const BRAIN_MODEL_CHOICES: BrainModelChoice[] = [
   {
     id: "mimo",
     name: "MiMo V2.5 Pro",
-    routeRole: "1 / default head",
-    capability: "multimodal + native search + large quota",
+    routeRole: { zh: "1 / 默认首位", en: "1 / default head" },
+    capability: { zh: "多模态 + 原生搜索 + 额度充裕", en: "multimodal + native search + large quota" },
   },
   {
     id: "stepfun",
     name: "StepFun 3.7 Flash",
-    routeRole: "2 / fast fallback",
-    capability: "high TPS text + coding",
+    routeRole: { zh: "2 / 高速兜底", en: "2 / fast fallback" },
+    capability: { zh: "高 TPS 文本 + 编码", en: "high TPS text + coding" },
   },
   {
     id: "spark",
     name: "Spark Qwen 3.6 35B A3B",
-    routeRole: "3 / local fallback",
-    capability: "local privacy + zero API cost",
+    routeRole: { zh: "3 / 本地兜底", en: "3 / local fallback" },
+    capability: { zh: "本地隐私 + 零 API 成本", en: "local privacy + zero API cost" },
   },
 ];
 
@@ -108,11 +108,12 @@ export function providersInfo(partial: Partial<ProvidersInfo> = {}): ProvidersIn
 
 export function renderBrainModelChoices(info: ProvidersInfo): string {
   const current = activeRouteLabel(info);
+  const lang = currentLang();
   return [
     t("models.title"),
     "",
     t("models.defaultOrder"),
-    ...BRAIN_MODEL_CHOICES.map((choice) => `  ${choice.id.padEnd(7)} ${choice.name.padEnd(26)} ${choice.routeRole} · ${choice.capability}`),
+    ...BRAIN_MODEL_CHOICES.map((choice) => `  ${choice.id.padEnd(7)} ${choice.name.padEnd(26)} ${choice.routeRole[lang]} · ${choice.capability[lang]}`),
     "",
     `${t("models.currentRoute")}: ${current}`,
     `${t("models.brainRoute")}:   ${summarizeBrainProviderStatus(info.brainProviders || null)}`,
