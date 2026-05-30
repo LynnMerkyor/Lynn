@@ -448,7 +448,7 @@ export function canPromptForDangerousTool(inputStream: Pick<NodeJS.ReadStream, "
 
 async function resolveToolApproval(request: ToolApprovalRequest): Promise<ToolApprovalRequest["approval"]> {
   if (!isDangerousClientTool(request.tool)) return request.approval;
-  if (request.approval === "yolo" || request.session?.approveAll) return "yolo";
+  if (request.approval === "yolo" || request.approval === "on-failure" || request.session?.approveAll) return "yolo";
   if (request.approval === "never") {
     throw new Error(`${request.tool} requires approval; current mode is never`);
   }
@@ -1022,7 +1022,7 @@ export function buildCodeRuntimeFrames(inputData: Pick<CodeAgentLoopInput, "cont
       kind: "tool_guard",
       source: "cli",
       title: "Local tool guard",
-      text: "Local tools can read and edit only inside the current workspace. Dangerous tools require approval unless YOLO mode is active.",
+      text: "Local tools can read and edit only inside the current workspace. Dangerous tools require approval unless approval mode is yolo or on-failure.",
       stable: false,
       cacheable: false,
     },

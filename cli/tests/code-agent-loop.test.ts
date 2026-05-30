@@ -214,6 +214,52 @@ describe("code agent loop", () => {
     expect(output).toContain('"ok":false');
   });
 
+  it("runs dangerous tools in on-failure approval mode without blocking non-interactive loops", async () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+lynn",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer((_body, count) => count === 1
+        ? JSON.stringify({ tool: "apply_patch", args: { patch } })
+        : "Patch applied after on-failure approval mode.",
+      async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "change hello to lynn",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--approval",
+          "on-failure",
+          "--max-steps",
+          "3",
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("lynn\n");
+    expect(output).not.toContain('"type":"code.tool.approval_required"');
+    expect(output).toContain('"type":"code.tool.result"');
+    expect(output).toContain('"ok":true');
+    expect(output).toContain("Patch applied after on-failure approval mode");
+  });
+
   it("executes multiple model-requested tool calls from one turn", async () => {
     const original = process.stdout.write;
     let output = "";
