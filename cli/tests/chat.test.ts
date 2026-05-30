@@ -214,6 +214,47 @@ describe("chat mode controls", () => {
     }
   });
 
+  it("treats --cwd as an implicit chat flag and uses it for /cwd", async () => {
+    const targetCwd = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-chat-cwd-"));
+    try {
+      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+        const child = spawn(process.execPath, [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "--cwd",
+          targetCwd,
+          "--mock-brain",
+        ], {
+          cwd: cliRoot,
+          env: { ...process.env, NO_COLOR: "1", LYNN_LANG: "en" },
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+        let stdout = "";
+        let stderr = "";
+        const timer = setTimeout(() => {
+          child.kill();
+          reject(new Error("implicit chat did not exit"));
+        }, 5000);
+        child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+        child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+        child.on("error", reject);
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          resolve({ code, stdout, stderr });
+        });
+        child.stdin.write("/cwd\n/exit\n");
+        child.stdin.end();
+      });
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain(targetCwd);
+      expect(result.stdout).not.toContain("Usage:");
+    } finally {
+      await fs.rm(targetCwd, { recursive: true, force: true });
+    }
+  });
+
   it("runs interactive chat through CLI BYOK when Brain is offline", async () => {
     let requestBody = "";
     const provider = http.createServer((request, response) => {

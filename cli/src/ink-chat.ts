@@ -61,10 +61,10 @@ export async function runInkChat(args: ParsedArgs): Promise<number> {
 
 type Thumb = { id: number; esc: string };
 
-async function emitThumbnails(text: string, setThumbs: (updater: (prev: Thumb[]) => Thumb[]) => void): Promise<void> {
+async function emitThumbnails(text: string, cwd: string, setThumbs: (updater: (prev: Thumb[]) => Thumb[]) => void): Promise<void> {
   const protocol = detectImageProtocol();
   if (!protocol) return;
-  const refs = analyzePastedContext(text).imageRefs;
+  const refs = analyzePastedContext(text, cwd).imageRefs;
   if (!refs.length) return;
   const next: Thumb[] = [];
   for (const ref of refs) {
@@ -77,7 +77,6 @@ async function emitThumbnails(text: string, setThumbs: (updater: (prev: Thumb[])
 function InkChatApp(props: InkChatProps): React.ReactElement {
   const app = useApp();
   const [input, setInput] = useState("");
-  const contextInfo = useMemo(() => analyzePastedContext(input), [input]);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
   const [frame, setFrame] = useState(0);
@@ -89,6 +88,8 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
   const [thumbs, setThumbs] = useState<Thumb[]>([]);
   const [history] = useState(() => new HistoryNavigator(loadHistory(historyPath())));
   const dataDir = useMemo(() => resolveDataDir(getStringFlag(props.args.flags, "data-dir")), [props.args.flags]);
+  const effectiveCwd = getStringFlag(props.args.flags, "cwd") || process.cwd();
+  const contextInfo = useMemo(() => analyzePastedContext(input, effectiveCwd), [input, effectiveCwd]);
   const [memoryFrame, setMemoryFrame] = useState(() => buildMemoryContextFrameSync(dataDir));
   const messages = useMemo<ChatMessage[]>(() => resetCliRuntimeMessages(chatRouteLabel(props.fallbackProvider), memoryFrame), [props.fallbackProvider]);
 
@@ -127,6 +128,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
           dataDir,
           memoryFrame,
           setMemoryFrame,
+          cwd: effectiveCwd,
         });
         return;
       }
@@ -146,7 +148,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
     if (key.return) {
       const prefix = newlineIndex >= 0 ? value.slice(0, newlineIndex) : "";
       const submitted = `${input}${prefix}`;
-      void emitThumbnails(submitted, setThumbs);
+      void emitThumbnails(submitted, effectiveCwd, setThumbs);
       void submitInput({
         text: submitted,
         setInput,
@@ -166,6 +168,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
         dataDir,
         memoryFrame,
         setMemoryFrame,
+        cwd: effectiveCwd,
       });
       return;
     }
@@ -206,7 +209,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
       React.createElement(Text, null, `模型: ${provider}`),
       React.createElement(Text, null, `权限: ${renderMode(mode)}   Shift+Tab / /mode`),
       React.createElement(Text, null, `Brain: ${props.brainUrl}`),
-      React.createElement(Text, null, `目录: ${displayCwd(process.cwd())}`),
+      React.createElement(Text, null, `目录: ${displayCwd(effectiveCwd)}   cd / --cwd 切换`),
     ),
     React.createElement(Box, { marginTop: 1, flexDirection: "column" },
       recentTurns.length
@@ -220,7 +223,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
         React.createElement(InkSweep, { width: 28, frame }),
       )
       : null,
-    React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(process.cwd())} · ${renderMode(mode)} · think ${reasoning.effort}${usage ? ` · ${usage}` : ""}`),
+    React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${usage ? ` · ${usage}` : ""}`),
     React.createElement(InkInputLine, {
       value: input,
       placeholder: t("chat.placeholder"),
@@ -296,6 +299,7 @@ async function submitInput(inputData: {
   dataDir: string;
   memoryFrame: string;
   setMemoryFrame: (value: string) => void;
+  cwd: string;
 }): Promise<void> {
   const text = normalizeSlashInput(inputData.text.trim());
   if (!text) return;
@@ -341,7 +345,7 @@ async function submitInput(inputData: {
       return;
     }
   if (text === "/cwd" || text === "/pwd") {
-    inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("cwd.info", { cwd: process.cwd() }) }]);
+    inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("cwd.info", { cwd: inputData.cwd }) }]);
     return;
   }
   const memoryCommand = await handleMemorySlashCommand(text, inputData.dataDir);
@@ -365,7 +369,7 @@ async function submitInput(inputData: {
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: providerCommand.message }]);
     return;
   }
-  const imageCommand = parseImagePromptCommand(text);
+  const imageCommand = parseImagePromptCommand(text, inputData.cwd);
   if (imageCommand) {
     if (!imageCommand.imageRefs.length) {
       inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("chat.image.usage") }]);
@@ -396,7 +400,7 @@ async function submitInput(inputData: {
     return;
   }
 
-  const context = analyzePastedContext(text);
+  const context = analyzePastedContext(text, inputData.cwd);
   const promptText = context.text || (context.imageRefs.length ? t("chat.image.defaultPrompt") : text);
   let userContent: ChatMessage["content"] = promptText;
   const contextSummary = context.hasContext ? summarizePastedContext(context) : "";

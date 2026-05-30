@@ -71,6 +71,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   }
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const brainUrl = getStringFlag(args.flags, "brain-url") || process.env.LYNN_BRAIN_URL || "http://127.0.0.1:8790";
+  const chatCwd = getStringFlag(args.flags, "cwd") || process.cwd();
   let reasoning = parseReasoningOptions(args);
   const mode = await resolveChatMode(args);
   let cliProvider = await resolveCliProviderProfile(args);
@@ -84,6 +85,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     : null;
   if (options.intro !== false) {
     output.write(`${renderStartupBanner({
+      cwd: chatCwd,
       brainUrl,
       brainStatus: "unknown",
       modeLabel: renderMode(mode),
@@ -135,7 +137,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       output.write(`${renderBrainModelChoices(await resolveProvidersInfo(args))}\n\n`);
       return "continue";
     }
-    const imageCommand = parseImagePromptCommand(text);
+    const imageCommand = parseImagePromptCommand(text, chatCwd);
     if (imageCommand) {
       if (!imageCommand.imageRefs.length) {
         output.write(`${t("chat.image.usage")}\n\n`);
@@ -188,7 +190,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       return "continue";
     }
     if (text === "/cwd" || text === "/pwd") {
-      output.write(`${t("cwd.info", { cwd: process.cwd() })}\n\n`);
+      output.write(`${t("cwd.info", { cwd: chatCwd })}\n\n`);
       return "continue";
     }
     const memoryCommand = await handleMemorySlashCommand(text, dataDir);
@@ -253,7 +255,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     messages.push({ role: "assistant", content: assistant });
     output.write(`\n${renderStatusBar({
       model: renderState.provider ? modelDisplayName(renderState.provider) : t("status.chat.prefix"),
-      cwd: process.cwd(),
+      cwd: chatCwd,
       mode: renderMode(mode),
       reasoning: reasoning.effort,
       usage: latestUsage,

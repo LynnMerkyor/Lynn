@@ -169,6 +169,7 @@ function isImplicitChatInvocation(args: ReturnType<typeof parseArgs>): boolean {
     "show-reasoning",
     "approval",
     "sandbox",
+    "cwd",
     "base-url",
     "api-base",
     "api-key",
