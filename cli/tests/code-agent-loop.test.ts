@@ -2,12 +2,15 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import { maxSteps, runCode } from "../src/commands/code.js";
 import { appendSessionTurn, readSessionLines, sessionIndexPath } from "../src/session/store.js";
 
 let tmp = "";
+const cliRoot = fileURLToPath(new URL("..", import.meta.url));
 
 beforeEach(async () => {
   tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-agent-"));
@@ -665,6 +668,127 @@ describe("code agent loop", () => {
     }
 
     expect(output).toContain("BYOK code route answered");
+  });
+
+  it("runs a real CLI BYOK code subprocess through apply_patch and bash", async () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+lynn",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const command = "python3 -c \"import pathlib; assert pathlib.Path('hello.txt').read_text().strip() == 'lynn'\"";
+    const requestBodies: unknown[] = [];
+    const provider = http.createServer((request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      expect(request.headers.authorization).toBe("Bearer sk-subprocess-code");
+      let raw = "";
+      request.on("data", (chunk) => { raw += String(chunk); });
+      request.on("end", () => {
+        const count = requestBodies.push(JSON.parse(raw));
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        if (count === 1) {
+          response.end(rawSsePayloads([
+            JSON.stringify({
+              choices: [{
+                delta: {
+                  tool_calls: [{
+                    index: 0,
+                    id: "call_patch",
+                    type: "function",
+                    function: { name: "apply_patch", arguments: JSON.stringify({ text: patch }) },
+                  }],
+                },
+              }],
+            }),
+            JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] }),
+          ]));
+          return;
+        }
+        if (count === 2) {
+          response.end(rawSsePayloads([
+            JSON.stringify({
+              choices: [{
+                delta: {
+                  tool_calls: [{
+                    index: 0,
+                    id: "call_test",
+                    type: "function",
+                    function: { name: "bash", arguments: JSON.stringify({ command }) },
+                  }],
+                },
+              }],
+            }),
+            JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] }),
+          ]));
+          return;
+        }
+        response.end(sse("Patched hello.txt and verified the result."));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        "--import",
+        "tsx",
+        "src/cli.ts",
+        "code",
+        "change hello.txt to lynn and verify it",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-subprocess-code",
+        "--model",
+        "code-subprocess-model",
+        "--approval",
+        "yolo",
+        "--sandbox",
+        "workspace-write",
+        "--max-steps",
+        "5",
+        "--json",
+      ], {
+        cwd: cliRoot,
+        env: { ...process.env, NO_COLOR: "1", LYNN_LANG: "en" },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error("code subprocess did not exit"));
+      }, 8000);
+      child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+      child.on("error", reject);
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        resolve({ code, stdout, stderr });
+      });
+    });
+    await new Promise<void>((resolve) => provider.close(() => resolve()));
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('"activeProvider":"cli-byok:openai-compatible"');
+    expect(result.stdout).toContain('"fallbackFrom":[{"id":"brain","reason":"offline"}]');
+    expect(result.stdout).toContain('"tool":"apply_patch"');
+    expect(result.stdout).toContain('"tool":"bash"');
+    expect(result.stdout).toContain("Patched hello.txt and verified the result.");
+    expect(result.stdout).toContain('"type":"code.task.finished"');
+    expect(result.stdout).toContain('"ok":true');
+    await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("lynn\n");
+    expect(JSON.stringify(requestBodies[1])).toContain('"role":"tool"');
+    expect(JSON.stringify(requestBodies[2])).toContain('"role":"tool"');
   });
 
   it("carries cache/TPS usage into the final JSON task summary", async () => {
