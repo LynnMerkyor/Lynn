@@ -618,6 +618,78 @@ describe("code agent loop", () => {
     }
   });
 
+  it("passes code --image through CLI BYOK in a real subprocess", async () => {
+    const image = path.join(tmp, "subprocess-shot.png");
+    await fs.writeFile(image, Buffer.from("89504e470d0a1a0a", "hex"));
+    let requestBody = "";
+    const provider = http.createServer((request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      expect(request.headers.authorization).toBe("Bearer sk-code-image");
+      request.on("data", (chunk) => { requestBody += String(chunk); });
+      request.on("end", () => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end(sse("Reviewed BYOK screenshot."));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        "--import",
+        "tsx",
+        "src/cli.ts",
+        "code",
+        "review this screenshot",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-code-image",
+        "--model",
+        "code-image-model",
+        "--image",
+        image,
+        "--max-steps",
+        "1",
+        "--json",
+      ], {
+        cwd: cliRoot,
+        env: { ...process.env, NO_COLOR: "1", LYNN_LANG: "en" },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error("code image subprocess did not exit"));
+      }, 8000);
+      child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+      child.on("error", reject);
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        resolve({ code, stdout, stderr });
+      });
+    });
+    await new Promise<void>((resolve) => provider.close(() => resolve()));
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('"activeProvider":"cli-byok:openai-compatible"');
+    expect(result.stdout).toContain("Reviewed BYOK screenshot.");
+    const parsed = JSON.parse(requestBody) as { model?: string; messages?: Array<{ role?: string; content?: unknown }> };
+    expect(parsed.model).toBe("code-image-model");
+    const multimodalUser = parsed.messages?.find((message) => Array.isArray(message.content));
+    expect(multimodalUser).toBeTruthy();
+    const serialized = JSON.stringify(multimodalUser?.content);
+    expect(serialized).toContain("Attached images:");
+    expect(serialized).toContain("data:image/png;base64");
+  });
+
   it("runs code mode through CLI BYOK when local Brain is offline", async () => {
     const provider = http.createServer((request, response) => {
       expect(request.url).toBe("/v1/chat/completions");
