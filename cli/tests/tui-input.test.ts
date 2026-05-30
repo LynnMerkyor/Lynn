@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readInteractiveLine } from "../src/interactive-line.js";
 import { renderInputBand } from "../src/tui-input.js";
 import { visibleLength } from "../src/startup.js";
 
@@ -17,5 +18,11 @@ describe("renderInputBand", () => {
     const line = renderInputBand({ prompt: "› ", value: "", placeholder: "描述任务", width: 20, color: true });
     expect(line).toContain("\x1b[48;5;236m");
     expect(visibleLength(stripAnsi(line))).toBe(20);
+  });
+});
+
+describe("readInteractiveLine", () => {
+  it("exports the shared input reader used by chat and code modes", () => {
+    expect(typeof readInteractiveLine).toBe("function");
   });
 });

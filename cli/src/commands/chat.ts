@@ -1,5 +1,3 @@
-import { emitKeypressEvents } from "node:readline";
-import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { getStringFlag, hasFlag, parseArgs, type ParsedArgs } from "../args.js";
 import { BrainConnectionError, streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
@@ -16,6 +14,8 @@ import { MarkdownStream } from "../markdown.js";
 import { appendHistory, historyPath, loadHistory } from "../history.js";
 import { completeSlash } from "../completion.js";
 import { resolveEffectivePermissions } from "../permissions.js";
+import { HistoryNavigator } from "../history.js";
+import { readInteractiveLine } from "../interactive-line.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/exit",
@@ -54,17 +54,10 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   let cliProvider = await resolveCliProviderProfile(args);
   const messages: ChatMessage[] = [];
   const histFile = historyPath();
-  const rl = readline.createInterface({
-    input,
-    output,
-    terminal: input.isTTY && output.isTTY,
-    completer: completeChatInput,
-    history: loadHistory(histFile).reverse(),
-  });
-  const cleanupModeHotkey = input.isTTY && output.isTTY
-    ? installModeHotkey({ input, output, readlineInterface: rl, mode })
-    : () => {};
-
+  const history = loadHistory(histFile);
+  const rl = !input.isTTY
+    ? (await import("node:readline/promises")).createInterface({ input, output, terminal: false })
+    : null;
   if (options.intro !== false) {
     output.write(`${renderStartupBanner({
       brainUrl,
@@ -205,19 +198,25 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
 
   try {
     if (!input.isTTY) {
+      if (!rl) return 0;
       for await (const line of rl) {
         if (await handleText(line) === "break") break;
       }
     } else {
       const prompt = "› ";
       for (;;) {
-        const text = await rl.question(prompt);
+        const text = await readInteractiveLine(prompt, mode, {
+          placeholder: t("chat.placeholder"),
+          history: new HistoryNavigator(history),
+          completions: CHAT_SLASH_COMMANDS,
+          onShiftTab: () => renderInteractiveModeChange(toggleMode(mode), mode, supportsColor(output)),
+        });
+        if (text === null) break;
         if (await handleText(text) === "break") break;
       }
     }
   } finally {
-    cleanupModeHotkey();
-    rl.close();
+    rl?.close();
   }
   return 0;
 }
@@ -231,13 +230,6 @@ interface KeypressLike {
   name?: string;
   shift?: boolean;
   sequence?: string;
-}
-
-export interface ModeHotkeyStreams {
-  input: NodeJS.ReadStream;
-  output: NodeJS.WriteStream;
-  readlineInterface: unknown;
-  mode: ChatMode;
 }
 
 export async function resolveChatMode(args: ParsedArgs): Promise<ChatMode> {
@@ -417,19 +409,6 @@ export function applyReasoningCommand(current: ReturnType<typeof parseReasoningO
     return { reasoning: { ...current, display: "never" }, message: t("reasoning.displayNever") };
   }
   return { reasoning: current, message: t("reasoning.unknown", { raw: raw || "(empty)" }) };
-}
-
-export function installModeHotkey({ input, output, readlineInterface, mode }: ModeHotkeyStreams): () => void {
-  emitKeypressEvents(input, readlineInterface as Parameters<typeof emitKeypressEvents>[1]);
-  const onKeypress = (_chunk: string, key: KeypressLike) => {
-    if (!isModeToggleKeypress(key)) return;
-    const message = toggleMode(mode);
-    output.write(`\n${renderInteractiveModeChange(message, mode, supportsColor(output))}`);
-  };
-  input.on("keypress", onKeypress);
-  return () => {
-    input.off("keypress", onKeypress);
-  };
 }
 
 export function formatChatError(error: unknown): string {
