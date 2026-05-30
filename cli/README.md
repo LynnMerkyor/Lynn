@@ -46,6 +46,7 @@ Lynn "summarize this repo"
 Lynn -p "summarize this repo" --json
 Lynn exec "review the current diff" --reasoning auto --show-reasoning auto
 Lynn code "review the current diff"
+Lynn code -p "review the current diff" --json
 Lynn chat
 cat README.md | Lynn "summarize this file"
 Lynn - < README.md
@@ -97,6 +98,50 @@ try the local Brain first; if it is offline, they use this BYOK provider.
 
 For full default Brain routing, web search, Lynn client GUI Fleet, and provider
 management, install and open the Lynn client GUI.
+
+## Headless code mode for other agents
+
+External agents and CI jobs should call `Lynn code` in JSONL mode. Both forms
+below are equivalent; `-p/--prompt/--print` exists so agents can pass the task as
+a flag without relying on positional parsing:
+
+```bash
+Lynn code "review the current diff" --json --cwd /path/to/repo
+Lynn code -p "review the current diff" --json --cwd /path/to/repo
+Lynn code --prompt "fix the failing tests" --json --cwd /path/to/repo
+```
+
+For write-capable background work, make the permission mode explicit:
+
+```bash
+Lynn code -p "fix the failing tests, run the test suite, and report the diff" \
+  --json \
+  --cwd /path/to/repo \
+  --approval yolo \
+  --sandbox workspace-write \
+  --max-steps 20 \
+  --save-session
+```
+
+JSONL output is line-delimited. Important event types:
+
+- `code.task.started` - task accepted with repository context.
+- `reasoning.delta` - hidden or visible model reasoning stream.
+- `code.tool.requested` / `code.tool.result` - local tool calls and outputs.
+- `code.tool.ledger` - compact source-of-truth ledger for chained tool work.
+- `session.checkpoint` / `session.saved` - resumable session path.
+- `code.task.finished` - final status, usage, and optional resume command.
+
+Recommended agent defaults:
+
+- Use `--json`; never parse human TUI output.
+- Use `--cwd` so the worktree is explicit.
+- Use `--save-session` for tasks that may exceed one turn.
+- Use `--long --max-steps 1000` only for deliberate endurance runs.
+- Use `--approval yolo --sandbox workspace-write` only inside an isolated
+  worktree. Keep `ask` or `read-only` for shared checkouts.
+
+See `docs/ops/lynn-code-headless-agent-contract.md` for the full contract.
 
 ## Worker mode
 

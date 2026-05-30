@@ -169,6 +169,12 @@ try {
   assertIncludes(tools.name, tools.stdout, "read_file");
   assertIncludes(tools.name, tools.stdout, "apply_patch");
 
+  const codePrompt = await run("Lynn code headless prompt", lynnBin, ["code", "-p", "headless smoke", "--mock-brain", "--json"], { cwd: installDir, env: { LYNN_DATA_DIR: dataDir } });
+  assertIncludes(codePrompt.name, codePrompt.stdout, "\"type\":\"code.task.started\"");
+  assertIncludes(codePrompt.name, codePrompt.stdout, "\"task\":\"headless smoke\"");
+  assertIncludes(codePrompt.name, codePrompt.stdout, "\"type\":\"code.task.finished\"");
+  assertNotIncludes(codePrompt.name, codePrompt.stdout, "code mode ready");
+
   await run("direct node entry", nodeBin, [path.join(installDir, "node_modules", "@lynn", "cli", "bin", "lynn.mjs"), "version"], { cwd: installDir });
 
   console.log(`[cli-install-smoke] ${externalTarball ? "remote" : "packed"} install passed: ${tarballName}`);

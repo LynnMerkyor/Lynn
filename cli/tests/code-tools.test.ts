@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { buildCodeRuntimeFrames, canPromptForDangerousTool, codeToolDefinitions, createStreamingToolCallAccumulator, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeResumeSlash, parseCodeToolRequest, parseCodeToolRequests, renderCodeIntro, renderCodeTaskHeader, resumeCommandForSession, runCode, withLongRunCodeFlags } from "../src/commands/code.js";
+import { buildCodeRuntimeFrames, canPromptForDangerousTool, codeTaskPrompt, codeToolDefinitions, createStreamingToolCallAccumulator, formatToolResultForLoop, isDangerousClientTool, loadResumeMessages, parseCodeResumeSlash, parseCodeToolRequest, parseCodeToolRequests, renderCodeIntro, renderCodeTaskHeader, resumeCommandForSession, runCode, withLongRunCodeFlags } from "../src/commands/code.js";
 import { stableRuntimePrefix } from "../../shared/runtime-instruction-frames.js";
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
@@ -622,6 +622,39 @@ describe("code tools", () => {
     }
     expect(output).toContain("Mock code task: review current diff");
     expect(output).toContain("Directory:");
+  });
+
+  it("accepts -p/--prompt as a headless code task for agent callers", async () => {
+    expect(codeTaskPrompt(parseArgs(["code", "-p", "review current diff"]))).toBe("review current diff");
+    expect(codeTaskPrompt(parseArgs(["code", "--prompt", "review", "src/cli.ts"]))).toBe("review\n\nsrc/cli.ts");
+
+    const original = process.stdout.write;
+    const originalErr = process.stderr.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    try {
+      await expect(runCode(parseArgs([
+        "code",
+        "-p",
+        "headless agent task",
+        "--cwd",
+        tmp,
+        "--mock-brain",
+        "--json",
+      ]))).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+      process.stderr.write = originalErr;
+    }
+
+    expect(output).toContain('"type":"code.task.started"');
+    expect(output).toContain('"task":"headless agent task"');
+    expect(output).toContain('"type":"code.task.finished"');
+    expect(output).not.toContain("code mode ready");
   });
 
   it("saves code tasks as GUI-compatible CLI sessions", async () => {

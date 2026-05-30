@@ -115,7 +115,7 @@ export async function runCode(args: ParsedArgs): Promise<number> {
 
   const tool = getStringFlag(args.flags, "tool") as ClientToolName | null;
   if (!tool) {
-    const task = args.positionals.join(" ").trim();
+    const task = codeTaskPrompt(args);
     if (task) return runCodeTask(args, task, json);
     if (!json && input.isTTY && output.isTTY) {
       if (process.env.LYNN_CLI_LEGACY_TUI !== "1" && !hasFlag(args.flags, "no-ink", "legacy-tui")) {
@@ -160,6 +160,13 @@ export async function runCode(args: ParsedArgs): Promise<number> {
   if (json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...result });
   else process.stdout.write(`${JSON.stringify(result.output, null, 2)}\n`);
   return result.ok ? 0 : 1;
+}
+
+export function codeTaskPrompt(args: ParsedArgs): string {
+  return [
+    getStringFlag(args.flags, "p", "print", "prompt", "task"),
+    args.positionals.join(" ").trim(),
+  ].filter((part): part is string => !!part && !!part.trim()).join("\n\n").trim();
 }
 
 async function runCodeInteractive(args: ParsedArgs): Promise<number> {
