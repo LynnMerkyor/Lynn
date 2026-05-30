@@ -28,9 +28,7 @@ winget install OpenJS.NodeJS.LTS
 Install from the Lynn Tencent mirror:
 
 ```bash
-# Fetch the current build id first so npm will not reuse an older URL cache.
-BUILD=$(node -e "fetch('https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.json').then(r=>r.json()).then(j=>console.log(j.build))")
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=$BUILD"
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0.tgz
 ```
 
 The package installs the `Lynn` command. If you installed an older preview that
@@ -49,8 +47,7 @@ If npm dependency downloads are slow in mainland China, keep the Lynn tarball UR
 as-is and add a registry mirror for third-party dependencies:
 
 ```bash
-BUILD=$(node -e "fetch('https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.json').then(r=>r.json()).then(j=>console.log(j.build))")
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=$BUILD" \
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0.tgz \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -58,8 +55,7 @@ Release maintainers can smoke-test the exact CDN tarball before inviting
 external testers:
 
 ```bash
-BUILD=$(node -e "fetch('https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.json').then(r=>r.json()).then(j=>console.log(j.build))")
-LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=$BUILD" \
+LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0.tgz" \
   npm run test:cli-install:remote
 ```
 
@@ -141,8 +137,7 @@ Agent quick contract:
 # Requires Node.js 20 LTS or 22 LTS with npm.
 
 # Install/update.
-BUILD=$(node -e "fetch('https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.json').then(r=>r.json()).then(j=>console.log(j.build))")
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=$BUILD"
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0.tgz
 
 # Human launch commands.
 Lynn

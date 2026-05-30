@@ -58,8 +58,7 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-BUILD=$(node -e "fetch('https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.json').then(r=>r.json()).then(j=>console.log(j.build))")
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=$BUILD"
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0.tgz
 
 # 3. Launch.
 Lynn          # interactive chat TUI

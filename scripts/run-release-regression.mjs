@@ -300,7 +300,7 @@ async function runStaticChecks({ level }) {
     "blocker",
     cliReadme.includes("Node.js 20 LTS")
       && cliReadme.includes("npm install -g --force")
-      && cliReadme.includes("lynn-cli-latest.tgz")
+      && cliReadme.includes(`lynn-cli-${version}.tgz`)
       && cliReadme.includes("Lynn code -p"),
     "cli/README.md documents Node requirement, CDN install, and headless code usage",
   ));
@@ -319,8 +319,7 @@ async function runStaticChecks({ level }) {
     "static-cli-mirror-snippet",
     "blocker",
     installSnippet.includes("Node.js 20 LTS")
-      && installSnippet.includes("lynn-cli-latest.json")
-      && installSnippet.includes("lynn-cli-latest.tgz")
+      && installSnippet.includes(`lynn-cli-${version}.tgz`)
       && installSnippet.includes("Lynn agents"),
     "CLI mirror/release snippet includes Node requirement, CDN install, and launch commands",
   ));
@@ -330,7 +329,7 @@ async function runStaticChecks({ level }) {
     "blocker",
     downloadPage.includes("Node.js 20 LTS")
       && downloadPage.includes("npm install -g --force")
-      && downloadPage.includes("lynn-cli-0.80.0.tgz")
+      && downloadPage.includes(`lynn-cli-${version}.tgz`)
       && downloadPage.includes("Lynn code")
       && downloadPage.includes("Lynn agents")
       && downloadPage.includes("data-copy-target=\"cli-install\"")

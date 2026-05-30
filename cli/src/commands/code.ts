@@ -178,7 +178,7 @@ export function codeTaskPrompt(args: ParsedArgs): string {
 }
 
 export function renderCodeHeadlessHelp(): string {
-  const build = readVersionInfo().build || "<release-build>";
+  const version = readVersionInfo().version || "0.80.0";
   return [
     "Lynn code headless / CLI Fleet",
     "",
@@ -187,7 +187,7 @@ export function renderCodeHeadlessHelp(): string {
     "  - 给其他智能体 / CI / GUI Fleet 用: Lynn code -p \"任务\" --json --cwd /repo",
     "",
     "安装(Node.js 20 LTS 或 22 LTS + npm):",
-    `  npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=${build}`,
+    `  npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-${version}.tgz`,
     "",
     "静默调用(处理完直接退出,不进入 TUI):",
     "  Lynn code -p \"review the current diff\" --json --cwd /repo",

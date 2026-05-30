@@ -7,9 +7,8 @@ import { t } from "../i18n.js";
 import { readVersionInfo } from "../version.js";
 
 function installUrl(): string {
-  const build = readVersionInfo().build;
-  const suffix = build ? `?build=${encodeURIComponent(build)}` : "";
-  return `https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz${suffix}`;
+  const version = readVersionInfo().version || "0.80.0";
+  return `https://download.merkyorlynn.com/downloads/cli/lynn-cli-${version}.tgz`;
 }
 
 export async function runAgents(args: ParsedArgs, json: boolean): Promise<number> {
