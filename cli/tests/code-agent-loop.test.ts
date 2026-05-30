@@ -474,6 +474,7 @@ master, slave = pty.openpty()
 env = os.environ.copy()
 env["NO_COLOR"] = "1"
 env["LYNN_LANG"] = "zh"
+env["LYNN_CLI_UPDATE_CHECK"] = "0"
 proc = subprocess.Popen(
     [node_bin, "--import", "tsx", "src/cli.ts", "code", "--cwd", workspace, "--mock-brain"],
     cwd=cwd,
@@ -487,6 +488,7 @@ os.close(slave)
 buf = b""
 sent_task = False
 sent_exit = False
+exit_ready_at = None
 deadline = time.time() + 75
 while time.time() < deadline:
     readable, _, _ = select.select([master], [], [], 0.1)
@@ -502,7 +504,9 @@ while time.time() < deadline:
         if (not sent_task) and "Lynn Code" in text:
             os.write(master, "hi\\r".encode("utf-8"))
             sent_task = True
-        elif sent_task and (not sent_exit) and "模拟编码任务" in text:
+        elif sent_task and (not sent_exit) and exit_ready_at is None and "模拟编码任务" in text and "Git:干净" in text:
+            exit_ready_at = time.time() + 0.25
+    if sent_task and (not sent_exit) and exit_ready_at is not None and time.time() >= exit_ready_at:
             os.write(master, b"/exit\\r")
             sent_exit = True
     if sent_exit and proc.poll() is not None:
