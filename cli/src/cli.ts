@@ -38,6 +38,10 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   const args = parseArgs(argv);
   const json = hasFlag(args.flags, "json", "jsonl");
 
+  if (shouldResumeCodeInvocation(args)) {
+    return runCode(resumeCodeArgs(args));
+  }
+
   if (isImplicitChatInvocation(args)) {
     return runChat({ ...args, command: "chat" });
   }
@@ -135,6 +139,61 @@ function isImplicitChatInvocation(args: ReturnType<typeof parseArgs>): boolean {
     "data-dir",
   );
 }
+
+function shouldResumeCodeInvocation(args: ParsedArgs): boolean {
+  if (args.command === "code") return false;
+  if (hasFlag(args.flags, "continue") && (args.command === "help" || args.command === "continue")) return true;
+  if (!hasFlag(args.flags, "resume")) return false;
+  return args.command === "help" || !isKnownTopLevelCommand(args.command);
+}
+
+function resumeCodeArgs(args: ParsedArgs): ParsedArgs {
+  const flags = { ...args.flags };
+  if (hasFlag(flags, "continue") && !getStringFlag(flags, "resume")) flags.resume = "last";
+  const continuation = resumeContinuation(args);
+  return {
+    ...args,
+    command: "code",
+    flags: {
+      ...flags,
+      long: flags.long ?? true,
+    },
+    positionals: continuation,
+  };
+}
+
+function resumeContinuation(args: ParsedArgs): string[] {
+  if (args.command !== "help" && args.command !== "continue") return [args.command, ...args.positionals];
+  if (args.positionals.length > 0) return args.positionals;
+  return ["继续这个任务"];
+}
+
+function isKnownTopLevelCommand(command: string): boolean {
+  return TOP_LEVEL_COMMANDS.has(command);
+}
+
+const TOP_LEVEL_COMMANDS = new Set([
+  "version",
+  "doctor",
+  "chat",
+  "agents",
+  "providers",
+  "setup",
+  "byok",
+  "permissions",
+  "model",
+  "prompt",
+  "exec",
+  "worker",
+  "code",
+  "see",
+  "ground",
+  "ui2code",
+  "sessions",
+  "help",
+  "--help",
+  "-h",
+]);
 
 function startupModelLabel(info: ProvidersInfo, brainReachable: boolean): string {
   if (!brainReachable && info.cliProvider?.configured && info.cliProvider.profile) {

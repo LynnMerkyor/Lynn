@@ -437,6 +437,26 @@ async function runCodeResumeSmoke() {
   ]);
   assertIncludes(resumed.name, resumed.stdout, '"type":"session.resumed"');
   assertIncludes(resumed.name, resumed.stdout, '"type":"session.saved"');
+  const topLevelResumed = await run("top-level resume", [
+    "--resume",
+    codeSavedPath,
+    "continue from top level",
+    "--mock-brain",
+    "--data-dir",
+    sessionDataDir,
+    "--json",
+  ]);
+  assertIncludes(topLevelResumed.name, topLevelResumed.stdout, '"type":"session.resumed"');
+  assertIncludes(topLevelResumed.name, topLevelResumed.stdout, '"type":"session.saved"');
+  const topLevelContinue = await run("top-level continue latest", [
+    "--continue",
+    "--mock-brain",
+    "--data-dir",
+    sessionDataDir,
+    "--json",
+  ]);
+  assertIncludes(topLevelContinue.name, topLevelContinue.stdout, '"type":"session.resumed"');
+  assertIncludes(topLevelContinue.name, topLevelContinue.stdout, '"type":"session.saved"');
 }
 
 async function runStepFunByokFallbackSmoke() {

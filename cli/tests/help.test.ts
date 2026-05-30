@@ -7,8 +7,12 @@ describe("CLI help", () => {
     setLang("en");
     try {
       expect(usage()).toContain("--images a.png,b.png");
+      expect(usage()).toContain("Lynn --continue");
+      expect(usage()).toContain("Lynn --resume <session.jsonl>");
       setLang("zh");
       expect(usage()).toContain("--images a.png,b.png");
+      expect(usage()).toContain("Lynn --continue");
+      expect(usage()).toContain("Lynn --resume <session.jsonl>");
     } finally {
       setLang(null);
     }
