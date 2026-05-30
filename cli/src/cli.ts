@@ -64,6 +64,20 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     case "providers": {
       return runProviders(args, json);
     }
+    case "setup": {
+      return runProviders({
+        ...args,
+        command: "providers",
+        positionals: ["set", ...args.positionals.filter((value) => value !== "set")],
+      }, json);
+    }
+    case "byok": {
+      return runProviders({
+        ...args,
+        command: "providers",
+        positionals: providerAliasPositionals(args.positionals),
+      }, json);
+    }
     case "permissions": {
       return runPermissions(args, json);
     }
@@ -137,6 +151,14 @@ function startupModelLabel(info: ProvidersInfo, brainReachable: boolean): string
   const label = activeRouteLabel(info);
   if (/^MiMo via .*Brain router/i.test(label)) return "MiMo";
   return label;
+}
+
+function providerAliasPositionals(positionals: string[]): string[] {
+  const head = (positionals[0] || "").toLowerCase();
+  if (head === "set" || head === "unset" || head === "clear" || head === "reset" || head === "test" || head === "presets") {
+    return positionals;
+  }
+  return ["set", ...positionals];
 }
 
 main().then((code) => {

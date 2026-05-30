@@ -18,6 +18,7 @@ const toolDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-tools");
 const visionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-vision");
 const byokDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-byok");
 const mimoByokDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-mimo-byok");
+const setupDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-setup");
 const briefPath = path.join(root, "cli", "fixtures", "worker-brief.md");
 
 function run(name, args, options = {}) {
@@ -95,6 +96,8 @@ await fs.promises.rm(byokDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(byokDataDir, { recursive: true });
 await fs.promises.rm(mimoByokDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(mimoByokDataDir, { recursive: true });
+await fs.promises.rm(setupDataDir, { recursive: true, force: true });
+await fs.promises.mkdir(setupDataDir, { recursive: true });
 const stepfunWorkerBriefPath = path.join(byokDataDir, "stepfun-worker-brief.md");
 await fs.promises.writeFile(stepfunWorkerBriefPath, [
   "# Task: StepFun smoke worker",
@@ -147,6 +150,37 @@ checks.push(run("provider presets", ["providers", "presets"]).then((r) => {
   assertIncludes(r.name, r.stdout, "Lynn providers set --preset mimo --api-key <api-key>");
   assertIncludes(r.name, r.stdout, "Lynn providers set --preset stepfun --api-key <api-key>");
   assertNotIncludes(r.name, r.stdout, "sk-");
+}));
+
+checks.push(run("setup alias saves BYOK", [
+  "setup",
+  "--data-dir",
+  setupDataDir,
+  "--base-url",
+  "https://api.example.com/v1",
+  "--api-key",
+  "setup-smoke-key",
+  "--model",
+  "setup-model",
+  "--json",
+]).then(async (r) => {
+  assertIncludes(r.name, r.stdout, '"type":"providers.saved"');
+  assertIncludes(r.name, r.stdout, '"model":"setup-model"');
+  assertNotIncludes(r.name, r.stdout, "setup-smoke-key");
+  const profile = JSON.parse(await fs.promises.readFile(path.join(setupDataDir, "providers", "cli.json"), "utf8"));
+  if (profile.apiKey !== "setup-smoke-key") throw new Error("setup alias did not save the raw key locally");
+}));
+
+checks.push(run("byok alias tests saved provider", [
+  "byok",
+  "test",
+  "--data-dir",
+  setupDataDir,
+  "--timeout-ms",
+  "50",
+], { expectFailure: true }).then((r) => {
+  assertIncludes(r.name, r.stdout, "Provider 测试失败");
+  assertNotIncludes(r.name, r.stdout, "setup-smoke-key");
 }));
 
 checks.push(run("worker agents", ["agents"]).then((r) => {
