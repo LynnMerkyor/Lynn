@@ -46,6 +46,24 @@ describe("startup banner", () => {
     expect(Math.max(...output.split("\n").map(visibleLength))).toBeLessThanOrEqual(76);
   });
 
+  it("drops optional row hints before wrapping provider labels in narrow TTYs", () => {
+    setLang("zh");
+    const previousColumns = process.stdout.columns;
+    Object.defineProperty(process.stdout, "columns", { value: 48, configurable: true });
+    try {
+      const output = renderStartupBanner({
+        brainStatus: "offline",
+        modelLabel: "CLI BYOK: step-3.7-flash",
+        showTips: false,
+      });
+      expect(output).toContain("CLI BYOK: step-3.7-flash");
+      expect(output).not.toContain("│ 切换");
+      expect(Math.max(...output.split("\n").map(visibleLength))).toBeLessThanOrEqual(50);
+    } finally {
+      Object.defineProperty(process.stdout, "columns", { value: previousColumns, configurable: true });
+    }
+  });
+
   it("can render a compact banner without tips", () => {
     const output = renderStartupBanner({
       brainStatus: "offline",

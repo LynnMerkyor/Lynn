@@ -68,11 +68,27 @@ function wrapVisible(line: string, width: number): string[] {
   return out;
 }
 
+function compactFrameLine(line: string, width: number): string {
+  if (visibleLength(line) <= width) return line;
+  const hintIndex = line.lastIndexOf("   ");
+  if (hintIndex < 0) return line;
+  const suffix = line.slice(hintIndex).trim();
+  if (!isOptionalRowHint(suffix)) return line;
+  const withoutHint = line.slice(0, hintIndex).trimEnd();
+  return visibleLength(withoutHint) <= width ? withoutHint : line;
+}
+
+function isOptionalRowHint(value: string): boolean {
+  return value === "Lynn providers"
+    || value.startsWith("/model")
+    || value.startsWith("Shift+Tab");
+}
+
 export function box(lines: string[]): string {
   // Cap width so one long line (e.g. BYOK guidance) can't blow the box out to
   // the full terminal width; wrap long lines instead of widening the frame.
   const cap = Math.min(Math.max((process.stdout.columns ?? 80) - 4, 44), 72);
-  const wrapped = lines.flatMap((line) => wrapVisible(line, cap));
+  const wrapped = lines.flatMap((line) => wrapVisible(compactFrameLine(line, cap), cap));
   const width = Math.max(...wrapped.map((line) => visibleLength(line)), Math.min(51, cap));
   const top = `╭${"─".repeat(width + 2)}╮`;
   const bottom = `╰${"─".repeat(width + 2)}╯`;
