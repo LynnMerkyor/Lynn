@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeSlashInput } from "../src/completion.js";
-import { slashHint, slashPalette } from "../src/ink-input-line.js";
+import { inputDisplayRows, slashHint, slashPalette } from "../src/ink-input-line.js";
 
 describe("Ink input slash hints", () => {
   it("shows command candidates when the user starts slash input", () => {
@@ -33,5 +33,20 @@ describe("Ink input slash hints", () => {
 
   it("normalizes full-width slash from Chinese IMEs", () => {
     expect(normalizeSlashInput("／model")).toBe("/model");
+  });
+
+  it("keeps typed multi-line input inside one input frame", () => {
+    const rows = inputDisplayRows("第一行\n第二行", "", 20);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ prompt: "› ", text: "第一行" });
+    expect(rows[1]).toMatchObject({ prompt: "  ", text: "第二行" });
+  });
+
+  it("places slash hint on the last display row only", () => {
+    const rows = inputDisplayRows("/mod\nextra", "el", 20);
+
+    expect(rows[0].hint).toBe("");
+    expect(rows[1].hint).toBe("el");
   });
 });

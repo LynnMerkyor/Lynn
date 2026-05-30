@@ -114,7 +114,7 @@ function summarizeContextParts(options: {
     const label = options.lang === "zh"
       ? `${options.imageCount} 张图片`
       : `${options.imageCount} image${options.imageCount === 1 ? "" : "s"}`;
-    const names = options.imageNames.slice(0, 2).join(", ");
+    const names = options.imageNames.slice(0, 3).join(", ");
     const extra = options.imageNames.length > 2
       ? (options.lang === "zh" ? ` 等 ${options.imageNames.length} 个文件` : ` +${options.imageNames.length - 2}`)
       : "";

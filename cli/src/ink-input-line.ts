@@ -19,19 +19,36 @@ export function InkInputLine({ value, placeholder, danger, commands = [], contex
   const hint = slashHint(value, commands, width - visibleLength(prompt));
   const palette = slashPalette(value, commands);
   const visibleText = value || placeholder;
-  const rawWidth = visibleLength(`${prompt}${visibleText}${hint ? ` ${hint}` : ""}`);
-  const pad = Math.max(0, width - rawWidth);
+  const rows = inputDisplayRows(visibleText, hint, width, prompt);
   const borderColor = danger ? "red" : "gray";
   return React.createElement(Box, { marginTop: 1, flexDirection: "column" },
     palette ? React.createElement(Text, { color: "gray" }, palette) : null,
     contextSummary ? React.createElement(Text, { color: "cyan" }, `已加入本轮上下文: ${contextSummary}`) : null,
-    React.createElement(Box, { borderStyle: "single", borderColor, paddingX: 1 },
-      React.createElement(Text, { color: "white" }, prompt),
-      React.createElement(Text, { color: value ? "white" : "gray" }, visibleText),
-      hint ? React.createElement(Text, { color: "gray" }, ` ${hint}`) : null,
-      pad ? React.createElement(Text, null, " ".repeat(pad)) : null,
+    React.createElement(Box, { borderStyle: "single", borderColor, paddingX: 1, flexDirection: "column" },
+      ...rows.map((row, index) => React.createElement(Box, { key: index },
+        React.createElement(Text, { color: "white" }, row.prompt),
+        React.createElement(Text, { color: value ? "white" : "gray" }, row.text),
+        row.hint ? React.createElement(Text, { color: "gray" }, ` ${row.hint}`) : null,
+        row.pad ? React.createElement(Text, null, " ".repeat(row.pad)) : null,
+      )),
     ),
   );
+}
+
+export function inputDisplayRows(value: string, hint: string, width: number, prompt = "› "): Array<{ prompt: string; text: string; hint: string; pad: number }> {
+  const lines = value.split(/\n/);
+  const rows = lines.length ? lines : [""];
+  return rows.map((line, index) => {
+    const rowPrompt = index === 0 ? prompt : "  ";
+    const rowHint = index === rows.length - 1 ? hint : "";
+    const rawWidth = visibleLength(`${rowPrompt}${line}${rowHint ? ` ${rowHint}` : ""}`);
+    return {
+      prompt: rowPrompt,
+      text: line,
+      hint: rowHint,
+      pad: Math.max(0, width - rawWidth),
+    };
+  });
 }
 
 export function slashHint(input: string, commands: string[], maxWidth = 72): string {

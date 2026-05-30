@@ -109,6 +109,11 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
       setInput((current) => appendPastedText(current, value));
       return;
     }
+    if (key.return && key.shift) {
+      const prefix = newlineIndex >= 0 ? value.slice(0, newlineIndex) : "";
+      setInput((current) => `${current}${prefix}\n`);
+      return;
+    }
     if (key.return) {
       const prefix = newlineIndex >= 0 ? value.slice(0, newlineIndex) : "";
       const submitted = `${input}${prefix}`;
