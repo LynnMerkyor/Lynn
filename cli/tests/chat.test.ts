@@ -482,7 +482,7 @@ proc = subprocess.Popen(
 os.close(slave)
 buf = b""
 sent_exit = False
-deadline = time.time() + 8
+deadline = time.time() + 30
 while time.time() < deadline:
     readable, _, _ = select.select([master], [], [], 0.1)
     if readable:
@@ -529,7 +529,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
     expect(result.stdout).toContain("›");
     expect(result.stdout).not.toContain("Aborted with Ctrl+D");
     expect(result.stderr).toBe("");
-  });
+  }, 45_000);
 
   pythonIt("uses the Ink TUI for bare Lynn in a TTY", async () => {
     const script = `

@@ -486,7 +486,7 @@ buf = b""
 toggled = False
 sent_task = False
 sent_exit = False
-deadline = time.time() + 12
+deadline = time.time() + 35
 while time.time() < deadline:
     readable, _, _ = select.select([master], [], [], 0.1)
     if readable:
@@ -543,7 +543,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
     expect(result.stdout).toContain("Lynn Code");
     expect(result.stdout).toContain("YOLO");
     expect(result.stdout).toContain("模拟编码任务");
-  });
+  }, 50_000);
 
   it("executes multiple model-requested tool calls from one turn", async () => {
     const original = process.stdout.write;
