@@ -392,6 +392,17 @@ function parseNumstat(raw: string): Map<string, { insertions: number; deletions:
   return out;
 }
 
+async function countUntrackedInsertions(worktree: string, filePath: string): Promise<number> {
+  const absolute = path.resolve(worktree, filePath);
+  const root = path.resolve(worktree);
+  if (absolute !== root && !absolute.startsWith(`${root}${path.sep}`)) return 0;
+  const stat = await fs.stat(absolute).catch(() => null);
+  if (!stat?.isFile()) return 0;
+  const text = await fs.readFile(absolute, "utf8").catch(() => "");
+  if (!text) return 0;
+  return text.endsWith("\n") ? text.split("\n").length - 1 : text.split("\n").length;
+}
+
 async function gitOutput(worktree: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync("git", ["-C", worktree, ...args], { maxBuffer: 10 * 1024 * 1024 });
   return String(stdout);
@@ -410,7 +421,9 @@ export async function collectGitDiff(worktree: string, ignorePaths: ReadonlySet<
     const code = line.slice(0, 2);
     const filePath = parseStatusPath(line);
     if (ignorePaths.has(filePath)) continue;
-    const stats = numstat.get(filePath) || { insertions: 0, deletions: 0 };
+    const stats = numstat.get(filePath) || (code.includes("?")
+      ? { insertions: await countUntrackedInsertions(worktree, filePath), deletions: 0 }
+      : { insertions: 0, deletions: 0 });
     changedFiles.push({
       path: filePath,
       action: actionFromStatus(code),

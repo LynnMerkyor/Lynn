@@ -623,10 +623,10 @@ describe("worker-run scaffold", () => {
       process.stdout.write = original;
     }
 
-    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; changedFiles?: Array<{ path: string; action: string }> });
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as { type: string; changedFiles?: Array<{ path: string; action: string; insertions?: number; deletions?: number }> });
     const diff = lines.find((line) => line.type === "git.diff");
     expect(diff?.changedFiles).toEqual([
-      { path: "worker-output.txt", action: "add", insertions: 0, deletions: 0 },
+      { path: "worker-output.txt", action: "add", insertions: 1, deletions: 0 },
     ]);
   });
 
