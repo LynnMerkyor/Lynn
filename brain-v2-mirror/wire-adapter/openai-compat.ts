@@ -64,6 +64,10 @@ function shouldForwardReasoningEffort(provider: WireAdapterOptions['provider'], 
 }
 
 export async function* call({ provider, messages, tools, signal, extraBody, reasoningEffort }: WireAdapterOptions): AsyncGenerator<StreamChunk> {
+  const effectiveReasoningEffort =
+    provider.default_reasoning_effort && (!reasoningEffort || reasoningEffort === 'auto')
+      ? provider.default_reasoning_effort
+      : reasoningEffort;
   const body: OpenAICompatRequestBody = {
     model: provider.model,
     messages,
@@ -73,8 +77,8 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
     ...(extraBody && typeof extraBody === 'object' ? extraBody : {}),
   };
   // F11: reasoning_effort BYOK 透传 — server.js 抽到 arg,extraBody 没的话从 arg 回灌
-  if (shouldForwardReasoningEffort(provider, reasoningEffort) && !body.reasoning_effort) {
-    body.reasoning_effort = reasoningEffort;
+  if (shouldForwardReasoningEffort(provider, effectiveReasoningEffort) && !body.reasoning_effort) {
+    body.reasoning_effort = effectiveReasoningEffort;
   }
   // 2026-05-25: provider.default_thinking === false 时(例如 apex-spark Brain v2 fallback),
   // 默认关 thinking,跟 MiMo 行为对齐。避免短 max_tokens 工况下 35B 长 reasoning 吃光
@@ -87,9 +91,9 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
     // 显式 'high'/'xhigh'/'on'/'medium'/'low' → 强制 on
     // 'off'/'none'/'disabled' → 强制 off
     let wantsThinking: boolean;
-    if (!reasoningEffort || reasoningEffort === 'auto') {
+    if (!effectiveReasoningEffort || effectiveReasoningEffort === 'auto') {
       wantsThinking = shouldAutoThink(messages);
-    } else if (reasoningEffort === 'off' || reasoningEffort === 'none' || reasoningEffort === 'disabled') {
+    } else if (effectiveReasoningEffort === 'off' || effectiveReasoningEffort === 'none' || effectiveReasoningEffort === 'disabled') {
       wantsThinking = false;
     } else {
       wantsThinking = true;

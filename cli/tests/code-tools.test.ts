@@ -578,7 +578,7 @@ describe("code tools", () => {
       maxSteps: 8,
     });
 
-    expect(header).toContain("MiMo V2.5 Pro→StepFun 3.7 Flash via local Brain router");
+    expect(header).toContain("StepFun 3.7 Flash→MiMo V2.5 Pro via local Brain router");
     expect(header).toContain("/repo");
     expect(header).toContain("ask / workspace-write");
     expect(header).toContain("think:");

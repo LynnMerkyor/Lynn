@@ -291,7 +291,7 @@ export function renderMode(mode: ChatMode): string {
 
 export function chatRouteLabel(provider?: { provider: string; model: string } | null): string {
   if (provider) return `CLI BYOK: ${modelLabelWithId(provider.model)}`;
-  return "MiMo V2.5 Pro → StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B via Brain router (auto)";
+  return "StepFun 3.7 Flash → MiMo V2.5 Pro → Spark Qwen 3.6 35B A3B via Brain router (auto)";
 }
 
 export function splitChatCommandLine(raw: string): string[] {

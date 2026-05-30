@@ -31,9 +31,9 @@ describe("doctor command", () => {
       if (href.endsWith("/v1/providers/status")) {
         return new Response(JSON.stringify({
           ok: true,
-          route: ["mimo", "step-3.7-flash", "apex-spark-i-balanced"],
+          route: ["step-3.7-flash", "mimo", "apex-spark-i-balanced"],
           providers: [
-            { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "missing", configured: false, local: false, inRoute: true },
+            { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "set", configured: true, local: false, inRoute: true },
             { id: "mimo", model: "mimo-v2.5-pro", endpoint: "https://token-plan-cn.xiaomimimo.com/v1", wire: "mimo", credential: "set", configured: true, local: false, inRoute: true },
             { id: "apex-spark-i-balanced", model: "qwen36", endpoint: "http://127.0.0.1:18098/v1", wire: "openai", credential: "not_required", configured: true, local: true, inRoute: true },
           ],
@@ -41,7 +41,7 @@ describe("doctor command", () => {
       }
       if (href.endsWith("/v1/chat/completions")) {
         return new Response([
-          'data: {"object":"lynn.provider","meta":{"active_provider":"mimo"}}',
+          'data: {"object":"lynn.provider","meta":{"active_provider":"step-3.7-flash"}}',
           "",
           'data: {"choices":[{"delta":{"content":"OK"},"finish_reason":"stop"}]}',
           "",
@@ -55,11 +55,11 @@ describe("doctor command", () => {
 
     expect(result.brain).toBe("ok");
     expect(result.ok).toBe(true);
-    expect(result.brainSmoke).toMatchObject({ ok: true, provider: "mimo" });
-    expect(result.brainProviders?.route[0]).toBe("mimo");
-    expect(rendered).toContain("brain-route: MiMo V2.5 Pro:key -> StepFun 3.7 Flash:missing-key -> Spark Qwen 3.6 35B A3B:local");
-    expect(rendered).toContain("head ready: MiMo V2.5 Pro; fallback ready: Spark Qwen 3.6 35B A3B");
-    expect(rendered).toContain("brain-smoke: route returned assistant output via mimo");
+    expect(result.brainSmoke).toMatchObject({ ok: true, provider: "step-3.7-flash" });
+    expect(result.brainProviders?.route[0]).toBe("step-3.7-flash");
+    expect(rendered).toContain("brain-route: StepFun 3.7 Flash:key -> MiMo V2.5 Pro:key -> Spark Qwen 3.6 35B A3B:local");
+    expect(rendered).toContain("head ready: StepFun 3.7 Flash; fallback ready: MiMo V2.5 Pro, Spark Qwen 3.6 35B A3B");
+    expect(rendered).toContain("brain-smoke: route returned assistant output via step-3.7-flash");
   });
 
   it("fails Brain route diagnostics when no provider in the route is configured", async () => {
@@ -69,7 +69,7 @@ describe("doctor command", () => {
       if (href.endsWith("/v1/providers/status")) {
         return new Response(JSON.stringify({
           ok: true,
-          route: ["mimo", "step-3.7-flash"],
+          route: ["step-3.7-flash", "mimo"],
           providers: [
             { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "missing", configured: false, local: false, inRoute: true },
             { id: "mimo", model: "mimo-v2.5-pro", endpoint: "https://token-plan-cn.xiaomimimo.com/v1", wire: "mimo", credential: "missing", configured: false, local: false, inRoute: true },
@@ -94,7 +94,7 @@ describe("doctor command", () => {
       if (href.endsWith("/v1/providers/status")) {
         return new Response(JSON.stringify({
           ok: true,
-          route: ["mimo", "step-3.7-flash"],
+          route: ["step-3.7-flash", "mimo"],
           providers: [
             { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "set", configured: true, local: false, inRoute: true },
             { id: "mimo", model: "mimo-v2.5-pro", endpoint: "https://token-plan-cn.xiaomimimo.com/v1", wire: "mimo", credential: "set", configured: true, local: false, inRoute: true },

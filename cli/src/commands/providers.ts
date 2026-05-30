@@ -74,16 +74,16 @@ export interface BrainModelChoice {
 
 export const BRAIN_MODEL_CHOICES: BrainModelChoice[] = [
   {
-    id: "mimo",
-    name: "MiMo V2.5 Pro",
-    routeRole: { zh: "1 / 默认首位", en: "1 / default head" },
-    capability: { zh: "多模态 + 原生搜索 + 额度充裕", en: "multimodal + native search + large quota" },
-  },
-  {
     id: "stepfun",
     name: "StepFun 3.7 Flash",
-    routeRole: { zh: "2 / 高速兜底", en: "2 / fast fallback" },
-    capability: { zh: "高 TPS 文本 + 编码", en: "high TPS text + coding" },
+    routeRole: { zh: "1 / 默认首位", en: "1 / default head" },
+    capability: { zh: "high+32K 高 TPS 文本 + 编码", en: "high+32K high TPS text + coding" },
+  },
+  {
+    id: "mimo",
+    name: "MiMo V2.5 Pro",
+    routeRole: { zh: "2 / 多模态兜底", en: "2 / multimodal fallback" },
+    capability: { zh: "多模态 + 原生搜索 + 额度充裕", en: "multimodal + native search + large quota" },
   },
   {
     id: "spark",
@@ -120,8 +120,8 @@ export function renderBrainModelChoices(info: ProvidersInfo): string {
     "",
     t("models.note.fixed"),
     t("models.note.byok"),
-    "  /model mimo     MiMo V2.5 Pro",
     "  /model stepfun  StepFun 3.7 Flash",
+    "  /model mimo     MiMo V2.5 Pro",
     "  /model spark    Spark Qwen 3.6 35B A3B",
   ].join("\n");
 }

@@ -41,9 +41,9 @@ const PROVIDER_DEFS = {
     thinking_control: 'qwen_chat_template',
   },
   // [step-3.7-flash v1] StepFun 云 198B-MoE/11B-A(step_plan 端点)。
-  // 2026-05-30 用户拍板:6月4日前 MiMo Token Plan 配额最宽裕,Brain 头位恢复 MiMo;
-  // StepFun 3.7 Flash 作为高速文本/编码 fallback 第二位,Spark 第三位兜底。
-  // reasoning-always(low/med/high 三档,无真 off);wire=openai(content + image_url + tools)。
+  // 2026-05-30 high+32K 评测反超 MiMo(GPQA/MMLU/TPS),Brain 文本头位切 StepFun;
+  // 多模态仍因 capability gate 自动落 MiMo,Spark 第三位本地兜底。
+  // reasoning-always(low/med/high 三档,无真 off);wire=openai(content + tools)。
   'step-3.7-flash': {
     id: providerId('step-3.7-flash'),
     endpoint: env('STEP37_BASE', 'https://api.stepfun.com/step_plan/v1'),
@@ -53,6 +53,8 @@ const PROVIDER_DEFS = {
     wire: 'openai',
     cooldown_ms: 60_000,
     default_thinking: false,
+    default_reasoning_effort: 'high',
+    max_tokens: 32_768,
   },
   'deepseek-chat': {
     id: providerId('deepseek-chat'),
@@ -101,8 +103,8 @@ export const PROVIDERS: Record<string, Provider> = PROVIDER_DEFS;
 
 // universalOrder — 单一兜底链路,不按 prompt 内容分支
 export const universalOrder = [
-  providerId('mimo'),                  // 头位:MiMo Token Plan 配额充裕,原生搜索/多模态/缓存
-  providerId('step-3.7-flash'),        // 第二位:StepFun 3.7 Flash,高 TPS + coding/agentic fallback
+  providerId('step-3.7-flash'),        // 头位:StepFun 3.7 Flash high+32K,高 TPS + 推理/编码
+  providerId('mimo'),                  // 第二位:MiMo Token Plan,原生搜索/多模态/缓存 fallback
   providerId('apex-spark-i-balanced'), // 第三位:本地零成本/隐私 fallback,Spark llama.cpp APEX-I-Balanced
   providerId('deepseek-chat'),         // 云兜底 V4-flash
   providerId('deepseek-pro'),          // 云兜底 V4-pro

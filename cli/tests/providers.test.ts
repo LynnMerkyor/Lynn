@@ -19,7 +19,7 @@ afterEach(() => setLang(null));
 describe("providers command", () => {
   it("renders BYOK guidance without exposing keys", () => {
     const output = renderProvidersInfo({
-      defaultRoute: "MiMo via local Brain router (auto)",
+      defaultRoute: "StepFun 3.7 Flash → MiMo V2.5 Pro via local Brain router (auto)",
       byokEntry: "Open Lynn GUI > Settings > Providers",
       keyPolicy: "Provider keys stay private.",
       brainUrl: "http://127.0.0.1:8790",
@@ -81,7 +81,7 @@ describe("providers command", () => {
   it("renders localized provider guidance in Chinese", () => {
     setLang("zh");
     const output = renderProvidersInfo({
-      defaultRoute: "MiMo via local Brain router (auto)",
+      defaultRoute: "StepFun 3.7 Flash → MiMo V2.5 Pro via local Brain router (auto)",
       byokEntry: "Lynn 客户端 > 设置 > Providers",
       keyPolicy: "Provider keys stay private.",
       brainUrl: "http://127.0.0.1:8790",
@@ -147,13 +147,13 @@ describe("providers command", () => {
 
   it("formats the active route for the startup banner", () => {
     expect(activeRouteLabel({
-      defaultRoute: "MiMo via local Brain router (auto)",
+      defaultRoute: "StepFun 3.7 Flash → MiMo V2.5 Pro via local Brain router (auto)",
       activeProvider: "mimo",
       activeModel: "mimo-v2.5-pro",
     })).toBe("MiMo V2.5 Pro (mimo-v2.5-pro)");
     expect(activeRouteLabel({
-      defaultRoute: "MiMo via local Brain router (auto)",
-    })).toBe("MiMo via local Brain router (auto)");
+      defaultRoute: "StepFun 3.7 Flash → MiMo V2.5 Pro via local Brain router (auto)",
+    })).toBe("StepFun 3.7 Flash → MiMo V2.5 Pro via local Brain router (auto)");
   });
 
   it("saves a CLI BYOK provider profile without printing the raw key", async () => {
