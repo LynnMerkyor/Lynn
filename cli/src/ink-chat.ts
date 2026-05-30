@@ -11,6 +11,7 @@ import { resolveCliProviderProfile, type CliProviderProfile } from "./provider-p
 import { resolveEffectivePermissions } from "./permissions.js";
 import { displayCwd } from "./startup.js";
 import { CHAT_SLASH_COMMANDS, applyModeCommand, applyReasoningCommand, chatRouteLabel, renderMode, type ChatMode } from "./commands/chat.js";
+import { InkMarkdown } from "./ink-markdown.js";
 
 type Turn = {
   id: number;
@@ -158,20 +159,7 @@ function TurnView({ turn }: { turn: Turn }): React.ReactElement {
   }
   return React.createElement(Box, { marginTop: 1, flexDirection: "column" },
     turn.meta ? React.createElement(Text, { color: "gray" }, turn.meta) : null,
-    React.createElement(MarkdownText, { text: turn.text, error: turn.error }),
-  );
-}
-
-function MarkdownText({ text, error }: { text: string; error?: boolean }): React.ReactElement {
-  const lines = text.split(/\r?\n/);
-  return React.createElement(Box, { flexDirection: "column" },
-    ...lines.map((line, index) => {
-      if (error) return React.createElement(Text, { key: index, color: "red" }, line);
-      if (/^#{1,6}\s+/.test(line)) return React.createElement(Text, { key: index, color: "cyan", bold: true }, line.replace(/^#{1,6}\s+/, ""));
-      if (/^```/.test(line)) return React.createElement(Text, { key: index, color: "gray" }, line);
-      if (/^\s*[-*]\s+/.test(line)) return React.createElement(Text, { key: index }, `• ${line.replace(/^\s*[-*]\s+/, "")}`);
-      return React.createElement(Text, { key: index }, line || " ");
-    }),
+    React.createElement(InkMarkdown, { text: turn.text, error: turn.error }),
   );
 }
 

@@ -11,6 +11,7 @@ import { resolveEffectivePermissions } from "./permissions.js";
 import { resolveCliProviderProfile } from "./provider-profile.js";
 import { CLIENT_TOOL_DEFINITIONS } from "./tools/types.js";
 import { t } from "./i18n.js";
+import { InkDiffText, InkMarkdown } from "./ink-markdown.js";
 
 type CodeItem =
   | { id: number; kind: "user"; text: string }
@@ -285,7 +286,7 @@ function CodeItemView({ item }: { item: CodeItem }): React.ReactElement {
     const color = item.ok === false ? "red" : item.ok === true ? "green" : "cyan";
     return React.createElement(Box, { flexDirection: "column" },
       React.createElement(Text, { color }, `${item.ok === false ? "×" : item.ok === true ? "✓" : "•"} ${item.title}`),
-      item.detail ? React.createElement(DiffishText, { text: item.detail }) : null,
+      item.detail ? React.createElement(InkDiffText, { text: item.detail }) : null,
     );
   }
   return React.createElement(Text, { color: item.tone === "danger" ? "red" : item.tone === "success" ? "green" : "gray" }, item.text);
@@ -294,31 +295,13 @@ function CodeItemView({ item }: { item: CodeItem }): React.ReactElement {
 function ApprovalPrompt({ approval }: { approval: ApprovalState }): React.ReactElement {
   return React.createElement(Box, { marginTop: 1, borderStyle: "double", borderColor: "red", paddingX: 1, flexDirection: "column" },
     React.createElement(Text, { color: "red", bold: true }, `${approval.request.tool} requires approval`),
-    approval.request.preview ? React.createElement(DiffishText, { text: approval.request.preview }) : null,
+    approval.request.preview ? React.createElement(InkDiffText, { text: approval.request.preview }) : null,
     React.createElement(Text, null, "y approve · a approve all for this task · n deny"),
   );
 }
 
 function MarkdownText({ text }: { text: string }): React.ReactElement {
-  return React.createElement(Box, { flexDirection: "column" },
-    ...text.split(/\r?\n/).map((line, index) => {
-      if (/^#{1,6}\s+/.test(line)) return React.createElement(Text, { key: index, color: "cyan", bold: true }, line.replace(/^#{1,6}\s+/, ""));
-      if (/^\s*[-*]\s+/.test(line)) return React.createElement(Text, { key: index }, `• ${line.replace(/^\s*[-*]\s+/, "")}`);
-      return React.createElement(Text, { key: index }, line || " ");
-    }),
-  );
-}
-
-function DiffishText({ text }: { text: string }): React.ReactElement {
-  return React.createElement(Box, { flexDirection: "column" },
-    ...text.split(/\r?\n/).slice(0, 18).map((line, index) => {
-      if (line.startsWith("+")) return React.createElement(Text, { key: index, color: "green" }, line);
-      if (line.startsWith("-")) return React.createElement(Text, { key: index, color: "red" }, line);
-      if (line.startsWith("@@")) return React.createElement(Text, { key: index, color: "cyan" }, line);
-      if (line.startsWith("╭") || line.startsWith("***") || line.startsWith("diff ")) return React.createElement(Text, { key: index, color: "gray" }, line);
-      return React.createElement(Text, { key: index, color: "gray" }, line);
-    }),
-  );
+  return React.createElement(InkMarkdown, { text });
 }
 
 function InkShimmerText({ text, frame }: { text: string; frame: number }): React.ReactElement {
