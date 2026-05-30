@@ -4,6 +4,8 @@ import { providerProfilePath, readCliProviderProfile, redactApiKey } from "../pr
 import { resolveDataDir } from "../session/store.js";
 import { readVersionInfo } from "../version.js";
 import { brainRouteReadiness, fetchBrainProviderStatus, type BrainProviderStatus } from "../brain-status.js";
+import { parseBrainStreamPayload, parseSsePayloads } from "../brain-client.js";
+import { signedBrainHeaders } from "../brain-auth.js";
 
 export interface DoctorResult {
   ok: boolean;
@@ -12,6 +14,7 @@ export interface DoctorResult {
   brainUrl: string;
   brain: "ok" | "skipped" | "unreachable";
   brainProviders?: BrainProviderStatus | null;
+  brainSmoke?: BrainRouteSmokeResult | null;
   cliProvider: {
     configured: boolean;
     path: string;
@@ -22,6 +25,12 @@ export interface DoctorResult {
   };
   presets: string[];
   checks: Array<{ name: string; ok: boolean; message: string }>;
+}
+
+export interface BrainRouteSmokeResult {
+  ok: boolean;
+  provider?: string;
+  message: string;
 }
 
 export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
@@ -42,6 +51,7 @@ export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
 
   let brain: DoctorResult["brain"] = "skipped";
   let brainProviders: BrainProviderStatus | null = null;
+  let brainSmoke: BrainRouteSmokeResult | null = null;
   if (!hasFlag(args.flags, "offline")) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 1500);
@@ -58,6 +68,18 @@ export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
           ok: readiness.usable,
           message: readiness.message,
         });
+        if (readiness.usable) {
+          if (hasFlag(args.flags, "no-route-smoke")) {
+            checks.push({ name: "brain-smoke", ok: true, message: "skipped (--no-route-smoke)" });
+          } else {
+            brainSmoke = await smokeBrainRoute(brainUrl, 5000);
+            checks.push({
+              name: "brain-smoke",
+              ok: brainSmoke.ok,
+              message: brainSmoke.message,
+            });
+          }
+        }
       }
     } catch (error) {
       brain = "unreachable";
@@ -77,6 +99,7 @@ export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
     brainUrl,
     brain,
     brainProviders,
+    brainSmoke,
     cliProvider: {
       configured: !!profile,
       path: profilePath,
@@ -87,6 +110,78 @@ export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
     },
     presets,
     checks,
+  };
+}
+
+export async function smokeBrainRoute(brainUrl: string, timeoutMs = 5000): Promise<BrainRouteSmokeResult> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let activeProvider = "";
+  try {
+    const response = await fetch(new URL("/v1/chat/completions", brainUrl), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...signedBrainHeaders({ pathname: "/v1/chat/completions" }),
+      },
+      body: JSON.stringify({
+        model: "lynn-brain-router",
+        stream: true,
+        max_tokens: 8,
+        messages: [{ role: "user", content: "Reply with OK." }],
+        extra_body: { enable_thinking: false },
+      }),
+      signal: ctrl.signal,
+    });
+    if (!response.ok) {
+      return { ok: false, message: `request failed: ${response.status} ${response.statusText}`.trim() };
+    }
+    if (!response.body) return { ok: false, message: "request returned no response body" };
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+      buffer += decoder.decode(chunk, { stream: true });
+      const split = buffer.split(/\n\n+/);
+      buffer = split.pop() || "";
+      const verdict = inspectSmokeBlocks(split, (provider) => { activeProvider = provider || activeProvider; });
+      if (verdict) return withProvider(verdict, activeProvider);
+    }
+    buffer += decoder.decode();
+    const verdict = inspectSmokeBlocks([buffer], (provider) => { activeProvider = provider || activeProvider; });
+    if (verdict) return withProvider(verdict, activeProvider);
+    return { ok: false, provider: activeProvider || undefined, message: activeProvider ? `provider ${activeProvider} returned no assistant output` : "no assistant output" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, provider: activeProvider || undefined, message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function inspectSmokeBlocks(blocks: string[], onProvider: (provider: string) => void): BrainRouteSmokeResult | null {
+  for (const block of blocks) {
+    for (const payload of parseSsePayloads(`${block}\n\n`)) {
+      for (const event of parseBrainStreamPayload(payload)) {
+        if (event.type === "provider") onProvider(event.activeProvider);
+        if (event.type === "brain.error") {
+          return { ok: false, message: event.code ? `${event.error} (${event.code})` : event.error };
+        }
+        if (event.type === "assistant.delta" && event.text.trim()) {
+          return { ok: true, message: "route returned assistant output" };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function withProvider(result: BrainRouteSmokeResult, provider: string): BrainRouteSmokeResult {
+  if (!provider) return result;
+  return {
+    ...result,
+    provider,
+    message: result.ok ? `${result.message} via ${provider}` : `${result.message} via ${provider}`,
   };
 }
 
