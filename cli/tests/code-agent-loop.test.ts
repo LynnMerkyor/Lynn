@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
@@ -11,6 +11,7 @@ import { appendSessionTurn, readSessionLines, sessionIndexPath } from "../src/se
 
 let tmp = "";
 const cliRoot = fileURLToPath(new URL("..", import.meta.url));
+const pythonIt = hasPython3() ? it : it.skip;
 
 beforeEach(async () => {
   tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-agent-"));
@@ -36,6 +37,15 @@ function rawSsePayloads(payloads: string[]): string {
     "data: [DONE]",
     "",
   ].join("\n");
+}
+
+function hasPython3(): boolean {
+  try {
+    execFileSync("python3", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function withBrainServer(handler: (body: unknown, count: number) => string, run: (url: string) => Promise<void>): Promise<void> {
@@ -861,6 +871,158 @@ describe("code agent loop", () => {
     await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("lynn\n");
     expect(JSON.stringify(requestBodies[1])).toContain('"role":"tool"');
     expect(JSON.stringify(requestBodies[2])).toContain('"role":"tool"');
+  });
+
+  pythonIt("executes apply_patch after an interactive TTY approval", async () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+approved",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const requestBodies: unknown[] = [];
+    const provider = http.createServer((request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      expect(request.headers.authorization).toBe("Bearer sk-approval-test");
+      let raw = "";
+      request.on("data", (chunk) => { raw += String(chunk); });
+      request.on("end", () => {
+        const count = requestBodies.push(JSON.parse(raw));
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        if (count === 1) {
+          response.end(rawSsePayloads([
+            JSON.stringify({
+              choices: [{
+                delta: {
+                  tool_calls: [{
+                    index: 0,
+                    id: "call_patch",
+                    type: "function",
+                    function: { name: "apply_patch", arguments: JSON.stringify({ text: patch }) },
+                  }],
+                },
+              }],
+            }),
+            JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] }),
+          ]));
+          return;
+        }
+        response.end(sse("Interactive approval applied the patch."));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const script = `
+import os
+import pty
+import select
+import subprocess
+import sys
+import time
+
+node_bin, cwd, workspace, provider_url = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+master, slave = pty.openpty()
+env = os.environ.copy()
+env["NO_COLOR"] = "1"
+env["LYNN_LANG"] = "en"
+proc = subprocess.Popen(
+    [
+        node_bin,
+        "--import",
+        "tsx",
+        "src/cli.ts",
+        "code",
+        "change hello.txt to approved",
+        "--cwd",
+        workspace,
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        provider_url,
+        "--api-key",
+        "sk-approval-test",
+        "--model",
+        "approval-model",
+        "--approval",
+        "ask",
+        "--sandbox",
+        "workspace-write",
+        "--max-steps",
+        "3",
+    ],
+    cwd=cwd,
+    stdin=slave,
+    stdout=slave,
+    stderr=slave,
+    env=env,
+    close_fds=True,
+)
+os.close(slave)
+buf = b""
+approved = False
+deadline = time.time() + 10
+while time.time() < deadline:
+    readable, _, _ = select.select([master], [], [], 0.1)
+    if readable:
+        try:
+            chunk = os.read(master, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        buf += chunk
+        text = buf.decode("utf-8", errors="replace")
+        if (not approved) and "[y/n/a]" in text:
+            os.write(master, b"y\\r")
+            approved = True
+    if proc.poll() is not None:
+        break
+if proc.poll() is None:
+    proc.terminate()
+    try:
+        proc.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+text = buf.decode("utf-8", errors="replace")
+if not approved:
+    sys.stderr.write("approval prompt was not observed\\n")
+sys.stdout.write(text)
+sys.exit(proc.returncode if proc.returncode is not None else 124)
+`;
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn("python3", [
+        "-c",
+        script,
+        process.execPath,
+        cliRoot,
+        tmp,
+        `http://127.0.0.1:${address.port}/v1`,
+      ], {
+        cwd: cliRoot,
+        env: { ...process.env },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+      child.on("error", reject);
+      child.on("close", (code) => resolve({ code, stdout, stderr }));
+    });
+    await new Promise<void>((resolve) => provider.close(() => resolve()));
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("Allow apply_patch");
+    expect(result.stdout).toContain("Interactive approval applied the patch.");
+    await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("approved\n");
+    expect(JSON.stringify(requestBodies[1])).toContain('"role":"tool"');
   });
 
   it("carries cache/TPS usage into the final JSON task summary", async () => {
