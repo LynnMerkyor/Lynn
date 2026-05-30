@@ -8,6 +8,7 @@ import { stableRuntimePrefix } from "../../shared/runtime-instruction-frames.js"
 import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
 import { setLang } from "../src/i18n.js";
+import { computeStablePrefixDiagnostics } from "../src/session/prefix-diagnostics.js";
 
 let tmp = "";
 
@@ -330,6 +331,7 @@ describe("code tools", () => {
     expect(prefix).toContain("cacheable_context:Repository root: /repo");
     expect(prefix).not.toContain("approval=ask");
     expect(prefix).toBe(yoloPrefix);
+    expect(computeStablePrefixDiagnostics(frames).stablePrefixHash).toBe(computeStablePrefixDiagnostics(yoloFrames).stablePrefixHash);
     expect(frames.find((frame) => frame.kind === "permission_state")).toMatchObject({ stable: false, cacheable: false });
     expect(frames.find((frame) => frame.kind === "tool_guard")).toMatchObject({ stable: false, cacheable: false });
   });

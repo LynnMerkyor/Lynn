@@ -90,6 +90,11 @@ describe("sessions command", () => {
             durationMs: 1000,
           },
         ],
+        cacheDiagnostics: {
+          stablePrefixHash: "prefixaaa",
+          stablePrefixChars: 1200,
+          stableFrameCount: 2,
+        },
       },
     });
 
@@ -99,6 +104,8 @@ describe("sessions command", () => {
     expect(output).toContain("turns: user 1");
     expect(output).toContain("usage: 120 tokens");
     expect(output).toContain("cache 80 (80%)");
+    expect(output).toContain("prefixaaa");
+    expect(output).toContain("1200 chars");
     expect(output).toContain("20.0 TPS");
     expect(output).toContain("read_file x1");
   });

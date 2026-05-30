@@ -19,11 +19,14 @@ export interface CliSessionStats {
   cacheMissTokens: number;
   cacheHitRatio: number | null;
   avgTps: number | null;
+  stablePrefixes: Array<{ hash: string; count: number; chars: number | null; frames: number | null }>;
+  prefixDrift: boolean;
   tools: Array<{ name: string; count: number }>;
 }
 
 export function computeSessionStats(lines: readonly CliSessionLine[]): CliSessionStats {
   const toolCounts = new Map<string, number>();
+  const prefixCounts = new Map<string, { count: number; chars: number | null; frames: number | null }>();
   const usages: CliUsageRecord[] = [];
   let userTurns = 0;
   let assistantTurns = 0;
@@ -41,6 +44,15 @@ export function computeSessionStats(lines: readonly CliSessionLine[]): CliSessio
       metadataLines += 1;
       const records = usageRecordsFromMetadata(line.data);
       usages.push(...records);
+      const prefix = stablePrefixFromMetadata(line.data);
+      if (prefix) {
+        const previous = prefixCounts.get(prefix.hash);
+        prefixCounts.set(prefix.hash, {
+          count: (previous?.count || 0) + 1,
+          chars: prefix.chars ?? previous?.chars ?? null,
+          frames: prefix.frames ?? previous?.frames ?? null,
+        });
+      }
     }
   }
 
@@ -96,6 +108,10 @@ export function computeSessionStats(lines: readonly CliSessionLine[]): CliSessio
     cacheMissTokens,
     cacheHitRatio,
     avgTps,
+    stablePrefixes: [...prefixCounts.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([hash, value]) => ({ hash, ...value })),
+    prefixDrift: prefixCounts.size > 1,
     tools: [...toolCounts.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, count]) => ({ name, count })),
@@ -117,11 +133,13 @@ export function renderSessionStats(sessionPath: string, stats: CliSessionStats):
         stats.avgTps !== null ? `${formatTps(stats.avgTps)} TPS` : null,
       ].filter(Boolean).join(" · ")
     : "no usage records";
+  const prefix = renderPrefixStats(stats);
   return [
     "Lynn session stats",
     `path: ${sessionPath}`,
     `turns: user ${stats.userTurns} · assistant ${stats.assistantTurns} · tool ${stats.toolResults} · metadata ${stats.metadataLines}`,
     `usage: ${usage}`,
+    `prefix: ${prefix}`,
     `tools: ${tools}`,
   ].join("\n") + "\n";
 }
@@ -145,6 +163,20 @@ function usageRecordsFromMetadata(data: Record<string, unknown> | undefined): Cl
   return [];
 }
 
+function stablePrefixFromMetadata(data: Record<string, unknown> | undefined): { hash: string; chars: number | null; frames: number | null } | null {
+  const diagnostics = objectRecord(data?.cacheDiagnostics);
+  if (!diagnostics) return null;
+  const hash = typeof diagnostics.stablePrefixHash === "string" ? diagnostics.stablePrefixHash : "";
+  if (!hash) return null;
+  const chars = typeof diagnostics.stablePrefixChars === "number" && Number.isFinite(diagnostics.stablePrefixChars)
+    ? diagnostics.stablePrefixChars
+    : null;
+  const frames = typeof diagnostics.stableFrameCount === "number" && Number.isFinite(diagnostics.stableFrameCount)
+    ? diagnostics.stableFrameCount
+    : null;
+  return { hash, chars, frames };
+}
+
 function objectRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -166,4 +198,17 @@ function formatTps(value: number): string {
   if (value >= 100) return String(Math.round(value));
   if (value >= 10) return value.toFixed(1);
   return value.toFixed(2);
+}
+
+function renderPrefixStats(stats: CliSessionStats): string {
+  if (!stats.stablePrefixes.length) return "no stable prefix records";
+  const summary = stats.stablePrefixes
+    .map((entry) => [
+      entry.hash,
+      `x${entry.count}`,
+      entry.chars !== null ? `${entry.chars} chars` : null,
+      entry.frames !== null ? `${entry.frames} frames` : null,
+    ].filter(Boolean).join(" · "))
+    .join("; ");
+  return stats.prefixDrift ? `DRIFT · ${summary}` : summary;
 }

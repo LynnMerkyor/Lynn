@@ -82,6 +82,11 @@ describe("CLI session store", () => {
             durationMs: 500,
           },
         ],
+        cacheDiagnostics: {
+          stablePrefixHash: "abc123",
+          stablePrefixChars: 42,
+          stableFrameCount: 2,
+        },
       },
     });
 
@@ -95,10 +100,35 @@ describe("CLI session store", () => {
       totalTokens: 15,
       cacheHitTokens: 8,
       cacheMissTokens: 2,
+      stablePrefixes: [{ hash: "abc123", count: 1, chars: 42, frames: 2 }],
+      prefixDrift: false,
       tools: [{ name: "grep", count: 1 }],
     });
     expect(stats.cacheHitRatio).toBe(0.8);
     expect(stats.avgTps).toBe(10);
+  });
+
+  it("flags stable prefix drift across replay metadata", async () => {
+    const sessionPath = await appendSessionLine({
+      dataDir: tmp,
+      cwd: "/repo",
+      line: { type: "user", content: "start" },
+    });
+    await appendSessionMetadata({
+      dataDir: tmp,
+      sessionPath,
+      data: { cacheDiagnostics: { stablePrefixHash: "one", stablePrefixChars: 10, stableFrameCount: 1 } },
+    });
+    await appendSessionMetadata({
+      dataDir: tmp,
+      sessionPath,
+      data: { cacheDiagnostics: { stablePrefixHash: "two", stablePrefixChars: 12, stableFrameCount: 1 } },
+    });
+
+    const stats = computeSessionStats(await readSessionLines(sessionPath));
+
+    expect(stats.prefixDrift).toBe(true);
+    expect(stats.stablePrefixes.map((entry) => entry.hash)).toEqual(["one", "two"]);
   });
 
   it("updates the session index while appending incremental checkpoint lines", async () => {

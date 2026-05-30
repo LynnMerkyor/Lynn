@@ -27,6 +27,7 @@ import { renderProvidersInfo, resolveProvidersInfo, runProviders } from "./provi
 import { readVersionInfo } from "../version.js";
 import { buildImagesContentParts, parseImageList } from "../media.js";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, readSessionLines, resolveDataDir } from "../session/store.js";
+import { computeStablePrefixDiagnostics } from "../session/prefix-diagnostics.js";
 import { normalizeRuntimeInstructionFrame, renderRuntimeInstructionFrame, stableRuntimePrefix, type RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
 
 const pExecFile = promisify(execFile);
@@ -550,6 +551,7 @@ async function runCodeTask(
         reasoning,
         maxSteps: stepBudget,
         maxStepsReached: final.maxStepsReached,
+        cacheDiagnostics: computeStablePrefixDiagnostics(buildCodeRuntimeFrames({ context, toolCtx })),
         usageSummary: final.usageSummary,
         usageRecords: final.usageRecords,
         resumedFrom: resumePath || null,
