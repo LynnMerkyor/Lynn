@@ -1,5 +1,6 @@
 import path from "node:path";
 import { getStringFlag, type ParsedArgs } from "../args.js";
+import { resumeCommandForSession } from "./code.js";
 import { writeJsonLine } from "../jsonl.js";
 import { listSessions, readSessionLines, resolveDataDir } from "../session/store.js";
 
@@ -18,16 +19,25 @@ export async function runSessions(args: ParsedArgs, json: boolean): Promise<numb
     return 0;
   }
 
-  if (subcommand === "show" || subcommand === "resume") {
+  if (subcommand === "show") {
     const sessionPath = args.positionals[1] || getStringFlag(args.flags, "session");
     if (!sessionPath) throw new Error(`sessions ${subcommand} requires a session path`);
     const lines = await readSessionLines(sessionPath);
-    if (json) writeJsonLine({ type: `sessions.${subcommand}`, sessionPath, lines });
+    if (json) writeJsonLine({ type: "sessions.show", sessionPath, lines });
     else {
       for (const line of lines) {
         process.stdout.write(`[${line.type}] ${line.content || JSON.stringify(line.data || {})}\n`);
       }
     }
+    return 0;
+  }
+
+  if (subcommand === "resume") {
+    const sessionPath = args.positionals[1] || getStringFlag(args.flags, "session");
+    if (!sessionPath) throw new Error("sessions resume requires a session path");
+    const command = resumeCommandForSession(sessionPath);
+    if (json) writeJsonLine({ type: "sessions.resume_command", sessionPath, command });
+    else process.stdout.write(`继续这个代码会话:\n  ${command}\n`);
     return 0;
   }
 
