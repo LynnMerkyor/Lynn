@@ -427,6 +427,13 @@ interface ToolApprovalRequest {
   session?: { approveAll: boolean };
 }
 
+class ToolApprovalRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ToolApprovalRequiredError";
+  }
+}
+
 export function isDangerousClientTool(tool: ClientToolName): boolean {
   return !!CLIENT_TOOL_DEFINITIONS.find((definition) => definition.name === tool)?.dangerous;
 }
@@ -442,7 +449,7 @@ async function resolveToolApproval(request: ToolApprovalRequest): Promise<ToolAp
     throw new Error(`${request.tool} requires approval; current mode is never`);
   }
   if (!canPromptForDangerousTool(request.input, request.output, request.json)) {
-    throw new Error(`${request.tool} requires --approval yolo or an interactive confirmation`);
+    throw new ToolApprovalRequiredError(`${request.tool} requires --approval yolo or an interactive confirmation`);
   }
   const rl = readline.createInterface({ input: request.input, output: request.output, terminal: true });
   try {
@@ -823,6 +830,18 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
             ...toolRequest.args,
           });
         } catch (error) {
+          if (inputData.json && error instanceof ToolApprovalRequiredError) {
+            writeJsonLine({
+              type: "code.tool.approval_required",
+              ts: nowIso(),
+              status: "waiting_approval",
+              tool: toolRequest.tool,
+              args: redactToolArgs(toolRequest),
+              approval: inputData.toolCtx.approval,
+              sandbox: inputData.toolCtx.sandbox || "workspace-write",
+              message: error.message,
+            });
+          }
           toolResult = {
             ok: false,
             tool: toolRequest.tool,

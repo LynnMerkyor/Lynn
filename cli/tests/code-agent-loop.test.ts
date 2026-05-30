@@ -158,6 +158,49 @@ describe("code agent loop", () => {
     expect(output).toContain("Changed hello.txt");
   });
 
+  it("emits approval_required for dangerous tools in non-interactive JSON mode", async () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+lynn",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer(() => JSON.stringify({ tool: "apply_patch", args: { patch } }), async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "change hello to lynn",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--approval",
+          "ask",
+          "--max-steps",
+          "1",
+          "--json",
+        ]))).resolves.toBe(2);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain('"type":"code.tool.approval_required"');
+    expect(output).toContain('"status":"waiting_approval"');
+    expect(output).toContain('"tool":"apply_patch"');
+    expect(output).toContain('"type":"code.tool.result"');
+    expect(output).toContain('"ok":false');
+  });
+
   it("executes multiple model-requested tool calls from one turn", async () => {
     const original = process.stdout.write;
     let output = "";
