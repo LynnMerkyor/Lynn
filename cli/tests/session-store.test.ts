@@ -86,6 +86,8 @@ describe("CLI session store", () => {
           stablePrefixHash: "abc123",
           stablePrefixChars: 42,
           stableFrameCount: 2,
+          volatileFrameCount: 2,
+          resumeMessageCount: 3,
         },
       },
     });
@@ -100,7 +102,14 @@ describe("CLI session store", () => {
       totalTokens: 15,
       cacheHitTokens: 8,
       cacheMissTokens: 2,
-      stablePrefixes: [{ hash: "abc123", count: 1, chars: 42, frames: 2 }],
+      stablePrefixes: [{
+        hash: "abc123",
+        count: 1,
+        chars: 42,
+        frames: 2,
+        volatileFrames: 2,
+        resumedMessages: 3,
+      }],
       prefixDrift: false,
       tools: [{ name: "grep", count: 1 }],
     });

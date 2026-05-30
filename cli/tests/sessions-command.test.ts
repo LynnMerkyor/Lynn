@@ -94,6 +94,8 @@ describe("sessions command", () => {
           stablePrefixHash: "prefixaaa",
           stablePrefixChars: 1200,
           stableFrameCount: 2,
+          volatileFrameCount: 2,
+          resumeMessageCount: 4,
         },
       },
     });
@@ -106,6 +108,8 @@ describe("sessions command", () => {
     expect(output).toContain("cache 80 (80%)");
     expect(output).toContain("prefixaaa");
     expect(output).toContain("1200 chars");
+    expect(output).toContain("2 volatile");
+    expect(output).toContain("4 resumed");
     expect(output).toContain("20.0 TPS");
     expect(output).toContain("read_file x1");
   });
@@ -158,6 +162,8 @@ describe("sessions command", () => {
           stablePrefixHash: "prefixaaa",
           stablePrefixChars: 1200,
           stableFrameCount: 2,
+          volatileFrameCount: 2,
+          resumeMessageCount: 4,
         },
       },
     });
@@ -174,6 +180,8 @@ describe("sessions command", () => {
     expect(output).toContain("cache 80 · miss 20 (80%)");
     expect(output).toContain("cache prefix prefixaaa");
     expect(output).toContain("1200 chars");
+    expect(output).toContain("2 volatile");
+    expect(output).toContain("4 resumed");
     expect(output).toContain("20.0 TPS");
   });
 

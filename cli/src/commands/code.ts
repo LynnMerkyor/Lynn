@@ -27,8 +27,8 @@ import { renderProvidersInfo, resolveProvidersInfo, runProviders } from "./provi
 import { readVersionInfo } from "../version.js";
 import { buildImagesContentParts, parseImageList } from "../media.js";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, readSessionLines, resolveDataDir } from "../session/store.js";
-import { computeStablePrefixDiagnostics } from "../session/prefix-diagnostics.js";
-import { normalizeRuntimeInstructionFrame, renderRuntimeInstructionFrame, stableRuntimePrefix, type RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
+import { buildCodeContextMessages, computeCodeContextLayerDiagnostics } from "../context-layers.js";
+import type { RuntimeInstructionFrame } from "../../../shared/runtime-instruction-frames.js";
 
 const pExecFile = promisify(execFile);
 
@@ -551,7 +551,7 @@ async function runCodeTask(
         reasoning,
         maxSteps: stepBudget,
         maxStepsReached: final.maxStepsReached,
-        cacheDiagnostics: computeStablePrefixDiagnostics(buildCodeRuntimeFrames({ context, toolCtx })),
+        cacheDiagnostics: computeCodeContextLayerDiagnostics(buildCodeRuntimeFrames({ context, toolCtx }), resumeMessages.length),
         usageSummary: final.usageSummary,
         usageRecords: final.usageRecords,
         resumedFrom: resumePath || null,
@@ -765,19 +765,11 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
   const initialContent = inputData.imagePaths?.length
     ? await buildImagesContentParts(inputData.imagePaths, initialPrompt)
     : initialPrompt;
-  const volatileRuntimeMessages: ChatMessage[] = frames
-    .map((frame) => normalizeRuntimeInstructionFrame(frame))
-    .filter((frame) => !frame.stable || !frame.cacheable)
-    .map((frame) => ({ role: "user" as const, content: renderRuntimeInstructionFrame(frame) }));
-  const messages: ChatMessage[] = [
-    {
-      role: "system",
-      content: stableRuntimePrefix(frames),
-    },
-    ...(inputData.resumeMessages || []),
-    ...volatileRuntimeMessages,
-    { role: "user", content: initialContent },
-  ];
+  const { messages } = buildCodeContextMessages({
+    frames,
+    resumeMessages: inputData.resumeMessages,
+    currentUserContent: initialContent,
+  });
   let finalText = "";
   let latestUsageSummary: string | null = null;
   const usageRecords: Array<{ usage: unknown; durationMs: number }> = [];

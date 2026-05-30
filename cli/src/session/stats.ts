@@ -20,14 +20,27 @@ export interface CliSessionStats {
   cacheMissTokens: number;
   cacheHitRatio: number | null;
   avgTps: number | null;
-  stablePrefixes: Array<{ hash: string; count: number; chars: number | null; frames: number | null }>;
+  stablePrefixes: Array<{
+    hash: string;
+    count: number;
+    chars: number | null;
+    frames: number | null;
+    volatileFrames: number | null;
+    resumedMessages: number | null;
+  }>;
   prefixDrift: boolean;
   tools: Array<{ name: string; count: number }>;
 }
 
 export function computeSessionStats(lines: readonly CliSessionLine[]): CliSessionStats {
   const toolCounts = new Map<string, number>();
-  const prefixCounts = new Map<string, { count: number; chars: number | null; frames: number | null }>();
+  const prefixCounts = new Map<string, {
+    count: number;
+    chars: number | null;
+    frames: number | null;
+    volatileFrames: number | null;
+    resumedMessages: number | null;
+  }>();
   const usages: CliUsageRecord[] = [];
   let userTurns = 0;
   let assistantTurns = 0;
@@ -52,6 +65,8 @@ export function computeSessionStats(lines: readonly CliSessionLine[]): CliSessio
           count: (previous?.count || 0) + 1,
           chars: prefix.chars ?? previous?.chars ?? null,
           frames: prefix.frames ?? previous?.frames ?? null,
+          volatileFrames: prefix.volatileFrames ?? previous?.volatileFrames ?? null,
+          resumedMessages: prefix.resumedMessages ?? previous?.resumedMessages ?? null,
         });
       }
     }
@@ -159,7 +174,13 @@ function usageRecordsFromMetadata(data: Record<string, unknown> | undefined): Cl
   return [];
 }
 
-function stablePrefixFromMetadata(data: Record<string, unknown> | undefined): { hash: string; chars: number | null; frames: number | null } | null {
+function stablePrefixFromMetadata(data: Record<string, unknown> | undefined): {
+  hash: string;
+  chars: number | null;
+  frames: number | null;
+  volatileFrames: number | null;
+  resumedMessages: number | null;
+} | null {
   const diagnostics = objectRecord(data?.cacheDiagnostics);
   if (!diagnostics) return null;
   const hash = typeof diagnostics.stablePrefixHash === "string" ? diagnostics.stablePrefixHash : "";
@@ -170,7 +191,13 @@ function stablePrefixFromMetadata(data: Record<string, unknown> | undefined): { 
   const frames = typeof diagnostics.stableFrameCount === "number" && Number.isFinite(diagnostics.stableFrameCount)
     ? diagnostics.stableFrameCount
     : null;
-  return { hash, chars, frames };
+  const volatileFrames = typeof diagnostics.volatileFrameCount === "number" && Number.isFinite(diagnostics.volatileFrameCount)
+    ? diagnostics.volatileFrameCount
+    : null;
+  const resumedMessages = typeof diagnostics.resumeMessageCount === "number" && Number.isFinite(diagnostics.resumeMessageCount)
+    ? diagnostics.resumeMessageCount
+    : null;
+  return { hash, chars, frames, volatileFrames, resumedMessages };
 }
 
 function objectRecord(value: unknown): Record<string, unknown> | null {
@@ -204,6 +231,8 @@ function renderPrefixStats(stats: CliSessionStats): string {
       `x${entry.count}`,
       entry.chars !== null ? `${entry.chars} chars` : null,
       entry.frames !== null ? `${entry.frames} frames` : null,
+      entry.volatileFrames !== null ? `${entry.volatileFrames} volatile` : null,
+      entry.resumedMessages ? `${entry.resumedMessages} resumed` : null,
     ].filter(Boolean).join(" · "))
     .join("; ");
   return stats.prefixDrift ? `DRIFT · ${summary}` : summary;

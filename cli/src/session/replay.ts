@@ -126,10 +126,14 @@ function summarizePrefix(data: Record<string, unknown>): string | null {
   if (!hash) return null;
   const chars = typeof diagnostics?.stablePrefixChars === "number" ? diagnostics.stablePrefixChars : null;
   const frames = typeof diagnostics?.stableFrameCount === "number" ? diagnostics.stableFrameCount : null;
+  const volatile = typeof diagnostics?.volatileFrameCount === "number" ? diagnostics.volatileFrameCount : null;
+  const resumed = typeof diagnostics?.resumeMessageCount === "number" ? diagnostics.resumeMessageCount : null;
   return [
     `cache prefix ${hash}`,
     chars !== null ? `${chars} chars` : null,
     frames !== null ? `${frames} frames` : null,
+    volatile !== null ? `${volatile} volatile` : null,
+    resumed ? `${resumed} resumed` : null,
   ].filter(Boolean).join(" · ");
 }
 
