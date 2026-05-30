@@ -8,6 +8,8 @@ import { TerminalSpinner } from "../terminal-spinner.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
 import { t } from "../i18n.js";
 import { buildImagesContentParts, parseImageList } from "../media.js";
+import { resetCliRuntimeMessages } from "../runtime-context.js";
+import { chatRouteLabel } from "./chat.js";
 
 export interface PromptOptions {
   json?: boolean;
@@ -71,12 +73,16 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   const startedAt = Date.now();
   if (!options.json) spinner.start();
   try {
-    const messages = imagePaths.length
-      ? [{ role: "user" as const, content: await buildImagesContentParts(imagePaths, prompt) }]
-      : undefined;
+    const messages = [
+      ...resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile)),
+      {
+        role: "user" as const,
+        content: imagePaths.length ? await buildImagesContentParts(imagePaths, prompt) : prompt,
+      },
+    ];
     for await (const event of streamBrainChat({
       brainUrl,
-      ...(messages ? { messages } : { prompt }),
+      messages,
       reasoning,
       fallbackProvider: cliProvider?.profile,
     })) {

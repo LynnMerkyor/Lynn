@@ -16,6 +16,7 @@ import { completeSlash, normalizeSlashInput } from "../completion.js";
 import { resolveEffectivePermissions } from "../permissions.js";
 import { HistoryNavigator } from "../history.js";
 import { readInteractiveLine } from "../interactive-line.js";
+import { refreshCliRuntimeSystemMessage, resetCliRuntimeMessages } from "../runtime-context.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/exit",
@@ -61,7 +62,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   let reasoning = parseReasoningOptions(args);
   const mode = await resolveChatMode(args);
   let cliProvider = await resolveCliProviderProfile(args);
-  const messages: ChatMessage[] = [];
+  const messages: ChatMessage[] = resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile));
   const histFile = historyPath();
   const history = loadHistory(histFile);
   const rl = !input.isTTY
@@ -132,6 +133,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
         if (shouldRefreshProviderRoute(providerCommand)) {
           cliProvider = await resolveCliProviderProfile(providerCommand) || await resolveCliProviderProfile(args);
           const nextRoute = chatRouteLabel(cliProvider?.profile);
+          refreshCliRuntimeSystemMessage(messages, nextRoute);
           const changed = previousRoute !== nextRoute;
           output.write(`\n${t(changed ? "chat.providers.routeReloaded" : "chat.providers.routeUnchanged", { route: nextRoute })}\n\n`);
         } else if (code === 0) {
@@ -146,13 +148,13 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       output.write(`${t("chat.providers.usage")}\n\n`);
       return "continue";
     }
-    if (text.startsWith("/")) {
-      output.write(`${t("slash.unknown")}\n\n`);
+    if (text === "/clear") {
+      messages.splice(0, messages.length, ...resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile)));
+      output.write(`${t("chat.cleared")}\n\n`);
       return "continue";
     }
-    if (text === "/clear") {
-      messages.length = 0;
-      output.write(`${t("chat.cleared")}\n\n`);
+    if (text.startsWith("/")) {
+      output.write(`${t("slash.unknown")}\n\n`);
       return "continue";
     }
 

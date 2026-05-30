@@ -15,6 +15,7 @@ import { CHAT_SLASH_COMMANDS, applyModeCommand, applyReasoningCommand, chatRoute
 import { InkMarkdown } from "./ink-markdown.js";
 import { handleInkProviderCommand } from "./ink-provider-commands.js";
 import { InkInputLine } from "./ink-input-line.js";
+import { refreshCliRuntimeSystemMessage, resetCliRuntimeMessages } from "./runtime-context.js";
 
 type Turn = {
   id: number;
@@ -65,7 +66,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
   const [provider, setProvider] = useState(chatRouteLabel(props.fallbackProvider));
   const [usage, setUsage] = useState<string | null>(null);
   const [history] = useState(() => new HistoryNavigator(loadHistory(historyPath())));
-  const messages = useMemo<ChatMessage[]>(() => [], []);
+  const messages = useMemo<ChatMessage[]>(() => resetCliRuntimeMessages(chatRouteLabel(props.fallbackProvider)), [props.fallbackProvider]);
 
   useEffect(() => {
     if (!busy) return;
@@ -254,11 +255,18 @@ async function submitInput(inputData: {
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("chat.help") }]);
     return;
   }
+  if (text === "/clear") {
+    inputData.messages.splice(0, inputData.messages.length, ...resetCliRuntimeMessages(chatRouteLabel(inputData.fallbackProvider)));
+    inputData.setTurns([]);
+    return;
+  }
   const providerCommand = await handleInkProviderCommand(text, inputData.props.args);
   if (providerCommand.handled) {
     if (providerCommand.refreshedProvider !== undefined) {
       inputData.setFallbackProvider(providerCommand.refreshedProvider);
-      inputData.setProvider(chatRouteLabel(providerCommand.refreshedProvider));
+      const nextRoute = chatRouteLabel(providerCommand.refreshedProvider);
+      refreshCliRuntimeSystemMessage(inputData.messages, nextRoute);
+      inputData.setProvider(nextRoute);
     }
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: providerCommand.message }]);
     return;

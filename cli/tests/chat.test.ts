@@ -280,8 +280,13 @@ describe("chat mode controls", () => {
     expect(JSON.parse(requestBody)).toMatchObject({
       model: "chat-model",
       stream: true,
-      messages: [{ role: "user", content: "hi" }],
     });
+    const parsed = JSON.parse(requestBody) as { messages?: Array<{ role?: string; content?: unknown }> };
+    expect(parsed.messages?.[0]).toMatchObject({
+      role: "system",
+      content: expect.stringContaining("Current model route shown to the user: CLI BYOK: chat-model"),
+    });
+    expect(parsed.messages?.at(-1)).toMatchObject({ role: "user", content: "hi" });
   });
 
   pythonIt("lets bare Lynn use CLI BYOK in a TTY when Brain is offline", async () => {
@@ -397,8 +402,13 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
     expect(JSON.parse(requestBody)).toMatchObject({
       model: "bare-model",
       stream: true,
-      messages: [{ role: "user", content: "hi" }],
     });
+    const parsed = JSON.parse(requestBody) as { messages?: Array<{ role?: string; content?: unknown }> };
+    expect(parsed.messages?.[0]).toMatchObject({
+      role: "system",
+      content: expect.stringContaining("Current model route shown to the user: CLI BYOK: bare-model"),
+    });
+    expect(parsed.messages?.at(-1)).toMatchObject({ role: "user", content: "hi" });
   });
 
   pythonIt("keeps bare Lynn in a TTY REPL when Brain is offline", async () => {

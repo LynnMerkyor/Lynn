@@ -35,8 +35,13 @@ describe("prompt stdin handling", () => {
         expect(JSON.parse(body)).toMatchObject({
           model: "command-model",
           stream: true,
-          messages: [{ role: "user", content: "hello" }],
         });
+        const parsed = JSON.parse(body) as { messages?: Array<{ role?: string; content?: unknown }> };
+        expect(parsed.messages?.[0]).toMatchObject({
+          role: "system",
+          content: expect.stringContaining("Current model route shown to the user: CLI BYOK: command-model"),
+        });
+        expect(parsed.messages?.at(-1)).toMatchObject({ role: "user", content: "hello" });
         response.writeHead(200, { "content-type": "text/event-stream" });
         response.end([
           "data: {\"choices\":[{\"delta\":{\"content\":\"command byok ok\"}}]}",
@@ -133,7 +138,11 @@ describe("prompt stdin handling", () => {
     }
 
     const parsed = JSON.parse(body) as { messages?: Array<{ content?: unknown }> };
-    const content = parsed.messages?.[0]?.content;
+    expect(parsed.messages?.[0]).toMatchObject({
+      role: "system",
+      content: expect.stringContaining("Current model route shown to the user: CLI BYOK: command-model"),
+    });
+    const content = parsed.messages?.at(-1)?.content;
     expect(Array.isArray(content)).toBe(true);
     expect(JSON.stringify(content)).toContain("data:image/png;base64");
     expect(output).toContain("\"images\":[");
