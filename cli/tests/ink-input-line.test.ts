@@ -38,6 +38,12 @@ describe("Ink input slash hints", () => {
     expect(slashPaletteItems("hello", ["/help"])).toEqual([]);
   });
 
+  it("labels yolo as the silent factory command", () => {
+    const items = slashPaletteItems("/yo", ["/help", "/yolo", "/ask"]);
+
+    expect(items).toEqual([{ command: "/yolo", label: "静默工厂" }]);
+  });
+
   it("normalizes full-width slash from Chinese IMEs", () => {
     expect(normalizeSlashInput("／model")).toBe("/model");
   });

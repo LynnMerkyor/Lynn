@@ -20,6 +20,20 @@ export async function runAgents(args: ParsedArgs, json: boolean): Promise<number
     const kind = agent.kind === "built-in" ? "profile" : "external";
     lines.push(`${status} ${agent.id.padEnd(16)} ${kind.padEnd(8)} ${agent.label.padEnd(30)} ${agent.availability}`);
   }
+  lines.push("", t("agents.headless.title"));
+  lines.push(`  ${t("agents.node.prereq")}`);
+  lines.push(`  ${t("agents.install.title")}`);
+  lines.push(`  npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz`);
+  lines.push("");
+  lines.push(`  ${t("agents.launch.title")}`);
+  lines.push(`  Lynn`);
+  lines.push(`  Lynn code`);
+  lines.push(`  Lynn agents`);
+  lines.push("");
+  lines.push(`  ${t("agents.headless.commands")}`);
+  lines.push(`  Lynn code -p "fix tests" --json --cwd /repo --approval yolo --sandbox workspace-write --save-session`);
+  lines.push(`  Lynn worker run --brief task.md --worktree /repo --jsonl --approval yolo --sandbox workspace-write`);
+  lines.push(`  Lynn worker run --brief task.md --worktree /repo --agent custom --agent-command "your command" --jsonl`);
   lines.push("", t("agents.tip"));
   process.stdout.write(`${lines.join("\n")}\n`);
   return 0;

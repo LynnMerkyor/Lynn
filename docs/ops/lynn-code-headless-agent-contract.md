@@ -10,6 +10,72 @@ call Lynn Code without an interactive terminal.
 Use `Lynn code -p "<task>" --json --cwd <worktree>` to run a coding task
 non-interactively and consume line-delimited JSON events.
 
+## Agent Quick Contract
+
+This is the short contract another coding agent should read first:
+
+```bash
+# Prerequisite: Node.js 20 LTS or 22 LTS with npm.
+# macOS: brew install node@20
+# macOS/Linux: nvm install 20 && nvm use 20
+# Windows: winget install OpenJS.NodeJS.LTS
+
+# Install or update Lynn CLI.
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz
+
+# Verify the binary without needing a model backend.
+Lynn version
+Lynn doctor --offline
+
+# Human launch commands.
+Lynn
+Lynn code
+Lynn agents
+
+# One-shot prompt. JSONL on stdout, exits when complete.
+Lynn -p "summarize this repository" --json --cwd /path/to/repo
+
+# Headless coding agent. Use this inside an isolated worktree.
+Lynn code -p "fix the failing tests, run tests, summarize the diff" \
+  --json \
+  --cwd /path/to/worktree \
+  --approval yolo \
+  --sandbox workspace-write \
+  --save-session
+
+# Long background task with resumable checkpoints.
+Lynn code -p "complete the migration until tests pass" \
+  --json \
+  --cwd /path/to/worktree \
+  --approval yolo \
+  --sandbox workspace-write \
+  --long \
+  --max-steps 1000 \
+  --save-session
+
+# GUI Fleet worker adapter. Emits Fleet JSONL, not human prose.
+Lynn worker run --brief task.md --worktree /path/to/worktree \
+  --jsonl \
+  --approval yolo \
+  --sandbox workspace-write
+
+# Wrap a different CLI under Lynn Fleet.
+Lynn worker run --brief task.md --worktree /path/to/worktree \
+  --agent custom \
+  --agent-command "your-cli --json" \
+  --jsonl
+```
+
+Rules for agents:
+
+- Use `--json` or `--jsonl`; never parse the human Ink TUI.
+- Always pass `--cwd` / `--worktree`.
+- Use `--approval yolo --sandbox workspace-write` only in an isolated git
+  worktree.
+- Read `code.task.finished.resumeCommand` if max steps are reached.
+- Ignore unknown event types; key off `type`.
+- Treat `code.tool.ledger` as source-of-truth for chained tool values.
+
 ## Supported Entry Points
 
 All three forms below run the same code agent path:
@@ -162,4 +228,3 @@ paths in the interactive TUI can include image, audio, and video files.
 6. Treat `code.tool.ledger` as source-of-truth for chained tool values.
 7. Use `--save-session` for long or important tasks.
 8. Use `--approval yolo` only in an isolated worktree.
-

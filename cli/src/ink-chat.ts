@@ -22,6 +22,7 @@ import { analyzePastedContext, appendPastedText, parseImagePromptCommand, summar
 import { buildImagesContentParts } from "./media.js";
 import { buildMemoryContextFrameSync, handleMemorySlashCommand } from "./session/memory.js";
 import { resolveDataDir } from "./session/store.js";
+import { rotatingPlaceholder } from "./ink-placeholders.js";
 
 type Turn = {
   id: number;
@@ -95,8 +96,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
   const messages = useMemo<ChatMessage[]>(() => resetCliRuntimeMessages(chatRouteLabel(props.fallbackProvider), memoryFrame), [props.fallbackProvider]);
 
   useEffect(() => {
-    if (!busy) return;
-    const timer = setInterval(() => setFrame((value) => value + 1), 90);
+    const timer = setInterval(() => setFrame((value) => value + 1), busy ? 90 : 4_000);
     return () => clearInterval(timer);
   }, [busy]);
 
@@ -236,7 +236,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
     React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${usage ? ` · ${usage}` : ""}`),
     React.createElement(InkInputLine, {
       value: input,
-      placeholder: t("chat.placeholder"),
+      placeholder: rotatingPlaceholder("chat", frame),
       danger: mode.approval === "yolo" || mode.sandbox === "danger-full-access",
       commands: CHAT_SLASH_COMMANDS,
       contextSummary: contextInfo.hasContext ? summarizePastedContext(contextInfo) : "",
@@ -255,7 +255,7 @@ function TurnView({ turn }: { turn: Turn }): React.ReactElement {
     );
   }
   if (turn.role === "system") {
-    return React.createElement(Text, { color: "gray" }, turn.text);
+    return React.createElement(Text, { color: turn.error ? "red" : "gray" }, turn.text);
   }
   return React.createElement(Box, { marginTop: 1, flexDirection: "column" },
     turn.meta ? React.createElement(Text, { color: "gray" }, turn.meta) : null,
@@ -342,14 +342,18 @@ async function submitInput(inputData: {
     const next = { ...inputData.mode };
     const message = applyModeCommand(next, text.slice(1));
     inputData.setMode(next);
-    inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: message }]);
+    const danger = next.approval === "yolo" || next.sandbox === "danger-full-access";
+    const body = danger ? `${message}\n${t("mode.yolo.factory")}` : message;
+    inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: body, error: danger }]);
     return;
   }
   if (text.startsWith("/mode ")) {
     const next = { ...inputData.mode };
     const message = applyModeCommand(next, text.slice(6).trim());
     inputData.setMode(next);
-    inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: message }]);
+    const danger = next.approval === "yolo" || next.sandbox === "danger-full-access";
+    const body = danger ? `${message}\n${t("mode.yolo.factory")}` : message;
+    inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: body, error: danger }]);
     return;
   }
   if (text === "/help") {

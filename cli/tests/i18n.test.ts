@@ -25,7 +25,8 @@ describe("cli i18n", () => {
     expect(t("mock.response", { text: "你好" })).toBe("模拟回复:你好");
     expect(t("offline.body")).toContain("离线");
     expect(t("offline.body")).toContain("Lynn brain start");
-    expect(t("code.placeholder")).toContain("编码任务");
+    expect(t("code.placeholder")).toContain("/yolo");
+    expect(t("chat.placeholder")).toContain("静默黑灯");
   });
 
   it("falls back to the English string when a key is missing in zh", () => {

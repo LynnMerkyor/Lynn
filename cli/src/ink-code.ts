@@ -21,6 +21,7 @@ import { modelLabelWithId } from "./provider-presets.js";
 import { handleMemorySlashCommand } from "./session/memory.js";
 import { resolveDataDir } from "./session/store.js";
 import { addCodeInputMediaFlags, prepareCodeTaskInput } from "./code-input.js";
+import { rotatingPlaceholder } from "./ink-placeholders.js";
 
 type CodeItem =
   | { id: number; kind: "user"; text: string }
@@ -120,8 +121,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   const contextInfo = React.useMemo(() => analyzePastedContext(input, effectiveCwd), [input, effectiveCwd]);
 
   useEffect(() => {
-    if (!busy) return;
-    const timer = setInterval(() => setFrame((value) => value + 1), 90);
+    const timer = setInterval(() => setFrame((value) => value + 1), busy ? 90 : 4_000);
     return () => clearInterval(timer);
   }, [busy]);
 
@@ -393,7 +393,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${usage ? ` · ${usage}` : ""}`),
     approval ? React.createElement(ApprovalPrompt, { approval }) : React.createElement(InkInputLine, {
       value: input,
-      placeholder: t("code.placeholder"),
+      placeholder: rotatingPlaceholder("code", frame),
       danger,
       commands: CODE_SLASH_COMMANDS,
       contextSummary: contextInfo.hasContext ? summarizePastedContext(contextInfo) : "",

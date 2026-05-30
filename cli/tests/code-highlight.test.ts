@@ -10,21 +10,21 @@ describe("highlightCodeLine", () => {
     const line = 'const x = "hi" + 42;';
     const segs = highlightCodeLine(line, "ts");
     expect(colorOf(segs, "const")).toBe("magenta");
-    expect(colorOf(segs, '"hi"')).toBe("green");
+    expect(colorOf(segs, '"hi"')).toBe("red");
     expect(colorOf(segs, "42")).toBe("yellow");
     expect(rejoin(segs)).toBe(line);
   });
 
   it("uses // for C-like langs and # for Python; # is not a comment in JS", () => {
-    expect(highlightCodeLine("x = 1 // note", "js").find((s) => s.text.includes("note"))?.color).toBe("gray");
-    expect(highlightCodeLine("x = 1 # note", "python").find((s) => s.text.includes("note"))?.color).toBe("gray");
+    expect(highlightCodeLine("x = 1 // note", "js").find((s) => s.text.includes("note"))?.color).toBe("green");
+    expect(highlightCodeLine("x = 1 # note", "python").find((s) => s.text.includes("note"))?.color).toBe("green");
     expect(highlightCodeLine("a # b", "js").find((s) => s.text.includes("# b"))?.color).toBeUndefined();
   });
 
   it("does not treat // inside a string as a comment", () => {
     const segs = highlightCodeLine('u = "http://x"', "js");
-    expect(colorOf(segs, '"http://x"')).toBe("green");
-    expect(segs.some((s) => s.color === "gray")).toBe(false);
+    expect(colorOf(segs, '"http://x"')).toBe("red");
+    expect(segs.some((s) => s.color === "green")).toBe(false);
   });
 
   it("colors booleans / null as literals", () => {

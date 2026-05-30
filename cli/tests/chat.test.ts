@@ -37,7 +37,7 @@ describe("chat mode controls", () => {
     const mode = { approval: "ask" as const, sandbox: "workspace-write" as const };
 
     expect(renderMode(mode)).toBe("ask / workspace-write");
-    expect(applyModeCommand(mode, "yolo")).toBe("YOLO mode enabled.");
+    expect(applyModeCommand(mode, "yolo")).toBe("YOLO silent factory mode enabled.");
     expect(renderMode(mode)).toBe("yolo / danger-full-access");
     expect(applyModeCommand(mode, "ask")).toBe("Guarded mode enabled.");
     expect(renderMode(mode)).toBe("ask / workspace-write");
@@ -52,7 +52,7 @@ describe("chat mode controls", () => {
   it("toggles yolo mode with the hotkey action", () => {
     const mode = { approval: "ask" as const, sandbox: "workspace-write" as const };
 
-    expect(toggleMode(mode)).toBe("YOLO mode enabled.");
+    expect(toggleMode(mode)).toBe("YOLO silent factory mode enabled.");
     expect(renderMode(mode)).toBe("yolo / danger-full-access");
     expect(toggleMode(mode)).toBe("Guarded mode enabled.");
     expect(renderMode(mode)).toBe("ask / workspace-write");
@@ -80,7 +80,7 @@ describe("chat mode controls", () => {
     setLang("zh");
     const mode = { approval: "ask" as const, sandbox: "workspace-write" as const };
 
-    expect(applyModeCommand(mode, "yolo")).toContain("YOLO 模式");
+    expect(applyModeCommand(mode, "yolo")).toContain("静默黑灯");
     expect(applyModeCommand(mode, "wat")).toContain("未知权限模式");
   });
 
@@ -570,7 +570,7 @@ while time.time() < deadline:
             break
         buf += chunk
         text = buf.decode("utf-8", errors="replace")
-        if (not sent_exit) and "Type a message" in text:
+        if (not sent_exit) and "/yolo" in text:
             os.write(master, b"/exit\\r")
             sent_exit = True
     if sent_exit and proc.poll() is not None:
@@ -601,7 +601,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
 
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("Lynn CLI");
-    expect(result.stdout).toContain("Type a message");
+    expect(result.stdout).toContain("/yolo");
     expect(result.stdout).toContain("StepFun 3.7 Flash");
     expect(result.stderr).toBe("");
   });

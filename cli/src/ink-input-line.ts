@@ -99,6 +99,10 @@ function slashCommandLabel(command: string): string {
       return t("slash.label.providers");
     case "/mode":
       return t("slash.label.mode");
+    case "/yolo":
+      return t("slash.label.yolo");
+    case "/ask":
+      return t("slash.label.ask");
     case "/fast":
       return t("slash.label.fast");
     case "/think":

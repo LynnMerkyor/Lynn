@@ -10,24 +10,47 @@ The CLI handles terminal UX, worker JSONL, and local file/shell orchestration.
 
 ## Quick start
 
+Prerequisite: Node.js 20 LTS or 22 LTS with npm.
+
+```bash
+# macOS, Homebrew:
+brew install node@20
+
+# macOS / Linux, nvm:
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+nvm install 20
+nvm use 20
+
+# Windows, PowerShell:
+winget install OpenJS.NodeJS.LTS
+```
+
 Install from the Lynn Tencent mirror:
 
 ```bash
-npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0-alpha.0.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0-alpha.0.tgz
 
 # Rolling preview build for testers:
-npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz
 ```
 
 The package installs the `Lynn` command. If you installed an older preview that
 also created a lowercase `lynn` shim, current builds clean the old Lynn-owned
 shim during global install before creating the `Lynn` command.
 
+Start here after installing:
+
+```bash
+Lynn                 # interactive chat TUI
+Lynn code            # coding-agent TUI
+Lynn agents          # copyable headless / Fleet commands for other agents
+```
+
 If npm dependency downloads are slow in mainland China, keep the Lynn tarball URL
 as-is and add a registry mirror for third-party dependencies:
 
 ```bash
-npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz \
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -109,6 +132,37 @@ a flag without relying on positional parsing:
 Lynn code "review the current diff" --json --cwd /path/to/repo
 Lynn code -p "review the current diff" --json --cwd /path/to/repo
 Lynn code --prompt "fix the failing tests" --json --cwd /path/to/repo
+```
+
+Agent quick contract:
+
+```bash
+# Requires Node.js 20 LTS or 22 LTS with npm.
+
+# Install/update.
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz
+
+# Human launch commands.
+Lynn
+Lynn code
+Lynn agents
+
+# One-shot prompt, no TUI.
+Lynn -p "summarize this repository" --json --cwd /path/to/repo
+
+# Headless coding worker, no per-tool prompts inside an isolated worktree.
+Lynn code -p "fix tests, run the suite, summarize the diff" \
+  --json \
+  --cwd /path/to/worktree \
+  --approval yolo \
+  --sandbox workspace-write \
+  --save-session
+
+# Fleet JSONL adapter.
+Lynn worker run --brief task.md --worktree /path/to/worktree \
+  --jsonl \
+  --approval yolo \
+  --sandbox workspace-write
 ```
 
 For write-capable background work, make the permission mode explicit:

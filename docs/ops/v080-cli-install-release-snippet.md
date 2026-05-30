@@ -1,0 +1,47 @@
+# Lynn CLI v0.80 Install Snippet
+
+Use this block on the mirror download page and at the top of the GitHub release
+notes. It is intentionally short enough for humans to copy and explicit enough
+for other coding agents to parse.
+
+## Install
+
+```bash
+# 1. Node requirement: Node.js 20 LTS or 22 LTS with npm.
+# macOS: brew install node@20
+# macOS/Linux: nvm install 20 && nvm use 20
+# Windows: winget install OpenJS.NodeJS.LTS
+
+# 2. Install or update Lynn CLI from the CDN.
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz
+
+# 3. Launch.
+Lynn          # interactive chat TUI
+Lynn code     # coding-agent TUI
+Lynn agents   # copyable headless/Fleet commands for other agents
+```
+
+## Headless / Fleet
+
+```bash
+# One-shot prompt, no TUI.
+Lynn -p "summarize this repository" --json --cwd /path/to/repo
+
+# Headless coding worker inside an isolated worktree.
+Lynn code -p "fix tests, run the suite, summarize the diff" \
+  --json \
+  --cwd /path/to/worktree \
+  --approval yolo \
+  --sandbox workspace-write \
+  --save-session
+
+# GUI Fleet adapter. Emits Fleet JSONL.
+Lynn worker run --brief task.md --worktree /path/to/worktree \
+  --jsonl \
+  --approval yolo \
+  --sandbox workspace-write
+```
+
+Rules for agents: use `--json` or `--jsonl`, always pass `--cwd` or
+`--worktree`, and use `--approval yolo --sandbox workspace-write` only inside an
+isolated git worktree.

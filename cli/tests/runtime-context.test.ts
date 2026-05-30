@@ -13,6 +13,8 @@ describe("CLI runtime context", () => {
     expect(message.content).toContain("Current model route shown to the user: StepFun 3.7 Flash");
     expect(message.content).toContain("default online route is StepFun 3.7 Flash high+32K first");
     expect(message.content).toContain("answer from this runtime context");
+    expect(message.content).toContain("Lynn code -p \"task\" --json");
+    expect(message.content).toContain("Lynn worker run --brief task.md");
   });
 
   it("refreshes the system route without moving it out of the prefix", () => {

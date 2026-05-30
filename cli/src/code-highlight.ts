@@ -57,13 +57,13 @@ export function highlightCodeLine(line: string, lang?: string): CodeSegment[] {
     const ch = rest[0];
 
     if (comment && rest.startsWith(comment)) {
-      push(rest, "gray");
+      push(rest, "green");
       break;
     }
     if (ch === '"' || ch === "'" || ch === "`") {
       const m = STRING_RE.exec(rest);
       if (m) {
-        push(m[0], "green");
+        push(m[0], "red");
         i += m[0].length;
         continue;
       }
