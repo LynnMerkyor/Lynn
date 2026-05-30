@@ -15,6 +15,7 @@ import { usage } from "./help.js";
 import { writeJsonLine } from "./jsonl.js";
 import { renderStartupBanner } from "./startup.js";
 import { installPipeErrorHandler } from "./stdio.js";
+import { classifyTaskRoute, codeArgsForRoute, visionArgsForRoute } from "./task-classifier.js";
 import { readVersionInfo } from "./version.js";
 import type { ProvidersInfo } from "./commands/providers.js";
 import { t } from "./i18n.js";
@@ -106,6 +107,9 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
         mockBrain: hasFlag(args.flags, "mock-brain", "mock"),
       });
     }
+    case "goal": {
+      return runCode(codeArgsForRoute(args, { kind: "goal", reason: "explicit goal command" }));
+    }
     case "worker": {
       return runWorker(args);
     }
@@ -129,6 +133,13 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     default: {
       if (args.command === "-p" || args.command === "--print") {
         return runPrompt(args, { json, mockBrain: hasFlag(args.flags, "mock-brain", "mock") });
+      }
+      const route = classifyTaskRoute(args);
+      if (route.kind === "goal" || route.kind === "code") {
+        return runCode(codeArgsForRoute(args, route));
+      }
+      if (route.kind === "vision") {
+        return runVisionCommand(visionArgsForRoute(args), "see", json);
       }
       return runPrompt({ ...args, command: "prompt", positionals: [args.command, ...args.positionals] }, {
         json,
@@ -202,6 +213,7 @@ const TOP_LEVEL_COMMANDS = new Set([
   "byok",
   "permissions",
   "model",
+  "goal",
   "prompt",
   "exec",
   "worker",
