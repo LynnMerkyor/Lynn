@@ -284,6 +284,7 @@ checks.push(run("implicit chat with global flags", ["--mock-brain"], { stdinLine
 }));
 
 checks.push(runBareTtyStartupSmoke());
+checks.push(runBareTtyByokSmoke());
 checks.push(runCodeBareTtyStartupSmoke());
 
 checks.push(run("chat brain offline recovery", ["chat", "--brain-url", "http://127.0.0.1:1"], { stdinLines: ["hi", "/exit"] }).then((r) => {
@@ -680,6 +681,75 @@ async function runBareTtyStartupSmoke() {
   const marker = fs.existsSync(markerPath) ? fs.readFileSync(markerPath, "utf8") : "";
   await fs.promises.rm(markerPath, { force: true });
   assertIncludes("bare TTY startup", marker, "LYNN_TTY_SMOKE_OK");
+}
+
+async function runBareTtyByokSmoke() {
+  if (!(await hasExpect())) {
+    process.stderr.write("[cli-smoke] skipping bare TTY BYOK smoke: expect not found\n");
+    return;
+  }
+  let seen = null;
+  const server = http.createServer((request, response) => {
+    if (request.url !== "/v1/chat/completions" || request.method !== "POST") {
+      response.writeHead(404);
+      response.end();
+      return;
+    }
+    let body = "";
+    request.on("data", (chunk) => { body += String(chunk); });
+    request.on("end", () => {
+      seen = { auth: request.headers.authorization, body: JSON.parse(body) };
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"bare tty byok ok\"}}]}",
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const markerPath = path.join(os.tmpdir(), `lynn-cli-tty-byok-smoke-${process.pid}.txt`);
+  await fs.promises.rm(markerPath, { force: true });
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("bare TTY BYOK smoke server failed to listen");
+    const script = [
+      "set timeout 10",
+      "spawn $env(NODE_BIN) $env(CLI_BIN)",
+      "expect \"Lynn CLI\"",
+      "expect \"› \"",
+      "send \"hi\\r\"",
+      "expect \"bare tty byok ok\"",
+      "expect \"› \"",
+      "send \"/exit\\r\"",
+      "expect eof",
+      "set marker [open $env(MARKER_PATH) w]",
+      "puts $marker \"LYNN_TTY_BYOK_SMOKE_OK\"",
+      "close $marker",
+    ].join("\n");
+    await runProcess("bare TTY BYOK", "expect", ["-c", script], {
+      env: {
+        NODE_BIN: nodeBin,
+        CLI_BIN: cliBin,
+        MARKER_PATH: markerPath,
+        LYNN_CLI_BRAIN_TIMEOUT_MS: "50",
+        LYNN_CLI_BASE_URL: `http://127.0.0.1:${address.port}/v1`,
+        LYNN_CLI_API_KEY: "bare-tty-key",
+        LYNN_CLI_MODEL: "bare-tty-model",
+      },
+    });
+    const marker = fs.existsSync(markerPath) ? fs.readFileSync(markerPath, "utf8") : "";
+    assertIncludes("bare TTY BYOK", marker, "LYNN_TTY_BYOK_SMOKE_OK");
+    if (!seen) throw new Error("bare TTY BYOK smoke did not call the provider");
+    if (seen.auth !== "Bearer bare-tty-key") throw new Error(`bare TTY BYOK smoke used wrong auth: ${seen.auth}`);
+    if (seen.body.model !== "bare-tty-model") throw new Error(`bare TTY BYOK smoke used wrong model: ${seen.body.model}`);
+    const messages = JSON.stringify(seen.body.messages || []);
+    if (!messages.includes("hi")) throw new Error("bare TTY BYOK smoke did not send the interactive prompt text");
+  } finally {
+    await fs.promises.rm(markerPath, { force: true });
+    await new Promise((resolve) => server.close(() => resolve()));
+  }
 }
 
 async function runCodeBareTtyStartupSmoke() {
