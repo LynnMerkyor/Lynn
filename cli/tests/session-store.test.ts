@@ -238,6 +238,6 @@ describe("CLI data directory resolution", () => {
     process.env.LYNN_DATA_DIR = "/tmp/lynn-data-dir";
     process.env.LYNN_HOME = "/tmp/lynn-home";
 
-    expect(resolveDataDir()).toBe("/tmp/lynn-data-dir");
+    expect(resolveDataDir()).toBe(path.resolve("/tmp/lynn-data-dir"));
   });
 });

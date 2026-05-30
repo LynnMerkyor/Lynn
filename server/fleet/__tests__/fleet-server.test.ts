@@ -534,6 +534,7 @@ describe("FleetHub.dispatch", () => {
   it("marks external worker profiles unavailable when their binaries are not on PATH", () => {
     const registry = resolveFleetRegistry({
       pathEnv: "/bin",
+      platform: "linux",
       fileExists: (file) => file === "/bin/qwen",
     });
 
@@ -997,14 +998,15 @@ describe("worker-command resolveCliCommand", () => {
   });
 
   it("falls back to a dev cli build under the repo", () => {
+    const cliEntry = path.join("/repo", "cli", "bin", "lynn.mjs");
     const cmd = resolveCliCommand(["worker", "run"], {
       repoRoot: "/repo",
       execPath: "/usr/bin/node",
       env: {},
-      fileExists: (p) => p === "/repo/cli/bin/lynn.mjs",
+      fileExists: (p) => p === cliEntry,
     });
     expect(cmd && cmd.command).toBe("/usr/bin/node");
-    expect(cmd && cmd.args[0]).toBe("/repo/cli/bin/lynn.mjs");
+    expect(cmd && cmd.args[0]).toBe(cliEntry);
   });
 
   it("returns null when no CLI runtime is available", () => {

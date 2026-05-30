@@ -12,6 +12,7 @@ import { setLang } from "../src/i18n.js";
 
 const cliRoot = fileURLToPath(new URL("..", import.meta.url));
 const pythonIt = hasPython3() ? it : it.skip;
+const ptyIt = process.platform === "win32" ? it.skip : pythonIt;
 
 beforeEach(() => setLang("en"));
 afterEach(() => setLang(null));
@@ -334,7 +335,7 @@ describe("providers command", () => {
     });
   });
 
-  pythonIt("runs the interactive BYOK three-step wizard in a real TTY", async () => {
+  ptyIt("runs the interactive BYOK three-step wizard in a real TTY", async () => {
     const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-provider-wizard-"));
     const script = `
 import os

@@ -28,7 +28,8 @@ import { setLang } from "../src/i18n.js";
 
 const cliRoot = fileURLToPath(new URL("..", import.meta.url));
 const pythonIt = hasPython3() ? it : it.skip;
-const interactivePtyIt = process.env.CI === "true" ? it.skip : pythonIt;
+const ptyIt = process.platform === "win32" ? it.skip : pythonIt;
+const interactivePtyIt = process.env.CI === "true" ? it.skip : ptyIt;
 
 beforeEach(() => setLang("en"));
 afterEach(() => setLang(null));
@@ -333,7 +334,7 @@ describe("chat mode controls", () => {
     expect(parsed.messages?.at(-1)).toMatchObject({ role: "user", content: "hi" });
   });
 
-  pythonIt("lets bare Lynn use CLI BYOK in a TTY when Brain is offline", async () => {
+  ptyIt("lets bare Lynn use CLI BYOK in a TTY when Brain is offline", async () => {
     const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-bare-chat-byok-"));
     let requestBody = "";
     const provider = http.createServer((request, response) => {
@@ -455,7 +456,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
     expect(parsed.messages?.at(-1)).toMatchObject({ role: "user", content: "hi" });
   });
 
-  pythonIt("keeps bare Lynn in a TTY REPL when Brain is offline", async () => {
+  ptyIt("keeps bare Lynn in a TTY REPL when Brain is offline", async () => {
     const script = `
 import os
 import pty

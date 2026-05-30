@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 
 // cli-env-manager is a CommonJS main-process module (.cjs); load it via Node's
 // require (vite's resolver does not include .cjs in its default extensions).
@@ -24,11 +25,12 @@ describe('resolveCliRuntime', () => {
   });
 
   it('falls back to electron-as-node on windows (server ships a SEA, not node)', () => {
+    const cliEntry = path.win32.join('C:/res', 'cli', 'lynn.mjs');
     const rt = resolveCliRuntime({
       platform: 'win32',
       execPath: 'C:/Lynn/Lynn.exe',
       resourcesPath: 'C:/res',
-      fileExists: existsIn(['C:/res/cli/lynn.mjs']),
+      fileExists: existsIn([cliEntry]),
     });
     expect(rt.nodeSource).toBe('electron');
     expect(rt.electronAsNode).toBe(true);
@@ -101,15 +103,16 @@ describe('getWorkerSpawnCommand', () => {
   });
 
   it('builds an electron-as-node command with ELECTRON_RUN_AS_NODE=1', () => {
+    const cliEntry = path.win32.join('C:/res', 'cli', 'lynn.mjs');
     const cmd = getWorkerSpawnCommand(['worker', 'run', '--jsonl'], {
       platform: 'win32',
       execPath: 'C:/Lynn/Lynn.exe',
       resourcesPath: 'C:/res',
-      fileExists: (p: string) => p === 'C:/res/cli/lynn.mjs',
+      fileExists: (p: string) => p === cliEntry,
     });
     expect(cmd).not.toBeNull();
     expect(cmd.command).toBe('C:/Lynn/Lynn.exe');
-    expect(cmd.args).toEqual(['C:/res/cli/lynn.mjs', 'worker', 'run', '--jsonl']);
+    expect(cmd.args).toEqual([cliEntry, 'worker', 'run', '--jsonl']);
     expect(cmd.env.ELECTRON_RUN_AS_NODE).toBe('1');
   });
 });
@@ -129,15 +132,16 @@ describe('getWorkerSpawnServerEnv', () => {
   });
 
   it('marks electron-as-node for the server on platforms without bundled node', () => {
+    const cliEntry = path.win32.join('C:/res', 'cli', 'lynn.mjs');
     const env = getWorkerSpawnServerEnv({
       platform: 'win32',
       execPath: 'C:/Lynn/Lynn.exe',
       resourcesPath: 'C:/res',
-      fileExists: (p: string) => p === 'C:/res/cli/lynn.mjs',
+      fileExists: (p: string) => p === cliEntry,
     });
     expect(env).toMatchObject({
       LYNN_CLI_NODE: 'C:/Lynn/Lynn.exe',
-      LYNN_CLI_ENTRY: 'C:/res/cli/lynn.mjs',
+      LYNN_CLI_ENTRY: cliEntry,
       LYNN_CLI_ELECTRON_AS_NODE: '1',
     });
   });

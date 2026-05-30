@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { afterEach, beforeEach } from "vitest";
+import path from "node:path";
 import { setLang } from "../src/i18n.js";
 import {
   analyzePastedContext,
@@ -14,6 +15,8 @@ beforeEach(() => setLang("en"));
 afterEach(() => setLang(null));
 
 describe("pasted context helpers", () => {
+  const slash = (value: string) => value.replace(/\\/g, "/");
+
   it("normalizes CRLF and appends pasted blocks without losing lines", () => {
     expect(normalizePastedText("a\r\nb\rc")).toBe("a\nb\nc");
     expect(appendPastedText("prefix", "line1\nline2")).toBe("prefix\nline1\nline2");
@@ -23,9 +26,9 @@ describe("pasted context helpers", () => {
     const info = analyzePastedContext('请看 "./screens/a.png"\n以及 /tmp/b.webp', "/repo");
 
     expect(info.text).toBe("请看\n以及");
-    expect(info.imageRefs.map((ref) => ref.path)).toEqual([
-      "/repo/screens/a.png",
-      "/tmp/b.webp",
+    expect(info.imageRefs.map((ref) => slash(ref.path))).toEqual([
+      slash(path.resolve("/repo", "screens/a.png")),
+      slash(path.resolve("/tmp/b.webp")),
     ]);
     expect(summarizePastedContext(info)).toContain("2 attachments");
     expect(summarizePastedContext(info)).toContain("a.png");
@@ -49,7 +52,7 @@ describe("pasted context helpers", () => {
       command: "/image",
       prompt: "explain this",
     });
-    expect(command?.imageRefs.map((ref) => ref.path)).toEqual(["/repo/screen shot.png"]);
+    expect(command?.imageRefs.map((ref) => slash(ref.path))).toEqual([slash(path.resolve("/repo", "screen shot.png"))]);
     expect(summarizeImageRefs(command?.imageRefs || [])).toBe("1 attachment: screen shot.png");
   });
 
@@ -57,7 +60,7 @@ describe("pasted context helpers", () => {
     const command = parseImagePromptCommand("/attach /tmp/a.png");
 
     expect(command?.prompt).toBe("Please analyze these images.");
-    expect(command?.imageRefs.map((ref) => ref.path)).toEqual(["/tmp/a.png"]);
+    expect(command?.imageRefs.map((ref) => slash(ref.path))).toEqual([slash(path.resolve("/tmp/a.png"))]);
   });
 
   it("summarizes pasted context in Chinese when the CLI language is zh", () => {

@@ -12,7 +12,8 @@ import { appendSessionTurn, readSessionLines, sessionIndexPath } from "../src/se
 let tmp = "";
 const cliRoot = fileURLToPath(new URL("..", import.meta.url));
 const pythonIt = hasPython3() ? it : it.skip;
-const interactivePtyIt = process.env.CI === "true" ? it.skip : pythonIt;
+const ptyIt = process.platform === "win32" ? it.skip : pythonIt;
+const interactivePtyIt = process.env.CI === "true" ? it.skip : ptyIt;
 
 beforeEach(async () => {
   tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-agent-"));
@@ -1286,7 +1287,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
     expect(JSON.stringify(requestBodies[2])).toContain('"role":"tool"');
   });
 
-  pythonIt("runs multiple dangerous tools after interactive allow-all approval", async () => {
+  ptyIt("runs multiple dangerous tools after interactive allow-all approval", async () => {
     const patch = [
       "*** Begin Patch",
       "*** Update File: hello.txt",

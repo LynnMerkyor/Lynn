@@ -34,27 +34,32 @@ function parseNodeMajor(version) {
   return m ? Number(m[1]) : null;
 }
 
+function pathForPlatform(platform) {
+  return platform === "win32" ? path.win32 : path.posix;
+}
+
 /**
  * Pure resolver: given environment facts, decide which Node runs the CLI and
  * whether the bundled CLI entry is present. Injectable for tests.
  */
 function resolveCliRuntime(opts = {}) {
   const platform = opts.platform || process.platform;
+  const pathApi = pathForPlatform(platform);
   const execPath = opts.execPath || process.execPath;
   const resourcesPath = opts.resourcesPath != null ? opts.resourcesPath : process.resourcesPath || "";
   const appRoot = opts.appRoot || path.join(__dirname, "..");
   const fileExists = opts.fileExists || defaultFileExists;
 
   // Bundled CLI (extraResources: cli/bin/lynn.mjs -> resources/cli/lynn.mjs).
-  const bundledCliEntry = resourcesPath ? path.join(resourcesPath, "cli", "lynn.mjs") : "";
-  const devCliEntry = path.join(appRoot, "cli", "bin", "lynn.mjs");
+  const bundledCliEntry = resourcesPath ? pathApi.join(resourcesPath, "cli", "lynn.mjs") : "";
+  const devCliEntry = pathApi.join(appRoot, "cli", "bin", "lynn.mjs");
   const cliEntry = fileExists(bundledCliEntry) ? bundledCliEntry : fileExists(devCliEntry) ? devCliEntry : "";
   const cliPresent = !!cliEntry;
 
   // Prefer a REAL bundled node (the mac/linux server bundle ships one).
   // Windows ships lynn-server.exe (a SEA, not a general node) -> not usable here.
   const bundledNode =
-    resourcesPath && platform !== "win32" ? path.join(resourcesPath, "server", "node") : "";
+    resourcesPath && platform !== "win32" ? pathApi.join(resourcesPath, "server", "node") : "";
   const hasBundledNode = fileExists(bundledNode);
 
   let node;

@@ -5,6 +5,7 @@ describe("agent registry", () => {
   it("marks Lynn CLI as current and detects external binaries on PATH", () => {
     const agents = detectCliAgents({
       pathEnv: "/bin",
+      platform: "linux",
       fileExists: (file) => file === "/bin/codex",
     });
     expect(agents.find((agent) => agent.id === "lynn-cli")).toMatchObject({ available: true, availability: "current binary", kind: "built-in" });
