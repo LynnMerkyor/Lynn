@@ -31,6 +31,14 @@ npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tg
   --registry=https://registry.npmmirror.com
 ```
 
+Release maintainers can smoke-test the exact CDN tarball before inviting
+external testers:
+
+```bash
+LYNN_CLI_TARBALL_URL=https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz \
+  npm run test:cli-install:remote
+```
+
 ```bash
 Lynn version
 Lynn doctor --offline

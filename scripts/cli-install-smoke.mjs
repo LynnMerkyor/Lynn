@@ -10,6 +10,19 @@ const root = process.cwd();
 const cliRoot = path.join(root, "cli");
 const nodeBin = process.execPath;
 
+function stringArg(name) {
+  const index = process.argv.indexOf(name);
+  if (index < 0) return null;
+  const value = process.argv[index + 1];
+  return value && !value.startsWith("--") ? value : null;
+}
+
+const remoteRequested = process.argv.includes("--remote");
+const externalTarball = stringArg("--tarball-url") || process.env.LYNN_CLI_TARBALL_URL || null;
+if (remoteRequested && !externalTarball) {
+  throw new Error("[cli-install-smoke] --remote requires LYNN_CLI_TARBALL_URL or --tarball-url <url>");
+}
+
 function run(name, command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -92,33 +105,44 @@ async function seedLegacyLowercaseShim(globalDir) {
   await fs.symlink("../lib/node_modules/@lynn/cli/bin/lynn.mjs", legacyShim);
 }
 
-await fs.access(path.join(cliRoot, "package.json")).catch(() => {
-  throw new Error("[cli-install-smoke] missing cli/package.json; run from repo root");
-});
+if (!externalTarball) {
+  await fs.access(path.join(cliRoot, "package.json")).catch(() => {
+    throw new Error("[cli-install-smoke] missing cli/package.json; run from repo root");
+  });
+}
 
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-install-smoke-"));
 const packDir = path.join(tmp, "pack");
 const installDir = path.join(tmp, "consumer");
 const globalDir = path.join(tmp, "global");
 const dataDir = path.join(tmp, "data");
+const npmCacheDir = path.join(tmp, "npm-cache");
 await fs.mkdir(packDir, { recursive: true });
 await fs.mkdir(installDir, { recursive: true });
 await fs.mkdir(path.join(globalDir, "bin"), { recursive: true });
 await fs.mkdir(dataDir, { recursive: true });
+await fs.mkdir(npmCacheDir, { recursive: true });
 
 try {
-  const packed = await run("npm pack", "npm", ["pack", "--pack-destination", packDir, "--silent"], { cwd: cliRoot });
-  const tarballName = packed.stdout.trim().split(/\r?\n/).filter(Boolean).pop();
-  if (!tarballName) throw new Error("[cli-install-smoke] npm pack did not report a tarball");
-  const tarball = path.join(packDir, tarballName);
-  await fs.access(tarball);
+  let tarball = externalTarball;
+  let tarballName = externalTarball || "";
+  if (!tarball) {
+    const packed = await run("npm pack", "npm", ["pack", "--pack-destination", packDir, "--silent"], { cwd: cliRoot });
+    tarballName = packed.stdout.trim().split(/\r?\n/).filter(Boolean).pop();
+    if (!tarballName) throw new Error("[cli-install-smoke] npm pack did not report a tarball");
+    tarball = path.join(packDir, tarballName);
+    await fs.access(tarball);
+  }
 
   await fs.writeFile(path.join(installDir, "package.json"), JSON.stringify({ private: true, type: "module" }, null, 2), "utf8");
-  const localInstall = await run("npm install packed CLI", "npm", ["install", "--silent", "--omit=dev", tarball], { cwd: installDir });
+  const installLabel = externalTarball ? "remote CLI" : "packed CLI";
+  const npmInstallFlags = ["--silent", "--omit=dev", "--cache", npmCacheDir];
+  if (externalTarball) npmInstallFlags.push("--prefer-online");
+  const localInstall = await run(`npm install ${installLabel}`, "npm", ["install", ...npmInstallFlags, tarball], { cwd: installDir });
   assertNpmInstallClean(localInstall);
 
   await seedLegacyLowercaseShim(globalDir);
-  const globalInstall = await run("npm global install packed CLI", "npm", ["install", "--global", "--silent", "--omit=dev", "--prefix", globalDir, tarball], { cwd: installDir });
+  const globalInstall = await run(`npm global install ${installLabel}`, "npm", ["install", "--global", "--prefix", globalDir, ...npmInstallFlags, tarball], { cwd: installDir });
   assertNpmInstallClean(globalInstall);
   const globalLynn = process.platform === "win32"
     ? path.join(globalDir, "Lynn.cmd")
@@ -147,7 +171,7 @@ try {
 
   await run("direct node entry", nodeBin, [path.join(installDir, "node_modules", "@lynn", "cli", "bin", "lynn.mjs"), "version"], { cwd: installDir });
 
-  console.log(`[cli-install-smoke] packed install passed: ${tarballName}`);
+  console.log(`[cli-install-smoke] ${externalTarball ? "remote" : "packed"} install passed: ${tarballName}`);
 } finally {
   if (process.env.KEEP_LYNN_CLI_INSTALL_SMOKE !== "1") {
     await fs.rm(tmp, { recursive: true, force: true });
