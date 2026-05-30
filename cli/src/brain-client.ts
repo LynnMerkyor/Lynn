@@ -13,8 +13,20 @@ export interface BrainChatRequest {
 }
 
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string | ChatContentPart[];
+  tool_call_id?: string;
+  name?: string;
+  tool_calls?: ChatAssistantToolCall[];
+}
+
+export interface ChatAssistantToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
 }
 
 export interface ChatToolDefinition {

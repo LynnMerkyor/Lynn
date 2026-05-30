@@ -170,6 +170,10 @@ describe("code tools", () => {
       { tool: "read_file", args: { path: "README.md", text: undefined, query: undefined, pattern: undefined, command: undefined, maxBytes: undefined } },
       { tool: "grep", args: { path: undefined, text: undefined, query: "MiMo", pattern: undefined, command: undefined, maxBytes: undefined } },
     ]);
+    expect(calls.toToolCalls()).toEqual([
+      { id: "call_1", name: "read_file", arguments: "{\"path\":\"README.md\"}" },
+      { id: undefined, name: "grep", arguments: "{\"query\":\"MiMo\"}" },
+    ]);
   });
 
   it("normalizes common coding-agent tool name and argument aliases", () => {

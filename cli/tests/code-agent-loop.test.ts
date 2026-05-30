@@ -270,7 +270,28 @@ describe("code agent loop", () => {
 
     expect(output).toContain('"type":"code.tool.requested"');
     expect(output).toContain('"tool":"read_file"');
-    expect(toolResultTurn).toContain("Tool result for read_file");
+    const toolTurnBody = JSON.parse(toolResultTurn) as {
+      messages?: Array<Record<string, unknown>>;
+    };
+    expect(toolTurnBody.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: "assistant",
+        tool_calls: [expect.objectContaining({
+          id: "call_1",
+          type: "function",
+          function: expect.objectContaining({
+            name: "read_file",
+            arguments: "{\"path\":\"hello.txt\"}",
+          }),
+        })],
+      }),
+      expect.objectContaining({
+        role: "tool",
+        tool_call_id: "call_1",
+        name: "read_file",
+        content: expect.stringContaining("Tool result for read_file"),
+      }),
+    ]));
     expect(toolResultTurn).toContain("hello.txt");
     expect(output).toContain("Read streamed tool call result");
   });

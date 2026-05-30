@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output, stderr as errorOutput } from "node:process";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
-import { formatBrainRecoveryHint, streamBrainChat, type BrainStreamEvent, type ChatMessage, type ChatToolDefinition } from "../brain-client.js";
+import { formatBrainRecoveryHint, streamBrainChat, type BrainStreamEvent, type ChatAssistantToolCall, type ChatMessage, type ChatToolDefinition } from "../brain-client.js";
 import { renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { resolveEffectivePermissions } from "../permissions.js";
@@ -716,6 +716,9 @@ interface CodeAgentLoopInput {
 }
 
 interface CodeToolRequest {
+  toolCallId?: string;
+  toolCallName?: string;
+  toolCallArguments?: string;
   tool: ClientToolName;
   args: {
     path?: string;
@@ -731,6 +734,12 @@ interface CodeAgentLoopResult {
   text: string;
   maxStepsReached: boolean;
   usageSummary: string | null;
+}
+
+interface CollectedToolCall {
+  id?: string;
+  name?: string;
+  arguments: string;
 }
 
 async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgentLoopResult> {
@@ -765,9 +774,16 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
     });
     const assistantText = result.text;
     latestUsageSummary = result.usageSummary || latestUsageSummary;
-    messages.push({ role: "assistant", content: assistantText });
+    const structuredToolRequests = toolRequestsFromCollectedCalls(result.toolCalls, step);
+    const toolRequests = structuredToolRequests.length ? structuredToolRequests : parseCodeToolRequests(assistantText);
+    messages.push(structuredToolRequests.length
+      ? {
+          role: "assistant",
+          content: assistantText,
+          tool_calls: assistantToolCallsForMessages(structuredToolRequests),
+        }
+      : { role: "assistant", content: assistantText });
     if (inputData.onCheckpoint && assistantText.trim()) await inputData.onCheckpoint({ type: "assistant", content: assistantText });
-    const toolRequests = parseCodeToolRequests(assistantText);
     if (!toolRequests.length) {
       finalText = assistantText;
       break;
@@ -820,16 +836,29 @@ async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgen
         formatToolResultForLoop(toolResult),
       ].join("\n"));
     }
-    const toolResultMessage = [
-      toolResultSections.length === 1 ? "Tool results:" : `Tool results for ${toolResultSections.length} requested tools:`,
-      ...toolResultSections,
-      "Continue. If no more tools are needed, give the final answer.",
-    ].join("\n");
-    messages.push({
-      role: "user",
-      content: toolResultMessage,
-    });
-    if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: toolResultMessage });
+    if (structuredToolRequests.length) {
+      for (let i = 0; i < structuredToolRequests.length; i += 1) {
+        const request = structuredToolRequests[i];
+        const section = toolResultSections[i] || `Tool result for ${request.tool}:\n(no result captured)`;
+        messages.push({
+          role: "tool",
+          tool_call_id: request.toolCallId,
+          name: request.tool,
+          content: section,
+        });
+      }
+    } else {
+      const toolResultMessage = [
+        toolResultSections.length === 1 ? "Tool results:" : `Tool results for ${toolResultSections.length} requested tools:`,
+        ...toolResultSections,
+        "Continue. If no more tools are needed, give the final answer.",
+      ].join("\n");
+      messages.push({
+        role: "user",
+        content: toolResultMessage,
+      });
+      if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: toolResultMessage });
+    }
   }
   let maxStepsReached = false;
   if (!finalText) {
@@ -938,6 +967,7 @@ function stableObject(value: Record<string, unknown>): Record<string, unknown> {
 interface BrainTextResult {
   text: string;
   usageSummary: string | null;
+  toolCalls: CollectedToolCall[];
 }
 
 async function collectBrainText(inputData: {
@@ -992,11 +1022,7 @@ async function collectBrainText(inputData: {
   } finally {
     spinner.stop();
   }
-  if (streamedToolCalls.hasCalls()) {
-    const toolCallText = streamedToolCalls.toJsonText();
-    text = text.trim() ? `${text}\n${toolCallText}` : toolCallText;
-  }
-  return { text, usageSummary };
+  return { text, usageSummary, toolCalls: streamedToolCalls.toToolCalls() };
 }
 
 export function codeToolDefinitions(): ChatToolDefinition[] {
@@ -1113,6 +1139,7 @@ export function parseCodeToolRequests(text: string): CodeToolRequest[] {
 export interface StreamingToolCallAccumulator {
   append(event: Extract<BrainStreamEvent, { type: "tool_call.delta" }>): void;
   toJsonText(): string;
+  toToolCalls(): CollectedToolCall[];
   hasCalls(): boolean;
 }
 
@@ -1133,20 +1160,54 @@ export function createStreamingToolCallAccumulator(): StreamingToolCallAccumulat
     toJsonText() {
       if (!calls.size) return "";
       return JSON.stringify({
-        tool_calls: [...calls.entries()]
-          .sort(([a], [b]) => a - b)
-          .map(([index, call]) => ({
-            index,
-            id: call.id,
-            type: "function",
-            function: {
-              name: call.name,
-              arguments: call.arguments,
-            },
-          })),
+        tool_calls: this.toToolCalls().map((call, index) => ({
+          index,
+          id: call.id,
+          type: "function",
+          function: {
+            name: call.name,
+            arguments: call.arguments,
+          },
+        })),
       });
     },
+    toToolCalls() {
+      return [...calls.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([, call]) => ({ id: call.id, name: call.name, arguments: call.arguments }));
+    },
   };
+}
+
+function toolRequestsFromCollectedCalls(calls: readonly CollectedToolCall[], step: number): CodeToolRequest[] {
+  const requests: CodeToolRequest[] = [];
+  for (let i = 0; i < calls.length; i += 1) {
+    const call = calls[i];
+    const request = normalizeToolPayload({ name: call.name, arguments: call.arguments });
+    if (!request) continue;
+    requests.push({
+      ...request,
+      toolCallId: call.id || `lynn_call_${step}_${i}`,
+      toolCallName: call.name || request.tool,
+      toolCallArguments: call.arguments,
+    });
+  }
+  return requests;
+}
+
+function assistantToolCallsForMessages(requests: readonly CodeToolRequest[]): ChatAssistantToolCall[] {
+  return requests.map((request, index) => ({
+    id: request.toolCallId || `lynn_call_${index}`,
+    type: "function",
+    function: {
+      name: request.toolCallName || request.tool,
+      arguments: request.toolCallArguments || JSON.stringify(cleanToolArgsForProvider(request.args)),
+    },
+  }));
+}
+
+function cleanToolArgsForProvider(args: CodeToolRequest["args"]): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(args).filter(([, value]) => value !== undefined));
 }
 
 function normalizeToolPayload(payload: Record<string, unknown>): CodeToolRequest | null {
