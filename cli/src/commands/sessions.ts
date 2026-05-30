@@ -3,6 +3,7 @@ import { getStringFlag, type ParsedArgs } from "../args.js";
 import { resumeCommandForSession } from "./code.js";
 import { writeJsonLine } from "../jsonl.js";
 import { listSessions, readSessionLines, resolveDataDir } from "../session/store.js";
+import { buildSessionReplayEvents, renderSessionReplay } from "../session/replay.js";
 import { computeSessionStats, renderSessionStats } from "../session/stats.js";
 
 export async function runSessions(args: ParsedArgs, json: boolean): Promise<number> {
@@ -49,6 +50,16 @@ export async function runSessions(args: ParsedArgs, json: boolean): Promise<numb
     const stats = computeSessionStats(lines);
     if (json) writeJsonLine({ type: "sessions.stats", sessionPath, stats });
     else process.stdout.write(renderSessionStats(sessionPath, stats));
+    return 0;
+  }
+
+  if (subcommand === "replay") {
+    const sessionPath = args.positionals[1] || getStringFlag(args.flags, "session");
+    if (!sessionPath) throw new Error("sessions replay requires a session path");
+    const lines = await readSessionLines(sessionPath);
+    const events = buildSessionReplayEvents(lines);
+    if (json) writeJsonLine({ type: "sessions.replay", sessionPath, events });
+    else process.stdout.write(renderSessionReplay(sessionPath, lines));
     return 0;
   }
 

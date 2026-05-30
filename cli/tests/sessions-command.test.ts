@@ -109,4 +109,90 @@ describe("sessions command", () => {
     expect(output).toContain("20.0 TPS");
     expect(output).toContain("read_file x1");
   });
+
+  it("renders a replay timeline from session JSONL events", async () => {
+    let sessionPath = await appendSessionLine({
+      dataDir: tmp,
+      cwd: "/repo",
+      title: "replay",
+      line: { type: "user", content: "inspect this repo", ts: "2026-05-30T01:00:00.000Z" },
+    });
+    sessionPath = await appendSessionLine({
+      dataDir: tmp,
+      sessionPath,
+      cwd: "/repo",
+      title: "replay",
+      line: {
+        type: "tool",
+        content: "Tool result for read_file:\npackage.json contents",
+        ts: "2026-05-30T01:00:01.000Z",
+        data: { name: "read_file", tool_call_id: "call_1" },
+      },
+    });
+    sessionPath = await appendSessionLine({
+      dataDir: tmp,
+      sessionPath,
+      cwd: "/repo",
+      title: "replay",
+      line: { type: "assistant", content: "done", ts: "2026-05-30T01:00:02.000Z" },
+    });
+    await appendSessionMetadata({
+      dataDir: tmp,
+      sessionPath,
+      data: {
+        kind: "code_task",
+        cwd: "/repo",
+        usageRecords: [
+          {
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 20,
+              total_tokens: 120,
+              prompt_cache_hit_tokens: 80,
+              prompt_cache_miss_tokens: 20,
+            },
+            durationMs: 1000,
+          },
+        ],
+        cacheDiagnostics: {
+          stablePrefixHash: "prefixaaa",
+          stablePrefixChars: 1200,
+          stableFrameCount: 2,
+        },
+      },
+    });
+
+    const output = await captureStdout(() => runSessions(parseArgs(["sessions", "replay", sessionPath]), false));
+
+    expect(output).toContain("Lynn session replay");
+    expect(output).toContain("01. 01:00:00 user");
+    expect(output).toContain("02. 01:00:01 tool read_file");
+    expect(output).toContain("tool_call_id call_1");
+    expect(output).toContain("03. 01:00:02 assistant");
+    expect(output).toContain("metadata code_task");
+    expect(output).toContain("usage 120 tokens");
+    expect(output).toContain("cache 80 · miss 20 (80%)");
+    expect(output).toContain("cache prefix prefixaaa");
+    expect(output).toContain("1200 chars");
+    expect(output).toContain("20.0 TPS");
+  });
+
+  it("emits structured replay events as JSON", async () => {
+    const sessionPath = await appendSessionTurn({
+      dataDir: tmp,
+      cwd: "/repo",
+      title: "json replay",
+      prompt: "hello",
+      assistant: "hi",
+    });
+
+    const output = await captureStdout(() => runSessions(parseArgs(["sessions", "replay", sessionPath]), true));
+    const parsed = JSON.parse(output) as { type: string; sessionPath: string; events: Array<{ type: string; label: string; content: string }> };
+
+    expect(parsed.type).toBe("sessions.replay");
+    expect(parsed.sessionPath).toBe(sessionPath);
+    expect(parsed.events).toHaveLength(2);
+    expect(parsed.events[0]).toMatchObject({ type: "user", label: "user", content: "hello" });
+    expect(parsed.events[1]).toMatchObject({ type: "assistant", label: "assistant", content: "hi" });
+  });
 });
