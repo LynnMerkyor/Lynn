@@ -12,17 +12,21 @@ The CLI handles terminal UX, worker JSONL, and local file/shell orchestration.
 Install from the Lynn Tencent mirror:
 
 ```bash
-npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0-alpha.0.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0-alpha.0.tgz
 
 # Rolling preview build for testers:
-npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz
 ```
+
+`--force` is intentional for preview testers: it lets npm replace an older
+`Lynn` / `lynn` shim instead of failing with `EEXIST` when the command was
+already installed.
 
 If npm dependency downloads are slow in mainland China, keep the Lynn tarball URL
 as-is and add a registry mirror for third-party dependencies:
 
 ```bash
-npm install -g https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz \
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz \
   --registry=https://registry.npmmirror.com
 ```
 

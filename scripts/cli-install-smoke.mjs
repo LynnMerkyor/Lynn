@@ -75,9 +75,11 @@ await fs.access(path.join(cliRoot, "package.json")).catch(() => {
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-install-smoke-"));
 const packDir = path.join(tmp, "pack");
 const installDir = path.join(tmp, "consumer");
+const globalDir = path.join(tmp, "global");
 const dataDir = path.join(tmp, "data");
 await fs.mkdir(packDir, { recursive: true });
 await fs.mkdir(installDir, { recursive: true });
+await fs.mkdir(path.join(globalDir, "bin"), { recursive: true });
 await fs.mkdir(dataDir, { recursive: true });
 
 try {
@@ -89,6 +91,17 @@ try {
 
   await fs.writeFile(path.join(installDir, "package.json"), JSON.stringify({ private: true, type: "module" }, null, 2), "utf8");
   await run("npm install packed CLI", "npm", ["install", "--silent", "--omit=dev", tarball], { cwd: installDir });
+
+  // Global testers often already have an older lynn shim in PATH. The public
+  // install command intentionally uses --force so npm replaces that shim
+  // instead of failing with EEXIST.
+  await fs.writeFile(path.join(globalDir, "bin", "lynn"), "#!/bin/sh\necho stale\n", { mode: 0o755 });
+  await run("npm global install packed CLI", "npm", ["install", "--global", "--force", "--silent", "--omit=dev", "--prefix", globalDir, tarball], { cwd: installDir });
+  const globalLynn = process.platform === "win32"
+    ? path.join(globalDir, "lynn.cmd")
+    : path.join(globalDir, "bin", "lynn");
+  const globalVersion = await run("global lynn version", globalLynn, ["version"], { cwd: installDir });
+  assertIncludes(globalVersion.name, globalVersion.stdout, "@lynn/cli");
 
   const lowerBin = await existingBin(installDir, ["lynn"]);
   const lynnBin = await existingBin(installDir, ["Lynn", "lynn"]);

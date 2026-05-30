@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Text, useCursor, useStdout } from "ink";
+import { Box, Text, useStdout } from "ink";
 import { completeSlash, normalizeSlashInput } from "./completion.js";
 import { t } from "./i18n.js";
 import { visibleLength } from "./startup.js";
@@ -13,24 +13,21 @@ export interface InkInputLineProps {
 
 export function InkInputLine({ value, placeholder, danger, commands = [] }: InkInputLineProps): React.ReactElement {
   const { stdout } = useStdout();
-  const { setCursorPosition } = useCursor();
   const prompt = "› ";
   const width = Math.max(20, (stdout.columns || 80) - 2);
   const hint = slashHint(value, commands, width - visibleLength(prompt));
   const palette = slashPalette(value, commands);
   const visibleText = value || placeholder;
-  const cursorX = Math.min(width - 1, visibleLength(`${prompt}${value}`));
   const rawWidth = visibleLength(`${prompt}${visibleText}${hint ? ` ${hint}` : ""}`);
   const pad = Math.max(0, width - rawWidth);
-  setCursorPosition({ x: cursorX, y: Number.MAX_SAFE_INTEGER });
-  const backgroundColor = danger ? "red" : "gray";
+  const borderColor = danger ? "red" : "gray";
   return React.createElement(Box, { marginTop: 1, flexDirection: "column" },
     palette ? React.createElement(Text, { color: "gray" }, palette) : null,
-    React.createElement(Box, null,
-      React.createElement(Text, { backgroundColor, color: "white" }, prompt),
-      React.createElement(Text, { backgroundColor, color: value ? "white" : "black" }, visibleText),
-      hint ? React.createElement(Text, { backgroundColor, color: "black" }, ` ${hint}`) : null,
-      pad ? React.createElement(Text, { backgroundColor }, " ".repeat(pad)) : null,
+    React.createElement(Box, { borderStyle: "single", borderColor, paddingX: 1 },
+      React.createElement(Text, { color: "white" }, prompt),
+      React.createElement(Text, { color: value ? "white" : "gray" }, visibleText),
+      hint ? React.createElement(Text, { color: "gray" }, ` ${hint}`) : null,
+      pad ? React.createElement(Text, null, " ".repeat(pad)) : null,
     ),
   );
 }
