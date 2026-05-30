@@ -621,8 +621,8 @@ function isBuiltInLynnWorker(agent: string): boolean {
   return agent === "lynn-cli" || agent === "mimo-vl" || agent === "mimo-pro" || agent === "mimo-fast" || agent === "stepfun-flash";
 }
 
-function isVisionTask(taskType: WorkerBrief["taskType"]): taskType is VisionCommand {
-  return taskType === "see" || taskType === "ground" || taskType === "ui2code";
+function isVisionTask(taskType: WorkerBrief["taskType"]): taskType is "see" | "ground" {
+  return taskType === "see" || taskType === "ground";
 }
 
 export function workerProfileDefaults(agent: string): { reasoning?: "off" | "high" | "xhigh"; maxSteps?: string; long?: boolean } {
@@ -665,6 +665,11 @@ async function runLynnCliWorker(input: {
     flags.resume = path.isAbsolute(input.brief.resumePath)
       ? input.brief.resumePath
       : path.resolve(input.worktree, input.brief.resumePath);
+  }
+  if (input.brief.image) {
+    flags.image = path.isAbsolute(input.brief.image)
+      ? input.brief.image
+      : path.resolve(input.worktree, input.brief.image);
   }
   const preset = workerProviderPreset(input.agent);
   if (preset && !readEnvProviderProfile() && !getStringFlag(input.args.flags, "preset") && !getStringFlag(input.args.flags, "base-url", "api-base") && !getStringFlag(input.args.flags, "model")) {

@@ -826,6 +826,112 @@ describe("worker-run scaffold", () => {
     expect(lines.some((line) => line.type === "worker.finished" && line.summary === "lynn-cli worker completed")).toBe(true);
   });
 
+  it("routes ui2code briefs through the code loop with attached images", async () => {
+    const repo = await makeTempGitRepo();
+    await fs.writeFile(path.join(repo, "hello.txt"), "hello\n", "utf8");
+    await fs.writeFile(path.join(repo, "shot.png"), Buffer.from("89504e470d0a1a0a", "hex"));
+    await execFileAsync("git", ["add", "hello.txt", "shot.png"], { cwd: repo });
+    await execFileAsync("git", ["-c", "user.name=Lynn Test", "-c", "user.email=lynn@example.test", "commit", "-m", "seed"], { cwd: repo });
+    const briefPath = path.join(repo, "brief.md");
+    await fs.writeFile(briefPath, [
+      "# Task: implement screenshot",
+      "",
+      "## Task Type",
+      "ui2code",
+      "",
+      "## Image",
+      "shot.png",
+      "",
+      "## Objective",
+      "Use the screenshot to update hello.txt.",
+      "",
+      "## Owned files",
+      "- hello.txt",
+      "",
+      "## Forbidden files",
+      "- server/**",
+      "",
+      "## Test commands",
+      `- ${PASS_TEST_COMMAND}`,
+    ].join("\n"));
+    const patch = [
+      "diff --git a/hello.txt b/hello.txt",
+      "--- a/hello.txt",
+      "+++ b/hello.txt",
+      "@@ -1 +1 @@",
+      "-hello",
+      "+ui2code",
+      "",
+    ].join("\n");
+    let calls = 0;
+    let firstBody = "";
+    const server = http.createServer((req, res) => {
+      if (req.url === "/v1/chat/completions" && req.method === "POST") {
+        let body = "";
+        req.on("data", (chunk) => { body += String(chunk); });
+        req.on("end", () => {
+          calls += 1;
+          if (calls === 1) firstBody = body;
+          const content = calls === 1
+            ? JSON.stringify({ tool: "apply_patch", args: { patch } })
+            : "Implemented the screenshot change.";
+          res.writeHead(200, { "content-type": "text/event-stream" });
+          res.end(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`);
+        });
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("server did not bind");
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const code = await runWorker(parseArgs([
+        "worker",
+        "run",
+        "--brief",
+        briefPath,
+        "--worktree",
+        repo,
+        "--agent",
+        "mimo-vl",
+        "--brain-url",
+        `http://127.0.0.1:${address.port}`,
+        "--approval",
+        "yolo",
+        "--max-steps",
+        "3",
+      ]));
+      expect(code).toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    const text = await fs.readFile(path.join(repo, "hello.txt"), "utf8");
+    const lines = output.trim().split(/\r?\n/).map((line) => JSON.parse(line) as {
+      type: string;
+      summary?: string;
+      changedFiles?: Array<{ path: string; action?: string; insertions?: number }>;
+    });
+    expect(firstBody).toContain("data:image/png;base64");
+    expect(firstBody).toContain("Use the screenshot to update hello.txt.");
+    expect(text).toContain("ui2code");
+    expect(lines.some((line) => (
+      line.type === "git.diff"
+      && line.changedFiles?.some((file) => file.path === "hello.txt" && file.action === "edit")
+    ))).toBe(true);
+    expect(lines.some((line) => line.type === "worker.finished" && line.summary === "lynn-cli worker completed")).toBe(true);
+  });
+
   it("runs MiMo vision workers through the Brain multimodal path", async () => {
     const repo = await makeTempGitRepo();
     await fs.writeFile(path.join(repo, "shot.png"), Buffer.from("89504e470d0a1a0a", "hex"));
