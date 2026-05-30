@@ -334,6 +334,12 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     }
     if (event.type === "tool.loop_guard") pushItem({ kind: "tool", title: `loop guard ${event.tool}`, detail: `${event.repeats} repeats`, ok: false });
     if (event.type === "plan.updated") pushItem({ kind: "plan", items: event.items });
+    if (event.type === "session.resumed") {
+      pushItem({ kind: "system", text: t("code.session.resumed", { path: event.path, messages: String(event.messages) }), tone: "success" });
+    }
+    if (event.type === "session.saved") {
+      pushItem({ kind: "system", text: t("code.session.saved", { path: event.path }), tone: "success" });
+    }
     if (event.type === "tool.result") {
       if (event.result.tool === "update_plan") return;
       pushItem({ kind: "tool", title: event.result.tool, detail: event.result.error || summarizeOutput(event.result.output), ok: event.result.ok });

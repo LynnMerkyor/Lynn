@@ -536,6 +536,7 @@ async function runCodeTask(
     writeJsonLine({ type: "code.task.started", ts: nowIso(), task, context });
     if (resumePath) writeJsonLine({ type: "session.resumed", ts: nowIso(), path: resumePath, messages: resumeMessages.length });
   }
+  if (resumePath) options.onEvent?.({ type: "session.resumed", path: resumePath, messages: resumeMessages.length });
 
   if (mockBrain) {
     const text = renderMockCodeTask(task, context);
@@ -550,6 +551,7 @@ async function runCodeTask(
     if (saveSession) {
       const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: context.cwd, title, prompt: task, assistant: text, modelProvider: "mock", modelId: "mock-brain" });
       await appendSessionMetadata({ dataDir, sessionPath: savedPath, data: { kind: "code_task", mock: true, cwd: context.cwd, images: codeImagePaths(args), resumedFrom: resumePath || null } });
+      options.onEvent?.({ type: "session.saved", path: savedPath });
       if (json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
     }
     return 0;
@@ -573,6 +575,7 @@ async function runCodeTask(
       modelId: cliProvider?.profile.model || "lynn-brain-router",
     });
     if (json) writeJsonLine({ type: "session.checkpoint", ts: nowIso(), path: liveSessionPath, line: "user" });
+    options.onEvent?.({ type: "session.checkpoint", path: liveSessionPath, line: "user" });
   }
   const final = await runCodeAgentLoop({
     task,
@@ -602,6 +605,7 @@ async function runCodeTask(
             modelId: cliProvider?.profile.model || "lynn-brain-router",
           });
           if (json) writeJsonLine({ type: "session.checkpoint", ts: nowIso(), path: liveSessionPath, line: line.type });
+          options.onEvent?.({ type: "session.checkpoint", path: liveSessionPath, line: line.type });
         }
       : undefined,
   });
@@ -620,6 +624,7 @@ async function runCodeTask(
           modelId: cliProvider?.profile.model || "lynn-brain-router",
         });
         if (json) writeJsonLine({ type: "session.checkpoint", ts: nowIso(), path: liveSessionPath, line: "assistant" });
+        options.onEvent?.({ type: "session.checkpoint", path: liveSessionPath, line: "assistant" });
       }
     }
     savedSessionPath = liveSessionPath || await appendSessionTurn({
@@ -648,6 +653,7 @@ async function runCodeTask(
         resumedFrom: resumePath || null,
       },
     });
+    options.onEvent?.({ type: "session.saved", path: savedSessionPath });
     if (json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedSessionPath });
   }
   const resumeCommand = final.maxStepsReached && savedSessionPath
@@ -792,6 +798,9 @@ export type CodeAgentEvent =
   | { type: "tool.result"; result: ClientToolResult }
   | { type: "tool.loop_guard"; tool: ClientToolName; repeats: number }
   | { type: "plan.updated"; items: CodePlanItem[] }
+  | { type: "session.resumed"; path: string; messages: number }
+  | { type: "session.checkpoint"; path: string; line: "user" | "assistant" | "tool" }
+  | { type: "session.saved"; path: string }
   | { type: "task.finished"; ok: boolean; text: string; usageSummary: string | null; maxStepsReached?: boolean; resumeCommand?: string; sessionPath?: string | null }
   | { type: "error"; message: string };
 

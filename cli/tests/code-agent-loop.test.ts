@@ -384,6 +384,40 @@ describe("code agent loop", () => {
     expect(events.some((event) => event.type === "tool.result" && event.result.tool === "update_plan")).toBe(true);
   });
 
+  it("emits session resume/save events for Ink goal visibility", async () => {
+    const dataDir = path.join(tmp, "event-session-data");
+    const sessionPath = await appendSessionTurn({
+      dataDir,
+      cwd: tmp,
+      title: "saved task",
+      prompt: "previous task",
+      assistant: "previous answer",
+    });
+    const events: CodeAgentEvent[] = [];
+
+    await expect(runCodeTaskWithEvents(parseArgs([
+      "code",
+      "continue saved work",
+      "--cwd",
+      tmp,
+      "--mock-brain",
+      "--resume",
+      sessionPath,
+      "--save-session",
+      "--data-dir",
+      dataDir,
+    ]), "continue saved work", (event) => {
+      events.push(event);
+    })).resolves.toBe(0);
+
+    expect(events).toContainEqual({
+      type: "session.resumed",
+      path: sessionPath,
+      messages: expect.any(Number),
+    });
+    expect(events.some((event) => event.type === "session.saved" && event.path === sessionPath)).toBe(true);
+  });
+
   pythonIt("uses the Ink code shell for mock coding turns and Shift+Tab mode toggle", async () => {
     const script = `
 import os
