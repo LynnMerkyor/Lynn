@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractGroundingBoxes } from "../src/vision-result.js";
+import { extractGroundingBoxes, renderGroundingSummary } from "../src/vision-result.js";
 
 describe("vision grounding result parser", () => {
   it("parses normalized boxes from fenced JSON", () => {
@@ -29,5 +29,19 @@ describe("vision grounding result parser", () => {
       width: 0.3,
       height: 0.4,
     }]);
+  });
+
+  it("renders normalized boxes as a human-readable grounding summary", () => {
+    expect(renderGroundingSummary([{
+      label: "submit",
+      x: 0.25,
+      y: 0.5,
+      width: 0.2,
+      height: 0.1,
+      confidence: 0.88,
+    }])).toBe([
+      "Grounding result:",
+      "  1. submit @ x=25%, y=50% · w=20% · h=10% · conf=88%",
+    ].join("\n"));
   });
 });

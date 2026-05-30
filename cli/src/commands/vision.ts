@@ -7,7 +7,7 @@ import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
 import { t } from "../i18n.js";
-import { extractGroundingBoxes } from "../vision-result.js";
+import { extractGroundingBoxes, renderGroundingSummary } from "../vision-result.js";
 
 export type VisionCommand = "see" | "ground" | "ui2code";
 
@@ -59,13 +59,18 @@ export async function runVisionCommand(args: ParsedArgs, command: VisionCommand,
   } finally {
     spinner.stop();
   }
+  const groundingBoxes = command === "ground" ? extractGroundingBoxes(answer) : [];
   if (json) {
     if (command === "ground") {
-      writeJsonLine({ type: "vision.result", ts: nowIso(), command, image: imagePath, images: imagePaths, boxes: extractGroundingBoxes(answer) });
+      writeJsonLine({ type: "vision.result", ts: nowIso(), command, image: imagePath, images: imagePaths, boxes: groundingBoxes });
     }
     writeJsonLine({ type: "vision.finished", ts: nowIso(), ok: true, images: imagePaths, contentReturned: !!answer.trim() });
   }
-  else process.stdout.write("\n");
+  else {
+    const summary = renderGroundingSummary(groundingBoxes);
+    if (summary) process.stdout.write(`\n${summary}`);
+    process.stdout.write("\n");
+  }
   return 0;
 }
 

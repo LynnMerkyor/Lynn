@@ -19,6 +19,24 @@ export function extractGroundingBoxes(text: string): FleetVisualBox[] {
   return [];
 }
 
+export function formatGroundingBox(box: FleetVisualBox, index = 0): string {
+  const label = box.label || `target ${index + 1}`;
+  return [
+    `${label} @ x=${formatPercent(box.x)}, y=${formatPercent(box.y)}`,
+    box.width !== undefined ? `w=${formatPercent(box.width)}` : null,
+    box.height !== undefined ? `h=${formatPercent(box.height)}` : null,
+    box.confidence !== undefined ? `conf=${formatPercent(box.confidence)}` : null,
+  ].filter(Boolean).join(" · ");
+}
+
+export function renderGroundingSummary(boxes: readonly FleetVisualBox[]): string {
+  if (!boxes.length) return "";
+  return [
+    "Grounding result:",
+    ...boxes.map((box, index) => `  ${index + 1}. ${formatGroundingBox(box, index)}`),
+  ].join("\n");
+}
+
 function normalizeVisualBoxes(value: unknown): FleetVisualBox[] {
   if (Array.isArray(value)) return value.flatMap((entry) => normalizeVisualBox(entry));
   if (!value || typeof value !== "object") return [];
@@ -107,4 +125,10 @@ function asNumber(value: unknown): number | null {
 
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
+}
+
+function formatPercent(value: number): string {
+  const pct = value * 100;
+  if (Math.abs(pct - Math.round(pct)) < 0.05) return `${Math.round(pct)}%`;
+  return `${pct.toFixed(1)}%`;
 }

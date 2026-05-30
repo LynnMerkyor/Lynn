@@ -227,4 +227,54 @@ describe("MiMo vision commands", () => {
       confidence: 0.88,
     }]);
   });
+
+  it("renders grounding boxes in human mode", async () => {
+    const provider = http.createServer((request, response) => {
+      request.resume();
+      request.on("end", () => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end([
+          `data: ${JSON.stringify({ choices: [{ delta: { content: '{"x":0.25,"y":0.5,"w":0.2,"h":0.1,"confidence":0.88,"label":"submit"}' } }] })}`,
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const originalStdout = process.stdout.write;
+    const originalStderr = process.stderr.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    try {
+      await expect(runVisionCommand(parseArgs([
+        "ground",
+        png,
+        "Submit",
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-vision-test",
+        "--model",
+        "vision-model",
+      ]), "ground", false)).resolves.toBe(0);
+    } finally {
+      process.stdout.write = originalStdout;
+      process.stderr.write = originalStderr;
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
+
+    expect(output).toContain('"x":0.25');
+    expect(output).toContain("Grounding result:");
+    expect(output).toContain("submit @ x=25%, y=50% · w=20% · h=10% · conf=88%");
+  });
 });
