@@ -78,6 +78,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/exit 退出聊天\n" +
       "/clear 清空上下文\n" +
       "/model 查看 Brain 三段模型路由; /model mimo|stepfun|spark 切换 MiMo V2.5 Pro / StepFun 3.7 Flash / Spark Qwen 3.6 35B A3B\n" +
+      "/image <图片路径> [问题] 添加图片;也可以直接粘贴图片路径和多段文字\n" +
       "/setup 打开 CLI-only BYOK 三步向导\n" +
       "/providers 查看提供方和 BYOK 设置\n" +
       "/providers set --base-url ... --api-key ... --model ... 配置 CLI BYOK\n" +
@@ -105,6 +106,10 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "  /providers set --preset stepfun --api-key <key>",
     "chat.providers.routeReloaded": "✓ 当前聊天路由已刷新:{route}",
     "chat.providers.routeUnchanged": "✓ Provider 配置已处理;当前聊天路由仍是:{route}",
+    "chat.image.defaultPrompt": "请分析这些图片。",
+    "chat.image.usage": "用法:/image <图片路径> [问题]。也支持 /attach 或直接粘贴图片路径。",
+    "chat.image.attached": "已加入图片上下文:{summary}",
+    "chat.image.readError": "图片上下文无法读取:{error}",
     "code.fast": "✓ 快速模式 · 思考关闭",
     "code.think": "✓ 思考模式 · 高",
     "code.help":
@@ -157,6 +162,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "slash.label.exit": "退出",
     "slash.label.tools": "工具",
     "slash.label.clear": "清空",
+    "slash.label.image": "图片",
     "banner.label.model": "模型",
     "banner.label.mode": "模式",
     "banner.label.byok": "BYOK",
@@ -294,6 +300,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/exit leave chat\n" +
       "/clear reset context\n" +
       "/model show the three Brain model choices; /model mimo|stepfun|spark switches MiMo V2.5 Pro / StepFun 3.7 Flash / Spark Qwen 3.6 35B A3B\n" +
+      "/image <image-path> [prompt] attach images; pasted image paths and multi-line text work too\n" +
       "/setup open the CLI-only BYOK three-step wizard\n" +
       "/providers show BYOK setup\n" +
       "/providers set --base-url ... --api-key ... --model ... configure CLI BYOK\n" +
@@ -321,6 +328,10 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "  /providers set --preset stepfun --api-key <key>",
     "chat.providers.routeReloaded": "✓ Chat route refreshed: {route}",
     "chat.providers.routeUnchanged": "✓ Provider command handled; chat route is still: {route}",
+    "chat.image.defaultPrompt": "Please analyze these images.",
+    "chat.image.usage": "Usage: /image <image-path> [prompt]. /attach and pasted image paths work too.",
+    "chat.image.attached": "Attached image context: {summary}",
+    "chat.image.readError": "Could not read image context: {error}",
     "code.fast": "✓ fast mode · thinking off",
     "code.think": "✓ thinking mode · high",
     "code.help":
@@ -373,6 +384,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "slash.label.exit": "exit",
     "slash.label.tools": "tools",
     "slash.label.clear": "clear",
+    "slash.label.image": "image",
     "banner.label.model": "model",
     "banner.label.mode": "mode",
     "banner.label.byok": "BYOK",

@@ -18,6 +18,8 @@ import { HistoryNavigator } from "../history.js";
 import { readInteractiveLine } from "../interactive-line.js";
 import { refreshCliRuntimeSystemMessage, resetCliRuntimeMessages } from "../runtime-context.js";
 import { modelDisplayName, modelLabelWithId } from "../provider-presets.js";
+import { buildImagesContentParts } from "../media.js";
+import { parseImagePromptCommand, summarizeImageRefs } from "../pasted-context.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/exit",
@@ -31,6 +33,9 @@ export const CHAT_SLASH_COMMANDS = [
   "/model mimo",
   "/model stepfun",
   "/model spark",
+  "/image",
+  "/images",
+  "/attach",
   "/setup",
   "/byok",
   "/providers",
@@ -122,6 +127,22 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       output.write(`${renderBrainModelChoices(await resolveProvidersInfo(args))}\n\n`);
       return "continue";
     }
+    const imageCommand = parseImagePromptCommand(text);
+    if (imageCommand) {
+      if (!imageCommand.imageRefs.length) {
+        output.write(`${t("chat.image.usage")}\n\n`);
+        return "continue";
+      }
+      let userContent: ChatMessage["content"];
+      try {
+        userContent = await buildImagesContentParts(imageCommand.imageRefs.map((ref) => ref.path), imageCommand.prompt);
+      } catch (error) {
+        output.write(`${t("chat.image.readError", { error: error instanceof Error ? error.message : String(error) })}\n\n`);
+        return "continue";
+      }
+      output.write(`${t("chat.image.attached", { summary: summarizeImageRefs(imageCommand.imageRefs) })}\n\n`);
+      return sendUserMessage(imageCommand.prompt, userContent);
+    }
     if (text === "/providers" || text === "/byok") {
       output.write(`${renderProvidersInfo(await resolveProvidersInfo(args))}\n\n`);
       return "continue";
@@ -163,9 +184,13 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       return "continue";
     }
 
-    messages.push({ role: "user", content: text });
+    return sendUserMessage(text, text);
+  }
+
+  async function sendUserMessage(displayText: string, content: ChatMessage["content"]): Promise<"continue"> {
+    messages.push({ role: "user", content });
     if (mockBrain) {
-      const answer = t("mock.response", { text });
+      const answer = t("mock.response", { text: displayText });
       messages.push({ role: "assistant", content: answer });
       output.write(`${answer}\n\n`);
       return "continue";

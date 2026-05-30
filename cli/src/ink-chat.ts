@@ -16,7 +16,7 @@ import { InkMarkdown } from "./ink-markdown.js";
 import { handleInkProviderCommand } from "./ink-provider-commands.js";
 import { InkInputLine } from "./ink-input-line.js";
 import { refreshCliRuntimeSystemMessage, resetCliRuntimeMessages } from "./runtime-context.js";
-import { analyzePastedContext, appendPastedText, summarizePastedContext } from "./pasted-context.js";
+import { analyzePastedContext, appendPastedText, parseImagePromptCommand, summarizeImageRefs, summarizePastedContext } from "./pasted-context.js";
 import { buildImagesContentParts } from "./media.js";
 
 type Turn = {
@@ -303,13 +303,39 @@ async function submitInput(inputData: {
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: providerCommand.message }]);
     return;
   }
+  const imageCommand = parseImagePromptCommand(text);
+  if (imageCommand) {
+    if (!imageCommand.imageRefs.length) {
+      inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("chat.image.usage") }]);
+      return;
+    }
+    let userContent: ChatMessage["content"];
+    try {
+      userContent = await buildImagesContentParts(imageCommand.imageRefs.map((ref) => ref.path), imageCommand.prompt);
+    } catch (error) {
+      inputData.setTurns((current) => [...current, {
+        id: Date.now(),
+        role: "system",
+        text: t("chat.image.readError", { error: error instanceof Error ? error.message : String(error) }),
+        error: true,
+      }]);
+      return;
+    }
+    await submitChatTurn({
+      ...inputData,
+      promptText: imageCommand.prompt,
+      userContent,
+      contextSummary: summarizeImageRefs(imageCommand.imageRefs),
+    });
+    return;
+  }
   if (text.startsWith("/")) {
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("slash.unknown") }]);
     return;
   }
 
   const context = analyzePastedContext(text);
-  const promptText = context.text || (context.imageRefs.length ? "请分析这些图片。" : text);
+  const promptText = context.text || (context.imageRefs.length ? t("chat.image.defaultPrompt") : text);
   let userContent: ChatMessage["content"] = promptText;
   const contextSummary = context.hasContext ? summarizePastedContext(context) : "";
   if (context.imageRefs.length) {
@@ -322,14 +348,35 @@ async function submitInput(inputData: {
     }
   }
 
-  const userTurn: Turn = { id: Date.now(), role: "user", text: promptText, meta: contextSummary };
+  await submitChatTurn({
+    ...inputData,
+    promptText,
+    userContent,
+    contextSummary,
+  });
+}
+
+async function submitChatTurn(inputData: {
+  setTurns: React.Dispatch<React.SetStateAction<Turn[]>>;
+  setBusy: (value: boolean) => void;
+  setProvider: (value: string) => void;
+  setUsage: (value: string | null) => void;
+  messages: ChatMessage[];
+  props: InkChatProps;
+  reasoning: ReasoningOptions;
+  fallbackProvider: CliProviderProfile | null;
+  promptText: string;
+  userContent: ChatMessage["content"];
+  contextSummary: string;
+}): Promise<void> {
+  const userTurn: Turn = { id: Date.now(), role: "user", text: inputData.promptText, meta: inputData.contextSummary };
   const assistantId = userTurn.id + 1;
   inputData.setTurns((current) => [...current, userTurn, { id: assistantId, role: "assistant", text: "", pending: true }]);
-  inputData.messages.push({ role: "user", content: userContent });
+  inputData.messages.push({ role: "user", content: inputData.userContent });
   inputData.setBusy(true);
 
   if (inputData.props.mockBrain) {
-    const answer = t("mock.response", { text: promptText });
+    const answer = t("mock.response", { text: inputData.promptText });
     inputData.messages.push({ role: "assistant", content: answer });
     inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, text: answer, pending: false, meta: "mock Brain" } : turn));
     inputData.setBusy(false);

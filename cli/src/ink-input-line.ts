@@ -80,6 +80,10 @@ function slashCommandLabel(command: string): string {
       return t("slash.label.tools");
     case "/clear":
       return t("slash.label.clear");
+    case "/image":
+    case "/images":
+    case "/attach":
+      return t("slash.label.image");
     default:
       return "";
   }

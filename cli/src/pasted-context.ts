@@ -1,4 +1,5 @@
 import path from "node:path";
+import { currentLang, t, type Lang } from "./i18n.js";
 
 const IMAGE_PATH_RE = /(?:file:\/\/)?(?:"([^"]+\.(?:png|jpe?g|webp|gif))"|'([^']+\.(?:png|jpe?g|webp|gif))'|(\S+\.(?:png|jpe?g|webp|gif)))/gi;
 
@@ -15,6 +16,12 @@ export interface PastedContextInfo {
   charCount: number;
   hasMultilineText: boolean;
   hasContext: boolean;
+}
+
+export interface ImagePromptCommand {
+  command: "/image" | "/images" | "/attach";
+  prompt: string;
+  imageRefs: PastedImageRef[];
 }
 
 export function normalizePastedText(value: string): string {
@@ -57,13 +64,71 @@ export function analyzePastedContext(value: string, cwd = process.cwd()): Pasted
 }
 
 export function summarizePastedContext(info: PastedContextInfo): string {
+  return summarizeContextParts({
+    imageCount: info.imageRefs.length,
+    imageNames: info.imageRefs.map((ref) => path.basename(ref.path)),
+    hasMultilineText: info.hasMultilineText,
+    lineCount: info.lineCount,
+    segmentCount: info.segmentCount,
+    charCount: info.charCount,
+    lang: currentLang(),
+  });
+}
+
+export function summarizeImageRefs(imageRefs: readonly PastedImageRef[], lang: Lang = currentLang()): string {
+  return summarizeContextParts({
+    imageCount: imageRefs.length,
+    imageNames: imageRefs.map((ref) => path.basename(ref.path)),
+    hasMultilineText: false,
+    lineCount: 0,
+    segmentCount: 0,
+    charCount: 0,
+    lang,
+  });
+}
+
+export function parseImagePromptCommand(value: string, cwd = process.cwd()): ImagePromptCommand | null {
+  const normalized = normalizePastedText(value).trim();
+  const match = normalized.match(/^\/(image|images|attach)(?:\s+([\s\S]*))?$/i);
+  if (!match) return null;
+  const command = `/${match[1].toLowerCase()}` as ImagePromptCommand["command"];
+  const info = analyzePastedContext(match[2] || "", cwd);
+  return {
+    command,
+    prompt: info.text || t("chat.image.defaultPrompt"),
+    imageRefs: info.imageRefs,
+  };
+}
+
+function summarizeContextParts(options: {
+  imageCount: number;
+  imageNames: readonly string[];
+  hasMultilineText: boolean;
+  lineCount: number;
+  segmentCount: number;
+  charCount: number;
+  lang: Lang;
+}): string {
   const parts: string[] = [];
-  if (info.imageRefs.length) parts.push(`${info.imageRefs.length} image${info.imageRefs.length === 1 ? "" : "s"}`);
-  if (info.hasMultilineText) {
-    parts.push(`${info.lineCount} lines`);
-    if (info.segmentCount > 1) parts.push(`${info.segmentCount} segments`);
+  if (options.imageCount) {
+    const label = options.lang === "zh"
+      ? `${options.imageCount} 张图片`
+      : `${options.imageCount} image${options.imageCount === 1 ? "" : "s"}`;
+    const names = options.imageNames.slice(0, 2).join(", ");
+    const extra = options.imageNames.length > 2
+      ? (options.lang === "zh" ? ` 等 ${options.imageNames.length} 个文件` : ` +${options.imageNames.length - 2}`)
+      : "";
+    parts.push(names ? `${label}: ${names}${extra}` : label);
   }
-  if (!parts.length && info.charCount > 0) parts.push(`${info.charCount} chars`);
+  if (options.hasMultilineText) {
+    parts.push(options.lang === "zh" ? `${options.lineCount} 行` : `${options.lineCount} lines`);
+    if (options.segmentCount > 1) {
+      parts.push(options.lang === "zh" ? `${options.segmentCount} 段` : `${options.segmentCount} segments`);
+    }
+  }
+  if (!parts.length && options.charCount > 0) {
+    parts.push(options.lang === "zh" ? `${options.charCount} 字符` : `${options.charCount} chars`);
+  }
   return parts.join(" · ");
 }
 
