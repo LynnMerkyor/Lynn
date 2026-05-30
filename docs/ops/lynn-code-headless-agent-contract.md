@@ -184,7 +184,9 @@ By default, `Lynn code` talks to the local Lynn Brain router:
 2. MiMo V2.5 Pro / Omni fallback, including multimodal turns.
 3. Spark Qwen 3.6 35B A3B local fallback.
 
-If the Lynn client GUI / Brain server is offline, configure CLI-only BYOK:
+If the local Lynn Brain server is offline, start it with `Lynn brain start` or
+open the Lynn client GUI. For machines that should run without the client/Brain,
+configure CLI-only BYOK:
 
 ```bash
 Lynn providers set --base-url https://api.example.com/v1 --api-key <key> --model <model-id>

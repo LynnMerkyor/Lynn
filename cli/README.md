@@ -76,12 +76,19 @@ Lynn - < README.md
 separate lowercase `lynn` binary because macOS default filesystems are
 case-insensitive and npm cannot safely create both shims in the same prefix.
 
-## CLI-only BYOK fallback
+## Runtime routing and CLI-only BYOK fallback
 
-The default StepFun -> MiMo -> Spark routing is provided by the local Lynn
-client GUI / Brain server. A standalone npm install cannot ship Lynn's
-server-side keys. For CLI-only use, configure your own OpenAI-compatible
-endpoint:
+`Lynn`, `Lynn chat`, and `Lynn code` can start directly after `npm install -g`.
+They try routes in this order:
+
+1. Local Lynn Brain router, if it is online. Start it with `Lynn brain start` or
+   by opening the Lynn client GUI.
+2. CLI-only BYOK fallback, if you configured one with `Lynn providers set`.
+3. Mock mode only when you explicitly pass `--mock-brain`.
+
+The default StepFun -> MiMo -> Spark routing lives in the local Brain router. A
+standalone npm install cannot ship Lynn's server-side keys. For CLI-only use,
+configure your own OpenAI-compatible endpoint:
 
 ```bash
 Lynn providers set
@@ -116,8 +123,9 @@ The profile is stored in `~/.lynn/providers/cli.json` with the key redacted in
 terminal output. `Lynn -p`, `Lynn chat`, `Lynn code`, and built-in Lynn workers
 try the local Brain first; if it is offline, they use this BYOK provider.
 
-For full default Brain routing, web search, Lynn client GUI Fleet, and provider
-management, install and open the Lynn client GUI.
+For full default Brain routing, web search, and GUI Fleet orchestration, keep the
+local Brain online with `Lynn brain start` or the Lynn client GUI. Provider
+management for the default Brain route remains in the Lynn client GUI.
 
 ## Headless code mode for other agents
 
