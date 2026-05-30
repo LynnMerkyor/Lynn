@@ -68,6 +68,17 @@ function firstSectionValue(markdown: string, title: string): string {
     .filter(Boolean)[0] || "";
 }
 
+function preambleObjective(markdown: string): string {
+  const lines = markdown.split(/\r?\n/);
+  const out: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith("# ")) continue;
+    if (/^##\s+/.test(line)) break;
+    if (line.trim()) out.push(line.trim());
+  }
+  return out.join("\n").trim();
+}
+
 function normalizeTaskType(raw: string): WorkerBrief["taskType"] {
   const value = raw.trim().toLowerCase();
   if (value === "see" || value === "ground" || value === "ui2code") return value;
@@ -76,7 +87,7 @@ function normalizeTaskType(raw: string): WorkerBrief["taskType"] {
 
 export function parseWorkerBrief(markdown: string): WorkerBrief {
   const title = markdown.split(/\r?\n/).find((line) => line.startsWith("# "))?.slice(2).trim() || "Untitled worker task";
-  const objective = sectionLines(markdown, "Objective").join("\n").trim();
+  const objective = sectionLines(markdown, "Objective").join("\n").trim() || preambleObjective(markdown);
   const owned = bulletValues(sectionLines(markdown, "Owned files"));
   const forbidden = bulletValues(sectionLines(markdown, "Forbidden files"));
   const centerLocks = [

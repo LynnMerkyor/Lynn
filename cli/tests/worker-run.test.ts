@@ -366,6 +366,13 @@ describe("worker-run scaffold", () => {
       "Reply exactly `worker ok` and finish. Do not inspect files and do not run tools.",
     ].join("\n")))).toBe(true);
     expect(isAnswerOnlyWorkerBrief(parseWorkerBrief([
+      "# Task: smoke",
+      "",
+      "Reply exactly: worker ok",
+      "Do not inspect files.",
+      "Do not run tools.",
+    ].join("\n")))).toBe(true);
+    expect(isAnswerOnlyWorkerBrief(parseWorkerBrief([
       "# Task: patch file",
       "",
       "## Objective",
