@@ -9,6 +9,7 @@ import {
   attachLocalQwen35BenchContext,
   shouldAttachLocalQwen35BenchContext,
 } from "./local-qwen35-bench-context.js";
+import { buildLocalOfficeDirectAnswer } from "./local-office-answer.js";
 
 export type ToolUseBehaviorName = "run_llm_again" | "prefetch_then_run_or_stop";
 
@@ -101,7 +102,8 @@ export function resolveInitialToolUseBehavior(promptText: unknown, opts: ToolUse
 
   const reportKind = inferReportResearchKind(text);
   const budgetContext = buildBudgetCalculationContext(text);
-  const disableTools = shouldDisableToolsForTurn(text);
+  const hasDeterministicLocalAnswer = !!buildLocalOfficeDirectAnswer(text);
+  const disableTools = shouldDisableToolsForTurn(text) || hasDeterministicLocalAnswer;
   const effectivePromptText = budgetContext
     ? buildPrefetchAugmentedPrompt(text, "", budgetContext)
     : text;
