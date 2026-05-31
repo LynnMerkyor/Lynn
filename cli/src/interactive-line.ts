@@ -3,6 +3,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { completeSlash } from "./completion.js";
 import { HistoryNavigator } from "./history.js";
 import { renderInputBand } from "./tui-input.js";
+import { renderPromptFrame } from "./terminal-spinner.js";
 import { cyan, supportsColor } from "./terminal-style.js";
 import { terminalTuiProfile } from "./terminal-safety.js";
 
@@ -16,6 +17,8 @@ export interface InteractiveLineOptions {
   history?: HistoryNavigator;
   completions?: string[];
   onShiftTab?: () => string | void;
+  /** 提供则在原生 readline 提示前画"对话框"框(顶栏状态 + `│ › `)。 */
+  frameStatus?: string;
 }
 
 export async function readInteractiveLine(
@@ -126,7 +129,10 @@ export function shouldUseNativeLineInput(env: NodeJS.ProcessEnv = process.env): 
 
 async function readNativeTerminalLine(prompt: string, options: InteractiveLineOptions): Promise<string | null> {
   const color = supportsColor(output);
-  const cleanPrompt = color ? prompt.replace("›", cyan("›", color)) : prompt;
+  const width = typeof output.columns === "number" && output.columns > 0 ? output.columns : 80;
+  const cleanPrompt = options.frameStatus !== undefined
+    ? renderPromptFrame(options.frameStatus, width, color)
+    : color ? prompt.replace("›", cyan("›", color)) : prompt;
   const rl = readline.createInterface({
     input,
     output,

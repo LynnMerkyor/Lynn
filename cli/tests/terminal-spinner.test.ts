@@ -7,6 +7,7 @@ import {
   brailleGlyph,
   renderCard,
   renderPlanCard,
+  renderPromptFrame,
   TerminalSpinner,
 } from "../src/terminal-spinner.js";
 
@@ -127,6 +128,24 @@ describe("TerminalSpinner class", () => {
     expect(calls(stream)[0][0]).toContain("\r");
   });
 
+  it("default mode keeps the visible sweep line but uses the soft label shimmer", () => {
+    const prevForce = process.env.LYNN_FORCE_COLOR;
+    process.env.LYNN_FORCE_COLOR = "1";
+    try {
+      const stream = mockStream(90);
+      const spinner = new TerminalSpinner(stream, "Thinking");
+      for (let i = 0; i < 6; i += 1) spinner.render();
+      const written = calls(stream).map((call) => call[0] as string).join("\n");
+      const plain = stripAnsi(written);
+      expect(plain).toContain("Thinking");
+      expect(plain).toContain("━"); // 用户要的可见流光线仍然存在(前几帧会扫入视野)
+      expect(written).toContain("\x1b[2m"); // label 使用 soft shimmer 的 dim 基底,不是全亮高噪音
+    } finally {
+      if (prevForce === undefined) delete process.env.LYNN_FORCE_COLOR;
+      else process.env.LYNN_FORCE_COLOR = prevForce;
+    }
+  });
+
   it("falls back to a static label when the available width is too small", () => {
     const stream = mockStream(80);
     const longLabel = "思".repeat(64); // visibleLength 远超可用宽 → 静态降级
@@ -159,5 +178,75 @@ describe("TerminalSpinner class", () => {
     spinner.start();
     expect(calls(stream)).toHaveLength(0);
     spinner.stop(); // 安全
+  });
+
+  it("renders a static label (no timer) when LYNN_CLI_NO_TUI_ANIMATION=1", () => {
+    const prev = process.env.LYNN_CLI_NO_TUI_ANIMATION;
+    process.env.LYNN_CLI_NO_TUI_ANIMATION = "1";
+    try {
+      const stream = mockStream(80);
+      const spinner = new TerminalSpinner(stream, "思考中");
+      spinner.start();
+      // 仅一次静态写入,内容就是 label 本身(无扫描条、无动画帧推进)。
+      expect(calls(stream)).toHaveLength(1);
+      expect(calls(stream)[0][0]).toBe("\r思考中");
+      spinner.stop();
+    } finally {
+      if (prev === undefined) delete process.env.LYNN_CLI_NO_TUI_ANIMATION;
+      else process.env.LYNN_CLI_NO_TUI_ANIMATION = prev;
+    }
+  });
+
+  it("keeps animating on Apple Terminal (wait spinner is IME-safe)", () => {
+    const prevTerm = process.env.TERM_PROGRAM;
+    const prevAnim = process.env.LYNN_CLI_NO_TUI_ANIMATION;
+    process.env.TERM_PROGRAM = "Apple_Terminal";
+    delete process.env.LYNN_CLI_NO_TUI_ANIMATION;
+    try {
+      const stream = mockStream(80);
+      const spinner = new TerminalSpinner(stream, "Thinking");
+      spinner.start();
+      spinner.render(); // 推进一帧 → 与首帧不同 = 真的在动
+      const frames = calls(stream).map((c) => stripAnsi(c[0] as string));
+      expect(frames.length).toBeGreaterThanOrEqual(2);
+      expect(frames.some((f) => f.includes("━") || f.includes("─"))).toBe(true); // 可见扫描条(无色也有 ─/━)
+      spinner.stop();
+    } finally {
+      if (prevTerm === undefined) delete process.env.TERM_PROGRAM;
+      else process.env.TERM_PROGRAM = prevTerm;
+      if (prevAnim !== undefined) process.env.LYNN_CLI_NO_TUI_ANIMATION = prevAnim;
+    }
+  });
+});
+
+describe("input prompt frame (对话框)", () => {
+  it("frames the prompt with a top status border + left-gutter chevron", () => {
+    const plain = stripAnsi(renderPromptFrame("Lynn · StepFun 3.7 Flash · ask / workspace-write", 72, false));
+    const [top, promptLine] = plain.split("\n");
+    expect(top.startsWith("╭─")).toBe(true);
+    expect(top.endsWith("╮")).toBe(true);
+    expect(top).toContain("Lynn · StepFun 3.7 Flash");
+    expect(promptLine).toBe("│ › "); // 只有左边框 + chevron(无右/下边框 → 无滚动残骸)
+  });
+
+  it("stays visible without color (plain box-drawing chars)", () => {
+    const out = renderPromptFrame("status", 60, false);
+    expect(out).not.toContain("\x1b["); // 无色 → 无 ANSI
+    expect(out).toContain("╭");
+    expect(out).toContain("│ › ");
+  });
+
+  it("colors the border (dim) and chevron (bright cyan) when enabled", () => {
+    const out = renderPromptFrame("status", 60, true);
+    expect(out).toContain("\x1b[2m"); // dim 边框
+    expect(out).toContain("\x1b[1;36m"); // bright cyan chevron
+    expect(stripAnsi(out).split("\n")[1]).toBe("│ › ");
+  });
+
+  it("truncates an over-long status instead of overflowing", () => {
+    const long = "X".repeat(200);
+    const top = stripAnsi(renderPromptFrame(long, 60, false)).split("\n")[0];
+    expect(top).toContain("…");
+    expect(top.length).toBeLessThanOrEqual(74); // 受 width(72)约束,不无限撑开
   });
 });

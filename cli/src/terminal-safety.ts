@@ -2,7 +2,14 @@ import { hasFlag, type ParsedArgs } from "./args.js";
 
 export interface TerminalTuiProfile {
   appleTerminal: boolean;
+  /** 输入区/重绘类动画(raw-mode 重画)。Apple Terminal 关 → 防中文输入法闪退。 */
   animation: boolean;
+  /**
+   * 模型等待期的单行 \r 流光(stderr,用户此刻不打字 → 不碰 stdin/raw mode)。
+   * 这条路径与输入法闪退无关,所以 Apple Terminal 也照常跑,只有显式
+   * LYNN_CLI_NO_TUI_ANIMATION=1 才关闭。
+   */
+  waitAnimation: boolean;
   inlineImages: boolean;
   dynamicPlaceholders: boolean;
 }
@@ -28,6 +35,7 @@ export function terminalTuiProfile(env: NodeJS.ProcessEnv = process.env): Termin
   return {
     appleTerminal,
     animation: env.LYNN_CLI_NO_TUI_ANIMATION === "1" ? false : !safe,
+    waitAnimation: env.LYNN_CLI_NO_TUI_ANIMATION !== "1",
     inlineImages: env.LYNN_CLI_NO_INLINE_IMAGES === "1" ? false : !safe,
     dynamicPlaceholders: !safe,
   };

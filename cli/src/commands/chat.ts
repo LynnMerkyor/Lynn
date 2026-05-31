@@ -5,7 +5,7 @@ import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, run
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
-import { dangerLine, dim, red, supportsColor } from "../terminal-style.js";
+import { bold, dim, green, red, supportsColor } from "../terminal-style.js";
 import { renderStartupBanner } from "../startup.js";
 import { renderStatusBar } from "../status-bar.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
@@ -240,7 +240,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     let assistant = "";
     let latestUsage: string | null = null;
     const renderState: HumanBrainRenderState = {};
-    const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"), { quiet: true });
+    const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"));
     const renderReasoning = shouldRenderReasoning(reasoning.display, false);
     const md = new MarkdownStream((s) => output.write(s), supportsColor(output));
     const turnStarted = Date.now();
@@ -299,6 +299,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
           placeholder: t("chat.placeholder"),
           history: new HistoryNavigator(history),
           completions: CHAT_SLASH_COMMANDS,
+          frameStatus: buildPromptFrameStatus(cliProvider?.profile, mode, reasoning.effort),
           onShiftTab: () => renderInteractiveModeChange(toggleMode(mode), mode, supportsColor(output)),
         });
         if (text === null) break;
@@ -341,6 +342,17 @@ export async function resolveChatMode(args: ParsedArgs): Promise<ChatMode> {
 
 export function renderMode(mode: ChatMode): string {
   return `${mode.approval} / ${mode.sandbox}`;
+}
+
+/** 输入区"对话框"顶栏状态文案:Lynn · 模型 · 模式 · 推理档。 */
+function buildPromptFrameStatus(
+  profile: { provider: string; model: string } | null | undefined,
+  mode: ChatMode,
+  effort: string,
+): string {
+  const model = profile ? modelLabelWithId(profile.model) : "StepFun 3.7 Flash";
+  const think = effort === "off" ? "fast" : `think ${effort}`;
+  return `Lynn · ${model} · ${renderMode(mode)} · ${think}`;
 }
 
 export function chatRouteLabel(provider?: { provider: string; model: string } | null): string {
@@ -491,9 +503,20 @@ export function toggleMode(mode: ChatMode): string {
 
 function renderInteractiveModeChange(message: string, mode: ChatMode, color: boolean): string {
   const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
-  const label = dangerous ? red(renderMode(mode), color) : renderMode(mode);
-  const warning = dangerous ? `\n${dangerLine(t("mode.danger.warning"), color)}` : "";
-  return `✓ ${message}\nmode: ${label}${warning}\n\n`;
+  if (dangerous) {
+    // 危险模式必须 loud:即使 NO_COLOR/无色,也用 ⚠ + 大写 DANGER 让人无法忽略;有色再叠红+粗。
+    const head = "⚠  YOLO 危险模式 / DANGER MODE  ⚠";
+    return [
+      "",
+      red(bold(head, color), color),
+      red(message, color),
+      `mode: ${red(bold(renderMode(mode), color), color)}`,
+      red(t("mode.danger.warning"), color),
+      "",
+      "",
+    ].join("\n");
+  }
+  return `${green("✓", color)} ${message}\nmode: ${dim(renderMode(mode), color)}\n\n`;
 }
 
 export function applyReasoningCommand(current: ReturnType<typeof parseReasoningOptions>, raw: string): { reasoning: ReturnType<typeof parseReasoningOptions>; message: string } {

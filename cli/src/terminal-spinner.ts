@@ -169,6 +169,26 @@ export function renderPlanCard(steps: PlanStep[], color: boolean, title = "Plan"
 }
 
 // ---------------------------------------------------------------------------
+// 输入区"对话框"框(append-only 安全,readline 友好)
+// ---------------------------------------------------------------------------
+
+/**
+ * 渲染输入区框:顶部 `╭─ <状态> ─…─╮` 整行 + 提示行 `│ › `(留给 readline 在右侧编辑)。
+ *   · 顶部是一整行 → append-only 滚动安全;提示行只有左边框、无右/下边框 → 无滚动残骸。
+ *   · 无色时退化为纯框线字符(╭─│╮),Apple Terminal 同样能看见"对话框"。
+ * 返回值直接作为 readline.question 的 prompt(末尾以 `› ` 收口,光标落在框内)。
+ */
+export function renderPromptFrame(status: string, width: number, color: boolean): string {
+  const target = Math.max(24, Math.min(width || 80, 72));
+  const maxStatus = target - 6;
+  const shown = visibleLength(status) > maxStatus ? `${status.slice(0, Math.max(1, maxStatus - 1))}…` : status;
+  const label = shown ? ` ${shown} ` : " ";
+  const fill = Math.max(3, target - visibleLength(label) - 3);
+  const top = `${dim("╭─", color)}${bold(label, color)}${dim("─".repeat(fill) + "╮", color)}`;
+  return `${top}\n${dim("│", color)} ${brightCyan("›", color)} `;
+}
+
+// ---------------------------------------------------------------------------
 // 单行动画器(\r 重画,IME 安全,自动降级)
 // ---------------------------------------------------------------------------
 
@@ -191,10 +211,16 @@ export class TerminalSpinner {
   start(): void {
     if (this.active || !this.stream.isTTY) return;
     this.active = true;
-    this.render();
     const profile = terminalTuiProfile();
-    // Apple Terminal 安全模式用低频(270ms),否则正常(90ms)。
-    const interval = profile.appleTerminal && !profile.animation ? 270 : 90;
+    if (!profile.waitAnimation) {
+      // 动画被显式关闭(LYNN_CLI_NO_TUI_ANIMATION=1)→ 静态标签,不起定时器。
+      this.stream.write(`\r${this.label}`);
+      return;
+    }
+    this.render();
+    // 模型等待期的单行 \r 流光是 stderr 输出、用户此刻不打字 → 输入法安全,
+    // 所以 Apple Terminal 也照常跑(节奏略缓 110ms),其它终端 90ms。
+    const interval = profile.appleTerminal ? 110 : 90;
     this.timer = setInterval(() => this.render(), interval);
   }
 
@@ -212,9 +238,7 @@ export class TerminalSpinner {
 
   /** 渲染当前帧(public 以便测试与按需手动刷新)。 */
   render(): void {
-    const profile = terminalTuiProfile();
     const color = supportsColor(this.stream);
-    const lowFrequency = profile.appleTerminal && !profile.animation;
     const availableWidth = this.clearWidth() - visibleLength(this.label) - 5;
 
     // 宽度不足:降级为静态 label(无动画)。
@@ -225,10 +249,13 @@ export class TerminalSpinner {
     }
 
     if (this.options.quiet) {
-      this.stream.write(`\r${renderQuietShimmer(this.label, this.frame, color, lowFrequency)}`);
+      this.stream.write(`\r${renderQuietShimmer(this.label, this.frame, color)}`);
     } else {
+      // 用户明确要回"看得见的一条流光线",所以保留可见扫描条 renderSweepFrame;
+      // 但标签用低噪音 renderSoftShimmer(不是高噪音 renderShimmerText)——只让那条线
+      // "流动",标签保持安静。这样同时满足"可见流光"(用户)与"低噪音"(既定方向)。
       const width = Math.min(42, Math.max(18, availableWidth));
-      this.stream.write(`\r${renderShimmerText(this.label, this.frame, color, lowFrequency)} ${renderSweepFrame(width, this.frame, color, lowFrequency)}`);
+      this.stream.write(`\r${renderSoftShimmer(this.label, this.frame, color)} ${renderSweepFrame(width, this.frame, color)}`);
     }
     this.frame += 1;
   }

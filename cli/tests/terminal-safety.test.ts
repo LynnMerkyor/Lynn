@@ -14,6 +14,8 @@ describe("terminal safety", () => {
     expect(terminalTuiProfile(env)).toEqual({
       appleTerminal: true,
       animation: false,
+      // 等待期流光(stderr,用户不打字)与输入法闪退无关 → Apple Terminal 也保持开。
+      waitAnimation: true,
       inlineImages: false,
       dynamicPlaceholders: false,
     });
@@ -43,6 +45,7 @@ describe("terminal safety", () => {
   it("honors global animation and image disables", () => {
     expect(terminalTuiProfile({ TERM_PROGRAM: "iTerm.app", LYNN_CLI_NO_TUI_ANIMATION: "1", LYNN_CLI_NO_INLINE_IMAGES: "1" })).toMatchObject({
       animation: false,
+      waitAnimation: false, // 显式总开关也关掉等待期流光
       inlineImages: false,
       dynamicPlaceholders: true,
     });

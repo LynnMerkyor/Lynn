@@ -1,5 +1,16 @@
-export function supportsColor(stream: Pick<NodeJS.WriteStream, "isTTY"> | undefined): boolean {
-  return !!stream?.isTTY && process.env.NO_COLOR !== "1";
+export function supportsColor(
+  stream: Pick<NodeJS.WriteStream, "isTTY"> | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (isTruthy(env.LYNN_FORCE_COLOR) || isTruthy(env.FORCE_COLOR) || isTruthy(env.CLICOLOR_FORCE)) return true;
+  if (isTruthy(env.LYNN_NO_COLOR)) return false;
+  if (env.NO_COLOR !== undefined) return false;
+  if (!stream?.isTTY) return false;
+  return env.TERM !== "dumb";
+}
+
+function isTruthy(value: string | undefined): boolean {
+  return value !== undefined && value !== "" && value !== "0" && value.toLowerCase() !== "false";
 }
 
 export function red(text: string, enabled: boolean): string {
