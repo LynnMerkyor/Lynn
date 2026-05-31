@@ -431,6 +431,57 @@ describe("brain-client stream parser", () => {
     }
   });
 
+  it("retries transient Brain 5xx responses before using fallback", async () => {
+    let brainRequests = 0;
+    const brain = http.createServer((_request, response) => {
+      brainRequests += 1;
+      if (brainRequests < 3) {
+        response.writeHead(503, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: "warming" }));
+        return;
+      }
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"brain recovered\"}}]}",
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"));
+    });
+    await new Promise<void>((resolve) => brain.listen(0, "127.0.0.1", resolve));
+    const oldAttempts = process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS;
+    const oldDelay = process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS;
+    process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS = "3";
+    process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS = "0";
+    try {
+      const address = brain.address();
+      if (!address || typeof address === "string") throw new Error("brain test server failed to listen");
+      const events = [];
+      for await (const event of streamBrainChat({
+        brainUrl: `http://127.0.0.1:${address.port}`,
+        prompt: "hello",
+        reasoning: { effort: "auto", display: "auto" },
+        fallbackProvider: {
+          provider: "openai-compatible",
+          baseUrl: "http://127.0.0.1:1/v1",
+          model: "test-model",
+          apiKey: "sk-test",
+        },
+      })) {
+        events.push(event);
+      }
+      expect(brainRequests).toBe(3);
+      expect(events).toContainEqual({ type: "assistant.delta", text: "brain recovered" });
+      expect(events).not.toContainEqual(expect.objectContaining({ type: "provider", activeProvider: "cli-byok:openai-compatible" }));
+    } finally {
+      if (oldAttempts === undefined) delete process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS;
+      else process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS = oldAttempts;
+      if (oldDelay === undefined) delete process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS;
+      else process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS = oldDelay;
+      await new Promise<void>((resolve) => brain.close(() => resolve()));
+    }
+  });
+
   it("falls back to CLI BYOK when online Brain streams all-providers-failed before any answer", async () => {
     const brokenBrain = http.createServer((_request, response) => {
       response.writeHead(200, { "content-type": "text/event-stream" });

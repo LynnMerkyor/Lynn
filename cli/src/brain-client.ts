@@ -259,32 +259,7 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
     messages,
   }, request.reasoning);
 
-  let response: Response;
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), brainRequestTimeoutMs(!!request.fallbackProvider));
-  try {
-    response = await fetch(brainEndpointUrl(request.brainUrl, "/v1/chat/completions"), {
-      method: "POST",
-      headers: { "content-type": "application/json", ...signedBrainHeaders({ pathname: "/v1/chat/completions" }) },
-      body: JSON.stringify(body),
-      signal: abort.signal,
-    });
-    if (response.status === 401) {
-      const registered = await registerRemoteBrainDevice(request.brainUrl);
-      if (registered) {
-        response = await fetch(brainEndpointUrl(request.brainUrl, "/v1/chat/completions"), {
-          method: "POST",
-          headers: { "content-type": "application/json", ...signedBrainHeaders({ pathname: "/v1/chat/completions" }) },
-          body: JSON.stringify(body),
-          signal: abort.signal,
-        });
-      }
-    }
-  } catch (error) {
-    throw new BrainConnectionError(request.brainUrl, error);
-  } finally {
-    clearTimeout(timer);
-  }
+  const response = await fetchBrainResponseWithRetry(request, body);
   if (!response.ok) {
     if (isRecoverableBrainStatus(response.status)) {
       throw new BrainUnavailableError(request.brainUrl, response.status, response.statusText);
@@ -312,6 +287,57 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
   for (const payload of parseSsePayloads(buffer)) {
     for (const event of parseBrainStreamPayload(payload)) yield event;
   }
+}
+
+async function fetchBrainResponseWithRetry(request: BrainChatRequest, body: Record<string, unknown>): Promise<Response> {
+  const attempts = brainRetryAttempts();
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetchBrainResponseOnce(request, body);
+      if (!response.ok && isRecoverableBrainStatus(response.status) && attempt < attempts) {
+        lastError = new BrainUnavailableError(request.brainUrl, response.status, response.statusText);
+        await sleep(brainRetryDelayMs(attempt));
+        continue;
+      }
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts) break;
+      await sleep(brainRetryDelayMs(attempt));
+    }
+  }
+  throw new BrainConnectionError(request.brainUrl, lastError);
+}
+
+async function fetchBrainResponseOnce(request: BrainChatRequest, body: Record<string, unknown>): Promise<Response> {
+  let response: Response;
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), brainRequestTimeoutMs(!!request.fallbackProvider));
+  try {
+    response = await fetch(brainEndpointUrl(request.brainUrl, "/v1/chat/completions"), {
+      method: "POST",
+      headers: { "content-type": "application/json", ...signedBrainHeaders({ pathname: "/v1/chat/completions" }) },
+      body: JSON.stringify(body),
+      signal: abort.signal,
+    });
+    if (response.status === 401) {
+      const registered = await registerRemoteBrainDevice(request.brainUrl);
+      if (registered) {
+        response = await fetch(brainEndpointUrl(request.brainUrl, "/v1/chat/completions"), {
+          method: "POST",
+          headers: { "content-type": "application/json", ...signedBrainHeaders({ pathname: "/v1/chat/completions" }) },
+          body: JSON.stringify(body),
+          signal: abort.signal,
+        });
+      }
+    }
+  } catch (error) {
+    throw new BrainConnectionError(request.brainUrl, error);
+  } finally {
+    clearTimeout(timer);
+  }
+  return response;
 }
 
 async function* streamDirectProviderChat(request: BrainChatRequest, provider: CliProviderProfile): AsyncGenerator<BrainStreamEvent> {
@@ -373,6 +399,25 @@ function brainRequestTimeoutMs(hasFallbackProvider: boolean): number {
   const parsed = raw ? Number(raw) : NaN;
   if (Number.isFinite(parsed) && parsed > 0) return Math.max(250, Math.min(30_000, parsed));
   return hasFallbackProvider ? 1200 : 5000;
+}
+
+function brainRetryAttempts(): number {
+  const raw = process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  if (Number.isFinite(parsed) && parsed >= 1) return Math.min(5, parsed);
+  return 3;
+}
+
+function brainRetryDelayMs(attempt: number): number {
+  const raw = process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  const base = Number.isFinite(parsed) && parsed >= 0 ? parsed : 500;
+  const jitter = base > 0 ? Math.floor(Math.random() * Math.min(250, base)) : 0;
+  return Math.min(5_000, base * (2 ** Math.max(0, attempt - 1)) + jitter);
+}
+
+function sleep(ms: number): Promise<void> {
+  return ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isRecoverableBrainStatus(status: number): boolean {

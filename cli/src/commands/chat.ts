@@ -240,7 +240,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     let assistant = "";
     let latestUsage: string | null = null;
     const renderState: HumanBrainRenderState = {};
-    const spinner = new TerminalSpinner(process.stderr);
+    const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"), { quiet: true });
     const renderReasoning = shouldRenderReasoning(reasoning.display, false);
     const md = new MarkdownStream((s) => output.write(s), supportsColor(output));
     const turnStarted = Date.now();

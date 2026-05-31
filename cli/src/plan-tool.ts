@@ -1,3 +1,5 @@
+import { renderCard, renderPlanCard } from "./terminal-spinner.js";
+
 export type CodePlanStatus = "pending" | "in_progress" | "completed";
 
 export interface CodePlanItem {
@@ -14,11 +16,11 @@ export function normalizePlanItems(value: unknown): CodePlanItem[] {
 }
 
 export function renderPlanItems(items: readonly CodePlanItem[]): string {
-  if (!items.length) return "Plan updated: no items";
-  return [
-    "Plan updated:",
-    ...items.map((item, index) => `${statusGlyph(item.status)} ${item.id || `P${index + 1}`}: ${item.content}`),
-  ].join("\n");
+  if (!items.length) return renderCard({ kind: "plan", title: "plan", body: ["no items"] }, false);
+  return renderPlanCard(items.map((item, index) => ({
+    status: item.status,
+    text: `${item.id || `P${index + 1}`}: ${item.content}`,
+  })), false, "plan");
 }
 
 function planArray(value: unknown): unknown[] {
@@ -60,10 +62,4 @@ function normalizeStatus(value: string | undefined): CodePlanStatus {
 function firstString(...values: unknown[]): string | undefined {
   const value = values.find((entry) => typeof entry === "string" && entry.trim());
   return typeof value === "string" ? value : undefined;
-}
-
-function statusGlyph(status: CodePlanStatus): string {
-  if (status === "completed") return "✓";
-  if (status === "in_progress") return "●";
-  return "○";
 }

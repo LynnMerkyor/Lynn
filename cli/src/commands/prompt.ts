@@ -91,7 +91,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   let modelProvider = "brain";
   let modelId = "lynn-brain-router";
   const renderState: HumanBrainRenderState = {};
-  const spinner = new TerminalSpinner(process.stderr);
+  const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"), { quiet: true });
   const startedAt = Date.now();
   if (!options.json) spinner.start();
   try {

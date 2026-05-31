@@ -8,7 +8,8 @@
  * line). With `color === false` (NO_COLOR / non-TTY) the output is plain text but
  * markdown markers are still cleaned up (e.g. `# Title` -> `Title`, `- x` -> `• x`).
  */
-import { bold, cyan, dim } from "./terminal-style.js";
+import { highlightCodeLine } from "./code-highlight.js";
+import { bold, cyan, dim, green, red, yellow } from "./terminal-style.js";
 
 const BULLET = "•";
 
@@ -75,13 +76,17 @@ export class MarkdownStream {
       this.inFence = !this.inFence;
       if (this.inFence) {
         const lang = fence[1].trim();
+        this.fenceLang = lang;
         return dim(lang ? `┌─ ${lang}` : "┌─", this.color);
       }
+      this.fenceLang = "";
       return dim("└─", this.color);
     }
-    if (this.inFence) return this.color ? cyan(line, true) : line;
+    if (this.inFence) return renderHighlightedCodeLine(line, this.color, this.fenceLang);
     return formatMarkdownLine(line, this.color);
   }
+
+  private fenceLang = "";
 }
 
 /** Render a complete markdown string to ANSI (non-streaming). */
@@ -91,4 +96,15 @@ export function renderMarkdown(text: string, color: boolean): string {
   stream.push(text);
   stream.end();
   return parts.join("");
+}
+
+function renderHighlightedCodeLine(line: string, color: boolean, lang?: string): string {
+  if (!color) return line;
+  return highlightCodeLine(line, lang).map((segment) => {
+    if (segment.color === "green") return green(segment.text, true);
+    if (segment.color === "red") return red(segment.text, true);
+    if (segment.color === "yellow") return yellow(segment.text, true);
+    if (segment.color === "magenta") return `\x1b[35m${segment.text}\x1b[0m`;
+    return segment.text;
+  }).join("");
 }

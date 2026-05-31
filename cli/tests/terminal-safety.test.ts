@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isAppleTerminal, shouldUseInkTui, terminalTuiProfile } from "../src/terminal-safety.js";
+import { shouldUseNativeLineInput } from "../src/interactive-line.js";
 import type { ParsedArgs } from "../src/args.js";
 
 const args: ParsedArgs = { command: "chat", positionals: [], flags: {} };
@@ -9,6 +10,7 @@ describe("terminal safety", () => {
     const env = { TERM_PROGRAM: "Apple_Terminal" };
     expect(isAppleTerminal(env)).toBe(true);
     expect(shouldUseInkTui(args, env)).toBe(false);
+    expect(shouldUseNativeLineInput(env)).toBe(true);
     expect(terminalTuiProfile(env)).toEqual({
       appleTerminal: true,
       animation: false,

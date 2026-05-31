@@ -320,7 +320,8 @@ describe("chat mode controls", () => {
 
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("chat byok ok");
-    expect(result.stderr).toContain("route:  fallback: brain(offline) -> cli-byok:openai-compatible");
+    expect(result.stderr).toContain("│ • route: cli-byok:openai-compatible");
+    expect(result.stderr).toContain("│   fallback: brain(offline) ->");
     expect(result.stderr).toContain("6 tokens");
     expect(JSON.parse(requestBody)).toMatchObject({
       model: "chat-model",

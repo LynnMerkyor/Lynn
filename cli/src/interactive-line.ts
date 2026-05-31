@@ -3,7 +3,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { completeSlash } from "./completion.js";
 import { HistoryNavigator } from "./history.js";
 import { renderInputBand } from "./tui-input.js";
-import { supportsColor } from "./terminal-style.js";
+import { cyan, supportsColor } from "./terminal-style.js";
 import { terminalTuiProfile } from "./terminal-safety.js";
 
 export interface InteractiveLineMode {
@@ -125,9 +125,8 @@ export function shouldUseNativeLineInput(env: NodeJS.ProcessEnv = process.env): 
 }
 
 async function readNativeTerminalLine(prompt: string, options: InteractiveLineOptions): Promise<string | null> {
-  const width = Math.max(80, typeof output.columns === "number" ? output.columns : 0);
   const color = supportsColor(output);
-  output.write(`${renderInputBand({ prompt: "", value: "", width, color })}\r`);
+  const cleanPrompt = color ? prompt.replace("›", cyan("›", color)) : prompt;
   const rl = readline.createInterface({
     input,
     output,
@@ -140,7 +139,7 @@ async function readNativeTerminalLine(prompt: string, options: InteractiveLineOp
       : undefined,
   });
   try {
-    return await rl.question(prompt);
+    return await rl.question(cleanPrompt);
   } catch {
     return null;
   } finally {

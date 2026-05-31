@@ -60,9 +60,12 @@ describe("renderBrainEventForHuman", () => {
     renderBrainEventForHuman({ type: "tool_progress", event: "start", name: "web_search" }, state, stream);
     renderBrainEventForHuman({ type: "tool_progress", event: "end", name: "web_search", ok: true, ms: 5134 }, state, stream);
 
-    expect(output).toContain("route: step-3.7-flash");
-    expect(output).toContain("╭─ tool web_search");
-    expect(output).toContain("✓ tool web_search done 5134ms");
+    expect(output).toContain("│ • route: StepFun 3.7 Flash");
+    expect(output).toContain("│ 🔧 🔎 web_search · running");
+    expect(output).toContain("│ ✓ 🔎 web_search · done 5.1s");
     expect(output).not.toContain("server tool:");
+    for (const line of output.split("\n").filter(Boolean)) {
+      expect((line.match(/│/g) || []).length).toBeLessThanOrEqual(1);
+    }
   });
 });
