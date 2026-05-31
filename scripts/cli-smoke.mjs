@@ -72,6 +72,19 @@ function assertNotIncludes(name, text, needle) {
   }
 }
 
+function parseJsonLine(name, stdout, type) {
+  const line = stdout.split(/\r?\n/).find((entry) => {
+    if (!entry.trim()) return false;
+    try {
+      return JSON.parse(entry).type === type;
+    } catch {
+      return false;
+    }
+  });
+  if (!line) throw new Error(`${name} output did not include JSON type ${type}\n${stdout}`);
+  return JSON.parse(line);
+}
+
 if (!fs.existsSync(cliBin)) {
   throw new Error(`CLI bundle missing: ${cliBin}. Run npm run build:cli first.`);
 }
@@ -234,6 +247,17 @@ checks.push(run("worker agents", ["agents"]).then((r) => {
   assertIncludes(r.name, r.stdout, "profile");
   assertIncludes(r.name, r.stdout, "external");
   assertIncludes(r.name, r.stdout, "CodeBuddy");
+}));
+
+checks.push(run("worker agents json contract", ["agents", "--json"]).then((r) => {
+  const parsed = parseJsonLine(r.name, r.stdout, "agents");
+  if (!parsed.contract?.install?.includes("npm install -g --force")) throw new Error("agents JSON contract missing install command");
+  if (!parsed.contract?.headless?.some((command) => command.includes("Lynn code -p") && command.includes("--approval yolo"))) {
+    throw new Error("agents JSON contract missing Lynn code headless command");
+  }
+  if (!parsed.contract?.headless?.some((command) => command.includes("Lynn worker run") && command.includes("--jsonl"))) {
+    throw new Error("agents JSON contract missing worker JSONL command");
+  }
 }));
 
 checks.push(run("permissions", ["permissions", "--data-dir", missingDataDir]).then((r) => {
@@ -407,6 +431,12 @@ assertIncludes(listed.name, listed.stdout, savedPath);
 const shown = await run("sessions show", ["sessions", "show", savedPath, "--json"]);
 assertIncludes(shown.name, shown.stdout, '"type":"sessions.show"');
 assertIncludes(shown.name, shown.stdout, "remember this");
+
+const cacheDoctor = await run("cache doctor json", ["cache", "doctor", savedPath, "--json"], { expectFailure: true });
+const cacheDoctorJson = parseJsonLine(cacheDoctor.name, cacheDoctor.stdout, "cache.doctor");
+if (cacheDoctorJson.sessionPath !== savedPath) throw new Error("cache doctor reported the wrong session path");
+if (cacheDoctorJson.ok !== false) throw new Error("cache doctor should warn for a minimal smoke session without telemetry");
+if (!Array.isArray(cacheDoctorJson.warnings) || !cacheDoctorJson.warnings.length) throw new Error("cache doctor JSON did not include warnings");
 
 await runCodeResumeSmoke();
 await runCodeImageByokSmoke();
