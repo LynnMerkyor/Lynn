@@ -5,10 +5,10 @@ import type { ParsedArgs } from "../src/args.js";
 const args: ParsedArgs = { command: "chat", positionals: [], flags: {} };
 
 describe("terminal safety", () => {
-  it("keeps Ink enabled in Apple Terminal with a conservative profile", () => {
+  it("defaults Apple Terminal to the stable non-Ink renderer", () => {
     const env = { TERM_PROGRAM: "Apple_Terminal" };
     expect(isAppleTerminal(env)).toBe(true);
-    expect(shouldUseInkTui(args, env)).toBe(true);
+    expect(shouldUseInkTui(args, env)).toBe(false);
     expect(terminalTuiProfile(env)).toEqual({
       appleTerminal: true,
       animation: false,
@@ -18,6 +18,7 @@ describe("terminal safety", () => {
   });
 
   it("allows explicit opt-in for full Apple Terminal Ink", () => {
+    expect(shouldUseInkTui(args, { TERM_PROGRAM: "Apple_Terminal", LYNN_CLI_APPLE_TERMINAL_FULL_TUI: "1" })).toBe(true);
     expect(terminalTuiProfile({ TERM_PROGRAM: "Apple_Terminal", LYNN_CLI_APPLE_TERMINAL_FULL_TUI: "1" })).toMatchObject({
       appleTerminal: true,
       animation: true,

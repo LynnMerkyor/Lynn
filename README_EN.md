@@ -41,7 +41,7 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2-apple-terminal-stable.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI
@@ -91,7 +91,7 @@ Related repositories:
 - **Fresh CLI installs can chat**: a standalone CLI install uses the hosted Lynn Brain by default; the desktop app, local Brain, and BYOK remain optional.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2-apple-terminal-stable.tgz"
 ```
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.2)

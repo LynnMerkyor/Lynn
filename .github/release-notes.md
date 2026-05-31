@@ -19,7 +19,7 @@ v0.80.2 只迭代 **Lynn CLI / Lynn Code**。桌面端 GUI 仍停在 v0.80.1,CLI
 node -v
 
 # 2. Install or update Lynn CLI from the CDN.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2-apple-terminal-stable.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI

@@ -51,7 +51,7 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带 In
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2-apple-terminal-stable.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI
@@ -124,7 +124,7 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 - 🌐 **纯 CLI 可直接使用**:全新机器只安装 CLI 时,默认走 Lynn 远端 Brain;本地 Brain 或 GUI 可选,BYOK 仍可用。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2-apple-terminal-stable.tgz"
 ```
 
 [完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.2)

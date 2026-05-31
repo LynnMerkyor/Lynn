@@ -8,15 +8,17 @@ export interface TerminalTuiProfile {
 }
 
 /**
- * Apple Terminal on recent macOS builds can crash while redrawing complex Ink
- * layouts during Chinese IME composition. Keep the modern Ink TUI, but use a
- * conservative rendering profile there: no inline image escape sequences, no
- * high-frequency shimmer/sweep animation, and no rotating placeholders. iTerm2,
- * kitty, VS Code and other terminals keep the full experience.
+ * Apple Terminal on recent macOS builds can crash inside Terminal.app/AppKit
+ * while Ink redraws during Chinese IME composition. That crash happens in the
+ * terminal process, so Lynn cannot catch or log it. Default Apple Terminal to
+ * the stable line renderer; iTerm2, kitty, VS Code and other terminals keep the
+ * full Ink experience. Advanced users can opt back in with
+ * LYNN_CLI_APPLE_TERMINAL_FULL_TUI=1.
  */
 export function shouldUseInkTui(args: ParsedArgs, env: NodeJS.ProcessEnv = process.env): boolean {
   if (env.LYNN_CLI_LEGACY_TUI === "1") return false;
   if (hasFlag(args.flags, "no-ink", "legacy-tui")) return false;
+  if (isAppleTerminal(env) && env.LYNN_CLI_APPLE_TERMINAL_FULL_TUI !== "1") return false;
   return true;
 }
 
