@@ -23,6 +23,7 @@ import { resolveDataDir } from "./session/store.js";
 import { addCodeInputMediaFlags, prepareCodeTaskInput } from "./code-input.js";
 import { rotatingPlaceholder } from "./ink-placeholders.js";
 import { createDecodeSpeedTracker, type DecodeSpeedTracker } from "./decode-speed.js";
+import { terminalTuiProfile } from "./terminal-safety.js";
 
 type CodeItem =
   | { id: number; kind: "user"; text: string }
@@ -105,6 +106,7 @@ export async function runInkCode(args: ParsedArgs, runTask: CodeTaskRunner): Pro
 
 function InkCodeApp(props: InkCodeProps): React.ReactElement {
   const app = useApp();
+  const profile = React.useMemo(() => terminalTuiProfile(), []);
   const [input, setInput] = useState("");
   const [items, setItems] = useState<CodeItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -124,10 +126,10 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   const contextInfo = React.useMemo(() => analyzePastedContext(input, effectiveCwd), [input, effectiveCwd]);
 
   useEffect(() => {
-    if (!busy) return;
-    const timer = setInterval(() => setFrame((value) => value + 1), 90);
+    if (!busy || !profile.animation) return;
+    const timer = setInterval(() => setFrame((value) => value + 1), 140);
     return () => clearInterval(timer);
-  }, [busy]);
+  }, [busy, profile.animation]);
 
   const requestApproval = (request: CodeAgentApprovalRequest): Promise<"approve" | "approve_all" | "deny"> => new Promise((resolve) => {
     approvalResolve.current = resolve;
@@ -394,15 +396,18 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     React.createElement(Box, { marginTop: 1, flexDirection: "column" },
       recent.length ? recent.map((item) => React.createElement(CodeItemView, { key: item.id, item })) : React.createElement(Text, { color: "gray" }, t("code.placeholder")),
     ),
-    busy ? React.createElement(Box, { flexDirection: "row" },
-      React.createElement(InkShimmerText, { text: t("spinner.coding"), frame }),
-      React.createElement(Text, null, " "),
-      React.createElement(InkSweep, { width: 28, frame }),
-    ) : null,
+    busy ? profile.animation
+      ? React.createElement(Box, { flexDirection: "row" },
+        React.createElement(InkShimmerText, { text: t("spinner.coding"), frame }),
+        React.createElement(Text, null, " "),
+        React.createElement(InkSweep, { width: 28, frame }),
+      )
+      : React.createElement(Text, { color: "cyan" }, t("spinner.coding"))
+    : null,
     React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${decodeTps ? ` · decode ${decodeTps}` : ""}${usage ? ` · ${usage}` : ""}`),
     approval ? React.createElement(ApprovalPrompt, { approval }) : React.createElement(InkInputLine, {
       value: input,
-      placeholder: rotatingPlaceholder("code", frame),
+      placeholder: profile.dynamicPlaceholders ? rotatingPlaceholder("code", frame) : t("code.placeholder"),
       danger,
       commands: CODE_SLASH_COMMANDS,
       contextSummary: contextInfo.hasContext ? summarizePastedContext(contextInfo) : "",
