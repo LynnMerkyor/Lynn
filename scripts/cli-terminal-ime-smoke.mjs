@@ -145,6 +145,12 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// 把 JS 字符串转成 AppleScript 字符串字面量(`keystroke "..."` 需要)。
+// AppleScript 里 " → \" , \ → \\ ;先转义反斜杠再转义引号。
+function quoteApple(value) {
+  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
+}
+
 function skip(reason) {
   const message = `[cli-terminal-ime-smoke] ⚠ IME path not verified: ${reason}`;
   if (requireImeSmoke) {
