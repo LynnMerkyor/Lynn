@@ -8,7 +8,7 @@ import './perf-init.js';
 import { run as routerRun, detectCapability } from './router.js';
 import { getProviderStatusSnapshot } from './provider-registry.js';
 import { makeSSEEmitter } from './stream-bridge.js';
-import { verifySignedRequest, AuthError } from './auth.js';
+import { registerDevice, verifySignedRequest, AuthError } from './auth.js';
 import { errorMessage, errorName, type ChatMessage, type ToolDefinition } from './types.js';
 
 // H4 fix (2026-05-24): agentKey 是长期 bearer,不能进 INFO 日志 plaintext。
@@ -26,10 +26,12 @@ const PORT = Number(process.env.BRAIN_V2_PORT || 8790);
 const HOST = process.env.BRAIN_V2_HOST || '127.0.0.1';
 const VERSION = '0.0.1';
 const CORS_ALLOWED_ORIGIN = process.env.BRAIN_V2_CORS_ORIGIN || '';
+const DEVICE_REGISTER_PER_IP_PER_DAY = Number(process.env.BRAIN_V2_DEVICE_REGISTER_PER_IP_PER_DAY || 5);
 type JsonObject = Record<string, unknown>;
 type LocalQwen35BridgeModule = typeof import('./local-qwen35-setup.js');
 type ErrorWithExtras = Error & { errors?: unknown; code?: string };
 let localQwen35BridgePromise: Promise<LocalQwen35BridgeModule> | null = null;
+const deviceRegisterBuckets = new Map<string, { day: string; count: number }>();
 
 function log(level: string, msg: string): void {
   console.log('[' + new Date().toISOString() + '] [' + level + '] ' + msg);
@@ -40,6 +42,24 @@ function isLocalRequestAddress(remote: string): boolean {
     || remote === '::1'
     || remote === '::ffff:127.0.0.1'
     || remote === 'localhost';
+}
+
+function currentUtcDay(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function consumeDeviceRegisterQuota(remote: string): boolean {
+  if (DEVICE_REGISTER_PER_IP_PER_DAY <= 0) return true;
+  const key = remote || 'unknown';
+  const day = currentUtcDay();
+  const bucket = deviceRegisterBuckets.get(key);
+  if (!bucket || bucket.day !== day) {
+    deviceRegisterBuckets.set(key, { day, count: 1 });
+    return true;
+  }
+  if (bucket.count >= DEVICE_REGISTER_PER_IP_PER_DAY) return false;
+  bucket.count += 1;
+  return true;
 }
 
 async function loadLocalQwen35Bridge(): Promise<LocalQwen35BridgeModule> {
@@ -310,6 +330,45 @@ async function handleAgentCheckpoint(req: IncomingMessage, res: ServerResponse, 
 }
 // [/agent-checkpoint v1 handler]
 
+async function handleDeviceRegister(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const remote = req.socket?.remoteAddress || '';
+  if (!consumeDeviceRegisterQuota(remote)) {
+    res.writeHead(429, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+    res.end(JSON.stringify({ ok: false, error: 'device registration rate limit exceeded' }));
+    return;
+  }
+
+  let body: JsonObject;
+  try {
+    body = await readJsonBody(req, 64 * 1024);
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+    res.end(JSON.stringify({ ok: false, error: 'invalid request body: ' + errorMessage(e) }));
+    return;
+  }
+
+  try {
+    const device = await registerDevice({
+      key: String(body.key || ''),
+      secret: String(body.secret || ''),
+      clientVersion: typeof body.clientVersion === 'string' ? body.clientVersion : undefined,
+      clientPlatform: typeof body.clientPlatform === 'string' ? body.clientPlatform : undefined,
+    });
+    log('info', `device registered ${_agentFingerprint(device.key)} remote=${remote || '?'}`);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+    res.end(JSON.stringify({ ok: true, key: device.key }));
+  } catch (e) {
+    if (e instanceof AuthError) {
+      res.writeHead(e.status, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+      return;
+    }
+    log('error', 'device register failed: ' + errorMessage(e));
+    res.writeHead(500, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+    res.end(JSON.stringify({ ok: false, error: 'device registration failed' }));
+  }
+}
+
 // [web-search proxy v1 handler]
 // Lynn desktop client's web_search tool calls this localhost endpoint so the
 // MiMo / Zhipu / Bocha / Tavily / Serper API keys can stay in this Node process
@@ -456,6 +515,10 @@ const server = http.createServer(async (req, res) => {
     return handleChatCompletions(req, res, url.pathname);
   }
 
+  if (req.method === 'POST' && (url.pathname === '/v2/devices/register' || url.pathname === '/v1/devices/register')) {
+    return handleDeviceRegister(req, res);
+  }
+
   // [deep-research v1 route]
   if (req.method === 'POST' && (url.pathname === '/v2/deep-research/completions' || url.pathname === '/v1/deep-research/completions')) {
     return handleDeepResearch(req, res, url.pathname);
@@ -494,7 +557,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       brain: 'v2', version: VERSION,
-      endpoints: ['POST /v1/chat/completions', 'POST /v2/chat/completions', 'POST /api/v1/chat/completions', 'GET /v1/providers/status', 'POST /v1/web-search', 'GET /v2/local-qwen35-9b/status', 'POST /v2/local-qwen35-9b/setup', 'GET /health'],
+      endpoints: ['POST /v1/chat/completions', 'POST /v2/chat/completions', 'POST /api/v1/chat/completions', 'POST /v1/devices/register', 'GET /v1/providers/status', 'POST /v1/web-search', 'GET /v2/local-qwen35-9b/status', 'POST /v2/local-qwen35-9b/setup', 'GET /health'],
     }));
     return;
   }

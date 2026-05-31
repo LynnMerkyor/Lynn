@@ -130,7 +130,7 @@ export function buildClientSignaturePayload({
   agentKey,
 }: ClientSignaturePayloadOptions): string {
   const normalizedMethod = String(method || "POST").toUpperCase();
-  const normalizedPath = String(pathname || "/v1/chat/completions").trim() || "/v1/chat/completions";
+  const normalizedPath = normalizeClientSignaturePath(pathname);
   return [
     CLIENT_AGENT_SIGNATURE_VERSION,
     normalizedMethod,
@@ -139,6 +139,17 @@ export function buildClientSignaturePayload({
     String(nonce || ""),
     String(agentKey || ""),
   ].join("\n");
+}
+
+export function normalizeClientSignaturePath(pathname: unknown): string {
+  const raw = String(pathname || "/v1/chat/completions").trim() || "/v1/chat/completions";
+  // The GUI stack historically signs OpenAI-compatible calls as
+  // "/chat/completions" because provider base URLs usually end in "/v1".
+  // Public Brain v2 is mounted behind /api/v2 and receives the request as
+  // "/v1/chat/completions", which is also what the CLI signs. Normalize this
+  // one common shape so GUI and CLI share the exact same strict-auth contract.
+  if (raw === "/chat/completions") return "/v1/chat/completions";
+  return raw;
 }
 
 export function signClientAgentRequest({
@@ -162,10 +173,9 @@ export function signClientAgentRequest({
     [CLIENT_AGENT_PLATFORM_HEADER]: String(clientPlatform || resolveLynnClientPlatform()),
   };
 
-  // 签名头：仅当服务端要求时附加。当前 Brain API 仅凭 key 认证，
-  // 附带签名头反而会触发不匹配的签名验证导致 401。
-  // 未来服务端升级签名协议后，可以重新启用此段。
-  if (normalizedSecret && process.env.LYNN_ENABLE_DEVICE_SIGNATURE === "1") {
+  // 签名头：默认开启。CLI 与 GUI 共用 client_agent_key/secret，
+  // Brain v2 strict 模式依赖这组 HMAC 头阻止匿名调用。
+  if (normalizedSecret && process.env.LYNN_DISABLE_DEVICE_SIGNATURE !== "1") {
     const payload = buildClientSignaturePayload({
       method,
       pathname,
@@ -248,7 +258,7 @@ export async function registerClientIdentityWithBrainApi({
     throw new Error("missing client identity registration params");
   }
 
-  const res = await fetch(`${normalizedBaseUrl}/device/register`, {
+  const res = await fetch(`${normalizedBaseUrl}/v1/devices/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

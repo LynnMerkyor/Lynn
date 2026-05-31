@@ -1,12 +1,9 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import crypto from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { callText } from "../core/llm-client.js";
-import {
-  buildClientSignaturePayload,
-} from "../core/client-agent-identity.js";
+import { buildClientSignaturePayload, registerClientIdentityWithBrainApi } from "../core/client-agent-identity.js";
 
 const tempDirs = [];
 
@@ -171,7 +168,7 @@ describe("callText", () => {
     });
   });
 
-  it("attaches client identity headers from preferences.json without signature by default", async () => {
+  it("attaches signed client identity headers from preferences.json by default", async () => {
     const lynnHome = makeTempDir("hanako-llm-");
     const clientKey = "ak_test_client_001";
     const clientSecret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -207,12 +204,12 @@ describe("callText", () => {
     const [, requestInit] = fetchMock.mock.calls[0];
     expect(requestInit.headers["X-Agent-Key"]).toBe(clientKey);
     expect(requestInit.headers["X-Lynn-Client-Platform"]).toBeTruthy();
-    expect(requestInit.headers["X-Lynn-Timestamp"]).toBeUndefined();
-    expect(requestInit.headers["X-Lynn-Nonce"]).toBeUndefined();
-    expect(requestInit.headers["X-Lynn-Signature"]).toBeUndefined();
+    expect(requestInit.headers["X-Lynn-Timestamp"]).toBeTruthy();
+    expect(requestInit.headers["X-Lynn-Nonce"]).toMatch(/^[a-f0-9]{24}$/);
+    expect(requestInit.headers["X-Lynn-Signature"]).toMatch(/^v1:[a-f0-9]{64}$/);
   });
 
-  it("attaches signed client identity headers when signature mode is enabled", async () => {
+  it("can disable signed client identity headers for legacy diagnostics", async () => {
     const lynnHome = makeTempDir("hanako-llm-signature-");
     const clientKey = "ak_test_client_001";
     const clientSecret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -226,7 +223,7 @@ describe("callText", () => {
       "utf-8",
     );
     vi.stubEnv("LYNN_HOME", lynnHome);
-    vi.stubEnv("LYNN_ENABLE_DEVICE_SIGNATURE", "1");
+    vi.stubEnv("LYNN_DISABLE_DEVICE_SIGNATURE", "1");
 
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -248,22 +245,40 @@ describe("callText", () => {
 
     const [, requestInit] = fetchMock.mock.calls[0];
     expect(requestInit.headers["X-Agent-Key"]).toBe(clientKey);
-    expect(requestInit.headers["X-Lynn-Timestamp"]).toBeTruthy();
-    expect(requestInit.headers["X-Lynn-Nonce"]).toMatch(/^[a-f0-9]{24}$/);
-    expect(requestInit.headers["X-Lynn-Signature"]).toMatch(/^v1:[a-f0-9]{64}$/);
     expect(requestInit.headers["X-Lynn-Client-Platform"]).toBeTruthy();
+    expect(requestInit.headers["X-Lynn-Timestamp"]).toBeUndefined();
+    expect(requestInit.headers["X-Lynn-Nonce"]).toBeUndefined();
+    expect(requestInit.headers["X-Lynn-Signature"]).toBeUndefined();
+  });
 
+  it("registers GUI client identity through the same Brain v1 device endpoint as CLI", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await registerClientIdentityWithBrainApi({
+      baseUrl: "https://api.merkyorlynn.com/api/v2",
+      agentKey: "ak_0123456789abcdef0123456789abcdef",
+      secret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      clientVersion: "0.80.0",
+      clientPlatform: "macos",
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.merkyorlynn.com/api/v2/v1/devices/register");
+  });
+
+  it("normalizes GUI OpenAI-compatible signatures to the Brain v1 chat path", () => {
     const payload = buildClientSignaturePayload({
       method: "POST",
       pathname: "/chat/completions",
-      timestamp: requestInit.headers["X-Lynn-Timestamp"],
-      nonce: requestInit.headers["X-Lynn-Nonce"],
-      agentKey: clientKey,
+      timestamp: "1000",
+      nonce: "abc",
+      agentKey: "ak_test",
     });
-    const expectedSignature = crypto
-      .createHmac("sha256", clientSecret)
-      .update(payload)
-      .digest("hex");
-    expect(requestInit.headers["X-Lynn-Signature"]).toBe(`v1:${expectedSignature}`);
+
+    expect(payload).toContain("\nPOST\n/v1/chat/completions\n");
   });
 });

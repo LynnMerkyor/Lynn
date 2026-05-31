@@ -30,6 +30,13 @@ type Device = {
   updatedAt?: string;
 };
 
+export type RegisterDeviceInput = {
+  key: string;
+  secret: string;
+  clientVersion?: string;
+  clientPlatform?: string;
+};
+
 type SignedRequestOptions = {
   pathname?: string;
   method?: string;
@@ -56,6 +63,46 @@ async function loadDeviceRecord(key: string): Promise<{ device: Device; filePath
 
 export async function loadDevice(key: string): Promise<Device | null> {
   return (await loadDeviceRecord(key))?.device || null;
+}
+
+function validateDeviceKey(key: string): void {
+  if (!/^ak_[a-f0-9]{24,80}$/i.test(key)) {
+    throw new AuthError(400, 'invalid device key');
+  }
+}
+
+function validateDeviceSecret(secret: string): void {
+  if (!/^[a-f0-9]{32,128}$/i.test(secret)) {
+    throw new AuthError(400, 'invalid device secret');
+  }
+}
+
+export async function registerDevice(input: RegisterDeviceInput): Promise<Device> {
+  const key = String(input.key || '').trim();
+  const secret = String(input.secret || '').trim();
+  validateDeviceKey(key);
+  validateDeviceSecret(secret);
+
+  const primaryDir = deviceDirs()[0];
+  await fsp.mkdir(primaryDir, { recursive: true });
+  const filePath = path.join(primaryDir, `${key}.json`);
+  const existing = await loadDeviceRecord(key);
+  if (existing?.device?.secret && existing.device.secret !== secret) {
+    throw new AuthError(409, 'device key already registered');
+  }
+
+  const now = new Date().toISOString();
+  const device: Device = {
+    ...(existing?.device || {}),
+    key,
+    secret,
+    clientVersion: String(input.clientVersion || existing?.device?.clientVersion || ''),
+    clientPlatform: String(input.clientPlatform || existing?.device?.clientPlatform || ''),
+    updatedAt: now,
+    disabled: existing?.device?.disabled === true,
+  };
+  await fsp.writeFile(filePath, JSON.stringify(device, null, 2), { encoding: 'utf8', mode: 0o600 });
+  return device;
 }
 
 export function buildClientSignaturePayload({ method = 'POST', pathname = '/chat/completions', timestamp, nonce, agentKey }: HmacSignaturePayload): string {

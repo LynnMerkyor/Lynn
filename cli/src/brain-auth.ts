@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { readVersionInfo } from "./version.js";
+import { brainEndpointUrl } from "./brain-url.js";
 
 const CLIENT_AGENT_KEY_PREF_KEY = "client_agent_key";
 const CLIENT_AGENT_SECRET_PREF_KEY = "client_agent_secret";
@@ -133,4 +134,24 @@ export function signedBrainHeaders(options: SignedBrainHeadersOptions = {}): Rec
     "x-lynn-client-version": version,
     "x-lynn-client-platform": process.platform,
   };
+}
+
+export async function registerRemoteBrainDevice(brainUrl: string, options: { lynnHome?: string } = {}): Promise<boolean> {
+  if (process.env.LYNN_CLI_DISABLE_BRAIN_AUTH === "1") return false;
+  const identity = ensureCliBrainIdentity({ lynnHome: options.lynnHome });
+  const version = readVersionInfo().version;
+  const response = await fetch(brainEndpointUrl(brainUrl, "/v1/devices/register"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      key: identity.key,
+      secret: identity.secret,
+      clientVersion: version,
+      clientPlatform: process.platform,
+    }),
+  });
+  if (response.ok) return true;
+  if (response.status === 404 || response.status === 405) return false;
+  const detail = await response.text().catch(() => "");
+  throw new Error(`Brain device registration failed: ${response.status} ${response.statusText}${detail ? ` · ${detail.slice(0, 160)}` : ""}`.trim());
 }

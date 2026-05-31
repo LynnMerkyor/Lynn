@@ -2,7 +2,7 @@ import { applyReasoningToBody, type ReasoningOptions } from "./reasoning.js";
 import type { ChatContentPart } from "./media.js";
 import type { CliProviderProfile } from "./provider-profile.js";
 import { t } from "./i18n.js";
-import { signedBrainHeaders } from "./brain-auth.js";
+import { registerRemoteBrainDevice, signedBrainHeaders } from "./brain-auth.js";
 import { brainEndpointUrl } from "./brain-url.js";
 
 export interface BrainChatRequest {
@@ -269,6 +269,17 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
       body: JSON.stringify(body),
       signal: abort.signal,
     });
+    if (response.status === 401) {
+      const registered = await registerRemoteBrainDevice(request.brainUrl);
+      if (registered) {
+        response = await fetch(brainEndpointUrl(request.brainUrl, "/v1/chat/completions"), {
+          method: "POST",
+          headers: { "content-type": "application/json", ...signedBrainHeaders({ pathname: "/v1/chat/completions" }) },
+          body: JSON.stringify(body),
+          signal: abort.signal,
+        });
+      }
+    }
   } catch (error) {
     throw new BrainConnectionError(request.brainUrl, error);
   } finally {

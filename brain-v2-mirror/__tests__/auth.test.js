@@ -9,10 +9,12 @@ const TMP_DIR = path.join(os.tmpdir(), 'brain-v2-auth-test-' + Date.now());
 process.env.LOBSTER_DEVICES_DIR = TMP_DIR;
 
 const auth = await import('../auth.js');
-const { verifySignedRequest, buildClientSignaturePayload, timingSafeEqualHex, rememberNonce, AuthError, __testing__ } = auth;
+const { verifySignedRequest, registerDevice, buildClientSignaturePayload, timingSafeEqualHex, rememberNonce, AuthError, __testing__ } = auth;
 
 const TEST_KEY = 'ak_test123';
 const TEST_SECRET = 'aabbccdd11223344';
+const REGISTER_KEY = 'ak_0123456789abcdef0123456789abcdef';
+const REGISTER_SECRET = 'aabbccdd11223344aabbccdd11223344';
 
 async function setupDevice({ disabled = false } = {}) {
   await fsp.mkdir(TMP_DIR, { recursive: true });
@@ -88,6 +90,32 @@ describe('rememberNonce', () => {
 });
 
 describe('verifySignedRequest (happy path)', () => {
+  it('registers a CLI device and accepts its signature', async () => {
+    await registerDevice({
+      key: REGISTER_KEY,
+      secret: REGISTER_SECRET,
+      clientVersion: '0.80.0',
+      clientPlatform: 'darwin',
+    });
+    const req = makeReq({ key: REGISTER_KEY, secret: REGISTER_SECRET });
+    const device = await verifySignedRequest(req);
+    expect(device).toMatchObject({
+      key: REGISTER_KEY,
+      clientVersion: '0.80.0',
+      clientPlatform: 'darwin',
+    });
+  });
+
+  it('refuses to overwrite a registered key with a different secret', async () => {
+    await registerDevice({ key: REGISTER_KEY, secret: REGISTER_SECRET });
+    await expect(registerDevice({ key: REGISTER_KEY, secret: 'bbbbcccc11223344bbbbcccc11223344' })).rejects.toThrowError(/already registered/);
+  });
+
+  it('rejects malformed device registration input', async () => {
+    await expect(registerDevice({ key: '../bad', secret: TEST_SECRET })).rejects.toThrowError(/invalid device key/);
+    await expect(registerDevice({ key: REGISTER_KEY, secret: 'short' })).rejects.toThrowError(/invalid device secret/);
+  });
+
   it('returns device on valid signature', async () => {
     await setupDevice();
     const req = makeReq();

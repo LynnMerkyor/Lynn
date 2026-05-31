@@ -519,6 +519,69 @@ describe("brain-client stream parser", () => {
     }
   });
 
+  it("auto-registers its Brain device after a strict 401 and retries once", async () => {
+    const seenUrls: string[] = [];
+    let chatCalls = 0;
+    const server = http.createServer((request, response) => {
+      seenUrls.push(String(request.url || ""));
+      if (request.url === "/v1/chat/completions" && request.method === "POST") {
+        chatCalls += 1;
+        expect(request.headers["x-agent-key"]).toMatch(/^ak_/);
+        if (chatCalls === 1) {
+          response.writeHead(401, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: "device not registered" }));
+          return;
+        }
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"registered\"}}]}",
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+        return;
+      }
+      if (request.url === "/v1/devices/register" && request.method === "POST") {
+        let body = "";
+        request.on("data", (chunk) => {
+          body += String(chunk);
+        });
+        request.on("end", () => {
+          const parsed = JSON.parse(body) as Record<string, unknown>;
+          expect(parsed.key).toMatch(/^ak_/);
+          expect(parsed.secret).toMatch(/^[a-f0-9]{64}$/);
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(JSON.stringify({ ok: true, key: parsed.key }));
+        });
+        return;
+      }
+      response.writeHead(404);
+      response.end("not found");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("test server failed to listen");
+      const events = [];
+      for await (const event of streamBrainChat({
+        brainUrl: `http://127.0.0.1:${address.port}`,
+        prompt: "hello",
+        reasoning: { effort: "auto", display: "auto" },
+      })) {
+        events.push(event);
+      }
+      expect(events).toContainEqual({ type: "assistant.delta", text: "registered" });
+      expect(chatCalls).toBe(2);
+      expect(seenUrls).toEqual([
+        "/v1/chat/completions",
+        "/v1/devices/register",
+        "/v1/chat/completions",
+      ]);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it("builds chat completion URLs from base URLs", () => {
     expect(chatCompletionsUrl("https://api.example.com/v1").toString()).toBe("https://api.example.com/v1/chat/completions");
     expect(chatCompletionsUrl("https://api.example.com/v1/chat/completions").toString()).toBe("https://api.example.com/v1/chat/completions");
