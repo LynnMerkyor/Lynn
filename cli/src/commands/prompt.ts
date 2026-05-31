@@ -123,6 +123,22 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   } finally {
     spinner.stop();
   }
+  if (!assistant.trim()) {
+    const message = sawReasoning ? t("prompt.emptyAfterReasoning") : t("prompt.empty");
+    if (options.json) {
+      writeJsonLine({
+        type: "run.finished",
+        ts: nowIso(),
+        ok: false,
+        code: "empty_visible_answer",
+        error: message,
+        reasoningReturned: sawReasoning,
+      });
+    } else {
+      process.stderr.write(`${message}\n`);
+    }
+    return 2;
+  }
   if (saveSession) {
     const savedPath = await appendSessionTurn({
       dataDir,

@@ -205,6 +205,54 @@ describe("prompt stdin handling", () => {
     expect(result.stdout).toContain("\"ok\":true");
   });
 
+  it("treats hidden-reasoning-only streams as an empty visible answer", async () => {
+    const provider = http.createServer((request, response) => {
+      request.resume();
+      request.on("end", () => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end([
+          "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"thinking but no answer\"}}]}",
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runPrompt(parseArgs([
+        "-p",
+        "hello",
+        "--json",
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-command-test",
+        "--model",
+        "command-model",
+      ]), { json: true })).resolves.toBe(2);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
+
+    expect(output).toContain("\"code\":\"empty_visible_answer\"");
+    expect(output).toContain("\"ok\":false");
+    expect(output).toContain("\"reasoningReturned\":true");
+    expect(output).not.toContain("\"ok\":true");
+  });
+
   it("exits quietly when downstream closes a JSON pipe early", async () => {
     const provider = http.createServer((request, response) => {
       request.resume();

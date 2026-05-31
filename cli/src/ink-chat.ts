@@ -99,7 +99,8 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
   const messages = useMemo<ChatMessage[]>(() => resetCliRuntimeMessages(chatRouteLabel(props.fallbackProvider), memoryFrame), [props.fallbackProvider]);
 
   useEffect(() => {
-    const timer = setInterval(() => setFrame((value) => value + 1), busy ? 90 : 4_000);
+    if (!busy) return;
+    const timer = setInterval(() => setFrame((value) => value + 1), 90);
     return () => clearInterval(timer);
   }, [busy]);
 

@@ -124,7 +124,8 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   const contextInfo = React.useMemo(() => analyzePastedContext(input, effectiveCwd), [input, effectiveCwd]);
 
   useEffect(() => {
-    const timer = setInterval(() => setFrame((value) => value + 1), busy ? 90 : 4_000);
+    if (!busy) return;
+    const timer = setInterval(() => setFrame((value) => value + 1), 90);
     return () => clearInterval(timer);
   }, [busy]);
 
