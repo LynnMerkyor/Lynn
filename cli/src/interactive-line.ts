@@ -18,7 +18,6 @@ export interface InteractiveLineOptions {
   history?: HistoryNavigator;
   completions?: string[];
   onShiftTab?: () => string | void;
-  /** 提供则在原生 readline 提示前画"对话框"框(顶栏状态 + `│ › `)。 */
   frameStatus?: string;
 }
 
@@ -137,7 +136,6 @@ export function shouldUseNativeLineInput(env: NodeJS.ProcessEnv = process.env): 
   return profile.appleTerminal && !profile.animation;
 }
 
-/** 真·完整对话框(boxed-input)是 Apple Terminal 原生路径的默认;LYNN_CLI_NO_BOXED_INPUT=1 回退 readline 闭合框。 */
 export function shouldUseBoxedInput(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.LYNN_CLI_NO_BOXED_INPUT !== "1";
 }

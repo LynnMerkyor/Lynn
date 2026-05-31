@@ -17,7 +17,7 @@ function box(opts: Partial<Parameters<typeof renderInputBox>[0]> = {}) {
   });
 }
 
-describe("renderInputBox (真·完整对话框)", () => {
+describe("renderInputBox", () => {
   it("draws a complete 4-sided box with the input INSIDE it", () => {
     const r = box({ buffer: "hello world", cursor: 11 });
     const top = stripAnsi(r.top);
@@ -26,14 +26,14 @@ describe("renderInputBox (真·完整对话框)", () => {
     expect(top.startsWith("╭")).toBe(true);
     expect(top.endsWith("╮")).toBe(true);
     expect(line.startsWith("│")).toBe(true);
-    expect(line.endsWith("│")).toBe(true); // 右边框存在 → 输入真在框里
+    expect(line.endsWith("│")).toBe(true);
     expect(line).toContain("› hello world");
     expect(bottom.startsWith("╰")).toBe(true);
     expect(bottom.endsWith("╯")).toBe(true);
   });
 
   it("keeps all three rows the same display width (右边框对齐)", () => {
-    const r = box({ buffer: "用一句话说明无交互模式", cursor: 5 }); // 含 CJK
+    const r = box({ buffer: "用一句话说明无交互模式", cursor: 5 });
     expect(visibleLength(stripAnsi(r.inputLine))).toBe(visibleLength(stripAnsi(r.top)));
     expect(visibleLength(stripAnsi(r.bottom))).toBe(visibleLength(stripAnsi(r.top)));
   });
@@ -52,9 +52,8 @@ describe("renderInputBox (真·完整对话框)", () => {
   it("shows a dim placeholder only when empty, cursor at start", () => {
     const r = box({ buffer: "", cursor: 0, color: true, placeholder: "问我任何事" });
     expect(stripAnsi(r.inputLine)).toContain("问我任何事");
-    expect(r.inputLine).toContain("\x1b[2m"); // 占位符 dim
+    expect(r.inputLine).toContain("\x1b[2m");
     expect(r.cursorCol).toBe(4);
-    // 一旦有输入,占位符消失
     expect(stripAnsi(box({ buffer: "x", cursor: 1, placeholder: "问我任何事" }).inputLine)).not.toContain("问我任何事");
   });
 
@@ -72,7 +71,7 @@ describe("renderInputBox (真·完整对话框)", () => {
 
   it("colors the chevron bright-cyan and borders dim when enabled", () => {
     const r = box({ buffer: "hi", cursor: 2, color: true });
-    expect(r.inputLine).toContain("\x1b[1;36m"); // › bright cyan
-    expect(r.top).toContain("\x1b[2m"); // 边框 dim
+    expect(r.inputLine).toContain("\x1b[1;36m");
+    expect(r.top).toContain("\x1b[2m");
   });
 });
