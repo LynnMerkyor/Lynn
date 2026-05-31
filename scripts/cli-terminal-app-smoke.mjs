@@ -26,11 +26,17 @@ const transcriptPath = path.join(tmp, "transcript.txt");
 const appleScriptPath = path.join(tmp, "run.applescript");
 
 const commands = [
-  ...Array.from({ length: turns }, (_, index) => `你好,Terminal 应用窗口中文 smoke ${index + 1}`),
+  "请用一句话说明 Lynn CLI 的 -p 无交互模式,并提到 JSON 输出。",
+  "/help",
+  "/model",
   "/think",
-  "/reasoning off",
+  "/reasoning high",
+  "/reasoning auto",
   "/version",
   "/yolo",
+  "/ask",
+  "请生成一个短段落,必须包含 Rust、TypeScript、CLI Fleet、长任务续跑 四个词。",
+  ...Array.from({ length: turns }, (_, index) => `Terminal 应用窗口中文压力输入 ${index + 1}: 中文标点,slash /help,at @README.md,数字 12345。`),
   "/exit",
 ];
 
@@ -43,10 +49,14 @@ on run argv
   set runCommand to "cd " & quoted form of repoDir & " && printf 'terminal-app-smoke-start\\\\n' > " & quoted form of transcriptPath & " && LYNN_CLI_UPDATE_CHECK=0 LYNN_LANG=zh node cli/bin/lynn.mjs --mock-brain; echo $? > " & quoted form of statusPath
   tell application "Terminal"
     activate
-    set smokeWindow to do script runCommand
+    do script runCommand
+    set index of front window to 1
     delay 3
-${commands.map((command, index) => `    do script ${quoteApple(command)} in smokeWindow
-    delay ${index < turns ? "1" : "0.5"}`).join("\n")}
+${commands.map((command, index) => `    activate
+    set index of front window to 1
+    do script ${quoteApple(command)} in selected tab of front window
+    delay ${index < commands.length - 1 ? "1" : "1.5"}`).join("\n")}
+    if (count of windows) > 0 then close front window saving no
   end tell
 end run
 `;
@@ -69,7 +79,7 @@ if (status !== "0") {
   throw new Error(`[cli-terminal-app-smoke] Lynn exited ${status}; temp=${tmp}`);
 }
 
-console.log(`[cli-terminal-app-smoke] passed Terminal.app smoke (${turns} Chinese turns); temp=${tmp}`);
+console.log(`[cli-terminal-app-smoke] passed Terminal.app realistic smoke (${commands.length - 1} turns before exit); temp=${tmp}`);
 
 function quoteApple(value) {
   return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
