@@ -62,6 +62,13 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   const json = hasFlag(args.flags, "json", "jsonl");
   await maybePromptForCliUpdate(args, readVersionInfo());
 
+  if (hasFlag(args.flags, "version", "v")) {
+    const info = readVersionInfo();
+    if (json) writeJsonLine({ type: "version", ...info });
+    else process.stdout.write(`${info.name} ${info.version}\n`);
+    return 0;
+  }
+
   if (shouldResumeCodeInvocation(args)) {
     return runCode(resumeCodeArgs(args));
   }
