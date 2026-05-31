@@ -392,6 +392,139 @@ describe("code agent loop · tool calls & repair", () => {
     expect(output).toContain("I already have the file content");
   });
 
+  it("rebuilds the tool-storm ledger from resume history to avoid repeating completed tools", async () => {
+    const sessionPath = path.join(tmp, "resume-tool-storm.jsonl");
+    const ts = new Date().toISOString();
+    const lines = [
+      { type: "user", ts, content: "Read hello.txt and remember it." },
+      {
+        type: "assistant",
+        ts,
+        content: "",
+        data: {
+          tool_calls: [{
+            id: "call_seed",
+            type: "function",
+            function: { name: "read_file", arguments: "{\"path\":\"hello.txt\"}" },
+          }],
+        },
+      },
+      {
+        type: "tool",
+        ts,
+        content: "Tool result for read_file:\n{\"ok\":true,\"tool\":\"read_file\",\"output\":{\"path\":\"hello.txt\",\"text\":\"hello\\n\"}}",
+        data: { tool_call_id: "call_seed", name: "read_file" },
+      },
+    ];
+    await fs.writeFile(sessionPath, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, "utf8");
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer((_body, count) => {
+        if (count === 1) return JSON.stringify({ tool: "read_file", args: { path: "hello.txt" } });
+        return "I can continue from the resumed tool result without re-reading.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "continue from checkpoint",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--resume",
+          sessionPath,
+          "--max-steps",
+          "3",
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain('"type":"code.tool.loop_guard"');
+    expect(output).toContain("Repeated identical tool request suppressed");
+    expect(output).toContain("I can continue from the resumed tool result");
+  });
+
+  it("rebuilds mutating tool fingerprints from resume history to avoid duplicate writes", async () => {
+    await fs.writeFile(path.join(tmp, "hello.txt"), "changed\n", "utf8");
+    const sessionPath = path.join(tmp, "resume-mutating-tool-storm.jsonl");
+    const ts = new Date().toISOString();
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+changed",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const lines = [
+      { type: "user", ts, content: "Change hello.txt to changed." },
+      {
+        type: "assistant",
+        ts,
+        content: "",
+        data: {
+          tool_calls: [{
+            id: "call_patch",
+            type: "function",
+            function: { name: "apply_patch", arguments: JSON.stringify({ text: patch }) },
+          }],
+        },
+      },
+      {
+        type: "tool",
+        ts,
+        content: "Tool result for apply_patch:\n{\"ok\":true,\"tool\":\"apply_patch\",\"output\":{\"changed\":true}}",
+        data: { tool_call_id: "call_patch", name: "apply_patch" },
+      },
+    ];
+    await fs.writeFile(sessionPath, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, "utf8");
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withBrainServer((_body, count) => {
+        if (count === 1) return JSON.stringify({ tool: "apply_patch", args: { patch } });
+        return "The resumed edit is already complete; no duplicate write needed.";
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "continue from edit checkpoint",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--resume",
+          sessionPath,
+          "--approval",
+          "yolo",
+          "--max-steps",
+          "3",
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain('"type":"code.tool.loop_guard"');
+    expect(output).toContain("Repeated identical tool request suppressed");
+    expect(output).toContain("already complete");
+    await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("changed\n");
+  });
+
   it("allows a verification read after a mutating edit", async () => {
     const patch = [
       "*** Begin Patch",

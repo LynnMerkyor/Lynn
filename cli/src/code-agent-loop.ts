@@ -16,7 +16,7 @@ import { dim, supportsColor } from "./terminal-style.js";
 import { renderToolLedger, toolLedgerEntry, type ToolLedgerEntry } from "./tool-ledger.js";
 import { runClientTool } from "./tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "./tools/types.js";
-import { RESUME_COMPACTION_NOTE, formatToolResultForLoop } from "./code-resume.js";
+import { RESUME_COMPACTION_NOTE, RESUME_REPAIR_NOTE, formatToolResultForLoop } from "./code-resume.js";
 
 
 export interface CodeAgentLoopInput {
@@ -83,8 +83,10 @@ const TOOL_STORM_WINDOW = 8;
 const RUNTIME_COMPACTION_MAX_CHARS = 150_000;
 const RUNTIME_COMPACTION_KEEP_GROUPS = 8;
 
-function createClientToolStormState(): ClientToolStormState {
-  return { recent: [] };
+function createClientToolStormState(seedMessages: readonly ChatMessage[] = []): ClientToolStormState {
+  const state: ClientToolStormState = { recent: [] };
+  seedClientToolStormState(state, seedMessages);
+  return state;
 }
 
 function isReadOnlyToolRequest(request: CodeToolRequest): boolean {
@@ -93,20 +95,66 @@ function isReadOnlyToolRequest(request: CodeToolRequest): boolean {
 
 function observeClientToolRequest(state: ClientToolStormState, request: CodeToolRequest): ClientToolStormVerdict {
   if (request.tool === "update_plan") return { suppress: false, repeatCount: 1 };
-  const readOnly = isReadOnlyToolRequest(request);
-  if (!readOnly) {
-    state.recent = state.recent.filter((entry) => !entry.readOnly);
-  }
   const fingerprint = toolRequestFingerprint(request);
   const previous = state.recent.filter((entry) => entry.fingerprint === fingerprint).length;
   if (previous > 0) {
     return { suppress: true, repeatCount: previous + 1 };
   }
-  state.recent.push({ fingerprint, readOnly });
+  rememberClientToolRequest(state, request);
+  return { suppress: false, repeatCount: 1 };
+}
+
+function rememberClientToolRequest(state: ClientToolStormState, request: CodeToolRequest): void {
+  if (request.tool === "update_plan") return;
+  const readOnly = isReadOnlyToolRequest(request);
+  if (!readOnly) {
+    state.recent = state.recent.filter((entry) => !entry.readOnly);
+  }
+  state.recent.push({ fingerprint: toolRequestFingerprint(request), readOnly });
   if (state.recent.length > TOOL_STORM_WINDOW) {
     state.recent.splice(0, state.recent.length - TOOL_STORM_WINDOW);
   }
-  return { suppress: false, repeatCount: 1 };
+}
+
+function seedClientToolStormState(state: ClientToolStormState, messages: readonly ChatMessage[]): void {
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i];
+    if (message.role === "assistant" && message.tool_calls?.length) {
+      const completedToolCallIds = completedToolCallsAfter(messages, i);
+      const completedCalls = message.tool_calls
+        .filter((toolCall) => completedToolCallIds.has(toolCall.id))
+        .map((toolCall) => ({
+          id: toolCall.id,
+          name: toolCall.function.name,
+          arguments: toolCall.function.arguments,
+        }));
+      for (const request of toolRequestsFromCollectedCalls(completedCalls, -1)) {
+        rememberClientToolRequest(state, request);
+      }
+      continue;
+    }
+    if (message.role !== "assistant" || typeof message.content !== "string") continue;
+    const next = messages[i + 1];
+    if (next?.role !== "user" || typeof next.content !== "string") continue;
+    if (!next.content.includes("Tool result") || next.content.includes(RESUME_REPAIR_NOTE)) continue;
+    for (const request of parseCodeToolRequests(message.content)) {
+      rememberClientToolRequest(state, request);
+    }
+  }
+}
+
+function completedToolCallsAfter(messages: readonly ChatMessage[], assistantIndex: number): Set<string> {
+  const completed = new Set<string>();
+  const assistant = messages[assistantIndex];
+  const required = new Set(assistant?.role === "assistant" ? assistant.tool_calls?.map((toolCall) => toolCall.id) || [] : []);
+  for (let i = assistantIndex + 1; i < messages.length && required.size > 0; i += 1) {
+    const candidate = messages[i];
+    if (candidate.role !== "tool" || !candidate.tool_call_id || !required.has(candidate.tool_call_id)) break;
+    if (typeof candidate.content === "string" && candidate.content.includes(RESUME_REPAIR_NOTE)) break;
+    completed.add(candidate.tool_call_id);
+    required.delete(candidate.tool_call_id);
+  }
+  return completed;
 }
 
 export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgentLoopResult> {
@@ -125,7 +173,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   let latestUsageSummary: string | null = null;
   const usageRecords: Array<{ usage: unknown; durationMs: number }> = [];
   const approvalSession = { approveAll: false };
-  const toolStorm = createClientToolStormState();
+  const toolStorm = createClientToolStormState(inputData.resumeMessages);
   for (let step = 0; step < inputData.maxSteps; step += 1) {
     const label = step === 0 ? t("spinner.coding") : t("spinner.reviewing");
     inputData.onEvent?.({ type: "step.started", step, label });
