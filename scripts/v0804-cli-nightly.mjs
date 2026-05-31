@@ -41,7 +41,7 @@ function printHelp() {
   node scripts/v0804-cli-nightly.mjs --mode full --with-terminal --real-model
 
 Options:
-  --mode quick|full     quick is the default; full adds pressure/Fleet gates.
+  --mode quick|full     quick is the default; full adds pack/install, pressure, and Fleet gates.
   --with-terminal       include Terminal.app + IME smoke gates.
   --real-model          include the remote real-model soak.
   --output DIR          write report under a custom directory.
@@ -77,6 +77,12 @@ function selectedSteps(options) {
   ];
   if (options.mode === "full") {
     steps.splice(1, 1, ["CLI full tests", "npm", ["--prefix", "cli", "test"], "full CLI unit/regression suite"]);
+    steps.splice(
+      4,
+      0,
+      ["CLI pack smoke", "npm", ["run", "test:cli-pack"], "npm pack guard: correct package, name, size, and manifest"],
+      ["CLI install smoke", "npm", ["run", "test:cli-install"], "fresh local install, global install, headless code, and runtime answer"],
+    );
     steps.push(
       ["CLI pressure", "npm", ["run", "test:cli-pressure"], "headless -p pressure and empty-answer handling"],
       ["CLI PTY smoke", "npm", ["run", "test:cli-pty"], "TTY prompt/input safety"],
