@@ -24,23 +24,6 @@
 
 ---
 
-## 🧠 Lynn 模型与引擎路线
-
-Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引擎已经形成一条独立路线,用于把 Lynn 的本地长期记忆 / 多 Agent / 工具调用能力跑在可控的私有模型栈上。
-
-| 方向 | 当前状态 |
-|---|---|
-| **Lynn V4 / V Flash 35B-A3B** | BF16 / NVFP4 / Q4_K_M 变体已完成发布与回归;Q4 工具调用模板热修已同步 HF / ModelScope。 |
-| **Lynn 27B-A3B 基座** | 从 Qwen3.6-35B-A3B BASE 走 variable-expert pruning + Router-FT + Recovery LoRA,当前选定 **step5000 final**。BF16 评测:V8 strict 33/34 = 97.06%,V9 adjusted 37/59 = 62.71%。 |
-| **Lynn-native NVFP4** | 27B variable-expert NVFP4 artifact 约 20GB,用于 Lynn Engine 自研 runtime。它不是 GGUF,也不是公开通用框架的 compressed-tensors v8-RTN。 |
-| **Lynn Engine** | 自研 Blackwell/R6000 推理引擎已跑通 27B NVFP4。当前 R6000 strict full path **103.44 tok/s**,serving replay **107.23 tok/s**;下一目标是生产稳定 100+ TPS 与 native FP4 kernel。 |
-
-相关仓库:
-- [MerkyorLynn/lynn-engine](https://github.com/MerkyorLynn/lynn-engine):Lynn 27B-A3B NVFP4 自研推理引擎。
-- [MerkyorLynn/lynn-distill-toolkit](https://github.com/MerkyorLynn/lynn-distill-toolkit):蒸馏、评测、量化与发布工具链。
-
-> 说明:27B Lynn-native NVFP4 是给 Lynn Engine 的内部/垂直 runtime artifact;通用用户仍建议从 V4 / V Flash 的 BF16、NVFP4 v8-RTN 或 Q4_K_M 版本开始。
-
 ## 🔭 V0.80:GUI + CLI Worker Fleet
 
 V0.80 把 Lynn 带回编程主战场,但不是再做一个单 CLI 或 IDE 插件。Lynn 的方向是把 **GUI 变成多个 CLI Agent 的指挥台**:你可以在图形界面里拆任务、派发给不同 CLI worker、查看日志和 diff、跑门禁、合并或丢弃结果。
@@ -110,6 +93,23 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 一个 `--agent` 把任务派给 Codex / Claude Code / Qwen / Kimi / CodeBuddy / OpenCode 或 Lynn 自身,统一吐 Fleet JSONL。安全边界守在 Lynn 侧(ownership / forbidden-glob / diff 校验 / gate),不依赖外部 worker 自觉。
 
 成功信号 = `gate.finished.ok`;硬失败 = `worker.violation` 或 `worker.error{recoverable:false}`。完整规范(BYOK 配置 / agent 适配表 / 全事件 schema / code tools)见 [`docs/ops/lynn-cli-agent-contract.md`](docs/ops/lynn-cli-agent-contract.md)。
+
+## 🧠 Lynn 模型与引擎路线
+
+Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引擎已经形成一条独立路线,用于把 Lynn 的本地长期记忆 / 多 Agent / 工具调用能力跑在可控的私有模型栈上。
+
+| 方向 | 当前状态 |
+|---|---|
+| **Lynn V4 / V Flash 35B-A3B** | BF16 / NVFP4 / Q4_K_M 变体已完成发布与回归;Q4 工具调用模板热修已同步 HF / ModelScope。 |
+| **Lynn 27B-A3B 基座** | 从 Qwen3.6-35B-A3B BASE 走 variable-expert pruning + Router-FT + Recovery LoRA,当前选定 **step5000 final**。BF16 评测:V8 strict 33/34 = 97.06%,V9 adjusted 37/59 = 62.71%。 |
+| **Lynn-native NVFP4** | 27B variable-expert NVFP4 artifact 约 20GB,用于 Lynn Engine 自研 runtime。它不是 GGUF,也不是公开通用框架的 compressed-tensors v8-RTN。 |
+| **Lynn Engine** | 自研 Blackwell/R6000 推理引擎已跑通 27B NVFP4。当前 R6000 strict full path **103.44 tok/s**,serving replay **107.23 tok/s**;下一目标是生产稳定 100+ TPS 与 native FP4 kernel。 |
+
+相关仓库:
+- [MerkyorLynn/lynn-engine](https://github.com/MerkyorLynn/lynn-engine):Lynn 27B-A3B NVFP4 自研推理引擎。
+- [MerkyorLynn/lynn-distill-toolkit](https://github.com/MerkyorLynn/lynn-distill-toolkit):蒸馏、评测、量化与发布工具链。
+
+> 说明:27B Lynn-native NVFP4 是给 Lynn Engine 的内部/垂直 runtime artifact;通用用户仍建议从 V4 / V Flash 的 BF16、NVFP4 v8-RTN 或 Q4_K_M 版本开始。
 
 ## 🆕 近期更新
 
