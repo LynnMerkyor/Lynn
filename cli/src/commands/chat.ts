@@ -239,40 +239,55 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
 
     let assistant = "";
     let latestUsage: string | null = null;
-    const renderState: HumanBrainRenderState = {};
+    let renderState: HumanBrainRenderState = {};
     const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"));
     const renderReasoning = shouldRenderReasoning(reasoning.display, false);
-    const md = new MarkdownStream((s) => output.write(s), supportsColor(output));
-    const turnStarted = Date.now();
-    const decodeTracker = createDecodeSpeedTracker(turnStarted);
+    const color = supportsColor(output);
+    const maxEmptyAttempts = 2;
     let decodeTps: string | null = null;
-    try {
-      spinner.start();
-      for await (const event of streamBrainChat({ brainUrl, messages, reasoning, fallbackProvider: cliProvider?.profile })) {
-        if (eventWritesHumanOutput(event, renderReasoning)) {
-          spinner.stop();
+    for (let attempt = 1; attempt <= maxEmptyAttempts; attempt += 1) {
+      assistant = "";
+      latestUsage = null;
+      renderState = {};
+      decodeTps = null;
+      const md = new MarkdownStream((s) => output.write(s), color);
+      const turnStarted = Date.now();
+      const decodeTracker = createDecodeSpeedTracker(turnStarted);
+      try {
+        spinner.start();
+        for await (const event of streamBrainChat({ brainUrl, messages, reasoning, fallbackProvider: cliProvider?.profile })) {
+          if (eventWritesHumanOutput(event, renderReasoning)) {
+            spinner.stop();
+          }
+          if (event.type === "brain.error") {
+            throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
+          }
+          if (event.type === "assistant.delta") {
+            md.push(event.text);
+            decodeTps = decodeTracker.add(event.text) || decodeTps;
+            assistant += event.text;
+          } else {
+            if (event.type === "usage") latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - turnStarted });
+            renderChatEvent(event, renderReasoning, renderState, turnStarted);
+          }
         }
-        if (event.type === "brain.error") {
-          throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
-        }
-        if (event.type === "assistant.delta") {
-          md.push(event.text);
-          decodeTps = decodeTracker.add(event.text) || decodeTps;
-          assistant += event.text;
-        } else {
-          if (event.type === "usage") latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - turnStarted });
-          renderChatEvent(event, renderReasoning, renderState, turnStarted);
-        }
+      } catch (error) {
+        spinner.stop();
+        messages.pop();
+        output.write(`\n${formatChatError(error)}\n\n`);
+        return "continue";
+      } finally {
+        spinner.stop();
       }
-    } catch (error) {
-      spinner.stop();
-      messages.pop();
-      output.write(`\n${formatChatError(error)}\n\n`);
-      return "continue";
-    } finally {
-      spinner.stop();
+      md.end();
+      if (assistant.trim()) break;
+      if (attempt < maxEmptyAttempts) output.write(`\n${dim(t("prompt.empty.retry"), color)}\n\n`);
     }
-    md.end();
+    if (!assistant.trim()) {
+      messages.pop();
+      output.write(`${red(t("prompt.empty"), color)}\n\n`);
+      return "continue";
+    }
     messages.push({ role: "assistant", content: assistant });
     output.write(`\n${renderStatusBar({
       model: renderState.provider ? modelDisplayName(renderState.provider) : t("status.chat.prefix"),
@@ -281,7 +296,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       reasoning: reasoning.effort,
       usage: latestUsage,
       decodeTps,
-      color: supportsColor(output),
+      color,
     })}\n\n`);
     return "continue";
   }

@@ -202,7 +202,7 @@ export async function readBoxedInputLine(options: BoxedInputOptions = {}): Promi
       insert(text);
     };
 
-    paint();
     input.on("data", onData);
+    paint();
   });
 }

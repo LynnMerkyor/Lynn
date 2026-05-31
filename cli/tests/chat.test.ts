@@ -335,6 +335,72 @@ describe("chat mode controls", () => {
     expect(parsed.messages?.at(-1)).toMatchObject({ role: "user", content: "hi" });
   });
 
+  it("retries an interactive chat turn once when Brain returns an empty visible answer", async () => {
+    let requests = 0;
+    const provider = http.createServer((request, response) => {
+      request.resume();
+      request.on("end", () => {
+        requests += 1;
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        if (requests === 1) {
+          response.end(["data: {\"choices\":[{\"delta\":{}}]}", "", "data: [DONE]", ""].join("\n"));
+          return;
+        }
+        response.end([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"retried ok\"}}]}",
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        "--import",
+        "tsx",
+        "src/cli.ts",
+        "chat",
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-chat-test",
+        "--model",
+        "chat-model",
+      ], {
+        cwd: cliRoot,
+        env: { ...process.env, NO_COLOR: "1", LYNN_LANG: "en" },
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error("interactive chat retry did not exit"));
+      }, 5000);
+      child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+      child.on("error", reject);
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        resolve({ code, stdout, stderr });
+      });
+      child.stdin.write("hi\n/exit\n");
+      child.stdin.end();
+    });
+    await new Promise<void>((resolve) => provider.close(() => resolve()));
+
+    expect(result.code).toBe(0);
+    expect(requests).toBe(2);
+    expect(result.stdout).toContain("retrying once automatically");
+    expect(result.stdout).toContain("retried ok");
+  });
+
   ptyIt("lets bare Lynn use CLI BYOK in a TTY when Brain is offline", async () => {
     const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-bare-chat-byok-"));
     let requestBody = "";
