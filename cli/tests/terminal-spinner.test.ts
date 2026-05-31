@@ -219,34 +219,41 @@ describe("TerminalSpinner class", () => {
   });
 });
 
-describe("input prompt frame (对话框)", () => {
-  it("frames the prompt with a top status border + left-gutter chevron", () => {
-    const plain = stripAnsi(renderPromptFrame("Lynn · StepFun 3.7 Flash · ask / workspace-write", 72, false));
-    const [top, promptLine] = plain.split("\n");
-    expect(top.startsWith("╭─")).toBe(true);
-    expect(top.endsWith("╮")).toBe(true);
-    expect(top).toContain("Lynn · StepFun 3.7 Flash");
-    expect(promptLine).toBe("│ › "); // 只有左边框 + chevron(无右/下边框 → 无滚动残骸)
+describe("input prompt frame (闭合框 fallback · LYNN_CLI_NO_BOXED_INPUT)", () => {
+  it("draws a complete closed box (top/mid/bot) with status inside + chevron below", () => {
+    const lines = stripAnsi(renderPromptFrame("Lynn · StepFun 3.7 Flash · ask / workspace-write", 80, false)).split("\n");
+    expect(lines[0].startsWith("╭")).toBe(true);
+    expect(lines[0].endsWith("╮")).toBe(true);
+    expect(lines[1].startsWith("│")).toBe(true);
+    expect(lines[1].endsWith("│")).toBe(true);
+    expect(lines[1]).toContain("Lynn · StepFun 3.7 Flash");
+    expect(lines[2].startsWith("╰")).toBe(true);
+    expect(lines[2].endsWith("╯")).toBe(true);
+    expect(lines[3]).toBe("› "); // 提示符在框正下方
+    expect(lines[0].length).toBe(lines[1].length); // 三行等宽
+    expect(lines[1].length).toBe(lines[2].length);
   });
 
   it("stays visible without color (plain box-drawing chars)", () => {
     const out = renderPromptFrame("status", 60, false);
     expect(out).not.toContain("\x1b["); // 无色 → 无 ANSI
     expect(out).toContain("╭");
-    expect(out).toContain("│ › ");
+    expect(out).toContain("╰");
+    expect(out.endsWith("› ")).toBe(true);
   });
 
   it("colors the border (dim) and chevron (bright cyan) when enabled", () => {
     const out = renderPromptFrame("status", 60, true);
     expect(out).toContain("\x1b[2m"); // dim 边框
     expect(out).toContain("\x1b[1;36m"); // bright cyan chevron
-    expect(stripAnsi(out).split("\n")[1]).toBe("│ › ");
+    expect(stripAnsi(out).split("\n")[3]).toBe("› ");
   });
 
-  it("truncates an over-long status instead of overflowing", () => {
-    const long = "X".repeat(200);
-    const top = stripAnsi(renderPromptFrame(long, 60, false)).split("\n")[0];
-    expect(top).toContain("…");
-    expect(top.length).toBeLessThanOrEqual(74); // 受 width(72)约束,不无限撑开
+  it("truncates an over-long status instead of overflowing the box width", () => {
+    const long = "X".repeat(400);
+    const lines = stripAnsi(renderPromptFrame(long, 60, false)).split("\n");
+    expect(lines[1]).toContain("…");
+    expect(lines[0].length).toBeLessThanOrEqual(60); // 受 width 约束
+    expect(lines[1].length).toBe(lines[0].length); // 内容行与边框等宽,不溢出
   });
 });

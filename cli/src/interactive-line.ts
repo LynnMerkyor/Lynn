@@ -4,6 +4,7 @@ import { completeSlash } from "./completion.js";
 import { HistoryNavigator } from "./history.js";
 import { renderInputBand } from "./tui-input.js";
 import { renderPromptFrame } from "./terminal-spinner.js";
+import { readBoxedInputLine } from "./boxed-input.js";
 import { cyan, supportsColor } from "./terminal-style.js";
 import { terminalTuiProfile } from "./terminal-safety.js";
 
@@ -35,6 +36,15 @@ export async function readInteractiveLine(
     }
   }
   if (shouldUseNativeLineInput()) {
+    if (shouldUseBoxedInput()) {
+      return readBoxedInputLine({
+        status: options.frameStatus,
+        placeholder: options.placeholder,
+        history: options.history,
+        completions: options.completions,
+        onShiftTab: options.onShiftTab,
+      });
+    }
     return readNativeTerminalLine(prompt, options);
   }
 
@@ -125,6 +135,11 @@ export function shouldUseNativeLineInput(env: NodeJS.ProcessEnv = process.env): 
   if (env.LYNN_CLI_APPLE_TERMINAL_RAW_INPUT === "1") return false;
   const profile = terminalTuiProfile(env);
   return profile.appleTerminal && !profile.animation;
+}
+
+/** 真·完整对话框(boxed-input)是 Apple Terminal 原生路径的默认;LYNN_CLI_NO_BOXED_INPUT=1 回退 readline 闭合框。 */
+export function shouldUseBoxedInput(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.LYNN_CLI_NO_BOXED_INPUT !== "1";
 }
 
 async function readNativeTerminalLine(prompt: string, options: InteractiveLineOptions): Promise<string | null> {

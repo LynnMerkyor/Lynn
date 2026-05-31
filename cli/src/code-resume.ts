@@ -46,8 +46,6 @@ export function shouldSaveCodeSession(args: ParsedArgs, inputData: { json: boole
   if (env === "0" || env === "false" || env === "off" || env === "no") return false;
   if (env) return true;
   if (inputData.resumePath) return true;
-  // Human code turns should be recoverable by default, like Codex/Claude Code.
-  // JSON/scripted and mock smoke paths stay side-effect-light unless explicitly opted in.
   return !inputData.json && !inputData.mockBrain;
 }
 
