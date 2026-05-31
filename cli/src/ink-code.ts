@@ -22,6 +22,8 @@ import { handleMemorySlashCommand } from "./session/memory.js";
 import { resolveDataDir } from "./session/store.js";
 import { addCodeInputMediaFlags, prepareCodeTaskInput } from "./code-input.js";
 import { rotatingPlaceholder } from "./ink-placeholders.js";
+import { createDecodeSpeedTracker, type DecodeSpeedTracker } from "./decode-speed.js";
+import { terminalTuiProfile } from "./terminal-safety.js";
 
 type CodeItem =
   | { id: number; kind: "user"; text: string }
@@ -104,6 +106,7 @@ export async function runInkCode(args: ParsedArgs, runTask: CodeTaskRunner): Pro
 
 function InkCodeApp(props: InkCodeProps): React.ReactElement {
   const app = useApp();
+  const profile = React.useMemo(() => terminalTuiProfile(), []);
   const [input, setInput] = useState("");
   const [items, setItems] = useState<CodeItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -111,19 +114,22 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   const [reasoning, setReasoning] = useState(props.initialReasoning);
   const [mode, setMode] = useState(props.initialMode);
   const [usage, setUsage] = useState<string | null>(null);
+  const [decodeTps, setDecodeTps] = useState<string | null>(null);
   const [provider, setProvider] = useState(props.modelLabel);
   const [approval, setApproval] = useState<ApprovalState | null>(null);
   const approvalResolve = useRef<((value: "approve" | "approve_all" | "deny") => void) | null>(null);
   const [history] = useState(() => new HistoryNavigator(loadHistory(historyPath())));
   const assistantId = useRef<number | null>(null);
+  const decodeTracker = useRef<DecodeSpeedTracker | null>(null);
   const dataDir = React.useMemo(() => resolveDataDir(typeof props.args.flags["data-dir"] === "string" ? props.args.flags["data-dir"] : null), [props.args.flags]);
   const effectiveCwd = getStringFlag(props.args.flags, "cwd") || process.cwd();
   const contextInfo = React.useMemo(() => analyzePastedContext(input, effectiveCwd), [input, effectiveCwd]);
 
   useEffect(() => {
-    const timer = setInterval(() => setFrame((value) => value + 1), busy ? 90 : 4_000);
+    if (!busy || !profile.animation) return;
+    const timer = setInterval(() => setFrame((value) => value + 1), 140);
     return () => clearInterval(timer);
-  }, [busy]);
+  }, [busy, profile.animation]);
 
   const requestApproval = (request: CodeAgentApprovalRequest): Promise<"approve" | "approve_all" | "deny"> => new Promise((resolve) => {
     approvalResolve.current = resolve;
@@ -312,6 +318,8 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     const prepared = prepareCodeTaskInput(text, effectiveCwd, t("chat.image.defaultPrompt"));
     pushItem({ kind: "user", text: prepared.contextSummary ? `${prepared.task}\n${prepared.contextSummary}` : prepared.task });
     assistantId.current = Date.now() + 1;
+    decodeTracker.current = createDecodeSpeedTracker(Date.now());
+    setDecodeTps(null);
     setItems((current) => [...current, { id: assistantId.current!, kind: "assistant" as const, text: "" }].slice(-14));
     setBusy(true);
     try {
@@ -332,6 +340,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     } finally {
       setBusy(false);
       assistantId.current = null;
+      decodeTracker.current = null;
     }
   };
 
@@ -345,6 +354,8 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     if (event.type === "assistant.delta") {
       const id = assistantId.current;
       if (!id) return;
+      const nextDecodeTps = decodeTracker.current?.add(event.text);
+      if (nextDecodeTps) setDecodeTps(nextDecodeTps);
       setItems((current) => current.map((item) => item.id === id && item.kind === "assistant" ? { ...item, text: `${item.text}${event.text}` } : item));
     }
     if (event.type === "tool.progress") pushItem({ kind: "system", text: event.message });
@@ -385,15 +396,18 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     React.createElement(Box, { marginTop: 1, flexDirection: "column" },
       recent.length ? recent.map((item) => React.createElement(CodeItemView, { key: item.id, item })) : React.createElement(Text, { color: "gray" }, t("code.placeholder")),
     ),
-    busy ? React.createElement(Box, { flexDirection: "row" },
-      React.createElement(InkShimmerText, { text: t("spinner.coding"), frame }),
-      React.createElement(Text, null, " "),
-      React.createElement(InkSweep, { width: 28, frame }),
-    ) : null,
-    React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${usage ? ` · ${usage}` : ""}`),
+    busy ? profile.animation
+      ? React.createElement(Box, { flexDirection: "row" },
+        React.createElement(InkShimmerText, { text: t("spinner.coding"), frame }),
+        React.createElement(Text, null, " "),
+        React.createElement(InkSweep, { width: 28, frame }),
+      )
+      : React.createElement(Text, { color: "cyan" }, t("spinner.coding"))
+    : null,
+    React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${decodeTps ? ` · decode ${decodeTps}` : ""}${usage ? ` · ${usage}` : ""}`),
     approval ? React.createElement(ApprovalPrompt, { approval }) : React.createElement(InkInputLine, {
       value: input,
-      placeholder: rotatingPlaceholder("code", frame),
+      placeholder: profile.dynamicPlaceholders ? rotatingPlaceholder("code", frame) : t("code.placeholder"),
       danger,
       commands: CODE_SLASH_COMMANDS,
       contextSummary: contextInfo.hasContext ? summarizePastedContext(contextInfo) : "",

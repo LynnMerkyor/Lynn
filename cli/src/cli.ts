@@ -22,6 +22,7 @@ import { maybePromptForCliUpdate } from "./self-update.js";
 import type { ProvidersInfo } from "./commands/providers.js";
 import { t } from "./i18n.js";
 import { resolveDefaultBrainUrl } from "./brain-url.js";
+import { shouldUseInkTui } from "./terminal-safety.js";
 
 async function main(argv = process.argv.slice(2)): Promise<number> {
   installPipeErrorHandler();
@@ -32,9 +33,10 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     const brainReachable = await checkBrainReachable(brainUrl, 500);
     const startupInfo: ProvidersInfo = { ...providerInfo, brainUrl };
     if (process.stdin.isTTY && process.stdout.isTTY) {
-      await maybePromptForCliUpdate({ command: "chat", positionals: [], flags: { ink: true } }, readVersionInfo());
-      if (process.env.LYNN_CLI_LEGACY_TUI !== "1") {
-        return runChat({ command: "chat", positionals: [], flags: { ink: true, "brain-url": brainUrl } }, { intro: false, brainReachable });
+      const chatArgs = { command: "chat", positionals: [], flags: { "brain-url": brainUrl } };
+      await maybePromptForCliUpdate({ ...chatArgs, flags: { ...chatArgs.flags, ink: shouldUseInkTui(chatArgs) } }, readVersionInfo());
+      if (shouldUseInkTui(chatArgs)) {
+        return runChat({ ...chatArgs, flags: { ...chatArgs.flags, ink: true } }, { intro: false, brainReachable });
       }
       process.stdout.write(`${renderStartupBanner({
         brainUrl,
@@ -47,7 +49,7 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
       // runChat prints the offline hint, then each message returns an actionable
       // recovery line (configure BYOK / start the client) instead of dropping the
       // user back to the shell (which made `Lynn` look like it "doesn't work").
-      return runChat({ command: "chat", positionals: [], flags: { "brain-url": brainUrl } }, { intro: false, brainReachable });
+      return runChat(chatArgs, { intro: false, brainReachable });
     }
     process.stdout.write(`${renderStartupBanner({
       brainUrl,

@@ -41,7 +41,7 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0.tgz
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2-apple-terminal-stable.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI
@@ -82,7 +82,38 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>v0.80.0</strong> · 2026-05-30 · CLI Worker Fleet + StepFun/MiMo Brain Route <em>(latest)</em></summary>
+<summary><strong>CLI v0.80.2</strong> · 2026-05-31 · Apple Terminal stability + TUI UX hotfix <em>(CLI latest)</em></summary>
+
+**CLI-only hotfix; the desktop app remains v0.80.1**:
+- **Apple Terminal / Chinese IME stability**: Lynn keeps the Ink TUI, input box, status bar, and decode TPS, while Apple Terminal uses a conservative profile with high-frequency shimmer/sweep, rotating placeholders, and inline image escapes disabled.
+- **Full TUI elsewhere**: iTerm2, kitty, VS Code Terminal, and other terminals keep shimmer, markdown tables/code highlighting, diff preview, multiline input, media path guidance, and the speed meter.
+- **Better as an agent worker**: `Lynn -p`, `Lynn code -p --json`, and `Lynn worker run --jsonl` skip the human TUI and are intended for Claude Code / Codex CLI / Kimi Code / CI / Fleet calls.
+- **Fresh CLI installs can chat**: a standalone CLI install uses the hosted Lynn Brain by default; the desktop app, local Brain, and BYOK remain optional.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2-apple-terminal-stable.tgz"
+```
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.2)
+
+</details>
+
+<details>
+<summary><strong>v0.80.1</strong> · 2026-05-31 · CLI stability hotfix + remote Brain fallback</summary>
+
+**V0.80.1 stability hotfix**:
+- **CLI works without the desktop app**: when the local Brain is unavailable, `Lynn` falls back to the hosted Brain route so fresh installs can chat immediately.
+- **No noisy build prompts**: same-version build refreshes no longer interrupt users; only true version upgrades ask for confirmation.
+- **Decode speed meter**: chat/code status bars show recent estimated decode TPS without adding context-budget anxiety.
+- **Packaged Fleet runtime**: the desktop app bundles the same CLI runtime used by the mirror tarball, so GUI Worker Fleet can spawn real workers after packaging.
+- **Release surfaces updated**: mirror install docs, GitHub release notes, README snippets, and CLI agent contract stay aligned.
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.1)
+
+</details>
+
+<details>
+<summary><strong>v0.80.0</strong> · 2026-05-30 · CLI Worker Fleet + StepFun/MiMo Brain Route</summary>
 
 **Lynn's programming-focused release**:
 - **Lynn CLI / Lynn Code**:new `@lynn/cli` package with Ink TUI, markdown/code rendering, real diff preview, multimodal input, `Lynn code -p ... --json`, and `Lynn agents`.
@@ -780,11 +811,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.80.0 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.80.1 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.80.0 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.80.1 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -847,7 +878,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.80.0 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.80.1 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

@@ -1,11 +1,11 @@
 const RELEASE = {
-  version: "0.80.0",
+  version: "0.80.1",
   releasePage: "https://github.com/MerkyorLynn/Lynn/releases",
   assets: {
     macArm:
-      "https://download.merkyorlynn.com/downloads/Lynn-0.80.0-macOS-arm64.dmg",
+      "https://download.merkyorlynn.com/downloads/Lynn-0.80.1-macOS-arm64.dmg",
     macIntel:
-      "https://download.merkyorlynn.com/downloads/Lynn-0.80.0-macOS-x64.dmg",
+      "https://download.merkyorlynn.com/downloads/Lynn-0.80.1-macOS-x64.dmg",
     windows: "https://github.com/MerkyorLynn/Lynn/releases",
   },
 };

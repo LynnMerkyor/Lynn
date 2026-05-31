@@ -7,6 +7,7 @@ export interface StatusBarInput {
   mode?: string;
   reasoning?: string;
   usage?: string | null;
+  decodeTps?: string | null;
   color?: boolean;
 }
 
@@ -16,6 +17,7 @@ export function renderStatusBar(input: StatusBarInput): string {
     displayCwd(input.cwd || process.cwd()),
     input.mode,
     input.reasoning ? `think ${input.reasoning}` : null,
+    input.decodeTps ? `decode ${input.decodeTps}` : null,
     input.usage,
   ].filter((part): part is string => !!part);
   return dim(parts.join(" · "), !!input.color);

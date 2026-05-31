@@ -92,6 +92,7 @@ export async function maybePromptForCliUpdate(
   if (isUpdateCheckSuppressed(env)) return;
   const result = await (opts.check || ((info) => checkCliUpdate(info, { env: opts.env })))(current);
   if (!result.available || !result.manifest) return;
+  if (isSameVersionBuildUpdate(current, result.manifest) && env.LYNN_CLI_PROMPT_BUILD_UPDATES !== "1") return;
 
   const suffix = result.manifest.build ? ` (${result.manifest.build})` : "";
   const rl = readline.createInterface({ input: stdin, output: stdout });
@@ -114,6 +115,13 @@ export async function maybePromptForCliUpdate(
     const message = error instanceof Error ? error.message : String(error);
     stderr.write(`${t("update.failed", { message })}\n`);
   }
+}
+
+function isSameVersionBuildUpdate(current: VersionInfo, manifest: CliUpdateManifest): boolean {
+  return compareVersions(manifest.version, current.version) === 0
+    && !!manifest.build
+    && !!current.build
+    && manifest.build !== current.build;
 }
 
 function isUpdateCheckSuppressed(env: NodeJS.ProcessEnv): boolean {

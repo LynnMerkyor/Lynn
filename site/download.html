@@ -9,14 +9,14 @@
     <title>Lynn 下载 | macOS 与 Windows 安装包</title>
     <meta
       name="description"
-      content="下载 Lynn 的 macOS Apple Silicon、macOS Intel、Windows 安装包与 Lynn CLI。v0.80.0 新增 CLI Worker Fleet、StepFun/MiMo Brain 路由和显式启用的本地 9B。"
+      content="下载 Lynn 的 macOS Apple Silicon、macOS Intel、Windows 安装包与 Lynn CLI。v0.80.1 新增 CLI Worker Fleet、StepFun/MiMo Brain 路由和显式启用的本地 9B。"
     />
     <meta name="theme-color" content="#f7f1e6" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Lynn 下载 | macOS 与 Windows 安装包" />
     <meta
       property="og:description"
-      content="下载 Lynn 的 macOS Apple Silicon、macOS Intel、Windows 安装包与 Lynn CLI。v0.80.0 新增 CLI Worker Fleet、StepFun/MiMo Brain 路由和显式启用的本地 9B。"
+      content="下载 Lynn 的 macOS Apple Silicon、macOS Intel、Windows 安装包与 Lynn CLI。v0.80.1 新增 CLI Worker Fleet、StepFun/MiMo Brain 路由和显式启用的本地 9B。"
     />
     <meta property="og:image" content="../.github/assets/screenshot-main-20260407-v3.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -47,7 +47,7 @@
             <span class="eyebrow">Lynn 下载页</span>
             <h1>选择适合你设备的版本</h1>
             <p class="lead">
-              当前版本 <strong id="release-version">0.80.0</strong>。
+              当前版本 <strong id="release-version">0.80.1</strong>。
               下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作、CLI Worker Fleet 和显式启用的本地 Qwen3.5-9B MTP。
             </p>
             <div class="platform-callout" id="platform-callout">
@@ -72,7 +72,7 @@
             <a
               class="button button-primary"
               data-download-key="macArm"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.80.0-macOS-arm64.dmg"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.80.1-macOS-arm64.dmg"
               target="_blank"
               rel="noreferrer"
             >下载 Apple Silicon 版</a>
@@ -93,7 +93,7 @@
             <a
               class="button button-primary"
               data-download-key="macIntel"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.80.0-macOS-x64.dmg"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.80.1-macOS-x64.dmg"
               target="_blank"
               rel="noreferrer"
             >下载 Intel 版</a>
@@ -104,7 +104,7 @@
               <span class="pill pill-warm">Windows 安装版</span>
               <h2>Windows</h2>
             </div>
-            <p>正式发布提供代码签名的 `Setup.exe` 安装包。v0.80.0 Windows 安装包上传后会同步到镜像站；如果当前镜像还未出现，请先从 GitHub Release 选择可用安装包。</p>
+            <p>正式发布提供代码签名的 `Setup.exe` 安装包。v0.80.1 Windows 安装包上传后会同步到镜像站；如果当前镜像还未出现，请先从 GitHub Release 选择可用安装包。</p>
             <ul>
               <li>文件格式：`.exe`</li>
               <li>安装方式：图形安装向导</li>
@@ -126,7 +126,7 @@
             <span class="eyebrow">Lynn CLI / Lynn Code</span>
             <h2>给开发者和其他智能体的安装方式</h2>
             <p>
-              Lynn CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带 Ink TUI、Markdown 渲染、流式输出、工具调用和长任务续跑。
+              Lynn CLI 当前最新为 <strong>v0.80.2</strong>。它是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带 Ink TUI、Markdown 渲染、流式输出、工具调用和长任务续跑。
               一行命令装好,不用克隆仓库、不用编译;也可以被 Claude Code、Codex CLI、Kimi Code、Qwen CLI、CI 或 Lynn GUI Fleet 以无交互方式调用。
             </p>
           </div>
@@ -158,7 +158,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
             </div>
             <div class="code-copy-block">
               <button class="copy-button" type="button" data-copy-target="cli-install">复制</button>
-              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0.tgz</code></pre>
+              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2-apple-terminal-stable.tgz</code></pre>
             </div>
           </div>
           <div class="cli-install-card">
@@ -171,7 +171,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
               <button class="copy-button" type="button" data-copy-target="cli-start">复制</button>
               <pre><code id="cli-start">Lynn                 # 交互式聊天 TUI
 Lynn code            # 编码 agent TUI
-Lynn --version       # 应输出 0.80.0
+Lynn --version       # 应输出 0.80.2
 Lynn agents          # 输出可复制的 Fleet / 其他 CLI 调用方式
 
 # 无交互编码 worker 示例
@@ -262,6 +262,6 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
       </footer>
     </div>
 
-    <script src="./app.js?v=0.80.0"></script>
+    <script src="./app.js?v=0.80.1"></script>
   </body>
 </html>

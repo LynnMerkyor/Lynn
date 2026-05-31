@@ -1,5 +1,5 @@
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
-import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
+import { streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
 import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
@@ -74,54 +74,102 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   const startedAt = Date.now();
   if (!options.json) spinner.start();
   try {
-    const messages = [
-      ...resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile)),
-      {
-        role: "user" as const,
-        content: imagePaths.length ? await buildImagesContentParts(imagePaths, prompt) : prompt,
-      },
-    ];
-    for await (const event of streamBrainChat({
-      brainUrl,
-      messages,
-      reasoning,
-      fallbackProvider: cliProvider?.profile,
-    })) {
-      const renderReasoning = shouldRenderReasoning(reasoning.display, !!options.json);
-      if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
-        spinner.stop();
+    const userContent = imagePaths.length ? await buildImagesContentParts(imagePaths, prompt) : prompt;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let attemptAssistant = "";
+      let attemptSawReasoning = false;
+      const retryVisibleAnswer = attempt > 0;
+      const messages: ChatMessage[] = [
+        ...resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile)),
+        ...(retryVisibleAnswer
+          ? [{
+              role: "system" as const,
+              content: "The previous attempt returned hidden reasoning without a visible answer. Return a concise visible final answer in assistant content. Do not return reasoning only.",
+            }]
+          : []),
+        {
+          role: "user" as const,
+          content: userContent,
+        },
+      ];
+      for await (const event of streamBrainChat({
+        brainUrl,
+        messages,
+        reasoning,
+        fallbackProvider: cliProvider?.profile,
+      })) {
+        const renderReasoning = shouldRenderReasoning(reasoning.display, !!options.json);
+        if (event.type === "assistant.delta" || (event.type === "reasoning.delta" && renderReasoning)) {
+          spinner.stop();
+        }
+        if (event.type === "brain.error") {
+          if (options.json) {
+            handleBrainEvent(event, {
+              json: true,
+              renderReasoning,
+              renderState,
+              startedAt,
+            });
+          }
+          throw new Error(formatBrainErrorForHuman(event.error, event.code));
+        }
+        handleBrainEvent(event, {
+          json: !!options.json,
+          renderReasoning,
+          renderState,
+          startedAt,
+        });
+        if (event.type === "provider") {
+          if (event.activeProvider.startsWith("cli-byok:") && cliProvider) {
+            modelProvider = cliProvider.profile.provider;
+            modelId = cliProvider.profile.model;
+          } else {
+            modelProvider = event.activeProvider;
+            modelId = "lynn-brain-router";
+          }
+        }
+        if (event.type === "reasoning.delta") {
+          sawReasoning = true;
+          attemptSawReasoning = true;
+        }
+        if (event.type === "assistant.delta") attemptAssistant += event.text;
       }
-      if (event.type === "brain.error") {
+      if (attemptAssistant.trim()) {
+        assistant = attemptAssistant;
+        break;
+      }
+      if (attemptSawReasoning && attempt === 0) {
         if (options.json) {
-          handleBrainEvent(event, {
-            json: true,
-            renderReasoning,
-            renderState,
-            startedAt,
+          writeJsonLine({
+            type: "run.retry",
+            ts: nowIso(),
+            code: "empty_visible_answer",
+            reason: "hidden_reasoning_only",
           });
         }
-        throw new Error(formatBrainErrorForHuman(event.error, event.code));
+        continue;
       }
-      handleBrainEvent(event, {
-        json: !!options.json,
-        renderReasoning,
-        renderState,
-        startedAt,
-      });
-      if (event.type === "provider") {
-        if (event.activeProvider.startsWith("cli-byok:") && cliProvider) {
-          modelProvider = cliProvider.profile.provider;
-          modelId = cliProvider.profile.model;
-        } else {
-          modelProvider = event.activeProvider;
-          modelId = "lynn-brain-router";
-        }
-      }
-      if (event.type === "reasoning.delta") sawReasoning = true;
-      if (event.type === "assistant.delta") assistant += event.text;
+      assistant = attemptAssistant;
+      break;
     }
   } finally {
     spinner.stop();
+  }
+  if (!assistant.trim()) {
+    const message = sawReasoning ? t("prompt.emptyAfterReasoning") : t("prompt.empty");
+    if (options.json) {
+      writeJsonLine({
+        type: "run.finished",
+        ts: nowIso(),
+        ok: false,
+        code: "empty_visible_answer",
+        error: message,
+        reasoningReturned: sawReasoning,
+      });
+    } else {
+      process.stderr.write(`${message}\n`);
+    }
+    return 2;
   }
   if (saveSession) {
     const savedPath = await appendSessionTurn({
