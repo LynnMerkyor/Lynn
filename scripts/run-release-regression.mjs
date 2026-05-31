@@ -130,6 +130,7 @@ async function runStaticChecks({ level }) {
     "test:cli-pack",
     "test:cli-install",
     "test:cli-install:remote",
+    "test:cli-nightly",
     "test:cli-pty",
     "test:cli-terminal-app",
     "test:cli-terminal-ime",

@@ -47,6 +47,7 @@
     "test:cli-install:remote": "node scripts/cli-install-smoke.mjs --remote",
     "test:cli-pressure": "npm run build:cli && node scripts/cli-p-stress.mjs",
     "test:cli-real": "npm run build:cli && node scripts/cli-real-model-soak.mjs",
+    "test:cli-nightly": "node scripts/v0804-cli-nightly.mjs --mode quick",
     "test:cli-pty": "npm run build:cli && node scripts/cli-pty-smoke.mjs",
     "test:cli-terminal-app": "npm run build:cli && node scripts/cli-terminal-app-smoke.mjs",
     "test:cli-terminal-ime": "npm run build:cli && node scripts/cli-terminal-ime-smoke.mjs",
