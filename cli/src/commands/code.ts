@@ -11,6 +11,7 @@ import { nowIso, writeJsonLine } from "../jsonl.js";
 import { resolveEffectivePermissions } from "../permissions.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
+import { shouldUseInkTui } from "../terminal-safety.js";
 import { bold, dangerLine, dim, green, red, supportsColor } from "../terminal-style.js";
 import { renderPatchPreview } from "../diff-format.js";
 import { renderMarkdown } from "../markdown.js";
@@ -127,7 +128,7 @@ export async function runCode(args: ParsedArgs): Promise<number> {
     const task = codeTaskPrompt(args);
     if (task) return runCodeTask(args, task, json);
     if (!json && input.isTTY && output.isTTY) {
-      if (process.env.LYNN_CLI_LEGACY_TUI !== "1" && !hasFlag(args.flags, "no-ink", "legacy-tui")) {
+      if (shouldUseInkTui(args)) {
         const { runInkCode } = await import("../ink-code.js");
         return runInkCode(args, runCodeTaskWithEvents);
       }

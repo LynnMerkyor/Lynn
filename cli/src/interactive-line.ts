@@ -1,9 +1,10 @@
 import readline from "node:readline/promises";
-import { stdin as input, stdout as output } from "node:process";
+import { env, stdin as input, stdout as output } from "node:process";
 import { completeSlash } from "./completion.js";
 import { HistoryNavigator } from "./history.js";
 import { renderInputBand } from "./tui-input.js";
 import { supportsColor } from "./terminal-style.js";
+import { isAppleTerminal } from "./terminal-safety.js";
 
 export interface InteractiveLineMode {
   approval: "ask" | "on-failure" | "never" | "yolo";
@@ -24,6 +25,15 @@ export async function readInteractiveLine(
 ): Promise<string | null> {
   if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== "function") {
     const rl = readline.createInterface({ input, output, terminal: false });
+    try {
+      return await rl.question(prompt);
+    } finally {
+      rl.close();
+    }
+  }
+
+  if (isAppleTerminal(env) && env.LYNN_CLI_APPLE_TERMINAL_RAW !== "1") {
+    const rl = readline.createInterface({ input, output, terminal: true });
     try {
       return await rl.question(prompt);
     } finally {

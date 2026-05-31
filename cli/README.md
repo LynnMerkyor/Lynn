@@ -28,7 +28,7 @@ winget install OpenJS.NodeJS.LTS
 Install from the Lynn Tencent mirror:
 
 ```bash
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=d7b2d4630795
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=d7b2d4630795"
 ```
 
 The package installs the `Lynn` command. If you installed an older preview that
@@ -47,7 +47,7 @@ If npm dependency downloads are slow in mainland China, keep the Lynn tarball UR
 as-is and add a registry mirror for third-party dependencies:
 
 ```bash
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=d7b2d4630795 \
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=d7b2d4630795" \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -145,7 +145,7 @@ Agent quick contract:
 # Requires Node.js 20 LTS or 22 LTS with npm.
 
 # Install/update.
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=d7b2d4630795
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=d7b2d4630795"
 
 # Human launch commands.
 Lynn

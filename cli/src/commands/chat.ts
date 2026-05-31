@@ -23,6 +23,7 @@ import { parseImagePromptCommand, summarizeImageRefs } from "../pasted-context.j
 import { buildMemoryContextFrameSync, handleMemorySlashCommand } from "../session/memory.js";
 import { resolveDataDir } from "../session/store.js";
 import { resolveDefaultBrainUrl } from "../brain-url.js";
+import { shouldUseInkTui } from "../terminal-safety.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/exit",
@@ -63,12 +64,7 @@ export function completeChatInput(line: string): [string[], string] {
 }
 
 export async function runChat(args: ParsedArgs, options: { intro?: boolean; brainReachable?: boolean } = {}): Promise<number> {
-  if (
-    input.isTTY &&
-    output.isTTY &&
-    process.env.LYNN_CLI_LEGACY_TUI !== "1" &&
-    !hasFlag(args.flags, "no-ink", "legacy-tui")
-  ) {
+  if (input.isTTY && output.isTTY && shouldUseInkTui(args)) {
     const { runInkChat } = await import("../ink-chat.js");
     return runInkChat(args);
   }
