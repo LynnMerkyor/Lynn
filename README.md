@@ -50,7 +50,7 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带 In
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.1.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=d7b2d4630795
 
 # 3. Launch.
 Lynn            # interactive chat TUI
