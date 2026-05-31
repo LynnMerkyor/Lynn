@@ -16,20 +16,26 @@ v0.80.0 是 Lynn 回到编程主战场的版本。它把桌面端从单一聊天
 
 ## CLI 安装
 
+Lynn CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手(Ink TUI、Markdown/代码渲染、流式输出、工具调用、长任务续跑)。一行命令装好,不用克隆仓库、不用编译。
+
 ```bash
 # 1. Node requirement: Node.js 20 LTS or 22 LTS with npm.
+# Check: node -v should be >= v20.
 # macOS: brew install node@20
 # macOS/Linux: nvm install 20 && nvm use 20
 # Windows: winget install OpenJS.NodeJS.LTS
 
-# 2. Install or update Lynn CLI from the CDN.
+# 2. Install or update Lynn CLI from the CDN. --force is safe for first install too.
 npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0.tgz
 
 # 3. Launch.
-Lynn          # interactive chat TUI
-Lynn code     # coding-agent TUI
-Lynn agents   # copyable headless/Fleet commands for other agents
+Lynn            # interactive chat TUI
+Lynn code       # coding-agent TUI
+Lynn --version  # should print 0.80.0
+Lynn agents     # copyable headless/Fleet commands for other agents
 ```
+
+默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到 Lynn 远端 Brain。模型级联为 **StepFun 3.7 Flash high+32K → MiMo V2.5 Pro/Omni → Spark Qwen 3.6 35B A3B**。纯 CLI 用户也可以用 `Lynn providers set ...` 绑定自己的 OpenAI 兼容端点。
 
 ## Headless / Fleet
 
