@@ -1,8 +1,8 @@
 # Lynn CLI · Agent Quick Contract
 
 > Machine-readable invocation spec for orchestrators and Fleet workers.
-> Command is `Lynn` (uppercase primary, `lynn` lowercase alias).
-> v0.80 alpha. Verified against `cli/` on branch `claude/v080-cli-gaps`.
+> Command is `Lynn` (uppercase; `lynn` also resolves on case-insensitive filesystems like macOS — use `Lynn` on Linux/CI).
+> v0.80.0. Verified against `cli/` on branch `codex/v0801-stability`.
 
 ---
 
@@ -19,7 +19,7 @@ npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-l
 
 `--force` lets npm replace an older `Lynn`/`lynn` shim. Requires Node ≥ 20.
 
-**Routing:** GUI running → local Lynn server / Brain chain (default MiMo, full cascade + Fleet).
+**Routing:** GUI running → local Lynn server / Brain chain (default StepFun 3.7 Flash, full StepFun → MiMo → Spark cascade + Fleet).
 GUI not running → user-owned BYOK endpoint (`Lynn providers set`).
 
 ---
@@ -102,6 +102,7 @@ approval — they do not relax Lynn's boundary checks.
 Newline-delimited JSON. Every event carries `workerId` and `agent`.
 
 ```jsonl
+{"type":"worker.started","workerId":"w1","agent":"step-3.7","cwd":".","worktree":".","branch":"fleet/w1","approval":"yolo","sandbox":"workspace-write"}
 {"type":"reasoning.delta","workerId":"w1","agent":"step-3.7","text":"...","hidden":true}
 {"type":"assistant.delta","workerId":"w1","agent":"step-3.7","text":"Here is the fix..."}
 {"type":"tool.started","workerId":"w1","agent":"step-3.7","name":"write_file"}
@@ -116,6 +117,7 @@ Newline-delimited JSON. Every event carries `workerId` and `agent`.
 {"type":"worker.progress","workerId":"w1","agent":"codex-cli","text":"raw stdout line"}
 {"type":"worker.violation","workerId":"w1","agent":"step-3.7","...":"ownership/glob breach"}
 {"type":"worker.error","workerId":"w1","agent":"step-3.7","code":"worker_exit_nonzero","message":"...","recoverable":true}
+{"type":"worker.finished","workerId":"w1","agent":"step-3.7","ok":true,"exitCode":0,"summary":"...","commit":"a1b2c3d"}
 ```
 
 **Event types:**
@@ -129,15 +131,18 @@ Newline-delimited JSON. Every event carries `workerId` and `agent`.
 | `test.started` / `test.finished` | test run | `command`, `ok`, `summary`, `ms` |
 | `git.diff` | resulting diff | diff payload |
 | `gate.finished` | Lynn-side validation gate | `ok` |
+| `worker.started` | worker lifecycle begin | `workerId`, `cwd`, `worktree`, `branch` (opt `pid`, `command`, `approval`, `sandbox`) |
 | `worker.progress` | wrapped external agent raw output | `text` |
 | `worker.violation` | ownership / forbidden-glob breach | breach detail |
 | `worker.error` | worker failure | `code`, `message`, `recoverable` |
+| `worker.finished` | worker lifecycle end (terminal) | `ok`, `exitCode`, `summary` (opt `commit`) |
 
 **Orchestrator parse pattern:**
 - Answer = concat `assistant.delta.text`
 - Success signal = `gate.finished.ok === true` (or final `shell/test.finished.ok`)
 - Hard fail = any `worker.violation`, or `worker.error` with `recoverable:false`
 - Non-zero worker exit → `worker.error` `code:"worker_exit_nonzero"`
+- Lifecycle bookends = `worker.started` (begin) … `worker.finished` (terminal; carries final `ok` / `exitCode` / optional `commit`)
 
 ---
 
@@ -163,4 +168,4 @@ Lynn -p "ping" --json                    # end-to-end smoke
 
 ---
 
-*Contract v0.2 · Lynn CLI v0.80 alpha · verified against cli/ source 2026-05-31*
+*Contract v0.3 · Lynn CLI v0.80.0 · verified against cli/ source 2026-05-31*
