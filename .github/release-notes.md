@@ -8,7 +8,7 @@ v0.80.0 是 Lynn 回到编程主战场的版本。它把桌面端从单一聊天
 
 - **Lynn CLI / Lynn Code**:新增 `@lynn/cli` npm 包、Ink TUI、流光等待、Markdown/代码高亮、真实 diff 预览、多行输入、图片/音频/视频附件、`Lynn code -p ... --json` 无交互调用和 `Lynn agents` 机器可读命令面。
 - **GUI Worker Fleet**:Lynn 客户端 GUI 可以把一个 task brief fan-out 给多个 CLI worker,每个 worker 在独立 worktree 中运行,并在 GUI 内展示 stdout/stderr、测试、diff、越界红灯、gate 状态和 gated merge 结果。
-- **Brain V2 默认路由**:StepFun 3.7 Flash high+32K → MiMo V2.5 Pro/Omni → Spark Qwen 3.6 35B A3B。StepFun 负责高速文本与编码主路,MiMo 接多模态与原生搜索兜底,Spark 接本地/自建零成本兜底。
+- **Brain V2 默认路由**:StepFun 3.7 Flash(256K 上下文,high 推理,32K 推理/生成预算) → MiMo V2.5 Pro/Omni → Spark Qwen 3.6 35B A3B。StepFun 负责高速文本与编码主路,MiMo 接多模态与原生搜索兜底,Spark 接本地/自建零成本兜底。
 - **链式工具加固**:tool result reinforcement、链式工具 hint、tool-storm 抑制、context compact 和 pre-search/web_search proxy 一起降低多步工具漂移与重复调用。
 - **长任务续跑**:CLI 会话 JSONL、checkpoint、帧恢复、计划重建、原始目标钉住、git 快照和 stable context layers 一起支撑长任务稳定续跑。
 - **本地 9B 改为显式启用**:本地 Qwen3.5-9B MTP 不再随应用启动自动占用约 6GB 显存/统一内存;用户点击启用时才下载/启动,并只在本地模型入口提示首次暖机较慢。
@@ -35,7 +35,7 @@ Lynn --version  # should print 0.80.0
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
-默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到 Lynn 远端 Brain。模型级联为 **StepFun 3.7 Flash high+32K → MiMo V2.5 Pro/Omni → Spark Qwen 3.6 35B A3B**。纯 CLI 用户也可以用 `Lynn providers set ...` 绑定自己的 OpenAI 兼容端点。
+默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到 Lynn 远端 Brain。模型级联为 **StepFun 3.7 Flash(256K 上下文,high 推理,32K 推理/生成预算) → MiMo V2.5 Pro/Omni → Spark Qwen 3.6 35B A3B**。纯 CLI 用户也可以用 `Lynn providers set ...` 绑定自己的 OpenAI 兼容端点。
 
 ## Headless / Fleet
 
@@ -76,6 +76,6 @@ v0.80.0 turns Lynn into a GUI-commanded CLI worker fleet. The desktop app become
 Highlights:
 - New `@lynn/cli` package with `Lynn`, `Lynn code`, `Lynn agents`, Ink TUI, markdown/code rendering, real diff preview, multimodal input, and JSONL headless mode.
 - GUI Fleet can dispatch multiple workers into isolated worktrees, show logs/diffs/tests/gates, and perform gated merges.
-- Brain V2 defaults to StepFun 3.7 Flash high+32K, then MiMo V2.5 Pro/Omni, then Spark Qwen 3.6 35B A3B.
+- Brain V2 defaults to StepFun 3.7 Flash (256K context, high reasoning, 32K reasoning/generation budget), then MiMo V2.5 Pro/Omni, then Spark Qwen 3.6 35B A3B.
 - Local Qwen3.5-9B MTP is now explicit opt-in and no longer auto-starts on app launch.
 - Release docs and gates now include CLI install, mirror distribution, and the machine-readable headless agent contract.

@@ -38,7 +38,7 @@ type Vars = Record<string, string | number>;
 const STRINGS: Record<Lang, Record<string, string>> = {
   zh: {
     "tips.banner":
-      '提示:Lynn -p "问题" 走本地 Brain 路由(默认 StepFun 3.7 Flash high+32K,MiMo V2.5 Pro 第二兜底)。\n' +
+      '提示:Lynn -p "问题" 走本地 Brain 路由(默认 StepFun 3.7 Flash(256K 上下文,high 推理,32K 推理/生成预算),MiMo V2.5 Pro 第二兜底)。\n' +
       "     聊天 / 代码里用 /fast 低延迟,/think 深度推理。\n" +
       "     Lynn providers 配置 CLI 专用 BYOK,Lynn help 查看全部命令。",
     "startup.label.model": "模型",
@@ -234,7 +234,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "providers.byok.configured": "已配置 CLI BYOK fallback;默认 Brain 路由仍由 Lynn 客户端设置 > Providers 控制",
     "providers.keyPolicy": "供应商密钥保存在 Lynn 客户端设置或 CLI 本地配置文件中;终端只显示脱敏值。",
     "providers.route.default": "StepFun 3.7 Flash → MiMo V2.5 Pro → Spark Qwen 3.6 35B A3B · 经本地 Brain 路由(自动)",
-    "providers.defaultNote": "默认模型: CLI 通过本地 Brain/router 先用 StepFun 3.7 Flash high+32K,MiMo V2.5 Pro 作为第二位多模态/原生搜索兜底,Spark Qwen 3.6 35B A3B 第三位本地兜底。需要本地 Brain 在线;可运行 Lynn brain start 或打开 Lynn 客户端。",
+    "providers.defaultNote": "默认模型: CLI 通过本地 Brain/router 先用 StepFun 3.7 Flash(256K 上下文,high 推理,32K 推理/生成预算),MiMo V2.5 Pro 作为第二位多模态/原生搜索兜底,Spark Qwen 3.6 35B A3B 第三位本地兜底。需要本地 Brain 在线;可运行 Lynn brain start 或打开 Lynn 客户端。",
     "providers.clientNote": "没有客户端时,CLI-only 模式不能修改默认模型设置。",
     "providers.cliNote": "CLI-only: 可用 OpenAI 兼容三步配置 BYOK:",
     "providers.routeHint": "用 Lynn model 或聊天里的 /model 查看路由;用 --brain-url 指向其他本地端点。",
@@ -301,7 +301,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
   },
   en: {
     "tips.banner":
-      'Tip: Lynn -p "prompt" uses the local Brain router (StepFun 3.7 Flash high+32K first, MiMo V2.5 Pro second).\n' +
+      'Tip: Lynn -p "prompt" uses the local Brain router (StepFun 3.7 Flash first (256K context; high reasoning with a 32K reasoning/generation budget), MiMo V2.5 Pro second).\n' +
       "     In chat / code, use /fast for low latency or /think for deeper reasoning.\n" +
       "     Run Lynn providers for CLI-only BYOK, or Lynn help to see every command.",
     "startup.label.model": "model",
@@ -497,7 +497,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "providers.byok.configured": "CLI BYOK fallback configured; client GUI Settings > Providers controls the default Brain route",
     "providers.keyPolicy": "Provider keys stay in Lynn client settings or the local CLI profile; terminal output shows only redacted values.",
     "providers.route.default": "StepFun 3.7 Flash → MiMo V2.5 Pro → Spark Qwen 3.6 35B A3B via local Brain router (auto)",
-    "providers.defaultNote": "Default model: CLI uses StepFun 3.7 Flash high+32K first through the local Brain/router, MiMo V2.5 Pro second as the multimodal/native-search fallback, and Spark Qwen 3.6 35B A3B third as the local fallback. Local Brain must be online; run Lynn brain start or open the Lynn client GUI.",
+    "providers.defaultNote": "Default model: CLI uses StepFun 3.7 Flash first (256K context; high reasoning with a 32K reasoning/generation budget) through the local Brain/router, MiMo V2.5 Pro second as the multimodal/native-search fallback, and Spark Qwen 3.6 35B A3B third as the local fallback. Local Brain must be online; run Lynn brain start or open the Lynn client GUI.",
     "providers.clientNote": "Without the client GUI, default model settings cannot be changed from CLI-only mode.",
     "providers.cliNote": "CLI-only: set a BYOK OpenAI-compatible endpoint with:",
     "providers.routeHint": "Use Lynn model or /model in chat to review this route. Use --brain-url to point at another local endpoint.",

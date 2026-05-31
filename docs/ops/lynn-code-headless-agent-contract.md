@@ -180,7 +180,7 @@ forbidden globs, tests, and the final diff before merge.
 
 By default, `Lynn code` talks to the local Lynn Brain router:
 
-1. StepFun 3.7 Flash, high reasoning and 32K completion budget.
+1. StepFun 3.7 Flash with 256K context, high reasoning, and a 32K reasoning/generation budget.
 2. MiMo V2.5 Pro / Omni fallback, including multimodal turns.
 3. Spark Qwen 3.6 35B A3B local fallback.
 

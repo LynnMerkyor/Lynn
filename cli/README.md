@@ -3,7 +3,7 @@
 Terminal and worker-runner interface for Lynn v0.80.
 
 This package is intentionally thin. When the Lynn client GUI is running, model routing uses
-the local Lynn server / Brain chain and defaults to StepFun 3.7 Flash high+32K,
+the local Lynn server / Brain chain and defaults to StepFun 3.7 Flash (256K context, high reasoning, 32K reasoning/generation budget),
 then MiMo V2.5 Pro, then Spark Qwen 3.6 35B A3B. When the client GUI is not
 running, the CLI can fall back to a user-owned OpenAI-compatible BYOK endpoint.
 The CLI handles terminal UX, worker JSONL, and local file/shell orchestration.

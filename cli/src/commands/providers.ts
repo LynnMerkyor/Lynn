@@ -78,7 +78,7 @@ export const BRAIN_MODEL_CHOICES: BrainModelChoice[] = [
     id: "stepfun",
     name: "StepFun 3.7 Flash",
     routeRole: { zh: "1 / 默认首位", en: "1 / default head" },
-    capability: { zh: "high+32K 高 TPS 文本 + 编码", en: "high+32K high TPS text + coding" },
+    capability: { zh: "256K 上下文 + high 推理 + 高 TPS 文本/编码", en: "256K context + high reasoning + high TPS text/coding" },
   },
   {
     id: "mimo",
