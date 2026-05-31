@@ -15,7 +15,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.80.1-brightgreen" alt="Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.80.1-brightgreen" alt="App Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.80.2-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -50,12 +51,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带 In
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=a1e4d9fd76bb"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.80.1
+Lynn --version  # should print 0.80.2
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
@@ -114,7 +115,24 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 ## 🆕 近期更新
 
 <details>
-<summary><strong>v0.80.1</strong> · 2026-05-30 · CLI Worker Fleet + StepFun/MiMo Brain Route <em>(最新)</em></summary>
+<summary><strong>CLI v0.80.2</strong> · 2026-05-31 · Apple Terminal 稳定性 + TUI 体验热修 <em>(CLI 最新)</em></summary>
+
+**CLI-only 热修,GUI 仍为 v0.80.1**:
+- 🧯 **Apple Terminal / 中文输入稳定性**:保留 Ink TUI、输入框、状态栏和 decode TPS,但在 Apple Terminal 自动关闭高频流光、扫描动画、动态 placeholder 与内联图片转义,规避 macOS Terminal + IME 绘制崩溃。
+- 🖥️ **完整 TUI 仍保留**:iTerm2、kitty、VS Code Terminal 等继续使用完整流光等待、Markdown 表格/代码高亮、diff 预览、多行输入、图片/音频/视频路径提示和底部速度表。
+- 🤖 **更适合其他智能体调用**:`Lynn -p`、`Lynn code -p --json`、`Lynn worker run --jsonl` 均不进入人类 TUI,适合作为 CLI Fleet worker 或被 Claude Code / Codex CLI / Kimi Code 静默调用。
+- 🌐 **纯 CLI 可直接使用**:全新机器只安装 CLI 时,默认走 Lynn 远端 Brain;本地 Brain 或 GUI 可选,BYOK 仍可用。
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz"
+```
+
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.2)
+
+</details>
+
+<details>
+<summary><strong>v0.80.1</strong> · 2026-05-30 · CLI Worker Fleet + StepFun/MiMo Brain Route</summary>
 
 **Lynn 有史以来最重要的编程版本**:
 - 🖥️ **Lynn CLI / Lynn Code**:新增 Ink TUI、流光等待、Markdown/代码高亮、真实 diff 预览、多行输入、图片/音频/视频附件、`Lynn code -p ... --json` 无交互调用和 `Lynn agents` 机器可读命令面。

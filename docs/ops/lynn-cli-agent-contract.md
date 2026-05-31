@@ -2,7 +2,7 @@
 
 > Machine-readable invocation spec for orchestrators and Fleet workers.
 > Command is `Lynn` (uppercase; `lynn` also resolves on case-insensitive filesystems like macOS — use `Lynn` on Linux/CI).
-> v0.80.0. Verified against `cli/` on branch `codex/v0801-stability`.
+> v0.80.2. Verified against `cli/` on branch `codex/v0801-stability`.
 
 ---
 
@@ -10,17 +10,16 @@
 
 ```bash
 # Lynn mirror tarball (npm registry package not yet published)
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz
 
 # Slow deps in mainland China:
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz \
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz \
   --registry=https://registry.npmmirror.com
 ```
 
 `--force` lets npm replace an older `Lynn`/`lynn` shim. Requires Node ≥ 20.
 
-**Routing:** GUI running → local Lynn server / Brain chain (default StepFun 3.7 Flash, full StepFun → MiMo → Spark cascade + Fleet).
-GUI not running → user-owned BYOK endpoint (`Lynn providers set`).
+**Routing:** fresh CLI installs use Lynn hosted Brain by default (StepFun 3.7 Flash → MiMo → Spark cascade). A local Lynn Brain or GUI is optional. BYOK (`Lynn providers set`) is available when a user wants their own OpenAI-compatible endpoint.
 
 ---
 
@@ -168,4 +167,4 @@ Lynn -p "ping" --json                    # end-to-end smoke
 
 ---
 
-*Contract v0.3 · Lynn CLI v0.80.0 · verified against cli/ source 2026-05-31*
+*Contract v0.3 · Lynn CLI v0.80.2 · verified against cli/ source 2026-05-31*

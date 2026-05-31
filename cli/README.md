@@ -28,7 +28,7 @@ winget install OpenJS.NodeJS.LTS
 Install from the Lynn Tencent mirror:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=a1e4d9fd76bb"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz"
 ```
 
 The package installs the `Lynn` command. If you installed an older preview that
@@ -47,7 +47,7 @@ If npm dependency downloads are slow in mainland China, keep the Lynn tarball UR
 as-is and add a registry mirror for third-party dependencies:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=a1e4d9fd76bb" \
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz" \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -55,7 +55,7 @@ Release maintainers can smoke-test the exact CDN tarball before inviting
 external testers:
 
 ```bash
-LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=a1e4d9fd76bb" \
+LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz" \
   npm run test:cli-install:remote
 ```
 
@@ -81,14 +81,14 @@ case-insensitive and npm cannot safely create both shims in the same prefix.
 `Lynn`, `Lynn chat`, and `Lynn code` can start directly after `npm install -g`.
 They try routes in this order:
 
-1. Local Lynn Brain router, if it is online. Start it with `Lynn brain start` or
-   by opening the Lynn client GUI.
-2. CLI-only BYOK fallback, if you configured one with `Lynn providers set`.
-3. Mock mode only when you explicitly pass `--mock-brain`.
+1. Hosted Lynn Brain router (`https://api.merkyorlynn.com/api/v2`) when reachable.
+2. Local Lynn Brain router, if you explicitly set `LYNN_BRAIN_URL` or the hosted route is unavailable and local is online.
+3. CLI-only BYOK fallback, if you configured one with `Lynn providers set`.
+4. Mock mode only when you explicitly pass `--mock-brain`.
 
-The default StepFun -> MiMo -> Spark routing lives in the local Brain router. A
-standalone npm install cannot ship Lynn's server-side keys. For CLI-only use,
-configure your own OpenAI-compatible endpoint:
+The default StepFun -> MiMo -> Spark routing lives in Lynn Brain and is usable from a
+fresh CLI install through the hosted route. You can still configure your own
+OpenAI-compatible endpoint when you want a private or company-owned route:
 
 ```bash
 Lynn providers set
@@ -145,7 +145,7 @@ Agent quick contract:
 # Requires Node.js 20 LTS or 22 LTS with npm.
 
 # Install/update.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz?build=a1e4d9fd76bb"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz"
 
 # Human launch commands.
 Lynn

@@ -205,10 +205,12 @@ describe("prompt stdin handling", () => {
     expect(result.stdout).toContain("\"ok\":true");
   });
 
-  it("treats hidden-reasoning-only streams as an empty visible answer", async () => {
+  it("retries hidden-reasoning-only streams once before failing", async () => {
+    let requests = 0;
     const provider = http.createServer((request, response) => {
       request.resume();
       request.on("end", () => {
+        requests += 1;
         response.writeHead(200, { "content-type": "text/event-stream" });
         response.end([
           "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"thinking but no answer\"}}]}",
@@ -248,9 +250,74 @@ describe("prompt stdin handling", () => {
     }
 
     expect(output).toContain("\"code\":\"empty_visible_answer\"");
+    expect(output).toContain("\"type\":\"run.retry\"");
     expect(output).toContain("\"ok\":false");
     expect(output).toContain("\"reasoningReturned\":true");
     expect(output).not.toContain("\"ok\":true");
+    expect(requests).toBe(2);
+  });
+
+  it("recovers when the hidden-reasoning retry returns visible content", async () => {
+    let requests = 0;
+    let retryBody = "";
+    const provider = http.createServer((request, response) => {
+      let body = "";
+      request.on("data", (chunk) => {
+        body += String(chunk);
+      });
+      request.on("end", () => {
+        requests += 1;
+        if (requests === 2) retryBody = body;
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end(requests === 1
+          ? [
+              "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"thinking but no answer\"}}]}",
+              "",
+              "data: [DONE]",
+              "",
+            ].join("\n")
+          : [
+              "data: {\"choices\":[{\"delta\":{\"content\":\"visible answer\"}}]}",
+              "",
+              "data: [DONE]",
+              "",
+            ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runPrompt(parseArgs([
+        "-p",
+        "hello",
+        "--json",
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-command-test",
+        "--model",
+        "command-model",
+      ]), { json: true })).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
+
+    expect(requests).toBe(2);
+    expect(output).toContain("\"type\":\"run.retry\"");
+    expect(output).toContain("\"text\":\"visible answer\"");
+    expect(output).toContain("\"ok\":true");
+    expect(retryBody).toContain("previous attempt returned hidden reasoning");
   });
 
   it("exits quietly when downstream closes a JSON pipe early", async () => {

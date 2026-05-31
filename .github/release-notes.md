@@ -1,16 +1,16 @@
-# Lynn v0.80.1 Release Notes
+# Lynn CLI v0.80.2 Release Notes
 
-> 发布日期:2026-05-31 · 稳定性热修
+> 发布日期:2026-05-31 · CLI-only 体验与稳定性热修
 
-v0.80.1 是 v0.80 CLI Worker Fleet 的稳定性热修版本,重点把 **Lynn 客户端 GUI 内置 CLI** 和公开 CDN CLI 包对齐,并减少 CLI 更新提示对交互会话的打断。
+v0.80.2 只迭代 **Lynn CLI / Lynn Code**。桌面端 GUI 仍停在 v0.80.1,CLI 可以领先一个版本,用于快速修复终端输入稳定性、补齐 Apple Terminal 体验、保留 Ink TUI、decode TPS 与 Fleet/headless 调用能力。
 
-## 重点修复
+## 重点修复与体验
 
-- **GUI 内置 CLI 对齐 CDN CLI**:重新打包 macOS GUI,内置 `Lynn` / `Lynn code` / `Lynn worker` 运行时与当前 `@lynn/cli` 包保持一致。
-- **CLI 更新提示降噪**:同版本 build 热修不再弹交互确认;只有真正版本号升级才提示用户接受更新,升级失败也不影响当前版本继续使用。
-- **StepFun/MiMo 路由说明修正**:明确 StepFun 3.7 Flash 是 256K 上下文,high 推理,32K 是推理/生成预算而不是上下文窗口。
-- **远端 Brain 默认可用**:纯 CLI 用户在本地 Lynn Brain 不可达时会自动回到 Lynn 远端 Brain,无需先安装或打开 Lynn 客户端即可开始体验。
-- **发布入口同步**:README、CLI README、下载镜像站和 GitHub Release 均更新 Node 要求、CLI 安装命令、启动命令和 Fleet/headless 调用说明。
+- **Apple Terminal / 中文输入稳定性**:保留 Ink TUI、输入框、状态栏和 decode TPS,但在 Apple Terminal 自动关闭高频流光/扫描动画、动态 placeholder 和内联图片转义,规避 macOS Terminal + IME 绘制崩溃。
+- **完整 TUI 保留**:iTerm2、kitty、VS Code Terminal 等继续使用完整流光等待、Markdown 表格/代码高亮、diff 预览、多行输入、图片/音频/视频路径提示和底部速度表。
+- **`-p` / headless 更适合其他智能体**:`Lynn -p`、`Lynn code -p --json`、`Lynn worker run --jsonl` 均不进入 TUI,适合作为 CLI Fleet worker 或被 Claude Code / Codex CLI / Kimi Code 静默调用。
+- **同版本更新不打断会话**:同版本 build 热修不弹确认;只有真正版本号升级才提示。升级失败不影响当前版本继续使用。
+- **远端 Brain 默认可用**:纯 CLI 用户本地 Brain 不可达时自动使用 Lynn 远端 Brain,无需先安装或打开 Lynn 客户端即可开始体验。
 
 ## CLI 安装
 
@@ -19,12 +19,12 @@ v0.80.1 是 v0.80 CLI Worker Fleet 的稳定性热修版本,重点把 **Lynn 客
 node -v
 
 # 2. Install or update Lynn CLI from the CDN.
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.1.tgz
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.80.1
+Lynn --version  # should print 0.80.2
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
@@ -50,4 +50,4 @@ Lynn worker run --brief task.md --worktree /path/to/worktree \
 
 ## English Summary
 
-v0.80.1 is a stability hotfix for the v0.80 CLI Worker Fleet release. It rebuilds the macOS desktop app with the latest embedded Lynn CLI, reduces same-version build update prompts, clarifies the StepFun 256K context / 32K reasoning budget wording, and keeps the CDN CLI install and GitHub Release documentation aligned.
+v0.80.2 is a CLI-only stability and UX hotfix. It keeps the modern Ink TUI while using a conservative Apple Terminal profile for Chinese IME stability, preserves decode TPS and headless/Fleet commands, keeps same-version build refreshes quiet, and ships as a CDN tarball without requiring a desktop app.
