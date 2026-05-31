@@ -173,7 +173,7 @@ function firstNumber(record: Record<string, unknown>, paths: string[]): number |
   return null;
 }
 
-function formatTps(value: number): string {
+export function formatTps(value: number): string {
   if (value >= 100) return String(Math.round(value));
   if (value >= 10) return value.toFixed(1);
   return value.toFixed(2);

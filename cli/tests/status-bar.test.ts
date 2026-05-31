@@ -8,6 +8,7 @@ describe("status bar", () => {
       cwd: process.cwd(),
       mode: "ask / workspace-write",
       reasoning: "auto",
+      decodeTps: "42 TPS",
       usage: "12 tokens",
       color: false,
     });
@@ -15,6 +16,7 @@ describe("status bar", () => {
     expect(rendered).toContain("MiMo");
     expect(rendered).toContain("ask / workspace-write");
     expect(rendered).toContain("think auto");
+    expect(rendered).toContain("decode 42 TPS");
     expect(rendered).toContain("12 tokens");
   });
 });

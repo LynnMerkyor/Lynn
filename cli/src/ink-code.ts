@@ -22,6 +22,7 @@ import { handleMemorySlashCommand } from "./session/memory.js";
 import { resolveDataDir } from "./session/store.js";
 import { addCodeInputMediaFlags, prepareCodeTaskInput } from "./code-input.js";
 import { rotatingPlaceholder } from "./ink-placeholders.js";
+import { createDecodeSpeedTracker, type DecodeSpeedTracker } from "./decode-speed.js";
 
 type CodeItem =
   | { id: number; kind: "user"; text: string }
@@ -111,11 +112,13 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   const [reasoning, setReasoning] = useState(props.initialReasoning);
   const [mode, setMode] = useState(props.initialMode);
   const [usage, setUsage] = useState<string | null>(null);
+  const [decodeTps, setDecodeTps] = useState<string | null>(null);
   const [provider, setProvider] = useState(props.modelLabel);
   const [approval, setApproval] = useState<ApprovalState | null>(null);
   const approvalResolve = useRef<((value: "approve" | "approve_all" | "deny") => void) | null>(null);
   const [history] = useState(() => new HistoryNavigator(loadHistory(historyPath())));
   const assistantId = useRef<number | null>(null);
+  const decodeTracker = useRef<DecodeSpeedTracker | null>(null);
   const dataDir = React.useMemo(() => resolveDataDir(typeof props.args.flags["data-dir"] === "string" ? props.args.flags["data-dir"] : null), [props.args.flags]);
   const effectiveCwd = getStringFlag(props.args.flags, "cwd") || process.cwd();
   const contextInfo = React.useMemo(() => analyzePastedContext(input, effectiveCwd), [input, effectiveCwd]);
@@ -312,6 +315,8 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     const prepared = prepareCodeTaskInput(text, effectiveCwd, t("chat.image.defaultPrompt"));
     pushItem({ kind: "user", text: prepared.contextSummary ? `${prepared.task}\n${prepared.contextSummary}` : prepared.task });
     assistantId.current = Date.now() + 1;
+    decodeTracker.current = createDecodeSpeedTracker(Date.now());
+    setDecodeTps(null);
     setItems((current) => [...current, { id: assistantId.current!, kind: "assistant" as const, text: "" }].slice(-14));
     setBusy(true);
     try {
@@ -332,6 +337,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     } finally {
       setBusy(false);
       assistantId.current = null;
+      decodeTracker.current = null;
     }
   };
 
@@ -345,6 +351,8 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     if (event.type === "assistant.delta") {
       const id = assistantId.current;
       if (!id) return;
+      const nextDecodeTps = decodeTracker.current?.add(event.text);
+      if (nextDecodeTps) setDecodeTps(nextDecodeTps);
       setItems((current) => current.map((item) => item.id === id && item.kind === "assistant" ? { ...item, text: `${item.text}${event.text}` } : item));
     }
     if (event.type === "tool.progress") pushItem({ kind: "system", text: event.message });
@@ -390,7 +398,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       React.createElement(Text, null, " "),
       React.createElement(InkSweep, { width: 28, frame }),
     ) : null,
-    React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${usage ? ` · ${usage}` : ""}`),
+    React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${decodeTps ? ` · decode ${decodeTps}` : ""}${usage ? ` · ${usage}` : ""}`),
     approval ? React.createElement(ApprovalPrompt, { approval }) : React.createElement(InkInputLine, {
       value: input,
       placeholder: rotatingPlaceholder("code", frame),

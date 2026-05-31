@@ -113,9 +113,9 @@ describe("self update", () => {
         check: async () => ({
           available: true,
           manifest: {
-            version: "0.80.0",
+            version: "0.80.1",
             build: "new",
-            tarballUrl: "https://download.example.test/lynn-cli-0.80.0.tgz",
+            tarballUrl: "https://download.example.test/lynn-cli-0.80.1.tgz",
           },
         }),
         install: async (manifest) => {
@@ -125,9 +125,72 @@ describe("self update", () => {
       },
     );
 
-    expect(installedUrl).toBe("https://download.example.test/lynn-cli-0.80.0.tgz");
+    expect(installedUrl).toBe("https://download.example.test/lynn-cli-0.80.1.tgz");
     expect(stdout.output).toContain("Lynn CLI 已更新");
     expect(stderr.output).toBe("");
+  });
+
+  it("does not interrupt interactive sessions for same-version build hotfixes by default", async () => {
+    const stdout = new CaptureStream();
+    const stderr = new CaptureStream();
+    let installed = false;
+
+    await maybePromptForCliUpdate(
+      { command: "chat", positionals: [], flags: {} },
+      { name: "@lynn/cli", version: "0.80.0", build: "old" },
+      {
+        stdin: ttyInput("y\n") as never,
+        stdout: stdout as never,
+        stderr,
+        env: {},
+        check: async () => ({
+          available: true,
+          manifest: {
+            version: "0.80.0",
+            build: "new",
+            tarballUrl: "https://download.example.test/lynn-cli-0.80.0.tgz",
+          },
+        }),
+        install: async () => {
+          installed = true;
+          return 0;
+        },
+      },
+    );
+
+    expect(installed).toBe(false);
+    expect(stdout.output).toBe("");
+    expect(stderr.output).toBe("");
+  });
+
+  it("can opt into prompting for same-version build updates", async () => {
+    const stdout = new CaptureStream();
+    let installed = false;
+
+    await maybePromptForCliUpdate(
+      { command: "chat", positionals: [], flags: {} },
+      { name: "@lynn/cli", version: "0.80.0", build: "old" },
+      {
+        stdin: ttyInput("y\n") as never,
+        stdout: stdout as never,
+        env: { LYNN_CLI_PROMPT_BUILD_UPDATES: "1" },
+        check: async () => ({
+          available: true,
+          manifest: {
+            version: "0.80.0",
+            build: "new",
+            tarballUrl: "https://download.example.test/lynn-cli-0.80.0.tgz",
+          },
+        }),
+        install: async () => {
+          installed = true;
+          return 0;
+        },
+      },
+    );
+
+    expect(installed).toBe(true);
+    expect(stdout.output).toContain("Lynn CLI 已更新");
   });
 
   it("reports update failures without throwing or breaking the current version", async () => {
@@ -145,9 +208,9 @@ describe("self update", () => {
         check: async () => ({
           available: true,
           manifest: {
-            version: "0.80.0",
+            version: "0.80.1",
             build: "new",
-            tarballUrl: "https://download.example.test/lynn-cli-0.80.0.tgz",
+            tarballUrl: "https://download.example.test/lynn-cli-0.80.1.tgz",
           },
         }),
         install: async () => 1,

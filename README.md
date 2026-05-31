@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.80.0-brightgreen" alt="Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/version-0.80.1-brightgreen" alt="Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -50,12 +50,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带 In
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.0.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.1.tgz
 
 # 3. Launch.
 Lynn            # interactive chat TUI
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.80.0
+Lynn --version  # should print 0.80.1
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
@@ -114,7 +114,7 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 ## 🆕 近期更新
 
 <details>
-<summary><strong>v0.80.0</strong> · 2026-05-30 · CLI Worker Fleet + StepFun/MiMo Brain Route <em>(最新)</em></summary>
+<summary><strong>v0.80.1</strong> · 2026-05-30 · CLI Worker Fleet + StepFun/MiMo Brain Route <em>(最新)</em></summary>
 
 **Lynn 有史以来最重要的编程版本**:
 - 🖥️ **Lynn CLI / Lynn Code**:新增 Ink TUI、流光等待、Markdown/代码高亮、真实 diff 预览、多行输入、图片/音频/视频附件、`Lynn code -p ... --json` 无交互调用和 `Lynn agents` 机器可读命令面。
@@ -125,7 +125,7 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 - 🧊 **本地 9B 改为显式启用**:本地 Qwen3.5-9B MTP 不再随启动自动占用约 6GB 显存/统一内存;用户点击启用时才下载/启动,并只在本地模型入口提示首次暖机较慢。
 - 📦 **CLI 镜像安装与发布门禁**:Node 要求、CDN tarball、`Lynn`/`Lynn code`/`Lynn agents` 启动命令和 headless contract 写入 README、CLI README、release notes 与 release static gate。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.0)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.1)
 
 </details>
 
@@ -1007,11 +1007,11 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.80.0 的 Apple Silicon / Intel DMG 会完成签名、公证、stapled,并通过 Gatekeeper 校验。
+**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.80.1 的 Apple Silicon / Intel DMG 会完成签名、公证、stapled,并通过 Gatekeeper 校验。
 
 **Windows**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.exe`，直接运行。
 
-> **Windows SmartScreen 提示：** V0.80.0 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
+> **Windows SmartScreen 提示：** V0.80.1 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
 Linux 版本计划中。
 
@@ -1079,7 +1079,7 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（V0.80.0 签名 + 公证 DMG） |
+| macOS (Apple Silicon) | 已支持（V0.80.1 签名 + 公证 DMG） |
 | macOS (Intel) | 已支持 |
 | Windows x64 | Beta |
 | Linux | 计划中 |
@@ -1141,7 +1141,7 @@ npm run dist:local            # 本地打包（macOS DMG，跳过公证）
 
 ### Q5：Windows 能用吗？
 
-可以。V0.80.0 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均会签名、公证并通过 Gatekeeper 校验。
+可以。V0.80.1 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均会签名、公证并通过 Gatekeeper 校验。
 
 ### Q6：能改模型吗？接自己的 API？
 

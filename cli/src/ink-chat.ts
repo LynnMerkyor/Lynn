@@ -24,6 +24,7 @@ import { buildMemoryContextFrameSync, handleMemorySlashCommand } from "./session
 import { resolveDataDir } from "./session/store.js";
 import { rotatingPlaceholder } from "./ink-placeholders.js";
 import { resolveDefaultBrainUrl } from "./brain-url.js";
+import { createDecodeSpeedTracker } from "./decode-speed.js";
 
 type Turn = {
   id: number;
@@ -88,6 +89,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
   const [fallbackProvider, setFallbackProvider] = useState<CliProviderProfile | null>(props.fallbackProvider || null);
   const [provider, setProvider] = useState(chatRouteLabel(props.fallbackProvider));
   const [usage, setUsage] = useState<string | null>(null);
+  const [decodeTps, setDecodeTps] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Thumb[]>([]);
   const [history] = useState(() => new HistoryNavigator(loadHistory(historyPath())));
   const dataDir = useMemo(() => resolveDataDir(getStringFlag(props.args.flags, "data-dir")), [props.args.flags]);
@@ -118,6 +120,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
           setBusy,
           setProvider,
           setUsage,
+          setDecodeTps,
           setReasoning,
           setMode,
           fallbackProvider,
@@ -158,6 +161,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
         setBusy,
         setProvider,
         setUsage,
+        setDecodeTps,
         setReasoning,
         setMode,
         fallbackProvider,
@@ -234,7 +238,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
         React.createElement(InkSweep, { width: 28, frame }),
       )
       : null,
-    React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${usage ? ` · ${usage}` : ""}`),
+    React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${decodeTps ? ` · decode ${decodeTps}` : ""}${usage ? ` · ${usage}` : ""}`),
     React.createElement(InkInputLine, {
       value: input,
       placeholder: rotatingPlaceholder("chat", frame),
@@ -298,6 +302,7 @@ async function submitInput(inputData: {
   setBusy: (value: boolean) => void;
   setProvider: (value: string) => void;
   setUsage: (value: string | null) => void;
+  setDecodeTps: (value: string | null) => void;
   setReasoning: (value: ReasoningOptions) => void;
   setMode: (value: ChatMode) => void;
   fallbackProvider: CliProviderProfile | null;
@@ -449,6 +454,7 @@ async function submitChatTurn(inputData: {
   setBusy: (value: boolean) => void;
   setProvider: (value: string) => void;
   setUsage: (value: string | null) => void;
+  setDecodeTps: (value: string | null) => void;
   messages: ChatMessage[];
   props: InkChatProps;
   reasoning: ReasoningOptions;
@@ -462,6 +468,7 @@ async function submitChatTurn(inputData: {
   inputData.setTurns((current) => [...current, userTurn, { id: assistantId, role: "assistant", text: "", pending: true }]);
   inputData.messages.push({ role: "user", content: inputData.userContent });
   inputData.setBusy(true);
+  inputData.setDecodeTps(null);
 
   if (inputData.props.mockBrain) {
     const answer = t("mock.response", { text: inputData.promptText });
@@ -473,6 +480,7 @@ async function submitChatTurn(inputData: {
 
   let assistant = "";
   const startedAt = Date.now();
+  const decodeTracker = createDecodeSpeedTracker(startedAt);
   try {
     for await (const event of streamBrainChat({
       brainUrl: inputData.props.brainUrl,
@@ -488,6 +496,8 @@ async function submitChatTurn(inputData: {
       }
       if (event.type !== "assistant.delta") continue;
       assistant += event.text;
+      const nextDecodeTps = decodeTracker.add(event.text);
+      if (nextDecodeTps) inputData.setDecodeTps(nextDecodeTps);
       inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, text: assistant, pending: false } : turn));
     }
     inputData.messages.push({ role: "assistant", content: assistant });
