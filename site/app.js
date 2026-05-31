@@ -4,7 +4,8 @@ const RELEASE = {
   assets: {
     macArm:
       "https://download.merkyorlynn.com/downloads/Lynn-0.80.0-macOS-arm64.dmg",
-    macIntel: "https://github.com/MerkyorLynn/Lynn/releases",
+    macIntel:
+      "https://download.merkyorlynn.com/downloads/Lynn-0.80.0-macOS-x64.dmg",
     windows: "https://github.com/MerkyorLynn/Lynn/releases",
   },
 };
