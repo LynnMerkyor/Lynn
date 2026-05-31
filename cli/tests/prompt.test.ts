@@ -255,7 +255,7 @@ describe("prompt stdin handling", () => {
     expect(result.stdout).toContain("\"ok\":true");
   });
 
-  it("retries hidden-reasoning-only streams once before failing", async () => {
+  it("retries hidden-reasoning-only streams twice before failing", async () => {
     let requests = 0;
     const provider = http.createServer((request, response) => {
       request.resume();
@@ -304,7 +304,7 @@ describe("prompt stdin handling", () => {
     expect(output).toContain("\"ok\":false");
     expect(output).toContain("\"reasoningReturned\":true");
     expect(output).not.toContain("\"ok\":true");
-    expect(requests).toBe(2);
+    expect(requests).toBe(3);
   });
 
   it("recovers when the hidden-reasoning retry returns visible content", async () => {

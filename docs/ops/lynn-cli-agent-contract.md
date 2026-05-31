@@ -2,7 +2,7 @@
 
 > Machine-readable invocation spec for orchestrators and Fleet workers.
 > Command is `Lynn` (uppercase; `lynn` also resolves on case-insensitive filesystems like macOS — use `Lynn` on Linux/CI).
-> v0.80.2. Verified against `cli/` on branch `codex/v0801-stability`.
+> v0.80.4. Verified against `cli/` on branch `codex/v0803-cli-release-polish`.
 
 ---
 
@@ -10,10 +10,10 @@
 
 ```bash
 # Lynn mirror tarball (npm registry package not yet published)
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2-apple-terminal-stable.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz
 
 # Slow deps in mainland China:
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2-apple-terminal-stable.tgz \
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -167,4 +167,4 @@ Lynn -p "ping" --json                    # end-to-end smoke
 
 ---
 
-*Contract v0.3 · Lynn CLI v0.80.2 · verified against cli/ source 2026-05-31*
+*Contract v0.3 · Lynn CLI v0.80.4 · verified against cli/ source 2026-05-31*

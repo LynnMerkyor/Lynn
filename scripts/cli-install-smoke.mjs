@@ -153,9 +153,13 @@ try {
 
   await assertNoLiteralLowercaseShim(path.join(installDir, "node_modules", ".bin"));
   const lynnBin = await existingBin(installDir, ["Lynn"]);
+  const installedPkg = JSON.parse(await fs.readFile(path.join(installDir, "node_modules", "@lynn", "cli", "package.json"), "utf8"));
+  const expectedVersion = String(installedPkg.version || "");
+  if (!expectedVersion) throw new Error("[cli-install-smoke] installed @lynn/cli package has no version");
 
   const version = await run("Lynn version", lynnBin, ["version"], { cwd: installDir });
   assertIncludes(version.name, version.stdout, "@lynn/cli");
+  assertIncludes(version.name, version.stdout, expectedVersion);
 
   const doctor = await run("Lynn doctor offline", lynnBin, ["doctor", "--offline"], { cwd: installDir, env: { LYNN_DATA_DIR: dataDir } });
   assertIncludes(doctor.name, doctor.stdout, "OK node");
@@ -168,7 +172,7 @@ try {
   const localRuntime = await run("Lynn local runtime answer", lynnBin, ["-p", "你的版本号", "--json", "--brain-url", "http://127.0.0.1:1"], { cwd: installDir, env: { LYNN_DATA_DIR: dataDir } });
   assertIncludes(localRuntime.name, localRuntime.stdout, "\"local\":true");
   assertIncludes(localRuntime.name, localRuntime.stdout, "Lynn CLI 版本");
-  assertIncludes(localRuntime.name, localRuntime.stdout, "0.80.3");
+  assertIncludes(localRuntime.name, localRuntime.stdout, expectedVersion);
   assertNotIncludes(localRuntime.name, localRuntime.stdout + localRuntime.stderr, "fetch failed");
 
   const nonRuntime = await run("Lynn non-version prompt", lynnBin, ["-p", "write a semantic version comparator", "--mock-brain", "--json", "--brain-url", "http://127.0.0.1:1"], { cwd: installDir, env: { LYNN_DATA_DIR: dataDir } });

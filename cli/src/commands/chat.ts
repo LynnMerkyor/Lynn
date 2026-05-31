@@ -243,7 +243,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"));
     const renderReasoning = shouldRenderReasoning(reasoning.display, false);
     const color = supportsColor(output);
-    const maxEmptyAttempts = 2;
+    const maxEmptyAttempts = 3;
     let decodeTps: string | null = null;
     for (let attempt = 1; attempt <= maxEmptyAttempts; attempt += 1) {
       assistant = "";
