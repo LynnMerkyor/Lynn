@@ -60,8 +60,6 @@ afterEach(() => {
   delete process.env.BRAIN_V2_STORM_MAX;
   delete process.env.BRAIN_V2_TOOL_RESULT_CAP;
   delete process.env.BRAIN_V2_TOOL_RESULT_KEEP_LATEST;
-  delete process.env.BRAIN_V2_CHAIN_TOOL_HINT;
-  delete process.env.BRAIN_V2_TOOL_RESULT_REINFORCE;
   delete process.env.ZHIPU_KEY;
   delete process.env.MIMO_SEARCH_KEY;
 });
@@ -469,7 +467,7 @@ describe('Router', () => {
     expect(fourthRoundToolMessages[2].content).not.toContain('[brain-v2:tool-result-compacted]');
   });
 
-  it('injects a chain-tool hint by default when tools are present and no system prompt exists', async () => {
+  it('does not inject a chain-tool hint by default when tools are present', async () => {
     let adapterMessages = null;
     mockState.adapterFn = async function* ({ messages }) {
       adapterMessages = messages;
@@ -479,12 +477,11 @@ describe('Router', () => {
 
     await run({ messages: [{ role: 'user', content: 'AAPL price times 100' }], tools: null, onChunk: async () => {} });
 
-    expect(adapterMessages[0]).toMatchObject({ role: 'system' });
-    expect(String(adapterMessages[0].content)).toContain('EXACT values returned by each tool');
+    expect(adapterMessages[0]).toMatchObject({ role: 'user' });
+    expect(String(adapterMessages[0].content)).not.toContain('EXACT values returned by each tool');
   });
 
-  it('allows opting out of the chain-tool hint and tool-result reinforcement', async () => {
-    process.env.BRAIN_V2_CHAIN_TOOL_HINT = '0';
+  it('feeds server tool results back without reinforcement wrappers', async () => {
     let adapterRuns = 0;
     const roundMessages = [];
     mockState.adapterFn = async function* ({ messages }) {
@@ -513,9 +510,10 @@ describe('Router', () => {
     const toolMessage = roundMessages[1].find((message) => message.role === 'tool');
     expect(toolMessage.content).toContain('【单位换算】');
     expect(toolMessage.content).not.toContain('[Lynn tool step');
+    expect(toolMessage.content).not.toContain('use these exact returned values');
   });
 
-  it('does not inject the chain-tool hint over a caller-provided system prompt', async () => {
+  it('preserves a caller-provided system prompt without adding another system prompt', async () => {
     let adapterMessages = null;
     mockState.adapterFn = async function* ({ messages }) {
       adapterMessages = messages;
@@ -531,41 +529,6 @@ describe('Router', () => {
 
     expect(adapterMessages[0].content).toBe('caller system');
     expect(String(adapterMessages[0].content)).not.toContain('EXACT values returned by each tool');
-  });
-
-  it('reinforces tool results by default', async () => {
-    let adapterRuns = 0;
-    const roundMessages = [];
-    mockState.adapterFn = async function* ({ messages }) {
-      adapterRuns += 1;
-      roundMessages.push(messages);
-      if (adapterRuns === 1) {
-        yield {
-          type: 'tool_call_delta',
-          delta: [{
-            index: 0,
-            id: 'tc-chain-1',
-            type: 'function',
-            function: { name: 'unit_convert', arguments: '{"query":"100公里"}' },
-          }],
-        };
-        yield { type: 'finish', reason: 'tool_calls' };
-        return;
-      }
-      yield { type: 'content', delta: 'ok' };
-      yield { type: 'finish', reason: 'stop' };
-    };
-
-    const result = await run({
-      messages: [{ role: 'user', content: '300美元换成人民币是多少' }],
-      onChunk: async () => {},
-    });
-
-    expect(result).toMatchObject({ ok: true, iterations: 2 });
-    const toolMessage = roundMessages[1].find((message) => message.role === 'tool');
-    expect(toolMessage.content).toContain('[Lynn tool step 1 completed] unit_convert returned the exact result below.');
-    expect(toolMessage.content).toContain('use these exact returned values');
-    expect(toolMessage.content).toContain('【单位换算】');
   });
 });
 
