@@ -18,6 +18,9 @@ import { runClientTool } from "./tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "./tools/types.js";
 import { RESUME_COMPACTION_NOTE, RESUME_REPAIR_NOTE, formatToolResultForLoop } from "./code-resume.js";
 import { augmentToolResultSection } from "./code-tool-verify.js";
+import { resolveAutoVerifyPlan, runAutoVerify, formatAutoVerifyFeedback } from "./code-autoverify.js";
+
+const MAX_AUTOVERIFY_REVERIFIES = 3;
 
 
 export interface CodeAgentLoopInput {
@@ -57,6 +60,7 @@ export type CodeAgentEvent =
   | { type: "tool.result"; result: ClientToolResult }
   | { type: "tool.ledger"; text: string }
   | { type: "tool.loop_guard"; tool: ClientToolName; repeats: number }
+  | { type: "auto.verify"; label: string; ok: boolean; ran: boolean }
   | { type: "plan.updated"; items: CodePlanItem[] }
   | { type: "runtime.compacted"; messages: number }
   | { type: "session.resumed"; path: string; messages: number }
@@ -176,6 +180,9 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   const usageRecords: Array<{ usage: unknown; durationMs: number }> = [];
   const approvalSession = { approveAll: false };
   const toolStorm = createClientToolStormState(inputData.resumeMessages);
+  const autoVerifyPlan = resolveAutoVerifyPlan(inputData.toolCtx.cwd);
+  let mutated = false;
+  let autoVerifyReverifies = 0;
   for (let step = 0; step < inputData.maxSteps; step += 1) {
     const label = step === 0 ? t("spinner.coding") : t("spinner.reviewing");
     inputData.onEvent?.({ type: "step.started", step, label });
@@ -213,6 +220,27 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       }
     }
     if (!toolRequests.length) {
+      // #1 自动验证收尾门:动过文件就不许"自信地宣布完成"——让项目自己的 typecheck 判对错。
+      if (mutated && autoVerifyPlan.enabled && autoVerifyReverifies < MAX_AUTOVERIFY_REVERIFIES) {
+        const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
+        if (outcome.ran) {
+          if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), label: outcome.label, ok: outcome.ok });
+          inputData.onEvent?.({ type: "auto.verify", label: outcome.label, ok: outcome.ok, ran: outcome.ran });
+          if (!inputData.json && !inputData.onEvent) {
+            process.stderr.write(`${renderCard({
+              kind: outcome.ok ? "ok" : "error",
+              title: `auto-verify · ${outcome.label} · ${outcome.ok ? "passed" : "FAILED"}`,
+            }, supportsColor(process.stderr))}\n`);
+          }
+        }
+        const feedback = formatAutoVerifyFeedback(outcome);
+        if (feedback) {
+          autoVerifyReverifies += 1;
+          messages.push({ role: "user", content: feedback });
+          if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: feedback });
+          continue; // 回到模型修复,不收尾
+        }
+      }
       finalText = assistantText;
       break;
     }
@@ -302,6 +330,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       }
       if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
       inputData.onEvent?.({ type: "tool.result", result: toolResult });
+      if (toolResult.ok && (toolRequest.tool === "write_file" || toolRequest.tool === "apply_patch")) mutated = true;
       if (!inputData.json && !inputData.onEvent && toolRequest.tool !== "update_plan") renderClientToolResult(toolResult, process.stderr, toolRequest);
       toolLedgerEntries.push(toolLedgerEntry(toolResult));
       const baseSection = [
