@@ -104,4 +104,33 @@ describe("renderBrainEventForHuman", () => {
     expect(renderToolDetailsList(state, false)).toContain("无展开明细");
     expect(renderToolDetail(state, 1, false)).toContain("没有提供搜索摘要或来源明细");
   });
+
+  it("promotes search detail snippets into the visible tool card", () => {
+    let output = "";
+    const stream = {
+      isTTY: false,
+      write(chunk: string) {
+        output += chunk;
+        return true;
+      },
+    } as unknown as NodeJS.WriteStream;
+    const state: HumanBrainRenderState = {};
+
+    renderBrainEventForHuman({
+      type: "tool_progress",
+      event: "end",
+      name: "web_search",
+      ok: true,
+      ms: 4500,
+      details: [
+        "[StepFun Docs](https://platform.stepfun.com/docs/zh/api-reference/chat/messages-create): max_tokens controls generated tokens; model context is separate.",
+        "[Pricing](https://platform.stepfun.com/pricing): StepFun 3.7 Flash supports high reasoning.",
+      ],
+    }, state, stream);
+
+    expect(output).toContain("StepFun Docs · platform.stepfun.com");
+    expect(output).toContain("max_tokens controls generated tokens");
+    expect(output).toContain("Pricing · platform.stepfun.com");
+    expect(output).toContain("details: /tool 1");
+  });
 });
