@@ -2,7 +2,7 @@
 
 > Machine-readable invocation spec for orchestrators and Fleet workers.
 > Command is `Lynn` (uppercase; `lynn` also resolves on case-insensitive filesystems like macOS — use `Lynn` on Linux/CI).
-> v0.80.4. Verified against `cli/` on branch `codex/v0803-cli-release-polish`.
+> v0.80.5. Verified against `cli/` on branch `codex/v0805-cache-ui-stability`.
 
 ---
 
@@ -10,16 +10,21 @@
 
 ```bash
 # Lynn mirror tarball (npm registry package not yet published)
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz
 
 # Slow deps in mainland China:
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz \
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz \
   --registry=https://registry.npmmirror.com
 ```
 
 `--force` lets npm replace an older `Lynn`/`lynn` shim. Requires Node ≥ 20.
 
 **Routing:** fresh CLI installs use Lynn hosted Brain by default (StepFun 3.7 Flash → MiMo → Spark cascade). A local Lynn Brain or GUI is optional. BYOK (`Lynn providers set`) is available when a user wants their own OpenAI-compatible endpoint.
+
+**Long-run cache discipline:** Lynn Code keeps stable prompt layers fixed for
+Reasonix-style prefix-cache hits. Machine output may include
+`code.runtime.compacted` when older turns are compressed; callers should treat it
+as informational and continue parsing later JSONL events.
 
 ---
 
@@ -167,4 +172,4 @@ Lynn -p "ping" --json                    # end-to-end smoke
 
 ---
 
-*Contract v0.3 · Lynn CLI v0.80.4 · verified against cli/ source 2026-05-31*
+*Contract v0.3 · Lynn CLI v0.80.5 · verified against cli/ source 2026-06-01*
