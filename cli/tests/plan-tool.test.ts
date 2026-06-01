@@ -22,10 +22,10 @@ describe("plan tool", () => {
       { content: "Patch", status: "in_progress", id: "C1" },
       { content: "Verify", status: "pending", id: "C2" },
     ])).toBe([
-      "Plan updated:",
-      "✓ S0: Explore",
-      "● C1: Patch",
-      "○ C2: Verify",
+      "│ ◷ plan",
+      "│   ✓ S0: Explore",
+      "│   ● C1: Patch",
+      "│   ○ C2: Verify",
     ].join("\n"));
   });
 });

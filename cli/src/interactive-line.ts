@@ -3,7 +3,9 @@ import { stdin as input, stdout as output } from "node:process";
 import { completeSlash } from "./completion.js";
 import { HistoryNavigator } from "./history.js";
 import { renderInputBand } from "./tui-input.js";
-import { supportsColor } from "./terminal-style.js";
+import { renderPromptFrame } from "./terminal-spinner.js";
+import { readBoxedInputLine } from "./boxed-input.js";
+import { cyan, supportsColor } from "./terminal-style.js";
 import { terminalTuiProfile } from "./terminal-safety.js";
 
 export interface InteractiveLineMode {
@@ -16,6 +18,7 @@ export interface InteractiveLineOptions {
   history?: HistoryNavigator;
   completions?: string[];
   onShiftTab?: () => string | void;
+  frameStatus?: string;
 }
 
 export async function readInteractiveLine(
@@ -32,6 +35,15 @@ export async function readInteractiveLine(
     }
   }
   if (shouldUseNativeLineInput()) {
+    if (shouldUseBoxedInput()) {
+      return readBoxedInputLine({
+        status: options.frameStatus,
+        placeholder: options.placeholder,
+        history: options.history,
+        completions: options.completions,
+        onShiftTab: options.onShiftTab,
+      });
+    }
     return readNativeTerminalLine(prompt, options);
   }
 
@@ -124,10 +136,16 @@ export function shouldUseNativeLineInput(env: NodeJS.ProcessEnv = process.env): 
   return profile.appleTerminal && !profile.animation;
 }
 
+export function shouldUseBoxedInput(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.LYNN_CLI_NO_BOXED_INPUT !== "1";
+}
+
 async function readNativeTerminalLine(prompt: string, options: InteractiveLineOptions): Promise<string | null> {
-  const width = Math.max(80, typeof output.columns === "number" ? output.columns : 0);
   const color = supportsColor(output);
-  output.write(`${renderInputBand({ prompt: "", value: "", width, color })}\r`);
+  const width = typeof output.columns === "number" && output.columns > 0 ? output.columns : 80;
+  const cleanPrompt = options.frameStatus !== undefined
+    ? renderPromptFrame(options.frameStatus, width, color)
+    : color ? prompt.replace("›", cyan("›", color)) : prompt;
   const rl = readline.createInterface({
     input,
     output,
@@ -140,7 +158,7 @@ async function readNativeTerminalLine(prompt: string, options: InteractiveLineOp
       : undefined,
   });
   try {
-    return await rl.question(prompt);
+    return await rl.question(cleanPrompt);
   } catch {
     return null;
   } finally {

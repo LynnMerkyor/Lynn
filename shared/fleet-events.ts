@@ -179,6 +179,7 @@ export interface FleetTestFinishedEvent extends FleetEventBase<"test.finished"> 
   ok: boolean;
   ms?: number;
   summary?: string;
+  data?: { output?: string; truncated?: boolean };
 }
 
 export interface FleetGateFinishedEvent extends FleetEventBase<"gate.finished"> {

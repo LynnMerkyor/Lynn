@@ -28,7 +28,7 @@ winget install OpenJS.NodeJS.LTS
 Install from the Lynn Tencent mirror:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.3.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz"
 ```
 
 The package installs the `Lynn` command. If you installed an older preview that
@@ -47,7 +47,7 @@ If npm dependency downloads are slow in mainland China, keep the Lynn tarball UR
 as-is and add a registry mirror for third-party dependencies:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.3.tgz" \
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz" \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -55,9 +55,20 @@ Release maintainers can smoke-test the exact CDN tarball before inviting
 external testers:
 
 ```bash
-LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.3.tgz" \
+LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz" \
   npm run test:cli-install:remote
 ```
+
+## Prefix-cache discipline
+
+Lynn Code keeps long-running agent context cache-friendly by separating the prompt into deterministic layers:
+
+- `stable_prefix`: model identity, tool contracts, safety/runtime rules.
+- `resume_history`: compacted session and checkpoint summaries.
+- `volatile_runtime`: route, cwd, permission mode, and current execution facts.
+- `current_user`: the latest task turn.
+
+This follows the same principle as Reasonix-style prefix-cache stability: keep the expensive, reusable prefix stable, append volatile context later, and detect drift instead of silently losing cache hits. `Lynn cache doctor --json` and session metadata expose stable-prefix hashes, cache hit/miss telemetry, and prefix drift diagnostics for automation.
 
 ```bash
 Lynn version
@@ -145,7 +156,7 @@ Agent quick contract:
 # Requires Node.js 20 LTS or 22 LTS with npm.
 
 # Install/update.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.3.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz"
 
 # Human launch commands.
 Lynn

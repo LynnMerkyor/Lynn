@@ -42,6 +42,12 @@ describe("MarkdownStream", () => {
     md.end();
     expect(out.join("")).toBe("┌─ js\nconst x = 1;\n└─\n");
   });
+
+  it("highlights fenced code in the readline markdown renderer", () => {
+    const rendered = renderMarkdown("```ts\nconst answer = 42;\n```\n", true);
+    expect(rendered).toContain("\x1b[35mconst\x1b[0m");
+    expect(rendered).toContain("\x1b[33m42\x1b[0m");
+  });
 });
 
 describe("renderMarkdown", () => {

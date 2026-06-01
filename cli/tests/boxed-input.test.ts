@@ -1,0 +1,77 @@
+import { describe, expect, it } from "vitest";
+import { renderInputBox } from "../src/boxed-input.js";
+import { visibleLength } from "../src/startup.js";
+
+function stripAnsi(value: string): string {
+  return value.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+function box(opts: Partial<Parameters<typeof renderInputBox>[0]> = {}) {
+  return renderInputBox({
+    status: "Lynn · StepFun 3.7 Flash · ask / workspace-write",
+    buffer: "",
+    cursor: 0,
+    width: 72,
+    color: false,
+    ...opts,
+  });
+}
+
+describe("renderInputBox", () => {
+  it("draws a complete 4-sided box with the input INSIDE it", () => {
+    const r = box({ buffer: "hello world", cursor: 11 });
+    const top = stripAnsi(r.top);
+    const line = stripAnsi(r.inputLine);
+    const bottom = stripAnsi(r.bottom);
+    expect(top.startsWith("╭")).toBe(true);
+    expect(top.endsWith("╮")).toBe(true);
+    expect(line.startsWith("│")).toBe(true);
+    expect(line.endsWith("│")).toBe(true);
+    expect(line).toContain("› hello world");
+    expect(bottom.startsWith("╰")).toBe(true);
+    expect(bottom.endsWith("╯")).toBe(true);
+  });
+
+  it("keeps all three rows the same display width (右边框对齐)", () => {
+    const r = box({ buffer: "用一句话说明无交互模式", cursor: 5 });
+    expect(visibleLength(stripAnsi(r.inputLine))).toBe(visibleLength(stripAnsi(r.top)));
+    expect(visibleLength(stripAnsi(r.bottom))).toBe(visibleLength(stripAnsi(r.top)));
+  });
+
+  it("computes cursorCol after the '│ › ' prefix (4) for ASCII", () => {
+    expect(box({ buffer: "", cursor: 0 }).cursorCol).toBe(4);
+    expect(box({ buffer: "abcdef", cursor: 6 }).cursorCol).toBe(10); // 4 + 6
+    expect(box({ buffer: "abcdef", cursor: 2 }).cursorCol).toBe(6); // 4 + 2
+  });
+
+  it("accounts for CJK double-width when placing the cursor", () => {
+    expect(box({ buffer: "你好", cursor: 2 }).cursorCol).toBe(8); // 4 + 2*2
+    expect(box({ buffer: "你好世界", cursor: 1 }).cursorCol).toBe(6); // 4 + 1*2
+  });
+
+  it("shows a dim placeholder only when empty, cursor at start", () => {
+    const r = box({ buffer: "", cursor: 0, color: true, placeholder: "问我任何事" });
+    expect(stripAnsi(r.inputLine)).toContain("问我任何事");
+    expect(r.inputLine).toContain("\x1b[2m");
+    expect(r.cursorCol).toBe(4);
+    expect(stripAnsi(box({ buffer: "x", cursor: 1, placeholder: "问我任何事" }).inputLine)).not.toContain("问我任何事");
+  });
+
+  it("horizontally scrolls long input without overflowing the right border", () => {
+    const r = box({ buffer: "x".repeat(200), cursor: 200, width: 40 });
+    expect(visibleLength(stripAnsi(r.inputLine))).toBe(visibleLength(stripAnsi(r.top))); // 不溢出
+    expect(r.cursorCol).toBeLessThan(40); // 光标贴右但在框内
+    expect(r.cursorCol).toBeGreaterThan(4);
+  });
+
+  it("degrades to plain box-drawing chars without color", () => {
+    const r = box({ buffer: "hi", cursor: 2, color: false });
+    expect(r.top + r.inputLine + r.bottom).not.toContain("\x1b[");
+  });
+
+  it("colors the chevron bright-cyan and borders dim when enabled", () => {
+    const r = box({ buffer: "hi", cursor: 2, color: true });
+    expect(r.inputLine).toContain("\x1b[1;36m");
+    expect(r.top).toContain("\x1b[2m");
+  });
+});

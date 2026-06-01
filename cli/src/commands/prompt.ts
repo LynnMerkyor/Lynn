@@ -91,12 +91,13 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   let modelProvider = "brain";
   let modelId = "lynn-brain-router";
   const renderState: HumanBrainRenderState = {};
-  const spinner = new TerminalSpinner(process.stderr);
+  const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"), { quiet: true });
   const startedAt = Date.now();
   if (!options.json) spinner.start();
   try {
     const userContent = imagePaths.length ? await buildImagesContentParts(imagePaths, prompt) : prompt;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    const maxVisibleAnswerAttempts = 3;
+    for (let attempt = 0; attempt < maxVisibleAnswerAttempts; attempt += 1) {
       let attemptAssistant = "";
       let attemptSawReasoning = false;
       const retryVisibleAnswer = attempt > 0;
@@ -159,7 +160,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
         assistant = attemptAssistant;
         break;
       }
-      if (attemptSawReasoning && attempt === 0) {
+      if (attemptSawReasoning && attempt < maxVisibleAnswerAttempts - 1) {
         if (options.json) {
           writeJsonLine({
             type: "run.retry",

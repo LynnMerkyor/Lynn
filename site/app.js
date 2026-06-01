@@ -1,5 +1,6 @@
 const RELEASE = {
-  version: "0.80.1",
+  guiVersion: "0.80.1",
+  cliVersion: "0.80.4",
   releasePage: "https://github.com/MerkyorLynn/Lynn/releases",
   assets: {
     macArm:
@@ -26,10 +27,10 @@ function detectPlatform() {
 }
 
 function applyReleaseData() {
-  const versionNode = document.getElementById("release-version");
-  if (versionNode) {
-    versionNode.textContent = RELEASE.version;
-  }
+  const guiVersionNode = document.getElementById("gui-release-version");
+  if (guiVersionNode) guiVersionNode.textContent = RELEASE.guiVersion;
+  const cliVersionNode = document.getElementById("cli-release-version");
+  if (cliVersionNode) cliVersionNode.textContent = RELEASE.cliVersion;
 
   document.querySelectorAll("[data-download-key]").forEach((link) => {
     const key = link.getAttribute("data-download-key");

@@ -16,7 +16,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.80.1-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.80.3-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.80.4-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -51,16 +51,18 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带 In
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.3.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.80.3
+Lynn --version  # should print 0.80.4
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
 默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到 Lynn 远端 Brain。模型级联为 **StepFun 3.7 Flash(256K 上下文,high 推理,32K 推理/生成预算) → MiMo V2.5 Pro/Omni → Spark Qwen 3.6 35B A3B**。纯 CLI 用户也可以用 `Lynn providers set ...` 绑定自己的 OpenAI 兼容端点。
+
+长任务默认采用 Reasonix 风格的**前置缓存纪律**:稳定前缀、工具定义、运行时约束和 resume 摘要分层固定,避免每轮重排导致 prefix drift;缓存命中和漂移诊断进入 session metadata / `Lynn cache doctor --json`,不在界面里制造上下文焦虑。
 
 面向其他智能体的最短静默契约:
 
@@ -115,19 +117,20 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 ## 🆕 近期更新
 
 <details>
-<summary><strong>CLI v0.80.3</strong> · 2026-05-31 · Apple Terminal 稳定性 + TUI 体验热修 <em>(CLI 最新)</em></summary>
+<summary><strong>CLI v0.80.4</strong> · 2026-05-31 · Apple Terminal 稳定性 + TUI 体验热修 <em>(CLI 最新)</em></summary>
 
 **CLI-only 热修,GUI 仍为 v0.80.1**:
 - 🧯 **Apple Terminal / 中文输入稳定性**:保留 Ink TUI、输入框、状态栏和 decode TPS,但在 Apple Terminal 自动关闭高频流光、扫描动画、动态 placeholder 与内联图片转义,规避 macOS Terminal + IME 绘制崩溃。
 - 🖥️ **完整 TUI 仍保留**:iTerm2、kitty、VS Code Terminal 等继续使用完整流光等待、Markdown 表格/代码高亮、diff 预览、多行输入、图片/音频/视频路径提示和底部速度表。
 - 🤖 **更适合其他智能体调用**:`Lynn -p`、`Lynn code -p --json`、`Lynn worker run --jsonl` 均不进入人类 TUI,适合作为 CLI Fleet worker 或被 Claude Code / Codex CLI / Kimi Code 静默调用。
+- 💾 **前置缓存与 prefix drift 诊断**:借鉴 Reasonix 的 prefix-cache 思路,把 stable prefix / resume history / volatile runtime / current user 分层固定,并把 cache hit、cache miss、stable prefix hash 和漂移诊断写入日志与 session metadata。
 - 🌐 **纯 CLI 可直接使用**:全新机器只安装 CLI 时,默认走 Lynn 远端 Brain;本地 Brain 或 GUI 可选,BYOK 仍可用。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.3.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.3)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.4)
 
 </details>
 
@@ -139,7 +142,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧭 **GUI Fleet 指挥台**:桌面端可以 fan-out 派单到多个 CLI worker,显示 stdout/stderr、测试、diff、越界红灯、gate 状态,并支持 gated merge 到目标分支和远端 push。
 - 🧠 **Brain V2 默认路由**:StepFun 3.7 Flash(256K 上下文,high 推理,32K 推理/生成预算) → MiMo V2.5 Pro/Omni → Spark Qwen 3.6 35B A3B。StepFun 负责高速文本与编码主路,MiMo 接多模态兜底,Spark 接本地零成本兜底。
 - 🔗 **链式工具与搜索加固**:工具结果显著性注入、链式工具 hint、tool-storm 抑制、pre-search/web_search 代理和搜索源展示补齐,降低多步工具漂移。
-- 💾 **长任务续跑与缓存纪律**:CLI 会话 JSONL、checkpoint、帧恢复、计划重建、原始目标钉住、git 快照和 stable context layers 一起支撑长任务稳定续跑。
+- 💾 **长任务续跑与前置缓存纪律**:CLI 会话 JSONL、checkpoint、帧恢复、计划重建、原始目标钉住、git 快照和 stable context layers 一起支撑长任务稳定续跑;cache telemetry / prefix drift 进入日志和 metadata,不增加用户焦虑。
 - 🧊 **本地 9B 改为显式启用**:本地 Qwen3.5-9B MTP 不再随启动自动占用约 6GB 显存/统一内存;用户点击启用时才下载/启动,并只在本地模型入口提示首次暖机较慢。
 - 📦 **CLI 镜像安装与发布门禁**:Node 要求、CDN tarball、`Lynn`/`Lynn code`/`Lynn agents` 启动命令和 headless contract 写入 README、CLI README、release notes 与 release static gate。
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { detectCliAgents } from "../src/agent-registry.js";
+import { buildAgentsHeadlessContract } from "../src/commands/agents.js";
 
 describe("agent registry", () => {
   it("marks Lynn CLI as current and detects external binaries on PATH", () => {
@@ -31,5 +32,15 @@ describe("agent registry", () => {
       availability: "built-in profile - BYOK preset stepfun",
       requiresPreset: "stepfun",
     });
+  });
+
+  it("exposes copyable headless commands for other agents", () => {
+    const contract = buildAgentsHeadlessContract("https://download.example/lynn-cli-0.80.4.tgz");
+
+    expect(contract.node).toContain("Node.js 20");
+    expect(contract.install).toBe("npm install -g --force https://download.example/lynn-cli-0.80.4.tgz");
+    expect(contract.launch).toContain("Lynn agents");
+    expect(contract.headless).toContain('Lynn code -p "fix tests" --json --cwd /repo --approval yolo --sandbox workspace-write --save-session');
+    expect(contract.headless).toContain("Lynn worker run --brief task.md --worktree /repo --jsonl --approval yolo --sandbox workspace-write");
   });
 });

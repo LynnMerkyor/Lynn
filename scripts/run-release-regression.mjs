@@ -125,9 +125,16 @@ async function runStaticChecks({ level }) {
     "build:main",
     "build:renderer",
     "build:cli",
+    "pack:cli",
     "test:cli",
+    "test:cli-pack",
     "test:cli-install",
     "test:cli-install:remote",
+    "test:cli-nightly",
+    "test:cli-pty",
+    "test:cli-terminal-app",
+    "test:cli-terminal-ime",
+    "test:cli-terminal-soak",
     "test:cli-fleet",
     "test:packaged-cli",
     "test:release",
@@ -155,11 +162,29 @@ async function runStaticChecks({ level }) {
     "blocker",
     Boolean(pkg.scripts?.["release:preflight"]
       && pkg.scripts["release:preflight"].includes("test:cli")
+      && pkg.scripts["release:preflight"].includes("test:cli-pack")
       && pkg.scripts["release:preflight"].includes("test:cli-install")
       && pkg.scripts["release:preflight"].includes("stress:cli")
+      && pkg.scripts["release:preflight"].includes("test:cli-pty")
+      && pkg.scripts["release:preflight"].includes("test:cli-terminal-soak")
       && pkg.scripts["release:preflight"].includes("test:cli-fleet")),
-    "release:preflight runs CLI smoke, install, stress, and Fleet gates",
+    "release:preflight runs CLI smoke, pack, install, stress, Terminal soak, and Fleet gates",
     String(pkg.scripts?.["release:preflight"] || ""),
+  ));
+  checks.push(makeCheck(
+    "static-cli-ime-release-requires-validation",
+    "blocker",
+    Boolean(pkg.scripts?.["test:cli-terminal-soak"]?.includes("cli-terminal-ime-smoke.mjs --require")),
+    "release Terminal soak requires the IME smoke to run instead of silently skipping",
+    String(pkg.scripts?.["test:cli-terminal-soak"] || ""),
+  ));
+  checks.push(makeCheck(
+    "static-cli-pack-guard",
+    "blocker",
+    Boolean(pkg.scripts?.["pack:cli"]?.includes("scripts/pack-cli.mjs")
+      && pkg.scripts?.["test:cli-pack"]?.includes("pack:cli")),
+    "CLI release has a guarded pack command so repo-root npm pack cannot ship the app tarball",
+    `${pkg.scripts?.["pack:cli"] || ""}\n${pkg.scripts?.["test:cli-pack"] || ""}`,
   ));
 
   checks.push(makeCheck(

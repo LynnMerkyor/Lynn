@@ -38,7 +38,7 @@ export async function runVisionCommand(args: ParsedArgs, command: VisionCommand,
   const content = await buildImagesContentParts(imagePaths, prompt);
   let answer = "";
   const renderState: HumanBrainRenderState = {};
-  const spinner = new TerminalSpinner(process.stderr, command === "ground" ? t("spinner.grounding") : t("spinner.seeing"));
+  const spinner = new TerminalSpinner(process.stderr, command === "ground" ? t("spinner.grounding") : t("spinner.seeing"), { quiet: true });
   const startedAt = Date.now();
   if (!json) spinner.start();
   try {

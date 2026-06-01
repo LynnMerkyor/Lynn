@@ -1,8 +1,26 @@
-import { describe, expect, it } from "vitest";
-import { renderShimmerText, renderSweepFrame } from "../src/terminal-spinner.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  renderShimmerText,
+  renderSweepFrame,
+  renderSoftShimmer,
+  renderQuietShimmer,
+  brailleGlyph,
+  renderCard,
+  renderPlanCard,
+  renderPromptFrame,
+  TerminalSpinner,
+} from "../src/terminal-spinner.js";
 
 function stripAnsi(value: string): string {
   return value.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+function mockStream(columns: number, isTTY = true) {
+  return { isTTY, columns, write: vi.fn() } as unknown as NodeJS.WriteStream;
+}
+
+function calls(stream: NodeJS.WriteStream): unknown[][] {
+  return (stream.write as unknown as ReturnType<typeof vi.fn>).mock.calls;
 }
 
 describe("terminal spinner sweep", () => {
@@ -28,5 +46,214 @@ describe("terminal spinner sweep", () => {
     expect(stripAnsi(colored)).toBe("Lynn");
     expect(colored).toContain("\x1b[1;36m");
     expect(colored).toContain("\x1b[36m");
+  });
+
+  it("supports low frequency mode for Apple Terminal safety", () => {
+    const normalFrame1 = stripAnsi(renderSweepFrame(12, 0, false));
+    const normalFrame2 = stripAnsi(renderSweepFrame(12, 1, false));
+    // 低频 frame/3:frame 0/1/2 是同一低频帧,frame 3 才前进
+    const lowFreq0 = stripAnsi(renderSweepFrame(12, 0, false, true));
+    const lowFreq2 = stripAnsi(renderSweepFrame(12, 2, false, true));
+    const lowFreq3 = stripAnsi(renderSweepFrame(12, 3, false, true));
+    expect(lowFreq0).toBe(lowFreq2);
+    expect(lowFreq0).not.toBe(lowFreq3);
+    expect(normalFrame1).not.toBe(normalFrame2);
+  });
+});
+
+describe("low-noise shimmer (流光扫描低噪音版)", () => {
+  it("renderSoftShimmer keeps plain text intact and uses a dim base + single highlight", () => {
+    expect(renderSoftShimmer("思考中", 1, false)).toBe("思考中"); // 无色 → 原样
+    const colored = renderSoftShimmer("Lynn", 0, true);
+    expect(stripAnsi(colored)).toBe("Lynn");
+    expect(colored).toContain("\x1b[2m"); // dim 基底(低噪音)
+    expect(colored).toContain("\x1b[1;36m"); // 仅一个移动高光
+  });
+
+  it("brailleGlyph cycles a single low-noise spinner glyph", () => {
+    const frames = Array.from({ length: 10 }, (_, f) => brailleGlyph(f));
+    expect(new Set(frames).size).toBeGreaterThan(1); // 会动
+    expect(brailleGlyph(0)).toBe(brailleGlyph(10)); // 循环
+    expect(Array.from(brailleGlyph(3)).length).toBe(1); // 单字符
+  });
+
+  it("renderQuietShimmer = glyph + soft label, with no full-width sweep bar", () => {
+    const out = stripAnsi(renderQuietShimmer("Thinking", 2, true));
+    expect(out).toContain("Thinking");
+    expect(out).not.toContain("━"); // 低噪音:无满宽扫描条
+    expect(out).not.toContain("─");
+  });
+});
+
+describe("colored cards (统一彩色卡片)", () => {
+  it("draws a colored left gutter, glyph, bold title and dim body", () => {
+    const card = renderCard({ kind: "tool", title: "web_search · done", body: ["3 results"] }, true);
+    const plain = stripAnsi(card);
+    expect(plain).toContain("│ 🔧 web_search · done");
+    expect(plain).toContain("│   3 results");
+    expect(card).toContain("\x1b[36m│\x1b[0m"); // tool → cyan gutter
+    // 只有左 gutter:每行至多一个 │(无右边框 → 无滚动残骸)
+    for (const lineText of plain.split("\n")) {
+      expect((lineText.match(/│/g) || []).length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("colors gutters by kind (ok=green, error=red, plan=yellow)", () => {
+    expect(renderCard({ kind: "ok", title: "x" }, true)).toContain("\x1b[32m│\x1b[0m");
+    expect(renderCard({ kind: "error", title: "x" }, true)).toContain("\x1b[31m│\x1b[0m");
+    expect(renderPlanCard([{ status: "completed", text: "a" }], true)).toContain("\x1b[33m│\x1b[0m");
+  });
+
+  it("renderPlanCard renders ✓ / ● / ○ for completed / in_progress / pending", () => {
+    const plan = stripAnsi(renderPlanCard([
+      { status: "completed", text: "done step" },
+      { status: "in_progress", text: "current step" },
+      { status: "pending", text: "todo step" },
+    ], true));
+    expect(plan).toContain("✓ done step");
+    expect(plan).toContain("● current step");
+    expect(plan).toContain("○ todo step");
+  });
+
+  it("degrades to plain text when color is off", () => {
+    expect(renderCard({ kind: "error", title: "boom" }, false)).toBe("│ ✗ boom");
+  });
+});
+
+describe("TerminalSpinner class", () => {
+  it("writes an animated frame on render() for a normal-width TTY", () => {
+    const stream = mockStream(80);
+    new TerminalSpinner(stream, "思考中").render();
+    expect(calls(stream)).toHaveLength(1);
+    expect(calls(stream)[0][0]).toContain("\r");
+  });
+
+  it("default mode keeps the visible sweep line but uses the soft label shimmer", () => {
+    const prevForce = process.env.LYNN_FORCE_COLOR;
+    process.env.LYNN_FORCE_COLOR = "1";
+    try {
+      const stream = mockStream(90);
+      const spinner = new TerminalSpinner(stream, "Thinking");
+      for (let i = 0; i < 6; i += 1) spinner.render();
+      const written = calls(stream).map((call) => call[0] as string).join("\n");
+      const plain = stripAnsi(written);
+      expect(plain).toContain("Thinking");
+      expect(plain).toContain("━"); // 用户要的可见流光线仍然存在(前几帧会扫入视野)
+      expect(written).toContain("\x1b[2m"); // label 使用 soft shimmer 的 dim 基底,不是全亮高噪音
+    } finally {
+      if (prevForce === undefined) delete process.env.LYNN_FORCE_COLOR;
+      else process.env.LYNN_FORCE_COLOR = prevForce;
+    }
+  });
+
+  it("falls back to a static label when the available width is too small", () => {
+    const stream = mockStream(80);
+    const longLabel = "思".repeat(64); // visibleLength 远超可用宽 → 静态降级
+    new TerminalSpinner(stream, longLabel).render();
+    expect(calls(stream)[0][0]).toBe(`\r${longLabel}`);
+  });
+
+  it("quiet mode renders the low-noise line (no sweep bar)", () => {
+    const stream = mockStream(80);
+    new TerminalSpinner(stream, "Thinking", { quiet: true }).render();
+    const written = stripAnsi(calls(stream)[0][0] as string);
+    expect(written).toContain("Thinking");
+    expect(written).not.toContain("━");
+  });
+
+  it("start() animates and stop() clears the line without residue", () => {
+    const stream = mockStream(80);
+    const spinner = new TerminalSpinner(stream, "x", { quiet: true });
+    spinner.start();
+    expect(calls(stream).length).toBeGreaterThan(0);
+    spinner.stop();
+    const last = calls(stream).at(-1)?.[0] as string;
+    expect(last.startsWith("\r")).toBe(true);
+    expect(last.trim()).toBe(""); // 清场:仅 \r + 空格
+  });
+
+  it("no-ops on a non-TTY stream", () => {
+    const stream = mockStream(80, false);
+    const spinner = new TerminalSpinner(stream);
+    spinner.start();
+    expect(calls(stream)).toHaveLength(0);
+    spinner.stop(); // 安全
+  });
+
+  it("renders a static label (no timer) when LYNN_CLI_NO_TUI_ANIMATION=1", () => {
+    const prev = process.env.LYNN_CLI_NO_TUI_ANIMATION;
+    process.env.LYNN_CLI_NO_TUI_ANIMATION = "1";
+    try {
+      const stream = mockStream(80);
+      const spinner = new TerminalSpinner(stream, "思考中");
+      spinner.start();
+      // 仅一次静态写入,内容就是 label 本身(无扫描条、无动画帧推进)。
+      expect(calls(stream)).toHaveLength(1);
+      expect(calls(stream)[0][0]).toBe("\r思考中");
+      spinner.stop();
+    } finally {
+      if (prev === undefined) delete process.env.LYNN_CLI_NO_TUI_ANIMATION;
+      else process.env.LYNN_CLI_NO_TUI_ANIMATION = prev;
+    }
+  });
+
+  it("keeps animating on Apple Terminal (wait spinner is IME-safe)", () => {
+    const prevTerm = process.env.TERM_PROGRAM;
+    const prevAnim = process.env.LYNN_CLI_NO_TUI_ANIMATION;
+    process.env.TERM_PROGRAM = "Apple_Terminal";
+    delete process.env.LYNN_CLI_NO_TUI_ANIMATION;
+    try {
+      const stream = mockStream(80);
+      const spinner = new TerminalSpinner(stream, "Thinking");
+      spinner.start();
+      spinner.render(); // 推进一帧 → 与首帧不同 = 真的在动
+      const frames = calls(stream).map((c) => stripAnsi(c[0] as string));
+      expect(frames.length).toBeGreaterThanOrEqual(2);
+      expect(frames.some((f) => f.includes("━") || f.includes("─"))).toBe(true); // 可见扫描条(无色也有 ─/━)
+      spinner.stop();
+    } finally {
+      if (prevTerm === undefined) delete process.env.TERM_PROGRAM;
+      else process.env.TERM_PROGRAM = prevTerm;
+      if (prevAnim !== undefined) process.env.LYNN_CLI_NO_TUI_ANIMATION = prevAnim;
+    }
+  });
+});
+
+describe("input prompt frame (闭合框 fallback · LYNN_CLI_NO_BOXED_INPUT)", () => {
+  it("draws a complete closed box (top/mid/bot) with status inside + chevron below", () => {
+    const lines = stripAnsi(renderPromptFrame("Lynn · StepFun 3.7 Flash · ask / workspace-write", 80, false)).split("\n");
+    expect(lines[0].startsWith("╭")).toBe(true);
+    expect(lines[0].endsWith("╮")).toBe(true);
+    expect(lines[1].startsWith("│")).toBe(true);
+    expect(lines[1].endsWith("│")).toBe(true);
+    expect(lines[1]).toContain("Lynn · StepFun 3.7 Flash");
+    expect(lines[2].startsWith("╰")).toBe(true);
+    expect(lines[2].endsWith("╯")).toBe(true);
+    expect(lines[3]).toBe("› "); // 提示符在框正下方
+    expect(lines[0].length).toBe(lines[1].length); // 三行等宽
+    expect(lines[1].length).toBe(lines[2].length);
+  });
+
+  it("stays visible without color (plain box-drawing chars)", () => {
+    const out = renderPromptFrame("status", 60, false);
+    expect(out).not.toContain("\x1b["); // 无色 → 无 ANSI
+    expect(out).toContain("╭");
+    expect(out).toContain("╰");
+    expect(out.endsWith("› ")).toBe(true);
+  });
+
+  it("colors the border (dim) and chevron (bright cyan) when enabled", () => {
+    const out = renderPromptFrame("status", 60, true);
+    expect(out).toContain("\x1b[2m"); // dim 边框
+    expect(out).toContain("\x1b[1;36m"); // bright cyan chevron
+    expect(stripAnsi(out).split("\n")[3]).toBe("› ");
+  });
+
+  it("truncates an over-long status instead of overflowing the box width", () => {
+    const long = "X".repeat(400);
+    const lines = stripAnsi(renderPromptFrame(long, 60, false)).split("\n");
+    expect(lines[1]).toContain("…");
+    expect(lines[0].length).toBeLessThanOrEqual(60); // 受 width 约束
+    expect(lines[1].length).toBe(lines[0].length); // 内容行与边框等宽,不溢出
   });
 });
