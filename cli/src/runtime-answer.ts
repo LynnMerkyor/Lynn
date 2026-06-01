@@ -26,20 +26,12 @@ const MODEL_ROUTE_PATTERNS = [
   /\b(?:model|route)\b.{0,24}\b(?:using|running|current|active)\b/i,
 ];
 
-const RUNTIME_KNOWLEDGE_PATTERNS = [
-  /(?:lynn\s*)?(?:cli|code|命令行).{0,24}(?:做了什么|是什么|能力|优化|本地优化|长任务|上下文压缩|前置缓存|prefix-cache|decode|tps|fleet|headless|静默调用)/i,
-  /(?:你|当前|现在).{0,16}(?:做了什么优化|本地优化|长任务|上下文压缩|前置缓存|prefix-cache|decode|tps|fleet|headless|静默调用)/i,
-  /(?:本地优化了什么|做了什么优化|前置缓存.{0,12}(?:在哪|是什么|如何|命中)|上下文压缩.{0,12}(?:是什么|如何|自动)|decode\s*tps|prefix-cache)/i,
-  /(?:什么是|介绍).{0,12}(?:lynn\s*)?(?:cli|code|命令行)/i,
-];
-
 export function isLocalRuntimeQuestion(text: string): boolean {
   const value = text.trim();
   if (!value) return false;
   if (/^(?:version|about)$/i.test(value)) return true;
   return VERSION_PATTERNS.some((pattern) => pattern.test(value))
-    || MODEL_ROUTE_PATTERNS.some((pattern) => pattern.test(value))
-    || RUNTIME_KNOWLEDGE_PATTERNS.some((pattern) => pattern.test(value));
+    || MODEL_ROUTE_PATTERNS.some((pattern) => pattern.test(value));
 }
 
 export function renderLocalRuntimeAnswer(input: RuntimeAnswerContext, locale: "zh" | "en" = "zh"): string {
