@@ -118,6 +118,35 @@ describe("code agent loop · core & approvals", () => {
     expect(JSON.stringify(messages)).toContain("old turn 19");
   });
 
+  it("keeps recent assistant tool-call frames atomic during runtime compaction", () => {
+    const recentToolCall = {
+      role: "assistant" as const,
+      content: "",
+      tool_calls: [
+        { id: "call_read", type: "function" as const, function: { name: "read_file", arguments: "{\"path\":\"a.ts\"}" } },
+        { id: "call_grep", type: "function" as const, function: { name: "grep", arguments: "{\"query\":\"TODO\"}" } },
+      ],
+    };
+    const messages = [
+      { role: "system" as const, content: "stable prefix" },
+      { role: "user" as const, content: "ORIGINAL TASK: keep me" },
+      ...Array.from({ length: 18 }, (_, index) => ({
+        role: index % 2 ? "assistant" as const : "user" as const,
+        content: `old turn ${index} ${"x".repeat(260)}`,
+      })),
+      recentToolCall,
+      { role: "tool" as const, tool_call_id: "call_read", content: "read result" },
+      { role: "tool" as const, tool_call_id: "call_grep", content: "grep result" },
+      { role: "assistant" as const, content: "next step" },
+    ];
+
+    expect(compactRuntimeMessages(messages, 2_000, 2, 2)).toBeGreaterThan(0);
+    const assistantIndex = messages.findIndex((message) => message.role === "assistant" && message.tool_calls?.[0]?.id === "call_read");
+    expect(assistantIndex).toBeGreaterThan(0);
+    expect(messages[assistantIndex + 1]).toMatchObject({ role: "tool", tool_call_id: "call_read", content: "read result" });
+    expect(messages[assistantIndex + 2]).toMatchObject({ role: "tool", tool_call_id: "call_grep", content: "grep result" });
+  });
+
   it("emits a runtime compaction event during long tool loops", async () => {
     for (let index = 1; index <= 12; index += 1) {
       await fs.writeFile(path.join(tmp, `big-${index}.txt`), `chunk ${index}\n${"x".repeat(35_000)}`, "utf8");
