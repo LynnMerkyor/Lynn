@@ -1,10 +1,11 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { brightCyan, bold, dim, supportsColor } from "./terminal-style.js";
+import { brightCyan, bold, dim, supportsColor, yellow } from "./terminal-style.js";
 import { visibleLength } from "./startup.js";
-import { completeSlash } from "./completion.js";
+import { completeSlash, normalizeSlashInput } from "./completion.js";
 import { HistoryNavigator } from "./history.js";
 import { analyzePastedContext, normalizePastedText, summarizePastedContext } from "./pasted-context.js";
+import { t } from "./i18n.js";
 
 const ESC = "\x1b";
 const PASTE_START = `${ESC}[200~`;
@@ -21,8 +22,10 @@ export interface BoxedInputOptions {
 export interface BoxRender {
   top: string;
   inputLine: string;
+  paletteLine?: string;
   bottom: string;
   cursorCol: number;
+  rowsBelowInput: number;
 }
 
 const COLLAPSE_CHARS = 120;
@@ -56,6 +59,67 @@ function truncateToWidth(text: string, max: number): string {
   return `${out}…`;
 }
 
+function slashCommandLabel(command: string): string {
+  const key = command.split(/\s+/)[0];
+  switch (key) {
+    case "/model":
+      return t("slash.label.model");
+    case "/providers":
+    case "/byok":
+    case "/setup":
+      return t("slash.label.providers");
+    case "/mode":
+      return t("slash.label.mode");
+    case "/yolo":
+      return t("slash.label.yolo");
+    case "/ask":
+      return t("slash.label.ask");
+    case "/fast":
+      return t("slash.label.fast");
+    case "/think":
+    case "/reasoning":
+      return t("slash.label.think");
+    case "/help":
+      return t("slash.label.help");
+    case "/exit":
+    case "/quit":
+      return t("slash.label.exit");
+    case "/tools":
+      return t("slash.label.tools");
+    case "/clear":
+      return t("slash.label.clear");
+    case "/image":
+    case "/images":
+    case "/attach":
+      return t("slash.label.image");
+    default:
+      return "";
+  }
+}
+
+function renderSlashPalette(input: string, commands: string[] | undefined, maxWidth: number, color: boolean): string | null {
+  const normalized = normalizeSlashInput(input);
+  if (!commands?.length || !normalized.startsWith("/") || normalized.includes("\n")) return null;
+  const completion = completeSlash(normalized, commands);
+  if (!completion.matches.length) return yellow(t("slash.unknown"), color);
+
+  const pieces: string[] = [];
+  for (let i = 0; i < completion.matches.length; i += 1) {
+    const command = completion.matches[i];
+    const label = slashCommandLabel(command);
+    const piece = `${brightCyan(command, color)}${label ? dim(` ${label}`, color) : ""}`;
+    const next = [...pieces, piece].join(dim("   ", color));
+    if (visibleLength(next) > maxWidth) {
+      const remaining = completion.matches.length - i;
+      const more = dim(` +${remaining}`, color);
+      if (pieces.length && visibleLength(`${pieces.join(dim("   ", color))}${more}`) <= maxWidth) pieces.push(more);
+      break;
+    }
+    pieces.push(piece);
+  }
+  return pieces.join(dim("   ", color));
+}
+
 export function renderInputBox(opts: {
   status: string;
   buffer: string;
@@ -63,6 +127,7 @@ export function renderInputBox(opts: {
   width: number;
   color: boolean;
   placeholder?: string;
+  completions?: string[];
 }): BoxRender {
   const { status, buffer, cursor, color } = opts;
   const w = clampWidth(opts.width);
@@ -112,13 +177,17 @@ export function renderInputBox(opts: {
   const right = ` ${dim("│", color)}`;
   const inputLine = `${left}${visibleText}${pad}${right}`;
   const cursorCol = 4 + (empty ? 0 : beforeCursor - winStart);
+  const palette = collapsed ? null : renderSlashPalette(buffer, opts.completions, textArea, color);
+  const paletteLine = palette
+    ? `${dim("│", color)}   ${palette}${" ".repeat(Math.max(0, textArea - visibleLength(palette)))} ${dim("│", color)}`
+    : undefined;
 
   const rawLabel = ` ${truncateToWidth(status, w - 7)} `;
   const fill = Math.max(2, w - 3 - visibleLength(rawLabel));
   const top = `${dim("╭─", color)}${bold(rawLabel, color)}${dim("─".repeat(fill) + "╮", color)}`;
   const bottom = dim(`╰${"─".repeat(w - 2)}╯`, color);
 
-  return { top, inputLine, bottom, cursorCol };
+  return { top, inputLine, paletteLine, bottom, cursorCol, rowsBelowInput: paletteLine ? 2 : 1 };
 }
 
 export async function readBoxedInputLine(options: BoxedInputOptions = {}): Promise<string | null> {
@@ -144,24 +213,31 @@ export async function readBoxedInputLine(options: BoxedInputOptions = {}): Promi
   input.resume();
   output.write(`${ESC}[?2004h`);
 
-  const render = () => renderInputBox({ status, buffer: value(), cursor: cur, width: width(), color, placeholder });
+  const render = () => renderInputBox({ status, buffer: value(), cursor: cur, width: width(), color, placeholder, completions: options.completions });
   const toCol = (col: number) => (col > 0 ? `${ESC}[${col}C` : "");
+  let painted = false;
+  let rowsBelowInput = 1;
 
-  const paint = () => {
+  const paint = (clear = false) => {
     const r = render();
-    output.write(`\r${r.top}\r\n${r.inputLine}\r\n${r.bottom}`);
-    output.write(`${ESC}[1A\r${toCol(r.cursorCol)}`);
+    if (painted && clear) output.write(`${ESC}[1A\r${ESC}[J`);
+    else output.write("\r");
+    output.write(`${r.top}\r\n${r.inputLine}\r\n`);
+    if (r.paletteLine) output.write(`${r.paletteLine}\r\n`);
+    output.write(r.bottom);
+    output.write(`${ESC}[${r.rowsBelowInput}A\r${toCol(r.cursorCol)}`);
+    rowsBelowInput = r.rowsBelowInput;
+    painted = true;
   };
   const redrawInput = () => {
-    const r = render();
-    output.write(`\r${ESC}[K${r.inputLine}\r${toCol(r.cursorCol)}`);
+    paint(true);
   };
   const printAbove = (message: string) => {
     output.write(`${ESC}[1A\r${ESC}[J${message}\n`);
     paint();
   };
   const leaveBelow = (tail = "") => {
-    output.write(`${ESC}[1B\r\n${tail}`);
+    output.write(`${ESC}[${rowsBelowInput}B\r\n${tail}`);
   };
 
   return await new Promise<string | null>((resolve) => {

@@ -86,4 +86,24 @@ describe("renderInputBox", () => {
     expect(line).not.toContain("第二段继续补充");
     expect(visibleLength(line)).toBe(visibleLength(stripAnsi(r.top)));
   });
+
+  it("shows slash command recommendations inside the frame", () => {
+    const r = box({ buffer: "/", cursor: 1, completions: ["/help", "/model", "/yolo", "/ask"], width: 82 });
+
+    expect(r.rowsBelowInput).toBe(2);
+    expect(stripAnsi(r.paletteLine || "")).toContain("/model");
+    expect(stripAnsi(r.paletteLine || "")).toContain("/yolo");
+    expect(stripAnsi(r.paletteLine || "")).toContain("静默工厂");
+    expect(visibleLength(stripAnsi(r.paletteLine || ""))).toBe(visibleLength(stripAnsi(r.top)));
+  });
+
+  it("shows an unknown slash guard without disturbing normal input height", () => {
+    const r = box({ buffer: "/nope", cursor: 5, completions: ["/help", "/model"], width: 72 });
+    const normal = box({ buffer: "hello", cursor: 5, completions: ["/help", "/model"], width: 72 });
+
+    expect(r.rowsBelowInput).toBe(2);
+    expect(stripAnsi(r.paletteLine || "")).toContain("未知命令");
+    expect(normal.paletteLine).toBeUndefined();
+    expect(normal.rowsBelowInput).toBe(1);
+  });
 });
