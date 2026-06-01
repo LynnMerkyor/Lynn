@@ -34,22 +34,30 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 
 ### CLI Quick Install
 
+Requires Node.js 20 LTS or 22 LTS. If Node is not installed yet:
+
 ```bash
-# 1. Node requirement: Node.js 20 LTS or 22 LTS with npm.
 # macOS: brew install node@20
 # macOS/Linux: nvm install 20 && nvm use 20
 # Windows: winget install OpenJS.NodeJS.LTS
+```
 
-# 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz"
+Install or update with one command:
 
-# 3. Launch.
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz"
+```
+
+Launch / verify:
+
+```bash
+Lynn --version # should print 0.80.5
 Lynn          # interactive chat TUI
 Lynn code     # coding-agent TUI
 Lynn agents   # copyable headless/Fleet commands for other agents
 ```
 
-Long runs follow a Reasonix-style **prefix-cache discipline**: stable instructions, tool specs, runtime constraints, and resume summaries stay in deterministic context layers so turns do not reorder the cacheable prefix. Cache hit/miss and prefix drift diagnostics go to session metadata and `Lynn cache doctor --json`, not an anxiety-inducing context meter.
+Long runs follow a Reasonix-style **prefix-cache discipline**: stable instructions, tool specs, runtime constraints, and resume summaries stay in deterministic context layers so turns do not reorder the cacheable prefix. Cache hits now appear as `prefix-cache ... hit` in usage, sessions, replay, and `Lynn cache doctor --json`, not as an anxiety-inducing context meter.
 
 Machine-call contract:
 
@@ -62,7 +70,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
   --save-session
 ```
 
-Agents should parse JSONL, not the human Ink TUI. See [`docs/ops/lynn-code-headless-agent-contract.md`](docs/ops/lynn-code-headless-agent-contract.md).
+Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-headless-agent-contract.md`](docs/ops/lynn-code-headless-agent-contract.md).
 
 ## 🧠 Lynn Models And Engine Roadmap
 
@@ -84,20 +92,20 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>CLI v0.80.4</strong> · 2026-05-31 · Apple Terminal stability + TUI UX hotfix <em>(CLI latest)</em></summary>
+<summary><strong>CLI v0.80.5</strong> · 2026-06-01 · prefix-cache visibility + long-run stability hotfix <em>(CLI latest)</em></summary>
 
 **CLI-only hotfix; the desktop app remains v0.80.1**:
-- **Apple Terminal / Chinese IME stability**: Lynn keeps the Ink TUI, input box, status bar, and decode TPS, while Apple Terminal uses a conservative profile with high-frequency shimmer/sweep, rotating placeholders, and inline image escapes disabled.
-- **Full TUI elsewhere**: iTerm2, kitty, VS Code Terminal, and other terminals keep shimmer, markdown tables/code highlighting, diff preview, multiline input, media path guidance, and the speed meter.
-- **Better as an agent worker**: `Lynn -p`, `Lynn code -p --json`, and `Lynn worker run --jsonl` skip the human TUI and are intended for Claude Code / Codex CLI / Kimi Code / CI / Fleet calls.
-- **Prefix-cache discipline**: stable prefix / resume history / volatile runtime / current user context layers preserve cacheable prompts; cache hit/miss, stable-prefix hash, and prefix-drift diagnostics are logged for long-run debugging.
-- **Fresh CLI installs can chat**: a standalone CLI install uses the hosted Lynn Brain by default; the desktop app, local Brain, and BYOK remain optional.
+- **Prefix-cache visibility**: Reasonix-style stable prefix / resume history / volatile runtime / current user layers remain deterministic; usage, sessions, replay, and `Lynn cache doctor --json` now surface `prefix-cache ... hit` without adding a context-budget anxiety meter.
+- **Runtime compaction during long tool loops**: `Lynn code --long` compacts older turns while preserving the original goal, current plan, and recent tool results; JSONL emits `code.runtime.compacted`, and the human TUI shows a lightweight info card.
+- **Early Brain stream retry**: if an SSE stream disconnects before any visible answer, reasoning, or tool call, the CLI retries with backoff; once output has started, it avoids retrying to prevent duplicate half-turn tool calls.
+- **Plan/tool card polish**: `update_plan` and resume plan echoes use Claude-Code-like plan cards, while route/tool/compaction events stay on the same left-gutter card language.
+- **Release gate covers compaction**: `cli-longrun-smoke` now forces large tool results and requires a `code.runtime.compacted` event, so long-run stability is verified outside narrow unit tests.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz"
 ```
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.4)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.5)
 
 </details>
 
