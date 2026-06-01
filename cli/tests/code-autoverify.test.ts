@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { resolveAutoVerifyPlan, runAutoVerify, formatAutoVerifyFeedback, type AutoVerifyPlan } from "../src/code-autoverify.js";
+import { resolveAutoVerifyPlan, runAutoVerify, formatAutoVerifyFeedback, buildAutoVerifyEvent, type AutoVerifyPlan } from "../src/code-autoverify.js";
 
 let cwd: string;
 beforeEach(() => { cwd = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-av-")); });
@@ -62,6 +62,32 @@ describe("runAutoVerify", () => {
     expect(outcome.ran).toBe(true);
     expect(outcome.ok).toBe(false);
     expect(outcome.output).toContain("TS2304");
+  });
+});
+
+describe("buildAutoVerifyEvent", () => {
+  const plan: AutoVerifyPlan = { enabled: true, command: ["npm", "run", "--silent", "typecheck"], label: "typecheck", timeoutMs: 1000 };
+
+  it("on pass: carries command + attempt, no blockedFinish, no output", () => {
+    const ev = buildAutoVerifyEvent({ ran: true, ok: true, label: "typecheck", output: "noise" }, plan, 1);
+    expect(ev).toMatchObject({ label: "typecheck", ok: true, ran: true, attempt: 1, blockedFinish: false });
+    expect(ev.command).toBe("npm run --silent typecheck");
+    expect(ev.output).toBeUndefined(); // success events stay clean for CI
+  });
+
+  it("on fail: blockedFinish=true and includes the errors for CI", () => {
+    const ev = buildAutoVerifyEvent({ ran: true, ok: false, label: "typecheck", output: "src/x.ts(1,1): error TS2322" }, plan, 2);
+    expect(ev.ok).toBe(false);
+    expect(ev.blockedFinish).toBe(true);
+    expect(ev.attempt).toBe(2);
+    expect(ev.output).toContain("TS2322");
+  });
+
+  it("when the check did not run: not blocking, no output", () => {
+    const ev = buildAutoVerifyEvent({ ran: false, ok: true, label: "typecheck", output: "" }, plan, 1);
+    expect(ev.ran).toBe(false);
+    expect(ev.blockedFinish).toBe(false);
+    expect(ev.output).toBeUndefined();
   });
 });
 

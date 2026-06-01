@@ -18,7 +18,7 @@ import { runClientTool } from "./tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "./tools/types.js";
 import { RESUME_COMPACTION_NOTE, RESUME_REPAIR_NOTE, extractLatestPlan, formatToolResultForLoop } from "./code-resume.js";
 import { augmentToolResultSection } from "./code-tool-verify.js";
-import { resolveAutoVerifyPlan, runAutoVerify, formatAutoVerifyFeedback } from "./code-autoverify.js";
+import { resolveAutoVerifyPlan, runAutoVerify, formatAutoVerifyFeedback, buildAutoVerifyEvent } from "./code-autoverify.js";
 import { checkPlanContract, defaultToolBudget, checkToolBudget } from "./code-plan-contract.js";
 import { createWorkspaceSnapshot, restoreWorkspaceSnapshot, autoRollbackEnabled, type WorkspaceSnapshot } from "./code-snapshot.js";
 import { selfVerifyEnabled, buildSelfVerifyPrompt, parseSelfVerifyVerdict, formatSelfVerifyCritique } from "./code-self-verify.js";
@@ -64,7 +64,7 @@ export type CodeAgentEvent =
   | { type: "tool.result"; result: ClientToolResult }
   | { type: "tool.ledger"; text: string }
   | { type: "tool.loop_guard"; tool: ClientToolName; repeats: number }
-  | { type: "auto.verify"; label: string; ok: boolean; ran: boolean }
+  | { type: "auto.verify"; label: string; ok: boolean; ran: boolean; command?: string; attempt?: number; blockedFinish?: boolean; output?: string }
   | { type: "snapshot"; ref: string; restoreCommand: string }
   | { type: "rollback"; ok: boolean; message: string }
   | { type: "self.verify"; pass: boolean }
@@ -239,8 +239,9 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       if (mutated && autoVerifyPlan.enabled && autoVerifyReverifies < MAX_AUTOVERIFY_REVERIFIES) {
         const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
         if (outcome.ran) {
-          if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), label: outcome.label, ok: outcome.ok });
-          inputData.onEvent?.({ type: "auto.verify", label: outcome.label, ok: outcome.ok, ran: outcome.ran });
+          const verifyEvent = buildAutoVerifyEvent(outcome, autoVerifyPlan, autoVerifyReverifies + 1);
+          if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), ...verifyEvent });
+          inputData.onEvent?.({ type: "auto.verify", ...verifyEvent });
           if (!inputData.json && !inputData.onEvent) {
             process.stderr.write(`${renderCard({
               kind: outcome.ok ? "ok" : "error",

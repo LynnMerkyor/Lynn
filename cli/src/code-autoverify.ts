@@ -29,6 +29,21 @@ export interface AutoVerifyOutcome {
   output: string;
 }
 
+/** CI-consumable payload for the auto-verify finish gate (emitted to headless JSON + onEvent). */
+export interface AutoVerifyEvent {
+  label: string;
+  ok: boolean;
+  ran: boolean;
+  /** The exact deterministic command that judged correctness, e.g. "npm run --silent typecheck". */
+  command: string;
+  /** 1-based re-verification attempt within this task. */
+  attempt: number;
+  /** True when a failed check blocked the model from finishing (the loop was forced to continue). */
+  blockedFinish: boolean;
+  /** Failing output (errors) — present only on failure so success events stay clean. */
+  output?: string;
+}
+
 const DISABLED: AutoVerifyPlan = { enabled: false, command: [], label: "auto-verify", timeoutMs: DEFAULT_TIMEOUT_MS };
 
 function tokenize(command: string): string[] {
@@ -90,6 +105,24 @@ export function runAutoVerify(plan: AutoVerifyPlan, cwd: string): Promise<AutoVe
     child.on("error", (error) => finish({ ran: false, ok: true, label: plan.label, output: `auto-verify error: ${error.message}` }));
     child.on("close", (code) => finish({ ran: true, ok: code === 0, label: plan.label, output: tail(buf) }));
   });
+}
+
+/**
+ * Build the CI-consumable event payload from an auto-verify outcome.
+ * Pure (no I/O) so it is unit-testable; the loop just spreads the result into
+ * its headless `code.auto.verify` JSONL line and the in-process `auto.verify` event.
+ */
+export function buildAutoVerifyEvent(outcome: AutoVerifyOutcome, plan: AutoVerifyPlan, attempt: number): AutoVerifyEvent {
+  const event: AutoVerifyEvent = {
+    label: outcome.label,
+    ok: outcome.ok,
+    ran: outcome.ran,
+    command: plan.command.join(" "),
+    attempt,
+    blockedFinish: outcome.ran && !outcome.ok,
+  };
+  if (!outcome.ok && outcome.output) event.output = outcome.output;
+  return event;
 }
 
 /** Feedback message injected into the loop when verification fails (null when it passed or did not run). */
