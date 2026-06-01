@@ -75,6 +75,14 @@ describe("renderInputBox", () => {
     expect(r.top).toContain("\x1b[2m");
   });
 
+  it("uses amber borders and chevron in YOLO mode", () => {
+    const r = box({ buffer: "hi", cursor: 2, color: true, danger: true });
+
+    expect(r.top).toContain("\x1b[38;5;208m");
+    expect(r.inputLine).toContain("\x1b[38;5;208m");
+    expect(r.bottom).toContain("\x1b[38;5;208m");
+  });
+
   it("collapses pasted long and multiline text into a stable paste block", () => {
     const pasted = "第一段很长很长\n第二段继续补充\n第三段结论";
     const summary = summarizeInputForBox(pasted);

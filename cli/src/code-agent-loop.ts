@@ -16,7 +16,15 @@ import { dim, supportsColor } from "./terminal-style.js";
 import { renderToolLedger, toolLedgerEntry, type ToolLedgerEntry } from "./tool-ledger.js";
 import { runClientTool } from "./tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "./tools/types.js";
-import { RESUME_COMPACTION_NOTE, RESUME_REPAIR_NOTE, formatToolResultForLoop } from "./code-resume.js";
+import { RESUME_COMPACTION_NOTE, RESUME_REPAIR_NOTE, extractLatestPlan, formatToolResultForLoop } from "./code-resume.js";
+import { augmentToolResultSection } from "./code-tool-verify.js";
+import { resolveAutoVerifyPlan, runAutoVerify, formatAutoVerifyFeedback, buildAutoVerifyEvent } from "./code-autoverify.js";
+import { checkPlanContract, defaultToolBudget, checkToolBudget } from "./code-plan-contract.js";
+import { createWorkspaceSnapshot, restoreWorkspaceSnapshot, autoRollbackEnabled, type WorkspaceSnapshot } from "./code-snapshot.js";
+import { selfVerifyEnabled, buildSelfVerifyPrompt, parseSelfVerifyVerdict, formatSelfVerifyCritique } from "./code-self-verify.js";
+
+const MAX_AUTOVERIFY_REVERIFIES = 3;
+const MAX_PLAN_REMINDERS = 2;
 
 
 export interface CodeAgentLoopInput {
@@ -56,6 +64,10 @@ export type CodeAgentEvent =
   | { type: "tool.result"; result: ClientToolResult }
   | { type: "tool.ledger"; text: string }
   | { type: "tool.loop_guard"; tool: ClientToolName; repeats: number }
+  | { type: "auto.verify"; label: string; ok: boolean; ran: boolean; command?: string; attempt?: number; blockedFinish?: boolean; output?: string }
+  | { type: "snapshot"; ref: string; restoreCommand: string }
+  | { type: "rollback"; ok: boolean; message: string }
+  | { type: "self.verify"; pass: boolean }
   | { type: "plan.updated"; items: CodePlanItem[] }
   | { type: "runtime.compacted"; messages: number }
   | { type: "session.resumed"; path: string; messages: number }
@@ -175,6 +187,17 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   const usageRecords: Array<{ usage: unknown; durationMs: number }> = [];
   const approvalSession = { approveAll: false };
   const toolStorm = createClientToolStormState(inputData.resumeMessages);
+  const autoVerifyPlan = resolveAutoVerifyPlan(inputData.toolCtx.cwd);
+  let mutated = false;
+  let autoVerifyReverifies = 0;
+  let latestPlan = inputData.resumeMessages ? extractLatestPlan(inputData.resumeMessages) : [];
+  const toolBudget = defaultToolBudget(inputData.maxSteps);
+  let toolCallCount = 0;
+  let budgetWarned = false;
+  let planReminders = 0;
+  let snapshot: WorkspaceSnapshot | null = null;
+  let rolledBack = false;
+  let selfVerifyPasses = 0;
   for (let step = 0; step < inputData.maxSteps; step += 1) {
     const label = step === 0 ? t("spinner.coding") : t("spinner.reviewing");
     inputData.onEvent?.({ type: "step.started", step, label });
@@ -185,6 +208,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       reasoning: inputData.reasoning,
       json: inputData.json,
       label,
+      danger: inputData.toolCtx.approval === "yolo" || inputData.toolCtx.sandbox === "danger-full-access",
       onEvent: inputData.onEvent,
     });
     const assistantText = result.text;
@@ -211,6 +235,72 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       }
     }
     if (!toolRequests.length) {
+      // #1 自动验证收尾门:动过文件就不许"自信地宣布完成"——让项目自己的 typecheck 判对错。
+      if (mutated && autoVerifyPlan.enabled && autoVerifyReverifies < MAX_AUTOVERIFY_REVERIFIES) {
+        const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
+        if (outcome.ran) {
+          const verifyEvent = buildAutoVerifyEvent(outcome, autoVerifyPlan, autoVerifyReverifies + 1);
+          if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), ...verifyEvent });
+          inputData.onEvent?.({ type: "auto.verify", ...verifyEvent });
+          if (!inputData.json && !inputData.onEvent) {
+            process.stderr.write(`${renderCard({
+              kind: outcome.ok ? "ok" : "error",
+              title: `auto-verify · ${outcome.label} · ${outcome.ok ? "passed" : "FAILED"}`,
+            }, supportsColor(process.stderr))}\n`);
+          }
+        }
+        const feedback = formatAutoVerifyFeedback(outcome);
+        if (feedback) {
+          // #5 自动回滚(opt-in):再修一次仍红 → 回到快照,让模型从干净态换思路重试一次。
+          if (autoRollbackEnabled() && snapshot?.available && !rolledBack && autoVerifyReverifies + 1 >= MAX_AUTOVERIFY_REVERIFIES) {
+            const restore = restoreWorkspaceSnapshot(inputData.toolCtx.cwd, snapshot);
+            rolledBack = true;
+            autoVerifyReverifies = 0;
+            if (inputData.json) writeJsonLine({ type: "code.rollback", ts: nowIso(), ok: restore.ok, message: restore.message });
+            inputData.onEvent?.({ type: "rollback", ok: restore.ok, message: restore.message });
+            const rollbackMsg = `${feedback}\n↩ Lynn rolled the workspace back to the pre-task snapshot (${restore.message}). The previous edits could not be made to pass — start over with a smaller, different approach.`;
+            messages.push({ role: "user", content: rollbackMsg });
+            if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: rollbackMsg });
+            continue;
+          }
+          autoVerifyReverifies += 1;
+          messages.push({ role: "user", content: feedback });
+          if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: feedback });
+          continue; // 回到模型修复,不收尾
+        }
+      }
+      // #3 计划契约:计划仍有未完成步骤就不许收尾(限次,避免死循环)。
+      const planVerdict = checkPlanContract(latestPlan);
+      if (planVerdict.message && planReminders < MAX_PLAN_REMINDERS) {
+        planReminders += 1;
+        messages.push({ role: "user", content: planVerdict.message });
+        if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: planVerdict.message });
+        continue;
+      }
+      // #4 对抗式自检:收尾前用同模型当怀疑者独立复核一次(仅动过文件,封顶 1 次)。
+      if (mutated && selfVerifyEnabled() && selfVerifyPasses < 1) {
+        selfVerifyPasses += 1;
+        const review = await collectBrainText({
+          brainUrl: inputData.brainUrl,
+          fallbackProvider: inputData.fallbackProvider,
+          messages: [{ role: "user", content: buildSelfVerifyPrompt(inputData.task, assistantText) }],
+          reasoning: inputData.reasoning,
+          json: inputData.json,
+          label: t("spinner.reviewing"),
+          danger: inputData.toolCtx.approval === "yolo" || inputData.toolCtx.sandbox === "danger-full-access",
+          noTools: true,
+          onEvent: inputData.onEvent,
+        });
+        const verdict = parseSelfVerifyVerdict(review.text);
+        if (inputData.json) writeJsonLine({ type: "code.self_verify", ts: nowIso(), pass: verdict.pass });
+        inputData.onEvent?.({ type: "self.verify", pass: verdict.pass });
+        if (!verdict.pass) {
+          const critique = formatSelfVerifyCritique(verdict.issues);
+          messages.push({ role: "user", content: critique });
+          if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: critique });
+          continue;
+        }
+      }
       finalText = assistantText;
       break;
     }
@@ -218,6 +308,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
     const toolLedgerEntries: ToolLedgerEntry[] = [];
     for (const toolRequest of toolRequests) {
       const stormVerdict = observeClientToolRequest(toolStorm, toolRequest);
+      if (toolRequest.tool !== "update_plan") toolCallCount += 1;
       if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
       const preview = formatDangerousToolPreview(toolRequest.tool, toolRequest.args, supportsColor(inputData.output));
       inputData.onEvent?.({ type: "tool.requested", tool: toolRequest.tool, args: redactToolArgs(toolRequest) as CodeToolRequest["args"], preview });
@@ -263,6 +354,13 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
               session: approvalSession,
             });
           }
+          if (!snapshot && (toolRequest.tool === "write_file" || toolRequest.tool === "apply_patch")) {
+            snapshot = createWorkspaceSnapshot(inputData.toolCtx.cwd);
+            if (snapshot.available && snapshot.ref && snapshot.restoreCommand) {
+              if (inputData.json) writeJsonLine({ type: "code.snapshot", ts: nowIso(), ref: snapshot.ref, restoreCommand: snapshot.restoreCommand });
+              inputData.onEvent?.({ type: "snapshot", ref: snapshot.ref, restoreCommand: snapshot.restoreCommand });
+            }
+          }
           toolResult = await runClientTool({ ...inputData.toolCtx, approval: effectiveApproval }, {
             name: toolRequest.tool,
             ...toolRequest.args,
@@ -289,6 +387,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       }
       if (toolRequest.tool === "update_plan") {
         const items = normalizePlanItems(toolRequest.args.plan);
+        latestPlan = items;
         if (inputData.json) writeJsonLine({ type: "code.plan.updated", ts: nowIso(), items });
         inputData.onEvent?.({ type: "plan.updated", items });
         if (!inputData.json && !inputData.onEvent) {
@@ -300,12 +399,14 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       }
       if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
       inputData.onEvent?.({ type: "tool.result", result: toolResult });
-      if (!inputData.json && !inputData.onEvent && toolRequest.tool !== "update_plan") renderClientToolResult(toolResult);
+      if (toolResult.ok && (toolRequest.tool === "write_file" || toolRequest.tool === "apply_patch")) mutated = true;
+      if (!inputData.json && !inputData.onEvent && toolRequest.tool !== "update_plan") renderClientToolResult(toolResult, process.stderr, toolRequest);
       toolLedgerEntries.push(toolLedgerEntry(toolResult));
-      toolResultSections.push([
+      const baseSection = [
         `Tool result for ${toolRequest.tool}:`,
         formatToolResultForLoop(toolResult),
-      ].join("\n"));
+      ].join("\n");
+      toolResultSections.push(augmentToolResultSection(toolRequest, toolResult, inputData.toolCtx.cwd, baseSection));
     }
     const toolLedger = renderToolLedger(toolLedgerEntries, step);
     if (toolLedger) {
@@ -354,6 +455,12 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       });
       if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: toolResultMessage });
     }
+    const budgetVerdict = checkToolBudget(toolCallCount, toolBudget, budgetWarned);
+    if (budgetVerdict.message) {
+      budgetWarned = true;
+      messages.push({ role: "user", content: budgetVerdict.message });
+      if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: budgetVerdict.message });
+    }
     const compactedMessages = compactRuntimeMessages(messages, undefined, undefined, runtimeAnchorCount);
     if (compactedMessages > 0) {
       if (inputData.json) writeJsonLine({ type: "code.runtime.compacted", ts: nowIso(), messages: compactedMessages });
@@ -371,6 +478,18 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   if (!finalText) {
     maxStepsReached = true;
     finalText = "Stopped after the maximum tool steps. Review the emitted tool results before continuing.";
+    // #1 收尾门只在模型"无工具轮"触发;若模型一直调工具(例如沙箱挡住自测、焦虑重试)直到 max-steps,
+    // 收尾门永远不到、状态无人确认。给上前再确定性验一次,把"虽超步但 typecheck 是绿的"明确报出来。
+    if (mutated && autoVerifyPlan.enabled) {
+      const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
+      if (outcome.ran) {
+        if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), label: outcome.label, ok: outcome.ok, atMaxSteps: true });
+        inputData.onEvent?.({ type: "auto.verify", label: outcome.label, ok: outcome.ok, ran: outcome.ran });
+        finalText += outcome.ok
+          ? `\n\n✓ Auto-verification (${outcome.label}) PASSED — the workspace is in a verified-good state despite hitting the step limit.`
+          : `\n\n⚠ Auto-verification (${outcome.label}) FAILED at the step limit:\n${outcome.output}`;
+      }
+    }
   }
   return {
     text: finalText,
@@ -462,13 +581,15 @@ async function collectBrainText(inputData: {
   reasoning: ReturnType<typeof parseReasoningOptions>;
   json: boolean;
   label: string;
+  danger?: boolean;
+  noTools?: boolean;
   onEvent?: (event: CodeAgentEvent) => void;
 }): Promise<BrainTextResult> {
   let text = "";
   let usageSummary: string | null = null;
   const usageRecords: Array<{ usage: unknown; durationMs: number }> = [];
   const streamedToolCalls = createStreamingToolCallAccumulator();
-  const spinner = new TerminalSpinner(process.stderr, inputData.label);
+  const spinner = new TerminalSpinner(process.stderr, inputData.label, { danger: inputData.danger });
   const renderState: HumanBrainRenderState = {};
   const startedAt = Date.now();
   if (!inputData.json && !inputData.onEvent) spinner.start();
@@ -478,7 +599,7 @@ async function collectBrainText(inputData: {
       reasoning: inputData.reasoning,
       messages: inputData.messages,
       fallbackProvider: inputData.fallbackProvider,
-      tools: codeToolDefinitions(),
+      tools: inputData.noTools ? undefined : codeToolDefinitions(),
     })) {
       const renderReasoning = shouldRenderReasoning(inputData.reasoning.display, inputData.json);
       if (eventWritesHumanOutput(event, renderReasoning, !!inputData.json || !!inputData.onEvent)) {

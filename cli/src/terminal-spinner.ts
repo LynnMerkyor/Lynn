@@ -1,22 +1,22 @@
-import { bold, brightCyan, cyan, dim, green, red, supportsColor, yellow } from "./terminal-style.js";
+import { bold, brightCyan, cyan, dim, green, orange, red, supportsColor, yellow } from "./terminal-style.js";
 import { t } from "./i18n.js";
 import { visibleLength } from "./startup.js";
 import { terminalTuiProfile } from "./terminal-safety.js";
 
-export function renderSweepFrame(width: number, frame: number, color: boolean, lowFrequency = false): string {
+export function renderSweepFrame(width: number, frame: number, color: boolean, lowFrequency = false, danger = false): string {
   const safeWidth = Math.max(8, width);
   const effectiveFrame = lowFrequency ? Math.floor(frame / 3) : frame;
   const head = (effectiveFrame % (safeWidth + 8)) - 4;
   return Array.from({ length: safeWidth }, (_, i) => {
     const distance = Math.abs(i - head);
-    if (distance === 0) return brightCyan("━", color);
-    if (distance <= 1) return cyan("━", color);
+    if (distance === 0) return danger ? orange("━", color) : brightCyan("━", color);
+    if (distance <= 1) return danger ? yellow("━", color) : cyan("━", color);
     if (distance <= 3) return dim("─", color);
     return " ";
   }).join("");
 }
 
-export function renderShimmerText(text: string, frame: number, color: boolean, lowFrequency = false): string {
+export function renderShimmerText(text: string, frame: number, color: boolean, lowFrequency = false, danger = false): string {
   if (!color) return text;
   const chars = Array.from(text);
   if (!chars.length) return text;
@@ -24,14 +24,14 @@ export function renderShimmerText(text: string, frame: number, color: boolean, l
   const head = effectiveFrame % (chars.length + 6);
   return chars.map((char, i) => {
     const distance = Math.abs(i - head);
-    if (distance === 0) return brightCyan(char, color);
-    if (distance <= 1) return cyan(char, color);
+    if (distance === 0) return danger ? orange(char, color) : brightCyan(char, color);
+    if (distance <= 1) return danger ? yellow(char, color) : cyan(char, color);
     if (distance <= 3) return dim(char, color);
     return char;
   }).join("");
 }
 
-export function renderSoftShimmer(text: string, frame: number, color: boolean, lowFrequency = false): string {
+export function renderSoftShimmer(text: string, frame: number, color: boolean, lowFrequency = false, danger = false): string {
   if (!color) return text;
   const chars = Array.from(text);
   if (!chars.length) return text;
@@ -39,9 +39,9 @@ export function renderSoftShimmer(text: string, frame: number, color: boolean, l
   const head = effectiveFrame % (chars.length + 4);
   return chars.map((char, i) => {
     const distance = Math.abs(i - head);
-    if (distance === 0) return brightCyan(char, color); // 仅 1 字高光
-    if (distance <= 1) return cyan(char, color);
-    return dim(char, color); // 其余全 dim → 低噪音
+    if (distance === 0) return danger ? orange(char, color) : brightCyan(char, color);
+    if (distance <= 1) return danger ? yellow(char, color) : cyan(char, color);
+    return dim(char, color);
   }).join("");
 }
 
@@ -52,9 +52,9 @@ export function brailleGlyph(frame: number, lowFrequency = false): string {
   return BRAILLE_FRAMES[((effectiveFrame % BRAILLE_FRAMES.length) + BRAILLE_FRAMES.length) % BRAILLE_FRAMES.length];
 }
 
-export function renderQuietShimmer(label: string, frame: number, color: boolean, lowFrequency = false): string {
-  const glyph = color ? cyan(brailleGlyph(frame, lowFrequency), color) : brailleGlyph(frame, lowFrequency);
-  return `${glyph} ${renderSoftShimmer(label, frame, color, lowFrequency)}`;
+export function renderQuietShimmer(label: string, frame: number, color: boolean, lowFrequency = false, danger = false): string {
+  const glyph = color ? (danger ? yellow(brailleGlyph(frame, lowFrequency), color) : cyan(brailleGlyph(frame, lowFrequency), color)) : brailleGlyph(frame, lowFrequency);
+  return `${glyph} ${renderSoftShimmer(label, frame, color, lowFrequency, danger)}`;
 }
 
 export type CardKind = "tool" | "run" | "ok" | "error" | "plan" | "info";
@@ -140,6 +140,7 @@ export function renderPromptFrame(status: string, width: number, color: boolean)
 
 export interface TerminalSpinnerOptions {
   quiet?: boolean;
+  danger?: boolean;
 }
 
 export class TerminalSpinner {
@@ -188,10 +189,10 @@ export class TerminalSpinner {
     }
 
     if (this.options.quiet) {
-      this.stream.write(`\r${renderQuietShimmer(this.label, this.frame, color)}`);
+      this.stream.write(`\r${renderQuietShimmer(this.label, this.frame, color, false, this.options.danger)}`);
     } else {
       const width = Math.min(42, Math.max(18, availableWidth));
-      this.stream.write(`\r${renderSoftShimmer(this.label, this.frame, color)} ${renderSweepFrame(width, this.frame, color)}`);
+      this.stream.write(`\r${renderSoftShimmer(this.label, this.frame, color, false, this.options.danger)} ${renderSweepFrame(width, this.frame, color, false, this.options.danger)}`);
     }
     this.frame += 1;
   }

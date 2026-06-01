@@ -49,7 +49,7 @@ export function renderBrainEventForHuman(
       const timing = typeof event.ms === "number" ? ` ${formatDuration(event.ms)}` : "";
       const detailId = rememberToolDetail(state, event);
       const body = [
-        ...(event.summary ? [event.summary] : []),
+        ...toolPreviewLines(event, color),
         `details: /tool ${detailId}`,
       ];
       stream.write(`${renderCard({
@@ -110,6 +110,45 @@ function rememberToolDetail(state: HumanBrainRenderState, event: Extract<BrainSt
     ok: event.ok,
   });
   return id;
+}
+
+function toolPreviewLines(event: Extract<BrainStreamEvent, { type: "tool_progress" }>, color: boolean): string[] {
+  const lines: string[] = [];
+  const add = (line: string | undefined) => {
+    const clean = oneLine(line || "", 180);
+    if (!clean || lines.includes(clean)) return;
+    lines.push(clean);
+  };
+  add(event.summary);
+  for (const detail of event.details || []) {
+    if (lines.length >= 2) break;
+    add(previewDetailLine(detail, color));
+  }
+  return lines;
+}
+
+function previewDetailLine(line: string, color: boolean): string {
+  const citation = line.match(/^\[([^\]]+)\]\(([^)]+)\):\s*(.*)$/);
+  if (citation) {
+    const [, title, url, summary] = citation;
+    const host = hostFromUrl(url);
+    const label = host ? `${title} · ${host}` : title;
+    return `${cyan(label, color)}${summary ? dim(` — ${summary}`, color) : ""}`;
+  }
+  return dim(line, color);
+}
+
+function hostFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function oneLine(value: string, max: number): string {
+  const compact = value.replace(/\s+/g, " ").trim();
+  return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
 }
 
 export function renderToolDetailsList(state: HumanBrainRenderState, color: boolean): string {

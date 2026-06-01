@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import { maxSteps, runCode, runCodeTaskWithEvents, type CodeAgentEvent } from "../src/commands/code.js";
 import { compactRuntimeMessages } from "../src/code-agent-loop.js";
+import type { ChatMessage } from "../src/brain-client.js";
 import { appendSessionTurn, readSessionLines, sessionIndexPath } from "../src/session/store.js";
 
 let tmp = "";
@@ -105,7 +106,7 @@ async function withRawBrainServer(handler: (body: unknown, count: number) => str
 
 describe("code agent loop · core & approvals", () => {
   it("compacts old runtime loop turns while keeping the anchored goal", () => {
-    const messages = [
+    const messages: ChatMessage[] = [
       { role: "system" as const, content: "stable prefix" },
       { role: "user" as const, content: "ORIGINAL TASK: keep me" },
       ...Array.from({ length: 20 }, (_, index) => ({ role: index % 2 ? "assistant" as const : "user" as const, content: `old turn ${index} ${"x".repeat(200)}` })),
@@ -127,7 +128,7 @@ describe("code agent loop · core & approvals", () => {
         { id: "call_grep", type: "function" as const, function: { name: "grep", arguments: "{\"query\":\"TODO\"}" } },
       ],
     };
-    const messages = [
+    const messages: ChatMessage[] = [
       { role: "system" as const, content: "stable prefix" },
       { role: "user" as const, content: "ORIGINAL TASK: keep me" },
       ...Array.from({ length: 18 }, (_, index) => ({
@@ -468,6 +469,18 @@ describe("code agent loop · core & approvals", () => {
             todos: [
               { id: "S0", content: "探索代码库结构", status: "completed" },
               { id: "C1", content: "实现修复", status: "in_progress" },
+            ],
+          },
+        })
+      : count === 2
+      // After the plan contract (#3) reminds it of the open step, a realistic model
+      // marks the step completed instead of finishing with an open plan.
+      ? JSON.stringify({
+          tool: "TodoWrite",
+          args: {
+            todos: [
+              { id: "S0", content: "探索代码库结构", status: "completed" },
+              { id: "C1", content: "实现修复", status: "completed" },
             ],
           },
         })

@@ -3,9 +3,9 @@ import { getStringFlag, hasFlag, parseArgs, type ParsedArgs } from "../args.js";
 import { BrainConnectionError, streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
 import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
-import { TerminalSpinner } from "../terminal-spinner.js";
+import { TerminalSpinner, renderCard } from "../terminal-spinner.js";
 import { formatBrainErrorForHuman, renderBrainEventForHuman, renderToolDetail, renderToolDetailsList, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
-import { bold, dim, green, red, supportsColor } from "../terminal-style.js";
+import { bold, dim, green, orange, red, supportsColor } from "../terminal-style.js";
 import { renderStartupBanner } from "../startup.js";
 import { renderStatusBar } from "../status-bar.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
@@ -27,6 +27,7 @@ import { resolveDefaultBrainUrl } from "../brain-url.js";
 import { shouldUseInkTui } from "../terminal-safety.js";
 import { createDecodeSpeedTracker } from "../decode-speed.js";
 import { createRuntimeMetrics, recordDecodeTps, recordUsageMetrics, renderRuntimeMetrics } from "../runtime-metrics.js";
+import { compactChatMessages } from "../chat-compaction.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/yolo",
@@ -253,16 +254,20 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
 
   async function sendUserMessage(displayText: string, content: ChatMessage["content"]): Promise<"continue"> {
     messages.push({ role: "user", content });
+    renderChatCompaction(compactChatMessages(messages));
     if (mockBrain) {
       const answer = t("mock.response", { text: displayText });
       messages.push({ role: "assistant", content: answer });
+      renderChatCompaction(compactChatMessages(messages));
       output.write(`${answer}\n\n`);
       return "continue";
     }
 
     let assistant = "";
     let latestUsage: string | null = null;
-    const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"));
+    const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"), {
+      danger: mode.approval === "yolo" || mode.sandbox === "danger-full-access",
+    });
     const renderReasoning = shouldRenderReasoning(reasoning.display, false);
     const color = supportsColor(output);
     const maxEmptyAttempts = 3;
@@ -314,6 +319,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       return "continue";
     }
     messages.push({ role: "assistant", content: assistant });
+    renderChatCompaction(compactChatMessages(messages));
     recordDecodeTps(runtimeMetrics, decodeTps);
     output.write(`\n${renderStatusBar({
       model: brainRenderState.provider ? modelDisplayName(brainRenderState.provider) : t("status.chat.prefix"),
@@ -326,6 +332,16 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       color,
     })}\n\n`);
     return "continue";
+  }
+
+  function renderChatCompaction(result: ReturnType<typeof compactChatMessages>): void {
+    if (!result.compactedMessages) return;
+    const color = supportsColor(process.stderr);
+    process.stderr.write(`${renderCard({
+      kind: "info",
+      title: `context compacted · ${result.compactedMessages} old messages`,
+      body: ["kept the first request, recent turns, links, and runtime notes"],
+    }, color)}\n`);
   }
 
   try {
@@ -387,10 +403,10 @@ export async function resolveChatMode(args: ParsedArgs): Promise<ChatMode> {
 }
 
 export function renderMode(mode: ChatMode): string {
-  return `${mode.approval} / ${mode.sandbox}`;
+  const sandbox = mode.sandbox === "danger-full-access" ? "full-access" : mode.sandbox;
+  return `${mode.approval} / ${sandbox}`;
 }
 
-/** 输入区"对话框"顶栏状态文案:Lynn · 模型 · 模式 · 推理档。 */
 function buildPromptFrameStatus(
   profile: { provider: string; model: string } | null | undefined,
   mode: ChatMode,
@@ -550,14 +566,13 @@ export function toggleMode(mode: ChatMode): string {
 function renderInteractiveModeChange(message: string, mode: ChatMode, color: boolean): string {
   const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
   if (dangerous) {
-    // 危险模式必须 loud:即使 NO_COLOR/无色,也用 ⚠ + 大写 DANGER 让人无法忽略;有色再叠红+粗。
-    const head = "⚠  YOLO 危险模式 / DANGER MODE  ⚠";
+    const head = "⚠  YOLO / full-access  ⚠";
     return [
       "",
-      red(bold(head, color), color),
-      red(message, color),
-      `mode: ${red(bold(renderMode(mode), color), color)}`,
-      red(t("mode.danger.warning"), color),
+      orange(bold(head, color), color),
+      orange(message, color),
+      `mode: ${orange(bold(renderMode(mode), color), color)}`,
+      orange(t("mode.danger.warning"), color),
       "",
       "",
     ].join("\n");

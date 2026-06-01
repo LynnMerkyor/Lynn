@@ -16,6 +16,8 @@ export interface CodeToolRequest {
     offset?: number;
     plan?: unknown;
   };
+  /** Loop iteration (step) this request belongs to; used for fallback tool-call ids and step events. */
+  step?: number;
 }
 
 export interface CollectedToolCall {

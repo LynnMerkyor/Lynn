@@ -23,7 +23,7 @@ export interface InteractiveLineOptions {
 
 export async function readInteractiveLine(
   prompt: string,
-  _mode: InteractiveLineMode,
+  mode: InteractiveLineMode,
   options: InteractiveLineOptions = {},
 ): Promise<string | null> {
   if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== "function") {
@@ -42,6 +42,7 @@ export async function readInteractiveLine(
         history: options.history,
         completions: options.completions,
         onShiftTab: options.onShiftTab,
+        danger: mode.approval === "yolo" || mode.sandbox === "danger-full-access",
       });
     }
     return readNativeTerminalLine(prompt, options);

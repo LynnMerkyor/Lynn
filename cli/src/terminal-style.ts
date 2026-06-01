@@ -21,6 +21,10 @@ export function yellow(text: string, enabled: boolean): string {
   return enabled ? `\x1b[33m${text}\x1b[0m` : text;
 }
 
+export function orange(text: string, enabled: boolean): string {
+  return enabled ? `\x1b[38;5;208m${text}\x1b[0m` : text;
+}
+
 export function cyan(text: string, enabled: boolean): string {
   return enabled ? `\x1b[36m${text}\x1b[0m` : text;
 }
@@ -42,5 +46,5 @@ export function bold(text: string, enabled: boolean): string {
 }
 
 export function dangerLine(text: string, enabled: boolean): string {
-  return red(text, enabled);
+  return orange(text, enabled);
 }
