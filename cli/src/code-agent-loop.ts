@@ -478,6 +478,18 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   if (!finalText) {
     maxStepsReached = true;
     finalText = "Stopped after the maximum tool steps. Review the emitted tool results before continuing.";
+    // #1 收尾门只在模型"无工具轮"触发;若模型一直调工具(例如沙箱挡住自测、焦虑重试)直到 max-steps,
+    // 收尾门永远不到、状态无人确认。给上前再确定性验一次,把"虽超步但 typecheck 是绿的"明确报出来。
+    if (mutated && autoVerifyPlan.enabled) {
+      const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
+      if (outcome.ran) {
+        if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), label: outcome.label, ok: outcome.ok, atMaxSteps: true });
+        inputData.onEvent?.({ type: "auto.verify", label: outcome.label, ok: outcome.ok, ran: outcome.ran });
+        finalText += outcome.ok
+          ? `\n\n✓ Auto-verification (${outcome.label}) PASSED — the workspace is in a verified-good state despite hitting the step limit.`
+          : `\n\n⚠ Auto-verification (${outcome.label}) FAILED at the step limit:\n${outcome.output}`;
+      }
+    }
   }
   return {
     text: finalText,
