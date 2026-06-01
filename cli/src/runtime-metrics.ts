@@ -25,7 +25,7 @@ export function recordUsageMetrics(metrics: RuntimeMetrics, usage: unknown): voi
 export function renderRuntimeMetrics(metrics: RuntimeMetrics): string | null {
   const parts = [
     renderAverageTps(metrics.decodeSamples),
-    renderAverageCache(metrics.cacheSamples),
+    renderAverageCache(metrics.cacheSamples) || "prefix-cache --",
   ].filter((part): part is string => !!part);
   return parts.length ? parts.join(" · ") : null;
 }

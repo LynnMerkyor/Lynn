@@ -19,12 +19,12 @@ describe("runtime metrics", () => {
     expect(renderRuntimeMetrics(metrics)).toBe("avg decode 200 TPS · prefix-cache 70% recent");
   });
 
-  it("ignores missing telemetry instead of showing diagnostics in the UI", () => {
+  it("keeps a stable prefix-cache badge even before provider telemetry arrives", () => {
     const metrics = createRuntimeMetrics();
 
     recordDecodeTps(metrics, null);
     recordUsageMetrics(metrics, { total_tokens: 12 });
 
-    expect(renderRuntimeMetrics(metrics)).toBeNull();
+    expect(renderRuntimeMetrics(metrics)).toBe("prefix-cache --");
   });
 });
