@@ -21,6 +21,7 @@ import { augmentToolResultSection } from "./code-tool-verify.js";
 import { resolveAutoVerifyPlan, runAutoVerify, formatAutoVerifyFeedback } from "./code-autoverify.js";
 import { checkPlanContract, defaultToolBudget, checkToolBudget } from "./code-plan-contract.js";
 import { createWorkspaceSnapshot, restoreWorkspaceSnapshot, autoRollbackEnabled, type WorkspaceSnapshot } from "./code-snapshot.js";
+import { selfVerifyEnabled, buildSelfVerifyPrompt, parseSelfVerifyVerdict, formatSelfVerifyCritique } from "./code-self-verify.js";
 
 const MAX_AUTOVERIFY_REVERIFIES = 3;
 const MAX_PLAN_REMINDERS = 2;
@@ -66,6 +67,7 @@ export type CodeAgentEvent =
   | { type: "auto.verify"; label: string; ok: boolean; ran: boolean }
   | { type: "snapshot"; ref: string; restoreCommand: string }
   | { type: "rollback"; ok: boolean; message: string }
+  | { type: "self.verify"; pass: boolean }
   | { type: "plan.updated"; items: CodePlanItem[] }
   | { type: "runtime.compacted"; messages: number }
   | { type: "session.resumed"; path: string; messages: number }
@@ -195,6 +197,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   let planReminders = 0;
   let snapshot: WorkspaceSnapshot | null = null;
   let rolledBack = false;
+  let selfVerifyPasses = 0;
   for (let step = 0; step < inputData.maxSteps; step += 1) {
     const label = step === 0 ? t("spinner.coding") : t("spinner.reviewing");
     inputData.onEvent?.({ type: "step.started", step, label });
@@ -272,6 +275,30 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         messages.push({ role: "user", content: planVerdict.message });
         if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: planVerdict.message });
         continue;
+      }
+      // #4 对抗式自检:收尾前用同模型当怀疑者独立复核一次(仅动过文件,封顶 1 次)。
+      if (mutated && selfVerifyEnabled() && selfVerifyPasses < 1) {
+        selfVerifyPasses += 1;
+        const review = await collectBrainText({
+          brainUrl: inputData.brainUrl,
+          fallbackProvider: inputData.fallbackProvider,
+          messages: [{ role: "user", content: buildSelfVerifyPrompt(inputData.task, assistantText) }],
+          reasoning: inputData.reasoning,
+          json: inputData.json,
+          label: t("spinner.reviewing"),
+          danger: inputData.toolCtx.approval === "yolo" || inputData.toolCtx.sandbox === "danger-full-access",
+          noTools: true,
+          onEvent: inputData.onEvent,
+        });
+        const verdict = parseSelfVerifyVerdict(review.text);
+        if (inputData.json) writeJsonLine({ type: "code.self_verify", ts: nowIso(), pass: verdict.pass });
+        inputData.onEvent?.({ type: "self.verify", pass: verdict.pass });
+        if (!verdict.pass) {
+          const critique = formatSelfVerifyCritique(verdict.issues);
+          messages.push({ role: "user", content: critique });
+          if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: critique });
+          continue;
+        }
       }
       finalText = assistantText;
       break;
@@ -542,6 +569,7 @@ async function collectBrainText(inputData: {
   json: boolean;
   label: string;
   danger?: boolean;
+  noTools?: boolean;
   onEvent?: (event: CodeAgentEvent) => void;
 }): Promise<BrainTextResult> {
   let text = "";
@@ -558,7 +586,7 @@ async function collectBrainText(inputData: {
       reasoning: inputData.reasoning,
       messages: inputData.messages,
       fallbackProvider: inputData.fallbackProvider,
-      tools: codeToolDefinitions(),
+      tools: inputData.noTools ? undefined : codeToolDefinitions(),
     })) {
       const renderReasoning = shouldRenderReasoning(inputData.reasoning.display, inputData.json);
       if (eventWritesHumanOutput(event, renderReasoning, !!inputData.json || !!inputData.onEvent)) {
