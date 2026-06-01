@@ -60,6 +60,17 @@ describe('OpenAI-compat wire adapter', () => {
     expect(body.max_tokens).toBe(8192);
   });
 
+  it('asks upstream streaming APIs to include usage for cache telemetry', async () => {
+    const f = mockFetch(ok(makeSSEBody(
+      'data: ' + JSON.stringify({ choices: [], usage: { prompt_cache_hit_tokens: 80, prompt_cache_miss_tokens: 20 } }) + '\n\n',
+      sseDone(),
+    )));
+    const chunks = await drain(callOpenAI({ provider, messages: [{ role: 'user', content: 'q' }] }));
+    const body = JSON.parse(f.mock.calls[0][1].body);
+    expect(body.stream_options).toEqual({ include_usage: true });
+    expect(chunks).toContainEqual({ type: 'usage', usage: { prompt_cache_hit_tokens: 80, prompt_cache_miss_tokens: 20 } });
+  });
+
   it('uses provider default reasoning effort and token budget for StepFun head route', async () => {
     const stepProvider = {
       id: 'step-3.7-flash',

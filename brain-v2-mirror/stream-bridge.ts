@@ -8,6 +8,7 @@ import type { ChunkMeta, FallbackEntry, ProviderId, StreamChunk } from './types.
 //   { type: 'reasoning', delta: string }
 //   { type: 'content',   delta: string }
 //   { type: 'tool_call_delta', delta: Array<{index, id?, function?: {name?, arguments?}}> }
+//   { type: 'usage', usage: unknown }
 //   { type: 'finish',    reason: string }
 //   { type: 'tool_progress', event: 'start'|'end', name: string, ms?: number, ok?: boolean, summary?: string, details?: string[] }
 //   { type: 'error', error: string, ...extra }
@@ -62,6 +63,9 @@ export function makeSSEEmitter(res: ServerResponse, { id, model = 'lynn-v2' }: S
     } else if (chunk.type === 'tool_call_delta') {
       write({ id, object: 'chat.completion.chunk', created, model: originalModel,
               choices: [{ index: 0, delta: { tool_calls: chunk.delta }, finish_reason: null }] });
+    } else if (chunk.type === 'usage') {
+      write({ id, object: 'chat.completion.chunk', created, model: originalModel,
+              choices: [], usage: chunk.usage });
     } else if (chunk.type === 'finish') {
       write({ id, object: 'chat.completion.chunk', created, model: originalModel,
               choices: [{ index: 0, delta: {}, finish_reason: chunk.reason || 'stop' }] });
