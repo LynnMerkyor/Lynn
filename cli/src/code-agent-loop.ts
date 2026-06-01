@@ -468,7 +468,7 @@ async function collectBrainText(inputData: {
   let usageSummary: string | null = null;
   const usageRecords: Array<{ usage: unknown; durationMs: number }> = [];
   const streamedToolCalls = createStreamingToolCallAccumulator();
-  const spinner = new TerminalSpinner(process.stderr, inputData.label, { quiet: true });
+  const spinner = new TerminalSpinner(process.stderr, inputData.label);
   const renderState: HumanBrainRenderState = {};
   const startedAt = Date.now();
   if (!inputData.json && !inputData.onEvent) spinner.start();
