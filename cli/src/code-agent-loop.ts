@@ -516,6 +516,7 @@ async function collectBrainText(inputData: {
           }
         } else {
           if (!inputData.onEvent) renderBrainEventForHuman(event, renderState, process.stderr);
+          if (!inputData.onEvent && shouldResumeWaitingSpinner(event)) spinner.start();
         }
       } else if (inputData.json && event.type === "usage") {
         usageSummary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt }) || usageSummary;
@@ -529,6 +530,10 @@ async function collectBrainText(inputData: {
     spinner.stop();
   }
   return { text, usageSummary, usageRecords, toolCalls: streamedToolCalls.toToolCalls() };
+}
+
+function shouldResumeWaitingSpinner(event: BrainStreamEvent): boolean {
+  return event.type === "provider" || event.type === "tool_progress";
 }
 
 function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolean, structuredOutput: boolean): boolean {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderInputBox } from "../src/boxed-input.js";
+import { renderInputBox, summarizeInputForBox } from "../src/boxed-input.js";
 import { visibleLength } from "../src/startup.js";
 
 function stripAnsi(value: string): string {
@@ -73,5 +73,17 @@ describe("renderInputBox", () => {
     const r = box({ buffer: "hi", cursor: 2, color: true });
     expect(r.inputLine).toContain("\x1b[1;36m");
     expect(r.top).toContain("\x1b[2m");
+  });
+
+  it("collapses pasted long and multiline text into a stable paste block", () => {
+    const pasted = "第一段很长很长\n第二段继续补充\n第三段结论";
+    const summary = summarizeInputForBox(pasted);
+    expect(summary).toContain("粘贴块");
+    expect(summary).toContain("3 行");
+    const r = box({ buffer: pasted, cursor: Array.from(pasted).length, width: 72 });
+    const line = stripAnsi(r.inputLine);
+    expect(line).toContain("↪ 粘贴块");
+    expect(line).not.toContain("第二段继续补充");
+    expect(visibleLength(line)).toBe(visibleLength(stripAnsi(r.top)));
   });
 });

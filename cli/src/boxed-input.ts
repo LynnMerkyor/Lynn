@@ -4,8 +4,11 @@ import { brightCyan, bold, dim, supportsColor } from "./terminal-style.js";
 import { visibleLength } from "./startup.js";
 import { completeSlash } from "./completion.js";
 import { HistoryNavigator } from "./history.js";
+import { analyzePastedContext, normalizePastedText, summarizePastedContext } from "./pasted-context.js";
 
 const ESC = "\x1b";
+const PASTE_START = `${ESC}[200~`;
+const PASTE_END = `${ESC}[201~`;
 
 export interface BoxedInputOptions {
   status?: string;
@@ -22,8 +25,18 @@ export interface BoxRender {
   cursorCol: number;
 }
 
+const COLLAPSE_CHARS = 120;
+
 function charWidth(ch: string): number {
   return Math.max(1, visibleLength(ch));
+}
+
+export function summarizeInputForBox(buffer: string): string | null {
+  const normalized = normalizePastedText(buffer);
+  if (!normalized.includes("\n") && Array.from(normalized).length <= COLLAPSE_CHARS) return null;
+  const info = analyzePastedContext(normalized);
+  const summary = summarizePastedContext(info) || `${Array.from(normalized).length} 字符`;
+  return `↪ 粘贴块 · ${summary}`;
 }
 
 function clampWidth(width: number): number {
@@ -54,7 +67,9 @@ export function renderInputBox(opts: {
   const { status, buffer, cursor, color } = opts;
   const w = clampWidth(opts.width);
   const textArea = w - 6;
-  const chars = Array.from(buffer);
+  const collapsed = summarizeInputForBox(buffer);
+  const renderBuffer = collapsed || buffer;
+  const chars = Array.from(renderBuffer);
 
   const starts: number[] = [];
   let acc = 0;
@@ -64,12 +79,13 @@ export function renderInputBox(opts: {
   }
   const totalCols = acc;
   let beforeCursor = 0;
-  for (let i = 0; i < cursor && i < chars.length; i += 1) beforeCursor += charWidth(chars[i]);
+  const renderCursor = collapsed ? chars.length : cursor;
+  for (let i = 0; i < renderCursor && i < chars.length; i += 1) beforeCursor += charWidth(chars[i]);
 
   let winStart = 0;
   if (totalCols > textArea) winStart = Math.max(0, beforeCursor - textArea + 1);
 
-  const empty = chars.length === 0;
+  const empty = !collapsed && chars.length === 0;
   let visibleText = "";
   let used = 0;
   if (empty && opts.placeholder) {
@@ -126,6 +142,7 @@ export async function readBoxedInputLine(options: BoxedInputOptions = {}): Promi
   const rawBefore = input.isRaw;
   input.setRawMode(true);
   input.resume();
+  output.write(`${ESC}[?2004h`);
 
   const render = () => renderInputBox({ status, buffer: value(), cursor: cur, width: width(), color, placeholder });
   const toCol = (col: number) => (col > 0 ? `${ESC}[${col}C` : "");
@@ -150,21 +167,62 @@ export async function readBoxedInputLine(options: BoxedInputOptions = {}): Promi
   return await new Promise<string | null>((resolve) => {
     const cleanup = () => {
       input.off("data", onData);
+      output.write(`${ESC}[?2004l`);
       input.setRawMode(rawBefore);
       input.pause();
     };
     const insert = (text: string) => {
-      const printable = Array.from(text).filter((ch) => ch >= " " && ch !== "\x7f");
+      const printable = Array.from(normalizePastedText(text)).filter((ch) => ch === "\n" || (ch >= " " && ch !== "\x7f"));
       if (!printable.length) return;
       buf.splice(cur, 0, ...printable);
       cur += printable.length;
       redrawInput();
     };
+    let pasteBuffer: string | null = null;
+    const consumePaste = (text: string): boolean => {
+      if (pasteBuffer !== null) {
+        const end = text.indexOf(PASTE_END);
+        if (end >= 0) {
+          pasteBuffer += text.slice(0, end);
+          insert(pasteBuffer);
+          pasteBuffer = null;
+          const rest = text.slice(end + PASTE_END.length);
+          if (rest) onData(Buffer.from(rest));
+          return true;
+        }
+        pasteBuffer += text;
+        return true;
+      }
+      const start = text.indexOf(PASTE_START);
+      if (start < 0) return false;
+      const before = text.slice(0, start);
+      const afterStart = text.slice(start + PASTE_START.length);
+      if (before) insert(before);
+      const end = afterStart.indexOf(PASTE_END);
+      if (end >= 0) {
+        insert(afterStart.slice(0, end));
+        const rest = afterStart.slice(end + PASTE_END.length);
+        if (rest) onData(Buffer.from(rest));
+      } else {
+        pasteBuffer = afterStart;
+      }
+      return true;
+    };
     const onData = (chunk: Buffer) => {
       const text = chunk.toString("utf8");
 
+      if (consumePaste(text)) return;
+
       const nl = text.search(/[\r\n]/);
       if (nl >= 0) {
+        const newlineCount = (text.match(/[\r\n]/g) || []).length;
+        const beforeText = text.slice(0, nl);
+        const afterText = text.slice(nl + 1);
+        const looksLikePaste = newlineCount > 1 || !!afterText.trim() || Array.from(beforeText).length > COLLAPSE_CHARS;
+        if (looksLikePaste) {
+          insert(normalizePastedText(text));
+          return;
+        }
         const before = Array.from(text.slice(0, nl)).filter((ch) => ch >= " " && ch !== "\x7f");
         if (before.length) { buf.splice(cur, 0, ...before); cur += before.length; }
         leaveBelow();

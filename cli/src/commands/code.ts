@@ -18,7 +18,7 @@ import { modelLabelWithId } from "../provider-presets.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ToolRunContext } from "../tools/types.js";
 import { createGitSnapshot } from "../git-checkpoint.js";
-import { applyModeCommand, applyReasoningCommand, buildChatProviderArgs, renderMode, shouldRefreshProviderRoute, shouldShowProviderSetUsage, toggleMode, type ChatMode } from "./chat.js";
+import { applyModeCommand, applyReasoningCommand, applyThinkCommand, buildChatProviderArgs, renderMode, shouldRefreshProviderRoute, shouldShowProviderSetUsage, toggleMode, type ChatMode } from "./chat.js";
 import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { readVersionInfo } from "../version.js";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, listSessions, readSessionLines, resolveDataDir } from "../session/store.js";
@@ -333,6 +333,9 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
     "/tools",
     "/fast",
     "/think",
+    "/think low",
+    "/think medium",
+    "/think high",
     "/reasoning",
     "/goal",
     "/resume",
@@ -387,6 +390,12 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       if (text === "/think") {
         reasoning = { ...reasoning, effort: "high" };
         output.write(`${t("code.think")}\n\n`);
+        continue;
+      }
+      if (text.startsWith("/think ")) {
+        const result = applyThinkCommand(reasoning, text.slice(7).trim(), "code");
+        reasoning = result.reasoning;
+        output.write(`✓ ${result.message}\n${t("code.reasoning.state", { effort: reasoning.effort, display: reasoning.display })}\n\n`);
         continue;
       }
       if (text === "/reasoning") {

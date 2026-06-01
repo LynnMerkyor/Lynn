@@ -80,4 +80,28 @@ describe("renderBrainEventForHuman", () => {
       expect((line.match(/│/g) || []).length).toBeLessThanOrEqual(1);
     }
   });
+
+  it("keeps tool details inspectable when Brain only reports tool timing", () => {
+    let output = "";
+    const stream = {
+      isTTY: false,
+      write(chunk: string) {
+        output += chunk;
+        return true;
+      },
+    } as unknown as NodeJS.WriteStream;
+    const state: HumanBrainRenderState = {};
+
+    renderBrainEventForHuman({
+      type: "tool_progress",
+      event: "end",
+      name: "web_fetch",
+      ok: true,
+      ms: 2600,
+    }, state, stream);
+
+    expect(output).toContain("details: /tool 1");
+    expect(renderToolDetailsList(state, false)).toContain("无展开明细");
+    expect(renderToolDetail(state, 1, false)).toContain("没有提供搜索摘要或来源明细");
+  });
 });

@@ -50,7 +50,7 @@ export function renderBrainEventForHuman(
       const detailId = rememberToolDetail(state, event);
       const body = [
         ...(event.summary ? [event.summary] : []),
-        ...(detailId ? [`details: /tool ${detailId}`] : []),
+        `details: /tool ${detailId}`,
       ];
       stream.write(`${renderCard({
         kind: event.ok === false ? "error" : "ok",
@@ -97,9 +97,8 @@ export function formatBrainErrorForHuman(error: string, code?: string): string {
   return `Brain error: ${error}${code ? ` (${code})` : ""}`;
 }
 
-function rememberToolDetail(state: HumanBrainRenderState, event: Extract<BrainStreamEvent, { type: "tool_progress" }>): number | null {
+function rememberToolDetail(state: HumanBrainRenderState, event: Extract<BrainStreamEvent, { type: "tool_progress" }>): number {
   const details = event.details?.filter((line) => line.trim()) || [];
-  if (!event.summary && details.length === 0) return null;
   const list = state.toolDetails || (state.toolDetails = []);
   const id = list.length + 1;
   list.push({
@@ -119,7 +118,7 @@ export function renderToolDetailsList(state: HumanBrainRenderState, color: boole
   return details.map((detail) => {
     const status = detail.ok === false ? red("failed", color) : green("done", color);
     const timing = typeof detail.ms === "number" ? ` · ${formatDuration(detail.ms)}` : "";
-    const summary = detail.summary ? ` — ${detail.summary}` : "";
+    const summary = ` — ${detail.summary || t("tool.details.unavailable.short")}`;
     return `${cyan(`/tool ${detail.id}`, color)} ${toolIcon(detail.name)} ${detail.name} · ${status}${timing}${summary}`;
   }).join("\n");
 }
@@ -134,7 +133,7 @@ export function renderToolDetail(state: HumanBrainRenderState, id: number, color
       body: detail.summary ? [detail.summary] : undefined,
     }, color),
   ];
-  const body = detail.details.length ? detail.details : detail.summary ? [detail.summary] : [];
+  const body = detail.details.length ? detail.details : detail.summary ? [detail.summary] : [t("tool.details.unavailable")];
   for (const line of body) lines.push(`│   ${renderDetailLine(line, color)}`);
   return lines.join("\n");
 }

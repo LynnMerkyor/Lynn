@@ -26,6 +26,7 @@ import { resolveDataDir } from "../session/store.js";
 import { resolveDefaultBrainUrl } from "../brain-url.js";
 import { shouldUseInkTui } from "../terminal-safety.js";
 import { createDecodeSpeedTracker } from "../decode-speed.js";
+import { createRuntimeMetrics, recordDecodeTps, recordUsageMetrics, renderRuntimeMetrics } from "../runtime-metrics.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/exit",
@@ -37,6 +38,9 @@ export const CHAT_SLASH_COMMANDS = [
   "/about",
   "/fast",
   "/think",
+  "/think low",
+  "/think medium",
+  "/think high",
   "/reasoning",
   "/yolo",
   "/ask",
@@ -84,6 +88,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   let memoryFrame = buildMemoryContextFrameSync(dataDir);
   const messages: ChatMessage[] = resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile), memoryFrame);
   const brainRenderState: HumanBrainRenderState = {};
+  const runtimeMetrics = createRuntimeMetrics();
   const histFile = historyPath();
   const history = loadHistory(histFile);
   const rl = !input.isTTY
@@ -137,6 +142,12 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     if (text === "/think") {
       reasoning = { ...reasoning, effort: "high" };
       output.write(`${t("chat.think")}\n\n`);
+      return "continue";
+    }
+    if (text.startsWith("/think ")) {
+      const result = applyThinkCommand(reasoning, text.slice(7).trim(), "chat");
+      reasoning = result.reasoning;
+      output.write(`${result.message}\n${t("reasoning.state", { effort: reasoning.effort, display: reasoning.display })}\n\n`);
       return "continue";
     }
     if (text === "/reasoning") {
@@ -277,8 +288,12 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
             decodeTps = decodeTracker.add(event.text) || decodeTps;
             assistant += event.text;
           } else {
-            if (event.type === "usage") latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - turnStarted });
+            if (event.type === "usage") {
+              latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - turnStarted });
+              recordUsageMetrics(runtimeMetrics, event.usage);
+            }
             renderChatEvent(event, renderReasoning, brainRenderState, turnStarted);
+            if (shouldResumeWaitingSpinner(event)) spinner.start();
           }
         }
       } catch (error) {
@@ -299,6 +314,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       return "continue";
     }
     messages.push({ role: "assistant", content: assistant });
+    recordDecodeTps(runtimeMetrics, decodeTps);
     output.write(`\n${renderStatusBar({
       model: brainRenderState.provider ? modelDisplayName(brainRenderState.provider) : t("status.chat.prefix"),
       cwd: chatCwd,
@@ -306,6 +322,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       reasoning: reasoning.effort,
       usage: latestUsage,
       decodeTps,
+      metrics: renderRuntimeMetrics(runtimeMetrics),
       color,
     })}\n\n`);
     return "continue";
@@ -344,6 +361,10 @@ function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolea
     || event.type === "brain.error"
     || event.type === "usage"
     || (event.type === "reasoning.delta" && renderReasoning);
+}
+
+function shouldResumeWaitingSpinner(event: BrainStreamEvent): boolean {
+  return event.type === "provider" || event.type === "tool_progress";
 }
 
 export interface ChatMode {
@@ -554,6 +575,20 @@ export function applyReasoningCommand(current: ReturnType<typeof parseReasoningO
   }
   if (value === "hide" || value === "never") {
     return { reasoning: { ...current, display: "never" }, message: t("reasoning.displayNever") };
+  }
+  return { reasoning: current, message: t("reasoning.unknown", { raw: raw || "(empty)" }) };
+}
+
+export function applyThinkCommand(current: ReturnType<typeof parseReasoningOptions>, raw: string, scope: "chat" | "code"): { reasoning: ReturnType<typeof parseReasoningOptions>; message: string } {
+  const value = raw.toLowerCase();
+  if (value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "auto") {
+    return {
+      reasoning: { ...current, effort: value },
+      message: t(scope === "chat" ? "chat.think.set" : "code.think.set", { value }),
+    };
+  }
+  if (value === "off" || value === "fast") {
+    return { reasoning: { ...current, effort: "off" }, message: t(scope === "chat" ? "chat.fast" : "code.fast") };
   }
   return { reasoning: current, message: t("reasoning.unknown", { raw: raw || "(empty)" }) };
 }

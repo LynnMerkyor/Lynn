@@ -743,6 +743,10 @@ describe("reasoning options", () => {
     });
   });
 
+  it("defaults interactive Brain calls to high reasoning", () => {
+    expect(parseReasoningOptions(parseArgs(["exec", "x"]))).toMatchObject({ effort: "high" });
+  });
+
   it("maps off to non-thinking request fields", () => {
     expect(applyReasoningToBody({}, { effort: "off", display: "auto" })).toEqual({
       reasoning_effort: "off",

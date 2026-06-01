@@ -83,6 +83,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "code.maxsteps": "最多 {n} 步",
     "chat.fast": "✓ 快速模式 · 思考关闭(低延迟短回复)",
     "chat.think": "✓ 思考模式 · 推理强度高",
+    "chat.think.set": "✓ 思考模式 · 推理强度 {value}",
     "chat.cleared": "✓ 上下文已清空",
     "chat.help":
       "/exit 退出聊天\n" +
@@ -99,14 +100,14 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/providers unset 清除 CLI BYOK\n" +
       "/providers test 测试 CLI BYOK\n" +
       "/fast 低延迟回复\n" +
-      "/think 深度推理\n" +
+      "/think low|medium|high 切换推理强度\n" +
       "/reasoning 查看或设置推理模式\n" +
       "/mode 查看权限模式\n" +
       "/yolo 开启零审批 YOLO 模式(本地写入和 shell 命令)\n" +
       "/ask 回到守护模式(workspace-write)\n" +
       "/mode ask|yolo|read-only|workspace|danger 切换权限\n" +
       "/help 显示命令",
-    "chat.reasoning.show": "reasoning:{effort} · display {display}\n用 /fast、/think 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
+    "chat.reasoning.show": "reasoning:{effort} · display {display}\n用 /fast、/think low|medium|high 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
     "chat.mode.show": "mode:{mode}\n用 /yolo 开启零审批本地工具权限,/ask 回到守护模式,或 Shift+Tab 切换。",
     "chat.providers.usage":
       "用法:\n" +
@@ -128,11 +129,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "chat.image.readError": "图片上下文无法读取:{error}",
     "code.fast": "✓ 快速模式 · 思考关闭",
     "code.think": "✓ 思考模式 · 高",
+    "code.think.set": "✓ 思考模式 · {value}",
     "code.help":
       "/exit 退出 code 模式\n" +
       "/tools 查看本地编码工具\n" +
       "/fast 低延迟 MiMo/Brain 回复\n" +
-      "/think 深度 MiMo/Brain 推理\n" +
+      "/think low|medium|high 切换推理强度\n" +
       "/reasoning 查看或设置推理模式\n" +
       "/goal <任务> 长任务模式:1000 步预算 + 自动保存断点\n" +
       "/resume [last|session.jsonl] [说明] 继续上次长任务\n" +
@@ -150,7 +152,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/ask 回到守护模式(workspace-write)\n" +
       "/mode ask 守护模式(workspace-write)\n" +
       "/mode yolo 允许本地写入和 shell 命令",
-    "code.reasoning.show": "think:{effort} / display {display}\n用 /fast、/think 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
+    "code.reasoning.show": "think:{effort} / display {display}\n用 /fast、/think low|medium|high 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
     "code.mode.show": "mode:{mode}\n用 /yolo 开启零审批本地工具权限,/ask 回到守护模式。",
     "code.resume.maxSteps": "已保存断点。继续: {command}",
     "code.resume.maxStepsFallback": "已到达步数上限。用 /resume 继续最近的长任务,或用 --resume <session.jsonl> --long。",
@@ -169,6 +171,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "code.snapshot.saved": "📌 已存文件快照 {sha}({files} 个改动)— `git stash apply {sha}` 可恢复",
     "code.resume.others": "  其他最近会话:{list}(用 --resume <路径> 指定)",
     "tool.approval.suffix": " (需要确认)",
+    "tool.details.unavailable.short": "无展开明细",
+    "tool.details.unavailable": "Brain 只返回了工具开始/结束状态,没有提供搜索摘要或来源明细。",
     "mode.yolo.enabled": "YOLO 静默黑灯工厂模式已开启。",
     "mode.ask.enabled": "守护模式已开启。",
     "mode.readonly.enabled": "只读模式已开启。",
@@ -352,6 +356,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "code.maxsteps": "max steps {n}",
     "chat.fast": "✓ fast mode · thinking off (short, low-latency replies)",
     "chat.think": "✓ thinking mode · reasoning high",
+    "chat.think.set": "✓ thinking mode · reasoning {value}",
     "chat.cleared": "✓ context cleared",
     "chat.help":
       "/exit leave chat\n" +
@@ -368,14 +373,14 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/providers unset clear CLI BYOK\n" +
       "/providers test test CLI BYOK\n" +
       "/fast low-latency replies\n" +
-      "/think deeper reasoning\n" +
+      "/think low|medium|high switch reasoning effort\n" +
       "/reasoning show or set reasoning mode\n" +
       "/mode show permission mode\n" +
       "/yolo enable zero-prompt YOLO mode for local writes and shell commands\n" +
       "/ask return to guarded workspace-write mode\n" +
       "/mode ask|yolo|read-only|workspace|danger change permission mode\n" +
       "/help show commands",
-    "chat.reasoning.show": "reasoning: {effort} · display {display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.",
+    "chat.reasoning.show": "reasoning: {effort} · display {display}\nUse /fast, /think low|medium|high, or /reasoning off|auto|low|medium|high|xhigh.",
     "chat.mode.show": "mode: {mode}\nUse /yolo for zero-prompt local tool permission, /ask for guarded mode, or Shift+Tab to toggle.",
     "chat.providers.usage":
       "Usage:\n" +
@@ -397,11 +402,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "chat.image.readError": "Could not read image context: {error}",
     "code.fast": "✓ fast mode · thinking off",
     "code.think": "✓ thinking mode · high",
+    "code.think.set": "✓ thinking mode · {value}",
     "code.help":
       "/exit leave code mode\n" +
       "/tools list local coding tools\n" +
       "/fast low-latency MiMo/Brain replies\n" +
-      "/think deeper MiMo/Brain reasoning\n" +
+      "/think low|medium|high switch reasoning effort\n" +
       "/reasoning show or set reasoning mode\n" +
       "/goal <task> long-running mode: 1000-step budget + automatic checkpoints\n" +
       "/resume [last|session.jsonl] [note] continue a saved long task\n" +
@@ -419,7 +425,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/ask return to guarded workspace-write mode\n" +
       "/mode ask guarded workspace-write mode\n" +
       "/mode yolo allow local writes and shell commands",
-    "code.reasoning.show": "think: {effort} / display {display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.",
+    "code.reasoning.show": "think: {effort} / display {display}\nUse /fast, /think low|medium|high, or /reasoning off|auto|low|medium|high|xhigh.",
     "code.mode.show": "mode: {mode}\nUse /yolo for zero-prompt local tool permission or /ask for guarded mode.",
     "code.resume.maxSteps": "Checkpoint saved. Continue with: {command}",
     "code.resume.maxStepsFallback": "Step budget reached. Use /resume for the latest long task, or --resume <session.jsonl> --long.",
@@ -438,6 +444,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "code.snapshot.saved": "📌 Saved file snapshot {sha} ({files} change(s)) — restore with `git stash apply {sha}`",
     "code.resume.others": "  Other recent sessions: {list} (use --resume <path>)",
     "tool.approval.suffix": " (approval required)",
+    "tool.details.unavailable.short": "no expanded detail",
+    "tool.details.unavailable": "Brain returned only tool start/end status and did not include a search summary or source details.",
     "mode.yolo.enabled": "YOLO silent factory mode enabled.",
     "mode.ask.enabled": "Guarded mode enabled.",
     "mode.readonly.enabled": "Read-only mode enabled.",

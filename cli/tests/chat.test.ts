@@ -9,6 +9,7 @@ import { parseArgs } from "../src/args.js";
 import {
   applyModeCommand,
   applyReasoningCommand,
+  applyThinkCommand,
   buildChatProviderArgs,
   chatRouteLabel,
   completeChatInput,
@@ -134,6 +135,7 @@ describe("chat mode controls", () => {
     expect(applyReasoningCommand(current, "off").reasoning).toMatchObject({ effort: "off" });
     expect(applyReasoningCommand(current, "high").reasoning).toMatchObject({ effort: "high" });
     expect(applyReasoningCommand(current, "show").reasoning).toMatchObject({ display: "always" });
+    expect(applyThinkCommand(current, "medium", "chat").reasoning).toMatchObject({ effort: "medium" });
   });
 
   it("localizes reasoning command receipts", () => {
