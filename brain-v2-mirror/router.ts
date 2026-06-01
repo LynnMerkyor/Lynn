@@ -117,6 +117,82 @@ function parseJsonObject(raw: string): Record<string, unknown> | null {
   }
 }
 
+function compactMaybe(value: unknown, max = 220): string | null {
+  if (typeof value !== 'string') return null;
+  const compacted = compactText(value, max);
+  return compacted ? compacted : null;
+}
+
+function searchCitationFromItem(item: unknown): string | null {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+  const record = item as Record<string, unknown>;
+  const title = compactMaybe(record.title ?? record.name ?? record.label, 120);
+  const url = compactMaybe(record.url ?? record.link ?? record.href, 260);
+  if (!title || !url) return null;
+  const snippet = compactMaybe(record.snippet ?? record.summary ?? record.content ?? record.description, 260) || '';
+  return `[${title}](${url}): ${snippet}`;
+}
+
+function structuredSearchSummary(parsed: Record<string, unknown>): { summary?: string; details?: string[] } | null {
+  const summaries: string[] = [];
+  const details: string[] = [];
+  const addSummary = (value: unknown, prefix = '') => {
+    const compacted = compactMaybe(value, 220);
+    if (compacted) summaries.push(prefix ? `${prefix}: ${compacted}` : compacted);
+  };
+  const addCitation = (item: unknown) => {
+    const citation = searchCitationFromItem(item);
+    if (citation) details.push(citation);
+  };
+
+  addSummary(parsed.summary);
+  if (Array.isArray(parsed.items)) parsed.items.forEach(addCitation);
+  if (Array.isArray(parsed.results)) parsed.results.forEach(addCitation);
+
+  if (Array.isArray(parsed.sources)) {
+    for (const source of parsed.sources) {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+      const record = source as Record<string, unknown>;
+      const name = compactMaybe(record.name ?? record.source ?? record.provider, 80) || 'source';
+      addSummary(record.summary, name);
+      if (Array.isArray(record.items)) record.items.forEach(addCitation);
+      if (Array.isArray(record.results)) record.results.forEach(addCitation);
+      if (record.ok === false && record.error) {
+        const error = compactMaybe(record.error, 160);
+        if (error) details.push(`${name}: error: ${error}`);
+      }
+    }
+  }
+
+  const uniqueDetails = Array.from(new Set(details)).slice(0, 8);
+  const picked = [
+    ...summaries.slice(0, 2),
+    ...uniqueDetails.slice(0, 2).map((line) => line.replace(/^\[([^\]]+)\]\([^)]+\):\s*/, '$1: ')),
+  ];
+  if (!picked.length && !uniqueDetails.length) return null;
+  return {
+    summary: picked.length ? compactText(picked.join(' · ')) : undefined,
+    details: [
+      ...summaries.map((line) => '摘要: ' + line),
+      ...uniqueDetails,
+    ].slice(0, 8).map((line) => compactText(line, 500)),
+  };
+}
+
+function numberedSearchCitations(lines: string[]): string[] {
+  const citations: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const match = lines[i].match(/^\d+[.)、]\s*(.+)$/);
+    if (!match) continue;
+    const title = match[1].trim();
+    const url = lines[i + 1]?.trim();
+    if (!/^https?:\/\//.test(url || '')) continue;
+    const snippet = lines[i + 2]?.trim() || '';
+    citations.push(`[${title}](${url}): ${snippet}`);
+  }
+  return citations;
+}
+
 function summarizeToolResult(toolName: string, result: unknown): { summary?: string; details?: string[] } {
   const raw = typeof result === 'string' ? result : JSON.stringify(result);
   if (!raw || !raw.trim()) return {};
@@ -131,13 +207,20 @@ function summarizeToolResult(toolName: string, result: unknown): { summary?: str
     .filter((line) => !/^──.+──$/.test(line) && line !== '搜索结果:');
 
   if (toolName === 'web_search') {
+    if (parsed) {
+      const structured = structuredSearchSummary(parsed);
+      if (structured) return structured;
+    }
     const summaries = lines
       .filter((line) => /^摘要[:：]/.test(line))
       .map((line) => line.replace(/^摘要[:：]\s*/, ''))
       .filter(Boolean);
-    const citations = lines
+    const citations = [
+      ...lines
       .filter((line) => /^\[[^\]]+\]\([^)]+\):/.test(line))
-      .filter(Boolean);
+        .filter(Boolean),
+      ...numberedSearchCitations(lines),
+    ];
     const citationSummaries = citations
       .map((line) => line.replace(/^\[([^\]]+)\]\([^)]+\):\s*/, '$1: '))
       .filter(Boolean);
@@ -495,4 +578,5 @@ export const __testing__ = {
   isLocalEndpoint,
   localProbeTimeoutMs,
   shouldInjectChainToolHint,
+  summarizeToolResult,
 };

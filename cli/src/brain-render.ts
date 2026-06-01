@@ -50,7 +50,7 @@ export function renderBrainEventForHuman(
       const detailId = rememberToolDetail(state, event);
       const body = [
         ...toolPreviewLines(event, color),
-        `details: /tool ${detailId}`,
+        toolDetailHint(event, detailId),
       ];
       stream.write(`${renderCard({
         kind: event.ok === false ? "error" : "ok",
@@ -125,6 +125,12 @@ function toolPreviewLines(event: Extract<BrainStreamEvent, { type: "tool_progres
     add(previewDetailLine(detail, color));
   }
   return lines;
+}
+
+function toolDetailHint(event: Extract<BrainStreamEvent, { type: "tool_progress" }>, detailId: number): string {
+  const hasSources = (event.details || []).some((line) => /^\[[^\]]+\]\([^)]+\):/.test(line));
+  if (hasSources) return `sources: /tool ${detailId}`;
+  return `details: /tool ${detailId}`;
 }
 
 function previewDetailLine(line: string, color: boolean): string {

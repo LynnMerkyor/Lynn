@@ -3,10 +3,11 @@ import { normalizeUsageTelemetry } from "./usage-telemetry.js";
 export interface RuntimeMetrics {
   decodeSamples: number[];
   cacheSamples: number[];
+  usageSamples: number;
 }
 
 export function createRuntimeMetrics(): RuntimeMetrics {
-  return { decodeSamples: [], cacheSamples: [] };
+  return { decodeSamples: [], cacheSamples: [], usageSamples: 0 };
 }
 
 export function recordDecodeTps(metrics: RuntimeMetrics, value: string | null | undefined): void {
@@ -17,6 +18,7 @@ export function recordDecodeTps(metrics: RuntimeMetrics, value: string | null | 
 
 export function recordUsageMetrics(metrics: RuntimeMetrics, usage: unknown): void {
   const telemetry = normalizeUsageTelemetry(usage);
+  if (telemetry) metrics.usageSamples += 1;
   if (telemetry?.cacheHitRatio !== null && telemetry?.cacheHitRatio !== undefined) {
     pushBounded(metrics.cacheSamples, telemetry.cacheHitRatio);
   }
@@ -25,7 +27,7 @@ export function recordUsageMetrics(metrics: RuntimeMetrics, usage: unknown): voi
 export function renderRuntimeMetrics(metrics: RuntimeMetrics): string | null {
   const parts = [
     renderAverageTps(metrics.decodeSamples),
-    renderAverageCache(metrics.cacheSamples) || "prefix-cache --",
+    renderAverageCache(metrics.cacheSamples) || renderCacheTracking(metrics),
   ].filter((part): part is string => !!part);
   return parts.length ? parts.join(" · ") : null;
 }
@@ -40,6 +42,10 @@ function renderAverageCache(samples: number[]): string | null {
   if (!samples.length) return null;
   const avg = samples.reduce((sum, value) => sum + value, 0) / samples.length;
   return `prefix-cache ${Math.round(avg * 100)}% recent`;
+}
+
+function renderCacheTracking(metrics: RuntimeMetrics): string {
+  return metrics.usageSamples > 0 ? "prefix-cache hit tracking" : "prefix-cache warming";
 }
 
 function parseTps(value: string | null | undefined): number | null {

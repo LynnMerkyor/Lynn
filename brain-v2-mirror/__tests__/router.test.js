@@ -401,6 +401,36 @@ describe('Router', () => {
     ]));
   });
 
+  it('summarizes structured and numbered web search results into inspectable sources', () => {
+    const structured = __testing__.summarizeToolResult('web_search', JSON.stringify({
+      ok: true,
+      provider: 'bocha',
+      summary: '官方文档摘要',
+      items: [
+        { title: 'StepFun Docs', url: 'https://platform.stepfun.com/docs/zh/api-reference/chat/messages-create', snippet: 'max_tokens controls generated output.' },
+      ],
+      sources: [
+        { name: 'bocha', ok: true, summary: 'Bocha summary', items: [{ title: 'Pricing', url: 'https://platform.stepfun.com/pricing', snippet: 'Token plan pricing.' }] },
+      ],
+    }));
+    expect(structured.summary).toContain('官方文档摘要');
+    expect(structured.details).toEqual(expect.arrayContaining([
+      expect.stringContaining('[StepFun Docs](https://platform.stepfun.com/docs/zh/api-reference/chat/messages-create)'),
+      expect.stringContaining('[Pricing](https://platform.stepfun.com/pricing)'),
+    ]));
+
+    const numbered = __testing__.summarizeToolResult('web_search', [
+      '── bocha ──',
+      '1. StepFun API Reference',
+      '   https://platform.stepfun.com/docs/zh/api-reference/responses/responses-create',
+      '   Responses API supports streaming and function calling.',
+    ].join('\n'));
+    expect(numbered.summary).toContain('StepFun API Reference');
+    expect(numbered.details).toEqual(expect.arrayContaining([
+      expect.stringContaining('[StepFun API Reference](https://platform.stepfun.com/docs/zh/api-reference/responses/responses-create)'),
+    ]));
+  });
+
   it('compacts older server tool results before subsequent provider rounds', async () => {
     process.env.BRAIN_V2_TOOL_RESULT_CAP = '8';
     let adapterRuns = 0;

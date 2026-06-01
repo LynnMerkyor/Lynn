@@ -25,6 +25,12 @@ describe("runtime metrics", () => {
     recordDecodeTps(metrics, null);
     recordUsageMetrics(metrics, { total_tokens: 12 });
 
-    expect(renderRuntimeMetrics(metrics)).toBe("prefix-cache --");
+    expect(renderRuntimeMetrics(metrics)).toBe("prefix-cache hit tracking");
+  });
+
+  it("shows prefix-cache as warming before any usage telemetry arrives", () => {
+    const metrics = createRuntimeMetrics();
+
+    expect(renderRuntimeMetrics(metrics)).toBe("prefix-cache warming");
   });
 });
