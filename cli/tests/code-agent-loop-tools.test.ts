@@ -104,7 +104,7 @@ async function withRawBrainServer(handler: (body: unknown, count: number) => str
 }
 
 describe("code agent loop · tool calls & repair", () => {
-  it("executes multiple model-requested tool calls from one turn", async () => {
+  it("executes one non-plan tool per model turn and defers extras", async () => {
     const original = process.stdout.write;
     let output = "";
     let toolResultTurn = "";
@@ -141,13 +141,15 @@ describe("code agent loop · tool calls & repair", () => {
       process.stdout.write = original;
     }
 
-    expect(output.match(/"type":"code\.tool\.requested"/g)).toHaveLength(2);
-    expect(output.match(/"type":"code\.tool\.result"/g)).toHaveLength(2);
+    expect(output.match(/"type":"code\.tool\.requested"/g)).toHaveLength(1);
+    expect(output.match(/"type":"code\.tool\.result"/g)).toHaveLength(1);
+    expect(output).toContain('"type":"code.tool.deferred"');
     expect(output).toContain('"type":"code.tool.ledger"');
     expect(toolResultTurn).toContain("Tool result for read_file");
     expect(toolResultTurn).toContain("Tool result for glob");
+    expect(toolResultTurn).toContain("Not executed in this atomic tool step");
     expect(toolResultTurn).toContain("<lynn_tool_ledger");
-    expect(toolResultTurn).toContain("source-of-truth");
+    expect(toolResultTurn).toContain("Tool observations recorded during this step");
     expect(toolResultTurn).toContain("hello.txt");
     expect(output).toContain("I read hello.txt and listed text files");
   });
@@ -247,6 +249,93 @@ describe("code agent loop · tool calls & repair", () => {
     ]));
     expect(toolResultTurn).toContain("hello.txt");
     expect(output).toContain("Read streamed tool call result");
+  });
+
+  it("keeps structured multi-tool turns protocol-valid while deferring extra action tools", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    let toolResultTurn = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await withRawBrainServer((body, count) => {
+        if (count === 1) {
+          expect(body).toMatchObject({ tool_choice: "auto" });
+          return rawSsePayloads([
+            JSON.stringify({
+              choices: [{
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_read",
+                      type: "function",
+                      function: { name: "read_file", arguments: "{\"path\":\"hello.txt\"}" },
+                    },
+                    {
+                      index: 1,
+                      id: "call_glob",
+                      type: "function",
+                      function: { name: "glob", arguments: "{\"pattern\":\"*.txt\"}" },
+                    },
+                  ],
+                },
+              }],
+            }),
+            JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] }),
+          ]);
+        }
+        toolResultTurn = JSON.stringify(body);
+        return rawSsePayloads([
+          JSON.stringify({ choices: [{ delta: { content: "Atomic tool step remained protocol-valid." } }] }),
+        ]);
+      }, async (brainUrl) => {
+        await expect(runCode(parseArgs([
+          "code",
+          "inspect hello with structured parallel tools",
+          "--cwd",
+          tmp,
+          "--brain-url",
+          brainUrl,
+          "--max-steps",
+          "3",
+          "--json",
+        ]))).resolves.toBe(0);
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output.match(/"type":"code\.tool\.requested"/g)).toHaveLength(1);
+    expect(output.match(/"type":"code\.tool\.result"/g)).toHaveLength(1);
+    expect(output).toContain('"type":"code.tool.deferred"');
+    const toolTurnBody = JSON.parse(toolResultTurn) as {
+      messages?: Array<Record<string, unknown>>;
+    };
+    expect(toolTurnBody.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: "assistant",
+        tool_calls: expect.arrayContaining([
+          expect.objectContaining({ id: "call_read" }),
+          expect.objectContaining({ id: "call_glob" }),
+        ]),
+      }),
+      expect.objectContaining({
+        role: "tool",
+        tool_call_id: "call_read",
+        name: "read_file",
+        content: expect.stringContaining("Tool result for read_file"),
+      }),
+      expect.objectContaining({
+        role: "tool",
+        tool_call_id: "call_glob",
+        name: "glob",
+        content: expect.stringContaining("Not executed in this atomic tool step"),
+      }),
+    ]));
+    expect(output).toContain("Atomic tool step remained protocol-valid");
   });
 
   it("keeps runtime instruction frames OpenAI-compatible across resumed code turns", async () => {

@@ -1,13 +1,3 @@
-// ============================================================================
-// 对抗式自检(#4)—— 不换大模型,让同一个模型在收尾前当「严格的怀疑者」独立复核一次。
-//
-// 收尾门(已过自动验证 + 计划契约)后,用一段全新的、对抗性的上下文(只给任务 + 拟交付答案,
-// 不带原对话的乐观惯性)逼模型找自己的茬。独立视角能逮住一部分"无症状的自信错误"——正是
-// flash 模型最危险的失败模式。封顶 1 次,成本就一个额外模型调用。
-// ============================================================================
-
-// Opt-in: this is the only guard that costs an extra model call (and can add a turn)
-// on every mutating task, so it defaults OFF — turn it on for complex/critical work.
 export function selfVerifyEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.LYNN_CLI_SELF_VERIFY === "1";
 }
@@ -50,8 +40,7 @@ export function parseSelfVerifyVerdict(text: string): SelfVerifyVerdict {
 
 export function formatSelfVerifyCritique(issues: string): string {
   return [
-    "⚠ Adversarial self-review found problems to fix before you can finish:",
+    "⚠ Adversarial self-review reported issues:",
     issues,
-    "Address each point above (make the edits + re-verify), then give the final answer.",
   ].join("\n");
 }

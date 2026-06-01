@@ -49,10 +49,10 @@ describe("parseSelfVerifyVerdict", () => {
 });
 
 describe("formatSelfVerifyCritique", () => {
-  it("turns issues into a fix-before-finish instruction", () => {
+  it("turns issues into an observation block", () => {
     const msg = formatSelfVerifyCritique("1. missing null check");
-    expect(msg).toContain("Adversarial self-review found problems");
+    expect(msg).toContain("Adversarial self-review reported issues");
     expect(msg).toContain("missing null check");
-    expect(msg).toContain("then give the final answer");
+    expect(msg).not.toContain("then give the final answer");
   });
 });

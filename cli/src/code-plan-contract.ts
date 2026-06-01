@@ -17,7 +17,7 @@ export function checkPlanContract(plan: readonly CodePlanItem[] | null | undefin
     message: [
       `Plan contract incomplete: ${incomplete.length} plan step(s) are still open:`,
       list,
-      "Completion is blocked until the visible plan is updated to match the actual task state.",
+      "Visible plan state remains open.",
     ].join("\n"),
   };
 }
@@ -39,7 +39,7 @@ export function checkToolBudget(toolCallCount: number, budget: number, alreadyWa
     overBudget: true,
     message: [
       `Tool budget reached (${toolCallCount}/${budget} tool calls).`,
-      "Further tool requests are paused until the current verified state, remaining work, and any repeated work are recorded.",
+      "Current verified state, remaining work, and repeated work should be visible before more tools run.",
     ].join("\n"),
   };
 }

@@ -96,6 +96,37 @@ const TOOL_STORM_WINDOW = 8;
 const RUNTIME_COMPACTION_MAX_CHARS = 150_000;
 const RUNTIME_COMPACTION_KEEP_GROUPS = 8;
 
+interface AtomicToolPlan {
+  deferredIndexes: Set<number>;
+}
+
+function planAtomicToolStep(requests: readonly CodeToolRequest[]): AtomicToolPlan {
+  const deferredIndexes = new Set<number>();
+  let usedActionTool = false;
+
+  requests.forEach((request, index) => {
+    if (request.tool === "update_plan") {
+      return;
+    }
+    if (!usedActionTool) {
+      usedActionTool = true;
+      return;
+    }
+    deferredIndexes.add(index);
+  });
+
+  return { deferredIndexes };
+}
+
+function deferredAtomicToolSection(request: CodeToolRequest): string {
+  return [
+    `Tool result for ${request.tool}:`,
+    "Not executed in this atomic tool step.",
+    "Lynn returned the first non-plan tool observation before running additional non-plan tools.",
+    "No filesystem, network, or shell action was performed for this request.",
+  ].join("\n");
+}
+
 function createClientToolStormState(seedMessages: readonly ChatMessage[] = []): ClientToolStormState {
   const state: ClientToolStormState = { recent: [] };
   seedClientToolStormState(state, seedMessages);
@@ -303,7 +334,23 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
     }
     const toolResultSections: string[] = [];
     const toolLedgerEntries: ToolLedgerEntry[] = [];
-    for (const toolRequest of toolRequests) {
+    const atomicPlan = planAtomicToolStep(toolRequests);
+    for (let toolIndex = 0; toolIndex < toolRequests.length; toolIndex += 1) {
+      const toolRequest = toolRequests[toolIndex];
+      if (atomicPlan.deferredIndexes.has(toolIndex)) {
+        const section = deferredAtomicToolSection(toolRequest);
+        toolResultSections.push(section);
+        if (inputData.json) {
+          writeJsonLine({
+            type: "code.tool.deferred",
+            ts: nowIso(),
+            tool: toolRequest.tool,
+            args: redactToolArgs(toolRequest),
+            reason: "atomic_tool_step",
+          });
+        }
+        continue;
+      }
       const stormVerdict = observeClientToolRequest(toolStorm, toolRequest);
       if (toolRequest.tool !== "update_plan") toolCallCount += 1;
       if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
@@ -315,7 +362,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         toolResult = {
           ok: false,
           tool: toolRequest.tool,
-          error: "Repeated identical tool request suppressed by Lynn CLI. Use a different tool, different arguments, or answer with the information already available.",
+          error: "Repeated identical tool request suppressed by Lynn CLI. No action was performed for this duplicate request.",
         };
         if (inputData.json) {
           writeJsonLine({ type: "code.tool.loop_guard", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest), repeats: stormVerdict.repeatCount });

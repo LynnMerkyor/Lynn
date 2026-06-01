@@ -314,7 +314,7 @@ export function renderCodeHeadlessHelp(): string {
     "  - 自动化调用只解析 --json / --jsonl,不要解析人类 TUI。",
     "  - 总是传 --cwd 或 --worktree。",
     "  - 交互式 ask 模式会逐次弹出授权;--approval yolo 只用于隔离 git worktree 的零逐条审批。",
-    "  - code.tool.ledger 是链式工具结果的 source-of-truth。",
+    "  - code.tool.ledger 记录每步工具观察,供上层调度和审计。",
     "  - code.task.finished.resumeCommand 存在时,按它继续。",
   ].join("\n");
 }

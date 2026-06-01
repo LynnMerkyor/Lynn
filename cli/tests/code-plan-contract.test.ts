@@ -23,7 +23,7 @@ describe("#3 checkPlanContract", () => {
     expect(result.message).toContain("writing tests");
     expect(result.message).toContain("update docs");
     expect(result.message).toContain("Plan contract incomplete");
-    expect(result.message).toContain("visible plan");
+    expect(result.message).toContain("Visible plan");
   });
 });
 
@@ -43,6 +43,6 @@ describe("#6 tool budget", () => {
     const verdict = checkToolBudget(12, 12, false);
     expect(verdict.overBudget).toBe(true);
     expect(verdict.message).toContain("Tool budget reached");
-    expect(verdict.message).toContain("Further tool requests are paused");
+    expect(verdict.message).toContain("Current verified state");
   });
 });
