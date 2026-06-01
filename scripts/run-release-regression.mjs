@@ -130,6 +130,7 @@ async function runStaticChecks({ level }) {
     "test:cli-pack",
     "test:cli-install",
     "test:cli-install:remote",
+    "test:cli-file-size",
     "test:cli-nightly",
     "test:cli-pty",
     "test:cli-terminal-app",
@@ -162,13 +163,14 @@ async function runStaticChecks({ level }) {
     "blocker",
     Boolean(pkg.scripts?.["release:preflight"]
       && pkg.scripts["release:preflight"].includes("test:cli")
+      && pkg.scripts["release:preflight"].includes("test:cli-file-size")
       && pkg.scripts["release:preflight"].includes("test:cli-pack")
       && pkg.scripts["release:preflight"].includes("test:cli-install")
       && pkg.scripts["release:preflight"].includes("stress:cli")
       && pkg.scripts["release:preflight"].includes("test:cli-pty")
       && pkg.scripts["release:preflight"].includes("test:cli-terminal-soak")
       && pkg.scripts["release:preflight"].includes("test:cli-fleet")),
-    "release:preflight runs CLI smoke, pack, install, stress, Terminal soak, and Fleet gates",
+    "release:preflight runs CLI file-size, smoke, pack, install, stress, Terminal soak, and Fleet gates",
     String(pkg.scripts?.["release:preflight"] || ""),
   ));
   checks.push(makeCheck(

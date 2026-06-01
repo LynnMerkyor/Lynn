@@ -394,6 +394,11 @@ describe('Router', () => {
     expect(end).toMatchObject({ name: 'web_search', ok: true });
     expect(end.summary).toContain('Zhipu summary');
     expect(end.summary).toContain('MiMo summary');
+    expect(end.details).toEqual(expect.arrayContaining([
+      expect.stringContaining('Zhipu summary'),
+      expect.stringContaining('[A](https://a.example)'),
+      expect.stringContaining('[B](https://b.example)'),
+    ]));
   });
 
   it('compacts older server tool results before subsequent provider rounds', async () => {

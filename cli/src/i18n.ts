@@ -90,6 +90,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/version 查看 Lynn CLI 本地版本和当前 Brain 路由\n" +
       "/model 查看 Brain 三段模型路由; /model stepfun|mimo|spark 切换 StepFun 3.7 Flash / MiMo V2.5 Pro / Spark Qwen 3.6 35B A3B\n" +
       "/memory 查看长期记忆; /memory add <事实> 保存长期事实; /memory forget <id> 删除\n" +
+      "/tool 查看最近工具详情; /tool <编号> 展开搜索来源/工具结果\n" +
       "/cwd 查看工作目录;默认是启动 Lynn 时终端所在目录,可先 cd 或用 --cwd 指定\n" +
       "/image <图片路径> [问题] 添加图片;也可以直接粘贴图片路径和多段文字\n" +
       "/setup 打开 CLI-only BYOK 三步向导\n" +
@@ -358,6 +359,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/version show the local Lynn CLI version and current Brain route\n" +
       "/model show the three Brain model choices; /model stepfun|mimo|spark switches StepFun 3.7 Flash / MiMo V2.5 Pro / Spark Qwen 3.6 35B A3B\n" +
       "/memory show durable memory; /memory add <fact> save a durable fact; /memory forget <id> delete\n" +
+      "/tool show recent tool details; /tool <id> expands search sources/tool output\n" +
       "/cwd show working directory; default is the terminal directory where Lynn started, use cd or --cwd to change\n" +
       "/image <image-path> [prompt] attach images; pasted image paths and multi-line text work too\n" +
       "/setup open the CLI-only BYOK three-step wizard\n" +

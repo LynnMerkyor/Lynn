@@ -4,7 +4,7 @@ import { BrainConnectionError, streamBrainChat, type BrainStreamEvent, type Chat
 import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
-import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
+import { formatBrainErrorForHuman, renderBrainEventForHuman, renderToolDetail, renderToolDetailsList, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { bold, dim, green, red, supportsColor } from "../terminal-style.js";
 import { renderStartupBanner } from "../startup.js";
 import { renderStatusBar } from "../status-bar.js";
@@ -31,6 +31,8 @@ export const CHAT_SLASH_COMMANDS = [
   "/exit",
   "/quit",
   "/help",
+  "/tool",
+  "/tools",
   "/version",
   "/about",
   "/fast",
@@ -81,6 +83,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   let memoryFrame = buildMemoryContextFrameSync(dataDir);
   const messages: ChatMessage[] = resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile), memoryFrame);
+  const brainRenderState: HumanBrainRenderState = {};
   const histFile = historyPath();
   const history = loadHistory(histFile);
   const rl = !input.isTTY
@@ -105,6 +108,15 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     if (text === "/exit" || text === "/quit") return "break";
     if (text === "/help") {
       output.write(`${t("chat.help")}\n\n`);
+      return "continue";
+    }
+    if (text === "/tool" || text === "/tools") {
+      output.write(`${renderToolDetailsList(brainRenderState, supportsColor(output))}\n\n`);
+      return "continue";
+    }
+    const toolDetailMatch = text.match(/^\/tool\s+(\d+)$/);
+    if (toolDetailMatch) {
+      output.write(`${renderToolDetail(brainRenderState, Number(toolDetailMatch[1]), supportsColor(output))}\n\n`);
       return "continue";
     }
     if (isLocalRuntimeQuestion(text)) {
@@ -239,7 +251,6 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
 
     let assistant = "";
     let latestUsage: string | null = null;
-    let renderState: HumanBrainRenderState = {};
     const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"));
     const renderReasoning = shouldRenderReasoning(reasoning.display, false);
     const color = supportsColor(output);
@@ -248,7 +259,6 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     for (let attempt = 1; attempt <= maxEmptyAttempts; attempt += 1) {
       assistant = "";
       latestUsage = null;
-      renderState = {};
       decodeTps = null;
       const md = new MarkdownStream((s) => output.write(s), color);
       const turnStarted = Date.now();
@@ -268,7 +278,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
             assistant += event.text;
           } else {
             if (event.type === "usage") latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - turnStarted });
-            renderChatEvent(event, renderReasoning, renderState, turnStarted);
+            renderChatEvent(event, renderReasoning, brainRenderState, turnStarted);
           }
         }
       } catch (error) {
@@ -290,7 +300,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     }
     messages.push({ role: "assistant", content: assistant });
     output.write(`\n${renderStatusBar({
-      model: renderState.provider ? modelDisplayName(renderState.provider) : t("status.chat.prefix"),
+      model: brainRenderState.provider ? modelDisplayName(brainRenderState.provider) : t("status.chat.prefix"),
       cwd: chatCwd,
       mode: renderMode(mode),
       reasoning: reasoning.effort,

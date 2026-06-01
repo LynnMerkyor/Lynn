@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../src/brain-render.js";
+import { formatBrainErrorForHuman, renderBrainEventForHuman, renderToolDetail, renderToolDetailsList, summarizeUsage, type HumanBrainRenderState } from "../src/brain-render.js";
 
 describe("brain render usage summary", () => {
   it("shows tokens, cache hit ratio, and TPS when usage timing is available", () => {
@@ -58,12 +58,23 @@ describe("renderBrainEventForHuman", () => {
 
     renderBrainEventForHuman({ type: "provider", activeProvider: "step-3.7-flash" }, state, stream);
     renderBrainEventForHuman({ type: "tool_progress", event: "start", name: "web_search" }, state, stream);
-    renderBrainEventForHuman({ type: "tool_progress", event: "end", name: "web_search", ok: true, ms: 5134, summary: "MiMo summary · Source A: fresh result" }, state, stream);
+    renderBrainEventForHuman({
+      type: "tool_progress",
+      event: "end",
+      name: "web_search",
+      ok: true,
+      ms: 5134,
+      summary: "MiMo summary · Source A: fresh result",
+      details: ["[Source A](https://a.example): fresh result"],
+    }, state, stream);
 
     expect(output).toContain("│ • route: StepFun 3.7 Flash");
     expect(output).toContain("│ 🔧 🔎 web_search · running");
     expect(output).toContain("│ ✓ 🔎 web_search · done 5.1s");
     expect(output).toContain("│   MiMo summary · Source A: fresh result");
+    expect(output).toContain("│   details: /tool 1");
+    expect(renderToolDetailsList(state, false)).toContain("/tool 1");
+    expect(renderToolDetail(state, 1, false)).toContain("Source A (https://a.example)");
     expect(output).not.toContain("server tool:");
     for (const line of output.split("\n").filter(Boolean)) {
       expect((line.match(/│/g) || []).length).toBeLessThanOrEqual(1);

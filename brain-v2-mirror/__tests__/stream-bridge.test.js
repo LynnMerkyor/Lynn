@@ -74,11 +74,11 @@ describe('stream-bridge SSE emitter', () => {
   it('forwards tool progress summaries', () => {
     const res = makeMockRes();
     const e = makeSSEEmitter(res, { id: 'x' });
-    e.emitChunk({ type: 'tool_progress', event: 'end', name: 'web_search', ms: 120, ok: true, summary: 'MiMo summary' });
+    e.emitChunk({ type: 'tool_progress', event: 'end', name: 'web_search', ms: 120, ok: true, summary: 'MiMo summary', details: ['[Source](https://example.test): snippet'] });
     const ev = parseSSEWrites(res.writes)[0];
     expect(ev).toMatchObject({
       object: 'lynn.tool_progress',
-      tool_progress: { event: 'end', name: 'web_search', ms: 120, ok: true, summary: 'MiMo summary' },
+      tool_progress: { event: 'end', name: 'web_search', ms: 120, ok: true, summary: 'MiMo summary', details: ['[Source](https://example.test): snippet'] },
     });
   });
 

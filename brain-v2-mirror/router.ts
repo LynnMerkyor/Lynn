@@ -117,12 +117,12 @@ function parseJsonObject(raw: string): Record<string, unknown> | null {
   }
 }
 
-function summarizeToolResult(toolName: string, result: unknown): string | undefined {
+function summarizeToolResult(toolName: string, result: unknown): { summary?: string; details?: string[] } {
   const raw = typeof result === 'string' ? result : JSON.stringify(result);
-  if (!raw || !raw.trim()) return undefined;
+  if (!raw || !raw.trim()) return {};
 
   const parsed = parseJsonObject(raw);
-  if (parsed?.error) return compactText('error: ' + String(parsed.error), 180);
+  if (parsed?.error) return { summary: compactText('error: ' + String(parsed.error), 180), details: [compactText(raw, 500)] };
 
   const lines = raw
     .split(/\r?\n/)
@@ -137,14 +137,24 @@ function summarizeToolResult(toolName: string, result: unknown): string | undefi
       .filter(Boolean);
     const citations = lines
       .filter((line) => /^\[[^\]]+\]\([^)]+\):/.test(line))
+      .filter(Boolean);
+    const citationSummaries = citations
       .map((line) => line.replace(/^\[([^\]]+)\]\([^)]+\):\s*/, '$1: '))
       .filter(Boolean);
-    const picked = [...summaries.slice(0, 2), ...citations.slice(0, 2)];
-    if (picked.length) return compactText(picked.join(' · '));
+    const picked = [...summaries.slice(0, 2), ...citationSummaries.slice(0, 2)];
+    if (picked.length) {
+      return {
+        summary: compactText(picked.join(' · ')),
+        details: [...summaries.map((line) => '摘要: ' + line), ...citations].slice(0, 8).map((line) => compactText(line, 500)),
+      };
+    }
   }
 
   const firstMeaningful = lines.find((line) => !line.startsWith('{')) || raw;
-  return compactText(firstMeaningful, 180);
+  return {
+    summary: compactText(firstMeaningful, 180),
+    details: lines.slice(0, 6).map((line) => compactText(line, 500)),
+  };
 }
 
 function formatToolResultContent(toolName: string, result: unknown, stepIndex: number): string {
@@ -433,8 +443,9 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       const toolResult = await executeServerTool(tc.function.name, tc.function.arguments || '{}', { log });
       const ms = Date.now() - t0;
       const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
+      const toolSummary = summarizeToolResult(tc.function.name, toolResult);
       await onChunk(
-        { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok, summary: summarizeToolResult(tc.function.name, toolResult) },
+        { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok, ...toolSummary },
         { providerId: lastProviderId }
       );
       workingMessages.push({

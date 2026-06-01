@@ -45,7 +45,7 @@ export type BrainStreamEvent =
   | { type: "reasoning.delta"; text: string; hidden?: boolean }
   | { type: "tool_call.delta"; index: number; id?: string; name?: string; arguments?: string }
   | { type: "provider"; activeProvider: string; fallbackFrom?: Array<{ id: string; reason?: string }> }
-  | { type: "tool_progress"; event: string; name: string; ms?: number; ok?: boolean; summary?: string }
+  | { type: "tool_progress"; event: string; name: string; ms?: number; ok?: boolean; summary?: string; details?: string[] }
   | { type: "brain.error"; error: string; code?: string }
   | { type: "usage"; usage: unknown }
   | { type: "done"; finishReason?: string | null };
@@ -124,7 +124,7 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
   const parsed = JSON.parse(payload) as {
     object?: string;
     meta?: { active_provider?: unknown; fallback_from?: unknown };
-    tool_progress?: { event?: unknown; name?: unknown; ms?: unknown; ok?: unknown; summary?: unknown };
+    tool_progress?: { event?: unknown; name?: unknown; ms?: unknown; ok?: unknown; summary?: unknown; details?: unknown };
     error?: unknown;
     code?: unknown;
     choices?: Array<{
@@ -167,6 +167,7 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
         ms: typeof progress.ms === "number" ? progress.ms : undefined,
         ok: typeof progress.ok === "boolean" ? progress.ok : undefined,
         summary: typeof progress.summary === "string" && progress.summary ? progress.summary : undefined,
+        details: Array.isArray(progress.details) ? progress.details.filter((line): line is string => typeof line === "string" && !!line.trim()) : undefined,
       });
     }
   }

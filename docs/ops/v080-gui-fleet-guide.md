@@ -25,8 +25,9 @@ a terminal; the GUI makes "five CLIs at once" a controlled engineering workflow.
   Copy logs.
 - **CLI runtime status line** - the Node runtime the GUI uses to run workers
   (reused bundled Node, or Electron-as-node). Zero terminal setup, zero download.
-- **Runner line** - each card shows whether the worker is a stub or really spawned
-  (via bundled Node / Electron-as-node), with the pid.
+- **Runner line** - each card shows the real worker runtime (bundled Node /
+  Electron-as-node), pid, and whether a fallback stub was used because no CLI
+  runtime could be resolved.
 - **Visual result** - MiMo vision workers (see / ground / ui2code) show their image
   path, task type, and result text (an "unstructured preview" until a structured
   grounding event lands - see the schema request).
@@ -39,9 +40,9 @@ The GUI never assumes `lynn` is on the user's PATH. It resolves a runtime via th
 CliEnvManager (`desktop/cli-env-manager.cjs`): the real bundled Node on mac/linux,
 Electron-as-node otherwise (always available). `getWorkerSpawnCommand()` returns the
 exact `{ command, args, env }` used to spawn `lynn worker run --jsonl` from the
-bundled CLI. The FleetHub really spawns when a CLI runtime is resolvable, and falls
-back to a stub broadcast (shown as "stub - CLI bundle pending" on the runner line)
-otherwise.
+bundled CLI. The normal path is a real `lynn worker run --jsonl` process. A stub
+broadcast is only an explicit fallback when no CLI runtime can be resolved; the
+runner line makes that visible instead of silently pretending a worker ran.
 
 ## Acceptance checklist (operator POV)
 
@@ -55,8 +56,8 @@ Open the app, then:
 - [ ] "Collapse all" / "Expand all" toggles every card.
 - [ ] Attention sort: blocked / failed / review cards float to the top.
 - [ ] Click a changed file -> the diff drawer expands (colorized +/-).
-- [ ] Each card shows a runner line ("stub - CLI bundle pending", or "spawned via
-      bundled Node / Electron-as-node" with a pid).
+- [ ] Each card shows a runner line ("spawned via bundled Node / Electron-as-node"
+      with a pid, or an explicit fallback-stub warning if the runtime is missing).
 - [ ] A MiMo vision task (see / ground / ui2code) shows its image path + task type and
       a "visual result" block (unstructured preview until the structured event lands).
 - [ ] Cancel one worker -> card goes to "cancelled".

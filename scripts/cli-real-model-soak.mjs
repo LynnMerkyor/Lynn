@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const cliEntry = path.join(root, "cli", "bin", "lynn.mjs");
 const timeoutMs = numberEnv("LYNN_CLI_REAL_TIMEOUT_MS", 60_000);
-const serialTurns = numberEnv("LYNN_CLI_REAL_TURNS", 4);
+const serialTurns = numberEnv("LYNN_CLI_REAL_TURNS", 6);
 const parallelTurns = numberEnv("LYNN_CLI_REAL_PARALLEL", 2, 0);
 const runInteractive = process.env.LYNN_CLI_REAL_INTERACTIVE !== "0";
 const brainUrl = argValue("--brain-url") || process.env.LYNN_CLI_REAL_BRAIN_URL || "";
@@ -58,6 +58,16 @@ async function runHeadlessCases() {
       name: "prompt-headless-doc",
       args: ["-p", "用一句话说明 Lynn CLI 的 -p 无交互模式", "--reasoning", "off"],
       expect: /(-p|无交互|非交互|print|headless)/i,
+    },
+    {
+      name: "prompt-chain-arithmetic",
+      args: ["-p", "AAPL 股价假设为 195.30 美元,请计算 100 股市值。只输出 19530 或 19,530。", "--reasoning", "off"],
+      expect: /(19,?530|19530)/i,
+    },
+    {
+      name: "prompt-chain-search-awareness",
+      args: ["-p", "如果需要实时资料,请先使用工具结果,再用一句话回答: Lynn CLI 是什么?", "--reasoning", "off"],
+      expect: /(Lynn|CLI|终端|command|terminal)/i,
     },
     {
       name: "code-headless-json",
