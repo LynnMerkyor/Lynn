@@ -77,10 +77,11 @@ describe("code tools", () => {
     expect(globToRegExp("**/*.ts").test("src/hello.ts")).toBe(true);
   });
 
-  it("requires yolo approval for writes and bash", async () => {
+  it("requires yolo approval for writes and arbitrary bash", async () => {
     await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "write_file", path: "out.txt", text: "x" })).rejects.toThrow("approval yolo");
     await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "apply_patch", text: "diff --git a/x b/x\n" })).rejects.toThrow("approval yolo");
-    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "bash", command: "pwd" })).rejects.toThrow("approval yolo");
+    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "bash", command: "pwd" })).resolves.toMatchObject({ ok: true, tool: "bash" });
+    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "bash", command: "git status" })).rejects.toThrow("requires YOLO approval");
   });
 
   it("blocks dangerous tools in read-only sandbox even with yolo approval", async () => {

@@ -28,6 +28,7 @@ import { prepareCodeTaskInput } from "../code-input.js";
 import { resolveDefaultBrainUrl } from "../brain-url.js";
 import { isLocalRuntimeQuestion, localeForText, renderLocalRuntimeAnswer } from "../runtime-answer.js";
 import { renderPlanCard } from "../terminal-spinner.js";
+import { isLocalExitText, parseLocalReadOnlyCommand, renderLocalReadOnlyBlocked, renderLocalReadOnlyResult, runLocalReadOnlyCommand } from "../local-command.js";
 import {
   assistantToolCallsForMessages,
   codeToolDefinitions,
@@ -321,6 +322,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   const mode = await resolveCodeMode(args);
   let reasoning = parseReasoningOptions(args);
   let cliProvider = await resolveCliProviderProfile(args);
+  const interactiveCwd = getStringFlag(args.flags, "cwd") || process.cwd();
   output.write(renderCodeIntro(mode, reasoning, { color: supportsColor(output), modelLabel: codeRouteLabel(false, cliProvider?.profile) }));
   const histFile = historyPath();
   const history = loadHistory(histFile);
@@ -367,9 +369,9 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       if (raw === null) break;
       const text = normalizeSlashInput(raw.trim());
       if (!text) continue;
+      if (isLocalExitText(text)) break;
       history.push(text);
       appendHistory(text, histFile);
-      if (text === "/exit" || text === "/quit") break;
       if (text === "/help") {
         output.write(`${t("code.help")}\n\n`);
         continue;
@@ -506,6 +508,16 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       }
       if (text.startsWith("/providers ") || text.startsWith("/byok ")) {
         output.write(`${t("chat.providers.usage")}\n\n`);
+        continue;
+      }
+      const localReadOnly = parseLocalReadOnlyCommand(text, interactiveCwd);
+      if (localReadOnly?.kind === "blocked") {
+        output.write(`${renderLocalReadOnlyBlocked(localReadOnly, output)}\n\n`);
+        continue;
+      }
+      if (localReadOnly?.kind === "command") {
+        const result = await runLocalReadOnlyCommand(localReadOnly.command);
+        output.write(`${renderLocalReadOnlyResult(localReadOnly.command, result, output)}\n\n`);
         continue;
       }
       if (text.startsWith("/")) {
