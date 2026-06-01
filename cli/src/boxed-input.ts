@@ -22,7 +22,7 @@ export interface BoxedInputOptions {
 export interface BoxRender {
   top: string;
   inputLine: string;
-  paletteLine?: string;
+  paletteLines: string[];
   bottom: string;
   cursorCol: number;
   rowsBelowInput: number;
@@ -82,7 +82,6 @@ function slashCommandLabel(command: string): string {
     case "/help":
       return t("slash.label.help");
     case "/exit":
-    case "/quit":
       return t("slash.label.exit");
     case "/tools":
       return t("slash.label.tools");
@@ -97,10 +96,52 @@ function slashCommandLabel(command: string): string {
   }
 }
 
-function renderSlashPalette(input: string, commands: string[] | undefined, maxWidth: number, color: boolean): string | null {
+function visibleCompletions(commands: string[]): string[] {
+  return commands.filter((command) => command !== "/quit" && command !== "/tool");
+}
+
+function renderSlashPalette(input: string, commands: string[] | undefined, maxWidth: number, color: boolean): string[] {
   const normalized = normalizeSlashInput(input);
-  if (!commands?.length || !normalized.startsWith("/") || normalized.includes("\n")) return null;
-  const completion = completeSlash(normalized, commands);
+  const visible = commands?.length ? visibleCompletions(commands) : [];
+  if (!visible.length || !normalized.startsWith("/") || normalized.includes("\n")) return [];
+  const completion = completeSlash(normalized, visible);
+  if (!completion.matches.length) return [yellow(t("slash.unknown"), color)];
+
+  const rows: string[] = [];
+  const shown = completion.matches.slice(0, 6);
+  for (let i = 0; i < shown.length; i += 1) {
+    const command = shown[i];
+    const label = slashCommandLabel(command);
+    const prefix = dim(`${i + 1}.`, color);
+    const row = `${prefix} ${brightCyan(command, color)}${label ? dim(`  ${label}`, color) : ""}`;
+    rows.push(truncateToWidth(row, maxWidth));
+  }
+  const remaining = completion.matches.length - shown.length;
+  if (remaining > 0) rows.push(dim(`+${remaining} more`, color));
+  return rows;
+}
+
+function renderSlashHint(input: string, commands: string[] | undefined, maxWidth: number, color: boolean): string {
+  const normalized = normalizeSlashInput(input);
+  const visible = commands?.length ? visibleCompletions(commands) : [];
+  if (!visible.length || !normalized.startsWith("/") || normalized.includes("\n")) return "";
+  const completion = completeSlash(normalized, visible);
+  if (!completion.matches.length) return "";
+  const suffix = completion.completed.length > normalized.length ? completion.completed.slice(normalized.length) : "";
+  if (suffix) return dim(truncateToWidth(suffix, maxWidth), color);
+  if (completion.matches.length === 1) {
+    const command = completion.matches[0];
+    const label = slashCommandLabel(command);
+    return dim(truncateToWidth(label ? ` ${label}` : "", maxWidth), color);
+  }
+  return "";
+}
+
+function renderLegacyHorizontalSlashPalette(input: string, commands: string[] | undefined, maxWidth: number, color: boolean): string | null {
+  const normalized = normalizeSlashInput(input);
+  const visible = commands?.length ? visibleCompletions(commands) : [];
+  if (!visible.length || !normalized.startsWith("/") || normalized.includes("\n")) return null;
+  const completion = completeSlash(normalized, visible);
   if (!completion.matches.length) return yellow(t("slash.unknown"), color);
 
   const pieces: string[] = [];
@@ -134,6 +175,7 @@ export function renderInputBox(opts: {
   const textArea = w - 6;
   const collapsed = summarizeInputForBox(buffer);
   const renderBuffer = collapsed || buffer;
+  const slashHint = collapsed ? "" : renderSlashHint(buffer, opts.completions, Math.max(0, textArea - visibleLength(buffer)), color);
   const chars = Array.from(renderBuffer);
 
   const starts: number[] = [];
@@ -142,7 +184,8 @@ export function renderInputBox(opts: {
     starts.push(acc);
     acc += charWidth(ch);
   }
-  const totalCols = acc;
+  const hintCols = visibleLength(slashHint);
+  const totalCols = acc + hintCols;
   let beforeCursor = 0;
   const renderCursor = collapsed ? chars.length : cursor;
   for (let i = 0; i < renderCursor && i < chars.length; i += 1) beforeCursor += charWidth(chars[i]);
@@ -166,9 +209,13 @@ export function renderInputBox(opts: {
       const c0 = starts[i];
       const cw = charWidth(chars[i]);
       if (c0 < winStart) continue;
-      if (c0 - winStart + cw > textArea) break;
+      if (c0 - winStart + cw > textArea - hintCols) break;
       visibleText += chars[i];
       used += cw;
+    }
+    if (slashHint && used + hintCols <= textArea) {
+      visibleText += slashHint;
+      used += hintCols;
     }
   }
   const pad = " ".repeat(Math.max(0, textArea - used));
@@ -177,17 +224,17 @@ export function renderInputBox(opts: {
   const right = ` ${dim("│", color)}`;
   const inputLine = `${left}${visibleText}${pad}${right}`;
   const cursorCol = 4 + (empty ? 0 : beforeCursor - winStart);
-  const palette = collapsed ? null : renderSlashPalette(buffer, opts.completions, textArea, color);
-  const paletteLine = palette
-    ? `${dim("│", color)}   ${palette}${" ".repeat(Math.max(0, textArea - visibleLength(palette)))} ${dim("│", color)}`
-    : undefined;
+  const palette = collapsed ? [] : renderSlashPalette(buffer, opts.completions, textArea, color);
+  const paletteLines = palette.map((row) => {
+    return `${dim("│", color)}   ${row}${" ".repeat(Math.max(0, textArea - visibleLength(row)))} ${dim("│", color)}`;
+  });
 
   const rawLabel = ` ${truncateToWidth(status, w - 7)} `;
   const fill = Math.max(2, w - 3 - visibleLength(rawLabel));
   const top = `${dim("╭─", color)}${bold(rawLabel, color)}${dim("─".repeat(fill) + "╮", color)}`;
   const bottom = dim(`╰${"─".repeat(w - 2)}╯`, color);
 
-  return { top, inputLine, paletteLine, bottom, cursorCol, rowsBelowInput: paletteLine ? 2 : 1 };
+  return { top, inputLine, paletteLines, bottom, cursorCol, rowsBelowInput: 1 + paletteLines.length };
 }
 
 export async function readBoxedInputLine(options: BoxedInputOptions = {}): Promise<string | null> {
@@ -223,7 +270,7 @@ export async function readBoxedInputLine(options: BoxedInputOptions = {}): Promi
     if (painted && clear) output.write(`${ESC}[1A\r${ESC}[J`);
     else output.write("\r");
     output.write(`${r.top}\r\n${r.inputLine}\r\n`);
-    if (r.paletteLine) output.write(`${r.paletteLine}\r\n`);
+    for (const line of r.paletteLines) output.write(`${line}\r\n`);
     output.write(r.bottom);
     output.write(`${ESC}[${r.rowsBelowInput}A\r${toCol(r.cursorCol)}`);
     rowsBelowInput = r.rowsBelowInput;

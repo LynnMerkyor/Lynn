@@ -88,13 +88,18 @@ describe("renderInputBox", () => {
   });
 
   it("shows slash command recommendations inside the frame", () => {
-    const r = box({ buffer: "/", cursor: 1, completions: ["/help", "/model", "/yolo", "/ask"], width: 82 });
+    const r = box({ buffer: "/", cursor: 1, completions: ["/exit", "/quit", "/help", "/tool", "/tools", "/model", "/yolo", "/ask"], width: 82 });
 
-    expect(r.rowsBelowInput).toBe(2);
-    expect(stripAnsi(r.paletteLine || "")).toContain("/model");
-    expect(stripAnsi(r.paletteLine || "")).toContain("/yolo");
-    expect(stripAnsi(r.paletteLine || "")).toContain("静默工厂");
-    expect(visibleLength(stripAnsi(r.paletteLine || ""))).toBe(visibleLength(stripAnsi(r.top)));
+    expect(r.rowsBelowInput).toBeGreaterThan(2);
+    const palette = stripAnsi(r.paletteLines.join("\n"));
+    expect(palette).toContain("1. /exit");
+    expect(palette).toContain("/model");
+    expect(palette).toContain("/yolo");
+    expect(palette).toContain("/tools");
+    expect(palette).toContain("静默工厂");
+    expect(palette).not.toContain("/quit");
+    expect(palette).not.toContain("/tool  ");
+    for (const line of r.paletteLines) expect(visibleLength(stripAnsi(line))).toBe(visibleLength(stripAnsi(r.top)));
   });
 
   it("shows an unknown slash guard without disturbing normal input height", () => {
@@ -102,8 +107,8 @@ describe("renderInputBox", () => {
     const normal = box({ buffer: "hello", cursor: 5, completions: ["/help", "/model"], width: 72 });
 
     expect(r.rowsBelowInput).toBe(2);
-    expect(stripAnsi(r.paletteLine || "")).toContain("未知命令");
-    expect(normal.paletteLine).toBeUndefined();
+    expect(stripAnsi(r.paletteLines[0] || "")).toContain("未知命令");
+    expect(normal.paletteLines).toEqual([]);
     expect(normal.rowsBelowInput).toBe(1);
   });
 });
