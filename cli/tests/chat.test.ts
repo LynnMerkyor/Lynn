@@ -408,6 +408,110 @@ describe("chat mode controls", () => {
     expect(parsed.messages?.at(-1)).toMatchObject({ role: "user", content: "hi" });
   });
 
+  it("lets ordinary chat execute safe local tools and feed exact results back to the model", async () => {
+    const targetCwd = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-chat-tool-loop-"));
+    const requestBodies: unknown[] = [];
+    let requests = 0;
+    await fs.writeFile(path.join(targetCwd, "alpha.txt"), "alpha", "utf8");
+
+    const provider = http.createServer((request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      expect(request.headers.authorization).toBe("Bearer sk-chat-tool");
+      let body = "";
+      request.on("data", (chunk) => {
+        body += String(chunk);
+      });
+      request.on("end", () => {
+        requests += 1;
+        requestBodies.push(JSON.parse(body));
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        if (requests === 1) {
+          response.end([
+            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_ls","type":"function","function":{"name":"bash","arguments":"{\\"command\\":\\"ls\\"}"}}]}}]}',
+            "",
+            'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+            "",
+            "data: [DONE]",
+            "",
+          ].join("\n"));
+          return;
+        }
+
+        response.end([
+          'data: {"choices":[{"delta":{"content":"I saw alpha.txt from the local tool result."}}]}',
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    try {
+      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+        const child = spawn(process.execPath, [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "chat",
+          "--cwd",
+          targetCwd,
+          "--brain-url",
+          "http://127.0.0.1:1",
+          "--base-url",
+          `http://127.0.0.1:${address.port}/v1`,
+          "--api-key",
+          "sk-chat-tool",
+          "--model",
+          "chat-tool-model",
+        ], {
+          cwd: cliRoot,
+          env: { ...process.env, NO_COLOR: "1", LYNN_LANG: "en" },
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+        let stdout = "";
+        let stderr = "";
+        const timer = setTimeout(() => {
+          child.kill();
+          reject(new Error("interactive chat tool loop did not exit"));
+        }, 8000);
+        child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+        child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+        child.on("error", reject);
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          resolve({ code, stdout, stderr });
+        });
+        child.stdin.write("list the files with a local tool\n/exit\n");
+        child.stdin.end();
+      });
+
+      expect(result.code).toBe(0);
+      expect(requests).toBe(2);
+      expect(result.stdout).toContain("I saw alpha.txt");
+      expect(result.stderr).toContain("bash");
+      expect(result.stderr).toContain("done");
+
+      const first = requestBodies[0] as { tools?: unknown[]; tool_choice?: string; messages?: Array<{ role?: string; content?: unknown }> };
+      expect(first.tool_choice).toBe("auto");
+      expect(first.tools).toEqual(expect.arrayContaining([
+        expect.objectContaining({ function: expect.objectContaining({ name: "bash" }) }),
+      ]));
+      expect(first.messages?.at(-1)).toMatchObject({ role: "user", content: "list the files with a local tool" });
+
+      const second = requestBodies[1] as { messages?: Array<{ role?: string; content?: unknown; tool_call_id?: string; tool_calls?: unknown[] }> };
+      const toolMessage = second.messages?.find((message) => message.role === "tool");
+      expect(toolMessage).toMatchObject({ tool_call_id: "call_ls" });
+      expect(String(toolMessage?.content)).toContain("alpha.txt");
+      expect(second.messages?.some((message) => message.role === "assistant" && Array.isArray(message.tool_calls))).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+      await fs.rm(targetCwd, { recursive: true, force: true });
+    }
+  });
+
   it("retries an interactive chat turn once when Brain returns an empty visible answer", async () => {
     let requests = 0;
     const provider = http.createServer((request, response) => {

@@ -206,6 +206,11 @@ export async function runCode(args: ParsedArgs): Promise<number> {
 
   const toolCwd = cwd(args);
   const toolMode = await resolveCodeMode(args);
+  const toolArgsForApproval = {
+    path: getStringFlag(args.flags, "path") || undefined,
+    text: getStringFlag(args.flags, "text", "content") || args.positionals.join(" ") || undefined,
+    command: getStringFlag(args.flags, "command") || args.positionals.join(" ") || undefined,
+  };
   const toolApproval = await resolveToolApproval({
     tool,
     approval: toolMode.approval,
@@ -213,11 +218,8 @@ export async function runCode(args: ParsedArgs): Promise<number> {
     json,
     input,
     output: errorOutput,
-    preview: formatDangerousToolPreview(tool, {
-      path: getStringFlag(args.flags, "path") || undefined,
-      text: getStringFlag(args.flags, "text", "content") || args.positionals.join(" ") || undefined,
-      command: getStringFlag(args.flags, "command") || args.positionals.join(" ") || undefined,
-    }, supportsColor(errorOutput)),
+    preview: formatDangerousToolPreview(tool, toolArgsForApproval, supportsColor(errorOutput)),
+    args: toolArgsForApproval,
   });
   const result = await runClientTool(
     { cwd: toolCwd, approval: toolApproval, sandbox: toolMode.sandbox, timeoutMs: timeoutMs(args) },

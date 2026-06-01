@@ -29,6 +29,10 @@ import { createDecodeSpeedTracker } from "../decode-speed.js";
 import { createRuntimeMetrics, recordDecodeTps, recordUsageMetrics, renderRuntimeMetrics } from "../runtime-metrics.js";
 import { compactChatMessages } from "../chat-compaction.js";
 import { isLocalExitText, parseLocalReadOnlyCommand, renderLocalReadOnlyBlocked, renderLocalReadOnlyResult, runLocalReadOnlyCommand } from "../local-command.js";
+import { assistantToolCallsForMessages, codeToolDefinitions, createStreamingToolCallAccumulator, parseCodeToolRequests, toolRequestsFromCollectedCalls, type CodeToolRequest } from "../code-tool-protocol.js";
+import { formatDangerousToolPreview, renderClientToolResult, renderClientToolStart, resolveToolApproval } from "../code-tool-render.js";
+import { runClientTool } from "../tools/registry.js";
+import type { ClientToolResult } from "../tools/types.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/yolo",
@@ -69,6 +73,8 @@ export const CHAT_SLASH_COMMANDS = [
   "/byok unset",
   "/clear",
 ];
+
+const CHAT_MAX_TOOL_STEPS = 20;
 
 export function completeChatInput(line: string): [string[], string] {
   const result = completeSlash(line, CHAT_SLASH_COMMANDS);
@@ -274,7 +280,6 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       return "continue";
     }
 
-    let assistant = "";
     let latestUsage: string | null = null;
     const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"), {
       danger: mode.approval === "yolo" || mode.sandbox === "danger-full-access",
@@ -283,33 +288,66 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     const color = supportsColor(output);
     const maxEmptyAttempts = 3;
     let decodeTps: string | null = null;
+    let finalAssistant = "";
     for (let attempt = 1; attempt <= maxEmptyAttempts; attempt += 1) {
-      assistant = "";
       latestUsage = null;
       decodeTps = null;
-      const md = new MarkdownStream((s) => output.write(s), color);
-      const turnStarted = Date.now();
-      const decodeTracker = createDecodeSpeedTracker(turnStarted);
+      let toolSteps = 0;
+      let attemptHadToolCalls = false;
       try {
-        spinner.start();
-        for await (const event of streamBrainChat({ brainUrl, messages, reasoning, fallbackProvider: cliProvider?.profile })) {
-          if (eventWritesHumanOutput(event, renderReasoning)) {
-            spinner.stop();
+        for (;;) {
+          const round = await streamChatModelRound({
+            brainUrl,
+            messages,
+            reasoning,
+            cliProvider,
+            renderReasoning,
+            brainRenderState,
+            runtimeMetrics,
+            spinner,
+            color,
+          });
+          latestUsage = round.latestUsage || latestUsage;
+          decodeTps = round.decodeTps || decodeTps;
+          const requests = round.toolRequests;
+          if (!requests.length) {
+            finalAssistant = round.assistant;
+            break;
           }
-          if (event.type === "brain.error") {
-            throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
-          }
-          if (event.type === "assistant.delta") {
-            md.push(event.text);
-            decodeTps = decodeTracker.add(event.text) || decodeTps;
-            assistant += event.text;
+          attemptHadToolCalls = true;
+          if (round.structuredToolCalls) {
+            messages.push({
+              role: "assistant",
+              content: round.assistant,
+              tool_calls: assistantToolCallsForMessages(requests),
+            });
           } else {
-            if (event.type === "usage") {
-              latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - turnStarted });
-              recordUsageMetrics(runtimeMetrics, event.usage);
+            messages.push({ role: "assistant", content: round.assistant });
+          }
+          const fallbackSections: string[] = [];
+          for (const request of requests) {
+            toolSteps += 1;
+            if (toolSteps > CHAT_MAX_TOOL_STEPS) {
+              const message = `Lynn chat stopped after ${CHAT_MAX_TOOL_STEPS} local tool steps. Try narrowing the request or use Lynn code for a long-running task.`;
+              messages.push({ role: "user", content: message });
+              output.write(`\n${red(message, color)}\n\n`);
+              return "continue";
             }
-            renderChatEvent(event, renderReasoning, brainRenderState, turnStarted);
-            if (shouldResumeWaitingSpinner(event)) spinner.start();
+            const result = await runChatClientTool(request);
+            const section = formatChatClientToolSection(request, result);
+            if (round.structuredToolCalls) {
+              messages.push({
+                role: "tool",
+                tool_call_id: request.toolCallId,
+                name: request.tool,
+                content: section,
+              });
+            } else {
+              fallbackSections.push(section);
+            }
+          }
+          if (!round.structuredToolCalls && fallbackSections.length) {
+            messages.push({ role: "user", content: `${fallbackSections.join("\n\n")}\nContinue from these tool results.` });
           }
         }
       } catch (error) {
@@ -320,16 +358,16 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       } finally {
         spinner.stop();
       }
-      md.end();
-      if (assistant.trim()) break;
+      if (finalAssistant.trim()) break;
+      if (attemptHadToolCalls) break;
       if (attempt < maxEmptyAttempts) output.write(`\n${dim(t("prompt.empty.retry"), color)}\n\n`);
     }
-    if (!assistant.trim()) {
+    if (!finalAssistant.trim()) {
       messages.pop();
       output.write(`${red(t("prompt.empty"), color)}\n\n`);
       return "continue";
     }
-    messages.push({ role: "assistant", content: assistant });
+    messages.push({ role: "assistant", content: finalAssistant });
     renderChatCompaction(compactChatMessages(messages));
     recordDecodeTps(runtimeMetrics, decodeTps);
     output.write(`\n${renderStatusBar({
@@ -343,6 +381,108 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       color,
     })}\n\n`);
     return "continue";
+  }
+
+  async function streamChatModelRound(inputData: {
+    brainUrl: string;
+    messages: ChatMessage[];
+    reasoning: typeof reasoning;
+    cliProvider: typeof cliProvider;
+    renderReasoning: boolean;
+    brainRenderState: HumanBrainRenderState;
+    runtimeMetrics: ReturnType<typeof createRuntimeMetrics>;
+    spinner: TerminalSpinner;
+    color: boolean;
+  }): Promise<{ assistant: string; toolRequests: CodeToolRequest[]; structuredToolCalls: boolean; latestUsage: string | null; decodeTps: string | null }> {
+    let assistant = "";
+    let latestUsage: string | null = null;
+    let decodeTps: string | null = null;
+    const md = new MarkdownStream((s) => output.write(s), inputData.color);
+    const turnStarted = Date.now();
+    const decodeTracker = createDecodeSpeedTracker(turnStarted);
+    const toolAccumulator = createStreamingToolCallAccumulator();
+    try {
+      inputData.spinner.start();
+      for await (const event of streamBrainChat({
+        brainUrl: inputData.brainUrl,
+        messages: inputData.messages,
+        reasoning: inputData.reasoning,
+        fallbackProvider: inputData.cliProvider?.profile,
+        tools: codeToolDefinitions(),
+      })) {
+        if (event.type === "tool_call.delta") {
+          toolAccumulator.append(event);
+          continue;
+        }
+        if (eventWritesHumanOutput(event, inputData.renderReasoning)) {
+          inputData.spinner.stop();
+        }
+        if (event.type === "brain.error") {
+          throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
+        }
+        if (event.type === "assistant.delta") {
+          md.push(event.text);
+          decodeTps = decodeTracker.add(event.text) || decodeTps;
+          assistant += event.text;
+        } else {
+          if (event.type === "usage") {
+            latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - turnStarted });
+            recordUsageMetrics(inputData.runtimeMetrics, event.usage);
+          }
+          renderChatEvent(event, inputData.renderReasoning, inputData.brainRenderState, turnStarted);
+          if (shouldResumeWaitingSpinner(event)) inputData.spinner.start();
+        }
+      }
+    } finally {
+      inputData.spinner.stop();
+      md.end();
+    }
+    const structuredRequests = toolRequestsFromCollectedCalls(toolAccumulator.toToolCalls(), 0);
+    if (structuredRequests.length) {
+      return { assistant, toolRequests: structuredRequests, structuredToolCalls: true, latestUsage, decodeTps };
+    }
+    return { assistant, toolRequests: parseCodeToolRequests(assistant), structuredToolCalls: false, latestUsage, decodeTps };
+  }
+
+  async function runChatClientTool(request: CodeToolRequest): Promise<ClientToolResult> {
+    const preview = formatDangerousToolPreview(request.tool, request.args, supportsColor(output));
+    renderClientToolStart(request, process.stderr);
+    try {
+      const effectiveApproval = await resolveToolApproval({
+        tool: request.tool,
+        approval: mode.approval,
+        cwd: chatCwd,
+        json: false,
+        input,
+        output,
+        preview,
+        args: request.args,
+      });
+      const result = await runClientTool({ cwd: chatCwd, approval: effectiveApproval, sandbox: mode.sandbox }, {
+        name: request.tool,
+        ...request.args,
+      });
+      renderClientToolResult(result, process.stderr, request);
+      return result;
+    } catch (error) {
+      const result: ClientToolResult = {
+        ok: false,
+        tool: request.tool,
+        error: error instanceof Error ? error.message : String(error),
+      };
+      renderClientToolResult(result, process.stderr, request);
+      return result;
+    }
+  }
+
+  function formatChatClientToolSection(request: CodeToolRequest, result: ClientToolResult): string {
+    const body = result.ok
+      ? JSON.stringify(result.output ?? {}, null, 2)
+      : `ERROR: ${result.error || "tool failed"}`;
+    return [
+      `Tool result for ${request.tool}:`,
+      compactToolResultBody(body),
+    ].join("\n");
   }
 
   function renderChatCompaction(result: ReturnType<typeof compactChatMessages>): void {
@@ -392,6 +532,11 @@ function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolea
 
 function shouldResumeWaitingSpinner(event: BrainStreamEvent): boolean {
   return event.type === "provider" || event.type === "tool_progress";
+}
+
+function compactToolResultBody(body: string, max = 16_000): string {
+  if (body.length <= max) return body;
+  return `${body.slice(0, max)}\n[Lynn chat truncated this local tool result from ${body.length} chars. Ask for a narrower read/search if more detail is needed.]`;
 }
 
 export interface ChatMode {

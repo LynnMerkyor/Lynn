@@ -4,6 +4,7 @@ import { renderPatchPreview } from "./diff-format.js";
 import { CLIENT_TOOL_DEFINITIONS } from "./tools/registry.js";
 import type { ClientToolName, ClientToolResult } from "./tools/types.js";
 import type { CodeToolRequest } from "./code-tool-protocol.js";
+import { isSafeReadOnlyShellCommand } from "./local-command.js";
 import { bold, dim, green, orange, red, supportsColor, yellow } from "./terminal-style.js";
 import { renderCard } from "./terminal-spinner.js";
 
@@ -15,6 +16,7 @@ export interface ToolApprovalRequest {
   input: NodeJS.ReadStream;
   output: NodeJS.WriteStream;
   preview?: string;
+  args?: CodeToolRequest["args"];
   session?: { approveAll: boolean };
 }
 
@@ -35,6 +37,7 @@ export function canPromptForDangerousTool(inputStream: Pick<NodeJS.ReadStream, "
 
 export async function resolveToolApproval(request: ToolApprovalRequest): Promise<ToolApprovalRequest["approval"]> {
   if (!isDangerousClientTool(request.tool)) return request.approval;
+  if (request.tool === "bash" && isSafeReadOnlyShellCommand(request.args?.command || "")) return request.approval;
   if (request.approval === "yolo" || request.approval === "on-failure" || request.session?.approveAll) return "yolo";
   if (request.approval === "never") {
     throw new Error(`${request.tool} requires approval; current mode is never`);

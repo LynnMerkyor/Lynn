@@ -351,6 +351,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
               input: inputData.input,
               output: inputData.output,
               preview,
+              args: toolRequest.args,
               session: approvalSession,
             });
           }
