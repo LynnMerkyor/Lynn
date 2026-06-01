@@ -139,7 +139,7 @@ export function renderSessionStats(sessionPath: string, stats: CliSessionStats):
         `in ${stats.promptTokens}`,
         `out ${stats.completionTokens}`,
         stats.cacheHitTokens || stats.cacheMissTokens
-          ? `cache ${stats.cacheHitTokens}${stats.cacheHitRatio !== null ? ` (${Math.round(stats.cacheHitRatio * 100)}%)` : ""}`
+          ? `prefix-cache ${stats.cacheHitTokens} hit${stats.cacheHitRatio !== null ? ` (${Math.round(stats.cacheHitRatio * 100)}%)` : ""}`
           : null,
         stats.avgTps !== null ? `${formatTps(stats.avgTps)} TPS` : null,
       ].filter(Boolean).join(" · ")

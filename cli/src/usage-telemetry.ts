@@ -135,11 +135,11 @@ function renderCachePart(telemetry: UsageTelemetry): string | null {
   if (hit === null && miss === null && write === null) return null;
   const ratio = telemetry.cacheHitRatio !== null ? ` (${Math.round(telemetry.cacheHitRatio * 100)}%)` : "";
   const segments = [
-    hit !== null ? `${hit}` : "0",
+    hit !== null ? `${hit} hit` : "0 hit",
     miss !== null ? `miss ${miss}` : null,
     write !== null && write !== miss ? `write ${write}` : null,
   ].filter(Boolean);
-  return `cache ${segments.join(" · ")}${ratio}`;
+  return `prefix-cache ${segments.join(" · ")}${ratio}`;
 }
 
 function computeCacheHitRatio(input: {

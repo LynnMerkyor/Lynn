@@ -158,7 +158,7 @@ function usageRecordsFromMetadata(data: Record<string, unknown>): Array<{ usage:
 function cacheSummary(hit: number, miss: number): string {
   const total = hit + miss;
   const ratio = total > 0 ? Math.round((hit / total) * 100) : null;
-  return `cache ${hit} · miss ${miss}${ratio !== null ? ` (${ratio}%)` : ""}`;
+  return `prefix-cache ${hit} hit · miss ${miss}${ratio !== null ? ` (${ratio}%)` : ""}`;
 }
 
 function compactText(value: string, max: number): string {

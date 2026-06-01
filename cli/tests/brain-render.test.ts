@@ -8,7 +8,7 @@ describe("brain render usage summary", () => {
       completion_tokens: 120,
       total_tokens: 1120,
       prompt_cache_hit_tokens: 850,
-    }, { durationMs: 2000 })).toBe("1120 tokens · in 1000 · out 120 · cache 850 (85%) · 60.0 TPS");
+    }, { durationMs: 2000 })).toBe("1120 tokens · in 1000 · out 120 · prefix-cache 850 hit (85%) · 60.0 TPS");
   });
 
   it("computes cache ratio from hit and miss tokens when prompt_tokens is missing", () => {
@@ -16,7 +16,7 @@ describe("brain render usage summary", () => {
       completion_tokens: 10,
       prompt_cache_hit_tokens: 90,
       prompt_cache_miss_tokens: 10,
-    }, { durationMs: 1000 })).toBe("out 10 · cache 90 · miss 10 (90%) · 10.0 TPS");
+    }, { durationMs: 1000 })).toBe("out 10 · prefix-cache 90 hit · miss 10 (90%) · 10.0 TPS");
   });
 
   it("keeps the old compact token summary when timing and cache fields are absent", () => {
@@ -32,7 +32,7 @@ describe("brain render usage summary", () => {
       input_tokens: 1000,
       output_tokens: 200,
       prompt_tokens_details: { cached_tokens: 750 },
-    }, { durationMs: 1000 })).toBe("1200 tokens · in 1000 · out 200 · cache 750 (75%) · 200 TPS");
+    }, { durationMs: 1000 })).toBe("1200 tokens · in 1000 · out 200 · prefix-cache 750 hit (75%) · 200 TPS");
   });
 });
 

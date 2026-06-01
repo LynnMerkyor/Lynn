@@ -105,7 +105,7 @@ describe("sessions command", () => {
     expect(output).toContain("Lynn session stats");
     expect(output).toContain("turns: user 1");
     expect(output).toContain("usage: 120 tokens");
-    expect(output).toContain("cache 80 (80%)");
+    expect(output).toContain("prefix-cache 80 hit (80%)");
     expect(output).toContain("prefixaaa");
     expect(output).toContain("1200 chars");
     expect(output).toContain("2 volatile");
@@ -177,7 +177,7 @@ describe("sessions command", () => {
     expect(output).toContain("03. 01:00:02 assistant");
     expect(output).toContain("metadata code_task");
     expect(output).toContain("usage 120 tokens");
-    expect(output).toContain("cache 80 · miss 20 (80%)");
+    expect(output).toContain("prefix-cache 80 hit · miss 20 (80%)");
     expect(output).toContain("cache prefix prefixaaa");
     expect(output).toContain("1200 chars");
     expect(output).toContain("2 volatile");

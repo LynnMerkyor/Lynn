@@ -159,7 +159,7 @@ describe("code agent loop · resume & checkpoint", () => {
       usageSummary?: string;
     }).find((line) => line.type === "code.task.finished");
     expect(finished?.usageSummary).toContain("120 tokens");
-    expect(finished?.usageSummary).toContain("cache 80 (80%)");
+    expect(finished?.usageSummary).toContain("prefix-cache 80 hit (80%)");
     expect(finished?.usageSummary).toContain("TPS");
   });
 

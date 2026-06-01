@@ -118,6 +118,33 @@ describe("code agent loop · core & approvals", () => {
     expect(JSON.stringify(messages)).toContain("old turn 19");
   });
 
+  it("emits a runtime compaction event during long tool loops", async () => {
+    for (let index = 1; index <= 12; index += 1) {
+      await fs.writeFile(path.join(tmp, `big-${index}.txt`), `chunk ${index}\n${"x".repeat(35_000)}`, "utf8");
+    }
+    const events: CodeAgentEvent[] = [];
+    await withBrainServer((_body, count) => count <= 12
+      ? JSON.stringify({ tool: "read_file", args: { path: `big-${count}.txt` } })
+      : "Finished after reading the large files.",
+    async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "read several large files and summarize them",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--max-steps",
+        "14",
+      ]), "read several large files and summarize them", (event) => {
+        events.push(event);
+      })).resolves.toBe(0);
+    });
+
+    expect(events.some((event) => event.type === "runtime.compacted" && event.messages > 0)).toBe(true);
+    expect(events.some((event) => event.type === "task.finished" && event.ok)).toBe(true);
+  });
+
   it("keeps normal coding turns capped at 20 steps unless long-run mode is explicit", () => {
     expect(maxSteps(parseArgs(["code", "task"]))).toBe(8);
     expect(maxSteps(parseArgs(["code", "task", "--max-steps", "20"]))).toBe(20);

@@ -27,7 +27,7 @@ import { computeCodeContextLayerDiagnostics } from "../context-layers.js";
 import { prepareCodeTaskInput } from "../code-input.js";
 import { resolveDefaultBrainUrl } from "../brain-url.js";
 import { isLocalRuntimeQuestion, localeForText, renderLocalRuntimeAnswer } from "../runtime-answer.js";
-import { renderPlanItems } from "../plan-tool.js";
+import { renderPlanCard } from "../terminal-spinner.js";
 import {
   assistantToolCallsForMessages,
   codeToolDefinitions,
@@ -658,7 +658,12 @@ async function runCodeTask(
     if (resumeDiag.compacted) detail += t("code.resume.compacted");
     if (resumeDiag.tornLines > 0) detail += t("code.resume.torn", { n: resumeDiag.tornLines });
     errorOutput.write(`${t("code.resume.summary", { messages: resumeDiag.messages, detail })}\n`);
-    if (resumePlan.length) errorOutput.write(`${renderPlanItems(resumePlan)}\n`);
+    if (resumePlan.length) {
+      errorOutput.write(`${renderPlanCard(resumePlan.map((item) => ({
+        status: item.status,
+        text: item.content,
+      })), supportsColor(errorOutput))}\n`);
+    }
     if (resumeInfo?.cwd && path.resolve(resumeInfo.cwd) !== path.resolve(context.cwd)) {
       errorOutput.write(`${t("code.resume.cwdDrift", { saved: resumeInfo.cwd, current: context.cwd })}\n`);
     }

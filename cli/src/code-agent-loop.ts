@@ -8,10 +8,10 @@ import { buildCodeContextMessages } from "./context-layers.js";
 import { t } from "./i18n.js";
 import { nowIso, writeJsonLine } from "./jsonl.js";
 import { buildImagesContentParts } from "./media.js";
-import { normalizePlanItems, renderPlanItems, type CodePlanItem } from "./plan-tool.js";
+import { normalizePlanItems, type CodePlanItem } from "./plan-tool.js";
 import type { CliProviderProfile } from "./provider-profile.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "./reasoning.js";
-import { TerminalSpinner } from "./terminal-spinner.js";
+import { TerminalSpinner, renderCard, renderPlanCard } from "./terminal-spinner.js";
 import { dim, supportsColor } from "./terminal-style.js";
 import { renderToolLedger, toolLedgerEntry, type ToolLedgerEntry } from "./tool-ledger.js";
 import { runClientTool } from "./tools/registry.js";
@@ -57,6 +57,7 @@ export type CodeAgentEvent =
   | { type: "tool.ledger"; text: string }
   | { type: "tool.loop_guard"; tool: ClientToolName; repeats: number }
   | { type: "plan.updated"; items: CodePlanItem[] }
+  | { type: "runtime.compacted"; messages: number }
   | { type: "session.resumed"; path: string; messages: number }
   | { type: "session.checkpoint"; path: string; line: "user" | "assistant" | "tool" }
   | { type: "session.saved"; path: string }
@@ -290,7 +291,12 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         const items = normalizePlanItems(toolRequest.args.plan);
         if (inputData.json) writeJsonLine({ type: "code.plan.updated", ts: nowIso(), items });
         inputData.onEvent?.({ type: "plan.updated", items });
-        if (!inputData.json && !inputData.onEvent) process.stderr.write(`${renderPlanItems(items)}\n`);
+        if (!inputData.json && !inputData.onEvent) {
+          process.stderr.write(`${renderPlanCard(items.map((item) => ({
+            status: item.status,
+            text: item.content,
+          })), supportsColor(process.stderr))}\n`);
+        }
       }
       if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
       inputData.onEvent?.({ type: "tool.result", result: toolResult });
@@ -348,7 +354,18 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       });
       if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: toolResultMessage });
     }
-    compactRuntimeMessages(messages, undefined, undefined, runtimeAnchorCount);
+    const compactedMessages = compactRuntimeMessages(messages, undefined, undefined, runtimeAnchorCount);
+    if (compactedMessages > 0) {
+      if (inputData.json) writeJsonLine({ type: "code.runtime.compacted", ts: nowIso(), messages: compactedMessages });
+      inputData.onEvent?.({ type: "runtime.compacted", messages: compactedMessages });
+      if (!inputData.json && !inputData.onEvent) {
+        process.stderr.write(`${renderCard({
+          kind: "info",
+          title: `runtime compacted · ${compactedMessages} old messages`,
+          body: ["kept the active goal, current plan, and recent tool results"],
+        }, supportsColor(process.stderr))}\n`);
+      }
+    }
   }
   let maxStepsReached = false;
   if (!finalText) {
