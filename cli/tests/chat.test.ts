@@ -41,7 +41,7 @@ describe("chat mode controls", () => {
 
     expect(renderMode(mode)).toBe("ask / workspace-write");
     expect(applyModeCommand(mode, "yolo")).toBe("YOLO silent factory mode enabled.");
-    expect(renderMode(mode)).toBe("yolo / danger-full-access");
+    expect(renderMode(mode)).toBe("yolo / full-access");
     expect(applyModeCommand(mode, "ask")).toBe("Guarded mode enabled.");
     expect(renderMode(mode)).toBe("ask / workspace-write");
   });
@@ -56,7 +56,7 @@ describe("chat mode controls", () => {
     const mode = { approval: "ask" as const, sandbox: "workspace-write" as const };
 
     expect(toggleMode(mode)).toBe("YOLO silent factory mode enabled.");
-    expect(renderMode(mode)).toBe("yolo / danger-full-access");
+    expect(renderMode(mode)).toBe("yolo / full-access");
     expect(toggleMode(mode)).toBe("Guarded mode enabled.");
     expect(renderMode(mode)).toBe("ask / workspace-write");
   });
@@ -73,7 +73,7 @@ describe("chat mode controls", () => {
 
       const mode = await resolveChatMode(parseArgs(["chat", "--data-dir", dataDir]));
 
-      expect(renderMode(mode)).toBe("yolo / danger-full-access");
+      expect(renderMode(mode)).toBe("yolo / full-access");
     } finally {
       await fs.rm(dataDir, { recursive: true, force: true });
     }

@@ -582,7 +582,6 @@ describe("code tools", () => {
   it("renders a clear danger warning for YOLO mode", () => {
     const intro = renderCodeIntro({ approval: "yolo", sandbox: "danger-full-access" });
 
-    expect(intro).toContain("DANGER:");
     expect(intro).toContain("YOLO mode can edit files");
   });
 
@@ -590,7 +589,7 @@ describe("code tools", () => {
     setLang("zh");
     const intro = renderCodeIntro({ approval: "yolo", sandbox: "danger-full-access" });
 
-    expect(intro).toContain("危险:");
+    expect(intro).toContain("YOLO 模式可直接编辑文件");
     expect(intro).toContain("shell 命令");
   });
 

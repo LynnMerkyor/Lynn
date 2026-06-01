@@ -6,7 +6,7 @@ import { nowIso, writeJsonLine } from "../jsonl.js";
 import { resolveEffectivePermissions } from "../permissions.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { shouldUseInkTui } from "../terminal-safety.js";
-import { bold, dangerLine, dim, red, supportsColor } from "../terminal-style.js";
+import { bold, dangerLine, dim, orange, supportsColor } from "../terminal-style.js";
 import { renderMarkdown } from "../markdown.js";
 import { HistoryNavigator, appendHistory, historyPath, loadHistory } from "../history.js";
 import { completeSlash, normalizeSlashInput } from "../completion.js";
@@ -570,7 +570,7 @@ export function renderCodeIntro(
 
 function renderModeChange(message: string, mode: ChatMode, color: boolean): string {
   const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
-  const modeLabel = dangerous ? red(renderMode(mode), color) : renderMode(mode);
+  const modeLabel = dangerous ? orange(renderMode(mode), color) : renderMode(mode);
   const warning = dangerous
     ? `\n${dangerLine(t("mode.danger.warning"), color)}`
     : "";

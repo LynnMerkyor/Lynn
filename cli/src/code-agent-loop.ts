@@ -185,6 +185,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       reasoning: inputData.reasoning,
       json: inputData.json,
       label,
+      danger: inputData.toolCtx.approval === "yolo" || inputData.toolCtx.sandbox === "danger-full-access",
       onEvent: inputData.onEvent,
     });
     const assistantText = result.text;
@@ -300,7 +301,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       }
       if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
       inputData.onEvent?.({ type: "tool.result", result: toolResult });
-      if (!inputData.json && !inputData.onEvent && toolRequest.tool !== "update_plan") renderClientToolResult(toolResult);
+      if (!inputData.json && !inputData.onEvent && toolRequest.tool !== "update_plan") renderClientToolResult(toolResult, process.stderr, toolRequest);
       toolLedgerEntries.push(toolLedgerEntry(toolResult));
       toolResultSections.push([
         `Tool result for ${toolRequest.tool}:`,
@@ -462,13 +463,14 @@ async function collectBrainText(inputData: {
   reasoning: ReturnType<typeof parseReasoningOptions>;
   json: boolean;
   label: string;
+  danger?: boolean;
   onEvent?: (event: CodeAgentEvent) => void;
 }): Promise<BrainTextResult> {
   let text = "";
   let usageSummary: string | null = null;
   const usageRecords: Array<{ usage: unknown; durationMs: number }> = [];
   const streamedToolCalls = createStreamingToolCallAccumulator();
-  const spinner = new TerminalSpinner(process.stderr, inputData.label);
+  const spinner = new TerminalSpinner(process.stderr, inputData.label, { danger: inputData.danger });
   const renderState: HumanBrainRenderState = {};
   const startedAt = Date.now();
   if (!inputData.json && !inputData.onEvent) spinner.start();

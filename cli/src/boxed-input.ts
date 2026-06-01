@@ -1,6 +1,6 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { brightCyan, bold, dim, supportsColor, yellow } from "./terminal-style.js";
+import { brightCyan, bold, dim, orange, supportsColor, yellow } from "./terminal-style.js";
 import { visibleLength } from "./startup.js";
 import { completeSlash, normalizeSlashInput } from "./completion.js";
 import { HistoryNavigator } from "./history.js";
@@ -17,6 +17,7 @@ export interface BoxedInputOptions {
   history?: HistoryNavigator;
   completions?: string[];
   onShiftTab?: () => string | void;
+  danger?: boolean;
 }
 
 export interface BoxRender {
@@ -137,30 +138,6 @@ function renderSlashHint(input: string, commands: string[] | undefined, maxWidth
   return "";
 }
 
-function renderLegacyHorizontalSlashPalette(input: string, commands: string[] | undefined, maxWidth: number, color: boolean): string | null {
-  const normalized = normalizeSlashInput(input);
-  const visible = commands?.length ? visibleCompletions(commands) : [];
-  if (!visible.length || !normalized.startsWith("/") || normalized.includes("\n")) return null;
-  const completion = completeSlash(normalized, visible);
-  if (!completion.matches.length) return yellow(t("slash.unknown"), color);
-
-  const pieces: string[] = [];
-  for (let i = 0; i < completion.matches.length; i += 1) {
-    const command = completion.matches[i];
-    const label = slashCommandLabel(command);
-    const piece = `${brightCyan(command, color)}${label ? dim(` ${label}`, color) : ""}`;
-    const next = [...pieces, piece].join(dim("   ", color));
-    if (visibleLength(next) > maxWidth) {
-      const remaining = completion.matches.length - i;
-      const more = dim(` +${remaining}`, color);
-      if (pieces.length && visibleLength(`${pieces.join(dim("   ", color))}${more}`) <= maxWidth) pieces.push(more);
-      break;
-    }
-    pieces.push(piece);
-  }
-  return pieces.join(dim("   ", color));
-}
-
 export function renderInputBox(opts: {
   status: string;
   buffer: string;
@@ -169,8 +146,12 @@ export function renderInputBox(opts: {
   color: boolean;
   placeholder?: string;
   completions?: string[];
+  danger?: boolean;
 }): BoxRender {
   const { status, buffer, cursor, color } = opts;
+  const danger = !!opts.danger;
+  const border = (text: string) => danger ? orange(text, color) : dim(text, color);
+  const chevron = danger ? orange("›", color) : brightCyan("›", color);
   const w = clampWidth(opts.width);
   const textArea = w - 6;
   const collapsed = summarizeInputForBox(buffer);
@@ -220,19 +201,19 @@ export function renderInputBox(opts: {
   }
   const pad = " ".repeat(Math.max(0, textArea - used));
 
-  const left = `${dim("│", color)} ${brightCyan("›", color)} `;
-  const right = ` ${dim("│", color)}`;
+  const left = `${border("│")} ${chevron} `;
+  const right = ` ${border("│")}`;
   const inputLine = `${left}${visibleText}${pad}${right}`;
   const cursorCol = 4 + (empty ? 0 : beforeCursor - winStart);
   const palette = collapsed ? [] : renderSlashPalette(buffer, opts.completions, textArea, color);
   const paletteLines = palette.map((row) => {
-    return `${dim("│", color)}   ${row}${" ".repeat(Math.max(0, textArea - visibleLength(row)))} ${dim("│", color)}`;
+    return `${border("│")}   ${row}${" ".repeat(Math.max(0, textArea - visibleLength(row)))} ${border("│")}`;
   });
 
   const rawLabel = ` ${truncateToWidth(status, w - 7)} `;
   const fill = Math.max(2, w - 3 - visibleLength(rawLabel));
-  const top = `${dim("╭─", color)}${bold(rawLabel, color)}${dim("─".repeat(fill) + "╮", color)}`;
-  const bottom = dim(`╰${"─".repeat(w - 2)}╯`, color);
+  const top = `${border("╭─")}${bold(rawLabel, color)}${border("─".repeat(fill) + "╮")}`;
+  const bottom = border(`╰${"─".repeat(w - 2)}╯`);
 
   return { top, inputLine, paletteLines, bottom, cursorCol, rowsBelowInput: 1 + paletteLines.length };
 }
@@ -260,7 +241,7 @@ export async function readBoxedInputLine(options: BoxedInputOptions = {}): Promi
   input.resume();
   output.write(`${ESC}[?2004h`);
 
-  const render = () => renderInputBox({ status, buffer: value(), cursor: cur, width: width(), color, placeholder, completions: options.completions });
+  const render = () => renderInputBox({ status, buffer: value(), cursor: cur, width: width(), color, placeholder, completions: options.completions, danger: options.danger });
   const toCol = (col: number) => (col > 0 ? `${ESC}[${col}C` : "");
   let painted = false;
   let rowsBelowInput = 1;

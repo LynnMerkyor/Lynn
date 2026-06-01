@@ -40,6 +40,13 @@ describe("terminal spinner sweep", () => {
     expect(frame).toContain("\x1b[2m─\x1b[0m");
   });
 
+  it("uses amber/yellow sweep colors in YOLO mode", () => {
+    const frame = renderSweepFrame(12, 6, true, false, true);
+
+    expect(frame).toContain("\x1b[38;5;208m━\x1b[0m");
+    expect(frame).toContain("\x1b[33m━\x1b[0m");
+  });
+
   it("renders a shimmer over the thinking label without changing plain text", () => {
     expect(renderShimmerText("Lynn 思考中", 2, false)).toBe("Lynn 思考中");
     const colored = renderShimmerText("Lynn", 1, true);
@@ -82,6 +89,12 @@ describe("low-noise shimmer (流光扫描低噪音版)", () => {
     expect(out).toContain("Thinking");
     expect(out).not.toContain("━"); // 低噪音:无满宽扫描条
     expect(out).not.toContain("─");
+  });
+
+  it("renders quiet shimmer with amber label in YOLO mode", () => {
+    const out = renderQuietShimmer("Thinking", 2, true, false, true);
+
+    expect(out).toContain("\x1b[38;5;208m");
   });
 });
 
