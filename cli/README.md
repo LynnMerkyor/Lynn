@@ -89,6 +89,23 @@ Lynn - < README.md
 separate lowercase `lynn` binary because macOS default filesystems are
 case-insensitive and npm cannot safely create both shims in the same prefix.
 
+## Runtime knowledge for agents
+
+When another agent asks what Lynn CLI does locally, the concise answer is:
+
+- Lynn CLI is a thin terminal workbench over Lynn Brain V2: interactive chat,
+  `Lynn -p`, `Lynn code`, and Fleet worker mode share the same route discipline.
+- Default routing is StepFun 3.7 Flash -> MiMo V2.5 Pro -> Spark Qwen 3.6 35B
+  A3B.
+- Local runtime features include stable-prefix layering for prefix-cache hits,
+  rolling decode TPS and prefix-cache telemetry, automatic context compaction,
+  tool ledgers for chained work, checkpoint/resume, finish gates, workspace
+  snapshots, and Fleet JSONL events.
+- For copyable headless usage, use `Lynn -p "prompt" --json` or
+  `Lynn code -p "task" --json --cwd /path --approval yolo --sandbox workspace-write`.
+
+The longer repo-side reference is `docs/ops/lynn-cli-runtime-knowledge.md`.
+
 ## Runtime routing and CLI-only BYOK fallback
 
 `Lynn`, `Lynn chat`, and `Lynn code` can start directly after `npm install -g`.

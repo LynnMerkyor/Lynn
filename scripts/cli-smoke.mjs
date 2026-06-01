@@ -298,7 +298,7 @@ checks.push(run("chat uses shared permission profile", [
   "--data-dir",
   chatPermissionDataDir,
 ], { stdinLines: ["/mode", "/exit"] }).then((r) => {
-  assertIncludes(r.name, r.stdout, "yolo / danger-full-access");
+  assertIncludes(r.name, r.stdout, "yolo / full-access");
 }));
 
 checks.push(run("mock prompt", ["-p", "你好", "--mock-brain"]).then((r) => {

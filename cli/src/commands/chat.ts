@@ -3,7 +3,7 @@ import { getStringFlag, hasFlag, parseArgs, type ParsedArgs } from "../args.js";
 import { BrainConnectionError, streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
 import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
-import { TerminalSpinner } from "../terminal-spinner.js";
+import { TerminalSpinner, renderCard } from "../terminal-spinner.js";
 import { formatBrainErrorForHuman, renderBrainEventForHuman, renderToolDetail, renderToolDetailsList, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { bold, dim, green, orange, red, supportsColor } from "../terminal-style.js";
 import { renderStartupBanner } from "../startup.js";
@@ -27,6 +27,7 @@ import { resolveDefaultBrainUrl } from "../brain-url.js";
 import { shouldUseInkTui } from "../terminal-safety.js";
 import { createDecodeSpeedTracker } from "../decode-speed.js";
 import { createRuntimeMetrics, recordDecodeTps, recordUsageMetrics, renderRuntimeMetrics } from "../runtime-metrics.js";
+import { compactChatMessages } from "../chat-compaction.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/yolo",
@@ -253,9 +254,11 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
 
   async function sendUserMessage(displayText: string, content: ChatMessage["content"]): Promise<"continue"> {
     messages.push({ role: "user", content });
+    renderChatCompaction(compactChatMessages(messages));
     if (mockBrain) {
       const answer = t("mock.response", { text: displayText });
       messages.push({ role: "assistant", content: answer });
+      renderChatCompaction(compactChatMessages(messages));
       output.write(`${answer}\n\n`);
       return "continue";
     }
@@ -316,6 +319,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       return "continue";
     }
     messages.push({ role: "assistant", content: assistant });
+    renderChatCompaction(compactChatMessages(messages));
     recordDecodeTps(runtimeMetrics, decodeTps);
     output.write(`\n${renderStatusBar({
       model: brainRenderState.provider ? modelDisplayName(brainRenderState.provider) : t("status.chat.prefix"),
@@ -328,6 +332,16 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       color,
     })}\n\n`);
     return "continue";
+  }
+
+  function renderChatCompaction(result: ReturnType<typeof compactChatMessages>): void {
+    if (!result.compactedMessages) return;
+    const color = supportsColor(process.stderr);
+    process.stderr.write(`${renderCard({
+      kind: "info",
+      title: `context compacted · ${result.compactedMessages} old messages`,
+      body: ["kept the first request, recent turns, links, and runtime notes"],
+    }, color)}\n`);
   }
 
   try {
