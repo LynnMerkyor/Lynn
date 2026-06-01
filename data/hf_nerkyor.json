@@ -1,46 +1,46 @@
 {
-  "collected_at": "2026-05-31T05:04:42+00:00",
+  "collected_at": "2026-06-01T05:26:22+00:00",
   "author": "nerkyor",
   "models": [
     {
       "id": "nerkyor/Lynn-V4-Flash-Distill-Qwen-35B-A3B-BF16-merged",
       "name": "Lynn-V4-Flash-Distill-Qwen-35B-A3B-BF16-merged",
-      "downloads_30d": 470,
+      "downloads_30d": 471,
       "likes": 1,
       "last_modified": "2026-05-15"
     },
     {
       "id": "nerkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
       "name": "Qwen3.6-35B-A3B-GGUF-imatrix",
-      "downloads_30d": 401,
+      "downloads_30d": 402,
       "likes": 0,
       "last_modified": "2026-05-21"
     },
     {
       "id": "nerkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF",
       "name": "Qwen3.6-35B-A3B-APEX-MTP-GGUF",
-      "downloads_30d": 352,
+      "downloads_30d": 353,
       "likes": 0,
       "last_modified": "2026-05-23"
     },
     {
-      "id": "nerkyor/Qwen3.6-27B-NVFP4-v8-RTN",
-      "name": "Qwen3.6-27B-NVFP4-v8-RTN",
-      "downloads_30d": 314,
+      "id": "nerkyor/Qwen3.6-35B-A3B-NVFP4-v8-RTN",
+      "name": "Qwen3.6-35B-A3B-NVFP4-v8-RTN",
+      "downloads_30d": 332,
       "likes": 1,
       "last_modified": "2026-05-11"
     },
     {
-      "id": "nerkyor/Qwen3.6-35B-A3B-NVFP4-v8-RTN",
-      "name": "Qwen3.6-35B-A3B-NVFP4-v8-RTN",
-      "downloads_30d": 311,
+      "id": "nerkyor/Qwen3.6-27B-NVFP4-v8-RTN",
+      "name": "Qwen3.6-27B-NVFP4-v8-RTN",
+      "downloads_30d": 315,
       "likes": 1,
       "last_modified": "2026-05-11"
     },
     {
       "id": "nerkyor/Qwen3.5-9B-GGUF-imatrix",
       "name": "Qwen3.5-9B-GGUF-imatrix",
-      "downloads_30d": 273,
+      "downloads_30d": 276,
       "likes": 0,
       "last_modified": "2026-05-23"
     },
@@ -54,14 +54,14 @@
     {
       "id": "nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B-NVFP4-v8-RTN",
       "name": "Lynn-V4-Pro-Distill-Qwen-35B-A3B-NVFP4-v8-RTN",
-      "downloads_30d": 228,
+      "downloads_30d": 229,
       "likes": 0,
       "last_modified": "2026-05-14"
     },
     {
       "id": "nerkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix",
       "name": "Qwen3-4B-Thinking-2507-GGUF-imatrix",
-      "downloads_30d": 216,
+      "downloads_30d": 217,
       "likes": 0,
       "last_modified": "2026-05-23"
     },
@@ -75,28 +75,28 @@
     {
       "id": "nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B",
       "name": "Lynn-V4-Pro-Distill-Qwen-35B-A3B",
-      "downloads_30d": 168,
+      "downloads_30d": 169,
       "likes": 0,
       "last_modified": "2026-05-14"
     },
     {
       "id": "nerkyor/Qwen3.5-9B-GGUF-imatrix-MTP",
       "name": "Qwen3.5-9B-GGUF-imatrix-MTP",
-      "downloads_30d": 156,
+      "downloads_30d": 166,
       "likes": 0,
       "last_modified": "2026-05-28"
     },
     {
       "id": "nerkyor/Qwen3.6-35B-A3B-NVFP4-modelopt",
       "name": "Qwen3.6-35B-A3B-NVFP4-modelopt",
-      "downloads_30d": 155,
+      "downloads_30d": 156,
       "likes": 1,
       "last_modified": "2026-05-12"
     },
     {
       "id": "nerkyor/Qwen3.5-4B-GGUF-imatrix",
       "name": "Qwen3.5-4B-GGUF-imatrix",
-      "downloads_30d": 135,
+      "downloads_30d": 141,
       "likes": 0,
       "last_modified": "2026-05-24"
     },
@@ -116,5 +116,5 @@
     }
   ],
   "total_models": 16,
-  "total_downloads_30d": 3652
+  "total_downloads_30d": 3700
 }
