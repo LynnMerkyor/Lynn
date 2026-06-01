@@ -65,7 +65,7 @@ export async function bashTool(ctx: ToolRunContext, command: string): Promise<Cl
   if (!command) throw new Error("--command is required for bash");
   assertWorkspaceBashAllowed(command, ctx.sandbox || "workspace-write");
   if (ctx.approval !== "yolo" && !isSafeReadOnlyShellCommand(command)) {
-    throw new Error("bash requires YOLO approval except for safe read-only pwd/ls shortcuts. Run /mode yolo in interactive code mode or pass --approval yolo.");
+    throw new Error("bash requires approval except for safe read-only pwd/ls shortcuts. In interactive ask mode, approve the prompt; for headless/Fleet runs pass --approval yolo.");
   }
   auditBash(command, ctx.cwd);
   return new Promise((resolve) => {

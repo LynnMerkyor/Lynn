@@ -420,6 +420,74 @@ describe("code agent loop · core & approvals", () => {
     expect(events.some((event) => event.type === "task.finished" && event.ok)).toBe(true);
   });
 
+  it("runs a dangerous write after one-time UI approval in ask mode", async () => {
+    const events: CodeAgentEvent[] = [];
+    let approvalRequests = 0;
+    await withBrainServer((_body, count) => count === 1
+      ? JSON.stringify({ tool: "write_file", args: { path: "approved.txt", text: "ok\n" } })
+      : "Approved write complete.",
+    async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "write approved.txt",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--approval",
+        "ask",
+        "--max-steps",
+        "3",
+      ]), "write approved.txt", (event) => {
+        events.push(event);
+      }, {
+        requestApproval: async (request) => {
+          approvalRequests += 1;
+          expect(request.tool).toBe("write_file");
+          return "approve";
+        },
+      })).resolves.toBe(0);
+    });
+
+    await expect(fs.readFile(path.join(tmp, "approved.txt"), "utf8")).resolves.toBe("ok\n");
+    expect(approvalRequests).toBe(1);
+    expect(events.some((event) => event.type === "tool.result" && event.result.ok)).toBe(true);
+  });
+
+  it("does not run a dangerous write when UI approval is denied", async () => {
+    const events: CodeAgentEvent[] = [];
+    let approvalRequests = 0;
+    await withBrainServer((_body, count) => count === 1
+      ? JSON.stringify({ tool: "write_file", args: { path: "denied.txt", text: "nope\n" } })
+      : "Write was denied, so I stopped.",
+    async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "try writing denied.txt",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--approval",
+        "ask",
+        "--max-steps",
+        "3",
+      ]), "try writing denied.txt", (event) => {
+        events.push(event);
+      }, {
+        requestApproval: async (request) => {
+          approvalRequests += 1;
+          expect(request.tool).toBe("write_file");
+          return "deny";
+        },
+      })).resolves.toBe(0);
+    });
+
+    await expect(fs.stat(path.join(tmp, "denied.txt"))).rejects.toThrow();
+    expect(approvalRequests).toBe(1);
+    expect(events.some((event) => event.type === "tool.result" && !event.result.ok && String(event.result.error).includes("cancelled"))).toBe(true);
+  });
+
   it("does not prompt for per-tool approval in yolo mode", async () => {
     const patch = [
       "*** Begin Patch",

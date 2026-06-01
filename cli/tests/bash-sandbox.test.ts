@@ -42,7 +42,7 @@ describe("assertWorkspaceBashAllowed", () => {
       const listed = await bashTool({ cwd: dir, approval: "ask", sandbox: "workspace-write" }, "ls");
       expect(listed.ok).toBe(true);
       expect(JSON.stringify(listed.output)).toContain("ok.txt");
-      await expect(bashTool({ cwd: dir, approval: "ask", sandbox: "workspace-write" }, "git status")).rejects.toThrow(/requires YOLO approval/);
+      await expect(bashTool({ cwd: dir, approval: "ask", sandbox: "workspace-write" }, "git status")).rejects.toThrow(/requires approval/);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }

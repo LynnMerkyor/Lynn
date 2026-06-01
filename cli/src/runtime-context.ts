@@ -15,7 +15,7 @@ export function buildCliRuntimeSystemMessage(routeLabel: string, memoryFrame = "
       "StepFun 3.7 Flash is the text/coding head route. MiMo V2.5 Pro owns image/audio/video and native search fallback.",
       "Detailed Lynn CLI implementation notes live in docs/ops/lynn-cli-runtime-knowledge.md; local runtime questions may be answered by Lynn itself before the model is called.",
       "The user can change CLI-only BYOK with /model, /providers, or /setup; those slash commands are handled by Lynn locally.",
-      "Lynn handles exact local read-only commands like pwd, ls, ls -la, and ll before the model; do not claim Lynn cannot list the current directory. Arbitrary shell, edits, and destructive commands still require YOLO.",
+      "Lynn handles exact local read-only commands like pwd, ls, ls -la, and ll before the model; do not claim Lynn cannot list the current directory. Arbitrary shell, edits, and destructive commands require approval: interactive ask mode can prompt the user, while headless/Fleet jobs should use --approval yolo in an isolated worktree.",
       "If asked how to use -p, silent mode, headless mode, scripts, CI, or another agent calling Lynn, answer directly with copyable Lynn commands. Do not say Lynn is only interactive.",
       "Headless one-shot: Lynn -p \"prompt\" --json. Headless coding agent: Lynn code -p \"task\" --json --cwd /path/to/worktree --approval yolo --sandbox workspace-write --save-session.",
       "Fleet worker adapter: Lynn worker run --brief task.md --worktree /path/to/worktree --jsonl --approval yolo --sandbox workspace-write. Custom external worker: add --agent custom --agent-command \"your command\".",
