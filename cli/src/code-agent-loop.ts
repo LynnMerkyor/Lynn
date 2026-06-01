@@ -17,6 +17,7 @@ import { renderToolLedger, toolLedgerEntry, type ToolLedgerEntry } from "./tool-
 import { runClientTool } from "./tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "./tools/types.js";
 import { RESUME_COMPACTION_NOTE, RESUME_REPAIR_NOTE, formatToolResultForLoop } from "./code-resume.js";
+import { augmentToolResultSection } from "./code-tool-verify.js";
 
 
 export interface CodeAgentLoopInput {
@@ -303,10 +304,11 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       inputData.onEvent?.({ type: "tool.result", result: toolResult });
       if (!inputData.json && !inputData.onEvent && toolRequest.tool !== "update_plan") renderClientToolResult(toolResult, process.stderr, toolRequest);
       toolLedgerEntries.push(toolLedgerEntry(toolResult));
-      toolResultSections.push([
+      const baseSection = [
         `Tool result for ${toolRequest.tool}:`,
         formatToolResultForLoop(toolResult),
-      ].join("\n"));
+      ].join("\n");
+      toolResultSections.push(augmentToolResultSection(toolRequest, toolResult, inputData.toolCtx.cwd, baseSection));
     }
     const toolLedger = renderToolLedger(toolLedgerEntries, step);
     if (toolLedger) {
