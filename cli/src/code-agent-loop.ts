@@ -20,6 +20,7 @@ import { RESUME_COMPACTION_NOTE, RESUME_REPAIR_NOTE, extractLatestPlan, formatTo
 import { augmentToolResultSection } from "./code-tool-verify.js";
 import { resolveAutoVerifyPlan, runAutoVerify, formatAutoVerifyFeedback } from "./code-autoverify.js";
 import { checkPlanContract, defaultToolBudget, checkToolBudget } from "./code-plan-contract.js";
+import { createWorkspaceSnapshot, restoreWorkspaceSnapshot, autoRollbackEnabled, type WorkspaceSnapshot } from "./code-snapshot.js";
 
 const MAX_AUTOVERIFY_REVERIFIES = 3;
 const MAX_PLAN_REMINDERS = 2;
@@ -63,6 +64,8 @@ export type CodeAgentEvent =
   | { type: "tool.ledger"; text: string }
   | { type: "tool.loop_guard"; tool: ClientToolName; repeats: number }
   | { type: "auto.verify"; label: string; ok: boolean; ran: boolean }
+  | { type: "snapshot"; ref: string; restoreCommand: string }
+  | { type: "rollback"; ok: boolean; message: string }
   | { type: "plan.updated"; items: CodePlanItem[] }
   | { type: "runtime.compacted"; messages: number }
   | { type: "session.resumed"; path: string; messages: number }
@@ -190,6 +193,8 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   let toolCallCount = 0;
   let budgetWarned = false;
   let planReminders = 0;
+  let snapshot: WorkspaceSnapshot | null = null;
+  let rolledBack = false;
   for (let step = 0; step < inputData.maxSteps; step += 1) {
     const label = step === 0 ? t("spinner.coding") : t("spinner.reviewing");
     inputData.onEvent?.({ type: "step.started", step, label });
@@ -242,6 +247,18 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         }
         const feedback = formatAutoVerifyFeedback(outcome);
         if (feedback) {
+          // #5 自动回滚(opt-in):再修一次仍红 → 回到快照,让模型从干净态换思路重试一次。
+          if (autoRollbackEnabled() && snapshot?.available && !rolledBack && autoVerifyReverifies + 1 >= MAX_AUTOVERIFY_REVERIFIES) {
+            const restore = restoreWorkspaceSnapshot(inputData.toolCtx.cwd, snapshot);
+            rolledBack = true;
+            autoVerifyReverifies = 0;
+            if (inputData.json) writeJsonLine({ type: "code.rollback", ts: nowIso(), ok: restore.ok, message: restore.message });
+            inputData.onEvent?.({ type: "rollback", ok: restore.ok, message: restore.message });
+            const rollbackMsg = `${feedback}\n↩ Lynn rolled the workspace back to the pre-task snapshot (${restore.message}). The previous edits could not be made to pass — start over with a smaller, different approach.`;
+            messages.push({ role: "user", content: rollbackMsg });
+            if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: rollbackMsg });
+            continue;
+          }
           autoVerifyReverifies += 1;
           messages.push({ role: "user", content: feedback });
           if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: feedback });
@@ -308,6 +325,13 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
               preview,
               session: approvalSession,
             });
+          }
+          if (!snapshot && (toolRequest.tool === "write_file" || toolRequest.tool === "apply_patch")) {
+            snapshot = createWorkspaceSnapshot(inputData.toolCtx.cwd);
+            if (snapshot.available && snapshot.ref && snapshot.restoreCommand) {
+              if (inputData.json) writeJsonLine({ type: "code.snapshot", ts: nowIso(), ref: snapshot.ref, restoreCommand: snapshot.restoreCommand });
+              inputData.onEvent?.({ type: "snapshot", ref: snapshot.ref, restoreCommand: snapshot.restoreCommand });
+            }
           }
           toolResult = await runClientTool({ ...inputData.toolCtx, approval: effectiveApproval }, {
             name: toolRequest.tool,
