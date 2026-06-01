@@ -16,11 +16,13 @@ import { dim, supportsColor } from "./terminal-style.js";
 import { renderToolLedger, toolLedgerEntry, type ToolLedgerEntry } from "./tool-ledger.js";
 import { runClientTool } from "./tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "./tools/types.js";
-import { RESUME_COMPACTION_NOTE, RESUME_REPAIR_NOTE, formatToolResultForLoop } from "./code-resume.js";
+import { RESUME_COMPACTION_NOTE, RESUME_REPAIR_NOTE, extractLatestPlan, formatToolResultForLoop } from "./code-resume.js";
 import { augmentToolResultSection } from "./code-tool-verify.js";
 import { resolveAutoVerifyPlan, runAutoVerify, formatAutoVerifyFeedback } from "./code-autoverify.js";
+import { checkPlanContract, defaultToolBudget, checkToolBudget } from "./code-plan-contract.js";
 
 const MAX_AUTOVERIFY_REVERIFIES = 3;
+const MAX_PLAN_REMINDERS = 2;
 
 
 export interface CodeAgentLoopInput {
@@ -183,6 +185,11 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   const autoVerifyPlan = resolveAutoVerifyPlan(inputData.toolCtx.cwd);
   let mutated = false;
   let autoVerifyReverifies = 0;
+  let latestPlan = inputData.resumeMessages ? extractLatestPlan(inputData.resumeMessages) : [];
+  const toolBudget = defaultToolBudget(inputData.maxSteps);
+  let toolCallCount = 0;
+  let budgetWarned = false;
+  let planReminders = 0;
   for (let step = 0; step < inputData.maxSteps; step += 1) {
     const label = step === 0 ? t("spinner.coding") : t("spinner.reviewing");
     inputData.onEvent?.({ type: "step.started", step, label });
@@ -241,6 +248,14 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
           continue; // 回到模型修复,不收尾
         }
       }
+      // #3 计划契约:计划仍有未完成步骤就不许收尾(限次,避免死循环)。
+      const planVerdict = checkPlanContract(latestPlan);
+      if (planVerdict.message && planReminders < MAX_PLAN_REMINDERS) {
+        planReminders += 1;
+        messages.push({ role: "user", content: planVerdict.message });
+        if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: planVerdict.message });
+        continue;
+      }
       finalText = assistantText;
       break;
     }
@@ -248,6 +263,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
     const toolLedgerEntries: ToolLedgerEntry[] = [];
     for (const toolRequest of toolRequests) {
       const stormVerdict = observeClientToolRequest(toolStorm, toolRequest);
+      if (toolRequest.tool !== "update_plan") toolCallCount += 1;
       if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
       const preview = formatDangerousToolPreview(toolRequest.tool, toolRequest.args, supportsColor(inputData.output));
       inputData.onEvent?.({ type: "tool.requested", tool: toolRequest.tool, args: redactToolArgs(toolRequest) as CodeToolRequest["args"], preview });
@@ -319,6 +335,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       }
       if (toolRequest.tool === "update_plan") {
         const items = normalizePlanItems(toolRequest.args.plan);
+        latestPlan = items;
         if (inputData.json) writeJsonLine({ type: "code.plan.updated", ts: nowIso(), items });
         inputData.onEvent?.({ type: "plan.updated", items });
         if (!inputData.json && !inputData.onEvent) {
@@ -385,6 +402,12 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         content: toolResultMessage,
       });
       if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: toolResultMessage });
+    }
+    const budgetVerdict = checkToolBudget(toolCallCount, toolBudget, budgetWarned);
+    if (budgetVerdict.message) {
+      budgetWarned = true;
+      messages.push({ role: "user", content: budgetVerdict.message });
+      if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: budgetVerdict.message });
     }
     const compactedMessages = compactRuntimeMessages(messages, undefined, undefined, runtimeAnchorCount);
     if (compactedMessages > 0) {

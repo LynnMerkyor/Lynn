@@ -472,6 +472,18 @@ describe("code agent loop · core & approvals", () => {
             ],
           },
         })
+      : count === 2
+      // After the plan contract (#3) reminds it of the open step, a realistic model
+      // marks the step completed instead of finishing with an open plan.
+      ? JSON.stringify({
+          tool: "TodoWrite",
+          args: {
+            todos: [
+              { id: "S0", content: "探索代码库结构", status: "completed" },
+              { id: "C1", content: "实现修复", status: "completed" },
+            ],
+          },
+        })
       : "Plan noted; continuing with the task.",
     async (brainUrl) => {
       await expect(runCodeTaskWithEvents(parseArgs([
