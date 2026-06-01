@@ -19,18 +19,13 @@ export interface AutoVerifyOutcome {
   output: string;
 }
 
-/** CI-consumable payload for the auto-verify finish gate (emitted to headless JSON + onEvent). */
 export interface AutoVerifyEvent {
   label: string;
   ok: boolean;
   ran: boolean;
-  /** The exact deterministic command that judged correctness, e.g. "npm run --silent typecheck". */
   command: string;
-  /** 1-based re-verification attempt within this task. */
   attempt: number;
-  /** True when a failed check blocked the model from finishing (the loop was forced to continue). */
   blockedFinish: boolean;
-  /** Failing output (errors) — present only on failure so success events stay clean. */
   output?: string;
 }
 
@@ -50,7 +45,6 @@ function readPackageScripts(cwd: string): Record<string, string> | null {
   }
 }
 
-/** Deterministically pick the workspace's own verification command (no model involved). */
 export function resolveAutoVerifyPlan(cwd: string, env: NodeJS.ProcessEnv = process.env): AutoVerifyPlan {
   if (env.LYNN_CLI_AUTOVERIFY === "0") return DISABLED;
   const timeoutMs = Number.parseInt(env.LYNN_CLI_AUTOVERIFY_TIMEOUT_MS || "", 10) || DEFAULT_TIMEOUT_MS;
@@ -70,7 +64,6 @@ function tail(text: string): string {
   return trimmed.length > MAX_OUTPUT_CHARS ? `…\n${trimmed.slice(-MAX_OUTPUT_CHARS)}` : trimmed;
 }
 
-/** Run the verification command; deterministic pass/fail by exit code. */
 export function runAutoVerify(plan: AutoVerifyPlan, cwd: string): Promise<AutoVerifyOutcome> {
   if (!plan.enabled || !plan.command.length) {
     return Promise.resolve({ ran: false, ok: true, label: plan.label, output: "" });
@@ -98,11 +91,6 @@ export function runAutoVerify(plan: AutoVerifyPlan, cwd: string): Promise<AutoVe
   });
 }
 
-/**
- * Build the CI-consumable event payload from an auto-verify outcome.
- * Pure (no I/O) so it is unit-testable; the loop just spreads the result into
- * its headless `code.auto.verify` JSONL line and the in-process `auto.verify` event.
- */
 export function buildAutoVerifyEvent(outcome: AutoVerifyOutcome, plan: AutoVerifyPlan, attempt: number): AutoVerifyEvent {
   const event: AutoVerifyEvent = {
     label: outcome.label,
@@ -135,15 +123,13 @@ export function formatAutoVerifyObservation(outcome: AutoVerifyOutcome, plan: Au
   return lines.join("\n");
 }
 
-/** Feedback message injected into the loop when verification fails (null when it passed or did not run). */
 export function formatAutoVerifyFeedback(outcome: AutoVerifyOutcome): string | null {
   if (!outcome.ran || outcome.ok) return null;
   return [
-    `⚠ Auto-verification (${outcome.label}) FAILED — you are NOT done yet.`,
-    "The workspace's own check reported errors after your edits:",
+    `Auto-verification (${outcome.label}) failed.`,
+    "The workspace check reported these errors after the edits:",
     "```",
     outcome.output || "(no output captured)",
     "```",
-    "Fix every error above, then continue. Do not give a final answer until this check passes.",
   ].join("\n");
 }

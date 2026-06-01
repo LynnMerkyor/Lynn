@@ -97,11 +97,12 @@ describe("formatAutoVerifyFeedback", () => {
     expect(formatAutoVerifyFeedback({ ran: false, ok: true, label: "typecheck", output: "" })).toBeNull();
   });
 
-  it("produces a loud 'you are NOT done' feedback with the errors when failed", () => {
+  it("reports deterministic verification errors when failed", () => {
     const msg = formatAutoVerifyFeedback({ ran: true, ok: false, label: "typecheck", output: "TS2304: Cannot find name 'x'" });
-    expect(msg).toContain("FAILED");
-    expect(msg).toContain("NOT done");
+    expect(msg).toContain("Auto-verification (typecheck) failed");
+    expect(msg).toContain("workspace check");
     expect(msg).toContain("TS2304");
-    expect(msg).toContain("Do not give a final answer");
+    expect(msg).not.toContain("NOT done");
+    expect(msg).not.toContain(["Do", "not", "give"].join(" "));
   });
 });

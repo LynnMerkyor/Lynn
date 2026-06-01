@@ -76,13 +76,13 @@ describe("#2 checkToolPostcondition", () => {
 });
 
 describe("#7 describeToolFailureContext", () => {
-  it("returns the current file content so the model can re-aim a failed patch", () => {
+  it("returns the current file content for a failed patch", () => {
     fs.writeFileSync(path.join(cwd, "real.ts"), "line A\nline B\nline C\n");
     const result: ClientToolResult = { ok: false, tool: "apply_patch", error: "codex patch context not found in real.ts" };
     const ctx = describeToolFailureContext(req("apply_patch", { text: "*** Update File: real.ts\n@@\n-wrong\n+x\n" }), result, cwd);
     expect(ctx).toContain("Current content of real.ts");
     expect(ctx).toContain("line A");
-    expect(ctx).toContain("Rebuild the patch against THIS exact text");
+    expect(ctx).toContain("Failure context");
   });
 
   it("lists sibling files when a path is not found", () => {
@@ -108,6 +108,7 @@ describe("augmentToolResultSection", () => {
       "Tool result for apply_patch:\nfailed",
     );
     expect(fail).toContain("Current content of f.ts");
+    expect(fail).toContain("Failure context");
 
     const ghost = augmentToolResultSection(
       req("write_file", { path: "ghost.ts", text: "x" }),
