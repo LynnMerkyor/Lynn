@@ -64,25 +64,16 @@ function listen(server) {
   });
 }
 
-function runCli(brainUrl) {
+function runCli(args, inputText = null) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [
-      cliBin,
-      "-p",
-      "回复 OK",
-      "--brain-url",
-      brainUrl,
-      "--reasoning",
-      "off",
-    ], {
+    const child = spawn(process.execPath, [cliBin, ...args], {
       cwd: root,
       env: {
         ...process.env,
         LYNN_CLI_UPDATE_CHECK: "0",
         LYNN_LANG: "zh",
-        LYNN_CLI_REMOTE_BRAIN_URL: brainUrl,
       },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
@@ -100,6 +91,7 @@ function runCli(brainUrl) {
       clearTimeout(timer);
       resolve({ code: code ?? 1, stdout, stderr });
     });
+    child.stdin.end(inputText ?? "");
   });
 }
 
@@ -112,18 +104,41 @@ function assertIncludes(name, text, needle) {
 const { server, chatRequests } = createBrainServer();
 const brainUrl = await listen(server);
 try {
-  const result = await runCli(brainUrl);
-  const combined = `${result.stdout}\n${result.stderr}`;
-  if (result.code !== 0) {
-    throw new Error(`Lynn exited ${result.code}\n${combined}`);
+  const headless = await runCli([
+    "-p",
+    "回复 OK",
+    "--brain-url",
+    brainUrl,
+    "--reasoning",
+    "off",
+  ]);
+  const headlessCombined = `${headless.stdout}\n${headless.stderr}`;
+  if (headless.code !== 0) {
+    throw new Error(`Lynn -p exited ${headless.code}\n${headlessCombined}`);
   }
-  assertIncludes("cache usage smoke", combined, "OK");
-  assertIncludes("cache usage smoke", combined, "route: StepFun 3.7 Flash");
-  assertIncludes("cache usage smoke", combined, "prefix-cache 800 hit");
-  assertIncludes("cache usage smoke", combined, "miss 200");
-  assertIncludes("cache usage smoke", combined, "(80%)");
-  if (chatRequests() !== 1) throw new Error(`expected 1 chat request, saw ${chatRequests()}`);
-  process.stdout.write("[cli-cache-usage-smoke] prefix-cache usage displayed\n");
+  assertIncludes("headless cache usage smoke", headlessCombined, "OK");
+  assertIncludes("headless cache usage smoke", headlessCombined, "route: StepFun 3.7 Flash");
+  assertIncludes("headless cache usage smoke", headlessCombined, "prefix-cache 800 hit");
+  assertIncludes("headless cache usage smoke", headlessCombined, "miss 200");
+  assertIncludes("headless cache usage smoke", headlessCombined, "(80%)");
+
+  const chat = await runCli([
+    "--brain-url",
+    brainUrl,
+    "--reasoning",
+    "off",
+  ], "缓存显示测试\n/exit\n");
+  const chatCombined = `${chat.stdout}\n${chat.stderr}`;
+  if (chat.code !== 0) {
+    throw new Error(`Lynn chat exited ${chat.code}\n${chatCombined}`);
+  }
+  assertIncludes("interactive cache usage smoke", chatCombined, "OK");
+  assertIncludes("interactive cache usage smoke", chatCombined, "prefix-cache 800 hit");
+  assertIncludes("interactive cache usage smoke", chatCombined, "miss 200");
+  assertIncludes("interactive cache usage smoke", chatCombined, "(80%)");
+
+  if (chatRequests() !== 2) throw new Error(`expected 2 chat requests, saw ${chatRequests()}`);
+  process.stdout.write("[cli-cache-usage-smoke] prefix-cache usage displayed in -p and chat\n");
 } finally {
   await new Promise((resolve) => server.close(resolve));
 }
