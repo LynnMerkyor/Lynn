@@ -18,9 +18,9 @@ import { runClientTool } from "./tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "./tools/types.js";
 import { RESUME_COMPACTION_NOTE, RESUME_REPAIR_NOTE, extractLatestPlan, formatToolResultForLoop } from "./code-resume.js";
 import { augmentToolResultSection } from "./code-tool-verify.js";
-import { resolveAutoVerifyPlan, runAutoVerify, formatAutoVerifyFeedback, buildAutoVerifyEvent } from "./code-autoverify.js";
+import { resolveAutoVerifyPlan, runAutoVerify, formatAutoVerifyFeedback, buildAutoVerifyEvent, formatAutoVerifyObservation, isLikelyVerificationCommand } from "./code-autoverify.js";
 import { checkPlanContract, defaultToolBudget, checkToolBudget } from "./code-plan-contract.js";
-import { createWorkspaceSnapshot, restoreWorkspaceSnapshot, autoRollbackEnabled, type WorkspaceSnapshot } from "./code-snapshot.js";
+import { createWorkspaceSnapshot, recordWorkspaceSnapshotForRequest, restoreWorkspaceSnapshot, autoRollbackEnabled, type WorkspaceSnapshot } from "./code-snapshot.js";
 import { selfVerifyEnabled, buildSelfVerifyPrompt, parseSelfVerifyVerdict, formatSelfVerifyCritique } from "./code-self-verify.js";
 
 const MAX_AUTOVERIFY_REVERIFIES = 3;
@@ -196,6 +196,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   let budgetWarned = false;
   let planReminders = 0;
   let snapshot: WorkspaceSnapshot | null = null;
+  let snapshotAnnounced = false;
   let rolledBack = false;
   let selfVerifyPasses = 0;
   for (let step = 0; step < inputData.maxSteps; step += 1) {
@@ -235,7 +236,6 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       }
     }
     if (!toolRequests.length) {
-      // #1 自动验证收尾门:动过文件就不许"自信地宣布完成"——让项目自己的 typecheck 判对错。
       if (mutated && autoVerifyPlan.enabled && autoVerifyReverifies < MAX_AUTOVERIFY_REVERIFIES) {
         const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
         if (outcome.ran) {
@@ -251,7 +251,6 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         }
         const feedback = formatAutoVerifyFeedback(outcome);
         if (feedback) {
-          // #5 自动回滚(opt-in):再修一次仍红 → 回到快照,让模型从干净态换思路重试一次。
           if (autoRollbackEnabled() && snapshot?.available && !rolledBack && autoVerifyReverifies + 1 >= MAX_AUTOVERIFY_REVERIFIES) {
             const restore = restoreWorkspaceSnapshot(inputData.toolCtx.cwd, snapshot);
             rolledBack = true;
@@ -266,10 +265,9 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
           autoVerifyReverifies += 1;
           messages.push({ role: "user", content: feedback });
           if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: feedback });
-          continue; // 回到模型修复,不收尾
+          continue;
         }
       }
-      // #3 计划契约:计划仍有未完成步骤就不许收尾(限次,避免死循环)。
       const planVerdict = checkPlanContract(latestPlan);
       if (planVerdict.message && planReminders < MAX_PLAN_REMINDERS) {
         planReminders += 1;
@@ -277,7 +275,6 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: planVerdict.message });
         continue;
       }
-      // #4 对抗式自检:收尾前用同模型当怀疑者独立复核一次(仅动过文件,封顶 1 次)。
       if (mutated && selfVerifyEnabled() && selfVerifyPasses < 1) {
         selfVerifyPasses += 1;
         const review = await collectBrainText({
@@ -355,9 +352,14 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
               session: approvalSession,
             });
           }
-          if (!snapshot && (toolRequest.tool === "write_file" || toolRequest.tool === "apply_patch")) {
-            snapshot = createWorkspaceSnapshot(inputData.toolCtx.cwd);
-            if (snapshot.available && snapshot.ref && snapshot.restoreCommand) {
+          if (toolRequest.tool === "write_file" || toolRequest.tool === "apply_patch") {
+            snapshot = recordWorkspaceSnapshotForRequest(
+              inputData.toolCtx.cwd,
+              snapshot || createWorkspaceSnapshot(inputData.toolCtx.cwd),
+              toolRequest,
+            );
+            if (!snapshotAnnounced && snapshot.available && snapshot.ref && snapshot.restoreCommand && snapshot.entries > 0) {
+              snapshotAnnounced = true;
               if (inputData.json) writeJsonLine({ type: "code.snapshot", ts: nowIso(), ref: snapshot.ref, restoreCommand: snapshot.restoreCommand });
               inputData.onEvent?.({ type: "snapshot", ref: snapshot.ref, restoreCommand: snapshot.restoreCommand });
             }
@@ -386,6 +388,30 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
           };
         }
       }
+      let autoVerifyObservation: string | null = null;
+      if (
+        mutated
+        && autoVerifyPlan.enabled
+        && toolRequest.tool === "bash"
+        && !toolResult.ok
+        && isLikelyVerificationCommand(toolRequest.args.command)
+        && /requires approval|cancelled by user|interactive confirmation/i.test(String(toolResult.error || ""))
+      ) {
+        const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
+        autoVerifyObservation = formatAutoVerifyObservation(outcome, autoVerifyPlan);
+        if (outcome.ran) {
+          const verifyEvent = buildAutoVerifyEvent(outcome, autoVerifyPlan, autoVerifyReverifies + 1);
+          if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), ...verifyEvent, source: "blocked_verification_tool" });
+          inputData.onEvent?.({ type: "auto.verify", ...verifyEvent });
+          if (!inputData.json && !inputData.onEvent) {
+            process.stderr.write(`${renderCard({
+              kind: outcome.ok ? "ok" : "error",
+              title: `auto-verify · ${outcome.label} · ${outcome.ok ? "passed" : "FAILED"}`,
+              body: ["ran after a verification shell command was blocked"],
+            }, supportsColor(process.stderr))}\n`);
+          }
+        }
+      }
       if (toolRequest.tool === "update_plan") {
         const items = normalizePlanItems(toolRequest.args.plan);
         latestPlan = items;
@@ -406,6 +432,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       const baseSection = [
         `Tool result for ${toolRequest.tool}:`,
         formatToolResultForLoop(toolResult),
+        ...(autoVerifyObservation ? [autoVerifyObservation] : []),
       ].join("\n");
       toolResultSections.push(augmentToolResultSection(toolRequest, toolResult, inputData.toolCtx.cwd, baseSection));
     }
@@ -436,10 +463,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         }
       }
       if (toolLedger) {
-        const ledgerMessage = [
-          toolLedger,
-          "Continue from the ledger. If no more tools are needed, give the final answer.",
-        ].join("\n");
+        const ledgerMessage = toolLedger;
         messages.push({ role: "user", content: ledgerMessage });
         if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: ledgerMessage });
       }
@@ -448,7 +472,6 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         toolResultSections.length === 1 ? "Tool results:" : `Tool results for ${toolResultSections.length} requested tools:`,
         ...toolResultSections,
         toolLedger,
-        "Continue. If no more tools are needed, give the final answer.",
       ].filter(Boolean).join("\n");
       messages.push({
         role: "user",
@@ -479,8 +502,6 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   if (!finalText) {
     maxStepsReached = true;
     finalText = "Stopped after the maximum tool steps. Review the emitted tool results before continuing.";
-    // #1 收尾门只在模型"无工具轮"触发;若模型一直调工具(例如沙箱挡住自测、焦虑重试)直到 max-steps,
-    // 收尾门永远不到、状态无人确认。给上前再确定性验一次,把"虽超步但 typecheck 是绿的"明确报出来。
     if (mutated && autoVerifyPlan.enabled) {
       const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
       if (outcome.ran) {

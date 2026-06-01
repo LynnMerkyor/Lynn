@@ -115,15 +115,14 @@ describe("loadResumeMessages — pin the original goal on compaction", () => {
 });
 
 describe("readResumeSessionInfo", () => {
-  it("reads cwd, git snapshot and the first prompt from the session", async () => {
+  it("reads cwd and the first prompt from the session", async () => {
     const file = await writeSession([
       { type: "user", content: "first prompt here", ts: "1" },
       { type: "assistant", content: "ok", ts: "2" },
-      { type: "metadata", ts: "3", data: { kind: "code_task", cwd: "/repo/x", gitSnapshot: "abc123def456" } },
+      { type: "metadata", ts: "3", data: { kind: "code_task", cwd: "/repo/x" } },
     ]);
     await expect(readResumeSessionInfo(file)).resolves.toEqual({
       cwd: "/repo/x",
-      gitSnapshot: "abc123def456",
       firstPrompt: "first prompt here",
     });
   });

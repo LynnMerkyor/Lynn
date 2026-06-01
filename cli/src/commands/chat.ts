@@ -347,7 +347,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
             }
           }
           if (!round.structuredToolCalls && fallbackSections.length) {
-            messages.push({ role: "user", content: `${fallbackSections.join("\n\n")}\nContinue from these tool results.` });
+            messages.push({ role: "user", content: `<lynn_local_tool_observations>\n${fallbackSections.join("\n\n")}\n</lynn_local_tool_observations>` });
           }
         }
       } catch (error) {

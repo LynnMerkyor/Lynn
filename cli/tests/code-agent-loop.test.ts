@@ -488,6 +488,56 @@ describe("code agent loop · core & approvals", () => {
     expect(events.some((event) => event.type === "tool.result" && !event.result.ok && String(event.result.error).includes("cancelled"))).toBe(true);
   });
 
+  it("runs deterministic auto-verify when a model-requested verification shell is denied", async () => {
+    await fs.writeFile(path.join(tmp, "package.json"), JSON.stringify({
+      scripts: { typecheck: "node verify.mjs" },
+    }), "utf8");
+    await fs.writeFile(path.join(tmp, "verify.mjs"), [
+      "import fs from 'node:fs';",
+      "if (!fs.readFileSync('hello.txt', 'utf8').includes('verified')) process.exit(1);",
+      "",
+    ].join("\n"), "utf8");
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+verified",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const events: CodeAgentEvent[] = [];
+    const bodies: unknown[] = [];
+    await withBrainServer((body, count) => {
+      bodies.push(body);
+      if (count === 1) return JSON.stringify({ tool: "apply_patch", args: { patch } });
+      if (count === 2) return JSON.stringify({ tool: "bash", args: { command: "npm run typecheck" } });
+      return "Auto-verify observed the workspace is green.";
+    }, async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "patch and verify",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--approval",
+        "ask",
+        "--max-steps",
+        "4",
+      ]), "patch and verify", (event) => {
+        events.push(event);
+      }, {
+        requestApproval: async (request) => request.tool === "apply_patch" ? "approve" : "deny",
+      })).resolves.toBe(0);
+    });
+
+    expect(events.some((event) => event.type === "auto.verify" && event.ok)).toBe(true);
+    expect(JSON.stringify(bodies[2])).toContain("[Lynn auto-verify observation]");
+    expect(JSON.stringify(bodies[2])).toContain("status: passed");
+    await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("verified\n");
+  });
+
   it("does not prompt for per-tool approval in yolo mode", async () => {
     const patch = [
       "*** Begin Patch",

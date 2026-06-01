@@ -17,7 +17,6 @@ import { resolveCliProviderProfile, type CliProviderProfile } from "../provider-
 import { modelLabelWithId } from "../provider-presets.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ToolRunContext } from "../tools/types.js";
-import { createGitSnapshot } from "../git-checkpoint.js";
 import { applyModeCommand, applyReasoningCommand, applyThinkCommand, buildChatProviderArgs, renderMode, shouldRefreshProviderRoute, shouldShowProviderSetUsage, toggleMode, type ChatMode } from "./chat.js";
 import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { readVersionInfo } from "../version.js";
@@ -690,9 +689,6 @@ async function runCodeTask(
     if (resumeInfo?.cwd && path.resolve(resumeInfo.cwd) !== path.resolve(context.cwd)) {
       errorOutput.write(`${t("code.resume.cwdDrift", { saved: resumeInfo.cwd, current: context.cwd })}\n`);
     }
-    if (resumeInfo?.gitSnapshot) {
-      errorOutput.write(`${t("code.resume.snapshot", { sha: resumeInfo.gitSnapshot.slice(0, 12) })}\n`);
-    }
     // When we auto-picked the latest session, name a couple of recent alternatives
     // so resume is an informed choice, not a silent guess.
     if (["last", "latest"].includes((getStringFlag(args.flags, "resume") || "").trim())) {
@@ -707,7 +703,7 @@ async function runCodeTask(
   }
   if (json) {
     writeJsonLine({ type: "code.task.started", ts: nowIso(), task: taskText, context, mediaPaths });
-    if (resumePath) writeJsonLine({ type: "session.resumed", ts: nowIso(), path: resumePath, messages: resumeMessages.length, repairedTools: resumeDiag?.repairedTools ?? 0, compacted: resumeDiag?.compacted ?? false, tornLines: resumeDiag?.tornLines ?? 0, plan: resumePlan, gitSnapshot: resumeInfo?.gitSnapshot ?? null });
+    if (resumePath) writeJsonLine({ type: "session.resumed", ts: nowIso(), path: resumePath, messages: resumeMessages.length, repairedTools: resumeDiag?.repairedTools ?? 0, compacted: resumeDiag?.compacted ?? false, tornLines: resumeDiag?.tornLines ?? 0, plan: resumePlan });
   }
   if (resumePath) options.onEvent?.({ type: "session.resumed", path: resumePath, messages: resumeMessages.length });
 
@@ -810,13 +806,6 @@ async function runCodeTask(
       modelProvider: cliProvider?.profile.provider || "brain",
       modelId: cliProvider?.profile.model || "lynn-brain-router",
     });
-    // Pair the conversation checkpoint with a non-destructive snapshot of the
-    // working tree, so a paused/continued task can also restore its files.
-    const fileSnapshot = await createGitSnapshot(context.cwd);
-    if (fileSnapshot) {
-      if (json) writeJsonLine({ type: "session.snapshot", ts: nowIso(), sha: fileSnapshot.sha, dirtyFiles: fileSnapshot.dirtyFiles });
-      else if (!options.onEvent && !options.compact) errorOutput.write(`${t("code.snapshot.saved", { sha: fileSnapshot.sha.slice(0, 12), files: fileSnapshot.dirtyFiles })}\n`);
-    }
     await appendSessionMetadata({
       dataDir,
       sessionPath: savedSessionPath,
@@ -831,8 +820,6 @@ async function runCodeTask(
         usageSummary: final.usageSummary,
         usageRecords: final.usageRecords,
         resumedFrom: resumePath || null,
-        gitSnapshot: fileSnapshot?.sha ?? null,
-        gitSnapshotFiles: fileSnapshot?.dirtyFiles ?? 0,
       },
     });
     options.onEvent?.({ type: "session.saved", path: savedSessionPath });

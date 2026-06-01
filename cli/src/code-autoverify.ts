@@ -2,16 +2,6 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-// ============================================================================
-// 自动验证回路(#1)—— 最大 ROI。把"我觉得改好了"换成"项目自己的 typecheck 绿了才算改好"。
-//
-// 放在收尾门:模型说"做完了"(无工具调用)时,若本会话动过文件,自动跑项目的确定性检查
-// (优先用 package.json 的 typecheck 脚本,否则 tsc --noEmit),红了就把错误回喂、不许收尾。
-// 弱模型也稳:对错由编译器判,不由模型的自信判。
-//
-// 默认:能检测到明确检查命令就开;LYNN_CLI_AUTOVERIFY=0 关,LYNN_CLI_AUTOVERIFY_CMD 自定义。
-// ============================================================================
-
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_CHARS = 4_000;
 
@@ -45,6 +35,7 @@ export interface AutoVerifyEvent {
 }
 
 const DISABLED: AutoVerifyPlan = { enabled: false, command: [], label: "auto-verify", timeoutMs: DEFAULT_TIMEOUT_MS };
+const VERIFY_COMMAND_RE = /\b(typecheck|tsc\b|vitest\b|jest\b|mocha\b|ava\b|pytest\b|cargo\s+test|go\s+test|deno\s+(?:test|check)|npm\s+(?:run\s+)?(?:test|typecheck)|pnpm\s+(?:run\s+)?(?:test|typecheck)|yarn\s+(?:run\s+)?(?:test|typecheck)|bun\s+(?:test|run\s+typecheck))\b/i;
 
 function tokenize(command: string): string[] {
   return command.trim().split(/\s+/).filter(Boolean);
@@ -123,6 +114,25 @@ export function buildAutoVerifyEvent(outcome: AutoVerifyOutcome, plan: AutoVerif
   };
   if (!outcome.ok && outcome.output) event.output = outcome.output;
   return event;
+}
+
+export function isLikelyVerificationCommand(command: unknown): boolean {
+  return typeof command === "string" && VERIFY_COMMAND_RE.test(command.trim());
+}
+
+export function formatAutoVerifyObservation(outcome: AutoVerifyOutcome, plan: AutoVerifyPlan): string {
+  if (!outcome.ran) {
+    return `[Lynn auto-verify did not run: ${outcome.output || "no verification command available"}]`;
+  }
+  const lines = [
+    `[Lynn auto-verify observation]`,
+    `command: ${plan.command.join(" ")}`,
+    `status: ${outcome.ok ? "passed" : "failed"}`,
+  ];
+  if (outcome.output) {
+    lines.push("output:", outcome.output);
+  }
+  return lines.join("\n");
 }
 
 /** Feedback message injected into the loop when verification fails (null when it passed or did not run). */
