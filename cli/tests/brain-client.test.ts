@@ -96,9 +96,9 @@ describe("brain-client stream parser", () => {
 
     expect(parseBrainStreamPayload(JSON.stringify({
       object: "lynn.tool_progress",
-      tool_progress: { event: "end", name: "web_search", ms: 120, ok: true },
+      tool_progress: { event: "end", name: "web_search", ms: 120, ok: true, summary: "MiMo summary" },
     }))).toEqual([
-      { type: "tool_progress", event: "end", name: "web_search", ms: 120, ok: true },
+      { type: "tool_progress", event: "end", name: "web_search", ms: 120, ok: true, summary: "MiMo summary" },
     ]);
 
     expect(parseBrainStreamPayload(JSON.stringify({

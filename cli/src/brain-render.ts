@@ -40,6 +40,7 @@ export function renderBrainEventForHuman(
       stream.write(`${renderCard({
         kind: event.ok === false ? "error" : "ok",
         title: `${toolIcon(event.name)} ${event.name} · ${status}${timing}`,
+        body: event.summary ? [event.summary] : undefined,
       }, color)}\n`);
       return;
     }

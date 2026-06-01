@@ -102,6 +102,51 @@ function shouldReinforceToolResults(): boolean {
     && process.env.BRAIN_V2_CHAIN_TOOL_HINT !== '0';
 }
 
+function compactText(value: string, max = 220): string {
+  const singleLine = value.replace(/\s+/g, ' ').trim();
+  if (singleLine.length <= max) return singleLine;
+  return singleLine.slice(0, Math.max(1, max - 1)).trimEnd() + '…';
+}
+
+function parseJsonObject(raw: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function summarizeToolResult(toolName: string, result: unknown): string | undefined {
+  const raw = typeof result === 'string' ? result : JSON.stringify(result);
+  if (!raw || !raw.trim()) return undefined;
+
+  const parsed = parseJsonObject(raw);
+  if (parsed?.error) return compactText('error: ' + String(parsed.error), 180);
+
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^──.+──$/.test(line) && line !== '搜索结果:');
+
+  if (toolName === 'web_search') {
+    const summaries = lines
+      .filter((line) => /^摘要[:：]/.test(line))
+      .map((line) => line.replace(/^摘要[:：]\s*/, ''))
+      .filter(Boolean);
+    const citations = lines
+      .filter((line) => /^\[[^\]]+\]\([^)]+\):/.test(line))
+      .map((line) => line.replace(/^\[([^\]]+)\]\([^)]+\):\s*/, '$1: '))
+      .filter(Boolean);
+    const picked = [...summaries.slice(0, 2), ...citations.slice(0, 2)];
+    if (picked.length) return compactText(picked.join(' · '));
+  }
+
+  const firstMeaningful = lines.find((line) => !line.startsWith('{')) || raw;
+  return compactText(firstMeaningful, 180);
+}
+
 function formatToolResultContent(toolName: string, result: unknown, stepIndex: number): string {
   const raw = typeof result === 'string' ? result : JSON.stringify(result);
   if (!shouldReinforceToolResults()) return raw;
@@ -389,7 +434,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       const ms = Date.now() - t0;
       const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
       await onChunk(
-        { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok },
+        { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok, summary: summarizeToolResult(tc.function.name, toolResult) },
         { providerId: lastProviderId }
       );
       workingMessages.push({

@@ -62,6 +62,8 @@ afterEach(() => {
   delete process.env.BRAIN_V2_TOOL_RESULT_KEEP_LATEST;
   delete process.env.BRAIN_V2_CHAIN_TOOL_HINT;
   delete process.env.BRAIN_V2_TOOL_RESULT_REINFORCE;
+  delete process.env.ZHIPU_KEY;
+  delete process.env.MIMO_SEARCH_KEY;
 });
 
 describe('Router', () => {
@@ -333,6 +335,65 @@ describe('Router', () => {
     ]);
     expect(chunks.filter(c => c.type === 'tool_progress' && c.event === 'end').map(c => c.ok))
       .toEqual([true, false, false, false]);
+  });
+
+  it('emits a compact server tool result summary for search cards', async () => {
+    process.env.ZHIPU_KEY = 'test-zhipu';
+    process.env.MIMO_SEARCH_KEY = 'test-mimo';
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: 'Zhipu summary',
+              tool_calls: [{ type: 'web_search', web_search: { search_result: [{ title: 'A', link: 'https://a.example', content: 'a snippet' }] } }],
+            },
+          }],
+        }),
+        text: async () => '',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { content: 'MiMo summary', annotations: [{ type: 'url_citation', title: 'B', url: 'https://b.example', summary: 'b snippet' }] } }],
+        }),
+        text: async () => '',
+      }));
+
+    let adapterRuns = 0;
+    mockState.adapterFn = async function* () {
+      adapterRuns += 1;
+      if (adapterRuns === 1) {
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: 'tc-search-summary',
+            type: 'function',
+            function: { name: 'web_search', arguments: '{"query":"Lynn CLI"}' },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: 'done' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: 'search Lynn CLI' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    const end = chunks.find((chunk) => chunk.type === 'tool_progress' && chunk.event === 'end');
+    expect(end).toMatchObject({ name: 'web_search', ok: true });
+    expect(end.summary).toContain('Zhipu summary');
+    expect(end.summary).toContain('MiMo summary');
   });
 
   it('compacts older server tool results before subsequent provider rounds', async () => {

@@ -9,7 +9,7 @@ import type { ChunkMeta, FallbackEntry, ProviderId, StreamChunk } from './types.
 //   { type: 'content',   delta: string }
 //   { type: 'tool_call_delta', delta: Array<{index, id?, function?: {name?, arguments?}}> }
 //   { type: 'finish',    reason: string }
-//   { type: 'tool_progress', event: 'start'|'end', name: string, ms?: number, ok?: boolean }
+//   { type: 'tool_progress', event: 'start'|'end', name: string, ms?: number, ok?: boolean, summary?: string }
 //   { type: 'error', error: string, ...extra }
 
 type SSEEmitterOptions = { id: string; model?: string };
@@ -75,6 +75,7 @@ export function makeSSEEmitter(res: ServerResponse, { id, model = 'lynn-v2' }: S
           name: chunk.name,
           ...(typeof chunk.ms === 'number' ? { ms: chunk.ms } : {}),
           ...(typeof chunk.ok === 'boolean' ? { ok: chunk.ok } : {}),
+          ...(typeof chunk.summary === 'string' && chunk.summary ? { summary: chunk.summary } : {}),
         },
       });
     } else if (chunk.type === 'error') {

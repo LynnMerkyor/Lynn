@@ -58,11 +58,12 @@ describe("renderBrainEventForHuman", () => {
 
     renderBrainEventForHuman({ type: "provider", activeProvider: "step-3.7-flash" }, state, stream);
     renderBrainEventForHuman({ type: "tool_progress", event: "start", name: "web_search" }, state, stream);
-    renderBrainEventForHuman({ type: "tool_progress", event: "end", name: "web_search", ok: true, ms: 5134 }, state, stream);
+    renderBrainEventForHuman({ type: "tool_progress", event: "end", name: "web_search", ok: true, ms: 5134, summary: "MiMo summary · Source A: fresh result" }, state, stream);
 
     expect(output).toContain("│ • route: StepFun 3.7 Flash");
     expect(output).toContain("│ 🔧 🔎 web_search · running");
     expect(output).toContain("│ ✓ 🔎 web_search · done 5.1s");
+    expect(output).toContain("│   MiMo summary · Source A: fresh result");
     expect(output).not.toContain("server tool:");
     for (const line of output.split("\n").filter(Boolean)) {
       expect((line.match(/│/g) || []).length).toBeLessThanOrEqual(1);
