@@ -538,6 +538,80 @@ describe("code agent loop · core & approvals", () => {
     await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("verified\n");
   });
 
+  it("feeds auto-verify observations back immediately after mutating tools", async () => {
+    await fs.writeFile(path.join(tmp, "package.json"), JSON.stringify({
+      scripts: { typecheck: "node verify.mjs" },
+    }), "utf8");
+    await fs.writeFile(path.join(tmp, "verify.mjs"), [
+      "import fs from 'node:fs';",
+      "const text = fs.readFileSync('hello.txt', 'utf8');",
+      "if (!text.includes('fixed')) {",
+      "  console.error('expected hello.txt to include fixed');",
+      "  process.exit(1);",
+      "}",
+      "",
+    ].join("\n"), "utf8");
+    const brokenPatch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+broken",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const fixedPatch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-broken",
+      "+fixed",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const events: CodeAgentEvent[] = [];
+    const bodies: unknown[] = [];
+    await withBrainServer((body, count) => {
+      bodies.push(body);
+      if (count === 1) return JSON.stringify({ tool: "apply_patch", args: { patch: brokenPatch } });
+      if (count === 2) {
+        const serialized = JSON.stringify(body);
+        expect(serialized).toContain("[Lynn auto-verify observation]");
+        expect(serialized).toContain("status: failed");
+        expect(serialized).toContain("expected hello.txt to include fixed");
+        return JSON.stringify({ tool: "apply_patch", args: { patch: fixedPatch } });
+      }
+      if (count === 3) {
+        const serialized = JSON.stringify(body);
+        expect(serialized).toContain("[Lynn auto-verify observation]");
+        expect(serialized).toContain("status: passed");
+        return "The file is fixed.";
+      }
+      return "The file is fixed.";
+    }, async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "patch hello.txt until verification passes",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--approval",
+        "yolo",
+        "--max-steps",
+        "5",
+        "--json",
+      ]), "patch hello.txt until verification passes", (event) => {
+        events.push(event);
+      })).resolves.toBe(0);
+    });
+
+    expect(events.filter((event) => event.type === "auto.verify" && event.ran)).toHaveLength(2);
+    expect(events.some((event) => event.type === "auto.verify" && !event.ok)).toBe(true);
+    expect(events.some((event) => event.type === "auto.verify" && event.ok)).toBe(true);
+    await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("fixed\n");
+  });
+
   it("does not prompt for per-tool approval in yolo mode", async () => {
     const patch = [
       "*** Begin Patch",

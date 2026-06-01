@@ -220,6 +220,8 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   const toolStorm = createClientToolStormState(inputData.resumeMessages);
   const autoVerifyPlan = resolveAutoVerifyPlan(inputData.toolCtx.cwd);
   let mutated = false;
+  let lastMutationVerifyOk = false;
+  let autoVerifyChecks = 0;
   let autoVerifyReverifies = 0;
   let latestPlan = inputData.resumeMessages ? extractLatestPlan(inputData.resumeMessages) : [];
   const toolBudget = defaultToolBudget(inputData.maxSteps);
@@ -267,10 +269,11 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       }
     }
     if (!toolRequests.length) {
-      if (mutated && autoVerifyPlan.enabled && autoVerifyReverifies < MAX_AUTOVERIFY_REVERIFIES) {
+      if (mutated && !lastMutationVerifyOk && autoVerifyPlan.enabled && autoVerifyReverifies < MAX_AUTOVERIFY_REVERIFIES) {
         const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
         if (outcome.ran) {
-          const verifyEvent = buildAutoVerifyEvent(outcome, autoVerifyPlan, autoVerifyReverifies + 1);
+          autoVerifyChecks += 1;
+          const verifyEvent = buildAutoVerifyEvent(outcome, autoVerifyPlan, autoVerifyChecks);
           if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), ...verifyEvent });
           inputData.onEvent?.({ type: "auto.verify", ...verifyEvent });
           if (!inputData.json && !inputData.onEvent) {
@@ -447,7 +450,8 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
         autoVerifyObservation = formatAutoVerifyObservation(outcome, autoVerifyPlan);
         if (outcome.ran) {
-          const verifyEvent = buildAutoVerifyEvent(outcome, autoVerifyPlan, autoVerifyReverifies + 1);
+          autoVerifyChecks += 1;
+          const verifyEvent = buildAutoVerifyEvent(outcome, autoVerifyPlan, autoVerifyChecks);
           if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), ...verifyEvent, source: "blocked_verification_tool" });
           inputData.onEvent?.({ type: "auto.verify", ...verifyEvent });
           if (!inputData.json && !inputData.onEvent) {
@@ -456,6 +460,32 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
               title: `auto-verify · ${outcome.label} · ${outcome.ok ? "passed" : "FAILED"}`,
               body: ["ran after a verification shell command was blocked"],
             }, supportsColor(process.stderr))}\n`);
+          }
+        }
+      }
+      const successfulMutation = toolResult.ok && (toolRequest.tool === "write_file" || toolRequest.tool === "apply_patch");
+      if (successfulMutation) {
+        mutated = true;
+        lastMutationVerifyOk = false;
+        if (autoVerifyPlan.enabled) {
+          const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
+          autoVerifyObservation = [
+            autoVerifyObservation,
+            formatAutoVerifyObservation(outcome, autoVerifyPlan),
+          ].filter(Boolean).join("\n\n");
+          if (outcome.ran) {
+            lastMutationVerifyOk = outcome.ok;
+            autoVerifyChecks += 1;
+            const verifyEvent = buildAutoVerifyEvent(outcome, autoVerifyPlan, autoVerifyChecks);
+            if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), ...verifyEvent, source: "post_mutation_tool" });
+            inputData.onEvent?.({ type: "auto.verify", ...verifyEvent });
+            if (!inputData.json && !inputData.onEvent) {
+              process.stderr.write(`${renderCard({
+                kind: outcome.ok ? "ok" : "error",
+                title: `auto-verify · ${outcome.label} · ${outcome.ok ? "passed" : "FAILED"}`,
+                body: ["ran after a file mutation"],
+              }, supportsColor(process.stderr))}\n`);
+            }
           }
         }
       }
@@ -473,7 +503,6 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       }
       if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
       inputData.onEvent?.({ type: "tool.result", result: toolResult });
-      if (toolResult.ok && (toolRequest.tool === "write_file" || toolRequest.tool === "apply_patch")) mutated = true;
       if (!inputData.json && !inputData.onEvent && toolRequest.tool !== "update_plan") renderClientToolResult(toolResult, process.stderr, toolRequest);
       toolLedgerEntries.push(toolLedgerEntry(toolResult));
       const baseSection = [
@@ -552,7 +581,8 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
     if (mutated && autoVerifyPlan.enabled) {
       const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
       if (outcome.ran) {
-        if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), label: outcome.label, ok: outcome.ok, atMaxSteps: true });
+        autoVerifyChecks += 1;
+        if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), label: outcome.label, ok: outcome.ok, atMaxSteps: true, attempt: autoVerifyChecks });
         inputData.onEvent?.({ type: "auto.verify", label: outcome.label, ok: outcome.ok, ran: outcome.ran });
         finalText += outcome.ok
           ? `\n\n✓ Auto-verification (${outcome.label}) PASSED — the workspace is in a verified-good state despite hitting the step limit.`
