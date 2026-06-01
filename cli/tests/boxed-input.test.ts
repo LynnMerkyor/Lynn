@@ -88,15 +88,15 @@ describe("renderInputBox", () => {
   });
 
   it("shows slash command recommendations inside the frame", () => {
-    const r = box({ buffer: "/", cursor: 1, completions: ["/exit", "/quit", "/help", "/tool", "/tools", "/model", "/yolo", "/ask"], width: 82 });
+    const r = box({ buffer: "/", cursor: 1, completions: ["/yolo", "/ask", "/model", "/mode", "/think", "/fast", "/exit", "/quit", "/tool", "/tools"], width: 82 });
 
     expect(r.rowsBelowInput).toBeGreaterThan(2);
     const palette = stripAnsi(r.paletteLines.join("\n"));
-    expect(palette).toContain("1. /exit");
+    expect(palette).toContain("1. /yolo");
+    expect(palette).toContain("/ask");
     expect(palette).toContain("/model");
-    expect(palette).toContain("/yolo");
-    expect(palette).toContain("/tools");
     expect(palette).toContain("静默工厂");
+    expect(palette).toContain("继续输入筛选");
     expect(palette).not.toContain("/quit");
     expect(palette).not.toContain("/tool  ");
     for (const line of r.paletteLines) expect(visibleLength(stripAnsi(line))).toBe(visibleLength(stripAnsi(r.top)));
@@ -110,5 +110,13 @@ describe("renderInputBox", () => {
     expect(stripAnsi(r.paletteLines[0] || "")).toContain("未知命令");
     expect(normal.paletteLines).toEqual([]);
     expect(normal.rowsBelowInput).toBe(1);
+  });
+
+  it("shows an explicit Tab completion hint for unique slash prefixes", () => {
+    const r = box({ buffer: "/he", cursor: 3, completions: ["/help", "/model"], width: 72 });
+    const line = stripAnsi(r.inputLine);
+
+    expect(line).toContain("/help");
+    expect(line).toContain("Tab 补全");
   });
 });

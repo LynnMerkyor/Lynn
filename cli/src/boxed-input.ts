@@ -117,7 +117,7 @@ function renderSlashPalette(input: string, commands: string[] | undefined, maxWi
     rows.push(truncateToWidth(row, maxWidth));
   }
   const remaining = completion.matches.length - shown.length;
-  if (remaining > 0) rows.push(dim(`+${remaining} more`, color));
+  if (remaining > 0) rows.push(dim(t("slash.moreHint"), color));
   return rows;
 }
 
@@ -128,7 +128,7 @@ function renderSlashHint(input: string, commands: string[] | undefined, maxWidth
   const completion = completeSlash(normalized, visible);
   if (!completion.matches.length) return "";
   const suffix = completion.completed.length > normalized.length ? completion.completed.slice(normalized.length) : "";
-  if (suffix) return dim(truncateToWidth(suffix, maxWidth), color);
+  if (suffix) return dim(truncateToWidth(`${suffix}  ${t("slash.tabHint")}`, maxWidth), color);
   if (completion.matches.length === 1) {
     const command = completion.matches[0];
     const label = slashCommandLabel(command);
