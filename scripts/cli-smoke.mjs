@@ -377,8 +377,15 @@ checks.push(run("vision ground mock json", ["ground", smokePng, "Submit button",
   assertIncludes(r.name, r.stdout, '"type":"vision.finished"');
 }));
 
-checks.push(run("mock chat", ["chat", "--mock-brain"], { stdinLines: ["/mode yolo", "hi", "/exit"] }).then((r) => {
+checks.push(run("mock chat", ["chat", "--mock-brain"], {
+  env: { NO_COLOR: "1", LYNN_LANG: "zh" },
+  stdinLines: ["/mode yolo", "hi", "/exit"],
+}).then((r) => {
   assertIncludes(r.name, r.stdout, "YOLO");
+  assertIncludes(r.name, r.stdout, "full-access");
+  assertIncludes(r.name, r.stdout, "直接编辑本地文件");
+  assertIncludes(r.name, r.stdout, "shell 命令");
+  assertIncludes(r.name, r.stdout, "不再逐次询问");
   assertIncludes(r.name, r.stdout, "hi");
 }));
 
