@@ -572,7 +572,7 @@ while time.time() < deadline:
             break
         buf += chunk
         text = buf.decode("utf-8", errors="replace")
-        if (not approved) and "[y/n/a]" in text:
+        if (not approved) and ("Choose [y/a/n]" in text or "Approval required: apply_patch" in text):
             os.write(master, b"a\\r")
             approved = True
     if proc.poll() is not None:
@@ -614,9 +614,10 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
 
     expect(result.code).toBe(0);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("Allow apply_patch");
+    expect(result.stdout).toContain("Approval required: apply_patch");
+    expect(result.stdout).toContain("Choose [y/a/n]");
     expect(result.stdout).toContain("Interactive allow-all approval applied and verified the patch.");
-    expect((result.stdout.match(/\[y\/n\/a\]/g) || [])).toHaveLength(1);
+    expect((result.stdout.match(/Choose \[y\/a\/n\]/g) || [])).toHaveLength(1);
     await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("approved\n");
     expect(JSON.stringify(requestBodies[1])).toContain('"role":"tool"');
     expect(JSON.stringify(requestBodies[2])).toContain('"role":"tool"');

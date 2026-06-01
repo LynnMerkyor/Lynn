@@ -41,7 +41,7 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.6.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI
@@ -84,7 +84,7 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>CLI v0.80.5</strong> · 2026-06-01 · prefix-cache visibility + long-run stability hotfix <em>(CLI latest)</em></summary>
+<summary><strong>CLI v0.80.6</strong> · 2026-06-01 · prefix-cache visibility + long-run stability hotfix <em>(CLI latest)</em></summary>
 
 **CLI-only hotfix; the desktop app remains v0.80.1**:
 - **Prefix-cache visibility**: Reasonix-style stable prefix / resume history / volatile runtime / current user layers remain deterministic; usage, sessions, replay, and `Lynn cache doctor --json` now surface `prefix-cache ... hit` without adding a context-budget anxiety meter.
@@ -94,10 +94,10 @@ Related repositories:
 - **Release gate covers compaction**: `cli-longrun-smoke` now forces large tool results and requires a `code.runtime.compacted` event, so long-run stability is verified outside narrow unit tests.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.6.tgz"
 ```
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.5)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
 
 </details>
 

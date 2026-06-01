@@ -50,6 +50,7 @@
     "test:cli-cache-usage": "npm run build:cli && node scripts/cli-cache-usage-smoke.mjs",
     "test:cli-file-size": "node scripts/check-cli-file-size.mjs",
     "test:cli-nightly": "node scripts/v0804-cli-nightly.mjs --mode quick",
+    "test:cli-v0806-nightly": "node scripts/v0806-cli-nightly.mjs",
     "test:cli-pty": "npm run build:cli && node scripts/cli-pty-smoke.mjs",
     "test:cli-terminal-app": "npm run build:cli && node scripts/cli-terminal-app-smoke.mjs",
     "test:cli-terminal-ime": "npm run build:cli && node scripts/cli-terminal-ime-smoke.mjs",

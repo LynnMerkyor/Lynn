@@ -4,7 +4,7 @@ import { renderPatchPreview } from "./diff-format.js";
 import { CLIENT_TOOL_DEFINITIONS } from "./tools/registry.js";
 import type { ClientToolName, ClientToolResult } from "./tools/types.js";
 import type { CodeToolRequest } from "./code-tool-protocol.js";
-import { bold, dim, green, red, supportsColor } from "./terminal-style.js";
+import { bold, dim, green, orange, red, supportsColor, yellow } from "./terminal-style.js";
 import { renderCard } from "./terminal-spinner.js";
 
 export interface ToolApprovalRequest {
@@ -44,8 +44,12 @@ export async function resolveToolApproval(request: ToolApprovalRequest): Promise
   }
   const rl = readline.createInterface({ input: request.input, output: request.output, terminal: true });
   try {
-    if (request.preview) request.output.write(`${request.preview}\n`);
-    const answer = (await rl.question(t("approval.prompt", { tool: request.tool, cwd: request.cwd }))).trim().toLowerCase();
+    request.output.write(`${renderToolApprovalCard({
+      tool: request.tool,
+      cwd: request.cwd,
+      preview: request.preview,
+    }, supportsColor(request.output))}\n`);
+    const answer = (await rl.question(t("approval.prompt"))).trim().toLowerCase();
     if (answer === "a" || answer === "always") {
       if (request.session) request.session.approveAll = true;
       return "yolo";
@@ -55,6 +59,31 @@ export async function resolveToolApproval(request: ToolApprovalRequest): Promise
   } finally {
     rl.close();
   }
+}
+
+export interface ToolApprovalCardInput {
+  tool: ClientToolName;
+  cwd: string;
+  preview?: string;
+}
+
+export function renderToolApprovalCard(input: ToolApprovalCardInput, color: boolean): string {
+  const gutter = orange("│", color);
+  const preview = (input.preview || "").trim();
+  const lines = [
+    `${gutter} ${orange("◆", color)} ${bold(t("approval.card.title", { tool: input.tool }), color)}`,
+    `${gutter}   ${dim(t("approval.card.cwd"), color)} ${input.cwd}`,
+  ];
+  if (preview) {
+    lines.push(`${gutter}   ${dim(t("approval.card.preview"), color)}`);
+    for (const line of preview.split("\n").slice(0, 18)) {
+      lines.push(`${gutter}     ${line}`);
+    }
+    const omitted = preview.split("\n").length - 18;
+    if (omitted > 0) lines.push(`${gutter}     ${dim(t("approval.card.omitted", { n: omitted }), color)}`);
+  }
+  lines.push(`${gutter}   ${green("y", color)} ${t("approval.card.once")} · ${yellow("a", color)} ${t("approval.card.session")} · ${red("n", color)} ${t("approval.card.deny")}`);
+  return lines.join("\n");
 }
 
 export function redactToolArgs(request: CodeToolRequest): Record<string, unknown> {
