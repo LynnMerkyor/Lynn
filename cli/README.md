@@ -59,6 +59,17 @@ LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.
   npm run test:cli-install:remote
 ```
 
+## Prefix-cache discipline
+
+Lynn Code keeps long-running agent context cache-friendly by separating the prompt into deterministic layers:
+
+- `stable_prefix`: model identity, tool contracts, safety/runtime rules.
+- `resume_history`: compacted session and checkpoint summaries.
+- `volatile_runtime`: route, cwd, permission mode, and current execution facts.
+- `current_user`: the latest task turn.
+
+This follows the same principle as Reasonix-style prefix-cache stability: keep the expensive, reusable prefix stable, append volatile context later, and detect drift instead of silently losing cache hits. `Lynn cache doctor --json` and session metadata expose stable-prefix hashes, cache hit/miss telemetry, and prefix drift diagnostics for automation.
+
 ```bash
 Lynn version
 Lynn doctor --offline

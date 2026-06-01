@@ -49,6 +49,8 @@ Lynn code     # coding-agent TUI
 Lynn agents   # copyable headless/Fleet commands for other agents
 ```
 
+Long runs follow a Reasonix-style **prefix-cache discipline**: stable instructions, tool specs, runtime constraints, and resume summaries stay in deterministic context layers so turns do not reorder the cacheable prefix. Cache hit/miss and prefix drift diagnostics go to session metadata and `Lynn cache doctor --json`, not an anxiety-inducing context meter.
+
 Machine-call contract:
 
 ```bash
@@ -88,6 +90,7 @@ Related repositories:
 - **Apple Terminal / Chinese IME stability**: Lynn keeps the Ink TUI, input box, status bar, and decode TPS, while Apple Terminal uses a conservative profile with high-frequency shimmer/sweep, rotating placeholders, and inline image escapes disabled.
 - **Full TUI elsewhere**: iTerm2, kitty, VS Code Terminal, and other terminals keep shimmer, markdown tables/code highlighting, diff preview, multiline input, media path guidance, and the speed meter.
 - **Better as an agent worker**: `Lynn -p`, `Lynn code -p --json`, and `Lynn worker run --jsonl` skip the human TUI and are intended for Claude Code / Codex CLI / Kimi Code / CI / Fleet calls.
+- **Prefix-cache discipline**: stable prefix / resume history / volatile runtime / current user context layers preserve cacheable prompts; cache hit/miss, stable-prefix hash, and prefix-drift diagnostics are logged for long-run debugging.
 - **Fresh CLI installs can chat**: a standalone CLI install uses the hosted Lynn Brain by default; the desktop app, local Brain, and BYOK remain optional.
 
 ```bash

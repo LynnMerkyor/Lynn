@@ -235,7 +235,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <li>Lynn CLI / Lynn Code 新增 Ink TUI、JSONL headless 模式和 Fleet worker adapter</li>
               <li>GUI Fleet 支持多 worker 派单、日志、diff、gate、合并与远端 push 闭环</li>
               <li>Brain 默认路由为 StepFun 3.7 Flash(256K 上下文,high 推理,32K 推理/生成预算) → MiMo → Spark Qwen 3.6 35B A3B</li>
-              <li>链式工具、搜索、tool-storm、长任务续跑和 cache-friendly context layers 加固</li>
+              <li>链式工具、搜索、tool-storm、长任务续跑和 Reasonix 风格前置缓存纪律加固:stable prefix 分层、cache telemetry 与 prefix drift 诊断进入日志/metadata</li>
               <li>本地 Qwen3.5-9B MTP 改为显式启用,不会随启动自动占用约 6GB 显存/统一内存</li>
               <li>CLI 镜像安装、headless agent contract 和 packaged CLI 门禁进入发布流程</li>
             </ul>
