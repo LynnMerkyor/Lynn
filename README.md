@@ -16,7 +16,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.80.1-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.80.4-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.80.5-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -41,28 +41,34 @@ Cursor 解决“我正在编辑这段代码”;Claude Code / Codex CLI 解决“
 
 ### CLI 快速安装
 
-V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带 Ink TUI、完整 Markdown 渲染、流式输出、工具调用和长任务续跑。它可以独立给人使用,也可以给其他智能体和 CI 当无交互 worker。**一行命令装好,不用克隆仓库、不用编译。**
+V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、完整 Markdown 渲染、流式输出、工具调用和长任务续跑。它可以独立给人使用,也可以给其他智能体和 CI 当无交互 worker。**一行命令装好,不用克隆仓库、不用编译。**
+
+需要 Node.js 20 LTS 或 22 LTS。没有 Node 时可先装:
 
 ```bash
-# 1. Node requirement: Node.js 20 LTS or 22 LTS with npm.
-# Check: node -v should be >= v20.
 # macOS: brew install node@20
 # macOS/Linux: nvm install 20 && nvm use 20
 # Windows: winget install OpenJS.NodeJS.LTS
+```
 
-# 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz"
+安装或覆盖升级只复制这一行:
 
-# 3. Launch.
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz"
+```
+
+启动 / 验证:
+
+```bash
+Lynn --version  # should print 0.80.5
 Lynn            # interactive chat TUI
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.80.4
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
 默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到 Lynn 远端 Brain。模型级联为 **StepFun 3.7 Flash(256K 上下文,high 推理,32K 推理/生成预算) → MiMo V2.5 Pro/Omni → Spark Qwen 3.6 35B A3B**。纯 CLI 用户也可以用 `Lynn providers set ...` 绑定自己的 OpenAI 兼容端点。
 
-长任务默认采用 Reasonix 风格的**前置缓存纪律**:稳定前缀、工具定义、运行时约束和 resume 摘要分层固定,避免每轮重排导致 prefix drift;缓存命中和漂移诊断进入 session metadata / `Lynn cache doctor --json`,不在界面里制造上下文焦虑。
+长任务默认采用 Reasonix 风格的**前置缓存纪律**:稳定前缀、工具定义、运行时约束和 resume 摘要分层固定,避免每轮重排导致 prefix drift;缓存命中以 `prefix-cache ... hit` 进入 usage、session、replay 和 `Lynn cache doctor --json`,不在界面里制造上下文焦虑。
 
 面向其他智能体的最短静默契约:
 
@@ -117,20 +123,20 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 ## 🆕 近期更新
 
 <details>
-<summary><strong>CLI v0.80.4</strong> · 2026-05-31 · Apple Terminal 稳定性 + TUI 体验热修 <em>(CLI 最新)</em></summary>
+<summary><strong>CLI v0.80.5</strong> · 2026-06-01 · 前置缓存可见 + 长任务稳定性热修 <em>(CLI 最新)</em></summary>
 
 **CLI-only 热修,GUI 仍为 v0.80.1**:
-- 🧯 **Apple Terminal / 中文输入稳定性**:保留 Ink TUI、输入框、状态栏和 decode TPS,但在 Apple Terminal 自动关闭高频流光、扫描动画、动态 placeholder 与内联图片转义,规避 macOS Terminal + IME 绘制崩溃。
-- 🖥️ **完整 TUI 仍保留**:iTerm2、kitty、VS Code Terminal 等继续使用完整流光等待、Markdown 表格/代码高亮、diff 预览、多行输入、图片/音频/视频路径提示和底部速度表。
-- 🤖 **更适合其他智能体调用**:`Lynn -p`、`Lynn code -p --json`、`Lynn worker run --jsonl` 均不进入人类 TUI,适合作为 CLI Fleet worker 或被 Claude Code / Codex CLI / Kimi Code 静默调用。
-- 💾 **前置缓存与 prefix drift 诊断**:借鉴 Reasonix 的 prefix-cache 思路,把 stable prefix / resume history / volatile runtime / current user 分层固定,并把 cache hit、cache miss、stable prefix hash 和漂移诊断写入日志与 session metadata。
-- 🌐 **纯 CLI 可直接使用**:全新机器只安装 CLI 时,默认走 Lynn 远端 Brain;本地 Brain 或 GUI 可选,BYOK 仍可用。
+- 💾 **前置缓存命中可见**:借鉴 Reasonix 的 prefix-cache 思路,stable prefix / resume history / volatile runtime / current user 分层固定;usage、session、replay 和 `Lynn cache doctor --json` 会显示 `prefix-cache ... hit`,但不在聊天 UI 里显示 ctx% 焦虑条。
+- 🧱 **长任务运行时压缩**:`Lynn code --long` 在工具循环中自动压缩旧消息,保留原始目标、当前计划和最近工具结果;JSONL 会发出 `code.runtime.compacted`,人类 TUI 会显示轻量信息卡。
+- 🔁 **Brain 早期断流自动重试**:如果 SSE 在任何可见内容/工具调用前断开,CLI 会指数退避重试;一旦已经开始输出,不会重试以避免重复半轮工具调用。
+- 🧭 **计划与工具卡片继续打磨**:`update_plan` 和 resume 计划回显使用 Claude Code 风格 plan card,工具/路由/压缩状态保持左 gutter 卡片风格。
+- 🧪 **门禁覆盖长跑压缩路径**:`cli-longrun-smoke` 会制造大工具结果并要求出现 `code.runtime.compacted`,避免长任务稳定性只停留在单测。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.4)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.5)
 
 </details>
 
