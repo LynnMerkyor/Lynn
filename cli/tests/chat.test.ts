@@ -32,6 +32,40 @@ const pythonIt = hasPython3() ? it : it.skip;
 const ptyIt = process.platform === "win32" ? it.skip : pythonIt;
 const interactivePtyIt = process.env.CI === "true" ? it.skip : ptyIt;
 
+async function runInteractiveChatInput(
+  inputText: string,
+  options: { args?: string[]; timeoutMs?: number } = {},
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [
+      "--import",
+      "tsx",
+      "src/cli.ts",
+      ...(options.args || []),
+      "--mock-brain",
+    ], {
+      cwd: cliRoot,
+      env: { ...process.env, NO_COLOR: "1", LYNN_LANG: "en" },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error("interactive chat fixture did not exit"));
+    }, options.timeoutMs || 5000);
+    child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+    child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+    child.stdin.write(inputText);
+    child.stdin.end();
+  });
+}
+
 beforeEach(() => setLang("en"));
 afterEach(() => setLang(null));
 
@@ -256,6 +290,43 @@ describe("chat mode controls", () => {
       expect(result.code).toBe(0);
       expect(result.stdout).toContain(targetCwd);
       expect(result.stdout).not.toContain("Usage:");
+    } finally {
+      await fs.rm(targetCwd, { recursive: true, force: true });
+    }
+  });
+
+  it("handles exact local exit phrases without sending them to the model", async () => {
+    const english = await runInteractiveChatInput("exit\n");
+    const chinese = await runInteractiveChatInput("再见\n");
+
+    expect(english.code).toBe(0);
+    expect(chinese.code).toBe(0);
+    expect(english.stdout).not.toContain("Mock Lynn response");
+    expect(chinese.stdout).not.toContain("Mock Lynn response");
+    expect(english.stdout).not.toContain("模拟回复");
+    expect(chinese.stdout).not.toContain("模拟回复");
+  });
+
+  it("runs local pwd and ls shortcuts without yolo or model fallback", async () => {
+    const targetCwd = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-chat-local-ls-"));
+    try {
+      await fs.writeFile(path.join(targetCwd, "alpha.txt"), "alpha", "utf8");
+      await fs.mkdir(path.join(targetCwd, "subdir"));
+
+      const result = await runInteractiveChatInput("pwd\nls\n/exit\n", {
+        args: ["--cwd", targetCwd],
+      });
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("local pwd");
+      expect(result.stdout).toContain(targetCwd);
+      expect(result.stdout).toContain("local ls");
+      expect(result.stdout).toContain("alpha.txt");
+      expect(result.stdout).toContain("subdir/");
+      expect(result.stdout).not.toContain("Mock Lynn response:pwd");
+      expect(result.stdout).not.toContain("Mock Lynn response:ls");
+      expect(result.stdout).not.toContain("模拟回复:pwd");
+      expect(result.stdout).not.toContain("模拟回复:ls");
     } finally {
       await fs.rm(targetCwd, { recursive: true, force: true });
     }

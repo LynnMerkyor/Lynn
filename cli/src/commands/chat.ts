@@ -28,6 +28,7 @@ import { shouldUseInkTui } from "../terminal-safety.js";
 import { createDecodeSpeedTracker } from "../decode-speed.js";
 import { createRuntimeMetrics, recordDecodeTps, recordUsageMetrics, renderRuntimeMetrics } from "../runtime-metrics.js";
 import { compactChatMessages } from "../chat-compaction.js";
+import { isLocalExitText, parseLocalReadOnlyCommand, renderLocalReadOnlyBlocked, renderLocalReadOnlyResult, runLocalReadOnlyCommand } from "../local-command.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/yolo",
@@ -110,8 +111,8 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   async function handleText(raw: string): Promise<"continue" | "break"> {
     const text = normalizeSlashInput(raw.trim());
     if (!text) return "continue";
+    if (isLocalExitText(text)) return "break";
     appendHistory(text, histFile);
-    if (text === "/exit" || text === "/quit") return "break";
     if (text === "/help") {
       output.write(`${t("chat.help")}\n\n`);
       return "continue";
@@ -233,6 +234,16 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     }
     if (text === "/cwd" || text === "/pwd") {
       output.write(`${t("cwd.info", { cwd: chatCwd })}\n\n`);
+      return "continue";
+    }
+    const localReadOnly = parseLocalReadOnlyCommand(text, chatCwd);
+    if (localReadOnly?.kind === "blocked") {
+      output.write(`${renderLocalReadOnlyBlocked(localReadOnly, output)}\n\n`);
+      return "continue";
+    }
+    if (localReadOnly?.kind === "command") {
+      const result = await runLocalReadOnlyCommand(localReadOnly.command);
+      output.write(`${renderLocalReadOnlyResult(localReadOnly.command, result, output)}\n\n`);
       return "continue";
     }
     const memoryCommand = await handleMemorySlashCommand(text, dataDir);
