@@ -72,6 +72,8 @@ import {
   type CodeAgentApprovalRequest,
   type CodeAgentEvent,
 } from "../code-agent-loop.js";
+import { runUltraCodeTask } from "../code-ultra-runner.js";
+import type { UltraEvent, UltraOptions } from "../code-ultra.js";
 
 export {
   codeToolDefinitions,
@@ -706,6 +708,21 @@ async function runCodeTask(
     sandbox: mode.sandbox,
     timeoutMs: timeoutMs(args),
   };
+  if (ultraEnabled(args)) {
+    return runUltraCodeBranch({
+      args,
+      taskText,
+      context,
+      brainUrl,
+      fallbackProvider: cliProvider?.profile,
+      reasoning,
+      json,
+      toolCtx,
+      stepBudget,
+      mode,
+      options,
+    });
+  }
   let savedSessionPath: string | null = null;
   let rewindBeforeLine: number | null = null;
   const rewindSnapshots: Array<{ ref: string; restoreCommand: string }> = [];
@@ -868,6 +885,121 @@ function renderAssistantBlock(text: string, footer?: string): string {
   const lines = text.replace(/\s+$/g, "").split(/\r?\n/);
   const body = lines.map((line, index) => `${index === 0 ? "• " : "  "}${line}`).join("\n");
   return `${body}${footer ? `\n\n${footer}` : ""}\n`;
+}
+
+function ultraEnabled(args: ParsedArgs): boolean {
+  return hasFlag(args.flags, "ultra");
+}
+
+function ultraOptions(args: ParsedArgs): UltraOptions {
+  const opts: UltraOptions = {};
+  const maxSubtasks = Number.parseInt(getStringFlag(args.flags, "ultra-max-subtasks") || "", 10);
+  const maxConcurrency = Number.parseInt(getStringFlag(args.flags, "ultra-concurrency") || "", 10);
+  if (Number.isFinite(maxSubtasks)) opts.maxSubtasks = maxSubtasks;
+  if (Number.isFinite(maxConcurrency)) opts.maxConcurrency = maxConcurrency;
+  return opts;
+}
+
+async function runUltraCodeBranch(p: {
+  args: ParsedArgs;
+  taskText: string;
+  context: CodeContext;
+  brainUrl: string;
+  fallbackProvider?: CliProviderProfile;
+  reasoning: ReturnType<typeof parseReasoningOptions>;
+  json: boolean;
+  toolCtx: ToolRunContext;
+  stepBudget: number;
+  mode: ChatMode;
+  options: { compact?: boolean; onEvent?: (event: CodeAgentEvent) => void };
+}): Promise<number> {
+  const color = supportsColor(errorOutput);
+  const compact = Boolean(p.options.compact || p.options.onEvent);
+  if (p.json) {
+    writeJsonLine({ type: "code.ultra.started", ts: nowIso(), task: p.taskText });
+  } else if (!compact) {
+    errorOutput.write(`${orange("⚡ ultra", color)} ${dim("— decomposing into parallel sub-tasks…", color)}\n`);
+  }
+
+  const ultra = await runUltraCodeTask({
+    task: p.taskText,
+    context: p.context,
+    brainUrl: p.brainUrl,
+    fallbackProvider: p.fallbackProvider,
+    reasoning: p.reasoning,
+    maxSteps: p.stepBudget,
+    toolCtx: p.toolCtx,
+    input,
+    output: errorOutput,
+    options: ultraOptions(p.args),
+    onEvent: (event) => emitUltraEvent(event, { json: p.json, compact, color, onEvent: p.options.onEvent }),
+  });
+
+  if (p.json) {
+    writeJsonLine({
+      type: "code.ultra.finished",
+      ts: nowIso(),
+      ok: ultra.ok,
+      waves: ultra.waves,
+      fallback: ultra.plan.fallback,
+      subtasks: ultra.results.map((r) => ({ id: r.id, title: r.title, ok: r.ok, skipped: Boolean(r.skipped) })),
+    });
+    writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: ultra.synthesis });
+    writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: ultra.ok });
+  } else if (p.options.onEvent) {
+    p.options.onEvent({ type: "assistant.delta", text: ultra.synthesis });
+    p.options.onEvent({ type: "task.finished", ok: ultra.ok, text: ultra.synthesis, usageSummary: null });
+  } else {
+    process.stdout.write(renderAssistantBlock(ultra.synthesis, renderCodeFooter({
+      context: p.context,
+      mode: p.mode,
+      mockBrain: false,
+      reasoning: p.reasoning,
+    })));
+  }
+  return ultra.ok ? 0 : 1;
+}
+
+function emitUltraEvent(
+  event: UltraEvent,
+  ctx: { json: boolean; compact: boolean; color: boolean; onEvent?: (event: CodeAgentEvent) => void },
+): void {
+  if (ctx.json) {
+    writeJsonLine({ ...event, ts: nowIso() });
+    return;
+  }
+  if (ctx.compact) {
+    const plain = formatUltraEventLine(event, false);
+    if (plain) ctx.onEvent?.({ type: "tool.progress", message: plain.trim() });
+    return;
+  }
+  const line = formatUltraEventLine(event, ctx.color);
+  if (line) errorOutput.write(`${line}\n`);
+}
+
+function formatUltraEventLine(event: UltraEvent, color: boolean): string | null {
+  switch (event.type) {
+    case "ultra.plan": {
+      const n = event.plan.subtasks.length;
+      const label = event.plan.fallback ? "single worker (no useful split)" : `${n} sub-task${n === 1 ? "" : "s"}`;
+      const warn = event.plan.warnings.length ? ` ${dim(`(${event.plan.warnings.length} note(s))`, color)}` : "";
+      return `${bold("plan", color)} ${dim("→", color)} ${label}${warn}`;
+    }
+    case "ultra.wave":
+      return dim(`wave ${event.wave}: ${event.ids.join(", ")}`, color);
+    case "ultra.subtask.started":
+      return dim(`  ▸ ${event.id} ${event.title}`, color);
+    case "ultra.subtask.finished":
+      if (event.skipped) return dim(`  ${event.id} skipped (dependency failed)`, color);
+      if (event.ok) return `  ${orange("✓", color)} ${event.id} ${event.title}`;
+      return `  ${dangerLine("✗", color)} ${event.id} ${event.title}`;
+    case "ultra.synthesis.started":
+      return dim("synthesizing results…", color);
+    case "ultra.synthesis":
+      return null; // printed as the final answer
+    default:
+      return null;
+  }
 }
 
 function renderCodeFooter(inputData: {
