@@ -98,6 +98,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   let memoryFrame = buildMemoryContextFrameSync(dataDir);
   const messages: ChatMessage[] = resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile), memoryFrame);
   const rewindState = createChatRewindState();
+  let pendingRewind: { phase: "list" | "preview"; ordinal: number | null } | null = null;
   const brainRenderState: HumanBrainRenderState = {};
   const runtimeMetrics = createRuntimeMetrics();
   const histFile = historyPath();
@@ -122,6 +123,23 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     if (!text) return "continue";
     if (isLocalExitText(text)) return "break";
     appendHistory(text, histFile);
+    if (pendingRewind) {
+      const selected = parsePendingRewindInput(text, pendingRewind);
+      if (selected) {
+        try {
+          const body = selected.apply
+            ? applyChatRewind(rewindState, selected.ordinal, messages, chatCwd, supportsColor(output))
+            : renderChatRewind(rewindState, { ordinal: selected.ordinal, apply: false }, supportsColor(output));
+          pendingRewind = selected.apply ? null : { phase: "preview", ordinal: selected.ordinal };
+          output.write(`${body}\n\n`);
+        } catch (error) {
+          pendingRewind = null;
+          output.write(`${red(error instanceof Error ? error.message : String(error), supportsColor(output))}\n\n`);
+        }
+        return "continue";
+      }
+      pendingRewind = null;
+    }
     if (text === "/help") {
       output.write(`${t("chat.help")}\n\n`);
       return "continue";
@@ -240,6 +258,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       messages.splice(0, messages.length, ...resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile), memoryFrame));
       rewindState.checkpoints = [];
       rewindState.active = null;
+      pendingRewind = null;
       output.write(`${t("chat.cleared")}\n\n`);
       return "continue";
     }
@@ -249,8 +268,12 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
         const body = rewindCommand.apply && rewindCommand.ordinal !== null
           ? applyChatRewind(rewindState, rewindCommand.ordinal, messages, chatCwd, supportsColor(output))
           : renderChatRewind(rewindState, rewindCommand, supportsColor(output));
+        pendingRewind = !rewindCommand.apply
+          ? { phase: rewindCommand.ordinal === null ? "list" : "preview", ordinal: rewindCommand.ordinal }
+          : null;
         output.write(`${body}\n\n`);
       } catch (error) {
+        pendingRewind = null;
         output.write(`${red(error instanceof Error ? error.message : String(error), supportsColor(output))}\n\n`);
       }
       return "continue";
@@ -542,6 +565,14 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     rl?.close();
   }
   return 0;
+}
+
+function parsePendingRewindInput(text: string, pending: { phase: "list" | "preview"; ordinal: number | null }): { ordinal: number; apply: boolean } | null {
+  if (/^\d+$/.test(text)) return { ordinal: Number(text), apply: false };
+  if (pending.phase === "preview" && pending.ordinal !== null && /^(?:y|yes|apply|确认|应用)$/i.test(text)) {
+    return { ordinal: pending.ordinal, apply: true };
+  }
+  return null;
 }
 
 function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolean): boolean {

@@ -129,7 +129,7 @@ function renderChatRewindList(state: ChatRewindState, color: boolean): string {
       const files = checkpoint.snapshot?.entries ? ` · ${checkpoint.snapshot.entries} touched` : "";
       return `${dim(`${index + 1}.`, color)} ${cyan(checkpoint.label, color)}${dim(files, color)}`;
     }),
-    dim("Use /rewind N to preview, /rewind N --apply to restore this chat to that point.", color),
+    dim("Type a number to preview. After preview, type y/apply to restore. Or use /rewind N --apply.", color),
   ].join("\n");
 }
 
