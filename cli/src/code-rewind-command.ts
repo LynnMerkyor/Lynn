@@ -1,4 +1,3 @@
-import type { Writable } from "node:stream";
 import { getStringFlag, hasFlag, type ParsedArgs } from "./args.js";
 import { nowIso, writeJsonLine } from "./jsonl.js";
 import { resolveDataDir } from "./session/store.js";
@@ -14,8 +13,8 @@ import {
 } from "./code-rewind.js";
 
 interface CodeRewindStreams {
-  output: Writable;
-  errorOutput: Writable;
+  output: NodeJS.WriteStream;
+  errorOutput: NodeJS.WriteStream;
 }
 
 export async function runCodeRewindCommand(args: ParsedArgs, json: boolean, streams: CodeRewindStreams): Promise<number> {
