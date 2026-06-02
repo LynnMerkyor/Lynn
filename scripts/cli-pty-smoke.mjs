@@ -32,8 +32,10 @@ if pid == 0:
 
 output = b""
 stage = 0
+stage_started = time.time()
 deadline = time.time() + (timeout_ms / 1000.0)
 exit_code = None
+long_paste = "第一段: Lynn PTY paste gate\n第二段: 确认长粘贴会收敛成粘贴块\n第三段: 提交后仍完整进入模型"
 
 def plain():
   text = output.decode("utf-8", "ignore")
@@ -53,22 +55,38 @@ try:
       break
 
     readable, _, _ = select.select([fd], [], [], 0.1)
-    if fd not in readable:
-      continue
-    try:
-      chunk = os.read(fd, 4096)
-    except OSError:
-      continue
-    if not chunk:
-      continue
-    output += chunk
+    if fd in readable:
+      try:
+        chunk = os.read(fd, 4096)
+      except OSError:
+        chunk = b""
+      if chunk:
+        output += chunk
     text = plain()
     if stage == 0 and "›" in text:
-      os.write(fd, "你好世界\r".encode("utf-8"))
+      # Empty enter must not submit the placeholder or repeat the previous turn.
+      os.write(fd, b"\r")
       stage = 1
-    elif stage == 1 and ("模拟回复:你好世界" in text or "模拟回复：你好世界" in text):
+      stage_started = time.time()
+    elif stage == 1:
+      if "模拟回复:" in text or "模拟回复：" in text:
+        raise RuntimeError("empty enter submitted a prompt")
+      if time.time() - stage_started > 0.4:
+        payload = "\x1b[200~" + long_paste + "\x1b[201~"
+        os.write(fd, payload.encode("utf-8"))
+        stage = 2
+        stage_started = time.time()
+    elif stage == 2 and "粘贴块" in text:
+      os.write(fd, b"\r")
+      stage = 3
+      stage_started = time.time()
+    elif stage == 3 and ("模拟回复:" in text or "模拟回复：" in text) and "第三段" in text:
+      os.write(fd, "你好世界\r".encode("utf-8"))
+      stage = 4
+      stage_started = time.time()
+    elif stage == 4 and ("模拟回复:你好世界" in text or "模拟回复：你好世界" in text):
       os.write(fd, b"/exit\r")
-      stage = 2
+      stage = 5
 
   if exit_code is None:
     try:
@@ -80,7 +98,7 @@ try:
   text = plain()
   if exit_code != 0:
     raise RuntimeError(f"Lynn exited {exit_code}")
-  if stage < 2:
+  if stage < 5:
     raise RuntimeError(f"Lynn exited before completing the PTY smoke, stage={stage}")
   if any(marker in text for marker in ["Uncaught", "TypeError", "ReferenceError", "setRawMode", "Cannot find module"]):
     raise RuntimeError("detected crash-like output")

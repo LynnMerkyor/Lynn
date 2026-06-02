@@ -5,6 +5,7 @@
 //   { type: 'reasoning', delta: string }
 //   { type: 'content',   delta: string }
 //   { type: 'tool_call_delta', delta: Array<{index, id?, function?: {name?, arguments?}}> }
+//   { type: 'usage',     usage: unknown }
 //   { type: 'finish',    reason: string }
 
 import type { StreamChunk, ToolCallDelta } from '../types.js';
@@ -59,7 +60,11 @@ export async function* parseOpenAISSE(body: SSEBody): AsyncGenerator<StreamChunk
       if (!data || data === '[DONE]') continue;
       let parsed: unknown;
       try { parsed = JSON.parse(data); } catch { continue; }
-      const choices = asRecord(parsed)?.choices;
+      const record = asRecord(parsed);
+      if (record && 'usage' in record && record.usage) {
+        yield { type: 'usage', usage: record.usage };
+      }
+      const choices = record?.choices;
       const choice = Array.isArray(choices) ? asRecord(choices[0]) : null;
       if (!choice) continue;
       const delta = asRecord(choice.delta) || {};

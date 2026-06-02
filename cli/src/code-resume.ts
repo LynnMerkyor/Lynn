@@ -20,7 +20,6 @@ export interface ResumeDiagnostics {
 
 export interface ResumeSessionInfo {
   cwd: string | null;
-  gitSnapshot: string | null;
   firstPrompt: string | null;
 }
 
@@ -92,17 +91,15 @@ export function truncateForResume(text: string, max = 72): string {
 export async function readResumeSessionInfo(sessionPath: string): Promise<ResumeSessionInfo> {
   const { lines } = await readSessionLinesResult(sessionPath);
   let cwd: string | null = null;
-  let gitSnapshot: string | null = null;
   let firstPrompt: string | null = null;
   for (const line of lines) {
     if (line.type === "metadata" && line.data) {
       if (typeof line.data.cwd === "string") cwd = line.data.cwd;
-      if (typeof line.data.gitSnapshot === "string") gitSnapshot = line.data.gitSnapshot;
     } else if (!firstPrompt && line.type === "user" && typeof line.content === "string" && line.content.trim()) {
       firstPrompt = line.content.trim();
     }
   }
-  return { cwd, gitSnapshot, firstPrompt };
+  return { cwd, firstPrompt };
 }
 
 export async function loadResumeMessages(sessionPath: string, maxChars = 24_000): Promise<ChatMessage[]> {

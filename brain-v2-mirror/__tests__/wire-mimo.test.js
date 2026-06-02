@@ -32,6 +32,17 @@ describe('MiMo wire adapter', () => {
     expect(contents).toEqual(['hello ', 'world']);
   });
 
+  it('requests and forwards streaming usage for prefix-cache telemetry', async () => {
+    const f = mockFetch(ok(makeSSEBody(
+      'data: ' + JSON.stringify({ choices: [], usage: { prompt_cache_hit_tokens: 60, prompt_cache_miss_tokens: 40 } }) + '\n\n',
+      sseDone(),
+    )));
+    const chunks = await drain(callMimo({ provider, messages: [{ role: 'user', content: 'q' }] }));
+    const body = JSON.parse(f.mock.calls[0][1].body);
+    expect(body.stream_options).toEqual({ include_usage: true });
+    expect(chunks).toContainEqual({ type: 'usage', usage: { prompt_cache_hit_tokens: 60, prompt_cache_miss_tokens: 40 } });
+  });
+
   it('forwards reasoning_content as reasoning chunk', async () => {
     mockFetch(ok(makeSSEBody(
       sseEvent({ reasoning_content: 'thinking...' }),

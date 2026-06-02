@@ -77,10 +77,11 @@ describe("code tools", () => {
     expect(globToRegExp("**/*.ts").test("src/hello.ts")).toBe(true);
   });
 
-  it("requires yolo approval for writes and bash", async () => {
-    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "write_file", path: "out.txt", text: "x" })).rejects.toThrow("approval yolo");
-    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "apply_patch", text: "diff --git a/x b/x\n" })).rejects.toThrow("approval yolo");
-    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "bash", command: "pwd" })).rejects.toThrow("approval yolo");
+  it("requires an approved effective permission for writes and arbitrary bash", async () => {
+    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "write_file", path: "out.txt", text: "x" })).rejects.toThrow("requires approval");
+    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "apply_patch", text: "diff --git a/x b/x\n" })).rejects.toThrow("requires approval");
+    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "bash", command: "pwd" })).resolves.toMatchObject({ ok: true, tool: "bash" });
+    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "bash", command: "git status" })).rejects.toThrow("requires approval");
   });
 
   it("blocks dangerous tools in read-only sandbox even with yolo approval", async () => {
@@ -283,7 +284,7 @@ describe("code tools", () => {
       },
     }));
     expect(request?.tool).toBe("apply_patch");
-    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: request!.tool, ...request!.args })).rejects.toThrow("approval yolo");
+    await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: request!.tool, ...request!.args })).rejects.toThrow("requires approval");
 
     const result = await runClientTool({ cwd: tmp, approval: "yolo" }, { name: request!.tool, ...request!.args });
     const text = await fs.readFile(path.join(tmp, "src", "hello.ts"), "utf8");
@@ -582,7 +583,6 @@ describe("code tools", () => {
   it("renders a clear danger warning for YOLO mode", () => {
     const intro = renderCodeIntro({ approval: "yolo", sandbox: "danger-full-access" });
 
-    expect(intro).toContain("DANGER:");
     expect(intro).toContain("YOLO mode can edit files");
   });
 
@@ -590,7 +590,7 @@ describe("code tools", () => {
     setLang("zh");
     const intro = renderCodeIntro({ approval: "yolo", sandbox: "danger-full-access" });
 
-    expect(intro).toContain("危险:");
+    expect(intro).toContain("YOLO 模式可直接编辑文件");
     expect(intro).toContain("shell 命令");
   });
 
@@ -711,6 +711,7 @@ describe("code tools", () => {
     const help = renderCodeHeadlessHelp();
     expect(help).toContain("Lynn code -p \"fix tests");
     expect(help).toContain("--approval yolo --sandbox workspace-write");
+    expect(help).toContain("交互式 ask 模式会逐次弹出授权");
     expect(help).toContain("Lynn worker run --brief task.md");
     expect(help).toContain("code.tool.ledger");
 

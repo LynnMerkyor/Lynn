@@ -4,7 +4,8 @@ import { renderPatchPreview } from "./diff-format.js";
 import { CLIENT_TOOL_DEFINITIONS } from "./tools/registry.js";
 import type { ClientToolName, ClientToolResult } from "./tools/types.js";
 import type { CodeToolRequest } from "./code-tool-protocol.js";
-import { bold, dim, green, supportsColor } from "./terminal-style.js";
+import { isSafeReadOnlyShellCommand } from "./local-command.js";
+import { bold, dim, green, orange, red, supportsColor, yellow } from "./terminal-style.js";
 import { renderCard } from "./terminal-spinner.js";
 
 export interface ToolApprovalRequest {
@@ -15,6 +16,7 @@ export interface ToolApprovalRequest {
   input: NodeJS.ReadStream;
   output: NodeJS.WriteStream;
   preview?: string;
+  args?: CodeToolRequest["args"];
   session?: { approveAll: boolean };
 }
 
@@ -35,6 +37,7 @@ export function canPromptForDangerousTool(inputStream: Pick<NodeJS.ReadStream, "
 
 export async function resolveToolApproval(request: ToolApprovalRequest): Promise<ToolApprovalRequest["approval"]> {
   if (!isDangerousClientTool(request.tool)) return request.approval;
+  if (request.tool === "bash" && isSafeReadOnlyShellCommand(request.args?.command || "")) return request.approval;
   if (request.approval === "yolo" || request.approval === "on-failure" || request.session?.approveAll) return "yolo";
   if (request.approval === "never") {
     throw new Error(`${request.tool} requires approval; current mode is never`);
@@ -44,8 +47,12 @@ export async function resolveToolApproval(request: ToolApprovalRequest): Promise
   }
   const rl = readline.createInterface({ input: request.input, output: request.output, terminal: true });
   try {
-    if (request.preview) request.output.write(`${request.preview}\n`);
-    const answer = (await rl.question(t("approval.prompt", { tool: request.tool, cwd: request.cwd }))).trim().toLowerCase();
+    request.output.write(`${renderToolApprovalCard({
+      tool: request.tool,
+      cwd: request.cwd,
+      preview: request.preview,
+    }, supportsColor(request.output))}\n`);
+    const answer = (await rl.question(t("approval.prompt"))).trim().toLowerCase();
     if (answer === "a" || answer === "always") {
       if (request.session) request.session.approveAll = true;
       return "yolo";
@@ -55,6 +62,31 @@ export async function resolveToolApproval(request: ToolApprovalRequest): Promise
   } finally {
     rl.close();
   }
+}
+
+export interface ToolApprovalCardInput {
+  tool: ClientToolName;
+  cwd: string;
+  preview?: string;
+}
+
+export function renderToolApprovalCard(input: ToolApprovalCardInput, color: boolean): string {
+  const gutter = orange("│", color);
+  const preview = (input.preview || "").trim();
+  const lines = [
+    `${gutter} ${orange("◆", color)} ${bold(t("approval.card.title", { tool: input.tool }), color)}`,
+    `${gutter}   ${dim(t("approval.card.cwd"), color)} ${input.cwd}`,
+  ];
+  if (preview) {
+    lines.push(`${gutter}   ${dim(t("approval.card.preview"), color)}`);
+    for (const line of preview.split("\n").slice(0, 18)) {
+      lines.push(`${gutter}     ${line}`);
+    }
+    const omitted = preview.split("\n").length - 18;
+    if (omitted > 0) lines.push(`${gutter}     ${dim(t("approval.card.omitted", { n: omitted }), color)}`);
+  }
+  lines.push(`${gutter}   ${green("y", color)} ${t("approval.card.once")} · ${yellow("a", color)} ${t("approval.card.session")} · ${red("n", color)} ${t("approval.card.deny")}`);
+  return lines.join("\n");
 }
 
 export function redactToolArgs(request: CodeToolRequest): Record<string, unknown> {
@@ -69,6 +101,11 @@ export function redactToolArgs(request: CodeToolRequest): Record<string, unknown
 
 export function renderClientToolStart(request: CodeToolRequest, stream: NodeJS.WriteStream = process.stderr): void {
   const color = supportsColor(stream);
+  const edit = editActivityForRequest(request);
+  if (edit) {
+    stream.write(`${renderCard({ kind: "run", title: editTitle("正在编辑", edit, color) }, color)}\n`);
+    return;
+  }
   const target = request.args.path || request.args.query || request.args.pattern || request.args.command || "";
   const body = target ? [oneLine(target, 120)] : undefined;
   stream.write(`${renderCard({
@@ -78,8 +115,19 @@ export function renderClientToolStart(request: CodeToolRequest, stream: NodeJS.W
   }, color)}\n`);
 }
 
-export function renderClientToolResult(result: ClientToolResult, stream: NodeJS.WriteStream = process.stderr): void {
+export function renderClientToolResult(result: ClientToolResult, stream: NodeJS.WriteStream = process.stderr, request?: CodeToolRequest): void {
   const color = supportsColor(stream);
+  const edit = request ? editActivityForRequest(request) : null;
+  if (edit) {
+    const state = result.ok ? "已编辑" : "编辑失败";
+    const body = result.ok ? undefined : [oneLine(result.error || summarizeToolOutput(result.output), 220)];
+    stream.write(`${renderCard({
+      kind: result.ok ? "ok" : "error",
+      title: editTitle(state, edit, color),
+      body,
+    }, color)}\n`);
+    return;
+  }
   const detail = result.error || summarizeToolOutput(result.output);
   stream.write(`${renderCard({
     kind: result.ok ? "ok" : "error",
@@ -108,6 +156,80 @@ function summarizeToolOutput(output: unknown): string {
   const text = typeof output === "string" ? output : JSON.stringify(output);
   if (!text) return "(no output)";
   return text.length > 500 ? `${text.slice(0, 500)}...` : text;
+}
+
+interface EditActivity {
+  file: string;
+  additions: number;
+  deletions: number;
+}
+
+function editActivityForRequest(request: CodeToolRequest): EditActivity | null {
+  if (request.tool === "write_file") {
+    const file = oneLine(String(request.args.path || "(unknown file)"), 80);
+    const text = typeof request.args.text === "string" ? request.args.text : "";
+    return { file, additions: countLogicalLines(text), deletions: 0 };
+  }
+  if (request.tool !== "apply_patch") return null;
+  const patch = typeof request.args.text === "string" ? request.args.text : "";
+  if (!patch.trim()) return { file: "(empty patch)", additions: 0, deletions: 0 };
+  return {
+    file: summarizePatchFiles(patch),
+    additions: countPatchLines(patch, "+"),
+    deletions: countPatchLines(patch, "-"),
+  };
+}
+
+function editTitle(prefix: string, edit: EditActivity, color: boolean): string {
+  const plus = edit.additions > 0 ? ` ${green(`+${edit.additions}`, color)}` : "";
+  const minus = edit.deletions > 0 ? ` ${red(`-${edit.deletions}`, color)}` : "";
+  return `✎ ${prefix} ${edit.file}${plus}${minus}`;
+}
+
+function summarizePatchFiles(patch: string): string {
+  const files = patchFiles(patch);
+  if (!files.length) return "(patch)";
+  if (files.length === 1) return oneLine(files[0], 80);
+  return `${oneLine(files[0], 64)} +${files.length - 1}`;
+}
+
+function patchFiles(patch: string): string[] {
+  const files: string[] = [];
+  const seen = new Set<string>();
+  const add = (file: string | undefined) => {
+    const clean = (file || "").trim().replace(/^[ab]\//, "");
+    if (!clean || clean === "/dev/null" || seen.has(clean)) return;
+    seen.add(clean);
+    files.push(clean);
+  };
+  for (const line of patch.replace(/\r\n/g, "\n").split("\n")) {
+    const git = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
+    if (git) {
+      add(git[2]);
+      continue;
+    }
+    const codex = line.match(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/);
+    if (codex) {
+      add(codex[1]);
+      continue;
+    }
+    const plus = line.match(/^\+\+\+ (?:b\/)?(.+)$/);
+    if (plus) add(plus[1]);
+  }
+  return files;
+}
+
+function countPatchLines(patch: string, op: "+" | "-"): number {
+  const ignored = op === "+" ? "+++" : "---";
+  return patch.replace(/\r\n/g, "\n").split("\n").filter((line) => {
+    return line.startsWith(op) && !line.startsWith(ignored);
+  }).length;
+}
+
+function countLogicalLines(text: string): number {
+  if (!text) return 0;
+  const normalized = text.replace(/\r\n/g, "\n");
+  return normalized.endsWith("\n") ? normalized.slice(0, -1).split("\n").length : normalized.split("\n").length;
 }
 
 function clientToolIcon(tool: ClientToolName): string {

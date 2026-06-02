@@ -40,16 +40,6 @@ function isProviderConfigured(provider: Provider | null): boolean {
 // Tool loop guard. Default raised to 50 — long research / agentic chains need 20-30 turns.
 // Set BRAIN_V2_MAX_ITERATIONS=0 for unlimited (only abort on real errors).
 const MAX_ITERATIONS = Number(process.env.BRAIN_V2_MAX_ITERATIONS || 50);
-// Chain tool hint: default-on guard for models that drift away from exact tool
-// results during multi-hop tool work. Set BRAIN_V2_CHAIN_TOOL_HINT=0 to opt out.
-const CHAIN_TOOL_HINT: ChatMessage = {
-  role: 'system',
-  content:
-    'When a task requires multiple tool calls, you MUST:\n' +
-    '1. Use the EXACT values returned by each tool — never estimate or use training knowledge for numeric results.\n' +
-    '2. Before each subsequent tool call, briefly restate what the previous tool returned.\n' +
-    '3. If a tool returns an error, report it honestly — do not substitute a plausible-sounding value.',
-};
 // P1#4: empty_response 不立即 cooldown。短期 cooldown,需累计 ≥ 2 次 transport-empty(零 SSE chunks)
 // 注: 此判断只看 transport 层 anyEmit,不窥探 content。一个 finish_reason=stop+空 content 不会触发。
 const EMPTY_RESPONSE_COOLDOWN_MS = Number(process.env.BRAIN_V2_EMPTY_COOLDOWN_MS || 30_000);
@@ -90,27 +80,148 @@ function localProbeTimeoutMs(provider: Provider): number {
   return Number.isFinite(configured) && configured > 0 ? configured : 1_500;
 }
 
-function shouldInjectChainToolHint(messages: ChatMessage[], tools: unknown[] | null | undefined): boolean {
-  return process.env.BRAIN_V2_CHAIN_TOOL_HINT !== '0'
-    && Array.isArray(tools)
-    && tools.length > 0
-    && messages[0]?.role !== 'system';
+function compactText(value: string, max = 220): string {
+  const singleLine = value.replace(/\s+/g, ' ').trim();
+  if (singleLine.length <= max) return singleLine;
+  return singleLine.slice(0, Math.max(1, max - 1)).trimEnd() + '…';
 }
 
-function shouldReinforceToolResults(): boolean {
-  return process.env.BRAIN_V2_TOOL_RESULT_REINFORCE !== '0'
-    && process.env.BRAIN_V2_CHAIN_TOOL_HINT !== '0';
+function parseJsonObject(raw: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function compactMaybe(value: unknown, max = 220): string | null {
+  if (typeof value !== 'string') return null;
+  const compacted = compactText(value, max);
+  return compacted ? compacted : null;
+}
+
+function searchCitationFromItem(item: unknown): string | null {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+  const record = item as Record<string, unknown>;
+  const title = compactMaybe(record.title ?? record.name ?? record.label, 120);
+  const url = compactMaybe(record.url ?? record.link ?? record.href, 260);
+  if (!title || !url) return null;
+  const snippet = compactMaybe(record.snippet ?? record.summary ?? record.content ?? record.description, 260) || '';
+  return `[${title}](${url}): ${snippet}`;
+}
+
+function structuredSearchSummary(parsed: Record<string, unknown>): { summary?: string; details?: string[] } | null {
+  const summaries: string[] = [];
+  const details: string[] = [];
+  const addSummary = (value: unknown, prefix = '') => {
+    const compacted = compactMaybe(value, 220);
+    if (compacted) summaries.push(prefix ? `${prefix}: ${compacted}` : compacted);
+  };
+  const addCitation = (item: unknown) => {
+    const citation = searchCitationFromItem(item);
+    if (citation) details.push(citation);
+  };
+
+  addSummary(parsed.summary);
+  if (Array.isArray(parsed.items)) parsed.items.forEach(addCitation);
+  if (Array.isArray(parsed.results)) parsed.results.forEach(addCitation);
+
+  if (Array.isArray(parsed.sources)) {
+    for (const source of parsed.sources) {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+      const record = source as Record<string, unknown>;
+      const name = compactMaybe(record.name ?? record.source ?? record.provider, 80) || 'source';
+      addSummary(record.summary, name);
+      if (Array.isArray(record.items)) record.items.forEach(addCitation);
+      if (Array.isArray(record.results)) record.results.forEach(addCitation);
+      if (record.ok === false && record.error) {
+        const error = compactMaybe(record.error, 160);
+        if (error) details.push(`${name}: error: ${error}`);
+      }
+    }
+  }
+
+  const uniqueDetails = Array.from(new Set(details)).slice(0, 8);
+  const picked = [
+    ...summaries.slice(0, 2),
+    ...uniqueDetails.slice(0, 2).map((line) => line.replace(/^\[([^\]]+)\]\([^)]+\):\s*/, '$1: ')),
+  ];
+  if (!picked.length && !uniqueDetails.length) return null;
+  return {
+    summary: picked.length ? compactText(picked.join(' · ')) : undefined,
+    details: [
+      ...summaries.map((line) => '摘要: ' + line),
+      ...uniqueDetails,
+    ].slice(0, 8).map((line) => compactText(line, 500)),
+  };
+}
+
+function numberedSearchCitations(lines: string[]): string[] {
+  const citations: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const match = lines[i].match(/^\d+[.)、]\s*(.+)$/);
+    if (!match) continue;
+    const title = match[1].trim();
+    const url = lines[i + 1]?.trim();
+    if (!/^https?:\/\//.test(url || '')) continue;
+    const snippet = lines[i + 2]?.trim() || '';
+    citations.push(`[${title}](${url}): ${snippet}`);
+  }
+  return citations;
+}
+
+function summarizeToolResult(toolName: string, result: unknown): { summary?: string; details?: string[] } {
+  const raw = typeof result === 'string' ? result : JSON.stringify(result);
+  if (!raw || !raw.trim()) return {};
+
+  const parsed = parseJsonObject(raw);
+  if (parsed?.error) return { summary: compactText('error: ' + String(parsed.error), 180), details: [compactText(raw, 500)] };
+
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^──.+──$/.test(line) && line !== '搜索结果:');
+
+  if (toolName === 'web_search') {
+    if (parsed) {
+      const structured = structuredSearchSummary(parsed);
+      if (structured) return structured;
+    }
+    const summaries = lines
+      .filter((line) => /^摘要[:：]/.test(line))
+      .map((line) => line.replace(/^摘要[:：]\s*/, ''))
+      .filter(Boolean);
+    const citations = [
+      ...lines
+      .filter((line) => /^\[[^\]]+\]\([^)]+\):/.test(line))
+        .filter(Boolean),
+      ...numberedSearchCitations(lines),
+    ];
+    const citationSummaries = citations
+      .map((line) => line.replace(/^\[([^\]]+)\]\([^)]+\):\s*/, '$1: '))
+      .filter(Boolean);
+    const picked = [...summaries.slice(0, 2), ...citationSummaries.slice(0, 2)];
+    if (picked.length) {
+      return {
+        summary: compactText(picked.join(' · ')),
+        details: [...summaries.map((line) => '摘要: ' + line), ...citations].slice(0, 8).map((line) => compactText(line, 500)),
+      };
+    }
+  }
+
+  const firstMeaningful = lines.find((line) => !line.startsWith('{')) || raw;
+  return {
+    summary: compactText(firstMeaningful, 180),
+    details: lines.slice(0, 6).map((line) => compactText(line, 500)),
+  };
 }
 
 function formatToolResultContent(toolName: string, result: unknown, stepIndex: number): string {
-  const raw = typeof result === 'string' ? result : JSON.stringify(result);
-  if (!shouldReinforceToolResults()) return raw;
-  return [
-    `[Lynn tool step ${stepIndex} completed] ${toolName} returned the exact result below.`,
-    'For any later calculation or comparison, use these exact returned values. Do not estimate or substitute from memory.',
-    '',
-    raw,
-  ].join('\n');
+  void toolName;
+  void stepIndex;
+  return typeof result === 'string' ? result : JSON.stringify(result);
 }
 
 async function runRound({
@@ -295,10 +406,6 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
 
   const mergedTools = mergeWithServerTools(tools);
   let workingMessages: ChatMessage[] = [...(messages || [])];
-  if (shouldInjectChainToolHint(workingMessages, mergedTools)) {
-    workingMessages = [CHAIN_TOOL_HINT, ...workingMessages];
-    log && log('info', '[chain-tool-hint] injected');
-  }
   let lastProviderId: ProviderId | null = null;
   let iter = 0;
   const maxIter = MAX_ITERATIONS > 0 ? MAX_ITERATIONS : Infinity;
@@ -388,8 +495,9 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       const toolResult = await executeServerTool(tc.function.name, tc.function.arguments || '{}', { log });
       const ms = Date.now() - t0;
       const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
+      const toolSummary = summarizeToolResult(tc.function.name, toolResult);
       await onChunk(
-        { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok },
+        { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok, ...toolSummary },
         { providerId: lastProviderId }
       );
       workingMessages.push({
@@ -438,5 +546,5 @@ export const __testing__ = {
   buildLocalProbeUrl,
   isLocalEndpoint,
   localProbeTimeoutMs,
-  shouldInjectChainToolHint,
+  summarizeToolResult,
 };

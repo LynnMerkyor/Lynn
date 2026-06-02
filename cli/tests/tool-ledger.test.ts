@@ -19,7 +19,7 @@ describe("tool ledger", () => {
     const ledger = renderToolLedger([entry], 0);
 
     expect(ledger).toContain("<lynn_tool_ledger");
-    expect(ledger).toContain("source-of-truth");
+    expect(ledger).toContain("Tool observations recorded during this step");
     expect(ledger).toContain("read_file ok");
     expect(ledger).toContain("path=src/value.txt");
     expect(ledger).toContain("price=195.30");

@@ -6,7 +6,7 @@ import { nowIso, writeJsonLine } from "../jsonl.js";
 import { resolveEffectivePermissions } from "../permissions.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { shouldUseInkTui } from "../terminal-safety.js";
-import { bold, dangerLine, dim, red, supportsColor } from "../terminal-style.js";
+import { bold, dangerLine, dim, orange, supportsColor } from "../terminal-style.js";
 import { renderMarkdown } from "../markdown.js";
 import { HistoryNavigator, appendHistory, historyPath, loadHistory } from "../history.js";
 import { completeSlash, normalizeSlashInput } from "../completion.js";
@@ -17,17 +17,18 @@ import { resolveCliProviderProfile, type CliProviderProfile } from "../provider-
 import { modelLabelWithId } from "../provider-presets.js";
 import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
 import type { ClientToolName, ToolRunContext } from "../tools/types.js";
-import { createGitSnapshot } from "../git-checkpoint.js";
-import { applyModeCommand, applyReasoningCommand, buildChatProviderArgs, renderMode, shouldRefreshProviderRoute, shouldShowProviderSetUsage, toggleMode, type ChatMode } from "./chat.js";
+import { applyModeCommand, applyReasoningCommand, applyThinkCommand, buildChatProviderArgs, renderMode, shouldRefreshProviderRoute, shouldShowProviderSetUsage, toggleMode, type ChatMode } from "./chat.js";
 import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { readVersionInfo } from "../version.js";
+import { renderCodeHeadlessHelp } from "../code-headless-help.js";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, listSessions, readSessionLines, resolveDataDir } from "../session/store.js";
 import { buildMemoryContextFrameSync } from "../session/memory.js";
 import { computeCodeContextLayerDiagnostics } from "../context-layers.js";
 import { prepareCodeTaskInput } from "../code-input.js";
 import { resolveDefaultBrainUrl } from "../brain-url.js";
 import { isLocalRuntimeQuestion, localeForText, renderLocalRuntimeAnswer } from "../runtime-answer.js";
-import { renderPlanItems } from "../plan-tool.js";
+import { renderPlanCard } from "../terminal-spinner.js";
+import { isLocalExitText, parseLocalReadOnlyCommand, renderLocalReadOnlyBlocked, renderLocalReadOnlyResult, runLocalReadOnlyCommand } from "../local-command.js";
 import {
   assistantToolCallsForMessages,
   codeToolDefinitions,
@@ -62,12 +63,18 @@ import {
   summarizeResumeMessages,
   truncateForResume,
 } from "../code-resume.js";
+import { runCodeRewindCommand, runCodeRewindSlash } from "../code-rewind-command.js";
+
+export { renderCodeHeadlessHelp } from "../code-headless-help.js";
 import { buildCodeRuntimeFrames } from "../code-runtime-frames.js";
 import {
   runCodeAgentLoop,
   type CodeAgentApprovalRequest,
   type CodeAgentEvent,
 } from "../code-agent-loop.js";
+import { runUltraCodeTask } from "../code-ultra-runner.js";
+import type { UltraEvent, UltraOptions } from "../code-ultra.js";
+import { mergeWorkspaceSnapshots } from "../code-snapshot.js";
 
 export {
   codeToolDefinitions,
@@ -184,6 +191,9 @@ export async function runCode(args: ParsedArgs): Promise<number> {
     else process.stdout.write(`${CLIENT_TOOL_DEFINITIONS.map((tool) => `${tool.name}${tool.dangerous ? " (approval required)" : ""}: ${tool.description}`).join("\n")}\n`);
     return 0;
   }
+  if (hasFlag(args.flags, "rewind")) {
+    return runCodeRewindCommand(args, json, { output, errorOutput });
+  }
 
   const tool = getStringFlag(args.flags, "tool") as ClientToolName | null;
   if (!tool) {
@@ -191,6 +201,9 @@ export async function runCode(args: ParsedArgs): Promise<number> {
     if (task && isLocalRuntimeQuestion(task)) return runCodeLocalRuntimeAnswer(args, task, json);
     if (task) return runCodeTask(args, task, json);
     if (!json && input.isTTY && output.isTTY) {
+      if (ultraEnabled(args)) {
+        errorOutput.write(`${dim("note: --ultra applies to headless tasks (e.g. Lynn code --ultra -p \"…\"); this interactive session runs normally.", supportsColor(errorOutput))}\n`);
+      }
       if (shouldUseInkTui(args)) {
         const { runInkCode } = await import("../ink-code.js");
         return runInkCode(args, runCodeTaskWithEvents);
@@ -205,6 +218,11 @@ export async function runCode(args: ParsedArgs): Promise<number> {
 
   const toolCwd = cwd(args);
   const toolMode = await resolveCodeMode(args);
+  const toolArgsForApproval = {
+    path: getStringFlag(args.flags, "path") || undefined,
+    text: getStringFlag(args.flags, "text", "content") || args.positionals.join(" ") || undefined,
+    command: getStringFlag(args.flags, "command") || args.positionals.join(" ") || undefined,
+  };
   const toolApproval = await resolveToolApproval({
     tool,
     approval: toolMode.approval,
@@ -212,11 +230,8 @@ export async function runCode(args: ParsedArgs): Promise<number> {
     json,
     input,
     output: errorOutput,
-    preview: formatDangerousToolPreview(tool, {
-      path: getStringFlag(args.flags, "path") || undefined,
-      text: getStringFlag(args.flags, "text", "content") || args.positionals.join(" ") || undefined,
-      command: getStringFlag(args.flags, "command") || args.positionals.join(" ") || undefined,
-    }, supportsColor(errorOutput)),
+    preview: formatDangerousToolPreview(tool, toolArgsForApproval, supportsColor(errorOutput)),
+    args: toolArgsForApproval,
   });
   const result = await runClientTool(
     { cwd: toolCwd, approval: toolApproval, sandbox: toolMode.sandbox, timeoutMs: timeoutMs(args) },
@@ -279,75 +294,42 @@ async function renderCodeLocalRuntimeAnswer(
   }, localeForText(text));
 }
 
-export function renderCodeHeadlessHelp(): string {
-  const version = readVersionInfo().version || "0.80.0";
-  return [
-    "Lynn code headless / CLI Fleet",
-    "",
-    "用途:",
-    "  - 给人用: Lynn code",
-    "  - 给其他智能体 / CI / GUI Fleet 用: Lynn code -p \"任务\" --json --cwd /repo",
-    "",
-    "安装(Node.js 20 LTS 或 22 LTS + npm):",
-    `  npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-${version}.tgz`,
-    "",
-    "静默调用(处理完直接退出,不进入 TUI):",
-    "  Lynn code -p \"review the current diff\" --json --cwd /repo",
-    "  Lynn code -p \"fix tests, run the suite, summarize the diff\" \\",
-    "    --json --cwd /worktree --approval yolo --sandbox workspace-write --save-session",
-    "",
-    "长任务/断点续跑:",
-    "  Lynn code -p \"complete the migration until tests pass\" \\",
-    "    --json --cwd /worktree --approval yolo --sandbox workspace-write \\",
-    "    --long --max-steps 1000 --save-session",
-    "  Lynn code --resume <session.jsonl> -p \"continue\" --json --long",
-    "",
-    "GUI Fleet worker(JSONL 事件流):",
-    "  Lynn worker run --brief task.md --worktree /worktree \\",
-    "    --jsonl --approval yolo --sandbox workspace-write",
-    "  Lynn worker run --brief task.md --worktree /worktree \\",
-    "    --agent custom --agent-command \"your-cli --json\" --jsonl",
-    "",
-    "规则:",
-    "  - 自动化调用只解析 --json / --jsonl,不要解析人类 TUI。",
-    "  - 总是传 --cwd 或 --worktree。",
-    "  - --approval yolo 只用于隔离 git worktree;它表示零逐条审批。",
-    "  - code.tool.ledger 是链式工具结果的 source-of-truth。",
-    "  - code.task.finished.resumeCommand 存在时,按它继续。",
-  ].join("\n");
-}
-
 async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   const mode = await resolveCodeMode(args);
   let reasoning = parseReasoningOptions(args);
   let cliProvider = await resolveCliProviderProfile(args);
+  const interactiveCwd = getStringFlag(args.flags, "cwd") || process.cwd();
   output.write(renderCodeIntro(mode, reasoning, { color: supportsColor(output), modelLabel: codeRouteLabel(false, cliProvider?.profile) }));
   const histFile = historyPath();
   const history = loadHistory(histFile);
   const slashCommands = [
-    "/exit",
-    "/quit",
-    "/help",
-    "/version",
-    "/about",
-    "/tools",
-    "/fast",
-    "/think",
-    "/reasoning",
-    "/goal",
-    "/resume",
-    "/continue",
     "/yolo",
     "/ask",
-    "/mode",
     "/model",
+    "/mode",
+    "/think",
+    "/think high",
+    "/think medium",
+    "/think low",
+    "/fast",
+    "/tools",
+    "/goal",
+    "/resume",
+    "/rewind",
+    "/providers",
+    "/help",
+    "/exit",
+    "/quit",
+    "/version",
+    "/about",
+    "/reasoning",
+    "/continue",
     "/model mimo",
     "/model stepfun",
-    "/model spark",
-    "/setup",
-    "/byok",
-    "/providers",
-    "/providers set",
+  "/model spark",
+  "/setup",
+  "/byok",
+  "/providers set",
     "/providers unset",
     "/providers test",
     "/providers presets",
@@ -364,9 +346,9 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       if (raw === null) break;
       const text = normalizeSlashInput(raw.trim());
       if (!text) continue;
+      if (isLocalExitText(text)) break;
       history.push(text);
       appendHistory(text, histFile);
-      if (text === "/exit" || text === "/quit") break;
       if (text === "/help") {
         output.write(`${t("code.help")}\n\n`);
         continue;
@@ -387,6 +369,12 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       if (text === "/think") {
         reasoning = { ...reasoning, effort: "high" };
         output.write(`${t("code.think")}\n\n`);
+        continue;
+      }
+      if (text.startsWith("/think ")) {
+        const result = applyThinkCommand(reasoning, text.slice(7).trim(), "code");
+        reasoning = result.reasoning;
+        output.write(`✓ ${result.message}\n${t("code.reasoning.state", { effort: reasoning.effort, display: reasoning.display })}\n\n`);
         continue;
       }
       if (text === "/reasoning") {
@@ -424,6 +412,10 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
           errorOutput.write(`• ${message}\n`);
         }
         output.write("\n");
+        continue;
+      }
+      if (text === "/rewind" || text.startsWith("/rewind ")) {
+        await runCodeRewindSlash(text, args, { output, errorOutput });
         continue;
       }
       if (text === "/resume" || text === "/continue" || text.startsWith("/resume ") || text.startsWith("/continue ")) {
@@ -499,6 +491,16 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
         output.write(`${t("chat.providers.usage")}\n\n`);
         continue;
       }
+      const localReadOnly = parseLocalReadOnlyCommand(text, interactiveCwd);
+      if (localReadOnly?.kind === "blocked") {
+        output.write(`${renderLocalReadOnlyBlocked(localReadOnly, output)}\n\n`);
+        continue;
+      }
+      if (localReadOnly?.kind === "command") {
+        const result = await runLocalReadOnlyCommand(localReadOnly.command);
+        output.write(`${renderLocalReadOnlyResult(localReadOnly.command, result, output)}\n\n`);
+        continue;
+      }
       if (text.startsWith("/")) {
         output.write(`${t("slash.unknown")}\n\n`);
         continue;
@@ -561,7 +563,7 @@ export function renderCodeIntro(
 
 function renderModeChange(message: string, mode: ChatMode, color: boolean): string {
   const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
-  const modeLabel = dangerous ? red(renderMode(mode), color) : renderMode(mode);
+  const modeLabel = dangerous ? orange(renderMode(mode), color) : renderMode(mode);
   const warning = dangerous
     ? `\n${dangerLine(t("mode.danger.warning"), color)}`
     : "";
@@ -658,12 +660,14 @@ async function runCodeTask(
     if (resumeDiag.compacted) detail += t("code.resume.compacted");
     if (resumeDiag.tornLines > 0) detail += t("code.resume.torn", { n: resumeDiag.tornLines });
     errorOutput.write(`${t("code.resume.summary", { messages: resumeDiag.messages, detail })}\n`);
-    if (resumePlan.length) errorOutput.write(`${renderPlanItems(resumePlan)}\n`);
+    if (resumePlan.length) {
+      errorOutput.write(`${renderPlanCard(resumePlan.map((item) => ({
+        status: item.status,
+        text: item.content,
+      })), supportsColor(errorOutput))}\n`);
+    }
     if (resumeInfo?.cwd && path.resolve(resumeInfo.cwd) !== path.resolve(context.cwd)) {
       errorOutput.write(`${t("code.resume.cwdDrift", { saved: resumeInfo.cwd, current: context.cwd })}\n`);
-    }
-    if (resumeInfo?.gitSnapshot) {
-      errorOutput.write(`${t("code.resume.snapshot", { sha: resumeInfo.gitSnapshot.slice(0, 12) })}\n`);
     }
     // When we auto-picked the latest session, name a couple of recent alternatives
     // so resume is an informed choice, not a silent guess.
@@ -679,7 +683,7 @@ async function runCodeTask(
   }
   if (json) {
     writeJsonLine({ type: "code.task.started", ts: nowIso(), task: taskText, context, mediaPaths });
-    if (resumePath) writeJsonLine({ type: "session.resumed", ts: nowIso(), path: resumePath, messages: resumeMessages.length, repairedTools: resumeDiag?.repairedTools ?? 0, compacted: resumeDiag?.compacted ?? false, tornLines: resumeDiag?.tornLines ?? 0, plan: resumePlan, gitSnapshot: resumeInfo?.gitSnapshot ?? null });
+    if (resumePath) writeJsonLine({ type: "session.resumed", ts: nowIso(), path: resumePath, messages: resumeMessages.length, repairedTools: resumeDiag?.repairedTools ?? 0, compacted: resumeDiag?.compacted ?? false, tornLines: resumeDiag?.tornLines ?? 0, plan: resumePlan });
   }
   if (resumePath) options.onEvent?.({ type: "session.resumed", path: resumePath, messages: resumeMessages.length });
 
@@ -708,14 +712,38 @@ async function runCodeTask(
     sandbox: mode.sandbox,
     timeoutMs: timeoutMs(args),
   };
+  if (ultraEnabled(args) && !options.compact) {
+    return runUltraCodeBranch({
+      args,
+      taskText,
+      context,
+      brainUrl,
+      fallbackProvider: cliProvider?.profile,
+      reasoning,
+      json,
+      toolCtx,
+      stepBudget,
+      mode,
+      options,
+      dataDir,
+      saveSession,
+      sessionPath,
+      title,
+      modelProvider: cliProvider?.profile.provider || "brain",
+      modelId: cliProvider?.profile.model || "lynn-brain-router",
+    });
+  }
   let savedSessionPath: string | null = null;
+  let rewindBeforeLine: number | null = null;
+  const rewindSnapshots: Array<{ ref: string; restoreCommand: string }> = [];
   if (saveSession) {
+    rewindBeforeLine = liveSessionPath ? (await readSessionLines(liveSessionPath).catch(() => [])).length : 0;
     liveSessionPath = await appendSessionLine({
       dataDir,
       sessionPath: liveSessionPath,
       cwd: context.cwd,
       title,
-      line: { type: "user", content: taskText },
+      line: { type: "user", content: taskText, data: { kind: "code_user_turn" } },
       modelProvider: cliProvider?.profile.provider || "brain",
       modelId: cliProvider?.profile.model || "lynn-brain-router",
     });
@@ -736,7 +764,10 @@ async function runCodeTask(
     imagePaths: mediaPaths,
     resumeMessages,
     memoryFrame,
-    onEvent: options.onEvent,
+    onEvent: (event) => {
+      if (event.type === "snapshot") rewindSnapshots.push({ ref: event.ref, restoreCommand: event.restoreCommand });
+      options.onEvent?.(event);
+    },
     requestApproval: options.requestApproval,
     onCheckpoint: saveSession && liveSessionPath
       ? async (line) => {
@@ -782,12 +813,23 @@ async function runCodeTask(
       modelProvider: cliProvider?.profile.provider || "brain",
       modelId: cliProvider?.profile.model || "lynn-brain-router",
     });
-    // Pair the conversation checkpoint with a non-destructive snapshot of the
-    // working tree, so a paused/continued task can also restore its files.
-    const fileSnapshot = await createGitSnapshot(context.cwd);
-    if (fileSnapshot) {
-      if (json) writeJsonLine({ type: "session.snapshot", ts: nowIso(), sha: fileSnapshot.sha, dirtyFiles: fileSnapshot.dirtyFiles });
-      else if (!options.onEvent && !options.compact) errorOutput.write(`${t("code.snapshot.saved", { sha: fileSnapshot.sha.slice(0, 12), files: fileSnapshot.dirtyFiles })}\n`);
+    if (rewindBeforeLine !== null && rewindSnapshots.length) {
+      const uniqueSnapshots = [...new Map(rewindSnapshots.map((snapshot) => [snapshot.ref, snapshot])).values()];
+      for (const snapshot of uniqueSnapshots) {
+        await appendSessionMetadata({
+          dataDir,
+          sessionPath: savedSessionPath,
+          data: {
+            kind: "code_rewind_checkpoint",
+            snapshotRef: snapshot.ref,
+            restoreCommand: snapshot.restoreCommand,
+            cwd: context.cwd,
+            task: taskText,
+            beforeLine: rewindBeforeLine,
+            createdAt: new Date().toISOString(),
+          },
+        });
+      }
     }
     await appendSessionMetadata({
       dataDir,
@@ -803,8 +845,6 @@ async function runCodeTask(
         usageSummary: final.usageSummary,
         usageRecords: final.usageRecords,
         resumedFrom: resumePath || null,
-        gitSnapshot: fileSnapshot?.sha ?? null,
-        gitSnapshotFiles: fileSnapshot?.dirtyFiles ?? 0,
       },
     });
     options.onEvent?.({ type: "session.saved", path: savedSessionPath });
@@ -855,6 +895,199 @@ function renderAssistantBlock(text: string, footer?: string): string {
   const lines = text.replace(/\s+$/g, "").split(/\r?\n/);
   const body = lines.map((line, index) => `${index === 0 ? "• " : "  "}${line}`).join("\n");
   return `${body}${footer ? `\n\n${footer}` : ""}\n`;
+}
+
+function ultraEnabled(args: ParsedArgs): boolean {
+  return hasFlag(args.flags, "ultra");
+}
+
+function ultraOptions(args: ParsedArgs): UltraOptions {
+  const opts: UltraOptions = {};
+  const maxSubtasks = Number.parseInt(getStringFlag(args.flags, "ultra-max-subtasks") || "", 10);
+  const maxConcurrency = Number.parseInt(getStringFlag(args.flags, "ultra-concurrency") || "", 10);
+  if (Number.isFinite(maxSubtasks)) opts.maxSubtasks = maxSubtasks;
+  if (Number.isFinite(maxConcurrency)) opts.maxConcurrency = maxConcurrency;
+  if (hasFlag(args.flags, "ultra-verify")) opts.adversarialVerify = true;
+  return opts;
+}
+
+async function runUltraCodeBranch(p: {
+  args: ParsedArgs;
+  taskText: string;
+  context: CodeContext;
+  brainUrl: string;
+  fallbackProvider?: CliProviderProfile;
+  reasoning: ReturnType<typeof parseReasoningOptions>;
+  json: boolean;
+  toolCtx: ToolRunContext;
+  stepBudget: number;
+  mode: ChatMode;
+  options: { compact?: boolean; onEvent?: (event: CodeAgentEvent) => void };
+  dataDir: string;
+  saveSession: boolean;
+  sessionPath?: string | null;
+  title: string;
+  modelProvider: string;
+  modelId: string;
+}): Promise<number> {
+  const color = supportsColor(errorOutput);
+  const compact = Boolean(p.options.compact || p.options.onEvent);
+  const workerSnapshots: string[] = [];
+
+  // Open the session with the user turn before running, so a crash still leaves
+  // a resumable transcript and the rewind checkpoint anchors correctly.
+  let liveSessionPath = p.sessionPath;
+  let rewindBeforeLine: number | null = null;
+  if (p.saveSession) {
+    rewindBeforeLine = liveSessionPath ? (await readSessionLines(liveSessionPath).catch(() => [])).length : 0;
+    liveSessionPath = await appendSessionLine({
+      dataDir: p.dataDir,
+      sessionPath: liveSessionPath,
+      cwd: p.context.cwd,
+      title: p.title,
+      line: { type: "user", content: p.taskText, data: { kind: "code_ultra_user_turn" } },
+      modelProvider: p.modelProvider,
+      modelId: p.modelId,
+    });
+  }
+
+  if (p.json) {
+    writeJsonLine({ type: "code.ultra.started", ts: nowIso(), task: p.taskText });
+  } else if (!compact) {
+    errorOutput.write(`${orange("⚡ ultra", color)} ${dim("— decomposing into parallel sub-tasks…", color)}\n`);
+  }
+
+  const ultra = await runUltraCodeTask({
+    task: p.taskText,
+    context: p.context,
+    brainUrl: p.brainUrl,
+    fallbackProvider: p.fallbackProvider,
+    reasoning: p.reasoning,
+    maxSteps: p.stepBudget,
+    toolCtx: p.toolCtx,
+    input,
+    output: errorOutput,
+    options: ultraOptions(p.args),
+    onEvent: (event) => emitUltraEvent(event, { json: p.json, compact, color, onEvent: p.options.onEvent }),
+    onSubtaskEvent: (_subtaskId, event) => {
+      if (event.type === "snapshot" && event.ref) workerSnapshots.push(event.ref);
+    },
+  });
+
+  if (p.json) {
+    writeJsonLine({
+      type: "code.ultra.finished",
+      ts: nowIso(),
+      ok: ultra.ok,
+      waves: ultra.waves,
+      fallback: ultra.plan.fallback,
+      subtasks: ultra.results.map((r) => ({ id: r.id, title: r.title, ok: r.ok, skipped: Boolean(r.skipped) })),
+    });
+    writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: ultra.synthesis });
+    writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: ultra.ok });
+  } else if (p.options.onEvent) {
+    p.options.onEvent({ type: "assistant.delta", text: ultra.synthesis });
+    p.options.onEvent({ type: "task.finished", ok: ultra.ok, text: ultra.synthesis, usageSummary: null });
+  } else {
+    process.stdout.write(renderAssistantBlock(ultra.synthesis, renderCodeFooter({
+      context: p.context,
+      mode: p.mode,
+      mockBrain: false,
+      reasoning: p.reasoning,
+    })));
+  }
+
+  // Persist the run: synthesis as the assistant turn + a single merged rewind
+  // checkpoint that undoes every file all workers touched.
+  if (p.saveSession && liveSessionPath) {
+    liveSessionPath = await appendSessionLine({
+      dataDir: p.dataDir,
+      sessionPath: liveSessionPath,
+      cwd: p.context.cwd,
+      title: p.title,
+      line: { type: "assistant", content: ultra.synthesis, data: { kind: "code_ultra_synthesis" } },
+      modelProvider: p.modelProvider,
+      modelId: p.modelId,
+    });
+    await appendSessionMetadata({
+      dataDir: p.dataDir,
+      sessionPath: liveSessionPath,
+      data: {
+        kind: "code_ultra_task",
+        cwd: p.context.cwd,
+        ok: ultra.ok,
+        waves: ultra.waves,
+        fallback: ultra.plan.fallback,
+        subtasks: ultra.results.map((r) => ({ id: r.id, title: r.title, ok: r.ok, skipped: Boolean(r.skipped) })),
+      },
+    });
+    if (workerSnapshots.length && rewindBeforeLine !== null) {
+      const merged = mergeWorkspaceSnapshots(workerSnapshots);
+      if (merged.available && merged.ref) {
+        await appendSessionMetadata({
+          dataDir: p.dataDir,
+          sessionPath: liveSessionPath,
+          data: {
+            kind: "code_rewind_checkpoint",
+            snapshotRef: merged.ref,
+            restoreCommand: merged.restoreCommand,
+            cwd: p.context.cwd,
+            task: p.taskText,
+            beforeLine: rewindBeforeLine,
+            createdAt: new Date().toISOString(),
+          },
+        });
+      }
+    }
+    if (p.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: liveSessionPath });
+    p.options.onEvent?.({ type: "session.saved", path: liveSessionPath });
+  }
+  return ultra.ok ? 0 : 1;
+}
+
+function emitUltraEvent(
+  event: UltraEvent,
+  ctx: { json: boolean; compact: boolean; color: boolean; onEvent?: (event: CodeAgentEvent) => void },
+): void {
+  if (ctx.json) {
+    writeJsonLine({ ...event, ts: nowIso() });
+    return;
+  }
+  if (ctx.compact) {
+    const plain = formatUltraEventLine(event, false);
+    if (plain) ctx.onEvent?.({ type: "tool.progress", message: plain.trim() });
+    return;
+  }
+  const line = formatUltraEventLine(event, ctx.color);
+  if (line) errorOutput.write(`${line}\n`);
+}
+
+function formatUltraEventLine(event: UltraEvent, color: boolean): string | null {
+  switch (event.type) {
+    case "ultra.plan": {
+      const n = event.plan.subtasks.length;
+      const label = event.plan.fallback ? "single worker (no useful split)" : `${n} sub-task${n === 1 ? "" : "s"}`;
+      const warn = event.plan.warnings.length ? ` ${dim(`(${event.plan.warnings.length} note(s))`, color)}` : "";
+      return `${bold("plan", color)} ${dim("→", color)} ${label}${warn}`;
+    }
+    case "ultra.wave":
+      return dim(`wave ${event.wave}: ${event.ids.join(", ")}`, color);
+    case "ultra.subtask.started":
+      return dim(`  ▸ ${event.id} ${event.title}`, color);
+    case "ultra.subtask.verified":
+      if (event.pass) return dim(`  ${event.id} verify ✓`, color);
+      return `  ${dangerLine("✗", color)} ${event.id} verify refuted${event.reason ? `: ${event.reason.replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
+    case "ultra.subtask.finished":
+      if (event.skipped) return dim(`  ${event.id} skipped (dependency failed)`, color);
+      if (event.ok) return `  ${orange("✓", color)} ${event.id} ${event.title}`;
+      return `  ${dangerLine("✗", color)} ${event.id} ${event.title}`;
+    case "ultra.synthesis.started":
+      return dim("synthesizing results…", color);
+    case "ultra.synthesis":
+      return null; // printed as the final answer
+    default:
+      return null;
+  }
 }
 
 function renderCodeFooter(inputData: {

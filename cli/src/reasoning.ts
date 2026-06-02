@@ -17,7 +17,7 @@ function oneOf<T extends string>(value: string | null, allowed: ReadonlySet<stri
 
 export function parseReasoningOptions(args: ParsedArgs): ReasoningOptions {
   return {
-    effort: oneOf(getStringFlag(args.flags, "reasoning"), EFFORTS, "auto"),
+    effort: oneOf(getStringFlag(args.flags, "reasoning"), EFFORTS, "high"),
     display: oneOf(getStringFlag(args.flags, "show-reasoning"), DISPLAYS, "auto"),
   };
 }

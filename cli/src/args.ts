@@ -65,6 +65,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "content",
       "data-dir",
       "resume",
+      "rewind",
       "session",
       "title",
       "agent-command",
@@ -74,6 +75,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "api-base",
       "api-key",
       "model",
+      "ultra-max-subtasks",
+      "ultra-concurrency",
     ].includes(name);
     if (takesValue && next && !next.startsWith("-")) {
       flags[name] = next;

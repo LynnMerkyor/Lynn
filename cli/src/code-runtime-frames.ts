@@ -22,7 +22,6 @@ export function buildCodeRuntimeFrames(input: CodeRuntimeFrameInput): RuntimeIns
         '{"tool":"update_plan|read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',
         "For non-trivial tasks, first call update_plan/TodoWrite with items and statuses pending/in_progress/completed, then update it as work progresses.",
         "Prefer read_file, grep, and glob before editing. Use apply_patch for edits when possible.",
-        "For chained tool work, treat the latest <lynn_tool_ledger> as source-of-truth: carry exact values, paths, exit codes, and snippets forward instead of relying on memory.",
         "When you are done, answer normally with a concise summary and tests run.",
         "Do not claim you edited files unless a tool actually changed them.",
         "Never download models, datasets, training packs, BF16, or GGUF files to the local Mac.",

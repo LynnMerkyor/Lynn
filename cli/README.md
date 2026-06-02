@@ -2,11 +2,13 @@
 
 Terminal and worker-runner interface for Lynn v0.80.
 
-This package is intentionally thin. When the Lynn client GUI is running, model routing uses
-the local Lynn server / Brain chain and defaults to StepFun 3.7 Flash (256K context, high reasoning, 32K reasoning/generation budget),
-then MiMo V2.5 Pro, then Spark Qwen 3.6 35B A3B. When the client GUI is not
-running, the CLI can fall back to a user-owned OpenAI-compatible BYOK endpoint.
-The CLI handles terminal UX, worker JSONL, and local file/shell orchestration.
+This package is intentionally thin. It handles terminal UX, worker JSONL, local
+file/shell orchestration, and headless agent contracts. Model routing defaults
+to Lynn Brain: local Brain when available, otherwise hosted Brain at
+`https://api.merkyorlynn.com/api/v2`, with StepFun 3.7 Flash (256K context,
+high reasoning, 32K reasoning/generation budget) -> MiMo V2.5 Pro -> Spark Qwen
+3.6 35B A3B. Users can still configure a private OpenAI-compatible BYOK
+endpoint with `Lynn providers set`.
 
 ## Quick start
 
@@ -28,7 +30,7 @@ winget install OpenJS.NodeJS.LTS
 Install from the Lynn Tencent mirror:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.6.tgz"
 ```
 
 The package installs the `Lynn` command. If you installed an older preview that
@@ -47,7 +49,7 @@ If npm dependency downloads are slow in mainland China, keep the Lynn tarball UR
 as-is and add a registry mirror for third-party dependencies:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz" \
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.6.tgz" \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -55,7 +57,7 @@ Release maintainers can smoke-test the exact CDN tarball before inviting
 external testers:
 
 ```bash
-LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz" \
+LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.6.tgz" \
   npm run test:cli-install:remote
 ```
 
@@ -68,7 +70,7 @@ Lynn Code keeps long-running agent context cache-friendly by separating the prom
 - `volatile_runtime`: route, cwd, permission mode, and current execution facts.
 - `current_user`: the latest task turn.
 
-This follows the same principle as Reasonix-style prefix-cache stability: keep the expensive, reusable prefix stable, append volatile context later, and detect drift instead of silently losing cache hits. `Lynn cache doctor --json` and session metadata expose stable-prefix hashes, cache hit/miss telemetry, and prefix drift diagnostics for automation.
+This follows the same principle as Reasonix-style prefix-cache stability: keep the expensive, reusable prefix stable, append volatile context later, and detect drift instead of silently losing cache hits. Usage summaries, session stats, replay, `Lynn cache doctor --json`, and session metadata expose `prefix-cache ... hit`, stable-prefix hashes, cache hit/miss telemetry, and prefix drift diagnostics for automation without adding a live context-budget meter.
 
 ```bash
 Lynn version
@@ -86,6 +88,23 @@ Lynn - < README.md
 `Lynn` is the primary command. The npm package intentionally avoids installing a
 separate lowercase `lynn` binary because macOS default filesystems are
 case-insensitive and npm cannot safely create both shims in the same prefix.
+
+## Runtime knowledge for agents
+
+When another agent asks what Lynn CLI does locally, the concise answer is:
+
+- Lynn CLI is a thin terminal workbench over Lynn Brain V2: interactive chat,
+  `Lynn -p`, `Lynn code`, and Fleet worker mode share the same route discipline.
+- Default routing is StepFun 3.7 Flash -> MiMo V2.5 Pro -> Spark Qwen 3.6 35B
+  A3B.
+- Local runtime features include stable-prefix layering for prefix-cache hits,
+  rolling decode TPS and prefix-cache telemetry, automatic context compaction,
+  tool ledgers for chained work, checkpoint/resume, finish gates, workspace
+  snapshots, and Fleet JSONL events.
+- For copyable headless usage, use `Lynn -p "prompt" --json` or
+  `Lynn code -p "task" --json --cwd /path --approval yolo --sandbox workspace-write`.
+
+The longer repo-side reference is `docs/ops/lynn-cli-runtime-knowledge.md`.
 
 ## Runtime routing and CLI-only BYOK fallback
 
@@ -156,7 +175,7 @@ Agent quick contract:
 # Requires Node.js 20 LTS or 22 LTS with npm.
 
 # Install/update.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.6.tgz"
 
 # Human launch commands.
 Lynn

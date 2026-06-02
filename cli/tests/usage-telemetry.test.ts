@@ -20,7 +20,7 @@ describe("usage telemetry normalization", () => {
       cacheHitRatio: 0.75,
       tps: 40,
     });
-    expect(renderUsageTelemetry(telemetry)).toBe("1080 tokens · in 1000 · out 80 · cache 750 · miss 250 (75%) · 40.0 TPS");
+    expect(renderUsageTelemetry(telemetry)).toBe("1080 tokens · in 1000 · out 80 · prefix-cache 750 hit · miss 250 (75%) · 40.0 TPS");
   });
 
   it("normalizes OpenAI nested cached token fields", () => {
@@ -32,7 +32,7 @@ describe("usage telemetry normalization", () => {
 
     expect(telemetry?.cacheHitTokens).toBe(600);
     expect(telemetry?.cacheHitRatio).toBeCloseTo(600 / 900);
-    expect(renderUsageTelemetry(telemetry)).toContain("cache 600 (67%)");
+    expect(renderUsageTelemetry(telemetry)).toContain("prefix-cache 600 hit (67%)");
   });
 
   it("normalizes Anthropic-style cache read/write fields", () => {
@@ -53,7 +53,7 @@ describe("usage telemetry normalization", () => {
       cacheHitRatio: 0.8,
       tps: 40,
     });
-    expect(renderUsageTelemetry(telemetry)).toBe("1320 tokens · in 1200 · out 120 · cache 960 · miss 240 (80%) · 40.0 TPS");
+    expect(renderUsageTelemetry(telemetry)).toBe("1320 tokens · in 1200 · out 120 · prefix-cache 960 hit · miss 240 (80%) · 40.0 TPS");
   });
 
   it("returns null for non-usage payloads", () => {

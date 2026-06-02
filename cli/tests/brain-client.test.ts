@@ -96,9 +96,9 @@ describe("brain-client stream parser", () => {
 
     expect(parseBrainStreamPayload(JSON.stringify({
       object: "lynn.tool_progress",
-      tool_progress: { event: "end", name: "web_search", ms: 120, ok: true },
+      tool_progress: { event: "end", name: "web_search", ms: 120, ok: true, summary: "MiMo summary", details: ["[Source](https://example.test): snippet"] },
     }))).toEqual([
-      { type: "tool_progress", event: "end", name: "web_search", ms: 120, ok: true },
+      { type: "tool_progress", event: "end", name: "web_search", ms: 120, ok: true, summary: "MiMo summary", details: ["[Source](https://example.test): snippet"] },
     ]);
 
     expect(parseBrainStreamPayload(JSON.stringify({
@@ -533,6 +533,51 @@ describe("brain-client stream parser", () => {
     }
   });
 
+  it("retries a Brain SSE stream that disconnects before any answer", async () => {
+    let brainRequests = 0;
+    const brain = http.createServer((_request, response) => {
+      brainRequests += 1;
+      if (brainRequests === 1) {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.write("data: {\"choices\"");
+        setImmediate(() => response.destroy(new Error("simulated early stream reset")));
+        return;
+      }
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"brain recovered after stream reset\"}}]}",
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"));
+    });
+    await new Promise<void>((resolve) => brain.listen(0, "127.0.0.1", resolve));
+    const oldAttempts = process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS;
+    const oldDelay = process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS;
+    process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS = "2";
+    process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS = "0";
+    try {
+      const address = brain.address();
+      if (!address || typeof address === "string") throw new Error("brain stream test server failed to listen");
+      const events = [];
+      for await (const event of streamBrainChat({
+        brainUrl: `http://127.0.0.1:${address.port}`,
+        prompt: "hello",
+        reasoning: { effort: "auto", display: "auto" },
+      })) {
+        events.push(event);
+      }
+      expect(brainRequests).toBe(2);
+      expect(events).toContainEqual({ type: "assistant.delta", text: "brain recovered after stream reset" });
+    } finally {
+      if (oldAttempts === undefined) delete process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS;
+      else process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS = oldAttempts;
+      if (oldDelay === undefined) delete process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS;
+      else process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS = oldDelay;
+      await new Promise<void>((resolve) => brain.close(() => resolve()));
+    }
+  });
+
   it("falls back to CLI BYOK when online Brain streams all-providers-failed before any answer", async () => {
     const brokenBrain = http.createServer((_request, response) => {
       response.writeHead(200, { "content-type": "text/event-stream" });
@@ -696,6 +741,10 @@ describe("reasoning options", () => {
       effort: "high",
       display: "always",
     });
+  });
+
+  it("defaults interactive Brain calls to high reasoning", () => {
+    expect(parseReasoningOptions(parseArgs(["exec", "x"]))).toMatchObject({ effort: "high" });
   });
 
   it("maps off to non-thinking request fields", () => {

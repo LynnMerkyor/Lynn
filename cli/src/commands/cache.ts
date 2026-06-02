@@ -46,14 +46,14 @@ export async function inspectCacheSession(sessionPath: string): Promise<CacheDoc
   }
   if (stats.usageRecords === 0) {
     warnings.push("No usage telemetry records were found");
-    recommendations.push("Cache hit ratio will appear once the provider returns usage telemetry.");
+    recommendations.push("Prefix-cache hit ratio will appear once the provider returns usage telemetry.");
   } else if (stats.cacheHitRatio === null) {
     recommendations.push("Usage telemetry is present, but this provider did not report cache hit/miss tokens.");
   } else if (stats.cacheHitRatio < 0.5) {
-    warnings.push(`Low cache hit ratio (${formatPercent(stats.cacheHitRatio)})`);
+    warnings.push(`Low prefix-cache hit ratio (${formatPercent(stats.cacheHitRatio)})`);
     recommendations.push("Check whether the stable prefix changes between turns or large volatile frames are inserted early.");
   } else {
-    recommendations.push(`Cache hit ratio is ${formatPercent(stats.cacheHitRatio)} for reported tokens.`);
+    recommendations.push(`Prefix-cache hit ratio is ${formatPercent(stats.cacheHitRatio)} for reported tokens.`);
   }
 
   return {
@@ -91,7 +91,7 @@ export function renderCacheDoctor(result: CacheDoctorResult): string {
     `session: ${result.sessionPath}`,
     `status: ${result.ok ? "OK" : "WARN"}`,
     `prefix: ${stats.prefixDrift ? "DRIFT · " : ""}${prefix}`,
-    `cache: ${cache}`,
+    `prefix-cache: ${cache}`,
     `turns: user ${stats.userTurns} · assistant ${stats.assistantTurns} · tool ${stats.toolResults}`,
     result.warnings.length ? `warnings:\n${result.warnings.map((item) => `  - ${item}`).join("\n")}` : "warnings: none",
     result.recommendations.length ? `recommendations:\n${result.recommendations.map((item) => `  - ${item}`).join("\n")}` : "recommendations: none",

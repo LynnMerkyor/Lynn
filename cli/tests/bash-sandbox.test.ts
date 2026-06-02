@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { assertWorkspaceBashAllowed } from "../src/tools/bash.js";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { assertWorkspaceBashAllowed, bashTool } from "../src/tools/bash.js";
 
 const check = (command: string) => () => assertWorkspaceBashAllowed(command, "workspace-write");
 
@@ -29,5 +32,19 @@ describe("assertWorkspaceBashAllowed", () => {
 
   it("allows everything in danger-full-access", () => {
     expect(() => assertWorkspaceBashAllowed("find . -delete", "danger-full-access")).not.toThrow();
+  });
+
+  it("allows only safe pwd/ls bash without yolo approval", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-bash-safe-"));
+    try {
+      await fs.writeFile(path.join(dir, "ok.txt"), "ok", "utf8");
+      await expect(bashTool({ cwd: dir, approval: "ask", sandbox: "workspace-write" }, "pwd")).resolves.toMatchObject({ ok: true });
+      const listed = await bashTool({ cwd: dir, approval: "ask", sandbox: "workspace-write" }, "ls");
+      expect(listed.ok).toBe(true);
+      expect(JSON.stringify(listed.output)).toContain("ok.txt");
+      await expect(bashTool({ cwd: dir, approval: "ask", sandbox: "workspace-write" }, "git status")).rejects.toThrow(/requires approval/);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 });

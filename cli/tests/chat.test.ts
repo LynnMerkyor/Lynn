@@ -9,6 +9,7 @@ import { parseArgs } from "../src/args.js";
 import {
   applyModeCommand,
   applyReasoningCommand,
+  applyThinkCommand,
   buildChatProviderArgs,
   chatRouteLabel,
   completeChatInput,
@@ -31,6 +32,40 @@ const pythonIt = hasPython3() ? it : it.skip;
 const ptyIt = process.platform === "win32" ? it.skip : pythonIt;
 const interactivePtyIt = process.env.CI === "true" ? it.skip : ptyIt;
 
+async function runInteractiveChatInput(
+  inputText: string,
+  options: { args?: string[]; timeoutMs?: number } = {},
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [
+      "--import",
+      "tsx",
+      "src/cli.ts",
+      ...(options.args || []),
+      "--mock-brain",
+    ], {
+      cwd: cliRoot,
+      env: { ...process.env, NO_COLOR: "1", LYNN_LANG: "en" },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error("interactive chat fixture did not exit"));
+    }, options.timeoutMs || 5000);
+    child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+    child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+    child.stdin.write(inputText);
+    child.stdin.end();
+  });
+}
+
 beforeEach(() => setLang("en"));
 afterEach(() => setLang(null));
 
@@ -40,7 +75,7 @@ describe("chat mode controls", () => {
 
     expect(renderMode(mode)).toBe("ask / workspace-write");
     expect(applyModeCommand(mode, "yolo")).toBe("YOLO silent factory mode enabled.");
-    expect(renderMode(mode)).toBe("yolo / danger-full-access");
+    expect(renderMode(mode)).toBe("yolo / full-access");
     expect(applyModeCommand(mode, "ask")).toBe("Guarded mode enabled.");
     expect(renderMode(mode)).toBe("ask / workspace-write");
   });
@@ -55,7 +90,7 @@ describe("chat mode controls", () => {
     const mode = { approval: "ask" as const, sandbox: "workspace-write" as const };
 
     expect(toggleMode(mode)).toBe("YOLO silent factory mode enabled.");
-    expect(renderMode(mode)).toBe("yolo / danger-full-access");
+    expect(renderMode(mode)).toBe("yolo / full-access");
     expect(toggleMode(mode)).toBe("Guarded mode enabled.");
     expect(renderMode(mode)).toBe("ask / workspace-write");
   });
@@ -72,7 +107,7 @@ describe("chat mode controls", () => {
 
       const mode = await resolveChatMode(parseArgs(["chat", "--data-dir", dataDir]));
 
-      expect(renderMode(mode)).toBe("yolo / danger-full-access");
+      expect(renderMode(mode)).toBe("yolo / full-access");
     } finally {
       await fs.rm(dataDir, { recursive: true, force: true });
     }
@@ -134,6 +169,7 @@ describe("chat mode controls", () => {
     expect(applyReasoningCommand(current, "off").reasoning).toMatchObject({ effort: "off" });
     expect(applyReasoningCommand(current, "high").reasoning).toMatchObject({ effort: "high" });
     expect(applyReasoningCommand(current, "show").reasoning).toMatchObject({ display: "always" });
+    expect(applyThinkCommand(current, "medium", "chat").reasoning).toMatchObject({ effort: "medium" });
   });
 
   it("localizes reasoning command receipts", () => {
@@ -259,6 +295,43 @@ describe("chat mode controls", () => {
     }
   });
 
+  it("handles exact local exit phrases without sending them to the model", async () => {
+    const english = await runInteractiveChatInput("exit\n");
+    const chinese = await runInteractiveChatInput("再见\n");
+
+    expect(english.code).toBe(0);
+    expect(chinese.code).toBe(0);
+    expect(english.stdout).not.toContain("Mock Lynn response");
+    expect(chinese.stdout).not.toContain("Mock Lynn response");
+    expect(english.stdout).not.toContain("模拟回复");
+    expect(chinese.stdout).not.toContain("模拟回复");
+  });
+
+  it("runs local pwd and ls shortcuts without yolo or model fallback", async () => {
+    const targetCwd = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-chat-local-ls-"));
+    try {
+      await fs.writeFile(path.join(targetCwd, "alpha.txt"), "alpha", "utf8");
+      await fs.mkdir(path.join(targetCwd, "subdir"));
+
+      const result = await runInteractiveChatInput("pwd\nls\n/exit\n", {
+        args: ["--cwd", targetCwd],
+      });
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("local pwd");
+      expect(result.stdout).toContain(targetCwd);
+      expect(result.stdout).toContain("local ls");
+      expect(result.stdout).toContain("alpha.txt");
+      expect(result.stdout).toContain("subdir/");
+      expect(result.stdout).not.toContain("Mock Lynn response:pwd");
+      expect(result.stdout).not.toContain("Mock Lynn response:ls");
+      expect(result.stdout).not.toContain("模拟回复:pwd");
+      expect(result.stdout).not.toContain("模拟回复:ls");
+    } finally {
+      await fs.rm(targetCwd, { recursive: true, force: true });
+    }
+  });
+
   it("runs interactive chat through CLI BYOK when Brain is offline", async () => {
     let requestBody = "";
     const provider = http.createServer((request, response) => {
@@ -333,6 +406,110 @@ describe("chat mode controls", () => {
       content: expect.stringContaining("Current model route shown to the user: CLI BYOK: chat-model"),
     });
     expect(parsed.messages?.at(-1)).toMatchObject({ role: "user", content: "hi" });
+  });
+
+  it("lets ordinary chat execute safe local tools and feed exact results back to the model", async () => {
+    const targetCwd = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-chat-tool-loop-"));
+    const requestBodies: unknown[] = [];
+    let requests = 0;
+    await fs.writeFile(path.join(targetCwd, "alpha.txt"), "alpha", "utf8");
+
+    const provider = http.createServer((request, response) => {
+      expect(request.url).toBe("/v1/chat/completions");
+      expect(request.headers.authorization).toBe("Bearer sk-chat-tool");
+      let body = "";
+      request.on("data", (chunk) => {
+        body += String(chunk);
+      });
+      request.on("end", () => {
+        requests += 1;
+        requestBodies.push(JSON.parse(body));
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        if (requests === 1) {
+          response.end([
+            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_ls","type":"function","function":{"name":"bash","arguments":"{\\"command\\":\\"ls\\"}"}}]}}]}',
+            "",
+            'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+            "",
+            "data: [DONE]",
+            "",
+          ].join("\n"));
+          return;
+        }
+
+        response.end([
+          'data: {"choices":[{"delta":{"content":"I saw alpha.txt from the local tool result."}}]}',
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    try {
+      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+        const child = spawn(process.execPath, [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "chat",
+          "--cwd",
+          targetCwd,
+          "--brain-url",
+          "http://127.0.0.1:1",
+          "--base-url",
+          `http://127.0.0.1:${address.port}/v1`,
+          "--api-key",
+          "sk-chat-tool",
+          "--model",
+          "chat-tool-model",
+        ], {
+          cwd: cliRoot,
+          env: { ...process.env, NO_COLOR: "1", LYNN_LANG: "en" },
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+        let stdout = "";
+        let stderr = "";
+        const timer = setTimeout(() => {
+          child.kill();
+          reject(new Error("interactive chat tool loop did not exit"));
+        }, 8000);
+        child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+        child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+        child.on("error", reject);
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          resolve({ code, stdout, stderr });
+        });
+        child.stdin.write("list the files with a local tool\n/exit\n");
+        child.stdin.end();
+      });
+
+      expect(result.code).toBe(0);
+      expect(requests).toBe(2);
+      expect(result.stdout).toContain("I saw alpha.txt");
+      expect(result.stderr).toContain("bash");
+      expect(result.stderr).toContain("done");
+
+      const first = requestBodies[0] as { tools?: unknown[]; tool_choice?: string; messages?: Array<{ role?: string; content?: unknown }> };
+      expect(first.tool_choice).toBe("auto");
+      expect(first.tools).toEqual(expect.arrayContaining([
+        expect.objectContaining({ function: expect.objectContaining({ name: "bash" }) }),
+      ]));
+      expect(first.messages?.at(-1)).toMatchObject({ role: "user", content: "list the files with a local tool" });
+
+      const second = requestBodies[1] as { messages?: Array<{ role?: string; content?: unknown; tool_call_id?: string; tool_calls?: unknown[] }> };
+      const toolMessage = second.messages?.find((message) => message.role === "tool");
+      expect(toolMessage).toMatchObject({ tool_call_id: "call_ls" });
+      expect(String(toolMessage?.content)).toContain("alpha.txt");
+      expect(second.messages?.some((message) => message.role === "assistant" && Array.isArray(message.tool_calls))).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+      await fs.rm(targetCwd, { recursive: true, force: true });
+    }
   });
 
   it("retries an interactive chat turn once when Brain returns an empty visible answer", async () => {

@@ -83,6 +83,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "code.maxsteps": "最多 {n} 步",
     "chat.fast": "✓ 快速模式 · 思考关闭(低延迟短回复)",
     "chat.think": "✓ 思考模式 · 推理强度高",
+    "chat.think.set": "✓ 思考模式 · 推理强度 {value}",
     "chat.cleared": "✓ 上下文已清空",
     "chat.help":
       "/exit 退出聊天\n" +
@@ -90,6 +91,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/version 查看 Lynn CLI 本地版本和当前 Brain 路由\n" +
       "/model 查看 Brain 三段模型路由; /model stepfun|mimo|spark 切换 StepFun 3.7 Flash / MiMo V2.5 Pro / Spark Qwen 3.6 35B A3B\n" +
       "/memory 查看长期记忆; /memory add <事实> 保存长期事实; /memory forget <id> 删除\n" +
+      "/tool 查看最近工具详情; /tool <编号> 展开搜索来源/工具结果\n" +
       "/cwd 查看工作目录;默认是启动 Lynn 时终端所在目录,可先 cd 或用 --cwd 指定\n" +
       "/image <图片路径> [问题] 添加图片;也可以直接粘贴图片路径和多段文字\n" +
       "/setup 打开 CLI-only BYOK 三步向导\n" +
@@ -98,14 +100,14 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/providers unset 清除 CLI BYOK\n" +
       "/providers test 测试 CLI BYOK\n" +
       "/fast 低延迟回复\n" +
-      "/think 深度推理\n" +
+      "/think low|medium|high 切换推理强度\n" +
       "/reasoning 查看或设置推理模式\n" +
       "/mode 查看权限模式\n" +
       "/yolo 开启零审批 YOLO 模式(本地写入和 shell 命令)\n" +
       "/ask 回到守护模式(workspace-write)\n" +
       "/mode ask|yolo|read-only|workspace|danger 切换权限\n" +
       "/help 显示命令",
-    "chat.reasoning.show": "reasoning:{effort} · display {display}\n用 /fast、/think 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
+    "chat.reasoning.show": "reasoning:{effort} · display {display}\n用 /fast、/think low|medium|high 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
     "chat.mode.show": "mode:{mode}\n用 /yolo 开启零审批本地工具权限,/ask 回到守护模式,或 Shift+Tab 切换。",
     "chat.providers.usage":
       "用法:\n" +
@@ -127,11 +129,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "chat.image.readError": "图片上下文无法读取:{error}",
     "code.fast": "✓ 快速模式 · 思考关闭",
     "code.think": "✓ 思考模式 · 高",
+    "code.think.set": "✓ 思考模式 · {value}",
     "code.help":
       "/exit 退出 code 模式\n" +
       "/tools 查看本地编码工具\n" +
       "/fast 低延迟 MiMo/Brain 回复\n" +
-      "/think 深度 MiMo/Brain 推理\n" +
+      "/think low|medium|high 切换推理强度\n" +
       "/reasoning 查看或设置推理模式\n" +
       "/goal <任务> 长任务模式:1000 步预算 + 自动保存断点\n" +
       "/resume [last|session.jsonl] [说明] 继续上次长任务\n" +
@@ -149,7 +152,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/ask 回到守护模式(workspace-write)\n" +
       "/mode ask 守护模式(workspace-write)\n" +
       "/mode yolo 允许本地写入和 shell 命令",
-    "code.reasoning.show": "think:{effort} / display {display}\n用 /fast、/think 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
+    "code.reasoning.show": "think:{effort} / display {display}\n用 /fast、/think low|medium|high 或 /reasoning off|auto|low|medium|high|xhigh 切换。",
     "code.mode.show": "mode:{mode}\n用 /yolo 开启零审批本地工具权限,/ask 回到守护模式。",
     "code.resume.maxSteps": "已保存断点。继续: {command}",
     "code.resume.maxStepsFallback": "已到达步数上限。用 /resume 继续最近的长任务,或用 --resume <session.jsonl> --long。",
@@ -164,26 +167,33 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "code.resume.torn": " · 恢复 {n} 行残损记录",
     "code.resume.task": "↻ 续跑任务:{task}",
     "code.resume.cwdDrift": "⚠ 目录已变:断点存于 {saved},当前在 {current} — 引用的文件可能已移动",
-    "code.resume.snapshot": "📌 文件快照 {sha} 可用 — 用 `git stash apply {sha}` 恢复",
-    "code.snapshot.saved": "📌 已存文件快照 {sha}({files} 个改动)— `git stash apply {sha}` 可恢复",
     "code.resume.others": "  其他最近会话:{list}(用 --resume <路径> 指定)",
     "tool.approval.suffix": " (需要确认)",
+    "tool.details.unavailable.short": "无展开明细",
+    "tool.details.unavailable": "Brain 只返回了工具开始/结束状态,没有提供搜索摘要或来源明细。",
     "mode.yolo.enabled": "YOLO 静默黑灯工厂模式已开启。",
     "mode.ask.enabled": "守护模式已开启。",
     "mode.readonly.enabled": "只读模式已开启。",
     "mode.workspace.enabled": "工作区写入模式已开启。",
-    "mode.danger.enabled": "危险全权限模式已开启。",
+    "mode.danger.enabled": "YOLO full-access 模式已开启。",
     "mode.unknown": "未知权限模式:{raw}。试试 /ask 或 /yolo。",
-    "mode.danger.warning": "危险:YOLO 模式会直接编辑本地文件并运行 shell 命令,不再逐次询问。",
+    "mode.danger.warning": "YOLO 模式会直接编辑本地文件并运行 shell 命令,不再逐次询问。",
     "mode.yolo.factory": "YOLO 静默黑灯工厂模式:本地编辑和 shell 命令不再逐条询问。",
-    "code.danger.warning": "危险:YOLO 模式可直接编辑文件并运行 shell 命令,不会逐次询问。",
+    "code.danger.warning": "YOLO 模式可直接编辑文件并运行 shell 命令,不会逐次询问。",
     "reasoning.effortSet": "推理强度已设为 {value}。",
     "reasoning.displayAlways": "推理显示已设为:始终。",
     "reasoning.displayNever": "推理显示已设为:从不。",
     "reasoning.unknown": "未知的推理模式:{raw}。",
     "reasoning.state": "推理:{effort} · 显示 {display}",
     "code.reasoning.state": "思考:{effort} / 显示 {display}",
-    "approval.prompt": "允许 {tool} 在 {cwd} 执行?[y/n/a](a = 本次会话全部允许) ",
+    "approval.prompt": "选择 [y/a/n] > ",
+    "approval.card.title": "需要授权: {tool}",
+    "approval.card.cwd": "目录:",
+    "approval.card.preview": "预览:",
+    "approval.card.omitted": "... 省略 {n} 行",
+    "approval.card.once": "允许一次",
+    "approval.card.session": "本次会话全部允许",
+    "approval.card.deny": "拒绝",
     "slash.unknown": "未知命令 · 输入 /help 查看全部命令",
     "slash.label.model": "路由/模型",
     "slash.label.providers": "BYOK",
@@ -197,6 +207,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "slash.label.image": "图片",
     "slash.label.yolo": "静默工厂",
     "slash.label.ask": "守护模式",
+    "slash.tabHint": "Tab 补全",
+    "slash.moreHint": "继续输入筛选 · Tab 补全 · /help 查看全部",
     "cwd.info": "工作目录:{cwd}\n默认是你启动 Lynn 时终端所在的目录。切换方式:\n  cd /path/to/project && Lynn\n  Lynn code --cwd /path/to/project \"任务\"",
     "banner.label.model": "模型",
     "banner.label.mode": "模式",
@@ -351,6 +363,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "code.maxsteps": "max steps {n}",
     "chat.fast": "✓ fast mode · thinking off (short, low-latency replies)",
     "chat.think": "✓ thinking mode · reasoning high",
+    "chat.think.set": "✓ thinking mode · reasoning {value}",
     "chat.cleared": "✓ context cleared",
     "chat.help":
       "/exit leave chat\n" +
@@ -358,6 +371,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/version show the local Lynn CLI version and current Brain route\n" +
       "/model show the three Brain model choices; /model stepfun|mimo|spark switches StepFun 3.7 Flash / MiMo V2.5 Pro / Spark Qwen 3.6 35B A3B\n" +
       "/memory show durable memory; /memory add <fact> save a durable fact; /memory forget <id> delete\n" +
+      "/tool show recent tool details; /tool <id> expands search sources/tool output\n" +
       "/cwd show working directory; default is the terminal directory where Lynn started, use cd or --cwd to change\n" +
       "/image <image-path> [prompt] attach images; pasted image paths and multi-line text work too\n" +
       "/setup open the CLI-only BYOK three-step wizard\n" +
@@ -366,14 +380,14 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/providers unset clear CLI BYOK\n" +
       "/providers test test CLI BYOK\n" +
       "/fast low-latency replies\n" +
-      "/think deeper reasoning\n" +
+      "/think low|medium|high switch reasoning effort\n" +
       "/reasoning show or set reasoning mode\n" +
       "/mode show permission mode\n" +
       "/yolo enable zero-prompt YOLO mode for local writes and shell commands\n" +
       "/ask return to guarded workspace-write mode\n" +
       "/mode ask|yolo|read-only|workspace|danger change permission mode\n" +
       "/help show commands",
-    "chat.reasoning.show": "reasoning: {effort} · display {display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.",
+    "chat.reasoning.show": "reasoning: {effort} · display {display}\nUse /fast, /think low|medium|high, or /reasoning off|auto|low|medium|high|xhigh.",
     "chat.mode.show": "mode: {mode}\nUse /yolo for zero-prompt local tool permission, /ask for guarded mode, or Shift+Tab to toggle.",
     "chat.providers.usage":
       "Usage:\n" +
@@ -395,11 +409,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "chat.image.readError": "Could not read image context: {error}",
     "code.fast": "✓ fast mode · thinking off",
     "code.think": "✓ thinking mode · high",
+    "code.think.set": "✓ thinking mode · {value}",
     "code.help":
       "/exit leave code mode\n" +
       "/tools list local coding tools\n" +
       "/fast low-latency MiMo/Brain replies\n" +
-      "/think deeper MiMo/Brain reasoning\n" +
+      "/think low|medium|high switch reasoning effort\n" +
       "/reasoning show or set reasoning mode\n" +
       "/goal <task> long-running mode: 1000-step budget + automatic checkpoints\n" +
       "/resume [last|session.jsonl] [note] continue a saved long task\n" +
@@ -417,7 +432,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/ask return to guarded workspace-write mode\n" +
       "/mode ask guarded workspace-write mode\n" +
       "/mode yolo allow local writes and shell commands",
-    "code.reasoning.show": "think: {effort} / display {display}\nUse /fast, /think, or /reasoning off|auto|low|medium|high|xhigh.",
+    "code.reasoning.show": "think: {effort} / display {display}\nUse /fast, /think low|medium|high, or /reasoning off|auto|low|medium|high|xhigh.",
     "code.mode.show": "mode: {mode}\nUse /yolo for zero-prompt local tool permission or /ask for guarded mode.",
     "code.resume.maxSteps": "Checkpoint saved. Continue with: {command}",
     "code.resume.maxStepsFallback": "Step budget reached. Use /resume for the latest long task, or --resume <session.jsonl> --long.",
@@ -432,26 +447,33 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "code.resume.torn": " · recovered {n} torn line(s)",
     "code.resume.task": "↻ Resuming task: {task}",
     "code.resume.cwdDrift": "⚠ Directory changed: checkpoint saved in {saved}, now in {current} — referenced files may have moved",
-    "code.resume.snapshot": "📌 File snapshot {sha} available — restore with `git stash apply {sha}`",
-    "code.snapshot.saved": "📌 Saved file snapshot {sha} ({files} change(s)) — restore with `git stash apply {sha}`",
     "code.resume.others": "  Other recent sessions: {list} (use --resume <path>)",
     "tool.approval.suffix": " (approval required)",
+    "tool.details.unavailable.short": "no expanded detail",
+    "tool.details.unavailable": "Brain returned only tool start/end status and did not include a search summary or source details.",
     "mode.yolo.enabled": "YOLO silent factory mode enabled.",
     "mode.ask.enabled": "Guarded mode enabled.",
     "mode.readonly.enabled": "Read-only mode enabled.",
     "mode.workspace.enabled": "Workspace-write mode enabled.",
-    "mode.danger.enabled": "Danger-full-access mode enabled.",
+    "mode.danger.enabled": "YOLO full-access mode enabled.",
     "mode.unknown": "Unknown mode: {raw}. Try /ask or /yolo.",
-    "mode.danger.warning": "DANGER: YOLO mode can edit local files and run shell commands without asking again.",
+    "mode.danger.warning": "YOLO mode can edit local files and run shell commands without asking again.",
     "mode.yolo.factory": "YOLO silent factory mode: local edits and shell commands run without per-step prompts.",
-    "code.danger.warning": "DANGER: YOLO mode can edit files and run shell commands without asking.",
+    "code.danger.warning": "YOLO mode can edit files and run shell commands without asking.",
     "reasoning.effortSet": "Reasoning effort set to {value}.",
     "reasoning.displayAlways": "Reasoning display set to always.",
     "reasoning.displayNever": "Reasoning display set to never.",
     "reasoning.unknown": "Unknown reasoning mode: {raw}.",
     "reasoning.state": "reasoning: {effort} · display {display}",
     "code.reasoning.state": "think: {effort} / display {display}",
-    "approval.prompt": "Allow {tool} in {cwd}? [y/n/a] (a = allow all this session) ",
+    "approval.prompt": "Choose [y/a/n] > ",
+    "approval.card.title": "Approval required: {tool}",
+    "approval.card.cwd": "cwd:",
+    "approval.card.preview": "preview:",
+    "approval.card.omitted": "... omitted {n} line(s)",
+    "approval.card.once": "allow once",
+    "approval.card.session": "allow all this session",
+    "approval.card.deny": "deny",
     "slash.unknown": "unknown command · type /help",
     "slash.label.model": "route/model",
     "slash.label.providers": "BYOK",
@@ -465,6 +487,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "slash.label.image": "image",
     "slash.label.yolo": "silent factory",
     "slash.label.ask": "guarded",
+    "slash.tabHint": "Tab completes",
+    "slash.moreHint": "keep typing to filter · Tab completes · /help shows all",
     "cwd.info": "working directory:{cwd}\nDefault is the terminal directory where Lynn was started. To change it:\n  cd /path/to/project && Lynn\n  Lynn code --cwd /path/to/project \"task\"",
     "banner.label.model": "model",
     "banner.label.mode": "mode",

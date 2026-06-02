@@ -71,6 +71,29 @@ describe('stream-bridge SSE emitter', () => {
     expect(ev.choices[0].finish_reason).toBe('tool_calls');
   });
 
+  it('forwards usage chunks so CLI can render prefix-cache telemetry', () => {
+    const res = makeMockRes();
+    const e = makeSSEEmitter(res, { id: 'x' });
+    e.emitChunk({ type: 'usage', usage: { prompt_cache_hit_tokens: 80, prompt_cache_miss_tokens: 20 } });
+    const ev = parseSSEWrites(res.writes)[0];
+    expect(ev).toMatchObject({
+      object: 'chat.completion.chunk',
+      choices: [],
+      usage: { prompt_cache_hit_tokens: 80, prompt_cache_miss_tokens: 20 },
+    });
+  });
+
+  it('forwards tool progress summaries', () => {
+    const res = makeMockRes();
+    const e = makeSSEEmitter(res, { id: 'x' });
+    e.emitChunk({ type: 'tool_progress', event: 'end', name: 'web_search', ms: 120, ok: true, summary: 'MiMo summary', details: ['[Source](https://example.test): snippet'] });
+    const ev = parseSSEWrites(res.writes)[0];
+    expect(ev).toMatchObject({
+      object: 'lynn.tool_progress',
+      tool_progress: { event: 'end', name: 'web_search', ms: 120, ok: true, summary: 'MiMo summary', details: ['[Source](https://example.test): snippet'] },
+    });
+  });
+
   it('done() writes [DONE] and ends the response', () => {
     const res = makeMockRes();
     const e = makeSSEEmitter(res, { id: 'x' });

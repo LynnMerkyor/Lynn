@@ -127,6 +127,6 @@ describe("cache command", () => {
     expect(code).toBe(1);
     expect(output).toContain("status: WARN");
     expect(output).toContain("Stable prefix drift detected");
-    expect(output).toContain("Low cache hit ratio (10%)");
+    expect(output).toContain("Low prefix-cache hit ratio (10%)");
   });
 });

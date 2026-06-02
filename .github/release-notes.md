@@ -1,34 +1,86 @@
-# Lynn CLI v0.80.2 Release Notes
+# Lynn CLI v0.80.5 Release Notes / 发布说明
 
-> 发布日期:2026-05-31 · CLI-only 体验与稳定性热修
+> 发布日期: 2026-06-01 · CLI-only 前置缓存与长任务稳定性热修
 
-v0.80.2 只迭代 **Lynn CLI / Lynn Code**。桌面端 GUI 仍停在 v0.80.1,CLI 可以领先一个版本,用于快速修复终端输入稳定性、补齐 Apple Terminal 体验、保留 Ink TUI、decode TPS 与 Fleet/headless 调用能力。
+v0.80.5 只迭代 **Lynn CLI / Lynn Code**；桌面端 GUI 仍为 v0.80.1。本版把
+Reasonix 风格的前置缓存命中变成可见但低打扰的信号，同时补齐长任务工具循环中的
+运行时压缩与 Brain 早期断流重试。
 
-## 重点修复与体验
+## 中文重点
 
-- **Apple Terminal / 中文输入稳定性**:保留 Ink TUI、输入框、状态栏和 decode TPS,但在 Apple Terminal 自动关闭高频流光/扫描动画、动态 placeholder 和内联图片转义,规避 macOS Terminal + IME 绘制崩溃。
-- **完整 TUI 保留**:iTerm2、kitty、VS Code Terminal 等继续使用完整流光等待、Markdown 表格/代码高亮、diff 预览、多行输入、图片/音频/视频路径提示和底部速度表。
-- **`-p` / headless 更适合其他智能体**:`Lynn -p`、`Lynn code -p --json`、`Lynn worker run --jsonl` 均不进入 TUI,适合作为 CLI Fleet worker 或被 Claude Code / Codex CLI / Kimi Code 静默调用。
-- **同版本更新不打断会话**:同版本 build 热修不弹确认;只有真正版本号升级才提示。升级失败不影响当前版本继续使用。
-- **远端 Brain 默认可用**:纯 CLI 用户本地 Brain 不可达时自动使用 Lynn 远端 Brain,无需先安装或打开 Lynn 客户端即可开始体验。
+- **前置缓存命中可见**：usage、session、replay 和 `Lynn cache doctor --json`
+  统一显示 `prefix-cache ... hit`，但不在聊天界面里放 ctx% 焦虑条。
+- **长任务运行时压缩**：`Lynn code --long` 会压缩旧轮次，同时保留原始目标、当前计划和最近工具结果；JSONL 发出
+  `code.runtime.compacted`，人类 TUI 显示轻量信息卡。
+- **Brain 早期断流自动重试**：SSE 在还没有任何可见回答、reasoning 或工具调用前断开时，CLI 会退避重试；一旦已经开始输出，就不重试，避免重复半轮工具调用。
+- **计划/工具卡片继续打磨**：`update_plan` 与 resume 计划回显使用 Claude Code 风格 plan card，工具、路由、压缩状态保持同一套左 gutter 卡片语言。
+- **门禁覆盖压缩路径**：`cli-longrun-smoke` 会制造大工具结果，并要求出现 `code.runtime.compacted`，避免长任务稳定性只停留在单测。
 
-## CLI 安装
+## 安装
 
 ```bash
-# 1. Node requirement: Node.js 20 LTS or 22 LTS with npm.
+# 前置: Node.js 20 LTS 或 22 LTS with npm.
 node -v
 
-# 2. Install or update Lynn CLI from the CDN.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.2-apple-terminal-stable.tgz"
+# 从 Lynn 镜像安装或覆盖升级。
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz"
 
-# 3. Launch.
-Lynn            # interactive chat TUI
-Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.80.2
-Lynn agents     # copyable headless/Fleet commands for other agents
+# 启动。
+Lynn            # 交互式聊天 TUI
+Lynn code       # 编码 agent TUI
+Lynn --version  # 应输出 0.80.5
+Lynn agents     # 给其他智能体/Fleet 的可复制命令
 ```
 
-默认 Brain V2 路由为 **StepFun 3.7 Flash(256K 上下文,high 推理,32K 推理/生成预算) → MiMo V2.5 Pro/Omni → Spark Qwen 3.6 35B A3B**。纯 CLI 用户也可以用 `Lynn providers set ...` 绑定自己的 OpenAI 兼容端点。
+默认 Brain 路由: **StepFun 3.7 Flash(256K 上下文, high 推理, 32K 推理/生成预算) -> MiMo V2.5 Pro/Omni -> Spark Qwen 3.6 35B A3B**。纯 CLI 首装在本地 Brain 不可达时会走 Lynn 远端 Brain；BYOK 仍可用。
+
+---
+
+> Release date: 2026-06-01 · CLI-only prefix-cache and long-run stability hotfix
+
+v0.80.5 focuses on Lynn CLI / Lynn Code. The desktop app remains v0.80.1. This
+release makes Reasonix-style prefix-cache behavior visible without creating
+context anxiety, hardens long-running code-agent loops, and adds release gates
+that prove runtime compaction happens during a real tool loop.
+
+## Highlights
+
+- **Prefix-cache visibility without anxiety**: usage summaries, session stats,
+  replay, and `Lynn cache doctor --json` now surface `prefix-cache ... hit`
+  rather than a live context-budget meter.
+- **Runtime compaction in long tool loops**: `Lynn code --long` compacts older
+  runtime turns while preserving the original task, current plan, and recent tool
+  results. JSONL emits `code.runtime.compacted`; human output shows a lightweight
+  info card.
+- **Early Brain stream retry**: if a Brain SSE stream disconnects before any
+  visible answer, reasoning, or tool call, the CLI retries with backoff. Once
+  output has started, retries stop to avoid duplicate half-turn tool calls.
+- **Plan/card polish**: `update_plan` and resume plan echoes use the same
+  left-gutter plan card language as tool and route cards.
+- **Release gate tightened**: `cli-longrun-smoke` now creates large tool results
+  and fails unless `code.runtime.compacted` appears, so long-task stability is
+  checked outside narrow unit tests.
+
+## Install
+
+```bash
+# Prerequisite: Node.js 20 LTS or 22 LTS with npm.
+node -v
+
+# Install or update from the Lynn mirror.
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz"
+
+# Launch.
+Lynn            # interactive chat TUI
+Lynn code       # coding-agent TUI
+Lynn --version  # should print 0.80.5
+Lynn agents     # copyable headless/Fleet commands
+```
+
+Default Brain route: **StepFun 3.7 Flash (256K context, high reasoning, 32K
+reasoning/generation budget) -> MiMo V2.5 Pro/Omni -> Spark Qwen 3.6 35B A3B**.
+Fresh CLI installs use the hosted Lynn Brain when local Brain is unavailable;
+BYOK via `Lynn providers set ...` remains available.
 
 ## Headless / Fleet
 
@@ -48,6 +100,9 @@ Lynn worker run --brief task.md --worktree /path/to/worktree \
   --sandbox workspace-write
 ```
 
-## English Summary
+## Verification
 
-v0.80.2 is a CLI-only stability and UX hotfix. It keeps the modern Ink TUI while using a conservative Apple Terminal profile for Chinese IME stability, preserves decode TPS and headless/Fleet commands, keeps same-version build refreshes quiet, and ships as a CDN tarball without requiring a desktop app.
+- `npm --prefix cli exec tsc -- --noEmit`
+- `npm --prefix cli run build`
+- `npm --prefix cli test` -> 60 files / 446 tests
+- `npm run test:cli-fleet` -> CLI + server/desktop Fleet + long-run compaction smoke

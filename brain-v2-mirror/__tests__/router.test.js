@@ -60,8 +60,8 @@ afterEach(() => {
   delete process.env.BRAIN_V2_STORM_MAX;
   delete process.env.BRAIN_V2_TOOL_RESULT_CAP;
   delete process.env.BRAIN_V2_TOOL_RESULT_KEEP_LATEST;
-  delete process.env.BRAIN_V2_CHAIN_TOOL_HINT;
-  delete process.env.BRAIN_V2_TOOL_RESULT_REINFORCE;
+  delete process.env.ZHIPU_KEY;
+  delete process.env.MIMO_SEARCH_KEY;
 });
 
 describe('Router', () => {
@@ -335,6 +335,100 @@ describe('Router', () => {
       .toEqual([true, false, false, false]);
   });
 
+  it('emits a compact server tool result summary for search cards', async () => {
+    process.env.ZHIPU_KEY = 'test-zhipu';
+    process.env.MIMO_SEARCH_KEY = 'test-mimo';
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: 'Zhipu summary',
+              tool_calls: [{ type: 'web_search', web_search: { search_result: [{ title: 'A', link: 'https://a.example', content: 'a snippet' }] } }],
+            },
+          }],
+        }),
+        text: async () => '',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { content: 'MiMo summary', annotations: [{ type: 'url_citation', title: 'B', url: 'https://b.example', summary: 'b snippet' }] } }],
+        }),
+        text: async () => '',
+      }));
+
+    let adapterRuns = 0;
+    mockState.adapterFn = async function* () {
+      adapterRuns += 1;
+      if (adapterRuns === 1) {
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: 'tc-search-summary',
+            type: 'function',
+            function: { name: 'web_search', arguments: '{"query":"Lynn CLI"}' },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: 'done' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: 'search Lynn CLI' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    const end = chunks.find((chunk) => chunk.type === 'tool_progress' && chunk.event === 'end');
+    expect(end).toMatchObject({ name: 'web_search', ok: true });
+    expect(end.summary).toContain('Zhipu summary');
+    expect(end.summary).toContain('MiMo summary');
+    expect(end.details).toEqual(expect.arrayContaining([
+      expect.stringContaining('Zhipu summary'),
+      expect.stringContaining('[A](https://a.example)'),
+      expect.stringContaining('[B](https://b.example)'),
+    ]));
+  });
+
+  it('summarizes structured and numbered web search results into inspectable sources', () => {
+    const structured = __testing__.summarizeToolResult('web_search', JSON.stringify({
+      ok: true,
+      provider: 'bocha',
+      summary: '官方文档摘要',
+      items: [
+        { title: 'StepFun Docs', url: 'https://platform.stepfun.com/docs/zh/api-reference/chat/messages-create', snippet: 'max_tokens controls generated output.' },
+      ],
+      sources: [
+        { name: 'bocha', ok: true, summary: 'Bocha summary', items: [{ title: 'Pricing', url: 'https://platform.stepfun.com/pricing', snippet: 'Token plan pricing.' }] },
+      ],
+    }));
+    expect(structured.summary).toContain('官方文档摘要');
+    expect(structured.details).toEqual(expect.arrayContaining([
+      expect.stringContaining('[StepFun Docs](https://platform.stepfun.com/docs/zh/api-reference/chat/messages-create)'),
+      expect.stringContaining('[Pricing](https://platform.stepfun.com/pricing)'),
+    ]));
+
+    const numbered = __testing__.summarizeToolResult('web_search', [
+      '── bocha ──',
+      '1. StepFun API Reference',
+      '   https://platform.stepfun.com/docs/zh/api-reference/responses/responses-create',
+      '   Responses API supports streaming and function calling.',
+    ].join('\n'));
+    expect(numbered.summary).toContain('StepFun API Reference');
+    expect(numbered.details).toEqual(expect.arrayContaining([
+      expect.stringContaining('[StepFun API Reference](https://platform.stepfun.com/docs/zh/api-reference/responses/responses-create)'),
+    ]));
+  });
+
   it('compacts older server tool results before subsequent provider rounds', async () => {
     process.env.BRAIN_V2_TOOL_RESULT_CAP = '8';
     let adapterRuns = 0;
@@ -373,7 +467,7 @@ describe('Router', () => {
     expect(fourthRoundToolMessages[2].content).not.toContain('[brain-v2:tool-result-compacted]');
   });
 
-  it('injects a chain-tool hint by default when tools are present and no system prompt exists', async () => {
+  it('does not inject a chain-tool hint by default when tools are present', async () => {
     let adapterMessages = null;
     mockState.adapterFn = async function* ({ messages }) {
       adapterMessages = messages;
@@ -383,12 +477,11 @@ describe('Router', () => {
 
     await run({ messages: [{ role: 'user', content: 'AAPL price times 100' }], tools: null, onChunk: async () => {} });
 
-    expect(adapterMessages[0]).toMatchObject({ role: 'system' });
-    expect(String(adapterMessages[0].content)).toContain('EXACT values returned by each tool');
+    expect(adapterMessages[0]).toMatchObject({ role: 'user' });
+    expect(String(adapterMessages[0].content)).not.toContain('EXACT values returned by each tool');
   });
 
-  it('allows opting out of the chain-tool hint and tool-result reinforcement', async () => {
-    process.env.BRAIN_V2_CHAIN_TOOL_HINT = '0';
+  it('feeds server tool results back without reinforcement wrappers', async () => {
     let adapterRuns = 0;
     const roundMessages = [];
     mockState.adapterFn = async function* ({ messages }) {
@@ -417,9 +510,10 @@ describe('Router', () => {
     const toolMessage = roundMessages[1].find((message) => message.role === 'tool');
     expect(toolMessage.content).toContain('【单位换算】');
     expect(toolMessage.content).not.toContain('[Lynn tool step');
+    expect(toolMessage.content).not.toContain('use these exact returned values');
   });
 
-  it('does not inject the chain-tool hint over a caller-provided system prompt', async () => {
+  it('preserves a caller-provided system prompt without adding another system prompt', async () => {
     let adapterMessages = null;
     mockState.adapterFn = async function* ({ messages }) {
       adapterMessages = messages;
@@ -435,41 +529,6 @@ describe('Router', () => {
 
     expect(adapterMessages[0].content).toBe('caller system');
     expect(String(adapterMessages[0].content)).not.toContain('EXACT values returned by each tool');
-  });
-
-  it('reinforces tool results by default', async () => {
-    let adapterRuns = 0;
-    const roundMessages = [];
-    mockState.adapterFn = async function* ({ messages }) {
-      adapterRuns += 1;
-      roundMessages.push(messages);
-      if (adapterRuns === 1) {
-        yield {
-          type: 'tool_call_delta',
-          delta: [{
-            index: 0,
-            id: 'tc-chain-1',
-            type: 'function',
-            function: { name: 'unit_convert', arguments: '{"query":"100公里"}' },
-          }],
-        };
-        yield { type: 'finish', reason: 'tool_calls' };
-        return;
-      }
-      yield { type: 'content', delta: 'ok' };
-      yield { type: 'finish', reason: 'stop' };
-    };
-
-    const result = await run({
-      messages: [{ role: 'user', content: '300美元换成人民币是多少' }],
-      onChunk: async () => {},
-    });
-
-    expect(result).toMatchObject({ ok: true, iterations: 2 });
-    const toolMessage = roundMessages[1].find((message) => message.role === 'tool');
-    expect(toolMessage.content).toContain('[Lynn tool step 1 completed] unit_convert returned the exact result below.');
-    expect(toolMessage.content).toContain('use these exact returned values');
-    expect(toolMessage.content).toContain('【单位换算】');
   });
 });
 

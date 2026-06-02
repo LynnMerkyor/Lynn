@@ -59,7 +59,13 @@ async function main() {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-longrun-"));
   const dataDir = path.join(tmp, "data");
   for (let i = 1; i <= toolTurns; i += 1) {
-    await fs.writeFile(path.join(tmp, `file-${i}.txt`), `long-run smoke file ${i}\n`, "utf8");
+    const payload = [
+      `long-run smoke file ${i}`,
+      "This deliberately large payload forces runtime compaction during the agent loop.",
+      "x".repeat(35_000),
+      "",
+    ].join("\n");
+    await fs.writeFile(path.join(tmp, `file-${i}.txt`), payload, "utf8");
   }
 
   let requestCount = 0;
@@ -128,6 +134,10 @@ async function main() {
     if (usageEvents.length < toolTurns) fail("expected usage events with cache telemetry", result.stdout);
     if (!usageEvents.some((event) => event.usage?.prompt_cache_hit_tokens > 0 && event.durationMs >= 0)) {
       fail("usage events did not preserve cache-hit tokens and duration", JSON.stringify(usageEvents.at(-1), null, 2));
+    }
+    const compactionEvents = events.filter((event) => event.type === "code.runtime.compacted");
+    if (!compactionEvents.some((event) => event.messages > 0)) {
+      fail("expected runtime compaction during the long tool loop", result.stdout);
     }
     const finished = events.find((event) => event.type === "code.task.finished");
     if (!finished?.ok) fail("long-run CLI did not finish cleanly", result.stdout);

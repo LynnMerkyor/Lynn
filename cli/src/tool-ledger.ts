@@ -19,8 +19,7 @@ export function renderToolLedger(entries: readonly ToolLedgerEntry[], step: numb
   if (!visible.length) return "";
   return [
     `<lynn_tool_ledger step="${step + 1}">`,
-    "Use these exact tool observations as source-of-truth for the next step.",
-    "If a calculation or edit depends on a value, carry it forward from this ledger instead of memory.",
+    "Tool observations recorded during this step:",
     ...visible.map((entry, index) => `${index + 1}. ${entry.tool} ${entry.ok ? "ok" : "failed"}: ${entry.summary}`),
     "</lynn_tool_ledger>",
   ].join("\n");

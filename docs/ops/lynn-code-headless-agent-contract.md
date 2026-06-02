@@ -21,7 +21,7 @@ This is the short contract another coding agent should read first:
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # Install or update Lynn CLI.
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.4.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.6.tgz
 
 # Verify the binary without needing a model backend.
 Lynn version
@@ -68,7 +68,7 @@ Lynn worker run --brief task.md --worktree /path/to/worktree \
 
 Rules for agents:
 
-- Use `--json` or `--jsonl`; never parse the human Ink TUI.
+- Use `--json` or `--jsonl`; never parse the human terminal TUI.
 - Always pass `--cwd` / `--worktree`.
 - Use `--approval yolo --sandbox workspace-write` only in an isolated git
   worktree.
@@ -141,6 +141,7 @@ Common events:
 | `code.tool.requested` | The model requested a local tool. |
 | `code.tool.result` | A local tool finished. |
 | `code.tool.ledger` | Compact source-of-truth ledger for chained tool work. |
+| `code.runtime.compacted` | Older runtime turns were compacted while preserving the goal, current plan, and recent tool results. |
 | `session.checkpoint` | A resumable session line was written. |
 | `session.resumed` | A previous session was loaded. |
 | `session.saved` | Final session path. |
@@ -205,6 +206,9 @@ Lynn code --resume /path/to/session.jsonl --long -p "continue the task" --json
 
 Lynn repairs incomplete tool frames on resume by preserving completed tool
 results and inserting explicit missing-result markers for interrupted calls.
+During long runs it may also compact older runtime turns before the next model
+request; the `code.runtime.compacted` event is informational and means the active
+goal, current plan, and recent tool results were kept.
 
 ## Input Media
 

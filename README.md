@@ -16,7 +16,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.80.1-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.80.5-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.80.6-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -43,26 +43,20 @@ Cursor 解决“我正在编辑这段代码”;Claude Code / Codex CLI 解决“
 
 V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、完整 Markdown 渲染、流式输出、工具调用和长任务续跑。它可以独立给人使用,也可以给其他智能体和 CI 当无交互 worker。**一行命令装好,不用克隆仓库、不用编译。**
 
-需要 Node.js 20 LTS 或 22 LTS。没有 Node 时可先装:
-
 ```bash
+# 1. Node requirement: Node.js 20 LTS or 22 LTS with npm.
+# Check: node -v should be >= v20.
 # macOS: brew install node@20
 # macOS/Linux: nvm install 20 && nvm use 20
 # Windows: winget install OpenJS.NodeJS.LTS
-```
 
-安装或覆盖升级只复制这一行:
+# 2. Install or update from the Lynn mirror. --force is safe for first install too.
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.6.tgz"
 
-```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz"
-```
-
-启动 / 验证:
-
-```bash
-Lynn --version  # should print 0.80.5
+# 3. Launch.
 Lynn            # interactive chat TUI
 Lynn code       # coding-agent TUI
+Lynn --version  # should print 0.80.6
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
@@ -81,7 +75,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
   --save-session
 ```
 
-机器调用请只解析 JSONL,不要解析人类 TUI。完整契约见 [`docs/ops/lynn-code-headless-agent-contract.md`](docs/ops/lynn-code-headless-agent-contract.md)。
+机器调用请只解析 JSONL,不要解析人类 TUI。完整契约见 [`docs/ops/lynn-code-headless-agent-contract.zh.md`](docs/ops/lynn-code-headless-agent-contract.zh.md) / [`English contract`](docs/ops/lynn-code-headless-agent-contract.md)。
 
 ### Agent Quick Contract
 
@@ -123,7 +117,7 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 ## 🆕 近期更新
 
 <details>
-<summary><strong>CLI v0.80.5</strong> · 2026-06-01 · 前置缓存可见 + 长任务稳定性热修 <em>(CLI 最新)</em></summary>
+<summary><strong>CLI v0.80.6</strong> · 2026-06-01 · 前置缓存可见 + 长任务稳定性热修 <em>(CLI 最新)</em></summary>
 
 **CLI-only 热修,GUI 仍为 v0.80.1**:
 - 💾 **前置缓存命中可见**:借鉴 Reasonix 的 prefix-cache 思路,stable prefix / resume history / volatile runtime / current user 分层固定;usage、session、replay 和 `Lynn cache doctor --json` 会显示 `prefix-cache ... hit`,但不在聊天 UI 里显示 ctx% 焦虑条。
@@ -133,10 +127,10 @@ Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引
 - 🧪 **门禁覆盖长跑压缩路径**:`cli-longrun-smoke` 会制造大工具结果并要求出现 `code.runtime.compacted`,避免长任务稳定性只停留在单测。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.6.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.5)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
 
 </details>
 

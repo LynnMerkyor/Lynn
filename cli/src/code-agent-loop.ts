@@ -8,15 +8,23 @@ import { buildCodeContextMessages } from "./context-layers.js";
 import { t } from "./i18n.js";
 import { nowIso, writeJsonLine } from "./jsonl.js";
 import { buildImagesContentParts } from "./media.js";
-import { normalizePlanItems, renderPlanItems, type CodePlanItem } from "./plan-tool.js";
+import { normalizePlanItems, type CodePlanItem } from "./plan-tool.js";
 import type { CliProviderProfile } from "./provider-profile.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "./reasoning.js";
-import { TerminalSpinner } from "./terminal-spinner.js";
+import { TerminalSpinner, renderCard, renderPlanCard } from "./terminal-spinner.js";
 import { dim, supportsColor } from "./terminal-style.js";
 import { renderToolLedger, toolLedgerEntry, type ToolLedgerEntry } from "./tool-ledger.js";
 import { runClientTool } from "./tools/registry.js";
 import type { ClientToolName, ClientToolResult, ToolRunContext } from "./tools/types.js";
-import { RESUME_COMPACTION_NOTE, RESUME_REPAIR_NOTE, formatToolResultForLoop } from "./code-resume.js";
+import { RESUME_COMPACTION_NOTE, RESUME_REPAIR_NOTE, extractLatestPlan, formatToolResultForLoop } from "./code-resume.js";
+import { augmentToolResultSection } from "./code-tool-verify.js";
+import { resolveAutoVerifyPlan, runAutoVerify, formatAutoVerifyFeedback, buildAutoVerifyEvent, formatAutoVerifyObservation, isLikelyVerificationCommand } from "./code-autoverify.js";
+import { checkPlanContract, defaultToolBudget, checkToolBudget } from "./code-plan-contract.js";
+import { createWorkspaceSnapshot, recordWorkspaceSnapshotForRequest, restoreWorkspaceSnapshot, autoRollbackEnabled, type WorkspaceSnapshot } from "./code-snapshot.js";
+import { selfVerifyEnabled, buildSelfVerifyPrompt, parseSelfVerifyVerdict, formatSelfVerifyCritique } from "./code-self-verify.js";
+
+const MAX_AUTOVERIFY_REVERIFIES = 3;
+const MAX_PLAN_REMINDERS = 2;
 
 
 export interface CodeAgentLoopInput {
@@ -56,7 +64,12 @@ export type CodeAgentEvent =
   | { type: "tool.result"; result: ClientToolResult }
   | { type: "tool.ledger"; text: string }
   | { type: "tool.loop_guard"; tool: ClientToolName; repeats: number }
+  | { type: "auto.verify"; label: string; ok: boolean; ran: boolean; command?: string; attempt?: number; blockedFinish?: boolean; output?: string }
+  | { type: "snapshot"; ref: string; restoreCommand: string }
+  | { type: "rollback"; ok: boolean; message: string }
+  | { type: "self.verify"; pass: boolean }
   | { type: "plan.updated"; items: CodePlanItem[] }
+  | { type: "runtime.compacted"; messages: number }
   | { type: "session.resumed"; path: string; messages: number }
   | { type: "session.checkpoint"; path: string; line: "user" | "assistant" | "tool" }
   | { type: "session.saved"; path: string }
@@ -82,6 +95,37 @@ interface ClientToolStormVerdict {
 const TOOL_STORM_WINDOW = 8;
 const RUNTIME_COMPACTION_MAX_CHARS = 150_000;
 const RUNTIME_COMPACTION_KEEP_GROUPS = 8;
+
+interface AtomicToolPlan {
+  deferredIndexes: Set<number>;
+}
+
+function planAtomicToolStep(requests: readonly CodeToolRequest[]): AtomicToolPlan {
+  const deferredIndexes = new Set<number>();
+  let usedActionTool = false;
+
+  requests.forEach((request, index) => {
+    if (request.tool === "update_plan") {
+      return;
+    }
+    if (!usedActionTool) {
+      usedActionTool = true;
+      return;
+    }
+    deferredIndexes.add(index);
+  });
+
+  return { deferredIndexes };
+}
+
+function deferredAtomicToolSection(request: CodeToolRequest): string {
+  return [
+    `Tool result for ${request.tool}:`,
+    "Not executed in this atomic tool step.",
+    "Lynn returned the first non-plan tool observation before running additional non-plan tools.",
+    "No filesystem, network, or shell action was performed for this request.",
+  ].join("\n");
+}
 
 function createClientToolStormState(seedMessages: readonly ChatMessage[] = []): ClientToolStormState {
   const state: ClientToolStormState = { recent: [] };
@@ -174,6 +218,20 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   const usageRecords: Array<{ usage: unknown; durationMs: number }> = [];
   const approvalSession = { approveAll: false };
   const toolStorm = createClientToolStormState(inputData.resumeMessages);
+  const autoVerifyPlan = resolveAutoVerifyPlan(inputData.toolCtx.cwd);
+  let mutated = false;
+  let lastMutationVerifyOk = false;
+  let autoVerifyChecks = 0;
+  let autoVerifyReverifies = 0;
+  let latestPlan = inputData.resumeMessages ? extractLatestPlan(inputData.resumeMessages) : [];
+  const toolBudget = defaultToolBudget(inputData.maxSteps);
+  let toolCallCount = 0;
+  let budgetWarned = false;
+  let planReminders = 0;
+  let snapshot: WorkspaceSnapshot | null = null;
+  let snapshotAnnounced = false;
+  let rolledBack = false;
+  let selfVerifyPasses = 0;
   for (let step = 0; step < inputData.maxSteps; step += 1) {
     const label = step === 0 ? t("spinner.coding") : t("spinner.reviewing");
     inputData.onEvent?.({ type: "step.started", step, label });
@@ -184,6 +242,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       reasoning: inputData.reasoning,
       json: inputData.json,
       label,
+      danger: inputData.toolCtx.approval === "yolo" || inputData.toolCtx.sandbox === "danger-full-access",
       onEvent: inputData.onEvent,
     });
     const assistantText = result.text;
@@ -210,13 +269,93 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       }
     }
     if (!toolRequests.length) {
+      if (mutated && !lastMutationVerifyOk && autoVerifyPlan.enabled && autoVerifyReverifies < MAX_AUTOVERIFY_REVERIFIES) {
+        const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
+        if (outcome.ran) {
+          autoVerifyChecks += 1;
+          const verifyEvent = buildAutoVerifyEvent(outcome, autoVerifyPlan, autoVerifyChecks);
+          if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), ...verifyEvent });
+          inputData.onEvent?.({ type: "auto.verify", ...verifyEvent });
+          if (!inputData.json && !inputData.onEvent) {
+            process.stderr.write(`${renderCard({
+              kind: outcome.ok ? "ok" : "error",
+              title: `auto-verify · ${outcome.label} · ${outcome.ok ? "passed" : "FAILED"}`,
+            }, supportsColor(process.stderr))}\n`);
+          }
+        }
+        const feedback = formatAutoVerifyFeedback(outcome);
+        if (feedback) {
+          if (autoRollbackEnabled() && snapshot?.available && !rolledBack && autoVerifyReverifies + 1 >= MAX_AUTOVERIFY_REVERIFIES) {
+            const restore = restoreWorkspaceSnapshot(inputData.toolCtx.cwd, snapshot);
+            rolledBack = true;
+            autoVerifyReverifies = 0;
+            if (inputData.json) writeJsonLine({ type: "code.rollback", ts: nowIso(), ok: restore.ok, message: restore.message });
+            inputData.onEvent?.({ type: "rollback", ok: restore.ok, message: restore.message });
+            const rollbackMsg = `${feedback}\n↩ Lynn rolled the workspace back to the pre-task snapshot (${restore.message}). The previous edits could not be made to pass — start over with a smaller, different approach.`;
+            messages.push({ role: "user", content: rollbackMsg });
+            if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: rollbackMsg });
+            continue;
+          }
+          autoVerifyReverifies += 1;
+          messages.push({ role: "user", content: feedback });
+          if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: feedback });
+          continue;
+        }
+      }
+      const planVerdict = checkPlanContract(latestPlan);
+      if (planVerdict.message && planReminders < MAX_PLAN_REMINDERS) {
+        planReminders += 1;
+        messages.push({ role: "user", content: planVerdict.message });
+        if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: planVerdict.message });
+        continue;
+      }
+      if (mutated && selfVerifyEnabled() && selfVerifyPasses < 1) {
+        selfVerifyPasses += 1;
+        const review = await collectBrainText({
+          brainUrl: inputData.brainUrl,
+          fallbackProvider: inputData.fallbackProvider,
+          messages: [{ role: "user", content: buildSelfVerifyPrompt(inputData.task, assistantText) }],
+          reasoning: inputData.reasoning,
+          json: inputData.json,
+          label: t("spinner.reviewing"),
+          danger: inputData.toolCtx.approval === "yolo" || inputData.toolCtx.sandbox === "danger-full-access",
+          noTools: true,
+          onEvent: inputData.onEvent,
+        });
+        const verdict = parseSelfVerifyVerdict(review.text);
+        if (inputData.json) writeJsonLine({ type: "code.self_verify", ts: nowIso(), pass: verdict.pass });
+        inputData.onEvent?.({ type: "self.verify", pass: verdict.pass });
+        if (!verdict.pass) {
+          const critique = formatSelfVerifyCritique(verdict.issues);
+          messages.push({ role: "user", content: critique });
+          if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: critique });
+          continue;
+        }
+      }
       finalText = assistantText;
       break;
     }
     const toolResultSections: string[] = [];
     const toolLedgerEntries: ToolLedgerEntry[] = [];
-    for (const toolRequest of toolRequests) {
+    const atomicPlan = planAtomicToolStep(toolRequests);
+    for (let toolIndex = 0; toolIndex < toolRequests.length; toolIndex += 1) {
+      const toolRequest = toolRequests[toolIndex];
+      if (atomicPlan.deferredIndexes.has(toolIndex)) {
+        const section = deferredAtomicToolSection(toolRequest);
+        toolResultSections.push(section);
+        if (inputData.json) {
+          writeJsonLine({
+            type: "code.tool.deferred",
+            ts: nowIso(),
+            tool: toolRequest.tool,
+            args: redactToolArgs(toolRequest),
+            reason: "atomic_tool_step",
+          });
+        }
+        continue;
+      }
       const stormVerdict = observeClientToolRequest(toolStorm, toolRequest);
+      if (toolRequest.tool !== "update_plan") toolCallCount += 1;
       if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
       const preview = formatDangerousToolPreview(toolRequest.tool, toolRequest.args, supportsColor(inputData.output));
       inputData.onEvent?.({ type: "tool.requested", tool: toolRequest.tool, args: redactToolArgs(toolRequest) as CodeToolRequest["args"], preview });
@@ -226,7 +365,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         toolResult = {
           ok: false,
           tool: toolRequest.tool,
-          error: "Repeated identical tool request suppressed by Lynn CLI. Use a different tool, different arguments, or answer with the information already available.",
+          error: "Repeated identical tool request suppressed by Lynn CLI. No action was performed for this duplicate request.",
         };
         if (inputData.json) {
           writeJsonLine({ type: "code.tool.loop_guard", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest), repeats: stormVerdict.repeatCount });
@@ -259,8 +398,21 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
               input: inputData.input,
               output: inputData.output,
               preview,
+              args: toolRequest.args,
               session: approvalSession,
             });
+          }
+          if (toolRequest.tool === "write_file" || toolRequest.tool === "apply_patch") {
+            snapshot = recordWorkspaceSnapshotForRequest(
+              inputData.toolCtx.cwd,
+              snapshot || createWorkspaceSnapshot(inputData.toolCtx.cwd),
+              toolRequest,
+            );
+            if (!snapshotAnnounced && snapshot.available && snapshot.ref && snapshot.restoreCommand && (snapshot.entries > 0 || snapshot.skipped.length > 0)) {
+              snapshotAnnounced = true;
+              if (inputData.json) writeJsonLine({ type: "code.snapshot", ts: nowIso(), ref: snapshot.ref, restoreCommand: snapshot.restoreCommand });
+              inputData.onEvent?.({ type: "snapshot", ref: snapshot.ref, restoreCommand: snapshot.restoreCommand });
+            }
           }
           toolResult = await runClientTool({ ...inputData.toolCtx, approval: effectiveApproval }, {
             name: toolRequest.tool,
@@ -286,20 +438,79 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
           };
         }
       }
+      let autoVerifyObservation: string | null = null;
+      if (
+        mutated
+        && autoVerifyPlan.enabled
+        && toolRequest.tool === "bash"
+        && !toolResult.ok
+        && isLikelyVerificationCommand(toolRequest.args.command)
+        && /requires approval|cancelled by user|interactive confirmation/i.test(String(toolResult.error || ""))
+      ) {
+        const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
+        autoVerifyObservation = formatAutoVerifyObservation(outcome, autoVerifyPlan);
+        if (outcome.ran) {
+          autoVerifyChecks += 1;
+          const verifyEvent = buildAutoVerifyEvent(outcome, autoVerifyPlan, autoVerifyChecks);
+          if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), ...verifyEvent, source: "blocked_verification_tool" });
+          inputData.onEvent?.({ type: "auto.verify", ...verifyEvent });
+          if (!inputData.json && !inputData.onEvent) {
+            process.stderr.write(`${renderCard({
+              kind: outcome.ok ? "ok" : "error",
+              title: `auto-verify · ${outcome.label} · ${outcome.ok ? "passed" : "FAILED"}`,
+              body: ["ran after a verification shell command was blocked"],
+            }, supportsColor(process.stderr))}\n`);
+          }
+        }
+      }
+      const successfulMutation = toolResult.ok && (toolRequest.tool === "write_file" || toolRequest.tool === "apply_patch");
+      if (successfulMutation) {
+        mutated = true;
+        lastMutationVerifyOk = false;
+        if (autoVerifyPlan.enabled) {
+          const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
+          autoVerifyObservation = [
+            autoVerifyObservation,
+            formatAutoVerifyObservation(outcome, autoVerifyPlan),
+          ].filter(Boolean).join("\n\n");
+          if (outcome.ran) {
+            lastMutationVerifyOk = outcome.ok;
+            autoVerifyChecks += 1;
+            const verifyEvent = buildAutoVerifyEvent(outcome, autoVerifyPlan, autoVerifyChecks);
+            if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), ...verifyEvent, source: "post_mutation_tool" });
+            inputData.onEvent?.({ type: "auto.verify", ...verifyEvent });
+            if (!inputData.json && !inputData.onEvent) {
+              process.stderr.write(`${renderCard({
+                kind: outcome.ok ? "ok" : "error",
+                title: `auto-verify · ${outcome.label} · ${outcome.ok ? "passed" : "FAILED"}`,
+                body: ["ran after a file mutation"],
+              }, supportsColor(process.stderr))}\n`);
+            }
+          }
+        }
+      }
       if (toolRequest.tool === "update_plan") {
         const items = normalizePlanItems(toolRequest.args.plan);
+        latestPlan = items;
         if (inputData.json) writeJsonLine({ type: "code.plan.updated", ts: nowIso(), items });
         inputData.onEvent?.({ type: "plan.updated", items });
-        if (!inputData.json && !inputData.onEvent) process.stderr.write(`${renderPlanItems(items)}\n`);
+        if (!inputData.json && !inputData.onEvent) {
+          process.stderr.write(`${renderPlanCard(items.map((item) => ({
+            status: item.status,
+            text: item.content,
+          })), supportsColor(process.stderr))}\n`);
+        }
       }
       if (inputData.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...toolResult });
       inputData.onEvent?.({ type: "tool.result", result: toolResult });
-      if (!inputData.json && !inputData.onEvent && toolRequest.tool !== "update_plan") renderClientToolResult(toolResult);
+      if (!inputData.json && !inputData.onEvent && toolRequest.tool !== "update_plan") renderClientToolResult(toolResult, process.stderr, toolRequest);
       toolLedgerEntries.push(toolLedgerEntry(toolResult));
-      toolResultSections.push([
+      const baseSection = [
         `Tool result for ${toolRequest.tool}:`,
         formatToolResultForLoop(toolResult),
-      ].join("\n"));
+        ...(autoVerifyObservation ? [autoVerifyObservation] : []),
+      ].join("\n");
+      toolResultSections.push(augmentToolResultSection(toolRequest, toolResult, inputData.toolCtx.cwd, baseSection));
     }
     const toolLedger = renderToolLedger(toolLedgerEntries, step);
     if (toolLedger) {
@@ -328,10 +539,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         }
       }
       if (toolLedger) {
-        const ledgerMessage = [
-          toolLedger,
-          "Continue from the ledger. If no more tools are needed, give the final answer.",
-        ].join("\n");
+        const ledgerMessage = toolLedger;
         messages.push({ role: "user", content: ledgerMessage });
         if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: ledgerMessage });
       }
@@ -340,7 +548,6 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         toolResultSections.length === 1 ? "Tool results:" : `Tool results for ${toolResultSections.length} requested tools:`,
         ...toolResultSections,
         toolLedger,
-        "Continue. If no more tools are needed, give the final answer.",
       ].filter(Boolean).join("\n");
       messages.push({
         role: "user",
@@ -348,12 +555,40 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       });
       if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: toolResultMessage });
     }
-    compactRuntimeMessages(messages, undefined, undefined, runtimeAnchorCount);
+    const budgetVerdict = checkToolBudget(toolCallCount, toolBudget, budgetWarned);
+    if (budgetVerdict.message) {
+      budgetWarned = true;
+      messages.push({ role: "user", content: budgetVerdict.message });
+      if (inputData.onCheckpoint) await inputData.onCheckpoint({ type: "user", content: budgetVerdict.message });
+    }
+    const compactedMessages = compactRuntimeMessages(messages, undefined, undefined, runtimeAnchorCount);
+    if (compactedMessages > 0) {
+      if (inputData.json) writeJsonLine({ type: "code.runtime.compacted", ts: nowIso(), messages: compactedMessages });
+      inputData.onEvent?.({ type: "runtime.compacted", messages: compactedMessages });
+      if (!inputData.json && !inputData.onEvent) {
+        process.stderr.write(`${renderCard({
+          kind: "info",
+          title: `runtime compacted · ${compactedMessages} old messages`,
+          body: ["kept the active goal, current plan, and recent tool results"],
+        }, supportsColor(process.stderr))}\n`);
+      }
+    }
   }
   let maxStepsReached = false;
   if (!finalText) {
     maxStepsReached = true;
     finalText = "Stopped after the maximum tool steps. Review the emitted tool results before continuing.";
+    if (mutated && autoVerifyPlan.enabled) {
+      const outcome = await runAutoVerify(autoVerifyPlan, inputData.toolCtx.cwd);
+      if (outcome.ran) {
+        autoVerifyChecks += 1;
+        if (inputData.json) writeJsonLine({ type: "code.auto.verify", ts: nowIso(), label: outcome.label, ok: outcome.ok, atMaxSteps: true, attempt: autoVerifyChecks });
+        inputData.onEvent?.({ type: "auto.verify", label: outcome.label, ok: outcome.ok, ran: outcome.ran });
+        finalText += outcome.ok
+          ? `\n\n✓ Auto-verification (${outcome.label}) PASSED — the workspace is in a verified-good state despite hitting the step limit.`
+          : `\n\n⚠ Auto-verification (${outcome.label}) FAILED at the step limit:\n${outcome.output}`;
+      }
+    }
   }
   return {
     text: finalText,
@@ -445,13 +680,15 @@ async function collectBrainText(inputData: {
   reasoning: ReturnType<typeof parseReasoningOptions>;
   json: boolean;
   label: string;
+  danger?: boolean;
+  noTools?: boolean;
   onEvent?: (event: CodeAgentEvent) => void;
 }): Promise<BrainTextResult> {
   let text = "";
   let usageSummary: string | null = null;
   const usageRecords: Array<{ usage: unknown; durationMs: number }> = [];
   const streamedToolCalls = createStreamingToolCallAccumulator();
-  const spinner = new TerminalSpinner(process.stderr, inputData.label, { quiet: true });
+  const spinner = new TerminalSpinner(process.stderr, inputData.label, { danger: inputData.danger });
   const renderState: HumanBrainRenderState = {};
   const startedAt = Date.now();
   if (!inputData.json && !inputData.onEvent) spinner.start();
@@ -461,7 +698,7 @@ async function collectBrainText(inputData: {
       reasoning: inputData.reasoning,
       messages: inputData.messages,
       fallbackProvider: inputData.fallbackProvider,
-      tools: codeToolDefinitions(),
+      tools: inputData.noTools ? undefined : codeToolDefinitions(),
     })) {
       const renderReasoning = shouldRenderReasoning(inputData.reasoning.display, inputData.json);
       if (eventWritesHumanOutput(event, renderReasoning, !!inputData.json || !!inputData.onEvent)) {
@@ -469,10 +706,8 @@ async function collectBrainText(inputData: {
       }
       if (event.type === "reasoning.delta" && renderReasoning) {
         inputData.onEvent?.({ type: "reasoning.delta", text: event.text });
-        if (!inputData.onEvent) {
-          if (inputData.json) writeJsonLine({ type: "reasoning.delta", ts: nowIso(), text: event.text, hidden: true });
-          else process.stderr.write(dim(event.text, supportsColor(process.stderr)));
-        }
+        if (inputData.json) writeJsonLine({ type: "reasoning.delta", ts: nowIso(), text: event.text, hidden: true });
+        else if (!inputData.onEvent) process.stderr.write(dim(event.text, supportsColor(process.stderr)));
       }
       if (event.type === "assistant.delta") {
         text += event.text;
@@ -499,6 +734,7 @@ async function collectBrainText(inputData: {
           }
         } else {
           if (!inputData.onEvent) renderBrainEventForHuman(event, renderState, process.stderr);
+          if (!inputData.onEvent && shouldResumeWaitingSpinner(event)) spinner.start();
         }
       } else if (inputData.json && event.type === "usage") {
         usageSummary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt }) || usageSummary;
@@ -512,6 +748,10 @@ async function collectBrainText(inputData: {
     spinner.stop();
   }
   return { text, usageSummary, usageRecords, toolCalls: streamedToolCalls.toToolCalls() };
+}
+
+function shouldResumeWaitingSpinner(event: BrainStreamEvent): boolean {
+  return event.type === "provider" || event.type === "tool_progress";
 }
 
 function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolean, structuredOutput: boolean): boolean {

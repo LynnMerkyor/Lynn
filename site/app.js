@@ -1,6 +1,6 @@
 const RELEASE = {
   guiVersion: "0.80.1",
-  cliVersion: "0.80.4",
+  cliVersion: "0.80.5",
   releasePage: "https://github.com/MerkyorLynn/Lynn/releases",
   assets: {
     macArm:

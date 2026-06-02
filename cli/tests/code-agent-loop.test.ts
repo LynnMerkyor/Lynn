@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import { maxSteps, runCode, runCodeTaskWithEvents, type CodeAgentEvent } from "../src/commands/code.js";
 import { compactRuntimeMessages } from "../src/code-agent-loop.js";
+import type { ChatMessage } from "../src/brain-client.js";
 import { appendSessionTurn, readSessionLines, sessionIndexPath } from "../src/session/store.js";
 
 let tmp = "";
@@ -105,7 +106,7 @@ async function withRawBrainServer(handler: (body: unknown, count: number) => str
 
 describe("code agent loop · core & approvals", () => {
   it("compacts old runtime loop turns while keeping the anchored goal", () => {
-    const messages = [
+    const messages: ChatMessage[] = [
       { role: "system" as const, content: "stable prefix" },
       { role: "user" as const, content: "ORIGINAL TASK: keep me" },
       ...Array.from({ length: 20 }, (_, index) => ({ role: index % 2 ? "assistant" as const : "user" as const, content: `old turn ${index} ${"x".repeat(200)}` })),
@@ -116,6 +117,62 @@ describe("code agent loop · core & approvals", () => {
     expect(messages[1]).toMatchObject({ role: "user", content: "ORIGINAL TASK: keep me" });
     expect(JSON.stringify(messages)).toContain("runtime compaction");
     expect(JSON.stringify(messages)).toContain("old turn 19");
+  });
+
+  it("keeps recent assistant tool-call frames atomic during runtime compaction", () => {
+    const recentToolCall = {
+      role: "assistant" as const,
+      content: "",
+      tool_calls: [
+        { id: "call_read", type: "function" as const, function: { name: "read_file", arguments: "{\"path\":\"a.ts\"}" } },
+        { id: "call_grep", type: "function" as const, function: { name: "grep", arguments: "{\"query\":\"TODO\"}" } },
+      ],
+    };
+    const messages: ChatMessage[] = [
+      { role: "system" as const, content: "stable prefix" },
+      { role: "user" as const, content: "ORIGINAL TASK: keep me" },
+      ...Array.from({ length: 18 }, (_, index) => ({
+        role: index % 2 ? "assistant" as const : "user" as const,
+        content: `old turn ${index} ${"x".repeat(260)}`,
+      })),
+      recentToolCall,
+      { role: "tool" as const, tool_call_id: "call_read", content: "read result" },
+      { role: "tool" as const, tool_call_id: "call_grep", content: "grep result" },
+      { role: "assistant" as const, content: "next step" },
+    ];
+
+    expect(compactRuntimeMessages(messages, 2_000, 2, 2)).toBeGreaterThan(0);
+    const assistantIndex = messages.findIndex((message) => message.role === "assistant" && message.tool_calls?.[0]?.id === "call_read");
+    expect(assistantIndex).toBeGreaterThan(0);
+    expect(messages[assistantIndex + 1]).toMatchObject({ role: "tool", tool_call_id: "call_read", content: "read result" });
+    expect(messages[assistantIndex + 2]).toMatchObject({ role: "tool", tool_call_id: "call_grep", content: "grep result" });
+  });
+
+  it("emits a runtime compaction event during long tool loops", async () => {
+    for (let index = 1; index <= 12; index += 1) {
+      await fs.writeFile(path.join(tmp, `big-${index}.txt`), `chunk ${index}\n${"x".repeat(35_000)}`, "utf8");
+    }
+    const events: CodeAgentEvent[] = [];
+    await withBrainServer((_body, count) => count <= 12
+      ? JSON.stringify({ tool: "read_file", args: { path: `big-${count}.txt` } })
+      : "Finished after reading the large files.",
+    async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "read several large files and summarize them",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--max-steps",
+        "14",
+      ]), "read several large files and summarize them", (event) => {
+        events.push(event);
+      })).resolves.toBe(0);
+    });
+
+    expect(events.some((event) => event.type === "runtime.compacted" && event.messages > 0)).toBe(true);
+    expect(events.some((event) => event.type === "task.finished" && event.ok)).toBe(true);
   });
 
   it("keeps normal coding turns capped at 20 steps unless long-run mode is explicit", () => {
@@ -363,6 +420,198 @@ describe("code agent loop · core & approvals", () => {
     expect(events.some((event) => event.type === "task.finished" && event.ok)).toBe(true);
   });
 
+  it("runs a dangerous write after one-time UI approval in ask mode", async () => {
+    const events: CodeAgentEvent[] = [];
+    let approvalRequests = 0;
+    await withBrainServer((_body, count) => count === 1
+      ? JSON.stringify({ tool: "write_file", args: { path: "approved.txt", text: "ok\n" } })
+      : "Approved write complete.",
+    async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "write approved.txt",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--approval",
+        "ask",
+        "--max-steps",
+        "3",
+      ]), "write approved.txt", (event) => {
+        events.push(event);
+      }, {
+        requestApproval: async (request) => {
+          approvalRequests += 1;
+          expect(request.tool).toBe("write_file");
+          return "approve";
+        },
+      })).resolves.toBe(0);
+    });
+
+    await expect(fs.readFile(path.join(tmp, "approved.txt"), "utf8")).resolves.toBe("ok\n");
+    expect(approvalRequests).toBe(1);
+    expect(events.some((event) => event.type === "tool.result" && event.result.ok)).toBe(true);
+  });
+
+  it("does not run a dangerous write when UI approval is denied", async () => {
+    const events: CodeAgentEvent[] = [];
+    let approvalRequests = 0;
+    await withBrainServer((_body, count) => count === 1
+      ? JSON.stringify({ tool: "write_file", args: { path: "denied.txt", text: "nope\n" } })
+      : "Write was denied, so I stopped.",
+    async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "try writing denied.txt",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--approval",
+        "ask",
+        "--max-steps",
+        "3",
+      ]), "try writing denied.txt", (event) => {
+        events.push(event);
+      }, {
+        requestApproval: async (request) => {
+          approvalRequests += 1;
+          expect(request.tool).toBe("write_file");
+          return "deny";
+        },
+      })).resolves.toBe(0);
+    });
+
+    await expect(fs.stat(path.join(tmp, "denied.txt"))).rejects.toThrow();
+    expect(approvalRequests).toBe(1);
+    expect(events.some((event) => event.type === "tool.result" && !event.result.ok && String(event.result.error).includes("cancelled"))).toBe(true);
+  });
+
+  it("runs deterministic auto-verify when a model-requested verification shell is denied", async () => {
+    await fs.writeFile(path.join(tmp, "package.json"), JSON.stringify({
+      scripts: { typecheck: "node verify.mjs" },
+    }), "utf8");
+    await fs.writeFile(path.join(tmp, "verify.mjs"), [
+      "import fs from 'node:fs';",
+      "if (!fs.readFileSync('hello.txt', 'utf8').includes('verified')) process.exit(1);",
+      "",
+    ].join("\n"), "utf8");
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+verified",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const events: CodeAgentEvent[] = [];
+    const bodies: unknown[] = [];
+    await withBrainServer((body, count) => {
+      bodies.push(body);
+      if (count === 1) return JSON.stringify({ tool: "apply_patch", args: { patch } });
+      if (count === 2) return JSON.stringify({ tool: "bash", args: { command: "npm run typecheck" } });
+      return "Auto-verify observed the workspace is green.";
+    }, async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "patch and verify",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--approval",
+        "ask",
+        "--max-steps",
+        "4",
+      ]), "patch and verify", (event) => {
+        events.push(event);
+      }, {
+        requestApproval: async (request) => request.tool === "apply_patch" ? "approve" : "deny",
+      })).resolves.toBe(0);
+    });
+
+    expect(events.some((event) => event.type === "auto.verify" && event.ok)).toBe(true);
+    expect(JSON.stringify(bodies[2])).toContain("[Lynn auto-verify observation]");
+    expect(JSON.stringify(bodies[2])).toContain("status: passed");
+    await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("verified\n");
+  });
+
+  it("feeds auto-verify observations back immediately after mutating tools", async () => {
+    await fs.writeFile(path.join(tmp, "package.json"), JSON.stringify({
+      scripts: { typecheck: "node verify.mjs" },
+    }), "utf8");
+    await fs.writeFile(path.join(tmp, "verify.mjs"), [
+      "import fs from 'node:fs';",
+      "const text = fs.readFileSync('hello.txt', 'utf8');",
+      "if (!text.includes('fixed')) {",
+      "  console.error('expected hello.txt to include fixed');",
+      "  process.exit(1);",
+      "}",
+      "",
+    ].join("\n"), "utf8");
+    const brokenPatch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-hello",
+      "+broken",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const fixedPatch = [
+      "*** Begin Patch",
+      "*** Update File: hello.txt",
+      "@@",
+      "-broken",
+      "+fixed",
+      "*** End Patch",
+      "",
+    ].join("\n");
+    const events: CodeAgentEvent[] = [];
+    const bodies: unknown[] = [];
+    await withBrainServer((body, count) => {
+      bodies.push(body);
+      if (count === 1) return JSON.stringify({ tool: "apply_patch", args: { patch: brokenPatch } });
+      if (count === 2) {
+        const serialized = JSON.stringify(body);
+        expect(serialized).toContain("[Lynn auto-verify observation]");
+        expect(serialized).toContain("status: failed");
+        expect(serialized).toContain("expected hello.txt to include fixed");
+        return JSON.stringify({ tool: "apply_patch", args: { patch: fixedPatch } });
+      }
+      if (count === 3) {
+        const serialized = JSON.stringify(body);
+        expect(serialized).toContain("[Lynn auto-verify observation]");
+        expect(serialized).toContain("status: passed");
+        return "The file is fixed.";
+      }
+      return "The file is fixed.";
+    }, async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "patch hello.txt until verification passes",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--approval",
+        "yolo",
+        "--max-steps",
+        "5",
+        "--json",
+      ]), "patch hello.txt until verification passes", (event) => {
+        events.push(event);
+      })).resolves.toBe(0);
+    });
+
+    expect(events.filter((event) => event.type === "auto.verify" && event.ran)).toHaveLength(2);
+    expect(events.some((event) => event.type === "auto.verify" && !event.ok)).toBe(true);
+    expect(events.some((event) => event.type === "auto.verify" && event.ok)).toBe(true);
+    await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("fixed\n");
+  });
+
   it("does not prompt for per-tool approval in yolo mode", async () => {
     const patch = [
       "*** Begin Patch",
@@ -412,6 +661,18 @@ describe("code agent loop · core & approvals", () => {
             todos: [
               { id: "S0", content: "探索代码库结构", status: "completed" },
               { id: "C1", content: "实现修复", status: "in_progress" },
+            ],
+          },
+        })
+      : count === 2
+      // After the plan contract (#3) reminds it of the open step, a realistic model
+      // marks the step completed instead of finishing with an open plan.
+      ? JSON.stringify({
+          tool: "TodoWrite",
+          args: {
+            todos: [
+              { id: "S0", content: "探索代码库结构", status: "completed" },
+              { id: "C1", content: "实现修复", status: "completed" },
             ],
           },
         })

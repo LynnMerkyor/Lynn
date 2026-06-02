@@ -3,9 +3,9 @@ import { getStringFlag, hasFlag, parseArgs, type ParsedArgs } from "../args.js";
 import { BrainConnectionError, streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
 import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
-import { TerminalSpinner } from "../terminal-spinner.js";
-import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
-import { bold, dim, green, red, supportsColor } from "../terminal-style.js";
+import { TerminalSpinner, renderCard } from "../terminal-spinner.js";
+import { formatBrainErrorForHuman, renderBrainEventForHuman, renderToolDetail, renderToolDetailsList, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
+import { bold, dim, green, orange, red, supportsColor } from "../terminal-style.js";
 import { renderStartupBanner } from "../startup.js";
 import { renderStatusBar } from "../status-bar.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
@@ -26,20 +26,34 @@ import { resolveDataDir } from "../session/store.js";
 import { resolveDefaultBrainUrl } from "../brain-url.js";
 import { shouldUseInkTui } from "../terminal-safety.js";
 import { createDecodeSpeedTracker } from "../decode-speed.js";
+import { createRuntimeMetrics, recordDecodeTps, recordUsageMetrics, renderRuntimeMetrics } from "../runtime-metrics.js";
+import { compactChatMessages } from "../chat-compaction.js";
+import { isLocalExitText, parseLocalReadOnlyCommand, renderLocalReadOnlyBlocked, renderLocalReadOnlyResult, runLocalReadOnlyCommand } from "../local-command.js";
+import { assistantToolCallsForMessages, codeToolDefinitions, createStreamingToolCallAccumulator, parseCodeToolRequests, toolRequestsFromCollectedCalls, type CodeToolRequest } from "../code-tool-protocol.js";
+import { formatDangerousToolPreview, renderClientToolResult, renderClientToolStart, resolveToolApproval } from "../code-tool-render.js";
+import { runClientTool } from "../tools/registry.js";
+import type { ClientToolResult } from "../tools/types.js";
+import { applyChatRewind, beginChatRewindTurn, createChatRewindState, finishChatRewindTurn, maybeRecordChatRewindSnapshot, parseChatRewindCommand, renderChatRewind } from "../chat-rewind.js";
 
 export const CHAT_SLASH_COMMANDS = [
-  "/exit",
-  "/quit",
-  "/help",
-  "/version",
-  "/about",
-  "/fast",
-  "/think",
-  "/reasoning",
   "/yolo",
   "/ask",
-  "/mode",
   "/model",
+  "/mode",
+  "/think",
+  "/think high",
+  "/think medium",
+  "/think low",
+  "/fast",
+  "/tools",
+  "/providers",
+  "/help",
+  "/exit",
+  "/quit",
+  "/tool",
+  "/version",
+  "/about",
+  "/reasoning",
   "/model mimo",
   "/model stepfun",
   "/model spark",
@@ -52,7 +66,6 @@ export const CHAT_SLASH_COMMANDS = [
   "/attach",
   "/setup",
   "/byok",
-  "/providers",
   "/providers set",
   "/providers unset",
   "/providers test",
@@ -60,7 +73,10 @@ export const CHAT_SLASH_COMMANDS = [
   "/byok set",
   "/byok unset",
   "/clear",
+  "/rewind",
 ];
+
+const CHAT_MAX_TOOL_STEPS = 20;
 
 export function completeChatInput(line: string): [string[], string] {
   const result = completeSlash(line, CHAT_SLASH_COMMANDS);
@@ -81,6 +97,10 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   let memoryFrame = buildMemoryContextFrameSync(dataDir);
   const messages: ChatMessage[] = resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile), memoryFrame);
+  const rewindState = createChatRewindState();
+  let pendingRewind: { phase: "list" | "preview"; ordinal: number | null } | null = null;
+  const brainRenderState: HumanBrainRenderState = {};
+  const runtimeMetrics = createRuntimeMetrics();
   const histFile = historyPath();
   const history = loadHistory(histFile);
   const rl = !input.isTTY
@@ -101,10 +121,36 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   async function handleText(raw: string): Promise<"continue" | "break"> {
     const text = normalizeSlashInput(raw.trim());
     if (!text) return "continue";
+    if (isLocalExitText(text)) return "break";
     appendHistory(text, histFile);
-    if (text === "/exit" || text === "/quit") return "break";
+    if (pendingRewind) {
+      const selected = parsePendingRewindInput(text, pendingRewind);
+      if (selected) {
+        try {
+          const body = selected.apply
+            ? applyChatRewind(rewindState, selected.ordinal, messages, chatCwd, supportsColor(output))
+            : renderChatRewind(rewindState, { ordinal: selected.ordinal, apply: false }, supportsColor(output));
+          pendingRewind = selected.apply ? null : { phase: "preview", ordinal: selected.ordinal };
+          output.write(`${body}\n\n`);
+        } catch (error) {
+          pendingRewind = null;
+          output.write(`${red(error instanceof Error ? error.message : String(error), supportsColor(output))}\n\n`);
+        }
+        return "continue";
+      }
+      pendingRewind = null;
+    }
     if (text === "/help") {
       output.write(`${t("chat.help")}\n\n`);
+      return "continue";
+    }
+    if (text === "/tool" || text === "/tools") {
+      output.write(`${renderToolDetailsList(brainRenderState, supportsColor(output))}\n\n`);
+      return "continue";
+    }
+    const toolDetailMatch = text.match(/^\/tool\s+(\d+)$/);
+    if (toolDetailMatch) {
+      output.write(`${renderToolDetail(brainRenderState, Number(toolDetailMatch[1]), supportsColor(output))}\n\n`);
       return "continue";
     }
     if (isLocalRuntimeQuestion(text)) {
@@ -125,6 +171,12 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     if (text === "/think") {
       reasoning = { ...reasoning, effort: "high" };
       output.write(`${t("chat.think")}\n\n`);
+      return "continue";
+    }
+    if (text.startsWith("/think ")) {
+      const result = applyThinkCommand(reasoning, text.slice(7).trim(), "chat");
+      reasoning = result.reasoning;
+      output.write(`${result.message}\n${t("reasoning.state", { effort: reasoning.effort, display: reasoning.display })}\n\n`);
       return "continue";
     }
     if (text === "/reasoning") {
@@ -204,11 +256,40 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     }
     if (text === "/clear") {
       messages.splice(0, messages.length, ...resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile), memoryFrame));
+      rewindState.checkpoints = [];
+      rewindState.active = null;
+      pendingRewind = null;
       output.write(`${t("chat.cleared")}\n\n`);
+      return "continue";
+    }
+    const rewindCommand = parseChatRewindCommand(text);
+    if (rewindCommand) {
+      try {
+        const body = rewindCommand.apply && rewindCommand.ordinal !== null
+          ? applyChatRewind(rewindState, rewindCommand.ordinal, messages, chatCwd, supportsColor(output))
+          : renderChatRewind(rewindState, rewindCommand, supportsColor(output));
+        pendingRewind = !rewindCommand.apply
+          ? { phase: rewindCommand.ordinal === null ? "list" : "preview", ordinal: rewindCommand.ordinal }
+          : null;
+        output.write(`${body}\n\n`);
+      } catch (error) {
+        pendingRewind = null;
+        output.write(`${red(error instanceof Error ? error.message : String(error), supportsColor(output))}\n\n`);
+      }
       return "continue";
     }
     if (text === "/cwd" || text === "/pwd") {
       output.write(`${t("cwd.info", { cwd: chatCwd })}\n\n`);
+      return "continue";
+    }
+    const localReadOnly = parseLocalReadOnlyCommand(text, chatCwd);
+    if (localReadOnly?.kind === "blocked") {
+      output.write(`${renderLocalReadOnlyBlocked(localReadOnly, output)}\n\n`);
+      return "continue";
+    }
+    if (localReadOnly?.kind === "command") {
+      const result = await runLocalReadOnlyCommand(localReadOnly.command);
+      output.write(`${renderLocalReadOnlyResult(localReadOnly.command, result, output)}\n\n`);
       return "continue";
     }
     const memoryCommand = await handleMemorySlashCommand(text, dataDir);
@@ -229,76 +310,235 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   }
 
   async function sendUserMessage(displayText: string, content: ChatMessage["content"]): Promise<"continue"> {
+    const checkpoint = beginChatRewindTurn(rewindState, displayText, messages.length);
     messages.push({ role: "user", content });
-    if (mockBrain) {
-      const answer = t("mock.response", { text: displayText });
-      messages.push({ role: "assistant", content: answer });
-      output.write(`${answer}\n\n`);
-      return "continue";
-    }
+    try {
+      renderChatCompaction(compactChatMessages(messages));
+      if (mockBrain) {
+        const answer = t("mock.response", { text: displayText });
+        messages.push({ role: "assistant", content: answer });
+        renderChatCompaction(compactChatMessages(messages));
+        output.write(`${answer}\n\n`);
+        return "continue";
+      }
 
+      let latestUsage: string | null = null;
+      const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"), {
+        danger: mode.approval === "yolo" || mode.sandbox === "danger-full-access",
+      });
+      const renderReasoning = shouldRenderReasoning(reasoning.display, false);
+      const color = supportsColor(output);
+      const maxEmptyAttempts = 3;
+      let decodeTps: string | null = null;
+      let finalAssistant = "";
+      for (let attempt = 1; attempt <= maxEmptyAttempts; attempt += 1) {
+        latestUsage = null;
+        decodeTps = null;
+        let toolSteps = 0;
+        let attemptHadToolCalls = false;
+        try {
+          for (;;) {
+            const round = await streamChatModelRound({
+              brainUrl,
+              messages,
+              reasoning,
+              cliProvider,
+              renderReasoning,
+              brainRenderState,
+              runtimeMetrics,
+              spinner,
+              color,
+            });
+            latestUsage = round.latestUsage || latestUsage;
+            decodeTps = round.decodeTps || decodeTps;
+            const requests = round.toolRequests;
+            if (!requests.length) {
+              finalAssistant = round.assistant;
+              break;
+            }
+            attemptHadToolCalls = true;
+            if (round.structuredToolCalls) {
+              messages.push({
+                role: "assistant",
+                content: round.assistant,
+                tool_calls: assistantToolCallsForMessages(requests),
+              });
+            } else {
+              messages.push({ role: "assistant", content: round.assistant });
+            }
+            const fallbackSections: string[] = [];
+            for (const request of requests) {
+              toolSteps += 1;
+              if (toolSteps > CHAT_MAX_TOOL_STEPS) {
+                const message = `Lynn chat stopped after ${CHAT_MAX_TOOL_STEPS} local tool steps. Try narrowing the request or use Lynn code for a long-running task.`;
+                messages.push({ role: "user", content: message });
+                output.write(`\n${red(message, color)}\n\n`);
+                return "continue";
+              }
+              const result = await runChatClientTool(request);
+              const section = formatChatClientToolSection(request, result);
+              if (round.structuredToolCalls) {
+                messages.push({
+                  role: "tool",
+                  tool_call_id: request.toolCallId,
+                  name: request.tool,
+                  content: section,
+                });
+              } else {
+                fallbackSections.push(section);
+              }
+            }
+            if (!round.structuredToolCalls && fallbackSections.length) {
+              messages.push({ role: "user", content: `<lynn_local_tool_observations>\n${fallbackSections.join("\n\n")}\n</lynn_local_tool_observations>` });
+            }
+          }
+        } catch (error) {
+          spinner.stop();
+          messages.pop();
+          output.write(`\n${formatChatError(error)}\n\n`);
+          return "continue";
+        } finally {
+          spinner.stop();
+        }
+        if (finalAssistant.trim()) break;
+        if (attemptHadToolCalls) break;
+        if (attempt < maxEmptyAttempts) output.write(`\n${dim(t("prompt.empty.retry"), color)}\n\n`);
+      }
+      if (!finalAssistant.trim()) {
+        messages.pop();
+        output.write(`${red(t("prompt.empty"), color)}\n\n`);
+        return "continue";
+      }
+      messages.push({ role: "assistant", content: finalAssistant });
+      renderChatCompaction(compactChatMessages(messages));
+      recordDecodeTps(runtimeMetrics, decodeTps);
+      output.write(`\n${renderStatusBar({
+        model: brainRenderState.provider ? modelDisplayName(brainRenderState.provider) : t("status.chat.prefix"),
+        cwd: chatCwd,
+        mode: renderMode(mode),
+        reasoning: reasoning.effort,
+        usage: latestUsage,
+        decodeTps,
+        metrics: renderRuntimeMetrics(runtimeMetrics),
+        color,
+      })}\n\n`);
+      return "continue";
+    } finally {
+      finishChatRewindTurn(rewindState, checkpoint);
+    }
+  }
+
+  async function streamChatModelRound(inputData: {
+    brainUrl: string;
+    messages: ChatMessage[];
+    reasoning: typeof reasoning;
+    cliProvider: typeof cliProvider;
+    renderReasoning: boolean;
+    brainRenderState: HumanBrainRenderState;
+    runtimeMetrics: ReturnType<typeof createRuntimeMetrics>;
+    spinner: TerminalSpinner;
+    color: boolean;
+  }): Promise<{ assistant: string; toolRequests: CodeToolRequest[]; structuredToolCalls: boolean; latestUsage: string | null; decodeTps: string | null }> {
     let assistant = "";
     let latestUsage: string | null = null;
-    let renderState: HumanBrainRenderState = {};
-    const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"));
-    const renderReasoning = shouldRenderReasoning(reasoning.display, false);
-    const color = supportsColor(output);
-    const maxEmptyAttempts = 3;
     let decodeTps: string | null = null;
-    for (let attempt = 1; attempt <= maxEmptyAttempts; attempt += 1) {
-      assistant = "";
-      latestUsage = null;
-      renderState = {};
-      decodeTps = null;
-      const md = new MarkdownStream((s) => output.write(s), color);
-      const turnStarted = Date.now();
-      const decodeTracker = createDecodeSpeedTracker(turnStarted);
-      try {
-        spinner.start();
-        for await (const event of streamBrainChat({ brainUrl, messages, reasoning, fallbackProvider: cliProvider?.profile })) {
-          if (eventWritesHumanOutput(event, renderReasoning)) {
-            spinner.stop();
-          }
-          if (event.type === "brain.error") {
-            throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
-          }
-          if (event.type === "assistant.delta") {
-            md.push(event.text);
-            decodeTps = decodeTracker.add(event.text) || decodeTps;
-            assistant += event.text;
-          } else {
-            if (event.type === "usage") latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - turnStarted });
-            renderChatEvent(event, renderReasoning, renderState, turnStarted);
-          }
+    const md = new MarkdownStream((s) => output.write(s), inputData.color);
+    const turnStarted = Date.now();
+    const decodeTracker = createDecodeSpeedTracker(turnStarted);
+    const toolAccumulator = createStreamingToolCallAccumulator();
+    try {
+      inputData.spinner.start();
+      for await (const event of streamBrainChat({
+        brainUrl: inputData.brainUrl,
+        messages: inputData.messages,
+        reasoning: inputData.reasoning,
+        fallbackProvider: inputData.cliProvider?.profile,
+        tools: codeToolDefinitions(),
+      })) {
+        if (event.type === "tool_call.delta") {
+          toolAccumulator.append(event);
+          continue;
         }
-      } catch (error) {
-        spinner.stop();
-        messages.pop();
-        output.write(`\n${formatChatError(error)}\n\n`);
-        return "continue";
-      } finally {
-        spinner.stop();
+        if (eventWritesHumanOutput(event, inputData.renderReasoning)) {
+          inputData.spinner.stop();
+        }
+        if (event.type === "brain.error") {
+          throw new Error(event.code ? `${event.error} (${event.code})` : event.error);
+        }
+        if (event.type === "assistant.delta") {
+          md.push(event.text);
+          decodeTps = decodeTracker.add(event.text) || decodeTps;
+          assistant += event.text;
+        } else {
+          if (event.type === "usage") {
+            latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - turnStarted });
+            recordUsageMetrics(inputData.runtimeMetrics, event.usage);
+          }
+          renderChatEvent(event, inputData.renderReasoning, inputData.brainRenderState, turnStarted);
+          if (shouldResumeWaitingSpinner(event)) inputData.spinner.start();
+        }
       }
+    } finally {
+      inputData.spinner.stop();
       md.end();
-      if (assistant.trim()) break;
-      if (attempt < maxEmptyAttempts) output.write(`\n${dim(t("prompt.empty.retry"), color)}\n\n`);
     }
-    if (!assistant.trim()) {
-      messages.pop();
-      output.write(`${red(t("prompt.empty"), color)}\n\n`);
-      return "continue";
+    const structuredRequests = toolRequestsFromCollectedCalls(toolAccumulator.toToolCalls(), 0);
+    if (structuredRequests.length) {
+      return { assistant, toolRequests: structuredRequests, structuredToolCalls: true, latestUsage, decodeTps };
     }
-    messages.push({ role: "assistant", content: assistant });
-    output.write(`\n${renderStatusBar({
-      model: renderState.provider ? modelDisplayName(renderState.provider) : t("status.chat.prefix"),
-      cwd: chatCwd,
-      mode: renderMode(mode),
-      reasoning: reasoning.effort,
-      usage: latestUsage,
-      decodeTps,
-      color,
-    })}\n\n`);
-    return "continue";
+    return { assistant, toolRequests: parseCodeToolRequests(assistant), structuredToolCalls: false, latestUsage, decodeTps };
+  }
+
+  async function runChatClientTool(request: CodeToolRequest): Promise<ClientToolResult> {
+    const preview = formatDangerousToolPreview(request.tool, request.args, supportsColor(output));
+    renderClientToolStart(request, process.stderr);
+    try {
+      const effectiveApproval = await resolveToolApproval({
+        tool: request.tool,
+        approval: mode.approval,
+        cwd: chatCwd,
+        json: false,
+        input,
+        output,
+        preview,
+        args: request.args,
+      });
+      maybeRecordChatRewindSnapshot(rewindState, chatCwd, request);
+      const result = await runClientTool({ cwd: chatCwd, approval: effectiveApproval, sandbox: mode.sandbox }, {
+        name: request.tool,
+        ...request.args,
+      });
+      renderClientToolResult(result, process.stderr, request);
+      return result;
+    } catch (error) {
+      const result: ClientToolResult = {
+        ok: false,
+        tool: request.tool,
+        error: error instanceof Error ? error.message : String(error),
+      };
+      renderClientToolResult(result, process.stderr, request);
+      return result;
+    }
+  }
+
+  function formatChatClientToolSection(request: CodeToolRequest, result: ClientToolResult): string {
+    const body = result.ok
+      ? JSON.stringify(result.output ?? {}, null, 2)
+      : `ERROR: ${result.error || "tool failed"}`;
+    return [
+      `Tool result for ${request.tool}:`,
+      compactToolResultBody(body),
+    ].join("\n");
+  }
+
+  function renderChatCompaction(result: ReturnType<typeof compactChatMessages>): void {
+    if (!result.compactedMessages) return;
+    const color = supportsColor(process.stderr);
+    process.stderr.write(`${renderCard({
+      kind: "info",
+      title: `context compacted · ${result.compactedMessages} old messages`,
+      body: ["kept the first request, recent turns, links, and runtime notes"],
+    }, color)}\n`);
   }
 
   try {
@@ -327,6 +567,14 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   return 0;
 }
 
+function parsePendingRewindInput(text: string, pending: { phase: "list" | "preview"; ordinal: number | null }): { ordinal: number; apply: boolean } | null {
+  if (/^\d+$/.test(text)) return { ordinal: Number(text), apply: false };
+  if (pending.phase === "preview" && pending.ordinal !== null && /^(?:y|yes|apply|确认|应用)$/i.test(text)) {
+    return { ordinal: pending.ordinal, apply: true };
+  }
+  return null;
+}
+
 function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolean): boolean {
   return event.type === "assistant.delta"
     || event.type === "provider"
@@ -334,6 +582,15 @@ function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolea
     || event.type === "brain.error"
     || event.type === "usage"
     || (event.type === "reasoning.delta" && renderReasoning);
+}
+
+function shouldResumeWaitingSpinner(event: BrainStreamEvent): boolean {
+  return event.type === "provider" || event.type === "tool_progress";
+}
+
+function compactToolResultBody(body: string, max = 16_000): string {
+  if (body.length <= max) return body;
+  return `${body.slice(0, max)}\n[Lynn chat truncated this local tool result from ${body.length} chars. Ask for a narrower read/search if more detail is needed.]`;
 }
 
 export interface ChatMode {
@@ -356,10 +613,10 @@ export async function resolveChatMode(args: ParsedArgs): Promise<ChatMode> {
 }
 
 export function renderMode(mode: ChatMode): string {
-  return `${mode.approval} / ${mode.sandbox}`;
+  const sandbox = mode.sandbox === "danger-full-access" ? "full-access" : mode.sandbox;
+  return `${mode.approval} / ${sandbox}`;
 }
 
-/** 输入区"对话框"顶栏状态文案:Lynn · 模型 · 模式 · 推理档。 */
 function buildPromptFrameStatus(
   profile: { provider: string; model: string } | null | undefined,
   mode: ChatMode,
@@ -519,14 +776,13 @@ export function toggleMode(mode: ChatMode): string {
 function renderInteractiveModeChange(message: string, mode: ChatMode, color: boolean): string {
   const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
   if (dangerous) {
-    // 危险模式必须 loud:即使 NO_COLOR/无色,也用 ⚠ + 大写 DANGER 让人无法忽略;有色再叠红+粗。
-    const head = "⚠  YOLO 危险模式 / DANGER MODE  ⚠";
+    const head = "⚠  YOLO / full-access  ⚠";
     return [
       "",
-      red(bold(head, color), color),
-      red(message, color),
-      `mode: ${red(bold(renderMode(mode), color), color)}`,
-      red(t("mode.danger.warning"), color),
+      orange(bold(head, color), color),
+      orange(message, color),
+      `mode: ${orange(bold(renderMode(mode), color), color)}`,
+      orange(t("mode.danger.warning"), color),
       "",
       "",
     ].join("\n");
@@ -544,6 +800,20 @@ export function applyReasoningCommand(current: ReturnType<typeof parseReasoningO
   }
   if (value === "hide" || value === "never") {
     return { reasoning: { ...current, display: "never" }, message: t("reasoning.displayNever") };
+  }
+  return { reasoning: current, message: t("reasoning.unknown", { raw: raw || "(empty)" }) };
+}
+
+export function applyThinkCommand(current: ReturnType<typeof parseReasoningOptions>, raw: string, scope: "chat" | "code"): { reasoning: ReturnType<typeof parseReasoningOptions>; message: string } {
+  const value = raw.toLowerCase();
+  if (value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "auto") {
+    return {
+      reasoning: { ...current, effort: value },
+      message: t(scope === "chat" ? "chat.think.set" : "code.think.set", { value }),
+    };
+  }
+  if (value === "off" || value === "fast") {
+    return { reasoning: { ...current, effort: "off" }, message: t(scope === "chat" ? "chat.fast" : "code.fast") };
   }
   return { reasoning: current, message: t("reasoning.unknown", { raw: raw || "(empty)" }) };
 }

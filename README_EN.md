@@ -34,24 +34,16 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 
 ### CLI Quick Install
 
-Requires Node.js 20 LTS or 22 LTS. If Node is not installed yet:
-
 ```bash
+# 1. Node requirement: Node.js 20 LTS or 22 LTS with npm.
 # macOS: brew install node@20
 # macOS/Linux: nvm install 20 && nvm use 20
 # Windows: winget install OpenJS.NodeJS.LTS
-```
 
-Install or update with one command:
+# 2. Install or update from the Lynn mirror.
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.6.tgz"
 
-```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz"
-```
-
-Launch / verify:
-
-```bash
-Lynn --version # should print 0.80.5
+# 3. Launch.
 Lynn          # interactive chat TUI
 Lynn code     # coding-agent TUI
 Lynn agents   # copyable headless/Fleet commands for other agents
@@ -92,7 +84,7 @@ Related repositories:
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>CLI v0.80.5</strong> · 2026-06-01 · prefix-cache visibility + long-run stability hotfix <em>(CLI latest)</em></summary>
+<summary><strong>CLI v0.80.6</strong> · 2026-06-01 · prefix-cache visibility + long-run stability hotfix <em>(CLI latest)</em></summary>
 
 **CLI-only hotfix; the desktop app remains v0.80.1**:
 - **Prefix-cache visibility**: Reasonix-style stable prefix / resume history / volatile runtime / current user layers remain deterministic; usage, sessions, replay, and `Lynn cache doctor --json` now surface `prefix-cache ... hit` without adding a context-budget anxiety meter.
@@ -102,10 +94,10 @@ Related repositories:
 - **Release gate covers compaction**: `cli-longrun-smoke` now forces large tool results and requires a `code.runtime.compacted` event, so long-run stability is verified outside narrow unit tests.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.5.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.6.tgz"
 ```
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.5)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
 
 </details>
 

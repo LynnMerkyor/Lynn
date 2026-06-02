@@ -46,7 +46,14 @@ export function renderLocalRuntimeAnswer(input: RuntimeAnswerContext, locale: "z
       input.mode ? `Permissions: ${input.mode}` : "",
       input.reasoning ? `Reasoning: ${input.reasoning}` : "",
       "",
-    "Use `Lynn version` for the local CLI version, `/model` for the Brain model route, and `Lynn providers` for BYOK settings.",
+      "Runtime optimizations:",
+      "- Stable-prefix layers for prefix-cache hits.",
+      "- Rolling decode TPS and prefix-cache telemetry in the footer.",
+      "- Automatic context compaction for long chat/code sessions.",
+      "- Tool ledger, checkpoint/resume, finish gates, and Fleet JSONL workers.",
+      "",
+      "Docs: docs/ops/lynn-cli-runtime-knowledge.md and cli/README.md.",
+      "Use `Lynn version` for the local CLI version, `/model` for the Brain model route, and `Lynn providers` for BYOK settings.",
     ].filter(Boolean).join("\n");
   }
   return [
@@ -57,6 +64,13 @@ export function renderLocalRuntimeAnswer(input: RuntimeAnswerContext, locale: "z
     input.mode ? `权限:${input.mode}` : "",
     input.reasoning ? `思考:${input.reasoning}` : "",
     "",
+    "运行时优化:",
+    "- stable-prefix 分层,提高前置缓存命中。",
+    "- 底栏长期显示 decode TPS 和 prefix-cache 最近状态。",
+    "- 长聊天 / 长代码任务自动上下文压缩。",
+    "- tool ledger、checkpoint/resume、收尾门禁和 Fleet JSONL worker。",
+    "",
+    "说明文档:docs/ops/lynn-cli-runtime-knowledge.md 和 cli/README.md。",
     "提示:`Lynn version` 查看本地 CLI 版本,`/model` 查看 Brain 模型路由,`Lynn providers` 查看 BYOK 设置。",
   ].filter(Boolean).join("\n");
 }

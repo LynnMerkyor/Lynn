@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderInputBox } from "../src/boxed-input.js";
+import { renderInputBox, summarizeInputForBox } from "../src/boxed-input.js";
 import { visibleLength } from "../src/startup.js";
 
 function stripAnsi(value: string): string {
@@ -73,5 +73,58 @@ describe("renderInputBox", () => {
     const r = box({ buffer: "hi", cursor: 2, color: true });
     expect(r.inputLine).toContain("\x1b[1;36m");
     expect(r.top).toContain("\x1b[2m");
+  });
+
+  it("uses amber borders and chevron in YOLO mode", () => {
+    const r = box({ buffer: "hi", cursor: 2, color: true, danger: true });
+
+    expect(r.top).toContain("\x1b[38;5;208m");
+    expect(r.inputLine).toContain("\x1b[38;5;208m");
+    expect(r.bottom).toContain("\x1b[38;5;208m");
+  });
+
+  it("collapses pasted long and multiline text into a stable paste block", () => {
+    const pasted = "第一段很长很长\n第二段继续补充\n第三段结论";
+    const summary = summarizeInputForBox(pasted);
+    expect(summary).toContain("粘贴块");
+    expect(summary).toContain("3 行");
+    const r = box({ buffer: pasted, cursor: Array.from(pasted).length, width: 72 });
+    const line = stripAnsi(r.inputLine);
+    expect(line).toContain("↪ 粘贴块");
+    expect(line).not.toContain("第二段继续补充");
+    expect(visibleLength(line)).toBe(visibleLength(stripAnsi(r.top)));
+  });
+
+  it("shows slash command recommendations inside the frame", () => {
+    const r = box({ buffer: "/", cursor: 1, completions: ["/yolo", "/ask", "/model", "/mode", "/think", "/fast", "/exit", "/quit", "/tool", "/tools"], width: 82 });
+
+    expect(r.rowsBelowInput).toBeGreaterThan(2);
+    const palette = stripAnsi(r.paletteLines.join("\n"));
+    expect(palette).toContain("1. /yolo");
+    expect(palette).toContain("/ask");
+    expect(palette).toContain("/model");
+    expect(palette).toContain("静默工厂");
+    expect(palette).toContain("继续输入筛选");
+    expect(palette).not.toContain("/quit");
+    expect(palette).not.toContain("/tool  ");
+    for (const line of r.paletteLines) expect(visibleLength(stripAnsi(line))).toBe(visibleLength(stripAnsi(r.top)));
+  });
+
+  it("shows an unknown slash guard without disturbing normal input height", () => {
+    const r = box({ buffer: "/nope", cursor: 5, completions: ["/help", "/model"], width: 72 });
+    const normal = box({ buffer: "hello", cursor: 5, completions: ["/help", "/model"], width: 72 });
+
+    expect(r.rowsBelowInput).toBe(2);
+    expect(stripAnsi(r.paletteLines[0] || "")).toContain("未知命令");
+    expect(normal.paletteLines).toEqual([]);
+    expect(normal.rowsBelowInput).toBe(1);
+  });
+
+  it("shows an explicit Tab completion hint for unique slash prefixes", () => {
+    const r = box({ buffer: "/he", cursor: 3, completions: ["/help", "/model"], width: 72 });
+    const line = stripAnsi(r.inputLine);
+
+    expect(line).toContain("/help");
+    expect(line).toContain("Tab 补全");
   });
 });

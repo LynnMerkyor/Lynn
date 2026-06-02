@@ -77,8 +77,9 @@ export type StreamChunk =
   | { type: 'reasoning'; delta: string }
   | { type: 'content'; delta: string }
   | { type: 'tool_call_delta'; delta: ToolCallDelta[] }
+  | { type: 'usage'; usage: unknown }
   | { type: 'finish'; reason: string }
-  | { type: 'tool_progress'; event: 'start' | 'end'; name: string; ms?: number; ok?: boolean }
+  | { type: 'tool_progress'; event: 'start' | 'end'; name: string; ms?: number; ok?: boolean; summary?: string; details?: string[] }
   | { type: 'pre_search'; source: 'mimo'; query: string; hit: boolean; ms: number; cached: 'request' | 'lru' | null }
   | { type: 'audio_fallback'; source: string; transcripts: number; total: number; ms: number }
   | ({ type: 'error'; error: string } & Record<string, unknown>);

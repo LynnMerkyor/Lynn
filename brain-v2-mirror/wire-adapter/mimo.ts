@@ -22,6 +22,7 @@ type MimoRequestBody = Record<string, unknown> & {
   max_completion_tokens: number;
   temperature: number;
   stream: boolean;
+  stream_options?: Record<string, unknown>;
   reasoning_effort?: string | null;
   thinking?: MimoThinking;
   tools?: ToolDefinition[];
@@ -75,6 +76,7 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
     max_completion_tokens: 32768,
     temperature: 0.6,
     stream: true,
+    stream_options: { include_usage: true },
     // extraBody spread 末尾 = 客户端可 override
     ...(extraBody && typeof extraBody === 'object' ? extraBody : {}),
   };

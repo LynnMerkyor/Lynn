@@ -48,6 +48,7 @@ type OpenAICompatRequestBody = Record<string, unknown> & {
   max_tokens: number;
   temperature: number;
   stream: boolean;
+  stream_options?: Record<string, unknown>;
   reasoning_effort?: string | null;
   chat_template_kwargs?: Record<string, unknown>;
   tools?: ToolDefinition[];
@@ -74,6 +75,7 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
     max_tokens: provider.max_tokens || 4096,
     temperature: provider.temperature ?? 0.6,
     stream: true,
+    stream_options: { include_usage: true },
     ...(extraBody && typeof extraBody === 'object' ? extraBody : {}),
   };
   // F11: reasoning_effort BYOK 透传 — server.js 抽到 arg,extraBody 没的话从 arg 回灌

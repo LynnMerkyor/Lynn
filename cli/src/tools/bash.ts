@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { ClientToolResult, ToolRunContext } from "./types.js";
+import { isSafeReadOnlyShellCommand } from "../local-command.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_STREAM_BYTES = 1_000_000;
@@ -62,10 +63,10 @@ export function assertWorkspaceBashAllowed(command: string, sandbox: ToolRunCont
 
 export async function bashTool(ctx: ToolRunContext, command: string): Promise<ClientToolResult> {
   if (!command) throw new Error("--command is required for bash");
-  if (ctx.approval !== "yolo") {
-    throw new Error("bash requires YOLO approval. Run /mode yolo in interactive code mode or pass --approval yolo.");
-  }
   assertWorkspaceBashAllowed(command, ctx.sandbox || "workspace-write");
+  if (ctx.approval !== "yolo" && !isSafeReadOnlyShellCommand(command)) {
+    throw new Error("bash requires approval except for safe read-only pwd/ls shortcuts. In interactive ask mode, approve the prompt; for headless/Fleet runs pass --approval yolo.");
+  }
   auditBash(command, ctx.cwd);
   return new Promise((resolve) => {
     const child = spawn(command, {

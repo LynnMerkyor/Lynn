@@ -45,7 +45,7 @@ export type BrainStreamEvent =
   | { type: "reasoning.delta"; text: string; hidden?: boolean }
   | { type: "tool_call.delta"; index: number; id?: string; name?: string; arguments?: string }
   | { type: "provider"; activeProvider: string; fallbackFrom?: Array<{ id: string; reason?: string }> }
-  | { type: "tool_progress"; event: string; name: string; ms?: number; ok?: boolean }
+  | { type: "tool_progress"; event: string; name: string; ms?: number; ok?: boolean; summary?: string; details?: string[] }
   | { type: "brain.error"; error: string; code?: string }
   | { type: "usage"; usage: unknown }
   | { type: "done"; finishReason?: string | null };
@@ -69,6 +69,17 @@ export class BrainUnavailableError extends Error {
     this.name = "BrainUnavailableError";
     this.brainUrl = brainUrl;
     this.status = status;
+  }
+}
+
+export class BrainStreamInterruptedError extends Error {
+  readonly brainUrl: string;
+
+  constructor(brainUrl: string, cause: unknown) {
+    const detail = cause instanceof Error && cause.message ? ` (${cause.message})` : "";
+    super(`Brain stream interrupted before completion${detail}`);
+    this.name = "BrainStreamInterruptedError";
+    this.brainUrl = brainUrl;
   }
 }
 
@@ -113,7 +124,7 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
   const parsed = JSON.parse(payload) as {
     object?: string;
     meta?: { active_provider?: unknown; fallback_from?: unknown };
-    tool_progress?: { event?: unknown; name?: unknown; ms?: unknown; ok?: unknown };
+    tool_progress?: { event?: unknown; name?: unknown; ms?: unknown; ok?: unknown; summary?: unknown; details?: unknown };
     error?: unknown;
     code?: unknown;
     choices?: Array<{
@@ -155,6 +166,8 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
         name,
         ms: typeof progress.ms === "number" ? progress.ms : undefined,
         ok: typeof progress.ok === "boolean" ? progress.ok : undefined,
+        summary: typeof progress.summary === "string" && progress.summary ? progress.summary : undefined,
+        details: Array.isArray(progress.details) ? progress.details.filter((line): line is string => typeof line === "string" && !!line.trim()) : undefined,
       });
     }
   }
@@ -222,25 +235,36 @@ export async function* streamBrainChat(request: BrainChatRequest): AsyncGenerato
 }
 
 export async function* streamLynnChat(request: BrainChatRequest): AsyncGenerator<BrainStreamEvent> {
-  try {
-    let sawAssistantOutput = false;
-    for await (const event of streamBrainOnlyChat(request)) {
-      if (event.type === "assistant.delta" || event.type === "reasoning.delta" || event.type === "tool_call.delta") {
-        sawAssistantOutput = true;
+  const attempts = brainRetryAttempts();
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      let sawAssistantOutput = false;
+      for await (const event of streamBrainOnlyChat(request)) {
+        if (event.type === "assistant.delta" || event.type === "reasoning.delta" || event.type === "tool_call.delta") {
+          sawAssistantOutput = true;
+        }
+        if (event.type === "brain.error" && request.fallbackProvider && !sawAssistantOutput && isRecoverableBrainStreamError(event)) {
+          yield* streamDirectProviderChat(request, request.fallbackProvider);
+          return;
+        }
+        yield event;
       }
-      if (event.type === "brain.error" && request.fallbackProvider && !sawAssistantOutput && isRecoverableBrainStreamError(event)) {
+      return;
+    } catch (error) {
+      lastError = error;
+      if (error instanceof BrainStreamInterruptedError && attempt < attempts) {
+        await sleep(brainRetryDelayMs(attempt));
+        continue;
+      }
+      if ((error instanceof BrainConnectionError || error instanceof BrainUnavailableError || error instanceof BrainStreamInterruptedError) && request.fallbackProvider) {
         yield* streamDirectProviderChat(request, request.fallbackProvider);
         return;
       }
-      yield event;
+      throw error;
     }
-  } catch (error) {
-    if ((error instanceof BrainConnectionError || error instanceof BrainUnavailableError) && request.fallbackProvider) {
-      yield* streamDirectProviderChat(request, request.fallbackProvider);
-      return;
-    }
-    throw error;
   }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 function isRecoverableBrainStreamError(event: Extract<BrainStreamEvent, { type: "brain.error" }>): boolean {
@@ -272,21 +296,37 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
 
   const decoder = new TextDecoder();
   let buffer = "";
-  for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
-    buffer += decoder.decode(chunk, { stream: true });
-    const split = buffer.split(/\n\n+/);
-    buffer = split.pop() || "";
-    for (const block of split) {
-      for (const payload of parseSsePayloads(`${block}\n\n`)) {
-        for (const event of parseBrainStreamPayload(payload)) yield event;
+  let emittedContentfulEvent = false;
+  try {
+    for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+      buffer += decoder.decode(chunk, { stream: true });
+      const split = buffer.split(/\n\n+/);
+      buffer = split.pop() || "";
+      for (const block of split) {
+        for (const payload of parseSsePayloads(`${block}\n\n`)) {
+          for (const event of parseBrainStreamPayload(payload)) {
+            if (isContentfulStreamEvent(event)) emittedContentfulEvent = true;
+            yield event;
+          }
+        }
       }
     }
+  } catch (error) {
+    if (!emittedContentfulEvent) throw new BrainStreamInterruptedError(request.brainUrl, error);
+    throw error;
   }
 
   buffer += decoder.decode();
   for (const payload of parseSsePayloads(buffer)) {
-    for (const event of parseBrainStreamPayload(payload)) yield event;
+    for (const event of parseBrainStreamPayload(payload)) {
+      if (isContentfulStreamEvent(event)) emittedContentfulEvent = true;
+      yield event;
+    }
   }
+}
+
+function isContentfulStreamEvent(event: BrainStreamEvent): boolean {
+  return event.type === "assistant.delta" || event.type === "reasoning.delta" || event.type === "tool_call.delta";
 }
 
 async function fetchBrainResponseWithRetry(request: BrainChatRequest, body: Record<string, unknown>): Promise<Response> {
