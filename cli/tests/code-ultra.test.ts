@@ -346,6 +346,50 @@ describe("runUltraTask", () => {
     expect(result.synthesis).toBe("ran-anyway");
   });
 
+  it("downgrades a refuted sub-task and skips its dependents (adversarial verify)", async () => {
+    const verified: Array<{ id: string; pass: boolean }> = [];
+    const result = await runUltraTask({
+      task: "verify chain",
+      options: { adversarialVerify: true },
+      complete: async (_p, kind) =>
+        kind === "decompose"
+          ? planJson([
+              { id: "t1", title: "impl", brief: "do impl", dependsOn: [] },
+              { id: "t2", title: "dependent", brief: "build on impl", dependsOn: ["t1"] },
+            ])
+          : "SYNTH",
+      runSubtask: async (subtask): Promise<UltraWorkerOutput> => ({ ok: true, text: `${subtask.id} done` }),
+      verifySubtask: async (subtask) => {
+        // t1's work is refuted; t2 would pass but never runs.
+        const pass = subtask.id !== "t1";
+        verified.push({ id: subtask.id, pass });
+        return { pass, reason: pass ? undefined : "incomplete" };
+      },
+    });
+    const t1 = result.results.find((r) => r.id === "t1");
+    const t2 = result.results.find((r) => r.id === "t2");
+    expect(t1?.ok).toBe(false); // refuted -> downgraded
+    expect(t1?.error).toContain("refuted");
+    expect(t2?.skipped).toBe(true); // dependent skipped because t1 failed verification
+    expect(verified).toEqual([{ id: "t1", pass: false }]); // t2 never reached the verifier
+    expect(result.ok).toBe(false);
+  });
+
+  it("does not verify when adversarialVerify is off", async () => {
+    let verifyCalls = 0;
+    const result = await runUltraTask({
+      task: "no verify",
+      complete: async (_p, kind) => (kind === "decompose" ? planJson([{ id: "t1", title: "A", brief: "a", dependsOn: [] }]) : "S"),
+      runSubtask: async (): Promise<UltraWorkerOutput> => ({ ok: true, text: "done" }),
+      verifySubtask: async () => {
+        verifyCalls += 1;
+        return { pass: false, reason: "should not be called" };
+      },
+    });
+    expect(verifyCalls).toBe(0);
+    expect(result.results[0].ok).toBe(true);
+  });
+
   it("respects the concurrency cap while still running every task", async () => {
     let active = 0;
     let peak = 0;

@@ -141,6 +141,47 @@ export function workspaceSnapshotFromRef(ref: string): WorkspaceSnapshot | null 
   };
 }
 
+/**
+ * Merge several per-worker snapshots into ONE combined snapshot, so an ultra
+ * run (many parallel workers) becomes a single rewind checkpoint that undoes
+ * every file all workers touched. Entries are deduped by path: the first
+ * occurrence wins, and a "created" (existed=false) entry is preferred so a file
+ * created during the run is correctly deleted on rewind.
+ */
+export function mergeWorkspaceSnapshots(refs: string[]): WorkspaceSnapshot {
+  const manifests = refs
+    .map((ref) => readManifest({ file: snapshotFile(ref) }))
+    .filter((manifest): manifest is WorkspaceSnapshotManifest => Boolean(manifest));
+  if (!manifests.length) return UNAVAILABLE;
+  try {
+    const id = crypto.randomUUID();
+    const file = path.join(snapshotRoot(), `${id}.json`);
+    const byPath = new Map<string, WorkspaceSnapshotEntry>();
+    const skipped = new Set<string>();
+    for (const manifest of manifests) {
+      for (const entry of manifest.entries) {
+        const existing = byPath.get(entry.path);
+        if (!existing) byPath.set(entry.path, entry);
+        else if (existing.existed && !entry.existed) byPath.set(entry.path, entry);
+      }
+      for (const path of manifest.skipped) skipped.add(path);
+    }
+    const merged: WorkspaceSnapshotManifest = {
+      version: SNAPSHOT_VERSION,
+      id,
+      cwd: manifests[0].cwd,
+      createdAt: new Date().toISOString(),
+      entries: [...byPath.values()],
+      skipped: [...skipped].sort(),
+    };
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(merged, null, 2));
+    return { available: true, ref: id, restoreCommand: `internal://lynn-cli-snapshot/${id}`, file, entries: merged.entries.length, skipped: merged.skipped };
+  } catch {
+    return UNAVAILABLE;
+  }
+}
+
 export function autoRollbackEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.LYNN_CLI_AUTO_ROLLBACK === "1";
 }

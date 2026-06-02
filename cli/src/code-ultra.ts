@@ -63,12 +63,20 @@ export interface UltraOptions {
   maxConcurrency?: number;
   /** Below this many sub-tasks we just run a single worker (default 2). */
   minSubtasks?: number;
+  /** Run an independent refuter on each ok sub-task; a refuted sub-task is downgraded to failed. */
+  adversarialVerify?: boolean;
+}
+
+export interface UltraVerifyVerdict {
+  pass: boolean;
+  reason?: string;
 }
 
 export type UltraEvent =
   | { type: "ultra.plan"; plan: UltraPlan }
   | { type: "ultra.wave"; wave: number; ids: string[] }
   | { type: "ultra.subtask.started"; id: string; title: string }
+  | { type: "ultra.subtask.verified"; id: string; title: string; pass: boolean; reason?: string }
   | { type: "ultra.subtask.finished"; id: string; title: string; ok: boolean; skipped: boolean }
   | { type: "ultra.synthesis.started" }
   | { type: "ultra.synthesis"; text: string };
@@ -93,6 +101,8 @@ export interface UltraRunInput {
   complete: (prompt: string, kind: "decompose" | "synthesize") => Promise<string>;
   /** Run one sub-task as a reliable atomic worker (wraps runCodeAgentLoop). */
   runSubtask: (subtask: UltraSubtask, ctx: UltraSubtaskContext) => Promise<UltraWorkerOutput>;
+  /** Optional independent refuter (used only when options.adversarialVerify is on). */
+  verifySubtask?: (subtask: UltraSubtask, output: UltraWorkerOutput) => Promise<UltraVerifyVerdict>;
   options?: UltraOptions;
   onEvent?: (event: UltraEvent) => void;
 }
@@ -371,7 +381,7 @@ export async function runUltraTask(input: UltraRunInput): Promise<UltraResult> {
             .filter((r): r is UltraSubtaskResult => Boolean(r));
           try {
             const output = await input.runSubtask(subtask, { allSubtasks: plan.subtasks, dependencyResults });
-            return {
+            const result: UltraSubtaskResult = {
               id: subtask.id,
               title: subtask.title,
               ok: output.ok,
@@ -379,6 +389,22 @@ export async function runUltraTask(input: UltraRunInput): Promise<UltraResult> {
               maxStepsReached: output.maxStepsReached,
               error: output.error,
             };
+            // Adversarial verify: an ok sub-task must survive an independent
+            // refuter. A refuted sub-task is downgraded to failed, so anything
+            // depending on it is skipped rather than built on a bad result.
+            if (output.ok && options.adversarialVerify && input.verifySubtask) {
+              try {
+                const verdict = await input.verifySubtask(subtask, output);
+                input.onEvent?.({ type: "ultra.subtask.verified", id: subtask.id, title: subtask.title, pass: verdict.pass, reason: verdict.reason });
+                if (!verdict.pass) {
+                  result.ok = false;
+                  result.error = `adversarial verify refuted: ${verdict.reason || "no reason given"}`;
+                }
+              } catch {
+                // A verifier failure must not crash the run; keep the worker's verdict.
+              }
+            }
+            return result;
           } catch (error) {
             return { id: subtask.id, title: subtask.title, ok: false, text: "", error: errorMessage(error) };
           }

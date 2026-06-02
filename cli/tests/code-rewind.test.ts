@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { applyCodeRewind, parseCodeRewindSpec, readCodeRewindSession, renderCodeRewindApply, renderCodeRewindPreview } from "../src/code-rewind.js";
-import { createWorkspaceSnapshot, recordWorkspaceSnapshotForRequest } from "../src/code-snapshot.js";
+import { createWorkspaceSnapshot, mergeWorkspaceSnapshots, recordWorkspaceSnapshotForRequest } from "../src/code-snapshot.js";
 import { appendSessionLine, appendSessionMetadata, readSessionLines } from "../src/session/store.js";
 
 async function tmpDir(prefix: string): Promise<string> {
@@ -122,6 +122,37 @@ describe("code rewind sidecar snapshots", () => {
     const both = await applyCodeRewind({ sessionPath, ordinal: 2 });
     await expect(fs.readFile(path.join(cwd, "shared.txt"), "utf8")).resolves.toBe("v0");
     expect(both.missingSnapshots).toEqual([]);
+  });
+
+  it("merges parallel worker snapshots into one ultra rewind checkpoint", async () => {
+    const root = await tmpDir("lynn-rewind-ultra-");
+    const dataDir = path.join(root, "data");
+    const cwd = path.join(root, "repo");
+    await fs.mkdir(cwd, { recursive: true });
+
+    // Two independent "workers" each create one file (existed=false pre-state).
+    const w1 = recordWorkspaceSnapshotForRequest(cwd, createWorkspaceSnapshot(cwd), { tool: "write_file", args: { path: "w1.txt", text: "one" } });
+    await fs.writeFile(path.join(cwd, "w1.txt"), "one", "utf8");
+    const w2 = recordWorkspaceSnapshotForRequest(cwd, createWorkspaceSnapshot(cwd), { tool: "write_file", args: { path: "w2.txt", text: "two" } });
+    await fs.writeFile(path.join(cwd, "w2.txt"), "two", "utf8");
+
+    const merged = mergeWorkspaceSnapshots([w1.ref as string, w2.ref as string]);
+    expect(merged.available).toBe(true);
+    expect(merged.entries).toBe(2);
+
+    const sessionPath = await appendSessionLine({ dataDir, cwd, title: "ultra", line: { type: "user", content: "build two files", data: { kind: "code_ultra_user_turn" } } });
+    await appendSessionMetadata({ dataDir, sessionPath, data: { kind: "code_rewind_checkpoint", snapshotRef: merged.ref, restoreCommand: merged.restoreCommand, cwd, task: "build two files", beforeLine: 0 } });
+
+    // One checkpoint represents the whole ultra run.
+    const session = await readCodeRewindSession(sessionPath);
+    expect(session.checkpoints).toHaveLength(1);
+    expect(session.checkpoints[0].entries).toHaveLength(2);
+
+    // A single rewind undoes every worker's file.
+    const applied = await applyCodeRewind({ sessionPath, ordinal: 1 });
+    expect(applied.deletedFiles.sort()).toEqual(["w1.txt", "w2.txt"]);
+    await expect(fs.stat(path.join(cwd, "w1.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(fs.stat(path.join(cwd, "w2.txt"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("flags a partial rewind when a checkpoint snapshot is missing", async () => {

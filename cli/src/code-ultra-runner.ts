@@ -8,6 +8,7 @@
 import { streamBrainChat } from "./brain-client.js";
 import { runCodeAgentLoop, type CodeAgentEvent } from "./code-agent-loop.js";
 import type { CodeContext } from "./code-context.js";
+import { buildSelfVerifyPrompt, parseSelfVerifyVerdict } from "./code-self-verify.js";
 import {
   runUltraTask,
   type UltraEvent,
@@ -99,10 +100,16 @@ export async function runUltraCodeTask(input: UltraRunnerInput): Promise<UltraRe
     };
   };
 
+  const verifySubtask = async (subtask: UltraSubtask, output: { text: string }) => {
+    const verdict = parseSelfVerifyVerdict(await complete(buildSelfVerifyPrompt(subtask.brief, output.text)));
+    return { pass: verdict.pass, reason: verdict.issues };
+  };
+
   return runUltraTask({
     task: input.task,
     complete: (prompt) => complete(prompt),
     runSubtask,
+    verifySubtask,
     options: input.options,
     onEvent: input.onEvent,
   });

@@ -74,6 +74,7 @@ import {
 } from "../code-agent-loop.js";
 import { runUltraCodeTask } from "../code-ultra-runner.js";
 import type { UltraEvent, UltraOptions } from "../code-ultra.js";
+import { mergeWorkspaceSnapshots } from "../code-snapshot.js";
 
 export {
   codeToolDefinitions,
@@ -200,6 +201,9 @@ export async function runCode(args: ParsedArgs): Promise<number> {
     if (task && isLocalRuntimeQuestion(task)) return runCodeLocalRuntimeAnswer(args, task, json);
     if (task) return runCodeTask(args, task, json);
     if (!json && input.isTTY && output.isTTY) {
+      if (ultraEnabled(args)) {
+        errorOutput.write(`${dim("note: --ultra applies to headless tasks (e.g. Lynn code --ultra -p \"…\"); this interactive session runs normally.", supportsColor(errorOutput))}\n`);
+      }
       if (shouldUseInkTui(args)) {
         const { runInkCode } = await import("../ink-code.js");
         return runInkCode(args, runCodeTaskWithEvents);
@@ -708,7 +712,7 @@ async function runCodeTask(
     sandbox: mode.sandbox,
     timeoutMs: timeoutMs(args),
   };
-  if (ultraEnabled(args)) {
+  if (ultraEnabled(args) && !options.compact) {
     return runUltraCodeBranch({
       args,
       taskText,
@@ -721,6 +725,12 @@ async function runCodeTask(
       stepBudget,
       mode,
       options,
+      dataDir,
+      saveSession,
+      sessionPath,
+      title,
+      modelProvider: cliProvider?.profile.provider || "brain",
+      modelId: cliProvider?.profile.model || "lynn-brain-router",
     });
   }
   let savedSessionPath: string | null = null;
@@ -897,6 +907,7 @@ function ultraOptions(args: ParsedArgs): UltraOptions {
   const maxConcurrency = Number.parseInt(getStringFlag(args.flags, "ultra-concurrency") || "", 10);
   if (Number.isFinite(maxSubtasks)) opts.maxSubtasks = maxSubtasks;
   if (Number.isFinite(maxConcurrency)) opts.maxConcurrency = maxConcurrency;
+  if (hasFlag(args.flags, "ultra-verify")) opts.adversarialVerify = true;
   return opts;
 }
 
@@ -912,9 +923,34 @@ async function runUltraCodeBranch(p: {
   stepBudget: number;
   mode: ChatMode;
   options: { compact?: boolean; onEvent?: (event: CodeAgentEvent) => void };
+  dataDir: string;
+  saveSession: boolean;
+  sessionPath?: string | null;
+  title: string;
+  modelProvider: string;
+  modelId: string;
 }): Promise<number> {
   const color = supportsColor(errorOutput);
   const compact = Boolean(p.options.compact || p.options.onEvent);
+  const workerSnapshots: string[] = [];
+
+  // Open the session with the user turn before running, so a crash still leaves
+  // a resumable transcript and the rewind checkpoint anchors correctly.
+  let liveSessionPath = p.sessionPath;
+  let rewindBeforeLine: number | null = null;
+  if (p.saveSession) {
+    rewindBeforeLine = liveSessionPath ? (await readSessionLines(liveSessionPath).catch(() => [])).length : 0;
+    liveSessionPath = await appendSessionLine({
+      dataDir: p.dataDir,
+      sessionPath: liveSessionPath,
+      cwd: p.context.cwd,
+      title: p.title,
+      line: { type: "user", content: p.taskText, data: { kind: "code_ultra_user_turn" } },
+      modelProvider: p.modelProvider,
+      modelId: p.modelId,
+    });
+  }
+
   if (p.json) {
     writeJsonLine({ type: "code.ultra.started", ts: nowIso(), task: p.taskText });
   } else if (!compact) {
@@ -933,6 +969,9 @@ async function runUltraCodeBranch(p: {
     output: errorOutput,
     options: ultraOptions(p.args),
     onEvent: (event) => emitUltraEvent(event, { json: p.json, compact, color, onEvent: p.options.onEvent }),
+    onSubtaskEvent: (_subtaskId, event) => {
+      if (event.type === "snapshot" && event.ref) workerSnapshots.push(event.ref);
+    },
   });
 
   if (p.json) {
@@ -956,6 +995,52 @@ async function runUltraCodeBranch(p: {
       mockBrain: false,
       reasoning: p.reasoning,
     })));
+  }
+
+  // Persist the run: synthesis as the assistant turn + a single merged rewind
+  // checkpoint that undoes every file all workers touched.
+  if (p.saveSession && liveSessionPath) {
+    liveSessionPath = await appendSessionLine({
+      dataDir: p.dataDir,
+      sessionPath: liveSessionPath,
+      cwd: p.context.cwd,
+      title: p.title,
+      line: { type: "assistant", content: ultra.synthesis, data: { kind: "code_ultra_synthesis" } },
+      modelProvider: p.modelProvider,
+      modelId: p.modelId,
+    });
+    await appendSessionMetadata({
+      dataDir: p.dataDir,
+      sessionPath: liveSessionPath,
+      data: {
+        kind: "code_ultra_task",
+        cwd: p.context.cwd,
+        ok: ultra.ok,
+        waves: ultra.waves,
+        fallback: ultra.plan.fallback,
+        subtasks: ultra.results.map((r) => ({ id: r.id, title: r.title, ok: r.ok, skipped: Boolean(r.skipped) })),
+      },
+    });
+    if (workerSnapshots.length && rewindBeforeLine !== null) {
+      const merged = mergeWorkspaceSnapshots(workerSnapshots);
+      if (merged.available && merged.ref) {
+        await appendSessionMetadata({
+          dataDir: p.dataDir,
+          sessionPath: liveSessionPath,
+          data: {
+            kind: "code_rewind_checkpoint",
+            snapshotRef: merged.ref,
+            restoreCommand: merged.restoreCommand,
+            cwd: p.context.cwd,
+            task: p.taskText,
+            beforeLine: rewindBeforeLine,
+            createdAt: new Date().toISOString(),
+          },
+        });
+      }
+    }
+    if (p.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: liveSessionPath });
+    p.options.onEvent?.({ type: "session.saved", path: liveSessionPath });
   }
   return ultra.ok ? 0 : 1;
 }
@@ -989,6 +1074,9 @@ function formatUltraEventLine(event: UltraEvent, color: boolean): string | null 
       return dim(`wave ${event.wave}: ${event.ids.join(", ")}`, color);
     case "ultra.subtask.started":
       return dim(`  ▸ ${event.id} ${event.title}`, color);
+    case "ultra.subtask.verified":
+      if (event.pass) return dim(`  ${event.id} verify ✓`, color);
+      return `  ${dangerLine("✗", color)} ${event.id} verify refuted${event.reason ? `: ${event.reason.replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
     case "ultra.subtask.finished":
       if (event.skipped) return dim(`  ${event.id} skipped (dependency failed)`, color);
       if (event.ok) return `  ${orange("✓", color)} ${event.id} ${event.title}`;
