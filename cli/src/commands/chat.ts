@@ -33,6 +33,7 @@ import { assistantToolCallsForMessages, codeToolDefinitions, createStreamingTool
 import { formatDangerousToolPreview, renderClientToolResult, renderClientToolStart, resolveToolApproval } from "../code-tool-render.js";
 import { runClientTool } from "../tools/registry.js";
 import type { ClientToolResult } from "../tools/types.js";
+import { applyChatRewind, beginChatRewindTurn, createChatRewindState, finishChatRewindTurn, maybeRecordChatRewindSnapshot, parseChatRewindCommand, renderChatRewind } from "../chat-rewind.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/yolo",
@@ -72,6 +73,7 @@ export const CHAT_SLASH_COMMANDS = [
   "/byok set",
   "/byok unset",
   "/clear",
+  "/rewind",
 ];
 
 const CHAT_MAX_TOOL_STEPS = 20;
@@ -95,6 +97,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   let memoryFrame = buildMemoryContextFrameSync(dataDir);
   const messages: ChatMessage[] = resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile), memoryFrame);
+  const rewindState = createChatRewindState();
   const brainRenderState: HumanBrainRenderState = {};
   const runtimeMetrics = createRuntimeMetrics();
   const histFile = historyPath();
@@ -235,7 +238,21 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     }
     if (text === "/clear") {
       messages.splice(0, messages.length, ...resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile), memoryFrame));
+      rewindState.checkpoints = [];
+      rewindState.active = null;
       output.write(`${t("chat.cleared")}\n\n`);
+      return "continue";
+    }
+    const rewindCommand = parseChatRewindCommand(text);
+    if (rewindCommand) {
+      try {
+        const body = rewindCommand.apply && rewindCommand.ordinal !== null
+          ? applyChatRewind(rewindState, rewindCommand.ordinal, messages, chatCwd, supportsColor(output))
+          : renderChatRewind(rewindState, rewindCommand, supportsColor(output));
+        output.write(`${body}\n\n`);
+      } catch (error) {
+        output.write(`${red(error instanceof Error ? error.message : String(error), supportsColor(output))}\n\n`);
+      }
       return "continue";
     }
     if (text === "/cwd" || text === "/pwd") {
@@ -270,117 +287,122 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
   }
 
   async function sendUserMessage(displayText: string, content: ChatMessage["content"]): Promise<"continue"> {
+    const checkpoint = beginChatRewindTurn(rewindState, displayText, messages.length);
     messages.push({ role: "user", content });
-    renderChatCompaction(compactChatMessages(messages));
-    if (mockBrain) {
-      const answer = t("mock.response", { text: displayText });
-      messages.push({ role: "assistant", content: answer });
+    try {
       renderChatCompaction(compactChatMessages(messages));
-      output.write(`${answer}\n\n`);
-      return "continue";
-    }
+      if (mockBrain) {
+        const answer = t("mock.response", { text: displayText });
+        messages.push({ role: "assistant", content: answer });
+        renderChatCompaction(compactChatMessages(messages));
+        output.write(`${answer}\n\n`);
+        return "continue";
+      }
 
-    let latestUsage: string | null = null;
-    const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"), {
-      danger: mode.approval === "yolo" || mode.sandbox === "danger-full-access",
-    });
-    const renderReasoning = shouldRenderReasoning(reasoning.display, false);
-    const color = supportsColor(output);
-    const maxEmptyAttempts = 3;
-    let decodeTps: string | null = null;
-    let finalAssistant = "";
-    for (let attempt = 1; attempt <= maxEmptyAttempts; attempt += 1) {
-      latestUsage = null;
-      decodeTps = null;
-      let toolSteps = 0;
-      let attemptHadToolCalls = false;
-      try {
-        for (;;) {
-          const round = await streamChatModelRound({
-            brainUrl,
-            messages,
-            reasoning,
-            cliProvider,
-            renderReasoning,
-            brainRenderState,
-            runtimeMetrics,
-            spinner,
-            color,
-          });
-          latestUsage = round.latestUsage || latestUsage;
-          decodeTps = round.decodeTps || decodeTps;
-          const requests = round.toolRequests;
-          if (!requests.length) {
-            finalAssistant = round.assistant;
-            break;
-          }
-          attemptHadToolCalls = true;
-          if (round.structuredToolCalls) {
-            messages.push({
-              role: "assistant",
-              content: round.assistant,
-              tool_calls: assistantToolCallsForMessages(requests),
+      let latestUsage: string | null = null;
+      const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"), {
+        danger: mode.approval === "yolo" || mode.sandbox === "danger-full-access",
+      });
+      const renderReasoning = shouldRenderReasoning(reasoning.display, false);
+      const color = supportsColor(output);
+      const maxEmptyAttempts = 3;
+      let decodeTps: string | null = null;
+      let finalAssistant = "";
+      for (let attempt = 1; attempt <= maxEmptyAttempts; attempt += 1) {
+        latestUsage = null;
+        decodeTps = null;
+        let toolSteps = 0;
+        let attemptHadToolCalls = false;
+        try {
+          for (;;) {
+            const round = await streamChatModelRound({
+              brainUrl,
+              messages,
+              reasoning,
+              cliProvider,
+              renderReasoning,
+              brainRenderState,
+              runtimeMetrics,
+              spinner,
+              color,
             });
-          } else {
-            messages.push({ role: "assistant", content: round.assistant });
-          }
-          const fallbackSections: string[] = [];
-          for (const request of requests) {
-            toolSteps += 1;
-            if (toolSteps > CHAT_MAX_TOOL_STEPS) {
-              const message = `Lynn chat stopped after ${CHAT_MAX_TOOL_STEPS} local tool steps. Try narrowing the request or use Lynn code for a long-running task.`;
-              messages.push({ role: "user", content: message });
-              output.write(`\n${red(message, color)}\n\n`);
-              return "continue";
+            latestUsage = round.latestUsage || latestUsage;
+            decodeTps = round.decodeTps || decodeTps;
+            const requests = round.toolRequests;
+            if (!requests.length) {
+              finalAssistant = round.assistant;
+              break;
             }
-            const result = await runChatClientTool(request);
-            const section = formatChatClientToolSection(request, result);
+            attemptHadToolCalls = true;
             if (round.structuredToolCalls) {
               messages.push({
-                role: "tool",
-                tool_call_id: request.toolCallId,
-                name: request.tool,
-                content: section,
+                role: "assistant",
+                content: round.assistant,
+                tool_calls: assistantToolCallsForMessages(requests),
               });
             } else {
-              fallbackSections.push(section);
+              messages.push({ role: "assistant", content: round.assistant });
+            }
+            const fallbackSections: string[] = [];
+            for (const request of requests) {
+              toolSteps += 1;
+              if (toolSteps > CHAT_MAX_TOOL_STEPS) {
+                const message = `Lynn chat stopped after ${CHAT_MAX_TOOL_STEPS} local tool steps. Try narrowing the request or use Lynn code for a long-running task.`;
+                messages.push({ role: "user", content: message });
+                output.write(`\n${red(message, color)}\n\n`);
+                return "continue";
+              }
+              const result = await runChatClientTool(request);
+              const section = formatChatClientToolSection(request, result);
+              if (round.structuredToolCalls) {
+                messages.push({
+                  role: "tool",
+                  tool_call_id: request.toolCallId,
+                  name: request.tool,
+                  content: section,
+                });
+              } else {
+                fallbackSections.push(section);
+              }
+            }
+            if (!round.structuredToolCalls && fallbackSections.length) {
+              messages.push({ role: "user", content: `<lynn_local_tool_observations>\n${fallbackSections.join("\n\n")}\n</lynn_local_tool_observations>` });
             }
           }
-          if (!round.structuredToolCalls && fallbackSections.length) {
-            messages.push({ role: "user", content: `<lynn_local_tool_observations>\n${fallbackSections.join("\n\n")}\n</lynn_local_tool_observations>` });
-          }
+        } catch (error) {
+          spinner.stop();
+          messages.pop();
+          output.write(`\n${formatChatError(error)}\n\n`);
+          return "continue";
+        } finally {
+          spinner.stop();
         }
-      } catch (error) {
-        spinner.stop();
-        messages.pop();
-        output.write(`\n${formatChatError(error)}\n\n`);
-        return "continue";
-      } finally {
-        spinner.stop();
+        if (finalAssistant.trim()) break;
+        if (attemptHadToolCalls) break;
+        if (attempt < maxEmptyAttempts) output.write(`\n${dim(t("prompt.empty.retry"), color)}\n\n`);
       }
-      if (finalAssistant.trim()) break;
-      if (attemptHadToolCalls) break;
-      if (attempt < maxEmptyAttempts) output.write(`\n${dim(t("prompt.empty.retry"), color)}\n\n`);
-    }
-    if (!finalAssistant.trim()) {
-      messages.pop();
-      output.write(`${red(t("prompt.empty"), color)}\n\n`);
+      if (!finalAssistant.trim()) {
+        messages.pop();
+        output.write(`${red(t("prompt.empty"), color)}\n\n`);
+        return "continue";
+      }
+      messages.push({ role: "assistant", content: finalAssistant });
+      renderChatCompaction(compactChatMessages(messages));
+      recordDecodeTps(runtimeMetrics, decodeTps);
+      output.write(`\n${renderStatusBar({
+        model: brainRenderState.provider ? modelDisplayName(brainRenderState.provider) : t("status.chat.prefix"),
+        cwd: chatCwd,
+        mode: renderMode(mode),
+        reasoning: reasoning.effort,
+        usage: latestUsage,
+        decodeTps,
+        metrics: renderRuntimeMetrics(runtimeMetrics),
+        color,
+      })}\n\n`);
       return "continue";
+    } finally {
+      finishChatRewindTurn(rewindState, checkpoint);
     }
-    messages.push({ role: "assistant", content: finalAssistant });
-    renderChatCompaction(compactChatMessages(messages));
-    recordDecodeTps(runtimeMetrics, decodeTps);
-    output.write(`\n${renderStatusBar({
-      model: brainRenderState.provider ? modelDisplayName(brainRenderState.provider) : t("status.chat.prefix"),
-      cwd: chatCwd,
-      mode: renderMode(mode),
-      reasoning: reasoning.effort,
-      usage: latestUsage,
-      decodeTps,
-      metrics: renderRuntimeMetrics(runtimeMetrics),
-      color,
-    })}\n\n`);
-    return "continue";
   }
 
   async function streamChatModelRound(inputData: {
@@ -458,6 +480,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
         preview,
         args: request.args,
       });
+      maybeRecordChatRewindSnapshot(rewindState, chatCwd, request);
       const result = await runClientTool({ cwd: chatCwd, approval: effectiveApproval, sandbox: mode.sandbox }, {
         name: request.tool,
         ...request.args,

@@ -1,0 +1,94 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import { applyCodeRewind, parseCodeRewindSpec, readCodeRewindSession, renderCodeRewindPreview } from "../src/code-rewind.js";
+import { createWorkspaceSnapshot, recordWorkspaceSnapshotForRequest } from "../src/code-snapshot.js";
+import { appendSessionLine, appendSessionMetadata, readSessionLines } from "../src/session/store.js";
+
+async function tmpDir(prefix: string): Promise<string> {
+  return fs.mkdtemp(path.join(os.tmpdir(), prefix));
+}
+
+describe("code rewind sidecar snapshots", () => {
+  it("previews and rewinds only files touched by Lynn", async () => {
+    const root = await tmpDir("lynn-rewind-");
+    const dataDir = path.join(root, "data");
+    const cwd = path.join(root, "repo");
+    await fs.mkdir(cwd, { recursive: true });
+    await fs.writeFile(path.join(cwd, "a.txt"), "A0", "utf8");
+    await fs.writeFile(path.join(cwd, "busy.bin"), "external-v1", "utf8");
+
+    let sessionPath = await appendSessionLine({
+      dataDir,
+      cwd,
+      title: "task A",
+      line: { type: "user", content: "change a" },
+    });
+    let snapshot = createWorkspaceSnapshot(cwd);
+    snapshot = recordWorkspaceSnapshotForRequest(cwd, snapshot, { tool: "write_file", args: { path: "a.txt", text: "A1" } });
+    await fs.writeFile(path.join(cwd, "a.txt"), "A1", "utf8");
+    sessionPath = await appendSessionLine({ dataDir, sessionPath, cwd, title: "task A", line: { type: "assistant", content: "changed a" } });
+    await appendSessionMetadata({
+      dataDir,
+      sessionPath,
+      data: { kind: "code_rewind_checkpoint", snapshotRef: snapshot.ref, restoreCommand: snapshot.restoreCommand, cwd, task: "change a", beforeLine: 0 },
+    });
+
+    const beforeSecondTurn = (await readSessionLines(sessionPath)).length;
+    sessionPath = await appendSessionLine({ dataDir, sessionPath, cwd, title: "task B", line: { type: "user", content: "create b" } });
+    let second = createWorkspaceSnapshot(cwd);
+    second = recordWorkspaceSnapshotForRequest(cwd, second, { tool: "write_file", args: { path: "new.txt", text: "new" } });
+    await fs.writeFile(path.join(cwd, "new.txt"), "new", "utf8");
+    await fs.writeFile(path.join(cwd, "busy.bin"), "external-v2", "utf8");
+    await appendSessionMetadata({
+      dataDir,
+      sessionPath,
+      data: { kind: "code_rewind_checkpoint", snapshotRef: second.ref, restoreCommand: second.restoreCommand, cwd, task: "create b", beforeLine: beforeSecondTurn },
+    });
+    await fs.appendFile(sessionPath, "{torn", "utf8");
+
+    const session = await readCodeRewindSession(sessionPath);
+    expect(session.skippedLines).toBe(1);
+    expect(session.checkpoints).toHaveLength(2);
+    expect(renderCodeRewindPreview(session, 1, false)).toContain("delete created: new.txt");
+
+    const applied = await applyCodeRewind({ sessionPath, ordinal: 1 });
+    await expect(fs.readFile(path.join(cwd, "a.txt"), "utf8")).resolves.toBe("A1");
+    await expect(fs.readFile(path.join(cwd, "busy.bin"), "utf8")).resolves.toBe("external-v2");
+    await expect(fs.stat(path.join(cwd, "new.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(applied.deletedFiles).toEqual(["new.txt"]);
+    expect(applied.trimmedSessionPath).not.toBe(sessionPath);
+    expect((await readSessionLines(applied.trimmedSessionPath)).at(-1)?.data?.kind).toBe("code_rewind_applied");
+
+    await applyCodeRewind({ sessionPath, ordinal: 2 });
+    await expect(fs.readFile(path.join(cwd, "a.txt"), "utf8")).resolves.toBe("A0");
+    await expect(fs.readFile(path.join(cwd, "busy.bin"), "utf8")).resolves.toBe("external-v2");
+  });
+
+  it("reports skipped large files without overwriting them", async () => {
+    const root = await tmpDir("lynn-rewind-large-");
+    const dataDir = path.join(root, "data");
+    const cwd = path.join(root, "repo");
+    await fs.mkdir(cwd, { recursive: true });
+    const largePath = path.join(cwd, "large.bin");
+    await fs.writeFile(largePath, Buffer.alloc(6 * 1024 * 1024, 1));
+    const snapshot = recordWorkspaceSnapshotForRequest(cwd, createWorkspaceSnapshot(cwd), { tool: "write_file", args: { path: "large.bin", text: "x" } });
+    await fs.writeFile(largePath, "latest", "utf8");
+    const sessionPath = await appendSessionLine({ dataDir, cwd, title: "large", line: { type: "user", content: "touch large" } });
+    await appendSessionMetadata({
+      dataDir,
+      sessionPath,
+      data: { kind: "code_rewind_checkpoint", snapshotRef: snapshot.ref, restoreCommand: snapshot.restoreCommand, cwd, task: "touch large", beforeLine: 0 },
+    });
+    const applied = await applyCodeRewind({ sessionPath, ordinal: 1 });
+    expect(applied.skippedFiles).toEqual(["large.bin"]);
+    await expect(fs.readFile(largePath, "utf8")).resolves.toBe("latest");
+  });
+
+  it("parses slash and headless specs", () => {
+    expect(parseCodeRewindSpec("/rewind")).toEqual({ sessionRef: null, ordinal: null, apply: false });
+    expect(parseCodeRewindSpec("/rewind 2 --apply")).toEqual({ sessionRef: null, ordinal: 2, apply: true });
+    expect(parseCodeRewindSpec("last#3", true)).toEqual({ sessionRef: "last", ordinal: 3, apply: true });
+  });
+});

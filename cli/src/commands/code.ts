@@ -20,6 +20,7 @@ import type { ClientToolName, ToolRunContext } from "../tools/types.js";
 import { applyModeCommand, applyReasoningCommand, applyThinkCommand, buildChatProviderArgs, renderMode, shouldRefreshProviderRoute, shouldShowProviderSetUsage, toggleMode, type ChatMode } from "./chat.js";
 import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
 import { readVersionInfo } from "../version.js";
+import { renderCodeHeadlessHelp } from "../code-headless-help.js";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, listSessions, readSessionLines, resolveDataDir } from "../session/store.js";
 import { buildMemoryContextFrameSync } from "../session/memory.js";
 import { computeCodeContextLayerDiagnostics } from "../context-layers.js";
@@ -62,6 +63,9 @@ import {
   summarizeResumeMessages,
   truncateForResume,
 } from "../code-resume.js";
+import { runCodeRewindCommand, runCodeRewindSlash } from "../code-rewind-command.js";
+
+export { renderCodeHeadlessHelp } from "../code-headless-help.js";
 import { buildCodeRuntimeFrames } from "../code-runtime-frames.js";
 import {
   runCodeAgentLoop,
@@ -184,6 +188,9 @@ export async function runCode(args: ParsedArgs): Promise<number> {
     else process.stdout.write(`${CLIENT_TOOL_DEFINITIONS.map((tool) => `${tool.name}${tool.dangerous ? " (approval required)" : ""}: ${tool.description}`).join("\n")}\n`);
     return 0;
   }
+  if (hasFlag(args.flags, "rewind")) {
+    return runCodeRewindCommand(args, json, { output, errorOutput });
+  }
 
   const tool = getStringFlag(args.flags, "tool") as ClientToolName | null;
   if (!tool) {
@@ -281,44 +288,6 @@ async function renderCodeLocalRuntimeAnswer(
   }, localeForText(text));
 }
 
-export function renderCodeHeadlessHelp(): string {
-  const version = readVersionInfo().version || "0.80.0";
-  return [
-    "Lynn code headless / CLI Fleet",
-    "",
-    "用途:",
-    "  - 给人用: Lynn code",
-    "  - 给其他智能体 / CI / GUI Fleet 用: Lynn code -p \"任务\" --json --cwd /repo",
-    "",
-    "安装(Node.js 20 LTS 或 22 LTS + npm):",
-    `  npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-${version}.tgz`,
-    "",
-    "静默调用(处理完直接退出,不进入 TUI):",
-    "  Lynn code -p \"review the current diff\" --json --cwd /repo",
-    "  Lynn code -p \"fix tests, run the suite, summarize the diff\" \\",
-    "    --json --cwd /worktree --approval yolo --sandbox workspace-write --save-session",
-    "",
-    "长任务/断点续跑:",
-    "  Lynn code -p \"complete the migration until tests pass\" \\",
-    "    --json --cwd /worktree --approval yolo --sandbox workspace-write \\",
-    "    --long --max-steps 1000 --save-session",
-    "  Lynn code --resume <session.jsonl> -p \"continue\" --json --long",
-    "",
-    "GUI Fleet worker(JSONL 事件流):",
-    "  Lynn worker run --brief task.md --worktree /worktree \\",
-    "    --jsonl --approval yolo --sandbox workspace-write",
-    "  Lynn worker run --brief task.md --worktree /worktree \\",
-    "    --agent custom --agent-command \"your-cli --json\" --jsonl",
-    "",
-    "规则:",
-    "  - 自动化调用只解析 --json / --jsonl,不要解析人类 TUI。",
-    "  - 总是传 --cwd 或 --worktree。",
-    "  - 交互式 ask 模式会逐次弹出授权;--approval yolo 只用于隔离 git worktree 的零逐条审批。",
-    "  - code.tool.ledger 记录每步工具观察,供上层调度和审计。",
-    "  - code.task.finished.resumeCommand 存在时,按它继续。",
-  ].join("\n");
-}
-
 async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   const mode = await resolveCodeMode(args);
   let reasoning = parseReasoningOptions(args);
@@ -340,6 +309,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
     "/tools",
     "/goal",
     "/resume",
+    "/rewind",
     "/providers",
     "/help",
     "/exit",
@@ -436,6 +406,10 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
           errorOutput.write(`• ${message}\n`);
         }
         output.write("\n");
+        continue;
+      }
+      if (text === "/rewind" || text.startsWith("/rewind ")) {
+        await runCodeRewindSlash(text, args, { output, errorOutput });
         continue;
       }
       if (text === "/resume" || text === "/continue" || text.startsWith("/resume ") || text.startsWith("/continue ")) {
@@ -733,13 +707,16 @@ async function runCodeTask(
     timeoutMs: timeoutMs(args),
   };
   let savedSessionPath: string | null = null;
+  let rewindBeforeLine: number | null = null;
+  const rewindSnapshots: Array<{ ref: string; restoreCommand: string }> = [];
   if (saveSession) {
+    rewindBeforeLine = liveSessionPath ? (await readSessionLines(liveSessionPath).catch(() => [])).length : 0;
     liveSessionPath = await appendSessionLine({
       dataDir,
       sessionPath: liveSessionPath,
       cwd: context.cwd,
       title,
-      line: { type: "user", content: taskText },
+      line: { type: "user", content: taskText, data: { kind: "code_user_turn" } },
       modelProvider: cliProvider?.profile.provider || "brain",
       modelId: cliProvider?.profile.model || "lynn-brain-router",
     });
@@ -760,7 +737,10 @@ async function runCodeTask(
     imagePaths: mediaPaths,
     resumeMessages,
     memoryFrame,
-    onEvent: options.onEvent,
+    onEvent: (event) => {
+      if (event.type === "snapshot") rewindSnapshots.push({ ref: event.ref, restoreCommand: event.restoreCommand });
+      options.onEvent?.(event);
+    },
     requestApproval: options.requestApproval,
     onCheckpoint: saveSession && liveSessionPath
       ? async (line) => {
@@ -806,6 +786,24 @@ async function runCodeTask(
       modelProvider: cliProvider?.profile.provider || "brain",
       modelId: cliProvider?.profile.model || "lynn-brain-router",
     });
+    if (rewindBeforeLine !== null && rewindSnapshots.length) {
+      const uniqueSnapshots = [...new Map(rewindSnapshots.map((snapshot) => [snapshot.ref, snapshot])).values()];
+      for (const snapshot of uniqueSnapshots) {
+        await appendSessionMetadata({
+          dataDir,
+          sessionPath: savedSessionPath,
+          data: {
+            kind: "code_rewind_checkpoint",
+            snapshotRef: snapshot.ref,
+            restoreCommand: snapshot.restoreCommand,
+            cwd: context.cwd,
+            task: taskText,
+            beforeLine: rewindBeforeLine,
+            createdAt: new Date().toISOString(),
+          },
+        });
+      }
+    }
     await appendSessionMetadata({
       dataDir,
       sessionPath: savedSessionPath,

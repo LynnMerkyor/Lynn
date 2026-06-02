@@ -65,6 +65,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "content",
       "data-dir",
       "resume",
+      "rewind",
       "session",
       "title",
       "agent-command",

@@ -408,7 +408,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
               snapshot || createWorkspaceSnapshot(inputData.toolCtx.cwd),
               toolRequest,
             );
-            if (!snapshotAnnounced && snapshot.available && snapshot.ref && snapshot.restoreCommand && snapshot.entries > 0) {
+            if (!snapshotAnnounced && snapshot.available && snapshot.ref && snapshot.restoreCommand && (snapshot.entries > 0 || snapshot.skipped.length > 0)) {
               snapshotAnnounced = true;
               if (inputData.json) writeJsonLine({ type: "code.snapshot", ts: nowIso(), ref: snapshot.ref, restoreCommand: snapshot.restoreCommand });
               inputData.onEvent?.({ type: "snapshot", ref: snapshot.ref, restoreCommand: snapshot.restoreCommand });
@@ -706,10 +706,8 @@ async function collectBrainText(inputData: {
       }
       if (event.type === "reasoning.delta" && renderReasoning) {
         inputData.onEvent?.({ type: "reasoning.delta", text: event.text });
-        if (!inputData.onEvent) {
-          if (inputData.json) writeJsonLine({ type: "reasoning.delta", ts: nowIso(), text: event.text, hidden: true });
-          else process.stderr.write(dim(event.text, supportsColor(process.stderr)));
-        }
+        if (inputData.json) writeJsonLine({ type: "reasoning.delta", ts: nowIso(), text: event.text, hidden: true });
+        else if (!inputData.onEvent) process.stderr.write(dim(event.text, supportsColor(process.stderr)));
       }
       if (event.type === "assistant.delta") {
         text += event.text;

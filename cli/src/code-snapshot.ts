@@ -16,19 +16,19 @@ export interface WorkspaceSnapshot {
   skipped: string[];
 }
 
-interface SnapshotEntry {
+export interface WorkspaceSnapshotEntry {
   path: string;
   existed: boolean;
   data?: string;
   mode?: number;
 }
 
-interface SnapshotManifest {
+export interface WorkspaceSnapshotManifest {
   version: typeof SNAPSHOT_VERSION;
   id: string;
   cwd: string;
   createdAt: string;
-  entries: SnapshotEntry[];
+  entries: WorkspaceSnapshotEntry[];
   skipped: string[];
 }
 
@@ -38,7 +38,7 @@ export function createWorkspaceSnapshot(cwd: string): WorkspaceSnapshot {
   try {
     const id = crypto.randomUUID();
     const file = path.join(snapshotRoot(), `${id}.json`);
-    const manifest: SnapshotManifest = {
+    const manifest: WorkspaceSnapshotManifest = {
       version: SNAPSHOT_VERSION,
       id,
       cwd: path.resolve(cwd),
@@ -122,6 +122,25 @@ export function restoreWorkspaceSnapshot(cwd: string, snapshot: WorkspaceSnapsho
   return { ok: true, message: `restored ${restored} touched file(s) from snapshot ${manifest.id.slice(0, 12)}${suffix}` };
 }
 
+export function readWorkspaceSnapshotManifest(ref: string): WorkspaceSnapshotManifest | null {
+  const file = snapshotFile(ref);
+  return readManifest({ file });
+}
+
+export function workspaceSnapshotFromRef(ref: string): WorkspaceSnapshot | null {
+  const file = snapshotFile(ref);
+  const manifest = readManifest({ file });
+  if (!manifest) return null;
+  return {
+    available: true,
+    ref: manifest.id,
+    restoreCommand: `internal://lynn-cli-snapshot/${manifest.id}`,
+    file,
+    entries: manifest.entries.length,
+    skipped: manifest.skipped,
+  };
+}
+
 export function autoRollbackEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.LYNN_CLI_AUTO_ROLLBACK === "1";
 }
@@ -130,17 +149,21 @@ function snapshotRoot(): string {
   return path.join(os.homedir(), ".lynn", "cli-snapshots");
 }
 
-function readManifest(snapshot: Pick<WorkspaceSnapshot, "file">): SnapshotManifest | null {
+function snapshotFile(ref: string): string {
+  return path.join(snapshotRoot(), `${ref}.json`);
+}
+
+function readManifest(snapshot: Pick<WorkspaceSnapshot, "file">): WorkspaceSnapshotManifest | null {
   if (!snapshot.file) return null;
   try {
-    const parsed = JSON.parse(fs.readFileSync(snapshot.file, "utf8")) as SnapshotManifest;
+    const parsed = JSON.parse(fs.readFileSync(snapshot.file, "utf8")) as WorkspaceSnapshotManifest;
     return parsed?.version === SNAPSHOT_VERSION && Array.isArray(parsed.entries) ? parsed : null;
   } catch {
     return null;
   }
 }
 
-function writeManifest(file: string, manifest: SnapshotManifest): void {
+function writeManifest(file: string, manifest: WorkspaceSnapshotManifest): void {
   fs.writeFileSync(file, JSON.stringify(manifest, null, 2));
 }
 
