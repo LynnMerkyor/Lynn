@@ -38,6 +38,8 @@ export interface CodeRewindApplyResult {
   restoredFiles: string[];
   deletedFiles: string[];
   skippedFiles: string[];
+  /** Snapshot refs in range that could not be loaded — their files were NOT restored (partial rewind). */
+  missingSnapshots: string[];
   trimmedSessionPath: string;
   restoreMessages: string[];
 }
@@ -106,10 +108,12 @@ export async function applyCodeRewind(input: { sessionPath: string; ordinal: num
   const restoredFiles: string[] = [];
   const deletedFiles: string[] = [];
   const skippedFiles = new Set<string>();
+  const missingSnapshots: string[] = [];
   const restoreMessages: string[] = [];
   for (const checkpoint of restoreRange) {
     const snapshot = workspaceSnapshotFromRef(checkpoint.snapshotRef);
     if (!snapshot) {
+      missingSnapshots.push(checkpoint.snapshotRef);
       restoreMessages.push(`missing snapshot ${checkpoint.snapshotRef}`);
       continue;
     }
@@ -134,6 +138,7 @@ export async function applyCodeRewind(input: { sessionPath: string; ordinal: num
       restoredFiles,
       deletedFiles,
       skippedFiles: [...skippedFiles],
+      missingSnapshots,
     },
   });
   return {
@@ -143,6 +148,7 @@ export async function applyCodeRewind(input: { sessionPath: string; ordinal: num
     restoredFiles: unique(restoredFiles),
     deletedFiles: unique(deletedFiles),
     skippedFiles: [...skippedFiles].sort(),
+    missingSnapshots: unique(missingSnapshots),
     trimmedSessionPath,
     restoreMessages,
   };
@@ -175,6 +181,8 @@ export function renderCodeRewindPreview(session: CodeRewindSession, ordinal: num
   if (restored.length) lines.push(`${green("restore", color)}: ${restored.join(", ")}`);
   if (deleted.length) lines.push(`${yellow("delete created", color)}: ${deleted.join(", ")}`);
   if (skipped.length) lines.push(`${red("skipped", color)}: ${skipped.join(", ")}`);
+  const missing = range.filter((checkpoint) => checkpoint.missing).length;
+  if (missing) lines.push(`${red(`⚠ ${missing} checkpoint snapshot(s) missing`, color)} — those files will NOT be restored; this rewind is partial.`);
   lines.push(dim("No files outside these touched paths will be restored.", color));
   lines.push(dim(`Apply with /rewind ${ordinal} --apply`, color));
   return lines.join("\n");
@@ -189,6 +197,7 @@ export function renderCodeRewindApply(result: CodeRewindApplyResult, color = sup
   if (result.restoredFiles.length) lines.push(`${green("restored", color)}: ${result.restoredFiles.join(", ")}`);
   if (result.deletedFiles.length) lines.push(`${yellow("deleted created", color)}: ${result.deletedFiles.join(", ")}`);
   if (result.skippedFiles.length) lines.push(`${red("skipped", color)}: ${result.skippedFiles.join(", ")}`);
+  if (result.missingSnapshots.length) lines.push(`${red(`⚠ partial: ${result.missingSnapshots.length} snapshot(s) missing`, color)} — some files could not be restored.`);
   lines.push(dim(`Resume with: Lynn code --resume ${shellQuote(result.trimmedSessionPath)} --long "continue"`, color));
   return lines.join("\n");
 }
