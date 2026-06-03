@@ -1,10 +1,9 @@
-// Native (no-MCP) "working checkpoint" — a model-controlled scratchpad that is
-// re-injected before every model call and survives history compaction.
+// Native working checkpoint — a model-controlled scratchpad that is re-injected
+// before every model call and survives history compaction.
 //
-// This is the no-MCP, in-process answer to "keep durable context without
-// bloating history": instead of a separate server (token + process-boundary
-// cost), the model curates ONE small, capped notepad. The loop pins the latest
-// content into context each turn; the model overwrites it via the
+// This keeps durable context small without adding another process boundary: the
+// model curates one capped notepad, the loop pins the latest content into
+// context each turn, and the model overwrites it via the
 // update_working_checkpoint tool. Clean-room TS, zero external dependency.
 
 const MAX_CHECKPOINT_CHARS = 4000;
