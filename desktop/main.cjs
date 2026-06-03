@@ -247,56 +247,9 @@ let _localAuthHeaderHookInstalled = false;
 
 // ── 主进程 i18n ──
 // 从 agent config.yaml 读取 locale，加载对应语言包的 "main" 部分
-let _mainI18nData = null;
-
-function _resolveLocaleKey(locale) {
-  if (!locale) return "zh";
-  if (locale === "zh-TW" || locale === "zh-Hant") return "zh-TW";
-  if (locale.startsWith("zh")) return "zh";
-  if (locale.startsWith("ja")) return "ja";
-  if (locale.startsWith("ko")) return "ko";
-  return "en";
-}
-
-function _getMainI18n() {
-  if (_mainI18nData) return _mainI18nData;
-  try {
-    // 从 preferences.json 读取全局 locale（和 server/renderer 一致）
-    let locale = null;
-    try {
-      const prefs = JSON.parse(fs.readFileSync(path.join(lynnHome, "preferences.json"), "utf-8"));
-      locale = prefs.locale || null;
-    } catch { /* preferences.json 不存在时 fallback */ }
-    const key = _resolveLocaleKey(locale);
-    const file = path.join(__dirname, "src", "locales", `${key}.json`);
-    const all = JSON.parse(fs.readFileSync(file, "utf-8"));
-    _mainI18nData = all.main || {};
-  } catch {
-    _mainI18nData = {};
-  }
-  return _mainI18nData;
-}
-
-/**
- * 主进程翻译函数
- * @param {string} dotPath  如 "tray.show" → main.tray.show
- * @param {object} [vars]   占位符变量 {key: value}
- * @param {string} [fallback] 找不到时的回退文本
- */
-function mt(dotPath, vars, fallback) {
-  const data = _getMainI18n();
-  const val = dotPath.split(".").reduce((obj, k) => obj?.[k], data);
-  let text = (typeof val === "string") ? val : (fallback || dotPath);
-  if (vars) {
-    for (const [k, v] of Object.entries(vars)) {
-      text = text.replace(new RegExp(`\\{${k}\\}`, "g"), v);
-    }
-  }
-  return text;
-}
-
-/** 重置 i18n 缓存（locale 变更时调用） */
-function resetMainI18n() { _mainI18nData = null; }
+// 主进程 i18n 已抽到 main-i18n.cjs（注入 lynnHome + localesDir）。
+const { createMainI18n } = require("./main-i18n.cjs");
+const { mt, resetMainI18n } = createMainI18n({ lynnHome, localesDir: path.join(__dirname, "src", "locales") });
 
 /** 跨平台杀进程：Windows 用 taskkill，POSIX 用 signal */
 function killPid(pid, force = false) {
