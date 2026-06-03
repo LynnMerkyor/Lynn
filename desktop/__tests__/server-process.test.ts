@@ -136,7 +136,33 @@ describe("resolveBundledServerLaunch", () => {
   const base = { resourcesPath: path.join(path.sep, "res"), dirname: path.join(path.sep, "app", "desktop"), execPath: "/usr/bin/electron" };
   const serverDir = path.join(base.resourcesPath, "server");
 
-  it("uses the dev source entry + ELECTRON_RUN_AS_NODE when nothing is bundled", () => {
+  it("uses the dev server bundle when it is already built", () => {
+    const devBundle = path.join(base.dirname, "..", "dist-server-bundle", "index.js");
+    const out = resolveBundledServerLaunch({
+      ...base,
+      platform: "darwin",
+      existsSync: (p: string) => p === devBundle,
+    });
+    expect(out.mode).toBe("dev");
+    expect(out.serverBin).toBe(base.execPath);
+    expect(out.serverArgs).toEqual([devBundle]);
+    expect(out.env).toEqual({ ELECTRON_RUN_AS_NODE: "1" });
+  });
+
+  it("falls back to tsx + server/index.ts in dev when no server bundle exists", () => {
+    const tsEntry = path.join(base.dirname, "..", "server", "index.ts");
+    const out = resolveBundledServerLaunch({
+      ...base,
+      platform: "darwin",
+      existsSync: (p: string) => p === tsEntry,
+    });
+    expect(out.mode).toBe("dev");
+    expect(out.serverBin).toBe(base.execPath);
+    expect(out.serverArgs).toEqual(["--import", "tsx", tsEntry]);
+    expect(out.env).toEqual({ ELECTRON_RUN_AS_NODE: "1" });
+  });
+
+  it("keeps the legacy server/index.js dev fallback when neither bundle nor ts entry exists", () => {
     const out = resolveBundledServerLaunch({ ...base, platform: "darwin", existsSync: () => false });
     expect(out.mode).toBe("dev");
     expect(out.serverBin).toBe(base.execPath);
@@ -210,6 +236,7 @@ describe("createServerProcessController.start (fake deps — no Electron)", () =
 
   function fakeChild() {
     let unreffed = false;
+    let killed: string | true | null = null;
     const handlers: Record<string, (...a: unknown[]) => void> = {};
     return {
       stdout: { on: () => {} },
@@ -218,6 +245,12 @@ describe("createServerProcessController.start (fake deps — no Electron)", () =
       // the last so tests can simulate a crash via emit().
       on: (event: string, fn: (...a: unknown[]) => void) => { handlers[event] = fn; },
       emit: (event: string, ...args: unknown[]) => handlers[event] && handlers[event](...args),
+      get killed() { return !!killed; },
+      kill: (signal?: string) => {
+        killed = signal || true;
+        if (handlers.exit) handlers.exit(null, signal || null);
+      },
+      killedWith: () => killed,
       unref: () => { unreffed = true; },
       wasUnreffed: () => unreffed,
     };
@@ -362,5 +395,57 @@ describe("createServerProcessController.start (fake deps — no Electron)", () =
     st.port = 7000; st.token = "t"; st.startedAt = 0; st.heartbeatFailures = 3;
     await ctl.checkHeartbeat();
     expect(ctl.getState().heartbeatFailures).toBe(0);
+  });
+
+  it("shutdown stops heartbeat and terminates a spawned server process", async () => {
+    const lynnHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lynn-ctl-")));
+    const child = fakeChild();
+    const ctl = createServerProcessController(baseDeps(lynnHome, {
+      spawn: () => {
+        fs.writeFileSync(path.join(lynnHome, "server-info.json"), JSON.stringify({ pid: process.pid, port: 7300, token: "t" }));
+        return child;
+      },
+      shutdownGraceMs: 5,
+    }));
+    await ctl.start();
+    ctl.startHeartbeat();
+    expect(ctl.hasServer()).toBe(true);
+    const didShutdown = await ctl.shutdown();
+    expect(didShutdown).toBe(true);
+    expect(child.killedWith()).toBe("SIGTERM");
+    expect(ctl.getState().process).toBeNull();
+    expect(ctl.getState().heartbeatTimer).toBeNull();
+    expect(ctl.hasServer()).toBe(false);
+  });
+
+  it("shutdown closes a reused server through the HTTP endpoint", async () => {
+    const lynnHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lynn-ctl-")));
+    fs.writeFileSync(
+      path.join(lynnHome, "server-info.json"),
+      JSON.stringify({ pid: process.pid, port: 7400, token: "reuse-token" }),
+    );
+    const requests: Array<{ url: string; headers?: Record<string, string>; method?: string }> = [];
+    let killCalls = 0;
+    const ctl = createServerProcessController(baseDeps(lynnHome, {
+      fetch: async (url: string, options: { headers?: Record<string, string>; method?: string } = {}) => {
+        requests.push({ url, headers: options.headers, method: options.method });
+        if (url.includes("/api/health")) {
+          return {
+            ok: true,
+            json: async () => ({ status: "ok", version: "1.2.3", features: { translateRoute: true, toolsRoute: true } }),
+          };
+        }
+        return { ok: true, json: async () => ({}) };
+      },
+      killPid: () => { killCalls++; },
+      reusedShutdownGraceMs: 0,
+    }));
+    await ctl.start();
+    expect(ctl.getState().reusedPid).toBe(process.pid);
+    const didShutdown = await ctl.shutdown();
+    expect(didShutdown).toBe(true);
+    expect(requests.some((r) => r.url.endsWith("/api/shutdown") && r.method === "POST" && r.headers?.Authorization === "Bearer reuse-token")).toBe(true);
+    expect(killCalls).toBe(1); // final force-kill safeguard after the zero-ms wait in this test
+    expect(ctl.getState().reusedPid).toBeNull();
   });
 });

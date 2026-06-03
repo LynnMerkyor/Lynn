@@ -124,6 +124,38 @@ function injectWindowsGitPath(env, { platform, resourcesPath, existsSync }) {
   return env;
 }
 
+function resolveDevServerLaunch({ dirname, execPath, existsSync }) {
+  const appRoot = path.join(dirname, "..");
+  const bundledDevEntry = path.join(appRoot, "dist-server-bundle", "index.js");
+  const tsEntry = path.join(appRoot, "server", "index.ts");
+  const jsEntry = path.join(appRoot, "server", "index.js");
+
+  if (existsSync(bundledDevEntry)) {
+    return {
+      mode: "dev",
+      serverBin: execPath,
+      serverArgs: [bundledDevEntry],
+      env: { ELECTRON_RUN_AS_NODE: "1" },
+    };
+  }
+
+  if (existsSync(tsEntry)) {
+    return {
+      mode: "dev",
+      serverBin: execPath,
+      serverArgs: ["--import", "tsx", tsEntry],
+      env: { ELECTRON_RUN_AS_NODE: "1" },
+    };
+  }
+
+  return {
+    mode: "dev",
+    serverBin: execPath,
+    serverArgs: [jsEntry],
+    env: { ELECTRON_RUN_AS_NODE: "1" },
+  };
+}
+
 // Pick how to launch the server (bundled standalone vs dev source), returning
 // the binary, args, extra env, and which mode was chosen. Pure given existsSync.
 //   - bundled (extraResources/server present): HANA_ROOT set
@@ -155,23 +187,18 @@ function resolveBundledServerLaunch({ platform, resourcesPath, dirname, execPath
     return { mode: "bundled", serverBin, serverArgs, env: { HANA_ROOT: bundledServerDir } };
   }
 
-  // 开发模式：用 Electron 自带的 Node（ELECTRON_RUN_AS_NODE=1）跑源码。
-  // native addon（better-sqlite3 等）按 Electron ABI 编译，必须用 Electron 的 Node。
-  return {
-    mode: "dev",
-    serverBin: execPath,
-    serverArgs: [path.join(dirname, "..", "server", "index.js")],
-    env: { ELECTRON_RUN_AS_NODE: "1" },
-  };
+  // 开发模式：用 Electron 自带的 Node（ELECTRON_RUN_AS_NODE=1）跑 server。
+  // npm run start 不一定先 build:server,所以优先使用已有 bundle,否则
+  // 退到 tsx 加载 server/index.ts。最后才兼容旧的 server/index.js。
+  return resolveDevServerLaunch({ dirname, execPath, existsSync });
 }
 
 // ── Stateful controller (state-migration §1, Step S2) ───────────────────────
 //
-// Owns the canonical server process/port/token state. main.cjs keeps proxy
-// globals synced from getState() during the S2→S4 interim (many readers still
-// read those proxies); start() is a faithful move of main's startServer() body
-// with all Electron/Node capabilities injected as deps so it is unit-testable
-// with fakes (no real Electron). monitorServer / heartbeat migrate in S3.
+// Owns the canonical server process/port/token/log state. start(), monitor(),
+// heartbeat, and shutdown are faithful moves of main.cjs lifecycle code with
+// Electron/Node capabilities injected as deps so they are unit-testable with
+// fakes (no real Electron).
 function createServerProcessController(deps) {
   const {
     app,
@@ -196,6 +223,9 @@ function createServerProcessController(deps) {
     writeCrashLog = () => {},
     isQuitting = () => false,
     onServerRestarted = () => {},
+    shutdownGraceMs = 5000,
+    reusedShutdownGraceMs = 5000,
+    reusedShutdownPollMs = 200,
   } = deps;
 
   const state = {
@@ -265,7 +295,7 @@ function createServerProcessController(deps) {
 
     // ── 2. 启动新 server ──
     state.reusedPid = null;
-    state.logs.length = 0; // clear in place so main's _serverLogs proxy ref stays valid
+    state.logs.length = 0; // clear in place so any captured diagnostics ref stays valid
 
     const serverEnv = { ...env, LYNN_HOME: lynnHome, ...getWorkerSpawnServerEnv() };
 
@@ -412,16 +442,84 @@ function createServerProcessController(deps) {
     state.heartbeatRestarting = false;
   }
 
+  async function waitForChildExit(proc, timeoutMs) {
+    if (!proc || proc.killed) return;
+    await new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        try { if (!proc.killed) proc.kill(); } catch {}
+        resolve();
+      }, timeoutMs);
+      if (typeof timeout.unref === "function") timeout.unref();
+
+      proc.on("exit", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+  }
+
+  async function shutdown() {
+    stopHeartbeat();
+
+    if (state.process && !state.process.killed) {
+      const proc = state.process;
+      console.log("[desktop] 正在关闭 Server...");
+
+      if (platform === "win32") {
+        try {
+          await fetch(`http://127.0.0.1:${state.port}/api/shutdown`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${state.token}` },
+            signal: AbortSignal.timeout(shutdownGraceMs),
+          });
+        } catch {}
+      } else {
+        try { proc.kill("SIGTERM"); } catch {}
+      }
+
+      await waitForChildExit(proc, shutdownGraceMs);
+      if (state.process === proc) state.process = null;
+      return true;
+    }
+
+    if (state.reusedPid) {
+      const pid = state.reusedPid;
+      console.log("[desktop] 正在关闭复用的 Server...");
+      try {
+        await fetch(`http://127.0.0.1:${state.port}/api/shutdown`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${state.token}` },
+          signal: AbortSignal.timeout(2000),
+        });
+      } catch {
+        killPid(pid);
+      }
+
+      const deadline = Date.now() + reusedShutdownGraceMs;
+      while (Date.now() < deadline) {
+        if (!isPidAlive(pid)) break;
+        await new Promise(r => setTimeout(r, reusedShutdownPollMs));
+      }
+      killPid(pid, true);
+      if (state.reusedPid === pid) state.reusedPid = null;
+      return true;
+    }
+
+    return false;
+  }
+
   return {
     start,
     monitor,
     startHeartbeat,
     stopHeartbeat,
+    shutdown,
     checkHeartbeat, // exposed for tests
     getState: () => state,
     getPort: () => state.port,
     getToken: () => state.token,
     getLogs: () => state.logs,
+    hasServer: () => !!(state.process && !state.process.killed) || !!state.reusedPid,
   };
 }
 
@@ -431,6 +529,7 @@ module.exports = {
   isReusableServerHealth,
   resolveAecNativeDir,
   injectWindowsGitPath,
+  resolveDevServerLaunch,
   resolveBundledServerLaunch,
   createServerProcessController,
 };

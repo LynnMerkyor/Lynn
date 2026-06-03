@@ -235,12 +235,8 @@ function getWindowEntryStamp(pageName) {
 const { isAllowedBrowserUrl } = require("./browser-url-guard.cjs");
 let _browserViewerTheme = "warm-paper"; // 当前主题（用于 backgroundColor）
 const TITLEBAR_HEIGHT = 44;        // 浏览器窗口标题栏高度（px）
-let serverProcess = null;
-let serverPort = null;
-let serverToken = null;
 let isQuitting = false;  // 区分关窗口（hide）和真正退出（quit）
 let tray = null;
-let reusedServerPid = null; // 复用已有 server 时记录其 PID，退出时发 SIGTERM
 let isExitingServer = false; // 只有托盘"退出"时才 kill server，其余路径仅关前端
 let forceQuitApp = false;   // 启动失败等场景需要真正退出，绕过"隐藏保持运行"拦截
 let _localAuthHeaderHookInstalled = false;
@@ -313,6 +309,7 @@ function shouldAttachLocalAuthHeader(urlString) {
   try {
     const parsed = new URL(urlString);
     const isLocalHost = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost";
+    const serverPort = serverController.getPort();
     return parsed.protocol === "http:" && isLocalHost && (!serverPort || parsed.port === String(serverPort));
   } catch {
     return false;
@@ -322,6 +319,7 @@ function shouldAttachLocalAuthHeader(urlString) {
 function ensureLocalAuthHeaderHook() {
   if (_localAuthHeaderHookInstalled || !session.defaultSession) return;
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    const serverToken = serverController.getToken();
     if (!serverToken || !shouldAttachLocalAuthHeader(details.url)) {
       callback({ requestHeaders: details.requestHeaders });
       return;
@@ -743,20 +741,14 @@ function hasExistingConfig() {
   return false;
 }
 
-// ── 启动 Server ──
-// 收集 server 的 stdout/stderr 用于崩溃诊断
-let _serverLogs = [];
-
 // Server process logic lives in server-process.cjs. createServerProcessController
 // owns the canonical process/port/token/logs state + crash-monitor + heartbeat
-// (S2/S3); main.cjs is the composition root that injects Electron/Node deps.
-// startServer() below is now a thin wrapper that syncs the legacy proxies.
+// (S2-S4); main.cjs is the composition root that injects Electron/Node deps.
 const { createServerProcessController } = require("./server-process.cjs");
 
 // Server lifecycle owner. main.cjs is the composition root: it constructs the
 // controller with Electron/Node capabilities injected. The controller owns the
-// canonical process/port/token state; the legacy globals below are proxies kept
-// in sync during the S2→S4 migration (see docs/REFACTOR-desktop-state-migration.md).
+// canonical process/port/token/logs state and exposes getters for main readers.
 const serverController = createServerProcessController({
   app,
   fetch,
@@ -779,37 +771,24 @@ const serverController = createServerProcessController({
   writeCrashLog,
   isQuitting: () => isQuitting,
   // Called on each internal restart (monitor/heartbeat): re-sync the legacy
-  // proxies for external readers, then notify renderer windows (replaces the
-  // old notifyRendererServerRestarted()).
+  // readers through controller getters, then notify renderer windows.
   onServerRestarted: ({ port, token }) => {
-    syncServerProxies();
+    let sent = 0;
     for (const win of [mainWindow, settingsWindow]) {
-      if (win && !win.isDestroyed()) win.webContents.send("server-restarted", { port, token });
+      if (win && !win.isDestroyed()) {
+        win.webContents.send("server-restarted", { port, token });
+        sent++;
+      }
     }
+    console.log(`[desktop] server-restarted sent to ${sent} window(s), port: ${port}`);
   },
 });
 
-// Sync controller-owned state into the legacy main globals. Readers still on
-// these proxies (IPC get-server-port/token, browser WS, local auth header,
-// shutdown, monitor/heartbeat) migrate to the controller getters in S3/S4,
-// after which the proxies are removed.
-function syncServerProxies() {
-  const s = serverController.getState();
-  serverPort = s.port;
-  serverToken = s.token;
-  serverProcess = s.process;
-  reusedServerPid = s.reusedPid;
-  _serverLogs = s.logs;
-}
-
 async function startServer() {
   await serverController.start();
-  syncServerProxies();
 }
 
-// Server crash-monitor + heartbeat moved into serverController (state-migration
-// S3). main calls serverController.monitor() / startHeartbeat() / stopHeartbeat();
-// internal restarts re-sync the proxies + notify windows via onServerRestarted.
+// Server crash-monitor, heartbeat, and shutdown live in serverController.
 
 /**
  * 显示当前最相关窗口
@@ -889,7 +868,7 @@ function createTray() {
  * 将崩溃日志写入 LYNN_HOME/crash.log（默认 ~/.lynn/crash.log）并返回日志内容
  */
 function writeCrashLog(errorMessage) {
-  const logs = _serverLogs.join("");
+  const logs = serverController.getLogs().join("");
   const timestamp = new Date().toISOString();
 
   // 没有任何输出时，附加诊断信息帮助定位问题
@@ -1838,6 +1817,8 @@ async function handleBrowserCommand(cmd, params) {
 
 /** 通过 WebSocket 监听 server 的浏览器命令 */
 function setupBrowserCommands() {
+  const serverPort = serverController.getPort();
+  const serverToken = serverController.getToken();
   if (!serverPort || !serverToken) return;
 
   const WebSocket = require("ws");
@@ -1961,8 +1942,8 @@ async function checkForUpdates() {
 }
 
 // ── IPC ──
-wrapIpcHandler("get-server-port", () => serverPort);
-wrapIpcHandler("get-server-token", () => serverToken);
+wrapIpcHandler("get-server-port", () => serverController.getPort());
+wrapIpcHandler("get-server-token", () => serverController.getToken());
 wrapIpcHandler("get-app-version", () => app.getVersion());
 wrapIpcHandler("cli:status", () => getCliEnvStatus());
 wrapIpcHandler("wake-lock-set", (_event, payload = {}) => (
@@ -2209,7 +2190,7 @@ wrapIpcHandler("avatar:upload", async (event, role) => {
 wrapIpcHandler("get-splash-info", () => {
   try {
     const agentId = getCurrentAgentId();
-    if (!agentId) return { agentName: null, locale: "zh-CN", yuan: "hanako" };
+    if (!agentId) return { agentName: null, locale: "zh-CN", yuan: "lynn" };
     const configPath = path.join(lynnHome, "agents", agentId, "config.yaml");
     const text = fs.readFileSync(configPath, "utf-8");
     // 简易提取：agent:\n  name: xxx / yuan: xxx 和顶层 locale: xxx
@@ -2219,10 +2200,10 @@ wrapIpcHandler("get-splash-info", () => {
     return {
       agentName: agentMatch?.[1]?.trim() || null,
       locale: localeMatch?.[1]?.trim() || null,
-      yuan: yuanMatch?.[1]?.trim() || "hanako",
+      yuan: yuanMatch?.[1]?.trim() || "lynn",
     };
   } catch {
-    return { agentName: null, locale: "zh-CN", yuan: "hanako" };
+    return { agentName: null, locale: "zh-CN", yuan: "lynn" };
   }
 });
 
@@ -3445,7 +3426,7 @@ app.whenReady().then(async () => {
     // 2. 后台启动 server
     console.log("[desktop] 启动 Lynn Server...");
     await startServer();
-    console.log(`[desktop] Server 就绪，端口: ${serverPort}`);
+    console.log(`[desktop] Server 就绪，端口: ${serverController.getPort()}`);
     serverController.monitor();
     serverController.startHeartbeat();
     setupBrowserCommands();
@@ -3554,7 +3535,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0 && serverPort) {
+  if (BrowserWindow.getAllWindows().length === 0 && serverController.getPort()) {
     if (isSetupComplete()) {
       createMainWindow();
       // 不在这里 show()，前端 init 完成后会通过 app-ready IPC 触发显示
@@ -3680,63 +3661,9 @@ app.on("before-quit", async (event) => {
   _currentBrowserSession = null;
 
   // 完全退出：同时关闭 server
-  if (serverProcess && !serverProcess.killed) {
+  if (serverController.hasServer()) {
     event.preventDefault();
-    console.log("[desktop] 正在关闭 Server...");
-
-    if (process.platform === "win32") {
-      // Windows：用 HTTP 关闭（信号不可靠）
-      try {
-        await fetch(`http://127.0.0.1:${serverPort}/api/shutdown`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${serverToken}` },
-          signal: AbortSignal.timeout(5000),
-        });
-      } catch {}
-    } else {
-      // macOS/Linux：SIGTERM
-      try { serverProcess.kill("SIGTERM"); } catch {}
-    }
-
-    await new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        if (serverProcess && !serverProcess.killed) {
-          serverProcess.kill();
-        }
-        resolve();
-      }, 5000);
-
-      serverProcess.on("exit", () => {
-        clearTimeout(timeout);
-        resolve();
-      });
-    });
-
-    serverProcess = null;
-    app.quit();
-  } else if (reusedServerPid) {
-    // 复用路径：通过 HTTP 接口优雅关闭（跨平台可靠，不依赖信号）
-    event.preventDefault();
-    console.log("[desktop] 正在关闭复用的 Server...");
-    try {
-      await fetch(`http://127.0.0.1:${serverPort}/api/shutdown`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${serverToken}` },
-        signal: AbortSignal.timeout(2000),
-      });
-    } catch {
-      // HTTP 失败则回退到 kill
-      killPid(reusedServerPid);
-    }
-
-    // 轮询等待进程退出（最多 5 秒）
-    const deadline = Date.now() + 5000;
-    while (Date.now() < deadline) {
-      try { process.kill(reusedServerPid, 0); } catch { break; }
-      await new Promise(r => setTimeout(r, 200));
-    }
-    killPid(reusedServerPid, true); // 超时则强制
-    reusedServerPid = null;
+    await serverController.shutdown();
     app.quit();
   }
 });
