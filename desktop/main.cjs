@@ -748,14 +748,10 @@ function hasExistingConfig() {
 let _serverLogs = [];
 
 // Server process logic lives in server-process.cjs. createServerProcessController
-// owns the canonical state (S2); startServer() below is now a thin wrapper around
-// it. isReusableServerHealth is still used directly by the in-main heartbeat
-// (migrates into the controller in S3). The pure helpers (pollServerInfo,
-// resolveBundledServerLaunch, …) are used only inside the controller now.
-const {
-  isReusableServerHealth,
-  createServerProcessController,
-} = require("./server-process.cjs");
+// owns the canonical process/port/token/logs state + crash-monitor + heartbeat
+// (S2/S3); main.cjs is the composition root that injects Electron/Node deps.
+// startServer() below is now a thin wrapper that syncs the legacy proxies.
+const { createServerProcessController } = require("./server-process.cjs");
 
 // Server lifecycle owner. main.cjs is the composition root: it constructs the
 // controller with Electron/Node capabilities injected. The controller owns the
@@ -779,6 +775,18 @@ const serverController = createServerProcessController({
   readBrainRuntimeConfig,
   killPid,
   onLocalAuthHeaderNeeded: () => ensureLocalAuthHeaderHook(),
+  dialog,
+  writeCrashLog,
+  isQuitting: () => isQuitting,
+  // Called on each internal restart (monitor/heartbeat): re-sync the legacy
+  // proxies for external readers, then notify renderer windows (replaces the
+  // old notifyRendererServerRestarted()).
+  onServerRestarted: ({ port, token }) => {
+    syncServerProxies();
+    for (const win of [mainWindow, settingsWindow]) {
+      if (win && !win.isDestroyed()) win.webContents.send("server-restarted", { port, token });
+    }
+  },
 });
 
 // Sync controller-owned state into the legacy main globals. Readers still on
@@ -791,7 +799,6 @@ function syncServerProxies() {
   serverToken = s.token;
   serverProcess = s.process;
   reusedServerPid = s.reusedPid;
-  _serverStartedAt = s.startedAt;
   _serverLogs = s.logs;
 }
 
@@ -800,113 +807,9 @@ async function startServer() {
   syncServerProxies();
 }
 
-/**
- * 持久监控 server 进程：崩溃后自动重启一次，再失败则写 crash log 并通知用户
- */
-let _serverRestartAttempts = 0;
-let _serverHeartbeatTimer = null;
-let _serverHeartbeatFailures = 0;
-let _serverHeartbeatChecking = false;
-let _serverHeartbeatRestarting = false;
-let _serverStartedAt = 0;
-const SERVER_HEARTBEAT_STARTUP_GRACE_MS = 4 * 60 * 1000;
-const SERVER_HEARTBEAT_INTERVAL_MS = 10_000;
-const SERVER_HEARTBEAT_TIMEOUT_MS = 5_000;
-const SERVER_HEARTBEAT_MAX_FAILURES = 6;
-
-function notifyRendererServerRestarted() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("server-restarted", { port: serverPort, token: serverToken });
-  }
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.webContents.send("server-restarted", { port: serverPort, token: serverToken });
-  }
-}
-
-function monitorServer() {
-  if (!serverProcess) return;
-  serverProcess.on("exit", async (code, signal) => {
-    if (isQuitting) return; // 正常退出流程
-    if (_serverHeartbeatRestarting) return; // heartbeat 正在主动拉起新 server
-    const reason = signal ? `信号 ${signal}` : `退出码 ${code}`;
-    console.error(`[desktop] Server 意外退出 (${reason})`);
-
-    if (_serverRestartAttempts < 1) {
-      _serverRestartAttempts++;
-      console.log("[desktop] 尝试自动重启 Server...");
-      try {
-        await startServer();
-        console.log("[desktop] Server 重启成功");
-        monitorServer(); // 重新挂监控
-        notifyRendererServerRestarted();
-      } catch (err) {
-        console.error("[desktop] Server 重启失败:", err.message);
-        writeCrashLog(`Server 重启失败: ${err.message}`);
-        dialog.showErrorBox("Lynn Server", mt("dialog.serverRestartFailed", { error: err.message }));
-      }
-    } else {
-      writeCrashLog(`Server 多次崩溃 (${reason})，放弃重启`);
-      dialog.showErrorBox("Lynn Server", mt("dialog.serverMultipleCrash", { reason }));
-    }
-  });
-}
-
-async function checkServerHeartbeat() {
-  if (isQuitting || _serverHeartbeatRestarting || _serverHeartbeatChecking) return;
-  if (!serverPort || !serverToken) return;
-  if (_serverStartedAt && Date.now() - _serverStartedAt < SERVER_HEARTBEAT_STARTUP_GRACE_MS) return;
-  _serverHeartbeatChecking = true;
-  try {
-    const res = await fetch(`http://127.0.0.1:${serverPort}/api/health`, {
-      headers: { Authorization: `Bearer ${serverToken}` },
-      signal: AbortSignal.timeout(SERVER_HEARTBEAT_TIMEOUT_MS),
-    });
-    const health = res.ok ? await res.json().catch(() => null) : null;
-    if (res.ok && isReusableServerHealth(health, typeof app.getVersion === "function" ? app.getVersion() : "")) {
-      _serverHeartbeatFailures = 0;
-      return;
-    }
-    _serverHeartbeatFailures++;
-  } catch {
-    _serverHeartbeatFailures++;
-  } finally {
-    _serverHeartbeatChecking = false;
-  }
-
-  if (_serverHeartbeatFailures < SERVER_HEARTBEAT_MAX_FAILURES || _serverHeartbeatRestarting || isQuitting) return;
-  _serverHeartbeatRestarting = true;
-  console.warn("[desktop] Server heartbeat failed 3 times, restarting server...");
-  try {
-    _serverHeartbeatFailures = 0;
-    await startServer();
-    monitorServer();
-    notifyRendererServerRestarted();
-    console.log("[desktop] Server heartbeat restart succeeded");
-  } catch (err) {
-    console.error("[desktop] Server heartbeat restart failed:", err?.message || err);
-    writeCrashLog(`Server 心跳重启失败: ${err?.message || err}`);
-  } finally {
-    _serverHeartbeatRestarting = false;
-  }
-}
-
-function startServerHeartbeat() {
-  if (_serverHeartbeatTimer) clearInterval(_serverHeartbeatTimer);
-  _serverHeartbeatTimer = setInterval(() => {
-    void checkServerHeartbeat();
-  }, SERVER_HEARTBEAT_INTERVAL_MS);
-  if (typeof _serverHeartbeatTimer.unref === "function") {
-    _serverHeartbeatTimer.unref();
-  }
-}
-
-function stopServerHeartbeat() {
-  if (_serverHeartbeatTimer) clearInterval(_serverHeartbeatTimer);
-  _serverHeartbeatTimer = null;
-  _serverHeartbeatFailures = 0;
-  _serverHeartbeatChecking = false;
-  _serverHeartbeatRestarting = false;
-}
+// Server crash-monitor + heartbeat moved into serverController (state-migration
+// S3). main calls serverController.monitor() / startHeartbeat() / stopHeartbeat();
+// internal restarts re-sync the proxies + notify windows via onServerRestarted.
 
 /**
  * 显示当前最相关窗口
@@ -3543,8 +3446,8 @@ app.whenReady().then(async () => {
     console.log("[desktop] 启动 Lynn Server...");
     await startServer();
     console.log(`[desktop] Server 就绪，端口: ${serverPort}`);
-    monitorServer();
-    startServerHeartbeat();
+    serverController.monitor();
+    serverController.startHeartbeat();
     setupBrowserCommands();
     createTray();
 
@@ -3741,7 +3644,7 @@ function registerGlobalSummon(configuredAccelerator = readGlobalSummonShortcutPr
 
 // ── 优雅关闭 ──
 app.on("will-quit", () => {
-  stopServerHeartbeat();
+  serverController.stopHeartbeat();
   wakeLockReasons.clear();
   refreshWakeLock();
   globalShortcut.unregisterAll();

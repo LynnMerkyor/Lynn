@@ -210,10 +210,14 @@ describe("createServerProcessController.start (fake deps — no Electron)", () =
 
   function fakeChild() {
     let unreffed = false;
+    const handlers: Record<string, (...a: unknown[]) => void> = {};
     return {
       stdout: { on: () => {} },
       stderr: { on: () => {} },
-      on: () => {}, // pollServerInfo attaches an 'exit' handler (fail-fast on crash)
+      // pollServerInfo (startup) + monitor() both attach 'exit' handlers; capture
+      // the last so tests can simulate a crash via emit().
+      on: (event: string, fn: (...a: unknown[]) => void) => { handlers[event] = fn; },
+      emit: (event: string, ...args: unknown[]) => handlers[event] && handlers[event](...args),
       unref: () => { unreffed = true; },
       wasUnreffed: () => unreffed,
     };
@@ -281,5 +285,82 @@ describe("createServerProcessController.start (fake deps — no Electron)", () =
     await ctl.start();
     // start() clears logs in place, so the reference a proxy captured stays valid
     expect(ctl.getLogs()).toBe(logsRef);
+  });
+
+  // ── S3: monitor + heartbeat ────────────────────────────────────────────────
+
+  it("auto-restarts once on unexpected server exit and notifies onServerRestarted", async () => {
+    const lynnHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lynn-ctl-")));
+    let port = 7001;
+    let restarted: unknown = null;
+    let resolveRestart: () => void = () => {};
+    const restartDone = new Promise<void>((r) => { resolveRestart = r; });
+    const ctl = createServerProcessController(baseDeps(lynnHome, {
+      spawn: () => {
+        fs.writeFileSync(path.join(lynnHome, "server-info.json"), JSON.stringify({ pid: process.pid, port: port++, token: "t" }));
+        return fakeChild();
+      },
+      onServerRestarted: (p: unknown) => { restarted = p; resolveRestart(); },
+    }));
+    await ctl.start();
+    ctl.monitor();
+    expect(ctl.getState().restartAttempts).toBe(0);
+    ctl.getState().process.emit("exit", 1, null); // simulate crash
+    await restartDone;
+    expect(ctl.getState().restartAttempts).toBe(1);
+    expect(restarted).toMatchObject({ token: "t" });
+  });
+
+  it("gives up after a second crash — writeCrashLog, no restart", async () => {
+    const lynnHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lynn-ctl-")));
+    let restartCalls = 0;
+    let crashLogs = 0;
+    const ctl = createServerProcessController(baseDeps(lynnHome, {
+      spawn: () => {
+        fs.writeFileSync(path.join(lynnHome, "server-info.json"), JSON.stringify({ pid: process.pid, port: 7100, token: "t" }));
+        return fakeChild();
+      },
+      onServerRestarted: () => { restartCalls++; },
+      writeCrashLog: () => { crashLogs++; },
+    }));
+    await ctl.start();
+    ctl.getState().restartAttempts = 1; // the one allowed restart is already used
+    ctl.monitor();
+    ctl.getState().process.emit("exit", null, "SIGSEGV");
+    await Promise.resolve();
+    expect(crashLogs).toBe(1);
+    expect(restartCalls).toBe(0);
+  });
+
+  it("heartbeat restarts the server after MAX consecutive failures", async () => {
+    const lynnHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lynn-ctl-")));
+    let restarted = false;
+    const ctl = createServerProcessController(baseDeps(lynnHome, {
+      fetch: async () => { throw new Error("server down"); },
+      spawn: () => {
+        fs.writeFileSync(path.join(lynnHome, "server-info.json"), JSON.stringify({ pid: process.pid, port: 7200, token: "t" }));
+        return fakeChild();
+      },
+      onServerRestarted: () => { restarted = true; },
+    }));
+    // set creds directly so startedAt stays 0 → startup grace window is skipped
+    const st = ctl.getState();
+    st.port = 7000; st.token = "t"; st.startedAt = 0;
+    for (let i = 0; i < 6; i++) await ctl.checkHeartbeat();
+    expect(restarted).toBe(true);
+  });
+
+  it("heartbeat resets the failure counter when the server is healthy", async () => {
+    const lynnHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lynn-ctl-")));
+    const ctl = createServerProcessController(baseDeps(lynnHome, {
+      fetch: async () => ({
+        ok: true,
+        json: async () => ({ status: "ok", version: "1.2.3", features: { translateRoute: true, toolsRoute: true } }),
+      }),
+    }));
+    const st = ctl.getState();
+    st.port = 7000; st.token = "t"; st.startedAt = 0; st.heartbeatFailures = 3;
+    await ctl.checkHeartbeat();
+    expect(ctl.getState().heartbeatFailures).toBe(0);
   });
 });

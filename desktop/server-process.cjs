@@ -17,6 +17,12 @@ const path = require("path");
 // Default i18n passthrough so the module never hard-depends on main.cjs's mt().
 const defaultMt = (key, _vars, fallback) => fallback || key;
 
+// Heartbeat tuning (moved verbatim from main.cjs in S3).
+const SERVER_HEARTBEAT_STARTUP_GRACE_MS = 4 * 60 * 1000;
+const SERVER_HEARTBEAT_INTERVAL_MS = 10_000;
+const SERVER_HEARTBEAT_TIMEOUT_MS = 5_000;
+const SERVER_HEARTBEAT_MAX_FAILURES = 6;
+
 // process.kill(pid, 0) probes liveness without sending a real signal.
 function isPidAlive(pid, proc = process) {
   try { proc.kill(pid, 0); return true; } catch { return false; }
@@ -185,6 +191,11 @@ function createServerProcessController(deps) {
     readBrainRuntimeConfig,
     killPid,
     onLocalAuthHeaderNeeded = () => {},
+    // S3 (monitor / heartbeat) deps:
+    dialog = { showErrorBox: () => {} },
+    writeCrashLog = () => {},
+    isQuitting = () => false,
+    onServerRestarted = () => {},
   } = deps;
 
   const state = {
@@ -315,8 +326,98 @@ function createServerProcessController(deps) {
     proc.unref(); // 脱离 Electron 事件循环，允许 Electron 独立退出
   }
 
+  // 持久监控 server 进程：崩溃后自动重启一次，再失败则写 crash log 并通知用户
+  function monitor() {
+    if (!state.process) return;
+    state.process.on("exit", async (code, signal) => {
+      if (isQuitting()) return; // 正常退出流程
+      if (state.heartbeatRestarting) return; // heartbeat 正在主动拉起新 server
+      const reason = signal ? `信号 ${signal}` : `退出码 ${code}`;
+      console.error(`[desktop] Server 意外退出 (${reason})`);
+
+      if (state.restartAttempts < 1) {
+        state.restartAttempts++;
+        console.log("[desktop] 尝试自动重启 Server...");
+        try {
+          await start();
+          console.log("[desktop] Server 重启成功");
+          monitor(); // 重新挂监控
+          onServerRestarted({ port: state.port, token: state.token });
+        } catch (err) {
+          console.error("[desktop] Server 重启失败:", err.message);
+          writeCrashLog(`Server 重启失败: ${err.message}`);
+          dialog.showErrorBox("Lynn Server", mt("dialog.serverRestartFailed", { error: err.message }));
+        }
+      } else {
+        writeCrashLog(`Server 多次崩溃 (${reason})，放弃重启`);
+        dialog.showErrorBox("Lynn Server", mt("dialog.serverMultipleCrash", { reason }));
+      }
+    });
+  }
+
+  async function checkHeartbeat() {
+    if (isQuitting() || state.heartbeatRestarting || state.heartbeatChecking) return;
+    if (!state.port || !state.token) return;
+    if (state.startedAt && Date.now() - state.startedAt < SERVER_HEARTBEAT_STARTUP_GRACE_MS) return;
+    state.heartbeatChecking = true;
+    try {
+      const res = await fetch(`http://127.0.0.1:${state.port}/api/health`, {
+        headers: { Authorization: `Bearer ${state.token}` },
+        signal: AbortSignal.timeout(SERVER_HEARTBEAT_TIMEOUT_MS),
+      });
+      const health = res.ok ? await res.json().catch(() => null) : null;
+      if (res.ok && isReusableServerHealth(health, typeof app.getVersion === "function" ? app.getVersion() : "")) {
+        state.heartbeatFailures = 0;
+        return;
+      }
+      state.heartbeatFailures++;
+    } catch {
+      state.heartbeatFailures++;
+    } finally {
+      state.heartbeatChecking = false;
+    }
+
+    if (state.heartbeatFailures < SERVER_HEARTBEAT_MAX_FAILURES || state.heartbeatRestarting || isQuitting()) return;
+    state.heartbeatRestarting = true;
+    console.warn("[desktop] Server heartbeat failed 3 times, restarting server...");
+    try {
+      state.heartbeatFailures = 0;
+      await start();
+      monitor();
+      onServerRestarted({ port: state.port, token: state.token });
+      console.log("[desktop] Server heartbeat restart succeeded");
+    } catch (err) {
+      console.error("[desktop] Server heartbeat restart failed:", err?.message || err);
+      writeCrashLog(`Server 心跳重启失败: ${err?.message || err}`);
+    } finally {
+      state.heartbeatRestarting = false;
+    }
+  }
+
+  function startHeartbeat() {
+    if (state.heartbeatTimer) clearInterval(state.heartbeatTimer);
+    state.heartbeatTimer = setInterval(() => {
+      void checkHeartbeat();
+    }, SERVER_HEARTBEAT_INTERVAL_MS);
+    if (typeof state.heartbeatTimer.unref === "function") {
+      state.heartbeatTimer.unref();
+    }
+  }
+
+  function stopHeartbeat() {
+    if (state.heartbeatTimer) clearInterval(state.heartbeatTimer);
+    state.heartbeatTimer = null;
+    state.heartbeatFailures = 0;
+    state.heartbeatChecking = false;
+    state.heartbeatRestarting = false;
+  }
+
   return {
     start,
+    monitor,
+    startHeartbeat,
+    stopHeartbeat,
+    checkHeartbeat, // exposed for tests
     getState: () => state,
     getPort: () => state.port,
     getToken: () => state.token,
