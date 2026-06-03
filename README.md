@@ -1,10 +1,6 @@
 [English](README_EN.md) | **中文**
 
 <p align="center">
-  <img src=".github/assets/banner.png" width="100%" alt="Lynn Banner">
-</p>
-
-<p align="center">
   <img src="desktop/src/assets/Lynn.png" width="80" alt="Lynn">
 </p>
 
