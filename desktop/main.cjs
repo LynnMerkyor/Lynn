@@ -403,31 +403,7 @@ function writeUserPreferences(nextPrefs) {
 // v0.79 policy: the built-in default model is Brain v2. Older desktop builds
 // persisted v1 roots in ~/.lynn; migrate only the first-party "brain" provider
 // so BYOK/custom providers stay untouched.
-const CANONICAL_BRAIN_API_ROOT = "https://api.merkyorlynn.com/api/v2";
-const CANONICAL_BRAIN_PROVIDER_BASE_URL = `${CANONICAL_BRAIN_API_ROOT}/v1`;
-const DEPRECATED_BRAIN_API_ROOTS = new Set([
-  "https://api.merkyorlynn.com/api",
-  "http://82.156.182.240/api",
-]);
-const DEPRECATED_BRAIN_PROVIDER_BASE_URLS = new Set([
-  "https://api.merkyorlynn.com/api/v1",
-  "http://82.156.182.240/api/v1",
-]);
-
-function normalizeBrainUrl(value) {
-  const text = String(value || "").trim();
-  return text ? text.replace(/\/+$/, "") : "";
-}
-
-function isDeprecatedBrainApiRoot(value) {
-  const normalized = normalizeBrainUrl(value);
-  return normalized ? DEPRECATED_BRAIN_API_ROOTS.has(normalized) : false;
-}
-
-function isDeprecatedBrainProviderBaseUrl(value) {
-  const normalized = normalizeBrainUrl(value);
-  return normalized ? DEPRECATED_BRAIN_PROVIDER_BASE_URLS.has(normalized) : false;
-}
+const { CANONICAL_BRAIN_API_ROOT, CANONICAL_BRAIN_PROVIDER_BASE_URL, normalizeBrainUrl, isDeprecatedBrainApiRoot, isDeprecatedBrainProviderBaseUrl } = require("./brain-url-policy.cjs");
 
 function migrateBrainProviderStorage() {
   const providersPath = path.join(lynnHome, "added-models.yaml");
