@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="desktop/src/assets/Lynn.png" width="80" alt="Lynn">
-</p>
-
 <h1 align="center">Lynn</h1>
 
 <p align="center"><strong>GUI command center · CLI Worker Fleet · Long-term memory · Multi-agent collaboration</strong></p>

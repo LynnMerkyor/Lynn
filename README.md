@@ -1,9 +1,5 @@
 [English](README_EN.md) | **中文**
 
-<p align="center">
-  <img src="desktop/src/assets/Lynn.png" width="80" alt="Lynn">
-</p>
-
 <h1 align="center">Lynn</h1>
 
 <p align="center"><strong>GUI 指挥台 · CLI Worker Fleet · 长期记忆 · 多 Agent 协作</strong></p>
