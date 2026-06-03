@@ -25,6 +25,30 @@
 
 ---
 
+## 🧠 Lynn 自研推理引擎 · 对标 llama.cpp(重启)
+
+Lynn 不只是桌面 Agent。自研推理引擎已**重启为认真的主线**——目标不是「用 llama.cpp」,而是**对标 llama.cpp**:同模型同硬件把速度做到接近,乃至在 FP4-MMA 卡(R6000 一代)上**超过**它,同时保留 NVFP4 + MoE 原生 layout、跨设备内核 moat 这些 vendor 框架给不了的东西。
+
+**🆕 今天迭代(2026-06-03 · Spark sm_121 / Qwen3.6-35B-A3B NVFP4)**
+
+- **decode 启动开销战役:38.96 → ~45 tok/s(+26%)**,一连串 RC-validated launch-fusion(RMSNorm / full-attn / shared-expert / g-beta / bf16-out),40/40 贪心输出与 baseline 逐 token 一致。
+- **Banked:60 GiB「decode-only 显存」红利** —— decode 根本不读 BF16 shadow,常驻 **88→28 GiB**(release 后 token-exact 继续解码),需新 prefill 时再从常驻 packed NVFP4 反量化重建(~24s/请求)。在共享 128 GB Spark 上腾出 60 GiB 给 KV / 长上下文 / batch。
+- **诚实口径**:Spark sm_121 **无 FP4 MMA**,decode 是 launch-bound,结构性卡 **~45**;同硬件 llama.cpp Q4_K_M = **69.77**。read-4bit 其实已做、reusable decode graph 净负(0.75×)→ **Spark 不是追平 69.77 的战场**。
+
+**终局 = 自己把内核啃下来。** 把带宽墙真正推倒、逼近(乃至在 R6000 上超过)llama.cpp 的主路 = 融合 4-bit / 零-shadow 内核,分阶段啃、每阶段 gate + RC:**单投影 PoC → 全 dense 投影 + 删 shadow → MoE grouped 专家 → 融合减 launch**。这条路的收益兑现在 FP4-MMA 硅(R6000 一代)+ ggml 级低-dispatch CUDA;同一套 NVFP4 权重挪到那张卡即 native。**做引擎,要做就自己把内核啃下来。**
+
+| 方向 | 当前状态 |
+|---|---|
+| **Lynn Engine(自研)** | R6000 strict full path **103.44 tok/s** / serving replay 107.23(历史最佳);Spark sm_121 NVFP4 decode **~45**(结构性上限,无 FP4 MMA);终局 = 融合 4-bit / 零-shadow 内核。 |
+| **Lynn V4 / V Flash 35B-A3B** | BF16 / NVFP4 / Q4_K_M 变体已发布与回归;Q4 工具调用模板热修已同步 HF / ModelScope。 |
+| **Lynn 27B-A3B 基座** | Qwen3.6-35B-A3B BASE → variable-expert pruning + Router-FT + Recovery LoRA,选定 **step5000 final**;BF16 V8 strict 97.06% / V9 adjusted 62.71%。 |
+| **Lynn-native NVFP4** | 27B/35B variable-expert NVFP4 artifact(~20GB),Lynn Engine 专用 runtime,非 GGUF、非通用框架 v8-RTN。 |
+| **客户端默认后端** | 短期仍走 llama.cpp / GGUF 全平台——**务实默认,非放弃引擎**;引擎作为并行主线对标它。 |
+
+相关仓库:[lynn-engine](https://github.com/MerkyorLynn/lynn-engine)(自研推理引擎)· [lynn-distill-toolkit](https://github.com/MerkyorLynn/lynn-distill-toolkit)(蒸馏 / 评测 / 量化 / 发布)。详见 [decode launch-overhead campaign](https://github.com/MerkyorLynn/lynn-engine/blob/main/reports/qwen36_35b/DECODE_LAUNCH_OVERHEAD_CAMPAIGN_20260603.md)。
+
+> 说明:Lynn-native NVFP4 是给 Lynn Engine 的内部 / 垂直 runtime artifact;通用用户仍建议从 V4 / V Flash 的 BF16、NVFP4 v8-RTN 或 Q4_K_M 版本开始。
+
 ## 🔭 V0.80:GUI + CLI Worker Fleet
 
 V0.80 把 Lynn 带回编程主战场,但不是再做一个单 CLI 或 IDE 插件。Lynn 的方向是把 **GUI 变成多个 CLI Agent 的指挥台**:你可以在图形界面里拆任务、派发给不同 CLI worker、查看日志和 diff、跑门禁、合并或丢弃结果。
@@ -96,23 +120,6 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 一个 `--agent` 把任务派给 Codex / Claude Code / Qwen / Kimi / CodeBuddy / OpenCode 或 Lynn 自身,统一吐 Fleet JSONL。安全边界守在 Lynn 侧(ownership / forbidden-glob / diff 校验 / gate),不依赖外部 worker 自觉。
 
 成功信号 = `gate.finished.ok`;硬失败 = `worker.violation` 或 `worker.error{recoverable:false}`。完整规范(BYOK 配置 / agent 适配表 / 全事件 schema / code tools)见 [`docs/ops/lynn-cli-agent-contract.md`](docs/ops/lynn-cli-agent-contract.md)。
-
-## 🧠 Lynn 模型与引擎路线
-
-Lynn 现在不只是桌面端 Agent。配套的模型、量化和自研推理引擎已经形成一条独立路线,用于把 Lynn 的本地长期记忆 / 多 Agent / 工具调用能力跑在可控的私有模型栈上。
-
-| 方向 | 当前状态 |
-|---|---|
-| **Lynn V4 / V Flash 35B-A3B** | BF16 / NVFP4 / Q4_K_M 变体已完成发布与回归;Q4 工具调用模板热修已同步 HF / ModelScope。 |
-| **Lynn 27B-A3B 基座** | 从 Qwen3.6-35B-A3B BASE 走 variable-expert pruning + Router-FT + Recovery LoRA,当前选定 **step5000 final**。BF16 评测:V8 strict 33/34 = 97.06%,V9 adjusted 37/59 = 62.71%。 |
-| **Lynn-native NVFP4** | 27B variable-expert NVFP4 artifact 约 20GB,用于 Lynn Engine 自研 runtime。它不是 GGUF,也不是公开通用框架的 compressed-tensors v8-RTN。 |
-| **Lynn Engine** | 自研 Blackwell/R6000 推理引擎已跑通 27B NVFP4。当前 R6000 strict full path **103.44 tok/s**,serving replay **107.23 tok/s**;下一目标是生产稳定 100+ TPS 与 native FP4 kernel。 |
-
-相关仓库:
-- [MerkyorLynn/lynn-engine](https://github.com/MerkyorLynn/lynn-engine):Lynn 27B-A3B NVFP4 自研推理引擎。
-- [MerkyorLynn/lynn-distill-toolkit](https://github.com/MerkyorLynn/lynn-distill-toolkit):蒸馏、评测、量化与发布工具链。
-
-> 说明:27B Lynn-native NVFP4 是给 Lynn Engine 的内部/垂直 runtime artifact;通用用户仍建议从 V4 / V Flash 的 BF16、NVFP4 v8-RTN 或 Q4_K_M 版本开始。
 
 ## 🆕 近期更新
 

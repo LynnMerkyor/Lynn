@@ -18,6 +18,30 @@
 
 ---
 
+## 🧠 Lynn's Own Inference Engine · Benchmarking Against llama.cpp (Restarted)
+
+Lynn is more than a desktop agent. The custom inference engine is **restarted as a serious mainline** — the goal is not "use llama.cpp" but to **benchmark against (and rival) llama.cpp**: match its speed on the same model + hardware, and even **surpass it on FP4-MMA cards (R6000 class)**, while keeping the NVFP4 + MoE native layout and the cross-device kernel moat that vendor frameworks can't give us.
+
+**🆕 Today's iteration (2026-06-03 · Spark sm_121 / Qwen3.6-35B-A3B NVFP4)**
+
+- **Decode launch-overhead campaign: 38.96 → ~45 tok/s (+26%)**, a chain of RC-validated launch fusions (RMSNorm / full-attn / shared-expert / g-beta / bf16-out); 40/40 greedy outputs token-identical to baseline.
+- **Banked: a 60 GiB "decode-only memory" win** — decode never reads the BF16 shadow, so resident drops **88→28 GiB** (decode keeps going token-exact after release) and the shadow is rebuilt by dequantizing the resident packed NVFP4 only when a new prefill needs it (~24s/request). On the shared 128 GB Spark this frees 60 GiB for KV / long context / batch.
+- **Honest read**: Spark sm_121 has **no FP4 MMA**, decode is launch-bound and **structurally capped ~45**; llama.cpp Q4_K_M on the same hardware = **69.77**. read-4bit is already done and a reusable decode graph is net-negative (0.75×) → **Spark is not the battlefield for matching 69.77**.
+
+**The endgame = chew through the kernels ourselves.** The main path to knock down the bandwidth wall and approach (even surpass on R6000) llama.cpp is a fused 4-bit / zero-shadow kernel, staged with a gate + RC at each step: **single-projection PoC → all dense projections + drop shadow → MoE grouped experts → fuse to cut launches**. The payoff lands on FP4-MMA silicon (R6000 class) + ggml-level low-dispatch CUDA; the same NVFP4 weights become native on that card. **If you're going to build an engine, build the kernels yourself.**
+
+| Track | Current status |
+|---|---|
+| **Lynn Engine (custom)** | R6000 strict full path **103.44 tok/s** / serving replay 107.23 (best so far); Spark sm_121 NVFP4 decode **~45** (structural ceiling, no FP4 MMA); endgame = fused 4-bit / zero-shadow kernel. |
+| **Lynn V4 / V Flash 35B-A3B** | BF16 / NVFP4 / Q4_K_M variants shipped & regression-tested; Q4 tool-calling template hotfix pushed to HF / ModelScope. |
+| **Lynn 27B-A3B base** | Qwen3.6-35B-A3B BASE → variable-expert pruning + Router-FT + Recovery LoRA, step5000 final; BF16 V8 strict 97.06% / V9 adjusted 62.71%. |
+| **Lynn-native NVFP4** | 27B/35B variable-expert NVFP4 artifact (~20GB), a Lynn Engine-only runtime artifact — not GGUF, not generic v8-RTN. |
+| **Client default backend** | Short-term still llama.cpp / GGUF on all platforms — a **pragmatic default, not abandoning the engine**; the engine is a parallel mainline rivaling it. |
+
+Related: [lynn-engine](https://github.com/MerkyorLynn/lynn-engine) (custom inference engine) · [lynn-distill-toolkit](https://github.com/MerkyorLynn/lynn-distill-toolkit) (distill / eval / quant / release). See the [decode launch-overhead campaign](https://github.com/MerkyorLynn/lynn-engine/blob/main/reports/qwen36_35b/DECODE_LAUNCH_OVERHEAD_CAMPAIGN_20260603.md).
+
+> Note: Lynn-native NVFP4 is an internal / vertical runtime artifact for Lynn Engine; general users should start with the V4 / V Flash BF16, NVFP4 v8-RTN, or Q4_K_M variants.
+
 ## 🔭 V0.80: GUI + CLI Worker Fleet
 
 V0.80 brings Lynn back to the programming battlefield, but not as another single CLI or IDE plugin. The direction is to make **the GUI a command center for multiple CLI agents**: split tasks, dispatch workers, inspect logs and diffs, run gates, then merge or discard the result from one visual workflow.
@@ -63,23 +87,6 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
 ```
 
 Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-headless-agent-contract.md`](docs/ops/lynn-code-headless-agent-contract.md).
-
-## 🧠 Lynn Models And Engine Roadmap
-
-Lynn is no longer only a desktop agent. The project now has a companion model, quantization, and custom inference stack so Lynn's local memory, multi-agent workflow, and tool-calling path can run on a model stack we fully own.
-
-| Track | Current status |
-|---|---|
-| **Lynn V4 / V Flash 35B-A3B** | BF16 / NVFP4 / Q4_K_M variants have been shipped and regression-tested. The Q4 tool-calling template hotfix has been pushed to Hugging Face and ModelScope. |
-| **Lynn 27B-A3B base** | Built from Qwen3.6-35B-A3B BASE through variable-expert pruning + Router-FT + Recovery LoRA. The selected base is **step5000 final**. BF16 eval:V8 strict 33/34 = 97.06%,V9 adjusted 37/59 = 62.71%. |
-| **Lynn-native NVFP4** | The 27B variable-expert NVFP4 artifact is about 20GB and targets Lynn Engine directly. It is not GGUF and not the public compressed-tensors v8-RTN format used by generic serving stacks. |
-| **Lynn Engine** | Custom Blackwell/R6000 runtime for 27B NVFP4. Current R6000 strict full path reaches **103.44 tok/s**,with serving replay at **107.23 tok/s**. Next target:production-stable 100+ TPS and native FP4 kernels. |
-
-Related repositories:
-- [MerkyorLynn/lynn-engine](https://github.com/MerkyorLynn/lynn-engine):custom Lynn 27B-A3B NVFP4 inference engine.
-- [MerkyorLynn/lynn-distill-toolkit](https://github.com/MerkyorLynn/lynn-distill-toolkit):distillation, evaluation, quantization, and release toolkit.
-
-> Note:the 27B Lynn-native NVFP4 artifact is an internal/vertical runtime artifact for Lynn Engine. General users should start with the V4 / V Flash BF16, NVFP4 v8-RTN, or Q4_K_M variants.
 
 ## 🆕 Recent Updates
 
