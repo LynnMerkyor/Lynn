@@ -1,5 +1,6 @@
 import type { BrainStreamEvent, ChatAssistantToolCall, ChatToolDefinition } from "./brain-client.js";
 import type { ClientToolName } from "./tools/types.js";
+import { workingCheckpointEnabled } from "./code-working-checkpoint.js";
 
 export interface CodeToolRequest {
   toolCallId?: string;
@@ -15,6 +16,7 @@ export interface CodeToolRequest {
     maxBytes?: number;
     offset?: number;
     plan?: unknown;
+    content?: string;
   };
   /** Loop iteration (step) this request belongs to; used for fallback tool-call ids and step events. */
   step?: number;
@@ -34,7 +36,7 @@ export function toolRequestFingerprint(request: CodeToolRequest): string {
 }
 
 export function codeToolDefinitions(): ChatToolDefinition[] {
-  return [
+  const tools: ChatToolDefinition[] = [
     {
       type: "function",
       function: {
@@ -123,6 +125,22 @@ export function codeToolDefinitions(): ChatToolDefinition[] {
       },
     },
   ];
+  // Opt-in (LYNN_CLI_WORKING_CHECKPOINT=1): a model-curated scratchpad, re-injected
+  // every step and immune to history compaction. The no-MCP, in-process way to
+  // keep durable context small instead of leaning on long history.
+  if (workingCheckpointEnabled(process.env)) {
+    tools.push({
+      type: "function",
+      function: {
+        name: "update_working_checkpoint",
+        description: "Overwrite your private working checkpoint — a short scratchpad of the key facts, decisions, and next steps you must not lose. It is re-injected every step and survives history compaction, so keep durable context here instead of relying on long history. Keep it concise.",
+        parameters: objectSchema({
+          content: stringSchema("The full new checkpoint text. Replaces the previous one. Keep it tight."),
+        }, ["content"]),
+      },
+    });
+  }
+  return tools;
 }
 
 export function parseCodeToolRequest(text: string): CodeToolRequest | null {
@@ -271,6 +289,7 @@ function normalizeToolPayload(payload: Record<string, unknown>): CodeToolRequest
       maxBytes: numberArg(args.maxBytes ?? args.max_bytes),
       offset: numberArg(args.offset ?? args.start_offset ?? args.startOffset),
       plan: args.plan,
+      content: stringArg(args.content),
     },
   };
 }
@@ -313,6 +332,10 @@ const TOOL_NAME_ALIASES: Record<string, ClientToolName> = {
   update_todos: "update_plan",
   todo: "update_plan",
   plan: "update_plan",
+  update_working_checkpoint: "update_working_checkpoint",
+  working_checkpoint: "update_working_checkpoint",
+  checkpoint: "update_working_checkpoint",
+  scratchpad: "update_working_checkpoint",
 };
 
 function normalizeClientToolName(raw: string): ClientToolName | null {

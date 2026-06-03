@@ -1,4 +1,4 @@
-export type ClientToolName = "read_file" | "write_file" | "apply_patch" | "grep" | "glob" | "bash" | "update_plan";
+export type ClientToolName = "read_file" | "write_file" | "apply_patch" | "grep" | "glob" | "bash" | "update_plan" | "update_working_checkpoint";
 
 export interface ClientToolResult {
   ok: boolean;
