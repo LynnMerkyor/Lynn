@@ -241,8 +241,11 @@ export async function runCode(args: ParsedArgs): Promise<number> {
     preview: formatDangerousToolPreview(tool, toolArgsForApproval, supportsColor(errorOutput)),
     args: toolArgsForApproval,
   });
+  const toolSandbox = tool === "bash" && toolMode.approval === "ask" && toolApproval === "yolo"
+    ? "danger-full-access"
+    : toolMode.sandbox;
   const result = await runClientTool(
-    { cwd: toolCwd, approval: toolApproval, sandbox: toolMode.sandbox, timeoutMs: timeoutMs(args) },
+    { cwd: toolCwd, approval: toolApproval, sandbox: toolSandbox, timeoutMs: timeoutMs(args) },
     {
       name: tool,
       path: getStringFlag(args.flags, "path") || undefined,
