@@ -747,63 +747,11 @@ function hasExistingConfig() {
 // 收集 server 的 stdout/stderr 用于崩溃诊断
 let _serverLogs = [];
 
-/**
- * 轮询 server-info.json 等待 server 就绪
- */
-function pollServerInfo(infoPath, { timeout = 60000, interval = 200, process: proc } = {}) {
-  return new Promise((resolve, reject) => {
-    const deadline = Date.now() + timeout;
-    let exited = false;
-
-    if (proc) {
-      proc.on("exit", (code, signal) => {
-        exited = true;
-        reject(new Error(
-          signal
-            ? mt("dialog.serverKilledBySignal", { signal })
-            : mt("dialog.serverExitedWithCode", { code })
-        ));
-      });
-    }
-
-    const check = () => {
-      if (exited) return;
-      if (Date.now() > deadline) {
-        reject(new Error(mt("dialog.serverStartTimeout", null, "Server start timed out (60s)")));
-        return;
-      }
-      try {
-        const info = JSON.parse(fs.readFileSync(infoPath, "utf-8"));
-        // 确认 PID 存活
-        try { process.kill(info.pid, 0); } catch { setTimeout(check, interval); return; }
-        resolve(info);
-      } catch {
-        setTimeout(check, interval);
-      }
-    };
-    check();
-  });
-}
-
-function isReusableServerHealth(health) {
-  if (!health || health.status !== "ok") return false;
-
-  // Windows 覆盖安装后最容易留下旧版 lynn-server.exe。旧 server 的
-  // /api/health 仍可能返回 200，但缺少新前端依赖的能力（例如
-  // /api/translate、/api/tools/tts-bridge.tts_speak），会表现为 404。
-  const expectedVersion = typeof app.getVersion === "function" ? app.getVersion() : "";
-  const serverVersion = String(health.version || "").trim();
-  if (expectedVersion && serverVersion && serverVersion !== expectedVersion) {
-    return false;
-  }
-
-  const features = health.features || {};
-  if (features.translateRoute !== true || features.toolsRoute !== true) {
-    return false;
-  }
-
-  return true;
-}
+// pollServerInfo / isReusableServerHealth: stateless server helpers extracted to
+// server-process.cjs (unit-tested). The stateful launch path (startServer /
+// monitorServer / heartbeat) stays below — it assigns shared server state and is
+// the app boot path. mt / app.getVersion() are injected at the call-sites.
+const { pollServerInfo, isReusableServerHealth } = require("./server-process.cjs");
 
 async function startServer() {
   const serverInfoPath = path.join(lynnHome, "server-info.json");
@@ -828,7 +776,7 @@ async function startServer() {
           signal: AbortSignal.timeout(2000),
         });
         const health = res.ok ? await res.json().catch(() => null) : null;
-        if (res.ok && isReusableServerHealth(health)) {
+        if (res.ok && isReusableServerHealth(health, typeof app.getVersion === "function" ? app.getVersion() : "")) {
           console.log(`[desktop] 复用已运行的 server，端口: ${existingInfo.port}`);
           serverPort = existingInfo.port;
           serverToken = existingInfo.token;
@@ -974,6 +922,7 @@ async function startServer() {
   const info = await pollServerInfo(serverInfoPath, {
     timeout: 60000,
     process: serverProcess,
+    mt,
   });
   serverPort = info.port;
   serverToken = info.token;
@@ -1044,7 +993,7 @@ async function checkServerHeartbeat() {
       signal: AbortSignal.timeout(SERVER_HEARTBEAT_TIMEOUT_MS),
     });
     const health = res.ok ? await res.json().catch(() => null) : null;
-    if (res.ok && isReusableServerHealth(health)) {
+    if (res.ok && isReusableServerHealth(health, typeof app.getVersion === "function" ? app.getVersion() : "")) {
       _serverHeartbeatFailures = 0;
       return;
     }
