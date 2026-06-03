@@ -747,151 +747,57 @@ function hasExistingConfig() {
 // 收集 server 的 stdout/stderr 用于崩溃诊断
 let _serverLogs = [];
 
-// pollServerInfo / isReusableServerHealth: stateless server helpers extracted to
-// server-process.cjs (unit-tested). The stateful launch path (startServer /
-// monitorServer / heartbeat) stays below — it assigns shared server state and is
-// the app boot path. mt / app.getVersion() are injected at the call-sites.
+// Server process logic lives in server-process.cjs. createServerProcessController
+// owns the canonical state (S2); startServer() below is now a thin wrapper around
+// it. isReusableServerHealth is still used directly by the in-main heartbeat
+// (migrates into the controller in S3). The pure helpers (pollServerInfo,
+// resolveBundledServerLaunch, …) are used only inside the controller now.
 const {
-  isPidAlive,
-  pollServerInfo,
   isReusableServerHealth,
-  resolveAecNativeDir,
-  injectWindowsGitPath,
-  resolveBundledServerLaunch,
+  createServerProcessController,
 } = require("./server-process.cjs");
 
+// Server lifecycle owner. main.cjs is the composition root: it constructs the
+// controller with Electron/Node capabilities injected. The controller owns the
+// canonical process/port/token state; the legacy globals below are proxies kept
+// in sync during the S2→S4 migration (see docs/REFACTOR-desktop-state-migration.md).
+const serverController = createServerProcessController({
+  app,
+  fetch,
+  spawn,
+  fs,
+  mt,
+  lynnHome,
+  dirname: __dirname,
+  resourcesPath: process.resourcesPath,
+  execPath: process.execPath,
+  platform: process.platform,
+  env: process.env,
+  stdout: process.stdout,
+  stderr: process.stderr,
+  getWorkerSpawnServerEnv,
+  readBrainRuntimeConfig,
+  killPid,
+  onLocalAuthHeaderNeeded: () => ensureLocalAuthHeaderHook(),
+});
+
+// Sync controller-owned state into the legacy main globals. Readers still on
+// these proxies (IPC get-server-port/token, browser WS, local auth header,
+// shutdown, monitor/heartbeat) migrate to the controller getters in S3/S4,
+// after which the proxies are removed.
+function syncServerProxies() {
+  const s = serverController.getState();
+  serverPort = s.port;
+  serverToken = s.token;
+  serverProcess = s.process;
+  reusedServerPid = s.reusedPid;
+  _serverStartedAt = s.startedAt;
+  _serverLogs = s.logs;
+}
+
 async function startServer() {
-  const serverInfoPath = path.join(lynnHome, "server-info.json");
-
-  // ── 1. 检查是否有已运行的 server（Electron crash 后遗留的守护进程） ──
-  let existingInfo = null;
-  try {
-    existingInfo = JSON.parse(fs.readFileSync(serverInfoPath, "utf-8"));
-  } catch { /* 文件不存在或解析失败，启动新 server */ }
-
-  if (existingInfo) {
-    const pidAlive = isPidAlive(existingInfo.pid);
-
-    if (pidAlive) {
-      // PID 存活，尝试 health check
-      let reused = false;
-      try {
-        const res = await fetch(`http://127.0.0.1:${existingInfo.port}/api/health`, {
-          headers: { Authorization: `Bearer ${existingInfo.token}` },
-          signal: AbortSignal.timeout(2000),
-        });
-        const health = res.ok ? await res.json().catch(() => null) : null;
-        if (res.ok && isReusableServerHealth(health, typeof app.getVersion === "function" ? app.getVersion() : "")) {
-          console.log(`[desktop] 复用已运行的 server，端口: ${existingInfo.port}`);
-          serverPort = existingInfo.port;
-          serverToken = existingInfo.token;
-          reusedServerPid = existingInfo.pid;
-          // 复用现有 server 时也要给本地子资源请求补认证头，避免 avatar/img 等 403。
-          ensureLocalAuthHeaderHook();
-          reused = true;
-        } else if (res.ok) {
-          console.log(`[desktop] 旧 server 能力不匹配，正在重启: version=${health?.version || "unknown"}`);
-        }
-      } catch { /* health check 网络抖动，继续 kill 旧 server */ }
-
-      if (reused) return; // 跳过启动
-
-      // PID 存活但 health 失败（无响应或异常）：主动 kill，避免双 server 并存
-      console.log(`[desktop] 旧 server (PID ${existingInfo.pid}) 无响应，正在终止...`);
-      killPid(existingInfo.pid);
-      const deadline = Date.now() + 2000;
-      while (Date.now() < deadline) {
-        if (!isPidAlive(existingInfo.pid)) break;
-        await new Promise(r => setTimeout(r, 100));
-      }
-      killPid(existingInfo.pid, true);
-    }
-
-    // PID 已死或已 kill，删除脏文件
-    try { fs.unlinkSync(serverInfoPath); } catch {}
-  }
-
-  // ── 2. 启动新 server ──
-  reusedServerPid = null;
-  _serverLogs = [];
-
-  const serverEnv = { ...process.env, LYNN_HOME: lynnHome, ...getWorkerSpawnServerEnv() };
-
-  // 2026-05-01 P1-① — 把 native AEC 模块路径注入 server,让 server 端
-  // server/clients/aec/index.js 直接 require .node(零 IPC,reference signal 时序对齐)。
-  //
-  //   dev:  desktop/native-modules/aec
-  //   prod: app.asar.unpacked/desktop/native-modules/aec(asarUnpack 解压出来)
-  //
-  // 平台无 prebuilt(Win/Linux/macOS x64 等)→ server 端 require 抛错被 catch,
-  // VoiceSession 走 mic 直传(等同现状,不阻塞主链)。
-  try {
-    const aecDir = resolveAecNativeDir({ dirname: __dirname, existsSync: fs.existsSync });
-    if (aecDir) serverEnv.LYNN_AEC_NATIVE_DIR = aecDir;
-  } catch (err) {
-    console.warn("[desktop] AEC native dir resolve failed:", err?.message || err);
-  }
-
-  const brainRuntime = readBrainRuntimeConfig();
-  if (brainRuntime.apiRoot) serverEnv.BRAIN_API_ROOT_URL = brainRuntime.apiRoot;
-  if (brainRuntime.host) serverEnv.BRAIN_API_HOST = brainRuntime.host;
-  if (brainRuntime.legacyApiRoot) serverEnv.BRAIN_LEGACY_API_ROOT_URL = brainRuntime.legacyApiRoot;
-  if (brainRuntime.legacyHost) serverEnv.BRAIN_LEGACY_HOST = brainRuntime.legacyHost;
-
-  // Windows: 注入 MinGit 路径
-  injectWindowsGitPath(serverEnv, {
-    platform: process.platform,
-    resourcesPath: process.resourcesPath,
-    existsSync: fs.existsSync,
-  });
-
-  // 选择 server 启动方式（纯逻辑见 server-process.cjs:resolveBundledServerLaunch）
-  const launch = resolveBundledServerLaunch({
-    platform: process.platform,
-    resourcesPath: process.resourcesPath,
-    dirname: __dirname,
-    execPath: process.execPath,
-    existsSync: fs.existsSync,
-  });
-  const serverBin = launch.serverBin;
-  const serverArgs = launch.serverArgs;
-  Object.assign(serverEnv, launch.env);
-
-  // 删除旧 server-info.json
-  try { fs.unlinkSync(serverInfoPath); } catch {}
-
-  serverProcess = spawn(serverBin, serverArgs, {
-    detached: true,
-    windowsHide: true,
-    env: serverEnv,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-
-  // 捕获 stdout/stderr 到 buffer（打包后 console 不可见，崩溃时需要这些信息）
-  serverProcess.stdout?.on("data", (chunk) => {
-    const text = chunk.toString();
-    try { process.stdout.write(text); } catch {}
-    _serverLogs.push(text);
-    if (_serverLogs.length > 500) _serverLogs.splice(0, _serverLogs.length - 500);
-  });
-  serverProcess.stderr?.on("data", (chunk) => {
-    const text = chunk.toString();
-    try { process.stderr.write(text); } catch {}
-    _serverLogs.push("[stderr] " + text);
-    if (_serverLogs.length > 500) _serverLogs.splice(0, _serverLogs.length - 500);
-  });
-
-  // 等待 server ready（通过轮询 server-info.json）
-  const info = await pollServerInfo(serverInfoPath, {
-    timeout: 60000,
-    process: serverProcess,
-    mt,
-  });
-  serverPort = info.port;
-  serverToken = info.token;
-  _serverStartedAt = Date.now();
-  ensureLocalAuthHeaderHook();
-  serverProcess.unref(); // 脱离 Electron 事件循环，允许 Electron 独立退出
+  await serverController.start();
+  syncServerProxies();
 }
 
 /**

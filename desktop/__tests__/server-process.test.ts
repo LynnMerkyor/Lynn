@@ -11,6 +11,7 @@ const {
   resolveAecNativeDir,
   injectWindowsGitPath,
   resolveBundledServerLaunch,
+  createServerProcessController,
 } = require("../server-process.cjs");
 
 function tmpFile(name: string): string {
@@ -180,5 +181,105 @@ describe("resolveBundledServerLaunch", () => {
     expect(out.mode).toBe("bundled");
     expect(out.serverBin).toBe(wrapper);
     expect(out.serverArgs).toEqual([]);
+  });
+});
+
+describe("createServerProcessController.start (fake deps — no Electron)", () => {
+  function baseDeps(lynnHome: string, overrides: Record<string, unknown> = {}) {
+    return {
+      app: { getVersion: () => "1.2.3" },
+      fetch: async () => { throw new Error("fetch should not be called in this path"); },
+      spawn: () => { throw new Error("spawn should not be called in this path"); },
+      fs,
+      mt: (k: string) => k,
+      lynnHome,
+      dirname: path.join(lynnHome, "app"),
+      resourcesPath: path.join(lynnHome, "res"),
+      execPath: "/usr/bin/electron",
+      platform: "darwin",
+      env: { EXISTING: "1" },
+      stdout: { write: () => {} },
+      stderr: { write: () => {} },
+      getWorkerSpawnServerEnv: () => ({}),
+      readBrainRuntimeConfig: () => ({}),
+      killPid: () => {},
+      onLocalAuthHeaderNeeded: () => {},
+      ...overrides,
+    };
+  }
+
+  function fakeChild() {
+    let unreffed = false;
+    return {
+      stdout: { on: () => {} },
+      stderr: { on: () => {} },
+      on: () => {}, // pollServerInfo attaches an 'exit' handler (fail-fast on crash)
+      unref: () => { unreffed = true; },
+      wasUnreffed: () => unreffed,
+    };
+  }
+
+  it("reuses a live, healthy existing server without spawning", async () => {
+    const lynnHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lynn-ctl-")));
+    // existing server-info points at us (process.pid is alive) → reusable
+    fs.writeFileSync(
+      path.join(lynnHome, "server-info.json"),
+      JSON.stringify({ pid: process.pid, port: 4444, token: "reused" }),
+    );
+    let authHookCalls = 0;
+    const ctl = createServerProcessController(baseDeps(lynnHome, {
+      fetch: async () => ({
+        ok: true,
+        json: async () => ({ status: "ok", version: "1.2.3", features: { translateRoute: true, toolsRoute: true } }),
+      }),
+      onLocalAuthHeaderNeeded: () => { authHookCalls++; },
+      // spawn stays the throwing default → asserts we never spawn on the reuse path
+    }));
+    await ctl.start();
+    expect(ctl.getPort()).toBe(4444);
+    expect(ctl.getToken()).toBe("reused");
+    expect(ctl.getState().reusedPid).toBe(process.pid);
+    expect(ctl.getState().process).toBeNull(); // never spawned
+    expect(authHookCalls).toBe(1);
+  });
+
+  it("spawns a new server and resolves port/token from the info file", async () => {
+    const lynnHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lynn-ctl-")));
+    const child = fakeChild();
+    let authHookCalls = 0;
+    const ctl = createServerProcessController(baseDeps(lynnHome, {
+      spawn: () => {
+        // simulate the spawned server writing its info file (live pid → poll resolves)
+        fs.writeFileSync(
+          path.join(lynnHome, "server-info.json"),
+          JSON.stringify({ pid: process.pid, port: 5555, token: "spawned" }),
+        );
+        return child;
+      },
+      onLocalAuthHeaderNeeded: () => { authHookCalls++; },
+    }));
+    await ctl.start();
+    expect(ctl.getPort()).toBe(5555);
+    expect(ctl.getToken()).toBe("spawned");
+    expect(ctl.getState().process).toBe(child);
+    expect(child.wasUnreffed()).toBe(true);
+    expect(authHookCalls).toBe(1);
+  });
+
+  it("getLogs returns the live (in-place) logs array across restarts", async () => {
+    const lynnHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lynn-ctl-")));
+    const ctl = createServerProcessController(baseDeps(lynnHome, {
+      spawn: () => {
+        fs.writeFileSync(
+          path.join(lynnHome, "server-info.json"),
+          JSON.stringify({ pid: process.pid, port: 6666, token: "t" }),
+        );
+        return fakeChild();
+      },
+    }));
+    const logsRef = ctl.getLogs();
+    await ctl.start();
+    // start() clears logs in place, so the reference a proxy captured stays valid
+    expect(ctl.getLogs()).toBe(logsRef);
   });
 });

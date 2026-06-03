@@ -159,6 +159,171 @@ function resolveBundledServerLaunch({ platform, resourcesPath, dirname, execPath
   };
 }
 
+// ── Stateful controller (state-migration §1, Step S2) ───────────────────────
+//
+// Owns the canonical server process/port/token state. main.cjs keeps proxy
+// globals synced from getState() during the S2→S4 interim (many readers still
+// read those proxies); start() is a faithful move of main's startServer() body
+// with all Electron/Node capabilities injected as deps so it is unit-testable
+// with fakes (no real Electron). monitorServer / heartbeat migrate in S3.
+function createServerProcessController(deps) {
+  const {
+    app,
+    fetch,
+    spawn,
+    fs: depFs,
+    mt = defaultMt,
+    lynnHome,
+    dirname,
+    resourcesPath,
+    execPath,
+    platform,
+    env,
+    stdout = process.stdout,
+    stderr = process.stderr,
+    getWorkerSpawnServerEnv,
+    readBrainRuntimeConfig,
+    killPid,
+    onLocalAuthHeaderNeeded = () => {},
+  } = deps;
+
+  const state = {
+    process: null,
+    port: null,
+    token: null,
+    reusedPid: null,
+    logs: [],
+    startedAt: 0,
+    restartAttempts: 0,
+    heartbeatTimer: null,
+    heartbeatFailures: 0,
+    heartbeatChecking: false,
+    heartbeatRestarting: false,
+  };
+
+  async function start() {
+    const serverInfoPath = path.join(lynnHome, "server-info.json");
+
+    // ── 1. 检查是否有已运行的 server（Electron crash 后遗留的守护进程） ──
+    let existingInfo = null;
+    try {
+      existingInfo = JSON.parse(depFs.readFileSync(serverInfoPath, "utf-8"));
+    } catch { /* 文件不存在或解析失败，启动新 server */ }
+
+    if (existingInfo) {
+      const pidAlive = isPidAlive(existingInfo.pid);
+
+      if (pidAlive) {
+        // PID 存活，尝试 health check
+        let reused = false;
+        try {
+          const res = await fetch(`http://127.0.0.1:${existingInfo.port}/api/health`, {
+            headers: { Authorization: `Bearer ${existingInfo.token}` },
+            signal: AbortSignal.timeout(2000),
+          });
+          const health = res.ok ? await res.json().catch(() => null) : null;
+          if (res.ok && isReusableServerHealth(health, typeof app.getVersion === "function" ? app.getVersion() : "")) {
+            console.log(`[desktop] 复用已运行的 server，端口: ${existingInfo.port}`);
+            state.port = existingInfo.port;
+            state.token = existingInfo.token;
+            state.reusedPid = existingInfo.pid;
+            // 复用现有 server 时也要给本地子资源请求补认证头，避免 avatar/img 等 403。
+            onLocalAuthHeaderNeeded();
+            reused = true;
+          } else if (res.ok) {
+            console.log(`[desktop] 旧 server 能力不匹配，正在重启: version=${health?.version || "unknown"}`);
+          }
+        } catch { /* health check 网络抖动，继续 kill 旧 server */ }
+
+        if (reused) return; // 跳过启动
+
+        // PID 存活但 health 失败（无响应或异常）：主动 kill，避免双 server 并存
+        console.log(`[desktop] 旧 server (PID ${existingInfo.pid}) 无响应，正在终止...`);
+        killPid(existingInfo.pid);
+        const deadline = Date.now() + 2000;
+        while (Date.now() < deadline) {
+          if (!isPidAlive(existingInfo.pid)) break;
+          await new Promise(r => setTimeout(r, 100));
+        }
+        killPid(existingInfo.pid, true);
+      }
+
+      // PID 已死或已 kill，删除脏文件
+      try { depFs.unlinkSync(serverInfoPath); } catch {}
+    }
+
+    // ── 2. 启动新 server ──
+    state.reusedPid = null;
+    state.logs.length = 0; // clear in place so main's _serverLogs proxy ref stays valid
+
+    const serverEnv = { ...env, LYNN_HOME: lynnHome, ...getWorkerSpawnServerEnv() };
+
+    // 把 native AEC 模块路径注入 server（dev: native-modules/aec, prod: asar.unpacked）。
+    try {
+      const aecDir = resolveAecNativeDir({ dirname, existsSync: depFs.existsSync });
+      if (aecDir) serverEnv.LYNN_AEC_NATIVE_DIR = aecDir;
+    } catch (err) {
+      console.warn("[desktop] AEC native dir resolve failed:", err?.message || err);
+    }
+
+    const brainRuntime = readBrainRuntimeConfig();
+    if (brainRuntime.apiRoot) serverEnv.BRAIN_API_ROOT_URL = brainRuntime.apiRoot;
+    if (brainRuntime.host) serverEnv.BRAIN_API_HOST = brainRuntime.host;
+    if (brainRuntime.legacyApiRoot) serverEnv.BRAIN_LEGACY_API_ROOT_URL = brainRuntime.legacyApiRoot;
+    if (brainRuntime.legacyHost) serverEnv.BRAIN_LEGACY_HOST = brainRuntime.legacyHost;
+
+    // Windows: 注入 MinGit 路径
+    injectWindowsGitPath(serverEnv, { platform, resourcesPath, existsSync: depFs.existsSync });
+
+    // 选择 server 启动方式
+    const launch = resolveBundledServerLaunch({ platform, resourcesPath, dirname, execPath, existsSync: depFs.existsSync });
+    const serverBin = launch.serverBin;
+    const serverArgs = launch.serverArgs;
+    Object.assign(serverEnv, launch.env);
+
+    // 删除旧 server-info.json
+    try { depFs.unlinkSync(serverInfoPath); } catch {}
+
+    const proc = spawn(serverBin, serverArgs, {
+      detached: true,
+      windowsHide: true,
+      env: serverEnv,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    state.process = proc;
+
+    // 捕获 stdout/stderr 到 buffer（打包后 console 不可见，崩溃时需要这些信息）
+    proc.stdout?.on("data", (chunk) => {
+      const text = chunk.toString();
+      try { stdout.write(text); } catch {}
+      state.logs.push(text);
+      if (state.logs.length > 500) state.logs.splice(0, state.logs.length - 500);
+    });
+    proc.stderr?.on("data", (chunk) => {
+      const text = chunk.toString();
+      try { stderr.write(text); } catch {}
+      state.logs.push("[stderr] " + text);
+      if (state.logs.length > 500) state.logs.splice(0, state.logs.length - 500);
+    });
+
+    // 等待 server ready（通过轮询 server-info.json）
+    const info = await pollServerInfo(serverInfoPath, { timeout: 60000, process: proc, mt });
+    state.port = info.port;
+    state.token = info.token;
+    state.startedAt = Date.now();
+    onLocalAuthHeaderNeeded();
+    proc.unref(); // 脱离 Electron 事件循环，允许 Electron 独立退出
+  }
+
+  return {
+    start,
+    getState: () => state,
+    getPort: () => state.port,
+    getToken: () => state.token,
+    getLogs: () => state.logs,
+  };
+}
+
 module.exports = {
   isPidAlive,
   pollServerInfo,
@@ -166,4 +331,5 @@ module.exports = {
   resolveAecNativeDir,
   injectWindowsGitPath,
   resolveBundledServerLaunch,
+  createServerProcessController,
 };
