@@ -1,10 +1,7 @@
 import path from "node:path";
 import { stdin as input, stdout as output, stderr as errorOutput } from "node:process";
-import { randomUUID } from "node:crypto";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
-import { formatBrainRecoveryHint, streamBrainChat, type ChatMessage } from "../brain-client.js";
-import { loadSkills, appendSkill } from "../code-skill-store.js";
-import { skillCrystallizeEnabled, buildDistillPrompt, parseDistilledSkill, recallSkills, formatSkillRecallFrame } from "../code-skill-distill.js";
+import { formatBrainRecoveryHint, type ChatMessage } from "../brain-client.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { resolveEffectivePermissions } from "../permissions.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
@@ -633,16 +630,7 @@ async function runCodeTask(
   const mode = await resolveCodeMode(args);
   const cliProvider = await resolveCliProviderProfile(args);
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
-  let memoryFrame = buildMemoryContextFrameSync(dataDir, taskText);
-  // ① Recall: inject SOPs crystallized from past similar tasks (opt-in).
-  if (skillCrystallizeEnabled()) {
-    const recalled = recallSkills(taskText, loadSkills(dataDir));
-    const recallFrame = formatSkillRecallFrame(recalled);
-    if (recallFrame) {
-      memoryFrame = memoryFrame ? `${recallFrame}\n\n${memoryFrame}` : recallFrame;
-      if (json) writeJsonLine({ type: "code.skill.recalled", ts: nowIso(), titles: recalled.map((s) => s.title) });
-    }
-  }
+  const memoryFrame = buildMemoryContextFrameSync(dataDir, taskText);
   const resumePath = await resolveCodeResumePath(getStringFlag(args.flags, "resume"), dataDir);
   const resumeMessages = resumePath ? await loadResumeMessages(resumePath) : [];
   const resumeDiag = resumePath ? summarizeResumeMessages(resumeMessages) : null;
@@ -874,20 +862,6 @@ async function runCodeTask(
     resumeCommand: resumeCommand || undefined,
     sessionPath: savedSessionPath,
   });
-  // ② Crystallize: on a clean success, distill the trace into a reusable SOP (opt-in, best-effort).
-  if (skillCrystallizeEnabled() && !final.maxStepsReached && final.text.trim()) {
-    try {
-      const distillText = await collectOneCompletion(brainUrl, cliProvider?.profile, reasoning, buildDistillPrompt(taskText, final.text));
-      const draft = parseDistilledSkill(distillText, taskText);
-      if (draft) {
-        appendSkill(dataDir, { ...draft, id: randomUUID(), createdAt: new Date().toISOString() });
-        if (json) writeJsonLine({ type: "code.skill.crystallized", ts: nowIso(), title: draft.title });
-        options.onEvent?.({ type: "tool.progress", message: `crystallized SOP: ${draft.title}` });
-      }
-    } catch {
-      // Distillation is best-effort — never fail an already-successful task over it.
-    }
-  }
   if (json) {
     if (final.text.trim()) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: final.text });
     writeJsonLine({
@@ -1114,21 +1088,6 @@ function formatUltraEventLine(event: UltraEvent, color: boolean): string | null 
     default:
       return null;
   }
-}
-
-/** Collect a single non-tool model completion (used for skill distillation). */
-async function collectOneCompletion(
-  brainUrl: string,
-  fallbackProvider: CliProviderProfile | undefined,
-  reasoning: ReturnType<typeof parseReasoningOptions>,
-  prompt: string,
-): Promise<string> {
-  let text = "";
-  for await (const event of streamBrainChat({ brainUrl, prompt, reasoning, fallbackProvider })) {
-    if (event.type === "assistant.delta") text += event.text;
-    else if (event.type === "brain.error") throw new Error(event.error);
-  }
-  return text;
 }
 
 function renderCodeFooter(inputData: {
