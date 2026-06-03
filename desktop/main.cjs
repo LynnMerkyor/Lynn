@@ -751,7 +751,14 @@ let _serverLogs = [];
 // server-process.cjs (unit-tested). The stateful launch path (startServer /
 // monitorServer / heartbeat) stays below — it assigns shared server state and is
 // the app boot path. mt / app.getVersion() are injected at the call-sites.
-const { pollServerInfo, isReusableServerHealth } = require("./server-process.cjs");
+const {
+  isPidAlive,
+  pollServerInfo,
+  isReusableServerHealth,
+  resolveAecNativeDir,
+  injectWindowsGitPath,
+  resolveBundledServerLaunch,
+} = require("./server-process.cjs");
 
 async function startServer() {
   const serverInfoPath = path.join(lynnHome, "server-info.json");
@@ -763,9 +770,7 @@ async function startServer() {
   } catch { /* 文件不存在或解析失败，启动新 server */ }
 
   if (existingInfo) {
-    const pidAlive = (() => {
-      try { process.kill(existingInfo.pid, 0); return true; } catch { return false; }
-    })();
+    const pidAlive = isPidAlive(existingInfo.pid);
 
     if (pidAlive) {
       // PID 存活，尝试 health check
@@ -796,7 +801,7 @@ async function startServer() {
       killPid(existingInfo.pid);
       const deadline = Date.now() + 2000;
       while (Date.now() < deadline) {
-        try { process.kill(existingInfo.pid, 0); } catch { break; }
+        if (!isPidAlive(existingInfo.pid)) break;
         await new Promise(r => setTimeout(r, 100));
       }
       killPid(existingInfo.pid, true);
@@ -821,14 +826,8 @@ async function startServer() {
   // 平台无 prebuilt(Win/Linux/macOS x64 等)→ server 端 require 抛错被 catch,
   // VoiceSession 走 mic 直传(等同现状,不阻塞主链)。
   try {
-    const devAecDir = path.join(__dirname, "native-modules", "aec");
-    const unpackedAecDir = __dirname.includes("app.asar")
-      ? path.join(__dirname.replace("app.asar", "app.asar.unpacked"), "native-modules", "aec")
-      : devAecDir;
-    const aecDir = fs.existsSync(unpackedAecDir) ? unpackedAecDir : devAecDir;
-    if (fs.existsSync(aecDir)) {
-      serverEnv.LYNN_AEC_NATIVE_DIR = aecDir;
-    }
+    const aecDir = resolveAecNativeDir({ dirname: __dirname, existsSync: fs.existsSync });
+    if (aecDir) serverEnv.LYNN_AEC_NATIVE_DIR = aecDir;
   } catch (err) {
     console.warn("[desktop] AEC native dir resolve failed:", err?.message || err);
   }
@@ -840,59 +839,23 @@ async function startServer() {
   if (brainRuntime.legacyHost) serverEnv.BRAIN_LEGACY_HOST = brainRuntime.legacyHost;
 
   // Windows: 注入 MinGit 路径
-  if (process.platform === "win32") {
-    // MinGit-busybox 结构：cmd/git.exe, mingw64/bin/git.exe+sh.exe
-    const gitRoot = path.join(process.resourcesPath || "", "git");
-    const gitPaths = [
-      path.join(gitRoot, "mingw64", "bin"),
-      path.join(gitRoot, "cmd"),
-    ].filter(p => fs.existsSync(p));
-    if (gitPaths.length) {
-      // Windows 的 PATH 环境变量 key 可能是 "Path"（title case）或 "PATH"，
-      // { ...process.env } 展开后变成普通对象（区分大小写）。
-      // 必须找到原始 key 并删除，否则会同时存在 Path 和 PATH 两个 key，
-      // 导致 spawn 子进程的 PATH 不可预测。
-      const pathKey = Object.keys(serverEnv).find(k => k.toLowerCase() === "path") || "PATH";
-      const existingPath = serverEnv[pathKey] || "";
-      if (pathKey !== "PATH") delete serverEnv[pathKey];
-      serverEnv.PATH = gitPaths.join(";") + ";" + existingPath;
-    }
-  }
+  injectWindowsGitPath(serverEnv, {
+    platform: process.platform,
+    resourcesPath: process.resourcesPath,
+    existsSync: fs.existsSync,
+  });
 
-  // 选择 server 启动方式
-  let serverBin, serverArgs;
-  const bundledServerDir = path.join(process.resourcesPath || "", "server");
-  const bundledWrapper = path.join(bundledServerDir, "lynn-server");
-  const bundledExe = path.join(bundledServerDir, "lynn-server.exe");
-  const bundledNode = path.join(bundledServerDir, process.platform === "win32" ? "lynn-server.exe" : "node");
-  const bundledEntry = path.join(bundledServerDir, "bundle", "index.js");
-  const hasBundledWrapper = fs.existsSync(bundledWrapper) || fs.existsSync(bundledExe);
-  const hasBundledNodeRuntime = fs.existsSync(bundledNode) && fs.existsSync(bundledEntry);
-
-  if (hasBundledWrapper || hasBundledNodeRuntime) {
-    // 打包模式：优先使用 extraResources 里的独立 server
-    // 兼容两种产物：
-    // 1. 旧结构：macOS/Linux 使用 lynn-server shell wrapper；Windows 使用 lynn-server.exe
-    // 2. 新结构：直接带 node/lynn-server.exe + bundle/index.js
-    if (process.platform === "win32") {
-      serverBin = fs.existsSync(bundledExe) ? bundledExe : bundledNode;
-      serverArgs = [bundledEntry];
-    } else if (hasBundledNodeRuntime) {
-      serverBin = bundledNode;
-      serverArgs = [bundledEntry];
-    } else {
-      serverBin = bundledWrapper;
-      serverArgs = [];
-    }
-    serverEnv.HANA_ROOT = bundledServerDir;
-  } else {
-    // 开发模式：用 Electron 自带的 Node（ELECTRON_RUN_AS_NODE=1）跑源码
-    // native addon（better-sqlite3 等）通过 electron-rebuild 编译到对应 ABI，
-    // 必须用 Electron 的 Node 才能加载，用系统 node 会 ABI 不匹配
-    serverBin = process.execPath;
-    serverArgs = [path.join(__dirname, "..", "server", "index.js")];
-    serverEnv.ELECTRON_RUN_AS_NODE = "1";
-  }
+  // 选择 server 启动方式（纯逻辑见 server-process.cjs:resolveBundledServerLaunch）
+  const launch = resolveBundledServerLaunch({
+    platform: process.platform,
+    resourcesPath: process.resourcesPath,
+    dirname: __dirname,
+    execPath: process.execPath,
+    existsSync: fs.existsSync,
+  });
+  const serverBin = launch.serverBin;
+  const serverArgs = launch.serverArgs;
+  Object.assign(serverEnv, launch.env);
 
   // 删除旧 server-info.json
   try { fs.unlinkSync(serverInfoPath); } catch {}
