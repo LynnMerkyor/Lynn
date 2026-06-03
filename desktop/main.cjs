@@ -231,12 +231,8 @@ function getWindowEntryStamp(pageName) {
 }
 
 /** 校验浏览器 URL：仅允许 http/https */
-function isAllowedBrowserUrl(url) {
-  try {
-    const p = new URL(url);
-    return p.protocol === "http:" || p.protocol === "https:";
-  } catch { return false; }
-}
+// SSRF-guarded URL check for the model-driven browser agent (see browser-url-guard.cjs).
+const { isAllowedBrowserUrl } = require("./browser-url-guard.cjs");
 let _browserViewerTheme = "warm-paper"; // 当前主题（用于 backgroundColor）
 const TITLEBAR_HEIGHT = 44;        // 浏览器窗口标题栏高度（px）
 let serverProcess = null;
