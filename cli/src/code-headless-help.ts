@@ -20,7 +20,7 @@ export function renderCodeHeadlessHelp(): string {
     "长任务/断点续跑:",
     "  Lynn code -p \"complete the migration until tests pass\" \\",
     "    --json --cwd /worktree --approval yolo --sandbox danger-full-access \\",
-    "    --long --max-steps 1000 --save-session",
+    "    --long --max-steps 300 --save-session",
     "  Lynn code --resume <session.jsonl> -p \"continue\" --json --long",
     "",
     "ultra 模式(实验,opt-in):把大任务拆成原子子任务 → 并行可靠 worker → 对抗式综合:",

@@ -19,7 +19,7 @@ export function buildCliRuntimeSystemMessage(routeLabel: string, memoryFrame = "
       "If asked how to use -p, silent mode, headless mode, scripts, CI, or another agent calling Lynn, answer directly with copyable Lynn commands. Do not say Lynn is only interactive.",
       "Headless one-shot: Lynn -p \"prompt\" --json. Headless coding agent: Lynn code -p \"task\" --json --cwd /path/to/worktree --approval yolo --sandbox danger-full-access --save-session.",
       "Fleet worker adapter: Lynn worker run --brief task.md --worktree /path/to/worktree --jsonl --approval yolo --sandbox danger-full-access. Custom external worker: add --agent custom --agent-command \"your command\".",
-      "For long background jobs, include --long --max-steps 1000 --save-session and read code.task.finished.resumeCommand if max steps are reached.",
+      "For long background jobs, include --long --max-steps 300 --save-session and read code.task.finished.resumeCommand if max steps are reached.",
       "Answer in the user's language.",
       memoryFrame,
     ].join("\n"),
