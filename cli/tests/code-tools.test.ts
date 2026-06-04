@@ -322,7 +322,7 @@ describe("code tools", () => {
   });
 
   it("builds long-running code flags for goal mode without clobbering explicit step budgets", () => {
-    expect(withLongRunCodeFlags({})).toMatchObject({ long: true, "save-session": true, "max-steps": "1000" });
+    expect(withLongRunCodeFlags({})).toMatchObject({ long: true, "save-session": true, "max-steps": "300" });
     expect(withLongRunCodeFlags({ "max-steps": "42" })).toMatchObject({ long: true, "save-session": true, "max-steps": "42" });
   });
 

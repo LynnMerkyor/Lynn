@@ -133,9 +133,8 @@ function sandbox(args: ParsedArgs): ToolRunContext["sandbox"] {
   return "workspace-write";
 }
 
-const DEFAULT_MAX_STEPS = 8;
-const STANDARD_MAX_STEPS = 20;
-const LONG_MAX_STEPS = 1000;
+const DEFAULT_MAX_STEPS = 100;
+const LONG_MAX_STEPS = 300;
 
 export function isLongRun(args: ParsedArgs): boolean {
   return hasFlag(args.flags, "long", "endurance");
@@ -146,7 +145,7 @@ export function withLongRunCodeFlags(flags: Record<string, string | boolean> = {
     ...flags,
     long: flags.long ?? true,
     "save-session": flags["save-session"] ?? true,
-    "max-steps": flags["max-steps"] ?? "1000",
+    "max-steps": flags["max-steps"] ?? String(LONG_MAX_STEPS),
   };
 }
 
@@ -169,10 +168,9 @@ export function maxSteps(args: ParsedArgs): number {
   const raw = getStringFlag(args.flags, "max-steps", "steps");
   if (!raw) return DEFAULT_MAX_STEPS;
   const parsed = Number.parseInt(raw, 10);
-  const cap = isLongRun(args) ? LONG_MAX_STEPS : STANDARD_MAX_STEPS;
+  const cap = LONG_MAX_STEPS;
   if (!Number.isFinite(parsed) || parsed < 1 || parsed > cap) {
-    const hint = isLongRun(args) ? "" : " (pass --long for endurance runs up to 1000 steps)";
-    throw new Error(`--max-steps must be an integer from 1 to ${cap}${hint}`);
+    throw new Error(`--max-steps must be an integer from 1 to ${cap}`);
   }
   return parsed;
 }
