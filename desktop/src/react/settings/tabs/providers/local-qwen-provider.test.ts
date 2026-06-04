@@ -67,19 +67,21 @@ describe('Local Qwen provider UX guards', () => {
   });
 
   it('keeps local model IPC commands explicit and guarded', () => {
-    const main = read('desktop/main.cjs');
+    // v0.80.2 decomposition: local-model IPC + guards moved from main.cjs into
+    // local-model-controller.cjs.
+    const localModelController = read('desktop/local-model-controller.cjs');
     const preload = read('desktop/preload.cjs');
     const profiles = read('desktop/llamacpp-profiles.cjs');
     const controller = read('desktop/src/react/components/input/useLocalQwenStatusController.ts');
     const detail = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
-    expect(main).toContain('const LOCAL_MODEL_IPC = Object.freeze');
-    expect(main).toContain('parseStartDownloadPayload');
-    expect(main).toContain('download-boundary-invalid');
-    expect(main).toContain('model-path-not-allowed');
-    expect(main).toContain('isLocalModelPathAllowed');
-    expect(main).toContain('startup auto-start disabled');
-    expect(main).toContain('LYNN_LOCAL_MODEL_AUTO_START === "1"');
-    expect(main).toContain('parsedPayload.startAfterDownload || profile.autoStart');
+    expect(localModelController).toContain('const LOCAL_MODEL_IPC = Object.freeze');
+    expect(localModelController).toContain('parseStartDownloadPayload');
+    expect(localModelController).toContain('download-boundary-invalid');
+    expect(localModelController).toContain('model-path-not-allowed');
+    expect(localModelController).toContain('isLocalModelPathAllowed');
+    expect(localModelController).toContain('startup auto-start disabled');
+    expect(localModelController).toContain('LYNN_LOCAL_MODEL_AUTO_START === "1"');
+    expect(localModelController).toContain('parsedPayload.startAfterDownload || profile.autoStart');
     expect(profiles).toContain('[DEFAULT_MODEL_ID]:');
     expect(profiles).toContain('autoStart: false');
     expect(controller).toContain('startAfterDownload: true');
@@ -160,7 +162,10 @@ describe('Local Qwen provider UX guards', () => {
     expect(localStatus).toContain('predicted_tps');
     expect(localStatus).toContain('当前 ${predictedTps');
     expect(localStatus).toContain('服务累计处理');
-    expect(inputArea).toContain('localQwenTpsSummary');
+    // v0.80.2: InputArea wires the runtime hook; the TPS summary (renamed
+    // localQwenTpsSummary -> tpsSummary) lives in useLocalQwenStatusController.
+    expect(inputArea).toContain('useLocalQwenStatusController');
+    expect(localQwenController).toContain('tpsSummary');
     expect(localQwenStack).toContain('等待下一次采样');
     expect(localQwenController).toContain('intervalMs = active ? 3_000 : 15_000');
     expect(statusBar).toContain('formatTps');
