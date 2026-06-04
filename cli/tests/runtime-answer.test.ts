@@ -12,6 +12,8 @@ describe("runtime answer", () => {
     expect(isLocalRuntimeQuestion("what version are you?")).toBe(true);
     expect(isLocalRuntimeQuestion("what model are you using?")).toBe(true);
     expect(isLocalRuntimeQuestion("show the active route")).toBe(true);
+    expect(isLocalRuntimeQuestion("你的记忆可以保持多久")).toBe(true);
+    expect(isLocalRuntimeQuestion("Lynn CLI 的 memory 会持久保存吗")).toBe(true);
     expect(isLocalRuntimeQuestion("本地优化了什么？")).toBe(false);
     expect(isLocalRuntimeQuestion("Lynn CLI 做了什么长任务优化")).toBe(false);
     expect(isLocalRuntimeQuestion("帮我写一个版本比较函数")).toBe(false);
@@ -37,6 +39,8 @@ describe("runtime answer", () => {
     expect(text).toContain("权限:ask / workspace-write");
     expect(text).toContain("前置缓存");
     expect(text).toContain("decode TPS");
+    expect(text).toContain("记忆和连续性");
+    expect(text).toContain("/memory add");
     expect(text).toContain("docs/ops/lynn-cli-runtime-knowledge.md");
   });
 

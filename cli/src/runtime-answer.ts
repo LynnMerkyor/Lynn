@@ -26,12 +26,19 @@ const MODEL_ROUTE_PATTERNS = [
   /\b(?:model|route)\b.{0,24}\b(?:using|running|current|active)\b/i,
 ];
 
+const MEMORY_PATTERNS = [
+  /(?:lynn\s*)?(?:cli\s*)?.{0,12}(?:记忆|memory).{0,16}(?:多久|保持|保存|持久|长期|清空|记得|remember|persist)/i,
+  /(?:你|当前|现在|本地|运行时|命令行|cli|lynn).{0,16}(?:记忆|memory).{0,18}(?:多久|保持|保存|持久|长期|清空|记得|remember|persist)/i,
+  /\b(?:how long|where|does|can)\b.{0,40}\b(?:memory|remember|persist)\b/i,
+];
+
 export function isLocalRuntimeQuestion(text: string): boolean {
   const value = text.trim();
   if (!value) return false;
   if (/^(?:version|about)$/i.test(value)) return true;
   return VERSION_PATTERNS.some((pattern) => pattern.test(value))
-    || MODEL_ROUTE_PATTERNS.some((pattern) => pattern.test(value));
+    || MODEL_ROUTE_PATTERNS.some((pattern) => pattern.test(value))
+    || MEMORY_PATTERNS.some((pattern) => pattern.test(value));
 }
 
 export function renderLocalRuntimeAnswer(input: RuntimeAnswerContext, locale: "zh" | "en" = "zh"): string {
@@ -52,6 +59,11 @@ export function renderLocalRuntimeAnswer(input: RuntimeAnswerContext, locale: "z
       "- Automatic context compaction for long chat/code sessions.",
       "- Tool ledger, checkpoint/resume, finish gates, and Fleet JSONL workers.",
       "",
+      "Memory and continuity:",
+      "- Live chat/code context stays in the current context window and is auto-compacted for long runs.",
+      "- Saved sessions and checkpoints can be resumed with --save-session, /resume, and /rewind.",
+      "- Durable CLI memory is stored under ~/.lynn with /memory add and survives new terminal sessions until /memory forget removes it.",
+      "",
       "Docs: docs/ops/lynn-cli-runtime-knowledge.md and cli/README.md.",
       "Use `Lynn version` for the local CLI version, `/model` for the Brain model route, and `Lynn providers` for BYOK settings.",
     ].filter(Boolean).join("\n");
@@ -69,6 +81,11 @@ export function renderLocalRuntimeAnswer(input: RuntimeAnswerContext, locale: "z
     "- 底栏长期显示 decode TPS 和 prefix-cache 最近状态。",
     "- 长聊天 / 长代码任务自动上下文压缩。",
     "- tool ledger、checkpoint/resume、收尾门禁和 Fleet JSONL worker。",
+    "",
+    "记忆和连续性:",
+    "- 当前聊天 / 代码上下文会保留在本轮上下文窗口里,长对话和长任务会自动压缩。",
+    "- 保存的会话和检查点可通过 --save-session、/resume、/rewind 继续或回退。",
+    "- 持久 CLI 记忆通过 /memory add 写入 ~/.lynn,跨终端会话保留,直到 /memory forget 删除。",
     "",
     "说明文档:docs/ops/lynn-cli-runtime-knowledge.md 和 cli/README.md。",
     "提示:`Lynn version` 查看本地 CLI 版本,`/model` 查看 Brain 模型路由,`Lynn providers` 查看 BYOK 设置。",

@@ -77,6 +77,16 @@ describe("code tools", () => {
     expect(globToRegExp("**/*.ts").test("src/hello.ts")).toBe(true);
   });
 
+  it("skips trash and unreadable-style directories during glob instead of failing the turn", async () => {
+    await fs.mkdir(path.join(tmp, ".Trash"), { recursive: true });
+    await fs.writeFile(path.join(tmp, ".Trash", "hidden.ts"), "nope", "utf8");
+
+    const glob = await runClientTool({ cwd: tmp, approval: "ask" }, { name: "glob", pattern: "**/*.ts" });
+    expect(glob.ok).toBe(true);
+    expect(JSON.stringify(glob.output)).toContain("src/hello.ts");
+    expect(JSON.stringify(glob.output)).not.toContain("hidden.ts");
+  });
+
   it("requires an approved effective permission for writes and arbitrary bash", async () => {
     await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "write_file", path: "out.txt", text: "x" })).rejects.toThrow("requires approval");
     await expect(runClientTool({ cwd: tmp, approval: "ask" }, { name: "apply_patch", text: "diff --git a/x b/x\n" })).rejects.toThrow("requires approval");
