@@ -63,6 +63,7 @@
     "test:release": "node scripts/run-release-regression.mjs --mode all --level release",
     "test:release:static": "node scripts/run-release-regression.mjs --mode static --level release",
     "test:release:live": "node scripts/run-release-regression.mjs --mode live --level release",
+    "release:gui-efficiency": "node scripts/run-release-regression.mjs --mode live --level smoke --min-live-success-rate 1 --min-live-success-per-hour 60 --max-live-p50-ttft-ms 8000 --max-live-p50-wall-ms 30000",
     "test:release:smoke": "node scripts/run-release-regression.mjs --mode all --level smoke",
     "test:release:nightly": "node scripts/run-release-regression.mjs --mode all --level nightly",
     "test:release:ui": "node --import tsx scripts/run-electron-ui-smoke.ts",

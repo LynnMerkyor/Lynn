@@ -140,7 +140,31 @@ npm run release:cli-concurrency
 
 The gate runs independent StepFun prompt tasks with `--concurrency 2`. It still requires 100% success, zero waste steps, no max-step hits, and a minimum success/hour threshold. Do not parallelize dependent chains such as `verify -> fix -> rerun`; only independent probes, background summaries, and independent verifiers should run concurrently.
 
-### 5. Boundary stop only at objective boundaries
+### 5. GUI/Brain live efficiency
+
+The desktop UI has two different gates:
+
+- `test:release:ui`: fixture-driven renderer smoke. It checks that the Electron UI can render the important surfaces, but it does not prove model routing or Brain latency.
+- `release:gui-efficiency`: live WebSocket gate. It connects to the currently running Lynn server (`~/.lynn/server-info.json` by default), runs smoke release cases through GUI/Brain/WebSocket, and records case success, turn wall-clock, TTFT, text volume, and tool turns.
+
+Run it after starting the packaged app or dev server when changing GUI/Brain routing, WebSocket streaming, desktop server boot, or renderer behavior that can affect perceived latency:
+
+```bash
+npm run release:gui-efficiency
+```
+
+This gate is intentionally explicit rather than part of `release:preflight`, because CI or a headless packaging machine may not have a live Lynn server. Do not replace it with `test:release:ui`: visual smoke cannot catch a slow or broken Brain path.
+
+The live report writes a `Live Efficiency` section into `output/release-regression-*/report.md` and an `efficiency` object into `live-results.json`:
+
+- case pass rate;
+- success/hour from real live case wall-clock;
+- p50/p90 turn wall time;
+- p50/p90 TTFT;
+- tool-turn count;
+- generated text and thinking character volume.
+
+### 6. Boundary stop only at objective boundaries
 
 Boundary stop is allowed only when the output format has a crisp completion condition:
 
@@ -155,7 +179,7 @@ Boundary stop trims generation tail, not validation. A coding task still cannot 
 
 The CLI exposes this only as an explicit machine-output option: `Lynn -p "..." --json --stop-at-json`. Use it for JSON/schema/eval prompts with an objective parse boundary; do not enable it for normal chat or coding-agent loops.
 
-### 6. Fewer wasted retries, not fewer valid repairs
+### 7. Fewer wasted retries, not fewer valid repairs
 
 Do reduce:
 
