@@ -164,7 +164,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🔎 **Safer, inspectable search**:web search prefers the brain v2 localhost proxy first, keeping MiMo/GLM paid search keys server-side; chat tool cards can expand synthesized answers and search sources.
 - 🧭 **Local model upgrade window**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model. Older 9B GGUF files now show as upgrade candidates, and 9B/35B download entries point to the ModelScope MTP repositories with MTP + thinking-on kept as default.
 - 🛡️ **Runtime regression coverage tightened**:composer replacement, local Qwen status, stock-market, MCP transport, bridge streaming/attachment, session events, engine tool runtime, agent dynamic prompt, web-search, and search source UI all gained or updated focused tests.
-- ✅ **Release gate**:V0.79.9 passed typecheck, runtime typecheck, full vitest, release static/live regressions, UI smoke, macOS signing/notarization/stapling/Gatekeeper validation, and Windows installer signing.
+- ✅ **Release gate**:V0.79.9 passed typecheck, runtime typecheck, full vitest, release static/live regressions, UI smoke, macOS signing/notarization/stapling/Gatekeeper validation, and Windows installer signing for the releases that ship Windows assets.
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.9)
 
@@ -208,7 +208,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧭 **Local model policy unchanged**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model; 4B remains a low-config downgrade with the thinking-on risk documented.
 - 🧾 **Chat/artifact paths are easier to maintain**:stream emitters, turn state, artifact recovery, tool summaries, and voice fallback helpers now have TS boundaries ahead of the larger `chat.js` and core split.
 - 🧪 **Core migration deferred intentionally**:`core/session-coordinator.js`, `core/engine.js`, and similarly large files stay out of this package to keep the release stable.
-- 📦 **macOS release artifacts are notarized**:Apple Silicon and Intel DMGs are signed, notarized, stapled, and Gatekeeper-validated; Windows ships as a signed NSIS installer.
+- 📦 **macOS release artifacts are notarized**:Apple Silicon and Intel DMGs are signed, notarized, stapled, and Gatekeeper-validated; Windows installers are published only when a signed Windows asset is present in the Release.
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.3)
 
@@ -842,9 +842,9 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 V0.81.0 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
-**Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
+**Windows:** use the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) when a Windows asset is listed. The v0.81.0 update manifest intentionally does not point to a missing Windows installer.
 
-> **Windows SmartScreen notice:** The v0.81.0 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** Future Windows installers are code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
