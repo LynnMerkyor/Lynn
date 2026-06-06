@@ -75,7 +75,8 @@
     "lint": "eslint desktop/src/ server/",
     "test:watch": "vitest",
     "postinstall": "node scripts/patch-pi-sdk.cjs",
-    "release:cli-efficiency": "npm run bench:cli-routes -- --stepfun-runs 3 --spark-runs 1 --min-stepfun-success-rate 1 --max-stepfun-p50-ttft-ms 2500 --max-stepfun-p50-wall-ms 4000 && npm run bench:cli-efficiency -- --live --suite smoke --repeat 1 --min-success-rate 1 --min-success-per-hour 1200 --max-p50-ttft-ms 2500 --max-p50-wall-ms 4500 --max-waste-steps 0 --max-max-steps-reached 0"
+    "release:cli-efficiency": "npm run bench:cli-routes -- --stepfun-runs 3 --spark-runs 1 --min-stepfun-success-rate 1 --max-stepfun-p50-ttft-ms 2500 --max-stepfun-p50-wall-ms 4000 && npm run bench:cli-efficiency -- --live --suite smoke --repeat 1 --min-success-rate 1 --min-success-per-hour 1200 --max-p50-ttft-ms 2500 --max-p50-wall-ms 4500 --max-waste-steps 0 --max-max-steps-reached 0",
+    "release:cli-prefix-cache": "npm run bench:cli-efficiency -- --live --suite cache --repeat 2 --min-success-rate 1 --min-success-per-hour 1200 --min-cache-hit-ratio 0.40 --min-cache-hit-tokens 2000 --max-p50-ttft-ms 2500 --max-waste-steps 0 --max-max-steps-reached 0"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

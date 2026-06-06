@@ -100,7 +100,7 @@ function createTasks() {
     {
       id: "fast-model-answer",
       kind: "prompt",
-      suite: ["smoke", "full"],
+      suite: ["smoke", "cache", "full"],
       prompt: "用两句话解释 TypeScript discriminated union 适合解决什么问题。不要调用工具。",
       notes: "Fast StepFun model TTFT and visible answer.",
       requireModel: true,
@@ -388,6 +388,7 @@ function evaluateEfficiencyGate(summary, parsedArgs) {
     thresholdCheck("maxP50WallMs", "p50 wall", readNumberOption(parsedArgs, "maxP50WallMs", "LYNN_EFFICIENCY_MAX_P50_WALL_MS"), summary.wallMs?.p50, (actual, expected) => actual <= expected, formatNullable),
     thresholdCheck("maxP50TtftMs", "p50 TTFT", readNumberOption(parsedArgs, "maxP50TtftMs", "LYNN_EFFICIENCY_MAX_P50_TTFT_MS"), summary.ttftMs?.p50, (actual, expected) => actual <= expected, formatNullable),
     thresholdCheck("minCacheHitRatio", "prefix-cache hit ratio", readRatioOption(parsedArgs, "minCacheHitRatio", "LYNN_EFFICIENCY_MIN_CACHE_HIT_RATIO"), summary.cacheHitRatio, (actual, expected) => actual >= expected, percent),
+    thresholdCheck("minCacheHitTokens", "prefix-cache hit tokens", readNumberOption(parsedArgs, "minCacheHitTokens", "LYNN_EFFICIENCY_MIN_CACHE_HIT_TOKENS"), summary.cacheHitTokens, (actual, expected) => actual >= expected, String),
     thresholdCheck("maxWasteSteps", "waste steps", readNumberOption(parsedArgs, "maxWasteSteps", "LYNN_EFFICIENCY_MAX_WASTE_STEPS"), summary.wasteSteps, (actual, expected) => actual <= expected, String),
     thresholdCheck("maxMaxStepsReached", "max-steps hits", readNumberOption(parsedArgs, "maxMaxStepsReached", "LYNN_EFFICIENCY_MAX_MAX_STEPS_REACHED"), summary.maxStepsReached, (actual, expected) => actual <= expected, String),
   ].filter(Boolean);

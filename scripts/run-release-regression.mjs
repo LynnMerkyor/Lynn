@@ -143,6 +143,7 @@ async function runStaticChecks({ level }) {
     "test:release:ui",
     "release:preflight",
     "release:cli-efficiency",
+    "release:cli-prefix-cache",
     "release:manifest",
   ];
   for (const name of requiredScripts) {
@@ -196,6 +197,19 @@ async function runStaticChecks({ level }) {
     "CLI release has a live StepFun efficiency gate with route, latency, and waste-step thresholds",
     String(pkg.scripts?.["release:cli-efficiency"] || ""),
   ));
+  checks.push(makeCheck(
+    "static-cli-prefix-cache-release-gate",
+    "blocker",
+    Boolean(pkg.scripts?.["release:cli-prefix-cache"]
+      && pkg.scripts["release:cli-prefix-cache"].includes("bench:cli-efficiency")
+      && pkg.scripts["release:cli-prefix-cache"].includes("suite cache")
+      && pkg.scripts["release:cli-prefix-cache"].includes("repeat 2")
+      && pkg.scripts["release:cli-prefix-cache"].includes("min-cache-hit-ratio")
+      && pkg.scripts["release:cli-prefix-cache"].includes("min-cache-hit-tokens")),
+    "CLI release has a live repeated StepFun prefix-cache warm gate",
+    String(pkg.scripts?.["release:cli-prefix-cache"] || ""),
+  ));
+
   checks.push(makeCheck(
     "static-cli-pack-guard",
     "blocker",

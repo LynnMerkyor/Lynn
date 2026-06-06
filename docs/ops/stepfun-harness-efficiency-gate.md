@@ -313,6 +313,14 @@ For release blocking, use explicit quality and latency thresholds:
 npm run release:cli-efficiency
 ```
 
+Prefix-cache has its own repeated warm gate. It intentionally runs the same StepFun task twice so the second pass can reuse the stable prefix. This isolates cache behavior from the colder route smoke:
+
+```bash
+npm run release:cli-prefix-cache
+```
+
+Use this gate when changing stable-prefix ordering, runtime-knowledge injection, tool schemas, provider routing, or Brain usage accounting. A failure means users may still get correct answers, but the default StepFun path has lost a latency advantage and should not be called an efficiency improvement.
+
 To run only the task efficiency half:
 
 ```bash
@@ -328,7 +336,7 @@ npm run bench:cli-efficiency -- \
   --max-max-steps-reached 0
 ```
 
-For prefix-cache work, add `--min-cache-hit-ratio 0.90` only after at least two repeated model runs have warmed the stable prefix. Do not set this on cold-start-only measurements.
+For prefix-cache work, use `release:cli-prefix-cache` or add both `--min-cache-hit-ratio` and `--min-cache-hit-tokens` only after at least two repeated model runs have warmed the stable prefix. Do not set cache thresholds on cold-start-only measurements.
 
 Compare mode also prints per-task deltas. Read this table before accepting a speed claim:
 
