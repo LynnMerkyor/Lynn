@@ -1,6 +1,6 @@
 # Lynn Code 无交互 Agent 调用契约
 
-状态:v0.80.6 release-candidate contract。
+状态:v0.80.10 release-candidate contract。
 
 这份文档给其他智能体、CI、GUI Fleet worker 阅读。目标是让它们无需和人交互,也能稳定调用 Lynn CLI 完成编码任务。
 
@@ -15,7 +15,7 @@
 node -v
 
 # 2. 安装或覆盖升级 Lynn CLI
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.10.tgz
 
 # 3. 检查本地命令
 Lynn version
@@ -37,14 +37,12 @@ Lynn code -p "修复失败测试,运行测试,总结 diff" \
   --sandbox danger-full-access \
   --save-session
 
-# 7. 长任务。会保存断点,达到步数上限时可 resume。
-Lynn code -p "持续完成迁移直到测试通过" \
+# 7. 穷尽最优任务。会保存断点,达到步数上限时可 resume。
+Lynn code --best -p "找出最优方案,实现并跑门禁" \
   --json \
   --cwd /path/to/worktree \
   --approval yolo \
   --sandbox danger-full-access \
-  --long \
-  --max-steps 1000 \
   --save-session
 
 # 8. GUI Fleet worker adapter。输出 Fleet JSONL,不是人类文本。
@@ -63,6 +61,21 @@ Lynn worker run --brief task.md --worktree /path/to/worktree \
 - `code.tool.ledger` 是链式工具结果的压缩事实源。
 - 长任务必须加 `--save-session`;如果 `code.task.finished` 里有 `resumeCommand`,应继续调用它。
 - `worker.violation` 或不可恢复的 `worker.error` 是硬失败。
+
+## 穷尽最优模式
+
+需要“最好结果”而不是“最快收口”时,使用 `--best` 或 `--exhaustive`:
+
+```bash
+Lynn code --best -p "找出最优方案,实现并跑门禁" \
+  --json \
+  --cwd /path/to/worktree \
+  --approval yolo \
+  --sandbox danger-full-access \
+  --save-session
+```
+
+`--best` 会保持 StepFun 3.7 Flash 作为高速主路由,并启用 300 步预算、ultra 任务分解、原子 worker、对抗式验收、自动验证、checkpoint/resume 和运行时压缩。Harness 只做拆步、分派、验证、修复和防工具风暴,不会用路由兜底替模型选择最终答案。
 
 ## 权限模式
 
@@ -123,4 +136,3 @@ Lynn doctor --offline
 Lynn -p "只回复 OK" --json
 Lynn agents --json
 ```
-

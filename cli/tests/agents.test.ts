@@ -41,6 +41,7 @@ describe("agent registry", () => {
     expect(contract.install).toBe("npm install -g --force https://download.example/lynn-cli-0.80.4.tgz");
     expect(contract.launch).toContain("Lynn agents");
     expect(contract.headless).toContain('Lynn code -p "fix tests" --json --cwd /repo --approval yolo --sandbox danger-full-access --save-session');
+    expect(contract.headless).toContain('Lynn code --best -p "find the best solution, implement it, run gates" --json --cwd /repo --approval yolo --sandbox danger-full-access --save-session');
     expect(contract.headless).toContain("Lynn worker run --brief task.md --worktree /repo --jsonl --approval yolo --sandbox danger-full-access");
   });
 });

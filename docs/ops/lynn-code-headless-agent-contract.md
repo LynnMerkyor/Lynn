@@ -21,7 +21,7 @@ This is the short contract another coding agent should read first:
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # Install or update Lynn CLI.
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.10.tgz
 
 # Verify the binary without needing a model backend.
 Lynn version
@@ -43,14 +43,12 @@ Lynn code -p "fix the failing tests, run tests, summarize the diff" \
   --sandbox danger-full-access \
   --save-session
 
-# Long background task with resumable checkpoints.
-Lynn code -p "complete the migration until tests pass" \
+# Exhaustive best-effort task with resumable checkpoints.
+Lynn code --best -p "find the best solution, implement it, run gates" \
   --json \
   --cwd /path/to/worktree \
   --approval yolo \
   --sandbox danger-full-access \
-  --long \
-  --max-steps 1000 \
   --save-session
 
 # GUI Fleet worker adapter. Emits Fleet JSONL, not human prose.
@@ -113,18 +111,22 @@ Lynn code -p "fix the failing tests, run the suite, and summarize the diff" \
   --save-session
 ```
 
-For endurance work:
+For exhaustive best-effort work:
 
 ```bash
-Lynn code -p "complete this migration until tests pass" \
+Lynn code --best -p "find the best solution, implement it, run gates" \
   --json \
   --cwd /path/to/worktree \
   --approval yolo \
   --sandbox danger-full-access \
-  --long \
-  --max-steps 1000 \
   --save-session
 ```
+
+`--best` is equivalent to `--exhaustive`:it keeps StepFun 3.7 Flash as the fast
+head route, raises the budget to 300 steps, enables ultra task decomposition,
+atomic workers, adversarial verification, automatic checkpoints, and runtime
+compaction. The harness never chooses the final answer for the model; it only
+decomposes, dispatches, verifies, repairs, and prevents tool storms.
 
 ## Output
 

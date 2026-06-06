@@ -13,7 +13,7 @@ for other coding agents to parse.
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update Lynn CLI from the CDN.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.10.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI
@@ -35,6 +35,14 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
   --sandbox danger-full-access \
   --save-session
 
+# Exhaustive best mode: 300 steps + decomposition + adversarial verification.
+Lynn code --best -p "find the best solution, implement it, run gates" \
+  --json \
+  --cwd /path/to/worktree \
+  --approval yolo \
+  --sandbox danger-full-access \
+  --save-session
+
 # GUI Fleet adapter. Emits Fleet JSONL.
 Lynn worker run --brief task.md --worktree /path/to/worktree \
   --jsonl \
@@ -44,4 +52,5 @@ Lynn worker run --brief task.md --worktree /path/to/worktree \
 
 Rules for agents: use `--json` or `--jsonl`, always pass `--cwd` or
 `--worktree`, and use `--approval yolo --sandbox danger-full-access` only inside an
-isolated git worktree.
+isolated git worktree. Use `--best` / `--exhaustive` for tasks that need the
+best completed result instead of the fastest short answer.

@@ -61,7 +61,7 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.10.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI
@@ -82,14 +82,19 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
   --save-session
 ```
 
+For exhaustive best-effort work, use `--best` (or `/goal` / `/best` in the TUI). Lynn enables a 300-step budget, ultra task decomposition, atomic workers, adversarial verification, auto-verify, checkpoints/resume, and runtime compaction. The harness does not choose the final answer for the model; it only decomposes, schedules, verifies, repairs, and prevents tool storms.
+
 Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-headless-agent-contract.md`](docs/ops/lynn-code-headless-agent-contract.md).
 
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>GUI v0.80.3 / CLI v0.80.9</strong> · 2026-06-06 · local model routing policy + scan guards <em>(latest)</em></summary>
+<summary><strong>GUI v0.80.3 / CLI v0.80.10</strong> · 2026-06-06 · StepFun exhaustive best mode + scan guards <em>(latest)</em></summary>
 
 **GUI and CLI ship together**:
+- **StepFun 3.7 Flash best mode**:`/goal`, `/best`, and `Lynn code --best` now use a 300-step exhaustive budget with ultra decomposition, parallel atomic workers, adversarial acceptance, auto-verify, and checkpoint/resume. The target is the best completed result, not fewer steps.
+- **Macro orchestration + atomic loop**: large tasks are decomposed into dependency waves, while each worker still runs one action per turn with the tool ledger, plan contract, budget guard, and max-step verification.
+- **No answer fallback**: the harness does not inject chain hints or let a router answer for the model; it decomposes, schedules, verifies, repairs, and records.
 - **Cloud StepFun remains the default**: StepFun 3.7 Flash stays the primary route; local 9B only starts after explicit user action and no longer consumes GPU/unified memory by default.
 - **Local 9B runtime policy**: KV cache reuse, warm pool off by default, idle unload, small-context prompts, stable prefix, 3-5 tool schemas, visible local TPS, and automatic promotion to StepFun when local inference fails.
 - **Local 35B/Spark positioning**: 35B/Spark is the explicit high-end local tier and third fallback, not the default primary path.
@@ -97,10 +102,10 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 - **Release gates**: Brain V2, CLI toolchain/cache/file-size/pack/install, runtime answer/context, and local model policy tests all run before release.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.10.tgz"
 ```
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.9)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.10)
 
 </details>
 
@@ -115,7 +120,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - **Release gate covers compaction**: `cli-longrun-smoke` now forces large tool results and requires a `code.runtime.compacted` event, so long-run stability is verified outside narrow unit tests.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.10.tgz"
 ```
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)

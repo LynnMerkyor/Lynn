@@ -2,7 +2,7 @@
 
 > Machine-readable invocation spec for orchestrators and Fleet workers.
 > Command is `Lynn` (uppercase; `lynn` also resolves on case-insensitive filesystems like macOS — use `Lynn` on Linux/CI).
-> v0.80.6. Verified against `cli/` on branch `codex/v0806-cli-tool-trace`.
+> v0.80.10. Verified against `cli/` on branch `codex/cli-step-budget-0807`.
 
 ---
 
@@ -10,10 +10,10 @@
 
 ```bash
 # Lynn mirror tarball (npm registry package not yet published)
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.10.tgz
 
 # Slow deps in mainland China:
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz \
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.10.tgz \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -34,6 +34,7 @@ as informational and continue parsing later JSONL events.
 Lynn -p "PROMPT" --json                          # one-shot, JSONL out, exits
 Lynn exec "TASK" --reasoning auto --json         # exec mode
 Lynn code "TASK"                                 # code agent (read/write/bash/grep in cwd)
+Lynn code --best "TASK"                          # exhaustive best mode: decompose, verify, checkpoint
 echo "..." | Lynn -p "PROMPT" --json             # piped stdin
 Lynn - < FILE                                    # file as stdin
 ```
@@ -63,8 +64,11 @@ Stored at `~/.lynn/providers/cli.json`, key redacted in terminal output.
 task brief (markdown), runs in a worktree, emits Fleet JSONL.
 
 ```bash
-# step-3.7 worker (via Brain)
+# step-3.7 worker (via Brain; high reasoning + long session defaults)
 Lynn worker run --brief task.md --worktree . --jsonl
+
+# exhaustive best mode is explicit, for broad tasks that need decomposition + verification
+Lynn worker run --brief task.md --worktree . --best --jsonl
 
 # wrap an external agent CLI (Lynn = unified adapter)
 Lynn worker run --brief task.md --worktree . --agent codex-cli    --jsonl
@@ -162,6 +166,19 @@ Lynn code --tool write_file ... --approval yolo
 defaults to 120s timeout, stdout/stderr capped to keep stuck commands from
 blocking Fleet workers.
 
+For exhaustive coding work, prefer:
+
+```bash
+Lynn code --best -p "find the best solution, implement it, run gates" \
+  --json --cwd /repo --approval yolo --sandbox danger-full-access --save-session
+```
+
+`--best` is also accepted as `--exhaustive`. It keeps StepFun 3.7 Flash as the
+fast head route while enabling a 300-step budget, ultra decomposition, atomic
+workers, adversarial verification, auto-verify, and checkpoints. The harness
+does not answer for the model; it only orchestrates, validates, repairs, and
+guards against tool storms.
+
 ---
 
 ## Health Check
@@ -174,4 +191,4 @@ Lynn -p "ping" --json                    # end-to-end smoke
 
 ---
 
-*Contract v0.3 · Lynn CLI v0.80.6 · verified against cli/ source 2026-06-01*
+*Contract v0.4 · Lynn CLI v0.80.10 · verified against cli/ source 2026-06-06*

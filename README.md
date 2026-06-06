@@ -12,7 +12,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.80.3-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.80.9-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.80.10-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -71,12 +71,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.10.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.80.9
+Lynn --version  # should print 0.80.10
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
@@ -94,6 +94,8 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
   --sandbox danger-full-access \
   --save-session
 ```
+
+需要“穷尽最优解”时用 `--best`(或 `/goal` / `/best` 交互入口):Lynn 会启用 300 步预算、ultra 任务分解、原子 worker、对抗式验收、自动验证、checkpoint/resume 和运行时压缩。它不会用路由替模型选答案,只负责拆步、调度、验证和防工具风暴。
 
 机器调用请只解析 JSONL,不要解析人类 TUI。完整契约见 [`docs/ops/lynn-code-headless-agent-contract.zh.md`](docs/ops/lynn-code-headless-agent-contract.zh.md) / [`English contract`](docs/ops/lynn-code-headless-agent-contract.md)。
 
@@ -120,9 +122,12 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 ## 🆕 近期更新
 
 <details>
-<summary><strong>GUI v0.80.3 / CLI v0.80.9</strong> · 2026-06-06 · 端侧模型策略 + 工具扫描守卫 <em>(最新)</em></summary>
+<summary><strong>GUI v0.80.3 / CLI v0.80.10</strong> · 2026-06-06 · StepFun 穷尽最优 + 工具扫描守卫 <em>(最新)</em></summary>
 
 **GUI 与 CLI 同步发版**:
+- ⚡ **StepFun 3.7 Flash 专项 best 模式**:`/goal`、`/best`、`Lynn code --best` 默认进入 300 步穷尽预算,开启 ultra 分解、并行原子 worker、对抗验收、auto-verify 和 checkpoint/resume,目标是“最好结果”,不是少跑几步。
+- 🧱 **编排/分派/验收和 atomic loop 合流**:宏观任务先拆成独立子任务与依赖波次;每个 worker 内仍坚持一轮一动作、工具结果 ledger、计划契约、工具预算和 max-steps 补验,防止 StepFun 高速工具链变成工具风暴。
+- 🧭 **不做答案兜底、不抢模型输出**:harness 只负责拆步、调度、验证、修复和记录;不会注入链式 system hint,也不会让路由替模型选择最终回答。
 - 🧠 **默认云端 StepFun,本地模型显式启用**:StepFun 3.7 Flash 继续作为主路由;本地 9B 只在用户明确启用时启动,默认不占 GPU/统一内存。
 - 🧊 **端侧 9B 运行策略**:KV cache 复用、warm pool 默认关闭、空闲自动 unload、小上下文、稳定前缀、3-5 个工具 schema、底栏本地 TPS 和失败升云 StepFun。
 - ⚙️ **本地 35B/Spark 定位清晰**:35B/Spark 是显式高端本地档与第三兜底,不是默认主路由,避免误伤普通用户机器。
@@ -130,10 +135,10 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 - 🧪 **门禁覆盖**:Brain V2、CLI toolchain/cache/file-size/pack/install、runtime answer/context、本地模型策略测试全部纳入发布前检查。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.10.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.9)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.10)
 
 </details>
 
@@ -148,7 +153,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧪 **门禁覆盖长跑压缩路径**:`cli-longrun-smoke` 会制造大工具结果并要求出现 `code.runtime.compacted`,避免长任务稳定性只停留在单测。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.10.tgz"
 ```
 
 [完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)

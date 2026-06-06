@@ -8,11 +8,20 @@ The default interactive route stays StepFun 3.7 Flash cloud first. The goal is t
 
 This gate must not reward "shorter because less careful". It rewards less waiting, less idle serial work, and fewer repeated failed attempts. It must not reward shorter generations, fewer repair attempts, or fewer verification passes when those steps are needed to reach the best solution.
 
+The product-level exhaustive entrypoint is `Lynn code --best` (alias
+`--exhaustive`) and the interactive `/goal` / `/best` commands. This preset
+keeps StepFun 3.7 Flash as the fast head route, raises the budget to 300 steps,
+enables ultra decomposition, parallel atomic workers, adversarial verification,
+auto-verify, checkpoints, and runtime compaction. The harness may decompose,
+dispatch, validate, repair, and prevent tool storms; it must not inject hidden
+chain hints, answer for the model, or let the router choose the final response.
+
 ## Non-goals
 
 Do not optimize by:
 
 - lowering `--max-steps` for coding tasks;
+- replacing `--best` with a tiny step cap for broad review or migration tasks;
 - disabling auto-verify, plan contract, checkpoint/resume, rewind, refuter, or adversarial validation;
 - suppressing model retries that are needed to repair a wrong state;
 - forcing short answers for tasks that ask for analysis, review, or an exhaustive solution;
@@ -221,6 +230,7 @@ Success: typecheck/test pass; refuter/auto-verify runs; repairs are counted as v
 Purpose: do not over-optimize away deep work.
 
 - architecture review or "find best solution";
+- run with `--best` so the task uses 300 steps, ultra split, atomic workers, adversarial verify, and checkpoints;
 - allow sufficient reads/searches/refuter passes.
 
 Success: quality rubric wins over shortest time. Measure wall-clock, but do not fail simply for spending time on useful evidence.

@@ -74,6 +74,7 @@ import {
   renderCodeTaskHeader,
 } from "../code-output.js";
 import { runUltraCodeBranch, ultraEnabled } from "../code-ultra-command.js";
+import { bestCodeArgs, bestEnabled, parseBestSlashTask, withBestCodeFlags } from "../code-best.js";
 
 export { renderCodeHeadlessHelp } from "../code-headless-help.js";
 export { renderCodeIntro, renderCodeTaskHeader } from "../code-output.js";
@@ -174,7 +175,7 @@ export function parseCodeResumeSlash(raw: string): { resume: string; task: strin
 
 export function maxSteps(args: ParsedArgs): number {
   const raw = getStringFlag(args.flags, "max-steps", "steps");
-  if (!raw) return DEFAULT_MAX_STEPS;
+  if (!raw) return bestEnabled(args) ? LONG_MAX_STEPS : DEFAULT_MAX_STEPS;
   const parsed = Number.parseInt(raw, 10);
   const cap = LONG_MAX_STEPS;
   if (!Number.isFinite(parsed) || parsed < 1 || parsed > cap) {
@@ -323,6 +324,8 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
     "/fast",
     "/tools",
     "/goal",
+    "/best",
+    "/exhaustive",
     "/resume",
     "/rewind",
     "/providers",
@@ -403,19 +406,24 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
       if (text.startsWith("/goal ")) {
         const task = text.slice(6).trim();
         output.write(`${t("code.goal.started")}\n\n`);
-        const taskArgs: ParsedArgs = {
-          ...args,
-          positionals: [task],
-          flags: withLongRunCodeFlags({
-            ...args.flags,
-            approval: mode.approval,
-            sandbox: mode.sandbox,
-            reasoning: reasoning.effort,
-            "show-reasoning": reasoning.display,
-          }),
-        };
         try {
-          await runCodeTask(taskArgs, task, false, { compact: true });
+          await runCodeTask(bestCodeArgs(args, task, mode, reasoning), task, false, { compact: false });
+        } catch (error) {
+          const message = formatBrainRecoveryHint(error);
+          errorOutput.write(`• ${message}\n`);
+        }
+        output.write("\n");
+        continue;
+      }
+      if (text === "/best" || text === "/exhaustive") {
+        output.write(`${t("code.best.usage")}\n\n`);
+        continue;
+      }
+      const bestTask = parseBestSlashTask(text);
+      if (bestTask) {
+        output.write(`${t("code.best.started")}\n\n`);
+        try {
+          await runCodeTask(bestCodeArgs(args, bestTask, mode, reasoning), bestTask, false, { compact: false });
         } catch (error) {
           const message = formatBrainRecoveryHint(error);
           errorOutput.write(`• ${message}\n`);
@@ -582,6 +590,9 @@ async function runCodeTask(
     requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny">;
   } = {},
 ): Promise<number> {
+  if (bestEnabled(args)) {
+    args = { ...args, flags: withBestCodeFlags(args.flags) };
+  }
   const context = await collectCodeContext(cwd(args));
   const preparedInput = prepareCodeTaskInput(task, context.cwd, t("chat.image.defaultPrompt"));
   const taskText = preparedInput.task;
@@ -684,7 +695,7 @@ async function runCodeTask(
     sandbox: mode.sandbox,
     timeoutMs: timeoutMs(args),
   };
-  if (ultraEnabled(args) && !options.compact) {
+  if (ultraEnabled(args)) {
     return runUltraCodeBranch({
       args,
       taskText,

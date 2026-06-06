@@ -15,7 +15,7 @@ import { renderAssistantBlock, renderCodeFooter } from "./code-output.js";
 import { bold, dangerLine, dim, orange, supportsColor } from "./terminal-style.js";
 
 export function ultraEnabled(args: ParsedArgs): boolean {
-  return hasFlag(args.flags, "ultra");
+  return hasFlag(args.flags, "ultra", "best", "exhaustive");
 }
 
 function ultraOptions(args: ParsedArgs): UltraOptions {
