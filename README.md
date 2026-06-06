@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.80.2-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.80.7-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.80.3-brightgreen" alt="App Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.80.9-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -71,12 +71,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.7.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.80.7
+Lynn --version  # should print 0.80.9
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
@@ -120,17 +120,17 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 ## 🆕 近期更新
 
 <details>
-<summary><strong>GUI v0.80.2 / CLI v0.80.7</strong> · 2026-06-03 · 桌面启动自愈 + CLI 原生工作检查点 <em>(最新)</em></summary>
+<summary><strong>GUI v0.80.3 / CLI v0.80.9</strong> · 2026-06-06 · 端侧模型策略 + 工具扫描守卫 <em>(最新)</em></summary>
 
 **GUI 与 CLI 同步发版**:
-- 🧭 **桌面 Server 进程所有权收口**:`desktop/server-process.cjs` 现在统一持有 server pid、端口、token、日志和重启状态;`main.cjs` 只通过 controller 读取状态,避免旧全局变量与新重启路径抢状态。
-- 🔁 **真 App 崩溃自愈门禁**:真实启动 Electron App,观察 `[desktop] Server 就绪，端口:`;杀掉内置 server 后必须看到 `Server 意外退出` → `自动重启` → `Server 重启成功` → `server-restarted sent to ... window(s)`。
-- 🪪 **启动页回到 Lynn 品牌**:splash fallback 默认 `yuan: "lynn"`,不再退回 Hanako 时代文案或图标。
-- 🧰 **CLI 工具链继续原生化**:`web_scan`、`update_working_checkpoint`、技能结晶/召回、浏览器 computer-use 安全审计和 SSRF 防护进入同一条稳定线。
-- 🧪 **打包发版门禁升级**:CLI install/pack/PTY/toolchain 门禁 + GUI server bundle/main/renderer/runtime/full test + 真 App boot/restart 一起作为发布前阻塞项。
+- 🧠 **默认云端 StepFun,本地模型显式启用**:StepFun 3.7 Flash 继续作为主路由;本地 9B 只在用户明确启用时启动,默认不占 GPU/统一内存。
+- 🧊 **端侧 9B 运行策略**:KV cache 复用、warm pool 默认关闭、空闲自动 unload、小上下文、稳定前缀、3-5 个工具 schema、底栏本地 TPS 和失败升云 StepFun。
+- ⚙️ **本地 35B/Spark 定位清晰**:35B/Spark 是显式高端本地档与第三兜底,不是默认主路由,避免误伤普通用户机器。
+- 🧰 **CLI 工具扫描守卫**:交互式工具里禁止默认执行 `find / ...` 这类全盘扫描;glob 遇到 `.Trash` 或权限目录会跳过并记录,不再把整轮弄失败。
+- 🧪 **门禁覆盖**:Brain V2、CLI toolchain/cache/file-size/pack/install、runtime answer/context、本地模型策略测试全部纳入发布前检查。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.7.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
 ```
 
 [完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.7)
@@ -148,7 +148,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧪 **门禁覆盖长跑压缩路径**:`cli-longrun-smoke` 会制造大工具结果并要求出现 `code.runtime.compacted`,避免长任务稳定性只停留在单测。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.7.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
 ```
 
 [完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)

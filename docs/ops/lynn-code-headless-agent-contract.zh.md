@@ -15,7 +15,7 @@
 node -v
 
 # 2. 安装或覆盖升级 Lynn CLI
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.7.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz
 
 # 3. 检查本地命令
 Lynn version

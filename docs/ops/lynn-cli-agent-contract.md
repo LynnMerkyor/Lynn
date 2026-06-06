@@ -10,10 +10,10 @@
 
 ```bash
 # Lynn mirror tarball (npm registry package not yet published)
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.7.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz
 
 # Slow deps in mainland China:
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.7.tgz \
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz \
   --registry=https://registry.npmmirror.com
 ```
 

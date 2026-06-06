@@ -61,7 +61,7 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.7.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI
@@ -87,17 +87,17 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>GUI v0.80.2 / CLI v0.80.7</strong> · 2026-06-03 · desktop boot recovery + native CLI checkpoints <em>(latest)</em></summary>
+<summary><strong>GUI v0.80.3 / CLI v0.80.9</strong> · 2026-06-06 · local model routing policy + scan guards <em>(latest)</em></summary>
 
 **GUI and CLI ship together**:
-- **Desktop server-process ownership**:`desktop/server-process.cjs` now owns the server pid, port, token, logs, and restart state; `main.cjs` reads those values through the controller instead of racing legacy globals.
-- **True App boot/restart gate**: release gates now launch the real Electron app, wait for `[desktop] Server ready`, kill the bundled server, and require `server crashed` → `auto restart` → `server restarted` → `server-restarted sent to ... window(s)`.
-- **Lynn-branded splash fallback**: splash fallback defaults to `yuan: "lynn"` and no longer falls back to Hanako-era copy or imagery.
-- **Native CLI toolchain line**:`web_scan`, `update_working_checkpoint`, skill crystallization/recall, browser computer-use audit, and SSRF protection remain on the stable native path.
-- **Stronger release gates**: CLI install/pack/PTY/toolchain gates and GUI server bundle/main/renderer/runtime/full tests run together before release.
+- **Cloud StepFun remains the default**: StepFun 3.7 Flash stays the primary route; local 9B only starts after explicit user action and no longer consumes GPU/unified memory by default.
+- **Local 9B runtime policy**: KV cache reuse, warm pool off by default, idle unload, small-context prompts, stable prefix, 3-5 tool schemas, visible local TPS, and automatic promotion to StepFun when local inference fails.
+- **Local 35B/Spark positioning**: 35B/Spark is the explicit high-end local tier and third fallback, not the default primary path.
+- **CLI scan guards**: tool mode blocks default `find / ...` whole-disk scans; glob skips `.Trash` and permission-denied directories instead of failing the whole turn.
+- **Release gates**: Brain V2, CLI toolchain/cache/file-size/pack/install, runtime answer/context, and local model policy tests all run before release.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.7.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
 ```
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.7)
@@ -115,7 +115,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - **Release gate covers compaction**: `cli-longrun-smoke` now forces large tool results and requires a `code.runtime.compacted` event, so long-run stability is verified outside narrow unit tests.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.7.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
 ```
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
