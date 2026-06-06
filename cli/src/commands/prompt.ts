@@ -12,6 +12,7 @@ import { resetCliRuntimeMessages } from "../runtime-context.js";
 import { isLocalRuntimeQuestion, localeForText, renderLocalRuntimeAnswer } from "../runtime-answer.js";
 import { chatRouteLabel } from "./chat.js";
 import { resolveDefaultBrainUrl } from "../brain-url.js";
+import { completeJsonBoundary } from "../json-boundary.js";
 
 export interface PromptOptions {
   json?: boolean;
@@ -46,6 +47,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   const title = getStringFlag(args.flags, "title");
   const cliProvider = await resolveCliProviderProfile(args);
   const imagePaths = promptImagePaths(args);
+  const stopAtJson = !!options.json && hasFlag(args.flags, "stop-at-json", "json-boundary-stop");
 
   if (options.json) {
     writeJsonLine({ type: "run.started", ts: nowIso(), prompt, reasoning, ...(imagePaths.length ? { images: imagePaths } : {}) });
@@ -134,6 +136,30 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
             });
           }
           throw new Error(formatBrainErrorForHuman(event.error, event.code));
+        }
+        if (event.type === "assistant.delta" && stopAtJson) {
+          const nextAssistant = attemptAssistant + event.text;
+          const boundary = completeJsonBoundary(nextAssistant);
+          if (boundary !== null) {
+            const boundedAssistant = nextAssistant.slice(0, boundary);
+            const boundedDelta = boundedAssistant.slice(attemptAssistant.length);
+            if (boundedDelta) {
+              handleBrainEvent({ ...event, text: boundedDelta }, {
+                json: true,
+                renderReasoning,
+                renderState,
+                startedAt,
+              });
+            }
+            attemptAssistant = boundedAssistant;
+            writeJsonLine({
+              type: "run.boundary_stop",
+              ts: nowIso(),
+              boundary: "json",
+              reason: "complete_json_visible",
+            });
+            break;
+          }
         }
         handleBrainEvent(event, {
           json: !!options.json,

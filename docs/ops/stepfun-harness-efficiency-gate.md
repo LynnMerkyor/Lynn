@@ -122,6 +122,8 @@ Boundary stop is not allowed for open-ended architecture review, code review, lo
 
 Boundary stop trims generation tail, not validation. A coding task still cannot be declared complete until the deterministic verifier or auto-verify has passed.
 
+The CLI exposes this only as an explicit machine-output option: `Lynn -p "..." --json --stop-at-json`. Use it for JSON/schema/eval prompts with an objective parse boundary; do not enable it for normal chat or coding-agent loops.
+
 ### 5. Fewer wasted retries, not fewer valid repairs
 
 Do reduce:
