@@ -37,6 +37,8 @@ for (const task of tasks) {
     task.setup?.(working);
     const run = await runTask(task, working);
     const verify = task.verify ? task.verify(working) : { ok: true, stdout: "", stderr: "" };
+    const externalValidationSteps = task.verify ? 1 : 0;
+    const validationSteps = run.validationSteps + externalValidationSteps;
     const success = run.exitCode === 0 && run.hasVisibleAnswer && run.outputOk && run.modelOk !== false && verify.ok;
     results.push({
       id: task.id,
@@ -44,12 +46,15 @@ for (const task of tasks) {
       label,
       success,
       ...run,
+      internalValidationSteps: run.validationSteps,
+      externalValidationSteps,
+      validationSteps,
       verifier: verify,
       prompt: task.prompt,
       notes: task.notes || "",
     });
     const status = success ? "PASS" : "FAIL";
-    console.log(`${status} ${task.id} wall=${run.wallMs}ms ttft=${formatNullable(run.ttftMs)} tools=${run.toolSteps} validation=${run.validationSteps} waste=${run.wasteSteps}`);
+    console.log(`${status} ${task.id} wall=${run.wallMs}ms ttft=${formatNullable(run.ttftMs)} tools=${run.toolSteps} validation=${validationSteps} waste=${run.wasteSteps}`);
   } finally {
     if (args.keep !== true) fs.rmSync(working, { recursive: true, force: true });
   }
@@ -261,8 +266,9 @@ function isToolStart(event) {
 function isValidationTool(event) {
   const name = String(event.name || event.tool || event.toolName || event.request?.name || "");
   const command = String(event.command || event.request?.args?.command || event.args?.command || "");
+  const eventText = JSON.stringify(event);
   if (/auto.?verify|refuter|verify|typecheck|test/i.test(name)) return true;
-  return /\b(tsc|typecheck|npm\s+test|npm\s+run\s+test|python3?\s+test_|node\s+test|pytest|vitest)\b/i.test(command);
+  return /\b(tsc|typecheck|npm\s+test|npm\s+run\s+(?:test|typecheck)|python3?\s+test_|node\s+test|pytest|vitest)\b/i.test(`${command}\n${eventText}`);
 }
 
 function isRepairEvent(event) {
