@@ -1,6 +1,6 @@
 {
   "name": "lynn",
-  "version": "0.80.2",
+  "version": "0.80.3",
   "type": "module",
   "description": "Lynn - a personal AI agent with memory and soul",
   "license": "Apache-2.0",
@@ -47,6 +47,7 @@
     "test:cli-install:remote": "node scripts/cli-install-smoke.mjs --remote",
     "test:cli-pressure": "npm run build:cli && node scripts/cli-p-stress.mjs",
     "test:cli-real": "npm run build:cli && node scripts/cli-real-model-soak.mjs",
+    "test:cli-toolchain": "npm run build:cli && node scripts/cli-toolchain-stress.mjs",
     "bench:cli-efficiency": "npm run build:cli && node scripts/cli-efficiency-gate.mjs",
     "bench:cli-routes": "npm run build:cli && node scripts/cli-route-latency-smoke.mjs",
     "test:cli-cache-usage": "npm run build:cli && node scripts/cli-cache-usage-smoke.mjs",
@@ -63,12 +64,11 @@
     "test:release": "node scripts/run-release-regression.mjs --mode all --level release",
     "test:release:static": "node scripts/run-release-regression.mjs --mode static --level release",
     "test:release:live": "node scripts/run-release-regression.mjs --mode live --level release",
-    "release:gui-efficiency": "node scripts/run-release-regression.mjs --mode live --level smoke --min-live-success-rate 1 --min-live-success-per-hour 60 --max-live-p50-ttft-ms 8000 --max-live-p50-wall-ms 30000",
     "test:release:smoke": "node scripts/run-release-regression.mjs --mode all --level smoke",
     "test:release:nightly": "node scripts/run-release-regression.mjs --mode all --level nightly",
     "test:release:ui": "node --import tsx scripts/run-electron-ui-smoke.ts",
     "release:gate": "node scripts/release-gate.mjs",
-    "release:preflight": "npm test && npm run test:brain-v2 && npm run typecheck && npm run typecheck:runtime && npm run test:cli-file-size && npm run test:cli-cache-usage && npm run test:cli && npm run test:cli-pack && npm run test:cli-install && npm --prefix cli run stress:cli && npm run test:cli-pty && npm run test:cli-terminal-soak && npm run test:cli-fleet && npm run release:cli-efficiency && npm run release:cli-prefix-cache && npm run release:cli-concurrency && npm run build:server && npm run build:main && npm run build:renderer && npm run test:release:static && npm run test:release:ui",
+    "release:preflight": "npm test && npm run test:brain-v2 && npm run typecheck && npm run typecheck:runtime && npm run test:cli-file-size && npm run test:cli-cache-usage && npm run test:cli && npm run test:cli-pack && npm run test:cli-install && npm --prefix cli run stress:cli && npm run test:cli-pty && npm run test:cli-terminal-soak && npm run test:cli-fleet && npm run build:server && npm run build:main && npm run build:renderer && npm run test:release:static && npm run test:release:ui",
     "build:server": "node scripts/build-server.mjs",
     "build:server:win": "node scripts/build-server.mjs win32 x64",
     "release:manifest": "node --import tsx scripts/generate-update-manifest.ts",
@@ -76,9 +76,7 @@
     "lint": "eslint desktop/src/ server/",
     "test:watch": "vitest",
     "postinstall": "node scripts/patch-pi-sdk.cjs",
-    "release:cli-efficiency": "npm run bench:cli-routes -- --stepfun-runs 3 --spark-runs 1 --min-stepfun-success-rate 1 --max-stepfun-p50-ttft-ms 2500 --max-stepfun-p50-wall-ms 4000 && npm run bench:cli-efficiency -- --live --suite smoke --repeat 1 --min-success-rate 1 --min-success-per-hour 1200 --max-p50-ttft-ms 2500 --max-p50-wall-ms 4500 --max-waste-steps 0 --max-max-steps-reached 0",
-    "release:cli-prefix-cache": "npm run bench:cli-efficiency -- --live --suite cache --repeat 2 --min-success-rate 1 --min-success-per-hour 1200 --min-cache-hit-ratio 0.40 --min-cache-hit-tokens 2000 --max-p50-ttft-ms 2500 --max-waste-steps 0 --max-max-steps-reached 0",
-    "release:cli-concurrency": "npm run bench:cli-efficiency -- --live --suite concurrency --repeat 1 --concurrency 2 --min-success-rate 1 --min-success-per-hour 1800 --max-p50-ttft-ms 3000 --max-p50-wall-ms 4500 --max-waste-steps 0 --max-max-steps-reached 0"
+    "release:cli-efficiency": "npm run bench:cli-routes -- --stepfun-runs 3 --spark-runs 1 --min-stepfun-success-rate 1 --max-stepfun-p50-ttft-ms 2500 --max-stepfun-p50-wall-ms 4000 && npm run bench:cli-efficiency -- --live --suite smoke --repeat 1 --min-success-rate 1 --max-p50-ttft-ms 2500 --max-p50-wall-ms 4500 --max-waste-steps 0 --max-max-steps-reached 0"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

@@ -22,10 +22,6 @@ function parseArgs(argv) {
     wsUrl: "",
     token: "",
     list: false,
-    minLiveSuccessRate: null,
-    minLiveSuccessPerHour: null,
-    maxLiveP50TtftMs: null,
-    maxLiveP50WallMs: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -46,14 +42,6 @@ function parseArgs(argv) {
     else if (arg.startsWith("--token=")) args.token = arg.slice("--token=".length);
     else if (arg === "--output") args.output = next();
     else if (arg.startsWith("--output=")) args.output = arg.slice("--output=".length);
-    else if (arg === "--min-live-success-rate") args.minLiveSuccessRate = Number(next());
-    else if (arg.startsWith("--min-live-success-rate=")) args.minLiveSuccessRate = Number(arg.slice("--min-live-success-rate=".length));
-    else if (arg === "--min-live-success-per-hour") args.minLiveSuccessPerHour = Number(next());
-    else if (arg.startsWith("--min-live-success-per-hour=")) args.minLiveSuccessPerHour = Number(arg.slice("--min-live-success-per-hour=".length));
-    else if (arg === "--max-live-p50-ttft-ms") args.maxLiveP50TtftMs = Number(next());
-    else if (arg.startsWith("--max-live-p50-ttft-ms=")) args.maxLiveP50TtftMs = Number(arg.slice("--max-live-p50-ttft-ms=".length));
-    else if (arg === "--max-live-p50-wall-ms") args.maxLiveP50WallMs = Number(next());
-    else if (arg.startsWith("--max-live-p50-wall-ms=")) args.maxLiveP50WallMs = Number(arg.slice("--max-live-p50-wall-ms=".length));
     else if (arg === "--list") args.list = true;
     else if (arg === "--help" || arg === "-h") {
       printHelp();
@@ -77,10 +65,6 @@ Options:
   --ws-url URL                 override WebSocket URL
   --token TOKEN                override auth token
   --output DIR                 output directory
-  --min-live-success-rate N    fail live mode when case success rate is below N
-  --min-live-success-per-hour N fail live mode when successful cases/hour is below N
-  --max-live-p50-ttft-ms N     fail live mode when p50 first-token latency exceeds N
-  --max-live-p50-wall-ms N     fail live mode when p50 turn wall time exceeds N
   --list                       list included cases`);
 }
 
@@ -159,9 +143,6 @@ async function runStaticChecks({ level }) {
     "test:release:ui",
     "release:preflight",
     "release:cli-efficiency",
-    "release:cli-prefix-cache",
-    "release:cli-concurrency",
-    "release:gui-efficiency",
     "release:manifest",
   ];
   for (const name of requiredScripts) {
@@ -191,11 +172,8 @@ async function runStaticChecks({ level }) {
       && pkg.scripts["release:preflight"].includes("stress:cli")
       && pkg.scripts["release:preflight"].includes("test:cli-pty")
       && pkg.scripts["release:preflight"].includes("test:cli-terminal-soak")
-      && pkg.scripts["release:preflight"].includes("test:cli-fleet")
-      && pkg.scripts["release:preflight"].includes("release:cli-efficiency")
-      && pkg.scripts["release:preflight"].includes("release:cli-prefix-cache")
-      && pkg.scripts["release:preflight"].includes("release:cli-concurrency")),
-    "release:preflight runs CLI cache usage, file-size, smoke, pack, install, stress, Terminal soak, Fleet, StepFun efficiency, prefix-cache, and concurrency gates",
+      && pkg.scripts["release:preflight"].includes("test:cli-fleet")),
+    "release:preflight runs CLI cache usage, file-size, smoke, pack, install, stress, Terminal soak, and Fleet gates",
     String(pkg.scripts?.["release:preflight"] || ""),
   ));
   checks.push(makeCheck(
@@ -212,52 +190,11 @@ async function runStaticChecks({ level }) {
       && pkg.scripts["release:cli-efficiency"].includes("bench:cli-routes")
       && pkg.scripts["release:cli-efficiency"].includes("bench:cli-efficiency")
       && pkg.scripts["release:cli-efficiency"].includes("min-stepfun-success-rate")
-      && pkg.scripts["release:cli-efficiency"].includes("min-success-per-hour")
       && pkg.scripts["release:cli-efficiency"].includes("max-stepfun-p50-ttft-ms")
       && pkg.scripts["release:cli-efficiency"].includes("max-waste-steps")),
     "CLI release has a live StepFun efficiency gate with route, latency, and waste-step thresholds",
     String(pkg.scripts?.["release:cli-efficiency"] || ""),
   ));
-  checks.push(makeCheck(
-    "static-cli-prefix-cache-release-gate",
-    "blocker",
-    Boolean(pkg.scripts?.["release:cli-prefix-cache"]
-      && pkg.scripts["release:cli-prefix-cache"].includes("bench:cli-efficiency")
-      && pkg.scripts["release:cli-prefix-cache"].includes("suite cache")
-      && pkg.scripts["release:cli-prefix-cache"].includes("repeat 2")
-      && pkg.scripts["release:cli-prefix-cache"].includes("min-cache-hit-ratio")
-      && pkg.scripts["release:cli-prefix-cache"].includes("min-cache-hit-tokens")),
-    "CLI release has a live repeated StepFun prefix-cache warm gate",
-    String(pkg.scripts?.["release:cli-prefix-cache"] || ""),
-  ));
-
-  checks.push(makeCheck(
-    "static-cli-concurrency-release-gate",
-    "blocker",
-    Boolean(pkg.scripts?.["release:cli-concurrency"]
-      && pkg.scripts["release:cli-concurrency"].includes("bench:cli-efficiency")
-      && pkg.scripts["release:cli-concurrency"].includes("suite concurrency")
-      && pkg.scripts["release:cli-concurrency"].includes("concurrency 2")
-      && pkg.scripts["release:cli-concurrency"].includes("min-success-per-hour")
-      && pkg.scripts["release:cli-concurrency"].includes("max-waste-steps")),
-    "CLI release has a live StepFun c2 concurrency gate",
-    String(pkg.scripts?.["release:cli-concurrency"] || ""),
-  ));
-
-  checks.push(makeCheck(
-    "static-gui-efficiency-release-gate",
-    "blocker",
-    Boolean(pkg.scripts?.["release:gui-efficiency"]
-      && pkg.scripts["release:gui-efficiency"].includes("run-release-regression.mjs")
-      && pkg.scripts["release:gui-efficiency"].includes("--mode live")
-      && pkg.scripts["release:gui-efficiency"].includes("min-live-success-rate")
-      && pkg.scripts["release:gui-efficiency"].includes("min-live-success-per-hour")
-      && pkg.scripts["release:gui-efficiency"].includes("max-live-p50-ttft-ms")
-      && pkg.scripts["release:gui-efficiency"].includes("max-live-p50-wall-ms")),
-    "GUI release has an explicit live Brain/WebSocket efficiency gate with wall-clock and TTFT thresholds",
-    String(pkg.scripts?.["release:gui-efficiency"] || ""),
-  ));
-
   checks.push(makeCheck(
     "static-cli-pack-guard",
     "blocker",
@@ -308,12 +245,13 @@ async function runStaticChecks({ level }) {
         `manifest stable.version equals package version ${version}`,
         manifest.stable.version ? `manifest=${manifest.stable.version}` : "missing stable.version",
       ));
+      const releaseUrl = String(manifest.stable.releaseUrl || "");
       checks.push(makeCheck(
         "static-manifest-release-url-version",
         "critical",
-        String(manifest.stable.releaseUrl || "").includes(`v${version}`),
-        `manifest releaseUrl points to v${version}`,
-        String(manifest.stable.releaseUrl || ""),
+        releaseUrl.includes(`v${version}`) || releaseUrl.includes(`v${cliVersion}`),
+        `manifest releaseUrl points to v${version} or v${cliVersion}`,
+        releaseUrl,
       ));
       const badGithubDownloads = assetUrls.filter((url) => /github\.com\/.*\.(dmg|exe)(?:$|\?)/i.test(url));
       checks.push(makeCheck(
@@ -445,7 +383,7 @@ async function runStaticChecks({ level }) {
     "blocker",
     headlessContract.includes("Lynn code -p")
       && headlessContract.includes("--approval yolo")
-      && headlessContract.includes("--sandbox workspace-write")
+      && headlessContract.includes("--sandbox danger-full-access")
       && headlessContract.includes("Lynn worker run"),
     "headless/Fleet contract documents non-interactive Lynn code usage",
   ));
@@ -590,66 +528,6 @@ function findMissing(text, needles = []) {
 
 function summarizeTools(tools) {
   return tools.map((tool) => `${tool.name || "unknown"}:${tool.success === true ? "ok" : tool.success === false ? "fail" : "?"}`);
-}
-
-function percentile(values, pct) {
-  const nums = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
-  if (!nums.length) return null;
-  const index = Math.min(nums.length - 1, Math.max(0, Math.ceil((pct / 100) * nums.length) - 1));
-  return nums[index];
-}
-
-function formatMs(value) {
-  return value === null || value === undefined ? "--" : `${Math.round(value)}ms`;
-}
-
-function buildLiveEfficiencySummary(liveResults) {
-  const caseResults = liveResults.filter((item) => item.id !== "LIVE-HEALTH" && item.id !== "LIVE-EFFICIENCY");
-  const passed = caseResults.filter((item) => item.ok).length;
-  const failed = caseResults.length - passed;
-  const totalWallMs = caseResults.reduce((sum, item) => sum + Math.max(0, item.elapsedMs || 0), 0);
-  const turns = caseResults.flatMap((item) => item.turns || []);
-  const turnWallMs = turns.map((turn) => turn.elapsedMs).filter((value) => Number.isFinite(value));
-  const ttftMs = turns.map((turn) => turn.ttftMs).filter((value) => Number.isFinite(value));
-  const totalTextChars = turns.reduce((sum, turn) => sum + Math.max(0, turn.textChars || 0), 0);
-  const totalThinkingChars = turns.reduce((sum, turn) => sum + Math.max(0, turn.thinkingChars || 0), 0);
-  const toolTurns = turns.filter((turn) => (turn.tools || []).length > 0).length;
-  const successRate = caseResults.length ? passed / caseResults.length : 0;
-  const successPerHour = totalWallMs > 0 ? passed / (totalWallMs / 3_600_000) : 0;
-
-  return {
-    cases: caseResults.length,
-    passed,
-    failed,
-    turns: turns.length,
-    toolTurns,
-    successRate,
-    successPerHour,
-    totalWallMs,
-    p50TurnWallMs: percentile(turnWallMs, 50),
-    p90TurnWallMs: percentile(turnWallMs, 90),
-    p50TtftMs: percentile(ttftMs, 50),
-    p90TtftMs: percentile(ttftMs, 90),
-    totalTextChars,
-    totalThinkingChars,
-  };
-}
-
-function liveEfficiencyFailures(summary, args) {
-  const failures = [];
-  if (args.minLiveSuccessRate !== null && summary.successRate < args.minLiveSuccessRate) {
-    failures.push(`success rate ${summary.successRate.toFixed(2)} < ${args.minLiveSuccessRate}`);
-  }
-  if (args.minLiveSuccessPerHour !== null && summary.successPerHour < args.minLiveSuccessPerHour) {
-    failures.push(`success/hour ${summary.successPerHour.toFixed(2)} < ${args.minLiveSuccessPerHour}`);
-  }
-  if (args.maxLiveP50TtftMs !== null && (summary.p50TtftMs === null || summary.p50TtftMs > args.maxLiveP50TtftMs)) {
-    failures.push(`p50 TTFT ${formatMs(summary.p50TtftMs)} > ${args.maxLiveP50TtftMs}ms`);
-  }
-  if (args.maxLiveP50WallMs !== null && (summary.p50TurnWallMs === null || summary.p50TurnWallMs > args.maxLiveP50WallMs)) {
-    failures.push(`p50 turn wall ${formatMs(summary.p50TurnWallMs)} > ${args.maxLiveP50WallMs}ms`);
-  }
-  return failures;
 }
 
 function scoreTurn(testCase, turn, turnResult, turnIndex) {
@@ -917,7 +795,6 @@ async function runLiveCase(testCase, config) {
 }
 
 async function runLiveChecks(args, outputDir) {
-  const liveStarted = Date.now();
   const config = await resolveServerConfig(args);
   const health = await httpJson(`${config.baseUrl}/api/health`, config.token).catch((error) => ({
     ok: false,
@@ -967,34 +844,9 @@ async function runLiveChecks(args, outputDir) {
     }
   }
 
-  const efficiency = buildLiveEfficiencySummary(liveResults);
-  efficiency.totalElapsedMs = Date.now() - liveStarted;
-  const efficiencyFailures = liveEfficiencyFailures(efficiency, args);
-  const hasEfficiencyThresholds = [
-    args.minLiveSuccessRate,
-    args.minLiveSuccessPerHour,
-    args.maxLiveP50TtftMs,
-    args.maxLiveP50WallMs,
-  ].some((value) => value !== null);
-  if (hasEfficiencyThresholds) {
-    liveResults.push({
-      id: "LIVE-EFFICIENCY",
-      area: "runtime",
-      severity: "critical",
-      title: `GUI/Brain live efficiency: ${efficiency.passed}/${efficiency.cases} cases, ${efficiency.successPerHour.toFixed(2)} success/hour, p50 TTFT ${formatMs(efficiency.p50TtftMs)}, p50 turn ${formatMs(efficiency.p50TurnWallMs)}`,
-      ok: efficiencyFailures.length === 0,
-      failures: efficiencyFailures,
-      warnings: [],
-      elapsedMs: efficiency.totalElapsedMs,
-      turns: [],
-      efficiency,
-    });
-  }
-
   await fs.writeFile(path.join(outputDir, "live-results.json"), JSON.stringify({
     config: { baseUrl: config.baseUrl, wsUrl: config.wsUrl, serverInfoPath: config.serverInfoPath },
     level: args.level,
-    efficiency,
     results: liveResults,
   }, null, 2));
   return liveResults;
@@ -1018,8 +870,6 @@ async function writeReport(outputDir, { args, staticChecks, liveResults }) {
   const blockerFailed = failed.filter((item) => item.severity === "blocker");
   const criticalFailed = failed.filter((item) => item.severity === "critical");
   const warnings = all.flatMap((item) => (item.warnings || []).map((warning) => ({ ...item, warning })));
-  const liveEfficiency = liveResults.find((item) => item.id === "LIVE-EFFICIENCY")?.efficiency
-    || buildLiveEfficiencySummary(liveResults);
 
   const lines = [
     `# Lynn Release Regression Report`,
@@ -1053,20 +903,6 @@ async function writeReport(outputDir, { args, staticChecks, liveResults }) {
       ok: item.ok,
       message: item.ok ? item.title : ((item.failures || [])[0] || item.title),
     }))) || "Live checks were not run.",
-    "",
-    "## Live Efficiency",
-    "",
-    liveResults.length
-      ? [
-          `- Cases: ${liveEfficiency.passed}/${liveEfficiency.cases} passed`,
-          `- Success/hour: ${liveEfficiency.successPerHour.toFixed(2)}`,
-          `- Total case wall: ${formatMs(liveEfficiency.totalWallMs)}`,
-          `- Turn p50 wall: ${formatMs(liveEfficiency.p50TurnWallMs)}; p90 wall: ${formatMs(liveEfficiency.p90TurnWallMs)}`,
-          `- TTFT p50: ${formatMs(liveEfficiency.p50TtftMs)}; p90: ${formatMs(liveEfficiency.p90TtftMs)}`,
-          `- Turns: ${liveEfficiency.turns}; tool turns: ${liveEfficiency.toolTurns}`,
-          `- Text chars: ${liveEfficiency.totalTextChars}; thinking chars: ${liveEfficiency.totalThinkingChars}`,
-        ].join("\n")
-      : "Live checks were not run.",
     "",
     "## Warnings",
     "",

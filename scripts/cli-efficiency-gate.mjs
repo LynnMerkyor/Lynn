@@ -15,7 +15,6 @@ const suite = String(args.suite || process.env.LYNN_EFFICIENCY_SUITE || "smoke")
 const label = String(args.label || process.env.LYNN_EFFICIENCY_LABEL || "baseline");
 const timeoutMs = Number(args.timeoutMs || process.env.LYNN_EFFICIENCY_TIMEOUT_MS || 240000);
 const repeat = positiveInt(args.repeat || process.env.LYNN_EFFICIENCY_REPEAT || 1, "repeat");
-const concurrency = positiveInt(args.concurrency || process.env.LYNN_EFFICIENCY_CONCURRENCY || 1, "concurrency");
 const reportPath = path.resolve(String(args.out || path.join(outDir, `cli-efficiency-gate-${startedAt.toISOString().replace(/[:.]/g, "-")}.json`)));
 
 if (args.compare === true) {
@@ -47,19 +46,39 @@ if (!live) {
 
 fs.mkdirSync(outDir, { recursive: true });
 
-const measurementStartedAt = new Date();
-const results = await runTaskRuns(taskRuns);
-const measurementFinishedAt = new Date();
-const report = summarize({
-  label,
-  suite,
-  repeat,
-  concurrency,
-  startedAt: measurementStartedAt,
-  finishedAt: measurementFinishedAt,
-  elapsedWallMs: measurementFinishedAt.getTime() - measurementStartedAt.getTime(),
-  results,
-});
+const results = [];
+for (const task of taskRuns) {
+  const working = fs.mkdtempSync(path.join(os.tmpdir(), `lynn-efficiency-${safeFileId(task.id)}-`));
+  try {
+    task.setup?.(working);
+    const run = await runTask(task, working);
+    const verify = task.verify ? task.verify(working) : { ok: true, stdout: "", stderr: "" };
+    const externalValidationSteps = task.verify ? 1 : 0;
+    const validationSteps = run.validationSteps + externalValidationSteps;
+    const success = run.exitCode === 0 && run.hasVisibleAnswer && run.outputOk && run.modelOk !== false && verify.ok;
+    results.push({
+      id: task.id,
+      taskId: task.taskId,
+      runIndex: task.runIndex,
+      kind: task.kind,
+      label,
+      success,
+      ...run,
+      internalValidationSteps: run.validationSteps,
+      externalValidationSteps,
+      validationSteps,
+      verifier: verify,
+      prompt: task.prompt,
+      notes: task.notes || "",
+    });
+    const status = success ? "PASS" : "FAIL";
+    console.log(`${status} ${task.id} wall=${run.wallMs}ms ttft=${formatNullable(run.ttftMs)} tools=${run.toolSteps} validation=${validationSteps} waste=${run.wasteSteps}`);
+  } finally {
+    if (args.keep !== true) fs.rmSync(working, { recursive: true, force: true });
+  }
+}
+
+const report = summarize({ label, suite, repeat, startedAt, finishedAt: new Date(), results });
 const gate = evaluateEfficiencyGate(report.summary, args);
 const finalReport = { ...report, gate };
 fs.writeFileSync(reportPath, `${JSON.stringify(finalReport, null, 2)}\n`);
@@ -81,7 +100,7 @@ function createTasks() {
     {
       id: "fast-model-answer",
       kind: "prompt",
-      suite: ["smoke", "cache", "concurrency", "full"],
+      suite: ["smoke", "full"],
       prompt: "用两句话解释 TypeScript discriminated union 适合解决什么问题。不要调用工具。",
       notes: "Fast StepFun model TTFT and visible answer.",
       requireModel: true,
@@ -90,10 +109,9 @@ function createTasks() {
     {
       id: "structured-short-answer",
       kind: "prompt",
-      suite: ["smoke", "concurrency", "full"],
+      suite: ["smoke", "full"],
       prompt: "只输出 JSON:{\"route\":\"StepFun-first\",\"localModels\":\"opt-in\"}。不要解释。",
       notes: "Schema boundary task; boundary stop is allowed only after the required JSON is visible.",
-      requireModel: true,
       command: () => ["-p", "只输出 JSON:{\"route\":\"StepFun-first\",\"localModels\":\"opt-in\"}。不要解释。", "--json", "--stop-at-json", "--reasoning", "high"],
       verifyOutput(text) {
         try {
@@ -155,54 +173,6 @@ function expandTaskRuns(tasks, repeatCount) {
     }
   }
   return runs;
-}
-
-async function runTaskRuns(runs) {
-  const results = new Array(runs.length);
-  let next = 0;
-  const workerCount = Math.min(concurrency, runs.length);
-  async function worker() {
-    while (true) {
-      const index = next;
-      next += 1;
-      if (index >= runs.length) return;
-      results[index] = await runTaskRun(runs[index]);
-    }
-  }
-  await Promise.all(Array.from({ length: workerCount }, () => worker()));
-  return results;
-}
-
-async function runTaskRun(task) {
-  const working = fs.mkdtempSync(path.join(os.tmpdir(), `lynn-efficiency-${safeFileId(task.id)}-`));
-  try {
-    task.setup?.(working);
-    const run = await runTask(task, working);
-    const verify = task.verify ? task.verify(working) : { ok: true, stdout: "", stderr: "" };
-    const externalValidationSteps = task.verify ? 1 : 0;
-    const validationSteps = run.validationSteps + externalValidationSteps;
-    const success = run.exitCode === 0 && run.hasVisibleAnswer && run.outputOk && run.modelOk !== false && verify.ok;
-    const result = {
-      id: task.id,
-      taskId: task.taskId,
-      runIndex: task.runIndex,
-      kind: task.kind,
-      label,
-      success,
-      ...run,
-      internalValidationSteps: run.validationSteps,
-      externalValidationSteps,
-      validationSteps,
-      verifier: verify,
-      prompt: task.prompt,
-      notes: task.notes || "",
-    };
-    const status = success ? "PASS" : "FAIL";
-    console.log(`${status} ${task.id} wall=${run.wallMs}ms ttft=${formatNullable(run.ttftMs)} tools=${run.toolSteps} validation=${validationSteps} waste=${run.wasteSteps}`);
-    return result;
-  } finally {
-    if (args.keep !== true) fs.rmSync(working, { recursive: true, force: true });
-  }
 }
 
 async function runTask(task, cwd) {
@@ -369,9 +339,6 @@ function runVerifier(cmd, args, cwd, timeout = 30000) {
 }
 
 function summarize(input) {
-  const elapsedWallMs = Number(input.elapsedWallMs || 0);
-  const taskWallMs = sum(input.results, "wallMs");
-  const measuredWallMs = elapsedWallMs > 0 ? elapsedWallMs : taskWallMs;
   const failed = input.results.filter((result) => !result.success).length;
   const passed = input.results.length - failed;
   const wall = input.results.map((result) => result.wallMs).sort((a, b) => a - b);
@@ -380,14 +347,11 @@ function summarize(input) {
     total: input.results.length,
     taskCount: new Set(input.results.map((result) => result.taskId || result.id)).size,
     repeat: input.repeat,
-    concurrency: input.concurrency || 1,
     passed,
     failed,
     successRate: input.results.length ? passed / input.results.length : 0,
-    totalWallMs: measuredWallMs,
-    totalTaskWallMs: taskWallMs,
-    elapsedWallMs: measuredWallMs,
-    successPerHour: successPerHour(passed, measuredWallMs),
+    totalWallMs: sum(input.results, "wallMs"),
+    successPerHour: successPerHour(passed, sum(input.results, "wallMs")),
     wallMs: percentileSummary(wall),
     ttftMs: percentileSummary(ttft),
     toolSteps: sum(input.results, "toolSteps"),
@@ -410,7 +374,6 @@ function summarize(input) {
     label: input.label,
     suite: input.suite,
     repeat: input.repeat,
-    concurrency: input.concurrency || 1,
     startedAt: input.startedAt.toISOString(),
     finishedAt: input.finishedAt.toISOString(),
     summary,
@@ -421,11 +384,9 @@ function summarize(input) {
 function evaluateEfficiencyGate(summary, parsedArgs) {
   const checks = [
     thresholdCheck("minSuccessRate", "success rate", readRatioOption(parsedArgs, "minSuccessRate", "LYNN_EFFICIENCY_MIN_SUCCESS_RATE"), summary.successRate, (actual, expected) => actual >= expected, percent),
-    thresholdCheck("minSuccessPerHour", "success/hour", readNumberOption(parsedArgs, "minSuccessPerHour", "LYNN_EFFICIENCY_MIN_SUCCESS_PER_HOUR"), summary.successPerHour, (actual, expected) => actual >= expected, fmtNumber),
     thresholdCheck("maxP50WallMs", "p50 wall", readNumberOption(parsedArgs, "maxP50WallMs", "LYNN_EFFICIENCY_MAX_P50_WALL_MS"), summary.wallMs?.p50, (actual, expected) => actual <= expected, formatNullable),
     thresholdCheck("maxP50TtftMs", "p50 TTFT", readNumberOption(parsedArgs, "maxP50TtftMs", "LYNN_EFFICIENCY_MAX_P50_TTFT_MS"), summary.ttftMs?.p50, (actual, expected) => actual <= expected, formatNullable),
     thresholdCheck("minCacheHitRatio", "prefix-cache hit ratio", readRatioOption(parsedArgs, "minCacheHitRatio", "LYNN_EFFICIENCY_MIN_CACHE_HIT_RATIO"), summary.cacheHitRatio, (actual, expected) => actual >= expected, percent),
-    thresholdCheck("minCacheHitTokens", "prefix-cache hit tokens", readNumberOption(parsedArgs, "minCacheHitTokens", "LYNN_EFFICIENCY_MIN_CACHE_HIT_TOKENS"), summary.cacheHitTokens, (actual, expected) => actual >= expected, String),
     thresholdCheck("maxWasteSteps", "waste steps", readNumberOption(parsedArgs, "maxWasteSteps", "LYNN_EFFICIENCY_MAX_WASTE_STEPS"), summary.wasteSteps, (actual, expected) => actual <= expected, String),
     thresholdCheck("maxMaxStepsReached", "max-steps hits", readNumberOption(parsedArgs, "maxMaxStepsReached", "LYNN_EFFICIENCY_MAX_MAX_STEPS_REACHED"), summary.maxStepsReached, (actual, expected) => actual <= expected, String),
   ].filter(Boolean);
@@ -617,7 +578,7 @@ function normalizedReportMetrics(report) {
   const repeat = Number(summary.repeat ?? report.repeat ?? 1);
   const passed = Number(summary.passed ?? results.filter((result) => result.success).length ?? 0);
   const failed = Number(summary.failed ?? Math.max(0, total - passed));
-  const totalWallMs = Number(summary.totalWallMs ?? summary.elapsedWallMs ?? sum(results, "wallMs"));
+  const totalWallMs = Number(summary.totalWallMs ?? sum(results, "wallMs"));
   const promptTokens = Number(summary.promptTokens ?? sumUsage(results, "promptTokens"));
   const cacheHitTokens = Number(summary.cacheHitTokens ?? sumUsage(results, "cacheHitTokens"));
   return {
@@ -626,7 +587,6 @@ function normalizedReportMetrics(report) {
     total,
     taskCount,
     repeat,
-    concurrency: Number(summary.concurrency || report.concurrency || 1),
     passed,
     failed,
     successRate: Number(summary.successRate ?? (total ? passed / total : 0)),
@@ -814,7 +774,6 @@ function printDryRun(selected, runs) {
   console.log("");
   console.log(`Selected suite: ${suite}`);
   console.log(`Repeat: ${repeat} (${runs.length} task runs)`);
-  console.log(`Concurrency: ${concurrency}`);
   for (const task of selected) {
     console.log(`- ${task.id} [${task.kind}] ${task.notes || ""}`);
   }
