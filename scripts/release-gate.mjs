@@ -28,6 +28,8 @@ Options:
                 Skip live StepFun route/efficiency gates.
   --no-cli-prefix-cache
                 Skip live StepFun prefix-cache warm gate.
+  --no-cli-concurrency
+                Skip live StepFun c2 concurrency gate.
 `);
   process.exit(0);
 }
@@ -41,6 +43,7 @@ const steps = [
   ...(!has("--no-cli-fleet") ? [["CLI/Fleet focused regressions", "npm", ["run", "test:cli-fleet"]]] : []),
   ...(!has("--no-cli-efficiency") ? [["CLI StepFun efficiency gates", "npm", ["run", "release:cli-efficiency"]]] : []),
   ...(!has("--no-cli-prefix-cache") ? [["CLI StepFun prefix-cache gate", "npm", ["run", "release:cli-prefix-cache"]]] : []),
+  ...(!has("--no-cli-concurrency") ? [["CLI StepFun concurrency gate", "npm", ["run", "release:cli-concurrency"]]] : []),
   ...(!has("--quick") ? [["Vitest full suite", "npm", ["test", "--", "--reporter=dot"]]] : []),
   ...(!has("--no-build") ? [
     ["Build server bundle", "npm", ["run", "build:server"]],

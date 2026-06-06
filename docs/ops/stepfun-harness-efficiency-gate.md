@@ -128,7 +128,19 @@ Not allowed:
 - bypassing plan order when later steps depend on previous tool results;
 - making the router answer on behalf of the model.
 
-### 4. Boundary stop only at objective boundaries
+### 4. Concurrency gate
+
+Concurrency is measured with real elapsed wall-clock for the whole batch, not by summing every task's individual wall time. This is the only way to prove that c2/c4 scheduling actually makes users wait less.
+
+Run the c2 gate before claiming scheduler or parallel dispatch improvements:
+
+```bash
+npm run release:cli-concurrency
+```
+
+The gate runs independent StepFun prompt tasks with `--concurrency 2`. It still requires 100% success, zero waste steps, no max-step hits, and a minimum success/hour threshold. Do not parallelize dependent chains such as `verify -> fix -> rerun`; only independent probes, background summaries, and independent verifiers should run concurrently.
+
+### 5. Boundary stop only at objective boundaries
 
 Boundary stop is allowed only when the output format has a crisp completion condition:
 
@@ -143,7 +155,7 @@ Boundary stop trims generation tail, not validation. A coding task still cannot 
 
 The CLI exposes this only as an explicit machine-output option: `Lynn -p "..." --json --stop-at-json`. Use it for JSON/schema/eval prompts with an objective parse boundary; do not enable it for normal chat or coding-agent loops.
 
-### 5. Fewer wasted retries, not fewer valid repairs
+### 6. Fewer wasted retries, not fewer valid repairs
 
 Do reduce:
 

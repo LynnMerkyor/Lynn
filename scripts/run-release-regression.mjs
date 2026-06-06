@@ -144,6 +144,7 @@ async function runStaticChecks({ level }) {
     "release:preflight",
     "release:cli-efficiency",
     "release:cli-prefix-cache",
+    "release:cli-concurrency",
     "release:manifest",
   ];
   for (const name of requiredScripts) {
@@ -175,8 +176,9 @@ async function runStaticChecks({ level }) {
       && pkg.scripts["release:preflight"].includes("test:cli-terminal-soak")
       && pkg.scripts["release:preflight"].includes("test:cli-fleet")
       && pkg.scripts["release:preflight"].includes("release:cli-efficiency")
-      && pkg.scripts["release:preflight"].includes("release:cli-prefix-cache")),
-    "release:preflight runs CLI cache usage, file-size, smoke, pack, install, stress, Terminal soak, Fleet, StepFun efficiency, and prefix-cache gates",
+      && pkg.scripts["release:preflight"].includes("release:cli-prefix-cache")
+      && pkg.scripts["release:preflight"].includes("release:cli-concurrency")),
+    "release:preflight runs CLI cache usage, file-size, smoke, pack, install, stress, Terminal soak, Fleet, StepFun efficiency, prefix-cache, and concurrency gates",
     String(pkg.scripts?.["release:preflight"] || ""),
   ));
   checks.push(makeCheck(
@@ -210,6 +212,19 @@ async function runStaticChecks({ level }) {
       && pkg.scripts["release:cli-prefix-cache"].includes("min-cache-hit-tokens")),
     "CLI release has a live repeated StepFun prefix-cache warm gate",
     String(pkg.scripts?.["release:cli-prefix-cache"] || ""),
+  ));
+
+  checks.push(makeCheck(
+    "static-cli-concurrency-release-gate",
+    "blocker",
+    Boolean(pkg.scripts?.["release:cli-concurrency"]
+      && pkg.scripts["release:cli-concurrency"].includes("bench:cli-efficiency")
+      && pkg.scripts["release:cli-concurrency"].includes("suite concurrency")
+      && pkg.scripts["release:cli-concurrency"].includes("concurrency 2")
+      && pkg.scripts["release:cli-concurrency"].includes("min-success-per-hour")
+      && pkg.scripts["release:cli-concurrency"].includes("max-waste-steps")),
+    "CLI release has a live StepFun c2 concurrency gate",
+    String(pkg.scripts?.["release:cli-concurrency"] || ""),
   ));
 
   checks.push(makeCheck(
