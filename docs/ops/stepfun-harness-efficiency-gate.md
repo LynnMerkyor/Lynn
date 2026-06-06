@@ -36,6 +36,19 @@ This runs real `Lynn -p --json` turns through the product default StepFun path a
 node scripts/cli-route-latency-smoke.mjs --require-spark
 ```
 
+For release blocking, add explicit StepFun thresholds instead of eyeballing the report:
+
+```bash
+npm run bench:cli-routes -- \
+  --stepfun-runs 5 \
+  --spark-runs 1 \
+  --min-stepfun-success-rate 1 \
+  --max-stepfun-p50-ttft-ms 2500 \
+  --max-stepfun-p50-wall-ms 4000
+```
+
+These thresholds gate the default cloud path. They intentionally do not fail the release when Spark is unavailable unless `--require-spark` is set, because Spark/A3B is an opt-in local/offline/batch/fallback route rather than the default interactive critical path.
+
 Interpretation:
 
 - StepFun success with low TTFT means the cloud route can carry the default interactive path.
@@ -287,6 +300,22 @@ The report summary includes `taskStats[]` for repeated runs. For each base task 
 - `cacheHitTokensDelta`, `wallMsDelta`, and `ttftMsDelta` from first to last run.
 
 Use these per-task fields to distinguish a real prefix-cache win from noise. A useful StepFun-first optimization should make repeated runs warmer or less variable without reducing task success or validation coverage.
+
+For release blocking, use explicit quality and latency thresholds:
+
+```bash
+npm run bench:cli-efficiency -- \
+  --live \
+  --suite smoke \
+  --repeat 3 \
+  --min-success-rate 1 \
+  --max-p50-ttft-ms 2500 \
+  --max-p50-wall-ms 4500 \
+  --max-waste-steps 0 \
+  --max-max-steps-reached 0
+```
+
+For prefix-cache work, add `--min-cache-hit-ratio 0.90` only after at least two repeated model runs have warmed the stable prefix. Do not set this on cold-start-only measurements.
 
 Compare mode also prints per-task deltas. Read this table before accepting a speed claim:
 
