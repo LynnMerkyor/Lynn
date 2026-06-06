@@ -26,7 +26,7 @@ npm run release:cli-prefix-cache
 # 桌面 UI smoke：需要先完成 renderer build
 npm run test:release:ui
 
-# 一键发版前检查：单测 + 类型 + CLI/Fleet + StepFun efficiency + 构建 + release static gate + UI smoke
+# 一键发版前检查：单测 + 类型 + CLI/Fleet + StepFun efficiency + prefix-cache + 构建 + release static gate + UI smoke
 npm run release:preflight
 
 # 正式 macOS/Windows 打包会先强制执行 release:preflight
@@ -117,7 +117,7 @@ V8/V9 benchmark 主要衡量模型能力和路由质量；release regression 主
 7. `npm run release:cli-prefix-cache`（CLI/Brain 路由、稳定前缀、runtime knowledge、工具 schema 改动必跑；GUI-only hotpatch 可记录原因后跳过）
 8. `npm run test:release:static`
 9. `npm run test:release:ui`
-10. 平台打包、公证、manifest、镜像站更新（`dist` / `dist:win` 会先跑 `release:preflight`）
+10. 平台打包、公证、manifest、镜像站更新（`dist` / `dist:win` 会先跑 `release:preflight`,因此 StepFun efficiency 与 prefix-cache 会阻断真实打包）
 11. 真实安装包 smoke
 12. 启动打包后的 Lynn 服务后跑 `npm run test:release:live`
 13. 人工 UI Gate

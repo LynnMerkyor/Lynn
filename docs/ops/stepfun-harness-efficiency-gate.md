@@ -42,7 +42,7 @@ For release blocking, add explicit StepFun thresholds instead of eyeballing the 
 npm run release:cli-efficiency
 ```
 
-This script runs both the route gate and the task efficiency gate with the current release thresholds. To tune or debug the route gate directly:
+This script runs both the route gate and the task efficiency gate with the current release thresholds. `release:preflight` also runs this gate, so packaging cannot silently skip the default StepFun latency guard. To tune or debug the route gate directly:
 
 ```bash
 npm run bench:cli-routes -- \
@@ -319,7 +319,7 @@ Prefix-cache has its own repeated warm gate. It intentionally runs the same Step
 npm run release:cli-prefix-cache
 ```
 
-Use this gate when changing stable-prefix ordering, runtime-knowledge injection, tool schemas, provider routing, or Brain usage accounting. A failure means users may still get correct answers, but the default StepFun path has lost a latency advantage and should not be called an efficiency improvement.
+Use this gate when changing stable-prefix ordering, runtime-knowledge injection, tool schemas, provider routing, or Brain usage accounting. `release:preflight` also runs this gate, so packaging cannot silently skip prefix-cache validation. A failure means users may still get correct answers, but the default StepFun path has lost a latency advantage and should not be called an efficiency improvement.
 
 To run only the task efficiency half:
 
