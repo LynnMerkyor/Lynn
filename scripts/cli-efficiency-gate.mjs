@@ -16,6 +16,20 @@ const label = String(args.label || process.env.LYNN_EFFICIENCY_LABEL || "baselin
 const timeoutMs = Number(args.timeoutMs || process.env.LYNN_EFFICIENCY_TIMEOUT_MS || 240000);
 const reportPath = path.resolve(String(args.out || path.join(outDir, `cli-efficiency-gate-${startedAt.toISOString().replace(/[:.]/g, "-")}.json`)));
 
+if (args.compare === true) {
+  const { baselinePath, experimentPath } = resolveCompareInputs(args);
+  const baseline = loadReport(baselinePath);
+  const experiment = loadReport(experimentPath);
+  const comparison = compareReports(baseline, experiment, { requireSpeedup: args.requireSpeedup === true });
+  printComparison(comparison);
+  if (args.out) {
+    fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+    fs.writeFileSync(reportPath, `${JSON.stringify(comparison, null, 2)}\n`);
+    console.log(`[cli-efficiency-gate] wrote ${reportPath}`);
+  }
+  process.exit(comparison.pass ? 0 : 1);
+}
+
 const allTasks = createTasks();
 const tasks = selectTasks(allTasks, suite);
 
@@ -311,6 +325,9 @@ function summarize(input) {
     total: input.results.length,
     passed,
     failed,
+    successRate: input.results.length ? passed / input.results.length : 0,
+    totalWallMs: sum(input.results, "wallMs"),
+    successPerHour: successPerHour(passed, sum(input.results, "wallMs")),
     wallMs: percentileSummary(wall),
     ttftMs: percentileSummary(ttft),
     toolSteps: sum(input.results, "toolSteps"),
@@ -326,6 +343,7 @@ function summarize(input) {
     cacheHitTokens: sumUsage(input.results, "cacheHitTokens"),
     cacheWriteTokens: sumUsage(input.results, "cacheWriteTokens"),
   };
+  summary.cacheHitRatio = summary.promptTokens > 0 ? summary.cacheHitTokens / summary.promptTokens : null;
   return {
     schema: "lynn-cli-efficiency-gate-v1",
     label: input.label,
@@ -358,6 +376,191 @@ function sum(results, field) {
 
 function sumUsage(results, field) {
   return results.reduce((acc, result) => acc + Number(result.usage?.[field] || 0), 0);
+}
+
+function successPerHour(passed, totalWallMs) {
+  if (!totalWallMs) return null;
+  return passed / (totalWallMs / 3600000);
+}
+
+function resolveCompareInputs(parsedArgs) {
+  const positionals = parsedArgs._ || [];
+  const baselinePath = parsedArgs.baseline || parsedArgs.base || positionals[0];
+  const experimentPath = parsedArgs.experiment || parsedArgs.exp || positionals[1];
+  if (!baselinePath || !experimentPath) {
+    throw new Error("Usage: node scripts/cli-efficiency-gate.mjs --compare --baseline baseline.json --experiment experiment.json");
+  }
+  return {
+    baselinePath: path.resolve(String(baselinePath)),
+    experimentPath: path.resolve(String(experimentPath)),
+  };
+}
+
+function loadReport(file) {
+  return JSON.parse(fs.readFileSync(file, "utf8"));
+}
+
+function compareReports(baseline, experiment, options = {}) {
+  const base = normalizedReportMetrics(baseline);
+  const exp = normalizedReportMetrics(experiment);
+  const reasons = [];
+  const warnings = [];
+  const taskComparisons = compareTasks(baseline.results || [], experiment.results || [], reasons, warnings);
+
+  if (exp.successRate < base.successRate) {
+    reasons.push(`success rate regressed: ${percent(exp.successRate)} < ${percent(base.successRate)}`);
+  }
+  if (exp.failed > base.failed) {
+    reasons.push(`failed task count increased: ${exp.failed} > ${base.failed}`);
+  }
+  if (exp.wasteSteps > base.wasteSteps) {
+    reasons.push(`waste steps increased: ${exp.wasteSteps} > ${base.wasteSteps}`);
+  }
+  if (exp.maxStepsReached > base.maxStepsReached) {
+    reasons.push(`max-steps hits increased: ${exp.maxStepsReached} > ${base.maxStepsReached}`);
+  }
+  if (options.requireSpeedup && Number(exp.successPerHour || 0) <= Number(base.successPerHour || 0)) {
+    reasons.push(`success/hour did not improve: ${fmtNumber(exp.successPerHour)} <= ${fmtNumber(base.successPerHour)}`);
+  }
+
+  return {
+    schema: "lynn-cli-efficiency-compare-v1",
+    pass: reasons.length === 0,
+    requireSpeedup: Boolean(options.requireSpeedup),
+    baseline: base,
+    experiment: exp,
+    deltas: {
+      successRate: exp.successRate - base.successRate,
+      successPerHour: nullableDelta(exp.successPerHour, base.successPerHour),
+      totalWallMs: exp.totalWallMs - base.totalWallMs,
+      p50WallMs: nullableDelta(exp.p50WallMs, base.p50WallMs),
+      p50TtftMs: nullableDelta(exp.p50TtftMs, base.p50TtftMs),
+      wasteSteps: exp.wasteSteps - base.wasteSteps,
+      validationSteps: exp.validationSteps - base.validationSteps,
+      repairSteps: exp.repairSteps - base.repairSteps,
+      cacheHitRatio: nullableDelta(exp.cacheHitRatio, base.cacheHitRatio),
+    },
+    taskComparisons,
+    reasons,
+    warnings,
+  };
+}
+
+function normalizedReportMetrics(report) {
+  const results = report.results || [];
+  const summary = report.summary || {};
+  const total = Number(summary.total ?? results.length ?? 0);
+  const passed = Number(summary.passed ?? results.filter((result) => result.success).length ?? 0);
+  const failed = Number(summary.failed ?? Math.max(0, total - passed));
+  const totalWallMs = Number(summary.totalWallMs ?? sum(results, "wallMs"));
+  const promptTokens = Number(summary.promptTokens ?? sumUsage(results, "promptTokens"));
+  const cacheHitTokens = Number(summary.cacheHitTokens ?? sumUsage(results, "cacheHitTokens"));
+  return {
+    label: String(report.label || ""),
+    suite: String(report.suite || ""),
+    total,
+    passed,
+    failed,
+    successRate: Number(summary.successRate ?? (total ? passed / total : 0)),
+    totalWallMs,
+    successPerHour: Number(summary.successPerHour ?? successPerHour(passed, totalWallMs) ?? 0),
+    p50WallMs: valueAt(summary.wallMs, "p50"),
+    p50TtftMs: valueAt(summary.ttftMs, "p50"),
+    toolSteps: Number(summary.toolSteps || 0),
+    validationSteps: Number(summary.validationSteps || 0),
+    repairSteps: Number(summary.repairSteps || 0),
+    wasteSteps: Number(summary.wasteSteps || 0),
+    maxStepsReached: Number(summary.maxStepsReached || 0),
+    promptTokens,
+    completionTokens: Number(summary.completionTokens || sumUsage(results, "completionTokens")),
+    cacheHitTokens,
+    cacheWriteTokens: Number(summary.cacheWriteTokens || sumUsage(results, "cacheWriteTokens")),
+    cacheHitRatio: summary.cacheHitRatio ?? (promptTokens > 0 ? cacheHitTokens / promptTokens : null),
+  };
+}
+
+function compareTasks(baselineResults, experimentResults, reasons, warnings) {
+  const experimentById = new Map(experimentResults.map((result) => [result.id, result]));
+  const comparisons = [];
+  for (const baseTask of baselineResults) {
+    const expTask = experimentById.get(baseTask.id);
+    if (!expTask) {
+      reasons.push(`missing experiment task: ${baseTask.id}`);
+      continue;
+    }
+    const comparison = {
+      id: baseTask.id,
+      kind: baseTask.kind,
+      baselineSuccess: Boolean(baseTask.success),
+      experimentSuccess: Boolean(expTask.success),
+      wallMsDelta: Number(expTask.wallMs || 0) - Number(baseTask.wallMs || 0),
+      validationStepsDelta: Number(expTask.validationSteps || 0) - Number(baseTask.validationSteps || 0),
+      wasteStepsDelta: Number(expTask.wasteSteps || 0) - Number(baseTask.wasteSteps || 0),
+    };
+    comparisons.push(comparison);
+    if (baseTask.success && !expTask.success) {
+      reasons.push(`task regressed from pass to fail: ${baseTask.id}`);
+    }
+    if (Number(expTask.wasteSteps || 0) > Number(baseTask.wasteSteps || 0)) {
+      reasons.push(`task waste increased: ${baseTask.id}`);
+    }
+    if (isQualityTask(baseTask) && Number(baseTask.validationSteps || 0) > 0 && Number(expTask.validationSteps || 0) < Number(baseTask.validationSteps || 0)) {
+      reasons.push(`quality task lost validation work: ${baseTask.id} (${expTask.validationSteps} < ${baseTask.validationSteps})`);
+    }
+    if (Number(expTask.repairSteps || 0) < Number(baseTask.repairSteps || 0)) {
+      warnings.push(`repair steps decreased for ${baseTask.id}; confirm this is due to fewer failures, not disabled repair`);
+    }
+  }
+  return comparisons;
+}
+
+function isQualityTask(task) {
+  return task.kind === "code" || /refactor|fix|review|exhaustive|ultra/i.test(String(task.id || ""));
+}
+
+function valueAt(object, key) {
+  return object && typeof object[key] === "number" ? object[key] : null;
+}
+
+function nullableDelta(value, base) {
+  if (typeof value !== "number" || typeof base !== "number") return null;
+  return value - base;
+}
+
+function printComparison(comparison) {
+  const mark = comparison.pass ? "PASS" : "FAIL";
+  console.log(`Lynn Harness Efficiency Compare: ${mark}`);
+  console.log(`baseline:   success=${comparison.baseline.passed}/${comparison.baseline.total} success/hour=${fmtNumber(comparison.baseline.successPerHour)} p50Wall=${formatNullable(comparison.baseline.p50WallMs)} p50TTFT=${formatNullable(comparison.baseline.p50TtftMs)} waste=${comparison.baseline.wasteSteps} validation=${comparison.baseline.validationSteps} cache=${percent(comparison.baseline.cacheHitRatio)}`);
+  console.log(`experiment: success=${comparison.experiment.passed}/${comparison.experiment.total} success/hour=${fmtNumber(comparison.experiment.successPerHour)} p50Wall=${formatNullable(comparison.experiment.p50WallMs)} p50TTFT=${formatNullable(comparison.experiment.p50TtftMs)} waste=${comparison.experiment.wasteSteps} validation=${comparison.experiment.validationSteps} cache=${percent(comparison.experiment.cacheHitRatio)}`);
+  console.log(`delta:      success/hour=${signed(comparison.deltas.successPerHour)} totalWall=${signedMs(comparison.deltas.totalWallMs)} p50Wall=${signedMs(comparison.deltas.p50WallMs)} p50TTFT=${signedMs(comparison.deltas.p50TtftMs)} waste=${signed(comparison.deltas.wasteSteps)} validation=${signed(comparison.deltas.validationSteps)}`);
+  if (comparison.reasons.length) {
+    console.log("");
+    console.log("Quality gate failures:");
+    for (const reason of comparison.reasons) console.log(`- ${reason}`);
+  }
+  if (comparison.warnings.length) {
+    console.log("");
+    console.log("Warnings:");
+    for (const warning of comparison.warnings) console.log(`- ${warning}`);
+  }
+}
+
+function fmtNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : "--";
+}
+
+function percent(value) {
+  return typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : "--";
+}
+
+function signed(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "--";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
+}
+
+function signedMs(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "--";
+  return `${value >= 0 ? "+" : ""}${Math.round(value)}ms`;
 }
 
 function summarizeUsage(usage) {
@@ -395,7 +598,11 @@ function parseArgs(argv) {
   const parsed = {};
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
-    if (!token.startsWith("--")) continue;
+    if (!token.startsWith("--")) {
+      if (!parsed._) parsed._ = [];
+      parsed._.push(token);
+      continue;
+    }
     const eq = token.indexOf("=");
     if (eq > 0) {
       parsed[toCamel(token.slice(2, eq))] = token.slice(eq + 1);
