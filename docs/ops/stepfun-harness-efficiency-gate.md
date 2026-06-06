@@ -39,6 +39,12 @@ node scripts/cli-route-latency-smoke.mjs --require-spark
 For release blocking, add explicit StepFun thresholds instead of eyeballing the report:
 
 ```bash
+npm run release:cli-efficiency
+```
+
+This script runs both the route gate and the task efficiency gate with the current release thresholds. To tune or debug the route gate directly:
+
+```bash
 npm run bench:cli-routes -- \
   --stepfun-runs 5 \
   --spark-runs 1 \
@@ -302,6 +308,12 @@ The report summary includes `taskStats[]` for repeated runs. For each base task 
 Use these per-task fields to distinguish a real prefix-cache win from noise. A useful StepFun-first optimization should make repeated runs warmer or less variable without reducing task success or validation coverage.
 
 For release blocking, use explicit quality and latency thresholds:
+
+```bash
+npm run release:cli-efficiency
+```
+
+To run only the task efficiency half:
 
 ```bash
 npm run bench:cli-efficiency -- \
