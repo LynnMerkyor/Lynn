@@ -14,6 +14,7 @@ const live = args.live === true || process.env.LYNN_EFFICIENCY_LIVE === "1";
 const suite = String(args.suite || process.env.LYNN_EFFICIENCY_SUITE || "smoke");
 const label = String(args.label || process.env.LYNN_EFFICIENCY_LABEL || "baseline");
 const timeoutMs = Number(args.timeoutMs || process.env.LYNN_EFFICIENCY_TIMEOUT_MS || 240000);
+const repeat = positiveInt(args.repeat || process.env.LYNN_EFFICIENCY_REPEAT || 1, "repeat");
 const reportPath = path.resolve(String(args.out || path.join(outDir, `cli-efficiency-gate-${startedAt.toISOString().replace(/[:.]/g, "-")}.json`)));
 
 if (args.compare === true) {
@@ -32,21 +33,22 @@ if (args.compare === true) {
 
 const allTasks = createTasks();
 const tasks = selectTasks(allTasks, suite);
+const taskRuns = expandTaskRuns(tasks, repeat);
 
 if (!tasks.length) {
   throw new Error(`No efficiency tasks selected for suite=${suite}`);
 }
 
 if (!live) {
-  printDryRun(tasks);
+  printDryRun(tasks, taskRuns);
   process.exit(0);
 }
 
 fs.mkdirSync(outDir, { recursive: true });
 
 const results = [];
-for (const task of tasks) {
-  const working = fs.mkdtempSync(path.join(os.tmpdir(), `lynn-efficiency-${task.id}-`));
+for (const task of taskRuns) {
+  const working = fs.mkdtempSync(path.join(os.tmpdir(), `lynn-efficiency-${safeFileId(task.id)}-`));
   try {
     task.setup?.(working);
     const run = await runTask(task, working);
@@ -56,6 +58,8 @@ for (const task of tasks) {
     const success = run.exitCode === 0 && run.hasVisibleAnswer && run.outputOk && run.modelOk !== false && verify.ok;
     results.push({
       id: task.id,
+      taskId: task.taskId,
+      runIndex: task.runIndex,
       kind: task.kind,
       label,
       success,
@@ -74,7 +78,7 @@ for (const task of tasks) {
   }
 }
 
-const report = summarize({ label, suite, startedAt, finishedAt: new Date(), results });
+const report = summarize({ label, suite, repeat, startedAt, finishedAt: new Date(), results });
 fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 console.log(`[cli-efficiency-gate] wrote ${reportPath}`);
 
@@ -151,6 +155,21 @@ function createTasks() {
 function selectTasks(tasks, requestedSuite) {
   if (requestedSuite === "all") return tasks;
   return tasks.filter((task) => task.suite.includes(requestedSuite));
+}
+
+function expandTaskRuns(tasks, repeatCount) {
+  const runs = [];
+  for (const task of tasks) {
+    for (let i = 1; i <= repeatCount; i += 1) {
+      runs.push({
+        ...task,
+        id: repeatCount > 1 ? `${task.id}#${i}` : task.id,
+        taskId: task.id,
+        runIndex: i,
+      });
+    }
+  }
+  return runs;
 }
 
 async function runTask(task, cwd) {
@@ -323,6 +342,8 @@ function summarize(input) {
   const ttft = input.results.map((result) => result.ttftMs).filter((value) => typeof value === "number").sort((a, b) => a - b);
   const summary = {
     total: input.results.length,
+    taskCount: new Set(input.results.map((result) => result.taskId || result.id)).size,
+    repeat: input.repeat,
     passed,
     failed,
     successRate: input.results.length ? passed / input.results.length : 0,
@@ -348,6 +369,7 @@ function summarize(input) {
     schema: "lynn-cli-efficiency-gate-v1",
     label: input.label,
     suite: input.suite,
+    repeat: input.repeat,
     startedAt: input.startedAt.toISOString(),
     finishedAt: input.finishedAt.toISOString(),
     summary,
@@ -450,6 +472,8 @@ function normalizedReportMetrics(report) {
   const results = report.results || [];
   const summary = report.summary || {};
   const total = Number(summary.total ?? results.length ?? 0);
+  const taskCount = Number(summary.taskCount ?? new Set(results.map((result) => result.taskId || result.id)).size ?? total);
+  const repeat = Number(summary.repeat ?? report.repeat ?? 1);
   const passed = Number(summary.passed ?? results.filter((result) => result.success).length ?? 0);
   const failed = Number(summary.failed ?? Math.max(0, total - passed));
   const totalWallMs = Number(summary.totalWallMs ?? sum(results, "wallMs"));
@@ -459,6 +483,8 @@ function normalizedReportMetrics(report) {
     label: String(report.label || ""),
     suite: String(report.suite || ""),
     total,
+    taskCount,
+    repeat,
     passed,
     failed,
     successRate: Number(summary.successRate ?? (total ? passed / total : 0)),
@@ -580,7 +606,7 @@ function summarizeUsage(usage) {
   };
 }
 
-function printDryRun(selected) {
+function printDryRun(selected, runs) {
   console.log("Lynn Harness Efficiency Gate (dry-run)");
   console.log("");
   console.log("This script measures StepFun-first wall-clock without rewarding shallow answers.");
@@ -589,9 +615,22 @@ function printDryRun(selected) {
   console.log("  npm run build:cli && node scripts/cli-efficiency-gate.mjs --live --suite smoke");
   console.log("");
   console.log(`Selected suite: ${suite}`);
+  console.log(`Repeat: ${repeat} (${runs.length} task runs)`);
   for (const task of selected) {
     console.log(`- ${task.id} [${task.kind}] ${task.notes || ""}`);
   }
+}
+
+function positiveInt(value, name) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return parsed;
+}
+
+function safeFileId(value) {
+  return String(value).replace(/[^a-zA-Z0-9_.-]/g, "-");
 }
 
 function parseArgs(argv) {
