@@ -297,8 +297,15 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
   const decoder = new TextDecoder();
   let buffer = "";
   let emittedContentfulEvent = false;
+  const reader = response.body.getReader();
+  let completed = false;
   try {
-    for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+    while (true) {
+      const { value: chunk, done } = await reader.read();
+      if (done) {
+        completed = true;
+        break;
+      }
       buffer += decoder.decode(chunk, { stream: true });
       const split = buffer.split(/\n\n+/);
       buffer = split.pop() || "";
@@ -314,6 +321,9 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
   } catch (error) {
     if (!emittedContentfulEvent) throw new BrainStreamInterruptedError(request.brainUrl, error);
     throw error;
+  } finally {
+    if (!completed) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
 
   buffer += decoder.decode();
@@ -411,15 +421,27 @@ async function* streamDirectProviderChat(request: BrainChatRequest, provider: Cl
 
   const decoder = new TextDecoder();
   let buffer = "";
-  for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
-    buffer += decoder.decode(chunk, { stream: true });
-    const split = buffer.split(/\n\n+/);
-    buffer = split.pop() || "";
-    for (const block of split) {
-      for (const payload of parseSsePayloads(`${block}\n\n`)) {
-        for (const event of parseBrainStreamPayload(payload)) yield event;
+  const reader = response.body.getReader();
+  let completed = false;
+  try {
+    while (true) {
+      const { value: chunk, done } = await reader.read();
+      if (done) {
+        completed = true;
+        break;
+      }
+      buffer += decoder.decode(chunk, { stream: true });
+      const split = buffer.split(/\n\n+/);
+      buffer = split.pop() || "";
+      for (const block of split) {
+        for (const payload of parseSsePayloads(`${block}\n\n`)) {
+          for (const event of parseBrainStreamPayload(payload)) yield event;
+        }
       }
     }
+  } finally {
+    if (!completed) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
   buffer += decoder.decode();
   for (const payload of parseSsePayloads(buffer)) {
