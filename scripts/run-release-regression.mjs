@@ -232,12 +232,13 @@ async function runStaticChecks({ level }) {
         `manifest stable.version equals package version ${version}`,
         manifest.stable.version ? `manifest=${manifest.stable.version}` : "missing stable.version",
       ));
+      const releaseUrl = String(manifest.stable.releaseUrl || "");
       checks.push(makeCheck(
         "static-manifest-release-url-version",
         "critical",
-        String(manifest.stable.releaseUrl || "").includes(`v${version}`),
-        `manifest releaseUrl points to v${version}`,
-        String(manifest.stable.releaseUrl || ""),
+        releaseUrl.includes(`v${version}`) || releaseUrl.includes(`v${cliVersion}`),
+        `manifest releaseUrl points to v${version} or v${cliVersion}`,
+        releaseUrl,
       ));
       const badGithubDownloads = assetUrls.filter((url) => /github\.com\/.*\.(dmg|exe)(?:$|\?)/i.test(url));
       checks.push(makeCheck(
@@ -369,7 +370,7 @@ async function runStaticChecks({ level }) {
     "blocker",
     headlessContract.includes("Lynn code -p")
       && headlessContract.includes("--approval yolo")
-      && headlessContract.includes("--sandbox workspace-write")
+      && headlessContract.includes("--sandbox danger-full-access")
       && headlessContract.includes("Lynn worker run"),
     "headless/Fleet contract documents non-interactive Lynn code usage",
   ));

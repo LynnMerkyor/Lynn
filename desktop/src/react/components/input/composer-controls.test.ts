@@ -51,9 +51,10 @@ describe('composer controls regression', () => {
   it('uses concise Chinese copy for deep research controls and status', () => {
     const panel = read('desktop/src/react/components/input/DeepResearchPanel.tsx');
     const inputArea = read('desktop/src/react/components/InputArea.tsx');
+    const runner = read('desktop/src/react/components/input/useDeepResearchRunner.ts');
     const formatter = read('desktop/src/react/components/input/deep-research.ts');
     const serverFormatter = read('server/routes/deep-research.ts');
-    const joined = [panel, inputArea, formatter, serverFormatter].join('\n');
+    const joined = [panel, inputArea, runner, formatter, serverFormatter].join('\n');
 
     expect(joined).toContain('深度调研');
     expect(joined).toContain('正在使用');
@@ -62,11 +63,12 @@ describe('composer controls regression', () => {
 
   it('keeps the deep research button as an explicit mode before running', () => {
     const inputArea = read('desktop/src/react/components/InputArea.tsx');
+    const runner = read('desktop/src/react/components/input/useDeepResearchRunner.ts');
     const submitArea = read('desktop/src/react/components/input/SubmitArea.tsx');
 
     expect(inputArea).toContain('setDeepResearchOpen((open) => !open)');
     expect(inputArea).toContain('deepResearchOpen && text');
-    expect(inputArea).toContain('深研已启动');
+    expect(runner).toContain('深研已启动');
     expect(submitArea).toContain('aria-pressed={deepResearchOpen}');
   });
 

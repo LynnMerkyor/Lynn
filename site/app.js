@@ -1,12 +1,12 @@
 const RELEASE = {
-  guiVersion: "0.80.2",
-  cliVersion: "0.80.7",
+  guiVersion: "0.80.3",
+  cliVersion: "0.80.9",
   releasePage: "https://github.com/MerkyorLynn/Lynn/releases",
   assets: {
     macArm:
-      "https://download.merkyorlynn.com/downloads/Lynn-0.80.2-macOS-arm64.dmg",
+      "https://download.merkyorlynn.com/downloads/Lynn-0.80.3-macOS-arm64.dmg",
     macIntel:
-      "https://download.merkyorlynn.com/downloads/Lynn-0.80.2-macOS-x64.dmg",
+      "https://download.merkyorlynn.com/downloads/Lynn-0.80.3-macOS-x64.dmg",
     windows: "https://github.com/MerkyorLynn/Lynn/releases",
   },
 };
