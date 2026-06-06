@@ -109,7 +109,7 @@ function createTasks() {
       suite: ["smoke", "full"],
       prompt: "只输出 JSON:{\"route\":\"StepFun-first\",\"localModels\":\"opt-in\"}。不要解释。",
       notes: "Schema boundary task; boundary stop is allowed only after the required JSON is visible.",
-      command: () => ["-p", "只输出 JSON:{\"route\":\"StepFun-first\",\"localModels\":\"opt-in\"}。不要解释。", "--json", "--reasoning", "high"],
+      command: () => ["-p", "只输出 JSON:{\"route\":\"StepFun-first\",\"localModels\":\"opt-in\"}。不要解释。", "--json", "--stop-at-json", "--reasoning", "high"],
       verifyOutput(text) {
         try {
           const first = text.match(/\{[\s\S]*\}/)?.[0] || "";
