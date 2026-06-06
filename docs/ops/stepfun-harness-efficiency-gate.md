@@ -20,6 +20,30 @@ Do not optimize by:
 
 Local 9B/35B remains opt-in: offline, privacy-sensitive, batch, or fallback only.
 
+## Route availability gate
+
+Before using a local 9B/35B route in the default path, prove that it is actually reachable and warm on the user's machine. A distilled A3B planner can be useful, but it is not a required dependency for the default interactive CLI path.
+
+Run the route smoke when changing router priority, local-model service setup, or Spark tunnel assumptions:
+
+```bash
+npm run bench:cli-routes
+```
+
+This runs real `Lynn -p --json` turns through the product default StepFun path and probes the local Spark OpenAI-compatible endpoint. Spark failures are recorded as availability evidence, not as a script failure, unless `--require-spark` is set:
+
+```bash
+node scripts/cli-route-latency-smoke.mjs --require-spark
+```
+
+Interpretation:
+
+- StepFun success with low TTFT means the cloud route can carry the default interactive path.
+- Spark unavailable means local A3B/35B must stay opt-in/offline/batch/fallback for that environment.
+- Spark reachable and warm can justify local opt-in workflows, background critic/compression, or privacy-sensitive work, but should not add a new failure point to the default interactive path.
+
+The release default should remain StepFun-first unless the route smoke proves the local route is both reachable and materially better for a specific task class without reducing success, validation, or repair coverage.
+
 ## What "faster" means
 
 Measure task-level wall-clock, not only decode TPS.
