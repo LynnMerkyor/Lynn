@@ -262,6 +262,14 @@ The report summary includes `taskStats[]` for repeated runs. For each base task 
 
 Use these per-task fields to distinguish a real prefix-cache win from noise. A useful StepFun-first optimization should make repeated runs warmer or less variable without reducing task success or validation coverage.
 
+Compare mode also prints per-task deltas. Read this table before accepting a speed claim:
+
+- `p50Wall` and `p50TTFT` show where the time moved;
+- `cache` shows whether prefix-cache changes helped the task type that should benefit;
+- `validation` and `waste` show whether speed came from better harness behavior or from accidentally removing quality work.
+
+The per-task table is attribution, not a shortcut. A task getting faster is useful only when success and validation stay intact.
+
 Add `--require-speedup` only when an experiment is explicitly meant to prove a speed win. Without that flag, compare mode is a quality regression gate: it allows neutral speed results but blocks shallow speedups.
 
 ## Release rule
