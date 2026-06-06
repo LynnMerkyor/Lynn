@@ -48,11 +48,12 @@ const report = summarize({
   sparkBaseUrl,
   sparkModel,
 });
+report.gate = evaluateRouteGate(report.summary, args);
 
 fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 printSummary(report, reportPath);
 
-if (report.summary.stepfun.successes === 0) process.exit(1);
+if (report.summary.stepfun.successes === 0 || !report.gate.pass) process.exit(1);
 if (requireSpark && report.summary.spark.successes === 0) process.exit(1);
 
 async function runStepFun(index) {
@@ -296,13 +297,55 @@ function printSummary(report, file) {
   console.log("Lynn Route Latency Smoke");
   console.log(`StepFun: ${step.successes}/${step.total} ok p50Wall=${formatMs(step.p50WallMs)} p50TTFT=${formatMs(step.p50TtftMs)} cacheHit=${step.p50CacheHitTokens ?? "--"}`);
   console.log(`Spark:   ${spark.successes}/${spark.total} ok p50Wall=${formatMs(spark.p50WallMs)} p50TTFT=${formatMs(spark.p50TtftMs)} health=${report.sparkHealth.ok ? "ok" : "failed"}`);
+  if (report.gate.checked) {
+    console.log(`Gate:    ${report.gate.pass ? "PASS" : "FAIL"} (${report.gate.checked} checks)`);
+    for (const check of report.gate.checks) {
+      console.log(`- ${check.pass ? "PASS" : "FAIL"} ${check.label}: ${check.actualFormatted} ${check.operator} ${check.expectedFormatted}`);
+    }
+  }
   if (!report.sparkHealth.ok) console.log(`Spark health error: ${report.sparkHealth.error || report.sparkHealth.body || report.sparkHealth.status}`);
   console.log(`Recommendation: ${report.summary.recommendation}`);
   console.log(`[cli-route-latency-smoke] wrote ${file}`);
 }
 
+function evaluateRouteGate(summary, parsedArgs) {
+  const checks = [
+    thresholdCheck("minStepfunSuccessRate", "StepFun success rate", readRatioOption(parsedArgs, "minStepfunSuccessRate", "LYNN_ROUTE_MIN_STEPFUN_SUCCESS_RATE"), summary.stepfun.successRate, (actual, expected) => actual >= expected, percent),
+    thresholdCheck("maxStepfunP50WallMs", "StepFun p50 wall", readNumberOption(parsedArgs, "maxStepfunP50WallMs", "LYNN_ROUTE_MAX_STEPFUN_P50_WALL_MS"), summary.stepfun.p50WallMs, (actual, expected) => actual <= expected, formatMs),
+    thresholdCheck("maxStepfunP50TtftMs", "StepFun p50 TTFT", readNumberOption(parsedArgs, "maxStepfunP50TtftMs", "LYNN_ROUTE_MAX_STEPFUN_P50_TTFT_MS"), summary.stepfun.p50TtftMs, (actual, expected) => actual <= expected, formatMs),
+    thresholdCheck("minStepfunCacheHitTokens", "StepFun p50 cache hit tokens", readNumberOption(parsedArgs, "minStepfunCacheHitTokens", "LYNN_ROUTE_MIN_STEPFUN_CACHE_HIT_TOKENS"), summary.stepfun.p50CacheHitTokens, (actual, expected) => actual >= expected, String),
+  ].filter(Boolean);
+  const failures = checks.filter((check) => !check.pass);
+  return {
+    pass: failures.length === 0,
+    checked: checks.length,
+    checks,
+    reasons: failures.map((check) => `${check.label} ${check.actualFormatted} failed ${check.operator} ${check.expectedFormatted}`),
+  };
+}
+
+function thresholdCheck(key, label, expected, actual, predicate, format) {
+  if (expected === null) return null;
+  const actualNumber = typeof actual === "number" && Number.isFinite(actual) ? actual : null;
+  const pass = actualNumber !== null && predicate(actualNumber, expected);
+  return {
+    key,
+    label,
+    pass,
+    actual: actualNumber,
+    expected,
+    actualFormatted: actualNumber === null ? "--" : format(actualNumber),
+    expectedFormatted: format(expected),
+    operator: predicate(2, 1) ? ">=" : "<=",
+  };
+}
+
 function formatMs(value) {
   return typeof value === "number" && Number.isFinite(value) ? `${value}ms` : "--";
+}
+
+function percent(value) {
+  return typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : "--";
 }
 
 function parseArgs(argv) {
@@ -328,6 +371,23 @@ function positiveInt(value, name) {
   return parsed;
 }
 
+function readNumberOption(parsedArgs, key, envName) {
+  const raw = parsedArgs[key] ?? process.env[envName];
+  if (raw === undefined || raw === null || raw === false) return null;
+  const parsed = Number(String(raw).trim());
+  if (!Number.isFinite(parsed)) throw new Error(`${key} must be a number`);
+  return parsed;
+}
+
+function readRatioOption(parsedArgs, key, envName) {
+  const raw = parsedArgs[key] ?? process.env[envName];
+  if (raw === undefined || raw === null || raw === false) return null;
+  const text = String(raw).trim();
+  const parsed = text.endsWith("%") ? Number(text.slice(0, -1)) / 100 : Number(text);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${key} must be a ratio such as 1, 0.95, or 95%`);
+  return parsed > 1 ? parsed / 100 : parsed;
+}
+
 function camel(value) {
   return value.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 }
@@ -346,5 +406,13 @@ Options:
   --timeout-ms N         Per-run timeout (default 30000)
   --out FILE             JSON report path
   --require-spark        Fail if Spark has no successful run
+  --min-stepfun-success-rate R
+                         Fail if StepFun success rate is below R (e.g. 1 or 95%)
+  --max-stepfun-p50-wall-ms N
+                         Fail if StepFun p50 wall-clock exceeds N
+  --max-stepfun-p50-ttft-ms N
+                         Fail if StepFun p50 TTFT exceeds N
+  --min-stepfun-cache-hit-tokens N
+                         Fail if StepFun p50 cache-hit tokens is below N
 `);
 }

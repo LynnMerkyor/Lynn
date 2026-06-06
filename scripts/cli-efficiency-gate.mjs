@@ -79,10 +79,13 @@ for (const task of taskRuns) {
 }
 
 const report = summarize({ label, suite, repeat, startedAt, finishedAt: new Date(), results });
-fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+const gate = evaluateEfficiencyGate(report.summary, args);
+const finalReport = { ...report, gate };
+fs.writeFileSync(reportPath, `${JSON.stringify(finalReport, null, 2)}\n`);
+printGate(gate);
 console.log(`[cli-efficiency-gate] wrote ${reportPath}`);
 
-if (report.summary.failed > 0) process.exit(1);
+if (finalReport.summary.failed > 0 || !gate.pass) process.exit(1);
 
 function createTasks() {
   return [
@@ -375,6 +378,40 @@ function summarize(input) {
     finishedAt: input.finishedAt.toISOString(),
     summary,
     results: input.results,
+  };
+}
+
+function evaluateEfficiencyGate(summary, parsedArgs) {
+  const checks = [
+    thresholdCheck("minSuccessRate", "success rate", readRatioOption(parsedArgs, "minSuccessRate", "LYNN_EFFICIENCY_MIN_SUCCESS_RATE"), summary.successRate, (actual, expected) => actual >= expected, percent),
+    thresholdCheck("maxP50WallMs", "p50 wall", readNumberOption(parsedArgs, "maxP50WallMs", "LYNN_EFFICIENCY_MAX_P50_WALL_MS"), summary.wallMs?.p50, (actual, expected) => actual <= expected, formatNullable),
+    thresholdCheck("maxP50TtftMs", "p50 TTFT", readNumberOption(parsedArgs, "maxP50TtftMs", "LYNN_EFFICIENCY_MAX_P50_TTFT_MS"), summary.ttftMs?.p50, (actual, expected) => actual <= expected, formatNullable),
+    thresholdCheck("minCacheHitRatio", "prefix-cache hit ratio", readRatioOption(parsedArgs, "minCacheHitRatio", "LYNN_EFFICIENCY_MIN_CACHE_HIT_RATIO"), summary.cacheHitRatio, (actual, expected) => actual >= expected, percent),
+    thresholdCheck("maxWasteSteps", "waste steps", readNumberOption(parsedArgs, "maxWasteSteps", "LYNN_EFFICIENCY_MAX_WASTE_STEPS"), summary.wasteSteps, (actual, expected) => actual <= expected, String),
+    thresholdCheck("maxMaxStepsReached", "max-steps hits", readNumberOption(parsedArgs, "maxMaxStepsReached", "LYNN_EFFICIENCY_MAX_MAX_STEPS_REACHED"), summary.maxStepsReached, (actual, expected) => actual <= expected, String),
+  ].filter(Boolean);
+  const failures = checks.filter((check) => !check.pass);
+  return {
+    pass: failures.length === 0,
+    checked: checks.length,
+    checks,
+    reasons: failures.map((check) => `${check.label} ${check.actualFormatted} failed ${check.operator} ${check.expectedFormatted}`),
+  };
+}
+
+function thresholdCheck(key, label, expected, actual, predicate, format) {
+  if (expected === null) return null;
+  const actualNumber = typeof actual === "number" && Number.isFinite(actual) ? actual : null;
+  const pass = actualNumber !== null && predicate(actualNumber, expected);
+  return {
+    key,
+    label,
+    pass,
+    actual: actualNumber,
+    expected,
+    actualFormatted: actualNumber === null ? "--" : format(actualNumber),
+    expectedFormatted: format(expected),
+    operator: predicate(2, 1) ? ">=" : "<=",
   };
 }
 
@@ -742,12 +779,38 @@ function printDryRun(selected, runs) {
   }
 }
 
+function printGate(gate) {
+  if (!gate.checked) return;
+  console.log(`Gate: ${gate.pass ? "PASS" : "FAIL"} (${gate.checked} checks)`);
+  for (const check of gate.checks) {
+    const mark = check.pass ? "PASS" : "FAIL";
+    console.log(`- ${mark} ${check.label}: ${check.actualFormatted} ${check.operator} ${check.expectedFormatted}`);
+  }
+}
+
 function positiveInt(value, name) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) {
     throw new Error(`${name} must be a positive integer`);
   }
   return parsed;
+}
+
+function readNumberOption(parsedArgs, key, envName) {
+  const raw = parsedArgs[key] ?? process.env[envName];
+  if (raw === undefined || raw === null || raw === false) return null;
+  const parsed = Number(String(raw).trim());
+  if (!Number.isFinite(parsed)) throw new Error(`${key} must be a number`);
+  return parsed;
+}
+
+function readRatioOption(parsedArgs, key, envName) {
+  const raw = parsedArgs[key] ?? process.env[envName];
+  if (raw === undefined || raw === null || raw === false) return null;
+  const text = String(raw).trim();
+  const parsed = text.endsWith("%") ? Number(text.slice(0, -1)) / 100 : Number(text);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${key} must be a ratio such as 0.95 or 95%`);
+  return parsed > 1 ? parsed / 100 : parsed;
 }
 
 function safeFileId(value) {
