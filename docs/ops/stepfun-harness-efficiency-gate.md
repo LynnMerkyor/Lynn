@@ -4,9 +4,9 @@ Status: draft for v0.80.x efficiency work
 
 ## North star
 
-The default interactive route stays StepFun 3.7 Flash cloud first. The goal is to make real Lynn tasks finish sooner in wall-clock time while preserving exhaustive search, adversarial verification, and corrective reruns.
+The default interactive route stays StepFun 3.7 Flash cloud first. The goal is to make real Lynn tasks spend less time waiting or repeating unproductive work while preserving exhaustive search, adversarial verification, and corrective reruns.
 
-This gate must not reward "shorter because less careful". It rewards less waiting, less idle serial work, and fewer repeated failed attempts.
+This gate must not reward "shorter because less careful". It rewards less waiting, less idle serial work, and fewer repeated failed attempts. It must not reward shorter generations, fewer repair attempts, or fewer verification passes when those steps are needed to reach the best solution.
 
 ## Non-goals
 
@@ -32,7 +32,7 @@ Required metrics per run:
 - `final_answer_ms`: start to final visible answer;
 - `tool_steps`: total tool calls;
 - `validation_steps`: typecheck/test/refuter/auto-verify steps;
-- `repair_steps`: retries that corrected a failed state;
+- `repair_steps`: retries that corrected a failed state; these are valid quality work, not waste;
 - `waste_steps`: denied duplicate commands, repeated failed commands with same fingerprint, empty answers, or known no-op tool calls;
 - `max_steps_reached`: whether the task exhausted the loop;
 - `success`: task-specific verifier result;
@@ -77,16 +77,16 @@ Not allowed:
 - bypassing plan order when later steps depend on previous tool results;
 - making the router answer on behalf of the model.
 
-### 4. Early stop only at objective boundaries
+### 4. Boundary stop only at objective boundaries
 
-Early stop is allowed only when the output format has a crisp completion condition:
+Boundary stop is allowed only when the output format has a crisp completion condition:
 
 - JSON/schema all required fields present;
 - patch/diff generated and applied;
 - verifier answer captured;
 - a single required answer in an eval task.
 
-Early stop is not allowed for open-ended architecture review, code review, long analysis, or "find the best solution" tasks unless an explicit verifier/refuter says enough evidence has been collected.
+Boundary stop is not allowed for open-ended architecture review, code review, long analysis, or "find the best solution" tasks unless an explicit verifier/refuter says enough evidence has been collected. It is a parser/format boundary, not a quality shortcut.
 
 ### 5. Fewer wasted retries, not fewer valid repairs
 
@@ -181,6 +181,7 @@ For exhaustive tasks:
 
 - success/quality rubric is primary;
 - efficiency win is fewer waste steps and fewer repeated failed commands, not less analysis.
+- the gate should allow more tool calls, more verification, or more repair when those steps expand coverage or improve the answer.
 
 ## Baseline and experiment matrix
 
@@ -208,4 +209,4 @@ Every experiment must report:
 
 ## Release rule
 
-Do not ship an efficiency optimization if it improves wall-clock by making the agent less willing to verify, repair, or search for the best solution. Lynn's product promise is fast enough engineering discipline, not fast shallow answers.
+Do not ship an efficiency optimization if it improves wall-clock by making the agent less willing to verify, repair, rerun a failed attempt, or search for the best solution. Lynn's product promise is fast enough engineering discipline, not fast shallow answers.

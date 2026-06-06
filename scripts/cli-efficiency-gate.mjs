@@ -76,7 +76,7 @@ function createTasks() {
       kind: "prompt",
       suite: ["smoke", "full"],
       prompt: "只输出 JSON:{\"route\":\"StepFun-first\",\"localModels\":\"opt-in\"}。不要解释。",
-      notes: "Schema boundary task; early stop is allowed only after the required JSON is visible.",
+      notes: "Schema boundary task; boundary stop is allowed only after the required JSON is visible.",
       command: () => ["-p", "只输出 JSON:{\"route\":\"StepFun-first\",\"localModels\":\"opt-in\"}。不要解释。", "--json", "--reasoning", "high"],
       verifyOutput(text) {
         try {
@@ -287,6 +287,7 @@ function summarize(input) {
     toolSteps: sum(input.results, "toolSteps"),
     validationSteps: sum(input.results, "validationSteps"),
     repairSteps: sum(input.results, "repairSteps"),
+    validRepairSteps: sum(input.results, "repairSteps"),
     wasteSteps: sum(input.results, "wasteSteps"),
     maxStepsReached: input.results.filter((result) => result.maxStepsReached).length,
   };
@@ -323,7 +324,8 @@ function sum(results, field) {
 function printDryRun(selected) {
   console.log("Lynn Harness Efficiency Gate (dry-run)");
   console.log("");
-  console.log("This script measures StepFun-first task wall-clock without rewarding shallow answers.");
+  console.log("This script measures StepFun-first wall-clock without rewarding shallow answers.");
+  console.log("Valid repair, rerun, verification, and refuter steps are quality work; only repeated no-op failures count as waste.");
   console.log("Run live with:");
   console.log("  npm run build:cli && node scripts/cli-efficiency-gate.mjs --live --suite smoke");
   console.log("");
