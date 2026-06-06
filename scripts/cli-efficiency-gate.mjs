@@ -384,6 +384,7 @@ function summarize(input) {
 function evaluateEfficiencyGate(summary, parsedArgs) {
   const checks = [
     thresholdCheck("minSuccessRate", "success rate", readRatioOption(parsedArgs, "minSuccessRate", "LYNN_EFFICIENCY_MIN_SUCCESS_RATE"), summary.successRate, (actual, expected) => actual >= expected, percent),
+    thresholdCheck("minSuccessPerHour", "success/hour", readNumberOption(parsedArgs, "minSuccessPerHour", "LYNN_EFFICIENCY_MIN_SUCCESS_PER_HOUR"), summary.successPerHour, (actual, expected) => actual >= expected, fmtNumber),
     thresholdCheck("maxP50WallMs", "p50 wall", readNumberOption(parsedArgs, "maxP50WallMs", "LYNN_EFFICIENCY_MAX_P50_WALL_MS"), summary.wallMs?.p50, (actual, expected) => actual <= expected, formatNullable),
     thresholdCheck("maxP50TtftMs", "p50 TTFT", readNumberOption(parsedArgs, "maxP50TtftMs", "LYNN_EFFICIENCY_MAX_P50_TTFT_MS"), summary.ttftMs?.p50, (actual, expected) => actual <= expected, formatNullable),
     thresholdCheck("minCacheHitRatio", "prefix-cache hit ratio", readRatioOption(parsedArgs, "minCacheHitRatio", "LYNN_EFFICIENCY_MIN_CACHE_HIT_RATIO"), summary.cacheHitRatio, (actual, expected) => actual >= expected, percent),

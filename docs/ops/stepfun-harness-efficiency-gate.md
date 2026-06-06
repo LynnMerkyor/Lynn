@@ -321,6 +321,7 @@ npm run bench:cli-efficiency -- \
   --suite smoke \
   --repeat 3 \
   --min-success-rate 1 \
+  --min-success-per-hour 1200 \
   --max-p50-ttft-ms 2500 \
   --max-p50-wall-ms 4500 \
   --max-waste-steps 0 \

@@ -190,6 +190,7 @@ async function runStaticChecks({ level }) {
       && pkg.scripts["release:cli-efficiency"].includes("bench:cli-routes")
       && pkg.scripts["release:cli-efficiency"].includes("bench:cli-efficiency")
       && pkg.scripts["release:cli-efficiency"].includes("min-stepfun-success-rate")
+      && pkg.scripts["release:cli-efficiency"].includes("min-success-per-hour")
       && pkg.scripts["release:cli-efficiency"].includes("max-stepfun-p50-ttft-ms")
       && pkg.scripts["release:cli-efficiency"].includes("max-waste-steps")),
     "CLI release has a live StepFun efficiency gate with route, latency, and waste-step thresholds",
