@@ -24,6 +24,12 @@ Local 9B/35B remains opt-in: offline, privacy-sensitive, batch, or fallback only
 
 Measure task-level wall-clock, not only decode TPS.
 
+Primary objective:
+
+- `success_per_hour`: passed tasks divided by total wall-clock hours.
+
+This is the main product metric. Optimizing tokens/second alone can make the harness skip verification and return faster wrong answers. Optimizing `success_per_hour` keeps verification in the objective function: a cheap verifier, a useful repair pass, or an adversarial check is good when it increases successful completed work per hour.
+
 Required metrics per run:
 
 - `wall_ms`: start to final terminal event;
@@ -63,6 +69,8 @@ Useful extra metrics:
 
 Expected win: shorter TTFT/prefill for repeated sessions, especially tool-heavy code tasks.
 
+Pure wins that do not reduce correctness, such as prefix-cache reuse and hot cloud routing, can be used aggressively. They reduce waiting rather than thinking.
+
 ### 3. Parallelism where it is semantically safe
 
 Allowed:
@@ -88,6 +96,8 @@ Boundary stop is allowed only when the output format has a crisp completion cond
 
 Boundary stop is not allowed for open-ended architecture review, code review, long analysis, or "find the best solution" tasks unless an explicit verifier/refuter says enough evidence has been collected. It is a parser/format boundary, not a quality shortcut.
 
+Boundary stop trims generation tail, not validation. A coding task still cannot be declared complete until the deterministic verifier or auto-verify has passed.
+
 ### 5. Fewer wasted retries, not fewer valid repairs
 
 Do reduce:
@@ -103,6 +113,13 @@ Do not reduce:
 - a refuter/adversarial pass;
 - a second implementation attempt after verification proves the first wrong;
 - additional targeted reads needed to make a final judgment.
+
+The preferred optimization is to make verification cheaper:
+
+- reuse stable-prefix and prompt-cache across repair reruns;
+- run deterministic auto-verify before asking a model to judge;
+- gate adversarial model verification by uncertainty and task risk, not by a blanket "always off";
+- parallelize only independent probes and independent verifiers; preserve `verify -> fix -> rerun` dependencies.
 
 ## Gate task set
 
@@ -206,6 +223,23 @@ Every experiment must report:
 - wall-clock deltas;
 - quality notes;
 - which guardrails stayed enabled.
+
+Use the compare mode to gate experiments:
+
+```bash
+node scripts/cli-efficiency-gate.mjs --compare \
+  --baseline output/baseline.json \
+  --experiment output/experiment.json
+```
+
+The comparison fails if an experiment:
+
+- lowers success rate;
+- increases failed tasks, waste steps, or max-step hits;
+- removes validation work from coding/refactor tasks;
+- misses tasks present in the baseline.
+
+Add `--require-speedup` only when an experiment is explicitly meant to prove a speed win. Without that flag, compare mode is a quality regression gate: it allows neutral speed results but blocks shallow speedups.
 
 ## Release rule
 
