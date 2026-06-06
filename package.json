@@ -1,6 +1,6 @@
 {
   "name": "lynn",
-  "version": "0.80.2",
+  "version": "0.81.0",
   "type": "module",
   "description": "Lynn - a personal AI agent with memory and soul",
   "license": "Apache-2.0",
@@ -47,6 +47,9 @@
     "test:cli-install:remote": "node scripts/cli-install-smoke.mjs --remote",
     "test:cli-pressure": "npm run build:cli && node scripts/cli-p-stress.mjs",
     "test:cli-real": "npm run build:cli && node scripts/cli-real-model-soak.mjs",
+    "test:cli-toolchain": "npm run build:cli && node scripts/cli-toolchain-stress.mjs",
+    "bench:cli-efficiency": "npm run build:cli && node scripts/cli-efficiency-gate.mjs",
+    "bench:cli-routes": "npm run build:cli && node scripts/cli-route-latency-smoke.mjs",
     "test:cli-cache-usage": "npm run build:cli && node scripts/cli-cache-usage-smoke.mjs",
     "test:cli-file-size": "node scripts/check-cli-file-size.mjs",
     "test:cli-nightly": "node scripts/v0804-cli-nightly.mjs --mode quick",
@@ -72,7 +75,8 @@
     "release:finalize-mac": "APPLE_NOTARY_PROFILE=${APPLE_NOTARY_PROFILE:-hanako-notary} scripts/finalize-macos-dmg.sh dist/Lynn-${npm_package_version}-macOS-arm64.dmg dist/Lynn-${npm_package_version}-macOS-x64.dmg",
     "lint": "eslint desktop/src/ server/",
     "test:watch": "vitest",
-    "postinstall": "node scripts/patch-pi-sdk.cjs"
+    "postinstall": "node scripts/patch-pi-sdk.cjs",
+    "release:cli-efficiency": "npm run bench:cli-routes -- --stepfun-runs 3 --spark-runs 1 --min-stepfun-success-rate 1 --max-stepfun-p50-ttft-ms 2500 --max-stepfun-p50-wall-ms 4000 && npm run bench:cli-efficiency -- --live --suite smoke --repeat 1 --min-success-rate 1 --max-p50-ttft-ms 2500 --max-p50-wall-ms 4500 --max-waste-steps 0 --max-max-steps-reached 0"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

@@ -370,6 +370,76 @@ describe("prompt stdin handling", () => {
     expect(retryBody).toContain("previous attempt returned hidden reasoning");
   });
 
+  it("can stop prompt JSON mode after a complete visible JSON boundary", async () => {
+    const provider = http.createServer((request, response) => {
+      request.resume();
+      request.on("end", () => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: '{"ok":true}' } }] })}\n\n`);
+        setTimeout(() => {
+          if (!response.destroyed) {
+            response.end([
+              `data: ${JSON.stringify({ choices: [{ delta: { content: " trailing text that should not be emitted" } }] })}`,
+              "",
+              "data: [DONE]",
+              "",
+            ].join("\n"));
+          }
+        }, 2000);
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
+
+    const original = process.stdout.write;
+    let output = "";
+    const oldAttempts = process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS;
+    const oldTimeout = process.env.LYNN_CLI_BRAIN_TIMEOUT_MS;
+    const oldRetryBase = process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS;
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    const started = Date.now();
+    let elapsedMs = 0;
+    try {
+      process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS = "1";
+      process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS = "0";
+      process.env.LYNN_CLI_BRAIN_TIMEOUT_MS = "50";
+      await expect(runPrompt(parseArgs([
+        "-p",
+        "return json",
+        "--json",
+        "--stop-at-json",
+        "--brain-url",
+        "http://127.0.0.1:1",
+        "--base-url",
+        `http://127.0.0.1:${address.port}/v1`,
+        "--api-key",
+        "sk-command-test",
+        "--model",
+        "command-model",
+      ]), { json: true })).resolves.toBe(0);
+      elapsedMs = Date.now() - started;
+    } finally {
+      process.stdout.write = original;
+      if (oldAttempts === undefined) delete process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS;
+      else process.env.LYNN_CLI_BRAIN_RETRY_ATTEMPTS = oldAttempts;
+      if (oldRetryBase === undefined) delete process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS;
+      else process.env.LYNN_CLI_BRAIN_RETRY_BASE_MS = oldRetryBase;
+      if (oldTimeout === undefined) delete process.env.LYNN_CLI_BRAIN_TIMEOUT_MS;
+      else process.env.LYNN_CLI_BRAIN_TIMEOUT_MS = oldTimeout;
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
+
+    expect(elapsedMs).toBeLessThan(1500);
+    expect(output).toContain("\"type\":\"run.boundary_stop\"");
+    expect(output).toContain("\"text\":\"{\\\"ok\\\":true}\"");
+    expect(output).toContain("\"ok\":true");
+    expect(output).not.toContain("trailing text");
+  });
+
   it("exits quietly when downstream closes a JSON pipe early", async () => {
     const provider = http.createServer((request, response) => {
       request.resume();
