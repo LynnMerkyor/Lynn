@@ -491,6 +491,7 @@ function compareReports(baseline, experiment, options = {}) {
   const reasons = [];
   const warnings = [];
   const taskComparisons = compareTasks(baseline.results || [], experiment.results || [], reasons, warnings);
+  const taskStatComparisons = compareTaskStats(baseline, experiment, reasons, warnings);
 
   if (exp.successRate < base.successRate) {
     reasons.push(`success rate regressed: ${percent(exp.successRate)} < ${percent(base.successRate)}`);
@@ -526,6 +527,7 @@ function compareReports(baseline, experiment, options = {}) {
       cacheHitRatio: nullableDelta(exp.cacheHitRatio, base.cacheHitRatio),
     },
     taskComparisons,
+    taskStatComparisons,
     reasons,
     warnings,
   };
@@ -603,6 +605,50 @@ function compareTasks(baselineResults, experimentResults, reasons, warnings) {
   return comparisons;
 }
 
+function compareTaskStats(baseline, experiment, reasons, warnings) {
+  const baselineStats = normalizedTaskStats(baseline);
+  const experimentStats = normalizedTaskStats(experiment);
+  const experimentByTaskId = new Map(experimentStats.map((stat) => [stat.taskId, stat]));
+  const comparisons = [];
+  for (const baseTask of baselineStats) {
+    const expTask = experimentByTaskId.get(baseTask.taskId);
+    if (!expTask) {
+      reasons.push(`missing experiment task group: ${baseTask.taskId}`);
+      continue;
+    }
+    const comparison = {
+      taskId: baseTask.taskId,
+      baselineRuns: baseTask.runs,
+      experimentRuns: expTask.runs,
+      successRateDelta: nullableDelta(expTask.successRate, baseTask.successRate),
+      successPerHourDelta: nullableDelta(expTask.successPerHour, baseTask.successPerHour),
+      p50WallMsDelta: nullableDelta(valueAt(expTask.wallMs, "p50"), valueAt(baseTask.wallMs, "p50")),
+      p50TtftMsDelta: nullableDelta(valueAt(expTask.ttftMs, "p50"), valueAt(baseTask.ttftMs, "p50")),
+      cacheHitRatioDelta: nullableDelta(expTask.cacheHitRatio, baseTask.cacheHitRatio),
+      cacheHitTokensDeltaDelta: nullableDelta(expTask.cacheHitTokensDelta, baseTask.cacheHitTokensDelta),
+      validationStepsDelta: Number(expTask.validationSteps || 0) - Number(baseTask.validationSteps || 0),
+      wasteStepsDelta: Number(expTask.wasteSteps || 0) - Number(baseTask.wasteSteps || 0),
+    };
+    comparisons.push(comparison);
+    if (Number(expTask.runs || 0) < Number(baseTask.runs || 0)) {
+      reasons.push(`task repeat coverage regressed: ${baseTask.taskId} (${expTask.runs} < ${baseTask.runs})`);
+    }
+    if (Number(expTask.wasteSteps || 0) > Number(baseTask.wasteSteps || 0)) {
+      reasons.push(`task group waste increased: ${baseTask.taskId}`);
+    }
+    if (typeof comparison.cacheHitRatioDelta === "number" && comparison.cacheHitRatioDelta < -0.05) {
+      warnings.push(`prefix-cache ratio decreased for ${baseTask.taskId}: ${signedPercentPoints(comparison.cacheHitRatioDelta)}`);
+    }
+  }
+  return comparisons;
+}
+
+function normalizedTaskStats(report) {
+  const fromSummary = report?.summary?.taskStats;
+  if (Array.isArray(fromSummary) && fromSummary.length) return fromSummary;
+  return summarizeByTask(report?.results || []);
+}
+
 function isQualityTask(task) {
   return task.kind === "code" || /refactor|fix|review|exhaustive|ultra/i.test(String(task.id || ""));
 }
@@ -622,6 +668,13 @@ function printComparison(comparison) {
   console.log(`baseline:   success=${comparison.baseline.passed}/${comparison.baseline.total} success/hour=${fmtNumber(comparison.baseline.successPerHour)} p50Wall=${formatNullable(comparison.baseline.p50WallMs)} p50TTFT=${formatNullable(comparison.baseline.p50TtftMs)} waste=${comparison.baseline.wasteSteps} validation=${comparison.baseline.validationSteps} cache=${percent(comparison.baseline.cacheHitRatio)}`);
   console.log(`experiment: success=${comparison.experiment.passed}/${comparison.experiment.total} success/hour=${fmtNumber(comparison.experiment.successPerHour)} p50Wall=${formatNullable(comparison.experiment.p50WallMs)} p50TTFT=${formatNullable(comparison.experiment.p50TtftMs)} waste=${comparison.experiment.wasteSteps} validation=${comparison.experiment.validationSteps} cache=${percent(comparison.experiment.cacheHitRatio)}`);
   console.log(`delta:      success/hour=${signed(comparison.deltas.successPerHour)} totalWall=${signedMs(comparison.deltas.totalWallMs)} p50Wall=${signedMs(comparison.deltas.p50WallMs)} p50TTFT=${signedMs(comparison.deltas.p50TtftMs)} waste=${signed(comparison.deltas.wasteSteps)} validation=${signed(comparison.deltas.validationSteps)}`);
+  if (comparison.taskStatComparisons.length) {
+    console.log("");
+    console.log("Per-task deltas:");
+    for (const task of comparison.taskStatComparisons) {
+      console.log(`- ${task.taskId}: runs ${task.baselineRuns}->${task.experimentRuns} success=${signedPercentPoints(task.successRateDelta)} success/hour=${signed(task.successPerHourDelta)} p50Wall=${signedMs(task.p50WallMsDelta)} p50TTFT=${signedMs(task.p50TtftMsDelta)} cache=${signedPercentPoints(task.cacheHitRatioDelta)} validation=${signed(task.validationStepsDelta)} waste=${signed(task.wasteStepsDelta)}`);
+    }
+  }
   if (comparison.reasons.length) {
     console.log("");
     console.log("Quality gate failures:");
@@ -640,6 +693,11 @@ function fmtNumber(value) {
 
 function percent(value) {
   return typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : "--";
+}
+
+function signedPercentPoints(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "--";
+  return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(1)}pp`;
 }
 
 function signed(value) {
