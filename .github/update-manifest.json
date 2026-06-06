@@ -6,7 +6,6 @@
     "assets": {
       "darwin-arm64": "https://download.merkyorlynn.com/downloads/Lynn-0.81.0-macOS-arm64.dmg",
       "darwin-x64": "https://download.merkyorlynn.com/downloads/Lynn-0.81.0-macOS-x64.dmg",
-      "win32-x64": "https://download.merkyorlynn.com/downloads/Lynn-0.81.0-Windows-Setup.exe",
       "default": "https://download.merkyorlynn.com/download.html"
     }
   }
