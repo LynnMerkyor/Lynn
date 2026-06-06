@@ -1,6 +1,6 @@
 # Lynn Code Headless Agent Contract
 
-Status: v0.80 integration contract.
+Status: v0.81.0 integration contract.
 
 This document is for other agents, CI jobs, and GUI Fleet workers that need to
 call Lynn Code without an interactive terminal.
@@ -21,7 +21,7 @@ This is the short contract another coding agent should read first:
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # Install or update Lynn CLI.
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.10.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.81.0.tgz
 
 # Verify the binary without needing a model backend.
 Lynn version

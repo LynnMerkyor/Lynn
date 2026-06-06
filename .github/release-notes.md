@@ -1,32 +1,32 @@
-# Lynn CLI v0.80.9 / GUI v0.80.3 Release Notes / 发布说明
+# Lynn v0.81.0 Release Notes / 发布说明
 
-> 发布日期: 2026-06-06 · 端侧模型策略 + 工具扫描守卫
+> 发布日期: 2026-06-06 · StepFun 3.7 Flash 专项优化 + 统一版本号
 
-本次发版同步更新 **Lynn CLI v0.80.9** 与 **Lynn GUI v0.80.3**。CLI 侧重点是
-端侧 9B/35B 与云端 StepFun 3.7 Flash 的角色分工、可观测运行时状态和工具扫描守卫;GUI 侧同步
-本地模型策略与 provider/route 展示。
+本次发版统一 **Lynn CLI 与 GUI 版本号为 v0.81.0**。重点是让 StepFun 3.7 Flash 在 Lynn 的 CLI / GUI 工作流里更适合“穷尽最优解”:显式 best/exhaustive 模式、300 步长任务预算、原子工具步进、自动验证、计划契约、工具预算和 Fleet/headless 默认建议对齐。
 
 ## 中文重点
 
-- **默认云端 StepFun,本地模型显式启用**:StepFun 3.7 Flash 继续作为主路由;本地 9B 只在用户明确启用时启动,默认不占 GPU/统一内存。
-- **端侧 9B 工程策略**:KV cache 复用、warm pool 默认关闭、空闲自动 unload、小上下文、稳定前缀、3-5 个工具 schema、底栏本地 TPS 和失败升云 StepFun。
-- **端侧 35B/Spark 定位清晰**:35B/Spark 是显式高端本地档与第三兜底,不是默认主路由,避免误伤普通用户机器。
-- **运行时自知**:`Lynn version`、运行时回答和 `docs/ops/lynn-cli-runtime-knowledge.md` 会解释本地模型、记忆、前置缓存、decode TPS、checkpoint/resume/rewind 与 Fleet worker 的真实能力。
-- **CLI 工具扫描守卫**:交互式工具里禁止默认执行 `find / ...` 这类全盘扫描;glob 遇到 `.Trash` 或权限目录会跳过并记录,不再把整轮弄失败。
+- **统一版本号**:CLI 与桌面 GUI 同步为 v0.81.0,下载页、更新 manifest、README 与 Release 说明统一口径。
+- **StepFun 穷尽最优模式**:
+  - `Lynn code --best -p "任务" --json --cwd /path --approval yolo --sandbox danger-full-access`
+  - `/goal`、`/best`、`/exhaustive` 会进入更适合长任务的 300 步预算与 ultra 编排。
+- **原子步进 + 验证保留**:不通过提示词兜底抢模型工作,而是让模型逐步调用工具,由 harness 做计划契约、自动验证、工具预算与失败上下文回喂。
+- **Fleet/headless 合约更清楚**:黑灯工厂建议 `--approval yolo --sandbox danger-full-access`,适合隔离 worktree;普通人类交互仍使用 ask / workspace-write。
+- **GUI 对齐**:桌面包、更新 manifest、下载页与 CLI tarball 统一同一个 v0.81.0 发布号。
 
 ## 安装
 
 ```bash
-# 前置: Node.js 20 LTS 或 22 LTS with npm.
+# 前置:Node.js 20 LTS 或 22 LTS with npm.
 node -v
 
-# 从 Lynn 镜像安装或覆盖升级。
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
+# 从 Lynn 镜像安装或覆盖升级 CLI。
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.81.0.tgz"
 
 # 启动。
 Lynn            # 交互式聊天 TUI
 Lynn code       # 编码 agent TUI
-Lynn --version  # 应输出 0.80.9
+Lynn --version  # 应输出 0.81.0
 Lynn agents     # 给其他智能体/Fleet 的可复制命令
 ```
 
@@ -34,48 +34,44 @@ Lynn agents     # 给其他智能体/Fleet 的可复制命令
 
 ---
 
-> Release date: 2026-06-06 · local model routing policy + scan guards
+> Release date: 2026-06-06 · StepFun 3.7 Flash specialization + unified app/CLI version
 
-This release ships **Lynn CLI v0.80.9** and **Lynn GUI v0.80.3**. The CLI focuses
-on matching local 9B/35B inference with the cloud StepFun 3.7 Flash route, runtime
-observability, and safer tool scans. The GUI carries the same local-model policy
-into provider and route surfaces.
+This release unifies **Lynn CLI and desktop GUI at v0.81.0**. The focus is making StepFun 3.7 Flash work better for exhaustive best-result coding loops across Lynn CLI and GUI: explicit best/exhaustive mode, a 300-step long-task budget, atomic tool progression, finish gates, plan contracts, tool budgets, and clearer Fleet/headless defaults.
 
 ## Highlights
 
-- **Cloud StepFun remains the default**: StepFun 3.7 Flash stays the primary route; local 9B only starts after explicit user action and no longer consumes GPU/unified memory by default.
-- **Local 9B runtime policy**: KV cache reuse, warm pool off by default, idle unload, small-context prompts, stable prefix, 3-5 tool schemas, visible local TPS, and automatic promotion to StepFun when local inference fails.
-- **Local 35B/Spark positioning**: 35B/Spark is the explicit high-end local tier and third fallback, not the default primary path.
-- **Runtime self-knowledge**: `Lynn version`, local runtime answers, and `docs/ops/lynn-cli-runtime-knowledge.md` explain local models, memory, prefix cache, decode TPS, checkpoint/resume/rewind, and Fleet workers from inside Lynn.
-- **CLI scan guards**: tool mode blocks default `find / ...` whole-disk scans; glob skips `.Trash` and permission-denied directories instead of failing the whole turn.
+- **Unified version**: CLI, desktop GUI, update manifest, download page, README, and release notes all use v0.81.0.
+- **StepFun best mode**:
+  - `Lynn code --best -p "task" --json --cwd /path --approval yolo --sandbox danger-full-access`
+  - `/goal`, `/best`, and `/exhaustive` enter the longer 300-step + ultra orchestration path.
+- **Atomic tools + verification kept**: Lynn does not take over model output through prompt fallbacks. The model chooses tools step by step while the harness enforces plan contracts, auto-verification, tool budgets, and rich failure feedback.
+- **Fleet/headless contract**: silent factory workers should use `--approval yolo --sandbox danger-full-access` inside isolated worktrees; human interactive sessions stay on ask / workspace-write.
+- **GUI alignment**: desktop artifacts, update manifest, download site, and CLI tarball share the same v0.81.0 train.
 
 ## Install
 
 ```bash
-# Prerequisite: Node.js 20 LTS or 22 LTS with npm.
+# Prerequisite:Node.js 20 LTS or 22 LTS with npm.
 node -v
 
 # Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.80.9.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.81.0.tgz"
 
 # Launch.
 Lynn            # interactive chat TUI
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.80.9
+Lynn --version  # should print 0.81.0
 Lynn agents     # copyable headless/Fleet commands
 ```
 
-Default Brain route: **StepFun 3.7 Flash (256K context, high reasoning, 32K
-reasoning/generation budget) -> MiMo V2.5 Pro/Omni -> Spark Qwen 3.6 35B A3B**.
-Fresh CLI installs use the hosted Lynn Brain when local Brain is unavailable;
-BYOK via `Lynn providers set ...` remains available.
+Default Brain route: **StepFun 3.7 Flash (256K context, high reasoning, 32K reasoning/generation budget) -> MiMo V2.5 Pro/Omni -> Spark Qwen 3.6 35B A3B**. Fresh CLI installs use hosted Lynn Brain when local Brain is unavailable; BYOK via `Lynn providers set ...` remains available.
 
 ## Headless / Fleet
 
 ```bash
 Lynn -p "summarize this repository" --json --cwd /path/to/repo
 
-Lynn code -p "fix tests, run the suite, summarize the diff" \
+Lynn code --best -p "fix tests, run the suite, summarize the diff" \
   --json \
   --cwd /path/to/worktree \
   --approval yolo \
@@ -90,12 +86,8 @@ Lynn worker run --brief task.md --worktree /path/to/worktree \
 
 ## Verification
 
-- `npm run typecheck`
-- `npm run test:brain-v2`
-- `npm run test:cli`
-- `npm run test:cli-cache-usage`
+- `npm run release:preflight`
 - `npm run test:cli-toolchain`
-- `npm run test:cli-file-size`
-- `npm run test:cli-pack`
-- `npm run test:cli-install`
+- `npm run test:cli-fleet`
+- `npm run test:release:static`
 - GUI build/sign/notarize gates for the desktop artifacts
