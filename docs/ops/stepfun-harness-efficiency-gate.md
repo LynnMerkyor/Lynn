@@ -239,6 +239,19 @@ The comparison fails if an experiment:
 - removes validation work from coding/refactor tasks;
 - misses tasks present in the baseline.
 
+For prefix-cache and TTFT work, use repeated runs rather than a single sample:
+
+```bash
+npm run build:cli
+LYNN_EFFICIENCY_LIVE=1 node scripts/cli-efficiency-gate.mjs \
+  --suite smoke \
+  --repeat 3 \
+  --label stepfun-cache-warmup \
+  --out output/stepfun-cache-warmup.json
+```
+
+Repeated runs keep a unique run id (`task#1`, `task#2`, ...) while preserving the base `taskId`, so reports can show both per-run variance and per-task warming. Compare baseline and experiment with the same repeat count; a speedup only counts if success rate and validation coverage stay intact.
+
 Add `--require-speedup` only when an experiment is explicitly meant to prove a speed win. Without that flag, compare mode is a quality regression gate: it allows neutral speed results but blocks shallow speedups.
 
 ## Release rule
