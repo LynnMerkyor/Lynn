@@ -37,7 +37,7 @@ for (const task of tasks) {
     task.setup?.(working);
     const run = await runTask(task, working);
     const verify = task.verify ? task.verify(working) : { ok: true, stdout: "", stderr: "" };
-    const success = run.exitCode === 0 && run.hasVisibleAnswer && verify.ok;
+    const success = run.exitCode === 0 && run.hasVisibleAnswer && run.outputOk && run.modelOk !== false && verify.ok;
     results.push({
       id: task.id,
       kind: task.kind,
@@ -64,12 +64,21 @@ if (report.summary.failed > 0) process.exit(1);
 function createTasks() {
   return [
     {
-      id: "fast-runtime-answer",
+      id: "local-runtime-answer",
       kind: "prompt",
       suite: ["smoke", "full"],
       prompt: "用两句话说明 Lynn CLI 当前默认模型路由和运行时优化。必须回答可见文本,不要调用工具。",
-      notes: "Fast interactive TTFT and visible answer.",
+      notes: "Local runtime-knowledge shortcut; measures no-network UX, not StepFun model latency.",
       command: () => ["-p", "用两句话说明 Lynn CLI 当前默认模型路由和运行时优化。必须回答可见文本,不要调用工具。", "--json", "--reasoning", "high"],
+    },
+    {
+      id: "fast-model-answer",
+      kind: "prompt",
+      suite: ["smoke", "full"],
+      prompt: "用两句话解释 TypeScript discriminated union 适合解决什么问题。不要调用工具。",
+      notes: "Fast StepFun model TTFT and visible answer.",
+      requireModel: true,
+      command: () => ["-p", "用两句话解释 TypeScript discriminated union 适合解决什么问题。不要调用工具。", "--json", "--reasoning", "high"],
     },
     {
       id: "structured-short-answer",
@@ -149,6 +158,9 @@ async function runTask(task, cwd) {
   let repairSteps = 0;
   let wasteSteps = 0;
   let maxStepsReached = false;
+  let localAnswer = false;
+  let usageEventCount = 0;
+  let lastUsage = null;
   const events = [];
 
   child.stdout.on("data", (chunk) => {
@@ -177,6 +189,11 @@ async function runTask(task, cwd) {
       if (isRepairEvent(event)) repairSteps += 1;
       if (isWasteEvent(event)) wasteSteps += 1;
       if (event.maxStepsReached === true || event.code === "max_steps_reached") maxStepsReached = true;
+      if (event.type === "run.finished" && event.local === true) localAnswer = true;
+      if (event.type === "usage" && event.usage) {
+        usageEventCount += 1;
+        lastUsage = event.usage;
+      }
     }
   });
 
@@ -191,7 +208,9 @@ async function runTask(task, cwd) {
   }
 
   const outputOk = task.verifyOutput ? task.verifyOutput(assistantText) : true;
+  const modelOk = task.requireModel ? !localAnswer && usageEventCount > 0 : true;
   if (!outputOk) wasteSteps += 1;
+  if (!modelOk) wasteSteps += 1;
 
   return {
     exitCode: exitCode ?? 124,
@@ -204,6 +223,10 @@ async function runTask(task, cwd) {
     repairSteps,
     wasteSteps,
     maxStepsReached,
+    localAnswer,
+    modelOk,
+    usageEventCount,
+    usage: summarizeUsage(lastUsage),
     hasVisibleAnswer: assistantText.trim().length > 0,
     outputOk,
     assistantText: assistantText.slice(0, 4000),
@@ -290,6 +313,12 @@ function summarize(input) {
     validRepairSteps: sum(input.results, "repairSteps"),
     wasteSteps: sum(input.results, "wasteSteps"),
     maxStepsReached: input.results.filter((result) => result.maxStepsReached).length,
+    localAnswers: input.results.filter((result) => result.localAnswer).length,
+    modelRuns: input.results.filter((result) => result.modelOk !== false && result.usageEventCount > 0).length,
+    promptTokens: sumUsage(input.results, "promptTokens"),
+    completionTokens: sumUsage(input.results, "completionTokens"),
+    cacheHitTokens: sumUsage(input.results, "cacheHitTokens"),
+    cacheWriteTokens: sumUsage(input.results, "cacheWriteTokens"),
   };
   return {
     schema: "lynn-cli-efficiency-gate-v1",
@@ -319,6 +348,27 @@ function percentile(values, p) {
 
 function sum(results, field) {
   return results.reduce((acc, result) => acc + Number(result[field] || 0), 0);
+}
+
+function sumUsage(results, field) {
+  return results.reduce((acc, result) => acc + Number(result.usage?.[field] || 0), 0);
+}
+
+function summarizeUsage(usage) {
+  if (!usage || typeof usage !== "object") return null;
+  const promptTokens = Number(usage.prompt_tokens || usage.input_tokens || 0);
+  const completionTokens = Number(usage.completion_tokens || usage.output_tokens || 0);
+  const totalTokens = Number(usage.total_tokens || promptTokens + completionTokens || 0);
+  const details = usage.prompt_tokens_details || usage.input_tokens_details || {};
+  const cacheHitTokens = Number(details.cached_tokens || details.cache_read_input_tokens || usage.cacheHitTokens || 0);
+  const cacheWriteTokens = Number(details.cache_creation_input_tokens || details.cache_write_input_tokens || usage.cacheWriteTokens || 0);
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    cacheHitTokens,
+    cacheWriteTokens,
+  };
 }
 
 function printDryRun(selected) {
