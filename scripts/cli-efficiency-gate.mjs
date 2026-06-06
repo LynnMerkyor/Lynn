@@ -365,6 +365,7 @@ function summarize(input) {
     cacheWriteTokens: sumUsage(input.results, "cacheWriteTokens"),
   };
   summary.cacheHitRatio = summary.promptTokens > 0 ? summary.cacheHitTokens / summary.promptTokens : null;
+  summary.taskStats = summarizeByTask(input.results);
   return {
     schema: "lynn-cli-efficiency-gate-v1",
     label: input.label,
@@ -385,6 +386,68 @@ function percentileSummary(values) {
     p90: percentile(values, 0.9),
     max: values[values.length - 1],
   };
+}
+
+function summarizeByTask(results) {
+  const groups = new Map();
+  for (const result of results) {
+    const taskId = result.taskId || result.id;
+    if (!groups.has(taskId)) groups.set(taskId, []);
+    groups.get(taskId).push(result);
+  }
+  return Array.from(groups.entries()).map(([taskId, taskResults]) => {
+    const sorted = [...taskResults].sort((a, b) => Number(a.runIndex || 1) - Number(b.runIndex || 1));
+    const passed = sorted.filter((result) => result.success).length;
+    const promptTokens = sumUsage(sorted, "promptTokens");
+    const cacheHitTokens = sumUsage(sorted, "cacheHitTokens");
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    return {
+      taskId,
+      runs: sorted.length,
+      passed,
+      failed: sorted.length - passed,
+      successRate: sorted.length ? passed / sorted.length : 0,
+      successPerHour: successPerHour(passed, sum(sorted, "wallMs")),
+      wallMs: percentileSummary(sorted.map((result) => result.wallMs).sort((a, b) => a - b)),
+      ttftMs: percentileSummary(sorted.map((result) => result.ttftMs).filter((value) => typeof value === "number").sort((a, b) => a - b)),
+      toolSteps: sum(sorted, "toolSteps"),
+      validationSteps: sum(sorted, "validationSteps"),
+      wasteSteps: sum(sorted, "wasteSteps"),
+      promptTokens,
+      cacheHitTokens,
+      cacheHitRatio: promptTokens > 0 ? cacheHitTokens / promptTokens : null,
+      firstRun: summarizeRunForTrend(first),
+      lastRun: summarizeRunForTrend(last),
+      cacheHitTokensDelta: runUsageValue(last, "cacheHitTokens") - runUsageValue(first, "cacheHitTokens"),
+      wallMsDelta: Number(last?.wallMs || 0) - Number(first?.wallMs || 0),
+      ttftMsDelta: nullableDelta(last?.ttftMs, first?.ttftMs),
+    };
+  });
+}
+
+function summarizeRunForTrend(result) {
+  if (!result) return null;
+  return {
+    id: result.id,
+    runIndex: result.runIndex,
+    success: Boolean(result.success),
+    wallMs: result.wallMs,
+    ttftMs: result.ttftMs,
+    promptTokens: runUsageValue(result, "promptTokens"),
+    cacheHitTokens: runUsageValue(result, "cacheHitTokens"),
+    cacheHitRatio: runUsageRatio(result),
+  };
+}
+
+function runUsageValue(result, field) {
+  return Number(result?.usage?.[field] || 0);
+}
+
+function runUsageRatio(result) {
+  const promptTokens = runUsageValue(result, "promptTokens");
+  if (!promptTokens) return null;
+  return runUsageValue(result, "cacheHitTokens") / promptTokens;
 }
 
 function percentile(values, p) {

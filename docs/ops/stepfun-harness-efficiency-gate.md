@@ -252,6 +252,16 @@ LYNN_EFFICIENCY_LIVE=1 node scripts/cli-efficiency-gate.mjs \
 
 Repeated runs keep a unique run id (`task#1`, `task#2`, ...) while preserving the base `taskId`, so reports can show both per-run variance and per-task warming. Compare baseline and experiment with the same repeat count; a speedup only counts if success rate and validation coverage stay intact.
 
+The report summary includes `taskStats[]` for repeated runs. For each base task it records:
+
+- per-task success rate and `successPerHour`;
+- p50/p90 wall-clock and TTFT;
+- total validation, waste, prompt, and prefix-cache hit tokens;
+- first-run and last-run snapshots;
+- `cacheHitTokensDelta`, `wallMsDelta`, and `ttftMsDelta` from first to last run.
+
+Use these per-task fields to distinguish a real prefix-cache win from noise. A useful StepFun-first optimization should make repeated runs warmer or less variable without reducing task success or validation coverage.
+
 Add `--require-speedup` only when an experiment is explicitly meant to prove a speed win. Without that flag, compare mode is a quality regression gate: it allows neutral speed results but blocks shallow speedups.
 
 ## Release rule
