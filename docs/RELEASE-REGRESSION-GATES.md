@@ -20,10 +20,19 @@ npm run test:release:live
 # CLI 默认链路效率门禁：真实 StepFun 路由 + wall-clock 成功率/延迟/工具风暴阈值
 npm run release:cli-efficiency
 
+# CLI StepFun prefix-cache 暖前缀门禁：重复同一任务，确认 cache hit 可见
+npm run release:cli-prefix-cache
+
+# CLI StepFun c2 并发门禁：确认独立任务并行不降低成功率、不引入工具风暴
+npm run release:cli-concurrency
+
+# GUI/Brain live efficiency：连接正在运行的 Lynn server，检查 WebSocket/Brain 链路的 wall-clock 与 TTFT
+npm run release:gui-efficiency
+
 # 桌面 UI smoke：需要先完成 renderer build
 npm run test:release:ui
 
-# 一键发版前检查：单测 + 类型 + CLI/Fleet + StepFun efficiency + 构建 + release static gate + UI smoke
+# 一键发版前检查：单测 + 类型 + CLI/Fleet + StepFun efficiency + prefix-cache + concurrency + 构建 + release static gate + UI smoke
 npm run release:preflight
 
 # 正式 macOS/Windows 打包会先强制执行 release:preflight
@@ -34,7 +43,7 @@ npm run dist:win
 npm run test:release:nightly
 ```
 
-`test:release:static` 只扫仓库和发布资产，不连接模型或本机服务。`release:cli-efficiency` 会真实连接默认 StepFun 云端链路，用于 CLI 发版前确认“默认交互路径”没有变慢、断连或工具风暴。`test:release` / `test:release:live` 会读取 `~/.lynn/server-info.json` 并连接当前本机 Lynn。开发版可指定：
+`test:release:static` 只扫仓库和发布资产，不连接模型或本机服务。`release:cli-efficiency` 会真实连接默认 StepFun 云端链路，用于 CLI 发版前确认“默认交互路径”没有变慢、断连或工具风暴。`release:cli-prefix-cache` 会重复同一 StepFun 任务，确认 stable-prefix/prefix-cache 仍在真实链路里产生命中。`release:cli-concurrency` 会用 c2 并发跑独立 StepFun 任务，确认少串行等待不会牺牲成功率或引入 waste。`test:release:ui` 是 Electron renderer fixture smoke，只证明 UI 结构能渲染；`release:gui-efficiency` / `test:release:live` 会读取 `~/.lynn/server-info.json` 并连接当前本机 Lynn，才证明 GUI → server → Brain → 模型的 live 链路有可接受的 wall-clock 与 TTFT。开发版可指定：
 
 ```bash
 LYNN_HOME=~/.lynn-dev npm run test:release
@@ -111,12 +120,15 @@ V8/V9 benchmark 主要衡量模型能力和路由质量；release regression 主
 4. `npm run build:main`
 5. `npm run build:renderer`
 6. `npm run release:cli-efficiency`（CLI 发版必跑；GUI-only hotpatch 可记录原因后跳过）
-7. `npm run test:release:static`
-8. `npm run test:release:ui`
-9. 平台打包、公证、manifest、镜像站更新（`dist` / `dist:win` 会先跑 `release:preflight`）
-10. 真实安装包 smoke
-11. 启动打包后的 Lynn 服务后跑 `npm run test:release:live`
-12. 人工 UI Gate
+7. `npm run release:cli-prefix-cache`（CLI/Brain 路由、稳定前缀、runtime knowledge、工具 schema 改动必跑；GUI-only hotpatch 可记录原因后跳过）
+8. `npm run release:cli-concurrency`（CLI/Brain 调度、并发、后台任务优先级改动必跑；GUI-only hotpatch 可记录原因后跳过）
+9. 启动本机 Lynn server 后跑 `npm run release:gui-efficiency`（GUI/Brain live 链路改动必跑；无 GUI/server 环境时不可用文档 smoke 代替）
+10. `npm run test:release:static`
+11. `npm run test:release:ui`
+12. 平台打包、公证、manifest、镜像站更新（`dist` / `dist:win` 会先跑 `release:preflight`,因此 StepFun efficiency 与 prefix-cache 会阻断真实打包）
+13. 真实安装包 smoke
+14. 启动打包后的 Lynn 服务后跑 `npm run test:release:live`
+15. 人工 UI Gate
 
 不要用裸 `/v1/chat/completions` 结果替代 `test:release`。裸模型端点测不到 Lynn 的 WebSocket、事件解析、UI 渲染、工具卡片和跨 prompt fence。
 
