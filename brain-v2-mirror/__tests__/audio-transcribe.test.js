@@ -2,8 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyAudioTranscribe, createAudioRequestCache, __testing__ } from '../audio-transcribe.js';
 
-const providerMimo = {
-  id: 'mimo',
+// Hypothetical audio-native provider (capability.audio === true). No real provider currently
+// advertises audio:true, so this only exercises the now-inert skip branch in the middleware.
+const providerAudioNative = {
+  id: 'audio-native',
   capability: { vision: true, audio: true, video: true, tools: true, thinking: true, native_search: true },
 };
 
@@ -96,11 +98,11 @@ describe('applyAudioTranscribe — gating', () => {
     expect(r.messages).toBe(msgsAudioB64);
   });
 
-  it('skips when provider has native audio (mimo)', async () => {
+  it('skips when provider has native audio (audio-native)', async () => {
     process.env.BRAIN_V2_AUDIO_FALLBACK = '1';
     process.env.OPENAI_API_KEY = 'k';
     const r = await applyAudioTranscribe({
-      messages: msgsAudioB64, provider: providerMimo, requestCache: createAudioRequestCache(),
+      messages: msgsAudioB64, provider: providerAudioNative, requestCache: createAudioRequestCache(),
     });
     expect(r.meta.applied).toBe(false);
     expect(r.meta.skipReason).toBe('provider-native-audio');

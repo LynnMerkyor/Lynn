@@ -7,7 +7,7 @@ import {
 
 describe("CLI runtime context", () => {
   it("tells the model which route the user sees", () => {
-    const message = buildCliRuntimeSystemMessage("StepFun 3.7 Flash → MiMo V2.5 Pro via Brain router (auto)");
+    const message = buildCliRuntimeSystemMessage("StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B via Brain router (auto)");
 
     expect(message.role).toBe("system");
     expect(message.content).toContain("Current model route shown to the user: StepFun 3.7 Flash");
@@ -28,7 +28,7 @@ describe("CLI runtime context", () => {
   });
 
   it("keeps volatile runtime values (version, route) in a tail after the stable prefix", () => {
-    const message = buildCliRuntimeSystemMessage("StepFun 3.7 Flash → MiMo V2.5 Pro via Brain router (auto)");
+    const message = buildCliRuntimeSystemMessage("StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B via Brain router (auto)");
     const content = String(message.content);
 
     // The stable identity/rules must come before the volatile runtime line so the
@@ -38,7 +38,7 @@ describe("CLI runtime context", () => {
   });
 
   it("refreshes the system route without moving it out of the prefix", () => {
-    const messages = resetCliRuntimeMessages("StepFun 3.7 Flash → MiMo V2.5 Pro");
+    const messages = resetCliRuntimeMessages("StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B");
     messages.push({ role: "user", content: "hi" });
 
     refreshCliRuntimeSystemMessage(messages, "CLI BYOK: step-3.7-flash");

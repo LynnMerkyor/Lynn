@@ -27,8 +27,6 @@ function resolveVoiceConfig(ctx) {
     default_voice: voiceConfig.default_voice || ctx.config?.get?.("default_voice") || "中文女",
     base_url: voiceConfig.base_url || ctx.config?.get?.("base_url") || "",
     api_key: voiceConfig.api_key || ctx.config?.get?.("api_key") || "",
-    voice_clone_audio_path: voiceConfig.voice_clone_audio_path || ctx.config?.get?.("voice_clone_audio_path") || "",
-    voice_description: voiceConfig.voice_description || ctx.config?.get?.("voice_description") || "",
   };
 }
 

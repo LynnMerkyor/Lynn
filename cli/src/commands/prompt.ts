@@ -2,7 +2,7 @@ import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
 import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
-import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
+import { lowerReasoningEffort, parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { appendSessionTurn, resolveDataDir } from "../session/store.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
@@ -116,10 +116,15 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
           content: userContent,
         },
       ];
+      // On a visible-answer retry, step reasoning down so a budget-overflowing think shrinks
+      // and leaves room for the answer (mirrors the Brain-side length-retry).
+      const attemptReasoning = retryVisibleAnswer
+        ? { ...reasoning, effort: lowerReasoningEffort(reasoning.effort) }
+        : reasoning;
       for await (const event of streamBrainChat({
         brainUrl,
         messages,
-        reasoning,
+        reasoning: attemptReasoning,
         fallbackProvider: cliProvider?.profile,
       })) {
         const renderReasoning = shouldRenderReasoning(reasoning.display, !!options.json);

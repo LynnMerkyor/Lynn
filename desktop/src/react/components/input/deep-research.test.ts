@@ -28,10 +28,10 @@ describe('deep-research helpers', () => {
   it('does not invent fallback text when deep research returns an empty model answer', () => {
     const text = formatDeepResearchAssistantText({
       text: '',
-      winnerProviderId: 'mimo',
+      winnerProviderId: 'step-3.7-flash',
     });
 
-    expect(text).toBe('---\n**深度调研**：完成 · 输出来源：mimo');
+    expect(text).toBe('---\n**深度调研**：完成 · 输出来源：step-3.7-flash');
     expect(text).not.toContain('没有返回可见答案');
   });
 

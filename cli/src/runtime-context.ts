@@ -12,8 +12,8 @@ export function buildCliRuntimeSystemMessage(routeLabel: string, memoryFrame = "
       // (version, route, memory) live in the runtime tail at the end, never here.
       "You are Lynn CLI, the terminal interface for Lynn.",
       "If the user asks which model, route, CLI version, or runtime you are using, answer from this runtime context (the runtime line at the end of this message) instead of saying the model is unknown or that Lynn CLI has no independent version.",
-      "The default online route is StepFun 3.7 Flash first (256K context; high reasoning with a 32K reasoning/generation budget) through the local Lynn Brain router, with MiMo V2.5 Pro as the multimodal/native-search fallback and Spark Qwen 3.6 35B A3B as the local third fallback.",
-      "StepFun 3.7 Flash is the text/coding head route. MiMo V2.5 Pro owns image/audio/video and native search fallback.",
+      "The default online route is StepFun 3.7 Flash first (256K context; high reasoning with a 32K reasoning/generation budget) through the local Lynn Brain router, with Spark Qwen 3.6 35B A3B as the local fallback.",
+      "StepFun 3.7 Flash is the text/coding head route; image/audio/video are routed by the local Brain to its vision/voice backends.",
       "Local 9B is explicit opt-in only: warm pool defaults off, idle unload is expected, prompts stay small with stable prefix and recent short history, local tool schemas should stay limited, local decode TPS is surfaced, and local failure should promote to StepFun instead of blocking the user. Local 35B/Spark is an explicit high-end local tier and third fallback, not the default primary.",
       "Lynn CLI memory is layered: the live chat/code context is kept in the current context window and auto-compacted for long runs; sessions/checkpoints can be saved and resumed with --save-session, /resume, and /rewind; durable CLI memory is stored under ~/.lynn with /memory add and survives new terminal sessions until /memory forget removes it.",
       "The user can change CLI-only BYOK with /model, /providers, or /setup; those slash commands are handled by Lynn locally.",

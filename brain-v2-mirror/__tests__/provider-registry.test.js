@@ -5,9 +5,9 @@ describe('provider registry', () => {
   it('keeps StepFun high+32K in the intended universal fallback head position', () => {
     expect(universalOrder.map(String).slice(0, 4)).toEqual([
       'step-3.7-flash',
-      'mimo',
       'apex-spark-i-balanced',
       'deepseek-chat',
+      'deepseek-pro',
     ]);
   });
 
@@ -21,12 +21,12 @@ describe('provider registry', () => {
     expect(step.cooldown_ms).toBe(60_000);
     expect(step.default_thinking).toBe(false);
     expect(step.default_reasoning_effort).toBe('high');
-    expect(step.max_tokens).toBe(32_768);
+    expect(step.max_tokens).toBe(49_152);
     expect(step.thinking_control).toBeUndefined();
     expect(step.capability).toMatchObject({
-      vision: false,
+      vision: true,
       audio: false,
-      video: false,
+      video: true,
       tools: true,
       thinking: true,
       native_search: false,
@@ -39,15 +39,17 @@ describe('provider registry', () => {
     expect(getProvider('deepseek-chat').thinking_control).toBeUndefined();
   });
 
-  it('keeps StepFun as the text head while multimodal capability falls through to MiMo', () => {
+  it('routes vision to StepFun as the head vision-capable provider', () => {
     const visionOrder = providerOrderForCapability({ vision: true })
       .map((id) => PROVIDERS[id])
       .filter((provider) => provider?.capability?.vision)
       .map((provider) => String(provider.id));
 
-    expect(visionOrder[0]).toBe('mimo');
-    expect(visionOrder).not.toContain('step-3.7-flash');
-    expect(universalOrder.map(String).slice(0, 3)).toEqual(['step-3.7-flash', 'mimo', 'apex-spark-i-balanced']);
+    // StepFun (step-3.7-flash) now covers vision itself (vision_model=step-1o-turbo-vision via the
+    // openai-compat adapter switch) and is the head — MiMo is no longer the vision fallback.
+    expect(visionOrder[0]).toBe('step-3.7-flash');
+    expect(visionOrder).toContain('step-3.7-flash');
+    expect(universalOrder.map(String)[0]).toBe('step-3.7-flash');
     expect(visionOrder).not.toContain('apex-spark-i-balanced');
     expect(visionOrder).not.toContain('deepseek-chat');
   });
@@ -57,7 +59,7 @@ describe('provider registry', () => {
     const step = snapshot.providers.find((provider) => provider.id === 'step-3.7-flash');
     const spark = snapshot.providers.find((provider) => provider.id === 'apex-spark-i-balanced');
 
-    expect(snapshot.route.slice(0, 3)).toEqual(['step-3.7-flash', 'mimo', 'apex-spark-i-balanced']);
+    expect(snapshot.route.slice(0, 3)).toEqual(['step-3.7-flash', 'apex-spark-i-balanced', 'deepseek-chat']);
     expect(step).toMatchObject({ id: 'step-3.7-flash', credential: expect.any(String), inRoute: true });
     expect(spark).toMatchObject({ credential: 'not_required', configured: true, local: true });
     expect(JSON.stringify(snapshot)).not.toContain('apiKey');

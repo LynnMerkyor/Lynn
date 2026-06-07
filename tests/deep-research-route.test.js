@@ -70,7 +70,7 @@ describe("deep research route", () => {
       sseLine({
         object: "deep-research.meta",
         type: "candidate-picked",
-        winnerProviderId: "mimo",
+        winnerProviderId: "step-3.7-flash",
       }),
       sseLine({
         choices: [{ delta: { content: "模型原样输出。" }, finish_reason: "stop" }],
@@ -160,7 +160,7 @@ describe("deep research route", () => {
       body: JSON.stringify({
         prompt: "A3B 是什么意思？",
         baseUrl: "http://brain-v2.test",
-        candidates: ["deepseek-chat", "mimo"],
+        candidates: ["deepseek-chat", "step-3.7-flash"],
       }),
     });
 
@@ -190,7 +190,7 @@ describe("deep research route", () => {
     );
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toMatchObject({
       messages: [{ role: "user", content: "A3B 是什么意思？" }],
-      candidates: ["deepseek-chat", "mimo"],
+      candidates: ["deepseek-chat", "step-3.7-flash"],
     });
   });
 

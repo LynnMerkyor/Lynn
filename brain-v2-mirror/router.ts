@@ -238,7 +238,7 @@ async function runRound({
 }: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache }): Promise<RunRoundResult> {
   const errors: Array<{ providerId: ProviderId; error: string }> = [];
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
-  // (例:"MiMo → Spark fallback"),不再让 cascade decision 对 UI 不可见。
+  // (例:"StepFun → Spark fallback"),不再让 cascade decision 对 UI 不可见。
   const fallbackChain: FallbackEntry[] = [];
   for (const providerId of providerOrderForCapability(capabilityRequired)) {
     const provider = getProvider(providerId);
@@ -415,16 +415,46 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   const toolStormState = createToolStormState();
   const toolResultCompactionConfig = readToolResultCompactionConfigFromEnv();
   let serverToolStepIndex = 0;
+  // [overflow-retry] activeReasoning can be stepped down once if a reasoning model blows past
+  // max_tokens mid-<think> (finish_reason=length with no usable answer), so the answer fits.
+  let activeReasoning = reasoningEffort;
+  let lengthRetried = false;
+  const stepDownReasoning = (effort: string | null | undefined): string => {
+    const e = String(effort || 'high').toLowerCase();
+    if (e === 'medium') return 'low';
+    if (e === 'low' || e === 'off' || e === 'none' || e === 'disabled') return 'low';
+    return 'medium'; // high / xhigh / auto / null → medium
+  };
 
   while (iter < maxIter) {
     iter++;
     const result = await runRound({
       messages: workingMessages, tools: mergedTools, capabilityRequired,
-      signal, onChunk, log, extraBody, reasoningEffort,
+      signal, onChunk, log, extraBody, reasoningEffort: activeReasoning,
       requestCache,
       audioCache,
     });
     lastProviderId = result.providerId;
+
+    // [overflow-retry] StepFun-class reasoning models can blow past max_tokens mid-<think>,
+    // returning finish_reason=length with no visible answer and no tool call. Retry once with
+    // reduced reasoning (+ a concise-answer nudge) so the answer fits, instead of passing an
+    // empty turn through to the client.
+    if (
+      result.finishReason === 'length'
+      && result.toolCalls.length === 0
+      && !String(result.contentAccum || '').trim()
+      && !lengthRetried
+    ) {
+      lengthRetried = true;
+      activeReasoning = stepDownReasoning(activeReasoning);
+      log && log('warn', `provider ${lastProviderId} length-overflow with empty answer; retry once with reasoning=${activeReasoning}`);
+      workingMessages.push({
+        role: 'user',
+        content: '上一次回答因长度上限被截断,且没有给出可见答案。请直接、简洁地给出最终答案,不要再展开完整的思考过程。',
+      });
+      continue;
+    }
 
     // Model 自然结束 (stop / length / content_filter / function_call 等非 tool_calls) → 透传完成
     if (result.finishReason !== 'tool_calls' || result.toolCalls.length === 0) {

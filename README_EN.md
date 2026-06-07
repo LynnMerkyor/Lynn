@@ -14,29 +14,50 @@
 
 ---
 
-## 🧠 Lynn's Own Inference Engine · Benchmarking Against llama.cpp (Restarted)
+## 🧠 Part 1 · Engine & Models
 
-Lynn is more than a desktop agent. The custom inference engine is **restarted as a serious mainline** — the goal is not "use llama.cpp" but to **benchmark against (and rival) llama.cpp**: match its speed on the same model + hardware, and even **surpass it on FP4-MMA cards (R6000 class)**, while keeping the NVFP4 + MoE native layout and the cross-device kernel moat that vendor frameworks can't give us.
+### ① Purpose-distilled task-orchestrator model (Lynn Agent's brain)
 
-**🆕 Today's iteration (2026-06-03 · Spark sm_121 / Qwen3.6-35B-A3B NVFP4)**
+Lynn Agent's core is an orchestrator that **decomposes → delegates → verifies**, fast. We distilled a model for exactly this: LoRA (**r=64 / α=128 / dropout 0.05**, **1,842 distillation samples**) transferring **DeepSeek-V4-Pro's thinking-on reasoning style** into **Qwen3.6-35B-A3B** (MoE, 3B active).
 
-- **Decode launch-overhead campaign: 38.96 → ~45 tok/s (+26%)**, a chain of RC-validated launch fusions (RMSNorm / full-attn / shared-expert / g-beta / bf16-out); 40/40 greedy outputs token-identical to baseline.
-- **Banked: a 60 GiB "decode-only memory" win** — decode never reads the BF16 shadow, so resident drops **88→28 GiB** (decode keeps going token-exact after release) and the shadow is rebuilt by dequantizing the resident packed NVFP4 only when a new prefill needs it (~24s/request). On the shared 128 GB Spark this frees 60 GiB for KV / long context / batch.
-- **Honest read**: Spark sm_121 has **no FP4 MMA**, decode is launch-bound and **structurally capped ~45**; llama.cpp Q4_K_M on the same hardware = **69.77**. read-4bit is already done and a reusable decode graph is net-negative (0.75×) → **Spark is not the battlefield for matching 69.77**.
+Same harness, thinking-on, vs the base A3B:
 
-**The endgame = chew through the kernels ourselves.** The main path to knock down the bandwidth wall and approach (even surpass on R6000) llama.cpp is a fused 4-bit / zero-shadow kernel, staged with a gate + RC at each step: **single-projection PoC → all dense projections + drop shadow → MoE grouped experts → fuse to cut launches**. The payoff lands on FP4-MMA silicon (R6000 class) + ggml-level low-dispatch CUDA; the same NVFP4 weights become native on that card. **If you're going to build an engine, build the kernels yourself.**
+| Metric | Distilled orchestrator | Base A3B | |
+|---|---|---|---|
+| End-to-end orchestration latency | **26.6s** | 60.7s | 2.3× faster — decisive, not verbose |
+| GPQA-Diamond-198 | **80.3%** | 72.7% | **+7.6pp** hard reasoning |
+| MMLU-500 | 90.2% | 91.4% | knowledge flat |
+| False-verify (20×5) | **0/20** | 0/20 | self-claim matches reality |
 
-| Track | Current status |
+Distilled and base have **identical single-stream TPS** (~224 tok/s on R6000) — the orchestration speedup comes from **fewer tokens to a decision** (we distilled the *thinking style*, not raw speed). Hard tasks (e.g. concurrency) are still backstopped by **harness objective verification + a DS-Pro escape hatch**.
+
+📦 ModelScope: `Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill` (BF16 + Q4_K_M gguf)
+
+### ② Engine route: we chose the fastest edge framework — llama.cpp — and give back
+
+We built our own NVFP4 engine and spent weeks on Blackwell kernels. The hard conclusion: **single-stream decode is a bandwidth/launch game; a hand-written kernel can't out-run mature llama.cpp.**
+
+| Single-stream decode (same model, same GPU) | tok/s |
 |---|---|
-| **Lynn Engine (custom)** | R6000 strict full path **103.44 tok/s** / serving replay 107.23 (best so far); Spark sm_121 NVFP4 decode **~45** (structural ceiling, no FP4 MMA); endgame = fused 4-bit / zero-shadow kernel. |
-| **Lynn V4 / V Flash 35B-A3B** | BF16 / NVFP4 / Q4_K_M variants shipped & regression-tested; Q4 tool-calling template hotfix pushed to HF / ModelScope. |
-| **Lynn 27B-A3B base** | Qwen3.6-35B-A3B BASE → variable-expert pruning + Router-FT + Recovery LoRA, step5000 final; BF16 V8 strict 97.06% / V9 adjusted 62.71%. |
-| **Lynn-native NVFP4** | 27B/35B variable-expert NVFP4 artifact (~20GB), a Lynn Engine-only runtime artifact — not GGUF, not generic v8-RTN. |
-| **Client default backend** | Short-term still llama.cpp / GGUF on all platforms — a **pragmatic default, not abandoning the engine**; the engine is a parallel mainline rivaling it. |
+| llama.cpp Q4_K_M (Spark sm_121) | **69.77** (+MTP **79**) |
+| self-built NVFP4 (Spark, fused) | ~45 |
+| llama.cpp Q4_K_M (R6000) | ~207 |
+| self-built NVFP4 (R6000 strict) | ~108 |
 
-Related: [lynn-engine](https://github.com/MerkyorLynn/lynn-engine) (custom inference engine) · [lynn-distill-toolkit](https://github.com/MerkyorLynn/lynn-distill-toolkit) (distill / eval / quant / release). See the [decode launch-overhead campaign](https://github.com/MerkyorLynn/lynn-engine/blob/main/reports/qwen36_35b/DECODE_LAUNCH_OVERHEAD_CAMPAIGN_20260603.md).
+So **edge inference = llama.cpp** (fastest single-stream, mature, cross-platform), and we contribute our validated improvements upstream (llama.cpp PR: *forthcoming*).
 
-> Note: Lynn-native NVFP4 is an internal / vertical runtime artifact for Lynn Engine; general users should start with the V4 / V Flash BF16, NVFP4 v8-RTN, or Q4_K_M variants.
+### ③ NVFP4 not abandoned — the frontier is concurrent serving, proven on vLLM
+
+NVFP4's real payoff is **batched throughput**. Same R6000, `VLLM_MOE_FORCE_MARLIN=1`:
+
+| concurrency | 1 | 16 | 64 (soak) |
+|---|---|---|---|
+| output tok/s | 175 | 1289 | **2434** (0 failed) |
+
+**NVFP4 beats FP8 by 1.14–1.34× at every tier** (same machine, same harness). We contributed the regression tests / docs / correctness gate for this W4A16 NVFP4 Marlin path to vLLM (3 open PRs, under review):
+- [#44671](https://github.com/vllm-project/vllm/pull/44671) ModelOpt W4A16 lm_head regression tests
+- [#44672](https://github.com/vllm-project/vllm/pull/44672) ModelOpt W4A16 NVFP4 Marlin path docs
+- [#44673](https://github.com/vllm-project/vllm/pull/44673) speculative decoding correctness gate
 
 ## 🔭 V0.80: GUI + CLI Worker Fleet
 

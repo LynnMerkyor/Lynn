@@ -123,11 +123,11 @@ describe('stream-bridge SSE emitter', () => {
   it('switches model when meta.providerId changes (fallback chain visibility)', () => {
     const res = makeMockRes();
     const e = makeSSEEmitter(res, { id: 'x' });
-    e.emitChunk({ type: 'content', delta: 'a' }, { providerId: 'mimo' });
+    e.emitChunk({ type: 'content', delta: 'a' }, { providerId: 'step-3.7-flash' });
     e.emitChunk({ type: 'content', delta: 'b' }, { providerId: 'spark' });
     const events = parseSSEWrites(res.writes);
     const providerEvents = events.filter((ev) => ev.object === 'lynn.provider');
-    expect(providerEvents.map((ev) => ev.meta.active_provider)).toEqual(['mimo', 'spark']);
+    expect(providerEvents.map((ev) => ev.meta.active_provider)).toEqual(['step-3.7-flash', 'spark']);
     expect(chatChunks(res.writes).map((ev) => ev.model)).toEqual(['lynn-v2', 'lynn-v2']);
   });
 });

@@ -3,7 +3,7 @@
  * Posts to POST /api/fleet/dispatch; the server FleetHub broadcasts fleet events
  * back over the WS, so a dispatched worker appears on the board with no extra wiring.
  *
- * Supports MiMo vision dispatch (task type + image) and fan-out: one brief dispatched
+ * Supports vision dispatch (task type + image) and fan-out: one brief dispatched
  * to several agents in parallel (each gets its own worker + worktree).
  */
 import { useEffect, useState } from 'react';
@@ -40,9 +40,6 @@ interface FleetDispatchFormState {
 
 const FALLBACK_AGENTS: AgentEntry[] = [
   { id: 'lynn-cli', label: 'Lynn CLI', enabled: true },
-  { id: 'mimo-vl', label: 'MiMo Vision (mimo-v2.5)', enabled: true },
-  { id: 'mimo-pro', label: 'MiMo Pro (long-endurance)', enabled: true },
-  { id: 'mimo-fast', label: 'MiMo Fast', enabled: true },
   { id: 'stepfun-flash', label: 'StepFun 3.7 Flash (fast coding)', enabled: true },
   { id: 'codex-cli', label: 'Codex', enabled: true },
   { id: 'claude-code', label: 'Claude Code', enabled: true },
@@ -53,6 +50,8 @@ const FALLBACK_AGENTS: AgentEntry[] = [
 ];
 
 const DEFAULT_FLEET_AGENT = 'lynn-cli';
+// Vision tasks route through StepFun (step-1o-turbo-vision via the wire adapter).
+const VISION_FLEET_AGENT = 'stepfun-flash';
 const INITIAL_SCOPE_DEFAULTS = buildPresetDefaults(DEFAULT_FLEET_SCOPE_PRESET, '');
 const EXTERNAL_AGENT_IDS = new Set([
   'codex-cli',
@@ -182,8 +181,8 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
 
   const setTaskKind = (value: FleetTaskType) => {
     setTaskType(value);
-    if (isVisionTask(value) && !agent.startsWith('mimo-')) setAgent('mimo-vl');
-    if (value === 'code' && agent === 'mimo-vl') setAgent(DEFAULT_FLEET_AGENT);
+    if (isVisionTask(value) && agent !== VISION_FLEET_AGENT) setAgent(VISION_FLEET_AGENT);
+    if (value === 'code' && agent === VISION_FLEET_AGENT) setAgent(DEFAULT_FLEET_AGENT);
   };
 
   const applyScopePreset = (presetId: string) => {
@@ -258,9 +257,9 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
           <label className={s.formLabel}>Task type</label>
           <select className={s.formInput} value={taskType} onChange={(e) => setTaskKind(e.target.value as FleetTaskType)}>
             <option value="code">Code / text work</option>
-            <option value="see">MiMo see image</option>
-            <option value="ground">MiMo ground UI element</option>
-            <option value="ui2code">MiMo UI to code</option>
+            <option value="see">See image</option>
+            <option value="ground">Ground UI element</option>
+            <option value="ui2code">UI to code</option>
           </select>
         </div>
       </div>
@@ -310,7 +309,7 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
             onChange={(e) => setImage(e.target.value)}
             placeholder="/Users/lynn/Desktop/screenshot.png"
           />
-          <div className={s.formHint}>The path is passed to `Lynn worker run`; the CLI reads the image locally and routes it through MiMo vision.</div>
+          <div className={s.formHint}>The path is passed to `Lynn worker run`; the CLI reads the image locally and routes it through a vision-capable model.</div>
         </div>
       )}
       <div className={s.formRow}>
@@ -345,7 +344,7 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
       {targets.some(isExternalFleetAgent) && (
         <div className={needsExternalFullAccess ? s.formDangerHint : s.formHint}>
           External CLI adapters run their own shell/process. To launch them from Fleet, explicitly set Approval=yolo and
-          Sandbox=danger-full-access. Built-in Lynn, MiMo, and StepFun workers can stay guarded.
+          Sandbox=danger-full-access. Built-in Lynn and StepFun workers can stay guarded.
         </div>
       )}
       <div className={s.formRow}>

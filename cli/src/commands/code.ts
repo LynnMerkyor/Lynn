@@ -336,7 +336,6 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
     "/about",
     "/reasoning",
     "/continue",
-    "/model mimo",
     "/model stepfun",
   "/model spark",
   "/setup",

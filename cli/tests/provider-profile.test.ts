@@ -101,13 +101,12 @@ describe("CLI provider profile", () => {
     });
 
     expect(readEnvProviderProfile({
-      LYNN_CLI_PRESET: "mimo",
-      LYNN_CLI_MODEL: "mimo-v2.5",
-      LYNN_CLI_API_KEY: "mimo-secret",
+      LYNN_CLI_PRESET: "spark",
+      LYNN_CLI_API_KEY: "spark-secret",
     })).toMatchObject({
-      baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
-      model: "mimo-v2.5",
-      apiKey: "mimo-secret",
+      baseUrl: "http://127.0.0.1:18098/v1",
+      model: "qwen36-35b-a3b-apex-mtp",
+      apiKey: "spark-secret",
     });
   });
 

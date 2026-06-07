@@ -69,8 +69,14 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
     provider.default_reasoning_effort && (!reasoningEffort || reasoningEffort === 'auto')
       ? provider.default_reasoning_effort
       : reasoningEffort;
+  // Vision routing: if the turn carries image content and the provider declares a vision_model
+  // (StepFun: step-1o-turbo-vision), route images to that model; text stays on provider.model.
+  const hasImageContent = Array.isArray(messages) && messages.some((m) =>
+    !!m && Array.isArray(m.content)
+    && (m.content as Array<{ type?: string }>).some((c) => c?.type === 'image_url'));
+  const model = (hasImageContent && provider.vision_model ? provider.vision_model : provider.model) as ModelId;
   const body: OpenAICompatRequestBody = {
-    model: provider.model,
+    model,
     messages,
     max_tokens: provider.max_tokens || 4096,
     temperature: provider.temperature ?? 0.6,
@@ -83,7 +89,7 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
     body.reasoning_effort = effectiveReasoningEffort;
   }
   // 2026-05-25: provider.default_thinking === false 时(例如 apex-spark Brain v2 fallback),
-  // 默认关 thinking,跟 MiMo 行为对齐。避免短 max_tokens 工况下 35B 长 reasoning 吃光
+  // 默认关 thinking。避免短 max_tokens 工况下 35B 长 reasoning 吃光
   // 预算返回空 content。client 通过 reasoning_effort('low'/'medium'/'high'/'on')显式
   // opt-in,或 extraBody.chat_template_kwargs.enable_thinking 直接覆盖。
   if (provider.default_thinking === false

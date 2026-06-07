@@ -21,29 +21,53 @@
 
 ---
 
-## 🧠 Lynn 自研推理引擎 · 对标 llama.cpp(重启)
+## 🧠 第一部分 · 引擎与模型
 
-Lynn 不只是桌面 Agent。自研推理引擎已**重启为认真的主线**——目标不是「用 llama.cpp」,而是**对标 llama.cpp**:同模型同硬件把速度做到接近,乃至在 FP4-MMA 卡(R6000 一代)上**超过**它,同时保留 NVFP4 + MoE 原生 layout、跨设备内核 moat 这些 vendor 框架给不了的东西。
+### ① 专属任务编排器蒸馏模型（Lynn Agent 的大脑）
 
-**🆕 今天迭代(2026-06-03 · Spark sm_121 / Qwen3.6-35B-A3B NVFP4)**
+Lynn Agent 的核心是一个会**快速 拆分 → 分派 → 验收**任务的编排器。我们为此**专门蒸馏**了一个模型:用 LoRA（**r=64 / α=128 / dropout 0.05**,**1842 条蒸馏样本**)把 **DeepSeek-V4-Pro 在「思考开启(thinking-on)」时的多步推理与自我验证思维方式**蒸进 **Qwen3.6-35B-A3B**(MoE,3B 激活)。
 
-- **decode 启动开销战役:38.96 → ~45 tok/s(+26%)**,一连串 RC-validated launch-fusion(RMSNorm / full-attn / shared-expert / g-beta / bf16-out),40/40 贪心输出与 baseline 逐 token 一致。
-- **Banked:60 GiB「decode-only 显存」红利** —— decode 根本不读 BF16 shadow,常驻 **88→28 GiB**(release 后 token-exact 继续解码),需新 prefill 时再从常驻 packed NVFP4 反量化重建(~24s/请求)。在共享 128 GB Spark 上腾出 60 GiB 给 KV / 长上下文 / batch。
-- **诚实口径**:Spark sm_121 **无 FP4 MMA**,decode 是 launch-bound,结构性卡 **~45**;同硬件 llama.cpp Q4_K_M = **69.77**。read-4bit 其实已做、reusable decode graph 净负(0.75×)→ **Spark 不是追平 69.77 的战场**。
+编排器有三个硬条件——**快、会拆解验收、不乱报完成**。实测(同一 harness,thinking-on):
 
-**终局 = 自己把内核啃下来。** 把带宽墙真正推倒、逼近(乃至在 R6000 上超过)llama.cpp 的主路 = 融合 4-bit / 零-shadow 内核,分阶段啃、每阶段 gate + RC:**单投影 PoC → 全 dense 投影 + 删 shadow → MoE grouped 专家 → 融合减 launch**。这条路的收益兑现在 FP4-MMA 硅(R6000 一代)+ ggml 级低-dispatch CUDA;同一套 NVFP4 权重挪到那张卡即 native。**做引擎,要做就自己把内核啃下来。**
+| 维度 | 蒸馏编排器 | 原版 A3B | 说明 |
+|---|---|---|---|
+| 端到端编排耗时 | **26.6s** | 60.7s | 决断不啰嗦,比原版快 2.3×、比云 API 快 2–3× |
+| GPQA-Diamond-198 | **80.3%**(32K) | 72.7% | 硬推理 **+7.6pp** |
+| MMLU-500 | 90.2% | 91.4% | 知识广度持平 |
+| 编排假验证(20×5) | **0 / 20** | 0 / 20 | 自报完成与真实状态一致 |
 
-| 方向 | 当前状态 |
+关键:蒸馏与原版**单流 TPS 相同**(R6000 ~224 tok/s),但端到端编排**快一倍**——**蒸的是「思维方式」,红利是更少 token 到结论**。难题(如并发)仍由 **harness 客观验证 + DS-Pro 逃生舱**兜底(实测证明硬题上模型自报不可信)。
+
+📦 ModelScope:`Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill`(BF16 + Q4_K_M gguf)
+> 与早期 `Lynn-V4-Pro-Distill` 区分:这一版蒸的是 **thinking-on 的思维方式**,目标「学会怎么想」,直接服务 Agent 编排。
+
+### ② 引擎路线:端侧选最快的 llama.cpp,并回馈上游
+
+我们自研过 NVFP4 推理引擎,在 Blackwell 上认真啃了几周内核。结论很硬:**单流 decode 是带宽 / launch 游戏,自写内核打不过成熟的 llama.cpp**。
+
+| 单流 decode(同模型同卡) | tok/s |
 |---|---|
-| **Lynn Engine(自研)** | R6000 strict full path **103.44 tok/s** / serving replay 107.23(历史最佳);Spark sm_121 NVFP4 decode **~45**(结构性上限,无 FP4 MMA);终局 = 融合 4-bit / 零-shadow 内核。 |
-| **Lynn V4 / V Flash 35B-A3B** | BF16 / NVFP4 / Q4_K_M 变体已发布与回归;Q4 工具调用模板热修已同步 HF / ModelScope。 |
-| **Lynn 27B-A3B 基座** | Qwen3.6-35B-A3B BASE → variable-expert pruning + Router-FT + Recovery LoRA,选定 **step5000 final**;BF16 V8 strict 97.06% / V9 adjusted 62.71%。 |
-| **Lynn-native NVFP4** | 27B/35B variable-expert NVFP4 artifact(~20GB),Lynn Engine 专用 runtime,非 GGUF、非通用框架 v8-RTN。 |
-| **客户端默认后端** | 短期仍走 llama.cpp / GGUF 全平台——**务实默认,非放弃引擎**;引擎作为并行主线对标它。 |
+| llama.cpp Q4_K_M(Spark sm_121) | **69.77**(+MTP **79**) |
+| 自研 NVFP4(Spark,内核融合后) | ~45 |
+| llama.cpp Q4_K_M(R6000) | ~207 |
+| 自研 NVFP4(R6000 strict) | ~108 |
 
-相关仓库:[lynn-engine](https://github.com/MerkyorLynn/lynn-engine)(自研推理引擎)· [lynn-distill-toolkit](https://github.com/MerkyorLynn/lynn-distill-toolkit)(蒸馏 / 评测 / 量化 / 发布)。详见 [decode launch-overhead campaign](https://github.com/MerkyorLynn/lynn-engine/blob/main/reports/qwen36_35b/DECODE_LAUNCH_OVERHEAD_CAMPAIGN_20260603.md)。
+所以**端侧主推理我们选 llama.cpp**(单流最快、生态成熟、全平台),并把实测验证的改进**回馈上游**(llama.cpp PR:*即将提交*)。不是放弃,是「打得过就用、用得上就贡献」。
 
-> 说明:Lynn-native NVFP4 是给 Lynn Engine 的内部 / 垂直 runtime artifact;通用用户仍建议从 V4 / V Flash 的 BF16、NVFP4 v8-RTN 或 Q4_K_M 版本开始。
+### ③ 不放弃 NVFP4:前沿在并发服务侧,已用 vLLM 求证
+
+NVFP4 的真正红利不在单流 decode,而在**并发吞吐**。同一张 R6000,`VLLM_MOE_FORCE_MARLIN=1`:
+
+| 并发 | 1 | 16 | 64(release soak) |
+|---|---|---|---|
+| 输出 tok/s | 175 | 1289 | **2434**(0 failed) |
+
+**NVFP4 vs FP8(同机同 harness):每档都赢 1.14–1.34×**。我们把这条 W4A16 NVFP4 Marlin 路径的**回归测试 / 文档 / 正确性门禁回馈给 vLLM**(3 个 open PR,maintainer review 中):
+- [#44671](https://github.com/vllm-project/vllm/pull/44671) Add ModelOpt W4A16 lm_head regression tests
+- [#44672](https://github.com/vllm-project/vllm/pull/44672) Document ModelOpt W4A16 NVFP4 Marlin path
+- [#44673](https://github.com/vllm-project/vllm/pull/44673) Add speculative decoding correctness gate
+
+---
 
 ## 🔭 V0.80:GUI + CLI Worker Fleet
 
