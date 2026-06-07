@@ -648,7 +648,7 @@ Memory and skill distillation work together: the more you use Lynn, the more acc
 
 ## 🚀 Lynn's Own Models + Inference Engine (May 2026)
 
-Until now Lynn ran entirely on third-party models (MiMo / Qwen3.6 / DeepSeek / Kimi) — Lynn handled the engineering and UX, the models came from elsewhere.
+Until now Lynn ran largely on third-party models (StepFun / Qwen3.6 / DeepSeek / Kimi) — Lynn handled the engineering and UX, the models came from elsewhere.
 
 **That's changing. Lynn now has its own models, with a dedicated inference engine coming next.**
 
@@ -681,7 +681,7 @@ All tooling is open-sourced: [lynn-distill-toolkit](https://github.com/MerkyorLy
 - Upstream inference engines (vLLM / SGLang / TRT-LLM) ship NVFP4 + MoE support on a 4–8 week cadence — **too slow for our roadmap**
 - Owning both means Lynn-specific capabilities (Yuan personality / proactive recall / task modes) can be baked into training data and inference paths directly
 
-This doesn't replace the cloud fallback chain (MiMo / Qwen / DeepSeek remain the default route). **It adds a private, local path** — not a switch.
+This doesn't replace the cloud fallback chain (StepFun / Qwen / DeepSeek remain the default route). **It adds a private, local path** — not a switch.
 
 ## Local models — three-tier hardware ladder
 
@@ -725,18 +725,16 @@ Interface available in 5 languages: Chinese, English, Japanese, Korean, and Trad
 
 Lynn doesn't just slap an OpenAI-compatible wrapper and call it a day. From 9B small models to GLM-5 reasoning models, every tier has purpose-built adaptations:
 
-**Free built-in models (Brain v2)** — Quick Start ships with a built-in model pool. v0.77.7+ routes through brain v2 with multi-tier auto-fallback:
+**Free built-in models (Brain v2)** — Quick Start ships with a built-in model pool. Current Brain V2 routes through a StepFun-first cascade with multi-tier auto-fallback:
 
 ```
-T1  ⭐ Xiaomi MiMo v2.5-pro (default head; enable_search built-in web search + thinking)
-T2  GPU Qwen3.6-35B-A3B FP8 (128K window; self-hosted SGLang+MTP on DGX Spark)
+T1  ⭐ StepFun 3.7 Flash (256K context, high reasoning, 32K reasoning/generation budget)
+T2  Spark Qwen 3.6 35B A3B (local/self-hosted fallback)
 T3  DeepSeek V4-flash / V4-pro (cloud, long context)
-T4  Zhipu GLM-5-Turbo / GLM-5.1 (coding plan)
-T5  Kimi K2.6 (api.kimi.com coding plan, 256K window)
-T6  Step-3.5 Flash / MiniMax M2.7-highspeed (last-resort)
+T4  Zhipu GLM / Kimi / MiniMax (provider fallback chain)
 ```
 
-No API key needed — device authentication only. MiMo upstream supports `thinking:{type:"disabled"}` fast-mode (simple chat TTF -51%). Some tiers go through DGX Spark GPUs which require physical access; cloud tiers remain available as fallbacks.
+No API key needed — device authentication only. Some tiers go through local or self-hosted GPUs which require physical access; cloud tiers remain available as fallbacks.
 
 **Three-tier tool layering** — Tools are automatically pruned based on context window:
 - Small models (<32K, e.g. ERNIE 8K, Moonshot 8K, Step 8K): only `web_search` + `web_fetch`, preventing tool descriptions from blowing out the context

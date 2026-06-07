@@ -30,7 +30,7 @@ Lynn --version  # 应输出 0.81.0
 Lynn agents     # 给其他智能体/Fleet 的可复制命令
 ```
 
-默认 Brain 路由: **StepFun 3.7 Flash(256K 上下文, high 推理, 32K 推理/生成预算) -> MiMo V2.5 Pro/Omni -> Spark Qwen 3.6 35B A3B**。纯 CLI 首装在本地 Brain 不可达时会走 Lynn 远端 Brain;BYOK 仍可用。
+默认 Brain 路由: **StepFun 3.7 Flash(256K 上下文, high 推理, 32K 推理/生成预算) -> Spark Qwen 3.6 35B A3B**。纯 CLI 首装在本地 Brain 不可达时会走 Lynn 远端 Brain;BYOK 仍可用。
 
 ---
 
@@ -64,7 +64,7 @@ Lynn --version  # should print 0.81.0
 Lynn agents     # copyable headless/Fleet commands
 ```
 
-Default Brain route: **StepFun 3.7 Flash (256K context, high reasoning, 32K reasoning/generation budget) -> MiMo V2.5 Pro/Omni -> Spark Qwen 3.6 35B A3B**. Fresh CLI installs use hosted Lynn Brain when local Brain is unavailable; BYOK via `Lynn providers set ...` remains available.
+Default Brain route: **StepFun 3.7 Flash (256K context, high reasoning, 32K reasoning/generation budget) -> Spark Qwen 3.6 35B A3B**. Fresh CLI installs use hosted Lynn Brain when local Brain is unavailable; BYOK via `Lynn providers set ...` remains available.
 
 ## Headless / Fleet
 

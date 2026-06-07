@@ -19,7 +19,7 @@ npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0
 
 `--force` lets npm replace an older `Lynn`/`lynn` shim. Requires Node ≥ 20.
 
-**Routing:** fresh CLI installs use Lynn hosted Brain by default (StepFun 3.7 Flash → MiMo → Spark cascade). A local Lynn Brain or GUI is optional. BYOK (`Lynn providers set`) is available when a user wants their own OpenAI-compatible endpoint.
+**Routing:** fresh CLI installs use Lynn hosted Brain by default (StepFun 3.7 Flash → Spark cascade). A local Lynn Brain or GUI is optional. BYOK (`Lynn providers set`) is available when a user wants their own OpenAI-compatible endpoint.
 
 **Long-run cache discipline:** Lynn Code keeps stable prompt layers fixed for
 Reasonix-style prefix-cache hits. Machine output may include
@@ -48,7 +48,6 @@ Brain or a configured BYOK provider must be reachable; `Lynn doctor --offline` c
 
 ```bash
 Lynn providers set --preset stepfun --api-key <key>   # step-3.7
-Lynn providers set --preset mimo    --api-key <key>   # MiMo
 Lynn providers presets                                # list presets
 # manual:
 Lynn providers set --base-url https://api.x.com/v1 --api-key <key> --model <id>
