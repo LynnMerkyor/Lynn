@@ -77,6 +77,14 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       "model",
       "ultra-max-subtasks",
       "ultra-concurrency",
+      "expect",
+      "task-class",
+      "worker-repair-rounds",
+      "mock-worker-output",
+      "mock-escape-output",
+      "escape-base-url",
+      "escape-api-key",
+      "escape-model",
     ].includes(name);
     if (takesValue && next && !next.startsWith("-")) {
       flags[name] = next;

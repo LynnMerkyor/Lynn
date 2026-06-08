@@ -390,7 +390,7 @@ async function fetchBrainResponseOnce(request: BrainChatRequest, body: Record<st
   return response;
 }
 
-async function* streamDirectProviderChat(request: BrainChatRequest, provider: CliProviderProfile): AsyncGenerator<BrainStreamEvent> {
+export async function* streamDirectProviderChat(request: BrainChatRequest, provider: CliProviderProfile): AsyncGenerator<BrainStreamEvent> {
   const messages = request.messages || (request.prompt ? [{ role: "user" as const, content: request.prompt }] : []);
   if (!messages.length) {
     throw new Error("Provider request requires a prompt or messages");

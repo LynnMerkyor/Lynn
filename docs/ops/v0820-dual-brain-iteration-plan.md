@@ -31,7 +31,7 @@ The release goal is not higher raw decode TPS. The goal is shorter successful ta
 | B. Worker route | Codex | step37 Fleet worker profile, JSONL event contract reuse | worker mock + one real coding smoke |
 | C. Harness acceptance | Codex | objective verification schema and escalation rules | false-verify fixture must fail closed |
 | D. GUI Fleet | Codex | manager task tree + worker cards + validation lights | UI smoke with mock event stream |
-| E. CLI lights-out | Codex | A3B delegate loop + worker invocation + JSONL terminal result | headless mock + one small coding fixture |
+| E. CLI lights-out | Codex | A3B delegate loop + worker invocation + JSONL terminal result | `Lynn manager run --jsonl --mock` + live StepFun/DS mock servers |
 | F. MTP optional | Claude | distilled A3B MTP correctness / quality report | enable only if token-exact or quality loss <=5%; otherwise disabled |
 
 ## Routing Contract
@@ -123,7 +123,7 @@ Stop implementation and run gates when these files are wired:
 - false-verify fail-closed fixture; **covered by `shared/__tests__/dual-brain-route.test.ts`**
 - manager JSONL event fixture; **covered by `shared/__tests__/fleet-events.test.ts`**
 - GUI mock event-stream fixture; **covered by Fleet reducer manager-event test**
-- CLI mock delegate fixture; **next implementation boundary**
+- CLI mock delegate fixture; **wired in `cli/src/commands/manager-run.ts`**
 
 Minimum commands to run at the gate:
 
@@ -142,5 +142,5 @@ If the repo does not currently expose one of these scripts, record the missing s
 3. Add acceptance schema validator. **Done.**
 4. Add manager JSONL event types. **Done.**
 5. Wire GUI mock event stream. **First reducer support done; full visual surface next.**
-6. Wire CLI mock delegate loop. **QoS guard done; delegate loop remains next boundary.**
+6. Wire CLI mock delegate loop. **Done: `Lynn manager run` emits manager JSONL, calls StepFun worker lane, validates acceptance, and escalates to DS-V4 Flash when rules match.**
 7. Stop at gate tests.

@@ -4,7 +4,7 @@
 
 <h1 align="center">Lynn</h1>
 
-<p align="center"><strong>GUI command center · CLI Worker Fleet · Long-term memory · Multi-agent collaboration</strong></p>
+<p align="center"><strong>GUI command center · CLI Worker Fleet · distilled A3B orchestrator · long-term memory</strong></p>
 <p align="center">An open-source desktop AI agent whose GUI command center dispatches multiple coding CLIs (Codex / Claude / Qwen ...) in parallel - coding, research, and business in one visual workspace, not another chat box</p>
 
 <p align="center"><a href="README.md">中文版 (默认)</a> | <strong>English</strong></p>
@@ -29,7 +29,7 @@ Same harness, thinking-on, vs the base A3B:
 | MMLU-500 | 90.2% | 91.4% | knowledge flat |
 | False-verify (20×5) | **0/20** | 0/20 | self-claim matches reality |
 
-Distilled and base have **identical single-stream TPS** (~224 tok/s on R6000) — the orchestration speedup comes from **fewer tokens to a decision** (we distilled the *thinking style*, not raw speed). Hard tasks (e.g. concurrency) are still backstopped by **harness objective verification + a DS-Pro escape hatch**.
+Distilled and base have **identical single-stream TPS** (~224 tok/s on R6000) — the orchestration speedup comes from **fewer tokens to a decision** (we distilled the *thinking style*, not raw speed). Hard tasks (e.g. concurrency) are still backstopped by **harness objective verification + a DS-V4 Flash escape hatch**.
 
 📦 **ModelScope**: `Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill` · **HuggingFace**: `nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill` (BF16 + Q4_K_M gguf)
 
@@ -113,10 +113,14 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>Lynn v0.82.0</strong> · 2026-06-06 · StepFun exhaustive best mode + scan guards <em>(latest)</em></summary>
+<summary><strong>Lynn v0.82.0</strong> · 2026-06-08 · dual-brain QoS + distilled A3B orchestrator <em>(latest)</em></summary>
 
 **GUI and CLI ship together**:
 - **StepFun 3.7 Flash best mode**:`/goal`, `/best`, and `Lynn code --best` now use a 300-step exhaustive budget with ultra decomposition, parallel atomic workers, adversarial acceptance, auto-verify, and checkpoint/resume. The target is the best completed result, not fewer steps.
+- **Distilled A3B orchestrator enters the product route**: Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill is now the local single-slot manager/fallback for decomposition, delegation, acceptance, and synthesis; GUI foreground work keeps priority, and CLI/background jobs skip Spark when it is busy.
+- **Dual-brain QoS route is fixed**: `A3B -> StepFun 3.7 Flash -> DS-V4 Flash`; StepFun does the work, local A3B verifies, and DS-V4 Flash is the escape hatch only for high-risk or objectively failed work.
+- **Four upstream PRs**: llama.cpp NVFP4 guidance plus vLLM W4A16 NVFP4 regression/docs/spec-decode correctness gate, turning the self-built engine work into reusable evidence and upstream contribution.
+- **MiMo wrap-up**: MiMo remains available for multimodal, native-search, and legacy compatibility fallback, but no longer carries the v0.82 text/orchestration main-route story.
 - **Macro orchestration + atomic loop**: large tasks are decomposed into dependency waves, while each worker still runs one action per turn with the tool ledger, plan contract, budget guard, and max-step verification.
 - **No answer fallback**: the harness does not inject chain hints or let a router answer for the model; it decomposes, schedules, verifies, repairs, and records.
 - **Cloud StepFun remains the default**: StepFun 3.7 Flash stays the primary route; local 9B only starts after explicit user action and no longer consumes GPU/unified memory by default.
@@ -712,18 +716,17 @@ Interface available in 5 languages: Chinese, English, Japanese, Korean, and Trad
 
 Lynn doesn't just slap an OpenAI-compatible wrapper and call it a day. From 9B small models to GLM-5 reasoning models, every tier has purpose-built adaptations:
 
-**Free built-in models (Brain v2)** — Quick Start ships with a built-in model pool. v0.77.7+ routes through brain v2 with multi-tier auto-fallback:
+**Free built-in models (Brain v2)** — Quick Start ships with a built-in model pool. v0.82 routes through Brain V2 with a dual-brain main chain and multimodal/search fallback:
 
 ```
-T1  ⭐ Xiaomi MiMo v2.5-pro (default head; enable_search built-in web search + thinking)
-T2  GPU Qwen3.6-35B-A3B FP8 (128K window; self-hosted SGLang+MTP on DGX Spark)
-T3  DeepSeek V4-flash / V4-pro (cloud, long context)
-T4  Zhipu GLM-5-Turbo / GLM-5.1 (coding plan)
-T5  Kimi K2.6 (api.kimi.com coding plan, 256K window)
-T6  Step-3.5 Flash / MiniMax M2.7-highspeed (last-resort)
+T1  ⭐ StepFun 3.7 Flash (256K context, high reasoning, 32K reasoning/generation budget, text/coding head)
+T2  Spark distilled A3B (local single-slot manager/fallback for decomposition, validation, privacy, and cost control)
+T3  DS-V4 Flash (escape hatch for high-risk work, failed objective validation, or repeated worker repair)
+T4  Xiaomi MiMo v2.5 Pro / Omni (multimodal, native search, audio/video/image compatibility fallback)
+T5  Zhipu GLM / Kimi / MiniMax (vendor backup lanes)
 ```
 
-No API key needed — device authentication only. MiMo upstream supports `thinking:{type:"disabled"}` fast-mode (simple chat TTF -51%). Some tiers go through DGX Spark GPUs which require physical access; cloud tiers remain available as fallbacks.
+No API key needed — device authentication only. MiMo remains useful where its native multimodal/search surface is the right tool; the text/coding/orchestration main lane is now StepFun + distilled A3B + DS-V4 Flash.
 
 **Three-tier tool layering** — Tools are automatically pruned based on context window:
 - Small models (<32K, e.g. ERNIE 8K, Moonshot 8K, Step 8K): only `web_search` + `web_fetch`, preventing tool descriptions from blowing out the context

@@ -6,6 +6,7 @@ import { runCache } from "./commands/cache.js";
 import { runChat } from "./commands/chat.js";
 import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
+import { runManager } from "./commands/manager-run.js";
 import { runMemory } from "./commands/memory.js";
 import { runPermissions } from "./commands/permissions.js";
 import { runPrompt } from "./commands/prompt.js";
@@ -127,6 +128,9 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     case "memory": {
       return runMemory(args, json);
     }
+    case "manager": {
+      return runManager(args);
+    }
     case "prompt":
     case "exec": {
       return runPrompt(args, {
@@ -243,6 +247,7 @@ const TOP_LEVEL_COMMANDS = new Set([
   "permissions",
   "model",
   "memory",
+  "manager",
   "goal",
   "prompt",
   "exec",

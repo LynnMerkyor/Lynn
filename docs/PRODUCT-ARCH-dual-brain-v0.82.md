@@ -144,7 +144,7 @@ Thought(想):怎么把任务拆成子步、派给谁
 - [x] Spark 蒸馏 A3B 升本地单槽 manager/fallback(已把 :18098 换成蒸馏 gguf,77 tok/s)
 - [ ] A3B 编排 MTP(Claude 并行测试;只有 token-exact/harness 质量损失 <=5% 才允许进入可选 profile,不得阻塞 v0.82)
 - [ ] GUI Fleet:编排器中枢 + 多 worker 并行 + 验收可视化
-- [ ] CLI:A3B 派活 + harness 验收闭环(黑灯工厂-P)
+- [x] CLI:manager JSONL 派活 + harness 验收 + DS-V4 Flash escalation 闭环(`Lynn manager run --jsonl`;可承接 A3B 计划输出)
 - [x] 路由配置固化三级:本地 A3B → 3.7 Flash → DS-V4 Flash;本地 busy guard 已接入 Brain router
 - [ ] 模型路由纪律锁定:STEP_TEXT_MODEL = step-3.7-flash(执行头),不得静默降级
 
