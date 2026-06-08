@@ -1,41 +1,34 @@
 {
-  "collected_at": "2026-06-06T04:37:47+00:00",
+  "collected_at": "2026-06-08T05:14:29+00:00",
   "author": "nerkyor",
   "models": [
     {
       "id": "nerkyor/Lynn-V4-Flash-Distill-Qwen-35B-A3B-BF16-merged",
       "name": "Lynn-V4-Flash-Distill-Qwen-35B-A3B-BF16-merged",
-      "downloads_30d": 495,
+      "downloads_30d": 499,
       "likes": 1,
       "last_modified": "2026-05-15"
     },
     {
       "id": "nerkyor/Qwen3.6-35B-A3B-GGUF-imatrix",
       "name": "Qwen3.6-35B-A3B-GGUF-imatrix",
-      "downloads_30d": 407,
+      "downloads_30d": 413,
       "likes": 0,
       "last_modified": "2026-05-21"
     },
     {
       "id": "nerkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF",
       "name": "Qwen3.6-35B-A3B-APEX-MTP-GGUF",
-      "downloads_30d": 396,
+      "downloads_30d": 402,
       "likes": 0,
       "last_modified": "2026-05-23"
     },
     {
       "id": "nerkyor/Qwen3.5-9B-GGUF-imatrix",
       "name": "Qwen3.5-9B-GGUF-imatrix",
-      "downloads_30d": 291,
+      "downloads_30d": 293,
       "likes": 0,
       "last_modified": "2026-05-23"
-    },
-    {
-      "id": "nerkyor/Qwen3.6-35B-A3B-NVFP4-v8-RTN",
-      "name": "Qwen3.6-35B-A3B-NVFP4-v8-RTN",
-      "downloads_30d": 284,
-      "likes": 1,
-      "last_modified": "2026-05-11"
     },
     {
       "id": "nerkyor/Lynn-V4-Flash-Distill-Qwen-35B-A3B-Q4_K_M",
@@ -45,60 +38,67 @@
       "last_modified": "2026-05-17"
     },
     {
+      "id": "nerkyor/Qwen3.6-35B-A3B-NVFP4-v8-RTN",
+      "name": "Qwen3.6-35B-A3B-NVFP4-v8-RTN",
+      "downloads_30d": 270,
+      "likes": 1,
+      "last_modified": "2026-05-11"
+    },
+    {
       "id": "nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B-NVFP4-v8-RTN",
       "name": "Lynn-V4-Pro-Distill-Qwen-35B-A3B-NVFP4-v8-RTN",
-      "downloads_30d": 251,
+      "downloads_30d": 258,
       "likes": 0,
       "last_modified": "2026-05-14"
     },
     {
       "id": "nerkyor/Qwen3.6-35B-A3B-NVFP4-modelopt",
       "name": "Qwen3.6-35B-A3B-NVFP4-modelopt",
-      "downloads_30d": 246,
+      "downloads_30d": 250,
       "likes": 1,
       "last_modified": "2026-05-12"
     },
     {
-      "id": "nerkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix",
-      "name": "Qwen3-4B-Thinking-2507-GGUF-imatrix",
-      "downloads_30d": 225,
-      "likes": 0,
-      "last_modified": "2026-05-23"
-    },
-    {
       "id": "nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B-Q4_K_M",
       "name": "Lynn-V4-Pro-Distill-Qwen-35B-A3B-Q4_K_M",
-      "downloads_30d": 205,
+      "downloads_30d": 234,
       "likes": 0,
       "last_modified": "2026-05-17"
     },
     {
-      "id": "nerkyor/Qwen3.5-9B-GGUF-imatrix-MTP",
-      "name": "Qwen3.5-9B-GGUF-imatrix-MTP",
-      "downloads_30d": 192,
+      "id": "nerkyor/Qwen3-4B-Thinking-2507-GGUF-imatrix",
+      "name": "Qwen3-4B-Thinking-2507-GGUF-imatrix",
+      "downloads_30d": 226,
       "likes": 0,
-      "last_modified": "2026-05-28"
+      "last_modified": "2026-05-23"
     },
     {
       "id": "nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B",
       "name": "Lynn-V4-Pro-Distill-Qwen-35B-A3B",
-      "downloads_30d": 191,
+      "downloads_30d": 200,
       "likes": 0,
       "last_modified": "2026-05-14"
     },
     {
-      "id": "nerkyor/Qwen3.6-27B-NVFP4-v8-RTN",
-      "name": "Qwen3.6-27B-NVFP4-v8-RTN",
-      "downloads_30d": 185,
-      "likes": 1,
-      "last_modified": "2026-05-11"
+      "id": "nerkyor/Qwen3.5-9B-GGUF-imatrix-MTP",
+      "name": "Qwen3.5-9B-GGUF-imatrix-MTP",
+      "downloads_30d": 199,
+      "likes": 0,
+      "last_modified": "2026-05-28"
     },
     {
       "id": "nerkyor/Qwen3.5-4B-GGUF-imatrix",
       "name": "Qwen3.5-4B-GGUF-imatrix",
-      "downloads_30d": 153,
+      "downloads_30d": 170,
       "likes": 0,
       "last_modified": "2026-05-24"
+    },
+    {
+      "id": "nerkyor/Qwen3.6-27B-NVFP4-v8-RTN",
+      "name": "Qwen3.6-27B-NVFP4-v8-RTN",
+      "downloads_30d": 167,
+      "likes": 1,
+      "last_modified": "2026-05-11"
     },
     {
       "id": "nerkyor/Lynn-V4-Flash-Distill-Qwen-35B-A3B-NVFP4-v8-RTN",
@@ -113,8 +113,15 @@
       "downloads_30d": 0,
       "likes": 0,
       "last_modified": "2026-05-14"
+    },
+    {
+      "id": "nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill",
+      "name": "Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill",
+      "downloads_30d": 0,
+      "likes": 0,
+      "last_modified": "2026-06-07"
     }
   ],
-  "total_models": 16,
-  "total_downloads_30d": 3814
+  "total_models": 17,
+  "total_downloads_30d": 3874
 }
