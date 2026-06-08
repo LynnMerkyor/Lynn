@@ -1,7 +1,6 @@
 export type Brand<T, Name extends string> = T & { readonly __brand: Name };
 
 export type ProviderIdLiteral =
-  | 'mimo'
   | 'apex-spark-i-balanced'
   | 'step-3.7-flash'
   | 'deepseek-chat'
@@ -10,10 +9,8 @@ export type ProviderIdLiteral =
   | 'glm-coding';
 
 export type ModelIdLiteral =
-  | 'mimo-v2.5-pro'
-  | 'mimo-v2.5'
-  | 'mimo-v2-omni'
   | 'qwen36-35b-a3b-apex-mtp'
+  | 'qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix'
   | 'step-3.7-flash'   // StepFun 198B-MoE/11B-A text/coding fallback, step_plan 端点
   | 'deepseek-v4-flash'
   | 'deepseek-v4-pro'
@@ -22,7 +19,7 @@ export type ModelIdLiteral =
 export type ProviderId = Brand<ProviderIdLiteral, 'ProviderId'>;
 export type ModelId = Brand<ModelIdLiteral, 'ModelId'>;
 
-export type WireName = 'mimo' | 'sglang' | 'openai' | 'openai-compat';
+export type WireName = 'sglang' | 'openai' | 'openai-compat';
 
 export interface ProviderCapability {
   vision: boolean;
@@ -49,9 +46,13 @@ export interface Provider {
   authType?: 'none' | 'bearer';
   max_tokens?: number;
   temperature?: number;
+  // When set, the openai-compat adapter uses this model id (instead of `model`) for turns that
+  // carry image content — lets one provider serve text + vision with different models
+  // (StepFun: text=step-3.7-flash, vision=step-1o-turbo-vision).
+  vision_model?: string;
 }
 
-export type FallbackReason = 'cooldown' | 'probe-failed' | 'probe-threw' | 'error' | 'empty';
+export type FallbackReason = 'cooldown' | 'probe-failed' | 'probe-threw' | 'local-busy' | 'error' | 'empty';
 
 export interface FallbackEntry {
   id: ProviderId;

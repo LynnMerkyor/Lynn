@@ -2,13 +2,14 @@
 //
 // 当 router 选中的 provider 不支持原生 audio(capability.audio === false),但 messages
 // 含 audio content part 时,brain 端用 Whisper 把 audio 转录成文本,把 audio part 替换为
-// 文本段后继续 forward。这样 MiMo audio 挂了的情况下,Spark/DeepSeek 也能"听懂"音频
+// 文本段后继续 forward。这样在 audio-native provider 挂了的情况下,Spark/DeepSeek 也能"听懂"音频
 // (信息量损失但不阻断,符合"失败降级保底"原则)。
 //
 // 设计要点(对齐 search-context.ts 模式):
 //   - feature flag: BRAIN_V2_AUDIO_FALLBACK=1,默认 OFF
 //   - 仅在 provider.capability.audio === false && messages 含 audio 时触发
-//   - MiMo 自带 audio:true,跳过(原生处理质量更好)
+//   - audio-native provider(capability.audio === true)跳过转录,直接交原生处理(质量更好)。
+//     注:当前没有任何 provider advertise audio:true,所以这条 skip 分支现在是 inert(保留以备将来接入)。
 //   - 失败不阻断:transcribe 挂了 → 返回原 messages → adapter 自己面对(可能 400)
 //   - per-request 缓存(audio 数据哈希为 key),fallback 链不重复转录
 //

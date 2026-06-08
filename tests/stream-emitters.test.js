@@ -72,7 +72,7 @@ describe("chat stream emitters", () => {
     const providerEvent = {
       type: "provider_meta",
       active_provider: "apex-spark-i-balanced",
-      fallback_from: [{ id: "mimo", reason: "cooldown" }],
+      fallback_from: [{ id: "step-3.7-flash", reason: "cooldown" }],
     };
     const statusEvent = { type: "status", isStreaming: true, detail: "fallback-warm" };
 

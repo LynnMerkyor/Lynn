@@ -477,7 +477,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   };
 
   const startRecommendedDownload = async (option: LocalUpgradeOption) => {
-    const modelId = option.id || 'qwen36-35b-a3b-apex-mtp';
+    const modelId = option.id || 'qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix';
     if (!platform?.llamacppStartDownload) {
       setActionStatus({ kind: 'error', text: '当前运行环境不支持本地模型下载。请使用桌面客户端。' });
       return;
@@ -611,7 +611,10 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         <span>Lynn imatrix 校准</span>
         <span>MMLU 500 81.20%</span>
         <span>24GB+ 推荐</span>
-        <span>本地优先</span>
+        <span>GUI 交互优先</span>
+        <span>本地 A3B 单槽</span>
+        <span>忙时 CLI 转 StepFun</span>
+        <span>DS-V4 Flash 逃生舱</span>
         <span>无 API Key</span>
         <span>隐私留在本机</span>
       </div>
@@ -629,6 +632,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         {endpointRunning && <span>{runtimeTpsLabel ? `当前 ${runtimeTpsLabel}` : '速度等待采样'}</span>}
         {endpointRunning && <span>{runtimeMetricsReady ? `服务累计处理 ${runtimeTokens.toLocaleString()} tokens` : '运行统计同步中'}</span>}
         {endpointRunning && slotLabel && <span>{slotLabel}</span>}
+        <span>QoS 单槽:本地忙时跳过 Spark,保护 GUI 前台</span>
         <span>{plan.base_url || 'http://127.0.0.1:18099/v1'}</span>
       </div>
 
@@ -680,7 +684,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         <div className={styles['pv-local-qwen-upgrade']}>
           <div className={styles['pv-local-qwen-hardware-title']}>可选本地模型</div>
           {upgradeOptions.map((option) => {
-            const optionId = option.id || 'qwen36-35b-a3b-apex-mtp';
+            const optionId = option.id || 'qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix';
             const download = llamaState.download;
             const isThisDownload = download.modelId === optionId
               || (!!option.file_name && download.fileName === option.file_name);
@@ -693,7 +697,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
             return (
               <div key={option.id || option.label} className={styles['pv-local-qwen-upgrade-card']}>
                 <div className={styles['pv-local-qwen-upgrade-copy']}>
-                  <strong>{option.label || 'Qwen3.6-35B-A3B APEX-MTP I-Balanced'}</strong>
+                  <strong>{option.label || 'Qwen3.6-35B-A3B DSV4Pro Thinking Distill Q4_K_M imatrix'}</strong>
                   {option.profile && <em>{option.profile}</em>}
                   {Array.isArray(option.metrics) && option.metrics.length > 0 && (
                     <div className={styles['pv-local-qwen-upgrade-metrics']}>

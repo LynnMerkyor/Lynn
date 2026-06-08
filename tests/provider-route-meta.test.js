@@ -11,14 +11,14 @@ describe("provider route metadata helpers", () => {
       meta: {
         active_provider: "apex-spark-i-balanced",
         fallback_from: [
-          { id: "mimo", reason: "cooldown" },
+          { id: "step-3.7-flash", reason: "cooldown" },
           { providerId: "local", error: "probe-failed" },
         ],
       },
     })).toEqual({
       activeProvider: "apex-spark-i-balanced",
       fallbackFrom: [
-        { id: "mimo", reason: "cooldown" },
+        { id: "step-3.7-flash", reason: "cooldown" },
         { id: "local", reason: "probe-failed" },
       ],
     });
@@ -28,10 +28,10 @@ describe("provider route metadata helpers", () => {
     expect(extractProviderRouteMeta({
       type: "provider_meta",
       activeProvider: "spark",
-      fallbackFrom: [{ provider: "mimo", status: "probe-threw" }],
+      fallbackFrom: [{ provider: "step-3.7-flash", status: "probe-threw" }],
     })).toEqual({
       activeProvider: "spark",
-      fallbackFrom: [{ id: "mimo", reason: "probe-threw" }],
+      fallbackFrom: [{ id: "step-3.7-flash", reason: "probe-threw" }],
     });
   });
 

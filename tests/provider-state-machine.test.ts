@@ -56,7 +56,7 @@ describe("provider state machine", () => {
       fallback: {
         active: true,
         activeProviderId: "spark",
-        chain: [{ providerId: "mimo", reason: "cooldown", safeReason: "MiMo is cooling down." }],
+        chain: [{ providerId: "step-3.7-flash", reason: "cooldown", safeReason: "StepFun 3.7 Flash is cooling down." }],
       },
     });
 
@@ -70,12 +70,12 @@ describe("provider state machine", () => {
       displayName: "Lynn Brain",
       auth: { required: true, status: "authenticated" },
       health: { status: "healthy", lastCheckedAt: "2026-05-26T01:00:00.000Z" },
-      cooldown: { active: true, reason: "429", safeReason: "MiMo is cooling down.", until: 1779725400000 },
+      cooldown: { active: true, reason: "429", safeReason: "StepFun 3.7 Flash is cooling down.", until: 1779725400000 },
       fallback: {
         active: true,
         activeProviderId: "spark",
         chain: [
-          { providerId: "mimo", displayName: "MiMo", reason: "cooldown", safeReason: "MiMo is cooling down." },
+          { providerId: "step-3.7-flash", displayName: "StepFun 3.7 Flash", reason: "cooldown", safeReason: "StepFun 3.7 Flash is cooling down." },
           { providerId: "spark", displayName: "Spark", reason: "manual" },
         ],
       },
@@ -84,7 +84,7 @@ describe("provider state machine", () => {
     expect(snapshot.state).toBe("fallback_active");
     expect(snapshot.cooldown).toMatchObject({ active: true, reason: "429", until: 1779725400000 });
     expect(snapshot.fallback.activeProviderId).toBe("spark");
-    expect(snapshot.fallback.chain.map((entry) => entry.providerId)).toEqual(["mimo", "spark"]);
+    expect(snapshot.fallback.chain.map((entry) => entry.providerId)).toEqual(["step-3.7-flash", "spark"]);
   });
 
   it("derives disabled and error terminal states", () => {

@@ -81,7 +81,6 @@ const CODE_SLASH_COMMANDS = [
   "/mode",
   "/mode yolo",
   "/model",
-  "/model mimo",
   "/model stepfun",
   "/model spark",
   "/providers",

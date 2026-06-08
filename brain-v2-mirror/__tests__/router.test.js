@@ -10,11 +10,11 @@ const mockState = vi.hoisted(() => ({
 }));
 
 vi.mock('../provider-registry.js', () => ({
-  universalOrder: ['p-mimo', 'p-spark', 'p-cloud', 'p-vision'],
+  universalOrder: ['p-step', 'p-spark', 'p-cloud', 'p-vision'],
   providerOrderForCapability: (capabilityRequired) => (
     capabilityRequired?.vision || capabilityRequired?.audio || capabilityRequired?.video
-      ? ['p-vision', 'p-mimo', 'p-spark', 'p-cloud']
-      : ['p-mimo', 'p-spark', 'p-cloud', 'p-vision']
+      ? ['p-vision', 'p-step', 'p-spark', 'p-cloud']
+      : ['p-step', 'p-spark', 'p-cloud', 'p-vision']
   ),
   getProvider: (id) => mockState.providers[id] || null,
   isInCooldown: (id) => mockState.cooldown.has(id),
@@ -42,7 +42,7 @@ async function* yieldChunks(...chunks) { for (const c of chunks) yield c; }
 beforeEach(() => {
   mockState.cooldown.clear();
   mockState.providers = {
-    'p-mimo':   makeProvider('p-mimo'),
+    'p-step':   makeProvider('p-step'),
     'p-spark':  makeProvider('p-spark'),
     'p-cloud':  makeProvider('p-cloud'),
     'p-vision': makeProvider('p-vision', { vision: true }),
@@ -65,6 +65,62 @@ afterEach(() => {
 });
 
 describe('Router', () => {
+  it('retries once with reduced reasoning when a turn overflows (finish=length, empty answer)', async () => {
+    const reasoningSeen = [];
+    let call = 0;
+    mockState.adapterFn = async function* ({ provider, reasoningEffort }) {
+      mockState.adapterCalls.push(provider.id);
+      reasoningSeen.push(reasoningEffort ?? null);
+      call += 1;
+      if (call === 1) {
+        // overflow mid-reasoning: reasoning streamed, no content, finish=length
+        yield { type: 'reasoning', delta: 'thinking…' };
+        yield { type: 'finish', reason: 'length' };
+      } else {
+        // retry produces a real answer
+        yield { type: 'content', delta: 'final answer' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const chunks = [];
+    const r = await run({
+      messages: [{ role: 'user', content: 'hard q' }],
+      tools: null,
+      capabilityRequired: { vision: false, audio: false },
+      reasoningEffort: 'high',
+      onChunk: async (c) => chunks.push(c),
+    });
+    expect(r.ok).toBe(true);
+    // length-overflow with empty answer → retried once on the same provider
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-step']);
+    // reasoning stepped high → medium on the retry
+    expect(reasoningSeen[0]).toBe('high');
+    expect(reasoningSeen[1]).toBe('medium');
+    // the retry's answer reached the client
+    expect(chunks.some((c) => c.type === 'content' && c.delta === 'final answer')).toBe(true);
+  });
+
+  it('does not retry length-overflow when a visible answer was produced', async () => {
+    let call = 0;
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      call += 1;
+      yield { type: 'content', delta: 'partial but visible' };
+      yield { type: 'finish', reason: 'length' };
+    };
+    const r = await run({
+      messages: [{ role: 'user', content: 'q' }],
+      tools: null,
+      capabilityRequired: { vision: false, audio: false },
+      reasoningEffort: 'high',
+      onChunk: async () => {},
+    });
+    expect(r.ok).toBe(true);
+    // truncated-but-visible → pass through, no retry
+    expect(mockState.adapterCalls).toEqual(['p-step']);
+    expect(call).toBe(1);
+  });
+
   it('uses first provider on success', async () => {
     mockState.adapterFn = async function* ({ provider }) {
       mockState.adapterCalls.push(provider.id);
@@ -74,8 +130,8 @@ describe('Router', () => {
     const chunks = [];
     const r = await run({ messages: [{ role: 'user', content: 'q' }], tools: null, capabilityRequired: { vision: false, audio: false }, onChunk: async c => chunks.push(c) });
     expect(r.ok).toBe(true);
-    expect(r.providerId).toBe('p-mimo');
-    expect(mockState.adapterCalls).toEqual(['p-mimo']);
+    expect(r.providerId).toBe('p-step');
+    expect(mockState.adapterCalls).toEqual(['p-step']);
     expect(chunks.map(c => c.type)).toEqual(['content', 'finish']);
   });
 
@@ -84,14 +140,14 @@ describe('Router', () => {
     mockState.adapterFn = async function* ({ provider }) {
       mockState.adapterCalls.push(provider.id);
       callIdx++;
-      if (callIdx === 1) throw new Error('mimo HTTP 500 fail');
+      if (callIdx === 1) throw new Error('p-step HTTP 500 fail');
       yield { type: 'content', delta: 'fallback ok' };
     };
     const chunks = [];
     const r = await run({ messages: [{ role: 'user', content: 'q' }], onChunk: async c => chunks.push(c) });
     expect(r.providerId).toBe('p-spark');
-    expect(mockState.adapterCalls).toEqual(['p-mimo', 'p-spark']);
-    expect(mockState.cooldown.has('p-mimo')).toBe(true);  // HTTP error 2192 markUnhealthy
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
+    expect(mockState.cooldown.has('p-step')).toBe(true);  // HTTP error 2192 markUnhealthy
   });
 
   it('falls back on HTTP 429 rate limit and cools down the limited provider', async () => {
@@ -100,7 +156,7 @@ describe('Router', () => {
     mockState.adapterFn = async function* ({ provider }) {
       mockState.adapterCalls.push(provider.id);
       callIdx++;
-      if (callIdx === 1) throw new Error('p-mimo HTTP 429: rate limited');
+      if (callIdx === 1) throw new Error('p-step HTTP 429: rate limited');
       yield { type: 'content', delta: 'fallback after rate limit' };
       yield { type: 'finish', reason: 'stop' };
     };
@@ -111,8 +167,8 @@ describe('Router', () => {
     });
 
     expect(r.providerId).toBe('p-spark');
-    expect(mockState.adapterCalls).toEqual(['p-mimo', 'p-spark']);
-    expect(mockState.cooldown.has('p-mimo')).toBe(true);
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
+    expect(mockState.cooldown.has('p-step')).toBe(true);
     expect(chunks.find((c) => c.type === 'content')?.delta).toBe('fallback after rate limit');
   });
 
@@ -130,11 +186,11 @@ describe('Router', () => {
     const chunks = [];
     const r = await run({ messages: [{ role: 'user', content: 'q' }], onChunk: async c => chunks.push(c) });
     expect(r.providerId).toBe('p-spark');
-    expect(mockState.cooldown.has('p-mimo')).toBe(false);  // P1#4: 1st empty doesn't cooldown yet
+    expect(mockState.cooldown.has('p-step')).toBe(false);  // P1#4: 1st empty doesn't cooldown yet
   });
 
   it('skips providers in cooldown', async () => {
-    mockState.cooldown.add('p-mimo');
+    mockState.cooldown.add('p-step');
     mockState.cooldown.add('p-spark');
     mockState.adapterFn = async function* ({ provider }) {
       mockState.adapterCalls.push(provider.id);
@@ -146,7 +202,7 @@ describe('Router', () => {
   });
 
   it('probes local providers through explicit health_path before fallback use', async () => {
-    mockState.cooldown.add('p-mimo');
+    mockState.cooldown.add('p-step');
     mockState.providers['p-spark'] = {
       ...makeProvider('p-spark'),
       endpoint: 'http://127.0.0.1:18098/v1',
@@ -167,16 +223,53 @@ describe('Router', () => {
     expect(mockState.adapterCalls).toEqual(['p-spark']);
   });
 
+  it('skips the Spark A3B local manager when its single llama.cpp slot is busy', async () => {
+    mockState.cooldown.add('p-step');
+    mockState.providers['p-spark'] = {
+      ...makeProvider('apex-spark-i-balanced'),
+      endpoint: 'http://127.0.0.1:18098/v1',
+      health_path: '/health',
+      health_probe_ms: 25,
+    };
+    const fetchMock = vi.fn(async (url) => {
+      if (String(url).endsWith('/slots')) {
+        return { ok: true, json: async () => ([{ id: 0, is_processing: true }]) };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'cloud ok' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const metas = [];
+    const r = await run({
+      messages: [{ role: 'user', content: 'q' }],
+      onChunk: async (_chunk, meta) => metas.push(meta),
+    });
+
+    expect(r.providerId).toBe('p-cloud');
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:18098/health', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:18098/slots', expect.any(Object));
+    expect(mockState.adapterCalls).toEqual(['p-cloud']);
+    expect(metas[0].fallback_from).toEqual([
+      { id: 'p-step', reason: 'cooldown' },
+      { id: 'p-spark', reason: 'local-busy' },
+    ]);
+  });
+
   it('clears cooldown on successful provider run', async () => {
-    mockState.cooldown.add('p-mimo');  // mimo was unhealthy
+    mockState.cooldown.add('p-step');  // p-step was unhealthy
     mockState.adapterFn = async function* ({ provider }) {
       mockState.adapterCalls.push(provider.id);
       yield { type: 'content', delta: 'x' };
     };
     await run({ messages: [{ role: 'user', content: 'q' }], onChunk: async () => {} });
     // p-spark succeeded, cooldown cleared for p-spark (was not set anyway)
-    // p-mimo's cooldown remains (we skipped it)
-    expect(mockState.cooldown.has('p-mimo')).toBe(true);  // pre-set cooldown unchanged
+    // p-step's cooldown remains (we skipped it)
+    expect(mockState.cooldown.has('p-step')).toBe(true);  // pre-set cooldown unchanged
     expect(mockState.cooldown.has('p-spark')).toBe(false);
   });
 
@@ -237,13 +330,13 @@ describe('Router', () => {
     };
     const metas = [];
     await run({ messages: [{ role: 'user', content: 'q' }], onChunk: async (c, meta) => metas.push(meta) });
-    expect(metas.every(m => m.providerId === 'p-mimo')).toBe(true);
+    expect(metas.every(m => m.providerId === 'p-step')).toBe(true);
   });
 
   it('injects pre-search context before the selected non-native provider runs', async () => {
     process.env.BRAIN_V2_PRE_SEARCH = '1';
     process.env.MIMO_SEARCH_KEY = 'test-mimo';
-    mockState.cooldown.add('p-mimo');
+    mockState.cooldown.add('p-step');
     mockState.providers['p-spark'] = makeProvider('p-spark', { native_search: false });
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -284,7 +377,7 @@ describe('Router', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(chunks.map(c => c.type)).toEqual(['pre_search', 'content']);
     expect(chunks[0]).toMatchObject({ source: 'mimo', hit: true, cached: null });
-    expect(metas[0].fallback_from).toEqual([{ id: 'p-mimo', reason: 'cooldown' }]);
+    expect(metas[0].fallback_from).toEqual([{ id: 'p-step', reason: 'cooldown' }]);
     expect(adapterMessages).toHaveLength(5);
     expect(adapterMessages.map(m => m.role)).toEqual(['system', 'user', 'assistant', 'user', 'user']);
     expect(adapterMessages.filter(m => m.role === 'system')).toHaveLength(1);
@@ -324,7 +417,7 @@ describe('Router', () => {
     expect(result).toMatchObject({
       ok: false,
       error: 'tool_storm_limit',
-      providerId: 'p-mimo',
+      providerId: 'p-step',
       iterations: 4,
     });
     expect(adapterRuns).toBe(4);
@@ -593,5 +686,15 @@ describe('router local probe helpers', () => {
       endpoint: 'http://127.0.0.1:18098/v1',
       health_path: 'models',
     })).toBe('http://127.0.0.1:18098/v1/models');
+  });
+
+  it('builds root slots URLs and summarizes llama.cpp slot busy state', () => {
+    expect(__testing__.buildLocalSlotsUrl({
+      endpoint: 'http://127.0.0.1:18098/v1',
+    })).toBe('http://127.0.0.1:18098/slots');
+    expect(__testing__.summarizeLocalSlots([
+      { id: 0, is_processing: true },
+      { id: 1, state: 'idle' },
+    ])).toEqual({ total: 2, busy: 1 });
   });
 });

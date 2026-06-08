@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { agentOptionLabel, buildFleetDispatchPayload, externalTargetsNeedFullAccess, isExternalFleetAgent } from '../TaskBriefForm';
 
 describe('TaskBriefForm payload', () => {
-  it('includes MiMo vision task type and image path for Fleet dispatch', () => {
+  it('includes vision task type and image path for Fleet dispatch', () => {
     const payload = buildFleetDispatchPayload({
       title: 'Ground login button',
-      agent: 'mimo-vl',
+      agent: 'stepfun-flash',
       taskType: 'ground',
       image: 'screenshots/login.png',
       approval: 'yolo',
@@ -14,12 +14,12 @@ describe('TaskBriefForm payload', () => {
       owned: 'desktop/src/react/**\n',
       forbidden: 'server/**',
       tests: 'npm run typecheck',
-      branch: 'fleet/mimo-ground-login',
-      worktree: 'worktrees/fleet-mimo-ground-login',
+      branch: 'fleet/vision-ground-login',
+      worktree: 'worktrees/fleet-vision-ground-login',
     });
 
     expect(payload).toMatchObject({
-      agent: 'mimo-vl',
+      agent: 'stepfun-flash',
       taskType: 'ground',
       image: 'screenshots/login.png',
       owned: ['desktop/src/react/**'],
@@ -57,7 +57,7 @@ describe('TaskBriefForm payload', () => {
 
   it('requires explicit YOLO/full-access before launching external CLI adapters', () => {
     expect(isExternalFleetAgent('codex-cli')).toBe(true);
-    expect(isExternalFleetAgent('mimo-pro')).toBe(false);
+    expect(isExternalFleetAgent('stepfun-flash')).toBe(false);
     expect(externalTargetsNeedFullAccess({
       targets: ['lynn-cli', 'codex-cli'],
       approval: 'ask',
@@ -69,7 +69,7 @@ describe('TaskBriefForm payload', () => {
       sandbox: 'danger-full-access',
     })).toBe(false);
     expect(externalTargetsNeedFullAccess({
-      targets: ['mimo-pro', 'stepfun-flash'],
+      targets: ['lynn-cli', 'stepfun-flash'],
       approval: 'ask',
       sandbox: 'workspace-write',
     })).toBe(false);

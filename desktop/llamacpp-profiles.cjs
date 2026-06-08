@@ -10,6 +10,7 @@ const { DEFAULT_CONFIG: LLAMACPP_DEFAULT_CONFIG } = require("./llamacpp-manager.
 const { DEFAULT_SOURCES: MODEL_DOWNLOADER_SOURCES } = require("./model-downloader.cjs");
 
 const DEFAULT_MODEL_ID = "qwen35-9b-q4km-imatrix";
+const DISTILLED_35B_MODEL_ID = "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix";
 
 // Canonical key is always the GGUF model id. Historical local-* aliases map
 // back to these entries for older client builds and stored configs.
@@ -46,23 +47,24 @@ const LLAMACPP_BASE_PROFILES = Object.freeze({
     autoStart: false,
     sources: MODEL_DOWNLOADER_SOURCES,
   },
-  // 35B APEX-MTP high-end tier. Old Q4_K_M ids remain aliases so existing UI
-  // and saved configs keep working while new downloads use the faster MTP file.
-  "qwen36-35b-a3b-apex-mtp": {
-    modelId: "qwen36-35b-a3b-apex-mtp",
-    revision: "2026-05-28-apex-mtp",
-    label: "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
-    fileName: "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
+  // 35B high-end orchestrator tier. The product route now uses the DS-V4-Pro
+  // thinking-on distilled Q4_K_M imatrix artifact; old 35B ids remain aliases.
+  [DISTILLED_35B_MODEL_ID]: {
+    modelId: DISTILLED_35B_MODEL_ID,
+    revision: "2026-06-08-dsv4pro-thinking-distill",
+    label: "Qwen3.6-35B-A3B DSV4Pro Thinking Distill Q4_K_M imatrix",
+    fileName: "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf",
     supersedesFileNames: [
       "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
+      "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
     ],
-    expectedSize: 26_059_443_808,
-    expectedSha256: "9bf7d96bb3a9d363e645dd998aee9e9bff8e016a82aec7ff081e0e6cdb53419e",
+    expectedSize: 21_166_758_016,
+    expectedSha256: "fde1e85843127a06ce99a0c6b2799dd16507d8fa5619e4c702fd8214f2135e6d",
     parallelSegments: 4,
     autoStart: false,
     sources: [
-      { id: "modelscope", label: "ModelScope (国内主源)", url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/master/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf" },
-      { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf" },
+      { id: "modelscope", label: "ModelScope (国内主源)", url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill/resolve/master/gguf/Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf" },
+      { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill/resolve/main/gguf/Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf" },
     ],
   },
 });
@@ -70,7 +72,9 @@ const LLAMACPP_BASE_PROFILES = Object.freeze({
 const LLAMACPP_ALIAS_MAP = Object.freeze({
   "local-qwen35-4b-q4km": "qwen35-4b-q4km",
   "local-qwen35-9b-q4km-imatrix": DEFAULT_MODEL_ID,
-  "qwen36-35b-a3b-q4km-imatrix": "qwen36-35b-a3b-apex-mtp",
+  "local-a3b-distill": DISTILLED_35B_MODEL_ID,
+  "qwen36-35b-a3b-q4km-imatrix": DISTILLED_35B_MODEL_ID,
+  "qwen36-35b-a3b-apex-mtp": DISTILLED_35B_MODEL_ID,
 });
 
 const LLAMACPP_DOWNLOAD_PROFILES = Object.freeze({
@@ -178,11 +182,14 @@ function buildLlamacppArgsForAlias(modelAlias, modelPath = "") {
   let args = [...(LLAMACPP_DEFAULT_CONFIG.serverArgs || [])];
   const fileName = path.basename(String(modelPath || ""));
   const haystack = `${modelAlias} ${fileName}`;
+  const is35bDistill = /qwen36-35b-a3b-dsv4pro-distill|local-a3b-distill|dsv4pro|distill|lynn-prod-Q4_K_M-imatrix/i.test(haystack);
   const is35bImatrix = /qwen36-35b-a3b-q4km-imatrix|35B-A3B-Q4_K_M-imatrix/i.test(haystack);
   const is35bApexMtp = /35B-A3B-APEX-MTP|qwen36-35b-a3b-apex-mtp/i.test(haystack);
-  const is35b = is35bImatrix || is35bApexMtp;
+  const is35b = is35bDistill || is35bImatrix || is35bApexMtp;
   const is9bMtp = /9B.*(?:imatrix.*mtp|mtp)|qwen35-9b-q4km-imatrix/i.test(haystack);
-  const launchAlias = is35bImatrix
+  const launchAlias = is35bDistill
+    ? DISTILLED_35B_MODEL_ID
+    : is35bImatrix
     ? "qwen36-35b-a3b-q4km-imatrix"
     : is35bApexMtp
       ? "qwen36-35b-a3b-apex-mtp"
@@ -205,6 +212,7 @@ function buildLlamacppArgsForAlias(modelAlias, modelPath = "") {
 
 module.exports = {
   DEFAULT_MODEL_ID,
+  DISTILLED_35B_MODEL_ID,
   MODEL_DOWNLOADER_SOURCES,
   LLAMACPP_DOWNLOAD_PROFILES,
   canonicalizeLlamacppModelId,

@@ -1,8 +1,8 @@
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
 import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
-import { isWritableStreamClosed, nowIso, writeJsonLine } from "../jsonl.js";
-import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
+import { nowIso, writeJsonLine } from "../jsonl.js";
+import { lowerReasoningEffort, parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { appendSessionTurn, resolveDataDir } from "../session/store.js";
 import { TerminalSpinner } from "../terminal-spinner.js";
 import { resolveCliProviderProfile } from "../provider-profile.js";
@@ -48,20 +48,9 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   const cliProvider = await resolveCliProviderProfile(args);
   const imagePaths = promptImagePaths(args);
   const stopAtJson = !!options.json && hasFlag(args.flags, "stop-at-json", "json-boundary-stop");
-  let jsonOutputClosed = false;
-  const emitJson = (value: unknown): boolean => {
-    if (!options.json) return true;
-    if (jsonOutputClosed || isWritableStreamClosed(process.stdout)) {
-      jsonOutputClosed = true;
-      return false;
-    }
-    const ok = writeJsonLine(value);
-    if (!ok) jsonOutputClosed = true;
-    return ok;
-  };
 
   if (options.json) {
-    emitJson({ type: "run.started", ts: nowIso(), prompt, reasoning, ...(imagePaths.length ? { images: imagePaths } : {}) });
+    writeJsonLine({ type: "run.started", ts: nowIso(), prompt, reasoning, ...(imagePaths.length ? { images: imagePaths } : {}) });
   }
 
   if (!imagePaths.length && isLocalRuntimeQuestion(prompt)) {
@@ -72,14 +61,14 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       reasoning: reasoning.effort,
     }, localeForText(prompt));
     if (options.json) {
-      emitJson({ type: "assistant.delta", ts: nowIso(), text });
-      emitJson({ type: "run.finished", ts: nowIso(), ok: true, local: true });
+      writeJsonLine({ type: "assistant.delta", ts: nowIso(), text });
+      writeJsonLine({ type: "run.finished", ts: nowIso(), ok: true, local: true });
     } else {
       process.stdout.write(`${text}\n`);
     }
     if (saveSession) {
       const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: process.cwd(), title, prompt, assistant: text, modelProvider: "lynn-cli", modelId: "local-runtime" });
-      if (options.json) emitJson({ type: "session.saved", ts: nowIso(), path: savedPath });
+      if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
     }
     return 0;
   }
@@ -87,14 +76,14 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   if (options.mockBrain) {
     const text = t("mock.response", { text: prompt });
     if (options.json) {
-      emitJson({ type: "assistant.delta", ts: nowIso(), text });
-      emitJson({ type: "run.finished", ts: nowIso(), ok: true });
+      writeJsonLine({ type: "assistant.delta", ts: nowIso(), text });
+      writeJsonLine({ type: "run.finished", ts: nowIso(), ok: true });
     } else {
       process.stdout.write(`${text}\n`);
     }
     if (saveSession) {
       const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: process.cwd(), title, prompt, assistant: text, modelProvider: "mock", modelId: "mock-brain" });
-      if (options.json) emitJson({ type: "session.saved", ts: nowIso(), path: savedPath });
+      if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
     }
     return 0;
   }
@@ -127,10 +116,15 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
           content: userContent,
         },
       ];
+      // On a visible-answer retry, step reasoning down so a budget-overflowing think shrinks
+      // and leaves room for the answer (mirrors the Brain-side length-retry).
+      const attemptReasoning = retryVisibleAnswer
+        ? { ...reasoning, effort: lowerReasoningEffort(reasoning.effort) }
+        : reasoning;
       for await (const event of streamBrainChat({
         brainUrl,
         messages,
-        reasoning,
+        reasoning: attemptReasoning,
         fallbackProvider: cliProvider?.profile,
       })) {
         const renderReasoning = shouldRenderReasoning(reasoning.display, !!options.json);
@@ -139,16 +133,12 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
         }
         if (event.type === "brain.error") {
           if (options.json) {
-            if (!handleBrainEvent(event, {
+            handleBrainEvent(event, {
               json: true,
               renderReasoning,
               renderState,
               startedAt,
-              emitJson,
-            })) {
-              jsonOutputClosed = true;
-              break;
-            }
+            });
           }
           throw new Error(formatBrainErrorForHuman(event.error, event.code));
         }
@@ -159,19 +149,15 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
             const boundedAssistant = nextAssistant.slice(0, boundary);
             const boundedDelta = boundedAssistant.slice(attemptAssistant.length);
             if (boundedDelta) {
-              if (!handleBrainEvent({ ...event, text: boundedDelta }, {
+              handleBrainEvent({ ...event, text: boundedDelta }, {
                 json: true,
                 renderReasoning,
                 renderState,
                 startedAt,
-                emitJson,
-              })) {
-                jsonOutputClosed = true;
-                break;
-              }
+              });
             }
             attemptAssistant = boundedAssistant;
-            emitJson({
+            writeJsonLine({
               type: "run.boundary_stop",
               ts: nowIso(),
               boundary: "json",
@@ -180,16 +166,12 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
             break;
           }
         }
-        if (!handleBrainEvent(event, {
+        handleBrainEvent(event, {
           json: !!options.json,
           renderReasoning,
           renderState,
           startedAt,
-          emitJson,
-        })) {
-          jsonOutputClosed = true;
-          break;
-        }
+        });
         if (event.type === "provider") {
           if (event.activeProvider.startsWith("cli-byok:") && cliProvider) {
             modelProvider = cliProvider.profile.provider;
@@ -205,14 +187,13 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
         }
         if (event.type === "assistant.delta") attemptAssistant += event.text;
       }
-      if (jsonOutputClosed) break;
       if (attemptAssistant.trim()) {
         assistant = attemptAssistant;
         break;
       }
       if (attemptSawReasoning && attempt < maxVisibleAnswerAttempts - 1) {
         if (options.json) {
-          emitJson({
+          writeJsonLine({
             type: "run.retry",
             ts: nowIso(),
             code: "empty_visible_answer",
@@ -227,11 +208,10 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   } finally {
     spinner.stop();
   }
-  if (jsonOutputClosed) return 0;
   if (!assistant.trim()) {
     const message = sawReasoning ? t("prompt.emptyAfterReasoning") : t("prompt.empty");
     if (options.json) {
-      emitJson({
+      writeJsonLine({
         type: "run.finished",
         ts: nowIso(),
         ok: false,
@@ -255,10 +235,10 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       modelProvider,
       modelId,
     });
-    if (options.json) emitJson({ type: "session.saved", ts: nowIso(), path: savedPath });
+    if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
   }
   if (options.json) {
-    emitJson({ type: "run.finished", ts: nowIso(), ok: true, reasoningReturned: sawReasoning });
+    writeJsonLine({ type: "run.finished", ts: nowIso(), ok: true, reasoningReturned: sawReasoning });
   } else {
     process.stdout.write("\n");
   }
@@ -331,22 +311,16 @@ function readOptionalStdin(firstChunkTimeoutMs: number): Promise<string> {
   });
 }
 
-function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; renderReasoning: boolean; renderState: HumanBrainRenderState; startedAt?: number; emitJson?: (value: unknown) => boolean }): boolean {
+function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; renderReasoning: boolean; renderState: HumanBrainRenderState; startedAt?: number }): void {
   if (opts.json) {
     if (event.type === "assistant.delta" || event.type === "reasoning.delta") {
-      return opts.emitJson ? opts.emitJson({ ...event, ts: nowIso() }) : writeJsonLine({ ...event, ts: nowIso() });
+      writeJsonLine({ ...event, ts: nowIso() });
     } else if (event.type === "provider" || event.type === "tool_progress" || event.type === "brain.error") {
-      return opts.emitJson ? opts.emitJson({ ...event, ts: nowIso() }) : writeJsonLine({ ...event, ts: nowIso() });
+      writeJsonLine({ ...event, ts: nowIso() });
     } else if (event.type === "usage") {
-      const usageEvent = {
-        type: "usage",
-        ts: nowIso(),
-        usage: event.usage,
-        durationMs: opts.startedAt ? Date.now() - opts.startedAt : undefined,
-      };
-      return opts.emitJson ? opts.emitJson(usageEvent) : writeJsonLine(usageEvent);
+      writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage, durationMs: opts.startedAt ? Date.now() - opts.startedAt : undefined });
     }
-    return true;
+    return;
   }
 
   if (event.type === "assistant.delta") {
@@ -359,5 +333,4 @@ function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; render
   } else {
     renderBrainEventForHuman(event, opts.renderState, process.stderr);
   }
-  return true;
 }

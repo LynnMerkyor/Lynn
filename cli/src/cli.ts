@@ -6,6 +6,7 @@ import { runCache } from "./commands/cache.js";
 import { runChat } from "./commands/chat.js";
 import { runCode } from "./commands/code.js";
 import { renderDoctor, runDoctor } from "./commands/doctor.js";
+import { runManager } from "./commands/manager-run.js";
 import { runMemory } from "./commands/memory.js";
 import { runPermissions } from "./commands/permissions.js";
 import { runPrompt } from "./commands/prompt.js";
@@ -127,6 +128,9 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     case "memory": {
       return runMemory(args, json);
     }
+    case "manager": {
+      return runManager(args);
+    }
     case "prompt":
     case "exec": {
       return runPrompt(args, {
@@ -243,6 +247,7 @@ const TOP_LEVEL_COMMANDS = new Set([
   "permissions",
   "model",
   "memory",
+  "manager",
   "goal",
   "prompt",
   "exec",
@@ -262,9 +267,7 @@ function startupModelLabel(info: ProvidersInfo, brainReachable: boolean): string
     return `CLI BYOK: ${info.cliProvider.profile.model}`;
   }
   const label = activeRouteLabel(info);
-  if (/^brain\s*\/\s*lynn-brain-router/i.test(label)) return "StepFun 3.7 Flash → MiMo V2.5 Pro";
-  if (/^MiMo via .*Brain router/i.test(label)) return "MiMo V2.5 Pro";
-  if (/^StepFun.*MiMo/i.test(label)) return "StepFun 3.7 Flash → MiMo V2.5 Pro";
+  if (/^brain\s*\/\s*lynn-brain-router/i.test(label)) return "StepFun 3.7 Flash → Spark A3B single-slot → DS-V4 Flash";
   return label;
 }
 

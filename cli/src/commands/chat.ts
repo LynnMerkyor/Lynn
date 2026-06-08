@@ -2,7 +2,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { getStringFlag, hasFlag, parseArgs, type ParsedArgs } from "../args.js";
 import { BrainConnectionError, streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
 import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
-import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
+import { lowerReasoningEffort, parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { TerminalSpinner, renderCard } from "../terminal-spinner.js";
 import { formatBrainErrorForHuman, renderBrainEventForHuman, renderToolDetail, renderToolDetailsList, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
 import { bold, dim, green, orange, red, supportsColor } from "../terminal-style.js";
@@ -54,7 +54,6 @@ export const CHAT_SLASH_COMMANDS = [
   "/version",
   "/about",
   "/reasoning",
-  "/model mimo",
   "/model stepfun",
   "/model spark",
   "/memory",
@@ -341,12 +340,17 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
         decodeTps = null;
         let toolSteps = 0;
         let attemptHadToolCalls = false;
+        // On an empty-answer retry, step reasoning down so an overflowing think leaves room
+        // for the answer (mirrors the Brain-side length-retry).
+        const attemptReasoning = attempt > 1
+          ? { ...reasoning, effort: lowerReasoningEffort(reasoning.effort) }
+          : reasoning;
         try {
           for (;;) {
             const round = await streamChatModelRound({
               brainUrl,
               messages,
-              reasoning,
+              reasoning: attemptReasoning,
               cliProvider,
               renderReasoning,
               brainRenderState,
@@ -640,7 +644,7 @@ function buildPromptFrameStatus(
 
 export function chatRouteLabel(provider?: { provider: string; model: string } | null): string {
   if (provider) return `CLI BYOK: ${modelLabelWithId(provider.model)}`;
-  return "StepFun 3.7 Flash → MiMo V2.5 Pro → Spark Qwen 3.6 35B A3B via Brain router (auto)";
+  return "StepFun 3.7 Flash → Spark A3B single-slot → DS-V4 Flash via Brain router (auto)";
 }
 
 export function splitChatCommandLine(raw: string): string[] {

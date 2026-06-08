@@ -1,18 +1,17 @@
-# Lynn v0.81.0 Release Notes / 发布说明
+# Lynn v0.82.0 Release Notes / 发布说明
 
-> 发布日期: 2026-06-06 · StepFun 3.7 Flash 专项优化 + 统一版本号
+> 发布日期: 2026-06-08 · 双脑 QoS 路由 + 蒸馏 A3B 编排器 + CLI manager loop
 
-本次发版统一 **Lynn CLI 与 GUI 版本号为 v0.81.0**。重点是让 StepFun 3.7 Flash 在 Lynn 的 CLI / GUI 工作流里更适合“穷尽最优解”:显式 best/exhaustive 模式、300 步长任务预算、原子工具步进、自动验证、计划契约、工具预算和 Fleet/headless 默认建议对齐。
+本次发版把 Lynn CLI 与桌面 GUI 同步到 **v0.82.0**。主线从“继续堆自研推理引擎”收束为产品可用的双脑架构:云端 StepFun 3.7 Flash 负责执行,本地 Spark 蒸馏 A3B 负责单槽编排/验收/兜底,DS-V4 Flash 只在高风险或客观验收失败时介入。
 
 ## 中文重点
 
-- **统一版本号**:CLI 与桌面 GUI 同步为 v0.81.0,下载页、更新 manifest、README 与 Release 说明统一口径。
-- **StepFun 穷尽最优模式**:
-  - `Lynn code --best -p "任务" --json --cwd /path --approval yolo --sandbox danger-full-access`
-  - `/goal`、`/best`、`/exhaustive` 会进入更适合长任务的 300 步预算与 ultra 编排。
-- **原子步进 + 验证保留**:不通过提示词兜底抢模型工作,而是让模型逐步调用工具,由 harness 做计划契约、自动验证、工具预算与失败上下文回喂。
-- **Fleet/headless 合约更清楚**:黑灯工厂建议 `--approval yolo --sandbox danger-full-access`,适合隔离 worktree;普通人类交互仍使用 ask / workspace-write。
-- **GUI 对齐**:桌面包、更新 manifest、下载页与 CLI tarball 统一同一个 v0.81.0 发布号。
+- **蒸馏 A3B 编排器进入产品链路**: `Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill` 作为本地 manager/fallback,负责拆分、分派、验收和收口。蒸馏的是 thinking-on 思维方式,不是 raw TPS。
+- **双脑 QoS 路由固化**: 主链为 `StepFun 3.7 Flash -> Spark 蒸馏 A3B -> DS-V4 Flash`。GUI 前台优先占用本地 A3B;CLI/后台任务在 Spark busy 时跳过本地槽,避免拖慢交互体验。
+- **CLI manager loop**: 新增 `Lynn manager run -p "任务" --jsonl`。它会发出 manager/delegate/validation/acceptance JSONL 事件,调用 StepFun worker,并在客观验收失败或高风险任务时升级到 DS-V4 Flash。
+- **StepFun best mode 保留**: `/goal`、`/best`、`Lynn code --best` 仍使用 300 步穷尽预算、ultra 分解、原子工具步进、自动验证和 checkpoint/resume。
+- **MiMo 收尾**: MiMo 保留在多模态、原生搜索和历史兼容兜底位,不再承担 v0.82 文本/编排主路由叙事。
+- **上游贡献落地**: 4 个上游 PR 已提交,包括 llama.cpp NVFP4 指南和 vLLM W4A16 NVFP4 regression/docs/spec-decode correctness gate。自研引擎线收束为可复用证据和上游贡献材料。
 
 ## 安装
 
@@ -21,32 +20,41 @@
 node -v
 
 # 从 Lynn 镜像安装或覆盖升级 CLI。
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.81.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz"
 
 # 启动。
 Lynn            # 交互式聊天 TUI
 Lynn code       # 编码 agent TUI
-Lynn --version  # 应输出 0.81.0
+Lynn manager run -p "拆分并验收这个长任务" --jsonl
+Lynn --version  # 应输出 0.82.0
 Lynn agents     # 给其他智能体/Fleet 的可复制命令
 ```
 
-默认 Brain 路由: **StepFun 3.7 Flash(256K 上下文, high 推理, 32K 推理/生成预算) -> Spark Qwen 3.6 35B A3B**。纯 CLI 首装在本地 Brain 不可达时会走 Lynn 远端 Brain;BYOK 仍可用。
+默认 Brain V2 路由: **StepFun 3.7 Flash(256K 上下文, high 推理, 32K 推理/生成预算) -> Spark 蒸馏 A3B 单槽 manager/fallback -> DS-V4 Flash 逃生舱**。MiMo 继续承接多模态和原生搜索兼容路径。纯 CLI 首装在本地 Brain 不可达时会走 Lynn 远端 Brain;BYOK 仍可用。
+
+## 验证
+
+- `npm run release:gate`
+- `npm --prefix cli test -- manager-run`
+- `npm --prefix cli run typecheck`
+- `npm test -- shared/__tests__/dual-brain-route.test.ts shared/__tests__/fleet-events.test.ts`
+- macOS 打包签名、公证、staple、Gatekeeper 校验
+- CLI tarball 镜像站安装 smoke
 
 ---
 
-> Release date: 2026-06-06 · StepFun 3.7 Flash specialization + unified app/CLI version
+> Release date: 2026-06-08 · dual-brain QoS route + distilled A3B orchestrator + CLI manager loop
 
-This release unifies **Lynn CLI and desktop GUI at v0.81.0**. The focus is making StepFun 3.7 Flash work better for exhaustive best-result coding loops across Lynn CLI and GUI: explicit best/exhaustive mode, a 300-step long-task budget, atomic tool progression, finish gates, plan contracts, tool budgets, and clearer Fleet/headless defaults.
+This release unifies Lynn CLI and desktop GUI at **v0.82.0**. The product route moves away from private inference-engine work and into a practical dual-brain architecture: StepFun 3.7 Flash executes work, the local Spark distilled A3B acts as a single-slot manager/validator/fallback, and DS-V4 Flash is reserved for high-risk or objectively failed work.
 
 ## Highlights
 
-- **Unified version**: CLI, desktop GUI, update manifest, download page, README, and release notes all use v0.81.0.
-- **StepFun best mode**:
-  - `Lynn code --best -p "task" --json --cwd /path --approval yolo --sandbox danger-full-access`
-  - `/goal`, `/best`, and `/exhaustive` enter the longer 300-step + ultra orchestration path.
-- **Atomic tools + verification kept**: Lynn does not take over model output through prompt fallbacks. The model chooses tools step by step while the harness enforces plan contracts, auto-verification, tool budgets, and rich failure feedback.
-- **Fleet/headless contract**: silent factory workers should use `--approval yolo --sandbox danger-full-access` inside isolated worktrees; human interactive sessions stay on ask / workspace-write.
-- **GUI alignment**: desktop artifacts, update manifest, download site, and CLI tarball share the same v0.81.0 train.
+- **Distilled A3B orchestrator in the product route**: `Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill` is now the local manager/fallback for decomposition, delegation, acceptance, and synthesis. The distillation targets thinking style, not raw TPS.
+- **Dual-brain QoS route**: the main chain is `StepFun 3.7 Flash -> Spark distilled A3B -> DS-V4 Flash`. GUI foreground work owns the local A3B slot; CLI/background jobs skip Spark when it is busy to preserve interactive latency.
+- **CLI manager loop**: `Lynn manager run -p "task" --jsonl` emits manager/delegate/validation/acceptance JSONL events, calls the StepFun worker lane, and escalates directly to DS-V4 Flash when objective validation fails or the task is high-risk.
+- **StepFun best mode remains**: `/goal`, `/best`, and `Lynn code --best` keep the 300-step exhaustive budget, ultra decomposition, atomic tool loop, auto-verification, and checkpoint/resume behavior.
+- **MiMo wrap-up**: MiMo remains available for multimodal, native-search, and legacy compatibility fallback, but no longer carries the v0.82 text/orchestration main-route story.
+- **Upstream contribution**: four upstream PRs are open, covering llama.cpp NVFP4 guidance plus vLLM W4A16 NVFP4 regression/docs/spec-decode correctness gate. The self-built engine work is now reusable evidence and upstream contribution material.
 
 ## Install
 
@@ -55,39 +63,14 @@ This release unifies **Lynn CLI and desktop GUI at v0.81.0**. The focus is makin
 node -v
 
 # Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.81.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz"
 
 # Launch.
 Lynn            # interactive chat TUI
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.81.0
+Lynn manager run -p "split and validate this long task" --jsonl
+Lynn --version  # should print 0.82.0
 Lynn agents     # copyable headless/Fleet commands
 ```
 
-Default Brain route: **StepFun 3.7 Flash (256K context, high reasoning, 32K reasoning/generation budget) -> Spark Qwen 3.6 35B A3B**. Fresh CLI installs use hosted Lynn Brain when local Brain is unavailable; BYOK via `Lynn providers set ...` remains available.
-
-## Headless / Fleet
-
-```bash
-Lynn -p "summarize this repository" --json --cwd /path/to/repo
-
-Lynn code --best -p "fix tests, run the suite, summarize the diff" \
-  --json \
-  --cwd /path/to/worktree \
-  --approval yolo \
-  --sandbox danger-full-access \
-  --save-session
-
-Lynn worker run --brief task.md --worktree /path/to/worktree \
-  --jsonl \
-  --approval yolo \
-  --sandbox danger-full-access
-```
-
-## Verification
-
-- `npm run release:preflight`
-- `npm run test:cli-toolchain`
-- `npm run test:cli-fleet`
-- `npm run test:release:static`
-- GUI build/sign/notarize gates for the desktop artifacts
+Default Brain V2 route: **StepFun 3.7 Flash (256K context, high reasoning, 32K reasoning/generation budget) -> Spark distilled A3B single-slot manager/fallback -> DS-V4 Flash escape hatch**. MiMo remains the multimodal/native-search compatibility lane. Fresh CLI installs use hosted Lynn Brain when local Brain is unavailable; BYOK via `Lynn providers set ...` remains available.

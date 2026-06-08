@@ -7,13 +7,6 @@ export interface ProviderPreset {
 }
 
 export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
-  mimo: {
-    provider: "openai-compatible",
-    baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
-    model: "mimo-v2.5-pro",
-    displayName: "MiMo V2.5 Pro",
-    description: "MiMo V2.5 Pro Token Plan route (multimodal/native-search fallback in Lynn Brain)",
-  },
   stepfun: {
     provider: "openai-compatible",
     baseUrl: "https://api.stepfun.com/step_plan/v1",
@@ -24,16 +17,16 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
   spark: {
     provider: "openai-compatible",
     baseUrl: "http://127.0.0.1:18098/v1",
-    model: "qwen36-35b-a3b-apex-mtp",
-    displayName: "Spark Qwen 3.6 35B A3B",
-    description: "Spark Qwen 3.6 35B A3B local fallback route",
+    model: "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix",
+    displayName: "Spark Qwen 3.6 35B A3B Distill",
+    description: "Spark Qwen 3.6 35B A3B Distill local fallback route",
   },
   deepseek: {
     provider: "openai-compatible",
     baseUrl: "https://api.deepseek.com/v1",
     model: "deepseek-chat",
-    displayName: "DeepSeek Chat",
-    description: "DeepSeek OpenAI-compatible chat backend",
+    displayName: "DS-V4 Flash",
+    description: "DS-V4 Flash escape route via DeepSeek OpenAI-compatible chat backend",
   },
   openai: {
     provider: "openai-compatible",
@@ -45,17 +38,17 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
 };
 
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
-  mimo: "MiMo V2.5 Pro",
-  "mimo-v2.5-pro": "MiMo V2.5 Pro",
-  "mimo-v2.5": "MiMo V2.5",
-  "mimo-v2-omni": "MiMo V2 Omni",
   stepfun: "StepFun 3.7 Flash",
   "step-3.7-flash": "StepFun 3.7 Flash",
-  spark: "Spark Qwen 3.6 35B A3B",
-  "apex-spark": "Spark Qwen 3.6 35B A3B",
-  "apex-spark-i-balanced": "Spark Qwen 3.6 35B A3B",
-  qwen36: "Spark Qwen 3.6 35B A3B",
-  "qwen36-35b-a3b-apex-mtp": "Spark Qwen 3.6 35B A3B",
+  spark: "Spark Qwen 3.6 35B A3B Distill",
+  deepseek: "DS-V4 Flash",
+  "deepseek-chat": "DS-V4 Flash",
+  "apex-spark": "Spark Qwen 3.6 35B A3B Distill",
+  "apex-spark-i-balanced": "Spark Qwen 3.6 35B A3B Distill",
+  qwen36: "Spark Qwen 3.6 35B A3B Distill",
+  "qwen36-35b-a3b-apex-mtp": "Spark Qwen 3.6 35B A3B APEX-MTP",
+  "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix": "Spark Qwen 3.6 35B A3B Distill",
+  "local-a3b-distill": "Spark Qwen 3.6 35B A3B Distill",
 };
 
 export function modelDisplayName(value: string | null | undefined): string {

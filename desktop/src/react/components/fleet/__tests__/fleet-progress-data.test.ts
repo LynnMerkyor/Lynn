@@ -5,8 +5,45 @@ import { createWorkerView, reduceFleetWorker, summarizeFleetUsage } from '../fle
 // protocol field) for B1 vision + B3 runner, so the GUI can render them without a
 // shared protocol change.
 describe('worker.progress data (vision + runner context)', () => {
+  it('folds v0.82 manager events into a Fleet view', () => {
+    let v = createWorkerView('m1', 'lynn-cli');
+    v = reduceFleetWorker(v, {
+      type: 'manager.started',
+      workerId: 'm1',
+      managerId: 'm1',
+      route: ['local-a3b-manager', 'step-3.7-flash-worker', 'ds-v4-flash-escape'],
+      managerModel: 'local-a3b-distill',
+    });
+    expect(v.status).toBe('running');
+    expect(v.log.at(-1)).toContain('local-a3b-manager -> step-3.7-flash-worker -> ds-v4-flash-escape');
+
+    v = reduceFleetWorker(v, {
+      type: 'manager.validation',
+      workerId: 'm1',
+      managerId: 'm1',
+      ok: false,
+      summary: 'false-verify risk suspected',
+      falseVerifyRisk: 'suspected',
+      evidenceCount: 2,
+    });
+    expect(v.gate).toEqual({ ok: false, summary: 'false-verify risk suspected' });
+    expect(v.status).toBe('failed');
+
+    v = reduceFleetWorker(v, {
+      type: 'manager.finished',
+      workerId: 'm1',
+      managerId: 'm1',
+      ok: true,
+      status: 'escalated',
+      summary: 'completed through DS-V4 Flash',
+      escalationReason: 'two distinct harness failures',
+    });
+    expect(v.finished).toMatchObject({ ok: true, exitCode: 0, summary: 'completed through DS-V4 Flash' });
+    expect(v.log.at(-1)).toBe('escalated: two distinct harness failures');
+  });
+
   it('captures vision taskType + image from data:{kind:vision}', () => {
-    let v = createWorkerView('w1', 'mimo-vl');
+    let v = createWorkerView('w1', 'stepfun-flash');
     v = reduceFleetWorker(v, {
       type: 'worker.progress',
       workerId: 'w1',
@@ -123,11 +160,11 @@ describe('worker.progress data (vision + runner context)', () => {
   });
 
   it('captures structured worker.visual_result events', () => {
-    let v = createWorkerView('w1', 'mimo-vl');
+    let v = createWorkerView('w1', 'stepfun-flash');
     v = reduceFleetWorker(v, {
       type: 'worker.visual_result',
       workerId: 'w1',
-      agent: 'mimo-vl',
+      agent: 'stepfun-flash',
       taskType: 'ground',
       image: '/shot.png',
       summary: 'Button is at bottom right.',

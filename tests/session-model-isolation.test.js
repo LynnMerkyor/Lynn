@@ -13,7 +13,7 @@ import { findModel } from "../shared/model-ref.js";
 // ── Mock 工厂 ──
 
 const MODEL_A = { id: "minimax", name: "MiniMax", provider: "minimax" };
-const MODEL_B = { id: "mimo", name: "Mimo", provider: "minimax" };
+const MODEL_B = { id: "minimax-abab", name: "MiniMax", provider: "minimax" };
 const MODEL_DEFAULT = MODEL_A;
 
 function makeMockModels() {
@@ -135,7 +135,7 @@ describe("Session model isolation", () => {
     const coord = makeMockSessionCoordinator(models);
     coord.createSession(null, null, true, MODEL_A);
 
-    models.setDefaultModel("mimo", "minimax");
+    models.setDefaultModel("minimax-abab", "minimax");
     expect(models.currentModel).toBe(MODEL_B);
     expect(coord.session.model).toBe(MODEL_A);
   });
@@ -186,7 +186,7 @@ describe("Session model isolation", () => {
     expect(sessionB.model).toBe(MODEL_B);
 
     // 改默认模型不影响任何已有 session
-    models.setDefaultModel("mimo", "minimax");
+    models.setDefaultModel("minimax-abab", "minimax");
     expect(sessionA.model).toBe(MODEL_A);
     expect(sessionB.model).toBe(MODEL_B);
   });

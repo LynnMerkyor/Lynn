@@ -18,6 +18,7 @@ import {
   readToolStormConfigFromEnv,
 } from './tool-storm.js';
 import { errorMessage, type ChatMessage, type FallbackEntry, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
+import { DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY } from '../shared/dual-brain-route.js';
 
 type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio' | 'video'>>;
 type ProviderError = Error & { suppressBody?: boolean; cooldownMs?: number };
@@ -48,6 +49,7 @@ const _emptyCounters = new Map<ProviderId, number>();
 // Local provider fast probe (cold-start race avoidance). Opt-out via env.
 const LOCAL_HEALTH_PROBE_ENABLED = process.env.BRAIN_V2_LOCAL_HEALTH_PROBE !== '0';
 const DEFAULT_LOCAL_HEALTH_PROBE_MS = Number(process.env.BRAIN_V2_LOCAL_HEALTH_PROBE_MS || 1_500);
+const LOCAL_SINGLE_SLOT_GUARD_ENABLED = process.env.BRAIN_V2_LOCAL_SINGLE_SLOT_GUARD !== '0';
 
 function _bumpEmpty(providerId: ProviderId): number {
   const n = (_emptyCounters.get(providerId) || 0) + 1;
@@ -75,6 +77,13 @@ function buildLocalProbeUrl(provider: Provider): string {
   return new URL(healthPath, base).toString();
 }
 
+function buildLocalSlotsUrl(provider: Provider): string {
+  const endpointUrl = new URL(provider.endpoint);
+  const url = new URL(endpointUrl.origin);
+  url.pathname = '/slots';
+  return url.toString();
+}
+
 function localProbeTimeoutMs(provider: Provider): number {
   const configured = Number(provider.health_probe_ms || DEFAULT_LOCAL_HEALTH_PROBE_MS);
   return Number.isFinite(configured) && configured > 0 ? configured : 1_500;
@@ -99,6 +108,52 @@ function compactMaybe(value: unknown, max = 220): string | null {
   if (typeof value !== 'string') return null;
   const compacted = compactText(value, max);
   return compacted ? compacted : null;
+}
+
+function slotsFromPayload(payload: unknown): Array<Record<string, unknown>> | null {
+  if (Array.isArray(payload)) {
+    return payload.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item));
+  }
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>;
+    if (Array.isArray(record.slots)) {
+      return record.slots.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item));
+    }
+  }
+  return null;
+}
+
+function slotIsBusy(slot: Record<string, unknown>): boolean {
+  if (slot.is_processing === true || slot.processing === true || slot.busy === true) return true;
+  const state = String(slot.state || slot.status || '').toLowerCase();
+  return !!state && state !== 'idle' && state !== 'available' && state !== 'ready';
+}
+
+export function summarizeLocalSlots(payload: unknown): { total: number; busy: number } | null {
+  const slots = slotsFromPayload(payload);
+  if (!slots || slots.length === 0) return null;
+  return {
+    total: slots.length,
+    busy: slots.filter(slotIsBusy).length,
+  };
+}
+
+async function getLocalSlotSummary(provider: Provider): Promise<{ total: number; busy: number } | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), localProbeTimeoutMs(provider));
+  try {
+    const res = await fetch(buildLocalSlotsUrl(provider), { method: 'GET', signal: ctrl.signal }).catch(() => null);
+    if (!res || !res.ok) return null;
+    return summarizeLocalSlots(await res.json().catch(() => null));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function shouldGuardLocalSingleSlot(provider: Provider): boolean {
+  return LOCAL_SINGLE_SLOT_GUARD_ENABLED
+    && String(provider.id) === 'apex-spark-i-balanced'
+    && isLocalEndpoint(provider.endpoint);
 }
 
 function searchCitationFromItem(item: unknown): string | null {
@@ -238,7 +293,7 @@ async function runRound({
 }: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache }): Promise<RunRoundResult> {
   const errors: Array<{ providerId: ProviderId; error: string }> = [];
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
-  // (例:"MiMo → Spark fallback"),不再让 cascade decision 对 UI 不可见。
+  // (例:"StepFun → Spark fallback"),不再让 cascade decision 对 UI 不可见。
   const fallbackChain: FallbackEntry[] = [];
   for (const providerId of providerOrderForCapability(capabilityRequired)) {
     const provider = getProvider(providerId);
@@ -278,6 +333,14 @@ async function runRound({
         log && log('info', `provider ${providerId} fast-probe threw, skip+cooldown`);
         markUnhealthy(providerId, 'health-probe-threw', 5000);
         fallbackChain.push({ id: providerId, reason: 'probe-threw' });
+        continue;
+      }
+    }
+    if (shouldGuardLocalSingleSlot(provider)) {
+      const slotSummary = await getLocalSlotSummary(provider).catch(() => null);
+      if (slotSummary && slotSummary.busy >= DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY) {
+        log && log('info', `provider ${providerId} local single-slot busy (${slotSummary.busy}/${slotSummary.total}), skip`);
+        fallbackChain.push({ id: providerId, reason: 'local-busy' });
         continue;
       }
     }
@@ -415,16 +478,46 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   const toolStormState = createToolStormState();
   const toolResultCompactionConfig = readToolResultCompactionConfigFromEnv();
   let serverToolStepIndex = 0;
+  // [overflow-retry] activeReasoning can be stepped down once if a reasoning model blows past
+  // max_tokens mid-<think> (finish_reason=length with no usable answer), so the answer fits.
+  let activeReasoning = reasoningEffort;
+  let lengthRetried = false;
+  const stepDownReasoning = (effort: string | null | undefined): string => {
+    const e = String(effort || 'high').toLowerCase();
+    if (e === 'medium') return 'low';
+    if (e === 'low' || e === 'off' || e === 'none' || e === 'disabled') return 'low';
+    return 'medium'; // high / xhigh / auto / null → medium
+  };
 
   while (iter < maxIter) {
     iter++;
     const result = await runRound({
       messages: workingMessages, tools: mergedTools, capabilityRequired,
-      signal, onChunk, log, extraBody, reasoningEffort,
+      signal, onChunk, log, extraBody, reasoningEffort: activeReasoning,
       requestCache,
       audioCache,
     });
     lastProviderId = result.providerId;
+
+    // [overflow-retry] StepFun-class reasoning models can blow past max_tokens mid-<think>,
+    // returning finish_reason=length with no visible answer and no tool call. Retry once with
+    // reduced reasoning (+ a concise-answer nudge) so the answer fits, instead of passing an
+    // empty turn through to the client.
+    if (
+      result.finishReason === 'length'
+      && result.toolCalls.length === 0
+      && !String(result.contentAccum || '').trim()
+      && !lengthRetried
+    ) {
+      lengthRetried = true;
+      activeReasoning = stepDownReasoning(activeReasoning);
+      log && log('warn', `provider ${lastProviderId} length-overflow with empty answer; retry once with reasoning=${activeReasoning}`);
+      workingMessages.push({
+        role: 'user',
+        content: '上一次回答因长度上限被截断,且没有给出可见答案。请直接、简洁地给出最终答案,不要再展开完整的思考过程。',
+      });
+      continue;
+    }
 
     // Model 自然结束 (stop / length / content_filter / function_call 等非 tool_calls) → 透传完成
     if (result.finishReason !== 'tool_calls' || result.toolCalls.length === 0) {
@@ -544,7 +637,9 @@ export function detectCapability(messages?: ChatMessage[]): CapabilityRequired {
 export const __testing__ = {
   _emptyCounters,
   buildLocalProbeUrl,
+  buildLocalSlotsUrl,
   isLocalEndpoint,
   localProbeTimeoutMs,
+  summarizeLocalSlots,
   summarizeToolResult,
 };

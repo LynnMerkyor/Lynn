@@ -51,7 +51,7 @@ For release blocking, add explicit StepFun thresholds instead of eyeballing the 
 npm run release:cli-efficiency
 ```
 
-This script runs both the route gate and the task efficiency gate with the current release thresholds. `release:preflight` also runs this gate, so packaging cannot silently skip the default StepFun latency guard. To tune or debug the route gate directly:
+This script runs both the route gate and the task efficiency gate with the current release thresholds. To tune or debug the route gate directly:
 
 ```bash
 npm run bench:cli-routes -- \
@@ -137,43 +137,7 @@ Not allowed:
 - bypassing plan order when later steps depend on previous tool results;
 - making the router answer on behalf of the model.
 
-### 4. Concurrency gate
-
-Concurrency is measured with real elapsed wall-clock for the whole batch, not by summing every task's individual wall time. This is the only way to prove that c2/c4 scheduling actually makes users wait less.
-
-Run the c2 gate before claiming scheduler or parallel dispatch improvements:
-
-```bash
-npm run release:cli-concurrency
-```
-
-The gate runs independent StepFun prompt tasks with `--concurrency 2`. It still requires 100% success, zero waste steps, no max-step hits, and a minimum success/hour threshold. Do not parallelize dependent chains such as `verify -> fix -> rerun`; only independent probes, background summaries, and independent verifiers should run concurrently.
-
-### 5. GUI/Brain live efficiency
-
-The desktop UI has two different gates:
-
-- `test:release:ui`: fixture-driven renderer smoke. It checks that the Electron UI can render the important surfaces, but it does not prove model routing or Brain latency.
-- `release:gui-efficiency`: live WebSocket gate. It connects to the currently running Lynn server (`~/.lynn/server-info.json` by default), runs smoke release cases through GUI/Brain/WebSocket, and records case success, turn wall-clock, TTFT, text volume, and tool turns.
-
-Run it after starting the packaged app or dev server when changing GUI/Brain routing, WebSocket streaming, desktop server boot, or renderer behavior that can affect perceived latency:
-
-```bash
-npm run release:gui-efficiency
-```
-
-This gate is intentionally explicit rather than part of `release:preflight`, because CI or a headless packaging machine may not have a live Lynn server. Do not replace it with `test:release:ui`: visual smoke cannot catch a slow or broken Brain path.
-
-The live report writes a `Live Efficiency` section into `output/release-regression-*/report.md` and an `efficiency` object into `live-results.json`:
-
-- case pass rate;
-- success/hour from real live case wall-clock;
-- p50/p90 turn wall time;
-- p50/p90 TTFT;
-- tool-turn count;
-- generated text and thinking character volume.
-
-### 6. Boundary stop only at objective boundaries
+### 4. Boundary stop only at objective boundaries
 
 Boundary stop is allowed only when the output format has a crisp completion condition:
 
@@ -188,7 +152,7 @@ Boundary stop trims generation tail, not validation. A coding task still cannot 
 
 The CLI exposes this only as an explicit machine-output option: `Lynn -p "..." --json --stop-at-json`. Use it for JSON/schema/eval prompts with an objective parse boundary; do not enable it for normal chat or coding-agent loops.
 
-### 7. Fewer wasted retries, not fewer valid repairs
+### 5. Fewer wasted retries, not fewer valid repairs
 
 Do reduce:
 
@@ -266,6 +230,7 @@ Success: typecheck/test pass; refuter/auto-verify runs; repairs are counted as v
 Purpose: do not over-optimize away deep work.
 
 - architecture review or "find best solution";
+- run with `--best` so the task uses 300 steps, ultra split, atomic workers, adversarial verify, and checkpoints;
 - allow sufficient reads/searches/refuter passes.
 
 Success: quality rubric wins over shortest time. Measure wall-clock, but do not fail simply for spending time on useful evidence.
@@ -358,14 +323,6 @@ For release blocking, use explicit quality and latency thresholds:
 npm run release:cli-efficiency
 ```
 
-Prefix-cache has its own repeated warm gate. It intentionally runs the same StepFun task twice so the second pass can reuse the stable prefix. This isolates cache behavior from the colder route smoke:
-
-```bash
-npm run release:cli-prefix-cache
-```
-
-Use this gate when changing stable-prefix ordering, runtime-knowledge injection, tool schemas, provider routing, or Brain usage accounting. `release:preflight` also runs this gate, so packaging cannot silently skip prefix-cache validation. A failure means users may still get correct answers, but the default StepFun path has lost a latency advantage and should not be called an efficiency improvement.
-
 To run only the task efficiency half:
 
 ```bash
@@ -374,14 +331,13 @@ npm run bench:cli-efficiency -- \
   --suite smoke \
   --repeat 3 \
   --min-success-rate 1 \
-  --min-success-per-hour 1200 \
   --max-p50-ttft-ms 2500 \
   --max-p50-wall-ms 4500 \
   --max-waste-steps 0 \
   --max-max-steps-reached 0
 ```
 
-For prefix-cache work, use `release:cli-prefix-cache` or add both `--min-cache-hit-ratio` and `--min-cache-hit-tokens` only after at least two repeated model runs have warmed the stable prefix. Do not set cache thresholds on cold-start-only measurements.
+For prefix-cache work, add `--min-cache-hit-ratio 0.90` only after at least two repeated model runs have warmed the stable prefix. Do not set this on cold-start-only measurements.
 
 Compare mode also prints per-task deltas. Read this table before accepting a speed claim:
 

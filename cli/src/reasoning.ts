@@ -22,6 +22,23 @@ export function parseReasoningOptions(args: ParsedArgs): ReasoningOptions {
   };
 }
 
+/**
+ * Step reasoning effort down one notch — used to retry a turn whose reasoning overflowed the
+ * token budget (high/xhigh→medium, medium/auto→low). low/off are already minimal, returned as-is.
+ */
+export function lowerReasoningEffort(effort: ReasoningEffort): ReasoningEffort {
+  switch (effort) {
+    case "xhigh":
+    case "high":
+      return "medium";
+    case "medium":
+    case "auto":
+      return "low";
+    default:
+      return effort;
+  }
+}
+
 export function shouldRenderReasoning(display: ReasoningDisplay, json: boolean): boolean {
   if (json) return true;
   return display === "always";

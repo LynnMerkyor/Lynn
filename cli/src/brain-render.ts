@@ -72,8 +72,7 @@ export function renderBrainEventForHuman(
 
 function providerLabel(provider: string, color: boolean): string {
   if (provider.includes("step-3.7")) return brightCyan("StepFun 3.7 Flash", color);
-  if (provider.includes("mimo")) return cyan("MiMo V2.5 Pro", color);
-  if (provider.includes("spark") || provider.includes("apex")) return yellow("Spark Qwen 3.6 35B A3B", color);
+  if (provider.includes("spark") || provider.includes("apex")) return yellow("Spark Qwen 3.6 35B A3B Distill", color);
   return provider;
 }
 

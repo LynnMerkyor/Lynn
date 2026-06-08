@@ -1601,32 +1601,6 @@
       "reasoning": true
     }
   },
-  "mimo": {
-    "mimo-v2-pro": {
-      "name": "MiMo V2 Pro",
-      "context": 1048576,
-      "maxOutput": 131072,
-      "vision": true,
-      "reasoning": true
-    },
-    "mimo-v2-omni": {
-      "name": "MiMo V2 Omni",
-      "context": 262144,
-      "maxOutput": 32768,
-      "vision": true
-    },
-    "mimo-v2-flash": {
-      "name": "MiMo V2 Flash (309B MoE)",
-      "context": 262144,
-      "maxOutput": 65536,
-      "reasoning": true
-    },
-    "mimo-v2-tts": {
-      "name": "MiMo V2 TTS",
-      "context": 131072,
-      "maxOutput": 8192
-    }
-  },
   "zhipu": {
     "glm-5": {
       "name": "GLM-5",

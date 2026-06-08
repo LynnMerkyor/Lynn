@@ -45,17 +45,17 @@ describe("normalizeLocalUpgradeOptions (memory-adaptive)", () => {
   it("shows both downgrade + upgrade when memory is unknown", () => {
     const out = normalizeLocalUpgradeOptions([], null);
     expect(out.some((o) => o.id === "qwen35-4b-q4km")).toBe(true);
-    expect(out.some((o) => o.id === "qwen36-35b-a3b-apex-mtp")).toBe(true);
+    expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix")).toBe(true);
   });
   it("hides the 4B downgrade on >32GB machines, keeps 35B", () => {
     const out = normalizeLocalUpgradeOptions([], 64);
     expect(out.some((o) => o.id === "qwen35-4b-q4km")).toBe(false);
-    expect(out.some((o) => o.id === "qwen36-35b-a3b-apex-mtp")).toBe(true);
+    expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix")).toBe(true);
   });
-  it("hides the 35B upgrade on <22GB machines, keeps 4B", () => {
+  it("hides the 35B upgrade on <24GB machines, keeps 4B", () => {
     const out = normalizeLocalUpgradeOptions([], 16);
     expect(out.some((o) => o.id === "qwen35-4b-q4km")).toBe(true);
-    expect(out.some((o) => o.id === "qwen36-35b-a3b-apex-mtp")).toBe(false);
+    expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix")).toBe(false);
   });
   it("drops 9b/27b server options from the optional list", () => {
     const out = normalizeLocalUpgradeOptions([{ id: "x-9b" }, { id: "y-27b" }], 28);
