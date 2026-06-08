@@ -82,9 +82,9 @@ export const BRAIN_MODEL_CHOICES: BrainModelChoice[] = [
   },
   {
     id: "spark",
-    name: "Spark Qwen 3.6 35B A3B",
-    routeRole: { zh: "2 / 本地兜底", en: "2 / local fallback" },
-    capability: { zh: "本地隐私 + 零 API 成本", en: "local privacy + zero API cost" },
+    name: "Spark Qwen 3.6 35B A3B Distill",
+    routeRole: { zh: "2 / 本地单槽", en: "2 / local single-slot" },
+    capability: { zh: "本地隐私 + 零 API 成本；忙时跳过保护 GUI", en: "local privacy + zero API cost; skipped when busy to protect GUI" },
   },
 ];
 
@@ -116,7 +116,7 @@ export function renderBrainModelChoices(info: ProvidersInfo): string {
     t("models.note.fixed"),
     t("models.note.byok"),
     "  /model stepfun  StepFun 3.7 Flash",
-    "  /model spark    Spark Qwen 3.6 35B A3B",
+    "  /model spark    Spark Qwen 3.6 35B A3B Distill",
   ].join("\n");
 }
 

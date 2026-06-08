@@ -223,6 +223,43 @@ describe('Router', () => {
     expect(mockState.adapterCalls).toEqual(['p-spark']);
   });
 
+  it('skips the Spark A3B local manager when its single llama.cpp slot is busy', async () => {
+    mockState.cooldown.add('p-step');
+    mockState.providers['p-spark'] = {
+      ...makeProvider('apex-spark-i-balanced'),
+      endpoint: 'http://127.0.0.1:18098/v1',
+      health_path: '/health',
+      health_probe_ms: 25,
+    };
+    const fetchMock = vi.fn(async (url) => {
+      if (String(url).endsWith('/slots')) {
+        return { ok: true, json: async () => ([{ id: 0, is_processing: true }]) };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'cloud ok' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const metas = [];
+    const r = await run({
+      messages: [{ role: 'user', content: 'q' }],
+      onChunk: async (_chunk, meta) => metas.push(meta),
+    });
+
+    expect(r.providerId).toBe('p-cloud');
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:18098/health', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:18098/slots', expect.any(Object));
+    expect(mockState.adapterCalls).toEqual(['p-cloud']);
+    expect(metas[0].fallback_from).toEqual([
+      { id: 'p-step', reason: 'cooldown' },
+      { id: 'p-spark', reason: 'local-busy' },
+    ]);
+  });
+
   it('clears cooldown on successful provider run', async () => {
     mockState.cooldown.add('p-step');  // p-step was unhealthy
     mockState.adapterFn = async function* ({ provider }) {
@@ -649,5 +686,15 @@ describe('router local probe helpers', () => {
       endpoint: 'http://127.0.0.1:18098/v1',
       health_path: 'models',
     })).toBe('http://127.0.0.1:18098/v1/models');
+  });
+
+  it('builds root slots URLs and summarizes llama.cpp slot busy state', () => {
+    expect(__testing__.buildLocalSlotsUrl({
+      endpoint: 'http://127.0.0.1:18098/v1',
+    })).toBe('http://127.0.0.1:18098/slots');
+    expect(__testing__.summarizeLocalSlots([
+      { id: 0, is_processing: true },
+      { id: 1, state: 'idle' },
+    ])).toEqual({ total: 2, busy: 1 });
   });
 });

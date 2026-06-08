@@ -10,6 +10,7 @@ export type ProviderIdLiteral =
 
 export type ModelIdLiteral =
   | 'qwen36-35b-a3b-apex-mtp'
+  | 'qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix'
   | 'step-3.7-flash'   // StepFun 198B-MoE/11B-A text/coding fallback, step_plan 端点
   | 'deepseek-v4-flash'
   | 'deepseek-v4-pro'
@@ -51,7 +52,7 @@ export interface Provider {
   vision_model?: string;
 }
 
-export type FallbackReason = 'cooldown' | 'probe-failed' | 'probe-threw' | 'error' | 'empty';
+export type FallbackReason = 'cooldown' | 'probe-failed' | 'probe-threw' | 'local-busy' | 'error' | 'empty';
 
 export interface FallbackEntry {
   id: ProviderId;

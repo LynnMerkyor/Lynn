@@ -38,7 +38,7 @@ export async function handleInkProviderCommand(raw: string, baseArgs: ParsedArgs
     : undefined;
   return {
     handled: true,
-    message: message.trim() || t("chat.providers.routeUnchanged", { route: refreshedProvider?.model || "StepFun 3.7 Flash→Spark Qwen 3.6 35B A3B" }),
+    message: message.trim() || t("chat.providers.routeUnchanged", { route: refreshedProvider?.model || "StepFun 3.7 Flash→Spark A3B single-slot→DS-V4 Flash" }),
     refreshedProvider,
   };
 }

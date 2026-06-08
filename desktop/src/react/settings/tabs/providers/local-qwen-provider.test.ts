@@ -24,7 +24,7 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('selectGgufModel');
   });
 
-  it('advertises the local ladder (9B default → 4B downgrade → 35B 32GB+ APEX-MTP) with objective metrics', () => {
+  it('advertises the local ladder (9B default → 4B downgrade → 35B distilled orchestrator) with objective metrics', () => {
     const source = read('server/routes/local-qwen35.ts');
     expect(source).not.toContain('qwen36-27b-q4km-imatrix');
     // 9B is the default local onboarding model.
@@ -35,16 +35,19 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('qwen35-4b-q4km');
     expect(source).toContain('低配降级');
     expect(source).toContain('thinking-on 可能长思考后无正文');
-    // 35B = 32GB+ high-end APEX-MTP with DGX Spark TPS clearly labeled.
-    expect(source).toContain('qwen36-35b-a3b-apex-mtp');
-    expect(source).toContain('DGX Spark thinking-on 75-85 TPS');
-    expect(source).toContain('DGX Spark 数学 84.69 TPS');
-    expect(source).toContain('DGX Spark 归纳证明 75.53 TPS');
-    expect(source).toContain('APEX I-Balanced');
+    // 35B = 24GB+ DS-V4-Pro thinking distilled orchestrator with objective metrics.
+    expect(source).toContain('qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix');
+    expect(source).toContain('DSV4Pro Thinking Distill');
+    expect(source).toContain('MMLU-500 90.8%');
+    expect(source).toContain('GPQA-Diamond raw 67.2% / parsed 86.4%');
+    expect(source).toContain('Spark 77 tok/s');
+    expect(source).toContain('本地 35B 是单槽 manager/fallback');
+    expect(source).toContain('忙时 CLI/后台任务转 StepFun');
+    expect(source).toContain('DS-V4 Flash 只作硬题逃生舱');
     expect(source).not.toContain('Spark/远端兜底');
-    expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF');
+    expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill');
     expect(source).toContain('下载到本机');
-    expect(source).toContain('Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf');
+    expect(source).toContain('Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf');
     expect(source).toContain('LOCAL_QWEN35_RUNTIME_POLICY');
     expect(source).toContain('warm_pool_default: false');
     expect(source).toContain('idle_unload: true');
@@ -56,6 +59,10 @@ describe('Local Qwen provider UX guards', () => {
   it('makes advanced local models actionable instead of passive cards', () => {
     const source = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
     expect(source).toContain('MMLU 500 81.20%');
+    expect(source).toContain('GUI 交互优先');
+    expect(source).toContain('本地 A3B 单槽');
+    expect(source).toContain('忙时 CLI 转 StepFun');
+    expect(source).toContain('QoS 单槽:本地忙时跳过 Spark');
     expect(source).not.toContain('MMLU 100 81.00%');
     expect(source).toContain('startRecommendedDownload');
     expect(source).toContain('llamacppStartDownload');
@@ -96,19 +103,20 @@ describe('Local Qwen provider UX guards', () => {
     expect(preload).toContain('llamacppStartCustomModel: (modelPath)');
   });
 
-  it('downloads the recommended 35B APEX-MTP model through Lynn with checksum and parallel ranges', () => {
+  it('downloads the recommended 35B distilled model through Lynn with checksum and parallel ranges', () => {
     const profiles = read('desktop/llamacpp-profiles.cjs');
     const downloader = read('desktop/model-downloader.cjs');
     const preload = read('desktop/preload.cjs');
-    // 2026-05-28: canonical 35B = APEX-MTP I-Balanced;old Q4_K_M id remains a backward-compatible alias.
-    expect(profiles).toContain('qwen36-35b-a3b-apex-mtp');
-    expect(profiles).toContain('26_059_443_808');
-    expect(profiles).toContain('9bf7d96bb3a9d363e645dd998aee9e9bff8e016a82aec7ff081e0e6cdb53419e');
+    // 2026-06-08: canonical 35B = DS-V4-Pro thinking distilled Q4_K_M;old 35B ids remain backward-compatible aliases.
+    expect(profiles).toContain('qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix');
+    expect(profiles).toContain('21_166_758_016');
+    expect(profiles).toContain('fde1e85843127a06ce99a0c6b2799dd16507d8fa5619e4c702fd8214f2135e6d');
     expect(profiles).toContain('parallelSegments: 4');
-    expect(profiles).toContain('Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf');
-    expect(profiles).toContain('Qwen3.6-35B-A3B-APEX-MTP-GGUF');
+    expect(profiles).toContain('Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf');
+    expect(profiles).toContain('Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill');
     // legacy alias still maps old stored ids to the new canonical profile.
-    expect(profiles).toContain('"qwen36-35b-a3b-q4km-imatrix": "qwen36-35b-a3b-apex-mtp"');
+    expect(profiles).toContain('"qwen36-35b-a3b-q4km-imatrix": DISTILLED_35B_MODEL_ID');
+    expect(profiles).toContain('"qwen36-35b-a3b-apex-mtp": DISTILLED_35B_MODEL_ID');
     expect(preload).toContain('llamacppStartDownload: (payload)');
     expect(downloader).toContain('_downloadFromSourceParallel');
     expect(downloader).toContain('"Range"');

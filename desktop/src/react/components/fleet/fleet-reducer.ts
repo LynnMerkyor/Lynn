@@ -275,6 +275,27 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
   const next: FleetWorkerView = { ...prev, lastTs: ev.ts ?? prev.lastTs };
   if (ev.agent) next.agent = ev.agent;
   switch (ev.type) {
+    case 'manager.started':
+      next.status = 'running';
+      next.log = [...prev.log, `manager ${ev.managerModel}: ${ev.route.join(' -> ')}`];
+      return next;
+    case 'manager.delegated':
+      next.log = [...prev.log, `delegate ${ev.workerId}: ${ev.workerModel} · ${ev.objective}`];
+      return next;
+    case 'manager.validation':
+      next.gate = { ok: ev.ok, summary: ev.summary };
+      next.log = [...prev.log, `manager validation ${ev.ok ? 'ok' : 'fail'}: ${ev.summary}`];
+      if (!ev.ok) next.status = 'failed';
+      return next;
+    case 'manager.finished':
+      next.finished = {
+        ok: ev.ok,
+        exitCode: ev.ok ? 0 : 1,
+        summary: ev.summary,
+      };
+      next.status = ev.ok ? (ev.status === 'escalated' ? 'completed' : 'waiting_approval') : 'failed';
+      if (ev.escalationReason) next.log = [...next.log, `escalated: ${ev.escalationReason}`];
+      return next;
     case 'worker.started':
       next.status = 'running';
       next.cwd = ev.cwd;

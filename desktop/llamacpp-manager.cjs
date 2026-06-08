@@ -137,17 +137,23 @@ function legacyModelPathCandidates(homeDir, modelId, fileName) {
   }
   if (modelId === "qwen36-35b-a3b-q4km-imatrix") {
     // Legacy Q4_K_M id: keep old file discovery so existing users do not need
-    // to move files. New downloads map this id to the APEX-MTP profile.
+    // to move files. New downloads map this id to the distilled Q4_K_M profile.
     candidates.push(
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf"),
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", fileName),
-      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),
-      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "apex_mtp", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),
-      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B-APEX-MTP", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),
+    );
+  }
+  if (modelId === "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix") {
+    // 2026-06-08 canonical high-end local file: DS-V4-Pro thinking-on distill.
+    candidates.push(
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill", "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill", "gguf", "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf"),
     );
   }
   if (modelId === "qwen36-35b-a3b-apex-mtp") {
-    // 2026-05-28 canonical high-end local file: APEX-MTP I-Balanced.
+    // Legacy APEX-MTP discovery only. The downloadable 35B profile now maps to
+    // the distilled Q4_K_M artifact, but existing local files can still launch.
     candidates.push(
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "apex_mtp", "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf"),

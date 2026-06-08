@@ -39,7 +39,7 @@ describe("Ink provider commands", () => {
     expect(result.message).toContain("Lynn Models / Brain Route");
     expect(result.message).not.toContain("MiMo");
     expect(result.message).toContain("StepFun 3.7 Flash");
-    expect(result.message).toContain("Spark Qwen 3.6 35B A3B");
+    expect(result.message).toContain("Spark Qwen 3.6 35B A3B Distill");
   });
 
   it("normalizes full-width slash for model route commands", async () => {
@@ -48,7 +48,7 @@ describe("Ink provider commands", () => {
     const result = await handleInkProviderCommand("／model", args);
 
     expect(result.handled).toBe(true);
-    expect(result.message).toContain("Spark Qwen 3.6 35B A3B");
+    expect(result.message).toContain("Spark Qwen 3.6 35B A3B Distill");
   });
 
   it("prints set usage for bare interactive provider setup commands", async () => {

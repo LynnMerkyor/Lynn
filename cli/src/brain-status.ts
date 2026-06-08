@@ -10,6 +10,9 @@ export interface BrainProviderStatusEntry {
   configured: boolean;
   local: boolean;
   inRoute: boolean;
+  routeRole?: "head" | "local_single_slot_manager" | "escape" | "tail";
+  localConcurrencyLimit?: number;
+  busyFallbackProvider?: string;
 }
 
 export interface BrainProviderStatus {
@@ -51,6 +54,12 @@ export function summarizeBrainProviderStatus(status: BrainProviderStatus | null)
     const provider = byId.get(id);
     const label = modelDisplayName(provider?.model || id);
     if (!provider) return `${label}:unknown`;
+    if (provider.routeRole === "local_single_slot_manager") {
+      return `${label}:local-single-slot`;
+    }
+    if (provider.routeRole === "escape") {
+      return `${label}:escape`;
+    }
     if (provider.credential === "set") return `${label}:key`;
     if (provider.credential === "not_required") return `${label}:local`;
     return `${label}:missing-key`;

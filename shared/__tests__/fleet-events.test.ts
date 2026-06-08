@@ -71,7 +71,9 @@ describe("fleet-events protocol", () => {
   it("exposes known event types and progress helper", () => {
     expect(FLEET_WORKER_EVENT_TYPES).toContain("worker.violation");
     expect(FLEET_WORKER_EVENT_TYPES).toContain("worker.visual_result");
+    expect(FLEET_WORKER_EVENT_TYPES).toContain("manager.validation");
     expect(isFleetWorkerEventType("git.diff")).toBe(true);
+    expect(isFleetWorkerEventType("manager.finished")).toBe(true);
     expect(isFleetWorkerEventType("unknown")).toBe(false);
     expect(makeFleetProgressEvent("hello", { workerId: "w2" })).toEqual({
       type: "worker.progress",
@@ -103,5 +105,32 @@ describe("fleet-events protocol", () => {
 
     expect(result.ok).toBe(false);
     expect(result.errors.join("\n")).toContain("summary");
+  });
+
+  it("accepts manager lifecycle events for v0.82 dual-brain orchestration", () => {
+    expect(validateFleetWorkerEvent({
+      type: "manager.started",
+      managerId: "m1",
+      route: ["local-a3b-manager", "step-3.7-flash-worker", "ds-v4-flash-escape"],
+      managerModel: "local-a3b-distill",
+    })).toEqual({ ok: true, errors: [] });
+
+    expect(validateFleetWorkerEvent({
+      type: "manager.validation",
+      managerId: "m1",
+      ok: false,
+      summary: "false-verify risk suspected; escalating",
+      falseVerifyRisk: "suspected",
+      evidenceCount: 2,
+    })).toEqual({ ok: true, errors: [] });
+
+    expect(validateFleetWorkerEvent({
+      type: "manager.finished",
+      managerId: "m1",
+      ok: true,
+      status: "escalated",
+      summary: "completed through DS-V4 Flash escape",
+      escalationReason: "two distinct harness failures",
+    })).toEqual({ ok: true, errors: [] });
   });
 });

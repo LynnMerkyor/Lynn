@@ -99,13 +99,13 @@ describe('OpenAI-compat wire adapter', () => {
     await expect(drain(callOpenAI({ provider, messages: [{ role: 'user', content: 'q' }] }))).rejects.toThrow(/deepseek-chat HTTP 401/);
   });
 
-  // ── 2026-05-25 default_thinking flag(Spark APEX-MTP Brain v2 fallback 加固) ──
+  // ── 2026-06-08 default_thinking flag(Spark distilled A3B Brain v2 fallback 加固) ──
   describe('provider.default_thinking semantics', () => {
     const sparkProvider = {
       id: 'apex-spark-i-balanced',
       endpoint: 'http://127.0.0.1:18098/v1',
       apiKey: 'none',
-      model: 'qwen36-35b-a3b-apex-mtp',
+      model: 'qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix',
       capability: { vision: false, tools: true, thinking: true },
       default_thinking: false,
       thinking_control: 'qwen_chat_template',

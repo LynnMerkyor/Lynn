@@ -7,7 +7,7 @@ import {
 
 describe("CLI runtime context", () => {
   it("tells the model which route the user sees", () => {
-    const message = buildCliRuntimeSystemMessage("StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B via Brain router (auto)");
+    const message = buildCliRuntimeSystemMessage("StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B Distill via Brain router (auto)");
 
     expect(message.role).toBe("system");
     expect(message.content).toContain("Current model route shown to the user: StepFun 3.7 Flash");
@@ -15,6 +15,8 @@ describe("CLI runtime context", () => {
     expect(message.content).toContain("answer from this runtime context");
     expect(message.content).toContain("Lynn CLI memory is layered");
     expect(message.content).toContain("Local 9B is explicit opt-in only");
+    expect(message.content).toContain("Spark Qwen 3.6 35B A3B Distill is a local single-slot manager/fallback");
+    expect(message.content).toContain("DS-V4 Flash is escape-only");
     expect(message.content).toContain("failure should promote to StepFun");
     expect(message.content).toContain("/memory add");
     expect(message.content).toContain("Do not assume the user's current directory contains that docs path");
@@ -28,7 +30,7 @@ describe("CLI runtime context", () => {
   });
 
   it("keeps volatile runtime values (version, route) in a tail after the stable prefix", () => {
-    const message = buildCliRuntimeSystemMessage("StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B via Brain router (auto)");
+    const message = buildCliRuntimeSystemMessage("StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B Distill via Brain router (auto)");
     const content = String(message.content);
 
     // The stable identity/rules must come before the volatile runtime line so the
@@ -38,7 +40,7 @@ describe("CLI runtime context", () => {
   });
 
   it("refreshes the system route without moving it out of the prefix", () => {
-    const messages = resetCliRuntimeMessages("StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B");
+    const messages = resetCliRuntimeMessages("StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B Distill");
     messages.push({ role: "user", content: "hi" });
 
     refreshCliRuntimeSystemMessage(messages, "CLI BYOK: step-3.7-flash");

@@ -14,7 +14,7 @@ const stepfunRuns = positiveInt(args.stepfunRuns || process.env.LYNN_ROUTE_STEPF
 const sparkRuns = positiveInt(args.sparkRuns || process.env.LYNN_ROUTE_SPARK_RUNS || 3, "spark-runs");
 const timeoutMs = positiveInt(args.timeoutMs || process.env.LYNN_ROUTE_TIMEOUT_MS || 30000, "timeout-ms");
 const sparkBaseUrl = String(args.sparkBaseUrl || process.env.LYNN_SPARK_URL || "http://127.0.0.1:18098/v1").replace(/\/$/, "");
-const sparkModel = String(args.sparkModel || process.env.LYNN_SPARK_MODEL || "qwen36-35b-a3b-apex-mtp");
+const sparkModel = String(args.sparkModel || process.env.LYNN_SPARK_MODEL || "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix");
 const label = String(args.label || process.env.LYNN_ROUTE_LABEL || "route-latency-smoke");
 const reportPath = path.resolve(String(args.out || path.join(outDir, `cli-route-latency-${startedAt.toISOString().replace(/[:.]/g, "-")}.json`)));
 const requireSpark = args.requireSpark === true || process.env.LYNN_ROUTE_REQUIRE_SPARK === "1";
@@ -402,7 +402,7 @@ Options:
   --stepfun-runs N       StepFun CLI runs (default 5)
   --spark-runs N         Spark direct runs (default 3)
   --spark-base-url URL   Spark OpenAI-compatible base URL (default http://127.0.0.1:18098/v1)
-  --spark-model ID       Spark model id (default qwen36-35b-a3b-apex-mtp)
+  --spark-model ID       Spark model id (default qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix)
   --timeout-ms N         Per-run timeout (default 30000)
   --out FILE             JSON report path
   --require-spark        Fail if Spark has no successful run

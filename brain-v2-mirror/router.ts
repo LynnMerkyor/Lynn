@@ -18,6 +18,7 @@ import {
   readToolStormConfigFromEnv,
 } from './tool-storm.js';
 import { errorMessage, type ChatMessage, type FallbackEntry, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
+import { DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY } from '../shared/dual-brain-route.js';
 
 type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio' | 'video'>>;
 type ProviderError = Error & { suppressBody?: boolean; cooldownMs?: number };
@@ -48,6 +49,7 @@ const _emptyCounters = new Map<ProviderId, number>();
 // Local provider fast probe (cold-start race avoidance). Opt-out via env.
 const LOCAL_HEALTH_PROBE_ENABLED = process.env.BRAIN_V2_LOCAL_HEALTH_PROBE !== '0';
 const DEFAULT_LOCAL_HEALTH_PROBE_MS = Number(process.env.BRAIN_V2_LOCAL_HEALTH_PROBE_MS || 1_500);
+const LOCAL_SINGLE_SLOT_GUARD_ENABLED = process.env.BRAIN_V2_LOCAL_SINGLE_SLOT_GUARD !== '0';
 
 function _bumpEmpty(providerId: ProviderId): number {
   const n = (_emptyCounters.get(providerId) || 0) + 1;
@@ -75,6 +77,13 @@ function buildLocalProbeUrl(provider: Provider): string {
   return new URL(healthPath, base).toString();
 }
 
+function buildLocalSlotsUrl(provider: Provider): string {
+  const endpointUrl = new URL(provider.endpoint);
+  const url = new URL(endpointUrl.origin);
+  url.pathname = '/slots';
+  return url.toString();
+}
+
 function localProbeTimeoutMs(provider: Provider): number {
   const configured = Number(provider.health_probe_ms || DEFAULT_LOCAL_HEALTH_PROBE_MS);
   return Number.isFinite(configured) && configured > 0 ? configured : 1_500;
@@ -99,6 +108,52 @@ function compactMaybe(value: unknown, max = 220): string | null {
   if (typeof value !== 'string') return null;
   const compacted = compactText(value, max);
   return compacted ? compacted : null;
+}
+
+function slotsFromPayload(payload: unknown): Array<Record<string, unknown>> | null {
+  if (Array.isArray(payload)) {
+    return payload.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item));
+  }
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>;
+    if (Array.isArray(record.slots)) {
+      return record.slots.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item));
+    }
+  }
+  return null;
+}
+
+function slotIsBusy(slot: Record<string, unknown>): boolean {
+  if (slot.is_processing === true || slot.processing === true || slot.busy === true) return true;
+  const state = String(slot.state || slot.status || '').toLowerCase();
+  return !!state && state !== 'idle' && state !== 'available' && state !== 'ready';
+}
+
+export function summarizeLocalSlots(payload: unknown): { total: number; busy: number } | null {
+  const slots = slotsFromPayload(payload);
+  if (!slots || slots.length === 0) return null;
+  return {
+    total: slots.length,
+    busy: slots.filter(slotIsBusy).length,
+  };
+}
+
+async function getLocalSlotSummary(provider: Provider): Promise<{ total: number; busy: number } | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), localProbeTimeoutMs(provider));
+  try {
+    const res = await fetch(buildLocalSlotsUrl(provider), { method: 'GET', signal: ctrl.signal }).catch(() => null);
+    if (!res || !res.ok) return null;
+    return summarizeLocalSlots(await res.json().catch(() => null));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function shouldGuardLocalSingleSlot(provider: Provider): boolean {
+  return LOCAL_SINGLE_SLOT_GUARD_ENABLED
+    && String(provider.id) === 'apex-spark-i-balanced'
+    && isLocalEndpoint(provider.endpoint);
 }
 
 function searchCitationFromItem(item: unknown): string | null {
@@ -278,6 +333,14 @@ async function runRound({
         log && log('info', `provider ${providerId} fast-probe threw, skip+cooldown`);
         markUnhealthy(providerId, 'health-probe-threw', 5000);
         fallbackChain.push({ id: providerId, reason: 'probe-threw' });
+        continue;
+      }
+    }
+    if (shouldGuardLocalSingleSlot(provider)) {
+      const slotSummary = await getLocalSlotSummary(provider).catch(() => null);
+      if (slotSummary && slotSummary.busy >= DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY) {
+        log && log('info', `provider ${providerId} local single-slot busy (${slotSummary.busy}/${slotSummary.total}), skip`);
+        fallbackChain.push({ id: providerId, reason: 'local-busy' });
         continue;
       }
     }
@@ -574,7 +637,9 @@ export function detectCapability(messages?: ChatMessage[]): CapabilityRequired {
 export const __testing__ = {
   _emptyCounters,
   buildLocalProbeUrl,
+  buildLocalSlotsUrl,
   isLocalEndpoint,
   localProbeTimeoutMs,
+  summarizeLocalSlots,
   summarizeToolResult,
 };

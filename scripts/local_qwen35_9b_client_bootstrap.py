@@ -344,23 +344,23 @@ def _hardware_profile() -> dict[str, Any]:
                 "file_name": "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
                 "min_memory_gib": 24,
             })
-            if mem >= 32:
+            if mem >= 24:
                 upgrade_options.append({
-                    "id": "qwen36-35b-a3b-apex-mtp",
-                    "label": "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
-                    "profile": "32GB 统一内存+ 推荐 · thinking-on 长链最快",
+                    "id": "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix",
+                    "label": "Qwen3.6-35B-A3B DSV4Pro Thinking Distill Q4_K_M imatrix",
+                    "profile": "24GB 统一内存+ 可选 · Lynn 编排器大脑",
                     "metrics": [
-                        "DGX Spark thinking-on 75-85 TPS",
-                        "DGX Spark 数学 84.69 TPS",
-                        "DGX Spark 归纳证明 75.53 TPS",
-                        "APEX I-Balanced",
-                        "24.27 GiB · MTP head",
+                        "21 GB Q4_K_M imatrix",
+                        "MMLU-500 90.8%",
+                        "GPQA-Diamond raw 67.2% / parsed 86.4%",
+                        "Spark 77 tok/s",
+                        "R6000 ~224 tok/s",
                     ],
-                    "reason": "高端质量档；APEX-MTP 保留官方 MTP head，thinking-on 长链路比 no-MTP 基线提升约 20-30%。",
-                    "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF",
+                    "reason": "高端编排器档；蒸馏 DS-V4-Pro thinking-on 的拆分、分派与验收思维方式。默认不启用 MTP，质量稳定性优先。",
+                    "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill",
                     "download_label": "下载到本机",
-                    "file_name": "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
-                    "min_memory_gib": 32,
+                    "file_name": "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf",
+                    "min_memory_gib": 24,
                 })
         elif mem >= 16:
             recommendation = "recommended_with_limits"
@@ -402,23 +402,23 @@ def _hardware_profile() -> dict[str, Any]:
                 "file_name": "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
                 "min_vram_gib": 24,
             })
-            if vram >= 32:
+            if vram >= 24:
                 upgrade_options.append({
-                    "id": "qwen36-35b-a3b-apex-mtp",
-                    "label": "Qwen3.6-35B-A3B APEX-MTP I-Balanced",
-                    "profile": "32GB 显存+ 推荐 · thinking-on 长链最快",
+                    "id": "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix",
+                    "label": "Qwen3.6-35B-A3B DSV4Pro Thinking Distill Q4_K_M imatrix",
+                    "profile": "24GB 显存+ 可选 · Lynn 编排器大脑",
                     "metrics": [
-                        "DGX Spark thinking-on 75-85 TPS",
-                        "DGX Spark 数学 84.69 TPS",
-                        "DGX Spark 归纳证明 75.53 TPS",
-                        "APEX I-Balanced",
-                        "24.27 GiB · MTP head",
+                        "21 GB Q4_K_M imatrix",
+                        "MMLU-500 90.8%",
+                        "GPQA-Diamond raw 67.2% / parsed 86.4%",
+                        "Spark 77 tok/s",
+                        "R6000 ~224 tok/s",
                     ],
-                    "reason": "高端质量档；APEX-MTP 保留官方 MTP head，thinking-on 长链路比 no-MTP 基线提升约 20-30%。",
-                    "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF",
+                    "reason": "高端编排器档；蒸馏 DS-V4-Pro thinking-on 的拆分、分派与验收思维方式。默认不启用 MTP，质量稳定性优先。",
+                    "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill",
                     "download_label": "下载到本机",
-                    "file_name": "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
-                    "min_vram_gib": 32,
+                    "file_name": "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf",
+                    "min_vram_gib": 24,
                 })
         elif vram >= 16:
             recommendation = "recommended_with_limits"

@@ -61,7 +61,14 @@ describe('provider registry', () => {
 
     expect(snapshot.route.slice(0, 3)).toEqual(['step-3.7-flash', 'apex-spark-i-balanced', 'deepseek-chat']);
     expect(step).toMatchObject({ id: 'step-3.7-flash', credential: expect.any(String), inRoute: true });
-    expect(spark).toMatchObject({ credential: 'not_required', configured: true, local: true });
+    expect(spark).toMatchObject({
+      credential: 'not_required',
+      configured: true,
+      local: true,
+      routeRole: 'local_single_slot_manager',
+      localConcurrencyLimit: 1,
+      busyFallbackProvider: 'step-3.7-flash or ds-v4-flash',
+    });
     expect(JSON.stringify(snapshot)).not.toContain('apiKey');
   });
 });

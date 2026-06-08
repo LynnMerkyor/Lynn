@@ -105,7 +105,7 @@ describe("CLI provider profile", () => {
       LYNN_CLI_API_KEY: "spark-secret",
     })).toMatchObject({
       baseUrl: "http://127.0.0.1:18098/v1",
-      model: "qwen36-35b-a3b-apex-mtp",
+      model: "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix",
       apiKey: "spark-secret",
     });
   });

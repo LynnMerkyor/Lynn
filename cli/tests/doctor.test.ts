@@ -35,7 +35,7 @@ describe("doctor command", () => {
           route: ["step-3.7-flash", "apex-spark-i-balanced"],
           providers: [
             { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "set", configured: true, local: false, inRoute: true },
-            { id: "apex-spark-i-balanced", model: "qwen36", endpoint: "http://127.0.0.1:18098/v1", wire: "openai", credential: "not_required", configured: true, local: true, inRoute: true },
+            { id: "apex-spark-i-balanced", model: "qwen36", endpoint: "http://127.0.0.1:18098/v1", wire: "openai", credential: "not_required", configured: true, local: true, inRoute: true, routeRole: "local_single_slot_manager", localConcurrencyLimit: 1 },
           ],
         }), { status: 200, statusText: "OK" });
       }
@@ -57,8 +57,8 @@ describe("doctor command", () => {
     expect(result.ok).toBe(true);
     expect(result.brainSmoke).toMatchObject({ ok: true, provider: "step-3.7-flash" });
     expect(result.brainProviders?.route[0]).toBe("step-3.7-flash");
-    expect(rendered).toContain("brain-route: StepFun 3.7 Flash:key -> Spark Qwen 3.6 35B A3B:local");
-    expect(rendered).toContain("head ready: StepFun 3.7 Flash; fallback ready: Spark Qwen 3.6 35B A3B");
+    expect(rendered).toContain("brain-route: StepFun 3.7 Flash:key -> Spark Qwen 3.6 35B A3B Distill:local-single-slot");
+    expect(rendered).toContain("head ready: StepFun 3.7 Flash; fallback ready: Spark Qwen 3.6 35B A3B Distill");
     expect(rendered).toContain("brain-smoke: route returned assistant output via step-3.7-flash");
   });
 

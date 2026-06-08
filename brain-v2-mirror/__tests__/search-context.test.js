@@ -7,7 +7,7 @@ const providerSpark = {
   id: 'apex-spark-i-balanced',
   endpoint: 'http://127.0.0.1:18098/v1',
   apiKey: 'none',
-  model: 'qwen36-35b-a3b-apex-mtp',
+  model: 'qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix',
   capability: { vision: false, audio: false, tools: true, thinking: true, native_search: false },
   wire: 'openai',
   cooldown_ms: 300_000,

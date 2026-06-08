@@ -644,7 +644,7 @@ function buildPromptFrameStatus(
 
 export function chatRouteLabel(provider?: { provider: string; model: string } | null): string {
   if (provider) return `CLI BYOK: ${modelLabelWithId(provider.model)}`;
-  return "StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B via Brain router (auto)";
+  return "StepFun 3.7 Flash → Spark A3B single-slot → DS-V4 Flash via Brain router (auto)";
 }
 
 export function splitChatCommandLine(raw: string): string[] {

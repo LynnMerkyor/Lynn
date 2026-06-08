@@ -3,6 +3,10 @@ type RequiredFieldMap<T extends string> = Readonly<Record<T, readonly string[]>>
 export const FLEET_EVENT_SCHEMA_VERSION = 1;
 
 export const FLEET_WORKER_EVENT_TYPES = Object.freeze([
+  "manager.started",
+  "manager.delegated",
+  "manager.validation",
+  "manager.finished",
   "worker.started",
   "worker.claims",
   "worker.progress",
@@ -60,6 +64,35 @@ export interface FleetEventBase<TType extends FleetWorkerEventType = FleetWorker
   taskId?: string;
   workerId?: string;
   agent?: FleetAgentKind | string;
+}
+
+export interface FleetManagerStartedEvent extends FleetEventBase<"manager.started"> {
+  managerId: string;
+  route: readonly string[];
+  managerModel: string;
+}
+
+export interface FleetManagerDelegatedEvent extends FleetEventBase<"manager.delegated"> {
+  managerId: string;
+  workerId: string;
+  workerModel: string;
+  objective: string;
+}
+
+export interface FleetManagerValidationEvent extends FleetEventBase<"manager.validation"> {
+  managerId: string;
+  ok: boolean;
+  summary: string;
+  falseVerifyRisk?: "none" | "suspected" | "confirmed";
+  evidenceCount?: number;
+}
+
+export interface FleetManagerFinishedEvent extends FleetEventBase<"manager.finished"> {
+  managerId: string;
+  ok: boolean;
+  status: "passed" | "failed" | "escalated";
+  summary: string;
+  escalationReason?: string | null;
 }
 
 export interface FleetChangedFile {
@@ -205,6 +238,10 @@ export interface FleetWorkerErrorEvent extends FleetEventBase<"worker.error"> {
 }
 
 export type FleetWorkerEvent =
+  | FleetManagerStartedEvent
+  | FleetManagerDelegatedEvent
+  | FleetManagerValidationEvent
+  | FleetManagerFinishedEvent
   | FleetWorkerStartedEvent
   | FleetWorkerClaimsEvent
   | FleetWorkerProgressEvent
@@ -238,6 +275,10 @@ export interface FleetJsonLineParseResult {
 }
 
 export const FLEET_EVENT_REQUIRED_FIELDS = Object.freeze({
+  "manager.started": ["managerId", "route", "managerModel"],
+  "manager.delegated": ["managerId", "workerId", "workerModel", "objective"],
+  "manager.validation": ["managerId", "ok", "summary"],
+  "manager.finished": ["managerId", "ok", "status", "summary"],
   "worker.started": ["workerId", "cwd", "worktree", "branch"],
   "worker.claims": ["owned", "forbidden"],
   "worker.progress": ["message"],

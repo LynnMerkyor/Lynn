@@ -2,6 +2,7 @@
 // 原则:只做事实型(capability + 健康/cooldown),不做内容判断
 import './env-loader.js';
 import { envModel, providerId, type Provider, type ProviderId, type ProviderIdLiteral } from './types.js';
+import { DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY } from '../shared/dual-brain-route.js';
 
 const env = (k: string, d: string): string => process.env[k] || d;
 
@@ -15,10 +16,9 @@ const PROVIDER_DEFS = {
     id: providerId('apex-spark-i-balanced'),
     endpoint: env('APEX_SPARK_BASE', 'http://127.0.0.1:18098/v1'),
     apiKey: 'none',
-    // 2026-05-25: 实际 Spark llama-server `-a` alias 是 qwen36-35b-a3b-apex-mtp
-    // (lynn-apex-mtp-llamacpp.service)。之前 default 'apex-i-balanced' 跟 server alias
-    // mismatch,fallback 触发就 404,所以 MiMo 降级链路一直没真跑过。
-    model: envModel('APEX_SPARK_MODEL', 'qwen36-35b-a3b-apex-mtp'),
+    // 2026-06-08: Spark fallback now points at the DS-V4-Pro thinking distilled
+    // Q4_K_M orchestrator. Keep the provider id for env/backward compatibility.
+    model: envModel('APEX_SPARK_MODEL', 'qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix'),
     capability: { vision: false, audio: false, video: false, tools: true, thinking: true, native_search: false },
     wire: 'openai',
     cooldown_ms: 300_000,
@@ -99,8 +99,8 @@ export const PROVIDERS: Record<string, Provider> = PROVIDER_DEFS;
 // universalOrder — 单一兜底链路,不按 prompt 内容分支
 export const universalOrder = [
   providerId('step-3.7-flash'),        // 头位:StepFun 3.7 Flash high+48K,高 TPS + 推理/编码/视觉
-  providerId('apex-spark-i-balanced'), // 第二位:本地零成本/隐私 fallback,Spark llama.cpp APEX-I-Balanced
-  providerId('deepseek-chat'),         // 云兜底 V4-flash
+  providerId('apex-spark-i-balanced'), // 本地 A3B 单槽 manager/fallback;忙时 router 跳过,保护 GUI 交互
+  providerId('deepseek-chat'),         // DS-V4 Flash escape lane
   providerId('deepseek-pro'),          // 云兜底 V4-pro
   providerId('glm-5-turbo'),           // 末位
 ] as const satisfies readonly ProviderId[];
@@ -148,6 +148,9 @@ export interface ProviderStatusSnapshotEntry {
   configured: boolean;
   local: boolean;
   inRoute: boolean;
+  routeRole?: 'head' | 'local_single_slot_manager' | 'escape' | 'tail';
+  localConcurrencyLimit?: number;
+  busyFallbackProvider?: string;
 }
 
 export interface ProviderStatusSnapshot {
@@ -179,6 +182,19 @@ export function getProviderStatusSnapshot(capabilityRequired?: { vision?: boolea
         configured: credential !== 'missing',
         local: provider.apiKey === 'none' || Boolean(provider.health_path),
         inRoute: routeSet.has(String(provider.id)),
+        routeRole: String(provider.id) === 'step-3.7-flash'
+          ? 'head'
+          : String(provider.id) === 'apex-spark-i-balanced'
+            ? 'local_single_slot_manager'
+            : String(provider.id) === 'deepseek-chat'
+              ? 'escape'
+              : 'tail',
+        localConcurrencyLimit: String(provider.id) === 'apex-spark-i-balanced'
+          ? DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY
+          : undefined,
+        busyFallbackProvider: String(provider.id) === 'apex-spark-i-balanced'
+          ? 'step-3.7-flash or ds-v4-flash'
+          : undefined,
       };
     }),
   };

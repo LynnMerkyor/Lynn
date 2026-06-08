@@ -638,7 +638,7 @@ describe("code tools", () => {
       maxSteps: 8,
     });
 
-    expect(header).toContain("StepFun 3.7 Flash→Spark Qwen 3.6 35B A3B");
+    expect(header).toContain("StepFun 3.7 Flash→Spark A3B single-slot→DS-V4 Flash");
     expect(header).toContain("/repo");
     expect(header).toContain("ask / workspace-write");
     expect(header).toContain("think:");

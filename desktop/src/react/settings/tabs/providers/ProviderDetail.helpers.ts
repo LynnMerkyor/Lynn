@@ -57,21 +57,21 @@ export const LOCAL_QWEN35_4B_DOWNGRADE: LocalUpgradeOption = {
 };
 
 export const LOCAL_QWEN36_35B_UPGRADE: LocalUpgradeOption = {
-  id: 'qwen36-35b-a3b-apex-mtp',
-  label: 'Qwen3.6-35B-A3B APEX-MTP I-Balanced',
-  profile: '32GB 显存/统一内存+ 推荐 · thinking-on 长链最快',
-  metrics: ['DGX Spark thinking-on 75-85 TPS', 'DGX Spark 数学 84.69 TPS', 'DGX Spark 归纳证明 75.53 TPS', 'APEX I-Balanced', '24.27 GiB · MTP head'],
-  reason: '高端质量档；APEX-MTP 保留官方 MTP head，thinking-on 长链路比 no-MTP 基线提升约 20-30%。',
-  modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-APEX-MTP-GGUF',
+  id: 'qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix',
+  label: 'Qwen3.6-35B-A3B DSV4Pro Thinking Distill Q4_K_M imatrix',
+  profile: '24GB 显存/统一内存+ 可选 · Lynn 编排器大脑',
+  metrics: ['21 GB Q4_K_M imatrix', 'MMLU-500 90.8%', 'GPQA-Diamond raw 67.2% / parsed 86.4%', 'Spark 77 tok/s', 'R6000 ~224 tok/s'],
+  reason: '高端编排器档；蒸馏 DS-V4-Pro thinking-on 的拆分、分派与验收思维方式。本地 35B 是单槽 manager/fallback；忙时 CLI/后台任务转 StepFun，DS-V4 Flash 只作硬题逃生舱。默认不启用 MTP，质量稳定性优先。',
+  modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill',
   download_label: '下载到本机',
-  file_name: 'Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf',
+  file_name: 'Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf',
 };
 
 export function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], memoryGib?: number | null) {
   // 默认卡即 9B;可选区按硬件分级展示降级 / 高端档。
   // 2026-05-25 P1-1: 接 hardware.total_memory_gib 做 memory-adaptive 显示 —
   //   - memoryGib > 32:藏 4B 降级(高配机器不需要降级提示),保留 35B
-  //   - memoryGib < 22:藏 35B 高端(21GB 文件 + KV cache 加载不动)
+  //   - memoryGib < 24:藏 35B 高端(21GB 文件 + KV cache 加载不动)
   //   - 中间(22~32GB):4B + 35B 都显示,用户自选
   //   - memoryGib 未知(null/undefined):全显示(保留 v0.79.1 之前行为)
   let server4b: LocalUpgradeOption | null = null;
@@ -87,7 +87,7 @@ export function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [],
   }
   const mem = typeof memoryGib === 'number' && Number.isFinite(memoryGib) ? memoryGib : null;
   const show4b = mem === null || mem <= 32;
-  const show35b = mem === null || mem >= 22;
+  const show35b = mem === null || mem >= 24;
   const normalized: LocalUpgradeOption[] = [...others];
   if (show4b) {
     normalized.unshift({ ...LOCAL_QWEN35_4B_DOWNGRADE, ...(server4b || {}), ...LOCAL_QWEN35_4B_DOWNGRADE });

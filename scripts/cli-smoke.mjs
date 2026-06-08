@@ -17,7 +17,7 @@ const sessionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-sessions");
 const toolDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-tools");
 const visionDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-vision");
 const byokDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-byok");
-const mimoByokDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-mimo-byok");
+const deepseekByokDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-deepseek-byok");
 const setupDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-setup");
 const modelSwitchDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-model-switch");
 const byokPresetDataDir = path.join(os.tmpdir(), "lynn-cli-smoke-byok-preset");
@@ -109,8 +109,8 @@ await fs.promises.rm(visionDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(visionDataDir, { recursive: true });
 await fs.promises.rm(byokDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(byokDataDir, { recursive: true });
-await fs.promises.rm(mimoByokDataDir, { recursive: true, force: true });
-await fs.promises.mkdir(mimoByokDataDir, { recursive: true });
+await fs.promises.rm(deepseekByokDataDir, { recursive: true, force: true });
+await fs.promises.mkdir(deepseekByokDataDir, { recursive: true });
 await fs.promises.rm(setupDataDir, { recursive: true, force: true });
 await fs.promises.mkdir(setupDataDir, { recursive: true });
 await fs.promises.rm(modelSwitchDataDir, { recursive: true, force: true });
@@ -146,7 +146,8 @@ checks.push(run("version", ["version"]).then((r) => {
 
 checks.push(run("startup banner", []).then((r) => {
   assertIncludes(r.name, r.stdout, "Lynn CLI");
-  assertIncludes(r.name, r.stdout, "MiMo");
+  assertIncludes(r.name, r.stdout, "StepFun 3.7 Flash");
+  assertIncludes(r.name, r.stdout, "Spark Qwen 3.6 35B A3B Distill");
   assertIncludes(r.name, r.stdout, "ask / workspace");
   assertIncludes(r.name, r.stdout, "Shift+Tab");
   assertIncludes(r.name, r.stdout, "Brain:");
@@ -165,11 +166,12 @@ checks.push(run("providers", ["providers", "--data-dir", missingDataDir]).then((
 }));
 
 checks.push(run("provider presets", ["providers", "presets"]).then((r) => {
-  assertIncludes(r.name, r.stdout, "mimo");
-  assertIncludes(r.name, r.stdout, "mimo-v2.5-pro");
+  assertNotIncludes(r.name, r.stdout, "mimo-v2.5-pro");
+  assertIncludes(r.name, r.stdout, "deepseek");
+  assertIncludes(r.name, r.stdout, "deepseek-chat");
   assertIncludes(r.name, r.stdout, "stepfun");
   assertIncludes(r.name, r.stdout, "step-3.7-flash");
-  assertIncludes(r.name, r.stdout, "Lynn providers set --preset mimo --api-key <api-key>");
+  assertIncludes(r.name, r.stdout, "Lynn providers set --preset deepseek --api-key <api-key>");
   assertIncludes(r.name, r.stdout, "Lynn providers set --preset stepfun --api-key <api-key>");
   assertNotIncludes(r.name, r.stdout, "sk-");
 }));
@@ -225,7 +227,7 @@ checks.push(run("model preset shortcut saves BYOK", [
 
 checks.push(run("byok preset shortcut saves BYOK", [
   "byok",
-  "mimo",
+  "deepseek",
   "--data-dir",
   byokPresetDataDir,
   "--api-key",
@@ -233,16 +235,16 @@ checks.push(run("byok preset shortcut saves BYOK", [
   "--json",
 ]).then(async (r) => {
   assertIncludes(r.name, r.stdout, '"type":"providers.saved"');
-  assertIncludes(r.name, r.stdout, '"model":"mimo-v2.5-pro"');
+  assertIncludes(r.name, r.stdout, '"model":"deepseek-chat"');
   assertNotIncludes(r.name, r.stdout, "byok-preset-key");
   const profile = JSON.parse(await fs.promises.readFile(path.join(byokPresetDataDir, "providers", "cli.json"), "utf8"));
-  if (profile.model !== "mimo-v2.5-pro") throw new Error("byok shortcut did not save MiMo model");
+  if (profile.model !== "deepseek-chat") throw new Error("byok shortcut did not save DeepSeek model");
   if (profile.apiKey !== "byok-preset-key") throw new Error("byok shortcut did not save key");
 }));
 
 checks.push(run("worker agents", ["agents"]).then((r) => {
   assertIncludes(r.name, r.stdout, "Lynn worker agents");
-  assertIncludes(r.name, r.stdout, "mimo-vl");
+  assertNotIncludes(r.name, r.stdout, "mimo-vl");
   assertIncludes(r.name, r.stdout, "stepfun-flash");
   assertIncludes(r.name, r.stdout, "profile");
   assertIncludes(r.name, r.stdout, "external");
@@ -271,8 +273,9 @@ checks.push(run("doctor offline guidance", ["doctor", "--offline", "--data-dir",
   assertIncludes(r.name, r.stdout, "cli-byok");
   assertIncludes(r.name, r.stdout, "optional CLI-only BYOK");
   assertIncludes(r.name, r.stdout, "Lynn providers set --preset stepfun --api-key <api-key>");
-  assertIncludes(r.name, r.stdout, "mimo:mimo-v2.5-pro");
+  assertIncludes(r.name, r.stdout, "deepseek:deepseek-chat");
   assertIncludes(r.name, r.stdout, "stepfun:step-3.7-flash");
+  assertNotIncludes(r.name, r.stdout, "mimo:mimo-v2.5-pro");
   assertNotIncludes(r.name, r.stdout, "sk-");
 }));
 
@@ -423,7 +426,7 @@ for (const check of checks) {
 }
 
 await runStepFunByokFallbackSmoke();
-await runMiMoByokFallbackSmoke();
+await runDeepSeekByokFallbackSmoke();
 
 const saved = await run("session save", ["-p", "remember this", "--mock-brain", "--save-session", "--data-dir", sessionDataDir, "--json"]);
 assertIncludes(saved.name, saved.stdout, '"type":"session.saved"');
@@ -621,7 +624,7 @@ async function runStepFunByokFallbackSmoke() {
   }
 }
 
-async function runMiMoByokFallbackSmoke() {
+async function runDeepSeekByokFallbackSmoke() {
   let seen = null;
   const server = http.createServer((request, response) => {
     if (request.url !== "/v1/chat/completions" || request.method !== "POST") {
@@ -635,7 +638,7 @@ async function runMiMoByokFallbackSmoke() {
       seen = { auth: request.headers.authorization, body: JSON.parse(body) };
       response.writeHead(200, { "content-type": "text/event-stream" });
       response.end([
-        "data: {\"choices\":[{\"delta\":{\"content\":\"ok from mimo\"}}]}",
+        "data: {\"choices\":[{\"delta\":{\"content\":\"ok from deepseek\"}}]}",
         "",
         "data: [DONE]",
         "",
@@ -645,55 +648,55 @@ async function runMiMoByokFallbackSmoke() {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
     const address = server.address();
-    if (!address || typeof address === "string") throw new Error("MiMo BYOK smoke server failed to listen");
+    if (!address || typeof address === "string") throw new Error("DeepSeek BYOK smoke server failed to listen");
     const baseUrl = `http://127.0.0.1:${address.port}/v1`;
-    await run("mimo preset save", [
+    await run("deepseek preset save", [
       "providers",
       "set",
       "--data-dir",
-      mimoByokDataDir,
+      deepseekByokDataDir,
       "--preset",
-      "mimo",
+      "deepseek",
       "--api-key",
-      "mimo-smoke-key",
+      "deepseek-smoke-key",
       "--json",
     ]);
-    const tested = await run("mimo provider test", [
+    const tested = await run("deepseek provider test", [
       "providers",
       "test",
       "--data-dir",
-      mimoByokDataDir,
+      deepseekByokDataDir,
       "--preset",
-      "mimo",
+      "deepseek",
       "--base-url",
       baseUrl,
       "--api-key",
-      "mimo-smoke-key",
+      "deepseek-smoke-key",
       "--json",
     ]);
     assertIncludes(tested.name, tested.stdout, '"type":"providers.test"');
     assertIncludes(tested.name, tested.stdout, '"ok":true');
-    assertIncludes(tested.name, tested.stdout, '"model":"mimo-v2.5-pro"');
-    assertNotIncludes(tested.name, tested.stdout, "mimo-smoke-key");
-    const result = await run("mimo byok fallback", [
+    assertIncludes(tested.name, tested.stdout, '"model":"deepseek-chat"');
+    assertNotIncludes(tested.name, tested.stdout, "deepseek-smoke-key");
+    const result = await run("deepseek byok fallback", [
       "-p",
       "say ok",
       "--data-dir",
-      mimoByokDataDir,
+      deepseekByokDataDir,
       "--preset",
-      "mimo",
+      "deepseek",
       "--base-url",
       baseUrl,
       "--api-key",
-      "mimo-smoke-key",
+      "deepseek-smoke-key",
       "--brain-url",
       "http://127.0.0.1:1",
       "--json",
     ], { env: { LYNN_CLI_BRAIN_TIMEOUT_MS: "50" } });
-    assertIncludes(result.name, result.stdout, '"text":"ok from mimo"');
-    if (!seen) throw new Error("MiMo BYOK smoke did not call the provider");
-    if (seen.auth !== "Bearer mimo-smoke-key") throw new Error(`MiMo BYOK smoke used wrong auth: ${seen.auth}`);
-    if (seen.body.model !== "mimo-v2.5-pro") throw new Error(`MiMo BYOK smoke used wrong model: ${seen.body.model}`);
+    assertIncludes(result.name, result.stdout, '"text":"ok from deepseek"');
+    if (!seen) throw new Error("DeepSeek BYOK smoke did not call the provider");
+    if (seen.auth !== "Bearer deepseek-smoke-key") throw new Error(`DeepSeek BYOK smoke used wrong auth: ${seen.auth}`);
+    if (seen.body.model !== "deepseek-chat") throw new Error(`DeepSeek BYOK smoke used wrong model: ${seen.body.model}`);
   } finally {
     await new Promise((resolve) => server.close(() => resolve()));
   }

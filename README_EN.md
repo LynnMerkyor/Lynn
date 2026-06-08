@@ -31,7 +31,7 @@ Same harness, thinking-on, vs the base A3B:
 
 Distilled and base have **identical single-stream TPS** (~224 tok/s on R6000) — the orchestration speedup comes from **fewer tokens to a decision** (we distilled the *thinking style*, not raw speed). Hard tasks (e.g. concurrency) are still backstopped by **harness objective verification + a DS-Pro escape hatch**.
 
-📦 ModelScope: `Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill` (BF16 + Q4_K_M gguf)
+📦 **ModelScope**: `Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill` · **HuggingFace**: `nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill` (BF16 + Q4_K_M gguf)
 
 ### ② Engine route: we chose the fastest edge framework — llama.cpp — and give back
 
@@ -44,7 +44,10 @@ We built our own NVFP4 engine and spent weeks on Blackwell kernels. The hard con
 | llama.cpp Q4_K_M (R6000) | ~207 |
 | self-built NVFP4 (R6000 strict) | ~108 |
 
-So **edge inference = llama.cpp** (fastest single-stream, mature, cross-platform), and we contribute our validated improvements upstream (llama.cpp PR: *forthcoming*).
+So **edge inference = llama.cpp** (fastest single-stream, mature, cross-platform), and we contribute our validated improvements upstream:
+- [#24273](https://github.com/ggml-org/llama.cpp/pull/24273) NVFP4 conversion / backend / benchmarking guidance doc (open, under review)
+
+Not abandonment — "use what wins, contribute what helps." **The self-built engine narrows to a research asset; frontier NVFP4 research continues.**
 
 ### ③ NVFP4 not abandoned — the frontier is concurrent serving, proven on vLLM
 
@@ -82,7 +85,7 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.81.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI
@@ -110,7 +113,7 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>Lynn v0.81.0</strong> · 2026-06-06 · StepFun exhaustive best mode + scan guards <em>(latest)</em></summary>
+<summary><strong>Lynn v0.82.0</strong> · 2026-06-06 · StepFun exhaustive best mode + scan guards <em>(latest)</em></summary>
 
 **GUI and CLI ship together**:
 - **StepFun 3.7 Flash best mode**:`/goal`, `/best`, and `Lynn code --best` now use a 300-step exhaustive budget with ultra decomposition, parallel atomic workers, adversarial acceptance, auto-verify, and checkpoint/resume. The target is the best completed result, not fewer steps.
@@ -123,10 +126,10 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 - **Release gates**: Brain V2, CLI toolchain/cache/file-size/pack/install, runtime answer/context, and local model policy tests all run before release.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.81.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz"
 ```
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.81.0)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.82.0)
 
 </details>
 
@@ -141,7 +144,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - **Release gate covers compaction**: `cli-longrun-smoke` now forces large tool results and requires a `code.runtime.compacted` event, so long-run stability is verified outside narrow unit tests.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.81.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz"
 ```
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
@@ -667,43 +670,6 @@ Lynn's memory is not a static `memory.md`. It's a six-layer system:
 
 Memory and skill distillation work together: the more you use Lynn, the more accurate its recall, the faster it works — gradually becoming a long-term collaborator that truly understands you.
 
-## 🚀 Lynn's Own Models + Inference Engine (May 2026)
-
-Until now Lynn ran entirely on third-party models (MiMo / Qwen3.6 / DeepSeek / Kimi) — Lynn handled the engineering and UX, the models came from elsewhere.
-
-**That's changing. Lynn now has its own models, with a dedicated inference engine coming next.**
-
-### First model: Lynn-V4-Pro-Distill-Qwen-35B-A3B
-
-A work-horse model built on top of Qwen3.6-35B-A3B via distillation + multi-stage LoRA. 4-gate eval **NET WIN +40pp** vs base.
-
-Three ready-to-use formats:
-
-| Format | Size | Who it's for |
-|---|---|---|
-| **BF16 full precision** | 65 GB | Finetune / training starting point |
-| **NVFP4-v8-RTN** | 21 GB | Single 24 GB GPU (verified on SGLang dev-cu13 nightly) |
-| **Q4_K_M GGUF** | 20 GB | llama.cpp / Ollama, runs on consumer GPUs |
-
-- 🤗 **HuggingFace**: [`nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B`](https://huggingface.co/nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B) ([Q4_K_M](https://huggingface.co/nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B-Q4_K_M) · [NVFP4-v8-RTN](https://huggingface.co/nerkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B-NVFP4-v8-RTN))
-- 🇨🇳 **ModelScope** (recommended for users in China): [`Merkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B`](https://modelscope.cn/models/Merkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B) ([Q4_K_M](https://modelscope.cn/models/Merkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B-Q4_K_M) · [NVFP4-v8-RTN](https://modelscope.cn/models/Merkyor/Lynn-V4-Pro-Distill-Qwen-35B-A3B-NVFP4-v8-RTN))
-
-All tooling is open-sourced: [lynn-distill-toolkit](https://github.com/MerkyorLynn/lynn-distill-toolkit) (4-gate eval / sanity / pipeline / pruning) + [qwen3.6-nvfp4-toolkit](https://github.com/MerkyorLynn/qwen3.6-nvfp4-toolkit) (NVFP4 quantization toolchain).
-
-### What's coming next
-
-- 🔜 **Lynn-V4-Flash-Distill** (ETA May 14) — a lighter Flash variant optimized for speed
-- 🔜 **Lynn-27B-A3B** (late May) — MoE-pruned variant, fits on a single 4090 / 5060 Ti
-- 🔜 **Lynn Engine** — Lynn's own inference engine. Reads NVFP4 + MoE native layouts directly, bypassing the upstream integration cycle of transformers / vLLM. Phase 1–4 path: loader → BF16 slow-path oracle → layer parity → 5-token parity → native FP4 GEMM performance
-
-### Why own models + an engine
-
-- General-purpose models — even great ones — **aren't specifically tuned for "long-term memory + multi-Agent + writing"**, the shape Lynn actually needs
-- Upstream inference engines (vLLM / SGLang / TRT-LLM) ship NVFP4 + MoE support on a 4–8 week cadence — **too slow for our roadmap**
-- Owning both means Lynn-specific capabilities (Yuan personality / proactive recall / task modes) can be baked into training data and inference paths directly
-
-This doesn't replace the cloud fallback chain (MiMo / Qwen / DeepSeek remain the default route). **It adds a private, local path** — not a switch.
-
 ## Local models — three-tier hardware ladder
 
 Starting with Lynn v0.79.1, local models are grouped by hardware. **The default tier stays on 9B MTP; 4B is a low-config downgrade only**:
@@ -712,7 +678,7 @@ Starting with Lynn v0.79.1, local models are grouped by hardware. **The default 
 |------|-------|:----:|---------------------|:-------:|-------------------|
 | **Default** | **Qwen3.5-9B Q4_K_M imatrix MTP** | 5.38 GB | **24GB VRAM/unified memory+** | 32K | **Q4_K_M imatrix** · default gate target · MTP acceleration · stable thinking-on path |
 | Downgrade | Qwen3.5-4B Q4_K_M imatrix (Lynn) | 2.6 GB | 8~16GB optional | 32K | **Q4_K_M imatrix** · MMLU thinking-off 73.00% · GPQA thinking-off 16.67% · thinking-on may think for a long time and return no visible answer |
-| High-end | Qwen3.6-35B-A3B Q4_K_M imatrix | 21 GB | 24GB VRAM/unified memory+ | 32K | **Q4_K_M imatrix (Lynn-calibrated)** · MMLU 500 = 90.40% · GPQA Diamond 80.70% · R6000 reference 207 tok/s |
+| High-end · orchestrator brain | **Qwen3.6-35B-A3B distilled orchestrator** Q4_K_M imatrix | 21 GB | 24GB VRAM/unified memory+ | 32K | **DS-V4-Pro thinking-style distilled** · MMLU 500 = 90.2% · GPQA-Diamond 80.3% · 2.3× faster end-to-end orchestration · Spark 77 / R6000 ~224 tok/s |
 
 > 9B / 35B quality numbers are measured with **Q4_K_M quantization** + **thinking-on 32K max_tokens**, GB10 Spark llama.cpp on the same hardware. 4B imatrix is available only as a downgrade: thinking-off is usable; thinking-on has reproduced long empty reasoning and is not safe as the onboarding default.
 
@@ -730,7 +696,7 @@ Starting with Lynn v0.79.1, local models are grouped by hardware. **The default 
 
 **Low-config 4B / High-end 35B** (explicit hardware choices):
 - 4B: [Merkyor/Qwen3.5-4B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix) (`Qwen3.5-4B-Q4_K_M-imatrix.gguf`, **2.6 GB**) — downgrade only; thinking-off recommended
-- 35B: [Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-GGUF-imatrix) (`Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf`, **21 GB**) — Lynn imatrix-calibrated, R6000 reference 207 tok/s, fits 24G local machines
+- 35B (orchestrator brain): [Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill) (`gguf/Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf`, **21 GB**) — **distilled task orchestrator** (the brain from Part 1), Spark 77 / R6000 ~224 tok/s, fits 24G local machines
 
 In the app: **Settings → Models → Local Qwen3.5-9B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background. The chat input shows local model status, and you can stop the runtime anytime to release memory. The Models page also supports explicit 4B downgrade / 35B high-end choices, or importing any llama.cpp-compatible GGUF you already have.
 
@@ -861,11 +827,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.81.0 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.82.0 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.81.0 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.82.0 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -928,7 +894,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.81.0 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.82.0 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

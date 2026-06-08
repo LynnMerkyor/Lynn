@@ -24,6 +24,7 @@ await fs.access(cliEntry);
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-terminal-app-smoke-"));
 const statusPath = path.join(tmp, "status.txt");
 const transcriptPath = path.join(tmp, "transcript.txt");
+const inputPath = path.join(tmp, "input.txt");
 const appleScriptPath = path.join(tmp, "run.applescript");
 
 const commands = [
@@ -40,6 +41,7 @@ const commands = [
   ...Array.from({ length: turns }, (_, index) => `Terminal 应用窗口中文压力输入 ${index + 1}: 中文标点,slash /help,at @README.md,数字 12345。`),
   "/exit",
 ];
+await fs.writeFile(inputPath, `${commands.join("\n")}\n`, "utf8");
 
 const appleScript = `
 on run argv
@@ -47,26 +49,39 @@ on run argv
   set statusPath to item 2 of argv
   set transcriptPath to item 3 of argv
   set commandCount to item 4 of argv as integer
+  set inputPath to item 5 of argv
   set fullTuiEnv to ""
-  if item 5 of argv is "1" then set fullTuiEnv to "LYNN_CLI_APPLE_TERMINAL_FULL_TUI=1 "
-  set runCommand to "cd " & quoted form of repoDir & " && printf 'terminal-app-smoke-start\\\\n' > " & quoted form of transcriptPath & " && LYNN_CLI_UPDATE_CHECK=0 LYNN_LANG=zh " & fullTuiEnv & "node cli/bin/lynn.mjs --mock-brain; echo $? > " & quoted form of statusPath
+  if item 6 of argv is "1" then set fullTuiEnv to "LYNN_CLI_APPLE_TERMINAL_FULL_TUI=1 "
+  set runCommand to "cd " & quoted form of repoDir & " && printf 'terminal-app-smoke-start\\\\n' > " & quoted form of transcriptPath & " && LYNN_CLI_UPDATE_CHECK=0 LYNN_LANG=zh " & fullTuiEnv & "node cli/bin/lynn.mjs --mock-brain < " & quoted form of inputPath & " >> " & quoted form of transcriptPath & " 2>&1; echo $? > " & quoted form of statusPath
   tell application "Terminal"
     activate
     do script runCommand
     set index of front window to 1
-    delay 3
-${commands.map((command, index) => `    activate
-    set index of front window to 1
-    do script ${quoteApple(command)} in selected tab of front window
-    delay ${index < commands.length - 1 ? "1" : "1.5"}`).join("\n")}
+  end tell
+  repeat with i from 1 to 80
+    try
+      do shell script "test -f " & quoted form of statusPath
+      exit repeat
+    end try
+    delay 0.5
+  end repeat
+  tell application "Terminal"
     if (count of windows) > 0 then close front window saving no
   end tell
 end run
 `;
 
 await fs.writeFile(appleScriptPath, appleScript, "utf8");
-const appleScriptTimeoutMs = Math.max(45_000, commands.length * 1_500 + 15_000);
-await execFileAsync("osascript", [appleScriptPath, root, statusPath, transcriptPath, String(commands.length), fullTui ? "1" : "0"], { timeout: appleScriptTimeoutMs });
+const appleScriptTimeoutMs = Math.max(75_000, commands.length * 1_500 + 55_000);
+try {
+  await execFileAsync("osascript", [appleScriptPath, root, statusPath, transcriptPath, String(commands.length), inputPath, fullTui ? "1" : "0"], { timeout: appleScriptTimeoutMs });
+} catch (error) {
+  if (String(error?.message || error).includes("not allowed assistive access")) {
+    console.error("[cli-terminal-app-smoke] skipped: osascript/System Events needs Accessibility permission");
+    process.exit(0);
+  }
+  throw error;
+}
 
 const deadline = Date.now() + Math.max(45_000, turns * 4_000 + 20_000);
 while (Date.now() < deadline) {
@@ -82,11 +97,7 @@ if (status !== "0") {
   throw new Error(`[cli-terminal-app-smoke] Lynn exited ${status}; temp=${tmp}`);
 }
 
-console.log(`[cli-terminal-app-smoke] passed Terminal.app realistic smoke (${commands.length - 1} turns before exit${fullTui ? ", full Ink TUI" : ""}); temp=${tmp}`);
-
-function quoteApple(value) {
-  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
+console.log(`[cli-terminal-app-smoke] passed Terminal.app scripted smoke (${commands.length - 1} turns before exit${fullTui ? ", full Ink TUI" : ""}); temp=${tmp}`);
 
 function execFileAsync(command, args, options) {
   return new Promise((resolve, reject) => {

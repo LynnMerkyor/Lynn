@@ -1,6 +1,6 @@
 # Lynn Code 无交互 Agent 调用契约
 
-状态:v0.81.0 release-candidate contract。
+状态:v0.82.0 release-candidate contract。
 
 这份文档给其他智能体、CI、GUI Fleet worker 阅读。目标是让它们无需和人交互,也能稳定调用 Lynn CLI 完成编码任务。
 
@@ -15,7 +15,7 @@
 node -v
 
 # 2. 安装或覆盖升级 Lynn CLI
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.81.0.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz
 
 # 3. 检查本地命令
 Lynn version
