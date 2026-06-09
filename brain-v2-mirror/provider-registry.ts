@@ -96,13 +96,12 @@ const PROVIDER_DEFS = {
 
 export const PROVIDERS: Record<string, Provider> = PROVIDER_DEFS;
 
-// universalOrder — 单一兜底链路,不按 prompt 内容分支
+// universalOrder — v0.83 hotfix: keep the shipped GUI/CLI default simple and
+// reliable. StepFun is the default conversation/execution route; local A3B,
+// DS-V4, and GLM remain registered for explicit experiments, health checks, or
+// future manager flows, but they are not part of the default user chat chain.
 export const universalOrder = [
-  providerId('step-3.7-flash'),        // 头位:StepFun 3.7 Flash high+48K,高 TPS + 推理/编码/视觉
-  providerId('apex-spark-i-balanced'), // 本地 A3B 单槽 manager/fallback;忙时 router 跳过,保护 GUI 交互
-  providerId('deepseek-chat'),         // DS-V4 Flash escape lane
-  providerId('deepseek-pro'),          // 云兜底 V4-pro
-  providerId('glm-5-turbo'),           // 末位
+  providerId('step-3.7-flash'),        // StepFun 3.7 Flash high+48K,高 TPS + 推理/编码/视觉
 ] as const satisfies readonly ProviderId[];
 
 export function providerOrderForCapability(capabilityRequired?: { vision?: boolean; audio?: boolean; video?: boolean }): readonly ProviderId[] {
@@ -182,18 +181,14 @@ export function getProviderStatusSnapshot(capabilityRequired?: { vision?: boolea
         configured: credential !== 'missing',
         local: provider.apiKey === 'none' || Boolean(provider.health_path),
         inRoute: routeSet.has(String(provider.id)),
-        routeRole: String(provider.id) === 'step-3.7-flash'
+        routeRole: routeSet.has(String(provider.id))
           ? 'head'
-          : String(provider.id) === 'apex-spark-i-balanced'
-            ? 'local_single_slot_manager'
-            : String(provider.id) === 'deepseek-chat'
-              ? 'escape'
-              : 'tail',
+          : undefined,
         localConcurrencyLimit: String(provider.id) === 'apex-spark-i-balanced'
           ? DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY
           : undefined,
         busyFallbackProvider: String(provider.id) === 'apex-spark-i-balanced'
-          ? 'step-3.7-flash or ds-v4-flash'
+          ? 'explicit manager-run only'
           : undefined,
       };
     }),

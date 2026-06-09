@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 import YAML from "js-yaml";
 import { afterEach, describe, expect, it } from "vitest";
-import { migrateLocalQwenDefaultTo9B, migrateToProvidersYaml } from "../core/migrate-providers.js";
+import { migrateDeprecatedMimoLlmToBrain, migrateLocalQwenDefaultTo9B, migrateToProvidersYaml } from "../core/migrate-providers.js";
 
 function makeTempRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lynn-migrate-providers-"));
@@ -179,5 +179,89 @@ describe("migrateLocalQwenDefaultTo9B", () => {
       provider: "deepseek",
     });
     expect(readJson(path.join(lynnHome, "user", "preferences.json")).local_qwen_default_9b_mtp_default_v2).toBe(true);
+  });
+});
+
+describe("migrateDeprecatedMimoLlmToBrain", () => {
+  it("removes expired MiMo Token Plan LLM providers and migrates agent model refs to Brain", () => {
+    const root = makeTempRoot();
+    tempRoots.push(root);
+    const lynnHome = path.join(root, ".lynn");
+    const agentsDir = path.join(lynnHome, "agents");
+
+    writeYaml(path.join(lynnHome, "added-models.yaml"), {
+      providers: {
+        mimo: {
+          display_name: "MiMo Token Plan",
+          base_url: "https://token-plan-cn.xiaomimimo.com/v1",
+          api: "openai-completions",
+          models: [{ id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro" }],
+        },
+        zhipu: {
+          models: ["glm-5.1"],
+        },
+      },
+    });
+    writeYaml(path.join(agentsDir, "lynn", "config.yaml"), {
+      api: {
+        provider: "mimo",
+        base_url: "https://token-plan-cn.xiaomimimo.com/v1",
+        api_key: "sk-old",
+      },
+      models: {
+        chat: { id: "mimo-v2.5-pro", provider: "mimo" },
+        utility: "xiaomi/mimo-v2.5-pro",
+        utility_large: { id: "glm-5.1", provider: "zhipu" },
+      },
+    });
+    writeJson(path.join(lynnHome, "user", "preferences.json"), {
+      favorites: [
+        { id: "mimo-v2.5-pro", provider: "mimo" },
+        { id: "glm-5.1", provider: "zhipu" },
+      ],
+    });
+
+    migrateDeprecatedMimoLlmToBrain(lynnHome, agentsDir);
+
+    const added = readYaml(path.join(lynnHome, "added-models.yaml"));
+    expect(added.providers.mimo).toBeUndefined();
+    expect(added.providers.zhipu.models).toEqual(["glm-5.1"]);
+
+    const config = readYaml(path.join(agentsDir, "lynn", "config.yaml"));
+    expect(config.api).toEqual({ provider: "brain" });
+    expect(config.models.chat).toEqual({ id: "lynn-brain-router", provider: "brain" });
+    expect(config.models.utility).toEqual({ id: "lynn-brain-router", provider: "brain" });
+    expect(config.models.utility_large).toEqual({ id: "glm-5.1", provider: "zhipu" });
+    expect(readJson(path.join(lynnHome, "user", "preferences.json")).favorites).toEqual([
+      { id: "glm-5.1", provider: "zhipu" },
+    ]);
+  });
+
+  it("preserves explicit MiMo paid web-search configuration outside the LLM token-plan route", () => {
+    const root = makeTempRoot();
+    tempRoots.push(root);
+    const lynnHome = path.join(root, ".lynn");
+    const agentsDir = path.join(lynnHome, "agents");
+
+    writeYaml(path.join(lynnHome, "added-models.yaml"), {
+      providers: {
+        "mimo-search": {
+          display_name: "MiMo Search",
+          base_url: "https://api.xiaomimimo.com/v1",
+          api: "openai-completions",
+          models: ["web-search"],
+        },
+      },
+    });
+    fs.mkdirSync(agentsDir, { recursive: true });
+    writeJson(path.join(lynnHome, "user", "preferences.json"), {});
+
+    migrateDeprecatedMimoLlmToBrain(lynnHome, agentsDir);
+
+    const added = readYaml(path.join(lynnHome, "added-models.yaml"));
+    expect(added.providers["mimo-search"]).toMatchObject({
+      base_url: "https://api.xiaomimimo.com/v1",
+      models: ["web-search"],
+    });
   });
 });

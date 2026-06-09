@@ -65,7 +65,7 @@ const ONLY_PROVIDERS = arg('providers') ? String(arg('providers')).split(',').ma
 const SKIP_PROVIDERS = arg('skip') ? String(arg('skip')).split(',').map(s => s.trim()) : [];
 const JSON_OUT = arg('json', '');
 const SEND_FEISHU = args.includes('--feishu');
-const SKIP_MM = args.includes('--skip-mm');  // 跳过多模态 probe(默认开)
+const RUN_MM = args.includes('--with-mm');  // 多模态/TTS probe 只在显式要求时运行
 const BRAIN_BASE = process.env.BRAIN_V2_BASE || 'http://127.0.0.1:8790';
 
 // ── provider registry from env(单一事实来源,跟 brain-v2-mirror 一致) ──
@@ -74,12 +74,12 @@ const BRAIN_BASE = process.env.BRAIN_V2_BASE || 'http://127.0.0.1:8790';
 const PROVIDERS = [
   {
     id: 'mimo',
-    label: 'MiMo V2.5 Pro (默认)',
-    endpoint: process.env.MIMO_SEARCH_BASE || 'https://token-plan-cn.xiaomimimo.com/v1',
+    label: 'MiMo Paid Search (opt-in)',
+    endpoint: process.env.MIMO_SEARCH_BASE || 'https://api.xiaomimimo.com/v1',
     apiKey: process.env.MIMO_SEARCH_KEY || '',
     model: process.env.MIMO_SEARCH_MODEL || 'mimo-v2.5-pro',
-    wire: 'mimo',
-    authStyle: 'bearer',
+    wire: 'mimo-search',
+    authStyle: 'api-key',
   },
   {
     id: 'apex-spark-mtp',
@@ -151,7 +151,7 @@ function timedFetch(url, init, timeoutMs) {
   });
 }
 
-// ── per-provider direct test:tool-call 模拟 + 一次 synth ──
+// ── per-provider direct test:tool-call/search 模拟 + 一次 synth ──
 async function testProvider(p) {
   if (!p.endpoint) {
     return { ok: false, skipped: true, reason: 'endpoint not configured (env missing)' };
@@ -175,9 +175,8 @@ async function testProvider(p) {
       },
     }],
   };
-  if (p.wire === 'mimo') {
-    toolBody.enable_search = true;
-    toolBody.thinking = { type: 'enabled' };  // thinking-on
+  if (p.wire === 'mimo-search') {
+    toolBody.tools = [{ type: 'web_search', max_keyword: 5, force_search: true }];
   }
 
   const headers = { 'Content-Type': 'application/json' };
@@ -206,6 +205,31 @@ async function testProvider(p) {
     };
   }
 
+  if (p.wire === 'mimo-search') {
+    try {
+      const parsed = JSON.parse(tool.body || '{}');
+      const annotations = parsed?.choices?.[0]?.message?.annotations;
+      const citations = Array.isArray(annotations)
+        ? annotations.filter((item) => item?.type === 'url_citation' || item?.url_citation?.url || item?.url)
+        : [];
+      if (!citations.length) {
+        return {
+          ok: false,
+          toolMs: tool.ms,
+          reason: 'paid search returned no url citations',
+        };
+      }
+      return {
+        ok: true,
+        toolMs: tool.ms,
+        totalMs: tool.ms,
+        citations: citations.length,
+      };
+    } catch (e) {
+      return { ok: false, toolMs: tool.ms, reason: 'paid search parse fail: ' + e.message };
+    }
+  }
+
   // 2) synth probe:简单一句话答(不调工具)
   const synthBody = {
     model: p.model,
@@ -213,7 +237,7 @@ async function testProvider(p) {
     stream: false,
     max_tokens: 32,
   };
-  if (p.wire === 'mimo') synthBody.thinking = { type: 'enabled' };
+  if (p.wire === 'mimo-search') synthBody.tools = [{ type: 'web_search', max_keyword: 3, force_search: false }];
 
   const synthUrl = p.wire === 'anthropic'
     ? (p.endpoint.replace(/\/+$/, '')) + '/v1/messages'
@@ -248,7 +272,7 @@ const MIN_WAV_B64 = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA
 
 async function probeMimoMultimodal(kind) {
   // kind: 'image' | 'audio'
-  const mimoEndpoint = process.env.MIMO_SEARCH_BASE || 'https://token-plan-cn.xiaomimimo.com/v1';
+  const mimoEndpoint = process.env.MIMO_SEARCH_BASE || 'https://api.xiaomimimo.com/v1';
   const mimoKey = process.env.MIMO_SEARCH_KEY || process.env.MIMO_KEY || '';
   if (!mimoKey) {
     return { ok: false, skipped: true, reason: 'MIMO key not configured' };
@@ -533,9 +557,9 @@ async function main() {
   const brain = await brainSmoke();
   process.stderr.write(brain.ok ? `OK ${brain.ms}ms\n` : `FAIL ${brain.error}\n`);
 
-  // MiMo MM probes(image / audio / tts)— --skip-mm 关闭
+  // MiMo MM probes(image / audio / tts)— 过期 Token Plan 不再默认巡检;需要时 --with-mm 显式开启。
   let mm = null;
-  if (!SKIP_MM) {
+  if (RUN_MM) {
     mm = {};
     process.stderr.write('  testing MiMo image probe... ');
     mm.image = await probeMimoMultimodal('image');

@@ -2,8 +2,9 @@
 """Write the Lynn local-provider contract for Lynn's local llama.cpp model.
 
 The desktop/client side can consume this JSON directly, or mirror the fields
-into its own settings store. The key rule is conservative: keep MIMO as
-fallback and switch local-first only after checksum + smoke gates pass.
+into its own settings store. The key rule is conservative: keep StepFun as the
+default hosted route and switch local-first only after checksum + smoke gates
+pass.
 """
 
 from __future__ import annotations
@@ -76,8 +77,8 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
         "provider_id": f"local-{args.served_name}",
         "display_name": profile["display_name"],
         "status": "configured_pending_smoke",
-        "default_provider": "mimo",
-        "fallback_provider": "mimo",
+        "default_provider": "stepfun",
+        "fallback_provider": "stepfun",
         "activation_policy": "local_first_after_smoke",
         "runtime": {
             "kind": "llama.cpp",
@@ -127,7 +128,7 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
             "machine": platform.machine(),
         },
         "notes": [
-            "The Lynn client must keep MIMO available until smoke_required passes.",
+            "The Lynn client must keep StepFun available until smoke_required passes.",
             profile["recommendation"],
             "35B Q4_K_M imatrix remains an optional high-memory upgrade through the local model manager.",
         ],

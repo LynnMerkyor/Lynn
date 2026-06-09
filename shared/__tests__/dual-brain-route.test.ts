@@ -12,9 +12,9 @@ import {
   validateDualBrainAcceptanceReport,
 } from "../dual-brain-route.js";
 
-describe("dual-brain v0.82 route contract", () => {
-  it("locks the default topology to A3B -> step37 -> DS-V4 Flash", () => {
-    expect(DUAL_BRAIN_ROUTE_LABEL).toBe("A3B -> step37 -> DS-V4 Flash");
+describe("dual-brain v0.83 route contract", () => {
+  it("locks the default topology to manager/executor roles", () => {
+    expect(DUAL_BRAIN_ROUTE_LABEL).toBe("A3B/V4 orchestrate · StepFun/V4/GLM execute");
     expect(DUAL_BRAIN_ROUTE.order).toEqual([
       "local-a3b-manager",
       "step-3.7-flash-worker",
@@ -24,7 +24,8 @@ describe("dual-brain v0.82 route contract", () => {
     expect(DUAL_BRAIN_ROUTE.worker.apiModel).toBe(DUAL_BRAIN_WORKER_MODEL);
     expect(DUAL_BRAIN_ROUTE.escape.apiModel).toBe("deepseek-chat");
     expect(DUAL_BRAIN_ROUTE.escape.displayName).toBe("DS-V4 Flash");
-    expect(DUAL_BRAIN_QOS_LABEL).toContain("local A3B single-slot");
+    expect(DUAL_BRAIN_QOS_LABEL).toContain("manager brain: A3B + V4 Flash");
+    expect(DUAL_BRAIN_QOS_LABEL).toContain("executor brain: StepFun 3.7 Flash + V4 Flash + GLM-5 Turbo");
   });
 
   it("accepts a task report only when objective evidence supports the status", () => {

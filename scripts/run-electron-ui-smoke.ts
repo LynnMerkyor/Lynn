@@ -17,6 +17,7 @@ const DEFAULT_OUTPUT_ROOT = path.join(ROOT, "output");
 
 const SCENARIOS = [
   { id: "home", expect: ["Lynn"] },
+  { id: "send", expect: ["UI_SMOKE_SEND_PROMPT", "UI_SMOKE_SEND_OK"] },
   { id: "short", expect: ["UI_SMOKE_SHORT_OK"] },
   { id: "tools", expect: ["UI_SMOKE_TOOL_CARD", "reports/summary.md"] },
   { id: "long-code", expect: ["UI_SMOKE_LONG_CODE", "calculateTotal"] },
@@ -282,8 +283,37 @@ async function main(): Promise<void> {
     await waitForExpression(cdp, "window.__lynnUiSmokeReady === true");
 
     for (const scenario of SCENARIOS) {
-      await cdp.evaluate(`window.__lynnSetUiSmokeScenario(${JSON.stringify(scenario.id)})`);
+      if (scenario.id === "send") {
+        const sendResult = await cdp.evaluate(`window.__lynnRunUiSmokeSend()`) as { sent?: boolean; itemCount?: number };
+        if (!sendResult?.sent) {
+          results.push({
+            id: scenario.id,
+            ok: false,
+            failures: ["sendPrompt returned false"],
+            screenshot: "",
+          });
+          console.log("[ui-smoke] send: FAIL");
+          console.log("  - sendPrompt returned false");
+          continue;
+        }
+        if ((sendResult.itemCount ?? 0) < 2) {
+          results.push({
+            id: scenario.id,
+            ok: false,
+            failures: [`send scenario did not render both turns (itemCount=${sendResult.itemCount ?? 0})`],
+            screenshot: "",
+          });
+          console.log("[ui-smoke] send: FAIL");
+          console.log(`  - send scenario did not render both turns (itemCount=${sendResult.itemCount ?? 0})`);
+          continue;
+        }
+      } else {
+        await cdp.evaluate(`window.__lynnSetUiSmokeScenario(${JSON.stringify(scenario.id)})`);
+      }
       await waitForExpression(cdp, `document.body.dataset.uiSmokeScenario === ${JSON.stringify(scenario.id)}`);
+      if (scenario.id === "send") {
+        await waitForExpression(cdp, "document.body.innerText.includes('UI_SMOKE_SEND_OK')");
+      }
       await wait(350);
       const snapshot = await cdp.evaluate(`(() => {
         const root = document.documentElement;

@@ -39,6 +39,12 @@ describe('brain-models', () => {
     expect(formatCompactModelLabel({ id: 'lynn-brain-router', provider: 'brain' })).toBe('默认模型');
   });
 
+  it('把已停用的 MiMo Token Plan LLM 显示成默认模型，避免旧会话继续展示 mimo-v2.5-pro', () => {
+    expect(normalizeDisplayModelId('mimo-v2.5-pro', 'mimo')).toBe('lynn-brain-router');
+    expect(normalizeDisplayModelName({ id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', provider: 'mimo' })).toBe('默认模型');
+    expect(formatCompactModelLabel({ id: 'mimo-v2.5-pro', provider: 'mimo' })).toBe('默认模型');
+  });
+
   it('保留非 brain 模型的原始显示', () => {
     expect(normalizeDisplayModelId('glm-5.1', 'zhipu')).toBe('glm-5.1');
     expect(normalizeDisplayModelName({ id: 'glm-5.1', name: 'GLM-5.1', provider: 'zhipu' })).toBe('GLM-5.1');
@@ -50,6 +56,7 @@ describe('brain-models', () => {
     const options = buildUserVisibleModelOptions([
       { id: 'step-3.5-flash-2603', name: 'Step 3.5 Flash 2603', provider: 'brain' },
       { id: 'glm-z1-9b-0414', name: 'Glm Z1.9b 0414', provider: 'brain' },
+      { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', provider: 'mimo' },
       { id: 'glm-5.1', name: 'GLM-5.1', provider: 'glm' },
     ]);
 

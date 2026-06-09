@@ -1,6 +1,6 @@
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent } from "../brain-client.js";
-import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
+import { formatBrainErrorForHuman, renderBrainEventForHuman, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { buildImagesContentParts, parseImageList } from "../media.js";
 import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
@@ -80,7 +80,6 @@ function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolea
     || event.type === "provider"
     || event.type === "tool_progress"
     || event.type === "brain.error"
-    || event.type === "usage"
     || (event.type === "reasoning.delta" && renderReasoning);
 }
 
@@ -137,8 +136,8 @@ function renderVisionEvent(event: BrainStreamEvent, opts: { json: boolean; rende
   if (event.type === "assistant.delta") process.stdout.write(event.text);
   else if (event.type === "reasoning.delta" && opts.renderReasoning) process.stderr.write(event.text);
   else if (event.type === "usage") {
-    const summary = summarizeUsage(event.usage, { durationMs: opts.startedAt ? Date.now() - opts.startedAt : undefined });
-    if (summary) process.stderr.write(`\nusage: ${summary}\n`);
+    // Human vision mode keeps usage telemetry out of the rendered answer. JSONL
+    // mode still emits structured usage above for automation.
   } else {
     renderBrainEventForHuman(event, opts.renderState, process.stderr);
   }

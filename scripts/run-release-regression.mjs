@@ -171,9 +171,11 @@ async function runStaticChecks({ level }) {
       && pkg.scripts["release:preflight"].includes("test:cli-install")
       && pkg.scripts["release:preflight"].includes("stress:cli")
       && pkg.scripts["release:preflight"].includes("test:cli-pty")
-      && pkg.scripts["release:preflight"].includes("test:cli-terminal-soak")
+      && pkg.scripts["release:preflight"].includes("test:cli-pressure")
+      && pkg.scripts["release:preflight"].includes("test:cli-toolchain")
+      && pkg.scripts["release:preflight"].includes("test:release:ui")
       && pkg.scripts["release:preflight"].includes("test:cli-fleet")),
-    "release:preflight runs CLI cache usage, file-size, smoke, pack, install, stress, Terminal soak, and Fleet gates",
+    "release:preflight runs CLI cache usage, file-size, smoke, pack, install, stress, pty, pressure, toolchain, Fleet, and GUI send gates",
     String(pkg.scripts?.["release:preflight"] || ""),
   ));
   checks.push(makeCheck(

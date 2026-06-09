@@ -9,9 +9,7 @@ import { globToRegExp } from "../src/tools/glob.js";
 import { runClientTool } from "../src/tools/registry.js";
 import { setLang } from "../src/i18n.js";
 import { computeStablePrefixDiagnostics } from "../src/session/prefix-diagnostics.js";
-
 let tmp = "";
-
 beforeEach(() => setLang("en"));
 afterEach(() => setLang(null));
 
@@ -582,7 +580,7 @@ describe("code tools", () => {
 
     expect(intro).toContain("Lynn Code");
     expect(intro).toContain("StepFun");
-    expect(intro).toContain("Spark");
+    expect(intro).not.toContain("Spark");
     expect(intro).toContain("directory:");
     expect(intro).toContain("/fast");
     expect(intro).toContain("/think");
@@ -638,7 +636,8 @@ describe("code tools", () => {
       maxSteps: 8,
     });
 
-    expect(header).toContain("StepFun 3.7 Flash→Spark A3B single-slot→DS-V4 Flash");
+    expect(header).toContain("StepFun 3.7 Flash");
+    expect(header).not.toContain("Spark A3B");
     expect(header).toContain("/repo");
     expect(header).toContain("ask / workspace-write");
     expect(header).toContain("think:");
@@ -860,9 +859,7 @@ describe("code tools", () => {
 
     const resumed = await loadResumeMessages(sessionFile, 80);
 
-    expect(resumed).toEqual(expect.arrayContaining([
-      expect.objectContaining({ role: "user", content: "latest instruction" }),
-    ]));
+    expect(resumed).toEqual(expect.arrayContaining([expect.objectContaining({ role: "user", content: "latest instruction" })]));
     expect(resumed.some((message) => message.role === "tool")).toBe(false);
     expect(JSON.stringify(resumed)).not.toContain("call_big");
   });

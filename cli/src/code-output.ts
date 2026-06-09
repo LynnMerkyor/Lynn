@@ -74,7 +74,7 @@ export function renderCodeFooter(inputData: {
     ? "mock Brain"
     : inputData.fallbackProvider
       ? `CLI BYOK:${modelLabelWithId(inputData.fallbackProvider.model)}`
-      : "StepFun 3.7 Flash→Spark A3B single-slot→DS-V4 Flash";
+      : "StepFun 3.7 Flash via Brain";
   const mode = renderMode(inputData.mode);
   return dim([
     model,

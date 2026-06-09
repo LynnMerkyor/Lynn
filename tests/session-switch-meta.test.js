@@ -48,6 +48,22 @@ describe("session switch meta helper", () => {
     });
   });
 
+  it("drops stale MiMo Token Plan model refs from old session metadata", () => {
+    const dir = tempDir();
+    const sessionPath = path.join(dir, "mimo.jsonl");
+    fs.writeFileSync(path.join(dir, "session-meta.json"), JSON.stringify({
+      "mimo.jsonl": {
+        memoryEnabled: true,
+        model: { id: "mimo-v2.5-pro", provider: "mimo" },
+      },
+    }));
+
+    expect(readSessionSwitchMeta({ sessionPath, sessionDir: dir })).toEqual({
+      memoryEnabled: true,
+      savedModelRef: null,
+    });
+  });
+
   it("ignores missing meta file and reports malformed meta", () => {
     const dir = tempDir();
     const onReadError = vi.fn();

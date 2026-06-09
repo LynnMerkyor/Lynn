@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { isDeprecatedMimoLlmRef } from "../shared/deprecated-models.js";
 
 export type ModelRef = { id: string; provider?: string };
 
@@ -27,6 +28,10 @@ export function readSessionSwitchMeta(opts: {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
       opts.onReadError?.(err);
     }
+  }
+
+  if (savedModelRef && isDeprecatedMimoLlmRef(savedModelRef.id, savedModelRef.provider)) {
+    savedModelRef = null;
   }
 
   return { memoryEnabled, savedModelRef };

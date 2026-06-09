@@ -1,6 +1,6 @@
 # Lynn Code Headless Agent Contract
 
-Status: v0.82.0 integration contract.
+Status: v0.83.0 integration contract.
 
 This document is for other agents, CI jobs, and GUI Fleet workers that need to
 call Lynn Code without an interactive terminal.
@@ -21,7 +21,7 @@ This is the short contract another coding agent should read first:
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # Install or update Lynn CLI.
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.83.0.tgz
 
 # Verify the binary without needing a model backend.
 Lynn version
@@ -181,11 +181,10 @@ forbidden globs, tests, and the final diff before merge.
 
 ## Model Routing
 
-By default, `Lynn code` talks to the local Lynn Brain router:
+By default, `Lynn code` talks to Lynn Brain through StepFun 3.7 Flash:
 
-1. StepFun 3.7 Flash with 256K context, high reasoning, and a 32K reasoning/generation budget.
-2. MiMo V2.5 Pro / Omni fallback, including multimodal turns.
-3. Spark Qwen 3.6 35B A3B local fallback.
+- StepFun 3.7 Flash: fast text/coding execution with 256K context, high reasoning, and a 48K reasoning/generation budget.
+- Spark A3B, DS-V4, and GLM remain explicit manager-run, health-check, or future experiment lanes; they are not part of the default headless route.
 
 If the local Lynn Brain server is offline, start it with `Lynn brain start` or
 open the Lynn client GUI. For machines that should run without the client/Brain,

@@ -1,4 +1,4 @@
-export const DUAL_BRAIN_ROUTE_VERSION = "v0.82.0";
+export const DUAL_BRAIN_ROUTE_VERSION = "v0.83.0";
 
 export const DUAL_BRAIN_MANAGER_MODEL = "local-a3b-distill";
 export const DUAL_BRAIN_WORKER_MODEL = "step-3.7-flash";
@@ -50,8 +50,8 @@ export const DUAL_BRAIN_ROUTE = Object.freeze({
   } satisfies DualBrainRouteNode),
 });
 
-export const DUAL_BRAIN_ROUTE_LABEL = "A3B -> step37 -> DS-V4 Flash";
-export const DUAL_BRAIN_QOS_LABEL = "GUI priority; local A3B single-slot; busy CLI falls back to StepFun; DS-V4 Flash is escape-only";
+export const DUAL_BRAIN_ROUTE_LABEL = "A3B/V4 orchestrate · StepFun/V4/GLM execute";
+export const DUAL_BRAIN_QOS_LABEL = "manager brain: A3B + V4 Flash; executor brain: StepFun 3.7 Flash + V4 Flash + GLM-5 Turbo";
 
 export type DualBrainStatus = "passed" | "failed" | "escalated";
 export type DualBrainFalseVerifyRisk = "none" | "suspected" | "confirmed";

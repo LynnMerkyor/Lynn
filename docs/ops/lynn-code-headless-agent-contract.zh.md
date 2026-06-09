@@ -1,6 +1,6 @@
 # Lynn Code 无交互 Agent 调用契约
 
-状态:v0.82.0 release-candidate contract。
+状态:v0.83.0 release-candidate contract。
 
 这份文档给其他智能体、CI、GUI Fleet worker 阅读。目标是让它们无需和人交互,也能稳定调用 Lynn CLI 完成编码任务。
 
@@ -15,7 +15,7 @@
 node -v
 
 # 2. 安装或覆盖升级 Lynn CLI
-npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz
+npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.83.0.tgz
 
 # 3. 检查本地命令
 Lynn version
@@ -108,7 +108,7 @@ Lynn 无交互输出是 JSONL,每行一个 JSON 对象。常见事件:
 
 ## 模型与长任务稳定性
 
-默认路由为 StepFun 3.7 Flash -> MiMo V2.5 Pro -> Spark Qwen 3.6 35B A3B。Lynn Code 会保持稳定前缀层,让前置缓存更容易命中;长任务过程中会自动压缩旧轮上下文,并保留原始目标、当前计划和最近工具结果。
+默认 Brain 策略是 StepFun 3.7 Flash 一条龙:默认 GUI/CLI 对话、`-p`、研究、工具调用和编码执行都走 StepFun 3.7 Flash(256K 上下文,high 推理,48K 推理/生成预算)。Spark A3B / DS-V4 / GLM 保留为显式 manager-run、健康检查或后续实验通道,不进入默认 headless 路由。Lynn Code 会保持稳定前缀层,让前置缓存更容易命中;长任务过程中会自动压缩旧轮上下文,并保留原始目标、当前计划和最近工具结果。
 
 本地工具链还包含:
 

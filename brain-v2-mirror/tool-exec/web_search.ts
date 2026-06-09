@@ -1,6 +1,6 @@
 // @ts-nocheck
 // Brain v2 · web_search tool
-// Promise.allSettled 多源聚合: Zhipu + MiMo + Bocha/Tavily/Serper (when configured)
+// Promise.allSettled 多源聚合: Zhipu + MiMo paid search + Bocha/Tavily/Serper (when configured)
 // 5min LRU 缓存,14s 总预算
 //
 // Two public surfaces:
@@ -59,18 +59,17 @@ async function searchZhipu(query, signal) {
 export async function searchMimo(query, signal) {
   const key = envOr('MIMO_SEARCH_KEY');
   if (!key) throw new Error('MIMO_SEARCH_KEY missing');
-  const base = envOr('MIMO_SEARCH_BASE', 'https://token-plan-cn.xiaomimimo.com/v1');
+  const base = envOr('MIMO_SEARCH_BASE', 'https://api.xiaomimimo.com/v1');
   const model = envOr('MIMO_SEARCH_MODEL', 'mimo-v2.5-pro');
   const resp = await fetch(base + '/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+    headers: { 'Content-Type': 'application/json', 'api-key': key },
     body: JSON.stringify({
       model,
       messages: [{ role: 'user', content: query }],
-      enable_search: true,
-      max_completion_tokens: 2000,
-      thinking: { type: 'disabled' },
+      tools: [{ type: 'web_search', max_keyword: 5, force_search: true }],
       stream: false,
+      max_tokens: 2000,
     }),
     signal,
   });
@@ -177,18 +176,17 @@ async function searchZhipuStructured(query, signal) {
 async function searchMimoStructured(query, signal) {
   const key = envOr('MIMO_SEARCH_KEY');
   if (!key) throw new Error('MIMO_SEARCH_KEY missing');
-  const base = envOr('MIMO_SEARCH_BASE', 'https://token-plan-cn.xiaomimimo.com/v1');
+  const base = envOr('MIMO_SEARCH_BASE', 'https://api.xiaomimimo.com/v1');
   const model = envOr('MIMO_SEARCH_MODEL', 'mimo-v2.5-pro');
   const resp = await fetch(base + '/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+    headers: { 'Content-Type': 'application/json', 'api-key': key },
     body: JSON.stringify({
       model,
       messages: [{ role: 'user', content: query }],
-      enable_search: true,
-      max_completion_tokens: 2000,
-      thinking: { type: 'disabled' },
+      tools: [{ type: 'web_search', max_keyword: 5, force_search: true }],
       stream: false,
+      max_tokens: 2000,
     }),
     signal,
   });
@@ -272,7 +270,9 @@ async function searchSerperStructured(query, signal) {
 
 const STRUCTURED_RACERS = [
   { source: 'zhipu',  fn: (q, s) => searchZhipuStructured(q, s) },
-  { source: 'mimo',   fn: (q, s) => searchMimoStructured(q, s) },
+  // MiMo paid search is valid but slower (real probe: ~26s). Keep it opt-in so it
+  // never blocks the default answer path.
+  { source: 'mimo',   fn: (q, s) => searchMimoStructured(q, s), optional: true, envKey: 'MIMO_SEARCH_ENABLE' },
   { source: 'bocha',  fn: (q, s) => searchBochaStructured(q, s),  optional: true, envKey: 'BOCHA_KEY' },
   { source: 'tavily', fn: (q, s) => searchTavilyStructured(q, s), optional: true, envKey: 'TAVILY_KEY' },
   { source: 'serper', fn: (q, s) => searchSerperStructured(q, s), optional: true, envKey: 'SERPER_KEY' },
@@ -324,8 +324,9 @@ export async function webSearchStructured(query, { log } = {}) {
     return { ok: false, error: 'all search sources failed', sources };
   }
 
-  // Prefer MiMo / Zhipu because they carry the LLM-synthesized summary.
-  const llmWinner = sources.find((s) => s.ok && s.summary && (s.name === 'mimo' || s.name === 'zhipu'));
+  // Prefer Zhipu first for the fast default path; MiMo paid search can still win when explicitly enabled.
+  const llmWinner = sources.find((s) => s.ok && s.summary && s.name === 'zhipu')
+    || sources.find((s) => s.ok && s.summary && s.name === 'mimo');
   const primary = llmWinner || sources.find((s) => s.ok);
 
   // Merge items across all successful sources, de-dup by URL.
@@ -357,7 +358,9 @@ export async function webSearchStructured(query, { log } = {}) {
 
 const RACERS = [
   { source: 'zhipu',  fn: (q, s) => searchZhipu(q, s) },
-  { source: 'mimo',   fn: (q, s) => searchMimo(q, s) },
+  // MiMo paid search is kept as an explicit opt-in/fallback source; it is not in
+  // the default fast race because it can take >20s.
+  { source: 'mimo',   fn: (q, s) => searchMimo(q, s), optional: true, envKey: 'MIMO_SEARCH_ENABLE' },
   { source: 'bocha',  fn: (q, s) => searchBocha(q, s),  optional: true, envKey: 'BOCHA_KEY' },
   { source: 'tavily', fn: (q, s) => searchTavily(q, s), optional: true, envKey: 'TAVILY_KEY' },
   { source: 'serper', fn: (q, s) => searchSerper(q, s), optional: true, envKey: 'SERPER_KEY' },

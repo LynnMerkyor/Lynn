@@ -2,12 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { getProvider, getProviderStatusSnapshot, PROVIDERS, providerOrderForCapability, universalOrder } from '../provider-registry.js';
 
 describe('provider registry', () => {
-  it('keeps StepFun high+32K in the intended universal fallback head position', () => {
-    expect(universalOrder.map(String).slice(0, 4)).toEqual([
+  it('keeps StepFun high+48K as the only default GUI/CLI route', () => {
+    expect(universalOrder.map(String)).toEqual([
       'step-3.7-flash',
-      'apex-spark-i-balanced',
-      'deepseek-chat',
-      'deepseek-pro',
     ]);
   });
 
@@ -59,15 +56,15 @@ describe('provider registry', () => {
     const step = snapshot.providers.find((provider) => provider.id === 'step-3.7-flash');
     const spark = snapshot.providers.find((provider) => provider.id === 'apex-spark-i-balanced');
 
-    expect(snapshot.route.slice(0, 3)).toEqual(['step-3.7-flash', 'apex-spark-i-balanced', 'deepseek-chat']);
+    expect(snapshot.route).toEqual(['step-3.7-flash']);
     expect(step).toMatchObject({ id: 'step-3.7-flash', credential: expect.any(String), inRoute: true });
     expect(spark).toMatchObject({
       credential: 'not_required',
       configured: true,
       local: true,
-      routeRole: 'local_single_slot_manager',
+      inRoute: false,
       localConcurrencyLimit: 1,
-      busyFallbackProvider: 'step-3.7-flash or ds-v4-flash',
+      busyFallbackProvider: 'explicit manager-run only',
     });
     expect(JSON.stringify(snapshot)).not.toContain('apiKey');
   });

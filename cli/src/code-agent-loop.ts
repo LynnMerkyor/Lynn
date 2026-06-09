@@ -756,10 +756,7 @@ async function collectBrainText(inputData: {
         if (event.type === "usage") {
           const summary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt });
           usageSummary = summary || usageSummary;
-          if (summary) {
-            inputData.onEvent?.({ type: "usage", summary });
-            if (!inputData.onEvent) process.stderr.write(`usage: ${summary}\n`);
-          }
+          if (summary) inputData.onEvent?.({ type: "usage", summary });
         } else {
           if (!inputData.onEvent) renderBrainEventForHuman(event, renderState, process.stderr);
           if (!inputData.onEvent && shouldResumeWaitingSpinner(event)) spinner.start();
@@ -788,6 +785,5 @@ function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolea
     || event.type === "provider"
     || event.type === "tool_progress"
     || event.type === "brain.error"
-    || event.type === "usage"
     || (event.type === "reasoning.delta" && renderReasoning);
 }

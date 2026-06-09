@@ -151,7 +151,7 @@ describe("chat mode controls", () => {
 
   it("surfaces CLI BYOK fallback in the chat startup route label", () => {
     expect(chatRouteLabel({ provider: "openai-compatible", model: "step-3.7-flash" })).toBe("CLI BYOK: StepFun 3.7 Flash (step-3.7-flash)");
-    expect(chatRouteLabel(null)).toBe("StepFun 3.7 Flash → Spark A3B single-slot → DS-V4 Flash via Brain router (auto)");
+    expect(chatRouteLabel(null)).toBe("StepFun 3.7 Flash via Brain router (default)");
   });
 
   it("renders CLI BYOK fallback in startup copy", () => {
@@ -404,7 +404,7 @@ describe("chat mode controls", () => {
     expect(result.stdout).toContain("chat byok ok");
     expect(result.stderr).toContain("│ • route: cli-byok:openai-compatible");
     expect(result.stderr).toContain("│   fallback: brain(offline) ->");
-    expect(result.stderr).toContain("6 tokens");
+    expect(result.stderr).not.toContain("usage:");
     expect(JSON.parse(requestBody)).toMatchObject({
       model: "chat-model",
       stream: true,

@@ -17,6 +17,17 @@ import path from "path";
 import YAML from "js-yaml";
 import { safeReadYAMLSync } from "../shared/safe-fs.js";
 import { fromRoot } from "../shared/hana-root.js";
+import {
+  BRAIN_CHAT_MODEL_ID,
+  BRAIN_PROVIDER_ID,
+  BRAIN_UTILITY_LARGE_MODEL_ID,
+  BRAIN_UTILITY_MODEL_ID,
+} from "../shared/brain-provider.js";
+import {
+  isDeprecatedMimoLlmModelId,
+  isDeprecatedMimoLlmProvider,
+  isDeprecatedMimoTokenPlanBaseUrl,
+} from "../shared/deprecated-models.js";
 import type { LLMApi, ProviderConfig, ProviderConfigMap } from "./types.js";
 
 type LogFn = (msg: string) => void;
@@ -431,6 +442,121 @@ export function migrateLocalQwenDefaultTo9B(lynnHome: string, agentsDir: string,
     log(`[migrate-providers] migrated ${changedAgents} agent local Qwen default(s) → Qwen3.5-9B`);
   } else {
     log("[migrate-providers] local Qwen 3.5-9B default migration marked");
+  }
+}
+
+// ── Deprecated MiMo Token Plan LLM cleanup ───────────────────────────────────
+
+function _brainRefForModelKey(key: string): ModelRefObject {
+  const id = key === "utility" || key === "utility_large" || key === "utilityLarge"
+    ? (key === "utility" ? BRAIN_UTILITY_MODEL_ID : BRAIN_UTILITY_LARGE_MODEL_ID)
+    : BRAIN_CHAT_MODEL_ID;
+  return { id, provider: BRAIN_PROVIDER_ID };
+}
+
+function _migrateDeprecatedMimoModelRef(value: unknown, key: string): unknown {
+  if (typeof value === "string") {
+    return isDeprecatedMimoLlmModelId(value) ? _brainRefForModelKey(key) : value;
+  }
+  if (!isRecord(value)) return value;
+  const id = typeof value.id === "string" ? value.id : "";
+  const provider = typeof value.provider === "string" ? value.provider : "";
+  if (!isDeprecatedMimoLlmModelId(id) && !(isDeprecatedMimoLlmProvider(provider) && id)) return value;
+  return { ...value, ..._brainRefForModelKey(key) };
+}
+
+function _providerLooksLikeDeprecatedMimoLlm(providerName: string, config: ProviderConfig): boolean {
+  if (isDeprecatedMimoLlmProvider(providerName)) return true;
+  if (isDeprecatedMimoTokenPlanBaseUrl(config.base_url)) return true;
+  return Array.isArray(config.models)
+    && config.models.some((model) => isDeprecatedMimoLlmModelId(modelEntryId(model)));
+}
+
+function _removeDeprecatedMimoModelsFromProviders(providers: ProviderConfigMap): number {
+  let removed = 0;
+  for (const [providerName, providerConfig] of Object.entries({ ...providers })) {
+    if (!isRecord(providerConfig)) continue;
+    const nextConfig = providerConfig as ProviderConfig;
+    const originalModels = Array.isArray(nextConfig.models) ? nextConfig.models : [];
+    const keptModels = originalModels.filter((model) => !isDeprecatedMimoLlmModelId(modelEntryId(model)));
+    removed += originalModels.length - keptModels.length;
+
+    const deprecatedProvider = _providerLooksLikeDeprecatedMimoLlm(providerName, nextConfig);
+    if (deprecatedProvider && keptModels.length === 0) {
+      delete providers[providerName];
+      removed += 1;
+      continue;
+    }
+    if (keptModels.length !== originalModels.length) {
+      nextConfig.models = keptModels;
+    }
+  }
+  return removed;
+}
+
+/**
+ * MiMo paid search lives at api.xiaomimimo.com and is still valid. This cleanup
+ * only removes the expired MiMo Token Plan LLM route and any stale agent/session
+ * model references that would make the GUI keep showing "mimo / mimo-v2.5-pro".
+ */
+export function migrateDeprecatedMimoLlmToBrain(lynnHome: string, agentsDir: string, log: LogFn = () => {}): void {
+  const providersPath = path.join(lynnHome, "added-models.yaml");
+  const prefsPath = path.join(lynnHome, "user", "preferences.json");
+  const raw = toAddedModelsYaml(safeReadYAMLSync(providersPath, {}, YAML));
+  const providers = getProvidersMap(raw);
+  let changedProviders = _removeDeprecatedMimoModelsFromProviders(providers) > 0;
+  if (changedProviders) {
+    raw.providers = providers;
+    const header =
+      "# Lynn 供应商配置（全局，跨 agent 共享）\n" +
+      "# 由设置页面管理\n\n";
+    atomicWriteYAML(providersPath, raw, header);
+  }
+
+  let changedAgents = 0;
+  for (const ac of _collectAgentConfigs(agentsDir)) {
+    const cfg = ac.config || {};
+    let changed = false;
+    const api = getAgentApi(cfg);
+    if (api && isDeprecatedMimoLlmProvider(api.provider)) {
+      api.provider = BRAIN_PROVIDER_ID;
+      delete api.base_url;
+      delete api.api_key;
+      changed = true;
+    }
+
+    const models = getAgentModels(cfg);
+    for (const key of ["chat", "review", "utility", "utility_large", "utilityLarge"]) {
+      const current = models?.[key];
+      const migrated = _migrateDeprecatedMimoModelRef(current, key);
+      if (migrated !== current) {
+        ensureAgentModels(cfg)[key] = migrated;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      atomicWriteYAML(ac.path, cfg);
+      changedAgents += 1;
+    }
+  }
+
+  const prefs = _readPrefs(prefsPath);
+  let changedPrefs = false;
+  if (Array.isArray(prefs.favorites)) {
+    const kept = prefs.favorites.filter((fav) => {
+      const normalized = normalizeFavorite(fav);
+      return !normalized || !isDeprecatedMimoLlmModelId(normalized.modelId);
+    });
+    if (kept.length !== prefs.favorites.length) {
+      prefs.favorites = kept;
+      changedPrefs = true;
+    }
+  }
+  if (changedPrefs) atomicWriteJSON(prefsPath, prefs);
+
+  if (changedProviders || changedAgents > 0 || changedPrefs) {
+    log(`[migrate-providers] removed deprecated MiMo Token Plan LLM refs (providers=${changedProviders ? "yes" : "no"}, agents=${changedAgents}, prefs=${changedPrefs ? "yes" : "no"})`);
   }
 }
 

@@ -1,14 +1,17 @@
 import { useStore } from './stores';
+import { sendPrompt } from './stores/prompt-actions';
 import { renderMarkdown } from './utils/markdown';
 import type { ChatListItem, ChatMessage, ContentBlock } from './stores/chat-types';
+import { __setWebSocketForUiSmoke } from './services/websocket';
 
-type SmokeScenario = 'home' | 'short' | 'tools' | 'long-code';
+type SmokeScenario = 'home' | 'short' | 'tools' | 'long-code' | 'send';
 
 declare global {
   interface Window {
     __lynnUiSmokeReady?: boolean;
     __lynnUiSmokeScenario?: SmokeScenario;
     __lynnSetUiSmokeScenario?: (scenario: SmokeScenario) => boolean;
+    __lynnRunUiSmokeSend?: () => Promise<{ sent: boolean; payload?: unknown; itemCount: number }>;
   }
 }
 
@@ -50,6 +53,8 @@ function assistantMessage(id: string, blocks: ContentBlock[]): ChatListItem {
 }
 
 function itemsForScenario(scenario: SmokeScenario): ChatListItem[] {
+  if (scenario === 'send') return [];
+
   if (scenario === 'tools') {
     return [
       userMessage('ui-smoke-tools-user', 'UI_SMOKE_TOOLS：整理工作区并展示工具卡片。'),
@@ -144,6 +149,8 @@ function applyScenario(scenario: SmokeScenario): void {
   const sessionPath = `/tmp/lynn-ui-smoke-${scenario}.jsonl`;
   const now = new Date().toISOString();
   const isHome = scenario === 'home';
+  const isSend = scenario === 'send';
+  const items = itemsForScenario(scenario);
 
   useStore.setState({
     serverPort: '0',
@@ -170,14 +177,14 @@ function applyScenario(scenario: SmokeScenario): void {
       title: `UI Smoke · ${scenario}`,
       firstMessage: `UI_SMOKE_${scenario.toUpperCase()}`,
       modified: now,
-      messageCount: 2,
+      messageCount: isSend ? 0 : 2,
       agentId: 'lynn',
       agentName: 'Lynn',
       cwd: '/tmp',
     }],
     chatSessions: isHome ? {} : {
       [sessionPath]: {
-        items: itemsForScenario(scenario),
+        items,
         hasMore: false,
         loadingMore: false,
         oldestId: `ui-smoke-${scenario}-user`,
@@ -194,11 +201,53 @@ function applyScenario(scenario: SmokeScenario): void {
   window.__lynnUiSmokeScenario = scenario;
 }
 
+function installFakePromptSocket(): { lastPayload?: unknown } {
+  const state: { lastPayload?: unknown } = {};
+  const fake = {
+    readyState: WebSocket.OPEN,
+    send(payload: string) {
+      const parsed = JSON.parse(payload);
+      state.lastPayload = parsed;
+      if (parsed?.type === 'prompt' && parsed.clientMessageId) {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('hana-prompt-accepted', {
+            detail: {
+              clientMessageId: parsed.clientMessageId,
+              sessionPath: parsed.sessionPath,
+            },
+          }));
+        }, 0);
+      }
+    },
+    close() {},
+  } as unknown as WebSocket;
+  __setWebSocketForUiSmoke(fake);
+  return state;
+}
+
+async function runSendScenario(): Promise<{ sent: boolean; payload?: unknown; itemCount: number }> {
+  applyScenario('send');
+  const socketState = installFakePromptSocket();
+  const sent = await sendPrompt({
+    text: 'UI_SMOKE_SEND_PROMPT',
+    displayText: 'UI_SMOKE_SEND_PROMPT',
+  });
+  const sessionPath = useStore.getState().currentSessionPath;
+  if (sent && sessionPath) {
+    useStore.getState().appendItem(sessionPath, assistantMessage('ui-smoke-send-assistant', [
+      textBlock('UI_SMOKE_SEND_OK：GUI 发送链路已收到 mock 回复。'),
+    ]));
+  }
+  const items = sessionPath ? useStore.getState().chatSessions[sessionPath]?.items ?? [] : [];
+  return { sent, payload: socketState.lastPayload, itemCount: items.length };
+}
+
 export function installUiSmokeFixture(initialScenario: SmokeScenario = 'home'): void {
   window.__lynnSetUiSmokeScenario = (scenario: SmokeScenario) => {
     applyScenario(scenario);
     return true;
   };
+  window.__lynnRunUiSmokeSend = runSendScenario;
   applyScenario(initialScenario);
   window.__lynnUiSmokeReady = true;
   window.dispatchEvent(new CustomEvent('lynn-ui-smoke-ready', { detail: { scenario: initialScenario } }));

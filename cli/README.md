@@ -1,13 +1,15 @@
 # @lynn/cli
 
-Terminal and worker-runner interface for Lynn v0.82.0.
+Terminal and worker-runner interface for Lynn v0.83.0.
 
 This package is intentionally thin. It handles terminal UX, worker JSONL, local
 file/shell orchestration, and headless agent contracts. Model routing defaults
 to Lynn Brain: local Brain when available, otherwise hosted Brain at
-`https://api.merkyorlynn.com/api/v2`, with StepFun 3.7 Flash (256K context,
-high reasoning, 32K reasoning/generation budget) -> MiMo V2.5 Pro -> Spark Qwen
-3.6 35B A3B. Users can still configure a private OpenAI-compatible BYOK
+`https://api.merkyorlynn.com/api/v2`. The default Brain policy is dual-role,
+not a simple linear cascade: Spark distilled A3B and DS-V4 Flash handle
+decomposition / dispatch / verification, while StepFun 3.7 Flash is the fast
+text/coding executor and DS-V4 Flash / GLM-5 Turbo are repair or escape
+execution lanes. Users can still configure a private OpenAI-compatible BYOK
 endpoint with `Lynn providers set`.
 
 ## Quick start
@@ -30,7 +32,7 @@ winget install OpenJS.NodeJS.LTS
 Install from the Lynn Tencent mirror:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.83.0.tgz"
 ```
 
 The package installs the `Lynn` command. If you installed an older preview that
@@ -49,7 +51,7 @@ If npm dependency downloads are slow in mainland China, keep the Lynn tarball UR
 as-is and add a registry mirror for third-party dependencies:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz" \
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.83.0.tgz" \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -57,7 +59,7 @@ Release maintainers can smoke-test the exact CDN tarball before inviting
 external testers:
 
 ```bash
-LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz" \
+LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.83.0.tgz" \
   npm run test:cli-install:remote
 ```
 
@@ -95,8 +97,10 @@ When another agent asks what Lynn CLI does locally, the concise answer is:
 
 - Lynn CLI is a thin terminal workbench over Lynn Brain V2: interactive chat,
   `Lynn -p`, `Lynn code`, and Fleet worker mode share the same route discipline.
-- Default routing is StepFun 3.7 Flash -> MiMo V2.5 Pro -> Spark Qwen 3.6 35B
-  A3B.
+- Default Brain routing is role-based: Spark distilled A3B + DS-V4 Flash
+  orchestrate and verify; StepFun 3.7 Flash executes most text/coding turns;
+  DS-V4 Flash and GLM-5 Turbo cover high-risk repair / escape execution. Deprecated
+  MiMo Token Plan text-model refs are cleaned on startup.
 - Local runtime features include stable-prefix layering for prefix-cache hits,
   rolling decode TPS and prefix-cache telemetry, automatic context compaction,
   tool ledgers for chained work, checkpoint/resume, finish gates, workspace
@@ -116,8 +120,8 @@ They try routes in this order:
 3. CLI-only BYOK fallback, if you configured one with `Lynn providers set`.
 4. Mock mode only when you explicitly pass `--mock-brain`.
 
-The default StepFun -> MiMo -> Spark routing lives in Lynn Brain and is usable from a
-fresh CLI install through the hosted route. You can still configure your own
+The default dual-role routing lives in Lynn Brain and is usable from a fresh CLI
+install through the hosted route. You can still configure your own
 OpenAI-compatible endpoint when you want a private or company-owned route:
 
 ```bash
@@ -144,7 +148,6 @@ Common presets fill the API URL and model name while still requiring your own
 key:
 
 ```bash
-Lynn providers set --preset mimo --api-key <token-plan-key>
 Lynn providers set --preset stepfun --api-key <stepfun-key>
 Lynn providers presets
 ```
@@ -156,6 +159,9 @@ try the local Brain first; if it is offline, they use this BYOK provider.
 For full default Brain routing, web search, and GUI Fleet orchestration, keep the
 local Brain online with `Lynn brain start` or the Lynn client GUI. Provider
 management for the default Brain route remains in the Lynn client GUI.
+Deprecated MiMo Token Plan text-model presets are intentionally not exposed as
+CLI BYOK routes. MiMo paid search is a server-side Brain search surface and is
+validated separately by the Brain API connectivity gate.
 
 ## Headless code mode for other agents
 
@@ -175,7 +181,7 @@ Agent quick contract:
 # Requires Node.js 20 LTS or 22 LTS with npm.
 
 # Install/update.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.83.0.tgz"
 
 # Human launch commands.
 Lynn

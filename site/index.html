@@ -10,14 +10,14 @@
     <title>Lynn — 开源桌面 AI Agent | Claude Code / Cursor / Codex 替代 | 智能体助手</title>
     <meta
       name="description"
-      content="Lynn 是基于 Open Hanako 的开源桌面 AI Agent，支持双脑模型路由、蒸馏 A3B 编排器、记忆系统、复查闭环、自动任务和 CLI Worker Fleet。可作为 Claude Code、Cursor、Codex 的桌面级替代。"
+      content="Lynn 是基于 Open Hanako 的开源桌面 AI Agent，默认使用 StepFun 3.7 Flash，支持记忆系统、复查闭环、自动任务和 CLI Worker Fleet。可作为 Claude Code、Cursor、Codex 的桌面级替代。"
     />
     <meta name="theme-color" content="#f7f1e6" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Lynn — 开源桌面 AI Agent | Claude Code / Cursor / Codex 替代 | 智能体助手" />
     <meta
       property="og:description"
-      content="Lynn 是基于 Open Hanako 的开源桌面 AI Agent，支持双脑模型路由、蒸馏 A3B 编排器、记忆系统、复查闭环、自动任务和 CLI Worker Fleet。可作为 Claude Code、Cursor、Codex 的桌面级替代。"
+      content="Lynn 是基于 Open Hanako 的开源桌面 AI Agent，默认使用 StepFun 3.7 Flash，支持记忆系统、复查闭环、自动任务和 CLI Worker Fleet。可作为 Claude Code、Cursor、Codex 的桌面级替代。"
     />
     <meta property="og:image" content="https://raw.githubusercontent.com/MerkyorLynn/Lynn/main/.github/assets/screenshot-main-20260407-v3.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -36,12 +36,12 @@
       "applicationCategory": "DeveloperApplication",
       "applicationSubCategory": "AI Agent",
       "operatingSystem": "macOS 12+, Windows 10+",
-      "description": "Lynn 是基于 Open Hanako 的开源桌面 AI Agent。支持双脑模型路由、蒸馏 A3B 编排器、六层记忆系统、写作工作台、Diff 视图、MCP 接入、多 Agent 协作。可作为 Claude Code、Cursor、Codex 的桌面级替代。",
+      "description": "Lynn 是基于 Open Hanako 的开源桌面 AI Agent。默认使用 StepFun 3.7 Flash，支持六层记忆系统、写作工作台、Diff 视图、多 Agent 协作。可作为 Claude Code、Cursor、Codex 的桌面级替代。",
       "url": "https://download.merkyorlynn.com",
       "downloadUrl": "https://download.merkyorlynn.com/download",
       "screenshot": "https://raw.githubusercontent.com/MerkyorLynn/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
       "image": "https://raw.githubusercontent.com/MerkyorLynn/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
-      "softwareVersion": "0.82.0",
+      "softwareVersion": "0.83.0",
       "datePublished": "2026-04-16",
       "fileSize": "180MB",
       "inLanguage": "zh-CN",
@@ -60,7 +60,7 @@
         "worstRating": "1"
       },
       "featureList": [
-        "双脑智能路由 (StepFun 3.7 Flash / Spark 蒸馏 A3B / DS-V4 Flash)",
+        "StepFun 3.7 Flash 默认模型路由",
         "本地 Qwen3.5-9B 默认模型和 Qwen3.6-35B-A3B 蒸馏编排器可选",
         "六层记忆系统：心跳/心态/工作记忆/用户画像",
         "写作工作台 + Diff 视图 + 对比外部修改",
@@ -105,11 +105,11 @@
       <main>
         <section class="hero">
           <div class="hero-copy">
-            <span class="eyebrow">Lynn 0.82.0</span>
+            <span class="eyebrow">Lynn 0.83.0</span>
             <h1>用 GUI 调度多个 CLI Agent,让代码任务真正跑起来。</h1>
             <p class="lead">
               Lynn 是一个有心跳、有记忆、会主动行动、还能多 Agent 协作的桌面 AI
-              助手。V0.82 固化双脑 QoS:StepFun 3.7 Flash 执行,本地蒸馏 A3B 编排/验收,DS-V4 Flash 处理高风险逃生,让 Codex、Claude Code、Qwen、Kimi 等 CLI 可以被统一派单、验收和收口。
+              助手。V0.83 默认使用 StepFun 3.7 Flash 一条龙完成文本、研究、工具调用和编码执行,让 Codex、Claude Code、Qwen、Kimi 等 CLI 可以被统一派单、验收和收口。
             </p>
             <div class="hero-actions">
               <a class="button button-primary" href="./download.html">下载 Lynn</a>
@@ -184,7 +184,7 @@
             </article>
             <article class="feature-card">
               <h3>多模型路由</h3>
-              <p>StepFun 3.7 Flash 负责文本/编码执行,Spark 蒸馏 A3B 作为本地单槽编排器和验收者,DS-V4 Flash 只在高风险或客观验收失败时介入。MiMo 保留多模态和原生搜索兜底。</p>
+              <p>默认对话和 CLI <code>-p</code> 路径统一使用 StepFun 3.7 Flash;Spark A3B / DS-V4 / GLM 保留为显式实验、健康检查或后续编排通道。MiMo Token Plan 文本模型已退出产品链路。</p>
             </article>
             <article class="feature-card">
               <h3>安全防护</h3>
@@ -294,6 +294,6 @@
       </footer>
     </div>
 
-    <script src="./app.js?v=0.82.0"></script>
+    <script src="./app.js?v=0.83.0"></script>
   </body>
 </html>

@@ -17,15 +17,16 @@ The CLI is a thin local workbench. Routing, default model access, hosted
 fallback, search, and multimodal provider selection are handled by Lynn Brain
 V2.
 
-## Default Model Route
+## Default Brain Policy
 
-The default online route is:
+The default online policy is StepFun-first:
 
-1. StepFun 3.7 Flash - primary text and coding route, 256K context, high
-   reasoning, 32K reasoning/generation budget.
-2. MiMo V2.5 Pro - multimodal and native-search fallback for image, audio,
-   video, and search-heavy turns.
-3. Spark Qwen 3.6 35B A3B - local third fallback.
+- StepFun 3.7 Flash handles default GUI/CLI chat, `-p`, research, tool calls,
+  and coding execution end to end.
+- Spark A3B, DS-V4, and GLM remain explicit manager-run, health-check, or
+  future experiment lanes; they are not part of the default chat route.
+- Deprecated MiMo Token Plan text-model references are cleaned on startup. MiMo
+  paid search is a separate tool surface and is not the default text model.
 
 Users can still configure a private OpenAI-compatible endpoint with
 `Lynn providers set`.
@@ -51,7 +52,7 @@ model:
 ## Local Model Matching Policy
 
 StepFun 3.7 Flash remains the default route for coding, research, and long
-tool chains. It runs with high reasoning and a 32K reasoning/generation budget.
+tool chains. It runs with high reasoning and a 48K reasoning/generation budget.
 
 Local 9B is explicit opt-in. It is for low-latency local turns and offline
 fallback, not for default startup. Its runtime policy is:

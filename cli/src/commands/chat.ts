@@ -595,7 +595,6 @@ function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolea
     || event.type === "provider"
     || event.type === "tool_progress"
     || event.type === "brain.error"
-    || event.type === "usage"
     || (event.type === "reasoning.delta" && renderReasoning);
 }
 
@@ -644,7 +643,7 @@ function buildPromptFrameStatus(
 
 export function chatRouteLabel(provider?: { provider: string; model: string } | null): string {
   if (provider) return `CLI BYOK: ${modelLabelWithId(provider.model)}`;
-  return "StepFun 3.7 Flash → Spark A3B single-slot → DS-V4 Flash via Brain router (auto)";
+  return "StepFun 3.7 Flash via Brain router (default)";
 }
 
 export function splitChatCommandLine(raw: string): string[] {
@@ -859,8 +858,9 @@ function renderChatEvent(event: BrainStreamEvent, renderReasoning: boolean, rend
   if (event.type === "reasoning.delta" && renderReasoning) {
     process.stderr.write(dim(event.text, supportsColor(process.stderr)));
   } else if (event.type === "usage") {
-    const summary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt });
-    if (summary) process.stderr.write(`\nusage: ${summary}\n`);
+    // Chat renders usage through the footer/runtime metrics. Printing every
+    // upstream usage chunk here turns streaming telemetry into visible spam.
+    void startedAt;
   } else {
     renderBrainEventForHuman(event, renderState, process.stderr);
   }

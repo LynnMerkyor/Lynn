@@ -6,6 +6,7 @@ import {
   isBrainModelRef,
 } from '../../../../shared/brain-provider.js';
 import { getUserFacingModelAlias } from '../../../../shared/assistant-role-models.js';
+import { isDeprecatedMimoLlmRef } from '../../../../shared/deprecated-models.js';
 import { parseSharedModelRef } from './model-ref';
 
 type BrainModelLike = {
@@ -43,7 +44,7 @@ function cloneCollapsedBrainModel<T extends BrainModelLike>(model: T, isCurrent:
 }
 
 export function isDisplayDefaultModel(modelId?: string | null, provider?: string | null): boolean {
-  return isBrainModelRef(modelId || '', provider || '');
+  return isBrainModelRef(modelId || '', provider || '') || isDeprecatedMimoLlmRef(modelId, provider);
 }
 
 export function normalizeDisplayModelId(modelId?: string | null, provider?: string | null): string {

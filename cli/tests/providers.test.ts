@@ -20,7 +20,7 @@ afterEach(() => setLang(null));
 describe("providers command", () => {
   it("renders BYOK guidance without exposing keys", () => {
     const output = renderProvidersInfo({
-      defaultRoute: "StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B Distill via local Brain router (auto)",
+      defaultRoute: "StepFun 3.7 Flash via local Brain router (default)",
       byokEntry: "Open Lynn GUI > Settings > Providers",
       keyPolicy: "Provider keys stay private.",
       brainUrl: "http://127.0.0.1:8790",
@@ -82,7 +82,7 @@ describe("providers command", () => {
   it("renders localized provider guidance in Chinese", () => {
     setLang("zh");
     const output = renderProvidersInfo({
-      defaultRoute: "StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B Distill via local Brain router (auto)",
+      defaultRoute: "StepFun 3.7 Flash via local Brain router (default)",
       byokEntry: "Lynn 客户端 > 设置 > Providers",
       keyPolicy: "Provider keys stay private.",
       brainUrl: "http://127.0.0.1:8790",

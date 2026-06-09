@@ -92,6 +92,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   let sawReasoning = false;
   let modelProvider = "brain";
   let modelId = "lynn-brain-router";
+  let latestUsage: string | null = null;
   const renderState: HumanBrainRenderState = {};
   const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"), { quiet: true });
   const startedAt = Date.now();
@@ -185,6 +186,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
           sawReasoning = true;
           attemptSawReasoning = true;
         }
+        if (event.type === "usage") latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt }) || latestUsage;
         if (event.type === "assistant.delta") attemptAssistant += event.text;
       }
       if (attemptAssistant.trim()) {
@@ -240,6 +242,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   if (options.json) {
     writeJsonLine({ type: "run.finished", ts: nowIso(), ok: true, reasoningReturned: sawReasoning });
   } else {
+    if (latestUsage) process.stderr.write(`${latestUsage}\n`);
     process.stdout.write("\n");
   }
   return 0;
@@ -250,7 +253,6 @@ function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolea
     || event.type === "provider"
     || event.type === "tool_progress"
     || event.type === "brain.error"
-    || event.type === "usage"
     || (event.type === "reasoning.delta" && renderReasoning);
 }
 
@@ -328,8 +330,8 @@ function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; render
   } else if (event.type === "reasoning.delta" && opts.renderReasoning) {
     process.stderr.write(event.text);
   } else if (event.type === "usage") {
-    const summary = summarizeUsage(event.usage, { durationMs: opts.startedAt ? Date.now() - opts.startedAt : undefined });
-    if (summary) process.stderr.write(`\nusage: ${summary}\n`);
+    // Human prompt mode keeps usage telemetry out of the answer stream. JSONL
+    // mode still emits structured usage above for automation.
   } else {
     renderBrainEventForHuman(event, opts.renderState, process.stderr);
   }

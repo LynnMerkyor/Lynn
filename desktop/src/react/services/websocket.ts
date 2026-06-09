@@ -56,6 +56,16 @@ export function getWebSocket(): WebSocket | null {
   return _ws;
 }
 
+/** UI smoke only: inject a fake websocket so the release gate can exercise sendPrompt end-to-end. */
+export function __setWebSocketForUiSmoke(ws: WebSocket | null): void {
+  try {
+    if (new URLSearchParams(window.location.search).get('uiSmoke') !== '1') return;
+  } catch {
+    return;
+  }
+  _ws = ws;
+}
+
 /** 发起 WebSocket 连接 */
 export function connectWebSocket(port?: string, token?: string): void {
   // 如果没有传参，从 Zustand store 获取

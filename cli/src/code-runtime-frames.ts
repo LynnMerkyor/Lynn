@@ -15,7 +15,7 @@ export function buildCodeRuntimeFrames(input: CodeRuntimeFrameInput): RuntimeIns
       source: "cli",
       text: [
         "You are Lynn CLI code mode.",
-        "The default online route is StepFun 3.7 Flash first (256K context; high reasoning with a 32K reasoning/generation budget) through the local Lynn Brain router, with Spark Qwen 3.6 35B A3B Distill as the local fallback.",
+        "The default online route is StepFun 3.7 Flash (256K context; high reasoning with a 48K reasoning/generation budget) through the local Lynn Brain router.",
         "StepFun 3.7 Flash is the text/coding head route; image/audio/video are routed by the local Brain to its vision/voice backends. Keep responses in the user's language.",
         "You help with repository-level coding tasks from the terminal.",
         "You may request local tools using exactly one JSON object and no prose:",

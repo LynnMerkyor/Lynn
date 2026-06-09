@@ -147,7 +147,7 @@ checks.push(run("version", ["version"]).then((r) => {
 checks.push(run("startup banner", []).then((r) => {
   assertIncludes(r.name, r.stdout, "Lynn CLI");
   assertIncludes(r.name, r.stdout, "StepFun 3.7 Flash");
-  assertIncludes(r.name, r.stdout, "Spark Qwen 3.6 35B A3B Distill");
+  assertIncludes(r.name, r.stdout, "Brain");
   assertIncludes(r.name, r.stdout, "ask / workspace");
   assertIncludes(r.name, r.stdout, "Shift+Tab");
   assertIncludes(r.name, r.stdout, "Brain:");
@@ -156,6 +156,8 @@ checks.push(run("startup banner", []).then((r) => {
   }
   assertIncludes(r.name, r.stdout, "Lynn providers");
   assertNotIncludes(r.name, r.stdout, "MiMo via local Brain router");
+  assertNotIncludes(r.name, r.stdout, "Spark Qwen 3.6 35B A3B Distill");
+  assertNotIncludes(r.name, r.stdout, "mimo-v2.5-pro");
 }));
 
 checks.push(run("providers", ["providers", "--data-dir", missingDataDir]).then((r) => {

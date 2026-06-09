@@ -484,10 +484,12 @@ describe('Router', () => {
     const end = chunks.find((chunk) => chunk.type === 'tool_progress' && chunk.event === 'end');
     expect(end).toMatchObject({ name: 'web_search', ok: true });
     expect(end.summary).toContain('Zhipu summary');
-    expect(end.summary).toContain('MiMo summary');
+    expect(end.summary).not.toContain('MiMo summary');
     expect(end.details).toEqual(expect.arrayContaining([
       expect.stringContaining('Zhipu summary'),
       expect.stringContaining('[A](https://a.example)'),
+    ]));
+    expect(end.details).not.toEqual(expect.arrayContaining([
       expect.stringContaining('[B](https://b.example)'),
     ]));
   });
