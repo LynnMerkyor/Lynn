@@ -11,6 +11,7 @@ declare global {
     __lynnUiSmokeReady?: boolean;
     __lynnUiSmokeScenario?: SmokeScenario;
     __lynnSetUiSmokeScenario?: (scenario: SmokeScenario) => boolean;
+    __lynnPrepareUiSmokeSend?: () => boolean;
     __lynnRunUiSmokeSend?: () => Promise<{ sent: boolean; payload?: unknown; itemCount: number }>;
   }
 }
@@ -201,7 +202,7 @@ function applyScenario(scenario: SmokeScenario): void {
   window.__lynnUiSmokeScenario = scenario;
 }
 
-function installFakePromptSocket(): { lastPayload?: unknown } {
+function installFakePromptSocket(options: { autoReply?: boolean } = {}): { lastPayload?: unknown } {
   const state: { lastPayload?: unknown } = {};
   const fake = {
     readyState: WebSocket.OPEN,
@@ -216,6 +217,11 @@ function installFakePromptSocket(): { lastPayload?: unknown } {
               sessionPath: parsed.sessionPath,
             },
           }));
+          if (options.autoReply && parsed.sessionPath) {
+            useStore.getState().appendItem(String(parsed.sessionPath), assistantMessage('ui-smoke-send-assistant', [
+              textBlock('UI_SMOKE_SEND_OK：GUI 发送链路已收到 mock 回复。'),
+            ]));
+          }
         }, 0);
       }
     },
@@ -223,6 +229,12 @@ function installFakePromptSocket(): { lastPayload?: unknown } {
   } as unknown as WebSocket;
   __setWebSocketForUiSmoke(fake);
   return state;
+}
+
+function prepareSendScenario(): boolean {
+  applyScenario('send');
+  installFakePromptSocket({ autoReply: true });
+  return true;
 }
 
 async function runSendScenario(): Promise<{ sent: boolean; payload?: unknown; itemCount: number }> {
@@ -247,6 +259,7 @@ export function installUiSmokeFixture(initialScenario: SmokeScenario = 'home'): 
     applyScenario(scenario);
     return true;
   };
+  window.__lynnPrepareUiSmokeSend = prepareSendScenario;
   window.__lynnRunUiSmokeSend = runSendScenario;
   applyScenario(initialScenario);
   window.__lynnUiSmokeReady = true;

@@ -64,6 +64,13 @@ interface ScenarioResult {
   screenshot: string;
 }
 
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 function nowStamp() {
   return new Date().toISOString().replace(/[:.]/g, "-");
 }
@@ -215,6 +222,41 @@ async function waitForExpression(cdp: CdpClient, expression: string, timeoutMs =
   throw new Error(`Timed out waiting for expression: ${expression}`);
 }
 
+async function elementRect(cdp: CdpClient, selector: string): Promise<Rect> {
+  const rect = await cdp.evaluate(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  })()`) as Rect | null;
+  if (!rect || rect.width <= 0 || rect.height <= 0) {
+    throw new Error(`Element is not visible: ${selector}`);
+  }
+  return rect;
+}
+
+async function clickElement(cdp: CdpClient, selector: string): Promise<void> {
+  const rect = await elementRect(cdp, selector);
+  const x = Math.round(rect.x + rect.width / 2);
+  const y = Math.round(rect.y + rect.height / 2);
+  await cdp.call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+  await cdp.call("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+  await cdp.call("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+}
+
+async function runSendViaUserInteraction(cdp: CdpClient): Promise<{ sent: boolean; itemCount: number }> {
+  const prepared = await cdp.evaluate(`window.__lynnPrepareUiSmokeSend && window.__lynnPrepareUiSmokeSend()`) as boolean;
+  if (!prepared) throw new Error("send scenario fixture did not prepare");
+  await waitForExpression(cdp, "document.body.dataset.uiSmokeScenario === 'send'");
+  await clickElement(cdp, "textarea#inputBox");
+  await cdp.call("Input.insertText", { text: "UI_SMOKE_SEND_PROMPT" });
+  await waitForExpression(cdp, "document.querySelector('textarea#inputBox')?.value === 'UI_SMOKE_SEND_PROMPT'");
+  await clickElement(cdp, "button[title*='发送'], button[title*='Send']");
+  await waitForExpression(cdp, "document.body.innerText.includes('UI_SMOKE_SEND_PROMPT')");
+  await waitForExpression(cdp, "document.body.innerText.includes('UI_SMOKE_SEND_OK')");
+  return { sent: true, itemCount: 2 };
+}
+
 function assertScenario(id: string, snapshot: Snapshot, expectedTexts: string[]): string[] {
   const failures: string[] = [];
   const text = String(snapshot.visibleText || "");
@@ -284,7 +326,7 @@ async function main(): Promise<void> {
 
     for (const scenario of SCENARIOS) {
       if (scenario.id === "send") {
-        const sendResult = await cdp.evaluate(`window.__lynnRunUiSmokeSend()`) as { sent?: boolean; itemCount?: number };
+        const sendResult = await runSendViaUserInteraction(cdp);
         if (!sendResult?.sent) {
           results.push({
             id: scenario.id,
