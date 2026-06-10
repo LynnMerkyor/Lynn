@@ -14,6 +14,7 @@ import { createQwen3AsrProvider } from "./qwen3-asr.js";
 import { createFasterWhisperProvider } from "./faster-whisper.js";
 import { createOpenAIWhisperProvider } from "./openai-whisper.js";
 import { createAzureSTTProvider } from "./azure-stt.js";
+import { createStepFunRealtimeAsrProvider } from "../stepfun-realtime.js";
 
 interface ASRConfig {
   provider?: string;
@@ -43,6 +44,10 @@ function errorMessage(err: unknown): string {
 }
 
 const PROVIDERS: Record<string, ASRProviderFactory> = {
+  "stepfun-realtime": createStepFunRealtimeAsrProvider,
+  "stepfun": createStepFunRealtimeAsrProvider,
+  "spark": (config) => createASRFallbackProvider({ ...config, provider: "qwen3-asr", fallback_provider: "sensevoice" }),
+  "spark-local": (config) => createASRFallbackProvider({ ...config, provider: "qwen3-asr", fallback_provider: "sensevoice" }),
   "qwen3-asr": createQwen3AsrProvider,
   "qwen3": createQwen3AsrProvider,
   "qwen": createQwen3AsrProvider,
@@ -56,6 +61,8 @@ const PROVIDERS: Record<string, ASRProviderFactory> = {
 
 export function listASRProviders() {
   return [
+    { id: "stepfun-realtime", label: "StepFun Realtime ASR (灰度 · 云端)", needsKey: true },
+    { id: "spark", label: "Spark local ASR Router (Qwen3-ASR → SenseVoice)", needsKey: false },
     { id: "qwen3-asr", label: "Qwen3-ASR-0.6B (V0.79 Jarvis Runtime)", needsKey: false },
     { id: "sensevoice", label: "SenseVoice (达摩院・推荐)", needsKey: false, default: true },
     { id: "faster-whisper", label: "Faster Whisper (自托管)", needsKey: false },

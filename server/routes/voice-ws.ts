@@ -48,6 +48,7 @@ import {
   isSemanticTranscript,
   normalizeVoiceTranscript,
   resolveVoiceRuntimeAsrConfig,
+  resolveVoiceRuntimeTtsConfig,
   splitTextForTts,
 } from "../chat/voice-session-utils.js";
 import { FRAME, STATE } from "../chat/voice-ws-types.js";
@@ -80,6 +81,7 @@ export {
   isSemanticTranscript,
   normalizeVoiceTranscript,
   resolveVoiceRuntimeAsrConfig,
+  resolveVoiceRuntimeTtsConfig,
   splitTextForTts,
 };
 /**

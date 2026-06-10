@@ -21,6 +21,7 @@ import {
   normalizeTtsAudioToPcm16Mono16k,
   normalizeVoiceTranscript,
   resolveVoiceRuntimeAsrConfig,
+  resolveVoiceRuntimeTtsConfig,
   splitTextForTts,
 } from "../server/routes/voice-ws.js";
 
@@ -106,6 +107,35 @@ describe("voice-ws route — createVoiceWsRoute", () => {
       provider: "openai",
       base_url: "https://example.test",
     });
+  });
+
+  it("only switches to StepFun Realtime router when the voice gray switch is enabled", () => {
+    const oldRouter = process.env.LYNN_VOICE_ROUTER;
+    const oldKey = process.env.LYNN_STEP_REALTIME_KEY;
+    try {
+      delete process.env.LYNN_VOICE_ROUTER;
+      process.env.LYNN_STEP_REALTIME_KEY = "sk-test";
+      expect(resolveVoiceRuntimeAsrConfig({})).toMatchObject({
+        provider: "qwen3-asr",
+        fallback_provider: "sensevoice",
+      });
+
+      process.env.LYNN_VOICE_ROUTER = "auto";
+      expect(resolveVoiceRuntimeAsrConfig({}, { realtime: { endpoint: "https://api.stepfun.com" } })).toMatchObject({
+        provider: "stepfun-realtime",
+        fallback_provider: "spark",
+        endpoint: "https://api.stepfun.com",
+      });
+      expect(resolveVoiceRuntimeTtsConfig({}, { realtime: { endpoint: "https://api.stepfun.com" } })).toMatchObject({
+        provider: "stepfun-realtime",
+        fallback_provider: "spark",
+      });
+    } finally {
+      if (oldRouter === undefined) delete process.env.LYNN_VOICE_ROUTER;
+      else process.env.LYNN_VOICE_ROUTER = oldRouter;
+      if (oldKey === undefined) delete process.env.LYNN_STEP_REALTIME_KEY;
+      else process.env.LYNN_STEP_REALTIME_KEY = oldKey;
+    }
   });
 });
 

@@ -190,13 +190,101 @@ export function buildVoicePrompt(transcript: string, emotion: EmotionResult | nu
   ].filter(Boolean).join("\n");
 }
 
-export function resolveVoiceRuntimeAsrConfig(config: JsonRecord = {}): JsonRecord {
+function configString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function mergeRealtimeConfig(config: JsonRecord, voiceConfig: JsonRecord = {}): JsonRecord {
+  const realtime = asRecord(voiceConfig.realtime) || {};
+  return {
+    ...realtime,
+    ...config,
+    api_key: config.api_key || config.apiKey || realtime.api_key || realtime.apiKey,
+    endpoint: config.endpoint || config.base_url || config.baseUrl || realtime.endpoint || realtime.base_url || realtime.baseUrl,
+    model: config.model || realtime.model,
+    default_voice: config.default_voice || config.voice || realtime.default_voice || realtime.voice,
+  };
+}
+
+function voiceRouterMode(config: JsonRecord = {}, voiceConfig: JsonRecord = {}): string {
+  const router = asRecord(voiceConfig.router) || {};
+  return configString(config.router)
+    || configString(router.provider)
+    || configString(router.mode)
+    || configString(voiceConfig.router)
+    || configString(process.env.LYNN_VOICE_ROUTER)
+    || "";
+}
+
+function hasStepRealtimeKey(config: JsonRecord = {}, voiceConfig: JsonRecord = {}): boolean {
+  const merged = mergeRealtimeConfig(config, voiceConfig);
+  return !!(
+    configString(merged.api_key)
+    || configString(merged.apiKey)
+    || configString(process.env.LYNN_STEP_REALTIME_KEY)
+    || configString(process.env.STEPFUN_REALTIME_API_KEY)
+    || configString(process.env.STEPFUN_API_KEY)
+    || configString(process.env.STEP_API_KEY)
+  );
+}
+
+function shouldUseStepRealtime(config: JsonRecord = {}, voiceConfig: JsonRecord = {}): boolean {
+  const provider = configString(config.provider);
+  const mode = voiceRouterMode(config, voiceConfig);
+  if (provider === "stepfun-realtime" || provider === "stepfun") return true;
+  if (mode === "stepfun" || mode === "stepfun-realtime") return true;
+  if (mode === "auto") return hasStepRealtimeKey(config, voiceConfig);
+  return false;
+}
+
+export function resolveVoiceRuntimeAsrConfig(config: JsonRecord = {}, voiceConfig: JsonRecord = {}): JsonRecord {
+  if (shouldUseStepRealtime(config, voiceConfig)) {
+    return {
+      ...mergeRealtimeConfig(config, voiceConfig),
+      provider: "stepfun-realtime",
+      fallback_provider: config.fallback_provider || config.fallbackProvider || "spark",
+      fallback: {
+        provider: "spark",
+        ...(asRecord(config.fallback) || {}),
+      },
+    };
+  }
   const provider = String(config.provider || "").trim();
+  if (provider === "spark" || provider === "spark-local") {
+    return {
+      ...config,
+      provider: "spark",
+      fallback_provider: config.fallback_provider || config.fallbackProvider || "sensevoice",
+    };
+  }
   if (!provider || provider === "sensevoice") {
     return {
       ...config,
       provider: "qwen3-asr",
       fallback_provider: config.fallback_provider || config.fallbackProvider || "sensevoice",
+    };
+  }
+  return config;
+}
+
+export function resolveVoiceRuntimeTtsConfig(config: JsonRecord = {}, voiceConfig: JsonRecord = {}): JsonRecord {
+  if (shouldUseStepRealtime(config, voiceConfig)) {
+    return {
+      ...mergeRealtimeConfig(config, voiceConfig),
+      provider: "stepfun-realtime",
+      fallback_provider: config.fallback_provider || config.fallbackProvider || "spark",
+      fallback: {
+        provider: "spark",
+        ...(asRecord(config.fallback) || {}),
+      },
+    };
+  }
+  const provider = configString(config.provider);
+  if (provider === "spark" || provider === "spark-local") {
+    return {
+      ...config,
+      provider: "spark",
+      fallback_provider: config.fallback_provider || config.fallbackProvider || "edge",
     };
   }
   return config;

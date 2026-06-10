@@ -345,12 +345,6 @@ export function JarvisRuntimeOverlay() {
       onCaptureStats: (captureStats) => setStatus((s) => ({ ...s, captureStats })),
       onPlaybackStats: (playbackStats) => setStatus((s) => ({ ...s, playbackStats })),
       stopCaptureOnEndTurn: true,
-      // 2026-05-01 P1-① — Tier 1 全双工:关浏览器原生 AEC/NS/AGC,让 server 端
-      // tonarino webrtc-audio-processing native AEC 接管(reference signal 在 server
-      // 已构造,零 IPC)。平台无 prebuilt → server 自动降级为 mic 直传(等同现状)。
-      echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl: false,
     });
     clientRef.current = client;
     return client;

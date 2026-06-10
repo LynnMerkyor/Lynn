@@ -6,10 +6,12 @@
  */
 import { createCosyVoice2TtsProvider } from "./cosyvoice2.js";
 import { createEdgeTtsProvider } from "./edge.js";
+import { createStepFunRealtimeTtsProvider } from "../stepfun-realtime.js";
 
 interface TTSConfig {
   provider?: string;
   fallback_provider?: string;
+  fallbackProvider?: string;
   fallback?: TTSConfig;
   [key: string]: unknown;
 }
@@ -39,6 +41,10 @@ function errorMessage(err: unknown): string {
 }
 
 const PROVIDERS: Record<string, TTSProviderFactory> = {
+  "stepfun-realtime": createStepFunRealtimeTtsProvider,
+  "stepfun": createStepFunRealtimeTtsProvider,
+  spark: (config) => createTTSFallbackProvider({ ...config, provider: "cosyvoice2", fallback_provider: "edge" }),
+  "spark-local": (config) => createTTSFallbackProvider({ ...config, provider: "cosyvoice2", fallback_provider: "edge" }),
   cosyvoice: createCosyVoice2TtsProvider,
   cosyvoice2: createCosyVoice2TtsProvider,
   "cosyvoice-2": createCosyVoice2TtsProvider,
@@ -58,7 +64,7 @@ export function createTTSProvider(config: TTSConfig = {}): TTSProvider {
 export function createTTSFallbackProvider(config: TTSConfig = {}, deps: TTSFallbackDeps = {}): TTSProvider {
   const primaryProvider = config.provider || "cosyvoice2";
   const primary = deps.primaryProvider || createTTSProvider({ ...config, provider: primaryProvider });
-  const fallbackProvider = config.fallback?.provider || config.fallback_provider || "edge";
+  const fallbackProvider = config.fallback?.provider || config.fallback_provider || config.fallbackProvider || "edge";
 
   if (primaryProvider === fallbackProvider && !deps.fallbackProvider) {
     return primary;

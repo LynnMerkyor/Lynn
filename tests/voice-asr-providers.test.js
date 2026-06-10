@@ -8,6 +8,7 @@ import { createASRFallbackProvider } from "../server/clients/asr/index.js";
 import { createQwen3AsrProvider } from "../server/clients/asr/qwen3-asr.js";
 import { createSERProvider, EMOTION_LLM_HINT } from "../server/clients/ser/index.js";
 import { createEmotion2VecProvider } from "../server/clients/ser/emotion2vec-plus.js";
+import { createStepFunRealtimeAsrProvider, createStepFunRealtimeTtsProvider } from "../server/clients/stepfun-realtime.js";
 import { createCosyVoice2TtsProvider } from "../server/clients/tts/cosyvoice2.js";
 import { createEdgeTtsProvider, createTTSFallbackProvider } from "../server/clients/tts/index.js";
 import { normalizeChineseTtsText, stripEmojiForTts } from "../shared/tts-text-normalizer.js";
@@ -124,6 +125,105 @@ describe("ASR fallback chain", () => {
       text: "fallback 转写",
       fallbackUsed: true,
       primaryError: "qwen offline",
+    });
+  });
+});
+
+describe("StepFun Realtime voice providers", () => {
+  class FakeStepWebSocket {
+    static instances = [];
+    handlers = {};
+    sent = [];
+
+    constructor(url, opts) {
+      this.url = url;
+      this.opts = opts;
+      FakeStepWebSocket.instances.push(this);
+    }
+
+    on(event, cb) {
+      this.handlers[event] = cb;
+      return this;
+    }
+
+    send(message, cb) {
+      this.sent.push(JSON.parse(String(message)));
+      cb?.();
+      const type = this.sent.at(-1)?.type;
+      if (type === "response.create") {
+        queueMicrotask(() => {
+          if (this.sent.at(-1)?.response?.modalities?.includes("audio")) {
+            this.message({ type: "response.audio.delta", delta: Buffer.from([1, 0, 2, 0]).toString("base64") });
+          } else {
+            this.message({ type: "response.raw_text.delta", delta: "你好 Lynn" });
+          }
+          this.message({ type: "response.done" });
+        });
+      }
+    }
+
+    close() {}
+
+    open() {
+      this.handlers.open?.();
+    }
+
+    message(value) {
+      this.handlers.message?.(Buffer.from(JSON.stringify(value)));
+    }
+  }
+
+  beforeEach(() => {
+    FakeStepWebSocket.instances = [];
+  });
+
+  it("transcribes through StepFun Realtime websocket frames", async () => {
+    const p = createStepFunRealtimeAsrProvider({
+      api_key: "sk-test",
+      endpoint: "https://api.stepfun.com",
+      websocketCtor: FakeStepWebSocket,
+      timeout_ms: 1000,
+    });
+    const pending = p.transcribe(Buffer.alloc(3200), { language: "zh" });
+    const ws = FakeStepWebSocket.instances[0];
+    ws.open();
+
+    const result = await pending;
+    expect(result).toMatchObject({ text: "你好 Lynn", provider: "stepfun-realtime" });
+    expect(ws.url).toBe("wss://api.stepfun.com/v1/realtime/stateless?model=step-overture-preview");
+    expect(ws.opts.headers.Authorization).toBe("Bearer sk-test");
+    expect(ws.sent.map((m) => m.type)).toEqual([
+      "input_audio_buffer.append",
+      "input_audio_buffer.commit",
+      "response.create",
+    ]);
+    expect(ws.sent[2].response.modalities).toEqual(["text"]);
+  });
+
+  it("synthesizes StepFun Realtime audio as WAV for the existing voice pipeline", async () => {
+    const p = createStepFunRealtimeTtsProvider({
+      api_key: "sk-test",
+      websocketCtor: FakeStepWebSocket,
+      timeout_ms: 1000,
+    });
+    const pending = p.synthesize("你好");
+    const ws = FakeStepWebSocket.instances[0];
+    ws.open();
+
+    const result = await pending;
+    expect(result.provider).toBe("stepfun-realtime");
+    expect(result.mimeType).toBe("audio/wav");
+    expect(result.audio.subarray(0, 4).toString("ascii")).toBe("RIFF");
+    expect(ws.sent[0].response.modalities).toEqual(["audio", "text"]);
+    expect(ws.sent[0].response.voice).toBe("jingdiannvsheng");
+  });
+
+  it("reports degraded health when StepFun Realtime key is missing", async () => {
+    const p = createStepFunRealtimeAsrProvider({ websocketCtor: FakeStepWebSocket });
+    await expect(p.health()).resolves.toMatchObject({
+      ok: false,
+      degraded: true,
+      provider: "stepfun-realtime",
     });
   });
 });

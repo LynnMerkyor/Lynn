@@ -30,6 +30,7 @@ import {
   normalizeVoiceTranscript,
   providerHealthStatus,
   resolveVoiceRuntimeAsrConfig,
+  resolveVoiceRuntimeTtsConfig,
   splitTextForTts,
   TTS_RETRY_MIN_SEGMENT_CHARS,
   TTS_SEGMENT_TIMEOUT_MS,
@@ -46,6 +47,7 @@ import type {
   CurrentReplyPlayed,
   EmotionResult,
   ErleRecord,
+  JsonRecord,
   PendingInterruptedReply,
   SaveInterruptedTurn,
   SerProvider,
@@ -115,9 +117,10 @@ export class VoiceSession {
     this.ws = ws;
     this.engine = engine;
     this.hub = hub;
-    this.asrProvider = (asrProvider || createASRFallbackProvider(resolveVoiceRuntimeAsrConfig(engine?.config?.voice?.asr || {}))) as AsrProvider;
-    this.serProvider = (serProvider || createSERProvider(engine?.config?.voice?.ser || {})) as SerProvider;
-    this.ttsProvider = (ttsProvider || createTTSFallbackProvider(engine?.config?.voice?.tts || {})) as TtsProvider;
+    const voiceConfig = engine?.config?.voice || {};
+    this.asrProvider = (asrProvider || createASRFallbackProvider(resolveVoiceRuntimeAsrConfig(voiceConfig.asr || {}, voiceConfig as JsonRecord))) as AsrProvider;
+    this.serProvider = (serProvider || createSERProvider(voiceConfig.ser || {})) as SerProvider;
+    this.ttsProvider = (ttsProvider || createTTSFallbackProvider(resolveVoiceRuntimeTtsConfig(voiceConfig.tts || {}, voiceConfig as JsonRecord))) as TtsProvider;
     this.brainRunner = brainRunner || defaultBrainRunner;
     this.saveInterruptedTurn = saveInterruptedTurn; // DS 反馈 #3 T2 阶段的可注入钩子
     this.mode = mode === "chat" ? "chat" : "direct";
@@ -836,4 +839,3 @@ export class VoiceSession {
     }
   }
 }
-

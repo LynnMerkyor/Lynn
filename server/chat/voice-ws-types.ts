@@ -105,6 +105,9 @@ export interface VoiceEngine {
       asr?: JsonRecord;
       ser?: JsonRecord;
       tts?: JsonRecord;
+      realtime?: JsonRecord;
+      router?: JsonRecord;
+      browserAec?: unknown;
     };
   };
   executeIsolated?: (prompt: string, opts: { signal?: AbortSignal }) => Promise<{ error?: unknown; replyText?: unknown } | null | undefined>;

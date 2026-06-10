@@ -7,6 +7,8 @@ import { KeyInput } from '../widgets/KeyInput';
 import styles from '../Settings.module.css';
 
 const ASR_PROVIDERS = [
+  { value: 'stepfun-realtime', label: 'StepFun Realtime ASR (灰度 · 云端)' },
+  { value: 'spark', label: 'Spark local ASR Router (Qwen3-ASR → SenseVoice)' },
   { value: 'sensevoice', label: 'SenseVoice (达摩院・推荐)' },
   { value: 'faster-whisper', label: 'Faster Whisper (自托管)' },
   { value: 'openai', label: 'OpenAI Whisper API (BYOK)' },
@@ -14,6 +16,8 @@ const ASR_PROVIDERS = [
 ];
 
 const TTS_PROVIDERS = [
+  { value: 'stepfun-realtime', label: 'StepFun Realtime TTS (灰度 · 云端)' },
+  { value: 'spark', label: 'Spark local TTS Router (CosyVoice → Edge)' },
   { value: 'cosyvoice', label: 'CosyVoice (Spark · 真流式 · 默认推荐)' },
   { value: 'edge', label: 'Edge TTS (免费在线・备用)' },
   { value: 'openai', label: 'OpenAI TTS API (BYOK)' },
@@ -40,7 +44,8 @@ const LANGUAGES = [
 ];
 
 function defaultTtsVoice(provider: string): string {
-  if (provider === 'cosyvoice') return '中文女';
+  if (provider === 'cosyvoice' || provider === 'spark') return '中文女';
+  if (provider === 'stepfun-realtime') return 'jingdiannvsheng';
   return 'zh-CN-XiaoxiaoNeural';
 }
 
@@ -124,8 +129,8 @@ export function VoiceTab() {
     return () => { cancelled = true; };
   }, []);
 
-  const needsAsrKey = asrProvider === 'openai' || asrProvider === 'azure';
-  const needsTtsKey = ttsProvider === 'openai';
+  const needsAsrKey = asrProvider === 'openai' || asrProvider === 'azure' || asrProvider === 'stepfun-realtime';
+  const needsTtsKey = ttsProvider === 'openai' || ttsProvider === 'stepfun-realtime';
 
   const handleSave = async () => {
     const payload: {
@@ -218,6 +223,10 @@ export function VoiceTab() {
           <span className={styles['settings-field-hint']}>
             {asrProvider === 'sensevoice'
               ? 'SenseVoice 部署在 Spark,中文流式 50ms,WER 业界领先,无需额外配置(默认推荐)。'
+              : asrProvider === 'stepfun-realtime'
+              ? '优先走 StepFun Realtime 云端识别,失败会由服务端退回 Spark 本地 ASR。Base URL 可填 https://api.stepfun.com 或 wss://api.stepfun.com/v1/realtime/stateless。'
+              : asrProvider === 'spark'
+              ? 'Spark 本地识别路由:Qwen3-ASR 优先,SenseVoice fallback。适合作为 StepFun Realtime 的本地备用。'
               : asrProvider === 'faster-whisper'
               ? 'Faster Whisper 自托管服务,无需额外配置。'
               : '使用第三方 API,需填写对应的密钥。'}
@@ -241,7 +250,7 @@ export function VoiceTab() {
                 type="text"
                 value={asrBaseUrl}
                 onChange={(e) => setAsrBaseUrl(e.target.value)}
-                placeholder="https://api.openai.com/v1"
+                placeholder={asrProvider === 'stepfun-realtime' ? 'https://api.stepfun.com' : 'https://api.openai.com/v1'}
               />
             </div>
           </>
@@ -266,7 +275,7 @@ export function VoiceTab() {
 
         <div className={styles['settings-field']}>
           <label className={styles['settings-field-label']}>默认音色</label>
-          {ttsProvider === 'cosyvoice' ? (
+          {ttsProvider === 'cosyvoice' || ttsProvider === 'spark' ? (
             <SelectWidget
               options={COSYVOICE_VOICES}
               value={ttsVoice}
@@ -284,6 +293,10 @@ export function VoiceTab() {
           <span className={styles['settings-field-hint']}>
             {ttsProvider === 'cosyvoice'
               ? 'CosyVoice 2 部署在 Spark,短文本低延迟,支持真流式播放。内置音色:中文女 / 中文男 / 英文女 / 英文男 / 日语男 / 韩语女 / 粤语女。'
+              : ttsProvider === 'spark'
+              ? 'Spark 本地合成路由:CosyVoice 优先,Edge/macOS 备用。'
+              : ttsProvider === 'stepfun-realtime'
+              ? '优先走 StepFun Realtime 云端合成,失败会由服务端退回 Spark 本地 TTS。默认音色可填 StepFun Realtime voice。'
               : ttsProvider === 'edge'
               ? 'Edge TTS 使用 Neural 音色 ID,如 zh-CN-XiaoxiaoNeural,适合作为网络备用。'
               : ttsProvider === 'openai'
@@ -354,7 +367,7 @@ export function VoiceTab() {
                 type="text"
                 value={ttsBaseUrl}
                 onChange={(e) => setTtsBaseUrl(e.target.value)}
-                placeholder="https://api.openai.com/v1"
+                placeholder={ttsProvider === 'stepfun-realtime' ? 'https://api.stepfun.com' : 'https://api.openai.com/v1'}
               />
             </div>
           </>
