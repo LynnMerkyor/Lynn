@@ -92,8 +92,31 @@ npm run release:manifest
 
 ## 7. GitHub Release
 
-3 个资产(Apple-Silicon.dmg / Intel.dmg / Windows-Setup.exe)+ Release notes 顶部贴
-[安装片段](v080-cli-install-release-snippet.md)(记得片段里 tarball 版本已在第 1 步更新)。
+3 个资产(Apple-Silicon.dmg / Intel.dmg / Windows-Setup.exe)+ CLI tarball。
+
+⛔ **Release body 顶部必须先放“国内镜像站下载（推荐）”区块**。GitHub Assets 只能作为备用下载,
+不能让国内用户先点 GitHub。缺这个区块 = Release 不合格,必须补完再发布。
+
+模板(版本号必须替换成当次版本):
+
+````md
+## 国内镜像站下载（推荐）
+
+国内用户请优先使用以下镜像站地址；GitHub Assets 作为备用下载。
+
+- **CLI**:
+
+  ```bash
+  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-<ver>.tgz"
+  ```
+
+- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-<ver>-macOS-arm64.dmg
+- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-<ver>-macOS-x64.dmg
+- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-<ver>-Windows-Setup.exe
+- **下载页**: https://download.merkyorlynn.com/download.html
+````
+
+其后再贴发版说明正文和 [安装片段](v080-cli-install-release-snippet.md)(记得片段里 tarball 版本已在第 1 步更新)。
 
 ## 8. 装后验证(发布 ≠ 完成)
 
@@ -120,6 +143,7 @@ npm run test:release:live      # 连本机已启动的打包版 Lynn
 | CLI 资产传到 `/var/www/...` | 公网 404/旧版,无报错 | 第 3 步 ⛔ + deploy-map 表 |
 | 只 rsync 不 sed 静态页 | 用户看到旧版本号 | 第 6 步两步制 + 12 处替换口诀 |
 | manifest/站点指 GitHub 直链 | 国内用户下不动 | static gate 强制 + 第 5 步 ⛔ |
+| GitHub Release 没有国内镜像区块 | 用户默认点 GitHub Assets,国内下载慢/失败 | 第 7 步 ⛔ 模板 |
 | dmg 不改名直接发 | 命名与历史版式不一致 | 第 4 步改名规则 |
 | 平台缺各自 server bundle | 装上打不开 | `dist`/`dist:win` 内置 build:server,别绕过脚本 |
 | PAT 缺 workflow scope | push 被拒 | 第 0 步检查 `.github/workflows` 改动 |

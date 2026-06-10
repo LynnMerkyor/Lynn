@@ -4,6 +4,21 @@
 
 本次发版把 Lynn CLI 与桌面 GUI 同步到 **v0.84.0**。默认对话和任务执行统一回到 **StepFun 3.7 Flash 一条龙主链**，优先保证“能正常对话、能完成工具任务、能给出最终答案”。本地蒸馏 A3B manager 仍作为显式 `Lynn manager run` 能力保留，但不会抢占默认 GUI/CLI 对话链路；考虑本地并发与稳定性，默认编排器切换继续暂缓。
 
+## 国内镜像站下载（推荐）
+
+国内用户请优先使用以下镜像站地址；GitHub Assets 作为备用下载。
+
+- **CLI**:
+
+  ```bash
+  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz"
+  ```
+
+- **macOS Apple Silicon / ARM64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.0-macOS-arm64.dmg](https://download.merkyorlynn.com/downloads/Lynn-0.84.0-macOS-arm64.dmg)
+- **macOS Intel / x64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.0-macOS-x64.dmg](https://download.merkyorlynn.com/downloads/Lynn-0.84.0-macOS-x64.dmg)
+- **Windows x64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.0-Windows-Setup.exe](https://download.merkyorlynn.com/downloads/Lynn-0.84.0-Windows-Setup.exe)
+- **下载页**: [https://download.merkyorlynn.com/download.html](https://download.merkyorlynn.com/download.html)
+
 ## 中文重点
 
 - **GUI 空答根因修复**：旧会话复用过期设备签名时，客户端会为每次请求刷新签名；工具链最终答案晚到时，Brain 不再 8 秒硬关流并丢弃 late final answer。
