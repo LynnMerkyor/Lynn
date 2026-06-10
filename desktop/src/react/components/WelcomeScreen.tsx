@@ -23,21 +23,27 @@ import styles from './Welcome.module.css';
 let _avatarTs = Date.now();
 export function refreshAvatarTs() { _avatarTs = Date.now(); }
 
+type QuickActionBehavior = 'prompt' | 'at' | 'fleet';
+
 const DEFAULT_QUICK_PROMPT_KEYS = [
   'welcome.quickActions.askFolder',
   'welcome.quickActions.summarizeWork',
   'welcome.quickActions.planToday',
+  // Fleet discoverability: a first-screen way for ordinary GUI users to learn they can
+  // dispatch parallel CLI workers (opens the Fleet panel + Task Brief form).
+  'welcome.quickActions.fleet',
 ] as const;
 
-const DEFAULT_QUICK_ACTION_BEHAVIORS: Record<string, 'prompt' | 'at'> = {
+const DEFAULT_QUICK_ACTION_BEHAVIORS: Record<string, QuickActionBehavior> = {
   'welcome.quickActions.askFolder': 'prompt',
   'welcome.quickActions.summarizeWork': 'at',
   'welcome.quickActions.planToday': 'prompt',
+  'welcome.quickActions.fleet': 'fleet',
 };
 
 const QUICK_ACTIONS_LS_KEY = 'lynn-welcome-quick-actions-v1';
 
-interface PersistedQuickAction { key: string; behavior: 'prompt' | 'at' }
+interface PersistedQuickAction { key: string; behavior: QuickActionBehavior }
 
 /**
  * Quick action customization scaffold: WelcomeScreen reads from localStorage
@@ -58,7 +64,7 @@ export function readQuickActionsConfig(): PersistedQuickAction[] {
       .filter((item) => item && typeof item.key === 'string')
       .map((item) => ({
         key: String(item.key),
-        behavior: item.behavior === 'at' ? 'at' as const : 'prompt' as const,
+        behavior: (item.behavior === 'at' ? 'at' : item.behavior === 'fleet' ? 'fleet' : 'prompt') as QuickActionBehavior,
       }));
     return sane.length > 0 ? sane : (null as unknown as PersistedQuickAction[]);
   } catch {
@@ -319,15 +325,28 @@ function WelcomeAvatar({ agentId, hasAvatar, agentAvatarUrl, yuan, name }: {
 function QuickActions({ displayName, selectedFolder }: { displayName: string; selectedFolder: string | null }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState<string | null>(null);
+  // First-run coachmark for the Fleet entry: pulse until the user clicks it once.
+  const [fleetCoachSeen, setFleetCoachSeen] = useState(() => {
+    try { return localStorage.getItem('lynn-fleet-coachmark-seen-v1') === '1'; } catch { return true; }
+  });
+  const markFleetCoachSeen = useCallback(() => {
+    setFleetCoachSeen(true);
+    try { localStorage.setItem('lynn-fleet-coachmark-seen-v1', '1'); } catch { /* ignore */ }
+  }, []);
 
   const actions = useMemo(() => {
     const persisted = readQuickActionsConfig();
-    const config = persisted && persisted.length > 0
+    const base = persisted && persisted.length > 0
       ? persisted
       : DEFAULT_QUICK_PROMPT_KEYS.map((key) => ({
           key: key as string,
           behavior: DEFAULT_QUICK_ACTION_BEHAVIORS[key],
         }));
+    // Always surface the Fleet discoverability action, even over a persisted (pre-fleet)
+    // localStorage config — otherwise existing users never see the parallel-workers entry.
+    const config = base.some((a) => a.key === 'welcome.quickActions.fleet')
+      ? base
+      : [...base, { key: 'welcome.quickActions.fleet', behavior: 'fleet' as QuickActionBehavior }];
     return config.map(({ key, behavior }) => ({
       key,
       behavior,
@@ -358,10 +377,16 @@ function QuickActions({ displayName, selectedFolder }: { displayName: string; se
       {actions.map((action) => (
         <button
           key={action.key}
-          className={styles.quickActionBtn}
+          className={`${styles.quickActionBtn}${action.behavior === 'fleet' && !fleetCoachSeen ? ` ${styles.quickActionCoachmark}` : ''}`}
+          title={action.behavior === 'fleet' ? (t('fleet.chatHint.text') || undefined) : undefined}
           onClick={() => {
             if (action.behavior === 'at') {
               handleTryAt();
+              return;
+            }
+            if (action.behavior === 'fleet') {
+              markFleetCoachSeen();
+              useStore.getState().openFleetBriefForm();
               return;
             }
             void handleClick(action.key, action.prompt);

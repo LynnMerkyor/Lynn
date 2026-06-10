@@ -147,7 +147,8 @@ checks.push(run("version", ["version"]).then((r) => {
 checks.push(run("startup banner", []).then((r) => {
   assertIncludes(r.name, r.stdout, "Lynn CLI");
   assertIncludes(r.name, r.stdout, "StepFun 3.7 Flash");
-  assertIncludes(r.name, r.stdout, "Spark Qwen 3.6 35B A3B Distill");
+  assertIncludes(r.name, r.stdout, "默认 StepFun 3.7 Flash");
+  assertIncludes(r.name, r.stdout, "48K 推理/生成预算");
   assertIncludes(r.name, r.stdout, "ask / workspace");
   assertIncludes(r.name, r.stdout, "Shift+Tab");
   assertIncludes(r.name, r.stdout, "Brain:");

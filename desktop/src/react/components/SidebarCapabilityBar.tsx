@@ -205,6 +205,7 @@ export function SidebarCapabilityBar() {
     {
       key: 'fleet',
       label: tt('sidebar.capability.fleet', 'Workers'),
+      title: tt('sidebar.capability.fleetTip', 'Fleet 指挥台:把任务拆给多个 CLI worker 并行干,每个独立 worktree'),
       onClick: () => {
         useStore.setState({ welcomeVisible: false, activePanel: 'fleet' });
       },
@@ -226,7 +227,7 @@ export function SidebarCapabilityBar() {
       label: tt('sidebar.capability.mcpHub', 'MCP 接入'),
       onClick: () => openCapabilityPanel('mcp'),
     },
-  ].filter(Boolean) as Array<{ key: string; label: string; onClick?: () => void }>;
+  ].filter(Boolean) as Array<{ key: string; label: string; onClick?: () => void; title?: string }>;
 
   return (
     <div className="sidebar-capability-bar">
@@ -290,6 +291,7 @@ export function SidebarCapabilityBar() {
               type="button"
               className="sidebar-capability-chip sidebar-capability-chip-button"
               onClick={chip.onClick}
+              title={chip.title}
             >
               {chip.label}
             </button>

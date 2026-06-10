@@ -773,7 +773,10 @@ describe("chat route event forwarding", () => {
     expect(retryEvents).toHaveLength(0);
   });
 
-  it("closes a successful tool turn without synthesizing a visible summary when the model never sends final text", async () => {
+  // 2026-06-10 产品决策反转(用户实测报障:"有授权卡片但最后没有反馈",issue #72 第三类的 GUI 变体):
+  // 工具执行成功而模型不给收尾文本时,turn 不再静默关闭 —— 输出一行基于真实 tool_end 计数的
+  // 事实反馈(buildToolCompletionSummary,trustedFallback)。仍不允许编造模型内容。
+  it("closes a successful tool turn with a factual tool-completion line when the model never sends final text", async () => {
     vi.useFakeTimers();
     try {
       engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
@@ -809,7 +812,9 @@ describe("chat route event forwarding", () => {
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
         .join("");
-      expect(visibleText).toBe("");
+      // 事实行:真实 tool_end 计数,不是模型口吻的编造内容。
+      expect(visibleText).toContain("已执行 1 个操作");
+      expect(visibleText).toContain("没有返回总结回复");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
     } finally {
@@ -1383,7 +1388,8 @@ describe("chat route event forwarding", () => {
     }
   });
 
-  it("closes without emitting a local-operation summary when tools succeeded but the model never finalizes", async () => {
+  // 2026-06-10 产品决策反转(同上):静默关闭 → 事实反馈行。
+  it("closes with a factual tool-completion line when tools succeeded but the model never finalizes", async () => {
     vi.useFakeTimers();
     try {
       engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
@@ -1434,7 +1440,8 @@ describe("chat route event forwarding", () => {
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
         .join("");
-      expect(visibleText).toBe("");
+      // 事实行:真实 tool_end 计数,不是模型口吻的编造内容。
+      expect(visibleText).toContain("已执行 1 个操作");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({
         type: "turn_end",
         sessionPath: "/sessions/current.jsonl",

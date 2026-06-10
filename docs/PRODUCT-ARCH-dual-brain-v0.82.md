@@ -146,7 +146,7 @@ Thought(想):怎么把任务拆成子步、派给谁
 - [ ] GUI Fleet:编排器中枢 + 多 worker 并行 + 验收可视化
 - [x] CLI:manager JSONL 派活 + harness 验收 + DS-V4 Flash escalation 闭环(`Lynn manager run --jsonl`;可承接 A3B 计划输出)
 - [x] 路由配置固化三级:本地 A3B → 3.7 Flash → DS-V4 Flash;本地 busy guard 已接入 Brain router
-- [ ] 模型路由纪律锁定:STEP_TEXT_MODEL = step-3.7-flash(执行头),不得静默降级
+- [x] 模型路由纪律锁定:STEP_TEXT_MODEL = step-3.7-flash(执行头),不得静默降级(CLAUDE.md「Model Routing Discipline」+ prod .env ⛔ 守卫已落,2026-06-07)
 
 ---
 

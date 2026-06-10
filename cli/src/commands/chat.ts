@@ -2,9 +2,10 @@ import { stdin as input, stdout as output } from "node:process";
 import { getStringFlag, hasFlag, parseArgs, type ParsedArgs } from "../args.js";
 import { BrainConnectionError, streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
 import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
-import { lowerReasoningEffort, parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
+import { applyFastReasoning, lowerReasoningEffort, parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
+import { DEFAULT_ROUTE_CHAIN_AUTO } from "../route-labels.js";
 import { TerminalSpinner, renderCard } from "../terminal-spinner.js";
-import { formatBrainErrorForHuman, renderBrainEventForHuman, renderToolDetail, renderToolDetailsList, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
+import { formatBrainErrorForHuman, renderBrainEventForHuman, renderToolDetail, renderToolDetailsList, summarizeUsage, thinkingStatusLabel, type HumanBrainRenderState } from "../brain-render.js";
 import { bold, dim, green, orange, red, supportsColor } from "../terminal-style.js";
 import { renderStartupBanner } from "../startup.js";
 import { renderStatusBar } from "../status-bar.js";
@@ -168,12 +169,12 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       return "continue";
     }
     if (text === "/fast") {
-      reasoning = { ...reasoning, effort: "off" };
+      reasoning = applyFastReasoning(reasoning);
       output.write(`${t("chat.fast")}\n\n`);
       return "continue";
     }
     if (text === "/think") {
-      reasoning = { ...reasoning, effort: "high" };
+      reasoning = { ...reasoning, effort: "high", maxTokens: undefined };
       output.write(`${t("chat.think")}\n\n`);
       return "continue";
     }
@@ -359,6 +360,8 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
               color,
             });
             latestUsage = round.latestUsage || latestUsage;
+            // One record per ROUND (final frame only) — session totals + cache-hit sampling.
+            if (round.lastUsageRaw) recordUsageMetrics(runtimeMetrics, round.lastUsageRaw);
             decodeTps = round.decodeTps || decodeTps;
             const requests = round.toolRequests;
             if (!requests.length) {
@@ -447,9 +450,10 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     runtimeMetrics: ReturnType<typeof createRuntimeMetrics>;
     spinner: TerminalSpinner;
     color: boolean;
-  }): Promise<{ assistant: string; toolRequests: CodeToolRequest[]; structuredToolCalls: boolean; latestUsage: string | null; decodeTps: string | null }> {
+  }): Promise<{ assistant: string; toolRequests: CodeToolRequest[]; structuredToolCalls: boolean; latestUsage: string | null; lastUsageRaw: unknown; decodeTps: string | null }> {
     let assistant = "";
     let latestUsage: string | null = null;
+    let lastUsageRaw: unknown = null;
     let decodeTps: string | null = null;
     const md = new MarkdownStream((s) => output.write(s), inputData.color);
     const turnStarted = Date.now();
@@ -481,7 +485,16 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
         } else {
           if (event.type === "usage") {
             latestUsage = summarizeUsage(event.usage, { durationMs: Date.now() - turnStarted });
-            recordUsageMetrics(inputData.runtimeMetrics, event.usage);
+            // Last frame wins: only the FINAL streaming usage frame carries real totals (and the
+            // real prefix-cache value); the caller records it once per round for session totals.
+            lastUsageRaw = event.usage;
+            // Streaming usage feeds the waiting spinner (thinking progress) instead of printing
+            // per-frame "usage:" lines; the end-of-turn status bar shows the final usage.
+            if (!assistant) {
+              const label = thinkingStatusLabel(event.usage, turnStarted);
+              if (label) inputData.spinner.setLabel(label);
+            }
+            continue;
           }
           renderChatEvent(event, inputData.renderReasoning, inputData.brainRenderState, turnStarted);
           if (shouldResumeWaitingSpinner(event)) inputData.spinner.start();
@@ -493,9 +506,9 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     }
     const structuredRequests = toolRequestsFromCollectedCalls(toolAccumulator.toToolCalls(), 0);
     if (structuredRequests.length) {
-      return { assistant, toolRequests: structuredRequests, structuredToolCalls: true, latestUsage, decodeTps };
+      return { assistant, toolRequests: structuredRequests, structuredToolCalls: true, latestUsage, lastUsageRaw, decodeTps };
     }
-    return { assistant, toolRequests: parseCodeToolRequests(assistant), structuredToolCalls: false, latestUsage, decodeTps };
+    return { assistant, toolRequests: parseCodeToolRequests(assistant), structuredToolCalls: false, latestUsage, lastUsageRaw, decodeTps };
   }
 
   async function runChatClientTool(request: CodeToolRequest): Promise<ClientToolResult> {
@@ -595,7 +608,6 @@ function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolea
     || event.type === "provider"
     || event.type === "tool_progress"
     || event.type === "brain.error"
-    || event.type === "usage"
     || (event.type === "reasoning.delta" && renderReasoning);
 }
 
@@ -644,7 +656,7 @@ function buildPromptFrameStatus(
 
 export function chatRouteLabel(provider?: { provider: string; model: string } | null): string {
   if (provider) return `CLI BYOK: ${modelLabelWithId(provider.model)}`;
-  return "StepFun 3.7 Flash → Spark A3B single-slot → DS-V4 Flash via Brain router (auto)";
+  return DEFAULT_ROUTE_CHAIN_AUTO;
 }
 
 export function splitChatCommandLine(raw: string): string[] {
@@ -817,7 +829,8 @@ function renderLocalToolList(color: boolean): string {
 export function applyReasoningCommand(current: ReturnType<typeof parseReasoningOptions>, raw: string): { reasoning: ReturnType<typeof parseReasoningOptions>; message: string } {
   const value = raw.toLowerCase();
   if (value === "off" || value === "auto" || value === "low" || value === "medium" || value === "high" || value === "xhigh") {
-    return { reasoning: { ...current, effort: value }, message: t("reasoning.effortSet", { value }) };
+    // Explicit effort selection clears any /fast output-budget cap.
+    return { reasoning: { ...current, effort: value, maxTokens: undefined }, message: t("reasoning.effortSet", { value }) };
   }
   if (value === "show" || value === "always") {
     return { reasoning: { ...current, display: "always" }, message: t("reasoning.displayAlways") };
@@ -831,13 +844,19 @@ export function applyReasoningCommand(current: ReturnType<typeof parseReasoningO
 export function applyThinkCommand(current: ReturnType<typeof parseReasoningOptions>, raw: string, scope: "chat" | "code"): { reasoning: ReturnType<typeof parseReasoningOptions>; message: string } {
   const value = raw.toLowerCase();
   if (value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "auto") {
+    // Explicit effort selection clears any /fast output-budget cap.
     return {
-      reasoning: { ...current, effort: value },
+      reasoning: { ...current, effort: value, maxTokens: undefined },
       message: t(scope === "chat" ? "chat.think.set" : "code.think.set", { value }),
     };
   }
-  if (value === "off" || value === "fast") {
-    return { reasoning: { ...current, effort: "off" }, message: t(scope === "chat" ? "chat.fast" : "code.fast") };
+  if (value === "fast") {
+    // Real fast profile: low reasoning + 8K output cap (StepFun is reasoning-always, no true off).
+    return { reasoning: applyFastReasoning(current), message: t(scope === "chat" ? "chat.fast" : "code.fast") };
+  }
+  if (value === "off") {
+    // Thinking-off (local Spark honors enable_thinking=false); no output cap.
+    return { reasoning: { ...current, effort: "off", maxTokens: undefined }, message: t(scope === "chat" ? "chat.fast" : "code.fast") };
   }
   return { reasoning: current, message: t("reasoning.unknown", { raw: raw || "(empty)" }) };
 }
@@ -859,8 +878,8 @@ function renderChatEvent(event: BrainStreamEvent, renderReasoning: boolean, rend
   if (event.type === "reasoning.delta" && renderReasoning) {
     process.stderr.write(dim(event.text, supportsColor(process.stderr)));
   } else if (event.type === "usage") {
-    const summary = summarizeUsage(event.usage, { durationMs: Date.now() - startedAt });
-    if (summary) process.stderr.write(`\nusage: ${summary}\n`);
+    // Tracked in the turn loop (latestUsage + spinner label); printed once in the end-of-turn
+    // status bar instead of one scrolling line per streaming usage frame.
   } else {
     renderBrainEventForHuman(event, renderState, process.stderr);
   }

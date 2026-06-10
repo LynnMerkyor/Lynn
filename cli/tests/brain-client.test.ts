@@ -743,14 +743,40 @@ describe("reasoning options", () => {
     });
   });
 
-  it("defaults interactive Brain calls to high reasoning", () => {
-    expect(parseReasoningOptions(parseArgs(["exec", "x"]))).toMatchObject({ effort: "high" });
+  it("defaults interactive Brain calls to auto reasoning (provider default governs)", () => {
+    // "auto" defers to the provider default (StepFun: high on the first round) and lets the
+    // Brain drop tool-continuation rounds to medium; an explicit --reasoning pins every round.
+    expect(parseReasoningOptions(parseArgs(["exec", "x"]))).toMatchObject({ effort: "auto" });
   });
 
   it("maps off to non-thinking request fields", () => {
     expect(applyReasoningToBody({}, { effort: "off", display: "auto" })).toEqual({
       reasoning_effort: "off",
       extra_body: { enable_thinking: false },
+    });
+  });
+
+  it("carries the fast-mode output cap as extra_body.max_tokens", () => {
+    expect(applyReasoningToBody({}, { effort: "low", display: "auto", maxTokens: 8_192 })).toEqual({
+      reasoning_effort: "low",
+      extra_body: { reasoning_effort: "low", max_tokens: 8_192 },
+    });
+    // no cap → no max_tokens in extra_body
+    expect(applyReasoningToBody({}, { effort: "low", display: "auto" })).toEqual({
+      reasoning_effort: "low",
+      extra_body: { reasoning_effort: "low" },
+    });
+  });
+
+  it("parses --fast into the low + 8K profile", () => {
+    expect(parseReasoningOptions(parseArgs(["exec", "x", "--fast"]))).toMatchObject({
+      effort: "low",
+      maxTokens: 8_192,
+    });
+    // explicit --reasoning wins on effort; the cap still applies
+    expect(parseReasoningOptions(parseArgs(["exec", "x", "--fast", "--reasoning", "medium"]))).toMatchObject({
+      effort: "medium",
+      maxTokens: 8_192,
     });
   });
 

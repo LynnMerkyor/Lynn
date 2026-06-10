@@ -126,6 +126,9 @@ export function StatusBar() {
     };
   }, [showLocalQwenRuntime]);
 
+  const currentSessionPath = useStore((s) => s.currentSessionPath);
+  const sessionUsageMap = useStore((s) => s.sessionUsage);
+
   const meta = useMemo(() => {
     const parts: string[] = [];
     const chat = formatModelTag('chat', currentModel, agentYuan, 'chat', localQwenStatus);
@@ -139,11 +142,22 @@ export function StatusBar() {
     return parts;
   }, [agentYuan, currentModel, localQwenStatus, utilityModel, utilityLargeModel]);
 
-  if (wsState === 'connected' && meta.length === 0) return null;
+  // 会话成本(StepFun 一条龙:全 token 云计费)。来自 usage-slice 的去重累计。
+  const usageChip = useMemo(() => {
+    const u = currentSessionPath ? sessionUsageMap[currentSessionPath] : undefined;
+    if (!u || u.totalTokens <= 0) return null;
+    const tr = (k: string, fb: string) => { const v = t(k); return v && v !== k ? v : fb; };
+    const fmt = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : String(n));
+    const cachePct = u.input > 0 ? Math.round((u.cacheRead / u.input) * 100) : 0;
+    const cost = u.costTotal > 0 ? ` · $${u.costTotal >= 0.1 ? u.costTotal.toFixed(2) : u.costTotal.toFixed(4)}` : '';
+    return `Σ ${fmt(u.totalTokens)} tok (in ${fmt(u.input)} · out ${fmt(u.output)}) · ${tr('status.usage.cache', '缓存')} ${cachePct}%${cost}`;
+  }, [currentSessionPath, sessionUsageMap]);
+
+  if (wsState === 'connected' && meta.length === 0 && !usageChip) return null;
 
   return (
     <div className={styles.bar}>
-      {meta.length > 0 && (
+      {(meta.length > 0 || usageChip) && (
         <div className={styles.metaRow}>
           {meta.map((item) => (
             <span
@@ -154,6 +168,14 @@ export function StatusBar() {
               {item}
             </span>
           ))}
+          {usageChip && (
+            <span
+              className={styles.metaChip}
+              title={(() => { const v = t('status.usage.tip'); return v && v !== 'status.usage.tip' ? v : '本会话累计云端 token 消耗(含前缀缓存命中与费用估算)'; })()}
+            >
+              {usageChip}
+            </span>
+          )}
         </div>
       )}
       {wsState === 'reconnecting' && (

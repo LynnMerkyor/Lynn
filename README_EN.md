@@ -4,7 +4,7 @@
 
 <h1 align="center">Lynn</h1>
 
-<p align="center"><strong>GUI command center · CLI Worker Fleet · distilled A3B orchestrator · long-term memory</strong></p>
+<p align="center"><strong>GUI command center · CLI Worker Fleet · StepFun default route · long-term memory</strong></p>
 <p align="center">An open-source desktop AI agent whose GUI command center dispatches multiple coding CLIs (Codex / Claude / Qwen ...) in parallel - coding, research, and business in one visual workspace, not another chat box</p>
 
 <p align="center"><a href="README.md">中文版 (默认)</a> | <strong>English</strong></p>
@@ -85,7 +85,7 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI
@@ -113,27 +113,22 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>Lynn v0.82.0</strong> · 2026-06-08 · dual-brain QoS + distilled A3B orchestrator <em>(latest)</em></summary>
+<summary><strong>Lynn v0.84.0</strong> · 2026-06-10 · StepFun default route + GUI empty-answer recovery <em>(latest)</em></summary>
 
 **GUI and CLI ship together**:
-- **StepFun 3.7 Flash best mode**:`/goal`, `/best`, and `Lynn code --best` now use a 300-step exhaustive budget with ultra decomposition, parallel atomic workers, adversarial acceptance, auto-verify, and checkpoint/resume. The target is the best completed result, not fewer steps.
-- **Distilled A3B orchestrator enters the product route**: Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill is now the local single-slot manager/fallback for decomposition, delegation, acceptance, and synthesis; GUI foreground work keeps priority, and CLI/background jobs skip Spark when it is busy.
-- **Dual-brain QoS route is fixed**: `A3B -> StepFun 3.7 Flash -> DS-V4 Flash`; StepFun does the work, local A3B verifies, and DS-V4 Flash is the escape hatch only for high-risk or objectively failed work.
-- **Four upstream PRs**: llama.cpp NVFP4 guidance plus vLLM W4A16 NVFP4 regression/docs/spec-decode correctness gate, turning the self-built engine work into reusable evidence and upstream contribution.
-- **MiMo wrap-up**: MiMo remains available for multimodal, native-search, and legacy compatibility fallback, but no longer carries the v0.82 text/orchestration main-route story.
-- **Macro orchestration + atomic loop**: large tasks are decomposed into dependency waves, while each worker still runs one action per turn with the tool ledger, plan contract, budget guard, and max-step verification.
-- **No answer fallback**: the harness does not inject chain hints or let a router answer for the model; it decomposes, schedules, verifies, repairs, and records.
-- **Cloud StepFun remains the default**: StepFun 3.7 Flash stays the primary route; local 9B only starts after explicit user action and no longer consumes GPU/unified memory by default.
-- **Local 9B runtime policy**: KV cache reuse, warm pool off by default, idle unload, small-context prompts, stable prefix, 3-5 tool schemas, visible local TPS, and automatic promotion to StepFun when local inference fails.
-- **Local 35B/Spark positioning**: 35B/Spark is the explicit high-end local tier and third fallback, not the default primary path.
-- **CLI scan guards**: tool mode blocks default `find / ...` whole-disk scans; glob skips `.Trash` and permission-denied directories instead of failing the whole turn.
-- **Release gates**: Brain V2, CLI toolchain/cache/file-size/pack/install, runtime answer/context, and local model policy tests all run before release.
+- **StepFun 3.7 Flash default route**: normal GUI/CLI chat, `Lynn -p`, and coding execution use StepFun 3.7 Flash by default. Experimental manager paths stay explicit.
+- **GUI empty-answer recovery**: stale device signatures are refreshed per request, and Brain no longer closes a tool turn after 8 seconds if the final assistant answer is still arriving.
+- **reasoning-only retry**: Brain retries responses that contain reasoning but no visible answer at the source.
+- **honest tool-turn close**: tool completion is rendered factually while waiting for the model's final answer; no silent close and no fake local summary.
+- **GUI token/cost pipeline**: SDK usage now flows through WebSocket, store, and the input-row chip.
+- **Fleet discoverability and acceptance panel**: desktop Fleet entry points and acceptance UI are easier to find and inspect.
+- **Issue #72 gates**: headless GUI startup recovery, real CLI task execution, release SOP, doc-drift checks, and repo hygiene gates cover legacy memory db, Hanako/OpenHanako conflicts, and “starts but cannot answer” regressions.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz"
 ```
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.82.0)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.0)
 
 </details>
 
@@ -148,7 +143,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - **Release gate covers compaction**: `cli-longrun-smoke` now forces large tool results and requires a `code.runtime.compacted` event, so long-run stability is verified outside narrow unit tests.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.82.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz"
 ```
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
@@ -716,17 +711,17 @@ Interface available in 5 languages: Chinese, English, Japanese, Korean, and Trad
 
 Lynn doesn't just slap an OpenAI-compatible wrapper and call it a day. From 9B small models to GLM-5 reasoning models, every tier has purpose-built adaptations:
 
-**Free built-in models (Brain v2)** — Quick Start ships with a built-in model pool. v0.82 routes through Brain V2 with a dual-brain main chain and multimodal/search fallback:
+**Free built-in models (Brain v2)** — Quick Start ships with a built-in model pool. v0.84 uses StepFun 3.7 Flash as the ordinary GUI/CLI default route, with vendor fallbacks and an explicit local manager path:
 
 ```
-T1  ⭐ StepFun 3.7 Flash (256K context, high reasoning, 32K reasoning/generation budget, text/coding head)
-T2  Spark distilled A3B (local single-slot manager/fallback for decomposition, validation, privacy, and cost control)
-T3  DS-V4 Flash (escape hatch for high-risk work, failed objective validation, or repeated worker repair)
-T4  Xiaomi MiMo v2.5 Pro / Omni (multimodal, native search, audio/video/image compatibility fallback)
+T1  ⭐ StepFun 3.7 Flash (256K context, high reasoning, 48K reasoning/generation budget, text/coding head)
+T2  DS-V4 Flash (vendor fallback for StepFun outage or specific high-risk work)
+T3  Local manager (explicit `Lynn manager run` experimental path)
+T4  Vision: StepFun `step-1o-turbo-vision` (selected automatically for image content)
 T5  Zhipu GLM / Kimi / MiniMax (vendor backup lanes)
 ```
 
-No API key needed — device authentication only. MiMo remains useful where its native multimodal/search surface is the right tool; the text/coding/orchestration main lane is now StepFun + distilled A3B + DS-V4 Flash.
+No API key needed — device authentication only. The normal text/coding lane is StepFun 3.7 Flash first; local manager and alternate providers are explicit or fallback paths.
 
 **Three-tier tool layering** — Tools are automatically pruned based on context window:
 - Small models (<32K, e.g. ERNIE 8K, Moonshot 8K, Step 8K): only `web_search` + `web_fetch`, preventing tool descriptions from blowing out the context
@@ -830,11 +825,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.82.0 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.84.0 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.82.0 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.84.0 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -897,7 +892,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.82.0 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.84.0 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

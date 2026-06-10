@@ -49,7 +49,12 @@ export function ThinkingLevelButton({ level, onChange, modelXhigh }: {
 
   const isOff = level === 'off';
   const levelLabel = tLevel(`input.thinkingLevel.${level}`, level);
-  const buttonTitle = tLevel('settings.agent.thinkingLevelHint', '')
+  // When 'auto', surface the brain's step-down strategy so it's visible/controllable:
+  // auto rides the provider default (StepFun: high) and the brain drops tool-continuation
+  // rounds to medium. Explicit levels pin every round.
+  const autoHint = level === 'auto' ? tLevel('input.thinkingLevel.autoHint', '') : '';
+  const buttonTitle = autoHint
+    || tLevel('settings.agent.thinkingLevelHint', '')
     || tLevel('input.thinking', '')
     || levelLabel;
 

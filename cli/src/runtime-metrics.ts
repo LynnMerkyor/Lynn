@@ -4,10 +4,13 @@ export interface RuntimeMetrics {
   decodeSamples: number[];
   cacheSamples: number[];
   usageSamples: number;
+  /** Session-cumulative cloud token spend (sum of per-round FINAL usage frames only). */
+  sessionPromptTokens: number;
+  sessionCompletionTokens: number;
 }
 
 export function createRuntimeMetrics(): RuntimeMetrics {
-  return { decodeSamples: [], cacheSamples: [], usageSamples: 0 };
+  return { decodeSamples: [], cacheSamples: [], usageSamples: 0, sessionPromptTokens: 0, sessionCompletionTokens: 0 };
 }
 
 export function recordDecodeTps(metrics: RuntimeMetrics, value: string | null | undefined): void {
@@ -22,14 +25,32 @@ export function recordUsageMetrics(metrics: RuntimeMetrics, usage: unknown): voi
   if (telemetry?.cacheHitRatio !== null && telemetry?.cacheHitRatio !== undefined) {
     pushBounded(metrics.cacheSamples, telemetry.cacheHitRatio);
   }
+  // Cumulative spend: callers must pass the per-round FINAL usage frame only (streaming
+  // mid-frames are cumulative within a round; summing every frame would overcount).
+  if (typeof telemetry?.promptTokens === "number") metrics.sessionPromptTokens += telemetry.promptTokens;
+  if (typeof telemetry?.completionTokens === "number") metrics.sessionCompletionTokens += telemetry.completionTokens;
 }
 
 export function renderRuntimeMetrics(metrics: RuntimeMetrics): string | null {
   const parts = [
     renderAverageTps(metrics.decodeSamples),
     renderAverageCache(metrics.cacheSamples) || renderCacheTracking(metrics),
+    renderSessionTotals(metrics),
   ].filter((part): part is string => !!part);
   return parts.length ? parts.join(" · ") : null;
+}
+
+function formatTokenCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return String(value);
+}
+
+/** Session-cumulative cloud spend — every token is cloud-billed on the StepFun-only route. */
+function renderSessionTotals(metrics: RuntimeMetrics): string | null {
+  const total = metrics.sessionPromptTokens + metrics.sessionCompletionTokens;
+  if (total <= 0) return null;
+  return `Σ ${formatTokenCount(total)} tok (in ${formatTokenCount(metrics.sessionPromptTokens)} · out ${formatTokenCount(metrics.sessionCompletionTokens)})`;
 }
 
 function renderAverageTps(samples: number[]): string | null {

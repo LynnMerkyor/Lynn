@@ -172,16 +172,29 @@ async function runStaticChecks({ level }) {
       && pkg.scripts["release:preflight"].includes("stress:cli")
       && pkg.scripts["release:preflight"].includes("test:cli-pty")
       && pkg.scripts["release:preflight"].includes("test:cli-terminal-soak")
-      && pkg.scripts["release:preflight"].includes("test:cli-fleet")),
-    "release:preflight runs CLI cache usage, file-size, smoke, pack, install, stress, Terminal soak, and Fleet gates",
+      && pkg.scripts["release:preflight"].includes("test:cli-fleet")
+      && pkg.scripts["release:preflight"].includes("gate:cli-task")),
+    "release:preflight runs CLI cache usage, file-size, smoke, pack, install, stress, Terminal soak, Fleet, and real task gates",
     String(pkg.scripts?.["release:preflight"] || ""),
   ));
   checks.push(makeCheck(
-    "static-cli-ime-release-requires-validation",
+    "static-cli-terminal-soak-does-not-block-on-ime",
     "blocker",
-    Boolean(pkg.scripts?.["test:cli-terminal-soak"]?.includes("cli-terminal-ime-smoke.mjs --require")),
-    "release Terminal soak requires the IME smoke to run instead of silently skipping",
+    Boolean(pkg.scripts?.["test:cli-terminal-soak"]
+      && !pkg.scripts["test:cli-terminal-soak"].includes("cli-terminal-ime-smoke")),
+    "release Terminal soak is a Terminal.app smoke only; IME crash lab is not a release blocker",
     String(pkg.scripts?.["test:cli-terminal-soak"] || ""),
+  ));
+  const gateCliTaskText = await readTextIfExists(path.join(ROOT, "scripts", "gate-cli-task.mjs"));
+  checks.push(makeCheck(
+    "static-cli-real-task-release-gate",
+    "blocker",
+    Boolean(pkg.scripts?.["gate:cli-task"]?.includes("gate-cli-task.mjs")
+      && gateCliTaskText.includes("真实任务组:4 条")
+      && gateCliTaskText.includes("默认模型叙事")
+      && gateCliTaskText.includes("输入超过 10 个汉字")),
+    "release uses live >10-Chinese-character CLI tasks, including default-route narrative, instead of IME-only simulation",
+    `${pkg.scripts?.["gate:cli-task"] || ""}\n${gateCliTaskText.slice(0, 500)}`,
   ));
   checks.push(makeCheck(
     "static-cli-efficiency-release-gate",

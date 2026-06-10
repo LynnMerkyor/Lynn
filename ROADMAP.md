@@ -37,7 +37,7 @@
 - GUI 指挥台并行调度多个 CLI worker (Codex / Claude / Qwen…), 每个 worker 独立 worktree
 - `@lynn/cli` npm 包: `Lynn -p` / `Lynn code` / `Lynn agents` / `Lynn worker run`
 - Fleet 门禁 (测试 + 越界) → review → gated merge-to-main + 远端 push
-- 默认 Brain V2 路由: StepFun 3.7 Flash → MiMo → Spark
+- 默认 Brain V2 路由: StepFun 3.7 Flash → Spark A3B 单槽 → DS-V4 Flash(MiMo 已移出模型链,仅作付费搜索后端)
 
 ---
 

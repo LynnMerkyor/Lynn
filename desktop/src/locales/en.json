@@ -149,7 +149,8 @@
       "startWorkspace": "Read workspace first",
       "resumeTask": "Resume task",
       "resumePrompt": "Continue the last task and tell me the current progress plus the next step first.",
-      "workspacePrompt": "Quickly read the current workspace and tell me where you would start."
+      "workspacePrompt": "Quickly read the current workspace and tell me where you would start.",
+      "fleetTip": "Fleet: split a task across parallel CLI workers, each in its own worktree"
     }
   },
   "titlebar": {
@@ -267,7 +268,11 @@
     "serverNotReady": "Server not ready",
     "loading": "Loading...",
     "reconnecting": "Reconnecting",
-    "reconnect": "Reconnect"
+    "reconnect": "Reconnect",
+    "usage": {
+      "cache": "cache",
+      "tip": "Cumulative cloud token spend for this session (incl. prefix-cache hits and cost estimate)"
+    }
   },
   "input": {
     "placeholder": "Say something...",
@@ -299,11 +304,12 @@
       "off": "off",
       "auto": "auto",
       "high": "high",
-      "xhigh": "max"
+      "xhigh": "max",
+      "autoHint": "auto: coding/reasoning turns run at high; tool-continuation rounds auto-drop to medium. Pick high to pin every round."
     },
     "thinkingDesc": {
       "off": "no reasoning",
-      "auto": "model decides depth",
+      "auto": "Deep for coding/reasoning; tool follow-up rounds auto-step down",
       "high": "deep reasoning",
       "xhigh": "full reasoning"
     },
@@ -376,6 +382,9 @@
       },
       "tryAt": {
         "label": "Try @ file context"
+      },
+      "fleet": {
+        "label": "⚡ Run parallel workers"
       }
     }
   },
@@ -2209,5 +2218,73 @@
   "agentDiscovery.body": "Found installed AI tools on your device:",
   "agentDiscovery.benefit": "Once enabled, Lynn can reuse their skill libraries to boost capabilities — no extra setup needed.",
   "agentDiscovery.enable": "Enable",
-  "agentDiscovery.later": "Later"
+  "agentDiscovery.later": "Later",
+  "fleet": {
+    "empty": {
+      "title": "No parallel workers yet",
+      "intro": "Split one task across 3-5 CLI workers (codex / claude / qwen ...), each in its own isolated git worktree, and supervise progress, diffs, and tests here.",
+      "step1": "Dispatch worker — write a brief: which files it owns, which are forbidden, the test commands.",
+      "step2": "Each worker runs in its own worktree; this board shows its live log, per-file diff, and tests.",
+      "step3": "Out-of-scope edits and center-file conflicts are flagged red and block merge.",
+      "step4": "Cancel / retry / open the worktree from each card.",
+      "hint": "New here? Click \"Play mock worker\" to watch a simulated run end-to-end."
+    },
+    "dispatch": "Dispatch worker",
+    "closeForm": "Close form",
+    "playMock": "Play mock worker",
+    "form": {
+      "title": "Title",
+      "titlePlaceholder": "e.g. Split ComposerTextarea",
+      "agent": "Agent",
+      "ready": "Ready",
+      "taskType": "Task type",
+      "taskTypeCode": "Code / text work",
+      "taskTypeSee": "See image",
+      "taskTypeGround": "Ground UI element",
+      "taskTypeUi2code": "UI to code",
+      "scopePreset": "Scope preset",
+      "fanOut": "Fan out to (parallel, optional)",
+      "imagePath": "Image path",
+      "imageHint": "The path is passed to Lynn worker run; the CLI reads the image locally and routes it through a vision-capable model.",
+      "approval": "Approval",
+      "approvalAsk": "ask (guarded)",
+      "approvalOnFailure": "on-failure",
+      "approvalNever": "never (read/check only)",
+      "approvalYolo": "yolo (autonomous edits)",
+      "approvalHintYolo": "YOLO lets the worker edit files and run shell tools without another prompt.",
+      "approvalHintGuarded": "Non-interactive workers may stop before dangerous edits unless approval is yolo.",
+      "sandbox": "Sandbox",
+      "sandboxHintFull": "Full filesystem access is only for trusted local worktrees.",
+      "sandboxHintScoped": "Workspace-write keeps edits scoped to the assigned worktree.",
+      "externalHint": "External CLI adapters run their own shell/process. To launch them from Fleet, explicitly set Approval=yolo and Sandbox=danger-full-access. Built-in Lynn and StepFun workers can stay guarded.",
+      "branch": "Branch",
+      "worktree": "Worktree",
+      "objective": "Objective",
+      "owned": "Owned files (one glob per line)",
+      "forbidden": "Forbidden files",
+      "tests": "Test commands (one per line)",
+      "dispatching": "Dispatching...",
+      "dispatchN": "Dispatch to {count} workers",
+      "cancel": "Cancel",
+      "unavailable": "unavailable"
+    },
+    "panel": {
+      "cliRuntime": "CLI runtime",
+      "perms": "perms",
+      "workersCount": "{count} worker(s)",
+      "mockBadge": "mock",
+      "mockBadgeTitle": "Demo playback — no real process was launched"
+    },
+    "chatHint": {
+      "text": "⚡ This task looks splittable across parallel workers",
+      "action": "Dispatch"
+    },
+    "acceptance": {
+      "passed": "✓ Acceptance passed",
+      "failed": "✗ Acceptance failed",
+      "falseVerify": "false-verify risk",
+      "evidence": "evidence",
+      "escalated": "escalated"
+    }
+  }
 }

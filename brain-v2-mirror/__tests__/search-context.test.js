@@ -18,7 +18,7 @@ const providerMimo = {
   id: 'mimo',
   endpoint: 'https://example.com/v1',
   apiKey: 'k',
-  model: 'mimo-v2.5-pro',
+  model: 'mimo-v2-flash',
   capability: { vision: false, audio: false, tools: true, thinking: true, native_search: true },
   wire: 'mimo',
   cooldown_ms: 300_000,

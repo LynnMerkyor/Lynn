@@ -83,7 +83,10 @@
     "jian": "책상",
     "bridge": "소셜 플랫폼",
     "toggle": "사이드바",
-    "bridgeShort": "연결"
+    "bridgeShort": "연결",
+    "capability": {
+      "fleetTip": "Fleet: 작업을 여러 CLI 워커로 나눠 병렬 실행(각자 독립 worktree)"
+    }
   },
   "session": {
     "untitled": "새 대화",
@@ -158,7 +161,11 @@
     "serverNotReady": "서버가 준비되지 않았어요",
     "loading": "로딩 중...",
     "reconnecting": "재연결 중",
-    "reconnect": "다시 연결"
+    "reconnect": "다시 연결",
+    "usage": {
+      "cache": "캐시",
+      "tip": "이 세션의 누적 클라우드 token 사용량(프리픽스 캐시 적중 및 비용 추정 포함)"
+    }
   },
   "input": {
     "placeholder": "무슨 이야기든 해보세요...",
@@ -180,11 +187,12 @@
       "off": "끔",
       "auto": "자동",
       "high": "깊은",
-      "xhigh": "최대"
+      "xhigh": "최대",
+      "autoHint": "auto: 코딩/추론은 high, 도구 결과 후 연속 라운드는 자동으로 medium으로 낮아집니다. 매 라운드 고정하려면 high 선택."
     },
     "thinkingDesc": {
       "off": "추론 없음",
-      "auto": "모델이 깊이를 결정",
+      "auto": "코딩/추론은 자동 심화, 도구 연속 라운드는 자동 감속",
       "high": "깊은 추론",
       "xhigh": "전체 추론"
     },
@@ -238,6 +246,9 @@
       "planToday": {
         "label": "오늘 계획 만들기",
         "prompt": "현재 워크스페이스를 기준으로 오늘 실행할 3단계 계획을 우선순위대로 만들어 주세요."
+      },
+      "fleet": {
+        "label": "⚡ 병렬 워커 배치"
       }
     }
   },
@@ -1971,5 +1982,73 @@
     "requestFailed": "리뷰 요청에 실패했습니다",
     "followUp": "발견 사항 처리",
     "taskCreated": "백그라운드 실행 작업을 만들었습니다"
+  },
+  "fleet": {
+    "empty": {
+      "title": "아직 병렬 워커가 없습니다",
+      "intro": "하나의 작업을 3~5개의 CLI 워커(codex / claude / qwen…)로 나누어 각각 독립된 git worktree에서 병렬 실행하고, 여기서 진행 상황·diff·테스트를 관리합니다.",
+      "step1": "워커 배치 — 브리프 작성: 담당 파일, 금지 파일, 테스트 명령.",
+      "step2": "각 워커는 자체 worktree에서 실행되며, 이 보드에 실시간 로그·파일별 diff·테스트가 표시됩니다.",
+      "step3": "범위를 벗어난 편집과 중심 파일 충돌은 빨간색으로 표시되어 병합을 차단합니다.",
+      "step4": "각 카드에서 취소 / 재시도 / worktree 열기.",
+      "hint": "처음이신가요? \"모의 워커 재생\"으로 전체 흐름을 확인하세요."
+    },
+    "dispatch": "워커 배치",
+    "closeForm": "폼 닫기",
+    "playMock": "모의 워커 재생",
+    "form": {
+      "title": "제목",
+      "titlePlaceholder": "예: ComposerTextarea 분리",
+      "agent": "실행 Agent",
+      "ready": "준비됨",
+      "taskType": "작업 유형",
+      "taskTypeCode": "코드 / 텍스트 작업",
+      "taskTypeSee": "이미지 인식",
+      "taskTypeGround": "UI 요소 찾기",
+      "taskTypeUi2code": "스크린샷→코드",
+      "scopePreset": "범위 프리셋",
+      "fanOut": "동시 파견(병렬, 선택)",
+      "imagePath": "이미지 경로",
+      "imageHint": "경로는 Lynn worker run에 전달되며, CLI가 로컬에서 이미지를 읽어 비전 모델로 라우팅합니다.",
+      "approval": "승인",
+      "approvalAsk": "ask · 위험 작업 확인",
+      "approvalOnFailure": "on-failure · 실패 시 확인",
+      "approvalNever": "never · 읽기 전용",
+      "approvalYolo": "yolo · 전자동 편집",
+      "approvalHintYolo": "YOLO는 워커가 확인 없이 파일 편집과 셸 실행을 할 수 있게 합니다.",
+      "approvalHintGuarded": "비대화형 워커는 승인이 yolo가 아니면 위험한 편집 전에 멈출 수 있습니다.",
+      "sandbox": "샌드박스",
+      "sandboxHintFull": "전체 파일시스템 권한은 신뢰할 수 있는 로컬 worktree에만.",
+      "sandboxHintScoped": "workspace-write는 편집을 할당된 worktree 내로 제한합니다.",
+      "externalHint": "외부 CLI(Codex / Claude 등)는 자체 셸을 실행합니다. Fleet에서 시작하려면 Approval=yolo + Sandbox=danger-full-access를 명시하세요. 내장 Lynn / StepFun 워커는 보호 상태 유지 가능.",
+      "branch": "브랜치",
+      "worktree": "Worktree",
+      "objective": "목표",
+      "owned": "담당 파일(한 줄에 glob 하나)",
+      "forbidden": "수정 금지 파일",
+      "tests": "테스트 명령(한 줄에 하나)",
+      "dispatching": "파견 중…",
+      "dispatchN": "워커 {count}개에 파견",
+      "cancel": "취소",
+      "unavailable": "사용 불가"
+    },
+    "panel": {
+      "cliRuntime": "CLI 런타임",
+      "perms": "권한",
+      "workersCount": "워커 {count}개",
+      "mockBadge": "모의",
+      "mockBadgeTitle": "데모 재생 — 실제 프로세스는 실행되지 않았습니다"
+    },
+    "chatHint": {
+      "text": "⚡ 이 작업은 여러 병렬 워커로 나눠 동시에 처리할 수 있어 보입니다",
+      "action": "배치하기"
+    },
+    "acceptance": {
+      "passed": "✓ 검수 통과",
+      "failed": "✗ 검수 실패",
+      "falseVerify": "허위 검증 위험",
+      "evidence": "객관적 증거",
+      "escalated": "에스컬레이션"
+    }
   }
 }

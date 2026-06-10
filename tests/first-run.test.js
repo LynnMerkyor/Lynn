@@ -51,7 +51,6 @@ describe('ensureFirstRun', () => {
     const oldHome = path.join(root, '.hanako');
     const lynnHome = path.join(root, '.lynn');
     const oldHomeBefore = process.env.HOME;
-    const oldUserProfileBefore = process.env.USERPROFILE;
 
     fs.mkdirSync(path.join(oldHome, 'agents', 'hanako'), { recursive: true });
     fs.writeFileSync(path.join(oldHome, 'openhanako-marker.txt'), 'openhanako-data\n', 'utf-8');
@@ -61,13 +60,10 @@ describe('ensureFirstRun', () => {
 
     try {
       process.env.HOME = root;
-      process.env.USERPROFILE = root;
       ensureFirstRun(lynnHome, productDir);
     } finally {
       if (oldHomeBefore === undefined) delete process.env.HOME;
       else process.env.HOME = oldHomeBefore;
-      if (oldUserProfileBefore === undefined) delete process.env.USERPROFILE;
-      else process.env.USERPROFILE = oldUserProfileBefore;
     }
 
     expect(fs.existsSync(oldHome)).toBe(true);

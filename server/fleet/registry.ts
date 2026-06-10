@@ -6,6 +6,7 @@
  * disabled until their JSONL/permission/cwd behaviour is verified on the machine.
  */
 import type { FleetAgentKind } from "../../shared/fleet-events.js";
+import { fleetRegistryAgents } from "../../shared/fleet-agents.js";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveFleetDataDir } from "./data-dir.js";
@@ -23,18 +24,15 @@ export interface FleetAgentEntry {
   requiresPreset?: string;
 }
 
-export const DEFAULT_FLEET_REGISTRY: FleetAgentEntry[] = [
-  { id: "lynn-cli", label: "Lynn CLI", bin: "lynn", supportsJsonl: true, enabled: true },
-  { id: "stepfun-flash", label: "StepFun 3.7 Flash (fast coding)", bin: "lynn", supportsJsonl: true, enabled: true, requiresPreset: "stepfun" },
-  { id: "codex-cli", label: "Codex", bin: "codex", supportsJsonl: true, enabled: true },
-  { id: "claude-internal", label: "Claude (internal)", bin: "claude-internal", supportsJsonl: false, enabled: true },
-  { id: "claude-code", label: "Claude Code", bin: "claude", supportsJsonl: true, enabled: true },
-  { id: "qwen-cli", label: "Qwen", bin: "qwen", supportsJsonl: true, enabled: true },
-  { id: "kimi-cli", label: "Kimi", bin: "kimi", supportsJsonl: true, enabled: true },
-  { id: "codebuddy", label: "CodeBuddy", bin: "codebuddy", supportsJsonl: true, enabled: true },
-  { id: "opencode", label: "OpenCode", bin: "opencode", supportsJsonl: false, enabled: false },
-  { id: "custom", label: "Custom", bin: "", supportsJsonl: false, enabled: false },
-];
+// Agent 名单的唯一事实源在 shared/fleet-agents.ts(CLI/GUI 同源);这里只做 server 视角投影。
+export const DEFAULT_FLEET_REGISTRY: FleetAgentEntry[] = fleetRegistryAgents().map((agent) => ({
+  id: agent.id,
+  label: agent.label,
+  bin: agent.bin,
+  supportsJsonl: agent.supportsJsonl,
+  enabled: agent.enabled,
+  ...(agent.requiresPreset ? { requiresPreset: agent.requiresPreset } : {}),
+}));
 
 export interface ResolveFleetRegistryOptions {
   pathEnv?: string;

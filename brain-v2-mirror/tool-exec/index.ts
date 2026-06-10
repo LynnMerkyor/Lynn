@@ -14,6 +14,8 @@ import { liveNews } from './live_news.js';
 import { stockResearch } from './stock_research.js';
 import { createReport } from './create_report.js';
 import { createPptx } from './create_pptx.js';
+// V0.83+:外部工具族(akshare/飞书/高德/IMAP…)统一经 MCP 桥接入,不再逐个扩 switch。
+import { executeMcpTool, getMcpToolDefs, isMcpTool } from './mcp-proxy.js';
 
 // ── server-side tool definitions(给 model 看的 schema)─────
 export const SERVER_TOOLS = [
@@ -206,7 +208,15 @@ export const SERVER_TOOL_NAMES = new Set(SERVER_TOOLS.map(t => t.function.name))
 
 // ── dispatcher ────────────────────────────────────────────
 export async function executeServerTool(name, argsStr, { log } = {}) {
-  if (!SERVER_TOOL_NAMES.has(name)) return JSON.stringify({ error: 'tool not handled by brain server: ' + name });
+  if (!SERVER_TOOL_NAMES.has(name)) {
+    if (isMcpTool(name)) {
+      let mcpArgs;
+      try { mcpArgs = typeof argsStr === 'string' ? JSON.parse(argsStr || '{}') : (argsStr || {}); }
+      catch { return JSON.stringify({ error: 'invalid tool args (not JSON): ' + String(argsStr).slice(0, 200) }); }
+      return executeMcpTool(name, mcpArgs, { log });
+    }
+    return JSON.stringify({ error: 'tool not handled by brain server: ' + name });
+  }
   let args;
   try { args = typeof argsStr === 'string' ? JSON.parse(argsStr || '{}') : (argsStr || {}); }
   catch { return JSON.stringify({ error: 'invalid tool args (not JSON): ' + String(argsStr).slice(0, 200) }); }
@@ -237,7 +247,7 @@ export async function executeServerTool(name, argsStr, { log } = {}) {
 }
 
 export function isServerTool(name) {
-  return SERVER_TOOL_NAMES.has(name);
+  return SERVER_TOOL_NAMES.has(name) || isMcpTool(name);
 }
 
 // Heavy, rarely-needed document generators. Their full JSON schemas cost ~600 tok, but a
@@ -281,6 +291,11 @@ export function mergeWithServerTools(clientTools, messages) {
     if (seen.has(st.function.name)) continue;
     if (!allowGated && GATED_TOOLS.has(st.function.name)) continue;
     list.push(st);
+  }
+  // MCP 工具(akshare 等):同步快照注入;预热未完时为空,下一回合自然出现。
+  for (const mt of getMcpToolDefs()) {
+    if (seen.has(mt.function.name)) continue;
+    list.push(mt);
   }
   return list;
 }

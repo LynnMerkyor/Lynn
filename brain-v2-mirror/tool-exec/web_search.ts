@@ -59,17 +59,16 @@ async function searchZhipu(query, signal) {
 export async function searchMimo(query, signal) {
   const key = envOr('MIMO_SEARCH_KEY');
   if (!key) throw new Error('MIMO_SEARCH_KEY missing');
-  const base = envOr('MIMO_SEARCH_BASE', 'https://token-plan-cn.xiaomimimo.com/v1');
-  const model = envOr('MIMO_SEARCH_MODEL', 'mimo-v2.5-pro');
+  const base = envOr('MIMO_SEARCH_BASE', 'https://api.xiaomimimo.com/v1');
+  const model = envOr('MIMO_SEARCH_MODEL', 'mimo-v2-flash');
   const resp = await fetch(base + '/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+    headers: { 'Content-Type': 'application/json', 'api-key': key },
     body: JSON.stringify({
       model,
       messages: [{ role: 'user', content: query }],
-      enable_search: true,
-      max_completion_tokens: 2000,
-      thinking: { type: 'disabled' },
+      tools: [{ type: 'web_search', max_keyword: 5, force_search: true }],
+      max_tokens: 2000,
       stream: false,
     }),
     signal,
@@ -177,17 +176,16 @@ async function searchZhipuStructured(query, signal) {
 async function searchMimoStructured(query, signal) {
   const key = envOr('MIMO_SEARCH_KEY');
   if (!key) throw new Error('MIMO_SEARCH_KEY missing');
-  const base = envOr('MIMO_SEARCH_BASE', 'https://token-plan-cn.xiaomimimo.com/v1');
-  const model = envOr('MIMO_SEARCH_MODEL', 'mimo-v2.5-pro');
+  const base = envOr('MIMO_SEARCH_BASE', 'https://api.xiaomimimo.com/v1');
+  const model = envOr('MIMO_SEARCH_MODEL', 'mimo-v2-flash');
   const resp = await fetch(base + '/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+    headers: { 'Content-Type': 'application/json', 'api-key': key },
     body: JSON.stringify({
       model,
       messages: [{ role: 'user', content: query }],
-      enable_search: true,
-      max_completion_tokens: 2000,
-      thinking: { type: 'disabled' },
+      tools: [{ type: 'web_search', max_keyword: 5, force_search: true }],
+      max_tokens: 2000,
       stream: false,
     }),
     signal,

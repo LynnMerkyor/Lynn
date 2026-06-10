@@ -24,6 +24,9 @@ export interface UiSlice {
   welcomeVisible: boolean;
   currentTab: TabType;
   activePanel: ActivePanel;
+  /** Transient: when set, the Fleet panel auto-opens the Task Brief form on entry
+   *  (welcome quick-action / chat hint dispatch). WorkersPanel reads then clears it. */
+  fleetOpenBriefForm: boolean;
   locale: string;
   /** Skill 预览 overlay 数据（null = 关闭） */
   skillViewerData: { name: string; baseDir: string; filePath?: string; installed?: boolean } | null;
@@ -57,6 +60,8 @@ export interface UiSlice {
   setWelcomeVisible: (visible: boolean) => void;
   setCurrentTab: (tab: TabType) => void;
   setActivePanel: (panel: ActivePanel) => void;
+  /** Open the Fleet panel and request the Task Brief form (discoverability entry points). */
+  openFleetBriefForm: () => void;
   setChannelCreateOverlayVisible: (visible: boolean) => void;
   setAddMemberOverlayVisible: (visible: boolean) => void;
   setAddMemberTargetChannel: (channelId: string | null) => void;
@@ -79,6 +84,7 @@ export const createUiSlice = (
   welcomeVisible: true,
   currentTab: 'chat',
   activePanel: null,
+  fleetOpenBriefForm: false,
   // Keep locale empty until i18n.load() finishes so the first successful
   // locale sync always triggers a rerender, even for the default zh locale.
   locale: '',
@@ -100,6 +106,7 @@ export const createUiSlice = (
   },
   setWelcomeVisible: (visible) => set({ welcomeVisible: visible }),
   setCurrentTab: (tab) => set({ currentTab: tab }),
+  openFleetBriefForm: () => set({ welcomeVisible: false, activePanel: 'fleet', fleetOpenBriefForm: true }),
   setActivePanel: (panel) => set({ activePanel: panel }),
   setChannelCreateOverlayVisible: (visible) => set({ channelCreateOverlayVisible: visible }),
   setAddMemberOverlayVisible: (visible) => set({ addMemberOverlayVisible: visible }),

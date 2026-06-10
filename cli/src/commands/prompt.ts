@@ -1,6 +1,6 @@
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
 import { streamBrainChat, type BrainStreamEvent, type ChatMessage } from "../brain-client.js";
-import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "../brain-render.js";
+import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, thinkingStatusLabel, type HumanBrainRenderState } from "../brain-render.js";
 import { nowIso, writeJsonLine } from "../jsonl.js";
 import { lowerReasoningEffort, parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
 import { appendSessionTurn, resolveDataDir } from "../session/store.js";
@@ -90,6 +90,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
 
   let assistant = "";
   let sawReasoning = false;
+  let lastUsage: unknown = null;
   let modelProvider = "brain";
   let modelId = "lynn-brain-router";
   const renderState: HumanBrainRenderState = {};
@@ -128,6 +129,17 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
         fallbackProvider: cliProvider?.profile,
       })) {
         const renderReasoning = shouldRenderReasoning(reasoning.display, !!options.json);
+        // Streaming usage frames update the waiting spinner instead of printing one line per
+        // frame (the old behavior scrolled dozens of "usage:" lines per turn). The final usage
+        // line prints once after the loop.
+        if (event.type === "usage" && !options.json) {
+          lastUsage = event.usage;
+          if (!attemptAssistant) {
+            const label = thinkingStatusLabel(event.usage, startedAt);
+            if (label) spinner.setLabel(label);
+          }
+          continue;
+        }
         if (!options.json && eventWritesHumanOutput(event, renderReasoning)) {
           spinner.stop();
         }
@@ -186,6 +198,11 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
           attemptSawReasoning = true;
         }
         if (event.type === "assistant.delta") attemptAssistant += event.text;
+        // Waiting states between visible outputs (route card, tool progress) resume the spinner
+        // so the thinking phase stays animated instead of leaving dead air.
+        if (!options.json && !attemptAssistant && (event.type === "provider" || event.type === "tool_progress")) {
+          spinner.start();
+        }
       }
       if (attemptAssistant.trim()) {
         assistant = attemptAssistant;
@@ -241,6 +258,8 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
     writeJsonLine({ type: "run.finished", ts: nowIso(), ok: true, reasoningReturned: sawReasoning });
   } else {
     process.stdout.write("\n");
+    const summary = lastUsage ? summarizeUsage(lastUsage, { durationMs: Date.now() - startedAt }) : null;
+    if (summary) process.stderr.write(`usage: ${summary}\n`);
   }
   return 0;
 }
@@ -250,7 +269,6 @@ function eventWritesHumanOutput(event: BrainStreamEvent, renderReasoning: boolea
     || event.type === "provider"
     || event.type === "tool_progress"
     || event.type === "brain.error"
-    || event.type === "usage"
     || (event.type === "reasoning.delta" && renderReasoning);
 }
 
@@ -328,8 +346,8 @@ function handleBrainEvent(event: BrainStreamEvent, opts: { json: boolean; render
   } else if (event.type === "reasoning.delta" && opts.renderReasoning) {
     process.stderr.write(event.text);
   } else if (event.type === "usage") {
-    const summary = summarizeUsage(event.usage, { durationMs: opts.startedAt ? Date.now() - opts.startedAt : undefined });
-    if (summary) process.stderr.write(`\nusage: ${summary}\n`);
+    // Human mode: streaming usage is consumed by the spinner label in the run loop; the final
+    // usage line prints once after the turn. (JSON mode still emits every usage frame above.)
   } else {
     renderBrainEventForHuman(event, opts.renderState, process.stderr);
   }

@@ -1,6 +1,7 @@
 import { wsSend } from "../ws-protocol.js";
 import { t } from "../i18n.js";
 import { resumeSessionStream } from "../session-stream-store.js";
+import { extractLastAssistantUsage } from "./session-persistence.js";
 
 export interface WsControlHandlerDeps {
   engine: any;
@@ -73,6 +74,9 @@ export function createWsControlHandler({
         tokens: usage?.tokens ?? null,
         contextWindow: usage?.contextWindow ?? null,
         percent: usage?.percent ?? null,
+        // 会话成本管线:最后一轮 assistant 的 Pi-SDK usage(token/缓存/费用 + 去重时间戳)。
+        // renderer 在每次 turn_end 后请求本包,按 timestamp 去重累计 → StatusBar 显示。
+        turnUsage: extractLastAssistantUsage(usageSession),
       });
       return true;
     }

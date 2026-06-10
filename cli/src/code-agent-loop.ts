@@ -1,5 +1,5 @@
 import { streamBrainChat, type BrainStreamEvent, type ChatMessage } from "./brain-client.js";
-import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, type HumanBrainRenderState } from "./brain-render.js";
+import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, thinkingStatusLabel, type HumanBrainRenderState } from "./brain-render.js";
 import { buildCodePrompt, type CodeContext } from "./code-context.js";
 import { buildCodeRuntimeFrames } from "./code-runtime-frames.js";
 import { assistantToolCallsForMessages, codeToolDefinitions, createStreamingToolCallAccumulator, parseCodeToolRequests, toolRequestFingerprint, toolRequestsFromCollectedCalls, type CodeToolRequest, type CollectedToolCall } from "./code-tool-protocol.js";
@@ -758,7 +758,12 @@ async function collectBrainText(inputData: {
           usageSummary = summary || usageSummary;
           if (summary) {
             inputData.onEvent?.({ type: "usage", summary });
-            if (!inputData.onEvent) process.stderr.write(`usage: ${summary}\n`);
+            // Plain-terminal mode: streaming usage drives the waiting spinner label instead of
+            // printing one line per frame; the final usage renders at the end of the round.
+            if (!inputData.onEvent) {
+              const label = thinkingStatusLabel(event.usage, startedAt);
+              if (label) spinner.setLabel(label);
+            }
           }
         } else {
           if (!inputData.onEvent) renderBrainEventForHuman(event, renderState, process.stderr);

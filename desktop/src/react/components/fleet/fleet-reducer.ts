@@ -117,6 +117,15 @@ export interface FleetWorkerView {
   planItems: FleetPlanItemView[];
   tests: FleetTestResult[];
   gate: { ok: boolean; summary: string } | null;
+  /** Manager acceptance (StepFun-一条龙: deterministic harness verdict — 防"模型自报完成").
+   *  Folded from manager.validation / manager.finished. */
+  managerValidation: {
+    ok: boolean;
+    summary: string;
+    falseVerifyRisk?: 'none' | 'suspected' | 'confirmed';
+    evidenceCount?: number;
+  } | null;
+  escalationReason?: string | null;
   violations: FleetViolation[];
   /** True once any forbidden-file or center-lock breach is seen (drives the merge block + red flag). */
   hasForbiddenEdit: boolean;
@@ -172,6 +181,7 @@ export function createWorkerView(workerId: string, agent?: string): FleetWorkerV
     planItems: [],
     tests: [],
     gate: null,
+    managerValidation: null,
     violations: [],
     hasForbiddenEdit: false,
     error: null,
@@ -284,6 +294,12 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
       return next;
     case 'manager.validation':
       next.gate = { ok: ev.ok, summary: ev.summary };
+      next.managerValidation = {
+        ok: ev.ok,
+        summary: ev.summary,
+        ...(ev.falseVerifyRisk ? { falseVerifyRisk: ev.falseVerifyRisk } : {}),
+        ...(typeof ev.evidenceCount === 'number' ? { evidenceCount: ev.evidenceCount } : {}),
+      };
       next.log = [...prev.log, `manager validation ${ev.ok ? 'ok' : 'fail'}: ${ev.summary}`];
       if (!ev.ok) next.status = 'failed';
       return next;
@@ -294,7 +310,10 @@ export function reduceFleetWorker(prev: FleetWorkerView, ev: FleetWorkerEvent): 
         summary: ev.summary,
       };
       next.status = ev.ok ? (ev.status === 'escalated' ? 'completed' : 'waiting_approval') : 'failed';
-      if (ev.escalationReason) next.log = [...next.log, `escalated: ${ev.escalationReason}`];
+      if (ev.escalationReason) {
+        next.escalationReason = ev.escalationReason;
+        next.log = [...next.log, `escalated: ${ev.escalationReason}`];
+      }
       return next;
     case 'worker.started':
       next.status = 'running';

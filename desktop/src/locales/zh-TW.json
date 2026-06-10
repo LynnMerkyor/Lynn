@@ -107,7 +107,8 @@
       "startWorkspace": "先讀工作區",
       "resumeTask": "繼續目前任務",
       "resumePrompt": "繼續剛才的任務，先告訴我目前進度和下一步。",
-      "workspacePrompt": "先快速讀一下目前工作區，告訴我你會從哪裡開始。"
+      "workspacePrompt": "先快速讀一下目前工作區，告訴我你會從哪裡開始。",
+      "fleetTip": "Fleet 指揮台:把任務拆給多個 CLI worker 並行做,每個獨立 worktree"
     }
   },
   "titlebar": {
@@ -213,7 +214,11 @@
     "serverNotReady": "Server 未就緒",
     "loading": "載入中...",
     "reconnecting": "重新連線中",
-    "reconnect": "重新連線"
+    "reconnect": "重新連線",
+    "usage": {
+      "cache": "快取",
+      "tip": "本會話累計雲端 token 消耗(含前綴快取命中與費用估算)"
+    }
   },
   "input": {
     "placeholder": "說點什麼...",
@@ -235,11 +240,12 @@
       "off": "關閉",
       "auto": "自動",
       "high": "深度",
-      "xhigh": "極限"
+      "xhigh": "極限",
+      "autoHint": "auto:編碼/推理任務→high,工具拿到結果後的續輪自動降到 medium(隨任務自動調速)。要每輪固定檔位就直接選 high。"
     },
     "thinkingDesc": {
       "off": "不推理",
-      "auto": "模型決定深度",
+      "auto": "編碼/推理自動用深度;工具續輪自動降速",
       "high": "深度推理",
       "xhigh": "最強推理"
     },
@@ -304,6 +310,9 @@
       },
       "tryAt": {
         "label": "試試 @ 引用檔案"
+      },
+      "fleet": {
+        "label": "⚡ 佈置並行任務"
       }
     }
   },
@@ -2075,5 +2084,73 @@
     "requestFailed": "複查請求失敗",
     "followUp": "處理發現",
     "taskCreated": "已建立背景執行任務"
+  },
+  "fleet": {
+    "empty": {
+      "title": "還沒有並行 worker",
+      "intro": "把一個任務拆給 3-5 個 CLI worker(codex / claude / qwen…),各自在獨立 git worktree 裡並行跑,在這裡統一盯進度、看 diff、跑測試。",
+      "step1": "佈置 worker — 寫個簡報:它負責哪些檔案、禁止碰哪些、用什麼測試指令。",
+      "step2": "每個 worker 跑在自己的 worktree 裡;這塊板即時顯示它的日誌、逐檔 diff、測試結果。",
+      "step3": "越界改動和中心檔案衝突會標紅並擋住合併。",
+      "step4": "每張卡片上可以取消 / 重試 / 開啟 worktree。",
+      "hint": "第一次用?點「試跑模擬 worker」看一遍完整流程。"
+    },
+    "dispatch": "佈置 worker",
+    "closeForm": "關閉表單",
+    "playMock": "試跑模擬 worker",
+    "form": {
+      "title": "標題",
+      "titlePlaceholder": "例:拆分 ComposerTextarea",
+      "agent": "執行 Agent",
+      "ready": "就緒",
+      "taskType": "任務類型",
+      "taskTypeCode": "程式 / 文字任務",
+      "taskTypeSee": "看圖(辨識圖片)",
+      "taskTypeGround": "定位 UI 元素",
+      "taskTypeUi2code": "截圖轉程式",
+      "scopePreset": "範圍預設",
+      "fanOut": "同時派給(並行,可選)",
+      "imagePath": "圖片路徑",
+      "imageHint": "路徑會傳給 Lynn worker run;CLI 在本地讀圖並走視覺模型。",
+      "approval": "審批",
+      "approvalAsk": "ask · 危險操作需確認",
+      "approvalOnFailure": "on-failure · 失敗時確認",
+      "approvalNever": "never · 唯讀檢查",
+      "approvalYolo": "yolo · 全自動改動",
+      "approvalHintYolo": "YOLO 允許 worker 直接改檔案、跑指令,不再逐次確認。",
+      "approvalHintGuarded": "非互動 worker 在危險改動前可能停下,除非審批為 yolo。",
+      "sandboxHintFull": "完整檔案系統權限只用於可信的本地 worktree。",
+      "sandbox": "沙箱",
+      "sandboxHintScoped": "workspace-write 把改動限制在分配的 worktree 內。",
+      "externalHint": "外部 CLI(Codex / Claude 等)自帶 shell。從 Fleet 啟動必須顯式 Approval=yolo + Sandbox=danger-full-access;內建 Lynn / StepFun worker 可保持守護。",
+      "branch": "分支",
+      "worktree": "Worktree",
+      "objective": "目標說明",
+      "owned": "負責檔案(每行一個 glob)",
+      "forbidden": "禁改檔案",
+      "tests": "測試指令(每行一條)",
+      "dispatching": "派發中…",
+      "dispatchN": "派給 {count} 個 worker",
+      "cancel": "取消",
+      "unavailable": "不可用"
+    },
+    "panel": {
+      "cliRuntime": "CLI 執行時",
+      "perms": "權限",
+      "workersCount": "{count} 個 worker",
+      "mockBadge": "模擬",
+      "mockBadgeTitle": "演示回放,未啟動任何真實程序"
+    },
+    "chatHint": {
+      "text": "⚡ 這個任務看起來可以拆給多個並行 worker 同時做",
+      "action": "去佈置"
+    },
+    "acceptance": {
+      "passed": "✓ 驗收通過",
+      "failed": "✗ 驗收未過",
+      "falseVerify": "假驗證風險",
+      "evidence": "客觀證據",
+      "escalated": "已升級"
+    }
   }
 }

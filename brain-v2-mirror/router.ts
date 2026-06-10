@@ -28,6 +28,8 @@ type RunRoundResult = {
   finishReason: string | null;
   toolCalls: ToolCall[];
   contentAccum: string;
+  /** 本轮是否流出过 reasoning(reasoning-only 空答重试的判据)。 */
+  sawReasoning: boolean;
 };
 
 function isProviderConfigured(provider: Provider | null): boolean {
@@ -347,6 +349,8 @@ async function runRound({
 
     const adapter = getAdapter(provider.wire);
     let anyEmit = false;
+    let lastUsage: unknown = null;
+    let sawReasoning = false;
     let finishReason: string | null = null;
     let contentAccum = '';
     const toolCallsAcc: ToolCall[] = [];
@@ -404,7 +408,25 @@ async function runRound({
           await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
           continue;
         }
+        if (chunk.type === 'usage') {
+          lastUsage = (chunk as { usage?: unknown }).usage;
+        }
+        if (chunk.type === 'reasoning') {
+          sawReasoning = true;
+        }
         await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
+      }
+      // [prefix-cache 埋点] StepFun 流式 usage 的中途帧恒报 cached_tokens=0,只有最终帧带真值
+      // (2026-06-10 实测)。这里只记最终帧,prod 日志可直接观测真实命中率。
+      if (lastUsage && typeof lastUsage === 'object') {
+        const u = lastUsage as Record<string, unknown>;
+        const details = u.prompt_tokens_details as Record<string, unknown> | undefined;
+        const cached = (typeof details?.cached_tokens === 'number' ? details.cached_tokens : undefined)
+          ?? (typeof u.cached_tokens === 'number' ? u.cached_tokens : undefined);
+        if (typeof u.prompt_tokens === 'number' && cached !== undefined) {
+          const pct = u.prompt_tokens > 0 ? Math.round((cached / u.prompt_tokens) * 100) : 0;
+          log && log('info', `provider ${providerId} usage: prompt=${u.prompt_tokens} completion=${u.completion_tokens ?? '?'} prefix-cache=${cached} (${pct}%)`);
+        }
       }
       // anyEmit=false 表示 transport 层零 SSE chunks (真正 wire 失败)。
       // 注意: 这不是检测 "content 为空" — 一个 finish_reason=stop+空 content 仍算正常,因为 chunks≥1。
@@ -425,6 +447,7 @@ async function runRound({
         finishReason,
         toolCalls: toolCallsAcc.filter(Boolean),
         contentAccum,
+        sawReasoning,
       };
     } catch (e) {
       const err = e as ProviderError;
@@ -482,6 +505,13 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   // max_tokens mid-<think> (finish_reason=length with no usable answer), so the answer fits.
   let activeReasoning = reasoningEffort;
   let lengthRetried = false;
+  // [tool-round effort-down] Continuation rounds (after server-tool results are fed back) mostly
+  // integrate observations instead of re-deriving the plan; at the provider-default `high` they
+  // re-burn a long <think> per round. When the CLIENT did not pin an effort (null/auto → provider
+  // default applies), drop continuation rounds to `medium`. Explicit client efforts are honored.
+  // Kill switch: LYNN_TOOL_ROUND_EFFORT_DOWN=0.
+  const clientPinnedReasoning = !(reasoningEffort == null || String(reasoningEffort).toLowerCase() === 'auto');
+  const toolRoundEffortDown = process.env.LYNN_TOOL_ROUND_EFFORT_DOWN !== '0';
   const stepDownReasoning = (effort: string | null | undefined): string => {
     const e = String(effort || 'high').toLowerCase();
     if (e === 'medium') return 'low';
@@ -499,22 +529,24 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     });
     lastProviderId = result.providerId;
 
-    // [overflow-retry] StepFun-class reasoning models can blow past max_tokens mid-<think>,
-    // returning finish_reason=length with no visible answer and no tool call. Retry once with
-    // reduced reasoning (+ a concise-answer nudge) so the answer fits, instead of passing an
-    // empty turn through to the client.
+    // [empty-answer retry] 两种"只想不说"的空答形态,各重试一次(共用一次配额):
+    //  a) finish=length:reasoning 撑爆 max_tokens,正文没出来(StepFun 高档思考的老问题);
+    //  b) finish=stop + sawReasoning:模型思考完就正常收流,一个字正文都没给 ——
+    //     2026-06-10 用户实测(工具轮后"有授权卡片但最后没有反馈"的上游根因)。
+    // 都是降一档 reasoning + 直答 nudge 重试,不编造内容。
+    const emptyAnswer = result.toolCalls.length === 0 && !String(result.contentAccum || '').trim();
+    const reasoningOnlyStop = result.finishReason === 'stop' && result.sawReasoning;
     if (
-      result.finishReason === 'length'
-      && result.toolCalls.length === 0
-      && !String(result.contentAccum || '').trim()
+      emptyAnswer
       && !lengthRetried
+      && (result.finishReason === 'length' || reasoningOnlyStop)
     ) {
       lengthRetried = true;
       activeReasoning = stepDownReasoning(activeReasoning);
-      log && log('warn', `provider ${lastProviderId} length-overflow with empty answer; retry once with reasoning=${activeReasoning}`);
+      log && log('warn', `provider ${lastProviderId} ${result.finishReason === 'length' ? 'length-overflow' : 'reasoning-only stop'} with empty answer; retry once with reasoning=${activeReasoning}`);
       workingMessages.push({
         role: 'user',
-        content: '上一次回答因长度上限被截断,且没有给出可见答案。请直接、简洁地给出最终答案,不要再展开完整的思考过程。',
+        content: '上一次回答没有给出可见的正文答案。请基于已有的上下文和工具结果,直接、简洁地给出最终答案,不要再展开完整的思考过程。',
       });
       continue;
     }
@@ -546,59 +578,98 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       content: result.contentAccum || null,
       tool_calls: result.toolCalls,
     });
+    // Phase 1 (serial): storm verdicts. Storm counting is order-dependent on the CALL sequence
+    // only (name+args repetition), never on execution results, so verdicts are decided up front.
+    // Hitting the storm ceiling aborts the round before executing the remaining tools.
+    let stormLimitHit: ReturnType<typeof observeToolCallStorm> | null = null;
+    const runnable: Array<{ tc: ToolCall; order: number }> = [];
     for (const tc of serverCalls) {
       const stormVerdict = observeToolCallStorm(toolStormState, tc, toolStormConfig);
-      if (stormVerdict.storm) {
-        log && log('warn', `tool storm suppressed: ${stormVerdict.toolName} repeat=${stormVerdict.seen} storms=${stormVerdict.stormCount}/${toolStormConfig.maxStorms}`);
-        await onChunk(
-          { type: 'tool_progress', event: 'start', name: tc.function.name },
-          { providerId: lastProviderId }
-        );
-        await onChunk(
-          { type: 'tool_progress', event: 'end', name: tc.function.name, ms: 0, ok: false },
-          { providerId: lastProviderId }
-        );
-        workingMessages.push({
-          role: 'tool',
-          tool_call_id: tc.id || ('tc-' + Math.random().toString(36).slice(2)),
-          content: buildToolStormReflection(stormVerdict),
-        });
-        workingMessages = compactToolResults(workingMessages, toolResultCompactionConfig);
-        if (stormVerdict.maxStormsReached) {
-          await onChunk(
-            { type: 'error', error: 'tool_storm_limit', tool: stormVerdict.toolName, storms: stormVerdict.stormCount },
-            { providerId: lastProviderId }
-          );
-          return {
-            ok: false,
-            providerId: lastProviderId,
-            iterations: iter,
-            error: 'tool_storm_limit',
-          };
-        }
+      if (!stormVerdict.storm) {
+        runnable.push({ tc, order: runnable.length });
         continue;
       }
-      const t0 = Date.now();
-      // 工具进度通过自定义 chunk type 表达,不污染 content stream (F5 fix)
-      // Lynn UI 消费 type=tool_progress;非 Lynn 客户端 ignored。
+      log && log('warn', `tool storm suppressed: ${stormVerdict.toolName} repeat=${stormVerdict.seen} storms=${stormVerdict.stormCount}/${toolStormConfig.maxStorms}`);
       await onChunk(
         { type: 'tool_progress', event: 'start', name: tc.function.name },
         { providerId: lastProviderId }
       );
-      const toolResult = await executeServerTool(tc.function.name, tc.function.arguments || '{}', { log });
-      const ms = Date.now() - t0;
-      const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
-      const toolSummary = summarizeToolResult(tc.function.name, toolResult);
       await onChunk(
-        { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok, ...toolSummary },
+        { type: 'tool_progress', event: 'end', name: tc.function.name, ms: 0, ok: false },
         { providerId: lastProviderId }
       );
       workingMessages.push({
         role: 'tool',
         tool_call_id: tc.id || ('tc-' + Math.random().toString(36).slice(2)),
-        content: formatToolResultContent(tc.function.name, toolResult, ++serverToolStepIndex),
+        content: buildToolStormReflection(stormVerdict),
       });
-      workingMessages = compactToolResults(workingMessages, toolResultCompactionConfig);
+      if (stormVerdict.maxStormsReached) {
+        stormLimitHit = stormVerdict;
+        break;
+      }
+    }
+    if (stormLimitHit) {
+      await onChunk(
+        { type: 'error', error: 'tool_storm_limit', tool: stormLimitHit.toolName, storms: stormLimitHit.stormCount },
+        { providerId: lastProviderId }
+      );
+      return {
+        ok: false,
+        providerId: lastProviderId,
+        iterations: iter,
+        error: 'tool_storm_limit',
+      };
+    }
+    // Phase 2 (parallel): independent server tools run concurrently (cap via
+    // BRAIN_V2_TOOL_PARALLEL, default 4, 1 = serial). Progress chunks emit in real time as each
+    // tool starts/ends; tool RESULT messages are appended in the model's original call order so
+    // the conversation stays deterministic.
+    const toolParallel = Math.max(1, Number(process.env.BRAIN_V2_TOOL_PARALLEL || 4) || 1);
+    const toolOutcomes: Array<{ tc: ToolCall; toolResult: string } | null> = new Array(runnable.length).fill(null);
+    // A round that produced tool_calls always has an active provider; capture it as non-null for
+    // the worker closures (let-narrowing does not flow into async closures).
+    const roundProviderId = lastProviderId as ProviderId;
+    let nextRunnable = 0;
+    const runToolWorker = async (): Promise<void> => {
+      for (;;) {
+        const slot = nextRunnable;
+        if (slot >= runnable.length) return;
+        nextRunnable += 1;
+        const { tc, order } = runnable[slot];
+        const t0 = Date.now();
+        // 工具进度通过自定义 chunk type 表达,不污染 content stream (F5 fix)
+        // Lynn UI 消费 type=tool_progress;非 Lynn 客户端 ignored。
+        await onChunk(
+          { type: 'tool_progress', event: 'start', name: tc.function.name },
+          { providerId: roundProviderId }
+        );
+        const toolResult = await executeServerTool(tc.function.name, tc.function.arguments || '{}', { log });
+        const ms = Date.now() - t0;
+        const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
+        const toolSummary = summarizeToolResult(tc.function.name, toolResult);
+        await onChunk(
+          { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok, ...toolSummary },
+          { providerId: roundProviderId }
+        );
+        toolOutcomes[order] = { tc, toolResult };
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(toolParallel, runnable.length) }, () => runToolWorker()));
+    for (const outcome of toolOutcomes) {
+      if (!outcome) continue;
+      workingMessages.push({
+        role: 'tool',
+        tool_call_id: outcome.tc.id || ('tc-' + Math.random().toString(36).slice(2)),
+        content: formatToolResultContent(outcome.tc.function.name, outcome.toolResult, ++serverToolStepIndex),
+      });
+    }
+    workingMessages = compactToolResults(workingMessages, toolResultCompactionConfig);
+    if (toolRoundEffortDown && !clientPinnedReasoning) {
+      const e = String(activeReasoning || 'auto').toLowerCase();
+      if (e === 'auto' || e === 'high' || e === 'xhigh') {
+        activeReasoning = 'medium';
+        log && log('info', `iter ${iter}: tool continuation round → reasoning=medium (was ${e}; set LYNN_TOOL_ROUND_EFFORT_DOWN=0 to disable)`);
+      }
     }
   }
   // 达 MAX_ITERATIONS 上限 → emit 显式 error chunk (不再撒谎成 finish:stop)

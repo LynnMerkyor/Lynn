@@ -39,15 +39,26 @@ export function WorkersPanel() {
   const clearFinishedWorkers = useStore((st) => st.clearFinishedWorkers);
   const cancelRef = useRef<null | (() => void)>(null);
   const [showForm, setShowForm] = useState(false);
+  const fleetOpenBriefForm = useStore((st) => st.fleetOpenBriefForm);
   const [cliEnv, setCliEnv] = useState<CliEnvStatus | null>(null);
   const [perm, setPerm] = useState<{ exists: boolean; approval: string; sandbox: string; path: string } | null>(null);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const t = window.t ?? ((k: string) => k);
 
   useEffect(() => {
     return () => {
       if (cancelRef.current) cancelRef.current();
     };
   }, []);
+
+  // Discoverability entry points (welcome quick-action / chat hint) request the brief form via a
+  // transient store flag; open it on arrival and clear the flag so it doesn't re-trigger.
+  useEffect(() => {
+    if (activePanel === 'fleet' && fleetOpenBriefForm) {
+      setShowForm(true);
+      useStore.setState({ fleetOpenBriefForm: false });
+    }
+  }, [activePanel, fleetOpenBriefForm]);
 
   useEffect(() => {
     if (activePanel !== 'fleet') return;
@@ -206,15 +217,15 @@ export function WorkersPanel() {
         <div className={fp.floatingPanelBody}>
           {cliEnv && (
             <div className={s.cliEnv} data-ready={cliEnv.ready ? '1' : '0'}>
-              CLI runtime: Node {cliEnv.node.version ?? '?'} ({cliEnv.node.source})
-              {cliEnv.ready ? ' · ready' : cliEnv.cli.present ? '' : ' · CLI runtime unavailable'}
+              {t('fleet.panel.cliRuntime')}: Node {cliEnv.node.version ?? '?'} ({cliEnv.node.source})
+              {cliEnv.ready ? ` · ${t('fleet.form.ready')}` : cliEnv.cli.present ? '' : ' · CLI runtime unavailable'}
             </div>
           )}
           {perm && (
             <div className={s.permBadge} data-default={perm.exists ? '0' : '1'}>
               {perm.exists ? (
                 <>
-                  perms: {perm.approval} · {perm.sandbox}
+                  {t('fleet.panel.perms')}: {perm.approval} · {perm.sandbox}
                 </>
               ) : (
                 <>
@@ -226,10 +237,10 @@ export function WorkersPanel() {
           )}
           <div className={s.fleetToolbar}>
             <button className={s.fleetBtn} onClick={() => setShowForm((v) => !v)}>
-              {showForm ? 'Close form' : 'Dispatch worker'}
+              {showForm ? t('fleet.closeForm') : t('fleet.dispatch')}
             </button>
             <button className={s.fleetBtn} onClick={playMock}>
-              Play mock worker
+              {t('fleet.playMock')}
             </button>
             {finishedCount > 0 && (
               <button className={s.fleetBtn} onClick={clearFinishedWorkers}>
@@ -247,7 +258,7 @@ export function WorkersPanel() {
               </button>
             )}
             <span className={s.fleetHint}>
-              {fleetWorkers.length} worker(s)
+              {t('fleet.panel.workersCount', { count: fleetWorkers.length })}
               {(['running', 'waiting_approval', 'blocked', 'failed'] as const).map((st) =>
                 statusCounts[st] ? (
                   <span key={st} className={s.statusChip} data-status={st}>
@@ -280,19 +291,15 @@ export function WorkersPanel() {
 
           {fleetWorkers.length === 0 ? (
             <div className={s.fleetEmpty}>
-              <div className={s.emptyTitle}>No workers yet</div>
-              <p>Dispatch 3-5 CLI workers (codex / claude / qwen ...) into isolated git worktrees and supervise them here.</p>
+              <div className={s.emptyTitle}>{t('fleet.empty.title')}</div>
+              <p>{t('fleet.empty.intro')}</p>
               <ol className={s.emptySteps}>
-                <li>
-                  <strong>Dispatch worker</strong> — write a brief: which files it owns, which are forbidden, the test commands.
-                </li>
-                <li>Each worker runs in its own worktree; this board shows its live log, per-file diff, and tests.</li>
-                <li>Out-of-scope edits and center-file conflicts are flagged red and block merge.</li>
-                <li>Cancel / retry / open the worktree from each card.</li>
+                <li>{t('fleet.empty.step1')}</li>
+                <li>{t('fleet.empty.step2')}</li>
+                <li>{t('fleet.empty.step3')}</li>
+                <li>{t('fleet.empty.step4')}</li>
               </ol>
-              <p className={s.emptyHint}>
-                New here? Click <strong>Play mock worker</strong> to watch a simulated run end-to-end.
-              </p>
+              <p className={s.emptyHint}>{t('fleet.empty.hint')}</p>
             </div>
           ) : (
             <div className={s.fleetBoard} data-grid={fleetWorkers.length > 1 ? '1' : '0'}>

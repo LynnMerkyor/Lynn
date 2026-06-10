@@ -25,6 +25,7 @@ import type { ProvidersInfo } from "./commands/providers.js";
 import { t } from "./i18n.js";
 import { resolveDefaultBrainUrl } from "./brain-url.js";
 import { shouldUseInkTui } from "./terminal-safety.js";
+import { DEFAULT_ROUTE_CHAIN } from "./route-labels.js";
 
 async function main(argv = process.argv.slice(2)): Promise<number> {
   installPipeErrorHandler();
@@ -267,7 +268,7 @@ function startupModelLabel(info: ProvidersInfo, brainReachable: boolean): string
     return `CLI BYOK: ${info.cliProvider.profile.model}`;
   }
   const label = activeRouteLabel(info);
-  if (/^brain\s*\/\s*lynn-brain-router/i.test(label)) return "StepFun 3.7 Flash → Spark A3B single-slot → DS-V4 Flash";
+  if (/^brain\s*\/\s*lynn-brain-router/i.test(label)) return DEFAULT_ROUTE_CHAIN;
   return label;
 }
 

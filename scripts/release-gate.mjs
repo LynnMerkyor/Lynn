@@ -20,12 +20,14 @@ uploading binaries.
 
 Options:
   --quick       Skip full vitest and Electron UI smoke; keep type/build/static gates.
-  --no-ui      Skip Electron UI smoke.
+  --no-ui      Skip Electron UI smoke (also skips the GUI startup-recovery matrix).
   --no-build   Skip build:server/build:main/build:renderer.
   --no-cli-fleet
                 Skip focused CLI/Fleet regression tests.
   --no-cli-efficiency
                 Skip live StepFun route/efficiency gates.
+  --no-cli-task
+                Skip the live CLI task-execution gate (issue #72 class-3 net).
 `);
   process.exit(0);
 }
@@ -46,6 +48,12 @@ const steps = [
   ] : []),
   ["Static release regression", "npm", ["run", "test:release:smoke", "--", "--mode", "static"]],
   ...(!has("--quick") && !has("--no-ui") ? [["Electron UI smoke", "npm", ["run", "test:release:ui"]]] : []),
+  // issue #72 regression nets. Both are HEADLESS (no Electron window):
+  //  - startup recovery: boots dist-server-bundle through fresh/corrupt-db/.hanako-sentinel
+  //    profiles (needs build:server, so it rides with --no-build).
+  //  - CLI task: real -p tasks must produce VISIBLE answers (reasoning-only = fail).
+  ...(!has("--no-build") ? [["Startup recovery matrix (issue #72, headless)", "node", ["scripts/gate-startup-recovery.mjs"]]] : []),
+  ...(!has("--no-cli-task") ? [["CLI live task gate (issue #72)", "node", ["scripts/gate-cli-task.mjs"]]] : []),
 ];
 
 function formatDuration(ms) {

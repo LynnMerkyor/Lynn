@@ -199,9 +199,12 @@ async function hasStagedChanges(cwd: string): Promise<boolean> {
   }
 }
 
-function isSafeBranchName(branch: string): boolean {
+export function isSafeBranchName(branch: string): boolean {
   if (!branch || branch.startsWith("/") || branch.endsWith("/") || branch.includes("..")) return false;
   if (branch.includes("@{") || branch.endsWith(".lock")) return false;
+  // Leading "-" would let a branch name parse as a git FLAG (e.g. "-d", "--force") — argv
+  // injection guard. Also cap length to keep refs/log output sane.
+  if (branch.startsWith("-") || branch.length > 256) return false;
   return /^[A-Za-z0-9._/-]+$/.test(branch);
 }
 

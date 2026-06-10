@@ -222,3 +222,17 @@ export interface UsageSummaryOptions {
 export function summarizeUsage(usage: unknown, options: UsageSummaryOptions = {}): string | null {
   return renderUsageTelemetry(normalizeUsageTelemetry(usage, options));
 }
+
+/**
+ * Compact spinner label for the thinking phase: "<thinking> · 342 tok · 18s".
+ * Streaming usage frames arrive continuously while a reasoning model thinks; instead of printing
+ * each one (scroll spam), the waiting spinner shows live progress and the full usage line prints
+ * once at the end of the turn.
+ */
+export function thinkingStatusLabel(usage: unknown, startedAt?: number): string | null {
+  const u = usage as { completion_tokens?: unknown } | null | undefined;
+  const completion = typeof u?.completion_tokens === "number" ? u.completion_tokens : null;
+  if (completion == null) return null;
+  const elapsed = startedAt ? Math.max(0, Math.round((Date.now() - startedAt) / 1000)) : null;
+  return `${t("spinner.thinking")} · ${completion} tok${elapsed != null ? ` · ${elapsed}s` : ""}`;
+}

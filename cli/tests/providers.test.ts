@@ -20,7 +20,7 @@ afterEach(() => setLang(null));
 describe("providers command", () => {
   it("renders BYOK guidance without exposing keys", () => {
     const output = renderProvidersInfo({
-      defaultRoute: "StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B Distill via local Brain router (auto)",
+      defaultRoute: "StepFun 3.7 Flash via local Brain router (auto)",
       byokEntry: "Open Lynn GUI > Settings > Providers",
       keyPolicy: "Provider keys stay private.",
       brainUrl: "http://127.0.0.1:8790",
@@ -82,7 +82,7 @@ describe("providers command", () => {
   it("renders localized provider guidance in Chinese", () => {
     setLang("zh");
     const output = renderProvidersInfo({
-      defaultRoute: "StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B Distill via local Brain router (auto)",
+      defaultRoute: "StepFun 3.7 Flash via local Brain router (auto)",
       byokEntry: "Lynn 客户端 > 设置 > Providers",
       keyPolicy: "Provider keys stay private.",
       brainUrl: "http://127.0.0.1:8790",
@@ -146,13 +146,13 @@ describe("providers command", () => {
 
   it("formats the active route for the startup banner", () => {
     expect(activeRouteLabel({
-      defaultRoute: "StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B Distill via local Brain router (auto)",
+      defaultRoute: "StepFun 3.7 Flash via local Brain router (auto)",
       activeProvider: "stepfun",
       activeModel: "step-3.7-flash",
     })).toBe("StepFun 3.7 Flash (step-3.7-flash)");
     expect(activeRouteLabel({
-      defaultRoute: "StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B Distill via local Brain router (auto)",
-    })).toBe("StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B Distill via local Brain router (auto)");
+      defaultRoute: "StepFun 3.7 Flash via local Brain router (auto)",
+    })).toBe("StepFun 3.7 Flash via local Brain router (auto)");
   });
 
   it("saves a CLI BYOK provider profile without printing the raw key", async () => {

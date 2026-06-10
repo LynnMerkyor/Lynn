@@ -74,12 +74,12 @@ const BRAIN_BASE = process.env.BRAIN_V2_BASE || 'http://127.0.0.1:8790';
 const PROVIDERS = [
   {
     id: 'mimo',
-    label: 'MiMo V2.5 Pro (默认)',
-    endpoint: process.env.MIMO_SEARCH_BASE || 'https://token-plan-cn.xiaomimimo.com/v1',
+    label: 'MiMo Search (付费搜索平台)',
+    endpoint: process.env.MIMO_SEARCH_BASE || 'https://api.xiaomimimo.com/v1',
     apiKey: process.env.MIMO_SEARCH_KEY || '',
-    model: process.env.MIMO_SEARCH_MODEL || 'mimo-v2.5-pro',
+    model: process.env.MIMO_SEARCH_MODEL || 'mimo-v2-flash',
     wire: 'mimo',
-    authStyle: 'bearer',
+    authStyle: 'api-key',
   },
   {
     id: 'apex-spark-mtp',
@@ -248,7 +248,7 @@ const MIN_WAV_B64 = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA
 
 async function probeMimoMultimodal(kind) {
   // kind: 'image' | 'audio'
-  const mimoEndpoint = process.env.MIMO_SEARCH_BASE || 'https://token-plan-cn.xiaomimimo.com/v1';
+  const mimoEndpoint = process.env.MIMO_SEARCH_BASE || 'https://api.xiaomimimo.com/v1';
   const mimoKey = process.env.MIMO_SEARCH_KEY || process.env.MIMO_KEY || '';
   if (!mimoKey) {
     return { ok: false, skipped: true, reason: 'MIMO key not configured' };
@@ -282,7 +282,11 @@ async function probeMimoMultimodal(kind) {
   const url = mimoEndpoint.replace(/\/+$/, '') + '/chat/completions';
   const r = await timedFetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + mimoKey },
+    headers: {
+      'Content-Type': 'application/json',
+      'api-key': mimoKey,
+      Authorization: 'Bearer ' + mimoKey,
+    },
     body: JSON.stringify(body),
   }, 30_000);
 

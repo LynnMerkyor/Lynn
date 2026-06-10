@@ -183,9 +183,9 @@ forbidden globs, tests, and the final diff before merge.
 
 By default, `Lynn code` talks to the local Lynn Brain router:
 
-1. StepFun 3.7 Flash with 256K context, high reasoning, and a 32K reasoning/generation budget.
-2. MiMo V2.5 Pro / Omni fallback, including multimodal turns.
-3. Spark Qwen 3.6 35B A3B local fallback.
+1. StepFun 3.7 Flash with 256K context, high reasoning, and a 48K reasoning/generation budget.
+2. Vision and voice are routed by Brain to the matching backend when a turn contains media.
+3. Local manager routing is explicit and experimental (`Lynn manager run`); it is not the default `Lynn code` answer path.
 
 If the local Lynn Brain server is offline, start it with `Lynn brain start` or
 open the Lynn client GUI. For machines that should run without the client/Brain,

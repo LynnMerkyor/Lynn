@@ -170,6 +170,44 @@ describe("resolveBundledServerLaunch", () => {
     expect(out.env).toEqual({ ELECTRON_RUN_AS_NODE: "1" });
   });
 
+  it("honors LYNN_SERVER_NODE_BIN in dev (ABI escape hatch for the startup gate)", () => {
+    // Electron's embedded Node (v22) vs node_modules natives built under nvm Node (v20) →
+    // better-sqlite3 ERR_DLOPEN_FAILED at FactStore boot (issue-#72 class). The gate pins the
+    // server child to an external ABI-consistent Node; packaged launches never set this env.
+    const externalNode = "/tmp/fake-node-bin";
+    const devBundle = path.join(base.dirname, "..", "dist-server-bundle", "index.js");
+    process.env.LYNN_SERVER_NODE_BIN = externalNode;
+    try {
+      const out = resolveBundledServerLaunch({
+        ...base,
+        platform: "darwin",
+        existsSync: (p: string) => p === devBundle || p === externalNode,
+      });
+      expect(out.mode).toBe("dev");
+      expect(out.serverBin).toBe(externalNode);
+      expect(out.serverArgs).toEqual([devBundle]);
+      expect(out.env).toEqual({});
+    } finally {
+      delete process.env.LYNN_SERVER_NODE_BIN;
+    }
+  });
+
+  it("ignores LYNN_SERVER_NODE_BIN when the binary does not exist", () => {
+    const devBundle = path.join(base.dirname, "..", "dist-server-bundle", "index.js");
+    process.env.LYNN_SERVER_NODE_BIN = "/nonexistent/node";
+    try {
+      const out = resolveBundledServerLaunch({
+        ...base,
+        platform: "darwin",
+        existsSync: (p: string) => p === devBundle,
+      });
+      expect(out.serverBin).toBe(base.execPath);
+      expect(out.env).toEqual({ ELECTRON_RUN_AS_NODE: "1" });
+    } finally {
+      delete process.env.LYNN_SERVER_NODE_BIN;
+    }
+  });
+
   it("uses the node runtime + bundle entry when the bundled node runtime is present", () => {
     const node = path.join(serverDir, "node");
     const entry = path.join(serverDir, "bundle", "index.js");

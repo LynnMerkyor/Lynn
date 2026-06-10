@@ -9,7 +9,7 @@ import { t } from "./i18n.js";
 import { completeSlash } from "./completion.js";
 import { normalizeSlashInput } from "./completion.js";
 import { completeMentionInput } from "./mentions.js";
-import { parseReasoningOptions, shouldRenderReasoning, type ReasoningOptions } from "./reasoning.js";
+import { applyFastReasoning, parseReasoningOptions, shouldRenderReasoning, type ReasoningOptions } from "./reasoning.js";
 import { resolveCliProviderProfile, type CliProviderProfile } from "./provider-profile.js";
 import { resolveEffectivePermissions } from "./permissions.js";
 import { displayCwd } from "./startup.js";
@@ -334,13 +334,13 @@ async function submitInput(inputData: {
     return;
   }
   if (text === "/fast") {
-    const next = { ...inputData.reasoning, effort: "off" as const };
+    const next = applyFastReasoning(inputData.reasoning);
     inputData.setReasoning(next);
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("chat.fast") }]);
     return;
   }
   if (text === "/think") {
-    const next = { ...inputData.reasoning, effort: "high" as const };
+    const next = { ...inputData.reasoning, effort: "high" as const, maxTokens: undefined };
     inputData.setReasoning(next);
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("chat.think") }]);
     return;

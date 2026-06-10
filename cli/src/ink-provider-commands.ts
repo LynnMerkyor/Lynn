@@ -4,6 +4,7 @@ import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, run
 import { normalizeSlashInput } from "./completion.js";
 import { t } from "./i18n.js";
 import { resolveCliProviderProfile, type CliProviderProfile } from "./provider-profile.js";
+import { DEFAULT_ROUTE_CHAIN_COMPACT } from "./route-labels.js";
 
 export interface InkProviderCommandResult {
   handled: boolean;
@@ -38,7 +39,7 @@ export async function handleInkProviderCommand(raw: string, baseArgs: ParsedArgs
     : undefined;
   return {
     handled: true,
-    message: message.trim() || t("chat.providers.routeUnchanged", { route: refreshedProvider?.model || "StepFun 3.7 Flash→Spark A3B single-slot→DS-V4 Flash" }),
+    message: message.trim() || t("chat.providers.routeUnchanged", { route: refreshedProvider?.model || DEFAULT_ROUTE_CHAIN_COMPACT }),
     refreshedProvider,
   };
 }

@@ -435,6 +435,18 @@
 
 /* ── Context Usage Ring ── */
 
+
+/* 会话累计云 token/费用芯片(ContextRing 旁,低噪;hover 看明细)。 */
+.session-cost-chip {
+  font-size: 11px;
+  opacity: 0.62;
+  white-space: nowrap;
+  align-self: center;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+.session-cost-chip:hover { opacity: 0.95; }
+
 .context-ring {
     --ring-bg: var(--border);
     --ring-fg: var(--accent);

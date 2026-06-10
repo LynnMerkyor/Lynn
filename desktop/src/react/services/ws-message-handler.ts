@@ -249,6 +249,10 @@ export function handleServerMessage(msg: ServerEvent | any): void {
 
     case 'context_usage': {
       const sp = msg.sessionPath;
+      // 会话成本累计:server 回包附带的最后一轮 usage(timestamp 去重在 slice 内做)。
+      if (sp && msg.turnUsage && typeof msg.turnUsage === 'object') {
+        useStore.getState().recordTurnUsage(sp, msg.turnUsage);
+      }
       if (!sp || sp === useStore.getState().currentSessionPath) {
         const tokens = msg.tokens ?? msg.totalTokens ?? null;
         const contextWindow = msg.contextWindow ?? msg.window ?? null;

@@ -1,0 +1,126 @@
+# Lynn 发版 SOP(单一入口)
+
+> 从「改版本号」到「公网 URL 验证」的一条龙顺序。本文是**索引型 SOP**:每步给命令和坑位,
+> 细节以被引文档为准,**不要在别处复制本流程**(会漂移)。
+>
+> 引用地图:
+> - 门禁分层与阻断规则 → [`docs/RELEASE-REGRESSION-GATES.md`](../RELEASE-REGRESSION-GATES.md)
+> - 镜像站路径/上传/验证 → [`docs/ops/download-site-deploy-map.md`](download-site-deploy-map.md)
+> - 安装片段(发版页/Release notes 用)→ [`docs/ops/v080-cli-install-release-snippet.md`](v080-cli-install-release-snippet.md)
+> - 公证 → `scripts/notarize.cjs` + `scripts/finalize-macos-dmg.sh`
+> - 门禁脚本入口 → `scripts/release-gate.mjs`(含 `--quick/--no-ui/--no-cli-task` 等开关)
+> - Brain 发布(独立节奏)→ `scripts/mirror-prod-diff.sh`(mirror↔prod 漂移检测,部署前必跑)
+
+---
+
+## 0. 前置自检(5 分钟,省一下午)
+
+```bash
+git status -sb                       # 工作树必须干净;在 worktree 干活则先 diff -rq <worktree> <主仓>
+node -p "process.arch"               # 必须 arm64(本机)
+file node_modules/better-sqlite3/build/Release/better_sqlite3.node | grep arm64 \
+  || npm rebuild better-sqlite3      # ⚠ 事故记录 2026-06-10:x86_64 残留导致 GUI 启动连环崩(#72 同类)
+```
+
+- ⛔ **`STEP_TEXT_MODEL` 必须 = `step-3.7-flash`**(CLAUDE.md 纪律;2026-06-07 曾被静默降到 3.5 跑了大半天)。
+- 本分支若含 `.github/workflows/*` 改动,**PAT 无 workflow scope 会 push 失败**——先隔离该 commit 或换有 scope 的凭证。
+
+## 1. 版本号(一个数字,N 个落点)
+
+| 落点 | 文件 |
+|---|---|
+| 根版本 | `package.json` `version` |
+| CLI 版本 | `cli/package.json` `version`(与根同步) |
+| README 必须提到当前版本 | `README.md` + `README_EN.md`(static gate 会查;**hotpatch 子条目并入当前版本条目**,不另起) |
+| 安装片段 tarball URL | `docs/ops/v080-cli-install-release-snippet.md`(`lynn-cli-<ver>.tgz`) |
+| 镜像静态页 | 见第 6 步:**3 文件 × 4 处 = 12 个替换** |
+
+## 2. 门禁(必须全绿才进入打包)
+
+```bash
+npm run release:preflight
+# = 单测(root+brain) + typecheck×2 + CLI 全家桶 + 构建×3 + static gate + UI smoke
+#   + gate:startup(GUI 冷启动三矩阵:fresh / corrupt-db / .hanako 哨兵 —— issue #72 回归网)
+#   + gate:cli-task(CLI 真任务执行:可见答案 / usage 单行 / fast 档 —— 思考不说话回归网)
+```
+
+分步跑/跳过用 `npm run release:gate -- --help` 看开关。阻断规则(blocker/critical/extended)见
+[RELEASE-REGRESSION-GATES.md](../RELEASE-REGRESSION-GATES.md)。
+
+- ⚠ `LYNN_UI_SMOKE=1` 的 UI smoke **不覆盖 server 启动链**(它 createMainWindow 后直接 return)——
+  #72 当年就是这么漏的。`gate:startup` 跑的才是真启动链,两者都要绿。
+- `gate:cli-task` 需要 Brain 在线;Brain 离线 = 门禁失败(路由不可用不许放行)。
+
+## 3. CLI 包 → 镜像
+
+按 [download-site-deploy-map.md §CLI Release Checklist](download-site-deploy-map.md) 四步走:
+`pack:cli` → scp 到 **`/opt/lobster-brain/public/downloads/cli/`** → `curl -fsSIL` 验公网 URL + sha256 → 
+`LYNN_CLI_TARBALL_URL=… npm run test:cli-install:remote`。
+
+- ⛔ **CLI 资产路径是 nginx alias `/opt/lobster-brain/public/downloads/cli/`,不是 `/var/www/download-site/downloads/`**
+  ——传错位置公网不更新且无报错(历史踩过)。
+
+## 4. GUI 包(每平台都要自己的 server bundle)
+
+```bash
+export APPLE_NOTARY_PROFILE=lynn-notary    # ⚠ 脚本默认值是 hanako-notary,必须显式覆盖
+npm run dist        # macOS(自动先跑 release:preflight;build:server 已含)
+npm run dist:win    # Windows x64(仅 x64,⛔ 不出 ARM64 Windows)
+```
+
+- dmg **改名后再发布**:arm64 → `Lynn-<ver>-macOS-Apple-Silicon.dmg`,x64 → `…-Intel.dmg`。
+- 公证+装订+验证一条龙:`npm run release:finalize-mac`(= `scripts/finalize-macos-dmg.sh`,
+  notarytool submit --wait → stapler staple → Gatekeeper 验证)。
+
+## 5. 更新清单(manifest)
+
+```bash
+npm run release:manifest
+```
+
+- ⛔ `.github/update-manifest.json` 与站点页面的 `.dmg/.exe` 链接**必须指腾讯镜像
+  `https://download.merkyorlynn.com/downloads/…`,严禁 GitHub 直链**(static gate 强制)。
+
+## 6. 上传镜像 + 静态页版本(两步,缺一不可)
+
+1. **rsync 资产**(installers + blockmaps + `latest-mac.yml`/`latest.yml`)到
+   **`tencent:/opt/lobster-brain/public/downloads/`** —— 见 [deploy-map §GUI](download-site-deploy-map.md)。
+2. **sed 静态页版本号**:`/var/www/download-site/{index.html,download.html,app.js}`
+   **3 文件 × 4 处 = 12 个替换**。⛔ **rsync ≠ 更新首页**——只做第 1 步用户看到的还是旧版本。
+
+验证公网(不是验证服务器文件):对 6 个资产 URL + 2 个 yml 全部 `curl -fsSIL` 200,见 deploy-map 命令块。
+
+## 7. GitHub Release
+
+3 个资产(Apple-Silicon.dmg / Intel.dmg / Windows-Setup.exe)+ Release notes 顶部贴
+[安装片段](v080-cli-install-release-snippet.md)(记得片段里 tarball 版本已在第 1 步更新)。
+
+## 8. 装后验证(发布 ≠ 完成)
+
+```bash
+# 真实安装包 smoke(装到 /Applications 后)
+npm run test:release:live      # 连本机已启动的打包版 Lynn
+```
+最后过一遍 [人工 UI Gate 八项](../RELEASE-REGRESSION-GATES.md)(首屏/短答/工具/长输出/diff/Settings/Voice/Bridge)。
+
+## 9. 交付(给用户的最后一条消息)
+
+⛔ **6 条直链一次性全给,不要问**:GitHub 3(arm/intel/win)+ 腾讯镜像 3(同三个)。
+测试链接同样两边都给(镜像规则管的是站点默认,不管对用户的交付)。
+
+---
+
+## 附:掉坑索引(每条都真实发生过)
+
+| 坑 | 后果 | 防线 |
+|---|---|---|
+| `STEP_TEXT_MODEL` 被静默改 3.5 | 主力降级跑了大半天 | CLAUDE.md ⛔ 纪律 + .env 注释守卫 |
+| x86_64 原生模块残留(better-sqlite3) | GUI 启动连环崩(#72 同类) | 第 0 步 `file` 自检 + `gate:startup` 预检 |
+| UI smoke 跳过 server 启动链 | #72 漏到生产(用户打不开) | `gate:startup` 三矩阵(fresh/corrupt-db/hanako) |
+| CLI 资产传到 `/var/www/...` | 公网 404/旧版,无报错 | 第 3 步 ⛔ + deploy-map 表 |
+| 只 rsync 不 sed 静态页 | 用户看到旧版本号 | 第 6 步两步制 + 12 处替换口诀 |
+| manifest/站点指 GitHub 直链 | 国内用户下不动 | static gate 强制 + 第 5 步 ⛔ |
+| dmg 不改名直接发 | 命名与历史版式不一致 | 第 4 步改名规则 |
+| 平台缺各自 server bundle | 装上打不开 | `dist`/`dist:win` 内置 build:server,别绕过脚本 |
+| PAT 缺 workflow scope | push 被拒 | 第 0 步检查 `.github/workflows` 改动 |
+| mirror↔prod 漂移(Brain) | 部署覆盖手工修复 | `scripts/mirror-prod-diff.sh` 硬信号门 |

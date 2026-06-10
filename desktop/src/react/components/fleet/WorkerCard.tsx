@@ -141,6 +141,14 @@ export function WorkerCard({
         </button>
         <span className={s.statusDot} data-status={worker.status} />
         <span className={s.workerAgent}>{worker.agent ?? 'worker'}</span>
+        {/* Mock-playback workers (the "Play mock worker" demo fixture) replay a canned JSONL —
+            no real CLI process runs. Label them loudly so the demo agent name (claude-code)
+            is never mistaken for a real launch. */}
+        {worker.workerId.startsWith('mock-') && (
+          <span className={s.mockBadge} title={(window.t?.('fleet.panel.mockBadgeTitle')) || '演示回放,未启动任何真实进程'}>
+            {(window.t?.('fleet.panel.mockBadge')) || '模拟'}
+          </span>
+        )}
         <span className={s.workerBranch}>{worker.branch ?? worker.workerId}</span>
         {worker.reasoningChunks > 0 && <span className={s.reasoningChip}>reasoning x{worker.reasoningChunks}</span>}
         {worker.usage && <span className={s.usageChip}>{worker.usage.summary}</span>}
@@ -341,6 +349,34 @@ export function WorkerCard({
           )}
 
           {worker.log.length > 0 && <div className={s.workerLog}>{worker.log.slice(-4).join('\n')}</div>}
+
+          {/* 验收面板(StepFun 一条龙):harness 客观判定 + 假验证风险 + 升级原因 —
+              防"模型自报完成"的可视护栏。数据来自 manager.validation / manager.finished。 */}
+          {worker.managerValidation && (
+            <div className={s.acceptancePanel} data-ok={worker.managerValidation.ok ? '1' : '0'}>
+              <span className={s.acceptanceVerdict}>
+                {worker.managerValidation.ok
+                  ? ((window.t?.('fleet.acceptance.passed')) || '✓ 验收通过')
+                  : ((window.t?.('fleet.acceptance.failed')) || '✗ 验收未过')}
+              </span>
+              {worker.managerValidation.falseVerifyRisk && (
+                <span className={s.acceptanceChip} data-risk={worker.managerValidation.falseVerifyRisk}>
+                  {((window.t?.('fleet.acceptance.falseVerify')) || '假验证风险')}: {worker.managerValidation.falseVerifyRisk}
+                </span>
+              )}
+              {typeof worker.managerValidation.evidenceCount === 'number' && (
+                <span className={s.acceptanceChip}>
+                  {((window.t?.('fleet.acceptance.evidence')) || '客观证据')}: {worker.managerValidation.evidenceCount}
+                </span>
+              )}
+              <span className={s.acceptanceSummary}>{worker.managerValidation.summary}</span>
+              {worker.escalationReason && (
+                <span className={s.acceptanceEscalation}>
+                  {((window.t?.('fleet.acceptance.escalated')) || '已升级')}: {worker.escalationReason}
+                </span>
+              )}
+            </div>
+          )}
 
           {worker.finished && (
             <div className={s.workerFinished}>

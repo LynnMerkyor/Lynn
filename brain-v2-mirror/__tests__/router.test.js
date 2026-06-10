@@ -62,7 +62,64 @@ afterEach(() => {
   delete process.env.BRAIN_V2_TOOL_RESULT_KEEP_LATEST;
   delete process.env.ZHIPU_KEY;
   delete process.env.MIMO_SEARCH_KEY;
+  delete process.env.LYNN_TOOL_ROUND_EFFORT_DOWN;
+  delete process.env.BRAIN_V2_TOOL_PARALLEL;
 });
+
+function makeTwoToolThenContentAdapter(capturedRounds) {
+  let adapterRuns = 0;
+  return async function* ({ messages }) {
+    adapterRuns += 1;
+    capturedRounds.push(messages);
+    if (adapterRuns === 1) {
+      yield {
+        type: 'tool_call_delta',
+        delta: [
+          { index: 0, id: 'tc-a', type: 'function', function: { name: 'web_search', arguments: '{"query":"alpha"}' } },
+          { index: 1, id: 'tc-b', type: 'function', function: { name: 'web_search', arguments: '{"query":"beta"}' } },
+        ],
+      };
+      yield { type: 'finish', reason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'content', delta: 'done' };
+    yield { type: 'finish', reason: 'stop' };
+  };
+}
+
+function stubSearchFetchOk() {
+  process.env.ZHIPU_KEY = 'test-zhipu';
+  process.env.MIMO_SEARCH_KEY = 'test-mimo';
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ choices: [{ message: { content: 'search summary' } }] }),
+    text: async () => '',
+  }));
+}
+
+function makeToolThenContentAdapter(reasoningSeen) {
+  let adapterRuns = 0;
+  return async function* ({ reasoningEffort }) {
+    adapterRuns += 1;
+    reasoningSeen.push(reasoningEffort ?? null);
+    if (adapterRuns === 1) {
+      yield {
+        type: 'tool_call_delta',
+        delta: [{
+          index: 0,
+          id: 'tc-effort-down',
+          type: 'function',
+          function: { name: 'web_search', arguments: '{"query":"q"}' },
+        }],
+      };
+      yield { type: 'finish', reason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'content', delta: 'done' };
+    yield { type: 'finish', reason: 'stop' };
+  };
+}
 
 describe('Router', () => {
   it('retries once with reduced reasoning when a turn overflows (finish=length, empty answer)', async () => {
@@ -490,6 +547,145 @@ describe('Router', () => {
       expect.stringContaining('[A](https://a.example)'),
       expect.stringContaining('[B](https://b.example)'),
     ]));
+  });
+
+  it('retries once when a round is reasoning-only with finish=stop (思考完不说话)', async () => {
+    // 2026-06-10 用户实测:工具轮后模型只出 reasoning 就正常收流,正文为空 → GUI 静默无反馈。
+    const reasoningSeen = [];
+    let call = 0;
+    mockState.adapterFn = async function* ({ reasoningEffort }) {
+      reasoningSeen.push(reasoningEffort ?? null);
+      call += 1;
+      if (call === 1) {
+        yield { type: 'reasoning', delta: '想了一大圈…' };
+        yield { type: 'finish', reason: 'stop' }; // 不是 length —— 正常 stop 但零正文
+        return;
+      }
+      yield { type: 'content', delta: '这是最终答案' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+    const r = await run({
+      messages: [{ role: 'user', content: '调研一下' }],
+      reasoningEffort: 'high',
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+    expect(r).toMatchObject({ ok: true, iterations: 2 });
+    expect(reasoningSeen).toEqual(['high', 'medium']); // 重试降一档
+    expect(chunks.some((c) => c.type === 'content' && /最终答案/.test(c.delta))).toBe(true);
+  });
+
+  it('does NOT retry a plain empty stop without reasoning (kept pass-through)', async () => {
+    let call = 0;
+    mockState.adapterFn = async function* () {
+      call += 1;
+      yield { type: 'finish', reason: 'stop' }; // 无 reasoning 无 content —— 维持 BYOK 透传语义
+    };
+    const r = await run({ messages: [{ role: 'user', content: 'x' }], onChunk: async () => {} });
+    expect(r).toMatchObject({ ok: true, iterations: 1 });
+    expect(call).toBe(1);
+  });
+
+  it('drops tool continuation rounds to medium reasoning when client did not pin an effort', async () => {
+    stubSearchFetchOk();
+    const reasoningSeen = [];
+    mockState.adapterFn = makeToolThenContentAdapter(reasoningSeen);
+
+    const result = await run({
+      messages: [{ role: 'user', content: 'search something' }],
+      onChunk: async () => {},
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    // round 1 rides the provider default (client sent nothing); continuation round is medium
+    expect(reasoningSeen).toEqual([null, 'medium']);
+  });
+
+  it('honors an explicitly pinned client effort across tool continuation rounds', async () => {
+    stubSearchFetchOk();
+    const reasoningSeen = [];
+    mockState.adapterFn = makeToolThenContentAdapter(reasoningSeen);
+
+    const result = await run({
+      messages: [{ role: 'user', content: 'search something' }],
+      reasoningEffort: 'high',
+      onChunk: async () => {},
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    expect(reasoningSeen).toEqual(['high', 'high']);
+  });
+
+  it('keeps continuation rounds at the default effort when LYNN_TOOL_ROUND_EFFORT_DOWN=0', async () => {
+    process.env.LYNN_TOOL_ROUND_EFFORT_DOWN = '0';
+    stubSearchFetchOk();
+    const reasoningSeen = [];
+    mockState.adapterFn = makeToolThenContentAdapter(reasoningSeen);
+
+    const result = await run({
+      messages: [{ role: 'user', content: 'search something' }],
+      onChunk: async () => {},
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    expect(reasoningSeen).toEqual([null, null]);
+  });
+
+  it('runs independent server tools concurrently and feeds results back in original call order', async () => {
+    process.env.ZHIPU_KEY = 'test-zhipu';
+    process.env.MIMO_SEARCH_KEY = 'test-mimo';
+    // Concurrency barrier: each web_search issues 2 source fetches (zhipu+mimo). With both tools
+    // in flight at once there are 4 pending fetches; serial execution would stall at 2 and the
+    // barrier would only release via the (failing) fallback timer.
+    const pending = [];
+    let sawParallelBarrier = false;
+    const okPayload = { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'search summary' } }] }), text: async () => '' };
+    const flush = () => { while (pending.length) pending.shift()(okPayload); };
+    const fallbackTimer = setTimeout(flush, 1500);
+    vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => {
+      pending.push(resolve);
+      if (pending.length >= 4) {
+        sawParallelBarrier = true;
+        clearTimeout(fallbackTimer);
+        flush();
+      }
+    })));
+
+    const capturedRounds = [];
+    mockState.adapterFn = makeTwoToolThenContentAdapter(capturedRounds);
+
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: 'search two things' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+    clearTimeout(fallbackTimer);
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    expect(sawParallelBarrier).toBe(true);
+    const starts = chunks.filter((c) => c.type === 'tool_progress' && c.event === 'start');
+    const ends = chunks.filter((c) => c.type === 'tool_progress' && c.event === 'end');
+    expect(starts).toHaveLength(2);
+    expect(ends).toHaveLength(2);
+    // Round-2 messages carry both tool results in the model's original call order.
+    const round2Tools = capturedRounds[1].filter((m) => m.role === 'tool').map((m) => m.tool_call_id);
+    expect(round2Tools).toEqual(['tc-a', 'tc-b']);
+  });
+
+  it('falls back to serial tool execution with BRAIN_V2_TOOL_PARALLEL=1', async () => {
+    process.env.BRAIN_V2_TOOL_PARALLEL = '1';
+    stubSearchFetchOk();
+    const capturedRounds = [];
+    mockState.adapterFn = makeTwoToolThenContentAdapter(capturedRounds);
+
+    const result = await run({
+      messages: [{ role: 'user', content: 'search two things' }],
+      onChunk: async () => {},
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    const round2Tools = capturedRounds[1].filter((m) => m.role === 'tool').map((m) => m.tool_call_id);
+    expect(round2Tools).toEqual(['tc-a', 'tc-b']);
   });
 
   it('summarizes structured and numbered web search results into inspectable sources', () => {

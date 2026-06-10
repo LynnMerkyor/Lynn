@@ -33,4 +33,17 @@ describe("runtime metrics", () => {
 
     expect(renderRuntimeMetrics(metrics)).toBe("prefix-cache warming");
   });
+
+  it("accumulates session token spend from per-round final usage frames", () => {
+    const metrics = createRuntimeMetrics();
+
+    // two rounds in one turn + one more turn — caller passes FINAL frame of each round only
+    recordUsageMetrics(metrics, { prompt_tokens: 2_788, completion_tokens: 342 });
+    recordUsageMetrics(metrics, { prompt_tokens: 3_214, completion_tokens: 500 });
+    recordUsageMetrics(metrics, { prompt_tokens: 4_000, completion_tokens: 1_158 });
+
+    expect(metrics.sessionPromptTokens).toBe(10_002);
+    expect(metrics.sessionCompletionTokens).toBe(2_000);
+    expect(renderRuntimeMetrics(metrics)).toContain("Σ 12.0k tok (in 10.0k · out 2.0k)");
+  });
 });

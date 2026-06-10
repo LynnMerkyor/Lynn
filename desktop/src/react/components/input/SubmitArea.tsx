@@ -1,6 +1,7 @@
 import type { ChangeEvent, MutableRefObject } from 'react';
 import type { ThinkingLevel } from '../../stores/model-slice';
 import { ContextRing } from './ContextRing';
+import { SessionCostChip } from './SessionCostChip';
 import { ModelSelector } from './ModelSelector';
 import { SecurityModeSelector } from './SecurityModeSelector';
 import { SendButton } from './SendButton';
@@ -104,6 +105,7 @@ export function SubmitArea({
           <ThinkingLevelButton level={thinkingLevel} onChange={onThinkingLevelChange} modelXhigh={modelXhigh} />
         )}
         <ContextRing />
+        <SessionCostChip />
         <div className={styles['send-controls']}>
           <ModelSelector
             models={selectorModels}

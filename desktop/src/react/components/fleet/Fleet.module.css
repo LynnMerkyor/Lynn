@@ -11,14 +11,21 @@
   font-size: 12px;
   padding: 4px 10px;
   border-radius: 6px;
-  border: 1px solid var(--border-color, #3a3a3a);
-  background: var(--button-bg, #2a2a2a);
+  /* Theme-agnostic: the old dark fallbacks (#2a2a2a bg + inherit color) rendered
+     dark-on-dark on the light theme. Outline style stays readable on both themes. */
+  border: 1px solid var(--border-color, currentColor);
+  background: var(--button-bg, transparent);
   color: inherit;
   cursor: pointer;
 }
 
 .fleetBtn:hover {
-  background: var(--button-hover-bg, #343434);
+  background: var(--button-hover-bg, rgba(127, 127, 127, 0.12));
+}
+
+.fleetBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .fleetHint {
@@ -132,6 +139,43 @@
   border-radius: 4px;
   padding: 1px 6px;
 }
+
+/* "Play mock worker" demo fixture — loud label so the canned agent name is never
+   mistaken for a real CLI launch. */
+.mockBadge {
+  font-size: 11px;
+  color: #fff;
+  background: #7c5cc4;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+/* 验收面板:harness 客观判定行(StepFun 一条龙防"模型自报完成")。 */
+.acceptancePanel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+}
+.acceptancePanel[data-ok='1'] { border-color: #27ae60; }
+.acceptancePanel[data-ok='0'] { border-color: #c0392b; }
+.acceptanceVerdict { font-weight: 600; }
+.acceptancePanel[data-ok='1'] .acceptanceVerdict { color: #27ae60; }
+.acceptancePanel[data-ok='0'] .acceptanceVerdict { color: #c0392b; }
+.acceptanceChip {
+  font-size: 11px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.acceptanceChip[data-risk='suspected'] { background: #e67e22; color: #fff; }
+.acceptanceChip[data-risk='confirmed'] { background: #c0392b; color: #fff; }
+.acceptanceSummary { opacity: 0.8; }
+.acceptanceEscalation { color: #e67e22; font-weight: 600; }
 
 .workerDiff {
   margin-top: 6px;

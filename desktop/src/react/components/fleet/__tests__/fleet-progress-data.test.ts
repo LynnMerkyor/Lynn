@@ -278,3 +278,27 @@ describe('worker.progress data (vision + runner context)', () => {
     expect(v.checkpoint).toEqual({ path: '/tmp/session.jsonl', line: undefined });
   });
 });
+
+describe('manager acceptance folding (A-10 验收面板)', () => {
+  it('folds manager.validation into structured managerValidation', () => {
+    let v = createWorkerView('w-acc', 'stepfun-flash');
+    v = reduceFleetWorker(v, {
+      type: 'manager.validation', workerId: 'w-acc', managerId: 'step-3.7-flash',
+      ok: true, summary: '1 objective evidence item(s) passed',
+      falseVerifyRisk: 'none', evidenceCount: 1,
+    } as never);
+    expect(v.managerValidation).toMatchObject({ ok: true, falseVerifyRisk: 'none', evidenceCount: 1 });
+    expect(v.gate).toMatchObject({ ok: true });
+  });
+
+  it('records escalation reason from manager.finished', () => {
+    let v = createWorkerView('w-esc', 'stepfun-flash');
+    v = reduceFleetWorker(v, {
+      type: 'manager.finished', workerId: 'w-esc', managerId: 'step-3.7-flash',
+      ok: true, status: 'escalated', summary: 'escalated to ds-v4-flash',
+      escalationReason: 'harness fail x2',
+    } as never);
+    expect(v.escalationReason).toBe('harness fail x2');
+    expect(v.status).toBe('completed');
+  });
+});

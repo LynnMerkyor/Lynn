@@ -150,9 +150,14 @@ export class TerminalSpinner {
 
   constructor(
     private readonly stream: NodeJS.WriteStream,
-    private readonly label = t("spinner.thinking"),
+    private label = t("spinner.thinking"),
     private readonly options: TerminalSpinnerOptions = {},
   ) {}
+
+  /** Live-update the waiting label (e.g. thinking progress: tokens + elapsed) without restarting. */
+  setLabel(label: string): void {
+    if (label) this.label = label;
+  }
 
   start(): void {
     if (this.active || !this.stream.isTTY) return;

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { cliVisibleAgents } from "../../shared/fleet-agents.js";
 
 export interface CliAgentEntry {
   id: string;
@@ -12,17 +13,17 @@ export interface CliAgentEntry {
   requiresPreset?: string;
 }
 
-const AGENTS: Array<Omit<CliAgentEntry, "available" | "availability"> & { profileHint?: string }> = [
-  { id: "lynn-cli", label: "Lynn CLI", bin: "Lynn", enabled: true, kind: "built-in", profileHint: "current binary" },
-  { id: "stepfun-flash", label: "StepFun 3.7 Flash", bin: "Lynn", enabled: true, kind: "built-in", profileHint: "built-in profile - BYOK preset stepfun", requiresPreset: "stepfun" },
-  { id: "codex-cli", label: "Codex", bin: "codex", enabled: true, kind: "external" },
-  { id: "claude-code", label: "Claude Code", bin: "claude", enabled: true, kind: "external" },
-  { id: "claude-internal", label: "Claude (internal)", bin: "claude-internal", enabled: true, kind: "external" },
-  { id: "qwen-cli", label: "Qwen", bin: "qwen", enabled: true, kind: "external" },
-  { id: "kimi-cli", label: "Kimi", bin: "kimi", enabled: true, kind: "external" },
-  { id: "opencode", label: "OpenCode", bin: "opencode", enabled: true, kind: "external" },
-  { id: "codebuddy", label: "CodeBuddy", bin: "codebuddy", enabled: true, kind: "external" },
-];
+// Agent 名单的唯一事实源在 shared/fleet-agents.ts(server/GUI 同源);这里只做 CLI 视角投影
+//(bin 用 cliBin:CLI 自身二进制是大写 Lynn)。
+const AGENTS: Array<Omit<CliAgentEntry, "available" | "availability"> & { profileHint?: string }> = cliVisibleAgents().map((agent) => ({
+  id: agent.id,
+  label: agent.label,
+  bin: agent.cliBin,
+  enabled: agent.enabled,
+  kind: agent.kind,
+  ...(agent.profileHint ? { profileHint: agent.profileHint } : {}),
+  ...(agent.requiresPreset ? { requiresPreset: agent.requiresPreset } : {}),
+}));
 
 export interface DetectCliAgentsOptions {
   pathEnv?: string;

@@ -28,7 +28,6 @@
 
   "brain": [
     "lynn-brain-router",
-    "step-3.5-flash-2603",
     "glm-z1-9b-0414",
     "glm-4-9b-0414",
     "qwen3-8b"
@@ -162,8 +161,7 @@
   ],
 
   "stepfun-coding": [
-    "step-3.5-flash-2603",
-    "step-3.5-flash"
+    "step-3.7-flash"
   ],
 
   "tencent-coding": [

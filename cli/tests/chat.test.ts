@@ -151,7 +151,7 @@ describe("chat mode controls", () => {
 
   it("surfaces CLI BYOK fallback in the chat startup route label", () => {
     expect(chatRouteLabel({ provider: "openai-compatible", model: "step-3.7-flash" })).toBe("CLI BYOK: StepFun 3.7 Flash (step-3.7-flash)");
-    expect(chatRouteLabel(null)).toBe("StepFun 3.7 Flash → Spark A3B single-slot → DS-V4 Flash via Brain router (auto)");
+    expect(chatRouteLabel(null)).toBe("StepFun 3.7 Flash via Brain router (auto)");
   });
 
   it("renders CLI BYOK fallback in startup copy", () => {
@@ -170,6 +170,21 @@ describe("chat mode controls", () => {
     expect(applyReasoningCommand(current, "high").reasoning).toMatchObject({ effort: "high" });
     expect(applyReasoningCommand(current, "show").reasoning).toMatchObject({ display: "always" });
     expect(applyThinkCommand(current, "medium", "chat").reasoning).toMatchObject({ effort: "medium" });
+  });
+
+  it("gives /fast a real low-latency profile and clears the cap on explicit efforts", () => {
+    const current = { effort: "auto" as const, display: "auto" as const };
+
+    // fast = low reasoning + 8K output cap (StepFun is reasoning-always; no true off)
+    const fast = applyThinkCommand(current, "fast", "chat").reasoning;
+    expect(fast).toMatchObject({ effort: "low", maxTokens: 8_192 });
+    // off keeps thinking-off semantics (local Spark) without an output cap
+    const off = applyThinkCommand(fast, "off", "chat").reasoning;
+    expect(off.effort).toBe("off");
+    expect(off.maxTokens).toBeUndefined();
+    // switching to an explicit effort clears a lingering fast cap
+    expect(applyThinkCommand(fast, "high", "chat").reasoning.maxTokens).toBeUndefined();
+    expect(applyReasoningCommand(fast, "medium").reasoning.maxTokens).toBeUndefined();
   });
 
   it("localizes reasoning command receipts", () => {
@@ -404,7 +419,10 @@ describe("chat mode controls", () => {
     expect(result.stdout).toContain("chat byok ok");
     expect(result.stderr).toContain("│ • route: cli-byok:openai-compatible");
     expect(result.stderr).toContain("│   fallback: brain(offline) ->");
-    expect(result.stderr).toContain("6 tokens");
+    // Streaming usage frames no longer print per-frame lines; the final usage renders once in
+    // the end-of-turn status bar (stdout).
+    expect(result.stderr).not.toContain("6 tokens");
+    expect(result.stdout).toContain("6 tokens");
     expect(JSON.parse(requestBody)).toMatchObject({
       model: "chat-model",
       stream: true,

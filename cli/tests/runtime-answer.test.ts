@@ -27,7 +27,7 @@ describe("runtime answer", () => {
 
   it("renders the local CLI version instead of asking the model", () => {
     const text = renderLocalRuntimeAnswer({
-      routeLabel: "StepFun 3.7 Flash → Spark Qwen 3.6 35B A3B Distill",
+      routeLabel: "StepFun 3.7 Flash",
       brainUrl: "https://api.merkyorlynn.com/api/v2",
       cwd: "/tmp/project",
       mode: "ask / workspace-write",
@@ -41,7 +41,7 @@ describe("runtime answer", () => {
     expect(text).toContain("decode TPS");
     expect(text).toContain("本地 9B");
     expect(text).toContain("升云到 StepFun");
-    expect(text).toContain("本地 35B");
+    expect(text).toContain("本地 manager");
     expect(text).toContain("记忆和连续性");
     expect(text).toContain("/memory add");
     expect(text).toContain("docs/ops/lynn-cli-runtime-knowledge.md");

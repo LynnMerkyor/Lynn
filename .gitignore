@@ -109,3 +109,15 @@ output/
 # Spike build artifacts
 spike/**/target/
 desktop/native-modules/**/target/
+
+# Stray root-level build artifacts (real outputs live in desktop/ + dist-renderer/,
+# already ignored). Root copies are leaks — never track them again.
+/main.bundle.cjs
+/settings-*.js
+
+# External engine / upstream-PR experiment trees + git worktrees (not part of the app)
+/lynn-engine/
+/lynn-engine-main/
+/vllm-pr-*/
+/vllm-upstream-prs/
+/worktrees/

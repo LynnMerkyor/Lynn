@@ -151,7 +151,8 @@
       "startWorkspace": "浏览工作区",
       "resumeTask": "继续当前任务",
       "resumePrompt": "继续刚才的任务，先告诉我当前进度和下一步。",
-      "workspacePrompt": "先快速读一下当前工作区，告诉我你会从哪里开始。"
+      "workspacePrompt": "先快速读一下当前工作区，告诉我你会从哪里开始。",
+      "fleetTip": "Fleet 指挥台:把任务拆给多个 CLI worker 并行干,每个独立 worktree"
     }
   },
   "titlebar": {
@@ -278,7 +279,11 @@
     "reconnect": "重新连接",
     "tasksRecovered": "已恢复 {count} 个后台任务",
     "tasksRecoveredRunning": "后台还有 {count} 个任务正在继续",
-    "tasksRecoveredWaiting": "后台还有 {count} 个任务正在继续，其中 {waiting} 个在等你确认"
+    "tasksRecoveredWaiting": "后台还有 {count} 个任务正在继续，其中 {waiting} 个在等你确认",
+    "usage": {
+      "cache": "缓存",
+      "tip": "本会话累计云端 token 消耗(含前缀缓存命中与费用估算)"
+    }
   },
   "input": {
     "placeholder": "说点什么...",
@@ -310,11 +315,12 @@
       "off": "关闭",
       "auto": "自动",
       "high": "深度",
-      "xhigh": "极限"
+      "xhigh": "极限",
+      "autoHint": "auto:编码/推理任务→high,工具拿到结果后的续轮自动降到 medium(随任务自动调速)。要每轮固定档位就直接选 high。"
     },
     "thinkingDesc": {
       "off": "不推理",
-      "auto": "模型决定深度",
+      "auto": "编码/推理自动用深度;工具续轮自动降速",
       "high": "深度推理",
       "xhigh": "最强推理"
     },
@@ -389,6 +395,9 @@
       },
       "tryAt": {
         "label": "试试 @ 引用文件"
+      },
+      "fleet": {
+        "label": "⚡ 布置并行任务"
       }
     }
   },
@@ -2222,5 +2231,73 @@
   "agentDiscovery.body": "检测到你电脑上已安装以下 AI 工具：",
   "agentDiscovery.benefit": "启用后，Lynn 可以直接复用这些工具的技能库，无需额外配置即可提升能力。",
   "agentDiscovery.enable": "一键启用",
-  "agentDiscovery.later": "以后再说"
+  "agentDiscovery.later": "以后再说",
+  "fleet": {
+    "empty": {
+      "title": "还没有并行 worker",
+      "intro": "把一个任务拆给 3-5 个 CLI worker(codex / claude / qwen…),各自在独立 git worktree 里并行干,在这里统一盯进度、看 diff、跑测试。",
+      "step1": "布置 worker — 写个简报:它负责哪些文件、禁止碰哪些、用什么测试命令。",
+      "step2": "每个 worker 跑在自己的 worktree 里;这块板实时显示它的日志、逐文件 diff、测试结果。",
+      "step3": "越界改动和中心文件冲突会标红并挡住合并。",
+      "step4": "每张卡片上可以取消 / 重试 / 打开 worktree。",
+      "hint": "第一次用?点「试跑模拟 worker」看一遍完整流程。"
+    },
+    "dispatch": "布置 worker",
+    "closeForm": "关闭表单",
+    "playMock": "试跑模拟 worker",
+    "form": {
+      "title": "标题",
+      "titlePlaceholder": "例:拆分 ComposerTextarea",
+      "agent": "执行 Agent",
+      "ready": "就绪",
+      "taskType": "任务类型",
+      "taskTypeCode": "代码 / 文本任务",
+      "taskTypeSee": "看图(识别图片)",
+      "taskTypeGround": "定位 UI 元素",
+      "taskTypeUi2code": "截图转代码",
+      "scopePreset": "范围预设",
+      "fanOut": "同时派给(并行,可选)",
+      "imagePath": "图片路径",
+      "imageHint": "路径会传给 Lynn worker run;CLI 在本地读图并走视觉模型。",
+      "approval": "审批",
+      "approvalAsk": "ask · 危险操作需确认",
+      "approvalOnFailure": "on-failure · 失败时确认",
+      "approvalNever": "never · 只读检查",
+      "approvalYolo": "yolo · 全自动改动",
+      "approvalHintYolo": "YOLO 允许 worker 直接改文件、跑命令,不再逐次确认。",
+      "approvalHintGuarded": "非交互 worker 在危险改动前可能停下,除非审批为 yolo。",
+      "sandbox": "沙箱",
+      "sandboxHintFull": "完整文件系统权限只用于可信的本地 worktree。",
+      "sandboxHintScoped": "workspace-write 把改动限制在分配的 worktree 内。",
+      "externalHint": "外部 CLI(Codex / Claude 等)自带 shell。从 Fleet 启动必须显式 Approval=yolo + Sandbox=danger-full-access;内置 Lynn / StepFun worker 可保持守护。",
+      "branch": "分支",
+      "worktree": "Worktree",
+      "objective": "目标说明",
+      "owned": "负责文件(每行一个 glob)",
+      "forbidden": "禁改文件",
+      "tests": "测试命令(每行一条)",
+      "dispatching": "派发中…",
+      "dispatchN": "派给 {count} 个 worker",
+      "cancel": "取消",
+      "unavailable": "不可用"
+    },
+    "panel": {
+      "cliRuntime": "CLI 运行时",
+      "perms": "权限",
+      "workersCount": "{count} 个 worker",
+      "mockBadge": "模拟",
+      "mockBadgeTitle": "演示回放,未启动任何真实进程"
+    },
+    "chatHint": {
+      "text": "⚡ 这个任务看起来可以拆给多个并行 worker 同时干",
+      "action": "去布置"
+    },
+    "acceptance": {
+      "passed": "✓ 验收通过",
+      "failed": "✗ 验收未过",
+      "falseVerify": "假验证风险",
+      "evidence": "客观证据",
+      "escalated": "已升级"
+    }
+  }
 }

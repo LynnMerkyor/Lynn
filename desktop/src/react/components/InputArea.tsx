@@ -169,6 +169,30 @@ function InputAreaInner() {
       return 0;
     }
   });
+  // Fleet discoverability: when the typed task is clearly multi-file/splittable, surface a
+  // one-line "拆给并行 worker?" hint (same pattern as the @ inline hint). Dismiss persists.
+  const [fleetHintDismissed, setFleetHintDismissed] = useState(() => {
+    try {
+      return localStorage.getItem('lynn-fleet-chat-hint-dismissed-v1') === '1';
+    } catch {
+      return true;
+    }
+  });
+  const showFleetHint = useMemo(() => {
+    if (fleetHintDismissed) return false;
+    const text = inputValue.trim();
+    if (text.length < 14 || text.startsWith('/')) return false;
+    // Conservative parallel-intent heuristic (multi-file / batch / per-each phrasing).
+    return /([3-9]\s*个\s*(文件|组件|页面|模块|脚本|仓库))|所有(的)?(文件|组件|页面|模块)|批量(修改|重构|更新|处理|迁移)|分别(修改|处理|更新|重构)|每个(文件|组件|模块)都|\b(refactor|update|fix|migrate)\b[^\n]{0,40}\ball\b|\bacross\s+\d+\s+files\b/i.test(text);
+  }, [fleetHintDismissed, inputValue]);
+  const dismissFleetHint = useCallback(() => {
+    setFleetHintDismissed(true);
+    try { localStorage.setItem('lynn-fleet-chat-hint-dismissed-v1', '1'); } catch { /* ignore */ }
+  }, []);
+  const openFleetFromHint = useCallback(() => {
+    dismissFleetHint();
+    useStore.getState().openFleetBriefForm();
+  }, [dismissFleetHint]);
   const inputLineCount = useMemo(() => {
     if (!inputValue) return 0;
     return inputValue.split(/\r\n|\n|\r/).length;
@@ -789,6 +813,9 @@ function InputAreaInner() {
         onTryAtInjection={handleTryAtInjection}
         onUseInlineAtHint={handleUseInlineAtHint}
         showAtDiscovery={showAtDiscovery && !inputValue.trim() && attachedFiles.length === 0 && !quotedSelection && !recoveryMessage && !taskRecoveryMessage && !inlineError && !inlineNotice && !slashBusy && !compacting}
+        showFleetHint={showFleetHint && !isStreaming}
+        onOpenFleet={openFleetFromHint}
+        onDismissFleetHint={dismissFleetHint}
         t={t}
       />
       <DeepResearchLauncher

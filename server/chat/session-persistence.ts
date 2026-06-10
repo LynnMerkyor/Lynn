@@ -22,6 +22,19 @@ interface PersistLocalQwen35DirectTurnOptions {
   provider?: unknown;
   model?: unknown;
   usage?: unknown;
+  timestamp?: unknown;
+}
+
+/** context_usage 回包附带的"最后一轮 usage"(Pi-SDK Usage 投影 + 去重锚点)。 */
+export interface LastAssistantUsage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalTokens: number;
+  costTotal: number | null;
+  model: string | null;
+  timestamp: number | null;
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -54,6 +67,39 @@ function formatError(err: unknown): string {
 
 function normalizePersistedAssistantText(text: unknown): string {
   return String(text || "");
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * 倒序找最后一条带 usage 的 assistant 消息,投影成 LastAssistantUsage。
+ * usage 形状 = Pi-SDK Usage(input/output/cacheRead/cacheWrite/totalTokens/cost.total);
+ * timestamp 用作 renderer 去重锚点(同一条消息绝不重复累计)。
+ */
+export function extractLastAssistantUsage(session: unknown): LastAssistantUsage | null {
+  const messages = getSessionMessages(session);
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = asPersistedMessage(messages[i]) ?? getEntryMessage(messages[i]);
+    if (!msg || msg.role !== "assistant" || !isRecord(msg.usage)) continue;
+    const usage = msg.usage as JsonRecord;
+    const input = toFiniteNumber(usage.input);
+    const output = toFiniteNumber(usage.output);
+    if (input == null && output == null) continue;
+    const cost = isRecord(usage.cost) ? usage.cost as JsonRecord : null;
+    return {
+      input: input ?? 0,
+      output: output ?? 0,
+      cacheRead: toFiniteNumber(usage.cacheRead) ?? 0,
+      cacheWrite: toFiniteNumber(usage.cacheWrite) ?? 0,
+      totalTokens: toFiniteNumber(usage.totalTokens) ?? ((input ?? 0) + (output ?? 0)),
+      costTotal: cost ? toFiniteNumber(cost.total) : null,
+      model: typeof msg.model === "string" ? msg.model : null,
+      timestamp: toFiniteNumber(msg.timestamp),
+    };
+  }
+  return null;
 }
 
 export function readPersistedAssistantRecords(session: unknown, sessionPath = ""): PersistedMessage[] {

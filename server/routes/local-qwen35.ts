@@ -13,8 +13,9 @@
  *  - Backward compat (existing client builds still call /api/local-qwen35-9b/*)
  *  - python3 bootstrap path users who explicitly opted in via env LYNN_LOCAL_QWEN35_USE_BOOTSTRAP=1
  *
- * TODO sprint: migrate LocalModelDownloadStep.tsx to call platform.llamacppStartDownload()
- *              instead of this HTTP route, then mark file for removal.
+ * REMOVAL TARGET: V0.84 — after LocalModelDownloadStep.tsx migrates to
+ *                 platform.llamacppStartDownload(), delete this file. A one-time runtime
+ *                 warning below makes any残留 usage observable in server logs before removal.
  */
 import { spawn, execFile } from "child_process";
 import fs from "fs";
@@ -953,6 +954,16 @@ export function deriveLocalQwen35ProviderState({ runtime, status, registered, jo
 export function createLocalQwen35Route(engine: LocalQwen35RouteEngine): Hono {
   const route = new Hono();
   let job: SetupJob | null = null;
+  // Deprecation telemetry: log ONCE on first real use so V0.84 removal can be data-driven
+  // (no hits in logs across a release cycle = safe to delete).
+  let warnedDeprecated = false;
+  route.use("*", async (c, next) => {
+    if (!warnedDeprecated) {
+      warnedDeprecated = true;
+      console.warn(`[local-qwen35] DEPRECATED Path B route hit (${c.req.method} ${c.req.path}) — Path A (desktop llamacpp-manager) is canonical; this route is scheduled for removal in V0.84`);
+    }
+    await next();
+  });
 
   route.get("/local-qwen35-9b/status", async (c) => {
     const runtime = await runtimeDetails();

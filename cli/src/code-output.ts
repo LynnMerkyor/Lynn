@@ -8,6 +8,7 @@ import { t } from "./i18n.js";
 import type { CodeContext } from "./code-context.js";
 import type { ToolRunContext } from "./tools/types.js";
 import { readVersionInfo } from "./version.js";
+import { DEFAULT_ROUTE_CHAIN_COMPACT } from "./route-labels.js";
 
 export function renderAssistantBlock(text: string, footer?: string): string {
   const lines = text.replace(/\s+$/g, "").split(/\r?\n/);
@@ -74,7 +75,7 @@ export function renderCodeFooter(inputData: {
     ? "mock Brain"
     : inputData.fallbackProvider
       ? `CLI BYOK:${modelLabelWithId(inputData.fallbackProvider.model)}`
-      : "StepFun 3.7 Flash→Spark A3B single-slot→DS-V4 Flash";
+      : DEFAULT_ROUTE_CHAIN_COMPACT;
   const mode = renderMode(inputData.mode);
   return dim([
     model,

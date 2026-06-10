@@ -83,7 +83,10 @@
     "jian": "デスク",
     "bridge": "ソーシャル連携",
     "toggle": "サイドバー",
-    "bridgeShort": "連携"
+    "bridgeShort": "連携",
+    "capability": {
+      "fleetTip": "Fleet:タスクを複数の CLI ワーカーに分割して並列実行(各自独立 worktree)"
+    }
   },
   "session": {
     "untitled": "新しいチャット",
@@ -158,7 +161,11 @@
     "serverNotReady": "サーバーの準備ができていません",
     "loading": "読み込み中...",
     "reconnecting": "再接続中",
-    "reconnect": "再接続"
+    "reconnect": "再接続",
+    "usage": {
+      "cache": "キャッシュ",
+      "tip": "このセッションの累計クラウド token 消費(プレフィックスキャッシュ命中とコスト推定を含む)"
+    }
   },
   "input": {
     "placeholder": "なにか話しかけてみてください...",
@@ -180,11 +187,12 @@
       "off": "オフ",
       "auto": "自動",
       "high": "深い",
-      "xhigh": "最大"
+      "xhigh": "最大",
+      "autoHint": "auto:コーディング/推論は high、ツール結果後の継続ラウンドは自動的に medium に下がります。毎ラウンド固定したい場合は high を選択。"
     },
     "thinkingDesc": {
       "off": "推論なし",
-      "auto": "モデルが深さを判断",
+      "auto": "コーディング/推論は自動で深く、ツール続行ラウンドは自動減速",
       "high": "深い推論",
       "xhigh": "フル推論"
     },
@@ -238,6 +246,9 @@
       "planToday": {
         "label": "今日の計画を作る",
         "prompt": "現在のワークスペースをもとに、今日進めるための 3 ステップ計画を優先順で作ってください。"
+      },
+      "fleet": {
+        "label": "⚡ 並列ワーカーを配置"
       }
     }
   },
@@ -1961,5 +1972,73 @@
     "requestFailed": "レビュー要求に失敗しました",
     "followUp": "指摘に対応",
     "taskCreated": "バックグラウンド実行タスクを作成しました"
+  },
+  "fleet": {
+    "empty": {
+      "title": "まだ並列ワーカーがありません",
+      "intro": "1つのタスクを3〜5個のCLIワーカー(codex / claude / qwen…)に分割し、それぞれ独立したgit worktreeで並行実行し、ここで進捗・diff・テストを監視します。",
+      "step1": "ワーカー配置 — ブリーフを記入:担当ファイル、禁止ファイル、テストコマンド。",
+      "step2": "各ワーカーは自分のworktreeで実行され、このボードにライブログ・ファイル別diff・テストが表示されます。",
+      "step3": "範囲外の編集と中心ファイルの競合は赤で表示され、マージをブロックします。",
+      "step4": "各カードからキャンセル / 再試行 / worktreeを開く。",
+      "hint": "初めてですか?「モックワーカーを再生」で一連の流れを確認できます。"
+    },
+    "dispatch": "ワーカー配置",
+    "closeForm": "フォームを閉じる",
+    "playMock": "モックワーカーを再生",
+    "form": {
+      "title": "タイトル",
+      "titlePlaceholder": "例:ComposerTextarea を分割",
+      "agent": "実行 Agent",
+      "ready": "準備完了",
+      "taskType": "タスク種別",
+      "taskTypeCode": "コード / テキスト作業",
+      "taskTypeSee": "画像認識",
+      "taskTypeGround": "UI 要素の特定",
+      "taskTypeUi2code": "スクショ→コード",
+      "scopePreset": "スコープ プリセット",
+      "fanOut": "同時に派遣(並列・任意)",
+      "imagePath": "画像パス",
+      "imageHint": "パスは Lynn worker run に渡され、CLI がローカルで画像を読み、視覚モデルへルーティングします。",
+      "approval": "承認",
+      "approvalAsk": "ask · 危険操作は確認",
+      "approvalOnFailure": "on-failure · 失敗時に確認",
+      "approvalNever": "never · 読み取りのみ",
+      "approvalYolo": "yolo · 全自動編集",
+      "approvalHintYolo": "YOLO はワーカーが確認なしでファイル編集やシェル実行を行えます。",
+      "approvalHintGuarded": "非対話ワーカーは承認が yolo でない限り、危険な編集の前に停止することがあります。",
+      "sandbox": "サンドボックス",
+      "sandboxHintFull": "フルファイルシステム権限は信頼できるローカル worktree のみに。",
+      "sandboxHintScoped": "workspace-write は編集を割り当てられた worktree 内に限定します。",
+      "externalHint": "外部 CLI(Codex / Claude など)は独自のシェルを実行します。Fleet から起動するには Approval=yolo + Sandbox=danger-full-access を明示してください。内蔵 Lynn / StepFun はガード付きのままで構いません。",
+      "branch": "ブランチ",
+      "worktree": "Worktree",
+      "objective": "目的",
+      "owned": "担当ファイル(1 行 1 glob)",
+      "forbidden": "編集禁止ファイル",
+      "tests": "テストコマンド(1 行 1 つ)",
+      "dispatching": "派遣中…",
+      "dispatchN": "{count} 個のワーカーに派遣",
+      "cancel": "キャンセル",
+      "unavailable": "利用不可"
+    },
+    "panel": {
+      "cliRuntime": "CLI ランタイム",
+      "perms": "権限",
+      "workersCount": "ワーカー {count} 件",
+      "mockBadge": "モック",
+      "mockBadgeTitle": "デモ再生 — 実プロセスは起動していません"
+    },
+    "chatHint": {
+      "text": "⚡ このタスクは複数の並列ワーカーに分割できそうです",
+      "action": "配置する"
+    },
+    "acceptance": {
+      "passed": "✓ 検収合格",
+      "failed": "✗ 検収不合格",
+      "falseVerify": "偽検証リスク",
+      "evidence": "客観的証拠",
+      "escalated": "エスカレーション"
+    }
   }
 }

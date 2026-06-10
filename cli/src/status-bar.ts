@@ -1,5 +1,6 @@
 import { displayCwd } from "./startup.js";
 import { dim } from "./terminal-style.js";
+import { STATUS_BAR_DEFAULT_MODEL } from "./route-labels.js";
 
 export interface StatusBarInput {
   model?: string;
@@ -14,7 +15,7 @@ export interface StatusBarInput {
 
 export function renderStatusBar(input: StatusBarInput): string {
   const parts = [
-    input.model || "StepFun/Brain",
+    input.model || STATUS_BAR_DEFAULT_MODEL,
     displayCwd(input.cwd || process.cwd()),
     input.mode,
     input.reasoning ? `think ${input.reasoning}` : null,

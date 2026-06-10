@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import s from './Fleet.module.css';
 import { DEFAULT_FLEET_SCOPE_PRESET, FLEET_SCOPE_PRESETS, buildPresetDefaults } from './brief-presets';
+import { CANONICAL_FLEET_AGENTS, guiFallbackAgents } from '../../../../../shared/fleet-agents.js';
 
 interface AgentEntry {
   id: string;
@@ -38,30 +39,17 @@ interface FleetDispatchFormState {
   worktree: string;
 }
 
-const FALLBACK_AGENTS: AgentEntry[] = [
-  { id: 'lynn-cli', label: 'Lynn CLI', enabled: true },
-  { id: 'stepfun-flash', label: 'StepFun 3.7 Flash (fast coding)', enabled: true },
-  { id: 'codex-cli', label: 'Codex', enabled: true },
-  { id: 'claude-code', label: 'Claude Code', enabled: true },
-  { id: 'claude-internal', label: 'Claude (internal)', enabled: true },
-  { id: 'qwen-cli', label: 'Qwen', enabled: true },
-  { id: 'kimi-cli', label: 'Kimi', enabled: true },
-  { id: 'codebuddy', label: 'CodeBuddy', enabled: true },
-];
+// Agent 名单的唯一事实源在 shared/fleet-agents.ts;这里只取 GUI 兜底投影
+//(/api/fleet/registry 拉不到时展示 fleet 可派单项)。
+const FALLBACK_AGENTS: AgentEntry[] = guiFallbackAgents();
 
 const DEFAULT_FLEET_AGENT = 'lynn-cli';
 // Vision tasks route through StepFun (step-1o-turbo-vision via the wire adapter).
 const VISION_FLEET_AGENT = 'stepfun-flash';
 const INITIAL_SCOPE_DEFAULTS = buildPresetDefaults(DEFAULT_FLEET_SCOPE_PRESET, '');
-const EXTERNAL_AGENT_IDS = new Set([
-  'codex-cli',
-  'claude-code',
-  'claude-internal',
-  'qwen-cli',
-  'kimi-cli',
-  'codebuddy',
-  'opencode',
-]);
+const EXTERNAL_AGENT_IDS = new Set(
+  CANONICAL_FLEET_AGENTS.filter((agent) => agent.kind === 'external' && !agent.serverOnly).map((agent) => String(agent.id)),
+);
 
 function toLines(value: string): string[] {
   return value
@@ -110,6 +98,11 @@ export function buildFleetDispatchPayload(state: FleetDispatchFormState) {
 }
 
 export function TaskBriefForm({ onClose }: { onClose: () => void }) {
+  const t = window.t ?? ((k: string) => k);
+  const tf = (k: string, fallback: string, vars?: Record<string, string | number>) => {
+    const v = t(`fleet.form.${k}`, vars);
+    return v && v !== `fleet.form.${k}` ? v : fallback;
+  };
   const [agents, setAgents] = useState<AgentEntry[]>(FALLBACK_AGENTS);
   const [title, setTitle] = useState('');
   const [agent, setAgent] = useState(DEFAULT_FLEET_AGENT);
@@ -238,12 +231,12 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
   return (
     <div className={s.briefForm}>
       <div className={s.formField}>
-        <label className={s.formLabel}>Title</label>
-        <input className={s.formInput} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Split ComposerTextarea" />
+        <label className={s.formLabel}>{tf('title', 'Title')}</label>
+        <input className={s.formInput} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tf('titlePlaceholder', 'Split ComposerTextarea')} />
       </div>
       <div className={s.formRow}>
         <div className={s.formField}>
-          <label className={s.formLabel}>Agent</label>
+          <label className={s.formLabel}>{tf('agent', 'Agent')}</label>
           <select className={s.formInput} value={agent} onChange={(e) => setAgent(e.target.value)}>
             {agents.map((a) => (
               <option key={a.id} value={a.id} disabled={!a.enabled}>
@@ -251,21 +244,21 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
               </option>
             ))}
           </select>
-          <div className={s.formHint}>{agents.find((a) => a.id === agent)?.availability || 'Ready'}</div>
+          <div className={s.formHint}>{agents.find((a) => a.id === agent)?.availability || tf('ready', 'Ready')}</div>
         </div>
         <div className={s.formField}>
-          <label className={s.formLabel}>Task type</label>
+          <label className={s.formLabel}>{tf('taskType', 'Task type')}</label>
           <select className={s.formInput} value={taskType} onChange={(e) => setTaskKind(e.target.value as FleetTaskType)}>
-            <option value="code">Code / text work</option>
-            <option value="see">See image</option>
-            <option value="ground">Ground UI element</option>
-            <option value="ui2code">UI to code</option>
+            <option value="code">{tf('taskTypeCode', 'Code / text work')}</option>
+            <option value="see">{tf('taskTypeSee', 'See image')}</option>
+            <option value="ground">{tf('taskTypeGround', 'Ground UI element')}</option>
+            <option value="ui2code">{tf('taskTypeUi2code', 'UI to code')}</option>
           </select>
         </div>
       </div>
 
       <div className={s.formField}>
-        <label className={s.formLabel}>Scope preset</label>
+        <label className={s.formLabel}>{tf('scopePreset', 'Scope preset')}</label>
         <select className={s.formInput} value={scopePresetId} onChange={(e) => applyScopePreset(e.target.value)}>
           {FLEET_SCOPE_PRESETS.map((preset) => (
             <option key={preset.id} value={preset.id}>
@@ -280,7 +273,7 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
 
       {agents.length > 1 && (
         <div className={s.formField}>
-          <label className={s.formLabel}>Fan out to (parallel, optional)</label>
+          <label className={s.formLabel}>{tf('fanOut', 'Fan out to (parallel, optional)')}</label>
           <div className={s.fanOutRow}>
             {agents
               .filter((a) => a.id !== agent && a.enabled)
@@ -302,33 +295,33 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
 
       {isVision && (
         <div className={s.formField}>
-          <label className={s.formLabel}>Image path</label>
+          <label className={s.formLabel}>{tf('imagePath', 'Image path')}</label>
           <input
             className={s.formInput}
             value={image}
             onChange={(e) => setImage(e.target.value)}
             placeholder="/Users/lynn/Desktop/screenshot.png"
           />
-          <div className={s.formHint}>The path is passed to `Lynn worker run`; the CLI reads the image locally and routes it through a vision-capable model.</div>
+          <div className={s.formHint}>{tf('imageHint', 'The path is passed to `Lynn worker run`; the CLI reads the image locally and routes it through a vision-capable model.')}</div>
         </div>
       )}
       <div className={s.formRow}>
         <div className={s.formField}>
-          <label className={s.formLabel}>Approval</label>
+          <label className={s.formLabel}>{tf('approval', 'Approval')}</label>
           <select className={s.formInput} value={approval} onChange={(e) => setApproval(e.target.value as FleetApprovalMode)}>
-            <option value="ask">ask (guarded)</option>
-            <option value="on-failure">on-failure</option>
-            <option value="never">never (read/check only)</option>
-            <option value="yolo">yolo (autonomous edits)</option>
+            <option value="ask">{tf('approvalAsk', 'ask (guarded)')}</option>
+            <option value="on-failure">{tf('approvalOnFailure', 'on-failure')}</option>
+            <option value="never">{tf('approvalNever', 'never (read/check only)')}</option>
+            <option value="yolo">{tf('approvalYolo', 'yolo (autonomous edits)')}</option>
           </select>
           <div className={approval === 'yolo' ? s.formDangerHint : s.formHint}>
             {approval === 'yolo'
-              ? 'YOLO lets the worker edit files and run shell tools without another prompt.'
-              : 'Non-interactive workers may stop before dangerous edits unless approval is yolo.'}
+              ? tf('approvalHintYolo', 'YOLO lets the worker edit files and run shell tools without another prompt.')
+              : tf('approvalHintGuarded', 'Non-interactive workers may stop before dangerous edits unless approval is yolo.')}
           </div>
         </div>
         <div className={s.formField}>
-          <label className={s.formLabel}>Sandbox</label>
+          <label className={s.formLabel}>{tf('sandbox', 'Sandbox')}</label>
           <select className={s.formInput} value={sandbox} onChange={(e) => setSandbox(e.target.value as FleetSandboxMode)}>
             <option value="read-only">read-only</option>
             <option value="workspace-write">workspace-write</option>
@@ -336,34 +329,33 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
           </select>
           <div className={sandbox === 'danger-full-access' ? s.formDangerHint : s.formHint}>
             {sandbox === 'danger-full-access'
-              ? 'Full filesystem access is only for trusted local worktrees.'
-              : 'Workspace-write keeps edits scoped to the assigned worktree.'}
+              ? tf('sandboxHintFull', 'Full filesystem access is only for trusted local worktrees.')
+              : tf('sandboxHintScoped', 'Workspace-write keeps edits scoped to the assigned worktree.')}
           </div>
         </div>
       </div>
       {targets.some(isExternalFleetAgent) && (
         <div className={needsExternalFullAccess ? s.formDangerHint : s.formHint}>
-          External CLI adapters run their own shell/process. To launch them from Fleet, explicitly set Approval=yolo and
-          Sandbox=danger-full-access. Built-in Lynn and StepFun workers can stay guarded.
+          {tf('externalHint', 'External CLI adapters run their own shell/process. To launch them from Fleet, explicitly set Approval=yolo and Sandbox=danger-full-access. Built-in Lynn and StepFun workers can stay guarded.')}
         </div>
       )}
       <div className={s.formRow}>
         <div className={s.formField}>
-          <label className={s.formLabel}>Branch</label>
+          <label className={s.formLabel}>{tf('branch', 'Branch')}</label>
           <input className={s.formInput} value={branch} onChange={(e) => setBranch(e.target.value)} placeholder={isVision ? baseBranch : 'cli-2/inputarea'} />
         </div>
       </div>
       <div className={s.formField}>
-        <label className={s.formLabel}>Worktree</label>
+        <label className={s.formLabel}>{tf('worktree', 'Worktree')}</label>
         <input className={s.formInput} value={worktree} onChange={(e) => setWorktree(e.target.value)} placeholder={isVision ? baseWorktree : 'worktrees/cli-2-inputarea'} />
       </div>
       <div className={s.formField}>
-        <label className={s.formLabel}>Objective</label>
+        <label className={s.formLabel}>{tf('objective', 'Objective')}</label>
         <textarea className={s.formTextarea} value={objective} onChange={(e) => setObjective(e.target.value)} rows={2} />
       </div>
       <div className={s.formRow}>
         <div className={s.formField}>
-          <label className={s.formLabel}>Owned files (one glob per line)</label>
+          <label className={s.formLabel}>{tf('owned', 'Owned files (one glob per line)')}</label>
           <textarea
             className={s.formTextarea}
             value={owned}
@@ -373,21 +365,25 @@ export function TaskBriefForm({ onClose }: { onClose: () => void }) {
           />
         </div>
         <div className={s.formField}>
-          <label className={s.formLabel}>Forbidden files</label>
+          <label className={s.formLabel}>{tf('forbidden', 'Forbidden files')}</label>
           <textarea className={s.formTextarea} value={forbidden} onChange={(e) => setForbidden(e.target.value)} rows={3} />
         </div>
       </div>
       <div className={s.formField}>
-        <label className={s.formLabel}>Test commands (one per line)</label>
+        <label className={s.formLabel}>{tf('tests', 'Test commands (one per line)')}</label>
         <textarea className={s.formTextarea} value={tests} onChange={(e) => setTests(e.target.value)} rows={2} />
       </div>
       {error && <div className={s.formError}>{error}</div>}
       <div className={s.formActions}>
         <button className={s.fleetBtn} onClick={submit} disabled={busy || !canSubmit}>
-          {busy ? 'Dispatching...' : targets.length > 1 ? `Dispatch to ${targets.length} workers` : 'Dispatch worker'}
+          {busy
+            ? tf('dispatching', 'Dispatching...')
+            : targets.length > 1
+              ? tf('dispatchN', `Dispatch to ${targets.length} workers`, { count: targets.length })
+              : (t('fleet.dispatch') !== 'fleet.dispatch' ? t('fleet.dispatch') : 'Dispatch worker')}
         </button>
         <button className={s.fleetBtn} onClick={onClose} disabled={busy}>
-          Cancel
+          {tf('cancel', 'Cancel')}
         </button>
       </div>
     </div>

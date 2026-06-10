@@ -8,7 +8,7 @@ import { withBestCodeFlags } from "./code-best.js";
 import { applyModeCommand, applyReasoningCommand, renderMode, toggleMode, type ChatMode } from "./commands/chat.js";
 import { displayCwd } from "./startup.js";
 import { HistoryNavigator, appendHistory, historyPath, loadHistory } from "./history.js";
-import { parseReasoningOptions, type ReasoningOptions } from "./reasoning.js";
+import { applyFastReasoning, parseReasoningOptions, type ReasoningOptions } from "./reasoning.js";
 import { resolveEffectivePermissions } from "./permissions.js";
 import { resolveCliProviderProfile } from "./provider-profile.js";
 import { CLIENT_TOOL_DEFINITIONS } from "./tools/types.js";
@@ -250,12 +250,12 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       return;
     }
     if (text === "/fast") {
-      setReasoning((current) => ({ ...current, effort: "off" }));
+      setReasoning((current) => applyFastReasoning(current));
       pushItem({ kind: "system", text: t("code.fast"), tone: "success" });
       return;
     }
     if (text === "/think") {
-      setReasoning((current) => ({ ...current, effort: "high" }));
+      setReasoning((current) => ({ ...current, effort: "high", maxTokens: undefined }));
       pushItem({ kind: "system", text: t("code.think"), tone: "success" });
       return;
     }

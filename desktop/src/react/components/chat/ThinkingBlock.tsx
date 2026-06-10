@@ -66,7 +66,15 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
     setTranslateError(null);
   }, [content]);
 
-  const elapsedLabel = !sealed && elapsed >= 2000 ? ` (${formatElapsed(elapsed)})` : '';
+  // Thinking volume badge — at 100+ TPS heads (StepFun 3.7 Flash) the thinking phase is the
+  // dominant wait; show how much reasoning has streamed so the wait reads as progress.
+  const charCount = content ? content.length : 0;
+  const volumeLabel = charCount >= 200
+    ? ` · ${charCount >= 1000 ? `${(charCount / 1000).toFixed(1)}k` : charCount} 字`
+    : '';
+  const elapsedLabel = !sealed && elapsed >= 2000
+    ? ` (${formatElapsed(elapsed)}${volumeLabel})`
+    : (sealed && charCount >= 200 ? ` (${charCount >= 1000 ? `${(charCount / 1000).toFixed(1)}k` : charCount} 字)` : '');
   const activeLabel = useMemo(() => {
     if (sealed) return t('thinking.done');
     if (isLocalColdStartThinking && elapsed >= 8_000) return '首轮暖机中，后续会更快';

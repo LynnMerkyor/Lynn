@@ -18,6 +18,26 @@ import {
   extractLatestAssistantVisibleTextAfter,
 } from "./session-persistence.js";
 
+/**
+ * 工具回合结束但模型没有产出收尾文本时的事实行(issue #72 第三类的 GUI 变体:
+ * 命令执行成功、授权卡片也在,turn 却静默结束)。V0.79 禁止合成内容 —— 这里
+ * 只复述真实 tool_end 计数(stream-state 的 successfulToolCount / lastFailedTools),
+ * 不替模型编任何话。纯函数,导出供单测。
+ */
+export function buildToolCompletionSummary(ss: any): string {
+  const okCount = Number(ss?.successfulToolCount || 0);
+  const failedTools = Array.isArray(ss?.lastFailedTools) ? ss.lastFailedTools.filter(Boolean).map(String) : [];
+  const failCount = ss?.hasFailedTool ? Math.max(1, failedTools.length) : 0;
+  if (okCount + failCount === 0) return "";
+  // 措辞必须诚实:工具跑完≠任务完成 —— 模型没给总结时,明说"没有总结回复",
+  // 不写"✅ 全部成功"那种读起来像任务完成的句式(2026-06-10 用户纠偏:"自报完成")。
+  if (failCount === 0) {
+    return `已执行 ${okCount} 个操作(工具均成功),但模型没有返回总结回复。可点「编辑重发」让它基于工具结果直接作答,详情见上方工具卡片。`;
+  }
+  const failDetail = failedTools.length ? `(${failedTools.slice(0, 3).join("、")})` : "";
+  return `已执行 ${okCount + failCount} 个操作:${okCount} 个成功,${failCount} 个失败${failDetail},且模型没有返回总结回复。可点「编辑重发」重试,详情见上方工具卡片。`;
+}
+
 export interface ToolTurnFinalizerDeps {
   engine: any;
   editRollbackStore: any;
@@ -110,7 +130,9 @@ export function createToolTurnFinalizer({
     if (reason === "hard_turn_timeout" && !ss.hasToolCall) {
       return buildLocalOfficeDirectAnswer(ss.originalPromptText || ss.effectivePromptText || "");
     }
-    return "";
+    // 工具都跑完了但模型没给收尾文本(issue #72 第三类的 GUI 变体:"有授权卡片但最后没有反馈")。
+    // V0.79 禁止编造内容 —— 这里只输出基于真实 tool_end 计数的事实行,不替模型说话。
+    return buildToolCompletionSummary(ss);
   }
 
   function buildRealtimeToolFallbackText(toolName: any, event: any) {
@@ -327,11 +349,15 @@ export function createToolTurnFinalizer({
       Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
       const finalText = extractLatestAssistantVisibleText(engine.getSessionByPath(sessionPath), sessionPath);
       const meaningfulFinalText = isMeaningfulPersistedFinalText(finalText, ss) ? finalText : "";
+      // 没有模型收尾文本时,给一行真实工具结果的事实反馈,而不是静默关流
+      //(用户视角:命令执行成功了却没有任何回应)。
+      const fallbackText = meaningfulFinalText || buildEmptyTurnFallbackText(ss, "tool_authorization_timeout");
       closeStreamWithVisibleFallback(
         sessionPath,
         ss,
-        meaningfulFinalText || "",
+        fallbackText,
         "tool_authorization_timeout",
+        meaningfulFinalText ? {} : { trustedFallback: true },
       );
     }, timeouts.toolAuthorizationGraceMs);
     if (ss.toolAuthorizationTimer.unref) ss.toolAuthorizationTimer.unref();

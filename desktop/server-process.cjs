@@ -130,29 +130,39 @@ function resolveDevServerLaunch({ dirname, execPath, existsSync }) {
   const tsEntry = path.join(appRoot, "server", "index.ts");
   const jsEntry = path.join(appRoot, "server", "index.js");
 
+  // ABI escape hatch (startup-recovery gate / dev): Electron's embedded Node (e.g. v22) and the
+  // Node that built node_modules natives (e.g. nvm v20) can disagree, making better-sqlite3 throw
+  // ERR_DLOPEN_FAILED inside FactStore at boot — the issue-#72 failure class. When
+  // LYNN_SERVER_NODE_BIN points at an external Node matching the build ABI, use it directly
+  // (no ELECTRON_RUN_AS_NODE). Packaged launches never set this env and are unaffected.
+  const externalNode = process.env.LYNN_SERVER_NODE_BIN;
+  const runtime = externalNode && existsSync(externalNode)
+    ? { serverBin: externalNode, env: {} }
+    : { serverBin: execPath, env: { ELECTRON_RUN_AS_NODE: "1" } };
+
   if (existsSync(bundledDevEntry)) {
     return {
       mode: "dev",
-      serverBin: execPath,
+      serverBin: runtime.serverBin,
       serverArgs: [bundledDevEntry],
-      env: { ELECTRON_RUN_AS_NODE: "1" },
+      env: { ...runtime.env },
     };
   }
 
   if (existsSync(tsEntry)) {
     return {
       mode: "dev",
-      serverBin: execPath,
+      serverBin: runtime.serverBin,
       serverArgs: ["--import", "tsx", tsEntry],
-      env: { ELECTRON_RUN_AS_NODE: "1" },
+      env: { ...runtime.env },
     };
   }
 
   return {
     mode: "dev",
-    serverBin: execPath,
+    serverBin: runtime.serverBin,
     serverArgs: [jsEntry],
-    env: { ELECTRON_RUN_AS_NODE: "1" },
+    env: { ...runtime.env },
   };
 }
 
