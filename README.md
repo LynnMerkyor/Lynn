@@ -194,7 +194,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 **Lynn 有史以来最重要的编程版本**:
 - 🖥️ **Lynn CLI / Lynn Code**:新增 Ink TUI、流光等待、Markdown/代码高亮、真实 diff 预览、多行输入、图片/音频/视频附件、`Lynn code -p ... --json` 无交互调用和 `Lynn agents` 机器可读命令面。
 - 🧭 **GUI Fleet 指挥台**:桌面端可以 fan-out 派单到多个 CLI worker,显示 stdout/stderr、测试、diff、越界红灯、gate 状态,并支持 gated merge 到目标分支和远端 push。
-- 🧠 **Brain V2 默认路由**:StepFun 3.7 Flash(256K 上下文,high 推理,48K 推理/生成预算) → Spark Qwen 3.6 35B A3B 单槽 → DS-V4 Flash 逃生舱。StepFun 负责高速文本/编码**与视觉**(`step-1o-turbo-vision`),Spark 接本地零成本兜底。MiMo 仅作付费搜索后端,不在模型链上。
+- 🧠 **Brain V2 默认路由**:StepFun 3.7 Flash(256K 上下文,high 推理,48K 推理/生成预算) → Spark Qwen 3.6 35B A3B 单槽 → DS-V4 Flash 逃生舱。StepFun 负责高速文本/编码**与视觉**(`step-1o-turbo-vision`),Spark 接本地零成本兜底。
 - 🔗 **链式工具与搜索加固**:工具结果显著性注入、链式工具 hint、tool-storm 抑制、pre-search/web_search 代理和搜索源展示补齐,降低多步工具漂移。
 - 💾 **长任务续跑与前置缓存纪律**:CLI 会话 JSONL、checkpoint、帧恢复、计划重建、原始目标钉住、git 快照和 stable context layers 一起支撑长任务稳定续跑;cache telemetry / prefix drift 进入日志和 metadata,不增加用户焦虑。
 - 🧊 **本地 9B 改为显式启用**:本地 Qwen3.5-9B MTP 不再随启动自动占用约 6GB 显存/统一内存;用户点击启用时才下载/启动,并只在本地模型入口提示首次暖机较慢。
@@ -209,7 +209,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 
 **稳定性与维护成本下降版**:
 - 🧩 **五个高风险中枢拆分**:`InputArea`、`stock-market`、`mcp-client`、`bridge-manager`、`engine/agent` 已拆出稳定边界,降低后续改动冲突和回归面。
-- 🔎 **搜索工具更可解释**:web search 默认优先走 brain v2 本地 proxy,MiMo/GLM key 不进客户端;聊天工具卡支持展开查看综合答案与搜索源。
+- 🔎 **搜索工具更可解释**:web search 默认优先走 brain v2 本地 proxy,搜索 key 不进客户端;聊天工具卡支持展开查看综合答案与搜索源。
 - 🧭 **本地模型升级窗口**:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;旧版 9B GGUF 会显示为“可升级到 9B MTP”,不会误判为默认就绪。9B/35B 下载入口指向 ModelScope MTP 仓库,启动默认保持 MTP + thinking-on,并在模型卡标注 DGX Spark TPS 区间。
 - 🛡️ **中枢回归继续收紧**:session event、tool runtime、dynamic prompt、MCP transport、bridge streaming/attachment 和搜索源摘要都补了 focused tests。
 - ✅ **发布门禁**:V0.79.9 候选已通过 typecheck、runtime typecheck、全量 vitest、三段构建与 release regression 门禁。

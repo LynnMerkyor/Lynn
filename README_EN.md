@@ -184,7 +184,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 
 **Final V0.79 stability release**:
 - 🧩 **Five risk-heavy centers split**:`InputArea`, `stock-market`, `mcp-client`, `bridge-manager`, and `engine/agent` now have clearer module boundaries, reducing future conflict and regression risk.
-- 🔎 **Safer, inspectable search**:web search prefers the brain v2 localhost proxy first, keeping MiMo/GLM paid search keys server-side; chat tool cards can expand synthesized answers and search sources.
+- 🔎 **Safer, inspectable search**:web search prefers the brain v2 localhost proxy first, keeping paid search keys server-side; chat tool cards can expand synthesized answers and search sources.
 - 🧭 **Local model upgrade window**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model. Older 9B GGUF files now show as upgrade candidates, and 9B/35B download entries point to the ModelScope MTP repositories with MTP + thinking-on kept as default.
 - 🛡️ **Runtime regression coverage tightened**:composer replacement, local Qwen status, stock-market, MCP transport, bridge streaming/attachment, session events, engine tool runtime, agent dynamic prompt, web-search, and search source UI all gained or updated focused tests.
 - ✅ **Release gate**:V0.79.9 passed typecheck, runtime typecheck, full vitest, release static/live regressions, UI smoke, macOS signing/notarization/stapling/Gatekeeper validation, and Windows installer signing.
