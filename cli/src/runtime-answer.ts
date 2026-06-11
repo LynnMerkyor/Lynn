@@ -7,6 +7,7 @@ export interface RuntimeAnswerContext {
   cwd: string;
   mode?: string;
   reasoning?: string;
+  question?: string;
 }
 
 const VERSION_PATTERNS = [
@@ -38,6 +39,12 @@ const RUNTIME_OPTIMIZATION_PATTERNS = [
   /\b(?:local|runtime|prefix|cache|decode|tps|9b|35b)\b.{0,36}\b(?:optimization|policy|fallback|route|model)\b/i,
 ];
 
+const VOICE_PATTERNS = [
+  /(?:lynn\s*)?(?:cli\s*)?.{0,16}(?:语音|朗读|转写|听写|录音|ASR|TTS|voice|speech|audio).{0,24}(?:模式|能力|怎么用|可用|支持|输入|输出|朗读|转写|录音|speak|listen|transcribe)/i,
+  /(?:你|当前|现在|本地|运行时|命令行|cli|lynn).{0,20}(?:语音|朗读|转写|听写|录音|ASR|TTS|voice|speech|audio)/i,
+  /\b(?:voice|speech|audio|asr|tts|transcribe|record)\b.{0,36}\b(?:mode|support|input|output|cli|lynn|use|command)\b/i,
+];
+
 export function isLocalRuntimeQuestion(text: string): boolean {
   const value = text.trim();
   if (!value) return false;
@@ -45,12 +52,39 @@ export function isLocalRuntimeQuestion(text: string): boolean {
   return VERSION_PATTERNS.some((pattern) => pattern.test(value))
     || MODEL_ROUTE_PATTERNS.some((pattern) => pattern.test(value))
     || MEMORY_PATTERNS.some((pattern) => pattern.test(value))
-    || RUNTIME_OPTIMIZATION_PATTERNS.some((pattern) => pattern.test(value));
+    || RUNTIME_OPTIMIZATION_PATTERNS.some((pattern) => pattern.test(value))
+    || VOICE_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function isVoiceRuntimeQuestion(text: string | undefined): boolean {
+  const value = String(text || "").trim();
+  if (!value) return false;
+  return VOICE_PATTERNS.some((pattern) => pattern.test(value));
 }
 
 export function renderLocalRuntimeAnswer(input: RuntimeAnswerContext, locale: "zh" | "en" = "zh"): string {
   const version = readVersionInfo();
   const build = version.build ? ` (${version.build})` : "";
+  if (isVoiceRuntimeQuestion(input.question)) {
+    if (locale === "en") {
+      return [
+        "Yes. Lynn voice is StepFun Realtime first, hosted by Brain; local Spark/SenseVoice/CosyVoice/system voice is fallback only.",
+        "- Current chat: type `/voice` or `lynn voice` to enter realtime voice in place; Ctrl+C returns to chat.",
+        "- Shell direct entry: `Lynn voice` uses the same StepFun Realtime path.",
+        "- Audio file/transcription: `Lynn voice --file speech.wav --send`",
+        "- Speak to file: `Lynn voice --speak \"hello\" --out reply.wav`",
+        "- GUI: click the microphone button; it uses the same StepFun Realtime path.",
+      ].join("\n");
+    }
+    return [
+      "有。Lynn 语音主链是 Brain 托管的 StepFun Realtime,本地 Spark/SenseVoice/CosyVoice/系统语音只做 fallback。",
+      "- 当前 chat:输入 `/voice` 或 `lynn voice` 就地进入实时语音;Ctrl+C 返回聊天。",
+      "- 外层直进:`Lynn voice` 复用同一条 StepFun Realtime 链路。",
+      "- 音频文件/转写:`Lynn voice --file speech.wav --send`",
+      "- 朗读保存:`Lynn voice --speak \"你好\" --out reply.wav`",
+      "- GUI:点麦克风按钮,走同一条 StepFun Realtime 链路。",
+    ].join("\n");
+  }
   if (locale === "en") {
     return [
       `Lynn CLI version: ${version.version}${build}`,
@@ -72,6 +106,12 @@ export function renderLocalRuntimeAnswer(input: RuntimeAnswerContext, locale: "z
       "- Live chat/code context stays in the current context window and is auto-compacted for long runs.",
       "- Saved sessions and checkpoints can be resumed with --save-session, /resume, and /rewind.",
       "- Durable CLI memory is stored under ~/.lynn with /memory add and survives new terminal sessions until /memory forget removes it.",
+      "",
+      "Voice:",
+      "- In the current chat, type `/voice` or `lynn voice` to enter Brain-hosted StepFun Realtime in place; Ctrl+C returns to chat.",
+      "- Shell direct entry: `Lynn voice` uses the same realtime path when you want to start directly from a terminal.",
+      "- File/one-shot: `Lynn voice --file speech.wav --send` or `Lynn -p \"answer this\" --voice-file speech.wav`.",
+      "- TTS: `Lynn voice --speak \"hello\" --out reply.wav`.",
       "",
       "Docs: docs/ops/lynn-cli-runtime-knowledge.md and cli/README.md.",
       "Use `Lynn version` for the local CLI version, `/model` for the Brain model route, and `Lynn providers` for BYOK settings.",
@@ -97,6 +137,12 @@ export function renderLocalRuntimeAnswer(input: RuntimeAnswerContext, locale: "z
     "- 当前聊天 / 代码上下文会保留在本轮上下文窗口里,长对话和长任务会自动压缩。",
     "- 保存的会话和检查点可通过 --save-session、/resume、/rewind 继续或回退。",
     "- 持久 CLI 记忆通过 /memory add 写入 ~/.lynn,跨终端会话保留,直到 /memory forget 删除。",
+    "",
+    "语音能力:",
+    "- 当前 chat 内输入 `/voice` 或 `lynn voice` 就地进入 Brain 托管 StepFun Realtime;Ctrl+C 返回聊天。",
+    "- 外层 `Lynn voice` 只是从终端直进同一条实时链路。",
+    "- 文件/一次性:`Lynn voice --file speech.wav --send` 或 `Lynn -p \"按语音内容回答\" --voice-file speech.wav`。",
+    "- 朗读:`Lynn voice --speak \"你好\" --out reply.wav`。",
     "",
     "说明文档:docs/ops/lynn-cli-runtime-knowledge.md 和 cli/README.md。",
     "提示:`Lynn version` 查看本地 CLI 版本,`/model` 查看 Brain 模型路由,`Lynn providers` 查看 BYOK 设置。",

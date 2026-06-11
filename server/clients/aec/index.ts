@@ -67,7 +67,7 @@ export function createAecProcessor(cfg: AecProcessorConfig = {}): AecProcessorHa
   if (!isAvailable) return null;
   try {
     return nativeModule?.createProcessor({
-      sampleRate: cfg.sampleRate || 16000,
+      sampleRate: cfg.sampleRate || 24000,
       enableNs: cfg.enableNs !== false,
     }) || null;
   } catch (err) {
@@ -77,7 +77,7 @@ export function createAecProcessor(cfg: AecProcessorConfig = {}): AecProcessorHa
 }
 
 /**
- * 喂 far-end (TTS reference) PCM 一帧 10ms (160 samples Float32 @ 16kHz)。
+ * 喂 far-end (TTS reference) PCM 一帧 10ms (240 samples Float32 @ 24kHz)。
  * 必须在 processCapture 之前调用(API 顺序约束,见 lib.rs 注释)。
  */
 export function aecProcessRender(handle: AecProcessorHandle | null | undefined, farEnd: Float32Array): void {
@@ -86,7 +86,7 @@ export function aecProcessRender(handle: AecProcessorHandle | null | undefined, 
 }
 
 /**
- * 喂 near-end (mic) PCM 一帧 10ms (160 samples Float32),返回清掉 echo 的 PCM。
+ * 喂 near-end (mic) PCM 一帧 10ms (240 samples Float32),返回清掉 echo 的 PCM。
  */
 export function aecProcessCapture(
   handle: AecProcessorHandle | null | undefined,

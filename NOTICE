@@ -6,3 +6,10 @@ This project is a derivative work based on the open source project by liliMozi.
 Original repository: https://github.com/liliMozi/openhanako
 
 Licensed under the Apache License, Version 2.0.
+
+Step Realtime CLI reference
+---------------------------
+Portions of the Lynn voice routing design and browser AEC integration are based
+on ideas and protocol examples from StepFun's Step-Realtime-CLI.
+Repository: https://github.com/stepfun-ai/Step-Realtime-CLI
+License: MIT

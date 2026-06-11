@@ -2208,7 +2208,7 @@
   "error.llmTimeout": "模型请求超时",
   "error.llmRateLimited": "模型限流，请稍候",
   "error.llmEmptyResponse": "模型返回了空响应",
-  "error.llmAuthFailed": "模型认证失败",
+  "error.llmAuthFailed": "模型认证失败，请重新开始对话；若仍失败，请检查模型/供应商设置或系统时间",
   "error.llmSlowResponse": "模型响应较慢，请耐心等待",
   "error.fsPermission": "文件权限不足",
   "error.fsNotFound": "文件未找到",
@@ -2298,6 +2298,28 @@
       "falseVerify": "假验证风险",
       "evidence": "客观证据",
       "escalated": "已升级"
+    }
+  },
+  "jarvis": {
+    "ariaLabel": "Lynn 语音助手",
+    "action": {
+      "start": "实时对话",
+      "endTurn": "完成本轮",
+      "interruptListen": "插话",
+      "interrupt": "停止"
+    },
+    "state": {
+      "idle": "点一次进入连续语音",
+      "listening": "正在听 · 说完点完成本轮",
+      "thinking": "思考中",
+      "speaking": "正在用语音回答",
+      "degraded": "语音服务异常"
+    },
+    "hint": {
+      "idle": "点一次进入连续语音；播报结束会自动继续听，点停止/关闭退出。",
+      "listening": "正在听；嘈杂环境说完点“完成本轮”。",
+      "thinking": "正在组织回答，完成后会直接语音播报。",
+      "speaking": "正在朗读回答，结束后会自动继续听；点“插话”可打断。"
     }
   }
 }

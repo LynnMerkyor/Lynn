@@ -421,6 +421,24 @@ describe("createServerProcessController.start (fake deps — no Electron)", () =
     expect(restarted).toBe(true);
   });
 
+  it("heartbeat restart failure writes a crash log and shows a visible error", async () => {
+    const lynnHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lynn-ctl-")));
+    let crashLog = "";
+    const dialogs: Array<[string, string]> = [];
+    const ctl = createServerProcessController(baseDeps(lynnHome, {
+      fetch: async () => { throw new Error("server down"); },
+      spawn: () => { throw new Error("spawn failed"); },
+      writeCrashLog: (message: string) => { crashLog = message; },
+      dialog: { showErrorBox: (title: string, message: string) => { dialogs.push([title, message]); } },
+      mt: (key: string, vars?: { error?: string }) => `${key}:${vars?.error || ""}`,
+    }));
+    const st = ctl.getState();
+    st.port = 7000; st.token = "t"; st.startedAt = 0;
+    for (let i = 0; i < 6; i++) await ctl.checkHeartbeat();
+    expect(crashLog).toContain("spawn failed");
+    expect(dialogs).toEqual([["Lynn Server", "dialog.serverRestartFailed:spawn failed"]]);
+  });
+
   it("heartbeat resets the failure counter when the server is healthy", async () => {
     const lynnHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lynn-ctl-")));
     const ctl = createServerProcessController(baseDeps(lynnHome, {

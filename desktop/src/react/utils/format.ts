@@ -186,10 +186,36 @@ export function injectCopyButtons(container: HTMLElement): void {
     const language = langClass ? langClass[1].toLowerCase() : undefined;
 
     copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(text || '').then(() => {
+      const markCopied = () => {
         copyBtn.textContent = t('attach.copied');
         setTimeout(() => { copyBtn.textContent = t('attach.copy'); }, 1500);
-      });
+      };
+      // [COPY-FIX 2026-06-10] navigator.clipboard.writeText rejects in Electron on
+      // focus/permission edge cases even though the OS clipboard usually IS written —
+      // an un-caught rejection here surfaced as a false "Write permission denied" toast.
+      // Fall back to execCommand (same pattern as UserMessage/AssistantMessage) and only
+      // ever mark copied; never raise an error.
+      const legacyFallback = () => {
+        try {
+          // eslint-disable-next-line no-restricted-syntax -- Electron clipboard fallback needs a temporary textarea for execCommand when navigator.clipboard rejects.
+          const ta = document.createElement('textarea');
+          ta.value = text || '';
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          ta.setAttribute('readonly', '');
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          if (ok) markCopied();
+        } catch { /* swallow — copy is best-effort */ }
+      };
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text || '').then(markCopied).catch(legacyFallback);
+      } else {
+        legacyFallback();
+      }
     });
 
     btnGroup.appendChild(copyBtn);

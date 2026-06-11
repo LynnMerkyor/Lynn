@@ -44,9 +44,7 @@ if (process.platform !== "win32") {
 
 const lynnHome = process.env.LYNN_HOME
   ? path.resolve(process.env.LYNN_HOME.replace(/^~/, os.homedir()))
-  : process.env.HANA_HOME
-    ? path.resolve(process.env.HANA_HOME.replace(/^~/, os.homedir()))
-    : path.join(os.homedir(), ".lynn");
+  : path.join(os.homedir(), ".lynn");
 
 // 按 LYNN_HOME 隔离 Electron userData（localStorage / cache / session）
 // 生产: ~/Library/Application Support/Lynn

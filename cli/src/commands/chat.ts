@@ -29,6 +29,8 @@ import { shouldUseInkTui } from "../terminal-safety.js";
 import { createDecodeSpeedTracker } from "../decode-speed.js";
 import { createRuntimeMetrics, recordDecodeTps, recordUsageMetrics, renderRuntimeMetrics } from "../runtime-metrics.js";
 import { compactChatMessages } from "../chat-compaction.js";
+import { runRealtimeVoice } from "../voice-realtime.js";
+import { argsForChatVoiceLaunch, parseChatVoiceLaunchCommand } from "../voice-command.js";
 import { isLocalExitText, parseLocalReadOnlyCommand, renderLocalReadOnlyBlocked, renderLocalReadOnlyResult, runLocalReadOnlyCommand } from "../local-command.js";
 import { assistantToolCallsForMessages, codeToolDefinitions, createStreamingToolCallAccumulator, parseCodeToolRequests, toolRequestsFromCollectedCalls, type CodeToolRequest } from "../code-tool-protocol.js";
 import { formatDangerousToolPreview, renderClientToolResult, renderClientToolStart, resolveToolApproval } from "../code-tool-render.js";
@@ -46,6 +48,8 @@ export const CHAT_SLASH_COMMANDS = [
   "/think medium",
   "/think low",
   "/fast",
+  "/voice",
+  "/ptt",
   "/tools",
   "/providers",
   "/help",
@@ -141,6 +145,12 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       }
       pendingRewind = null;
     }
+    const voiceLaunch = parseChatVoiceLaunchCommand(text);
+    if (voiceLaunch) {
+      try { await runRealtimeVoice(argsForChatVoiceLaunch(args, voiceLaunch), { embedded: true }); }
+      catch (error) { output.write(`${formatChatError(error)}\n\n`); }
+      return "continue";
+    }
     if (text === "/help") {
       output.write(`${t("chat.help")}\n\n`);
       return "continue";
@@ -165,6 +175,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
         cwd: chatCwd,
         mode: renderMode(mode),
         reasoning: reasoning.effort,
+        question: text,
       }, localeForText(text))}\n\n`);
       return "continue";
     }

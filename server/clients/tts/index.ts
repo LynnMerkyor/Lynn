@@ -1,5 +1,5 @@
 /**
- * TTS Provider Registry · Lynn V0.79 Jarvis Runtime
+ * TTS Provider Registry · Lynn Voice Runtime
  *
  * Voice WS uses byte-returning providers. The older tts-bridge plugin remains
  * the file-saving tool path for chat message朗读.
@@ -7,6 +7,7 @@
 import { createCosyVoice2TtsProvider } from "./cosyvoice2.js";
 import { createEdgeTtsProvider } from "./edge.js";
 import { createStepFunRealtimeTtsProvider } from "../stepfun-realtime.js";
+import { createBrainRealtimeTtsProvider } from "../brain-realtime-voice.js";
 
 interface TTSConfig {
   provider?: string;
@@ -41,8 +42,12 @@ function errorMessage(err: unknown): string {
 }
 
 const PROVIDERS: Record<string, TTSProviderFactory> = {
-  "stepfun-realtime": createStepFunRealtimeTtsProvider,
-  "stepfun": createStepFunRealtimeTtsProvider,
+  "brain-realtime": createBrainRealtimeTtsProvider,
+  "brain-stepfun-realtime": createBrainRealtimeTtsProvider,
+  "stepfun-realtime": createBrainRealtimeTtsProvider,
+  "stepfun": createBrainRealtimeTtsProvider,
+  "stepfun-direct": createStepFunRealtimeTtsProvider,
+  "stepfun-byok": createStepFunRealtimeTtsProvider,
   spark: (config) => createTTSFallbackProvider({ ...config, provider: "cosyvoice2", fallback_provider: "edge" }),
   "spark-local": (config) => createTTSFallbackProvider({ ...config, provider: "cosyvoice2", fallback_provider: "edge" }),
   cosyvoice: createCosyVoice2TtsProvider,
@@ -53,7 +58,7 @@ const PROVIDERS: Record<string, TTSProviderFactory> = {
 };
 
 export function createTTSProvider(config: TTSConfig = {}): TTSProvider {
-  const providerId = config.provider || "cosyvoice2";
+  const providerId = config.provider || "brain-realtime";
   const factory = PROVIDERS[providerId];
   if (!factory) {
     throw new Error(`Unknown TTS provider: ${providerId}. Available: ${Object.keys(PROVIDERS).join(", ")}`);
@@ -62,7 +67,7 @@ export function createTTSProvider(config: TTSConfig = {}): TTSProvider {
 }
 
 export function createTTSFallbackProvider(config: TTSConfig = {}, deps: TTSFallbackDeps = {}): TTSProvider {
-  const primaryProvider = config.provider || "cosyvoice2";
+  const primaryProvider = config.provider || "brain-realtime";
   const primary = deps.primaryProvider || createTTSProvider({ ...config, provider: primaryProvider });
   const fallbackProvider = config.fallback?.provider || config.fallback_provider || config.fallbackProvider || "edge";
 
@@ -89,12 +94,17 @@ export function createTTSFallbackProvider(config: TTSConfig = {}, deps: TTSFallb
       try {
         return await primary.synthesize(text, opts);
       } catch (err) {
-        const result = await fallback.synthesize(text, opts);
-        return {
-          ...result,
-          fallbackUsed: true,
-          primaryError: errorMessage(err),
-        };
+        const primaryError = errorMessage(err);
+        try {
+          const result = await fallback.synthesize(text, opts);
+          return {
+            ...result,
+            fallbackUsed: true,
+            primaryError,
+          };
+        } catch (fallbackErr) {
+          throw new Error(`${primary.name || primaryProvider} failed: ${primaryError}; ${fallback.name || fallbackProvider} failed: ${errorMessage(fallbackErr)}`);
+        }
       }
     },
 
@@ -108,12 +118,17 @@ export function createTTSFallbackProvider(config: TTSConfig = {}, deps: TTSFallb
           return;
         } catch (err) {
           // 主链流式失败 → fallback synthesize 整段 → 包装成单 chunk yield
-          const fallbackResult = await fallback.synthesize(text, opts);
-          yield {
-            ...fallbackResult,
-            fallbackUsed: true,
-            primaryError: errorMessage(err),
-          };
+          const primaryError = errorMessage(err);
+          try {
+            const fallbackResult = await fallback.synthesize(text, opts);
+            yield {
+              ...fallbackResult,
+              fallbackUsed: true,
+              primaryError,
+            };
+          } catch (fallbackErr) {
+            throw new Error(`${primary.name || primaryProvider} failed: ${primaryError}; ${fallback.name || fallbackProvider} failed: ${errorMessage(fallbackErr)}`);
+          }
         }
       },
     } : {}),

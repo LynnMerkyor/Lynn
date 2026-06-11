@@ -44,7 +44,7 @@ afterEach(() => {
 });
 
 describe('ensureFirstRun', () => {
-  it('copies legacy ~/.hanako data into ~/.lynn without moving OpenHanako data away', () => {
+  it('does not copy legacy ~/.hanako data into ~/.lynn by default', () => {
     const root = makeTempRoot();
     tempRoots.push(root);
     const productDir = makeProductDir(root);
@@ -64,6 +64,39 @@ describe('ensureFirstRun', () => {
     } finally {
       if (oldHomeBefore === undefined) delete process.env.HOME;
       else process.env.HOME = oldHomeBefore;
+    }
+
+    expect(fs.existsSync(oldHome)).toBe(true);
+    expect(fs.readFileSync(path.join(oldHome, 'openhanako-marker.txt'), 'utf-8')).toBe('openhanako-data\n');
+    expect(fs.existsSync(path.join(lynnHome, 'openhanako-marker.txt'))).toBe(false);
+    expect(fs.existsSync(path.join(lynnHome, 'agents', 'lynn', 'config.yaml'))).toBe(true);
+    expect(fs.existsSync(path.join(lynnHome, 'agents', 'hanako', 'config.yaml'))).toBe(true);
+  });
+
+  it('copies legacy ~/.hanako data only when explicitly requested', () => {
+    const root = makeTempRoot();
+    tempRoots.push(root);
+    const productDir = makeProductDir(root);
+    const oldHome = path.join(root, '.hanako');
+    const lynnHome = path.join(root, '.lynn');
+    const oldHomeBefore = process.env.HOME;
+    const oldImportFlag = process.env.LYNN_IMPORT_HANAKO_ON_FIRST_RUN;
+
+    fs.mkdirSync(path.join(oldHome, 'agents', 'hanako'), { recursive: true });
+    fs.writeFileSync(path.join(oldHome, 'openhanako-marker.txt'), 'openhanako-data\n', 'utf-8');
+    writeYaml(path.join(oldHome, 'agents', 'hanako', 'config.yaml'), {
+      agent: { name: 'Hanako', yuan: 'hanako' },
+    });
+
+    try {
+      process.env.HOME = root;
+      process.env.LYNN_IMPORT_HANAKO_ON_FIRST_RUN = '1';
+      ensureFirstRun(lynnHome, productDir);
+    } finally {
+      if (oldHomeBefore === undefined) delete process.env.HOME;
+      else process.env.HOME = oldHomeBefore;
+      if (oldImportFlag === undefined) delete process.env.LYNN_IMPORT_HANAKO_ON_FIRST_RUN;
+      else process.env.LYNN_IMPORT_HANAKO_ON_FIRST_RUN = oldImportFlag;
     }
 
     expect(fs.existsSync(oldHome)).toBe(true);

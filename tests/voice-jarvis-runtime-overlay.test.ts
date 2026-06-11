@@ -4,19 +4,20 @@ import {
   extractAssistantSpeechText,
   jarvisPrimaryLabel,
   resolveJarvisPrimaryAction,
+  shouldAutoResumeVoiceListening,
 } from '../desktop/src/react/components/voice/JarvisRuntimeOverlay';
 import { VOICE_STATE } from '../desktop/src/react/services/voice-ws-client';
 
-describe('JarvisRuntimeOverlay action policy', () => {
+describe('Lynn voice overlay action policy', () => {
   it('uses start as the default action', () => {
     expect(resolveJarvisPrimaryAction(VOICE_STATE.IDLE)).toBe('start');
     expect(resolveJarvisPrimaryAction(VOICE_STATE.DEGRADED)).toBe('start');
-    expect(jarvisPrimaryLabel('start')).toBe('开始');
+    expect(jarvisPrimaryLabel('start')).toBe('实时对话');
   });
 
   it('ends the turn while listening', () => {
     expect(resolveJarvisPrimaryAction(VOICE_STATE.LISTENING)).toBe('end-turn');
-    expect(jarvisPrimaryLabel('end-turn')).toBe('完成');
+    expect(jarvisPrimaryLabel('end-turn')).toBe('完成本轮');
   });
 
   it('interrupts before half-duplex capture while speaking', () => {
@@ -26,11 +27,17 @@ describe('JarvisRuntimeOverlay action policy', () => {
 
   it('interrupts current thinking without starting capture', () => {
     expect(resolveJarvisPrimaryAction(VOICE_STATE.THINKING)).toBe('interrupt');
-    expect(jarvisPrimaryLabel('interrupt')).toBe('中断');
+    expect(jarvisPrimaryLabel('interrupt')).toBe('停止');
+  });
+
+  it('auto-resumes only after assistant speech finishes', () => {
+    expect(shouldAutoResumeVoiceListening(VOICE_STATE.SPEAKING, VOICE_STATE.IDLE, true)).toBe(true);
+    expect(shouldAutoResumeVoiceListening(VOICE_STATE.THINKING, VOICE_STATE.IDLE, true)).toBe(false);
+    expect(shouldAutoResumeVoiceListening(VOICE_STATE.SPEAKING, VOICE_STATE.IDLE, false)).toBe(false);
   });
 });
 
-describe('JarvisRuntimeOverlay chat integration helpers', () => {
+describe('Lynn voice overlay chat integration helpers', () => {
   it('extracts speakable text from the final assistant chat message', () => {
     expect(extractAssistantSpeechText({
       id: 'a1',
@@ -46,7 +53,9 @@ describe('JarvisRuntimeOverlay chat integration helpers', () => {
 describe('buildVoiceRequestText — P1-② voice context prompt prefix (slim)', () => {
   it('prepends one-line prefix with short/colloquial/no-markdown/direct-tool signals', () => {
     const out = buildVoiceRequestText('帮我查深圳明天天气');
-    expect(out).toContain('[语音对话');
+    expect(out).toContain('[语音模式');
+    expect(out).toContain('Lynn');
+    expect(out).toContain('直接回答');
     expect(out).toContain('短答');
     expect(out).toContain('markdown');
     expect(out).toMatch(/工具.*直接|直接.*执行/);

@@ -109,6 +109,16 @@ window.addEventListener('error', (e) => {
   });
 });
 window.addEventListener('unhandledrejection', (e) => {
+  // Clipboard writes (navigator.clipboard.writeText) reject in Electron on focus/permission
+  // edge cases even when the OS clipboard WAS actually written — non-critical, and surfacing
+  // them as an error toast (e.g. "Failed to execute 'writeText' on 'Clipboard': Write
+  // permission denied") is a false alarm. Swallow that specific class; everything else reports.
+  const reason = e.reason as { name?: unknown; message?: unknown } | undefined;
+  const detail = String((reason && (reason.message ?? reason)) || '');
+  if (/writeText|clipboard/i.test(detail)) {
+    e.preventDefault?.();
+    return;
+  }
   _errorBus.report(_AppError.wrap(e.reason));
 });
 

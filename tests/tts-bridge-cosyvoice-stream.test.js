@@ -21,6 +21,18 @@ function okStreamResponse() {
   });
 }
 
+function okBrainRealtimeResponse() {
+  return new Response(JSON.stringify({
+    ok: true,
+    provider: "brain-stepfun-realtime",
+    mime_type: "audio/wav",
+    audio_base64: Buffer.from(WAV_BYTES).toString("base64"),
+  }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 let originalFetch;
 
 beforeEach(() => {
@@ -33,9 +45,10 @@ afterEach(() => {
 });
 
 describe("CosyVoice TTS stream provider", () => {
-  it("is the default TTS provider after Spark stream recovery", () => {
-    expect(createTTSProvider({}).name).toBe("cosyvoice");
-    expect(listTTSProviders()[0]).toMatchObject({ id: "cosyvoice", default: true });
+  it("defaults TTS to Lynn Brain StepFun Realtime and keeps CosyVoice as fallback", () => {
+    expect(createTTSProvider({}).name).toBe("brain-realtime");
+    expect(listTTSProviders()[0]).toMatchObject({ id: "stepfun-realtime", default: true });
+    expect(listTTSProviders().find((provider) => provider.id === "cosyvoice")).toMatchObject({ needsKey: false });
   });
 
   it("calls /v1/audio/speech/stream and returns the response body", async () => {
@@ -62,14 +75,13 @@ describe("CosyVoice TTS stream provider", () => {
     expect(result.stream).toBeTruthy();
   });
 
-  it("tts-engine exposes synthesizeStream for the configured provider", async () => {
-    global.fetch = vi.fn(async () => okStreamResponse());
+  it("tts-engine exposes synthesizeStream for the default StepFun Brain provider", async () => {
+    global.fetch = vi.fn(async () => okBrainRealtimeResponse());
     const result = await synthesizeStream({
       text: "测试一句",
-      provider: "cosyvoice",
-      config: { base_url: "http://tts.local" },
+      config: { base_url: "http://brain.local" },
     });
-    expect(result.provider).toBe("cosyvoice");
+    expect(result.provider).toBe("brain-stepfun-realtime");
   });
 });
 describe("tts-bridge audio stream route", () => {
@@ -115,12 +127,13 @@ describe("tts-bridge audio stream route", () => {
     expect(res.headers.get("content-type")).toContain("audio/wav");
   });
 
-  it("returns 409 when the selected provider cannot stream", async () => {
+  it("streams the default StepFun Brain provider instead of returning a non-stream 409", async () => {
+    global.fetch = vi.fn(async () => okBrainRealtimeResponse());
     const app = new Hono();
     registerAudioRoutes(app, {
       dataDir: "",
-      config: { get: (key) => key === "provider" ? "edge" : undefined },
-      engine: { config: { voice: { tts: { provider: "edge" } } } },
+      config: { get: () => undefined },
+      engine: { config: { voice: { tts: { base_url: "http://brain.local" } } } },
       log: { warn: vi.fn() },
     });
 
@@ -129,7 +142,9 @@ describe("tts-bridge audio stream route", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ text: "hello" }),
     });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: "tts_stream_unavailable", provider: "edge" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("audio/wav");
+    expect(res.headers.get("x-lynn-tts-provider")).toBe("brain-stepfun-realtime");
+    expect(new Uint8Array(await res.arrayBuffer()).length).toBeGreaterThan(40);
   });
 });

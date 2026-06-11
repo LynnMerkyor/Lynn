@@ -11,7 +11,7 @@ import { synthesize } from "../lib/tts-engine.js";
 
 export const name = "tts_speak";
 export const description =
-  "将指定文本转为语音音频文件，保存到书桌。默认 CosyVoice 2（Spark 本地服务），支持 Edge TTS、macOS say 和 OpenAI。" +
+  "将指定文本转为语音音频文件，保存到书桌。默认通过 Lynn Brain 托管 StepFun Realtime TTS；Spark/CosyVoice、macOS say、Edge TTS 和 OpenAI 只作为 fallback 或显式选择。" +
   "适合有声书、长文朗读、定时播报等场景。";
 export const parameters = Type.Object({
   text: Type.String({ description: "要朗读的文本内容。建议不超过 3000 字；更长文本请分段调用。" }),
@@ -110,20 +110,23 @@ export async function execute(params, ctx = {}) {
   } catch {} // cleanup 失败不阻塞 TTS 生成
 
   const baseName = filename || `tts_${Date.now()}`;
-  // 当前 cosyvoice/say provider 输出 wav,edge/openai 输出 mp3 — 由 provider 内部决定真正写入格式
-  // 用 .wav 扩展名让 macOS afplay/QuickLook 直接识别(magic bytes 检测 RIFF 头)
+  // 当前 stepfun/cosyvoice/say provider 输出 wav,edge/openai 可能输出 mp3 — 由 provider 内部决定真正写入格式。
+  // 用 .wav 扩展名让 macOS afplay/QuickLook 优先按 magic bytes 识别。
   const outPath = path.join(outDir, `${baseName}.wav`);
   const metaPath = path.join(outDir, `${baseName}.json`);
 
   const engineConfig = ctx.engine?.config || {};
   const voiceConfig = engineConfig.voice?.tts || {};
   const cfg = {
-    provider: voiceConfig.provider || config?.get?.("provider") || "cosyvoice",
-    default_voice: voiceConfig.default_voice || config?.get?.("default_voice") || "中文女",
+    provider: voiceConfig.provider || config?.get?.("provider") || "stepfun-realtime",
+    default_voice: voiceConfig.default_voice || config?.get?.("default_voice") || "jingdiannvsheng",
+    base_url: voiceConfig.base_url || config?.get?.("base_url") || "",
+    timeout_ms: voiceConfig.timeout_ms || config?.get?.("timeout_ms") || 45_000,
   };
 
   const providers = [
     cfg.provider,
+    "cosyvoice",
     process.platform === "darwin" ? "say" : "",
     "edge",
   ].filter(Boolean).filter((item, index, arr) => arr.indexOf(item) === index);
@@ -173,6 +176,7 @@ export async function execute(params, ctx = {}) {
         speed,
         outPath,
         provider,
+        config: cfg,
       });
       result.fallbackFrom = provider === cfg.provider ? "" : cfg.provider;
       break;

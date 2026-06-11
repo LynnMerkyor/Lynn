@@ -2189,7 +2189,7 @@
   "error.llmTimeout": "Model request timed out",
   "error.llmRateLimited": "Model rate limited, please wait",
   "error.llmEmptyResponse": "Model returned empty response",
-  "error.llmAuthFailed": "Model authentication failed",
+  "error.llmAuthFailed": "Model authentication failed — start a new conversation; if it persists, check your model/provider settings or system clock",
   "error.llmSlowResponse": "Model is responding slowly, please wait",
   "error.fsPermission": "File permission denied",
   "error.fsNotFound": "File not found",
@@ -2285,6 +2285,28 @@
       "falseVerify": "false-verify risk",
       "evidence": "evidence",
       "escalated": "escalated"
+    }
+  },
+  "jarvis": {
+    "ariaLabel": "Lynn voice assistant",
+    "action": {
+      "start": "Realtime voice",
+      "endTurn": "Finish turn",
+      "interruptListen": "Talk over",
+      "interrupt": "Stop"
+    },
+    "state": {
+      "idle": "Tap once for continuous voice",
+      "listening": "Listening · finish turn when done",
+      "thinking": "Thinking",
+      "speaking": "Speaking the answer",
+      "degraded": "Voice service issue"
+    },
+    "hint": {
+      "idle": "Tap once for continuous voice. Lynn resumes listening after playback; stop or close to exit.",
+      "listening": "Listening now. In noisy rooms, tap Finish turn after speaking.",
+      "thinking": "Preparing the answer; playback starts automatically.",
+      "speaking": "Playing the answer. Lynn resumes listening after playback; use Talk over to interrupt."
     }
   }
 }

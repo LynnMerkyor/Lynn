@@ -25,8 +25,15 @@ import { buildMemoryContextFrameSync, handleMemorySlashCommand } from "./session
 import { resolveDataDir } from "./session/store.js";
 import { rotatingPlaceholder } from "./ink-placeholders.js";
 import { resolveDefaultBrainUrl } from "./brain-url.js";
+import { runRealtimeVoice } from "./voice-realtime.js";
+import { argsForChatVoiceLaunch, parseChatVoiceLaunchCommand, type ChatVoiceLaunch } from "./voice-command.js";
 import { createDecodeSpeedTracker } from "./decode-speed.js";
 import { terminalTuiProfile } from "./terminal-safety.js";
+
+// Set by /voice or lynn voice; consumed by runInkChat's loop to hand off to realtime voice
+// (ink must fully unmount before the voice session takes the terminal, then chat re-enters).
+let pendingVoiceLaunch: ChatVoiceLaunch | null = null;
+export { parseChatVoiceLaunchCommand as parseInkVoiceLaunchCommand } from "./voice-command.js";
 
 type Turn = {
   id: number;
@@ -53,16 +60,26 @@ export async function runInkChat(args: ParsedArgs): Promise<number> {
   const permissions = await resolveEffectivePermissions(args);
   const initialMode: ChatMode = { approval: permissions.approval, sandbox: permissions.sandbox };
   const fallbackProvider = (await resolveCliProviderProfile(args))?.profile || null;
-  const instance = render(React.createElement(InkChatApp, {
-    args,
-    brainUrl,
-    mockBrain,
-    initialReasoning,
-    initialMode,
-    fallbackProvider,
-  }));
-  await instance.waitUntilExit();
-  return 0;
+  // Loop so /voice can hand off to the realtime voice session and then re-enter chat.
+  for (;;) {
+    pendingVoiceLaunch = null;
+    const instance = render(React.createElement(InkChatApp, {
+      args,
+      brainUrl,
+      mockBrain,
+      initialReasoning,
+      initialMode,
+      fallbackProvider,
+    }));
+    await instance.waitUntilExit();
+    // cast: TS can't see that waitUntilExit() let the /voice handler mutate the module var.
+    const pending = pendingVoiceLaunch as ChatVoiceLaunch | null;
+    if (!pending) return 0;
+    pendingVoiceLaunch = null;
+    // ink has unmounted and restored the terminal; run the voice session inline, then re-render chat.
+    const voiceArgs: ParsedArgs = argsForChatVoiceLaunch(args, pending);
+    try { await runRealtimeVoice(voiceArgs, { embedded: true }); } catch { /* fall back to chat */ }
+  }
 }
 
 type Thumb = { id: number; esc: string };
@@ -345,6 +362,14 @@ async function submitInput(inputData: {
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("chat.think") }]);
     return;
   }
+  const voiceLaunch = parseChatVoiceLaunchCommand(text);
+  if (voiceLaunch) {
+    // Hand off to realtime voice: exit ink, runInkChat runs runRealtimeVoice, then re-enters chat.
+    pendingVoiceLaunch = voiceLaunch;
+    inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: "进入实时语音对话…(Ctrl+C 返回聊天)" }]);
+    inputData.appExit();
+    return;
+  }
   if (text.startsWith("/reasoning ")) {
     const result = applyReasoningCommand(inputData.reasoning, text.slice(11).trim());
     inputData.setReasoning(result.reasoning);
@@ -380,6 +405,7 @@ async function submitInput(inputData: {
       cwd: inputData.cwd,
       mode: renderMode(inputData.mode),
       reasoning: inputData.reasoning.effort,
+      question: text,
     }, localeForText(text));
     if (text.startsWith("/")) {
       inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: answer }]);

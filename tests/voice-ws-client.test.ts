@@ -49,7 +49,7 @@ class FakePcmStream {
   onPcm: ((pcm: Int16Array) => void) | null = null;
   start = vi.fn(async () => {
     this.running = true;
-    return 16000;
+    return 24000;
   });
   stop = vi.fn(() => {
     this.running = false;
@@ -130,7 +130,7 @@ describe('VoiceWsClient', () => {
     ws.open();
     await start;
 
-    const pcm = new Int16Array(1600);
+    const pcm = new Int16Array(2400);
     pcm[0] = 123;
     stream.emitPcm(pcm);
     await client.endTurn();
@@ -138,7 +138,7 @@ describe('VoiceWsClient', () => {
     const first = parseVoiceFrame(ws.sent[0] as ArrayBuffer)!;
     const second = parseVoiceFrame(ws.sent[1] as ArrayBuffer)!;
     expect(first.type).toBe(VOICE_FRAME.PCM_AUDIO);
-    expect(first.payload.byteLength).toBe(3200);
+    expect(first.payload.byteLength).toBe(4800);
     expect(second.type).toBe(VOICE_FRAME.END_OF_TURN);
     expect(stream.stop).toHaveBeenCalledTimes(1);
   });
@@ -219,6 +219,32 @@ describe('VoiceWsClient', () => {
     expect(stream.running).toBe(true);
 
     ws.receive(makeVoiceFrame(VOICE_FRAME.STATE_CHANGE, 1, new TextEncoder().encode('thinking')));
+
+    expect(stream.stop).toHaveBeenCalledTimes(1);
+    expect(stream.running).toBe(false);
+  });
+
+  it('stops capture while assistant speech is playing to avoid self-transcription', async () => {
+    FakeWebSocket.instances = [];
+    const stream = new FakePcmStream();
+    const player = new FakePcmPlayer();
+    const client = new VoiceWsClient({
+      url: 'ws://unit.test/voice-ws',
+      websocketCtor: FakeWebSocket,
+      pcmPlayer: player,
+      pcmStreamFactory: (opts) => {
+        stream.onPcm = opts.onPcm;
+        return stream;
+      },
+    });
+
+    const start = client.startListening();
+    const ws = FakeWebSocket.instances.at(-1)!;
+    ws.open();
+    await start;
+    expect(stream.running).toBe(true);
+
+    ws.receive(makeVoiceFrame(VOICE_FRAME.STATE_CHANGE, 1, new TextEncoder().encode('speaking')));
 
     expect(stream.stop).toHaveBeenCalledTimes(1);
     expect(stream.running).toBe(false);

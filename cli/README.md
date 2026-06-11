@@ -1,6 +1,6 @@
 # @lynn/cli
 
-Terminal and worker-runner interface for Lynn v0.84.0.
+Terminal and worker-runner interface for Lynn v0.84.1.
 
 This package is intentionally thin. It handles terminal UX, worker JSONL, local
 file/shell orchestration, and headless agent contracts. Model routing defaults
@@ -9,6 +9,11 @@ to Lynn Brain: local Brain when available, otherwise hosted Brain at
 StepFun 3.7 Flash (256K context, high reasoning, 48K reasoning/generation
 budget). Users can still configure a private OpenAI-compatible BYOK endpoint
 with `Lynn providers set`.
+
+Voice follows the same primary-chain rule: inside the `Lynn` chat, `/voice` and
+`lynn voice` open the Brain-hosted StepFun Realtime conversation in place with a
+live waveform. File/record transcription and `--speak` TTS are auxiliary
+utilities, not the main voice experience.
 
 ## Quick start
 
@@ -30,7 +35,7 @@ winget install OpenJS.NodeJS.LTS
 Install from the Lynn Tencent mirror:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz"
 ```
 
 The package installs the `Lynn` command. If you installed an older preview that
@@ -40,7 +45,7 @@ shim during global install before creating the `Lynn` command.
 Start here after installing:
 
 ```bash
-Lynn                 # interactive chat TUI
+Lynn                 # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code            # coding-agent TUI
 Lynn agents          # copyable headless / Fleet commands for other agents
 ```
@@ -49,7 +54,7 @@ If npm dependency downloads are slow in mainland China, keep the Lynn tarball UR
 as-is and add a registry mirror for third-party dependencies:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz" \
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz" \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -57,7 +62,7 @@ Release maintainers can smoke-test the exact CDN tarball before inviting
 external testers:
 
 ```bash
-LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz" \
+LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz" \
   npm run test:cli-install:remote
 ```
 
@@ -97,6 +102,9 @@ When another agent asks what Lynn CLI does locally, the concise answer is:
   `Lynn -p`, `Lynn code`, and Fleet worker mode share the same route discipline.
 - Default routing for ordinary chat and code execution is StepFun 3.7 Flash.
   Explicit manager experiments stay behind `Lynn manager run`.
+- Default voice starts inside the `Lynn` chat: `/voice` and `lynn voice` both
+  enter Brain-hosted StepFun Realtime with live mic and waveform. File,
+  record, and speak flags remain available only for ASR/TTS utility workflows.
 - Local runtime features include stable-prefix layering for prefix-cache hits,
   rolling decode TPS and prefix-cache telemetry, automatic context compaction,
   tool ledgers for chained work, checkpoint/resume, finish gates, workspace
@@ -174,7 +182,7 @@ Agent quick contract:
 # Requires Node.js 20 LTS or 22 LTS with npm.
 
 # Install/update.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz"
 
 # Human launch commands.
 Lynn

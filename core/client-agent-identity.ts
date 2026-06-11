@@ -95,7 +95,7 @@ export function buildClientAgentMetadata(agentKey: unknown): ClientAgentMetadata
 }
 
 export function resolveLynnHome(): string {
-  const raw = process.env.LYNN_HOME || process.env.HANA_HOME || "";
+  const raw = process.env.LYNN_HOME || "";
   if (raw) {
     return path.resolve(raw.replace(/^~/, os.homedir()));
   }

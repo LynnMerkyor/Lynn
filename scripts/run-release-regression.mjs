@@ -292,6 +292,13 @@ async function runStaticChecks({ level }) {
         String(manifest.stable.assets["darwin-arm64"] || ""),
       ));
       checks.push(makeCheck(
+        "static-manifest-windows-x64-name",
+        "blocker",
+        String(manifest.stable.assets["win32-x64"] || "").includes(`Lynn-${version}-Windows-Setup.exe`),
+        "manifest win32-x64 URL matches the signed electron-builder artifact name",
+        String(manifest.stable.assets["win32-x64"] || ""),
+      ));
+      checks.push(makeCheck(
         "static-manifest-no-legacy-macos-name",
         "blocker",
         !assetUrls.some((url) => /Apple-Silicon|macOS-Intel/.test(url)),

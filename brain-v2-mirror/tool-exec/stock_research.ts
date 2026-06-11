@@ -115,7 +115,10 @@ print(json.dumps(result, ensure_ascii=False, default=str))
 `;
 
   try {
-    const tmpScript = '/tmp/tushare_query_' + Date.now() + '.py';
+    // pid + time + random: the router runs tool calls in parallel, so a Date.now()-only name
+    // can collide between two concurrent stock_research calls (one overwrites/deletes the
+    // other's script → wrong-stock data or a spurious failure).
+    const tmpScript = '/tmp/tushare_query_' + process.pid + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10) + '.py';
     fs.writeFileSync(tmpScript, script, 'utf-8');
     const raw = execSync('python3 ' + tmpScript, { encoding: 'utf8', timeout: 30000 });
     try { fs.unlinkSync(tmpScript); } catch {}

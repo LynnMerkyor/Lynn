@@ -23,10 +23,11 @@ function resolveVoiceConfig(ctx) {
   const engineConfig = ctx.engine?.config || {};
   const voiceConfig = engineConfig.voice?.tts || {};
   return {
-    provider: voiceConfig.provider || ctx.config?.get?.("provider") || "cosyvoice",
-    default_voice: voiceConfig.default_voice || ctx.config?.get?.("default_voice") || "中文女",
+    provider: voiceConfig.provider || ctx.config?.get?.("provider") || "stepfun-realtime",
+    default_voice: voiceConfig.default_voice || ctx.config?.get?.("default_voice") || "jingdiannvsheng",
     base_url: voiceConfig.base_url || ctx.config?.get?.("base_url") || "",
     api_key: voiceConfig.api_key || ctx.config?.get?.("api_key") || "",
+    timeout_ms: voiceConfig.timeout_ms || ctx.config?.get?.("timeout_ms") || 45_000,
   };
 }
 
@@ -66,10 +67,7 @@ export default function registerAudioRoutes(app, ctx) {
     if (!text) return c.json({ error: "tts_stream_empty_text" }, 400);
 
     const voiceConfig = resolveVoiceConfig(ctx);
-    const provider = voiceConfig.provider || "cosyvoice";
-    if (provider !== "cosyvoice") {
-      return c.json({ error: "tts_stream_unavailable", provider }, 409);
-    }
+    const provider = voiceConfig.provider || "stepfun-realtime";
 
     try {
       const speechText = await normalizeSpeechText(text).then((value) => String(value || "").slice(0, 3000));

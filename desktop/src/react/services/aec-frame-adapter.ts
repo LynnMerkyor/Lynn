@@ -6,7 +6,7 @@
  * mechanical split/merge at the browser boundary.
  */
 
-export const AEC_SAMPLE_RATE = 16000;
+export const AEC_SAMPLE_RATE = 24000;
 export const AEC_FRAME_MS = 10;
 export const AEC_SAMPLES_PER_FRAME = (AEC_SAMPLE_RATE * AEC_FRAME_MS) / 1000;
 

@@ -301,6 +301,7 @@ async function renderCodeLocalRuntimeAnswer(
     cwd: cwd(args),
     mode: renderMode(mode),
     reasoning: reasoning.effort,
+    question: text,
   }, localeForText(text));
 }
 

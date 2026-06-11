@@ -13,10 +13,12 @@ import { isLocalRuntimeQuestion, localeForText, renderLocalRuntimeAnswer } from 
 import { chatRouteLabel } from "./chat.js";
 import { resolveDefaultBrainUrl } from "../brain-url.js";
 import { completeJsonBoundary } from "../json-boundary.js";
+import { mergePromptAndVoice, transcribeVoiceInput } from "../voice-client.js";
 
 export interface PromptOptions {
   json?: boolean;
   mockBrain?: boolean;
+  onAssistantComplete?: (text: string) => void | Promise<void>;
 }
 
 export function resolvePrompt(args: ParsedArgs): string {
@@ -34,8 +36,10 @@ export function mergePromptAndStdin(prompt: string, stdinText: string): string {
 
 export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): Promise<number> {
   const rawPrompt = resolvePrompt(args);
-  const stdinText = await readPromptStdin(rawPrompt);
-  const prompt = mergePromptAndStdin(rawPrompt, stdinText);
+  const voice = await transcribeVoiceInput(args);
+  const promptSeed = voice ? mergePromptAndVoice(rawPrompt, voice.text) : rawPrompt;
+  const stdinText = await readPromptStdin(rawPrompt.trim() === "-" ? rawPrompt : promptSeed);
+  const prompt = mergePromptAndStdin(promptSeed, stdinText);
   if (!prompt) {
     throw new Error("prompt is required");
   }
@@ -50,6 +54,14 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   const stopAtJson = !!options.json && hasFlag(args.flags, "stop-at-json", "json-boundary-stop");
 
   if (options.json) {
+    if (voice) {
+      writeJsonLine({
+        type: "voice.transcript",
+        ts: nowIso(),
+        text: voice.text,
+        provider: voice.provider,
+      });
+    }
     writeJsonLine({ type: "run.started", ts: nowIso(), prompt, reasoning, ...(imagePaths.length ? { images: imagePaths } : {}) });
   }
 
@@ -59,6 +71,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       brainUrl,
       cwd: process.cwd(),
       reasoning: reasoning.effort,
+      question: prompt,
     }, localeForText(prompt));
     if (options.json) {
       writeJsonLine({ type: "assistant.delta", ts: nowIso(), text });
@@ -70,6 +83,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: process.cwd(), title, prompt, assistant: text, modelProvider: "lynn-cli", modelId: "local-runtime" });
       if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
     }
+    await options.onAssistantComplete?.(text);
     return 0;
   }
 
@@ -85,6 +99,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: process.cwd(), title, prompt, assistant: text, modelProvider: "mock", modelId: "mock-brain" });
       if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
     }
+    await options.onAssistantComplete?.(text);
     return 0;
   }
 
@@ -261,6 +276,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
     const summary = lastUsage ? summarizeUsage(lastUsage, { durationMs: Date.now() - startedAt }) : null;
     if (summary) process.stderr.write(`usage: ${summary}\n`);
   }
+  await options.onAssistantComplete?.(assistant);
   return 0;
 }
 

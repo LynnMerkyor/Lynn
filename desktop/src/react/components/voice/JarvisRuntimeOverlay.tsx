@@ -11,7 +11,7 @@ import { IncrementalTtsSegmenter } from '../../services/incremental-tts-segmente
 import styles from './JarvisRuntimeOverlay.module.css';
 
 export const LYNN_RUNTIME_DISPLAY_NAME = 'Lynn';
-export const LYNN_RUNTIME_ARIA_LABEL = 'Lynn Runtime';
+export const LYNN_RUNTIME_ARIA_LABEL = 'Lynn 语音助手';
 
 type JarvisAction = 'start' | 'end-turn' | 'interrupt-listen' | 'interrupt';
 
@@ -41,6 +41,8 @@ const INITIAL_STATUS: JarvisStatus = {
   playbackStats: null,
 };
 
+const AUTO_RESUME_AFTER_SPEECH_MS = 1200;
+
 export function resolveJarvisPrimaryAction(state: VoiceState | string): JarvisAction {
   if (state === VOICE_STATE.LISTENING) return 'end-turn';
   if (state === VOICE_STATE.SPEAKING) return 'interrupt-listen';
@@ -48,34 +50,50 @@ export function resolveJarvisPrimaryAction(state: VoiceState | string): JarvisAc
   return 'start';
 }
 
+export function shouldAutoResumeVoiceListening(previous: VoiceState | string, next: VoiceState | string, enabled: boolean): boolean {
+  return enabled && previous === VOICE_STATE.SPEAKING && next === VOICE_STATE.IDLE;
+}
+
+function tr(key: string, fallback: string): string {
+  const value = typeof window === 'undefined'
+    ? undefined
+    : (window as { t?: (key: string) => string }).t?.(key);
+  return value && value !== key ? value : fallback;
+}
+
 export function jarvisPrimaryLabel(action: JarvisAction): string {
-  const tt = typeof window === 'undefined' ? undefined : (window as { t?: (key: string) => string }).t;
   switch (action) {
     case 'end-turn':
-      return tt?.('jarvis.action.endTurn') || '完成';
+      return tr('jarvis.action.endTurn', '完成本轮');
     case 'interrupt-listen':
-      return tt?.('jarvis.action.interruptListen') || '插话';
+      return tr('jarvis.action.interruptListen', '插话');
     case 'interrupt':
-      return tt?.('jarvis.action.interrupt') || '中断';
+      return tr('jarvis.action.interrupt', '停止');
     default:
-      return tt?.('jarvis.action.start') || '开始';
+      return tr('jarvis.action.start', '实时对话');
   }
 }
 
 function stateLabel(state: VoiceState | string): string {
-  const tt = typeof window === 'undefined' ? undefined : (window as { t?: (key: string) => string }).t;
   switch (state) {
     case VOICE_STATE.LISTENING:
-      return tt?.('jarvis.state.listening') || '正在听';
+      return tr('jarvis.state.listening', '正在听 · 说完点完成本轮');
     case VOICE_STATE.THINKING:
-      return tt?.('jarvis.state.thinking') || '思考中';
+      return tr('jarvis.state.thinking', '思考中');
     case VOICE_STATE.SPEAKING:
-      return tt?.('jarvis.state.speaking') || '正在说';
+      return tr('jarvis.state.speaking', '正在用语音回答');
     case VOICE_STATE.DEGRADED:
-      return tt?.('jarvis.state.degraded') || '主链异常';
+      return tr('jarvis.state.degraded', '语音服务异常');
     default:
-      return tt?.('jarvis.state.idle') || '待机';
+      return tr('jarvis.state.idle', '安静环境点实时对话');
   }
+}
+
+function modeHint(state: VoiceState | string): string {
+  if (state === VOICE_STATE.LISTENING) return tr('jarvis.hint.listening', '正在听；嘈杂环境说完点“完成本轮”。');
+  if (state === VOICE_STATE.SPEAKING) return tr('jarvis.hint.speaking', '正在朗读回答，结束后会自动继续听；点“插话”可打断。');
+  if (state === VOICE_STATE.THINKING) return tr('jarvis.hint.thinking', '正在组织回答，完成后会直接语音播报。');
+  return tr('jarvis.hint.idle', '点一次进入连续语音；播报结束会自动继续听，点停止/关闭退出。');
 }
 
 function formatEmotion(value: unknown): string | null {
@@ -133,8 +151,8 @@ function clampActivityLevel(value: number): number {
  */
 // #32: voice prompt prefix — language-aware (was: hardcoded Chinese)
 // English speakers were getting a Chinese system instruction prepended invisibly.
-const VOICE_PROMPT_PREFIX_ZH = "[语音对话·短答口语化无markdown·有工具直接执行不展开候选] ";
-const VOICE_PROMPT_PREFIX_EN = "[Voice mode · short conversational answer · no markdown · execute tools directly without listing candidates] ";
+const VOICE_PROMPT_PREFIX_ZH = "[语音模式·你是Lynn·直接回答用户问题·短答口语化·无markdown·有工具直接执行] ";
+const VOICE_PROMPT_PREFIX_EN = "[Voice mode · you are Lynn · answer directly · short conversational answer · no markdown · execute tools directly] ";
 
 function resolveVoicePrefix(): string {
   try {
@@ -178,6 +196,20 @@ export function JarvisRuntimeOverlay() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<JarvisStatus>(INITIAL_STATUS);
   const clientRef = useRef<VoiceWsClient | null>(null);
+  // 2026-06-11: voice transport mode. 'realtime' = StepFun Realtime full-duplex (primary).
+  // On a DEGRADED frame we first RECONNECT realtime (the brain session reconnects cleanly —
+  // verified e2e); only after REALTIME_MAX_RETRIES consecutive failures do we flip to 'chat'
+  // (the DGX ASR→model→TTS fallback). A healthy SPEAKING frame resets the retry counter.
+  const voiceModeRef = useRef<'realtime' | 'chat'>('realtime');
+  const realtimeRetryRef = useRef(0);
+  // Set when the user hits 停止/× so an in-flight DEGRADED can't auto-reconnect and resurrect the
+  // session (that race made the overlay "refuse to close"). Cleared on the next explicit start.
+  const userStoppedRef = useRef(false);
+  const degradeFallbackRef = useRef<(() => void) | null>(null);
+  const autoContinueRef = useRef(false);
+  const latestStateRef = useRef<VoiceState | string>(INITIAL_STATUS.state);
+  const previousStateRef = useRef<VoiceState | string>(INITIAL_STATUS.state);
+  const autoResumeTimerRef = useRef<number | null>(null);
   const pendingVoiceTurnRef = useRef<{
     transcript: string;
     sessionPath: string | null;
@@ -224,7 +256,10 @@ export function JarvisRuntimeOverlay() {
     const client = new VoiceWsClient({
       port,
       token,
-      mode: 'chat',
+      // 2026-06-11: StepFun Realtime full-duplex (mode='realtime', Brain-hosted shared key) is the
+      // primary path; voiceModeRef flips to 'chat' (DGX ASR→model→TTS) after repeated failures. The
+      // server's /voice-ws route maps mode→RealtimeVoiceSession|VoiceSession.
+      mode: voiceModeRef.current,
       onOpen: () => setStatus((s) => ({ ...s, error: null })),
       onClose: () => {
         pendingVoiceTurnRef.current = null;
@@ -235,13 +270,23 @@ export function JarvisRuntimeOverlay() {
         setStatus((s) => ({ ...s, error: message }));
         addToast(`${LYNN_RUNTIME_DISPLAY_NAME} 语音连接失败：${message}`, 'error', 4000, { dedupeKey: 'jarvis-runtime-error' });
       },
-      onState: (state) => setStatus((s) => ({
-        ...s,
-        state: pendingVoiceTurnRef.current && state === VOICE_STATE.IDLE ? s.state : state,
-        error: null,
-      })),
+      onState: (state) => {
+        // A healthy turn (assistant speaking, or a reconnected session reaching LISTENING) means
+        // realtime is viable → clear the retry budget so transient blips don't accrue toward DGX.
+        if (state === VOICE_STATE.SPEAKING || state === VOICE_STATE.LISTENING) realtimeRetryRef.current = 0;
+        // Realtime engine reported DEGRADED → reconnect realtime first, DGX only as last resort.
+        if (state === VOICE_STATE.DEGRADED && voiceModeRef.current === 'realtime') {
+          degradeFallbackRef.current?.();
+          return;
+        }
+        setStatus((s) => ({
+          ...s,
+          state: pendingVoiceTurnRef.current && state === VOICE_STATE.IDLE && s.state !== VOICE_STATE.SPEAKING ? s.state : state,
+          error: null,
+        }));
+      },
       onTranscriptPartial: (text) => setStatus((s) => ({ ...s, transcript: text })),
-      onTranscriptFinal: (text) => {
+	      onTranscriptFinal: (text) => {
         const transcript = text.trim();
         setStatus((s) => ({ ...s, transcript }));
         if (!transcript) return;
@@ -337,14 +382,17 @@ export function JarvisRuntimeOverlay() {
           const message = err instanceof Error ? err.message : String(err);
           setStatus((s) => ({ ...s, state: VOICE_STATE.DEGRADED, error: `语音转聊天失败：${message}` }));
         });
-      },
-      onAssistantReply: (text) => setStatus((s) => ({ ...s, assistantReply: text })),
+	      },
+	      onAssistantReply: (text) => setStatus((s) => ({ ...s, assistantReply: text })),
       onEmotion: (emotion) => setStatus((s) => ({ ...s, emotion: formatEmotion(emotion) })),
       onHealth: (health) => setStatus((s) => ({ ...s, health })),
       onStats: (stats) => setStatus((s) => ({ ...s, stats })),
       onCaptureStats: (captureStats) => setStatus((s) => ({ ...s, captureStats })),
       onPlaybackStats: (playbackStats) => setStatus((s) => ({ ...s, playbackStats })),
-      stopCaptureOnEndTurn: true,
+	      // realtime duplex: StepFun server-VAD owns turn boundaries, so an accidental "end turn"
+	      // tap must NOT stop the continuous mic stream (it would silently go deaf). chat/PTT keeps
+	      // the original stop-on-end-turn behavior.
+      stopCaptureOnEndTurn: voiceModeRef.current !== 'realtime',
     });
     clientRef.current = client;
     return client;
@@ -364,10 +412,10 @@ export function JarvisRuntimeOverlay() {
     const assistants = assistantMessages(currentChatItems);
     if (assistants.length <= pending.assistantBaseline) return;
     const latestAssistant = assistants[assistants.length - 1];
-    const speechText = extractAssistantSpeechText(latestAssistant);
-    if (!speechText || speechText === pending.spokenText) return;
-    pending.spokenText = speechText;
-    pendingVoiceTurnRef.current = null;
+	    const speechText = extractAssistantSpeechText(latestAssistant);
+	    if (!speechText || speechText === pending.spokenText) return;
+	    pending.spokenText = speechText;
+	    pendingVoiceTurnRef.current = null;
     setStatus((s) => ({ ...s, assistantReply: speechText, state: VOICE_STATE.SPEAKING, error: null }));
     void ensureClient().then((client) => client.speakText(speechText)).catch((err) => {
       const message = err instanceof Error ? err.message : String(err);
@@ -376,7 +424,9 @@ export function JarvisRuntimeOverlay() {
   }, [currentChatItems, currentSessionPath, ensureClient, isStreaming]);
 
   const startListening = useCallback(async () => {
-    pendingVoiceTurnRef.current = null;
+	    autoContinueRef.current = true;
+	    userStoppedRef.current = false; // explicit (re)start clears the stop guard
+	    pendingVoiceTurnRef.current = null;
     tearDownIncremental('reset');
     setBusy(true);
     setOpen(true);
@@ -397,16 +447,16 @@ export function JarvisRuntimeOverlay() {
         ...s,
         state: VOICE_STATE.DEGRADED,
         inputMode: null,
-        error: `Spark 语音主链不可用：${message}`,
+        error: `语音服务不可用：${message}`,
       }));
-      addToast(`${LYNN_RUNTIME_DISPLAY_NAME} 语音主链不可用：${message}`, 'error', 5000, { dedupeKey: 'jarvis-runtime-start' });
+      addToast(`${LYNN_RUNTIME_DISPLAY_NAME} 语音服务不可用：${message}`, 'error', 5000, { dedupeKey: 'jarvis-runtime-start' });
     } finally {
       setBusy(false);
     }
   }, [addToast, ensureClient, tearDownIncremental]);
 
-  const startListeningAfterInterrupt = useCallback(async () => {
-    pendingVoiceTurnRef.current = null;
+	  const startListeningAfterInterrupt = useCallback(async () => {
+	    pendingVoiceTurnRef.current = null;
     tearDownIncremental('interrupt');
     setOpen(true);
     setStatus((s) => ({ ...s, error: null }));
@@ -421,7 +471,7 @@ export function JarvisRuntimeOverlay() {
         ...s,
         state: VOICE_STATE.DEGRADED,
         inputMode: null,
-        error: `Spark 语音主链不可用：${message}`,
+        error: `语音服务不可用：${message}`,
       }));
       addToast(`${LYNN_RUNTIME_DISPLAY_NAME} 插话启动失败：${message}`, 'error', 5000, { dedupeKey: 'jarvis-runtime-interrupt-start' });
     }
@@ -454,6 +504,9 @@ export function JarvisRuntimeOverlay() {
     //   ② listenAfter=true → fire-and-forget 启 mic,不阻塞 setBusy(false)
     pendingVoiceTurnRef.current = null;
     tearDownIncremental('interrupt');
+    // 停止 (listenAfter=false): also stop the mic. In realtime duplex the stream keeps feeding
+    // StepFun otherwise, so it would keep replying and the session would "refuse to stop".
+    if (!listenAfter) { autoContinueRef.current = false; userStoppedRef.current = true; clientRef.current?.stopCapture?.(); }
     setBusy(true);
     try {
       await clientRef.current?.interrupt();
@@ -474,14 +527,68 @@ export function JarvisRuntimeOverlay() {
   }, [startListeningAfterInterrupt, tearDownIncremental]);
 
   const close = useCallback(() => {
+    autoContinueRef.current = false;
+    userStoppedRef.current = true; // block any in-flight degrade reconnect from reopening
+    if (autoResumeTimerRef.current !== null) {
+      window.clearTimeout(autoResumeTimerRef.current);
+      autoResumeTimerRef.current = null;
+    }
     pendingVoiceTurnRef.current = null;
     tearDownIncremental('reset');
     clientRef.current?.destroy();
     clientRef.current = null;
+    voiceModeRef.current = 'realtime'; // fresh open retries the realtime primary
+    realtimeRetryRef.current = 0;
     setStatus(INITIAL_STATUS);
     setOpen(false);
     setBusy(false);
   }, [tearDownIncremental]);
+
+  // Wire the degrade recovery. Defined after startListening so the ref breaks the
+  // ensureClient↔startListening dependency cycle. The brain realtime session reconnects cleanly
+  // (verified e2e: reconnect + same-session continuation both work), so a DEGRADED frame first
+  // RECONNECTS realtime; only after REALTIME_MAX_RETRIES consecutive failures (the counter is
+  // cleared by a healthy SPEAKING frame) do we fall back to the DGX 'chat' pipeline.
+  useEffect(() => {
+    const REALTIME_MAX_RETRIES = 5;
+    degradeFallbackRef.current = () => {
+      if (userStoppedRef.current) return; // user hit 停止/×; do not resurrect the session
+      if (voiceModeRef.current !== 'realtime') return; // already on DGX → onState renders degraded
+      try { clientRef.current?.destroy(); } catch { /* ignore */ }
+      clientRef.current = null;
+      if (realtimeRetryRef.current >= REALTIME_MAX_RETRIES) {
+        voiceModeRef.current = 'chat';
+        addToast(`${LYNN_RUNTIME_DISPLAY_NAME} 实时语音多次中断，已切换备用引擎`, 'warning', 4000, { dedupeKey: 'jarvis-runtime-fallback' });
+      } else {
+        // Silent reconnect — a healthy LISTENING/SPEAKING frame resets the count, so transient
+        // idle-closes recover transparently without toast spam.
+        realtimeRetryRef.current += 1;
+      }
+      void startListening().catch(() => { /* startListening sets its own DEGRADED UI */ });
+    };
+  }, [addToast, startListening]);
+
+  useEffect(() => {
+    const previous = previousStateRef.current;
+    latestStateRef.current = status.state;
+    previousStateRef.current = status.state;
+    if (!open || !shouldAutoResumeVoiceListening(previous, status.state, autoContinueRef.current)) return;
+    if (autoResumeTimerRef.current !== null) window.clearTimeout(autoResumeTimerRef.current);
+    autoResumeTimerRef.current = window.setTimeout(() => {
+      autoResumeTimerRef.current = null;
+      if (!open || !autoContinueRef.current || latestStateRef.current !== VOICE_STATE.IDLE) return;
+      void startListening().catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        setStatus((s) => ({ ...s, state: VOICE_STATE.DEGRADED, inputMode: null, error: `自动续听失败：${message}` }));
+      });
+    }, AUTO_RESUME_AFTER_SPEECH_MS);
+    return () => {
+      if (autoResumeTimerRef.current !== null) {
+        window.clearTimeout(autoResumeTimerRef.current);
+        autoResumeTimerRef.current = null;
+      }
+    };
+  }, [open, startListening, status.state]);
 
   const handlePrimary = useCallback(async () => {
     const action = resolveJarvisPrimaryAction(status.state);
@@ -539,7 +646,7 @@ export function JarvisRuntimeOverlay() {
   const activityLevel = status.state === VOICE_STATE.LISTENING
     ? clampActivityLevel((status.captureStats?.avgAmplitude || 0) * 18)
     : status.state === VOICE_STATE.SPEAKING
-      ? clampActivityLevel((status.playbackStats?.queueSamples || 0) / 16000)
+      ? clampActivityLevel((status.playbackStats?.queueSamples || 0) / 24000)
       : status.state === VOICE_STATE.THINKING
         ? 0.45
         : 0;
@@ -602,6 +709,7 @@ export function JarvisRuntimeOverlay() {
         ))}
       </div>
 
+      <div className={styles.modeHint}>{modeHint(status.state)}</div>
       {status.error && <div className={styles.error}>{status.error}</div>}
     </section>
   );

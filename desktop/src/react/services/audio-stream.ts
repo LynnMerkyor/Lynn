@@ -1,12 +1,16 @@
 /**
  * audio-stream.ts — Lynn V0.79 Jarvis Runtime,客户端 PCM 采集
  *
- * 用 AudioWorklet(`/workers/pcm-recorder.worklet.js`)采集 16kHz Int16 PCM,
+ * 用 AudioWorklet(`/workers/pcm-recorder.worklet.js`)采集 24kHz Int16 PCM,
  * 通过 callback 推到上层(VoiceWS client 等)。
  *
  * Phase 1 范围:基础采集 + WS frame 协议
  * Phase 2 集成:接 native AEC module(`window.platform.aecCreate`),
  *               TTS 播放期 ref signal 喂 AEC,清掉自回声后再发 WS
+ *
+ * Browser AEC constraints follow the same product direction as StepFun's
+ * Step-Realtime-CLI BrowserAudioDriver (MIT, see NOTICE): capture and playback
+ * stay in the browser stack whenever possible so Chrome/WebKit AEC can work.
  *
  * AEC 三档体验承诺(参考 docs/PLAN-v0.79-JARVIS-MODE.md v2.3):
  *   Tier 1 全双工:有 native AEC,echoCancellation: false 浏览器
@@ -24,7 +28,7 @@ export interface PcmStats {
 }
 
 export interface PcmStreamOptions {
-  /** 采集回调:每 100ms 一个 chunk(1600 samples @ 16kHz Int16) */
+  /** 采集回调:每 100ms 一个 chunk(2400 samples @ 24kHz Int16) */
   onPcm: (pcm: Int16Array) => void;
   /** 统计回调:每秒一次 */
   onStats?: (stats: PcmStats) => void;
@@ -71,7 +75,7 @@ export class PcmStream {
           echoCancellation: this.opts.echoCancellation ?? true,
           noiseSuppression: this.opts.noiseSuppression ?? true,
           autoGainControl: this.opts.autoGainControl ?? true,
-          sampleRate: 16000, // hint, not enforced
+          sampleRate: 24000, // hint, not enforced; StepFun Realtime native rate
           channelCount: 1,
         },
       });

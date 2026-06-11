@@ -6,13 +6,13 @@
 
 <h1 align="center">Lynn</h1>
 
-<p align="center"><strong>GUI 指挥台 · CLI Worker Fleet · StepFun 默认主链 · 长期记忆</strong></p>
+<p align="center"><strong>GUI 指挥台 · CLI Worker Fleet · StepFun 默认主链 · 实时语音 · 长期记忆</strong></p>
 <p align="center">开源桌面 AI Agent:用 GUI 指挥台并行调度多个代码 CLI(Codex / Claude / Qwen…),编程 / 研究 / 业务同台可视化编排——不是又一个聊天框,而是多 CLI 编排台</p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.84.0-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.84.0-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.84.1-brightgreen" alt="App Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.84.1-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -23,9 +23,11 @@
 
 ## 🧠 第一部分 · 引擎与模型
 
-### ① StepFun 默认主链 + 本地编排器储备
+### ① StepFun 默认主链 + 实时语音 + 本地编排器储备
 
 v0.84 的 GUI / CLI 默认对话与任务执行统一走 **StepFun 3.7 Flash**:优先保证普通对话能回复、工具任务能完成、最终答案可见。本地蒸馏 A3B manager 仍作为显式 `Lynn manager run` 能力保留;考虑本地部署的并发能力与稳定性,默认切换到本地编排器继续暂缓。
+
+语音主入口同样走 **Brain 托管 StepFun Realtime**:GUI 麦克风直接进入实时语音;CLI 在当前 `Lynn` chat 里输入 `/voice` 或 `lynn voice` 会就地切到实时语音,状态和采样波形显示在聊天框下方,`Ctrl+C` 返回聊天。`Lynn voice --file/--record` 转写、`Lynn voice --speak` 朗读保存只是辅助工具,不再作为语音主体验。
 
 我们同时储备了一个会**快速 拆分 → 分派 → 验收**任务的本地编排器模型:用 LoRA（**r=64 / α=128 / dropout 0.05**,**1842 条蒸馏样本**)把 **DeepSeek-V4-Pro 在「思考开启(thinking-on)」时的多步推理与自我验证思维方式**蒸进 **Qwen3.6-35B-A3B**(MoE,3B 激活)。
 
@@ -100,16 +102,16 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz"
 
 # 3. Launch.
-Lynn            # interactive chat TUI
+Lynn            # interactive chat TUI; 输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.84.0
+Lynn --version  # should print 0.84.1
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
-默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到 Lynn 远端 Brain。v0.84 的 GUI/CLI 普通对话与任务执行统一回到 **StepFun 3.7 Flash(256K 上下文,high 推理,48K 推理/生成预算)** 一条龙主链,优先保证能正常对话、能完成工具任务、能给出最终答案。视觉由 StepFun `step-1o-turbo-vision` 承接;本地 manager 作为显式 `Lynn manager run` 实验链路保留,不会抢占默认 GUI/CLI 路径。纯 CLI 用户也可以用 `Lynn providers set ...` 绑定自己的 OpenAI 兼容端点。
+默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到 Lynn 远端 Brain。v0.84 的 GUI/CLI 普通对话与任务执行统一回到 **StepFun 3.7 Flash(256K 上下文,high 推理,48K 推理/生成预算)** 一条龙主链,优先保证能正常对话、能完成工具任务、能给出最终答案。视觉由 StepFun `step-1o-turbo-vision` 承接;语音由 Brain 托管 **StepFun Realtime** 承接,CLI 当前 chat 内 `/voice` / `lynn voice` 与 GUI 麦克风默认就是实时语音对话。本地 manager 作为显式 `Lynn manager run` 实验链路保留,不会抢占默认 GUI/CLI 路径。纯 CLI 用户也可以用 `Lynn providers set ...` 绑定自己的 OpenAI 兼容端点。
 
 长任务默认采用 Reasonix 风格的**前置缓存纪律**:稳定前缀、工具定义、运行时约束和 resume 摘要分层固定,避免每轮重排导致 prefix drift;缓存命中以 `prefix-cache ... hit` 进入 usage、session、replay 和 `Lynn cache doctor --json`,不在界面里制造上下文焦虑。
 
@@ -151,22 +153,24 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 ## 🆕 近期更新
 
 <details>
-<summary><strong>Lynn v0.84.0</strong> · 2026-06-10 · StepFun 默认主链 + GUI 空答修复 <em>(最新)</em></summary>
+<summary><strong>Lynn v0.84.1</strong> · 2026-06-12 · StepFun 默认主链 + 实时语音 + GUI 空答修复 <em>(最新)</em></summary>
 
 **GUI 与 CLI 同步发版**:
 - ⚡ **StepFun 3.7 Flash 默认主链**:普通 GUI/CLI 对话、`Lynn -p` 和编码执行默认走 StepFun 3.7 Flash,不再让实验性 manager 抢占默认回答路径。
+- 🎙️ **实时语音主入口**:GUI 麦克风与 CLI 当前 chat 内 `/voice` / `lynn voice` 默认走 Brain 托管 StepFun Realtime 连续对话;CLI 在聊天框下方显示状态与采样波形。ASR 转写、录一句和 TTS 保存作为辅助命令保留。
 - 🩹 **GUI 空答修复**:旧会话复用过期设备签名时会自动刷新签名;工具链最终答案晚到时不再被 8 秒硬关流吞掉。
 - 🧠 **reasoning-only 空答重试**:Brain 在源头识别“只有思考、没有可见正文”的响应并重试,减少“思考完但不说话”。
 - 🔧 **工具 turn 收口更诚实**:工具完成后如果还在等待模型最终答复,显示事实性的工具完成状态,不静默关闭、不伪造本地总结。
 - 📊 **GUI token/cost pipeline**:SDK usage → WebSocket → store → 输入行 chip 打通,桌面端能长期显示会话 token/cost 状态。
 - 🧭 **Fleet 可发现性与验收面板**:桌面端增加 Fleet 入口和 acceptance panel,便于调度黑灯工厂 worker。
-- 🧪 **Issue #72 回归门禁**:新增 headless GUI 启动恢复门禁、CLI 真任务门禁、release SOP 和文档漂移检查,覆盖 legacy memory db、Hanako/OpenHanako 冲突和“能启动但不能对话”的回归。
+- 🧪 **Issue #72/#74 数据隔离与自愈**:Lynn 默认不再读取/迁移 `~/.hanako`;只有显式设置 `LYNN_IMPORT_HANAKO_ON_FIRST_RUN=1` 才导入。已被旧版污染的 `~/.lynn` 会在启动时把已下线 MiMo/TokenPlan 模型引用修回 Brain 默认路由,同时保留用户 API key。
+- 🛡️ **安全与 BUG 修复附带**:设备签名刷新、工具 turn 收口、reasoning-only 空答重试、Fleet 验收面板和发布门禁随本版一起落地。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.0)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.1)
 
 </details>
 
@@ -181,7 +185,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧪 **门禁覆盖长跑压缩路径**:`cli-longrun-smoke` 会制造大工具结果并要求出现 `code.runtime.compacted`,避免长任务稳定性只停留在单测。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz"
 ```
 
 [完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
@@ -1043,11 +1047,11 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.84.0 的 Apple Silicon / Intel DMG 会完成签名、公证、stapled,并通过 Gatekeeper 校验。
+**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.84.1 的 Apple Silicon / Intel DMG 会完成签名、公证、stapled,并通过 Gatekeeper 校验。
 
 **Windows**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.exe`，直接运行。
 
-> **Windows SmartScreen 提示：** V0.84.0 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
+> **Windows SmartScreen 提示：** V0.84.1 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
 Linux 版本计划中。
 
@@ -1115,7 +1119,7 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（V0.84.0 签名 + 公证 DMG） |
+| macOS (Apple Silicon) | 已支持（V0.84.1 签名 + 公证 DMG） |
 | macOS (Intel) | 已支持 |
 | Windows x64 | Beta |
 | Linux | 计划中 |
@@ -1177,7 +1181,7 @@ npm run dist:local            # 本地打包（macOS DMG，跳过公证）
 
 ### Q5：Windows 能用吗？
 
-可以。V0.84.0 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均会签名、公证并通过 Gatekeeper 校验。
+可以。V0.84.1 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均会签名、公证并通过 Gatekeeper 校验。
 
 ### Q6：能改模型吗？接自己的 API？
 

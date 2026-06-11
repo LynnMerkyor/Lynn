@@ -2,22 +2,22 @@
   "id": "tts-bridge",
   "name": "TTS Bridge",
   "version": "0.3.1",
-  "description": "文本转语音桥接：默认 CosyVoice 2（Spark 本地服务、短文本低延迟、真流式、零 token 成本），可选 Edge TTS、macOS say、OpenAI TTS。生成音频保存到书桌，支持 Bridge 多平台推送。",
+  "description": "文本转语音桥接：默认通过 Lynn Brain 托管 StepFun Realtime TTS；Spark/CosyVoice、macOS say、Edge TTS、OpenAI 只作为 fallback 或显式选择。生成音频保存到书桌，支持 Bridge 多平台推送。",
   "contributes": {
     "configuration": {
       "properties": {
         "provider": {
           "type": "string",
           "title": "TTS Provider",
-          "default": "cosyvoice",
-          "enum": ["edge", "say", "cosyvoice", "openai"],
-          "description": "语音合成服务来源。cosyvoice 阿里 CosyVoice 2（Spark 本地服务，真流式，默认推荐）；edge 微软 Edge 在线 TTS（免费，需网络，备用）；say macOS 本地（离线，仅 Mac）；openai OpenAI TTS API。"
+          "default": "stepfun-realtime",
+          "enum": ["stepfun-realtime", "cosyvoice", "say", "edge", "openai"],
+          "description": "语音合成服务来源。stepfun-realtime 通过 Lynn Brain 托管 StepFun Realtime（默认，无需本地 Key）；cosyvoice/Spark、本地 say、Edge、OpenAI 只作为 fallback 或显式选择。"
         },
         "default_voice": {
           "type": "string",
           "title": "Default Voice",
-          "default": "zh-CN-XiaoxiaoNeural",
-          "description": "默认音色 ID。edge 支持 300+ 音色（如 zh-CN-XiaoxiaoNeural、en-US-JennyNeural）；say 系统 voice（如 Ting-Ting、Mei-Jia）。"
+          "default": "jingdiannvsheng",
+          "description": "默认音色 ID。StepFun Realtime 默认 jingdiannvsheng；Edge 支持 300+ 音色（如 zh-CN-XiaoxiaoNeural、en-US-JennyNeural）；say 使用系统 voice（如 Ting-Ting、Mei-Jia）。"
         },
         "speed": {
           "type": "number",

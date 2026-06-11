@@ -2723,11 +2723,13 @@ body.resizing .jian-sidebar-inner {
 
 /* Toast 通知 */
 .toast-container {
+    /* 2026-06-11 UX: top-right, narrower stack — a 680px top-center toast overlapped the
+       conversation (e.g. the clipboard error covered the latest reply). Top-right is the
+       standard non-blocking position; revert by restoring left:50%/translateX/680px. */
     position: fixed;
     top: 76px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(680px, calc(100vw - 32px));
+    right: 16px;
+    width: min(400px, calc(100vw - 32px));
     display: flex;
     flex-direction: column;
     align-items: stretch;

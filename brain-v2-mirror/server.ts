@@ -10,6 +10,7 @@ import { getProviderStatusSnapshot } from './provider-registry.js';
 import { makeSSEEmitter } from './stream-bridge.js';
 import { registerDevice, verifySignedRequest, AuthError } from './auth.js';
 import { errorMessage, errorName, type ChatMessage, type ToolDefinition } from './types.js';
+import { attachRealtimeUpgrade } from './voice-realtime-proxy.js';
 
 // H4 fix (2026-05-24): agentKey 是长期 bearer,不能进 INFO 日志 plaintext。
 // 用 sha256 头 8 个 hex 做指纹 — 足够区分会话,不可反推。
@@ -22,6 +23,7 @@ function _agentFingerprint(key: unknown): string {
 import { runDeepResearch } from './deep-research.js';
 // [web-search proxy v1 import] — server-side keys, client never sees MiMo/Zhipu API keys
 import { webSearchStructured } from './tool-exec/web_search.js';
+import { voiceAsr, voiceTts } from './voice-realtime.js';
 const PORT = Number(process.env.BRAIN_V2_PORT || 8790);
 const HOST = process.env.BRAIN_V2_HOST || '127.0.0.1';
 const VERSION = '0.0.1';
@@ -33,7 +35,10 @@ type ErrorWithExtras = Error & { errors?: unknown; code?: string };
 let localQwen35BridgePromise: Promise<LocalQwen35BridgeModule> | null = null;
 const deviceRegisterBuckets = new Map<string, { day: string; count: number }>();
 
-function log(level: string, msg: string): void {
+function log(level: string, ...parts: unknown[]): void {
+  // Variadic: several tool-exec call sites pass (level, tag, detail). Joining keeps the
+  // detail instead of silently dropping the 3rd arg under the old 2-param signature.
+  const msg = parts.map((p) => (typeof p === 'string' ? p : JSON.stringify(p))).join(' ');
   console.log('[' + new Date().toISOString() + '] [' + level + '] ' + msg);
 }
 
@@ -411,6 +416,64 @@ async function handleWebSearch(req: IncomingMessage, res: ServerResponse, _pathn
 }
 // [/web-search proxy v1 handler]
 
+async function handleVoiceRealtime(req: IncomingMessage, res: ServerResponse, pathname: string, kind: 'asr' | 'tts'): Promise<void> {
+  let body: JsonObject;
+  try {
+    body = await readJsonBody(req, kind === 'asr' ? 24 * 1024 * 1024 : 1024 * 1024);
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+    res.end(JSON.stringify({ ok: false, error: 'invalid request body: ' + errorMessage(e) }));
+    return;
+  }
+
+  let device = null;
+  try {
+    device = await verifySignedRequest(req, { pathname, method: 'POST', log });
+  } catch (e) {
+    if (e instanceof AuthError) {
+      res.writeHead(e.status, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+      return;
+    }
+    log('error', 'voice auth unexpected: ' + errorMessage(e));
+    res.writeHead(500, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+    res.end(JSON.stringify({ ok: false, error: 'internal auth error' }));
+    return;
+  }
+
+  const ctrl = new AbortController();
+  let clientDisconnected = false;
+  req.on('close', () => {
+    if (!res.writableEnded) {
+      clientDisconnected = true;
+      ctrl.abort();
+    }
+  });
+
+  const id = `voice-${kind}-${Date.now()}`;
+  log('info', `[${id}] start agent=${_agentFingerprint(device?.key)}`);
+  try {
+    const result = kind === 'asr'
+      ? await voiceAsr(body, ctrl.signal)
+      : await voiceTts(body, ctrl.signal);
+    if (clientDisconnected) {
+      log('info', `[${id}] aborted (client_disconnect)`);
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+    res.end(JSON.stringify(result));
+    log('info', `[${id}] done provider=${String(result.provider || 'unknown')}`);
+  } catch (err) {
+    if (clientDisconnected || errorName(err) === 'AbortError') {
+      log('info', `[${id}] aborted`);
+      return;
+    }
+    log('error', `[${id}] failed: ${errorMessage(err)}`);
+    res.writeHead(502, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+    res.end(JSON.stringify({ ok: false, error: errorMessage(err), provider: 'stepfun-realtime' }));
+  }
+}
+
 async function handleProviderStatus(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const remote = req.socket?.remoteAddress || '';
   if (!isLocalRequestAddress(remote)) {
@@ -536,6 +599,14 @@ const server = http.createServer(async (req, res) => {
   }
   // [/web-search proxy v1 route]
 
+  if (req.method === 'POST' && (url.pathname === '/v2/voice/asr' || url.pathname === '/v1/voice/asr')) {
+    return handleVoiceRealtime(req, res, url.pathname, 'asr');
+  }
+
+  if (req.method === 'POST' && (url.pathname === '/v2/voice/tts' || url.pathname === '/v1/voice/tts')) {
+    return handleVoiceRealtime(req, res, url.pathname, 'tts');
+  }
+
   if (req.method === 'GET' && (url.pathname === '/v2/providers/status' || url.pathname === '/v1/providers/status')) {
     return handleProviderStatus(req, res);
   }
@@ -557,7 +628,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       brain: 'v2', version: VERSION,
-      endpoints: ['POST /v1/chat/completions', 'POST /v2/chat/completions', 'POST /api/v1/chat/completions', 'POST /v1/devices/register', 'GET /v1/providers/status', 'POST /v1/web-search', 'GET /v2/local-qwen35-9b/status', 'POST /v2/local-qwen35-9b/setup', 'GET /health'],
+      endpoints: ['POST /v1/chat/completions', 'POST /v2/chat/completions', 'POST /api/v1/chat/completions', 'POST /v1/devices/register', 'GET /v1/providers/status', 'POST /v1/web-search', 'POST /v1/voice/asr', 'POST /v1/voice/tts', 'GET /v2/local-qwen35-9b/status', 'POST /v2/local-qwen35-9b/setup', 'GET /health'],
     }));
     return;
   }
@@ -566,9 +637,14 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: 'not found', path: url.pathname }));
 });
 
+// ── StepFun Realtime full-duplex WS proxy (2026-06-11) ──
+// Client (local-server bridge / CLI) ↔ /v1/voice/realtime WS ↔ StepFun Realtime (key stays on
+// brain). Device-signed (method=GET, pathname=/v1/voice/realtime); strict rejects unsigned.
+attachRealtimeUpgrade(server, { verifySignedRequest, log, host: HOST, port: PORT, AuthError });
+
 server.listen(PORT, HOST, () => {
   log('info', 'brain v2 listening http://' + HOST + ':' + PORT);
-  log('info', 'endpoints: POST /v1/chat/completions  POST /v2/chat/completions  GET /health');
+  log('info', 'endpoints: POST /v1/chat/completions  POST /v2/chat/completions  POST /v1/voice/asr  POST /v1/voice/tts  GET /health');
 });
 
 process.on('unhandledRejection', (reason) => {

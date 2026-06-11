@@ -8,13 +8,14 @@
  *   A fresh     全新空 profile         → server 必须 boot 到就绪(写出 server-info.json)
  *   B corrupt   预置损坏的 facts.db    → 必须就绪 + 自动备份重建(bak 文件或恢复日志)
  *   C hanako    HOME 下有 .hanako 哨兵 → 必须就绪 + .hanako 一个字节都不许动
+ *   D polluted  ~/.lynn 里有旧 MiMo 引用 → 必须自愈到 Brain 默认路由
  *
  * ★ HEADLESS:#72 是纯 server 启动故障(FactStore/better-sqlite3),本门禁只 boot
  *   dist-server-bundle/index.js,**绝不起 Electron、不开任何窗口**。早期版本起整个桌面 app
  *   会往用户屏幕弹 raw-i18n 的吓人窗口(2026-06-10 教训),且那窗口与 #72 无关。
  *
  * 依赖:npm run build:server(dist-server-bundle)。无需 Electron / renderer。
- * 用法:node scripts/gate-startup-recovery.mjs [--ready-timeout-ms 90000] [--only A|B|C]
+ * 用法:node scripts/gate-startup-recovery.mjs [--ready-timeout-ms 90000] [--only A|B|C|D]
  */
 
 import { spawn } from "node:child_process";
@@ -24,6 +25,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import YAML from "js-yaml";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -93,6 +95,29 @@ async function findFiles(dir, predicate) {
   }
   await walk(dir);
   return hits;
+}
+
+async function writeJson(file, value) {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, JSON.stringify(value, null, 2) + "\n", "utf-8");
+}
+
+async function writeYaml(file, value) {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, YAML.dump(value, {
+    indent: 2,
+    lineWidth: -1,
+    sortKeys: false,
+    noRefs: true,
+  }), "utf-8");
+}
+
+async function readYamlObject(file) {
+  try {
+    return YAML.load(await fs.readFile(file, "utf-8")) || {};
+  } catch {
+    return {};
+  }
 }
 
 function terminate(child) {
@@ -243,9 +268,56 @@ async function main() {
       const problems = diffSnapshots(before, after);
       check("C .hanako 内容逐字节未动", problems.length === 0, problems.join("; "));
     }
+    const copiedSentinel = await fs.stat(path.join(fakeHome, ".lynn", "SENTINEL.txt")).then(() => true).catch(() => false);
+    check("C .lynn 不复制 OpenHanako 哨兵", !copiedSentinel, "Lynn 默认读取/复制了 ~/.hanako，可能导致跳过引导和旧模型状态污染");
   }
 
-  console.log(`\n[gate-startup] ${failures.length === 0 ? "PASS — 冷启动三矩阵全绿" : `FAIL — ${failures.length} 项失败`}`);
+  // ── Matrix D:旧版已污染 ~/.lynn 必须自愈到 Brain 默认路由(#74)────────────
+  if (!ONLY || ONLY === "D") {
+    console.log("\n[D polluted-models] 预置 OpenHanako 旧模型引用冷启动(#74 自愈网)");
+    const home = path.join(os.tmpdir(), `lynn-gate-polluted-${stamp}`);
+    const agentDir = path.join(home, "agents", "lynn");
+    await writeYaml(path.join(agentDir, "config.yaml"), {
+      agent: { name: "Lynn", yuan: "lynn" },
+      api: { provider: "mimo" },
+      models: {
+        chat: { id: "mimo-v2.5-pro", provider: "mimo" },
+        utility: "token-plan-cn",
+      },
+    });
+    await writeYaml(path.join(home, "added-models.yaml"), {
+      _migrated: true,
+      providers: {
+        mimo: {
+          api_key: "sk-test",
+          base_url: "https://token-plan-cn.xiaomimimo.com/v1",
+          api: "openai-completions",
+          models: ["mimo-v2.5-pro", "still-valid-model"],
+        },
+      },
+    });
+    await writeJson(path.join(home, "user", "preferences.json"), {
+      utility_model: { id: "mimo-v2.5-pro", provider: "mimo" },
+    });
+    await writeJson(path.join(agentDir, "sessions", "session-meta.json"), {
+      "old.jsonl": {
+        model: { id: "mimo-v2.5-pro", provider: "mimo" },
+      },
+    });
+
+    const r = await launchAndWaitReady({ name: "polluted-models", env: { LYNN_HOME: home } });
+    check("D 到达 Server 就绪", r.ready, `ready=false fatal=${r.fatal} tail:\n${tail(r.logs)}`);
+    const cfg = await readYamlObject(path.join(agentDir, "config.yaml"));
+    const added = await readYamlObject(path.join(home, "added-models.yaml"));
+    const prefs = JSON.parse(await fs.readFile(path.join(home, "user", "preferences.json"), "utf-8"));
+    const meta = JSON.parse(await fs.readFile(path.join(agentDir, "sessions", "session-meta.json"), "utf-8"));
+    check("D agent chat 已回到 Brain 默认", cfg?.models?.chat?.provider === "brain" && cfg?.models?.chat?.id === "lynn-brain-router", JSON.stringify(cfg?.models?.chat));
+    check("D shared utility 已回到 Brain 默认", prefs?.utility_model?.provider === "brain" && prefs?.utility_model?.id === "lynn-brain-router", JSON.stringify(prefs?.utility_model));
+    check("D provider 凭证保留但坏模型移除", added?.providers?.mimo?.api_key && !JSON.stringify(added?.providers?.mimo?.models || []).includes("mimo-v2.5-pro"), JSON.stringify(added?.providers?.mimo));
+    check("D session meta 已回到 Brain 默认", meta?.["old.jsonl"]?.model?.provider === "brain" && meta?.["old.jsonl"]?.model?.id === "lynn-brain-router", JSON.stringify(meta?.["old.jsonl"]));
+  }
+
+  console.log(`\n[gate-startup] ${failures.length === 0 ? "PASS — 冷启动/恢复矩阵全绿" : `FAIL — ${failures.length} 项失败`}`);
   if (failures.length) {
     for (const f of failures) console.log(`  - ${f}`);
     process.exit(1);

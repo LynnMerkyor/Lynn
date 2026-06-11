@@ -200,13 +200,14 @@ describe('verifySignedRequest (failure modes)', () => {
     }
   });
 
-  it('strict mode (default): rejects nonce replay with 401', async () => {
+  it('strict mode (default): tolerates signed nonce replay for client retries', async () => {
     await setupDevice();
     const req1 = makeReq({ nonce: 'replay-test-strict' });
     await verifySignedRequest(req1);
     await new Promise(r => setTimeout(r, 80));
     const req2 = makeReq({ nonce: 'replay-test-strict' });
-    await expect(verifySignedRequest(req2, { log: () => {} })).rejects.toThrowError(/nonce replayed/);
+    const device = await verifySignedRequest(req2, { log: () => {} });
+    expect(device.key).toBe(TEST_KEY);
   });
 });
 

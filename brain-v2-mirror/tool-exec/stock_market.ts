@@ -6,7 +6,10 @@ import { execSync } from 'child_process';
 
 // ── Tushare 通用 API call ─────────────────────────────────
 async function tushareApiCall(apiName, params = {}) {
-  const token = process.env.TUSHARE_TOKEN || 'bc975ecd147d93f6a90bf7f60d73e6420a36e562678fe2690061171c';
+  // No hardcoded fallback token — a committed third-party token ships in the bundle and can
+  // be quota-abused. Require the env var (prod sets TUSHARE_TOKEN); matches stock_research.ts.
+  const token = process.env.TUSHARE_TOKEN;
+  if (!token) throw new Error('Tushare token not configured (set TUSHARE_TOKEN)');
   try {
     const resp = await fetch('http://api.tushare.pro', {
       method: 'POST',
@@ -458,10 +461,12 @@ export async function stockMarket(query, { log, webSearchFn } = {}) {
             ': ' +
             d.price +
             ' (' +
-            (d.changePercent >= 0 ? '+' : '') +
+            // changePercent/changeAmount are strings (often with a '%'); compare the parsed
+            // number so positives get '+', negatives already carry '-', and empty → no stray '+'.
+            (parseFloat(d.changePercent) >= 0 ? '+' : '') +
             d.changePercent +
             ', ' +
-            (d.changeAmount >= 0 ? '+' : '') +
+            (parseFloat(d.changeAmount) >= 0 ? '+' : '') +
             d.changeAmount +
             ')',
         );

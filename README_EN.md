@@ -4,7 +4,7 @@
 
 <h1 align="center">Lynn</h1>
 
-<p align="center"><strong>GUI command center · CLI Worker Fleet · StepFun default route · long-term memory</strong></p>
+<p align="center"><strong>GUI command center · CLI Worker Fleet · StepFun default route · realtime voice · long-term memory</strong></p>
 <p align="center">An open-source desktop AI agent whose GUI command center dispatches multiple coding CLIs (Codex / Claude / Qwen ...) in parallel - coding, research, and business in one visual workspace, not another chat box</p>
 
 <p align="center"><a href="README.md">中文版 (默认)</a> | <strong>English</strong></p>
@@ -85,13 +85,16 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz"
 
 # 3. Launch.
-Lynn          # interactive chat TUI
+Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
+Lynn --version  # should print 0.84.1
 Lynn agents   # copyable headless/Fleet commands for other agents
 ```
+
+Default Brain V2 route: **StepFun 3.7 Flash (256K context, high reasoning, 48K reasoning/generation budget)** for normal GUI/CLI chat, `Lynn -p`, and coding execution. Voice is Brain-hosted **StepFun Realtime** by default: the GUI microphone and `/voice` / `lynn voice` inside the CLI chat enter continuous realtime conversation with live status and waveform. Local manager routes remain explicit experiments and do not take over the ordinary GUI/CLI path.
 
 Long runs follow a Reasonix-style **prefix-cache discipline**: stable instructions, tool specs, runtime constraints, and resume summaries stay in deterministic context layers so turns do not reorder the cacheable prefix. Cache hits now appear as `prefix-cache ... hit` in usage, sessions, replay, and `Lynn cache doctor --json`, not as an anxiety-inducing context meter.
 
@@ -113,22 +116,24 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>Lynn v0.84.0</strong> · 2026-06-10 · StepFun default route + GUI empty-answer recovery <em>(latest)</em></summary>
+<summary><strong>Lynn v0.84.1</strong> · 2026-06-12 · StepFun default route + realtime voice + GUI empty-answer recovery <em>(latest)</em></summary>
 
 **GUI and CLI ship together**:
 - **StepFun 3.7 Flash default route**: normal GUI/CLI chat, `Lynn -p`, and coding execution use StepFun 3.7 Flash by default. Experimental manager paths stay explicit.
+- **Realtime voice primary path**: GUI microphone and `/voice` / `lynn voice` inside the CLI chat use Brain-hosted StepFun Realtime for continuous conversation; the CLI renders status and a live waveform below the chat. ASR/TTS utility commands remain auxiliary.
 - **GUI empty-answer recovery**: stale device signatures are refreshed per request, and Brain no longer closes a tool turn after 8 seconds if the final assistant answer is still arriving.
 - **reasoning-only retry**: Brain retries responses that contain reasoning but no visible answer at the source.
 - **honest tool-turn close**: tool completion is rendered factually while waiting for the model's final answer; no silent close and no fake local summary.
 - **GUI token/cost pipeline**: SDK usage now flows through WebSocket, store, and the input-row chip.
 - **Fleet discoverability and acceptance panel**: desktop Fleet entry points and acceptance UI are easier to find and inspect.
-- **Issue #72 gates**: headless GUI startup recovery, real CLI task execution, release SOP, doc-drift checks, and repo hygiene gates cover legacy memory db, Hanako/OpenHanako conflicts, and “starts but cannot answer” regressions.
+- **Issue #72/#74 data isolation and repair**: Lynn no longer reads or migrates `~/.hanako` by default; import is opt-in via `LYNN_IMPORT_HANAKO_ON_FIRST_RUN=1`. Existing polluted `~/.lynn` installs repair retired MiMo/TokenPlan model references back to the Brain default route while preserving user API keys.
+- **Safety and bug-fix rollup**: device-signature refresh, honest tool-turn close, reasoning-only retry, Fleet acceptance UI, release gates, and doc-drift checks ship together.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz"
 ```
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.0)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.1)
 
 </details>
 
@@ -143,7 +148,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - **Release gate covers compaction**: `cli-longrun-smoke` now forces large tool results and requires a `code.runtime.compacted` event, so long-run stability is verified outside narrow unit tests.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz"
 ```
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
@@ -825,11 +830,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.84.0 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.84.1 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.84.0 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.84.1 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -892,7 +897,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.84.0 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.84.1 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

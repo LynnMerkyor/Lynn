@@ -116,6 +116,14 @@
   animation-duration: 1100ms;
 }
 
+.modeHint {
+  margin-top: -4px;
+  color: var(--text-muted, #7a7167);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 @keyframes voice-bar {
   0%, 100% { transform: scaleY(0.68); }
   50%      { transform: scaleY(1); }

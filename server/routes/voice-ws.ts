@@ -7,8 +7,8 @@
  *   [type:u8] [flags:u8] [seq:u16 BE] [payload:variable]
  *
  * Types:
- *   0x01 PCM_AUDIO           client → server  mic PCM 16kHz Int16,100ms/chunk
- *   0x02 PCM_TTS             server → client  TTS PCM 16kHz Int16 mono
+ *   0x01 PCM_AUDIO           client → server  mic PCM 24kHz Int16,100ms/chunk
+ *   0x02 PCM_TTS             server → client  TTS PCM 24kHz Int16 mono
  *   0x10 PING                client → server  RTT 测量
  *   0x11 PONG                server → client  RTT 回包
  *   0x12 TRANSCRIPT_PARTIAL  server → client  ASR 增量(Phase 2B+)
@@ -22,7 +22,7 @@
  *   0x31 TEXT_TURN           client → server  降级 ASR 已得出的转写文本
  *   0x32 SPEAK_TEXT          client → server  播放已有聊天回复文本
  *
- * Phase 2A:PCM → ASR → Brain → CosyVoice2 → PCM_TTS 最小闭环。
+ * Phase 2A:PCM → Brain-hosted StepFun Realtime ASR/TTS → PCM_TTS 最小闭环。
  * Phase 2B:server-side energy VAD fallback for auto end-of-turn.
  * Phase 2D:Silero/TEN VAD interrupt arbitration / AEC reference signal coordination.
  */
@@ -34,6 +34,8 @@ import {
   extractPcm16FromWav,
   float32ToInt16LEBuffer,
   makeFrame,
+  PCM_SAMPLE_RATE,
+  PCM_TTS_CHUNK_BYTES,
   normalizeTtsAudioToPcm16Mono16k,
   parseFrame,
   pcm16Rms,
@@ -41,6 +43,7 @@ import {
 } from "../chat/voice-audio-codec.js";
 import { AEC_SAMPLES_PER_FRAME, TtsReferenceQueue, aecProcessFrame100ms } from "../chat/voice-aec.js";
 import { VoiceSession } from "../chat/voice-session.js";
+import { RealtimeVoiceSession } from "../chat/voice-realtime-session.js";
 import {
   asRecord,
   cleanTextForTts,
@@ -68,6 +71,8 @@ export {
   extractPcm16FromWav,
   float32ToInt16LEBuffer,
   makeFrame,
+  PCM_SAMPLE_RATE,
+  PCM_TTS_CHUNK_BYTES,
   normalizeTtsAudioToPcm16Mono16k,
   parseFrame,
   pcm16Rms,
@@ -101,7 +106,11 @@ export function createVoiceWsRoute(engine: VoiceEngine, hub: unknown, { upgradeW
 
     return {
       onOpen(_event: unknown, ws: VoiceSocket) {
-        session = new VoiceSession(ws, { ...deps, engine, hub, mode });
+        // mode=realtime → StepFun Realtime full-duplex via Brain (primary); otherwise the
+        // ASR→model→TTS VoiceSession (DGX/local fallback). Same /voice-ws binary protocol.
+        session = mode === "realtime"
+          ? (new RealtimeVoiceSession(ws, { ...deps, engine, hub, mode }) as unknown as VoiceSession)
+          : new VoiceSession(ws, { ...deps, engine, hub, mode });
         session.onOpen();
         debugLog()?.log("voice-ws", "client connected");
       },

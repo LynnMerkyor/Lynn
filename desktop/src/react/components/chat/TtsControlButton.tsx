@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import { useI18n } from '../../hooks/use-i18n';
 import { playTtsSpeechStream } from '../../services/tts-stream-playback';
+import { createVoiceWsClientFromPlatform, VOICE_STATE } from '../../services/voice-ws-client';
 import { useStore } from '../../stores';
 import styles from './Chat.module.css';
 
@@ -91,23 +92,93 @@ async function playAudioHttpUrl(audioPath: string): Promise<TtsPlaybackControlle
   return { stop, finished };
 }
 
-function speakViaBrowser(text: string): boolean {
+function speakViaBrowser(text: string): TtsPlaybackController | null {
   try {
     const u = new SpeechSynthesisUtterance(text);
     const isZh = /[一-鿿]/.test(text.slice(0, 100));
     u.lang = isZh ? 'zh-CN' : 'en-US';
     u.rate = 1.0;
     window.speechSynthesis.cancel();
+    let stopped = false;
+    const finished = new Promise<void>((resolve) => {
+      u.onend = () => resolve();
+      u.onerror = () => resolve();
+    });
     window.speechSynthesis.speak(u);
-    return true;
+    return {
+      stop: () => {
+        if (stopped) return;
+        stopped = true;
+        try { window.speechSynthesis.cancel(); } catch { /* best-effort */ }
+      },
+      finished,
+    };
   } catch (e) {
     console.warn('[tts] browser SpeechSynthesis failed:', e);
-    return false;
+    return null;
   }
 }
 
 function messageAudioFilename(messageId?: string | null): string {
   return `msg_${messageId?.slice(-8) || Date.now()}`;
+}
+
+async function playRealtimeSpeech(text: string, onLateError?: (message: string) => void): Promise<TtsPlaybackController> {
+  const value = text.trim().slice(0, 3000);
+  if (!value) throw new Error('没有可朗读的文本');
+
+  let finished = false;
+  let heardAudio = false;
+  let finishTimer: ReturnType<typeof setTimeout> | null = null;
+  let firstAudioTimer: ReturnType<typeof setTimeout> | null = null;
+  let resolveFinished: (() => void) | null = null;
+
+  const finish = (client: Awaited<ReturnType<typeof createVoiceWsClientFromPlatform>>) => {
+    if (finished) return;
+    finished = true;
+    if (finishTimer) clearTimeout(finishTimer);
+    if (firstAudioTimer) clearTimeout(firstAudioTimer);
+    try { client.destroy(); } catch { /* best-effort */ }
+    resolveFinished?.();
+  };
+
+  const client = await createVoiceWsClientFromPlatform({
+    mode: 'chat',
+    stopCaptureOnEndTurn: false,
+    onStats: (stats) => {
+      if (stats.ttsBytesIn > 0) heardAudio = true;
+    },
+    onState: (state) => {
+      if (heardAudio && state === VOICE_STATE.IDLE) finish(client);
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!heardAudio) onLateError?.(`StepFun Realtime 朗读失败：${message}`);
+      finish(client);
+    },
+  });
+
+  const playback = new Promise<void>((resolve) => {
+    resolveFinished = resolve;
+  });
+
+  firstAudioTimer = setTimeout(() => {
+    if (!heardAudio) {
+      onLateError?.('StepFun Realtime 暂未返回语音，已停止本次朗读。');
+      finish(client);
+    }
+  }, 12_000);
+
+  finishTimer = setTimeout(() => finish(client), Math.max(10_000, Math.min(90_000, value.length * 320 + 6_000)));
+  await client.speakText(value);
+
+  return {
+    stop: () => {
+      if (finished) return;
+      void client.interrupt().finally(() => finish(client));
+    },
+    finished: playback,
+  };
 }
 
 export function TtsControlButton({ plainText, messageId, isStreamingMessage }: TtsControlButtonProps) {
@@ -154,15 +225,31 @@ export function TtsControlButton({ plainText, messageId, isStreamingMessage }: T
   }, [isStreamingMessage, plainText, messageId, ttsAutoPrefetch]);
 
   const handleClick = useCallback(async (e: React.MouseEvent<HTMLButtonElement>) => {
+    const startBrowserPlayback = async (toastText: string) => {
+      const controller = speakViaBrowser(plainText.slice(0, 3000));
+      if (!controller) throw new Error('浏览器 TTS 不可用');
+      ttsControllerRef.current = controller;
+      setTtsPlaying(true);
+      addToast(toastText, 'info');
+      controller.finished.finally(() => {
+        if (ttsControllerRef.current === controller) {
+          ttsControllerRef.current = null;
+          setTtsPlaying(false);
+        }
+      });
+    };
+
     if (e.shiftKey && ttsBrowserFallbackEnabled) {
       if (window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
         addToast('已停止浏览器朗读', 'info');
         return;
       }
-      const ok = speakViaBrowser(plainText.slice(0, 3000));
-      if (ok) addToast('浏览器朗读中(Shift+点击停止)', 'info');
-      else addToast('浏览器 TTS 不可用', 'error');
+      try {
+        await startBrowserPlayback('浏览器朗读中 · 再按一次停止');
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : String(err), 'error');
+      }
       return;
     }
 
@@ -201,7 +288,26 @@ export function TtsControlButton({ plainText, messageId, isStreamingMessage }: T
       });
     };
 
+    const startRealtimePlayback = async () => {
+      const controller = await playRealtimeSpeech(plainText, (message) => addToast(message, 'error'));
+      ttsControllerRef.current = controller;
+      setTtsPlaying(true);
+      addToast('正在用 StepFun Realtime 朗读 · 再按一次停止', 'success');
+      controller.finished.finally(() => {
+        if (ttsControllerRef.current === controller) {
+          ttsControllerRef.current = null;
+          setTtsPlaying(false);
+        }
+      });
+    };
+
     try {
+      try {
+        await startRealtimePlayback();
+        return;
+      } catch (realtimeErr) {
+        console.warn('[tts] StepFun Realtime playback unavailable, falling back:', realtimeErr);
+      }
       if (ttsAudioPath) {
         try {
           await startPlayback(ttsAudioPath, '正在朗读 · 再按一次停止');
@@ -231,7 +337,11 @@ export function TtsControlButton({ plainText, messageId, isStreamingMessage }: T
       const data = await res.json();
       const audioPath = data?.details?.path || data?.result?.details?.path;
       if (!audioPath) {
-        addToast('TTS 返回缺失 path', 'error');
+        if (ttsBrowserFallbackEnabled) {
+          await startBrowserPlayback('服务端 TTS 无可播放音频,已自动改用浏览器朗读');
+        } else {
+          addToast('TTS 返回缺失 path', 'error');
+        }
         return;
       }
       setTtsAudioPath(audioPath);
@@ -239,9 +349,22 @@ export function TtsControlButton({ plainText, messageId, isStreamingMessage }: T
         const cached = data?.details?.cached || data?.result?.details?.cached;
         await startPlayback(audioPath, cached ? '正在朗读（已缓存）· 再按一次停止' : '正在朗读 · 再按一次停止 · 右键换音色');
       } catch (err: any) {
-        addToast(`播放失败：${err?.message || err}。音频已保存，可在 Voice 设置里检查服务状态。`, 'error');
+        if (ttsBrowserFallbackEnabled) {
+          await startBrowserPlayback(`播放失败,已自动改用浏览器朗读: ${err?.message || err}`);
+        } else {
+          addToast(`播放失败：${err?.message || err}。音频已保存，可在 Voice 设置里检查服务状态。`, 'error');
+        }
       }
     } catch (err) {
+      if (ttsBrowserFallbackEnabled) {
+        try {
+          await startBrowserPlayback(`服务端 TTS 不可用,已自动改用浏览器朗读: ${err instanceof Error ? err.message : String(err)}`);
+          return;
+        } catch (fallbackErr) {
+          addToast(`TTS 不可用: ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`, 'error');
+          return;
+        }
+      }
       addToast(String(err), 'error');
     }
   }, [

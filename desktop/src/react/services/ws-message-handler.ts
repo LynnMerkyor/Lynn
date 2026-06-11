@@ -40,6 +40,20 @@ function warnProtocolIssue(type: string, errors: string[]): void {
   console.warn(`[ws] protocol issue: ${errors.join('; ')}`);
 }
 
+export function humanizeTurnFailureError(rawInput: unknown): string {
+  const raw = String(rawInput || 'Unknown error');
+  if (/request timed out|timeout|aborted/iu.test(raw)) {
+    return `模型请求超时，请重试：${raw}`;
+  }
+  if (/all providers? (have )?failed|route failed|no providers? available/iu.test(raw)) {
+    return '所有模型暂时不可用，请稍后重试或重新开始对话';
+  }
+  if (/empty (response|reply)|no content/iu.test(raw)) {
+    return '模型没有返回内容，请点「编辑重发」重试';
+  }
+  return raw;
+}
+
 function patchReviewBlock(sessionPath: string, reviewId: string, patch: Record<string, unknown>): void {
   const nextPatch = Object.fromEntries(
     Object.entries(patch).filter(([, value]) => value !== undefined),
@@ -232,12 +246,15 @@ export function handleServerMessage(msg: ServerEvent | any): void {
 
     case 'error': {
       const raw = String(msg.message || 'Unknown error');
-      const message = /request timed out|timeout|aborted/iu.test(raw)
-        ? `模型请求超时：${raw}`
-        : raw;
+      const message = humanizeTurnFailureError(raw);
       useStore.getState().setInlineError?.(message);
       if (msg.sessionPath) applySessionStreamingStatus(msg.sessionPath, false);
-      useStore.getState().addToast?.(message, 'error', 5000, {
+      // [FEEDBACK-FIX 2026-06-11] Turn failures were a 5s toast that was easy to miss → felt
+      // silent. Make them persistent (stay until dismissed; bounded by MAX_PERSISTENT + dedupe).
+      // Retry path: the input-area inline error keeps a recoverable draft, and the failed
+      // user message has 「编辑重发」.
+      useStore.getState().addToast?.(message, 'error', 0, {
+        persistent: true,
         dedupeKey: `ws-error:${msg.sessionPath || 'global'}:${raw}`,
       });
       break;

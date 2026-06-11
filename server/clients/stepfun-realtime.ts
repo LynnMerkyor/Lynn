@@ -3,7 +3,6 @@ import WebSocket from "ws";
 import {
   decodePcm16Audio,
   pcm16ToWav,
-  toBuffer,
 } from "../chat/voice-audio-codec.js";
 
 type WebSocketCtor = new (url: string, options?: Record<string, unknown>) => {
@@ -38,6 +37,8 @@ const DEFAULT_MODEL = "step-overture-preview";
 const DEFAULT_VOICE = "jingdiannvsheng";
 const DEFAULT_TIMEOUT_MS = 30000;
 const STEP_SAMPLE_RATE = 24000;
+const STEPFUN_REALTIME_ASR_UNSUPPORTED =
+  "StepFun Realtime stateless returns assistant response transcripts, not standalone user ASR transcripts";
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -53,6 +54,9 @@ export function resolveStepFunRealtimeConfig(config: StepRealtimeConfig = {}) {
     || stringValue(config.apiKey)
     || stringValue(process.env.LYNN_STEP_REALTIME_KEY)
     || stringValue(process.env.STEPFUN_REALTIME_API_KEY)
+    || stringValue(process.env.STEP37_KEY)
+    || stringValue(process.env.STEPFUN_CODING_KEY)
+    || stringValue(process.env.STEPFUN_CODING_API_KEY)
     || stringValue(process.env.STEPFUN_API_KEY)
     || stringValue(process.env.STEP_API_KEY);
   const endpoint = normalizeRealtimeEndpoint(
@@ -61,6 +65,7 @@ export function resolveStepFunRealtimeConfig(config: StepRealtimeConfig = {}) {
       || stringValue(config.baseUrl)
       || stringValue(process.env.LYNN_STEP_REALTIME_ENDPOINT)
       || stringValue(process.env.STEPFUN_REALTIME_ENDPOINT)
+      || stringValue(process.env.STEP37_BASE)
       || stringValue(process.env.STEPFUN_BASE_URL),
   );
   return {
@@ -90,6 +95,9 @@ function normalizeRealtimeEndpoint(value: string): string {
   if (/^https:\/\//i.test(endpoint)) endpoint = endpoint.replace(/^https:/i, "wss:");
   if (/^http:\/\//i.test(endpoint)) endpoint = endpoint.replace(/^http:/i, "ws:");
   endpoint = endpoint.replace(/\/+$/, "");
+  endpoint = endpoint
+    .replace(/\/step_plan\/v1(?:\/chat\/completions)?$/i, "")
+    .replace(/\/v1\/chat\/completions$/i, "");
   if (!/\/v1\/realtime\/stateless$/i.test(endpoint)) {
     if (/\/v1$/i.test(endpoint)) endpoint = `${endpoint}/realtime/stateless`;
     else endpoint = `${endpoint}/v1/realtime/stateless`;
@@ -142,7 +150,7 @@ function resamplePcm16Mono(pcm: Buffer, fromRate: number, toRate: number): Buffe
   return out;
 }
 
-function toStepPcm(audio: Buffer): Buffer {
+export function prepareStepFunRealtimePcm(audio: Buffer): Buffer {
   const decoded = decodePcm16Audio(audio);
   if (decoded.bitsPerSample !== 16) {
     throw new Error(`StepFun Realtime only accepts PCM16 input, got ${decoded.bitsPerSample}-bit`);
@@ -192,7 +200,7 @@ async function runStepFunRealtime(config: StepRealtimeConfig, input: {
     ws.on("open", async () => {
       try {
         if (input.mode === "asr") {
-          const pcm = toStepPcm(input.audio || Buffer.alloc(0));
+          const pcm = prepareStepFunRealtimePcm(input.audio || Buffer.alloc(0));
           await sendJson(ws, { type: "input_audio_buffer.append", audio: pcm.toString("base64") });
           await sendJson(ws, { type: "input_audio_buffer.commit" });
           await sendJson(ws, {
@@ -247,16 +255,19 @@ export function createStepFunRealtimeAsrProvider(config: StepRealtimeConfig = {}
     name: "stepfun-realtime-asr",
     label: "StepFun Realtime ASR",
     async transcribe(audioBuffer: unknown, opts: Record<string, unknown> = {}) {
-      const result = await runStepFunRealtime(config, {
-        mode: "asr",
-        audio: toBuffer(audioBuffer as Buffer),
-        signal: opts.signal as AbortSignal | undefined,
-      });
-      return { text: result.text, language: opts.language || "auto", provider: "stepfun-realtime", raw: result.messages };
+      void config;
+      void audioBuffer;
+      void opts;
+      throw new Error(STEPFUN_REALTIME_ASR_UNSUPPORTED);
     },
     async health() {
-      const ok = hasStepFunRealtimeCredential(config);
-      return { ok, fallbackOk: false, degraded: !ok, provider: "stepfun-realtime" };
+      return {
+        ok: false,
+        fallbackOk: false,
+        degraded: true,
+        provider: "stepfun-realtime",
+        error: STEPFUN_REALTIME_ASR_UNSUPPORTED,
+      };
     },
   };
 }

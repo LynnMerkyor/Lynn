@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 import YAML from "js-yaml";
 import { afterEach, describe, expect, it } from "vitest";
-import { migrateLocalQwenDefaultTo9B, migrateToProvidersYaml } from "../core/migrate-providers.js";
+import { migrateLocalQwenDefaultTo9B, migrateToProvidersYaml, repairRetiredModelReferences } from "../core/migrate-providers.js";
 
 function makeTempRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lynn-migrate-providers-"));
@@ -179,5 +179,85 @@ describe("migrateLocalQwenDefaultTo9B", () => {
       provider: "deepseek",
     });
     expect(readJson(path.join(lynnHome, "user", "preferences.json")).local_qwen_default_9b_mtp_default_v2).toBe(true);
+  });
+});
+
+describe("repairRetiredModelReferences", () => {
+  it("repairs retired OpenHanako model refs without deleting provider credentials", () => {
+    const root = makeTempRoot();
+    tempRoots.push(root);
+    const lynnHome = path.join(root, ".lynn");
+    const agentsDir = path.join(lynnHome, "agents");
+    const sessionMetaPath = path.join(agentsDir, "lynn", "sessions", "session-meta.json");
+    const logs = [];
+
+    writeYaml(path.join(lynnHome, "added-models.yaml"), {
+      _migrated: true,
+      providers: {
+        mimo: {
+          api_key: "sk-mimo",
+          base_url: "https://token-plan-cn.xiaomimimo.com/v1",
+          api: "openai-completions",
+          models: ["mimo-v2.5-pro", "still-valid-model"],
+        },
+        deepseek: {
+          api_key: "sk-deepseek",
+          base_url: "https://api.deepseek.com/v1",
+          api: "openai-completions",
+          models: ["deepseek-chat"],
+        },
+      },
+    });
+    writeYaml(path.join(agentsDir, "lynn", "config.yaml"), {
+      api: { provider: "mimo" },
+      models: {
+        chat: { id: "mimo-v2.5-pro", provider: "mimo" },
+        utility: "token-plan-cn",
+        summarizer: { id: "deepseek-chat", provider: "deepseek" },
+      },
+    });
+    writeJson(path.join(lynnHome, "user", "preferences.json"), {
+      utility_model: { id: "mimo-v2.5-pro", provider: "mimo" },
+      compiler_model: "deepseek-chat",
+      favorites: [
+        { id: "mimo-v2.5-pro", provider: "mimo" },
+        { id: "deepseek-chat", provider: "deepseek" },
+      ],
+      oauth_custom_models: {
+        mimo: ["mimo-v2.5-pro", "still-valid-model"],
+      },
+    });
+    writeJson(sessionMetaPath, {
+      "old.jsonl": {
+        memoryEnabled: true,
+        model: { id: "mimo-v2.5-pro", provider: "mimo" },
+      },
+    });
+
+    repairRetiredModelReferences(lynnHome, agentsDir, (msg) => logs.push(msg));
+
+    const config = readYaml(path.join(agentsDir, "lynn", "config.yaml"));
+    expect(config.api.provider).toBe("brain");
+    expect(config.models.chat).toEqual({ id: "lynn-brain-router", provider: "brain" });
+    expect(config.models.utility).toEqual({ id: "lynn-brain-router", provider: "brain" });
+    expect(config.models.summarizer).toEqual({ id: "deepseek-chat", provider: "deepseek" });
+
+    const added = readYaml(path.join(lynnHome, "added-models.yaml"));
+    expect(added.providers.mimo.api_key).toBe("sk-mimo");
+    expect(added.providers.mimo.models).toEqual(["still-valid-model"]);
+    expect(added.providers.deepseek.models).toEqual(["deepseek-chat"]);
+
+    const prefs = readJson(path.join(lynnHome, "user", "preferences.json"));
+    expect(prefs.utility_model).toEqual({ id: "lynn-brain-router", provider: "brain" });
+    expect(prefs.compiler_model).toBe("deepseek-chat");
+    expect(prefs.favorites).toEqual([{ id: "deepseek-chat", provider: "deepseek" }]);
+    expect(prefs.oauth_custom_models).toEqual({ mimo: ["still-valid-model"] });
+    expect(prefs.retired_hanako_model_refs_repaired_v1).toBe(true);
+
+    const meta = readJson(sessionMetaPath);
+    expect(meta["old.jsonl"].model).toEqual({ id: "lynn-brain-router", provider: "brain" });
+    expect(meta["old.jsonl"].modelId).toBe("lynn-brain-router");
+    expect(meta["old.jsonl"].modelProvider).toBe("brain");
+    expect(logs.join("\n")).toContain("repaired retired OpenHanako model references");
   });
 });

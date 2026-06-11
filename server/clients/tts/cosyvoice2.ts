@@ -1,5 +1,5 @@
 /**
- * CosyVoice 2 TTS client for Lynn V0.79 Jarvis Runtime.
+ * CosyVoice 2 TTS client for Lynn Voice Runtime fallback.
  *
  * This path returns audio bytes directly for Voice WS, unlike the plugin tool
  * that writes generated speech to desk files.
@@ -71,7 +71,7 @@ export function createCosyVoice2TtsProvider(config: CosyVoice2Config = {}) {
 
   return {
     name: "cosyvoice2",
-    label: "CosyVoice 2 (V0.79 Jarvis Runtime TTS)",
+    label: "CosyVoice 2 (Spark fallback TTS)",
 
     async synthesize(text: unknown, { voice = defaultVoice, speed = 1.0, signal = null, timeoutMs = DEFAULT_TIMEOUT_MS }: CosyVoiceSynthesizeOptions = {}): Promise<CosyVoiceSynthesisResult> {
       const input = normalizeChineseTtsText(text);

@@ -6,7 +6,7 @@
 #   2. notarize the signed DMG
 #   3. staple the notarization ticket
 #   4. validate with stapler and Gatekeeper
-#   5. regenerate blockmaps after the DMG bytes are final
+#   5. regenerate blockmaps and latest-mac.yml after the DMG bytes are final
 #
 # Usage:
 #   APPLE_NOTARY_PROFILE=hanako-notary scripts/finalize-macos-dmg.sh dist/Lynn-0.77.1-macOS-Apple-Silicon.dmg dist/Lynn-0.77.1-macOS-Intel.dmg
@@ -109,4 +109,50 @@ for dmg in "$@"; do
   "$APP_BUILDER" blockmap --input "$dmg" --output "$dmg.blockmap"
 done
 
-echo "All macOS DMGs are signed, notarized, stapled, Gatekeeper-validated, and blockmap-refreshed."
+if [[ -f "dist/latest-mac.yml" ]]; then
+  node - "$@" <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+
+const dmgs = process.argv.slice(2)
+  .filter((file) => file.endsWith(".dmg"))
+  .map((file) => {
+    const bytes = fs.readFileSync(file);
+    return {
+      url: path.basename(file),
+      sha512: crypto.createHash("sha512").update(bytes).digest("base64"),
+      size: bytes.length,
+    };
+  })
+  .sort((a, b) => {
+    const rank = (entry) => (entry.url.includes("-x64.") ? 0 : entry.url.includes("-arm64.") ? 1 : 2);
+    return rank(a) - rank(b);
+  });
+
+if (dmgs.length > 0) {
+  const versionMatch = dmgs[0].url.match(/Lynn-(\d+\.\d+\.\d+)-macOS-/);
+  const version = versionMatch ? versionMatch[1] : "";
+  const manifestPath = path.join(process.cwd(), "dist", "latest-mac.yml");
+  const existing = fs.existsSync(manifestPath) ? fs.readFileSync(manifestPath, "utf8") : "";
+  const releaseDate = existing.match(/releaseDate:\s*'([^']+)'/)?.[1] || new Date().toISOString();
+  const primary = dmgs.find((entry) => entry.url.includes("-x64.")) || dmgs[0];
+  const lines = [
+    `version: ${version}`,
+    "files:",
+    ...dmgs.flatMap((entry) => [
+      `  - url: ${entry.url}`,
+      `    sha512: ${entry.sha512}`,
+      `    size: ${entry.size}`,
+    ]),
+    `path: ${primary.url}`,
+    `sha512: ${primary.sha512}`,
+    `releaseDate: '${releaseDate}'`,
+  ];
+  fs.writeFileSync(manifestPath, `${lines.join("\n")}\n`);
+  console.log(`==> Refreshed updater manifest after final DMG bytes: ${path.relative(process.cwd(), manifestPath)}`);
+}
+NODE
+fi
+
+echo "All macOS DMGs are signed, notarized, stapled, Gatekeeper-validated, blockmap-refreshed, and latest-mac.yml refreshed."

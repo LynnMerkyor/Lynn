@@ -6,6 +6,7 @@
 //   + max_tokens 动态调整(短答 512 / 长think 4096)。避免 default_thinking=false provider
 //   被 ThinkingLevelButton 'auto' 一刀切打开 thinking。
 import { parseOpenAISSE } from './_sse-parser.js';
+import { sanitizeToolsForWire, sanitizeMessagesForWire, restoreToolNameInChunk } from './_tool-name-codec.js';
 import type { ChatMessage, ModelId, StreamChunk, ToolDefinition, WireAdapterOptions } from '../types.js';
 
 // F12: 智能判断是否需要 thinking
@@ -64,20 +65,51 @@ function shouldForwardReasoningEffort(provider: WireAdapterOptions['provider'], 
     && reasoningEffort !== 'disabled';
 }
 
+// ── Vision routing helpers (2026-06-10 Bug A fix) ──
+// step-1o-turbo-vision caps at 32K ctx while step-3.7-flash text is 256K. Routing a turn to
+// the vision model just because SOME old image sits in history pins long convos to 32K →
+// context overflow → no answer. Only a RECENT image should trigger vision routing.
+const VISION_RECENT_LOOKBACK = 6;
+function messageHasImage(m: ChatMessage | undefined): boolean {
+  return !!m && Array.isArray(m.content)
+    && (m.content as Array<{ type?: string }>).some((c) => c?.type === 'image_url');
+}
+function hasRecentImage(messages?: ChatMessage[]): boolean {
+  if (!Array.isArray(messages)) return false;
+  return messages.slice(-VISION_RECENT_LOOKBACK).some(messageHasImage);
+}
+// Replace image blocks with a text placeholder so the large-context text model can carry a
+// long history that merely contains stale images, without being fed image content it rejects.
+function stripImageContent(messages?: ChatMessage[]): ChatMessage[] | undefined {
+  if (!Array.isArray(messages)) return messages;
+  let changed = false;
+  const out = messages.map((m) => {
+    if (!messageHasImage(m)) return m;
+    changed = true;
+    const content = (m.content as Array<{ type?: string }>).map((c) =>
+      c?.type === 'image_url' ? { type: 'text', text: '[earlier image omitted]' } : c);
+    return { ...m, content } as ChatMessage;
+  });
+  return changed ? out : messages;
+}
+
 export async function* call({ provider, messages, tools, signal, extraBody, reasoningEffort }: WireAdapterOptions): AsyncGenerator<StreamChunk> {
   const effectiveReasoningEffort =
     provider.default_reasoning_effort && (!reasoningEffort || reasoningEffort === 'auto')
       ? provider.default_reasoning_effort
       : reasoningEffort;
-  // Vision routing: if the turn carries image content and the provider declares a vision_model
-  // (StepFun: step-1o-turbo-vision), route images to that model; text stays on provider.model.
-  const hasImageContent = Array.isArray(messages) && messages.some((m) =>
-    !!m && Array.isArray(m.content)
-    && (m.content as Array<{ type?: string }>).some((c) => c?.type === 'image_url'));
-  const model = (hasImageContent && provider.vision_model ? provider.vision_model : provider.model) as ModelId;
+  // Vision routing (Bug A fix): route to the small-context vision model ONLY when a RECENT
+  // message carries an image. When not, use the large-context text model and strip stale
+  // image blocks so it isn't fed image content it may reject.
+  const wantsVision = !!provider.vision_model && hasRecentImage(messages);
+  const model = (wantsVision ? provider.vision_model : provider.model) as ModelId;
+  const routedMessages = wantsVision ? messages : stripImageContent(messages);
+  // Some providers (DeepSeek) reject tool/function names outside ^[a-zA-Z0-9_-]+$;
+  // rewrite historical tool_call names in the messages to match the tools array below.
+  const wireMessages = sanitizeMessagesForWire(routedMessages);
   const body: OpenAICompatRequestBody = {
     model,
-    messages,
+    messages: wireMessages,
     max_tokens: provider.max_tokens || 4096,
     temperature: provider.temperature ?? 0.6,
     stream: true,
@@ -120,24 +152,48 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
       body.max_tokens = 512;
     }
   }
+  // Sanitize tool names on the way out (DeepSeek strict pattern); restore on the way back
+  // so the brain pipeline only ever sees the original names. Conforming names → no-op.
+  let toolNameRestore = null;
   if (Array.isArray(tools) && tools.length > 0) {
-    body.tools = tools;
+    const sanitized = sanitizeToolsForWire(tools);
+    body.tools = sanitized.tools;
     body.tool_choice = 'auto';
+    toolNameRestore = sanitized.restore;
   }
-  const resp = await fetch(provider.endpoint + '/chat/completions', {
+  const postChat = (b: OpenAICompatRequestBody) => fetch(provider.endpoint + '/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: 'Bearer ' + provider.apiKey,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(b),
     signal,
   });
+  let resp = await postChat(body);
+  // Option-4 fallback (Bug A): if the vision model overflows its 32K context, retry once on
+  // the text model with images stripped — a long image-bearing convo still gets answered.
+  if (!resp.ok && wantsVision && resp.status === 400) {
+    const errText = await resp.text().catch(() => '');
+    if (/maximum context length|context length|too long/i.test(errText)) {
+      body.model = provider.model as ModelId;
+      body.messages = sanitizeMessagesForWire(stripImageContent(messages));
+      resp = await postChat(body);
+    } else {
+      throw new Error(provider.id + ' HTTP ' + resp.status + ' ' + errText.slice(0, 200));
+    }
+  }
   if (!resp.ok) {
     const errText = await resp.text().catch(() => '');
     throw new Error(provider.id + ' HTTP ' + resp.status + ' ' + errText.slice(0, 200));
   }
-  yield* parseOpenAISSE(resp.body);
+  if (toolNameRestore) {
+    for await (const chunk of parseOpenAISSE(resp.body)) {
+      yield restoreToolNameInChunk(chunk, toolNameRestore);
+    }
+  } else {
+    yield* parseOpenAISSE(resp.body);
+  }
 }
 
 export const wireMeta = {

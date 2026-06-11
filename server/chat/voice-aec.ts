@@ -11,7 +11,7 @@ import {
 } from "../clients/aec/index.js";
 import type { AecCapture, AecProcessorHandle, AecRender, BinaryInput } from "./voice-ws-types.js";
 
-// Native AEC requires 10ms frames at 16kHz: 160 samples per frame.
+// Native AEC consumes 10ms frames at the current voice PCM sample rate.
 export const AEC_SAMPLES_PER_FRAME = 160;
 
 /**

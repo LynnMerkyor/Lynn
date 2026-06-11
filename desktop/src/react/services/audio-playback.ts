@@ -63,7 +63,7 @@ export class PcmPlayer {
 
   /**
    * 推入一个 PCM chunk
-   * @param pcm Int16Array (16kHz mono),建议 100ms 一片(1600 samples)
+   * @param pcm Int16Array (24kHz mono),建议 100ms 一片(2400 samples)
    */
   enqueue(pcm: Int16Array): void {
     if (!this.workletNode) throw new Error("PcmPlayer not initialized — call init() first");

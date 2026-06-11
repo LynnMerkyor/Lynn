@@ -16,6 +16,8 @@ describe("runtime answer", () => {
     expect(isLocalRuntimeQuestion("Lynn CLI 的 memory 会持久保存吗")).toBe(true);
     expect(isLocalRuntimeQuestion("本地优化了什么？")).toBe(true);
     expect(isLocalRuntimeQuestion("Lynn CLI 做了什么长任务优化")).toBe(true);
+    expect(isLocalRuntimeQuestion("你有语音模式吗")).toBe(true);
+    expect(isLocalRuntimeQuestion("Lynn CLI 怎么语音输入")).toBe(true);
     expect(isLocalRuntimeQuestion("帮我写一个版本比较函数")).toBe(false);
     expect(isLocalRuntimeQuestion("帮我实现一个模型选择器")).toBe(false);
     expect(isLocalRuntimeQuestion("bump the package version in package.json")).toBe(false);
@@ -45,6 +47,28 @@ describe("runtime answer", () => {
     expect(text).toContain("记忆和连续性");
     expect(text).toContain("/memory add");
     expect(text).toContain("docs/ops/lynn-cli-runtime-knowledge.md");
+    expect(text).toContain("/voice");
+    expect(text).toContain("当前 chat");
+    expect(text).toContain("Lynn voice --file");
+    expect(text).toContain("Lynn voice --speak");
+    expect(text).toContain("StepFun Realtime");
+  });
+
+  it("answers voice questions concisely", () => {
+    const text = renderLocalRuntimeAnswer({
+      routeLabel: "StepFun 3.7 Flash",
+      brainUrl: "https://api.merkyorlynn.com/api/v2",
+      cwd: "/tmp/project",
+      question: "你有语音能力吗",
+    }, "zh");
+    expect(text).toContain("/voice");
+    expect(text).toContain("lynn voice");
+    expect(text).toContain("Ctrl+C 返回聊天");
+    expect(text).toContain("StepFun Realtime");
+    expect(text).toContain("GUI");
+    expect(text).not.toContain("直接开麦:`Lynn voice`");
+    expect(text).not.toContain("运行时优化");
+    expect(text).not.toContain("本地 9B");
   });
 
   it("uses English for English prompts", () => {

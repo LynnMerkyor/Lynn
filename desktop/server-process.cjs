@@ -428,7 +428,9 @@ function createServerProcessController(deps) {
       console.log("[desktop] Server heartbeat restart succeeded");
     } catch (err) {
       console.error("[desktop] Server heartbeat restart failed:", err?.message || err);
-      writeCrashLog(`Server 心跳重启失败: ${err?.message || err}`);
+      const message = err?.message || err;
+      writeCrashLog(`Server 心跳重启失败: ${message}`);
+      dialog.showErrorBox("Lynn Server", mt("dialog.serverRestartFailed", { error: message }));
     } finally {
       state.heartbeatRestarting = false;
     }

@@ -1,20 +1,20 @@
 /**
  * AudioWorkletProcessor — 流式 PCM 播放 + 中途清空 + 淡出
  *
- * 输入:Int16Array PCM chunks(16kHz mono),通过 port.postMessage 推入
+ * 输入:Int16Array PCM chunks(24kHz mono),通过 port.postMessage 推入
  * 输出:AudioWorklet 渲染时取队列前面的 samples 输出到 destination
  *
  * 中途清空:port.postMessage({type: 'flush'}) → 立即清队列 + 20ms 线性淡出
  *
  * 重要约束:
- *   - AudioContext sampleRate 由设备决定(通常 48kHz),内部上采样 16k → 设备 rate
+ *   - AudioContext sampleRate 由设备决定(通常 48kHz),内部上采样 24k → 设备 rate
  *   - 队列空时输出静音,不报错(避免 underrun 噪音)
  *   - 监控 underrun count 和 queue size
  */
 class PcmPlayerProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.sourceSampleRate = 16000;
+    this.sourceSampleRate = 24000;
     this.upsampleRatio = sampleRate / this.sourceSampleRate; // device / source
 
     // 缓冲队列 - Float32 samples already upsampled to device rate

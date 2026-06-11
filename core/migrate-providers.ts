@@ -17,6 +17,14 @@ import path from "path";
 import YAML from "js-yaml";
 import { safeReadYAMLSync } from "../shared/safe-fs.js";
 import { fromRoot } from "../shared/hana-root.js";
+import {
+  BRAIN_CHAT_MODEL_ID,
+  BRAIN_COMPILER_MODEL_ID,
+  BRAIN_PROVIDER_ID,
+  BRAIN_SUMMARIZER_MODEL_ID,
+  BRAIN_UTILITY_LARGE_MODEL_ID,
+  BRAIN_UTILITY_MODEL_ID,
+} from "../shared/brain-provider.js";
 import type { LLMApi, ProviderConfig, ProviderConfigMap } from "./types.js";
 
 type LogFn = (msg: string) => void;
@@ -358,6 +366,215 @@ function _migrateChatRef(chat: unknown): unknown {
   return isOldLocal
     ? { ...chat, id: NEW_LOCAL_QWEN_MODEL, provider: NEW_LOCAL_QWEN_PROVIDER }
     : chat;
+}
+
+// ── OpenHanako 污染数据自愈 ───────────────────────────────────────────────────
+
+const RETIRED_HANAKO_MODEL_REPAIR_VERSION = "retired_hanako_model_refs_repaired_v1";
+const RETIRED_MODEL_ROLE_KEYS = ["chat", "utility", "utility_large", "utilityLarge", "summarizer", "compiler"] as const;
+const RETIRED_SHARED_MODEL_PREFS = [
+  ["utility", "utility_model"],
+  ["utility_large", "utility_large_model"],
+  ["summarizer", "summarizer_model"],
+  ["compiler", "compiler_model"],
+] as const;
+
+function normalizeModelId(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getModelRefId(ref: unknown): string | null {
+  if (typeof ref === "string") return ref.trim() || null;
+  if (isRecord(ref) && typeof ref.id === "string") return ref.id.trim() || null;
+  return null;
+}
+
+function isRetiredHanakoModelId(modelId: unknown): boolean {
+  const normalized = normalizeModelId(modelId);
+  if (!normalized) return false;
+  const tail = normalized.includes("/") ? normalized.split("/").pop() || normalized : normalized;
+
+  if (tail === "token-plan-cn") return true;
+  if (/^mimo-v2\.5(?:[-_.]|$)/i.test(tail)) return true;
+  if (/^mimo-v2-omni(?:[-_.]|$)/i.test(tail)) return true;
+  if (/^xiaomi-mimo-v2\.5(?:[-_.]|$)/i.test(tail)) return true;
+  return false;
+}
+
+function isRetiredModelRef(ref: unknown): boolean {
+  const id = getModelRefId(ref);
+  return Boolean(id && isRetiredHanakoModelId(id));
+}
+
+function brainModelRefForRole(role: string): ModelRefObject {
+  if (role === "utility_large" || role === "utilityLarge") {
+    return { id: BRAIN_UTILITY_LARGE_MODEL_ID, provider: BRAIN_PROVIDER_ID };
+  }
+  if (role === "summarizer") return { id: BRAIN_SUMMARIZER_MODEL_ID, provider: BRAIN_PROVIDER_ID };
+  if (role === "compiler") return { id: BRAIN_COMPILER_MODEL_ID, provider: BRAIN_PROVIDER_ID };
+  if (role === "utility") return { id: BRAIN_UTILITY_MODEL_ID, provider: BRAIN_PROVIDER_ID };
+  return { id: BRAIN_CHAT_MODEL_ID, provider: BRAIN_PROVIDER_ID };
+}
+
+function compactRetiredModelList(models: unknown): { models: unknown; removed: number } {
+  if (!Array.isArray(models)) return { models, removed: 0 };
+  const next = models.filter((model) => !isRetiredHanakoModelId(modelEntryId(model)));
+  return { models: next, removed: models.length - next.length };
+}
+
+function repairAgentModelRefs(ac: AgentConfigEntry): boolean {
+  const models = getAgentModels(ac.config);
+  if (!models) return false;
+
+  let changed = false;
+  let repairedChat = false;
+  for (const key of RETIRED_MODEL_ROLE_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(models, key)) continue;
+    const current = models[key];
+    if (!isRetiredModelRef(current)) continue;
+    models[key] = brainModelRefForRole(key);
+    changed = true;
+    if (key === "chat") repairedChat = true;
+  }
+
+  const api = getAgentApi(ac.config);
+  if (repairedChat && api && api.provider !== BRAIN_PROVIDER_ID) {
+    api.provider = BRAIN_PROVIDER_ID;
+    changed = true;
+  }
+
+  return changed;
+}
+
+function repairSharedModelPrefs(prefs: PreferencesJson): boolean {
+  let changed = false;
+  for (const [role, prefKey] of RETIRED_SHARED_MODEL_PREFS) {
+    if (!Object.prototype.hasOwnProperty.call(prefs, prefKey)) continue;
+    if (!isRetiredModelRef(prefs[prefKey])) continue;
+    prefs[prefKey] = brainModelRefForRole(role);
+    changed = true;
+  }
+  return changed;
+}
+
+function repairFavoritePrefs(prefs: PreferencesJson): boolean {
+  let changed = false;
+  if (Array.isArray(prefs.favorites)) {
+    const next = prefs.favorites.filter((favorite) => {
+      const normalized = normalizeFavorite(favorite);
+      return !normalized || !isRetiredHanakoModelId(normalized.modelId);
+    });
+    if (next.length !== prefs.favorites.length) {
+      if (next.length) prefs.favorites = next;
+      else delete prefs.favorites;
+      changed = true;
+    }
+  }
+
+  if (isRecord(prefs.oauth_custom_models)) {
+    const nextCustom: Record<string, string[]> = {};
+    let removed = 0;
+    for (const [provider, value] of Object.entries(prefs.oauth_custom_models)) {
+      if (!Array.isArray(value)) continue;
+      const next = value.filter((modelId) => !isRetiredHanakoModelId(modelId));
+      removed += value.length - next.length;
+      if (next.length) nextCustom[provider] = next.map(String);
+    }
+    if (removed > 0) {
+      if (Object.keys(nextCustom).length) prefs.oauth_custom_models = nextCustom;
+      else delete prefs.oauth_custom_models;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function repairSessionMetaFile(metaPath: string): boolean {
+  let meta: unknown;
+  try {
+    meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+  } catch {
+    return false;
+  }
+  if (!isRecord(meta)) return false;
+
+  let changed = false;
+  for (const entry of Object.values(meta)) {
+    if (!isRecord(entry)) continue;
+    const rawRef = isRecord(entry.model)
+      ? entry.model
+      : (typeof entry.modelId === "string" ? { id: entry.modelId, provider: entry.modelProvider } : null);
+    if (!isRetiredModelRef(rawRef)) continue;
+    const next = brainModelRefForRole("chat");
+    entry.model = next;
+    entry.modelId = next.id;
+    entry.modelProvider = next.provider;
+    changed = true;
+  }
+
+  if (changed) atomicWriteJSON(metaPath, meta);
+  return changed;
+}
+
+function repairSessionMetaFiles(agentsDir: string): number {
+  let changed = 0;
+  for (const ac of _collectAgentConfigs(agentsDir)) {
+    const metaPath = path.join(path.dirname(ac.path), "sessions", "session-meta.json");
+    if (!fs.existsSync(metaPath)) continue;
+    if (repairSessionMetaFile(metaPath)) changed += 1;
+  }
+  return changed;
+}
+
+/**
+ * 旧版自动复制 OpenHanako 数据后, ~/.lynn 里可能残留指向已下线 MiMo/Token Plan
+ * 模型的 agent/shared/session/provider 引用。这里只修明确失效的模型 ID,保留用户
+ * provider 凭证与其他模型,并回到免 Key 的 Brain 默认路由。
+ */
+export function repairRetiredModelReferences(lynnHome: string, agentsDir: string, log: LogFn = () => {}): void {
+  const providersPath = path.join(lynnHome, "added-models.yaml");
+  const prefsPath = path.join(lynnHome, "user", "preferences.json");
+  let changedAgents = 0;
+  let removedProviderModels = 0;
+  let changedProviders = false;
+
+  for (const ac of _collectAgentConfigs(agentsDir)) {
+    if (!repairAgentModelRefs(ac)) continue;
+    atomicWriteYAML(ac.path, ac.config);
+    changedAgents += 1;
+  }
+
+  const raw = toAddedModelsYaml(safeReadYAMLSync(providersPath, {}, YAML));
+  const providers = getProvidersMap(raw);
+  for (const providerConfig of Object.values(providers)) {
+    if (!isRecord(providerConfig)) continue;
+    const compacted = compactRetiredModelList(providerConfig.models);
+    if (compacted.removed <= 0) continue;
+    providerConfig.models = compacted.models as ProviderConfig["models"];
+    removedProviderModels += compacted.removed;
+    changedProviders = true;
+  }
+  if (changedProviders) {
+    raw.providers = providers;
+    const header =
+      "# Lynn 供应商配置（全局，跨 agent 共享）\n" +
+      "# 由设置页面管理\n\n";
+    atomicWriteYAML(providersPath, raw, header);
+  }
+
+  const prefs = _readPrefs(prefsPath);
+  const sharedPrefsChanged = repairSharedModelPrefs(prefs);
+  const favoritePrefsChanged = repairFavoritePrefs(prefs);
+  const prefsChanged = sharedPrefsChanged || favoritePrefsChanged;
+  if (prefsChanged) {
+    prefs[RETIRED_HANAKO_MODEL_REPAIR_VERSION] = true;
+    atomicWriteJSON(prefsPath, prefs);
+  }
+
+  const changedSessionMetaFiles = repairSessionMetaFiles(agentsDir);
+  if (changedAgents || removedProviderModels || prefsChanged || changedSessionMetaFiles) {
+    log(`[migrate-providers] repaired retired OpenHanako model references: agents=${changedAgents}, providerModels=${removedProviderModels}, prefs=${prefsChanged ? 1 : 0}, sessionMeta=${changedSessionMetaFiles}`);
+  }
 }
 
 /**

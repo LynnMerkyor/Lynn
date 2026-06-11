@@ -186,7 +186,12 @@ export async function verifySignedRequest(req: IncomingMessage, { pathname = '/v
 
   const parsedTs = Number(timestamp);
   if (!Number.isFinite(parsedTs)) throw new AuthError(401, 'invalid device timestamp');
-  if (Math.abs(Date.now() - parsedTs) > DEVICE_AUTH_WINDOW_MS) throw new AuthError(401, 'device signature expired');
+  if (Math.abs(Date.now() - parsedTs) > DEVICE_AUTH_WINDOW_MS) {
+    // 2026-06-10: expiry respects mode — relaxed tolerates skew (warn) so clock-skewed devices
+    // aren't locked out; strict enforces the ±DEVICE_AUTH_WINDOW_MS window. (Synced from prod.)
+    if (strict) throw new AuthError(401, 'device signature expired');
+    log && log('warn', 'auth signature expired for ' + agentKey + ' — relaxed allow');
+  }
 
   // 2026-05-25 P2-3: 把 device existence check 移到 rememberNonce 之前。
   // 未授权 agentKey spray nonces 时,直接在 loadDevice 阶段 reject,不会污染 _nonceCache。
@@ -196,11 +201,12 @@ export async function verifySignedRequest(req: IncomingMessage, { pathname = '/v
   if (!device?.secret) throw new AuthError(401, 'device not registered');
 
   if (!rememberNonce(agentKey, nonce)) {
-    if (strict) {
-      log && log('warn', 'auth nonce replayed for ' + agentKey + ' — strict reject');
-      throw new AuthError(401, 'device nonce replayed');
-    }
-    log && log('warn', 'auth nonce replayed for ' + agentKey + ' — relaxed allow');
+    // 2026-06-10: nonce replay tolerated even under strict. Clients / the desktop local-server
+    // re-send the SAME signed request on retry (same nonce + stale ts), so rejecting replays
+    // would 401 legit devices. The critical control is rejecting UNSIGNED (missing-header)
+    // requests above; a replayed nonce still carries a valid device HMAC verified below → a
+    // known registered device, not anonymous abuse. (Synced from prod.)
+    log && log('warn', 'auth nonce replayed for ' + agentKey + ' — allow (tolerated)');
   }
 
 

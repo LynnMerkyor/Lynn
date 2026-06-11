@@ -15,6 +15,7 @@ import { createFasterWhisperProvider } from "./faster-whisper.js";
 import { createOpenAIWhisperProvider } from "./openai-whisper.js";
 import { createAzureSTTProvider } from "./azure-stt.js";
 import { createStepFunRealtimeAsrProvider } from "../stepfun-realtime.js";
+import { createBrainRealtimeAsrProvider } from "../brain-realtime-voice.js";
 
 interface ASRConfig {
   provider?: string;
@@ -44,8 +45,12 @@ function errorMessage(err: unknown): string {
 }
 
 const PROVIDERS: Record<string, ASRProviderFactory> = {
-  "stepfun-realtime": createStepFunRealtimeAsrProvider,
-  "stepfun": createStepFunRealtimeAsrProvider,
+  "brain-realtime": createBrainRealtimeAsrProvider,
+  "brain-stepfun-realtime": createBrainRealtimeAsrProvider,
+  "stepfun-realtime": createBrainRealtimeAsrProvider,
+  "stepfun": createBrainRealtimeAsrProvider,
+  "stepfun-direct": createStepFunRealtimeAsrProvider,
+  "stepfun-byok": createStepFunRealtimeAsrProvider,
   "spark": (config) => createASRFallbackProvider({ ...config, provider: "qwen3-asr", fallback_provider: "sensevoice" }),
   "spark-local": (config) => createASRFallbackProvider({ ...config, provider: "qwen3-asr", fallback_provider: "sensevoice" }),
   "qwen3-asr": createQwen3AsrProvider,
@@ -61,10 +66,10 @@ const PROVIDERS: Record<string, ASRProviderFactory> = {
 
 export function listASRProviders() {
   return [
-    { id: "stepfun-realtime", label: "StepFun Realtime ASR (灰度 · 云端)", needsKey: true },
-    { id: "spark", label: "Spark local ASR Router (Qwen3-ASR → SenseVoice)", needsKey: false },
-    { id: "qwen3-asr", label: "Qwen3-ASR-0.6B (V0.79 Jarvis Runtime)", needsKey: false },
-    { id: "sensevoice", label: "SenseVoice (达摩院・推荐)", needsKey: false, default: true },
+    { id: "spark", label: "Local ASR Router (Qwen3-ASR → SenseVoice)", needsKey: false, default: true },
+    { id: "stepfun-realtime", label: "StepFun Realtime conversation/TTS (not standalone ASR)", needsKey: false },
+    { id: "qwen3-asr", label: "Qwen3-ASR-0.6B (fallback)", needsKey: false },
+    { id: "sensevoice", label: "SenseVoice (fallback)", needsKey: false },
     { id: "faster-whisper", label: "Faster Whisper (自托管)", needsKey: false },
     { id: "openai", label: "OpenAI Whisper API", needsKey: true },
     { id: "azure", label: "Azure Speech-to-Text", needsKey: true },
@@ -72,11 +77,11 @@ export function listASRProviders() {
 }
 
 export function createASRProvider(config: ASRConfig = {}): ASRProvider {
-  const providerId = config.provider || "sensevoice";
+  const providerId = config.provider || "brain-realtime";
   const factory = PROVIDERS[providerId];
   if (!factory) {
-    console.warn(`[ASR] Unknown provider "${providerId}", falling back to sensevoice`);
-    return createSenseVoiceProvider(config);
+    console.warn(`[ASR] Unknown provider "${providerId}", falling back to brain-realtime`);
+    return createBrainRealtimeAsrProvider(config);
   }
   return factory(config);
 }
@@ -101,12 +106,17 @@ export function createASRFallbackProvider(config: ASRConfig = {}, deps: ASRFallb
       try {
         return await primary.transcribe(audioBuffer, opts);
       } catch (err) {
-        const result = await fallback.transcribe(audioBuffer, opts);
-        return {
-          ...result,
-          fallbackUsed: true,
-          primaryError: errorMessage(err),
-        };
+        const primaryError = errorMessage(err);
+        try {
+          const result = await fallback.transcribe(audioBuffer, opts);
+          return {
+            ...result,
+            fallbackUsed: true,
+            primaryError,
+          };
+        } catch (fallbackErr) {
+          throw new Error(`${primary.name || primaryProvider} failed: ${primaryError}; ${fallback.name || fallbackProvider} failed: ${errorMessage(fallbackErr)}`);
+        }
       }
     },
 

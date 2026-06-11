@@ -15,6 +15,8 @@ import {
   STATE,
   makeFrame,
   createVoiceWsRoute,
+  PCM_SAMPLE_RATE,
+  PCM_TTS_CHUNK_BYTES,
   parseFrame,
   pcm16ToWav,
   pcm16Rms,
@@ -78,8 +80,9 @@ function makeHealthyDeps(overrides = {}) {
 }
 
 function pcmFrame(amplitude = 0) {
-  const out = Buffer.alloc(3200);
-  for (let i = 0; i < 1600; i += 1) {
+  const samples = PCM_SAMPLE_RATE / 10;
+  const out = Buffer.alloc(PCM_TTS_CHUNK_BYTES);
+  for (let i = 0; i < samples; i += 1) {
     const sample = amplitude === 0 ? 0 : (i % 2 === 0 ? amplitude : -amplitude);
     out.writeInt16LE(sample, i * 2);
   }
@@ -94,40 +97,90 @@ describe("voice-ws route — createVoiceWsRoute", () => {
     expect(typeof wsRoute.get).toBe("function");
   });
 
-  it("defaults Jarvis Runtime ASR to Qwen3-ASR with SenseVoice fallback", () => {
+  it("defaults Lynn Voice ASR to local transcription and TTS to Brain StepFun Realtime", () => {
     expect(resolveVoiceRuntimeAsrConfig({})).toMatchObject({
-      provider: "qwen3-asr",
+      provider: "spark",
       fallback_provider: "sensevoice",
     });
-    expect(resolveVoiceRuntimeAsrConfig({ provider: "sensevoice" })).toMatchObject({
-      provider: "qwen3-asr",
-      fallback_provider: "sensevoice",
-    });
-    expect(resolveVoiceRuntimeAsrConfig({ provider: "openai", base_url: "https://example.test" })).toMatchObject({
-      provider: "openai",
-      base_url: "https://example.test",
+    expect(resolveVoiceRuntimeTtsConfig({})).toMatchObject({
+      provider: "brain-realtime",
+      fallback_provider: "spark",
     });
   });
 
-  it("only switches to StepFun Realtime router when the voice gray switch is enabled", () => {
+  it("keeps standalone ASR on real transcription providers when stale voice settings exist", () => {
+    expect(resolveVoiceRuntimeAsrConfig({ provider: "sensevoice" })).toMatchObject({
+      provider: "sensevoice",
+      fallback_provider: "spark",
+    });
+    expect(resolveVoiceRuntimeAsrConfig({ provider: "spark" })).toMatchObject({
+      provider: "spark",
+      fallback_provider: "sensevoice",
+    });
+    const openai = resolveVoiceRuntimeAsrConfig({ provider: "openai", base_url: "https://example.test", api_key: "sk-old" });
+    expect(openai).toMatchObject({
+      provider: "openai",
+      fallback_provider: "spark",
+      base_url: "https://example.test",
+      api_key: "sk-old",
+    });
+    expect(resolveVoiceRuntimeTtsConfig({ provider: "cosyvoice2" })).toMatchObject({
+      provider: "brain-realtime",
+      fallback_provider: "cosyvoice2",
+    });
+    const cosyvoice = resolveVoiceRuntimeTtsConfig({ provider: "cosyvoice", base_url: "http://127.0.0.1:18021", default_voice: "中文女" });
+    expect(cosyvoice).toMatchObject({
+      provider: "brain-realtime",
+      fallback_provider: "cosyvoice",
+      fallback: {
+        provider: "cosyvoice",
+        base_url: "http://127.0.0.1:18021",
+        default_voice: "中文女",
+      },
+    });
+    expect(cosyvoice.base_url).toBeUndefined();
+    expect(cosyvoice.default_voice).toBeUndefined();
+  });
+
+  it("keeps StepFun Realtime on Brain unless direct BYOK is explicit", () => {
     const oldRouter = process.env.LYNN_VOICE_ROUTER;
     const oldKey = process.env.LYNN_STEP_REALTIME_KEY;
     try {
       delete process.env.LYNN_VOICE_ROUTER;
       process.env.LYNN_STEP_REALTIME_KEY = "sk-test";
       expect(resolveVoiceRuntimeAsrConfig({})).toMatchObject({
-        provider: "qwen3-asr",
+        provider: "spark",
         fallback_provider: "sensevoice",
       });
 
       process.env.LYNN_VOICE_ROUTER = "auto";
       expect(resolveVoiceRuntimeAsrConfig({}, { realtime: { endpoint: "https://api.stepfun.com" } })).toMatchObject({
-        provider: "stepfun-realtime",
-        fallback_provider: "spark",
-        endpoint: "https://api.stepfun.com",
+        provider: "spark",
+        fallback_provider: "sensevoice",
       });
       expect(resolveVoiceRuntimeTtsConfig({}, { realtime: { endpoint: "https://api.stepfun.com" } })).toMatchObject({
-        provider: "stepfun-realtime",
+        provider: "brain-realtime",
+        fallback_provider: "spark",
+      });
+      expect(resolveVoiceRuntimeAsrConfig({ provider: "stepfun-direct" }, {
+        providers: {
+          "stepfun-coding": {
+            api_key: "sk-provider",
+            base_url: "https://api.stepfun.com/step_plan/v1",
+          },
+        },
+      })).toMatchObject({
+        provider: "spark",
+        fallback_provider: "sensevoice",
+      });
+
+      delete process.env.LYNN_STEP_REALTIME_KEY;
+      expect(resolveVoiceRuntimeAsrConfig({ provider: "stepfun-realtime" })).toMatchObject({
+        provider: "spark",
+        fallback_provider: "sensevoice",
+      });
+      expect(resolveVoiceRuntimeTtsConfig({ provider: "stepfun-realtime" })).toMatchObject({
+        provider: "brain-realtime",
         fallback_provider: "spark",
       });
     } finally {
@@ -151,7 +204,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
   });
 
   it("idle → listening on first PCM_AUDIO frame", async () => {
-    const pcm = Buffer.alloc(3200, 0); // 1600 samples Int16 = 3200 bytes
+    const pcm = Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0); // 2400 samples Int16 = 4800 bytes
     hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, pcm) }, ws);
     // STATE_CHANGE 应已发出
     await new Promise((r) => setTimeout(r, 5));
@@ -186,7 +239,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
     hooks.onOpen({}, ws);
 
     // 先发一个 PCM 进入 LISTENING
-    const pcm = Buffer.alloc(3200, 0);
+    const pcm = Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0);
     hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, pcm) }, ws);
     await new Promise((r) => setTimeout(r, 5));
     ws.sent = []; // 清空
@@ -220,7 +273,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
 
     const ttsFrames = ws.sent.filter((b) => b[0] === FRAME.PCM_TTS).map(parseFrame);
     expect(ttsFrames.length).toBeGreaterThanOrEqual(2);
-    expect(ttsFrames[0].payload.length).toBeLessThanOrEqual(3200);
+    expect(ttsFrames[0].payload.length).toBeLessThanOrEqual(PCM_TTS_CHUNK_BYTES);
   });
 
   it("normalizes spoken restart artifacts before emitting transcript_final", async () => {
@@ -236,7 +289,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
     ws = new MockWs();
     hooks.onOpen({}, ws);
 
-    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(3200, 0)) }, ws);
+    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0)) }, ws);
     hooks.onMessage({ data: makeFrame(FRAME.END_OF_TURN, 0, 1, Buffer.alloc(0)) }, ws);
     await vi.waitFor(() => expect(deps.asrProvider.transcribe).toHaveBeenCalledTimes(1));
 
@@ -253,7 +306,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
     ws = new MockWs();
     hooks.onOpen({}, ws);
 
-    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(3200, 0)) }, ws);
+    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0)) }, ws);
     hooks.onMessage({ data: makeFrame(FRAME.END_OF_TURN, 0, 1, Buffer.alloc(0)) }, ws);
     await vi.waitFor(() => expect(deps.asrProvider.transcribe).toHaveBeenCalledTimes(1));
 
@@ -280,12 +333,46 @@ describe("voice-ws route — VoiceSession state machine", () => {
     expect(ws.sent.some((b) => b[0] === FRAME.PCM_TTS)).toBe(true);
   });
 
+  it("drops microphone frames while speaking so assistant TTS cannot become the next user transcript", async () => {
+    let resolveSynth;
+    const synthesize = vi.fn(async () => new Promise((resolve) => {
+      resolveSynth = () => resolve({ audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 1), mimeType: "audio/pcm" });
+    }));
+    const deps = makeHealthyDeps({
+      ttsProvider: {
+        synthesize,
+        health: vi.fn(async () => true),
+      },
+    });
+    upg = makeMockUpgrade();
+    createVoiceWsRoute({}, {}, { upgradeWebSocket: upg.upgradeWebSocket, ...deps });
+    hooks = upg.invoke({ req: { query: (key) => (key === "mode" ? "chat" : "") } });
+    ws = new MockWs();
+    hooks.onOpen({}, ws);
+
+    hooks.onMessage({
+      data: makeFrame(FRAME.SPEAK_TEXT, 0, 0, Buffer.from("在呢,有什么可以帮到你的吗?", "utf-8")),
+    }, ws);
+    await vi.waitFor(() => expect(synthesize).toHaveBeenCalledTimes(1));
+
+    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 1, pcmFrame(2200)) }, ws);
+    hooks.onMessage({ data: makeFrame(FRAME.END_OF_TURN, 0, 2, Buffer.alloc(0)) }, ws);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(deps.asrProvider.transcribe).not.toHaveBeenCalled();
+
+    resolveSynth();
+    await vi.waitFor(() => {
+      const states = ws.sent.filter((b) => b[0] === FRAME.STATE_CHANGE).map((b) => b.subarray(4).toString("utf-8"));
+      expect(states.at(-1)).toBe(STATE.IDLE);
+    });
+  });
+
   it("does not let a late on-open health probe override active speaking state", async () => {
     let resolveHealth;
     let resolveSynth;
     const ttsHealth = new Promise((resolve) => { resolveHealth = resolve; });
     const synthResult = new Promise((resolve) => {
-      resolveSynth = () => resolve({ audio: Buffer.alloc(3200, 1), mimeType: "audio/pcm" });
+      resolveSynth = () => resolve({ audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 1), mimeType: "audio/pcm" });
     });
     const deps = makeHealthyDeps({
       healthOnOpen: true,
@@ -359,7 +446,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
       if (synthesize.mock.calls.length === 1) {
         throw new Error("segment too long");
       }
-      return { audio: Buffer.alloc(3200, 1), mimeType: "audio/pcm" };
+      return { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 1), mimeType: "audio/pcm" };
     });
     const deps = makeHealthyDeps({
       ttsProvider: {
@@ -463,7 +550,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
     ws = new MockWs();
     hooks.onOpen({}, ws);
 
-    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(3200, 0)) }, ws);
+    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0)) }, ws);
     hooks.onMessage({ data: makeFrame(FRAME.END_OF_TURN, 0, 1, Buffer.alloc(0)) }, ws);
     await vi.waitFor(() => expect(deps.brainRunner).toHaveBeenCalled());
 
@@ -489,7 +576,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
     ws = new MockWs();
     hooks.onOpen({}, ws);
 
-    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(3200, 0)) }, ws);
+    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0)) }, ws);
     hooks.onMessage({ data: makeFrame(FRAME.END_OF_TURN, 0, 1, Buffer.alloc(0)) }, ws);
     await vi.waitFor(() => expect(ws.sent.some((b) => b[0] === FRAME.EMOTION)).toBe(true));
 
@@ -550,7 +637,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
       expect(states).toContain(STATE.DEGRADED);
     });
     ws.sent = [];
-    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(3200, 0)) }, ws);
+    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0)) }, ws);
     await vi.waitFor(() => {
       const states = ws.sent.filter((b) => b[0] === FRAME.STATE_CHANGE).map((b) => b.subarray(4).toString("utf-8"));
       expect(states).toContain(STATE.LISTENING);
@@ -570,7 +657,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
     ws = new MockWs();
     hooks.onOpen({}, ws);
 
-    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(3200, 0)) }, ws);
+    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0)) }, ws);
     hooks.onMessage({ data: makeFrame(FRAME.END_OF_TURN, 0, 1, Buffer.alloc(0)) }, ws);
     await vi.waitFor(() => {
       const states = ws.sent.filter((b) => b[0] === FRAME.STATE_CHANGE).map((b) => b.subarray(4).toString("utf-8"));
@@ -618,7 +705,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
       brainRunner: vi.fn(async () => " fallback reply。"),
       ttsProvider: {
         synthesize: vi.fn(async () => ({
-          audio: Buffer.alloc(3200, 3),
+          audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 3),
           mimeType: "audio/pcm",
           fallbackUsed: true,
           primaryError: "cosyvoice offline",
@@ -632,7 +719,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
     ws = new MockWs();
     hooks.onOpen({}, ws);
 
-    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(3200, 0)) }, ws);
+    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0)) }, ws);
     hooks.onMessage({ data: makeFrame(FRAME.END_OF_TURN, 0, 1, Buffer.alloc(0)) }, ws);
     await vi.waitFor(() => expect(ws.sent.some((b) => b[0] === FRAME.PCM_TTS)).toBe(true));
 
@@ -674,7 +761,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
     const interruptStates = ws.sent.filter((b) => b[0] === FRAME.STATE_CHANGE).map((b) => b.subarray(4).toString("utf-8"));
     expect(interruptStates).toContain(STATE.LISTENING);
     ws.sent = [];
-    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 2, Buffer.alloc(3200, 0)) }, ws);
+    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 2, Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0)) }, ws);
     hooks.onMessage({ data: makeFrame(FRAME.END_OF_TURN, 0, 3, Buffer.alloc(0)) }, ws);
     await vi.waitFor(() => expect(deps.asrProvider.transcribe).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(deps.ttsProvider.synthesize).toHaveBeenCalled());
@@ -690,7 +777,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
   });
 
   it("extracts PCM data from WAV TTS responses before PCM_TTS", async () => {
-    const pcm = Buffer.alloc(3200, 2);
+    const pcm = Buffer.alloc(PCM_TTS_CHUNK_BYTES, 2);
     const deps = makeHealthyDeps({
       brainRunner: vi.fn(async () => "一句话。"),
       ttsProvider: {
@@ -703,14 +790,14 @@ describe("voice-ws route — VoiceSession state machine", () => {
     hooks = upg.invoke({});
     ws = new MockWs();
     hooks.onOpen({}, ws);
-    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(3200, 0)) }, ws);
+    hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0)) }, ws);
     hooks.onMessage({ data: makeFrame(FRAME.END_OF_TURN, 0, 1, Buffer.alloc(0)) }, ws);
     await vi.waitFor(() => expect(ws.sent.some((b) => b[0] === FRAME.PCM_TTS)).toBe(true));
     const tts = ws.sent.find((b) => b[0] === FRAME.PCM_TTS);
     expect(parseFrame(tts).payload.equals(pcm)).toBe(true);
   });
 
-  it("resamples 22050Hz CosyVoice WAV to 16k PCM before PCM_TTS playback", () => {
+  it("resamples 22050Hz CosyVoice WAV to 24k PCM before PCM_TTS playback", () => {
     const sourceRate = 22050;
     const sourceSamples = sourceRate;
     const pcm = Buffer.alloc(sourceSamples * 2);
@@ -720,11 +807,11 @@ describe("voice-ws route — VoiceSession state machine", () => {
 
     const normalized = normalizeTtsAudioToPcm16Mono16k(pcm16ToWav(pcm, { sampleRate: sourceRate }));
 
-    expect(normalized.length).toBe(16000 * 2);
+    expect(normalized.length).toBe(PCM_SAMPLE_RATE * 2);
   });
 
   it("seq u16 wrap accepted without crash", () => {
-    const pcm = Buffer.alloc(3200, 0);
+    const pcm = Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0);
     // seq = 0xFFFF, then 0
     hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0xffff, pcm) }, ws);
     hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, pcm) }, ws);
@@ -746,7 +833,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
       if (synthesize.mock.calls.length === 1) {
         await firstSpeech;
       }
-      return { audio: Buffer.alloc(3200, 1), mimeType: "audio/pcm" };
+      return { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 1), mimeType: "audio/pcm" };
     });
     const deps = makeHealthyDeps({
       ttsProvider: { synthesize, health: vi.fn(async () => true) },
@@ -806,8 +893,8 @@ describe("voice-ws route — VoiceSession state machine", () => {
   it("speakText prefers ttsProvider.synthesizeStream when available (P0-② 2026-05-01)", async () => {
     const synthesize = vi.fn();
     const synthesizeStream = vi.fn(async function* (_text) {
-      yield { audio: Buffer.alloc(3200, 1), mimeType: "audio/pcm", provider: "cosyvoice2" };
-      yield { audio: Buffer.alloc(3200, 2), mimeType: "audio/pcm", provider: "cosyvoice2" };
+      yield { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 1), mimeType: "audio/pcm", provider: "cosyvoice2" };
+      yield { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 2), mimeType: "audio/pcm", provider: "cosyvoice2" };
     });
     const deps = makeHealthyDeps({
       ttsProvider: { synthesize, synthesizeStream, health: vi.fn(async () => true) },
@@ -833,7 +920,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
   });
 
   it("speakText falls back to batch synthesize when provider has no synthesizeStream", async () => {
-    const synthesize = vi.fn(async () => ({ audio: Buffer.alloc(3200, 1), mimeType: "audio/pcm" }));
+    const synthesize = vi.fn(async () => ({ audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 1), mimeType: "audio/pcm" }));
     const deps = makeHealthyDeps({
       ttsProvider: { synthesize, health: vi.fn(async () => true) },
     });
@@ -854,8 +941,8 @@ describe("voice-ws route — VoiceSession state machine", () => {
   it("streamSegmentToPcm flags DEGRADED on any chunk with fallbackUsed, not just the first (修 2 2026-05-01)", async () => {
     // primary 先 yield 一个正常 chunk,然后 fallback 路径再 yield 一个 fallbackUsed 的 chunk
     const synthesizeStream = vi.fn(async function* (_text) {
-      yield { audio: Buffer.alloc(3200, 0xAA), mimeType: "audio/pcm" };
-      yield { audio: Buffer.alloc(3200, 0xBB), mimeType: "audio/pcm", fallbackUsed: true, primaryError: "primary blew up mid-stream" };
+      yield { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0xAA), mimeType: "audio/pcm" };
+      yield { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0xBB), mimeType: "audio/pcm", fallbackUsed: true, primaryError: "primary blew up mid-stream" };
     });
     const deps = makeHealthyDeps({
       ttsProvider: { synthesize: vi.fn(), synthesizeStream, health: vi.fn(async () => true) },
@@ -879,7 +966,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
   it("streamSegmentToPcm with stream failure mid-segment does NOT split-retry once PCM was yielded (修 3 2026-05-01)", async () => {
     // yield 一段后抛 — 不应触发"切小重试"(否则用户会重听已播段)
     const synthesizeStream = vi.fn(async function* (_text) {
-      yield { audio: Buffer.alloc(3200, 0xCC), mimeType: "audio/pcm" };
+      yield { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0xCC), mimeType: "audio/pcm" };
       throw new Error("stream connection lost mid-yield");
     });
     const deps = makeHealthyDeps({
@@ -912,7 +999,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
         firstCall = false;
         throw new Error("stream couldn't even start");
       }
-      yield { audio: Buffer.alloc(3200, 0x11), mimeType: "audio/pcm" };
+      yield { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0x11), mimeType: "audio/pcm" };
     });
     const deps = makeHealthyDeps({
       ttsProvider: { synthesize: vi.fn(), synthesizeStream, health: vi.fn(async () => true) },
@@ -936,9 +1023,9 @@ describe("voice-ws route — VoiceSession state machine", () => {
     let resolveSecondChunk;
     const secondChunkGate = new Promise((resolve) => { resolveSecondChunk = resolve; });
     const synthesizeStream = vi.fn(async function* (_text) {
-      yield { audio: Buffer.alloc(3200, 0xAA), mimeType: "audio/pcm" };
+      yield { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0xAA), mimeType: "audio/pcm" };
       await secondChunkGate;
-      yield { audio: Buffer.alloc(3200, 0xBB), mimeType: "audio/pcm" };
+      yield { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 0xBB), mimeType: "audio/pcm" };
     });
     const deps = makeHealthyDeps({
       ttsProvider: { synthesize: vi.fn(), synthesizeStream, health: vi.fn(async () => true) },
@@ -980,7 +1067,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
         // 第一段 hold,模拟合成时间
         await new Promise((r) => { resolveFirst = r; });
       }
-      return { audio: Buffer.alloc(3200, 1), mimeType: "audio/pcm" };
+      return { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 1), mimeType: "audio/pcm" };
     });
     const deps = makeHealthyDeps({
       ttsProvider: { synthesize, health: vi.fn(async () => true) },
@@ -1030,9 +1117,9 @@ describe("voice-ws route — VoiceSession state machine", () => {
     const synthesize = vi.fn(async (text) => {
       if (synthesize.mock.calls.length === 1) {
         await firstSpeech;
-        return { audio: Buffer.alloc(3200, 1), mimeType: "audio/pcm" };
+        return { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 1), mimeType: "audio/pcm" };
       }
-      return { audio: Buffer.alloc(3200, 1), mimeType: "audio/pcm" };
+      return { audio: Buffer.alloc(PCM_TTS_CHUNK_BYTES, 1), mimeType: "audio/pcm" };
     });
     const deps = makeHealthyDeps({
       ttsProvider: { synthesize, health: vi.fn(async () => true) },
@@ -1093,7 +1180,7 @@ describe("voice-ws route — VoiceSession state machine", () => {
     expect(deps.ttsProvider.synthesize).not.toHaveBeenCalled();
   });
 
-  it("server-side AEC processes mic frame using TTS reference queue (P1-① 2026-05-01)", async () => {
+  it("server-side AEC processes mic frame using retained TTS reference queue (P1-① 2026-05-01)", async () => {
     // mock AEC processor:capture 函数把 mic Float32 全部置 0(模拟"完美" echo cancellation)
     const captures = [];
     const renders = [];
@@ -1121,8 +1208,12 @@ describe("voice-ws route — VoiceSession state machine", () => {
       data: makeFrame(FRAME.SPEAK_TEXT, 0, 0, Buffer.from("你好。", "utf-8")),
     }, ws);
     await vi.waitFor(() => expect(deps.ttsProvider.synthesize).toHaveBeenCalled());
+    await vi.waitFor(() => {
+      const states = ws.sent.filter((b) => b[0] === FRAME.STATE_CHANGE).map((b) => b.subarray(4).toString("utf-8"));
+      expect(states.at(-1)).toBe(STATE.IDLE);
+    });
 
-    // 发一个 100ms mic 帧(1600 samples = 3200 字节,10×10ms 帧)
+    // 发一个 100ms mic 帧(2400 samples = 4800 字节,10×10ms 帧)
     hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, pcmFrame(2000)) }, ws);
     await vi.waitFor(() => expect(captures.length).toBeGreaterThan(0));
 
@@ -1180,6 +1271,10 @@ describe("voice-ws route — VoiceSession state machine", () => {
       data: makeFrame(FRAME.SPEAK_TEXT, 0, 0, Buffer.from("一段。两段。三段。", "utf-8")),
     }, ws);
     await vi.waitFor(() => expect(deps.ttsProvider.synthesize.mock.calls.length).toBeGreaterThan(0));
+    await vi.waitFor(() => {
+      const states = ws.sent.filter((b) => b[0] === FRAME.STATE_CHANGE).map((b) => b.subarray(4).toString("utf-8"));
+      expect(states.at(-1)).toBe(STATE.IDLE);
+    });
 
     // 一个 100ms mic 帧 → take 队首(最老)reference
     hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, pcmFrame(800)) }, ws);
@@ -1212,6 +1307,10 @@ describe("voice-ws route — VoiceSession state machine", () => {
         data: makeFrame(FRAME.SPEAK_TEXT, 0, 0, Buffer.from("足够长的文本累积参考信号一段。又一段。又又一段。", "utf-8")),
       }, ws);
       await vi.waitFor(() => expect(deps.ttsProvider.synthesize.mock.calls.length).toBeGreaterThan(2));
+      await vi.waitFor(() => {
+        const states = ws.sent.filter((b) => b[0] === FRAME.STATE_CHANGE).map((b) => b.subarray(4).toString("utf-8"));
+        expect(states.at(-1)).toBe(STATE.IDLE);
+      });
 
       hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 0, pcmFrame(800)) }, ws);
       await vi.waitFor(() => expect(renders.length).toBeGreaterThan(0));

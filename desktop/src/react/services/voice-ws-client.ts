@@ -131,13 +131,13 @@ export interface VoiceWsClientOptions extends VoiceWsClientEvents {
   noiseSuppression?: boolean;
   autoGainControl?: boolean;
   stopCaptureOnEndTurn?: boolean;
-  mode?: 'direct' | 'chat';
+  mode?: 'direct' | 'chat' | 'realtime';
 }
 
 const WS_OPEN = 1;
 const decoder = new TextDecoder();
 
-export function resolveVoiceWsUrl(port?: string | number | null, mode?: 'direct' | 'chat'): string {
+export function resolveVoiceWsUrl(port?: string | number | null, mode?: 'direct' | 'chat' | 'realtime'): string {
   const suffix = mode ? `?mode=${encodeURIComponent(mode)}` : '';
   if (port) return `ws://127.0.0.1:${port}/voice-ws${suffix}`;
   const loc = globalThis.location;

@@ -8,7 +8,7 @@ import { createASRFallbackProvider } from "../server/clients/asr/index.js";
 import { createQwen3AsrProvider } from "../server/clients/asr/qwen3-asr.js";
 import { createSERProvider, EMOTION_LLM_HINT } from "../server/clients/ser/index.js";
 import { createEmotion2VecProvider } from "../server/clients/ser/emotion2vec-plus.js";
-import { createStepFunRealtimeAsrProvider, createStepFunRealtimeTtsProvider } from "../server/clients/stepfun-realtime.js";
+import { createStepFunRealtimeAsrProvider, createStepFunRealtimeTtsProvider, resolveStepFunRealtimeConfig } from "../server/clients/stepfun-realtime.js";
 import { createCosyVoice2TtsProvider } from "../server/clients/tts/cosyvoice2.js";
 import { createEdgeTtsProvider, createTTSFallbackProvider } from "../server/clients/tts/index.js";
 import { normalizeChineseTtsText, stripEmojiForTts } from "../shared/tts-text-normalizer.js";
@@ -177,27 +177,33 @@ describe("StepFun Realtime voice providers", () => {
     FakeStepWebSocket.instances = [];
   });
 
-  it("transcribes through StepFun Realtime websocket frames", async () => {
+  it("reuses the existing StepFun coding key/base env for realtime voice", () => {
+    const oldKey = process.env.STEP37_KEY;
+    const oldBase = process.env.STEP37_BASE;
+    try {
+      process.env.STEP37_KEY = "sk-step37";
+      process.env.STEP37_BASE = "https://api.stepfun.com/step_plan/v1";
+      const cfg = resolveStepFunRealtimeConfig();
+      expect(cfg.apiKey).toBe("sk-step37");
+      expect(cfg.endpoint).toBe("wss://api.stepfun.com/v1/realtime/stateless");
+    } finally {
+      if (oldKey === undefined) delete process.env.STEP37_KEY;
+      else process.env.STEP37_KEY = oldKey;
+      if (oldBase === undefined) delete process.env.STEP37_BASE;
+      else process.env.STEP37_BASE = oldBase;
+    }
+  });
+
+  it("does not treat StepFun Realtime assistant transcripts as standalone ASR", async () => {
     const p = createStepFunRealtimeAsrProvider({
       api_key: "sk-test",
       endpoint: "https://api.stepfun.com",
       websocketCtor: FakeStepWebSocket,
       timeout_ms: 1000,
     });
-    const pending = p.transcribe(Buffer.alloc(3200), { language: "zh" });
-    const ws = FakeStepWebSocket.instances[0];
-    ws.open();
-
-    const result = await pending;
-    expect(result).toMatchObject({ text: "你好 Lynn", provider: "stepfun-realtime" });
-    expect(ws.url).toBe("wss://api.stepfun.com/v1/realtime/stateless?model=step-overture-preview");
-    expect(ws.opts.headers.Authorization).toBe("Bearer sk-test");
-    expect(ws.sent.map((m) => m.type)).toEqual([
-      "input_audio_buffer.append",
-      "input_audio_buffer.commit",
-      "response.create",
-    ]);
-    expect(ws.sent[2].response.modalities).toEqual(["text"]);
+    await expect(p.transcribe(Buffer.alloc(3200), { language: "zh" }))
+      .rejects.toThrow(/not standalone user ASR transcripts/);
+    expect(FakeStepWebSocket.instances).toHaveLength(0);
   });
 
   it("synthesizes StepFun Realtime audio as WAV for the existing voice pipeline", async () => {
@@ -224,6 +230,7 @@ describe("StepFun Realtime voice providers", () => {
       ok: false,
       degraded: true,
       provider: "stepfun-realtime",
+      error: expect.stringMatching(/not standalone user ASR transcripts/),
     });
   });
 });

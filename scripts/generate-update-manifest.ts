@@ -75,6 +75,14 @@ function buildAssetUrls(version: string) {
   return assets;
 }
 
+function buildDownloadUrls(version: string) {
+  return {
+    macArm: `${MIRROR_DOWNLOAD_BASE}/Lynn-${version}-macOS-arm64.dmg`,
+    macX64: `${MIRROR_DOWNLOAD_BASE}/Lynn-${version}-macOS-x64.dmg`,
+    windows: `${MIRROR_DOWNLOAD_BASE}/Lynn-${version}-Windows-Setup.exe`,
+  };
+}
+
 function resolveNotes({ notes, notesFile }: Pick<CliArgs, "notes" | "notesFile">): string {
   if (notes) return notes.trim();
   if (notesFile) {
@@ -114,7 +122,15 @@ function generateManifest({ channel, version, notes }: {
     assets: buildAssetUrls(version),
   };
 
-  const next = { ...existing, [channel]: entry };
+  const next: UpdateManifest & { version?: string; notes?: string; downloads?: ReturnType<typeof buildDownloadUrls> } = {
+    ...existing,
+    [channel]: entry,
+  };
+  if (channel === "stable") {
+    next.version = version;
+    next.notes = notes;
+    next.downloads = buildDownloadUrls(version);
+  }
   fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
   fs.writeFileSync(manifestPath, JSON.stringify(next, null, 2) + "\n", "utf-8");
   return manifestPath;

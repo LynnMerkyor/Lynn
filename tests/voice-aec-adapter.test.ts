@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AEC_SAMPLE_RATE,
   AEC_SAMPLES_PER_FRAME,
   float32ToInt16,
   int16ToFloat32,
@@ -8,8 +9,8 @@ import {
 } from "../desktop/src/react/services/aec-frame-adapter";
 
 describe("AEC frame adapter", () => {
-  it("splits a 100ms 16kHz Int16 chunk into ten 10ms Float32 frames", () => {
-    const pcm = new Int16Array(1600);
+  it("splits a 100ms 24kHz Int16 chunk into ten 10ms Float32 frames", () => {
+    const pcm = new Int16Array(AEC_SAMPLE_RATE / 10);
     for (let i = 0; i < pcm.length; i++) pcm[i] = i - 800;
     const frames = splitPcm100msToAecFrames(pcm);
     expect(frames).toHaveLength(10);
@@ -25,7 +26,7 @@ describe("AEC frame adapter", () => {
     });
     const pcm = mergeAecFramesToPcm(frames);
     expect(pcm).toBeInstanceOf(Int16Array);
-    expect(pcm).toHaveLength(1600);
+    expect(pcm).toHaveLength(AEC_SAMPLE_RATE / 10);
   });
 
   it("round-trips representative Int16 values through Float32 conversion", () => {
@@ -35,7 +36,7 @@ describe("AEC frame adapter", () => {
   });
 
   it("rejects chunks that cannot be split into strict 10ms frames", () => {
-    expect(() => splitPcm100msToAecFrames(new Int16Array(1599))).toThrow(/not divisible/);
+    expect(() => splitPcm100msToAecFrames(new Int16Array((AEC_SAMPLE_RATE / 10) - 1))).toThrow(/not divisible/);
     expect(() => mergeAecFramesToPcm([new Float32Array(100)])).toThrow(/frame length/);
   });
 });

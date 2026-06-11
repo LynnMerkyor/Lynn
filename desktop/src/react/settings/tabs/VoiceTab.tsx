@@ -7,32 +7,14 @@ import { KeyInput } from '../widgets/KeyInput';
 import styles from '../Settings.module.css';
 
 const ASR_PROVIDERS = [
-  { value: 'stepfun-realtime', label: 'StepFun Realtime ASR (灰度 · 云端)' },
-  { value: 'spark', label: 'Spark local ASR Router (Qwen3-ASR → SenseVoice)' },
-  { value: 'sensevoice', label: 'SenseVoice (达摩院・推荐)' },
-  { value: 'faster-whisper', label: 'Faster Whisper (自托管)' },
+  { value: 'spark', label: '语音输入转写 (本地 ASR · 默认)' },
   { value: 'openai', label: 'OpenAI Whisper API (BYOK)' },
   { value: 'azure', label: 'Azure Speech-to-Text (BYOK)' },
 ];
 
 const TTS_PROVIDERS = [
-  { value: 'stepfun-realtime', label: 'StepFun Realtime TTS (灰度 · 云端)' },
-  { value: 'spark', label: 'Spark local TTS Router (CosyVoice → Edge)' },
-  { value: 'cosyvoice', label: 'CosyVoice (Spark · 真流式 · 默认推荐)' },
-  { value: 'edge', label: 'Edge TTS (免费在线・备用)' },
+  { value: 'stepfun-realtime', label: 'StepFun Realtime TTS (Lynn 云端 · 无需 Key)' },
   { value: 'openai', label: 'OpenAI TTS API (BYOK)' },
-  { value: 'say', label: 'macOS say (本地离线)' },
-];
-
-// CosyVoice SFT 7 个内置 speakers
-const COSYVOICE_VOICES = [
-  { value: '中文女', label: '中文女(默认)' },
-  { value: '中文男', label: '中文男' },
-  { value: '英文女', label: '英文女' },
-  { value: '英文男', label: '英文男' },
-  { value: '日语男', label: '日语男' },
-  { value: '韩语女', label: '韩语女' },
-  { value: '粤语女', label: '粤语女' },
 ];
 
 const LANGUAGES = [
@@ -44,9 +26,23 @@ const LANGUAGES = [
 ];
 
 function defaultTtsVoice(provider: string): string {
-  if (provider === 'cosyvoice' || provider === 'spark') return '中文女';
   if (provider === 'stepfun-realtime') return 'jingdiannvsheng';
   return 'zh-CN-XiaoxiaoNeural';
+}
+
+const LEGACY_ASR_FALLBACKS = new Set(['stepfun-realtime', 'stepfun', 'brain-realtime', 'brain-stepfun-realtime', 'sensevoice', 'faster-whisper']);
+const LEGACY_TTS_FALLBACKS = new Set(['spark', 'cosyvoice', 'edge', 'say']);
+
+export function normalizeAsrProvider(provider?: string | null): string {
+  const value = String(provider || '').trim();
+  if (!value || LEGACY_ASR_FALLBACKS.has(value)) return 'spark';
+  return value;
+}
+
+export function normalizeTtsProvider(provider?: string | null): string {
+  const value = String(provider || '').trim();
+  if (!value || LEGACY_TTS_FALLBACKS.has(value)) return 'stepfun-realtime';
+  return value;
 }
 
 type ShortcutStatus = {
@@ -78,14 +74,14 @@ export function VoiceTab() {
   const { settingsConfig } = useSettingsStore();
   const voice = settingsConfig?.voice || {};
 
-  const [asrProvider, setAsrProvider] = useState(voice.asr?.provider || 'sensevoice');
+  const [asrProvider, setAsrProvider] = useState(normalizeAsrProvider(voice.asr?.provider));
   const [asrKey, setAsrKey] = useState(voice.asr?.api_key || '');
   const [asrBaseUrl, setAsrBaseUrl] = useState(voice.asr?.base_url || '');
 
-  const [ttsProvider, setTtsProvider] = useState(voice.tts?.provider || 'cosyvoice');
+  const [ttsProvider, setTtsProvider] = useState(normalizeTtsProvider(voice.tts?.provider));
   const [ttsKey, setTtsKey] = useState(voice.tts?.api_key || '');
   const [ttsBaseUrl, setTtsBaseUrl] = useState(voice.tts?.base_url || '');
-  const [ttsVoice, setTtsVoice] = useState(voice.tts?.default_voice || defaultTtsVoice(voice.tts?.provider || 'cosyvoice'));
+  const [ttsVoice, setTtsVoice] = useState(voice.tts?.default_voice || defaultTtsVoice(normalizeTtsProvider(voice.tts?.provider)));
   const ttsAutoPrefetch = useStore((s) => s.ttsAutoPrefetch);
   const ttsStreamingEnabled = useStore((s) => s.ttsStreamingEnabled);
   const ttsBrowserFallbackEnabled = useStore((s) => s.ttsBrowserFallbackEnabled);
@@ -102,10 +98,11 @@ export function VoiceTab() {
   // 当 settingsConfig 从服务端刷新后，同步本地状态
   useEffect(() => {
     const v = settingsConfig?.voice || {};
-    setAsrProvider(v.asr?.provider || 'sensevoice');
+    const nextAsrProvider = normalizeAsrProvider(v.asr?.provider);
+    setAsrProvider(nextAsrProvider);
     setAsrKey(v.asr?.api_key || '');
     setAsrBaseUrl(v.asr?.base_url || '');
-    const nextTtsProvider = v.tts?.provider || 'cosyvoice';
+    const nextTtsProvider = normalizeTtsProvider(v.tts?.provider);
     setTtsProvider(nextTtsProvider);
     setTtsProviderPreference(nextTtsProvider);
     setTtsKey(v.tts?.api_key || '');
@@ -129,8 +126,8 @@ export function VoiceTab() {
     return () => { cancelled = true; };
   }, []);
 
-  const needsAsrKey = asrProvider === 'openai' || asrProvider === 'azure' || asrProvider === 'stepfun-realtime';
-  const needsTtsKey = ttsProvider === 'openai' || ttsProvider === 'stepfun-realtime';
+  const needsAsrKey = asrProvider === 'openai' || asrProvider === 'azure';
+  const needsTtsKey = ttsProvider === 'openai';
 
   const handleSave = async () => {
     const payload: {
@@ -150,13 +147,13 @@ export function VoiceTab() {
         asr: {
           provider: asrProvider,
           ...(needsAsrKey ? { api_key: asrKey || undefined } : {}),
-          ...(asrBaseUrl ? { base_url: asrBaseUrl } : {}),
+          ...(needsAsrKey && asrBaseUrl ? { base_url: asrBaseUrl } : {}),
         },
         tts: {
           provider: ttsProvider,
           default_voice: ttsVoice,
           ...(needsTtsKey ? { api_key: ttsKey || undefined } : {}),
-          ...(ttsBaseUrl ? { base_url: ttsBaseUrl } : {}),
+          ...(needsTtsKey && ttsBaseUrl ? { base_url: ttsBaseUrl } : {}),
         },
       },
     };
@@ -221,15 +218,16 @@ export function VoiceTab() {
             onChange={(v) => setAsrProvider(v)}
           />
           <span className={styles['settings-field-hint']}>
-            {asrProvider === 'sensevoice'
-              ? 'SenseVoice 部署在 Spark,中文流式 50ms,WER 业界领先,无需额外配置(默认推荐)。'
-              : asrProvider === 'stepfun-realtime'
-              ? '优先走 StepFun Realtime 云端识别,失败会由服务端退回 Spark 本地 ASR。Base URL 可填 https://api.stepfun.com 或 wss://api.stepfun.com/v1/realtime/stateless。'
-              : asrProvider === 'spark'
-              ? 'Spark 本地识别路由:Qwen3-ASR 优先,SenseVoice fallback。适合作为 StepFun Realtime 的本地备用。'
-              : asrProvider === 'faster-whisper'
-              ? 'Faster Whisper 自托管服务,无需额外配置。'
+            {asrProvider === 'spark'
+              ? '实时语音会话和朗读优先走 StepFun Realtime;用户语音转写使用本地 ASR,避免把助手语音误识别成你的输入。'
               : '使用第三方 API,需填写对应的密钥。'}
+          </span>
+        </div>
+
+        <div className={styles['settings-field']}>
+          <label className={styles['settings-field-label']}>备用顺序</label>
+          <span className={styles['settings-field-hint']}>
+            转写顺序:Qwen3-ASR → SenseVoice → Faster Whisper。StepFun Realtime 不再作为独立 ASR 使用。
           </span>
         </div>
 
@@ -250,7 +248,7 @@ export function VoiceTab() {
                 type="text"
                 value={asrBaseUrl}
                 onChange={(e) => setAsrBaseUrl(e.target.value)}
-                placeholder={asrProvider === 'stepfun-realtime' ? 'https://api.stepfun.com' : 'https://api.openai.com/v1'}
+                placeholder="https://api.openai.com/v1"
               />
             </div>
           </>
@@ -275,33 +273,26 @@ export function VoiceTab() {
 
         <div className={styles['settings-field']}>
           <label className={styles['settings-field-label']}>默认音色</label>
-          {ttsProvider === 'cosyvoice' || ttsProvider === 'spark' ? (
-            <SelectWidget
-              options={COSYVOICE_VOICES}
-              value={ttsVoice}
-              onChange={(v) => setTtsVoice(v)}
-            />
-          ) : (
-            <input
-              className={styles['settings-input']}
-              type="text"
-              value={ttsVoice}
-              onChange={(e) => setTtsVoice(e.target.value)}
-              placeholder="zh-CN-XiaoxiaoNeural"
-            />
-          )}
+          <input
+            className={styles['settings-input']}
+            type="text"
+            value={ttsVoice}
+            onChange={(e) => setTtsVoice(e.target.value)}
+            placeholder={ttsProvider === 'stepfun-realtime' ? 'jingdiannvsheng' : 'zh-CN-XiaoxiaoNeural'}
+          />
           <span className={styles['settings-field-hint']}>
-            {ttsProvider === 'cosyvoice'
-              ? 'CosyVoice 2 部署在 Spark,短文本低延迟,支持真流式播放。内置音色:中文女 / 中文男 / 英文女 / 英文男 / 日语男 / 韩语女 / 粤语女。'
-              : ttsProvider === 'spark'
-              ? 'Spark 本地合成路由:CosyVoice 优先,Edge/macOS 备用。'
-              : ttsProvider === 'stepfun-realtime'
-              ? '优先走 StepFun Realtime 云端合成,失败会由服务端退回 Spark 本地 TTS。默认音色可填 StepFun Realtime voice。'
-              : ttsProvider === 'edge'
-              ? 'Edge TTS 使用 Neural 音色 ID,如 zh-CN-XiaoxiaoNeural,适合作为网络备用。'
+            {ttsProvider === 'stepfun-realtime'
+              ? '主链:GUI/CLI 语音输出经 Lynn Brain 托管 StepFun Realtime,无需填写 Key;失败时才依序退回 Spark/CosyVoice/系统语音。'
               : ttsProvider === 'openai'
               ? 'OpenAI TTS 使用内置音色 alloy / echo / onyx / nova'
-              : '本地 say,音色取决于系统设置'}
+              : '第三方 TTS 需要你自己的配置。'}
+          </span>
+        </div>
+
+        <div className={styles['settings-field']}>
+          <label className={styles['settings-field-label']}>备用顺序</label>
+          <span className={styles['settings-field-hint']}>
+            StepFun Realtime 不可用时才自动降级:Spark local TTS Router → CosyVoice → Edge/macOS say。备用链不再作为默认合成引擎选择。
           </span>
         </div>
 
@@ -317,8 +308,7 @@ export function VoiceTab() {
           </label>
           <span className={styles['settings-field-hint']}>
             开启后:每条 ≥50 字回复在 streaming 结束时后台 TTS 一次,缓存到磁盘。点喇叭命中缓存 0 等待。
-            注意:每条都烧 TTS quota,OpenAI 收费 provider 慎开。CosyVoice/Edge 免费可开。
-            ⚡ Shift+点击 喇叭 = 浏览器原生即时朗读(本地,&lt;50ms,无 quota)。
+            默认走 StepFun Realtime 主链;服务端 TTS 不可用时会自动退回本地/浏览器朗读。Shift+点击仍可强制即时浏览器朗读。
           </span>
         </div>
 
@@ -332,7 +322,7 @@ export function VoiceTab() {
             <span>优先使用流式播放(可用时更快开声)</span>
           </label>
           <span className={styles['settings-field-hint']}>
-            CosyVoice 支持真流式时会优先边合成边播放;失败会自动回退到普通文件合成。
+            StepFun Realtime 可用时优先边合成边播放;失败会自动回退到本地 fallback 或普通文件合成。
           </span>
         </div>
 
@@ -343,10 +333,10 @@ export function VoiceTab() {
               checked={ttsBrowserFallbackEnabled}
               onChange={(e) => setTtsBrowserFallbackEnabled(e.target.checked)}
             />
-            <span>允许 Shift+点击使用浏览器即时朗读</span>
+            <span>允许浏览器即时朗读 fallback</span>
           </label>
           <span className={styles['settings-field-hint']}>
-            完全本地、无 quota,适合快速听草稿;关闭后 Shift+点击会按普通朗读处理。
+            完全本地、无 quota。开启后服务端 TTS 不可用会自动接管;Shift+点击可强制使用浏览器朗读。
           </span>
         </div>
 
@@ -367,7 +357,7 @@ export function VoiceTab() {
                 type="text"
                 value={ttsBaseUrl}
                 onChange={(e) => setTtsBaseUrl(e.target.value)}
-                placeholder={ttsProvider === 'stepfun-realtime' ? 'https://api.stepfun.com' : 'https://api.openai.com/v1'}
+                placeholder="https://api.openai.com/v1"
               />
             </div>
           </>

@@ -13,6 +13,7 @@ import { runPrompt } from "./commands/prompt.js";
 import { activeRouteLabel, renderBrainModelChoices, resolveProvidersInfo, runProviders } from "./commands/providers.js";
 import { runSessions } from "./commands/sessions.js";
 import { runVisionCommand } from "./commands/vision.js";
+import { runVoice } from "./commands/voice.js";
 import { runWorker } from "./commands/worker-run.js";
 import { usage } from "./help.js";
 import { writeJsonLine } from "./jsonl.js";
@@ -100,6 +101,9 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     case "brain": {
       return runBrain(args);
+    }
+    case "voice": {
+      return runVoice(args, { json });
     }
     case "cache": {
       return runCache(args, json);
@@ -249,6 +253,7 @@ const TOP_LEVEL_COMMANDS = new Set([
   "model",
   "memory",
   "manager",
+  "voice",
   "goal",
   "prompt",
   "exec",

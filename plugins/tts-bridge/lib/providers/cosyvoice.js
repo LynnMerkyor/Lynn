@@ -1,8 +1,7 @@
 /**
- * CosyVoice 2 TTS Provider · v0.78
+ * CosyVoice 2 TTS Provider · fallback path
  *
- * 阿里 CosyVoice 2(中文流式 TTS 顶级,语音克隆能力)
- * 部署在 Spark,brain 走 frp 反向 :18021 → DGX :8005
+ * CosyVoice 2 runs only as fallback after Lynn Brain hosted StepFun Realtime.
  *
  * 协议:OpenAI 兼容 /v1/audio/speech(POST text → wav bytes)
  * 环境变量:LYNN_COSYVOICE_URL(默认 http://localhost:18021)
@@ -27,7 +26,7 @@ export function createCosyVoiceProvider(config = {}) {
   const baseUrl = resolveBaseUrl(config);
   return {
     name: "cosyvoice",
-    label: "CosyVoice 2 (阿里・推荐)",
+    label: "CosyVoice 2 (Spark fallback)",
     supportsStreaming: true,
 
     async synthesize({ text, voice, speed, outPath }) {

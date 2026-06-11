@@ -12,14 +12,16 @@ import {
   pcm16ToWav,
   createVoiceWsRoute,
   makeFrame,
+  PCM_SAMPLE_RATE,
+  PCM_TTS_CHUNK_BYTES,
   parseFrame,
 } from "../server/routes/voice-ws.js";
 
 // ───────────────────────────── 补单 #2 · 4s 切段 ─────────────────────────────
 
 describe("extractEmotionSegment — DS 反馈 #2", () => {
-  const SR = 16000;
-  // 16kHz Int16 mono 假 PCM(正弦样),每字节 2B
+  const SR = PCM_SAMPLE_RATE;
+  // 24kHz Int16 mono 假 PCM(正弦样),每字节 2B
   function makePcm(seconds, pattern = 0x1234) {
     const samples = SR * seconds;
     const buf = Buffer.alloc(samples * 2);
@@ -38,7 +40,7 @@ describe("extractEmotionSegment — DS 反馈 #2", () => {
     const pcm = makePcm(10);
     const wav = pcm16ToWav(pcm, { sampleRate: SR });
     const out = extractEmotionSegment(wav);
-    // 44 字节 WAV header + 4s * 16000 * 2B = 44 + 128000 = 128044
+    // 44 字节 WAV header + 4s * PCM_SAMPLE_RATE * 2B
     expect(out.length).toBe(44 + 4 * SR * 2);
     // 出来的也是合法 WAV
     expect(out.subarray(0, 4).toString("ascii")).toBe("RIFF");
@@ -141,7 +143,7 @@ async function driveInterruptScenario({ asrText, saveImpl }) {
     async synthesize(_segment, opts) {
       await new Promise((r) => setTimeout(r, 100));
       if (opts?.signal?.aborted) throw new Error("aborted");
-      const pcm = Buffer.alloc(Math.floor(16000 * 0.1) * 2);
+      const pcm = Buffer.alloc(Math.floor(PCM_SAMPLE_RATE * 0.1) * 2);
       return { audio: pcm16ToWav(pcm) };
     },
     async health() { return true; },
@@ -169,7 +171,7 @@ async function driveInterruptScenario({ asrText, saveImpl }) {
   await new Promise((r) => setTimeout(r, 80));
 
   // 3) T2 · 送 PCM + EOT → processTurn → resolveInterruptedReply
-  await hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 3, Buffer.alloc(1600 * 2)) }, ws);
+  await hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 3, Buffer.alloc(PCM_TTS_CHUNK_BYTES)) }, ws);
   await hooks.onMessage({ data: makeFrame(FRAME.END_OF_TURN, 0, 4, Buffer.alloc(0)) }, ws);
   await new Promise((r) => setTimeout(r, 200));
 
@@ -217,7 +219,7 @@ describe("voice-ws interrupted T1/T2 state machine — DS 反馈 #3", () => {
       async synthesize(_s, opts) {
         await new Promise((r) => setTimeout(r, 100));
         if (opts?.signal?.aborted) throw new Error("aborted");
-        return { audio: pcm16ToWav(Buffer.alloc(Math.floor(16000 * 0.1) * 2)) };
+        return { audio: pcm16ToWav(Buffer.alloc(Math.floor(PCM_SAMPLE_RATE * 0.1) * 2)) };
       },
       health: async () => true,
     };
@@ -236,7 +238,7 @@ describe("voice-ws interrupted T1/T2 state machine — DS 反馈 #3", () => {
     await hooks.onMessage({ data: makeFrame(FRAME.TEXT_TURN, 0, 1, Buffer.from("hi", "utf-8")) }, ws);
     await new Promise((r) => setTimeout(r, 150));
     await hooks.onMessage({ data: makeFrame(FRAME.INTERRUPT, 0, 2, Buffer.alloc(0)) }, ws);
-    await hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 3, Buffer.alloc(1600 * 2)) }, ws);
+    await hooks.onMessage({ data: makeFrame(FRAME.PCM_AUDIO, 0, 3, Buffer.alloc(PCM_TTS_CHUNK_BYTES)) }, ws);
     await hooks.onMessage({ data: makeFrame(FRAME.END_OF_TURN, 0, 4, Buffer.alloc(0)) }, ws);
     await new Promise((r) => setTimeout(r, 200));
     // 跑到这里没抛就通过

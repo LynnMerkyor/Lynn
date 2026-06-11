@@ -74,8 +74,8 @@ export function SubmitArea({
           type="button"
           className={styles['attach-btn']}
           onClick={onVoiceClick}
-          title="Lynn 语音"
-          aria-label="打开 Lynn 语音"
+          title="实时语音对话 · 嘈杂环境说完点完成本轮"
+          aria-label="打开 Lynn 实时语音对话"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />

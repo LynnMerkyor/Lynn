@@ -82,9 +82,7 @@ function errMessage(err: unknown): string {
 // 开发时可通过 LYNN_HOME 环境变量隔离数据目录，如：LYNN_HOME=~/.lynn-dev node --import tsx server/index.ts
 const lynnHome = process.env.LYNN_HOME
   ? path.resolve(process.env.LYNN_HOME.replace(/^~/, os.homedir()))
-  : process.env.HANA_HOME
-    ? path.resolve(process.env.HANA_HOME.replace(/^~/, os.homedir()))
-    : path.join(os.homedir(), ".lynn");
+  : path.join(os.homedir(), ".lynn");
 process.env.LYNN_HOME = lynnHome;
 // ── 首次运行播种 ──
 console.log("[server] ① ensureFirstRun...");

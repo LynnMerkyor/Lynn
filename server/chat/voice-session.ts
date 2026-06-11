@@ -117,10 +117,15 @@ export class VoiceSession {
     this.ws = ws;
     this.engine = engine;
     this.hub = hub;
-    const voiceConfig = engine?.config?.voice || {};
-    this.asrProvider = (asrProvider || createASRFallbackProvider(resolveVoiceRuntimeAsrConfig(voiceConfig.asr || {}, voiceConfig as JsonRecord))) as AsrProvider;
-    this.serProvider = (serProvider || createSERProvider(voiceConfig.ser || {})) as SerProvider;
-    this.ttsProvider = (ttsProvider || createTTSFallbackProvider(resolveVoiceRuntimeTtsConfig(voiceConfig.tts || {}, voiceConfig as JsonRecord))) as TtsProvider;
+    const engineConfig = (engine?.config || {}) as JsonRecord;
+    const voiceConfig = asRecord(engineConfig.voice) || {};
+    const voiceRuntimeConfig = {
+      ...voiceConfig,
+      providers: asRecord(engineConfig.providers) || {},
+    } as JsonRecord;
+    this.asrProvider = (asrProvider || createASRFallbackProvider(resolveVoiceRuntimeAsrConfig(asRecord(voiceConfig.asr) || {}, voiceRuntimeConfig))) as AsrProvider;
+    this.serProvider = (serProvider || createSERProvider(asRecord(voiceConfig.ser) || {})) as SerProvider;
+    this.ttsProvider = (ttsProvider || createTTSFallbackProvider(resolveVoiceRuntimeTtsConfig(asRecord(voiceConfig.tts) || {}, voiceRuntimeConfig))) as TtsProvider;
     this.brainRunner = brainRunner || defaultBrainRunner;
     this.saveInterruptedTurn = saveInterruptedTurn; // DS 反馈 #3 T2 阶段的可注入钩子
     this.mode = mode === "chat" ? "chat" : "direct";
@@ -130,7 +135,7 @@ export class VoiceSession {
     this.lastInSeq = -1;
     this.utteranceBuffer = []; // 累积当前 utterance 的 PCM (Int16Array[])
     this.totalBufferedSamples = 0;
-    this.maxBufferedSamples = 16000 * 30; // 30s 上限
+    this.maxBufferedSamples = PCM_SAMPLE_RATE * 30; // 30s 上限
     this.transcriptPartial = "";
     this.startTs = Date.now();
     this.pcmFramesIn = 0;
@@ -255,6 +260,12 @@ export class VoiceSession {
     }
   }
 
+  clearInputBuffer(): void {
+    this.utteranceBuffer = [];
+    this.totalBufferedSamples = 0;
+    this.resetVad();
+  }
+
   async onAudio(frame: VoiceFrame): Promise<void> {
     // 计 seq 顺序
     const expectedSeq = (this.lastInSeq + 1) & 0xffff;
@@ -268,6 +279,15 @@ export class VoiceSession {
     // Phase 2B:client-side Silero/TEN 未接入前,server 侧先做保守 energy VAD 兜底。
     if (this.state === STATE.IDLE || this.state === STATE.DEGRADED) {
       this.setState(STATE.LISTENING);
+    }
+
+    // Never let assistant playback/thinking audio leak into the next user turn.
+    // The client should stop capture while SPEAKING/THINKING, but late frames can
+    // still arrive from AudioWorklet queues. Dropping here prevents TTS echo from
+    // becoming a fake user transcript.
+    if (this.state !== STATE.LISTENING || this.processingTurn) {
+      this.clearInputBuffer();
+      return;
     }
 
     // 2026-05-01 P1-① — server 侧 AEC:取等长 reference(PCM_TTS 已 push),
@@ -330,6 +350,10 @@ export class VoiceSession {
   async endOfTurn(): Promise<unknown> {
     if (this.processingTurn) return this.processingTurn;
     if (this.state === STATE.IDLE) return;
+    if (this.state !== STATE.LISTENING) {
+      this.clearInputBuffer();
+      return;
+    }
     if (this.utteranceBuffer.length === 0) {
       this.setState(STATE.IDLE);
       return;
@@ -337,9 +361,7 @@ export class VoiceSession {
 
     const combinedPcm = Buffer.concat(this.utteranceBuffer);
     const wavAudio = pcm16ToWav(combinedPcm);
-    this.utteranceBuffer = [];
-    this.totalBufferedSamples = 0;
-    this.resetVad();
+    this.clearInputBuffer();
 
     const generation = ++this.turnGeneration;
     this.processingTurn = this.processTurn(wavAudio)
@@ -551,6 +573,7 @@ export class VoiceSession {
       this.setState(STATE.IDLE);
       return;
     }
+    this.clearInputBuffer();
     if (emitAssistantReply) this.send(makeTranscriptFrame(FRAME.ASSISTANT_REPLY, this.outSeq++, replyText));
     this.setState(STATE.SPEAKING);
     // DS 反馈 #3 · 追踪已播放进度,onInterrupt T1 时快照
@@ -789,9 +812,7 @@ export class VoiceSession {
       this.turnAbort?.abort();
       this.turnAbort = null;
       this.processingTurn = null;
-      this.utteranceBuffer = [];
-      this.totalBufferedSamples = 0;
-      this.resetVad();
+      this.clearInputBuffer();
       debugLog()?.log("voice-ws", "interrupt received");
       this.setState(STATE.LISTENING);
     }
@@ -830,8 +851,8 @@ export class VoiceSession {
         if (micPcm.length) fs.writeFileSync(micPath, pcm16ToWav(micPcm));
         if (ttsPcm.length) fs.writeFileSync(ttsPath, pcm16ToWav(ttsPcm));
         debugLog()?.log("voice-ws",
-          `ERLE recorded: mic ${(micPcm.length / 32000).toFixed(1)}s → ${micPath}, ` +
-          `tts ${(ttsPcm.length / 32000).toFixed(1)}s → ${ttsPath}`,
+          `ERLE recorded: mic ${(micPcm.length / (PCM_SAMPLE_RATE * 2)).toFixed(1)}s → ${micPath}, ` +
+          `tts ${(ttsPcm.length / (PCM_SAMPLE_RATE * 2)).toFixed(1)}s → ${ttsPath}`,
         );
       } catch (err) {
         debugLog()?.warn("voice-ws", `ERLE record write failed: ${errorMessage(err)}`);

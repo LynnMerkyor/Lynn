@@ -11,7 +11,7 @@ export class TtsReferenceSignalQueue {
   private queuedSamples = 0;
   private readonly maxSamples: number;
 
-  constructor(maxSamples = 16000 * 10) {
+  constructor(maxSamples = 24000 * 10) {
     this.maxSamples = Math.max(0, Math.floor(maxSamples));
   }
 

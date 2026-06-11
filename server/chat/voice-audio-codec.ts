@@ -7,8 +7,8 @@ import type {
   VoiceState,
 } from "./voice-ws-types.js";
 
-export const PCM_SAMPLE_RATE = 16000;
-export const PCM_TTS_CHUNK_BYTES = 3200; // 100ms @ 16kHz Int16 mono
+export const PCM_SAMPLE_RATE = 24000;
+export const PCM_TTS_CHUNK_BYTES = 4800; // 100ms @ 24kHz Int16 mono, StepFun Realtime native rate
 
 export function toBuffer(value: BinaryInput): Buffer {
   if (!value) return Buffer.alloc(0);

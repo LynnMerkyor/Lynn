@@ -1,21 +1,21 @@
 /**
- * AudioWorkletProcessor — 16kHz Mono Int16 PCM 采集
+ * AudioWorkletProcessor — 24kHz Mono Int16 PCM 采集
  *
  * 输入:AudioContext 默认 sampleRate(通常 48kHz),Float32 [-1, 1]
- * 输出:16kHz Int16Array chunks 通过 port.postMessage
+ * 输出:24kHz Int16Array chunks 通过 port.postMessage
  *
- * 重采样策略:线性下采样(48000 → 16000 = 取每 3 帧 1 帧)
+ * 重采样策略:线性下采样(48000 → 24000 = 取每 2 帧 1 帧)
  *            生产环境应用 SRC(sox/r8brain),spike 阶段够用
  *
- * Chunk 大小:每 100ms 一个 chunk = 1600 samples @ 16kHz
+ * Chunk 大小:每 100ms 一个 chunk = 2400 samples @ 24kHz
  *
  * 监控:每秒 postMessage 一次 stats(已采样多少 chunk + 平均 amplitude)
  */
 class PcmRecorderProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.targetSampleRate = 16000;
-    this.chunkSize = 1600; // 100ms @ 16kHz
+    this.targetSampleRate = 24000;
+    this.chunkSize = 2400; // 100ms @ 24kHz
     this.inputBuffer = []; // 累积下采样后的 Float32 samples
     this.totalSamples = 0;
     this.totalChunks = 0;
@@ -34,7 +34,7 @@ class PcmRecorderProcessor extends AudioWorkletProcessor {
     const channel = input[0]; // mono
     if (!channel) return true;
 
-    // 线性下采样 sampleRate → 16kHz
+    // 线性下采样 sampleRate → 24kHz
     for (let i = 0; i < channel.length; i += this.resampleRatio) {
       const idx = Math.floor(i);
       if (idx < channel.length) {
