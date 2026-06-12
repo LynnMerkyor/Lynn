@@ -352,6 +352,7 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
     maybeGenerateFirstTurnTitle,
     buildRealtimeToolFallbackText,
     closeStreamAfterError,
+    closeStreamWithVisibleFallback,
     scheduleToolAuthorizationFallback,
     scheduleToolFinalizationFallback,
     hasStreamEvent,

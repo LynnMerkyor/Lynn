@@ -102,6 +102,7 @@ export interface ProviderCredentialsSnake {
 export interface SyncModelsOptions {
   modelsJsonPath: string;
   authJsonPath?: string;
+  lynnHome?: string;
   oauthKeyMap?: Record<string, ProviderId>;
 }
 
@@ -125,7 +126,7 @@ export interface ModelsJsonModelEntry {
   quirks?: string[];
   compat?: {
     supportsDeveloperRole?: boolean;
-    thinkingFormat?: "qwen" | "zai" | string;
+    thinkingFormat?: "qwen" | "zai" | "deepseek" | string;
   };
 }
 
@@ -195,6 +196,7 @@ export interface LLMRequest {
   timeoutMs?: number;
   signal?: AbortSignal;
   requestHeaders?: Record<string, string> | null;
+  throwOnReasoningOnly?: boolean;
 }
 
 export interface LLMChoice {

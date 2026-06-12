@@ -17,6 +17,7 @@ const KNOWN_MODELS = {
   },
   deepseek: {
     "deepseek-chat": { name: "DeepSeek Chat", context: 128000, maxOutput: 8192 },
+    "deepseek-v4-pro": { name: "DeepSeek V4 Pro", context: 128000, maxOutput: 8192, reasoning: true, thinkingFormat: "deepseek" },
   },
   openai: {
     "gpt-4o": { name: "GPT-4o", context: 128000, maxOutput: 16384, vision: true },
@@ -369,6 +370,26 @@ describe("syncModels", () => {
     const model = result.providers.glm.models[0];
     expect(model.reasoning).toBe(true);
     expect(model.compat).toEqual({ supportsDeveloperRole: false, thinkingFormat: "zai" });
+  });
+
+  it("marks DeepSeek V4 models with explicit thinking toggle format", async () => {
+    const syncModels = await loadSync();
+
+    const providers = {
+      deepseek: {
+        base_url: "https://api.deepseek.com/v1",
+        api: "openai-completions",
+        api_key: "sk-deepseek",
+        models: ["deepseek-v4-pro"],
+      },
+    };
+
+    syncModels(providers, { modelsJsonPath });
+
+    const result = JSON.parse(fs.readFileSync(modelsJsonPath, "utf-8"));
+    const model = result.providers.deepseek.models[0];
+    expect(model.reasoning).toBe(true);
+    expect(model.compat).toEqual({ supportsDeveloperRole: false, thinkingFormat: "deepseek" });
   });
 
   it("falls back to humanized name for unknown models", async () => {

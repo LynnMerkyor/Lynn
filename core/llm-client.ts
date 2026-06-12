@@ -20,6 +20,7 @@ type ResponseKind = "text" | "reasoning_only" | "non_displayable_content" | "emp
 
 type ContentStats = {
   textParts: string[];
+  reasoningTextParts: string[];
   reasoningBlockCount: number;
   nonDisplayableBlockCount: number;
 };
@@ -27,6 +28,7 @@ type ContentStats = {
 type ResponseAnalysis = {
   text: string;
   responseKind: ResponseKind;
+  fallbackFromReasoning: boolean;
   reasoningBlockCount: number;
   nonDisplayableBlockCount: number;
 };
@@ -78,9 +80,24 @@ const DISPLAYABLE_TEXT_TYPES: ReadonlySet<string> = new Set<DisplayableTextType>
   "refusal",
 ]);
 
+function isDeepSeekV4ThinkingModel(provider: unknown, model: unknown): boolean {
+  const providerId = String(provider || "").trim().toLowerCase();
+  const modelId = String(model || "").trim().toLowerCase();
+  return providerId === "deepseek" && /^deepseek-v4-(?:flash|pro)$/u.test(modelId);
+}
+
+function deepSeekThinkingPayload(reasoning: boolean): Record<string, unknown> {
+  return {
+    thinking: reasoning
+      ? { type: "enabled", reasoning_effort: "high" }
+      : { type: "disabled" },
+  };
+}
+
 function createContentStats(): ContentStats {
   return {
     textParts: [],
+    reasoningTextParts: [],
     reasoningBlockCount: 0,
     nonDisplayableBlockCount: 0,
   };
@@ -108,6 +125,32 @@ function isReasoningLikeBlock(block: unknown): boolean {
     || typeof record.thinking === "string"
     || typeof record.reasoning === "string"
     || typeof record.reasoning_content === "string";
+}
+
+function extractUnknownText(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) {
+    return value.map(extractUnknownText).filter(Boolean).join("\n").trim();
+  }
+  if (!value || typeof value !== "object") return "";
+  const record = value as Record<string, unknown>;
+  for (const key of ["text", "value", "content", "summary"]) {
+    const text = extractUnknownText(record[key]);
+    if (text) return text;
+  }
+  return "";
+}
+
+function extractReasoningText(block: unknown): string {
+  if (!block || typeof block !== "object") return "";
+  const record = block as LLMContentBlock;
+  return [
+    record.reasoning_content,
+    record.reasoning,
+    record.thinking,
+    record.text,
+    record.value,
+  ].map(extractUnknownText).filter(Boolean).join("\n").trim();
 }
 
 function collectContentStats(content: LLMMessage["content"]): ContentStats {
@@ -140,6 +183,8 @@ function collectContentStats(content: LLMMessage["content"]): ContentStats {
 
     if (isReasoningLikeBlock(block)) {
       stats.reasoningBlockCount += 1;
+      const reasoningText = extractReasoningText(block);
+      if (reasoningText) stats.reasoningTextParts.push(reasoningText);
       continue;
     }
 
@@ -151,13 +196,47 @@ function collectContentStats(content: LLMMessage["content"]): ContentStats {
 
 function mergeContentStats(target: ContentStats, source: ContentStats): void {
   target.textParts.push(...source.textParts);
+  target.reasoningTextParts.push(...source.reasoningTextParts);
   target.reasoningBlockCount += source.reasoningBlockCount;
   target.nonDisplayableBlockCount += source.nonDisplayableBlockCount;
 }
 
+function cleanReasoningFallbackText(parts: string[]): string {
+  const raw = stripInternalProgressTags(parts.join("\n"))
+    .replace(/<\/?think>/giu, "")
+    .trim();
+  if (!raw) return "";
+
+  const lines = raw
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const stripLabel = (line: string): string => line
+    .replace(/^(?:最终答案|答案|结论|final\s+answer|answer|conclusion)\s*[：:\-]\s*/iu, "")
+    .trim();
+
+  const labeled = [...lines].reverse().find((line) => (
+    /^(?:最终答案|答案|结论|final\s+answer|answer|conclusion)\s*[：:\-]/iu.test(line)
+  ));
+  if (labeled) return stripLabel(labeled).slice(0, 1200).trim();
+
+  const conclusion = [...lines].reverse().find((line) => (
+    /^(?:因此|所以|综上|总之|简而言之|therefore|so|in\s+short)\b/iu.test(line)
+  ));
+  if (conclusion) return conclusion.slice(0, 1200).trim();
+
+  const singleShortLine = lines.length === 1 && lines[0].length <= 220 ? lines[0] : "";
+  if (singleShortLine && !/(?:先|需要|分析|思考|推理|step\s*by\s*step|reasoning)/iu.test(singleShortLine)) {
+    return singleShortLine;
+  }
+  return "";
+}
+
 function finalizeResponseAnalysis(stats: ContentStats): ResponseAnalysis {
-  const text = stripInternalProgressTags(stats.textParts.join("\n")).trim();
-  const responseKind: ResponseKind = text
+  const visibleText = stripInternalProgressTags(stats.textParts.join("\n")).trim();
+  const fallbackText = visibleText ? "" : cleanReasoningFallbackText(stats.reasoningTextParts);
+  const text = visibleText || fallbackText;
+  const responseKind: ResponseKind = visibleText
     ? "text"
     : stats.reasoningBlockCount > 0
       ? "reasoning_only"
@@ -167,6 +246,7 @@ function finalizeResponseAnalysis(stats: ContentStats): ResponseAnalysis {
   return {
     text,
     responseKind,
+    fallbackFromReasoning: !visibleText && !!fallbackText,
     reasoningBlockCount: stats.reasoningBlockCount,
     nonDisplayableBlockCount: stats.nonDisplayableBlockCount,
   };
@@ -215,13 +295,19 @@ function analyzeLlmResponse(api: LLMApi, data: LLMResponse | null): ResponseAnal
     }
     if (typeof message.reasoning_content === "string" && message.reasoning_content.trim()) {
       stats.reasoningBlockCount += 1;
+      stats.reasoningTextParts.push(message.reasoning_content.trim());
     } else if (Array.isArray(message.reasoning_content) && message.reasoning_content.length > 0) {
       stats.reasoningBlockCount += message.reasoning_content.length;
+      const reasoningText = extractUnknownText(message.reasoning_content);
+      if (reasoningText) stats.reasoningTextParts.push(reasoningText);
     }
     if (message.reasoning && typeof message.reasoning === "object") {
       stats.reasoningBlockCount += 1;
+      const reasoningText = extractUnknownText(message.reasoning);
+      if (reasoningText) stats.reasoningTextParts.push(reasoningText);
     } else if (typeof message.reasoning === "string" && message.reasoning.trim()) {
       stats.reasoningBlockCount += 1;
+      stats.reasoningTextParts.push(message.reasoning.trim());
     }
   }
   return finalizeResponseAnalysis(stats);
@@ -335,6 +421,27 @@ function parseLlmResponsePayload(rawText: string, contentType: string): LLMRespo
   }
 }
 
+function applyVisibleAnswerRetryNudge(body: LlmRequestBody): void {
+  const nudge = "上一次调用没有返回最终可见答案。本次请直接输出最终答案，不要只返回思考过程。";
+  if (Array.isArray(body.messages)) {
+    body.messages = [
+      { role: "system", content: nudge },
+      ...(body.messages as Array<unknown>),
+    ];
+  } else if (typeof body.instructions === "string") {
+    body.instructions = `${body.instructions}\n\n${nudge}`;
+  } else if (typeof body.system === "string") {
+    body.system = `${body.system}\n\n${nudge}`;
+  } else {
+    body.instructions = nudge;
+  }
+  if ("enable_thinking" in body) body.enable_thinking = false;
+  const thinking = body.thinking;
+  if (thinking && typeof thinking === "object") {
+    body.thinking = { type: "disabled" };
+  }
+}
+
 /**
  * core/llm-client.ts — 统一的非流式 LLM 调用入口
  *
@@ -367,6 +474,7 @@ export async function callText({
   timeoutMs,
   signal,
   requestHeaders = null,
+  throwOnReasoningOnly = false,
 }: LLMRequest): Promise<string> {
   // T3: 推理模型自动延长超时（reasoning 模型 TTFT 通常 20-40 秒）
   const effectiveTimeoutMs = timeoutMs ?? (reasoning ? 90_000 : 60_000);
@@ -456,10 +564,12 @@ export async function callText({
       model, temperature, max_tokens: maxTokens,
       messages: allMessages,
       ...(quirks.includes("enable_thinking") && { enable_thinking: false }),
+      ...(isDeepSeekV4ThinkingModel(provider, model) ? deepSeekThinkingPayload(reasoning) : {}),
     };
   }
 
   // ── 4. 发送请求（带自动重试） ──
+  let reasoningOnlyRetryCount = 0;
   return withRetry<string>(async () => {
     const SLOW_THRESHOLD_MS = 15_000;
     const slowTimer = setTimeout(() => {
@@ -532,14 +642,50 @@ export async function callText({
     const analysis = analyzeLlmResponse(api, data);
     const text = analysis.text;
 
+    if (analysis.responseKind === "reasoning_only") {
+      if (throwOnReasoningOnly) {
+        const err = new AppError('LLM_EMPTY_RESPONSE', {
+          message: 'Model returned reasoning content without a final visible answer',
+          context: {
+            provider: provider || null,
+            modelId: model || null,
+            api: api || null,
+            responseKind: analysis.responseKind,
+            reasoningBlockCount: analysis.reasoningBlockCount,
+            nonDisplayableBlockCount: analysis.nonDisplayableBlockCount,
+          },
+        });
+        err.retryable = false;
+        throw err;
+      }
+      if (reasoningOnlyRetryCount < 1) {
+        reasoningOnlyRetryCount += 1;
+        applyVisibleAnswerRetryNudge(body);
+        throw new AppError('LLM_EMPTY_RESPONSE', {
+          message: 'Model returned reasoning content without a final visible answer',
+          context: {
+            provider: provider || null,
+            modelId: model || null,
+            api: api || null,
+            responseKind: analysis.responseKind,
+            reasoningBlockCount: analysis.reasoningBlockCount,
+            nonDisplayableBlockCount: analysis.nonDisplayableBlockCount,
+            retriedWithVisibleAnswerNudge: true,
+          },
+        });
+      }
+      if (!text) {
+        return "模型这次只返回了思考过程，没有给出最终可见答案。请重试，或切换到 /fast 后再发。";
+      }
+      return text;
+    }
+
     if (!text) {
       if (combinedSignal.aborted) {
         throw new AppError('LLM_TIMEOUT', { context: { model } });
       }
       const err = new AppError('LLM_EMPTY_RESPONSE', {
-        message: analysis.responseKind === "reasoning_only"
-          ? 'Model returned reasoning content without a final visible answer'
-          : analysis.responseKind === "non_displayable_content"
+        message: analysis.responseKind === "non_displayable_content"
             ? 'Model returned non-displayable structured content without visible text'
             : 'Model returned empty or non-displayable content',
         context: {

@@ -26,7 +26,7 @@ describe("cli i18n", () => {
     expect(t("offline.body")).toContain("离线");
     expect(t("offline.body")).toContain("Lynn brain start");
     expect(t("code.placeholder")).toContain("/yolo");
-    expect(t("chat.placeholder")).toContain("静默黑灯");
+    expect(t("chat.placeholder")).toContain("/voice");
     expect(t("update.failed", { message: "network" })).toContain("当前版本不受影响");
   });
 

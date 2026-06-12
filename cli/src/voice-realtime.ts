@@ -52,8 +52,14 @@ function micInputArgs(): string[] {
 }
 
 function micFilterArgs(): string[] {
-  if (process.env.LYNN_CLI_VOICE_RAW_MIC === "1") return [];
-  return ["-af", "highpass=f=80,dynaudnorm=f=150:g=15:p=0.95,alimiter=limit=0.95"];
+  // Raw mic by default — verified working in a live call. dynaudnorm dynamically normalized the
+  // level, which raised the silence floor so the local VAD never detected end-of-speech (UI stuck
+  // at "听到了", no commit, no reply). Raw keeps the speech↔silence gap the VAD needs. The old
+  // filter is opt-in via LYNN_CLI_VOICE_MIC_FILTER=1 for experimentation only.
+  if (process.env.LYNN_CLI_VOICE_MIC_FILTER === "1") {
+    return ["-af", "highpass=f=80,dynaudnorm=f=150:g=15:p=0.95,alimiter=limit=0.95"];
+  }
+  return [];
 }
 
 export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boolean; embedded?: boolean } = {}): Promise<number> {

@@ -97,6 +97,32 @@ if (code.includes("streamFn: (options.requestHeaders || options.requestMetadata)
 
 fs.writeFileSync(target, code, "utf8");
 
+// ── Patch 1b: allow Lynn's DeepSeek V4 thinking-toggle compat flag ──
+const modelRegistryTarget = path.join(
+  __dirname, "..",
+  "node_modules", "@mariozechner", "pi-coding-agent",
+  "dist", "core", "model-registry.js"
+);
+
+if (fs.existsSync(modelRegistryTarget)) {
+  let registryCode = fs.readFileSync(modelRegistryTarget, "utf8");
+  if (registryCode.includes('Type.Literal("deepseek")')) {
+    console.log("[patch-pi-sdk] model-registry.js deepseek thinkingFormat schema already applied");
+  } else {
+    const schemaNeedle = 'Type.Literal("openai"), Type.Literal("zai"), Type.Literal("qwen")';
+    const schemaReplacement = 'Type.Literal("openai"), Type.Literal("zai"), Type.Literal("qwen"), Type.Literal("deepseek")';
+    if (registryCode.includes(schemaNeedle)) {
+      registryCode = registryCode.replace(schemaNeedle, schemaReplacement);
+      fs.writeFileSync(modelRegistryTarget, registryCode, "utf8");
+      console.log("[patch-pi-sdk] patched model-registry.js → allow deepseek thinkingFormat");
+    } else {
+      console.warn("[patch-pi-sdk] model-registry.js structure changed, cannot allow deepseek thinkingFormat");
+    }
+  }
+} else {
+  console.log("[patch-pi-sdk] model-registry.js not found, skipping deepseek schema patch");
+}
+
 // ── Patch 2: pi-ai openai-completions.js ──
 // dashscope/volcengine 等 API 不接受 tools: []（空数组返回 400）。
 // Pi SDK 在对话历史有 tool_calls 但当前 turn 无工具时发 tools: []，
@@ -336,6 +362,40 @@ function lynnIsBrainManagedToolTrace(model, toolCall, ignoredKeys) {
     console.log("[patch-pi-sdk] openai-completions.js zai-thinking patch already applied");
   } else {
     console.warn("[patch-pi-sdk] openai-completions.js structure changed, cannot apply zai-thinking patch");
+  }
+
+  if (completionsCode.includes("/* patched: deepseek-thinking-format */")) {
+    console.log("[patch-pi-sdk] openai-completions.js deepseek thinking patch already applied");
+  } else {
+    const deepseekThinkingNeedle =
+      '    /* patched: zai-thinking-format */\n' +
+      '    if (compat.thinkingFormat === "zai" && model.reasoning) {';
+    const deepseekThinkingNeedleModern =
+      '    /* patched: zai-thinking-format (0.67+) */\n' +
+      '    if (compat.thinkingFormat === "zai" && model.reasoning) {';
+    const deepseekThinkingReplacement =
+      '    /* patched: deepseek-thinking-format */\n' +
+      '    if (compat.thinkingFormat === "deepseek" && model.reasoning) {\n' +
+      '        const effort = String(options?.reasoningEffort || "").toLowerCase();\n' +
+      '        const wantsThinking = !!effort && effort !== "off" && effort !== "none" && effort !== "disabled";\n' +
+      '        if (wantsThinking) {\n' +
+      '            const mappedEffort = compat.reasoningEffortMap ? mapReasoningEffort(options.reasoningEffort, compat.reasoningEffortMap) : options.reasoningEffort;\n' +
+      '            params.thinking = { type: "enabled", reasoning_effort: mappedEffort };\n' +
+      '        }\n' +
+      '        else {\n' +
+      '            params.thinking = { type: "disabled" };\n' +
+      '        }\n' +
+      '    }\n' +
+      '    else if (compat.thinkingFormat === "zai" && model.reasoning) {';
+    if (completionsCode.includes(deepseekThinkingNeedle)) {
+      completionsCode = completionsCode.replace(deepseekThinkingNeedle, deepseekThinkingReplacement);
+      console.log("[patch-pi-sdk] patched openai-completions.js → use DeepSeek thinking payload");
+    } else if (completionsCode.includes(deepseekThinkingNeedleModern)) {
+      completionsCode = completionsCode.replace(deepseekThinkingNeedleModern, deepseekThinkingReplacement);
+      console.log("[patch-pi-sdk] patched openai-completions.js → use DeepSeek thinking payload");
+    } else {
+      console.warn("[patch-pi-sdk] openai-completions.js structure changed, cannot apply deepseek-thinking patch");
+    }
   }
 
   // ── Patch 3: Brain provider tolerant adapter ──

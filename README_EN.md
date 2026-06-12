@@ -85,12 +85,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.2.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.84.1
+Lynn --version  # should print 0.84.2
 Lynn agents   # copyable headless/Fleet commands for other agents
 ```
 
@@ -116,7 +116,7 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>Lynn v0.84.1</strong> · 2026-06-12 · StepFun default route + realtime voice + GUI empty-answer recovery <em>(latest)</em></summary>
+<summary><strong>Lynn v0.84.2</strong> · 2026-06-12 · StepFun default route + realtime voice + GUI empty-answer recovery <em>(latest)</em></summary>
 
 **GUI and CLI ship together**:
 - **StepFun 3.7 Flash default route**: normal GUI/CLI chat, `Lynn -p`, and coding execution use StepFun 3.7 Flash by default. Experimental manager paths stay explicit.
@@ -130,10 +130,10 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 - **Safety and bug-fix rollup**: device-signature refresh, honest tool-turn close, reasoning-only retry, Fleet acceptance UI, release gates, and doc-drift checks ship together.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.2.tgz"
 ```
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.1)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.2)
 
 </details>
 
@@ -148,7 +148,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - **Release gate covers compaction**: `cli-longrun-smoke` now forces large tool results and requires a `code.runtime.compacted` event, so long-run stability is verified outside narrow unit tests.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.2.tgz"
 ```
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
@@ -830,11 +830,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.84.1 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.84.2 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.84.1 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.84.2 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -897,7 +897,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.84.1 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.84.2 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

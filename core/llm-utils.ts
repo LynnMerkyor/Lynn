@@ -12,7 +12,7 @@ import {
   containsPseudoToolSimulation as containsSharedPseudoToolSimulation,
   stripPseudoToolCallMarkup,
 } from "../shared/pseudo-tool-call.js";
-import type { LLMApi, LLMMessage, ModelId } from "./types.js";
+import type { LLMApi, LLMMessage, ModelId, ProviderId } from "./types.js";
 
 export interface ContentBlock {
   type?: string;
@@ -28,6 +28,7 @@ export interface ToolCallBlock extends ContentBlock {
 
 export interface UtilityModelAttempt {
   model?: ModelId | null;
+  provider?: ProviderId | null;
   api?: LLMApi | null;
   api_key?: string | null;
   base_url?: string | null;
@@ -35,6 +36,7 @@ export interface UtilityModelAttempt {
 
 interface ConfiguredUtilityModelAttempt {
   model: ModelId;
+  provider?: ProviderId | null;
   api: LLMApi;
   api_key?: string | null;
   base_url: string;
@@ -129,8 +131,8 @@ function isConfiguredAttempt(candidate: UtilityModelAttempt): candidate is Confi
 }
 
 /** 统一的 utility LLM 调用 */
-async function callLlm({ model, api, api_key, base_url, messages, temperature = 0.3, max_tokens = 100, timeoutMs, signal, quirks, fallbacks = [] }: LlmCallOptions): Promise<string | null> {
-  const attempts = [{ model, api, api_key, base_url }, ...fallbacks]
+async function callLlm({ model, provider, api, api_key, base_url, messages, temperature = 0.3, max_tokens = 100, timeoutMs, signal, quirks, fallbacks = [] }: LlmCallOptions): Promise<string | null> {
+  const attempts = [{ model, provider, api, api_key, base_url }, ...fallbacks]
     .filter(isConfiguredAttempt);
 
   let lastError: unknown = null;
@@ -139,6 +141,7 @@ async function callLlm({ model, api, api_key, base_url, messages, temperature = 
       return await callText({
         api: candidate.api,
         model: candidate.model,
+        provider: candidate.provider || undefined,
         apiKey: candidate.api_key as string | undefined,
         baseUrl: candidate.base_url,
         messages,

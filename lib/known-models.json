@@ -306,12 +306,16 @@
       "name": "DeepSeek V4 Flash",
       "context": 128000,
       "maxOutput": 8192,
+      "reasoning": true,
+      "thinkingFormat": "deepseek",
       "note": "Chat + reasoning unified — set thinking:{type:'enabled'|'disabled'} per-call"
     },
     "deepseek-v4-pro": {
       "name": "DeepSeek V4 Pro",
       "context": 128000,
       "maxOutput": 8192,
+      "reasoning": true,
+      "thinkingFormat": "deepseek",
       "note": "Stronger sibling of v4-flash; same thinking-toggle API"
     },
     "deepseek-chat": {

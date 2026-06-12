@@ -550,6 +550,7 @@ async function runDirectModelDeepResearch({
     timeoutMs: Math.max(timeoutMs || DEFAULT_DEEP_RESEARCH_TIMEOUT_MS, 300_000),
     signal,
     reasoning: !disableThinking,
+    throwOnReasoningOnly: true,
   });
   return {
     ok: true,

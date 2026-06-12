@@ -186,6 +186,7 @@ export class ModelManager {
     const changed = syncModels(providers, {
       modelsJsonPath: this.modelsJsonPath,
       authJsonPath: this.authJsonPath,
+      lynnHome: this._lynnHome,
       oauthKeyMap: this._buildOAuthKeyMap(),
     });
     if (changed) {
@@ -226,7 +227,9 @@ export class ModelManager {
   resolveThinkingLevel(level: string | null | undefined, model: ResolvedModel | null = null): string {
     const rawLevel = level || "auto";
     const provider = String(model?.provider || "").trim();
+    const thinkingFormat = String((model as { compat?: { thinkingFormat?: unknown } } | null)?.compat?.thinkingFormat || "").trim();
     if (provider === BRAIN_PROVIDER_ID && rawLevel === "auto") return "off";
+    if (thinkingFormat === "deepseek" && rawLevel === "auto") return "off";
     return rawLevel === "auto" ? "medium" : rawLevel;
   }
 

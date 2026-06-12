@@ -5,9 +5,8 @@
  * 投影为 Pi SDK 格式（camelCase），附加 known-models.json 元数据。
  */
 
-import crypto from "crypto";
 import fs from "fs";
-import os from "os";
+import { decryptApiKey } from "./provider-key-crypto.js";
 import { isLocalBaseUrl } from "../shared/net-utils.js";
 import { lookupKnown } from "../shared/known-models.js";
 import type {
@@ -22,7 +21,6 @@ import type {
 
 const DEFAULT_CONTEXT_WINDOW = 128_000;
 const ZAI_PROVIDER_IDS = new Set<ProviderId>(["zhipu", "glm", "glm-5", "zai", "z-ai"]);
-const PROVIDER_KEY_SALT = "hanako-provider-keys-v1";
 
 type KnownModelMetadata = {
   name?: string;
@@ -30,28 +28,9 @@ type KnownModelMetadata = {
   maxOutput?: number;
   vision?: boolean;
   reasoning?: boolean;
+  thinkingFormat?: string;
   quirks?: string[];
 };
-
-function decryptStoredApiKey(stored: unknown): string {
-  if (!stored || typeof stored !== "string" || !stored.startsWith("enc:")) {
-    return typeof stored === "string" ? stored : "";
-  }
-  try {
-    const parts = stored.split(":");
-    if (parts.length !== 4) return stored;
-    const [, ivHex, tagHex, encHex] = parts;
-    const material = `${os.hostname()}:${os.userInfo().username}`;
-    const key = crypto.pbkdf2Sync(material, PROVIDER_KEY_SALT, 100000, 32, "sha256");
-    const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivHex, "hex"));
-    decipher.setAuthTag(Buffer.from(tagHex, "hex"));
-    let plain = decipher.update(encHex, "hex", "utf8");
-    plain += decipher.final("utf8");
-    return plain;
-  } catch {
-    return stored;
-  }
-}
 
 /**
  * 模型 ID → 人类可读名
@@ -107,7 +86,9 @@ function buildModelEntry(modelEntry: ProviderModelConfig, provider: ProviderId):
   // 3. 智谱 / GLM reasoning 模型使用 zai thinking 格式：thinking: { type: "enabled|disabled" }
   if (entry.reasoning && provider !== "openai") {
     const compat: NonNullable<ModelsJsonModelEntry["compat"]> = { supportsDeveloperRole: false };
-    if (entry.quirks?.includes("enable_thinking")) {
+    if (known?.thinkingFormat) {
+      compat.thinkingFormat = known.thinkingFormat;
+    } else if (entry.quirks?.includes("enable_thinking")) {
       compat.thinkingFormat = "qwen";
     } else if (ZAI_PROVIDER_IDS.has(provider)) {
       compat.thinkingFormat = "zai";
@@ -157,7 +138,7 @@ export function syncModels(
     if (!p.base_url) continue;
     if (!p.models || p.models.length === 0) continue;
 
-    let apiKey = decryptStoredApiKey(p.api_key || "");
+    let apiKey = decryptApiKey(p.api_key || "", opts.lynnHome);
     const authType = p.auth_type || "api-key";
 
     // 无 api_key 时尝试 OAuth 查找

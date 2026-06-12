@@ -11,6 +11,7 @@ import os from "os";
 import path from "path";
 import YAML from "js-yaml";
 import { ProviderRegistry } from "../core/provider-registry.js";
+import { syncModels } from "../core/model-sync.js";
 
 const tmpDir = path.join(os.tmpdir(), "hana-test-pr-crud-" + Date.now());
 
@@ -319,6 +320,27 @@ describe("saveProvider", () => {
       baseUrl: "https://new.api.com/v1",
       api: "openai-completions",
     });
+  });
+
+  it("保存的加密 key 可被 models.json 投影读取", () => {
+    writeAddedModels({});
+    const reg = makeRegistry();
+    reg.saveProvider("test-provider", {
+      api_key: "sk-sync",
+      base_url: "https://sync.api.com/v1",
+      api: "openai-completions",
+      models: ["sync-model"],
+    });
+
+    const modelsJsonPath = path.join(tmpDir, "models.json");
+    const changed = syncModels(readAddedModels(), {
+      modelsJsonPath,
+      lynnHome: tmpDir,
+    });
+    const modelsJson = JSON.parse(fs.readFileSync(modelsJsonPath, "utf-8"));
+
+    expect(changed).toBe(true);
+    expect(modelsJson.providers["test-provider"].apiKey).toBe("sk-sync");
   });
 
   it("更新已有 provider 的配置（合并）", () => {

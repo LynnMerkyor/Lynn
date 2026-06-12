@@ -354,6 +354,40 @@ describe("chat route event forwarding", () => {
     }));
   });
 
+  it("shows a visible fallback when a turn ends with reasoning only and no answer", async () => {
+    engine.currentModel = { id: "deepseek-v4-pro", provider: "deepseek", name: "DeepSeek V4 Pro" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(() => new Promise(() => {}));
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "你好" }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(1), { timeout: 1000 });
+
+    subscribed({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "thinking_delta",
+        delta: "我需要先思考一下。",
+      },
+    }, "/sessions/current.jsonl");
+    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(visibleText).toContain("模型这次只返回了思考过程");
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "turn_end",
+      sessionPath: "/sessions/current.jsonl",
+    }));
+  });
+
   it("passes backend tool-template XML fragments across streaming chunks", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
@@ -1456,8 +1490,9 @@ describe("chat route event forwarding", () => {
     }
   });
 
-  // 简单天气/行情类问题先走本地实时预取,避免默认模型工具链冷启动时长时间空白。
-  it("injects local realtime prefetch for brain weather turns", async () => {
+  // Brain V2 owns realtime tools server-side. Local prefetch must stay off,
+  // otherwise a stale client-side snapshot can leak into the next turn.
+  it("does not inject local realtime prefetch for brain weather turns", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     let eventsBeforeModelCall = [];
@@ -1476,18 +1511,18 @@ describe("chat route event forwarding", () => {
 
     await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
 
-    expect(eventsBeforeModelCall).toContainEqual(expect.objectContaining({
+    expect(eventsBeforeModelCall).not.toContainEqual(expect.objectContaining({
       type: "tool_start",
       name: "weather",
       sessionPath: "/sessions/current.jsonl",
     }));
-    expect(eventsBeforeModelCall).toContainEqual(expect.objectContaining({
+    expect(eventsBeforeModelCall).not.toContainEqual(expect.objectContaining({
       type: "tool_end",
       name: "weather",
       success: true,
       sessionPath: "/sessions/current.jsonl",
     }));
-    expect(reportResearchMock.buildReportResearchContext).toHaveBeenCalled();
+    expect(reportResearchMock.buildReportResearchContext).not.toHaveBeenCalled();
   });
 
   it("disables tools for simple memory acknowledgement turns", async () => {

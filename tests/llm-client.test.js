@@ -45,7 +45,7 @@ describe("callText", () => {
       messages: [{ role: "user", content: "请只回复OK" }],
       temperature: 0,
       maxTokens: 16,
-      timeoutMs: 1000,
+      timeoutMs: 5000,
     });
 
     expect(text).toBe("OK");
@@ -72,7 +72,7 @@ describe("callText", () => {
       provider: "dashscope",
       quirks: ["enable_thinking"],
       messages: [{ role: "user", content: "hi" }],
-      timeoutMs: 1000,
+      timeoutMs: 5000,
     });
 
     const [, requestInit] = fetchMock.mock.calls[0];
@@ -104,13 +104,55 @@ describe("callText", () => {
       baseUrl: "https://example.com/v1",
       model: "demo-model",
       messages: [{ role: "user", content: "请只回复最终答案" }],
-      timeoutMs: 1000,
+      timeoutMs: 5000,
     });
 
     expect(text).toBe("最终答案");
   });
 
-  it("classifies reasoning-only OpenAI responses without treating them as generic empty text", async () => {
+  it("retries reasoning-only OpenAI responses with a visible-answer nudge", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          choices: [{
+            message: {
+              content: "",
+              reasoning_content: "我需要先想一想。",
+            },
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          choices: [{ message: { content: "最终答案" } }],
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const text = await callText({
+      api: "openai-completions",
+      apiKey: "sk-test",
+      baseUrl: "https://example.com/v1",
+      model: "demo-reasoner",
+      provider: "custom-openai",
+      messages: [{ role: "user", content: "ping" }],
+      timeoutMs: 5000,
+    });
+
+    expect(text).toBe("最终答案");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(secondBody.messages[0]).toEqual(expect.objectContaining({
+      role: "system",
+      content: expect.stringContaining("最终可见答案"),
+    }));
+  });
+
+  it("extracts a labeled final answer from repeated reasoning-only responses", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -118,32 +160,51 @@ describe("callText", () => {
         choices: [{
           message: {
             content: "",
-            reasoning_content: "chain of thought",
+            reasoning_content: "分析略。\n答案：可以正常回复。",
           },
         }],
       }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(callText({
+    const text = await callText({
       api: "openai-completions",
       apiKey: "sk-test",
       baseUrl: "https://example.com/v1",
       model: "demo-reasoner",
       provider: "custom-openai",
       messages: [{ role: "user", content: "ping" }],
-      timeoutMs: 1000,
-    })).rejects.toMatchObject({
-      code: "LLM_EMPTY_RESPONSE",
-      retryable: false,
-      context: {
-        provider: "custom-openai",
-        modelId: "demo-reasoner",
-        api: "openai-completions",
-        responseKind: "reasoning_only",
-        reasoningBlockCount: 1,
-      },
+      timeoutMs: 5000,
     });
+
+    expect(text).toBe("可以正常回复。");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("disables DeepSeek V4 thinking for non-stream utility calls by default", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        choices: [{ message: { content: "OK" } }],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const text = await callText({
+      api: "openai-completions",
+      apiKey: "sk-test",
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-v4-pro",
+      provider: "deepseek",
+      messages: [{ role: "user", content: "你好" }],
+      timeoutMs: 1000,
+    });
+
+    expect(text).toBe("OK");
+    const [, requestInit] = fetchMock.mock.calls[0];
+    const body = JSON.parse(requestInit.body);
+    expect(body.thinking).toEqual({ type: "disabled" });
   });
 
   it("classifies non-json 403 responses as auth failures instead of invalid JSON", async () => {

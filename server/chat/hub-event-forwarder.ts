@@ -43,6 +43,7 @@ export interface HubEventForwarderDeps {
   maybeGenerateFirstTurnTitle: (sessionPath: any, ss: any) => void;
   buildRealtimeToolFallbackText: (toolName: any, event: any) => string;
   closeStreamAfterError: (sessionPath: any, ss: any) => void;
+  closeStreamWithVisibleFallback: (sessionPath: any, ss: any, text: any, reason: any, options?: any) => boolean;
   scheduleToolAuthorizationFallback: (sessionPath: any, ss: any) => void;
   scheduleToolFinalizationFallback: (sessionPath: any, ss: any) => void;
   hasStreamEvent: (ss: any, type: any) => boolean;
@@ -63,6 +64,7 @@ export function createHubEventForwarder({
   maybeGenerateFirstTurnTitle,
   buildRealtimeToolFallbackText,
   closeStreamAfterError,
+  closeStreamWithVisibleFallback,
   scheduleToolAuthorizationFallback,
   scheduleToolFinalizationFallback,
   hasStreamEvent,
@@ -429,6 +431,16 @@ export function createHubEventForwarder({
       }
       if (ss._turnEndDeferred) {
         debugLog()?.log("ws", `[TURN-END v1] resuming deferred turn_end · hasOutput=${ss.hasOutput} hasToolCall=${ss.hasToolCall} · ${sessionPath}`);
+      }
+      if (!ss.hasOutput && ss.hasThinking && !ss.hasToolCall && !ss.hasError) {
+        closeStreamWithVisibleFallback(
+          sessionPath,
+          ss,
+          "模型这次只返回了思考过程，没有给出最终可见答案。请点「编辑重发」重试，或切到 /fast 后再发。",
+          "reasoning_only_without_visible_answer",
+          { trustedFallback: true },
+        );
+        return;
       }
       lifecycleHooks.run("turn_end", {
         event,
