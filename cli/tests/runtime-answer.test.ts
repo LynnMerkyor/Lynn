@@ -25,6 +25,8 @@ describe("runtime answer", () => {
     expect(isLocalRuntimeQuestion("train a model router from logs")).toBe(false);
     expect(isLocalRuntimeQuestion("读一下这个项目给我一个你的架构评估和优化建议：https://github.com/MerkyorLynn/Lynn 只需要审阅CLI部分的架构")).toBe(false);
     expect(isLocalRuntimeQuestion("评估 Lynn CLI 的长任务架构")).toBe(false);
+    expect(isLocalRuntimeQuestion("你觉得我们这 CLI编排器和执行器用哪几个模型合适")).toBe(false);
+    expect(isLocalRuntimeQuestion("你觉得我们这个Lynn CLI编排器和执行器用哪几个模型合适")).toBe(false);
   });
 
   it("renders the local CLI version instead of asking the model", () => {

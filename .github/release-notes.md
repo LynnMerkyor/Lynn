@@ -4,7 +4,7 @@
 
 本次发版覆盖在线 v0.84.1，重点修复两条用户可感知主线：CLI 在当前 chat 内进入 StepFun Realtime 后只显示波形、不出回复；以及 Issue #74 里 macOS BYOK API Key 重启后清空、DeepSeek V4 Pro 偶发“只有思考没有最终答案”导致不回复。
 
-> 2026-06-12 晚间重发同版本资产：补齐 Brain 设备注册真实 IP / 默认不限流防护、本地模型 Windows 启动黑框修复、自定义 `LYNN_HOME` 下 llama.cpp 二进制与 GGUF 查找一致性，以及 CLI 顶部流光条的低闪烁回归。
+> 2026-06-12 晚间重发同版本资产：补齐 Brain 设备注册真实 IP / 默认不限流防护、本地模型 Windows 启动黑框修复、自定义 `LYNN_HOME` 下 llama.cpp 二进制与 GGUF 查找一致性、CLI 顶部流光条低闪烁回归，以及 CLI 本地 runtime 兜底误触发修复。
 
 ## 国内镜像站下载（推荐）
 
@@ -32,6 +32,7 @@
 - **Brain 注册限流热修复**：设备注册限流改为读取真实客户端 IP，并且默认关闭限流；无效 body / 错误 key 不再消耗 quota，服务端记录注册 analytics，避免反向代理地址导致全网共享 5 次/天的“brain unreachable”事故复发。
 - **本地模型启动加固**：Windows 启动本地 `llama-server` 时隐藏控制台窗口，修复回复时弹黑框；自定义 `LYNN_HOME` 时，下载目录和运行时查找目录保持一致，避免隔离数据目录下下载成功但启动找不到模型。
 - **CLI 顶部流光条回归修复**：保留顶部流光 banner，同时放慢输入框 placeholder 轮换，避免空闲时高频闪烁。
+- **CLI runtime 兜底收窄**：`Lynn CLI 编排器/执行器用哪几个模型合适` 这类模型选型问题不再被本地版本/能力说明拦截，改回正常交给模型回答。
 - **v0.84.1 修复保留**：StepFun 3.7 Flash 默认主链、GUI Realtime 语音、工具 turn 收口、token/cost pipeline、Fleet 入口与发布门禁继续保留。
 
 ## 安装
@@ -73,7 +74,7 @@ Lynn agents     # 给其他智能体/Fleet 的可复制命令
 
 This release supersedes the online v0.84.1 build. It focuses on two user-visible paths: CLI realtime voice inside the current chat, and Issue #74 reports where macOS BYOK API keys appeared to reset and DeepSeek V4 Pro could return reasoning without a final visible answer.
 
-> Evening same-version asset refresh: adds Brain device-registration real-IP/default-off quota hardening, Windows local-model console-window suppression, custom `LYNN_HOME` llama.cpp path consistency, and a lower-flicker CLI top banner.
+> Evening same-version asset refresh: adds Brain device-registration real-IP/default-off quota hardening, Windows local-model console-window suppression, custom `LYNN_HOME` llama.cpp path consistency, a lower-flicker CLI top banner, and a narrower CLI runtime-answer fallback.
 
 ## Highlights
 
@@ -86,6 +87,7 @@ This release supersedes the online v0.84.1 build. It focuses on two user-visible
 - **Brain registration hardening**: device registration now resolves the real client IP and defaults the quota to disabled; invalid bodies / bad keys no longer consume quota, and registration analytics are recorded server-side to prevent the proxy-address global-limit failure mode.
 - **Local model startup hardening**: Windows local `llama-server` startup hides console windows, and custom `LYNN_HOME` installs use the same root for downloaded GGUF files and runtime discovery.
 - **CLI top-banner regression fix**: the flowing-light header stays animated, while input placeholder rotation is slowed to avoid high-frequency flicker.
+- **CLI runtime fallback narrowed**: model-selection questions about the Lynn CLI orchestrator/executor no longer get intercepted by the local version/capability summary and are sent to the model normally.
 - **v0.84.1 fixes remain**: StepFun 3.7 Flash default routing, GUI realtime voice, honest tool-turn close, token/cost pipeline, Fleet entry points, and release gates remain in place.
 
 ## Install

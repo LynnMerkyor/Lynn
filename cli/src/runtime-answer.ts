@@ -20,7 +20,7 @@ const VERSION_PATTERNS = [
 
 const MODEL_ROUTE_PATTERNS = [
   /(^|\s)\/model(\s|$)/i,
-  /(?:你|当前|现在|本地|运行时|命令行|cli|lynn).{0,16}(?:模型|model|路由|route)/i,
+  /(?:你|当前|现在|本地|运行时|命令行|cli|lynn).{0,16}(?:当前|正在|实际|默认|工作).{0,8}(?:模型|model|路由|route)/i,
   /(?:工作|使用|正在用|当前).{0,12}(?:模型|model)/i,
   /(?:模型|model).{0,12}(?:是什么|是哪|哪个|\broute\b|using|running)/i,
   /\b(?:what|which|show|tell|current|your|runtime|cli|lynn)\b.{0,32}\b(?:model|route)\b/i,
@@ -45,10 +45,16 @@ const VOICE_PATTERNS = [
   /\b(?:voice|speech|audio|asr|tts|transcribe|record)\b.{0,36}\b(?:mode|support|input|output|cli|lynn|use|command)\b/i,
 ];
 
+const MODEL_SELECTION_ADVICE_PATTERNS = [
+  /(?:你觉得|建议|推荐|适合|合适|选型|怎么选|比较好|应该用|用哪几个模型|用哪些模型|哪几个模型|哪个模型).{0,60}(?:模型|编排器|执行器|router|orchestrator|executor)/i,
+  /(?:编排器|执行器|router|orchestrator|executor).{0,60}(?:模型|model).{0,30}(?:合适|适合|建议|推荐|选型|用哪|用哪些|哪几个|哪个|比较好)/i,
+];
+
 export function isLocalRuntimeQuestion(text: string): boolean {
   const value = text.trim();
   if (!value) return false;
   if (/^(?:version|about)$/i.test(value)) return true;
+  if (MODEL_SELECTION_ADVICE_PATTERNS.some((pattern) => pattern.test(value))) return false;
   return VERSION_PATTERNS.some((pattern) => pattern.test(value))
     || MODEL_ROUTE_PATTERNS.some((pattern) => pattern.test(value))
     || MEMORY_PATTERNS.some((pattern) => pattern.test(value))
