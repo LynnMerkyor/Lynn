@@ -42,6 +42,7 @@ import {
 import {
   applySessionToolRuntime,
   buildSessionToolsForEntry,
+  filterBrainManagedCustomTools,
   filterCustomToolsByTier,
   normalizeCustomToolsForModel,
   resolveToolTier,
@@ -257,7 +258,10 @@ export class SessionCoordinator {
     const toolTier = resolveToolTier(effectiveModel);
     const nativeToolsDisabled = isNativeToolCallingDisabled(effectiveModel);
     const suppressClientTools = shouldSuppressClientToolSchema(effectiveModel);
-    const filteredCustomTools = filterCustomToolsByTier(sessionCustomTools, toolTier);
+    const filteredCustomTools = filterBrainManagedCustomTools(
+      filterCustomToolsByTier(sessionCustomTools, toolTier),
+      effectiveModel,
+    );
     const effectiveSessionTools = (nativeToolsDisabled || suppressClientTools) ? [] : sessionTools;
     const effectiveCustomTools = (nativeToolsDisabled || suppressClientTools) ? [] : normalizeCustomToolsForModel(filteredCustomTools, effectiveModel);
     if (toolTier && toolTier !== "full") {

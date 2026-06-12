@@ -6,23 +6,23 @@ import {
   stripPseudoToolCallMarkup,
 } from "../pseudo-tool-call.js";
 
-describe("pseudo tool detection pass-through", () => {
-  it("does not classify model text as invalid just because it looks like a tool call", () => {
-    expect(containsPseudoToolSimulation('web_search(querys=["今日金价"])')).toBe(false);
-    expect(containsPseudoToolSimulation('<tool_call name="web_search">x</tool_call>')).toBe(false);
+describe("pseudo tool detection suppression", () => {
+  it("classifies high-confidence pseudo tool markup but leaves shell examples alone", () => {
+    expect(containsPseudoToolSimulation('web_search(querys=["今日金价"])')).toBe(true);
+    expect(containsPseudoToolSimulation('<tool_call name="web_search">x</tool_call>')).toBe(true);
     expect(containsPseudoToolSimulation("shell: > ls /Users/lynn")).toBe(false);
   });
 
-  it("does not count pseudo-tool-looking text as suppression evidence", () => {
+  it("counts high-confidence pseudo-tool-looking text as suppression evidence", () => {
     const raw = [
       '<tool_call name="web_search">x</tool_call>',
       'web_search(querys=["今日金价"])',
       "shell: > ls /Users/lynn",
     ].join("\n");
-    expect(countPseudoToolMarkers(raw)).toBe(0);
+    expect(countPseudoToolMarkers(raw)).toBeGreaterThanOrEqual(2);
   });
 
-  it("returns model text unchanged", () => {
+  it("strips pseudo tool markup but keeps surrounding prose", () => {
     const raw = [
       "先看一下",
       "",
@@ -32,6 +32,10 @@ describe("pseudo tool detection pass-through", () => {
       "",
       "再继续总结",
     ].join("\n");
-    expect(stripPseudoToolCallMarkup(raw)).toBe(raw);
+    const cleaned = stripPseudoToolCallMarkup(raw);
+    expect(cleaned).toContain("先看一下");
+    expect(cleaned).toContain("再继续总结");
+    expect(cleaned).not.toContain("web_search");
+    expect(cleaned).not.toContain("<web_search>");
   });
 });

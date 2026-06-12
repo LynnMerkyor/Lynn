@@ -1,6 +1,7 @@
 import { findModel } from "../shared/model-ref.js";
 import { resolveRoleDefaultModel } from "../shared/assistant-role-models.js";
 import {
+  filterBrainManagedCustomTools,
   normalizeCustomToolsForModel,
   shouldSuppressClientToolSchema,
   type ToolLike,
@@ -85,12 +86,13 @@ export function prepareIsolatedToolRuntime(opts: {
     || PATROL_TOOLS_DEFAULT;
   const allowSet = new Set(patrolAllowed);
   const suppressClientTools = shouldSuppressClientToolSchema(opts.execModel);
+  const filteredCustomTools = filterBrainManagedCustomTools(
+    allCustomTools.filter((tool: ToolLike) => allowSet.has(tool.name)),
+    opts.execModel,
+  );
   const actCustomTools = suppressClientTools
     ? []
-    : normalizeCustomToolsForModel(
-        allCustomTools.filter((tool: ToolLike) => allowSet.has(tool.name)),
-        opts.execModel,
-      );
+    : normalizeCustomToolsForModel(filteredCustomTools, opts.execModel);
 
   const actTools = suppressClientTools
     ? []

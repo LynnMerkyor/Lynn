@@ -163,18 +163,31 @@ export function createSessionResourceLoader(opts: {
           : "[Tool Call Hard Rule] Never fake tool calls in plain text (for example <tool_call>, <invoke>, <toolcode>, or XML/JSON tool arguments). When a tool is needed, you must invoke the real tool interface instead of printing tool-call markup to the user."
         );
 
+        extras.push(isZh
+          ? [
+              "【Lynn 本地工具能力】你不是普通网页聊天框。当前会话由 Lynn 桌面 Agent 托管，在执行模式下可以通过真实工具读取/搜索/编辑本机文件并运行必要命令。",
+              "用户要求查找本地文件、读取桌面/下载/工作区、写代码、改文件、运行脚本或整理目录时，必须使用 read、grep、find、ls、bash、edit/write 等真实工具完成；不要回答“我没有本地文件系统权限”。",
+              "只有当前确实没有收到相应工具 schema、或安全策略阻止了具体路径/操作时，才说明缺少哪个工具或哪条权限。",
+            ].join(" ")
+          : [
+              "[Lynn local tool capability] You are not a generic web chat box. This session is hosted by the Lynn desktop agent; in execute mode, real tools can read/search/edit local files and run necessary commands.",
+              "When the user asks to find local files, read Desktop/Downloads/workspace content, write code, edit files, run scripts, or organize folders, use real tools such as read, grep, find, ls, bash, edit/write. Do not answer that you have no local filesystem access.",
+              "Only mention a missing tool or permission if the corresponding tool schema is truly absent or a security policy blocks the specific path/action.",
+            ].join(" ")
+        );
+
         const selectedModelProviderForTools = sessionEntry.modelProvider || effectiveModel?.provider || null;
         if (isBrainProvider(selectedModelProviderForTools)) {
           extras.push(isZh
             ? [
-                "【Brain V2 工具边界】当前会话走 Brain 托管链路，本地客户端不会执行 stock_market、weather、live_news、sports_score、web_search、web_fetch、exchange_rate、calendar、unit_convert、express_tracking 这些函数工具。",
-                "需要实时行情、天气、新闻、汇率或比分时，Brain 会在服务端完成检索与整理；你只需要基于服务端返回的内容用正文回答。",
-                "不要为这些名称生成 toolCall / function_call，也不要在正文里声明本地工具失败。",
+                "【Brain V2 工具边界】当前会话走 Brain 托管链路：stock_market、weather、live_news、sports_score、web_search、web_fetch、exchange_rate、calendar、unit_convert、express_tracking 这些实时函数由 Brain 服务端托管，本地客户端不会重复执行。",
+                "但本地文件、目录、bash、edit/write 等桌面工具仍由 Lynn 客户端执行。需要读取或修改本机文件时，继续调用真实本地工具，不要声明本地文件工具不可用。",
+                "不要为 Brain 托管的实时工具名称生成 toolCall / function_call，也不要在正文里声明这些服务端工具失败。",
               ].join(" ")
             : [
-                "[Brain V2 Tool Boundary] This session is routed through the Brain-managed chain. The local client will not execute function tools named stock_market, weather, live_news, sports_score, web_search, web_fetch, exchange_rate, calendar, unit_convert, or express_tracking.",
-                "For realtime market, weather, news, FX, or score lookups, Brain performs retrieval server-side; answer in normal text from the server-provided facts.",
-                "Do not emit toolCall/function_call entries for those names, and do not claim that local tools failed.",
+                "[Brain V2 Tool Boundary] This session is routed through the Brain-managed chain: realtime functions named stock_market, weather, live_news, sports_score, web_search, web_fetch, exchange_rate, calendar, unit_convert, or express_tracking are handled server-side by Brain, so the local client will not duplicate them.",
+                "Local desktop tools for files, directories, bash, and edit/write still run through the Lynn client. For local file tasks, keep using real local tools and do not claim local filesystem tools are unavailable.",
+                "Do not emit toolCall/function_call entries for Brain-managed realtime names, and do not claim those server-side tools failed.",
               ].join(" ")
           );
         }

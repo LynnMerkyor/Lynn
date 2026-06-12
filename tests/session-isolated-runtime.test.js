@@ -64,6 +64,27 @@ describe("session isolated runtime helpers", () => {
     expect(runtime.customTools).toEqual([{ name: "web_search" }]);
   });
 
+  it("keeps isolated local tools for Brain but drops Brain-managed realtime custom tools", () => {
+    const runtime = prepareIsolatedToolRuntime({
+      execCwd: "/tmp/work",
+      targetAgent: {
+        agentDir: "/tmp/agent",
+        tools: [],
+        config: { desk: { patrol_tools: ["web_search", "weather", "notify"] } },
+      },
+      execModel: { id: "lynn-brain-router", provider: "brain" },
+      buildTools: () => ({
+        tools: [{ name: "read" }, { name: "bash" }],
+        customTools: [{ name: "web_search" }, { name: "weather" }, { name: "notify" }],
+      }),
+      getSessionPath: () => "/tmp/session.jsonl",
+    });
+
+    expect(runtime.suppressClientTools).toBe(false);
+    expect(runtime.tools).toEqual([{ name: "read" }, { name: "bash" }]);
+    expect(runtime.customTools).toEqual([{ name: "notify" }]);
+  });
+
   it("exposes a stable default patrol tool allowlist", () => {
     expect(PATROL_TOOLS_DEFAULT).toContain("web_search");
     expect(PATROL_TOOLS_DEFAULT).toContain("message_agent");

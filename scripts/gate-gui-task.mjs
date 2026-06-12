@@ -304,14 +304,18 @@ async function main() {
           .filter(Boolean);
         const joined = assistantTexts.join('\\n');
         const hasExpected = joined.includes(${JSON.stringify(EXPECT)});
-        const hasRefusal = /(无法|不能|没有|不知|抱歉|未能|无法确认)/.test(joined);
-        return hasExpected && !hasRefusal ? joined : '';
+        return hasExpected ? joined : '';
       })()
     `, TIMEOUT_MS);
 
     const allText = await cdp.evaluate(`document.body.innerText || ''`).catch(() => "");
     if (!String(answer || "").includes(EXPECT)) {
       throw new Error(`assistant visible answer did not include ${EXPECT}; body=${String(allText).slice(0, 1200)}`);
+    }
+    const hasRefusal = /(?:无法|不能|没有|缺少|未能|无法确认).{0,28}(?:本地|文件|文件系统|目录|工具|权限|访问|读取)/.test(String(answer))
+      || /(?:抱歉).{0,28}(?:无法|不能|没有|缺少|未能|无法确认)/.test(String(answer));
+    if (hasRefusal) {
+      throw new Error(`assistant visible answer included a local-file refusal; answer=${String(answer).replace(/\s+/g, " ").slice(0, 1200)}`);
     }
 
     console.log("[gate-gui-task] PASS — 真实 GUI 对话链路完成");

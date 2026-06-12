@@ -14,6 +14,13 @@ import { chatRouteLabel } from "./chat.js";
 import { resolveDefaultBrainUrl } from "../brain-url.js";
 import { completeJsonBoundary } from "../json-boundary.js";
 import { mergePromptAndVoice, transcribeVoiceInput } from "../voice-client.js";
+import { classifyRouteIntent } from "../../../shared/task-route-intent.js";
+import {
+  buildLocalWorkspaceDirectReply,
+  buildLocalWorkspaceContext,
+  shouldAttachLocalWorkspaceContext,
+  shouldUseLocalWorkspaceDirectReply,
+} from "../../../server/chat/local-workspace-context.js";
 
 export interface PromptOptions {
   json?: boolean;
@@ -34,6 +41,35 @@ export function mergePromptAndStdin(prompt: string, stdinText: string): string {
   return `${cleanPrompt}\n\n--- stdin ---\n${cleanStdin}`;
 }
 
+export function buildCliLocalWorkspacePrompt(prompt: string, cwd = process.cwd(), imagesCount = 0): {
+  prompt: string;
+  attached: boolean;
+  routeIntent: string;
+} {
+  const routeIntent = classifyRouteIntent(prompt, { imagesCount });
+  if (imagesCount > 0 || !shouldAttachLocalWorkspaceContext(prompt, routeIntent)) {
+    return { prompt, attached: false, routeIntent };
+  }
+  const workspaceContext = buildLocalWorkspaceContext({
+    promptText: prompt,
+    cwd,
+    maxEntries: 120,
+    maxDocs: 8,
+    maxDocChars: 3200,
+  });
+  return {
+    prompt: [
+      workspaceContext,
+      "",
+      "【Lynn CLI 本地文件任务要求】上方快照来自 Lynn CLI 在本机真实读取，不是模型猜测。请基于这些事实回答；如果还需要更精确的文件、目录或内容检索，请明确说明需要用户切到 `Lynn code`/执行模式，而不要把本地路径当网页或回答“我没有本地文件系统权限”。",
+      "",
+      prompt,
+    ].join("\n"),
+    attached: true,
+    routeIntent,
+  };
+}
+
 export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): Promise<number> {
   const rawPrompt = resolvePrompt(args);
   const voice = await transcribeVoiceInput(args);
@@ -52,6 +88,9 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   const cliProvider = await resolveCliProviderProfile(args);
   const imagePaths = promptImagePaths(args);
   const stopAtJson = !!options.json && hasFlag(args.flags, "stop-at-json", "json-boundary-stop");
+  const effectiveCwd = getStringFlag(args.flags, "cwd") || process.cwd();
+  const localWorkspace = buildCliLocalWorkspacePrompt(prompt, effectiveCwd, imagePaths.length);
+  const modelPrompt = localWorkspace.prompt;
 
   if (options.json) {
     if (voice) {
@@ -69,7 +108,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
     const text = renderLocalRuntimeAnswer({
       routeLabel: chatRouteLabel(cliProvider?.profile),
       brainUrl,
-      cwd: process.cwd(),
+      cwd: effectiveCwd,
       reasoning: reasoning.effort,
       question: prompt,
     }, localeForText(prompt));
@@ -80,7 +119,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       process.stdout.write(`${text}\n`);
     }
     if (saveSession) {
-      const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: process.cwd(), title, prompt, assistant: text, modelProvider: "lynn-cli", modelId: "local-runtime" });
+      const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: effectiveCwd, title, prompt, assistant: text, modelProvider: "lynn-cli", modelId: "local-runtime" });
       if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
     }
     await options.onAssistantComplete?.(text);
@@ -96,11 +135,36 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       process.stdout.write(`${text}\n`);
     }
     if (saveSession) {
-      const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: process.cwd(), title, prompt, assistant: text, modelProvider: "mock", modelId: "mock-brain" });
+      const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: effectiveCwd, title, prompt, assistant: text, modelProvider: "mock", modelId: "mock-brain" });
       if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
     }
     await options.onAssistantComplete?.(text);
     return 0;
+  }
+
+  if (!imagePaths.length && shouldUseLocalWorkspaceDirectReply(prompt, localWorkspace.routeIntent)) {
+    const directReply = buildLocalWorkspaceDirectReply({
+      promptText: prompt,
+      cwd: effectiveCwd,
+      maxEntries: 120,
+      maxDocs: 8,
+      maxDocChars: 3200,
+    });
+    if (directReply.ok && directReply.text.trim()) {
+      const text = directReply.text;
+      if (options.json) {
+        writeJsonLine({ type: "assistant.delta", ts: nowIso(), text });
+        writeJsonLine({ type: "run.finished", ts: nowIso(), ok: true, local: true, localWorkspace: true });
+      } else {
+        process.stdout.write(`${text}\n`);
+      }
+      if (saveSession) {
+        const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: effectiveCwd, title, prompt, assistant: text, modelProvider: "lynn-cli", modelId: "local-workspace" });
+        if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
+      }
+      await options.onAssistantComplete?.(text);
+      return 0;
+    }
   }
 
   let assistant = "";
@@ -113,7 +177,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   const startedAt = Date.now();
   if (!options.json) spinner.start();
   try {
-    const userContent = imagePaths.length ? await buildImagesContentParts(imagePaths, prompt) : prompt;
+    const userContent = imagePaths.length ? await buildImagesContentParts(imagePaths, prompt) : modelPrompt;
     const maxVisibleAnswerAttempts = 3;
     for (let attempt = 0; attempt < maxVisibleAnswerAttempts; attempt += 1) {
       let attemptAssistant = "";
@@ -260,7 +324,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
     const savedPath = await appendSessionTurn({
       dataDir,
       sessionPath,
-      cwd: process.cwd(),
+      cwd: effectiveCwd,
       title,
       prompt,
       assistant,

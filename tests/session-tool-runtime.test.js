@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applySessionToolRuntime,
   buildSessionToolsForEntry,
+  filterBrainManagedCustomTools,
   shouldSuppressClientToolSchema,
 } from "../core/session-tool-runtime.js";
 
@@ -97,21 +98,42 @@ describe("session tool runtime helpers", () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("runtime tools disabled"));
   });
 
-  it("suppresses client tool schemas for Brain so Brain V2 owns realtime tools", () => {
-    expect(shouldSuppressClientToolSchema({ id: "lynn-brain-router", provider: "brain" })).toBe(true);
+  it("keeps local client tools for Brain while filtering Brain-managed realtime custom tools", () => {
+    expect(shouldSuppressClientToolSchema({ id: "lynn-brain-router", provider: "brain" })).toBe(false);
 
     const entry = makeEntry({
       model: { id: "lynn-brain-router", provider: "brain" },
     });
-    const deps = makeDeps();
+    const deps = makeDeps(vi.fn(() => ({
+      tools: [{ name: "read" }, { name: "grep" }, { name: "bash" }],
+      customTools: [{ name: "weather" }, { name: "web_search" }, { name: "notify" }],
+    })));
     const logger = { warn: vi.fn(), log: vi.fn() };
 
     applySessionToolRuntime({ entry, ...deps, logger });
 
     expect(entry.nativeToolCallingDisabled).toBe(false);
-    expect(entry.session._customTools).toEqual([]);
-    expect(entry.session._baseToolsOverride).toEqual({});
-    expect(entry.session._buildRuntime).toHaveBeenCalledWith({ activeToolNames: [] });
-    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining("Brain V2 internal tool chain"));
+    expect(entry.session._customTools).toEqual([{ name: "notify" }]);
+    expect(entry.session._baseToolsOverride).toMatchObject({
+      read: { name: "read" },
+      grep: { name: "grep" },
+      bash: { name: "bash" },
+    });
+    expect(entry.session._buildRuntime).toHaveBeenCalledWith({
+      activeToolNames: ["read", "grep", "bash", "notify"],
+    });
+    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining("filtered 2 Brain-managed"));
+  });
+
+  it("filters only realtime custom tools owned by Brain", () => {
+    expect(filterBrainManagedCustomTools([
+      { name: "weather" },
+      { name: "web_search" },
+      { name: "notify" },
+      { name: "present_files" },
+    ], { id: "lynn-brain-router", provider: "brain" })).toEqual([
+      { name: "notify" },
+      { name: "present_files" },
+    ]);
   });
 });

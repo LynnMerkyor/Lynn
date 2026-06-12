@@ -8,6 +8,7 @@ import type {
   StreamEventPayload,
 } from "./stream-event-emitter.js";
 import type { SessionStreamState } from "../session-stream-store.js";
+import { stripStreamingPseudoToolBlocks } from "./stream-sanitizer.js";
 
 type ThinkTagEvent =
   | { type: "think_start" }
@@ -79,6 +80,18 @@ export function createStreamEmitters({
   clearToolFinalizationTimer,
   maybeGenerateFirstTurnTitle,
 }: CreateStreamEmittersDeps) {
+  function sanitizeVisibleDelta(
+    sessionPath: string,
+    ss: ChatStreamEmitterState,
+    delta: unknown,
+  ): string {
+    const result = stripStreamingPseudoToolBlocks(ss, delta);
+    if (result.suppressed) {
+      debugLog()?.warn("ws", `suppressed pseudo tool-call text delta · session=${sessionPath}`);
+    }
+    return result.text;
+  }
+
   function emitStreamEvent(
     sessionPath: string,
     ss: ChatStreamEmitterState,
@@ -92,7 +105,7 @@ export function createStreamEmitters({
     ss: ChatStreamEmitterState,
     delta: unknown,
   ): boolean {
-    const next = String(delta || "");
+    const next = sanitizeVisibleDelta(sessionPath, ss, delta);
     if (!next) return false;
     ss.hasOutput = true;
     ss.titlePreview += next;
@@ -107,7 +120,7 @@ export function createStreamEmitters({
     ss: ChatStreamEmitterState,
     delta: unknown,
   ): void {
-    const next = String(delta || "");
+    const next = sanitizeVisibleDelta(sessionPath, ss, delta);
     if (!next) return;
     if (hasToolExecutionInFlight(ss)) {
       ss.bufferedVisibleTextDuringTool = `${ss.bufferedVisibleTextDuringTool || ""}${next}`;

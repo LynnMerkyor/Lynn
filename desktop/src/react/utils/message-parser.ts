@@ -95,7 +95,25 @@ export function cleanMoodText(raw: string): string {
 }
 
 export function stripToolCodeMarkup(raw: string): string {
-  return String(raw || '');
+  return String(raw || '')
+    .replace(/<\|tool_calls_section_begin\|>[\s\S]*?<\|tool_calls_section_end\|>/giu, '')
+    .replace(/<\|tool_code_begin\|>[\s\S]*?<\|tool_code_end\|>/giu, '')
+    .replace(/<\|tool_call(?:s_section)?_(?:begin|end)\|>|<\|tool_call_argument_(?:begin|end)\|>/giu, '')
+    .replace(/<\|tool_code_(?:begin|end)\|>/giu, '')
+    .replace(/```[ \t]*(?:[a-z][\w.-]*\/)?(?:tool_params|tool-params|toolparams)\b[\s\S]*?```/giu, '')
+    .replace(/<tool_call\b[^\n>]*(?:>|$)[^\n]*?<\/arg_value>\s*/giu, '')
+    .replace(/<tool_code\b[\s\S]*?<\/tool_code>\s*/gi, '')
+    .replace(/<tool\b[\s\S]*?<\/tool>\s*/gi, '')
+    .replace(/<lynn_tool_progress\b[\s\S]*?<\/lynn_tool_progress>\s*/gi, '')
+    .replace(/<tool_call\b[\s\S]*?<\/tool_call>\s*/gi, '')
+    .replace(/<execute\b[\s\S]*?<\/execute>\s*/gi, '')
+    .replace(/<minimax:tool_call\b[\s\S]*?<\/minimax:tool_call>\s*/gi, '')
+    .replace(/<invoke\b[\s\S]*?<\/invoke>\s*/gi, '')
+    .replace(/<read\b[\s\S]*?<\/read>\s*/gi, '')
+    .replace(/<read_file\b[\s\S]*?<\/read_file>\s*/gi, '')
+    .replace(/<([a-z_][\w:-]*)\b[\s\S]*?<\/\1>\s*/gi, (match, name) => (
+      looksLikeKnownToolName(name) ? '' : match
+    ));
 }
 
 function stripLeadingPseudoArgs(line: string): string {
@@ -134,19 +152,24 @@ function looksLikeStandalonePseudoToolCall(paragraph: string): boolean {
 
 function cleanPseudoToolLine(line: string): string {
   const cleaned = String(line ?? '');
-  // V0.79: render model text as-is. Do not hide pseudo-tool text at the
-  // display layer; if a model emits it as text, it is still the model output.
   void PSEUDO_SHELL_LINE_RE.test(cleaned);
   void BARE_PSEUDO_COMMAND_LINE_RE.test(cleaned);
-  void PSEUDO_TOOL_TAG_RE.test(cleaned);
-  void looksLikeStandalonePseudoToolCall(cleaned);
-  void stripLeadingPseudoArgs(cleaned);
+  if (looksLikeStandalonePseudoToolCall(cleaned)) return '';
+  if (PSEUDO_TOOL_TAG_RE.test(cleaned)) {
+    return stripLeadingPseudoArgs(cleaned)
+      .replace(/<\/?(?:tool[\w:-]*|read[\w:-]*|read_file[\w:-]*|invoke[\w:-]*|minimax:[\w:-]*|arg_value[\w:-]*|path[\w:-]*|function[\w:-]*|parameter[\w:-]*|command[\w:-]*|description[\w:-]*|query[\w:-]*|pattern[\w:-]*|limit[\w:-]*|路径|参数|命令|描述|查询|模式|限制)\b[^>\n]*(?:>|$)/giu, '')
+      .replace(/<(?:function|parameter)=[^>\n]*(?:>|$)/giu, '');
+  }
   return cleaned;
 }
 
 export function containsPseudoToolCallSimulation(raw: string): boolean {
-  void raw;
-  return false;
+  const text = String(raw || '');
+  if (!text) return false;
+  if (PSEUDO_TOOL_TAG_RE.test(text)) return true;
+  const blockStripped = stripToolCodeMarkup(text);
+  if (blockStripped !== text) return true;
+  return text.split(/\n\s*\n/).some(looksLikeStandalonePseudoToolCall);
 }
 
 export function sanitizeAssistantDisplayText(raw: string): string {

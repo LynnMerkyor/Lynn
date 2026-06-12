@@ -7,8 +7,10 @@ import {
   normalizeRouteIntent,
 } from "../../shared/task-route-intent.js";
 
-const LOCAL_WORKSPACE_RE = /(?:\b(?:workspace|working directory|folder|directory|files?|desk|note|notes|todo|task list|current project)\b|工作空间|工作区|当前目录|桌面|文件夹|目录|文件|文档|笺|便签|工作清单|优先事项|待办|项目)/i;
-const LOCAL_ACTION_RE = /(?:\b(?:read|scan|inspect|look at|list|summarize|organize|review|check|delete|remove|clean)\b|读一下|读取|看看|看一下|查看|检查|扫描|列出|整理|总结|汇总|分析|打开|删除|删掉|移除|清理)/i;
+const LOCAL_WORKSPACE_RE = /(?:\b(?:workspace|working directory|folder|directory|files?|desk|note|notes|todo|task list|current project)\b|工作空间|工作区|当前目录|桌面|文件夹|目录|文件|文档|本地|小说|章节|第一章|笺|便签|工作清单|优先事项|待办|项目)/i;
+const LOCAL_ACTION_RE = /(?:\b(?:read|scan|inspect|look at|list|find|search|summarize|organize|review|check|delete|remove|clean)\b|读一下|读读|帮我读|阅读|读取|看看|看一下|查看|查找|找到|搜索|寻找|检查|扫描|列出|整理|总结|汇总|分析|打开|删除|删掉|移除|清理)/i;
+const LOCAL_DIRECT_READ_RE = /(?:\b(?:read|scan|inspect|look at|list|find|search|summarize|review|check)\b|读一下|读读|帮我读|阅读|读取|看看|看一下|查看|查找|找到|搜索|寻找|检查|扫描|列出|总结|汇总|打开)/i;
+const LOCAL_MUTATION_RE = /(?:\b(?:delete|remove|clean|move|copy|rename|write|edit|modify|create|make|organize)\b|删除|删掉|移除|清理|移动|挪到|复制|拷贝|重命名|写入|编辑|修改|改写|创建|新建|整理|归档)/i;
 const ABSOLUTE_PATH_RE = /((?:\/(?:Users|Volumes|Applications|opt|var|tmp|private|home|srv|mnt|etc)[^\s"'`“”‘’）),，。；;]*)|(?:[A-Za-z]:\\[^\s"'`“”‘’）),，。；;]*))/g;
 const SKIP_DIRS = new Set([
   ".git",
@@ -245,6 +247,23 @@ export function shouldAttachLocalWorkspaceContext(promptText: unknown, routeInte
   return LOCAL_WORKSPACE_RE.test(text) && LOCAL_ACTION_RE.test(text);
 }
 
+export function shouldUseLocalWorkspaceDirectReply(promptText: unknown, routeIntent?: string | null): boolean {
+  if (!shouldAttachLocalWorkspaceContext(promptText, routeIntent)) return false;
+  const text = String(promptText || "");
+  if (LOCAL_MUTATION_RE.test(text)) return false;
+  return LOCAL_DIRECT_READ_RE.test(text);
+}
+
+function extractRequestedSecret(promptText: unknown, docs: WorkspaceDocument[]): string {
+  const text = String(promptText || "");
+  if (!/暗号|口令|密码|code word|passphrase/i.test(text)) return "";
+  for (const doc of docs) {
+    const match = String(doc.preview || "").match(/(?:暗号|口令|密码)\s*[:：]\s*([^\n。；;，,]{2,40})/i);
+    if (match?.[1]) return match[1].trim().replace(/[。；;，,]+$/g, "");
+  }
+  return "";
+}
+
 export function buildLocalWorkspaceDirectReply({
   promptText,
   cwd,
@@ -268,6 +287,17 @@ export function buildLocalWorkspaceDirectReply({
     || snapshot.docs.find((doc) => /笺|便签|工作清单|待办|计划/.test(doc.rel));
   const openTasks = extractOpenTasks(jianDoc?.preview);
   const importantDocs = summarizeImportantDocs(snapshot.docs);
+  const requestedSecret = extractRequestedSecret(snapshot.promptText, snapshot.docs);
+
+  if (requestedSecret) {
+    return {
+      ok: true,
+      root: snapshot.root,
+      entriesCount: snapshot.entries.length,
+      docsCount: snapshot.docs.length,
+      text: requestedSecret,
+    };
+  }
 
   const lines = [
     `我已读取 \`${snapshot.root}\`。当前看到 ${snapshot.entries.length} 个目录项。`,
@@ -291,6 +321,16 @@ export function buildLocalWorkspaceDirectReply({
     lines.push("");
     lines.push("重点文档预览：");
     lines.push(importantDocs);
+  }
+
+  const docPreviews = snapshot.docs.slice(0, 2);
+  if (docPreviews.length > 0) {
+    lines.push("");
+    lines.push("文档摘录：");
+    for (const doc of docPreviews) {
+      lines.push(`\`${doc.rel}\`：`);
+      lines.push(String(doc.preview || "").slice(0, 900));
+    }
   }
 
   lines.push("");

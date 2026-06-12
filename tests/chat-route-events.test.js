@@ -170,7 +170,7 @@ describe("chat route event forwarding", () => {
     expect(clients[0].sent).toContainEqual({ type: "security_mode", mode: "safe" });
   });
 
-  it("passes pseudo-tool XML through without steering Brain default model text", async () => {
+  it("suppresses pseudo-tool XML without steering Brain default model text", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -196,10 +196,10 @@ describe("chat route event forwarding", () => {
     expect(clients[0].sent
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
-      .join("")).toContain("<web_search>");
+      .join("")).not.toContain("<web_search>");
   });
 
-  it("passes pseudo-tool function text for non-Brain model text without steering", async () => {
+  it("suppresses pseudo-tool function text for non-Brain model text without steering", async () => {
     engine.currentModel = { id: "kimi-k2.5", provider: "moonshot", name: "Kimi K2.5" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -226,10 +226,10 @@ describe("chat route event forwarding", () => {
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).toContain("web_search");
+    expect(visibleText).not.toContain("web_search");
   });
 
-  it("passes pseudo bash XML even after a real tool call already ran", async () => {
+  it("suppresses pseudo bash XML even after a real tool call already ran", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -277,11 +277,12 @@ describe("chat route event forwarding", () => {
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).toContain("<bash>");
-    expect(visibleText).toContain("mkdir -p");
+    expect(visibleText).toContain("好的，我来执行。");
+    expect(visibleText).not.toContain("<bash>");
+    expect(visibleText).not.toContain("mkdir -p");
   });
 
-  it("passes fragmented pseudo web_search XML across streaming chunks", async () => {
+  it("suppresses fragmented pseudo web_search XML across streaming chunks", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -313,11 +314,11 @@ describe("chat route event forwarding", () => {
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).toContain("<web_search>");
-    expect(visibleText).toContain("深圳 2026年4月28日 天气预报");
+    expect(visibleText).not.toContain("<web_search>");
+    expect(visibleText).not.toContain("</web_search>");
   });
 
-  it("passes pseudo-tool XML without retrying Brain when a thinking-only turn ends", async () => {
+  it("suppresses pseudo-tool XML without retrying Brain when a thinking-only turn ends", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -348,7 +349,7 @@ describe("chat route event forwarding", () => {
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).toContain("<bash>");
+    expect(visibleText).not.toContain("<bash>");
     expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
     }));
@@ -388,7 +389,7 @@ describe("chat route event forwarding", () => {
     }));
   });
 
-  it("passes backend tool-template XML fragments across streaming chunks", async () => {
+  it("suppresses backend tool-template XML fragments across streaming chunks", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -421,8 +422,7 @@ describe("chat route event forwarding", () => {
       .map((evt) => evt.delta)
       .join("");
     expect(visibleText).toContain("最终答案");
-    expect(visibleText).toMatch(/tavily|_calls|<\/?inv/i);
-    expect(visibleText).toContain("深圳天气");
+    expect(visibleText).not.toMatch(/tavily|_calls|<\/?inv/i);
   });
 
   it("does not defer turn_end or schedule internal retry for truncated-looking text", async () => {
@@ -1010,7 +1010,7 @@ describe("chat route event forwarding", () => {
       'bash\n\n{“cmd”: “find /Users/lynn/Downloads -type f -name "*zzzzzztest" 2>/dev/null”}',
       /(?:^|\n)\s*bash\s*(?:\n|$)|[“"]cmd[”"]|你刚才把工具调用写成了普通文本/,
     ],
-  ])("passes %s pseudo markup for a Downloads delete task without recovery", async (_label, delta, forbiddenRe) => {
+  ])("suppresses %s pseudo markup for a Downloads delete task without recovery", async (_label, delta, forbiddenRe) => {
     const recoveredExecute = vi.fn(async () => ({
       content: [{ type: "text", text: "下载文件夹中没有 zzzzzztest 文件。\n" }],
     }));
@@ -1052,7 +1052,7 @@ describe("chat route event forwarding", () => {
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).toMatch(forbiddenRe);
+    expect(visibleText).not.toMatch(forbiddenRe);
   });
 
   it("emits a persisted assistant reply when hub.send completes without stream deltas", async () => {
@@ -1551,7 +1551,7 @@ describe("chat route event forwarding", () => {
     }));
   });
 
-  it("passes pseudo tool text for Brain without client-side retry prompts", async () => {
+  it("suppresses pseudo tool text for Brain without client-side retry prompts", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.steerSession = vi.fn(() => true);
@@ -1582,7 +1582,7 @@ describe("chat route event forwarding", () => {
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).toContain("<web_search>");
+    expect(visibleText).not.toContain("<web_search>");
     expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
     }));
@@ -1626,7 +1626,7 @@ describe("chat route event forwarding", () => {
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).toContain("<tool_call>");
+    expect(visibleText).not.toContain("<tool_call>");
     expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
     }));
@@ -1674,7 +1674,7 @@ describe("chat route event forwarding", () => {
       name: "stock_market",
       sessionPath: "/sessions/current.jsonl",
     }));
-    expect(visibleText).toContain("<tool_call>");
+    expect(visibleText).not.toContain("<tool_call>");
   });
 
   it("does not inject local prefetch for non-realtime brain turns", async () => {

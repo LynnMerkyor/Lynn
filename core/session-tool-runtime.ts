@@ -70,11 +70,30 @@ const STANDARD_CUSTOM_TOOLS = new Set([
 
 const OPENAI_RESPONSES_TOOL_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
+export const BRAIN_MANAGED_CUSTOM_TOOLS = new Set([
+  "stock_market",
+  "weather",
+  "live_news",
+  "sports_score",
+  "web_search",
+  "web_fetch",
+  "exchange_rate",
+  "calendar",
+  "unit_convert",
+  "express_tracking",
+]);
+
 export function filterCustomToolsByTier(customTools: ToolLike[], tier: string | null | undefined) {
   if (!tier || tier === "full") return customTools;
   if (tier === "none") return [];
   const allowed = tier === "minimal" ? MINIMAL_CUSTOM_TOOLS : STANDARD_CUSTOM_TOOLS;
   return customTools.filter((tool: ToolLike) => allowed.has(tool.name));
+}
+
+export function filterBrainManagedCustomTools(customTools: ToolLike[], model: ModelLike) {
+  if (!Array.isArray(customTools) || customTools.length === 0) return [];
+  if (!isBrainProvider(model?.provider)) return customTools;
+  return customTools.filter((tool: ToolLike) => !BRAIN_MANAGED_CUSTOM_TOOLS.has(String(tool?.name || "")));
 }
 
 function isStrictToolNameModel(model: ModelLike) {
@@ -124,7 +143,8 @@ export function normalizeCustomToolsForModel(customTools: ToolLike[], model: Mod
 }
 
 export function shouldSuppressClientToolSchema(model: ModelLike) {
-  return isBrainProvider(model?.provider);
+  void model;
+  return false;
 }
 
 export function resolveToolTier(model: ModelLike) {
@@ -205,17 +225,12 @@ export function applySessionToolRuntime({
     return;
   }
 
-  if (suppressClientTools) {
-    entry.nativeToolCallingDisabled = false;
-    session._customTools = [];
-    session._baseToolsOverride = {};
-    session._buildRuntime({ activeToolNames: [] });
-    logger.log?.(`[model-tools] runtime using Brain V2 internal tool chain for ${modelLabel(modelRef)}; client tool schema suppressed`);
-    return;
-  }
-
   const baseToolsOverride = Object.fromEntries(tools.map((tool: ToolLike) => [tool.name, tool]));
-  const normalizedCustomTools = normalizeCustomToolsForModel(customTools || [], modelRef);
+  const brainFilteredCustomTools = filterBrainManagedCustomTools(customTools || [], modelRef);
+  if (isBrainProvider(modelRef?.provider) && brainFilteredCustomTools.length !== (customTools || []).length) {
+    logger.log?.(`[model-tools] Brain provider keeps local client tools for ${modelLabel(modelRef)}; filtered ${(customTools || []).length - brainFilteredCustomTools.length} Brain-managed realtime tool(s)`);
+  }
+  const normalizedCustomTools = normalizeCustomToolsForModel(brainFilteredCustomTools, modelRef);
   const customNames = normalizedCustomTools.map((tool: ToolLike) => tool.name);
   const activeToolNames = config.toolsRestricted
     ? [...READ_ONLY_BUILTIN_TOOLS, ...customNames]

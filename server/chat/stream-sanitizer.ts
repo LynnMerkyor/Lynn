@@ -1,23 +1,22 @@
-/**
- * Legacy stream sanitizer compatibility shim.
- *
- * Brain/default output is no longer filtered for pseudo-tool-looking text.
- * Streaming chunks are passed through verbatim; real tool events remain handled
- * by the structured event pipeline.
- */
+import {
+  containsPseudoToolSimulation,
+  stripPseudoToolCallMarkup,
+} from "../../shared/pseudo-tool-call.js";
 
 export interface StreamSanitizerResult {
   text: string;
-  suppressed: false;
+  suppressed: boolean;
 }
 
 export function stripStreamingPseudoToolBlocks(
   _ss: unknown,
   chunk: unknown,
 ): StreamSanitizerResult {
-  return { text: String(chunk || ""), suppressed: false };
+  const text = String(chunk || "");
+  if (!containsPseudoToolSimulation(text)) return { text, suppressed: false };
+  return { text: stripPseudoToolCallMarkup(text), suppressed: true };
 }
 
-export function containsNonProgressPseudoToolSimulation(): false {
-  return false;
+export function containsNonProgressPseudoToolSimulation(raw: unknown): boolean {
+  return containsPseudoToolSimulation(raw);
 }

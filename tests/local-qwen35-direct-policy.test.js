@@ -23,6 +23,11 @@ describe("local Qwen3.5 direct policy", () => {
       isLocalModel: true,
       toolBehavior: TOOL_USE_BEHAVIOR.PREFETCH_THEN_RUN_OR_STOP,
     })).toBe(false);
+    expect(shouldUseLocalQwen35DirectBridge("你能找到本地第一章小说吗", {
+      isLocalModel: true,
+      toolBehavior: TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN,
+      routeIntent: "utility",
+    })).toBe(false);
   });
 
   it("disables thinking and tightens max tokens for lightweight asks", () => {

@@ -6,7 +6,7 @@ import {
   stripPseudoToolCallMarkup,
 } from "../pseudo-tool-call.js";
 
-describe("scanPseudoToolMarkers (observe-only corpus scan)", () => {
+describe("scanPseudoToolMarkers corpus scan", () => {
   it("labels malformed tool-call shapes with pattern names + counts", () => {
     const raw = [
       "先看一下",
@@ -43,12 +43,10 @@ describe("scanPseudoToolMarkers (observe-only corpus scan)", () => {
     expect(scanPseudoToolMarkers(undefined).total).toBe(0);
   });
 
-  it("is OBSERVE-ONLY: scanning does NOT re-enable the intentional pass-through suppression", () => {
-    // v0.79.3 deliberately made the suppression API pass-through. The corpus scan must not
-    // change that — detecting for telemetry != suppressing/stripping output.
+  it("scans broad shapes while suppression blocks high-confidence pseudo tools", () => {
     const raw = 'web_search(querys=["今日金价"])\n\n<web_search>金价</web_search>';
-    expect(scanPseudoToolMarkers(raw).total).toBeGreaterThan(0); // it DETECTS
-    expect(containsPseudoToolSimulation(raw)).toBe(false);        // but suppression stays off
-    expect(stripPseudoToolCallMarkup(raw)).toBe(raw);             // and output is untouched
+    expect(scanPseudoToolMarkers(raw).total).toBeGreaterThan(0);
+    expect(containsPseudoToolSimulation(raw)).toBe(true);
+    expect(stripPseudoToolCallMarkup(raw)).not.toContain("web_search");
   });
 });

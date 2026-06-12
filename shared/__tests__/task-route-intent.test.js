@@ -69,6 +69,8 @@ describe("task route intent", () => {
     expect(classifyRouteIntent("帮我整理桌面，把报告合并一下")).toBe("utility");
     expect(classifyRouteIntent("读取这个PDF，提取付款和违约条款")).toBe("utility");
     expect(classifyRouteIntent("明天早上9点提醒我执行日报定时任务")).toBe("utility");
+    expect(classifyRouteIntent("你能找到本地第一章小说吗")).toBe("utility");
+    expect(classifyRouteIntent("查找一下本地有没有钢铁长城第一章")).toBe("utility");
   });
 
   it("does not create hidden route instructions for utility routes", () => {

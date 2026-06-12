@@ -5,7 +5,7 @@ import {
   stripStreamingPseudoToolBlocks,
 } from "../server/chat/stream-sanitizer.js";
 
-describe("stream sanitizer pass-through", () => {
+describe("stream sanitizer", () => {
   it("passes plain text through unchanged", () => {
     expect(stripStreamingPseudoToolBlocks({}, "普通回答，没有内部标签。")).toEqual({
       text: "普通回答，没有内部标签。",
@@ -20,17 +20,16 @@ describe("stream sanitizer pass-through", () => {
     });
   });
 
-  it("passes pseudo-tool-looking text through unchanged", () => {
+  it("strips high-confidence pseudo-tool-looking text", () => {
     const raw = "</think>\n<|tool_code_begin|>bash\nfind ~/Downloads -name '*.zip'\n<|tool_code_end|>\n完成。";
-    expect(stripStreamingPseudoToolBlocks({}, raw)).toEqual({
-      text: raw,
-      suppressed: false,
-    });
+    const result = stripStreamingPseudoToolBlocks({}, raw);
+    expect(result.suppressed).toBe(true);
+    expect(result.text).toBe("完成。");
   });
 
-  it("does not flag pseudo-tool-looking text as non-progress simulation", () => {
+  it("flags pseudo-tool-looking text as non-progress simulation", () => {
     expect(containsNonProgressPseudoToolSimulation(
       '<lynn_tool_progress event="start" name="web_search"></lynn_tool_progress><web_search>深圳天气</web_search>',
-    )).toBe(false);
+    )).toBe(true);
   });
 });

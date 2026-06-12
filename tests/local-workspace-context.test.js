@@ -7,6 +7,7 @@ import {
   buildLocalWorkspaceDirectReply,
   buildLocalWorkspaceContext,
   shouldAttachLocalWorkspaceContext,
+  shouldUseLocalWorkspaceDirectReply,
 } from "../server/chat/local-workspace-context.js";
 
 describe("local workspace context", () => {
@@ -16,6 +17,7 @@ describe("local workspace context", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-workspace-context-"));
     fs.writeFileSync(path.join(tmpDir, "jian.md"), "# 今日笺\n\n- [ ] 修复默认模型读取工作区\n", "utf8");
     fs.writeFileSync(path.join(tmpDir, "report.md"), "# 报告\n\n真实内容\n", "utf8");
+    fs.writeFileSync(path.join(tmpDir, "第一章-钢铁长城.md"), "# 第一章\n\n暗号：桐门已亮。\n", "utf8");
     fs.mkdirSync(path.join(tmpDir, "docs"));
     fs.writeFileSync(path.join(tmpDir, "docs", "note.txt"), "nested note", "utf8");
   });
@@ -29,8 +31,17 @@ describe("local workspace context", () => {
     expect(shouldAttachLocalWorkspaceContext("读一下这个项目/Users/lynn/DEV/Lynn", "utility")).toBe(true);
     expect(shouldAttachLocalWorkspaceContext("请先看看当前工作空间和笺", "utility")).toBe(true);
     expect(shouldAttachLocalWorkspaceContext("请把下载文件夹的所有后缀 zip 文件都删除", "utility")).toBe(true);
+    expect(shouldAttachLocalWorkspaceContext("你能找到本地第一章小说吗", "utility")).toBe(true);
     expect(shouldAttachLocalWorkspaceContext("今天深圳天气如何", "utility")).toBe(false);
     expect(shouldAttachLocalWorkspaceContext("随便聊两句", "chat")).toBe(false);
+  });
+
+  it("uses direct local workspace replies only for read-only local file requests", () => {
+    expect(shouldUseLocalWorkspaceDirectReply("请阅读本地第一章小说", "utility")).toBe(true);
+    expect(shouldUseLocalWorkspaceDirectReply("请查找这个本地目录里的文件", "utility")).toBe(true);
+    expect(shouldUseLocalWorkspaceDirectReply("请删除下载文件夹里的旧文件", "utility")).toBe(false);
+    expect(shouldUseLocalWorkspaceDirectReply("帮我分析桌面上的 Excel", "utility")).toBe(false);
+    expect(shouldUseLocalWorkspaceDirectReply("随便聊两句", "chat")).toBe(false);
   });
 
   it("does not attach workspace snapshots to internal automation prompts", () => {
@@ -72,6 +83,17 @@ describe("local workspace context", () => {
     expect(result.text).toContain("[文件] jian.md");
     expect(result.text).toContain("未完成事项");
     expect(result.text).toContain("修复默认模型读取工作区");
+  });
+
+  it("answers exact local secret reads directly from document previews", () => {
+    const result = buildLocalWorkspaceDirectReply({
+      promptText: "请阅读这个本地目录里的第一章小说文件，只回答里面的暗号四个字。",
+      cwd: tmpDir,
+      now: new Date("2026-04-11T04:00:00Z"),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.text).toBe("桐门已亮");
   });
 
   it("prefers an explicit absolute directory in the prompt over the session cwd", () => {

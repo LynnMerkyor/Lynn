@@ -1,5 +1,6 @@
 import fs from "fs";
 import { debugLog } from "../../lib/debug-log.js";
+import { ROUTE_INTENTS, normalizeRouteIntent } from "../../shared/task-route-intent.js";
 import { TOOL_USE_BEHAVIOR } from "./tool-use-behavior.js";
 import { persistedChatMessageText } from "./session-persistence.js";
 
@@ -59,6 +60,8 @@ export function shouldUseLocalQwen35DirectBridge(promptText: unknown = "", opts:
   if (opts.hasImages) return false;
   if (opts.rehydratedMutation) return false;
   if (opts.toolBehavior && opts.toolBehavior !== TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN) return false;
+  const routeIntent = normalizeRouteIntent(opts.routeIntent || null);
+  if (routeIntent === ROUTE_INTENTS.UTILITY || routeIntent === ROUTE_INTENTS.CODING) return false;
   const text = String(promptText || "").trim();
   if (!text || text.length > LOCAL_QWEN35_DIRECT_MAX_CHARS) return false;
   return true;

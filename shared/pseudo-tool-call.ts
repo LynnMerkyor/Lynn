@@ -313,28 +313,72 @@ function stripToolCodeMarkup(raw: unknown): string {
 
 // ── Public API ──
 
+const SUPPRESSED_PSEUDO_PATTERN_NAMES = new Set([
+  "qwen_tool_call_markup",
+  "known_tool_xml_tag",
+  "tool_name_json_args_block",
+  "known_tool_xml_block",
+  "read_tool_leak",
+  "pseudo_tool_tag",
+  "template_tool_tag",
+  "template_tool_block",
+  "orphan_template_fragment",
+  "pipe_numbered_pseudo_tool",
+  "tool_params_fence",
+  "arg_line_pseudo",
+  "standalone_function_call",
+]);
+
+function suppressionPatterns(): readonly PseudoPattern[] {
+  return PSEUDO_PATTERNS.filter((pattern) => SUPPRESSED_PSEUDO_PATTERN_NAMES.has(pattern.name));
+}
+
 export function containsPseudoToolSimulation(raw: unknown): boolean {
-  void raw;
-  return false;
+  const text = String(raw || "");
+  if (!text) return false;
+  return suppressionPatterns().some((pattern) => {
+    try {
+      return pattern.detect(text);
+    } catch {
+      return false;
+    }
+  });
 }
 
 export function countPseudoToolMarkers(raw: unknown): number {
-  void raw;
-  return 0;
+  const text = String(raw || "");
+  if (!text) return 0;
+  return suppressionPatterns().reduce((sum, pattern) => {
+    try {
+      return sum + Math.max(0, pattern.count(text));
+    } catch {
+      return sum;
+    }
+  }, 0);
 }
 
 export function stripPseudoToolCallMarkup(raw: unknown): string {
-  return String(raw || "");
+  let text = String(raw || "");
+  if (!text) return "";
+  text = stripToolCodeMarkup(text);
+  for (const pattern of suppressionPatterns()) {
+    try {
+      text = pattern.strip(text);
+    } catch {
+      // Keep the prior text if an individual pattern fails.
+    }
+  }
+  return text
+    .replace(THINK_TAG_RE, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 // ── Observe-only corpus scan ──
-// IMPORTANT: this is read-only telemetry. It runs the PSEUDO_PATTERNS registry purely to
-// LABEL text (which malformed-tool-call shapes appear + how many), and NEVER alters or
-// suppresses output. It is intentionally separate from the suppression API above
-// (containsPseudoToolSimulation / stripPseudoToolCallMarkup), which v0.79.3 deliberately
-// turned into pass-throughs to avoid false-positive suppression of legit model text.
-// A false positive here is harmless (filtered at corpus-curation time); it must never be
-// wired into control flow (turn invalidation / stripping).
+// This is telemetry-only: it labels every known malformed-tool-call shape,
+// including looser patterns that are useful for corpus triage but not safe
+// enough for automatic suppression.
 
 export type PseudoToolMarkerScan = {
   total: number;

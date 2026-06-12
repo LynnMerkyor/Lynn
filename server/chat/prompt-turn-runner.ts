@@ -21,6 +21,12 @@ import { buildPrefetchToolSummary, rememberFailedTool, rememberSuccessfulTool } 
 import { buildReportResearchContext } from "./report-research-context.js";
 import { consumeMutationConfirmation, recordPendingDeleteRequest } from "./turn-retry-policy.js";
 import { buildLocalOfficeDirectAnswer } from "./local-office-answer.js";
+import {
+  buildLocalWorkspaceDirectReply,
+  buildLocalWorkspaceContext,
+  shouldAttachLocalWorkspaceContext,
+  shouldUseLocalWorkspaceDirectReply,
+} from "./local-workspace-context.js";
 import { skillCrystallizeEnabled, recallSkillFrame, resolveBrainDataDir } from "./skill-crystallize.js";
 import {
   appendTextToLatestAssistantInMemory,
@@ -179,6 +185,46 @@ export function createPromptTurnRunner({
       if (skillCrystallizeEnabled()) {
         const recallFrame = recallSkillFrame(resolveBrainDataDir(), promptText);
         if (recallFrame) effectivePromptText = `${recallFrame}\n\n${effectivePromptText}`;
+      }
+      if (shouldAttachLocalWorkspaceContext(promptText, ss.routeIntent)) {
+        const sessionCwd = engine.getSessionByPath(promptSessionPath)?.sessionManager?.getCwd?.()
+          || engine.cwd
+          || process.cwd();
+        if (shouldUseLocalWorkspaceDirectReply(promptText, ss.routeIntent)) {
+          const directReply = buildLocalWorkspaceDirectReply({
+            promptText,
+            cwd: sessionCwd,
+            maxEntries: 120,
+            maxDocs: 8,
+            maxDocChars: 3200,
+          });
+          if (directReply.ok && directReply.text.trim()) {
+            ss.hasLocalPrefetchEvidence = true;
+            closeStreamWithVisibleFallback(
+              promptSessionPath,
+              ss,
+              directReply.text,
+              "local_workspace_direct_reply",
+              { trustedFallback: true },
+            );
+            return;
+          }
+        }
+        const workspaceContext = buildLocalWorkspaceContext({
+          promptText,
+          cwd: sessionCwd,
+          maxEntries: 120,
+          maxDocs: 8,
+          maxDocChars: 3200,
+        });
+        ss.hasLocalPrefetchEvidence = true;
+        effectivePromptText = [
+          workspaceContext,
+          "",
+          "【本地文件任务要求】上方快照来自 Lynn 客户端真实读取，不是模型猜测。请基于这些事实回答；如果还需要更精确的文件、目录或内容检索，继续调用真实 read/grep/find/ls/bash 工具。不要回答“我没有本地文件系统权限”。",
+          "",
+          effectivePromptText,
+        ].join("\n");
       }
       const noToolTurnInstruction = disableTurnTools ? buildNoToolTurnPrompt(effectivePromptText) : "";
       if (shouldUseLocalQwen35DirectBridge(promptText, {

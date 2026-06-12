@@ -117,4 +117,21 @@ describe("chat stream emitters", () => {
       sessionPath: "/tmp/session.jsonl",
     }));
   });
+
+  it("suppresses pseudo tool markup before broadcasting visible text", () => {
+    const { ss, broadcast, emitters } = makeHarness();
+
+    emitters.emitVisibleTextDelta(
+      "/tmp/session.jsonl",
+      ss,
+      "<tool_call>\n<function=bash>\n<parameter=command>find /Users/lynn/Desktop -name '*.md'</parameter>\n</function>\n</tool_call>\n我来读取文件。",
+    );
+
+    expect(ss.visibleTextAcc).toBe("我来读取文件。");
+    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({
+      type: "text_delta",
+      delta: "我来读取文件。",
+      sessionPath: "/tmp/session.jsonl",
+    }));
+  });
 });

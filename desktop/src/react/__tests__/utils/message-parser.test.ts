@@ -240,25 +240,28 @@ describe('moodLabel', () => {
 });
 
 describe('pseudo tool detection', () => {
-  it('不再把类似工具调用的模型文本判为无效输出', () => {
-    expect(containsPseudoToolCallSimulation('web_search(querys=["今日金价"])')).toBe(false);
-    expect(containsPseudoToolCallSimulation('read_file(path="/tmp/a.txt")')).toBe(false);
-    expect(containsPseudoToolCallSimulation('stock_market(query="今天金价多少")')).toBe(false);
-    expect(containsPseudoToolCallSimulation('weather(location="北京")')).toBe(false);
-    expect(containsPseudoToolCallSimulation('sports_score(team="湖人")')).toBe(false);
-    expect(containsPseudoToolCallSimulation('live_news(topic="AI")')).toBe(false);
+  it('识别高置信伪工具调用文本', () => {
+    expect(containsPseudoToolCallSimulation('web_search(querys=["今日金价"])')).toBe(true);
+    expect(containsPseudoToolCallSimulation('read_file(path="/tmp/a.txt")')).toBe(true);
+    expect(containsPseudoToolCallSimulation('stock_market(query="今天金价多少")')).toBe(true);
+    expect(containsPseudoToolCallSimulation('weather(location="北京")')).toBe(true);
+    expect(containsPseudoToolCallSimulation('sports_score(team="湖人")')).toBe(true);
+    expect(containsPseudoToolCallSimulation('live_news(topic="AI")')).toBe(true);
   });
 
-  it('不再识别 XML 风格伪工具标签', () => {
-    expect(containsPseudoToolCallSimulation('<tool_call name="web_search">x</tool_call>')).toBe(false);
+  it('识别 XML 风格伪工具标签', () => {
+    expect(containsPseudoToolCallSimulation('<tool_call name="web_search">x</tool_call>')).toBe(true);
   });
 
   it('不再识别 shell 风格伪命令行', () => {
     expect(containsPseudoToolCallSimulation('shell: > ls /Users/lynn')).toBe(false);
   });
 
-  it('保留伪工具调用正文作为模型原始输出', () => {
+  it('剥离伪工具调用正文但保留周围文本', () => {
     const input = '先看一下\n\nweb_search(querys=["今日金价"])\n\n再继续总结';
-    expect(sanitizeAssistantDisplayText(input)).toBe(input);
+    const output = sanitizeAssistantDisplayText(input);
+    expect(output).toContain('先看一下');
+    expect(output).toContain('再继续总结');
+    expect(output).not.toContain('web_search');
   });
 });
