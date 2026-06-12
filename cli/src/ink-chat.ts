@@ -118,12 +118,15 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
   const contextInfo = useMemo(() => analyzePastedContext(input, effectiveCwd), [input, effectiveCwd]);
   const [memoryFrame, setMemoryFrame] = useState(() => buildMemoryContextFrameSync(dataDir));
   const messages = useMemo<ChatMessage[]>(() => resetCliRuntimeMessages(chatRouteLabel(props.fallbackProvider), memoryFrame), [props.fallbackProvider]);
+  const placeholderFrame = Math.floor(frame / 43);
 
   useEffect(() => {
-    if (!busy || !profile.animation) return;
+    // Always animate (not only while busy) so the top flowing-light banner keeps flowing. Gated by
+    // profile.animation → safe/dumb terminals (and LYNN_CLI_NO_TUI_ANIMATION=1) get a static banner.
+    if (!profile.animation) return;
     const timer = setInterval(() => setFrame((value) => value + 1), 140);
     return () => clearInterval(timer);
-  }, [busy, profile.animation]);
+  }, [profile.animation]);
 
   useInput((value, key) => {
     if (busy) return;
@@ -241,6 +244,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
         return React.createElement(Box, { key: thumb.id, height: 8 }, React.createElement(Text, null, thumb.esc));
       },
     }),
+    React.createElement(InkTopBanner, { width: (process.stdout.columns || 80) - 4, frame, animated: profile.animation }),
     React.createElement(Box, { borderStyle: "round", borderColor: "gray", paddingX: 1, flexDirection: "column" },
       React.createElement(Text, { bold: true }, "Lynn CLI"),
       React.createElement(Text, null, `模型: ${provider}`),
@@ -266,7 +270,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
     React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${decodeTps ? ` · decode ${decodeTps}` : ""}${usage ? ` · ${usage}` : ""}`),
     React.createElement(InkInputLine, {
       value: input,
-      placeholder: profile.dynamicPlaceholders ? rotatingPlaceholder("chat", frame) : t("chat.placeholder"),
+      placeholder: profile.dynamicPlaceholders ? rotatingPlaceholder("chat", placeholderFrame) : t("chat.placeholder"),
       danger: mode.approval === "yolo" || mode.sandbox === "danger-full-access",
       commands: CHAT_SLASH_COMMANDS,
       contextSummary: contextInfo.hasContext ? summarizePastedContext(contextInfo) : "",
@@ -317,6 +321,35 @@ function InkSweep({ width, frame }: { width: number; frame: number }): React.Rea
       if (distance <= 3) return React.createElement(Text, { key: index, color: "gray" }, "─");
       return React.createElement(Text, { key: index }, " ");
     }),
+  );
+}
+
+// kimi-code-style flowing-light header. Pure render, gated by profile.animation (static fallback
+// on safe/dumb terminals). Reuses the shared `frame` counter — no extra timers.
+const BANNER_GRADIENT = ["cyan", "cyanBright", "blueBright", "blue", "magentaBright", "magenta", "blueBright", "cyanBright"];
+
+function InkTopBanner({ width, frame, animated }: { width: number; frame: number; animated: boolean }): React.ReactElement {
+  const barWidth = Math.max(16, Math.min(Number.isFinite(width) ? width : 72, 72));
+  const title = Array.from("◆ LYNN");
+  const head = (frame % (barWidth + 10)) - 5;
+  return React.createElement(Box, { flexDirection: "column", marginBottom: 1 },
+    React.createElement(Text, null,
+      ...title.map((ch, i) => React.createElement(Text, {
+        key: i,
+        color: animated ? BANNER_GRADIENT[(i + frame) % BANNER_GRADIENT.length] : "cyan",
+        bold: true,
+      }, ch)),
+      React.createElement(Text, { color: "gray" }, "  实时语音 · 编码 · 调研"),
+    ),
+    React.createElement(Text, null,
+      ...Array.from({ length: barWidth }, (_, i) => {
+        if (!animated) return React.createElement(Text, { key: i, color: "gray" }, "─");
+        const color = BANNER_GRADIENT[(i + frame) % BANNER_GRADIENT.length];
+        const distance = Math.abs(i - head);
+        const char = distance <= 1 ? "━" : "─";
+        return React.createElement(Text, { key: i, color, bold: distance === 0 }, char);
+      }),
+    ),
   );
 }
 

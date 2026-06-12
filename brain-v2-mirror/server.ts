@@ -9,6 +9,9 @@ import { run as routerRun, detectCapability } from './router.js';
 import { getProviderStatusSnapshot } from './provider-registry.js';
 import { makeSSEEmitter } from './stream-bridge.js';
 import { registerDevice, verifySignedRequest, AuthError } from './auth.js';
+import { resolveClientIp } from './client-ip.js';
+import { createDailyQuota, parseDailyLimit } from './daily-quota.js';
+import { recordDeviceRegisterEvent } from './device-register-analytics.js';
 import { errorMessage, errorName, type ChatMessage, type ToolDefinition } from './types.js';
 import { attachRealtimeUpgrade } from './voice-realtime-proxy.js';
 
@@ -28,12 +31,17 @@ const PORT = Number(process.env.BRAIN_V2_PORT || 8790);
 const HOST = process.env.BRAIN_V2_HOST || '127.0.0.1';
 const VERSION = '0.0.1';
 const CORS_ALLOWED_ORIGIN = process.env.BRAIN_V2_CORS_ORIGIN || '';
-const DEVICE_REGISTER_PER_IP_PER_DAY = Number(process.env.BRAIN_V2_DEVICE_REGISTER_PER_IP_PER_DAY || 5);
+const DEVICE_REGISTER_PER_IP_PER_DAY = parseDailyLimit(process.env.BRAIN_V2_DEVICE_REGISTER_PER_IP_PER_DAY, 0);
+const TRUST_PROXY_HEADERS = process.env.BRAIN_V2_TRUST_PROXY_HEADERS === '1'
+  ? true
+  : process.env.BRAIN_V2_TRUST_PROXY_HEADERS === '0'
+    ? false
+    : undefined;
 type JsonObject = Record<string, unknown>;
 type LocalQwen35BridgeModule = typeof import('./local-qwen35-setup.js');
 type ErrorWithExtras = Error & { errors?: unknown; code?: string };
 let localQwen35BridgePromise: Promise<LocalQwen35BridgeModule> | null = null;
-const deviceRegisterBuckets = new Map<string, { day: string; count: number }>();
+const deviceRegisterQuota = createDailyQuota({ limit: DEVICE_REGISTER_PER_IP_PER_DAY });
 
 function log(level: string, ...parts: unknown[]): void {
   // Variadic: several tool-exec call sites pass (level, tag, detail). Joining keeps the
@@ -47,24 +55,6 @@ function isLocalRequestAddress(remote: string): boolean {
     || remote === '::1'
     || remote === '::ffff:127.0.0.1'
     || remote === 'localhost';
-}
-
-function currentUtcDay(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function consumeDeviceRegisterQuota(remote: string): boolean {
-  if (DEVICE_REGISTER_PER_IP_PER_DAY <= 0) return true;
-  const key = remote || 'unknown';
-  const day = currentUtcDay();
-  const bucket = deviceRegisterBuckets.get(key);
-  if (!bucket || bucket.day !== day) {
-    deviceRegisterBuckets.set(key, { day, count: 1 });
-    return true;
-  }
-  if (bucket.count >= DEVICE_REGISTER_PER_IP_PER_DAY) return false;
-  bucket.count += 1;
-  return true;
 }
 
 async function loadLocalQwen35Bridge(): Promise<LocalQwen35BridgeModule> {
@@ -336,19 +326,33 @@ async function handleAgentCheckpoint(req: IncomingMessage, res: ServerResponse, 
 // [/agent-checkpoint v1 handler]
 
 async function handleDeviceRegister(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const remote = req.socket?.remoteAddress || '';
-  if (!consumeDeviceRegisterQuota(remote)) {
-    res.writeHead(429, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
-    res.end(JSON.stringify({ ok: false, error: 'device registration rate limit exceeded' }));
-    return;
-  }
-
+  const clientIp = resolveClientIp(req, { trustProxyHeaders: TRUST_PROXY_HEADERS });
   let body: JsonObject;
   try {
     body = await readJsonBody(req, 64 * 1024);
   } catch (e) {
+    void recordDeviceRegisterEvent({
+      ok: false,
+      status: 'invalid_body',
+      statusCode: 400,
+      clientIp,
+      error: errorMessage(e),
+    });
     res.writeHead(400, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
     res.end(JSON.stringify({ ok: false, error: 'invalid request body: ' + errorMessage(e) }));
+    return;
+  }
+
+  if (!deviceRegisterQuota.consume(clientIp)) {
+    void recordDeviceRegisterEvent({
+      ok: false,
+      status: 'rate_limited',
+      statusCode: 429,
+      clientIp,
+      error: 'device registration rate limit exceeded',
+    });
+    res.writeHead(429, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
+    res.end(JSON.stringify({ ok: false, error: 'device registration rate limit exceeded' }));
     return;
   }
 
@@ -359,16 +363,45 @@ async function handleDeviceRegister(req: IncomingMessage, res: ServerResponse): 
       clientVersion: typeof body.clientVersion === 'string' ? body.clientVersion : undefined,
       clientPlatform: typeof body.clientPlatform === 'string' ? body.clientPlatform : undefined,
     });
-    log('info', `device registered ${_agentFingerprint(device.key)} remote=${remote || '?'}`);
+    log('info', `device registered ${_agentFingerprint(device.key)} clientIp=${clientIp || '?'}`);
+    void recordDeviceRegisterEvent({
+      ok: true,
+      status: 'ok',
+      statusCode: 200,
+      clientIp,
+      keyFingerprint: _agentFingerprint(device.key),
+      clientVersion: typeof body.clientVersion === 'string' ? body.clientVersion : undefined,
+      clientPlatform: typeof body.clientPlatform === 'string' ? body.clientPlatform : undefined,
+    });
     res.writeHead(200, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
     res.end(JSON.stringify({ ok: true, key: device.key }));
   } catch (e) {
     if (e instanceof AuthError) {
+      void recordDeviceRegisterEvent({
+        ok: false,
+        status: 'auth_error',
+        statusCode: e.status,
+        clientIp,
+        keyFingerprint: body.key ? _agentFingerprint(String(body.key)) : undefined,
+        clientVersion: typeof body.clientVersion === 'string' ? body.clientVersion : undefined,
+        clientPlatform: typeof body.clientPlatform === 'string' ? body.clientPlatform : undefined,
+        error: e.message,
+      });
       res.writeHead(e.status, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
       res.end(JSON.stringify({ ok: false, error: e.message }));
       return;
     }
     log('error', 'device register failed: ' + errorMessage(e));
+    void recordDeviceRegisterEvent({
+      ok: false,
+      status: 'server_error',
+      statusCode: 500,
+      clientIp,
+      keyFingerprint: body.key ? _agentFingerprint(String(body.key)) : undefined,
+      clientVersion: typeof body.clientVersion === 'string' ? body.clientVersion : undefined,
+      clientPlatform: typeof body.clientPlatform === 'string' ? body.clientPlatform : undefined,
+      error: errorMessage(e),
+    });
     res.writeHead(500, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
     res.end(JSON.stringify({ ok: false, error: 'device registration failed' }));
   }

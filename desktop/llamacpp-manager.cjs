@@ -89,10 +89,19 @@ function defaultLynnRoot(homeDir) {
   return path.join(homeDir, ".lynn");
 }
 
-function defaultBinaryPath(homeDir, platform) {
-  const root = defaultLynnRoot(homeDir);
+function expandHomePath(rawPath, homeDir = os.homedir()) {
+  const raw = String(rawPath || "").trim();
+  if (!raw) return "";
+  return path.resolve(raw.replace(/^~(?=$|[\\/])/, homeDir));
+}
+
+function binaryPathForLynnRoot(lynnRoot, platform) {
   const binName = platform === "win32" ? "llama-server.exe" : "llama-server";
-  return path.join(root, "llamacpp", "bin", binName);
+  return path.join(lynnRoot, "llamacpp", "bin", binName);
+}
+
+function defaultBinaryPath(homeDir, platform) {
+  return binaryPathForLynnRoot(defaultLynnRoot(homeDir), platform);
 }
 
 function systemBinaryCandidates(platform) {
@@ -112,14 +121,22 @@ function systemBinaryCandidates(platform) {
   return [...new Set(candidates)];
 }
 
-function defaultModelPath(homeDir, fileName) {
-  return path.join(defaultLynnRoot(homeDir), "models", fileName);
+function lynnHomeModelPath(lynnHome, fileName) {
+  return path.join(lynnHome, "models", fileName);
 }
 
-function legacyModelPathCandidates(homeDir, modelId, fileName) {
+function defaultModelPath(homeDir, fileName) {
+  return lynnHomeModelPath(defaultLynnRoot(homeDir), fileName);
+}
+
+function legacyModelPathCandidates(homeDir, modelId, fileName, lynnHome = defaultLynnRoot(homeDir)) {
   const candidates = [
-    defaultModelPath(homeDir, fileName),
+    lynnHomeModelPath(lynnHome, fileName),
   ];
+  const defaultHomeModelPath = defaultModelPath(homeDir, fileName);
+  if (defaultHomeModelPath !== candidates[0]) {
+    candidates.push(defaultHomeModelPath);
+  }
   if (modelId === "qwen35-4b-q4km") {
     candidates.push(
       path.join(homeDir, "Models", "Lynn", "Qwen3.5-4B", "q4_k_m", "Qwen3.5-4B-Q4_K_M-imatrix.gguf"),
@@ -190,6 +207,7 @@ class LlamaCppManager {
     this.netModule = opts.netModule || net;
     this.fsModule = opts.fsModule || fs;
     this.homeDir = opts.homeDir || os.homedir();
+    this.lynnHome = expandHomePath(opts.lynnHome, this.homeDir) || defaultLynnRoot(this.homeDir);
     this.platform = opts.platform || process.platform;
     this.envSkip = opts.envSkip
       ? () => opts.envSkip()
@@ -224,7 +242,7 @@ class LlamaCppManager {
     if (this.binaryOverride && this.fsModule.existsSync(this.binaryOverride)) {
       return this.binaryOverride;
     }
-    const candidate = defaultBinaryPath(this.homeDir, this.platform);
+    const candidate = binaryPathForLynnRoot(this.lynnHome, this.platform);
     if (this.fsModule.existsSync(candidate)) return candidate;
     for (const systemCandidate of systemBinaryCandidates(this.platform)) {
       if (this.fsModule.existsSync(systemCandidate)) return systemCandidate;
@@ -236,7 +254,7 @@ class LlamaCppManager {
     if (this.modelOverride && this.fsModule.existsSync(this.modelOverride)) {
       return this.modelOverride;
     }
-    for (const candidate of legacyModelPathCandidates(this.homeDir, this.config.modelId, this.config.modelFileName)) {
+    for (const candidate of legacyModelPathCandidates(this.homeDir, this.config.modelId, this.config.modelFileName, this.lynnHome)) {
       if (this.fsModule.existsSync(candidate)) return candidate;
     }
     return null;
@@ -400,6 +418,7 @@ class LlamaCppManager {
       this.child = this.spawnFn(this.binaryPath, args, {
         stdio: ["ignore", "pipe", "pipe"],
         detached: false,
+        windowsHide: true,
       });
     } catch (err) {
       this.onLog("error", `[llamacpp] spawn failed: ${err?.message || err}`);
@@ -481,18 +500,18 @@ class LlamaCppManager {
     // resolve binary + model
     this.binaryPath = this.resolveBinaryPath();
     if (!this.binaryPath) {
-      const candidate = defaultBinaryPath(this.homeDir, this.platform);
+      const candidate = binaryPathForLynnRoot(this.lynnHome, this.platform);
       this.emitState({ status: "needs-binary", expectedPath: candidate });
       this.onLog("warn", `[llamacpp] binary not found at ${candidate} — UI should trigger install`);
       return;
     }
     this.modelPath = this.resolveModelPath();
     if (!this.modelPath) {
-      const candidate = defaultModelPath(this.homeDir, this.config.modelFileName);
+      const candidate = lynnHomeModelPath(this.lynnHome, this.config.modelFileName);
       this.emitState({
         status: "needs-model",
         expectedPath: candidate,
-        candidatePaths: legacyModelPathCandidates(this.homeDir, this.config.modelId, this.config.modelFileName),
+        candidatePaths: legacyModelPathCandidates(this.homeDir, this.config.modelId, this.config.modelFileName, this.lynnHome),
         modelId: this.config.modelId,
       });
       this.onLog("warn", `[llamacpp] model not found at ${candidate} — UI should trigger download`);
@@ -523,5 +542,6 @@ module.exports = {
   defaultLynnRoot,
   defaultBinaryPath,
   defaultModelPath,
+  lynnHomeModelPath,
   DEFAULT_CONFIG,
 };

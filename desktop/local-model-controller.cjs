@@ -128,6 +128,7 @@ function startLlamacpp() {
   if (llamacpp) return;
   try {
     llamacpp = new LlamaCppManager({
+      lynnHome,
       onLog: (level, msg) => {
         if (level === "error") console.error(msg);
         else if (level === "warn") console.warn(msg);
@@ -163,6 +164,7 @@ async function startLlamacppCustomModel(modelPath) {
   broadcastToAllWindows(LOCAL_MODEL_IPC.state, lastLlamacppState);
   try {
     llamacpp = new LlamaCppManager({
+      lynnHome,
       modelId: modelAlias,
       modelFileName: path.basename(modelPath),
       modelPath,
