@@ -246,6 +246,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
       React.createElement(Text, null, `模型: ${provider}`),
       React.createElement(Text, null, `权限: ${renderMode(mode)}   Shift+Tab / /yolo / /ask`),
       React.createElement(Text, null, `Brain: ${props.brainUrl}`),
+      React.createElement(Text, null, t("chat.voice.hint")),
       React.createElement(Text, null, `目录: ${displayCwd(effectiveCwd)}   cd / --cwd 切换`),
     ),
     React.createElement(Box, { marginTop: 1, flexDirection: "column" },

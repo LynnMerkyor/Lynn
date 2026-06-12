@@ -8,14 +8,13 @@ interface ModelInfoLike {
   isBrain?: unknown;
 }
 
-const BRAIN_PREFETCH_KINDS = new Set<unknown>([
-  "market_weather_brief", "weather", "sports", "market", "news",
-]);
-
 export function shouldPrefetchReportContext(reportKind: unknown, currentModelInfo?: ModelInfoLike | null): boolean {
   if (!reportKind) return false;
-  if (!currentModelInfo?.isBrain) return true;
-  return BRAIN_PREFETCH_KINDS.has(reportKind);
+  // Brain V2 already owns realtime tools server-side. Injecting local prefetch
+  // text as a synthetic user prompt creates two competing tool chains and can
+  // leak a previous market/search snapshot into the next turn.
+  if (currentModelInfo?.isBrain) return false;
+  return true;
 }
 
 export function shouldSuppressLocalToolPrefetch(text: unknown): boolean {

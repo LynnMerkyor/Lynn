@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applySessionToolRuntime,
   buildSessionToolsForEntry,
+  shouldSuppressClientToolSchema,
 } from "../core/session-tool-runtime.js";
 
 function makeEntry({ mode = "authorized", model = { id: "qwen", provider: "local" } } = {}) {
@@ -94,5 +95,23 @@ describe("session tool runtime helpers", () => {
     expect(entry.session._baseToolsOverride).toEqual({});
     expect(entry.session._buildRuntime).toHaveBeenCalledWith({ activeToolNames: [] });
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("runtime tools disabled"));
+  });
+
+  it("suppresses client tool schemas for Brain so Brain V2 owns realtime tools", () => {
+    expect(shouldSuppressClientToolSchema({ id: "lynn-brain-router", provider: "brain" })).toBe(true);
+
+    const entry = makeEntry({
+      model: { id: "lynn-brain-router", provider: "brain" },
+    });
+    const deps = makeDeps();
+    const logger = { warn: vi.fn(), log: vi.fn() };
+
+    applySessionToolRuntime({ entry, ...deps, logger });
+
+    expect(entry.nativeToolCallingDisabled).toBe(false);
+    expect(entry.session._customTools).toEqual([]);
+    expect(entry.session._baseToolsOverride).toEqual({});
+    expect(entry.session._buildRuntime).toHaveBeenCalledWith({ activeToolNames: [] });
+    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining("Brain V2 internal tool chain"));
   });
 });

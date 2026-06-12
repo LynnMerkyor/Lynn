@@ -159,6 +159,8 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 - ⚡ **StepFun 3.7 Flash 默认主链**:普通 GUI/CLI 对话、`Lynn -p` 和编码执行默认走 StepFun 3.7 Flash,不再让实验性 manager 抢占默认回答路径。
 - 🎙️ **实时语音主入口**:GUI 麦克风与 CLI 当前 chat 内 `/voice` / `lynn voice` 默认走 Brain 托管 StepFun Realtime 连续对话;CLI 在聊天框下方显示状态与采样波形。ASR 转写、录一句和 TTS 保存作为辅助命令保留。
 - 🩹 **GUI 空答修复**:旧会话复用过期设备签名时会自动刷新签名;工具链最终答案晚到时不再被 8 秒硬关流吞掉。
+- 🧯 **GUI 内容串台修复**:Brain V2 托管的 `stock_market` / `web_search` 等工具 trace 不再被本地 Pi SDK 当作客户端工具二次执行,避免“金价工具结果串到英伟达问题”或红叉假失败。
+- 🎛️ **CLI 实时语音补强**:当前 chat 输入框内 `/voice` / `lynn voice` 是一眼可见的主入口;CLI 端加入本地停顿提交与播放失败提示,避免“有波形但不出声/不结束本轮”。
 - 🧠 **reasoning-only 空答重试**:Brain 在源头识别“只有思考、没有可见正文”的响应并重试,减少“思考完但不说话”。
 - 🔧 **工具 turn 收口更诚实**:工具完成后如果还在等待模型最终答复,显示事实性的工具完成状态,不静默关闭、不伪造本地总结。
 - 📊 **GUI token/cost pipeline**:SDK usage → WebSocket → store → 输入行 chip 打通,桌面端能长期显示会话 token/cost 状态。

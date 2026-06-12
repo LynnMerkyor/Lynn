@@ -39,18 +39,21 @@ const STRINGS: Record<Lang, Record<string, string>> = {
   zh: {
     "tips.banner":
       '提示:Lynn -p "问题" 走本地 Brain 路由(默认 StepFun 3.7 Flash,256K 上下文,high 推理,48K 推理/生成预算)。\n' +
-      "     聊天 / 代码里用 /fast 低延迟,/think 深度推理。\n" +
+      "     聊天内 /voice 或 lynn voice 进入 StepFun Realtime 实时语音; /fast 低延迟,/think 深度推理。\n" +
       "     Lynn providers 配置 CLI 专用 BYOK,Lynn help 查看全部命令。",
     "startup.label.model": "模型",
     "startup.label.mode": "权限",
     "startup.label.byok": "BYOK",
     "startup.label.brain": "Brain",
     "startup.label.directory": "目录",
+    "startup.label.voice": "语音",
     "startup.hint.model": "/model 切换",
     "startup.hint.mode": "Shift+Tab 切换",
     "startup.hint.dir": "cd / --cwd 切换",
+    "startup.hint.voice": "Ctrl+C 返回聊天",
     "startup.byok.default": "客户端 Providers",
     "startup.byok.cliFallback": "CLI BYOK 兜底",
+    "startup.voice.realtime": "/voice / lynn voice · StepFun Realtime",
     "status.chat.prefix": "StepFun/Brain",
     "offline.body":
       "默认 StepFun 3.7 Flash 路由暂不可用(本地 Brain 离线)。你可以直接启动本地 Brain,或配置 CLI-only BYOK:\n" +
@@ -72,8 +75,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "code.placeholder.yolo": "/yolo 静默黑灯工厂模式;输入编码任务开始",
     "code.placeholder.longrun": "/goal 长任务 · /resume 续跑 · /ask 守护模式",
     "code.placeholder.context": "@文件路径 补全上下文 · /help 查看全部命令",
-    "chat.placeholder": "/yolo 静默黑灯工厂模式;输入消息开始",
-    "chat.placeholder.yolo": "/yolo 静默黑灯工厂模式;输入消息开始",
+    "chat.placeholder": "/voice 实时语音;输入消息开始",
+    "chat.placeholder.yolo": "/voice 实时语音;输入消息开始",
     "chat.placeholder.route": "/model 查看 StepFun · /ask 守护模式",
     "chat.placeholder.media": "粘贴图片/音频/视频路径可分析 · /help 查看全部命令",
     "code.tip": "提示:/yolo 进入静默黑灯工厂模式,/fast 快速编辑,/think 深度推理。",
@@ -90,6 +93,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/clear 清空上下文\n" +
       "/version 查看 Lynn CLI 本地版本和当前 Brain 路由\n" +
       "/model 查看 Brain 当前模型路由;本地 A3B manager 请显式使用 Lynn manager run\n" +
+      "/voice 或 lynn voice 在当前 chat 内进入 StepFun Realtime 实时语音;Ctrl+C 返回聊天\n" +
       "/memory 查看长期记忆; /memory add <事实> 保存长期事实; /memory forget <id> 删除\n" +
       "/tool 查看最近工具详情; /tool <编号> 展开搜索来源/工具结果\n" +
       "/cwd 查看工作目录;默认是启动 Lynn 时终端所在目录,可先 cd 或用 --cwd 指定\n" +
@@ -123,6 +127,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "  /providers set --preset stepfun --api-key <key>",
     "chat.providers.routeReloaded": "✓ 当前聊天路由已刷新:{route}",
     "chat.providers.routeUnchanged": "✓ Provider 配置已处理;当前聊天路由仍是:{route}",
+    "chat.voice.hint": "语音: /voice 或 lynn voice 进入 StepFun Realtime,Ctrl+C 返回聊天",
     "chat.image.defaultPrompt": "请分析这些图片。",
     "chat.image.usage": "用法:/image <图片路径> [问题]。也支持 /attach 或直接粘贴图片路径。",
     "chat.image.attached": "已加入图片上下文:{summary}",
@@ -217,7 +222,10 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "banner.label.mode": "模式",
     "banner.label.byok": "BYOK",
     "banner.label.brain": "Brain",
+    "banner.label.voice": "语音",
     "banner.label.dir": "目录",
+    "banner.voice.realtime": "/voice / lynn voice · StepFun Realtime",
+    "banner.hint.voice": "Ctrl+C 返回聊天",
     "banner.hint.model": "/model 切换",
     "banner.hint.mode": "Shift+Tab 切换",
     "banner.hint.providers": "Lynn providers",
@@ -322,18 +330,21 @@ const STRINGS: Record<Lang, Record<string, string>> = {
   en: {
     "tips.banner":
       'Tip: Lynn -p "prompt" uses the local Brain router (StepFun 3.7 Flash by default, 256K context, high reasoning, 48K reasoning/generation budget).\n' +
-      "     In chat / code, use /fast for low latency or /think for deeper reasoning.\n" +
+      "     In chat, /voice or lynn voice enters StepFun Realtime voice; use /fast for low latency or /think for deeper reasoning.\n" +
       "     Run Lynn providers for CLI-only BYOK, or Lynn help to see every command.",
     "startup.label.model": "model",
     "startup.label.mode": "mode",
     "startup.label.byok": "BYOK",
     "startup.label.brain": "brain",
     "startup.label.directory": "directory",
+    "startup.label.voice": "voice",
     "startup.hint.model": "/model to change",
     "startup.hint.mode": "Shift+Tab to toggle",
     "startup.hint.dir": "cd / --cwd",
+    "startup.hint.voice": "Ctrl+C returns",
     "startup.byok.default": "client Providers",
     "startup.byok.cliFallback": "CLI BYOK fallback",
+    "startup.voice.realtime": "/voice / lynn voice · StepFun Realtime",
     "status.chat.prefix": "StepFun/Brain",
     "offline.body":
       "Default StepFun 3.7 Flash route unavailable (local Brain offline). Start the local Brain, or configure CLI-only BYOK:\n" +
@@ -355,8 +366,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "code.placeholder.yolo": "/yolo for silent factory mode; type a coding task",
     "code.placeholder.longrun": "/goal long task · /resume continue · /ask guarded mode",
     "code.placeholder.context": "@file path for context · /help for all commands",
-    "chat.placeholder": "/yolo for silent factory mode; type a message",
-    "chat.placeholder.yolo": "/yolo for silent factory mode; type a message",
+    "chat.placeholder": "/voice for realtime voice; type a message",
+    "chat.placeholder.yolo": "/voice for realtime voice; type a message",
     "chat.placeholder.route": "/model shows StepFun · /ask guarded mode",
     "chat.placeholder.media": "Paste image/audio/video paths to analyze · /help for commands",
     "code.tip": "Tip: /yolo for silent factory mode, /fast for quick edits, /think for deeper reasoning.",
@@ -373,6 +384,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "/clear reset context\n" +
       "/version show the local Lynn CLI version and current Brain route\n" +
       "/model shows the current Brain route; use Lynn manager run explicitly for the local A3B manager\n" +
+      "/voice or lynn voice enter StepFun Realtime voice inside this chat; Ctrl+C returns\n" +
       "/memory show durable memory; /memory add <fact> save a durable fact; /memory forget <id> delete\n" +
       "/tool show recent tool details; /tool <id> expands search sources/tool output\n" +
       "/cwd show working directory; default is the terminal directory where Lynn started, use cd or --cwd to change\n" +
@@ -406,6 +418,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "  /providers set --preset stepfun --api-key <key>",
     "chat.providers.routeReloaded": "✓ Chat route refreshed: {route}",
     "chat.providers.routeUnchanged": "✓ Provider command handled; chat route is still: {route}",
+    "chat.voice.hint": "voice: /voice or lynn voice enters StepFun Realtime; Ctrl+C returns to chat",
     "chat.image.defaultPrompt": "Please analyze these images.",
     "chat.image.usage": "Usage: /image <image-path> [prompt]. /attach and pasted image paths work too.",
     "chat.image.attached": "Attached image context: {summary}",
@@ -500,7 +513,10 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "banner.label.mode": "mode",
     "banner.label.byok": "BYOK",
     "banner.label.brain": "brain",
+    "banner.label.voice": "voice",
     "banner.label.dir": "directory",
+    "banner.voice.realtime": "/voice / lynn voice · StepFun Realtime",
+    "banner.hint.voice": "Ctrl+C returns",
     "banner.hint.model": "/model to change",
     "banner.hint.mode": "Shift+Tab to toggle",
     "banner.hint.providers": "Lynn providers",

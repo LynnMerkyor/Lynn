@@ -133,6 +133,137 @@ if (fs.existsSync(completionsTarget)) {
     }
   }
 
+  // ── Patch 2b: Brain V2 server-managed tool calls are trace, not local client tools ──
+  //
+  // Brain V2 may return OpenAI-style tool_calls for tools it already executed
+  // server-side (stock_market / web_search / weather...). Pi's generic OpenAI
+  // adapter treats every tool_call as a local client tool request, then writes
+  // "Tool stock_market not found" and starts a follow-up turn. That creates the
+  // exact GUI failure we saw: current query's tool row + previous answer text.
+  //
+  // Keep text streaming normally, but suppress Brain-managed tool_call chunks
+  // before they become Pi toolCall blocks. Local/non-Brain providers are intact.
+  if (completionsCode.includes("patched: brain managed tool-call trace")) {
+    console.log("[patch-pi-sdk] openai-completions.js Brain managed tool trace patch already applied");
+  } else {
+    const brainTraceHelperNeedle =
+      "export const streamOpenAICompletions = (model, context, options) => {\n";
+    const brainTraceHelper =
+`const LYNN_BRAIN_MANAGED_TOOL_TRACE_NAMES = new Set([
+    "stock_market",
+    "weather",
+    "live_news",
+    "sports_score",
+    "web_search",
+    "web_fetch",
+    "exchange_rate",
+    "calendar",
+    "unit_convert",
+    "express_tracking",
+]);
+function lynnIsBrainProvider(model) {
+    return String(model?.provider || "").trim() === "brain";
+}
+function lynnToolCallTraceKey(toolCall) {
+    if (toolCall?.id)
+        return String(toolCall.id);
+    if (toolCall?.index !== undefined)
+        return \`index:\${toolCall.index}\`;
+    return "";
+}
+function lynnIsBrainManagedToolTrace(model, toolCall, ignoredKeys) {
+    if (!lynnIsBrainProvider(model))
+        return false;
+    const key = lynnToolCallTraceKey(toolCall);
+    if (key && ignoredKeys?.has(key))
+        return true;
+    const name = String(toolCall?.function?.name || "").trim();
+    const ignored = LYNN_BRAIN_MANAGED_TOOL_TRACE_NAMES.has(name);
+    if (ignored && key)
+        ignoredKeys.add(key);
+    return ignored;
+}
+
+`;
+    if (completionsCode.includes(brainTraceHelperNeedle)) {
+      completionsCode = completionsCode.replace(brainTraceHelperNeedle, brainTraceHelper + brainTraceHelperNeedle);
+      console.log("[patch-pi-sdk] patched openai-completions.js → Brain managed tool trace helpers");
+    } else {
+      console.warn("[patch-pi-sdk] openai-completions.js structure changed, cannot insert Brain managed tool trace helpers");
+    }
+
+    const streamStateNeedle =
+      "            let currentBlock = null;\n" +
+      "            const blocks = output.content;";
+    const streamStateReplacement =
+      "            let currentBlock = null;\n" +
+      "            // patched: brain managed tool-call trace\n" +
+      "            const lynnIgnoredBrainToolCallKeys = new Set();\n" +
+      "            let lynnEmittedLocalToolCall = false;\n" +
+      "            const blocks = output.content;";
+    if (completionsCode.includes(streamStateNeedle)) {
+      completionsCode = completionsCode.replace(streamStateNeedle, streamStateReplacement);
+      console.log("[patch-pi-sdk] patched openai-completions.js → Brain trace stream state");
+    } else {
+      console.warn("[patch-pi-sdk] openai-completions.js structure changed, cannot patch Brain trace stream state");
+    }
+
+    const finishReasonNeedle =
+      "                if (choice.finish_reason) {\n" +
+      "                    output.stopReason = mapStopReason(choice.finish_reason);\n" +
+      "                }";
+    const finishReasonReplacement =
+      "                if (choice.finish_reason) {\n" +
+      "                    const mappedStopReason = mapStopReason(choice.finish_reason);\n" +
+      "                    output.stopReason = lynnIsBrainProvider(model) && mappedStopReason === \"toolUse\" && !lynnEmittedLocalToolCall\n" +
+      "                        ? \"stop\"\n" +
+      "                        : mappedStopReason;\n" +
+      "                }";
+    if (completionsCode.includes(finishReasonNeedle)) {
+      completionsCode = completionsCode.replace(finishReasonNeedle, finishReasonReplacement);
+      console.log("[patch-pi-sdk] patched openai-completions.js → Brain tool_calls finish_reason maps to stop");
+    } else {
+      console.warn("[patch-pi-sdk] openai-completions.js structure changed, cannot patch Brain finish_reason");
+    }
+
+    const toolLoopNeedle =
+      "                    if (choice?.delta?.tool_calls) {\n" +
+      "                        for (const toolCall of choice.delta.tool_calls) {\n" +
+      "                            if (!currentBlock ||";
+    const toolLoopReplacement =
+      "                    if (choice?.delta?.tool_calls) {\n" +
+      "                        for (const toolCall of choice.delta.tool_calls) {\n" +
+      "                            if (lynnIsBrainManagedToolTrace(model, toolCall, lynnIgnoredBrainToolCallKeys))\n" +
+      "                                continue;\n" +
+      "                            lynnEmittedLocalToolCall = true;\n" +
+      "                            if (!currentBlock ||";
+    if (completionsCode.includes(toolLoopNeedle)) {
+      completionsCode = completionsCode.replace(toolLoopNeedle, toolLoopReplacement);
+      console.log("[patch-pi-sdk] patched openai-completions.js → ignore Brain managed tool_call deltas");
+    } else {
+      console.warn("[patch-pi-sdk] openai-completions.js structure changed, cannot patch Brain tool_call loop");
+    }
+
+    const tolerantHelperToolNeedle =
+      "            if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {\n" +
+      "                output.stopReason = \"toolUse\";\n" +
+      "                for (const toolCall of message.tool_calls)\n" +
+      "                    pushToolCall(toolCall);\n" +
+      "            }\n" +
+      "            else {";
+    const tolerantHelperToolReplacement =
+      "            if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0 && !lynnIsBrainProvider(model)) {\n" +
+      "                output.stopReason = \"toolUse\";\n" +
+      "                for (const toolCall of message.tool_calls)\n" +
+      "                    pushToolCall(toolCall);\n" +
+      "            }\n" +
+      "            else {";
+    if (completionsCode.includes(tolerantHelperToolNeedle)) {
+      completionsCode = completionsCode.replace(tolerantHelperToolNeedle, tolerantHelperToolReplacement);
+      console.log("[patch-pi-sdk] patched openai-completions.js → Brain tolerant helper treats tool_calls as trace");
+    }
+  }
+
   const thinkingNeedle =
     '    if ((compat.thinkingFormat === "zai" || compat.thinkingFormat === "qwen") && model.reasoning) {\n' +
     '        // Both Z.ai and Qwen use enable_thinking: boolean\n' +
@@ -317,7 +448,7 @@ if (fs.existsSync(completionsTarget)) {
                 };
                 calculateCost(model, output.usage);
             }
-            if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+            if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0 && !lynnIsBrainProvider(model)) {
                 output.stopReason = "toolUse";
                 for (const toolCall of message.tool_calls)
                     pushToolCall(toolCall);

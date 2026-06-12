@@ -525,14 +525,17 @@ export class SessionCoordinator {
     const runPromptAttempt = async (attemptText: string) => {
       return runPromptWithIntegrity(entry.session, attemptText, _promptOpts, { passOptionsArgument: true });
     };
+    let promptFinished = false;
     try {
       if (opts?.disableTools) {
         await this._runWithTurnToolsDisabled(sessionPath, entry, () => runPromptAttempt(text));
       } else {
         await runPromptAttempt(text);
       }
+      promptFinished = true;
       agent?._memoryTicker?.notifyTurn(sessionPath);
     } finally {
+      if (promptFinished) sanitizeActiveSessionContextForPrompt(entry.session, sessionPath);
       clearSessionTurnContext(entry);
     }
   }

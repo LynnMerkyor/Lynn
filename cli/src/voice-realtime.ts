@@ -25,6 +25,11 @@ const SAMPLE_RATE = 24000;
 const FRAME_BYTES = SAMPLE_RATE * 2 / 10; // 100ms @24kHz Int16 = 4800 bytes
 const WAVE_WIDTH = 28;
 const BARS = " ▁▂▃▄▅▆▇█";
+const SPEECH_RMS = 0.012;
+const SILENCE_RMS = 0.006;
+const MIN_SPEECH_FRAMES = 2;
+const END_SILENCE_FRAMES = 7;
+const COMMIT_COOLDOWN_MS = 900;
 
 function wsUrlFromBrain(brainUrl: string): string {
   const base = brainUrl.replace(/^https:/i, "wss:").replace(/^http:/i, "ws:").replace(/\/+$/, "");
@@ -66,6 +71,10 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
   let assistantBuf = "";
   const history: number[] = new Array(WAVE_WIDTH).fill(0);
   const isTTY = process.stdout.isTTY;
+  let speechFrames = 0;
+  let silenceFrames = 0;
+  let localSpeechActive = false;
+  let lastCommitAt = 0;
 
   const phaseLabel = (): string => {
     switch (phase) {
@@ -129,6 +138,12 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
   const enqueueAudio = (pcm: Buffer): void => {
     assistantPcm = assistantPcm.length ? Buffer.concat([assistantPcm, pcm]) : Buffer.from(pcm);
   };
+  const commitTurn = (reason: string): void => {
+    const now = Date.now();
+    if (ptt || ws.readyState !== WebSocket.OPEN || now - lastCommitAt < COMMIT_COOLDOWN_MS) return;
+    lastCommitAt = now;
+    try { ws.send(JSON.stringify({ type: "commit", reason })); } catch { /* best-effort */ }
+  };
   const flushAudio = (): void => {
     const pcm = assistantPcm;
     assistantPcm = Buffer.alloc(0);
@@ -138,7 +153,10 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
     try { afplayProc?.kill("SIGTERM"); } catch { /* noop */ }
     afplayProc = spawn(playCmd, playArgs(file), { stdio: "ignore" });
     afplayProc.once("exit", () => { try { fs.unlinkSync(file); } catch { /* noop */ } afplayProc = null; });
-    afplayProc.once("error", () => { afplayProc = null; });
+    afplayProc.once("error", (err: Error) => {
+      printLine(`播放失败:${err.message || playCmd};已保留文字回复。`);
+      afplayProc = null;
+    });
   };
   const stopPlayback = (): void => {
     assistantPcm = Buffer.alloc(0);
@@ -157,7 +175,29 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
       while (pending.length >= FRAME_BYTES) {
         const frame = pending.subarray(0, FRAME_BYTES);
         pending = pending.subarray(FRAME_BYTES);
-        micLevel = Math.max(micLevel, rms(frame));
+        const level = rms(frame);
+        micLevel = Math.max(micLevel, level);
+        if (!ptt) {
+          if (level >= SPEECH_RMS) {
+            speechFrames += 1;
+            silenceFrames = 0;
+            if (!localSpeechActive && speechFrames >= MIN_SPEECH_FRAMES) {
+              localSpeechActive = true;
+              phase = "listening";
+            }
+          } else if (localSpeechActive && level <= SILENCE_RMS) {
+            silenceFrames += 1;
+            if (silenceFrames >= END_SILENCE_FRAMES) {
+              localSpeechActive = false;
+              speechFrames = 0;
+              silenceFrames = 0;
+              phase = "thinking";
+              commitTurn("local_silence");
+            }
+          } else if (!localSpeechActive) {
+            speechFrames = Math.max(0, speechFrames - 1);
+          }
+        }
         if (!ptt && ws.readyState === WebSocket.OPEN) ws.send(frame, { binary: true });
         else if (ptt && pttActive && ws.readyState === WebSocket.OPEN) ws.send(frame, { binary: true });
       }
@@ -233,8 +273,14 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "config", mode: ptt ? "ptt" : "duplex", voice }));
         printLine("已连接,开始对话。");
         break;
-      case "speech_started": stopPlayback(); phase = "listening"; assistantBuf = ""; break; // barge-in
-      case "speech_stopped": phase = "thinking"; break;
+      case "speech_started":
+        stopPlayback(); phase = "listening"; assistantBuf = "";
+        localSpeechActive = true; speechFrames = MIN_SPEECH_FRAMES; silenceFrames = 0;
+        break; // barge-in
+      case "speech_stopped":
+        phase = "thinking";
+        localSpeechActive = false; speechFrames = 0; silenceFrames = 0;
+        break;
       case "user_transcript": if (evt.text) printLine(`你:  ${evt.text}`); break;
       case "assistant_transcript":
         phase = "speaking";

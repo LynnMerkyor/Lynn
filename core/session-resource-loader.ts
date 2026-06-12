@@ -1,6 +1,6 @@
 import { t, getLocale } from "../server/i18n.js";
 import { formatProjectInstructions } from "../lib/project-instructions.js";
-import { getBrainDisplayName, isBrainModelRef } from "../shared/brain-provider.js";
+import { getBrainDisplayName, isBrainModelRef, isBrainProvider } from "../shared/brain-provider.js";
 import { getUserFacingModelAlias } from "../shared/assistant-role-models.js";
 import {
   DEFAULT_SECURITY_MODE,
@@ -162,6 +162,22 @@ export function createSessionResourceLoader(opts: {
           ? "【工具调用底线】绝不要在正文中伪造工具调用（例如输出 <tool_call>、<invoke>、<toolcode>、XML/JSON 工具参数等文本）。需要用工具时必须调用真实工具接口，而不是把工具格式打印给用户看。"
           : "[Tool Call Hard Rule] Never fake tool calls in plain text (for example <tool_call>, <invoke>, <toolcode>, or XML/JSON tool arguments). When a tool is needed, you must invoke the real tool interface instead of printing tool-call markup to the user."
         );
+
+        const selectedModelProviderForTools = sessionEntry.modelProvider || effectiveModel?.provider || null;
+        if (isBrainProvider(selectedModelProviderForTools)) {
+          extras.push(isZh
+            ? [
+                "【Brain V2 工具边界】当前会话走 Brain 托管链路，本地客户端不会执行 stock_market、weather、live_news、sports_score、web_search、web_fetch、exchange_rate、calendar、unit_convert、express_tracking 这些函数工具。",
+                "需要实时行情、天气、新闻、汇率或比分时，Brain 会在服务端完成检索与整理；你只需要基于服务端返回的内容用正文回答。",
+                "不要为这些名称生成 toolCall / function_call，也不要在正文里声明本地工具失败。",
+              ].join(" ")
+            : [
+                "[Brain V2 Tool Boundary] This session is routed through the Brain-managed chain. The local client will not execute function tools named stock_market, weather, live_news, sports_score, web_search, web_fetch, exchange_rate, calendar, unit_convert, or express_tracking.",
+                "For realtime market, weather, news, FX, or score lookups, Brain performs retrieval server-side; answer in normal text from the server-provided facts.",
+                "Do not emit toolCall/function_call entries for those names, and do not claim that local tools failed.",
+              ].join(" ")
+          );
+        }
 
         const turnCount = sessionEntry.session?.turnCount ?? sessionEntry.session?.sessionManager?.getTurnCount?.() ?? 0;
         if (turnCount <= 2 && !sessionEntry._jianHintInjected) {

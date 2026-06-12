@@ -78,6 +78,7 @@ function compactFrameLine(line: string, width: number): string {
 function isOptionalRowHint(value: string): boolean {
   return value === "Lynn providers"
     || value.startsWith("/model")
+    || value.startsWith("/voice")
     || value.startsWith("cd / --cwd")
     || value.startsWith("Shift+Tab");
 }
@@ -117,6 +118,7 @@ export function renderStartupBanner(input: {
     padLine(t("banner.label.mode"), input.modeLabel || "ask / workspace-write", t("banner.hint.mode")),
     padLine(t("banner.label.byok"), byokLabel, t("banner.hint.providers")),
     padLine(t("banner.label.brain"), brainLabel),
+    padLine(t("banner.label.voice"), t("banner.voice.realtime"), t("banner.hint.voice")),
     padLine(t("banner.label.dir"), displayCwd(input.cwd || process.cwd()), t("banner.hint.dir")),
   ];
   const out = [box(lines)];

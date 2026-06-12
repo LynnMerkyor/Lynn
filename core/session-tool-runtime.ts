@@ -8,6 +8,7 @@ import {
   SECURITY_MODE_CONFIG,
   SecurityMode,
 } from "../shared/security-mode.js";
+import { isBrainProvider } from "../shared/brain-provider.js";
 import type { ResolvedModel } from "./types.js";
 
 const log = createModuleLogger("session");
@@ -122,8 +123,8 @@ export function normalizeCustomToolsForModel(customTools: ToolLike[], model: Mod
   return normalized;
 }
 
-export function shouldSuppressClientToolSchema(_model: ModelLike) {
-  return false;
+export function shouldSuppressClientToolSchema(model: ModelLike) {
+  return isBrainProvider(model?.provider);
 }
 
 export function resolveToolTier(model: ModelLike) {

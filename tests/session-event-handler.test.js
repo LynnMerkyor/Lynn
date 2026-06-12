@@ -64,4 +64,30 @@ describe("session event handler", () => {
     expect(entry._lastRecallContext).toContain("read");
     expect(entry._lastRecallContext).toContain("ENOENT");
   });
+
+  it("suppresses Brain-managed local realtime tool echoes", () => {
+    const { entry, emitEvent, handler } = makeHandler();
+    entry.modelProvider = "brain";
+
+    handler({
+      type: "tool_execution_start",
+      toolCallId: "tc-market",
+      toolName: "stock_market",
+      args: { query: "黄金价格" },
+    });
+    handler({
+      type: "tool_execution_end",
+      toolCallId: "tc-market",
+      toolName: "stock_market",
+      isError: true,
+      result: {
+        content: [{ type: "text", text: "Tool stock_market not found" }],
+        isError: true,
+      },
+    });
+
+    expect(emitEvent).not.toHaveBeenCalled();
+    expect(entry._toolFailCount).toBeUndefined();
+    expect(entry._lastRecallContext).toBeUndefined();
+  });
 });

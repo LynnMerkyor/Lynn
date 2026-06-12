@@ -37,6 +37,8 @@ interface Buffer {
   lastRenderedHtml: string;
   lastRenderedFinalized: boolean;
   activeMessageId: string | null;
+  streamId: string | null;
+  lastEndedStreamId: string | null;
   pendingModelHint: string | null;
   pendingProviderRoute: ChatMessage['providerRoute'] | null;
 }
@@ -60,6 +62,8 @@ function createBuffer(sessionPath: string): Buffer {
     lastRenderedHtml: '',
     lastRenderedFinalized: false,
     activeMessageId: null,
+    streamId: null,
+    lastEndedStreamId: null,
     pendingModelHint: null,
     pendingProviderRoute: null,
   };
@@ -174,6 +178,80 @@ class StreamBufferManager {
     return false;
   }
 
+  private getActiveStreamingMessage(buf: Buffer): ChatMessage | null {
+    if (!buf.messageAppended || !buf.activeMessageId) return null;
+    const state = useStore.getState();
+    const sess = state.chatSessions?.[buf.sessionPath];
+    const items = sess?.items;
+    if (!items || !items.length) return null;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      if (
+        it?.type === 'message'
+        && it.data?.role === 'assistant'
+        && it.data.id === buf.activeMessageId
+        && it.data.id.startsWith('stream-')
+      ) {
+        return it.data;
+      }
+    }
+    return null;
+  }
+
+  private updateStreamingMessage(buf: Buffer, updater: (message: ChatMessage) => ChatMessage): void {
+    if (this.updateActiveStreamingMessage(buf, updater)) return;
+    // Legacy fallback for very old stream events without an active id. Never use
+    // this when an active stream id exists; updating "last message" is what let
+    // a later tool row attach to a previous answer after abort/retry.
+    if (buf.activeMessageId) return;
+    useStore.getState().updateLastMessage(buf.sessionPath, (m) => (
+      m.role === 'assistant' ? updater(m) : m
+    ));
+  }
+
+  private resetTurnBuffer(buf: Buffer, nextStreamId: string | null = null): void {
+    if (buf.flushTimer) {
+      clearTimeout(buf.flushTimer);
+      buf.flushTimer = null;
+    }
+    buf.textAcc = '';
+    buf.thinkingAcc = '';
+    buf.moodAcc = '';
+    buf.xingAcc = '';
+    buf.xingTitle = '';
+    buf.inThinking = false;
+    buf.inMood = false;
+    buf.inXing = false;
+    buf.messageAppended = false;
+    buf.lastRenderedText = '';
+    buf.lastRenderedHtml = '';
+    buf.lastRenderedFinalized = false;
+    buf.activeMessageId = null;
+    buf.streamId = nextStreamId;
+    buf.pendingModelHint = null;
+    buf.pendingProviderRoute = null;
+  }
+
+  private bindIncomingStream(buf: Buffer, msg: any): boolean {
+    const incoming = typeof msg?.streamId === 'string' && msg.streamId
+      ? msg.streamId
+      : null;
+    if (!incoming) return true;
+    if (!buf.messageAppended && buf.lastEndedStreamId === incoming) return false;
+    if (!buf.streamId) {
+      this.resetTurnBuffer(buf, incoming);
+      return true;
+    }
+    if (buf.streamId === incoming) return true;
+    // A new stream started in the same session. Reset local accumulators before
+    // the first chunk so old text/tool state cannot bleed into the next turn.
+    if (!buf.messageAppended || msg?.seq === 1 || msg?.type === 'text_delta' || msg?.type === 'tool_start' || msg?.type === 'tool_progress') {
+      this.resetTurnBuffer(buf, incoming);
+      return true;
+    }
+    return false;
+  }
+
   /** 调度节流 flush */
   private scheduleFlush(buf: Buffer): void {
     const now = Date.now();
@@ -197,7 +275,7 @@ class StreamBufferManager {
 
     const store = useStore.getState();
     let finalMarkdownRefresh: { sessionPath: string; text: string } | null = null;
-    store.updateLastMessage(buf.sessionPath, (msg) => {
+    this.updateStreamingMessage(buf, (msg) => {
       const blocks = [...(msg.blocks || [])];
 
       // ── Thinking ──
@@ -276,7 +354,7 @@ class StreamBufferManager {
           if (!latestBuf || sanitizeAssistantDisplayText(latestBuf.textAcc) !== text) return;
           const html = renderMarkdown(text);
           latestBuf.lastRenderedHtml = html;
-          useStore.getState().updateLastMessage(sessionPath, (msg) => ({
+          this.updateStreamingMessage(latestBuf, (msg) => ({
             ...msg,
             blocks: (msg.blocks || []).map((block) => (
               block.type === 'text' && block.plainText === text
@@ -297,6 +375,7 @@ class StreamBufferManager {
     const sessionPath = msg.sessionPath || useStore.getState().currentSessionPath;
     if (!sessionPath) return;
     const buf = this.getBuffer(sessionPath);
+    if (!this.bindIncomingStream(buf, msg)) return;
 
     switch (msg.type) {
       case 'text_delta':
@@ -364,7 +443,7 @@ class StreamBufferManager {
         this.flush(buf); // 先 flush 文本
         // [PROGRESS-UX v1] also surface to title bar
         useStore.setState({ currentActivity: msg.name || 'tool' });
-        useStore.getState().updateLastMessage(sessionPath, (m) => {
+        this.updateStreamingMessage(buf, (m) => {
           const blocks = [...(m.blocks || [])];
           // 找最后一个 tool_group 或创建新的
           let lastTg = blocks.length - 1;
@@ -394,10 +473,7 @@ class StreamBufferManager {
       case 'tool_end':
         // [PROGRESS-UX v1] clear activity if no other tool still running on this turn
         {
-          const cur = useStore.getState();
-          const session = cur.chatSessions[sessionPath];
-          const lastItem = session?.items?.[session.items.length - 1];
-          const lastMsg = lastItem?.type === 'message' ? lastItem.data : null;
+          const lastMsg = this.getActiveStreamingMessage(buf);
           // Determine if any other tool is still pending after this one closes
           let stillBusy = false;
           for (const b of (lastMsg?.blocks || [])) {
@@ -412,7 +488,7 @@ class StreamBufferManager {
           }
           if (!stillBusy) useStore.setState({ currentActivity: null });
         }
-        useStore.getState().updateLastMessage(sessionPath, (m) => {
+        this.updateStreamingMessage(buf, (m) => {
           const blocks = [...(m.blocks || [])];
           // 从后往前找含该 tool 名且未 done 的
           for (let i = blocks.length - 1; i >= 0; i--) {
@@ -439,7 +515,7 @@ class StreamBufferManager {
         const event = msg.event;
         const name = msg.name || 'tool';
         if (event === 'start') {
-          useStore.getState().updateLastMessage(sessionPath, (m) => {
+          this.updateStreamingMessage(buf, (m) => {
             const blocks = [...(m.blocks || [])];
             let lastTg = blocks.length - 1;
             while (lastTg >= 0 && blocks[lastTg].type !== 'tool_group') lastTg--;
@@ -464,7 +540,7 @@ class StreamBufferManager {
           // Also surface to title bar via store activity
           useStore.setState({ currentActivity: name });
         } else if (event === 'end') {
-          useStore.getState().updateLastMessage(sessionPath, (m) => {
+          this.updateStreamingMessage(buf, (m) => {
             const blocks = [...(m.blocks || [])];
             for (let i = blocks.length - 1; i >= 0; i--) {
               if (blocks[i].type !== 'tool_group') continue;
@@ -481,10 +557,7 @@ class StreamBufferManager {
             return m;
           });
           // Clear activity if no other tool is still running
-          const cur = useStore.getState();
-          const session = cur.chatSessions[sessionPath];
-          const lastItem = session?.items?.[session.items.length - 1];
-          const lastMsg = lastItem?.type === 'message' ? lastItem.data : null;
+          const lastMsg = this.getActiveStreamingMessage(buf);
           const stillBusy = lastMsg?.blocks?.some(
             (b) => b.type === 'tool_group' && b.tools.some((t) => !t.done),
           );
@@ -496,7 +569,7 @@ class StreamBufferManager {
       case 'file_output':
         this.ensureMessage(buf);
         this.flush(buf);
-        useStore.getState().updateLastMessage(sessionPath, (m) => ({
+        this.updateStreamingMessage(buf, (m) => ({
           ...m,
           blocks: [...(m.blocks || []), { type: 'file_output', filePath: msg.filePath, label: msg.label, ext: msg.ext }],
         }));
@@ -509,7 +582,7 @@ class StreamBufferManager {
       case 'file_diff':
         this.ensureMessage(buf);
         this.flush(buf);
-        useStore.getState().updateLastMessage(sessionPath, (m) => ({
+        this.updateStreamingMessage(buf, (m) => ({
           ...m,
           blocks: [...(m.blocks || []), {
             type: 'file_diff',
@@ -529,7 +602,7 @@ class StreamBufferManager {
       case 'artifact':
         this.ensureMessage(buf);
         this.flush(buf);
-        useStore.getState().updateLastMessage(sessionPath, (m) => ({
+        this.updateStreamingMessage(buf, (m) => ({
           ...m,
           blocks: [...(m.blocks || []), {
             type: 'artifact',
@@ -545,7 +618,7 @@ class StreamBufferManager {
       case 'browser_screenshot':
         this.ensureMessage(buf);
         this.flush(buf);
-        useStore.getState().updateLastMessage(sessionPath, (m) => ({
+        this.updateStreamingMessage(buf, (m) => ({
           ...m,
           blocks: [...(m.blocks || []), { type: 'browser_screenshot', base64: msg.base64, mimeType: msg.mimeType }],
         }));
@@ -554,7 +627,7 @@ class StreamBufferManager {
       case 'skill_activated':
         this.ensureMessage(buf);
         this.flush(buf);
-        useStore.getState().updateLastMessage(sessionPath, (m) => ({
+        this.updateStreamingMessage(buf, (m) => ({
           ...m,
           blocks: [...(m.blocks || []), { type: 'skill', skillName: msg.skillName, skillFilePath: msg.skillFilePath }],
         }));
@@ -563,7 +636,7 @@ class StreamBufferManager {
       case 'cron_confirmation':
         this.ensureMessage(buf);
         this.flush(buf);
-        useStore.getState().updateLastMessage(sessionPath, (m) => ({
+        this.updateStreamingMessage(buf, (m) => ({
           ...m,
           blocks: [...(m.blocks || []), { type: 'cron_confirm', confirmId: msg.confirmId, jobData: msg.jobData, status: 'pending' as const }],
         }));
@@ -572,7 +645,7 @@ class StreamBufferManager {
       case 'settings_confirmation':
         this.ensureMessage(buf);
         this.flush(buf);
-        useStore.getState().updateLastMessage(sessionPath, (m) => ({
+        this.updateStreamingMessage(buf, (m) => ({
           ...m,
           blocks: [...(m.blocks || []), {
             type: 'settings_confirm' as const,
@@ -594,7 +667,7 @@ class StreamBufferManager {
       case 'tool_authorization':
         this.ensureMessage(buf);
         this.flush(buf);
-        useStore.getState().updateLastMessage(sessionPath, (m) => ({
+        this.updateStreamingMessage(buf, (m) => ({
           ...m,
           blocks: [...(m.blocks || []), {
             type: 'tool_authorization' as const,
@@ -643,22 +716,12 @@ class StreamBufferManager {
       }
 
       case 'turn_end':
-        this.flush(buf, true);
-        // 清理 buffer
-        buf.textAcc = '';
-        buf.thinkingAcc = '';
-        buf.moodAcc = '';
-        buf.xingAcc = '';
-        buf.inThinking = false;
-        buf.inMood = false;
-        buf.inXing = false;
-        buf.messageAppended = false;
-        buf.lastRenderedText = '';
-        buf.lastRenderedHtml = '';
-        buf.lastRenderedFinalized = false;
-        buf.activeMessageId = null;
-        buf.pendingModelHint = null;
-        buf.pendingProviderRoute = null;
+        {
+          const endedStreamId = buf.streamId;
+          this.flush(buf, true);
+          this.resetTurnBuffer(buf, null);
+          buf.lastEndedStreamId = endedStreamId;
+        }
         // [PROGRESS-UX v1] clear title-bar activity on turn end
         useStore.setState({ currentActivity: null });
         break;
