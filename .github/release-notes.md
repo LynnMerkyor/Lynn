@@ -1,10 +1,8 @@
-# Lynn v0.84.2 Release Notes / 发布说明
+# Lynn v0.84.3 Release Notes / 发布说明
 
-> 发布日期: 2026-06-12 · CLI 实时语音断句 + Issue #74 BYOK Key / DeepSeek 空回复修复 · 晚间热更新补齐 Brain 注册与本地模型启动加固
+> 发布日期: 2026-06-13 · Agent 本地文件任务热修 + GUI/CLI 工具边界门禁
 
-本次发版覆盖在线 v0.84.1，重点修复两条用户可感知主线：CLI 在当前 chat 内进入 StepFun Realtime 后只显示波形、不出回复；以及 Issue #74 里 macOS BYOK API Key 重启后清空、DeepSeek V4 Pro 偶发“只有思考没有最终答案”导致不回复。
-
-> 2026-06-12 晚间重发同版本资产：补齐 Brain 设备注册真实 IP / 默认不限流防护、本地模型 Windows 启动黑框修复、自定义 `LYNN_HOME` 下 llama.cpp 二进制与 GGUF 查找一致性、CLI 顶部流光条低闪烁回归，以及 CLI 本地 runtime 兜底误触发修复。
+本次热修覆盖 v0.84.2，重点修复默认模型下 Lynn Agent 在 GUI / CLI 里处理本地文件、小说章节、代码与工具任务时的两个高频问题：模型错误声明“无法访问本地文件系统”，以及部分本地模型把伪 `<tool_call>` 文本直接吐到界面里。
 
 ## 国内镜像站下载（推荐）
 
@@ -13,27 +11,23 @@
 - **CLI**:
 
   ```bash
-  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.2.tgz"
+  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.3.tgz"
   ```
 
-- **macOS Apple Silicon / ARM64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.2-macOS-arm64.dmg](https://download.merkyorlynn.com/downloads/Lynn-0.84.2-macOS-arm64.dmg)
-- **macOS Intel / x64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.2-macOS-x64.dmg](https://download.merkyorlynn.com/downloads/Lynn-0.84.2-macOS-x64.dmg)
-- **Windows x64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.2-Windows-Setup.exe](https://download.merkyorlynn.com/downloads/Lynn-0.84.2-Windows-Setup.exe)
+- **macOS Apple Silicon / ARM64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.3-macOS-arm64.dmg](https://download.merkyorlynn.com/downloads/Lynn-0.84.3-macOS-arm64.dmg)
+- **macOS Intel / x64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.3-macOS-x64.dmg](https://download.merkyorlynn.com/downloads/Lynn-0.84.3-macOS-x64.dmg)
+- **Windows x64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.3-Windows-Setup.exe](https://download.merkyorlynn.com/downloads/Lynn-0.84.3-Windows-Setup.exe)
 - **下载页**: [https://download.merkyorlynn.com/download.html](https://download.merkyorlynn.com/download.html)
 
 ## 中文重点
 
-- **CLI 当前 chat 内实时语音修复**：`/voice` 和聊天框内输入 `lynn voice` 都会被本地拦截，直接进入同一个 StepFun Realtime 会话，不再把 `lynn voice` 发给模型回答，也不要求用户退出 chat 另开 shell。
-- **CLI 波形有声修复**：CLI 麦克风改为 raw 输入默认路径，使用本地 VAD 断句并以 PTT 模式驱动 Brain Realtime commit；旧 `dynaudnorm` 滤镜只保留为 opt-in，避免抬高静音底噪后让语音轮次永远停在“🎤 在听”。模型播放期间会抑制麦克风采集，减少把回复听回去当成用户输入。
-- **Issue #74 API Key 重置修复**：BYOK provider key 加密不再依赖 macOS `os.hostname()`，改为 `~/.lynn` 内固定随机 seed。能解开的旧密文会平滑读取；已经因 hostname 漂移解不开的 key 需要用户升级后重填一次，之后不再随网络/DHCP/局域网重名清空。
-- **Issue #74 DeepSeek V4 空回复修复**：DeepSeek V4 Flash/Pro 标记为 DeepSeek thinking format，utility/channel/memory 非流式调用默认关闭 thinking；reasoning-only 响应会先重试一次并要求最终可见答案，仍无正文时只抽取明确“答案/结论”句兜底，主聊天流式路径也会给出可见降级提示，不再静默空屏。
-- **Hanako 数据隔离延续**：Lynn 默认不再读取或迁移 `~/.hanako`，只在显式设置 `LYNN_IMPORT_HANAKO_ON_FIRST_RUN=1` 时导入，避免 OpenHanako 的已引导状态和旧模型配置污染 Lynn。
-- **GUI 内容串台防护**：Brain V2 主链继续由 Brain 托管工具，不再让客户端本地预取行情/天气插入合成上下文，避免旧搜索/行情结果串入下一轮回答。
-- **Brain 注册限流热修复**：设备注册限流改为读取真实客户端 IP，并且默认关闭限流；无效 body / 错误 key 不再消耗 quota，服务端记录注册 analytics，避免反向代理地址导致全网共享 5 次/天的“brain unreachable”事故复发。
-- **本地模型启动加固**：Windows 启动本地 `llama-server` 时隐藏控制台窗口，修复回复时弹黑框；自定义 `LYNN_HOME` 时，下载目录和运行时查找目录保持一致，避免隔离数据目录下下载成功但启动找不到模型。
-- **CLI 顶部流光条回归修复**：保留顶部流光 banner，同时放慢输入框 placeholder 轮换，避免空闲时高频闪烁。
-- **CLI runtime 兜底收窄**：`Lynn CLI 编排器/执行器用哪几个模型合适` 这类模型选型问题不再被本地版本/能力说明拦截，改回正常交给模型回答。
-- **v0.84.1 修复保留**：StepFun 3.7 Flash 默认主链、GUI Realtime 语音、工具 turn 收口、token/cost pipeline、Fleet 入口与发布门禁继续保留。
+- **GUI / CLI 本地文件任务修复**：默认模型现在会收到真实本地 workspace 摘要；“找本地第一章小说”“读桌面文件”“查看当前目录”这类只读任务不再被模型误判成无权限。
+- **本地文件直接回答兜底**：对简单只读文件搜索，Lynn 会先用本地扫描结果给模型提供确定上下文；能直接回答的文件暗号/章节内容会稳定返回，避免云端或本地模型凭空拒绝。
+- **工具边界修复**：Brain 托管的实时工具与客户端本地工具分离，只过滤 Brain 自己管理的工具，不再把 GUI/CLI 的本地文件、搜索、代码工具整批压掉。
+- **本地 Qwen direct bridge 收窄**：utility / coding 任务不再绕过工具链直连本地模型，避免本地 A3B / 9B 在需要工具时只靠语言猜测。
+- **伪工具调用清理**：如果模型输出 `<tool_call>` / `<function=...>` 这类模拟工具文本，服务端流式与前端渲染都会清理，不再把假工具 XML 展示给用户。
+- **Agent 任务矩阵门禁**：新增 release gate，覆盖 GUI + CLI 本地小说/文件读取、路由分类、工具边界、伪工具泄漏与 live smoke，防止今晚修过的问题再次回归。
+- **v0.84.2 修复保留**：CLI 实时语音断句、BYOK Key 持久化、Brain 注册限流、本地模型启动、DeepSeek 空答恢复等修复继续保留。
 
 ## 安装
 
@@ -42,12 +36,12 @@
 node -v
 
 # 从 Lynn 镜像安装或覆盖升级 CLI。
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.3.tgz"
 
 # 启动。
 Lynn            # 交互式聊天 TUI；输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # 编码 agent TUI
-Lynn --version  # 应输出 0.84.2
+Lynn --version  # 应输出 0.84.3
 Lynn agents     # 给其他智能体/Fleet 的可复制命令
 ```
 
@@ -57,38 +51,35 @@ Lynn agents     # 给其他智能体/Fleet 的可复制命令
 
 - `npm run typecheck`
 - `npm run typecheck:runtime`
-- `npm --prefix cli run typecheck`
-- `npm run build:cli`
-- `node scripts/cli-voice-repl-pty-smoke.mjs`
-- `npm run test:voice-step`
 - `npm run build:server`
 - `npm run build:main`
 - `npm run build:renderer`
+- `npm run build:cli`
+- `npm test`
 - `npm run test:release:static`
+- `npm run test:release:ui`
+- `npm run gate:startup`
+- `npm run gate:cli-task`
+- `npm run gate:gui-task`
+- `npm run gate:agent-matrix`
 - CLI tarball 镜像站安装 smoke
 - macOS 打包签名、公证、staple、Gatekeeper 校验
 
 ---
 
-> Release date: 2026-06-12 · CLI realtime voice turn detection + Issue #74 BYOK key / DeepSeek empty-answer fixes · evening refresh for Brain registration and local model startup hardening
+> Release date: 2026-06-13 · Agent local-file task hotfix + GUI/CLI tool-boundary gate
 
-This release supersedes the online v0.84.1 build. It focuses on two user-visible paths: CLI realtime voice inside the current chat, and Issue #74 reports where macOS BYOK API keys appeared to reset and DeepSeek V4 Pro could return reasoning without a final visible answer.
-
-> Evening same-version asset refresh: adds Brain device-registration real-IP/default-off quota hardening, Windows local-model console-window suppression, custom `LYNN_HOME` llama.cpp path consistency, a lower-flicker CLI top banner, and a narrower CLI runtime-answer fallback.
+This hotfix supersedes v0.84.2. It targets two user-visible failures in default-model GUI/CLI agent workflows: local file and novel-reading tasks incorrectly claiming that Lynn has no filesystem access, and local models leaking pseudo `<tool_call>` text into visible chat output.
 
 ## Highlights
 
-- **CLI realtime voice inside chat**: `/voice` and `lynn voice` typed in the Lynn chat box are intercepted locally and enter the same Brain-hosted StepFun Realtime session. They are not sent to the model as normal chat text.
-- **CLI waveform with real replies**: microphone capture now defaults to raw input, local VAD commits turns in PTT mode, and playback suppresses mic capture to reduce echo-as-user-input regressions. The old `dynaudnorm` filter is opt-in only because it can raise the silence floor and prevent turn commits.
-- **Issue #74 BYOK key persistence**: provider API key encryption now uses a stable per-`~/.lynn` random seed instead of `os.hostname()`. Existing decryptable keys continue to load; keys already lost to hostname drift need to be re-entered once after upgrade.
-- **Issue #74 DeepSeek V4 empty-answer recovery**: DeepSeek V4 Flash/Pro defaults utility calls to thinking-off. Reasoning-only responses are retried with a visible-answer nudge, then fall back only to explicit final-answer/conclusion text when available. Streaming chat also shows a visible fallback instead of going blank.
-- **Hanako isolation**: Lynn no longer reads or migrates `~/.hanako` by default. Import remains opt-in via `LYNN_IMPORT_HANAKO_ON_FIRST_RUN=1`.
-- **GUI crosstalk protection**: Brain V2 owns realtime tools server-side; client-side market/weather prefetch stays disabled for Brain turns so stale local results cannot leak into a later answer.
-- **Brain registration hardening**: device registration now resolves the real client IP and defaults the quota to disabled; invalid bodies / bad keys no longer consume quota, and registration analytics are recorded server-side to prevent the proxy-address global-limit failure mode.
-- **Local model startup hardening**: Windows local `llama-server` startup hides console windows, and custom `LYNN_HOME` installs use the same root for downloaded GGUF files and runtime discovery.
-- **CLI top-banner regression fix**: the flowing-light header stays animated, while input placeholder rotation is slowed to avoid high-frequency flicker.
-- **CLI runtime fallback narrowed**: model-selection questions about the Lynn CLI orchestrator/executor no longer get intercepted by the local version/capability summary and are sent to the model normally.
-- **v0.84.1 fixes remain**: StepFun 3.7 Flash default routing, GUI realtime voice, honest tool-turn close, token/cost pipeline, Fleet entry points, and release gates remain in place.
+- **GUI / CLI local-file task fix**: default model turns now receive a real local workspace summary. Read-only requests such as "find the first local novel chapter", "read my desktop file", or "inspect this folder" no longer fail with a false no-filesystem-access refusal.
+- **Deterministic read-only fallback**: simple local file searches can be answered from the local scan before a model guesses or refuses, so file secrets / chapter snippets return reliably.
+- **Tool-boundary fix**: Brain-managed realtime tools and client-side local tools are filtered separately. Lynn no longer suppresses the entire GUI/CLI client-tool surface during Brain turns.
+- **Local Qwen bridge narrowed**: utility and coding tasks no longer bypass the tool chain through the direct local-model bridge.
+- **Pseudo tool-call cleanup**: fake `<tool_call>` / `<function=...>` style text is stripped from server streaming and frontend rendering.
+- **Agent task-matrix gate**: a new release gate covers GUI + CLI local novel/file reads, routing, tool boundaries, pseudo-tool leakage, and live smoke tests.
+- **v0.84.2 fixes remain**: CLI realtime voice turn detection, BYOK key persistence, Brain registration hardening, local-model startup hardening, and DeepSeek empty-answer recovery remain in place.
 
 ## Install
 
@@ -97,12 +88,12 @@ This release supersedes the online v0.84.1 build. It focuses on two user-visible
 node -v
 
 # Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.3.tgz"
 
 # Launch.
 Lynn            # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.84.2
+Lynn --version  # should print 0.84.3
 Lynn agents     # copyable headless/Fleet commands
 ```
 

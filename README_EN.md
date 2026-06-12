@@ -85,12 +85,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.3.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.84.2
+Lynn --version  # should print 0.84.3
 Lynn agents   # copyable headless/Fleet commands for other agents
 ```
 
@@ -116,7 +116,26 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>Lynn v0.84.2</strong> · 2026-06-12 · StepFun default route + realtime voice + GUI empty-answer recovery <em>(latest)</em></summary>
+<summary><strong>Lynn v0.84.3</strong> · 2026-06-13 · Agent local-file task hotfix + GUI/CLI tool-boundary gate <em>(latest)</em></summary>
+
+**Default-model Agent workflow hotfix**:
+- **GUI / CLI local-file task fix**: default model turns now receive a real local workspace summary. Read-only requests such as "find the first local novel chapter", "read my desktop file", or "inspect this folder" no longer fail with a false no-filesystem-access refusal.
+- **Deterministic read-only fallback**: simple local file searches can be answered from the local scan before a model guesses or refuses, so file secrets / chapter snippets return reliably.
+- **Tool-boundary fix**: Brain-managed realtime tools and client-side local tools are filtered separately. Lynn no longer suppresses the entire GUI/CLI client-tool surface during Brain turns.
+- **Local Qwen bridge narrowed**: utility and coding tasks no longer bypass the tool chain through the direct local-model bridge.
+- **Pseudo tool-call cleanup**: fake `<tool_call>` / `<function=...>` style text is stripped from server streaming and frontend rendering.
+- **Agent task-matrix gate**: a new release gate covers GUI + CLI local novel/file reads, routing, tool boundaries, pseudo-tool leakage, and live smoke tests.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.3.tgz"
+```
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.3)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.84.2</strong> · 2026-06-12 · StepFun default route + realtime voice + GUI empty-answer recovery</summary>
 
 **GUI and CLI ship together**:
 - **StepFun 3.7 Flash default route**: normal GUI/CLI chat, `Lynn -p`, and coding execution use StepFun 3.7 Flash by default. Experimental manager paths stay explicit.
@@ -148,7 +167,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - **Release gate covers compaction**: `cli-longrun-smoke` now forces large tool results and requires a `code.runtime.compacted` event, so long-run stability is verified outside narrow unit tests.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.3.tgz"
 ```
 
 [Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
@@ -830,11 +849,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.84.2 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.84.3 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.84.2 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.84.3 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -897,7 +916,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.84.2 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.84.3 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

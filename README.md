@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.84.2-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.84.2-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.84.3-brightgreen" alt="App Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.84.3-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -102,12 +102,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.3.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI; 输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.84.2
+Lynn --version  # should print 0.84.3
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
@@ -153,7 +153,26 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 ## 🆕 近期更新
 
 <details>
-<summary><strong>Lynn v0.84.2</strong> · 2026-06-12 · CLI 实时语音 + Issue #74 BYOK Key 修复 <em>(最新)</em></summary>
+<summary><strong>Lynn v0.84.3</strong> · 2026-06-13 · Agent 本地文件任务热修 + GUI/CLI 工具边界门禁 <em>(最新)</em></summary>
+
+**默认模型 Agent 工作流热修**:
+- **GUI / CLI 本地文件任务修复**:默认模型会收到真实本地 workspace 摘要,“找本地第一章小说”“读桌面文件”“查看当前目录”这类只读任务不再误答“无法访问本地文件系统”。
+- **本地文件直接回答兜底**:简单只读文件搜索会先用本地扫描结果给出确定上下文;章节暗号、文件片段等能稳定返回,不依赖模型猜权限。
+- **工具边界修复**:Brain 托管实时工具与客户端本地工具分离,不再把 GUI/CLI 的本地文件、搜索、代码工具整批压掉。
+- **本地 Qwen direct bridge 收窄**:utility / coding 任务不再绕过工具链直连本地模型,需要工具时会走正常工具路径。
+- **伪工具调用清理**:模型吐出的 `<tool_call>` / `<function=...>` 模拟工具文本会在服务端流式和前端渲染两层清理,不再展示给用户。
+- **Agent 任务矩阵门禁**:新增 release gate 覆盖 GUI + CLI 本地小说/文件读取、路由分类、工具边界、伪工具泄漏与 live smoke。
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.3.tgz"
+```
+
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.3)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.84.2</strong> · 2026-06-12 · CLI 实时语音 + Issue #74 BYOK Key 修复</summary>
 
 **同日稳定性修复**:
 - **CLI 实时语音断句修复**:当前 chat 内 `/voice` / `lynn voice` 仍然进入 Brain 托管 StepFun Realtime,但 CLI 端改为 raw mic 默认 + 本地 VAD 负责停顿提交、Brain 端关闭 server_vad 抢断,最长 10s 兜底提交、播放时暂停采麦;旧 `dynaudnorm` 滤镜只做 opt-in,避免再次出现“有波形但一直在听、不回答”的问题。
@@ -203,7 +222,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧪 **门禁覆盖长跑压缩路径**:`cli-longrun-smoke` 会制造大工具结果并要求出现 `code.runtime.compacted`,避免长任务稳定性只停留在单测。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.3.tgz"
 ```
 
 [完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
@@ -1065,11 +1084,11 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.84.2 的 Apple Silicon / Intel DMG 会完成签名、公证、stapled,并通过 Gatekeeper 校验。
+**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.84.3 的 Apple Silicon / Intel DMG 会完成签名、公证、stapled,并通过 Gatekeeper 校验。
 
 **Windows**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.exe`，直接运行。
 
-> **Windows SmartScreen 提示：** V0.84.2 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
+> **Windows SmartScreen 提示：** V0.84.3 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
 Linux 版本计划中。
 
@@ -1137,7 +1156,7 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（V0.84.2 签名 + 公证 DMG） |
+| macOS (Apple Silicon) | 已支持（V0.84.3 签名 + 公证 DMG） |
 | macOS (Intel) | 已支持 |
 | Windows x64 | Beta |
 | Linux | 计划中 |
@@ -1199,7 +1218,7 @@ npm run dist:local            # 本地打包（macOS DMG，跳过公证）
 
 ### Q5：Windows 能用吗？
 
-可以。V0.84.2 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均会签名、公证并通过 Gatekeeper 校验。
+可以。V0.84.3 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均会签名、公证并通过 Gatekeeper 校验。
 
 ### Q6：能改模型吗？接自己的 API？
 
