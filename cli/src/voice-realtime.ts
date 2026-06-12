@@ -25,11 +25,12 @@ const SAMPLE_RATE = 24000;
 const FRAME_BYTES = SAMPLE_RATE * 2 / 10; // 100ms @24kHz Int16 = 4800 bytes
 const WAVE_WIDTH = 28;
 const BARS = " ▁▂▃▄▅▆▇█";
-const SPEECH_RMS = 0.012;
-const SILENCE_RMS = 0.006;
+const SPEECH_RMS = 0.006;
+const SILENCE_RMS = 0.003;
 const MIN_SPEECH_FRAMES = 2;
 const END_SILENCE_FRAMES = 7;
 const COMMIT_COOLDOWN_MS = 900;
+const MAX_TURN_MS = 10_000;
 
 function wsUrlFromBrain(brainUrl: string): string {
   const base = brainUrl.replace(/^https:/i, "wss:").replace(/^http:/i, "ws:").replace(/\/+$/, "");
@@ -50,13 +51,22 @@ function micInputArgs(): string[] {
   return ["-f", "pulse", "-i", "default"];
 }
 
+function micFilterArgs(): string[] {
+  if (process.env.LYNN_CLI_VOICE_RAW_MIC === "1") return [];
+  return ["-af", "highpass=f=80,dynaudnorm=f=150:g=15:p=0.95,alimiter=limit=0.95"];
+}
+
 export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boolean; embedded?: boolean } = {}): Promise<number> {
   const ptt = hasFlag(args.flags, "ptt", "push-to-talk");
   const ctrlCHint = options.embedded ? "返回聊天" : "退出";
   const voice = getStringFlag(args.flags, "voice") || "";
   const brainUrl = await resolveDefaultBrainUrl(args);
   const qs: string[] = [];
-  if (ptt) qs.push("mode=ptt");
+  // The CLI keeps the mic open continuously but drives turn boundaries locally.
+  // Brain/StepFun therefore run with manual turn detection for both hands-free
+  // and explicit PTT modes; otherwise server_vad and local VAD can fight and
+  // leave the UI stuck at "在听" with no response.
+  qs.push("mode=ptt");
   if (voice) qs.push(`voice=${encodeURIComponent(voice)}`);
   const url = wsUrlFromBrain(brainUrl) + (qs.length ? `?${qs.join("&")}` : "");
   let headers: Record<string, string> = {};
@@ -64,7 +74,7 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
   catch (err) { process.stderr.write(`语音签名失败:${(err as Error).message}\n`); return 1; }
 
   // ── shared UI state ──
-  type Phase = "connecting" | "listening" | "thinking" | "speaking" | "degraded";
+  type Phase = "connecting" | "listening" | "hearing" | "thinking" | "speaking" | "degraded";
   let phase: Phase = "connecting";
   let micLevel = 0;
   let spkLevel = 0;
@@ -75,10 +85,14 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
   let silenceFrames = 0;
   let localSpeechActive = false;
   let lastCommitAt = 0;
+  let localSpeechStartedAt = 0;
+  let playbackActive = false;
+  let suppressMicUntil = 0;
 
   const phaseLabel = (): string => {
     switch (phase) {
       case "listening": return "🎤 在听";
+      case "hearing": return "🎤 听到了";
       case "thinking": return "💭 思考";
       case "speaking": return "🔊 回答";
       case "degraded": return "⚠️ 降级";
@@ -142,6 +156,7 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
     const now = Date.now();
     if (ptt || ws.readyState !== WebSocket.OPEN || now - lastCommitAt < COMMIT_COOLDOWN_MS) return;
     lastCommitAt = now;
+    suppressMicUntil = now + 600;
     try { ws.send(JSON.stringify({ type: "commit", reason })); } catch { /* best-effort */ }
   };
   const flushAudio = (): void => {
@@ -151,22 +166,34 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
     const file = path.join(os.tmpdir(), `lynn-voice-${process.pid}-${playSeq++}.wav`);
     try { fs.writeFileSync(file, Buffer.concat([wavHeader(pcm.length), pcm])); } catch { return; }
     try { afplayProc?.kill("SIGTERM"); } catch { /* noop */ }
+    playbackActive = true;
+    phase = "speaking";
     afplayProc = spawn(playCmd, playArgs(file), { stdio: "ignore" });
-    afplayProc.once("exit", () => { try { fs.unlinkSync(file); } catch { /* noop */ } afplayProc = null; });
+    afplayProc.once("exit", () => {
+      try { fs.unlinkSync(file); } catch { /* noop */ }
+      afplayProc = null;
+      playbackActive = false;
+      suppressMicUntil = Date.now() + 350;
+      if (!closed) phase = "listening";
+    });
     afplayProc.once("error", (err: Error) => {
       printLine(`播放失败:${err.message || playCmd};已保留文字回复。`);
       afplayProc = null;
+      playbackActive = false;
+      suppressMicUntil = Date.now() + 350;
     });
   };
   const stopPlayback = (): void => {
     assistantPcm = Buffer.alloc(0);
     try { afplayProc?.kill("SIGTERM"); } catch { /* noop */ }
     afplayProc = null;
+    playbackActive = false;
   };
 
   const startMic = (): void => {
     mic = spawn("ffmpeg", [
       "-hide_banner", "-loglevel", "error", "-nostdin", ...micInputArgs(),
+      ...micFilterArgs(),
       "-ac", "1", "-ar", String(SAMPLE_RATE), "-sample_fmt", "s16", "-f", "s16le", "pipe:1",
     ], { stdio: ["ignore", "pipe", "pipe"] });
     let pending = Buffer.alloc(0);
@@ -177,13 +204,20 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
         pending = pending.subarray(FRAME_BYTES);
         const level = rms(frame);
         micLevel = Math.max(micLevel, level);
+        const now = Date.now();
+        const canCapture = !playbackActive && phase !== "speaking" && phase !== "thinking" && now >= suppressMicUntil;
         if (!ptt) {
-          if (level >= SPEECH_RMS) {
+          if (!canCapture) {
+            speechFrames = 0;
+            silenceFrames = 0;
+            localSpeechActive = false;
+          } else if (level >= SPEECH_RMS) {
             speechFrames += 1;
             silenceFrames = 0;
             if (!localSpeechActive && speechFrames >= MIN_SPEECH_FRAMES) {
               localSpeechActive = true;
-              phase = "listening";
+              localSpeechStartedAt = now;
+              phase = "hearing";
             }
           } else if (localSpeechActive && level <= SILENCE_RMS) {
             silenceFrames += 1;
@@ -194,11 +228,17 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
               phase = "thinking";
               commitTurn("local_silence");
             }
+          } else if (localSpeechActive && localSpeechStartedAt && now - localSpeechStartedAt >= MAX_TURN_MS) {
+            localSpeechActive = false;
+            speechFrames = 0;
+            silenceFrames = 0;
+            phase = "thinking";
+            commitTurn("local_max_turn");
           } else if (!localSpeechActive) {
             speechFrames = Math.max(0, speechFrames - 1);
           }
         }
-        if (!ptt && ws.readyState === WebSocket.OPEN) ws.send(frame, { binary: true });
+        if (!ptt && canCapture && ws.readyState === WebSocket.OPEN) ws.send(frame, { binary: true });
         else if (ptt && pttActive && ws.readyState === WebSocket.OPEN) ws.send(frame, { binary: true });
       }
     });
@@ -268,9 +308,9 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
     try { evt = JSON.parse(data.toString("utf-8")); } catch { return; }
     switch (evt.type) {
       case "ready":
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "config", mode: "ptt", voice }));
         startMic(); setupPtt();
-        phase = ptt ? "listening" : "listening";
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "config", mode: ptt ? "ptt" : "duplex", voice }));
+        phase = "listening";
         printLine("已连接,开始对话。");
         break;
       case "speech_started":
