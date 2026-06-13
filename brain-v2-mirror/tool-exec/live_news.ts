@@ -24,7 +24,7 @@ function todayCnText() {
 }
 
 function buildExpansionQueries(query, days) {
-  const raw = compactLine(query);
+  const raw = compactLine(String(query || '').replace(/(?:昨晚|昨夜|昨天|昨日|前天|前晚|前日|今早|今晨|今晚|今夜|凌晨|清晨|早间|晚间|刚刚|刚才|方才|此前|日前|早些时候|稍早|yesterday)/gi, ' '));
   const core = compactLine(raw.replace(/(?:请|帮我|查一下|查查|搜索|查询|全网|今天|今日|最新|新闻|有什么|哪些|一下)/g, ' ')) || raw;
   const dateText = todayCnText();
   const windowText = Number(days) <= 1 ? '今日 最新' : '近' + days + '天 最新';

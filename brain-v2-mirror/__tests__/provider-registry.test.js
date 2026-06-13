@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { getProvider, getProviderStatusSnapshot, PROVIDERS, providerOrderForCapability, universalOrder } from '../provider-registry.js';
 
 describe('provider registry', () => {
-  it('keeps StepFun high+32K in the intended universal fallback head position', () => {
+  it('keeps StepFun low-reasoning + 48K in the intended universal fallback head position', () => {
     expect(universalOrder.map(String).slice(0, 4)).toEqual([
       'step-3.7-flash',
       'apex-spark-i-balanced',
@@ -20,7 +20,7 @@ describe('provider registry', () => {
     expect(step.wire).toBe('openai');
     expect(step.cooldown_ms).toBe(60_000);
     expect(step.default_thinking).toBe(false);
-    expect(step.default_reasoning_effort).toBe('high');
+    expect(step.default_reasoning_effort).toBe('low');
     expect(step.max_tokens).toBe(49_152);
     expect(step.thinking_control).toBeUndefined();
     expect(step.capability).toMatchObject({

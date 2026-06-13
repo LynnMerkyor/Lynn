@@ -60,8 +60,9 @@ export async function exchangeRate(query) {
 
 export async function sportsScore(query) {
   return JSON.stringify({
-    error: '体育比分工具暂未接入独立数据源',
+    status: 'no_direct_source',
     query: String(query || ''),
+    guidance: '体育比分暂无独立数据源,请改用 web_search 检索 赛事+比分/赛果/赛程 等关键词,并以来源页面为准。',
   });
 }
 

@@ -4,6 +4,7 @@ vi.mock('../tool-exec/web_search.js', () => ({
   webSearch: vi.fn(async (q) => 'mock results for: ' + q),
 }));
 
+import { webSearch } from '../tool-exec/web_search.js';
 import { executeServerTool, isServerTool, mergeWithServerTools, SERVER_TOOLS, SERVER_TOOL_NAMES } from '../tool-exec/index.js';
 import { parallelResearch } from '../tool-exec/parallel_research.js';
 
@@ -28,6 +29,26 @@ describe('tool-exec dispatcher', () => {
   it('accepts already-parsed args object', async () => {
     const r = await executeServerTool('web_search', { query: 'parsed' });
     expect(r).toBe('mock results for: parsed');
+  });
+
+  it('strips relative-time words from live_news expansion queries', async () => {
+    vi.mocked(webSearch).mockClear();
+    const r = await executeServerTool('live_news', { query: '昨晚世界杯赛程结束了吗？比赛结果如何' });
+    expect(r).toContain('【实时新闻扩展检索】');
+    const queries = vi.mocked(webSearch).mock.calls.map(([q]) => String(q));
+    expect(queries).toHaveLength(9);
+    expect(queries.join('\n')).not.toContain('昨晚');
+    expect(queries.some((q) => q.includes('今日 最新'))).toBe(true);
+    expect(queries.some((q) => q.includes('近3天 最新'))).toBe(true);
+    expect(queries.some((q) => q.includes('近7天 最新'))).toBe(true);
+  });
+
+  it('guides sports_score callers to web_search instead of returning a dead-source error', async () => {
+    const r = await executeServerTool('sports_score', { query: '世界杯比分' });
+    const data = JSON.parse(r);
+    expect(data.status).toBe('no_direct_source');
+    expect(data.guidance).toContain('web_search');
+    expect(data.error).toBeUndefined();
   });
 
   it('isServerTool returns true for known and false for unknown', () => {

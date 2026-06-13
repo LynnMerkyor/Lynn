@@ -46,7 +46,7 @@ const PROVIDER_DEFS = {
     wire: 'openai',
     cooldown_ms: 60_000,
     default_thinking: false,
-    default_reasoning_effort: 'high',
+    default_reasoning_effort: 'low',
     // 48K (was 32K): reasoning + answer + tool-call share this one output budget. At high
     // reasoning, hard tasks overflowed 32K mid-<think> → finish_reason=length → empty answer.
     max_tokens: 49_152,
