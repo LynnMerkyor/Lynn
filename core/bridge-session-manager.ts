@@ -40,7 +40,7 @@ import {
 import {
   buildClientAgentMetadata,
   readClientAgentKeyFromPreferencesFile,
-  readSignedClientAgentHeaders,
+  readSignedClientAgentHeadersForProvider,
 } from "./client-agent-identity.js";
 import { resolveCompactionSettings } from "./compaction-settings.js";
 
@@ -518,11 +518,15 @@ export class BridgeSessionManager {
       }
 
       const clientAgentKey = readClientAgentKeyFromPreferencesFile();
-      const clientAgentHeaders = readSignedClientAgentHeaders({
+      const clientAgentHeaders = readSignedClientAgentHeadersForProvider({
         method: "POST",
         pathname: "/chat/completions",
+        provider: sessionOpts.model?.provider,
+        baseUrl: sessionOpts.model?.baseUrl,
       });
-      const clientAgentMetadata = buildClientAgentMetadata(clientAgentKey);
+      const clientAgentMetadata = Object.keys(clientAgentHeaders).length > 0
+        ? buildClientAgentMetadata(clientAgentKey)
+        : undefined;
       const { session } = await createBridgeAgentSession({
         cwd: homeCwd,
         sessionManager: mgr,

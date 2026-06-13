@@ -21,7 +21,7 @@ import {
 import {
   buildClientAgentMetadata,
   readClientAgentKeyFromPreferencesFile,
-  readSignedClientAgentHeaders,
+  readSignedClientAgentHeadersForProvider,
 } from "./client-agent-identity.js";
 import { resolveCompactionSettings } from "./compaction-settings.js";
 import {
@@ -317,11 +317,15 @@ export class SessionCoordinator {
     }
 
     const clientAgentKey = readClientAgentKeyFromPreferencesFile();
-    const clientAgentHeaders = readSignedClientAgentHeaders({
+    const clientAgentHeaders = readSignedClientAgentHeadersForProvider({
       method: "POST",
       pathname: "/chat/completions",
+      provider: effectiveModel?.provider,
+      baseUrl: effectiveModel?.baseUrl,
     });
-    const clientAgentMetadata = buildClientAgentMetadata(clientAgentKey);
+    const clientAgentMetadata = Object.keys(clientAgentHeaders).length > 0
+      ? buildClientAgentMetadata(clientAgentKey)
+      : undefined;
     const { session } = await createAgentSession({
       cwd: effectiveCwd,
       sessionManager: sessionMgr,

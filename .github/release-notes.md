@@ -1,8 +1,8 @@
 # Lynn v0.84.3 Release Notes / 发布说明
 
-> 发布日期: 2026-06-13 · Agent 本地文件任务热修 + GUI/CLI 工具边界门禁 + BYOK 内容过滤误杀修复
+> 发布日期: 2026-06-13 · Agent 本地文件任务热修 + GUI/CLI 工具边界门禁 + BYOK DeepSeek 直连兼容修复
 
-本次热修覆盖 v0.84.2，重点修复默认模型下 Lynn Agent 在 GUI / CLI 里处理本地文件、小说章节、代码与工具任务时的两个高频问题：模型错误声明“无法访问本地文件系统”，以及部分本地模型把伪 `<tool_call>` 文本直接吐到界面里。此次覆盖包还追加修复 #74 里暴露的 BYOK 输入侧内容过滤误杀。
+本次热修覆盖 v0.84.2，重点修复默认模型下 Lynn Agent 在 GUI / CLI 里处理本地文件、小说章节、代码与工具任务时的两个高频问题：模型错误声明“无法访问本地文件系统”，以及部分本地模型把伪 `<tool_call>` 文本直接吐到界面里。此次覆盖包还追加修复 #74 里暴露的 BYOK 输入侧内容过滤误杀、DeepSeek V4 Pro / DeepSeek Reasoner 多轮直连兼容问题。
 
 ## 国内镜像站下载（推荐）
 
@@ -29,6 +29,8 @@
 - **BYOK 内容过滤误杀修复**：普通软件反馈/报错描述不再被短词片段误判拦截；BYOK / 本地模型命中过滤时默认只记录警告，不再硬拦用户自己的模型调用。
 - **过滤错误文案修复**：`error.contentFiltered` 不再裸露内部 key，拦截时会显示“本地内容安全过滤 + 命中类别”。
 - **Provider Key 状态更清楚**：模型设置页会在已保存且可解密的 API Key 输入框显示“已保存，留空保持不变”；不能解密的旧 Key 不再假装已配置，用户重填一次后即可稳定保存。
+- **BYOK DeepSeek 多轮修复**：DeepSeek V4 Pro / DeepSeek Reasoner 这类 reasoning 模型在第二轮以后会保留上一轮 `reasoning_content`，避免 BYOK 直连续轮 400 或静默无回复。
+- **第三方 BYOK 请求隔离**：DeepSeek 等第三方 BYOK 请求不再附带 Lynn / Brain 设备签名头；签名头只用于 Brain 托管路由，减少兼容接口误拒风险。
 - **Agent 任务矩阵门禁**：新增 release gate，覆盖 GUI + CLI 本地小说/文件读取、路由分类、工具边界、伪工具泄漏与 live smoke，防止今晚修过的问题再次回归。
 - **v0.84.2 修复保留**：CLI 实时语音断句、BYOK Key 持久化、Brain 注册限流、本地模型启动、DeepSeek 空答恢复等修复继续保留。
 
@@ -48,7 +50,7 @@ Lynn --version  # 应输出 0.84.3
 Lynn agents     # 给其他智能体/Fleet 的可复制命令
 ```
 
-默认 Brain V2 路由：**StepFun 3.7 Flash（256K 上下文，high 推理，48K 推理/生成预算）**。语音默认走 **Brain 托管 StepFun Realtime**。Spark / SenseVoice / CosyVoice / 系统语音只作为 fallback；BYOK 继续可用。
+默认 Brain V2 路由：**StepFun 3.7 Flash（256K 上下文，Brain 托管 reasoning / 生成预算）**。语音默认走 **Brain 托管 StepFun Realtime**。Spark / SenseVoice / CosyVoice / 系统语音只作为 fallback；BYOK 继续可用。
 
 ## 验证
 
@@ -70,9 +72,9 @@ Lynn agents     # 给其他智能体/Fleet 的可复制命令
 
 ---
 
-> Release date: 2026-06-13 · Agent local-file task hotfix + GUI/CLI tool-boundary gate + BYOK content-filter false-positive fix
+> Release date: 2026-06-13 · Agent local-file task hotfix + GUI/CLI tool-boundary gate + BYOK DeepSeek direct-connection fix
 
-This hotfix supersedes v0.84.2. It targets two user-visible failures in default-model GUI/CLI agent workflows: local file and novel-reading tasks incorrectly claiming that Lynn has no filesystem access, and local models leaking pseudo `<tool_call>` text into visible chat output. This overwritten build also includes the #74 BYOK input-side content-filter false-positive fix.
+This hotfix supersedes v0.84.2. It targets two user-visible failures in default-model GUI/CLI agent workflows: local file and novel-reading tasks incorrectly claiming that Lynn has no filesystem access, and local models leaking pseudo `<tool_call>` text into visible chat output. This overwritten build also includes the #74 BYOK input-side content-filter false-positive fix plus DeepSeek V4 Pro / DeepSeek Reasoner multi-turn direct-connection compatibility fixes.
 
 ## Highlights
 
@@ -84,6 +86,8 @@ This hotfix supersedes v0.84.2. It targets two user-visible failures in default-
 - **BYOK content-filter false-positive fix**: ordinary support/bug-report wording is no longer blocked by short embedded dictionary fragments. BYOK/local model hits now default to warning-only instead of hard-blocking the user's own model call.
 - **Readable content-filter errors**: `error.contentFiltered` no longer leaks as a raw internal key; hard blocks now show the local safety filter and matched category.
 - **Clearer provider key state**: saved, decryptable API keys now show a "Saved. Leave blank to keep the current key" placeholder. Old undecryptable keys no longer appear configured; re-enter once to migrate them.
+- **BYOK DeepSeek multi-turn fix**: DeepSeek V4 Pro / DeepSeek Reasoner follow-up requests now preserve the previous assistant `reasoning_content`, avoiding second-turn 400s or silent empty replies on compatible BYOK endpoints.
+- **Third-party BYOK request isolation**: DeepSeek and other third-party BYOK requests no longer carry Lynn / Brain device-signature headers. Those headers are now limited to Brain-hosted routes.
 - **Agent task-matrix gate**: a new release gate covers GUI + CLI local novel/file reads, routing, tool boundaries, pseudo-tool leakage, and live smoke tests.
 - **v0.84.2 fixes remain**: CLI realtime voice turn detection, BYOK key persistence, Brain registration hardening, local-model startup hardening, and DeepSeek empty-answer recovery remain in place.
 
@@ -103,4 +107,4 @@ Lynn --version  # should print 0.84.3
 Lynn agents     # copyable headless/Fleet commands
 ```
 
-Default Brain V2 route: **StepFun 3.7 Flash (256K context, high reasoning, 48K reasoning/generation budget)**. Voice defaults to **Brain-hosted StepFun Realtime**. Spark / SenseVoice / CosyVoice / system voice are fallback paths only. BYOK remains available.
+Default Brain V2 route: **StepFun 3.7 Flash (256K context, Brain-managed reasoning / generation budget)**. Voice defaults to **Brain-hosted StepFun Realtime**. Spark / SenseVoice / CosyVoice / system voice are fallback paths only. BYOK remains available.

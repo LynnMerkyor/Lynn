@@ -2,6 +2,10 @@ import crypto from "node:crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import {
+  BRAIN_PROVIDER_BASE_URLS,
+  isBrainProvider,
+} from "../shared/brain-provider.js";
 
 export const CLIENT_AGENT_KEY_PREF_KEY = "client_agent_key";
 export const CLIENT_AGENT_SECRET_PREF_KEY = "client_agent_secret";
@@ -40,6 +44,11 @@ export interface ReadSignedClientAgentHeadersOptions extends ReadClientIdentityO
   pathname?: string;
   clientVersion?: string;
   clientPlatform?: string;
+}
+
+export interface ReadSignedProviderHeadersOptions extends ReadSignedClientAgentHeadersOptions {
+  provider?: unknown;
+  baseUrl?: unknown;
 }
 
 export interface RegisterClientIdentityOptions {
@@ -240,6 +249,39 @@ export function readSignedClientAgentHeaders(opts: ReadSignedClientAgentHeadersO
     clientVersion: opts.clientVersion || _getLynnPackageVersion(),
     clientPlatform: opts.clientPlatform,
   });
+}
+
+function normalizeProviderBaseUrl(value: unknown): string {
+  const raw = String(value || "").trim().replace(/\/+$/, "");
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return raw;
+  }
+}
+
+export function shouldAttachClientAgentHeadersToProvider({
+  provider,
+  baseUrl,
+}: {
+  provider?: unknown;
+  baseUrl?: unknown;
+} = {}): boolean {
+  if (isBrainProvider(String(provider || "").trim())) return true;
+  const normalizedBase = normalizeProviderBaseUrl(baseUrl);
+  if (!normalizedBase) return false;
+  return BRAIN_PROVIDER_BASE_URLS
+    .map(normalizeProviderBaseUrl)
+    .some((brainBase) => normalizedBase === brainBase || normalizedBase.startsWith(`${brainBase}/`));
+}
+
+export function readSignedClientAgentHeadersForProvider(
+  opts: ReadSignedProviderHeadersOptions = {},
+): ClientAgentHeaders {
+  if (!shouldAttachClientAgentHeadersToProvider(opts)) return {};
+  return readSignedClientAgentHeaders(opts);
 }
 
 export async function registerClientIdentityWithBrainApi({

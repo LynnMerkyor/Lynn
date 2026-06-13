@@ -207,6 +207,44 @@ describe("callText", () => {
     expect(body.thinking).toEqual({ type: "disabled" });
   });
 
+  it("preserves DeepSeek V4 reasoning_content on follow-up requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        choices: [{ message: { content: "OK" } }],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await callText({
+      api: "openai-completions",
+      apiKey: "sk-test",
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-v4-pro-202606",
+      provider: "my-deepseek-byok",
+      messages: [
+        { role: "user", content: "第一轮" },
+        {
+          role: "assistant",
+          content: "第一轮可见答案",
+          reasoning_content: "上一轮 DeepSeek 思考链摘要",
+        },
+        { role: "user", content: "继续" },
+      ],
+      timeoutMs: 1000,
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0];
+    const body = JSON.parse(requestInit.body);
+    expect(body.messages[1]).toEqual({
+      role: "assistant",
+      content: "第一轮可见答案",
+      reasoning_content: "上一轮 DeepSeek 思考链摘要",
+    });
+    expect(body.thinking).toEqual({ type: "disabled" });
+  });
+
   it("classifies non-json 403 responses as auth failures instead of invalid JSON", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
@@ -229,7 +267,7 @@ describe("callText", () => {
     });
   });
 
-  it("attaches signed client identity headers from preferences.json by default", async () => {
+  it("attaches signed client identity headers from preferences.json for Brain requests", async () => {
     const lynnHome = makeTempDir("hanako-llm-");
     const clientKey = "ak_test_client_001";
     const clientSecret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -256,8 +294,9 @@ describe("callText", () => {
     await callText({
       api: "openai-completions",
       apiKey: "sk-test",
-      baseUrl: "https://example.com/v1",
+      baseUrl: "https://api.merkyorlynn.com/api/v2/v1",
       model: "demo-model",
+      provider: "brain",
       messages: [{ role: "user", content: "hello" }],
       timeoutMs: 1000,
     });
@@ -268,6 +307,46 @@ describe("callText", () => {
     expect(requestInit.headers["X-Lynn-Timestamp"]).toBeTruthy();
     expect(requestInit.headers["X-Lynn-Nonce"]).toMatch(/^[a-f0-9]{24}$/);
     expect(requestInit.headers["X-Lynn-Signature"]).toMatch(/^v1:[a-f0-9]{64}$/);
+  });
+
+  it("does not attach Lynn client identity headers to third-party BYOK requests", async () => {
+    const lynnHome = makeTempDir("hanako-llm-byok-");
+    fs.mkdirSync(path.join(lynnHome, "user"), { recursive: true });
+    fs.writeFileSync(
+      path.join(lynnHome, "user", "preferences.json"),
+      JSON.stringify({
+        client_agent_key: "ak_test_client_001",
+        client_agent_secret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      }, null, 2),
+      "utf-8",
+    );
+    vi.stubEnv("LYNN_HOME", lynnHome);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        choices: [{ message: { content: "OK" } }],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await callText({
+      api: "openai-completions",
+      apiKey: "sk-test",
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-v4-pro",
+      provider: "deepseek",
+      messages: [{ role: "user", content: "hello" }],
+      timeoutMs: 1000,
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0];
+    expect(requestInit.headers["X-Agent-Key"]).toBeUndefined();
+    expect(requestInit.headers["X-Lynn-Client-Platform"]).toBeUndefined();
+    expect(requestInit.headers["X-Lynn-Timestamp"]).toBeUndefined();
+    expect(requestInit.headers["X-Lynn-Nonce"]).toBeUndefined();
+    expect(requestInit.headers["X-Lynn-Signature"]).toBeUndefined();
   });
 
   it("can disable signed client identity headers for legacy diagnostics", async () => {
@@ -298,8 +377,9 @@ describe("callText", () => {
     await callText({
       api: "openai-completions",
       apiKey: "sk-test",
-      baseUrl: "https://example.com/v1",
+      baseUrl: "https://api.merkyorlynn.com/api/v2/v1",
       model: "demo-model",
+      provider: "brain",
       messages: [{ role: "user", content: "hello" }],
       timeoutMs: 1000,
     });

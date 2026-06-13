@@ -7,7 +7,7 @@ import { BrowserManager } from "../lib/browser/browser-manager.js";
 import {
   buildClientAgentMetadata,
   readClientAgentKeyFromPreferencesFile,
-  readSignedClientAgentHeaders,
+  readSignedClientAgentHeadersForProvider,
 } from "./client-agent-identity.js";
 import { runPromptWithIntegrity } from "./session-prompt-sanitizer.js";
 import {
@@ -156,11 +156,15 @@ export async function executeIsolatedSession(
     });
 
     const clientAgentKey = readClientAgentKeyFromPreferencesFile();
-    const clientAgentHeaders = readSignedClientAgentHeaders({
+    const clientAgentHeaders = readSignedClientAgentHeadersForProvider({
       method: "POST",
       pathname: "/chat/completions",
+      provider: execModel?.provider,
+      baseUrl: execModel?.baseUrl,
     });
-    const clientAgentMetadata = buildClientAgentMetadata(clientAgentKey);
+    const clientAgentMetadata = Object.keys(clientAgentHeaders).length > 0
+      ? buildClientAgentMetadata(clientAgentKey)
+      : undefined;
     const { session } = await createAgentSession({
       cwd: execCwd,
       sessionManager: tempSessionMgr,

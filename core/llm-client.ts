@@ -2,7 +2,7 @@ import { AppError } from '../shared/errors.js';
 import { errorBus } from '../shared/error-bus.js';
 import { withRetry } from '../shared/retry.js';
 import {
-  readSignedClientAgentHeaders,
+  readSignedClientAgentHeadersForProvider,
 } from './client-agent-identity.js';
 import { getPooledDispatcher } from '../shared/http-pool.js';
 import type {
@@ -62,6 +62,7 @@ type ClientAgentRequestMetadata = {
 type NormalizedMessage = {
   role: LLMMessage["role"];
   content: string | undefined;
+  reasoning_content?: LLMMessage["reasoning_content"];
 };
 
 type LlmRequestBody = Record<string, unknown>;
@@ -80,10 +81,24 @@ const DISPLAYABLE_TEXT_TYPES: ReadonlySet<string> = new Set<DisplayableTextType>
   "refusal",
 ]);
 
-function isDeepSeekV4ThinkingModel(provider: unknown, model: unknown): boolean {
+function isDeepSeekProviderLike(provider: unknown, baseUrl: unknown): boolean {
   const providerId = String(provider || "").trim().toLowerCase();
+  if (providerId.includes("deepseek")) return true;
+  try {
+    const url = new URL(String(baseUrl || ""));
+    return url.hostname.toLowerCase().includes("deepseek");
+  } catch {
+    return String(baseUrl || "").toLowerCase().includes("deepseek");
+  }
+}
+
+function isDeepSeekV4ThinkingModel(provider: unknown, model: unknown, baseUrl?: unknown): boolean {
   const modelId = String(model || "").trim().toLowerCase();
-  return providerId === "deepseek" && /^deepseek-v4-(?:flash|pro)$/u.test(modelId);
+  return isDeepSeekProviderLike(provider, baseUrl)
+    && (
+      /^deepseek-v4-(?:flash|pro)(?:[-_.:].*)?$/u.test(modelId)
+      || /^deepseek-reasoner(?:[-_.:].*)?$/u.test(modelId)
+    );
 }
 
 function deepSeekThinkingPayload(reasoning: boolean): Record<string, unknown> {
@@ -481,6 +496,7 @@ export async function callText({
   // ── 1. 消息归一化：提取 system 消息合并到 systemPrompt ──
   let mergedSystem = systemPrompt || "";
   const normalizedMessages: NormalizedMessage[] = [];
+  const shouldPreserveReasoningContent = isDeepSeekV4ThinkingModel(provider, model, baseUrl);
   for (const m of messages) {
     if (m.role === "system") {
       const text = typeof m.content === "string"
@@ -490,7 +506,18 @@ export async function callText({
           : "";
       if (text) mergedSystem += (mergedSystem ? "\n" : "") + text;
     } else {
-      normalizedMessages.push({ role: m.role, content: typeof m.content === "string" ? m.content : JSON.stringify(m.content) });
+      const normalized: NormalizedMessage = {
+        role: m.role,
+        content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+      };
+      if (
+        shouldPreserveReasoningContent
+        && m.role === "assistant"
+        && m.reasoning_content != null
+      ) {
+        normalized.reasoning_content = m.reasoning_content;
+      }
+      normalizedMessages.push(normalized);
     }
   }
 
@@ -509,9 +536,11 @@ export async function callText({
         : "/chat/completions",
   };
   const clientAgentHeaders: ClientAgentHeaders = {
-    ...readSignedClientAgentHeaders({
+    ...readSignedClientAgentHeadersForProvider({
       method: clientAgentRequestMetadata.method,
       pathname: clientAgentRequestMetadata.pathname,
+      provider,
+      baseUrl,
     }),
     ...(requestHeaders || {}),
   };
@@ -564,7 +593,7 @@ export async function callText({
       model, temperature, max_tokens: maxTokens,
       messages: allMessages,
       ...(quirks.includes("enable_thinking") && { enable_thinking: false }),
-      ...(isDeepSeekV4ThinkingModel(provider, model) ? deepSeekThinkingPayload(reasoning) : {}),
+      ...(isDeepSeekV4ThinkingModel(provider, model, baseUrl) ? deepSeekThinkingPayload(reasoning) : {}),
     };
   }
 
