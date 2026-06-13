@@ -10,6 +10,11 @@ import type { HmacSignaturePayload, LogFn } from './types.js';
 
 const DEVICE_AUTH_WINDOW_MS = Number(process.env.DEVICE_AUTH_WINDOW_MS || 5 * 60 * 1000);
 const DEVICE_NONCE_TTL_MS = Number(process.env.DEVICE_NONCE_TTL_MS || 10 * 60 * 1000);
+// 2026-06-13 security: new-device registration requires the obfuscated client token
+// (decoded from the same constant the client embeds). Existing devices (idempotent
+// re-register, same secret) bypass this — registered users are never locked out.
+function _decodeRegToken(e: string): string { try { return Buffer.from(e, 'base64').toString('utf-8').split('').reverse().join(''); } catch { return ''; } }
+const _EXPECTED_REG_TOKEN = String(process.env.BRAIN_V2_DEVICE_REGISTER_TOKEN || _decodeRegToken('MWFhZTdhODhkYzdhOGIzYzk3YmRkMzg3ZjI3NTkwZTgtZ2VyLW5pYXJiLW5ueWw='));
 const DEVICES_DIR = process.env.LOBSTER_DEVICES_DIR || '/opt/lobster-brain/data/devices';
 const USER_DEVICES_DIR = path.join(os.homedir(), '.lynn', 'brain-devices');
 
@@ -35,6 +40,7 @@ export type RegisterDeviceInput = {
   secret: string;
   clientVersion?: string;
   clientPlatform?: string;
+  registrationToken?: string;
 };
 
 type SignedRequestOptions = {
@@ -87,6 +93,9 @@ export async function registerDevice(input: RegisterDeviceInput): Promise<Device
   await fsp.mkdir(primaryDir, { recursive: true });
   const filePath = path.join(primaryDir, `${key}.json`);
   const existing = await loadDeviceRecord(key);
+  if (!existing?.device && _EXPECTED_REG_TOKEN && String((input as any).registrationToken || '').trim() !== _EXPECTED_REG_TOKEN) {
+    throw new AuthError(403, 'registration token required');
+  }
   if (existing?.device?.secret && existing.device.secret !== secret) {
     throw new AuthError(409, 'device key already registered');
   }

@@ -360,6 +360,7 @@ async function handleDeviceRegister(req: IncomingMessage, res: ServerResponse): 
     const device = await registerDevice({
       key: String(body.key || ''),
       secret: String(body.secret || ''),
+      registrationToken: typeof body.registrationToken === 'string' ? body.registrationToken : undefined,
       clientVersion: typeof body.clientVersion === 'string' ? body.clientVersion : undefined,
       clientPlatform: typeof body.clientPlatform === 'string' ? body.clientPlatform : undefined,
     });
