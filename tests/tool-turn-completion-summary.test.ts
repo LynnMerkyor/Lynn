@@ -17,6 +17,29 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
     expect(three).toContain("没有返回总结回复");
   });
 
+  it("uses realtime evidence previews when search/fetch tools succeeded but the model gave no final text", () => {
+    const out = buildToolCompletionSummary({
+      successfulToolCount: 2,
+      lastSuccessfulTools: [
+        {
+          name: "web_search",
+          outputPreview: "Mexico beat South Africa 2-0; South Korea beat Czechia 2-1.",
+        },
+        {
+          name: "web_fetch",
+          outputPreview: "World Cup day two schedule and results: Canada drew Bosnia and Herzegovina 1-1.",
+        },
+      ],
+    });
+
+    expect(out).toContain("工具已经返回资料");
+    expect(out).toContain("网页搜索");
+    expect(out).toContain("Mexico beat South Africa 2-0");
+    expect(out).toContain("网页抓取");
+    expect(out).toContain("Canada drew Bosnia and Herzegovina 1-1");
+    expect(out).not.toContain("已执行 2 个操作");
+  });
+
   it("surfaces failures with tool names (capped at 3)", () => {
     const out = buildToolCompletionSummary({
       successfulToolCount: 2,

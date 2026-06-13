@@ -29,6 +29,10 @@ export function buildToolCompletionSummary(ss: any): string {
   const failedTools = Array.isArray(ss?.lastFailedTools) ? ss.lastFailedTools.filter(Boolean).map(String) : [];
   const failCount = ss?.hasFailedTool ? Math.max(1, failedTools.length) : 0;
   if (okCount + failCount === 0) return "";
+  if (failCount === 0) {
+    const evidenceFallback = buildRealtimeEvidenceFallbackSummary(ss);
+    if (evidenceFallback) return evidenceFallback;
+  }
   // 措辞必须诚实:工具跑完≠任务完成 —— 模型没给总结时,明说"没有总结回复",
   // 不写"✅ 全部成功"那种读起来像任务完成的句式(2026-06-10 用户纠偏:"自报完成")。
   if (failCount === 0) {
@@ -36,6 +40,56 @@ export function buildToolCompletionSummary(ss: any): string {
   }
   const failDetail = failedTools.length ? `(${failedTools.slice(0, 3).join("、")})` : "";
   return `已执行 ${okCount + failCount} 个操作:${okCount} 个成功,${failCount} 个失败${failDetail},且模型没有返回总结回复。可点「编辑重发」重试,详情见上方工具卡片。`;
+}
+
+const REALTIME_EVIDENCE_TOOL_NAMES = new Set([
+  "web_search",
+  "web_fetch",
+  "sports_score",
+  "live_news",
+  "weather",
+  "stock_market",
+]);
+
+function displayToolName(name: string): string {
+  switch (name) {
+    case "web_search": return "网页搜索";
+    case "web_fetch": return "网页抓取";
+    case "sports_score": return "体育比分";
+    case "live_news": return "实时新闻";
+    case "weather": return "天气";
+    case "stock_market": return "行情";
+    default: return name;
+  }
+}
+
+function compactEvidencePreview(value: unknown): string {
+  return String(value || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 280);
+}
+
+export function buildRealtimeEvidenceFallbackSummary(ss: any): string {
+  const tools = Array.isArray(ss?.lastSuccessfulTools) ? ss.lastSuccessfulTools : [];
+  const evidence = tools
+    .filter((tool: any) => REALTIME_EVIDENCE_TOOL_NAMES.has(String(tool?.name || "")))
+    .map((tool: any) => ({
+      name: String(tool?.name || ""),
+      preview: compactEvidencePreview(tool?.outputPreview),
+    }))
+    .filter((tool: any) => tool.name && tool.preview)
+    .slice(-4);
+
+  if (!evidence.length) return "";
+  const lines = evidence.map((tool: any) => `- ${displayToolName(tool.name)}: ${tool.preview}`);
+  return [
+    "工具已经返回资料,但模型没有生成最终总结。以下是工具返回的摘要,请以来源页面/工具结果为准:",
+    ...lines,
+    "",
+    "可点「编辑重发」让模型基于这些结果重新组织回答。",
+  ].join("\n");
 }
 
 export interface ToolTurnFinalizerDeps {

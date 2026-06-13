@@ -856,6 +856,93 @@ describe("chat route event forwarding", () => {
     }
   });
 
+  it("shows realtime search evidence when web tools succeed but the model ends with thinking only", async () => {
+    vi.useFakeTimers();
+    try {
+      engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+      engine.resolveModelOverrides = vi.fn((model) => model);
+      engine.abortSessionByPath = vi.fn(async () => true);
+      hub.send = vi.fn(() => new Promise(() => {}));
+
+      const res = await app.request("/ws");
+      expect(res.status).toBe(200);
+
+      connections[0].handlers.onMessage({
+        data: JSON.stringify({ type: "prompt", text: "昨晚世界杯赛程结束了吗？比赛结果如何" }),
+      }, connections[0].client);
+
+      subscribed({
+        type: "tool_execution_start",
+        toolCallId: "call_search_worldcup",
+        toolName: "web_search",
+        args: { query: "2026 世界杯 6月12日 比赛结果" },
+      }, "/sessions/current.jsonl");
+      subscribed({
+        type: "tool_execution_end",
+        toolCallId: "call_search_worldcup",
+        toolName: "web_search",
+        args: { query: "2026 世界杯 6月12日 比赛结果" },
+        result: {
+          content: [
+            { type: "text", text: "Mexico beat South Africa 2-0; South Korea beat Czechia 2-1." },
+          ],
+          details: {
+            provider: "web",
+            summary: "Mexico beat South Africa 2-0; South Korea beat Czechia 2-1.",
+          },
+        },
+        isError: false,
+      }, "/sessions/current.jsonl");
+      subscribed({
+        type: "tool_execution_start",
+        toolCallId: "call_fetch_worldcup",
+        toolName: "web_fetch",
+        args: { url: "https://example.test/world-cup-results" },
+      }, "/sessions/current.jsonl");
+      subscribed({
+        type: "tool_execution_end",
+        toolCallId: "call_fetch_worldcup",
+        toolName: "web_fetch",
+        args: { url: "https://example.test/world-cup-results" },
+        result: {
+          content: [
+            { type: "text", text: "Canada drew Bosnia and Herzegovina 1-1 on June 12." },
+          ],
+        },
+        isError: false,
+      }, "/sessions/current.jsonl");
+      subscribed({
+        type: "message_update",
+        assistantMessageEvent: {
+          type: "thinking_delta",
+          delta: "我已经查到 ESPN 页面,还要再核对赛事网站。",
+        },
+      }, "/sessions/current.jsonl");
+      subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+
+      expect(clients[0].sent.filter((evt) => evt.type === "turn_end")).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(8000);
+
+      const visibleText = clients[0].sent
+        .filter((evt) => evt.type === "text_delta")
+        .map((evt) => evt.delta)
+        .join("");
+
+      expect(visibleText).toContain("工具已经返回资料");
+      expect(visibleText).toContain("网页搜索");
+      expect(visibleText).toContain("Mexico beat South Africa 2-0");
+      expect(visibleText).toContain("网页抓取");
+      expect(visibleText).toContain("Canada drew Bosnia and Herzegovina 1-1");
+      expect(visibleText).not.toContain("模型这次只返回了思考过程");
+      expect(clients[0].sent).toContainEqual(expect.objectContaining({
+        type: "turn_end",
+        sessionPath: "/sessions/current.jsonl",
+      }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("closes a tool authorization turn when no final event arrives after confirmation flow", async () => {
     vi.useFakeTimers();
     try {
