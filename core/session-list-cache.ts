@@ -24,6 +24,11 @@ const SESSION_AUX_FILES = new Set([
   "session-titles.json",
 ]);
 
+type SessionSkeletonListResult = {
+  skeletons: AnyRecord[];
+  complete: boolean;
+};
+
 function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   return Promise.race([
@@ -34,13 +39,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   ]);
 }
 
-export async function listSessionFileSkeletons(sessionDir: string, agent: AgentLike) {
-  const entries = await withTimeout(
-    fsp.readdir(sessionDir, { withFileTypes: true }),
+async function listSessionFileSkeletonsWithStatus(sessionDir: string, agent: AgentLike): Promise<SessionSkeletonListResult> {
+  const timedOut = Symbol("session-list-timeout");
+  const entries = await withTimeout<fs.Dirent[] | typeof timedOut>(
+    fsp.readdir(sessionDir, { withFileTypes: true }) as Promise<fs.Dirent[]>,
     SESSION_LIST_TIMEOUT_MS,
-    [],
+    timedOut,
   );
-  if (!Array.isArray(entries) || entries.length === 0) return [];
+  if (entries === timedOut) return { skeletons: [], complete: false };
+  if (!Array.isArray(entries) || entries.length === 0) return { skeletons: [], complete: true };
 
   const files = entries
     .filter((entry) => entry.isFile?.() && entry.name.endsWith(".jsonl") && !SESSION_AUX_FILES.has(entry.name))
@@ -66,7 +73,11 @@ export async function listSessionFileSkeletons(sessionDir: string, agent: AgentL
       labels: [],
     };
   }));
-  return skeletons.filter((entry) => entry.path);
+  return { skeletons: skeletons.filter((entry) => entry.path), complete: true };
+}
+
+export async function listSessionFileSkeletons(sessionDir: string, agent: AgentLike) {
+  return (await listSessionFileSkeletonsWithStatus(sessionDir, agent)).skeletons;
 }
 
 export async function collectAgentSessionEntries(opts: {
@@ -80,8 +91,21 @@ export async function collectAgentSessionEntries(opts: {
     if (!fs.existsSync(sessionDir)) continue;
     try {
       const indexed = (await readSessionIndex(sessionDir)) as AnyRecord[];
-      const skeletons = await listSessionFileSkeletons(sessionDir, agent);
+      const { skeletons, complete: skeletonListComplete } = await listSessionFileSkeletonsWithStatus(sessionDir, agent);
       if (indexed.length > 0) {
+        if (!skeletonListComplete) {
+          sessions.push(...indexed.map((entry) => {
+            const modified = entry.modified ? new Date(entry.modified) : new Date(0);
+            return {
+              ...entry,
+              modified: Number.isNaN(modified.getTime()) ? new Date(0) : modified,
+              agentId: entry.agentId || agent.id,
+              agentName: entry.agentName || agent.name,
+              labels: Array.isArray(entry.labels) ? entry.labels.filter(Boolean) : [],
+            };
+          }));
+          continue;
+        }
         const skeletonPaths = new Set(skeletons.map((entry) => entry.path));
         const indexedPaths = new Set<string>();
         const merged: AnyRecord[] = [];
@@ -111,9 +135,11 @@ export async function collectAgentSessionEntries(opts: {
       }
 
       for (const session of skeletons) sessions.push(session);
-      await refreshSessionIndex(sessionDir, skeletons, { agent }).catch((err: unknown) => {
-        opts.onIndexRefreshError?.(agent, err);
-      });
+      if (skeletonListComplete) {
+        await refreshSessionIndex(sessionDir, skeletons, { agent }).catch((err: unknown) => {
+          opts.onIndexRefreshError?.(agent, err);
+        });
+      }
     } catch {}
   }
   return sessions;
@@ -130,8 +156,8 @@ export async function refreshMissingSessionIndexes(opts: {
     try {
       const existing = await readSessionIndex(sessionDir);
       if (existing.length > 0) continue;
-      const skeletons = await listSessionFileSkeletons(sessionDir, agent);
-      await refreshSessionIndex(sessionDir, skeletons, { agent });
+      const { skeletons, complete: skeletonListComplete } = await listSessionFileSkeletonsWithStatus(sessionDir, agent);
+      if (skeletonListComplete) await refreshSessionIndex(sessionDir, skeletons, { agent });
     } catch (err) {
       opts.onError?.(agent, err);
     }

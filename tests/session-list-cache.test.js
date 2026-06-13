@@ -1,4 +1,5 @@
 import fs from "fs";
+import fsp from "fs/promises";
 import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +13,8 @@ describe("session list/cache helpers", () => {
   const dirs = [];
 
   afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
     for (const dir of dirs.splice(0)) {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -133,4 +136,46 @@ describe("session list/cache helpers", () => {
     const refreshed = JSON.parse(fs.readFileSync(path.join(sessionDir, "session-index.json"), "utf-8"));
     expect(refreshed.sessions.map((session) => session.path)).toEqual(expect.arrayContaining([indexedPath, missingPath]));
   });
+
+  it("keeps the existing session index when directory listing times out", async () => {
+    const root = tempDir();
+    const sessionDir = path.join(root, "agent-a", "sessions");
+    fs.mkdirSync(sessionDir, { recursive: true });
+    const indexedPath = path.join(sessionDir, "indexed.jsonl");
+    const payload = {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      sessions: [{
+        path: indexedPath,
+        title: "Keep me",
+        firstMessage: "hello",
+        modified: new Date("2026-06-13T00:00:00.000Z").toISOString(),
+        messageCount: 2,
+        labels: ["important"],
+      }],
+    };
+    fs.writeFileSync(path.join(sessionDir, "session-index.json"), `${JSON.stringify(payload, null, 2)}\n`);
+    vi.spyOn(fsp, "readdir").mockImplementationOnce(() => new Promise(() => {}));
+
+    const sessions = await listCoordinatorSessions({
+      agentsDir: root,
+      agents: [{ id: "agent-a", name: "Agent A" }],
+      currentPath: null,
+      sessionStarted: false,
+      activeAgentId: "agent-a",
+      activeAgent: { id: "agent-a", agentName: "Agent A" },
+    });
+
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toMatchObject({
+      path: indexedPath,
+      title: "Keep me",
+      firstMessage: "hello",
+      messageCount: 2,
+      labels: ["important"],
+    });
+    const after = JSON.parse(fs.readFileSync(path.join(sessionDir, "session-index.json"), "utf-8"));
+    expect(after.sessions).toHaveLength(1);
+    expect(after.sessions[0].title).toBe("Keep me");
+  }, 2_000);
 });

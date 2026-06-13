@@ -40,6 +40,7 @@ import { useGitContext } from './input/useGitContext';
 import { useConfiguredThinkingLevel } from './input/useConfiguredThinkingLevel';
 import { useTextareaAutoResize } from './input/useTextareaAutoResize';
 import { detectInlineFileSuggestion } from './input/file-context-suggestions';
+import { consumeEditResendTarget } from './input/edit-resend-target';
 import { computeComposerTextUpdate, type ComposerInsertMode } from './input/composer-text';
 import {
   fileToWorkingSet,
@@ -632,9 +633,10 @@ function InputAreaInner() {
         readFileBase64: window.hana?.readFileBase64?.bind(window.hana),
       });
 
+      const replaceFromMessageId = consumeEditResendTarget(editResendTargetRef, mode);
       const sent = await submitPromptTask({
         ...prepared.submission,
-        replaceFromMessageId: mode === 'prompt' ? editResendTargetRef.current : null,
+        replaceFromMessageId,
         gitContext: gitContext ? {
           repoName: gitContext.repoName,
           branch: gitContext.branch,
@@ -642,7 +644,6 @@ function InputAreaInner() {
         } : null,
       });
       if (!sent) return;
-      editResendTargetRef.current = null;
 
       const nextSessionPath = useStore.getState().currentSessionPath;
       if (nextSessionPath) {
