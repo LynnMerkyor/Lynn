@@ -323,6 +323,9 @@ export class LynnEngine {
   // ── Path 感知 API（Phase 2） ──
   async promptSession(p: string, text: string, opts?: AnyRecord) { return this._sessionCoord.promptSession(p, text, opts); }
   steerSession(p: string, text: string) { return this._sessionCoord.steerSession(p, text); }
+  truncateSessionBeforeVisibleMessage(p: string, visibleMessageId: string) {
+    return this._sessionCoord.truncateSessionBeforeVisibleMessage(p, visibleMessageId);
+  }
   async abortSession(p: string) { return this._sessionCoord.abortSession(p); }
   get focusSessionPath() { return this._sessionCoord.currentSessionPath; }
   getMessages(p: string) { return this._sessionCoord.getSessionByPath(p)?.messages ?? []; }

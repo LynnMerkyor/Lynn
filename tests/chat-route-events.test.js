@@ -35,6 +35,10 @@ function makeWebSocketHarness() {
   return { clients, connections, upgradeWebSocket };
 }
 
+function waitForAsyncHandlers() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe("chat route event forwarding", () => {
   let subscribed;
   let hub;
@@ -62,6 +66,7 @@ describe("chat route event forwarding", () => {
       getSessionByPath: vi.fn(() => ({ messages: [] })),
       listSessions: vi.fn(async () => []),
       isSessionStreaming: vi.fn(() => false),
+      truncateSessionBeforeVisibleMessage: vi.fn(async () => ({ ok: true })),
       promptSession: vi.fn(),
       steerSession: vi.fn(() => false),
       abortSession: vi.fn(() => false),
@@ -77,6 +82,43 @@ describe("chat route event forwarding", () => {
     editRollbackStore = route.editRollbackStore;
     app = new Hono();
     app.route("", route.wsRoute);
+  });
+
+  it("rewinds a session before accepting an edit-resend prompt", async () => {
+    hub.send = vi.fn(() => new Promise(() => {}));
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "改后的问题", replaceFromMessageId: "user-1718000000000", replaceFromMessageIndex: 2 }),
+    }, connections[0].client);
+    await waitForAsyncHandlers();
+
+    expect(engine.truncateSessionBeforeVisibleMessage).toHaveBeenCalledWith("/sessions/current.jsonl", "2");
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "prompt_accepted",
+      sessionPath: "/sessions/current.jsonl",
+    }));
+    expect(hub.send).toHaveBeenCalled();
+  });
+
+  it("does not append a prompt when edit-resend cannot find the target message", async () => {
+    engine.truncateSessionBeforeVisibleMessage.mockResolvedValueOnce({ ok: false, reason: "message-not-found" });
+    hub.send = vi.fn(() => new Promise(() => {}));
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "改后的问题", replaceFromMessageId: "missing" }),
+    }, connections[0].client);
+    await waitForAsyncHandlers();
+
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "error",
+      sessionPath: "/sessions/current.jsonl",
+    }));
+    expect(clients[0].sent.some((event) => event.type === "prompt_accepted")).toBe(false);
+    expect(hub.send).not.toHaveBeenCalled();
   });
 
   it("forwards tool_authorization events to websocket clients", async () => {

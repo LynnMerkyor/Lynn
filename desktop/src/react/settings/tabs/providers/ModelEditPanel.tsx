@@ -1,17 +1,51 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSettingsStore } from '../../store';
-import { t, lookupModelMeta, autoSaveConfig, CONTEXT_PRESETS, OUTPUT_PRESETS } from '../../helpers';
+import { hanaFetch } from '../../api';
+import { t, lookupModelMeta, autoSaveConfig, CONTEXT_PRESETS, OUTPUT_PRESETS, resolveProviderForModel } from '../../helpers';
 import { ComboInput } from '../../widgets/ComboInput';
 import { Toggle } from '../../widgets/Toggle';
 import styles from '../../Settings.module.css';
 
-export function ModelEditPanel({ modelId, anchorEl, onClose }: {
+const platform = window.platform;
+
+type ProviderModelEntry = string | {
+  id?: string;
+  name?: string;
+  displayName?: string;
+  context?: number | null;
+  maxOutput?: number | null;
+  [key: string]: unknown;
+};
+
+function modelEntryId(entry: ProviderModelEntry): string {
+  if (typeof entry === 'string') return entry;
+  return typeof entry?.id === 'string' ? entry.id : '';
+}
+
+function modelEntryMeta(entry: ProviderModelEntry | undefined) {
+  if (!entry || typeof entry === 'string') return {};
+  return entry;
+}
+
+function positiveInt(value: string): number | null {
+  const parsed = Number.parseInt(value.trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function ModelEditPanel({ modelId, providerId, anchorEl, onClose, onRefresh }: {
   modelId: string;
+  providerId?: string;
   anchorEl: HTMLElement | null;
   onClose: () => void;
+  onRefresh?: () => Promise<void>;
 }) {
   const { showToast } = useSettingsStore();
-  const meta = lookupModelMeta(modelId) || {};
+  const config = useSettingsStore.getState().settingsConfig;
+  const resolvedProviderId = providerId || resolveProviderForModel(modelId);
+  const providerModels = (resolvedProviderId ? config?.providers?.[resolvedProviderId]?.models : []) as ProviderModelEntry[] | undefined;
+  const providerModelEntry = providerModels?.find(entry => modelEntryId(entry) === modelId);
+  const providerMeta = modelEntryMeta(providerModelEntry);
+  const meta = { ...(lookupModelMeta(modelId) || {}), ...providerMeta };
   const [displayName, setDisplayName] = useState(meta.displayName || '');
   const [ctxVal, setCtxVal] = useState(String(meta.context || ''));
   const [outVal, setOutVal] = useState(String(meta.maxOutput || ''));
@@ -44,6 +78,51 @@ export function ModelEditPanel({ modelId, anchorEl, onClose }: {
     const config = useSettingsStore.getState().settingsConfig;
     const currentOverrides = config?.models?.overrides || {};
     await autoSaveConfig({ models: { overrides: { ...currentOverrides, [modelId]: entry } } });
+    const targetProviderId = providerId || resolveProviderForModel(modelId);
+    const providerConfig = targetProviderId ? useSettingsStore.getState().settingsConfig?.providers?.[targetProviderId] : null;
+    if (targetProviderId && providerConfig) {
+      const models = (providerConfig.models || []) as ProviderModelEntry[];
+      const found = models.some(item => modelEntryId(item) === modelId);
+      const nextModels = (found ? models : [...models, modelId]).map((item) => {
+        if (modelEntryId(item) !== modelId) return item;
+        const next: Record<string, unknown> = typeof item === 'object' && item !== null ? { ...item, id: modelId } : { id: modelId };
+        if (name) next.name = name;
+        else delete next.name;
+        const context = positiveInt(ctx);
+        if (context) next.context = context;
+        else delete next.context;
+        const maxOutput = positiveInt(maxOut);
+        if (maxOutput) next.maxOutput = maxOutput;
+        else delete next.maxOutput;
+        next.vision = vision;
+        next.reasoning = reasoning;
+        return next;
+      });
+      const res = await hanaFetch('/api/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providers: { [targetProviderId]: { models: nextModels } } }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      try {
+        const modelsRes = await hanaFetch('/api/models');
+        const modelsData = await modelsRes.json();
+        const current = modelsData?.models?.find?.((model: { id?: string; provider?: string; isCurrent?: boolean }) => model?.isCurrent);
+        if (current?.id === modelId && (!current.provider || current.provider === targetProviderId)) {
+          await hanaFetch('/api/models/set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modelId, provider: targetProviderId }),
+          });
+        }
+      } catch {
+        // Model refresh is best effort; saved provider metadata will apply on next switch/session.
+      }
+      await onRefresh?.();
+      platform?.settingsChanged?.('models-changed');
+      window.dispatchEvent(new CustomEvent('models-changed'));
+    }
     showToast(t('settings.saved'), 'success');
     onClose();
   };

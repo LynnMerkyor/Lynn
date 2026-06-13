@@ -31,6 +31,7 @@ interface UseInputEventBridgeArgs {
   securityMode: string;
   selectedFolder: string | null | undefined;
   setComposerTextFromEvent: (text: string, options?: ComposerInsertOptions) => void;
+  setEditResendTarget: (messageId: string | null) => void;
   setInlineNotice: (value: string | null) => void;
   setPendingConfirm: (payload: PendingConfirmPayload) => void;
   t: Translate;
@@ -43,6 +44,7 @@ export function useInputEventBridge({
   securityMode,
   selectedFolder,
   setComposerTextFromEvent,
+  setEditResendTarget,
   setInlineNotice,
   setPendingConfirm,
   t,
@@ -50,9 +52,10 @@ export function useInputEventBridge({
 }: UseInputEventBridgeArgs) {
   useEffect(() => {
     const handlePasteToInput = (event: Event) => {
-      const detail = (event as CustomEvent<{ text?: string; editResend?: boolean }>).detail || {};
+      const detail = (event as CustomEvent<{ text?: string; editResend?: boolean; messageId?: string }>).detail || {};
       const current = textareaRef.current?.value ?? useStore.getState().composerText;
       const editResend = !!detail.editResend;
+      setEditResendTarget(editResend && detail.messageId ? String(detail.messageId) : null);
       if (editResend && current.trim() && current.trim() !== String(detail.text || '').trim()) {
         useStore.getState().addToast?.('已用上一条消息替换当前输入。', 'info', 3600, {
           dedupeKey: 'edit-resend-replaced-draft',
@@ -68,7 +71,7 @@ export function useInputEventBridge({
     };
     window.addEventListener('hana-paste-to-input', handlePasteToInput);
     return () => window.removeEventListener('hana-paste-to-input', handlePasteToInput);
-  }, [setComposerTextFromEvent, setInlineNotice, textareaRef]);
+  }, [setComposerTextFromEvent, setEditResendTarget, setInlineNotice, textareaRef]);
 
   useEffect(() => {
     const handleRunCommand = (event: Event) => {

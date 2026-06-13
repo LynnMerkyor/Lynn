@@ -82,6 +82,7 @@ import {
 } from "./session-turn-context.js";
 import { createSessionContextFactory } from "./session-context-factory.js";
 import { readSessionSwitchMeta } from "./session-switch-meta.js";
+import { truncateSessionBeforeVisibleMessage as truncateVisibleSessionMessage } from "./session-visible-truncate.js";
 import {
   notifyActiveSessionEnd,
   prepareCachedSessionSwitch,
@@ -588,6 +589,12 @@ export class SessionCoordinator {
       if (promptFinished) sanitizeActiveSessionContextForPrompt(entry.session, sessionPath);
       clearSessionTurnContext(entry);
     }
+  }
+
+  truncateSessionBeforeVisibleMessage(sessionPath: string, visibleMessageId: string) {
+    const entry = this._sessions.get(sessionPath);
+    if (!entry?.session) return { ok: false, reason: "session-not-in-cache" };
+    return truncateVisibleSessionMessage(entry.session, sessionPath, visibleMessageId);
   }
 
   async _runWithTurnToolsDisabled(sessionPath: string, entry: SessionEntry, run: () => Promise<unknown>) {

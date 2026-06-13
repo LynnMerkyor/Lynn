@@ -12,6 +12,22 @@ type KnownModelsByProvider = Record<string, Record<string, KnownModel>>;
 
 const _raw = JSON.parse(readFileSync(fromRoot("lib", "known-models.json"), "utf-8")) as KnownModelsByProvider;
 
+function lookupDeepSeekThinkingVariant(modelId: string): KnownModel | null {
+  const normalized = modelId.trim().toLowerCase();
+  const deepseekModels = _raw.deepseek;
+  if (!deepseekModels) return null;
+  if (/^deepseek-v4-pro(?:[-_.:].*)?$/u.test(normalized)) {
+    return deepseekModels["deepseek-v4-pro"] || null;
+  }
+  if (/^deepseek-v4-flash(?:[-_.:].*)?$/u.test(normalized)) {
+    return deepseekModels["deepseek-v4-flash"] || null;
+  }
+  if (/^deepseek-reasoner(?:[-_.:].*)?$/u.test(normalized)) {
+    return deepseekModels["deepseek-reasoner"] || null;
+  }
+  return null;
+}
+
 /**
  * 查词典：provider + modelId 二级查找，fallback 遍历所有 provider
  */
@@ -25,6 +41,8 @@ export function lookupKnown(provider: unknown, modelId: unknown): KnownModel | n
     if (models[modelId]) return models[modelId];
     if (bare && models[bare]) return models[bare];
   }
+  const deepseekVariant = lookupDeepSeekThinkingVariant(bare || modelId);
+  if (deepseekVariant) return deepseekVariant;
   return null;
 }
 

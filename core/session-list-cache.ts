@@ -80,10 +80,17 @@ export async function collectAgentSessionEntries(opts: {
     if (!fs.existsSync(sessionDir)) continue;
     try {
       const indexed = (await readSessionIndex(sessionDir)) as AnyRecord[];
+      const skeletons = await listSessionFileSkeletons(sessionDir, agent);
       if (indexed.length > 0) {
+        const skeletonPaths = new Set(skeletons.map((entry) => entry.path));
+        const indexedPaths = new Set<string>();
+        const merged: AnyRecord[] = [];
         for (const entry of indexed) {
+          const entryPath = String(entry?.path || "");
+          if (!entryPath || !skeletonPaths.has(entryPath)) continue;
+          indexedPaths.add(entryPath);
           const modified = entry.modified ? new Date(entry.modified) : new Date(0);
-          sessions.push({
+          merged.push({
             ...entry,
             modified: Number.isNaN(modified.getTime()) ? new Date(0) : modified,
             agentId: entry.agentId || agent.id,
@@ -91,10 +98,18 @@ export async function collectAgentSessionEntries(opts: {
             labels: Array.isArray(entry.labels) ? entry.labels.filter(Boolean) : [],
           });
         }
+        for (const skeleton of skeletons) {
+          if (!indexedPaths.has(skeleton.path)) merged.push(skeleton);
+        }
+        sessions.push(...merged);
+        if (merged.length !== indexed.length || skeletons.some((entry) => !indexedPaths.has(entry.path))) {
+          await refreshSessionIndex(sessionDir, merged, { agent }).catch((err: unknown) => {
+            opts.onIndexRefreshError?.(agent, err);
+          });
+        }
         continue;
       }
 
-      const skeletons = await listSessionFileSkeletons(sessionDir, agent);
       for (const session of skeletons) sessions.push(session);
       await refreshSessionIndex(sessionDir, skeletons, { agent }).catch((err: unknown) => {
         opts.onIndexRefreshError?.(agent, err);

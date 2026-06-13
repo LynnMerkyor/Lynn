@@ -358,9 +358,11 @@ function App() {
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
             <line x1="15" y1="3" x2="15" y2="21"></line>
           </svg>
-          <span className={`tb-toggle-badge${jianPendingCount > 0 ? ' has-count' : jianHasContent ? ' has-content' : ''}`}>
-            {jianPendingCount > 0 ? String(Math.min(jianPendingCount, 99)) : jianHasContent ? '•' : '+'}
-          </span>
+          {(jianPendingCount > 0 || jianHasContent) && (
+            <span className={`tb-toggle-badge${jianPendingCount > 0 ? ' has-count' : ' has-content'}`}>
+              {jianPendingCount > 0 ? String(Math.min(jianPendingCount, 99)) : '•'}
+            </span>
+          )}
         </button>
         <WindowControls />
       </div>

@@ -1,8 +1,8 @@
-# Lynn v0.84.3 Release Notes / 发布说明
+# Lynn v0.84.4 Release Notes / 发布说明
 
-> 发布日期: 2026-06-13 · Agent 本地文件任务热修 + GUI/CLI 工具边界门禁 + BYOK DeepSeek 直连兼容修复
+> 发布日期: 2026-06-13 · #74 收口 + Agent 本地文件任务热修 + GUI/CLI 工具边界门禁 + BYOK DeepSeek 直连兼容修复
 
-本次热修覆盖 v0.84.2，重点修复默认模型下 Lynn Agent 在 GUI / CLI 里处理本地文件、小说章节、代码与工具任务时的两个高频问题：模型错误声明“无法访问本地文件系统”，以及部分本地模型把伪 `<tool_call>` 文本直接吐到界面里。此次覆盖包还追加修复 #74 里暴露的 BYOK 输入侧内容过滤误杀、DeepSeek V4 Pro / DeepSeek Reasoner 多轮直连兼容问题。
+本次版本在 v0.84.3 基础上发布，继续修复默认模型下 Lynn Agent 在 GUI / CLI 里处理本地文件、小说章节、代码与工具任务时的两个高频问题：模型错误声明“无法访问本地文件系统”，以及部分本地模型把伪 `<tool_call>` 文本直接吐到界面里。此次版本还完整修复 #74 里暴露的 BYOK 输入侧内容过滤误杀、`deepseek-v4-pro` / `deepseek-v4-flash` / `deepseek-reasoner` 多轮直连兼容、会话重启后消失、模型上下文编辑不生效与“编辑重发”仍带旧上下文的问题。
 
 ## 国内镜像站下载（推荐）
 
@@ -11,12 +11,12 @@
 - **CLI**:
 
   ```bash
-  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.3.tgz"
+  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.4.tgz"
   ```
 
-- **macOS Apple Silicon / ARM64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.3-macOS-arm64.dmg](https://download.merkyorlynn.com/downloads/Lynn-0.84.3-macOS-arm64.dmg)
-- **macOS Intel / x64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.3-macOS-x64.dmg](https://download.merkyorlynn.com/downloads/Lynn-0.84.3-macOS-x64.dmg)
-- **Windows x64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.3-Windows-Setup.exe](https://download.merkyorlynn.com/downloads/Lynn-0.84.3-Windows-Setup.exe)
+- **macOS Apple Silicon / ARM64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.4-macOS-arm64.dmg](https://download.merkyorlynn.com/downloads/Lynn-0.84.4-macOS-arm64.dmg)
+- **macOS Intel / x64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.4-macOS-x64.dmg](https://download.merkyorlynn.com/downloads/Lynn-0.84.4-macOS-x64.dmg)
+- **Windows x64**: [https://download.merkyorlynn.com/downloads/Lynn-0.84.4-Windows-Setup.exe](https://download.merkyorlynn.com/downloads/Lynn-0.84.4-Windows-Setup.exe)
 - **下载页**: [https://download.merkyorlynn.com/download.html](https://download.merkyorlynn.com/download.html)
 
 ## 中文重点
@@ -29,10 +29,14 @@
 - **BYOK 内容过滤误杀修复**：普通软件反馈/报错描述不再被短词片段误判拦截；BYOK / 本地模型命中过滤时默认只记录警告，不再硬拦用户自己的模型调用。
 - **过滤错误文案修复**：`error.contentFiltered` 不再裸露内部 key，拦截时会显示“本地内容安全过滤 + 命中类别”。
 - **Provider Key 状态更清楚**：模型设置页会在已保存且可解密的 API Key 输入框显示“已保存，留空保持不变”；不能解密的旧 Key 不再假装已配置，用户重填一次后即可稳定保存。
-- **BYOK DeepSeek 多轮修复**：DeepSeek V4 Pro / DeepSeek Reasoner 这类 reasoning 模型在第二轮以后会保留上一轮 `reasoning_content`，避免 BYOK 直连续轮 400 或静默无回复。
+- **BYOK DeepSeek 多轮修复**：`deepseek-v4-pro` / `deepseek-v4-flash` / `deepseek-reasoner` 这类 reasoning 模型在第二轮以后会保留上一轮 `reasoning_content`，避免 BYOK 直连续轮 400 或静默无回复；`deepseek-chat` 与 `deepseek-reasoner` 标记为 2026/07/24 弃用兼容入口。
 - **第三方 BYOK 请求隔离**：DeepSeek 等第三方 BYOK 请求不再附带 Lynn / Brain 设备签名头；签名头只用于 Brain 托管路由，减少兼容接口误拒风险。
+- **模型上下文编辑真正生效**：Provider 模型列表会保留用户自定义 context / max output，保存后刷新当前运行时模型配置，不再只是 UI 看起来保存。
+- **会话列表冷启动修复**：重启 Lynn 后会重新扫描已落盘的 `.jsonl` 会话；即使 session index 缺项，也会合并磁盘文件，避免侧栏空白。
+- **编辑重发改为真实上下文回退**：点“编辑重发”后，Lynn 会把本地持久历史截到被编辑用户消息之前再发送新问题，不再把修改后的内容追加在旧上下文后面。
+- **顶部栏图标重叠修复**：右上角用户信息与笺/侧栏按钮角标不再互相覆盖，空状态不再显示无意义的 `+` 角标。
 - **Agent 任务矩阵门禁**：新增 release gate，覆盖 GUI + CLI 本地小说/文件读取、路由分类、工具边界、伪工具泄漏与 live smoke，防止今晚修过的问题再次回归。
-- **v0.84.2 修复保留**：CLI 实时语音断句、BYOK Key 持久化、Brain 注册限流、本地模型启动、DeepSeek 空答恢复等修复继续保留。
+- **v0.84.3 / v0.84.2 修复保留**：CLI 实时语音断句、BYOK Key 持久化、Brain 注册限流、本地模型启动、DeepSeek 空答恢复、本地文件任务与伪工具调用清理等修复继续保留。
 
 ## 安装
 
@@ -41,12 +45,12 @@
 node -v
 
 # 从 Lynn 镜像安装或覆盖升级 CLI。
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.3.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.4.tgz"
 
 # 启动。
 Lynn            # 交互式聊天 TUI；输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # 编码 agent TUI
-Lynn --version  # 应输出 0.84.3
+Lynn --version  # 应输出 0.84.4
 Lynn agents     # 给其他智能体/Fleet 的可复制命令
 ```
 
@@ -72,9 +76,9 @@ Lynn agents     # 给其他智能体/Fleet 的可复制命令
 
 ---
 
-> Release date: 2026-06-13 · Agent local-file task hotfix + GUI/CLI tool-boundary gate + BYOK DeepSeek direct-connection fix
+> Release date: 2026-06-13 · #74 close-out + Agent local-file task hotfix + GUI/CLI tool-boundary gate + BYOK DeepSeek direct-connection fix
 
-This hotfix supersedes v0.84.2. It targets two user-visible failures in default-model GUI/CLI agent workflows: local file and novel-reading tasks incorrectly claiming that Lynn has no filesystem access, and local models leaking pseudo `<tool_call>` text into visible chat output. This overwritten build also includes the #74 BYOK input-side content-filter false-positive fix plus DeepSeek V4 Pro / DeepSeek Reasoner multi-turn direct-connection compatibility fixes.
+This release builds on v0.84.3. It targets two user-visible failures in default-model GUI/CLI agent workflows: local file and novel-reading tasks incorrectly claiming that Lynn has no filesystem access, and local models leaking pseudo `<tool_call>` text into visible chat output. It also closes the #74 follow-ups around BYOK content-filter false positives, `deepseek-v4-pro` / `deepseek-v4-flash` / `deepseek-reasoner` multi-turn direct connections, missing sessions after restart, model context edits not taking effect, and edit-resend keeping stale context.
 
 ## Highlights
 
@@ -86,10 +90,14 @@ This hotfix supersedes v0.84.2. It targets two user-visible failures in default-
 - **BYOK content-filter false-positive fix**: ordinary support/bug-report wording is no longer blocked by short embedded dictionary fragments. BYOK/local model hits now default to warning-only instead of hard-blocking the user's own model call.
 - **Readable content-filter errors**: `error.contentFiltered` no longer leaks as a raw internal key; hard blocks now show the local safety filter and matched category.
 - **Clearer provider key state**: saved, decryptable API keys now show a "Saved. Leave blank to keep the current key" placeholder. Old undecryptable keys no longer appear configured; re-enter once to migrate them.
-- **BYOK DeepSeek multi-turn fix**: DeepSeek V4 Pro / DeepSeek Reasoner follow-up requests now preserve the previous assistant `reasoning_content`, avoiding second-turn 400s or silent empty replies on compatible BYOK endpoints.
+- **BYOK DeepSeek multi-turn fix**: `deepseek-v4-pro` / `deepseek-v4-flash` / `deepseek-reasoner` follow-up requests now preserve the previous assistant `reasoning_content`, avoiding second-turn 400s or silent empty replies on compatible BYOK endpoints. `deepseek-chat` and `deepseek-reasoner` are marked as compatibility entries deprecated on 2026/07/24.
 - **Third-party BYOK request isolation**: DeepSeek and other third-party BYOK requests no longer carry Lynn / Brain device-signature headers. Those headers are now limited to Brain-hosted routes.
+- **Model context edits now reach runtime**: provider model metadata keeps user-defined context / max output values, and saving refreshes the active model runtime instead of only updating the UI.
+- **Session list cold-start fix**: Lynn scans persisted `.jsonl` sessions after restart and merges files missing from the session index, preventing an empty sidebar when sessions are still on disk.
+- **Edit-resend now rewinds context**: editing a previous user message truncates the local persistent history before that message, then sends the new text; it no longer appends edited text after stale context.
+- **Top-bar overlap fix**: the user identity area and note/sidebar toggle badge no longer overlap, and empty state no longer shows a stray `+` badge.
 - **Agent task-matrix gate**: a new release gate covers GUI + CLI local novel/file reads, routing, tool boundaries, pseudo-tool leakage, and live smoke tests.
-- **v0.84.2 fixes remain**: CLI realtime voice turn detection, BYOK key persistence, Brain registration hardening, local-model startup hardening, and DeepSeek empty-answer recovery remain in place.
+- **v0.84.3 / v0.84.2 fixes remain**: CLI realtime voice turn detection, BYOK key persistence, Brain registration hardening, local-model startup hardening, DeepSeek empty-answer recovery, local-file task fixes, and pseudo-tool-call cleanup remain in place.
 
 ## Install
 
@@ -98,12 +106,12 @@ This hotfix supersedes v0.84.2. It targets two user-visible failures in default-
 node -v
 
 # Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.3.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.4.tgz"
 
 # Launch.
 Lynn            # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.84.3
+Lynn --version  # should print 0.84.4
 Lynn agents     # copyable headless/Fleet commands
 ```
 

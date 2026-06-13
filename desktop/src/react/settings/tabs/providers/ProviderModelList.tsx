@@ -20,6 +20,28 @@ interface DiscoveredModel {
   maxOutput?: number | null;
 }
 
+type ProviderModelEntry = string | {
+  id?: string;
+  name?: string;
+  displayName?: string;
+  context?: number | null;
+  maxOutput?: number | null;
+};
+
+function modelEntryId(entry: ProviderModelEntry): string {
+  if (typeof entry === 'string') return entry;
+  return typeof entry?.id === 'string' ? entry.id : '';
+}
+
+function modelEntryMeta(entry: ProviderModelEntry | undefined): Partial<DiscoveredModel> {
+  if (!entry || typeof entry === 'string') return {};
+  return {
+    name: entry.name || entry.displayName,
+    context: entry.context,
+    maxOutput: entry.maxOutput,
+  };
+}
+
 export function ProviderModelList({ providerId, summary, onRefresh }: {
   providerId: string;
   summary: ProviderSummary;
@@ -47,7 +69,8 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
 
   useEffect(() => { void loadDiscoveredModels(); }, [loadDiscoveredModels]);
 
-  const currentModels = summary.models || [];
+  const currentModelEntries = (summary.models || []) as ProviderModelEntry[];
+  const currentModels = currentModelEntries.map(modelEntryId).filter(Boolean);
   // Merge: discovered model IDs + custom_models, deduplicated, with currentModels included for display
   const discoveredIds = discoveredModels.map(m => m.id);
   const allModels = [...new Set([...currentModels, ...discoveredIds, ...(summary.custom_models || [])])];
@@ -60,7 +83,7 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
       await hanaFetch('/api/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providers: { [providerId]: { models: [...currentModels, mid] } } }),
+        body: JSON.stringify({ providers: { [providerId]: { models: [...currentModelEntries, mid] } } }),
       });
       await onRefresh();
       platform?.settingsChanged?.('models-changed');
@@ -72,7 +95,7 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
 
   const removeModelFromProvider = async (mid: string) => {
     try {
-      const next = currentModels.filter(m => m !== mid);
+      const next = currentModelEntries.filter(m => modelEntryId(m) !== mid);
       await hanaFetch('/api/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -102,7 +125,7 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
         await hanaFetch('/api/config', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ providers: { [providerId]: { models: [...currentModels, id] } } }),
+          body: JSON.stringify({ providers: { [providerId]: { models: [...currentModelEntries, id] } } }),
         });
       }
       setCustomInput('');
@@ -208,11 +231,12 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
           <div className={styles['pv-fav-list']}>
             {currentModels.map(mid => {
               const meta = lookupModelMeta(mid) || {};
+              const savedMeta = modelEntryMeta(currentModelEntries.find(entry => modelEntryId(entry) === mid));
               return (
                 <div key={mid} className={styles['pv-fav-item']}>
-                  <span className={styles['pv-fav-item-name']} title={mid}>{meta.displayName || meta.name || mid}</span>
+                  <span className={styles['pv-fav-item-name']} title={mid}>{meta.displayName || savedMeta.name || meta.name || mid}</span>
                   {(meta.displayName || meta.name) && meta.displayName !== mid && meta.name !== mid && <span className={styles['pv-fav-item-id']}>{mid}</span>}
-                  {meta.context && <span className={styles['pv-model-ctx']}>{formatContext(meta.context)}</span>}
+                  {(savedMeta.context || meta.context) && <span className={styles['pv-model-ctx']}>{formatContext((savedMeta.context || meta.context) as number)}</span>}
                   <div className={styles['pv-fav-item-actions']}>
                     <button
                       className={styles['pv-fav-item-edit']}
@@ -235,7 +259,13 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
             })}
           </div>
           {editing && (
-            <ModelEditPanel modelId={editing.id} anchorEl={editing.anchor} onClose={() => setEditing(null)} />
+            <ModelEditPanel
+              modelId={editing.id}
+              providerId={providerId}
+              anchorEl={editing.anchor}
+              onClose={() => setEditing(null)}
+              onRefresh={onRefresh}
+            />
           )}
         </div>
       )}
@@ -272,11 +302,12 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
               autoFocus
             />
             <div className={styles['pv-model-dropdown-list']}>
-              {filtered.map(mid => {
-                const isAdded = currentModels.includes(mid);
-                const meta = lookupModelMeta(mid) || {};
-                const discovered = discoveredModels.find(d => d.id === mid);
-                const ctx = meta.context || discovered?.context;
+	              {filtered.map(mid => {
+	                const isAdded = currentModels.includes(mid);
+	                const meta = lookupModelMeta(mid) || {};
+	                const savedMeta = modelEntryMeta(currentModelEntries.find(entry => modelEntryId(entry) === mid));
+	                const discovered = discoveredModels.find(d => d.id === mid);
+	                const ctx = savedMeta.context || meta.context || discovered?.context;
                 return (
                   <button
                     key={mid}

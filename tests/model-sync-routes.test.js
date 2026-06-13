@@ -354,6 +354,50 @@ describe("model sync related routes", () => {
     expect(JSON.stringify(data.providers["error-provider"].stateSnapshot)).not.toContain("sk-error-secret");
   });
 
+  it("provider summary preserves user model metadata and dedupes by model id", async () => {
+    const { createProvidersRoute } = await import("../server/routes/providers.js");
+    const app = new Hono();
+    const rawProviders = {
+      deepseek: {
+        auth_type: "api-key",
+        base_url: "https://api.deepseek.com/v1",
+        api: "openai-completions",
+        api_key: "sk-test",
+        models: [
+          { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro Custom", context: 262144, maxOutput: 32768 },
+        ],
+      },
+    };
+    const registryEntries = new Map([
+      ["deepseek", { displayName: "DeepSeek", authType: "api-key", baseUrl: "https://api.deepseek.com/v1", api: "openai-completions" }],
+    ]);
+    const engine = {
+      availableModels: [{ id: "deepseek-v4-pro", provider: "deepseek" }],
+      authStorage: { getOAuthProviders: () => [] },
+      preferences: { getOAuthCustomModels: () => ({}) },
+      providerRegistry: {
+        getAllProvidersRaw: () => rawProviders,
+        getAll: () => registryEntries,
+        get: (id) => registryEntries.get(id) || null,
+        isOAuth: () => false,
+        getAuthJsonKey: (id) => id,
+        getDefaultModels: (id) => (id === "deepseek" ? ["deepseek-v4-pro", "deepseek-v4-flash"] : []),
+        getCredentials: () => ({ apiKey: "sk-test", baseUrl: "https://api.deepseek.com/v1", api: "openai-completions" }),
+        getOAuthProviderIds: () => [],
+      },
+    };
+
+    app.route("/api", createProvidersRoute(engine));
+
+    const res = await app.request("/api/providers/summary");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.providers.deepseek.models).toEqual([
+      { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro Custom", context: 262144, maxOutput: 32768 },
+      "deepseek-v4-flash",
+    ]);
+  });
+
   it("oauth provider fetch reports registry issue instead of remote /models fallback", async () => {
     const { createProvidersRoute } = await import("../server/routes/providers.js");
     const app = new Hono();

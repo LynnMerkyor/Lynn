@@ -68,4 +68,34 @@ describe("sessions route security mode sync", () => {
     expect(data.planMode).toBe(true);
     expect(data.securityMode).toBe("safe");
   });
+
+  it("lists persisted sessions through the engine even when no session is active in memory", async () => {
+    engine.currentSessionPath = null;
+    engine.listSessions.mockResolvedValueOnce([{
+      path: "/tmp/agents/main/sessions/persisted.jsonl",
+      title: "Persisted",
+      firstMessage: "hello from disk",
+      modified: "2026-06-13T00:00:00.000Z",
+      messageCount: 2,
+      cwd: "/workspace/main",
+      agentId: "agent-main",
+      agentName: "Lynn",
+      modelId: "gpt-5",
+      modelProvider: "openai",
+      labels: ["pinned"],
+    }]);
+
+    const res = await app.request("/api/sessions");
+
+    expect(res.status).toBe(200);
+    expect(engine.listSessions).toHaveBeenCalledOnce();
+    const data = await res.json();
+    expect(data).toEqual([
+      expect.objectContaining({
+        path: "/tmp/agents/main/sessions/persisted.jsonl",
+        firstMessage: "hello from disk",
+        messageCount: 2,
+      }),
+    ]);
+  });
 });

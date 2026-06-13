@@ -424,13 +424,33 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
                 const createdSession = await createPromptSession(engine);
                 promptSessionPath = resolveCreatedPromptSessionPath(createdSession, engine);
               }
-              const { promptText } = normalizePromptRequest(msg, promptSessionPath, { locale: getLocale() });
-              debugLog()?.log("ws", `user message (${promptText.length} chars, ${msg.images?.length || 0} images)`);
               const ss = getState(promptSessionPath);
               if (!ss) {
                 wsSend(ws, { type: "error", message: t("error.noActiveSession") });
                 return;
               }
+              const replaceFromMessageId = msg.replaceFromMessageId != null
+                ? String(msg.replaceFromMessageId || "").trim()
+                : "";
+              if (replaceFromMessageId) {
+                const replaceFromMessageIndex = Number.isInteger(Number(msg.replaceFromMessageIndex)) && Number(msg.replaceFromMessageIndex) >= 0
+                  ? String(Number(msg.replaceFromMessageIndex))
+                  : replaceFromMessageId;
+                const result = await Promise.resolve(
+                  engine.truncateSessionBeforeVisibleMessage?.(promptSessionPath, replaceFromMessageIndex),
+                );
+                if (!result?.ok) {
+                  debugLog()?.warn("ws", `edit-resend rewind failed · session=${promptSessionPath} · reason=${result?.reason || "unknown"}`);
+                  wsSend(ws, {
+                    type: "error",
+                    message: "无法定位要编辑的历史消息，请重新打开会话后再试。",
+                    sessionPath: promptSessionPath,
+                  });
+                  return;
+                }
+              }
+              const { promptText } = normalizePromptRequest(msg, promptSessionPath, { locale: getLocale() });
+              debugLog()?.log("ws", `user message (${promptText.length} chars, ${msg.images?.length || 0} images)`);
               wsSend(ws, {
                 type: "prompt_accepted",
                 sessionPath: promptSessionPath,

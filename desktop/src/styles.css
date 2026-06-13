@@ -192,8 +192,9 @@ body {
 /* 笺面板按钮 badge */
 .tb-toggle-badge {
     position: absolute;
-    top: 1px;
-    right: 1px;
+    top: -4px;
+    right: -4px;
+    z-index: 1;
     min-width: 14px;
     height: 14px;
     padding: 0 4px;
@@ -430,7 +431,7 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    max-width: min(52vw, 640px);
+    max-width: min(46vw, 560px);
     padding: 6px 14px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--bg-card) 88%, transparent);

@@ -48,6 +48,7 @@ interface SessionsEngine {
   currentModel?: SessionModelRef | null;
   memoryEnabled?: boolean;
   getAgent?(agentId: string): SessionAgent | null | undefined;
+  listSessions(): Promise<SessionListEntry[]> | SessionListEntry[];
   createSessionForAgent(agentId: string, cwd?: string, memoryEnabled?: boolean): Promise<unknown> | unknown;
   createSession(agentId?: string | null, cwd?: string, memoryEnabled?: boolean): Promise<{ sessionManager?: { getSessionFile?(): string | null } } | void> | { sessionManager?: { getSessionFile?(): string | null } } | void;
   persistSessionMeta(): unknown;
@@ -314,30 +315,6 @@ function ensureSessionFileOnDisk(sessionPath?: string | null): boolean {
   }
 }
 
-async function fastListCurrentAgentSessions(engine: SessionsEngine): Promise<SessionListEntry[]> {
-  const agentId = engine.currentAgentId || path.basename(engine.agentDir || "");
-  const agentName = engine.agentName || agentId || null;
-  const currentPath = engine.currentSessionPath;
-  if (!currentPath) return [];
-
-  // Hot path: this endpoint is hit during app boot and must never scan or parse
-  // session history. Full history can be rebuilt lazily elsewhere; chat input
-  // availability matters more than a perfect sidebar on first paint.
-  return [{
-    path: currentPath,
-    title: null,
-    firstMessage: "",
-    modified: new Date().toISOString(),
-    messageCount: 0,
-    cwd: engine.homeCwd || "",
-    agentId,
-    agentName,
-    modelId: null,
-    modelProvider: null,
-    labels: [],
-  }];
-}
-
 function formatSessionDate(value: unknown): string | null {
   if (!value) return null;
   if (typeof value === "string") return value;
@@ -352,7 +329,7 @@ export function createSessionsRoute(engine: SessionsEngine): Hono {
   // 列出所有 agent 的历史 session
   route.get("/sessions", async (c) => {
     try {
-      const sessions = await fastListCurrentAgentSessions(engine);
+      const sessions = await engine.listSessions();
       return c.json(sessions.map(s => ({
         path: s.path,
         title: s.title || null,

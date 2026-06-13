@@ -161,6 +161,7 @@ export type ContentBlock =
 
 export interface ChatMessage {
   id: string;              // 服务端返回的稳定 ID（JSONL 行号）
+  visibleIndex?: number;   // /sessions/messages 的可见消息序号；编辑重发用它回滚服务端上下文
   role: 'user' | 'assistant';
   // User
   taskMode?: 'prompt' | 'steer';

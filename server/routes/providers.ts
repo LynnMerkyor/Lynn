@@ -295,7 +295,7 @@ export function createProvidersRoute(engine: ProvidersRouteEngine): Hono {
       const oauthInfo = getOAuthLoginInfo(name);
       const sdkIds = sdkByProvider.get(name) || [];
       const defaultModels = provRegistry.getDefaultModels(name) || [];
-      const allModels = [...new Set([...(p.models || []), ...defaultModels, ...sdkIds])];
+      const allModels = dedupeProviderModelEntries([...(p.models || []), ...defaultModels, ...sdkIds]);
       const customModels = oauthCustom[name] || [];
       const decryptedCreds = provRegistry.getCredentials?.(name);
       const hasSavedApiKey = decryptedCreds
@@ -426,6 +426,18 @@ export function createProvidersRoute(engine: ProvidersRouteEngine): Hono {
       if (typeof record.id === "string") return record.id.trim();
     }
     return String(value).trim();
+  }
+
+  function dedupeProviderModelEntries(values: unknown[]): unknown[] {
+    const seen = new Set<string>();
+    const result: unknown[] = [];
+    for (const value of values) {
+      const id = normalizeModelId(value);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      result.push(value);
+    }
+    return result;
   }
 
   function resolveProviderSmokeModel(providerName: string | undefined, body: ProviderTestBody = {}): string {

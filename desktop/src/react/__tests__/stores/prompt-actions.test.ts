@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface MockState extends Record<string, unknown> {
   appended: Array<{ sessionPath: string; item: { data: Record<string, unknown> } }>;
+  chatSessions: Record<string, { items: Array<{ type: string; data: Record<string, unknown> }> }>;
   appendItem: ((sessionPath: string, item: unknown) => void) & { mockClear: () => void };
   addToast: ((...args: unknown[]) => void) & { mockClear: () => void };
 }
@@ -20,6 +21,7 @@ const mockState: MockState = {
   sessions: [],
   serverReady: true,
   welcomeVisible: true,
+  chatSessions: {},
   appended: [],
   appendItem: vi.fn((sessionPath: string, item: unknown) => {
     mockState.appended.push({ sessionPath, item: item as { data: Record<string, unknown> } });
@@ -28,8 +30,9 @@ const mockState: MockState = {
   addToast: vi.fn((..._args: unknown[]) => undefined) as unknown as MockState['addToast'],
 };
 
-const setState = vi.fn((patch: Record<string, unknown>) => {
-  Object.assign(mockState, patch);
+const setState = vi.fn((patch: Record<string, unknown> | ((state: MockState) => Record<string, unknown>)) => {
+  const next = typeof patch === 'function' ? patch(mockState) : patch;
+  Object.assign(mockState, next);
 });
 
 const ensureSession = vi.fn();
@@ -101,6 +104,7 @@ describe('prompt-actions', () => {
     mockState.agentName = 'Lynn';
     mockState.currentModel = null;
     mockState.sessions = [];
+    mockState.chatSessions = {};
     mockState.welcomeVisible = true;
     mockState.appended = [];
     mockState.appendItem.mockClear();
@@ -256,6 +260,36 @@ describe('prompt-actions', () => {
     expect(appended.attachments).toEqual([{ path: '/repo/a.ts', name: 'a.ts', isDir: false }]);
     expect(renderMarkdown).toHaveBeenCalledWith('显示文本');
     expect(setState).toHaveBeenCalledWith({ welcomeVisible: false });
+  });
+
+  it('编辑重发会把 replaceFromMessageId 发给服务端并裁掉本地旧分支', async () => {
+    mockState.chatSessions = {
+      '/sessions/current': {
+        items: [
+          { type: 'message', data: { id: '0', visibleIndex: 0, role: 'user', text: '旧问题' } },
+          { type: 'message', data: { id: '1', visibleIndex: 1, role: 'assistant', text: '旧回答' } },
+          { type: 'message', data: { id: 'user-1718000000000', role: 'user', text: '后续问题' } },
+        ],
+      },
+    };
+    const { submitPromptTask } = await import('../../stores/prompt-actions');
+
+    const sent = await submitPromptTask({
+      mode: 'prompt',
+      text: '改后的问题',
+      replaceFromMessageId: 'user-1718000000000',
+    });
+
+    expect(sent).toBe(true);
+    expect(JSON.parse(websocketRef?.send.mock.calls[0][0])).toMatchObject({
+      type: 'prompt',
+      text: '改后的问题',
+      sessionPath: '/sessions/current',
+      replaceFromMessageId: 'user-1718000000000',
+      replaceFromMessageIndex: 2,
+    });
+    expect(mockState.chatSessions['/sessions/current'].items.map(item => item.data.id)).toEqual(['0', '1']);
+    expect(mockState.appendItem).toHaveBeenCalledOnce();
   });
 
   it('websocket send 抛错时不乐观上屏，避免假消息卡住会话', async () => {

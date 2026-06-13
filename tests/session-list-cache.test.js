@@ -100,4 +100,37 @@ describe("session list/cache helpers", () => {
     });
     expect(sessions.some((session) => session.path === oldPath)).toBe(true);
   });
+
+  it("merges jsonl files that are missing from an existing session index", async () => {
+    const root = tempDir();
+    const sessionDir = path.join(root, "agent-a", "sessions");
+    fs.mkdirSync(sessionDir, { recursive: true });
+    const indexedPath = path.join(sessionDir, "indexed.jsonl");
+    const missingPath = path.join(sessionDir, "new-after-index.jsonl");
+    fs.writeFileSync(indexedPath, "{}\n");
+    fs.writeFileSync(missingPath, "{}\n");
+    fs.writeFileSync(path.join(sessionDir, "session-index.json"), JSON.stringify({
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      sessions: [{
+        path: indexedPath,
+        title: "Indexed",
+        modified: new Date().toISOString(),
+        messageCount: 2,
+      }],
+    }));
+
+    const sessions = await listCoordinatorSessions({
+      agentsDir: root,
+      agents: [{ id: "agent-a", name: "Agent A" }],
+      currentPath: null,
+      sessionStarted: false,
+      activeAgentId: "agent-a",
+      activeAgent: { id: "agent-a", agentName: "Agent A" },
+    });
+
+    expect(sessions.map((session) => session.path)).toEqual(expect.arrayContaining([indexedPath, missingPath]));
+    const refreshed = JSON.parse(fs.readFileSync(path.join(sessionDir, "session-index.json"), "utf-8"));
+    expect(refreshed.sessions.map((session) => session.path)).toEqual(expect.arrayContaining([indexedPath, missingPath]));
+  });
 });

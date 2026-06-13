@@ -33,7 +33,7 @@ export interface ProviderSummary {
   base_url: string;
   api: string;
   api_key: string;
-  models: string[];
+  models: Array<string | { id?: string; name?: string; context?: number | null; maxOutput?: number | null }>;
   custom_models: string[];
   has_credentials: boolean;
   logged_in?: boolean;

@@ -71,6 +71,7 @@ export function buildItemsFromHistory(data: HistoryApiResponse): ChatListItem[] 
   for (let i = 0; i < data.messages.length; i++) {
     const m = data.messages[i];
     const id = m.id || `hist-${i}`;
+    const visibleIndex = Number.isFinite(Number(m.id)) ? Number(m.id) : i;
 
     if (m.role === 'user') {
       // strip steer 前缀（内部标记，不应展示给用户）
@@ -93,6 +94,7 @@ export function buildItemsFromHistory(data: HistoryApiResponse): ChatListItem[] 
       const allAtts = [...fileAtts, ...imageAtts];
       const msg: ChatMessage = {
         id,
+        visibleIndex,
         role: 'user',
         text,
         textHtml: text ? renderMarkdown(text) : undefined,
@@ -216,7 +218,7 @@ export function buildItemsFromHistory(data: HistoryApiResponse): ChatListItem[] 
         }
       }
 
-      const msg: ChatMessage = { id, role: 'assistant', blocks, model: m.model || null };
+      const msg: ChatMessage = { id, visibleIndex, role: 'assistant', blocks, model: m.model || null };
       items.push({ type: 'message', data: msg });
     }
   }

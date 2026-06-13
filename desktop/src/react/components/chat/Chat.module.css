@@ -133,6 +133,8 @@
 
 .avatarRowUser {
     flex-direction: row-reverse;
+    justify-content: flex-start;
+    gap: 0.55rem;
 }
 
 .avatar {
@@ -183,6 +185,12 @@
 }
 
 .avatarName {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: min(28vw, 220px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 0.75rem;
     color: var(--text-muted);
     letter-spacing: 0.02em;

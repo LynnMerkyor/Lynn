@@ -16,6 +16,8 @@ export interface SendPromptOptions {
   attachments?: UserAttachment[];
   images?: PromptImage[];
   gitContext?: GitContext | null;
+  replaceFromMessageId?: string | null;
+  replaceFromMessageIndex?: number | null;
 }
 
 function canSendPayload(text: string, images?: PromptImage[]): boolean {
@@ -76,6 +78,50 @@ function sendWebSocketJson(payload: Record<string, unknown>): boolean {
 
 function createClientMessageId(): string {
   return `prompt-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function trimSessionItemsFromMessage(sessionPath: string, messageId?: string | null): void {
+  const targetId = String(messageId || '').trim();
+  if (!targetId) return;
+  useStore.setState(((state: any) => {
+    const session = state.chatSessions?.[sessionPath];
+    if (!session?.items?.length) return {};
+    const index = session.items.findIndex((item: any) => item?.type === 'message' && item?.data?.id === targetId);
+    if (index < 0) return {};
+    return {
+      chatSessions: {
+        ...state.chatSessions,
+        [sessionPath]: {
+          ...session,
+          items: session.items.slice(0, index),
+        },
+      },
+    };
+  }) as any);
+}
+
+function resolveVisibleMessageIndex(sessionPath: string, messageId?: string | null): number | null {
+  const targetId = String(messageId || '').trim();
+  if (!targetId) return null;
+  const session = useStore.getState().chatSessions?.[sessionPath];
+  const items = Array.isArray(session?.items) ? session.items : [];
+  let visibleIndex = 0;
+  for (const item of items) {
+    if (item?.type !== 'message') continue;
+    const message = item.data;
+    if (message?.id === targetId) {
+      if (Number.isFinite(message.visibleIndex)) return Number(message.visibleIndex);
+      return visibleIndex;
+    }
+    visibleIndex += 1;
+  }
+  return null;
+}
+
+function countSessionMessages(sessionPath: string): number {
+  const session = useStore.getState().chatSessions?.[sessionPath];
+  const items = Array.isArray(session?.items) ? session.items : [];
+  return items.reduce((count: number, item: any) => count + (item?.type === 'message' ? 1 : 0), 0);
 }
 
 function waitForPromptAccepted(clientMessageId: string, sessionPath: string, timeoutMs = 2500): Promise<boolean> {
@@ -157,10 +203,13 @@ export async function submitPromptTask(options: SendPromptOptions): Promise<bool
     : undefined;
 
   const clientMessageId = mode === 'prompt' ? createClientMessageId() : null;
+  const replaceFromMessageIndex = mode === 'prompt' && options.replaceFromMessageId
+    ? (options.replaceFromMessageIndex ?? resolveVisibleMessageIndex(sessionPath, options.replaceFromMessageId))
+    : null;
   const promptAccepted = clientMessageId ? waitForPromptAccepted(clientMessageId, sessionPath) : null;
   const sent = mode === 'steer'
     ? sendWebSocketJson({ type: 'steer', text: requestText, sessionPath })
-    : resendPromptRequest(requestText, options.images, sessionPath, clientMessageId);
+    : resendPromptRequest(requestText, options.images, sessionPath, clientMessageId, options.replaceFromMessageId, replaceFromMessageIndex);
   if (!sent) {
     return false;
   }
@@ -173,10 +222,18 @@ export async function submitPromptTask(options: SendPromptOptions): Promise<bool
     }
   }
 
+  if (mode === 'prompt' && options.replaceFromMessageId) {
+    trimSessionItemsFromMessage(sessionPath, options.replaceFromMessageId);
+  }
+
+  const visibleIndex = mode === 'prompt'
+    ? (replaceFromMessageIndex ?? countSessionMessages(sessionPath))
+    : undefined;
   useStore.getState().appendItem(sessionPath, {
     type: 'message',
     data: {
       id: `user-${Date.now()}`,
+      visibleIndex,
       role: 'user',
       taskMode: mode,
       text: displayText || undefined,
@@ -200,6 +257,8 @@ export function resendPromptRequest(
   images?: PromptImage[],
   sessionPath?: string | null,
   clientMessageId?: string | null,
+  replaceFromMessageId?: string | null,
+  replaceFromMessageIndex?: number | null,
 ): boolean {
   if (!canSendPayload(requestText, images)) {
     return false;
@@ -226,6 +285,12 @@ export function resendPromptRequest(
   };
   if (clientMessageId) {
     payload.clientMessageId = clientMessageId;
+  }
+  if (replaceFromMessageId) {
+    payload.replaceFromMessageId = replaceFromMessageId;
+    if (Number.isInteger(replaceFromMessageIndex) && Number(replaceFromMessageIndex) >= 0) {
+      payload.replaceFromMessageIndex = replaceFromMessageIndex;
+    }
   }
   if (images?.length) {
     payload.images = images;
