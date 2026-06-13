@@ -58,7 +58,72 @@ function isLocalQwenProviderId(id?: string | null) {
 }
 
 function normalizeProviderId(id?: string | null) {
-  return isLocalQwenProviderId(id) ? LOCAL_QWEN_PROVIDER_ID : (id || null);
+  const raw = typeof id === 'string' ? id.trim() : '';
+  if (!raw) return null;
+  if (isLocalQwenProviderId(raw)) return LOCAL_QWEN_PROVIDER_ID;
+  const preset = PROVIDER_PRESETS.find(p =>
+    p.value.toLowerCase() === raw.toLowerCase() ||
+    p.label.toLowerCase() === raw.toLowerCase()
+  );
+  if (preset) return preset.value;
+  return raw;
+}
+
+function modelEntryId(model: ProviderSummary['models'][number] | undefined): string {
+  if (!model) return '';
+  return typeof model === 'object' ? String(model.id || '') : String(model || '');
+}
+
+function mergeSummaryModels(
+  left: ProviderSummary['models'] = [],
+  right: ProviderSummary['models'] = [],
+): ProviderSummary['models'] {
+  const seen = new Set<string>();
+  const result: ProviderSummary['models'] = [];
+  for (const model of [...left, ...right]) {
+    const id = modelEntryId(model);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    result.push(model);
+  }
+  return result;
+}
+
+function mergeProviderSummaries(base: ProviderSummary, incoming: ProviderSummary): ProviderSummary {
+  const mergedModels = mergeSummaryModels(base.models, incoming.models);
+  const modelIds = new Set(mergedModels.map(modelEntryId).filter(Boolean));
+  const customModels = Array.from(new Set([
+    ...(base.custom_models || []),
+    ...(incoming.custom_models || []),
+  ]));
+  const removedModels = Array.from(new Set([
+    ...(base.removed_models || []),
+    ...(incoming.removed_models || []),
+  ])).filter(id => !modelIds.has(id));
+  const removedModelIds = new Set(removedModels);
+  const hasIncomingCredentials = incoming.has_credentials || !!incoming.api_key;
+  const hasBaseCredentials = base.has_credentials || !!base.api_key;
+  return {
+    ...base,
+    ...(hasIncomingCredentials && !hasBaseCredentials ? incoming : {}),
+    models: mergedModels,
+    custom_models: customModels.filter(id => !modelIds.has(id) && !removedModelIds.has(id)),
+    removed_models: removedModels,
+    has_credentials: base.has_credentials || incoming.has_credentials,
+    api_key: base.api_key || incoming.api_key || '',
+    credential_error: base.credential_error || incoming.credential_error,
+    stateSnapshot: hasIncomingCredentials && !hasBaseCredentials ? incoming.stateSnapshot : base.stateSnapshot,
+  };
+}
+
+function normalizeProvidersSummary(input: Record<string, ProviderSummary>): Record<string, ProviderSummary> {
+  const output: Record<string, ProviderSummary> = {};
+  for (const [rawId, summary] of Object.entries(input || {})) {
+    const id = normalizeProviderId(rawId) || rawId.trim();
+    if (!id) continue;
+    output[id] = output[id] ? mergeProviderSummaries(output[id], summary) : summary;
+  }
+  return output;
 }
 
 const LOCAL_PROVIDER_FALLBACKS: Record<string, ProviderSummary> = {
@@ -70,6 +135,7 @@ const LOCAL_PROVIDER_FALLBACKS: Record<string, ProviderSummary> = {
     api_key: '',
     models: ['qwen35-9b-q4km-imatrix'],
     custom_models: [],
+    removed_models: [],
     has_credentials: true,
     supports_oauth: false,
     can_delete: false,
@@ -145,6 +211,7 @@ function buildPresetSummary(id: string): ProviderSummary | null {
       api_key: '',
       models: cfg.models || [],
       custom_models: [],
+      removed_models: [],
       has_credentials: true,
       supports_oauth: false,
       can_delete: false,
@@ -161,6 +228,7 @@ function buildPresetSummary(id: string): ProviderSummary | null {
     api_key: '',
     models: preset.defaultModelId ? [preset.defaultModelId] : [],
     custom_models: [],
+    removed_models: [],
     has_credentials: !!preset.noKey || !!preset.local,
     supports_oauth: false,
     can_delete: false,
@@ -168,17 +236,22 @@ function buildPresetSummary(id: string): ProviderSummary | null {
 }
 
 export function ProvidersTab() {
-  const { providersSummary, selectedProviderId, preferredProviderId, settingsConfig } = useSettingsStore();
+  const { providersSummary, selectedProviderId, preferredProviderId, settingsConfig, serverPort } = useSettingsStore();
   const providers = settingsConfig?.providers || {};
   const [addingProvider, setAddingProvider] = useState(false);
+  const [summaryLoadError, setSummaryLoadError] = useState<string | null>(null);
 
   const loadSummary = useCallback(async () => {
+    if (!serverPort) return;
     try {
       const res = await hanaFetch('/api/providers/summary');
       const data = await res.json();
-      useSettingsStore.setState({ providersSummary: data.providers || {} });
-    } catch { /* swallow */ }
-  }, []);
+      useSettingsStore.setState({ providersSummary: normalizeProvidersSummary(data.providers || {}) });
+      setSummaryLoadError(null);
+    } catch (err: unknown) {
+      setSummaryLoadError(err instanceof Error ? err.message : String(err));
+    }
+  }, [serverPort]);
 
   const refreshProviders = useCallback(async () => {
     await loadSettingsConfig();
@@ -249,10 +322,10 @@ export function ProvidersTab() {
   const codingPlanProviders = visibleCodingProviderIds;
   const localModelProviders = visibleLocalProviderIds;
   const registeredApiKey = visibleRegisteredApiIds;
-  const registeredSet = new Set(providerIds);
+  const registeredSet = new Set(providerIds.map(id => normalizeProviderId(id) || id));
 
   const unregisteredPresets = PROVIDER_PRESETS.filter(p =>
-    !registeredSet.has(p.value) && !oauthProviders.includes(p.value)
+    summaryLoaded && !registeredSet.has(p.value) && !oauthProviders.includes(p.value)
   );
   const presetValues = new Set(PROVIDER_PRESETS.map(p => p.value));
   const customProviders = sortByPriority(
@@ -359,7 +432,9 @@ export function ProvidersTab() {
             if (!summary) {
               return (
                 <div className={styles['pv-empty']}>
-                  {summaryLoaded ? t('settings.providers.selectHint') : '正在读取模型配置...'}
+                  {summaryLoadError
+                    ? `${t('settings.providers.loadFailed')}: ${summaryLoadError}`
+                    : (summaryLoaded ? t('settings.providers.selectHint') : '正在读取模型配置...')}
                 </div>
               );
             }

@@ -16,6 +16,15 @@ import styles from '../../Settings.module.css';
 
 const platform = window.platform;
 
+function providerModelId(value: unknown): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && typeof (value as { id?: unknown }).id === 'string') {
+    return String((value as { id: string }).id);
+  }
+  return '';
+}
+
 export function ApiKeyCredentials({ providerId, summary, providerConfig: _providerConfig, isPresetSetup, presetInfo, onRefresh }: {
   providerId: string;
   summary: ProviderSummary;
@@ -28,6 +37,7 @@ export function ApiKeyCredentials({ providerId, summary, providerConfig: _provid
   const [keyVal, setKeyVal] = useState('');
   const [keyEdited, setKeyEdited] = useState(false);
   const hasSavedKey = !!summary.api_key;
+  const keyUnreadable = summary.credential_error === 'unreadable_api_key';
   const derivedBaseUrl = summary.base_url || presetInfo?.url || '';
   const [urlVal, setUrlVal] = useState(derivedBaseUrl);
   const [urlEdited, setUrlEdited] = useState(false);
@@ -35,7 +45,10 @@ export function ApiKeyCredentials({ providerId, summary, providerConfig: _provid
   const requiresKey = summary.type === 'api-key' && !presetInfo?.local;
   const isDefaultModelProvider = providerId === BRAIN_PROVIDER_ID;
   const [connStatus, setConnStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>(isDefaultModelProvider ? 'ok' : 'idle');
-  const smokeModelId = summary.models?.[0] || presetInfo?.defaultModelId || '';
+  const smokeModelId = providerModelId(summary.models?.[0])
+    || summary.custom_models?.[0]
+    || presetInfo?.defaultModelId
+    || '';
 
   // 未编辑时，从 summary 同步 base_url
   useEffect(() => {
@@ -77,7 +90,9 @@ export function ApiKeyCredentials({ providerId, summary, providerConfig: _provid
             api,
             models: summary.models?.length
               ? [...summary.models]
-              : (presetInfo?.defaultModelId ? [presetInfo.defaultModelId] : []),
+              : (summary.custom_models?.length
+                  ? [summary.custom_models[0]]
+                  : (presetInfo?.defaultModelId ? [presetInfo.defaultModelId] : [])),
           }
         : (requiresKey ? { api_key: key } : {});
       // 如果 base_url 也被编辑过，一并保存
@@ -150,32 +165,37 @@ export function ApiKeyCredentials({ providerId, summary, providerConfig: _provid
       {requiresKey ? (
         <div className={styles['pv-cred-row']}>
           <span className={styles['pv-cred-label']}>{t('settings.api.apiKey')}</span>
-          <div className={styles['pv-cred-key-row']}>
-            <KeyInput
-              value={keyVal}
-              onChange={(v) => { setKeyVal(v); setKeyEdited(true); setConnStatus('idle'); }}
-              placeholder={
-                hasSavedKey
-                  ? (t('settings.providers.savedKeyPlaceholder') || '已保存，留空则保持不变')
-                  : (isPresetSetup ? t('settings.providers.setupHint') : '')
-              }
-            />
-            <button
-              className={`${styles['pv-cred-conn-icon']} ${styles[connStatus] || ''}`}
-              title={t('settings.providers.verifyConnection')}
-              onClick={(e) => {
-                if (keyEdited && keyVal.trim()) {
-                  verifyAndSave(e.currentTarget);
-                } else {
-                  verifyOnly(e.currentTarget);
+          <div className={styles['pv-cred-key-stack']}>
+            <div className={styles['pv-cred-key-row']}>
+              <KeyInput
+                value={keyVal}
+                onChange={(v) => { setKeyVal(v); setKeyEdited(true); setConnStatus('idle'); }}
+                placeholder={
+                  hasSavedKey
+                    ? (t('settings.providers.savedKeyPlaceholder') || '已保存，留空则保持不变')
+                    : (isPresetSetup ? t('settings.providers.setupHint') : '')
                 }
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-              </svg>
-            </button>
+              />
+              <button
+                className={`${styles['pv-cred-conn-icon']} ${styles[connStatus] || ''}`}
+                title={t('settings.providers.verifyConnection')}
+                onClick={(e) => {
+                  if (keyEdited && keyVal.trim()) {
+                    verifyAndSave(e.currentTarget);
+                  } else {
+                    verifyOnly(e.currentTarget);
+                  }
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+              </button>
+            </div>
+            {keyUnreadable && (
+              <div className={styles['pv-cred-warning']}>{t('settings.providers.keyUnreadable')}</div>
+            )}
           </div>
         </div>
       ) : (

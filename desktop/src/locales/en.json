@@ -896,6 +896,8 @@
       "setupHint": "Enter API Key to activate this provider",
       "savedKeyPlaceholder": "Saved. Leave blank to keep the current key",
       "selectHint": "Select a provider to view details",
+      "loadFailed": "Failed to load model configuration",
+      "keyUnreadable": "The previously saved API key cannot be read. Please enter it again once.",
       "addCustom": "Add Custom Provider",
       "noKey": "Not configured",
       "remove": "Remove",

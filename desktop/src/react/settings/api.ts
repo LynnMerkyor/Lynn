@@ -6,8 +6,17 @@ import { useSettingsStore } from './store';
 
 const DEFAULT_TIMEOUT = 30_000;
 
-export function hanaUrl(path: string): string {
+function getReadyServerPort(): string {
   const { serverPort } = useSettingsStore.getState();
+  const port = String(serverPort ?? '').trim();
+  if (!port || port === 'null' || port === 'undefined' || Number.isNaN(Number(port))) {
+    throw new Error('settings server is not ready');
+  }
+  return port;
+}
+
+export function hanaUrl(path: string): string {
+  const serverPort = getReadyServerPort();
   return `http://127.0.0.1:${serverPort}${path}`;
 }
 
@@ -15,7 +24,8 @@ export async function hanaFetch(
   path: string,
   opts: RequestInit & { timeout?: number } = {},
 ): Promise<Response> {
-  const { serverPort, serverToken } = useSettingsStore.getState();
+  const { serverToken } = useSettingsStore.getState();
+  const serverPort = getReadyServerPort();
   const headers: Record<string, string> = { ...(opts.headers as Record<string, string>) };
   if (serverToken) {
     headers['Authorization'] = `Bearer ${serverToken}`;

@@ -35,7 +35,9 @@ export interface ProviderSummary {
   api_key: string;
   models: Array<string | { id?: string; name?: string; context?: number | null; maxOutput?: number | null }>;
   custom_models: string[];
+  removed_models?: string[];
   has_credentials: boolean;
+  credential_error?: string;
   logged_in?: boolean;
   supports_oauth: boolean;
   is_coding_plan?: boolean;

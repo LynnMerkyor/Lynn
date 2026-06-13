@@ -6,7 +6,9 @@ import os from 'node:os';
 
 // Use isolated tmp devices dir
 const TMP_DIR = path.join(os.tmpdir(), 'brain-v2-auth-test-' + Date.now());
+const REGISTER_TOKEN = 'test-registration-token';
 process.env.LOBSTER_DEVICES_DIR = TMP_DIR;
+process.env.BRAIN_V2_DEVICE_REGISTER_TOKEN = REGISTER_TOKEN;
 
 const auth = await import('../auth.js');
 const { verifySignedRequest, registerDevice, buildClientSignaturePayload, timingSafeEqualHex, rememberNonce, AuthError, __testing__ } = auth;
@@ -96,6 +98,7 @@ describe('verifySignedRequest (happy path)', () => {
       secret: REGISTER_SECRET,
       clientVersion: '0.80.0',
       clientPlatform: 'darwin',
+      registrationToken: REGISTER_TOKEN,
     });
     const req = makeReq({ key: REGISTER_KEY, secret: REGISTER_SECRET });
     const device = await verifySignedRequest(req);
@@ -107,8 +110,25 @@ describe('verifySignedRequest (happy path)', () => {
   });
 
   it('refuses to overwrite a registered key with a different secret', async () => {
-    await registerDevice({ key: REGISTER_KEY, secret: REGISTER_SECRET });
+    await registerDevice({ key: REGISTER_KEY, secret: REGISTER_SECRET, registrationToken: REGISTER_TOKEN });
     await expect(registerDevice({ key: REGISTER_KEY, secret: 'bbbbcccc11223344bbbbcccc11223344' })).rejects.toThrowError(/already registered/);
+  });
+
+  it('requires a registration token only for new device keys', async () => {
+    await expect(registerDevice({ key: REGISTER_KEY, secret: REGISTER_SECRET })).rejects.toThrowError(/registration token required/);
+    await registerDevice({ key: REGISTER_KEY, secret: REGISTER_SECRET, registrationToken: REGISTER_TOKEN });
+
+    const device = await registerDevice({
+      key: REGISTER_KEY,
+      secret: REGISTER_SECRET,
+      clientVersion: '0.80.1',
+      clientPlatform: 'darwin',
+    });
+    expect(device).toMatchObject({
+      key: REGISTER_KEY,
+      clientVersion: '0.80.1',
+      clientPlatform: 'darwin',
+    });
   });
 
   it('rejects malformed device registration input', async () => {

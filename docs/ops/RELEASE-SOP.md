@@ -51,6 +51,21 @@ npm run release:preflight
   #72 当年就是这么漏的。`gate:startup` 跑的才是真启动链,两者都要绿。
 - `gate:cli-task` 需要 Brain 在线;Brain 离线 = 门禁失败(路由不可用不许放行)。
 
+### 2.1 本地包人工验收闸(覆盖线上前必须过)
+
+无论是新版本发布还是**同版本热修覆盖**,打包后的本地安装包都必须先由执行者完成 GUI/CLI 人工验收,
+并把结果交给用户确认。**用户确认前不得 rsync 镜像站、不得覆盖 GitHub Release 资产。**
+
+最低人工验收项:
+
+- GUI:从 DMG 安装/覆盖到 `/Applications`,冷启动后短答、Settings 首页、Settings → 模型服务、DeepSeek/BYOK 配置页、
+  默认模型选择器、会话列表恢复、麦克风按钮打开/停止。
+- GUI Settings:本地 server 端口未就绪时不得出现 `127.0.0.1:null` / 空白 preset 误导;Provider 列表不得出现大小写重复条目。
+- CLI:打包版 `Lynn.app/Contents/Resources/cli/lynn.mjs` 至少跑 `version`、进入 chat、`/voice` 入口 smoke。
+- 下载包一致性:本地待验包 hash 记录在验收说明里;线上覆盖后必须再用公网 URL 下载并比对 hash。
+
+这条是 2026-06-13 #74 同版本覆盖事故后的硬纪律:只跑自动门禁不等于可发布。
+
 ## 3. CLI 包 → 镜像
 
 按 [download-site-deploy-map.md §CLI Release Checklist](download-site-deploy-map.md) 四步走:

@@ -92,6 +92,39 @@ describe("getCredentials", () => {
     expect(creds.baseUrl).toBe("https://api.test.com/v1");
     expect(creds.api).toBe("openai-completions");
   });
+
+  it("归一并合并内置 provider 的大小写变体", () => {
+    writeAddedModels({
+      DeepSeek: {
+        api_key: "enc:broken-old-key",
+        base_url: "https://empty.example/v1",
+        api: "openai-completions",
+        models: ["deepseek-v4-pro"],
+      },
+      deepseek: {
+        api_key: "sk-real",
+        base_url: "https://api.deepseek.com/v1",
+        api: "openai-completions",
+        models: ["deepseek-v4-flash"],
+      },
+    });
+    const reg = makeRegistry({
+      id: "deepseek",
+      displayName: "DeepSeek",
+      defaultBaseUrl: "https://api.deepseek.com/v1",
+    });
+
+    const creds = reg.getCredentials("DeepSeek");
+
+    expect(creds.apiKey).toBe("sk-real");
+    expect(creds.baseUrl).toBe("https://api.deepseek.com/v1");
+    expect(reg.getProviderModels("DeepSeek")).toEqual(["deepseek-v4-pro", "deepseek-v4-flash"]);
+    const saved = readAddedModels();
+    expect(saved.DeepSeek).toBeUndefined();
+    expect(saved.deepseek.api_key).toMatch(/^enc:/);
+    expect(saved.deepseek.api_key).not.toBe("enc:broken-old-key");
+    expect(saved.deepseek.models).toEqual(["deepseek-v4-pro", "deepseek-v4-flash"]);
+  });
 });
 
 // ── getProviderModels ────────────────────────────────────────────────────────
@@ -139,6 +172,26 @@ describe("getProviderModels", () => {
     const reg = makeRegistry();
     const models = reg.getProviderModels("nonexistent");
     expect(models).toEqual([]);
+  });
+
+  it("removeModel records removed_models and addModel restores it", () => {
+    writeAddedModels({
+      "test-provider": {
+        api_key: "sk-x",
+        models: ["model-a", "model-b"],
+      },
+    });
+    const reg = makeRegistry();
+
+    reg.removeModel("test-provider", "model-b");
+    let saved = readAddedModels();
+    expect(saved["test-provider"].models).toEqual(["model-a"]);
+    expect(saved["test-provider"].removed_models).toEqual(["model-b"]);
+
+    reg.addModel("test-provider", "model-b");
+    saved = readAddedModels();
+    expect(saved["test-provider"].models).toEqual(["model-a", "model-b"]);
+    expect(saved["test-provider"].removed_models).toBeUndefined();
   });
 });
 
@@ -365,6 +418,46 @@ describe("saveProvider", () => {
     expect(persisted["test-provider"].models).toEqual(["model-a"]);
     expect(reg.getCredentials("test-provider")).toEqual({
       apiKey: "sk-new",
+      baseUrl: "https://new.api.com/v1",
+      api: "openai-completions",
+    });
+  });
+
+  it("保存 __saved__ 占位符时保留已有 API Key", () => {
+    writeAddedModels({
+      "test-provider": {
+        api_key: "sk-old",
+        base_url: "https://old.api.com/v1",
+        api: "openai-completions",
+      },
+    });
+    const reg = makeRegistry();
+    reg.saveProvider("test-provider", {
+      api_key: "__saved__",
+      base_url: "https://new.api.com/v1",
+    });
+
+    const persisted = readAddedModels();
+    expect(persisted["test-provider"].api_key).toMatch(/^enc:/);
+    expect(reg.getCredentials("test-provider")).toEqual({
+      apiKey: "sk-old",
+      baseUrl: "https://new.api.com/v1",
+      api: "openai-completions",
+    });
+  });
+
+  it("新 provider 误传 __saved__ 时不写入假 API Key", () => {
+    writeAddedModels({});
+    const reg = makeRegistry();
+    reg.saveProvider("test-provider", {
+      api_key: "__saved__",
+      base_url: "https://new.api.com/v1",
+    });
+
+    const persisted = readAddedModels();
+    expect(persisted["test-provider"].api_key).toBeUndefined();
+    expect(reg.getCredentials("test-provider")).toEqual({
+      apiKey: "",
       baseUrl: "https://new.api.com/v1",
       api: "openai-completions",
     });

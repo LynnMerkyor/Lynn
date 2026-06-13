@@ -31,6 +31,7 @@ interface RawProviderConfig {
   api?: string;
   api_key?: string;
   models?: ProviderModelPayload[];
+  removed_models?: string[];
   [key: string]: unknown;
 }
 
@@ -167,6 +168,7 @@ export function createConfigRoute(engine: ConfigRouteEngine): Hono {
           api: p.api || entry?.api || "",
           api_key: p.api_key || "",
           models,
+          removed_models: Array.isArray(p.removed_models) ? p.removed_models : [],
           model_count: models.length,
         };
       }

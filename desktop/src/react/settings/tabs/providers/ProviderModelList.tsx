@@ -11,7 +11,7 @@ import {
 } from '../../../../../../shared/brain-provider.js';
 import styles from '../../Settings.module.css';
 
-const platform = window.platform;
+const platform = typeof window !== 'undefined' ? window.platform : undefined;
 
 interface DiscoveredModel {
   id: string;
@@ -42,6 +42,47 @@ function modelEntryMeta(entry: ProviderModelEntry | undefined): Partial<Discover
   };
 }
 
+function uniqueModelIds(ids: Array<string | undefined | null>): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const value of ids) {
+    const id = String(value || '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    result.push(id);
+  }
+  return result;
+}
+
+export function buildProviderModelOptions({
+  currentModelEntries,
+  discoveredModels,
+  customModels,
+  removedModels,
+}: {
+  currentModelEntries: ProviderModelEntry[];
+  discoveredModels: DiscoveredModel[];
+  customModels: string[];
+  removedModels?: string[];
+}): { currentModels: string[]; candidateModels: string[] } {
+  const currentModels = uniqueModelIds(currentModelEntries.map(modelEntryId));
+  const currentSet = new Set(currentModels);
+  const removedSet = new Set(uniqueModelIds(removedModels || []));
+  const candidateModels = uniqueModelIds([
+    ...discoveredModels.map(m => m.id),
+    ...(customModels || []),
+  ]).filter((id) => !currentSet.has(id) && !removedSet.has(id));
+  return { currentModels, candidateModels };
+}
+
+export function nextRemovedModelsAfterAdd(removedModels: string[] | undefined, modelId: string): string[] {
+  return uniqueModelIds(removedModels || []).filter((id) => id !== modelId);
+}
+
+export function nextRemovedModelsAfterRemove(removedModels: string[] | undefined, modelId: string): string[] {
+  return uniqueModelIds([...(removedModels || []), modelId]);
+}
+
 export function ProviderModelList({ providerId, summary, onRefresh }: {
   providerId: string;
   summary: ProviderSummary;
@@ -70,20 +111,23 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
   useEffect(() => { void loadDiscoveredModels(); }, [loadDiscoveredModels]);
 
   const currentModelEntries = (summary.models || []) as ProviderModelEntry[];
-  const currentModels = currentModelEntries.map(modelEntryId).filter(Boolean);
-  // Merge: discovered model IDs + custom_models, deduplicated, with currentModels included for display
-  const discoveredIds = discoveredModels.map(m => m.id);
-  const allModels = [...new Set([...currentModels, ...discoveredIds, ...(summary.custom_models || [])])];
+  const { currentModels, candidateModels } = buildProviderModelOptions({
+    currentModelEntries,
+    discoveredModels,
+    customModels: summary.custom_models || [],
+    removedModels: summary.removed_models || [],
+  });
   const query = search.toLowerCase();
-  const filtered = query ? allModels.filter(m => m.toLowerCase().includes(query)) : allModels;
+  const filtered = query ? candidateModels.filter(m => m.toLowerCase().includes(query)) : candidateModels;
 
   const addModelToProvider = async (mid: string) => {
     if (currentModels.includes(mid)) return;
+    const nextRemoved = nextRemovedModelsAfterAdd(summary.removed_models, mid);
     try {
       await hanaFetch('/api/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providers: { [providerId]: { models: [...currentModelEntries, mid] } } }),
+        body: JSON.stringify({ providers: { [providerId]: { models: [...currentModelEntries, mid], removed_models: nextRemoved } } }),
       });
       await onRefresh();
       platform?.settingsChanged?.('models-changed');
@@ -96,10 +140,11 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
   const removeModelFromProvider = async (mid: string) => {
     try {
       const next = currentModelEntries.filter(m => modelEntryId(m) !== mid);
+      const nextRemoved = nextRemovedModelsAfterRemove(summary.removed_models, mid);
       await hanaFetch('/api/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providers: { [providerId]: { models: next } } }),
+        body: JSON.stringify({ providers: { [providerId]: { models: next, removed_models: nextRemoved } } }),
       });
       await onRefresh();
       platform?.settingsChanged?.('models-changed');
@@ -122,10 +167,11 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
       } else {
+        const nextRemoved = nextRemovedModelsAfterAdd(summary.removed_models, id);
         await hanaFetch('/api/config', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ providers: { [providerId]: { models: [...currentModelEntries, id] } } }),
+          body: JSON.stringify({ providers: { [providerId]: { models: [...currentModelEntries, id], removed_models: nextRemoved } } }),
         });
       }
       setCustomInput('');
@@ -303,7 +349,6 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
             />
             <div className={styles['pv-model-dropdown-list']}>
 	              {filtered.map(mid => {
-	                const isAdded = currentModels.includes(mid);
 	                const meta = lookupModelMeta(mid) || {};
 	                const savedMeta = modelEntryMeta(currentModelEntries.find(entry => modelEntryId(entry) === mid));
 	                const discovered = discoveredModels.find(d => d.id === mid);
@@ -311,11 +356,10 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
                 return (
                   <button
                     key={mid}
-                    className={`${styles['pv-model-dropdown-option']}${isAdded  ? ' ' + styles['added'] : ''}`}
-                    onClick={() => { if (!isAdded) { addModelToProvider(mid); } }}
+                    className={styles['pv-model-dropdown-option']}
+                    onClick={() => { addModelToProvider(mid); }}
                   >
                     <span className={styles['pv-model-dropdown-option-name']}>{mid}</span>
-                    {isAdded && <span className={styles['pv-model-dropdown-option-check']}>{'\u2713'}</span>}
                     {ctx && <span className={styles['pv-model-ctx']}>{formatContext(ctx)}</span>}
                   </button>
                 );

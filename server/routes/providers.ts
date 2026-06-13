@@ -24,6 +24,7 @@ type RawProviderConfig = {
   auth_type?: string;
   display_name?: string;
   models?: ProviderModelConfig[];
+  removed_models?: string[];
   [key: string]: unknown;
 };
 
@@ -35,7 +36,9 @@ type ProviderSummary = {
   api_key: string;
   models: unknown[];
   custom_models: string[];
+  removed_models: string[];
   has_credentials: boolean;
+  credential_error?: string;
   logged_in?: boolean;
   supports_oauth: boolean;
   is_coding_plan: boolean;
@@ -114,6 +117,13 @@ type ProviderTestBody = {
   modelId?: unknown;
   model?: unknown;
 };
+
+const SAVED_API_KEY_SENTINEL = "__saved__";
+
+function sanitizeExplicitApiKey(value: unknown): string {
+  const key = String(value || "").replace(/[^\x20-\x7E]/g, "").trim();
+  return key === SAVED_API_KEY_SENTINEL ? "" : key;
+}
 
 type ProviderRegistryLike = {
   get(providerId: string): ProviderRegistryEntry | null | undefined;
@@ -222,6 +232,7 @@ export function createProvidersRoute(engine: ProvidersRouteEngine): Hono {
         api: p.api || entry?.api || "",
         auth_type: p.auth_type || entry?.authType || "api-key",
         models: p.models || [],
+        removed_models: Array.isArray(p.removed_models) ? p.removed_models : [],
       };
     }
 
@@ -295,24 +306,33 @@ export function createProvidersRoute(engine: ProvidersRouteEngine): Hono {
       const oauthInfo = getOAuthLoginInfo(name);
       const sdkIds = sdkByProvider.get(name) || [];
       const defaultModels = provRegistry.getDefaultModels(name) || [];
-      const allModels = dedupeProviderModelEntries([...(p.models || []), ...defaultModels, ...sdkIds]);
-      const customModels = oauthCustom[name] || [];
+      const savedModels = dedupeProviderModelEntries([...(p.models || [])]);
+      const savedModelIds = new Set(savedModels.map(normalizeModelId).filter(Boolean));
+      const removedModelIds = new Set(dedupeModelIds(p.removed_models || []));
+      const customModels = dedupeModelIds([
+        ...(oauthCustom[name] || []),
+        ...defaultModels,
+        ...sdkIds,
+      ]).filter((id) => !savedModelIds.has(id) && !removedModelIds.has(id));
       const decryptedCreds = provRegistry.getCredentials?.(name);
       const hasSavedApiKey = decryptedCreds
         ? !!decryptedCreds.apiKey
         : !!p.api_key;
+      const credentialError = p.api_key && !hasSavedApiKey ? "unreadable_api_key" : undefined;
 
       const summary: ProviderSummary = {
         type: isOAuth ? "oauth" : ((p.auth_type || registryEntry?.authType) === "none" ? "none" : "api-key"),
-        display_name: oauthInfo?.name || p.display_name || name,
+        display_name: oauthInfo?.name || p.display_name || registryEntry?.displayName || name,
         base_url: p.base_url || "",
         api: p.api || "",
         api_key: hasSavedApiKey ? "__saved__" : "",
-        models: allModels,
+        models: savedModels,
         custom_models: customModels,
+        removed_models: [...removedModelIds],
         has_credentials: ((p.auth_type || registryEntry?.authType) === "none")
           ? !!(p.base_url || registryEntry?.baseUrl)
           : !!(hasSavedApiKey || (isOAuth && oauthInfo?.loggedIn)),
+        credential_error: credentialError,
         logged_in: isOAuth ? !!oauthInfo?.loggedIn : undefined,
         supports_oauth: isOAuth,
         is_coding_plan: name.endsWith("-coding"),
@@ -336,15 +356,21 @@ export function createProvidersRoute(engine: ProvidersRouteEngine): Hono {
       const entry = provRegistry.get(oauthId);
       const sdkIds = sdkByProvider.get(authKey) || sdkByProvider.get(oauthId) || [];
       const defaultModels = provRegistry.getDefaultModels(oauthId) || [];
-      const customModels = oauthCustom[authKey] || oauthCustom[oauthId] || [];
+      const customModels = dedupeModelIds([
+        ...(oauthCustom[authKey] || []),
+        ...(oauthCustom[oauthId] || []),
+        ...defaultModels,
+        ...sdkIds,
+      ]);
       const summary: ProviderSummary = {
         type: "oauth",
         display_name: loginInfo?.name || entry?.displayName || oauthId,
         base_url: entry?.baseUrl || "",
         api: entry?.api || "",
         api_key: "",
-        models: [...new Set([...defaultModels, ...sdkIds])],
+        models: [],
         custom_models: customModels,
+        removed_models: [],
         has_credentials: !!loginInfo?.loggedIn,
         logged_in: !!loginInfo?.loggedIn,
         supports_oauth: true,
@@ -366,14 +392,16 @@ export function createProvidersRoute(engine: ProvidersRouteEngine): Hono {
         if (entry.authType === "oauth") continue; // OAuth provider 走上面的白名单逻辑
         const sdkIds = sdkByProvider.get(id) || [];
         const defaultModels = provRegistry.getDefaultModels(id) || [];
+        const customModels = dedupeModelIds([...defaultModels, ...sdkIds]);
         const summary: ProviderSummary = {
           type: entry.authType === "none" ? "none" : "api-key",
           display_name: entry.displayName || id,
           base_url: entry.baseUrl || "",
           api: entry.api || "",
           api_key: "",
-          models: [...new Set([...defaultModels, ...sdkIds])],
-          custom_models: [],
+          models: [],
+          custom_models: customModels,
+          removed_models: [],
           has_credentials: entry.authType === "none" ? !!entry.baseUrl : false,
           logged_in: undefined,
           supports_oauth: false,
@@ -436,6 +464,18 @@ export function createProvidersRoute(engine: ProvidersRouteEngine): Hono {
       if (!id || seen.has(id)) continue;
       seen.add(id);
       result.push(value);
+    }
+    return result;
+  }
+
+  function dedupeModelIds(values: unknown[]): string[] {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const value of values) {
+      const id = normalizeModelId(value);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      result.push(id);
     }
     return result;
   }
@@ -546,7 +586,8 @@ export function createProvidersRoute(engine: ProvidersRouteEngine): Hono {
    */
   route.post("/providers/fetch-models", async (c) => {
     const body = await safeJson<ProviderFetchModelsBody>(c);
-    const { name, base_url, api: explicitApi, api_key } = body;
+    const { name, base_url, api: explicitApi } = body;
+    const api_key = sanitizeExplicitApiKey(body.api_key);
     if (!name && !base_url) {
       return c.json({ error: "name or base_url is required" }, 400);
     }
@@ -704,7 +745,7 @@ export function createProvidersRoute(engine: ProvidersRouteEngine): Hono {
     const base_url = String(body.base_url || "").trim();
     const explicitApi = String(body.api || "").trim();
     // 清洗 API key：去除非 ASCII 字符（防止粘贴时输入法带入中文）
-    const explicitApiKey = (body.api_key || "").replace(/[^\x20-\x7E]/g, "").trim();
+    const explicitApiKey = sanitizeExplicitApiKey(body.api_key);
     const savedProvider: RawProviderConfig = name ? (() => {
       const cred = engine.providerRegistry.getCredentials(name);
       if (!cred) return {};

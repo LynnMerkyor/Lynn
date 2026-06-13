@@ -248,7 +248,8 @@ describe("model sync related routes", () => {
       has_credentials: false,
       logged_in: false,
       supports_oauth: true,
-      models: ["gpt-5.4"],
+      models: [],
+      custom_models: ["gpt-5.4"],
     });
   });
 
@@ -363,6 +364,7 @@ describe("model sync related routes", () => {
         base_url: "https://api.deepseek.com/v1",
         api: "openai-completions",
         api_key: "sk-test",
+        removed_models: ["deepseek-chat"],
         models: [
           { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro Custom", context: 262144, maxOutput: 32768 },
         ],
@@ -381,7 +383,7 @@ describe("model sync related routes", () => {
         get: (id) => registryEntries.get(id) || null,
         isOAuth: () => false,
         getAuthJsonKey: (id) => id,
-        getDefaultModels: (id) => (id === "deepseek" ? ["deepseek-v4-pro", "deepseek-v4-flash"] : []),
+        getDefaultModels: (id) => (id === "deepseek" ? ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat"] : []),
         getCredentials: () => ({ apiKey: "sk-test", baseUrl: "https://api.deepseek.com/v1", api: "openai-completions" }),
         getOAuthProviderIds: () => [],
       },
@@ -394,8 +396,9 @@ describe("model sync related routes", () => {
     const data = await res.json();
     expect(data.providers.deepseek.models).toEqual([
       { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro Custom", context: 262144, maxOutput: 32768 },
-      "deepseek-v4-flash",
     ]);
+    expect(data.providers.deepseek.custom_models).toEqual(["deepseek-v4-flash"]);
+    expect(data.providers.deepseek.removed_models).toEqual(["deepseek-chat"]);
   });
 
   it("oauth provider fetch reports registry issue instead of remote /models fallback", async () => {

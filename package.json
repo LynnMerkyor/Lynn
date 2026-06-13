@@ -64,6 +64,7 @@
     "test:gui-feedback": "npm test -- --run desktop/src/react/__tests__/services/ws-message-handler.test.ts",
     "test:packaged-cli": "node scripts/packaged-cli-runtime-smoke.mjs",
     "test:packaged-server": "node scripts/packaged-server-smoke.mjs",
+    "test:packaged-settings": "node scripts/packaged-settings-provider-smoke.mjs",
     "test:cli-fleet": "npm --prefix cli test -- code-tools code-agent-loop worker-run providers brain-render status-bar vision && npm test -- --run server/fleet/__tests__/fleet-server.test.ts desktop/src/react/components/fleet/__tests__ --reporter=dot && node scripts/cli-longrun-smoke.mjs",
     "voice:smoke": "node --import tsx scripts/voice-runtime-smoke.ts",
     "test:release": "node scripts/run-release-regression.mjs --mode all --level release",

@@ -63,6 +63,7 @@ export interface ProviderConfig {
   display_name?: string;
   auth_type?: ProviderAuthType;
   models?: ProviderModelConfig[];
+  removed_models?: ModelId[];
   [key: string]: unknown;
 }
 

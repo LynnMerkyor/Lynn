@@ -3530,6 +3530,20 @@ a.about-link:hover {
     min-width: 0;
 }
 
+.pv-cred-key-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+    min-width: 0;
+}
+
+.pv-cred-warning {
+    color: var(--warning, #b8822c);
+    font-size: 0.72rem;
+    line-height: 1.35;
+}
+
 .pv-cred-conn-icon {
     display: flex;
     align-items: center;

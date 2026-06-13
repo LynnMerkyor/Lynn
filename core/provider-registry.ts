@@ -23,12 +23,14 @@ import type {
   ProviderCredentials,
   ProviderEntry,
   ProviderId,
+  ProviderModelConfig,
   ProviderModelEntry,
   ProviderPlugin,
 } from "./types.js";
 
 type SafeReadYamlSync = (filePath: string, fallback: unknown, yaml: typeof YAML) => unknown;
 const readYamlSync = safeReadYAMLSync as SafeReadYamlSync;
+const SAVED_API_KEY_SENTINEL = "__saved__";
 
 // API Key encryption (_encryptKey / _decryptKey) now lives in provider-key-crypto.ts — see the
 // #74 fix (stable seed instead of the drifting os.hostname()).
@@ -142,6 +144,101 @@ export class ProviderRegistry {
     }
   }
 
+  _canonicalProviderId(providerId: ProviderId | string): ProviderId {
+    const raw = String(providerId || "").trim() as ProviderId;
+    if (!raw) return raw;
+    const lower = raw.toLowerCase();
+    for (const id of this._plugins.keys()) {
+      if (String(id).toLowerCase() === lower) return id;
+    }
+    return raw;
+  }
+
+  _modelEntryId(model: ProviderModelConfig | undefined): string {
+    if (!model) return "";
+    return typeof model === "object" ? String(model.id || "") : String(model || "");
+  }
+
+  _mergeStringLists(...lists: unknown[]): string[] {
+    const merged: string[] = [];
+    const seen = new Set<string>();
+    for (const list of lists) {
+      if (!Array.isArray(list)) continue;
+      for (const value of list) {
+        const id = String(value || "").trim();
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        merged.push(id);
+      }
+    }
+    return merged;
+  }
+
+  _hasUsableApiKey(apiKey: unknown): boolean {
+    if (typeof apiKey !== "string" || !apiKey.trim()) return false;
+    if (!apiKey.startsWith("enc:")) return true;
+    return !!_decryptKey(apiKey, this._lynnHome);
+  }
+
+  _mergeProviderConfig(base: ProviderConfig, incoming: ProviderConfig): ProviderConfig {
+    const baseHasUsableKey = this._hasUsableApiKey(base?.api_key);
+    const incomingHasUsableKey = this._hasUsableApiKey(incoming?.api_key);
+    const preferIncomingConfig = incomingHasUsableKey && !baseHasUsableKey;
+    const merged: ProviderConfig = preferIncomingConfig ? { ...incoming } : { ...base };
+    const fillSource = preferIncomingConfig ? base : incoming;
+
+    for (const [key, value] of Object.entries(fillSource || {})) {
+      if (key === "models" || key === "removed_models") continue;
+      if (key === "api_key") {
+        if (!this._hasUsableApiKey(merged.api_key) && this._hasUsableApiKey(value)) {
+          merged.api_key = value as string;
+        }
+        continue;
+      }
+      const current = merged[key];
+      if (current === undefined || current === null || current === "") {
+        merged[key] = value;
+      }
+    }
+
+    const nextModels: ProviderModelConfig[] = [];
+    const seen = new Set<string>();
+    for (const model of [
+      ...((Array.isArray(base.models) ? base.models : []) as ProviderModelConfig[]),
+      ...((Array.isArray(incoming.models) ? incoming.models : []) as ProviderModelConfig[]),
+    ]) {
+      const id = this._modelEntryId(model);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      nextModels.push(model);
+    }
+    if (nextModels.length > 0) merged.models = nextModels;
+    const removedModels = this._mergeStringLists(base.removed_models, incoming.removed_models)
+      .filter((id) => !seen.has(id));
+    if (removedModels.length > 0) merged.removed_models = removedModels;
+    else delete merged.removed_models;
+    return merged;
+  }
+
+  _normalizeProviderConfigMap(providers: ProviderConfigMap): { providers: ProviderConfigMap; changed: boolean } {
+    const normalized: ProviderConfigMap = {};
+    let changed = false;
+
+    for (const [rawId, config] of Object.entries(providers || {})) {
+      const canonicalId = this._canonicalProviderId(rawId);
+      if (canonicalId !== rawId) changed = true;
+      const incoming = (config && typeof config === "object" ? config : {}) as ProviderConfig;
+      if (normalized[canonicalId]) {
+        normalized[canonicalId] = this._mergeProviderConfig(normalized[canonicalId], incoming);
+        changed = true;
+      } else {
+        normalized[canonicalId] = { ...incoming };
+      }
+    }
+
+    return { providers: normalized, changed };
+  }
+
   /**
    * 注册 provider 插件
    * 同一 id 注册两次会覆盖（方便测试/扩展）
@@ -161,7 +258,15 @@ export class ProviderRegistry {
   _loadAddedModels(): ProviderConfigMap {
     const ymlPath = path.join(this._lynnHome, "added-models.yaml");
     const raw = (readYamlSync(ymlPath, {}, YAML) || {}) as { providers?: ProviderConfigMap };
-    return raw.providers || {};
+    const { providers, changed } = this._normalizeProviderConfigMap(raw.providers || {});
+    if (changed) {
+      try {
+        this._saveAddedModels(providers);
+      } catch {
+        // A failed self-heal must not prevent settings from loading. The next explicit save will retry.
+      }
+    }
+    return providers;
   }
 
   /**
@@ -179,6 +284,9 @@ export class ProviderRegistry {
     // Encrypt API keys before persisting
     if (data.providers) {
       for (const prov of Object.values(data.providers) as ProviderConfig[]) {
+        if (prov?.api_key === SAVED_API_KEY_SENTINEL) {
+          delete prov.api_key;
+        }
         if (prov && typeof prov === "object" && prov.api_key && !prov.api_key.startsWith("enc:")) {
           prov.api_key = _encryptKey(prov.api_key, this._lynnHome);
         }
@@ -262,7 +370,8 @@ export class ProviderRegistry {
    */
   get(providerId: ProviderId): ProviderEntry | null {
     if (this._entries.size === 0) this.reload();
-    const direct = this._entries.get(providerId);
+    const canonicalId = this._canonicalProviderId(providerId);
+    const direct = this._entries.get(canonicalId);
     if (direct) return direct;
     // 反向查找：providerId 可能是某个 OAuth provider 的 authJsonKey
     // 如 "openai-codex" → "openai-codex-oauth"
@@ -313,7 +422,7 @@ export class ProviderRegistry {
    * @returns {ModelId[]}
    */
   getDefaultModels(providerId: ProviderId): ModelId[] {
-    return _defaultModels[providerId] || [];
+    return _defaultModels[this._canonicalProviderId(providerId)] || [];
   }
 
   /**
@@ -326,14 +435,15 @@ export class ProviderRegistry {
     providerId: ProviderId,
     overrides: Pick<ProviderConfig, "base_url" | "api" | "display_name" | "auth_type">,
   ): void {
+    const canonicalId = this._canonicalProviderId(providerId);
     const userConfig = this._loadAddedModels();
-    userConfig[providerId] = { ...(userConfig[providerId] || {}), ...overrides };
+    userConfig[canonicalId] = { ...(userConfig[canonicalId] || {}), ...overrides };
     this._saveAddedModels(userConfig);
     // 更新内存中的 entry
-    this._entries.delete(providerId);
-    if (this._plugins.has(providerId)) {
-      const plugin = this._plugins.get(providerId);
-      if (plugin) this._entries.set(providerId, this._merge(plugin, userConfig[providerId], true));
+    this._entries.delete(canonicalId);
+    if (this._plugins.has(canonicalId)) {
+      const plugin = this._plugins.get(canonicalId);
+      if (plugin) this._entries.set(canonicalId, this._merge(plugin, userConfig[canonicalId], true));
     } else {
       this.reload(); // 自定义 provider 走完整 reload
     }
@@ -344,15 +454,16 @@ export class ProviderRegistry {
    * @param {ProviderId} providerId
    */
   remove(providerId: ProviderId): void {
+    const canonicalId = this._canonicalProviderId(providerId);
     const userConfig = this._loadAddedModels();
-    if (!Object.prototype.hasOwnProperty.call(userConfig, providerId)) return;
-    delete userConfig[providerId];
+    if (!Object.prototype.hasOwnProperty.call(userConfig, canonicalId)) return;
+    delete userConfig[canonicalId];
     this._saveAddedModels(userConfig);
-    this._entries.delete(providerId);
+    this._entries.delete(canonicalId);
     // 如果有内置插件声明，以默认值重建 entry
-    if (this._plugins.has(providerId)) {
-      const plugin = this._plugins.get(providerId);
-      if (plugin) this._entries.set(providerId, this._merge(plugin, {}, true));
+    if (this._plugins.has(canonicalId)) {
+      const plugin = this._plugins.get(canonicalId);
+      if (plugin) this._entries.set(canonicalId, this._merge(plugin, {}, true));
     }
   }
 
@@ -374,10 +485,11 @@ export class ProviderRegistry {
    */
   getCredentials(providerId: ProviderId): ProviderCredentials | null {
     const userConfig = this._loadAddedModels();
-    const uc = userConfig[providerId];
+    const canonicalId = this._canonicalProviderId(providerId);
+    const uc = userConfig[canonicalId];
     if (!uc) return null;
 
-    const plugin = this._plugins.get(providerId);
+    const plugin = this._plugins.get(canonicalId);
     return {
       apiKey: _decryptKey(uc.api_key, this._lynnHome) || "",
       baseUrl: uc.base_url || plugin?.defaultBaseUrl || "",
@@ -393,7 +505,7 @@ export class ProviderRegistry {
    */
   getProviderModels(providerId: ProviderId): ModelId[] {
     const userConfig = this._loadAddedModels();
-    const uc = userConfig[providerId];
+    const uc = userConfig[this._canonicalProviderId(providerId)];
     if (!uc?.models || !Array.isArray(uc.models)) return [];
     return uc.models.map((m) => (typeof m === "object" ? m.id : m));
   }
@@ -413,19 +525,24 @@ export class ProviderRegistry {
    * @param {ModelId | ProviderModelEntry} model
    */
   addModel(providerId: ProviderId, model: ModelId | ProviderModelEntry): void {
+    const canonicalId = this._canonicalProviderId(providerId);
     const userConfig = this._loadAddedModels();
-    if (!userConfig[providerId]) userConfig[providerId] = {};
-    if (!Array.isArray(userConfig[providerId].models)) {
-      userConfig[providerId].models = [];
+    if (!userConfig[canonicalId]) userConfig[canonicalId] = {};
+    if (!Array.isArray(userConfig[canonicalId].models)) {
+      userConfig[canonicalId].models = [];
     }
 
     const newId = typeof model === "object" ? model.id : model;
-    const exists = userConfig[providerId].models.some(
+    const exists = userConfig[canonicalId].models.some(
       (m) => (typeof m === "object" ? m.id : m) === newId,
     );
     if (exists) return;
 
-    userConfig[providerId].models.push(model);
+    userConfig[canonicalId].models.push(model);
+    if (Array.isArray(userConfig[canonicalId].removed_models)) {
+      userConfig[canonicalId].removed_models = userConfig[canonicalId].removed_models?.filter((id) => id !== newId);
+      if (userConfig[canonicalId].removed_models?.length === 0) delete userConfig[canonicalId].removed_models;
+    }
     this._saveAddedModels(userConfig);
     this._entries.clear();
   }
@@ -437,12 +554,13 @@ export class ProviderRegistry {
    */
   removeModel(providerId: ProviderId, modelId: ModelId): void {
     const userConfig = this._loadAddedModels();
-    const uc = userConfig[providerId];
+    const uc = userConfig[this._canonicalProviderId(providerId)];
     if (!uc?.models || !Array.isArray(uc.models)) return;
 
     uc.models = uc.models.filter(
       (m) => (typeof m === "object" ? m.id : m) !== modelId,
     );
+    uc.removed_models = this._mergeStringLists(uc.removed_models, [modelId]);
     this._saveAddedModels(userConfig);
     this._entries.clear();
   }
@@ -453,8 +571,13 @@ export class ProviderRegistry {
    * @param {ProviderConfig} data - 要写入的字段（api_key, base_url, api, models 等）
    */
   saveProvider(providerId: ProviderId, data: ProviderConfig): void {
+    const canonicalId = this._canonicalProviderId(providerId);
     const userConfig = this._loadAddedModels();
-    userConfig[providerId] = { ...(userConfig[providerId] || {}), ...data };
+    const nextData = { ...data };
+    if (nextData.api_key === SAVED_API_KEY_SENTINEL) {
+      delete nextData.api_key;
+    }
+    userConfig[canonicalId] = { ...(userConfig[canonicalId] || {}), ...nextData };
     this._saveAddedModels(userConfig);
     this._entries.clear();
   }
