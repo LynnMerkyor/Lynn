@@ -1,6 +1,7 @@
 import fs from "fs";
 import { debugLog } from "../../lib/debug-log.js";
 import { finishSessionStream } from "../session-stream-store.js";
+import { buildToolCompletionSummary } from "./tool-turn-finalizer.js";
 import {
   clearToolAuthorizationTimer,
   clearTurnTimers,
@@ -220,6 +221,7 @@ export function createHubEventForwarder({
 
       const {
         rawDetails,
+        publicDetails,
         summary: toolSummary,
         toolName,
         normalizedArgs,
@@ -231,7 +233,7 @@ export function createHubEventForwarder({
         type: "tool_end",
         name: toolName,
         success: !toolIsError,
-        details: rawDetails,
+        details: publicDetails || rawDetails,
         summary: publicSummary,
       });
       lifecycleHooks.run("tool_end", {
@@ -423,16 +425,17 @@ export function createHubEventForwarder({
         debugLog()?.log("ws", `[TURN-END v4] defer turn_end (tool still in flight count=${ss.activeToolCallCount || 0}, recovered=${!!ss.recoveredBashInFlight}) · hasOutput=${ss.hasOutput} · ${sessionPath}`);
         return;
       }
-      if (ss.hasToolCall && !ss.hasError && !ss._turnEndDeferred) {
+      const hasToolEvidence = !!(ss.hasToolCall || ss.hasPrefetchToolCall || Number(ss.successfulToolCount || 0) > 0);
+      if (hasToolEvidence && !ss.hasError && !ss._turnEndDeferred) {
         ss._turnEndDeferred = true;
         scheduleToolFinalizationFallback(sessionPath, ss);
         debugLog()?.log("ws", `[TURN-END v2] defer tool-phase turn_end (awaiting final assistant text) · hasOutput=${ss.hasOutput} · ${sessionPath}`);
         return;
       }
       if (ss._turnEndDeferred) {
-        debugLog()?.log("ws", `[TURN-END v1] resuming deferred turn_end · hasOutput=${ss.hasOutput} hasToolCall=${ss.hasToolCall} · ${sessionPath}`);
+        debugLog()?.log("ws", `[TURN-END v1] resuming deferred turn_end · hasOutput=${ss.hasOutput} hasToolCall=${ss.hasToolCall} hasPrefetchToolCall=${ss.hasPrefetchToolCall} · ${sessionPath}`);
       }
-      if (!ss.hasOutput && ss.hasThinking && !ss.hasToolCall && !ss.hasError) {
+      if (!ss.hasOutput && ss.hasThinking && !hasToolEvidence && !ss.hasError) {
         closeStreamWithVisibleFallback(
           sessionPath,
           ss,
@@ -442,12 +445,36 @@ export function createHubEventForwarder({
         );
         return;
       }
+      if (!ss.hasOutput && !hasToolEvidence && !ss.hasError) {
+        closeStreamWithVisibleFallback(
+          sessionPath,
+          ss,
+          "模型这次没有返回可见内容。本轮已安全结束，避免空回复污染后续上下文；请点「编辑重发」重试，或切换默认模型后再发。",
+          "empty_turn_without_visible_answer",
+          { trustedFallback: true },
+        );
+        return;
+      }
+      if (!ss.hasOutput && hasToolEvidence && !ss.hasError) {
+        const fallbackText = String(ss.realtimeToolFallbackText || "").trim()
+          || buildToolCompletionSummary(ss);
+        if (fallbackText) {
+          closeStreamWithVisibleFallback(
+            sessionPath,
+            ss,
+            fallbackText,
+            "tool_turn_end_without_visible_answer",
+            { trustedFallback: true },
+          );
+          return;
+        }
+      }
       lifecycleHooks.run("turn_end", {
         event,
         ss,
         sessionPath,
         hasOutput: ss.hasOutput,
-        hasToolCall: ss.hasToolCall,
+        hasToolCall: hasToolEvidence,
       });
       clearTurnTimers(ss);
       if (ss.streamSource === "internal_retry") {
@@ -464,7 +491,7 @@ export function createHubEventForwarder({
       broadcast({ type: "status", isStreaming: false, sessionPath });
       void emitModelHintFromSessionTail(sessionPath, ss, emitStreamEvent);
       finishSessionStream(ss);
-      if (ss.progressMarkerCount > 0 && !ss.hasToolCall) {
+      if (ss.progressMarkerCount > 0 && !hasToolEvidence) {
         debugLog()?.warn("ws", `observed ${ss.progressMarkerCount} hallucinated <lynn_tool_progress> markers (no real tool_call) · session=${sessionPath}`);
       }
       resetCompletedTurnState(ss);

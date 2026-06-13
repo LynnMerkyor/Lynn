@@ -93,10 +93,10 @@ export function createPromptTurnRunner({
     if (toolFallback) return toolFallback;
     const deterministic = buildLocalOfficeDirectAnswer(ss?.originalPromptText || ss?.effectivePromptText || "");
     if (deterministic) return deterministic;
-    if (ss?.hasToolCall) {
+    if (ss?.hasToolCall || ss?.hasPrefetchToolCall || Number(ss?.successfulToolCount || 0) > 0) {
       return "工具已经完成执行，但模型没有返回最终总结。请查看上方工具结果；如果需要，我可以基于这些结果继续整理成简短回答。";
     }
-    return "";
+    return "模型这次没有返回可见内容。本轮已安全结束，避免空回复污染后续上下文；请点「编辑重发」重试，或切换默认模型后再发。";
   }
 
   return async function runPromptTurn({
@@ -272,6 +272,7 @@ export function createPromptTurnRunner({
       if (!rehydratedMutation && initialToolUse.behavior === TOOL_USE_BEHAVIOR.PREFETCH_THEN_RUN_OR_STOP) {
         const toolName = initialToolUse.toolName;
         ss.hasPrefetchToolCall = true;
+        ss.hasToolCall = true;
         emitStreamEvent(promptSessionPath, ss, { type: "tool_start", name: toolName, args: { query: promptText } });
         const stopPrefetchFeedback = localQwenSynthesisAfterPrefetch
           ? startLocalQwen35PrefetchFeedback(promptSessionPath, ss, toolName, promptText)

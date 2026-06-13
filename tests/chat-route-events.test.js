@@ -1016,7 +1016,7 @@ describe("chat route event forwarding", () => {
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
         .join("");
-      expect(visibleText).toBe("");
+      expect(visibleText).toContain("模型这次没有返回可见内容");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
     } finally {
@@ -1652,6 +1652,58 @@ describe("chat route event forwarding", () => {
       sessionPath: "/sessions/current.jsonl",
     }));
     expect(reportResearchMock.buildReportResearchContext).not.toHaveBeenCalled();
+  });
+
+  it("closes a BYOK local prefetch turn with realtime evidence when the model returns no text", async () => {
+    vi.useFakeTimers();
+    try {
+      engine.currentModel = { id: "deepseek-v4-flash", provider: "deepseek", name: "DeepSeek V4 Flash" };
+      engine.resolveModelOverrides = vi.fn((model) => model);
+      engine.abortSessionByPath = vi.fn(async () => true);
+      reportResearchMock.inferReportResearchKind.mockReturnValue("sports");
+      reportResearchMock.buildReportResearchContext.mockResolvedValue([
+        "今晚（6月14日）小组赛还有4场:",
+        "03:00 卡塔尔 vs 瑞士 B组",
+        "06:00 巴西 vs 摩洛哥 D组",
+        "09:00 海地 vs 苏格兰 E组",
+      ].join("\n"));
+      hub.send = vi.fn(async () => {
+        subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+      });
+
+      const res = await app.request("/ws");
+      expect(res.status).toBe(200);
+
+      connections[0].handlers.onMessage({
+        data: JSON.stringify({ type: "prompt", text: "今晚世界杯比赛几点开始" }),
+      }, connections[0].client);
+
+      await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
+      expect(clients[0].sent).toContainEqual(expect.objectContaining({
+        type: "tool_start",
+        name: "sports_score",
+      }));
+      expect(clients[0].sent).toContainEqual(expect.objectContaining({
+        type: "tool_end",
+        name: "sports_score",
+        success: true,
+      }));
+      expect(clients[0].sent.filter((evt) => evt.type === "turn_end")).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(8_000);
+
+      const visibleText = clients[0].sent
+        .filter((evt) => evt.type === "text_delta")
+        .map((evt) => evt.delta)
+        .join("");
+      expect(visibleText).toContain("工具已经返回资料");
+      expect(visibleText).toContain("体育比分");
+      expect(visibleText).toContain("卡塔尔 vs 瑞士");
+      expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
+      expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("disables tools for simple memory acknowledgement turns", async () => {

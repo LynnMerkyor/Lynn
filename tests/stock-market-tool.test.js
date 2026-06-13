@@ -221,4 +221,73 @@ describe("stock market tool", () => {
     expect(text).toContain("Stooq");
     expect(res.details?.directQuotes?.[0]?.symbol).toBe("AAPL");
   });
+
+  it("resolves Chinese NVIDIA quote prompts through structured US quotes before web search", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      const href = String(url);
+      if (href.includes("qt.gtimg.cn/q=usNVDA")) {
+        const body = 'v_usNVDA="200~NVIDIA~NVDA.OQ~205.19~204.87~204.86~112345314~0~0~205.42~800~0~0~0~0~0~0~0~0~205.44~2100~0~0~0~0~0~0~0~0~~2026-06-12 16:00:01~0.32~0.16~207.07~203.44~USD~112345314~23043334162";';
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => Buffer.from(body, "utf8"),
+          text: async () => body,
+        };
+      }
+      throw new Error(`unexpected fetch: ${href}`);
+    }));
+
+    const tool = createStockMarketTool();
+    const res = await tool.execute("test", { query: "英伟达收盘价" });
+    const text = res.content?.[0]?.text || "";
+
+    expect(webSearchMock.runSearchQuery).not.toHaveBeenCalled();
+    expect(webFetchMock.fetchWebContent).not.toHaveBeenCalled();
+    expect(text).toContain("NVDA 最近可用行情");
+    expect(text).toContain("NVIDIA");
+    expect(text).toContain("价格: 205.19 USD");
+    expect(text).toContain("腾讯财经");
+    expect(res.details?.provider).toBe("腾讯财经");
+    expect(res.details?.directQuotes?.[0]?.symbol).toBe("NVDA");
+  });
+
+  it("returns direct FX rates instead of fetching garbled forex pages", async () => {
+    const tool = createStockMarketTool();
+    const res = await tool.execute("test", { query: "美元人民币汇率" });
+    const text = res.content?.[0]?.text || "";
+
+    expect(webSearchMock.runSearchQuery).not.toHaveBeenCalled();
+    expect(webFetchMock.fetchWebContent).not.toHaveBeenCalled();
+    expect(res.details?.kind).toBe("fx");
+    expect(res.details?.provider).toBe("open.er-api.com");
+    expect(text).toContain("USD/CNY");
+    expect(text).toContain("1 USD = 7.2 CNY");
+    expect(text).not.toContain("���");
+  });
+
+  it("keeps search-result URLs out of gold snapshots while preserving snippets", async () => {
+    webSearchMock.runSearchQuery.mockResolvedValue({
+      provider: "lynn-brain/glm",
+      plan: { scene: "finance" },
+      results: [
+        {
+          title: "金价大跳水！跌破900元克价大关",
+          url: "https://www.baidu.com/s?wd=%E9%87%91%E4%BB%B7",
+          snippet: "上海黄金交易所 Au99.99 788.66 元/克，深圳水贝黄金 758-766 元/克",
+        },
+      ],
+    });
+
+    const tool = createStockMarketTool();
+    const res = await tool.execute("test", { query: "今天金价如何" });
+    const text = res.content?.[0]?.text || "";
+
+    expect(webFetchMock.fetchWebContent).not.toHaveBeenCalledWith(
+      expect.stringContaining("baidu.com"),
+      expect.anything(),
+    );
+    expect(text).toContain("上海黄金交易所 Au99.99 788.66 元/克");
+    expect(text).toContain("深圳水贝黄金 758-766 元/克");
+    expect(text).not.toContain("https://www.baidu.com/s");
+  });
 });

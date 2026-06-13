@@ -14,8 +14,14 @@ import {
   resetCompletedTurnState,
 } from "./stream-state.js";
 import {
+  appendJsonlLine,
+  appendTextToLatestAssistantInMemory,
+  appendTextToLatestAssistantRecord,
   extractLatestAssistantVisibleText,
   extractLatestAssistantVisibleTextAfter,
+  getLastSessionEntryId,
+  latestPersistedMessageText,
+  sessionLineId,
 } from "./session-persistence.js";
 
 /**
@@ -50,6 +56,12 @@ const REALTIME_EVIDENCE_TOOL_NAMES = new Set([
   "weather",
   "stock_market",
 ]);
+
+function formatError(err: unknown): string {
+  return err && typeof err === "object" && "message" in err
+    ? String((err as { message?: unknown }).message || err)
+    : String(err);
+}
 
 function displayToolName(name: string): string {
   switch (name) {
@@ -133,6 +145,49 @@ export function createToolTurnFinalizer({
   hasDifferentActiveStreamToken,
   timeouts,
 }: ToolTurnFinalizerDeps) {
+  function persistVisibleFallbackText(sessionPath: any, ss: any, text: any): boolean {
+    const visibleText = String(text || "");
+    if (!sessionPath || !visibleText.trim()) return false;
+    const session = engine.getSessionByPath?.(sessionPath);
+    let persisted = false;
+    const latest = latestPersistedMessageText(sessionPath);
+    const fallbackMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: visibleText }],
+      timestamp: Date.now(),
+    };
+    if (latest?.role === "assistant") {
+      persisted = appendTextToLatestAssistantRecord(sessionPath, visibleText);
+    }
+    if (!persisted) {
+      try {
+        appendJsonlLine(sessionPath, {
+          type: "message",
+          id: sessionLineId(),
+          parentId: getLastSessionEntryId(sessionPath),
+          timestamp: new Date().toISOString(),
+          message: fallbackMessage,
+        });
+        persisted = true;
+      } catch (err) {
+        debugLog()?.warn("ws", `[TURN-CLOSE-FALLBACK v2] persist fallback failed · ${formatError(err)} · ${sessionPath}`);
+      }
+    }
+    const sessionMessages = session && Array.isArray(session.messages) ? session.messages : null;
+    const latestInMemory = sessionMessages?.[sessionMessages.length - 1];
+    const inMemoryAppended = latest?.role === "assistant" && latestInMemory?.role === "assistant"
+      ? appendTextToLatestAssistantInMemory(session, visibleText)
+      : false;
+    if (!inMemoryAppended && session && Array.isArray(session.messages)) {
+      try {
+        session.messages.push(fallbackMessage);
+      } catch (err) {
+        debugLog()?.warn("ws", `[TURN-CLOSE-FALLBACK v2] memory fallback failed · ${formatError(err)} · ${sessionPath}`);
+      }
+    }
+    return persisted || inMemoryAppended;
+  }
+
   function closeStreamWithVisibleFallback(sessionPath: any, ss: any, text: any, reason: any, opts: any = {}) {
     if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
     ss._turnClosed = true;
@@ -147,6 +202,7 @@ export function createToolTurnFinalizer({
     }
     if (text && (!ss.hasOutput || opts.appendEvenIfHasOutput)) {
       const prefix = ss.hasOutput && opts.appendEvenIfHasOutput ? "\n\n" : "";
+      persistVisibleFallbackText(sessionPath, ss, prefix + text);
       if (opts.trustedFallback) {
         emitTrustedVisibleTextDelta(sessionPath, ss, prefix + text);
       } else {
@@ -177,16 +233,21 @@ export function createToolTurnFinalizer({
     return true;
   }
 
+  function hasToolEvidence(ss: any) {
+    return !!(ss?.hasToolCall || ss?.hasPrefetchToolCall || Number(ss?.successfulToolCount || 0) > 0);
+  }
+
   function buildEmptyTurnFallbackText(ss: any, reason: any = "") {
     if (!ss || ss.hasOutput) return "";
     const toolFallback = String(ss.realtimeToolFallbackText || "").trim();
     if (toolFallback) return toolFallback;
-    if (reason === "hard_turn_timeout" && !ss.hasToolCall) {
+    if (reason === "hard_turn_timeout" && !hasToolEvidence(ss)) {
       return buildLocalOfficeDirectAnswer(ss.originalPromptText || ss.effectivePromptText || "");
     }
     // 工具都跑完了但模型没给收尾文本(issue #72 第三类的 GUI 变体:"有授权卡片但最后没有反馈")。
     // V0.79 禁止编造内容 —— 这里只输出基于真实 tool_end 计数的事实行,不替模型说话。
-    return buildToolCompletionSummary(ss);
+    return buildToolCompletionSummary(ss)
+      || "模型这次没有返回可见内容。本轮已安全结束，避免空回复污染后续上下文；请点「编辑重发」重试，或切换默认模型后再发。";
   }
 
   function buildRealtimeToolFallbackText(toolName: any, event: any) {

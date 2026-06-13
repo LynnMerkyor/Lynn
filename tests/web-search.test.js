@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runSearchQuery, searchBingHtml, searchDuckDuckGoHtml } from "../lib/tools/web-search.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createWebSearchTool, runSearchQuery, searchBingHtml, searchDuckDuckGoHtml } from "../lib/tools/web-search.js";
+import { loadLocale } from "../server/i18n.js";
 
 describe("web search fallback", () => {
   beforeEach(() => {
+    loadLocale("zh");
     // Keep DDG/Bing path tests deterministic by disabling the brain proxy tier.
     process.env.LYNN_DISABLE_BRAIN_SEARCH = '1';
   });
@@ -120,13 +125,16 @@ describe("web search fallback", () => {
 
 describe("web search Tier 1 brain proxy", () => {
   beforeEach(() => {
+    loadLocale("zh");
     delete process.env.LYNN_DISABLE_BRAIN_SEARCH;
     process.env.BRAIN_V2_URL = 'http://127.0.0.1:8790';
   });
   afterEach(() => {
     vi.restoreAllMocks();
     delete process.env.BRAIN_V2_URL;
+    delete process.env.LYNN_BRAIN_URL;
     delete process.env.LYNN_DISABLE_BRAIN_SEARCH;
+    delete process.env.LYNN_HOME;
   });
 
   it("uses brain proxy first and surfaces summary + sources", async () => {
@@ -174,6 +182,90 @@ describe("web search Tier 1 brain proxy", () => {
     // Brain proxy was called, DDG/Bing were NOT
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/v1/web-search'), expect.any(Object));
+  });
+
+  it("uses the configured public Brain root by default and signs the proxy request", async () => {
+    delete process.env.BRAIN_V2_URL;
+    delete process.env.LYNN_BRAIN_URL;
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-web-search-"));
+    fs.mkdirSync(path.join(home, "user"), { recursive: true });
+    fs.writeFileSync(path.join(home, "user", "preferences.json"), JSON.stringify({
+      client_agent_key: "ak_testwebsearch",
+      client_agent_secret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    }));
+    process.env.LYNN_HOME = home;
+    const fetchMock = vi.fn(async (url, opts = {}) => {
+      expect(String(url)).toBe("https://api.merkyorlynn.com/api/v2/v1/web-search");
+      expect(opts?.headers?.["Content-Type"]).toBe("application/json");
+      expect(opts?.headers).toHaveProperty("X-Agent-Key");
+      expect(opts?.headers).toHaveProperty("X-Lynn-Signature");
+      const body = JSON.parse(String(opts?.body || "{}"));
+      expect(body.query).toContain("2026世界杯");
+      expect(body.query).toContain("小组赛");
+      expect(body.query).toContain("对阵");
+      expect(body.query).toContain("比分");
+      const payload = {
+        ok: true,
+        provider: "glm",
+        summary: "加拿大 1-1 波黑，美国 4-1 巴拉圭。",
+        items: [
+          { title: "世界杯赛程", url: "https://source.example/sports", snippet: "真实赛程" },
+        ],
+      };
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(payload),
+        json: async () => payload,
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runSearchQuery("世界杯今天有什么赛程安排", 5, { sceneHint: "sports" });
+
+    expect(result.provider).toBe("lynn-brain/glm");
+    expect(result.summary).toContain("加拿大");
+    expect(result.results[0]?.title).toBe("世界杯赛程");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides search-result page urls in tool output so models do not fetch them", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-web-search-"));
+    fs.mkdirSync(path.join(home, "user"), { recursive: true });
+    fs.writeFileSync(path.join(home, "user", "preferences.json"), JSON.stringify({
+      client_agent_key: "ak_testwebsearch",
+      client_agent_secret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    }));
+    process.env.LYNN_HOME = home;
+    const fetchMock = vi.fn(async () => {
+      const payload = {
+        ok: true,
+        provider: "glm",
+        summary: "加拿大 1-1 波黑；卡塔尔 6月14日 03:00 对阵瑞士。",
+        items: [{
+          title: "世界杯6连败终结！加拿大队1-1波黑队！",
+          url: "https://www.baidu.com/s?wd=%E4%B8%96%E7%95%8C%E6%9D%AF",
+          snippet: "2026美加墨世界杯小组赛B组首轮，加拿大队1-1战平波黑队。",
+        }],
+      };
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(payload),
+        json: async () => payload,
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await createWebSearchTool().execute("test", {
+      query: "世界杯今天有什么比赛吗",
+      maxResults: 5,
+    });
+    const text = result.content[0].text;
+
+    expect(text).toContain("搜索页链接已隐藏");
+    expect(text).toContain("加拿大 1-1 波黑");
+    expect(text).not.toContain("https://www.baidu.com/s");
   });
 
   it("falls through to DDG/Bing when brain proxy returns ok=false", async () => {

@@ -69,4 +69,44 @@ describe("tool summary search sources", () => {
     expect(result.publicSummary?.searchSources?.[0].summary?.length).toBeLessThanOrEqual(360);
     expect(result.publicSummary?.searchSources?.[0].items?.[0].url?.length).toBeLessThanOrEqual(400);
   });
+
+  it("removes search-result page urls from web_search public summaries and details", () => {
+    const result = summarizeToolExecution({
+      toolName: "web_search",
+      result: {
+        details: {
+          provider: "lynn-brain/glm",
+          summary: "综合答案",
+          sources: [
+            {
+              name: "glm",
+              ok: true,
+              items: [
+                {
+                  title: "世界杯赛程",
+                  url: "https://www.baidu.com/s?wd=%E4%B8%96%E7%95%8C%E6%9D%AF",
+                  snippet: "加拿大 1-1 波黑",
+                },
+                {
+                  title: "可核验来源",
+                  url: "https://sports.example.com/world-cup",
+                  snippet: "真实页面",
+                },
+              ],
+            },
+          ],
+        },
+        content: [{ type: "text", text: "工具提示：搜索页链接已隐藏" }],
+      },
+    });
+
+    const summaryItems = result.publicSummary?.searchSources?.[0].items || [];
+    const details = result.publicDetails as { sources?: Array<{ items?: Array<{ title?: string; url?: string }> }> };
+    const detailItems = details.sources?.[0]?.items || [];
+    expect(summaryItems.find((item) => item.title === "世界杯赛程")?.url).toBeUndefined();
+    expect(detailItems.find((item) => item.title === "世界杯赛程")?.url).toBeUndefined();
+    expect(summaryItems.find((item) => item.title === "可核验来源")?.url).toBe("https://sports.example.com/world-cup");
+    expect(JSON.stringify(result.publicSummary)).not.toContain("baidu.com/s");
+    expect(JSON.stringify(result.publicDetails)).not.toContain("baidu.com/s");
+  });
 });

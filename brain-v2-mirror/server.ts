@@ -414,11 +414,29 @@ async function handleDeviceRegister(req: IncomingMessage, res: ServerResponse): 
 // only and are never embedded in client code, renderer process, or distributed
 // binaries. Returns { ok, provider, items[], summary?, sources[] } so the UI
 // can render a synthesized answer plus a collapsible "View sources (N)" list.
-async function handleWebSearch(req: IncomingMessage, res: ServerResponse, _pathname: string): Promise<void> {
-  const remote = req.socket?.remoteAddress || '';
-  if (!isLocalRequestAddress(remote)) {
-    res.writeHead(403, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: false, error: 'local_only', remote }));
+async function handleWebSearch(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
+  // 2026-06-14 security: proxies the server-side MiMo/GLM PAID search backends.
+  // The old isLocalRequestAddress() gate was defeated by nginx (proxy_pass makes
+  // every request's remoteAddress 127.0.0.1), so public /api/v2/v1/web-search was
+  // callable unauthenticated -> paid-search abuse. Require the device HMAC sig
+  // (the desktop already sends it); reject null so it always needs a device.
+  let device = null;
+  try {
+    device = await verifySignedRequest(req, { pathname, method: 'POST', log });
+  } catch (e) {
+    if (e instanceof AuthError) {
+      res.writeHead(e.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+      return;
+    }
+    log('error', 'web-search auth unexpected: ' + errorMessage(e));
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'internal auth error' }));
+    return;
+  }
+  if (!device) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'device signature required' }));
     return;
   }
 

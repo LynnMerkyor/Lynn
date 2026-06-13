@@ -68,6 +68,7 @@ interface SearchSourceTrace {
 export interface ToolExecutionSummaryResult {
   toolName: string;
   rawDetails: ToolArgs;
+  publicDetails?: ToolArgs;
   normalizedArgs: ToolArgs;
   toolIsError: boolean;
   summary: ToolPublicSummary;
@@ -152,6 +153,23 @@ function compactText(value: unknown, max = 240): string | undefined {
   return text ? text.slice(0, max) : undefined;
 }
 
+function isSearchEngineResultPage(rawUrl: unknown): boolean {
+  const value = String(rawUrl || "").trim();
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (host.endsWith("baidu.com") && path === "/s") return true;
+    if (host.endsWith("bing.com") && path === "/search") return true;
+    if (host.endsWith("google.com") && path === "/search") return true;
+    if (host.endsWith("duckduckgo.com") && (path === "/" || path === "/html" || path === "/html/")) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 function sanitizeSearchSources(raw: unknown): SearchSourceTrace[] {
   if (!Array.isArray(raw)) return [];
   return raw.slice(0, 8).map((source) => {
@@ -164,9 +182,10 @@ function sanitizeSearchSources(raw: unknown): SearchSourceTrace[] {
       summary: compactText(record.summary, 360),
       items: rawItems.slice(0, 6).map((item) => {
         const itemRecord = (item && typeof item === "object") ? item as ToolArgs : {};
+        const url = compactText(itemRecord.url, 400);
         return {
           title: compactText(itemRecord.title, 140),
-          url: compactText(itemRecord.url, 400),
+          url: url && !isSearchEngineResultPage(url) ? url : undefined,
           snippet: compactText(itemRecord.snippet, 220),
         };
       }).filter((item) => item.title || item.url || item.snippet),
@@ -174,9 +193,18 @@ function sanitizeSearchSources(raw: unknown): SearchSourceTrace[] {
   }).filter((source) => source.name || source.summary || source.error || source.items?.length);
 }
 
+function sanitizeToolDetailsForStream(toolName: string, rawDetails: ToolArgs): ToolArgs {
+  if (toolName !== "web_search") return rawDetails;
+  return {
+    ...rawDetails,
+    sources: sanitizeSearchSources(rawDetails.sources),
+  };
+}
+
 export function summarizeToolExecution(event: ToolExecutionEvent | null | undefined): ToolExecutionSummaryResult {
   const rawDetails = event?.result?.details || {};
   const toolName = event?.toolName || "";
+  const publicDetails = sanitizeToolDetailsForStream(toolName, rawDetails);
   const normalizedArgs = (normalizeToolArgsForSummary(toolName, event?.args) || {}) as ToolArgs;
   const toolIsError = Boolean(event?.isError || event?.result?.isError);
   const summary: ToolPublicSummary = {};
@@ -235,6 +263,7 @@ export function summarizeToolExecution(event: ToolExecutionEvent | null | undefi
   return {
     toolName,
     rawDetails,
+    publicDetails,
     normalizedArgs,
     toolIsError,
     summary,

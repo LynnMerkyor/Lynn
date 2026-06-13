@@ -21,6 +21,16 @@ describe("known DeepSeek thinking variants", () => {
     expect(model).toBeTruthy();
     expect(model.reasoning).toBe(true);
     expect(model.thinkingFormat).toBe("deepseek");
+    expect(model.context).toBe(1000000);
+  });
+
+  it("tracks DeepSeek V4 Flash as a 1M-context model", () => {
+    const model = lookupKnown("deepseek", "deepseek-v4-flash");
+    expect(model).toBeTruthy();
+    expect(model.reasoning).toBe(true);
+    expect(model.thinkingFormat).toBe("deepseek");
+    expect(model.context).toBe(1000000);
+    expect(model.maxOutput).toBe(64000);
   });
 
   it("matches DeepSeek Reasoner suffix variants as deepseek reasoning models", () => {

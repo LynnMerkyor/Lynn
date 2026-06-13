@@ -304,31 +304,31 @@
   "deepseek": {
     "deepseek-v4-flash": {
       "name": "DeepSeek V4 Flash",
-      "context": 128000,
-      "maxOutput": 8192,
+      "context": 1000000,
+      "maxOutput": 64000,
       "reasoning": true,
       "thinkingFormat": "deepseek",
-      "note": "Chat + reasoning unified — set thinking:{type:'enabled'|'disabled'} per-call"
+      "note": "Chat + reasoning unified — set thinking:{type:'enabled'|'disabled'} per-call. API supports larger output windows; Lynn caps the interactive default for stable multi-turn chat."
     },
     "deepseek-v4-pro": {
       "name": "DeepSeek V4 Pro",
-      "context": 128000,
-      "maxOutput": 8192,
+      "context": 1000000,
+      "maxOutput": 64000,
       "reasoning": true,
       "thinkingFormat": "deepseek",
-      "note": "Stronger sibling of v4-flash; same thinking-toggle API"
+      "note": "Stronger sibling of v4-flash; same thinking-toggle API. API supports larger output windows; Lynn caps the interactive default for stable multi-turn chat."
     },
     "deepseek-chat": {
       "name": "DeepSeek Chat (deprecated 2026/07/24 → deepseek-v4-flash)",
-      "context": 128000,
-      "maxOutput": 8192,
+      "context": 1000000,
+      "maxOutput": 64000,
       "deprecated": true,
       "deprecatedAt": "2026-07-24",
       "alias": "deepseek-v4-flash"
     },
     "deepseek-reasoner": {
       "name": "DeepSeek Reasoner (deprecated 2026/07/24 → deepseek-v4-flash thinking)",
-      "context": 128000,
+      "context": 1000000,
       "maxOutput": 64000,
       "reasoning": true,
       "thinkingFormat": "deepseek",

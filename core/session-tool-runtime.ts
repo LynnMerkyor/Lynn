@@ -102,6 +102,8 @@ function isStrictToolNameModel(model: ModelLike) {
   return provider === "openai"
     || provider === "openai-codex"
     || provider === "openai-codex-oauth"
+    || provider === "deepseek"
+    || api === "openai-completions"
     || api === "openai-responses"
     || api === "openai-codex-responses";
 }

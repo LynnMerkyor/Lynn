@@ -47,6 +47,7 @@ import {
   extractGoldSignals,
   formatPrice,
   hasConceptStockIntent,
+  hasGoldEvidence,
   hasStockBasketIntent,
   isZhLocale,
   keywordScore,
@@ -62,7 +63,7 @@ import {
   collectStooqQuotes,
   extractHongKongStockSymbols,
   fetchTextWithTimeout,
-  fetchStooqQuote,
+  fetchUsStockQuote,
   fetchTencentAStockQuote,
   hasFinanceLookupIntent,
   timeoutSignal,
@@ -84,13 +85,65 @@ async function fetchJsonWithTimeout(url: string, ms: number, headers: Record<str
 }
 
 async function fetchUsdCnyRate(): Promise<{ rate: number; updatedAt: string; source: string }> {
-  const json = await fetchJsonWithTimeout("https://open.er-api.com/v6/latest/USD", 4500);
-  const rate = Number(json?.rates?.CNY);
+  const fx = await fetchFxRate("USD", "CNY");
+  return {
+    rate: fx.rate,
+    updatedAt: fx.updatedAt,
+    source: fx.source,
+  };
+}
+
+async function fetchFxRate(base = "USD", quote = "CNY"): Promise<{ base: string; quote: string; rate: number; updatedAt: string; source: string }> {
+  const normalizedBase = String(base || "USD").trim().toUpperCase();
+  const normalizedQuote = String(quote || "CNY").trim().toUpperCase();
+  const json = await fetchJsonWithTimeout(`https://open.er-api.com/v6/latest/${encodeURIComponent(normalizedBase)}`, 4500);
+  const rate = Number(json?.rates?.[normalizedQuote]);
   if (!Number.isFinite(rate)) throw new Error("USD/CNY unavailable");
   return {
+    base: normalizedBase,
+    quote: normalizedQuote,
     rate,
     updatedAt: json.time_last_update_utc || "",
     source: "open.er-api.com",
+  };
+}
+
+function inferFxPair(query: unknown): { base: string; quote: string } {
+  const text = String(query || "").toLowerCase();
+  const hasCny = /人民币|cny|rmb/.test(text);
+  const pairs: Array<[RegExp, string]> = [
+    [/(美元|美金|\busd\b)/i, "USD"],
+    [/(欧元|\beur\b)/i, "EUR"],
+    [/(英镑|\bgbp\b)/i, "GBP"],
+    [/(日元|\bjpy\b)/i, "JPY"],
+    [/(港币|港元|\bhkd\b)/i, "HKD"],
+  ];
+  const found = pairs.filter(([re]) => re.test(text)).map(([, code]) => code);
+  if (found.length >= 2) return { base: found[0], quote: found[1] };
+  if (found.length === 1 && hasCny && found[0] !== "CNY") return { base: found[0], quote: "CNY" };
+  return { base: "USD", quote: "CNY" };
+}
+
+async function fetchFxMarketSource(query: unknown): Promise<MarketSource | null> {
+  const { base, quote } = inferFxPair(query);
+  const fx = await fetchFxRate(base, quote);
+  const inverse = fx.rate ? 1 / fx.rate : null;
+  const lines = [
+    `${fx.base}/${fx.quote}：1 ${fx.base} = ${formatPrice(fx.rate, 4)} ${fx.quote}`,
+    inverse != null && Number.isFinite(inverse)
+      ? `${fx.quote}/${fx.base}：1 ${fx.quote} = ${formatPrice(inverse, 6)} ${fx.base}`
+      : "",
+    fx.updatedAt ? `更新时间：${fx.updatedAt}` : "",
+  ].filter(Boolean);
+  return {
+    title: `${fx.base}/${fx.quote} 汇率`,
+    url: `https://open.er-api.com/v6/latest/${encodeURIComponent(fx.base)}`,
+    snippet: lines.join("；"),
+    lines,
+    goldSignals: null,
+    source: fx.source,
+    host: "open.er-api.com",
+    timestamp: fx.updatedAt,
   };
 }
 
@@ -346,7 +399,7 @@ async function collectConceptStockQuotes(query: unknown): Promise<ConceptQuotes>
   const fetcher = resolved.marketHint === "hk"
     ? fetchSinaHongKongQuote
     : resolved.marketHint === "us"
-      ? fetchStooqQuote
+      ? fetchUsStockQuote
       : fetchTencentAStockQuote;
   const settled = await Promise.allSettled(resolved.symbols.map((symbol) => fetcher(symbol)));
   return {
@@ -442,6 +495,48 @@ function sourceLabel(url: unknown): string {
   }
 }
 
+function isSearchEngineResultUrl(rawUrl: unknown): boolean {
+  try {
+    const parsed = new URL(String(rawUrl || ""));
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (host.endsWith("baidu.com") && path === "/s") return true;
+    if (host.endsWith("bing.com") && path === "/search") return true;
+    if (host.endsWith("google.com") && path === "/search") return true;
+    if (host.endsWith("duckduckgo.com") && (path === "/" || path === "/html/" || path === "/html")) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function shouldHideMarketSourceUrl(rawUrl: unknown): boolean {
+  try {
+    const parsed = new URL(String(rawUrl || ""));
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (isSearchEngineResultUrl(rawUrl)) return true;
+    // Quote detail pages on these sites are mostly JS-rendered shells. Showing
+    // them as deep-read URLs makes the model call web_fetch, get an empty page,
+    // and then claim the quote was unavailable even when snippets were useful.
+    if (host.endsWith("eastmoney.com") && /quote|stock|us|hk|sz|sh/i.test(path)) return true;
+    if (host.endsWith("baidu.com")) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function shouldFetchMarketResultUrl(rawUrl: unknown): boolean {
+  if (shouldHideMarketSourceUrl(rawUrl)) return false;
+  return true;
+}
+
+function marketSummarySourceLabel(rawUrl: unknown, fallback = ""): string {
+  if (shouldHideMarketSourceUrl(rawUrl)) return isZhLocale() ? "搜索摘要" : "Search summary";
+  return sourceLabel(rawUrl) || fallback;
+}
+
 function buildSnapshotText(
   query: string,
   kind: MarketKind,
@@ -451,8 +546,14 @@ function buildSnapshotText(
 ): string {
   const goldSummary = kind === "gold" ? buildGoldSummary(sources) : "";
   if (kind === "gold" && goldSummary) {
-    const refs = sources.slice(0, 3).map((item, idx) => {
-      return `${idx + 1}. ${item.title || item.source || item.url}\n${item.url}`;
+    const refs = sources
+      .filter((item) => item.url && !shouldHideMarketSourceUrl(item.url))
+      .filter((item) => item.host === "api.gold-api.com" || hasGoldEvidence(item.goldSignals))
+      .slice(0, 3)
+      .map((item, idx) => {
+      const url = shouldHideMarketSourceUrl(item.url) ? "" : item.url || "";
+      const title = item.title || item.source || url;
+      return `${idx + 1}. ${title}${url ? `\n${url}` : ""}`;
     }).join("\n");
     return [
       `黄金价格快照（via ${provider}）`,
@@ -472,13 +573,17 @@ function buildSnapshotText(
         `财经/行情快照（via ${provider}）`,
         `查询：${query}`,
         `类型：${kind}`,
-        "说明：以下结果来自网页搜索与正文抓取汇总，关键价格、涨跌幅与时间点建议至少交叉验证 2 个来源。",
+        directQuotes.length
+          ? "说明：以下结果优先来自直连行情源；关键价格、涨跌幅和时间点建议至少交叉验证 2 个来源。"
+          : "说明：以下结果来自结构化源、网页搜索与正文抓取汇总；关键价格、涨跌幅和时间点建议至少交叉验证 2 个来源。",
       ].join("\n")
     : [
         `Market snapshot (via ${provider})`,
         `Query: ${query}`,
         `Type: ${kind}`,
-        "Note: results are aggregated from web search plus page extraction. Cross-check key prices, changes, and timestamps across at least two sources.",
+        directQuotes.length
+          ? "Note: direct market data sources are preferred. Cross-check key prices, changes, and timestamps across at least two sources."
+          : "Note: results are aggregated from structured sources, web search, and page extraction. Cross-check key prices, changes, and timestamps across at least two sources.",
       ].join("\n");
 
   const quoteBody = directQuotes.length
@@ -624,6 +729,17 @@ async function collectMarketSources(query: string, kind: MarketKind, market = ""
       };
     }
   }
+  if (kind === "fx") {
+    const fxSource = await fetchFxMarketSource(query).catch(() => null);
+    if (fxSource) {
+      return {
+        provider: fxSource.source || "open.er-api.com",
+        plan: { scene: "finance" },
+        sources: [fxSource],
+        directQuotes,
+      };
+    }
+  }
   const searchQueries = kind === "gold"
     ? buildGoldQueries(query, market, symbol)
     : [buildQuery(query, kind, market, symbol)];
@@ -651,20 +767,26 @@ async function collectMarketSources(query: string, kind: MarketKind, market = ""
 
       let fetchedText = "";
       try {
-        const fetched = await fetchWebContent(result.url, MAX_FETCH_LENGTH);
-        fetchedText = fetched.text || "";
+        if (shouldFetchMarketResultUrl(result.url)) {
+          const fetched = await fetchWebContent(result.url, MAX_FETCH_LENGTH);
+          fetchedText = fetched.text || "";
+        }
       } catch {
         // fallback to snippet only
       }
-      const lines = extractCandidateLines(fetchedText || result.snippet || "", kind);
+      const evidenceText = fetchedText || result.snippet || "";
+      const lines = extractCandidateLines(evidenceText, kind);
+      const goldSignals = kind === "gold" ? extractGoldSignals(evidenceText) : null;
+      if (kind === "gold" && !hasGoldEvidence(goldSignals)) continue;
+      const hideUrl = shouldHideMarketSourceUrl(result.url);
       picked.push({
         title: result.title,
-        url: result.url,
+        url: hideUrl ? "" : result.url,
         snippet: result.snippet,
         lines,
-        goldSignals: kind === "gold" ? extractGoldSignals(fetchedText || result.snippet || "") : null,
-        source: sourceLabel(result.url),
-        host: (() => {
+        goldSignals,
+        source: marketSummarySourceLabel(result.url),
+        host: hideUrl ? "" : (() => {
           try { return new URL(result.url).hostname; } catch { return ""; }
         })(),
       });

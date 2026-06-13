@@ -125,6 +125,33 @@ describe("session tool runtime helpers", () => {
     expect(logger.log).toHaveBeenCalledWith(expect.stringContaining("filtered 2 Brain-managed"));
   });
 
+  it("normalizes custom tool names for DeepSeek/OpenAI-compatible chat completions", () => {
+    const execute = vi.fn();
+    const entry = makeEntry({
+      model: { id: "deepseek-v4-pro", provider: "deepseek", api: "openai-completions" },
+    });
+    const deps = makeDeps(vi.fn(() => ({
+      tools: [{ name: "read" }],
+      customTools: [
+        { name: "flux-studio.generate_image", execute },
+        { name: "mcp.server.tool", execute },
+      ],
+    })));
+    const logger = { warn: vi.fn(), log: vi.fn() };
+
+    applySessionToolRuntime({ entry, ...deps, logger });
+
+    expect(entry.session._customTools.map((tool) => tool.name)).toEqual([
+      "flux-studio_generate_image",
+      "mcp_server_tool",
+    ]);
+    expect(entry.session._customTools[0]._aliasOf).toBe("flux-studio.generate_image");
+    expect(entry.session._customTools[0].execute).toBe(execute);
+    expect(entry.session._buildRuntime).toHaveBeenCalledWith({
+      activeToolNames: ["read", "flux-studio_generate_image", "mcp_server_tool"],
+    });
+  });
+
   it("filters only realtime custom tools owned by Brain", () => {
     expect(filterBrainManagedCustomTools([
       { name: "weather" },

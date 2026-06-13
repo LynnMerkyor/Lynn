@@ -151,7 +151,7 @@ export class ProviderRegistry {
     for (const id of this._plugins.keys()) {
       if (String(id).toLowerCase() === lower) return id;
     }
-    return raw;
+    return lower as ProviderId;
   }
 
   _modelEntryId(model: ProviderModelConfig | undefined): string {

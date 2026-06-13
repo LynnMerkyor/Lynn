@@ -302,6 +302,21 @@ function hostname(url: unknown): string {
   }
 }
 
+function isSearchEngineResultPage(url: unknown): boolean {
+  try {
+    const parsed = new URL(String(url || ""));
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (host.endsWith("baidu.com") && path === "/s") return true;
+    if (host.endsWith("bing.com") && path === "/search") return true;
+    if (host.endsWith("google.com") && path === "/search") return true;
+    if (host.endsWith("duckduckgo.com") && (path === "/" || path === "/html/" || path === "/html")) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 function timeoutSignal(ms: number): TimeoutHandle {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
@@ -419,14 +434,18 @@ function formatSearchResults(
   provider: string,
   results: RealtimeSearchResult[],
 ): string {
+  const hidesSearchPageLinks = results.some((result) => isSearchEngineResultPage(result.url));
   const rows = results.map((result, index) => {
-    const host = hostname(result.url);
+    const hideUrl = isSearchEngineResultPage(result.url);
+    const host = hideUrl ? "" : hostname(result.url);
     return [
       `${index + 1}. ${result.title || result.url}`,
-      host ? `${zhOrEn("来源", "Source")}: ${host}` : "",
+      hideUrl
+        ? `${zhOrEn("证据类型", "Evidence type")}: ${zhOrEn("搜索摘要（搜索页链接已隐藏）", "search summary; search-page URL hidden")}`
+        : (host ? `${zhOrEn("来源", "Source")}: ${host}` : ""),
       result.windowLabel ? `${zhOrEn("检索窗口", "Search window")}: ${result.windowLabel}` : "",
       result.freshness ? `${zhOrEn("新鲜度", "Freshness")}: ${result.freshness}` : "",
-      result.url,
+      hideUrl ? "" : result.url,
       result.snippet ? `- ${compactLine(result.snippet)}` : "",
       result.fetchedText ? `- ${zhOrEn("正文摘录", "Fetched excerpt")}: ${compactLine(result.fetchedText).slice(0, 520)}` : "",
     ].filter(Boolean).join("\n");
@@ -435,9 +454,15 @@ function formatSearchResults(
   return [
     `${title} (${provider})`,
     `${zhOrEn("查询", "Query")}: ${query}`,
+    hidesSearchPageLinks
+      ? zhOrEn(
+        "工具提示：以下结果来自 Brain 搜索摘要，搜索页链接已隐藏；不要再调用 web_fetch 访问搜索页，若摘要不足请直接说明证据不足。",
+        "Tool note: these results are Brain search summaries; search-page URLs are hidden. Do not call web_fetch on search pages; say evidence is insufficient if the summaries are not enough.",
+      )
+      : "",
     "",
     rows,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function formatNewsRssResults(
@@ -482,8 +507,15 @@ async function searchAndFetch(
 ): Promise<SearchGroup> {
   const searchResult = await runSearchQuery(query, maxResults, { sceneHint }) || {};
   const { results = [], provider = "", plan = null } = searchResult;
+  if (sceneHint === "sports" && /^(bing-html|duckduckgo-html)$/i.test(provider)) {
+    return { provider, plan, results: [] };
+  }
   const enriched: RealtimeSearchResult[] = [];
   for (const result of results.slice(0, 2)) {
+    if (isSearchEngineResultPage(result.url)) {
+      enriched.push(result as RealtimeSearchResult);
+      continue;
+    }
     let text = "";
     try {
       const fetched = await fetchWebContent(result.url, FETCH_LIMIT);

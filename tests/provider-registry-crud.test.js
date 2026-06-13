@@ -125,6 +125,35 @@ describe("getCredentials", () => {
     expect(saved.deepseek.api_key).not.toBe("enc:broken-old-key");
     expect(saved.deepseek.models).toEqual(["deepseek-v4-pro", "deepseek-v4-flash"]);
   });
+
+  it("归一并合并自定义 provider 的大小写变体", () => {
+    writeAddedModels({
+      MyBYOK: {
+        api_key: "enc:broken-old-key",
+        base_url: "https://empty.example/v1",
+        api: "openai-completions",
+        models: ["model-a"],
+      },
+      mybyok: {
+        api_key: "sk-real-custom",
+        base_url: "https://api.custom.example/v1",
+        api: "openai-completions",
+        models: ["model-b"],
+      },
+    });
+    const reg = makeRegistry();
+
+    const creds = reg.getCredentials("MYBYOK");
+
+    expect(creds.apiKey).toBe("sk-real-custom");
+    expect(creds.baseUrl).toBe("https://api.custom.example/v1");
+    expect(reg.getProviderModels("MyBYOK")).toEqual(["model-a", "model-b"]);
+    const saved = readAddedModels();
+    expect(saved.MyBYOK).toBeUndefined();
+    expect(saved.mybyok.api_key).toMatch(/^enc:/);
+    expect(saved.mybyok.api_key).not.toBe("enc:broken-old-key");
+    expect(saved.mybyok.models).toEqual(["model-a", "model-b"]);
+  });
 });
 
 // ── getProviderModels ────────────────────────────────────────────────────────

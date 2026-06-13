@@ -85,12 +85,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.4.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.5.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.84.4
+Lynn --version  # should print 0.84.5
 Lynn agents   # copyable headless/Fleet commands for other agents
 ```
 
@@ -116,7 +116,26 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details>
-<summary><strong>Lynn v0.84.4</strong> · 2026-06-13 · Agent local-file task hotfix + GUI/CLI tool-boundary gate <em>(latest)</em></summary>
+<summary><strong>Lynn v0.84.5</strong> · 2026-06-14 · BYOK DeepSeek stability + realtime search and market fixes <em>(latest)</em></summary>
+
+**Issue #74 and BYOK model closure**:
+- **DeepSeek V4 Pro / V4 Flash verified in real multi-turn chats**: provider ids are normalized, unreadable legacy API keys show an explicit re-entry prompt, and duplicate provider entries no longer route models to an empty-key provider.
+- **Thinking-model empty-turn poisoning fixed**: hard-empty assistant turns now persist a visible fallback and are stripped before the next prompt, so one blank BYOK turn no longer breaks the whole thread.
+- **DeepSeek V4 context and output budget fixed**: V4 Pro / V4 Flash keep 1M context while their output budget returns to a provider-safe cap.
+- **Provider settings cleanup**: deleting deprecated or discovered models no longer makes them loop back into the add-model list; blank saves do not overwrite an existing key.
+- **Search, sports, and market tools hardened**: BYOK tool search uses the Brain GLM/MiMo chain first and no longer treats Baidu/Bing search pages as evidence; World Cup schedules, NBA scores, gold prices, and US stocks such as NVDA use structured or parseable sources.
+- **Release gates**: the local app package passed packaged server / CLI / settings smokes, plus real DeepSeek V4 Pro / Flash multi-turn verification.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.5.tgz"
+```
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.5)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.84.4</strong> · 2026-06-13 · Agent local-file task hotfix + GUI/CLI tool-boundary gate</summary>
 
 **Default-model Agent workflow hotfix**:
 - **GUI / CLI local-file task fix**: default model turns now receive a real local workspace summary. Read-only requests such as "find the first local novel chapter", "read my desktop file", or "inspect this folder" no longer fail with a false no-filesystem-access refusal.
@@ -849,11 +868,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.84.4 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.84.5 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.84.4 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.84.5 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -916,7 +935,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.84.4 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.84.5 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

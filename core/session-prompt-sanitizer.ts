@@ -90,6 +90,24 @@ function isEmptyAbortedAssistantMessage(message: AnyRecord | null | undefined): 
   });
 }
 
+function hasToolCallLikeContent(message: AnyRecord | null | undefined): boolean {
+  if (!message) return false;
+  if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) return true;
+  if (Array.isArray(message.toolCalls) && message.toolCalls.length > 0) return true;
+  const content = Array.isArray(message.content) ? message.content : [];
+  return content.some((block: AnyRecord) => {
+    const type = String(block?.type || "");
+    return type === "toolCall" || type === "tool_use" || type === "function_call";
+  });
+}
+
+function isEmptyAssistantContextPoison(message: AnyRecord | null | undefined): boolean {
+  if (!message || message.role !== "assistant") return false;
+  if (messageContentText(message.content).trim()) return false;
+  if (hasToolCallLikeContent(message)) return false;
+  return true;
+}
+
 function rewriteAssistantBrainManagedToolCalls(message: AnyRecord): AnyRecord | null {
   if (!message || message.role !== "assistant" || !Array.isArray(message.content)) return null;
   const filtered = message.content.filter((block: AnyRecord) => {
@@ -146,7 +164,8 @@ export function sanitizeMessagesBeforePrompt(messages: unknown) {
       isInternalRetryPromptMessage(message) ||
       isTransientRecoveredToolPlaceholder(message) ||
       isBrainManagedToolNotFoundToolResult(message) ||
-      isEmptyAbortedAssistantMessage(message)
+      isEmptyAbortedAssistantMessage(message) ||
+      isEmptyAssistantContextPoison(message)
     ) {
       removed += 1;
       continue;
@@ -160,6 +179,10 @@ export function sanitizeMessagesBeforePrompt(messages: unknown) {
     const assistantWithoutBrainToolCalls = rewriteAssistantBrainManagedToolCalls(message);
     if (assistantWithoutBrainToolCalls) {
       rewritten += 1;
+      if (isEmptyAssistantContextPoison(assistantWithoutBrainToolCalls)) {
+        removed += 1;
+        continue;
+      }
       cleaned.push(assistantWithoutBrainToolCalls);
       continue;
     }

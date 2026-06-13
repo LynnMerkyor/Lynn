@@ -13,7 +13,7 @@ vi.mock("../lib/tools/web-search.js", () => searchMock);
 vi.mock("../lib/tools/web-fetch.js", () => fetchContentMock);
 
 import { createStockMarketTool } from "../lib/tools/stock-market.js";
-import { createWeatherTool, extractWeatherLocation } from "../lib/tools/realtime-info.js";
+import { createSportsScoreTool, createWeatherTool, extractWeatherLocation } from "../lib/tools/realtime-info.js";
 import { buildDirectResearchAnswer, inferReportResearchKind } from "../server/chat/report-research-context.js";
 
 function jsonResponse(data) {
@@ -470,6 +470,58 @@ describe("realtime market/weather tools", () => {
     // Two concept-search queries plus one final general fallback search.
     // The old path retried concept resolution a second time and inflated this to five calls.
     expect(searchMock.runSearchQuery).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not inject weak HTML fallback results as sports score evidence", async () => {
+    searchMock.runSearchQuery.mockResolvedValue({
+      provider: "bing-html",
+      plan: { scene: "sports" },
+      results: [{
+        title: "今晚7:35，武汉吃黄鳝",
+        url: "https://example.com/local-league",
+        snippet: "地方联赛新闻，不是世界杯赛程。",
+      }],
+    });
+
+    const result = await createSportsScoreTool().execute("test", {
+      query: "世界杯今天有什么比赛吗",
+      maxResults: 5,
+    });
+    const text = result.content[0].text;
+
+    expect(searchMock.runSearchQuery).toHaveBeenCalledWith(
+      expect.stringContaining("世界杯今天有什么比赛吗"),
+      5,
+      { sceneHint: "sports" },
+    );
+    expect(result.details.provider).toBe("bing-html");
+    expect(text).toContain("体育查询结果");
+    expect(text).not.toContain("武汉吃黄鳝");
+    expect(text).not.toContain("地方联赛新闻");
+  });
+
+  it("does not expose or fetch search-result page urls from Brain sports summaries", async () => {
+    searchMock.runSearchQuery.mockResolvedValue({
+      provider: "lynn-brain/glm",
+      plan: { scene: "sports" },
+      results: [{
+        title: "世界杯6连败终结！加拿大队1-1波黑队！",
+        url: "https://www.baidu.com/s?wd=%E4%B8%96%E7%95%8C%E6%9D%AF",
+        snippet: "2026美加墨世界杯小组赛B组首轮，加拿大队1-1战平波黑队。",
+      }],
+    });
+
+    const result = await createSportsScoreTool().execute("test", {
+      query: "世界杯今天有什么比赛吗",
+      maxResults: 5,
+    });
+    const text = result.content[0].text;
+
+    expect(fetchContentMock.fetchWebContent).not.toHaveBeenCalled();
+    expect(result.details.provider).toBe("lynn-brain/glm");
+    expect(text).toContain("搜索摘要");
+    expect(text).toContain("加拿大队1-1战平波黑队");
+    expect(text).not.toContain("https://www.baidu.com/s");
   });
 
   it("uses Open-Meteo forecast data with temperature and rain probability", async () => {

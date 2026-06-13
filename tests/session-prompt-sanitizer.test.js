@@ -115,4 +115,22 @@ describe("session prompt sanitizer helpers", () => {
       { type: "text", text: "今天金价约 916 元/克。" },
     ]);
   });
+
+  it("removes empty assistant messages that can poison DeepSeek follow-up turns", () => {
+    const result = sanitizeMessagesBeforePrompt([
+      { role: "user", content: [{ type: "text", text: "抓一下" }] },
+      { role: "assistant", content: "" },
+      { role: "assistant", content: [{ type: "thinking", thinking: "只有思考链,没有可见答案" }] },
+      { role: "assistant", content: [{ type: "toolCall", id: "tc-drop", name: "web_search", arguments: { query: "世界杯" } }] },
+      { role: "assistant", content: [{ type: "toolCall", id: "tc-keep", name: "custom_tool", arguments: { query: "世界杯" } }] },
+      { role: "assistant", content: [{ type: "text", text: "正常答案" }] },
+    ]);
+
+    expect(result.removed).toBe(3);
+    expect(result.messages).toHaveLength(3);
+    expect(result.messages[1].content).toEqual([
+      { type: "toolCall", id: "tc-keep", name: "custom_tool", arguments: { query: "世界杯" } },
+    ]);
+    expect(result.messages[2].content).toEqual([{ type: "text", text: "正常答案" }]);
+  });
 });

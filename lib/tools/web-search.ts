@@ -18,6 +18,8 @@ import { Type } from "@sinclair/typebox";
 import { loadConfig } from "../memory/config-loader.js";
 import { t, getLocale } from "../../server/i18n.js";
 import { safeParseResponse } from "../../shared/safe-parse.js";
+import { BRAIN_API_ROOTS } from "../../shared/brain-provider.js";
+import { readSignedClientAgentHeaders } from "../../core/client-agent-identity.js";
 
 type SearchScene = "general" | "docs" | "finance" | "sports" | "realtime" | "research" | string;
 
@@ -160,8 +162,32 @@ function containsAny(text: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
 
+function hasFreshSignal(text: string): boolean {
+  return /今天|今日|今晚|今晨|实时|最新|刚刚|赛前|赛后|now|today|latest|live|breaking/i.test(text);
+}
+
+function hasSportsSignal(text: string): boolean {
+  return /比分|赛果|赛程|赛况|体育|足球|篮球|小组赛|淘汰赛|对阵|开赛|比赛安排|世界杯|欧洲杯|亚冠|中超|英超|西甲|德甲|意甲|欧冠|nba|cba|fifa|world cup|fixture|fixtures|schedule|score|scores|result|results/i.test(text);
+}
+
+function hasScheduleSignal(text: string): boolean {
+  return /比赛|赛程|赛况|赛果|比分|对阵|开赛|比赛安排|小组赛|淘汰赛|fixture|fixtures|schedule|score|scores|result|results|match|matches/i.test(text);
+}
+
 function isZhLocale(): boolean {
   return String(getLocale?.() || "").startsWith("zh");
+}
+
+function localSearchDateParts(): { cn: string; short: string; iso: string } {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+  return {
+    cn: `${year}年${month}月${day}日`,
+    short: `${month}月${day}日`,
+    iso: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+  };
 }
 
 function getHostname(rawUrl: unknown): string {
@@ -170,6 +196,21 @@ function getHostname(rawUrl: unknown): string {
   } catch {
     return "";
   }
+}
+
+function isSearchEngineResultPage(rawUrl: unknown): boolean {
+  try {
+    const parsed = new URL(String(rawUrl || ""));
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (host.endsWith("baidu.com") && path === "/s") return true;
+    if (host.endsWith("bing.com") && path === "/search") return true;
+    if (host.endsWith("google.com") && path === "/search") return true;
+    if (host.endsWith("duckduckgo.com") && (path === "/" || path === "/html/" || path === "/html")) return true;
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 function getSourceLabel(hostname: unknown): string {
@@ -198,21 +239,15 @@ function classifySearchScene(query: unknown): SearchScene {
     return "docs";
   }
 
-  if (containsAny(text, [
-    /\b(金价|黄金|白银|原油|股价|股市|a股|港股|美股|基金|汇率|期货|指数|行情|财报|btc|eth|纳指|道指|标普)\b/i,
-  ])) {
+  if (/金价|黄金|白银|原油|股价|股市|a股|港股|美股|基金|汇率|期货|指数|行情|财报|纳指|道指|标普|btc|eth/i.test(text)) {
     return "finance";
   }
 
-  if (containsAny(text, [
-    /\b(比分|赛果|赛程|体育|足球|篮球|nba|cba|英超|西甲|欧冠|世界杯|网球|羽毛球|乒乓球|live score|fixture|result)\b/i,
-  ])) {
+  if (hasSportsSignal(text)) {
     return "sports";
   }
 
-  if (containsAny(text, [
-    /\b(最新|今日|今天|实时|刚刚|新闻|突发|比分|赛果|赛程|天气|近况|现状|now|today|latest|live|breaking)\b/i,
-  ])) {
+  if (hasFreshSignal(text) || /新闻|突发|天气|近况|现状/i.test(text)) {
     return "realtime";
   }
 
@@ -234,20 +269,25 @@ function expandQueryForScene(query: unknown, scene: SearchScene): string {
     const suffix = containsAny(text, [/\b(akshare|腾讯自选股|新浪财经|雪球|东方财富)\b/i])
       ? ""
       : " AkShare 腾讯自选股 新浪财经";
-    if (containsAny(text, [/\b(今日|今天|实时|最新|price|live|today|latest)\b/i])) {
+    if (hasFreshSignal(text) || /\b(price|live|today|latest)\b/i.test(text)) {
       return `${raw}${suffix}`.trim();
     }
     return `${raw}${suffix} 今日 最新 行情`.trim();
   }
 
   if (scene === "sports") {
-    const suffix = containsAny(text, [/\b(腾讯体育|新浪体育|懂球帝|虎扑)\b/i])
+    const suffix = /腾讯体育|新浪体育|懂球帝|虎扑|espn|fifa/i.test(text)
       ? ""
-      : " 腾讯体育 新浪体育 懂球帝 虎扑";
-    if (containsAny(text, [/\b(实时|最新|live|today|latest|比分|赛果|赛程)\b/i])) {
-      return `${raw}${suffix}`.trim();
+      : " 腾讯体育 新浪体育 懂球帝 虎扑 ESPN FIFA";
+    const date = localSearchDateParts();
+    const dateTerms = hasFreshSignal(text) ? `${date.cn} ${date.short} ${date.iso}` : "";
+    if (/世界杯|world cup|fifa/i.test(text) && hasScheduleSignal(text)) {
+      return `2026世界杯 ${dateTerms} 今日赛程 小组赛 对阵 比分 赛果 美加墨世界杯 ${raw}${suffix}`.trim();
     }
-    return `${raw}${suffix} 实时 比分 赛果`.trim();
+    if (hasFreshSignal(text) || hasScheduleSignal(text)) {
+      return `${raw} ${dateTerms} 赛程 对阵 比分 赛果${suffix}`.trim();
+    }
+    return `${raw} ${dateTerms} 实时 比分 赛果 赛程${suffix}`.trim();
   }
 
   if (scene === "realtime") {
@@ -346,55 +386,84 @@ interface BrainProxyResult {
 }
 
 const BRAIN_PROXY_TIMEOUT_MS = 14_000;
+const BRAIN_PROXY_PATHNAME = "/v1/web-search";
 
-function resolveBrainProxyUrl(): string {
-  const raw = String(process.env.BRAIN_V2_URL || process.env.LYNN_BRAIN_URL || 'http://127.0.0.1:8790').trim();
-  return raw.replace(/\/+$/, '');
+function normalizeBrainProxyRoot(raw: unknown): string {
+  return String(raw || "").trim().replace(/\/+$/, "");
+}
+
+function resolveBrainProxyRoots(): string[] {
+  const override = normalizeBrainProxyRoot(process.env.BRAIN_V2_URL || process.env.LYNN_BRAIN_URL);
+  const roots = override
+    ? [override]
+    : BRAIN_API_ROOTS.map(normalizeBrainProxyRoot).filter(Boolean);
+  return [...new Set(roots)];
 }
 
 /**
  * Call Lynn brain v2 mirror's /v1/web-search endpoint. The proxy holds all
  * MiMo / Zhipu / Bocha / Tavily / Serper API keys server-side; this client
- * function never sees them. Localhost-only by brain's enforcement.
+ * function never sees them. Public Brain roots require the same device HMAC
+ * headers as chat, so BYOK users get the high-quality search chain too.
  */
 async function searchLynnBrainProxy(
   query: string,
   maxResults: number,
   signal?: AbortSignal,
 ): Promise<BrainProxyResult> {
-  const ctrl = new AbortController();
-  if (signal) signal.addEventListener('abort', () => ctrl.abort(), { once: true });
-  const timer = setTimeout(() => ctrl.abort(), BRAIN_PROXY_TIMEOUT_MS);
-  let res: Response;
-  try {
-    res = await fetch(`${resolveBrainProxyUrl()}/v1/web-search`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, maxResults }),
-      signal: ctrl.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+  const roots = resolveBrainProxyRoots();
+  if (!roots.length) throw new Error("brain proxy root not configured");
+  const errors: string[] = [];
+  for (const root of roots) {
+    const ctrl = new AbortController();
+    if (signal) signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+    const timer = setTimeout(() => ctrl.abort(), BRAIN_PROXY_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(`${root}${BRAIN_PROXY_PATHNAME}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...readSignedClientAgentHeaders({ method: "POST", pathname: BRAIN_PROXY_PATHNAME }),
+        },
+        body: JSON.stringify({ query, maxResults }),
+        signal: ctrl.signal,
+      });
+    } catch (err) {
+      errors.push(`${root}: ${errorMessage(err)}`);
+      clearTimeout(timer);
+      continue;
+    } finally {
+      clearTimeout(timer);
+    }
 
-  const data = await safeParseResponse<BrainProxyResponse>(res, null);
-  if (!data) throw new Error(`brain proxy HTTP ${res.status}`);
-  if (!data.ok) throw new Error(`brain proxy: ${data.error || 'unknown error'}`);
+    const data = await safeParseResponse<BrainProxyResponse>(res, null);
+    if (!data) {
+      errors.push(`${root}: HTTP ${res.status}`);
+      continue;
+    }
+    if (!data.ok) {
+      errors.push(`${root}: ${data.error || `HTTP ${res.status}`}`);
+      continue;
+    }
 
-  const items = (data.items || []).slice(0, maxResults).map((it) => ({
-    title: String(it.title || ""),
-    url: String(it.url || ""),
-    snippet: String(it.snippet || ""),
-  }));
-  if (items.length === 0 && !data.summary) {
-    throw new Error('brain proxy returned no items and no summary');
+    const items = (data.items || []).slice(0, maxResults).map((it) => ({
+      title: String(it.title || ""),
+      url: String(it.url || ""),
+      snippet: String(it.snippet || ""),
+    }));
+    if (items.length === 0 && !data.summary) {
+      errors.push(`${root}: no items and no summary`);
+      continue;
+    }
+    return {
+      results: items,
+      provider: data.provider ? `lynn-brain/${data.provider}` : "lynn-brain",
+      summary: data.summary,
+      sources: Array.isArray(data.sources) ? data.sources : undefined,
+    };
   }
-  return {
-    results: items,
-    provider: data.provider ? `lynn-brain/${data.provider}` : 'lynn-brain',
-    summary: data.summary,
-    sources: Array.isArray(data.sources) ? data.sources : undefined,
-  };
+  throw new Error(errors[0] || "brain proxy unavailable");
 }
 
 // ════════════════════════════════════════
@@ -802,16 +871,25 @@ export function createWebSearchTool() {
 
         const formatted = results
           .map((r, i) => {
-            const host = getHostname(r.url);
-            const source = getSourceLabel(host);
+            const hideSearchPage = isSearchEngineResultPage(r.url);
+            const host = hideSearchPage ? "" : getHostname(r.url);
+            const source = hideSearchPage
+              ? (isZhLocale() ? "Brain 搜索摘要" : "Brain search summary")
+              : getSourceLabel(host);
             const sourceLine = source
               ? (isZhLocale() ? `   来源：${source}\n` : `   Source: ${source}\n`)
               : "";
-            return `${i + 1}. **${r.title}**\n${sourceLine}   ${r.url}\n   ${r.snippet}`;
+            const urlLine = hideSearchPage ? "" : `   ${r.url}\n`;
+            return `${i + 1}. **${r.title}**\n${sourceLine}${urlLine}   ${r.snippet}`;
           })
           .join("\n\n");
 
         const planNotice = buildPlanNotice(plan);
+        const hiddenSearchPageNotice = results.some((r) => isSearchEngineResultPage(r.url))
+          ? (isZhLocale()
+            ? "工具提示：部分结果来自 Brain 搜索摘要，搜索页链接已隐藏；不要调用 web_fetch 访问搜索页，若摘要不足请说明证据不足。"
+            : "Tool note: some results are Brain search summaries; search-page URLs are hidden. Do not call web_fetch on search pages; say evidence is insufficient if summaries are not enough.")
+          : "";
         const followupHint = plan?.suggestDeepRead
           ? `\n\n${t("error.searchFollowupHint")}`
           : "";
@@ -822,7 +900,7 @@ export function createWebSearchTool() {
         const resultsText = results.length > 0
           ? t("error.searchResults", { provider, results: formatted })
           : "";
-        const body = [planNotice, summaryBlock + resultsText]
+        const body = [planNotice, hiddenSearchPageNotice, summaryBlock + resultsText]
           .filter((s) => String(s).trim())
           .join("\n\n") + followupHint;
 

@@ -66,7 +66,7 @@ function normalizeProviderId(id?: string | null) {
     p.label.toLowerCase() === raw.toLowerCase()
   );
   if (preset) return preset.value;
-  return raw;
+  return raw.toLowerCase();
 }
 
 function modelEntryId(model: ProviderSummary['models'][number] | undefined): string {

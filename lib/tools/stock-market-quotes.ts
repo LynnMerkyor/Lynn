@@ -209,10 +209,172 @@ export async function fetchStooqQuote(symbol: string): Promise<MarketQuote | nul
   return null;
 }
 
+function formatSignedNumber(value: unknown, digits = 2): string {
+  const n = toFiniteNumber(value);
+  if (n == null || !Number.isFinite(n)) return "";
+  return `${n >= 0 ? "+" : ""}${formatPrice(n, digits)}`;
+}
+
+function formatTradingViewTimestamp(epochSeconds: unknown): { date: string; time: string } {
+  const n = Number(epochSeconds);
+  if (!Number.isFinite(n) || n <= 0) return { date: "", time: "" };
+  const iso = new Date(n * 1000).toISOString();
+  return {
+    date: iso.slice(0, 10),
+    time: `${iso.slice(11, 16)} UTC`,
+  };
+}
+
+export async function fetchTradingViewQuote(symbol: string): Promise<MarketQuote | null> {
+  const bare = String(symbol || "").trim().toUpperCase().replace(/^\$/, "").split(".")[0];
+  if (!/^[A-Z]{1,5}$/.test(bare)) return null;
+  const tickers = [`NASDAQ:${bare}`, `NYSE:${bare}`, `AMEX:${bare}`];
+  const timer = timeoutSignal(4500);
+  try {
+    const resp = await fetch("https://scanner.tradingview.com/america/scan", {
+      method: "POST",
+      signal: timer.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 Lynn/MarketQuote",
+      },
+      body: JSON.stringify({
+        symbols: { tickers, query: { types: [] } },
+        columns: [
+          "name",
+          "description",
+          "exchange",
+          "close",
+          "change",
+          "change_abs",
+          "volume",
+          "market_cap_basic",
+          "currency",
+          "update_mode",
+          "time",
+        ],
+      }),
+    });
+    if (!resp.ok) throw new Error(`TradingView ${resp.status}`);
+    const json = await resp.json() as LooseRecord;
+    const row = Array.isArray(json?.data) ? json.data.find((item: LooseRecord) => {
+      const d = Array.isArray(item?.d) ? item.d : [];
+      return String(d[0] || "").toUpperCase() === bare && Number.isFinite(Number(d[3]));
+    }) : null;
+    const d = Array.isArray(row?.d) ? row.d : [];
+    const close = formatPrice(d[3], 2);
+    if (!close) return null;
+    const exchange = String(d[2] || String(row?.s || "").split(":")[0] || "").toUpperCase();
+    const timestamp = formatTradingViewTimestamp(d[10]);
+    const change = formatSignedNumber(d[5], 2);
+    const pct = formatSignedNumber(d[4], 2);
+    return {
+      symbol: bare,
+      name: String(d[1] || d[0] || bare),
+      date: timestamp.date,
+      // TradingView's daily-bar timestamp is the bar time, not a precise close
+      // timestamp. Keep the quote date and avoid presenting it as close time.
+      time: "",
+      close,
+      volume: d[6] != null ? String(d[6]) : "",
+      amount: d[7] != null ? String(d[7]) : "",
+      change,
+      pct: pct ? `${pct}%` : "",
+      source: "TradingView",
+      url: exchange
+        ? `https://www.tradingview.com/symbols/${encodeURIComponent(`${exchange}-${bare}`)}/`
+        : `https://www.tradingview.com/symbols/${encodeURIComponent(bare)}/`,
+      currency: String(d[8] || "USD"),
+    };
+  } catch {
+    return null;
+  } finally {
+    timer.clear();
+  }
+}
+
+// US quotes via mainland-reachable mirrors first. stooq.com (the former primary)
+// now returns HTTP 404 and TradingView's scanner is unreliable from China, so US
+// lookups fell through to web search → JS-rendered quote pages → no extractable
+// price. Tencent (qt.gtimg.cn) and Sina (hq.sinajs.cn) both serve US quotes over
+// GBK, fast and reachable from the mainland; their price fields are ASCII. Keep
+// stooq / TradingView as overseas fallbacks.
+export async function fetchTencentUsQuote(symbol: string): Promise<MarketQuote | null> {
+  const bare = String(symbol || "").trim().toUpperCase().replace(/^\$/, "").split(".")[0];
+  if (!/^[A-Z]{1,5}$/.test(bare)) return null;
+  const raw = await fetchTextWithTimeout(`https://qt.gtimg.cn/q=us${bare}`, 4500, {
+    Referer: "https://gu.qq.com/",
+  }, "gbk");
+  const match = raw.match(/="([^"]*)"/);
+  const parts = (match?.[1] || "").split("~");
+  if (parts.length < 35) return null;
+  const price = toFiniteNumber(parts[3]);
+  if (price == null || !Number.isFinite(price)) return null;
+  const prev = toFiniteNumber(parts[4]);
+  const pct = formatSignedNumber(parts[32], 2);
+  return {
+    symbol: bare,
+    name: parts[1] || bare,
+    price: formatPrice(price, 2),
+    close: formatPrice(price, 2),
+    previousClose: prev != null && Number.isFinite(prev) ? formatPrice(prev, 2) : "",
+    previous: prev != null && Number.isFinite(prev) ? formatPrice(prev, 2) : "",
+    open: formatPrice(parts[5], 2),
+    high: formatPrice(parts[33], 2),
+    low: formatPrice(parts[34], 2),
+    volume: parts[6] || "",
+    time: parts[30] || "",
+    change: formatSignedNumber(parts[31], 2),
+    pct: pct ? `${pct}%` : "",
+    source: "腾讯财经",
+    url: `https://gu.qq.com/us${bare}`,
+    currency: parts[35] || "USD",
+  };
+}
+
+export async function fetchSinaUsQuote(symbol: string): Promise<MarketQuote | null> {
+  const bare = String(symbol || "").trim().toUpperCase().replace(/^\$/, "").split(".")[0];
+  if (!/^[A-Z]{1,5}$/.test(bare)) return null;
+  const raw = await fetchTextWithTimeout(`https://hq.sinajs.cn/list=gb_${bare.toLowerCase()}`, 4500, {
+    Referer: "https://finance.sina.com.cn/",
+  }, "gbk");
+  const match = raw.match(/="([^"]*)"/);
+  const parts = (match?.[1] || "").split(",");
+  if (parts.length < 27) return null;
+  const price = toFiniteNumber(parts[1]);
+  if (price == null || !Number.isFinite(price)) return null;
+  const prev = toFiniteNumber(parts[26]);
+  const pct = toFiniteNumber(parts[2]);
+  return {
+    symbol: bare,
+    name: parts[0] || bare,
+    price: formatPrice(price, 2),
+    close: formatPrice(price, 2),
+    previousClose: prev != null && Number.isFinite(prev) ? formatPrice(prev, 2) : "",
+    previous: prev != null && Number.isFinite(prev) ? formatPrice(prev, 2) : "",
+    open: formatPrice(parts[5], 2),
+    high: formatPrice(parts[6], 2),
+    low: formatPrice(parts[7], 2),
+    time: parts[3] || "",
+    change: formatSignedNumber(parts[4], 2),
+    pct: pct != null && Number.isFinite(pct) ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` : "",
+    source: "新浪财经",
+    url: `https://stock.finance.sina.com.cn/usstock/quotes/${bare}.html`,
+    currency: "USD",
+  };
+}
+
+export async function fetchUsStockQuote(symbol: string): Promise<MarketQuote | null> {
+  return await fetchTencentUsQuote(symbol).catch(() => null)
+    || await fetchSinaUsQuote(symbol).catch(() => null)
+    || await fetchStooqQuote(symbol).catch(() => null)
+    || await fetchTradingViewQuote(symbol).catch(() => null);
+}
+
 export async function collectStooqQuotes(query: unknown, explicitSymbol = ""): Promise<MarketQuote[]> {
   const symbols = extractUsStockSymbols(query, explicitSymbol);
   if (!symbols.length) return [];
-  const settled = await Promise.allSettled(symbols.map((symbol) => fetchStooqQuote(symbol)));
+  const settled = await Promise.allSettled(symbols.map((symbol) => fetchUsStockQuote(symbol)));
   return settled
     .map((item) => item.status === "fulfilled" ? item.value : null)
     .filter((item): item is MarketQuote => Boolean(item));
