@@ -105,6 +105,44 @@ type PromptOptions = AnyRecord & {
   turnInstruction?: string;
   disableTools?: boolean;
 };
+
+function translatedOrFallback(key: string, fallback: string, vars?: Record<string, unknown>): string {
+  const value = t(key, vars);
+  if (value && value !== key) return value;
+  if (!vars) return fallback;
+  return fallback.replace(/\{(\w+)\}/g, (_match, name) => String(vars[name] ?? ""));
+}
+
+function contentFilterCategoryText(check: AnyRecord | null | undefined): string {
+  const categories = [...new Set((check?.matches || []).map((m: AnyRecord) => m.category).filter(Boolean))];
+  return categories.join(", ") || "matched";
+}
+
+function isBrainManagedProvider(provider: unknown): boolean {
+  const value = String(provider || "").trim().toLowerCase();
+  return !value || value === "brain" || value === "stepfun-brain";
+}
+
+function downgradedContentFilterResult(check: AnyRecord, shouldDowngrade: boolean): AnyRecord {
+  if (!shouldDowngrade || !check?.blocked) return check;
+  return {
+    ...check,
+    blocked: false,
+    level: "warn",
+    originalLevel: check.level,
+    downgraded: true,
+  };
+}
+
+function contentFilterErrorMessage(check: AnyRecord): string {
+  const categories = contentFilterCategoryText(check);
+  return translatedOrFallback(
+    "error.contentFiltered",
+    "消息触发了本地内容安全过滤，已被拦截。类别：{categories}。请换一种更明确、正常的表述后重试。",
+    { categories },
+  );
+}
+
 type SessionEntry = AnyRecord & {
   session: SessionLike;
   agentId: string;
@@ -167,6 +205,8 @@ export class SessionCoordinator {
   _pendingPlanMode: boolean;
   _pendingSecurityMode: string;
   _contentFilter?: AnyRecord | null;
+  _contentFilterEnabled?: boolean;
+  _contentFilterByokMode?: "warn" | "block";
 
   /**
    * @param {object} deps
@@ -198,6 +238,8 @@ export class SessionCoordinator {
     this._titlesCache = new Map(); // sessionDir → { titles, ts }
     this._pendingPlanMode = false;
     this._pendingSecurityMode = DEFAULT_SECURITY_MODE;
+    this._contentFilterEnabled = true;
+    this._contentFilterByokMode = "warn";
   }
 
   get session() { return this._session; }
@@ -572,28 +614,38 @@ export class SessionCoordinator {
   }
 
   _applyContentFilter(text: string, sessionPath: string | null | undefined) {
-    if (!this._contentFilter || !text) return null;
+    if (!this._contentFilterEnabled || !this._contentFilter || !text) return null;
     const check = this._contentFilter.check(text);
     if (!check || !check.matches?.length || check.level === "pass") return check;
 
-    const categories = [...new Set(check.matches.map((m: AnyRecord) => m.category).filter(Boolean))];
-    log.log(`[content-filter] ${check.level} input (${categories.join(", ")})`);
+    const entry = sessionPath ? this._sessions.get(sessionPath) : null;
+    const modelProvider = entry?.modelProvider;
+    const byokOrLocal = !isBrainManagedProvider(modelProvider);
+    const shouldDowngrade = byokOrLocal && this._contentFilterByokMode !== "block";
+    const effectiveCheck = downgradedContentFilterResult(check, shouldDowngrade);
+    const categories = contentFilterCategoryText(check);
+    const logLevel = effectiveCheck.downgraded ? `${check.level}->${effectiveCheck.level}` : check.level;
+    log.log(`[content-filter] ${logLevel} input (${categories})`);
     this._d.emitEvent({
       type: "content_filtered",
       direction: "input",
-      blocked: !!check.blocked,
-      level: check.level,
+      blocked: !!effectiveCheck.blocked,
+      level: effectiveCheck.level,
+      originalLevel: effectiveCheck.originalLevel || check.level,
+      downgraded: !!effectiveCheck.downgraded,
+      provider: String(modelProvider || ""),
+      categories: categories === "matched" ? [] : categories.split(", "),
       matches: check.matches.map((m: AnyRecord) => ({ category: m.category, level: m.level })),
     }, sessionPath || null);
     this._d.emitDevLog?.(
-      `内容过滤 ${check.level}: ${categories.join(", ") || "matched"}`,
-      check.level === "warn" ? "warn" : "info",
+      `内容过滤 ${logLevel}: ${categories}`,
+      effectiveCheck.level === "warn" ? "warn" : "info",
     );
 
-    if (check.blocked) {
-      throw new Error(t("error.contentFiltered") || "消息包含不安全内容，已被拦截。");
+    if (effectiveCheck.blocked) {
+      throw new Error(contentFilterErrorMessage(check));
     }
-    return check;
+    return effectiveCheck;
   }
 
   steerSession(sessionPath: string, text: string) {

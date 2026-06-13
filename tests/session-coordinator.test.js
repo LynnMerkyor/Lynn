@@ -858,6 +858,147 @@ describe("SessionCoordinator", () => {
     expect(emitDevLog).toHaveBeenCalledWith("内容过滤 warn: 10-gambling", "warn");
   });
 
+  it("downgrades BYOK content filter blocks to warnings", async () => {
+    const emitEvent = vi.fn();
+    const emitDevLog = vi.fn();
+    const session = {
+      sessionManager: { getSessionFile: () => "/tmp/session.jsonl", getCwd: () => "/tmp/workspace" },
+      subscribe: vi.fn(() => vi.fn()),
+      _buildRuntime: vi.fn(),
+      prompt: vi.fn().mockResolvedValue(undefined),
+      steer: vi.fn(),
+      isStreaming: false,
+    };
+    createAgentSessionMock.mockResolvedValueOnce({ session });
+
+    const coordinator = new SessionCoordinator({
+      agentsDir: "/tmp/agents",
+      getAgent: () => ({
+        agentDir: "/tmp/agent",
+        sessionDir: "/tmp/agent-sessions",
+        tools: [],
+        config: {},
+        recallForMessage: vi.fn().mockResolvedValue(""),
+        _memoryTicker: { notifyTurn: vi.fn() },
+        setMemoryEnabled: vi.fn(),
+      }),
+      getActiveAgentId: () => "hana",
+      getModels: () => ({
+        currentModel: { name: "DeepSeek V4 Pro", provider: "deepseek" },
+        authStorage: {},
+        modelRegistry: {},
+        resolveThinkingLevel: () => "medium",
+      }),
+      getResourceLoader: () => ({ getAppendSystemPrompt: () => [] }),
+      getSkills: () => null,
+      buildTools: () => ({ tools: [], customTools: [] }),
+      emitEvent,
+      emitDevLog,
+      getHomeCwd: () => "/tmp/home",
+      agentIdFromSessionPath: () => null,
+      switchAgentOnly: async () => {},
+      getConfig: () => ({}),
+      getPrefs: () => ({ getThinkingLevel: () => "medium" }),
+      getAgents: () => new Map(),
+      getActivityStore: () => null,
+      getAgentById: () => null,
+      listAgents: () => [],
+    });
+
+    coordinator._contentFilter = {
+      check: vi.fn().mockReturnValue({
+        blocked: true,
+        level: "block",
+        matches: [{ category: "02-national-security", level: "block" }],
+      }),
+    };
+
+    await coordinator.createSession(null, "/tmp/workspace", true);
+    await coordinator.prompt("升级最新版后依然无法正常使用，模型配置界面不对。");
+
+    expect(session.prompt).toHaveBeenCalledWith("升级最新版后依然无法正常使用，模型配置界面不对。", undefined);
+    expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: "content_filtered",
+      blocked: false,
+      level: "warn",
+      originalLevel: "block",
+      downgraded: true,
+      provider: "deepseek",
+      categories: ["02-national-security"],
+    }), "/tmp/session.jsonl");
+    expect(emitDevLog).toHaveBeenCalledWith("内容过滤 block->warn: 02-national-security", "warn");
+  });
+
+  it("keeps Brain-managed content filter blocks hard and shows categories", async () => {
+    const emitEvent = vi.fn();
+    const emitDevLog = vi.fn();
+    const session = {
+      sessionManager: { getSessionFile: () => "/tmp/session.jsonl", getCwd: () => "/tmp/workspace" },
+      subscribe: vi.fn(() => vi.fn()),
+      _buildRuntime: vi.fn(),
+      prompt: vi.fn().mockResolvedValue(undefined),
+      steer: vi.fn(),
+      isStreaming: false,
+    };
+    createAgentSessionMock.mockResolvedValueOnce({ session });
+
+    const coordinator = new SessionCoordinator({
+      agentsDir: "/tmp/agents",
+      getAgent: () => ({
+        agentDir: "/tmp/agent",
+        sessionDir: "/tmp/agent-sessions",
+        tools: [],
+        config: {},
+        recallForMessage: vi.fn().mockResolvedValue(""),
+        _memoryTicker: { notifyTurn: vi.fn() },
+        setMemoryEnabled: vi.fn(),
+      }),
+      getActiveAgentId: () => "hana",
+      getModels: () => ({
+        currentModel: { name: "StepFun 3.7 Flash", provider: "brain" },
+        authStorage: {},
+        modelRegistry: {},
+        resolveThinkingLevel: () => "medium",
+      }),
+      getResourceLoader: () => ({ getAppendSystemPrompt: () => [] }),
+      getSkills: () => null,
+      buildTools: () => ({ tools: [], customTools: [] }),
+      emitEvent,
+      emitDevLog,
+      getHomeCwd: () => "/tmp/home",
+      agentIdFromSessionPath: () => null,
+      switchAgentOnly: async () => {},
+      getConfig: () => ({}),
+      getPrefs: () => ({ getThinkingLevel: () => "medium" }),
+      getAgents: () => new Map(),
+      getActivityStore: () => null,
+      getAgentById: () => null,
+      listAgents: () => [],
+    });
+
+    coordinator._contentFilter = {
+      check: vi.fn().mockReturnValue({
+        blocked: true,
+        level: "block",
+        matches: [{ category: "02-national-security", level: "block" }],
+      }),
+    };
+
+    await coordinator.createSession(null, "/tmp/workspace", true);
+    await expect(coordinator.prompt("blocked input")).rejects.toThrow(/02-national-security/);
+
+    expect(session.prompt).not.toHaveBeenCalled();
+    expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: "content_filtered",
+      blocked: true,
+      level: "block",
+      originalLevel: "block",
+      downgraded: false,
+      provider: "brain",
+      categories: ["02-national-security"],
+    }), "/tmp/session.jsonl");
+  });
+
   it("applies content filtering to steer messages too", () => {
     const emitEvent = vi.fn();
     const emitDevLog = vi.fn();

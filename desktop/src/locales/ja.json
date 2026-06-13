@@ -690,6 +690,7 @@
       "verifySuccess": "接続を確認しました",
       "verifyFailed": "検証に失敗しました",
       "setupHint": "API Key を入力してこのプロバイダーを有効にしてください",
+      "savedKeyPlaceholder": "保存済みです。空欄のままにすると現在のキーを保持します",
       "selectHint": "プロバイダーを選択して詳細を表示",
       "addCustom": "カスタムプロバイダーを追加",
       "noKey": "未設定",
@@ -1312,6 +1313,7 @@
     "agentDeleteActive": "現在使用中のアシスタントは削除できません",
     "agentNotExists": "アシスタント \"{id}\" は存在しません",
     "modelNoResponse": "{model} は今回、表示できる内容を返しませんでした。上流の空応答や互換性の問題であることが多く、API 設定ミスとは限りません。再試行するか、別のモデルに切り替えてください。",
+    "contentFiltered": "このメッセージはローカルのコンテンツ安全フィルターでブロックされました。カテゴリ: {categories}。表現を変えてもう一度お試しください。",
     "defaultModelNoResponse": "{model} の主経路では、このターンで表示できる結果を返せませんでした。Lynn は自動で予備経路にも引き継ぎましたが、まだ表示可能な内容を取得できませんでした。しばらくして再試行するか、設定で自分のモデルサービスに切り替えてください。",
     "invalidToolSimulation": "このラウンドでは実際のツール呼び出しが実行されなかったため、結果は無効として扱われました。もう一度お試しください。",
     "defaultModelInvalidToolSimulation": "デフォルトモデルはこのラウンドで実際のツール実行を完了できなかったため、この結果は無効として扱われました。Lynn はより安定した予備の実行ルートへ切り替えています。",
@@ -1795,7 +1797,11 @@
       "workingDir": "作業ディレクトリ",
       "workingDirDesc": "Agent のファイルシステム作業ディレクトリ",
       "theme": "テーマ",
-      "chatModel": "チャットモデル"
+      "chatModel": "チャットモデル",
+      "contentFilter": "ローカルコンテンツ安全フィルター",
+      "contentFilterDesc": "ローカル入力側のコンテンツ安全フィルターを制御します。既定では有効で、BYOK / ローカルモデルでは既定で警告のみ記録し、ハードブロックしません。",
+      "contentFilterByok": "BYOK フィルターポリシー",
+      "contentFilterByokDesc": "BYOK / ローカルモデルでフィルターに一致した場合の扱い：warn は警告のみ、block はプロンプトを停止します。"
     }
   },
   "cli": {

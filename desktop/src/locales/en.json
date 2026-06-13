@@ -894,6 +894,7 @@
       "verifyFailed": "Verification failed",
       "defaultModelHint": "Lynn routes the default model in the background. You do not need to add, remove, or choose individual model IDs manually.",
       "setupHint": "Enter API Key to activate this provider",
+      "savedKeyPlaceholder": "Saved. Leave blank to keep the current key",
       "selectHint": "Select a provider to view details",
       "addCustom": "Add Custom Provider",
       "noKey": "Not configured",
@@ -1588,6 +1589,7 @@
     "agentDeleteActive": "Cannot delete the currently active agent",
     "agentNotExists": "Agent \"{id}\" does not exist",
     "modelNoResponse": "Model returned no content. Please check API configuration and network connection.",
+    "contentFiltered": "This message was blocked by the local content safety filter. Categories: {categories}. Please rephrase it more clearly and try again.",
     "noActiveSession": "No active session",
     "compacting": "Compaction in progress",
     "waitForReply": "Please wait for the response to finish before compacting",
@@ -2047,7 +2049,11 @@
       "workingDir": "Working Directory",
       "workingDirDesc": "Agent file system working directory",
       "theme": "Theme",
-      "chatModel": "Chat Model"
+      "chatModel": "Chat Model",
+      "contentFilter": "Local Content Safety Filter",
+      "contentFilterDesc": "Controls local input-side content safety filtering. Enabled by default; BYOK/local models record warnings by default instead of hard-blocking.",
+      "contentFilterByok": "BYOK Filter Policy",
+      "contentFilterByokDesc": "How BYOK/local models handle filter hits: warn records a warning, block stops the prompt."
     }
   },
   "cli": {

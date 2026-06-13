@@ -93,6 +93,24 @@ function shouldExposeVerboseModelRouting() {
   return flag === "1" || flag === "true" || process?.env?.NODE_ENV === "development";
 }
 
+function isDisabledFlag(value: unknown): boolean {
+  const flag = String(value || "").trim().toLowerCase();
+  return flag === "0" || flag === "false" || flag === "off" || flag === "disabled";
+}
+
+function resolveContentFilterConfig(prefs: AnyRecord): { enabled: boolean; byokMode: "warn" | "block" } {
+  const raw = prefs?.content_filter;
+  const envSetting = process?.env?.LYNN_CONTENT_FILTER;
+  const enabled = !isDisabledFlag(envSetting)
+    && raw !== false
+    && !(raw && typeof raw === "object" && raw.enabled === false);
+  const byok = raw && typeof raw === "object" ? String(raw.byok || "").trim().toLowerCase() : "";
+  return {
+    enabled,
+    byokMode: byok === "block" ? "block" : "warn",
+  };
+}
+
 export class LynnEngine {
   [key: string]: any;
 
@@ -406,6 +424,13 @@ export class LynnEngine {
   setTimezone(tz: string) { this._prefs.setTimezone(tz); }
   getUpdateChannel() { return this._prefs.getUpdateChannel(); }
   setUpdateChannel(ch: string) { this._prefs.setUpdateChannel(ch); }
+  getContentFilter() { return this._prefs.getContentFilter(); }
+  setContentFilter(partial: boolean | AnyRecord) {
+    this._prefs.setContentFilter(partial as any);
+    const cfg = resolveContentFilterConfig(this._readPreferences());
+    this._sessionCoord._contentFilterEnabled = cfg.enabled;
+    this._sessionCoord._contentFilterByokMode = cfg.byokMode;
+  }
   setMemoryEnabled(v: boolean) { return this._configCoord.setMemoryEnabled(v); }
   setMemoryMasterEnabled(id: string, v: boolean) { return this._configCoord.setMemoryMasterEnabled(id, v); }
   persistSessionMeta() { return this._configCoord.persistSessionMeta(); }
@@ -815,14 +840,25 @@ export class LynnEngine {
 
     // 7b. 内容安全过滤器
     try {
-      this._contentFilter = new ContentFilter();
-      await this._contentFilter.init();
-      // 注入到 SessionCoordinator
-      this._sessionCoord._contentFilter = this._contentFilter;
-      log(`✿ 内容过滤器已加载 (${this._contentFilter.stats.totalWords} 词)`);
+      const contentFilterConfig = resolveContentFilterConfig(this._readPreferences());
+      this._sessionCoord._contentFilterEnabled = contentFilterConfig.enabled;
+      this._sessionCoord._contentFilterByokMode = contentFilterConfig.byokMode;
+      if (!contentFilterConfig.enabled) {
+        this._contentFilter = null;
+        this._sessionCoord._contentFilter = null;
+        log("✿ 内容过滤器已关闭");
+      } else {
+        this._contentFilter = new ContentFilter();
+        await this._contentFilter.init();
+        // 注入到 SessionCoordinator
+        this._sessionCoord._contentFilter = this._contentFilter;
+        log(`✿ 内容过滤器已加载 (${this._contentFilter.stats.totalWords} 词, BYOK=${contentFilterConfig.byokMode})`);
+      }
     } catch (err) {
       log(`[init] content filter init failed (non-fatal): ${errMessage(err)}`);
       this._contentFilter = null;
+      this._sessionCoord._contentFilter = null;
+      this._sessionCoord._contentFilterEnabled = false;
     }
 
     // 8. 沙盒日志

@@ -46,4 +46,20 @@ describe("ContentFilter", () => {
     expect(result.blocked).toBe(false);
     expect(result.matches.some((match) => String(match.word) === "6.4")).toBe(false);
   });
+
+  it("does not block normal support wording with embedded CJK policy fragments", async () => {
+    const filter = await createFilter();
+    const result = filter.check("升级最新版后依然无法正常使用，模型配置界面不对。");
+
+    expect(result.blocked).toBe(false);
+    expect(result.matches.some((match) => String(match.word) === "法正")).toBe(false);
+  });
+
+  it("still catches standalone short CJK policy terms", async () => {
+    const filter = await createFilter();
+    const result = filter.check("法正");
+
+    expect(result.blocked).toBe(true);
+    expect(result.matches.some((match) => String(match.word) === "法正")).toBe(true);
+  });
 });

@@ -53,6 +53,17 @@ export interface NormalizedSnapshotPreference {
   maxDays: number;
 }
 
+export interface ContentFilterPreference {
+  enabled?: boolean;
+  byok?: "warn" | "block" | string;
+  [key: string]: unknown;
+}
+
+export interface NormalizedContentFilterPreference {
+  enabled: boolean;
+  byok: "warn" | "block";
+}
+
 export interface ClientIdentity {
   key: string;
   secret: string;
@@ -70,6 +81,7 @@ export interface PreferencesData {
   oauth_custom_models?: Record<string, string[]>;
   update_channel?: UpdateChannelPreference | string;
   snapshot?: SnapshotPreference;
+  content_filter?: boolean | ContentFilterPreference;
   [CLIENT_AGENT_KEY_PREF_KEY]?: unknown;
   [CLIENT_AGENT_SECRET_PREF_KEY]?: unknown;
   primaryAgent?: string | null;
@@ -264,6 +276,33 @@ export class PreferencesManager {
   setSnapshot(partial: Partial<SnapshotPreference>): void {
     const prefs = this.getPreferences();
     prefs.snapshot = { ...(prefs.snapshot || {}), ...partial };
+    this.savePreferences(prefs);
+  }
+
+  /** 读取本地内容安全过滤配置 */
+  getContentFilter(): NormalizedContentFilterPreference {
+    const cfg = this.getPreferences().content_filter;
+    const byok = cfg && typeof cfg === "object" && String(cfg.byok || "").toLowerCase() === "block"
+      ? "block"
+      : "warn";
+    return {
+      enabled: cfg !== false && !(cfg && typeof cfg === "object" && cfg.enabled === false),
+      byok,
+    };
+  }
+
+  /** 保存本地内容安全过滤配置 */
+  setContentFilter(partial: boolean | Partial<ContentFilterPreference>): void {
+    const prefs = this.getPreferences();
+    if (typeof partial === "boolean") {
+      prefs.content_filter = partial ? { enabled: true, byok: this.getContentFilter().byok } : false;
+    } else {
+      const current = this.getContentFilter();
+      prefs.content_filter = {
+        enabled: partial.enabled ?? current.enabled,
+        byok: partial.byok === "block" ? "block" : partial.byok === "warn" ? "warn" : current.byok,
+      };
+    }
     this.savePreferences(prefs);
   }
 

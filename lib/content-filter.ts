@@ -92,6 +92,7 @@ const SAFE_CONTEXT_PATTERNS: RegExp[] = [
   /财经|行情|股价|股票|基金|指数|汇率|金价|报价|价格|开盘|收盘|成交量|投资建议|不构成投资/,
   /商务邮件|工作邮件|会议|项目|纪要|客户|合同|办公|任务规划|工作计划|时间安排|风险|冲突/,
   /(?:文件|文件夹|目录|路径|本地操作|工具结果|真实工具|执行命令|已执行命令|mkdir|mv|cp|read).{0,16}(?:创建|移动|复制|读取|查询|整理)|(?:创建|移动|复制|读取|查询|整理).{0,16}(?:文件|文件夹|目录|路径|本地操作|工具结果|真实工具|命令)/,
+  /无法正常使用|不能正常使用|无法使用|不能使用|还是不行|依然不行|不回复|没回复|报错|错误|故障|bug|升级|最新版|配置|api\s*key|模型|provider|deepseek|qwen|stepfun/i,
 ];
 
 // 在教育语境中豁免的短词（这些词单独出现时是高频误拦源）
@@ -100,7 +101,7 @@ const CONTEXTUAL_EXEMPT_WORDS = new Set<string>([
   '色情', '诽谤', '歧视', '侵权', '犯罪', '校园霸凌',
   '暴力犯罪', '暴力事件', '名誉损害', '维权', '危机干预',
   '护法', '管控', '成瘾', '网暴', '价格', '开盘', '冲突',
-  '复制',
+  '复制', '法正',
 ]);
 
 function isAsciiTokenChar(char: string | undefined): boolean {
@@ -115,6 +116,20 @@ function shouldSkipEmbeddedAsciiShortWord(text: string, start: number, end: numb
 function shouldSkipEmbeddedNumericWord(text: string, start: number, end: number, word: string): boolean {
   if (!/^\d+(?:[.-]\d+)+$/.test(word || '')) return false;
   return /\d/.test(text[start - 1] || '') || /\d/.test(text[end] || '');
+}
+
+function isCjkChar(char: string | undefined): boolean {
+  return /[\u3400-\u9fff]/.test(char || '');
+}
+
+function shouldSkipEmbeddedCjkShortWord(text: string, start: number, end: number, word: string, category: string | null): boolean {
+  // Large policy/security dictionaries contain many two-character fragments.
+  // In Chinese text those fragments can appear across ordinary word boundaries,
+  // e.g. "无法正常" contains "法正". Do not hard-block these when they are
+  // embedded inside a longer CJK run; standalone terms still match.
+  if (category !== '02-national-security') return false;
+  if (!/^[\u3400-\u9fff]{1,2}$/.test(word || '')) return false;
+  return isCjkChar(text[start - 1]) && isCjkChar(text[end]);
 }
 
 class TrieNode {
@@ -248,6 +263,9 @@ export class ContentFilter {
             continue;
           }
           if (shouldSkipEmbeddedNumericWord(normalizedText, i, j, matchedWord)) {
+            continue;
+          }
+          if (shouldSkipEmbeddedCjkShortWord(normalizedText, i, j, matchedWord, node.category)) {
             continue;
           }
           if (isEducationalContext && wordLen <= 4 && CONTEXTUAL_EXEMPT_WORDS.has(matchedWord)) {

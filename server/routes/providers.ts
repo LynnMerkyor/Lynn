@@ -297,18 +297,22 @@ export function createProvidersRoute(engine: ProvidersRouteEngine): Hono {
       const defaultModels = provRegistry.getDefaultModels(name) || [];
       const allModels = [...new Set([...(p.models || []), ...defaultModels, ...sdkIds])];
       const customModels = oauthCustom[name] || [];
+      const decryptedCreds = provRegistry.getCredentials?.(name);
+      const hasSavedApiKey = decryptedCreds
+        ? !!decryptedCreds.apiKey
+        : !!p.api_key;
 
       const summary: ProviderSummary = {
         type: isOAuth ? "oauth" : ((p.auth_type || registryEntry?.authType) === "none" ? "none" : "api-key"),
         display_name: oauthInfo?.name || p.display_name || name,
         base_url: p.base_url || "",
         api: p.api || "",
-        api_key: p.api_key || "",
+        api_key: hasSavedApiKey ? "__saved__" : "",
         models: allModels,
         custom_models: customModels,
         has_credentials: ((p.auth_type || registryEntry?.authType) === "none")
           ? !!(p.base_url || registryEntry?.baseUrl)
-          : !!(p.api_key || (isOAuth && oauthInfo?.loggedIn)),
+          : !!(hasSavedApiKey || (isOAuth && oauthInfo?.loggedIn)),
         logged_in: isOAuth ? !!oauthInfo?.loggedIn : undefined,
         supports_oauth: isOAuth,
         is_coding_plan: name.endsWith("-coding"),

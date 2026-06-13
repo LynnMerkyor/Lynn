@@ -691,6 +691,7 @@
       "verifySuccess": "연결 확인됨",
       "verifyFailed": "확인 실패",
       "setupHint": "API Key를 입력해서 이 Provider를 활성화하세요",
+      "savedKeyPlaceholder": "저장되어 있어요. 비워 두면 현재 키를 유지해요",
       "selectHint": "Provider를 선택하면 상세 정보를 볼 수 있어요",
       "addCustom": "커스텀 Provider 추가",
       "noKey": "미설정",
@@ -1322,6 +1323,7 @@
     "agentDeleteActive": "현재 사용 중인 어시스턴트는 삭제할 수 없어요",
     "agentNotExists": "어시스턴트 \"{id}\"가 존재하지 않아요",
     "modelNoResponse": "{model}이(가) 이번에는 표시할 수 있는 내용을 반환하지 않았어요. 상위 서비스의 빈 응답이나 호환성 문제일 가능성이 크며, API 설정 오류만을 뜻하지는 않아요. 다시 시도하거나 다른 모델로 바꿔 보세요.",
+    "contentFiltered": "이 메시지는 로컬 콘텐츠 안전 필터에 의해 차단되었어요. 카테고리: {categories}. 더 명확하고 일반적인 표현으로 다시 시도해 주세요.",
     "defaultModelNoResponse": "{model}의 주 경로에서 이번 턴에 보여 줄 결과를 만들지 못했어요. Lynn이 자동으로 보조 경로까지 이어받아 봤지만 아직 표시할 내용을 얻지 못했어요. 잠시 후 다시 시도하거나 설정에서 자신의 모델 서비스로 바꿔 보세요.",
     "invalidToolSimulation": "이번 턴에서 실제 도구 호출이 실행되지 않아 결과가 무효 처리되었어요. 다시 시도해 주세요.",
     "defaultModelInvalidToolSimulation": "기본 모델이 이번 턴에서 실제 도구 실행을 끝내지 못해 결과를 무효 처리했어요. Lynn이 더 안정적인 보조 실행 경로로 넘겨서 다시 처리하고 있어요.",
@@ -1805,7 +1807,11 @@
       "workingDir": "작업 디렉토리",
       "workingDirDesc": "Agent의 파일 시스템 작업 디렉토리",
       "theme": "테마",
-      "chatModel": "대화 모델"
+      "chatModel": "대화 모델",
+      "contentFilter": "로컬 콘텐츠 안전 필터",
+      "contentFilterDesc": "로컬 입력 단계의 콘텐츠 안전 필터를 제어해요. 기본값은 켜짐이며, BYOK / 로컬 모델은 기본적으로 차단 대신 경고만 기록해요.",
+      "contentFilterByok": "BYOK 필터 정책",
+      "contentFilterByokDesc": "BYOK / 로컬 모델에서 필터가 감지됐을 때의 처리 방식: warn은 경고만 기록하고, block은 프롬프트를 중단해요."
     }
   },
   "cli": {

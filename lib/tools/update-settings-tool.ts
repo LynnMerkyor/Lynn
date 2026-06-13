@@ -40,6 +40,8 @@ interface SettingsEngineLike {
   preferences: PreferencesLike;
   agent?: AgentLike | null;
   availableModels?: Array<{ id: string }>;
+  getContentFilter?: () => { enabled?: boolean; byok?: string } | null | undefined;
+  setContentFilter?: (partial: boolean | Record<string, unknown>) => void;
   setSecurityMode(value: string): void;
   setLocale(value: string): void;
   setTimezone(value: string): void;
@@ -179,6 +181,30 @@ const SETTINGS_REGISTRY: Record<string, SettingsRegistryEntry> = {
     searchTerms: ["reasoning", "推理", "思考", "推論"],
     get: (engine) => engine.preferences.getThinkingLevel() || "auto",
     apply: (engine, v) => engine.setThinkingLevel(settingString(v)),
+  },
+  "content_filter.enabled": {
+    type: "toggle",
+    get label() { return t("toolDef.updateSettings.contentFilter"); },
+    get description() { return t("toolDef.updateSettings.contentFilterDesc"); },
+    searchTerms: ["content filter", "safety filter", "安全过滤", "内容过滤", "过滤器", "誤判", "误杀", "誤殺", "コンテンツ", "필터"],
+    get: (engine) => String(engine.getContentFilter?.()?.enabled !== false),
+    apply: (engine, v) => {
+      if (!engine.setContentFilter) throw new Error("content filter settings unavailable");
+      engine.setContentFilter({ enabled: v === true || v === "true" });
+    },
+  },
+  "content_filter.byok": {
+    type: "list",
+    get label() { return t("toolDef.updateSettings.contentFilterByok"); },
+    get description() { return t("toolDef.updateSettings.contentFilterByokDesc"); },
+    options: ["warn", "block"],
+    optionLabels: { warn: "warn", block: "block" },
+    searchTerms: ["BYOK", "local model", "content filter", "safety filter", "安全过滤", "内容过滤", "过滤策略", "api key", "本地模型"],
+    get: (engine) => engine.getContentFilter?.()?.byok || "warn",
+    apply: (engine, v) => {
+      if (!engine.setContentFilter) throw new Error("content filter settings unavailable");
+      engine.setContentFilter({ byok: settingString(v) });
+    },
   },
   "memory.enabled": {
     type: "toggle",

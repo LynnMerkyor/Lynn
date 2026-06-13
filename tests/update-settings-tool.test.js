@@ -18,6 +18,14 @@ function makeMockPrefs(initial = {}) {
     setTimezone(v) { store.timezone = v; },
     getThinkingLevel: () => store.thinking_level || "auto",
     setThinkingLevel(v) { store.thinking_level = v; },
+    getContentFilter: () => store.content_filter || { enabled: true, byok: "warn" },
+    setContentFilter(partial) {
+      if (typeof partial === "boolean") {
+        store.content_filter = partial ? { enabled: true, byok: store.content_filter?.byok || "warn" } : { enabled: false, byok: store.content_filter?.byok || "warn" };
+      } else {
+        store.content_filter = { ...(store.content_filter || { enabled: true, byok: "warn" }), ...partial };
+      }
+    },
     _store: store,
   };
 }
@@ -40,6 +48,8 @@ function makeMockEngine(overrides = {}) {
     setLocale: vi.fn(function (v) { prefs.setLocale(v); }),
     setTimezone: vi.fn(function (v) { prefs.setTimezone(v); }),
     setThinkingLevel: vi.fn(function (v) { prefs.setThinkingLevel(v); }),
+    getContentFilter: vi.fn(() => prefs.getContentFilter()),
+    setContentFilter: vi.fn(function (partial) { prefs.setContentFilter(partial); }),
     setSecurityMode: vi.fn(),
     securityMode: overrides.securityMode || "authorized",
     currentSessionPath: "/sessions/test",
@@ -93,6 +103,26 @@ describe("update-settings-tool", () => {
       const text = result.content[0].text;
       expect(text).toContain('Execute');
       expect(text).toContain('authorized (Execute)');
+    });
+  });
+
+  describe("content filter settings", () => {
+    it("search exposes the local content filter switch and BYOK policy", async () => {
+      const { tool } = buildTool({ prefsData: { content_filter: { enabled: true, byok: "warn" } } });
+      const result = await tool.execute("c-filter-search", { action: "search", query: "content filter" });
+      const text = result.content[0].text;
+
+      expect(text).toContain("content_filter.enabled");
+      expect(text).toContain("content_filter.byok");
+      expect(text).toContain("warn");
+    });
+
+    it("apply content_filter.byok updates the BYOK policy through confirmation", async () => {
+      const { tool, engine } = buildTool({ prefsData: { content_filter: { enabled: true, byok: "warn" } } });
+      await tool.execute("c-filter-apply", { action: "apply", key: "content_filter.byok", value: "block" });
+
+      expect(engine.setContentFilter).toHaveBeenCalledWith({ byok: "block" });
+      expect(engine.preferences._store.content_filter).toMatchObject({ enabled: true, byok: "block" });
     });
   });
 

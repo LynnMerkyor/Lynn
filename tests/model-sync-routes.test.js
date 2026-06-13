@@ -328,6 +328,8 @@ describe("model sync related routes", () => {
       state: "needs_auth",
       auth: { required: true, status: "missing" },
     });
+    expect(data.providers["api-missing"].api_key).toBe("");
+    expect(data.providers["disabled-provider"].api_key).toBe("__saved__");
     expect(data.providers["local-ready"].stateSnapshot).toMatchObject({
       state: "ready",
       auth: { required: false, status: "not_required" },

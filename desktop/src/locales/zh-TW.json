@@ -760,6 +760,7 @@
       "authLabel": "授權",
       "baseUrlLabel": "位址",
       "setupHint": "輸入 API Key 以啟用此供應商",
+      "savedKeyPlaceholder": "已儲存，留空則保持不變",
       "selectHint": "選擇一個供應商查看詳情",
       "addCustom": "新增自訂供應商",
       "noKey": "未設定",
@@ -1410,6 +1411,7 @@
     "agentDeleteActive": "不能刪除目前正在使用的助手",
     "agentNotExists": "助手 \"{id}\" 不存在",
     "modelNoResponse": "{model} 這次沒有回傳任何可顯示內容。這通常是上游空回應或介面相容問題，不一定是你的 API 設定錯誤。請重試，或切換其他模型。",
+    "contentFiltered": "這則訊息觸發了本機內容安全過濾，已被攔截。類別：{categories}。請換一種更明確、正常的表述後再試。",
     "defaultModelNoResponse": "{model} 的主鏈路這一輪沒有產出可顯示結果。Lynn 已自動接力備援鏈路，但這次仍未取得可展示內容。你可以稍後重試，或在設定中切換到自己的模型服務。",
     "invalidToolSimulation": "模型這一輪沒有真正執行工具呼叫，因此結果已被忽略。請再試一次。",
     "defaultModelInvalidToolSimulation": "預設模型這一輪沒有真正完成工具執行，因此結果已被忽略。Lynn 正在切到更穩定的備援執行鏈路。",
@@ -1893,7 +1895,11 @@
       "workingDir": "工作目錄",
       "workingDirDesc": "Agent 的檔案系統工作目錄",
       "theme": "主題",
-      "chatModel": "對話模型"
+      "chatModel": "對話模型",
+      "contentFilter": "本機內容安全過濾",
+      "contentFilterDesc": "控制本機輸入側內容安全過濾。預設開啟；BYOK / 本地模型預設只記錄警告，不硬攔截。",
+      "contentFilterByok": "BYOK 過濾策略",
+      "contentFilterByokDesc": "BYOK / 本地模型命中過濾時的處理方式：warn 只記錄警告，block 直接攔截。"
     }
   },
   "cli": {
