@@ -672,6 +672,29 @@ describe('Router', () => {
     expect(round2Tools).toEqual(['tc-a', 'tc-b']);
   });
 
+  it('adds grounding instructions to realtime evidence tool results before synthesis', async () => {
+    process.env.ZHIPU_KEY = 'test-zhipu';
+    process.env.MIMO_SEARCH_KEY = 'test-mimo';
+    stubSearchFetchOk();
+    const capturedRounds = [];
+    mockState.adapterFn = makeTwoToolThenContentAdapter(capturedRounds);
+
+    const result = await run({
+      messages: [{ role: 'user', content: '世界杯最新赛程' }],
+      onChunk: async () => {},
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    const toolMessages = capturedRounds[1].filter((m) => m.role === 'tool');
+    expect(toolMessages).toHaveLength(2);
+    for (const message of toolMessages) {
+      expect(message.content).toContain('【Lynn 工具证据 #');
+      expect(message.content).toContain('请只基于上方工具证据回答当前事实');
+      expect(message.content).toContain('不要用旧知识或记忆补充工具证据里没有的具体事实');
+      expect(message.content).toContain('The user wants');
+    }
+  });
+
   it('falls back to serial tool execution with BRAIN_V2_TOOL_PARALLEL=1', async () => {
     process.env.BRAIN_V2_TOOL_PARALLEL = '1';
     stubSearchFetchOk();

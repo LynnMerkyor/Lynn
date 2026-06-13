@@ -275,10 +275,29 @@ function summarizeToolResult(toolName: string, result: unknown): { summary?: str
   };
 }
 
+const GROUNDED_TOOL_NAMES = new Set([
+  'web_search',
+  'web_fetch',
+  'live_news',
+  'sports_score',
+  'stock_market',
+  'weather',
+  'exchange_rate',
+  'parallel_research',
+]);
+
 function formatToolResultContent(toolName: string, result: unknown, stepIndex: number): string {
-  void toolName;
-  void stepIndex;
-  return typeof result === 'string' ? result : JSON.stringify(result);
+  const raw = typeof result === 'string' ? result : JSON.stringify(result);
+  if (!GROUNDED_TOOL_NAMES.has(toolName)) return raw;
+  return [
+    `【Lynn 工具证据 #${stepIndex}: ${toolName}】`,
+    raw,
+    '',
+    '【回答约束】请只基于上方工具证据回答当前事实、赛程、比分、价格、日期、数值和来源。',
+    '不要用旧知识或记忆补充工具证据里没有的具体事实；证据不足就明确说“工具结果中未查到”，并说明还需要继续检索。',
+    '如果涉及时间，请保留工具证据中的日期/时区口径，换算时要说明换算依据。',
+    '不要输出内部规划、英文自述或“The user wants...”这类中间推理文本。',
+  ].join('\n');
 }
 
 async function runRound({
