@@ -1,8 +1,8 @@
 # Lynn v0.84.3 Release Notes / 发布说明
 
-> 发布日期: 2026-06-13 · Agent 本地文件任务热修 + GUI/CLI 工具边界门禁
+> 发布日期: 2026-06-13 · Agent 本地文件任务热修 + GUI/CLI 工具边界门禁 + BYOK 内容过滤误杀修复
 
-本次热修覆盖 v0.84.2，重点修复默认模型下 Lynn Agent 在 GUI / CLI 里处理本地文件、小说章节、代码与工具任务时的两个高频问题：模型错误声明“无法访问本地文件系统”，以及部分本地模型把伪 `<tool_call>` 文本直接吐到界面里。
+本次热修覆盖 v0.84.2，重点修复默认模型下 Lynn Agent 在 GUI / CLI 里处理本地文件、小说章节、代码与工具任务时的两个高频问题：模型错误声明“无法访问本地文件系统”，以及部分本地模型把伪 `<tool_call>` 文本直接吐到界面里。此次覆盖包还追加修复 #74 里暴露的 BYOK 输入侧内容过滤误杀。
 
 ## 国内镜像站下载（推荐）
 
@@ -26,6 +26,9 @@
 - **工具边界修复**：Brain 托管的实时工具与客户端本地工具分离，只过滤 Brain 自己管理的工具，不再把 GUI/CLI 的本地文件、搜索、代码工具整批压掉。
 - **本地 Qwen direct bridge 收窄**：utility / coding 任务不再绕过工具链直连本地模型，避免本地 A3B / 9B 在需要工具时只靠语言猜测。
 - **伪工具调用清理**：如果模型输出 `<tool_call>` / `<function=...>` 这类模拟工具文本，服务端流式与前端渲染都会清理，不再把假工具 XML 展示给用户。
+- **BYOK 内容过滤误杀修复**：普通软件反馈/报错描述不再被短词片段误判拦截；BYOK / 本地模型命中过滤时默认只记录警告，不再硬拦用户自己的模型调用。
+- **过滤错误文案修复**：`error.contentFiltered` 不再裸露内部 key，拦截时会显示“本地内容安全过滤 + 命中类别”。
+- **Provider Key 状态更清楚**：模型设置页会在已保存且可解密的 API Key 输入框显示“已保存，留空保持不变”；不能解密的旧 Key 不再假装已配置，用户重填一次后即可稳定保存。
 - **Agent 任务矩阵门禁**：新增 release gate，覆盖 GUI + CLI 本地小说/文件读取、路由分类、工具边界、伪工具泄漏与 live smoke，防止今晚修过的问题再次回归。
 - **v0.84.2 修复保留**：CLI 实时语音断句、BYOK Key 持久化、Brain 注册限流、本地模型启动、DeepSeek 空答恢复等修复继续保留。
 
@@ -67,9 +70,9 @@ Lynn agents     # 给其他智能体/Fleet 的可复制命令
 
 ---
 
-> Release date: 2026-06-13 · Agent local-file task hotfix + GUI/CLI tool-boundary gate
+> Release date: 2026-06-13 · Agent local-file task hotfix + GUI/CLI tool-boundary gate + BYOK content-filter false-positive fix
 
-This hotfix supersedes v0.84.2. It targets two user-visible failures in default-model GUI/CLI agent workflows: local file and novel-reading tasks incorrectly claiming that Lynn has no filesystem access, and local models leaking pseudo `<tool_call>` text into visible chat output.
+This hotfix supersedes v0.84.2. It targets two user-visible failures in default-model GUI/CLI agent workflows: local file and novel-reading tasks incorrectly claiming that Lynn has no filesystem access, and local models leaking pseudo `<tool_call>` text into visible chat output. This overwritten build also includes the #74 BYOK input-side content-filter false-positive fix.
 
 ## Highlights
 
@@ -78,6 +81,9 @@ This hotfix supersedes v0.84.2. It targets two user-visible failures in default-
 - **Tool-boundary fix**: Brain-managed realtime tools and client-side local tools are filtered separately. Lynn no longer suppresses the entire GUI/CLI client-tool surface during Brain turns.
 - **Local Qwen bridge narrowed**: utility and coding tasks no longer bypass the tool chain through the direct local-model bridge.
 - **Pseudo tool-call cleanup**: fake `<tool_call>` / `<function=...>` style text is stripped from server streaming and frontend rendering.
+- **BYOK content-filter false-positive fix**: ordinary support/bug-report wording is no longer blocked by short embedded dictionary fragments. BYOK/local model hits now default to warning-only instead of hard-blocking the user's own model call.
+- **Readable content-filter errors**: `error.contentFiltered` no longer leaks as a raw internal key; hard blocks now show the local safety filter and matched category.
+- **Clearer provider key state**: saved, decryptable API keys now show a "Saved. Leave blank to keep the current key" placeholder. Old undecryptable keys no longer appear configured; re-enter once to migrate them.
 - **Agent task-matrix gate**: a new release gate covers GUI + CLI local novel/file reads, routing, tool boundaries, pseudo-tool leakage, and live smoke tests.
 - **v0.84.2 fixes remain**: CLI realtime voice turn detection, BYOK key persistence, Brain registration hardening, local-model startup hardening, and DeepSeek empty-answer recovery remain in place.
 
