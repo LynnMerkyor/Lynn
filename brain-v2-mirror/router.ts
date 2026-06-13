@@ -18,7 +18,7 @@ import {
   readToolStormConfigFromEnv,
 } from './tool-storm.js';
 import { errorMessage, type ChatMessage, type FallbackEntry, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
-import { DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY } from '../shared/dual-brain-route.js';
+const DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY = 1;
 
 type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio' | 'video'>>;
 type ProviderError = Error & { suppressBody?: boolean; cooldownMs?: number };
@@ -28,6 +28,7 @@ type RunRoundResult = {
   finishReason: string | null;
   toolCalls: ToolCall[];
   contentAccum: string;
+  reasoningAccum: string;
   /** 本轮是否流出过 reasoning(reasoning-only 空答重试的判据)。 */
   sawReasoning: boolean;
 };
@@ -38,6 +39,25 @@ function isProviderConfigured(provider: Provider | null): boolean {
   if (provider.apiKey === 'none') return true;
   if (provider.authType === 'none') return true;
   return false;
+}
+
+function shouldEchoReasoningContent(providerId: ProviderId | null | undefined): boolean {
+  return /deepseek/i.test(String(providerId || ''));
+}
+
+function assistantToolContinuationMessage(result: RunRoundResult): ChatMessage {
+  const message: ChatMessage = {
+    role: 'assistant',
+    content: result.contentAccum || null,
+    tool_calls: result.toolCalls,
+  };
+  if (shouldEchoReasoningContent(result.providerId)) {
+    // DeepSeek reasoning models require this field on assistant tool-call messages
+    // in the continuation round. They may require it even when no reasoning text
+    // was streamed, so echo an explicit empty string instead of omitting it.
+    message.reasoning_content = result.reasoningAccum || '';
+  }
+  return message;
 }
 
 // Tool loop guard. Default raised to 50 — long research / agentic chains need 20-30 turns.
@@ -300,6 +320,27 @@ function formatToolResultContent(toolName: string, result: unknown, stepIndex: n
   ].join('\n');
 }
 
+function summarizeToolCallArgs(argsText: string | undefined): string | undefined {
+  const parsed = parseJsonObject(argsText || '');
+  if (!parsed) return undefined;
+  const preferred = [
+    parsed.query,
+    parsed.q,
+    parsed.url,
+    parsed.city,
+    parsed.location,
+    parsed.code,
+    parsed.name,
+    parsed.title,
+  ].find((value) => typeof value === 'string' && value.trim());
+  if (typeof preferred === 'string') return compactText(preferred, 96);
+  const pairs = Object.entries(parsed)
+    .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+    .slice(0, 3)
+    .map(([key, value]) => `${key}=${String(value)}`);
+  return pairs.length ? compactText(pairs.join(' '), 96) : undefined;
+}
+
 async function runRound({
   messages,
   tools,
@@ -372,6 +413,7 @@ async function runRound({
     let sawReasoning = false;
     let finishReason: string | null = null;
     let contentAccum = '';
+    let reasoningAccum = '';
     const toolCallsAcc: ToolCall[] = [];
     try {
       log && log('info', `→ provider ${providerId}`);
@@ -381,7 +423,7 @@ async function runRound({
         await onChunk(
           {
             type: 'pre_search',
-            source: 'mimo',
+            source: searchContext.meta.source,
             query: searchContext.meta.query,
             hit: searchContext.meta.hit,
             ms: searchContext.meta.ms,
@@ -432,6 +474,7 @@ async function runRound({
         }
         if (chunk.type === 'reasoning') {
           sawReasoning = true;
+          reasoningAccum += String((chunk as { delta?: unknown }).delta || '');
         }
         await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
       }
@@ -466,6 +509,7 @@ async function runRound({
         finishReason,
         toolCalls: toolCallsAcc.filter(Boolean),
         contentAccum,
+        reasoningAccum,
         sawReasoning,
       };
     } catch (e) {
@@ -592,11 +636,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
 
     // 服务端工具 → brain 代执行,结果回灌 messages,下一轮再问 model
     log && log('info', `iter ${iter}: ${serverCalls.length} server-side tool_calls, executing...`);
-    workingMessages.push({
-      role: 'assistant',
-      content: result.contentAccum || null,
-      tool_calls: result.toolCalls,
-    });
+    workingMessages.push(assistantToolContinuationMessage(result));
     // Phase 1 (serial): storm verdicts. Storm counting is order-dependent on the CALL sequence
     // only (name+args repetition), never on execution results, so verdicts are decided up front.
     // Hitting the storm ceiling aborts the round before executing the remaining tools.
@@ -609,12 +649,13 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         continue;
       }
       log && log('warn', `tool storm suppressed: ${stormVerdict.toolName} repeat=${stormVerdict.seen} storms=${stormVerdict.stormCount}/${toolStormConfig.maxStorms}`);
+      const argsSummary = summarizeToolCallArgs(tc.function.arguments);
       await onChunk(
-        { type: 'tool_progress', event: 'start', name: tc.function.name },
+        { type: 'tool_progress', event: 'start', name: tc.function.name, argsSummary },
         { providerId: lastProviderId }
       );
       await onChunk(
-        { type: 'tool_progress', event: 'end', name: tc.function.name, ms: 0, ok: false },
+        { type: 'tool_progress', event: 'end', name: tc.function.name, ms: 0, ok: false, argsSummary },
         { providerId: lastProviderId }
       );
       workingMessages.push({
@@ -655,11 +696,12 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         if (slot >= runnable.length) return;
         nextRunnable += 1;
         const { tc, order } = runnable[slot];
+        const argsSummary = summarizeToolCallArgs(tc.function.arguments);
         const t0 = Date.now();
         // 工具进度通过自定义 chunk type 表达,不污染 content stream (F5 fix)
         // Lynn UI 消费 type=tool_progress;非 Lynn 客户端 ignored。
         await onChunk(
-          { type: 'tool_progress', event: 'start', name: tc.function.name },
+          { type: 'tool_progress', event: 'start', name: tc.function.name, argsSummary },
           { providerId: roundProviderId }
         );
         const toolResult = await executeServerTool(tc.function.name, tc.function.arguments || '{}', { log });
@@ -667,7 +709,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
         const toolSummary = summarizeToolResult(tc.function.name, toolResult);
         await onChunk(
-          { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok, ...toolSummary },
+          { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok, argsSummary, ...toolSummary },
           { providerId: roundProviderId }
         );
         toolOutcomes[order] = { tc, toolResult };

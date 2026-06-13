@@ -5,13 +5,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 const mockState = vi.hoisted(() => ({
   cooldown: new Set(),
   providers: {},
+  order: null,
   adapterFn: null,
   adapterCalls: [],
 }));
 
 vi.mock('../provider-registry.js', () => ({
   universalOrder: ['p-step', 'p-spark', 'p-cloud', 'p-vision'],
-  providerOrderForCapability: (capabilityRequired) => (
+  providerOrderForCapability: (capabilityRequired) => mockState.order || (
     capabilityRequired?.vision || capabilityRequired?.audio || capabilityRequired?.video
       ? ['p-vision', 'p-step', 'p-spark', 'p-cloud']
       : ['p-step', 'p-spark', 'p-cloud', 'p-vision']
@@ -29,6 +30,8 @@ vi.mock('../wire-adapter/index.js', () => ({
 }));
 
 import { run, detectCapability, __testing__ } from '../router.js';
+import { __testing__ as webSearchTesting } from '../tool-exec/web_search.js';
+import { __testing__ as searchContextTesting } from '../search-context.js';
 
 function makeProvider(id, capability = {}) {
   return {
@@ -47,8 +50,12 @@ beforeEach(() => {
     'p-cloud':  makeProvider('p-cloud'),
     'p-vision': makeProvider('p-vision', { vision: true }),
   };
+  mockState.order = null;
   mockState.adapterCalls = [];
   mockState.adapterFn = null;
+  webSearchTesting.cache.clear();
+  webSearchTesting.structuredCache.clear();
+  searchContextTesting.clearCache();
 });
 
 afterEach(() => {
@@ -93,7 +100,7 @@ function stubSearchFetchOk() {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
-    json: async () => ({ choices: [{ message: { content: 'search summary' } }] }),
+    json: async () => ({ search_result: [{ title: 'search summary', link: 'https://search.example', content: 'search summary' }] }),
     text: async () => '',
   }));
 }
@@ -392,7 +399,7 @@ describe('Router', () => {
 
   it('injects pre-search context before the selected non-native provider runs', async () => {
     process.env.BRAIN_V2_PRE_SEARCH = '1';
-    process.env.MIMO_SEARCH_KEY = 'test-mimo';
+    process.env.ZHIPU_KEY = 'test-zhipu';
     mockState.cooldown.add('p-step');
     mockState.providers['p-spark'] = makeProvider('p-spark', { native_search: false });
     const fetchMock = vi.fn(async () => ({
@@ -400,12 +407,7 @@ describe('Router', () => {
       status: 200,
       text: async () => '',
       json: async () => ({
-        choices: [{
-          message: {
-            content: '杭州今日有小雨。',
-            annotations: [{ type: 'url_citation', title: 'weather', url: 'https://weather.example', summary: 'rain' }],
-          },
-        }],
+        search_result: [{ title: '杭州天气', link: '', content: '杭州今日有小雨。', publish_date: '2026-06-13' }],
       }),
     }));
     vi.stubGlobal('fetch', fetchMock);
@@ -422,7 +424,7 @@ describe('Router', () => {
         { role: 'system', content: 'persona must stay at prefix' },
         { role: 'user', content: '你好' },
         { role: 'assistant', content: '你好' },
-        { role: 'user', content: '今天天气怎么样' },
+        { role: 'user', content: '今天天气怎么样 router-presearch-unique-20260613' },
       ],
       onChunk: async (chunk, meta) => {
         chunks.push(chunk);
@@ -433,7 +435,7 @@ describe('Router', () => {
     expect(result.providerId).toBe('p-spark');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(chunks.map(c => c.type)).toEqual(['pre_search', 'content']);
-    expect(chunks[0]).toMatchObject({ source: 'mimo', hit: true, cached: null });
+    expect(chunks[0]).toMatchObject({ source: 'glm', hit: true, cached: null });
     expect(metas[0].fallback_from).toEqual([{ id: 'p-step', reason: 'cooldown' }]);
     expect(adapterMessages).toHaveLength(5);
     expect(adapterMessages.map(m => m.role)).toEqual(['system', 'user', 'assistant', 'user', 'user']);
@@ -443,7 +445,7 @@ describe('Router', () => {
     expect(String(adapterMessages[3].content)).toContain('<lynn_runtime_frame');
     expect(String(adapterMessages[3].content)).toContain('【实时信息上下文】');
     expect(adapterMessages[4].role).toBe('user');
-    expect(adapterMessages[4].content).toBe('今天天气怎么样');
+    expect(adapterMessages[4].content).toBe('今天天气怎么样 router-presearch-unique-20260613');
   });
 
   it('suppresses repeated server tool calls when storm detection is enabled', async () => {
@@ -493,12 +495,7 @@ describe('Router', () => {
         ok: true,
         status: 200,
         json: async () => ({
-          choices: [{
-            message: {
-              content: 'Zhipu summary',
-              tool_calls: [{ type: 'web_search', web_search: { search_result: [{ title: 'A', link: 'https://a.example', content: 'a snippet' }] } }],
-            },
-          }],
+          search_result: [{ title: 'A', link: 'https://a.example', content: 'Zhipu summary a snippet' }],
         }),
         text: async () => '',
       })
@@ -539,13 +536,11 @@ describe('Router', () => {
 
     expect(result).toMatchObject({ ok: true, iterations: 2 });
     const end = chunks.find((chunk) => chunk.type === 'tool_progress' && chunk.event === 'end');
-    expect(end).toMatchObject({ name: 'web_search', ok: true });
+    expect(end).toMatchObject({ name: 'web_search', ok: true, argsSummary: 'Lynn CLI' });
     expect(end.summary).toContain('Zhipu summary');
-    expect(end.summary).toContain('MiMo summary');
     expect(end.details).toEqual(expect.arrayContaining([
       expect.stringContaining('Zhipu summary'),
       expect.stringContaining('[A](https://a.example)'),
-      expect.stringContaining('[B](https://b.example)'),
     ]));
   });
 
@@ -631,20 +626,58 @@ describe('Router', () => {
     expect(reasoningSeen).toEqual([null, null]);
   });
 
+  it('echoes reasoning_content on DeepSeek tool continuation even when no reasoning streamed', async () => {
+    stubSearchFetchOk();
+    mockState.providers = { 'deepseek-chat': makeProvider('deepseek-chat') };
+    mockState.order = ['deepseek-chat'];
+    const capturedRounds = [];
+    mockState.adapterFn = makeTwoToolThenContentAdapter(capturedRounds);
+
+    const result = await run({
+      messages: [{ role: 'user', content: 'search with deepseek' }],
+      onChunk: async () => {},
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    const assistantContinuation = capturedRounds[1].find((message) => message.role === 'assistant' && Array.isArray(message.tool_calls));
+    expect(assistantContinuation).toBeTruthy();
+    expect(assistantContinuation).toHaveProperty('reasoning_content', '');
+  });
+
+  it('does not add reasoning_content to non-DeepSeek tool continuations', async () => {
+    stubSearchFetchOk();
+    const capturedRounds = [];
+    mockState.adapterFn = makeTwoToolThenContentAdapter(capturedRounds);
+
+    const result = await run({
+      messages: [{ role: 'user', content: 'search with stepfun' }],
+      onChunk: async () => {},
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    const assistantContinuation = capturedRounds[1].find((message) => message.role === 'assistant' && Array.isArray(message.tool_calls));
+    expect(assistantContinuation).toBeTruthy();
+    expect(assistantContinuation).not.toHaveProperty('reasoning_content');
+  });
+
   it('runs independent server tools concurrently and feeds results back in original call order', async () => {
     process.env.ZHIPU_KEY = 'test-zhipu';
     process.env.MIMO_SEARCH_KEY = 'test-mimo';
-    // Concurrency barrier: each web_search issues 2 source fetches (zhipu+mimo). With both tools
-    // in flight at once there are 4 pending fetches; serial execution would stall at 2 and the
-    // barrier would only release via the (failing) fallback timer.
+    // Concurrency barrier: each web_search issues one default GLM fetch. With both tools
+    // in flight at once there are 2 pending fetches; serial execution would stall at 1.
     const pending = [];
     let sawParallelBarrier = false;
-    const okPayload = { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'search summary' } }] }), text: async () => '' };
+    const okPayload = {
+      ok: true,
+      status: 200,
+      json: async () => ({ search_result: [{ title: 'search summary', link: 'https://search.example', content: 'search summary' }] }),
+      text: async () => '',
+    };
     const flush = () => { while (pending.length) pending.shift()(okPayload); };
     const fallbackTimer = setTimeout(flush, 1500);
     vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => {
       pending.push(resolve);
-      if (pending.length >= 4) {
+      if (pending.length >= 2) {
         sawParallelBarrier = true;
         clearTimeout(fallbackTimer);
         flush();

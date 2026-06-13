@@ -5,6 +5,7 @@ import { visibleLength } from "./startup.js";
 
 export type InkMarkdownLine =
   | { kind: "heading"; text: string }
+  | { kind: "hr" }
   | { kind: "bullet"; indent: string; text: string }
   | { kind: "numbered"; indent: string; number: string; text: string }
   | { kind: "quote"; text: string }
@@ -53,6 +54,10 @@ export function parseInkMarkdown(text: string): InkMarkdownLine[] {
     }
     if (!raw) {
       parsed.push({ kind: "blank" });
+      continue;
+    }
+    if (/^\s*(?:-{3,}|_{3,}|─{3,})\s*$/.test(raw)) {
+      parsed.push({ kind: "hr" });
       continue;
     }
     const heading = /^#{1,6}\s+(.*)$/.exec(raw);
@@ -127,7 +132,14 @@ export function InkDiffText({ text, maxLines = 32 }: { text: string; maxLines?: 
 function renderMarkdownLine(line: InkMarkdownLine, key: number, error: boolean): React.ReactElement {
   if (error) return React.createElement(Text, { key, color: "red" }, line.kind === "blank" ? " " : lineText(line));
   if (line.kind === "blank") return React.createElement(Text, { key }, " ");
-  if (line.kind === "heading") return React.createElement(Text, { key, color: "cyan", bold: true }, line.text);
+  if (line.kind === "hr") return React.createElement(Text, { key, color: "gray" }, "─".repeat(Math.min(process.stdout.columns || 80, 96)));
+  if (line.kind === "heading") {
+    const underline = "─".repeat(Math.max(4, Math.min(visibleLength(line.text), 40)));
+    return React.createElement(Box, { key, flexDirection: "column", marginTop: 1 },
+      React.createElement(Text, { color: "cyan", bold: true }, line.text),
+      React.createElement(Text, { color: "gray" }, underline),
+    );
+  }
   if (line.kind === "quote") return React.createElement(Text, { key, color: "gray" }, `▏ ${line.text}`);
   if (line.kind === "fence") return React.createElement(Text, { key, color: "gray" }, line.open ? `┌─${line.lang ? ` ${line.lang}` : ""}` : "└─");
   if (line.kind === "code") return renderDiffAwareCodeLine(line.text, key, line.lang);
@@ -180,6 +192,7 @@ function renderInline(text: string): React.ReactElement[] {
 
 function lineText(line: InkMarkdownLine): string {
   if (line.kind === "blank") return "";
+  if (line.kind === "hr") return "────────";
   if (line.kind === "fence") return line.open ? `┌─${line.lang ? ` ${line.lang}` : ""}` : "└─";
   if (line.kind === "bullet") return `${line.indent}• ${line.text}`;
   if (line.kind === "numbered") return `${line.indent}${line.number}. ${line.text}`;
@@ -211,14 +224,17 @@ function renderTable(rows: string[][], key: number): React.ReactElement {
     Math.max(3, ...dataRows.map((row) => visibleLength(row[c] ?? ""))));
   const pad = (text: string, c: number) => `${text}${" ".repeat(Math.max(0, widths[c] - visibleLength(text)))}`;
   const rowText = (cells: string[]) =>
-    Array.from({ length: cols }, (_, c) => pad(cells[c] ?? "", c)).join(" │ ");
-  const divider = widths.map((w) => "─".repeat(w)).join("─┼─");
+    `│ ${Array.from({ length: cols }, (_, c) => pad(cells[c] ?? "", c)).join(" │ ")} │`;
+  const border = (left: string, mid: string, right: string) =>
+    `${left}${widths.map((w) => "─".repeat(w + 2)).join(mid)}${right}`;
   const out: React.ReactElement[] = [
+    React.createElement(Text, { key: "top", color: "gray" }, border("┌", "┬", "┐")),
     React.createElement(Text, { key: "h", bold: true }, rowText(dataRows[0])),
-    React.createElement(Text, { key: "d", color: "gray" }, divider),
+    React.createElement(Text, { key: "d", color: "gray" }, border("├", "┼", "┤")),
   ];
   for (let i = 1; i < dataRows.length; i += 1) {
     out.push(React.createElement(Text, { key: i }, rowText(dataRows[i])));
   }
+  out.push(React.createElement(Text, { key: "bottom", color: "gray" }, border("└", "┴", "┘")));
   return React.createElement(Box, { key, flexDirection: "column" }, ...out);
 }

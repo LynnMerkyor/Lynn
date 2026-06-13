@@ -2,7 +2,7 @@
 // 原则:只做事实型(capability + 健康/cooldown),不做内容判断
 import './env-loader.js';
 import { envModel, providerId, type Provider, type ProviderId, type ProviderIdLiteral } from './types.js';
-import { DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY } from '../shared/dual-brain-route.js';
+const DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY = 1;
 
 const env = (k: string, d: string): string => process.env[k] || d;
 
@@ -10,7 +10,7 @@ type ProviderRegistry = Record<ProviderIdLiteral, Provider>;
 
 // NOTE: MiMo is no longer a chat/vision provider here (StepFun step-3.7-flash + step-1o-turbo-vision
 // took over text+vision). MiMo's *paid search* backend stays alive separately in tool-exec/web_search.ts
-// (searchMimo/searchMimoStructured) + search-context.ts pre-search — those still use MIMO_SEARCH_* env.
+// web_search/search-context resolve their own search provider chain (GLM primary, MiMo for links/fallback).
 const PROVIDER_DEFS = {
   'apex-spark-i-balanced': {
     id: providerId('apex-spark-i-balanced'),

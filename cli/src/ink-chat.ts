@@ -40,8 +40,20 @@ type Turn = {
   role: "user" | "assistant" | "system";
   text: string;
   meta?: string;
+  trace?: TraceLine[];
   pending?: boolean;
   error?: boolean;
+};
+
+export type TraceLine = {
+  id: number;
+  kind: "reasoning" | "tool";
+  text: string;
+  status?: "running" | "done" | "failed";
+  ms?: number;
+  ok?: boolean;
+  toolName?: string;
+  argsSummary?: string;
 };
 
 interface InkChatProps {
@@ -293,7 +305,29 @@ function TurnView({ turn }: { turn: Turn }): React.ReactElement {
   }
   return React.createElement(Box, { marginTop: 1, flexDirection: "column" },
     turn.meta ? React.createElement(Text, { color: "gray" }, turn.meta) : null,
+    turn.trace?.length
+      ? React.createElement(Box, { flexDirection: "column", marginBottom: turn.text ? 1 : 0 },
+        ...turn.trace.map((trace) => React.createElement(TraceLineView, { key: trace.id, trace })),
+      )
+      : null,
     React.createElement(InkMarkdown, { text: turn.text, error: turn.error }),
+  );
+}
+
+function TraceLineView({ trace }: { trace: TraceLine }): React.ReactElement {
+  if (trace.kind === "reasoning") {
+    return React.createElement(Text, { color: "gray" },
+      "• ",
+      React.createElement(Text, { dimColor: true }, trace.text),
+    );
+  }
+  const color = trace.status === "failed" ? "red" : trace.status === "done" ? "green" : "cyan";
+  const dot = trace.status === "failed" ? "✕" : trace.status === "done" ? "●" : "•";
+  return React.createElement(Text, null,
+    React.createElement(Text, { color }, dot),
+    " ",
+    React.createElement(Text, { color: trace.status === "running" ? "cyan" : undefined, bold: trace.status === "done" }, trace.text),
+    trace.ms !== undefined ? React.createElement(Text, { color: "gray" }, ` ${formatTraceMs(trace.ms)}`) : null,
   );
 }
 
@@ -351,6 +385,92 @@ function InkTopBanner({ width, frame, animated }: { width: number; frame: number
       }),
     ),
   );
+}
+
+type ToolProgressEvent = Extract<BrainStreamEvent, { type: "tool_progress" }>;
+
+export function friendlyToolName(name: string): string {
+  const normalized = String(name || "").trim();
+  const known: Record<string, string> = {
+    web_search: "SearchWeb",
+    web_fetch: "FetchWeb",
+    live_news: "LiveNews",
+    sports_score: "SportsScore",
+    stock_market: "StockMarket",
+    weather: "Weather",
+    exchange_rate: "ExchangeRate",
+    calendar: "Calendar",
+    unit_convert: "UnitConvert",
+    express_tracking: "ExpressTracking",
+    parallel_research: "ParallelResearch",
+    create_report: "CreateReport",
+    create_artifact: "CreateArtifact",
+    create_pptx: "CreatePPTX",
+    create_pdf: "CreatePDF",
+  };
+  return known[normalized] || normalized.replace(/(^|[_.-])([a-z])/g, (_m, sep: string, ch: string) => `${sep === "." ? "." : ""}${ch.toUpperCase()}`);
+}
+
+export function formatToolTraceText(event: ToolProgressEvent): string {
+  const verb = event.event === "end" ? (event.ok === false ? "Failed" : "Used") : "Using";
+  const arg = event.argsSummary ? ` (${event.argsSummary})` : "";
+  return `${verb} ${friendlyToolName(event.name)}${arg}`;
+}
+
+function formatTraceMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  return ms >= 1000 ? `${(ms / 1000).toFixed(ms >= 10_000 ? 0 : 1)}s` : `${Math.round(ms)}ms`;
+}
+
+function compactTraceText(text: string, max = 180): string {
+  const single = String(text || "").replace(/\s+/g, " ").trim();
+  if (single.length <= max) return single;
+  return `${single.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
+}
+
+function appendReasoningTrace(trace: TraceLine[] | undefined, delta: string): TraceLine[] {
+  const traces = [...(trace || [])];
+  const text = compactTraceText(`${traces.at(-1)?.kind === "reasoning" ? traces.at(-1)?.text || "" : ""}${delta}`);
+  if (traces.at(-1)?.kind === "reasoning") {
+    traces[traces.length - 1] = { ...traces[traces.length - 1], text };
+  } else {
+    traces.push({ id: Date.now() + traces.length, kind: "reasoning", text });
+  }
+  return traces.slice(-8);
+}
+
+function updateToolTrace(trace: TraceLine[] | undefined, event: ToolProgressEvent): TraceLine[] {
+  const traces = [...(trace || [])];
+  const status = event.event === "end" ? (event.ok === false ? "failed" : "done") : "running";
+  const next: TraceLine = {
+    id: Date.now() + traces.length,
+    kind: "tool",
+    status,
+    ok: event.ok,
+    toolName: event.name,
+    argsSummary: event.argsSummary,
+    ms: event.ms,
+    text: formatToolTraceText(event),
+  };
+  if (event.event === "end") {
+    const index = findLastToolTrace(traces, event.name, event.argsSummary);
+    if (index >= 0) {
+      traces[index] = { ...next, id: traces[index].id };
+      return traces.slice(-8);
+    }
+  }
+  traces.push(next);
+  return traces.slice(-8);
+}
+
+function findLastToolTrace(traces: TraceLine[], name: string, argsSummary?: string): number {
+  for (let i = traces.length - 1; i >= 0; i -= 1) {
+    const trace = traces[i];
+    if (trace.kind !== "tool" || trace.toolName !== name) continue;
+    if (argsSummary && trace.argsSummary && trace.argsSummary !== argsSummary) continue;
+    if (trace.status === "running") return i;
+  }
+  return -1;
 }
 
 async function submitInput(inputData: {
@@ -580,7 +700,11 @@ async function submitChatTurn(inputData: {
       if (event.type === "usage") inputData.setUsage(summarizeUsage(event.usage, { durationMs: Date.now() - startedAt }));
       if (event.type === "brain.error") throw new Error(formatBrainErrorForHuman(event.error, event.code));
       if (event.type === "reasoning.delta" && shouldRenderReasoning(inputData.reasoning.display, false)) {
-        inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, meta: `${turn.meta || ""}${event.text}`.slice(-180) } : turn));
+        inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, trace: appendReasoningTrace(turn.trace, event.text) } : turn));
+      }
+      if (event.type === "tool_progress") {
+        inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, pending: false, trace: updateToolTrace(turn.trace, event) } : turn));
+        continue;
       }
       if (event.type !== "assistant.delta") continue;
       assistant += event.text;

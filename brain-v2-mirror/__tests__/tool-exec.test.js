@@ -97,6 +97,18 @@ describe('mergeWithServerTools document-intent gating', () => {
     expect(n).not.toContain('create_artifact');
   });
 
+  it('injects HTML/report tools when the user asks to export results as an image', () => {
+    const n = names(null, [{ role: 'user', content: '把刚才世界杯赛程结果输出成图片长图' }]);
+    expect(n).toContain('create_report');
+    expect(n).toContain('create_artifact');
+  });
+
+  it('does not treat creative image drawing as an HTML report request', () => {
+    const n = names(null, [{ role: 'user', content: '画一只猫在月亮上睡觉' }]);
+    expect(n).not.toContain('create_report');
+    expect(n).not.toContain('create_artifact');
+  });
+
   it('injects the document generators on explicit intent (zh)', () => {
     expect(names(null, [{ role: 'user', content: '帮我做个PPT介绍这个项目' }])).toContain('create_pptx');
     expect(names(null, [{ role: 'user', content: '整理成一份分析报告' }])).toContain('create_report');

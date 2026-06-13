@@ -80,8 +80,8 @@ export type StreamChunk =
   | { type: 'tool_call_delta'; delta: ToolCallDelta[] }
   | { type: 'usage'; usage: unknown }
   | { type: 'finish'; reason: string }
-  | { type: 'tool_progress'; event: 'start' | 'end'; name: string; ms?: number; ok?: boolean; summary?: string; details?: string[] }
-  | { type: 'pre_search'; source: 'mimo'; query: string; hit: boolean; ms: number; cached: 'request' | 'lru' | null }
+  | { type: 'tool_progress'; event: 'start' | 'end'; name: string; ms?: number; ok?: boolean; summary?: string; details?: string[]; argsSummary?: string }
+  | { type: 'pre_search'; source: string; query: string; hit: boolean; ms: number; cached: 'request' | 'lru' | null }
   | { type: 'audio_fallback'; source: string; transcripts: number; total: number; ms: number }
   | ({ type: 'error'; error: string } & Record<string, unknown>);
 
@@ -124,6 +124,8 @@ export interface ChatMessage {
   content?: unknown;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
+  /** DeepSeek reasoning models require this field to be echoed on assistant tool-call continuations. */
+  reasoning_content?: string;
 }
 
 export interface ToolCall {

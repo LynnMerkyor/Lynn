@@ -5,6 +5,7 @@ describe("parseInkMarkdown", () => {
   it("parses markdown blocks used by the Ink chat and code shells", () => {
     expect(parseInkMarkdown([
       "# Title",
+      "---",
       "- use `read_file`",
       "1. run **tests**",
       "> note",
@@ -15,6 +16,7 @@ describe("parseInkMarkdown", () => {
       "```",
     ].join("\n"))).toEqual([
       { kind: "heading", text: "Title" },
+      { kind: "hr" },
       { kind: "bullet", indent: "", text: "use `read_file`" },
       { kind: "numbered", indent: "", number: "1", text: "run **tests**" },
       { kind: "quote", text: "note" },

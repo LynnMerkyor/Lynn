@@ -146,7 +146,7 @@ export const SERVER_TOOLS = [
     type: 'function',
     function: {
       name: 'create_report',
-      description: 'Generate a professional dark-themed HTML analysis report from JSON (title + sections[], provide >=3 sections). Each section = {title, type, ...type-specific fields}. By type: metrics -> metrics:[{label,value,change,direction:up|down|neutral}] (KPI cards); text -> content (string) or blocks:[{heading,text}]; table -> headers:[str] + rows:[[str]]; verdict -> items:[{period,range,note}] (prediction cards); warning -> content (alert text).',
+      description: 'Generate a professional HTML report/page from JSON (title + sections[]). Use when the user explicitly asks for a report, preview/export page, or to turn existing results/data/tables/rankings/charts into an image/long image/PNG/HTML visualization. This is deterministic local Chromium/Electron HTML→PNG rendering, not AI text-to-image; creative illustrations belong to generate_image/flux. Provide real content, not shell reports. Each section = {title, type, ...type-specific fields}. By type: metrics -> metrics:[{label,value,change,direction:up|down|neutral}] (KPI cards); text -> content (string) or blocks:[{heading,text}]; table -> headers:[str] + rows:[[str]]; verdict -> items:[{period,range,note}] (prediction cards); warning -> content (alert text).',
       parameters: {
         type: 'object',
         properties: {
@@ -260,10 +260,17 @@ const DOC_INTENT_RE = new RegExp([
   // zh: a create-verb followed (within one clause) by a document object — the gap
   // covers connectors/measure-words like 成/个/一份/详细的 ("做成PPT", "做一份详细的报告").
   '(生成|制作|做|帮我做|给我做|帮我生成|导出|搞|整理|写|画|出)[^。!?,;，；\\n]{0,8}(报告|研报|分析报告|ppt|pptx|幻灯片?|演示文稿|演示|海报|pdf|artifact|预览)',
+  // zh: deterministic result/data visualization export. This is NOT AI text-to-image;
+  // it should route to HTML/report/artifact tools that can be rendered/exported as PNG.
+  '(结果|数据|表格|榜单|图表|看板|赛程|行情)[^。!?,;，；\\n]{0,16}(出成|生成|导出|输出|做成|制成)[^。!?,;，；\\n]{0,8}(图片|长图|png|PNG|HTML|html|可视化)',
+  '(出成|导出|输出|做成)[^。!?,;，；\\n]{0,8}(图片|长图|png|PNG)',
   // zh: strong standalone format words
   '研报|演示文稿|幻灯片|pptx',
   // en: a create-verb followed by a document object
   '\\b(create|generate|make|build|export|produce|draft|write)\\b[^\\n]{0,24}\\b(report|presentation|pptx?|powerpoint|slides?|slide\\s*deck|deck|pdf|artifact)\\b',
+  // en: deterministic result/data/table/chart export to image or HTML
+  '\\b(results?|data|tables?|rankings?|charts?|dashboard|schedule|market)\\b[^\\n]{0,40}\\b(image|long\\s*image|png|html|visuali[sz]ation)\\b',
+  '\\b(export|render|turn|convert)\\b[^\\n]{0,40}\\b(image|long\\s*image|png|html)\\b',
   // en: strong standalone format words
   '\\b(pptx|powerpoint)\\b',
 ].join('|'), 'i');

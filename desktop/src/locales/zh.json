@@ -1946,7 +1946,7 @@
     },
     "report": {
       "label": "生成 HTML 报告",
-      "description": "仅当用户明确要求生成报告、HTML 报告、可预览/可导出的页面或发布稿时，生成可在聊天框预览、浏览器打开并导出 PNG 的专业 HTML 报告。适合深度研究、行情分析、行业报告、项目复盘、发布稿。简单计算、普通表格、摘要和管理建议应直接在聊天正文回答，不要调用此工具。必须先提供真实内容章节，不要生成空壳报告。stylePreset 可选：editorial-paper（纸质杂志感深度报告，推荐默认）、finance-dark（深色金融看板）、magazine（大胆杂志版式）、clean-briefing（清爽简报）。",
+      "description": "仅当用户明确要求生成报告、HTML 报告、可预览/可导出的页面、发布稿，或把已有结果/数据/表格/榜单/图表出成图片、长图、PNG、HTML 可视化时调用。此工具走本地 Chromium/Electron 渲染 HTML→PNG，适合确定性数据图、表格图、行情看板和深度报告；创意插画/文生图才用 generate_image/flux。简单计算、普通表格、摘要和管理建议应直接在聊天正文回答，不要调用此工具，除非用户明确要求导出成图或页面。必须先提供真实内容章节，不要生成空壳报告。stylePreset 可选：editorial-paper（纸质杂志感深度报告，推荐默认）、finance-dark（深色金融看板）、magazine（大胆杂志版式）、clean-briefing（清爽简报）。",
       "titleDesc": "报告标题",
       "tagDesc": "报告分类或短标签，如 A股研究、行业观察",
       "subtitleDesc": "副标题或一句话摘要",
