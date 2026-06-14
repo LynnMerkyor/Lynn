@@ -7,6 +7,7 @@ export default defineConfig({
       ...configDefaults.exclude,
       "**/.claude/**",
       "**/.codebuddy/**",
+      "**/.qwen/**",
       "**/.session_tmps/**",
       "**/.thumbs/**",
       "**/dist-release*/**",

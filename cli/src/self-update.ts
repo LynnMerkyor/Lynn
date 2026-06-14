@@ -1,4 +1,8 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import readline from "node:readline/promises";
 import type { Readable, Writable } from "node:stream";
 import { getStringFlag, hasFlag, type ParsedArgs } from "./args.js";
@@ -21,6 +25,7 @@ export interface CliUpdateCheck {
 
 const DEFAULT_MANIFEST_URL = "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.json";
 const DEFAULT_TARBALL_URL = "https://download.merkyorlynn.com/downloads/cli/lynn-cli-latest.tgz";
+const SHA256_RE = /^[a-f0-9]{64}$/i;
 
 export function isInteractiveUpdateCommand(args: ParsedArgs): boolean {
   if (hasFlag(args.flags, "json", "jsonl", "help", "h")) return false;
@@ -132,10 +137,56 @@ function isUpdateCheckSuppressed(env: NodeJS.ProcessEnv): boolean {
     || env.NODE_ENV === "test";
 }
 
-export function installCliUpdate(manifest: CliUpdateManifest): Promise<number> {
+export async function installCliUpdate(manifest: CliUpdateManifest): Promise<number> {
+  const verified = await downloadVerifiedCliUpdateTarball(manifest);
+  try {
+    return await runNpmGlobalInstall(verified.tarballPath);
+  } finally {
+    verified.cleanup();
+  }
+}
+
+export function verifyCliUpdateTarballBytes(bytes: Uint8Array, expectedSha256: string): string {
+  const expected = normalizeSha256(expectedSha256);
+  if (!expected) {
+    throw new Error("CLI update manifest has invalid sha256");
+  }
+  const actual = createHash("sha256").update(bytes).digest("hex");
+  if (actual !== expected) {
+    throw new Error(`CLI update sha256 mismatch: expected ${expected}, got ${actual}`);
+  }
+  return actual;
+}
+
+async function downloadVerifiedCliUpdateTarball(
+  manifest: CliUpdateManifest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ tarballPath: string; cleanup: () => void }> {
+  const expected = normalizeSha256(manifest.sha256);
+  if (!expected) {
+    throw new Error("CLI update manifest is missing a valid sha256");
+  }
+  const response = await fetchImpl(manifest.tarballUrl || DEFAULT_TARBALL_URL);
+  if (!response.ok) {
+    throw new Error(`CLI update download failed: HTTP ${response.status}`);
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  verifyCliUpdateTarballBytes(bytes, expected);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-cli-update-"));
+  const tarballPath = path.join(dir, "lynn-cli-update.tgz");
+  fs.writeFileSync(tarballPath, bytes);
+  return {
+    tarballPath,
+    cleanup: () => {
+      fs.rmSync(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+function runNpmGlobalInstall(target: string): Promise<number> {
   const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
   return new Promise((resolve, reject) => {
-    const child = spawn(npmBin, ["install", "-g", "--force", manifest.tarballUrl || DEFAULT_TARBALL_URL], {
+    const child = spawn(npmBin, ["install", "-g", "--force", target], {
       stdio: "inherit",
       env: process.env,
     });
@@ -146,16 +197,25 @@ export function installCliUpdate(manifest: CliUpdateManifest): Promise<number> {
 
 function normalizeManifest(raw: Partial<CliUpdateManifest>): CliUpdateManifest | null {
   if (!raw || typeof raw.version !== "string" || !raw.version.trim()) return null;
+  const rawWithUrl = raw as Partial<CliUpdateManifest> & { url?: unknown };
   const tarballUrl = typeof raw.tarballUrl === "string" && raw.tarballUrl.trim()
     ? raw.tarballUrl.trim()
+    : typeof rawWithUrl.url === "string" && rawWithUrl.url.trim()
+      ? rawWithUrl.url.trim()
     : DEFAULT_TARBALL_URL;
   return {
     version: raw.version.trim(),
     build: typeof raw.build === "string" && raw.build.trim() ? raw.build.trim() : undefined,
     tarballUrl,
-    sha256: typeof raw.sha256 === "string" ? raw.sha256 : undefined,
+    sha256: normalizeSha256(raw.sha256) || undefined,
     notesUrl: typeof raw.notesUrl === "string" ? raw.notesUrl : undefined,
   };
+}
+
+function normalizeSha256(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return SHA256_RE.test(normalized) ? normalized : null;
 }
 
 function compareVersions(left: string, right: string): number {

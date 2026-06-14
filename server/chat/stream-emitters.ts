@@ -12,6 +12,10 @@ import {
   flushStreamingPseudoToolBlocks,
   stripStreamingPseudoToolBlocks,
 } from "./stream-sanitizer.js";
+import {
+  containsPseudoToolSimulation,
+  stripPseudoToolCallMarkup,
+} from "../../shared/pseudo-tool-call.js";
 
 type ThinkTagEvent =
   | { type: "think_start" }
@@ -98,6 +102,17 @@ export function createStreamEmitters({
     return result.text;
   }
 
+  function sanitizeTrustedVisibleDelta(sessionPath: string, delta: unknown): string {
+    const text = String(delta || "");
+    if (!text) return "";
+    if (!containsPseudoToolSimulation(text)) return text;
+    const stripped = stripPseudoToolCallMarkup(text);
+    if (stripped !== text) {
+      debugLog()?.warn("ws", `stripped pseudo tool-call markup from trusted visible text · session=${sessionPath}`);
+    }
+    return stripped;
+  }
+
   function emitStreamEvent(
     sessionPath: string,
     ss: ChatStreamEmitterState,
@@ -111,7 +126,7 @@ export function createStreamEmitters({
     ss: ChatStreamEmitterState,
     delta: unknown,
   ): boolean {
-    const next = sanitizeVisibleDelta(sessionPath, ss, delta);
+    const next = sanitizeTrustedVisibleDelta(sessionPath, delta);
     if (!next) return false;
     ss.hasOutput = true;
     ss.titlePreview += next;

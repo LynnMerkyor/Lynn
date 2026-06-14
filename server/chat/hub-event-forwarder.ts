@@ -145,9 +145,10 @@ export function createHubEventForwarder({
       ss.hasToolCall = true;
       ss.activeToolCallCount = Math.max(0, Number(ss.activeToolCallCount || 0)) + 1;
       ss.lastToolExecutionActivity = Date.now();
-      if (Number(ss.activeToolCallCount || 0) === 1) {
-        ss.activeToolCallStartedAt = ss.lastToolExecutionActivity;
-      }
+      // The finalization fence should measure grace from the most recent
+      // active tool transition. Multiple overlapping tools can otherwise make
+      // a later slow tool inherit an older start time and get aborted early.
+      ss.activeToolCallStartedAt = ss.lastToolExecutionActivity;
       if (ss.isThinking) {
         ss.isThinking = false;
         emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
@@ -210,6 +211,8 @@ export function createHubEventForwarder({
       ss.lastToolExecutionActivity = Date.now();
       if (Number(ss.activeToolCallCount || 0) === 0) {
         ss.activeToolCallStartedAt = null;
+      } else {
+        ss.activeToolCallStartedAt = ss.lastToolExecutionActivity;
       }
       try {
         const key = event.toolCallId || event.toolName || "";

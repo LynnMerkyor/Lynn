@@ -1,4 +1,4 @@
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -77,7 +77,7 @@ ${bodyHtml}
   fs.writeFileSync(htmlPath, html);
 
   try {
-    execSync(`python3 -m weasyprint "${htmlPath}" "${pdfPath}"`, { timeout: 30000, stdio: 'pipe' });
+    execFileSync('python3', ['-m', 'weasyprint', htmlPath, pdfPath], { timeout: 30000, stdio: 'pipe' });
     if (fs.existsSync(pdfPath)) {
       return { path: pdfPath, size: fs.statSync(pdfPath).size, html: htmlPath };
     }
