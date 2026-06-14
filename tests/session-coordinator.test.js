@@ -3,16 +3,17 @@ import os from "os";
 import path from "path";
 import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
 
-const { createAgentSessionMock, sessionManagerCreateMock } = vi.hoisted(() => ({
+const { createAgentSessionMock, sessionManagerCreateMock, sessionManagerOpenMock } = vi.hoisted(() => ({
   createAgentSessionMock: vi.fn(),
   sessionManagerCreateMock: vi.fn(),
+  sessionManagerOpenMock: vi.fn(),
 }));
 
 vi.mock("@mariozechner/pi-coding-agent", () => ({
   createAgentSession: createAgentSessionMock,
   SessionManager: {
     create: sessionManagerCreateMock,
-    open: vi.fn(),
+    open: sessionManagerOpenMock,
   },
   SettingsManager: {
     inMemory: vi.fn(() => ({})),
@@ -37,6 +38,10 @@ describe("SessionCoordinator", () => {
     vi.clearAllMocks();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hana-session-coordinator-"));
     sessionManagerCreateMock.mockReturnValue({ getCwd: () => "/tmp/workspace" });
+    sessionManagerOpenMock.mockReturnValue({
+      getCwd: () => "/tmp/workspace",
+      getSessionFile: () => "/tmp/session.jsonl",
+    });
     createAgentSessionMock.mockResolvedValue({
       session: {
         sessionManager: { getSessionFile: () => "/tmp/session.jsonl", getCwd: () => "/tmp/workspace" },
@@ -50,6 +55,7 @@ describe("SessionCoordinator", () => {
 
   afterEach(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
+    vi.useRealTimers();
   });
 
   it("applies session memory before creating the agent session", async () => {
@@ -188,6 +194,98 @@ describe("SessionCoordinator", () => {
     await coordinator.createSession(null, "/tmp/workspace", true);
     const resourceLoader = createAgentSessionMock.mock.calls.at(-1)[0].resourceLoader;
     expect(resourceLoader.getAppendSystemPrompt()).toContain("[MCP Resources]\n- filesystem: repo-root, docs");
+  });
+
+  it("refreshes stale Brain request signatures before the next prompt", async () => {
+    const previousLynnHome = process.env.LYNN_HOME;
+    const firstTime = Date.parse("2026-06-14T00:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(firstTime);
+    try {
+      process.env.LYNN_HOME = tempDir;
+      const prefsDir = path.join(tempDir, "user");
+      fs.mkdirSync(prefsDir, { recursive: true });
+      fs.writeFileSync(path.join(prefsDir, "preferences.json"), JSON.stringify({
+        client_agent_key: "ak_test_refresh",
+        client_agent_secret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      }), "utf8");
+
+      const prompts = [];
+      createAgentSessionMock.mockImplementation(async ({ requestHeaders }) => ({
+        session: {
+          sessionManager: { getSessionFile: () => "/tmp/session.jsonl", getCwd: () => "/tmp/workspace" },
+          subscribe: vi.fn(() => vi.fn()),
+          _buildRuntime: vi.fn(),
+          prompt: vi.fn().mockImplementation(async (...args) => {
+            prompts.push({ requestHeaders, args });
+          }),
+          steer: vi.fn(),
+          isStreaming: false,
+        },
+      }));
+
+      const agent = {
+        agentDir: "/tmp/agent",
+        sessionDir: "/tmp/agent-sessions",
+        tools: [],
+        config: {},
+        recallForMessage: vi.fn().mockResolvedValue(""),
+        setMemoryEnabled: vi.fn(),
+        _memoryTicker: { notifyTurn: vi.fn() },
+      };
+      const model = {
+        id: "lynn-brain-router",
+        provider: "brain",
+        name: "默认模型",
+        baseUrl: "https://api.merkyorlynn.com/api/v2/v1",
+      };
+      const coordinator = new SessionCoordinator({
+        agentsDir: "/tmp/agents",
+        getAgent: () => agent,
+        getActiveAgentId: () => "hana",
+        getModels: () => ({
+          currentModel: model,
+          availableModels: [model],
+          authStorage: {},
+          modelRegistry: {},
+          resolveThinkingLevel: () => "medium",
+        }),
+        getResourceLoader: () => ({ getAppendSystemPrompt: () => [] }),
+        getSkills: () => null,
+        buildTools: () => ({ tools: [], customTools: [] }),
+        emitEvent: () => {},
+        emitDevLog: () => {},
+        getHomeCwd: () => "/tmp/home",
+        agentIdFromSessionPath: () => null,
+        switchAgentOnly: async () => {},
+        getConfig: () => ({}),
+        getPrefs: () => ({ getThinkingLevel: () => "medium" }),
+        getAgents: () => new Map(),
+        getActivityStore: () => null,
+        getAgentById: () => null,
+        listAgents: () => [],
+      });
+
+      await coordinator.createSession(null, "/tmp/workspace", true, model);
+      const initialHeaders = createAgentSessionMock.mock.calls[0][0].requestHeaders;
+      expect(initialHeaders["X-Lynn-Timestamp"]).toBe(String(firstTime));
+
+      const refreshedTime = firstTime + (5 * 60 * 60 * 1000) + 1;
+      vi.setSystemTime(refreshedTime);
+      await coordinator.prompt("你好");
+
+      expect(createAgentSessionMock).toHaveBeenCalledTimes(2);
+      expect(sessionManagerOpenMock).toHaveBeenCalledWith("/tmp/session.jsonl", "/tmp/agent-sessions");
+      const refreshedHeaders = createAgentSessionMock.mock.calls[1][0].requestHeaders;
+      expect(refreshedHeaders["X-Lynn-Timestamp"]).toBe(String(refreshedTime));
+      expect(refreshedHeaders["X-Lynn-Timestamp"]).not.toBe(initialHeaders["X-Lynn-Timestamp"]);
+      expect(prompts).toHaveLength(1);
+      expect(prompts[0].requestHeaders).toBe(refreshedHeaders);
+      expect(prompts[0].args[0]).toBe("你好");
+    } finally {
+      if (previousLynnHome === undefined) delete process.env.LYNN_HOME;
+      else process.env.LYNN_HOME = previousLynnHome;
+    }
   });
 
   it("rebuilds runtime tools when switching security mode to plan", async () => {

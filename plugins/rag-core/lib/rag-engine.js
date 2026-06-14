@@ -67,8 +67,8 @@ async function parseFile(filePath) {
   // PDF / 其他：尝试用 pdftotext 或退化为文件名占位
   if (ext === ".pdf") {
     try {
-      const { execSync } = await import("child_process");
-      const text = execSync(`pdftotext "${filePath}" -`, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+      const { execFileSync } = await import("child_process");
+      const text = execFileSync("pdftotext", [filePath, "-"], { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
       return text;
     } catch {
       return `[PDF file: ${path.basename(filePath)} — 未安装 pdftotext，仅索引文件名]`;

@@ -1,6 +1,13 @@
+import { createHash } from "node:crypto";
 import { Readable, Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { checkCliUpdate, isInteractiveUpdateCommand, isUpdateNewer, maybePromptForCliUpdate } from "../src/self-update.js";
+import {
+  checkCliUpdate,
+  isInteractiveUpdateCommand,
+  isUpdateNewer,
+  maybePromptForCliUpdate,
+  verifyCliUpdateTarballBytes,
+} from "../src/self-update.js";
 
 function ttyInput(text: string) {
   let sent = false;
@@ -95,6 +102,34 @@ describe("self update", () => {
       build: "bbb",
       tarballUrl: "https://download.example.test/lynn.tgz",
     });
+  });
+
+  it("accepts the published url manifest field and normalized sha256", async () => {
+    const result = await checkCliUpdate(
+      { name: "@lynn/cli", version: "0.80.0-alpha.0", build: "aaa" },
+      {
+        env: {},
+        fetchImpl: async () => new Response(JSON.stringify({
+          version: "0.80.1",
+          build: "bbb",
+          url: "https://download.example.test/lynn-cli-0.80.1.tgz",
+          sha256: " ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789 ",
+        })),
+      },
+    );
+    expect(result.available).toBe(true);
+    expect(result.manifest).toMatchObject({
+      tarballUrl: "https://download.example.test/lynn-cli-0.80.1.tgz",
+      sha256: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    });
+  });
+
+  it("verifies downloaded update tarball bytes before install", () => {
+    const bytes = Buffer.from("lynn cli update");
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    expect(verifyCliUpdateTarballBytes(bytes, sha256)).toBe(sha256);
+    expect(() => verifyCliUpdateTarballBytes(bytes, "0".repeat(64))).toThrow(/sha256 mismatch/);
+    expect(() => verifyCliUpdateTarballBytes(bytes, "not-a-sha")).toThrow(/invalid sha256/);
   });
 
   it("lets an interactive user accept an update without changing the running session", async () => {

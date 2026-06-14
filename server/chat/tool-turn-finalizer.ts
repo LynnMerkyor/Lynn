@@ -273,7 +273,7 @@ export function createToolTurnFinalizer({
       ? extractLatestAssistantVisibleText(session, sessionPath)
       : "";
     if (opts.requirePersistedText && !ss.hasOutput && !finalText) return false;
-    return closeStreamWithVisibleFallback(sessionPath, ss, finalText, reason);
+    return closeStreamWithVisibleFallback(sessionPath, ss, finalText, reason, { trustedFallback: true });
   }
 
   function scheduleReturnedTurnFinalizationFallback(sessionPath: any, ss: any, reason: any) {
@@ -321,7 +321,7 @@ export function createToolTurnFinalizer({
         ss.persistedAssistantTextBaseline || 0,
       );
       if (finalText) {
-        closeStreamWithVisibleFallback(sessionPath, ss, finalText, "persisted_final_answer_poll");
+        closeStreamWithVisibleFallback(sessionPath, ss, finalText, "persisted_final_answer_poll", { trustedFallback: true });
       }
     }, 1000);
     if (ss.persistedFinalAnswerPollTimer.unref) ss.persistedFinalAnswerPollTimer.unref();

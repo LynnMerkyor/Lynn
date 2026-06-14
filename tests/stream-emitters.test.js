@@ -67,6 +67,25 @@ describe("chat stream emitters", () => {
     }));
   });
 
+  it("trusted visible text strips pseudo-tool markup without withholding recovered content", () => {
+    const { ss, broadcast, emitters } = makeHarness();
+
+    const emitted = emitters.emitTrustedVisibleTextDelta(
+      "/tmp/session.jsonl",
+      ss,
+      "<tool_call>bash\nrm delete-me.txt && ls\n",
+    );
+
+    expect(emitted).toBe(true);
+    expect(ss.visibleTextAcc).toContain("rm delete-me.txt && ls");
+    expect(ss.visibleTextAcc).not.toContain("<tool_call>");
+    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({
+      type: "text_delta",
+      delta: expect.stringContaining("rm delete-me.txt && ls"),
+      sessionPath: "/tmp/session.jsonl",
+    }));
+  });
+
   it("preserves provider metadata and status event payloads", () => {
     const { ss, broadcast, emitters } = makeHarness();
     const providerEvent = {

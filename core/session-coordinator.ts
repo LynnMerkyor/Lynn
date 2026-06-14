@@ -20,6 +20,7 @@ import {
 } from "../shared/security-mode.js";
 import {
   buildClientAgentMetadata,
+  CLIENT_AGENT_TIMESTAMP_HEADER,
   readClientAgentKeyFromPreferencesFile,
   readSignedClientAgentHeadersForProvider,
 } from "./client-agent-identity.js";
@@ -94,6 +95,7 @@ import type { ResolvedModel } from "./types.js";
 export { PATROL_TOOLS_DEFAULT } from "./session-isolated-runtime.js";
 
 const log = createModuleLogger("session");
+const BRAIN_SESSION_SIGNATURE_REFRESH_MS = 5 * 60 * 60 * 1000;
 
 type AnyRecord = Record<string, any>;
 type ToolLike = AnyRecord & { name: string };
@@ -148,10 +150,13 @@ type SessionEntry = AnyRecord & {
   session: SessionLike;
   agentId: string;
   memoryEnabled?: boolean;
+  cwd?: string | null;
   planMode?: boolean;
   securityMode?: string;
   modelId?: string | null;
   modelProvider?: string | null;
+  model?: ModelLike;
+  clientAgentSignedAt?: number | null;
   nativeToolCallingDisabled?: boolean;
   lastTouchedAt: number;
   unsub: () => void;
@@ -187,6 +192,17 @@ function errMessage(err: unknown): string {
 function warnMemoryNotifySessionEnd(context: string, sessionPath: string | null | undefined, err: unknown) {
   const message = errMessage(err);
   log.warn(`memory notifySessionEnd failed during ${context} · session=${sessionPath} · ${message}`);
+}
+
+function clientAgentSignedAt(headers: Record<string, string> | null | undefined): number | null {
+  const raw = headers?.[CLIENT_AGENT_TIMESTAMP_HEADER];
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function isLikelyBrainAuthError(err: unknown): boolean {
+  const message = errMessage(err);
+  return /\b(?:401|403)\b|LLM_AUTH_FAILED|device signature|missing device signature|invalid device signature|unauthori[sz]ed|forbidden/i.test(message);
 }
 
 function notifyMemorySessionEnd(agent: AgentLike | null | undefined, sessionPath: string, context: string) {
@@ -376,10 +392,13 @@ export class SessionCoordinator {
       session,
       agentId: this._d.getActiveAgentId(),
       memoryEnabled,
+      cwd: effectiveCwd,
       planMode: initialPlanMode,
       securityMode: initialSecurityMode,
       modelId: effectiveModel?.id || null,
       modelProvider: effectiveModel?.provider || null,
+      model: effectiveModel,
+      clientAgentSignedAt: clientAgentSignedAt(clientAgentHeaders),
       nativeToolCallingDisabled: nativeToolsDisabled,
       lastTouchedAt: Date.now(),
       unsub,
@@ -469,7 +488,7 @@ export class SessionCoordinator {
     this._sessionStarted = true;
     const sp = this._session.sessionManager?.getSessionFile?.() ?? null;
     if (sp) {
-      const entry = this._sessions.get(sp);
+      const entry = await this._refreshBrainSessionSignatureIfNeeded(sp, this._sessions.get(sp), "pre-prompt");
       if (entry) entry.lastTouchedAt = Date.now();
     }
 
@@ -515,6 +534,14 @@ export class SessionCoordinator {
         const agentForTicker = entry ? this._d.getAgentById(entry.agentId) : agent;
         agentForTicker?._memoryTicker?.notifyTurn(sp);
       }
+    } catch (err) {
+      const entry = sp ? this._sessions.get(sp) : null;
+      if (sp && entry && isLikelyBrainAuthError(err)) {
+        await this._refreshBrainSessionSignatureIfNeeded(sp, entry, "auth-failure", { force: true }).catch((refreshErr) => {
+          log.warn(`Brain session auth refresh failed · session=${sp} · ${errMessage(refreshErr)}`);
+        });
+      }
+      throw err;
     } finally {
       if (sp) {
         const entry = this._sessions.get(sp);
@@ -549,8 +576,9 @@ export class SessionCoordinator {
   // ── Path 感知 API（Phase 2） ──
 
   async promptSession(sessionPath: string, text: string, opts: PromptOptions = {}) {
-    const entry = this._sessions.get(sessionPath);
+    let entry = this._sessions.get(sessionPath);
     if (!entry) throw new Error(t("error.sessionNotInCache", { path: sessionPath }));
+    entry = await this._refreshBrainSessionSignatureIfNeeded(sessionPath, entry, "pre-prompt-session") || entry;
     entry.lastTouchedAt = Date.now();
 
     this._applyContentFilter(text, sessionPath);
@@ -585,6 +613,13 @@ export class SessionCoordinator {
       }
       promptFinished = true;
       agent?._memoryTicker?.notifyTurn(sessionPath);
+    } catch (err) {
+      if (entry && isLikelyBrainAuthError(err)) {
+        await this._refreshBrainSessionSignatureIfNeeded(sessionPath, entry, "auth-failure", { force: true }).catch((refreshErr) => {
+          log.warn(`Brain session auth refresh failed · session=${sessionPath} · ${errMessage(refreshErr)}`);
+        });
+      }
+      throw err;
     } finally {
       if (promptFinished) sanitizeActiveSessionContextForPrompt(entry.session, sessionPath);
       clearSessionTurnContext(entry);
@@ -595,6 +630,46 @@ export class SessionCoordinator {
     const entry = this._sessions.get(sessionPath);
     if (!entry?.session) return { ok: false, reason: "session-not-in-cache" };
     return truncateVisibleSessionMessage(entry.session, sessionPath, visibleMessageId);
+  }
+
+  async _refreshBrainSessionSignatureIfNeeded(
+    sessionPath: string,
+    entry: SessionEntry | null | undefined,
+    reason: string,
+    opts: { force?: boolean } = {},
+  ): Promise<SessionEntry | null | undefined> {
+    if (!sessionPath || !entry) return entry;
+    if (!isBrainManagedProvider(entry.modelProvider)) return entry;
+    const signedAt = Number(entry.clientAgentSignedAt || 0);
+    if (!opts.force) {
+      if (!Number.isFinite(signedAt) || signedAt <= 0) return entry;
+      if (Date.now() - signedAt < BRAIN_SESSION_SIGNATURE_REFRESH_MS) return entry;
+    }
+
+    const model = entry.model
+      || findModel(this._d.getModels().availableModels || [], entry.modelId || "", entry.modelProvider || "")
+      || this._d.getModels().currentModel;
+    if (!model || !isBrainManagedProvider(model.provider)) return entry;
+
+    const agent = this._d.getAgentById(entry.agentId) || this._d.getAgent();
+    const sessionMgr = SessionManager.open(sessionPath, agent.sessionDir);
+    const cwd = sessionMgr.getCwd?.() || entry.cwd || entry.session?.sessionManager?.getCwd?.() || this._d.getHomeCwd() || process.cwd();
+    const previousPlanMode = entry.planMode;
+    const previousSecurityMode = entry.securityMode;
+    const previousCompactionCount = entry.compactionCount;
+    const previousRelayInProgress = entry.relayInProgress;
+
+    log.warn(`refreshing Brain session signature · reason=${reason} · session=${sessionPath}`);
+    await this.createSession(sessionMgr, cwd, entry.memoryEnabled ?? true, model);
+    const refreshed = this._sessions.get(sessionPath);
+    if (refreshed) {
+      refreshed.planMode = previousPlanMode;
+      refreshed.securityMode = previousSecurityMode;
+      refreshed.compactionCount = previousCompactionCount ?? refreshed.compactionCount;
+      refreshed.relayInProgress = previousRelayInProgress ?? refreshed.relayInProgress;
+      this._applySessionToolRuntime(sessionPath, refreshed.securityMode);
+    }
+    return refreshed || this._sessions.get(sessionPath) || entry;
   }
 
   async _runWithTurnToolsDisabled(sessionPath: string, entry: SessionEntry, run: () => Promise<unknown>) {

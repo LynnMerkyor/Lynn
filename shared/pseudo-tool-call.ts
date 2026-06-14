@@ -345,6 +345,83 @@ export function containsPseudoToolSimulation(raw: unknown): boolean {
   });
 }
 
+// ── Streaming prefix check (used by the cross-chunk carry buffer) ──
+// Returns true when the character(s) starting at `ltIndex` look like the opening of a pseudo-tool
+// tag (i.e. a "<" optionally followed by "/", then a name that matches the pseudo-tool registry —
+// tool*, execute, read*, invoke, function, parameter, command, query, etc., or a template tag like
+// tool_call/search_result, or a `||N` pipe-numbered opener).
+//
+// Anchored exactly at the given "<" — does NOT scan the whole string. This lets the streaming
+// sanitizer decide whether a SPECIFIC "<" position should be withheld without falsely matching
+// ordinary markup like <details>, <Component>, or TypeScript <T> generics.
+const PSEUDO_OPEN_NAME_CHARS = "[\\w:-]*";
+const PSEUDO_OPEN_NAME_GROUP = `(?:tool${PSEUDO_OPEN_NAME_CHARS}|lynn_tool_progress${PSEUDO_OPEN_NAME_CHARS}|execute${PSEUDO_OPEN_NAME_CHARS}|read${PSEUDO_OPEN_NAME_CHARS}|read_file${PSEUDO_OPEN_NAME_CHARS}|invoke${PSEUDO_OPEN_NAME_CHARS}|minimax:[\\w:-]*|arg_value${PSEUDO_OPEN_NAME_CHARS}|path${PSEUDO_OPEN_NAME_CHARS}|function${PSEUDO_OPEN_NAME_CHARS}|parameter${PSEUDO_OPEN_NAME_CHARS}|command${PSEUDO_OPEN_NAME_CHARS}|description${PSEUDO_OPEN_NAME_CHARS}|query${PSEUDO_OPEN_NAME_CHARS}|pattern${PSEUDO_OPEN_NAME_CHARS}|limit${PSEUDO_OPEN_NAME_CHARS}|路径|参数|命令|描述|查询|模式|限制)`;
+const PSEUDO_OPEN_AT_LT_RE = new RegExp(`^</?${PSEUDO_OPEN_NAME_GROUP}(?:\\b|$)`, "iu");
+const PSEUDO_FUNCTION_EQ_AT_LT_RE = /^<\/?(?:function|parameter)=/iu;
+const TEMPLATE_OPEN_AT_LT_RE = new RegExp(`^</?(?:${TEMPLATE_TAG_SOURCE})\\b`, "iu");
+const KNOWN_OPEN_AT_LT_RE = new RegExp(`^</?(?:${KNOWN_TOOL_XML_TAG_SOURCE})\\b`, "iu");
+
+export function isPseudoToolTagOpenAt(text: string, ltIndex: number): boolean {
+  if (ltIndex < 0 || ltIndex >= text.length || text[ltIndex] !== "<") return false;
+  const slice = text.slice(ltIndex);
+  return (
+    PSEUDO_OPEN_AT_LT_RE.test(slice) ||
+    PSEUDO_FUNCTION_EQ_AT_LT_RE.test(slice) ||
+    TEMPLATE_OPEN_AT_LT_RE.test(slice) ||
+    KNOWN_OPEN_AT_LT_RE.test(slice)
+  );
+}
+
+/**
+ * Given a buffer, find the index of the last "<" that opens a pseudo-tool tag (per the registry
+ * above) AND has no matching closer within the buffer. Returns -1 if no such unresolved opener.
+ * Only registry-matched openers count — ordinary markup (<details>, <Component>, <T>) is ignored,
+ * so it is never withheld from the client.
+ */
+export function findUnresolvedPseudoToolOpen(text: string): number {
+  if (!text) return -1;
+  // Stack of openIndex for openers we recognized. We track names only to pop on the matching
+  // closer; everything here is registry-scoped, so non-pseudo tags never enter the stack.
+  const stack: Array<{ name: string; openIndex: number }> = [];
+  let lastUnresolved = -1;
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] !== "<") continue;
+    if (!isPseudoToolTagOpenAt(text, i)) continue;
+    const isClose = text[i + 1] === "/";
+    const name = readPseudoTagName(text, i);
+    if (!name) continue;
+    if (isClose) {
+      for (let j = stack.length - 1; j >= 0; j -= 1) {
+        if (stack[j].name === name) {
+          stack.splice(j, 1);
+          break;
+        }
+      }
+    } else {
+      stack.push({ name, openIndex: i });
+    }
+    // Advance past this tag's own ">" so attrs / nested chars inside one tag aren't re-scanned.
+    const gt = text.indexOf(">", i + 1);
+    if (gt !== -1) i = gt;
+  }
+  for (let j = stack.length - 1; j >= 0; j -= 1) {
+    lastUnresolved = stack[j].openIndex;
+    break;
+  }
+  return lastUnresolved;
+}
+
+function readPseudoTagName(text: string, ltIndex: number): string {
+  let i = ltIndex + 1;
+  if (text[i] === "/") i += 1;
+  const start = i;
+  while (i < text.length && /[A-Za-z0-9_:-]/.test(text[i])) i += 1;
+  // Lowercase so that an opener like <Tool_Call> matches its closer </tool_call> in the
+  // findUnresolvedPseudoToolOpen stack — without this, a mixed-case opener would never pop and
+  // the whole block (plus trailing prose) would be wrongly withheld as "unresolved".
+  return text.slice(start, i).toLowerCase();
+}
+
 export function countPseudoToolMarkers(raw: unknown): number {
   const text = String(raw || "");
   if (!text) return 0;

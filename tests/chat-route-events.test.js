@@ -1294,6 +1294,54 @@ describe("chat route event forwarding", () => {
     }
   });
 
+  it("measures tool finalization grace from the latest overlapping tool activity", async () => {
+    vi.useFakeTimers();
+    try {
+      engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+      engine.resolveModelOverrides = vi.fn((model) => model);
+      engine.abortSessionByPath = vi.fn(async () => true);
+      hub.send = vi.fn(() => new Promise(() => {}));
+
+      const res = await app.request("/ws");
+      expect(res.status).toBe(200);
+
+      connections[0].handlers.onMessage({
+        data: JSON.stringify({ type: "prompt", text: "先查资料再整理成表格" }),
+      }, connections[0].client);
+
+      subscribed({
+        type: "tool_execution_start",
+        toolCallId: "search-1",
+        toolName: "web_search",
+        args: { query: "first source" },
+      }, "/sessions/current.jsonl");
+      subscribed({
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: "我先整理已拿到的信息。" },
+      }, "/sessions/current.jsonl");
+      subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+
+      await vi.advanceTimersByTimeAsync(4000);
+      subscribed({
+        type: "tool_execution_start",
+        toolCallId: "fetch-2",
+        toolName: "web_fetch",
+        args: { url: "https://example.com/slow" },
+      }, "/sessions/current.jsonl");
+
+      await vi.advanceTimersByTimeAsync(4001);
+      expect(engine.abortSessionByPath).not.toHaveBeenCalled();
+      expect(clients[0].sent.filter((evt) => evt.type === "turn_end")).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+      expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
+      expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not wait for hard timeout when a tool_end is missing but visible answer arrived", async () => {
     vi.useFakeTimers();
     try {

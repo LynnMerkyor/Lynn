@@ -8,7 +8,14 @@ import type {
   StreamEventPayload,
 } from "./stream-event-emitter.js";
 import type { SessionStreamState } from "../session-stream-store.js";
-import { stripStreamingPseudoToolBlocks } from "./stream-sanitizer.js";
+import {
+  flushStreamingPseudoToolBlocks,
+  stripStreamingPseudoToolBlocks,
+} from "./stream-sanitizer.js";
+import {
+  containsPseudoToolSimulation,
+  stripPseudoToolCallMarkup,
+} from "../../shared/pseudo-tool-call.js";
 
 type ThinkTagEvent =
   | { type: "think_start" }
@@ -53,6 +60,9 @@ export interface ChatStreamEmitterState extends SessionStreamState {
   bufferedVisibleTextDuringTool: string;
   hasBufferedVisibleTextDuringTool: boolean;
   progressMarkerCount: number;
+  // Cross-chunk carry buffer for the streaming pseudo-tool sanitizer. Undefined until first used;
+  // the sanitizer reads it defensively (see server/chat/stream-sanitizer.ts).
+  sanitizerCarry?: string;
   [key: string]: unknown;
 }
 
@@ -92,6 +102,17 @@ export function createStreamEmitters({
     return result.text;
   }
 
+  function sanitizeTrustedVisibleDelta(sessionPath: string, delta: unknown): string {
+    const text = String(delta || "");
+    if (!text) return "";
+    if (!containsPseudoToolSimulation(text)) return text;
+    const stripped = stripPseudoToolCallMarkup(text);
+    if (stripped !== text) {
+      debugLog()?.warn("ws", `stripped pseudo tool-call markup from trusted visible text · session=${sessionPath}`);
+    }
+    return stripped;
+  }
+
   function emitStreamEvent(
     sessionPath: string,
     ss: ChatStreamEmitterState,
@@ -105,7 +126,7 @@ export function createStreamEmitters({
     ss: ChatStreamEmitterState,
     delta: unknown,
   ): boolean {
-    const next = sanitizeVisibleDelta(sessionPath, ss, delta);
+    const next = sanitizeTrustedVisibleDelta(sessionPath, delta);
     if (!next) return false;
     ss.hasOutput = true;
     ss.titlePreview += next;
@@ -268,6 +289,13 @@ export function createStreamEmitters({
         emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
       }
     });
+    // Drain the streaming sanitizer's cross-chunk carry last: any trailing fragment withheld
+    // during the deltas gets resolved here (emitted if it's normal prose, dropped if it's still
+    // an unmatched pseudo-tool prefix). This is the turn-end close for the carry buffer.
+    const residual = flushStreamingPseudoToolBlocks(ss);
+    if (residual.text) {
+      emitTrustedVisibleTextDelta(sessionPath, ss, residual.text);
+    }
   }
 
   function emitMoodEvent(sessionPath: string, ss: ChatStreamEmitterState, evt: MoodEvent): void {
