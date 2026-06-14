@@ -8,7 +8,10 @@ import type {
   StreamEventPayload,
 } from "./stream-event-emitter.js";
 import type { SessionStreamState } from "../session-stream-store.js";
-import { stripStreamingPseudoToolBlocks } from "./stream-sanitizer.js";
+import {
+  flushStreamingPseudoToolBlocks,
+  stripStreamingPseudoToolBlocks,
+} from "./stream-sanitizer.js";
 
 type ThinkTagEvent =
   | { type: "think_start" }
@@ -53,6 +56,9 @@ export interface ChatStreamEmitterState extends SessionStreamState {
   bufferedVisibleTextDuringTool: string;
   hasBufferedVisibleTextDuringTool: boolean;
   progressMarkerCount: number;
+  // Cross-chunk carry buffer for the streaming pseudo-tool sanitizer. Undefined until first used;
+  // the sanitizer reads it defensively (see server/chat/stream-sanitizer.ts).
+  sanitizerCarry?: string;
   [key: string]: unknown;
 }
 
@@ -268,6 +274,13 @@ export function createStreamEmitters({
         emitStreamEvent(sessionPath, ss, { type: "xing_text", delta: xEvt.data });
       }
     });
+    // Drain the streaming sanitizer's cross-chunk carry last: any trailing fragment withheld
+    // during the deltas gets resolved here (emitted if it's normal prose, dropped if it's still
+    // an unmatched pseudo-tool prefix). This is the turn-end close for the carry buffer.
+    const residual = flushStreamingPseudoToolBlocks(ss);
+    if (residual.text) {
+      emitTrustedVisibleTextDelta(sessionPath, ss, residual.text);
+    }
   }
 
   function emitMoodEvent(sessionPath: string, ss: ChatStreamEmitterState, evt: MoodEvent): void {
