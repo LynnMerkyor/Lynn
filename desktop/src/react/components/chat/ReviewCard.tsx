@@ -148,6 +148,26 @@ function gateLabel(gate: Props['workflowGate'], zh: boolean): string | null {
   return 'Hold';
 }
 
+function stripLeadingIdentity(label: string | null | undefined, identities: Array<string | null | undefined>): string {
+  let next = String(label || '').trim();
+  if (!next) return '';
+  for (const identity of identities) {
+    const name = String(identity || '').trim();
+    if (!name) continue;
+    const lowerNext = next.toLowerCase();
+    const lowerName = name.toLowerCase();
+    if (lowerNext === lowerName) return '';
+    for (const separator of [' · ', ' / ', ' - ']) {
+      const prefix = `${lowerName}${separator}`;
+      if (lowerNext.startsWith(prefix)) {
+        next = next.slice(name.length + separator.length).trim();
+        break;
+      }
+    }
+  }
+  return next;
+}
+
 function followUpTaskBadgeClass(task: ReviewFollowUpTaskState | null | undefined): string {
   if (!task) return styles.reviewBadgeAction;
   if (task.status === 'completed') return styles.reviewVerdictPass;
@@ -241,6 +261,12 @@ export const ReviewCard = memo(function ReviewCard({
   }, [reviewerFallbackAvatar, reviewerAgent, reviewerHasAvatar]);
   const executorFallbackAvatar = useMemo(() => yuanFallbackAvatar(executorYuan || 'lynn'), [executorYuan]);
   const resolvedExecutorAvatarSrc = executorAvatarUrl || executorFallbackAvatar;
+  const reviewerMetaModelLabel = stripLeadingIdentity(reviewerModelLabel, [reviewerName, reviewerAgentName]);
+  const reviewerMetaText = [
+    reviewerName,
+    reviewerAgentName && reviewerAgentName !== reviewerName ? reviewerAgentName : '',
+    reviewerMetaModelLabel,
+  ].filter(Boolean).join(' · ');
 
   const verdictText = verdictLabel(verdict, zh);
   const gateText = gateLabel(workflowGate, zh);
@@ -378,11 +404,7 @@ export const ReviewCard = memo(function ReviewCard({
         )}
         <div className={styles.reviewCardIdentity}>
           <span className={styles.reviewCardTitle}>{t('review.cardTitle') || 'Review'}</span>
-          <span className={styles.reviewCardMeta}>
-            {reviewerName}
-            {reviewerAgentName && reviewerAgentName !== reviewerName ? ` · ${reviewerAgentName}` : ''}
-            {reviewerModelLabel ? ` · ${reviewerModelLabel}` : ''}
-          </span>
+          <span className={styles.reviewCardMeta}>{reviewerMetaText}</span>
           {(status === 'loading' || autoReviewLabel || verdictText || gateText || findingsText || packText || followUpPrompt || fallbackNote) && (
             <div className={styles.reviewCardSignals}>
               {autoReviewLabel && (

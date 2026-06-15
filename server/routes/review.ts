@@ -655,14 +655,16 @@ async function runReviewerSessionWithFallback(
           throw createReviewNoOutputError();
         }
         const timeoutLike = isTimeoutLikeError(err);
-        const originalText = originalModelLabel
-          ? (isZh()
-              ? `原复查模型 ${originalModelLabel}`
-              : `The original review model ${originalModelLabel}`)
-          : (isZh() ? "原复查模型" : "The original review model");
+        const nextLabel = candidateLabel || AUTO_REVIEW_MODEL_LABEL;
+        const originalLabel = originalModelLabel || AUTO_REVIEW_MODEL_LABEL;
+        const samePublicLabel = originalLabel === nextLabel;
         const fallbackNote = isZh()
-          ? `${originalText}${timeoutLike ? " 超时" : " 暂时不可用"}，已自动切换到 ${candidateLabel || AUTO_REVIEW_MODEL_LABEL} 完成这次复查。`
-          : `${originalText} ${timeoutLike ? "timed out" : "became temporarily unavailable"}, so this review finished on ${candidateLabel || "a fallback review model"}.`;
+          ? (samePublicLabel
+              ? `${AUTO_REVIEW_MODEL_LABEL} 主候选${timeoutLike ? "超时" : "暂时不可用"}，已自动切换到备用候选完成这次复查。`
+              : `原复查模型 ${originalLabel}${timeoutLike ? " 超时" : " 暂时不可用"}，已自动切换到 ${nextLabel} 完成这次复查。`)
+          : (samePublicLabel
+              ? `The primary ${AUTO_REVIEW_MODEL_LABEL} candidate ${timeoutLike ? "timed out" : "became temporarily unavailable"}, so this review finished on a backup candidate.`
+              : `The original review model ${originalLabel} ${timeoutLike ? "timed out" : "became temporarily unavailable"}, so this review finished on ${nextLabel}.`);
         return {
           content,
           fallbackNote,

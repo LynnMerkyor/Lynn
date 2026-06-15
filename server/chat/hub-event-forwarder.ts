@@ -461,7 +461,7 @@ export function createHubEventForwarder({
         return;
       }
       if (!ss.hasOutput && !hasToolEvidence && !ss.hasError) {
-        const fallbackText = "模型这次没有返回可见内容。本轮已安全结束，避免空回复污染后续上下文；请点「编辑重发」重试，或切换默认模型后再发。";
+        const fallbackText = "模型这次没有返回可见内容。本轮已安全结束，避免空回复污染后续上下文；Hanako 会尝试给出兜底复查。你也可以点「编辑重发」重试，或切换模型后再发。";
         if (closeStreamWithVisibleFallback(
           sessionPath,
           ss,
