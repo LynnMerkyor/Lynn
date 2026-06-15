@@ -14,10 +14,10 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const REPO_BASE = "https://github.com/MerkyorLynn/Lynn";
+const REPO_BASE = "https://gitee.com/merkyor/Lynn";
 // [HOTPATCH 2026-04-27 night] 资产 URL 必须走腾讯镜像不能走 GitHub
 // CN 用户从 GitHub releases 下载会卡死,memory feedback_macos_dmg_naming.md 早写了这条铁律。
-// releaseUrl 保留 GitHub(官方 release notes 页) — 但 .dmg/.exe 真实下载必须从镜像站走。
+// releaseUrl points at the source mirror release page; .dmg/.exe downloads must stay on the download mirror.
 const MIRROR_DOWNLOAD_BASE = "https://download.merkyorlynn.com/downloads";
 
 type ReleaseChannel = "stable" | "beta";
