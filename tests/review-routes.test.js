@@ -148,6 +148,50 @@ describe('review route', () => {
     }));
   });
 
+  it('starts automatic Hanako review with a short output cap and review metadata', async () => {
+    await app.request('/api/review/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ defaultReviewer: 'butter', butterReviewerId: 'agent-butter' }),
+    });
+
+    const res = await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context: '主回答: NVDA 最新报价 $205.19。',
+        autoReview: true,
+        reviewMode: 'background',
+        triggerReasons: ['time_sensitive_or_market'],
+        sourceResponse: 'NVDA 最新报价 $205.19。',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.reviewerName).toBe('Hanako');
+    expect(data.reviewerYuan).toBe('hanako');
+
+    await Promise.resolve();
+
+    expect(runAgentSession).toHaveBeenCalledWith(
+      'agent-hanako',
+      expect.any(Array),
+      expect.objectContaining({
+        maxTokens: 1200,
+        readOnly: true,
+        sessionSuffix: 'auto-review',
+      }),
+    );
+    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'review_start',
+      reviewerName: 'Hanako',
+      autoReview: true,
+      reviewMode: 'background',
+      triggerReasons: ['time_sensitive_or_market'],
+    }));
+  });
+
   it('bootstraps a missing reviewer agent when the requested reviewer kind has no candidate', async () => {
     engine.currentAgentId = 'agent-butter';
     engine._agents.splice(0, engine._agents.length, ...[
@@ -295,7 +339,7 @@ describe('review route', () => {
 
     expect(runAgentSession).toHaveBeenCalledTimes(2);
     expect(resultMsg.errorCode).toBe('review_timeout_recovered');
-    expect(resultMsg.fallbackNote).toContain('默认复查模型');
+    expect(resultMsg.fallbackNote).toContain('Hanako · MiMo/GLM');
     expect(resultMsg.fallbackNote).toMatch(/自动切换到|finished on/);
   });
 

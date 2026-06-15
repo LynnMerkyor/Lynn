@@ -27,6 +27,7 @@ import {
 } from "./hub-event-utils.js";
 import { emitModelHintFromSessionTail } from "./model-hint-recovery.js";
 import { extractProviderRouteMeta } from "./provider-meta.js";
+import { scheduleAutoReviewForTurn } from "./auto-review.js";
 
 type AnyRecord = Record<string, any>;
 
@@ -439,36 +440,68 @@ export function createHubEventForwarder({
         debugLog()?.log("ws", `[TURN-END v1] resuming deferred turn_end · hasOutput=${ss.hasOutput} hasToolCall=${ss.hasToolCall} hasPrefetchToolCall=${ss.hasPrefetchToolCall} · ${sessionPath}`);
       }
       if (!ss.hasOutput && ss.hasThinking && !hasToolEvidence && !ss.hasError) {
-        closeStreamWithVisibleFallback(
+        const fallbackText = "模型这次只返回了思考过程，没有给出最终可见答案。请点「编辑重发」重试，或切到 /fast 后再发。";
+        if (closeStreamWithVisibleFallback(
           sessionPath,
           ss,
-          "模型这次只返回了思考过程，没有给出最终可见答案。请点「编辑重发」重试，或切到 /fast 后再发。",
+          fallbackText,
           "reasoning_only_without_visible_answer",
           { trustedFallback: true },
-        );
+        )) {
+          scheduleAutoReviewForTurn({
+            engine,
+            broadcast,
+            sessionPath,
+            ss,
+            mode: "fallback",
+            reason: "reasoning_only_without_visible_answer",
+            sourceText: fallbackText,
+          });
+        }
         return;
       }
       if (!ss.hasOutput && !hasToolEvidence && !ss.hasError) {
-        closeStreamWithVisibleFallback(
+        const fallbackText = "模型这次没有返回可见内容。本轮已安全结束，避免空回复污染后续上下文；请点「编辑重发」重试，或切换默认模型后再发。";
+        if (closeStreamWithVisibleFallback(
           sessionPath,
           ss,
-          "模型这次没有返回可见内容。本轮已安全结束，避免空回复污染后续上下文；请点「编辑重发」重试，或切换默认模型后再发。",
+          fallbackText,
           "empty_turn_without_visible_answer",
           { trustedFallback: true },
-        );
+        )) {
+          scheduleAutoReviewForTurn({
+            engine,
+            broadcast,
+            sessionPath,
+            ss,
+            mode: "fallback",
+            reason: "empty_turn_without_visible_answer",
+            sourceText: fallbackText,
+          });
+        }
         return;
       }
       if (!ss.hasOutput && hasToolEvidence && !ss.hasError) {
         const fallbackText = String(ss.realtimeToolFallbackText || "").trim()
           || buildToolCompletionSummary(ss);
         if (fallbackText) {
-          closeStreamWithVisibleFallback(
+          if (closeStreamWithVisibleFallback(
             sessionPath,
             ss,
             fallbackText,
             "tool_turn_end_without_visible_answer",
             { trustedFallback: true },
-          );
+          )) {
+            scheduleAutoReviewForTurn({
+              engine,
+              broadcast,
+              sessionPath,
+              ss,
+              mode: "fallback",
+              reason: "tool_turn_end_without_visible_answer",
+              sourceText: fallbackText,
+            });
+          }
           return;
         }
       }
@@ -494,6 +527,15 @@ export function createHubEventForwarder({
       broadcast({ type: "status", isStreaming: false, sessionPath });
       void emitModelHintFromSessionTail(sessionPath, ss, emitStreamEvent);
       finishSessionStream(ss);
+      scheduleAutoReviewForTurn({
+        engine,
+        broadcast,
+        sessionPath,
+        ss,
+        mode: "background",
+        reason: "turn_end",
+        sourceText: String(ss.visibleTextAcc || ""),
+      });
       if (ss.progressMarkerCount > 0 && !hasToolEvidence) {
         debugLog()?.warn("ws", `observed ${ss.progressMarkerCount} hallucinated <lynn_tool_progress> markers (no real tool_call) · session=${sessionPath}`);
       }

@@ -142,6 +142,10 @@ export type ContentBlock =
       reviewerModelLabel?: string | null;
       reviewerModelId?: string | null;
       reviewerModelProvider?: string | null;
+      autoReview?: boolean;
+      reviewMode?: 'background' | 'fallback' | string | null;
+      triggerReasons?: string[];
+      sourceResponse?: string | null;
       content: string;
       error?: string;
       status: 'loading' | 'done';

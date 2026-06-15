@@ -521,6 +521,10 @@ export function handleServerMessage(msg: ServerEvent | any): void {
           reviewerModelLabel: msg.reviewerModelLabel || null,
           reviewerModelId: msg.reviewerModelId || null,
           reviewerModelProvider: msg.reviewerModelProvider || null,
+          autoReview: !!msg.autoReview,
+          reviewMode: msg.reviewMode || null,
+          triggerReasons: Array.isArray(msg.triggerReasons) ? msg.triggerReasons.filter((v: unknown): v is string => typeof v === 'string') : [],
+          sourceResponse: typeof msg.sourceResponse === 'string' ? msg.sourceResponse : null,
           content: '',
           status: 'loading' as const,
           stage: 'packing_context' as const,
@@ -560,6 +564,9 @@ export function handleServerMessage(msg: ServerEvent | any): void {
         reviewerModelLabel: msg.reviewerModelLabel || null,
         reviewerModelId: msg.reviewerModelId || null,
         reviewerModelProvider: msg.reviewerModelProvider || null,
+        autoReview: !!msg.autoReview,
+        reviewMode: msg.reviewMode || null,
+        triggerReasons: Array.isArray(msg.triggerReasons) ? msg.triggerReasons.filter((v: unknown): v is string => typeof v === 'string') : undefined,
       });
       break;
     }
@@ -577,6 +584,9 @@ export function handleServerMessage(msg: ServerEvent | any): void {
         reviewerModelLabel: msg.reviewerModelLabel || null,
         reviewerModelId: msg.reviewerModelId || null,
         reviewerModelProvider: msg.reviewerModelProvider || null,
+        autoReview: !!msg.autoReview,
+        reviewMode: msg.reviewMode || null,
+        triggerReasons: Array.isArray(msg.triggerReasons) ? msg.triggerReasons.filter((v: unknown): v is string => typeof v === 'string') : undefined,
         content: msg.content || '',
         error: msg.error,
         errorCode: msg.errorCode || null,
@@ -589,6 +599,7 @@ export function handleServerMessage(msg: ServerEvent | any): void {
         contextPack: msg.contextPack || null,
         followUpPrompt: msg.followUpPrompt || null,
         fallbackNote: msg.fallbackNote || null,
+        sourceResponse: typeof msg.sourceResponse === 'string' ? msg.sourceResponse : undefined,
       });
       break;
     }

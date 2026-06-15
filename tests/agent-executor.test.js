@@ -139,6 +139,63 @@ describe("runAgentSession", () => {
     }));
   });
 
+  it("caps the resolved model output budget when maxTokens is provided", async () => {
+    const prompt = vi.fn(async () => {});
+    const subscribe = vi.fn(() => () => {});
+
+    createAgentSessionMock.mockResolvedValue({
+      session: {
+        prompt,
+        abort: vi.fn(async () => {}),
+        subscribe,
+        sessionManager: {
+          getSessionFile: () => path.join(tmpDir, "session.jsonl"),
+        },
+      },
+    });
+
+    await runAgentSession(
+      "hanako",
+      [{ text: "review briefly", capture: true }],
+      {
+        maxTokens: 1200,
+        engine: {
+          homeCwd: tmpDir,
+          getAgent: () => ({
+            agentDir: path.join(tmpDir, "agents", "hanako"),
+            personality: "personality",
+            systemPrompt: "prompt",
+            tools: [],
+            config: {},
+          }),
+          createSessionContext: () => ({
+            resourceLoader: {
+              getSystemPrompt: () => "prompt",
+            },
+            getSkillsForAgent: () => [],
+            buildTools: () => ({ tools: [], customTools: [] }),
+            authStorage: {},
+            modelRegistry: {},
+            resolveModel: () => ({
+              id: "mimo-v2.5-pro",
+              provider: "mimo",
+              name: "MiMo v2.5 Pro",
+              maxTokens: 64000,
+            }),
+          }),
+        },
+      },
+    );
+
+    expect(createAgentSessionMock).toHaveBeenCalledWith(expect.objectContaining({
+      model: expect.objectContaining({
+        id: "mimo-v2.5-pro",
+        provider: "mimo",
+        maxTokens: 1200,
+      }),
+    }));
+  });
+
   it("lazy-loads a missing agent before executing the session", async () => {
     const prompt = vi.fn(async () => {});
     const subscribe = vi.fn(() => () => {});

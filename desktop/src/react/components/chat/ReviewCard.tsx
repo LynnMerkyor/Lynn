@@ -39,6 +39,9 @@ interface Props {
   reviewerYuan?: string;
   reviewerHasAvatar?: boolean;
   reviewerModelLabel?: string | null;
+  autoReview?: boolean;
+  reviewMode?: 'background' | 'fallback' | string | null;
+  triggerReasons?: string[];
   executorName: string;
   executorYuan?: string;
   executorAvatarUrl?: string | null;
@@ -195,6 +198,9 @@ export const ReviewCard = memo(function ReviewCard({
   reviewerYuan,
   reviewerHasAvatar,
   reviewerModelLabel,
+  autoReview,
+  reviewMode,
+  triggerReasons = [],
   executorName,
   executorYuan,
   executorAvatarUrl,
@@ -257,6 +263,12 @@ export const ReviewCard = memo(function ReviewCard({
   const executionResolution = useMemo(() => (
     structured ? buildExecutionResolution(structured, sourceResponse, zh) : null
   ), [structured, sourceResponse, zh]);
+  const autoReviewLabel = autoReview
+    ? reviewMode === 'fallback'
+      ? (zh ? 'Hanako 兜底复查' : 'Hanako fallback review')
+      : (zh ? 'Hanako 后台复查' : 'Hanako background review')
+    : null;
+  const reviewReasonTitle = triggerReasons.length ? triggerReasons.join(', ') : undefined;
 
   const createFollowUpTask = async () => {
     if (!structured || structured.findings.length === 0 || creatingTask || followUpTaskBusy) return;
@@ -369,9 +381,15 @@ export const ReviewCard = memo(function ReviewCard({
           <span className={styles.reviewCardMeta}>
             {reviewerName}
             {reviewerAgentName && reviewerAgentName !== reviewerName ? ` · ${reviewerAgentName}` : ''}
+            {reviewerModelLabel ? ` · ${reviewerModelLabel}` : ''}
           </span>
-          {(status === 'loading' || verdictText || gateText || findingsText || packText || followUpPrompt || fallbackNote) && (
+          {(status === 'loading' || autoReviewLabel || verdictText || gateText || findingsText || packText || followUpPrompt || fallbackNote) && (
             <div className={styles.reviewCardSignals}>
+              {autoReviewLabel && (
+                <span className={`${styles.reviewBadge} ${reviewMode === 'fallback' ? styles.reviewVerdictConcerns : styles.reviewBadgeStage}`} title={reviewReasonTitle}>
+                  {autoReviewLabel}
+                </span>
+              )}
               {status === 'loading' && (
                 <span className={`${styles.reviewBadge} ${styles.reviewBadgeStage}`}>
                   {stageLabel(stage, zh)}

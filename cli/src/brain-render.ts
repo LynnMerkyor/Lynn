@@ -65,6 +65,39 @@ export function renderBrainEventForHuman(
     }, color)}\n`);
     return;
   }
+  if (event.type === "review_start") {
+    const title = event.reviewMode === "fallback" ? "Hanako fallback review" : "Hanako background review";
+    const model = event.reviewerModelLabel ? ` · ${event.reviewerModelLabel}` : "";
+    const reasons = event.triggerReasons?.length ? [`reasons: ${event.triggerReasons.join(", ")}`] : undefined;
+    stream.write(`${renderCard({
+      kind: "info",
+      title: `${title}${model}`,
+      body: reasons,
+    }, color)}\n`);
+    return;
+  }
+  if (event.type === "review_progress") {
+    const stage = event.stage || "reviewing";
+    stream.write(`${renderCard({
+      kind: "info",
+      title: `Hanako review · ${stage}`,
+    }, color)}\n`);
+    return;
+  }
+  if (event.type === "review_result") {
+    const title = event.error ? "Hanako review failed" : "Hanako review";
+    const body = event.error
+      ? [event.error]
+      : event.content
+        ? [oneLine(event.content, 360)]
+        : undefined;
+    stream.write(`${renderCard({
+      kind: event.error ? "error" : "ok",
+      title,
+      body,
+    }, color)}\n`);
+    return;
+  }
   if (event.type === "brain.error") {
     stream.write(`\n${formatBrainErrorForHuman(event.error, event.code)}\n`);
   }

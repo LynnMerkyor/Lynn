@@ -25,7 +25,7 @@ import {
   getUserFacingRoleModelLabel,
 } from "../../shared/assistant-role-models.js";
 
-type ReviewerKind = "hanako" | "butter";
+export type ReviewerKind = "hanako" | "butter";
 type ReviewProgressStage = "packing_context" | "reviewing" | "structuring" | "done";
 type ReviewVerdict = "pass" | "concerns" | "blocker";
 type JsonRecord = Record<string, unknown>;
@@ -144,6 +144,27 @@ interface CreateReviewRouteOptions {
   taskRuntime?: ReviewTaskRuntime | null;
 }
 
+export interface StartReviewRunRequest {
+  context: string;
+  reviewerKind?: unknown;
+  sessionPath?: string | null;
+  reviewId?: string | null;
+  autoReview?: boolean;
+  reviewMode?: "background" | "fallback" | string | null;
+  triggerReasons?: string[];
+  sourceResponse?: string | null;
+}
+
+export interface StartReviewRunResult {
+  reviewId: string;
+  sessionPath: string | null;
+  reviewerName: string;
+  reviewerAgent: string;
+  reviewerAgentName: string;
+  reviewerYuan: ReviewerKind;
+  reviewerHasAvatar: boolean;
+}
+
 interface CodedError extends Error {
   code?: string;
 }
@@ -221,6 +242,11 @@ interface ReviewConfigBody extends JsonRecord {
 interface ReviewRequestBody extends JsonRecord {
   context?: unknown;
   reviewerKind?: unknown;
+  reviewId?: unknown;
+  autoReview?: unknown;
+  reviewMode?: unknown;
+  triggerReasons?: unknown;
+  sourceResponse?: unknown;
 }
 
 interface ReviewProgressEmitterArgs {
@@ -258,6 +284,10 @@ const MAX_SESSION_LINES = 120;
 const MAX_TOOL_ITEMS = 10;
 const REVIEW_EXEC_TIMEOUT_MS = 45_000;
 const REVIEW_FALLBACK_TIMEOUT_MS = 22_000;
+const AUTO_REVIEW_EXEC_TIMEOUT_MS = Number(process.env.LYNN_AUTO_REVIEW_TIMEOUT_MS || 18_000);
+const AUTO_REVIEW_FALLBACK_TIMEOUT_MS = Number(process.env.LYNN_AUTO_REVIEW_FALLBACK_TIMEOUT_MS || 12_000);
+const AUTO_REVIEW_MAX_OUTPUT_TOKENS = Math.max(600, Math.min(1200, Number(process.env.LYNN_AUTO_REVIEW_MAX_TOKENS || 1200)));
+const AUTO_REVIEW_MODEL_LABEL = "Hanako · MiMo/GLM";
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -313,22 +343,38 @@ function isZh(): boolean {
   return getLocale().startsWith("zh");
 }
 
-function buildReviewSystemAppend(): string {
+function buildReviewSystemAppend(options: { autoReview?: boolean; reviewMode?: string | null } = {}): string {
+  const autoReview = !!options.autoReview;
+  const fallbackMode = options.reviewMode === "fallback";
   if (isZh()) {
-    return [
+    const lines = [
       "你现在是 Review 角色。另一个 Agent 刚刚完成了一项任务，用户请求你复查。",
       "",
       "要求：",
       "- 保留你的 MOOD / PULSE / REFLECT 区块（这是你的思维框架，review 时同样有用）",
       "- 聚焦于：逻辑漏洞、遗漏的边界情况、可改进的点、潜在风险",
       "- 如果一切看起来没问题，简短确认即可，不要为了挑刺而挑刺",
+      ...(autoReview
+        ? [
+            "- 这是后台自动复查：请保持精炼，正文最多 5 条要点，不要重写整篇答案",
+            "- 优先检查事实、数字、时间、工具证据和明显遗漏；没有问题就直接说通过",
+            "- 不要写长篇解释；目标是在 600-1200 token 内完成",
+          ]
+        : []),
+      ...(fallbackMode
+        ? [
+            "- 原回答可能为空或不完整：如果上下文里有足够证据，请给出一个简短可用的替代答案",
+            "- 如果证据不足，请明确说还缺什么，而不是编造",
+          ]
+        : []),
       "- 先在正文给出你自然语言的 review 结论",
       "- 然后严格追加一个 ```json 代码块，结构必须是 { summary, verdict, findings, nextStep? }",
       "- verdict 只能是 pass / concerns / blocker",
       "- findings 必须是数组；每项包含 severity(high|medium|low), title, detail, suggestion?, filePath?",
       "- 如果没有问题，findings 返回空数组",
       "- 语气：像一个认真但友善的同事在帮忙把关",
-    ].join("\n");
+    ];
+    return lines.join("\n");
   }
 
   return [
@@ -338,6 +384,19 @@ function buildReviewSystemAppend(): string {
     "- Keep your MOOD / PULSE / REFLECT block (it's your thinking framework, useful for review too)",
     "- Focus on: logic gaps, missed edge cases, areas for improvement, potential risks",
     "- If everything looks fine, confirm briefly. Do not nitpick for the sake of it",
+    ...(autoReview
+      ? [
+          "- This is an automatic background review: keep it concise, with at most 5 visible bullets",
+          "- Prioritize factual claims, numbers, dates, tool evidence, and obvious omissions",
+          "- Do not rewrite the whole answer. Aim to finish within 600-1200 tokens",
+        ]
+      : []),
+    ...(fallbackMode
+      ? [
+          "- The source answer may be empty or incomplete. If the provided evidence is enough, produce a short usable substitute answer",
+          "- If evidence is insufficient, state what is missing instead of inventing details",
+        ]
+      : []),
     "- First give your natural-language review conclusion",
     "- Then append a strict ```json code block with { summary, verdict, findings, nextStep? }",
     "- verdict must be one of pass / concerns / blocker",
@@ -514,7 +573,7 @@ function buildReviewFallbackCandidates(engine: ReviewRouteEngine, reviewer: Revi
 function formatReviewFailureMessage(err: unknown, attemptedModels: string[] = []): string {
   const modelHint = attemptedModels.length
     ? (isZh()
-        ? ` 已自动尝试 ${attemptedModels.length} 个备用复查模型`
+        ? ` 已自动尝试 ${attemptedModels.length} 个 Hanako · MiMo/GLM 备用模型`
         : ` It already retried with ${attemptedModels.length} fallback review models.`)
     : "";
 
@@ -544,6 +603,7 @@ async function runReviewerSessionWithFallback(
   reviewer: ReviewCandidate,
   rounds: AgentSessionRound[],
   opts: RunAgentSessionOptions,
+  timing: { fallbackTimeoutMs?: number } = {},
 ): Promise<ReviewRunResult> {
   const runtimeAgent = engine.getAgent?.(reviewer.id);
   const reviewerModel = runtimeAgent ? getAgentModel(runtimeAgent) : null;
@@ -554,7 +614,7 @@ async function runReviewerSessionWithFallback(
     reviewer,
     originalModel?.id || reviewerModel?.modelId || null,
     originalModel?.provider || reviewerModel?.modelProvider || null,
-    isZh() ? "默认复查模型" : "default review model",
+    AUTO_REVIEW_MODEL_LABEL,
   ) || "";
 
   try {
@@ -582,13 +642,13 @@ async function runReviewerSessionWithFallback(
         reviewer,
         candidate?.id || null,
         candidate?.provider || null,
-        isZh() ? "备用复查模型" : "fallback review model",
+        AUTO_REVIEW_MODEL_LABEL,
       );
       if (candidateLabel) attemptedModels.push(candidateLabel);
       try {
         const content = await runAgentSession(reviewer.id, rounds, {
           ...opts,
-          signal: AbortSignal.timeout(REVIEW_FALLBACK_TIMEOUT_MS),
+          signal: AbortSignal.timeout(timing.fallbackTimeoutMs || REVIEW_FALLBACK_TIMEOUT_MS),
           modelOverride: candidate as RunAgentSessionOptions["modelOverride"],
         });
         if (!hasMeaningfulReviewOutput(content)) {
@@ -601,7 +661,7 @@ async function runReviewerSessionWithFallback(
               : `The original review model ${originalModelLabel}`)
           : (isZh() ? "原复查模型" : "The original review model");
         const fallbackNote = isZh()
-          ? `${originalText}${timeoutLike ? " 超时" : " 暂时不可用"}，已自动切换到 ${candidateLabel || "备用复查模型"} 完成这次复查。`
+          ? `${originalText}${timeoutLike ? " 超时" : " 暂时不可用"}，已自动切换到 ${candidateLabel || AUTO_REVIEW_MODEL_LABEL} 完成这次复查。`
           : `${originalText} ${timeoutLike ? "timed out" : "became temporarily unavailable"}, so this review finished on ${candidateLabel || "a fallback review model"}.`;
         return {
           content,
@@ -856,8 +916,8 @@ function buildSessionContextPack(sessionPath: string | null | undefined): Sessio
   }
 }
 
-function buildReviewContextPack(context: string, engine: ReviewRouteEngine): ReviewContextPack {
-  const sessionPath = engine.currentSessionPath || null;
+function buildReviewContextPack(context: string, engine: ReviewRouteEngine, sessionPathOverride: string | null = null): ReviewContextPack {
+  const sessionPath = sessionPathOverride || engine.currentSessionPath || null;
   const gitContext = sessionPath
     ? {
         sessionPath,
@@ -873,6 +933,198 @@ function buildReviewContextPack(context: string, engine: ReviewRouteEngine): Rev
     gitContext,
     sessionContext,
     ...(workspacePath ? { workspacePath } : {}),
+  };
+}
+
+export async function startReviewRun(
+  engine: ReviewRouteEngine,
+  { broadcast = () => undefined }: Pick<CreateReviewRouteOptions, "broadcast"> = {},
+  request: StartReviewRunRequest,
+): Promise<StartReviewRunResult> {
+  const context = typeof request.context === "string" ? request.context : "";
+  if (!context.trim()) {
+    const err: CodedError = new Error("missing context");
+    err.code = "missing_context";
+    throw err;
+  }
+
+  const reviewConfig = await ensureDefaultReviewerAgents(engine);
+  const reviewerKind = request.reviewerKind === "butter"
+    ? "butter"
+    : (request.autoReview ? "hanako" : reviewConfig.defaultReviewer);
+  const reviewer = resolveReviewer(reviewConfig.candidates, reviewerKind, reviewConfig, engine.currentAgentId);
+
+  if (!reviewer) {
+    const err: CodedError = new Error(reviewerMissingMessage(reviewerKind));
+    err.code = "reviewer_not_configured";
+    throw err;
+  }
+
+  try {
+    const loadedReviewer = typeof engine.ensureAgentLoaded === "function"
+      ? await engine.ensureAgentLoaded(reviewer.id)
+      : engine.getAgent?.(reviewer.id);
+    if (!loadedReviewer) {
+      const err: CodedError = new Error(isZh()
+        ? `复查人 agent "${reviewer.id}" 不存在或未初始化`
+        : `Reviewer agent "${reviewer.id}" does not exist or is not initialized`);
+      err.code = "reviewer_agent_missing";
+      throw err;
+    }
+  } catch (err) {
+    const wrapped: CodedError = new Error(errorMessage(err, isZh() ? "复查人初始化失败" : "Reviewer initialization failed"));
+    wrapped.code = errorCode(err) || "reviewer_agent_init_failed";
+    throw wrapped;
+  }
+
+  const reviewerRuntime = engine.getAgent?.(reviewer.id);
+  const reviewerConfiguredModel = reviewerRuntime ? getAgentModel(reviewerRuntime) : null;
+  const reviewerConfiguredAvailable = reviewerConfiguredModel?.modelId
+    ? getAvailableModel(engine, reviewerConfiguredModel.modelId, reviewerConfiguredModel.modelProvider)
+    : null;
+  const reviewerName = reviewerDisplayName(reviewer.yuan);
+  const reviewerModelLabel = reviewModelDisplayLabel(
+    reviewer,
+    reviewerConfiguredAvailable?.id || reviewerConfiguredModel?.modelId || null,
+    reviewerConfiguredAvailable?.provider || reviewerConfiguredModel?.modelProvider || null,
+    AUTO_REVIEW_MODEL_LABEL,
+  );
+  const reviewerModelId = reviewerConfiguredAvailable?.id || reviewerConfiguredModel?.modelId || null;
+  const reviewerModelProvider = reviewerConfiguredAvailable?.provider || reviewerConfiguredModel?.modelProvider || null;
+  const sessionPath = typeof request.sessionPath === "string" && request.sessionPath.trim()
+    ? request.sessionPath
+    : (engine.currentSessionPath || null);
+  const reviewId = request.reviewId || `review-${Date.now()}`;
+  const autoReview = !!request.autoReview;
+  const reviewMode = request.reviewMode || (autoReview ? "background" : null);
+  const triggerReasons = Array.isArray(request.triggerReasons)
+    ? request.triggerReasons.filter((reason): reason is string => typeof reason === "string" && !!reason.trim()).slice(0, 6)
+    : [];
+  const emitProgress = createReviewProgressEmitter({ broadcast, reviewId, sessionPath, reviewer });
+
+  broadcast({
+    type: "review_start",
+    reviewId,
+    sessionPath,
+    reviewerName,
+    reviewerAgent: reviewer.id,
+    reviewerAgentName: reviewer.name,
+    reviewerYuan: reviewer.yuan,
+    reviewerHasAvatar: reviewer.hasAvatar,
+    reviewerModelLabel,
+    reviewerModelId,
+    reviewerModelProvider,
+    autoReview,
+    reviewMode,
+    triggerReasons,
+  });
+
+  void (async () => {
+    try {
+      emitProgress("packing_context", { autoReview, reviewMode, triggerReasons, reviewerModelLabel, reviewerModelId, reviewerModelProvider });
+      const contextPack = buildReviewContextPack(context, engine, sessionPath);
+      const prompt = formatContextPack(contextPack);
+
+      emitProgress("reviewing", { autoReview, reviewMode, triggerReasons, reviewerModelLabel, reviewerModelId, reviewerModelProvider });
+      const reviewRun = await runReviewerSessionWithFallback(
+        engine,
+        reviewer,
+        [{ text: prompt, capture: true }],
+        {
+          engine,
+          signal: AbortSignal.timeout(autoReview ? AUTO_REVIEW_EXEC_TIMEOUT_MS : REVIEW_EXEC_TIMEOUT_MS),
+          sessionSuffix: autoReview ? "auto-review" : "review",
+          systemAppend: buildReviewSystemAppend({ autoReview, reviewMode }),
+          maxTokens: autoReview ? AUTO_REVIEW_MAX_OUTPUT_TOKENS : undefined,
+          readOnly: true,
+          keepSession: false,
+        },
+        { fallbackTimeoutMs: autoReview ? AUTO_REVIEW_FALLBACK_TIMEOUT_MS : REVIEW_FALLBACK_TIMEOUT_MS },
+      );
+
+      emitProgress("structuring", { autoReview, reviewMode, triggerReasons, reviewerModelLabel, reviewerModelId, reviewerModelProvider });
+      const cleanedContent = stripThinkTags(reviewRun.content || "");
+      const structured = parseStructuredReview(cleanedContent);
+      const followUpPrompt = structured ? buildReviewFollowUp(structured) : null;
+
+      emitProgress("done", {
+        verdict: structured?.verdict || null,
+        findingsCount: structured?.findings?.length || 0,
+        workflowGate: structured?.workflowGate || "clear",
+        autoReview,
+        reviewMode,
+        triggerReasons,
+        reviewerModelLabel,
+        reviewerModelId,
+        reviewerModelProvider,
+      });
+
+      broadcast({
+        type: "review_result",
+        reviewId,
+        sessionPath,
+        reviewerName,
+        reviewerAgent: reviewer.id,
+        reviewerAgentName: reviewer.name,
+        reviewerYuan: reviewer.yuan,
+        reviewerHasAvatar: reviewer.hasAvatar,
+        reviewerModelLabel: reviewRun.usedModelLabel || AUTO_REVIEW_MODEL_LABEL,
+        reviewerModelId: reviewRun.usedModelId || null,
+        reviewerModelProvider: reviewRun.usedModelProvider || null,
+        content: cleanedContent,
+        structured,
+        contextPack,
+        followUpPrompt,
+        fallbackNote: reviewRun.fallbackNote || null,
+        errorCode: reviewRun.errorCode || null,
+        autoReview,
+        reviewMode,
+        triggerReasons,
+        sourceResponse: request.sourceResponse || null,
+      });
+    } catch (err) {
+      emitProgress("done", {
+        error: errorMessage(err, "Review failed"),
+        workflowGate: "follow_up",
+        errorCode: errorCode(err),
+        autoReview,
+        reviewMode,
+        triggerReasons,
+        reviewerModelLabel,
+        reviewerModelId,
+        reviewerModelProvider,
+      });
+      broadcast({
+        type: "review_result",
+        reviewId,
+        sessionPath,
+        reviewerName,
+        reviewerAgent: reviewer.id,
+        reviewerAgentName: reviewer.name,
+        reviewerYuan: reviewer.yuan,
+        reviewerHasAvatar: reviewer.hasAvatar,
+        reviewerModelLabel: null,
+        reviewerModelId: null,
+        reviewerModelProvider: null,
+        content: "",
+        error: formatReviewFailureMessage(err),
+        errorCode: errorCode(err),
+        autoReview,
+        reviewMode,
+        triggerReasons,
+        sourceResponse: request.sourceResponse || null,
+      });
+    }
+  })();
+
+  return {
+    reviewId,
+    sessionPath,
+    reviewerName,
+    reviewerAgent: reviewer.id,
+    reviewerAgentName: reviewer.name,
+    reviewerYuan: reviewer.yuan,
+    reviewerHasAvatar: reviewer.hasAvatar,
   };
 }
 
@@ -1054,155 +1306,28 @@ export function createReviewRoute(
       return c.json({ error: "missing context" }, 400);
     }
 
-    const reviewConfig = await ensureDefaultReviewerAgents(engine);
-    const reviewerKind = body.reviewerKind === "butter" ? "butter" : reviewConfig.defaultReviewer;
-    const reviewer = resolveReviewer(reviewConfig.candidates, reviewerKind, reviewConfig, engine.currentAgentId);
-
-    if (!reviewer) {
-      return c.json({
-        error: reviewerMissingMessage(reviewerKind),
-        code: "reviewer_not_configured",
-        reviewerKind,
-        config: reviewConfig,
-      }, 400);
-    }
-
     try {
-      const loadedReviewer = typeof engine.ensureAgentLoaded === "function"
-        ? await engine.ensureAgentLoaded(reviewer.id)
-        : engine.getAgent?.(reviewer.id);
-      if (!loadedReviewer) {
-        return c.json({
-          error: isZh()
-            ? `复查人 agent "${reviewer.id}" 不存在或未初始化`
-            : `Reviewer agent "${reviewer.id}" does not exist or is not initialized`,
-          reviewerKind,
-          code: "reviewer_agent_missing",
-        }, 500);
-      }
+      const result = await startReviewRun(engine, { broadcast }, {
+        context,
+        reviewerKind: body.reviewerKind,
+        reviewId: typeof body.reviewId === "string" ? body.reviewId : null,
+        autoReview: body.autoReview === true,
+        reviewMode: typeof body.reviewMode === "string" ? body.reviewMode : null,
+        triggerReasons: Array.isArray(body.triggerReasons)
+          ? body.triggerReasons.filter((reason): reason is string => typeof reason === "string")
+          : [],
+        sourceResponse: typeof body.sourceResponse === "string" ? body.sourceResponse : null,
+      });
+
+      return c.json(result);
     } catch (err) {
+      const code = errorCode(err);
+      const status = code === "reviewer_not_configured" || code === "missing_context" ? 400 : 500;
       return c.json({
-        error: errorMessage(err, isZh() ? "复查人初始化失败" : "Reviewer initialization failed"),
-        reviewerKind,
-        code: "reviewer_agent_init_failed",
-      }, 500);
+        error: errorMessage(err, isZh() ? "复查启动失败" : "Failed to start review"),
+        code,
+      }, status);
     }
-
-    const reviewerRuntime = engine.getAgent?.(reviewer.id);
-    const reviewerConfiguredModel = reviewerRuntime ? getAgentModel(reviewerRuntime) : null;
-    const reviewerConfiguredAvailable = reviewerConfiguredModel?.modelId
-      ? getAvailableModel(engine, reviewerConfiguredModel.modelId, reviewerConfiguredModel.modelProvider)
-      : null;
-    const reviewerName = reviewerDisplayName(reviewer.yuan);
-    const reviewerAgentName = reviewer.name;
-    const sessionPath = engine.currentSessionPath || null;
-    const reviewId = `review-${Date.now()}`;
-    const emitProgress = createReviewProgressEmitter({ broadcast, reviewId, sessionPath, reviewer });
-
-    broadcast({
-      type: "review_start",
-      reviewId,
-      sessionPath,
-      reviewerName,
-      reviewerAgent: reviewer.id,
-      reviewerAgentName,
-      reviewerYuan: reviewer.yuan,
-      reviewerHasAvatar: reviewer.hasAvatar,
-      reviewerModelLabel: reviewModelDisplayLabel(
-        reviewer,
-        reviewerConfiguredAvailable?.id || reviewerConfiguredModel?.modelId || null,
-        reviewerConfiguredAvailable?.provider || reviewerConfiguredModel?.modelProvider || null,
-        isZh() ? "默认复查模型" : "default review model",
-      ),
-      reviewerModelId: reviewerConfiguredAvailable?.id || reviewerConfiguredModel?.modelId || null,
-      reviewerModelProvider: reviewerConfiguredAvailable?.provider || reviewerConfiguredModel?.modelProvider || null,
-    });
-
-    (async () => {
-      try {
-        emitProgress("packing_context");
-        const contextPack = buildReviewContextPack(context, engine);
-        const prompt = formatContextPack(contextPack);
-
-        emitProgress("reviewing");
-        const reviewRun = await runReviewerSessionWithFallback(
-          engine,
-          reviewer,
-          [{ text: prompt, capture: true }],
-          {
-            engine,
-            signal: AbortSignal.timeout(REVIEW_EXEC_TIMEOUT_MS),
-            sessionSuffix: "review",
-            systemAppend: buildReviewSystemAppend(),
-            readOnly: true,
-            keepSession: false,
-          },
-        );
-
-        emitProgress("structuring");
-        const cleanedContent = stripThinkTags(reviewRun.content || "");
-        const structured = parseStructuredReview(cleanedContent);
-        const followUpPrompt = structured ? buildReviewFollowUp(structured) : null;
-
-        emitProgress("done", {
-          verdict: structured?.verdict || null,
-          findingsCount: structured?.findings?.length || 0,
-          workflowGate: structured?.workflowGate || "clear",
-        });
-
-        broadcast({
-          type: "review_result",
-          reviewId,
-          sessionPath,
-          reviewerName,
-          reviewerAgent: reviewer.id,
-          reviewerAgentName,
-          reviewerYuan: reviewer.yuan,
-          reviewerHasAvatar: reviewer.hasAvatar,
-          reviewerModelLabel: reviewRun.usedModelLabel || null,
-          reviewerModelId: reviewRun.usedModelId || null,
-          reviewerModelProvider: reviewRun.usedModelProvider || null,
-          content: cleanedContent,
-          structured,
-          contextPack,
-          followUpPrompt,
-          fallbackNote: reviewRun.fallbackNote || null,
-          errorCode: reviewRun.errorCode || null,
-        });
-      } catch (err) {
-        emitProgress("done", {
-          error: errorMessage(err, "Review failed"),
-          workflowGate: "follow_up",
-          errorCode: errorCode(err),
-        });
-        broadcast({
-          type: "review_result",
-          reviewId,
-          sessionPath,
-          reviewerName,
-          reviewerAgent: reviewer.id,
-          reviewerAgentName,
-          reviewerYuan: reviewer.yuan,
-          reviewerHasAvatar: reviewer.hasAvatar,
-          reviewerModelLabel: null,
-          reviewerModelId: null,
-          reviewerModelProvider: null,
-          content: "",
-          error: formatReviewFailureMessage(err),
-          errorCode: errorCode(err),
-        });
-      }
-    })();
-
-    return c.json({
-      reviewId,
-      sessionPath,
-      reviewerName,
-      reviewerAgent: reviewer.id,
-      reviewerAgentName,
-      reviewerYuan: reviewer.yuan,
-      reviewerHasAvatar: reviewer.hasAvatar,
-    });
   });
 
   route.get("/review/agents", async (c) => {

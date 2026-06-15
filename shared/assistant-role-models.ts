@@ -42,9 +42,9 @@ function _ref(providerEncoded: string, idEncoded: string): Readonly<ModelRef> {
 
 export const USER_FACING_MODEL_LABELS: Readonly<Record<string, string>> = Object.freeze({
   lynn: "默认工作模型",
-  hanako: "默认复查模型",
-  butter: "默认复查模型",
-  review: "默认复查模型",
+  hanako: "Hanako · MiMo/GLM",
+  butter: "Hanako · MiMo/GLM",
+  review: "Hanako · MiMo/GLM",
   utility: "默认工具模型",
   utility_large: "默认执行模型",
   brain: getBrainDisplayName(),
@@ -57,6 +57,10 @@ export const ASSISTANT_ROLE_MODEL_FALLBACKS: Readonly<Record<string, readonly Mo
     _ref("dXBpaHo=", "aHNhbGYtNC1tbGc="),
   ]),
   hanako: Object.freeze([
+    Object.freeze({ provider: "mimo", id: "mimo-v2.5-pro" }),
+    Object.freeze({ provider: "xiaomi", id: "mimo-v2.5-pro" }),
+    Object.freeze({ provider: "xiaomi-mimo", id: "mimo-v2.5-pro" }),
+    Object.freeze({ provider: "token-plan", id: "mimo-v2.5-pro" }),
     _ref("dXBpaHo=", "aHNhbGYtNC1tbGc="),
     _ref("a2Vlc3BlZWQ=", "dGFoYy1rZWVzcGVlZA=="),
     Object.freeze({ provider: BRAIN_PROVIDER_ID, id: BRAIN_CHAT_MODEL_ID }),

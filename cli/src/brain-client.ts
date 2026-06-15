@@ -46,6 +46,9 @@ export type BrainStreamEvent =
   | { type: "tool_call.delta"; index: number; id?: string; name?: string; arguments?: string }
   | { type: "provider"; activeProvider: string; fallbackFrom?: Array<{ id: string; reason?: string }> }
   | { type: "tool_progress"; event: string; name: string; ms?: number; ok?: boolean; summary?: string; details?: string[]; argsSummary?: string }
+  | { type: "review_start"; reviewId: string; reviewerName?: string; reviewerModelLabel?: string; autoReview?: boolean; reviewMode?: string | null; triggerReasons?: string[] }
+  | { type: "review_progress"; reviewId: string; stage?: string; findingsCount?: number; verdict?: string; workflowGate?: string; autoReview?: boolean; reviewMode?: string | null; triggerReasons?: string[] }
+  | { type: "review_result"; reviewId: string; content?: string; error?: string; reviewerName?: string; reviewerModelLabel?: string; autoReview?: boolean; reviewMode?: string | null; triggerReasons?: string[] }
   | { type: "brain.error"; error: string; code?: string }
   | { type: "usage"; usage: unknown }
   | { type: "done"; finishReason?: string | null };
@@ -127,6 +130,18 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
     tool_progress?: { event?: unknown; name?: unknown; ms?: unknown; ok?: unknown; summary?: unknown; details?: unknown; args_summary?: unknown; argsSummary?: unknown };
     error?: unknown;
     code?: unknown;
+    type?: unknown;
+    reviewId?: unknown;
+    reviewerName?: unknown;
+    reviewerModelLabel?: unknown;
+    autoReview?: unknown;
+    reviewMode?: unknown;
+    triggerReasons?: unknown;
+    stage?: unknown;
+    findingsCount?: unknown;
+    verdict?: unknown;
+    workflowGate?: unknown;
+    content?: unknown;
     choices?: Array<{
       delta?: {
         content?: unknown;
@@ -142,6 +157,44 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
     usage?: unknown;
   };
   const events: BrainStreamEvent[] = [];
+  const rawType = typeof parsed.type === "string" ? parsed.type : typeof parsed.object === "string" ? parsed.object : "";
+  const reviewId = typeof parsed.reviewId === "string" ? parsed.reviewId : "";
+  const reviewCommon = () => ({
+    reviewId,
+    autoReview: typeof parsed.autoReview === "boolean" ? parsed.autoReview : undefined,
+    reviewMode: typeof parsed.reviewMode === "string" ? parsed.reviewMode : null,
+    triggerReasons: Array.isArray(parsed.triggerReasons)
+      ? parsed.triggerReasons.filter((reason): reason is string => typeof reason === "string" && !!reason.trim())
+      : undefined,
+  });
+  if (reviewId && (rawType === "review_start" || rawType === "lynn.review_start")) {
+    events.push({
+      type: "review_start",
+      ...reviewCommon(),
+      reviewerName: typeof parsed.reviewerName === "string" ? parsed.reviewerName : undefined,
+      reviewerModelLabel: typeof parsed.reviewerModelLabel === "string" ? parsed.reviewerModelLabel : undefined,
+    });
+  }
+  if (reviewId && (rawType === "review_progress" || rawType === "lynn.review_progress")) {
+    events.push({
+      type: "review_progress",
+      ...reviewCommon(),
+      stage: typeof parsed.stage === "string" ? parsed.stage : undefined,
+      findingsCount: typeof parsed.findingsCount === "number" ? parsed.findingsCount : undefined,
+      verdict: typeof parsed.verdict === "string" ? parsed.verdict : undefined,
+      workflowGate: typeof parsed.workflowGate === "string" ? parsed.workflowGate : undefined,
+    });
+  }
+  if (reviewId && (rawType === "review_result" || rawType === "lynn.review_result")) {
+    events.push({
+      type: "review_result",
+      ...reviewCommon(),
+      reviewerName: typeof parsed.reviewerName === "string" ? parsed.reviewerName : undefined,
+      reviewerModelLabel: typeof parsed.reviewerModelLabel === "string" ? parsed.reviewerModelLabel : undefined,
+      content: typeof parsed.content === "string" ? parsed.content : undefined,
+      error: typeof parsed.error === "string" ? parsed.error : undefined,
+    });
+  }
   if (parsed.object === "lynn.provider") {
     const activeProvider = typeof parsed.meta?.active_provider === "string" ? parsed.meta.active_provider : "";
     const fallbackFrom = Array.isArray(parsed.meta?.fallback_from)

@@ -75,6 +75,7 @@ export interface RunAgentSessionOptions {
   signal?: AbortSignal;
   sessionSuffix?: string;
   systemAppend?: string;
+  maxTokens?: number;
   keepSession?: boolean;
   noMemory?: boolean;
   noTools?: boolean;
@@ -149,6 +150,7 @@ export async function runAgentSession(
     signal,
     sessionSuffix = "temp",
     systemAppend,
+    maxTokens = undefined,
     keepSession = false,
     noMemory = false,
     noTools = false,
@@ -213,7 +215,21 @@ export async function runAgentSession(
       customTools = built.customTools || [];
     }
   }
-  const model = (modelOverride || ctx.resolveModel(agent.config)) as SessionModel;
+  const resolvedModel = (modelOverride || ctx.resolveModel(agent.config)) as SessionModel & Record<string, unknown>;
+  const outputCap = Number.isFinite(Number(maxTokens)) && Number(maxTokens) > 0
+    ? Math.floor(Number(maxTokens))
+    : 0;
+  const model = outputCap > 0 && resolvedModel && typeof resolvedModel === "object"
+    ? ({
+        ...resolvedModel,
+        maxTokens: Math.min(
+          Number.isFinite(Number(resolvedModel.maxTokens)) && Number(resolvedModel.maxTokens) > 0
+            ? Number(resolvedModel.maxTokens)
+            : outputCap,
+          outputCap,
+        ),
+      } as SessionModel)
+    : resolvedModel as SessionModel;
   const { session } = await createAgentSession({
     cwd,
     sessionManager: tempSessionMgr,
