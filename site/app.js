@@ -1,7 +1,7 @@
 const RELEASE = {
   guiVersion: "0.84.5",
   cliVersion: "0.84.5",
-  releasePage: "https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.5",
+  releasePage: "https://gitee.com/merkyor/Lynn/releases/tag/v0.84.5",
   assets: {
     macArm:
       "https://download.merkyorlynn.com/downloads/Lynn-0.84.5-macOS-arm64.dmg",
@@ -70,7 +70,7 @@ function applyPlatformHint() {
 
   if (callout) {
     callout.innerHTML =
-      "<strong>未自动识别系统：</strong> 你也可以直接前往 GitHub Release 页面选择安装包。";
+      "<strong>未自动识别系统：</strong> 你也可以直接前往 Gitee Release 页面选择安装包。";
   }
 }
 
