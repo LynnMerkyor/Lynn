@@ -1691,16 +1691,21 @@
     }
 
     .input-controls {
-        justify-content: stretch;
-        display: grid;
-        grid-template-columns: auto auto minmax(0, 1fr) auto;
+        justify-content: flex-start;
+        flex-wrap: wrap;
         gap: 0.38rem;
     }
 
+    .send-controls {
+        flex: 1 1 240px;
+        justify-content: flex-end;
+        margin-left: auto;
+    }
+
     .model-selector {
-        flex: 1 1 auto;
+        flex: 1 1 180px;
         min-width: 0;
-        width: 100%;
+        width: auto;
         max-width: none;
     }
 
@@ -1729,6 +1734,23 @@
     .local-model-status-copy {
         flex-direction: column;
         gap: 2px;
+    }
+}
+
+@media (max-width: 620px) {
+    .input-controls {
+        justify-content: flex-start;
+    }
+
+    .send-controls {
+        flex: 1 1 100%;
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .model-selector {
+        flex: 1 1 0;
+        width: 100%;
     }
 }
 

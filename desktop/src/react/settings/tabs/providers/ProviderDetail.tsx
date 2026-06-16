@@ -8,8 +8,7 @@ import { ProviderModelList } from './ProviderModelList';
 import { useLlamacppState } from '../../../hooks/use-llamacpp-state';
 import { BRAIN_PROVIDER_ID, BRAIN_PROVIDER_LABEL } from '../../../../../../shared/brain-provider.js';
 import styles from '../../Settings.module.css';
-
-const platform = window.platform;
+import { notifyModelsChanged } from './model-change-events';
 import {
   LOCAL_QWEN_PROVIDER_LABEL,
   LOCAL_QWEN35_9B_EXPECTED_SIZE,
@@ -23,6 +22,8 @@ import {
   type LocalActionStatus,
   type LocalUpgradeOption,
 } from "./ProviderDetail.helpers";
+
+const platform = typeof window !== 'undefined' ? window.platform : undefined;
 
 export function ProviderDetail({ providerId, summary, providerConfig, isPresetSetup, presetInfo, onRefresh }: {
   providerId: string;
@@ -181,8 +182,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         ].filter(Boolean).join(':') || 'default-running';
         if (lastEndpointRefreshKeyRef.current !== modelKey) {
           lastEndpointRefreshKeyRef.current = modelKey;
-          platform?.settingsChanged?.('models-changed');
-          window.dispatchEvent(new CustomEvent('models-changed'));
+          notifyModelsChanged();
           void onRefresh();
         }
       }
@@ -430,8 +430,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       await hanaFetch('/api/local-qwen35-9b/register', { method: 'POST', timeout: 10_000 });
       showToast('本地 Qwen3.5-9B 已注册到模型列表。', 'success');
       setActionStatus({ kind: 'success', text: '已重新注册本地端点，并切换到本地 Qwen3.5-9B。' });
-      platform?.settingsChanged?.('models-changed');
-      window.dispatchEvent(new CustomEvent('models-changed'));
+      notifyModelsChanged();
       await onRefresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -905,7 +904,7 @@ function ProviderDeleteButton({ providerId, onRefresh }: { providerId: string; o
       useSettingsStore.setState({ selectedProviderId: null });
       setConfirming(false);
       await onRefresh();
-      platform?.settingsChanged?.('models-changed');
+      notifyModelsChanged();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       showToast(t('settings.saveFailed') + ': ' + msg, 'error');

@@ -13,8 +13,7 @@ import {
   getBrainUserNotice,
 } from '../../../../../../shared/brain-provider.js';
 import styles from '../../Settings.module.css';
-
-const platform = window.platform;
+import { notifyModelsChanged } from './model-change-events';
 
 function providerModelId(value: unknown): string {
   if (!value) return '';
@@ -107,7 +106,7 @@ export function ApiKeyCredentials({ providerId, summary, providerConfig: _provid
       setKeyEdited(false);
       if (urlEdited) setUrlEdited(false);
       await onRefresh();
-      platform?.settingsChanged?.('models-changed');
+      notifyModelsChanged();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       showToast(t('settings.saveFailed') + ': ' + msg, 'error');
@@ -133,6 +132,10 @@ export function ApiKeyCredentials({ providerId, summary, providerConfig: _provid
       });
       const testData = await testRes.json();
       setConnStatus(testData.ok ? 'ok' : 'fail');
+      if (testData.ok) {
+        await onRefresh();
+        notifyModelsChanged();
+      }
       showToast(
         testData.ok ? t('settings.providers.verifySuccess') : (testData.error || testData.message || t('settings.providers.verifyFailed')),
         testData.ok ? 'success' : 'error',

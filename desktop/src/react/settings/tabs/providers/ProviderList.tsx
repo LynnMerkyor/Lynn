@@ -6,8 +6,7 @@ import { loadSettingsConfig } from '../../actions';
 import { SelectWidget } from '../../widgets/SelectWidget';
 import { KeyInput } from '../../widgets/KeyInput';
 import styles from '../../Settings.module.css';
-
-const platform = window.platform;
+import { notifyModelsChanged } from './model-change-events';
 
 export function AddCustomButton({ adding, onToggle, onDone, onCancel }: {
   adding: boolean;
@@ -78,7 +77,7 @@ function AddProviderForm({ onDone, onCancel }: { onDone: () => void; onCancel: (
       if (data.error) throw new Error(data.error);
       showToast(t('settings.providers.added', { name: n }), 'success');
       await loadSettingsConfig();
-      platform?.settingsChanged?.('models-changed');
+      notifyModelsChanged();
       useSettingsStore.setState({ selectedProviderId: n });
       onDone();
     } catch (err: unknown) {

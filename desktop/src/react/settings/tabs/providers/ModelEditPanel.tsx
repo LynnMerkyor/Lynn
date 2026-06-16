@@ -5,8 +5,7 @@ import { t, lookupModelMeta, autoSaveConfig, CONTEXT_PRESETS, OUTPUT_PRESETS, re
 import { ComboInput } from '../../widgets/ComboInput';
 import { Toggle } from '../../widgets/Toggle';
 import styles from '../../Settings.module.css';
-
-const platform = window.platform;
+import { notifyModelsChanged } from './model-change-events';
 
 type ProviderModelEntry = string | {
   id?: string;
@@ -120,8 +119,7 @@ export function ModelEditPanel({ modelId, providerId, anchorEl, onClose, onRefre
         // Model refresh is best effort; saved provider metadata will apply on next switch/session.
       }
       await onRefresh?.();
-      platform?.settingsChanged?.('models-changed');
-      window.dispatchEvent(new CustomEvent('models-changed'));
+      notifyModelsChanged();
     }
     showToast(t('settings.saved'), 'success');
     onClose();

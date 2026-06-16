@@ -134,4 +134,34 @@ describe("renderBrainEventForHuman", () => {
     expect(output).toContain("sources: /tool 1 · 2 links · platform.stepfun.com");
     expect(renderToolDetailsList(state, false)).toContain("/tool 1 🔎 web_search · done · 4.5s — 2 sources: platform.stepfun.com");
   });
+
+  it("deduplicates repeated JSON tool summaries and details in the visible tool card", () => {
+    let output = "";
+    const stream = {
+      isTTY: false,
+      write(chunk: string) {
+        output += chunk;
+        return true;
+      },
+    } as unknown as NodeJS.WriteStream;
+    const state: HumanBrainRenderState = {};
+    const payload = JSON.stringify({
+      status: "no_direct_source",
+      query: "世界杯 今晚 赛程",
+      guidance: "体育比分暂无独立数据源,请改用 web_search。",
+    });
+
+    renderBrainEventForHuman({
+      type: "tool_progress",
+      event: "end",
+      name: "sports_score",
+      ok: true,
+      ms: 0,
+      summary: payload,
+      details: [payload],
+    }, state, stream);
+
+    expect((output.match(/no_direct_source/g) || []).length).toBe(1);
+    expect(output).toContain("details: /tool 1");
+  });
 });

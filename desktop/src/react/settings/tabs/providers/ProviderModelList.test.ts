@@ -29,4 +29,23 @@ describe('ProviderModelList model candidates', () => {
     expect(providerModelList.nextRemovedModelsAfterAdd(['deepseek-chat', 'deepseek-reasoner'], 'deepseek-chat'))
       .toEqual(['deepseek-reasoner']);
   });
+
+  it('auto-registers discovered models only when a provider has no saved models', () => {
+    expect(providerModelList.buildAutoRegisteredModelEntries({
+      currentModelEntries: [],
+      discoveredModels: [
+        { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context: 1_000_000, maxOutput: 64_000 },
+        { id: 'deepseek-chat' },
+      ],
+      removedModels: ['deepseek-chat'],
+    })).toEqual([
+      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context: 1_000_000, maxOutput: 64_000 },
+    ]);
+
+    expect(providerModelList.buildAutoRegisteredModelEntries({
+      currentModelEntries: ['deepseek-v4-flash'],
+      discoveredModels: [{ id: 'deepseek-v4-pro' }],
+      removedModels: [],
+    })).toEqual(['deepseek-v4-flash']);
+  });
 });

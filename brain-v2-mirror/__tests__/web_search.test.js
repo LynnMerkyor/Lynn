@@ -145,12 +145,13 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
     expect(r.ok).toBe(true);
     expect(r.provider).toBe('glm');
     expect(r.summary).toContain('墨西哥 2-0 南非');
-    expect(r.items[0]).toMatchObject({ title: '2026世界杯最新赛程' });
+    expect(r.items).toEqual([]);
+    expect(r.sources[0].items[0]).toMatchObject({ title: '2026世界杯最新赛程', url: '' });
     expect(r.sources.map((s) => s.name)).toEqual(['glm']);
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps GLM content-only results usable with a title search URL', async () => {
+  it('keeps GLM content-only results usable without inventing a Baidu source URL', async () => {
     global.fetch = vi.fn().mockResolvedValueOnce(glmResp({ link: '', title: '2026世界杯最新赛程', content: '墨西哥 2-0 南非，韩国 2-1 捷克。' }));
 
     const r = await webSearchStructured('世界杯赛程');
@@ -158,8 +159,13 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
     expect(r.ok).toBe(true);
     expect(r.provider).toBe('glm');
     expect(r.summary).toContain('墨西哥 2-0 南非');
-    expect(r.items[0]).toMatchObject({ title: '2026世界杯最新赛程' });
-    expect(r.items[0].url).toContain('https://www.baidu.com/s?wd=');
+    expect(r.items).toEqual([]);
+    expect(r.sources[0].items[0]).toMatchObject({ title: '2026世界杯最新赛程', url: '' });
+
+    const formatted = __testing__.formatStructuredSearchForTool(r);
+    expect(formatted).toContain('GLM Web Search');
+    expect(formatted).toContain('摘要无原文链接');
+    expect(formatted).not.toContain('baidu.com/s?wd=');
   });
 
   it('uses structured MiMo as primary for explicit source-link queries', async () => {
@@ -171,6 +177,18 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
     expect(r.provider).toBe('mimo');
     expect(r.summary).toBe('MiMo 综合答案');
     expect(r.items).toEqual([{ title: 'M', url: 'http://m', snippet: 'm-snip' }]);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses structured MiMo as primary for source-grade people and fee research queries', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(mimoResp('MiMo 私董会 citation answer', 'https://source.example/private-board'));
+
+    const r = await webSearchStructured('中国主要私董会的人数，收费');
+
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('mimo');
+    expect(r.summary).toBe('MiMo 私董会 citation answer');
+    expect(r.items).toEqual([{ title: 'M', url: 'https://source.example/private-board', snippet: 'm-snip' }]);
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 

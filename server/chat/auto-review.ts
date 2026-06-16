@@ -30,7 +30,7 @@ export interface AutoReviewDecision {
 
 const AUTO_REVIEW_DISABLED = /^(?:0|false|off|no)$/i;
 const AUTO_REVIEW_HIGH_RISK_TOOL_RE = /\b(?:web[_-]?search|web[_-]?fetch|stock[_-]?market|sports[_-]?score|search|fetch|stock|quote|market|sports|score|weather|news|live|research|bash|write|edit|create_report|create_poster|browser)\b/i;
-const AUTO_REVIEW_HIGH_RISK_TEXT_RE = /(?:行情|股价|金价|黄金|比分|赛程|世界杯|NBA|天气|新闻|最新|今天|今晚|昨日|昨晚|收盘|价格|搜索|访问|来源|文件|执行|写入|删除|修改)/i;
+const AUTO_REVIEW_HIGH_RISK_TEXT_RE = /(?:行情|股价|金价|黄金|比分|赛程|世界杯|NBA|天气|新闻|最新|今天|今晚|昨日|昨晚|收盘|价格|搜索|访问|来源|文件|执行|写入|删除|修改|预测|概率|赔率|夺冠|热门|私董会|会费|收费标准|人数规模|会员人数|主要机构|机构名单|机构对比|榜单|排名|调研)/i;
 
 function autoReviewEnabled(): boolean {
   return !AUTO_REVIEW_DISABLED.test(String(process.env.LYNN_AUTO_REVIEW ?? ""));

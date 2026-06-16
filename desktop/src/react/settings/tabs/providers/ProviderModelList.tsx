@@ -10,8 +10,7 @@ import {
   getBrainDisplayName,
 } from '../../../../../../shared/brain-provider.js';
 import styles from '../../Settings.module.css';
-
-const platform = typeof window !== 'undefined' ? window.platform : undefined;
+import { notifyModelsChanged } from './model-change-events';
 
 interface DiscoveredModel {
   id: string;
@@ -83,6 +82,40 @@ export function nextRemovedModelsAfterRemove(removedModels: string[] | undefined
   return uniqueModelIds([...(removedModels || []), modelId]);
 }
 
+export function buildAutoRegisteredModelEntries({
+  currentModelEntries,
+  discoveredModels,
+  removedModels,
+}: {
+  currentModelEntries: ProviderModelEntry[];
+  discoveredModels: DiscoveredModel[];
+  removedModels?: string[];
+}): ProviderModelEntry[] {
+  if (uniqueModelIds(currentModelEntries.map(modelEntryId)).length > 0) {
+    return currentModelEntries;
+  }
+
+  const removedSet = new Set(uniqueModelIds(removedModels || []));
+  const seen = new Set<string>();
+  const entries: ProviderModelEntry[] = [];
+  for (const model of discoveredModels) {
+    const id = String(model?.id || '').trim();
+    if (!id || removedSet.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    if (model.name || model.context || model.maxOutput) {
+      entries.push({
+        id,
+        name: model.name,
+        context: model.context ?? null,
+        maxOutput: model.maxOutput ?? null,
+      });
+    } else {
+      entries.push(id);
+    }
+  }
+  return entries;
+}
+
 export function ProviderModelList({ providerId, summary, onRefresh }: {
   providerId: string;
   summary: ProviderSummary;
@@ -130,7 +163,7 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
         body: JSON.stringify({ providers: { [providerId]: { models: [...currentModelEntries, mid], removed_models: nextRemoved } } }),
       });
       await onRefresh();
-      platform?.settingsChanged?.('models-changed');
+      notifyModelsChanged();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       showToast(msg, 'error');
@@ -147,7 +180,7 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
         body: JSON.stringify({ providers: { [providerId]: { models: next, removed_models: nextRemoved } } }),
       });
       await onRefresh();
-      platform?.settingsChanged?.('models-changed');
+      notifyModelsChanged();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       showToast(msg, 'error');
@@ -176,7 +209,7 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
       }
       setCustomInput('');
       await onRefresh();
-      platform?.settingsChanged?.('models-changed');
+      notifyModelsChanged();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       showToast(msg, 'error');
@@ -204,8 +237,28 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
       if (data.error) { showFetchHint(t('settings.providers.fetchFailed'), false); return; }
       const models = (data.models || []) as DiscoveredModel[];
       if (models.length === 0) { showFetchHint(t('settings.providers.fetchFailed'), false); return; }
-      // Backend already cached the results; just refresh the dropdown
       setDiscoveredModels(models);
+      const nextModels = buildAutoRegisteredModelEntries({
+        currentModelEntries,
+        discoveredModels: models,
+        removedModels: summary.removed_models || [],
+      });
+      if (currentModels.length === 0 && nextModels.length > 0) {
+        await hanaFetch('/api/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providers: {
+              [providerId]: {
+                models: nextModels,
+                removed_models: summary.removed_models || [],
+              },
+            },
+          }),
+        });
+        await onRefresh();
+        notifyModelsChanged();
+      }
       showFetchHint(t('settings.providers.fetchSuccess', { name: providerId, n: models.length }), true);
     } catch {
       showFetchHint(t('settings.providers.fetchFailed'), false);

@@ -48,6 +48,17 @@ describe('composer controls regression', () => {
     expect(cssBlock(inputCss, '.send-controls')).toContain('gap: 0.34rem');
   });
 
+  it('lets composer controls wrap instead of clipping in narrow windows', () => {
+    const inputCss = read('desktop/src/react/components/input/InputArea.module.css');
+
+    expect(inputCss).toContain('@media (max-width: 980px)');
+    expect(inputCss).toContain('.input-controls {\n        justify-content: flex-start;\n        flex-wrap: wrap;');
+    expect(inputCss).toContain('.send-controls {\n        flex: 1 1 240px;');
+    expect(inputCss).toContain('@media (max-width: 620px)');
+    expect(inputCss).toContain('.send-controls {\n        flex: 1 1 100%;');
+    expect(inputCss).toContain('.model-selector {\n        flex: 1 1 0;');
+  });
+
   it('uses concise Chinese copy for deep research controls and status', () => {
     const panel = read('desktop/src/react/components/input/DeepResearchPanel.tsx');
     const inputArea = read('desktop/src/react/components/InputArea.tsx');

@@ -11,8 +11,12 @@ const NL = String.fromCharCode(10);
 function envOr(name, fallback = "") {
   return process.env[name] || fallback;
 }
+function needsSourceGradeEvidence(query) {
+  return /(私董会|会费|收费标准|人数规模|会员人数|主要(?:私董会|机构|协会|商会)|机构(?:名单|对比|收费|人数)|预测|概率|赔率|夺冠(?:概率|热门)?|榜单|排名)/i.test(String(query || ""));
+}
 function wantsSourceLinks(query) {
-  return /(官方|官网|来源|出处|引用|参考|链接|原文|source|citation|reference|official|link)/i.test(String(query || ""));
+  const q = String(query || "");
+  return /(官方|官网|来源|出处|引用|参考|链接|原文|source|citation|reference|official|link)/i.test(q) || needsSourceGradeEvidence(q);
 }
 function configuredStructuredSource(source) {
   const entry = STRUCTURED_RACERS.find((r) => r.source === source);
@@ -175,8 +179,11 @@ function usefulItems(items) {
 }
 function isUsableStructuredResult(value) {
   const items = usefulItems(value?.items);
+  const rawItems = (Array.isArray(value?.items) ? value.items : []).filter((item) => (
+    String(item?.title || "").trim() || String(item?.snippet || item?.summary || "").trim()
+  ));
   const summary = String(value?.summary || "").trim();
-  return items.length >= 1 && summary.length > 0 || items.length >= 2;
+  return items.length >= 1 && summary.length > 0 || items.length >= 2 || rawItems.length >= 1 && summary.length > 0;
 }
 function requireUsableStructured(source, value) {
   if (!isUsableStructuredResult(value)) throw new Error(source + " unusable result");
@@ -251,7 +258,7 @@ async function searchGlmWebStructured(query, signal) {
   if (data.error) throw new Error("glm-search " + JSON.stringify(data.error).slice(0, 80));
   const sr = (Array.isArray(data.search_result) ? data.search_result : []).filter((x) => String(x.content || "").trim());
   if (!sr.length) throw new Error("glm-search empty result");
-  const items = sr.map((x) => ({ title: String(x.title || ""), url: String(x.link || "").trim() || ("https://www.baidu.com/s?wd=" + encodeURIComponent(String(x.title || "").slice(0, 40))), snippet: String(x.content || "").slice(0, 240) }));
+  const items = sr.map((x) => ({ title: String(x.title || ""), url: String(x.link || "").trim(), snippet: String(x.content || "").slice(0, 240) }));
   const summary = sr.slice(0, 5).map((x) => String(x.title || "").trim() + (x.publish_date ? "(" + x.publish_date + ")" : "") + "：" + String(x.content || "").replace(/\s+/g, " ").slice(0, 220)).join("\n");
   return { items, summary };
 }
@@ -346,10 +353,17 @@ function formatStructuredSearchForTool(result) {
       const snippet = String(item.snippet || item.summary || "").replace(/\s+/g, " ").trim();
       if (snippet) lines.push("   " + snippet.slice(0, 240));
     });
+  } else if (result.provider === "glm" && result.summary) {
+    if (lines.length) lines.push("");
+    lines.push("\u6765\u6E90\u8BF4\u660E: GLM Web Search \u672A\u8FD4\u56DE\u53EF\u70B9\u51FB\u539F\u6587\u94FE\u63A5;\u4E0A\u65B9\u6458\u8981\u53EA\u80FD\u4F5C\u4E3A\u641C\u7D22\u7EBF\u7D22,\u6536\u8D39/\u4EBA\u6570/\u9884\u6D4B\u7B49\u53E3\u5F84\u9700\u4F18\u5148\u4F7F\u7528\u5E26\u94FE\u63A5\u6765\u6E90\u590D\u6838\u3002");
   }
   const sourceStatus = (Array.isArray(result.sources) ? result.sources : []).map((source) => {
     const name = String(source?.name || "source");
-    if (source?.ok) return name + "\u2713";
+    if (source?.ok) {
+      const sourceItems = usefulItems(source.items || []);
+      const summaryOnly = name === "glm" && !sourceItems.length && source?.summary;
+      return name + "\u2713" + (summaryOnly ? "(\u6458\u8981\u65E0\u539F\u6587\u94FE\u63A5)" : "");
+    }
     const error = String(source?.error || "").trim();
     return name + "\u2717" + (error ? "(" + error.slice(0, 120) + ")" : "");
   }).filter(Boolean);

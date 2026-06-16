@@ -146,9 +146,12 @@ function rememberToolDetail(state: HumanBrainRenderState, event: Extract<BrainSt
 
 function toolPreviewLines(event: Extract<BrainStreamEvent, { type: "tool_progress" }>, color: boolean): string[] {
   const lines: string[] = [];
+  const seen = new Set<string>();
   const add = (line: string | undefined) => {
     const clean = oneLine(line || "", 180);
-    if (!clean || lines.includes(clean)) return;
+    const key = toolPreviewDedupeKey(clean);
+    if (!clean || seen.has(key)) return;
+    seen.add(key);
     lines.push(clean);
   };
   add(event.summary);
@@ -157,6 +160,16 @@ function toolPreviewLines(event: Extract<BrainStreamEvent, { type: "tool_progres
     add(previewDetailLine(detail, color));
   }
   return lines;
+}
+
+function toolPreviewDedupeKey(line: string): string {
+  const stripped = line.replace(/\x1b\[[0-9;]*m/g, "").trim();
+  if (!stripped) return "";
+  try {
+    return `json:${JSON.stringify(JSON.parse(stripped))}`;
+  } catch {
+    return stripped;
+  }
 }
 
 function toolDetailHint(event: Extract<BrainStreamEvent, { type: "tool_progress" }>, detailId: number): string {

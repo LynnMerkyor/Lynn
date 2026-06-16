@@ -66,6 +66,43 @@ describe("auto review policy", () => {
     expect(decision.reasons).toEqual([]);
   });
 
+  it("requests background review for source-grade business research even when the answer is not empty", () => {
+    const decision = decideAutoReviewTurn({
+      mode: "background",
+      sourceText: "公开资料显示，某私董会收费 13.8 万元/人，但人数规模未查到。",
+      ss: makeState({
+        hasOutput: true,
+        lastSuccessfulTools: [
+          {
+            name: "web_search",
+            command: "中国主要私董会的人数，收费",
+            outputPreview: "运河私董会 学费 138000",
+          },
+        ],
+        successfulToolCount: 1,
+      }),
+    });
+
+    expect(decision.shouldReview).toBe(true);
+    expect(decision.reasons).toEqual(expect.arrayContaining([
+      "tool_evidence",
+      "high_risk_tool",
+      "time_sensitive_or_market",
+    ]));
+    expect(decision.context).toContain("中国主要私董会的人数，收费");
+  });
+
+  it("requests background review for prediction and probability claims", () => {
+    const decision = decideAutoReviewTurn({
+      mode: "background",
+      sourceText: "西班牙是世界杯夺冠概率最高的队伍。",
+      ss: makeState({ hasOutput: true }),
+    });
+
+    expect(decision.shouldReview).toBe(true);
+    expect(decision.reasons).toContain("time_sensitive_or_market");
+  });
+
   it("always reviews fallback turns so empty answers get a visible safety net", () => {
     const decision = decideAutoReviewTurn({
       mode: "fallback",
