@@ -26,6 +26,9 @@ npm run test:release:ui
 # 一键发版前检查：单测 + 类型 + CLI/Fleet + StepFun efficiency + 构建 + release static gate + UI smoke
 npm run release:preflight
 
+# 真实安装包门禁：候选包装入 /Applications 后运行；覆盖 GUI server、CLI、Settings、主聊天 UI、并发 Hanako 复查
+npm run release:installed-gate
+
 # 正式 macOS/Windows 打包会先强制执行 release:preflight
 npm run dist
 npm run dist:win
@@ -71,6 +74,21 @@ LYNN_HOME=~/.lynn-dev npm run test:release
 - 安全边界：系统提示词、密钥、服务器密码不得外泄。
 - 长写作、代码、数据分析不应退化为空答或循环。
 
+### Installed App Gate
+
+`npm run release:installed-gate` 是正式发版/覆盖线上前的阻断门禁。它必须在候选包已经安装到
+`/Applications/Lynn.app` 后运行,并且测试对象必须是这个安装包,不能是 dev server 或源码启动进程。
+
+覆盖范围:
+
+- `packaged-server-smoke`:真实包 server 冷启动、原生模块、health、配置污染修复。
+- `packaged-cli-runtime-smoke`:真实包内 CLI runtime,避免全局 `lynn` 旧拷贝误判。
+- `packaged-settings-provider-smoke`:真实 Electron Settings 窗口,Provider 去重、Key 状态、读取/删除模型不回流。
+- `packaged-main-ui-smoke`:真实 Electron 主聊天窗口,隔离 `LYNN_HOME`,种入 BYOK DeepSeek V4 Pro/Flash,在窄窗下点击输入栏、模型下拉、任务模式、执行模式并断言控件没有截断或横向溢出。
+- 并发自动复查:真实 WebSocket + `/api/review`,一次发起 3 个 Hanako 自动复查,必须全部收到非空 `review_result`。
+
+失败即阻断发布。若外部模型/Brain 暂时不可用,结果也是阻断,不能降级成 warning;这是为了避免“本地看起来能开,真实用户路径不可用”。
+
 ### Manual UI Gate
 
 自动脚本不能完全替代真实桌面视觉检查。正式发版前必须用打包后的 app 做一次人工 UI 检查：
@@ -83,6 +101,8 @@ LYNN_HOME=~/.lynn-dev npm run test:release
 6. Settings：Providers、Voice、Bridge、Security 在 1280px 宽度下无截断。
 7. Voice：长按录音、权限提示、ASR 插入、TTS 播放状态至少跑一次。
 8. Bridge：微信/飞书各跑一条短问答和一条工具问答。
+
+新增/修改过按钮、菜单、面板、复查、Provider、CLI 交互时,必须把对应按钮加入当次验收记录。没有截图/日志路径的“已看过”不算通过。
 
 ### Electron UI Smoke
 
@@ -114,9 +134,9 @@ V8/V9 benchmark 主要衡量模型能力和路由质量；release regression 主
 7. `npm run test:release:static`
 8. `npm run test:release:ui`
 9. 平台打包、公证、manifest、镜像站更新（`dist` / `dist:win` 会先跑 `release:preflight`）
-10. 真实安装包 smoke
+10. 真实安装包 smoke + `npm run release:installed-gate`
 11. 启动打包后的 Lynn 服务后跑 `npm run test:release:live`
-12. 人工 UI Gate
+12. 人工 UI Gate(按钮矩阵 + 截图/日志路径)
 
 不要用裸 `/v1/chat/completions` 结果替代 `test:release`。裸模型端点测不到 Lynn 的 WebSocket、事件解析、UI 渲染、工具卡片和跨 prompt fence。
 

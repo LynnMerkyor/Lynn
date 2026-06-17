@@ -1,6 +1,6 @@
 {
   "name": "lynn",
-  "version": "0.84.6",
+  "version": "0.84.7",
   "type": "module",
   "description": "Lynn - a personal AI agent with memory and soul",
   "license": "Apache-2.0",
@@ -65,6 +65,7 @@
     "test:packaged-cli": "node scripts/packaged-cli-runtime-smoke.mjs",
     "test:packaged-server": "node scripts/packaged-server-smoke.mjs",
     "test:packaged-settings": "node scripts/packaged-settings-provider-smoke.mjs",
+    "test:packaged-main-ui": "node scripts/packaged-main-ui-smoke.mjs",
     "test:cli-fleet": "npm --prefix cli test -- code-tools code-agent-loop worker-run providers brain-render status-bar vision && npm test -- --run server/fleet/__tests__/fleet-server.test.ts desktop/src/react/components/fleet/__tests__ --reporter=dot && node scripts/cli-longrun-smoke.mjs",
     "voice:smoke": "node --import tsx scripts/voice-runtime-smoke.ts",
     "test:release": "node scripts/run-release-regression.mjs --mode all --level release",
@@ -87,7 +88,8 @@
     "release:cli-efficiency": "npm run bench:cli-routes -- --stepfun-runs 3 --spark-runs 1 --min-stepfun-success-rate 1 --max-stepfun-p50-ttft-ms 2500 --max-stepfun-p50-wall-ms 4000 && npm run bench:cli-efficiency -- --live --suite smoke --repeat 1 --min-success-rate 1 --max-p50-ttft-ms 2500 --max-p50-wall-ms 4500 --max-waste-steps 0 --max-max-steps-reached 0",
     "gate:gui-task": "npm run build:server && npm run build:main && npm run build:renderer && node scripts/gate-gui-task.mjs",
     "gate:agent-matrix": "node --import tsx scripts/gate-agent-task-matrix.mjs --live-all",
-    "test:voice-step": "node --import tsx scripts/gate-voice-step-realtime.mjs"
+    "test:voice-step": "node --import tsx scripts/gate-voice-step-realtime.mjs",
+    "release:installed-gate": "node scripts/gate-installed-app.mjs"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

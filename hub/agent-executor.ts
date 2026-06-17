@@ -76,6 +76,8 @@ export interface RunAgentSessionOptions {
   sessionSuffix?: string;
   systemAppend?: string;
   maxTokens?: number;
+  thinkingLevel?: "off" | "low" | "medium" | "high" | "xhigh";
+  captureSettleTimeoutMs?: number;
   keepSession?: boolean;
   noMemory?: boolean;
   noTools?: boolean;
@@ -93,6 +95,79 @@ type TextDeltaEvent = AgentSessionEvent & {
     delta?: string;
   };
 };
+
+type MessageEndEvent = AgentSessionEvent & {
+  type: "message_end";
+  message?: {
+    role?: string;
+    content?: unknown;
+  };
+};
+
+type AgentEndEvent = AgentSessionEvent & {
+  type: "agent_end";
+  messages?: unknown;
+};
+
+function contentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (!part || typeof part !== "object") return "";
+        const record = part as Record<string, unknown>;
+        return typeof record.text === "string" ? record.text : "";
+      })
+      .join("");
+  }
+  return "";
+}
+
+function latestAssistantTextFromMessages(messages: unknown, startIndex = 0): string {
+  if (!Array.isArray(messages)) return "";
+  const safeStart = Math.max(0, Math.min(startIndex, messages.length));
+  for (let i = messages.length - 1; i >= safeStart; i -= 1) {
+    const message = messages[i] as Record<string, unknown> | null | undefined;
+    if (!message || message.role !== "assistant") continue;
+    const text = contentText(message.content).trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function readJsonlLines(sessionPath: string | null | undefined): string[] {
+  if (!sessionPath) return [];
+  try {
+    if (!fs.existsSync(sessionPath)) return [];
+    return fs.readFileSync(sessionPath, "utf8").split(/\r?\n/).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function latestAssistantTextFromJsonl(sessionPath: string | null | undefined, startLine = 0): string {
+  try {
+    const lines = readJsonlLines(sessionPath);
+    const safeStart = Math.max(0, Math.min(startLine, lines.length));
+    for (let i = lines.length - 1; i >= safeStart; i -= 1) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(lines[i]);
+      } catch {
+        continue;
+      }
+      const record = parsed as Record<string, unknown> | null | undefined;
+      const message = (record?.message || record) as Record<string, unknown> | null | undefined;
+      if (!message || message.role !== "assistant") continue;
+      const text = contentText(message.content).trim();
+      if (text) return text;
+    }
+  } catch {
+    return "";
+  }
+  return "";
+}
 
 function asAgentEngine(engine: unknown): AgentEngine {
   const candidate = engine as Partial<AgentEngine> | null | undefined;
@@ -142,6 +217,50 @@ async function promptWithSignal(session: AgentSession, text: string, signal?: Ab
   }
 }
 
+function waitForCaptureResolution(
+  getText: () => string,
+  signal?: AbortSignal,
+  timeoutMs = 900,
+): Promise<void> {
+  if (getText().trim()) return Promise.resolve();
+  if (signal?.aborted) {
+    return Promise.reject(toAbortReason(signal));
+  }
+
+  return new Promise((resolve, reject) => {
+    let done = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let interval: ReturnType<typeof setInterval> | undefined;
+
+    const cleanup = () => {
+      if (timeout) clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+      if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+    };
+    const finish = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve();
+    };
+    const fail = (err: unknown) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      reject(err);
+    };
+    const check = () => {
+      if (getText().trim()) finish();
+    };
+    const onAbort = () => fail(toAbortReason(signal));
+
+    interval = setInterval(check, 25);
+    timeout = setTimeout(finish, timeoutMs);
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+    check();
+  });
+}
+
 export async function runAgentSession(
   agentId: string,
   rounds: AgentSessionRound[],
@@ -151,6 +270,8 @@ export async function runAgentSession(
     sessionSuffix = "temp",
     systemAppend,
     maxTokens = undefined,
+    thinkingLevel = "medium",
+    captureSettleTimeoutMs = 900,
     keepSession = false,
     noMemory = false,
     noTools = false,
@@ -243,22 +364,45 @@ export async function runAgentSession(
     authStorage: ctx.authStorage,
     modelRegistry: ctx.modelRegistry,
     model,
-    thinkingLevel: "medium",
+    thinkingLevel,
     resourceLoader: tempResourceLoader,
     tools,
     customTools,
   });
 
   onSessionReady?.(session.sessionManager?.getSessionFile?.() || null);
+  const sessionFile = session.sessionManager?.getSessionFile?.() || null;
+  let captureMessageStart = Array.isArray((session as unknown as { messages?: unknown }).messages)
+    ? ((session as unknown as { messages?: unknown[] }).messages || []).length
+    : 0;
+  let captureJsonlStart = readJsonlLines(sessionFile).length;
 
   // 4. 文本捕获
   let capturedText = "";
+  let capturedEndText = "";
   let isCapturing = false;
+  let resolveCaptureEvent: (() => void) | null = null;
+  const markCaptureEvent = () => {
+    if (!resolveCaptureEvent) return;
+    const resolve = resolveCaptureEvent;
+    resolveCaptureEvent = null;
+    resolve();
+  };
   const unsub = session.subscribe((event: AgentSessionEvent) => {
     if (!isCapturing) return;
     if (event.type === "message_update") {
       const sub = (event as TextDeltaEvent).assistantMessageEvent;
       if (sub?.type === "text_delta") capturedText += sub.delta || "";
+    } else if (event.type === "message_end") {
+      const message = (event as MessageEndEvent).message;
+      if (message?.role === "assistant") {
+        capturedEndText = contentText(message.content);
+        if (capturedEndText.trim()) markCaptureEvent();
+      }
+    } else if (event.type === "agent_end") {
+      const text = latestAssistantTextFromMessages((event as AgentEndEvent).messages, 0);
+      if (text) capturedEndText = text;
+      if (text.trim()) markCaptureEvent();
     }
   });
 
@@ -271,18 +415,47 @@ export async function runAgentSession(
         throw toAbortReason(signal);
       }
       isCapturing = !!round.capture;
-      if (round.capture) capturedText = "";
+      if (round.capture) {
+        capturedText = "";
+        capturedEndText = "";
+        resolveCaptureEvent = null;
+        const messages = (session as unknown as { messages?: unknown[] }).messages;
+        captureMessageStart = Array.isArray(messages) ? messages.length : 0;
+        captureJsonlStart = readJsonlLines(sessionFile).length;
+      }
       await promptWithSignal(session, round.text, signal);
+      if (round.capture && !capturedText.trim() && !capturedEndText.trim()) {
+        await Promise.race([
+          new Promise<void>((resolve) => { resolveCaptureEvent = resolve; }),
+          waitForCaptureResolution(() => {
+            return capturedText
+              || capturedEndText
+              || latestAssistantTextFromMessages(
+                (session as unknown as { messages?: unknown }).messages,
+                captureMessageStart,
+              )
+              || latestAssistantTextFromJsonl(sessionFile, captureJsonlStart);
+          }, signal, captureSettleTimeoutMs),
+        ]);
+        resolveCaptureEvent = null;
+      }
     }
   } finally {
+    resolveCaptureEvent = null;
     unsub?.();
+  }
+
+  if (!capturedText.trim()) {
+    capturedText = capturedEndText || latestAssistantTextFromMessages(
+      (session as unknown as { messages?: unknown }).messages,
+      captureMessageStart,
+    ) || latestAssistantTextFromJsonl(sessionFile, captureJsonlStart);
   }
 
   // 6. 清理临时 session 文件（keepSession=true 时保留，供 DM 等场景存档）
   if (!keepSession) {
-    const sessionPath = session.sessionManager?.getSessionFile?.();
-    if (sessionPath) {
-      try { fs.unlinkSync(sessionPath); } catch {}
+    if (sessionFile) {
+      try { fs.unlinkSync(sessionFile); } catch {}
     }
   }
 

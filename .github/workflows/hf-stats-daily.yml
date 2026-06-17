@@ -4,9 +4,12 @@ name: HF nerkyor daily stats
 # 每天 00:30 UTC = 08:30 北京,在 brain server 09:00 cron 之前把数据落到 data/hf_nerkyor.json
 # brain server github-daily.py 走 GitHub Contents API 拉这个文件(同一个 PAT)
 
+# 2026-06-17: 定时 cron 暂时停用 —— 账号封禁申诉期间,移除唯一的 scheduled job,
+# 与申诉信"no scheduled jobs"保持一致;账号恢复后如需每天自动收数据再取消下面注释。
+# 停用期间 data/hf_nerkyor.json 不再自动更新,需要时去 Actions 页手动触发(workflow_dispatch)。
 on:
-  schedule:
-    - cron: '30 0 * * *'  # 00:30 UTC daily
+  # schedule:
+  #   - cron: '30 0 * * *'  # 00:30 UTC daily —— 申诉期间停用,恢复后再开
   workflow_dispatch:  # 允许手动触发(GitHub UI / gh CLI)
 
 permissions:

@@ -70,9 +70,13 @@ async function waitForFile(filePath, child, logs, timeoutMs = 30000) {
 async function waitForDebugPage(port, matcher, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
   let lastError = null;
+  let lastPages = [];
   while (Date.now() < deadline) {
     try {
       const pages = await fetchJson(`http://127.0.0.1:${port}/json/list`);
+      lastPages = Array.isArray(pages)
+        ? pages.map((page) => ({ title: page.title, url: page.url }))
+        : [];
       const page = pages.find(matcher);
       if (page?.webSocketDebuggerUrl) return page;
     } catch (error) {
@@ -81,7 +85,7 @@ async function waitForDebugPage(port, matcher, timeoutMs = 30000) {
     await wait(250);
   }
   const suffix = lastError instanceof Error ? `: ${lastError.message}` : "";
-  throw new Error(`[packaged-settings-smoke] Electron debug page not available${suffix}`);
+  throw new Error(`[packaged-settings-smoke] Electron debug page not available${suffix}; pages=${JSON.stringify(lastPages)}`);
 }
 
 class CdpClient {
@@ -173,6 +177,20 @@ async function terminate(child, timeoutMs = 3000) {
   } catch {}
 }
 
+async function rmRetry(filePath, retries = 5) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      await fs.rm(filePath, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 });
+      return;
+    } catch (error) {
+      lastError = error;
+      await wait(150 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
 async function writeJson(filePath, value) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf-8");
@@ -258,7 +276,16 @@ async function main() {
     const mainPage = await waitForDebugPage(debugPort, (item) => String(item.url || "").includes("index.html"));
     mainCdp = new CdpClient(mainPage.webSocketDebuggerUrl);
     await mainCdp.open();
-    await mainCdp.evaluate(`window.platform?.openSettings?.({ tab: 'providers', providerId: 'DeepSeek' })`);
+    await mainCdp.call("Runtime.enable");
+    await waitForMainWindowPlatform(mainCdp);
+    const openedSettings = await mainCdp.evaluate(`(async () => {
+      if (typeof window.platform?.openSettings !== 'function') return false;
+      await window.platform.openSettings({ tab: 'providers', providerId: 'DeepSeek' });
+      return true;
+    })()`);
+    if (!openedSettings) {
+      throw new Error("[packaged-settings-smoke] main window did not expose platform.openSettings");
+    }
 
     const settingsPage = await waitForDebugPage(debugPort, (item) => String(item.url || "").includes("settings.html"));
     settingsCdp = new CdpClient(settingsPage.webSocketDebuggerUrl);
@@ -321,8 +348,26 @@ async function main() {
     mainCdp?.close();
     settingsCdp?.close();
     await terminate(child);
-    await fs.rm(tmp, { recursive: true, force: true });
+    await rmRetry(tmp);
   }
+}
+
+async function waitForMainWindowPlatform(cdp, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  let last = null;
+  while (Date.now() < deadline) {
+    const state = await cdp.evaluate(`(() => ({
+      readyState: document.readyState,
+      hasPlatform: !!window.platform,
+      hasOpenSettings: typeof window.platform?.openSettings === 'function',
+      bodyText: (document.body?.innerText || '').slice(0, 500),
+      location: String(location.href || ''),
+    }))()`).catch((error) => ({ error: error?.message || String(error) }));
+    last = state;
+    if (state?.hasOpenSettings) return state;
+    await wait(250);
+  }
+  throw new Error(`[packaged-settings-smoke] main window platform.openSettings not ready\n${JSON.stringify(last)}`);
 }
 
 async function waitForSettingsSnapshot(cdp, options = {}) {

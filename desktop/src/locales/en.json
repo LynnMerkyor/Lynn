@@ -276,6 +276,7 @@
   },
   "input": {
     "placeholder": "Say something...",
+    "restoreDraft": "Restore draft",
     "hintAt": "Type @ to show Lynn a file",
     "hintSlash": "Type / for quick commands",
     "hintDrag": "Drop files here to add context",

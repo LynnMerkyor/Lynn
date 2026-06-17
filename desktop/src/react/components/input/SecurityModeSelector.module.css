@@ -15,6 +15,9 @@
     align-items: center;
     gap: 0.25rem;
     padding: 0.28rem 0.45rem;
+    height: 30px;
+    min-height: 30px;
+    box-sizing: border-box;
     font-family: inherit;
     font-size: 0.72rem;
     color: var(--text-muted);

@@ -14,6 +14,35 @@ function envOr(name, fallback = "") {
 function needsSourceGradeEvidence(query) {
   return /(私董会|会费|收费标准|人数规模|会员人数|主要(?:私董会|机构|协会|商会)|机构(?:名单|对比|收费|人数)|预测|概率|赔率|夺冠(?:概率|热门)?|榜单|排名)/i.test(String(query || ""));
 }
+function isSportsPredictionQuery(query) {
+  const q = String(query || "");
+  return /(胜率|预测|概率|赔率|盘口|让球|夺冠|热门|odds|prediction|probability|forecast|betting)/i.test(q) &&
+    /(世界杯|足球|英格兰|克罗地亚|西班牙|法国|德国|巴西|阿根廷|葡萄牙|荷兰|意大利|比利时|NBA|总决赛|决赛|半决赛|football|soccer|world cup|fifa|nba|finals|england|croatia|spain|france|germany|brazil|argentina|portugal|netherlands|belgium)/i.test(q);
+}
+function enrichSportsPredictionQuery(query) {
+  const q = String(query || "").trim();
+  if (!isSportsPredictionQuery(q)) return q;
+  const aliases = [];
+  const aliasPairs = [
+    [/英格兰/i, "England"],
+    [/克罗地亚/i, "Croatia"],
+    [/西班牙/i, "Spain"],
+    [/法国/i, "France"],
+    [/德国/i, "Germany"],
+    [/巴西/i, "Brazil"],
+    [/阿根廷/i, "Argentina"],
+    [/葡萄牙/i, "Portugal"],
+    [/荷兰/i, "Netherlands"],
+    [/比利时/i, "Belgium"],
+    [/世界杯|FIFA/i, "FIFA World Cup 2026"],
+    [/NBA/i, "NBA"],
+  ];
+  for (const [pattern, value] of aliasPairs) {
+    if (pattern.test(q) && !q.toLowerCase().includes(String(value).toLowerCase())) aliases.push(value);
+  }
+  const tail = "odds implied probability win probability prediction bookmaker Opta";
+  return [q, ...aliases, tail].join(" ").replace(/\s+/g, " ").trim().slice(0, 220);
+}
 function wantsSourceLinks(query) {
   const q = String(query || "");
   return /(官方|官网|来源|出处|引用|参考|链接|原文|source|citation|reference|official|link)/i.test(q) || needsSourceGradeEvidence(q);
@@ -177,6 +206,50 @@ async function searchMimo(query, signal) {
 function usefulItems(items) {
   return (Array.isArray(items) ? items : []).filter((item) => String(item?.url || "").trim());
 }
+function hostnameOf(url) {
+  try {
+    return new URL(String(url || "")).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+const LOW_QUALITY_SPORTS_PREDICTION_DOMAINS = new Set([
+  "cricinformers.com",
+  "heavenlypredictions.com",
+  "soccertips.ai",
+]);
+const PREFERRED_SPORTS_PREDICTION_DOMAINS = [
+  /(^|\.)oddschecker\.com$/i,
+  /(^|\.)theanalyst\.com$/i,
+  /(^|\.)opta/i,
+  /(^|\.)espn\.com$/i,
+  /(^|\.)fifa\.com$/i,
+  /(^|\.)uefa\.com$/i,
+  /(^|\.)sofascore\.com$/i,
+  /(^|\.)fotmob\.com$/i,
+  /(^|\.)flashscore\./i,
+  /(^|\.)sportsmole\.co\.uk$/i,
+  /(^|\.)bettingexpert\.com$/i,
+];
+function scoreSportsPredictionItem(item) {
+  const host = hostnameOf(item?.url);
+  const text = [item?.title, item?.snippet, item?.summary, item?.url].map((v) => String(v || "")).join(" ");
+  let score = 0;
+  if (LOW_QUALITY_SPORTS_PREDICTION_DOMAINS.has(host)) score -= 100;
+  if (PREFERRED_SPORTS_PREDICTION_DOMAINS.some((pattern) => pattern.test(host))) score += 60;
+  if (/(odds|implied|probability|prediction|bookmaker|赔率|胜率|概率|盘口|让球)/i.test(text)) score += 20;
+  if (/\b\d{1,2}(?:\.\d+)?%|\b\d+(?:\.\d+)?\s*-\s*\d+(?:\.\d+)?\b/.test(text)) score += 10;
+  return score;
+}
+function refineStructuredResultForQuery(query, value) {
+  if (!isSportsPredictionQuery(query) || !value || !Array.isArray(value.items)) return value;
+  const scored = value.items.map((item, index) => ({ item, index, score: scoreSportsPredictionItem(item) }));
+  const nonLowQuality = scored.filter((entry) => entry.score > -50);
+  const kept = (nonLowQuality.length ? nonLowQuality : scored)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.item);
+  return { ...value, items: kept };
+}
 function isUsableStructuredResult(value) {
   const items = usefulItems(value?.items);
   const rawItems = (Array.isArray(value?.items) ? value.items : []).filter((item) => (
@@ -279,12 +352,13 @@ async function webSearchStructured(query, { log } = {}) {
     return cached;
   }
   const ctrl = new AbortController();
+  const providerQuery = enrichSportsPredictionQuery(q);
   const primarySource = preferredPrimarySource(q);
   const primaryRacers = STRUCTURED_RACERS.filter((r) => r.source === primarySource).filter((r) => !r.optional || envOr(r.envKey)).map((r) => ({
     source: r.source,
-    fn: () => r.fn(q, ctrl.signal).then((value) => requireUsableStructured(r.source, value))
+    fn: () => r.fn(providerQuery, ctrl.signal).then((value) => requireUsableStructured(r.source, refineStructuredResultForQuery(q, value)))
   }));
-  log && log("info", "tool-exec/web_search_structured primary race q=" + q + " racers=" + primaryRacers.map((r) => r.source).join(","));
+  log && log("info", "tool-exec/web_search_structured primary race q=" + q + (providerQuery !== q ? " provider_q=" + providerQuery : "") + " racers=" + primaryRacers.map((r) => r.source).join(","));
   let settled = await raceUsableSources(primaryRacers, PRIMARY_SEARCH_BUDGET_MS);
   let anyOk = settled.some((s) => s.ok);
   if (!anyOk) {
@@ -292,7 +366,7 @@ async function webSearchStructured(query, { log } = {}) {
     ctrl.abort();
     const fallbackRacers = STRUCTURED_RACERS.filter((r) => r.source !== primarySource).filter((r) => !r.optional || envOr(r.envKey)).map((r) => ({
       source: r.source,
-      fn: () => r.fn(q, fallbackCtrl.signal).then((value) => requireUsableStructured(r.source, value))
+      fn: () => r.fn(providerQuery, fallbackCtrl.signal).then((value) => requireUsableStructured(r.source, refineStructuredResultForQuery(q, value)))
     }));
     log && log("info", "tool-exec/web_search_structured fallback race q=" + q + " racers=" + fallbackRacers.map((r) => r.source).join(","));
     const fallbackSettled = await raceUsableSources(fallbackRacers, BUDGET_MS);

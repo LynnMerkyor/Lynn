@@ -192,6 +192,40 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('enriches sports probability queries with English odds terms before calling MiMo', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(mimoResp('MiMo odds answer', 'https://oddschecker.com/football/world-cup'));
+
+    const r = await webSearchStructured('英格兰 克罗地亚 比赛 胜率 预测');
+
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('mimo');
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.messages[0].content).toContain('England');
+    expect(body.messages[0].content).toContain('Croatia');
+    expect(body.messages[0].content).toContain('odds');
+    expect(body.messages[0].content).toContain('implied probability');
+  });
+
+  it('filters low-quality SEO sports prediction domains when better odds sources are present', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(jsonResp({
+      choices: [{
+        message: {
+          content: 'MiMo odds answer',
+          annotations: [
+            { type: 'url_citation', title: 'SEO tips', url: 'https://soccertips.ai/england-croatia', summary: 'generic prediction' },
+            { type: 'url_citation', title: 'OddsChecker odds', url: 'https://www.oddschecker.com/football/world-cup/england-croatia', summary: 'England 55% implied probability from odds' },
+          ],
+        },
+      }],
+    }));
+
+    const r = await webSearchStructured('英格兰 克罗地亚 胜率 预测');
+
+    expect(r.ok).toBe(true);
+    expect(r.items[0].url).toContain('oddschecker.com');
+    expect(r.items.map((item) => item.url)).not.toContain('https://soccertips.ai/england-croatia');
+  });
+
   it('falls back to non-summary source when MiMo and GLM both fail and Bocha is configured', async () => {
     process.env.BOCHA_KEY = 'test-bocha';
     global.fetch = vi.fn().mockImplementation((url) => {

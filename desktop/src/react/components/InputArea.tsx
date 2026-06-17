@@ -511,7 +511,7 @@ function InputAreaInner() {
       target.setSelectionRange(update.caretStart, update.caretEnd);
       if (!isComposing.current) {
         target.style.height = 'auto';
-        target.style.height = Math.min(target.scrollHeight, 120) + 'px';
+        target.style.height = Math.min(Math.max(target.scrollHeight, 34), 120) + 'px';
       }
     });
   }, [requestInputFocus, setComposerText]);

@@ -24,6 +24,8 @@
     justify-content: space-between;
     gap: 0.55rem;
     min-width: 0;
+    height: auto;
+    min-height: 38px;
 }
 
 .input-hover-reveal {
@@ -1593,6 +1595,8 @@
     appearance: none;
     -webkit-appearance: none;
     padding: 0;
+    height: 34px;
+    min-height: 34px;
     border-radius: 0;
     resize: none;
     max-height: 120px;
@@ -1660,7 +1664,8 @@
     justify-content: center;
     gap: 0.25rem;
     min-width: 42px;
-    min-height: 32px;
+    height: 34px;
+    min-height: 34px;
     padding: 0.35rem 0.68rem;
     font-family: inherit;
     font-size: 0.72rem;
@@ -1806,14 +1811,16 @@
 .send-btn-group .send-btn {
     border: none;
     border-radius: 0;
-    min-height: auto;
+    height: 34px;
+    min-height: 34px;
     min-width: auto;
     padding: 0.3rem 0.55rem;
 }
 
 .send-btn-group .send-btn.is-streaming {
     border-left: 1px solid rgba(var(--coral-rgb, 210, 100, 90), 0.2);
-    min-height: auto;
+    height: 34px;
+    min-height: 34px;
     min-width: auto;
 }
 

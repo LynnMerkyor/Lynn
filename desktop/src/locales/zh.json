@@ -287,6 +287,7 @@
   },
   "input": {
     "placeholder": "说点什么...",
+    "restoreDraft": "恢复草稿",
     "hintAt": "输入 @ 让 Lynn 看文件",
     "hintSlash": "输入 / 查看快捷命令",
     "hintDrag": "拖拽文件到此处附加上下文",

@@ -16,6 +16,8 @@ import fs from "fs";
 import path from "path";
 import { Hono } from "hono";
 import { runAgentSession, type AgentSessionRound, type RunAgentSessionOptions } from "../../hub/agent-executor.js";
+import { callText } from "../../core/llm-client.js";
+import type { LLMApi, ModelId, ProviderId } from "../../core/types.js";
 import { getLocale } from "../i18n.js";
 import { buildReviewFollowUp, parseStructuredReview } from "../review-result.js";
 import { buildReviewFollowUpTaskPrompt, buildReviewFollowUpTaskTitle } from "../review-follow-up.js";
@@ -127,6 +129,22 @@ interface ReviewRouteEngine {
   ensureAgentLoaded?: (id: string) => Promise<RuntimeAgentLike | null | undefined>;
   invalidateAgentListCache?: () => unknown;
   resolveUtilityConfig?: () => UtilityConfigLike | null | undefined;
+  resolveProviderCredentials?: (provider: string | null | undefined) => {
+    api_key?: string;
+    base_url?: string;
+    api?: LLMApi;
+  } | null | undefined;
+  authStorage?: {
+    get?: (provider: string | null | undefined) => { type?: string; resourceUrl?: string } | null | undefined;
+    getApiKey?: (provider: string | null | undefined) => Promise<string | null | undefined> | string | null | undefined;
+  } | null;
+  providerRegistry?: {
+    get?: (provider: string | null | undefined) => {
+      authType?: string;
+      baseUrl?: string;
+      api?: LLMApi;
+    } | null | undefined;
+  } | null;
 }
 
 interface BroadcastPayload extends JsonRecord {
@@ -176,6 +194,15 @@ interface ReviewRunResult {
   usedModelId: string | null;
   usedModelProvider: string | null;
   usedModelLabel: string | null;
+}
+
+interface DirectReviewModelConfig {
+  model: ModelId;
+  provider: ProviderId;
+  api: LLMApi;
+  apiKey: string;
+  baseUrl: string;
+  label: string | null;
 }
 
 interface StructuredReviewFinding {
@@ -288,6 +315,13 @@ const AUTO_REVIEW_EXEC_TIMEOUT_MS = Number(process.env.LYNN_AUTO_REVIEW_TIMEOUT_
 const AUTO_REVIEW_FALLBACK_TIMEOUT_MS = Number(process.env.LYNN_AUTO_REVIEW_FALLBACK_TIMEOUT_MS || 12_000);
 const AUTO_REVIEW_MAX_OUTPUT_TOKENS = Math.max(600, Math.min(1200, Number(process.env.LYNN_AUTO_REVIEW_MAX_TOKENS || 1200)));
 const AUTO_REVIEW_MODEL_LABEL = "Hanako · MiMo/GLM";
+const AUTO_REVIEW_FALLBACK_PROVIDERS = new Set(["mimo", "xiaomi", "xiaomi-mimo", "token-plan", "zhipu", "zhipu-coding", "brain"]);
+const AUTO_REVIEW_MIMO_PROVIDERS = new Set(["mimo", "xiaomi", "xiaomi-mimo", "token-plan"]);
+const AUTO_REVIEW_GLM_PROVIDERS = new Set(["zhipu", "zhipu-coding"]);
+const AUTO_REVIEW_BRAIN_PROVIDERS = new Set(["brain"]);
+const AUTO_REVIEW_GLM_MAX_CONCURRENCY = Math.max(1, Number(process.env.LYNN_AUTO_REVIEW_GLM_MAX_CONCURRENCY || 1));
+const reviewExecutionQueues = new Map<string, Promise<void>>();
+let activeAutoReviewGlmCalls = 0;
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -482,6 +516,8 @@ function isTimeoutLikeError(err: unknown): boolean {
 }
 
 function isRetryableReviewError(err: unknown): boolean {
+  if (errorCode(err) === "review_model_busy") return true;
+  if (errorCode(err) === "LLM_AUTH_FAILED") return true;
   if (isTimeoutLikeError(err)) return true;
   const message = errorMessage(err);
   if (/review returned no output|没有产出可显示的复查结果|no review output/i.test(message)) return true;
@@ -497,12 +533,76 @@ function hasMeaningfulReviewOutput(content: unknown): content is string {
   return typeof content === "string" && content.trim().length > 0;
 }
 
+function buildDeterministicReviewFallbackContent(input: {
+  autoReview?: boolean;
+  attemptedModels?: string[];
+  lastError?: unknown;
+} = {}): string {
+  const attempted = Array.isArray(input.attemptedModels) ? input.attemptedModels.filter(Boolean) : [];
+  const reason = isTimeoutLikeError(input.lastError)
+    ? (isZh() ? "复查模型在时限内没有完成输出" : "the review model did not finish within the timeout")
+    : (isZh() ? "复查模型暂时没有返回可见文本" : "the review model did not return visible text");
+  const tried = attempted.length
+    ? (isZh() ? `，已尝试 ${attempted.length} 个 Hanako · MiMo/GLM 候选` : ` after trying ${attempted.length} Hanako · MiMo/GLM candidate(s)`)
+    : "";
+  const summary = isZh()
+    ? `${reason}${tried}。本次已降级为最低限度复查：没有生成新的模型判断；请把此结论视为可继续讨论的兜底状态。`
+    : `Hanako review degraded because ${reason}${tried}. No new model judgment was produced; treat this as a fallback state that lets the conversation continue.`;
+  const nextStep = isZh()
+    ? (input.autoReview ? "可以先继续讨论原回答；涉及事实、数字、时效性时建议稍后手动复查。" : "建议稍后重试复查，或继续讨论原回答中的具体可疑点。")
+    : (input.autoReview ? "You can continue with the original answer for now; manually re-run review later for factual or time-sensitive claims." : "Retry the review later, or continue by pointing at the specific claim you want checked.");
+  const findingTitle = isZh() ? "复查模型未返回可见文本" : "Review model returned no visible text";
+  const findingDetail = summary;
+  const findingSuggestion = nextStep;
+  const json = {
+    summary,
+    verdict: "concerns",
+    findings: [{
+      severity: "low",
+      title: findingTitle,
+      detail: findingDetail,
+      suggestion: findingSuggestion,
+    }],
+    nextStep,
+  };
+  const lead = isZh()
+    ? [
+        "Hanako 这次没有拿到可见的模型复查文本，已自动降级为兜底复查。",
+        "",
+        summary,
+        nextStep,
+      ].join("\n")
+    : [
+        "Hanako did not receive visible review text this time, so it fell back to a deterministic review status.",
+        "",
+        summary,
+        nextStep,
+      ].join("\n");
+  return `${lead}\n\n\`\`\`json\n${JSON.stringify(json, null, 2)}\n\`\`\``;
+}
+
 function createReviewNoOutputError(): CodedError {
   const err: CodedError = new Error(isZh()
     ? "这次复查没有产出可显示的复查结果。"
     : "This review returned no output.");
   err.code = "review_no_output";
   return err;
+}
+
+function enqueueReviewerExecution(reviewerId: string, run: () => Promise<void>): void {
+  const key = reviewerId || "reviewer";
+  const previous = reviewExecutionQueues.get(key) || Promise.resolve();
+  let next: Promise<void>;
+  next = previous
+    .catch(() => undefined)
+    .then(run)
+    .catch(() => undefined)
+    .finally(() => {
+      if (reviewExecutionQueues.get(key) === next) {
+        reviewExecutionQueues.delete(key);
+      }
+    });
+  reviewExecutionQueues.set(key, next);
 }
 
 function getAvailableModel(engine: ReviewRouteEngine, modelId: string | null | undefined, providerId: string | null = null): ModelLike | null {
@@ -531,7 +631,108 @@ function reviewModelDisplayLabel(
     || null;
 }
 
-function buildReviewFallbackCandidates(engine: ReviewRouteEngine, reviewer: ReviewCandidate): ModelLike[] {
+function isAutoReviewFallbackAllowed(model: ModelLike | null | undefined): boolean {
+  const provider = String(model?.provider || "").trim().toLowerCase();
+  return !!provider && AUTO_REVIEW_FALLBACK_PROVIDERS.has(provider);
+}
+
+function normalizeProviderId(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeModelId(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isAutoReviewGlmProvider(provider: unknown): boolean {
+  return AUTO_REVIEW_GLM_PROVIDERS.has(normalizeProviderId(provider));
+}
+
+function autoReviewProviderTier(provider: unknown): number {
+  const normalized = normalizeProviderId(provider);
+  if (AUTO_REVIEW_MIMO_PROVIDERS.has(normalized)) return 0;
+  if (AUTO_REVIEW_GLM_PROVIDERS.has(normalized)) return 1;
+  if (AUTO_REVIEW_BRAIN_PROVIDERS.has(normalized)) return 2;
+  return 9;
+}
+
+function autoReviewModelPreference(model: ModelLike | null | undefined): number {
+  const provider = normalizeProviderId(model?.provider);
+  const id = normalizeModelId(model?.id);
+  if (AUTO_REVIEW_MIMO_PROVIDERS.has(provider)) {
+    if (id === "mimo-v2.5-pro") return 0;
+    if (id.includes("mimo-v2.5-pro")) return 1;
+    if (id.includes("mimo-v2.5")) return 2;
+    return 4;
+  }
+  if (AUTO_REVIEW_GLM_PROVIDERS.has(provider)) {
+    if (id === "glm-5-turbo" || id === "glm-5.0-turbo") return 0;
+    if (id.includes("glm-5") && id.includes("turbo")) return 1;
+    if (id.includes("glm-5")) return 2;
+    return 4;
+  }
+  if (AUTO_REVIEW_BRAIN_PROVIDERS.has(provider)) {
+    if (id === "lynn-brain-router") return 0;
+    if (id.includes("brain")) return 1;
+    return 4;
+  }
+  return 9;
+}
+
+function sortAutoReviewModels(models: ModelLike[]): ModelLike[] {
+  return [...models].sort((a, b) => {
+    const providerTierDiff = autoReviewProviderTier(a?.provider) - autoReviewProviderTier(b?.provider);
+    if (providerTierDiff !== 0) return providerTierDiff;
+    const preferenceDiff = autoReviewModelPreference(a) - autoReviewModelPreference(b);
+    if (preferenceDiff !== 0) return preferenceDiff;
+    return `${a?.provider || ""}/${a?.id || ""}`.localeCompare(`${b?.provider || ""}/${b?.id || ""}`);
+  });
+}
+
+function buildAutoReviewFallbackCandidates(
+  engine: ReviewRouteEngine,
+  originalModel: ModelLike | null | undefined,
+  reviewerModel: { modelId: string | null; modelProvider: string | null } | null | undefined,
+): ModelLike[] {
+  const candidates: ModelLike[] = [];
+  const seen = new Set<string>();
+  const pushCandidate = (model: ModelLike | null | undefined) => {
+    if (!model?.id || !model?.provider || !isAutoReviewFallbackAllowed(model)) return;
+    const key = `${model.provider}/${model.id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidates.push(model);
+  };
+
+  pushCandidate(originalModel);
+  if (reviewerModel?.modelId) {
+    pushCandidate(getAvailableModel(engine, reviewerModel.modelId, reviewerModel.modelProvider));
+  }
+
+  for (const model of Array.isArray(engine.availableModels) ? engine.availableModels : []) {
+    pushCandidate(model);
+  }
+
+  return sortAutoReviewModels(candidates);
+}
+
+function tryReserveAutoReviewModelSlot(config: DirectReviewModelConfig, autoReview?: boolean): boolean {
+  if (!autoReview || !isAutoReviewGlmProvider(config.provider)) return true;
+  if (activeAutoReviewGlmCalls >= AUTO_REVIEW_GLM_MAX_CONCURRENCY) return false;
+  activeAutoReviewGlmCalls += 1;
+  return true;
+}
+
+function releaseAutoReviewModelSlot(config: DirectReviewModelConfig, autoReview?: boolean): void {
+  if (!autoReview || !isAutoReviewGlmProvider(config.provider)) return;
+  activeAutoReviewGlmCalls = Math.max(0, activeAutoReviewGlmCalls - 1);
+}
+
+function buildReviewFallbackCandidates(
+  engine: ReviewRouteEngine,
+  reviewer: ReviewCandidate,
+  options: { autoReview?: boolean } = {},
+): ModelLike[] {
   const candidates: ModelLike[] = [];
   const seen = new Set();
   const runtimeAgent = engine.getAgent?.(reviewer.id);
@@ -542,6 +743,7 @@ function buildReviewFallbackCandidates(engine: ReviewRouteEngine, reviewer: Revi
 
   const pushCandidate = (model: ModelLike | null | undefined) => {
     if (!model?.id || !model?.provider) return;
+    if (options.autoReview && !isAutoReviewFallbackAllowed(model)) return;
     const key = `${model.provider}/${model.id}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -568,6 +770,236 @@ function buildReviewFallbackCandidates(engine: ReviewRouteEngine, reviewer: Revi
 
   pushCandidate(engine.currentModel);
   return candidates;
+}
+
+async function resolveDirectReviewModelConfig(
+  engine: ReviewRouteEngine,
+  reviewer: ReviewCandidate,
+  model: ModelLike | null | undefined,
+  modelIdFallback: string | null | undefined = null,
+  providerFallback: string | null | undefined = null,
+): Promise<DirectReviewModelConfig | null> {
+  const modelId = String(model?.id || modelIdFallback || "").trim();
+  const provider = String(model?.provider || providerFallback || "").trim();
+  if (!modelId || !provider) return null;
+
+  const creds = engine.resolveProviderCredentials?.(provider) || {};
+  const oauthCred = engine.authStorage?.get?.(provider);
+  const oauthBaseUrl = oauthCred?.type === "oauth" ? String(oauthCred.resourceUrl || "") : "";
+  const providerEntry = engine.providerRegistry?.get?.(provider);
+  const baseUrl = String(creds.base_url || oauthBaseUrl || model?.baseUrl || providerEntry?.baseUrl || "").trim();
+  const api = (creds.api || (model?.api as LLMApi | undefined) || providerEntry?.api || "openai-completions") as LLMApi;
+  let apiKey = String(creds.api_key || "");
+  if (!apiKey) {
+    try {
+      apiKey = String(await engine.authStorage?.getApiKey?.(provider) || "");
+    } catch {
+      // Some providers intentionally allow missing keys; validate below.
+    }
+  }
+
+  const allowMissingApiKey = providerEntry?.authType === "none";
+  if (!baseUrl) return null;
+  if (!apiKey && !allowMissingApiKey) return null;
+
+  return {
+    model: modelId as ModelId,
+    provider: provider as ProviderId,
+    api,
+    apiKey,
+    baseUrl,
+    label: reviewModelDisplayLabel(reviewer, modelId, provider, AUTO_REVIEW_MODEL_LABEL),
+  };
+}
+
+async function runDirectReviewerModel(
+  engine: ReviewRouteEngine,
+  reviewer: ReviewCandidate,
+  config: DirectReviewModelConfig,
+  prompt: string,
+  options: { autoReview?: boolean; reviewMode?: string | null; timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<string> {
+  const timeoutMs = options.timeoutMs || (options.autoReview ? AUTO_REVIEW_EXEC_TIMEOUT_MS : REVIEW_EXEC_TIMEOUT_MS);
+  if (!tryReserveAutoReviewModelSlot(config, options.autoReview)) {
+    const err: CodedError = new Error("auto review model concurrency limit reached");
+    err.code = "review_model_busy";
+    throw err;
+  }
+  try {
+    return await callText({
+      api: config.api,
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      provider: config.provider,
+      systemPrompt: buildReviewSystemAppend({
+        autoReview: options.autoReview,
+        reviewMode: options.reviewMode,
+      }),
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      maxTokens: options.autoReview ? AUTO_REVIEW_MAX_OUTPUT_TOKENS : 1800,
+      timeoutMs,
+      signal: options.signal,
+      reasoning: false,
+      quirks: ["enable_thinking"],
+    });
+  } finally {
+    releaseAutoReviewModelSlot(config, options.autoReview);
+  }
+}
+
+async function runDirectReviewerSessionWithFallback(
+  engine: ReviewRouteEngine,
+  reviewer: ReviewCandidate,
+  prompt: string,
+  timing: { fallbackTimeoutMs?: number; autoReview?: boolean; reviewMode?: string | null; signal?: AbortSignal } = {},
+): Promise<ReviewRunResult> {
+  const runtimeAgent = engine.getAgent?.(reviewer.id);
+  const reviewerModel = runtimeAgent ? getAgentModel(runtimeAgent) : null;
+  const originalModel = reviewerModel?.modelId
+    ? getAvailableModel(engine, reviewerModel.modelId, reviewerModel.modelProvider)
+    : null;
+  const originalConfig = await resolveDirectReviewModelConfig(
+    engine,
+    reviewer,
+    originalModel,
+    reviewerModel?.modelId,
+    reviewerModel?.modelProvider,
+  );
+  const attemptedModels: string[] = [];
+  let lastError: unknown = createReviewNoOutputError();
+
+  if (timing.autoReview) {
+    const candidates = buildAutoReviewFallbackCandidates(engine, originalModel, reviewerModel);
+    for (const candidate of candidates) {
+      const config = await resolveDirectReviewModelConfig(engine, reviewer, candidate, candidate?.id, candidate?.provider);
+      if (!config) continue;
+      if (config.label) attemptedModels.push(config.label);
+      try {
+        const content = await runDirectReviewerModel(engine, reviewer, config, prompt, {
+          autoReview: true,
+          reviewMode: timing.reviewMode,
+          timeoutMs: AUTO_REVIEW_EXEC_TIMEOUT_MS,
+          signal: timing.signal,
+        });
+        if (!hasMeaningfulReviewOutput(content)) {
+          throw createReviewNoOutputError();
+        }
+        const originalLabel = originalConfig?.label || AUTO_REVIEW_MODEL_LABEL;
+        const nextLabel = config.label || AUTO_REVIEW_MODEL_LABEL;
+        const switched = originalConfig && (config.model !== originalConfig.model || config.provider !== originalConfig.provider);
+        const fallbackNote = switched
+          ? (isZh()
+              ? `Hanako 自动复查已按 MiMo/GLM 策略切换到 ${nextLabel} 完成。`
+              : `Hanako automatic review switched to ${nextLabel} according to the MiMo/GLM policy.`)
+          : null;
+        return {
+          content,
+          fallbackNote,
+          errorCode: switched ? "review_fallback_recovered" : null,
+          usedModelId: config.model,
+          usedModelProvider: config.provider,
+          usedModelLabel: nextLabel || originalLabel,
+        };
+      } catch (err) {
+        lastError = err;
+        if (!isRetryableReviewError(err)) break;
+      }
+    }
+
+    return {
+      content: buildDeterministicReviewFallbackContent({
+        autoReview: timing.autoReview,
+        attemptedModels,
+        lastError,
+      }),
+      fallbackNote: formatReviewFailureMessage(lastError, attemptedModels),
+      errorCode: "review_deterministic_fallback",
+      usedModelId: null,
+      usedModelProvider: null,
+      usedModelLabel: AUTO_REVIEW_MODEL_LABEL,
+    };
+  }
+
+  if (originalConfig) {
+    try {
+      const content = await runDirectReviewerModel(engine, reviewer, originalConfig, prompt, {
+        autoReview: timing.autoReview,
+        reviewMode: timing.reviewMode,
+        timeoutMs: timing.autoReview ? AUTO_REVIEW_EXEC_TIMEOUT_MS : REVIEW_EXEC_TIMEOUT_MS,
+        signal: timing.signal,
+      });
+      if (!hasMeaningfulReviewOutput(content)) {
+        throw createReviewNoOutputError();
+      }
+      return {
+        content,
+        fallbackNote: null,
+        errorCode: null,
+        usedModelId: originalConfig.model,
+        usedModelProvider: originalConfig.provider,
+        usedModelLabel: originalConfig.label,
+      };
+    } catch (err) {
+      lastError = err;
+      if (!isRetryableReviewError(err)) throw err;
+    }
+  }
+
+  const candidates = buildReviewFallbackCandidates(engine, reviewer, { autoReview: timing.autoReview });
+  for (const candidate of candidates) {
+    const config = await resolveDirectReviewModelConfig(engine, reviewer, candidate, candidate?.id, candidate?.provider);
+    if (!config) continue;
+    if (originalConfig && config.model === originalConfig.model && config.provider === originalConfig.provider) continue;
+    if (config.label) attemptedModels.push(config.label);
+    try {
+      const content = await runDirectReviewerModel(engine, reviewer, config, prompt, {
+        autoReview: timing.autoReview,
+        reviewMode: timing.reviewMode,
+        timeoutMs: timing.fallbackTimeoutMs || REVIEW_FALLBACK_TIMEOUT_MS,
+        signal: timing.signal,
+      });
+      if (!hasMeaningfulReviewOutput(content)) {
+        throw createReviewNoOutputError();
+      }
+      const timeoutLike = isTimeoutLikeError(lastError);
+      const originalLabel = originalConfig?.label || AUTO_REVIEW_MODEL_LABEL;
+      const nextLabel = config.label || AUTO_REVIEW_MODEL_LABEL;
+      const samePublicLabel = originalLabel === nextLabel;
+      const fallbackNote = isZh()
+        ? (samePublicLabel
+            ? `${AUTO_REVIEW_MODEL_LABEL} 主候选${timeoutLike ? "超时" : "暂时不可用"}，已自动切换到备用候选完成这次复查。`
+            : `原复查模型 ${originalLabel}${timeoutLike ? " 超时" : " 暂时不可用"}，已自动切换到 ${nextLabel} 完成这次复查。`)
+        : (samePublicLabel
+            ? `The primary ${AUTO_REVIEW_MODEL_LABEL} candidate ${timeoutLike ? "timed out" : "became temporarily unavailable"}, so this review finished on a backup candidate.`
+            : `The original review model ${originalLabel} ${timeoutLike ? "timed out" : "became temporarily unavailable"}, so this review finished on ${nextLabel}.`);
+      return {
+        content,
+        fallbackNote,
+        errorCode: isTimeoutLikeError(lastError) ? "review_timeout_recovered" : "review_fallback_recovered",
+        usedModelId: config.model,
+        usedModelProvider: config.provider,
+        usedModelLabel: config.label,
+      };
+    } catch (retryErr) {
+      lastError = retryErr;
+      if (!isRetryableReviewError(retryErr)) break;
+    }
+  }
+
+  return {
+    content: buildDeterministicReviewFallbackContent({
+      autoReview: timing.autoReview,
+      attemptedModels,
+      lastError,
+    }),
+    fallbackNote: formatReviewFailureMessage(lastError, attemptedModels),
+    errorCode: "review_deterministic_fallback",
+    usedModelId: null,
+    usedModelProvider: null,
+    usedModelLabel: AUTO_REVIEW_MODEL_LABEL,
+  };
 }
 
 function formatReviewFailureMessage(err: unknown, attemptedModels: string[] = []): string {
@@ -603,7 +1035,7 @@ async function runReviewerSessionWithFallback(
   reviewer: ReviewCandidate,
   rounds: AgentSessionRound[],
   opts: RunAgentSessionOptions,
-  timing: { fallbackTimeoutMs?: number } = {},
+  timing: { fallbackTimeoutMs?: number; autoReview?: boolean } = {},
 ): Promise<ReviewRunResult> {
   const runtimeAgent = engine.getAgent?.(reviewer.id);
   const reviewerModel = runtimeAgent ? getAgentModel(runtimeAgent) : null;
@@ -633,7 +1065,7 @@ async function runReviewerSessionWithFallback(
   } catch (err) {
     if (!isRetryableReviewError(err)) throw err;
 
-    const candidates = buildReviewFallbackCandidates(engine, reviewer);
+    const candidates = buildReviewFallbackCandidates(engine, reviewer, { autoReview: timing.autoReview });
     const attemptedModels: string[] = [];
     let lastError = err;
 
@@ -679,9 +1111,18 @@ async function runReviewerSessionWithFallback(
       }
     }
 
-    const wrapped: CodedError = new Error(formatReviewFailureMessage(lastError, attemptedModels));
-    wrapped.code = isTimeoutLikeError(lastError) ? "review_timeout" : "review_retry_failed";
-    throw wrapped;
+    return {
+      content: buildDeterministicReviewFallbackContent({
+        autoReview: timing.autoReview,
+        attemptedModels,
+        lastError,
+      }),
+      fallbackNote: formatReviewFailureMessage(lastError, attemptedModels),
+      errorCode: "review_deterministic_fallback",
+      usedModelId: null,
+      usedModelProvider: null,
+      usedModelLabel: AUTO_REVIEW_MODEL_LABEL,
+    };
   }
 }
 
@@ -1021,28 +1462,45 @@ export async function startReviewRun(
     triggerReasons,
   });
 
-  void (async () => {
+  enqueueReviewerExecution(reviewer.id, async () => {
     try {
       emitProgress("packing_context", { autoReview, reviewMode, triggerReasons, reviewerModelLabel, reviewerModelId, reviewerModelProvider });
       const contextPack = buildReviewContextPack(context, engine, sessionPath);
       const prompt = formatContextPack(contextPack);
 
       emitProgress("reviewing", { autoReview, reviewMode, triggerReasons, reviewerModelLabel, reviewerModelId, reviewerModelProvider });
-      const reviewRun = await runReviewerSessionWithFallback(
-        engine,
-        reviewer,
-        [{ text: prompt, capture: true }],
-        {
-          engine,
-          signal: AbortSignal.timeout(autoReview ? AUTO_REVIEW_EXEC_TIMEOUT_MS : REVIEW_EXEC_TIMEOUT_MS),
-          sessionSuffix: autoReview ? "auto-review" : "review",
-          systemAppend: buildReviewSystemAppend({ autoReview, reviewMode }),
-          maxTokens: autoReview ? AUTO_REVIEW_MAX_OUTPUT_TOKENS : undefined,
-          readOnly: true,
-          keepSession: false,
-        },
-        { fallbackTimeoutMs: autoReview ? AUTO_REVIEW_FALLBACK_TIMEOUT_MS : REVIEW_FALLBACK_TIMEOUT_MS },
-      );
+      const reviewRun = autoReview
+        ? await runDirectReviewerSessionWithFallback(
+            engine,
+            reviewer,
+            prompt,
+            {
+              fallbackTimeoutMs: AUTO_REVIEW_FALLBACK_TIMEOUT_MS,
+              autoReview,
+              reviewMode,
+              signal: AbortSignal.timeout(AUTO_REVIEW_EXEC_TIMEOUT_MS),
+            },
+          )
+        : await runReviewerSessionWithFallback(
+            engine,
+            reviewer,
+            [{ text: prompt, capture: true }],
+            {
+              engine,
+              signal: AbortSignal.timeout(REVIEW_EXEC_TIMEOUT_MS),
+              sessionSuffix: "review",
+              systemAppend: buildReviewSystemAppend({ autoReview, reviewMode }),
+              maxTokens: undefined,
+              thinkingLevel: "off",
+              captureSettleTimeoutMs: 9_000,
+              readOnly: true,
+              keepSession: false,
+            },
+            {
+              fallbackTimeoutMs: REVIEW_FALLBACK_TIMEOUT_MS,
+              autoReview,
+            },
+          );
 
       emitProgress("structuring", { autoReview, reviewMode, triggerReasons, reviewerModelLabel, reviewerModelId, reviewerModelProvider });
       const cleanedContent = stripThinkTags(reviewRun.content || "");
@@ -1117,7 +1575,7 @@ export async function startReviewRun(
         sourceResponse: request.sourceResponse || null,
       });
     }
-  })();
+  });
 
   return {
     reviewId,

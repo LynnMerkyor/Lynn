@@ -6,7 +6,24 @@ vi.mock('../hub/agent-executor.js', () => ({
   runAgentSession: vi.fn(async () => 'Review looks good.\n```json\n{"summary":"Looks good.","verdict":"pass","findings":[]}\n```'),
 }));
 
+vi.mock('../core/llm-client.js', () => ({
+  callText: vi.fn(async () => 'Review looks good.\n```json\n{"summary":"Looks good.","verdict":"pass","findings":[]}\n```'),
+}));
+
 const { runAgentSession } = await import('../hub/agent-executor.js');
+const { callText } = await import('../core/llm-client.js');
+
+async function waitForBroadcast(broadcast, predicate, timeoutMs = 500) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const match = broadcast.mock.calls
+      .map(([msg]) => msg)
+      .find(predicate);
+    if (match) return match;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return null;
+}
 
 function makeEngine() {
   const prefs = {};
@@ -23,6 +40,8 @@ function makeEngine() {
     currentSessionPath: '/tmp/session.jsonl',
     currentModel: { id: 'step-3.5-flash-2603', name: 'Step 3.5 Flash 2603', provider: 'brain' },
     availableModels: [
+      { id: 'glm-5-turbo', name: 'GLM 5 Turbo', provider: 'zhipu-coding' },
+      { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', provider: 'mimo' },
       { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'openai' },
       { id: 'claude-3-7', name: 'Claude 3.7', provider: 'anthropic' },
       { id: 'step-3.5-flash-2603', name: 'Step 3.5 Flash 2603', provider: 'brain' },
@@ -35,8 +54,28 @@ function makeEngine() {
       utility_large_fallbacks: [],
       utility: 'gpt-4.1',
       utility_provider: 'openai',
-      utility_fallbacks: [],
+      utility_fallbacks: [{ model: 'mimo-v2.5-pro', provider: 'mimo' }],
     }),
+    resolveProviderCredentials: (provider) => ({
+      api_key: provider === 'brain' ? '' : `key-${provider}`,
+      base_url: provider === 'brain'
+        ? 'https://api.merkyorlynn.com/api/v2/v1'
+        : `https://${provider}.example.test/v1`,
+      api: 'openai-completions',
+    }),
+    providerRegistry: {
+      get: (provider) => ({
+        authType: provider === 'brain' ? 'none' : 'api-key',
+        baseUrl: provider === 'brain'
+          ? 'https://api.merkyorlynn.com/api/v2/v1'
+          : `https://${provider}.example.test/v1`,
+        api: 'openai-completions',
+      }),
+    },
+    authStorage: {
+      get: () => null,
+      getApiKey: async (provider) => provider === 'brain' ? '' : `auth-key-${provider}`,
+    },
     getAgent: (id) => {
       const agent = agents.find((item) => item.id === id);
       return {
@@ -47,8 +86,8 @@ function makeEngine() {
             yuan: agent?.yuan,
             tier: agent?.tier,
           },
-          api: { provider: id === 'agent-butter' ? 'anthropic' : 'openai' },
-          models: { chat: { id: id === 'agent-butter' ? 'claude-3-7' : 'gpt-4.1', provider: id === 'agent-butter' ? 'anthropic' : 'openai' } },
+          api: { provider: id === 'agent-butter' ? 'anthropic' : 'zhipu-coding' },
+          models: { chat: { id: id === 'agent-butter' ? 'claude-3-7' : 'glm-5-turbo', provider: id === 'agent-butter' ? 'anthropic' : 'zhipu-coding' } },
         },
         agentName: agent?.name,
         updateConfig: vi.fn((partial) => {
@@ -81,7 +120,10 @@ describe('review route', () => {
   let taskRuntime;
 
   beforeEach(() => {
-    runAgentSession.mockClear();
+    runAgentSession.mockReset();
+    callText.mockReset();
+    runAgentSession.mockResolvedValue('Review looks good.\n```json\n{"summary":"Looks good.","verdict":"pass","findings":[]}\n```');
+    callText.mockResolvedValue('Review looks good.\n```json\n{"summary":"Looks good.","verdict":"pass","findings":[]}\n```');
     engine = makeEngine();
     broadcast = vi.fn();
     taskRuntime = { createReviewFollowUpTask: vi.fn(() => ({ id: 'task-follow-up', title: '处理复查发现：Missing edge case' })) };
@@ -137,6 +179,8 @@ describe('review route', () => {
     expect(data.reviewerYuan).toBe('hanako');
     const reviewOpts = runAgentSession.mock.calls[0][2];
     expect(reviewOpts.signal).toBeInstanceOf(AbortSignal);
+    expect(reviewOpts.thinkingLevel).toBe('off');
+    expect(reviewOpts.captureSettleTimeoutMs).toBe(9000);
     expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({
       type: 'review_start',
       sessionPath: '/tmp/session.jsonl',
@@ -174,13 +218,14 @@ describe('review route', () => {
 
     await Promise.resolve();
 
-    expect(runAgentSession).toHaveBeenCalledWith(
-      'agent-hanako',
-      expect.any(Array),
+    expect(runAgentSession).not.toHaveBeenCalled();
+    expect(callText).toHaveBeenCalledWith(
       expect.objectContaining({
+        model: 'mimo-v2.5-pro',
+        provider: 'mimo',
         maxTokens: 1200,
-        readOnly: true,
-        sessionSuffix: 'auto-review',
+        reasoning: false,
+        quirks: ['enable_thinking'],
       }),
     );
     expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({
@@ -190,6 +235,105 @@ describe('review route', () => {
       reviewMode: 'background',
       triggerReasons: ['time_sensitive_or_market'],
     }));
+  });
+
+  it('serializes automatic reviews for the same reviewer agent', async () => {
+    let resolveFirst;
+    const firstRun = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    callText
+      .mockImplementationOnce(() => firstRun)
+      .mockResolvedValueOnce('Second review.\n```json\n{"summary":"Second.","verdict":"pass","findings":[]}\n```');
+
+    const firstRes = await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context: 'First automatic review.', autoReview: true }),
+    });
+    const secondRes = await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context: 'Second automatic review.', autoReview: true }),
+    });
+
+    expect(firstRes.status).toBe(200);
+    expect(secondRes.status).toBe(200);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(callText).toHaveBeenCalledTimes(1);
+
+    resolveFirst('First review.\n```json\n{"summary":"First.","verdict":"pass","findings":[]}\n```');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(callText).toHaveBeenCalledTimes(2);
+    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ model: 'mimo-v2.5-pro', provider: 'mimo' }));
+    expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({ model: 'mimo-v2.5-pro', provider: 'mimo' }));
+  });
+
+  it('limits automatic GLM review concurrency and falls through to Brain', async () => {
+    engine.availableModels = [
+      { id: 'glm-5-turbo', name: 'GLM 5 Turbo', provider: 'zhipu-coding' },
+      { id: 'lynn-brain-router', name: 'Default Brain', provider: 'brain' },
+    ];
+    let resolveGlm;
+    const glmRun = new Promise((resolve) => {
+      resolveGlm = resolve;
+    });
+    callText.mockImplementation((options) => {
+      if (options.provider === 'zhipu-coding') return glmRun;
+      if (options.provider === 'brain') {
+        return Promise.resolve('Brain review.\n```json\n{"summary":"Brain.","verdict":"pass","findings":[]}\n```');
+      }
+      return Promise.resolve('Unexpected review.\n```json\n{"summary":"Unexpected.","verdict":"pass","findings":[]}\n```');
+    });
+
+    const firstRes = await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context: 'First automatic GLM review.', autoReview: true, reviewerKind: 'hanako' }),
+    });
+    const secondRes = await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context: 'Second automatic review should skip busy GLM.', autoReview: true, reviewerKind: 'butter' }),
+    });
+
+    expect(firstRes.status).toBe(200);
+    expect(secondRes.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ provider: 'zhipu-coding', model: 'glm-5-turbo' }));
+    expect(callText.mock.calls.some(([options]) => options.provider === 'brain' && options.model === 'lynn-brain-router')).toBe(true);
+
+    resolveGlm('GLM review.\n```json\n{"summary":"GLM.","verdict":"pass","findings":[]}\n```');
+  });
+
+  it('keeps automatic Hanako fallback on MiMo/GLM/Brain instead of user BYOK models', async () => {
+    engine.currentModel = { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' };
+    engine.availableModels = [
+      ...engine.availableModels,
+      { id: 'deepseek-chat', name: 'DeepSeek Chat', provider: 'deepseek' },
+      { id: 'lynn-brain-router', name: 'Default Brain', provider: 'brain' },
+    ];
+    callText
+      .mockResolvedValueOnce('   ')
+      .mockResolvedValueOnce('Recovered on Brain.\n```json\n{"summary":"Recovered on Brain.","verdict":"pass","findings":[]}\n```');
+
+    const res = await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context: 'Auto review should avoid BYOK fallback.', autoReview: true }),
+    });
+
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(callText).toHaveBeenCalledTimes(2);
+    expect(['mimo', 'zhipu', 'zhipu-coding', 'brain']).toContain(callText.mock.calls[1][0].provider);
+    expect(callText.mock.calls[1][0].provider).not.toBe('deepseek');
   });
 
   it('bootstraps a missing reviewer agent when the requested reviewer kind has no candidate', async () => {
@@ -333,9 +477,10 @@ describe('review route', () => {
     });
 
     expect(res.status).toBe(200);
-    const resultMsg = broadcast.mock.calls
-      .map(([msg]) => msg)
-      .find((msg) => msg.type === 'review_result' && msg.structured?.summary === 'Recovered.');
+    const resultMsg = await waitForBroadcast(
+      broadcast,
+      (msg) => msg.type === 'review_result' && msg.structured?.summary === 'Recovered.',
+    );
 
     expect(runAgentSession).toHaveBeenCalledTimes(2);
     expect(resultMsg.errorCode).toBe('review_timeout_recovered');
@@ -355,13 +500,50 @@ describe('review route', () => {
     });
 
     expect(res.status).toBe(200);
-    const resultMsg = broadcast.mock.calls
-      .map(([msg]) => msg)
-      .find((msg) => msg.type === 'review_result' && msg.structured?.summary === 'Recovered after empty review.');
+    const resultMsg = await waitForBroadcast(
+      broadcast,
+      (msg) => msg.type === 'review_result' && msg.structured?.summary === 'Recovered after empty review.',
+    );
 
     expect(runAgentSession).toHaveBeenCalledTimes(2);
     expect(resultMsg.content).toContain('Recovered after empty review.');
     expect(resultMsg.fallbackNote).toMatch(/自动切换到|finished on/);
+  });
+
+  it('emits deterministic review content when all review model attempts return no visible output', async () => {
+    engine.availableModels = [
+      ...engine.availableModels,
+      { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', provider: 'mimo' },
+      { id: 'glm-5.0-turbo', name: 'GLM 5.0 Turbo', provider: 'zhipu' },
+    ];
+    callText.mockResolvedValue('   ');
+
+    const res = await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context: 'The original answer may need review, but review models are unstable.',
+        autoReview: true,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const resultMsg = await waitForBroadcast(
+      broadcast,
+      (msg) => msg.type === 'review_result' && msg.errorCode === 'review_deterministic_fallback',
+    );
+
+    expect(resultMsg).toBeTruthy();
+    expect(resultMsg.content).toContain('Hanako');
+    expect(resultMsg.content.trim().length).toBeGreaterThan(80);
+    expect(resultMsg.structured).toEqual(expect.objectContaining({
+      verdict: 'concerns',
+      findings: [expect.objectContaining({
+        severity: 'low',
+      })],
+    }));
+    expect(resultMsg.reviewerModelLabel).toBe('Hanako · MiMo/GLM');
+    expect(resultMsg.fallbackNote).toMatch(/复查|review/i);
   });
 
   it('marks high-severity findings as hold and keeps a follow-up prompt', async () => {

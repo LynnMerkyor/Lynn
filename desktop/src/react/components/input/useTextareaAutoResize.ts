@@ -15,6 +15,6 @@ export function useTextareaAutoResize({
     // IME 组合态不要 resize，避免中文输入法候选框飞到左下角。
     if (isComposing.current) return;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    el.style.height = Math.min(Math.max(el.scrollHeight, 34), 120) + 'px';
   }, [inputValue, isComposing, textareaRef]);
 }

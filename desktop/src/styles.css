@@ -2441,6 +2441,7 @@ html[data-platform="darwin"] .main-content::before {
     bottom: 0;
     left: 0;
     right: 0;
+    box-sizing: border-box;
     padding: var(--space-sm) var(--space-lg) var(--space-lg);
     /* 顶部 25% 渐变淡入实色，无硬边界，聊天内容上滚时自然过渡 */
     background: linear-gradient(
@@ -2465,8 +2466,9 @@ html[data-platform="darwin"] .main-content::before {
 }
 
 .input-area > * {
-    width: min(980px, calc(100vw - 48px));
-    max-width: 980px;
+    box-sizing: border-box;
+    width: min(980px, 100%);
+    max-width: 100%;
     margin-left: auto;
     margin-right: auto;
 }

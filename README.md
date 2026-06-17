@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/App-0.84.6-brightgreen" alt="App Version"></a>
-  <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.84.6-7bcad3" alt="CLI Version"></a>
+  <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/App-0.84.7-brightgreen" alt="App Version"></a>
+  <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.84.7-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -102,12 +102,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.6.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.7.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI; 输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.84.6
+Lynn --version  # should print 0.84.7
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
@@ -153,7 +153,28 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 ## 🆕 近期更新
 
 <details>
-<summary><strong>Lynn v0.84.6</strong> · 2026-06-17 · 工具成功无总结兜底 + 编辑重发恢复 <em>(最新)</em></summary>
+<summary><strong>Lynn v0.84.7</strong> · 2026-06-18 · Hanako 自动复查 + 真实 GUI/CLI installed gate <em>(最新)</em></summary>
+
+**自动复查与兜底**:
+- **Hanako 自动复查**:事实题、工具结果、空答兜底等高风险回答会自动触发 Hanako · MiMo/GLM 复查;界面会标明复查模型、结论、发现数和建议动作。
+- **复查备用链路**:MiMo 优先,GLM 作为低并发 fallback,避免 GLM 并发 429 时整条复查链路空转。
+- **默认/BYOK 空答兜底延续**:模型未返回可见内容时仍会写入安全兜底,避免空 assistant 轮污染后续上下文。
+
+**GUI / CLI 稳定性**:
+- **主聊天输入区窄窗修复**:左侧栏存在、窗口未全屏时,输入区和底部按钮不再按 `100vw` 撑出主内容,解决横向拉长前显示不完整的问题。
+- **真实安装包门禁**:新增 installed gate,在 `/Applications/Lynn.app` 上真实点击 Settings、主聊天输入区、模型下拉、任务模式、执行模式,并发跑 Hanako 自动复查;失败即阻断发布。
+- **工具成功无总结链路继续加固**:复杂工具成功但模型未总结时,会基于工具证据生成可见收口摘要,并支持编辑重发恢复。
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.7.tgz"
+```
+
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.84.7)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.84.6</strong> · 2026-06-17 · 工具成功无总结兜底 + 编辑重发恢复</summary>
 
 **工具收口与复查稳定性**:
 - **复杂工具成功但无总结兜底**:看图、文件、搜索等工具均成功但模型没给最终总结时,Lynn 会基于工具证据生成可见收口摘要,避免只剩“已执行 N 个操作”。
@@ -1108,11 +1129,11 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [Releases](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.dmg`。V0.84.6 的 Apple Silicon / Intel DMG 会完成签名、公证、stapled,并通过 Gatekeeper 校验。
+**macOS（Apple Silicon / Intel）**：从 [Releases](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.dmg`。V0.84.7 的 Apple Silicon / Intel DMG 会完成签名、公证、stapled,并通过 Gatekeeper 校验。
 
 **Windows**：从 [Releases](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.exe`，直接运行。
 
-> **Windows SmartScreen 提示：** V0.84.6 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
+> **Windows SmartScreen 提示：** V0.84.7 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
 Linux 版本计划中。
 
@@ -1180,7 +1201,7 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（V0.84.6 签名 + 公证 DMG） |
+| macOS (Apple Silicon) | 已支持（V0.84.7 签名 + 公证 DMG） |
 | macOS (Intel) | 已支持 |
 | Windows x64 | Beta |
 | Linux | 计划中 |
@@ -1242,7 +1263,7 @@ npm run dist:local            # 本地打包（macOS DMG，跳过公证）
 
 ### Q5：Windows 能用吗？
 
-可以。V0.84.6 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均会签名、公证并通过 Gatekeeper 校验。
+可以。V0.84.7 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均会签名、公证并通过 Gatekeeper 校验。
 
 ### Q6：能改模型吗？接自己的 API？
 
