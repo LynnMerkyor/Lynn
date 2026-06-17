@@ -271,17 +271,18 @@ describe('review route', () => {
     expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({ model: 'mimo-v2.5-pro', provider: 'mimo' }));
   });
 
-  it('limits automatic GLM review concurrency and falls through to Brain', async () => {
+  it('queues automatic GLM reviews when MiMo is unavailable', async () => {
     engine.availableModels = [
       { id: 'glm-5-turbo', name: 'GLM 5 Turbo', provider: 'zhipu-coding' },
       { id: 'lynn-brain-router', name: 'Default Brain', provider: 'brain' },
     ];
-    let resolveGlm;
-    const glmRun = new Promise((resolve) => {
-      resolveGlm = resolve;
-    });
+    const resolveGlmRuns = [];
     callText.mockImplementation((options) => {
-      if (options.provider === 'zhipu-coding') return glmRun;
+      if (options.provider === 'zhipu-coding') {
+        return new Promise((resolve) => {
+          resolveGlmRuns.push(resolve);
+        });
+      }
       if (options.provider === 'brain') {
         return Promise.resolve('Brain review.\n```json\n{"summary":"Brain.","verdict":"pass","findings":[]}\n```');
       }
@@ -296,18 +297,41 @@ describe('review route', () => {
     const secondRes = await app.request('/api/review', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ context: 'Second automatic review should skip busy GLM.', autoReview: true, reviewerKind: 'butter' }),
+      body: JSON.stringify({ context: 'Second automatic review should wait for GLM.', autoReview: true, reviewerKind: 'butter' }),
+    });
+    const thirdRes = await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context: 'Third automatic review should also wait for GLM.', autoReview: true, reviewerKind: 'hanako' }),
     });
 
     expect(firstRes.status).toBe(200);
     expect(secondRes.status).toBe(200);
+    expect(thirdRes.status).toBe(200);
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    expect(callText).toHaveBeenCalledTimes(1);
     expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ provider: 'zhipu-coding', model: 'glm-5-turbo' }));
-    expect(callText.mock.calls.some(([options]) => options.provider === 'brain' && options.model === 'lynn-brain-router')).toBe(true);
+    expect(callText.mock.calls.some(([options]) => options.provider === 'brain' && options.model === 'lynn-brain-router')).toBe(false);
 
-    resolveGlm('GLM review.\n```json\n{"summary":"GLM.","verdict":"pass","findings":[]}\n```');
+    resolveGlmRuns[0]('GLM review.\n```json\n{"summary":"GLM.","verdict":"pass","findings":[]}\n```');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(callText).toHaveBeenCalledTimes(2);
+    expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({ provider: 'zhipu-coding', model: 'glm-5-turbo' }));
+    expect(callText.mock.calls.some(([options]) => options.provider === 'brain' && options.model === 'lynn-brain-router')).toBe(false);
+
+    resolveGlmRuns[1]('Second GLM review.\n```json\n{"summary":"Second GLM.","verdict":"pass","findings":[]}\n```');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(callText).toHaveBeenCalledTimes(3);
+    expect(callText.mock.calls[2][0]).toEqual(expect.objectContaining({ provider: 'zhipu-coding', model: 'glm-5-turbo' }));
+    expect(callText.mock.calls.some(([options]) => options.provider === 'brain' && options.model === 'lynn-brain-router')).toBe(false);
+
+    resolveGlmRuns[2]('Third GLM review.\n```json\n{"summary":"Third GLM.","verdict":"pass","findings":[]}\n```');
   });
 
   it('keeps automatic Hanako fallback on MiMo/GLM/Brain instead of user BYOK models', async () => {

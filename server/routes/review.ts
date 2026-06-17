@@ -322,6 +322,7 @@ const AUTO_REVIEW_BRAIN_PROVIDERS = new Set(["brain"]);
 const AUTO_REVIEW_GLM_MAX_CONCURRENCY = Math.max(1, Number(process.env.LYNN_AUTO_REVIEW_GLM_MAX_CONCURRENCY || 1));
 const reviewExecutionQueues = new Map<string, Promise<void>>();
 let activeAutoReviewGlmCalls = 0;
+const autoReviewGlmWaiters: Array<() => void> = [];
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -716,16 +717,60 @@ function buildAutoReviewFallbackCandidates(
   return sortAutoReviewModels(candidates);
 }
 
-function tryReserveAutoReviewModelSlot(config: DirectReviewModelConfig, autoReview?: boolean): boolean {
-  if (!autoReview || !isAutoReviewGlmProvider(config.provider)) return true;
-  if (activeAutoReviewGlmCalls >= AUTO_REVIEW_GLM_MAX_CONCURRENCY) return false;
-  activeAutoReviewGlmCalls += 1;
-  return true;
+function makeAbortError(): Error {
+  const err = new Error("aborted");
+  err.name = "AbortError";
+  return err;
 }
 
-function releaseAutoReviewModelSlot(config: DirectReviewModelConfig, autoReview?: boolean): void {
-  if (!autoReview || !isAutoReviewGlmProvider(config.provider)) return;
-  activeAutoReviewGlmCalls = Math.max(0, activeAutoReviewGlmCalls - 1);
+async function reserveAutoReviewModelSlot(
+  config: DirectReviewModelConfig,
+  autoReview?: boolean,
+  signal?: AbortSignal,
+): Promise<() => void> {
+  if (!autoReview || !isAutoReviewGlmProvider(config.provider)) return () => {};
+
+  const buildRelease = () => {
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      activeAutoReviewGlmCalls = Math.max(0, activeAutoReviewGlmCalls - 1);
+      const next = autoReviewGlmWaiters.shift();
+      next?.();
+    };
+  };
+
+  if (activeAutoReviewGlmCalls < AUTO_REVIEW_GLM_MAX_CONCURRENCY) {
+    activeAutoReviewGlmCalls += 1;
+    return buildRelease();
+  }
+
+  if (signal?.aborted) throw signal.reason || makeAbortError();
+
+  return new Promise<() => void>((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const grant = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      activeAutoReviewGlmCalls += 1;
+      resolve(buildRelease());
+    };
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const index = autoReviewGlmWaiters.indexOf(grant);
+      if (index >= 0) autoReviewGlmWaiters.splice(index, 1);
+      reject(signal?.reason || makeAbortError());
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    autoReviewGlmWaiters.push(grant);
+  });
 }
 
 function buildReviewFallbackCandidates(
@@ -820,11 +865,7 @@ async function runDirectReviewerModel(
   options: { autoReview?: boolean; reviewMode?: string | null; timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<string> {
   const timeoutMs = options.timeoutMs || (options.autoReview ? AUTO_REVIEW_EXEC_TIMEOUT_MS : REVIEW_EXEC_TIMEOUT_MS);
-  if (!tryReserveAutoReviewModelSlot(config, options.autoReview)) {
-    const err: CodedError = new Error("auto review model concurrency limit reached");
-    err.code = "review_model_busy";
-    throw err;
-  }
+  const releaseSlot = await reserveAutoReviewModelSlot(config, options.autoReview, options.signal);
   try {
     return await callText({
       api: config.api,
@@ -845,7 +886,7 @@ async function runDirectReviewerModel(
       quirks: ["enable_thinking"],
     });
   } finally {
-    releaseAutoReviewModelSlot(config, options.autoReview);
+    releaseSlot();
   }
 }
 
@@ -881,7 +922,10 @@ async function runDirectReviewerSessionWithFallback(
           autoReview: true,
           reviewMode: timing.reviewMode,
           timeoutMs: AUTO_REVIEW_EXEC_TIMEOUT_MS,
-          signal: timing.signal,
+          // Automatic Hanako reviews may queue behind the GLM single-flight
+          // guard. The model execution timeout still applies inside callText;
+          // do not spend that budget while merely waiting for the queue.
+          signal: undefined,
         });
         if (!hasMeaningfulReviewOutput(content)) {
           throw createReviewNoOutputError();
