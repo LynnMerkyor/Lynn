@@ -1,6 +1,6 @@
-# Lynn v0.84.5 Release Notes / 发布说明
+# Lynn v0.84.6 Release Notes / 发布说明
 
-> 发布日期: 2026-06-16 · Hanako 自动复查兜底 + BYOK DeepSeek 收口 + 实时搜索/行情修复 + 空答污染防护
+> 发布日期: 2026-06-17 · 工具成功无总结兜底 + 编辑重发恢复 + v0.84.5 稳定性修复合集
 
 ## 国内镜像站下载（推荐）
 
@@ -9,16 +9,18 @@
 - **CLI**:
 
   ```bash
-  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.5.tgz"
+  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.6.tgz"
   ```
 
-- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.5-macOS-arm64.dmg
-- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.5-macOS-x64.dmg
-- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.5-Windows-Setup.exe
+- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.6-macOS-arm64.dmg
+- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.6-macOS-x64.dmg
+- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.6-Windows-Setup.exe
 - **下载页**: https://download.merkyorlynn.com/download.html
 
 ## 中文重点
 
+- **复杂工具成功但无总结兜底**: 当看图、文件、搜索等复杂工具均已成功执行,但模型没有返回最终总结时,Lynn 会基于工具证据生成可见收口摘要,不再只显示“已执行 N 个操作”。
+- **编辑重发恢复修复**: 在上一轮仍处理、WS 繁忙或发送失败时点击“编辑重发”,不会把旧的替换目标残留到下一条普通消息里,避免后续误截上下文或出现 error。
 - **Hanako 自动复查兜底**: 默认模型或 BYOK 模型没有返回可见内容、或回答需要复核时，Hanako 会自动启动后台复查并展示复查模型 `Hanako · MiMo/GLM`、结论、发现与建议执行结论。
 - **DeepSeek V4 Pro / V4 Flash 实测可用**: 本地包已用 DeepSeek V4 Pro 与 V4 Flash 做多轮对话、世界杯/NBA/金价/NVDA 等工具场景验证。
 - **Issue #74 provider 配置修复**: provider id 大小写归一去重，旧版不可读 API Key 明确提示重填，重复 DeepSeek 条目不再把模型路由到空 key provider。
@@ -52,10 +54,12 @@
 
 ---
 
-> Release date: 2026-06-16 · Hanako automatic review fallback + BYOK DeepSeek close-out + realtime search/quote fixes + empty-turn poisoning protection
+> Release date: 2026-06-17 · tool-success fallback summaries + edit-resend recovery + v0.84.5 stability rollup
 
 ## English highlights
 
+- **Tool-success fallback summaries**: when complex tools such as vision, files, or search complete successfully but the model returns no final prose, Lynn now summarizes the retained tool evidence instead of only saying that operations ran.
+- **Edit-resend recovery fix**: clicking edit-resend while a turn is still processing, the socket is busy, or a send fails no longer leaves a stale replacement target that can affect the next normal prompt.
 - **Hanako automatic review fallback**: when the default model or a BYOK model returns no visible content, or a response needs verification, Hanako can start a background review and show the review model `Hanako · MiMo/GLM`, findings, conclusion, and suggested execution result.
 - **DeepSeek V4 Pro / V4 Flash verified**: the local package was tested with DeepSeek V4 Pro and V4 Flash across multi-turn chat and tool-backed World Cup, NBA, gold, and NVDA scenarios.
 - **Issue #74 provider configuration fixes**: provider ids are normalized, duplicate DeepSeek entries are merged, unreadable legacy API keys now ask the user to re-enter once, and models no longer route to an empty-key provider.

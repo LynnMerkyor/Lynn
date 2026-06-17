@@ -888,9 +888,11 @@ describe("chat route event forwarding", () => {
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
         .join("");
-      // 事实行:真实 tool_end 计数,不是模型口吻的编造内容。
-      expect(visibleText).toContain("已执行 1 个操作");
-      expect(visibleText).toContain("没有返回总结回复");
+      // 事实行:真实 tool_end 证据摘要,不是模型口吻的编造内容。
+      expect(visibleText).toContain("工具已经完成执行");
+      expect(visibleText).toContain("bash");
+      expect(visibleText).toContain("mkdir -p 表格");
+      expect(visibleText).toContain("moved");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
     } finally {
@@ -1651,8 +1653,10 @@ describe("chat route event forwarding", () => {
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
         .join("");
-      // 事实行:真实 tool_end 计数,不是模型口吻的编造内容。
-      expect(visibleText).toContain("已执行 1 个操作");
+      // 事实行:真实 tool_end 证据摘要,不是模型口吻的编造内容。
+      expect(visibleText).toContain("工具已经完成执行");
+      expect(visibleText).toContain("bash");
+      expect(visibleText).toContain("moved 3 image files");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({
         type: "turn_end",
         sessionPath: "/sessions/current.jsonl",

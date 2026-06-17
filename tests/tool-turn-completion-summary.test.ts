@@ -40,6 +40,30 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
     expect(out).not.toContain("已执行 2 个操作");
   });
 
+  it("uses generic tool evidence for complex tools when available", () => {
+    const out = buildToolCompletionSummary({
+      successfulToolCount: 3,
+      lastSuccessfulTools: [
+        {
+          name: "image_analyze",
+          outputPreview: "检测到 2 张截图,其中一张包含报错提示。",
+        },
+        {
+          name: "bash",
+          command: "python analyze.py",
+          outputPreview: "summary.csv written",
+        },
+      ],
+    });
+
+    expect(out).toContain("工具已经完成执行");
+    expect(out).toContain("image_analyze");
+    expect(out).toContain("检测到 2 张截图");
+    expect(out).toContain("bash");
+    expect(out).toContain("python analyze.py");
+    expect(out).not.toContain("已执行 3 个操作");
+  });
+
   it("surfaces failures with tool names (capped at 3)", () => {
     const out = buildToolCompletionSummary({
       successfulToolCount: 2,

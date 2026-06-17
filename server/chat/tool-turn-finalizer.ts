@@ -38,14 +38,16 @@ export function buildToolCompletionSummary(ss: any): string {
   if (failCount === 0) {
     const evidenceFallback = buildRealtimeEvidenceFallbackSummary(ss);
     if (evidenceFallback) return evidenceFallback;
+    const genericEvidenceFallback = buildGenericToolEvidenceFallbackSummary(ss);
+    if (genericEvidenceFallback) return genericEvidenceFallback;
   }
   // 措辞必须诚实:工具跑完≠任务完成 —— 模型没给总结时,明说"没有总结回复",
   // 不写"✅ 全部成功"那种读起来像任务完成的句式(2026-06-10 用户纠偏:"自报完成")。
   if (failCount === 0) {
-    return `已执行 ${okCount} 个操作(工具均成功),但模型没有返回总结回复。可点「编辑重发」让它基于工具结果直接作答,详情见上方工具卡片。`;
+    return `已执行 ${okCount} 个操作(工具均成功),但模型没有返回总结回复。工具卡片已保留执行详情;你可以继续追问让 Lynn 基于工具结果总结。`;
   }
   const failDetail = failedTools.length ? `(${failedTools.slice(0, 3).join("、")})` : "";
-  return `已执行 ${okCount + failCount} 个操作:${okCount} 个成功,${failCount} 个失败${failDetail},且模型没有返回总结回复。可点「编辑重发」重试,详情见上方工具卡片。`;
+  return `已执行 ${okCount + failCount} 个操作:${okCount} 个成功,${failCount} 个失败${failDetail},且模型没有返回总结回复。工具卡片已保留执行详情;请根据失败项重试或继续追问。`;
 }
 
 const REALTIME_EVIDENCE_TOOL_NAMES = new Set([
@@ -101,6 +103,34 @@ export function buildRealtimeEvidenceFallbackSummary(ss: any): string {
     ...lines,
     "",
     "可点「编辑重发」让模型基于这些结果重新组织回答。",
+  ].join("\n");
+}
+
+function buildGenericToolEvidenceFallbackSummary(ss: any): string {
+  const tools = Array.isArray(ss?.lastSuccessfulTools) ? ss.lastSuccessfulTools : [];
+  const evidence = tools
+    .map((tool: any) => {
+      const name = String(tool?.name || "").trim();
+      const bits = [
+        String(tool?.command || "").trim(),
+        String(tool?.filePath || "").trim(),
+        compactEvidencePreview(tool?.outputPreview),
+      ].filter(Boolean);
+      return { name, preview: bits.join(" · ") };
+    })
+    .filter((tool: any) => tool.name || tool.preview)
+    .slice(-6);
+
+  if (!evidence.length) return "";
+  const lines = evidence.map((tool: any) => {
+    const label = tool.name ? displayToolName(tool.name) : "工具";
+    return tool.preview ? `- ${label}: ${tool.preview}` : `- ${label}: 已完成`;
+  });
+  return [
+    "工具已经完成执行,但模型没有生成最终总结。以下是可见工具证据摘要:",
+    ...lines,
+    "",
+    "可以直接继续追问“基于这些工具结果总结一下”,或点「编辑重发」重新组织回答。",
   ].join("\n");
 }
 

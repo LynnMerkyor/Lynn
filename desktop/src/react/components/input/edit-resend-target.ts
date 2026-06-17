@@ -5,8 +5,7 @@ export type EditResendTargetRef = {
 };
 
 export function consumeEditResendTarget(ref: EditResendTargetRef, mode: ComposerTaskMode): string | null {
-  if (mode !== 'prompt') return null;
   const target = ref.current;
   ref.current = null;
-  return target;
+  return mode === 'prompt' ? target : null;
 }

@@ -11,10 +11,10 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.84.5-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.84.5-7bcad3" alt="CLI Version"></a>
+  <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/App-0.84.6-brightgreen" alt="App Version"></a>
+  <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.84.6-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
+  <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
   <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-38-47848f?logo=electron" alt="Electron"></a>
 </p>
@@ -102,12 +102,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.5.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.6.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI; 输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.84.5
+Lynn --version  # should print 0.84.6
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
@@ -153,9 +153,14 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 ## 🆕 近期更新
 
 <details>
-<summary><strong>Lynn v0.84.5</strong> · 2026-06-14 · BYOK DeepSeek 稳定性 + 实时搜索/行情修复 <em>(最新)</em></summary>
+<summary><strong>Lynn v0.84.6</strong> · 2026-06-17 · 工具成功无总结兜底 + 编辑重发恢复 <em>(最新)</em></summary>
 
-**Issue #74 与 BYOK 模型闭环**:
+**工具收口与复查稳定性**:
+- **复杂工具成功但无总结兜底**:看图、文件、搜索等工具均成功但模型没给最终总结时,Lynn 会基于工具证据生成可见收口摘要,避免只剩“已执行 N 个操作”。
+- **编辑重发恢复修复**:上一轮仍在处理或发送失败时点击“编辑重发”,不会把旧替换目标残留到下一条普通消息里,避免后续误截上下文或出现 error。
+- **Hanako 自动复查兜底延续**:默认模型或 BYOK 模型无可见内容、事实题需要校验时,Hanako · MiMo/GLM 会作为复查/补位链路介入。
+
+**Issue #74 与 BYOK 模型闭环继续保留**:
 - **DeepSeek V4 Pro / V4 Flash 实测可连续对话**:DeepSeek provider 统一大小写与 id 归一,旧版不可读 API Key 会明确提示重填,重复 provider 不再把模型路由到空 key 条目。
 - **思考模型空答污染修复**:BYOK 思考模型出现纯空轮时会写入可见兜底文本,并在下一轮前剥离历史里的空 assistant 轮,避免一次空答把整条会话带坏。
 - **DeepSeek V4 上下文与输出预算修正**:V4 Pro / V4 Flash 保持 1M 上下文,输出预算回到稳定上限,不再把超大 `max_tokens` 传给 provider。
@@ -164,10 +169,10 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 - **发版门禁**:本地 App 包已跑 packaged server / CLI / settings smoke,并用 DeepSeek V4 Pro / Flash 做真实多轮验证。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.5.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.6.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.5)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.84.6)
 
 </details>
 
@@ -186,7 +191,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.4.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.4)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.84.4)
 
 </details>
 
@@ -202,7 +207,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.2.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.2)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.84.2)
 
 </details>
 
@@ -226,7 +231,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.1.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.1)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.84.1)
 
 </details>
 
@@ -244,7 +249,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.4.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.80.6)
 
 </details>
 
@@ -260,7 +265,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧊 **本地 9B 改为显式启用**:本地 Qwen3.5-9B MTP 不再随启动自动占用约 6GB 显存/统一内存;用户点击启用时才下载/启动,并只在本地模型入口提示首次暖机较慢。
 - 📦 **CLI 镜像安装与发布门禁**:Node 要求、CDN tarball、`Lynn`/`Lynn code`/`Lynn agents` 启动命令和 headless contract 写入 README、CLI README、release notes 与 release static gate。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.1)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.80.1)
 
 </details>
 
@@ -274,7 +279,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🛡️ **中枢回归继续收紧**:session event、tool runtime、dynamic prompt、MCP transport、bridge streaming/attachment 和搜索源摘要都补了 focused tests。
 - ✅ **发布门禁**:V0.79.9 候选已通过 typecheck、runtime typecheck、全量 vitest、三段构建与 release regression 门禁。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.9)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.9)
 
 </details>
 
@@ -289,7 +294,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧭 **本地模型口径不变**:默认仍是 Qwen3.5-9B Q4_K_M imatrix MTP;4B 保持低配降级,继续提示 thinking-on 风险。
 - ✅ **发布门禁**:V0.79.7 合入后通过 `typecheck:runtime`、全量 `typecheck`、全量 `npm test`、release static/UI/live regression 与打包公证门禁。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.7)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.7)
 
 </details>
 
@@ -304,7 +309,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧪 **core 大迁移延后**:`core/session-coordinator.js`、`core/engine.js` 等大文件不塞进本次包,避免为追求 JS 占比牺牲发版稳定性。
 - 📦 **macOS 三重校验完成**:Apple Silicon / Intel DMG 已签名、公证、stapled,并通过 Gatekeeper 校验;Windows 提供签名 NSIS 安装包。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.3)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.3)
 
 </details>
 
@@ -319,7 +324,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧱 **架构债务清扫**:`brain-v2-mirror` 完成 TypeScript island 后继续收紧热路径类型;`server/chat` 叶子模块与 `core` provider/LLM contract 增加 TS 迁移前的类型边界。
 - ✅ **发布门禁**:`npm test` 全量通过,新增 `typecheck:runtime`,brain-v2 `tsc + 104 tests` 通过,release preflight 覆盖构建与回归。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.2)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.2)
 
 </details>
 
@@ -337,7 +342,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🛡️ **架构与安全刷新**:聊天主链拆分为更小的服务模块,本地 GGUF 下载增加源地址/文件类型校验,模型状态与 token 文案统一到 provider state,避免 4B/9B 状态误导。
 - ✅ **测试矩阵**:9B MTP、GPT-5.4、默认模型安装版 smoke 全绿;Deep Research 三路 HTML artifact 门禁全绿;4B thinking-on 风险已在 Spark 复现并写入模型说明。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.1)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.1)
 
 </details>
 
@@ -351,7 +356,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧭 **Brain V2 迁移**:老用户的旧 Brain endpoint 会自动迁移到 V2 canonical;GLM Coding Plan 使用专属 coding 端点;空答兜底只做可见修复,不提前干预模型输出。
 - ✅ **回归门禁**:Full test suite `168 files / 1447 passed / 1 skipped`,TypeScript、renderer build、本地安装与 GUI smoke 通过。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.0)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.0)
 
 </details>
 
@@ -364,7 +369,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - ⏱️ **超时文案更清楚**:Deep Research fetch 超时统一显示可读提示,前端等待时间与服务端任务窗口对齐。
 - 🧩 **面板工程化**:Deep Research 面板与格式化 helper 抽离,补齐回归测试,便于后续继续迭代。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.78.1)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.78.1)
 
 </details>
 
@@ -380,7 +385,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧠 **新用户默认 Brain v2**:新安装/无本地配置的用户默认进入 Brain v2 链路。
 - 🔁 **老用户不强迁**:已有 Brain v1 或自定义 provider 配置保持原样,升级不会覆盖稳定路径。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.78.0)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.78.0)
 
 </details>
 
@@ -397,7 +402,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧩 **显式能力入口**:Deep Research 不抢占默认聊天链路,用户需要时手动开启。
 - 📊 **Benchmark 入仓**:Tool-abstain / Qwen3.5 vs Qwen3.6 实验文件归档到 `tests/benchmarks/`,便于后续复现。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.11)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.11)
 
 </details>
 
@@ -418,7 +423,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - Release、更新清单和镜像站下载链接统一指向 v0.77.10。
 - 全量 release regression 继续作为发版阻断门禁。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.10)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.10)
 
 </details>
 
@@ -442,7 +447,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 全量单测 `1209 passed / 1 skipped`。
 - TypeScript、lint、release regression 和 UI smoke 会作为本次发版门禁继续执行。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.9)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.9)
 
 </details>
 
@@ -467,7 +472,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - V9 benchmark 资料、runner 和复核材料进入 `tests/benchmarks`。
 - 新增 Artifact recovery 单测,覆盖 JSON 参数、HTML 推断、去重和无效输入。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.8)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.8)
 
 </details>
 
@@ -492,7 +497,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 **巡检改造**:
 - 📊 飞书 health-check 加 MiMo 头位 + 本地 GPU 路由重命名 + Kimi K2.6 (kimi-for-coding API) 替 K2.5 + brain v2 /api/v2 健康检测。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.7)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.7)
 
 </details>
 
@@ -513,7 +518,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 90 vitest 单测 + 16 e2e smoke 场景
 - 服务端 TypeScript / Lint / Build 全过
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.6)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.6)
 
 </details>
 
@@ -564,7 +569,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - ✅ E2E dev 多轮验证(在 brain 持续抖动状态下):`PENDING-DELETE-REQUEST v1` 100% 触发 / `MUTATION-CONFIRM-REHYDRATE v1` 100% 触发 / `POST-REHYDRATE-ESCALATE v1` 升级 retry 100% 触发(brain 仍嘴炮时);Path B `POST-REHYDRATE-DETERMINISTIC v1` 在 Downloads/Desktop/Documents 已知目录场景能正确合成 `find ... -delete` 命令
 - ✅ +17 单测覆盖:存储/消费/确认短语/TTL/无关输入/真删自动清/`find -delete` 识别/escalation prompt 的禁令措辞/路由元数据 strip / retry prompt 不再嵌入 routeIntent
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.5)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.5)
 
 </details>
 
@@ -579,7 +584,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🌦️ **实时数据证据修复**:天气/行情类回答必须基于有效字段,减少抓到首页导航却当成结果的情况。
 - 🌐 **翻译与报告入口**:补齐聊天内翻译入口、HTML artifact 安全渲染和 PNG 导出链路。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.4)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.4)
 
 </details>
 
@@ -595,7 +600,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🪟 **启动白屏修复**:修复 React selector update depth 和 splash 丢 app-ready 后卡住的问题。
 - 🧩 **打包链路加固**:插件独立加载、`build:server` npm 镜像损坏重试和本地冷启动验证都已补齐。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.3)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.3)
 
 </details>
 
@@ -611,7 +616,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧼 **流式伪工具清理增强**:统一 `<web_search>` / `<weather>` / `<bash>` 等伪工具标签清理。
 - 🧩 **运行时稳定性补丁**:修复 stream LRU、EventBus 异步异常、ChannelRouter 并发锁和 Plugin unload 清理。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.2)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.2)
 
 </details>
 
@@ -627,7 +632,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 📁 **文件任务识别增强**:优化下载/桌面目录别名、zip/excel/pdf 等文件识别和安全删除路径。
 - 🧪 **Release Regression Gate**:继续覆盖工具调用、文件操作、伪工具泄漏、thinking 泄漏和 UI smoke。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.2)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.2)
 
 </details>
 
@@ -662,7 +667,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🎙️ **PressToTalk UI 优化**:按钮样式 + 状态机重构,长按锁定 + 录音中视觉反馈更稳。
 - 🧱 **brain server 报告上下文增强**:`server/chat/report-research-context.js` 注入更结构化数据,模型生成报告更准确。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.76.9)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.76.9)
 
 </details>
 
@@ -689,7 +694,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🚫 **伪 tool-call 检测 + 自动恢复**: 模型在 text 里写 `<web_search>...` / `web_search(query=...)` 等"调用语句"时,brain 强切回真工具流,user 不再看到崩溃文本。
 - 🧪 **771/771 全测试 + 新增 30 regression cases** 锁住 file-move-image 永不再走 vision 误判。
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.76.8)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.76.8)
 
 </details>
 
@@ -704,7 +709,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🪟 **IME 不抖**: 中文输入候选切换稳定;thinking block 默认折叠
 - 📦 **3 平台公证**: macOS Apple Silicon + Intel + Windows 全打公证,镜像站同步
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.76.7)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.76.7)
 
 </details>
 
@@ -719,7 +724,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🎯 **串轮隔离 TURN-FENCE v1**: 上一轮 abort 无产出时自动系统隔离, 避免误读残留
 - 🧪 **测试**: 4 新 + 7 扩展, `715/715 vitest all green`
 
-[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.76.6)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.76.6)
 
 </details>
 
@@ -776,7 +781,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 
 </details>
 
-👉 [完整发版历史 · GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)
+👉 [完整发版历史 · GitHub Releases](https://gitee.com/merkyor/Lynn/releases)
 
 ---
 
@@ -1103,11 +1108,11 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.dmg`。V0.84.5 的 Apple Silicon / Intel DMG 会完成签名、公证、stapled,并通过 Gatekeeper 校验。
+**macOS（Apple Silicon / Intel）**：从 [Releases](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.dmg`。V0.84.6 的 Apple Silicon / Intel DMG 会完成签名、公证、stapled,并通过 Gatekeeper 校验。
 
-**Windows**：从 [Releases](https://github.com/MerkyorLynn/Lynn/releases) 下载最新 `.exe`，直接运行。
+**Windows**：从 [Releases](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.exe`，直接运行。
 
-> **Windows SmartScreen 提示：** V0.84.5 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
+> **Windows SmartScreen 提示：** V0.84.6 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
 Linux 版本计划中。
 
@@ -1175,7 +1180,7 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（V0.84.5 签名 + 公证 DMG） |
+| macOS (Apple Silicon) | 已支持（V0.84.6 签名 + 公证 DMG） |
 | macOS (Intel) | 已支持 |
 | Windows x64 | Beta |
 | Linux | 计划中 |
@@ -1237,7 +1242,7 @@ npm run dist:local            # 本地打包（macOS DMG，跳过公证）
 
 ### Q5：Windows 能用吗？
 
-可以。V0.84.5 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均会签名、公证并通过 Gatekeeper 校验。
+可以。V0.84.6 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均会签名、公证并通过 Gatekeeper 校验。
 
 ### Q6：能改模型吗？接自己的 API？
 
@@ -1270,7 +1275,7 @@ npm run dist:local            # 本地打包（macOS DMG，跳过公证）
 
 ## 链接
 
-- 📥 [下载最新版](https://github.com/MerkyorLynn/Lynn/releases)
+- 📥 [下载最新版](https://gitee.com/merkyor/Lynn/releases)
 - 🐞 [提交 Issue](https://github.com/MerkyorLynn/Lynn/issues)
 - 🔒 [安全政策](SECURITY.md)
 - 🤝 [贡献指南](CONTRIBUTING.md)

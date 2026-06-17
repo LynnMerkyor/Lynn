@@ -12,12 +12,12 @@ describe('edit resend target handling', () => {
     expect(consumeEditResendTarget(ref, 'prompt')).toBeNull();
   });
 
-  it('does not consume edit target for non-prompt modes', () => {
+  it('clears stale edit targets for non-prompt modes without returning them', () => {
     const ref = { current: 'user-1718000000000' };
 
     const target = consumeEditResendTarget(ref, 'steer');
 
     expect(target).toBeNull();
-    expect(ref.current).toBe('user-1718000000000');
+    expect(ref.current).toBeNull();
   });
 });
