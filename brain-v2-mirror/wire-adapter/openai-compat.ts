@@ -70,13 +70,16 @@ function shouldForwardReasoningEffort(provider: WireAdapterOptions['provider'], 
 // the vision model just because SOME old image sits in history pins long convos to 32K →
 // context overflow → no answer. Only a RECENT image should trigger vision routing.
 const VISION_RECENT_LOOKBACK = 6;
-function messageHasImage(m: ChatMessage | undefined): boolean {
+function contentPartHasImage(c: { type?: string }): boolean {
+  return c?.type === 'image_url' || c?.type === 'input_image';
+}
+function messageHasVisionInput(m: ChatMessage | undefined): boolean {
   return !!m && Array.isArray(m.content)
-    && (m.content as Array<{ type?: string }>).some((c) => c?.type === 'image_url');
+    && (m.content as Array<{ type?: string }>).some(contentPartHasImage);
 }
 function hasRecentImage(messages?: ChatMessage[]): boolean {
   if (!Array.isArray(messages)) return false;
-  return messages.slice(-VISION_RECENT_LOOKBACK).some(messageHasImage);
+  return messages.slice(-VISION_RECENT_LOOKBACK).some(messageHasVisionInput);
 }
 // Replace image blocks with a text placeholder so the large-context text model can carry a
 // long history that merely contains stale images, without being fed image content it rejects.
@@ -84,10 +87,10 @@ function stripImageContent(messages?: ChatMessage[]): ChatMessage[] | undefined 
   if (!Array.isArray(messages)) return messages;
   let changed = false;
   const out = messages.map((m) => {
-    if (!messageHasImage(m)) return m;
+    if (!messageHasVisionInput(m)) return m;
     changed = true;
     const content = (m.content as Array<{ type?: string }>).map((c) =>
-      c?.type === 'image_url' ? { type: 'text', text: '[earlier image omitted]' } : c);
+      contentPartHasImage(c) ? { type: 'text', text: '[earlier image omitted]' } : c);
     return { ...m, content } as ChatMessage;
   });
   return changed ? out : messages;
@@ -101,9 +104,11 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
   // Vision routing (Bug A fix): route to the small-context vision model ONLY when a RECENT
   // message carries an image. When not, use the large-context text model and strip stale
   // image blocks so it isn't fed image content it may reject.
-  const wantsVision = !!provider.vision_model && hasRecentImage(messages);
-  const model = (wantsVision ? provider.vision_model : provider.model) as ModelId;
-  const routedMessages = wantsVision ? messages : stripImageContent(messages);
+  const hasRecentVisionInput = hasRecentImage(messages);
+  const wantsVisionModel = !!provider.vision_model && hasRecentVisionInput;
+  const nativeVisionOnBaseModel = Boolean(provider.capability?.vision && !provider.vision_model && hasRecentVisionInput);
+  const model = (wantsVisionModel ? provider.vision_model : provider.model) as ModelId;
+  const routedMessages = (wantsVisionModel || nativeVisionOnBaseModel) ? messages : stripImageContent(messages);
   // Some providers (DeepSeek) reject tool/function names outside ^[a-zA-Z0-9_-]+$;
   // rewrite historical tool_call names in the messages to match the tools array below.
   const wireMessages = sanitizeMessagesForWire(routedMessages);
@@ -155,7 +160,7 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
   // Sanitize tool names on the way out (DeepSeek strict pattern); restore on the way back
   // so the brain pipeline only ever sees the original names. Conforming names → no-op.
   let toolNameRestore = null;
-  if (Array.isArray(tools) && tools.length > 0) {
+  if (Array.isArray(tools) && tools.length > 0 && provider.capability?.tools !== false) {
     const sanitized = sanitizeToolsForWire(tools);
     body.tools = sanitized.tools;
     body.tool_choice = 'auto';
@@ -173,7 +178,7 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
   let resp = await postChat(body);
   // Option-4 fallback (Bug A): if the vision model overflows its 32K context, retry once on
   // the text model with images stripped — a long image-bearing convo still gets answered.
-  if (!resp.ok && wantsVision && resp.status === 400) {
+  if (!resp.ok && wantsVisionModel && resp.status === 400) {
     const errText = await resp.text().catch(() => '');
     if (/maximum context length|context length|too long/i.test(errText)) {
       body.model = provider.model as ModelId;

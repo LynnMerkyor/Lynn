@@ -247,5 +247,76 @@ describe('OpenAI-compat wire adapter', () => {
       }));
       expect(JSON.parse(off.mock.calls[0][1].body).reasoning_effort).toBeUndefined();
     });
+
+    it('keeps recent image content for native multimodal base models without vision_model', async () => {
+      const mimoProvider = {
+        id: 'mimo-multimodal',
+        endpoint: 'https://token-plan-cn.xiaomimimo.com/v1',
+        apiKey: 'sk-mimo',
+        model: 'mimo-v2.5',
+        capability: { vision: true, audio: true, video: true, tools: false, thinking: true },
+        default_thinking: true,
+      };
+      const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'ok' }), sseDone())));
+      await drain(callOpenAI({
+        provider: mimoProvider,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: '描述图片' },
+            { type: 'input_image', image_url: { url: 'https://example.com/a.png' } },
+          ],
+        }],
+      }));
+      const body = JSON.parse(f.mock.calls[0][1].body);
+      expect(body.model).toBe('mimo-v2.5');
+      expect(body.messages[0].content[1].type).toBe('input_image');
+      expect(body.tools).toBeUndefined();
+      expect(body.tool_choice).toBeUndefined();
+    });
+
+    it('still strips stale images before sending native multimodal base models', async () => {
+      const mimoProvider = {
+        id: 'mimo-multimodal',
+        endpoint: 'https://token-plan-cn.xiaomimimo.com/v1',
+        apiKey: 'sk-mimo',
+        model: 'mimo-v2.5',
+        capability: { vision: true, audio: true, video: true, tools: false, thinking: true },
+        default_thinking: true,
+      };
+      const messages = [
+        { role: 'user', content: [{ type: 'image_url', image_url: { url: 'https://example.com/old.png' } }] },
+        { role: 'assistant', content: 'seen' },
+        { role: 'user', content: '1' },
+        { role: 'assistant', content: '2' },
+        { role: 'user', content: '3' },
+        { role: 'assistant', content: '4' },
+        { role: 'user', content: '继续聊,不要看旧图' },
+      ];
+      const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'ok' }), sseDone())));
+      await drain(callOpenAI({ provider: mimoProvider, messages }));
+      const body = JSON.parse(f.mock.calls[0][1].body);
+      expect(body.messages[0].content[0]).toEqual({ type: 'text', text: '[earlier image omitted]' });
+    });
+
+    it('does not send tool schema to providers that explicitly disable tool support', async () => {
+      const noToolProvider = {
+        id: 'mimo-multimodal',
+        endpoint: 'https://token-plan-cn.xiaomimimo.com/v1',
+        apiKey: 'sk-mimo',
+        model: 'mimo-v2.5',
+        capability: { vision: true, audio: true, video: true, tools: false, thinking: true },
+        default_thinking: true,
+      };
+      const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'ok' }), sseDone())));
+      await drain(callOpenAI({
+        provider: noToolProvider,
+        messages: [{ role: 'user', content: 'q' }],
+        tools: [{ type: 'function', function: { name: 'web_search', parameters: { type: 'object', properties: {} } } }],
+      }));
+      const body = JSON.parse(f.mock.calls[0][1].body);
+      expect(body.tools).toBeUndefined();
+      expect(body.tool_choice).toBeUndefined();
+    });
   });
 });

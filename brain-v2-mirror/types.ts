@@ -3,6 +3,7 @@ export type Brand<T, Name extends string> = T & { readonly __brand: Name };
 export type ProviderIdLiteral =
   | 'apex-spark-i-balanced'
   | 'step-3.7-flash'
+  | 'mimo-multimodal'
   | 'deepseek-chat'
   | 'deepseek-pro'
   | 'glm-5-turbo'
@@ -12,6 +13,8 @@ export type ModelIdLiteral =
   | 'qwen36-35b-a3b-apex-mtp'
   | 'qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix'
   | 'step-3.7-flash'   // StepFun 198B-MoE/11B-A text/coding fallback, step_plan 端点
+  | 'mimo-v2.5'
+  | 'mimo-v2-omni'
   | 'deepseek-v4-flash'
   | 'deepseek-v4-pro'
   | 'GLM-5-Turbo';

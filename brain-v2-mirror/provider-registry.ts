@@ -8,9 +8,8 @@ const env = (k: string, d: string): string => process.env[k] || d;
 
 type ProviderRegistry = Record<ProviderIdLiteral, Provider>;
 
-// NOTE: MiMo is no longer a chat/vision provider here (StepFun step-3.7-flash + step-1o-turbo-vision
-// took over text+vision). MiMo's *paid search* backend stays alive separately in tool-exec/web_search.ts
-// web_search/search-context resolve their own search provider chain (GLM primary, MiMo for links/fallback).
+// NOTE: MiMo search is still owned by tool-exec/web_search.ts. The `mimo-multimodal`
+// provider below is only for native image/audio/video understanding fallback.
 const PROVIDER_DEFS = {
   'apex-spark-i-balanced': {
     id: providerId('apex-spark-i-balanced'),
@@ -50,6 +49,21 @@ const PROVIDER_DEFS = {
     // 48K (was 32K): reasoning + answer + tool-call share this one output budget. At high
     // reasoning, hard tasks overflowed 32K mid-<think> → finish_reason=length → empty answer.
     max_tokens: 49_152,
+  },
+  // MiMo Token Plan multimodal fallback. Official docs expose image/audio/video understanding
+  // through the OpenAI-compatible chat completions API; use it after StepFun for image/video,
+  // and as the first native audio-capable provider in the multimodal route.
+  'mimo-multimodal': {
+    id: providerId('mimo-multimodal'),
+    endpoint: env('MIMO_MULTIMODAL_BASE', '') || env('MIMO_SEARCH_BASE', 'https://api.xiaomimimo.com/v1'),
+    apiKey: env('MIMO_MULTIMODAL_KEY', '') || env('MIMO_SEARCH_KEY', ''),
+    model: envModel('MIMO_MULTIMODAL_MODEL', 'mimo-v2.5'),
+    capability: { vision: true, audio: true, video: true, tools: false, thinking: true, native_search: false },
+    wire: 'openai',
+    cooldown_ms: 60_000,
+    default_thinking: true,
+    max_tokens: 8_192,
+    temperature: 0.2,
   },
   'deepseek-chat': {
     id: providerId('deepseek-chat'),
@@ -96,20 +110,30 @@ const PROVIDER_DEFS = {
 
 export const PROVIDERS: Record<string, Provider> = PROVIDER_DEFS;
 
-// universalOrder — 单一兜底链路,不按 prompt 内容分支
+// universalOrder — 文本/工具编排链路。2026-06-19: 长任务横评显示 DS V4 Flash
+// 编排+复核假验收最低,因此把 DS V4 Flash 提到文本头位;StepFun 继续作为高速执行/兜底。
 export const universalOrder = [
-  providerId('step-3.7-flash'),        // 头位:StepFun 3.7 Flash high+48K,高 TPS + 推理/编码/视觉
+  providerId('deepseek-chat'),         // 头位:DS V4 Flash 编排/复核优先
+  providerId('step-3.7-flash'),        // 高速执行/兜底:StepFun 3.7 Flash low+48K,高 TPS
   providerId('apex-spark-i-balanced'), // 本地 A3B 单槽 manager/fallback;忙时 router 跳过,保护 GUI 交互
-  providerId('deepseek-chat'),         // DS-V4 Flash escape lane
   providerId('deepseek-pro'),          // 云兜底 V4-pro
   providerId('glm-5-turbo'),           // 末位
+] as const satisfies readonly ProviderId[];
+
+const multimodalOrder = [
+  providerId('step-3.7-flash'),        // 多模态仍由 StepFun/vision_model 承接
+  providerId('mimo-multimodal'),       // MiMo 原生图片/音频/视频兜底;audio 首个可用 provider
+  providerId('apex-spark-i-balanced'),
+  providerId('deepseek-chat'),
+  providerId('deepseek-pro'),
+  providerId('glm-5-turbo'),
 ] as const satisfies readonly ProviderId[];
 
 export function providerOrderForCapability(capabilityRequired?: { vision?: boolean; audio?: boolean; video?: boolean }): readonly ProviderId[] {
   if (capabilityRequired?.vision || capabilityRequired?.audio || capabilityRequired?.video) {
     // 多模态首位 = StepFun(step-3.7-flash,vision_model=step-1o-turbo-vision,capability.vision/video=true)。
-    // audio 仍无供应商 → 下游 capability gate 抛 CAPABILITY_NOT_SUPPORTED。
-    return universalOrder;
+    // MiMo follows as native image/audio/video fallback; audio requests land there when configured.
+    return multimodalOrder;
   }
   return universalOrder;
 }
@@ -167,6 +191,7 @@ function credentialStatus(provider: Provider): ProviderCredentialStatus {
 export function getProviderStatusSnapshot(capabilityRequired?: { vision?: boolean; audio?: boolean; video?: boolean }): ProviderStatusSnapshot {
   const route = providerOrderForCapability(capabilityRequired).map(String);
   const routeSet = new Set(route);
+  const headProvider = route[0] || '';
   return {
     ok: true,
     route,
@@ -182,7 +207,7 @@ export function getProviderStatusSnapshot(capabilityRequired?: { vision?: boolea
         configured: credential !== 'missing',
         local: provider.apiKey === 'none' || Boolean(provider.health_path),
         inRoute: routeSet.has(String(provider.id)),
-        routeRole: String(provider.id) === 'step-3.7-flash'
+        routeRole: String(provider.id) === headProvider
           ? 'head'
           : String(provider.id) === 'apex-spark-i-balanced'
             ? 'local_single_slot_manager'
@@ -193,7 +218,7 @@ export function getProviderStatusSnapshot(capabilityRequired?: { vision?: boolea
           ? DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY
           : undefined,
         busyFallbackProvider: String(provider.id) === 'apex-spark-i-balanced'
-          ? 'step-3.7-flash or ds-v4-flash'
+          ? 'ds-v4-flash or step-3.7-flash'
           : undefined,
       };
     }),

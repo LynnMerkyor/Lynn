@@ -14,6 +14,14 @@ function envOr(name, fallback = "") {
 function needsSourceGradeEvidence(query) {
   return /(私董会|会费|收费标准|人数规模|会员人数|主要(?:私董会|机构|协会|商会)|机构(?:名单|对比|收费|人数)|预测|概率|赔率|夺冠(?:概率|热门)?|榜单|排名)/i.test(String(query || ""));
 }
+function normalizeSearchQueryIntent(query) {
+  const q = String(query || "").trim();
+  if (!q) return q;
+  if (!/世纪杯/.test(q)) return q;
+  if (/(?:新世纪杯|21世纪杯|二十一世纪杯|世纪杯(?:英语|演讲|作文|龙舟|朗诵|竞赛|活动|赛事))/.test(q)) return q;
+  if (!/(?:今晚|今夜|今天|今日|明天|昨晚|昨天|比赛|赛程|比分|赛果|小组赛|决赛|半决赛|足球|球队|对阵|夺冠|胜率|预测|world cup|fifa)/i.test(q)) return q;
+  return q.replace(/世纪杯/g, "世界杯");
+}
 function isSportsPredictionQuery(query) {
   const q = String(query || "");
   return /(胜率|预测|概率|赔率|盘口|让球|夺冠|热门|odds|prediction|probability|forecast|betting)/i.test(q) &&
@@ -344,7 +352,8 @@ const STRUCTURED_RACERS = [
   { source: "serper", fn: (q, s) => searchSerperStructured(q, s), optional: true, envKey: "SERPER_KEY" }
 ];
 async function webSearchStructured(query, { log } = {}) {
-  const q = String(query || "").trim();
+  const rawQuery = String(query || "").trim();
+  const q = normalizeSearchQueryIntent(rawQuery);
   if (!q) return { ok: false, error: "empty query", sources: [] };
   const cached = structuredCache.get(q.toLowerCase());
   if (cached) {
@@ -358,7 +367,7 @@ async function webSearchStructured(query, { log } = {}) {
     source: r.source,
     fn: () => r.fn(providerQuery, ctrl.signal).then((value) => requireUsableStructured(r.source, refineStructuredResultForQuery(q, value)))
   }));
-  log && log("info", "tool-exec/web_search_structured primary race q=" + q + (providerQuery !== q ? " provider_q=" + providerQuery : "") + " racers=" + primaryRacers.map((r) => r.source).join(","));
+  log && log("info", "tool-exec/web_search_structured primary race q=" + q + (rawQuery && rawQuery !== q ? " raw_q=" + rawQuery : "") + (providerQuery !== q ? " provider_q=" + providerQuery : "") + " racers=" + primaryRacers.map((r) => r.source).join(","));
   let settled = await raceUsableSources(primaryRacers, PRIMARY_SEARCH_BUDGET_MS);
   let anyOk = settled.some((s) => s.ok);
   if (!anyOk) {
@@ -448,7 +457,7 @@ function formatStructuredSearchForTool(result) {
   return lines.join(NL).trim() || JSON.stringify(result);
 }
 async function webSearch(query, { log } = {}) {
-  const q = String(query || "").trim();
+  const q = normalizeSearchQueryIntent(query);
   if (!q) return JSON.stringify({ error: "empty query" });
   const cached = cache.get(q.toLowerCase());
   if (cached) {
@@ -472,7 +481,8 @@ const __testing__ = {
   searchMimoStructured,
   searchGlmWebStructured,
   structuredCache,
-  formatStructuredSearchForTool
+  formatStructuredSearchForTool,
+  normalizeSearchQueryIntent
 };
 export {
   __testing__,

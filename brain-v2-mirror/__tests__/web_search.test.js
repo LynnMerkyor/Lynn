@@ -104,6 +104,12 @@ describe('web_search aggregator', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it('normalizes common World Cup typo intent without rewriting real event names', () => {
+    expect(__testing__.normalizeSearchQueryIntent('今晚的世纪杯比赛有几场')).toBe('今晚的世界杯比赛有几场');
+    expect(__testing__.normalizeSearchQueryIntent('新世纪杯龙舟比赛')).toBe('新世纪杯龙舟比赛');
+    expect(__testing__.normalizeSearchQueryIntent('21世纪杯英语演讲比赛')).toBe('21世纪杯英语演讲比赛');
+  });
+
   it('uses optional racers only in the fallback lane', async () => {
     delete process.env.ZHIPU_KEY;
     process.env.BOCHA_KEY = 'test-bocha';
@@ -263,6 +269,17 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
     expect(r.ok).toBe(false);
     expect(r.error).toBe('empty query');
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('sends normalized World Cup typo queries to the search provider', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(glmResp({ title: '世界杯赛程', content: '今晚 4 场小组赛。' }));
+
+    const r = await webSearchStructured('今晚的世纪杯比赛有几场');
+
+    expect(r.ok).toBe(true);
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.search_query).toContain('世界杯');
+    expect(body.search_query).not.toContain('世纪杯');
   });
 
   it('serves the second call from the structured cache', async () => {

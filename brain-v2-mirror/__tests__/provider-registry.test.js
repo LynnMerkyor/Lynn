@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { getProvider, getProviderStatusSnapshot, PROVIDERS, providerOrderForCapability, universalOrder } from '../provider-registry.js';
 
 describe('provider registry', () => {
-  it('keeps StepFun low-reasoning + 48K in the intended universal fallback head position', () => {
+  it('keeps DS V4 Flash as the text/tool orchestration head with StepFun as fast fallback', () => {
     expect(universalOrder.map(String).slice(0, 4)).toEqual([
+      'deepseek-chat',
       'step-3.7-flash',
       'apex-spark-i-balanced',
-      'deepseek-chat',
       'deepseek-pro',
     ]);
   });
@@ -39,27 +39,48 @@ describe('provider registry', () => {
     expect(getProvider('deepseek-chat').thinking_control).toBeUndefined();
   });
 
-  it('routes vision to StepFun as the head vision-capable provider', () => {
+  it('routes vision to StepFun first and MiMo multimodal as native fallback', () => {
     const visionOrder = providerOrderForCapability({ vision: true })
       .map((id) => PROVIDERS[id])
       .filter((provider) => provider?.capability?.vision)
       .map((provider) => String(provider.id));
 
-    // StepFun (step-3.7-flash) now covers vision itself (vision_model=step-1o-turbo-vision via the
-    // openai-compat adapter switch) and is the head — MiMo is no longer the vision fallback.
     expect(visionOrder[0]).toBe('step-3.7-flash');
+    expect(visionOrder[1]).toBe('mimo-multimodal');
     expect(visionOrder).toContain('step-3.7-flash');
-    expect(universalOrder.map(String)[0]).toBe('step-3.7-flash');
+    expect(visionOrder).toContain('mimo-multimodal');
+    expect(universalOrder.map(String)[0]).toBe('deepseek-chat');
     expect(visionOrder).not.toContain('apex-spark-i-balanced');
     expect(visionOrder).not.toContain('deepseek-chat');
   });
 
+  it('registers MiMo as native image/audio/video fallback without taking over text route', () => {
+    const mimo = getProvider('mimo-multimodal');
+    expect(mimo).toBeTruthy();
+    expect(String(mimo.id)).toBe('mimo-multimodal');
+    expect(String(mimo.model)).toBe('mimo-v2.5');
+    expect(mimo.wire).toBe('openai');
+    expect(mimo.capability).toMatchObject({
+      vision: true,
+      audio: true,
+      video: true,
+      tools: false,
+      thinking: true,
+      native_search: false,
+    });
+    expect(universalOrder.map(String)).not.toContain('mimo-multimodal');
+    expect(providerOrderForCapability({ audio: true }).map(String)).toContain('mimo-multimodal');
+    expect(providerOrderForCapability({ video: true }).map(String)).toContain('mimo-multimodal');
+  });
+
   it('exposes a sanitized provider status snapshot without leaking keys', () => {
     const snapshot = getProviderStatusSnapshot();
+    const ds = snapshot.providers.find((provider) => provider.id === 'deepseek-chat');
     const step = snapshot.providers.find((provider) => provider.id === 'step-3.7-flash');
     const spark = snapshot.providers.find((provider) => provider.id === 'apex-spark-i-balanced');
 
-    expect(snapshot.route.slice(0, 3)).toEqual(['step-3.7-flash', 'apex-spark-i-balanced', 'deepseek-chat']);
+    expect(snapshot.route.slice(0, 3)).toEqual(['deepseek-chat', 'step-3.7-flash', 'apex-spark-i-balanced']);
+    expect(ds).toMatchObject({ id: 'deepseek-chat', routeRole: 'head', inRoute: true });
     expect(step).toMatchObject({ id: 'step-3.7-flash', credential: expect.any(String), inRoute: true });
     expect(spark).toMatchObject({
       credential: 'not_required',
@@ -67,7 +88,7 @@ describe('provider registry', () => {
       local: true,
       routeRole: 'local_single_slot_manager',
       localConcurrencyLimit: 1,
-      busyFallbackProvider: 'step-3.7-flash or ds-v4-flash',
+      busyFallbackProvider: 'ds-v4-flash or step-3.7-flash',
     });
     expect(JSON.stringify(snapshot)).not.toContain('apiKey');
   });
