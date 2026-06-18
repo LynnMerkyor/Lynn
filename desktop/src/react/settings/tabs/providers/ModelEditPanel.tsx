@@ -104,19 +104,18 @@ export function ModelEditPanel({ modelId, providerId, anchorEl, onClose, onRefre
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      try {
-        const modelsRes = await hanaFetch('/api/models');
-        const modelsData = await modelsRes.json();
-        const current = modelsData?.models?.find?.((model: { id?: string; provider?: string; isCurrent?: boolean }) => model?.isCurrent);
-        if (current?.id === modelId && (!current.provider || current.provider === targetProviderId)) {
-          await hanaFetch('/api/models/set', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ modelId, provider: targetProviderId }),
-          });
-        }
-      } catch {
-        // Model refresh is best effort; saved provider metadata will apply on next switch/session.
+      const modelsRes = await hanaFetch('/api/models');
+      const modelsData = await modelsRes.json();
+      if (modelsData?.error) throw new Error(modelsData.error);
+      const current = modelsData?.models?.find?.((model: { id?: string; provider?: string; isCurrent?: boolean }) => model?.isCurrent);
+      if (current?.id === modelId && (!current.provider || current.provider === targetProviderId)) {
+        const setRes = await hanaFetch('/api/models/set', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modelId, provider: targetProviderId }),
+        });
+        const setData = await setRes.json().catch(() => null);
+        if (setData?.error) throw new Error(setData.error);
       }
       await onRefresh?.();
       notifyModelsChanged();

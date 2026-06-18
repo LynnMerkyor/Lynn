@@ -1,6 +1,6 @@
-# Lynn v0.84.7 Release Notes / 发布说明
+# Lynn v0.84.8 Release Notes / 发布说明
 
-> 发布日期: 2026-06-18 · Hanako 自动复查 + 真实 GUI/CLI installed gate + 工具兜底稳定性修复
+> 发布日期: 2026-06-18 · 真实看图门禁 + Hanako 并发复查稳定化 + provider / 上下文 / 流式回归修复
 
 ## 国内镜像站下载（推荐）
 
@@ -9,17 +9,19 @@
 - **CLI**:
 
   ```bash
-  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.7.tgz"
+  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.8.tgz"
   ```
 
-- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.7-macOS-arm64.dmg
-- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.7-macOS-x64.dmg
-- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.7-Windows-Setup.exe
+- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.8-macOS-arm64.dmg
+- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.8-macOS-x64.dmg
+- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.8-Windows-Setup.exe
 - **下载页**: https://download.merkyorlynn.com/download.html
 
 ## 中文重点
 
 - **复杂工具成功但无总结兜底**: 当看图、文件、搜索等复杂工具均已成功执行,但模型没有返回最终总结时,Lynn 会基于工具证据生成可见收口摘要,不再只显示“已执行 N 个操作”。
+- **真实看图 E2E 加入 installed gate**: 发布门禁现在会在已安装 App 中真实调用视觉模型识别图片,避免“代码通过但安装包没带上”的回归。
+- **Hanako 并发复查稳定化**: 自动复查提示词和输出预算重调,MiMo/GLM 并发复查真实门禁通过,减少“复查暂时没跑完”。
 - **编辑重发恢复修复**: 在上一轮仍处理、WS 繁忙或发送失败时点击“编辑重发”,不会把旧的替换目标残留到下一条普通消息里,避免后续误截上下文或出现 error。
 - **Hanako 自动复查兜底**: 默认模型或 BYOK 模型没有返回可见内容、或回答需要复核时，Hanako 会自动启动后台复查并展示复查模型 `Hanako · MiMo/GLM`、结论、发现与建议执行结论。
 - **Hanako 复查模型链路修正**: 自动复查优先使用 MiMo,GLM 作为低并发 fallback,避免 GLM 并发 429 导致复查卡住或显示“暂时没跑完”。
@@ -43,7 +45,9 @@
 - `npm run build:main`
 - `npm run build:renderer`
 - `npm run build:cli`
-- `npm test`（当前发布机 PTY 池耗尽，真 TTY 子集无法在本会话完成；非 PTY 测试、GUI/CLI/Agent gates 已通过）
+- `npm test -- --run tests/review-routes.test.js`
+- `npm test -- --run tests/model-manager-metadata.test.js desktop/src/react/settings/tabs/providers/ProviderModelList.test.ts`
+- `LYNN_INSTALLED_GATE_KEEP_TMP=1 node scripts/gate-installed-app.mjs`（已安装 GUI/server/CLI/settings/main-ui/live-vision/Hanako 并发复查全绿）
 - `npm run test:release:static`
 - `npm run test:release:ui`
 - `npm run gate:startup`
@@ -57,11 +61,13 @@
 
 ---
 
-> Release date: 2026-06-18 · Hanako automatic review + real GUI/CLI installed gate + tool fallback stability
+> Release date: 2026-06-18 · real vision gate + Hanako concurrent review stabilization + provider/context/streaming regression fixes
 
 ## English highlights
 
 - **Tool-success fallback summaries**: when complex tools such as vision, files, or search complete successfully but the model returns no final prose, Lynn now summarizes the retained tool evidence instead of only saying that operations ran.
+- **Real vision E2E added to the installed gate**: release gates now call the vision model from the installed app and verify the answer, preventing packaged-build drift.
+- **Hanako concurrent review stabilized**: auto-review prompts, timeout, and output budgets were tuned; the installed gate now verifies concurrent MiMo/GLM Hanako reviews.
 - **Edit-resend recovery fix**: clicking edit-resend while a turn is still processing, the socket is busy, or a send fails no longer leaves a stale replacement target that can affect the next normal prompt.
 - **Hanako automatic review fallback**: when the default model or a BYOK model returns no visible content, or a response needs verification, Hanako can start a background review and show the review model `Hanako · MiMo/GLM`, findings, conclusion, and suggested execution result.
 - **Hanako review model chain corrected**: automatic reviews prefer MiMo and use GLM as a low-concurrency fallback, avoiding GLM 429s that previously left reviews unfinished.

@@ -8,6 +8,118 @@
       "vision": true
     }
   },
+  "mimo": {
+    "mimo-v2.5-pro": {
+      "name": "MiMo V2.5 Pro",
+      "context": 262144,
+      "maxOutput": 64000,
+      "reasoning": true
+    },
+    "mimo-v2.5": {
+      "name": "MiMo V2.5",
+      "context": 262144,
+      "maxOutput": 32000,
+      "vision": true,
+      "reasoning": true
+    },
+    "mimo-v2-pro": {
+      "name": "MiMo V2 Pro",
+      "context": 262144,
+      "maxOutput": 32000,
+      "reasoning": true
+    },
+    "mimo-v2-omni": {
+      "name": "MiMo V2 Omni",
+      "context": 262144,
+      "maxOutput": 32000,
+      "vision": true,
+      "reasoning": true
+    }
+  },
+  "xiaomi": {
+    "mimo-v2.5-pro": {
+      "name": "MiMo V2.5 Pro",
+      "context": 262144,
+      "maxOutput": 64000,
+      "reasoning": true
+    },
+    "mimo-v2.5": {
+      "name": "MiMo V2.5",
+      "context": 262144,
+      "maxOutput": 32000,
+      "vision": true,
+      "reasoning": true
+    },
+    "mimo-v2-pro": {
+      "name": "MiMo V2 Pro",
+      "context": 262144,
+      "maxOutput": 32000,
+      "reasoning": true
+    },
+    "mimo-v2-omni": {
+      "name": "MiMo V2 Omni",
+      "context": 262144,
+      "maxOutput": 32000,
+      "vision": true,
+      "reasoning": true
+    }
+  },
+  "xiaomi-mimo": {
+    "mimo-v2.5-pro": {
+      "name": "MiMo V2.5 Pro",
+      "context": 262144,
+      "maxOutput": 64000,
+      "reasoning": true
+    },
+    "mimo-v2.5": {
+      "name": "MiMo V2.5",
+      "context": 262144,
+      "maxOutput": 32000,
+      "vision": true,
+      "reasoning": true
+    },
+    "mimo-v2-pro": {
+      "name": "MiMo V2 Pro",
+      "context": 262144,
+      "maxOutput": 32000,
+      "reasoning": true
+    },
+    "mimo-v2-omni": {
+      "name": "MiMo V2 Omni",
+      "context": 262144,
+      "maxOutput": 32000,
+      "vision": true,
+      "reasoning": true
+    }
+  },
+  "token-plan": {
+    "mimo-v2.5-pro": {
+      "name": "MiMo V2.5 Pro",
+      "context": 262144,
+      "maxOutput": 64000,
+      "reasoning": true
+    },
+    "mimo-v2.5": {
+      "name": "MiMo V2.5",
+      "context": 262144,
+      "maxOutput": 32000,
+      "vision": true,
+      "reasoning": true
+    },
+    "mimo-v2-pro": {
+      "name": "MiMo V2 Pro",
+      "context": 262144,
+      "maxOutput": 32000,
+      "reasoning": true
+    },
+    "mimo-v2-omni": {
+      "name": "MiMo V2 Omni",
+      "context": 262144,
+      "maxOutput": 32000,
+      "vision": true,
+      "reasoning": true
+    }
+  },
   "dashscope": {
     "qwen3.5-plus": {
       "name": "Qwen 3.5 Plus",

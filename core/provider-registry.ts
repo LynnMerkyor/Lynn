@@ -574,10 +574,19 @@ export class ProviderRegistry {
     const canonicalId = this._canonicalProviderId(providerId);
     const userConfig = this._loadAddedModels();
     const nextData = { ...data };
+    const existing = userConfig[canonicalId] || {};
     if (nextData.api_key === SAVED_API_KEY_SENTINEL) {
       delete nextData.api_key;
     }
-    userConfig[canonicalId] = { ...(userConfig[canonicalId] || {}), ...nextData };
+    if (
+      Array.isArray(nextData.models)
+      && nextData.models.length === 0
+      && Array.isArray(existing.models)
+      && existing.models.length > 0
+    ) {
+      delete nextData.models;
+    }
+    userConfig[canonicalId] = { ...existing, ...nextData };
     this._saveAddedModels(userConfig);
     this._entries.clear();
   }

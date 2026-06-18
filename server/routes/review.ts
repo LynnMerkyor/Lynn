@@ -311,9 +311,13 @@ const MAX_SESSION_LINES = 120;
 const MAX_TOOL_ITEMS = 10;
 const REVIEW_EXEC_TIMEOUT_MS = 45_000;
 const REVIEW_FALLBACK_TIMEOUT_MS = 22_000;
-const AUTO_REVIEW_EXEC_TIMEOUT_MS = Number(process.env.LYNN_AUTO_REVIEW_TIMEOUT_MS || 18_000);
-const AUTO_REVIEW_FALLBACK_TIMEOUT_MS = Number(process.env.LYNN_AUTO_REVIEW_FALLBACK_TIMEOUT_MS || 12_000);
-const AUTO_REVIEW_MAX_OUTPUT_TOKENS = Math.max(600, Math.min(1200, Number(process.env.LYNN_AUTO_REVIEW_MAX_TOKENS || 1200)));
+const AUTO_REVIEW_EXEC_TIMEOUT_MS = Number(process.env.LYNN_AUTO_REVIEW_TIMEOUT_MS || 35_000);
+const AUTO_REVIEW_FALLBACK_TIMEOUT_MS = Number(process.env.LYNN_AUTO_REVIEW_FALLBACK_TIMEOUT_MS || 18_000);
+const AUTO_REVIEW_CHAIN_TIMEOUT_MS = Math.max(
+  AUTO_REVIEW_EXEC_TIMEOUT_MS + AUTO_REVIEW_FALLBACK_TIMEOUT_MS + 15_000,
+  AUTO_REVIEW_EXEC_TIMEOUT_MS * 3,
+);
+const AUTO_REVIEW_MAX_OUTPUT_TOKENS = Math.max(1200, Math.min(2400, Number(process.env.LYNN_AUTO_REVIEW_MAX_TOKENS || 2000)));
 const AUTO_REVIEW_MODEL_LABEL = "Hanako · MiMo/GLM";
 const AUTO_REVIEW_FALLBACK_PROVIDERS = new Set(["mimo", "xiaomi", "xiaomi-mimo", "token-plan", "zhipu", "zhipu-coding", "brain"]);
 const AUTO_REVIEW_MIMO_PROVIDERS = new Set(["mimo", "xiaomi", "xiaomi-mimo", "token-plan"]);
@@ -382,6 +386,20 @@ function buildReviewSystemAppend(options: { autoReview?: boolean; reviewMode?: s
   const autoReview = !!options.autoReview;
   const fallbackMode = options.reviewMode === "fallback";
   if (isZh()) {
+    if (autoReview) {
+      return [
+        "你是 Hanako 自动复查员。请用中文简洁复查另一个回答。",
+        "重点检查：事实、数字、日期、工具证据、明显遗漏、空答或工具成功但无总结。",
+        fallbackMode
+          ? "原回答可能为空或不完整；证据足够时给出简短替代答案，证据不足时明确说明缺口。"
+          : "不要重写原回答；没有问题就直接说通过。",
+        "先给自然语言结论，随后追加一个 ```json 代码块。",
+        "JSON 结构必须是 { summary, verdict, findings, nextStep? }。",
+        "verdict 只能是 pass / concerns / blocker。",
+        "findings 是数组；每项包含 severity(high|medium|low), title, detail, suggestion?。",
+        "最多 5 条要点。",
+      ].filter(Boolean).join("\n");
+    }
     const lines = [
       "你现在是 Review 角色。另一个 Agent 刚刚完成了一项任务，用户请求你复查。",
       "",
@@ -410,6 +428,21 @@ function buildReviewSystemAppend(options: { autoReview?: boolean; reviewMode?: s
       "- 语气：像一个认真但友善的同事在帮忙把关",
     ];
     return lines.join("\n");
+  }
+
+  if (autoReview) {
+    return [
+      "You are Hanako, an automatic reviewer. Review the other answer concisely.",
+      "Check facts, numbers, dates, tool evidence, obvious omissions, empty answers, and cases where tools succeeded but no summary was given.",
+      fallbackMode
+        ? "The source answer may be empty or incomplete. If evidence is enough, provide a short substitute answer; otherwise state what is missing."
+        : "Do not rewrite the whole answer. If it looks fine, say it passes.",
+      "First provide a natural-language conclusion, then append one strict ```json code block.",
+      "JSON shape: { summary, verdict, findings, nextStep? }.",
+      "verdict must be pass / concerns / blocker.",
+      "findings must be an array; each item includes severity(high|medium|low), title, detail, suggestion?.",
+      "Use at most 5 bullets.",
+    ].filter(Boolean).join("\n");
   }
 
   return [
@@ -1522,7 +1555,7 @@ export async function startReviewRun(
               fallbackTimeoutMs: AUTO_REVIEW_FALLBACK_TIMEOUT_MS,
               autoReview,
               reviewMode,
-              signal: AbortSignal.timeout(AUTO_REVIEW_EXEC_TIMEOUT_MS),
+              signal: AbortSignal.timeout(AUTO_REVIEW_CHAIN_TIMEOUT_MS),
             },
           )
         : await runReviewerSessionWithFallback(

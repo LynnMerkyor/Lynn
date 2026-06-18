@@ -395,9 +395,6 @@ function isRetiredHanakoModelId(modelId: unknown): boolean {
   const tail = normalized.includes("/") ? normalized.split("/").pop() || normalized : normalized;
 
   if (tail === "token-plan-cn") return true;
-  if (/^mimo-v2\.5(?:[-_.]|$)/i.test(tail)) return true;
-  if (/^mimo-v2-omni(?:[-_.]|$)/i.test(tail)) return true;
-  if (/^xiaomi-mimo-v2\.5(?:[-_.]|$)/i.test(tail)) return true;
   return false;
 }
 

@@ -17,6 +17,8 @@ interface DiscoveredModel {
   name?: string;
   context?: number | null;
   maxOutput?: number | null;
+  vision?: boolean | null;
+  reasoning?: boolean | null;
 }
 
 type ProviderModelEntry = string | {
@@ -25,6 +27,8 @@ type ProviderModelEntry = string | {
   displayName?: string;
   context?: number | null;
   maxOutput?: number | null;
+  vision?: boolean | null;
+  reasoning?: boolean | null;
 };
 
 function modelEntryId(entry: ProviderModelEntry): string {
@@ -38,6 +42,27 @@ function modelEntryMeta(entry: ProviderModelEntry | undefined): Partial<Discover
     name: entry.name || entry.displayName,
     context: entry.context,
     maxOutput: entry.maxOutput,
+    vision: entry.vision,
+    reasoning: entry.reasoning,
+  };
+}
+
+function modelEntryFromDiscovery(model: DiscoveredModel | undefined, fallbackId: string): ProviderModelEntry {
+  const id = String(model?.id || fallbackId || '').trim();
+  if (!id) return fallbackId;
+  const hasMetadata = Boolean(model?.name)
+    || model?.context != null
+    || model?.maxOutput != null
+    || typeof model?.vision === 'boolean'
+    || typeof model?.reasoning === 'boolean';
+  if (!hasMetadata) return id;
+  return {
+    id,
+    name: model?.name,
+    context: model?.context ?? null,
+    maxOutput: model?.maxOutput ?? null,
+    vision: typeof model?.vision === 'boolean' ? model.vision : null,
+    reasoning: typeof model?.reasoning === 'boolean' ? model.reasoning : null,
   };
 }
 
@@ -102,16 +127,7 @@ export function buildAutoRegisteredModelEntries({
     const id = String(model?.id || '').trim();
     if (!id || removedSet.has(id) || seen.has(id)) continue;
     seen.add(id);
-    if (model.name || model.context || model.maxOutput) {
-      entries.push({
-        id,
-        name: model.name,
-        context: model.context ?? null,
-        maxOutput: model.maxOutput ?? null,
-      });
-    } else {
-      entries.push(id);
-    }
+    entries.push(modelEntryFromDiscovery(model, id));
   }
   return entries;
 }
@@ -156,11 +172,13 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
   const addModelToProvider = async (mid: string) => {
     if (currentModels.includes(mid)) return;
     const nextRemoved = nextRemovedModelsAfterAdd(summary.removed_models, mid);
+    const discovered = discoveredModels.find((model) => model.id === mid);
+    const nextEntry = modelEntryFromDiscovery(discovered, mid);
     try {
       await hanaFetch('/api/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providers: { [providerId]: { models: [...currentModelEntries, mid], removed_models: nextRemoved } } }),
+        body: JSON.stringify({ providers: { [providerId]: { models: [...currentModelEntries, nextEntry], removed_models: nextRemoved } } }),
       });
       await onRefresh();
       notifyModelsChanged();

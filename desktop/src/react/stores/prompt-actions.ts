@@ -124,7 +124,7 @@ function countSessionMessages(sessionPath: string): number {
   return items.reduce((count: number, item: any) => count + (item?.type === 'message' ? 1 : 0), 0);
 }
 
-function waitForPromptAccepted(clientMessageId: string, sessionPath: string, timeoutMs = 2500): Promise<boolean> {
+function waitForPromptAccepted(clientMessageId: string, sessionPath: string, timeoutMs = 8000): Promise<boolean> {
   return new Promise((resolve) => {
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;

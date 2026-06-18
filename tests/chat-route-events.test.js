@@ -102,6 +102,56 @@ describe("chat route event forwarding", () => {
     expect(hub.send).toHaveBeenCalled();
   });
 
+  it("releases a stale stream before accepting and rewinding an edit-resend prompt", async () => {
+    const order = [];
+    engine.isSessionStreaming = vi.fn(() => true);
+    engine.abortSessionByPath = vi.fn(async () => {
+      order.push("abort");
+      return true;
+    });
+    engine.truncateSessionBeforeVisibleMessage = vi.fn(async () => {
+      order.push("truncate");
+      return { ok: true };
+    });
+    hub.send = vi.fn(() => {
+      order.push("send");
+      return new Promise(() => {});
+    });
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    const client = connections[0].client;
+    client.send = vi.fn(function send(payload) {
+      const event = JSON.parse(payload);
+      this.sent.push(event);
+      if (event.type === "prompt_accepted" || event.type === "turn_end" || event.type === "status") {
+        order.push(event.type);
+      }
+    });
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({
+        type: "prompt",
+        text: "基于上面的工具结果直接总结",
+        replaceFromMessageId: "user-1718000000000",
+        replaceFromMessageIndex: 2,
+      }),
+    }, client);
+    await waitForAsyncHandlers();
+
+    expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+    expect(engine.truncateSessionBeforeVisibleMessage).toHaveBeenCalledWith("/sessions/current.jsonl", "2");
+    expect(hub.send).toHaveBeenCalled();
+    expect(order.indexOf("abort")).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf("truncate")).toBeGreaterThan(order.indexOf("abort"));
+    expect(order.indexOf("prompt_accepted")).toBeGreaterThan(order.indexOf("truncate"));
+    expect(order.indexOf("send")).toBeGreaterThan(order.indexOf("prompt_accepted"));
+    expect(client.sent).not.toContainEqual(expect.objectContaining({
+      type: "error",
+      message: expect.stringContaining("still"),
+    }));
+  });
+
   it("does not append a prompt when edit-resend cannot find the target message", async () => {
     engine.truncateSessionBeforeVisibleMessage.mockResolvedValueOnce({ ok: false, reason: "message-not-found" });
     hub.send = vi.fn(() => new Promise(() => {}));

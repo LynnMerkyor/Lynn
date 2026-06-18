@@ -118,11 +118,15 @@ export function OtherModelsSection({ providers }: { providers: Record<string, { 
 
   // 根据 model ID 反查所属 provider
   const resolveProvider = (modelId: string): string | null => {
-    if (isBrainModelId(modelId) && (providers[BRAIN_PROVIDER_ID]?.models || []).includes(modelId)) {
+    const hasModel = (models: unknown) => Array.isArray(models) && models.some((entry) => {
+      if (typeof entry === 'string') return entry === modelId;
+      return typeof (entry as { id?: unknown })?.id === 'string' && (entry as { id: string }).id === modelId;
+    });
+    if (isBrainModelId(modelId) && hasModel(providers[BRAIN_PROVIDER_ID]?.models)) {
       return BRAIN_PROVIDER_ID;
     }
     for (const [name, p] of Object.entries(providers)) {
-      if ((p.models || []).includes(modelId)) return name;
+      if (hasModel(p.models)) return name;
     }
     return null;
   };

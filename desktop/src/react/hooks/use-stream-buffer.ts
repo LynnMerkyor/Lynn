@@ -36,6 +36,7 @@ interface Buffer {
   lastRenderedText: string;
   lastRenderedHtml: string;
   lastRenderedFinalized: boolean;
+  markdownWarmupStarted: boolean;
   activeMessageId: string | null;
   streamId: string | null;
   lastEndedStreamId: string | null;
@@ -61,6 +62,7 @@ function createBuffer(sessionPath: string): Buffer {
     lastRenderedText: '',
     lastRenderedHtml: '',
     lastRenderedFinalized: false,
+    markdownWarmupStarted: false,
     activeMessageId: null,
     streamId: null,
     lastEndedStreamId: null,
@@ -226,6 +228,7 @@ class StreamBufferManager {
     buf.lastRenderedText = '';
     buf.lastRenderedHtml = '';
     buf.lastRenderedFinalized = false;
+    buf.markdownWarmupStarted = false;
     buf.activeMessageId = null;
     buf.streamId = nextStreamId;
     buf.pendingModelHint = null;
@@ -313,7 +316,7 @@ class StreamBufferManager {
           buf.lastRenderedText = displayText;
           buf.lastRenderedFinalized = finalizeText;
           const renderMarkdown = getCachedRenderMarkdown();
-          if (finalizeText && renderMarkdown) {
+          if (renderMarkdown) {
             buf.lastRenderedHtml = renderMarkdown(displayText);
           } else {
             buf.lastRenderedHtml = renderStreamingTextHtml(displayText);
@@ -381,6 +384,20 @@ class StreamBufferManager {
       case 'text_delta':
         this.ensureMessage(buf);
         buf.textAcc += msg.delta || '';
+        if (!buf.markdownWarmupStarted) {
+          buf.markdownWarmupStarted = true;
+          const warmupSessionPath = buf.sessionPath;
+          void loadRenderMarkdown()
+            .then(() => {
+              const latestBuf = this.buffers.get(warmupSessionPath);
+              if (!latestBuf || latestBuf !== buf || !latestBuf.textAcc) return;
+              latestBuf.lastRenderedText = '';
+              this.flush(latestBuf);
+            })
+            .catch((err) => {
+              console.warn('[stream] markdown warmup failed:', err);
+            });
+        }
         this.scheduleFlush(buf);
         break;
 

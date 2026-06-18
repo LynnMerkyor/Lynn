@@ -28,7 +28,9 @@ function detectDeveloperId() {
 }
 const DEFAULT_IDENTITY = detectDeveloperId() || "-";
 const IDENTITY = process.env.CODESIGN_IDENTITY || DEFAULT_IDENTITY;
-const TIMESTAMP = IDENTITY === "-" || process.env.LYNN_CODESIGN_TIMESTAMP === "0" ? "" : "--timestamp";
+const TIMESTAMP = IDENTITY === "-" ? "" : process.env.LYNN_CODESIGN_TIMESTAMP === "0" ? "--timestamp=none" : "--timestamp";
+const NO_TIMESTAMP = IDENTITY === "-" ? "" : "--timestamp=none";
+const REQUIRE_TIMESTAMP = process.env.LYNN_CODESIGN_REQUIRE_TIMESTAMP === "1";
 const KEYCHAIN_FLAG = CODESIGN_KEYCHAIN && IDENTITY !== "-" ? `--keychain "${CODESIGN_KEYCHAIN}"` : "";
 const RUNTIME_FLAG = IDENTITY === "-" ? "" : "--options runtime";
 
@@ -44,7 +46,7 @@ function sign(target, opts = "") {
   const base = `codesign ${KEYCHAIN_FLAG} --sign "${IDENTITY}" --force`;
   const suffix = `${RUNTIME_FLAG} ${opts} "${target}"`;
   const command = `${base} ${TIMESTAMP} ${suffix}`;
-  const fallback = `${base} ${suffix}`;
+  const fallback = `${base} ${NO_TIMESTAMP} ${suffix}`;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       execSync(command, { stdio: "pipe" });
@@ -54,6 +56,9 @@ function sign(target, opts = "") {
       if (!/timestamp service is not available|timestamp/i.test(detail) || !TIMESTAMP || attempt === 3) {
         if (detail.trim()) process.stderr.write(detail);
         if (TIMESTAMP && /timestamp/i.test(detail)) {
+          if (REQUIRE_TIMESTAMP) {
+            throw err;
+          }
           console.warn(`[sign-local] timestamp failed for ${target}; retrying once without timestamp`);
           execSync(fallback, { stdio: "inherit" });
           return;

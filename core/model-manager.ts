@@ -22,6 +22,7 @@ import { findModel } from "../shared/model-ref.js";
 import { isLocalBaseUrl } from "../shared/net-utils.js";
 import { syncModels } from "./model-sync.js";
 import { BRAIN_PROVIDER_ID } from "../shared/brain-provider.js";
+import { lookupKnown } from "../shared/known-models.js";
 import type {
   LLMApi,
   ModelId,
@@ -41,6 +42,13 @@ interface AgentConfig {
 }
 
 type SharedUtilityModels = Partial<Record<"utility" | "utility_large" | "summarizer" | "compiler", string>>;
+type RawModelEntry = NonNullable<ProviderConfig["models"]>[number];
+type KnownModelMetadata = {
+  context?: number;
+  maxOutput?: number;
+  vision?: boolean;
+  reasoning?: boolean;
+};
 
 interface UtilityApiOverride {
   provider?: string;
@@ -150,21 +158,57 @@ export class ModelManager {
     // 但用户只想看自己配置的模型。用 added-models.yaml 的模型列表过滤。
     const rawProviders = this.providerRegistry.getAllProvidersRaw();
     const userModelSets = new Map<string, Set<string>>();
+    const rawModelEntries = new Map<string, RawModelEntry>();
     for (const [name, raw] of Object.entries(rawProviders)) {
       if (!raw.models?.length) continue;
       const ids = new Set(raw.models.map(m => typeof m === "object" ? m.id : m));
       userModelSets.set(name, ids);
+      for (const model of raw.models) {
+        const id = typeof model === "object" ? model.id : model;
+        rawModelEntries.set(`${name}\u0000${id}`, model);
+      }
       // OAuth provider 的 authJsonKey 可能不同于 provider ID
       const authKey = this.providerRegistry.getAuthJsonKey(name);
-      if (authKey !== name) userModelSets.set(authKey, ids);
+      if (authKey !== name) {
+        userModelSets.set(authKey, ids);
+        for (const model of raw.models) {
+          const id = typeof model === "object" ? model.id : model;
+          rawModelEntries.set(`${authKey}\u0000${id}`, model);
+        }
+      }
     }
     this._availableModels = allModels.filter((m) => {
       const allowed = userModelSets.get(m.provider);
       // 没有在 added-models.yaml 里的 provider → 全部放行（兼容未知来源）
       if (!allowed) return true;
       return allowed.has(m.id);
-    });
+    }).map((m) => this._enrichModelMetadata(m, rawModelEntries.get(`${m.provider}\u0000${m.id}`)));
     return this._availableModels;
+  }
+
+  _enrichModelMetadata(model: ResolvedModel, rawEntry?: RawModelEntry): ResolvedModel {
+    const raw = typeof rawEntry === "object" && rawEntry !== null ? rawEntry : null;
+    const known = lookupKnown(model.provider, model.id) as KnownModelMetadata | null;
+    const rawVision = typeof raw?.vision === "boolean" ? raw.vision : undefined;
+    const rawReasoning = typeof raw?.reasoning === "boolean" ? raw.reasoning : undefined;
+    const hasImageInput = Array.isArray((model as { input?: unknown }).input)
+      && ((model as { input?: unknown[] }).input || []).includes("image");
+    const vision = rawVision ?? (model.vision === true || hasImageInput || known?.vision === true);
+    const reasoning = rawReasoning ?? (model.reasoning === true || known?.reasoning === true);
+    const input = Array.isArray((model as { input?: unknown }).input)
+      ? [...((model as { input?: Array<"text" | "image"> }).input || [])]
+      : ["text" as const];
+    if (vision && !input.includes("image")) input.push("image");
+    if (!input.includes("text")) input.unshift("text");
+
+    return {
+      ...model,
+      input,
+      vision,
+      reasoning,
+      contextWindow: raw?.context || known?.context || model.contextWindow || null,
+      maxTokens: raw?.maxOutput || known?.maxOutput || model.maxTokens || null,
+    };
   }
 
   /**

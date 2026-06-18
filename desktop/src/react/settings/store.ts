@@ -89,7 +89,15 @@ export function getProviderSummaryStatus(summary: ProviderSummaryStatusInput): P
 }
 
 export interface ProviderConfig extends Record<string, unknown> {
-  models?: string[];
+  models?: Array<string | {
+    id?: string;
+    name?: string;
+    displayName?: string;
+    context?: number | null;
+    maxOutput?: number | null;
+    vision?: boolean | null;
+    reasoning?: boolean | null;
+  }>;
   base_url?: string;
   api_key?: string;
   api?: string;

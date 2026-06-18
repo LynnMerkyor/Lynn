@@ -119,7 +119,10 @@ function resolvePreferredProviderId(
 
   const providers = config.providers || {};
   for (const [providerId, providerConfig] of Object.entries(providers)) {
-    if (Array.isArray(providerConfig?.models) && providerConfig.models.includes(chatModelId)) {
+    if (Array.isArray(providerConfig?.models) && providerConfig.models.some((entry: unknown) => {
+      if (typeof entry === "string") return entry === chatModelId;
+      return !!entry && typeof entry === "object" && (entry as { id?: unknown }).id === chatModelId;
+    })) {
       return providerId;
     }
   }

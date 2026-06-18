@@ -19,6 +19,7 @@ const SCENARIOS = [
   { id: "home", expect: ["Lynn"] },
   { id: "short", expect: ["UI_SMOKE_SHORT_OK"] },
   { id: "tools", expect: ["UI_SMOKE_TOOL_CARD", "reports/summary.md"] },
+  { id: "image-tool-empty", expect: ["UI_SMOKE_IMAGE_TOOL", "image_analyze", "编辑重发"] },
   { id: "long-code", expect: ["UI_SMOKE_LONG_CODE", "calculateTotal"] },
 ];
 

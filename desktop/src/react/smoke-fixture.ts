@@ -2,7 +2,7 @@ import { useStore } from './stores';
 import { renderMarkdown } from './utils/markdown';
 import type { ChatListItem, ChatMessage, ContentBlock } from './stores/chat-types';
 
-type SmokeScenario = 'home' | 'short' | 'tools' | 'long-code';
+type SmokeScenario = 'home' | 'short' | 'tools' | 'image-tool-empty' | 'long-code';
 
 declare global {
   interface Window {
@@ -24,15 +24,30 @@ function textBlock(markdown: string): ContentBlock {
   return { type: 'text', html: renderMarkdown(markdown), plainText: markdown };
 }
 
-function userMessage(id: string, text: string): ChatListItem {
+const TINY_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p94AAAAASUVORK5CYII=';
+
+function userMessage(id: string, text: string, options?: {
+  image?: boolean;
+  visibleIndex?: number;
+}): ChatListItem {
   return {
     type: 'message',
     data: {
       id,
+      visibleIndex: options?.visibleIndex,
       role: 'user',
       text,
       textHtml: renderMarkdown(text),
       requestText: text,
+      requestImages: options?.image ? [{ type: 'image', data: TINY_PNG, mimeType: 'image/png' }] : undefined,
+      attachments: options?.image ? [{
+        path: '/tmp/ui-smoke-image.png',
+        name: 'ui-smoke-image.png',
+        isDir: false,
+        base64Data: TINY_PNG,
+        mimeType: 'image/png',
+      }] : undefined,
       timestamp: Date.now(),
     },
   };
@@ -96,6 +111,33 @@ function itemsForScenario(scenario: SmokeScenario): ChatListItem[] {
           rollbackId: 'ui-smoke-rollback',
         },
         textBlock('已完成整理，并生成 `reports/summary.md`。UI_SMOKE_TOOL_CARD'),
+      ]),
+    ];
+  }
+
+  if (scenario === 'image-tool-empty') {
+    return [
+      userMessage('ui-smoke-image-tool-user', 'UI_SMOKE_IMAGE_TOOL：请看这张图并总结要点。', {
+        image: true,
+        visibleIndex: 0,
+      }),
+      assistantMessage('ui-smoke-image-tool-assistant', [
+        {
+          type: 'tool_group',
+          collapsed: false,
+          tools: [
+            {
+              name: 'image_analyze',
+              args: { prompt: 'UI_SMOKE_IMAGE_TOOL：请看这张图并总结要点。' },
+              done: true,
+              success: true,
+              startedAt: Date.now() - 1400,
+              summary: {
+                outputPreview: '图像分析工具执行成功，但模型没有返回总结回复。',
+              },
+            },
+          ],
+        },
       ]),
     ];
   }

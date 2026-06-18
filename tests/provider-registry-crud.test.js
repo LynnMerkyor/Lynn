@@ -452,6 +452,34 @@ describe("saveProvider", () => {
     });
   });
 
+  it("保存凭证配置误带空 models 时保留已有模型列表", () => {
+    writeAddedModels({
+      "test-provider": {
+        api_key: "sk-old",
+        base_url: "https://old.api.com/v1",
+        api: "openai-completions",
+        models: [
+          "model-a",
+          { id: "model-b", name: "Model B", vision: true },
+        ],
+      },
+    });
+    const reg = makeRegistry();
+    reg.saveProvider("test-provider", {
+      api_key: "__saved__",
+      base_url: "https://new.api.com/v1",
+      api: "openai-completions",
+      models: [],
+    });
+
+    const persisted = readAddedModels();
+    expect(persisted["test-provider"].models).toEqual([
+      "model-a",
+      { id: "model-b", name: "Model B", vision: true },
+    ]);
+    expect(reg.getProviderModels("test-provider")).toEqual(["model-a", "model-b"]);
+  });
+
   it("保存 __saved__ 占位符时保留已有 API Key", () => {
     writeAddedModels({
       "test-provider": {

@@ -65,14 +65,17 @@ function buildModelEntry(modelEntry: ProviderModelConfig, provider: ProviderId):
   const id = isObj ? modelEntry.id : modelEntry;
   const known = lookupKnown(provider, id) as KnownModelMetadata | null;
 
-  const vision = known?.vision === true;
+  const explicitVision = isObj && typeof modelEntry.vision === "boolean" ? modelEntry.vision : undefined;
+  const explicitReasoning = isObj && typeof modelEntry.reasoning === "boolean" ? modelEntry.reasoning : undefined;
+  const vision = explicitVision ?? (known?.vision === true);
+  const reasoning = explicitReasoning ?? (known?.reasoning === true);
   const entry: ModelsJsonModelEntry = {
     id,
     name: (isObj && modelEntry.name) || known?.name || humanizeName(id),
     input: vision ? ["text", "image"] : ["text"],
     contextWindow: (isObj && modelEntry.context) || known?.context || DEFAULT_CONTEXT_WINDOW,
     vision,
-    reasoning: known?.reasoning === true,
+    reasoning,
   };
 
   const maxOutput = (isObj && modelEntry.maxOutput) || known?.maxOutput;

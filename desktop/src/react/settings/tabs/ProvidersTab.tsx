@@ -191,7 +191,10 @@ function resolvePreferredProviderId(settingsConfig: SettingsConfig | null): stri
 
   const providers = settingsConfig.providers || {};
   for (const [providerId, providerConfig] of Object.entries(providers)) {
-    if ((providerConfig?.models || []).includes(chatModelId)) return providerId;
+    if ((providerConfig?.models || []).some((entry) => {
+      if (typeof entry === 'string') return entry === chatModelId;
+      return typeof entry?.id === 'string' && entry.id === chatModelId;
+    })) return providerId;
   }
 
   return null;

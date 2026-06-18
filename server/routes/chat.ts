@@ -429,33 +429,8 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
                 wsSend(ws, { type: "error", message: t("error.noActiveSession") });
                 return;
               }
-              const replaceFromMessageId = msg.replaceFromMessageId != null
-                ? String(msg.replaceFromMessageId || "").trim()
-                : "";
-              if (replaceFromMessageId) {
-                const replaceFromMessageIndex = Number.isInteger(Number(msg.replaceFromMessageIndex)) && Number(msg.replaceFromMessageIndex) >= 0
-                  ? String(Number(msg.replaceFromMessageIndex))
-                  : replaceFromMessageId;
-                const result = await Promise.resolve(
-                  engine.truncateSessionBeforeVisibleMessage?.(promptSessionPath, replaceFromMessageIndex),
-                );
-                if (!result?.ok) {
-                  debugLog()?.warn("ws", `edit-resend rewind failed · session=${promptSessionPath} · reason=${result?.reason || "unknown"}`);
-                  wsSend(ws, {
-                    type: "error",
-                    message: "无法定位要编辑的历史消息，请重新打开会话后再试。",
-                    sessionPath: promptSessionPath,
-                  });
-                  return;
-                }
-              }
               const { promptText } = normalizePromptRequest(msg, promptSessionPath, { locale: getLocale() });
               debugLog()?.log("ws", `user message (${promptText.length} chars, ${msg.images?.length || 0} images)`);
-              wsSend(ws, {
-                type: "prompt_accepted",
-                sessionPath: promptSessionPath,
-                clientMessageId: msg.clientMessageId || null,
-              });
               const engineStreaming = engine.isSessionStreaming(promptSessionPath);
               if (engineStreaming || ss?.isStreaming) {
                 const isLegacySyntheticStream = ss?.streamSource === "internal_retry";
@@ -476,6 +451,31 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
                   return;
                 }
               }
+              const replaceFromMessageId = msg.replaceFromMessageId != null
+                ? String(msg.replaceFromMessageId || "").trim()
+                : "";
+              if (replaceFromMessageId) {
+                const replaceFromMessageIndex = Number.isInteger(Number(msg.replaceFromMessageIndex)) && Number(msg.replaceFromMessageIndex) >= 0
+                  ? String(Number(msg.replaceFromMessageIndex))
+                  : replaceFromMessageId;
+                const result = await Promise.resolve(
+                  engine.truncateSessionBeforeVisibleMessage?.(promptSessionPath, replaceFromMessageIndex),
+                );
+                if (!result?.ok) {
+                  debugLog()?.warn("ws", `edit-resend rewind failed · session=${promptSessionPath} · reason=${result?.reason || "unknown"}`);
+                  wsSend(ws, {
+                    type: "error",
+                    message: "无法定位要编辑的历史消息，请重新打开会话后再试。",
+                    sessionPath: promptSessionPath,
+                  });
+                  return;
+                }
+              }
+              wsSend(ws, {
+                type: "prompt_accepted",
+                sessionPath: promptSessionPath,
+                clientMessageId: msg.clientMessageId || null,
+              });
               await runPromptTurn({
                 ws,
                 msg,

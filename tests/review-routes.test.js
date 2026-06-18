@@ -192,7 +192,7 @@ describe('review route', () => {
     }));
   });
 
-  it('starts automatic Hanako review with a short output cap and review metadata', async () => {
+  it('starts automatic Hanako review with a bounded output cap and review metadata', async () => {
     await app.request('/api/review/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -223,7 +223,7 @@ describe('review route', () => {
       expect.objectContaining({
         model: 'mimo-v2.5-pro',
         provider: 'mimo',
-        maxTokens: 1200,
+        maxTokens: 2000,
         reasoning: false,
         quirks: ['enable_thinking'],
       }),

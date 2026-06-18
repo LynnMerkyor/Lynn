@@ -157,6 +157,36 @@ describe("model sync related routes", () => {
     expect(allData.models[0].name).toBe("Gpt 5.4");
   });
 
+  it("model set refreshes the registry before applying the current model", async () => {
+    const { createModelsRoute } = await import("../server/routes/models.js");
+    const calls = [];
+    const app = new Hono();
+    const engine = {
+      availableModels: [],
+      currentModel: { id: "deepseek-v4-flash", provider: "deepseek", name: "DeepSeek V4 Flash" },
+      config: {},
+      refreshAvailableModels: vi.fn(async () => { calls.push("refresh"); }),
+      setPendingModel: vi.fn(async () => { calls.push("set"); }),
+      resolveModelOverrides: vi.fn((model) => model),
+      resolveProviderCredentials: vi.fn(() => ({})),
+      authStorage: { get: vi.fn(), getApiKey: vi.fn() },
+      providerRegistry: { get: vi.fn() },
+    };
+
+    app.route("/api", createModelsRoute(engine));
+
+    const res = await app.request("/api/models/set", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "deepseek", modelId: "deepseek-v4-flash" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(engine.refreshAvailableModels).toHaveBeenCalledTimes(1);
+    expect(engine.setPendingModel).toHaveBeenCalledWith("deepseek-v4-flash", "deepseek");
+    expect(calls).toEqual(["refresh", "set"]);
+  });
+
   it("provider fetch prefers Pi registry models for oauth providers", async () => {
     const { createProvidersRoute } = await import("../server/routes/providers.js");
     const app = new Hono();
@@ -366,7 +396,7 @@ describe("model sync related routes", () => {
         api_key: "sk-test",
         removed_models: ["deepseek-chat"],
         models: [
-          { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro Custom", context: 262144, maxOutput: 32768 },
+          { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro Custom", context: 262144, maxOutput: 32768, vision: true, reasoning: true },
         ],
       },
     };
@@ -395,7 +425,7 @@ describe("model sync related routes", () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.providers.deepseek.models).toEqual([
-      { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro Custom", context: 262144, maxOutput: 32768 },
+      { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro Custom", context: 262144, maxOutput: 32768, vision: true, reasoning: true },
     ]);
     expect(data.providers.deepseek.custom_models).toEqual(["deepseek-v4-flash"]);
     expect(data.providers.deepseek.removed_models).toEqual(["deepseek-chat"]);

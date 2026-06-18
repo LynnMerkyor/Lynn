@@ -217,6 +217,12 @@ async function writeYaml(filePath, value) {
   await fs.writeFile(filePath, YAML.dump(value), "utf-8");
 }
 
+async function writeJsonl(filePath, entries) {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  const body = entries.map((entry) => JSON.stringify(entry)).join("\n");
+  await fs.writeFile(filePath, `${body}\n`, "utf-8");
+}
+
 async function waitForFile(filePath, child, logs, timeoutMs = 45000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -315,12 +321,6 @@ async function main() {
     const serverInfoPath = path.join(lynnHome, "server-info.json");
     await waitForFile(serverInfoPath, child, logs);
     const serverInfo = JSON.parse(await fs.readFile(serverInfoPath, "utf-8"));
-    await postJson(
-      `http://127.0.0.1:${serverInfo.port}/api/sessions/new`,
-      { cwd: ROOT, memoryEnabled: false },
-      { Authorization: `Bearer ${serverInfo.token}` },
-      30000,
-    );
     const page = await waitForDebugPage(debugPort, (item) => String(item.url || "").includes("index.html"));
     cdp = new CdpClient(page.webSocketDebuggerUrl);
     await cdp.open();
@@ -386,10 +386,10 @@ async function main() {
     within("inputWrapper", baseLayout.wrapper, { minWidth: 300, minHeight: 80 });
     within("textarea", baseLayout.textarea, { minWidth: 220, minHeight: 30 });
     within("bottomBar", baseLayout.bottomBar, { minWidth: 300, minHeight: 38 });
-    within("modelButton", baseLayout.modelButton, { minWidth: 90, minHeight: 28 });
-    within("taskButton", baseLayout.taskButton, { minWidth: 60, minHeight: 28 });
-    within("deepResearch", baseLayout.deepResearch, { minWidth: 54, minHeight: 28 });
-    within("execMode", baseLayout.execMode, { minWidth: 70, minHeight: 28 });
+    within("modelButton", baseLayout.modelButton, { minWidth: 80, minHeight: 28 });
+    within("taskButton", baseLayout.taskButton, { minWidth: 60, minHeight: 20 });
+    within("deepResearch", baseLayout.deepResearch, { minWidth: 54, minHeight: 20 });
+    within("execMode", baseLayout.execMode, { minWidth: 70, minHeight: 20 });
     within("sendButton", baseLayout.sendButton, { minWidth: 34, minHeight: 34 });
     if (!baseLayout.hasAttach) failures.push("attach button missing");
     if (!baseLayout.hasVoice) failures.push("voice button missing");
@@ -462,6 +462,43 @@ async function main() {
     assertOk(popoverSnapshot.clickedExec, "execution mode button was not clickable");
     assertOk(/自动|快速|深研|执行模式/.test(String(popoverSnapshot.text || "")), "mode popovers did not leave expected UI text");
     await cdp.screenshot(path.join(outputDir, "mode-popovers.png"));
+
+    const smokeUrl = new URL(page.url);
+    smokeUrl.searchParams.set("uiSmoke", "1");
+    await cdp.call("Page.navigate", { url: smokeUrl.href });
+    await waitFor(cdp, `(() => document.readyState === 'complete' && window.__lynnUiSmokeReady === true && !!document.querySelector('#inputBox'))()`, 60000, "ui smoke mode");
+    await cdp.evaluate(`window.__lynnSetUiSmokeScenario('image-tool-empty')`);
+    await waitFor(cdp, `document.body.dataset.uiSmokeScenario === 'image-tool-empty'`, 15000, "image tool empty smoke scenario");
+    const seededEditText = "UI_SMOKE_IMAGE_TOOL：请看这张图并总结要点。";
+    const editResendSnapshot = await waitFor(cdp, `(() => {
+      const bodyText = document.body.innerText || '';
+      if (!bodyText.includes(${JSON.stringify(seededEditText)})) return null;
+      if (!bodyText.includes('image_analyze')) return null;
+      const editButton = Array.from(document.querySelectorAll('button')).find((el) => (el.textContent || '').includes('编辑重发'));
+      if (!editButton) return null;
+      return { ready: true, text: bodyText.slice(0, 2000) };
+    })()`, 60000, "seeded image-tool history with edit-resend button");
+    assertOk(editResendSnapshot?.ready, "seeded image-tool history was not visible");
+    const editClicked = await cdp.evaluate(`(() => {
+      const editButton = Array.from(document.querySelectorAll('button')).find((el) => (el.textContent || '').includes('编辑重发'));
+      if (!editButton) return false;
+      editButton.click();
+      return true;
+    })()`);
+    assertOk(editClicked, "edit-resend button for seeded image-tool turn was not clickable");
+    const editLoaded = await waitFor(cdp, `(() => {
+      const el = document.querySelector('#inputBox');
+      const text = document.body.innerText || '';
+      const value = el?.value || '';
+      return value.includes(${JSON.stringify(seededEditText)})
+        ? { value, text: text.slice(0, 2000) }
+        : null;
+    })()`, 15000, "edit-resend restored seeded prompt into composer");
+    assertOk(String(editLoaded?.value || "").includes(seededEditText), `edit-resend did not restore original prompt: ${JSON.stringify(editLoaded)}`);
+    const editErrorText = String(editLoaded?.text || "");
+    assertOk(!/Agent is already processing|error|无法定位要编辑的历史消息/.test(editErrorText),
+      `edit-resend surfaced an error for image-tool history: ${editErrorText}`);
+    await cdp.screenshot(path.join(outputDir, "edit-resend-image-tool.png"));
 
     console.log(`[packaged-main-ui-smoke] main UI ok: ${path.relative(ROOT, appPath)} screenshots=${path.relative(ROOT, outputDir)}`);
   } finally {

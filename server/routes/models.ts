@@ -228,6 +228,7 @@ export function createModelsRoute(engine: ModelsRouteEngine): Hono {
       if (!modelId) {
         return c.json({ error: t("error.missingParam", { param: "modelId" }) }, 400);
       }
+      await engine.refreshAvailableModels?.();
       await engine.setPendingModel(modelId, provider);
       return c.json({ ok: true, model: engine.currentModel?.name, pendingModel: true });
     } catch (err) {

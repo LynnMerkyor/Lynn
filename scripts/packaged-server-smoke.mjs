@@ -221,19 +221,23 @@ async function main() {
     const added = await readYamlObject(path.join(lynnHome, "added-models.yaml"));
     const prefs = JSON.parse(await fsp.readFile(path.join(lynnHome, "user", "preferences.json"), "utf-8"));
     const meta = JSON.parse(await fsp.readFile(path.join(pollutedAgentDir, "sessions", "session-meta.json"), "utf-8"));
-    if (config?.models?.chat?.provider !== "brain" || config?.models?.chat?.id !== "lynn-brain-router") {
-      throw new Error(`[packaged-server-smoke] polluted agent chat was not repaired: ${JSON.stringify(config?.models?.chat)}`);
+    if (config?.api?.provider !== "mimo" || config?.models?.chat?.provider !== "mimo" || config?.models?.chat?.id !== "mimo-v2.5-pro") {
+      throw new Error(`[packaged-server-smoke] MiMo Token Plan chat model was incorrectly repaired: ${JSON.stringify(config?.models?.chat)}`);
     }
-    if (prefs?.utility_model?.provider !== "brain" || prefs?.utility_model?.id !== "lynn-brain-router") {
-      throw new Error(`[packaged-server-smoke] polluted shared utility was not repaired: ${JSON.stringify(prefs?.utility_model)}`);
+    if (config?.models?.utility?.provider !== "brain" || config?.models?.utility?.id !== "lynn-brain-router") {
+      throw new Error(`[packaged-server-smoke] retired token-plan-cn utility was not repaired: ${JSON.stringify(config?.models?.utility)}`);
     }
-    if (!added?.providers?.mimo?.api_key || JSON.stringify(added?.providers?.mimo?.models || []).includes("mimo-v2.5-pro")) {
-      throw new Error(`[packaged-server-smoke] polluted provider models were not repaired safely: ${JSON.stringify(added?.providers?.mimo)}`);
+    if (prefs?.utility_model?.provider !== "mimo" || prefs?.utility_model?.id !== "mimo-v2.5-pro") {
+      throw new Error(`[packaged-server-smoke] valid MiMo preference was incorrectly repaired: ${JSON.stringify(prefs?.utility_model)}`);
     }
-    if (meta?.["old.jsonl"]?.model?.provider !== "brain" || meta?.["old.jsonl"]?.model?.id !== "lynn-brain-router") {
-      throw new Error(`[packaged-server-smoke] polluted session meta was not repaired: ${JSON.stringify(meta?.["old.jsonl"])}`);
+    const mimoModels = added?.providers?.mimo?.models || [];
+    if (!added?.providers?.mimo?.api_key || !mimoModels.includes("mimo-v2.5-pro") || !mimoModels.includes("still-valid-model")) {
+      throw new Error(`[packaged-server-smoke] valid MiMo provider models were not preserved: ${JSON.stringify(added?.providers?.mimo)}`);
     }
-    console.log("[packaged-server-smoke] packaged server booted, health ok, HANA_HOME ignored, .hanako not copied, polluted model refs repaired");
+    if (meta?.["old.jsonl"]?.model?.provider !== "mimo" || meta?.["old.jsonl"]?.model?.id !== "mimo-v2.5-pro") {
+      throw new Error(`[packaged-server-smoke] valid MiMo session meta was incorrectly repaired: ${JSON.stringify(meta?.["old.jsonl"])}`);
+    }
+    console.log("[packaged-server-smoke] packaged server booted, health ok, HANA_HOME ignored, .hanako not copied, retired token-plan-cn repaired, MiMo Token Plan preserved");
   } finally {
     await terminate(child);
     await fsp.rm(tmp, { recursive: true, force: true });

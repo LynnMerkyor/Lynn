@@ -14,6 +14,8 @@ type ProviderModelConfig = string | {
   name?: string;
   context?: number | null;
   maxOutput?: number | null;
+  vision?: boolean | null;
+  reasoning?: boolean | null;
   [key: string]: unknown;
 };
 
@@ -94,6 +96,8 @@ type NormalizedModel = {
   name: string;
   context: number | null;
   maxOutput: number | null;
+  vision?: boolean;
+  reasoning?: boolean;
 };
 
 type ModelsCache = Record<string, {
@@ -572,12 +576,21 @@ export function createProvidersRoute(engine: ProvidersRouteEngine): Hono {
   // ── Fetch / Test ──
 
   function normalizeRegistryModels(models: RouteModel[]): NormalizedModel[] {
-    return models.map((model) => ({
-      id: model.id,
-      name: model.name || model.id,
-      context: model.contextWindow ?? model.context ?? null,
-      maxOutput: model.maxOutputTokens ?? model.maxOutput ?? null,
-    }));
+    return models.map((model) => {
+      const normalized: NormalizedModel = {
+        id: model.id,
+        name: model.name || model.id,
+        context: model.contextWindow ?? model.context ?? null,
+        maxOutput: model.maxOutputTokens ?? model.maxOutput ?? null,
+      };
+      if (typeof (model as { vision?: unknown }).vision === "boolean") {
+        normalized.vision = (model as { vision?: boolean }).vision;
+      }
+      if (typeof (model as { reasoning?: unknown }).reasoning === "boolean") {
+        normalized.reasoning = (model as { reasoning?: boolean }).reasoning;
+      }
+      return normalized;
+    });
   }
 
   /**

@@ -34,12 +34,12 @@ describe('ProviderModelList model candidates', () => {
     expect(providerModelList.buildAutoRegisteredModelEntries({
       currentModelEntries: [],
       discoveredModels: [
-        { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context: 1_000_000, maxOutput: 64_000 },
+        { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context: 1_000_000, maxOutput: 64_000, vision: true, reasoning: true },
         { id: 'deepseek-chat' },
       ],
       removedModels: ['deepseek-chat'],
     })).toEqual([
-      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context: 1_000_000, maxOutput: 64_000 },
+      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context: 1_000_000, maxOutput: 64_000, vision: true, reasoning: true },
     ]);
 
     expect(providerModelList.buildAutoRegisteredModelEntries({
@@ -47,5 +47,17 @@ describe('ProviderModelList model candidates', () => {
       discoveredModels: [{ id: 'deepseek-v4-pro' }],
       removedModels: [],
     })).toEqual(['deepseek-v4-flash']);
+  });
+
+  it('keeps discovered model metadata when adding a vision model', () => {
+    expect(providerModelList.buildAutoRegisteredModelEntries({
+      currentModelEntries: [],
+      discoveredModels: [
+        { id: 'mimo-v2.5', name: 'MiMo V2.5', context: 262144, maxOutput: 32000, vision: true, reasoning: true },
+      ],
+      removedModels: [],
+    })).toEqual([
+      { id: 'mimo-v2.5', name: 'MiMo V2.5', context: 262144, maxOutput: 32000, vision: true, reasoning: true },
+    ]);
   });
 });

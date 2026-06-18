@@ -65,7 +65,10 @@ export function resolveProviderForModel(modelId: string): string | null {
   if (!modelId || !config) return null;
   const providers = config.providers || {};
   for (const [name, p] of Object.entries(providers) as [string, ProviderConfig][]) {
-    if ((p.models || []).includes(modelId)) return name;
+    if ((p.models || []).some((entry) => {
+      if (typeof entry === 'string') return entry === modelId;
+      return typeof entry?.id === 'string' && entry.id === modelId;
+    })) return name;
   }
   return null;
 }
