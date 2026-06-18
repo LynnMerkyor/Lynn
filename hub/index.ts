@@ -1,7 +1,7 @@
 /**
  * Hub — 消息调度中枢
  *
- * 同进程模式：Hub 和 HanaEngine 跑在同一个 Node 进程里。
+ * 同进程模式：Hub 和 LynnEngine 跑在同一个 Node 进程里。
  * hub.send() 内部直接调 engine 方法，行为零变化。
  * EventBus 通过 engine.setEventBus() 注入，统一事件广播。
  *

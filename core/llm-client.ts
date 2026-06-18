@@ -460,11 +460,11 @@ function applyVisibleAnswerRetryNudge(body: LlmRequestBody): void {
 /**
  * core/llm-client.ts — 统一的非流式 LLM 调用入口
  *
- * 直接 HTTP POST（非流式），不走 Pi SDK 的 completeSimple（强制流式）。
- * Pi SDK completeSimple 对 DashScope 等供应商有 20-40x 延迟膨胀（stream SSE 首 token 慢），
+ * 直接 HTTP POST（非流式），不走聊天 runtime 的流式链路。
+ * 历史 stream-first 短文本路径对 DashScope 等供应商有 20-40x 延迟膨胀（stream SSE 首 token 慢），
  * utility 短文本生成（50-200 token）不需要流式，直接 POST 最快。
  *
- * URL 构造规则与 Pi SDK 内部一致，确保和 Chat 链路（走 Pi SDK stream）访问同一个端点：
+ * URL 构造规则与聊天 runtime 一致，确保和 Chat 链路访问同一个端点：
  *   - openai-completions:  baseUrl + "/chat/completions"
  *   - anthropic-messages:  baseUrl + "/v1/messages"
  *   - openai-responses:    baseUrl + "/responses"
@@ -553,7 +553,7 @@ export async function callText({
   let body: LlmRequestBody;
 
   if (api === "anthropic-messages") {
-    // Anthropic Messages API：baseUrl + /v1/messages（和 Pi SDK Anthropic provider 一致）
+    // Anthropic Messages API：baseUrl + /v1/messages（和 runtime Anthropic provider 一致）
     endpoint = `${base}/v1/messages`;
     headers = {
       "Content-Type": "application/json",

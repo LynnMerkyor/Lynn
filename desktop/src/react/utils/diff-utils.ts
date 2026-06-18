@@ -25,19 +25,19 @@ export interface WordChange {
 // ── 从 unified diff 重建原文/新文 ──
 // 支持两种 diff 格式：
 // (A) 标准 unified diff: "+line" "-line" " line" "@@..." "---" "+++"
-// (B) pi-coding-agent 格式: "+NN line" "-NN line" " NN line"（行号前缀）
+// (B) agent numbered 格式: "+NN line" "-NN line" " NN line"（行号前缀）
 //     其中 NN 是右对齐空格填充的行号（padStart）
 
 function stripLineNumberPrefix(text: string): string {
-  // 剥掉 "\s*\d+ "（pi-coding-agent edit 工具的行号前缀）
+  // 剥掉 "\s*\d+ "（agent edit 工具的行号前缀）
   // 例如 " 33 内容" → "内容"；"  7 内容" → "内容"
   const m = text.match(/^(\s*\d+)\s(.*)$/s);
   return m ? m[2] : text;
 }
 
 /**
- * 探测 diff 是不是 pi-coding-agent 格式：
- * 标准 unified diff 有 `@@ -x,y +a,b @@` hunk header，pi 格式没有。
+ * 探测 diff 是不是带行号前缀的 agent 格式：
+ * 标准 unified diff 有 `@@ -x,y +a,b @@` hunk header，agent numbered 格式没有。
  * [2026-04-17 修复] 之前无差别 strip 会吞掉用户正文里 "2024 年"、"10 条建议" 之类的开头数字。
  */
 function detectDiffFormat(diff: string): 'unified' | 'pi-agent' {

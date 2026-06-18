@@ -1,7 +1,7 @@
 /**
  * ModelManager -- 模型发现、切换、凭证解析
  *
- * 管理 Pi SDK AuthStorage / ModelRegistry 基础设施，
+ * 管理 Lynn runtime AuthStorage / ModelRegistry 基础设施，
  * 以及模型选择、provider 凭证查找、utility 配置解析。
  * 从 Engine 提取，Engine 通过 manager 访问模型状态。
  *
@@ -156,7 +156,7 @@ export class ModelManager {
    */
   async refreshAvailable(): Promise<ResolvedModel[]> {
     const allModels = await this._modelRegistry!.getAvailable() as unknown as ResolvedModel[];
-    // Pi SDK 返回所有有 auth 的模型（包括 OAuth 内置模型），
+    // runtime registry 返回所有有 auth 的模型（包括 OAuth 内置模型），
     // 但用户只想看自己配置的模型。用 added-models.yaml 的模型列表过滤。
     const rawProviders = this.providerRegistry.getAllProvidersRaw();
     const userModelSets = new Map<string, Set<string>>();

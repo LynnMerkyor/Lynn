@@ -187,7 +187,7 @@ export class ChannelRouter {
     this._channelLocks = new Map();
   }
 
-  /** @returns {import('../core/engine.js').HanaEngine} */
+  /** @returns {import('../core/engine.js').LynnEngine} */
   get _engine(): EngineLike { return this._hub.engine; }
 
   // ──────────── 生命周期 ────────────

@@ -9,7 +9,7 @@
 //   - feature flag: BRAIN_V2_AUDIO_FALLBACK=1,默认 OFF
 //   - 仅在 provider.capability.audio === false && messages 含 audio 时触发
 //   - audio-native provider(capability.audio === true)跳过转录,直接交原生处理(质量更好)。
-//     注:当前没有任何 provider advertise audio:true,所以这条 skip 分支现在是 inert(保留以备将来接入)。
+//     MiMo Token Plan multimodal fallback advertises audio:true,会直接走原生音频理解。
 //   - 失败不阻断:transcribe 挂了 → 返回原 messages → adapter 自己面对(可能 400)
 //   - per-request 缓存(audio 数据哈希为 key),fallback 链不重复转录
 //

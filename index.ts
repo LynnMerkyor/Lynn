@@ -1,6 +1,6 @@
 import fs from "fs";
 import readline from "readline";
-import { HanaEngine } from "./core/engine.js";
+import { LynnEngine } from "./core/engine.js";
 import { ensureFirstRun } from "./core/first-run.js";
 import { MoodParser } from "./core/events.js";
 
@@ -48,7 +48,7 @@ process.env.LYNN_HOME = lynnHome;
 ensureFirstRun(lynnHome, productDir);
 
 // ── 初始化引擎 ──
-const engine = new HanaEngine({ lynnHome, productDir }) as any;
+const engine = new LynnEngine({ lynnHome, productDir }) as any;
 
 try {
   await engine.init((msg: string) => console.log(msg));
@@ -67,8 +67,8 @@ const available = engine.availableModels;
 const memoryMdPath = engine.memoryMdPath;
 
 // ── CLI 渲染器 ──
-// Hana 文字色 #7D1C4A = RGB(125, 28, 74)
-const hanaColor = `\x1b[38;2;125;28;74m`;
+// Lynn accent color #7D1C4A = RGB(125, 28, 74)
+const lynnAccentColor = `\x1b[38;2;125;28;74m`;
 const resetColor = `\x1b[0m`;
 
 // 思考动画
@@ -121,7 +121,7 @@ engine.subscribe((event: CliEvent) => {
 
       moodParser.feed(delta, (evt: MoodEvent) => {
         if (evt.type === "text") {
-          process.stdout.write(`${hanaColor}${evt.data}${resetColor}`);
+          process.stdout.write(`${lynnAccentColor}${evt.data}${resetColor}`);
         } else if (evt.type === "mood_start") {
           process.stdout.write(`\x1b[90m<mood>\x1b[0m`);
         } else if (evt.type === "mood_text") {
@@ -312,7 +312,7 @@ const ask = () => {
       await engine.prompt(trimmed);
       moodParser.flush((evt: MoodEvent) => {
         if (evt.type === "text") {
-          process.stdout.write(`${hanaColor}${evt.data}${resetColor}`);
+          process.stdout.write(`${lynnAccentColor}${evt.data}${resetColor}`);
         } else if (evt.type === "mood_text") {
           process.stdout.write(`\x1b[90m${evt.data}\x1b[0m`);
         }

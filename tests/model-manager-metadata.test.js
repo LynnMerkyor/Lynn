@@ -21,7 +21,7 @@ function makeManager(rawProviders, availableModels) {
 }
 
 describe("ModelManager metadata enrichment", () => {
-  it("preserves provider-declared vision metadata after Pi SDK discovery", async () => {
+  it("preserves provider-declared vision metadata after runtime discovery", async () => {
     const { manager, cleanup } = makeManager({
       mimo: {
         base_url: "https://token-plan-cn.xiaomimimo.com/v1",

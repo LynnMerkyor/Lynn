@@ -201,7 +201,7 @@ export class SkillManager {
 
   /**
    * 首次加载：从 resourceLoader 获取内置 skills + 合并所有 agent 的 learned skills + 外部技能
-   * @param {object} resourceLoader - Pi SDK DefaultResourceLoader 实例
+   * @param {object} resourceLoader - Lynn runtime DefaultResourceLoader 实例
    * @param {Map} agents - agent Map
    * @param {Set<string>} hiddenSkills - 需要隐藏的 skill name 集合
    */

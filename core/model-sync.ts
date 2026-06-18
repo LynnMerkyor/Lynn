@@ -2,7 +2,7 @@
  * model-sync.js — added-models.yaml → models.json 单向投影
  *
  * 系统中唯一写 models.json 的地方。从 providers 配置（snake_case）
- * 投影为 Pi SDK 格式（camelCase），附加 known-models.json 元数据。
+ * 投影为 Lynn runtime models.json 格式（camelCase），附加 known-models.json 元数据。
  */
 
 import fs from "fs";
@@ -56,7 +56,7 @@ function extractApiKey(entry: unknown): string {
 }
 
 /**
- * 构建单个模型的 Pi SDK 格式条目
+ * 构建单个模型的 Lynn runtime 格式条目
  * @param {string|{id:string, name?:string, context?:number, maxOutput?:number}} modelEntry
  * @param {string} provider - provider 名称（查词典用）
  */
@@ -83,7 +83,7 @@ function buildModelEntry(modelEntry: ProviderModelConfig, provider: ProviderId):
 
   if (known?.quirks?.length) entry.quirks = known.quirks;
 
-  // Pi SDK compat 覆盖：
+  // Runtime compat 覆盖：
   // 1. 非 OpenAI provider 不发 developer role（dashscope 等不支持）
   // 2. Qwen reasoning 模型使用 enable_thinking
   // 3. 智谱 / GLM reasoning 模型使用 zai thinking 格式：thinking: { type: "enabled|disabled" }
@@ -103,7 +103,7 @@ function buildModelEntry(modelEntry: ProviderModelConfig, provider: ProviderId):
 }
 
 /**
- * 单向投影：providers 配置 → models.json（Pi SDK 格式）
+ * 单向投影：providers 配置 → models.json（Lynn runtime 格式）
  *
  * @param {Record<string, object>} providers - added-models.yaml 中的 providers 块（snake_case）
  * @param {object} [opts]
@@ -155,7 +155,7 @@ export function syncModels(
     const allowMissingApiKey = authType === "none";
     if (!apiKey && !isLocal && !allowMissingApiKey) continue;
 
-    // Pi SDK 目前要求 provider entry 带一个非空 apiKey；对无 Key 的内置远端 provider，
+    // Runtime registry 目前要求 provider entry 带一个非空 apiKey；对无 Key 的内置远端 provider，
     // 用占位值保活 models.json，真实请求侧会依赖 Lynn 签名头鉴权。
     const effectiveApiKey = apiKey || "local";
 

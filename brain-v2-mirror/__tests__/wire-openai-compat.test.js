@@ -275,6 +275,60 @@ describe('OpenAI-compat wire adapter', () => {
       expect(body.tool_choice).toBeUndefined();
     });
 
+    it('keeps native audio content for multimodal providers', async () => {
+      const mimoProvider = {
+        id: 'mimo-multimodal',
+        endpoint: 'https://token-plan-cn.xiaomimimo.com/v1',
+        apiKey: 'sk-mimo',
+        model: 'mimo-v2.5',
+        capability: { vision: true, audio: true, video: true, tools: false, thinking: true },
+        default_thinking: true,
+      };
+      const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'ok' }), sseDone())));
+      await drain(callOpenAI({
+        provider: mimoProvider,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: '听一下这段音频' },
+            { type: 'input_audio', input_audio: { data: 'ZmFrZQ==', format: 'mp3' } },
+            { type: 'audio_url', audio_url: { url: 'https://example.com/a.mp3' } },
+          ],
+        }],
+      }));
+      const body = JSON.parse(f.mock.calls[0][1].body);
+      expect(body.messages[0].content[1]).toEqual({ type: 'input_audio', input_audio: { data: 'ZmFrZQ==', format: 'mp3' } });
+      expect(body.messages[0].content[2]).toEqual({ type: 'audio_url', audio_url: { url: 'https://example.com/a.mp3' } });
+      expect(body.tools).toBeUndefined();
+    });
+
+    it('keeps native video content for multimodal providers', async () => {
+      const mimoProvider = {
+        id: 'mimo-multimodal',
+        endpoint: 'https://token-plan-cn.xiaomimimo.com/v1',
+        apiKey: 'sk-mimo',
+        model: 'mimo-v2.5',
+        capability: { vision: true, audio: true, video: true, tools: false, thinking: true },
+        default_thinking: true,
+      };
+      const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'ok' }), sseDone())));
+      await drain(callOpenAI({
+        provider: mimoProvider,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: '总结这个视频' },
+            { type: 'input_video', input_video: { url: 'https://example.com/v.mp4' } },
+            { type: 'video_url', video_url: { url: 'https://example.com/b.mp4' } },
+          ],
+        }],
+      }));
+      const body = JSON.parse(f.mock.calls[0][1].body);
+      expect(body.messages[0].content[1]).toEqual({ type: 'input_video', input_video: { url: 'https://example.com/v.mp4' } });
+      expect(body.messages[0].content[2]).toEqual({ type: 'video_url', video_url: { url: 'https://example.com/b.mp4' } });
+      expect(body.tools).toBeUndefined();
+    });
+
     it('still strips stale images before sending native multimodal base models', async () => {
       const mimoProvider = {
         id: 'mimo-multimodal',

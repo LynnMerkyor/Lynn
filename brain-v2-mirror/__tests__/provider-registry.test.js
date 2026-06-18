@@ -54,10 +54,21 @@ describe('provider registry', () => {
     expect(visionOrder).not.toContain('deepseek-chat');
   });
 
+  it('routes native audio to MiMo multimodal after filtering non-audio providers', () => {
+    const audioCapableOrder = providerOrderForCapability({ audio: true })
+      .map((id) => PROVIDERS[id])
+      .filter((provider) => provider?.capability?.audio)
+      .map((provider) => String(provider.id));
+
+    expect(audioCapableOrder[0]).toBe('mimo-multimodal');
+    expect(audioCapableOrder).toEqual(['mimo-multimodal']);
+  });
+
   it('registers MiMo as native image/audio/video fallback without taking over text route', () => {
     const mimo = getProvider('mimo-multimodal');
     expect(mimo).toBeTruthy();
     expect(String(mimo.id)).toBe('mimo-multimodal');
+    expect(mimo.endpoint).toBe('https://token-plan-cn.xiaomimimo.com/v1');
     expect(String(mimo.model)).toBe('mimo-v2.5');
     expect(mimo.wire).toBe('openai');
     expect(mimo.capability).toMatchObject({

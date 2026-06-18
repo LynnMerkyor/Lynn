@@ -236,7 +236,7 @@ export class LynnEngine {
     // ── Plugin Manager ──
     this._pluginManager = null;  // initialized async in initPlugins()
 
-    // Pi SDK resources（init 时填充）
+    // Native runtime resources（init 时填充）
     this._resourceLoader = null;
 
     // 事件系统
@@ -374,14 +374,14 @@ export class LynnEngine {
    * 返回应用了用户 override 的模型对象（浅拷贝）。
    * override 字段映射集中在此处：ov.context→contextWindow, ov.maxOutput→maxTokens。
    * 不处理 displayName（模型显示名有独立的解析链 resolveModelName）。
-   * @param {object} model - Pi SDK 模型对象
+   * @param {object} model - Lynn runtime 模型对象
    * @param {object} [overrides] - 可选，指定 override map。不传则用当前 focus agent 的 config。
    *   bridge session 需要传入对应 agent 的 overrides，因为 bridge session 可能不属于 focus agent。
    */
   resolveModelOverrides(model: AnyRecord | null | undefined, overrides?: Record<string, AnyRecord>) {
     if (!model) return null;
-    // v0.77.7 (2026-05-05): brain provider 默认 reasoning=true 让 Pi SDK 透传
-    // Lynn ThinkingLevelButton 'off' → Pi SDK reasoning_effort: 'off'
+    // v0.77.7 (2026-05-05): brain provider 默认 reasoning=true 让 runtime 透传
+    // Lynn ThinkingLevelButton 'off' → runtime reasoning_effort: 'off'
     const isBrain = String(model.provider || "").trim() === BRAIN_PROVIDER_ID;
     const ov = (overrides || this.config?.models?.overrides)?.[model.id];
     if (!ov) {
@@ -666,8 +666,8 @@ export class LynnEngine {
         this._brainRegistrationPending = false;
       });
 
-    // 1. Pi SDK + 模型基础设施（必须在 agent init 之前，agent 需要解析记忆模型）
-    log(`[init] 1/5 Pi SDK 初始化...`);
+    // 1. Native runtime + 模型基础设施（必须在 agent init 之前，agent 需要解析记忆模型）
+    log(`[init] 1/5 Native runtime 初始化...`);
     this._models.init();
     // 预填充 _availableModels，agent init 时需要解析 utility model
     await this._models.refreshAvailable();
