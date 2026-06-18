@@ -7,7 +7,7 @@
 import fs from "fs";
 import path from "path";
 import { Type } from "@sinclair/typebox";
-import { StringEnum } from "@mariozechner/pi-ai";
+import { StringEnum } from "../../core/agent-runtime/schema.js";
 import { t } from "../../server/i18n.js";
 
 let _counter = 0;

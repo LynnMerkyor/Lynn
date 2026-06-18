@@ -25,7 +25,7 @@ import {
 import { PluginManager } from "./plugin-manager.js";
 import {
   DefaultResourceLoader,
-} from "@mariozechner/pi-coding-agent";
+} from "./agent-runtime/resource-loader.js";
 import { WELL_KNOWN_SKILL_PATHS, allBuiltInTools } from "./constants.js";
 
 import { PreferencesManager } from "./preferences-manager.js";

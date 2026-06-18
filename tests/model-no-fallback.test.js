@@ -9,19 +9,25 @@ import os from "os";
 import path from "path";
 import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
 
-// ── Mock Pi SDK ──
+// ── Mock native agent runtime ──
 
 const { createAgentSessionMock, sessionManagerCreateMock } = vi.hoisted(() => ({
   createAgentSessionMock: vi.fn(),
   sessionManagerCreateMock: vi.fn(),
 }));
 
-vi.mock("@mariozechner/pi-coding-agent", () => ({
-  createAgentSession: createAgentSessionMock,
+vi.mock("../core/agent-runtime/create-session.js", () => ({
+  createLynnAgentSession: createAgentSessionMock,
+}));
+
+vi.mock("../core/agent-runtime/session-manager.js", () => ({
   SessionManager: {
     create: sessionManagerCreateMock,
     open: vi.fn(),
   },
+}));
+
+vi.mock("../core/agent-runtime/settings-manager.js", () => ({
   SettingsManager: {
     inMemory: vi.fn(() => ({})),
   },

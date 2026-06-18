@@ -11,9 +11,11 @@
 import path from "path";
 import {
   AuthStorage,
+} from "./agent-runtime/auth-storage.js";
+import {
   ModelRegistry,
-} from "@mariozechner/pi-coding-agent";
-import { registerOAuthProvider } from "@mariozechner/pi-ai/oauth";
+} from "./agent-runtime/model-registry.js";
+import { registerOAuthProvider } from "./agent-runtime/oauth.js";
 import { minimaxOAuthProvider } from "../lib/oauth/minimax-portal.js";
 import { t } from "../server/i18n.js";
 import { ProviderRegistry } from "./provider-registry.js";

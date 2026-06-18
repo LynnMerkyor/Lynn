@@ -5,7 +5,7 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import { StringEnum } from "@mariozechner/pi-ai";
+import { StringEnum } from "../../core/agent-runtime/schema.js";
 import type { ActiveTaskInput, ActiveTaskMemory } from "../memory/active-task.js";
 
 type ActiveTaskAction = "get" | "set" | "patch" | "clear";

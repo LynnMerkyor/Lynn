@@ -84,7 +84,7 @@ export interface SkillAgentWithSetter extends SkillAgent {
 }
 
 export interface SkillResourceLoader {
-  getSkills?: () => { skills: Skill[] };
+  getSkills?: () => { skills?: Skill[] } | Skill[] | unknown;
   reload: () => Promise<unknown>;
 }
 
@@ -159,6 +159,15 @@ function expandQueryTokens(text: unknown, tokens: string[]): string[] {
   return [...expanded];
 }
 
+function readResourceSkills(resourceLoader: SkillResourceLoader): Skill[] {
+  const raw = resourceLoader.getSkills?.();
+  if (Array.isArray(raw)) return raw as Skill[];
+  if (raw && typeof raw === "object" && Array.isArray((raw as { skills?: unknown }).skills)) {
+    return (raw as { skills: Skill[] }).skills;
+  }
+  return [];
+}
+
 export class SkillManager {
   /**
    * @param {object} opts
@@ -198,7 +207,7 @@ export class SkillManager {
    */
   init(resourceLoader: SkillResourceLoader, agents: Map<unknown, SkillAgent>, hiddenSkills: Set<string>): void {
     this._hiddenSkills = hiddenSkills;
-    this._allSkills = resourceLoader.getSkills!().skills;
+    this._allSkills = readResourceSkills(resourceLoader);
     for (const s of this._allSkills) {
       s._hidden = hiddenSkills.has(s.name);
     }
@@ -304,7 +313,7 @@ export class SkillManager {
     delete resourceLoader.getSkills;
     await resourceLoader.reload();
 
-    this._allSkills = resourceLoader.getSkills!().skills;
+    this._allSkills = readResourceSkills(resourceLoader);
     for (const s of this._allSkills) {
       s._hidden = this._hiddenSkills.has(s.name);
     }

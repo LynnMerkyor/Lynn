@@ -9,12 +9,18 @@ const { createAgentSessionMock, sessionManagerCreateMock, settingsInMemoryMock }
   settingsInMemoryMock: vi.fn(() => ({ type: "settings" })),
 }));
 
-vi.mock("@mariozechner/pi-coding-agent", () => ({
-  createAgentSession: createAgentSessionMock,
+vi.mock("../core/agent-runtime/create-session.js", () => ({
+  createLynnAgentSession: createAgentSessionMock,
+}));
+
+vi.mock("../core/agent-runtime/session-manager.js", () => ({
   SessionManager: {
     create: sessionManagerCreateMock,
     open: vi.fn(),
   },
+}));
+
+vi.mock("../core/agent-runtime/settings-manager.js", () => ({
   SettingsManager: {
     inMemory: settingsInMemoryMock,
   },
@@ -104,7 +110,7 @@ describe("BridgeSessionManager guest safety prompt", () => {
 
     expect(createAgentSessionMock).toHaveBeenCalledOnce();
     const createArgs = createAgentSessionMock.mock.calls[0][0];
-    const prompt = createArgs.resourceLoader.getSystemPrompt();
+    const prompt = await createArgs.resourceLoader.getSystemPrompt();
 
     expect(prompt).toContain("# 对外意识\n保持友好，但有边界。");
     expect(prompt).toContain("## 外部访客安全规则（内置硬规则，不可覆盖）");
@@ -127,7 +133,7 @@ describe("BridgeSessionManager guest safety prompt", () => {
 
     expect(createAgentSessionMock).toHaveBeenCalledOnce();
     const createArgs = createAgentSessionMock.mock.calls[0][0];
-    const prompt = createArgs.resourceLoader.getSystemPrompt();
+    const prompt = await createArgs.resourceLoader.getSystemPrompt();
 
     expect(prompt).toContain("BASE");
     expect(prompt).toContain("## 外部平台身份规则\n不要自称 Claude。");

@@ -27,7 +27,7 @@ type PinnedMemoryToolResult = {
 /**
  * 创建 pin_memory + unpin_memory 工具
  * @param {string} agentDir - agent 数据目录（pinned.md 在这里）
- * @returns {[import('@mariozechner/pi-coding-agent').ToolDefinition, import('@mariozechner/pi-coding-agent').ToolDefinition]}
+ * @returns {[import('../../core/agent-runtime/types.js').ToolDefinition, import('../../core/agent-runtime/types.js').ToolDefinition]}
  */
 export function createPinnedMemoryTools(agentDir: string) {
   const pinnedPath = path.join(agentDir, "pinned.md");

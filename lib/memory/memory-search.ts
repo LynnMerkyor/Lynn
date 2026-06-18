@@ -71,7 +71,7 @@ function errorMessage(err: unknown): string {
  * @param {import('./fact-store.js').FactStore} factStore
  * @param {object} [opts]
  * @param {import('./retriever.js').HybridRetriever} [opts.retriever] - Phase 4 混合检索器
- * @returns {import('@mariozechner/pi-coding-agent').ToolDefinition}
+ * @returns {import('../../core/agent-runtime/types.js').ToolDefinition}
  */
 export function createMemorySearchTool(factStore: MemoryFactStore, opts: MemorySearchOptions = {}) {
   const retriever = opts.retriever || null;

@@ -17,10 +17,8 @@ export default defineConfig({
         "better-sqlite3",
 
         // ws: CJS package, Rollup's CJS→ESM interop loses WebSocketServer
-        // named export. Keep external — available as PI SDK transitive dep.
+        // named export. Keep external as a direct runtime dependency.
         "ws",
-        /^@mariozechner\//,
-        "@silvia-odwyer/photon-node",
         "@larksuiteoapi/node-sdk",
         "node-telegram-bot-api",
         "exceljs",

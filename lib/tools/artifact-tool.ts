@@ -5,7 +5,7 @@
  * 内容通过 WS 推送到前端渲染，不写入磁盘。
  */
 import { Type } from "@sinclair/typebox";
-import { StringEnum } from "@mariozechner/pi-ai";
+import { StringEnum } from "../../core/agent-runtime/schema.js";
 import { t } from "../../server/i18n.js";
 
 let _counter = 0;

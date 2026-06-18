@@ -24,7 +24,7 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import { StringEnum } from "@mariozechner/pi-ai";
+import { StringEnum } from "../../core/agent-runtime/schema.js";
 import { BrowserManager } from "../browser/browser-manager.js";
 import { t } from "../../server/i18n.js";
 
@@ -92,7 +92,7 @@ function err(text: string): BrowserToolResult {
 
 /**
  * 创建浏览器工具
- * @returns {import('@mariozechner/pi-coding-agent').ToolDefinition}
+ * @returns {import('../../core/agent-runtime/types.js').ToolDefinition}
  */
 export function createBrowserTool() {
   const browser = BrowserManager.instance();

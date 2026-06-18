@@ -50,7 +50,7 @@ import { createNotifyTool } from "../lib/tools/notify-tool.js";
 import { createUpdateSettingsTool } from "../lib/tools/update-settings-tool.js";
 import { createDelegateTool } from "../lib/tools/delegate-tool.js";
 import { READ_ONLY_BUILTIN_TOOLS } from "./config-coordinator.js";
-import { formatSkillsForPrompt } from "@mariozechner/pi-coding-agent";
+import { formatSkillsForPrompt } from "./agent-runtime/skills.js";
 import { runCompatChecks } from "../lib/compat/index.js";
 import { buildAgentDynamicPrompt } from "./agent-dynamic-prompt.js";
 

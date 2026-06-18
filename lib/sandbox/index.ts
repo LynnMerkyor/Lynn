@@ -31,7 +31,7 @@ import {
   createGrepTool,
   createFindTool,
   createLsTool,
-} from "@mariozechner/pi-coding-agent";
+} from "../../core/agent-runtime/tools.js";
 import type { SandboxPolicyMode } from "./policy.js";
 import type { SecurityAllowlist as SecurityAllowlistType, SessionAllowlist as SessionAllowlistType } from "./allowlist.js";
 

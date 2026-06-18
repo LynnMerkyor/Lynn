@@ -13,10 +13,12 @@ import crypto from "crypto";
 import type {
   Api,
   Model,
+} from "../../core/agent-runtime/types.js";
+import type {
   OAuthCredentials,
   OAuthLoginCallbacks,
   OAuthProviderInterface,
-} from "@mariozechner/pi-ai";
+} from "../../core/agent-runtime/oauth.js";
 
 const MINIMAX_CONFIG = {
   cn: {
@@ -206,7 +208,7 @@ export const minimaxOAuthProvider: OAuthProviderInterface = {
     const oauth = await requestDeviceCode({ challenge, state, region });
 
     // 通知前端：打开浏览器 + 显示 user_code
-    callbacks.onAuth({
+    callbacks.onAuth?.({
       url: oauth.verification_uri,
       instructions: oauth.user_code,
     });
@@ -258,7 +260,7 @@ export const minimaxOAuthProvider: OAuthProviderInterface = {
       body: new URLSearchParams({
         grant_type: "refresh_token",
         client_id: ep.clientId,
-        refresh_token: credentials.refresh,
+        refresh_token: String(credentials.refresh || credentials.refreshToken || ""),
       }),
     });
 
@@ -272,14 +274,14 @@ export const minimaxOAuthProvider: OAuthProviderInterface = {
     }
 
     return {
-      refresh: data.refresh_token || credentials.refresh,
+      refresh: data.refresh_token || String(credentials.refresh || credentials.refreshToken || ""),
       access: data.access_token,
       expires: data.expired_in || (Date.now() + 3600_000),
     };
   },
 
   getApiKey(credentials: OAuthCredentials): string {
-    return credentials.access;
+    return String(credentials.access || credentials.accessToken || "");
   },
 
   /**

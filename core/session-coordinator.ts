@@ -7,8 +7,10 @@
  */
 import {
   SessionManager,
+} from "./agent-runtime/session-manager.js";
+import {
   SettingsManager,
-} from "@mariozechner/pi-coding-agent";
+} from "./agent-runtime/settings-manager.js";
 import { createModuleLogger } from "../lib/debug-log.js";
 import { t, getLocale } from "../server/i18n.js";
 import { findModel } from "../shared/model-ref.js";

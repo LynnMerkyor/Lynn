@@ -8,17 +8,23 @@ import fs from "fs";
 import path from "path";
 import {
   SessionManager,
+} from "./agent-runtime/session-manager.js";
+import {
   SettingsManager,
-} from "@mariozechner/pi-coding-agent";
+} from "./agent-runtime/settings-manager.js";
 import type {
-  AgentSession,
   AgentSessionEvent,
-  CreateAgentSessionOptions,
   PromptOptions,
   ResourceLoader,
   ToolDefinition,
-} from "@mariozechner/pi-coding-agent";
-import type { Api, ImageContent, Model } from "@mariozechner/pi-ai";
+  Model,
+  Api,
+  ImageContent,
+} from "./agent-runtime/types.js";
+import type {
+  LynnAgentSession,
+  LynnCreateAgentSessionOptions,
+} from "./agent-runtime/create-session.js";
 import { debugLog } from "../lib/debug-log.js";
 import { READ_ONLY_BUILTIN_TOOLS } from "./config-coordinator.js";
 import { t, getLocale } from "../server/i18n.js";
@@ -43,6 +49,9 @@ import {
 } from "./client-agent-identity.js";
 import { createLynnAgentSession } from "./agent-runtime/create-session.js";
 import { resolveCompactionSettings } from "./compaction-settings.js";
+
+type AgentSession = LynnAgentSession;
+type CreateAgentSessionOptions = LynnCreateAgentSessionOptions;
 
 const LOCAL_QWEN35_PROVIDER_IDS = new Set([
   "local-qwen35-4b-q4km",
@@ -240,8 +249,8 @@ function toSessionPromptOptions(images?: BridgePromptInputImage[]): BridgePrompt
   return {
     images: images.map((img): BridgePromptImage => ({
       type: "image",
-      // pi-coding-agent 文档使用 source.base64，
-      // 但下游 pi-ai 仍会从顶层 data/mimeType 取值。
+      // Lynn native runtime 同时保留 source.base64 和顶层 data/mimeType，
+      // 兼容旧消息记录与 OpenAI-compatible 多模态请求转换。
       // 同时保留两套字段，避免图片在 provider 层丢失。
       data: img.data,
       mimeType: img.mimeType || "image/png",
@@ -429,7 +438,7 @@ export class BridgeSessionManager {
         const guestPrompt = parts.join("\n\n");
         const tempResourceLoader = Object.create(this._deps.getResourceLoader()) as ResourceLoader;
         tempResourceLoader.getSystemPrompt = () => guestPrompt;
-        tempResourceLoader.getSkills = () => ({ skills: [], diagnostics: [] });
+        tempResourceLoader.getSkills = () => [];
 
         // 使用 agent 配置的模型，而非 defaultModel
         const chatRef = agent.config?.models?.chat;
@@ -501,9 +510,11 @@ export class BridgeSessionManager {
         // 包装 resourceLoader 追加 MEDIA 协议指令
         const baseRL = this._deps.getResourceLoader();
         const ownerRL = Object.create(baseRL) as ResourceLoader;
-        const baseGetSP = baseRL.getSystemPrompt.bind(baseRL) as (...args: unknown[]) => string | undefined;
-        ownerRL.getSystemPrompt = (...args: unknown[]) => {
-          const sp = baseGetSP(...args);
+        const baseGetSP = typeof baseRL.getSystemPrompt === "function"
+          ? baseRL.getSystemPrompt.bind(baseRL) as (...args: unknown[]) => string | Promise<string> | undefined
+          : undefined;
+        ownerRL.getSystemPrompt = async (...args: unknown[]) => {
+          const sp = await baseGetSP?.(...args);
           return [sp, opts.systemAppend, mediaInstruction].filter(Boolean).join("\n\n");
         };
 
@@ -558,7 +569,7 @@ export class BridgeSessionManager {
         let sawToolCall = false;
         const unsub = session.subscribe((event: AgentSessionEvent) => {
           if (event.type === "message_update") {
-            const sub = event.assistantMessageEvent;
+            const sub = event.assistantMessageEvent as any;
             if (sub?.type === "text_delta") {
               const delta = sub.delta || "";
               capturedText += delta;

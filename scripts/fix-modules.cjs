@@ -184,7 +184,7 @@ exports.default = async function (context) {
   // 但 electron-builder files glob "desktop/native-modules/aec/*.node" 把它打进所有平台,
   // Win 启动 dlopen Mach-O → ERR_DLOPEN_FAILED(用户实测 v0.77.5 仍崩)。
   //
-  // Hotpatch #1 只 sweep 了 server bundle 的 @mariozechner/clipboard-*,这次扩展到 desktop。
+  // 旧版曾只 sweep server bundle 里的跨平台 clipboard native 包；这里覆盖 desktop。
   // 策略:napi-rs 标准命名 (*.{darwin|win32|linux}-{arm64|x64|...}.node),只保留当前 target 平台。
   const platformTag = platformName === "mac" ? "darwin"
                     : platformName === "windows" ? "win32"

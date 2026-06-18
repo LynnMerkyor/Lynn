@@ -9,12 +9,18 @@ const { createAgentSessionMock, sessionManagerCreateMock, settingsManagerInMemor
   settingsManagerInMemoryMock: vi.fn(() => ({})),
 }));
 
-vi.mock("@mariozechner/pi-coding-agent", () => ({
-  createAgentSession: createAgentSessionMock,
+vi.mock("../core/agent-runtime/create-session.js", () => ({
+  createLynnAgentSession: createAgentSessionMock,
+}));
+
+vi.mock("../core/agent-runtime/session-manager.js", () => ({
   SessionManager: {
     create: sessionManagerCreateMock,
     open: vi.fn(),
   },
+}));
+
+vi.mock("../core/agent-runtime/settings-manager.js", () => ({
   SettingsManager: {
     inMemory: settingsManagerInMemoryMock,
   },

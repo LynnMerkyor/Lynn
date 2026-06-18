@@ -1,7 +1,7 @@
 import fs from "fs";
 import {
   SessionManager,
-} from "@mariozechner/pi-coding-agent";
+} from "./agent-runtime/session-manager.js";
 import { BrowserManager } from "../lib/browser/browser-manager.js";
 import { createLynnAgentSession } from "./agent-runtime/create-session.js";
 import {

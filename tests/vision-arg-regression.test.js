@@ -1,16 +1,16 @@
-// [VISION-ARG-FIX v0.76.5] Regression guard for pi-agent-core prompt signature.
+// [VISION-ARG-FIX v0.76.5] Regression guard for native runtime prompt options.
 //
-// 背景：@mariozechner/pi-agent-core 0.56.3 的 Agent.prompt() 签名是：
-//   prompt(input: string, images?: ImageContent[]): Promise<void>;
+// 背景：Lynn 原生 agent runtime 的 Agent.prompt() 签名是：
+//   prompt(input: string, options?: { images?: ImageContent[] }): Promise<void>;
 //
-// 第二参数必须是 ImageContent 数组（或 undefined），不能是 { images: array } 这种对象包装。
-// 历史上 Lynn 三个调用点把 images 包成对象后 `images.length === undefined`，
-// 条件判断 `if (images && images.length > 0)` 永远 false，图片从未真正送达模型。
-// 结果：用户上传图片后模型回复 "没有收到图片"。
+// 第二参数必须是由 toSessionPromptOptions() 构造的 prompt options。历史上 Lynn
+// 在切换底层 runtime 时出现过两类回归：把 images 包成不被 runtime 识别的裸对象，
+// 或者绕开 helper 直接 inline `{ images: ... }`，导致图片从未真正送达模型。
 //
 // 此测试用静态扫描做守护：
 //   1) 确保源码里不再出现 `{ images: opts.images }` / `{ images: opts?.images }` 之类的对象包装。
 //   2) 确保 session.prompt() 的第二参数不是 `{` 起头的对象字面量。
+//   3) 确保入口使用 toSessionPromptOptions() helper 构造视觉 prompt options。
 //
 // 如果未来有人重新引入这个 bug（refactor 顺手包了对象），这个测试会立刻红。
 
@@ -31,10 +31,10 @@ function readSource(relPath) {
   return fs.readFileSync(path.join(REPO_ROOT, relPath), "utf8");
 }
 
-describe("[VISION-ARG-FIX] pi-sdk prompt image-argument regression guard", () => {
+describe("[VISION-ARG-FIX] native runtime prompt image-argument regression guard", () => {
   // 历史演化说明:
-  //   v0.76.5: pi-agent-core prompt(input, images?: ImageContent[]) 签名 · 直接传数组
-  //   v0.76.6: pi-ai 底层改成 options 对象 · 改用 toSessionPromptOptions 统一构造
+  //   v0.76.5: prompt(input, images?: ImageContent[]) 签名 · 直接传数组
+  //   v0.76.6+: prompt(input, options?: { images?: ImageContent[] }) · 改用 toSessionPromptOptions 统一构造
   //   任何版本都不应该出现 `{ images: opts.images }` 这种裸字面量 - 那是 v0.76.5 修过的 bug
   it.each(GUARDED_FILES)(
     "%s · does not use deprecated { images: opts.images } bare literal",
@@ -71,11 +71,11 @@ describe("[VISION-ARG-FIX] pi-sdk prompt image-argument regression guard", () =>
     (file) => {
       const src = readSource(file);
       // v0.76.6 之后 · 两边都应该用 toSessionPromptOptions(opts.images) 统一
-      // 而不是裸传数组 · 因为 pi-ai 底层字段布局已改(source.base64 + 顶层 data/mimeType 双带)
+      // 而不是裸传数组 · 因为视觉字段布局需要由 helper 统一 canonicalize
       const usesHelper = /toSessionPromptOptions\s*\(/.test(src);
       expect(
         usesHelper,
-        `${file} should use toSessionPromptOptions() helper to build prompt options with correct image shape for current pi-ai.`,
+        `${file} should use toSessionPromptOptions() helper to build prompt options with correct image shape for the native runtime.`,
       ).toBe(true);
     },
   );
@@ -92,23 +92,12 @@ describe("[VISION-ARG-FIX] pi-sdk prompt image-argument regression guard", () =>
     },
   );
 
-  it("@mariozechner/pi-agent-core.d.ts prompt signature is known", () => {
-    // pi-sdk 升级会改 prompt 签名 · 早期版本签名是 prompt(input: string, images?: ImageContent[])
-    // v0.76.6 之后改成 prompt(input: string, options?: { images?: ImageContent[] })
-    // 只要签名是这两种之一 · 就算通过;如果出现全新签名 · 测试红 · 提醒我们重新审
-    const agentDts = path.join(
-      REPO_ROOT,
-      "node_modules/@mariozechner/pi-agent-core/dist/agent.d.ts",
-    );
-    if (!fs.existsSync(agentDts)) {
-      return;
-    }
-    const src = fs.readFileSync(agentDts, "utf8");
-    const hasArraySig = /prompt\s*\(\s*input\s*:\s*string\s*,\s*images\?\s*:\s*ImageContent\[\]\s*\)/.test(src);
-    const hasOptionsSig = /prompt\s*\(\s*input\s*:\s*string\s*,\s*(?:options|opts)\?\s*:/.test(src);
+  it("native runtime prompt signature remains options-based", () => {
+    const runtimeTypes = readSource("core/agent-runtime/create-session.ts");
+    const hasOptionsSig = /prompt\s*\(\s*\w+\s*:\s*string\s*,\s*options\?\s*:\s*PromptOptions\s*\)/.test(runtimeTypes);
     expect(
-      hasArraySig || hasOptionsSig,
-      "@mariozechner/pi-agent-core 的 prompt() 签名已变为全新格式。请重新审视 core/session-coordinator.ts 和 core/bridge-session-manager.ts 的 toSessionPromptOptions 逻辑。",
+      hasOptionsSig,
+      "Native runtime prompt() signature changed. Re-check core/session-coordinator.ts and core/bridge-session-manager.ts toSessionPromptOptions usage.",
     ).toBe(true);
   });
 });

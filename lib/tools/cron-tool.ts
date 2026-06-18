@@ -12,7 +12,7 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import { StringEnum } from "@mariozechner/pi-ai";
+import { StringEnum } from "../../core/agent-runtime/schema.js";
 import { t, getLocale } from "../../server/i18n.js";
 
 type CronAction = "list" | "add" | "remove" | "toggle";

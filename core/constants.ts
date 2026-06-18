@@ -6,7 +6,7 @@ import {
   grepTool,
   findTool,
   lsTool,
-} from "@mariozechner/pi-coding-agent";
+} from "./agent-runtime/tools.js";
 
 export interface WellKnownSkillPath {
   suffix: string;

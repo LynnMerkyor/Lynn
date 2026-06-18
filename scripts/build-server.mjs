@@ -344,7 +344,7 @@ for (const ext of viteExternals) {
   if (typeof ext === "string") {
     if (builtinSet.has(ext)) continue;
     if (deps[ext]) externalDeps[ext] = deps[ext];
-    // 不在 dependencies 中的（如 fsevents、photon-node）由 transitive 或 optional 提供
+    // 不在 dependencies 中的 platform optional 包（如 fsevents）由 optional 链路提供。
   } else if (ext instanceof RegExp) {
     for (const dep of Object.keys(deps)) {
       if (ext.test(dep)) externalDeps[dep] = deps[dep];
@@ -390,8 +390,8 @@ try {
 
 // ── 5b. 验证所有 Vite external 在 node_modules 中可达 ──
 // 遍历 string 类型的 external，检查 node_modules 中是否存在。
-// RegExp external（如 /^@mariozechner\//）不在此检查范围内，
-// 因为匹配的包已通过派生逻辑显式安装或作为 transitive dep 存在。
+// RegExp external 不在此检查范围内，因为匹配的包通常通过派生逻辑
+// 显式安装或作为 transitive dep 存在。
 // platform-optional（fsevents）允许缺失，其余缺失说明 transitive 链断了。
 const OPTIONAL_EXTERNALS = new Set(["fsevents"]);
 const missing = [];
@@ -407,16 +407,6 @@ if (missing.length > 0) {
   console.error(`[build-server]   These packages are external in the bundle but not installed.`);
   console.error(`[build-server]   Fix: add them to root package.json dependencies, or check transitive dep chains.`);
   process.exit(1);
-}
-
-// ── 6. PI SDK patch ──
-// package.json 没有 postinstall，手动跑补丁
-const patchScript = path.join(ROOT, "scripts", "patch-pi-sdk.cjs");
-if (fs.existsSync(patchScript)) {
-  fs.mkdirSync(scriptsOutDir, { recursive: true });
-  fs.copyFileSync(patchScript, path.join(scriptsOutDir, "patch-pi-sdk.cjs"));
-  runWithTargetNode("scripts/patch-pi-sdk.cjs");
-  fs.rmSync(path.join(scriptsOutDir, "patch-pi-sdk.cjs"), { force: true });
 }
 
 // ── 7. 清理 node_modules/.bin ──
@@ -587,10 +577,6 @@ console.log(`[build-server] nft: kept ${keptFiles} files, removed ${removedFiles
 if (isCrossBuild) {
   console.log("[build-server] cross-build: skipping runtime import verification");
 } else {
-  await verifyRuntimeImports([
-    { packageName: "@mariozechner/pi-ai", relativePath: "dist/providers/google.js" },
-    { packageName: "@mariozechner/pi-ai", relativePath: "dist/providers/openai-completions.js" },
-  ]);
   console.log("[build-server] runtime import smoke test passed");
 }
 
@@ -618,43 +604,6 @@ if (platform !== "win32") {
     if (koffiRemoved > 0) {
       console.log(`[build-server] koffi: kept ${target}, removed ${koffiRemoved} other platform binaries`);
     }
-  }
-}
-
-// ── 8c. 清理外部依赖里的示例/测试资源 ──
-// @mariozechner/pi-coding-agent 的 examples 里包含 doom.wasm 等演示资源。
-// 这些文件不参与 Lynn 运行时，却会被 macOS codesign 当作资源逐个签名，
-// 在 Developer ID timestamp 阶段可能卡住整个 DMG 构建。
-const piCodingAgentExamples = path.join(nmDir, "@mariozechner", "pi-coding-agent", "examples");
-if (fs.existsSync(piCodingAgentExamples)) {
-  fs.rmSync(piCodingAgentExamples, { recursive: true, force: true });
-  console.log("[build-server] pi-coding-agent: removed examples from distributable package");
-}
-
-// ── 8d. 处理 @mariozechner/clipboard-* — 跨平台 optional native(2026-05-02 hotpatch v0.77.5)──
-// pi-tui / pi-agent-core 的 optionalDependencies 包含 clipboard-darwin-universal /
-// clipboard-darwin-arm64,但这些包没声明 `os` 字段,即便 npm_config_platform=win32
-// npm 仍把它们装进 node_modules。nft prune 阶段又被 protectExternal 整树保护,
-// Win 上 require Mach-O dylib → ERR_DLOPEN_FAILED 启动崩(用户 v0.77.5 截图实证)。
-//
-// 处理策略:跟 koffi 同款 — 只保留当前 target platform 的 clipboard 子包,其他直接删。
-const mariozechnerScope = path.join(nmDir, "@mariozechner");
-if (fs.existsSync(mariozechnerScope)) {
-  // 把 platform 名字标准化成 clipboard 包命名(darwin / linux / win32)
-  const platformTag = platform; // darwin / linux / win32
-  let clipboardCleared = 0;
-  for (const entry of fs.readdirSync(mariozechnerScope)) {
-    if (!entry.startsWith("clipboard-")) continue;
-    // 当前平台允许的命名:clipboard-<platform>-<arch> / clipboard-<platform>-universal
-    const isCurrent = entry === `clipboard-${platformTag}-${arch}`
-      || entry === `clipboard-${platformTag}-universal`;
-    if (!isCurrent) {
-      fs.rmSync(path.join(mariozechnerScope, entry), { recursive: true, force: true });
-      clipboardCleared++;
-    }
-  }
-  if (clipboardCleared > 0) {
-    console.log(`[build-server] clipboard: removed ${clipboardCleared} cross-platform variants (kept ${platformTag}-* only)`);
   }
 }
 

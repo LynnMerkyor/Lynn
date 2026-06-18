@@ -11,21 +11,26 @@ import fs from "fs";
 import path from "path";
 import {
   SessionManager,
+} from "../core/agent-runtime/session-manager.js";
+import {
   SettingsManager,
-  type AgentSession,
-  type AgentSessionEvent,
-  type AuthStorage,
-  type CreateAgentSessionOptions,
-  type ModelRegistry,
-  type ResourceLoader,
-  type ToolDefinition,
-} from "@mariozechner/pi-coding-agent";
+} from "../core/agent-runtime/settings-manager.js";
+import type {
+  AgentSessionEvent,
+  Model,
+  ResourceLoader,
+  ToolDefinition,
+} from "../core/agent-runtime/types.js";
+import type { AuthStorage } from "../core/agent-runtime/auth-storage.js";
+import type { ModelRegistry } from "../core/agent-runtime/model-registry.js";
+import type { LynnAgentSession } from "../core/agent-runtime/create-session.js";
 import { debugLog } from "../lib/debug-log.js";
 import { t } from "../server/i18n.js";
 import { createLynnAgentSession } from "../core/agent-runtime/create-session.js";
 
-type SessionModel = NonNullable<CreateAgentSessionOptions["model"]>;
-type BuiltInTool = NonNullable<CreateAgentSessionOptions["tools"]>[number];
+type AgentSession = LynnAgentSession;
+type SessionModel = Model;
+type BuiltInTool = ToolDefinition;
 type AgentModel = SessionModel | { id: string; provider?: string; name?: string };
 
 interface AgentRuntime {
