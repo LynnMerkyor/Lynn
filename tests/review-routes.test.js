@@ -40,6 +40,7 @@ function makeEngine() {
     currentSessionPath: '/tmp/session.jsonl',
     currentModel: { id: 'step-3.5-flash-2603', name: 'Step 3.5 Flash 2603', provider: 'brain' },
     availableModels: [
+      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' },
       { id: 'glm-5-turbo', name: 'GLM 5 Turbo', provider: 'zhipu-coding' },
       { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', provider: 'mimo' },
       { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'openai' },
@@ -221,8 +222,8 @@ describe('review route', () => {
     expect(runAgentSession).not.toHaveBeenCalled();
     expect(callText).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: 'mimo-v2.5-pro',
-        provider: 'mimo',
+        model: 'deepseek-v4-flash',
+        provider: 'deepseek',
         maxTokens: 2000,
         reasoning: false,
         quirks: ['enable_thinking'],
@@ -267,11 +268,11 @@ describe('review route', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(callText).toHaveBeenCalledTimes(2);
-    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ model: 'mimo-v2.5-pro', provider: 'mimo' }));
-    expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({ model: 'mimo-v2.5-pro', provider: 'mimo' }));
+    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ model: 'deepseek-v4-flash', provider: 'deepseek' }));
+    expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({ model: 'deepseek-v4-flash', provider: 'deepseek' }));
   });
 
-  it('queues automatic GLM reviews when MiMo is unavailable', async () => {
+  it('queues automatic GLM reviews when DS V4 and MiMo are unavailable', async () => {
     engine.availableModels = [
       { id: 'glm-5-turbo', name: 'GLM 5 Turbo', provider: 'zhipu-coding' },
       { id: 'lynn-brain-router', name: 'Default Brain', provider: 'brain' },
@@ -334,7 +335,7 @@ describe('review route', () => {
     resolveGlmRuns[2]('Third GLM review.\n```json\n{"summary":"Third GLM.","verdict":"pass","findings":[]}\n```');
   });
 
-  it('keeps automatic Hanako fallback on MiMo/GLM/Brain instead of user BYOK models', async () => {
+  it('keeps automatic Hanako fallback on DS V4/MiMo/GLM/Brain instead of unrelated BYOK models', async () => {
     engine.currentModel = { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' };
     engine.availableModels = [
       ...engine.availableModels,
@@ -356,8 +357,9 @@ describe('review route', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(callText).toHaveBeenCalledTimes(2);
+    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-flash' }));
     expect(['mimo', 'zhipu', 'zhipu-coding', 'brain']).toContain(callText.mock.calls[1][0].provider);
-    expect(callText.mock.calls[1][0].provider).not.toBe('deepseek');
+    expect(callText.mock.calls.some(([options]) => options.provider === 'deepseek' && options.model === 'deepseek-chat')).toBe(false);
   });
 
   it('bootstraps a missing reviewer agent when the requested reviewer kind has no candidate', async () => {
@@ -508,7 +510,7 @@ describe('review route', () => {
 
     expect(runAgentSession).toHaveBeenCalledTimes(2);
     expect(resultMsg.errorCode).toBe('review_timeout_recovered');
-    expect(resultMsg.fallbackNote).toContain('Hanako · MiMo/GLM');
+    expect(resultMsg.fallbackNote).toContain('Hanako · DS V4');
     expect(resultMsg.fallbackNote).toMatch(/自动切换到|finished on/);
   });
 
@@ -537,6 +539,7 @@ describe('review route', () => {
   it('emits deterministic review content when all review model attempts return no visible output', async () => {
     engine.availableModels = [
       ...engine.availableModels,
+      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' },
       { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', provider: 'mimo' },
       { id: 'glm-5.0-turbo', name: 'GLM 5.0 Turbo', provider: 'zhipu' },
     ];
@@ -566,7 +569,7 @@ describe('review route', () => {
         severity: 'low',
       })],
     }));
-    expect(resultMsg.reviewerModelLabel).toBe('Hanako · MiMo/GLM');
+    expect(resultMsg.reviewerModelLabel).toBe('Hanako · DS V4');
     expect(resultMsg.fallbackNote).toMatch(/复查|review/i);
   });
 

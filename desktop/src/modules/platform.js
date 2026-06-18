@@ -1,15 +1,18 @@
 /**
  * platform.js — 平台适配层
  *
- * Electron 环境：直接转发给 preload 注入的 window.hana（IPC）
+ * Electron 环境：直接转发给 preload 注入的 window.lynn/window.hana（IPC）
  * Web 环境：降级到 HTTP API + 浏览器原生 API
  *
- * 使用方式：所有前端代码调 platform.xxx()，不再直接碰 window.hana。
+ * 使用方式：所有前端代码调 platform.xxx()，不再直接碰 window.hana/window.lynn。
  */
 (function () {
-  if (window.hana) {
+  if (window.lynn || window.hana) {
     // Electron — 直接用 preload 注入的 IPC bridge
-    window.platform = window.hana;
+    const bridge = window.lynn || window.hana;
+    window.lynn = bridge;
+    window.hana = bridge;
+    window.platform = bridge;
     return;
   }
 

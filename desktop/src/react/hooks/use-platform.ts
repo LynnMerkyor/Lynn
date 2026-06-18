@@ -3,6 +3,8 @@ import type { PlatformApi } from '../types';
 declare global {
   interface Window {
     platform: PlatformApi;
+    lynn: PlatformApi;
+    hana: PlatformApi;
   }
 }
 

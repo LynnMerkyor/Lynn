@@ -15,12 +15,14 @@ function getReadyServerPort(): string {
   return port;
 }
 
-export function hanaUrl(path: string): string {
+export function lynnUrl(path: string): string {
   const serverPort = getReadyServerPort();
   return `http://127.0.0.1:${serverPort}${path}`;
 }
 
-export async function hanaFetch(
+export const hanaUrl = lynnUrl;
+
+export async function lynnFetch(
   path: string,
   opts: RequestInit & { timeout?: number } = {},
 ): Promise<Response> {
@@ -56,19 +58,21 @@ export async function hanaFetch(
       } catch {
         /* keep status text */
       }
-      throw new Error(`hanaFetch ${path}: ${detail}`);
+      throw new Error(`lynnFetch ${path}: ${detail}`);
     }
     return res;
   } catch (err) {
     if (timedOut && controller.signal.aborted) {
       const seconds = Math.max(1, Math.round(timeout / 1000));
-      throw new Error(`hanaFetch ${path}: 请求超时（${seconds} 秒）`);
+      throw new Error(`lynnFetch ${path}: 请求超时（${seconds} 秒）`);
     }
     throw err;
   } finally {
     clearTimeout(timer);
   }
 }
+
+export const hanaFetch = lynnFetch;
 
 /** 根据 yuan 类型返回 fallback 头像路径 */
 export function yuanFallbackAvatar(yuan?: string): string {

@@ -221,6 +221,14 @@ export async function switchSession(path: string): Promise<void> {
       await loadMessages(path);
     }
 
+    // If the target session is actively streaming, request replay immediately
+    // instead of waiting for the websocket watchdog tick. This keeps session
+    // switching deterministic during long tool turns and reconnects.
+    if (data.isStreaming && path) {
+      const { requestStreamResume } = await import('../services/stream-resume');
+      requestStreamResume(path);
+    }
+
     // 加载 desk files（显式传入切换后 session 的 cwd，覆盖 store 中旧的 deskBasePath）
     loadDeskFiles('', data.cwd || undefined);
 

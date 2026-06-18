@@ -318,8 +318,10 @@ const AUTO_REVIEW_CHAIN_TIMEOUT_MS = Math.max(
   AUTO_REVIEW_EXEC_TIMEOUT_MS * 3,
 );
 const AUTO_REVIEW_MAX_OUTPUT_TOKENS = Math.max(1200, Math.min(2400, Number(process.env.LYNN_AUTO_REVIEW_MAX_TOKENS || 2000)));
-const AUTO_REVIEW_MODEL_LABEL = "Hanako · MiMo/GLM";
-const AUTO_REVIEW_FALLBACK_PROVIDERS = new Set(["mimo", "xiaomi", "xiaomi-mimo", "token-plan", "zhipu", "zhipu-coding", "brain"]);
+const AUTO_REVIEW_MODEL_LABEL = "Hanako · DS V4";
+const AUTO_REVIEW_FALLBACK_LABEL = "Hanako · DS V4/MiMo/GLM";
+const AUTO_REVIEW_FALLBACK_PROVIDERS = new Set(["deepseek", "mimo", "xiaomi", "xiaomi-mimo", "token-plan", "zhipu", "zhipu-coding", "brain"]);
+const AUTO_REVIEW_DEEPSEEK_PROVIDERS = new Set(["deepseek"]);
 const AUTO_REVIEW_MIMO_PROVIDERS = new Set(["mimo", "xiaomi", "xiaomi-mimo", "token-plan"]);
 const AUTO_REVIEW_GLM_PROVIDERS = new Set(["zhipu", "zhipu-coding"]);
 const AUTO_REVIEW_BRAIN_PROVIDERS = new Set(["brain"]);
@@ -577,7 +579,7 @@ function buildDeterministicReviewFallbackContent(input: {
     ? (isZh() ? "复查模型在时限内没有完成输出" : "the review model did not finish within the timeout")
     : (isZh() ? "复查模型暂时没有返回可见文本" : "the review model did not return visible text");
   const tried = attempted.length
-    ? (isZh() ? `，已尝试 ${attempted.length} 个 Hanako · MiMo/GLM 候选` : ` after trying ${attempted.length} Hanako · MiMo/GLM candidate(s)`)
+    ? (isZh() ? `，已尝试 ${attempted.length} 个 ${AUTO_REVIEW_FALLBACK_LABEL} 候选` : ` after trying ${attempted.length} ${AUTO_REVIEW_FALLBACK_LABEL} candidate(s)`)
     : "";
   const summary = isZh()
     ? `${reason}${tried}。本次已降级为最低限度复查：没有生成新的模型判断；请把此结论视为可继续讨论的兜底状态。`
@@ -667,7 +669,12 @@ function reviewModelDisplayLabel(
 
 function isAutoReviewFallbackAllowed(model: ModelLike | null | undefined): boolean {
   const provider = String(model?.provider || "").trim().toLowerCase();
-  return !!provider && AUTO_REVIEW_FALLBACK_PROVIDERS.has(provider);
+  if (!provider || !AUTO_REVIEW_FALLBACK_PROVIDERS.has(provider)) return false;
+  if (AUTO_REVIEW_DEEPSEEK_PROVIDERS.has(provider)) {
+    const id = normalizeModelId(model?.id);
+    return id === "deepseek-v4-flash" || id.startsWith("deepseek-v4-flash-");
+  }
+  return true;
 }
 
 function normalizeProviderId(value: unknown): string {
@@ -684,15 +691,21 @@ function isAutoReviewGlmProvider(provider: unknown): boolean {
 
 function autoReviewProviderTier(provider: unknown): number {
   const normalized = normalizeProviderId(provider);
-  if (AUTO_REVIEW_MIMO_PROVIDERS.has(normalized)) return 0;
-  if (AUTO_REVIEW_GLM_PROVIDERS.has(normalized)) return 1;
-  if (AUTO_REVIEW_BRAIN_PROVIDERS.has(normalized)) return 2;
+  if (AUTO_REVIEW_DEEPSEEK_PROVIDERS.has(normalized)) return 0;
+  if (AUTO_REVIEW_MIMO_PROVIDERS.has(normalized)) return 1;
+  if (AUTO_REVIEW_GLM_PROVIDERS.has(normalized)) return 2;
+  if (AUTO_REVIEW_BRAIN_PROVIDERS.has(normalized)) return 3;
   return 9;
 }
 
 function autoReviewModelPreference(model: ModelLike | null | undefined): number {
   const provider = normalizeProviderId(model?.provider);
   const id = normalizeModelId(model?.id);
+  if (AUTO_REVIEW_DEEPSEEK_PROVIDERS.has(provider)) {
+    if (id === "deepseek-v4-flash") return 0;
+    if (id.startsWith("deepseek-v4-flash-")) return 1;
+    return 9;
+  }
   if (AUTO_REVIEW_MIMO_PROVIDERS.has(provider)) {
     if (id === "mimo-v2.5-pro") return 0;
     if (id.includes("mimo-v2.5-pro")) return 1;
@@ -968,8 +981,8 @@ async function runDirectReviewerSessionWithFallback(
         const switched = originalConfig && (config.model !== originalConfig.model || config.provider !== originalConfig.provider);
         const fallbackNote = switched
           ? (isZh()
-              ? `Hanako 自动复查已按 MiMo/GLM 策略切换到 ${nextLabel} 完成。`
-              : `Hanako automatic review switched to ${nextLabel} according to the MiMo/GLM policy.`)
+              ? `Hanako 自动复查已按 DS V4 优先策略切换到 ${nextLabel} 完成。`
+              : `Hanako automatic review switched to ${nextLabel} according to the DS V4-first policy.`)
           : null;
         return {
           content,
@@ -1082,7 +1095,7 @@ async function runDirectReviewerSessionWithFallback(
 function formatReviewFailureMessage(err: unknown, attemptedModels: string[] = []): string {
   const modelHint = attemptedModels.length
     ? (isZh()
-        ? ` 已自动尝试 ${attemptedModels.length} 个 Hanako · MiMo/GLM 备用模型`
+        ? ` 已自动尝试 ${attemptedModels.length} 个 ${AUTO_REVIEW_FALLBACK_LABEL} 备用模型`
         : ` It already retried with ${attemptedModels.length} fallback review models.`)
     : "";
 

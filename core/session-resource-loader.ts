@@ -11,6 +11,7 @@ import {
   buildKnownFolderAliasPrompt,
   shouldInjectLocalRoutePromptHints,
 } from "./session-context-hints.js";
+import { BRAIN_MANAGED_CUSTOM_TOOLS } from "./brain-managed-tools.js";
 
 type AnyRecord = Record<string, any>;
 
@@ -178,14 +179,16 @@ export function createSessionResourceLoader(opts: {
 
         const selectedModelProviderForTools = sessionEntry.modelProvider || effectiveModel?.provider || null;
         if (isBrainProvider(selectedModelProviderForTools)) {
+          const brainToolNames = [...BRAIN_MANAGED_CUSTOM_TOOLS].join("、");
+          const brainToolNamesEn = [...BRAIN_MANAGED_CUSTOM_TOOLS].join(", ");
           extras.push(isZh
             ? [
-                "【Brain V2 工具边界】当前会话走 Brain 托管链路：stock_market、weather、live_news、sports_score、web_search、web_fetch、exchange_rate、calendar、unit_convert、express_tracking 这些实时函数由 Brain 服务端托管，本地客户端不会重复执行。",
+                `【Brain V2 工具边界】当前会话走 Brain 托管链路：${brainToolNames} 这些实时函数由 Brain 服务端托管，本地客户端不会重复执行。`,
                 "但本地文件、目录、bash、edit/write 等桌面工具仍由 Lynn 客户端执行。需要读取或修改本机文件时，继续调用真实本地工具，不要声明本地文件工具不可用。",
                 "不要为 Brain 托管的实时工具名称生成 toolCall / function_call，也不要在正文里声明这些服务端工具失败。",
               ].join(" ")
             : [
-                "[Brain V2 Tool Boundary] This session is routed through the Brain-managed chain: realtime functions named stock_market, weather, live_news, sports_score, web_search, web_fetch, exchange_rate, calendar, unit_convert, or express_tracking are handled server-side by Brain, so the local client will not duplicate them.",
+                `[Brain V2 Tool Boundary] This session is routed through the Brain-managed chain: realtime functions named ${brainToolNamesEn} are handled server-side by Brain, so the local client will not duplicate them.`,
                 "Local desktop tools for files, directories, bash, and edit/write still run through the Lynn client. For local file tasks, keep using real local tools and do not claim local filesystem tools are unavailable.",
                 "Do not emit toolCall/function_call entries for Brain-managed realtime names, and do not claim those server-side tools failed.",
               ].join(" ")

@@ -51,7 +51,7 @@ describe("auto review policy", () => {
       "high_risk_tool",
       "time_sensitive_or_market",
     ]));
-    expect(decision.context).toContain("Hanako · MiMo/GLM");
+    expect(decision.context).toContain("Hanako · DS V4");
     expect(decision.context).toContain("NVDA 205.19");
   });
 

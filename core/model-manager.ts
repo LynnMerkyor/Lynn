@@ -206,8 +206,8 @@ export class ModelManager {
       input,
       vision,
       reasoning,
-      contextWindow: raw?.context || known?.context || model.contextWindow || null,
-      maxTokens: raw?.maxOutput || known?.maxOutput || model.maxTokens || null,
+      contextWindow: raw?.context || known?.context || model.contextWindow || undefined,
+      maxTokens: raw?.maxOutput || known?.maxOutput || model.maxTokens || undefined,
     };
   }
 

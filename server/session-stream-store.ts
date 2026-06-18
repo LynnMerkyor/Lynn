@@ -5,7 +5,7 @@
  * 每轮回复对应一个 streamId，流内每条事件按 seq 递增。
  */
 
-const DEFAULT_MAX_EVENTS = 200;
+const DEFAULT_MAX_EVENTS = 1_000;
 
 export interface SessionStreamEvent {
   [key: string]: unknown;
@@ -55,6 +55,8 @@ export interface ResumeSessionStreamResult {
 
 /** 创建初始流状态 */
 export function createSessionStreamState(opts: CreateSessionStreamStateOptions = {}): SessionStreamState {
+  const envMax = Number(process.env.LYNN_STREAM_REPLAY_MAX_EVENTS || "");
+  const configuredMax = opts.maxEvents || (Number.isFinite(envMax) && envMax > 0 ? envMax : DEFAULT_MAX_EVENTS);
   return {
     streamId: null,
     nextSeq: 1,
@@ -62,7 +64,7 @@ export function createSessionStreamState(opts: CreateSessionStreamStateOptions =
     startedAt: 0,
     endedAt: 0,
     events: [],
-    maxEvents: Math.max(1, opts.maxEvents || DEFAULT_MAX_EVENTS),
+    maxEvents: Math.max(1, configuredMax),
   };
 }
 

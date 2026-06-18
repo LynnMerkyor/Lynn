@@ -1,6 +1,7 @@
 import { getLocale } from "../server/i18n.js";
 import { isBrainProvider } from "../shared/brain-provider.js";
 import { runReadToolPromptInjectionGuardrail } from "./claw-aegis-guardrails.js";
+import { isBrainManagedCustomToolName } from "./brain-managed-tools.js";
 
 type AnyRecord = Record<string, any>;
 type AgentLike = AnyRecord;
@@ -11,19 +12,6 @@ type SessionEntry = AnyRecord & {
   relayInProgress?: boolean;
 };
 
-const BRAIN_MANAGED_TOOL_NAMES = new Set([
-  "stock_market",
-  "weather",
-  "live_news",
-  "sports_score",
-  "web_search",
-  "web_fetch",
-  "exchange_rate",
-  "calendar",
-  "unit_convert",
-  "express_tracking",
-]);
-
 function eventToolName(event: AnyRecord | null | undefined): string {
   return String(event?.toolName || event?.toolCall?.name || "").trim();
 }
@@ -32,15 +20,11 @@ function eventToolCallKey(event: AnyRecord | null | undefined): string {
   return String(event?.toolCallId || eventToolName(event) || "").trim();
 }
 
-function isBrainManagedTool(name: unknown): boolean {
-  return BRAIN_MANAGED_TOOL_NAMES.has(String(name || "").trim());
-}
-
 function shouldSuppressBrainManagedToolEvent(entry: SessionEntry | undefined, event: AnyRecord | null | undefined): boolean {
   if (!entry || !isBrainProvider(entry.modelProvider || null)) return false;
   if (event?.type !== "tool_execution_start" && event?.type !== "tool_execution_end") return false;
   const toolName = eventToolName(event);
-  if (!isBrainManagedTool(toolName)) return false;
+  if (!isBrainManagedCustomToolName(toolName)) return false;
 
   const pending = entry._brainManagedToolEventKeys instanceof Set
     ? entry._brainManagedToolEventKeys

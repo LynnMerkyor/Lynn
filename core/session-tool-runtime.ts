@@ -9,6 +9,10 @@ import {
   SecurityMode,
 } from "../shared/security-mode.js";
 import { isBrainProvider } from "../shared/brain-provider.js";
+import {
+  BRAIN_MANAGED_CUSTOM_TOOLS,
+  filterOutBrainManagedCustomTools,
+} from "./brain-managed-tools.js";
 import type { ResolvedModel } from "./types.js";
 
 const log = createModuleLogger("session");
@@ -70,18 +74,7 @@ const STANDARD_CUSTOM_TOOLS = new Set([
 
 const OPENAI_RESPONSES_TOOL_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
-export const BRAIN_MANAGED_CUSTOM_TOOLS = new Set([
-  "stock_market",
-  "weather",
-  "live_news",
-  "sports_score",
-  "web_search",
-  "web_fetch",
-  "exchange_rate",
-  "calendar",
-  "unit_convert",
-  "express_tracking",
-]);
+export { BRAIN_MANAGED_CUSTOM_TOOLS };
 
 export function filterCustomToolsByTier(customTools: ToolLike[], tier: string | null | undefined) {
   if (!tier || tier === "full") return customTools;
@@ -93,7 +86,7 @@ export function filterCustomToolsByTier(customTools: ToolLike[], tier: string | 
 export function filterBrainManagedCustomTools(customTools: ToolLike[], model: ModelLike) {
   if (!Array.isArray(customTools) || customTools.length === 0) return [];
   if (!isBrainProvider(model?.provider)) return customTools;
-  return customTools.filter((tool: ToolLike) => !BRAIN_MANAGED_CUSTOM_TOOLS.has(String(tool?.name || "")));
+  return filterOutBrainManagedCustomTools(customTools);
 }
 
 function isStrictToolNameModel(model: ModelLike) {

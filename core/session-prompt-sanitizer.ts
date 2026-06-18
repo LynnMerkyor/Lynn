@@ -1,22 +1,10 @@
 import { createModuleLogger } from "../lib/debug-log.js";
+import { isBrainManagedCustomToolName } from "./brain-managed-tools.js";
 
 const log = createModuleLogger("session");
 
 type AnyRecord = Record<string, any>;
 type SessionLike = AnyRecord;
-
-const BRAIN_MANAGED_TOOL_NAMES = new Set([
-  "stock_market",
-  "weather",
-  "live_news",
-  "sports_score",
-  "web_search",
-  "web_fetch",
-  "exchange_rate",
-  "calendar",
-  "unit_convert",
-  "express_tracking",
-]);
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err || "unknown error");
@@ -67,7 +55,7 @@ function contentBlockToolName(block: AnyRecord | null | undefined): string {
 }
 
 function isBrainManagedToolName(name: unknown): boolean {
-  return BRAIN_MANAGED_TOOL_NAMES.has(String(name || "").trim());
+  return isBrainManagedCustomToolName(name);
 }
 
 function isBrainManagedToolNotFoundToolResult(message: AnyRecord | null | undefined): boolean {

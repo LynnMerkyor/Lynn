@@ -1,9 +1,9 @@
 import fs from "fs";
 import {
-  createAgentSession,
   SessionManager,
 } from "@mariozechner/pi-coding-agent";
 import { BrowserManager } from "../lib/browser/browser-manager.js";
+import { createLynnAgentSession } from "./agent-runtime/create-session.js";
 import {
   buildClientAgentMetadata,
   readClientAgentKeyFromPreferencesFile,
@@ -165,7 +165,7 @@ export async function executeIsolatedSession(
     const clientAgentMetadata = Object.keys(clientAgentHeaders).length > 0
       ? buildClientAgentMetadata(clientAgentKey)
       : undefined;
-    const { session } = await createAgentSession({
+    const { session } = await createLynnAgentSession({
       cwd: execCwd,
       sessionManager: tempSessionMgr,
       settingsManager: deps.createSettings(execModel),

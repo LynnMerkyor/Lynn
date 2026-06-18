@@ -15,6 +15,10 @@ export type ToolLike = AnyRecord & {
   _aliasOf?: string;
 };
 
+interface WrapToolGuardOptions {
+  getSessionPath?: () => string | null;
+}
+
 export type BuildToolsOptions = AnyRecord & {
   activeMcpServers?: Set<string>;
   agentDir?: string;
@@ -99,7 +103,37 @@ export function detectSensitiveParams(toolName: string, params: any) {
   return null;
 }
 
-export function wrapToolWithGuard(tool: ToolLike): ToolLike {
+const DEFAULT_TOOL_INFLIGHT_TTL_MS = 45_000;
+const TOOL_INFLIGHT_TTL_MS = Math.max(1_000, Number(process.env.LYNN_TOOL_INFLIGHT_TTL_MS || DEFAULT_TOOL_INFLIGHT_TTL_MS));
+const MAX_INFLIGHT_KEY_CHARS = 8_000;
+const inflightToolCalls = new Map<string, number>();
+
+function stableSerialize(value: any, depth = 0): string {
+  if (depth > 6) return '"[depth-limit]"';
+  if (value === null || value === undefined) return String(value);
+  if (typeof value === "string") return JSON.stringify(value.length > 2_000 ? `${value.slice(0, 2_000)}…[${value.length} chars]` : value);
+  if (typeof value === "number" || typeof value === "boolean") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((item) => stableSerialize(item, depth + 1)).join(",")}]`;
+  if (typeof value === "object") {
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key], depth + 1)}`).join(",")}}`;
+  }
+  return JSON.stringify(String(value));
+}
+
+function purgeExpiredInflightToolCalls(now = Date.now()) {
+  for (const [key, startedAt] of inflightToolCalls.entries()) {
+    if (now - startedAt > TOOL_INFLIGHT_TTL_MS) inflightToolCalls.delete(key);
+  }
+}
+
+function buildInflightToolKey(toolName: string, params: any, sessionPath: string | null | undefined): string {
+  const sessionKey = sessionPath || "global";
+  const raw = `${sessionKey}\0${toolName}\0${stableSerialize(params)}`;
+  return raw.length > MAX_INFLIGHT_KEY_CHARS ? raw.slice(0, MAX_INFLIGHT_KEY_CHARS) : raw;
+}
+
+export function wrapToolWithGuard(tool: ToolLike, opts: WrapToolGuardOptions = {}): ToolLike {
   if (!tool?.execute || tool._guarded) return tool;
   const originalExecute = tool.execute;
   const schema = tool.parameters;
@@ -125,18 +159,43 @@ export function wrapToolWithGuard(tool: ToolLike): ToolLike {
       };
     }
 
-    const sensitive = detectSensitiveParams(tool.name, fixedParams);
-    if (sensitive) {
-      console.warn(`[ClawAegis] 敏感路径检测: tool=${sensitive.toolName} target=${sensitive.label} match=${sensitive.matched}`);
-      const result = await originalExecute(toolCallId, fixedParams, ...rest);
-      const warningText = `⚠️ 安全提示：检测到访问${sensitive.label}（${sensitive.matched}）。请确认这是用户明确要求的操作。如非必要，不要读取或传输此类文件内容。`;
-      if (result?.content?.[0]?.type === "text") {
-        result.content[0].text = warningText + "\n\n" + result.content[0].text;
-      }
-      return result;
+    const sessionPath = opts.getSessionPath?.() || null;
+    const inflightKey = buildInflightToolKey(tool.name, fixedParams, sessionPath);
+    const startedAt = Date.now();
+    purgeExpiredInflightToolCalls(startedAt);
+    if (inflightToolCalls.has(inflightKey)) {
+      return {
+        content: [{
+          type: "text",
+          text: `已跳过重复的并发工具调用：${tool.name}。相同参数的调用正在执行中，请等待前一个结果。`,
+        }],
+        details: {
+          deduped: true,
+          tool: tool.name,
+          sessionPath: sessionPath || undefined,
+        },
+      };
     }
+    inflightToolCalls.set(inflightKey, startedAt);
 
-    return originalExecute(toolCallId, fixedParams, ...rest);
+    try {
+      const sensitive = detectSensitiveParams(tool.name, fixedParams);
+      if (sensitive) {
+        console.warn(`[ClawAegis] 敏感路径检测: tool=${sensitive.toolName} target=${sensitive.label} match=${sensitive.matched}`);
+        const result = await originalExecute(toolCallId, fixedParams, ...rest);
+        const warningText = `⚠️ 安全提示：检测到访问${sensitive.label}（${sensitive.matched}）。请确认这是用户明确要求的操作。如非必要，不要读取或传输此类文件内容。`;
+        if (result?.content?.[0]?.type === "text") {
+          result.content[0].text = warningText + "\n\n" + result.content[0].text;
+        }
+        return result;
+      }
+
+      return await originalExecute(toolCallId, fixedParams, ...rest);
+    } finally {
+      if (inflightToolCalls.get(inflightKey) === startedAt) {
+        inflightToolCalls.delete(inflightKey);
+      }
+    }
   };
 
   return { ...tool, execute: guardedExecute, _guarded: true };
@@ -201,7 +260,9 @@ export function buildEngineToolRuntime(opts: BuildEngineToolRuntimeOptions) {
     getSessionPath: opts.getSessionPath,
   });
 
-  const guardedTools = ((result.customTools || []) as ToolLike[]).map(wrapToolWithGuard);
+  const guardedTools = ((result.customTools || []) as ToolLike[]).map((tool) => wrapToolWithGuard(tool, {
+    getSessionPath: opts.getSessionPath,
+  }));
   const aliases = createToolAliases(guardedTools);
   result.customTools = aliases.length > 0 ? [...guardedTools, ...aliases] : guardedTools;
   return result;

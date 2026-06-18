@@ -14,7 +14,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fromRoot } from '../shared/hana-root.js';
+import { fromRoot } from '../shared/lynn-root.js';
 
 const DATA_DIR = fromRoot('lib', 'content-filter-data');
 

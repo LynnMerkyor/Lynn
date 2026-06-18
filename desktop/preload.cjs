@@ -12,7 +12,7 @@ function resolveTheme() {
   return saved === "auto" ? (isDark ? "midnight" : "warm-paper") : saved;
 }
 
-contextBridge.exposeInMainWorld("hana", {
+const lynnBridge = {
   getServerPort: () => ipcRenderer.invoke("get-server-port"),
   getServerToken: () => ipcRenderer.invoke("get-server-token"),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
@@ -160,4 +160,7 @@ contextBridge.exposeInMainWorld("hana", {
       ipcRenderer.removeListener("window-unmaximized", onUnmaximized);
     };
   },
-});
+};
+
+contextBridge.exposeInMainWorld("lynn", lynnBridge);
+contextBridge.exposeInMainWorld("hana", lynnBridge);

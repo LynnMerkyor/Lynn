@@ -3,7 +3,7 @@
  */
 import fs from "fs";
 import path from "path";
-import { fromRoot } from "./hana-root.js";
+import { fromRoot } from "./lynn-root.js";
 
 const localesDir = fromRoot("desktop", "src", "locales");
 

@@ -69,7 +69,7 @@ import { BridgeManager } from "../lib/bridge/bridge-manager.js";
 import { Hub } from "../hub/index.js";
 import { TaskRuntime } from "../hub/task-runtime.js";
 import { startCLI } from "./cli.js";
-import { fromRoot } from "../shared/hana-root.js";
+import { fromRoot } from "../shared/lynn-root.js";
 
 const productDir = fromRoot("lib");
 type AnyRecord = Record<string, any>;

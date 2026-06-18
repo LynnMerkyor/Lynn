@@ -15,7 +15,7 @@ import path from "path";
 import YAML from "js-yaml";
 import { encryptApiKey as _encryptKey, decryptApiKey as _decryptKey } from "./provider-key-crypto.js";
 import { safeReadYAMLSync } from "../shared/safe-fs.js";
-import { fromRoot } from "../shared/hana-root.js";
+import { fromRoot } from "../shared/lynn-root.js";
 import type {
   ModelId,
   ProviderConfig,

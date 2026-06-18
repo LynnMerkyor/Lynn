@@ -7,7 +7,6 @@
 import fs from "fs";
 import path from "path";
 import {
-  createAgentSession,
   SessionManager,
   SettingsManager,
 } from "@mariozechner/pi-coding-agent";
@@ -42,6 +41,7 @@ import {
   readClientAgentKeyFromPreferencesFile,
   readSignedClientAgentHeadersForProvider,
 } from "./client-agent-identity.js";
+import { createLynnAgentSession } from "./agent-runtime/create-session.js";
 import { resolveCompactionSettings } from "./compaction-settings.js";
 
 const LOCAL_QWEN35_PROVIDER_IDS = new Set([
@@ -187,9 +187,9 @@ type BridgeCreateAgentSessionOptions = Omit<
   requestMetadata?: Record<string, unknown>;
 };
 
-const createBridgeAgentSession = createAgentSession as (
+const createBridgeAgentSession = createLynnAgentSession as (
   options: BridgeCreateAgentSessionOptions,
-) => ReturnType<typeof createAgentSession>;
+) => ReturnType<typeof createLynnAgentSession>;
 
 function isLocalQwen35Model(modelOrId: BridgeModelRef, provider?: string | null): boolean {
   const modelId = typeof modelOrId === "object" ? modelOrId?.id : modelOrId;

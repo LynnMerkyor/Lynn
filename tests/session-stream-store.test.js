@@ -53,6 +53,21 @@ describe("session-stream-store", () => {
     expect(resumed.events.map(x => x.seq)).toEqual([2, 3, 4]);
   });
 
+  it("支持通过环境变量调大或调小恢复事件缓冲容量", () => {
+    const original = process.env.LYNN_STREAM_REPLAY_MAX_EVENTS;
+    process.env.LYNN_STREAM_REPLAY_MAX_EVENTS = "5";
+    try {
+      const ss = createSessionStreamState();
+      expect(ss.maxEvents).toBe(5);
+    } finally {
+      if (original == null) {
+        delete process.env.LYNN_STREAM_REPLAY_MAX_EVENTS;
+      } else {
+        process.env.LYNN_STREAM_REPLAY_MAX_EVENTS = original;
+      }
+    }
+  });
+
   it("开始新流时会重置旧状态", () => {
     const ss = createSessionStreamState();
     beginSessionStream(ss, "stream_a");

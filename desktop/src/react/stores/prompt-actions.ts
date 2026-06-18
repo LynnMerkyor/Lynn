@@ -4,6 +4,7 @@ import type { ComposerDraft, QuotedSelection } from './input-slice';
 import { ensureSession, showSidebarToast } from './session-actions';
 import { getWebSocket } from '../services/websocket';
 import { getModeById } from '../config/task-modes';
+import { buildRetryDraftFromMessage } from '../utils/composer-state';
 
 export interface SendPromptOptions {
   mode?: 'prompt' | 'steer';
@@ -18,6 +19,7 @@ export interface SendPromptOptions {
   gitContext?: GitContext | null;
   replaceFromMessageId?: string | null;
   replaceFromMessageIndex?: number | null;
+  skipPersonaInjection?: boolean;
 }
 
 function canSendPayload(text: string, images?: PromptImage[]): boolean {
@@ -156,7 +158,7 @@ export async function submitPromptTask(options: SendPromptOptions): Promise<bool
   let requestText = options.requestText ?? options.text;
 
   // ── 任务模式 persona 注入（仅新发 prompt；steer 流中已有上下文，不重复注入）──
-  if (mode === 'prompt') {
+  if (mode === 'prompt' && !options.skipPersonaInjection) {
     const activeModeId = useStore.getState().taskModeId;
     const activeMode = activeModeId ? getModeById(activeModeId) : null;
     const persona = activeMode?.persona;
@@ -250,6 +252,60 @@ export async function submitPromptTask(options: SendPromptOptions): Promise<bool
   syncOptimisticSessionList(displayText || requestText, sessionPath);
   useStore.setState({ welcomeVisible: false });
   return true;
+}
+
+function numericVisibleIndex(value: unknown): number | null {
+  return Number.isFinite(value) && Number(value) >= 0 ? Number(value) : null;
+}
+
+export async function retryAssistantResponse(assistantMessageId: string): Promise<boolean> {
+  const targetId = String(assistantMessageId || '').trim();
+  if (!targetId) return false;
+
+  const state = useStore.getState();
+  const sessionPath = state.currentSessionPath;
+  if (!sessionPath) return false;
+  const items = state.chatSessions?.[sessionPath]?.items || [];
+
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (item?.type !== 'message' || item.data?.id !== targetId) continue;
+
+    for (let j = i - 1; j >= 0; j--) {
+      const prev = items[j];
+      if (prev?.type !== 'message' || prev.data?.role !== 'user') continue;
+      const userMessage = prev.data as any;
+      const draft = buildRetryDraftFromMessage(userMessage);
+      const displayText = draft.text || userMessage.text || userMessage.requestText || '';
+      const storedRequestText = typeof userMessage.requestText === 'string' ? userMessage.requestText : '';
+      const requestText = storedRequestText || displayText;
+
+      const sent = await submitPromptTask({
+        mode: 'prompt',
+        text: displayText || requestText,
+        displayText: displayText || requestText,
+        requestText: storedRequestText ? requestText : undefined,
+        images: userMessage.requestImages,
+        attachments: userMessage.attachments,
+        quotedText: userMessage.quotedText,
+        quotedSelection: userMessage.quotedSelection ?? null,
+        gitContext: userMessage.gitContext ?? null,
+        retryDraft: draft,
+        replaceFromMessageId: userMessage.id,
+        replaceFromMessageIndex: numericVisibleIndex(userMessage.visibleIndex),
+        skipPersonaInjection: !!storedRequestText,
+      });
+
+      if (!sent) {
+        const latestState = useStore.getState();
+        latestState.applyComposerDraft?.(draft);
+        latestState.requestInputFocus?.();
+      }
+      return sent;
+    }
+    return false;
+  }
+  return false;
 }
 
 export function resendPromptRequest(

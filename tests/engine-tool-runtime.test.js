@@ -60,6 +60,65 @@ describe("engine tool runtime helpers", () => {
     warn.mockRestore();
   });
 
+  it("deduplicates identical in-flight tool calls per session and releases after completion", async () => {
+    let resolveFirst;
+    const execute = vi.fn((toolCallId) => {
+      if (toolCallId === "call-1") {
+        return new Promise((resolve) => {
+          resolveFirst = () => resolve({ content: [{ type: "text", text: `done:${toolCallId}` }] });
+        });
+      }
+      return Promise.resolve({ content: [{ type: "text", text: `done:${toolCallId}` }] });
+    });
+    const guarded = wrapToolWithGuard({
+      name: "web_search",
+      execute,
+      parameters: {
+        properties: {
+          query: { type: "string" },
+        },
+      },
+    }, {
+      getSessionPath: () => "/sessions/a",
+    });
+
+    const first = guarded.execute("call-1", { query: "世界杯" });
+    const duplicate = await guarded.execute("call-2", { query: "世界杯" });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(duplicate.content[0].text).toContain("已跳过重复的并发工具调用");
+    expect(duplicate.details).toMatchObject({
+      deduped: true,
+      tool: "web_search",
+      sessionPath: "/sessions/a",
+    });
+
+    resolveFirst();
+    const firstResult = await first;
+    expect(firstResult.content[0].text).toBe("done:call-1");
+
+    await guarded.execute("call-3", { query: "世界杯" });
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not deduplicate identical tool params across different sessions", async () => {
+    const execute = vi.fn(async (toolCallId) => ({ content: [{ type: "text", text: `done:${toolCallId}` }] }));
+    let sessionPath = "/sessions/a";
+    const guarded = wrapToolWithGuard({
+      name: "web_search",
+      execute,
+    }, {
+      getSessionPath: () => sessionPath,
+    });
+
+    const first = guarded.execute("call-1", { query: "世界杯" });
+    sessionPath = "/sessions/b";
+    const second = guarded.execute("call-2", { query: "世界杯" });
+
+    await Promise.all([first, second]);
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
   it("creates weak-model aliases without clobbering existing tool names", () => {
     const tools = [{ name: "web_search" }, { name: "web-search" }, { name: "present_files" }];
     const aliases = createToolAliases(tools);

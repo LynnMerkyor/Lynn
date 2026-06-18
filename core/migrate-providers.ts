@@ -16,7 +16,7 @@ import fs from "fs";
 import path from "path";
 import YAML from "js-yaml";
 import { safeReadYAMLSync } from "../shared/safe-fs.js";
-import { fromRoot } from "../shared/hana-root.js";
+import { fromRoot } from "../shared/lynn-root.js";
 import {
   BRAIN_CHAT_MODEL_ID,
   BRAIN_COMPILER_MODEL_ID,

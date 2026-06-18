@@ -1,6 +1,6 @@
-# Lynn v0.84.8 Release Notes / 发布说明
+# Lynn v0.84.9 Release Notes / 发布说明
 
-> 发布日期: 2026-06-18 · 真实看图门禁 + Hanako 并发复查稳定化 + provider / 上下文 / 流式回归修复
+> 发布日期: 2026-06-19 · Runtime 接缝收口 + Lynn 命名兼容层 + DS V4-first Hanako 复核
 
 ## 国内镜像站下载（推荐）
 
@@ -9,75 +9,53 @@
 - **CLI**:
 
   ```bash
-  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.8.tgz"
+  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.9.tgz"
   ```
 
-- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.8-macOS-arm64.dmg
-- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.8-macOS-x64.dmg
-- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.8-Windows-Setup.exe
+- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.9-macOS-arm64.dmg
+- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.9-macOS-x64.dmg
+- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.84.9-Windows-Setup.exe
 - **下载页**: https://download.merkyorlynn.com/download.html
 
 ## 中文重点
 
+- **Pi SDK 接缝收口**:主聊天、Bridge、isolated dry-run、Hub agent executor 四个会话入口统一经过 `createLynnAgentSession`,为后续自研 transport / loop 替换打下单一入口。
+- **Brain 托管工具清单统一**:`web_search`、`stock_market`、`weather` 等 Brain 已执行工具统一到一个共享清单,避免本地二次执行、工具 trace 串台或三处清单漂移。
+- **替换 Pi SDK 设计文档**:新增 `docs/PLAN-pi-sdk-replacement.md`,明确 P1a transport、P1b 工具、P2 loop、P3 清理的拆分、验收与回退策略。
+- **编排 / 执行 / 复核固定化**:主回答继续走 StepFun / Brain 托管工具链,Hanako 自动复核改为 `Hanako · DS V4` 优先,DeepSeek V4 Flash 先做事实核查与反驳,MiMo 和 GLM 仅作为二、三梯队 fallback。
+- **Lynn-first 命名兼容层**:新增 `LYNN_ROOT`、`window.lynn`、`lynnFetch`,并保留 `HANA_ROOT`、`window.hana`、`hanaFetch` 兼容旧插件 / 脚本。
+- **notary profile 默认改名**:发版脚本默认使用 `lynn-notary`,避免继续依赖旧 Hanako 命名。
 - **复杂工具成功但无总结兜底**: 当看图、文件、搜索等复杂工具均已成功执行,但模型没有返回最终总结时,Lynn 会基于工具证据生成可见收口摘要,不再只显示“已执行 N 个操作”。
-- **真实看图 E2E 加入 installed gate**: 发布门禁现在会在已安装 App 中真实调用视觉模型识别图片,避免“代码通过但安装包没带上”的回归。
-- **Hanako 并发复查稳定化**: 自动复查提示词和输出预算重调,MiMo/GLM 并发复查真实门禁通过,减少“复查暂时没跑完”。
-- **编辑重发恢复修复**: 在上一轮仍处理、WS 繁忙或发送失败时点击“编辑重发”,不会把旧的替换目标残留到下一条普通消息里,避免后续误截上下文或出现 error。
-- **Hanako 自动复查兜底**: 默认模型或 BYOK 模型没有返回可见内容、或回答需要复核时，Hanako 会自动启动后台复查并展示复查模型 `Hanako · MiMo/GLM`、结论、发现与建议执行结论。
-- **Hanako 复查模型链路修正**: 自动复查优先使用 MiMo,GLM 作为低并发 fallback,避免 GLM 并发 429 导致复查卡住或显示“暂时没跑完”。
-- **真实 GUI / CLI installed gate**: 发布前新增真实安装包门禁,会在 `/Applications/Lynn.app` 上点击设置页、provider 列表、主聊天输入区、模型下拉、任务模式、执行模式、语音入口和 Hanako 自动复查;CLI 同步跑真实安装包命令。
-- **主聊天窄窗输入区修复**: 不全屏或打开左侧栏时,输入框、底部按钮和模型下拉不再横向溢出或被裁切。
+- **真实看图 E2E installed gate 保留**: 发布门禁会在已安装 App 中真实调用视觉模型识别图片,避免“代码通过但安装包没带上”的回归。
+- **Hanako 自动复查兜底保留**: 默认模型或 BYOK 模型没有返回可见内容、或回答需要复核时,Hanako 会自动启动后台复查;复查链路以 `Hanako · DS V4` 为第一候选,MiMo/GLM 作为备用,并展示结论、发现与建议执行结论。
+- **主聊天窄窗输入区修复保留**: 不全屏或打开左侧栏时,输入框、底部按钮和模型下拉不再横向溢出或被裁切。
 - **DeepSeek V4 Pro / V4 Flash 实测可用**: 本地包已用 DeepSeek V4 Pro 与 V4 Flash 做多轮对话、世界杯/NBA/金价/NVDA 等工具场景验证。
-- **Issue #74 provider 配置修复**: provider id 大小写归一去重，旧版不可读 API Key 明确提示重填，重复 DeepSeek 条目不再把模型路由到空 key provider。
-- **BYOK 思考模型空答污染修复**: 纯空 assistant 轮会写入可见兜底文本，并在下一轮 prompt 前清理历史里的空 assistant 轮，避免一次空答污染整条会话。
-- **DeepSeek V4 参数修正**: DeepSeek V4 Pro / V4 Flash 保持 1M 上下文，输出预算回到 provider 安全上限。
-- **模型配置页修复**: 删除 deprecated / 误读出的模型后不会循环回到添加列表；留空保存不会覆盖已有 Key。
-- **实时搜索、比分、行情工具加强**: BYOK 工具搜索优先走 Brain GLM/MiMo 链路；世界杯赛程、NBA 比分、金价、NVDA 等场景使用结构化/可解析数据源，避免 Baidu/Bing 搜索页或 JS 行情页污染证据。
-- **伪工具流式清理加强**: 跨 chunk 的伪 `<tool_call>` / `<function=...>` 标记会被缓存并清理，合法 HTML/JSX/泛型文本不会被误吞。
-- **安全与运行时加固**: self-update 校验 SHA256，PDF/RAG 外部命令改为安全参数调用，worker shell 调用收紧，Brain web-search 需要设备签名。
-- **已保留 v0.84.4 修复**: 会话重启保留、编辑重发真实回退上下文、内容过滤误杀修复、右上角图标重叠修复、CLI 实时语音主链等继续有效。
+- **Issue #74 provider 配置修复保留**: provider id 大小写归一去重,旧版不可读 API Key 明确提示重填,重复 DeepSeek 条目不再把模型路由到空 key provider。
+- **BYOK 思考模型空答污染修复保留**: 纯空 assistant 轮会写入可见兜底文本,并在下一轮 prompt 前清理历史里的空 assistant 轮,避免一次空答污染整条会话。
 
 ## 验证
 
 - `npm run typecheck`
-- `npm run typecheck:runtime`
-- `npm run build:server`
-- `npm run build:main`
-- `npm run build:renderer`
 - `npm run build:cli`
-- `npm test -- --run tests/review-routes.test.js`
-- `npm test -- --run tests/model-manager-metadata.test.js desktop/src/react/settings/tabs/providers/ProviderModelList.test.ts`
-- `LYNN_INSTALLED_GATE_KEEP_TMP=1 node scripts/gate-installed-app.mjs`（已安装 GUI/server/CLI/settings/main-ui/live-vision/Hanako 并发复查全绿）
-- `npm run test:release:static`
-- `npm run test:release:ui`
-- `npm run gate:startup`
 - `npm run gate:cli-task`
 - `npm run gate:gui-task`
-- `npm run gate:agent-matrix`
-- `npm run test:brain-v2`
-- CLI tarball pack/install smoke
+- `npm run test:release:ui`
+- `npm run test:release:static`
+- `npm test -- tests/brain-managed-tools.test.js desktop/src/react/__tests__/hooks/use-hana-fetch.test.ts tests/session-prompt-sanitizer.test.js tests/chat-route-events.test.js tests/session-coordinator.test.js tests/bridge-session-manager.test.js tests/agent-executor.test.js tests/model-no-fallback.test.js tests/engine-tool-runtime.test.js tests/session-stream-store.test.js desktop/src/react/__tests__/stores/prompt-actions.test.ts`
 - macOS arm64/x64 打包签名、公证、staple、Gatekeeper 校验
-- Windows x64 NSIS 打包签名
 
 ---
 
-> Release date: 2026-06-18 · real vision gate + Hanako concurrent review stabilization + provider/context/streaming regression fixes
+> Release date: 2026-06-19 · runtime seam cleanup + Lynn naming compatibility layer + DS V4-first Hanako review
 
 ## English highlights
 
-- **Tool-success fallback summaries**: when complex tools such as vision, files, or search complete successfully but the model returns no final prose, Lynn now summarizes the retained tool evidence instead of only saying that operations ran.
-- **Real vision E2E added to the installed gate**: release gates now call the vision model from the installed app and verify the answer, preventing packaged-build drift.
-- **Hanako concurrent review stabilized**: auto-review prompts, timeout, and output budgets were tuned; the installed gate now verifies concurrent MiMo/GLM Hanako reviews.
-- **Edit-resend recovery fix**: clicking edit-resend while a turn is still processing, the socket is busy, or a send fails no longer leaves a stale replacement target that can affect the next normal prompt.
-- **Hanako automatic review fallback**: when the default model or a BYOK model returns no visible content, or a response needs verification, Hanako can start a background review and show the review model `Hanako · MiMo/GLM`, findings, conclusion, and suggested execution result.
-- **Hanako review model chain corrected**: automatic reviews prefer MiMo and use GLM as a low-concurrency fallback, avoiding GLM 429s that previously left reviews unfinished.
-- **Real GUI / CLI installed gate**: release gates now exercise the installed `/Applications/Lynn.app`, including Settings, provider lists, the main composer, model picker, task/security modes, voice entry, and Hanako auto-review; CLI commands are checked from the installed package as well.
-- **Main chat narrow-window composer fix**: when the window is not fullscreen or the sidebar is open, the composer, bottom controls, and model picker no longer overflow or get clipped.
-- **DeepSeek V4 Pro / V4 Flash verified**: the local package was tested with DeepSeek V4 Pro and V4 Flash across multi-turn chat and tool-backed World Cup, NBA, gold, and NVDA scenarios.
-- **Issue #74 provider configuration fixes**: provider ids are normalized, duplicate DeepSeek entries are merged, unreadable legacy API keys now ask the user to re-enter once, and models no longer route to an empty-key provider.
-- **BYOK thinking-model empty-turn protection**: empty assistant turns persist a visible fallback and are stripped before the next prompt, preventing one empty answer from poisoning the whole thread.
-- **DeepSeek V4 parameters corrected**: V4 Pro / V4 Flash keep 1M context while output budget is capped to a provider-safe value.
-- **Provider model list fixes**: deleted deprecated/discovered models no longer loop back into the add list; saving with a blank key no longer overwrites an existing key.
-- **Realtime search, sports, gold, and US-stock paths improved**: BYOK tools prefer the Brain GLM/MiMo chain and structured quote sources instead of polluted Baidu/Bing search pages or JS-only quote pages.
-- **Pseudo tool-call stream cleanup**: split pseudo-tool markers are buffered and stripped without swallowing legitimate HTML/JSX/generic text.
-- **Runtime hardening**: self-update now verifies SHA256, PDF/RAG command execution uses safe argv calls, worker shell execution is tightened, and Brain web-search requires device signatures.
+- **Pi SDK seam cleanup**: the main chat path, Bridge sessions, isolated dry-run sessions, and Hub agent executor now route through `createLynnAgentSession`, giving Lynn one controlled entry point before replacing transport / loop internals.
+- **Central Brain-managed tool registry**: Brain-executed tools such as `web_search`, `stock_market`, and `weather` now share one registry, reducing local double-execution, trace drift, and hardcoded-list skew.
+- **Pi SDK replacement plan**: `docs/PLAN-pi-sdk-replacement.md` documents the staged P1a transport, P1b tool, P2 loop, and P3 cleanup plan with validation and rollback strategy.
+- **Orchestration / execution / review is fixed into one workflow**: primary answers keep using the StepFun / Brain-managed tool chain, while Hanako auto-review now tries `Hanako · DS V4` first; DeepSeek V4 Flash handles fact checks and counterpoints, with MiMo and GLM only as fallback tiers.
+- **Lynn-first compatibility layer**: `LYNN_ROOT`, `window.lynn`, and `lynnFetch` are introduced while keeping `HANA_ROOT`, `window.hana`, and `hanaFetch` as compatibility aliases.
+- **Notary profile renamed**: release scripts now default to `lynn-notary` instead of the old Hanako profile name.
+- **Tool-success fallback summaries retained**: complex tool turns still produce visible fallback summaries when the model does not return final prose.
+- **Installed GUI / CLI gates retained**: release gates continue to exercise the installed app, live vision, Hanako review, and CLI package paths.
+- **DeepSeek V4 Pro / Flash and Issue #74 fixes retained**: provider normalization, unreadable-key prompts, empty-turn protection, and BYOK tool stability remain in this release.

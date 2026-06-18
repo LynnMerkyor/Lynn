@@ -10,7 +10,6 @@
 import fs from "fs";
 import path from "path";
 import {
-  createAgentSession,
   SessionManager,
   SettingsManager,
   type AgentSession,
@@ -23,6 +22,7 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import { debugLog } from "../lib/debug-log.js";
 import { t } from "../server/i18n.js";
+import { createLynnAgentSession } from "../core/agent-runtime/create-session.js";
 
 type SessionModel = NonNullable<CreateAgentSessionOptions["model"]>;
 type BuiltInTool = NonNullable<CreateAgentSessionOptions["tools"]>[number];
@@ -351,7 +351,7 @@ export async function runAgentSession(
         ),
       } as SessionModel)
     : resolvedModel as SessionModel;
-  const { session } = await createAgentSession({
+  const { session } = await createLynnAgentSession({
     cwd,
     sessionManager: tempSessionMgr,
     settingsManager: SettingsManager.inMemory({

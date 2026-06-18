@@ -24,7 +24,7 @@ import path from "path";
 import { promisify } from "util";
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
-import { fromRoot } from "../../shared/hana-root.js";
+import { fromRoot } from "../../shared/lynn-root.js";
 
 const execFileAsync = promisify(execFile);
 const PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";

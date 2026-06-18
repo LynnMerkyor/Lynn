@@ -8,7 +8,7 @@
  *   A fresh     全新空 profile         → server 必须 boot 到就绪(写出 server-info.json)
  *   B corrupt   预置损坏的 facts.db    → 必须就绪 + 自动备份重建(bak 文件或恢复日志)
  *   C hanako    HOME 下有 .hanako 哨兵 → 必须就绪 + .hanako 一个字节都不许动
- *   D polluted  ~/.lynn 里有旧 MiMo 引用 → 必须自愈到 Brain 默认路由
+ *   D polluted  ~/.lynn 里有旧 token-plan-cn 引用 → 必须自愈;有效 MiMo Token Plan 必须保留
  *
  * ★ HEADLESS:#72 是纯 server 启动故障(FactStore/better-sqlite3),本门禁只 boot
  *   dist-server-bundle/index.js,**绝不起 Electron、不开任何窗口**。早期版本起整个桌面 app
@@ -272,7 +272,7 @@ async function main() {
     check("C .lynn 不复制 OpenHanako 哨兵", !copiedSentinel, "Lynn 默认读取/复制了 ~/.hanako，可能导致跳过引导和旧模型状态污染");
   }
 
-  // ── Matrix D:旧版已污染 ~/.lynn 必须自愈到 Brain 默认路由(#74)────────────
+  // ── Matrix D:旧版已污染 ~/.lynn 必须修退休模型,但保留有效 MiMo Token Plan(#74)───
   if (!ONLY || ONLY === "D") {
     console.log("\n[D polluted-models] 预置 OpenHanako 旧模型引用冷启动(#74 自愈网)");
     const home = path.join(os.tmpdir(), `lynn-gate-polluted-${stamp}`);
@@ -311,10 +311,11 @@ async function main() {
     const added = await readYamlObject(path.join(home, "added-models.yaml"));
     const prefs = JSON.parse(await fs.readFile(path.join(home, "user", "preferences.json"), "utf-8"));
     const meta = JSON.parse(await fs.readFile(path.join(agentDir, "sessions", "session-meta.json"), "utf-8"));
-    check("D agent chat 已回到 Brain 默认", cfg?.models?.chat?.provider === "brain" && cfg?.models?.chat?.id === "lynn-brain-router", JSON.stringify(cfg?.models?.chat));
-    check("D shared utility 已回到 Brain 默认", prefs?.utility_model?.provider === "brain" && prefs?.utility_model?.id === "lynn-brain-router", JSON.stringify(prefs?.utility_model));
-    check("D provider 凭证保留但坏模型移除", added?.providers?.mimo?.api_key && !JSON.stringify(added?.providers?.mimo?.models || []).includes("mimo-v2.5-pro"), JSON.stringify(added?.providers?.mimo));
-    check("D session meta 已回到 Brain 默认", meta?.["old.jsonl"]?.model?.provider === "brain" && meta?.["old.jsonl"]?.model?.id === "lynn-brain-router", JSON.stringify(meta?.["old.jsonl"]));
+    check("D 有效 MiMo Token Plan chat 保留", cfg?.models?.chat?.provider === "mimo" && cfg?.models?.chat?.id === "mimo-v2.5-pro", JSON.stringify(cfg?.models?.chat));
+    check("D 退休 token-plan-cn utility 已回到 Brain 默认", cfg?.models?.utility?.provider === "brain" && cfg?.models?.utility?.id === "lynn-brain-router", JSON.stringify(cfg?.models?.utility));
+    check("D shared utility 有效 MiMo 偏好保留", prefs?.utility_model?.provider === "mimo" && prefs?.utility_model?.id === "mimo-v2.5-pro", JSON.stringify(prefs?.utility_model));
+    check("D provider 凭证与有效模型保留", added?.providers?.mimo?.api_key && JSON.stringify(added?.providers?.mimo?.models || []).includes("mimo-v2.5-pro"), JSON.stringify(added?.providers?.mimo));
+    check("D session meta 有效 MiMo 保留", meta?.["old.jsonl"]?.model?.provider === "mimo" && meta?.["old.jsonl"]?.model?.id === "mimo-v2.5-pro", JSON.stringify(meta?.["old.jsonl"]));
   }
 
   console.log(`\n[gate-startup] ${failures.length === 0 ? "PASS — 冷启动/恢复矩阵全绿" : `FAIL — ${failures.length} 项失败`}`);

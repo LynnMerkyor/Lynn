@@ -6,7 +6,6 @@
  * 不持有 engine 引用，通过构造器注入依赖。
  */
 import {
-  createAgentSession,
   SessionManager,
   SettingsManager,
 } from "@mariozechner/pi-coding-agent";
@@ -25,6 +24,7 @@ import {
   readSignedClientAgentHeadersForProvider,
 } from "./client-agent-identity.js";
 import { resolveCompactionSettings } from "./compaction-settings.js";
+import { createLynnAgentSession } from "./agent-runtime/create-session.js";
 import {
   ROUTE_INTENTS,
 } from "../shared/task-route-intent.js";
@@ -343,7 +343,7 @@ export class SessionCoordinator {
     const clientAgentMetadata = Object.keys(clientAgentHeaders).length > 0
       ? buildClientAgentMetadata(clientAgentKey)
       : undefined;
-    const { session } = await createAgentSession({
+    const { session } = await createLynnAgentSession({
       cwd: effectiveCwd,
       sessionManager: sessionMgr,
       settingsManager: this._createSettings(effectiveModel),

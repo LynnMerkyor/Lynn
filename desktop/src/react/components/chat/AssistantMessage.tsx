@@ -16,9 +16,8 @@ import { useStore } from '../../stores';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import { useI18n } from '../../hooks/use-i18n';
 import { isBundledLynnAvatarSrc, yuanFallbackAvatar } from '../../utils/agent-helpers';
-import { buildRetryDraftFromMessage } from '../../utils/composer-state';
 import { formatCompactModelLabel } from '../../utils/brain-models';
-import { resendPromptRequest } from '../../stores/prompt-actions';
+import { retryAssistantResponse } from '../../stores/prompt-actions';
 import styles from './Chat.module.css';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -324,30 +323,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
 
 
   const handleRetry = useCallback(() => {
-    const state = useStore.getState();
-    const sessionPath = state.currentSessionPath;
-    if (!sessionPath) return;
-    const chatSession = state.chatSessions[sessionPath];
-    if (!chatSession?.items) return;
-
-    for (let i = chatSession.items.length - 1; i >= 0; i--) {
-      const item = chatSession.items[i];
-      if (item.type !== 'message' || item.data.id !== message.id) continue;
-      for (let j = i - 1; j >= 0; j--) {
-        const prev = chatSession.items[j];
-        if (prev.type !== 'message' || prev.data.role !== 'user') continue;
-        if (prev.data.requestText) {
-          if (resendPromptRequest(prev.data.requestText, prev.data.requestImages, sessionPath)) {
-            return;
-          }
-        }
-        const draft = buildRetryDraftFromMessage(prev.data);
-        state.applyComposerDraft(draft);
-        state.requestInputFocus();
-        return;
-      }
-      return;
-    }
+    void retryAssistantResponse(message.id);
   }, [message.id]);
 
   const handleReviewFollowUp = useCallback(() => {

@@ -20,6 +20,7 @@ declare global {
 
     // ── Platform bridge（preload 注入） ──
     platform: PlatformApi;
+    lynn: PlatformApi;
     hana: PlatformApi;
 
     // ── 日志上报 ──

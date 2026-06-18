@@ -5,7 +5,7 @@
  * 提供 lookupKnown(provider, modelId) 查询接口。
  */
 import { readFileSync } from "fs";
-import { fromRoot } from "./hana-root.js";
+import { fromRoot } from "./lynn-root.js";
 
 export type KnownModel = Record<string, unknown>;
 type KnownModelsByProvider = Record<string, Record<string, KnownModel>>;

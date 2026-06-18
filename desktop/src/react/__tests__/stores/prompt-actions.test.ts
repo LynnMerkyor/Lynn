@@ -5,6 +5,8 @@ interface MockState extends Record<string, unknown> {
   chatSessions: Record<string, { items: Array<{ type: string; data: Record<string, unknown> }> }>;
   appendItem: ((sessionPath: string, item: unknown) => void) & { mockClear: () => void };
   addToast: ((...args: unknown[]) => void) & { mockClear: () => void };
+  applyComposerDraft: ((draft: unknown) => void) & { mockClear: () => void };
+  requestInputFocus: (() => void) & { mockClear: () => void };
 }
 
 const mockState: MockState = {
@@ -28,6 +30,8 @@ const mockState: MockState = {
   }),
   setInlineNotice: vi.fn(),
   addToast: vi.fn((..._args: unknown[]) => undefined) as unknown as MockState['addToast'],
+  applyComposerDraft: vi.fn((_draft: unknown) => undefined) as unknown as MockState['applyComposerDraft'],
+  requestInputFocus: vi.fn(() => undefined) as unknown as MockState['requestInputFocus'],
 };
 
 const setState = vi.fn((patch: Record<string, unknown> | ((state: MockState) => Record<string, unknown>)) => {
@@ -110,6 +114,8 @@ describe('prompt-actions', () => {
     mockState.appendItem.mockClear();
     (mockState.setInlineNotice as ReturnType<typeof vi.fn>).mockClear();
     mockState.addToast.mockClear();
+    mockState.applyComposerDraft.mockClear();
+    mockState.requestInputFocus.mockClear();
     setState.mockClear();
     ensureSession.mockReset();
     ensureSession.mockResolvedValue(true);
@@ -290,6 +296,83 @@ describe('prompt-actions', () => {
     });
     expect(mockState.chatSessions['/sessions/current'].items.map(item => item.data.id)).toEqual(['0', '1']);
     expect(mockState.appendItem).toHaveBeenCalledOnce();
+  });
+
+  it('助手重新回答走正常 prompt 路径并从上一条用户消息截断旧分支', async () => {
+    mockState.chatSessions = {
+      '/sessions/current': {
+        items: [
+          {
+            type: 'message',
+            data: {
+              id: 'user-1',
+              visibleIndex: 0,
+              role: 'user',
+              text: '旧问题',
+              requestText: 'persona\n\n旧问题',
+              requestImages: [{ type: 'image', data: 'abc', mimeType: 'image/png' }],
+              retryDraft: {
+                text: '旧问题',
+                attachedFiles: [],
+                quotedSelection: null,
+                docContextFile: null,
+                workingSet: [],
+              },
+            },
+          },
+          { type: 'message', data: { id: 'assistant-1', visibleIndex: 1, role: 'assistant', text: '旧回答' } },
+        ],
+      },
+    };
+    const { retryAssistantResponse } = await import('../../stores/prompt-actions');
+
+    const sent = await retryAssistantResponse('assistant-1');
+
+    expect(sent).toBe(true);
+    expect(JSON.parse(websocketRef?.send.mock.calls[0][0])).toMatchObject({
+      type: 'prompt',
+      text: 'persona\n\n旧问题',
+      sessionPath: '/sessions/current',
+      replaceFromMessageId: 'user-1',
+      replaceFromMessageIndex: 0,
+      images: [{ type: 'image', data: 'abc', mimeType: 'image/png' }],
+    });
+    expect(mockState.chatSessions['/sessions/current'].items).toEqual([]);
+    expect(mockState.appendItem).toHaveBeenCalledOnce();
+    expect(mockState.appended[0].item.data).toMatchObject({
+      role: 'user',
+      text: '旧问题',
+      requestText: 'persona\n\n旧问题',
+      requestImages: [{ type: 'image', data: 'abc', mimeType: 'image/png' }],
+      retryDraft: {
+        text: '旧问题',
+        attachedFiles: [],
+        quotedSelection: null,
+        docContextFile: null,
+        workingSet: [],
+      },
+    });
+  });
+
+  it('助手重新回答发送失败时只回填草稿，不乐观裁剪旧分支', async () => {
+    websocketRef = null;
+    mockState.chatSessions = {
+      '/sessions/current': {
+        items: [
+          { type: 'message', data: { id: 'user-1', role: 'user', text: '旧问题' } },
+          { type: 'message', data: { id: 'assistant-1', role: 'assistant', text: '旧回答' } },
+        ],
+      },
+    };
+    const { retryAssistantResponse } = await import('../../stores/prompt-actions');
+
+    const sent = await retryAssistantResponse('assistant-1');
+
+    expect(sent).toBe(false);
+    expect(mockState.chatSessions['/sessions/current'].items.map(item => item.data.id)).toEqual(['user-1', 'assistant-1']);
+    expect(mockState.appendItem).not.toHaveBeenCalled();
+    expect(mockState.applyComposerDraft).toHaveBeenCalledWith(expect.objectContaining({ text: '旧问题' }));
+    expect(mockState.requestInputFocus).toHaveBeenCalledOnce();
   });
 
   it('websocket send 抛错时不乐观上屏，避免假消息卡住会话', async () => {

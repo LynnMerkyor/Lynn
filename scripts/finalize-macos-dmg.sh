@@ -9,7 +9,7 @@
 #   5. regenerate blockmaps and latest-mac.yml after the DMG bytes are final
 #
 # Usage:
-#   APPLE_NOTARY_PROFILE=hanako-notary scripts/finalize-macos-dmg.sh dist/Lynn-0.77.1-macOS-Apple-Silicon.dmg dist/Lynn-0.77.1-macOS-Intel.dmg
+#   APPLE_NOTARY_PROFILE=lynn-notary scripts/finalize-macos-dmg.sh dist/Lynn-0.77.1-macOS-Apple-Silicon.dmg dist/Lynn-0.77.1-macOS-Intel.dmg
 
 set -euo pipefail
 
@@ -27,7 +27,7 @@ if [[ -z "$NOTARY_PROFILE" ]]; then
 fi
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: APPLE_NOTARY_PROFILE=hanako-notary $0 <dmg> [<dmg> ...]" >&2
+  echo "Usage: APPLE_NOTARY_PROFILE=lynn-notary $0 <dmg> [<dmg> ...]" >&2
   exit 1
 fi
 
