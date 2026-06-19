@@ -4,6 +4,7 @@ import { SessionManager } from "./session-manager.js";
 import { SettingsManager } from "./settings-manager.js";
 import { ModelRegistry } from "./model-registry.js";
 import { DefaultResourceLoader } from "./resource-loader.js";
+import { sanitizeMessagesBeforePrompt } from "../session-prompt-sanitizer.js";
 import type {
   AgentSessionEvent,
   AgentSessionEventListener,
@@ -311,15 +312,19 @@ function appendToolDelta(map: Map<number, StreamToolCallAccumulator>, raw: unkno
 function finalizeToolCalls(map: Map<number, StreamToolCallAccumulator>): ToolCall[] {
   return [...map.values()]
     .sort((a, b) => a.index - b.index)
-    .filter((entry) => entry.name)
+    .filter((entry) => entry.name.trim())
     .map((entry) => ({
       id: entry.id,
       type: "function",
       function: {
-        name: entry.name,
+        name: entry.name.trim(),
         arguments: entry.arguments || "{}",
       },
     }));
+}
+
+function isExecutableToolCall(toolCall: ToolCall | null | undefined): toolCall is ToolCall {
+  return Boolean(toolCall?.id && toolCall.function?.name?.trim());
 }
 
 function safeJsonParse(value: string): unknown {
@@ -556,11 +561,17 @@ export class LynnAgentSession {
         await maybeString(this.resourceLoader.getSystemPrompt?.()),
         await maybeString(this.resourceLoader.getAppendSystemPrompt?.()),
       ].filter(Boolean).join("\n\n");
-      const baseContext = this.sessionManager.buildSessionContext().messages || [];
+      const rawContext = this.sessionManager.buildSessionContext().messages || [];
+      const sanitizedContext = sanitizeMessagesBeforePrompt(rawContext);
+      if (sanitizedContext.removed > 0 || sanitizedContext.rewritten > 0) {
+        this.agent.replaceMessages(sanitizedContext.messages);
+      }
+      const baseContext = sanitizedContext.messages;
       const messages: ChatMessage[] = system ? [{ role: "system", content: system }, ...baseContext] : [...baseContext];
       const maxToolRounds = 8;
       for (let round = 0; round < maxToolRounds; round += 1) {
         const result = await this.callModel(messages);
+        result.toolCalls = result.toolCalls.filter(isExecutableToolCall);
         if (result.assistant.content || result.assistant.tool_calls?.length) {
           messages.push(result.assistant);
         }

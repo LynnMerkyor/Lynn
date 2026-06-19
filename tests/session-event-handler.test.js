@@ -90,4 +90,30 @@ describe("session event handler", () => {
     expect(entry._toolFailCount).toBeUndefined();
     expect(entry._lastRecallContext).toBeUndefined();
   });
+
+  it("suppresses nameless Brain tool events from legacy malformed tool calls", () => {
+    const { entry, emitEvent, handler } = makeHandler();
+    entry.modelProvider = "brain";
+
+    handler({
+      type: "tool_execution_start",
+      toolCallId: "",
+      toolName: "",
+      args: { query: "世界杯" },
+    });
+    handler({
+      type: "tool_execution_end",
+      toolCallId: "",
+      toolName: "",
+      isError: true,
+      result: {
+        content: [{ type: "text", text: "Tool  not found" }],
+        isError: true,
+      },
+    });
+
+    expect(emitEvent).not.toHaveBeenCalled();
+    expect(entry._toolFailCount).toBeUndefined();
+    expect(entry._lastRecallContext).toBeUndefined();
+  });
 });

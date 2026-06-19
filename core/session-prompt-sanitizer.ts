@@ -54,6 +54,11 @@ function contentBlockToolName(block: AnyRecord | null | undefined): string {
   return "";
 }
 
+function isToolCallContentBlock(block: AnyRecord | null | undefined): boolean {
+  const type = String(block?.type || "");
+  return type === "toolCall" || type === "tool_use" || type === "function_call";
+}
+
 function isBrainManagedToolName(name: unknown): boolean {
   return isBrainManagedCustomToolName(name);
 }
@@ -64,6 +69,15 @@ function isBrainManagedToolNotFoundToolResult(message: AnyRecord | null | undefi
   if (!isBrainManagedToolName(toolName)) return false;
   const text = messageContentText(message.content).trim();
   return Boolean(message.isError) && new RegExp(`\\bTool\\s+${toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+not\\s+found\\b`, "i").test(text);
+}
+
+function isNamelessToolNotFoundToolResult(message: AnyRecord | null | undefined): boolean {
+  if (!message || message.role !== "toolResult") return false;
+  const toolName = String(message.toolName || "").trim();
+  const toolCallId = String(message.toolCallId || message.tool_call_id || "").trim();
+  if (toolName || toolCallId) return false;
+  const text = messageContentText(message.content).trim();
+  return Boolean(message.isError) && /\bTool\s+not\s+found\b/i.test(text.replace(/\s+/g, " "));
 }
 
 function isEmptyAbortedAssistantMessage(message: AnyRecord | null | undefined): boolean {
@@ -83,10 +97,7 @@ function hasToolCallLikeContent(message: AnyRecord | null | undefined): boolean 
   if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) return true;
   if (Array.isArray(message.toolCalls) && message.toolCalls.length > 0) return true;
   const content = Array.isArray(message.content) ? message.content : [];
-  return content.some((block: AnyRecord) => {
-    const type = String(block?.type || "");
-    return type === "toolCall" || type === "tool_use" || type === "function_call";
-  });
+  return content.some((block: AnyRecord) => isToolCallContentBlock(block));
 }
 
 function isEmptyAssistantContextPoison(message: AnyRecord | null | undefined): boolean {
@@ -96,12 +107,13 @@ function isEmptyAssistantContextPoison(message: AnyRecord | null | undefined): b
   return true;
 }
 
-function rewriteAssistantBrainManagedToolCalls(message: AnyRecord): AnyRecord | null {
+function rewriteAssistantUnsafeToolCalls(message: AnyRecord): AnyRecord | null {
   if (!message || message.role !== "assistant" || !Array.isArray(message.content)) return null;
   const filtered = message.content.filter((block: AnyRecord) => {
-    const type = String(block?.type || "");
-    if (type !== "toolCall" && type !== "tool_use") return true;
-    return !isBrainManagedToolName(contentBlockToolName(block));
+    if (!isToolCallContentBlock(block)) return true;
+    const toolName = contentBlockToolName(block);
+    if (!toolName.trim()) return false;
+    return !isBrainManagedToolName(toolName);
   });
   if (filtered.length === message.content.length) return null;
   return { ...message, content: filtered };
@@ -152,6 +164,7 @@ export function sanitizeMessagesBeforePrompt(messages: unknown) {
       isInternalRetryPromptMessage(message) ||
       isTransientRecoveredToolPlaceholder(message) ||
       isBrainManagedToolNotFoundToolResult(message) ||
+      isNamelessToolNotFoundToolResult(message) ||
       isEmptyAbortedAssistantMessage(message) ||
       isEmptyAssistantContextPoison(message)
     ) {
@@ -164,14 +177,14 @@ export function sanitizeMessagesBeforePrompt(messages: unknown) {
       cleaned.push(rewrittenMessage);
       continue;
     }
-    const assistantWithoutBrainToolCalls = rewriteAssistantBrainManagedToolCalls(message);
-    if (assistantWithoutBrainToolCalls) {
+    const assistantWithoutUnsafeToolCalls = rewriteAssistantUnsafeToolCalls(message);
+    if (assistantWithoutUnsafeToolCalls) {
       rewritten += 1;
-      if (isEmptyAssistantContextPoison(assistantWithoutBrainToolCalls)) {
+      if (isEmptyAssistantContextPoison(assistantWithoutUnsafeToolCalls)) {
         removed += 1;
         continue;
       }
-      cleaned.push(assistantWithoutBrainToolCalls);
+      cleaned.push(assistantWithoutUnsafeToolCalls);
       continue;
     }
     cleaned.push(message);

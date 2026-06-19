@@ -24,6 +24,7 @@ function shouldSuppressBrainManagedToolEvent(entry: SessionEntry | undefined, ev
   if (!entry || !isBrainProvider(entry.modelProvider || null)) return false;
   if (event?.type !== "tool_execution_start" && event?.type !== "tool_execution_end") return false;
   const toolName = eventToolName(event);
+  if (!toolName) return true;
   if (!isBrainManagedCustomToolName(toolName)) return false;
 
   const pending = entry._brainManagedToolEventKeys instanceof Set

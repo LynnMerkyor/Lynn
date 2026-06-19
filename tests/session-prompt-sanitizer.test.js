@@ -116,6 +116,35 @@ describe("session prompt sanitizer helpers", () => {
     ]);
   });
 
+  it("removes nameless legacy tool calls and their empty tool-not-found echoes", () => {
+    const result = sanitizeMessagesBeforePrompt([
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "try server-side search" },
+          { type: "toolCall", id: "", name: "", arguments: { query: "世界杯昨晚结果" } },
+          { type: "tool_use", id: "", name: "", input: { url: "https://example.com" } },
+          { type: "text", text: "昨晚瑞士 4-1 波黑。" },
+        ],
+      },
+      {
+        role: "toolResult",
+        toolCallId: "",
+        toolName: "",
+        isError: true,
+        content: [{ type: "text", text: "Tool  not found" }],
+      },
+    ]);
+
+    expect(result.removed).toBe(1);
+    expect(result.rewritten).toBe(1);
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0].content).toEqual([
+      { type: "thinking", thinking: "try server-side search" },
+      { type: "text", text: "昨晚瑞士 4-1 波黑。" },
+    ]);
+  });
+
   it("removes empty assistant messages that can poison DeepSeek follow-up turns", () => {
     const result = sanitizeMessagesBeforePrompt([
       { role: "user", content: [{ type: "text", text: "抓一下" }] },

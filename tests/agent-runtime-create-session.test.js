@@ -78,4 +78,45 @@ describe("createLynnAgentSession native runtime", () => {
       content: "queued message",
     });
   });
+
+  it("drops nameless streamed tool calls instead of executing empty tool cards", async () => {
+    const fetchMock = vi.fn(async () => sseResponse([
+      "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"\",\"function\":{\"name\":\"\",\"arguments\":\"{\\\"query\\\":\\\"世界杯\\\"}\"}}]}}]}\n\n",
+      "data: {\"choices\":[{\"delta\":{\"content\":\"工具证据已整理。\"}}]}\n\n",
+      "data: [DONE]\n\n",
+    ]));
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+    const events = [];
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: {
+        id: "brain-router",
+        provider: "brain",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:65530/v1",
+        apiKey: "test-key",
+      },
+      tools: [{
+        name: "web_search",
+        description: "search",
+        parameters: { type: "object", properties: {} },
+        execute: vi.fn(async () => ({ content: [{ type: "text", text: "should not run" }] })),
+      }],
+    });
+    session.subscribe((event) => events.push(event));
+
+    await session.prompt("世界杯");
+
+    expect(events.some((event) => event.type === "tool_execution_start")).toBe(false);
+    const messages = manager.buildSessionContext().messages;
+    expect(messages.some((message) => message.role === "tool")).toBe(false);
+    expect(JSON.stringify(messages)).not.toContain("Tool not found");
+    expect(messages.at(-1)).toMatchObject({
+      role: "assistant",
+      content: "工具证据已整理。",
+    });
+  });
 });
