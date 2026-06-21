@@ -1,0 +1,224 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-pro-cases-tool-denial-fix.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-1MUa5Z",
+  "gateCurrentDate": "2026-06-21",
+  "total": 4,
+  "counts": {
+    "process_fail": 1,
+    "ok": 3
+  },
+  "providerCounts": {
+    "deepseek-pro": 3,
+    "step-3.7-flash": 1
+  },
+  "toolRuns": 4,
+  "stepExecuteRuns": 0,
+  "avgMs": 30755,
+  "generatedAt": "2026-06-21T07:16:02.050Z",
+  "results": [
+    {
+      "index": 26,
+      "category": "search",
+      "prompt": "查一下 OpenAI 最近发布了什么新模型，给一句摘要",
+      "exitCode": 1,
+      "durationMs": 67736,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-pro"
+      ],
+      "toolNames": [
+        "live_news"
+      ],
+      "assistantText": "",
+      "reasoningChars": 953,
+      "usage": {
+        "prompt_tokens": 2213,
+        "completion_tokens": 333,
+        "total_tokens": 2546,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 240
+        },
+        "prompt_cache_hit_tokens": 512,
+        "prompt_cache_miss_tokens": 1701
+      },
+      "errors": [
+        "lynn: 默认 StepFun 3.7 Flash 路由在线,但 Brain v2 当前没有可用 provider。请在 Lynn 客户端 Providers 配置 Brain 路由密钥；只有想让 CLI 脱离客户端单独使用时,才运行: Lynn providers set --preset stepfun --api-key <key>"
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "live_news",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "live_news",
+          "ok": true
+        }
+      ],
+      "rawTail": ":\"2026-06-21T07:15:04.784Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"AI\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:04.822Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"新\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:04.823Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"模型\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:04.823Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"的信息\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:04.881Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\\n\\n\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:04.925Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"而且\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:04.925Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"指令\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:04.925Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"也\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:04.965Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"要求\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:04.965Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\\"\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.005Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"只\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.005Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"输出\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.086Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"面向\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.086Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"用户的\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.096Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"答案\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.096Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\",\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.096Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"不要\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.096Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"输出\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.096Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"内部\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.135Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"计划\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.135Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"、\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.135Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"工具\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.135Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"轨迹\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.153Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"或\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.153Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"'The\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.153Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" user\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.153Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" wants\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.186Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"...\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.186Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"'\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.186Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"这类\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.186Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"中间\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.186Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"推理\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.186Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\\\"\\n\\n\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.253Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"好的\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.253Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"，\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.254Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"我会\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.254Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"直接\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.292Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"给出\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.292Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"面向\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.292Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"用户的\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.331Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"回复\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.331Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:05.332Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:06.530Z\",\"usage\":{\"prompt_tokens\":2213,\"completion_tokens\":333,\"total_tokens\":2546,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":240},\"prompt_cache_hit_tokens\":512,\"prompt_cache_miss_tokens\":1701},\"durationMs\":67456}\n{\"type\":\"brain.error\",\"error\":\"all providers failed\",\"ts\":\"2026-06-21T07:15:06.746Z\"}",
+      "timedOut": false,
+      "status": "process_fail",
+      "reason": "exit 1"
+    },
+    {
+      "index": 27,
+      "category": "search",
+      "prompt": "访问 example.com 并用一句话概括页面内容",
+      "exitCode": 0,
+      "durationMs": 3728,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "web_fetch"
+      ],
+      "assistantText": "example.com 页面显示该域名专为文档示例使用，无需申请授权，但禁止用于实际运营场景。",
+      "reasoningChars": 201,
+      "usage": {
+        "cached_tokens": 512,
+        "prompt_tokens": 1261,
+        "completion_tokens": 129,
+        "total_tokens": 1390,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        }
+      ],
+      "rawTail": "26-06-21T07:15:10.121Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.121Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":93,\"total_tokens\":1354,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3294}\n{\"type\":\"reasoning.delta\",\"text\":\"，要\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:10.121Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.121Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":94,\"total_tokens\":1355,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3294}\n{\"type\":\"reasoning.delta\",\"text\":\"准确\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:10.121Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.249Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":98,\"total_tokens\":1359,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3422}\n{\"type\":\"reasoning.delta\",\"text\":\"，符合要求，\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:10.249Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.249Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":100,\"total_tokens\":1361,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3422}\n{\"type\":\"reasoning.delta\",\"text\":\"不要其他\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:10.249Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.249Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":102,\"total_tokens\":1363,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3422}\n{\"type\":\"reasoning.delta\",\"text\":\"内容。\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:10.249Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.249Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":106,\"total_tokens\":1367,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3422}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.321Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":109,\"total_tokens\":1370,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3494}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.321Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":112,\"total_tokens\":1373,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3494}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.321Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":116,\"total_tokens\":1377,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3494}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.321Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":119,\"total_tokens\":1380,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3494}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.450Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":121,\"total_tokens\":1382,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3623}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.450Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":125,\"total_tokens\":1386,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3623}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.450Z\",\"usage\":{\"prompt_tokens\":1261,\"completion_tokens\":129,\"total_tokens\":1390,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3623}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:10.452Z\",\"usage\":{\"cached_tokens\":512,\"prompt_tokens\":1261,\"completion_tokens\":129,\"total_tokens\":1390,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":3625}\n{\"type\":\"assistant.delta\",\"text\":\"example.com 页面显示该域名专为文档示例使用，无需申请授权，但禁止用于实际运营场景。\",\"ts\":\"2026-06-21T07:15:10.477Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T07:15:10.482Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 46,
+      "category": "mixed",
+      "prompt": "查询今晚世界杯赛程，并最后用一个小表格输出",
+      "exitCode": 0,
+      "durationMs": 35176,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-pro"
+      ],
+      "toolNames": [
+        "web_search"
+      ],
+      "assistantText": "根据 ESPN scoreboard 工具证据，共查到 48 场相关比赛：\n\n| 时间(北京时间) | 对阵 | 状态/比分 |\n|---|---|---|\n| 2026/06/17 03:00 | France vs Senegal | 3-1 FT |\n| 2026/06/17 06:00 | Iraq vs Norway | 1-4 FT |\n| 2026/06/17 09:00 | Argentina vs Algeria | 3-0 FT |\n| 2026/06/17 12:00 | Austria vs Jordan | 3-1 FT |\n| 2026/06/18 01:00 | Portugal vs Congo DR | 1-1 FT |\n| 2026/06/18 04:00 | England vs Croatia | 4-2 FT |\n| 2026/06/18 07:00 | Ghana vs Panama | 1-0 FT |\n| 2026/06/18 10:00 | Uzbekistan vs Colombia | 1-3 FT |\n| 2026/06/19 00:00 | Czechia vs South Africa | 1-1 FT |\n| 2026/06/19 03:00 | Switzerland vs Bosnia-Herzegovina | 4-1 FT |\n| 2026/06/19 06:00 | Canada vs Qatar | 6-0 FT |\n| 2026/06/19 09:00 | Mexico vs South Korea | 1-0 FT |\n| 2026/06/20 03:00 | United States vs Australia | 2-0 FT |\n| 2026/06/20 06:00 | Scotland vs Morocco | 0-1 FT |\n| 2026/06/20 08:30 | Brazil vs Haiti | 3-0 FT |\n| 2026/06/20 11:00 | Türkiye vs Paraguay | 0-1 FT |\n| 2026/06/21 01:00 | Netherlands vs Sweden | 5-1 FT |\n| 2026/06/21 04:00 | Germany vs Ivory Coast | 2-1 FT |\n| 2026/06/21 08:00 | Ecuador vs Curaçao | 0-0 FT |\n| 2026/06/21 12:00 | Tunisia vs Japan | 0-4 FT |\n| 2026/06/22 00:00 | Spain vs Saudi Arabia | Scheduled |\n| 2026/06/22 03:00 | Belgium vs Iran | Scheduled |\n| 2026/06/22 06:00 | Uruguay vs Cape Verde | Scheduled |\n| 2026/06/22 09:00 | New Zealand vs Egypt | Scheduled |",
+      "reasoningChars": 940,
+      "usage": {
+        "prompt_tokens": 4087,
+        "completion_tokens": 714,
+        "total_tokens": 4801,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 330
+        },
+        "prompt_cache_hit_tokens": 512,
+        "prompt_cache_miss_tokens": 3575
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "en\":true,\"ts\":\"2026-06-21T07:15:42.035Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"次\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.035Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"和\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.035Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"今晚\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.068Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"即将\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.106Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"进行的\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.106Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"场\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.147Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"次\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.147Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"（\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.147Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"即\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.147Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"6\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.189Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"月\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.189Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"22\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.189Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"日凌晨\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.189Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"的\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.189Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"场\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.222Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"次\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.222Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"）。\\n\\n\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.222Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"已完成\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.222Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"最终\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.222Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"答案\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.264Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"整理\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.264Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"，\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.264Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"可\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.319Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"输出\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.351Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:42.351Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:15:45.647Z\",\"usage\":{\"prompt_tokens\":4087,\"completion_tokens\":714,\"total_tokens\":4801,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":330},\"prompt_cache_hit_tokens\":512,\"prompt_cache_miss_tokens\":3575},\"durationMs\":35094}\n{\"type\":\"assistant.delta\",\"text\":\"根据 ESPN scoreboard 工具证据，共查到 48 场相关比赛：\\n\\n| 时间(北京时间) | 对阵 | 状态/比分 |\\n|---|---|---|\\n| 2026/06/17 03:00 | France vs Senegal | 3-1 FT |\\n| 2026/06/17 06:00 | Iraq vs Norway | 1-4 FT |\\n| 2026/06/17 09:00 | Argentina vs Algeria | 3-0 FT |\\n| 2026/06/17 12:00 | Austria vs Jordan | 3-1 FT |\\n| 2026/06/18 01:00 | Portugal vs Congo DR | 1-1 FT |\\n| 2026/06/18 04:00 | England vs Croatia | 4-2 FT |\\n| 2026/06/18 07:00 | Ghana vs Panama | 1-0 FT |\\n| 2026/06/18 10:00 | Uzbekistan vs Colombia | 1-3 FT |\\n| 2026/06/19 00:00 | Czechia vs South Africa | 1-1 FT |\\n| 2026/06/19 03:00 | Switzerland vs Bosnia-Herzegovina | 4-1 FT |\\n| 2026/06/19 06:00 | Canada vs Qatar | 6-0 FT |\\n| 2026/06/19 09:00 | Mexico vs South Korea | 1-0 FT |\\n| 2026/06/20 03:00 | United States vs Australia | 2-0 FT |\\n| 2026/06/20 06:00 | Scotland vs Morocco | 0-1 FT |\\n| 2026/06/20 08:30 | Brazil vs Haiti | 3-0 FT |\\n| 2026/06/20 11:00 | Türkiye vs Paraguay | 0-1 FT |\\n| 2026/06/21 01:00 | Netherlands vs Sweden | 5-1 FT |\\n| 2026/06/21 04:00 | Germany vs Ivory Coast | 2-1 FT |\\n| 2026/06/21 08:00 | Ecuador vs Curaçao | 0-0 FT |\\n| 2026/06/21 12:00 | Tunisia vs Japan | 0-4 FT |\\n| 2026/06/22 00:00 | Spain vs Saudi Arabia | Scheduled |\\n| 2026/06/22 03:00 | Belgium vs Iran | Scheduled |\\n| 2026/06/22 06:00 | Uruguay vs Cape Verde | Scheduled |\\n| 2026/06/22 09:00 | New Zealand vs Egypt | Scheduled |\",\"ts\":\"2026-06-21T07:15:45.654Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T07:15:45.658Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 49,
+      "category": "mixed",
+      "prompt": "查深圳明天天气，并说明今天和明天的区别",
+      "exitCode": 0,
+      "durationMs": 16378,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-pro"
+      ],
+      "toolNames": [
+        "weather"
+      ],
+      "assistantText": "## 深圳明天（6月22日）天气\n\n| 项目 | 详情 |\n|------|------|\n| 📅 日期 | 2026年6月22日（周日） |\n| ☀️ 天气 | **晴天** |\n| 🌡 气温 | **26°C ~ 31°C** |\n\n---\n\n## 今天 vs 明天的区别\n\n| 对比维度 | 今天（6/21） | 明天（6/22） |\n|----------|-------------|-------------|\n| ☁ 预报天气 | 局部零星降雨 | 晴天 |\n| 🌡 气温区间 | 27°C ~ 31°C | **26°C** ~ 31°C |\n| ☀ 紫外线 | 指数 10（极强） | 暂无数据 |\n| 💧 湿度 | 79%（当前实时） | 暂无数据 |\n\n**关键差异总结：**\n\n1. **降水**：今天预报有局部零星阵雨（不过当前实时天气是晴天、无降水），明天则是全天晴天，不用担心下雨。2. **最低温略降**：明天早晨最低温 26°C，比今天低 1°C，早晚会稍微凉快一点。最高温持平，都是 31°C。3. **整体来看**：明天是更适合户外活动的天气，晴好无雨，气温和今天相差不大，但建议还是做好防晒，今天紫外线指数高达 10，明天晴天紫外线预计也不会低。",
+      "reasoningChars": 1589,
+      "usage": {
+        "prompt_tokens": 1740,
+        "completion_tokens": 720,
+        "total_tokens": 2460,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 407
+        },
+        "prompt_cache_hit_tokens": 512,
+        "prompt_cache_miss_tokens": 1228
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "weather",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "weather",
+          "ok": true
+        }
+      ],
+      "rawTail": "}\n{\"type\":\"reasoning.delta\",\"text\":\"答案\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.083Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"说\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.083Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"今天\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.083Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"预报\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.127Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"有\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.169Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"局部\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.169Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"零星\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.169Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"降雨\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.169Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"，\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.169Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"当前\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.169Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"实时\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.208Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"无\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.208Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"降水\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.208Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"，\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.208Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"这与\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.208Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"工具\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.242Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"证据\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.242Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"一致\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.334Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.334Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"明天\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.334Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"晴天\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.334Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"26\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.334Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"~\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.334Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"31\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.363Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"°\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.363Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"C\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.363Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"也\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.363Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"正确\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.392Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\\n\\n\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.433Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"让我\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.433Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"直接\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.433Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"给出\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.466Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"最终\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.499Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"答案\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.500Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\",\"hidden\":true,\"ts\":\"2026-06-21T07:15:58.500Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:16:02.019Z\",\"usage\":{\"prompt_tokens\":1740,\"completion_tokens\":720,\"total_tokens\":2460,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":407},\"prompt_cache_hit_tokens\":512,\"prompt_cache_miss_tokens\":1228},\"durationMs\":16286}\n{\"type\":\"assistant.delta\",\"text\":\"## 深圳明天（6月22日）天气\\n\\n| 项目 | 详情 |\\n|------|------|\\n| 📅 日期 | 2026年6月22日（周日） |\\n| ☀️ 天气 | **晴天** |\\n| 🌡 气温 | **26°C ~ 31°C** |\\n\\n---\\n\\n## 今天 vs 明天的区别\\n\\n| 对比维度 | 今天（6/21） | 明天（6/22） |\\n|----------|-------------|-------------|\\n| ☁ 预报天气 | 局部零星降雨 | 晴天 |\\n| 🌡 气温区间 | 27°C ~ 31°C | **26°C** ~ 31°C |\\n| ☀ 紫外线 | 指数 10（极强） | 暂无数据 |\\n| 💧 湿度 | 79%（当前实时） | 暂无数据 |\\n\\n**关键差异总结：**\\n\\n1. **降水**：今天预报有局部零星阵雨（不过当前实时天气是晴天、无降水），明天则是全天晴天，不用担心下雨。2. **最低温略降**：明天早晨最低温 26°C，比今天低 1°C，早晚会稍微凉快一点。最高温持平，都是 31°C。3. **整体来看**：明天是更适合户外活动的天气，晴好无雨，气温和今天相差不大，但建议还是做好防晒，今天紫外线指数高达 10，明天晴天紫外线预计也不会低。\",\"ts\":\"2026-06-21T07:16:02.035Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T07:16:02.039Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

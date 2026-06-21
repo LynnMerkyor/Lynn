@@ -60,10 +60,41 @@ describe("tool-use behavior resolver", () => {
     expect(decision.disableTools).toBe(false);
   });
 
+  it("disables tools when the user asks for a shell command snippet, not execution", () => {
+    const decision = resolveInitialToolUseBehavior("写一个 bash 命令统计当前目录下所有 .ts 文件行数");
+
+    expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);
+    expect(decision.disableTools).toBe(true);
+  });
+
+  it("disables tools for conceptual product and workflow reasoning prompts", () => {
+    for (const prompt of [
+      "如果复核模型和主模型结论冲突，产品上怎么展示比较好？",
+      "设计一个 5 步门禁测试流程验证聊天工具链",
+      "给一个 UI 输入框在窄屏不溢出的设计检查清单",
+    ]) {
+      const decision = resolveInitialToolUseBehavior(prompt);
+      expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);
+      expect(decision.disableTools).toBe(true);
+    }
+  });
+
+  it("keeps explicit realtime lookup prompts tool-eligible", () => {
+    const decision = resolveInitialToolUseBehavior("查一下 OpenAI 最近发布了什么新模型，给一句摘要", {
+      modelInfo: { isBrain: false },
+    });
+
+    expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.PREFETCH_THEN_RUN_OR_STOP);
+    expect(decision.disableTools).toBe(false);
+    expect(decision.toolName).toBeTruthy();
+  });
+
   it("wraps no-tool turns with a non-deliverable route constraint", () => {
     const prompt = buildNoToolTurnPrompt("只回复：OK");
 
     expect(prompt).toContain("不要调用");
+    expect(prompt).toContain("不要声称");
+    expect(prompt).toContain("搜到/没搜到");
     expect(prompt).toContain("不要读取或写入文件");
     expect(prompt).toContain("必须严格遵守");
     expect(prompt).not.toContain("只回复：OK");

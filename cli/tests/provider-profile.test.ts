@@ -20,6 +20,7 @@ const originalPreset = process.env.LYNN_CLI_PRESET;
 const originalApiKey = process.env.LYNN_CLI_API_KEY;
 const originalBaseUrl = process.env.LYNN_CLI_BASE_URL;
 const originalModel = process.env.LYNN_CLI_MODEL;
+const originalDisableByokFallback = process.env.LYNN_CLI_DISABLE_BYOK_FALLBACK;
 
 afterEach(() => {
   if (originalPreset === undefined) delete process.env.LYNN_CLI_PRESET;
@@ -30,6 +31,8 @@ afterEach(() => {
   else process.env.LYNN_CLI_BASE_URL = originalBaseUrl;
   if (originalModel === undefined) delete process.env.LYNN_CLI_MODEL;
   else process.env.LYNN_CLI_MODEL = originalModel;
+  if (originalDisableByokFallback === undefined) delete process.env.LYNN_CLI_DISABLE_BYOK_FALLBACK;
+  else process.env.LYNN_CLI_DISABLE_BYOK_FALLBACK = originalDisableByokFallback;
 });
 
 describe("CLI provider profile", () => {
@@ -87,6 +90,30 @@ describe("CLI provider profile", () => {
     expect(redactApiKey("sk-1234567890")).toBe("sk-1…7890");
     expect(redactApiKey("short")).toBe("********");
     expect(redactApiKey(undefined)).toBe("(none)");
+  });
+
+  it("can disable CLI BYOK fallback for Brain-route gates", async () => {
+    const dataDir = await tempDir();
+    await writeCliProviderProfile(dataDir, {
+      provider: "deepseek",
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-chat",
+      apiKey: "sk-local-byok",
+    });
+
+    process.env.LYNN_CLI_DISABLE_BYOK_FALLBACK = "1";
+
+    await expect(resolveCliProviderProfile(parseArgs([
+      "prompt",
+      "hello",
+      "--data-dir",
+      dataDir,
+    ]))).resolves.toBeNull();
+    expect(readEnvProviderProfile({
+      LYNN_CLI_DISABLE_BYOK_FALLBACK: "1",
+      LYNN_CLI_PRESET: "deepseek",
+      DEEPSEEK_API_KEY: "sk-env-byok",
+    })).toBeNull();
   });
 
   it("resolves CLI provider presets from environment for node-only installs", () => {

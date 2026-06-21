@@ -37,8 +37,6 @@ const DEFAULT_MODEL = "step-overture-preview";
 const DEFAULT_VOICE = "jingdiannvsheng";
 const DEFAULT_TIMEOUT_MS = 30000;
 const STEP_SAMPLE_RATE = 24000;
-const STEPFUN_REALTIME_ASR_UNSUPPORTED =
-  "StepFun Realtime stateless returns assistant response transcripts, not standalone user ASR transcripts";
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -117,6 +115,22 @@ function bufferFromWsData(data: unknown): Buffer {
   if (data instanceof ArrayBuffer) return Buffer.from(new Uint8Array(data));
   if (ArrayBuffer.isView(data)) return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
   return Buffer.from(String(data || ""), "utf-8");
+}
+
+function bufferFromInput(data: unknown): Buffer {
+  if (Buffer.isBuffer(data)) return data;
+  if (data instanceof ArrayBuffer) return Buffer.from(new Uint8Array(data));
+  if (ArrayBuffer.isView(data)) return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  if (typeof data === "string") {
+    const value = data.trim();
+    if (!value) return Buffer.alloc(0);
+    try {
+      return Buffer.from(value, "base64");
+    } catch {
+      return Buffer.from(value);
+    }
+  }
+  return Buffer.from(String(data || ""));
 }
 
 function downmixPcm16ToMono(pcm: Buffer, channels: number): Buffer {
@@ -255,19 +269,26 @@ export function createStepFunRealtimeAsrProvider(config: StepRealtimeConfig = {}
     name: "stepfun-realtime-asr",
     label: "StepFun Realtime ASR",
     async transcribe(audioBuffer: unknown, opts: Record<string, unknown> = {}) {
-      void config;
-      void audioBuffer;
-      void opts;
-      throw new Error(STEPFUN_REALTIME_ASR_UNSUPPORTED);
+      const audio = bufferFromInput(audioBuffer);
+      if (!audio.length) throw new Error("StepFun Realtime ASR received empty audio");
+      const result = await runStepFunRealtime(config, {
+        mode: "asr",
+        audio,
+        signal: opts.signal as AbortSignal | undefined,
+      });
+      const transcript = result.text.trim();
+      if (!transcript) throw new Error("StepFun Realtime ASR returned no transcript");
+      return {
+        provider: "stepfun-realtime",
+        text: transcript,
+        transcript,
+        language: typeof opts.language === "string" ? opts.language : "auto",
+        raw: result.messages,
+      };
     },
     async health() {
-      return {
-        ok: false,
-        fallbackOk: false,
-        degraded: true,
-        provider: "stepfun-realtime",
-        error: STEPFUN_REALTIME_ASR_UNSUPPORTED,
-      };
+      const ok = hasStepFunRealtimeCredential(config);
+      return { ok, fallbackOk: false, degraded: !ok, provider: "stepfun-realtime" };
     },
   };
 }

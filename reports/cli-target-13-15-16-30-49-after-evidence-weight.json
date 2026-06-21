@@ -1,0 +1,370 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-13-15-16-30-49-after-evidence-weight.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-3i15YE",
+  "total": 5,
+  "counts": {
+    "ok": 5
+  },
+  "providerCounts": {
+    "step-3.7-flash": 4,
+    "deepseek-chat": 1
+  },
+  "toolRuns": 5,
+  "stepExecuteRuns": 0,
+  "avgMs": 21141,
+  "generatedAt": "2026-06-20T16:44:48.244Z",
+  "results": [
+    {
+      "index": 13,
+      "category": "realtime",
+      "prompt": "今天世界杯赛程发我一下",
+      "exitCode": 0,
+      "durationMs": 14317,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "calendar",
+        "web_search"
+      ],
+      "assistantText": "今天是2026年6月21日，2026美加墨世界杯进入第10个比赛日，今日赛程（均为北京时间）如下：\n1. 01:00 小组赛F组：荷兰vs瑞典\n2. 04:00 小组赛E组：德国vs科特迪瓦\n3. 08:00 小组赛E组：厄瓜多尔vs库拉索\n4. 12:00 小组赛F组：突尼斯vs日本",
+      "reasoningChars": 1994,
+      "usage": {
+        "cached_tokens": 512,
+        "prompt_tokens": 4098,
+        "completion_tokens": 497,
+        "total_tokens": 4595,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "calendar",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "calendar",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "s\":454,\"total_tokens\":4552,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13683}\n{\"type\":\"assistant.delta\",\"text\":\"E组：德国\",\"ts\":\"2026-06-20T16:43:16.663Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:43:16.663Z\",\"usage\":{\"prompt_tokens\":4098,\"completion_tokens\":458,\"total_tokens\":4556,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13683}\n{\"type\":\"assistant.delta\",\"text\":\"vs科特迪\",\"ts\":\"2026-06-20T16:43:16.663Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:43:16.663Z\",\"usage\":{\"prompt_tokens\":4098,\"completion_tokens\":462,\"total_tokens\":4560,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13683}\n{\"type\":\"assistant.delta\",\"text\":\"瓦\\n3.\",\"ts\":\"2026-06-20T16:43:16.663Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:43:16.663Z\",\"usage\":{\"prompt_tokens\":4098,\"completion_tokens\":466,\"total_tokens\":4564,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13683}\n{\"type\":\"assistant.delta\",\"text\":\" 08:00\",\"ts\":\"2026-06-20T16:43:16.663Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:43:16.749Z\",\"usage\":{\"prompt_tokens\":4098,\"completion_tokens\":470,\"total_tokens\":4568,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13769}\n{\"type\":\"assistant.delta\",\"text\":\" 小组赛E\",\"ts\":\"2026-06-20T16:43:16.749Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:43:16.749Z\",\"usage\":{\"prompt_tokens\":4098,\"completion_tokens\":473,\"total_tokens\":4571,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13769}\n{\"type\":\"assistant.delta\",\"text\":\"组：厄\",\"ts\":\"2026-06-20T16:43:16.749Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:43:16.749Z\",\"usage\":{\"prompt_tokens\":4098,\"completion_tokens\":477,\"total_tokens\":4575,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13769}\n{\"type\":\"assistant.delta\",\"text\":\"瓜多尔vs库\",\"ts\":\"2026-06-20T16:43:16.749Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:43:16.749Z\",\"usage\":{\"prompt_tokens\":4098,\"completion_tokens\":481,\"total_tokens\":4579,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13769}\n{\"type\":\"assistant.delta\",\"text\":\"拉索\\n4\",\"ts\":\"2026-06-20T16:43:16.749Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:43:16.749Z\",\"usage\":{\"prompt_tokens\":4098,\"completion_tokens\":485,\"total_tokens\":4583,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13769}\n{\"type\":\"assistant.delta\",\"text\":\". 12:\",\"ts\":\"2026-06-20T16:43:16.749Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:43:16.828Z\",\"usage\":{\"prompt_tokens\":4098,\"completion_tokens\":489,\"total_tokens\":4587,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13848}\n{\"type\":\"assistant.delta\",\"text\":\"00 小组赛\",\"ts\":\"2026-06-20T16:43:16.829Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:43:16.829Z\",\"usage\":{\"prompt_tokens\":4098,\"completion_tokens\":493,\"total_tokens\":4591,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13849}\n{\"type\":\"assistant.delta\",\"text\":\"F组：突\",\"ts\":\"2026-06-20T16:43:16.829Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:43:16.829Z\",\"usage\":{\"prompt_tokens\":4098,\"completion_tokens\":497,\"total_tokens\":4595,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13849}\n{\"type\":\"assistant.delta\",\"text\":\"尼斯vs日本\",\"ts\":\"2026-06-20T16:43:16.829Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:43:16.829Z\",\"usage\":{\"cached_tokens\":512,\"prompt_tokens\":4098,\"completion_tokens\":497,\"total_tokens\":4595,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":13849}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T16:43:16.844Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 15,
+      "category": "realtime",
+      "prompt": "2026世界杯已经出的赛事比分",
+      "exitCode": 0,
+      "durationMs": 52174,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "web_search",
+        "calendar"
+      ],
+      "assistantText": "正在查询 2026 世界杯的最新进度，请稍等——等等，今天是 **2026年6月21日**，2026美加墨世界杯确实已经开赛了！让我查查更多已经踢完的比赛：截至 **2026年6月21日**，2026 美加墨世界杯已开赛。根据工具证据，**小组赛首轮（24 场）已全部结束**，第二轮部分赛事也已完赛。以下是已明确公布比分的赛果汇总：\n\n---\n\n### 小组赛首轮（6 月 12–18 日，共 24 场，15 胜 9 平）\n| 日期（北京时间） | 对阵 | 比分 |\n|---|---|---|\n| 6 月 14 日 | 巴西 vs 摩洛哥 | 1–1 |\n| 6 月 14 日 | 苏格兰 vs 海地 | 1–0 |\n| 6 月 14 日 | 澳大利亚 vs 土耳其 | 2–0 |\n| 6 月 14 日 | 卡塔尔 vs 瑞士 | 1–1 |\n| 6 月 15 日 | 德国 vs 库拉索 | **7–1** |\n| 6 月 15 日 | 荷兰 vs 日本 | 2–2 |\n| 6 月 16 日 | 伊朗 vs 新西兰 | 2–2 |\n| 6 月 16 日 | 西班牙 vs 佛得角 | 0–0 |\n| 6 月 16 日 | 比利时 vs 埃及 | 1–1 |\n| 6 月 16 日 | 沙特阿拉伯 vs 乌拉圭 | 1–1 |\n| 6 月 17 日 | 法国 vs 塞内加尔 | 3–1 |\n| 6 月 18 日 | 哥伦比亚 vs 乌兹别克斯坦 | 3–1 |\n| 6 月 18 日 | 葡萄牙 vs 刚果民主 | 1–1（根据“开场 6 分钟领先、上半场补时被扳平、下半场未再进球”推断） |\n| 6 月 18 日 | 墨西哥 vs （对手未明确） | 2–0 |\n\n> 注：首轮其余场次（如阿根廷、英格兰、瑞典、挪威等队的比赛）工具证据中未提及具体比分。\n\n---\n\n### 小组赛第二轮（6 月 19–20 日，已结束场次）\n| 日期（北京时间） | 对阵 | 比分 |\n|---|---|---|\n| 6 月 19 日 | 捷克 vs 南非 | 1–1 |\n| 6 月 19 日 | 瑞士 vs 波黑 | 瑞士大胜（**具体比分未给出**） |\n| 6 月 19 日 | 加拿大 vs 卡塔尔 | 加拿大进 6 球（**具体比分未给出**，描述为“6 球横扫”） |\n| 6 月 19 日 | 墨西哥 vs 韩国 | 墨西哥一球小胜（**具体比分未给出**，描述为“一球力克”） |\n| 6 月 20 日 | 美国 vs 澳大利亚 | 2–0 |\n| 6 月 20 日 | 土耳其 vs 巴拉圭 | 0–1 |\n| 6 月 20 日 | 苏格兰 vs 摩洛哥 | 0–1 |\n| 6 月 20 日 | 巴西 vs 海地 | 3–0 |\n\n---\n\n### 当前结论\n- **首轮 24 场全部结束**，共 15 场分出胜负、9 场平局；其中德国 7–1 库拉索为目前最大比分。\n- **第二轮已进行 8 场**，美国两连胜积 6 分提前锁定淘汰赛席位（截至 6 月 20 日赛况）。\n- 工具证据中仍有部分比赛仅描述胜负关系，**未提供具体比分**（如瑞士 vs 波黑、加拿大 vs 卡塔尔、墨西哥 vs 韩国等）。\n- 首轮中阿根廷、英格兰、瑞典、挪威等队的比赛比分在现有证据中**未查到**。",
+      "reasoningChars": 7693,
+      "usage": {
+        "cached_tokens": 512,
+        "prompt_tokens": 6622,
+        "completion_tokens": 5771,
+        "total_tokens": 12393,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "calendar",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "calendar",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "748,\"total_tokens\":12370,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51533}\n{\"type\":\"assistant.delta\",\"text\":\"- 首\",\"ts\":\"2026-06-20T16:44:08.772Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:08.772Z\",\"usage\":{\"prompt_tokens\":6622,\"completion_tokens\":5750,\"total_tokens\":12372,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51533}\n{\"type\":\"assistant.delta\",\"text\":\"轮中\",\"ts\":\"2026-06-20T16:44:08.772Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:08.870Z\",\"usage\":{\"prompt_tokens\":6622,\"completion_tokens\":5751,\"total_tokens\":12373,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51631}\n{\"type\":\"assistant.delta\",\"text\":\"阿根廷\",\"ts\":\"2026-06-20T16:44:08.870Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:08.870Z\",\"usage\":{\"prompt_tokens\":6622,\"completion_tokens\":5753,\"total_tokens\":12375,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51631}\n{\"type\":\"assistant.delta\",\"text\":\"、英格兰\",\"ts\":\"2026-06-20T16:44:08.870Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:08.870Z\",\"usage\":{\"prompt_tokens\":6622,\"completion_tokens\":5757,\"total_tokens\":12379,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51631}\n{\"type\":\"assistant.delta\",\"text\":\"、瑞典、挪威\",\"ts\":\"2026-06-20T16:44:08.870Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:08.870Z\",\"usage\":{\"prompt_tokens\":6622,\"completion_tokens\":5760,\"total_tokens\":12382,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51631}\n{\"type\":\"assistant.delta\",\"text\":\"等队的比赛\",\"ts\":\"2026-06-20T16:44:08.870Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:08.870Z\",\"usage\":{\"prompt_tokens\":6622,\"completion_tokens\":5762,\"total_tokens\":12384,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51631}\n{\"type\":\"assistant.delta\",\"text\":\"比分在\",\"ts\":\"2026-06-20T16:44:08.870Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:08.998Z\",\"usage\":{\"prompt_tokens\":6622,\"completion_tokens\":5763,\"total_tokens\":12385,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51759}\n{\"type\":\"assistant.delta\",\"text\":\"现有\",\"ts\":\"2026-06-20T16:44:08.998Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:08.998Z\",\"usage\":{\"prompt_tokens\":6622,\"completion_tokens\":5764,\"total_tokens\":12386,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51759}\n{\"type\":\"assistant.delta\",\"text\":\"证据\",\"ts\":\"2026-06-20T16:44:08.998Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:08.998Z\",\"usage\":{\"prompt_tokens\":6622,\"completion_tokens\":5766,\"total_tokens\":12388,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51759}\n{\"type\":\"assistant.delta\",\"text\":\"中**\",\"ts\":\"2026-06-20T16:44:08.998Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:08.998Z\",\"usage\":{\"prompt_tokens\":6622,\"completion_tokens\":5768,\"total_tokens\":12390,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51759}\n{\"type\":\"assistant.delta\",\"text\":\"未查到\",\"ts\":\"2026-06-20T16:44:08.998Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:08.998Z\",\"usage\":{\"prompt_tokens\":6622,\"completion_tokens\":5771,\"total_tokens\":12393,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51759}\n{\"type\":\"assistant.delta\",\"text\":\"**。\",\"ts\":\"2026-06-20T16:44:08.998Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:08.998Z\",\"usage\":{\"cached_tokens\":512,\"prompt_tokens\":6622,\"completion_tokens\":5771,\"total_tokens\":12393,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":51759}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T16:44:09.020Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 16,
+      "category": "realtime",
+      "prompt": "NBA 总决赛打了几场，总比分如何？",
+      "exitCode": 0,
+      "durationMs": 12506,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "sports_score",
+        "web_search",
+        "web_fetch"
+      ],
+      "assistantText": "根据检索到的赛事信息：\n2025-2026赛季NBA总决赛对阵双方为纽约尼克斯与圣安东尼奥马刺，整个系列赛共进行5场，最终尼克斯以4-1的总比分击败马刺，夺得队史第三座NBA总冠军。该赛季总决赛MVP由尼克斯球员杰伦·布伦森获得，系列赛收官战G5于6月14日进行，尼克斯客场94-90战胜马刺，拿下冠军点。",
+      "reasoningChars": 934,
+      "usage": {
+        "cached_tokens": 512,
+        "prompt_tokens": 4542,
+        "completion_tokens": 465,
+        "total_tokens": 5007,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        }
+      ],
+      "rawTail": "ens\":427,\"total_tokens\":4969,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":11910}\n{\"type\":\"assistant.delta\",\"text\":\"总决赛MVP由尼\",\"ts\":\"2026-06-20T16:44:21.318Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:21.318Z\",\"usage\":{\"prompt_tokens\":4542,\"completion_tokens\":431,\"total_tokens\":4973,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":11910}\n{\"type\":\"assistant.delta\",\"text\":\"克斯球员杰伦\",\"ts\":\"2026-06-20T16:44:21.318Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:21.388Z\",\"usage\":{\"prompt_tokens\":4542,\"completion_tokens\":435,\"total_tokens\":4977,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":11980}\n{\"type\":\"assistant.delta\",\"text\":\"·布伦森\",\"ts\":\"2026-06-20T16:44:21.388Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:21.388Z\",\"usage\":{\"prompt_tokens\":4542,\"completion_tokens\":439,\"total_tokens\":4981,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":11980}\n{\"type\":\"assistant.delta\",\"text\":\"获得，系列赛\",\"ts\":\"2026-06-20T16:44:21.388Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:21.388Z\",\"usage\":{\"prompt_tokens\":4542,\"completion_tokens\":443,\"total_tokens\":4985,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":11980}\n{\"type\":\"assistant.delta\",\"text\":\"收官战G5\",\"ts\":\"2026-06-20T16:44:21.388Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:21.388Z\",\"usage\":{\"prompt_tokens\":4542,\"completion_tokens\":447,\"total_tokens\":4989,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":11980}\n{\"type\":\"assistant.delta\",\"text\":\"于6月14\",\"ts\":\"2026-06-20T16:44:21.388Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:21.519Z\",\"usage\":{\"prompt_tokens\":4542,\"completion_tokens\":451,\"total_tokens\":4993,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":12111}\n{\"type\":\"assistant.delta\",\"text\":\"日进行，尼\",\"ts\":\"2026-06-20T16:44:21.519Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:21.519Z\",\"usage\":{\"prompt_tokens\":4542,\"completion_tokens\":454,\"total_tokens\":4996,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":12111}\n{\"type\":\"assistant.delta\",\"text\":\"克斯客场94\",\"ts\":\"2026-06-20T16:44:21.519Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:21.519Z\",\"usage\":{\"prompt_tokens\":4542,\"completion_tokens\":457,\"total_tokens\":4999,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":12111}\n{\"type\":\"assistant.delta\",\"text\":\"-90战胜\",\"ts\":\"2026-06-20T16:44:21.519Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:21.519Z\",\"usage\":{\"prompt_tokens\":4542,\"completion_tokens\":459,\"total_tokens\":5001,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":12111}\n{\"type\":\"assistant.delta\",\"text\":\"马刺\",\"ts\":\"2026-06-20T16:44:21.519Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:21.519Z\",\"usage\":{\"prompt_tokens\":4542,\"completion_tokens\":463,\"total_tokens\":5005,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":12111}\n{\"type\":\"assistant.delta\",\"text\":\"，拿下冠军点\",\"ts\":\"2026-06-20T16:44:21.519Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:21.519Z\",\"usage\":{\"prompt_tokens\":4542,\"completion_tokens\":465,\"total_tokens\":5007,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":12111}\n{\"type\":\"assistant.delta\",\"text\":\"。\",\"ts\":\"2026-06-20T16:44:21.520Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:21.520Z\",\"usage\":{\"cached_tokens\":512,\"prompt_tokens\":4542,\"completion_tokens\":465,\"total_tokens\":5007,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":12112}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T16:44:21.528Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 30,
+      "category": "search",
+      "prompt": "查一下深圳今天有没有暴雨预警",
+      "exitCode": 0,
+      "durationMs": 16186,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "parallel_research",
+        "web_search"
+      ],
+      "assistantText": "根据现有检索到的工具证据，**未查到2026年6月20日（今天）深圳暴雨预警的生效记录**，最新公开的暴雨预警信息停留在2026年6月19日。\n当前可确认的最小可靠信息如下：\n1. 2026年6月19日08时52分，深圳市气象台曾对宝安区福永、松岗、航城、新桥街道，光明区凤凰、玉塘、马田街道发布暴雨橙色预警信号，当时全市处于暴雨防御状态，需防御局部内涝、山洪、滑坡、泥石流等灾害。\n2. 2026年6月20日深圳天气预报为零星小雨，气温26~31°C，暂未检索到当天发布暴雨预警的相关公开信息。",
+      "reasoningChars": 2049,
+      "usage": {
+        "cached_tokens": 512,
+        "prompt_tokens": 4059,
+        "completion_tokens": 722,
+        "total_tokens": 4781,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "parallel_research",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "parallel_research",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "al_tokens\":4737,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15582}\n{\"type\":\"assistant.delta\",\"text\":\"、山洪、\",\"ts\":\"2026-06-20T16:44:37.517Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:37.517Z\",\"usage\":{\"prompt_tokens\":4059,\"completion_tokens\":682,\"total_tokens\":4741,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15582}\n{\"type\":\"assistant.delta\",\"text\":\"滑坡、泥石\",\"ts\":\"2026-06-20T16:44:37.517Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:37.517Z\",\"usage\":{\"prompt_tokens\":4059,\"completion_tokens\":686,\"total_tokens\":4745,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15582}\n{\"type\":\"assistant.delta\",\"text\":\"流等灾害。\\n\",\"ts\":\"2026-06-20T16:44:37.517Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:37.574Z\",\"usage\":{\"prompt_tokens\":4059,\"completion_tokens\":690,\"total_tokens\":4749,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15639}\n{\"type\":\"assistant.delta\",\"text\":\"2. 202\",\"ts\":\"2026-06-20T16:44:37.574Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:37.574Z\",\"usage\":{\"prompt_tokens\":4059,\"completion_tokens\":694,\"total_tokens\":4753,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15639}\n{\"type\":\"assistant.delta\",\"text\":\"6年6月\",\"ts\":\"2026-06-20T16:44:37.574Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:37.574Z\",\"usage\":{\"prompt_tokens\":4059,\"completion_tokens\":698,\"total_tokens\":4757,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15639}\n{\"type\":\"assistant.delta\",\"text\":\"20日深圳天气预报\",\"ts\":\"2026-06-20T16:44:37.574Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:37.576Z\",\"usage\":{\"prompt_tokens\":4059,\"completion_tokens\":702,\"total_tokens\":4761,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15641}\n{\"type\":\"assistant.delta\",\"text\":\"为零星小雨，\",\"ts\":\"2026-06-20T16:44:37.576Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:37.707Z\",\"usage\":{\"prompt_tokens\":4059,\"completion_tokens\":706,\"total_tokens\":4765,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15772}\n{\"type\":\"assistant.delta\",\"text\":\"气温26~31\",\"ts\":\"2026-06-20T16:44:37.707Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:37.707Z\",\"usage\":{\"prompt_tokens\":4059,\"completion_tokens\":710,\"total_tokens\":4769,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15772}\n{\"type\":\"assistant.delta\",\"text\":\"°C，暂\",\"ts\":\"2026-06-20T16:44:37.707Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:37.707Z\",\"usage\":{\"prompt_tokens\":4059,\"completion_tokens\":714,\"total_tokens\":4773,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15772}\n{\"type\":\"assistant.delta\",\"text\":\"未检索到当天\",\"ts\":\"2026-06-20T16:44:37.707Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:37.707Z\",\"usage\":{\"prompt_tokens\":4059,\"completion_tokens\":718,\"total_tokens\":4777,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15772}\n{\"type\":\"assistant.delta\",\"text\":\"发布暴雨预警的相关\",\"ts\":\"2026-06-20T16:44:37.707Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:37.707Z\",\"usage\":{\"prompt_tokens\":4059,\"completion_tokens\":722,\"total_tokens\":4781,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15772}\n{\"type\":\"assistant.delta\",\"text\":\"公开信息。\",\"ts\":\"2026-06-20T16:44:37.707Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:37.707Z\",\"usage\":{\"cached_tokens\":512,\"prompt_tokens\":4059,\"completion_tokens\":722,\"total_tokens\":4781,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15772}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T16:44:37.715Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 49,
+      "category": "mixed",
+      "prompt": "查深圳明天天气，并说明今天和明天的区别",
+      "exitCode": 0,
+      "durationMs": 10522,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "toolNames": [
+        "weather",
+        "calendar"
+      ],
+      "assistantText": "## 深圳天气情况\n\n**今天（6月21日 周日）** — 今天的实时天气：\n- 🌡 当前温度 **29°C**，体感 **35°C**（湿热感强）\n- ☁ 天气：**零星小雨**（Patchy rain nearby）\n- 💧 湿度 **84%**，南风 9km/h\n- 全天预报：**27~31°C**，有零星小雨\n\n**明天（6月22日 周一）**：\n- ☀ **晴天**（Sunny），**26~31°C**\n- 无降雨预报\n\n---\n\n### 今天 vs 明天的区别\n\n| 对比项 | 今天（6/21） | 明天（6/22） |\n|--------|-------------|-------------|\n| 🌤 **天气** | 零星小雨 ☁️🌦 | **晴天 ☀️** |\n| 🌡 **温度** | 27~31°C | 26~31°C |\n| 💧 **湿度** | 84%（高湿闷热） | 预计更低 |\n| ☔ **降雨可能** | 有零星降雨 | **无降雨** |\n| 🌬 **体感** | 体感 35°C，湿热 | 预计更干爽 |\n\n**关键区别**：今天偏湿热有零星雨，体感闷热（体感35°C）；明天转为**大晴天**，虽然温度接近但无降雨，体感会比今天舒服不少。明天出门记得注意防晒 🧴☀️",
+      "reasoningChars": 1066,
+      "usage": {
+        "prompt_tokens": 2449,
+        "completion_tokens": 451,
+        "total_tokens": 2900,
+        "prompt_tokens_details": {
+          "cached_tokens": 2176
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 120
+        },
+        "prompt_cache_hit_tokens": 2176,
+        "prompt_cache_miss_tokens": 273
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "weather",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "weather",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "calendar",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "calendar",
+          "ok": true
+        }
+      ],
+      "rawTail": "580Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"关键\",\"ts\":\"2026-06-20T16:44:47.580Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"区别\",\"ts\":\"2026-06-20T16:44:47.580Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T16:44:47.604Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"：\",\"ts\":\"2026-06-20T16:44:47.604Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"今天\",\"ts\":\"2026-06-20T16:44:47.604Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"偏\",\"ts\":\"2026-06-20T16:44:47.604Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"湿热\",\"ts\":\"2026-06-20T16:44:47.638Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"有\",\"ts\":\"2026-06-20T16:44:47.638Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"零星\",\"ts\":\"2026-06-20T16:44:47.661Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"雨\",\"ts\":\"2026-06-20T16:44:47.661Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T16:44:47.709Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"体\",\"ts\":\"2026-06-20T16:44:47.709Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"感\",\"ts\":\"2026-06-20T16:44:47.716Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"闷\",\"ts\":\"2026-06-20T16:44:47.716Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"热\",\"ts\":\"2026-06-20T16:44:47.716Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"（\",\"ts\":\"2026-06-20T16:44:47.745Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"体\",\"ts\":\"2026-06-20T16:44:47.745Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"感\",\"ts\":\"2026-06-20T16:44:47.783Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"35\",\"ts\":\"2026-06-20T16:44:47.783Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"°\",\"ts\":\"2026-06-20T16:44:47.806Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"C\",\"ts\":\"2026-06-20T16:44:47.806Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"）；\",\"ts\":\"2026-06-20T16:44:47.806Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"明天\",\"ts\":\"2026-06-20T16:44:47.806Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"转为\",\"ts\":\"2026-06-20T16:44:47.806Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T16:44:47.827Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"大\",\"ts\":\"2026-06-20T16:44:47.869Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"晴天\",\"ts\":\"2026-06-20T16:44:47.907Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T16:44:47.907Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T16:44:47.907Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"虽然\",\"ts\":\"2026-06-20T16:44:47.907Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"温度\",\"ts\":\"2026-06-20T16:44:47.912Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"接近\",\"ts\":\"2026-06-20T16:44:47.947Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"但\",\"ts\":\"2026-06-20T16:44:47.947Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"无\",\"ts\":\"2026-06-20T16:44:47.966Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"降雨\",\"ts\":\"2026-06-20T16:44:48.007Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T16:44:48.007Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"体\",\"ts\":\"2026-06-20T16:44:48.030Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"感\",\"ts\":\"2026-06-20T16:44:48.052Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"会比\",\"ts\":\"2026-06-20T16:44:48.052Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"今天\",\"ts\":\"2026-06-20T16:44:48.085Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"舒服\",\"ts\":\"2026-06-20T16:44:48.085Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"不少\",\"ts\":\"2026-06-20T16:44:48.085Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"。\",\"ts\":\"2026-06-20T16:44:48.107Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"明天\",\"ts\":\"2026-06-20T16:44:48.107Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"出门\",\"ts\":\"2026-06-20T16:44:48.107Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"记得\",\"ts\":\"2026-06-20T16:44:48.142Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"注意\",\"ts\":\"2026-06-20T16:44:48.142Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"防晒\",\"ts\":\"2026-06-20T16:44:48.232Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 🧴\",\"ts\":\"2026-06-20T16:44:48.232Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"☀\",\"ts\":\"2026-06-20T16:44:48.232Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"️\",\"ts\":\"2026-06-20T16:44:48.232Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T16:44:48.232Z\",\"usage\":{\"prompt_tokens\":2449,\"completion_tokens\":451,\"total_tokens\":2900,\"prompt_tokens_details\":{\"cached_tokens\":2176},\"completion_tokens_details\":{\"reasoning_tokens\":120},\"prompt_cache_hit_tokens\":2176,\"prompt_cache_miss_tokens\":273},\"durationMs\":10141}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T16:44:48.237Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

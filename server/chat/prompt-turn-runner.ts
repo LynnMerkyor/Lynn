@@ -18,7 +18,7 @@ import {
 } from "./tool-use-behavior.js";
 import { attachLocalQwen35BenchContext, isLocalQwen35Model } from "./local-qwen35-bench-context.js";
 import { buildPrefetchToolSummary, rememberFailedTool, rememberSuccessfulTool } from "./tool-summary.js";
-import { buildReportResearchContext } from "./report-research-context.js";
+import { buildDirectResearchAnswer, buildReportResearchContext } from "./report-research-context.js";
 import { consumeMutationConfirmation, recordPendingDeleteRequest } from "./turn-retry-policy.js";
 import { buildLocalOfficeDirectAnswer } from "./local-office-answer.js";
 import {
@@ -36,6 +36,45 @@ import {
 } from "./session-persistence.js";
 
 type AnyRecord = Record<string, any>;
+
+const PREFETCH_REALTIME_EVIDENCE_TOOL_NAMES = new Set([
+  "web_search",
+  "web_fetch",
+  "sports_score",
+  "live_news",
+  "weather",
+  "stock_market",
+  "market_weather_brief",
+]);
+
+const DIRECT_CLOSE_PREFETCH_KINDS = new Set([
+  "market",
+  "weather",
+  "sports",
+  "news",
+  "public_data",
+]);
+
+function shouldCloseWithPrefetchDirectAnswer(reportKind: unknown, promptText: unknown, directAnswer: unknown): boolean {
+  const kind = String(reportKind || "");
+  if (!DIRECT_CLOSE_PREFETCH_KINDS.has(kind)) return false;
+  const answer = String(directAnswer || "").trim();
+  if (!answer) return false;
+  const prompt = String(promptText || "");
+  if (/(?:深度|完整|全面|系统(?:性)?|报告|调研|研究|分析|对比|比较|引用|来源列表|research|report|analysis|compare)/i.test(prompt)) {
+    return false;
+  }
+  if (kind !== "sports" && /(?:列出|表格|小表格|table)/i.test(prompt)) return false;
+  return true;
+}
+
+function shouldCloseWithImmediateLocalOfficeAnswer(promptText: unknown, directAnswer: unknown): boolean {
+  if (!String(directAnswer || "").trim()) return false;
+  const prompt = String(promptText || "");
+  return /(?:排序并去重|去重并排序|sort.*unique|unique.*sort)/iu.test(prompt)
+    || /(?:三列表格|3\s*列表格|三列\s*表格|3\s*列\s*表格)/.test(prompt)
+    && /(?:任务[、,，]\s*优先级[、,，]\s*风险|任务.*优先级.*风险)/.test(prompt);
+}
 
 export interface PromptTurnRunnerDeps {
   engine: any;
@@ -94,7 +133,7 @@ export function createPromptTurnRunner({
     const deterministic = buildLocalOfficeDirectAnswer(ss?.originalPromptText || ss?.effectivePromptText || "");
     if (deterministic) return deterministic;
     if (ss?.hasToolCall || ss?.hasPrefetchToolCall || Number(ss?.successfulToolCount || 0) > 0) {
-      return "工具已经完成执行，但模型没有返回最终总结。请查看上方工具结果；如果需要，我可以基于这些结果继续整理成简短回答。";
+      return "本轮已有工具执行记录；当前只能确认上方工具卡片中的可见结果，未覆盖的部分不能继续补推。";
     }
     return "模型这次没有返回可见内容。本轮已安全结束，避免空回复污染后续上下文；请点「编辑重发」重试，或切换默认模型后再发。";
   }
@@ -136,6 +175,7 @@ export function createPromptTurnRunner({
       ss.postRehydrateDeterministicAttempted = false;
       ss.hasOutput = false;
       ss.hasToolCall = false;
+      ss.hasRealtimeEvidenceToolCall = false;
       ss.hasThinking = false;
       ss.hasError = false;
       ss.realtimeToolFallbackText = "";
@@ -175,6 +215,17 @@ export function createPromptTurnRunner({
       let effectivePromptText = initialToolUse.effectivePromptText || promptText;
       let disableTurnTools = !!initialToolUse.disableTools;
       effectivePromptText = attachLocalQwen35BenchContext(effectivePromptText, currentModelInfo);
+      const immediateLocalOfficeAnswer = buildLocalOfficeDirectAnswer(promptText);
+      if (!rehydratedMutation && shouldCloseWithImmediateLocalOfficeAnswer(promptText, immediateLocalOfficeAnswer)) {
+        closeStreamWithVisibleFallback(
+          promptSessionPath,
+          ss,
+          immediateLocalOfficeAnswer,
+          "local_office_direct_answer",
+          { trustedFallback: true },
+        );
+        return;
+      }
       if (ss._rehydratedEffectivePrompt) {
         effectivePromptText = String(ss._rehydratedEffectivePrompt);
         disableTurnTools = false;
@@ -273,6 +324,9 @@ export function createPromptTurnRunner({
         const toolName = initialToolUse.toolName;
         ss.hasPrefetchToolCall = true;
         ss.hasToolCall = true;
+        if (PREFETCH_REALTIME_EVIDENCE_TOOL_NAMES.has(String(toolName || ""))) {
+          ss.hasRealtimeEvidenceToolCall = true;
+        }
         emitStreamEvent(promptSessionPath, ss, { type: "tool_start", name: toolName, args: { query: promptText } });
         const stopPrefetchFeedback = localQwenSynthesisAfterPrefetch
           ? startLocalQwen35PrefetchFeedback(promptSessionPath, ss, toolName, promptText)
@@ -305,6 +359,17 @@ export function createPromptTurnRunner({
               localPrefetch: true,
             });
             rememberSuccessfulTool(ss, toolName, toolSummary, { query: promptText });
+            const directAnswer = buildDirectResearchAnswer(initialToolUse.reportKind, reportContext, promptText);
+            if (shouldCloseWithPrefetchDirectAnswer(initialToolUse.reportKind, promptText, directAnswer)) {
+              closeStreamWithVisibleFallback(
+                promptSessionPath,
+                ss,
+                directAnswer,
+                "local_realtime_prefetch_direct_answer",
+                { trustedFallback: true },
+              );
+              return;
+            }
           } else {
             emitStreamEvent(promptSessionPath, ss, { type: "tool_end", name: toolName, success: false, error: "no evidence returned" });
             lifecycleHooks.run("tool_end", {
@@ -417,7 +482,7 @@ export function createPromptTurnRunner({
         wsSend(ws, { type: "error", message: t("error.modelNoResponse"), sessionPath: promptSessionPath });
       }
       if (ss && !hasStreamEvent(ss, "turn_end")) {
-        closeStreamAfterError(promptSessionPath, ss);
+        closeStreamAfterError(promptSessionPath, ss, aborted ? "model_request_aborted" : "model_tool_error");
       } else {
         broadcast({ type: "status", isStreaming: false, sessionPath: promptSessionPath });
       }

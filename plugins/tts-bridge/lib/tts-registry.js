@@ -6,7 +6,7 @@
  *
  * 默认值对齐 manifest.json provider.default = 'stepfun-realtime':
  *   - stepfun-realtime 通过 Lynn Brain 托管 StepFun Realtime,不要求用户本地填 Key
- *   - cosyvoice/say/edge/openai 只作为 fallback 或显式选择
+ *   - cosyvoice/say/edge/openai 只作为旧配置兼容或显式选择
  *
  * 配置来源:engine.config.voice.tts
  *
@@ -32,9 +32,9 @@ const PROVIDERS = {
 export function listTTSProviders() {
   return [
     { id: "stepfun-realtime", label: "StepFun Realtime TTS (Lynn 云端・默认)", needsKey: false, default: true },
-    { id: "cosyvoice", label: "CosyVoice 2 (Spark fallback)", needsKey: false },
-    { id: "say", label: "macOS say (本地 fallback)", needsKey: false, platform: "darwin" },
-    { id: "edge", label: "Edge TTS (在线 fallback)", needsKey: false },
+    { id: "cosyvoice", label: "CosyVoice 2 (legacy explicit)", needsKey: false },
+    { id: "say", label: "macOS say (legacy explicit)", needsKey: false, platform: "darwin" },
+    { id: "edge", label: "Edge TTS (legacy explicit)", needsKey: false },
     { id: "openai", label: "OpenAI TTS API", needsKey: true },
   ];
 }

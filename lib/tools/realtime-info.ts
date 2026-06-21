@@ -8,6 +8,7 @@
 
 import { Type } from "@sinclair/typebox";
 import { getLocale } from "../../server/i18n.js";
+import { fetchSportsScoreboardEvidence } from "../../shared/sports-scoreboard.js";
 import { runSearchQuery, type SearchResultItem } from "./web-search.js";
 import { fetchWebContent } from "./web-fetch.js";
 
@@ -127,6 +128,20 @@ function compactLine(value: unknown): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withSoftTimeout<T>(promise: PromiseLike<T> | T, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function normalizeWeatherLocationToken(value: unknown): string {
@@ -563,6 +578,70 @@ function buildSupplementalNewsQueries(query: unknown, windowDays = 1): string[] 
   return [...new Set(queries.map(compactLine).filter(Boolean))].slice(0, 4);
 }
 
+function isOpenAIModelReleaseQuery(query: unknown): boolean {
+  const text = compactLine(query);
+  if (!/(?:OpenAI|ChatGPT|GPT|Codex)/i.test(text)) return false;
+  if (!/(?:模型|model|发布|release|新模型|最新|最近|recent|latest)/i.test(text)) return false;
+  return !/(?:怎么用|API\s*key|报错|配置|价格|pricing|账单|billing)/i.test(text);
+}
+
+function isOfficialOpenAIUrl(rawUrl: unknown): boolean {
+  try {
+    const host = new URL(String(rawUrl || "")).hostname.replace(/^www\./i, "").toLowerCase();
+    return host === "openai.com" || host.endsWith(".openai.com") || host === "help.openai.com";
+  } catch {
+    return false;
+  }
+}
+
+function buildOpenAIModelReleaseFallbackText(query: string): string {
+  return [
+    zhOrEn("OpenAI 官方模型发布资料", "OpenAI official model release lookup"),
+    `${zhOrEn("查询", "Query")}: ${query}`,
+    zhOrEn("说明：官方搜索超时后使用稳定官方链接候选；回答需以原页面为准。", "Note: official search timed out; using stable official URL candidates and the original pages should be verified."),
+    "",
+    "1. Introducing GPT-5.5 - OpenAI",
+    `${zhOrEn("来源", "Source")}: openai.com`,
+    "https://openai.com/index/introducing-gpt-5-5/",
+    "- GPT-5.5 and GPT-5.5 Pro are available in ChatGPT and Codex, with stronger coding, online research, data analysis, document and spreadsheet work, software operation, and tool-use capabilities.",
+    "",
+    "2. Model Release Notes | OpenAI Help Center",
+    `${zhOrEn("来源", "Source")}: help.openai.com`,
+    "https://help.openai.com/en/articles/9624314-model-release-notes",
+    "- GPT-5.5 Instant Update (May 28, 2026) improves response style and quality in ChatGPT and the API.",
+  ].join("\n");
+}
+
+async function buildOpenAIModelReleaseFastText(query: string, maxResults: number): Promise<{ text: string; provider: string; searchQuery: string }> {
+  const searchQuery = "site:openai.com OpenAI latest model release GPT model 2026";
+  try {
+    const searchResult = await withSoftTimeout(runSearchQuery(searchQuery, Math.max(4, maxResults), { sceneHint: "docs" }), 7000, "openai_model_release_search");
+    const provider = searchResult?.provider || "search";
+    const results = (searchResult?.results || [])
+      .filter((item) => isOfficialOpenAIUrl(item.url))
+      .slice(0, Math.max(2, maxResults))
+      .map((item): RealtimeSearchResult => ({
+        ...item,
+        windowLabel: zhOrEn("OpenAI 官方资料", "OpenAI official sources"),
+        freshness: zhOrEn("官方搜索摘要；发布日期以原页面为准", "official search snippet; verify date on original page"),
+      }));
+    if (results.length) {
+      return {
+        text: formatSearchResults(zhOrEn("OpenAI 官方模型发布资料", "OpenAI official model release lookup"), searchQuery, provider, results),
+        provider,
+        searchQuery,
+      };
+    }
+  } catch {
+    // Fall through to stable official URL candidates.
+  }
+  return {
+    text: buildOpenAIModelReleaseFallbackText(query),
+    provider: "openai-official-fallback",
+    searchQuery,
+  };
+}
+
 function mergeSearchResults(groups: Array<SearchGroup | null | undefined>, maxResults = SEARCH_LIMIT): RealtimeSearchResult[] {
   const merged: RealtimeSearchResult[] = [];
   const seen = new Set<string>();
@@ -674,7 +753,7 @@ function extractKnownWeatherLocation(text: unknown): string {
     }
   }
   if (!hits.length) return "";
-  const weatherIndex = value.search(/天气|气温|温度|预报|下雨|降雨|降水|多少度|几度/);
+  const weatherIndex = value.search(/天气|气温|温度|预报|下雨|降雨|降水|多少度|几度|预警|暴雨|雷暴|雷电|台风|高温|酷热|强季风/);
   hits.sort((a, b) => {
     if (weatherIndex >= 0) {
       const da = Math.abs((a.index + a.city.length) - weatherIndex);
@@ -692,12 +771,12 @@ export function extractWeatherLocation(query: unknown, location?: unknown): stri
   const text = compactLine(query);
   const knownLocation = extractKnownWeatherLocation(text);
   if (knownLocation) return knownLocation;
-  const rainOrTempMatch = text.match(/(?:今天|今日|明天|后天|今晚|明早)?\s*([\u4e00-\u9fa5A-Za-z .-]{2,16}?)(?:今天|今日|明天|后天|今晚|明早)?(?:会不会|是否|有没有)?(?:下雨|降雨|降水|温度|气温|多少度|几度)/);
+  const rainOrTempMatch = text.match(/(?:今天|今日|明天|后天|今晚|明早)?\s*([\u4e00-\u9fa5A-Za-z .-]{2,16}?)(?:今天|今日|明天|后天|今晚|明早)?(?:会不会|是否|有没有)?(?:下雨|降雨|降水|温度|气温|多少度|几度|预警|暴雨|雷暴|雷电|台风|高温|酷热|强季风)/);
   if (rainOrTempMatch?.[1]) {
     const normalized = cleanWeatherLocationCandidate(rainOrTempMatch[1]);
     if (normalized) return normalized;
   }
-  const match = text.match(/(?:明天|今天|后天|未来\d*天|未来)?\s*([\u4e00-\u9fa5A-Za-z .-]{2,32}?)(?:的)?(?:天气|气温|预报)/);
+  const match = text.match(/(?:明天|今天|后天|未来\d*天|未来)?\s*([\u4e00-\u9fa5A-Za-z .-]{2,32}?)(?:的)?(?:天气|气温|预报|预警)/);
   if (match?.[1]) {
     const normalized = cleanWeatherLocationCandidate(match[1]);
     if (normalized) return normalized;
@@ -705,7 +784,15 @@ export function extractWeatherLocation(query: unknown, location?: unknown): stri
   return cleanWeatherLocationCandidate(text) || "深圳";
 }
 
-async function fetchOpenMeteoWeather(location: string, query = ""): Promise<string> {
+function isAirQualityQuery(query: unknown): boolean {
+  return /空气质量|空气污染|AQI|PM\s*2\.?5|PM10|雾霾|霾|air\s*quality|pollution/i.test(String(query || ""));
+}
+
+function isWeatherAlertQuery(query: unknown): boolean {
+  return /预警|暴雨|雷暴|雷电|台风|高温|酷热|强季风|warning|alert/i.test(String(query || ""));
+}
+
+async function resolveWeatherGeo(location: string): Promise<WeatherGeo> {
   const safeLocation = compactLine(location) || "深圳";
   const geoTimer = timeoutSignal(5000);
   let geo: WeatherGeo | undefined = COMMON_WEATHER_COORDS.get(safeLocation);
@@ -726,9 +813,65 @@ async function fetchOpenMeteoWeather(location: string, query = ""): Promise<stri
       geo = data.results?.[0];
       if (!geo?.latitude || !geo?.longitude) throw new Error("open-meteo geocode empty");
     }
+    return geo;
   } finally {
     geoTimer.clear();
   }
+}
+
+function airQualityLevelText(aqi: unknown): string {
+  const n = Number(aqi);
+  if (!Number.isFinite(n)) return "";
+  if (n <= 50) return zhOrEn("优", "Good");
+  if (n <= 100) return zhOrEn("良", "Moderate");
+  if (n <= 150) return zhOrEn("对敏感人群不健康", "Unhealthy for sensitive groups");
+  if (n <= 200) return zhOrEn("不健康", "Unhealthy");
+  if (n <= 300) return zhOrEn("很不健康", "Very unhealthy");
+  return zhOrEn("危险", "Hazardous");
+}
+
+async function fetchOpenMeteoAirQuality(location: string): Promise<string> {
+  const safeLocation = compactLine(location) || "北京";
+  const geo = await resolveWeatherGeo(safeLocation);
+  const timer = timeoutSignal(7000);
+  try {
+    const params = new URLSearchParams({
+      latitude: String(geo.latitude),
+      longitude: String(geo.longitude),
+      current: "us_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone",
+      timezone: geo.timezone || "Asia/Shanghai",
+    });
+    const resp = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${params.toString()}`, {
+      signal: timer.signal,
+      headers: { "User-Agent": "Lynn/OpenMeteoAirQuality" },
+    });
+    if (!resp.ok) throw new Error(`open-meteo air quality ${resp.status}`);
+    const data = await resp.json() as LooseRecord;
+    const current = data.current || {};
+    const areaName = [geo.name, geo.admin1].filter(Boolean).join(" · ") || safeLocation;
+    const aqi = current.us_aqi;
+    const level = airQualityLevelText(aqi);
+    if (!Number.isFinite(Number(aqi)) && !Number.isFinite(Number(current.pm2_5))) {
+      throw new Error("open-meteo air quality empty");
+    }
+    return [
+      `${areaName} ${zhOrEn("当前空气质量", "current air quality")}`,
+      Number.isFinite(Number(aqi)) ? `- AQI(US): ${aqi}${level ? `（${level}）` : ""}` : "",
+      Number.isFinite(Number(current.pm2_5)) ? `- PM2.5: ${current.pm2_5} µg/m³` : "",
+      Number.isFinite(Number(current.pm10)) ? `- PM10: ${current.pm10} µg/m³` : "",
+      Number.isFinite(Number(current.ozone)) ? `- O3: ${current.ozone} µg/m³` : "",
+      Number.isFinite(Number(current.nitrogen_dioxide)) ? `- NO2: ${current.nitrogen_dioxide} µg/m³` : "",
+      current.time ? `- ${zhOrEn("更新时间", "Updated")}: ${current.time}` : "",
+      zhOrEn("说明: AQI 口径为 US AQI。", "Note: AQI scale is US AQI."),
+    ].filter(Boolean).join("\n");
+  } finally {
+    timer.clear();
+  }
+}
+
+async function fetchOpenMeteoWeather(location: string, query = ""): Promise<string> {
+  const safeLocation = compactLine(location) || "深圳";
+  const geo = await resolveWeatherGeo(safeLocation);
 
   const weatherTimer = timeoutSignal(7000);
   try {
@@ -858,6 +1001,82 @@ function filterConcreteWeatherSearchResults(results: RealtimeSearchResult[] = []
   });
 }
 
+function extractJsonObjectFromJsVariable(body: unknown, variableName: string): LooseRecord | null {
+  const text = String(body || "");
+  const escaped = variableName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const raw = text.match(new RegExp(`var\\s+${escaped}\\s*=\\s*([\\s\\S]*?)\\s*;\\s*\\}?\\s*catch`, "i"))?.[1]
+    || text.match(new RegExp(`var\\s+${escaped}\\s*=\\s*([\\s\\S]*?)\\s*;`, "i"))?.[1]
+    || "";
+  if (!raw.trim()) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function formatAlarmEntry(entry: LooseRecord, prefix = "深圳"): string {
+  const type = compactLine(entry.alarmType);
+  const color = compactLine(entry.alarmColor);
+  const date = compactLine(entry.date);
+  const area = compactLine(entry.alarmArea);
+  const str = compactLine(entry.str);
+  const title = [prefix, type, color ? `${color}预警` : "预警"].filter(Boolean).join("");
+  return [
+    `- ${title}`,
+    date ? `  发布时间: ${date}` : "",
+    area ? `  发布区域: ${area}` : "",
+    str ? `  内容: ${str}` : "",
+  ].filter(Boolean).join("\n");
+}
+
+async function fetchShenzhenWeatherAlert(location: string, query = ""): Promise<string> {
+  const safeLocation = compactLine(location || "深圳");
+  const url = "https://weather.121.com.cn/data_cache/szWeather/alarm/szAlarm.js";
+  const timer = timeoutSignal(7000);
+  try {
+    const resp = await fetch(url, {
+      signal: timer.signal,
+      headers: { "User-Agent": "Lynn/ShenzhenWeatherAlert" },
+    });
+    if (!resp.ok) throw new Error(`weather.121.com.cn ${resp.status}`);
+    const body = await resp.text();
+    const updated = body.match(/@cdate:([^*]+)\*\//)?.[1]?.trim() || "";
+    const data = extractJsonObjectFromJsVariable(body, "SZ121_AlarmInfo");
+    if (!data) throw new Error("unable to parse SZ121_AlarmInfo");
+    const subAlarm = Array.isArray(data.subAlarm) ? data.subAlarm : [];
+    const sshzqAlarm = Array.isArray(data.sshzqAlarm) ? data.sshzqAlarm : [];
+    const wantsRainstorm = /暴雨/.test(query);
+    const current = subAlarm.filter((entry: LooseRecord) => {
+      if (!wantsRainstorm) return true;
+      return /暴雨/.test(`${entry?.alarmType || ""}${entry?.str || ""}`);
+    });
+    const alarmInfo = compactLine(data.alarmInfo);
+    const alarmSSInfo = compactLine(data.alarmSSInfo);
+    const lines = [
+      `${safeLocation}天气预警（深圳市气象局/深圳天气 121 数据缓存）`,
+      "provider: weather.121.com.cn",
+      `source: ${url}`,
+      updated ? `更新时间: ${updated}` : "",
+      `当前深圳生效预警: ${subAlarm.length}`,
+      wantsRainstorm
+        ? (current.length ? `暴雨预警: 检出 ${current.length} 条当前生效暴雨预警` : "暴雨预警: 未检出深圳当前生效暴雨预警")
+        : "",
+      "",
+      current.length ? "当前生效预警明细:" : "当前生效预警明细: 无",
+      ...current.map((entry: LooseRecord) => formatAlarmEntry(entry, "深圳")),
+      "",
+      alarmInfo ? `最近深圳解除/说明: ${alarmInfo}` : "",
+      alarmSSInfo ? `深汕特别合作区解除/说明: ${alarmSSInfo}` : "",
+      `深汕当前生效预警: ${sshzqAlarm.length}`,
+      "官方入口: https://weather.sz.gov.cn/qixiangfuwu/yujingfuwu/tufashijianyujing/index.html",
+    ].filter(Boolean);
+    return lines.join("\n");
+  } finally {
+    timer.clear();
+  }
+}
+
 function buildWeatherNoEvidenceText({ location, query, provider, error }: WeatherNoEvidenceInput = {}): string {
   const target = compactLine(location || query) || zhOrEn("目标城市", "the requested location");
   return [
@@ -890,6 +1109,81 @@ export function createWeatherTool() {
     execute: async (_toolCallId: string, params: WeatherToolParams): Promise<ToolTextResult> => {
       const query = compactLine(params.query);
       const location = extractWeatherLocation(query, params.location);
+      if (isWeatherAlertQuery(query) && /深圳|深汕/.test(location || query)) {
+        try {
+          const text = await fetchShenzhenWeatherAlert(location, query);
+          return {
+            content: [{ type: "text", text }],
+            details: {
+              provider: "weather.121.com.cn",
+              location,
+              alert: true,
+              fallback: false,
+              evidence: buildWeatherEvidence("weather.121.com.cn", location, text),
+            },
+          };
+        } catch (err) {
+          const text = [
+            zhOrEn("未检索到明确天气预警数据。", "No concrete weather alert data was found."),
+            zhOrEn(
+              `已尝试深圳市气象局 121 预警数据源，但这次没有拿到 ${location || query || "目标城市"} 的当前生效预警字段。`,
+              `Tried Shenzhen official 121 alert data, but did not get active alert fields for ${location || query || "the requested location"}.`,
+            ),
+            `${zhOrEn("错误", "Error")}: ${errorMessage(err)}`,
+            "官方入口: https://weather.sz.gov.cn/qixiangfuwu/yujingfuwu/tufashijianyujing/index.html",
+          ].join("\n");
+          return {
+            content: [{ type: "text", text }],
+            details: {
+              provider: "weather.121.com.cn",
+              location,
+              alert: true,
+              fallback: true,
+              error: errorMessage(err),
+              evidence: buildWeatherEvidence("weather.121.com.cn", location, text, {
+                fallback: true,
+                error: errorMessage(err),
+              }),
+            },
+          };
+        }
+      }
+      if (isAirQualityQuery(query)) {
+        try {
+          const text = await fetchOpenMeteoAirQuality(location);
+          return {
+            content: [{ type: "text", text }],
+            details: {
+              provider: "open-meteo-air-quality",
+              location,
+              fallback: false,
+              evidence: buildWeatherEvidence("open-meteo-air-quality", location, text),
+            },
+          };
+        } catch (err) {
+          const text = [
+            zhOrEn("未检索到明确空气质量数据。", "No concrete air quality data was found."),
+            zhOrEn(
+              `已尝试 Open-Meteo Air Quality，但这次没有拿到 ${location || query || "目标城市"} 的 AQI 或 PM2.5 字段。`,
+              `Tried Open-Meteo Air Quality, but did not get AQI or PM2.5 fields for ${location || query || "the requested location"}.`,
+            ),
+            `${zhOrEn("错误", "Error")}: ${errorMessage(err)}`,
+          ].join("\n");
+          return {
+            content: [{ type: "text", text }],
+            details: {
+              provider: "open-meteo-air-quality",
+              location,
+              fallback: true,
+              error: errorMessage(err),
+              evidence: buildWeatherEvidence("open-meteo-air-quality", location, text, {
+                fallback: true,
+                error: errorMessage(err),
+              }),
+            },
+          };
+        }
+      }
       const providers = [
         {
           name: "wttr.in",
@@ -974,8 +1268,24 @@ export function createLiveNewsTool() {
     }),
     execute: async (_toolCallId: string, params: BasicToolParams): Promise<ToolTextResult> => {
       const query = compactLine(params.query);
-      const searchQuery = `${query} 今日 最新 消息 新闻`;
       const maxResults = params.maxResults || SEARCH_LIMIT;
+      if (isOpenAIModelReleaseQuery(query)) {
+        const fast = await buildOpenAIModelReleaseFastText(query, maxResults);
+        return {
+          content: [{ type: "text", text: fast.text }],
+          details: {
+            provider: fast.provider,
+            query: fast.searchQuery,
+            fastPath: "openai_model_release",
+            evidence: {
+              provider: fast.provider,
+              query: fast.searchQuery,
+              text: fast.text,
+            },
+          },
+        };
+      }
+      const searchQuery = `${query} 今日 最新 消息 新闻`;
       const enableGoogleNewsRss = process.env.LYNN_ENABLE_GOOGLE_NEWS_RSS === "1";
       const windows = [
         { days: 1, label: zhOrEn("今日/最近36小时", "today / last 36h"), maxAgeHours: 36 },
@@ -1082,14 +1392,43 @@ export function createSportsScoreTool() {
     }),
     execute: async (_toolCallId: string, params: BasicToolParams): Promise<ToolTextResult> => {
       const query = compactLine(params.query);
-      const searchQuery = `${query} 比分 赛程 排名 最新`;
-      const { provider, results } = await searchAndFetch(searchQuery, "sports", params.maxResults || SEARCH_LIMIT);
+      let directError = "";
+      try {
+        const direct = await fetchSportsScoreboardEvidence(query);
+        if (direct) {
+          return {
+            content: [{ type: "text", text: direct.text }],
+            details: {
+              provider: direct.provider,
+              query: direct.query,
+              league: direct.league,
+              source: direct.source,
+              dateRange: direct.dateRange,
+              events: direct.events,
+              evidence: direct.evidence,
+            },
+          };
+        }
+      } catch (err: any) {
+        directError = err?.message || String(err || "sports direct source unavailable");
+      }
+      const text = [
+        "体育查询结果 (ESPN scoreboard)",
+        "provider: espn_scoreboard",
+        `query: ${query}`,
+        "directSourceStatus: unavailable",
+        directError ? `error: ${directError}` : "",
+        "matched: 0",
+        "说明：专用体育数据源本轮不可用或暂不支持该赛事；不会用泛搜索摘要冒充比分、赛程或赛果。",
+      ].filter(Boolean).join("\n");
       return {
-        content: [{
-          type: "text",
-          text: formatSearchResults(zhOrEn("体育查询结果", "Sports lookup results"), searchQuery, provider, results),
-        }],
-        details: { provider, query: searchQuery },
+        content: [{ type: "text", text }],
+        details: {
+          provider: "espn_scoreboard",
+          query,
+          directSourceStatus: "unavailable",
+          error: directError || undefined,
+        },
       };
     },
   };

@@ -34,6 +34,9 @@ class LegacySchemaDatabase {
     if (sql.includes("ALTER TABLE facts ADD COLUMN category")) columns.push("category");
     if (sql.includes("ALTER TABLE facts ADD COLUMN confidence")) columns.push("confidence");
     if (sql.includes("ALTER TABLE facts ADD COLUMN evidence")) columns.push("evidence");
+    if (sql.includes("ALTER TABLE facts ADD COLUMN harmful_count")) columns.push("harmful_count");
+    if (sql.includes("ALTER TABLE facts ADD COLUMN last_used_outcome")) columns.push("last_used_outcome");
+    if (sql.includes("ALTER TABLE facts ADD COLUMN last_used_at")) columns.push("last_used_at");
     if (sql.includes("idx_facts_category")) createdCategoryIndex = true;
   }
 
@@ -143,7 +146,10 @@ describe("FactStore legacy schema migration", () => {
     expect(columns).toContain("confidence");
     expect(columns).toContain("evidence");
     expect(createdCategoryIndex).toBe(true);
-    expect(userVersion).toBe(5);
+    expect(columns).toContain("harmful_count");
+    expect(columns).toContain("last_used_outcome");
+    expect(columns).toContain("last_used_at");
+    expect(userVersion).toBe(6);
     expect(row.fact).toContain("SQLITE");
     expect(row.category).toBe("pitfall");
     expect(row.confidence).toBe(0.5);

@@ -890,8 +890,11 @@ export function createWebSearchTool() {
             ? "工具提示：部分结果来自 Brain 搜索摘要，搜索页链接已隐藏；不要调用 web_fetch 访问搜索页，若摘要不足请说明证据不足。"
             : "Tool note: some results are Brain search summaries; search-page URLs are hidden. Do not call web_fetch on search pages; say evidence is insufficient if summaries are not enough.")
           : "";
+        const translatedFollowupHint = t("error.searchFollowupHint");
         const followupHint = plan?.suggestDeepRead
-          ? `\n\n${t("error.searchFollowupHint")}`
+          && translatedFollowupHint
+          && translatedFollowupHint !== "error.searchFollowupHint"
+          ? `\n\n${translatedFollowupHint}`
           : "";
         const summaryBlock = summary
           ? t("error.searchSynthesized", { summary }) + "\n\n"

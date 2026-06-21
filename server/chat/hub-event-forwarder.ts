@@ -28,8 +28,32 @@ import {
 import { emitModelHintFromSessionTail } from "./model-hint-recovery.js";
 import { extractProviderRouteMeta } from "./provider-meta.js";
 import { scheduleAutoReviewForTurn } from "./auto-review.js";
+import {
+  buildToolStormFallbackText,
+  updateToolStormGuard,
+} from "./tool-storm-guard.js";
 
 type AnyRecord = Record<string, any>;
+
+const REALTIME_EVIDENCE_TOOL_NAMES = new Set([
+  "web_search",
+  "websearch",
+  "web_fetch",
+  "webfetch",
+  "sports_score",
+  "sportsscore",
+  "live_news",
+  "livenews",
+  "weather",
+  "stock_market",
+  "stockmarket",
+  "exchange_rate",
+  "exchangerate",
+]);
+
+function isRealtimeEvidenceToolName(name: any): boolean {
+  return REALTIME_EVIDENCE_TOOL_NAMES.has(String(name || "").trim());
+}
 
 export interface HubEventForwarderDeps {
   hub: any;
@@ -144,6 +168,7 @@ export function createHubEventForwarder({
     } else if (event.type === "tool_execution_start") {
       if (!ss) return;
       ss.hasToolCall = true;
+      if (isRealtimeEvidenceToolName(event.toolName)) ss.hasRealtimeEvidenceToolCall = true;
       ss.activeToolCallCount = Math.max(0, Number(ss.activeToolCallCount || 0)) + 1;
       ss.lastToolExecutionActivity = Date.now();
       // The finalization fence should measure grace from the most recent
@@ -255,6 +280,54 @@ export function createHubEventForwarder({
         if (realtimeToolFallback) ss.realtimeToolFallbackText = realtimeToolFallback;
       } else {
         rememberFailedTool(ss, toolName);
+      }
+      const stormDecision = updateToolStormGuard(ss, toolName, normalizedArgs);
+      if (
+        stormDecision.exceeded
+        && !ss.toolStormClosed
+        && !ss.hasOutput
+        && !ss.hasError
+        && !ss._turnClosed
+        && !hasStreamEvent(ss, "turn_end")
+        && !hasToolExecutionInFlight(ss)
+      ) {
+        ss.toolStormClosed = true;
+        try {
+          emitStreamEvent(sessionPath, ss, {
+            type: "tool_progress",
+            name: toolName,
+            event: "storm_guard",
+            reason: stormDecision.reason,
+            count: stormDecision.count,
+            limit: stormDecision.limit,
+          });
+        } catch {
+          // Stream may already be closing.
+        }
+        try {
+          void Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
+        } catch {
+          // Abort is best-effort; fallback closing below is authoritative.
+        }
+        const fallbackText = buildToolStormFallbackText(stormDecision, buildToolCompletionSummary(ss));
+        if (closeStreamWithVisibleFallback(
+          sessionPath,
+          ss,
+          fallbackText,
+          "tool_storm_budget_exceeded",
+          { trustedFallback: true },
+        )) {
+          scheduleAutoReviewForTurn({
+            engine,
+            broadcast,
+            sessionPath,
+            ss,
+            mode: "fallback",
+            reason: "tool_storm_budget_exceeded",
+            sourceText: fallbackText,
+          });
+        }
+        return;
       }
       clearToolAuthorizationTimer(ss);
       scheduleToolFinalizationFallback(sessionPath, ss);

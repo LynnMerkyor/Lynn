@@ -1,0 +1,162 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-14-15-evidence-quality-r3.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-hbpqMM",
+  "gateCurrentDate": "2026-06-21",
+  "total": 2,
+  "counts": {
+    "quality_fail": 2
+  },
+  "providerCounts": {
+    "glm-5-turbo": 1,
+    "step-3.7-flash": 1
+  },
+  "toolRuns": 2,
+  "stepExecuteRuns": 0,
+  "avgMs": 34383,
+  "generatedAt": "2026-06-21T06:19:36.665Z",
+  "results": [
+    {
+      "index": 14,
+      "category": "realtime",
+      "prompt": "世界杯半决赛在哪一天？",
+      "exitCode": 0,
+      "durationMs": 54186,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-pro",
+        "glm-5-turbo"
+      ],
+      "toolNames": [
+        "web_search",
+        "live_news"
+      ],
+      "assistantText": "我已经拿到工具证据，但候选模型没有稳定完成最终总结。先按证据账本回答“世界杯半决赛在哪一天？”：\n\n- provider: glm\n- 摘要: 关注：ISF中国总决赛（南宁）6月21日赛程，现场抽奖环节调整 & 重磅加奖iPhone 17&iPad（发布时间：2026-06-21 10:49:29）(2026-06-21)：重要通知 | 关于21-22日比赛现场抽奖环节调整的说明 & 重磅加奖iPhone 17&iPad的公告 梦想家亚洲赛事 2026年6月20日 23:21 广西 各位到场支持“智游南宁杯”梦想家ISF2026六人德国世界杯中国总决赛的球迷朋友们： 因今日赛事赛程临时顺延，原计划晚间开展的现场扫码抽奖环节未能如期进行，给各位带来…\n- CCTV5直播，4:00，荷兰VS日本，世界杯“无冕之王”强势出战（发布时间：2026-06-15 00:10:00）(2026-06-15)：CCTV5直播，4:00，荷兰VS日本，世界杯“无冕之王”强势出战 北京时间6月15日凌晨4:00，2026年美加墨世界杯将展开F组的第一轮的较量，CCTV5现场直播比赛实况。\n- 世界杯史上，两支球队仅有一次交锋纪录，荷兰队以1-0战胜日本队。\n- 烟台体彩电竞盛宴终极对决本周日燃情上演（发布时间：2026-06-18 12:24:23）(2026-06-18)：电竞盛宴 2026美加墨世界杯激战正酣，足坛豪门逐鹿北美赛场——而在烟台，一场属于电竞爱好者的“世界杯”也将迎来高潮时刻——由烟台体彩主办、烟台市莱山区电子竞技运动协会承办的“电竞燃动世界杯 体彩乐透烟台夜”2026世界杯烟台城市电竞挑战赛决赛，将于6月21日在莱山区保利MALL外广场上演FC ONLINE与王者荣耀双项目的终极决战。\n- 决赛来临 此次赛事自5月21日在山东商务职业学院启动以来，“体育+电竞+公益”的跨界盛宴便点燃了港城青\n\n说明：以上只保留工具证据直接支持的事实；缺失或互相冲突的部分我不会继续拼接编造。",
+      "reasoningChars": 2015,
+      "usage": {
+        "prompt_tokens": 4365,
+        "completion_tokens": 180,
+        "total_tokens": 4545,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 108
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "live_news",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "live_news",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "2026-06-21T06:19:20.684Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"查\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.721Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"到\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.751Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"7\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.751Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"月\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.805Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"14\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.805Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"日\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.805Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"这一\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.825Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"场的\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.825Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"日期\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.865Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"，\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.865Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"另一\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.865Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"场\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.895Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"半决赛\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.895Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"的具体\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.895Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"日期\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.928Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"未\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.928Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"在\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.928Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"工具\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.964Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"结果\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:20.999Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"中出现\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.032Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\\n\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.073Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"-\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.073Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" 最终\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.073Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"答案\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.105Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"：\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.105Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"给出\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.105Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"已知\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.138Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"信息\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.173Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"，\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.173Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"说明\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.174Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"缺口\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.174Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\",\"hidden\":true,\"ts\":\"2026-06-21T06:19:21.208Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:19:22.062Z\",\"usage\":{\"prompt_tokens\":4365,\"completion_tokens\":180,\"total_tokens\":4545,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":108}},\"durationMs\":53888}\n{\"type\":\"assistant.delta\",\"text\":\"我已经拿到工具证据，但候选模型没有稳定完成最终总结。先按证据账本回答“世界杯半决赛在哪一天？”：\\n\\n- provider: glm\\n- 摘要: 关注：ISF中国总决赛（南宁）6月21日赛程，现场抽奖环节调整 & 重磅加奖iPhone 17&iPad（发布时间：2026-06-21 10:49:29）(2026-06-21)：重要通知 | 关于21-22日比赛现场抽奖环节调整的说明 & 重磅加奖iPhone 17&iPad的公告 梦想家亚洲赛事 2026年6月20日 23:21 广西 各位到场支持“智游南宁杯”梦想家ISF2026六人德国世界杯中国总决赛的球迷朋友们： 因今日赛事赛程临时顺延，原计划晚间开展的现场扫码抽奖环节未能如期进行，给各位带来…\\n- CCTV5直播，4:00，荷兰VS日本，世界杯“无冕之王”强势出战（发布时间：2026-06-15 00:10:00）(2026-06-15)：CCTV5直播，4:00，荷兰VS日本，世界杯“无冕之王”强势出战 北京时间6月15日凌晨4:00，2026年美加墨世界杯将展开F组的第一轮的较量，CCTV5现场直播比赛实况。\\n- 世界杯史上，两支球队仅有一次交锋纪录，荷兰队以1-0战胜日本队。\\n- 烟台体彩电竞盛宴终极对决本周日燃情上演（发布时间：2026-06-18 12:24:23）(2026-06-18)：电竞盛宴 2026美加墨世界杯激战正酣，足坛豪门逐鹿北美赛场——而在烟台，一场属于电竞爱好者的“世界杯”也将迎来高潮时刻——由烟台体彩主办、烟台市莱山区电子竞技运动协会承办的“电竞燃动世界杯 体彩乐透烟台夜”2026世界杯烟台城市电竞挑战赛决赛，将于6月21日在莱山区保利MALL外广场上演FC ONLINE与王者荣耀双项目的终极决战。\\n- 决赛来临 此次赛事自5月21日在山东商务职业学院启动以来，“体育+电竞+公益”的跨界盛宴便点燃了港城青\\n\\n说明：以上只保留工具证据直接支持的事实；缺失或互相冲突的部分我不会继续拼接编造。\",\"ts\":\"2026-06-21T06:19:22.064Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T06:19:22.072Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "quality_fail",
+      "reason": "world-cup-semifinal-question-without-date"
+    },
+    {
+      "index": 15,
+      "category": "realtime",
+      "prompt": "2026世界杯已经出的赛事比分",
+      "exitCode": 0,
+      "durationMs": 14580,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "web_search"
+      ],
+      "assistantText": "2026年世界杯正赛要到 **2026年6月11日–7月19日** 才开打（美国/加拿大/墨西哥联合主办），目前还没有正赛的比分。\n\n不过，**2026世界杯预选赛**已经在各大洲进行了。我帮你查一下最新的预选赛比分动态。截至 **2026年6月21日14时（北京时间）**，根据现有工具证据，2026美加墨世界杯已确认完赛的比分如下：\n\n| 日期（北京时间） | 对阵 | 比分 |\n|---|---|---|\n| 6月14日 | 巴西 vs 摩洛哥 | 1-1 |\n| 6月15日 | 瑞典 vs 突尼斯 | 5-1 |\n| 6月15日 | 荷兰 vs 日本 | 2-2 |\n| 6月15日 | 科特迪瓦 vs 厄瓜多尔 | 1-0 |\n| 6月16日 | 伊朗 vs 新西兰 | 2-2 |\n| 6月17日 | 挪威 vs 伊拉克 | 4-1 |\n| 6月19日 | 捷克 vs 南非 | 1-1 |\n| 6月20日 | 美国 vs 澳大利亚 | 2-0 |\n\n**说明：**\n- 以上为工具证据中明确记录的比赛结果，来源为央视新闻、新华社、澎湃新闻等媒体报道摘要。\n- 证据中未包含6月21日当天的比赛结果，也未提供6月20日巴西vs海地等场次的最终比分。\n- 如需完整赛程或最新完赛比分，建议查看FIFA官方渠道或体育直播平台。",
+      "reasoningChars": 1498,
+      "usage": {
+        "cached_tokens": 512,
+        "prompt_tokens": 5144,
+        "completion_tokens": 1020,
+        "total_tokens": 6164,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "stant.delta\",\"text\":\" | 1-\",\"ts\":\"2026-06-21T06:19:36.593Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"0 |\\n| \",\"ts\":\"2026-06-21T06:19:36.620Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"6月16日\",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" | 伊朗 vs\",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 新西兰 | \",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"2-2 |\\n\",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"| 6月\",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"17日 | \",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"挪威 vs 伊拉克\",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" | 4-\",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"1 |\\n| \",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"6月19日\",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" | 捷克 vs\",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 南非 | \",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"1-1 |\\n\",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"| 6月\",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"20日 | \",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"美国 vs 澳大利亚\",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" | 2-\",\"ts\":\"2026-06-21T06:19:36.621Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"0 |\\n\\n**说明\",\"ts\":\"2026-06-21T06:19:36.622Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"：**\\n- \",\"ts\":\"2026-06-21T06:19:36.622Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"以上为\",\"ts\":\"2026-06-21T06:19:36.622Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"工具\",\"ts\":\"2026-06-21T06:19:36.622Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"证据中明确\",\"ts\":\"2026-06-21T06:19:36.622Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"记录\",\"ts\":\"2026-06-21T06:19:36.622Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"的比赛\",\"ts\":\"2026-06-21T06:19:36.622Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"结果，来源\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"为\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"央视新闻、新华社\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"、澎湃新闻等\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"媒体报道摘要\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"。\\n- 证据\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"中未\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"包含\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"6\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"月21日当\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"天的比赛结果，\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"也未提供\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"6月20日\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"巴西vs海\",\"ts\":\"2026-06-21T06:19:36.623Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"地等场\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"次的\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"最终比分。\\n-\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 如需\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"完整赛程或\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"最新完\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"赛比分\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，建议\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"查看\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"FIFA官方渠道\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"或\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"体育直播\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"平台。\",\"ts\":\"2026-06-21T06:19:36.649Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T06:19:36.656Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "quality_fail",
+      "reason": "world-cup-stale-or-not-started-answer"
+    }
+  ]
+}

@@ -4,6 +4,7 @@
 
 import { memo, useState, useCallback, useEffect, useMemo, useRef, type MouseEvent } from 'react';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
+import { resolveUiI18nText } from '../../utils/ui-i18n';
 import styles from './Chat.module.css';
 
 interface Props {
@@ -26,7 +27,6 @@ function formatElapsed(ms: number): string {
 }
 
 export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, modelLabel, isLocalProvider }: Props) {
-  const t = useMemo(() => window.t ?? ((p: string) => p), []);
   // Keep raw provider thinking opt-in. Some providers stream internal thoughts in
   // English, so default-collapsing prevents that text from reading like the answer.
   const [explicitOpen, setExplicitOpen] = useState<boolean | null>(null);
@@ -66,32 +66,27 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
     setTranslateError(null);
   }, [content]);
 
-  // Thinking volume badge — at 100+ TPS heads (StepFun 3.7 Flash) the thinking phase is the
-  // dominant wait; show how much reasoning has streamed so the wait reads as progress.
-  const charCount = content ? content.length : 0;
-  const volumeLabel = charCount >= 200
-    ? ` · ${charCount >= 1000 ? `${(charCount / 1000).toFixed(1)}k` : charCount} 字`
-    : '';
+  // Keep the folded thinking label lightweight; the answer should remain the visual subject.
   const elapsedLabel = !sealed && elapsed >= 2000
-    ? ` (${formatElapsed(elapsed)}${volumeLabel})`
-    : (sealed && charCount >= 200 ? ` (${charCount >= 1000 ? `${(charCount / 1000).toFixed(1)}k` : charCount} 字)` : '');
+    ? ` (${formatElapsed(elapsed)})`
+    : '';
   const activeLabel = useMemo(() => {
-    if (sealed) return t('thinking.done');
-    if (isLocalColdStartThinking && elapsed >= 8_000) return '首轮暖机中，后续会更快';
-    if (isLocalModelThinking && elapsed >= 40_000) return '本地模型仍在生成';
-    if (isLocalModelThinking && elapsed >= 25_000) return '本地模型正在本机生成';
-    if (isLocalProgressThinking && elapsed >= 8_000) return '本地模型正在组织答案';
-    if (elapsed >= 8_000) return '正在组织答案';
-    return t('thinking.active');
-  }, [elapsed, isLocalColdStartThinking, isLocalModelThinking, isLocalProgressThinking, sealed, t]);
+    if (sealed) return resolveUiI18nText('thinking.done');
+    if (isLocalColdStartThinking && elapsed >= 8_000) return resolveUiI18nText('thinking.localWarmup');
+    if (isLocalModelThinking && elapsed >= 40_000) return resolveUiI18nText('thinking.localStillGeneratingShort');
+    if (isLocalModelThinking && elapsed >= 25_000) return resolveUiI18nText('thinking.localGeneratingOnDevice');
+    if (isLocalProgressThinking && elapsed >= 8_000) return resolveUiI18nText('thinking.localOrganizingAnswer');
+    if (elapsed >= 8_000) return resolveUiI18nText('thinking.organizingAnswer');
+    return resolveUiI18nText('thinking.active');
+  }, [elapsed, isLocalColdStartThinking, isLocalModelThinking, isLocalProgressThinking, sealed]);
 
   const fallbackBody = useMemo(() => {
     if (sealed || content.trim()) return '';
-    if (!isLocalModelThinking) return 'Lynn 正在组织答案。';
+    if (!isLocalModelThinking) return resolveUiI18nText('thinking.localOrganizing');
     if (elapsed >= 8_000) {
-      return '本地模型正在本机生成答案。首次启动后的第一问可能较慢，后续同一会话通常会明显更快。';
+      return resolveUiI18nText('thinking.localStillGenerating');
     }
-    return '本地模型正在本机生成答案，请稍候。';
+    return resolveUiI18nText('thinking.localGenerating');
   }, [content, elapsed, isLocalModelThinking, sealed]);
 
   const handleTranslateThinking = useCallback(async (event: MouseEvent<HTMLButtonElement>) => {
@@ -99,7 +94,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
     event.stopPropagation();
     if (!content || translateBusy) return;
     if (!sealed) {
-      setTranslateError('思考完成后再翻译。');
+      setTranslateError(resolveUiI18nText('thinking.translateWaitDone'));
       return;
     }
     // #29: chunked translate for long thinking (was: hard reject > 3000)
@@ -150,7 +145,9 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
         }
         pieces.push(data.text);
       }
-      const combined = pieces.join('\n\n') + (wasTruncated ? '\n\n[已截至前 ' + (TRANSLATE_CHUNK_CHARS * MAX_TRANSLATE_CHUNKS) + ' 字]' : '');
+      const combined = pieces.join('\n\n') + (wasTruncated
+        ? '\n\n[' + resolveUiI18nText('thinking.translationTruncated', { count: TRANSLATE_CHUNK_CHARS * MAX_TRANSLATE_CHUNKS }) + ']'
+        : '');
       if (!combined) throw new Error('translation produced empty result');
       setTranslated(combined);
     } catch (err) {
@@ -177,10 +174,10 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
             className={styles.thinkingTranslateBtn}
             onClick={handleTranslateThinking}
             disabled={translateBusy || !sealed}
-            title="把思考内容翻译成中文"
-            aria-label="把思考内容翻译成中文"
+            title={resolveUiI18nText('thinking.translateTitle')}
+            aria-label={resolveUiI18nText('thinking.translateTitle')}
           >
-            {translateBusy ? '翻译中' : '译中文'}
+            {translateBusy ? resolveUiI18nText('thinking.translateBusy') : resolveUiI18nText('thinking.translateAction')}
           </button>
         )}
         {!sealed && <span className={styles.thinkingDots}><span /><span /><span /></span>}
@@ -191,7 +188,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
           {(translated || translateError) && (
             <div className={styles.thinkingTranslationCard}>
               <div className={styles.translationCardHead}>
-                <span>{translateError ? '翻译失败' : '中文译文'}</span>
+                <span>{translateError ? resolveUiI18nText('thinking.translateFailed') : resolveUiI18nText('thinking.translationTitle')}</span>
               </div>
               <div className={styles.translationCardBody}>{translateError || translated}</div>
             </div>

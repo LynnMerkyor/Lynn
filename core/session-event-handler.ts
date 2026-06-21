@@ -2,6 +2,7 @@ import { getLocale } from "../server/i18n.js";
 import { isBrainProvider } from "../shared/brain-provider.js";
 import { runReadToolPromptInjectionGuardrail } from "./claw-aegis-guardrails.js";
 import { isBrainManagedCustomToolName } from "./brain-managed-tools.js";
+import { markInjectedMemoryOutcomeOnce } from "./session-memory-outcome.js";
 
 type AnyRecord = Record<string, any>;
 type AgentLike = AnyRecord;
@@ -109,6 +110,17 @@ export function createSessionEventHandler(options: SessionEventHandlerOptions) {
       runReadToolPromptInjectionGuardrail(event, {
         logger: (message) => console.warn(message),
       });
+
+      if (toolIsError) {
+        const eventAgent = options.getAgentById?.(entryForEvent.agentId) || options.getAgent();
+        markInjectedMemoryOutcomeOnce({
+          entry: entryForEvent,
+          agent: eventAgent,
+          outcome: "harmful",
+          reason: "tool_failure",
+          markerKey: "_memoryOutcomeToolFailureRecorded",
+        });
+      }
 
       // ── ClawAegis 输出层：输出验证（AI 声称 vs 实际结果） ──
       if (toolIsError && entryForEvent) {

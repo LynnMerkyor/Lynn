@@ -19,9 +19,10 @@ describe("web search sources UI", () => {
     expect(css).toContain(".searchSourceItem a");
   });
 
-  it("visually distinguishes provider fallback metadata from the model label", () => {
-    expect(assistantMessage).toContain("data-fallback=\"true\"");
-    expect(css).toContain(".providerRouteMeta[data-fallback=\"true\"]");
-    expect(css).toContain(".providerRouteMeta[data-fallback=\"true\"]::before");
+  it("renders provider route metadata as a neutral answered-by label with details", () => {
+    expect(assistantMessage).toContain("answerModelText");
+    expect(assistantMessage).toContain("providerRouteInfo");
+    expect(css).toContain(".providerRouteMeta");
+    expect(css).toContain(".providerRouteInfo");
   });
 });

@@ -38,6 +38,7 @@ interface RecallResult {
   experiences: ExperienceResult[];
   keywords: string[];
   preferredCategories: string[];
+  injectedFactIds: Array<number | string>;
 }
 
 interface FactStoreLike {
@@ -137,6 +138,19 @@ function factCategory(fact: FactLike): string {
     .replace(/\s+/g, "_");
 }
 
+function injectedFactIds(facts: FactLike[]): Array<number | string> {
+  const ids: Array<number | string> = [];
+  const seen = new Set<string>();
+  for (const f of facts || []) {
+    if (typeof f === "string" || !f?.fact || f.id == null) continue;
+    const key = String(f.id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    ids.push(f.id);
+  }
+  return ids;
+}
+
 export class ProactiveRecall {
   private readonly _factStore: FactStoreLike;
   private readonly _experienceDir: string;
@@ -225,12 +239,12 @@ export class ProactiveRecall {
    */
   async recall(userMessage: string, context: RecallContext = {}): Promise<RecallResult> {
     if (!this._isMemoryEnabled()) {
-      return { facts: [], experiences: [], keywords: [], preferredCategories: [] };
+      return { facts: [], experiences: [], keywords: [], preferredCategories: [], injectedFactIds: [] };
     }
 
     const keywords = this.extractKeywords(userMessage);
     if (keywords.length === 0) {
-      return { facts: [], experiences: [], keywords: [], preferredCategories: [] };
+      return { facts: [], experiences: [], keywords: [], preferredCategories: [], injectedFactIds: [] };
     }
 
     // 合并项目标签（Phase 2 注入）
@@ -248,7 +262,7 @@ export class ProactiveRecall {
       this._scanExperiences(keywords),
     ]);
 
-    return { facts, experiences, keywords, preferredCategories };
+    return { facts, experiences, keywords, preferredCategories, injectedFactIds: injectedFactIds(facts) };
   }
 
   /**

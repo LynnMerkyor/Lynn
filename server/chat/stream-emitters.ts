@@ -143,7 +143,7 @@ export function createStreamEmitters({
   ): void {
     const next = sanitizeVisibleDelta(sessionPath, ss, delta);
     if (!next) return;
-    if (hasToolExecutionInFlight(ss)) {
+    if (hasToolExecutionInFlight(ss) || (ss.hasRealtimeEvidenceToolCall && !ss.hasError && !hasStreamEvent(ss, "turn_end"))) {
       ss.bufferedVisibleTextDuringTool = `${ss.bufferedVisibleTextDuringTool || ""}${next}`;
       if (next.trim()) {
         ss.hasBufferedVisibleTextDuringTool = true;

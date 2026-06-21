@@ -1,0 +1,110 @@
+{
+  "artifact": "qwen36_27b_dflash_spark_20260617",
+  "date": "2026-06-17",
+  "hardware_class": "DGX Spark / sm_121",
+  "runtime": "spiritbuun/buun-llama-cpp DFlash fork, CUDA sm_121 build",
+  "target_model": "Qwen3.6-27B Q4_K_M GGUF",
+  "draft_model": "spiritbuun Qwen3.6-27B-DFlash GGUF q8_0 drafter",
+  "source_refs": [
+    "https://huggingface.co/spiritbuun/Qwen3.6-27B-DFlash-GGUF",
+    "https://huggingface.co/z-lab/Qwen3.6-27B-DFlash"
+  ],
+  "correctness": [
+    {
+      "prompt_index": 0,
+      "token_exact": false,
+      "base_tps": 12.143,
+      "dflash_tps": 22.298,
+      "dflash_accept_rate": 0.3659,
+      "base_sha16": "3e79082daab93482",
+      "dflash_sha16": "4150f12ecdb94a0b"
+    },
+    {
+      "prompt_index": 1,
+      "token_exact": false,
+      "base_tps": 12.158,
+      "dflash_tps": 18.437,
+      "dflash_accept_rate": 0.2581,
+      "base_sha16": "b1e8dc345a55b97b",
+      "dflash_sha16": "b8478887d1de817d"
+    },
+    {
+      "prompt_index": 2,
+      "token_exact": false,
+      "base_tps": 12.101,
+      "dflash_tps": 16.113,
+      "dflash_accept_rate": 0.2102,
+      "base_sha16": "ca9a795c53082ca8",
+      "dflash_sha16": "c79c4a5a858254aa"
+    }
+  ],
+  "correctness_exact_all": false,
+  "sweep": [
+    {
+      "mode": "base",
+      "speculative": false,
+      "concurrency": 1,
+      "wall_s": 11.048,
+      "total_tokens": 128,
+      "aggregate_tps": 11.586,
+      "accept_rate": null,
+      "errors": 0,
+      "vs_base_speedup": 1.0
+    },
+    {
+      "mode": "dflash",
+      "speculative": true,
+      "concurrency": 1,
+      "wall_s": 4.468,
+      "total_tokens": 128,
+      "aggregate_tps": 28.648,
+      "accept_rate": 0.5291,
+      "errors": 0,
+      "vs_base_speedup": 2.473
+    },
+    {
+      "mode": "base",
+      "speculative": false,
+      "concurrency": 4,
+      "wall_s": 15.656,
+      "total_tokens": 512,
+      "aggregate_tps": 32.702,
+      "accept_rate": null,
+      "errors": 0,
+      "vs_base_speedup": 1.0
+    },
+    {
+      "mode": "dflash",
+      "speculative": true,
+      "concurrency": 4,
+      "wall_s": 56.316,
+      "total_tokens": 512,
+      "aggregate_tps": 9.092,
+      "accept_rate": 0.0982,
+      "errors": 0,
+      "vs_base_speedup": 0.278
+    },
+    {
+      "mode": "base",
+      "speculative": false,
+      "concurrency": 8,
+      "wall_s": 24.355,
+      "total_tokens": 1024,
+      "aggregate_tps": 42.044,
+      "accept_rate": null,
+      "errors": 0,
+      "vs_base_speedup": 1.0
+    },
+    {
+      "mode": "dflash",
+      "speculative": true,
+      "concurrency": 8,
+      "wall_s": 163.852,
+      "total_tokens": 1024,
+      "aggregate_tps": 6.25,
+      "accept_rate": 0.0149,
+      "errors": 0,
+      "vs_base_speedup": 0.149
+    }
+  ]
+}

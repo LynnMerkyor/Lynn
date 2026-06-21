@@ -188,6 +188,11 @@ async function fetchGoldApiMarketSource(): Promise<MarketSource | null> {
   };
 }
 
+function shouldReturnGoldApiImmediately(query: unknown): boolean {
+  return !/(?:水贝|深圳|品牌|金店|周大福|周生生|老凤祥|老庙|中国黄金|回收|金条|投资金条|上金所|上海黄金交易所|Au99\.99|Au9999|首饰|饰金|批发|工费)/i
+    .test(String(query || ""));
+}
+
 function buildGoldQueries(query: unknown, market = "", symbol = ""): string[] {
   const raw = String(query || "").trim();
   return [...new Set([
@@ -700,7 +705,17 @@ async function collectMarketSources(query: string, kind: MarketKind, market = ""
   const picked: MarketSource[] = [];
   if (kind === "gold") {
     const goldApiSource = await fetchGoldApiMarketSource().catch(() => null);
-    if (goldApiSource) picked.push(goldApiSource);
+    if (goldApiSource) {
+      picked.push(goldApiSource);
+      if (shouldReturnGoldApiImmediately(query)) {
+        return {
+          provider: goldApiSource.source || "gold-api.com",
+          plan: { scene: "finance" },
+          sources: picked,
+          directQuotes,
+        };
+      }
+    }
   }
   if (kind === "oil") {
     const oilQuotes = await collectOilDirectQuotes(query).catch(() => []);

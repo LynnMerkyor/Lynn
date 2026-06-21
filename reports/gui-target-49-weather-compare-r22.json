@@ -1,0 +1,54 @@
+{
+  "outputPath": "/Users/lynn/Downloads/Lynn/reports/gui-target-49-weather-compare-r22.json",
+  "gateCurrentDate": "2026-06-21",
+  "total": 1,
+  "counts": {
+    "ok": 1
+  },
+  "providerCounts": {
+    "unknown": 1
+  },
+  "toolRuns": 1,
+  "stepExecuteRuns": 0,
+  "avgMs": 1725,
+  "failures": [],
+  "generatedAt": "2026-06-21T09:42:46.697Z",
+  "results": [
+    {
+      "index": 49,
+      "category": "mixed",
+      "prompt": "查深圳明天天气，并说明今天和明天的区别",
+      "startedAt": 1782034962461,
+      "elapsedMs": 1725,
+      "text": "深圳今天当前天气：晴，温度 31°C。\n明天 2026-06-22：附近有零星小雨，26-31°C，有降雨可能。\n主要区别：今天这条是当前实况，明天是预报；出门前建议再看本地天气 App 或雷达更新。\n数据来源/判断依据\n- 工具：weather\n- 时间：2026-06-21 17:42（本机时间）\n- 依据：天气工具返回的预报快照，按用户问法优先选择今天/明天/后天对应日期。\n- 注意：天气预报会滚动变化，出门前建议再看本地天气 App 或雷达。",
+      "textChars": 227,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "weather",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "weather"
+        },
+        {
+          "event": "end",
+          "name": "weather",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-42-42-463Z_657f9e76-fcb0-456a-8bfd-703f16e373e9.jsonl\",\"clientMessageId\":\"gui-50-49-1782034962470\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-42-42-463Z_657f9e76-fcb0-456a-8bfd-703f16e373e9.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"weather\",\"args\":{\"query\":\"查深圳明天天气，并说明今天和明天的区别\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-42-42-463Z_657f9e76-fcb0-456a-8bfd-703f16e373e9.jsonl\",\"streamId\":\"s_mqnllt7u_agq9o3\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"weather\",\"success\":true,\"summary\":{\"outputPreview\":\"【天气工具资料】\\n深圳 当前天气\\n- 天气: 晴\\n- 温度: 31°C\\n- 体感: 38°C\\n- 湿度: 79%\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-42-42-463Z_657f9e76-fcb0-456a-8bfd-703f16e373e9.jsonl\",\"streamId\":\"s_mqnllt7u_agq9o3\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"深圳今天当前天气：晴，温度 31°C。\\n明天 2026-06-22：附近有零星小雨，26-31°C，有降雨可能。\\n主要区别：今天这条是当前实况，明天是预报；出门前建议再看本地天气 App 或雷达更新。\\n数据来源/判断依据\\n- 工具：weather\\n- 时间：2026-06-21 17:42（本机时间）\\n- 依据：天气工具返回的预报快照，按用户问法优先选择今天/明天/后天对应日期。\\n- 注意：天气预报会滚动变化，出门前建议再看本地天气 App 或雷达。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-42-42-463Z_657f9e76-fcb0-456a-8bfd-703f16e373e9.jsonl\",\"streamId\":\"s_mqnllt7u_agq9o3\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-42-42-463Z_657f9e76-fcb0-456a-8bfd-703f16e373e9.jsonl\",\"streamId\":\"s_mqnllt7u_agq9o3\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-42-42-463Z_657f9e76-fcb0-456a-8bfd-703f16e373e9.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

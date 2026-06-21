@@ -55,7 +55,7 @@ export interface Provider {
   vision_model?: string;
 }
 
-export type FallbackReason = 'cooldown' | 'probe-failed' | 'probe-threw' | 'local-busy' | 'error' | 'empty';
+export type FallbackReason = 'cooldown' | 'probe-failed' | 'probe-threw' | 'local-busy' | 'error' | 'empty' | 'handoff';
 
 export interface FallbackEntry {
   id: ProviderId;

@@ -1,6 +1,6 @@
 import { readSignedClientAgentHeaders } from "../../core/client-agent-identity.js";
 import { BRAIN_API_ROOTS } from "../../shared/brain-provider.js";
-import { pcm16ToWav } from "../chat/voice-audio-codec.js";
+import { extractPcm16FromWav, pcm16ToWav, toBuffer } from "../chat/voice-audio-codec.js";
 
 interface BrainRealtimeVoiceConfig {
   timeout_ms?: unknown;
@@ -13,9 +13,6 @@ interface BrainRealtimeVoiceConfig {
   baseUrl?: unknown;
   [key: string]: unknown;
 }
-
-const STEPFUN_REALTIME_ASR_UNSUPPORTED =
-  "StepFun Realtime stateless exposes assistant response transcripts, not a standalone user ASR transcript";
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -36,6 +33,11 @@ function brainRoots(config: BrainRealtimeVoiceConfig): string[] {
 
 function endpoint(root: string, pathname: string): string {
   return `${root}${pathname}`;
+}
+
+function normalizeAudioInput(audioBuffer: unknown): Buffer {
+  const audio = toBuffer(audioBuffer as Parameters<typeof toBuffer>[0]);
+  return extractPcm16FromWav(audio);
 }
 
 async function postBrainVoice(pathname: "/v1/voice/asr" | "/v1/voice/tts", body: Record<string, unknown>, config: BrainRealtimeVoiceConfig): Promise<Record<string, unknown>> {
@@ -70,18 +72,30 @@ export function createBrainRealtimeAsrProvider(config: BrainRealtimeVoiceConfig 
     name: "brain-realtime-asr",
     label: "Lynn Brain StepFun Realtime ASR",
     async transcribe(audioBuffer: unknown, opts: Record<string, unknown> = {}) {
-      void audioBuffer;
-      void opts;
-      void config;
-      throw new Error(STEPFUN_REALTIME_ASR_UNSUPPORTED);
+      const pcm = normalizeAudioInput(audioBuffer);
+      if (!pcm.length) throw new Error("Brain realtime ASR received empty audio");
+      const data = await postBrainVoice("/v1/voice/asr", {
+        audio_base64: pcm.toString("base64"),
+        mime_type: "audio/pcm;rate=24000",
+        language: opts.language || config.language || "auto",
+        filename: opts.filename || "audio.pcm",
+      }, config);
+      const text = stringValue(data.text) || stringValue(data.transcript);
+      if (!text) throw new Error("Brain realtime ASR returned no transcript");
+      return {
+        provider: String(data.provider || "brain-stepfun-realtime"),
+        text,
+        transcript: text,
+        language: stringValue(data.language) || stringValue(opts.language) || "auto",
+        raw: data.raw,
+      };
     },
     async health() {
       return {
-        ok: false,
+        ok: true,
         fallbackOk: false,
-        degraded: true,
+        degraded: false,
         provider: "brain-realtime",
-        error: STEPFUN_REALTIME_ASR_UNSUPPORTED,
       };
     },
   };

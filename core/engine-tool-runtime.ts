@@ -206,6 +206,18 @@ const TOOL_ALIASES: Record<string, string> = {
   "websearch": "web_search",
   "web-fetch": "web_fetch",
   "webfetch": "web_fetch",
+  "stock-market": "stock_market",
+  "stockmarket": "stock_market",
+  "live-news": "live_news",
+  "livenews": "live_news",
+  "sports-score": "sports_score",
+  "sportsscore": "sports_score",
+  "exchange-rate": "exchange_rate",
+  "exchangerate": "exchange_rate",
+  "unit-convert": "unit_convert",
+  "unitconvert": "unit_convert",
+  "express-tracking": "express_tracking",
+  "expresstracking": "express_tracking",
   "search-memory": "search_memory",
   "searchmemory": "search_memory",
   "pin-memory": "pin_memory",
@@ -220,6 +232,13 @@ const TOOL_ALIASES: Record<string, string> = {
   "ask-agent": "ask_agent",
   "message-agent": "message_agent",
 };
+
+export function normalizeToolAliasName(name: unknown): string {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  return TOOL_ALIASES[lower] || lower.replace(/-/g, "_");
+}
 
 export function createToolAliases(customTools: ToolLike[]): ToolLike[] {
   const nameSet = new Set(customTools.map((t) => t.name));

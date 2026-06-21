@@ -802,7 +802,10 @@ export class Agent {
         projectPath: cwd,
       });
       const isZh = String(this._config.locale || "").startsWith("zh");
-      return this._proactiveRecall.formatForInjection(result, isZh);
+      return {
+        text: this._proactiveRecall.formatForInjection(result, isZh),
+        injectedFactIds: result.injectedFactIds || [],
+      };
     } catch (err) {
       console.error(`[agent] recallForMessage failed: ${errorMessage(err)}`);
       return "";

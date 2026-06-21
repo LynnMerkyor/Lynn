@@ -63,7 +63,7 @@ export function appendEvidenceBlock(answer: unknown, { kind, context, userPrompt
   const body = String(answer || "").trim();
   if (!body || /数据来源\/判断依据/.test(body)) return body;
   const prompt = textOf(userPrompt);
-  if (/(?:一句话|一行|简短|简洁|直接回答|只回复|只回答)/.test(prompt)) return body;
+  if (/(?:一句话|一句|一行|简短|简洁|直接回答|只回复|只回答)/.test(prompt)) return body;
   const meta = inferEvidenceMeta(kind, prompt);
   const sources = extractEvidenceSources(context);
   return [

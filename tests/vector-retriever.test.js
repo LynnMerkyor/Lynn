@@ -17,6 +17,7 @@ function makeTempRoot() {
 }
 
 afterEach(() => {
+  delete process.env.LYNN_MEMORY_OUTCOME_FEEDBACK;
   while (tmpRoots.length > 0) {
     fs.rmSync(tmpRoots.pop(), { recursive: true, force: true });
   }
@@ -173,6 +174,46 @@ describe("vector retriever integration", () => {
 
     expect(results[0].id).toBe(2);
     expect(results[0].categoryBoost).toBeGreaterThan(results[1].categoryBoost);
+
+    retriever.close();
+  });
+
+  it("applies harmful feedback as a conservative negative rank signal when enabled", async () => {
+    process.env.LYNN_MEMORY_OUTCOME_FEEDBACK = "1";
+    const factStore = createStubFactStore();
+    factStore.add({
+      id: 1,
+      fact: "React suspense streaming stale workaround",
+      tags: ["react", "streaming"],
+      category: "procedure",
+      importance_score: 10,
+      harmful_count: 3,
+    });
+    factStore.add({
+      id: 2,
+      fact: "React suspense streaming current workaround",
+      tags: ["react", "streaming"],
+      category: "procedure",
+      importance_score: 10,
+      harmful_count: 0,
+    });
+
+    const retriever = new HybridRetriever({
+      factStore,
+      vectorRetriever: {
+        get available() { return false; },
+        async search() { return []; },
+        close() {},
+      },
+    });
+
+    const before = { ...factStore.getById(2) };
+    const results = await retriever.search(["react", "streaming"], 5);
+
+    expect(results[0].id).toBe(2);
+    expect(results.find((row) => row.id === 1)?.harmfulPenalty).toBeGreaterThan(0);
+    expect(factStore.getById(2).hit_count).toBe(before.hit_count);
+    expect(factStore.getById(2).importance_score).toBe(before.importance_score);
 
     retriever.close();
   });

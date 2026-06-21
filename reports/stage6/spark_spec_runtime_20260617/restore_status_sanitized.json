@@ -1,0 +1,14 @@
+{
+  "checked_at": "2026-06-17T02:35:00+08:00",
+  "restored_services": [
+    {
+      "label": "previous_35b_private_service",
+      "health_ok": true
+    },
+    {
+      "label": "previous_27b_mtp_service",
+      "health_ok": true
+    }
+  ],
+  "note": "Local ports/endpoints omitted in sanitized artifact."
+}

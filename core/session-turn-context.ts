@@ -13,8 +13,13 @@ import {
 
 type AnyRecord = Record<string, any>;
 
+type RecallForMessageResult = string | {
+  text?: string | null;
+  injectedFactIds?: Array<string | number> | null;
+} | null | undefined;
+
 type AgentLike = AnyRecord & {
-  recallForMessage?: (text: string, cwd: string) => Promise<string | null | undefined> | string | null | undefined;
+  recallForMessage?: (text: string, cwd: string) => Promise<RecallForMessageResult> | RecallForMessageResult;
 };
 
 type SessionEntryLike = AnyRecord & {
@@ -40,10 +45,20 @@ export async function prepareSessionTurnContext(opts: {
 
   try {
     const cwd = opts.entry.session?.sessionManager?.getCwd?.() || "";
+    opts.entry._memoryOutcomeToolFailureRecorded = false;
     const recallCtx = await opts.agent.recallForMessage?.(opts.text, cwd);
-    opts.entry._lastRecallContext = recallCtx || "";
+    if (recallCtx && typeof recallCtx === "object") {
+      opts.entry._lastRecallContext = recallCtx.text || "";
+      opts.entry._lastRecallFactIds = Array.isArray(recallCtx.injectedFactIds)
+        ? [...new Set(recallCtx.injectedFactIds.map((id) => String(id)).filter(Boolean))]
+        : [];
+    } else {
+      opts.entry._lastRecallContext = recallCtx || "";
+      opts.entry._lastRecallFactIds = [];
+    }
   } catch {
     opts.entry._lastRecallContext = "";
+    opts.entry._lastRecallFactIds = [];
   }
 
   const routeIntent = classifyRouteIntent(opts.text, { imagesCount });
@@ -74,6 +89,8 @@ export async function prepareSessionTurnContext(opts: {
 
 export function clearSessionTurnContext(entry: SessionEntryLike) {
   entry._lastRecallContext = "";
+  entry._lastRecallFactIds = [];
+  entry._memoryOutcomeToolFailureRecorded = false;
   entry._lastSkillHintContext = "";
   entry._atInjectionHintContext = "";
   entry._turnInstructionHintContext = "";

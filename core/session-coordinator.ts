@@ -405,6 +405,7 @@ export class SessionCoordinator {
       lastTouchedAt: Date.now(),
       unsub,
       _lastRecallContext: "", // Phase 1: 主动召回上下文（一次性消费）
+      _lastRecallFactIds: [], // P0 outcome feedback: fact ids actually injected this turn
       _lastSkillHintContext: "",
       _atInjectionHintContext: "",
       _routeIntentHintContext: "",

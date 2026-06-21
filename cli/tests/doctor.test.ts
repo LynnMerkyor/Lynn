@@ -9,6 +9,7 @@ import { writeCliProviderProfile } from "../src/provider-profile.js";
 describe("doctor command", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it("supports offline diagnostics", async () => {
@@ -26,6 +27,7 @@ describe("doctor command", () => {
   });
 
   it("reads Brain v2 provider route status without requiring CLI BYOK", async () => {
+    vi.stubEnv("LYNN_CLI_DISABLE_BRAIN_AUTH", "1");
     vi.stubGlobal("fetch", vi.fn(async (url: URL | string) => {
       const href = String(url);
       if (href.endsWith("/health")) return new Response(JSON.stringify({ ok: true }), { status: 200, statusText: "OK" });
@@ -63,6 +65,7 @@ describe("doctor command", () => {
   });
 
   it("uses chat smoke when hosted Brain does not expose provider route status", async () => {
+    vi.stubEnv("LYNN_CLI_DISABLE_BRAIN_AUTH", "1");
     vi.stubGlobal("fetch", vi.fn(async (url: URL | string) => {
       const href = String(url);
       if (href.endsWith("/health")) return new Response(JSON.stringify({ ok: true }), { status: 200, statusText: "OK" });
@@ -99,7 +102,7 @@ describe("doctor command", () => {
           route: ["step-3.7-flash", "deepseek"],
           providers: [
             { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "missing", configured: false, local: false, inRoute: true },
-            { id: "deepseek", model: "deepseek-chat", endpoint: "https://api.deepseek.com/v1", wire: "openai", credential: "missing", configured: false, local: false, inRoute: true },
+            { id: "deepseek", model: "deepseek-v4-flash", endpoint: "https://api.deepseek.com/v1", wire: "openai", credential: "missing", configured: false, local: false, inRoute: true },
           ],
         }), { status: 200, statusText: "OK" });
       }
@@ -115,6 +118,7 @@ describe("doctor command", () => {
   });
 
   it("fails Brain diagnostics when the route status is usable but the chat smoke fails", async () => {
+    vi.stubEnv("LYNN_CLI_DISABLE_BRAIN_AUTH", "1");
     vi.stubGlobal("fetch", vi.fn(async (url: URL | string) => {
       const href = String(url);
       if (href.endsWith("/health")) return new Response(JSON.stringify({ ok: true }), { status: 200, statusText: "OK" });
@@ -124,7 +128,7 @@ describe("doctor command", () => {
           route: ["step-3.7-flash", "deepseek"],
           providers: [
             { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "set", configured: true, local: false, inRoute: true },
-            { id: "deepseek", model: "deepseek-chat", endpoint: "https://api.deepseek.com/v1", wire: "openai", credential: "set", configured: true, local: false, inRoute: true },
+            { id: "deepseek", model: "deepseek-v4-flash", endpoint: "https://api.deepseek.com/v1", wire: "openai", credential: "set", configured: true, local: false, inRoute: true },
           ],
         }), { status: 200, statusText: "OK" });
       }

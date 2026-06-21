@@ -1,0 +1,161 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-14-15-buffered-handoff.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-hO2jfR",
+  "gateCurrentDate": "2026-06-21",
+  "total": 2,
+  "counts": {
+    "ok": 1,
+    "quality_fail": 1
+  },
+  "providerCounts": {
+    "step-3.7-flash": 2
+  },
+  "toolRuns": 2,
+  "stepExecuteRuns": 0,
+  "avgMs": 33554,
+  "generatedAt": "2026-06-20T18:27:40.955Z",
+  "results": [
+    {
+      "index": 14,
+      "category": "realtime",
+      "prompt": "世界杯半决赛在哪一天？",
+      "exitCode": 0,
+      "durationMs": 45628,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "live_news",
+        "web_search"
+      ],
+      "assistantText": "根据当前检索到的公开信息，2026年美加墨世界杯（正在进行的这届赛事）的半决赛安排如下：\n1. 已确认其中一场半决赛将于**北京时间7月14日**在美国达拉斯体育场举行（来源：2026年6月16日公开赛事报道）。\n2. 现有证据未查到另一场半决赛的具体日期，也未查到完整的半决赛全部赛程安排。\n\n如果需要更完整的半决赛日期信息，建议后续通过官方渠道核验。",
+      "reasoningChars": 1136,
+      "usage": {
+        "cached_tokens": 512,
+        "prompt_tokens": 7139,
+        "completion_tokens": 526,
+        "total_tokens": 7665,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "live_news",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "live_news",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "20T18:27:19.209Z\",\"usage\":{\"prompt_tokens\":7139,\"completion_tokens\":492,\"total_tokens\":7631,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":44926}\n{\"type\":\"assistant.delta\",\"text\":\"未查到\",\"ts\":\"2026-06-20T18:27:19.209Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:19.209Z\",\"usage\":{\"prompt_tokens\":7139,\"completion_tokens\":496,\"total_tokens\":7635,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":44926}\n{\"type\":\"assistant.delta\",\"text\":\"另一场半决赛\",\"ts\":\"2026-06-20T18:27:19.209Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:19.209Z\",\"usage\":{\"prompt_tokens\":7139,\"completion_tokens\":500,\"total_tokens\":7639,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":44926}\n{\"type\":\"assistant.delta\",\"text\":\"的具体日期，也未\",\"ts\":\"2026-06-20T18:27:19.209Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:19.209Z\",\"usage\":{\"prompt_tokens\":7139,\"completion_tokens\":504,\"total_tokens\":7643,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":44926}\n{\"type\":\"assistant.delta\",\"text\":\"查到完整的半决赛\",\"ts\":\"2026-06-20T18:27:19.209Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:19.368Z\",\"usage\":{\"prompt_tokens\":7139,\"completion_tokens\":505,\"total_tokens\":7644,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":45085}\n{\"type\":\"assistant.delta\",\"text\":\"全部\",\"ts\":\"2026-06-20T18:27:19.368Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:19.368Z\",\"usage\":{\"prompt_tokens\":7139,\"completion_tokens\":509,\"total_tokens\":7648,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":45085}\n{\"type\":\"assistant.delta\",\"text\":\"赛程安排。\\n\\n\",\"ts\":\"2026-06-20T18:27:19.368Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:19.368Z\",\"usage\":{\"prompt_tokens\":7139,\"completion_tokens\":513,\"total_tokens\":7652,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":45085}\n{\"type\":\"assistant.delta\",\"text\":\"如果需要更完整的半\",\"ts\":\"2026-06-20T18:27:19.368Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:19.461Z\",\"usage\":{\"prompt_tokens\":7139,\"completion_tokens\":517,\"total_tokens\":7656,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":45178}\n{\"type\":\"assistant.delta\",\"text\":\"决赛日期信息，\",\"ts\":\"2026-06-20T18:27:19.461Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:19.461Z\",\"usage\":{\"prompt_tokens\":7139,\"completion_tokens\":521,\"total_tokens\":7660,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":45178}\n{\"type\":\"assistant.delta\",\"text\":\"建议后续通过官方\",\"ts\":\"2026-06-20T18:27:19.461Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:19.461Z\",\"usage\":{\"prompt_tokens\":7139,\"completion_tokens\":522,\"total_tokens\":7661,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":45178}\n{\"type\":\"assistant.delta\",\"text\":\"渠道\",\"ts\":\"2026-06-20T18:27:19.461Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:19.461Z\",\"usage\":{\"prompt_tokens\":7139,\"completion_tokens\":525,\"total_tokens\":7664,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":45178}\n{\"type\":\"assistant.delta\",\"text\":\"核验。\",\"ts\":\"2026-06-20T18:27:19.461Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:19.461Z\",\"usage\":{\"prompt_tokens\":7139,\"completion_tokens\":526,\"total_tokens\":7665,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":45178}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:19.461Z\",\"usage\":{\"cached_tokens\":512,\"prompt_tokens\":7139,\"completion_tokens\":526,\"total_tokens\":7665,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":45178}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T18:27:19.465Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 15,
+      "category": "realtime",
+      "prompt": "2026世界杯已经出的赛事比分",
+      "exitCode": 0,
+      "durationMs": 21479,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "web_search"
+      ],
+      "assistantText": "2026年世界杯决赛圈比赛要到 **2026年6月11日** 才开幕，目前还没有任何决赛圈的赛事比分哦！\n\n不过，目前全球各大洲的 **2026世界杯预选赛** 正在火热进行中。让我帮你查一下最新的预选赛比分情况：看起来 **2026年美加墨世界杯决赛圈已经开赛了！** 让我搜一下更完整的赛果汇总：根据已有工具证据，**2026年美加墨世界杯已于6月12日开幕**，目前小组赛首轮已全部结束（24场），第二轮部分比赛也已进行。以下是已确认的赛果：\n\n## 已完赛比分（按时间顺序）\n\n| 日期（北京时间） | 对阵 | 比分 | 组别/轮次 |\n|---|---|---|---|\n| 6月15日 | 德国 vs 库拉索 | **7–1** | E组第1轮 |\n| 6月16日 | 伊朗 vs 新西兰 | **2–2** | G组第1轮 |\n| 6月17日 | 挪威 vs 伊拉克 | **4–1** | I组第1轮 |\n| 6月19日 | 瑞士 vs 波黑 | **4–1** | B组第2轮 |\n| 6月19日 | 捷克 vs 南非 | **1–1** | A组第2轮 |\n| 6月20日 | 美国 vs 澳大利亚 | **2–0** | D组第2轮 |\n\n## 其他已知信息\n\n- **小组赛首轮**（24场）已于6月18日全部结束，其中15场分出胜负，9场平局。\n- **德国7–1库拉索** 是首轮最大比分。\n- **亚洲球队**（伊朗、日本、韩国、沙特、澳大利亚等）在首轮整体保持不败。\n- **东道主**美国队两连胜提前出线；加拿大收获世界杯历史首个积分（首战1–1波黑）。\n\n## 证据说明\n\n工具结果中提及的其他比分（如加拿大2–0卡塔尔、摩洛哥1–0葡萄牙、巴西3–1阿根廷、法国2–2西班牙等）在现有证据中缺乏交叉验证，部分信息可能为预测或实时未终场比分，暂不列为确定赛果。\n\n如需更完整的全部48队赛程或具体某场比赛详情，建议进一步检索。",
+      "reasoningChars": 2438,
+      "usage": {
+        "cached_tokens": 512,
+        "prompt_tokens": 4999,
+        "completion_tokens": 1741,
+        "total_tokens": 6740,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "\"completion_tokens\":1724,\"total_tokens\":6723,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":20838}\n{\"type\":\"assistant.delta\",\"text\":\"如需更\",\"ts\":\"2026-06-20T18:27:40.721Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:40.721Z\",\"usage\":{\"prompt_tokens\":4999,\"completion_tokens\":1726,\"total_tokens\":6725,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":20838}\n{\"type\":\"assistant.delta\",\"text\":\"完整的全部\",\"ts\":\"2026-06-20T18:27:40.721Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:40.860Z\",\"usage\":{\"prompt_tokens\":4999,\"completion_tokens\":1728,\"total_tokens\":6727,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":20977}\n{\"type\":\"assistant.delta\",\"text\":\"48队\",\"ts\":\"2026-06-20T18:27:40.860Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:40.860Z\",\"usage\":{\"prompt_tokens\":4999,\"completion_tokens\":1730,\"total_tokens\":6729,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":20977}\n{\"type\":\"assistant.delta\",\"text\":\"赛程\",\"ts\":\"2026-06-20T18:27:40.860Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:40.860Z\",\"usage\":{\"prompt_tokens\":4999,\"completion_tokens\":1732,\"total_tokens\":6731,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":20977}\n{\"type\":\"assistant.delta\",\"text\":\"或具体\",\"ts\":\"2026-06-20T18:27:40.860Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:40.860Z\",\"usage\":{\"prompt_tokens\":4999,\"completion_tokens\":1733,\"total_tokens\":6732,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":20977}\n{\"type\":\"assistant.delta\",\"text\":\"某\",\"ts\":\"2026-06-20T18:27:40.860Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:40.860Z\",\"usage\":{\"prompt_tokens\":4999,\"completion_tokens\":1734,\"total_tokens\":6733,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":20977}\n{\"type\":\"assistant.delta\",\"text\":\"场比赛\",\"ts\":\"2026-06-20T18:27:40.860Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:40.860Z\",\"usage\":{\"prompt_tokens\":4999,\"completion_tokens\":1735,\"total_tokens\":6734,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":20977}\n{\"type\":\"assistant.delta\",\"text\":\"详情\",\"ts\":\"2026-06-20T18:27:40.860Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:40.860Z\",\"usage\":{\"prompt_tokens\":4999,\"completion_tokens\":1737,\"total_tokens\":6736,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":20977}\n{\"type\":\"assistant.delta\",\"text\":\"，建议\",\"ts\":\"2026-06-20T18:27:40.860Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:40.860Z\",\"usage\":{\"prompt_tokens\":4999,\"completion_tokens\":1738,\"total_tokens\":6737,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":20977}\n{\"type\":\"assistant.delta\",\"text\":\"进一步\",\"ts\":\"2026-06-20T18:27:40.860Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:40.926Z\",\"usage\":{\"prompt_tokens\":4999,\"completion_tokens\":1739,\"total_tokens\":6738,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":21043}\n{\"type\":\"assistant.delta\",\"text\":\"检索\",\"ts\":\"2026-06-20T18:27:40.926Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:40.926Z\",\"usage\":{\"prompt_tokens\":4999,\"completion_tokens\":1741,\"total_tokens\":6740,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":21043}\n{\"type\":\"assistant.delta\",\"text\":\"。\",\"ts\":\"2026-06-20T18:27:40.926Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T18:27:40.926Z\",\"usage\":{\"cached_tokens\":512,\"prompt_tokens\":4999,\"completion_tokens\":1741,\"total_tokens\":6740,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":21043}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T18:27:40.948Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "quality_fail",
+      "reason": "world-cup-stale-or-not-started-answer"
+    }
+  ]
+}

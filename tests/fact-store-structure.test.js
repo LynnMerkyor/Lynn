@@ -26,6 +26,9 @@ class MockDatabase {
         { name: "category" },
         { name: "confidence" },
         { name: "evidence" },
+        { name: "harmful_count" },
+        { name: "last_used_outcome" },
+        { name: "last_used_at" },
       ];
     }
     return [];
@@ -57,8 +60,39 @@ class MockDatabase {
             category: params.category,
             confidence: params.confidence,
             evidence: params.evidence,
+            harmful_count: params.harmfulCount ?? 0,
+            last_used_outcome: params.lastUsedOutcome || null,
+            last_used_at: params.lastUsedAt || null,
           });
           return { lastInsertRowid: id };
+        },
+      };
+    }
+
+    if (sql.includes("last_used_outcome = @outcome") && sql.includes("harmful_count")) {
+      return {
+        run(params) {
+          const row = rows.get(Number(params.id));
+          if (!row) return { changes: 0 };
+          row.harmful_count += 1;
+          row.last_used_outcome = params.outcome;
+          row.last_used_at = params.usedAt;
+          return { changes: 1 };
+        },
+      };
+    }
+
+    if (sql.includes("last_used_outcome = @outcome") && sql.includes("hit_count")) {
+      return {
+        run(params) {
+          const row = rows.get(Number(params.id));
+          if (!row) return { changes: 0 };
+          row.hit_count += 1;
+          row.importance_score += params.importanceDelta;
+          row.last_accessed_at = params.usedAt;
+          row.last_used_outcome = params.outcome;
+          row.last_used_at = params.usedAt;
+          return { changes: 1 };
         },
       };
     }
@@ -161,6 +195,7 @@ describe("FactStore structured fields", () => {
   beforeEach(() => {
     rows = new Map();
     nextId = 1;
+    delete process.env.LYNN_MEMORY_OUTCOME_FEEDBACK;
   });
 
   it("persists category, confidence, and evidence", async () => {
@@ -221,6 +256,30 @@ describe("FactStore structured fields", () => {
 
     expect(store.getById(id)?.category).toBe("pitfall");
 
+    store.close();
+  });
+
+  it("marks harmful and helpful outcomes only when feedback is enabled", async () => {
+    const { FactStore } = await import("../lib/memory/fact-store.js");
+    const store = new FactStore("/tmp/facts.db");
+
+    const { id } = store.add({ fact: "V8 timeout 的历史坑点", tags: ["V8"], category: "pitfall" });
+    expect(store.markOutcome([id], "harmful")).toBe(0);
+    expect(store.getById(id)?.harmful_count).toBe(0);
+
+    process.env.LYNN_MEMORY_OUTCOME_FEEDBACK = "1";
+    expect(store.markOutcome([id], "harmful")).toBe(1);
+    expect(store.getById(id)?.harmful_count).toBe(1);
+    expect(store.getById(id)?.last_used_outcome).toBe("harmful");
+
+    const beforeHelpful = store.getById(id);
+    expect(store.markOutcome([id], "helpful")).toBe(1);
+    const afterHelpful = store.getById(id);
+    expect(afterHelpful?.hit_count).toBe((beforeHelpful?.hit_count || 0) + 1);
+    expect(afterHelpful?.importance_score).toBeGreaterThan(beforeHelpful?.importance_score || 0);
+    expect(afterHelpful?.last_used_outcome).toBe("helpful");
+
+    delete process.env.LYNN_MEMORY_OUTCOME_FEEDBACK;
     store.close();
   });
 });

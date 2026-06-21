@@ -56,6 +56,14 @@ export interface ChatTurnState extends SessionStreamStateFields {
   lastSuccessfulTools: ToolSuccessRecord[];
   hasFailedTool: boolean;
   lastFailedTools: string[];
+  toolStormGuard: {
+    total: number;
+    evidenceTotal: number;
+    byName: Record<string, number>;
+    bySignature: Record<string, number>;
+    lastDecisionReason: string;
+  };
+  toolStormClosed: boolean;
   realtimeToolFallbackText?: string;
   __slowToolTimers?: Map<string, TimerHandle>;
   toolFailedFallbackRetryAttempted: boolean;
@@ -90,6 +98,7 @@ export function createChatTurnState(): ChatTurnState {
     isThinking: false,
     hasOutput: false,
     hasToolCall: false,
+    hasRealtimeEvidenceToolCall: false,
     hasPrefetchToolCall: false,
     activeToolCallCount: 0,
     activeToolCallStartedAt: null,
@@ -121,6 +130,14 @@ export function createChatTurnState(): ChatTurnState {
     lastSuccessfulTools: [],
     hasFailedTool: false,
     lastFailedTools: [],
+    toolStormGuard: {
+      total: 0,
+      evidenceTotal: 0,
+      byName: {},
+      bySignature: {},
+      lastDecisionReason: "",
+    },
+    toolStormClosed: false,
     toolFailedFallbackRetryAttempted: false,
     toolFinalizationRetryAttempted: false,
     silentBrainAbortTimer: null,

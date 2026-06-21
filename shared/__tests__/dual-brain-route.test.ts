@@ -13,8 +13,8 @@ import {
 } from "../dual-brain-route.js";
 
 describe("dual-brain v0.82 route contract", () => {
-  it("locks the default topology to A3B -> step37 -> DS-V4 Flash", () => {
-    expect(DUAL_BRAIN_ROUTE_LABEL).toBe("A3B -> step37 -> DS-V4 Flash");
+  it("locks the default topology to A3B -> StepFun -> DS V4 Flash", () => {
+    expect(DUAL_BRAIN_ROUTE_LABEL).toBe("A3B -> StepFun -> DS V4 Flash");
     expect(DUAL_BRAIN_ROUTE.order).toEqual([
       "local-a3b-manager",
       "step-3.7-flash-worker",
@@ -22,8 +22,8 @@ describe("dual-brain v0.82 route contract", () => {
     ]);
     expect(DUAL_BRAIN_ROUTE.manager.apiModel).toBe(DUAL_BRAIN_MANAGER_MODEL);
     expect(DUAL_BRAIN_ROUTE.worker.apiModel).toBe(DUAL_BRAIN_WORKER_MODEL);
-    expect(DUAL_BRAIN_ROUTE.escape.apiModel).toBe("deepseek-chat");
-    expect(DUAL_BRAIN_ROUTE.escape.displayName).toBe("DS-V4 Flash");
+    expect(DUAL_BRAIN_ROUTE.escape.apiModel).toBe(DUAL_BRAIN_ESCAPE_MODEL);
+    expect(DUAL_BRAIN_ROUTE.escape.displayName).toBe("DS V4 Flash");
     expect(DUAL_BRAIN_QOS_LABEL).toContain("local A3B single-slot");
   });
 

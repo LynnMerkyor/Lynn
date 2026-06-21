@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSessionEventHandler } from "../core/session-event-handler.js";
 
 function makeHandler(overrides = {}) {
@@ -24,6 +24,10 @@ function makeHandler(overrides = {}) {
   });
   return { entry, emitEvent, handler, relaySession };
 }
+
+afterEach(() => {
+  delete process.env.LYNN_MEMORY_OUTCOME_FEEDBACK;
+});
 
 describe("session event handler", () => {
   it("keeps forwarding all session events", () => {
@@ -63,6 +67,34 @@ describe("session event handler", () => {
     expect(entry._toolFailDegraded).toBe(false);
     expect(entry._lastRecallContext).toContain("read");
     expect(entry._lastRecallContext).toContain("ENOENT");
+  });
+
+  it("marks injected facts harmful on tool failure when outcome feedback is enabled", () => {
+    process.env.LYNN_MEMORY_OUTCOME_FEEDBACK = "1";
+    const markOutcome = vi.fn(() => 2);
+    const { entry, handler } = makeHandler({
+      getAgentById: () => ({
+        factStore: { markOutcome },
+      }),
+    });
+    entry._lastRecallFactIds = ["1", "2"];
+
+    handler({
+      type: "tool_execution_end",
+      toolName: "bash",
+      isError: true,
+      result: { isError: true, content: [{ type: "text", text: "command failed" }] },
+    });
+    handler({
+      type: "tool_execution_end",
+      toolName: "bash",
+      isError: true,
+      result: { isError: true, content: [{ type: "text", text: "command failed again" }] },
+    });
+
+    expect(markOutcome).toHaveBeenCalledTimes(1);
+    expect(markOutcome).toHaveBeenCalledWith(["1", "2"], "harmful");
+    expect(entry._memoryOutcomeToolFailureRecorded).toBe(true);
   });
 
   it("suppresses Brain-managed local realtime tool echoes", () => {

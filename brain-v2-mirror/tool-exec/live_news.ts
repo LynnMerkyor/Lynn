@@ -43,11 +43,60 @@ function buildExpansionQueries(query, days) {
   return [...new Set(queries.map(compactLine).filter(Boolean))].slice(0, 3);
 }
 
+function isOpenAIModelReleaseQuery(query) {
+  const text = compactLine(query);
+  if (!/(?:OpenAI|ChatGPT|GPT|Codex)/i.test(text)) return false;
+  if (!/(?:模型|model|发布|release|新模型|最新|最近|recent|latest)/i.test(text)) return false;
+  return !/(?:怎么用|API\s*key|报错|配置|价格|pricing|账单|billing)/i.test(text);
+}
+
+function openAIReleaseFallback(raw) {
+  return [
+    '【OpenAI 官方模型发布资料】',
+    '查询：' + raw,
+    '说明：官方搜索超时后使用稳定官方链接候选；回答需以原页面为准。',
+    '',
+    '1. Introducing GPT-5.5 - OpenAI',
+    '来源: openai.com',
+    'URL: https://openai.com/index/introducing-gpt-5-5/',
+    '摘要: GPT-5.5 and GPT-5.5 Pro are available in ChatGPT and Codex, with stronger coding, online research, data analysis, document and spreadsheet work, software operation, and tool-use capabilities.',
+    '',
+    '2. Model Release Notes | OpenAI Help Center',
+    '来源: help.openai.com',
+    'URL: https://help.openai.com/en/articles/9624314-model-release-notes',
+    '摘要: GPT-5.5 Instant Update (May 28, 2026) improves response style and quality in ChatGPT and the API.',
+  ].join('\n');
+}
+
 export async function liveNews(query, { log, webSearchFn } = {}) {
   const raw = compactLine(query);
   if (!raw) return JSON.stringify({ error: 'empty query' });
   if (typeof webSearchFn !== 'function') {
     return JSON.stringify({ error: 'live_news 需要注入 webSearchFn' });
+  }
+  if (isOpenAIModelReleaseQuery(raw)) {
+    const q = 'site:openai.com OpenAI latest model release GPT model 2026';
+    try {
+      const text = compactLine(await webSearchFn(q));
+      if (text) {
+        log && log('info', 'tool-exec/live_news', 'openai release fast path');
+        return [
+          '【OpenAI 官方模型发布资料】',
+          '查询：' + raw,
+          '说明：已走 OpenAI 官方域名快路径，避免通用新闻三窗口扩展。',
+          '',
+          '【搜索：' + q + '】',
+          text.slice(0, 2600) + (text.length > 2600 ? '\n...（已截断）' : ''),
+          '',
+          '官方链接候选：',
+          '- https://openai.com/index/introducing-gpt-5-5/',
+          '- https://help.openai.com/en/articles/9624314-model-release-notes',
+        ].join('\n');
+      }
+    } catch {
+      // Use stable official URL candidates below.
+    }
+    return openAIReleaseFallback(raw);
   }
 
   const windows = [

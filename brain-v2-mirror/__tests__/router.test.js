@@ -891,6 +891,58 @@ describe('Router', () => {
     expect(visible).toBe('已有比分：A 1-0 B。');
   });
 
+  it('hands off tool-denial answers after grounded evidence to the next provider', async () => {
+    process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER = '99';
+    stubSearchFetchOk();
+    mockState.order = ['p-step', 'p-spark', 'p-cloud'];
+
+    const providerMessages = [];
+    let stepRuns = 0;
+    mockState.adapterFn = async function* ({ provider, messages }) {
+      mockState.adapterCalls.push(provider.id);
+      providerMessages.push({ provider: provider.id, messages });
+      if (provider.id === 'p-step') {
+        stepRuns += 1;
+        if (stepRuns === 1) {
+          yield {
+            type: 'tool_call_delta',
+            delta: [{
+              index: 0,
+              id: 'tc-tool-denial-evidence',
+              type: 'function',
+              function: { name: 'web_search', arguments: '{"query":"深圳明天天气"}' },
+            }],
+          };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+        yield { type: 'content', delta: 'Lynn CLI 的工具集中暂未包含天气查询功能，请去天气网站查看。' };
+        yield { type: 'finish', reason: 'stop' };
+        return;
+      }
+      yield { type: 'content', delta: '深圳明天按查询结果为晴天。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: '查深圳明天天气' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'p-spark', iterations: 3 });
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-step', 'p-spark']);
+    const sparkMessages = providerMessages.find((entry) => entry.provider === 'p-spark').messages;
+    expect(sparkMessages.some((message) => (
+      message.role === 'user'
+      && String(message.content).includes('否认了已经执行过的工具能力')
+      && String(message.content).includes('不要再调用工具')
+    ))).toBe(true);
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toBe('深圳明天按查询结果为晴天。');
+    expect(visible).not.toContain('工具集中暂未包含天气查询功能');
+  });
+
   it('hands off stale no-result answers even when grounded tool output has zero evidence weight', async () => {
     process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER = '99';
     process.env.ZHIPU_KEY = 'test-zhipu';
@@ -1027,6 +1079,45 @@ describe('Router', () => {
     const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
     expect(visible).toContain('根据 ESPN scoreboard 工具证据');
     expect(visible).toContain('| 2026/06/22 00:00 | Spain vs Saudi Arabia | Scheduled |');
+  });
+
+  it('emits a deterministic grounded evidence answer when providers fail after generic tool evidence', async () => {
+    stubSearchFetchOk();
+    mockState.order = ['p-step', 'p-spark'];
+    let stepRuns = 0;
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      if (provider.id === 'p-step') {
+        stepRuns += 1;
+        if (stepRuns === 1) {
+          yield {
+            type: 'tool_call_delta',
+            delta: [{
+              index: 0,
+              id: 'tc-generic-evidence',
+              type: 'function',
+              function: { name: 'web_search', arguments: '{"query":"OpenAI 最近发布的新模型"}' },
+            }],
+          };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+      }
+      throw new Error(`${provider.id} down`);
+    };
+
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: '查一下 OpenAI 最近发布了什么新模型' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result.ok).toBe(true);
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toContain('根据本轮已执行工具返回的证据');
+    expect(visible).toContain('web_search');
+    expect(visible).toContain('search summary');
+    expect(visible).not.toContain('all providers failed');
   });
 
   it('strips process preamble from evidence handoff synthesis without touching facts', async () => {

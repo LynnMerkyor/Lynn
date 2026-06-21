@@ -1,0 +1,935 @@
+{
+  "outputPath": "/Users/lynn/Downloads/Lynn/reports/gui-50-local-evidence-quality-r2.json",
+  "generatedAt": "2026-06-21T08:09:51.098Z",
+  "results": [
+    {
+      "index": 1,
+      "category": "simple",
+      "prompt": "你好，只回复 OK",
+      "startedAt": 1782028958928,
+      "elapsedMs": 2305,
+      "text": "OK",
+      "textChars": 2,
+      "thinkingChars": 28,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "toolEvents": [],
+      "errors": [],
+      "events": 23,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "1}\n{\"type\":\"thinking_start\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":2}\n{\"type\":\"thinking_delta\",\"delta\":\"用户\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":3}\n{\"type\":\"thinking_delta\",\"delta\":\"只\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":4}\n{\"type\":\"thinking_delta\",\"delta\":\"要求\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":5}\n{\"type\":\"thinking_delta\",\"delta\":\"回复\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":6}\n{\"type\":\"thinking_delta\",\"delta\":\" OK\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":7}\n{\"type\":\"thinking_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":8}\n{\"type\":\"thinking_delta\",\"delta\":\"直接\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":9}\n{\"type\":\"thinking_delta\",\"delta\":\"回复\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":10}\n{\"type\":\"thinking_delta\",\"delta\":\"即可\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":11}\n{\"type\":\"thinking_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":12}\n{\"type\":\"thinking_delta\",\"delta\":\"不需要\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":13}\n{\"type\":\"thinking_delta\",\"delta\":\"任何\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":14}\n{\"type\":\"thinking_delta\",\"delta\":\"额外\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":15}\n{\"type\":\"thinking_delta\",\"delta\":\"内容\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":16}\n{\"type\":\"thinking_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":17}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":18}\n{\"type\":\"text_delta\",\"delta\":\"OK\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":19}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\",\"streamId\":\"s_mqni14ut_mx2mj1\",\"seq\":20}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-38-930Z_85f24716-4081-4459-a36f-b1467c696d73.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 2,
+      "category": "simple",
+      "prompt": "用一句话解释 ReAct",
+      "startedAt": 1782028961236,
+      "elapsedMs": 3508,
+      "text": "ReAct 是一种让大模型交替进行推理（Think/Reason）和行动（Act/Tool Use）的框架——先思考当前需要什么信息，调用工具获取，再基于新信息继续推理，直到能给出答案，以此弥补纯文本模型无法获取实时或外部信息的短板。",
+      "textChars": 117,
+      "thinkingChars": 225,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "toolEvents": [],
+      "errors": [],
+      "events": 55,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "nd_qhg6yw\",\"seq\":33}\n{\"type\":\"thinking_delta\",\"delta\":\" actions\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":34}\n{\"type\":\"thinking_delta\",\"delta\":\" (\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":35}\n{\"type\":\"thinking_delta\",\"delta\":\"c\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":36}\n{\"type\":\"thinking_delta\",\"delta\":\"alling\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":37}\n{\"type\":\"thinking_delta\",\"delta\":\" tools\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":38}\n{\"type\":\"thinking_delta\",\"delta\":\")\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":39}\n{\"type\":\"thinking_delta\",\"delta\":\" to\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":40}\n{\"type\":\"thinking_delta\",\"delta\":\" gather\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":41}\n{\"type\":\"thinking_delta\",\"delta\":\" information\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":42}\n{\"type\":\"thinking_delta\",\"delta\":\" before\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":43}\n{\"type\":\"thinking_delta\",\"delta\":\" producing\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":44}\n{\"type\":\"thinking_delta\",\"delta\":\" a\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":45}\n{\"type\":\"thinking_delta\",\"delta\":\" final\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":46}\n{\"type\":\"thinking_delta\",\"delta\":\" answer\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":47}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":48}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":49}\n{\"type\":\"text_delta\",\"delta\":\"ReAct 是一种让大模型交替进行推理（Think/Reason）和行动（Act/Tool Use）的框架——先思考当前需要什么信息，调用工具获取，再基于新信息继续推理，直到能给出答案，以此弥补纯文本模型无法获取实时或外部信息的短板。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":50}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\",\"streamId\":\"s_mqni16nd_qhg6yw\",\"seq\":51}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-41-242Z_ff8b2290-8a6a-4752-91dd-0995d6ce2f60.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 3,
+      "category": "simple",
+      "prompt": "2+2 等于几？只给答案",
+      "startedAt": 1782028964746,
+      "elapsedMs": 2069,
+      "text": "4",
+      "textChars": 1,
+      "thinkingChars": 37,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "toolEvents": [],
+      "errors": [],
+      "events": 27,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "g_delta\",\"delta\":\"了一个\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":5}\n{\"type\":\"thinking_delta\",\"delta\":\"简单的\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":6}\n{\"type\":\"thinking_delta\",\"delta\":\"算术\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":7}\n{\"type\":\"thinking_delta\",\"delta\":\"题\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":8}\n{\"type\":\"thinking_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":9}\n{\"type\":\"thinking_delta\",\"delta\":\"要求\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":10}\n{\"type\":\"thinking_delta\",\"delta\":\"只\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":11}\n{\"type\":\"thinking_delta\",\"delta\":\"给\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":12}\n{\"type\":\"thinking_delta\",\"delta\":\"答案\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":13}\n{\"type\":\"thinking_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":14}\n{\"type\":\"thinking_delta\",\"delta\":\"不需要\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":15}\n{\"type\":\"thinking_delta\",\"delta\":\" Reflect\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":16}\n{\"type\":\"thinking_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":17}\n{\"type\":\"thinking_delta\",\"delta\":\"直接\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":18}\n{\"type\":\"thinking_delta\",\"delta\":\"回答\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":19}\n{\"type\":\"thinking_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":20}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":21}\n{\"type\":\"text_delta\",\"delta\":\"4\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":22}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\",\"streamId\":\"s_mqni19cl_3sr2mw\",\"seq\":23}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-44-750Z_8f25e3d0-88ad-4df8-8432-af9dbc8569c1.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 4,
+      "category": "simple",
+      "prompt": "把 hello world 翻译成中文",
+      "startedAt": 1782028966817,
+      "elapsedMs": 2341,
+      "text": "你好，世界",
+      "textChars": 5,
+      "thinkingChars": 165,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "toolEvents": [],
+      "errors": [],
+      "events": 51,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "lysis\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":29}\n{\"type\":\"thinking_delta\",\"delta\":\".\\n\\n\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":30}\n{\"type\":\"thinking_delta\",\"delta\":\"\\\"\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":31}\n{\"type\":\"thinking_delta\",\"delta\":\"hello\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":32}\n{\"type\":\"thinking_delta\",\"delta\":\" world\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":33}\n{\"type\":\"thinking_delta\",\"delta\":\"\\\"\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":34}\n{\"type\":\"thinking_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":35}\n{\"type\":\"thinking_delta\",\"delta\":\"翻译\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":36}\n{\"type\":\"thinking_delta\",\"delta\":\"成\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":37}\n{\"type\":\"thinking_delta\",\"delta\":\"中文\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":38}\n{\"type\":\"thinking_delta\",\"delta\":\"是\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":39}\n{\"type\":\"thinking_delta\",\"delta\":\" \\\"\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":40}\n{\"type\":\"thinking_delta\",\"delta\":\"你好\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":41}\n{\"type\":\"thinking_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":42}\n{\"type\":\"thinking_delta\",\"delta\":\"世界\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":43}\n{\"type\":\"thinking_delta\",\"delta\":\"\\\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":44}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":45}\n{\"type\":\"text_delta\",\"delta\":\"你好，世界\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":46}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\",\"streamId\":\"s_mqni1ayg_xmpt1v\",\"seq\":47}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-46-821Z_6ae9b17e-289b-4623-84c4-3272b8badaad.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 5,
+      "category": "simple",
+      "prompt": "用三条 bullet 解释什么是上下文窗口",
+      "startedAt": 1782028969161,
+      "elapsedMs": 4352,
+      "text": "1. **上下文窗口是模型一次能\"看到\"的最大 token 数**——它决定了模型在处理你的输入时，能同时参考多少历史内容。超出这个窗口的内容会被直接丢弃，不再参与后续生成。\n\n2. **它像一块固定大小的白板**：你发送的提示词 + 模型输出的历史内容 + 任何系统指令，都挤在这块白板上。白板满了，最早写上去的内容就会被擦掉。\n\n3. **窗口大小直接决定模型能处理多长的任务**——128K 的窗口能读完一整本小说，4K 的窗口只够应付几轮对话。但窗口越大，推理延迟和显存消耗也越高，这是计算资源的权衡。",
+      "textChars": 255,
+      "thinkingChars": 156,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "toolEvents": [],
+      "errors": [],
+      "events": 127,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "d_vbhi5g\",\"seq\":104}\n{\"type\":\"text_delta\",\"delta\":\"但\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":105}\n{\"type\":\"text_delta\",\"delta\":\"窗口\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":106}\n{\"type\":\"text_delta\",\"delta\":\"越大\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":107}\n{\"type\":\"text_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":108}\n{\"type\":\"text_delta\",\"delta\":\"推理\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":109}\n{\"type\":\"text_delta\",\"delta\":\"延迟\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":110}\n{\"type\":\"text_delta\",\"delta\":\"和\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":111}\n{\"type\":\"text_delta\",\"delta\":\"显\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":112}\n{\"type\":\"text_delta\",\"delta\":\"存\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":113}\n{\"type\":\"text_delta\",\"delta\":\"消耗\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":114}\n{\"type\":\"text_delta\",\"delta\":\"也\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":115}\n{\"type\":\"text_delta\",\"delta\":\"越高\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":116}\n{\"type\":\"text_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":117}\n{\"type\":\"text_delta\",\"delta\":\"这是\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":118}\n{\"type\":\"text_delta\",\"delta\":\"计算\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":119}\n{\"type\":\"text_delta\",\"delta\":\"资源的\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":120}\n{\"type\":\"text_delta\",\"delta\":\"权衡\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":121}\n{\"type\":\"text_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":122}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\",\"streamId\":\"s_mqni1crd_vbhi5g\",\"seq\":123}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-49-166Z_4a540be7-b069-460c-b2ce-81af438a2ed1.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 6,
+      "category": "simple",
+      "prompt": "给我 3 条 git commit message 规范",
+      "startedAt": 1782028973515,
+      "elapsedMs": 6275,
+      "text": "### Git Commit Message 规范（3 条）\n\n**1. 用 `type(scope): description` 格式**\n\n```\nfeat(auth): add OAuth2 login flow\nfix(parser): handle null pointer in image parse\nchore(deps): bump lodash to 4.17.21\n```\n\n常用 type：`feat`、`fix`、`refactor`、`test`、`docs`、`chore`、`style`。scope 是影响范围，可省略但建议标注。\n\n**2. description 用祈使句，首字母小写，不超过 50 字符**\n\n对的：\n\n```\nfix: correct timeout calculation in retry logic\n```\n\n错的：\n\n```\nFixed the timeout calculation bug.\nfix: Corrected the timeout calculation bug.\nfix: correct timeout calculation in retry logic because the previous implementation was using the wrong variable\n```\n\ncommit message 是这个改动 \"做了什么\"，不是 \"做了什么了\"。超过 50 字符的内容放在正文（空一行后写）。\n\n**3. 一个 commit 只做一件事**\n\n如果改了样式、修了 bug、升了依赖，分三个 commit。差异点在同一次提交里只限于一个逻辑变更。这样 `git revert`、`git bisect`、code review 都能精准定位，不会被大杂烩 commit 干扰。",
+      "textChars": 796,
+      "thinkingChars": 108,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "toolEvents": [],
+      "errors": [],
+      "events": 269,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "eq\":246}\n{\"type\":\"text_delta\",\"delta\":\"ect\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":247}\n{\"type\":\"text_delta\",\"delta\":\"`\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":248}\n{\"type\":\"text_delta\",\"delta\":\"、\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":249}\n{\"type\":\"text_delta\",\"delta\":\"code\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":250}\n{\"type\":\"text_delta\",\"delta\":\" review\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":251}\n{\"type\":\"text_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":252}\n{\"type\":\"text_delta\",\"delta\":\"都能\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":253}\n{\"type\":\"text_delta\",\"delta\":\"精准\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":254}\n{\"type\":\"text_delta\",\"delta\":\"定位\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":255}\n{\"type\":\"text_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":256}\n{\"type\":\"text_delta\",\"delta\":\"不会被\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":257}\n{\"type\":\"text_delta\",\"delta\":\"大\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":258}\n{\"type\":\"text_delta\",\"delta\":\"杂\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":259}\n{\"type\":\"text_delta\",\"delta\":\"烩\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":260}\n{\"type\":\"text_delta\",\"delta\":\" commit\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":261}\n{\"type\":\"text_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":262}\n{\"type\":\"text_delta\",\"delta\":\"干扰\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":263}\n{\"type\":\"text_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":264}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\",\"streamId\":\"s_mqni1g4a_zsc079\",\"seq\":265}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-53-520Z_3112efa6-3f81-4d2e-a2bc-2d0d6d39809c.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 7,
+      "category": "simple",
+      "prompt": "解释一下 React 的 state 和 props 区别",
+      "startedAt": 1782028979792,
+      "elapsedMs": 7963,
+      "text": "## State vs Props 的核心区别\n\n**Props（属性）**：父组件传入的数据，组件自身不能修改。像是函数的参数。\n\n**State（状态）**：组件内部管理的数据，可以由组件自身改变。像是函数内的局部变量。\n\n| 维度 | Props | State |\n|------|-------|-------|\n| 谁拥有 | 父组件 | 当前组件 |\n| 能否修改 | 只读，不可变 | 可通过 `setState()` / useState 的 setter 修改 |\n| 修改触发什么 | 父组件重新渲染时更新 | 调用 setter → 触发组件重新渲染 |\n| 默认值 | 调用方不传时为 undefined | 初始化时设定 |\n| 传递方向 | 父→子（单向数据流） | 通常不跨组件 |\n\n### 具体场景\n\n```jsx\n// 父组件\nfunction Parent() {\n  const [count, setCount] = useState(0);  // count 是 state\n\n  return <Child count={count} />;  // count 作为 props 传给子组件\n}\n\n// 子组件\nfunction Child({ count }) {  // count 是 props\n  // count 只能读，不能改\n  return <div>{count}</div>;\n}\n```\n\n**数据的本质流向**：state 是数据的源头，props 是数据的副本（或引用）往下传。子组件如果想\"改变\"某个从父组件传下来的值，实际上是在调用父组件通过 props 传下来的回调函数，让父组件去改它自己的 state。\n\n```jsx\nfunction Parent() {\n  const [count, setCount] = useState(0);\n\n  return <Child count={count} onIncrement={() => setCount(c => c + 1)} />;\n}\n```\n\n这种做法确保了**单向数据流**：数据变更路径可追踪，不会出现子组件悄无声息改了某个共享值的情况。这是 React 区别于双向绑定框架（如 Vue 的 v-model）的核心约束之一。",
+      "textChars": 991,
+      "thinkingChars": 148,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "toolEvents": [],
+      "errors": [],
+      "events": 405,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "eq\":382}\n{\"type\":\"text_delta\",\"delta\":\" React\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":383}\n{\"type\":\"text_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":384}\n{\"type\":\"text_delta\",\"delta\":\"区别于\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":385}\n{\"type\":\"text_delta\",\"delta\":\"双向\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":386}\n{\"type\":\"text_delta\",\"delta\":\"绑定\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":387}\n{\"type\":\"text_delta\",\"delta\":\"框架\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":388}\n{\"type\":\"text_delta\",\"delta\":\"（\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":389}\n{\"type\":\"text_delta\",\"delta\":\"如\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":390}\n{\"type\":\"text_delta\",\"delta\":\" Vue\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":391}\n{\"type\":\"text_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":392}\n{\"type\":\"text_delta\",\"delta\":\"的\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":393}\n{\"type\":\"text_delta\",\"delta\":\" v\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":394}\n{\"type\":\"text_delta\",\"delta\":\"-model\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":395}\n{\"type\":\"text_delta\",\"delta\":\"）\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":396}\n{\"type\":\"text_delta\",\"delta\":\"的核心\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":397}\n{\"type\":\"text_delta\",\"delta\":\"约束\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":398}\n{\"type\":\"text_delta\",\"delta\":\"之一\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":399}\n{\"type\":\"text_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":400}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\",\"streamId\":\"s_mqni1kyl_47vrk9\",\"seq\":401}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-02-59-797Z_d775ba6a-5f87-4416-a7f9-aefbec2c7482.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 8,
+      "category": "simple",
+      "prompt": "写一个 JavaScript debounce 函数",
+      "startedAt": 1782028987756,
+      "elapsedMs": 6456,
+      "text": "```javascript\nfunction debounce(fn, delayMs, options = {}) {\n  const { leading = false, trailing = true } = options;\n  let timer = null;\n  let lastArgs = null;\n  let invoked = false;\n\n  const clear = () => {\n    timer && clearTimeout(timer);\n    timer = null;\n    invoked = false;\n  };\n\n  const debounced = function (...args) {\n    lastArgs = args;\n\n    if (leading && !invoked) {\n      invoked = true;\n      fn.apply(this, args);\n      // 防止 leading 调用后立即 trailing 又触发一次\n      invoked = true;\n    }\n\n    timer && clearTimeout(timer);\n\n    timer = setTimeout(() => {\n      if (trailing && lastArgs) {\n        fn.apply(this, lastArgs);\n      }\n      clear();\n    }, delayMs);\n  };\n\n  debounced.cancel = clear;\n\n  debounced.flush = function () {\n    if (timer && lastArgs) {\n      fn.apply(this, lastArgs);\n    }\n    clear();\n  };\n\n  return debounced;\n}\n```\n\n**用法示例：**\n\n```javascript\nconst input = document.querySelector('#search');\nconst onSearch = debounce(\n  (e) => fetchSearch(e.target.value),\n  300,\n  { leading: false, trailing: true } // trailing-only 是常见做法\n);\n\ninput.addEventListener('input', onSearch);\n\n// 手动取消/立即执行\nonSearch.cancel();\nonSearch.flush();\n```\n\n三个要点说明：\n\n1. **trailing（默认）** — 停止触发后 `delayMs` 毫秒执行最后一次调用。适合输入防抖。\n2. **leading** — 首次立即执行，后续频繁触发被抑制。适合按钮防重复点击（配合 `trailing: false`）。\n3. **cancel / flush** — 清理定时器，或强制执行挂起的调用。组件卸载时必须 `cancel` 避免内存泄漏。",
+      "textChars": 1364,
+      "thinkingChars": 122,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "toolEvents": [],
+      "errors": [],
+      "events": 408,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "c\",\"seq\":385}\n{\"type\":\"text_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":386}\n{\"type\":\"text_delta\",\"delta\":\"或\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":387}\n{\"type\":\"text_delta\",\"delta\":\"强制执行\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":388}\n{\"type\":\"text_delta\",\"delta\":\"挂\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":389}\n{\"type\":\"text_delta\",\"delta\":\"起的\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":390}\n{\"type\":\"text_delta\",\"delta\":\"调用\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":391}\n{\"type\":\"text_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":392}\n{\"type\":\"text_delta\",\"delta\":\"组件\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":393}\n{\"type\":\"text_delta\",\"delta\":\"卸载\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":394}\n{\"type\":\"text_delta\",\"delta\":\"时必须\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":395}\n{\"type\":\"text_delta\",\"delta\":\" `\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":396}\n{\"type\":\"text_delta\",\"delta\":\"cancel\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":397}\n{\"type\":\"text_delta\",\"delta\":\"`\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":398}\n{\"type\":\"text_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":399}\n{\"type\":\"text_delta\",\"delta\":\"避免\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":400}\n{\"type\":\"text_delta\",\"delta\":\"内存\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":401}\n{\"type\":\"text_delta\",\"delta\":\"泄漏\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":402}\n{\"type\":\"text_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":403}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\",\"streamId\":\"s_mqni1r3r_fli7ac\",\"seq\":404}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-07-759Z_decd7f99-5ce1-4233-ac61-0458a292dc1f.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 9,
+      "category": "simple",
+      "prompt": "用 Markdown 表格比较 BFS 和 DFS",
+      "startedAt": 1782028994213,
+      "elapsedMs": 7834,
+      "text": "| 对比维度 | BFS（广度优先搜索） | DFS（深度优先搜索） |\n|---|---|---|\n| **核心数据结构** | 队列（Queue），先进先出 | 栈（Stack），后进先出 |\n| **遍历顺序** | 按层扩展，先访问离起点最近的所有节点，再进入下一层 | 沿一条分支走到底，再回溯到上一个分叉点继续 |\n| **空间复杂度** | O(w)，w 为最大层宽度。二叉树最坏 O(2^(h))，实际在大图中可能很大 | O(h)，h 为最大深度。链状图最坏 O(n)，但通常较低 |\n| **时间复杂度** | O(V + E)，访问所有顶点和边 | O(V + E)，访问所有顶点和边 |\n| **是否保证最短路径** | 是（在无权图中，首次到达目标节点的路径即为最短路径） | 否（首次遇到目标节点时走的未必是最短路径） |\n| **适用场景** | 最短路径、层级遍历、连通分量、社交网络\"几度人脉\" | 拓扑排序、连通性检测、迷宫生成、回溯法、路径存在性判断 |\n| **典型实现** | 迭代 + Queue | 迭代 + Stack，或递归（隐含系统栈） |\n| **内存压力** | 宽树占用大（如所有叶子都在同一层） | 深树可能栈溢出（递归深度过大） |\n| **结束时机** | 队列为空或找到目标 | 栈为空或找到目标，递归版本靠函数返回 |\n| **能否提前终止** | 可以，找到目标立即结束 | 可以，找到目标立即结束，但回溯版本需手动控制 |\n\n**一句话总结**：BFS 用空间换时间来找最短路径，DFS 用深度优先去快速判断\"能不能走通\"。选哪个取决于你的约束——图宽还是深，是否需要最短路径。",
+      "textChars": 725,
+      "thinkingChars": 150,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "toolEvents": [],
+      "errors": [],
+      "events": 388,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "5yxry\",\"seq\":365}\n{\"type\":\"text_delta\",\"delta\":\"走\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":366}\n{\"type\":\"text_delta\",\"delta\":\"通\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":367}\n{\"type\":\"text_delta\",\"delta\":\"\\\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":368}\n{\"type\":\"text_delta\",\"delta\":\"选\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":369}\n{\"type\":\"text_delta\",\"delta\":\"哪个\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":370}\n{\"type\":\"text_delta\",\"delta\":\"取决于\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":371}\n{\"type\":\"text_delta\",\"delta\":\"你的\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":372}\n{\"type\":\"text_delta\",\"delta\":\"约束\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":373}\n{\"type\":\"text_delta\",\"delta\":\"——\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":374}\n{\"type\":\"text_delta\",\"delta\":\"图\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":375}\n{\"type\":\"text_delta\",\"delta\":\"宽\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":376}\n{\"type\":\"text_delta\",\"delta\":\"还是\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":377}\n{\"type\":\"text_delta\",\"delta\":\"深\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":378}\n{\"type\":\"text_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":379}\n{\"type\":\"text_delta\",\"delta\":\"是否需要\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":380}\n{\"type\":\"text_delta\",\"delta\":\"最短\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":381}\n{\"type\":\"text_delta\",\"delta\":\"路径\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":382}\n{\"type\":\"text_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":383}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\",\"streamId\":\"s_mqni1w35_05yxry\",\"seq\":384}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-14-217Z_ff13bf79-8bed-4e6a-9bd3-0ea0111afcd1.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 10,
+      "category": "simple",
+      "prompt": "给出一个 SQL users 表建表语句",
+      "startedAt": 1782029002049,
+      "elapsedMs": 6122,
+      "text": "```sql\nCREATE TABLE users (\n    id          BIGINT          PRIMARY KEY AUTO_INCREMENT,\n    username    VARCHAR(50)     NOT NULL,\n    email       VARCHAR(100)    NOT NULL UNIQUE,\n    password    VARCHAR(255)    NOT NULL,\n    avatar      VARCHAR(255)    DEFAULT NULL,\n    role        VARCHAR(20)     NOT NULL DEFAULT 'user',\n    status      TINYINT         NOT NULL DEFAULT 1,\n    created_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    updated_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n\n    INDEX idx_users_username (username),\n    INDEX idx_users_email (email)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;\n```\n\n说几个关键设计点：\n\n1. **`id` 用 BIGINT** — 用户量上来后 INT 不够用，一次设计到位。\n2. **`email` UNIQUE** — 通常作为登录标识，必须唯一。\n3. **`status` 用 TINYINT** — 1 正常 / 0 禁用，比用 VARCHAR 存 'active'/'disabled' 更省空间且查询快。\n4. **`role` 用 VARCHAR(20)** — 可存 'user' / 'admin' / 'moderator'，够灵活；如果权限系统复杂，建议单独建 roles 表做多对多。\n5. **字符集 `utf8mb4`** — 用户昵称或简介里可能含 emoji，`utf8mb4` 才能存下。\n6. **索引** — `username` 和 `email` 单独建索引，因为登录查询基本走这两个字段。\n\n如果你用的不是 MySQL（比如 PostgreSQL、SQLite），告诉我，我可以改对应方言。",
+      "textChars": 1126,
+      "thinkingChars": 56,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "toolEvents": [],
+      "errors": [],
+      "events": 400,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"text_delta\",\"delta\":\"如果你\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":378}\n{\"type\":\"text_delta\",\"delta\":\"用的\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":379}\n{\"type\":\"text_delta\",\"delta\":\"不是\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":380}\n{\"type\":\"text_delta\",\"delta\":\" MySQL\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":381}\n{\"type\":\"text_delta\",\"delta\":\"（\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":382}\n{\"type\":\"text_delta\",\"delta\":\"比如\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":383}\n{\"type\":\"text_delta\",\"delta\":\" PostgreSQL\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":384}\n{\"type\":\"text_delta\",\"delta\":\"、\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":385}\n{\"type\":\"text_delta\",\"delta\":\"SQL\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":386}\n{\"type\":\"text_delta\",\"delta\":\"ite\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":387}\n{\"type\":\"text_delta\",\"delta\":\"），\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":388}\n{\"type\":\"text_delta\",\"delta\":\"告诉我\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":389}\n{\"type\":\"text_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":390}\n{\"type\":\"text_delta\",\"delta\":\"我可以\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":391}\n{\"type\":\"text_delta\",\"delta\":\"改\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":392}\n{\"type\":\"text_delta\",\"delta\":\"对应\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":393}\n{\"type\":\"text_delta\",\"delta\":\"方言\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":394}\n{\"type\":\"text_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":395}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\",\"streamId\":\"s_mqni224v_19706r\",\"seq\":396}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-22-052Z_06e6b978-1d7b-451a-8777-1e60fc06f400.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 11,
+      "category": "realtime",
+      "prompt": "昨晚世界杯最新的比赛结果",
+      "startedAt": 1782029008173,
+      "elapsedMs": 4567,
+      "text": "昨晚（6月21日凌晨至中午）共4场世界杯比赛：\n\n| 时间 | 主队 | 比分 | 客队 | 状态 |\n|------|------|:----:|------|:----:|\n| 01:00 | **荷兰** | **5-1** | 瑞典 | FT |\n| 04:00 | **德国** | **2-1** | 科特迪瓦 | FT |\n| 08:00 | 厄瓜多尔 | **0-0** | 库拉索 | FT |\n| 12:00 | 突尼斯 | **0-4** | **日本** | FT |\n\n两场大比分：荷兰 5-1 大胜瑞典，日本 4-0 完胜突尼斯。德国 2-1 拿下科特迪瓦，厄瓜多尔和库拉索互交白卷。",
+      "textChars": 306,
+      "thinkingChars": 193,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 178,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "s_mqni26uy_ou9gu0\",\"seq\":154}\n{\"type\":\"text_delta\",\"delta\":\"拿下\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":155}\n{\"type\":\"text_delta\",\"delta\":\"科\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":156}\n{\"type\":\"text_delta\",\"delta\":\"特\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":157}\n{\"type\":\"text_delta\",\"delta\":\"迪\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":158}\n{\"type\":\"text_delta\",\"delta\":\"瓦\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":159}\n{\"type\":\"text_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":160}\n{\"type\":\"text_delta\",\"delta\":\"厄\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":161}\n{\"type\":\"text_delta\",\"delta\":\"瓜\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":162}\n{\"type\":\"text_delta\",\"delta\":\"多尔\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":163}\n{\"type\":\"text_delta\",\"delta\":\"和\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":164}\n{\"type\":\"text_delta\",\"delta\":\"库\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":165}\n{\"type\":\"text_delta\",\"delta\":\"拉\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":166}\n{\"type\":\"text_delta\",\"delta\":\"索\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":167}\n{\"type\":\"text_delta\",\"delta\":\"互\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":168}\n{\"type\":\"text_delta\",\"delta\":\"交\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":169}\n{\"type\":\"text_delta\",\"delta\":\"白\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":170}\n{\"type\":\"text_delta\",\"delta\":\"卷\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":171}\n{\"type\":\"text_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":172}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\",\"streamId\":\"s_mqni26uy_ou9gu0\",\"seq\":173}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-28-179Z_dc47565f-0726-4299-b977-1aa4e8cf5eca.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 12,
+      "category": "realtime",
+      "prompt": "今晚世界杯有几场比赛",
+      "startedAt": 1782029012746,
+      "elapsedMs": 4850,
+      "text": "今晚有 **4 场**世界杯比赛：\n\n| 时间 (北京时间) | 对阵 |\n|---|---|\n| 00:00 | Spain vs Saudi Arabia |\n| 03:00 | Belgium vs Iran |\n| 06:00 | Uruguay vs Cape Verde |\n| 09:00 | New Zealand vs Egypt |\n\n从凌晨零点到早上九点，连着四场。",
+      "textChars": 194,
+      "thinkingChars": 502,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 197,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "173}\n{\"type\":\"text_delta\",\"delta\":\" |\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":174}\n{\"type\":\"text_delta\",\"delta\":\" New\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":175}\n{\"type\":\"text_delta\",\"delta\":\" Zealand\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":176}\n{\"type\":\"text_delta\",\"delta\":\" vs\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":177}\n{\"type\":\"text_delta\",\"delta\":\" Egypt\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":178}\n{\"type\":\"text_delta\",\"delta\":\" |\\n\\n\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":179}\n{\"type\":\"text_delta\",\"delta\":\"从\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":180}\n{\"type\":\"text_delta\",\"delta\":\"凌晨\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":181}\n{\"type\":\"text_delta\",\"delta\":\"零点\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":182}\n{\"type\":\"text_delta\",\"delta\":\"到\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":183}\n{\"type\":\"text_delta\",\"delta\":\"早上\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":184}\n{\"type\":\"text_delta\",\"delta\":\"九\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":185}\n{\"type\":\"text_delta\",\"delta\":\"点\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":186}\n{\"type\":\"text_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":187}\n{\"type\":\"text_delta\",\"delta\":\"连着\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":188}\n{\"type\":\"text_delta\",\"delta\":\"四\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":189}\n{\"type\":\"text_delta\",\"delta\":\"场\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":190}\n{\"type\":\"text_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":191}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\",\"streamId\":\"s_mqni2ae7_wrppbu\",\"seq\":192}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-32-751Z_3ac9ae73-3871-4821-b433-e4711646531d.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 13,
+      "category": "realtime",
+      "prompt": "今天世界杯赛程发我一下",
+      "startedAt": 1782029017601,
+      "elapsedMs": 33740,
+      "text": "2026年6月21日 世界杯赛程（北京时间）\n\n| 时间 | 对阵 | 比分 | 状态 |\n|------|------|------|------|\n| 01:00 | Netherlands 5-1 Sweden | 5-1 | 已结束 |\n| 04:00 | Germany 2-1 Ivory Coast | 2-1 | 已结束 |\n| 08:00 | Ecuador 0-0 Curaçao | 0-0 | 已结束 |\n| 12:00 | Tunisia 0-4 Japan | 0-4 | 已结束 |\n\n今天4场比赛全部结束。",
+      "textChars": 269,
+      "thinkingChars": 2607,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash",
+        "step-3.7-flash"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "webfetch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "websearch",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "webfetch"
+        },
+        {
+          "event": "end",
+          "name": "webfetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "websearch"
+        },
+        {
+          "event": "end",
+          "name": "websearch",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 527,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "onPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":506}\n{\"type\":\"thinking_delta\",\"delta\":\"00 Beijing time\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":507}\n{\"type\":\"thinking_delta\",\"delta\":\"\\n4. Tunisia \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":508}\n{\"type\":\"thinking_delta\",\"delta\":\"0-4 Japan\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":509}\n{\"type\":\"thinking_delta\",\"delta\":\" (FT) -\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":510}\n{\"type\":\"thinking_delta\",\"delta\":\" 12:00\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":511}\n{\"type\":\"thinking_delta\",\"delta\":\" Beijing time\\n\\nAll\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":512}\n{\"type\":\"thinking_delta\",\"delta\":\" matches\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":513}\n{\"type\":\"thinking_delta\",\"delta\":\" appear\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":514}\n{\"type\":\"thinking_delta\",\"delta\":\" to be finished\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":515}\n{\"type\":\"thinking_delta\",\"delta\":\" (FT =\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":516}\n{\"type\":\"thinking_delta\",\"delta\":\" Full Time). Let\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":517}\n{\"type\":\"thinking_delta\",\"delta\":\" me present this schedule\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":518}\n{\"type\":\"thinking_delta\",\"delta\":\" clearly to the user\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":519}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":520}\n{\"type\":\"text_delta\",\"delta\":\"2026年6月21日 世界杯赛程（北京时间）\\n\\n| 时间 | 对阵 | 比分 | 状态 |\\n|------|------|------|------|\\n| 01:00 | Netherlands 5-1 Sweden | 5-1 | 已结束 |\\n| 04:00 | Germany 2-1 Ivory Coast | 2-1 | 已结束 |\\n| 08:00 | Ecuador 0-0 Curaçao | 0-0 | 已结束 |\\n| 12:00 | Tunisia 0-4 Japan | 0-4 | 已结束 |\\n\\n今天4场比赛全部结束。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":521}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\",\"streamId\":\"s_mqni2e4t_5hxnrk\",\"seq\":522}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-03-37-606Z_d79f4ce5-7637-484b-a1d5-0fb9f46d3b8c.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 14,
+      "category": "realtime",
+      "prompt": "世界杯半决赛在哪一天？",
+      "startedAt": 1782029051344,
+      "elapsedMs": 4086,
+      "text": "从查询结果看，这两场标注为 **Quarterfinal Winner vs Quarterfinal Winner** 的比赛，实际上就是半决赛：\n\n- **2026年7月15日 03:00**（北京时间）\n- **2026年7月16日 03:00**（北京时间）\n\n所以半决赛分别在 **7月15日** 和 **7月16日** 的凌晨进行。",
+      "textChars": 172,
+      "thinkingChars": 478,
+      "providerTrail": [
+        "step-3.7-flash"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 95,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": ".jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":72}\n{\"type\":\"thinking_delta\",\"delta\":\"\\n不需要\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":73}\n{\"type\":\"thinking_delta\",\"delta\":\"Ref\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":74}\n{\"type\":\"thinking_delta\",\"delta\":\"lect，这是一个\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":75}\n{\"type\":\"thinking_delta\",\"delta\":\"简单的\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":76}\n{\"type\":\"thinking_delta\",\"delta\":\"信息查询和\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":77}\n{\"type\":\"thinking_delta\",\"delta\":\"回答\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":78}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":79}\n{\"type\":\"text_delta\",\"delta\":\"从查询结果看，这两场标注为 **Quarterfinal Winner vs Quarterfinal Winner** 的比赛，实际上就是半决赛：\\n\\n- **2026年7月15日 03:00**（北京时间）\\n- **2026年7月16日 03:00\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":80}\n{\"type\":\"text_delta\",\"delta\":\"**（北京时间）\\n\\n\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":81}\n{\"type\":\"text_delta\",\"delta\":\"所以半\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":82}\n{\"type\":\"text_delta\",\"delta\":\"决赛分别在\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":83}\n{\"type\":\"text_delta\",\"delta\":\" **7月15\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":84}\n{\"type\":\"text_delta\",\"delta\":\"日** 和\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":85}\n{\"type\":\"text_delta\",\"delta\":\" **7月16\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":86}\n{\"type\":\"text_delta\",\"delta\":\"日** 的\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":87}\n{\"type\":\"text_delta\",\"delta\":\"凌晨进行\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":88}\n{\"type\":\"text_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":89}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\",\"streamId\":\"s_mqni3467_zaj5j3\",\"seq\":90}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-11-349Z_6c1f2799-edd5-4e2b-989b-9cb10e1bdf48.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 15,
+      "category": "realtime",
+      "prompt": "2026世界杯已经出的赛事比分",
+      "startedAt": 1782029055433,
+      "elapsedMs": 5318,
+      "text": "2026世界杯已完赛 24 场，比分如下：\n\n**6月16日**\n- 西班牙 0-0 佛得角\n- 比利时 1-1 埃及\n- 沙特阿拉伯 1-1 乌拉圭\n- 伊朗 2-2 新西兰\n\n**6月17日**\n- 法国 3-1 塞内加尔\n- 伊拉克 1-4 挪威\n- 阿根廷 3-0 阿尔及利亚\n- 奥地利 3-1 约旦\n\n**6月18日**\n- 葡萄牙 1-1 刚果民主共和国\n- 英格兰 4-2 克罗地亚\n- 加纳 1-0 巴拿马\n- 乌兹别克斯坦 1-3 哥伦比亚\n\n**6月19日**\n- 捷克 1-1 南非\n- 瑞士 4-1 波黑\n- 加拿大 6-0 卡塔尔\n- 墨西哥 1-0 韩国\n\n**6月20日**\n- 美国 2-0 澳大利亚\n- 苏格兰 0-1 摩洛哥\n- 巴西 3-0 海地\n- 土耳其 0-1 巴拉圭\n\n**6月21日**\n- 荷兰 5-1 瑞典\n- 德国 2-1 科特迪瓦\n- 厄瓜多尔 0-0 库拉索\n- 突尼斯 0-4 日本",
+      "textChars": 422,
+      "thinkingChars": 523,
+      "providerTrail": [
+        "step-3.7-flash"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 203,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "ionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":180}\n{\"type\":\"text_delta\",\"delta\":\"地\\n- \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":181}\n{\"type\":\"text_delta\",\"delta\":\"土耳其 0-\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":182}\n{\"type\":\"text_delta\",\"delta\":\"1 巴拉圭\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":183}\n{\"type\":\"text_delta\",\"delta\":\"\\n\\n**6月\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":184}\n{\"type\":\"text_delta\",\"delta\":\"21日**\\n-\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":185}\n{\"type\":\"text_delta\",\"delta\":\" 荷兰 5\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":186}\n{\"type\":\"text_delta\",\"delta\":\"-1 瑞典\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":187}\n{\"type\":\"text_delta\",\"delta\":\"\\n- 德国\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":188}\n{\"type\":\"text_delta\",\"delta\":\" 2-1\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":189}\n{\"type\":\"text_delta\",\"delta\":\" 科特迪\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":190}\n{\"type\":\"text_delta\",\"delta\":\"瓦\\n- \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":191}\n{\"type\":\"text_delta\",\"delta\":\"厄瓜多尔 \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":192}\n{\"type\":\"text_delta\",\"delta\":\"0-0\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":193}\n{\"type\":\"text_delta\",\"delta\":\" 库拉索\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":194}\n{\"type\":\"text_delta\",\"delta\":\"\\n- 突\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":195}\n{\"type\":\"text_delta\",\"delta\":\"尼斯 0\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":196}\n{\"type\":\"text_delta\",\"delta\":\"-4 日本\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":197}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\",\"streamId\":\"s_mqni37bs_qt2tw5\",\"seq\":198}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-15-437Z_4773246f-4a07-42f4-b996-629146a07783.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 16,
+      "category": "realtime",
+      "prompt": "NBA 总决赛打了几场，总比分如何？",
+      "startedAt": 1782029060753,
+      "elapsedMs": 47421,
+      "text": "针对“体育查询结果 (ESPN scoreboard)\nprovider: espn_scoreboard\nleague: NBA\nsource: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?limit=950&dates=20260614-20260622\ndateRange: 20260614-20260622\n时间口径: 北京时间\nmatched: 0\n\nNBA 总决赛打了几场，总比分如何？”，我能从工具证据中确认：\n- 1. **2026 年_百度百科**\n- 2026年1月1日起，中国全面禁止生产含汞体温计和含汞血压计产品，增值税法及修订后的《中华人民共和国治安管理处罚法》《中华人民共和国国家公园法》 …\n- 2. **2026 年政府工作报告解读_中国政府网**\n- 2026年3月5日&ensp;&#0183;&ensp;展望未来，我们充满信心。- 三、2026年经济社会发展总体要求和政策取向 …\n- 3. **国务院办公厅关于 2026 年部分节假日安排的通知**\n如果需要更精确的实时结论，建议继续用官方或专业数据源交叉验证。",
+      "textChars": 527,
+      "thinkingChars": 714,
+      "providerTrail": [
+        "step-3.7-flash",
+        "step-3.7-flash",
+        "step-3.7-flash",
+        "glm-5-turbo"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "websearch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "websearch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "websearch",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "websearch"
+        },
+        {
+          "event": "end",
+          "name": "websearch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "websearch"
+        },
+        {
+          "event": "end",
+          "name": "websearch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "websearch"
+        },
+        {
+          "event": "end",
+          "name": "websearch",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 138,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "6-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":121}\n{\"type\":\"thinking_delta\",\"delta\":\" Finals information. Let\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":122}\n{\"type\":\"thinking_delta\",\"delta\":\" me try a more specific search in\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":123}\n{\"type\":\"thinking_delta\",\"delta\":\" Chinese and\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":124}\n{\"type\":\"thinking_delta\",\"delta\":\" also try fetching\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":125}\n{\"type\":\"thinking_delta\",\"delta\":\" from a\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":126}\n{\"type\":\"thinking_delta\",\"delta\":\" sports website\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":127}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":128}\n{\"type\":\"tool_start\",\"name\":\"websearch\",\"args\":{\"query\":\"2026 NBA总决赛 凯尔特人 雷霆 比分\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":129}\n{\"type\":\"tool_end\",\"name\":\"websearch\",\"success\":true,\"details\":{\"scene\":\"sports\",\"expandedQuery\":\"2026 NBA总决赛 凯尔特人 雷霆 比分  赛程 对阵 比分 赛果 腾讯体育 新浪体育 懂球帝 虎扑 ESPN FIFA\",\"preferFresh\":false,\"preferDocs\":false,\"preferredSources\":[\"腾讯体育\",\"新浪体育\",\"懂球帝\",\"虎扑\"],\"requiresSpecializedData\":true,\"shouldCrossVerify\":true,\"provider\":\"bing-html\"},\"summary\":{\"outputPreview\":\"搜索提示：这是体育比分/赛果类问题。优先参考 腾讯体育 / 新浪体育 / 懂球帝 / 虎扑 等来源；关键比分、赛果和开赛时间请至少交叉验证 2 个来源。若需要更精确的实时比分，建议额外接入专门体育数据源。\\n\\n搜索结果 (via bing-html):\\n\\n1. **2026 年_百度百科**\\n   来源：baike.baidu.com\\n   https://baike.baidu.com/item/\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":130}\n{\"type\":\"provider_meta\",\"activeProvider\":\"glm-5-turbo\",\"fallbackFrom\":[{\"id\":\"lynn-brain-router\",\"reason\":\"tool_round_limit\"}],\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":131}\n{\"type\":\"text_delta\",\"delta\":\"针对“体育查询结果 (ESPN scoreboard)\\nprovider: espn_scoreboard\\nleague: NBA\\nsource: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?limit=950&dates=20260614-20260622\\ndateRange: 20260614-20260622\\n时间口径: 北京时间\\nmatched: 0\\n\\nNBA 总决赛打了几场，总比分如何？”，我能从工具证据中确认：\\n- 1. **2026 年_百度百科**\\n- 2026年1月1日起，中国全面禁止生产含汞体温计和含汞血压计产品，增值税法及修订后的《中华人民共和国治安管理处罚法》《中华人民共和国国家公园法》 …\\n- 2. **2026 年政府工作报告解读_中国政府网**\\n- 2026年3月5日&ensp;&#0183;&ensp;展望未来，我们充满信心。- 三、2026年经济社会发展总体要求和政策取向 …\\n- 3. **国务院办公厅关于 2026 年部分节假日安排的通知**\\n如果需要更精确的实时结论，建议继续用官方或专业数据源交叉验证。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":132}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\",\"streamId\":\"s_mqni3bfa_0t9quf\",\"seq\":133}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-04-20-754Z_01a9901b-dcf4-4808-a0fa-2111cd050643.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 17,
+      "category": "realtime",
+      "prompt": "今年 NBA 马刺夺冠了吗，还是尼克斯？",
+      "startedAt": 1782029108177,
+      "elapsedMs": 39207,
+      "text": "根据本轮已执行工具返回的证据，当前能确认：\n- 体育比分: 【体育比分工具资料】 体育查询结果 (ESPN scoreboard) provider: espn_scoreboard league: NBA source: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?limit=950&dates=20260614-20260622 dateRange: 2\n- 网页抓取: 抓取出错: 禁止访问内网地址: thepackedhousesportsblog.com\n- 网页搜索: 搜索提示：这是体育比分/赛果类问题。优先参考 腾讯体育 / 新浪体育 / 懂球帝 / 虎扑 等来源；关键比分、赛果和开赛时间请至少交叉验证 2 个来源。若需要更精确的实时比分，建议额外接入专门体育数据源。 搜索结果 (via bing-html): 1. **2026 年_百度百科** 来源：baike.baidu.com https://baike.baidu.com/item/\n\n以上只包含工具结果中可见的事实；工具未返回或来源未覆盖的部分，不能继续补推。",
+      "textChars": 524,
+      "thinkingChars": 1029,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "webfetch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "websearch",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "webfetch"
+        },
+        {
+          "event": "end",
+          "name": "webfetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "websearch"
+        },
+        {
+          "event": "end",
+          "name": "websearch",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 234,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "4\",\"seq\":213}\n{\"type\":\"thinking_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":214}\n{\"type\":\"thinking_delta\",\"delta\":\"202\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":215}\n{\"type\":\"thinking_delta\",\"delta\":\"6\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":216}\n{\"type\":\"thinking_delta\",\"delta\":\" Finals\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":217}\n{\"type\":\"thinking_delta\",\"delta\":\" results\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":218}\n{\"type\":\"thinking_delta\",\"delta\":\" on\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":219}\n{\"type\":\"thinking_delta\",\"delta\":\" Chinese\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":220}\n{\"type\":\"thinking_delta\",\"delta\":\" sports\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":221}\n{\"type\":\"thinking_delta\",\"delta\":\" sites\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":222}\n{\"type\":\"thinking_delta\",\"delta\":\" or\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":223}\n{\"type\":\"thinking_delta\",\"delta\":\" English\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":224}\n{\"type\":\"thinking_delta\",\"delta\":\" sources\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":225}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":226}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":227}\n{\"type\":\"text_delta\",\"delta\":\"根据本轮已执行工具返回的证据，当前能确认：\\n- 体育比分: 【体育比分工具资料】 体育查询结果 (ESPN scoreboard) provider: espn_scoreboard league: NBA source: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?limit=950&dates=20260614-20260622 dateRange: 2\\n- 网页抓取: 抓取出错: 禁止访问内网地址: thepackedhousesportsblog.com\\n- 网页搜索: 搜索提示：这是体育比分/赛果类问题。优先参考 腾讯体育 / 新浪体育 / 懂球帝 / 虎扑 等来源；关键比分、赛果和开赛时间请至少交叉验证 2 个来源。若需要更精确的实时比分，建议额外接入专门体育数据源。 搜索结果 (via bing-html): 1. **2026 年_百度百科** 来源：baike.baidu.com https://baike.baidu.com/item/\\n\\n以上只包含工具结果中可见的事实；工具未返回或来源未覆盖的部分，不能继续补推。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":228}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\",\"streamId\":\"s_mqni4c0v_s1ndh4\",\"seq\":229}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-08-180Z_e03db801-83c5-4bba-aa38-d01bc9562ff1.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 18,
+      "category": "realtime",
+      "prompt": "今日金价是多少？",
+      "startedAt": 1782029147386,
+      "elapsedMs": 102793,
+      "text": "本轮工具执行包含 1 个成功、1 个失败(stock_market)；请查看上方工具卡片中的失败项。",
+      "textChars": 50,
+      "thinkingChars": 1119,
+      "providerTrail": [
+        "deepseek-chat",
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "stock_market",
+          "success": false
+        },
+        {
+          "id": "",
+          "name": "stockmarket",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "stock_market"
+        },
+        {
+          "event": "end",
+          "name": "stock_market",
+          "ok": false
+        },
+        {
+          "event": "start",
+          "name": "stockmarket"
+        },
+        {
+          "event": "slow_warning",
+          "name": "stockmarket",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "stockmarket",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 438,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "1T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":416}\n{\"type\":\"thinking_delta\",\"delta\":\" and\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":417}\n{\"type\":\"thinking_delta\",\"delta\":\" gold\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":418}\n{\"type\":\"thinking_delta\",\"delta\":\" is\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":419}\n{\"type\":\"thinking_delta\",\"delta\":\" down\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":420}\n{\"type\":\"thinking_delta\",\"delta\":\" about\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":421}\n{\"type\":\"thinking_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":422}\n{\"type\":\"thinking_delta\",\"delta\":\"28\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":423}\n{\"type\":\"thinking_delta\",\"delta\":\"%\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":424}\n{\"type\":\"thinking_delta\",\"delta\":\" from\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":425}\n{\"type\":\"thinking_delta\",\"delta\":\" its\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":426}\n{\"type\":\"thinking_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":427}\n{\"type\":\"thinking_delta\",\"delta\":\"202\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":428}\n{\"type\":\"thinking_delta\",\"delta\":\"6\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":429}\n{\"type\":\"thinking_delta\",\"delta\":\" high\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":430}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":431}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":432}\n{\"type\":\"text_delta\",\"delta\":\"本轮工具执行包含 1 个成功、1 个失败(stock_market)；请查看上方工具卡片中的失败项。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":433}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\",\"streamId\":\"s_mqni569y_2keb76\",\"seq\":434}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-05-47-390Z_087b37e4-8e3f-4334-8c43-93746caacc94.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 19,
+      "category": "realtime",
+      "prompt": "英伟达股价最新是多少？",
+      "startedAt": 1782029250182,
+      "elapsedMs": 9731,
+      "text": "英伟达（NVDA）最新可用行情来自上一个交易日（2026年6月18日，周五）收盘数据：\n\n| 指标 | 数值 |\n|------|------|\n| 当前价 | **210.69 USD** |\n| 涨跌 | **+6.04 (+2.95%)** |\n| 开盘 | 207.33 |\n| 最高 | 211.39 |\n| 最低 | 206.50 |\n\n因为今天是周日，美股没有交易，所以这是最新收盘价。周五涨幅接近 3%，表现不错。今晚（美东时间周一）将开始新一周交易，届时价格才会有更新。",
+      "textChars": 244,
+      "thinkingChars": 659,
+      "providerTrail": [
+        "deepseek-chat",
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "stock_market",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "stockmarket",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "stock_market"
+        },
+        {
+          "event": "end",
+          "name": "stock_market",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "stockmarket"
+        },
+        {
+          "event": "end",
+          "name": "stockmarket",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 245,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "b7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":224}\n{\"type\":\"thinking_delta\",\"delta\":\" since\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":225}\n{\"type\":\"thinking_delta\",\"delta\":\" markets\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":226}\n{\"type\":\"thinking_delta\",\"delta\":\" were\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":227}\n{\"type\":\"thinking_delta\",\"delta\":\" closed\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":228}\n{\"type\":\"thinking_delta\",\"delta\":\" over\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":229}\n{\"type\":\"thinking_delta\",\"delta\":\" the\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":230}\n{\"type\":\"thinking_delta\",\"delta\":\" weekend\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":231}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":232}\n{\"type\":\"thinking_delta\",\"delta\":\" Let\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":233}\n{\"type\":\"thinking_delta\",\"delta\":\" me\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":234}\n{\"type\":\"thinking_delta\",\"delta\":\" present\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":235}\n{\"type\":\"thinking_delta\",\"delta\":\" this\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":236}\n{\"type\":\"thinking_delta\",\"delta\":\" clearly\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":237}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":238}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":239}\n{\"type\":\"text_delta\",\"delta\":\"英伟达（NVDA）最新可用行情来自上一个交易日（2026年6月18日，周五）收盘数据：\\n\\n| 指标 | 数值 |\\n|------|------|\\n| 当前价 | **210.69 USD** |\\n| 涨跌 | **+6.04 (+2.95%)** |\\n| 开盘 | 207.33 |\\n| 最高 | 211.39 |\\n| 最低 | 206.50 |\\n\\n因为今天是周日，美股没有交易，所以这是最新收盘价。周五涨幅接近 3%，表现不错。今晚（美东时间周一）将开始新一周交易，届时价格才会有更新。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":240}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\",\"streamId\":\"s_mqni7dlg_ngfzil\",\"seq\":241}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-30-187Z_b656fc70-bb7f-48f3-a6ca-79dafdd8ebf3.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 20,
+      "category": "realtime",
+      "prompt": "苹果公司 AAPL 最新股价是多少？",
+      "startedAt": 1782029259916,
+      "elapsedMs": 8618,
+      "text": "苹果公司（AAPL）最新行情（数据来自腾讯财经，截至 2026-06-18 美东收盘）：\n\n- **股价：$298.01**\n- **涨跌：+$2.06（+0.70%）**\n- 开盘 / 最高 / 最低：$298.11 / $300.57 / $295.62\n\n这是上一个交易日的收盘价，不是实时盘中数据。如果想看今日实时行情，可以再告诉我。",
+      "textChars": 171,
+      "thinkingChars": 370,
+      "providerTrail": [
+        "deepseek-chat",
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "stock_market",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "stockmarket",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "stock_market"
+        },
+        {
+          "event": "end",
+          "name": "stock_market",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "stockmarket"
+        },
+        {
+          "event": "end",
+          "name": "stockmarket",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 205,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "ype\":\"thinking_delta\",\"delta\":\"L\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":184}\n{\"type\":\"thinking_delta\",\"delta\":\"）\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":185}\n{\"type\":\"thinking_delta\",\"delta\":\"的最新\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":186}\n{\"type\":\"thinking_delta\",\"delta\":\"股价\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":187}\n{\"type\":\"thinking_delta\",\"delta\":\"数据\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":188}\n{\"type\":\"thinking_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":189}\n{\"type\":\"thinking_delta\",\"delta\":\"我需要\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":190}\n{\"type\":\"thinking_delta\",\"delta\":\"把\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":191}\n{\"type\":\"thinking_delta\",\"delta\":\"关键\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":192}\n{\"type\":\"thinking_delta\",\"delta\":\"信息\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":193}\n{\"type\":\"thinking_delta\",\"delta\":\"提\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":194}\n{\"type\":\"thinking_delta\",\"delta\":\"出来\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":195}\n{\"type\":\"thinking_delta\",\"delta\":\"给\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":196}\n{\"type\":\"thinking_delta\",\"delta\":\"用户\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":197}\n{\"type\":\"thinking_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":198}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":199}\n{\"type\":\"text_delta\",\"delta\":\"苹果公司（AAPL）最新行情（数据来自腾讯财经，截至 2026-06-18 美东收盘）：\\n\\n- **股价：$298.01**\\n- **涨跌：+$2.06（+0.70%）**\\n- 开盘 / 最高 / 最低：$298.11 / $300.57 / $295.62\\n\\n这是上一个交易日的收盘价，不是实时盘中数据。如果想看今日实时行情，可以再告诉我。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":200}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\",\"streamId\":\"s_mqni7l3t_i1bfft\",\"seq\":201}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-39-920Z_5ebb5c75-769f-4936-8815-30c4a34c9bbe.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 21,
+      "category": "realtime",
+      "prompt": "美元人民币汇率现在多少？",
+      "startedAt": 1782029268537,
+      "elapsedMs": 68631,
+      "text": "针对“美元人民币汇率现在多少？”，我能从工具证据中确认：\n- 2. **1 USD 到 CNY - 美元 到 人民币 汇率 - Xe**\n- 3. **1 USD to CNY - US Dollars to Chinese Yuan Renminbi Exchange Rate - Xe**\n如果需要更精确的实时结论，建议继续用官方或专业数据源交叉验证。",
+      "textChars": 179,
+      "thinkingChars": 4943,
+      "providerTrail": [
+        "deepseek-chat",
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-chat",
+        "glm-5-turbo"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "stock_market",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "webfetch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "websearch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "webfetch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "webfetch",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "stock_market"
+        },
+        {
+          "event": "end",
+          "name": "stock_market",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "webfetch"
+        },
+        {
+          "event": "end",
+          "name": "webfetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "websearch"
+        },
+        {
+          "event": "slow_warning",
+          "name": "websearch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "websearch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "webfetch"
+        },
+        {
+          "event": "end",
+          "name": "webfetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "webfetch"
+        },
+        {
+          "event": "end",
+          "name": "webfetch",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 1210,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\":\" or\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1192}\n{\"type\":\"thinking_delta\",\"delta\":\" Reuters\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1193}\n{\"type\":\"thinking_delta\",\"delta\":\" for\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1194}\n{\"type\":\"thinking_delta\",\"delta\":\" the\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1195}\n{\"type\":\"thinking_delta\",\"delta\":\" latest\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1196}\n{\"type\":\"thinking_delta\",\"delta\":\" rate\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1197}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1198}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1199}\n{\"type\":\"tool_start\",\"name\":\"webfetch\",\"args\":{\"url\":\"https://www.google.com/finance/quote/USD-CNY?hl=zh\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1200}\n{\"type\":\"tool_end\",\"name\":\"webfetch\",\"success\":true,\"details\":{},\"summary\":{\"outputPreview\":\"来源: www.google.com/finance/beta/quote/USD-CNY (html→text)\\n\\n财经\\n\\nBeta 版\\n\\n (./)\\n\\nsearch_spark提问\\n\\nsettings\\n\\n主题\\n\\nmobile设备默认主题✓\\n\\ndark_mode深色主题\\n\\nlight_mode浅色主题\\n\\n涨跌颜色设置\\n\\nglobe_asia本地市场✓\\n\\nglobe国际\\n\\n搜索实验室\\n\\nfeedb\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1201}\n{\"type\":\"tool_start\",\"name\":\"webfetch\",\"args\":{\"url\":\"https://www.reuters.com/markets/quote/CNYUSD=X/\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1202}\n{\"type\":\"tool_end\",\"name\":\"webfetch\",\"success\":true,\"details\":{},\"summary\":{\"outputPreview\":\"抓取出错: 抓取失败: HTTP 401 HTTP Forbidden\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1203}\n{\"type\":\"provider_meta\",\"activeProvider\":\"glm-5-turbo\",\"fallbackFrom\":[{\"id\":\"lynn-brain-router\",\"reason\":\"tool_round_limit\"}],\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1204}\n{\"type\":\"text_delta\",\"delta\":\"针对“美元人民币汇率现在多少？”，我能从工具证据中确认：\\n- 2. **1 USD 到 CNY - 美元 到 人民币 汇率 - Xe**\\n- 3. **1 USD to CNY - US Dollars to Chinese Yuan Renminbi Exchange Rate - Xe**\\n如果需要更精确的实时结论，建议继续用官方或专业数据源交叉验证。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1205}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\",\"streamId\":\"s_mqni7rr9_q1nds8\",\"seq\":1206}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-07-48-540Z_994cce42-e5bb-4ac1-a998-c504a774eb70.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 22,
+      "category": "realtime",
+      "prompt": "深圳明天下雨吗？",
+      "startedAt": 1782029337170,
+      "elapsedMs": 53926,
+      "text": "针对“深圳 · 广东 当前天气\n- 天气: 雷暴\n- 温度: 30.6°C\n- 湿度: 71%\n- 风速: 16.3 km/h\n- 降水: 0 mm\n\n问题匹配日期：明天（已按用户问题排除今天）\n- 明天 2026-06-22: 雷暴 26.8~31.7°C 降雨概率 6% 降雨判断: 有降雨可能\n\n深圳明天下雨吗？”，我能从工具证据中确认：\n- 深圳有7000年人类活动史，1700年建城史。- 3 天之前&ensp;&#0183;&ensp;[2026-06-18] 深圳市生态环境局关于进一步规范机动车排放检验机构联网工作的通知 [2026-06-18] 深圳市工业和信息化局关于开展2026年高新技术企业认定工作的通知 [2026-06-18] 市工业和信息 …\n如果需要更精确的实时结论，建议继续用官方或专业数据源交叉验证。",
+      "textChars": 368,
+      "thinkingChars": 3534,
+      "providerTrail": [
+        "deepseek-chat",
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-pro",
+        "deepseek-chat",
+        "glm-5-turbo"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "weather",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "websearch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "websearch",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "weather"
+        },
+        {
+          "event": "end",
+          "name": "weather",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "websearch"
+        },
+        {
+          "event": "end",
+          "name": "websearch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "websearch"
+        },
+        {
+          "event": "end",
+          "name": "websearch",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 1049,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "delta\",\"delta\":\" Let\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1032}\n{\"type\":\"thinking_delta\",\"delta\":\" me\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1033}\n{\"type\":\"thinking_delta\",\"delta\":\" try\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1034}\n{\"type\":\"thinking_delta\",\"delta\":\" a\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1035}\n{\"type\":\"thinking_delta\",\"delta\":\" more\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1036}\n{\"type\":\"thinking_delta\",\"delta\":\" specific\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1037}\n{\"type\":\"thinking_delta\",\"delta\":\" search\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1038}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1039}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1040}\n{\"type\":\"tool_start\",\"name\":\"websearch\",\"args\":{\"query\":\"深圳天气预报 未来一周 2026年6月\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1041}\n{\"type\":\"tool_end\",\"name\":\"websearch\",\"success\":true,\"details\":{\"scene\":\"realtime\",\"expandedQuery\":\"深圳天气预报 未来一周 2026年6月 最新 今日\",\"preferFresh\":true,\"preferDocs\":false,\"preferredSources\":[],\"requiresSpecializedData\":false,\"shouldCrossVerify\":true,\"provider\":\"bing-html\"},\"summary\":{\"outputPreview\":\"搜索提示：这是实时/最新信息类问题。回答前请优先核对时间戳和来源站点，不要把单一结果当成最终结论。\\n\\n搜索结果 (via bing-html):\\n\\n1. **深圳 市_百度百科**\\n   来源：baike.baidu.com\\n   https://baike.baidu.com/item/%E6%B7%B1%E5%9C%B3%E5%B8%82/11044365\\n   4 天之前&ensp;&#01\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1042}\n{\"type\":\"provider_meta\",\"activeProvider\":\"glm-5-turbo\",\"fallbackFrom\":[{\"id\":\"lynn-brain-router\",\"reason\":\"tool_round_limit\"}],\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1043}\n{\"type\":\"text_delta\",\"delta\":\"针对“深圳 · 广东 当前天气\\n- 天气: 雷暴\\n- 温度: 30.6°C\\n- 湿度: 71%\\n- 风速: 16.3 km/h\\n- 降水: 0 mm\\n\\n问题匹配日期：明天（已按用户问题排除今天）\\n- 明天 2026-06-22: 雷暴 26.8~31.7°C 降雨概率 6% 降雨判断: 有降雨可能\\n\\n深圳明天下雨吗？”，我能从工具证据中确认：\\n- 深圳有7000年人类活动史，1700年建城史。- 3 天之前&ensp;&#0183;&ensp;[2026-06-18] 深圳市生态环境局关于进一步规范机动车排放检验机构联网工作的通知 [2026-06-18] 深圳市工业和信息化局关于开展2026年高新技术企业认定工作的通知 [2026-06-18] 市工业和信息 …\\n如果需要更精确的实时结论，建议继续用官方或专业数据源交叉验证。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1044}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\",\"streamId\":\"s_mqni98pp_p4x8tl\",\"seq\":1045}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-08-57-174Z_4ee1d8b0-c10a-4be2-819b-06c3df186cc9.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

@@ -82,6 +82,7 @@ export function validateCliProviderProfile(profile: CliProviderProfile): CliProv
 }
 
 export async function resolveCliProviderProfile(args: ParsedArgs): Promise<ResolvedCliProviderProfile | null> {
+  if (cliByokFallbackDisabled()) return null;
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   const fileProfile = await readCliProviderProfile(dataDir);
   const envProfile = readEnvProviderProfile();
@@ -115,6 +116,7 @@ export function readFlagProviderProfile(args: ParsedArgs): CliProviderProfile | 
 }
 
 export function readEnvProviderProfile(env: NodeJS.ProcessEnv = process.env): CliProviderProfile | null {
+  if (cliByokFallbackDisabled(env)) return null;
   const presetName = env.LYNN_CLI_PRESET || env.OPENAI_COMPATIBLE_PRESET || null;
   const preset = resolveProviderPreset(presetName);
   const baseUrl = env.LYNN_CLI_BASE_URL || env.OPENAI_BASE_URL || preset?.baseUrl || "";
@@ -128,6 +130,10 @@ export function readEnvProviderProfile(env: NodeJS.ProcessEnv = process.env): Cl
     model,
     apiKey: apiKey || undefined,
   };
+}
+
+function cliByokFallbackDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.LYNN_CLI_DISABLE_BYOK_FALLBACK === "1";
 }
 
 function stringValue(value: unknown): string | undefined {

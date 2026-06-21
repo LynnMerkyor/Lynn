@@ -51,8 +51,8 @@ const PROVIDERS: Record<string, ASRProviderFactory> = {
   "stepfun": createBrainRealtimeAsrProvider,
   "stepfun-direct": createStepFunRealtimeAsrProvider,
   "stepfun-byok": createStepFunRealtimeAsrProvider,
-  "spark": (config) => createASRFallbackProvider({ ...config, provider: "qwen3-asr", fallback_provider: "sensevoice" }),
-  "spark-local": (config) => createASRFallbackProvider({ ...config, provider: "qwen3-asr", fallback_provider: "sensevoice" }),
+  "spark": createBrainRealtimeAsrProvider,
+  "spark-local": createBrainRealtimeAsrProvider,
   "qwen3-asr": createQwen3AsrProvider,
   "qwen3": createQwen3AsrProvider,
   "qwen": createQwen3AsrProvider,
@@ -66,11 +66,10 @@ const PROVIDERS: Record<string, ASRProviderFactory> = {
 
 export function listASRProviders() {
   return [
-    { id: "spark", label: "Local ASR Router (Qwen3-ASR → SenseVoice)", needsKey: false, default: true },
-    { id: "stepfun-realtime", label: "StepFun Realtime conversation/TTS (not standalone ASR)", needsKey: false },
-    { id: "qwen3-asr", label: "Qwen3-ASR-0.6B (fallback)", needsKey: false },
-    { id: "sensevoice", label: "SenseVoice (fallback)", needsKey: false },
-    { id: "faster-whisper", label: "Faster Whisper (自托管)", needsKey: false },
+    { id: "stepfun-realtime", label: "StepFun Realtime ASR (Lynn Brain · 默认)", needsKey: false, default: true },
+    { id: "qwen3-asr", label: "Qwen3-ASR-0.6B (legacy explicit)", needsKey: false },
+    { id: "sensevoice", label: "SenseVoice (legacy explicit)", needsKey: false },
+    { id: "faster-whisper", label: "Faster Whisper (自托管 legacy)", needsKey: false },
     { id: "openai", label: "OpenAI Whisper API", needsKey: true },
     { id: "azure", label: "Azure Speech-to-Text", needsKey: true },
   ];
@@ -87,8 +86,8 @@ export function createASRProvider(config: ASRConfig = {}): ASRProvider {
 }
 
 export function createASRFallbackProvider(config: ASRConfig = {}, deps: ASRFallbackDeps = {}): ASRProvider {
-  const primaryProvider = config.provider || "qwen3-asr";
-  const fallbackProvider = config.fallback_provider || config.fallbackProvider || "sensevoice";
+  const primaryProvider = config.provider || "brain-realtime";
+  const fallbackProvider = config.fallback_provider || config.fallbackProvider || "brain-realtime";
   const primary = deps.primaryProvider || createASRProvider({ ...config, provider: primaryProvider });
   if (primaryProvider === fallbackProvider && !deps.fallbackProvider) {
     return primary;

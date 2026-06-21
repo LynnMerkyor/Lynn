@@ -13,7 +13,7 @@ vi.mock("../lib/tools/web-search.js", () => searchMock);
 vi.mock("../lib/tools/web-fetch.js", () => fetchContentMock);
 
 import { createStockMarketTool } from "../lib/tools/stock-market.js";
-import { createSportsScoreTool, createWeatherTool, extractWeatherLocation } from "../lib/tools/realtime-info.js";
+import { createLiveNewsTool, createSportsScoreTool, createWeatherTool, extractWeatherLocation } from "../lib/tools/realtime-info.js";
 import { buildDirectResearchAnswer, inferReportResearchKind } from "../server/chat/report-research-context.js";
 
 function jsonResponse(data) {
@@ -82,6 +82,64 @@ describe("realtime market/weather tools", () => {
     expect(inferReportResearchKind("创业板科技股今天表现")).toBe("market");
     expect(inferReportResearchKind("DeepSeek概念股今天表现")).toBe("market");
     expect(inferReportResearchKind("上海明天下雨吗？")).toBe("weather");
+    expect(inferReportResearchKind("查一下 OpenAI 最近发布了什么新模型，给一句摘要")).toBe("news");
+    expect(inferReportResearchKind("查一下深圳今天有没有暴雨预警")).toBe("weather");
+  });
+
+  it("uses a single official-domain search for OpenAI model-release live news", async () => {
+    searchMock.runSearchQuery.mockResolvedValue({
+      provider: "mock-search",
+      results: [{
+        title: "Introducing GPT-5.5 - OpenAI",
+        url: "https://openai.com/index/introducing-gpt-5-5/",
+        snippet: "Published: last month; GPT-5.5 and GPT-5.5 Pro are now available in ChatGPT and Codex.",
+      }],
+    });
+
+    const result = await createLiveNewsTool().execute("test", {
+      query: "查一下 OpenAI 最近发布了什么新模型，给一句摘要",
+      maxResults: 5,
+    });
+    const text = result.content.map((item) => item.text).join("\n");
+
+    expect(searchMock.runSearchQuery).toHaveBeenCalledTimes(1);
+    expect(searchMock.runSearchQuery.mock.calls[0][0]).toContain("site:openai.com");
+    expect(fetchContentMock.fetchWebContent).not.toHaveBeenCalled();
+    expect(text).toContain("OpenAI 官方模型发布资料");
+    expect(text).toContain("GPT-5.5");
+    expect(result.details.fastPath).toBe("openai_model_release");
+  });
+
+  it("uses Shenzhen official alert data for rainstorm warning questions", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      expect(String(url)).toContain("weather.121.com.cn/data_cache/szWeather/alarm/szAlarm.js");
+      return new Response([
+        "/*@cdate:2026-06-21 17:14:00*/",
+        "try{ var SZ121_AlarmInfo = {",
+        "\"warnpre\":{\"flagindex\":0},",
+        "\"subAlarm\":[],",
+        "\"sshzqAlarm\":[],",
+        "\"alarmInfo\":\"【深圳市解除雷电预警信号】雷暴云团已减弱，深圳市气象台2026年06月19日14时30分解除全市雷电预警信号。\",",
+        "\"alarmSSInfo\":\"【深汕特别合作区解除雷雨大风黄色预警和暴雨橙色预警信号】 雷暴云团已移出。\",",
+        "\"ingnalNum\":\"0\"",
+        "};}catch(e){}",
+      ].join(""));
+    }));
+
+    expect(extractWeatherLocation("查一下深圳今天有没有暴雨预警")).toBe("深圳");
+    const result = await createWeatherTool().execute("test", {
+      query: "查一下深圳今天有没有暴雨预警",
+    });
+    const text = result.content.map((item) => item.text).join("\n");
+    const answer = buildDirectResearchAnswer("weather", text, "查一下深圳今天有没有暴雨预警");
+
+    expect(text).toContain("当前深圳生效预警: 0");
+    expect(text).toContain("暴雨预警: 未检出深圳当前生效暴雨预警");
+    expect(result.details.provider).toBe("weather.121.com.cn");
+    expect(answer).toContain("未检出当前生效的暴雨预警");
+    expect(answer).toContain("官方数据更新时间：2026-06-21 17:14:00");
+    expect(answer).toContain("weather.121.com.cn/data_cache/szWeather/alarm/szAlarm.js");
+    expect(answer).not.toContain("有暴雨橙色预警");
   });
 
   it("uses Gold-API direct quotes before search snippets for gold queries", async () => {
@@ -137,9 +195,8 @@ describe("realtime market/weather tools", () => {
     expect(text).toContain("黄金价格快照");
     expect(text).toContain("国际现货黄金（XAU/USD）");
     expect(text).toContain("元/克");
-    expect(text).toContain("品牌金店首饰金价：1401-1445 元/克");
-    expect(text).toContain("银行投资金条：1046.29-1057 元/克");
-    expect(text).toContain("黄金回收：约 1027 元/克");
+    expect(searchMock.runSearchQuery).not.toHaveBeenCalled();
+    expect(fetchContentMock.fetchWebContent).not.toHaveBeenCalled();
   });
 
   it("uses Sina direct quotes for Brent oil queries", async () => {
@@ -472,6 +529,164 @@ describe("realtime market/weather tools", () => {
     expect(searchMock.runSearchQuery).toHaveBeenCalledTimes(3);
   });
 
+  it("uses ESPN scoreboard directly for World Cup tonight queries", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-06-21T15:30:00+08:00"));
+      vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+        events: [
+          {
+            date: "2026-06-21T04:00Z",
+            status: { type: { completed: true, shortDetail: "FT" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "4", team: { displayName: "Japan" } },
+              { homeAway: "away", score: "0", team: { displayName: "Tunisia" } },
+            ] }],
+          },
+          {
+            date: "2026-06-21T16:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Spain" } },
+              { homeAway: "away", score: "0", team: { displayName: "Saudi Arabia" } },
+            ] }],
+          },
+          {
+            date: "2026-06-21T19:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Belgium" } },
+              { homeAway: "away", score: "0", team: { displayName: "Iran" } },
+            ] }],
+          },
+          {
+            date: "2026-06-21T22:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Uruguay" } },
+              { homeAway: "away", score: "0", team: { displayName: "Cape Verde" } },
+            ] }],
+          },
+          {
+            date: "2026-06-22T01:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "New Zealand" } },
+              { homeAway: "away", score: "0", team: { displayName: "Egypt" } },
+            ] }],
+          },
+          {
+            date: "2026-06-22T17:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Argentina" } },
+              { homeAway: "away", score: "0", team: { displayName: "Austria" } },
+            ] }],
+          },
+        ],
+      })));
+
+      const result = await createSportsScoreTool().execute("test", {
+        query: "今晚世界杯有几场比赛",
+        maxResults: 5,
+      });
+      const text = result.content[0].text;
+
+      expect(searchMock.runSearchQuery).not.toHaveBeenCalled();
+      expect(result.details.provider).toBe("espn_scoreboard");
+      expect(text).toContain("匹配比赛: 4 场");
+      expect(text).toContain("北京时间");
+      expect(text).toContain("Spain vs Saudi Arabia");
+      expect(text).toContain("Belgium vs Iran");
+      expect(text).toContain("Uruguay vs Cape Verde");
+      expect(text).toContain("New Zealand vs Egypt");
+      expect(text).not.toContain("Japan 4-0 Tunisia");
+      expect(text).not.toContain("Argentina vs Austria");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("filters World Cup scoreboard by mentioned teams before answering match-existence questions", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-06-21T15:30:00+08:00"));
+      vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+        events: [
+          {
+            date: "2026-06-21T16:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Spain" } },
+              { homeAway: "away", score: "0", team: { displayName: "Saudi Arabia" } },
+            ] }],
+          },
+          {
+            date: "2026-06-17T19:00Z",
+            status: { type: { completed: true, shortDetail: "FT" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "4", team: { displayName: "England" } },
+              { homeAway: "away", score: "2", team: { displayName: "Croatia" } },
+            ] }],
+          },
+        ],
+      })));
+
+      const prompt = "查一下今晚英格兰与克罗地亚是否有比赛";
+      expect(inferReportResearchKind(prompt)).toBe("sports");
+      const result = await createSportsScoreTool().execute("test", {
+        query: prompt,
+        maxResults: 5,
+      });
+      const text = result.content[0].text;
+      const answer = buildDirectResearchAnswer("sports", `【体育比分工具资料】\n\n${text}`, prompt);
+
+      expect(searchMock.runSearchQuery).not.toHaveBeenCalled();
+      expect(result.details.provider).toBe("espn_scoreboard");
+      expect(text).toContain("matched: 0");
+      expect(answer).toContain("没有在 FIFA World Cup");
+      expect(answer).toContain("今晚没有这场比赛");
+      expect(answer).not.toContain("Spain vs Saudi Arabia");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses ESPN scoreboard directly for World Cup semifinal dates", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      events: [
+        {
+          date: "2026-07-14T19:00Z",
+          status: { type: { completed: false, shortDetail: "Scheduled" } },
+          competitions: [{ competitors: [
+            { homeAway: "home", score: "0", team: { displayName: "Quarterfinal 1 Winner" } },
+            { homeAway: "away", score: "0", team: { displayName: "Quarterfinal 2 Winner" } },
+          ] }],
+        },
+        {
+          date: "2026-07-15T19:00Z",
+          status: { type: { completed: false, shortDetail: "Scheduled" } },
+          competitions: [{ competitors: [
+            { homeAway: "home", score: "0", team: { displayName: "Quarterfinal 3 Winner" } },
+            { homeAway: "away", score: "0", team: { displayName: "Quarterfinal 4 Winner" } },
+          ] }],
+        },
+      ],
+    })));
+
+    const result = await createSportsScoreTool().execute("test", {
+      query: "世界杯半决赛在哪一天？",
+      maxResults: 5,
+    });
+    const text = result.content[0].text;
+
+    expect(searchMock.runSearchQuery).not.toHaveBeenCalled();
+    expect(result.details.provider).toBe("espn_scoreboard");
+    expect(text).toContain("2026/07/15");
+    expect(text).toContain("2026/07/16");
+    expect(text).toContain("Quarterfinal 1 Winner vs Quarterfinal 2 Winner");
+  });
+
   it("does not inject weak HTML fallback results as sports score evidence", async () => {
     searchMock.runSearchQuery.mockResolvedValue({
       provider: "bing-html",
@@ -479,23 +694,21 @@ describe("realtime market/weather tools", () => {
       results: [{
         title: "今晚7:35，武汉吃黄鳝",
         url: "https://example.com/local-league",
-        snippet: "地方联赛新闻，不是世界杯赛程。",
+        snippet: "地方联赛新闻，不是中超赛程。",
       }],
     });
 
     const result = await createSportsScoreTool().execute("test", {
-      query: "世界杯今天有什么比赛吗",
+      query: "中超今天有什么比赛吗",
       maxResults: 5,
     });
     const text = result.content[0].text;
 
-    expect(searchMock.runSearchQuery).toHaveBeenCalledWith(
-      expect.stringContaining("世界杯今天有什么比赛吗"),
-      5,
-      { sceneHint: "sports" },
-    );
-    expect(result.details.provider).toBe("bing-html");
+    expect(searchMock.runSearchQuery).not.toHaveBeenCalled();
+    expect(result.details.provider).toBe("espn_scoreboard");
+    expect(result.details.directSourceStatus).toBe("unavailable");
     expect(text).toContain("体育查询结果");
+    expect(text).toContain("directSourceStatus: unavailable");
     expect(text).not.toContain("武汉吃黄鳝");
     expect(text).not.toContain("地方联赛新闻");
   });
@@ -512,15 +725,16 @@ describe("realtime market/weather tools", () => {
     });
 
     const result = await createSportsScoreTool().execute("test", {
-      query: "世界杯今天有什么比赛吗",
+      query: "中超今天有什么比赛吗",
       maxResults: 5,
     });
     const text = result.content[0].text;
 
+    expect(searchMock.runSearchQuery).not.toHaveBeenCalled();
     expect(fetchContentMock.fetchWebContent).not.toHaveBeenCalled();
-    expect(result.details.provider).toBe("lynn-brain/glm");
-    expect(text).toContain("搜索摘要");
-    expect(text).toContain("加拿大队1-1战平波黑队");
+    expect(result.details.provider).toBe("espn_scoreboard");
+    expect(text).toContain("directSourceStatus: unavailable");
+    expect(text).not.toContain("加拿大队1-1战平波黑队");
     expect(text).not.toContain("https://www.baidu.com/s");
   });
 
@@ -582,6 +796,42 @@ describe("realtime market/weather tools", () => {
     expect(text).toContain("21~28°C");
     expect(text).toContain("降雨概率 25%");
     expect(text).toContain("降雨判断: 有降雨可能");
+  });
+
+  it("uses Open-Meteo air quality data for AQI questions", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      const href = String(url);
+      if (href.includes("air-quality-api.open-meteo.com")) {
+        expect(decodeURIComponent(href)).toContain("latitude=39.9042");
+        return jsonResponse({
+          current: {
+            time: "2026-06-21T16:00",
+            us_aqi: 42,
+            pm2_5: 8.1,
+            pm10: 21.4,
+            ozone: 82.5,
+            nitrogen_dioxide: 13.2,
+          },
+        });
+      }
+      throw new Error(`unexpected fetch ${href}`);
+    }));
+
+    const result = await createWeatherTool().execute("test", {
+      query: "北京今天空气质量怎么样？",
+    });
+    const text = result.content[0].text;
+
+    expect(result.details.provider).toBe("open-meteo-air-quality");
+    expect(result.details.location).toBe("北京");
+    expect(text).toContain("北京 · 北京 当前空气质量");
+    expect(text).toContain("AQI(US): 42（优）");
+    expect(text).toContain("PM2.5: 8.1");
+
+    const answer = buildDirectResearchAnswer("weather", text, "北京今天空气质量怎么样？");
+    expect(answer).toContain("北京空气质量");
+    expect(answer).toContain("AQI(US) 42");
+    expect(answer).toContain("PM2.5 8.1");
   });
 
   it("extracts the city from spoken ASR filler before weather lookup", async () => {
@@ -842,7 +1092,12 @@ describe("realtime market/weather tools", () => {
     expect(text).not.toContain("生活指数 城市导航");
 
     const direct = buildDirectResearchAnswer("weather", text, "今天上海天气如何");
-    expect(direct).toContain("不会把天气网站首页或导航菜单当成有效结果");
+    expect(direct).toContain("上海本轮 weather 调用在上游网络层失败");
+    expect(direct).toContain("只报告源状态");
+    expect(direct).toContain("不把天气网站首页、导航菜单或搜索噪声当作结论");
     expect(direct).toContain("中国天气网");
+    const normalized = direct.replace(/\s+/g, "");
+    expect(normalized).not.toMatch(/(?:没有|未包含|不包含|缺少|暂无|不支持).{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问).{0,24}(?:工具|功能|能力|接口)/u);
+    expect(normalized).not.toMatch(/(?:无法|不能|没法|不支持).{0,24}(?:实时|在线|联网|访问网页|查询天气|查询股价|查询汇率|查询比分|查询赛程)/u);
   });
 });

@@ -7,6 +7,7 @@ export type ResearchAnswerKind =
   | "sports"
   | "market"
   | "news"
+  | "public_data"
   | "generic"
   | (string & {});
 

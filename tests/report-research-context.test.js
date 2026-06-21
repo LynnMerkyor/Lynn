@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildReportResearchContext,
   buildDirectResearchAnswer,
   extractStockTargetForResearch,
   inferReportResearchKind,
@@ -36,6 +37,49 @@ describe("report research context intent", () => {
 
   it("detects non-stock evidence-chain research as generic instead of forcing a fixed template", () => {
     expect(inferReportResearchKind("帮我研究一下这个品牌在日本市场的竞品和价格区间")).toBe("generic");
+    expect(inferReportResearchKind("中国主要私董会的人数和收费大概多少？")).toBe("public_data");
+  });
+
+  it("prefetches OpenAI model-release questions with one official-domain search", async () => {
+    const calls = [];
+    const context = await buildReportResearchContext("查一下 OpenAI 最近发布了什么新模型，给一句摘要", {
+      toolWrappers: {
+        webSearch: async (query, limit, options) => {
+          calls.push({ query, limit, options });
+          return {
+            provider: "mock-search",
+            results: [{
+              title: "Introducing GPT-5.5 - OpenAI",
+              url: "https://openai.com/index/introducing-gpt-5-5/",
+              snippet: "Published: last month; GPT-5.5 and GPT-5.5 Pro are now available in ChatGPT and Codex.",
+            }],
+          };
+        },
+      },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].query).toContain("site:openai.com");
+    expect(context).toContain("【OpenAI 官方模型发布资料】");
+    expect(context).toContain("Introducing GPT-5.5");
+  });
+
+  it("builds a one-sentence OpenAI model-release direct answer from official context", () => {
+    const context = [
+      "【OpenAI 官方模型发布资料】",
+      "查询：site:openai.com OpenAI latest model release GPT model 2026",
+      "1. Introducing GPT-5.5 - OpenAI",
+      "来源: openai.com",
+      "检索窗口: OpenAI 官方资料",
+      "URL: https://openai.com/index/introducing-gpt-5-5/",
+      "摘要: Published: last month; GPT-5.5 and GPT-5.5 Pro are now available in ChatGPT and Codex.",
+    ].join("\n");
+
+    const answer = buildDirectResearchAnswer("news", context, "查一下 OpenAI 最近发布了什么新模型，给一句摘要");
+    expect(answer).toContain("GPT-5.5");
+    expect(answer).toContain("一句话摘要");
+    expect(answer).toContain("https://openai.com/index/introducing-gpt-5-5/");
+    expect(answer).not.toContain("数据来源/判断依据");
   });
 
   it("builds a direct gold answer when market prefetch already contains prices", () => {
@@ -59,6 +103,124 @@ describe("report research context intent", () => {
     expect(answer).toContain("1423-1469 元/克");
     expect(answer).toContain("1070.7-1077.66 元/克");
     expect(answer).toContain("1046 元/克");
+  });
+
+  it("builds a direct FX answer when market prefetch contains an exchange rate", () => {
+    const context = [
+      "【行情工具资料】",
+      "财经/行情快照（via open.er-api.com）",
+      "查询：美元人民币汇率现在多少？",
+      "类型：fx",
+      "",
+      "1. USD/CNY 汇率",
+      "来源：open.er-api.com",
+      "https://open.er-api.com/v6/latest/USD",
+      "- USD/CNY：1 USD = 6.7890 CNY",
+      "- CNY/USD：1 CNY = 0.147297 USD",
+      "- 更新时间：Sun, 21 Jun 2026 00:02:31 +0000",
+    ].join("\n");
+
+    const answer = buildDirectResearchAnswer("market", context, "美元人民币汇率现在多少？");
+    expect(answer).toContain("1 USD = 6.7890 CNY");
+    expect(answer).toContain("1 CNY = 0.147297 USD");
+    expect(answer).toContain("最近可用汇率快照");
+  });
+
+  it("builds a bounded public-data answer for private-board pricing questions", () => {
+    const context = [
+      "【研究资料】",
+      "查询：中国主要私董会的人数和收费大概多少？ 最新 资料 数据 来源",
+      "1. 领教工坊私董会",
+      "摘要: 每组 10-20 人，年费约 10万-20万元。",
+      "2. 正和岛会员",
+      "摘要: 小组 8-16 人，入会费 3万-20万元。",
+    ].join("\n");
+
+    const answer = buildDirectResearchAnswer("public_data", context, "中国主要私董会的人数和收费大概多少？");
+    expect(answer).toContain("10-20 人/组");
+    expect(answer).toContain("8万-20万元/年");
+    expect(answer).toContain("公开资料里私董会的收费通常不透明");
+    expect(answer).toContain("本轮搜索中可参考的数字线索");
+  });
+
+  it("builds a direct sports answer from ESPN scoreboard context", () => {
+    const context = [
+      "【体育比分工具资料】",
+      "",
+      "体育查询结果 (ESPN scoreboard)",
+      "provider: espn_scoreboard",
+      "league: FIFA World Cup",
+      "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260621-20260622",
+      "时间口径: 北京时间",
+      "匹配比赛: 4 场",
+      "",
+      "- 2026/06/22 00:00 Spain vs Saudi Arabia (Scheduled)",
+      "- 2026/06/22 03:00 Belgium vs Iran (Scheduled)",
+    ].join("\n");
+
+    const answer = buildDirectResearchAnswer("sports", context, "今晚世界杯有几场比赛");
+    expect(answer).toContain("共 4 场");
+    expect(answer).toContain("Spain vs Saudi Arabia");
+    expect(answer).toContain("来源：https://site.api.espn.com");
+  });
+
+  it("builds a direct sports table when the user asks for table output", () => {
+    const context = [
+      "【体育比分工具资料】",
+      "",
+      "体育查询结果 (ESPN scoreboard)",
+      "provider: espn_scoreboard",
+      "league: FIFA World Cup",
+      "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260621-20260622",
+      "时间口径: 北京时间",
+      "匹配比赛: 4 场",
+      "",
+      "- 2026/06/22 00:00 Spain vs Saudi Arabia (Scheduled)",
+      "- 2026/06/22 03:00 Belgium vs Iran (Scheduled)",
+    ].join("\n");
+
+    const answer = buildDirectResearchAnswer("sports", context, "查询今晚世界杯赛程，并最后用一个小表格输出");
+    expect(answer).toContain("| 时间（北京时间） | 对阵/比分 | 状态 |");
+    expect(answer).toContain("| 2026/06/22 00:00 | Spain vs Saudi Arabia | Scheduled |");
+    expect(answer).toContain("来源：https://site.api.espn.com");
+  });
+
+  it("closes sports answers with an explicit no-evidence boundary when ESPN has no match", () => {
+    const context = [
+      "【体育比分工具资料】",
+      "",
+      "体育查询结果 (ESPN scoreboard)",
+      "provider: espn_scoreboard",
+      "league: NBA",
+      "source: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=20260614-20260622",
+      "dateRange: 20260614-20260622",
+      "时间口径: 北京时间",
+      "matched: 0",
+    ].join("\n");
+
+    const answer = buildDirectResearchAnswer("sports", context, "今年 NBA 马刺夺冠了吗，还是尼克斯？");
+    expect(answer).toContain("没有匹配到 NBA");
+    expect(answer).toContain("不能确认马刺或尼克斯");
+    expect(answer).toContain("不会用猜测补答案");
+  });
+
+  it("closes sports direct-source failures without using generic search evidence", () => {
+    const context = [
+      "【体育比分工具资料】",
+      "",
+      "体育查询结果 (ESPN scoreboard)",
+      "provider: espn_scoreboard",
+      "query: 昨晚世界杯最新的比赛结果",
+      "directSourceStatus: unavailable",
+      "error: ESPN scoreboard HTTP 503",
+      "matched: 0",
+    ].join("\n");
+
+    const answer = buildDirectResearchAnswer("sports", context, "昨晚世界杯最新的比赛结果");
+    expect(answer).toContain("专用体育比分源返回失败");
+    expect(answer).toContain("ESPN scoreboard HTTP 503");
+    expect(answer).toContain("不会用泛搜索摘要");
+    expect(answer).not.toContain("百度百科");
   });
 
   it("builds a direct market answer with multiple US tickers instead of only the first quote", () => {

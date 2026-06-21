@@ -44,6 +44,19 @@ describe('tool-exec dispatcher', () => {
     expect(queries.some((q) => q.includes('近7天 最新'))).toBe(true);
   });
 
+  it('uses one official-domain fast path for OpenAI model release live_news', async () => {
+    vi.mocked(webSearch).mockClear();
+    vi.mocked(webSearch).mockResolvedValueOnce('1. Introducing GPT-5.5 - OpenAI\\nURL: https://openai.com/index/introducing-gpt-5-5/\\n摘要: GPT-5.5 and GPT-5.5 Pro are now available.');
+
+    const r = await executeServerTool('live_news', { query: '查一下 OpenAI 最近发布了什么新模型，给一句摘要' });
+    const queries = vi.mocked(webSearch).mock.calls.map(([q]) => String(q));
+
+    expect(r).toContain('OpenAI 官方模型发布资料');
+    expect(r).toContain('GPT-5.5');
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).toContain('site:openai.com');
+  });
+
   it('returns ESPN scoreboard evidence for recognized sports score queries', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,

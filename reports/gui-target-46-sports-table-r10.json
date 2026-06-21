@@ -1,0 +1,54 @@
+{
+  "outputPath": "/Users/lynn/Downloads/Lynn/reports/gui-target-46-sports-table-r10.json",
+  "gateCurrentDate": "2026-06-21",
+  "total": 1,
+  "counts": {
+    "ok": 1
+  },
+  "providerCounts": {
+    "unknown": 1
+  },
+  "toolRuns": 1,
+  "stepExecuteRuns": 0,
+  "avgMs": 1752,
+  "failures": [],
+  "generatedAt": "2026-06-21T10:03:07.552Z",
+  "results": [
+    {
+      "index": 46,
+      "category": "mixed",
+      "prompt": "查询今晚世界杯赛程，并最后用一个小表格输出",
+      "startedAt": 1782036183291,
+      "elapsedMs": 1752,
+      "text": "已匹配到的赛程（北京时间），共 4 场：\n| 时间（北京时间） | 对阵/比分 | 状态 |\n|---|---|---|\n| 2026/06/22 00:00 | Spain vs Saudi Arabia | Scheduled |\n| 2026/06/22 03:00 | Belgium vs Iran | Scheduled |\n| 2026/06/22 06:00 | Uruguay vs Cape Verde | Scheduled |\n| 2026/06/22 09:00 | New Zealand vs Egypt | Scheduled |\n\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260621-20260622\n数据来源/判断依据\n- 工具：research_prefetch\n- 时间：2026-06-21 18:03（本机时间）\n- 来源：site.api.espn.com\n- 依据：系统预取资料中的可用证据。\n- 注意：资料不足时应继续补充来源再下结论。",
+      "textChars": 520,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-03-03-294Z_5e60b09c-8c40-4d84-bf4c-63f2246de44e.jsonl\",\"clientMessageId\":\"gui-50-46-1782036183306\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-03-03-294Z_5e60b09c-8c40-4d84-bf4c-63f2246de44e.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"sports_score\",\"args\":{\"query\":\"查询今晚世界杯赛程，并最后用一个小表格输出\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-03-03-294Z_5e60b09c-8c40-4d84-bf4c-63f2246de44e.jsonl\",\"streamId\":\"s_mqnmbz7z_hm446e\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"sports_score\",\"success\":true,\"summary\":{\"outputPreview\":\"【体育比分工具资料】\\n体育查询结果 (ESPN scoreboard)\\nprovider: espn_scoreboard\\nleague: FIFA World Cup\\nsource: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260621-2026062\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-03-03-294Z_5e60b09c-8c40-4d84-bf4c-63f2246de44e.jsonl\",\"streamId\":\"s_mqnmbz7z_hm446e\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"已匹配到的赛程（北京时间），共 4 场：\\n| 时间（北京时间） | 对阵/比分 | 状态 |\\n|---|---|---|\\n| 2026/06/22 00:00 | Spain vs Saudi Arabia | Scheduled |\\n| 2026/06/22 03:00 | Belgium vs Iran | Scheduled |\\n| 2026/06/22 06:00 | Uruguay vs Cape Verde | Scheduled |\\n| 2026/06/22 09:00 | New Zealand vs Egypt | Scheduled |\\n\\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260621-20260622\\n数据来源/判断依据\\n- 工具：research_prefetch\\n- 时间：2026-06-21 18:03（本机时间）\\n- 来源：site.api.espn.com\\n- 依据：系统预取资料中的可用证据。\\n- 注意：资料不足时应继续补充来源再下结论。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-03-03-294Z_5e60b09c-8c40-4d84-bf4c-63f2246de44e.jsonl\",\"streamId\":\"s_mqnmbz7z_hm446e\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-03-03-294Z_5e60b09c-8c40-4d84-bf4c-63f2246de44e.jsonl\",\"streamId\":\"s_mqnmbz7z_hm446e\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-03-03-294Z_5e60b09c-8c40-4d84-bf4c-63f2246de44e.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

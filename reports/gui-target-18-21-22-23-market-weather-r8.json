@@ -1,0 +1,165 @@
+{
+  "outputPath": "/Users/lynn/Downloads/Lynn/reports/gui-target-18-21-22-23-market-weather-r8.json",
+  "gateCurrentDate": "2026-06-21",
+  "total": 4,
+  "counts": {
+    "ok": 4
+  },
+  "providerCounts": {
+    "unknown": 3,
+    "deepseek-chat": 1
+  },
+  "toolRuns": 4,
+  "stepExecuteRuns": 0,
+  "avgMs": 2359,
+  "failures": [],
+  "generatedAt": "2026-06-21T08:28:51.467Z",
+  "results": [
+    {
+      "index": 18,
+      "category": "realtime",
+      "prompt": "今日金价是多少？",
+      "startedAt": 1782030522018,
+      "elapsedMs": 1505,
+      "text": "根据刚刚检索到的 2026-06-21 黄金价格：\n- 国际现货黄金（XAU/USD） 907.29 元/克（约 4156.7 美元/盎司，USD/CNY 6.7890）\n看投资基础价优先参考上金所；看深圳批发/工费前口径可参考水贝；买首饰重点看品牌金店；看回收就看回收价。\n说明：以上是刚检索到的网页报价汇总，不同品牌门店、工费和地区会有差异，不构成投资或购买建议。\n数据来源/判断依据\n- 工具：stock_market\n- 时间：2026-06-21 16:28（本机时间）\n- 来源：Gold API 实时贵金属报价、api.gold-api.com\n- 依据：黄金/白银行情与品牌报价聚合结果，优先使用含明确数字的最近可用报价。\n- 注意：门店、地区、工费和更新时间会造成差异，不构成投资或购买建议。",
+      "textChars": 355,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "stock_market",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "stock_market"
+        },
+        {
+          "event": "end",
+          "name": "stock_market",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-42-020Z_70031de9-8d4b-40b4-b5a8-d3fc89cd872a.jsonl\",\"clientMessageId\":\"gui-50-18-1782030522025\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-42-020Z_70031de9-8d4b-40b4-b5a8-d3fc89cd872a.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"stock_market\",\"args\":{\"query\":\"今日金价是多少？\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-42-020Z_70031de9-8d4b-40b4-b5a8-d3fc89cd872a.jsonl\",\"streamId\":\"s_mqniymy3_nrhfk3\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"stock_market\",\"success\":true,\"summary\":{\"outputPreview\":\"【行情工具资料】\\n黄金价格快照（via gold-api.com）\\n查询：今日金价是多少？\\n可核验到的黄金价格（2026-06-21）：\\n- 国际现货黄金（XAU/USD） 907.29 元/克（约 4156.7 美元/盎司，USD/CNY 6.7890）\\n参考来源：\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-42-020Z_70031de9-8d4b-40b4-b5a8-d3fc89cd872a.jsonl\",\"streamId\":\"s_mqniymy3_nrhfk3\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"根据刚刚检索到的 2026-06-21 黄金价格：\\n- 国际现货黄金（XAU/USD） 907.29 元/克（约 4156.7 美元/盎司，USD/CNY 6.7890）\\n看投资基础价优先参考上金所；看深圳批发/工费前口径可参考水贝；买首饰重点看品牌金店；看回收就看回收价。\\n说明：以上是刚检索到的网页报价汇总，不同品牌门店、工费和地区会有差异，不构成投资或购买建议。\\n数据来源/判断依据\\n- 工具：stock_market\\n- 时间：2026-06-21 16:28（本机时间）\\n- 来源：Gold API 实时贵金属报价、api.gold-api.com\\n- 依据：黄金/白银行情与品牌报价聚合结果，优先使用含明确数字的最近可用报价。\\n- 注意：门店、地区、工费和更新时间会造成差异，不构成投资或购买建议。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-42-020Z_70031de9-8d4b-40b4-b5a8-d3fc89cd872a.jsonl\",\"streamId\":\"s_mqniymy3_nrhfk3\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-42-020Z_70031de9-8d4b-40b4-b5a8-d3fc89cd872a.jsonl\",\"streamId\":\"s_mqniymy3_nrhfk3\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-42-020Z_70031de9-8d4b-40b4-b5a8-d3fc89cd872a.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 21,
+      "category": "realtime",
+      "prompt": "美元人民币汇率现在多少？",
+      "startedAt": 1782030523527,
+      "elapsedMs": 953,
+      "text": "当前 USD/CNY 汇率：1 USD = 6.789 CNY。\n反向约为 1 CNY = 0.147297 USD。\n更新时间：Sun, 21 Jun 2026 00:02:31 +0000。\n说明：这是刚刚获取到的最近可用汇率快照，银行结售汇、支付平台和实时交易价会有点差。\n数据来源/判断依据\n- 工具：stock_market\n- 时间：2026-06-21 16:28（本机时间）\n- 来源：open.er-api.com\n- 依据：行情工具返回的最近可用股价、指数或板块候选数据。\n- 注意：行情展示不构成投资建议；交易级实时性请用券商或交易所源核验。",
+      "textChars": 282,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "stock_market",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "stock_market"
+        },
+        {
+          "event": "end",
+          "name": "stock_market",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-43-531Z_cb01137f-32fb-4f18-8a08-c15dc1a21015.jsonl\",\"clientMessageId\":\"gui-50-21-1782030523542\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-43-531Z_cb01137f-32fb-4f18-8a08-c15dc1a21015.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"stock_market\",\"args\":{\"query\":\"美元人民币汇率现在多少？\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-43-531Z_cb01137f-32fb-4f18-8a08-c15dc1a21015.jsonl\",\"streamId\":\"s_mqniyo47_fo6khd\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"stock_market\",\"success\":true,\"summary\":{\"outputPreview\":\"【行情工具资料】\\n财经/行情快照（via open.er-api.com）\\n查询：美元人民币汇率现在多少？\\n类型：fx\\n说明：以下结果来自结构化源、网页搜索与正文抓取汇总；关键价格、涨跌幅和时间点建议至少交叉验证 2 个来源。\\n1. USD/CNY 汇率\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-43-531Z_cb01137f-32fb-4f18-8a08-c15dc1a21015.jsonl\",\"streamId\":\"s_mqniyo47_fo6khd\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"当前 USD/CNY 汇率：1 USD = 6.789 CNY。\\n反向约为 1 CNY = 0.147297 USD。\\n更新时间：Sun, 21 Jun 2026 00:02:31 +0000。\\n说明：这是刚刚获取到的最近可用汇率快照，银行结售汇、支付平台和实时交易价会有点差。\\n数据来源/判断依据\\n- 工具：stock_market\\n- 时间：2026-06-21 16:28（本机时间）\\n- 来源：open.er-api.com\\n- 依据：行情工具返回的最近可用股价、指数或板块候选数据。\\n- 注意：行情展示不构成投资建议；交易级实时性请用券商或交易所源核验。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-43-531Z_cb01137f-32fb-4f18-8a08-c15dc1a21015.jsonl\",\"streamId\":\"s_mqniyo47_fo6khd\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-43-531Z_cb01137f-32fb-4f18-8a08-c15dc1a21015.jsonl\",\"streamId\":\"s_mqniyo47_fo6khd\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-43-531Z_cb01137f-32fb-4f18-8a08-c15dc1a21015.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 22,
+      "category": "realtime",
+      "prompt": "深圳明天下雨吗？",
+      "startedAt": 1782030524483,
+      "elapsedMs": 4804,
+      "text": "明天（6月22日）深圳预报是 **附近有零星小雨**，降雨判断标记为「有降雨可能」。所以明天大概率会有降雨，但强度不高，属于零星小雨级别。出门建议带伞，体感温度高（今天体感已达 37°C），明天湿热感应该也不会差太多。",
+      "textChars": 109,
+      "thinkingChars": 272,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "weather",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "weather"
+        },
+        {
+          "event": "end",
+          "name": "weather",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 82,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "96.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":61}\n{\"type\":\"thinking_delta\",\"delta\":\"有\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":62}\n{\"type\":\"thinking_delta\",\"delta\":\"降雨\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":63}\n{\"type\":\"thinking_delta\",\"delta\":\"可能\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":64}\n{\"type\":\"thinking_delta\",\"delta\":\"\\\"\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":65}\n{\"type\":\"thinking_delta\",\"delta\":\" (\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":66}\n{\"type\":\"thinking_delta\",\"delta\":\"possible\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":67}\n{\"type\":\"thinking_delta\",\"delta\":\" rainfall\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":68}\n{\"type\":\"thinking_delta\",\"delta\":\").\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":69}\n{\"type\":\"thinking_delta\",\"delta\":\" Let\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":70}\n{\"type\":\"thinking_delta\",\"delta\":\" me\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":71}\n{\"type\":\"thinking_delta\",\"delta\":\" give\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":72}\n{\"type\":\"thinking_delta\",\"delta\":\" a\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":73}\n{\"type\":\"thinking_delta\",\"delta\":\" direct\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":74}\n{\"type\":\"thinking_delta\",\"delta\":\" answer\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":75}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":76}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":77}\n{\"type\":\"text_delta\",\"delta\":\"明天（6月22日）深圳预报是 **附近有零星小雨**，降雨判断标记为「有降雨可能」。所以明天大概率会有降雨，但强度不高，属于零星小雨级别。出门建议带伞，体感温度高（今天体感已达 37°C），明天湿热感应该也不会差太多。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":78}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\",\"streamId\":\"s_mqniyoup_atl3kt\",\"seq\":79}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 23,
+      "category": "realtime",
+      "prompt": "北京今天空气质量怎么样？",
+      "startedAt": 1782030529290,
+      "elapsedMs": 2173,
+      "text": "北京空气质量：AQI(US) 151（不健康）；PM2.5 35.7 µg/m³；PM10 73.1 µg/m³；更新时间 2026-06-21T16:00。\n说明：这是刚刚通过 Open-Meteo Air Quality 拿到的空气质量快照，AQI 口径为 US AQI；本地站点可能有延迟或差异，敏感人群出门前可再核验本地空气质量 App。\n数据来源/判断依据\n- 工具：weather\n- 时间：2026-06-21 16:28（本机时间）\n- 依据：天气工具返回的预报快照，按用户问法优先选择今天/明天/后天对应日期。\n- 注意：天气预报会滚动变化，出门前建议再看本地天气 App 或雷达。",
+      "textChars": 300,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "weather",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "weather"
+        },
+        {
+          "event": "end",
+          "name": "weather",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 8,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-49-300Z_cfc82ffe-b2ec-4ec3-8a28-4325b650b919.jsonl\",\"clientMessageId\":\"gui-50-23-1782030529313\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-49-300Z_cfc82ffe-b2ec-4ec3-8a28-4325b650b919.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"weather\",\"args\":{\"query\":\"北京今天空气质量怎么样？\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-49-300Z_cfc82ffe-b2ec-4ec3-8a28-4325b650b919.jsonl\",\"streamId\":\"s_mqniyskj_mbtlpr\",\"seq\":1}\n{\"type\":\"session_title\",\"title\":\"深圳明天有雨\",\"path\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-44-486Z_537e3ef7-02d7-483a-9385-ff6b7447b696.jsonl\"}\n{\"type\":\"tool_end\",\"name\":\"weather\",\"success\":true,\"summary\":{\"outputPreview\":\"【天气工具资料】\\n北京 · 北京 当前空气质量\\n- AQI(US): 151（不健康）\\n- PM2.5: 35.7 µg/m³\\n- PM10: 73.1 µg/m³\\n- O3: 115 µg/m³\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-49-300Z_cfc82ffe-b2ec-4ec3-8a28-4325b650b919.jsonl\",\"streamId\":\"s_mqniyskj_mbtlpr\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"北京空气质量：AQI(US) 151（不健康）；PM2.5 35.7 µg/m³；PM10 73.1 µg/m³；更新时间 2026-06-21T16:00。\\n说明：这是刚刚通过 Open-Meteo Air Quality 拿到的空气质量快照，AQI 口径为 US AQI；本地站点可能有延迟或差异，敏感人群出门前可再核验本地空气质量 App。\\n数据来源/判断依据\\n- 工具：weather\\n- 时间：2026-06-21 16:28（本机时间）\\n- 依据：天气工具返回的预报快照，按用户问法优先选择今天/明天/后天对应日期。\\n- 注意：天气预报会滚动变化，出门前建议再看本地天气 App 或雷达。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-49-300Z_cfc82ffe-b2ec-4ec3-8a28-4325b650b919.jsonl\",\"streamId\":\"s_mqniyskj_mbtlpr\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-49-300Z_cfc82ffe-b2ec-4ec3-8a28-4325b650b919.jsonl\",\"streamId\":\"s_mqniyskj_mbtlpr\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-28-49-300Z_cfc82ffe-b2ec-4ec3-8a28-4325b650b919.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

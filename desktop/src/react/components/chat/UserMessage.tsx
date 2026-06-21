@@ -59,14 +59,6 @@ export const UserMessage = memo(function UserMessage({ message, showAvatar }: Pr
     }
   }, [message.text]);
 
-  const handlePasteToInput = useCallback(() => {
-    const text = String(message.text || '').trim();
-    if (!text) return;
-    window.dispatchEvent(new CustomEvent('hana-paste-to-input', {
-      detail: { text, source: 'user-message' },
-    }));
-  }, [message.text]);
-
   // #13: edit-and-resend — like paste but with `editResend:true` so InputArea can auto-send after edit.
   // InputArea handler listens for hana-paste-to-input + reads detail.editResend → focuses for edit then
   // submits on next Enter. Falls back to plain paste behavior if listener doesn't honor the flag.
@@ -136,14 +128,6 @@ export const UserMessage = memo(function UserMessage({ message, showAvatar }: Pr
                     </>
                 }
               </svg>
-            </button>
-            <button
-              className={`${styles.msgCopyBtn} ${styles.msgPasteBtn}`}
-              onClick={handlePasteToInput}
-              title={tt('common.pasteToInputTitle', '粘贴到输入框')}
-              aria-label={tt('common.pasteToInputTitle', '粘贴到输入框')}
-            >
-              {tt('common.pasteToInput', '粘贴')}
             </button>
             {/* #13: edit-and-resend — fixes typos without retyping the whole message */}
             <button

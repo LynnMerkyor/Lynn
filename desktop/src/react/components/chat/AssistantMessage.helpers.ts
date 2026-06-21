@@ -6,8 +6,7 @@
  */
 
 import type { ChatMessage, ContentBlock } from '../../stores/chat-types';
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import { resolveUiI18nText } from '../../utils/ui-i18n';
 
 export interface ReviewConfigAgent {
   id: string;
@@ -71,9 +70,24 @@ export function formatProviderRouteName(id?: string | null): string {
   const raw = String(id || '').trim();
   if (!raw) return '';
   const lower = raw.toLowerCase();
+  if (lower.includes('deepseek') || /\bds\b/.test(lower)) {
+    if (lower.includes('v4') && lower.includes('flash')) return 'DS V4 Flash';
+    if (lower.includes('v4') && lower.includes('pro')) return 'DS V4 Pro';
+    if (lower.includes('reasoner')) return 'DeepSeek Reasoner';
+    if (lower.includes('chat')) return 'DeepSeek Chat';
+    return 'DeepSeek';
+  }
+  if (lower.includes('glm')) {
+    if (lower.includes('5') && lower.includes('turbo')) return 'GLM 5.0 Turbo';
+    if (lower.includes('5')) return 'GLM 5';
+    if (lower.includes('4') && lower.includes('flash')) return 'GLM 4 Flash';
+    return 'GLM';
+  }
+  if (lower.includes('step')) {
+    if (lower.includes('3.7') || lower.includes('37')) return 'Step 3.7 Flash';
+    return 'StepFun';
+  }
   if (lower.includes('spark') || lower.includes('apex')) return 'Spark';
-  if (lower.includes('step')) return 'StepFun';
-  if (lower.includes('deepseek')) return 'DeepSeek';
   if (lower.includes('openai') || lower.includes('gpt')) return 'OpenAI';
   if (lower.includes('local')) return 'Local';
   return raw
@@ -86,24 +100,32 @@ export function formatProviderRouteName(id?: string | null): string {
 
 export function providerRouteLabel(route?: ChatMessage['providerRoute'] | null): string | null {
   if (!route?.activeProvider) return null;
-  const fallback = (route.fallbackFrom || []).map((hop) => formatProviderRouteName(hop.id)).filter(Boolean);
-  if (fallback.length === 0) return null;
-  const chain = [...fallback, formatProviderRouteName(route.activeProvider)].filter(Boolean);
-  return Array.from(new Set(chain)).join(' -> ');
+  return formatProviderRouteName(route.activeProvider) || route.activeProvider;
 }
 
 export function providerRouteTitle(route?: ChatMessage['providerRoute'] | null): string | undefined {
   if (!route?.activeProvider) return undefined;
   const active = formatProviderRouteName(route.activeProvider) || route.activeProvider;
   const fallback = route.fallbackFrom || [];
-  if (fallback.length === 0) return `当前回答模型：${active}`;
+  if (fallback.length === 0) {
+    return resolveUiI18nText('chat.providerRouteCurrent', { model: active });
+  }
+  const fullChain = Array.from(new Set([
+    ...fallback.map((hop) => formatProviderRouteName(hop.id) || hop.id).filter(Boolean),
+    active,
+  ])).join(' -> ');
   const details = fallback
     .map((hop) => {
       const name = formatProviderRouteName(hop.id) || hop.id;
       return hop.reason ? `${name}: ${hop.reason}` : name;
     })
     .join('；');
-  return `备用链路已切换到 ${active}。跳过：${details}`;
+  return resolveUiI18nText('chat.providerRouteFallback', {
+    model: active,
+    chain: fullChain,
+    count: fallback.length,
+    details,
+  });
 }
 
 export function summarizeToolState(blocks: ContentBlock[]): { running: number; total: number; activeLabel: string } {

@@ -11,7 +11,7 @@ import { synthesize } from "../lib/tts-engine.js";
 
 export const name = "tts_speak";
 export const description =
-  "将指定文本转为语音音频文件，保存到书桌。默认通过 Lynn Brain 托管 StepFun Realtime TTS；Spark/CosyVoice、macOS say、Edge TTS 和 OpenAI 只作为 fallback 或显式选择。" +
+  "将指定文本转为语音音频文件，保存到书桌。默认通过 Lynn Brain 托管 StepFun Realtime TTS；Spark/CosyVoice、macOS say 和 Edge TTS 仅作为旧配置兼容入口,不会自动接管。" +
   "适合有声书、长文朗读、定时播报等场景。";
 export const parameters = Type.Object({
   text: Type.String({ description: "要朗读的文本内容。建议不超过 3000 字；更长文本请分段调用。" }),
@@ -27,6 +27,23 @@ function voiceForProvider(provider, requestedVoice, defaultVoice) {
     return "zh-CN-XiaoxiaoNeural";
   }
   return requestedVoice || defaultVoice;
+}
+
+const LEGACY_STEPFUN_ALIASES = new Set([
+  "",
+  "spark",
+  "spark-local",
+  "cosyvoice",
+  "cosyvoice2",
+  "cosyvoice-2",
+  "say",
+  "edge",
+  "edge-tts",
+]);
+
+function normalizeProvider(provider) {
+  const value = String(provider || "").trim();
+  return LEGACY_STEPFUN_ALIASES.has(value) ? "stepfun-realtime" : value;
 }
 
 function hashSpeechRequest(payload) {
@@ -117,8 +134,9 @@ export async function execute(params, ctx = {}) {
 
   const engineConfig = ctx.engine?.config || {};
   const voiceConfig = engineConfig.voice?.tts || {};
+  const selectedProvider = normalizeProvider(voiceConfig.provider || config?.get?.("provider") || "stepfun-realtime");
   const cfg = {
-    provider: voiceConfig.provider || config?.get?.("provider") || "stepfun-realtime",
+    provider: selectedProvider,
     default_voice: voiceConfig.default_voice || config?.get?.("default_voice") || "jingdiannvsheng",
     base_url: voiceConfig.base_url || config?.get?.("base_url") || "",
     timeout_ms: voiceConfig.timeout_ms || config?.get?.("timeout_ms") || 45_000,
@@ -126,9 +144,7 @@ export async function execute(params, ctx = {}) {
 
   const providers = [
     cfg.provider,
-    "cosyvoice",
-    process.platform === "darwin" ? "say" : "",
-    "edge",
+    cfg.provider === "stepfun-realtime" ? "" : "stepfun-realtime",
   ].filter(Boolean).filter((item, index, arr) => arr.indexOf(item) === index);
 
   const requestHash = hashSpeechRequest({

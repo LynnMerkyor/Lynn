@@ -40,9 +40,35 @@ describe("session turn context helpers", () => {
     expect(routeAroundBrokenToolModel).toHaveBeenCalledWith("coding");
   });
 
+  it("stores injected recall fact ids when recall returns structured context", async () => {
+    const entry = {
+      session: {
+        sessionManager: { getCwd: () => "/tmp/workspace" },
+      },
+    };
+    const agent = {
+      recallForMessage: vi.fn(async () => ({
+        text: "remembered facts",
+        injectedFactIds: [1, "2", 1],
+      })),
+    };
+
+    await prepareSessionTurnContext({
+      entry,
+      text: "继续修 React streaming",
+      agent,
+      locale: "zh-CN",
+    });
+
+    expect(entry._lastRecallContext).toBe("remembered facts");
+    expect(entry._lastRecallFactIds).toEqual(["1", "2"]);
+  });
+
   it("clears transient context after a turn", () => {
     const entry = {
       _lastRecallContext: "memory",
+      _lastRecallFactIds: ["1"],
+      _memoryOutcomeToolFailureRecorded: true,
       _lastSkillHintContext: "skill",
       _atInjectionHintContext: "at",
       _turnInstructionHintContext: "instruction",
@@ -55,6 +81,8 @@ describe("session turn context helpers", () => {
 
     expect(entry).toMatchObject({
       _lastRecallContext: "",
+      _lastRecallFactIds: [],
+      _memoryOutcomeToolFailureRecorded: false,
       _lastSkillHintContext: "",
       _atInjectionHintContext: "",
       _turnInstructionHintContext: "",

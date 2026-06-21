@@ -323,6 +323,83 @@ function buildRealEstateResearchContext(userPrompt: unknown, opts: ReportResearc
 function buildGenericResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   return buildSearchResearchContext("【研究资料】", buildGenericResearchQueries(userPrompt), opts);
 }
+function hostFromUrl(rawUrl: unknown): string {
+  try {
+    return new URL(String(rawUrl || "")).hostname.replace(/^www\./i, "");
+  } catch {
+    return "";
+  }
+}
+function isOpenAIModelReleaseQuery(userPrompt: unknown): boolean {
+  const text = textOf(userPrompt);
+  if (!/(?:OpenAI|ChatGPT|GPT|Codex)/i.test(text)) return false;
+  if (!/(?:模型|model|发布|release|新模型|最新|最近|recent|latest)/i.test(text)) return false;
+  return !/(?:怎么用|API\s*key|报错|配置|价格|pricing|账单|billing)/i.test(text);
+}
+function formatOpenAIReleaseRows(results: WebSearchResultItem[], query: string, provider: string): string {
+  const seen = new Set<string>();
+  const rows: string[] = [];
+  for (const item of results || []) {
+    const url = item.url || "";
+    const host = hostFromUrl(url);
+    if (!/(?:^|\.)openai\.com$/i.test(host) && !/(?:^|\.)help\.openai\.com$/i.test(host)) continue;
+    const key = url || item.title || "";
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    rows.push([
+      `${rows.length + 1}. ${item.title || url}`,
+      host ? `来源: ${host}` : "",
+      "检索窗口: OpenAI 官方资料",
+      "新鲜度: 官方搜索摘要；发布日期以原页面为准",
+      url ? `URL: ${url}` : "",
+      item.snippet ? `摘要: ${textOf(item.snippet).slice(0, 520)}` : "",
+    ].filter(Boolean).join("\n"));
+    if (rows.length >= 5) break;
+  }
+  return [
+    "【OpenAI 官方模型发布资料】",
+    `查询：${query}`,
+    `来源：${provider || "search"}（仅保留 openai.com / help.openai.com）`,
+    "",
+    rows.join("\n\n"),
+  ].filter(Boolean).join("\n").slice(0, MAX_CONTEXT_CHARS);
+}
+function buildOpenAIReleaseFallbackContext(userPrompt: unknown): string {
+  return [
+    "【OpenAI 官方模型发布资料】",
+    `查询：${textOf(userPrompt)}`,
+    "来源：内置官方链接候选（官方搜索超时后使用；回答需提示以原页面为准）",
+    "",
+    "1. Introducing GPT-5.5 - OpenAI",
+    "来源: openai.com",
+    "检索窗口: OpenAI 官方资料",
+    "新鲜度: 官方发布页候选；发布日期以原页面为准",
+    "URL: https://openai.com/index/introducing-gpt-5-5/",
+    "摘要: GPT-5.5 and GPT-5.5 Pro are available in ChatGPT and Codex, with stronger coding, online research, data analysis, document and spreadsheet work, software operation, and tool-use capabilities.",
+    "",
+    "2. Model Release Notes | OpenAI Help Center",
+    "来源: help.openai.com",
+    "检索窗口: OpenAI 官方资料",
+    "新鲜度: 官方帮助中心发布说明候选；发布日期以原页面为准",
+    "URL: https://help.openai.com/en/articles/9624314-model-release-notes",
+    "摘要: GPT-5.5 Instant Update (May 28, 2026) improves response style and quality in ChatGPT and the API.",
+  ].join("\n");
+}
+async function buildOpenAIReleaseResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
+  const query = "site:openai.com OpenAI latest model release GPT model 2026";
+  try {
+    const result = await executeWebSearch(query, 6, { sceneHint: "docs" }, {
+      ...opts,
+      timeoutMs: Math.min(resolveTimeout(opts, "search", SEARCH_TIMEOUT_MS), 7000),
+      label: "openai_model_release_search",
+    });
+    const formatted = formatOpenAIReleaseRows(result.results || [], query, result.provider || "search");
+    if (/^\d+\.\s+/m.test(formatted)) return formatted;
+  } catch {
+    // Fall back to stable official URLs below; the answer builder still cites the source.
+  }
+  return buildOpenAIReleaseFallbackContext(userPrompt);
+}
 async function buildRealtimeToolContext({ title, toolKind, params, timeoutMs = REALTIME_TOOL_TIMEOUT_MS }: RealtimeToolContextRequest = {}, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const result = toolKind === "stock_market"
     ? await executeStockMarketTool((params || {}) as StockMarketToolParams, { ...opts, timeoutMs, label: "stock_market" })
@@ -417,6 +494,7 @@ async function buildMarketWeatherBriefContext(userPrompt: unknown, opts: ReportR
 }
 async function buildLiveNewsResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const promptText = String(userPrompt || "");
+  if (isOpenAIModelReleaseQuery(promptText)) return buildOpenAIReleaseResearchContext(promptText, opts);
   return buildRealtimeToolContext({ title: "【实时新闻工具资料】", toolKind: "live_news", params: { query: promptText, maxResults: 5 } }, opts);
 }
 export async function fetchForKind(kind: ReportResearchKind, target: StockResearchTarget | null | undefined, opts: ReportResearchFetchOptions = {}): Promise<string> {
@@ -429,6 +507,7 @@ export async function fetchForKind(kind: ReportResearchKind, target: StockResear
   if (kind === "sports") return buildSportsResearchContext(userPrompt, opts);
   if (kind === "market") return buildMarketResearchContext(userPrompt, opts);
   if (kind === "news") return buildLiveNewsResearchContext(userPrompt, opts);
+  if (kind === "public_data") return buildGenericResearchContext(userPrompt, opts);
   if (kind === "generic") return buildGenericResearchContext(userPrompt, opts);
   return "";
 }

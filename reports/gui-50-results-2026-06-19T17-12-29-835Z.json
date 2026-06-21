@@ -1,0 +1,79 @@
+{
+  "outputPath": "/Users/lynn/Downloads/Lynn/reports/gui-50-results-2026-06-19T17-12-29-835Z.json",
+  "total": 3,
+  "counts": {
+    "ok": 3
+  },
+  "providerCounts": {
+    "deepseek-chat": 3
+  },
+  "toolRuns": 0,
+  "avgMs": 2949,
+  "failures": [],
+  "generatedAt": "2026-06-19T17:12:38.740Z",
+  "results": [
+    {
+      "index": 1,
+      "category": "simple",
+      "prompt": "你好，只回复 OK",
+      "startedAt": 1781889149890,
+      "elapsedMs": 2322,
+      "text": "OK",
+      "textChars": 2,
+      "thinkingChars": 33,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "errors": [],
+      "events": 27,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "nl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":5}\n{\"type\":\"thinking_delta\",\"delta\":\"\\\"\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":6}\n{\"type\":\"thinking_delta\",\"delta\":\"你好\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":7}\n{\"type\":\"thinking_delta\",\"delta\":\"\\\"，\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":8}\n{\"type\":\"thinking_delta\",\"delta\":\"要求\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":9}\n{\"type\":\"thinking_delta\",\"delta\":\"只\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":10}\n{\"type\":\"thinking_delta\",\"delta\":\"回复\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":11}\n{\"type\":\"thinking_delta\",\"delta\":\"\\\"\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":12}\n{\"type\":\"thinking_delta\",\"delta\":\"OK\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":13}\n{\"type\":\"thinking_delta\",\"delta\":\"\\\"。\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":14}\n{\"type\":\"thinking_delta\",\"delta\":\"那就\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":15}\n{\"type\":\"thinking_delta\",\"delta\":\"简单\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":16}\n{\"type\":\"thinking_delta\",\"delta\":\"回复\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":17}\n{\"type\":\"thinking_delta\",\"delta\":\" OK\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":18}\n{\"type\":\"thinking_delta\",\"delta\":\" \",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":19}\n{\"type\":\"thinking_delta\",\"delta\":\"就行\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":20}\n{\"type\":\"thinking_delta\",\"delta\":\"。\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":21}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":22}\n{\"type\":\"text_delta\",\"delta\":\"OK\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":23}\n{\"type\":\"turn_end\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\",\"streamId\":\"s_mql6sjir_tyl7yw\",\"seq\":24}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-29-894Z_047d4ff7-7620-4da0-977a-85850dbba37a.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 2,
+      "category": "simple",
+      "prompt": "用一句话解释 ReAct",
+      "startedAt": 1781889152214,
+      "elapsedMs": 4594,
+      "text": "ReAct 是一种让大模型交替进行\"思考推理\"和\"调用工具/执行动作\"的范式——就像一个人遇到问题时会先想\"我需要查什么\"，然后去查资料，再根据结果继续推理，直到得出结论，而不是憋着一口气背完所有知识点再动手。",
+      "textChars": 105,
+      "thinkingChars": 64,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "errors": [],
+      "events": 33,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "nn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":11}\n{\"type\":\"thinking_delta\",\"delta\":\"ing\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":12}\n{\"type\":\"thinking_delta\",\"delta\":\" +\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":13}\n{\"type\":\"thinking_delta\",\"delta\":\" Acting\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":14}\n{\"type\":\"thinking_delta\",\"delta\":\"）。\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":15}\n{\"type\":\"thinking_delta\",\"delta\":\"这是个\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":16}\n{\"type\":\"thinking_delta\",\"delta\":\"概念\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":17}\n{\"type\":\"thinking_delta\",\"delta\":\"解释\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":18}\n{\"type\":\"thinking_delta\",\"delta\":\"，\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":19}\n{\"type\":\"thinking_delta\",\"delta\":\"直接\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":20}\n{\"type\":\"thinking_delta\",\"delta\":\"回答\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":21}\n{\"type\":\"thinking_delta\",\"delta\":\"就好\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":22}\n{\"type\":\"thinking_delta\",\"delta\":\"，\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":23}\n{\"type\":\"thinking_delta\",\"delta\":\"不需要\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":24}\n{\"type\":\"thinking_delta\",\"delta\":\" Reflect\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":25}\n{\"type\":\"thinking_delta\",\"delta\":\"。\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":26}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":27}\n{\"type\":\"text_delta\",\"delta\":\"ReAct 是一种让大模型交替进行\\\"思考推理\\\"和\\\"调用工具/执行动作\\\"的范式——就像一个人遇到问题时会先想\\\"我需要查什么\\\"，然后去查资料，再根据结果继续推理，直到得出结论，而不是憋着一口气背完所有知识点再动手。\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":28}\n{\"type\":\"turn_end\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\",\"streamId\":\"s_mql6slb7_ez16wh\",\"seq\":29}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 3,
+      "category": "simple",
+      "prompt": "2+2 等于几？只给答案",
+      "startedAt": 1781889156809,
+      "elapsedMs": 1930,
+      "text": "4",
+      "textChars": 1,
+      "thinkingChars": 33,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "errors": [],
+      "events": 31,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":9}\n{\"type\":\"thinking_delta\",\"delta\":\"只\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":10}\n{\"type\":\"thinking_delta\",\"delta\":\"要求\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":11}\n{\"type\":\"thinking_delta\",\"delta\":\"给出\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":12}\n{\"type\":\"thinking_delta\",\"delta\":\"答案\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":13}\n{\"type\":\"thinking_delta\",\"delta\":\"。\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":14}\n{\"type\":\"thinking_delta\",\"delta\":\"2\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":15}\n{\"type\":\"thinking_delta\",\"delta\":\"+\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":16}\n{\"type\":\"thinking_delta\",\"delta\":\"2\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":17}\n{\"type\":\"thinking_delta\",\"delta\":\"=\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":18}\n{\"type\":\"thinking_delta\",\"delta\":\"4\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":19}\n{\"type\":\"thinking_delta\",\"delta\":\"。\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":20}\n{\"type\":\"thinking_delta\",\"delta\":\"直接\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":21}\n{\"type\":\"thinking_delta\",\"delta\":\"回答\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":22}\n{\"type\":\"thinking_delta\",\"delta\":\"即可\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":23}\n{\"type\":\"thinking_delta\",\"delta\":\"。\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":24}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":25}\n{\"type\":\"text_delta\",\"delta\":\"4\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":26}\n{\"type\":\"turn_end\",\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\",\"streamId\":\"s_mql6sout_jmnr6p\",\"seq\":27}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-36-812Z_914c6680-9f9b-4396-9ab7-e943185390fa.jsonl\"}\n{\"type\":\"session_title\",\"title\":\"ReAct解释\",\"path\":\"/Users/lynn/.lynn/agents/lynn/sessions/2026-06-19T17-12-32-217Z_e108824f-3867-48aa-b28f-d1bdec9f4a56.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

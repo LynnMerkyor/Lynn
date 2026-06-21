@@ -1,0 +1,152 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-14-15-local-evidence-quality-r2.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-JPBzMa",
+  "gateCurrentDate": "2026-06-21",
+  "total": 2,
+  "counts": {
+    "ok": 1,
+    "quality_fail": 1
+  },
+  "providerCounts": {
+    "deepseek-chat": 1,
+    "step-3.7-flash": 1
+  },
+  "toolRuns": 2,
+  "stepExecuteRuns": 0,
+  "avgMs": 27750,
+  "generatedAt": "2026-06-21T06:27:34.596Z",
+  "results": [
+    {
+      "index": 14,
+      "category": "realtime",
+      "prompt": "世界杯半决赛在哪一天？",
+      "exitCode": 0,
+      "durationMs": 28482,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "toolNames": [
+        "web_search"
+      ],
+      "assistantText": "当前搜索工具暂时无法获取实时数据。不过，关于 **2026年世界杯** 的赛程，根据国际足联此前公布的官方安排：\n\n**2026年世界杯半决赛：**\n- **第一场半决赛：** 2026年 **7月14日（星期二）**\n- **第二场半决赛：** 2026年 **7月15日（星期三）**\n\n决赛则在 **2026年7月19日（星期日）** 于纽约/新泽西的大都会人寿体育场举行。> 注：如果你问的是 **2022年卡塔尔世界杯**，半决赛是在 **2022年12月13日（阿根廷vs克罗地亚）** 和 **12月14日（法国vs摩洛哥）**。请告诉我你想了解哪一届，我可以在网络恢复后进一步核实。",
+      "reasoningChars": 528,
+      "usage": {
+        "prompt_tokens": 2841,
+        "completion_tokens": 418,
+        "total_tokens": 3259,
+        "prompt_tokens_details": {
+          "cached_tokens": 2432
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 240
+        },
+        "prompt_cache_hit_tokens": 2432,
+        "prompt_cache_miss_tokens": 409
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": false
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": false
+        }
+      ],
+      "rawTail": ".614Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"的\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.634Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"体育\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.634Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"赛事\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.675Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"日程\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.676Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"，\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.693Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"属于\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.693Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"公开\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.734Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"知识\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.734Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.752Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"不过\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.753Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"规则\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.753Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"说\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.877Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\\"\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.877Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"证据\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.880Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"不足\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.880Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"就\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.880Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"明确\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.888Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"说\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.888Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"'\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.888Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"工具\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.888Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"结果\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.888Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"中\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.888Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"未\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.888Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"查到\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.888Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"'\\\"\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.888Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\\n\\n\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.905Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"让我\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.905Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"如实\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.923Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"告诉\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.923Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"用户\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.948Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"搜索\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:05.948Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"工具\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:06.000Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"暂时\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:06.011Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"无法\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:06.011Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"查询\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:06.011Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"到\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:06.037Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"结果\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:06.038Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\",\"hidden\":true,\"ts\":\"2026-06-21T06:27:06.065Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:07.557Z\",\"usage\":{\"prompt_tokens\":2841,\"completion_tokens\":418,\"total_tokens\":3259,\"prompt_tokens_details\":{\"cached_tokens\":2432},\"completion_tokens_details\":{\"reasoning_tokens\":240},\"prompt_cache_hit_tokens\":2432,\"prompt_cache_miss_tokens\":409},\"durationMs\":28418}\n{\"type\":\"assistant.delta\",\"text\":\"当前搜索工具暂时无法获取实时数据。不过，关于 **2026年世界杯** 的赛程，根据国际足联此前公布的官方安排：\\n\\n**2026年世界杯半决赛：**\\n- **第一场半决赛：** 2026年 **7月14日（星期二）**\\n- **第二场半决赛：** 2026年 **7月15日（星期三）**\\n\\n决赛则在 **2026年7月19日（星期日）** 于纽约/新泽西的大都会人寿体育场举行。> 注：如果你问的是 **2022年卡塔尔世界杯**，半决赛是在 **2022年12月13日（阿根廷vs克罗地亚）** 和 **12月14日（法国vs摩洛哥）**。请告诉我你想了解哪一届，我可以在网络恢复后进一步核实。\",\"ts\":\"2026-06-21T06:27:07.561Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T06:27:07.565Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 15,
+      "category": "realtime",
+      "prompt": "2026世界杯已经出的赛事比分",
+      "exitCode": 0,
+      "durationMs": 27018,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "web_search",
+        "web_fetch"
+      ],
+      "assistantText": "工具结果中未查到2026世界杯已出赛事比分信息。**已知事实：**\n- 当前日期锚点为2026年6月21日（Asia/Shanghai）\n- FIFA官网页面返回空响应\n- ESPN页面因JavaScript验证拦截，无法获取比分数据\n\n**来源口径：**\n所有尝试的外部数据源均未返回有效内容。**缺口：**\n缺少2026世界杯预选赛或正赛的实时比分数据。**最小可靠结论：**\n",
+      "reasoningChars": 479,
+      "usage": {
+        "cached_tokens": 512,
+        "prompt_tokens": 2439,
+        "completion_tokens": 316,
+        "total_tokens": 2755,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": false
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": false
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": false
+        }
+      ],
+      "rawTail": "ails\":{\"reasoning_tokens\":0}},\"durationMs\":26718}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.362Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":291,\"total_tokens\":2730,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26718}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.362Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":295,\"total_tokens\":2734,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26718}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.477Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":296,\"total_tokens\":2735,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26833}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.478Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":298,\"total_tokens\":2737,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26834}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.479Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":302,\"total_tokens\":2741,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26835}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.479Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":304,\"total_tokens\":2743,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26835}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.479Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":305,\"total_tokens\":2744,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26835}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.480Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":306,\"total_tokens\":2745,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26836}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.480Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":307,\"total_tokens\":2746,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26836}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.550Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":308,\"total_tokens\":2747,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26906}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.550Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":311,\"total_tokens\":2750,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26906}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.550Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":314,\"total_tokens\":2753,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26906}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.550Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":315,\"total_tokens\":2754,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26906}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.550Z\",\"usage\":{\"prompt_tokens\":2439,\"completion_tokens\":316,\"total_tokens\":2755,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26906}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:27:34.550Z\",\"usage\":{\"cached_tokens\":512,\"prompt_tokens\":2439,\"completion_tokens\":316,\"total_tokens\":2755,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":26906}\n{\"type\":\"assistant.delta\",\"text\":\"工具结果中未查到2026世界杯已出赛事比分信息。**已知事实：**\\n- 当前日期锚点为2026年6月21日（Asia/Shanghai）\\n- FIFA官网页面返回空响应\\n- ESPN页面因JavaScript验证拦截，无法获取比分数据\\n\\n**来源口径：**\\n所有尝试的外部数据源均未返回有效内容。**缺口：**\\n缺少2026世界杯预选赛或正赛的实时比分数据。**最小可靠结论：**\\n\",\"ts\":\"2026-06-21T06:27:34.580Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T06:27:34.585Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "quality_fail",
+      "reason": "world-cup-score-question-without-score"
+    }
+  ]
+}

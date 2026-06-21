@@ -16,7 +16,7 @@ const BRAIN_MANAGED_CUSTOM_TOOL_NAMES = [
 export const BRAIN_MANAGED_CUSTOM_TOOLS = new Set<string>(BRAIN_MANAGED_CUSTOM_TOOL_NAMES);
 
 export function normalizeBrainManagedToolName(name: unknown): string {
-  return String(name || "").trim();
+  return String(name || "").trim().toLowerCase().replace(/-/g, "_");
 }
 
 export function isBrainManagedCustomToolName(name: unknown): boolean {

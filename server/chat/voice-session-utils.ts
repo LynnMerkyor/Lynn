@@ -258,15 +258,8 @@ function shouldUseDirectStepRealtime(config: JsonRecord = {}, voiceConfig: JsonR
     || mode === "stepfun-byok";
 }
 
-function legacyVoiceFallbackProvider(config: JsonRecord = {}, defaultProvider: string): string {
-  const explicit = configString(config.fallback_provider) || configString(config.fallbackProvider);
-  if (explicit) return explicit;
-  const provider = configString(config.provider);
-  if (!provider || provider === "stepfun-realtime" || provider === "stepfun" || provider === "brain-realtime" || provider === "brain-stepfun-realtime" || provider === "stepfun-direct" || provider === "stepfun-byok") {
-    return defaultProvider;
-  }
-  return provider;
-}
+const DIRECT_ASR_PROVIDERS = new Set(["openai", "openai-whisper", "azure", "azure-stt"]);
+const DIRECT_TTS_PROVIDERS = new Set(["openai", "openai-tts"]);
 
 const LEGACY_FALLBACK_KEYS = [
   "base_url",
@@ -286,10 +279,7 @@ function pickLegacyFallbackConfig(config: JsonRecord = {}, fallbackProvider: str
   for (const key of LEGACY_FALLBACK_KEYS) {
     if (config[key] !== undefined && out[key] === undefined) out[key] = config[key];
   }
-  return {
-    ...out,
-    ...(asRecord(config.fallback) || {}),
-  };
+  return out;
 }
 
 function stripBrainRuntimeConfig(config: JsonRecord): JsonRecord {
@@ -303,35 +293,42 @@ function stripBrainRuntimeConfig(config: JsonRecord): JsonRecord {
 }
 
 export function resolveVoiceRuntimeAsrConfig(config: JsonRecord = {}, voiceConfig: JsonRecord = {}): JsonRecord {
-  // StepFun Realtime is the preferred voice conversation/TTS lane, but its
-  // stateless transcript events are assistant output transcripts, not a safe
-  // standalone ASR result. Keep user-input transcription on a real ASR provider
-  // so assistant speech can never be fed back as the next user prompt.
-  const provider = legacyVoiceFallbackProvider(config, "spark");
-  const fallbackProvider = configString(config.fallback_provider)
-    || configString(config.fallbackProvider)
-    || (provider === "spark" ? "sensevoice" : "spark");
-  const runtimeConfig = pickLegacyFallbackConfig(config, provider);
+  const requested = configString(config.provider).toLowerCase();
+  const directStep = shouldUseDirectStepRealtime(config, voiceConfig) && hasStepRealtimeKey(config, voiceConfig);
+  const provider = directStep
+    ? "stepfun-direct"
+    : DIRECT_ASR_PROVIDERS.has(requested)
+      ? requested
+      : "brain-realtime";
+  const fallbackProvider = "brain-realtime";
+  const runtimeConfig = provider === "brain-realtime"
+    ? stripBrainRuntimeConfig(mergeRealtimeConfig(config, voiceConfig))
+    : provider === "stepfun-direct"
+      ? mergeRealtimeConfig(config, voiceConfig)
+      : pickLegacyFallbackConfig(config, provider);
   return {
     ...runtimeConfig,
     provider,
     fallback_provider: fallbackProvider,
-    fallback: asRecord(config.fallback) || pickLegacyFallbackConfig(config, fallbackProvider),
+    fallback: { provider: fallbackProvider },
   };
 }
 
 export function resolveVoiceRuntimeTtsConfig(config: JsonRecord = {}, voiceConfig: JsonRecord = {}): JsonRecord {
   const merged = mergeRealtimeConfig(config, voiceConfig);
+  const requested = configString(config.provider).toLowerCase();
   const provider = shouldUseDirectStepRealtime(config, voiceConfig) && hasStepRealtimeKey(config, voiceConfig)
     ? "stepfun-direct"
-    : "brain-realtime";
-  const fallbackProvider = legacyVoiceFallbackProvider(config, "spark");
+    : DIRECT_TTS_PROVIDERS.has(requested)
+      ? requested
+      : "brain-realtime";
+  const fallbackProvider = "brain-realtime";
   const runtimeConfig = provider === "brain-realtime" ? stripBrainRuntimeConfig(merged) : merged;
   return {
     ...runtimeConfig,
     provider,
     fallback_provider: fallbackProvider,
-    fallback: pickLegacyFallbackConfig(config, fallbackProvider),
+    fallback: { provider: fallbackProvider },
   };
 }
 

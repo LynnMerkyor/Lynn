@@ -10,10 +10,12 @@ interface ModelInfoLike {
 
 export function shouldPrefetchReportContext(reportKind: unknown, currentModelInfo?: ModelInfoLike | null): boolean {
   if (!reportKind) return false;
-  // Brain V2 already owns realtime tools server-side. Injecting local prefetch
-  // text as a synthetic user prompt creates two competing tool chains and can
-  // leak a previous market/search snapshot into the next turn.
-  if (currentModelInfo?.isBrain) return false;
+  // Brain V2 owns open-ended realtime research server-side. For deterministic
+  // realtime facts, keep a local evidence pass so GUI turns can close with
+  // visible tool evidence even if the writer times out.
+  if (currentModelInfo?.isBrain) {
+    return new Set(["market_weather_brief", "weather", "sports", "market", "stock", "news", "public_data"]).has(String(reportKind));
+  }
   return true;
 }
 
@@ -30,6 +32,7 @@ export function prefetchToolNameForKind(kind: unknown): string {
   if (kind === "sports") return "sports_score";
   if (kind === "market" || kind === "stock") return "stock_market";
   if (kind === "news") return "live_news";
+  if (kind === "public_data") return "web_search";
   return "web_search";
 }
 

@@ -1,0 +1,38 @@
+{
+  "outputPath": "/Users/lynn/Downloads/Lynn/reports/gui-target-33-table-direct-r13.json",
+  "gateCurrentDate": "2026-06-21",
+  "total": 1,
+  "counts": {
+    "ok": 1
+  },
+  "providerCounts": {
+    "unknown": 1
+  },
+  "toolRuns": 0,
+  "stepExecuteRuns": 0,
+  "avgMs": 771,
+  "failures": [],
+  "generatedAt": "2026-06-21T10:24:26.973Z",
+  "results": [
+    {
+      "index": 33,
+      "category": "format",
+      "prompt": "给我一个三列表格：任务、优先级、风险",
+      "startedAt": 1782037463694,
+      "elapsedMs": 771,
+      "text": "| 任务 | 优先级 | 风险 |\n|---|---|---|\n| 明确需求范围 | 高 | 需求边界不清会导致返工 |\n| 完成核心实现 | 高 | 关键路径延期会影响整体交付 |\n| 补充测试与复核 | 中 | 覆盖不足可能遗漏边界问题 |",
+      "textChars": 122,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [],
+      "toolEvents": [],
+      "errors": [],
+      "events": 5,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-24-23-696Z_d3cdcd3d-877d-4aef-8a1a-489153310b1d.jsonl\",\"clientMessageId\":\"gui-50-33-1782037463702\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-24-23-696Z_d3cdcd3d-877d-4aef-8a1a-489153310b1d.jsonl\"}\n{\"type\":\"text_delta\",\"delta\":\"| 任务 | 优先级 | 风险 |\\n|---|---|---|\\n| 明确需求范围 | 高 | 需求边界不清会导致返工 |\\n| 完成核心实现 | 高 | 关键路径延期会影响整体交付 |\\n| 补充测试与复核 | 中 | 覆盖不足可能遗漏边界问题 |\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-24-23-696Z_d3cdcd3d-877d-4aef-8a1a-489153310b1d.jsonl\",\"streamId\":\"s_mqnn3f6i_jklb1j\",\"seq\":1}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-24-23-696Z_d3cdcd3d-877d-4aef-8a1a-489153310b1d.jsonl\",\"streamId\":\"s_mqnn3f6i_jklb1j\",\"seq\":2}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-24-23-696Z_d3cdcd3d-877d-4aef-8a1a-489153310b1d.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

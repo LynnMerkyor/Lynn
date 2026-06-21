@@ -10,6 +10,7 @@ export type ReportResearchKind =
   | "sports"
   | "market"
   | "news"
+  | "public_data"
   | "generic";
 
 export interface StockResearchTarget {
@@ -42,13 +43,15 @@ const KNOWN_STOCK_NAME_TO_CODE = new Map<string, string>([
 const STOCK_COMPANY_RE = /[\u4e00-\u9fa5A-Za-z]{2,18}(?:科技|股份|电子|智能|软件|证券|银行|集团|药业|医药|能源|材料|半导体|光电|电气|通信|汽车|机器人|芯片|电力|股份)/;
 const STOCK_ANALYSIS_RE = /(?:股票|股价|个股|A股|a股|科创板|创业板|沪深|标的|走势|怎么看|技术面|基本面|估值|市值|总股本|PE|PB|PS|资金|资金流|财报|研报|公告|解禁|减持|支撑位|压力位|K线|k线|均线|成交量|成交额|筹码|止损|止盈|仓位|目标价|三种情景|操作计划|未来1-3个月)/i;
 const GENERIC_RESEARCH_RE = /(?=.*(?:调研|研究|分析|评估|对比|比较|判断|怎么看|报告|预测|整理|汇总))(?=.*(?:最新|数据|资料|来源|公司|行业|市场|政策|公告|财报|研报|楼盘|房价|成交|竞品|价格|估值|市值|PDF|文档|报表|合同|产品|品牌))/i;
-const WEATHER_LOOKUP_RE = /(?:天气|气温|温度|预报|冷不冷|热不热|下雨|下雪|多少度|几度|紫外线|空气质量|湿度|风力|体感|带伞|雨伞)/i;
+const WEATHER_LOOKUP_RE = /(?:天气|气温|温度|预报|冷不冷|热不热|下雨|下雪|多少度|几度|紫外线|空气质量|湿度|风力|体感|带伞|雨伞|预警|暴雨|雷暴|雷电|台风|高温|酷热|强季风)/i;
 const SPORTS_LOOKUP_RE = /(?:比分|赛程|排名|战绩|湖人|勇士|NBA|CBA|英超|中超|欧冠|世界杯|比赛结果)/i;
-const MARKET_LOOKUP_RE = /(?:金价|黄金|白银|油价|原油|汇率|美元|人民币|指数|基金|ETF|etf|股价|股票|行情|收盘|涨跌|现价|最新价|美股|港股|A股|a股|恒生|恒指|纳指|道指|标普|AAPL|TSLA|NVDA|MSFT|GOOGL|AMZN|META|\$[A-Z]{1,5}\b)/i;
-const STOCK_BASKET_LOOKUP_RE = /(?:港股.{0,8}科技股?|科技股?.{0,8}港股|恒生科技(?!指数)|港股互联网|港股.{0,8}互联网|中概科技|(?:美股|纳斯达克|纳指|七巨头|magnificent|mag7).{0,12}(?:科技股?|AI|人工智能|芯片|半导体|互联网)|(?:科技股?|AI|人工智能|芯片|半导体|互联网).{0,12}(?:美股|纳斯达克|纳指|七巨头|magnificent|mag7)|(?:A股|a股|沪深|科创|创业板).{0,12}(?:AI|人工智能|算力|服务器|光模块|CPO|高速连接|科技股?|半导体|芯片|新能源|电动车|锂电|光伏|机器人|人形机器人|券商|证券|白酒|消费)|(?:AI|人工智能|算力|服务器|光模块|CPO|高速连接|科技股?|半导体|芯片|新能源|电动车|锂电|光伏|机器人|人形机器人|券商|证券|白酒|消费).{0,12}(?:A股|a股|沪深|科创|创业板))/i;
+const SPORTS_MATCH_LOOKUP_RE = /(?:(?:今晚|今天|今日|明天|昨晚|昨天|昨日).{0,20}(?:比赛|对阵)|(?:英格兰|克罗地亚|西班牙|沙特|比利时|伊朗|德国|荷兰|瑞典|美国队?|日本|突尼斯).{0,24}(?:比赛|对阵|比分|赛程))/i;
+const MARKET_LOOKUP_RE = /(?:金价|黄金|白银|油价|原油|汇率|美元|人民币|指数|基金|ETF|etf|股价|股票|行情|收盘|涨跌|现价|最新价|异动|美股|港股|A\s*股|a\s*股|A股|a股|恒生|恒指|纳指|道指|标普|AAPL|TSLA|NVDA|MSFT|GOOGL|AMZN|META|\$[A-Z]{1,5}\b)/i;
+const STOCK_BASKET_LOOKUP_RE = /(?:港股.{0,8}科技股?|科技股?.{0,8}港股|恒生科技(?!指数)|港股互联网|港股.{0,8}互联网|中概科技|(?:美股|纳斯达克|纳指|七巨头|magnificent|mag7).{0,12}(?:科技股?|AI|人工智能|芯片|半导体|互联网)|(?:科技股?|AI|人工智能|芯片|半导体|互联网).{0,12}(?:美股|纳斯达克|纳指|七巨头|magnificent|mag7)|(?:A\s*股|a\s*股|A股|a股|沪深|科创|创业板).{0,12}(?:AI|人工智能|算力|服务器|光模块|CPO|高速连接|科技股?|半导体|芯片|新能源|电动车|锂电|光伏|机器人|人形机器人|券商|证券|白酒|消费|异动|表现|行情)|(?:AI|人工智能|算力|服务器|光模块|CPO|高速连接|科技股?|半导体|芯片|新能源|电动车|锂电|光伏|机器人|人形机器人|券商|证券|白酒|消费|异动|表现|行情).{0,12}(?:A\s*股|a\s*股|A股|a股|沪深|科创|创业板))/i;
 const CONCEPT_STOCK_LOOKUP_RE = /(?:概念股|概念板块|板块|行业|题材|赛道|龙头|成分股|产业链|科技股)/i;
 const MARKET_WEATHER_BRIEF_RE = /(?:机场|出行|着装|穿什么|穿搭|行动建议|浦东|虹桥|登机|航班|明早|早班机|数据快照|行动建议)/i;
-const LIVE_NEWS_LOOKUP_RE = /(?=.*(?:今天|今日|今晚|最新|实时|进展|消息|新闻|报道|发生|了吗|如何|怎么样|快讯|热点|全网))(?=.*(?:AI|人工智能|科技|大模型|模型|Gemini|OpenAI|Anthropic|Claude|芯片|半导体|机器人|美伊|伊朗|美国|中东|巴以|以色列|巴勒斯坦|俄乌|俄罗斯|乌克兰|关税|制裁|冲突|停火|谈判|选举|地震|台风|事故|发布|宣布|外交|战争|袭击|股市|市场|公司|政策|干细胞|细胞治疗|再生医学|临床|医疗|医药|医院|药企))/i;
+const LIVE_NEWS_LOOKUP_RE = /(?=.*(?:今天|今日|今晚|最新|最近|实时|进展|消息|新闻|报道|发生|发布|了吗|如何|怎么样|快讯|热点|全网))(?=.*(?:AI|人工智能|科技|大模型|模型|Gemini|OpenAI|Anthropic|Claude|芯片|半导体|机器人|美伊|伊朗|美国|中东|巴以|以色列|巴勒斯坦|俄乌|俄罗斯|乌克兰|关税|制裁|冲突|停火|谈判|选举|地震|台风|事故|发布|宣布|外交|战争|袭击|股市|市场|公司|政策|干细胞|细胞治疗|再生医学|临床|医疗|医药|医院|药企))/i;
+const PUBLIC_DATA_LOOKUP_RE = /(?=.*(?:人数|收费|费用|会费|年费|入会费|规模|大概多少|多少))(?!.*(?:月收入|房租|固定支出|预算|攒|存款))/i;
 const EXTERNAL_RESEARCH_INTENT_RE = /(?:最新|实时|今天|今日|联网|搜索|查询|查一下|找一下|资料|来源|链接|官网|网页|公开信息|公告|财报|研报|新闻|政策|PDF|文档|市场数据|行业数据|竞品)/i;
 const LOCAL_OFFICE_TASK_RE = /(?:会议记录|会议纪要|行动项|负责人|截止时间|风险|经营分析|环比|增长率|根据数据|下面会议|Q[1-4]|报价模板|客户\s*[A-Z]\b)/i;
 const MARKET_WEATHER_TICKER_STOPWORDS = new Set([
@@ -109,10 +112,12 @@ export function inferReportResearchKind(text: unknown): ReportResearchKind {
     return "stock";
   }
   if (WEATHER_LOOKUP_RE.test(normalized)) return "weather";
-  if (SPORTS_LOOKUP_RE.test(normalized)) return "sports";
+  if (SPORTS_LOOKUP_RE.test(normalized) || SPORTS_MATCH_LOOKUP_RE.test(normalized)) return "sports";
   if (MARKET_LOOKUP_RE.test(normalized)) return "market";
+  if (/(?:OpenAI|ChatGPT|GPT|Codex)/i.test(normalized) && /(?:模型|model|发布|release|新模型|最新|最近)/i.test(normalized)) return "news";
   if (/(?:新闻|消息|报道|快讯|热点)/.test(normalized) && /(?:今天|今日|最新|实时|全网|查一下|查查|查询|搜索|有什么|哪些)/.test(normalized)) return "news";
   if (LIVE_NEWS_LOOKUP_RE.test(normalized)) return "news";
+  if (PUBLIC_DATA_LOOKUP_RE.test(normalized) && !LOCAL_OFFICE_TASK_RE.test(normalized)) return "public_data";
   if (GENERIC_RESEARCH_RE.test(normalized) && EXTERNAL_RESEARCH_INTENT_RE.test(normalized) && !LOCAL_OFFICE_TASK_RE.test(normalized)) return "generic";
   return "";
 }

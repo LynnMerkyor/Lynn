@@ -64,7 +64,7 @@ describe("manager run dual-brain loop", () => {
           taskId: "task-mock",
           managerModel: "local-a3b-distill",
           workerModel: "step-3.7-flash",
-          escapeModel: "ds-v4-flash",
+          escapeModel: "deepseek-v4-flash",
           status: "passed",
           falseVerifyRisk: "none",
         },
@@ -122,7 +122,7 @@ describe("manager run dual-brain loop", () => {
         "--escape-api-key",
         "sk-escape-test",
         "--escape-model",
-        "deepseek-chat",
+        "deepseek-v4-flash",
         "--expect",
         "PASS",
         "--task-class",
@@ -134,7 +134,7 @@ describe("manager run dual-brain loop", () => {
       expect(code).toBe(0);
       expect(JSON.parse(brainBody)).toMatchObject({ model: "lynn-brain-router", stream: true });
       expect(escapeAuth).toBe("Bearer sk-escape-test");
-      expect(JSON.parse(escapeBody)).toMatchObject({ model: "deepseek-chat", stream: true });
+      expect(JSON.parse(escapeBody)).toMatchObject({ model: "deepseek-v4-flash", stream: true });
       expect(lines.filter((line) => line.type === "manager.delegated").map((line) => line.workerId)).toEqual([
         "step37-worker",
         "ds-v4-flash-escape",

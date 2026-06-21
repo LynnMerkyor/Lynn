@@ -1,0 +1,170 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-14-15-runtime-fallback-r1.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-OIoAlx",
+  "gateCurrentDate": "2026-06-21",
+  "total": 2,
+  "counts": {
+    "ok": 2
+  },
+  "providerCounts": {
+    "step-3.7-flash": 2
+  },
+  "toolRuns": 2,
+  "stepExecuteRuns": 0,
+  "avgMs": 15389,
+  "generatedAt": "2026-06-21T04:26:40.942Z",
+  "results": [
+    {
+      "index": 14,
+      "category": "realtime",
+      "prompt": "世界杯半决赛在哪一天？",
+      "exitCode": 0,
+      "durationMs": 13551,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "web_search",
+        "web_fetch"
+      ],
+      "assistantText": "根据现有工具证据：\n\n**已知事实**\n- 2026年美加墨世界杯于6月11日开幕，7月19日举行决赛（来源：[E2]）。\n- 达拉斯将承办本届赛事，其中包含一场半决赛，日期为**7月14日**（来源：[E5]）。\n\n**缺口**\n- 现有证据仅提及一场半决赛（7月14日），未查到另一场半决赛的具体日期。\n- 两场半决赛是否均在7月14日，或分别在不同日期，现有证据不足以确认。\n\n**最终答案**\n2026年世界杯至少有一场半决赛定于**7月14日**举行（地点：美国达拉斯）。另一场半决赛的日期在现有搜索结果中未查到，建议查阅FIFA官方赛程获取完整信息。",
+      "reasoningChars": 1243,
+      "usage": {
+        "cached_tokens": 512,
+        "prompt_tokens": 4941,
+        "completion_tokens": 430,
+        "total_tokens": 5371,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": false
+        }
+      ],
+      "rawTail": "9Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，7月19\",\"ts\":\"2026-06-21T04:26:23.660Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"日举行\",\"ts\":\"2026-06-21T04:26:23.660Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"决赛（来源：[\",\"ts\":\"2026-06-21T04:26:23.660Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"E2]）。\\n\",\"ts\":\"2026-06-21T04:26:23.660Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"- 达\",\"ts\":\"2026-06-21T04:26:23.660Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"拉斯将承办\",\"ts\":\"2026-06-21T04:26:23.660Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"本届\",\"ts\":\"2026-06-21T04:26:23.660Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"赛事\",\"ts\":\"2026-06-21T04:26:23.660Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-21T04:26:23.660Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"其中\",\"ts\":\"2026-06-21T04:26:23.661Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"包含一场半\",\"ts\":\"2026-06-21T04:26:23.661Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"决赛，\",\"ts\":\"2026-06-21T04:26:23.661Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"日期为**\",\"ts\":\"2026-06-21T04:26:23.661Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"7月14日\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**（来源：[\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"E5]）。\\n\\n\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**缺口**\\n\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"- 现有\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"证据仅提及\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"一场\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"半决赛（\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"7月14日\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"），\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"未查到\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"另一场半决赛\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"的具体日期。\\n-\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 两\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"场半决赛是否\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"均在\",\"ts\":\"2026-06-21T04:26:23.662Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"7月14日\",\"ts\":\"2026-06-21T04:26:23.701Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-21T04:26:23.701Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"或分别在不同日期\",\"ts\":\"2026-06-21T04:26:23.701Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，现有\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"证据\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"不足以\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"确认。\\n\\n**最终\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"答案**\\n202\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"6年世界杯至少\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"有一场半决赛\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"定\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"于**7月\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"14日**举行\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"（地点：美国\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"达拉斯）。另一\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"场半决赛的\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"日期在现有搜索结果\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"中未查到\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，建议\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"查阅\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"F\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"IFA官方赛程\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"获取完整信息\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"。\",\"ts\":\"2026-06-21T04:26:23.702Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T04:26:23.705Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 15,
+      "category": "realtime",
+      "prompt": "2026世界杯已经出的赛事比分",
+      "exitCode": 0,
+      "durationMs": 17227,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "web_search"
+      ],
+      "assistantText": "截至2026年6月21日，根据现有工具证据，已确认的2026美加墨世界杯赛事比分如下：\n### 小组赛已赛比分\n1. 6月12日（首轮）：美国 4-1 巴拉圭\n2. 6月14日（首轮）：巴西 1-1 摩洛哥；卡塔尔 1-1 瑞士\n3. 6月15日（首轮）：荷兰 2-2 日本；瑞典 5-1 突尼斯；科特迪瓦 1-0 厄瓜多尔\n4. 6月16日（首轮）：伊朗 2-2 新西兰\n5. 6月17日（首轮）：挪威 4-1 伊拉克\n6. 6月18日（首轮）：加拿大 2-0 卡塔尔\n7. 6月20日（第二轮）：美国 2-0 澳大利亚；巴西 3-0 海地\n\n### 信息缺口\n现有工具证据仅覆盖了部分已进行的小组赛赛事，未收录全部已赛比分，也无淘汰赛阶段相关赛果（当前赛事仍处于小组赛阶段）。",
+      "reasoningChars": 1465,
+      "usage": {
+        "cached_tokens": 512,
+        "prompt_tokens": 5279,
+        "completion_tokens": 1117,
+        "total_tokens": 6396,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "istant.delta\",\"text\":\"6月14日\",\"ts\":\"2026-06-21T04:26:40.928Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"（首轮）：\",\"ts\":\"2026-06-21T04:26:40.928Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"巴西 1\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"-1\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 摩洛哥\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"；卡塔尔 \",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"1-1 \",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"瑞士\\n3.\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 6月15\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"日（首\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"轮）：荷兰\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 2-2\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 日本；瑞典\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 5-1\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 突尼斯；\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"科特迪瓦\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 1-0\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 厄瓜多尔\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"\\n4. \",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"6月16日\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"（首轮）：\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"伊朗 2-\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"2 新西兰\\n\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"5. 6\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"月17日（\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"首轮）：挪威\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 4-1\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 伊拉克\\n6\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\". 6月\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"18日（首\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"轮）：加拿大 \",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"2-0 \",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"卡塔尔\\n7\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\". 6月\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"20日（第二轮\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"）：美国 2\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"-0 澳大利亚\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"；巴西 3\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"-0 海\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"地\\n\\n### \",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"信息\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"缺口\\n\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"现有\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"工具证据仅覆盖\",\"ts\":\"2026-06-21T04:26:40.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"了部分已进行\",\"ts\":\"2026-06-21T04:26:40.931Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"的小组赛赛事\",\"ts\":\"2026-06-21T04:26:40.931Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，未收录全部\",\"ts\":\"2026-06-21T04:26:40.931Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"已赛比分\",\"ts\":\"2026-06-21T04:26:40.931Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，也无\",\"ts\":\"2026-06-21T04:26:40.931Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"淘汰赛阶段相关\",\"ts\":\"2026-06-21T04:26:40.931Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"赛果（当前\",\"ts\":\"2026-06-21T04:26:40.931Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"赛事仍处于小组\",\"ts\":\"2026-06-21T04:26:40.931Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"赛阶段）。\",\"ts\":\"2026-06-21T04:26:40.931Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T04:26:40.934Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

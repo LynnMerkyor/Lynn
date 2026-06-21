@@ -16,6 +16,7 @@ import DatabaseModule from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 import { scrubPII } from "../pii-guard.js";
+import { isMemoryOutcomeFeedbackEnabled, normalizeMemoryOutcome, type MemoryOutcome } from "./outcome-feedback.js";
 
 type SqliteRunResult = {
   changes: number;
@@ -46,7 +47,7 @@ const Database = DatabaseModule as DatabaseFactory;
  * 当前 schema 版本。每次改表结构时递增，
  * 并在 _migrate() 里添加对应的迁移逻辑。
  */
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 export const DEFAULT_MEMORY_CATEGORY = "other";
 export const MEMORY_CATEGORIES = Object.freeze([
   "person",
@@ -109,6 +110,9 @@ type FactInput = {
   category?: string | null;
   confidence?: number | null;
   evidence?: string | null;
+  harmful_count?: number | null;
+  last_used_outcome?: string | null;
+  last_used_at?: string | null;
 };
 
 type FactRecord = {
@@ -126,6 +130,9 @@ type FactRecord = {
   category: MemoryCategory;
   confidence: number;
   evidence: string | null;
+  harmful_count: number;
+  last_used_outcome: string | null;
+  last_used_at: string | null;
   matchCount?: number;
 };
 
@@ -148,6 +155,9 @@ type FactDbRow = {
   evidence?: string | null;
   matchCount?: number | null;
   rank?: number | null;
+  harmful_count?: number | null;
+  last_used_outcome?: string | null;
+  last_used_at?: string | null;
 };
 
 type FactLinkDbRow = {
@@ -189,6 +199,8 @@ type FactStatements = {
   deleteById: SqliteStatement;
   deleteAll: SqliteStatement;
   touchFact: SqliteStatement;
+  markHelpfulOutcome: SqliteStatement;
+  markHarmfulOutcome: SqliteStatement;
   updateFact: SqliteStatement;
   ftsSearch: SqliteStatement<FactDbRow>;
   getByCategory: SqliteStatement<FactDbRow>;
@@ -212,6 +224,10 @@ type MarkAccessedOptions = {
   at?: string;
 };
 
+type MarkOutcomeOptions = {
+  at?: string;
+};
+
 type UpdateFactOptions = {
   category?: string | null;
   confidence?: number | null;
@@ -229,6 +245,7 @@ type UpdateFactPayload = {
 type FactStoreChangeEvent =
   | { type: "add"; row: { id: number } & FactInsertRow }
   | { type: "access"; ids: number[]; at: string }
+  | { type: "outcome"; ids: number[]; outcome: MemoryOutcome; at: string }
   | { type: "delete"; id: number }
   | { type: "update"; id: number; updates: UpdateFactPayload }
   | { type: "clear" };
@@ -386,7 +403,10 @@ export class FactStore {
         last_accessed_at TEXT,
         category         TEXT NOT NULL DEFAULT 'other',
         confidence       REAL NOT NULL DEFAULT 0.5,
-        evidence         TEXT
+        evidence         TEXT,
+        harmful_count    INTEGER NOT NULL DEFAULT 0,
+        last_used_outcome TEXT,
+        last_used_at     TEXT
       );
     `);
     this._ensureBaseIndexes();
@@ -499,6 +519,20 @@ export class FactStore {
           case 4:
             this._ensureFactLinksTable();
             break;
+          case 5:
+            // v5 → v6：注入结果反馈字段（P0 负反馈 + 注入追踪）
+            if (!this._hasColumn("facts", "harmful_count")) {
+              this.db.exec("ALTER TABLE facts ADD COLUMN harmful_count INTEGER NOT NULL DEFAULT 0");
+            }
+            if (!this._hasColumn("facts", "last_used_outcome")) {
+              this.db.exec("ALTER TABLE facts ADD COLUMN last_used_outcome TEXT");
+            }
+            if (!this._hasColumn("facts", "last_used_at")) {
+              this.db.exec("ALTER TABLE facts ADD COLUMN last_used_at TEXT");
+            }
+            this.db.exec("CREATE INDEX IF NOT EXISTS idx_facts_harmful_count ON facts(harmful_count DESC)");
+            this.db.exec("CREATE INDEX IF NOT EXISTS idx_facts_last_used_at ON facts(last_used_at DESC)");
+            break;
         }
         v++;
       }
@@ -522,6 +556,12 @@ export class FactStore {
     if (this._hasColumn("facts", "category")) {
       this.db.exec("CREATE INDEX IF NOT EXISTS idx_facts_category ON facts(category)");
     }
+    if (this._hasColumn("facts", "harmful_count")) {
+      this.db.exec("CREATE INDEX IF NOT EXISTS idx_facts_harmful_count ON facts(harmful_count DESC)");
+    }
+    if (this._hasColumn("facts", "last_used_at")) {
+      this.db.exec("CREATE INDEX IF NOT EXISTS idx_facts_last_used_at ON facts(last_used_at DESC)");
+    }
   }
 
   private _prepareStatements(): void {
@@ -530,12 +570,14 @@ export class FactStore {
         INSERT INTO facts (
           fact, tags, time, session_id, created_at,
           source, project_path, importance_score, hit_count, last_accessed_at,
-          category, confidence, evidence
+          category, confidence, evidence,
+          harmful_count, last_used_outcome, last_used_at
         )
         VALUES (
           @fact, @tags, @time, @sessionId, @createdAt,
           @source, @projectPath, @importanceScore, @hitCount, @lastAccessedAt,
-          @category, @confidence, @evidence
+          @category, @confidence, @evidence,
+          @harmfulCount, @lastUsedOutcome, @lastUsedAt
         )
       `),
       getAll: this.db.prepare<FactDbRow>(`SELECT * FROM facts ORDER BY time DESC`),
@@ -556,6 +598,24 @@ export class FactStore {
           hit_count = COALESCE(hit_count, 0) + @increment,
           importance_score = COALESCE(importance_score, 0) + @importanceDelta,
           last_accessed_at = @lastAccessedAt
+        WHERE id = @id
+      `),
+      markHelpfulOutcome: this.db.prepare(`
+        UPDATE facts
+        SET
+          hit_count = COALESCE(hit_count, 0) + 1,
+          importance_score = COALESCE(importance_score, 0) + @importanceDelta,
+          last_accessed_at = @usedAt,
+          last_used_outcome = @outcome,
+          last_used_at = @usedAt
+        WHERE id = @id
+      `),
+      markHarmfulOutcome: this.db.prepare(`
+        UPDATE facts
+        SET
+          harmful_count = COALESCE(harmful_count, 0) + 1,
+          last_used_outcome = @outcome,
+          last_used_at = @usedAt
         WHERE id = @id
       `),
       updateFact: this.db.prepare(`
@@ -647,6 +707,11 @@ export class FactStore {
       evidence: typeof entry.evidence === "string" && entry.evidence.trim()
         ? entry.evidence.trim().slice(0, 500)
         : null,
+      harmful_count: isFiniteNumber(entry.harmful_count) ? Math.max(0, Math.floor(entry.harmful_count)) : 0,
+      last_used_outcome: typeof entry.last_used_outcome === "string" && entry.last_used_outcome.trim()
+        ? scrubPII(entry.last_used_outcome.trim().slice(0, 80)).cleaned
+        : null,
+      last_used_at: entry.last_used_at || null,
     };
 
     const result = this._stmts.insert.run({
@@ -663,6 +728,9 @@ export class FactStore {
       category: row.category,
       confidence: row.confidence,
       evidence: row.evidence,
+      harmfulCount: row.harmful_count,
+      lastUsedOutcome: row.last_used_outcome,
+      lastUsedAt: row.last_used_at,
     });
 
     const id = Number(result.lastInsertRowid);
@@ -838,6 +906,48 @@ export class FactStore {
     return touched;
   }
 
+  markOutcome(
+    ids: Array<number | string> | null | undefined,
+    outcome: MemoryOutcome | string,
+    opts: MarkOutcomeOptions = {},
+  ): number {
+    if (!isMemoryOutcomeFeedbackEnabled()) return 0;
+
+    const normalizedOutcome = normalizeMemoryOutcome(outcome);
+    if (!normalizedOutcome) return 0;
+
+    const normalizedIds = [...new Set((ids || []).filter((id) => Number.isInteger(id) || /^[0-9]+$/.test(String(id))).map((id) => Number(id)))];
+    if (normalizedIds.length === 0) return 0;
+
+    const { cleaned } = scrubPII(normalizedOutcome);
+    const usedAt = opts.at || new Date().toISOString();
+    const stmt = normalizedOutcome === "helpful"
+      ? this._stmts.markHelpfulOutcome
+      : this._stmts.markHarmfulOutcome;
+
+    const run = this.db.transaction(() => {
+      let touched = 0;
+      for (const id of normalizedIds) {
+        touched += stmt.run({
+          id,
+          outcome: cleaned,
+          usedAt,
+          importanceDelta: this.hitBonus,
+        }).changes;
+      }
+      return touched;
+    });
+
+    const touched = run();
+    if (touched > 0) {
+      this._emitChange({ type: "outcome", ids: normalizedIds, outcome: normalizedOutcome, at: usedAt });
+      if (normalizedOutcome === "helpful") {
+        this._emitChange({ type: "access", ids: normalizedIds, at: usedAt });
+      }
+    }
+    return touched;
+  }
+
   get size(): number {
     return this._stmts.count.get()!.cnt;
   }
@@ -901,6 +1011,9 @@ export class FactStore {
           category: entry.category || null,
           confidence: entry.confidence,
           evidence: entry.evidence || null,
+          harmful_count: entry.harmful_count,
+          last_used_outcome: entry.last_used_outcome || null,
+          last_used_at: entry.last_used_at || null,
         });
       }
     });
@@ -946,7 +1059,9 @@ export class FactStore {
 
     scored.sort((a, b) => b.score - a.score);
     const results = scored.slice(0, limit).map((s) => s.row);
-    if (results.length > 0) this.markAccessed(results.map((row) => row.id));
+    if (!isMemoryOutcomeFeedbackEnabled() && results.length > 0) {
+      this.markAccessed(results.map((row) => row.id));
+    }
     return results;
   }
 
@@ -968,7 +1083,9 @@ export class FactStore {
       `);
       const rows = stmt.all(...keywords, projectPath, limit);
       const results = rows.map(row => this._rowToFact(row));
-      if (results.length > 0) this.markAccessed(results.map((row) => row.id));
+      if (!isMemoryOutcomeFeedbackEnabled() && results.length > 0) {
+        this.markAccessed(results.map((row) => row.id));
+      }
       return results;
     } catch {
       return this.searchCombined(keywords, limit);
@@ -1054,6 +1171,9 @@ export class FactStore {
       category: normalizeCategory(row.category),
       confidence: clampConfidence(row.confidence),
       evidence: row.evidence ?? null,
+      harmful_count: row.harmful_count ?? 0,
+      last_used_outcome: row.last_used_outcome ?? null,
+      last_used_at: row.last_used_at ?? null,
       matchCount: row.matchCount ?? undefined,
     };
   }

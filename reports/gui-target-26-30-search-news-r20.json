@@ -1,0 +1,202 @@
+{
+  "outputPath": "/Users/lynn/Downloads/Lynn/reports/gui-target-26-30-search-news-r20.json",
+  "gateCurrentDate": "2026-06-21",
+  "total": 5,
+  "counts": {
+    "ok": 5
+  },
+  "providerCounts": {
+    "unknown": 4,
+    "deepseek-chat": 1
+  },
+  "toolRuns": 5,
+  "stepExecuteRuns": 0,
+  "avgMs": 4917,
+  "failures": [],
+  "generatedAt": "2026-06-21T09:22:12.326Z",
+  "results": [
+    {
+      "index": 26,
+      "category": "search",
+      "prompt": "查一下 OpenAI 最近发布了什么新模型，给一句摘要",
+      "startedAt": 1782033695216,
+      "elapsedMs": 7769,
+      "text": "OpenAI 最近发布的通用新模型是 GPT-5.5（含 GPT-5.5 Pro/Thinking/Instant）；一句话摘要：它主打更强的代码、在线研究、数据分析、文档/表格处理和跨工具执行能力。 来源：https://openai.com/index/introducing-gpt-5-5/",
+      "textChars": 149,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "live_news",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "live_news"
+        },
+        {
+          "event": "end",
+          "name": "live_news",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-35-217Z_358fc7dd-d3a8-4047-bef9-15b1c78eaedb.jsonl\",\"clientMessageId\":\"gui-50-26-1782033695222\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-35-217Z_358fc7dd-d3a8-4047-bef9-15b1c78eaedb.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"live_news\",\"args\":{\"query\":\"查一下 OpenAI 最近发布了什么新模型，给一句摘要\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-35-217Z_358fc7dd-d3a8-4047-bef9-15b1c78eaedb.jsonl\",\"streamId\":\"s_mqnkunef_6a2a1i\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"live_news\",\"success\":true,\"summary\":{\"outputPreview\":\"【OpenAI 官方模型发布资料】\\n查询：查一下 OpenAI 最近发布了什么新模型，给一句摘要\\n1. Introducing GPT-5.5 - OpenAI\\n检索窗口: OpenAI 官方资料\\n新鲜度: 官方发布页候选；发布日期以原页面为准\\nURL: https://openai.com/index/introducing-gpt-5-5/\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-35-217Z_358fc7dd-d3a8-4047-bef9-15b1c78eaedb.jsonl\",\"streamId\":\"s_mqnkunef_6a2a1i\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"OpenAI 最近发布的通用新模型是 GPT-5.5（含 GPT-5.5 Pro/Thinking/Instant）；一句话摘要：它主打更强的代码、在线研究、数据分析、文档/表格处理和跨工具执行能力。 来源：https://openai.com/index/introducing-gpt-5-5/\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-35-217Z_358fc7dd-d3a8-4047-bef9-15b1c78eaedb.jsonl\",\"streamId\":\"s_mqnkunef_6a2a1i\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-35-217Z_358fc7dd-d3a8-4047-bef9-15b1c78eaedb.jsonl\",\"streamId\":\"s_mqnkunef_6a2a1i\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-35-217Z_358fc7dd-d3a8-4047-bef9-15b1c78eaedb.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 27,
+      "category": "search",
+      "prompt": "访问 example.com 并用一句话概括页面内容",
+      "startedAt": 1782033705491,
+      "elapsedMs": 12940,
+      "text": "Example.com 是一个专门用于文档和示例中的示范域名，任何人都可以直接使用而无需申请许可。",
+      "textChars": 49,
+      "thinkingChars": 309,
+      "providerTrail": [
+        "deepseek-chat",
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "webfetch",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "webfetch"
+        },
+        {
+          "event": "end",
+          "name": "webfetch",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 99,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":78}\n{\"type\":\"provider_meta\",\"activeProvider\":\"deepseek-chat\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":79}\n{\"type\":\"thinking_start\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":80}\n{\"type\":\"thinking_delta\",\"delta\":\"The\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":81}\n{\"type\":\"thinking_delta\",\"delta\":\" page\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":82}\n{\"type\":\"thinking_delta\",\"delta\":\" is\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":83}\n{\"type\":\"thinking_delta\",\"delta\":\" very\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":84}\n{\"type\":\"thinking_delta\",\"delta\":\" simple\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":85}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":86}\n{\"type\":\"thinking_delta\",\"delta\":\" Let\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":87}\n{\"type\":\"thinking_delta\",\"delta\":\" me\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":88}\n{\"type\":\"thinking_delta\",\"delta\":\" summarize\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":89}\n{\"type\":\"thinking_delta\",\"delta\":\" in\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":90}\n{\"type\":\"thinking_delta\",\"delta\":\" one\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":91}\n{\"type\":\"thinking_delta\",\"delta\":\" sentence\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":92}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":93}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":94}\n{\"type\":\"text_delta\",\"delta\":\"Example.com 是一个专门用于文档和示例中的示范域名，任何人都可以直接使用而无需申请许可。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":95}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\",\"streamId\":\"s_mqnkuvc3_6zulua\",\"seq\":96}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-21-45-497Z_80d1295d-94e1-4d26-b04a-11f0f8002242.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 28,
+      "category": "search",
+      "prompt": "查一下 2026 世界杯美国队上一场比分",
+      "startedAt": 1782033720936,
+      "elapsedMs": 1857,
+      "text": "已匹配到的比赛结果（北京时间），共 2 场：\n- 2026/06/13 09:00 United States 4-1 Paraguay (FT)\n- 2026/06/20 03:00 United States 2-0 Australia (FT)\n\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260611-20260621\n数据来源/判断依据\n- 工具：research_prefetch\n- 时间：2026-06-21 17:22（本机时间）\n- 来源：site.api.espn.com\n- 依据：系统预取资料中的可用证据。\n- 注意：资料不足时应继续补充来源再下结论。",
+      "textChars": 364,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-00-941Z_b039b610-d363-4c7e-9c4f-1cd24f5502dc.jsonl\",\"clientMessageId\":\"gui-50-28-1782033720951\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-00-941Z_b039b610-d363-4c7e-9c4f-1cd24f5502dc.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"sports_score\",\"args\":{\"query\":\"查一下 2026 世界杯美国队上一场比分\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-00-941Z_b039b610-d363-4c7e-9c4f-1cd24f5502dc.jsonl\",\"streamId\":\"s_mqnkv794_pq0til\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"sports_score\",\"success\":true,\"summary\":{\"outputPreview\":\"【体育比分工具资料】\\n体育查询结果 (ESPN scoreboard)\\nprovider: espn_scoreboard\\nleague: FIFA World Cup\\nsource: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260611-2026062\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-00-941Z_b039b610-d363-4c7e-9c4f-1cd24f5502dc.jsonl\",\"streamId\":\"s_mqnkv794_pq0til\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"已匹配到的比赛结果（北京时间），共 2 场：\\n- 2026/06/13 09:00 United States 4-1 Paraguay (FT)\\n- 2026/06/20 03:00 United States 2-0 Australia (FT)\\n\\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260611-20260621\\n数据来源/判断依据\\n- 工具：research_prefetch\\n- 时间：2026-06-21 17:22（本机时间）\\n- 来源：site.api.espn.com\\n- 依据：系统预取资料中的可用证据。\\n- 注意：资料不足时应继续补充来源再下结论。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-00-941Z_b039b610-d363-4c7e-9c4f-1cd24f5502dc.jsonl\",\"streamId\":\"s_mqnkv794_pq0til\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-00-941Z_b039b610-d363-4c7e-9c4f-1cd24f5502dc.jsonl\",\"streamId\":\"s_mqnkv794_pq0til\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-00-941Z_b039b610-d363-4c7e-9c4f-1cd24f5502dc.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 29,
+      "category": "search",
+      "prompt": "查一下今晚英格兰与克罗地亚是否有比赛",
+      "startedAt": 1782033725299,
+      "elapsedMs": 1016,
+      "text": "本轮 ESPN scoreboard 没有在 FIFA World Cup（20260621-20260622）匹配到这组对阵。\n所以按这条直接数据源看，今晚没有这场比赛；我不会再用泛搜索结果猜测补答案。\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260621-20260622\n数据来源/判断依据\n- 工具：research_prefetch\n- 时间：2026-06-21 17:22（本机时间）\n- 来源：site.api.espn.com\n- 依据：系统预取资料中的可用证据。\n- 注意：资料不足时应继续补充来源再下结论。",
+      "textChars": 340,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-05-304Z_d4b895ef-d108-4973-ae3c-72ac74743a94.jsonl\",\"clientMessageId\":\"gui-50-29-1782033725313\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-05-304Z_d4b895ef-d108-4973-ae3c-72ac74743a94.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"sports_score\",\"args\":{\"query\":\"查一下今晚英格兰与克罗地亚是否有比赛\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-05-304Z_d4b895ef-d108-4973-ae3c-72ac74743a94.jsonl\",\"streamId\":\"s_mqnkvama_i3dpgj\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"sports_score\",\"success\":true,\"summary\":{\"outputPreview\":\"【体育比分工具资料】\\n体育查询结果 (ESPN scoreboard)\\nprovider: espn_scoreboard\\nleague: FIFA World Cup\\nsource: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260621-2026062\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-05-304Z_d4b895ef-d108-4973-ae3c-72ac74743a94.jsonl\",\"streamId\":\"s_mqnkvama_i3dpgj\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"本轮 ESPN scoreboard 没有在 FIFA World Cup（20260621-20260622）匹配到这组对阵。\\n所以按这条直接数据源看，今晚没有这场比赛；我不会再用泛搜索结果猜测补答案。\\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260621-20260622\\n数据来源/判断依据\\n- 工具：research_prefetch\\n- 时间：2026-06-21 17:22（本机时间）\\n- 来源：site.api.espn.com\\n- 依据：系统预取资料中的可用证据。\\n- 注意：资料不足时应继续补充来源再下结论。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-05-304Z_d4b895ef-d108-4973-ae3c-72ac74743a94.jsonl\",\"streamId\":\"s_mqnkvama_i3dpgj\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-05-304Z_d4b895ef-d108-4973-ae3c-72ac74743a94.jsonl\",\"streamId\":\"s_mqnkvama_i3dpgj\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-05-304Z_d4b895ef-d108-4973-ae3c-72ac74743a94.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 30,
+      "category": "search",
+      "prompt": "查一下深圳今天有没有暴雨预警",
+      "startedAt": 1782033728820,
+      "elapsedMs": 1001,
+      "text": "深圳今天未检出当前生效的暴雨预警。 官方数据同时显示深圳当前生效预警为 0。 官方数据更新时间：2026-06-21 17:20:00。 来源：https://weather.121.com.cn/data_cache/szWeather/alarm/szAlarm.js\n数据来源/判断依据\n- 工具：weather\n- 时间：2026-06-21 17:22（本机时间）\n- 来源：weather.121.com.cn、weather.sz.gov.cn\n- 依据：天气工具返回的预报快照，按用户问法优先选择今天/明天/后天对应日期。\n- 注意：天气预报会滚动变化，出门前建议再看本地天气 App 或雷达。",
+      "textChars": 305,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "weather",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "weather"
+        },
+        {
+          "event": "end",
+          "name": "weather",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-08-825Z_bb38c790-957f-48c8-a9cd-171fd82deb16.jsonl\",\"clientMessageId\":\"gui-50-30-1782033728836\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-08-825Z_bb38c790-957f-48c8-a9cd-171fd82deb16.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"weather\",\"args\":{\"query\":\"查一下深圳今天有没有暴雨预警\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-08-825Z_bb38c790-957f-48c8-a9cd-171fd82deb16.jsonl\",\"streamId\":\"s_mqnkvdc5_efaz59\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"weather\",\"success\":true,\"summary\":{\"outputPreview\":\"【天气工具资料】\\n深圳天气预警（深圳市气象局/深圳天气 121 数据缓存）\\nprovider: weather.121.com.cn\\nsource: https://weather.121.com.cn/data_cache/szWeather/alarm/szAlarm.js\\n更新时间: 2026-06-21 17:20:00\\n当前深圳生效预警: 0\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-08-825Z_bb38c790-957f-48c8-a9cd-171fd82deb16.jsonl\",\"streamId\":\"s_mqnkvdc5_efaz59\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"深圳今天未检出当前生效的暴雨预警。 官方数据同时显示深圳当前生效预警为 0。 官方数据更新时间：2026-06-21 17:20:00。 来源：https://weather.121.com.cn/data_cache/szWeather/alarm/szAlarm.js\\n数据来源/判断依据\\n- 工具：weather\\n- 时间：2026-06-21 17:22（本机时间）\\n- 来源：weather.121.com.cn、weather.sz.gov.cn\\n- 依据：天气工具返回的预报快照，按用户问法优先选择今天/明天/后天对应日期。\\n- 注意：天气预报会滚动变化，出门前建议再看本地天气 App 或雷达。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-08-825Z_bb38c790-957f-48c8-a9cd-171fd82deb16.jsonl\",\"streamId\":\"s_mqnkvdc5_efaz59\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-08-825Z_bb38c790-957f-48c8-a9cd-171fd82deb16.jsonl\",\"streamId\":\"s_mqnkvdc5_efaz59\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-22-08-825Z_bb38c790-957f-48c8-a9cd-171fd82deb16.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

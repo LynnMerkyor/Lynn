@@ -81,6 +81,34 @@ function pcm16ToWav(pcm: Buffer, sampleRate = 24_000): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
+function decodeAudioPayload(body: JsonObject): Buffer {
+  const raw = stringValue(body.audio_base64)
+    || stringValue(body.audioBase64)
+    || stringValue(body.audio);
+  if (!raw) return Buffer.alloc(0);
+  try {
+    return Buffer.from(raw, 'base64');
+  } catch {
+    return Buffer.alloc(0);
+  }
+}
+
+function extractPcm16FromWav(audio: Buffer): Buffer {
+  if (audio.length < 12 || audio.subarray(0, 4).toString('ascii') !== 'RIFF' || audio.subarray(8, 12).toString('ascii') !== 'WAVE') {
+    return audio;
+  }
+  let offset = 12;
+  while (offset + 8 <= audio.length) {
+    const chunkId = audio.subarray(offset, offset + 4).toString('ascii');
+    const chunkSize = audio.readUInt32LE(offset + 4);
+    const dataStart = offset + 8;
+    const dataEnd = Math.min(dataStart + chunkSize, audio.length);
+    if (chunkId === 'data') return Buffer.from(audio.subarray(dataStart, dataEnd));
+    offset = dataStart + chunkSize + (chunkSize % 2);
+  }
+  return audio;
+}
+
 function shortId(): string {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 }
@@ -206,9 +234,22 @@ async function runRealtime(body: JsonObject, input: { mode: 'asr' | 'tts'; audio
 }
 
 export async function voiceAsr(body: JsonObject, signal?: AbortSignal): Promise<JsonObject> {
-  void body;
-  void signal;
-  throw new Error('StepFun Realtime stateless returns assistant response transcripts, not standalone user ASR transcripts');
+  const audio = extractPcm16FromWav(decodeAudioPayload(body));
+  if (!audio.length) throw new Error('missing audio');
+  const result = await runRealtime(body, {
+    mode: 'asr',
+    audioPcm: audio,
+    signal,
+  });
+  const text = result.text.trim();
+  if (!text) throw new Error('StepFun Realtime returned no transcript');
+  return {
+    ok: true,
+    provider: 'stepfun-realtime',
+    text,
+    transcript: text,
+    raw: result.raw,
+  };
 }
 
 export async function voiceTts(body: JsonObject, signal?: AbortSignal): Promise<JsonObject> {

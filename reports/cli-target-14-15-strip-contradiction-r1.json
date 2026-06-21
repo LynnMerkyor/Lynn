@@ -1,0 +1,159 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-14-15-strip-contradiction-r1.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-XSMQRN",
+  "gateCurrentDate": "2026-06-21",
+  "total": 2,
+  "counts": {
+    "ok": 2
+  },
+  "providerCounts": {
+    "step-3.7-flash": 2
+  },
+  "toolRuns": 2,
+  "stepExecuteRuns": 0,
+  "avgMs": 18651,
+  "generatedAt": "2026-06-21T04:37:09.502Z",
+  "results": [
+    {
+      "index": 14,
+      "category": "realtime",
+      "prompt": "世界杯半决赛在哪一天？",
+      "exitCode": 0,
+      "durationMs": 15942,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "web_search"
+      ],
+      "assistantText": "根据现有工具证据，2026年美加墨世界杯仅查到一场半决赛将于7月14日在美国达拉斯举行，另一场半决赛的具体日期、两场半决赛的对阵安排等信息暂未在现有证据中找到。",
+      "reasoningChars": 1361,
+      "usage": {
+        "prompt_tokens": 4012,
+        "completion_tokens": 639,
+        "total_tokens": 4651,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": ":15239}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T04:36:47.871Z\",\"usage\":{\"prompt_tokens\":4012,\"completion_tokens\":607,\"total_tokens\":4619,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15239}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T04:36:47.871Z\",\"usage\":{\"prompt_tokens\":4012,\"completion_tokens\":611,\"total_tokens\":4623,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15239}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T04:36:47.952Z\",\"usage\":{\"prompt_tokens\":4012,\"completion_tokens\":615,\"total_tokens\":4627,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15320}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T04:36:47.952Z\",\"usage\":{\"prompt_tokens\":4012,\"completion_tokens\":619,\"total_tokens\":4631,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15320}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T04:36:47.952Z\",\"usage\":{\"prompt_tokens\":4012,\"completion_tokens\":623,\"total_tokens\":4635,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15320}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T04:36:48.112Z\",\"usage\":{\"prompt_tokens\":4012,\"completion_tokens\":627,\"total_tokens\":4639,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15480}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T04:36:48.112Z\",\"usage\":{\"prompt_tokens\":4012,\"completion_tokens\":631,\"total_tokens\":4643,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15480}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T04:36:48.112Z\",\"usage\":{\"prompt_tokens\":4012,\"completion_tokens\":632,\"total_tokens\":4644,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15480}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T04:36:48.112Z\",\"usage\":{\"prompt_tokens\":4012,\"completion_tokens\":636,\"total_tokens\":4648,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15480}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T04:36:48.112Z\",\"usage\":{\"prompt_tokens\":4012,\"completion_tokens\":638,\"total_tokens\":4650,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15480}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T04:36:48.113Z\",\"usage\":{\"prompt_tokens\":4012,\"completion_tokens\":639,\"total_tokens\":4651,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15481}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T04:36:48.113Z\",\"usage\":{\"prompt_tokens\":4012,\"completion_tokens\":639,\"total_tokens\":4651,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}},\"durationMs\":15481}\n{\"type\":\"assistant.delta\",\"text\":\"根据现有\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"工具证据，202\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"6年美加\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"墨世界杯仅查到\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"一场半决赛将于\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"7月14日\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"在美国达拉斯举行\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，另一场半\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"决赛的具体日期、\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"两场半决赛\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"的对阵安排等信息\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"暂\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"未在现有证据\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"中找到。\",\"ts\":\"2026-06-21T04:36:48.130Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T04:36:48.133Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 15,
+      "category": "realtime",
+      "prompt": "2026世界杯已经出的赛事比分",
+      "exitCode": 0,
+      "durationMs": 21359,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash"
+      ],
+      "toolNames": [
+        "sports_score",
+        "web_search"
+      ],
+      "assistantText": "截至2026年6月21日，基于现有工具证据，已完赛的2026美加墨世界杯部分赛事比分及情况如下：\n### 已确认具体比分的赛果\n1. 6月15日 E组首轮：德国7-1 库拉索\n2. 6月15日 E组首轮：科特迪瓦1-0 厄瓜多尔（迪亚洛第90分钟绝杀）\n3. 6月15日 F组首轮：荷兰2-2 日本\n4. 6月15日 F组首轮：瑞典5-1 突尼斯\n5. 6月16日 G组首轮：伊朗2-2 新西兰\n6. 6月17日 I组首轮：挪威4-1 伊拉克（哈兰德贡献2球1助攻）\n7. 6月19日 A组第2轮：捷克1-1 南非\n8. 首轮已赛：加拿大1-1 波黑（加拿大收获队史世界杯首个积分）\n### 首轮整体情况\n小组赛首轮24场比赛已于北京时间6月18日全部结束，其中15场分出胜负、9场战平；东道主美国、法国、英格兰、阿根廷均在首战取胜，西班牙、葡萄牙等球队未能赢下首轮，出战的亚洲球队首轮保持不败。\n### 缺口说明\n现有工具证据未覆盖全部已赛场次的详细比分，仅查到上述部分场次的具体赛果，第二轮其余已赛场次、以及更完整的全量赛果列表未在现有证据中体现。",
+      "reasoningChars": 2321,
+      "usage": {
+        "cached_tokens": 512,
+        "prompt_tokens": 4913,
+        "completion_tokens": 1744,
+        "total_tokens": 6657,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "\":\"assistant.delta\",\"text\":\"兰德贡献2球\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"1助攻）\\n7\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\". 6\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"月19日 A\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"组第\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"2轮：捷克\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"1-1 \",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"南非\\n8.\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" 首轮已\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"赛：加拿大\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"1-1 \",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"波黑（\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"加拿大收获\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"队史世界杯\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"首个积分\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"）\\n### 首\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"轮整体情况\\n\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"小组赛首\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"轮24场比赛\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"已于北京时间6月\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"18日全部结束\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，其中15\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"场分出\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"胜负、9\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"场战\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"平；东\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"道主美国\",\"ts\":\"2026-06-21T04:37:09.431Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"、法国、英格兰\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"、阿根廷均在\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"首战\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"取胜，西班牙\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"、葡萄牙等\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"球队未能赢\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"下首轮，\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"出\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"战的\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"亚洲球队首轮\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"保持不败。\\n\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"### 缺口说明\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"\\n现有工具证据\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"未覆盖全部已\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"赛场次的详细\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"比分，仅查到\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"上述部分\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"场次的具体\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"赛果，第二轮\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"其余已\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"赛场次\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"、以及更\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"完整的全\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"量赛果列表\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"未在现有证据\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"中体现。\",\"ts\":\"2026-06-21T04:37:09.491Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T04:37:09.495Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

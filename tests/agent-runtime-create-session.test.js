@@ -93,8 +93,8 @@ describe("createLynnAgentSession native runtime", () => {
       cwd: tempDir,
       sessionManager: manager,
       model: {
-        id: "brain-router",
-        provider: "brain",
+        id: "custom-router",
+        provider: "custom-provider",
         api: "openai-completions",
         baseUrl: "http://127.0.0.1:65530/v1",
         apiKey: "test-key",
@@ -118,5 +118,1240 @@ describe("createLynnAgentSession native runtime", () => {
       role: "assistant",
       content: "工具证据已整理。",
     });
+  });
+
+  it("does not expose Brain-managed tools to the local native runtime for Brain models", async () => {
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: SessionManager.create(tempDir, tempDir),
+      model: {
+        id: "brain-router",
+        provider: "brain",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:65530/v1",
+        apiKey: "test-key",
+      },
+      tools: [
+        { name: "read", description: "read file", parameters: { type: "object", properties: {} } },
+        { name: "web_search", description: "brain-owned search", parameters: { type: "object", properties: {} } },
+      ],
+      customTools: [
+        { name: "web-search", description: "local search skill must not run for Brain", parameters: { type: "object", properties: {} } },
+        { name: "stock_market", description: "brain-owned quote", parameters: { type: "object", properties: {} } },
+        { name: "present-files", description: "local helper", parameters: { type: "object", properties: {} } },
+      ],
+    });
+
+    expect(session.getActiveToolNames()).toEqual(["read", "present-files"]);
+  });
+
+  it("exposes step_execute to Brain and local planners but not Step itself", async () => {
+    const registry = {
+      getAll: () => [
+        { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+        { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+      ],
+    };
+    const { session: dsSession } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: SessionManager.create(tempDir, tempDir),
+      modelRegistry: registry,
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+      customTools: [{ name: "web-search", description: "search", parameters: { type: "object", properties: {} } }],
+    });
+    expect(dsSession.getActiveToolNames()).toContain("step_execute");
+
+    const { session: stepSession } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: SessionManager.create(tempDir, tempDir),
+      modelRegistry: registry,
+      model: { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+    });
+    expect(stepSession.getActiveToolNames()).not.toContain("step_execute");
+
+    const { session: brainSession } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: SessionManager.create(tempDir, tempDir),
+      modelRegistry: registry,
+      model: { id: "brain-router", provider: "brain", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "brain" },
+    });
+    expect(brainSession.getActiveToolNames()).toContain("step_execute");
+  });
+
+  it("lets Brain planners call step_execute while keeping Brain-managed tools filtered", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "brain-router" && fetchMock.mock.calls.length === 1) {
+        const toolNames = body.tools.map((tool) => tool.function.name);
+        expect(toolNames).toContain("step_execute");
+        expect(toolNames).not.toContain("web_search");
+        expect(toolNames).not.toContain("stock_market");
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_step\",\"function\":{\"name\":\"step_execute\",\"arguments\":\"{\\\"task\\\":\\\"整理今晚世界杯比赛场次\\\",\\\"context\\\":\\\"用户问今晚世界杯有几场比赛\\\"}\"}}]}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "step-3.7-flash") {
+        expect(body.tools).toBeUndefined();
+        expect(JSON.stringify(body.messages)).toContain("整理今晚世界杯比赛场次");
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"今晚共有 4 场比赛。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "brain-router") {
+        expect(JSON.stringify(body.messages)).toContain("Step 3.7 Flash 执行结果");
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"根据 Step 执行结果，今晚世界杯共有 4 场比赛。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "brain-router", provider: "brain", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "brain" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+        ],
+      },
+      model: { id: "brain-router", provider: "brain", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "brain" },
+      customTools: [
+        { name: "web_search", description: "brain-owned search", parameters: { type: "object", properties: {} } },
+        { name: "stock_market", description: "brain-owned quote", parameters: { type: "object", properties: {} } },
+        { name: "present-files", description: "local helper", parameters: { type: "object", properties: {} } },
+      ],
+    });
+
+    await session.prompt("今晚世界杯有几场比赛");
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const visibleText = manager.buildSessionContext().messages.at(-1).content;
+    expect(visibleText).toBe("根据 Step 执行结果，今晚世界杯共有 4 场比赛。");
+  });
+
+  it("lets DeepSeek delegate a subtask to StepFun via step_execute without exposing tools to Step", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash" && fetchMock.mock.calls.length === 1) {
+        expect(body.tools.map((tool) => tool.function.name)).toContain("step_execute");
+        expect(JSON.stringify(body.messages)).toContain("step_execute");
+        expect(JSON.stringify(body.messages)).toContain("Step 3.7 Flash 高速执行器");
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_step\",\"function\":{\"name\":\"step_execute\",\"arguments\":\"{\\\"task\\\":\\\"整理昨晚世界杯比分\\\",\\\"context\\\":\\\"已有搜索结果：墨西哥2-0南非\\\"}\"}}]}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "step-3.7-flash") {
+        expect(body.tools).toBeUndefined();
+        expect(JSON.stringify(body.messages)).toContain("整理昨晚世界杯比分");
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"昨晚世界杯比分：墨西哥 2-0 南非。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "deepseek-v4-flash") {
+        expect(JSON.stringify(body.messages)).toContain("Step 3.7 Flash 执行结果");
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"根据 Step 执行结果，昨晚墨西哥 2-0 南非。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+    });
+
+    await session.prompt("世界杯昨晚比赛结果");
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const serialized = JSON.stringify(manager.buildSessionContext().messages);
+    expect(serialized).toContain("Step 3.7 Flash 执行结果");
+    expect(serialized).toContain("根据 Step 执行结果，昨晚墨西哥 2-0 南非。");
+  });
+
+  it("executes a Brain-managed tool call from the original fallback tool set when Brain still emits one", async () => {
+    const responses = [
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_weather\",\"function\":{\"name\":\"weather\",\"arguments\":\"{\\\"location\\\":\\\"深圳\\\"}\"}}]}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"深圳天气已整理。\"}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+    ];
+    const fetchMock = vi.fn(async () => responses.shift());
+    globalThis.fetch = fetchMock;
+    const execute = vi.fn(async (_id, params) => ({
+      content: [{ type: "text", text: `weather:${params.location}` }],
+    }));
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: {
+        id: "brain-router",
+        provider: "brain",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:65530/v1",
+        apiKey: "test-key",
+      },
+      customTools: [{
+        name: "weather",
+        description: "weather",
+        parameters: { type: "object", properties: { location: { type: "string" } }, required: ["location"] },
+        execute,
+      }],
+    });
+
+    expect(session.getActiveToolNames()).toEqual([]);
+    await session.prompt("深圳明天天气");
+
+    expect(execute).toHaveBeenCalledWith("call_weather", { location: "深圳" }, expect.any(Object));
+    const serialized = JSON.stringify(manager.buildSessionContext().messages);
+    expect(serialized).toContain("weather:深圳");
+    expect(serialized).toContain("深圳天气已整理。");
+    expect(serialized).not.toContain("Tool not found");
+  });
+
+  it("does not leak literal Tool not found text when a requested tool is unavailable", async () => {
+    const responses = [
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_rate\",\"function\":{\"name\":\"exchange_rate\",\"arguments\":\"{\\\"pair\\\":\\\"USD/CNY\\\"}\"}}]}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+    ];
+    const fetchMock = vi.fn(async () => responses.shift());
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: {
+        id: "custom-router",
+        provider: "custom-provider",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:65530/v1",
+        apiKey: "test-key",
+      },
+    });
+
+    await session.prompt("美元人民币汇率现在多少？");
+
+    const serialized = JSON.stringify(manager.buildSessionContext().messages);
+    expect(serialized).not.toContain("Tool not found");
+    expect(serialized).toContain("模型这次没有返回可见内容");
+  });
+
+  it("resolves underscore tool calls to hyphenated runtime tool aliases", async () => {
+    const responses = [
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_search\",\"function\":{\"name\":\"web_search\",\"arguments\":\"{\\\"query\\\":\\\"世界杯昨晚比赛结果\\\"}\"}}]}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"昨晚比赛结果已整理。\"}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+    ];
+    const fetchMock = vi.fn(async () => responses.shift());
+    globalThis.fetch = fetchMock;
+    const execute = vi.fn(async (_id, params) => ({
+      content: [{ type: "text", text: `search:${params.query}` }],
+    }));
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: {
+        id: "custom-router",
+        provider: "custom-provider",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:65530/v1",
+        apiKey: "test-key",
+      },
+      customTools: [{
+        name: "web-search",
+        description: "search",
+        parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        execute,
+      }],
+    });
+
+    await session.prompt("世界杯昨晚比赛结果");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledWith(
+      "call_search",
+      { query: "世界杯昨晚比赛结果" },
+      expect.any(Object),
+    );
+    const serialized = JSON.stringify(manager.buildSessionContext().messages);
+    expect(serialized).toContain("search:世界杯昨晚比赛结果");
+    expect(serialized).toContain("昨晚比赛结果已整理。");
+    expect(serialized).not.toContain("Tool not found");
+  });
+
+  it("normalizes concatenated web_fetch arguments to the final URL object", async () => {
+    const responses = [
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_fetch\",\"function\":{\"name\":\"web_fetch\",\"arguments\":\"{\\\"query\\\":\\\"世界杯 比分\\\"}{\\\"query\\\":\\\"World Cup scores\\\"}{\\\"url\\\":\\\"https://example.com/match\\\"}\"}}]}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"抓取结果已整理。\"}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+    ];
+    const fetchMock = vi.fn(async () => responses.shift());
+    globalThis.fetch = fetchMock;
+    const execute = vi.fn(async (_id, params) => ({
+      content: [{ type: "text", text: `fetch:${params.url}:${params.query || ""}` }],
+    }));
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: {
+        id: "custom-router",
+        provider: "custom-provider",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:65530/v1",
+        apiKey: "test-key",
+      },
+      customTools: [{
+        name: "web-fetch",
+        description: "fetch",
+        parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
+        execute,
+      }],
+    });
+
+    await session.prompt("世界杯昨晚比赛结果");
+
+    expect(execute).toHaveBeenCalledWith(
+      "call_fetch",
+      { url: "https://example.com/match" },
+      expect.any(Object),
+    );
+    const serialized = JSON.stringify(manager.buildSessionContext().messages);
+    expect(serialized).toContain("fetch:https://example.com/match:");
+    expect(serialized).not.toContain("World Cup scores");
+  });
+
+  it("reroutes query-only web_fetch calls to web_search when available", async () => {
+    const responses = [
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_fetch\",\"function\":{\"name\":\"web_fetch\",\"arguments\":\"{\\\"query\\\":\\\"世界杯 比分\\\"}{\\\"query\\\":\\\"世界杯昨晚比分\\\"}\"}}]}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"搜索结果已整理。\"}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+    ];
+    const fetchMock = vi.fn(async () => responses.shift());
+    globalThis.fetch = fetchMock;
+    const fetchExecute = vi.fn(async () => ({ content: [{ type: "text", text: "should-not-run" }] }));
+    const searchExecute = vi.fn(async (_id, params) => ({
+      content: [{ type: "text", text: `search:${params.query}` }],
+    }));
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: {
+        id: "custom-router",
+        provider: "custom-provider",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:65530/v1",
+        apiKey: "test-key",
+      },
+      customTools: [
+        {
+          name: "web-fetch",
+          description: "fetch",
+          parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
+          execute: fetchExecute,
+        },
+        {
+          name: "web-search",
+          description: "search",
+          parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+          execute: searchExecute,
+        },
+      ],
+    });
+
+    await session.prompt("世界杯昨晚比赛结果");
+
+    expect(fetchExecute).not.toHaveBeenCalled();
+    expect(searchExecute).toHaveBeenCalledWith(
+      "call_fetch",
+      { query: "世界杯昨晚比分" },
+      expect.any(Object),
+    );
+    const serialized = JSON.stringify(manager.buildSessionContext().messages);
+    expect(serialized).toContain("search:世界杯昨晚比分");
+    expect(serialized).toContain("\"name\":\"web-search\"");
+  });
+
+  it("does not persist or render assistant draft text from a tool-call turn", async () => {
+    const responses = [
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"草稿不应显示。\"}}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_search\",\"function\":{\"name\":\"web_search\",\"arguments\":\"{\\\"query\\\":\\\"旧查询\\\"}{\\\"query\\\":\\\"新查询\\\"}{\\\"limit\\\":3}\"}}]}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"最终答案只出现一次。\"}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+    ];
+    const fetchMock = vi.fn(async () => responses.shift());
+    globalThis.fetch = fetchMock;
+    const execute = vi.fn(async (_id, params) => ({
+      content: [{ type: "text", text: `search:${params.query}:${params.limit}` }],
+    }));
+    const manager = SessionManager.create(tempDir, tempDir);
+    const events = [];
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: {
+        id: "custom-router",
+        provider: "custom-provider",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:65530/v1",
+        apiKey: "test-key",
+      },
+      customTools: [{
+        name: "web-search",
+        description: "search",
+        parameters: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } }, required: ["query"] },
+        execute,
+      }],
+    });
+    session.subscribe((event) => events.push(event));
+
+    await session.prompt("世界杯昨晚比赛结果");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledWith(
+      "call_search",
+      { query: "新查询", limit: 3 },
+      expect.any(Object),
+    );
+
+    const visibleText = events
+      .filter((event) => event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta")
+      .map((event) => event.assistantMessageEvent.text || event.assistantMessageEvent.delta || "")
+      .join("");
+    expect(visibleText).toBe("最终答案只出现一次。");
+
+    const messages = manager.buildSessionContext().messages;
+    const toolCallAssistant = messages.find((message) => message.role === "assistant" && Array.isArray(message.tool_calls));
+    expect(toolCallAssistant).toMatchObject({ role: "assistant", content: "" });
+    expect(JSON.stringify(messages)).not.toContain("草稿不应显示");
+    expect(JSON.stringify(messages)).toContain("search:新查询:3");
+    expect(messages.at(-1)).toMatchObject({
+      role: "assistant",
+      content: "最终答案只出现一次。",
+    });
+  });
+
+  it("hands empty DeepSeek responses to StepFun instead of ending with an empty fallback", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash") {
+        return sseResponse(["data: [DONE]\n\n"]);
+      }
+      if (body.model === "step-3.7-flash") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"Step 已接管并给出答案。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+    const events = [];
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+          { id: "glm-5-turbo", provider: "zhipu", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "glm" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+    });
+    session.subscribe((event) => events.push(event));
+
+    await session.prompt("今晚世界杯有几场比赛");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const stepBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(stepBody.model).toBe("step-3.7-flash");
+    expect(stepBody.tools).toBeUndefined();
+    expect(stepBody.messages.at(-1).content).toContain("上一模型没有返回可见正文");
+    expect(events.some((event) => event.type === "provider_meta" && event.activeProvider === "step-3.7-flash")).toBe(true);
+    const visibleText = events
+      .filter((event) => event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta")
+      .map((event) => event.assistantMessageEvent.text || event.assistantMessageEvent.delta || "")
+      .join("");
+    expect(visibleText).toBe("Step 已接管并给出答案。");
+    expect(manager.buildSessionContext().messages.at(-1)).toMatchObject({
+      role: "assistant",
+      content: "Step 已接管并给出答案。",
+    });
+  });
+
+  it("hands aborted DeepSeek requests to StepFun instead of ending with aborted", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash") {
+        const err = new Error("aborted");
+        err.name = "AbortError";
+        throw err;
+      }
+      if (body.model === "step-3.7-flash") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"Step 已接管超时请求。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+    const events = [];
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+          { id: "glm-5-turbo", provider: "zhipu", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "glm" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+    });
+    session.subscribe((event) => events.push(event));
+
+    await session.prompt("今晚世界杯有几场比赛");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const stepBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(stepBody.model).toBe("step-3.7-flash");
+    expect(stepBody.tools).toBeUndefined();
+    expect(stepBody.messages.at(-1).content).toContain("上一模型请求失败");
+    expect(events.some((event) => event.type === "provider_meta" && event.activeProvider === "step-3.7-flash")).toBe(true);
+    expect(events.some((event) => event.assistantMessageEvent?.type === "error" && event.assistantMessageEvent.error === "aborted")).toBe(false);
+    const visibleText = events
+      .filter((event) => event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta")
+      .map((event) => event.assistantMessageEvent.text || event.assistantMessageEvent.delta || "")
+      .join("");
+    expect(visibleText).toBe("Step 已接管超时请求。");
+    expect(manager.buildSessionContext().messages.at(-1)).toMatchObject({
+      role: "assistant",
+      content: "Step 已接管超时请求。",
+    });
+  });
+
+  it("hands timed out DeepSeek requests to StepFun instead of ending the turn", async () => {
+    const previousModelTimeout = process.env.LYNN_MODEL_CALL_TIMEOUT_MS;
+    const previousFallbackTimeout = process.env.LYNN_FALLBACK_MODEL_CALL_TIMEOUT_MS;
+    process.env.LYNN_MODEL_CALL_TIMEOUT_MS = "10";
+    process.env.LYNN_FALLBACK_MODEL_CALL_TIMEOUT_MS = "1000";
+
+    try {
+      const fetchMock = vi.fn(async (_url, init) => {
+        const body = JSON.parse(init.body);
+        if (body.model === "deepseek-v4-flash") {
+          await new Promise((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () => {
+              const err = new Error("aborted");
+              err.name = "AbortError";
+              reject(err);
+            }, { once: true });
+          });
+        }
+        if (body.model === "step-3.7-flash") {
+          return sseResponse([
+            "data: {\"choices\":[{\"delta\":{\"content\":\"世界杯半决赛在北京时间 7月10日和7月11日。\"}}]}\n\n",
+            "data: [DONE]\n\n",
+          ]);
+        }
+        throw new Error(`unexpected model ${body.model}`);
+      });
+      globalThis.fetch = fetchMock;
+      const manager = SessionManager.create(tempDir, tempDir);
+      const events = [];
+
+      const { session } = await createLynnAgentSession({
+        cwd: tempDir,
+        sessionManager: manager,
+        modelRegistry: {
+          getAll: () => [
+            { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+            { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+            { id: "glm-5-turbo", provider: "zhipu", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "glm" },
+          ],
+        },
+        model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+      });
+      session.subscribe((event) => events.push(event));
+
+      await session.prompt("世界杯半决赛在哪一天？");
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const stepBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+      expect(stepBody.model).toBe("step-3.7-flash");
+      expect(stepBody.tools).toBeUndefined();
+      expect(stepBody.messages.at(-1).content).toContain("上一模型请求失败");
+      expect(events.some((event) => event.type === "provider_meta" && event.activeProvider === "step-3.7-flash")).toBe(true);
+      const visibleText = events
+        .filter((event) => event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta")
+        .map((event) => event.assistantMessageEvent.text || event.assistantMessageEvent.delta || "")
+        .join("");
+      expect(visibleText).toContain("7月10日");
+      expect(visibleText).toContain("7月11日");
+      expect(visibleText).not.toContain("aborted");
+      expect(manager.buildSessionContext().messages.at(-1)).toMatchObject({
+        role: "assistant",
+        content: "世界杯半决赛在北京时间 7月10日和7月11日。",
+      });
+    } finally {
+      if (previousModelTimeout === undefined) delete process.env.LYNN_MODEL_CALL_TIMEOUT_MS;
+      else process.env.LYNN_MODEL_CALL_TIMEOUT_MS = previousModelTimeout;
+      if (previousFallbackTimeout === undefined) delete process.env.LYNN_FALLBACK_MODEL_CALL_TIMEOUT_MS;
+      else process.env.LYNN_FALLBACK_MODEL_CALL_TIMEOUT_MS = previousFallbackTimeout;
+    }
+  });
+
+  it("does not leak stale World Cup not-started answers when fallback can answer", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"截至2026年6月18日，2026世界杯正赛要到2026年6月20日才开赛，所以目前还没有正赛比分。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "step-3.7-flash") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"已经出的比分包括：墨西哥 2-0 南非，加拿大 1-1 波黑。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+          { id: "glm-5-turbo", provider: "zhipu", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "glm" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+    });
+
+    await session.prompt("2026世界杯已经出的赛事比分");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const stepBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(stepBody.model).toBe("step-3.7-flash");
+    const finalContent = manager.buildSessionContext().messages.at(-1).content;
+    expect(finalContent).toContain("墨西哥 2-0 南非");
+    expect(finalContent).toContain("加拿大 1-1 波黑");
+    expect(finalContent).not.toContain("还没有正赛比分");
+    expect(finalContent).not.toContain("才开赛");
+  });
+
+  it("summarizes successful tool evidence with StepFun when the planner keeps calling tools", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_search\",\"function\":{\"name\":\"web_search\",\"arguments\":\"{\\\"query\\\":\\\"世界杯昨晚比分\\\"}\"}}]}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "step-3.7-flash") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"根据工具结果，比分已整理。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+    const execute = vi.fn(async () => ({ content: [{ type: "text", text: "tool:墨西哥2-0南非" }] }));
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+      customTools: [{
+        name: "web-search",
+        description: "search",
+        parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        execute,
+      }],
+    });
+
+    await session.prompt("世界杯昨晚比赛结果");
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(execute).toHaveBeenCalledTimes(2);
+    const stepBody = JSON.parse(fetchMock.mock.calls[2][1].body);
+    expect(stepBody.model).toBe("step-3.7-flash");
+    expect(stepBody.tools).toBeUndefined();
+    expect(stepBody.messages).toHaveLength(2);
+    expect(stepBody.messages.at(-1).content).toContain("上一个模型已经多轮调用工具但没有产出最终答案");
+    expect(stepBody.messages.at(-1).content).toContain("tool:墨西哥2-0南非");
+    expect(stepBody.messages.some((message) => message.role === "tool")).toBe(false);
+    const serialized = JSON.stringify(manager.buildSessionContext().messages);
+    expect(serialized).toContain("tool:墨西哥2-0南非");
+    expect(serialized).toContain("根据工具结果，比分已整理。");
+    expect(serialized).not.toContain("工具链已执行多轮但没有形成最终回复");
+  });
+
+  it("lets StepFun take over tools when the planner returns empty without evidence", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash") {
+        return sseResponse(["data: [DONE]\n\n"]);
+      }
+      if (body.model === "step-3.7-flash" && Array.isArray(body.tools)) {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_search\",\"function\":{\"name\":\"web_search\",\"arguments\":\"{\\\"query\\\":\\\"世界杯昨晚比分\\\"}\"}}]}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "step-3.7-flash") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"Step 根据搜索证据整理了比分。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+    const execute = vi.fn(async (_id, params) => ({
+      content: [{ type: "text", text: `search:${params.query}:墨西哥2-0南非` }],
+    }));
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+      customTools: [{
+        name: "web-search",
+        description: "search",
+        parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        execute,
+      }],
+    });
+
+    await session.prompt("世界杯昨晚比赛结果");
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const stepToolBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(stepToolBody.model).toBe("step-3.7-flash");
+    expect(stepToolBody.tools?.map((tool) => tool.function.name)).toContain("web-search");
+    expect(stepToolBody.messages.at(-1).content).toContain("必要时调用一次最相关工具");
+    const stepFinalBody = JSON.parse(fetchMock.mock.calls[2][1].body);
+    expect(stepFinalBody.tools).toBeUndefined();
+    expect(stepFinalBody.messages).toHaveLength(2);
+    expect(JSON.stringify(stepFinalBody.messages)).toContain("search:世界杯昨晚比分:墨西哥2-0南非");
+    expect(stepFinalBody.messages.some((message) => message.role === "tool")).toBe(false);
+    expect(execute).toHaveBeenCalledWith(
+      "call_search",
+      { query: "世界杯昨晚比分" },
+      expect.any(Object),
+    );
+    const serialized = JSON.stringify(manager.buildSessionContext().messages);
+    expect(serialized).toContain("search:世界杯昨晚比分:墨西哥2-0南非");
+    expect(serialized).toContain("Step 根据搜索证据整理了比分。");
+    expect(serialized).not.toContain("工具链已执行多轮但没有形成最终回复");
+  });
+
+  it("uses a deterministic evidence answer instead of the generic tool-loop fallback when fallbacks stay empty", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_search\",\"function\":{\"name\":\"web_search\",\"arguments\":\"{\\\"query\\\":\\\"世界杯昨晚比分\\\"}\"}}]}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "step-3.7-flash" || body.model === "glm-5-turbo") {
+        return sseResponse(["data: [DONE]\n\n"]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+    const execute = vi.fn(async () => ({ content: [{ type: "text", text: "tool:美国4-1巴拉圭" }] }));
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+          { id: "glm-5-turbo", provider: "zhipu", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "glm" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+      customTools: [{
+        name: "web-search",
+        description: "search",
+        parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        execute,
+      }],
+    });
+
+    await session.prompt("世界杯昨晚比赛结果");
+
+    const finalMessage = manager.buildSessionContext().messages.at(-1);
+    expect(finalMessage).toMatchObject({ role: "assistant" });
+    expect(finalMessage.content).toContain("tool:美国4-1巴拉圭");
+    expect(finalMessage.content).toContain("我能从工具证据中确认");
+    expect(finalMessage.content).not.toContain("我已经拿到工具结果");
+    expect(finalMessage.content).not.toContain("接管总结模型");
+    expect(finalMessage.content).not.toContain("error.searchFollowupHint");
+    expect(finalMessage.content).not.toContain("工具链已执行多轮但没有形成最终回复");
+    expect(finalMessage.content).not.toContain("请缩小问题范围后重试");
+  });
+
+  it("compresses long sports search evidence into a visible answer when every model fallback is empty", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_search\",\"function\":{\"name\":\"web_search\",\"arguments\":\"{\\\"query\\\":\\\"昨晚世界杯最新比赛结果\\\"}\"}}]}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "step-3.7-flash" || body.model === "glm-5-turbo") {
+        return sseResponse(["data: [DONE]\n\n"]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+    const evidence = [
+      "搜索提示：这是体育比分/赛果类问题。优先参考专业体育来源。",
+      "📋 综合答案：",
+      "本届世界杯，首支出局球队诞生(2026-06-20)：北京时间20日凌晨，巴西队3-0战胜海地队，海地两连败提前出局。",
+      "早啊！新闻来了(2026-06-20)：北京时间20日凌晨，美国队2比0战胜澳大利亚队，小组赛第二轮拿到关键三分。",
+      "世界杯小组赛第二轮开战(2026-06-19)：苏格兰对阵摩洛哥、土耳其对阵巴拉圭等比赛继续进行。",
+      "error.searchFollowupHint",
+    ].join("\n");
+    const execute = vi.fn(async () => ({ content: [{ type: "text", text: evidence }] }));
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+          { id: "glm-5-turbo", provider: "zhipu", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "glm" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+      customTools: [{
+        name: "web-search",
+        description: "search",
+        parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        execute,
+      }],
+    });
+
+    await session.prompt("昨晚世界杯最新的比赛结果");
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    const finalMessage = manager.buildSessionContext().messages.at(-1);
+    expect(finalMessage).toMatchObject({ role: "assistant" });
+    expect(finalMessage.content).toContain("我能从工具证据中确认");
+    expect(finalMessage.content).toContain("巴西队3-0战胜海地队");
+    expect(finalMessage.content).toContain("美国队2比0战胜澳大利亚队");
+    expect(finalMessage.content).not.toContain("error.searchFollowupHint");
+    expect(finalMessage.content).not.toContain("工具链已执行多轮但没有形成最终回复");
+    expect(finalMessage.content).not.toContain("请缩小问题范围后重试");
+  });
+
+  it("does not turn scraped page chrome into a final answer when evidence has no facts", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_search\",\"function\":{\"name\":\"web_search\",\"arguments\":\"{\\\"query\\\":\\\"查一下深圳今天有没有暴雨预警\\\"}\"}}]}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "step-3.7-flash" || body.model === "mimo-v2.5-pro" || body.model === "glm-5-turbo") {
+        return sseResponse(["data: [DONE]\n\n"]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+    const noisyEvidence = [
+      "来源: weather.sz.gov.cn/qixiangfuwu/yujingfuwu/tufashijian/index.html (html→text)",
+      "您当前的浏览器版本过低，请升级到IE10及以上或采用360，QQ等浏览器，并选择急速模式版。",
+      "网站支持IPv6 (https://www.sz.gov.cn/) 繁體 (javascript:szqbl.chscht.run()) English (/en) 手机版 (/mobile)",
+      "数据开放 (https://opendata.sz.gov.cn/data/dataSet/toDataSet/dept/9) 无障碍阅读 (javascript:void(0)) 进入关怀版 热门搜...",
+    ].join("\n");
+    const execute = vi.fn(async () => ({ content: [{ type: "text", text: noisyEvidence }] }));
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+          { id: "mimo-v2.5-pro", provider: "xiaomi", api: "openai-completions", baseUrl: "http://127.0.0.1:65537/v1", apiKey: "mimo" },
+          { id: "glm-5-turbo", provider: "zhipu", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "glm" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+      customTools: [{
+        name: "web-search",
+        description: "search",
+        parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        execute,
+      }],
+    });
+
+    await session.prompt("查一下深圳今天有没有暴雨预警");
+
+    const finalMessage = manager.buildSessionContext().messages.at(-1);
+    expect(finalMessage).toMatchObject({ role: "assistant" });
+    expect(finalMessage.content).toContain("没有提取到足够可靠的事实");
+    expect(finalMessage.content).not.toContain("浏览器版本过低");
+    expect(finalMessage.content).not.toContain("javascript");
+    expect(finalMessage.content).not.toContain("weather.sz.gov.cn");
+  });
+
+  it("lets StepFun re-query when prior tool output is page chrome without usable facts", async () => {
+    let stepToolDelegationSeen = false;
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_search\",\"function\":{\"name\":\"web_search\",\"arguments\":\"{\\\"query\\\":\\\"查一下深圳今天有没有暴雨预警\\\"}\"}}]}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "step-3.7-flash" && JSON.stringify(body.tools || []).includes("web")) {
+        stepToolDelegationSeen = true;
+        expect(JSON.stringify(body.messages)).toContain("必要时调用一次最相关工具");
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_step_search\",\"function\":{\"name\":\"web_search\",\"arguments\":\"{\\\"query\\\":\\\"深圳暴雨预警\\\"}\"}}]}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "step-3.7-flash") {
+        const serializedMessages = JSON.stringify(body.messages);
+        expect(serializedMessages).toContain("暴雨橙色预警");
+        expect(serializedMessages).not.toContain("浏览器版本过低");
+        expect(serializedMessages).not.toContain("javascript:szqbl");
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"深圳今天有暴雨橙色预警，需关注官方预警。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+    const noisyEvidence = [
+      "来源: weather.sz.gov.cn/qixiangfuwu/yujingfuwu/tufashijian/index.html (html→text)",
+      "您当前的浏览器版本过低，请升级到IE10及以上或采用360，QQ等浏览器，并选择急速模式版。",
+      "网站支持IPv6 (https://www.sz.gov.cn/) 繁體 (javascript:szqbl.chscht.run()) English (/en) 手机版 (/mobile)",
+      "数据开放 (https://opendata.sz.gov.cn/data/dataSet/toDataSet/dept/9) 无障碍阅读 (javascript:void(0)) 进入关怀版 热门搜...",
+    ].join("\n");
+    const usefulEvidence = "深圳市气象台2026年6月20日10:00发布暴雨橙色预警，当前仍生效；预计3小时内有50毫米以上强降雨。";
+    let executeCount = 0;
+    const execute = vi.fn(async () => {
+      executeCount += 1;
+      return { content: [{ type: "text", text: executeCount === 1 ? noisyEvidence : usefulEvidence }] };
+    });
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+          { id: "mimo-v2.5-pro", provider: "xiaomi", api: "openai-completions", baseUrl: "http://127.0.0.1:65537/v1", apiKey: "mimo" },
+          { id: "glm-5-turbo", provider: "zhipu", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "glm" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+      customTools: [{
+        name: "web-search",
+        description: "search",
+        parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        execute,
+      }],
+    });
+
+    await session.prompt("查一下深圳今天有没有暴雨预警");
+
+    expect(stepToolDelegationSeen).toBe(true);
+    expect(execute).toHaveBeenCalledTimes(2);
+    const finalMessage = manager.buildSessionContext().messages.at(-1);
+    expect(finalMessage).toMatchObject({ role: "assistant" });
+    expect(finalMessage.content).toContain("暴雨橙色预警");
+    expect(finalMessage.content).not.toContain("浏览器版本过低");
+    expect(finalMessage.content).not.toContain("javascript");
+  });
+
+  it("keeps compact measured facts instead of treating all evidence as search noise", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_rate\",\"function\":{\"name\":\"exchange_rate\",\"arguments\":\"{\\\"pair\\\":\\\"USD/CNY\\\"}\"}}]}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (body.model === "step-3.7-flash" || body.model === "mimo-v2.5-pro" || body.model === "glm-5-turbo") {
+        return sseResponse(["data: [DONE]\n\n"]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+    const execute = vi.fn(async () => ({
+      content: [{ type: "text", text: "美元兑人民币：1 USD = 6.7844 CNY，数据来源 open.er-api.com，更新时间为 2026 年 6 月 20 日 00:02 UTC。" }],
+    }));
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+          { id: "mimo-v2.5-pro", provider: "xiaomi", api: "openai-completions", baseUrl: "http://127.0.0.1:65537/v1", apiKey: "mimo" },
+          { id: "glm-5-turbo", provider: "zhipu", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "glm" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+      customTools: [{
+        name: "exchange-rate",
+        description: "rate",
+        parameters: { type: "object", properties: { pair: { type: "string" } }, required: ["pair"] },
+        execute,
+      }],
+    });
+
+    await session.prompt("美元人民币汇率现在多少？");
+
+    const finalMessage = manager.buildSessionContext().messages.at(-1);
+    expect(finalMessage).toMatchObject({ role: "assistant" });
+    expect(finalMessage.content).toContain("1 USD = 6.7844 CNY");
+    expect(finalMessage.content).not.toContain("没有提取到足够可靠的事实");
+  });
+
+  it("deduplicates repeated final assistant text before persisting the turn", async () => {
+    const repeated = "目前美元兑人民币汇率约为 1 USD = 6.7844 CNY，数据来源 open.er-api.com，更新时间为 2026 年 6 月 20 日 00:02 UTC。";
+    const fetchMock = vi.fn(async () => sseResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: repeated + repeated } }] })}\n\n`,
+      "data: [DONE]\n\n",
+    ]));
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: { id: "test-model", provider: "test", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "test-key" },
+    });
+
+    await session.prompt("美元人民币汇率现在多少？");
+
+    const finalMessage = manager.buildSessionContext().messages.at(-1);
+    expect(finalMessage).toMatchObject({ role: "assistant" });
+    expect(finalMessage.content.match(/1 USD = 6\.7844 CNY/g)).toHaveLength(1);
+  });
+
+  it("drops stale process lead-in after a corrected final answer boundary", async () => {
+    const content = [
+      "这类数据目前还没有可靠结果。我帮你查一下。",
+      "看起来刚才的判断已经过期了！让我再获取完整信息。",
+      "好，我已经获取到可用数据。",
+      "",
+      "以下是最终汇总：",
+      "",
+      "| 项目 | 数值 |",
+      "| --- | --- |",
+      "| A | 1 |",
+      "| B | 2 |",
+    ].join("\n");
+    const fetchMock = vi.fn(async () => sseResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`,
+      "data: [DONE]\n\n",
+    ]));
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: { id: "test-model", provider: "test", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "test-key" },
+    });
+
+    await session.prompt("请整理结果");
+
+    const finalMessage = manager.buildSessionContext().messages.at(-1);
+    expect(finalMessage).toMatchObject({ role: "assistant" });
+    expect(finalMessage.content).toContain("以下是最终汇总");
+    expect(finalMessage.content).toContain("| A | 1 |");
+    expect(finalMessage.content).not.toContain("目前还没有可靠结果");
+    expect(finalMessage.content).not.toContain("我帮你查一下");
+    expect(finalMessage.content).not.toContain("让我再获取完整信息");
+  });
+
+  it("skips Spark and uses MiMo before GLM in the fallback tier", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash") return sseResponse(["data: [DONE]\n\n"]);
+      if (body.model === "mimo-v2.5-pro") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"MiMo 第二梯队兜底。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: SessionManager.create(tempDir, tempDir),
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "apex-spark-i-balanced", provider: "spark", api: "openai-completions", baseUrl: "http://127.0.0.1:65533/v1", apiKey: "spark" },
+          { id: "glm-5", provider: "zhipu-coding", api: "openai-completions", baseUrl: "http://127.0.0.1:65534/v1", apiKey: "glm5" },
+          { id: "GLM-5V-Turbo", provider: "zhipu-coding", api: "openai-completions", baseUrl: "http://127.0.0.1:65535/v1", apiKey: "glm5v" },
+          { id: "alaya-glm-5", provider: "k2.5", api: "openai-completions", baseUrl: "http://127.0.0.1:65536/v1", apiKey: "alaya" },
+          { id: "glm-5-turbo", provider: "zhipu", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "glm" },
+          { id: "mimo-v2.5-pro", provider: "xiaomi", api: "openai-completions", baseUrl: "http://127.0.0.1:65537/v1", apiKey: "mimo" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+    });
+
+    await session.prompt("你好");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).model).toBe("mimo-v2.5-pro");
+  });
+
+  it("falls back to GLM only after StepFun and MiMo fail to answer", async () => {
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash" || body.model === "step-3.7-flash" || body.model === "mimo-v2.5-pro") {
+        return sseResponse(["data: [DONE]\n\n"]);
+      }
+      if (body.model === "glm-5-turbo") {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"content\":\"GLM 最后兜底。\"}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      throw new Error(`unexpected model ${body.model}`);
+    });
+    globalThis.fetch = fetchMock;
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: SessionManager.create(tempDir, tempDir),
+      modelRegistry: {
+        getAll: () => [
+          { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+          { id: "step-3.7-flash", provider: "stepfun", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "step" },
+          { id: "glm-5-turbo", provider: "zhipu-coding", api: "openai-completions", baseUrl: "http://127.0.0.1:65532/v1", apiKey: "glm" },
+          { id: "mimo-v2.5-pro", provider: "xiaomi", api: "openai-completions", baseUrl: "http://127.0.0.1:65537/v1", apiKey: "mimo" },
+        ],
+      },
+      model: { id: "deepseek-v4-flash", provider: "deepseek", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "ds" },
+    });
+
+    await session.prompt("你好");
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body).model)).toEqual([
+      "deepseek-v4-flash",
+      "step-3.7-flash",
+      "mimo-v2.5-pro",
+      "glm-5-turbo",
+    ]);
   });
 });

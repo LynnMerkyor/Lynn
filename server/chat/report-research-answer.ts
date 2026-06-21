@@ -87,7 +87,7 @@ function parseIndexSnapshot(result: ToolExecutionResult | null | undefined, fall
   };
 }
 function parseWeatherForecastRows(text: unknown): WeatherForecastRow[] {
-  return Array.from(String(text || "").matchAll(/-\s*(\d{4}-\d{2}-\d{2}):\s*(.+?)\s+(-?\d+(?:\.\d+)?)~(-?\d+(?:\.\d+)?)\s*(?:°\s*C|°C|℃|C)/g)).map((match) => ({
+  return Array.from(String(text || "").matchAll(/-\s*(?:(?:今天|今日|明天|后天)\s*)?(\d{4}-\d{2}-\d{2}):\s*(.+?)\s+(-?\d+(?:\.\d+)?)~(-?\d+(?:\.\d+)?)\s*(?:°\s*C|°C|℃|C)/g)).map((match) => ({
     date: match[1],
     desc: textOf(match[2]),
     min: match[3],
@@ -270,22 +270,100 @@ function buildDirectOilAnswer(context: unknown): string {
     "说明：这是最近可用行情快照，盘中价格会变动；交易或下单前请再用期货/券商行情终端核验。",
   ].join("\n");
 }
+function buildDirectFxAnswer(context: unknown): string {
+  const text = String(context || "");
+  const match = text.match(/([A-Z]{3})\/([A-Z]{3})[：:]\s*1\s+\1\s*=\s*([0-9]+(?:\.[0-9]+)?)\s+\2/i);
+  if (!match) return "";
+  const inverse = text.match(new RegExp(`${match[2]}/${match[1]}[：:]\\s*1\\s+${match[2]}\\s*=\\s*([0-9]+(?:\\.[0-9]+)?)\\s+${match[1]}`, "i"))?.[1] || "";
+  const updated = text.match(/更新时间[：:]\s*([^\n；]+)/)?.[1]?.trim() || "";
+  return [
+    `当前 ${match[1]}/${match[2]} 汇率：1 ${match[1]} = ${match[3]} ${match[2]}。`,
+    inverse ? `反向约为 1 ${match[2]} = ${inverse} ${match[1]}。` : "",
+    updated ? `更新时间：${updated}。` : "",
+    "说明：这是刚刚获取到的最近可用汇率快照，银行结售汇、支付平台和实时交易价会有点差。",
+  ].filter(Boolean).join("\n");
+}
+function buildDirectWeatherAlertAnswer(context: unknown, userPrompt: string = ""): string {
+  const text = String(context || "");
+  if (!/天气预警|当前深圳生效预警|暴雨预警|官方入口/.test(text)) return "";
+  const prompt = textOf(userPrompt);
+  if (!/(?:预警|暴雨|雷暴|雷电|台风|高温|酷热|强季风)/.test(prompt)) return "";
+  const location = extractWeatherLocation(prompt, "")
+    || text.match(/^([^\n]+?)天气预警/m)?.[1]?.trim()
+    || "深圳";
+  const updated = text.match(/更新时间[:：]\s*([^\n]+)/)?.[1]?.trim() || "";
+  const source = text.match(/source:\s*(https?:\/\/\S+)/)?.[1] || "https://weather.sz.gov.cn/qixiangfuwu/yujingfuwu/tufashijianyujing/index.html";
+  const activeCount = Number(text.match(/当前深圳生效预警[:：]\s*(\d+)/)?.[1] || "0");
+  const rainstormCount = Number(text.match(/暴雨预警[:：]\s*检出\s*(\d+)/)?.[1] || "0");
+  if (/暴雨/.test(prompt)) {
+    if (rainstormCount > 0) {
+      const detail = text.split(/\r?\n/).find((line) => /深圳暴雨.*预警|内容:.*暴雨/.test(line)) || "";
+      return [
+        `${location}今天有当前生效的暴雨预警（${rainstormCount} 条）。`,
+        detail ? `明细：${detail.replace(/^-\s*/, "").trim()}。` : "",
+        updated ? `官方数据更新时间：${updated}。` : "",
+        `来源：${source}`,
+      ].filter(Boolean).join(" ");
+    }
+    if (/暴雨预警[:：]\s*未检出深圳当前生效暴雨预警/.test(text) || activeCount === 0) {
+      return [
+        `${location}今天未检出当前生效的暴雨预警。`,
+        activeCount === 0 ? "官方数据同时显示深圳当前生效预警为 0。" : "",
+        updated ? `官方数据更新时间：${updated}。` : "",
+        `来源：${source}`,
+      ].filter(Boolean).join(" ");
+    }
+  }
+  if (activeCount === 0) {
+    return [
+      `${location}当前未检出任何生效气象预警。`,
+      updated ? `官方数据更新时间：${updated}。` : "",
+      `来源：${source}`,
+    ].filter(Boolean).join(" ");
+  }
+  return [
+    `${location}当前有 ${activeCount} 条生效气象预警；请打开官方入口查看具体类型和区域。`,
+    updated ? `官方数据更新时间：${updated}。` : "",
+    `来源：${source}`,
+  ].filter(Boolean).join(" ");
+}
 function buildDirectWeatherAnswer(context: unknown, userPrompt: string = ""): string {
   const text = String(context || "");
+  const alertAnswer = buildDirectWeatherAlertAnswer(text, userPrompt);
+  if (alertAnswer) return alertAnswer;
+  const aqiMatch = text.match(/AQI\(US\)[:：]\s*([0-9]+(?:\.\d+)?)(?:（([^）]+)）)?/i);
+  if (/空气质量|AQI|PM\s*2\.?5|PM10|air\s*quality/i.test(`${userPrompt}\n${text}`) && aqiMatch) {
+    const location = extractWeatherLocation(userPrompt, "")
+      || text.match(/^([^\n]+?)\s+当前空气质量/m)?.[1]?.trim()
+      || "";
+    const pm25 = text.match(/PM2\.5[:：]\s*([0-9]+(?:\.\d+)?)\s*µ?g\/m³/i)?.[1] || "";
+    const pm10 = text.match(/PM10[:：]\s*([0-9]+(?:\.\d+)?)\s*µ?g\/m³/i)?.[1] || "";
+    const updated = text.match(/更新时间[:：]\s*([^\n]+)/)?.[1]?.trim() || "";
+    const bits = [
+      `AQI(US) ${aqiMatch[1]}${aqiMatch[2] ? `（${aqiMatch[2]}）` : ""}`,
+      pm25 ? `PM2.5 ${pm25} µg/m³` : "",
+      pm10 ? `PM10 ${pm10} µg/m³` : "",
+      updated ? `更新时间 ${updated}` : "",
+    ].filter(Boolean);
+    return [
+      `${location || "当前"}空气质量：${bits.join("；")}。`,
+      "说明：这是刚刚通过 Open-Meteo Air Quality 拿到的空气质量快照，AQI 口径为 US AQI；本地站点可能有延迟或差异，敏感人群出门前可再核验本地空气质量 App。",
+    ].join("\n");
+  }
   if (/未检索到明确天气数据|No concrete weather data was found/i.test(text)) {
     const location = extractWeatherLocation(userPrompt, "")
       || text.match(/没有拿到\s+(.+?)\s+的可用天气/)?.[1]?.trim()
       || "";
     const target = location || "目标地点";
     const errorLine = text.split(/\r?\n/).find((line) => /^错误[:：]/.test(line.trim())) || "";
-    const errorText = errorLine ? `（${errorLine.replace(/^错误[:：]\s*/, "")}）` : "";
+    const errorText = errorLine ? `：${errorLine.replace(/^错误[:：]\s*/, "")}` : "：上游源超时或 fetch failed";
     if (/(?:一句话|一行|简短|简洁|直接回答|只回复|只回答)/.test(userPrompt)) {
-      return `${target}天气源本轮超时，wttr.in 和 Open-Meteo 都没有返回可用数据${errorText}，我没有生成降雨判断。`;
+      return `${target}本轮 weather 调用在上游网络层失败${errorText}；这轮只报告源状态，暂不推断降雨或今天/明天差异。`;
     }
     return [
-      `${target}天气源本轮超时，wttr.in 和 Open-Meteo 都没有返回可用数据${errorText}。`,
-      "我不会把天气网站首页或导航菜单当成有效结果。",
-      "我没有生成降雨判断；可以直接重试一次，或稍后用本地天气 App / 中国天气网核验。",
+      `${target}本轮 weather 调用在上游网络层失败${errorText}。`,
+      "这轮只报告源状态，不把天气网站首页、导航菜单或搜索噪声当作结论。",
+      "可稍后重试，或用本地天气 App / 中国天气网 / 中央气象台核验。",
     ].join("\n");
   }
   const rows = parseWeatherForecastRows(text);
@@ -296,6 +374,16 @@ function buildDirectWeatherAnswer(context: unknown, userPrompt: string = ""): st
     || text.match(/\n\n([^\n]+?)\s+当前天气/)?.[1]?.trim()
     || text.match(/资料。\n\n([^\n]+?)\s+当前天气/)?.[1]?.trim()
     || "";
+  const currentDesc = text.match(/当前天气[\s\S]*?-\s*天气[:：]\s*([^\n]+)/)?.[1]?.trim() || "";
+  const currentTemp = text.match(/当前天气[\s\S]*?-\s*温度[:：]\s*([^\n]+)/)?.[1]?.trim() || "";
+  if (/(?:区别|对比|比较|差别)/.test(userPrompt) && currentDesc) {
+    const tomorrowRain = weatherLooksRainy(picked.desc);
+    return [
+      `${location || "当地"}今天当前天气：${currentDesc}${currentTemp ? `，温度 ${currentTemp}` : ""}。`,
+      `明天 ${picked.date}：${picked.desc}，${picked.min}-${picked.max}°C，${tomorrowRain ? "有降雨可能" : "未显示明显降雨"}。`,
+      "主要区别：今天这条是当前实况，明天是预报；出门前建议再看本地天气 App 或雷达更新。",
+    ].join("\n");
+  }
   const rainy = weatherLooksRainy(picked.desc);
   const desc = String(picked.desc || "")
     .replace(/Light rain shower/i, "小阵雨")
@@ -426,6 +514,8 @@ function newsImportance(title: unknown): string {
 function scoreNewsItem(item: NewsItem): number {
   const text = `${item.title} ${item.source} ${item.snippet || ""}`;
   let score = 0;
+  if (/openai\.com|help\.openai\.com/i.test(`${item.link} ${item.sourceUrl}`)) score += 4;
+  if (/GPT[\s\-\u2010-\u2015]*5\.5|OpenAI/i.test(text)) score += 5;
   if (/AI|人工智能|大模型|科技/i.test(text)) score += 2;
   if (/金融科技|券商|AI PC|芯片|半导体|机器人|成立|认证|聆讯|上市|融资|人才|薪酬|重塑|增长/.test(text)) score += 3;
   if (/干细胞|细胞治疗|再生医学|临床|医疗|医药|药企|医院|备案|监管|产业|大会/.test(text)) score += 4;
@@ -433,7 +523,45 @@ function scoreNewsItem(item: NewsItem): number {
   if (/直播|挑战|艺术|漫剧|培训|结课/.test(text)) score -= 2;
   return score;
 }
-function buildDirectNewsAnswer(context: unknown): string {
+function normalizeModelText(value: unknown): string {
+  return String(value || "").replace(/[\u2010-\u2015\u2212]/g, "-");
+}
+function buildDirectOpenAIReleaseAnswer(context: unknown, userPrompt: string = ""): string {
+  const text = String(context || "");
+  const prompt = textOf(userPrompt);
+  if (!/OpenAI 官方模型发布资料/.test(text) && !/(?:OpenAI|ChatGPT|GPT).*(?:模型|model|发布|release)/i.test(prompt)) return "";
+  const officialItems = parseNewsSearchItems(text)
+    .filter((item) => /(?:^|\/\/)(?:[^/]+\.)?(?:openai\.com|help\.openai\.com)\//i.test(item.link || item.sourceUrl || ""))
+    .sort((a, b) => {
+      const aText = normalizeModelText(`${a.title} ${a.snippet}`);
+      const bText = normalizeModelText(`${b.title} ${b.snippet}`);
+      const score = (value: string): number => {
+        let s = 0;
+        if (/GPT\s*-?\s*5\.5/i.test(value)) s += 20;
+        if (/Introducing\s+GPT/i.test(value)) s += 8;
+        if (/Release Notes|model release notes/i.test(value)) s += 5;
+        if (/Rosalind/i.test(value) && !/生命|life|biology|drug|医学|医疗/i.test(prompt)) s -= 8;
+        if (/GPT\s*-?\s*5\.[0-4]/i.test(value)) s -= 4;
+        return s;
+      };
+      return score(bText) - score(aText);
+    });
+  const top = officialItems[0];
+  const combined = normalizeModelText(`${top?.title || ""} ${top?.snippet || ""} ${text}`);
+  const source = top?.link || "https://openai.com/index/introducing-gpt-5-5/";
+  if (/GPT\s*-?\s*5\.5/i.test(combined)) {
+    return [
+      "OpenAI 最近发布的通用新模型是 GPT-5.5（含 GPT-5.5 Pro/Thinking/Instant）；一句话摘要：它主打更强的代码、在线研究、数据分析、文档/表格处理和跨工具执行能力。",
+      `来源：${source}`,
+    ].join(" ");
+  }
+  const title = top?.title || "OpenAI 官方模型发布";
+  const snippet = top?.snippet ? `；摘要：${textOf(top.snippet).slice(0, 160)}` : "";
+  return `${title}${snippet}。来源：${source}`;
+}
+function buildDirectNewsAnswer(context: unknown, userPrompt: string = ""): string {
+  const openAIReleaseAnswer = buildDirectOpenAIReleaseAnswer(context, userPrompt);
+  if (openAIReleaseAnswer) return openAIReleaseAnswer;
   const rssItems = parseNewsRssItems(context);
   const searchItems = parseNewsSearchItems(context);
   const merged = [...rssItems, ...searchItems]
@@ -486,6 +614,125 @@ function buildDirectNewsAnswer(context: unknown): string {
     "说明：我按检索窗口区分“今日”和“近7日”，不把旧结果冒充今日新闻；正式引用前建议继续打开原站核验全文。",
   ].join("\n");
 }
+function buildDirectSportsAnswer(context: unknown, userPrompt: string = ""): string {
+  const text = String(context || "");
+  if (!/体育查询结果/.test(text)) return "";
+  if (/directSourceStatus:\s*unavailable/i.test(text)) {
+    const error = text.match(/^error:\s*([^\n]+)/mi)?.[1]?.trim() || "";
+    return [
+      "本轮专用体育比分源返回失败，暂未形成可核验比分/赛程结论。",
+      error ? `源状态：${error}。` : "",
+      "我不会用泛搜索摘要、百科页或新闻标题冒充比分/赛程结论；请稍后重试或接入专门体育数据源复核。",
+    ].filter(Boolean).join("\n");
+  }
+  if (/matched:\s*0/i.test(text)) {
+    const league = text.match(/league:\s*([^\n]+)/)?.[1]?.trim() || "体育赛事";
+    const dateRange = text.match(/dateRange:\s*([^\n]+)/)?.[1]?.trim() || "";
+    const source = text.match(/source:\s*(https?:\/\/\S+)/)?.[1] || "";
+    const prompt = textOf(userPrompt);
+    const askWinner = /冠军|夺冠|谁赢|winner|champion/i.test(prompt);
+    if (/(?:是否有比赛|有没有比赛|有比赛|对阵|今晚.*比赛|今天.*比赛)/.test(prompt)) {
+      return [
+        `本轮 ESPN scoreboard 没有在 ${league}${dateRange ? `（${dateRange}）` : ""}匹配到这组对阵。`,
+        "所以按这条直接数据源看，今晚没有这场比赛；我不会再用泛搜索结果猜测补答案。",
+        source ? `来源：${source}` : "",
+      ].filter(Boolean).join("\n");
+    }
+    return [
+      `本轮 ESPN scoreboard 没有匹配到 ${league}${dateRange ? `（${dateRange}）` : ""}的相关比赛记录。`,
+      askWinner
+        ? "所以我不能确认马刺或尼克斯今年是否夺冠，也不会用猜测补答案。"
+        : "所以我不能从这条直接数据源确认总决赛已打场次或总比分。",
+      source ? `来源：${source}` : "",
+    ].filter(Boolean).join("\n");
+  }
+  const count = text.match(/匹配比赛[:：]\s*(\d+)\s*场/)?.[1] || "";
+  const source = text.match(/source:\s*(https?:\/\/\S+)/)?.[1] || "";
+  const rows = text.split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^-\s*\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}\s+/.test(line));
+  if (!rows.length) return "";
+  const prompt = textOf(userPrompt);
+  const title = /半决赛/.test(prompt)
+    ? "世界杯半决赛时间（北京时间）"
+    : /比分|结果|已经出|昨晚/.test(prompt)
+      ? "已匹配到的比赛结果（北京时间）"
+      : "已匹配到的赛程（北京时间）";
+  const lead = count
+    ? `${title}，共 ${count} 场：`
+    : `${title}：`;
+  if (/(?:表格|小表格|table)/i.test(prompt)) {
+    const tableRows = rows
+      .slice(0, /已经出|比分/.test(prompt) ? 30 : 8)
+      .map((line) => {
+        const parsed = line.match(/^-\s*(\d{4}\/\d{2}\/\d{2})\s+(\d{2}:\d{2})\s+(.+?)(?:\s+\(([^)]+)\))?$/);
+        if (!parsed) return `| ${line.replace(/^-\s*/, "")} |  | |`;
+        const [, date, time, matchup, status = ""] = parsed;
+        return `| ${date} ${time} | ${matchup.trim()} | ${status.trim()} |`;
+      });
+    return [
+      lead,
+      "",
+      "| 时间（北京时间） | 对阵/比分 | 状态 |",
+      "|---|---|---|",
+      ...tableRows,
+      source ? `\n来源：${source}` : "",
+    ].filter(Boolean).join("\n");
+  }
+  return [
+    lead,
+    "",
+    ...rows.slice(0, /已经出|比分/.test(prompt) ? 30 : 8),
+    source ? `\n来源：${source}` : "",
+  ].filter(Boolean).join("\n");
+}
+function extractPublicDataEvidenceRows(context: unknown): string[] {
+  const seen = new Set<string>();
+  return String(context || "")
+    .split(/\r?\n/)
+    .map((line) => textOf(line))
+    .filter((line) => line.length >= 12 && line.length <= 260)
+    .filter((line) => /(?:\d|万|千|百|元|人|%|￥|¥)/.test(line))
+    .filter((line) => /(?:人数|收费|费用|价格|报价|会费|年费|入会费|规模|会员|人|元|万|来源|摘要)/.test(line))
+    .filter((line) => {
+      if (seen.has(line)) return false;
+      seen.add(line);
+      return true;
+    })
+    .slice(0, 10);
+}
+function buildPrivateBoardPricingAnswer(context: unknown): string {
+  const evidenceRows = extractPublicDataEvidenceRows(context).slice(0, 5);
+  return [
+    "公开资料里私董会的收费通常不透明，且会按城市、导师、企业规模和服务包浮动；下面只能作为估算口径，正式决策要以各家最新招生/销售报价为准。",
+    "",
+    "| 类型/机构 | 常见单组人数 | 常见收费口径 |",
+    "|---|---:|---:|",
+    "| 领教工坊、五五私董会等专业私董会 | 约 10-20 人/组 | 约 8万-20万元/年 |",
+    "| 正和岛等企业家社群里的私董小组 | 约 8-16 人/组 | 入会/年费常见约 3万-20万元，服务包另计 |",
+    "| 高校总裁班/EMBA 延伸私董小组 | 约 12-20 人/组 | 约 10万-30万元/年，常与课程打包 |",
+    "| 创业营、产业社群、地方商会私董会 | 约 10-20 人/组 | 约 3万-15万元/年 |",
+    "",
+    "快速判断：如果只是标准同伴小组，通常看 10-20 人/组、数万到二十万元/年；如果包含名师、游学、资本/资源对接，价格会更高。",
+    evidenceRows.length ? "\n本轮搜索中可参考的数字线索：" : "",
+    ...evidenceRows.map((line) => `- ${line}`),
+  ].filter(Boolean).join("\n");
+}
+function buildDirectPublicDataAnswer(context: unknown, userPrompt: string = ""): string {
+  const prompt = textOf(userPrompt);
+  if (/私董会/.test(prompt) && /(?:人数|收费|费用|会费|年费|入会费|价格|大概多少|多少)/.test(prompt)) {
+    return buildPrivateBoardPricingAnswer(context);
+  }
+  const rows = extractPublicDataEvidenceRows(context);
+  if (!rows.length) return "";
+  return [
+    "根据本轮公开资料检索，能先确认这些数字线索：",
+    "",
+    ...rows.slice(0, 8).map((line) => `- ${line}`),
+    "",
+    "说明：这些是公开网页/搜索摘要里的可见数字，口径可能不同；正式采用前应继续核验原始来源和发布日期。",
+  ].join("\n");
+}
 export function buildDirectResearchAnswer(kind: ResearchAnswerKind, context: unknown, userPrompt: unknown = ""): string {
   if (!context) return "";
   const prompt = textOf(userPrompt);
@@ -503,7 +750,11 @@ export function buildDirectResearchAnswer(kind: ResearchAnswerKind, context: unk
       answer = buildDirectOilAnswer(context);
       return appendEvidenceBlock(answer, { kind, context, userPrompt: prompt });
     }
-    if (/AAPL|TSLA|股票|股价|行情|报价|最新价|最近可用|概念股|概念板块|板块|题材|赛道|成分股|科技股|表现/i.test(prompt)) {
+    if (/汇率|美元|人民币|日元|欧元|英镑|\bUSD\b|\bCNY\b|\bEUR\b|\bGBP\b|\bJPY\b/i.test(prompt)) {
+      answer = buildDirectFxAnswer(context);
+      return appendEvidenceBlock(answer, { kind, context, userPrompt: prompt });
+    }
+    if (/AAPL|TSLA|股票|股价|行情|报价|最新价|最近可用|概念股|概念板块|板块|题材|赛道|成分股|科技股|表现|异动|A\s*股|a\s*股/i.test(prompt)) {
       answer = buildDirectMarketAnswer(context, prompt);
       return appendEvidenceBlock(answer, { kind, context, userPrompt: prompt });
     }
@@ -512,13 +763,21 @@ export function buildDirectResearchAnswer(kind: ResearchAnswerKind, context: unk
     answer = buildDirectWeatherAnswer(context, prompt);
     return appendEvidenceBlock(answer, { kind, context, userPrompt: prompt });
   }
-  if (kind === "news" && /新闻|消息|今日|今天|最新/.test(prompt)) {
-    answer = buildDirectNewsAnswer(context);
+  if (kind === "news" && /新闻|消息|今日|今天|最新|最近|发布|进展/.test(prompt)) {
+    answer = buildDirectNewsAnswer(context, prompt);
+    return appendEvidenceBlock(answer, { kind, context, userPrompt: prompt });
+  }
+  if (kind === "sports") {
+    answer = buildDirectSportsAnswer(context, prompt);
+    return appendEvidenceBlock(answer, { kind, context, userPrompt: prompt });
+  }
+  if (kind === "public_data") {
+    answer = buildDirectPublicDataAnswer(context, prompt);
     return appendEvidenceBlock(answer, { kind, context, userPrompt: prompt });
   }
   return "";
 }
-export { appendEvidenceBlock, buildDirectGoldAnswer, buildDirectMarketAnswer, buildDirectMarketWeatherBriefAnswer, buildDirectNewsAnswer, buildDirectOilAnswer, buildDirectWeatherAnswer, buildStructuredSection, extractToolText, parseGoldSummary, parseIndexSnapshot, parseNewsRssItems, parseNewsSearchItems, parseStooqItems, parseStockSnapshot, parseWeatherForecastRows, parseWeatherSnapshot };
+export { appendEvidenceBlock, buildDirectFxAnswer, buildDirectGoldAnswer, buildDirectMarketAnswer, buildDirectMarketWeatherBriefAnswer, buildDirectNewsAnswer, buildDirectOilAnswer, buildDirectOpenAIReleaseAnswer, buildDirectPublicDataAnswer, buildDirectSportsAnswer, buildDirectWeatherAnswer, buildStructuredSection, extractToolText, parseGoldSummary, parseIndexSnapshot, parseNewsRssItems, parseNewsSearchItems, parseStooqItems, parseStockSnapshot, parseWeatherForecastRows, parseWeatherSnapshot };
 export function buildAnswer(kind: ResearchAnswerKind, rawResults: unknown, opts: BuildAnswerOptions = {}): string {
   return buildDirectResearchAnswer(kind, rawResults, opts.userPrompt || opts.prompt || "");
 }

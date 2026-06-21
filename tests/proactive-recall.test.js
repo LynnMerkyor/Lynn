@@ -31,6 +31,7 @@ describe("ProactiveRecall category-aware recall", () => {
       preferredCategories: expect.arrayContaining(["pitfall", "model_benchmark"]),
     });
     expect(result.preferredCategories).toContain("pitfall");
+    expect(result.injectedFactIds).toEqual([1]);
 
     const formatted = recall.formatForInjection(result, true);
     expect(formatted).toContain("注意事项");

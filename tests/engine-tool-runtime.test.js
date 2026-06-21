@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createToolAliases,
   detectSensitiveParams,
+  normalizeToolAliasName,
   selectMcpTools,
   wrapToolWithGuard,
 } from "../core/engine-tool-runtime.ts";
@@ -125,5 +126,12 @@ describe("engine tool runtime helpers", () => {
 
     expect(aliases.some((tool) => tool.name === "web-search")).toBe(false);
     expect(aliases.find((tool) => tool.name === "present-files")?._aliasOf).toBe("present_files");
+  });
+
+  it("normalizes common realtime tool aliases across hyphen and underscore forms", () => {
+    expect(normalizeToolAliasName("web-search")).toBe("web_search");
+    expect(normalizeToolAliasName("web_search")).toBe("web_search");
+    expect(normalizeToolAliasName("sports-score")).toBe("sports_score");
+    expect(normalizeToolAliasName("stock-market")).toBe("stock_market");
   });
 });

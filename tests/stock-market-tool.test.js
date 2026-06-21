@@ -115,9 +115,10 @@ describe("stock market tool", () => {
     const text = res.content?.[0]?.text || "";
 
     expect(text).toContain("黄金价格快照");
-    expect(text).toContain("1423-1465 元/克");
-    expect(text).toContain("1070.7-1077.66 元/克");
-    expect(text).toContain("1046");
+    expect(text).toContain("国际现货黄金（XAU/USD）");
+    expect(text).toContain("783.9 元/克");
+    expect(webSearchMock.runSearchQuery).not.toHaveBeenCalled();
+    expect(webFetchMock.fetchWebContent).not.toHaveBeenCalled();
     expect(res.details?.kind).toBe("gold");
   });
 
@@ -189,7 +190,7 @@ describe("stock market tool", () => {
       });
 
     const tool = createStockMarketTool();
-    const res = await tool.execute("test", { query: "今天金价如何" });
+    const res = await tool.execute("test", { query: "今天上金所和水贝金价如何" });
     const text = res.content?.[0]?.text || "";
 
     expect(webSearchMock.runSearchQuery).toHaveBeenCalledTimes(2);
@@ -279,7 +280,7 @@ describe("stock market tool", () => {
     });
 
     const tool = createStockMarketTool();
-    const res = await tool.execute("test", { query: "今天金价如何" });
+    const res = await tool.execute("test", { query: "今天上金所和水贝金价如何" });
     const text = res.content?.[0]?.text || "";
 
     expect(webFetchMock.fetchWebContent).not.toHaveBeenCalledWith(

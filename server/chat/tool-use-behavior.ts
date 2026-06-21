@@ -58,11 +58,21 @@ export function shouldDisableToolsForTurn(promptText: unknown): boolean {
     && /(?:刚才|上(?:一)?轮|前面|项目代号|本身|FENCE_OK|已准备好|介绍你|你能帮我|你能做什么|last\s+turn|previous|above)/iu.test(text);
   if (sameConversationRecallOnly) return true;
 
+  const conceptualProductOrWorkflowQuestion =
+    /(?:为什么|如何|怎么|怎样|给(?:出|一个)|设计(?:一个)?|解释).{0,80}(?:模型|工具|产品|展示|UI|输入框|窄屏|流程|门禁|测试|原因|区别|检查清单|冲突|用户|任务)/iu.test(text)
+    && !explicitToolAsk
+    && !/(?:最新|今天|今晚|现在|实时|查一下|查询|股价|天气|金价|汇率|世界杯|NBA|OpenAI\s*最近|发布)/iu.test(text);
+  if (conceptualProductOrWorkflowQuestion) return true;
+
   const shortLengthChatOnly = /\d+\s*(?:字|字符|个字|words?|chars?|characters?)\s*(?:以内|以下|之内|内|or\s+less|max(?:imum)?|under)/iu.test(text)
     && !explicitToolAsk
     && compact.length <= 220
     && /(?:介绍你|你能帮我|你能做什么|你是谁|已准备好|identity|introduce|what\s+can\s+you\s+do|who\s+are\s+you)/iu.test(text);
   if (shortLengthChatOnly) return true;
+
+  const commandSnippetRequest = /(?:写|给|提供|生成|构造).{0,20}(?:bash|shell|终端|命令|command)|(?:bash|shell).{0,8}(?:命令|command)/iu.test(text)
+    && !/(?:运行|执行|帮我跑|实际跑|检查|验证|run|execute|check|verify)/iu.test(text);
+  if (commandSnippetRequest) return true;
 
   const simpleMemoryAck = /(?:请)?记住|remember/iu.test(text)
     && /(?:项目代号|普通项目标签|标签|代号|偏好|preference|label|project\s+code)/iu.test(text)
@@ -78,6 +88,7 @@ export function buildNoToolTurnPrompt(promptText: unknown): string {
     : "";
   return [
     "【Lynn 路由约束】本轮用户要求直接聊天短答。不要调用、模拟或提及任何工具/技能;不要读取或写入文件;不要运行命令;不要创建交付物。",
+    "本轮没有搜索、检索、查询网页或读取外部资料;不要声称“搜到/没搜到/查到/没查到/检索到/未检索到”。",
     formatHint ? `${formatHint}有数字字数上限时,答案要保守控制在上限的约 70% 以内;不要列清单,不要展开解释。` : "",
     "只根据当前对话直接回答用户。",
   ].filter(Boolean).join("");

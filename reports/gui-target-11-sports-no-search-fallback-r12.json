@@ -1,0 +1,54 @@
+{
+  "outputPath": "/Users/lynn/Downloads/Lynn/reports/gui-target-11-sports-no-search-fallback-r12.json",
+  "gateCurrentDate": "2026-06-21",
+  "total": 1,
+  "counts": {
+    "ok": 1
+  },
+  "providerCounts": {
+    "unknown": 1
+  },
+  "toolRuns": 1,
+  "stepExecuteRuns": 0,
+  "avgMs": 2156,
+  "failures": [],
+  "generatedAt": "2026-06-21T10:16:19.657Z",
+  "results": [
+    {
+      "index": 11,
+      "category": "realtime",
+      "prompt": "昨晚世界杯最新的比赛结果",
+      "startedAt": 1782036974989,
+      "elapsedMs": 2156,
+      "text": "已匹配到的比赛结果（北京时间），共 4 场：\n- 2026/06/21 01:00 Netherlands 5-1 Sweden (FT)\n- 2026/06/21 04:00 Germany 2-1 Ivory Coast (FT)\n- 2026/06/21 08:00 Ecuador 0-0 Curaçao (FT)\n- 2026/06/21 12:00 Tunisia 0-4 Japan (FT)\n\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260611-20260621\n数据来源/判断依据\n- 工具：research_prefetch\n- 时间：2026-06-21 18:16（本机时间）\n- 来源：site.api.espn.com\n- 依据：系统预取资料中的可用证据。\n- 注意：资料不足时应继续补充来源再下结论。",
+      "textChars": 442,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-16-14-992Z_0b0ea2f5-7533-40cb-9f49-23592b36d6e4.jsonl\",\"clientMessageId\":\"gui-50-11-1782036974999\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-16-14-992Z_0b0ea2f5-7533-40cb-9f49-23592b36d6e4.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"sports_score\",\"args\":{\"query\":\"昨晚世界杯最新的比赛结果\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-16-14-992Z_0b0ea2f5-7533-40cb-9f49-23592b36d6e4.jsonl\",\"streamId\":\"s_mqnmsy3f_lofve8\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"sports_score\",\"success\":true,\"summary\":{\"outputPreview\":\"【体育比分工具资料】\\n体育查询结果 (ESPN scoreboard)\\nprovider: espn_scoreboard\\nleague: FIFA World Cup\\nsource: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260611-2026062\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-16-14-992Z_0b0ea2f5-7533-40cb-9f49-23592b36d6e4.jsonl\",\"streamId\":\"s_mqnmsy3f_lofve8\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"已匹配到的比赛结果（北京时间），共 4 场：\\n- 2026/06/21 01:00 Netherlands 5-1 Sweden (FT)\\n- 2026/06/21 04:00 Germany 2-1 Ivory Coast (FT)\\n- 2026/06/21 08:00 Ecuador 0-0 Curaçao (FT)\\n- 2026/06/21 12:00 Tunisia 0-4 Japan (FT)\\n\\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260611-20260621\\n数据来源/判断依据\\n- 工具：research_prefetch\\n- 时间：2026-06-21 18:16（本机时间）\\n- 来源：site.api.espn.com\\n- 依据：系统预取资料中的可用证据。\\n- 注意：资料不足时应继续补充来源再下结论。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-16-14-992Z_0b0ea2f5-7533-40cb-9f49-23592b36d6e4.jsonl\",\"streamId\":\"s_mqnmsy3f_lofve8\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-16-14-992Z_0b0ea2f5-7533-40cb-9f49-23592b36d6e4.jsonl\",\"streamId\":\"s_mqnmsy3f_lofve8\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T10-16-14-992Z_0b0ea2f5-7533-40cb-9f49-23592b36d6e4.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

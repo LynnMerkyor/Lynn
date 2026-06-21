@@ -14,21 +14,22 @@ describe("Voice settings StepFun Realtime contract", () => {
     expect(needsTtsKeyLine).not.toContain("stepfun");
   });
 
-  it("does not expose StepFun Realtime as standalone ASR", () => {
-    expect(source).toContain("{ value: 'spark', label: '语音输入转写 (本地 ASR · 默认)' }");
-    expect(source).toContain("StepFun Realtime 不再作为独立 ASR 使用");
-    expect(source).toContain("LEGACY_ASR_FALLBACKS.has(value)) return 'spark'");
+  it("exposes StepFun Realtime ASR as the Lynn cloud default instead of local Spark", () => {
+    expect(source).toContain("{ value: 'stepfun-realtime', label: 'StepFun Realtime ASR (Lynn 云端 · 默认)' }");
+    expect(source).toContain("GUI/CLI 语音输入通过 Lynn Brain 托管 StepFun Realtime 转写");
+    expect(source).toContain("LEGACY_ASR_FALLBACKS.has(value)) return 'stepfun-realtime'");
   });
 
   it("migrates legacy Spark-era TTS engines back to the StepFun primary chain", () => {
-    expect(source).toContain("const LEGACY_TTS_FALLBACKS = new Set(['spark', 'cosyvoice', 'edge', 'say'])");
+    expect(source).toContain("const LEGACY_TTS_FALLBACKS = new Set(['spark', 'spark-local', 'cosyvoice', 'cosyvoice2', 'cosyvoice-2', 'edge', 'edge-tts', 'say'])");
     expect(source).toContain("LEGACY_TTS_FALLBACKS.has(value)) return 'stepfun-realtime'");
   });
 
   it("does not expose local TTS fallback engines as primary provider choices", () => {
     const asrBlock = source.match(/const ASR_PROVIDERS = \[[\s\S]*?\];/)?.[0] || "";
     const ttsBlock = source.match(/const TTS_PROVIDERS = \[[\s\S]*?\];/)?.[0] || "";
-    expect(asrBlock).not.toContain("StepFun Realtime ASR");
+    expect(asrBlock).toContain("StepFun Realtime ASR");
+    expect(asrBlock).not.toContain("SenseVoice");
     expect(ttsBlock).not.toContain("CosyVoice");
     expect(ttsBlock).not.toContain("Spark local");
   });

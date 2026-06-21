@@ -1,0 +1,419 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-14-15-runtime-fix.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-Fhs2HG",
+  "total": 2,
+  "counts": {
+    "ok": 2
+  },
+  "providerCounts": {
+    "deepseek-chat": 2
+  },
+  "toolRuns": 2,
+  "stepExecuteRuns": 0,
+  "avgMs": 60738,
+  "generatedAt": "2026-06-20T15:11:31.258Z",
+  "results": [
+    {
+      "index": 14,
+      "category": "realtime",
+      "prompt": "世界杯半决赛在哪一天？",
+      "exitCode": 0,
+      "durationMs": 106914,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "toolNames": [
+        "web_search",
+        "web_fetch"
+      ],
+      "assistantText": "根据最新的赛程信息，**2026年美加墨世界杯**的两场半决赛安排在以下日期：\n\n---\n\n### 🏆 2026世界杯半决赛赛程\n\n| 场次 | 日期 | 时间 (美国东部时间 ET) | 对阵 | 场地 |\n|:---:|:---:|:---:|:---|:---|\n| **半决赛 1** | **7月14日（周二）** | 15:00 ET | Match 97 胜者 vs Match 98 胜者 | AT&T体育场，阿灵顿（达拉斯） |\n| **半决赛 2** | **7月15日（周三）** | 15:00 ET | Match 99 胜者 vs Match 100 胜者 | 梅赛德斯-奔驰体育场，亚特兰大 |\n\n---\n\n**简而言之：**\n- 🗓 **第一场半决赛：7月14日（星期二）**——在达拉斯\n- 🗓 **第二场半决赛：7月15日（星期三）**——在亚特兰大\n\n随后是**季军赛**（7月18日，迈阿密）和**决赛**（7月19日，纽约/新泽西MetLife体育场）。\n\n📌 *注：以上时间为美国东部时间（ET），换算到北京时间需加12小时，即北京时间分别为7月15日和7月16日凌晨3点。*",
+      "reasoningChars": 5105,
+      "usage": {
+        "prompt_tokens": 49999,
+        "completion_tokens": 505,
+        "total_tokens": 50504,
+        "prompt_tokens_details": {
+          "cached_tokens": 45696
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 200
+        },
+        "prompt_cache_hit_tokens": 45696,
+        "prompt_cache_miss_tokens": 4303
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": false
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": false
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": false
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": true
+        }
+      ],
+      "rawTail": "ssistant.delta\",\"text\":\"（\",\"ts\":\"2026-06-20T15:11:16.151Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"7\",\"ts\":\"2026-06-20T15:11:16.151Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"月\",\"ts\":\"2026-06-20T15:11:16.151Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"19\",\"ts\":\"2026-06-20T15:11:16.151Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"日\",\"ts\":\"2026-06-20T15:11:16.151Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T15:11:16.183Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"纽约\",\"ts\":\"2026-06-20T15:11:16.183Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"/\",\"ts\":\"2026-06-20T15:11:16.183Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"新\",\"ts\":\"2026-06-20T15:11:16.183Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"泽\",\"ts\":\"2026-06-20T15:11:16.215Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"西\",\"ts\":\"2026-06-20T15:11:16.215Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"Met\",\"ts\":\"2026-06-20T15:11:16.215Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"Life\",\"ts\":\"2026-06-20T15:11:16.237Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"体育\",\"ts\":\"2026-06-20T15:11:16.237Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"场\",\"ts\":\"2026-06-20T15:11:16.237Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"）。\\n\\n\",\"ts\":\"2026-06-20T15:11:16.262Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"📌\",\"ts\":\"2026-06-20T15:11:16.262Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" *\",\"ts\":\"2026-06-20T15:11:16.290Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"注\",\"ts\":\"2026-06-20T15:11:16.290Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"：\",\"ts\":\"2026-06-20T15:11:16.290Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"以上\",\"ts\":\"2026-06-20T15:11:16.320Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"时间为\",\"ts\":\"2026-06-20T15:11:16.320Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"美国\",\"ts\":\"2026-06-20T15:11:16.320Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"东部\",\"ts\":\"2026-06-20T15:11:16.320Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"时间\",\"ts\":\"2026-06-20T15:11:16.350Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"（\",\"ts\":\"2026-06-20T15:11:16.350Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"ET\",\"ts\":\"2026-06-20T15:11:16.375Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"），\",\"ts\":\"2026-06-20T15:11:16.375Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"换算\",\"ts\":\"2026-06-20T15:11:16.422Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"到\",\"ts\":\"2026-06-20T15:11:16.422Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"北京时间\",\"ts\":\"2026-06-20T15:11:16.430Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"需\",\"ts\":\"2026-06-20T15:11:16.430Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"加\",\"ts\":\"2026-06-20T15:11:16.467Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"12\",\"ts\":\"2026-06-20T15:11:16.467Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"小时\",\"ts\":\"2026-06-20T15:11:16.516Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T15:11:16.516Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"即\",\"ts\":\"2026-06-20T15:11:16.520Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"北京时间\",\"ts\":\"2026-06-20T15:11:16.520Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"分别为\",\"ts\":\"2026-06-20T15:11:16.520Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"7\",\"ts\":\"2026-06-20T15:11:16.543Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"月\",\"ts\":\"2026-06-20T15:11:16.582Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"15\",\"ts\":\"2026-06-20T15:11:16.582Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"日和\",\"ts\":\"2026-06-20T15:11:16.582Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"7\",\"ts\":\"2026-06-20T15:11:16.582Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"月\",\"ts\":\"2026-06-20T15:11:16.604Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"16\",\"ts\":\"2026-06-20T15:11:16.604Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"日凌晨\",\"ts\":\"2026-06-20T15:11:16.604Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"3\",\"ts\":\"2026-06-20T15:11:16.604Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"点\",\"ts\":\"2026-06-20T15:11:16.635Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"。\",\"ts\":\"2026-06-20T15:11:16.635Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"*\",\"ts\":\"2026-06-20T15:11:16.635Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T15:11:16.668Z\",\"usage\":{\"prompt_tokens\":49999,\"completion_tokens\":505,\"total_tokens\":50504,\"prompt_tokens_details\":{\"cached_tokens\":45696},\"completion_tokens_details\":{\"reasoning_tokens\":200},\"prompt_cache_hit_tokens\":45696,\"prompt_cache_miss_tokens\":4303},\"durationMs\":106466}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T15:11:16.689Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 15,
+      "category": "realtime",
+      "prompt": "2026世界杯已经出的赛事比分",
+      "exitCode": 0,
+      "durationMs": 14561,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "toolNames": [
+        "parallel_research"
+      ],
+      "assistantText": "2026年世界杯决赛圈比赛要到 **2026年6月11日～7月19日** 才正式开打（美加墨联合主办），所以目前**还没有任何决赛圈的正赛比分**。\n\n不过，如果你问的是 **2026世界杯预选赛**（各大洲已经有不少场次踢完了），我来帮你查一下各大赛区的最新进展：搜到了最新信息！原来**2026年美加墨世界杯小组赛已经开打**（首轮6月12日～6月18日），以下是截至目前的**已出比分**👇\n\n---\n\n## ✅ 小组赛首轮比分\n\n| 比赛 | 比分 | 日期 |\n|------|:----:|:----:|\n| 🇲🇽 墨西哥 vs 某队 | **2-0** | 6月12日 |\n| 🇧🇷 巴西 vs 🇲🇦 摩洛哥 | **1-1** | 6月13日 |\n| 🇶🇦 卡塔尔 vs 🇨🇭 瑞士 | **1-1** | 6月14日 |\n| 🏴󠁧󠁢󠁳󠁣󠁴󠁿 苏格兰 vs 🇭🇹 海地 | **1-0** | 6月14日 |\n| 🇦🇺 澳大利亚 vs 🇹🇷 土耳其 | **2-0** | 6月14日 |\n| 🇸🇪 瑞典 vs 🇹🇳 突尼斯 | **5-1** | 6月15日 |\n| 🇳🇴 挪威 vs 🇮🇶 伊拉克 | **4-1** | 6月17日（哈兰德2球1助） |\n| 🇵🇹 葡萄牙 vs 🇨🇩 刚果民主 | **1-1** | 6月18日 |\n| 🇺🇿 乌兹别克斯坦 vs 🇨🇴 哥伦比亚 | **1-3** | 6月18日 |\n\n## ✅ 小组赛第二轮（部分已出）\n\n| 比赛 | 比分 | 日期 |\n|------|:----:|:----:|\n| 🇨🇿 捷克 vs 🇿🇦 南非 | **1-1** | 6月19日 |\n| 🇨🇭 瑞士 vs 🇧🇦 波黑 | **4-1** | 6月19日 |\n| 🇰🇷 韩国 vs 🇲🇽 墨西哥 | **未提及** | 待查 |\n\n---\n\n### 🔥 目前看点\n- **瑞典 5-1 突尼斯** — 大胜领跑F组，力压日本+荷兰\n- **挪威 4-1 伊拉克** — 哈兰德世界杯首秀即2球1助\n- **巴西 1-1 摩洛哥** — 本届首场强强对话\n- **葡萄牙 1-1 刚果民主** — 葡萄牙开场6分钟破门后被压哨扳平\n- **卡塔尔 1-1 瑞士** — 补时绝平，拿到队史世界杯首个积分\n\n想让我继续查**某支球队的后续赛程**，或者整理**最新的小组积分榜**吗？",
+      "reasoningChars": 993,
+      "usage": {
+        "prompt_tokens": 4431,
+        "completion_tokens": 1121,
+        "total_tokens": 5552,
+        "prompt_tokens_details": {
+          "cached_tokens": 1792
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 503
+        },
+        "prompt_cache_hit_tokens": 1792,
+        "prompt_cache_miss_tokens": 2639
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "parallel_research",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "parallel_research",
+          "ok": true
+        }
+      ],
+      "rawTail": "Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"平\",\"ts\":\"2026-06-20T15:11:30.839Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"\\n\",\"ts\":\"2026-06-20T15:11:30.839Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"-\",\"ts\":\"2026-06-20T15:11:30.839Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" **\",\"ts\":\"2026-06-20T15:11:30.839Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"卡\",\"ts\":\"2026-06-20T15:11:30.840Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"塔尔\",\"ts\":\"2026-06-20T15:11:30.855Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" \",\"ts\":\"2026-06-20T15:11:30.855Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"1\",\"ts\":\"2026-06-20T15:11:30.855Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"-\",\"ts\":\"2026-06-20T15:11:30.953Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"1\",\"ts\":\"2026-06-20T15:11:30.953Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" \",\"ts\":\"2026-06-20T15:11:30.953Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"瑞士\",\"ts\":\"2026-06-20T15:11:30.953Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T15:11:30.953Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" —\",\"ts\":\"2026-06-20T15:11:30.953Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" \",\"ts\":\"2026-06-20T15:11:30.953Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"补\",\"ts\":\"2026-06-20T15:11:30.953Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"时\",\"ts\":\"2026-06-20T15:11:30.953Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"绝\",\"ts\":\"2026-06-20T15:11:30.953Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"平\",\"ts\":\"2026-06-20T15:11:30.953Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T15:11:30.965Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"拿到\",\"ts\":\"2026-06-20T15:11:30.965Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"队\",\"ts\":\"2026-06-20T15:11:30.965Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"史\",\"ts\":\"2026-06-20T15:11:30.965Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"世界杯\",\"ts\":\"2026-06-20T15:11:30.992Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"首个\",\"ts\":\"2026-06-20T15:11:30.992Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"积分\",\"ts\":\"2026-06-20T15:11:31.025Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"\\n\\n\",\"ts\":\"2026-06-20T15:11:31.025Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"想\",\"ts\":\"2026-06-20T15:11:31.025Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"让我\",\"ts\":\"2026-06-20T15:11:31.025Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"继续\",\"ts\":\"2026-06-20T15:11:31.060Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"查\",\"ts\":\"2026-06-20T15:11:31.060Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T15:11:31.060Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"某\",\"ts\":\"2026-06-20T15:11:31.075Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"支\",\"ts\":\"2026-06-20T15:11:31.075Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"球队\",\"ts\":\"2026-06-20T15:11:31.102Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"的\",\"ts\":\"2026-06-20T15:11:31.102Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"后续\",\"ts\":\"2026-06-20T15:11:31.102Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"赛\",\"ts\":\"2026-06-20T15:11:31.153Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"程\",\"ts\":\"2026-06-20T15:11:31.153Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T15:11:31.153Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T15:11:31.166Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"或者\",\"ts\":\"2026-06-20T15:11:31.166Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"整理\",\"ts\":\"2026-06-20T15:11:31.185Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T15:11:31.185Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"最新的\",\"ts\":\"2026-06-20T15:11:31.185Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"小组\",\"ts\":\"2026-06-20T15:11:31.220Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"积分\",\"ts\":\"2026-06-20T15:11:31.249Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"榜\",\"ts\":\"2026-06-20T15:11:31.249Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T15:11:31.249Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"吗\",\"ts\":\"2026-06-20T15:11:31.249Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"？\",\"ts\":\"2026-06-20T15:11:31.249Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T15:11:31.249Z\",\"usage\":{\"prompt_tokens\":4431,\"completion_tokens\":1121,\"total_tokens\":5552,\"prompt_tokens_details\":{\"cached_tokens\":1792},\"completion_tokens_details\":{\"reasoning_tokens\":503},\"prompt_cache_hit_tokens\":1792,\"prompt_cache_miss_tokens\":2639},\"durationMs\":14174}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T15:11:31.252Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

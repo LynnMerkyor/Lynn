@@ -9,4 +9,16 @@ describe("buildLocalOfficeDirectAnswer", () => {
     expect(answer).toContain("30%");
     expect(answer).toContain("管理建议");
   });
+
+  it("builds a stable three-column task priority risk table", () => {
+    const answer = buildLocalOfficeDirectAnswer("给我一个三列表格：任务、优先级、风险");
+    expect(answer).toContain("| 任务 | 优先级 | 风险 |");
+    expect(answer).toContain("| 明确需求范围 | 高 |");
+    expect(answer).not.toContain("你想让我");
+  });
+
+  it("sorts and deduplicates inline lists deterministically", () => {
+    const answer = buildLocalOfficeDirectAnswer("把这个列表排序并去重：banana, apple, banana, pear");
+    expect(answer).toBe("apple, banana, pear");
+  });
 });

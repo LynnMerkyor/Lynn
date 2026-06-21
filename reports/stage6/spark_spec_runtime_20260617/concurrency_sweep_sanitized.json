@@ -1,0 +1,752 @@
+[
+  {
+    "model": "9b",
+    "config": "base",
+    "concurrency": 1,
+    "health_ok": true,
+    "wall_s": 3.4645071029663086,
+    "total_tokens": 128,
+    "aggregate_tps": 36.94609253085569,
+    "accept_rate": null,
+    "per_request": [
+      {
+        "i": 0,
+        "latency_s": 3.462745189666748,
+        "tokens": 128,
+        "tps_server": 37.905574843965255,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "45725791c47b"
+      }
+    ]
+  },
+  {
+    "model": "9b",
+    "config": "base",
+    "concurrency": 4,
+    "health_ok": true,
+    "wall_s": 4.3059916496276855,
+    "total_tokens": 512,
+    "aggregate_tps": 118.90408566962032,
+    "accept_rate": null,
+    "per_request": [
+      {
+        "i": 3,
+        "latency_s": 4.269696474075317,
+        "tokens": 128,
+        "tps_server": 30.94597244212801,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "8a41328f20bb"
+      },
+      {
+        "i": 1,
+        "latency_s": 4.302157640457153,
+        "tokens": 128,
+        "tps_server": 31.598540542408696,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "c534b5cd1a93"
+      },
+      {
+        "i": 2,
+        "latency_s": 4.302983522415161,
+        "tokens": 128,
+        "tps_server": 31.603627306324082,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "e6a227cd356a"
+      },
+      {
+        "i": 0,
+        "latency_s": 4.304019212722778,
+        "tokens": 128,
+        "tps_server": 31.593205881075274,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "45725791c47b"
+      }
+    ]
+  },
+  {
+    "model": "9b",
+    "config": "base",
+    "concurrency": 8,
+    "health_ok": true,
+    "wall_s": 5.9536826610565186,
+    "total_tokens": 1024,
+    "aggregate_tps": 171.99438705358958,
+    "accept_rate": null,
+    "per_request": [
+      {
+        "i": 3,
+        "latency_s": 5.912543058395386,
+        "tokens": 128,
+        "tps_server": 22.340713331995218,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "2cdb053ae39d"
+      },
+      {
+        "i": 4,
+        "latency_s": 5.9126787185668945,
+        "tokens": 128,
+        "tps_server": 22.336939469337143,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "2cdb053ae39d"
+      },
+      {
+        "i": 0,
+        "latency_s": 5.951664209365845,
+        "tokens": 128,
+        "tps_server": 22.872606372808473,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "45725791c47b"
+      },
+      {
+        "i": 6,
+        "latency_s": 5.949673891067505,
+        "tokens": 128,
+        "tps_server": 22.86884680624048,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "ea84c9ce9769"
+      },
+      {
+        "i": 7,
+        "latency_s": 5.949450969696045,
+        "tokens": 128,
+        "tps_server": 22.876277229025135,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "8ac429d0ad5d"
+      },
+      {
+        "i": 1,
+        "latency_s": 5.952376365661621,
+        "tokens": 128,
+        "tps_server": 22.88744829090662,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "c785a28dbf72"
+      },
+      {
+        "i": 5,
+        "latency_s": 5.951166868209839,
+        "tokens": 128,
+        "tps_server": 22.883863854597358,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "4fb38bf4071d"
+      },
+      {
+        "i": 2,
+        "latency_s": 5.95271897315979,
+        "tokens": 128,
+        "tps_server": 22.879920635275294,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "e6a227cd356a"
+      }
+    ]
+  },
+  {
+    "model": "9b",
+    "config": "n2_p06",
+    "concurrency": 1,
+    "health_ok": true,
+    "wall_s": 2.098625659942627,
+    "total_tokens": 128,
+    "aggregate_tps": 60.99229721774169,
+    "accept_rate": 1.0,
+    "per_request": [
+      {
+        "i": 0,
+        "latency_s": 2.097343921661377,
+        "tokens": 128,
+        "tps_server": 64.51469826274014,
+        "draft_n": 79,
+        "draft_n_accepted": 79,
+        "sha": "45725791c47b"
+      }
+    ]
+  },
+  {
+    "model": "9b",
+    "config": "n2_p06",
+    "concurrency": 4,
+    "health_ok": true,
+    "wall_s": 9.998435735702515,
+    "total_tokens": 512,
+    "aggregate_tps": 51.2080102862236,
+    "accept_rate": 0.8671875,
+    "per_request": [
+      {
+        "i": 0,
+        "latency_s": 6.810420989990234,
+        "tokens": 128,
+        "tps_server": 19.719274558700352,
+        "draft_n": 79,
+        "draft_n_accepted": 79,
+        "sha": "45725791c47b"
+      },
+      {
+        "i": 1,
+        "latency_s": 9.593176364898682,
+        "tokens": 128,
+        "tps_server": 13.798786526088655,
+        "draft_n": 63,
+        "draft_n_accepted": 51,
+        "sha": "9297633dc4d7"
+      },
+      {
+        "i": 3,
+        "latency_s": 9.879037141799927,
+        "tokens": 128,
+        "tps_server": 13.387305090512301,
+        "draft_n": 60,
+        "draft_n_accepted": 47,
+        "sha": "8c86af925ad4"
+      },
+      {
+        "i": 2,
+        "latency_s": 9.996164321899414,
+        "tokens": 128,
+        "tps_server": 13.416905279688494,
+        "draft_n": 54,
+        "draft_n_accepted": 45,
+        "sha": "e0f87242c0c1"
+      }
+    ]
+  },
+  {
+    "model": "9b",
+    "config": "n2_p06",
+    "concurrency": 8,
+    "health_ok": true,
+    "wall_s": 19.201037883758545,
+    "total_tokens": 1024,
+    "aggregate_tps": 53.3304504787298,
+    "accept_rate": 0.87374749498998,
+    "per_request": [
+      {
+        "i": 0,
+        "latency_s": 12.958035469055176,
+        "tokens": 128,
+        "tps_server": 10.481530519637433,
+        "draft_n": 79,
+        "draft_n_accepted": 79,
+        "sha": "45725791c47b"
+      },
+      {
+        "i": 6,
+        "latency_s": 18.299126148223877,
+        "tokens": 128,
+        "tps_server": 7.293109857253327,
+        "draft_n": 63,
+        "draft_n_accepted": 55,
+        "sha": "da353b38abe0"
+      },
+      {
+        "i": 1,
+        "latency_s": 18.91505789756775,
+        "tokens": 128,
+        "tps_server": 6.915502286978217,
+        "draft_n": 63,
+        "draft_n_accepted": 51,
+        "sha": "9297633dc4d7"
+      },
+      {
+        "i": 5,
+        "latency_s": 18.91390037536621,
+        "tokens": 128,
+        "tps_server": 7.044775547672134,
+        "draft_n": 59,
+        "draft_n_accepted": 52,
+        "sha": "52b57c765d90"
+      },
+      {
+        "i": 4,
+        "latency_s": 19.06000852584839,
+        "tokens": 128,
+        "tps_server": 6.989501931914716,
+        "draft_n": 57,
+        "draft_n_accepted": 51,
+        "sha": "c81b5a436d52"
+      },
+      {
+        "i": 7,
+        "latency_s": 19.05919599533081,
+        "tokens": 128,
+        "tps_server": 6.989555747113068,
+        "draft_n": 59,
+        "draft_n_accepted": 51,
+        "sha": "52b57c765d90"
+      },
+      {
+        "i": 2,
+        "latency_s": 19.135653495788574,
+        "tokens": 128,
+        "tps_server": 6.962355739173184,
+        "draft_n": 58,
+        "draft_n_accepted": 50,
+        "sha": "d01614ed4cec"
+      },
+      {
+        "i": 3,
+        "latency_s": 19.1980562210083,
+        "tokens": 128,
+        "tps_server": 6.811558448386586,
+        "draft_n": 61,
+        "draft_n_accepted": 47,
+        "sha": "8c86af925ad4"
+      }
+    ]
+  },
+  {
+    "model": "27b_fused",
+    "config": "base",
+    "concurrency": 1,
+    "health_ok": true,
+    "wall_s": 10.745657444000244,
+    "total_tokens": 128,
+    "aggregate_tps": 11.911788614801583,
+    "accept_rate": null,
+    "per_request": [
+      {
+        "i": 0,
+        "latency_s": 10.74479341506958,
+        "tokens": 128,
+        "tps_server": 12.189992073648124,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "b782d54f23eb"
+      }
+    ]
+  },
+  {
+    "model": "27b_fused",
+    "config": "base",
+    "concurrency": 4,
+    "health_ok": true,
+    "wall_s": 13.289229393005371,
+    "total_tokens": 512,
+    "aggregate_tps": 38.52744089657186,
+    "accept_rate": null,
+    "per_request": [
+      {
+        "i": 0,
+        "latency_s": 13.18947148323059,
+        "tokens": 128,
+        "tps_server": 10.014128527114934,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "b782d54f23eb"
+      },
+      {
+        "i": 1,
+        "latency_s": 13.287696599960327,
+        "tokens": 128,
+        "tps_server": 10.218053256493572,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "b01d91e77b8d"
+      },
+      {
+        "i": 3,
+        "latency_s": 13.287009477615356,
+        "tokens": 128,
+        "tps_server": 10.218317547629335,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "12167e296554"
+      },
+      {
+        "i": 2,
+        "latency_s": 13.287487983703613,
+        "tokens": 128,
+        "tps_server": 10.217274329744809,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "226d499682aa"
+      }
+    ]
+  },
+  {
+    "model": "27b_fused",
+    "config": "base",
+    "concurrency": 8,
+    "health_ok": true,
+    "wall_s": 18.42467427253723,
+    "total_tokens": 1024,
+    "aggregate_tps": 55.577644676536615,
+    "accept_rate": null,
+    "per_request": [
+      {
+        "i": 4,
+        "latency_s": 18.299019813537598,
+        "tokens": 128,
+        "tps_server": 7.23318272302318,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "8524efebc909"
+      },
+      {
+        "i": 3,
+        "latency_s": 18.421095848083496,
+        "tokens": 128,
+        "tps_server": 7.373908611117976,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "1cb36f57679b"
+      },
+      {
+        "i": 7,
+        "latency_s": 18.419275999069214,
+        "tokens": 128,
+        "tps_server": 7.37410869781882,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "07bbb72f238a"
+      },
+      {
+        "i": 5,
+        "latency_s": 18.42122793197632,
+        "tokens": 128,
+        "tps_server": 7.374655062032373,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "4d3bdc5cdf63"
+      },
+      {
+        "i": 1,
+        "latency_s": 18.422510623931885,
+        "tokens": 128,
+        "tps_server": 7.374245918542122,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "0c4030ef5414"
+      },
+      {
+        "i": 2,
+        "latency_s": 18.422863006591797,
+        "tokens": 128,
+        "tps_server": 7.37486283763404,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "226d499682aa"
+      },
+      {
+        "i": 0,
+        "latency_s": 18.423247814178467,
+        "tokens": 128,
+        "tps_server": 7.374443899234906,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "b782d54f23eb"
+      },
+      {
+        "i": 6,
+        "latency_s": 18.422157287597656,
+        "tokens": 128,
+        "tps_server": 7.375069350139426,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "bc12d768df9a"
+      }
+    ]
+  },
+  {
+    "model": "27b_fused",
+    "config": "n2_p06",
+    "concurrency": 1,
+    "health_ok": true,
+    "wall_s": 7.113306045532227,
+    "total_tokens": 128,
+    "aggregate_tps": 17.994445786624787,
+    "accept_rate": 0.9130434782608695,
+    "per_request": [
+      {
+        "i": 0,
+        "latency_s": 7.112380266189575,
+        "tokens": 128,
+        "tps_server": 18.79130784566464,
+        "draft_n": 69,
+        "draft_n_accepted": 63,
+        "sha": "b782d54f23eb"
+      }
+    ]
+  },
+  {
+    "model": "27b_fused",
+    "config": "n2_p06",
+    "concurrency": 4,
+    "health_ok": true,
+    "wall_s": 26.4074809551239,
+    "total_tokens": 512,
+    "aggregate_tps": 19.388445299651178,
+    "accept_rate": 0.8647686832740213,
+    "per_request": [
+      {
+        "i": 1,
+        "latency_s": 25.39689040184021,
+        "tokens": 128,
+        "tps_server": 5.220300132183709,
+        "draft_n": 74,
+        "draft_n_accepted": 63,
+        "sha": "0c4030ef5414"
+      },
+      {
+        "i": 0,
+        "latency_s": 25.397666931152344,
+        "tokens": 128,
+        "tps_server": 5.220572448820445,
+        "draft_n": 69,
+        "draft_n_accepted": 63,
+        "sha": "b782d54f23eb"
+      },
+      {
+        "i": 3,
+        "latency_s": 26.2159206867218,
+        "tokens": 128,
+        "tps_server": 5.145581567497709,
+        "draft_n": 71,
+        "draft_n_accepted": 60,
+        "sha": "12167e296554"
+      },
+      {
+        "i": 2,
+        "latency_s": 26.4049654006958,
+        "tokens": 128,
+        "tps_server": 5.014354765756376,
+        "draft_n": 67,
+        "draft_n_accepted": 57,
+        "sha": "392652c2b28f"
+      }
+    ]
+  },
+  {
+    "model": "27b_fused",
+    "config": "n2_p06",
+    "concurrency": 8,
+    "health_ok": true,
+    "wall_s": 51.2327995300293,
+    "total_tokens": 1024,
+    "aggregate_tps": 19.987195886100242,
+    "accept_rate": 0.8738898756660746,
+    "per_request": [
+      {
+        "i": 1,
+        "latency_s": 50.25008249282837,
+        "tokens": 128,
+        "tps_server": 2.667588151648802,
+        "draft_n": 74,
+        "draft_n_accepted": 63,
+        "sha": "0c4030ef5414"
+      },
+      {
+        "i": 0,
+        "latency_s": 50.252766609191895,
+        "tokens": 128,
+        "tps_server": 2.6673480073733,
+        "draft_n": 69,
+        "draft_n_accepted": 63,
+        "sha": "b782d54f23eb"
+      },
+      {
+        "i": 4,
+        "latency_s": 50.25222563743591,
+        "tokens": 128,
+        "tps_server": 2.667425715996975,
+        "draft_n": 70,
+        "draft_n_accepted": 63,
+        "sha": "cc90971187e3"
+      },
+      {
+        "i": 7,
+        "latency_s": 50.73675990104675,
+        "tokens": 128,
+        "tps_server": 2.6403755125551607,
+        "draft_n": 70,
+        "draft_n_accepted": 62,
+        "sha": "5d6329946be4"
+      },
+      {
+        "i": 5,
+        "latency_s": 50.73794078826904,
+        "tokens": 128,
+        "tps_server": 2.640404978714623,
+        "draft_n": 69,
+        "draft_n_accepted": 62,
+        "sha": "5e37ddde0441"
+      },
+      {
+        "i": 6,
+        "latency_s": 50.73885107040405,
+        "tokens": 128,
+        "tps_server": 2.6404206107519785,
+        "draft_n": 72,
+        "draft_n_accepted": 62,
+        "sha": "bc12d768df9a"
+      },
+      {
+        "i": 3,
+        "latency_s": 50.94303560256958,
+        "tokens": 128,
+        "tps_server": 2.572890955554615,
+        "draft_n": 71,
+        "draft_n_accepted": 60,
+        "sha": "12167e296554"
+      },
+      {
+        "i": 2,
+        "latency_s": 51.23038911819458,
+        "tokens": 128,
+        "tps_server": 2.5580367579490093,
+        "draft_n": 68,
+        "draft_n_accepted": 57,
+        "sha": "693b579b65ef"
+      }
+    ]
+  },
+  {
+    "model": "35b_apex",
+    "config": "base",
+    "concurrency": 1,
+    "health_ok": true,
+    "wall_s": 0.30927538871765137,
+    "total_tokens": 4,
+    "aggregate_tps": 12.933457190322196,
+    "accept_rate": null,
+    "per_request": [
+      {
+        "i": 0,
+        "latency_s": 0.3083493709564209,
+        "tokens": 4,
+        "tps_server": 80.69234027959897,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "43fd56f56bb9"
+      }
+    ]
+  },
+  {
+    "model": "35b_apex",
+    "config": "base",
+    "concurrency": 4,
+    "health_ok": true,
+    "wall_s": 3.929344654083252,
+    "total_tokens": 265,
+    "aggregate_tps": 67.4412715933738,
+    "accept_rate": null,
+    "per_request": [
+      {
+        "i": 0,
+        "latency_s": 0.5398337841033936,
+        "tokens": 4,
+        "tps_server": 41.28520854190965,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "43fd56f56bb9"
+      },
+      {
+        "i": 1,
+        "latency_s": 0.5401260852813721,
+        "tokens": 5,
+        "tps_server": 26.40849719805845,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "68b80d661961"
+      },
+      {
+        "i": 2,
+        "latency_s": 3.9131524562835693,
+        "tokens": 128,
+        "tps_server": 35.944373834967024,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "c5e0df8574cb"
+      },
+      {
+        "i": 3,
+        "latency_s": 3.9264769554138184,
+        "tokens": 128,
+        "tps_server": 36.75115220604533,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "c7f50547f78f"
+      }
+    ]
+  },
+  {
+    "model": "35b_apex",
+    "config": "n2_p06",
+    "concurrency": 1,
+    "health_ok": true,
+    "wall_s": 0.32413625717163086,
+    "total_tokens": 4,
+    "aggregate_tps": 12.34048925875636,
+    "accept_rate": null,
+    "per_request": [
+      {
+        "i": 0,
+        "latency_s": 0.3233516216278076,
+        "tokens": 4,
+        "tps_server": 69.75446428571428,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "43fd56f56bb9"
+      }
+    ]
+  },
+  {
+    "model": "35b_apex",
+    "config": "n2_p06",
+    "concurrency": 4,
+    "health_ok": true,
+    "wall_s": 3.656625270843506,
+    "total_tokens": 265,
+    "aggregate_tps": 72.47119416720274,
+    "accept_rate": 0.8540145985401459,
+    "per_request": [
+      {
+        "i": 0,
+        "latency_s": 0.8554282188415527,
+        "tokens": 4,
+        "tps_server": 16.81046619625379,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "43fd56f56bb9"
+      },
+      {
+        "i": 1,
+        "latency_s": 0.9159672260284424,
+        "tokens": 5,
+        "tps_server": 16.80056718714824,
+        "draft_n": null,
+        "draft_n_accepted": null,
+        "sha": "68b80d661961"
+      },
+      {
+        "i": 3,
+        "latency_s": 3.6540799140930176,
+        "tokens": 128,
+        "tps_server": 39.54235897974535,
+        "draft_n": 73,
+        "draft_n_accepted": 58,
+        "sha": "f9293a1234bf"
+      },
+      {
+        "i": 2,
+        "latency_s": 3.654587507247925,
+        "tokens": 128,
+        "tps_server": 42.16084890869277,
+        "draft_n": 64,
+        "draft_n_accepted": 59,
+        "sha": "1c9f368e93f6"
+      }
+    ]
+  }
+]

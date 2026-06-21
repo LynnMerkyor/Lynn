@@ -1,0 +1,142 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-23-30-current-date-anchor.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-ZxIQCG",
+  "gateCurrentDate": "2026-06-20",
+  "total": 2,
+  "counts": {
+    "ok": 2
+  },
+  "providerCounts": {
+    "deepseek-pro": 1,
+    "deepseek-chat": 1
+  },
+  "toolRuns": 2,
+  "stepExecuteRuns": 0,
+  "avgMs": 31201,
+  "generatedAt": "2026-06-20T17:26:18.273Z",
+  "results": [
+    {
+      "index": 23,
+      "category": "realtime",
+      "prompt": "北京今天空气质量怎么样？",
+      "exitCode": 0,
+      "durationMs": 21926,
+      "providerTrail": [
+        "deepseek-chat",
+        "deepseek-pro"
+      ],
+      "toolNames": [
+        "web_search"
+      ],
+      "assistantText": "根据目前已有的工具证据，关于北京**今天（2026年6月20日，周六）**的空气质量，情况如下：\n\n---\n\n### 已有数据情况\n\n证据中**未查到 6月20日当天的具体 AQI 实时数据**，仅有天气预报信息：今天白天阴转晴，北风二三级转三四级，阵风六级左右，最高气温30℃。\n\n### 最近可参考的实测数据（6月19日）\n\n不同来源的数据存在一定差异：\n\n| 数据来源 | 更新时间 | AQI | 等级 | PM2.5 |\n|----------|----------|-----|------|-------|\n| 天气后报 | 6月19日 17:00 | **35** | 优 | 23μg/m³ |\n| aqicn.org | 6月19日 15:00 | 未明确给出具体数值 | 空气质量较好 | — |\n| air-level.com | 6月19日 03:00 | **88** | 良 | — |\n\n### 预报趋势\n\n根据生态环境部6月17日发布的**6月下半月空气质量预报会商结果**，6月16日—30日全国大部扩散条件总体较好，京津冀地区空气质量以**优良为主**。6月18日可能出现轻度污染，之后预计回归良的水平。\n\n---\n\n### 综合判断\n\n虽然缺少6月20日当天的精确AQI数值，但结合前一天（6月19日白天）AQI **35（优）**的实测数据、大风的有利扩散条件（北风阵风六级），以及官方预报趋势，**预计今天北京空气质量在优到良之间，适合户外活动**。如需精确的实时AQI数据，建议直接查看**北京市生态环境监测中心**官网或相关天气App的实时更新。",
+      "reasoningChars": 1426,
+      "usage": {
+        "prompt_tokens": 4824,
+        "completion_tokens": 808,
+        "total_tokens": 5632,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 428
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 4824
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "type\":\"assistant.delta\",\"text\":\"阵\",\"ts\":\"2026-06-20T17:25:37.088Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"风\",\"ts\":\"2026-06-20T17:25:37.128Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"六级\",\"ts\":\"2026-06-20T17:25:37.128Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"），\",\"ts\":\"2026-06-20T17:25:37.151Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"以及\",\"ts\":\"2026-06-20T17:25:37.151Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"官方\",\"ts\":\"2026-06-20T17:25:37.151Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"预报\",\"ts\":\"2026-06-20T17:25:37.283Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"趋势\",\"ts\":\"2026-06-20T17:25:37.283Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T17:25:37.286Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T17:25:37.286Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"预计\",\"ts\":\"2026-06-20T17:25:37.286Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"今天\",\"ts\":\"2026-06-20T17:25:37.286Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"北京\",\"ts\":\"2026-06-20T17:25:37.286Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"空气质量\",\"ts\":\"2026-06-20T17:25:37.288Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"在\",\"ts\":\"2026-06-20T17:25:37.288Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"优\",\"ts\":\"2026-06-20T17:25:37.328Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"到\",\"ts\":\"2026-06-20T17:25:37.328Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"良\",\"ts\":\"2026-06-20T17:25:37.328Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"之间\",\"ts\":\"2026-06-20T17:25:37.359Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T17:25:37.359Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"适合\",\"ts\":\"2026-06-20T17:25:37.406Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"户外\",\"ts\":\"2026-06-20T17:25:37.406Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"活动\",\"ts\":\"2026-06-20T17:25:37.439Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T17:25:37.439Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"。\",\"ts\":\"2026-06-20T17:25:37.440Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"如需\",\"ts\":\"2026-06-20T17:25:37.440Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"精确\",\"ts\":\"2026-06-20T17:25:37.440Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"的\",\"ts\":\"2026-06-20T17:25:37.467Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"实时\",\"ts\":\"2026-06-20T17:25:37.467Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"AQ\",\"ts\":\"2026-06-20T17:25:37.467Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"I\",\"ts\":\"2026-06-20T17:25:37.493Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"数据\",\"ts\":\"2026-06-20T17:25:37.493Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T17:25:37.493Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"建议\",\"ts\":\"2026-06-20T17:25:37.493Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"直接\",\"ts\":\"2026-06-20T17:25:37.527Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"查看\",\"ts\":\"2026-06-20T17:25:37.527Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T17:25:37.567Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"北京市\",\"ts\":\"2026-06-20T17:25:37.610Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"生态环境\",\"ts\":\"2026-06-20T17:25:37.610Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"监测\",\"ts\":\"2026-06-20T17:25:37.610Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"中心\",\"ts\":\"2026-06-20T17:25:37.633Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T17:25:37.633Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"官网\",\"ts\":\"2026-06-20T17:25:37.633Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"或\",\"ts\":\"2026-06-20T17:25:37.633Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"相关\",\"ts\":\"2026-06-20T17:25:37.657Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"天气\",\"ts\":\"2026-06-20T17:25:37.693Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"App\",\"ts\":\"2026-06-20T17:25:37.694Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"的\",\"ts\":\"2026-06-20T17:25:37.726Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"实时\",\"ts\":\"2026-06-20T17:25:37.726Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"更新\",\"ts\":\"2026-06-20T17:25:37.784Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"。\",\"ts\":\"2026-06-20T17:25:37.784Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T17:25:37.784Z\",\"usage\":{\"prompt_tokens\":4824,\"completion_tokens\":808,\"total_tokens\":5632,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":428},\"prompt_cache_hit_tokens\":0,\"prompt_cache_miss_tokens\":4824},\"durationMs\":21511}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T17:25:37.787Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 30,
+      "category": "search",
+      "prompt": "查一下深圳今天有没有暴雨预警",
+      "exitCode": 0,
+      "durationMs": 40476,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "toolNames": [
+        "weather",
+        "live_news"
+      ],
+      "assistantText": "## 深圳暴雨预警查询结果\n\n### 当前天气（6月21日）\n根据实时天气数据，今天深圳 **没有暴雨预警生效中**。天气为 **Patchy rain nearby（零星小雨）**，气温 27~31°C，体感较闷热（34°C），湿度 89%，目前无明显强降水。\n\n### 近几天预警回顾\n深圳在 **6月14日~6月19日** 经历了一轮持续强降雨过程，预警频繁升级，部分时段甚至发布了 **暴雨红色预警**（最高级别），具体情况：\n\n| 日期 | 预警等级 | 说明 |\n|------|---------|------|\n| 6月14日 | 🔴 **红色预警**（坪山、龙岗部分区域） | 全市进入暴雨紧急防御状态 |\n| 6月15日 | 🟡 黄色→🟠 橙色预警 | 全市暴雨戒备状态，下午解除 |\n| 6月16日 | 🔴 **红色预警**（龙岗、光明、龙华等） | 全市停课，学生留校 |\n| 6月18日 | 🟡 黄色→🟠 橙⾊→🔴 **红色**（全市） | 公园闭园，充电桩关闭，可推迟上学 |\n| 6月19日 | 🟠 橙色预警（宝安、光明部分区域） | 全市进入暴雨防御状态 |\n\n### 今天（6月21日）结论\n✅ **目前深圳未发布暴雨预警**。上一轮强降雨过程已于6月19日减弱，今天只有零星小雨，出行基本不受影响，但湿度较大，建议带伞以防局部阵雨。",
+      "reasoningChars": 758,
+      "usage": {
+        "prompt_tokens": 7529,
+        "completion_tokens": 557,
+        "total_tokens": 8086,
+        "prompt_tokens_details": {
+          "cached_tokens": 1920
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 196
+        },
+        "prompt_cache_hit_tokens": 1920,
+        "prompt_cache_miss_tokens": 5609
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "weather",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "live_news",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "weather",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "live_news",
+          "ok": true
+        }
+      ],
+      "rawTail": "Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"6\",\"ts\":\"2026-06-20T17:26:17.682Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"月\",\"ts\":\"2026-06-20T17:26:17.682Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"21\",\"ts\":\"2026-06-20T17:26:17.682Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"日\",\"ts\":\"2026-06-20T17:26:17.713Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"）\",\"ts\":\"2026-06-20T17:26:17.713Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"结论\",\"ts\":\"2026-06-20T17:26:17.713Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"\\n\",\"ts\":\"2026-06-20T17:26:17.749Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"✅\",\"ts\":\"2026-06-20T17:26:17.749Z\"}\n{\"type\":\"assistant.delta\",\"text\":\" **\",\"ts\":\"2026-06-20T17:26:17.749Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"目前\",\"ts\":\"2026-06-20T17:26:17.764Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"深圳\",\"ts\":\"2026-06-20T17:26:17.793Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"未\",\"ts\":\"2026-06-20T17:26:17.793Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"发布\",\"ts\":\"2026-06-20T17:26:17.835Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"暴雨\",\"ts\":\"2026-06-20T17:26:17.836Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"预警\",\"ts\":\"2026-06-20T17:26:17.836Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T17:26:17.848Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"。\",\"ts\":\"2026-06-20T17:26:17.848Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"上一\",\"ts\":\"2026-06-20T17:26:17.848Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"轮\",\"ts\":\"2026-06-20T17:26:17.878Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"强\",\"ts\":\"2026-06-20T17:26:17.878Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"降雨\",\"ts\":\"2026-06-20T17:26:17.879Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"过程\",\"ts\":\"2026-06-20T17:26:17.910Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"已于\",\"ts\":\"2026-06-20T17:26:17.910Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"6\",\"ts\":\"2026-06-20T17:26:17.910Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"月\",\"ts\":\"2026-06-20T17:26:17.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"19\",\"ts\":\"2026-06-20T17:26:17.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"日\",\"ts\":\"2026-06-20T17:26:17.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"减弱\",\"ts\":\"2026-06-20T17:26:17.930Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T17:26:17.957Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"今天\",\"ts\":\"2026-06-20T17:26:17.957Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"只有\",\"ts\":\"2026-06-20T17:26:17.987Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"零星\",\"ts\":\"2026-06-20T17:26:18.016Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"小雨\",\"ts\":\"2026-06-20T17:26:18.016Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T17:26:18.040Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"出行\",\"ts\":\"2026-06-20T17:26:18.040Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"基本\",\"ts\":\"2026-06-20T17:26:18.067Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"不受\",\"ts\":\"2026-06-20T17:26:18.094Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"影响\",\"ts\":\"2026-06-20T17:26:18.094Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T17:26:18.094Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"但\",\"ts\":\"2026-06-20T17:26:18.094Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"湿度\",\"ts\":\"2026-06-20T17:26:18.124Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"较大\",\"ts\":\"2026-06-20T17:26:18.156Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T17:26:18.185Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"建议\",\"ts\":\"2026-06-20T17:26:18.185Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"带\",\"ts\":\"2026-06-20T17:26:18.185Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"伞\",\"ts\":\"2026-06-20T17:26:18.212Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"以防\",\"ts\":\"2026-06-20T17:26:18.212Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"局部\",\"ts\":\"2026-06-20T17:26:18.252Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"阵\",\"ts\":\"2026-06-20T17:26:18.263Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"雨\",\"ts\":\"2026-06-20T17:26:18.263Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"。\",\"ts\":\"2026-06-20T17:26:18.263Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T17:26:18.263Z\",\"usage\":{\"prompt_tokens\":7529,\"completion_tokens\":557,\"total_tokens\":8086,\"prompt_tokens_details\":{\"cached_tokens\":1920},\"completion_tokens_details\":{\"reasoning_tokens\":196},\"prompt_cache_hit_tokens\":1920,\"prompt_cache_miss_tokens\":5609},\"durationMs\":40099}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T17:26:18.266Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

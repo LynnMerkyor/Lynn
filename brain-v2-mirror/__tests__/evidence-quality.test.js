@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildEvidencePolicyHint,
+  containsGroundedToolDenialContradiction,
   classifySearchEvidencePolicy,
   containsTemporalNoResultContradiction,
   currentTemporalContext,
@@ -50,5 +51,11 @@ describe('Evidence Quality Protocol', () => {
     expect(currentTemporalContext(now)).toContain('今天=2026-06-21');
     expect(containsTemporalNoResultContradiction('2026年6月20日尚未开赛，没有比分。', now)).toBe(true);
     expect(containsTemporalNoResultContradiction('2026年6月22日尚未开赛，没有比分。', now)).toBe(false);
+  });
+
+  it('detects answers that deny tools after grounded evidence exists', () => {
+    expect(containsGroundedToolDenialContradiction('Lynn CLI 的工具集中暂未包含天气查询功能。')).toBe(true);
+    expect(containsGroundedToolDenialContradiction('当前工具不支持实时查询股价。')).toBe(true);
+    expect(containsGroundedToolDenialContradiction('工具证据显示深圳明天晴天。')).toBe(false);
   });
 });

@@ -7,7 +7,7 @@ import { KeyInput } from '../widgets/KeyInput';
 import styles from '../Settings.module.css';
 
 const ASR_PROVIDERS = [
-  { value: 'spark', label: '语音输入转写 (本地 ASR · 默认)' },
+  { value: 'stepfun-realtime', label: 'StepFun Realtime ASR (Lynn 云端 · 默认)' },
   { value: 'openai', label: 'OpenAI Whisper API (BYOK)' },
   { value: 'azure', label: 'Azure Speech-to-Text (BYOK)' },
 ];
@@ -30,12 +30,25 @@ function defaultTtsVoice(provider: string): string {
   return 'zh-CN-XiaoxiaoNeural';
 }
 
-const LEGACY_ASR_FALLBACKS = new Set(['stepfun-realtime', 'stepfun', 'brain-realtime', 'brain-stepfun-realtime', 'sensevoice', 'faster-whisper']);
-const LEGACY_TTS_FALLBACKS = new Set(['spark', 'cosyvoice', 'edge', 'say']);
+const LEGACY_ASR_FALLBACKS = new Set([
+  'spark',
+  'spark-local',
+  'sensevoice',
+  'faster-whisper',
+  'qwen3-asr',
+  'qwen3',
+  'qwen',
+  'brain-realtime',
+  'brain-stepfun-realtime',
+  'stepfun',
+  'stepfun-direct',
+  'stepfun-byok',
+]);
+const LEGACY_TTS_FALLBACKS = new Set(['spark', 'spark-local', 'cosyvoice', 'cosyvoice2', 'cosyvoice-2', 'edge', 'edge-tts', 'say']);
 
 export function normalizeAsrProvider(provider?: string | null): string {
   const value = String(provider || '').trim();
-  if (!value || LEGACY_ASR_FALLBACKS.has(value)) return 'spark';
+  if (!value || LEGACY_ASR_FALLBACKS.has(value)) return 'stepfun-realtime';
   return value;
 }
 
@@ -218,8 +231,8 @@ export function VoiceTab() {
             onChange={(v) => setAsrProvider(v)}
           />
           <span className={styles['settings-field-hint']}>
-            {asrProvider === 'spark'
-              ? '实时语音会话和朗读优先走 StepFun Realtime;用户语音转写使用本地 ASR,避免把助手语音误识别成你的输入。'
+            {asrProvider === 'stepfun-realtime'
+              ? 'GUI/CLI 语音输入通过 Lynn Brain 托管 StepFun Realtime 转写,无需本地 Spark/SenseVoice。'
               : '使用第三方 API,需填写对应的密钥。'}
           </span>
         </div>
@@ -227,7 +240,7 @@ export function VoiceTab() {
         <div className={styles['settings-field']}>
           <label className={styles['settings-field-label']}>备用顺序</label>
           <span className={styles['settings-field-hint']}>
-            转写顺序:Qwen3-ASR → SenseVoice → Faster Whisper。StepFun Realtime 不再作为独立 ASR 使用。
+            默认链路:Lynn Brain → StepFun Realtime。OpenAI/Azure 仅在显式选择时使用。
           </span>
         </div>
 
@@ -282,7 +295,7 @@ export function VoiceTab() {
           />
           <span className={styles['settings-field-hint']}>
             {ttsProvider === 'stepfun-realtime'
-              ? '主链:GUI/CLI 语音输出经 Lynn Brain 托管 StepFun Realtime,无需填写 Key;失败时才依序退回 Spark/CosyVoice/系统语音。'
+              ? '主链:GUI/CLI 语音输出经 Lynn Brain 托管 StepFun Realtime,无需填写 Key。'
               : ttsProvider === 'openai'
               ? 'OpenAI TTS 使用内置音色 alloy / echo / onyx / nova'
               : '第三方 TTS 需要你自己的配置。'}
@@ -292,7 +305,7 @@ export function VoiceTab() {
         <div className={styles['settings-field']}>
           <label className={styles['settings-field-label']}>备用顺序</label>
           <span className={styles['settings-field-hint']}>
-            StepFun Realtime 不可用时才自动降级:Spark local TTS Router → CosyVoice → Edge/macOS say。备用链不再作为默认合成引擎选择。
+            不再自动调用 Spark/CosyVoice。服务端 TTS 不可用时,可由浏览器本地朗读 fallback 接管;OpenAI 仅在显式选择时使用。
           </span>
         </div>
 
@@ -308,7 +321,7 @@ export function VoiceTab() {
           </label>
           <span className={styles['settings-field-hint']}>
             开启后:每条 ≥50 字回复在 streaming 结束时后台 TTS 一次,缓存到磁盘。点喇叭命中缓存 0 等待。
-            默认走 StepFun Realtime 主链;服务端 TTS 不可用时会自动退回本地/浏览器朗读。Shift+点击仍可强制即时浏览器朗读。
+            默认走 StepFun Realtime 主链;服务端 TTS 不可用时可退回浏览器朗读。Shift+点击仍可强制即时浏览器朗读。
           </span>
         </div>
 
@@ -322,7 +335,7 @@ export function VoiceTab() {
             <span>优先使用流式播放(可用时更快开声)</span>
           </label>
           <span className={styles['settings-field-hint']}>
-            StepFun Realtime 可用时优先边合成边播放;失败会自动回退到本地 fallback 或普通文件合成。
+            StepFun Realtime 可用时优先边合成边播放;失败会自动回退到普通文件合成或浏览器朗读。
           </span>
         </div>
 

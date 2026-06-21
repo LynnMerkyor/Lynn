@@ -194,16 +194,30 @@ describe("StepFun Realtime voice providers", () => {
     }
   });
 
-  it("does not treat StepFun Realtime assistant transcripts as standalone ASR", async () => {
+  it("transcribes audio with StepFun Realtime when explicitly selected", async () => {
     const p = createStepFunRealtimeAsrProvider({
       api_key: "sk-test",
       endpoint: "https://api.stepfun.com",
       websocketCtor: FakeStepWebSocket,
       timeout_ms: 1000,
     });
-    await expect(p.transcribe(Buffer.alloc(3200), { language: "zh" }))
-      .rejects.toThrow(/not standalone user ASR transcripts/);
-    expect(FakeStepWebSocket.instances).toHaveLength(0);
+    const pending = p.transcribe(Buffer.alloc(3200), { language: "zh" });
+    const ws = FakeStepWebSocket.instances[0];
+    ws.open();
+
+    const result = await pending;
+    expect(result).toMatchObject({
+      provider: "stepfun-realtime",
+      text: "你好 Lynn",
+      transcript: "你好 Lynn",
+      language: "zh",
+    });
+    expect(ws.sent.map((evt) => evt.type)).toEqual([
+      "input_audio_buffer.append",
+      "input_audio_buffer.commit",
+      "response.create",
+    ]);
+    expect(ws.sent[2].response.modalities).toEqual(["text"]);
   });
 
   it("synthesizes StepFun Realtime audio as WAV for the existing voice pipeline", async () => {
@@ -230,7 +244,6 @@ describe("StepFun Realtime voice providers", () => {
       ok: false,
       degraded: true,
       provider: "stepfun-realtime",
-      error: expect.stringMatching(/not standalone user ASR transcripts/),
     });
   });
 });

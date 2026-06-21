@@ -1,0 +1,186 @@
+{
+  "outputPath": "/Users/lynn/Downloads/Lynn/reports/gui-target-11-17-sports-r13.json",
+  "generatedAt": "2026-06-21T08:52:24.442Z",
+  "results": [
+    {
+      "index": 11,
+      "category": "realtime",
+      "prompt": "昨晚世界杯最新的比赛结果",
+      "startedAt": 1782031935339,
+      "elapsedMs": 1918,
+      "text": "已匹配到的比赛结果（北京时间），共 4 场：\n- 2026/06/21 01:00 Netherlands 5-1 Sweden (FT)\n- 2026/06/21 04:00 Germany 2-1 Ivory Coast (FT)\n- 2026/06/21 08:00 Ecuador 0-0 Curaçao (FT)\n- 2026/06/21 12:00 Tunisia 0-4 Japan (FT)\n\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260611-20260621\n数据来源/判断依据\n- 工具：research_prefetch\n- 时间：2026-06-21 16:52（本机时间）\n- 来源：site.api.espn.com\n- 依据：系统预取资料中的可用证据。\n- 注意：资料不足时应继续补充来源再下结论。",
+      "textChars": 442,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-15-341Z_29e75faa-8739-4bf1-94dc-3bd610f00432.jsonl\",\"clientMessageId\":\"gui-50-11-1782031935344\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-15-341Z_29e75faa-8739-4bf1-94dc-3bd610f00432.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"sports_score\",\"args\":{\"query\":\"昨晚世界杯最新的比赛结果\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-15-341Z_29e75faa-8739-4bf1-94dc-3bd610f00432.jsonl\",\"streamId\":\"s_mqnjsxgw_eladgg\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"sports_score\",\"success\":true,\"summary\":{\"outputPreview\":\"【体育比分工具资料】\\n体育查询结果 (ESPN scoreboard)\\nprovider: espn_scoreboard\\nleague: FIFA World Cup\\nsource: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260611-2026062\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-15-341Z_29e75faa-8739-4bf1-94dc-3bd610f00432.jsonl\",\"streamId\":\"s_mqnjsxgw_eladgg\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"已匹配到的比赛结果（北京时间），共 4 场：\\n- 2026/06/21 01:00 Netherlands 5-1 Sweden (FT)\\n- 2026/06/21 04:00 Germany 2-1 Ivory Coast (FT)\\n- 2026/06/21 08:00 Ecuador 0-0 Curaçao (FT)\\n- 2026/06/21 12:00 Tunisia 0-4 Japan (FT)\\n\\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260611-20260621\\n数据来源/判断依据\\n- 工具：research_prefetch\\n- 时间：2026-06-21 16:52（本机时间）\\n- 来源：site.api.espn.com\\n- 依据：系统预取资料中的可用证据。\\n- 注意：资料不足时应继续补充来源再下结论。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-15-341Z_29e75faa-8739-4bf1-94dc-3bd610f00432.jsonl\",\"streamId\":\"s_mqnjsxgw_eladgg\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-15-341Z_29e75faa-8739-4bf1-94dc-3bd610f00432.jsonl\",\"streamId\":\"s_mqnjsxgw_eladgg\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-15-341Z_29e75faa-8739-4bf1-94dc-3bd610f00432.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 12,
+      "category": "realtime",
+      "prompt": "今晚世界杯有几场比赛",
+      "startedAt": 1782031937766,
+      "elapsedMs": 1579,
+      "text": "已匹配到的赛程（北京时间），共 4 场：\n- 2026/06/22 00:00 Spain vs Saudi Arabia (Scheduled)\n- 2026/06/22 03:00 Belgium vs Iran (Scheduled)\n- 2026/06/22 06:00 Uruguay vs Cape Verde (Scheduled)\n- 2026/06/22 09:00 New Zealand vs Egypt (Scheduled)\n\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260621-20260622\n数据来源/判断依据\n- 工具：research_prefetch\n- 时间：2026-06-21 16:52（本机时间）\n- 来源：site.api.espn.com\n- 依据：系统预取资料中的可用证据。\n- 注意：资料不足时应继续补充来源再下结论。",
+      "textChars": 464,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-17-770Z_0294dbde-ca84-439e-a2ff-c541ff96aac6.jsonl\",\"clientMessageId\":\"gui-50-12-1782031937779\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-17-770Z_0294dbde-ca84-439e-a2ff-c541ff96aac6.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"sports_score\",\"args\":{\"query\":\"今晚世界杯有几场比赛\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-17-770Z_0294dbde-ca84-439e-a2ff-c541ff96aac6.jsonl\",\"streamId\":\"s_mqnjszck_uh5a3p\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"sports_score\",\"success\":true,\"summary\":{\"outputPreview\":\"【体育比分工具资料】\\n体育查询结果 (ESPN scoreboard)\\nprovider: espn_scoreboard\\nleague: FIFA World Cup\\nsource: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260621-2026062\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-17-770Z_0294dbde-ca84-439e-a2ff-c541ff96aac6.jsonl\",\"streamId\":\"s_mqnjszck_uh5a3p\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"已匹配到的赛程（北京时间），共 4 场：\\n- 2026/06/22 00:00 Spain vs Saudi Arabia (Scheduled)\\n- 2026/06/22 03:00 Belgium vs Iran (Scheduled)\\n- 2026/06/22 06:00 Uruguay vs Cape Verde (Scheduled)\\n- 2026/06/22 09:00 New Zealand vs Egypt (Scheduled)\\n\\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260621-20260622\\n数据来源/判断依据\\n- 工具：research_prefetch\\n- 时间：2026-06-21 16:52（本机时间）\\n- 来源：site.api.espn.com\\n- 依据：系统预取资料中的可用证据。\\n- 注意：资料不足时应继续补充来源再下结论。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-17-770Z_0294dbde-ca84-439e-a2ff-c541ff96aac6.jsonl\",\"streamId\":\"s_mqnjszck_uh5a3p\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-17-770Z_0294dbde-ca84-439e-a2ff-c541ff96aac6.jsonl\",\"streamId\":\"s_mqnjszck_uh5a3p\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-17-770Z_0294dbde-ca84-439e-a2ff-c541ff96aac6.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 13,
+      "category": "realtime",
+      "prompt": "今天世界杯赛程发我一下",
+      "startedAt": 1782031939851,
+      "elapsedMs": 1036,
+      "text": "已匹配到的赛程（北京时间），共 1 场：\n- 2026/06/21 12:00 Tunisia 0-4 Japan (FT)\n\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260621-20260622\n数据来源/判断依据\n- 工具：research_prefetch\n- 时间：2026-06-21 16:52（本机时间）\n- 来源：site.api.espn.com\n- 依据：系统预取资料中的可用证据。\n- 注意：资料不足时应继续补充来源再下结论。",
+      "textChars": 301,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-19-859Z_2f659867-e956-4f24-9ac9-510a92b4ee46.jsonl\",\"clientMessageId\":\"gui-50-13-1782031939874\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-19-859Z_2f659867-e956-4f24-9ac9-510a92b4ee46.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"sports_score\",\"args\":{\"query\":\"今天世界杯赛程发我一下\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-19-859Z_2f659867-e956-4f24-9ac9-510a92b4ee46.jsonl\",\"streamId\":\"s_mqnjt0yr_nlangj\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"sports_score\",\"success\":true,\"summary\":{\"outputPreview\":\"【体育比分工具资料】\\n体育查询结果 (ESPN scoreboard)\\nprovider: espn_scoreboard\\nleague: FIFA World Cup\\nsource: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260621-2026062\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-19-859Z_2f659867-e956-4f24-9ac9-510a92b4ee46.jsonl\",\"streamId\":\"s_mqnjt0yr_nlangj\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"已匹配到的赛程（北京时间），共 1 场：\\n- 2026/06/21 12:00 Tunisia 0-4 Japan (FT)\\n\\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260621-20260622\\n数据来源/判断依据\\n- 工具：research_prefetch\\n- 时间：2026-06-21 16:52（本机时间）\\n- 来源：site.api.espn.com\\n- 依据：系统预取资料中的可用证据。\\n- 注意：资料不足时应继续补充来源再下结论。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-19-859Z_2f659867-e956-4f24-9ac9-510a92b4ee46.jsonl\",\"streamId\":\"s_mqnjt0yr_nlangj\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-19-859Z_2f659867-e956-4f24-9ac9-510a92b4ee46.jsonl\",\"streamId\":\"s_mqnjt0yr_nlangj\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-19-859Z_2f659867-e956-4f24-9ac9-510a92b4ee46.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 14,
+      "category": "realtime",
+      "prompt": "世界杯半决赛在哪一天？",
+      "startedAt": 1782031941391,
+      "elapsedMs": 1526,
+      "text": "世界杯半决赛时间（北京时间），共 2 场：\n- 2026/07/15 03:00 Quarterfinal 1 Winner vs Quarterfinal 2 Winner (Scheduled)\n- 2026/07/16 03:00 Quarterfinal 3 Winner vs Quarterfinal 4 Winner (Scheduled)\n\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260714-20260716\n数据来源/判断依据\n- 工具：research_prefetch\n- 时间：2026-06-21 16:52（本机时间）\n- 来源：site.api.espn.com\n- 依据：系统预取资料中的可用证据。\n- 注意：资料不足时应继续补充来源再下结论。",
+      "textChars": 416,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-21-396Z_4b1aa7e4-b33c-41c3-8c9d-ab5383344d3e.jsonl\",\"clientMessageId\":\"gui-50-14-1782031941404\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-21-396Z_4b1aa7e4-b33c-41c3-8c9d-ab5383344d3e.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"sports_score\",\"args\":{\"query\":\"世界杯半决赛在哪一天？\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-21-396Z_4b1aa7e4-b33c-41c3-8c9d-ab5383344d3e.jsonl\",\"streamId\":\"s_mqnjt259_54zmvk\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"sports_score\",\"success\":true,\"summary\":{\"outputPreview\":\"【体育比分工具资料】\\n体育查询结果 (ESPN scoreboard)\\nprovider: espn_scoreboard\\nleague: FIFA World Cup\\nsource: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260714-2026071\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-21-396Z_4b1aa7e4-b33c-41c3-8c9d-ab5383344d3e.jsonl\",\"streamId\":\"s_mqnjt259_54zmvk\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"世界杯半决赛时间（北京时间），共 2 场：\\n- 2026/07/15 03:00 Quarterfinal 1 Winner vs Quarterfinal 2 Winner (Scheduled)\\n- 2026/07/16 03:00 Quarterfinal 3 Winner vs Quarterfinal 4 Winner (Scheduled)\\n\\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260714-20260716\\n数据来源/判断依据\\n- 工具：research_prefetch\\n- 时间：2026-06-21 16:52（本机时间）\\n- 来源：site.api.espn.com\\n- 依据：系统预取资料中的可用证据。\\n- 注意：资料不足时应继续补充来源再下结论。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-21-396Z_4b1aa7e4-b33c-41c3-8c9d-ab5383344d3e.jsonl\",\"streamId\":\"s_mqnjt259_54zmvk\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-21-396Z_4b1aa7e4-b33c-41c3-8c9d-ab5383344d3e.jsonl\",\"streamId\":\"s_mqnjt259_54zmvk\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-21-396Z_4b1aa7e4-b33c-41c3-8c9d-ab5383344d3e.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 15,
+      "category": "realtime",
+      "prompt": "2026世界杯已经出的赛事比分",
+      "startedAt": 1782031943422,
+      "elapsedMs": 1017,
+      "text": "已匹配到的比赛结果（北京时间），共 24 场：\n- 2026/06/16 00:00 Spain 0-0 Cape Verde (FT)\n- 2026/06/16 03:00 Belgium 1-1 Egypt (FT)\n- 2026/06/16 06:00 Saudi Arabia 1-1 Uruguay (FT)\n- 2026/06/16 09:00 Iran 2-2 New Zealand (FT)\n- 2026/06/17 03:00 France 3-1 Senegal (FT)\n- 2026/06/17 06:00 Iraq 1-4 Norway (FT)\n- 2026/06/17 09:00 Argentina 3-0 Algeria (FT)\n- 2026/06/17 12:00 Austria 3-1 Jordan (FT)\n- 2026/06/18 01:00 Portugal 1-1 Congo DR (FT)\n- 2026/06/18 04:00 England 4-2 Croatia (FT)\n- 2026/06/18 07:00 Ghana 1-0 Panama (FT)\n- 2026/06/18 10:00 Uzbekistan 1-3 Colombia (FT)\n- 2026/06/19 00:00 Czechia 1-1 South Africa (FT)\n- 2026/06/19 03:00 Switzerland 4-1 Bosnia-Herzegovina (FT)\n- 2026/06/19 06:00 Canada 6-0 Qatar (FT)\n- 2026/06/19 09:00 Mexico 1-0 South Korea (FT)\n- 2026/06/20 03:00 United States 2-0 Australia (FT)\n- 2026/06/20 06:00 Scotland 0-1 Morocco (FT)\n- 2026/06/20 08:30 Brazil 3-0 Haiti (FT)\n- 2026/06/20 11:00 Türkiye 0-1 Paraguay (FT)\n- 2026/06/21 01:00 Netherlands 5-1 Sweden (FT)\n- 2026/06/21 04:00 Germany 2-1 Ivory Coast (FT)\n- 2026/06/21 08:00 Ecuador 0-0 Curaçao (FT)\n- 2026/06/21 12:00 Tunisia 0-4 Japan (FT)\n\n来源：https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260611-20260621\n数据来源/判断依据\n- 工具：research_prefetch\n- 时间：2026-06-21 16:52（本机时间）\n- 来源：site.api.espn.com\n- 依据：系统预取资料中的可用证据。\n- 注意：资料不足时应继续补充来源再下结论。",
+      "textChars": 1354,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-23-426Z_633e32d5-8b65-4fab-9e33-793d86013dc1.jsonl\",\"clientMessageId\":\"gui-50-15-1782031943435\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-23-426Z_633e32d5-8b65-4fab-9e33-793d86013dc1.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"sports_score\",\"args\":{\"query\":\"2026世界杯已经出的赛事比分\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-23-426Z_633e32d5-8b65-4fab-9e33-793d86013dc1.jsonl\",\"streamId\":\"s_mqnjt3po_rvlwgg\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"sports_score\",\"success\":true,\"summary\":{\"outputPreview\":\"【体育比分工具资料】\\n体育查询结果 (ESPN scoreboard)\\nprovider: espn_scoreboard\\nleague: FIFA World Cup\\nsource: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260611-2026062\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-23-426Z_633e32d5-8b65-4fab-9e33-793d86013dc1.jsonl\",\"streamId\":\"s_mqnjt3po_rvlwgg\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"已匹配到的比赛结果（北京时间），共 24 场：\\n- 2026/06/16 00:00 Spain 0-0 Cape Verde (FT)\\n- 2026/06/16 03:00 Belgium 1-1 Egypt (FT)\\n- 2026/06/16 06:00 Saudi Arabia 1-1 Uruguay (FT)\\n- 2026/06/16 09:00 Iran 2-2 New Zealand (FT)\\n- 2026/06/17 03:00 France 3-1 Senegal (FT)\\n- 2026/06/17 06:00 Iraq 1-4 Norway (FT)\\n- 2026/06/17 09:00 Argentina 3-0 Algeria (FT)\\n- 2026/06/17 12:00 Austria 3-1 Jordan (FT)\\n- 2026/06/18 01:00 Portugal 1-1 Congo DR (FT)\\n- 2026/06/18 04:00 England 4-2 Croatia (FT)\\n- 2026/06/18 07:00 Ghana 1-0 Panama (FT)\\n- 2026/06/18 10:00 Uzbekistan 1-3 Colombia (FT)\\n- 2026/06/19 00:00 Czechia 1-1 South Africa (FT)\\n- 2026/06/19 03:00 Switzerland 4-1 Bosnia-Herzegovina (FT)\\n- 2026/06/19 06:00 Canada 6-0 Qatar (FT)\\n- 2026/06/19 09:00 Mexico 1-0 South Korea (FT)\\n- 2026/06/20 03:00 United States 2-0 Australia (FT)\\n- 2026/06/20 06:00 Scotland 0-1 Morocco (FT)\\n- 2026/06/20 08:30 Brazil 3-0 Haiti (FT)\\n- 2026/06/20 11:00 Türkiye 0-1 Paraguay (FT)\\n- 2026/06/21 0\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-23-426Z_633e32d5-8b65-4fab-9e33-793d86013dc1.jsonl\",\"streamId\":\"s_mqnjt3po_rvlwgg\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-52-23-426Z_633e32d5-8b65-4fab-9e33-793d86013dc1.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

@@ -214,21 +214,18 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--text);
-    border-color: rgba(var(--accent-rgb), 0.22);
-    background: rgba(var(--accent-rgb), 0.07);
+    color: var(--text-secondary);
+    border-color: rgba(var(--accent-rgb), 0.18);
+    background: rgba(var(--accent-rgb), 0.045);
+    font-family: inherit;
 }
 
-.providerRouteMeta[data-fallback="true"] {
-    color: var(--warning, #9a5a00);
-    border-color: rgba(var(--warning-rgb, 194, 126, 30), 0.34);
-    background: rgba(var(--warning-rgb, 194, 126, 30), 0.1);
-}
-
-.providerRouteMeta[data-fallback="true"]::before {
-    content: '↳';
-    flex: 0 0 auto;
-    font-family: var(--font-sans);
+.providerRouteInfo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0.08rem;
+    color: var(--text-muted);
     font-size: 0.72rem;
     line-height: 1;
 }
@@ -309,6 +306,38 @@
 .modelHintDismiss:hover {
     opacity: 1;
     background: var(--overlay-light);
+}
+
+.emptyAnswerFallback {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    max-width: min(680px, 94%);
+    margin-top: 0.2rem;
+    padding: 0.45rem 0.65rem;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--hana-bg) 86%, var(--accent) 6%);
+    border: 1px solid color-mix(in srgb, var(--hana-border) 82%, transparent);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+.emptyAnswerRetryBtn {
+    border: 1px solid rgba(var(--accent-rgb), 0.22);
+    border-radius: 999px;
+    background: rgba(var(--accent-rgb), 0.08);
+    color: var(--accent);
+    padding: 0.18rem 0.55rem;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.emptyAnswerRetryBtn:hover {
+    background: rgba(var(--accent-rgb), 0.14);
 }
 
 /* 单条消息 */
@@ -1978,15 +2007,15 @@
 /* ── 思考折叠块 ── */
 
 .thinkingBlock {
-    margin: var(--space-xs) 0;
+    margin: 0.12rem 0 0.18rem;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 0.8rem;
+    font-size: 0.76rem;
 }
 
 .thinkingBlockRunning {
     position: relative;
     overflow: hidden;
-    padding-bottom: 0.22rem;
+    padding-bottom: 0.18rem;
 }
 
 .thinkingBlockRunning::after {
@@ -2015,15 +2044,15 @@
     gap: 0.28rem;
     cursor: pointer;
     color: var(--text-muted);
-    font-style: italic;
     user-select: none;
     list-style: none;
+    opacity: 0.78;
 }
 
 .thinkingBlockLabel {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.01em;
+    font-size: 0.68rem;
+    letter-spacing: 0;
 }
 
 .thinkingTranslateBtn {
@@ -2076,14 +2105,15 @@
 
 .thinkingBlockBody {
     margin-top: var(--space-xs);
-    padding: var(--space-sm) var(--space-md);
+    padding: 0.55rem 0.7rem;
     color: var(--text-muted);
     font-style: italic;
     font-size: 0.78rem;
     line-height: 1.6;
     white-space: pre-wrap;
-    border-left: 2px solid var(--border);
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    border-left: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--hana-bg) 78%, transparent);
 }
 
 .thinkingTranslationCard {

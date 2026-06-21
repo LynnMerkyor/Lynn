@@ -1,0 +1,96 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-14-debug.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-gsinv5",
+  "gateCurrentDate": "2026-06-21",
+  "total": 1,
+  "counts": {
+    "quality_fail": 1
+  },
+  "providerCounts": {
+    "glm-5-turbo": 1
+  },
+  "toolRuns": 1,
+  "stepExecuteRuns": 0,
+  "avgMs": 23266,
+  "generatedAt": "2026-06-21T06:23:26.305Z",
+  "results": [
+    {
+      "index": 14,
+      "category": "realtime",
+      "prompt": "世界杯半决赛在哪一天？",
+      "exitCode": 0,
+      "durationMs": 23266,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-pro",
+        "glm-5-turbo"
+      ],
+      "toolNames": [
+        "web_search",
+        "calendar"
+      ],
+      "assistantText": "我已经拿到工具证据，但候选模型没有稳定完成最终总结。先按证据账本回答“世界杯半决赛在哪一天？”：\n\n- provider: glm\n- 摘要: CCTV5直播，4:00，荷兰VS日本，世界杯“无冕之王”强势出战（发布时间：2026-06-15 00:10:00）(2026-06-15)：CCTV5直播，4:00，荷兰VS日本，世界杯“无冕之王”强势出战 北京时间6月15日凌晨4:00，2026年美加墨世界杯将展开F组的第一轮的较量，CCTV5现场直播比赛实况。\n- 世界杯史上，两支球队仅有一次交锋纪录，荷兰队以1-0战胜日本队。\n- 2026 WST滑板世界杯罗马站（发布时间：2026-06-20 16:03:12）(2026-06-20)：6月19日，2026 WST滑板世界杯罗马站-女子街式组四分之一决赛中，中国滑板队成员 朱沅铃、 崔宸曦突破重围，成功挺进 女子街式半 决赛。\n- 关注：ISF中国总决赛（南宁）6月21日赛程，现场抽奖环节调整 & 重磅加奖iPhone 17&iPad（发布时间：2026-06-21 10:49:29）(2026-06-21)：重要通知 | 关于21-22日比赛现场抽奖环节调整的说明 & 重磅加奖iPhone 17&iPad的公告 梦想家亚洲赛事 2026年6月20日 23:21 广西 各位到场支持“智游南宁杯”梦想家ISF2026六人德国世界杯中国总决赛的球迷朋友们： 因今日赛事赛程临时顺延，原计划晚间开展的现场扫码抽奖环节未能如期进行，给各位带来了不便与…\n- 迈阿密因 26 世界杯狂欢，“堵车大军” 强势降临，封路时间表正式发布（发布时间：2026-06-16 21:00:00）(2026-06-16)：2026年世界杯（World Cup）即将登陆南佛罗里达地区，这将对当地两个关键区域的交通产生巨大冲击。\n\n说明：以上只保留工具证据直接支持的事实；缺失或互相冲突的部分我不会继续拼接编造。",
+      "reasoningChars": 2891,
+      "usage": {
+        "prompt_tokens": 5331,
+        "completion_tokens": 324,
+        "total_tokens": 5655,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 173
+        }
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "calendar",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "calendar",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "oning.delta\",\"text\":\" -\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.224Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" July\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.283Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" \",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.283Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"19\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.283Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\",\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.283Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" \",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.283Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"202\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.342Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"6\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.342Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\")\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.342Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" and\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.342Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" that\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.342Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" semif\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.404Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"inals\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.404Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" exist\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.404Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" as\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.463Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" a\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.463Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" stage\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.463Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\",\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.463Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" but\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.525Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" no\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.525Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" specific\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.525Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" dates\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.525Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\".\\n\\n\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.583Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"I\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.642Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" need\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.642Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" to\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.642Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" be\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.642Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" honest\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.704Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" about\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.704Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" this\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.779Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" gap\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.782Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\".\",\"hidden\":true,\"ts\":\"2026-06-21T06:23:22.822Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T06:23:26.184Z\",\"usage\":{\"prompt_tokens\":5331,\"completion_tokens\":324,\"total_tokens\":5655,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":173}},\"durationMs\":22867}\n{\"type\":\"assistant.delta\",\"text\":\"我已经拿到工具证据，但候选模型没有稳定完成最终总结。先按证据账本回答“世界杯半决赛在哪一天？”：\\n\\n- provider: glm\\n- 摘要: CCTV5直播，4:00，荷兰VS日本，世界杯“无冕之王”强势出战（发布时间：2026-06-15 00:10:00）(2026-06-15)：CCTV5直播，4:00，荷兰VS日本，世界杯“无冕之王”强势出战 北京时间6月15日凌晨4:00，2026年美加墨世界杯将展开F组的第一轮的较量，CCTV5现场直播比赛实况。\\n- 世界杯史上，两支球队仅有一次交锋纪录，荷兰队以1-0战胜日本队。\\n- 2026 WST滑板世界杯罗马站（发布时间：2026-06-20 16:03:12）(2026-06-20)：6月19日，2026 WST滑板世界杯罗马站-女子街式组四分之一决赛中，中国滑板队成员 朱沅铃、 崔宸曦突破重围，成功挺进 女子街式半 决赛。\\n- 关注：ISF中国总决赛（南宁）6月21日赛程，现场抽奖环节调整 & 重磅加奖iPhone 17&iPad（发布时间：2026-06-21 10:49:29）(2026-06-21)：重要通知 | 关于21-22日比赛现场抽奖环节调整的说明 & 重磅加奖iPhone 17&iPad的公告 梦想家亚洲赛事 2026年6月20日 23:21 广西 各位到场支持“智游南宁杯”梦想家ISF2026六人德国世界杯中国总决赛的球迷朋友们： 因今日赛事赛程临时顺延，原计划晚间开展的现场扫码抽奖环节未能如期进行，给各位带来了不便与…\\n- 迈阿密因 26 世界杯狂欢，“堵车大军” 强势降临，封路时间表正式发布（发布时间：2026-06-16 21:00:00）(2026-06-16)：2026年世界杯（World Cup）即将登陆南佛罗里达地区，这将对当地两个关键区域的交通产生巨大冲击。\\n\\n说明：以上只保留工具证据直接支持的事实；缺失或互相冲突的部分我不会继续拼接编造。\",\"ts\":\"2026-06-21T06:23:26.293Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T06:23:26.298Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "quality_fail",
+      "reason": "world-cup-semifinal-question-without-date"
+    }
+  ]
+}

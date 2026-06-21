@@ -1,0 +1,66 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-26-deterministic-evidence-fallback.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-sqGdDq",
+  "gateCurrentDate": "2026-06-21",
+  "total": 1,
+  "counts": {
+    "ok": 1
+  },
+  "providerCounts": {
+    "deepseek-pro": 1
+  },
+  "toolRuns": 1,
+  "stepExecuteRuns": 0,
+  "avgMs": 64297,
+  "generatedAt": "2026-06-21T07:18:36.203Z",
+  "results": [
+    {
+      "index": 26,
+      "category": "search",
+      "prompt": "查一下 OpenAI 最近发布了什么新模型，给一句摘要",
+      "exitCode": 0,
+      "durationMs": 64297,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-pro"
+      ],
+      "toolNames": [
+        "live_news"
+      ],
+      "assistantText": "**工具结果中未查到。**\n\n本轮实时新闻检索全部失败（搜索源 glm 返回 401、mimo 超时），未能获取任何关于 OpenAI 新模型发布的近期信息。",
+      "reasoningChars": 573,
+      "usage": {
+        "prompt_tokens": 1980,
+        "completion_tokens": 163,
+        "total_tokens": 2143,
+        "prompt_tokens_details": {
+          "cached_tokens": 640
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 105
+        },
+        "prompt_cache_hit_tokens": 640,
+        "prompt_cache_miss_tokens": 1340
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "live_news",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "live_news",
+          "ok": true
+        }
+      ],
+      "rawTail": "\"text\":\"发布的\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.688Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"实时\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.738Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"新闻\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.790Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"信息\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.826Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"被\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.826Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"检索\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.826Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"到\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.851Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.851Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"我不能\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.851Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"用\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.851Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"旧\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.906Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"知识\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.906Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"编\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.906Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"造\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.927Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"，\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.927Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"必须\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.928Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"诚实\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.928Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"说明\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.960Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"工具\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.960Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"结果\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.960Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"中\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.992Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"未\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.992Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"查到\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:34.992Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"相关信息\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.029Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\\n\\n\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.029Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"用户\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.029Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"要求\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.029Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\\"\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.071Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"给\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.071Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"一句\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.104Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"摘要\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.104Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\\"，\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.104Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"我应该\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.104Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"简洁\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.138Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"直接\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.180Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"地\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.180Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"说明\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.214Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"搜索\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.214Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"失败\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.250Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"的情况\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.250Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\",\"hidden\":true,\"ts\":\"2026-06-21T07:18:35.288Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:18:36.183Z\",\"usage\":{\"prompt_tokens\":1980,\"completion_tokens\":163,\"total_tokens\":2143,\"prompt_tokens_details\":{\"cached_tokens\":640},\"completion_tokens_details\":{\"reasoning_tokens\":105},\"prompt_cache_hit_tokens\":640,\"prompt_cache_miss_tokens\":1340},\"durationMs\":64232}\n{\"type\":\"assistant.delta\",\"text\":\"**工具结果中未查到。**\\n\\n本轮实时新闻检索全部失败（搜索源 glm 返回 401、mimo 超时），未能获取任何关于 OpenAI 新模型发布的近期信息。\",\"ts\":\"2026-06-21T07:18:36.186Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T07:18:36.191Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

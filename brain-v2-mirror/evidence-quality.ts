@@ -205,3 +205,11 @@ export function containsTemporalNoResultContradiction(text: unknown, now = new D
   if (!dates.some((date) => date <= currentDateSerialForZone(now))) return false;
   return hasNoCurrentResultClaim(normalized) || hasPastDateFutureStartClaim(normalized);
 }
+
+export function containsGroundedToolDenialContradiction(text: unknown): boolean {
+  const normalized = String(text || "").replace(/\s+/g, "");
+  if (!normalized) return false;
+  return /(?:工具集|工具箱|工具列表|当前工具|可用工具|CLI工具|LynnCLI工具).{0,24}(?:没有|未包含|不包含|缺少|暂无|不支持).{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问)/iu.test(normalized)
+    || /(?:没有|未包含|不包含|缺少|暂无|不支持).{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问).{0,24}(?:工具|功能|能力|接口)/iu.test(normalized)
+    || /(?:无法|不能|没法|不支持).{0,24}(?:实时|在线|联网|访问网页|查询天气|查询股价|查询汇率|查询比分|查询赛程)/iu.test(normalized);
+}

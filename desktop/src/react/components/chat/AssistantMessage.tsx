@@ -17,6 +17,7 @@ import { hanaFetch } from '../../hooks/use-hana-fetch';
 import { useI18n } from '../../hooks/use-i18n';
 import { isBundledLynnAvatarSrc, yuanFallbackAvatar } from '../../utils/agent-helpers';
 import { formatCompactModelLabel } from '../../utils/brain-models';
+import { resolveUiI18nText } from '../../utils/ui-i18n';
 import { retryAssistantResponse } from '../../stores/prompt-actions';
 import styles from './Chat.module.css';
 
@@ -94,7 +95,15 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
   }, [message.model, currentModel, displayYuan, isStreamMsg, isLastAssistant, appIsStreaming]);
   const providerFallbackLabel = useMemo(() => providerRouteLabel(message.providerRoute), [message.providerRoute]);
   const providerFallbackTitle = useMemo(() => providerRouteTitle(message.providerRoute), [message.providerRoute]);
-  const showStreamingMeta = isStreamMsg && (runningTools > 0 || blocks.some(block => block.type === 'thinking' && !block.sealed));
+  const hasUnsealedThinking = blocks.some(block => block.type === 'thinking' && !block.sealed);
+  const showStreamingMeta = isStreamMsg && (runningTools > 0 || hasUnsealedThinking);
+  const answerModelName = providerFallbackLabel || messageModelLabel;
+  const answerModelText = useMemo(
+    () => answerModelName ? resolveUiI18nText('chat.answerModelLabel', { model: answerModelName }) : null,
+    [answerModelName],
+  );
+  const answerModelTitle = providerFallbackTitle
+    || (answerModelName ? resolveUiI18nText('chat.providerRouteCurrent', { model: answerModelName }) : undefined);
   // T2: TTFT 等待提示——streaming 中但还没有任何实际内容
   const showWaitingHint = isStreamMsg && blocks.length === 0;
 
@@ -114,17 +123,18 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
     return () => clearTimeout(timer);
   }, [showWaitingHint]);
 
-  // ── 空回复兜底：模型只产了 thinking 但没给正文 / 工具调用 ──
-  // 流已结束 + 至少有一个 thinking block + 没有任何正文 / 工具 / 授权卡片
-  // → 用户看到的是"两个折叠的思考完成 chip"然后没了，给个重试入口。
+  // ── 空回复兜底：模型只产了 thinking 但没给正文 ──
+  // 流/工具已结束 + 至少有一个 thinking block + 没有可见正文
+  // → 不让用户只看到"思考完成"和空白，给一行可见兜底和重做入口。
   const isEmptyAnswerAfterThinking = useMemo(() => {
-    if (isStreamMsg) return false;
     if (blocks.length === 0) return false;
-    if (toolGroups.length > 0) return false;
+    const isActiveStreamingMessage = isStreamMsg && isLastAssistant && appIsStreaming;
+    if (isActiveStreamingMessage) return false;
+    if (runningTools > 0) return false;
+    if (hasUnsealedThinking) return false;
     if (plainText.length > 0) return false;
-    return blocks.some((b) => b.type === 'thinking')
-      && blocks.every((b) => b.type === 'thinking' || b.type === 'mood');
-  }, [isStreamMsg, blocks, toolGroups, plainText]);
+    return blocks.some((b) => b.type === 'thinking');
+  }, [appIsStreaming, blocks, hasUnsealedThinking, isLastAssistant, isStreamMsg, plainText, runningTools]);
 
   // ── 模型表现评估：回复质量不佳时提示用户切换模型 ──
   const modelHintDismissKey = 'lynn-model-hint-dismissed';
@@ -364,18 +374,22 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
             <span className={`${styles.avatar} ${styles.userAvatar}`}>🌸</span>
           )}
           <span className={styles.avatarName}>{displayName}</span>
-          {messageModelLabel && (
-            <span className={styles.avatarMeta}>
-              {messageModelLabel}
-            </span>
-          )}
-          {providerFallbackLabel && (
+          {answerModelText && (
             <span
               className={`${styles.avatarMeta} ${styles.providerRouteMeta}`}
-              data-fallback="true"
-              title={providerFallbackTitle}
+              title={answerModelTitle}
+              aria-label={answerModelTitle}
             >
-              {providerFallbackLabel}
+              <span>{answerModelText}</span>
+              {providerFallbackTitle && (
+                <span
+                  className={styles.providerRouteInfo}
+                  title={providerFallbackTitle}
+                  aria-hidden="true"
+                >
+                  ⓘ
+                </span>
+              )}
             </span>
           )}
           {showStreamingMeta && (
@@ -415,6 +429,16 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
           onReviewTaskCreated={handleReviewTaskCreated}
         />
         ))}
+        {isEmptyAnswerAfterThinking && (
+          <div className={styles.emptyAnswerFallback}>
+            <span>{resolveUiI18nText('chat.emptyAnswerHint')}</span>
+            {isLastAssistant && (
+              <button className={styles.emptyAnswerRetryBtn} onClick={handleRetry}>
+                {resolveUiI18nText('chat.emptyAnswerRetry')}
+              </button>
+            )}
+          </div>
+        )}
         {showActionRail && (
           <div className={styles.messageActionRail}>
             <div className={styles.messageActionRailMain}>
@@ -533,16 +557,6 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
               {t('chat.modelHintAction') || '去设置'}
             </button>
             <button className={styles.modelHintDismiss} onClick={dismissModelHint}>×</button>
-          </div>
-        )}
-        {isEmptyAnswerAfterThinking && (
-          <div className={styles.modelHintBar}>
-            <span className={styles.modelHintText}>
-              {t('chat.emptyAnswerHint') || '模型只想了想，没说出话来。可以点重试再试一次。'}
-            </span>
-            <button className={styles.modelHintBtn} onClick={handleRetry}>
-              {t('chat.emptyAnswerRetry') || '重试'}
-            </button>
           </div>
         )}
       </div>

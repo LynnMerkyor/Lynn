@@ -97,46 +97,65 @@ describe("voice-ws route — createVoiceWsRoute", () => {
     expect(typeof wsRoute.get).toBe("function");
   });
 
-  it("defaults Lynn Voice ASR to local transcription and TTS to Brain StepFun Realtime", () => {
+  it("defaults Lynn Voice ASR and TTS to Brain StepFun Realtime", () => {
     expect(resolveVoiceRuntimeAsrConfig({})).toMatchObject({
-      provider: "spark",
-      fallback_provider: "sensevoice",
+      provider: "brain-realtime",
+      fallback_provider: "brain-realtime",
+      fallback: { provider: "brain-realtime" },
     });
     expect(resolveVoiceRuntimeTtsConfig({})).toMatchObject({
       provider: "brain-realtime",
-      fallback_provider: "spark",
+      fallback_provider: "brain-realtime",
+      fallback: { provider: "brain-realtime" },
     });
   });
 
-  it("keeps standalone ASR on real transcription providers when stale voice settings exist", () => {
+  it("migrates stale local voice settings back to Brain StepFun while preserving explicit API providers", () => {
     expect(resolveVoiceRuntimeAsrConfig({ provider: "sensevoice" })).toMatchObject({
-      provider: "sensevoice",
-      fallback_provider: "spark",
+      provider: "brain-realtime",
+      fallback_provider: "brain-realtime",
+      fallback: { provider: "brain-realtime" },
     });
     expect(resolveVoiceRuntimeAsrConfig({ provider: "spark" })).toMatchObject({
-      provider: "spark",
-      fallback_provider: "sensevoice",
+      provider: "brain-realtime",
+      fallback_provider: "brain-realtime",
+      fallback: { provider: "brain-realtime" },
     });
     const openai = resolveVoiceRuntimeAsrConfig({ provider: "openai", base_url: "https://example.test", api_key: "sk-old" });
     expect(openai).toMatchObject({
       provider: "openai",
-      fallback_provider: "spark",
+      fallback_provider: "brain-realtime",
+      fallback: { provider: "brain-realtime" },
       base_url: "https://example.test",
       api_key: "sk-old",
     });
+    const openaiWithStaleFallback = resolveVoiceRuntimeAsrConfig({
+      provider: "openai",
+      base_url: "https://example.test",
+      api_key: "sk-live",
+      fallback: {
+        provider: "sensevoice",
+        base_url: "http://127.0.0.1:18080",
+        api_key: "stale-local-key",
+      },
+    });
+    expect(openaiWithStaleFallback).toMatchObject({
+      provider: "openai",
+      fallback_provider: "brain-realtime",
+      fallback: { provider: "brain-realtime" },
+      base_url: "https://example.test",
+      api_key: "sk-live",
+    });
     expect(resolveVoiceRuntimeTtsConfig({ provider: "cosyvoice2" })).toMatchObject({
       provider: "brain-realtime",
-      fallback_provider: "cosyvoice2",
+      fallback_provider: "brain-realtime",
+      fallback: { provider: "brain-realtime" },
     });
     const cosyvoice = resolveVoiceRuntimeTtsConfig({ provider: "cosyvoice", base_url: "http://127.0.0.1:18021", default_voice: "中文女" });
     expect(cosyvoice).toMatchObject({
       provider: "brain-realtime",
-      fallback_provider: "cosyvoice",
-      fallback: {
-        provider: "cosyvoice",
-        base_url: "http://127.0.0.1:18021",
-        default_voice: "中文女",
-      },
+      fallback_provider: "brain-realtime",
+      fallback: { provider: "brain-realtime" },
     });
     expect(cosyvoice.base_url).toBeUndefined();
     expect(cosyvoice.default_voice).toBeUndefined();
@@ -149,18 +168,18 @@ describe("voice-ws route — createVoiceWsRoute", () => {
       delete process.env.LYNN_VOICE_ROUTER;
       process.env.LYNN_STEP_REALTIME_KEY = "sk-test";
       expect(resolveVoiceRuntimeAsrConfig({})).toMatchObject({
-        provider: "spark",
-        fallback_provider: "sensevoice",
+        provider: "brain-realtime",
+        fallback_provider: "brain-realtime",
       });
 
       process.env.LYNN_VOICE_ROUTER = "auto";
       expect(resolveVoiceRuntimeAsrConfig({}, { realtime: { endpoint: "https://api.stepfun.com" } })).toMatchObject({
-        provider: "spark",
-        fallback_provider: "sensevoice",
+        provider: "brain-realtime",
+        fallback_provider: "brain-realtime",
       });
       expect(resolveVoiceRuntimeTtsConfig({}, { realtime: { endpoint: "https://api.stepfun.com" } })).toMatchObject({
         provider: "brain-realtime",
-        fallback_provider: "spark",
+        fallback_provider: "brain-realtime",
       });
       expect(resolveVoiceRuntimeAsrConfig({ provider: "stepfun-direct" }, {
         providers: {
@@ -170,18 +189,19 @@ describe("voice-ws route — createVoiceWsRoute", () => {
           },
         },
       })).toMatchObject({
-        provider: "spark",
-        fallback_provider: "sensevoice",
+        provider: "stepfun-direct",
+        fallback_provider: "brain-realtime",
+        api_key: "sk-provider",
       });
 
       delete process.env.LYNN_STEP_REALTIME_KEY;
       expect(resolveVoiceRuntimeAsrConfig({ provider: "stepfun-realtime" })).toMatchObject({
-        provider: "spark",
-        fallback_provider: "sensevoice",
+        provider: "brain-realtime",
+        fallback_provider: "brain-realtime",
       });
       expect(resolveVoiceRuntimeTtsConfig({ provider: "stepfun-realtime" })).toMatchObject({
         provider: "brain-realtime",
-        fallback_provider: "spark",
+        fallback_provider: "brain-realtime",
       });
     } finally {
       if (oldRouter === undefined) delete process.env.LYNN_VOICE_ROUTER;

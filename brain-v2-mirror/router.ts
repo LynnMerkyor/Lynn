@@ -11,7 +11,7 @@ import { isServerTool, executeServerTool, mergeWithServerTools } from './tool-ex
 import { applySearchContext, createSearchRequestCache, type SearchRequestCache } from './search-context.js';
 import { applyAudioTranscribe, createAudioRequestCache, type AudioRequestCache } from './audio-transcribe.js';
 import { compactToolResults, readToolResultCompactionConfigFromEnv } from './context-compact.js';
-import { containsTemporalNoResultContradiction, currentTemporalContext } from './evidence-quality.js';
+import { containsGroundedToolDenialContradiction, containsTemporalNoResultContradiction, currentTemporalContext } from './evidence-quality.js';
 import {
   buildToolStormReflection,
   createToolStormState,
@@ -456,6 +456,52 @@ function buildDeterministicSportsEvidenceAnswer(messages: ChatMessage[]): string
   return `${title}\n\n${table}`;
 }
 
+function extractGroundedEvidenceLedgers(messages: ChatMessage[]): Array<{ tool: string; lines: string[] }> {
+  const out: Array<{ tool: string; lines: string[] }> = [];
+  for (const message of messages) {
+    if (message.role !== 'tool') continue;
+    const text = typeof message.content === 'string' ? message.content : JSON.stringify(message.content || '');
+    const header = text.match(/【Lynn 工具证据 #\d+:\s*([^】]+)】/u);
+    if (!header) continue;
+    const tool = header[1].trim();
+    const ledgerMatch = text.match(/【证据账本】\n([\s\S]*?)(?:\n\n|$)/u);
+    const rawLedger = ledgerMatch?.[1] || '';
+    const lines = rawLedger
+      .split(/\r?\n/u)
+      .map((line) => line.replace(/^[-*]\s*/u, '').trim())
+      .filter(Boolean)
+      .filter((line) => !/^error[:：]/iu.test(line))
+      .slice(0, 5);
+    if (lines.length) out.push({ tool, lines });
+  }
+  return out;
+}
+
+function buildDeterministicGroundedEvidenceAnswer(messages: ChatMessage[]): string | null {
+  const ledgers = extractGroundedEvidenceLedgers(messages);
+  if (!ledgers.length) return null;
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  for (const ledger of ledgers) {
+    for (const line of ledger.lines) {
+      const compacted = compactText(line, 320);
+      const key = `${ledger.tool}:${compacted}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lines.push(`- ${ledger.tool}: ${compacted}`);
+      if (lines.length >= 8) break;
+    }
+    if (lines.length >= 8) break;
+  }
+  if (!lines.length) return null;
+  return [
+    '根据本轮已执行工具返回的证据，当前能确认：',
+    ...lines,
+    '',
+    '以上只包含工具结果中可见的事实；工具未返回或来源未覆盖的部分，不能继续补推。',
+  ].join('\n');
+}
+
 const GROUNDED_TOOL_NAMES = new Set([
   'web_search',
   'web_fetch',
@@ -501,6 +547,18 @@ function buildTemporalCorrectionHandoffPrompt(toolCount: number, rejectedAnswer:
     `请忽略这个被拦截的候选答案: ${compactText(rejectedAnswer, 420)}`,
     '重点检查: 是否把当前/过去已经发生的日期说成未开赛、无比分、无结果或尚未公布。',
     '工具证据和当前时间锚点是唯一事实来源；如果证据仍不足,请明确说明缺少什么,不要用旧知识补具体事实。',
+    '最终只输出面向用户的答案,不要输出内部计划、工具轨迹或“The user wants...”这类中间推理。',
+  ].join('\n');
+}
+
+function buildToolDenialCorrectionHandoffPrompt(toolCount: number, rejectedAnswer: string): string {
+  return [
+    `本轮已经获得约 ${toolCount} 条可用工具证据,但上一个候选答案否认了已经执行过的工具能力,请接手修正并输出最终答案。`,
+    currentTemporalContext(),
+    '不要再调用工具,不要重新搜索,只基于上文已有工具证据回答用户原问题。',
+    `请忽略这个被拦截的候选答案: ${compactText(rejectedAnswer, 420)}`,
+    '重点检查: 上文已有工具证据账本；不要再说“没有查询工具”“工具不支持”“无法实时查询”。',
+    '工具证据和当前时间锚点是唯一事实来源；如果证据仍不足,请明确说明缺少什么,不要把工具能力说成不存在。',
     '最终只输出面向用户的答案,不要输出内部计划、工具轨迹或“The user wants...”这类中间推理。',
   ].join('\n');
 }
@@ -895,6 +953,14 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
         return { ok: true, providerId, iterations: iter };
       }
+      const evidenceAnswer = buildDeterministicGroundedEvidenceAnswer(workingMessages);
+      if (evidenceAnswer) {
+        const providerId = (lastProviderId || 'deepseek-chat') as ProviderId;
+        log && log('warn', `all providers failed after grounded evidence; emitting deterministic evidence fallback`);
+        await onChunk({ type: 'content', delta: evidenceAnswer }, { providerId });
+        await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
+        return { ok: true, providerId, iterations: iter };
+      }
       throw error;
     }
     lastProviderId = result.providerId;
@@ -937,6 +1003,21 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         workingMessages.push({
           role: 'user',
           content: buildTemporalCorrectionHandoffPrompt(evidenceToolCount, visibleText),
+        });
+        continue;
+      }
+      if (
+        visibleText
+        && hasGroundedEvidenceContext
+        && lastProviderId
+        && containsGroundedToolDenialContradiction(visibleText)
+      ) {
+        log && log('warn', `provider ${lastProviderId} denied available grounded tools after tool evidence; hand off to next provider`);
+        skippedProviders.add(lastProviderId);
+        summarizeFromEvidenceOnly = true;
+        workingMessages.push({
+          role: 'user',
+          content: buildToolDenialCorrectionHandoffPrompt(evidenceToolCount, visibleText),
         });
         continue;
       }
@@ -1117,6 +1198,7 @@ export const __testing__ = {
   isLocalEndpoint,
   localProbeTimeoutMs,
   currentTemporalContext,
+  containsGroundedToolDenialContradiction,
   containsTemporalNoResultContradiction,
   evidenceToolWeight,
   summarizeLocalSlots,

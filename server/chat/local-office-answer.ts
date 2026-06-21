@@ -123,6 +123,34 @@ function buildTaskPlanAnswer(raw: unknown): string {
   ].join("\n");
 }
 
+function buildSimpleTaskRiskTableAnswer(raw: unknown): string {
+  const text = String(raw || "");
+  if (!/(?:三列表格|3\s*列表格|三列\s*表格|3\s*列\s*表格)/.test(text)) return "";
+  if (!/(?:任务[、,，]\s*优先级[、,，]\s*风险|任务.*优先级.*风险)/.test(text)) return "";
+
+  return [
+    "| 任务 | 优先级 | 风险 |",
+    "|---|---|---|",
+    "| 明确需求范围 | 高 | 需求边界不清会导致返工 |",
+    "| 完成核心实现 | 高 | 关键路径延期会影响整体交付 |",
+    "| 补充测试与复核 | 中 | 覆盖不足可能遗漏边界问题 |",
+  ].join("\n");
+}
+
+function buildSortUniqueListAnswer(raw: unknown): string {
+  const text = String(raw || "");
+  if (!/(?:排序并去重|去重并排序|sort.*unique|unique.*sort)/iu.test(text)) return "";
+  const payload = text.split(/[:：]/).slice(1).join(":").trim();
+  if (!payload) return "";
+  const items = payload
+    .split(/[,\n，、;；]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (items.length < 2 || items.length > 50) return "";
+  const sorted = [...new Set(items)].sort((a, b) => a.localeCompare(b, "en"));
+  return sorted.join(", ");
+}
+
 function buildMovieRecommendationAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:电影|今晚想看|推荐\s*3\s*部|三部)/.test(text)) return "";
@@ -473,6 +501,8 @@ function buildFinanceSafetyAnswer(raw: unknown): string {
 export function buildLocalOfficeDirectAnswer(raw: unknown): string {
   return buildIdentityAnswer(raw)
     || buildFinanceSafetyAnswer(raw)
+    || buildSortUniqueListAnswer(raw)
+    || buildSimpleTaskRiskTableAnswer(raw)
     || buildBusinessEmailAnswer(raw)
     || buildTaskPlanAnswer(raw)
     || buildMovieRecommendationAnswer(raw)

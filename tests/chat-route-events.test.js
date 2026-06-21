@@ -939,7 +939,7 @@ describe("chat route event forwarding", () => {
         .map((evt) => evt.delta)
         .join("");
       // 事实行:真实 tool_end 证据摘要,不是模型口吻的编造内容。
-      expect(visibleText).toContain("工具已经完成执行");
+      expect(visibleText).toContain("根据本轮已执行操作返回的可见结果");
       expect(visibleText).toContain("bash");
       expect(visibleText).toContain("mkdir -p 表格");
       expect(visibleText).toContain("moved");
@@ -1022,7 +1022,7 @@ describe("chat route event forwarding", () => {
         .map((evt) => evt.delta)
         .join("");
 
-      expect(visibleText).toContain("工具已经返回资料");
+      expect(visibleText).toContain("根据本轮已执行工具返回的证据");
       expect(visibleText).toContain("网页搜索");
       expect(visibleText).toContain("Mexico beat South Africa 2-0");
       expect(visibleText).toContain("网页抓取");
@@ -1599,6 +1599,103 @@ describe("chat route event forwarding", () => {
     }
   });
 
+  it("closes aborted thinking-only turns with visible fallback text", async () => {
+    let rejectSend;
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(() => new Promise((resolve, reject) => {
+      rejectSend = reject;
+    }));
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "今晚世界杯有几场比赛？" }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
+    subscribed({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "thinking_delta",
+        delta: "我先检索赛程，然后组织答案。",
+      },
+    }, "/sessions/current.jsonl");
+
+    rejectSend?.(new Error("aborted"));
+    await waitForAsyncHandlers();
+
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(visibleText).toContain("模型请求中断前只返回了思考过程");
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "turn_end",
+      sessionPath: "/sessions/current.jsonl",
+    }));
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "status",
+      isStreaming: false,
+      sessionPath: "/sessions/current.jsonl",
+    }));
+  });
+
+  it("uses completed tool evidence instead of thinking-only copy when an aborted turn had tools", async () => {
+    let rejectSend;
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(() => new Promise((resolve, reject) => {
+      rejectSend = reject;
+    }));
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "今晚世界杯有几场比赛？" }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
+    subscribed({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "thinking_delta",
+        delta: "我先检索赛程，然后组织答案。",
+      },
+    }, "/sessions/current.jsonl");
+    subscribed({
+      type: "tool_execution_start",
+      toolCallId: "call_sports",
+      toolName: "sports_score",
+      args: { query: "今晚世界杯有几场比赛？" },
+    }, "/sessions/current.jsonl");
+    subscribed({
+      type: "tool_execution_end",
+      toolCallId: "call_sports",
+      toolName: "sports_score",
+      args: { query: "今晚世界杯有几场比赛？" },
+      result: { content: [{ type: "text", text: "2026-06-21 20:00 Brazil vs Japan; 2026-06-22 02:00 USA vs Spain." }] },
+      isError: false,
+    }, "/sessions/current.jsonl");
+
+    rejectSend?.(new Error("aborted"));
+    await waitForAsyncHandlers();
+
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(visibleText).toContain("Brazil vs Japan");
+    expect(visibleText).toContain("USA vs Spain");
+    expect(visibleText).not.toContain("模型请求中断前只返回了思考过程");
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "turn_end",
+      sessionPath: "/sessions/current.jsonl",
+    }));
+  });
+
   it("hard-aborts a Brain turn that streams thinking but never visible text", async () => {
     vi.useFakeTimers();
     try {
@@ -1704,7 +1801,7 @@ describe("chat route event forwarding", () => {
         .map((evt) => evt.delta)
         .join("");
       // 事实行:真实 tool_end 证据摘要,不是模型口吻的编造内容。
-      expect(visibleText).toContain("工具已经完成执行");
+      expect(visibleText).toContain("根据本轮已执行操作返回的可见结果");
       expect(visibleText).toContain("bash");
       expect(visibleText).toContain("moved 3 image files");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({
@@ -1721,9 +1818,9 @@ describe("chat route event forwarding", () => {
     }
   });
 
-  // Brain V2 owns realtime tools server-side. Local prefetch must stay off,
-  // otherwise a stale client-side snapshot can leak into the next turn.
-  it("does not inject local realtime prefetch for brain weather turns", async () => {
+  // Deterministic realtime facts get a local evidence pass even for Brain V2,
+  // so GUI turns can close from tool evidence if the writer times out.
+  it("injects local deterministic realtime prefetch for brain weather turns", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     let eventsBeforeModelCall = [];
@@ -1742,18 +1839,174 @@ describe("chat route event forwarding", () => {
 
     await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
 
-    expect(eventsBeforeModelCall).not.toContainEqual(expect.objectContaining({
+    expect(eventsBeforeModelCall).toContainEqual(expect.objectContaining({
       type: "tool_start",
       name: "weather",
       sessionPath: "/sessions/current.jsonl",
     }));
-    expect(eventsBeforeModelCall).not.toContainEqual(expect.objectContaining({
+    expect(eventsBeforeModelCall).toContainEqual(expect.objectContaining({
       type: "tool_end",
       name: "weather",
       success: true,
       sessionPath: "/sessions/current.jsonl",
     }));
-    expect(reportResearchMock.buildReportResearchContext).not.toHaveBeenCalled();
+    expect(reportResearchMock.buildReportResearchContext).toHaveBeenCalled();
+  });
+
+  it("closes simple market prefetch turns with a direct local answer before model tool chains", async () => {
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(async () => {});
+    reportResearchMock.inferReportResearchKind.mockReturnValue("market");
+    reportResearchMock.buildReportResearchContext.mockResolvedValue([
+      "【行情工具资料】",
+      "黄金价格快照（via gold-api.com）",
+      "查询：今日金价是多少？",
+      "可核验到的黄金价格（2026-06-21）：",
+      "- 国际现货黄金（XAU/USD） 907.29 元/克（约 4156.7 美元/盎司，USD/CNY 6.7890）",
+    ].join("\n"));
+    reportResearchMock.buildDirectResearchAnswer.mockReturnValue("根据刚刚检索到的 2026-06-21 黄金价格：\n- 国际现货黄金（XAU/USD） 907.29 元/克");
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "今日金价是多少？" }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
+
+    expect(hub.send).not.toHaveBeenCalled();
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "tool_start",
+      name: "stock_market",
+      sessionPath: "/sessions/current.jsonl",
+    }));
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "tool_end",
+      name: "stock_market",
+      success: true,
+      sessionPath: "/sessions/current.jsonl",
+    }));
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(visibleText).toContain("907.29 元/克");
+  });
+
+  it("closes public-data prefetch turns with a bounded local summary", async () => {
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(async () => {});
+    reportResearchMock.inferReportResearchKind.mockReturnValue("public_data");
+    reportResearchMock.buildReportResearchContext.mockResolvedValue("【研究资料】\n摘要: 每组 10-20 人，年费约 8万-20万元。");
+    reportResearchMock.buildDirectResearchAnswer.mockReturnValue("公开资料里私董会的收费通常不透明。\n| 类型/机构 | 常见单组人数 | 常见收费口径 |\n| 专业私董会 | 10-20 人/组 | 8万-20万元/年 |");
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "中国主要私董会的人数和收费大概多少？" }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
+
+    expect(hub.send).not.toHaveBeenCalled();
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "tool_start",
+      name: "web_search",
+      sessionPath: "/sessions/current.jsonl",
+    }));
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(visibleText).toContain("10-20 人/组");
+  });
+
+  it("closes sports table prefetch turns with a direct local answer before model tool chains", async () => {
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(async () => {});
+    reportResearchMock.inferReportResearchKind.mockReturnValue("sports");
+    reportResearchMock.buildReportResearchContext.mockResolvedValue("【体育比分工具资料】\n体育查询结果 (ESPN scoreboard)\n匹配比赛: 4 场\n- 2026/06/22 00:00 Spain vs Saudi Arabia (Scheduled)");
+    reportResearchMock.buildDirectResearchAnswer.mockReturnValue([
+      "已匹配到的赛程（北京时间），共 4 场：",
+      "",
+      "| 时间（北京时间） | 对阵/比分 | 状态 |",
+      "|---|---|---|",
+      "| 2026/06/22 00:00 | Spain vs Saudi Arabia | Scheduled |",
+    ].join("\n"));
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "查询今晚世界杯赛程，并最后用一个小表格输出" }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
+
+    expect(hub.send).not.toHaveBeenCalled();
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "tool_start",
+      name: "sports_score",
+      sessionPath: "/sessions/current.jsonl",
+    }));
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(visibleText).toContain("| 时间（北京时间） | 对阵/比分 | 状态 |");
+    expect(visibleText).toContain("Spain vs Saudi Arabia");
+  });
+
+  it("closes simple table template turns with a deterministic local answer", async () => {
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(async () => {});
+    reportResearchMock.inferReportResearchKind.mockReturnValue("");
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "给我一个三列表格：任务、优先级、风险" }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
+
+    expect(hub.send).not.toHaveBeenCalled();
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(visibleText).toContain("| 任务 | 优先级 | 风险 |");
+    expect(visibleText).toContain("| 明确需求范围 | 高 |");
+  });
+
+  it("closes simple sort-and-dedupe turns with a deterministic local answer", async () => {
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(async () => {});
+    reportResearchMock.inferReportResearchKind.mockReturnValue("");
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "把这个列表排序并去重：banana, apple, banana, pear" }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
+
+    expect(hub.send).not.toHaveBeenCalled();
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(visibleText).toBe("apple, banana, pear");
   });
 
   it("closes a BYOK local prefetch turn with realtime evidence when the model returns no text", async () => {
@@ -1798,7 +2051,7 @@ describe("chat route event forwarding", () => {
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
         .join("");
-      expect(visibleText).toContain("工具已经返回资料");
+      expect(visibleText).toContain("根据本轮已执行工具返回的证据");
       expect(visibleText).toContain("体育比分");
       expect(visibleText).toContain("卡塔尔 vs 瑞士");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));

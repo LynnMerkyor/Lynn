@@ -1,0 +1,105 @@
+{
+  "outputPath": "/Users/lynn/Downloads/Lynn/reports/gui-target-12-14-espn-r3.json",
+  "gateCurrentDate": "2026-06-21",
+  "total": 2,
+  "counts": {
+    "ok": 1,
+    "quality_fail": 1
+  },
+  "providerCounts": {
+    "deepseek-chat": 2
+  },
+  "toolRuns": 2,
+  "stepExecuteRuns": 0,
+  "avgMs": 7143,
+  "failures": [
+    {
+      "index": 14,
+      "category": "realtime",
+      "prompt": "世界杯半决赛在哪一天？",
+      "status": "quality_fail",
+      "reason": "world-cup-semifinal-question-without-date",
+      "errors": [],
+      "textPreview": "根据 ESPN 赛程数据，2026 年世界杯两场半决赛分别是： | 场次 | 北京时间 | 对阵 | |------|----------|------| | 半决赛 1 | **2026/07/15 03:00** | 1/4 决赛胜者 1 vs 1/4 决赛胜者 2 | | 半决赛 2 | **2026/07/16 03:00** | 1/4 决赛胜者 3 vs 1/4 决赛胜者 4 | 两天凌晨三点各一场。"
+    }
+  ],
+  "generatedAt": "2026-06-21T07:52:10.308Z",
+  "results": [
+    {
+      "index": 12,
+      "category": "realtime",
+      "prompt": "今晚世界杯有几场比赛",
+      "startedAt": 1782028316016,
+      "elapsedMs": 8963,
+      "text": "从你查到的数据来看，今晚（6月21日晚到6月22日凌晨）共有 **4 场**世界杯比赛：\n\n| 时间 (北京时间) | 对阵 |\n|---|---|\n| 22日 00:00 | Spain vs Saudi Arabia |\n| 22日 03:00 | Belgium vs Iran |\n| 22日 06:00 | Uruguay vs Cape Verde |\n| 22日 09:00 | New Zealand vs Egypt |\n\n当前是 6月21日 15:51，最早一场还有大约 8 小时开球，最晚一场大约 17 小时后。4 场比赛覆盖了从半夜到上午的时段——如果你有特别关注的场次，我可以拉更深的数据（阵容、赔率、交锋记录）。",
+      "textChars": 320,
+      "thinkingChars": 1400,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 500,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "_novd33\",\"seq\":477}\n{\"type\":\"text_delta\",\"delta\":\"特别\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":478}\n{\"type\":\"text_delta\",\"delta\":\"关注的\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":479}\n{\"type\":\"text_delta\",\"delta\":\"场\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":480}\n{\"type\":\"text_delta\",\"delta\":\"次\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":481}\n{\"type\":\"text_delta\",\"delta\":\"，\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":482}\n{\"type\":\"text_delta\",\"delta\":\"我可以\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":483}\n{\"type\":\"text_delta\",\"delta\":\"拉\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":484}\n{\"type\":\"text_delta\",\"delta\":\"更深\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":485}\n{\"type\":\"text_delta\",\"delta\":\"的数据\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":486}\n{\"type\":\"text_delta\",\"delta\":\"（\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":487}\n{\"type\":\"text_delta\",\"delta\":\"阵容\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":488}\n{\"type\":\"text_delta\",\"delta\":\"、\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":489}\n{\"type\":\"text_delta\",\"delta\":\"赔\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":490}\n{\"type\":\"text_delta\",\"delta\":\"率\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":491}\n{\"type\":\"text_delta\",\"delta\":\"、\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":492}\n{\"type\":\"text_delta\",\"delta\":\"交锋\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":493}\n{\"type\":\"text_delta\",\"delta\":\"记录\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":494}\n{\"type\":\"text_delta\",\"delta\":\"）。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":495}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\",\"streamId\":\"s_mqnhncsc_novd33\",\"seq\":496}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-51-56-019Z_021807b9-de29-4749-9c29-3972f16399fe.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 14,
+      "category": "realtime",
+      "prompt": "世界杯半决赛在哪一天？",
+      "startedAt": 1782028324983,
+      "elapsedMs": 5322,
+      "text": "根据 ESPN 赛程数据，2026 年世界杯两场半决赛分别是：\n\n| 场次 | 北京时间 | 对阵 |\n|------|----------|------|\n| 半决赛 1 | **2026/07/15 03:00** | 1/4 决赛胜者 1 vs 1/4 决赛胜者 2 |\n| 半决赛 2 | **2026/07/16 03:00** | 1/4 决赛胜者 3 vs 1/4 决赛胜者 4 |\n\n两天凌晨三点各一场。",
+      "textChars": 210,
+      "thinkingChars": 424,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "sports_score",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "sports_score"
+        },
+        {
+          "event": "end",
+          "name": "sports_score",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 199,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "_gcrtv6\",\"seq\":175}\n{\"type\":\"text_delta\",\"delta\":\" vs\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":176}\n{\"type\":\"text_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":177}\n{\"type\":\"text_delta\",\"delta\":\"1\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":178}\n{\"type\":\"text_delta\",\"delta\":\"/\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":179}\n{\"type\":\"text_delta\",\"delta\":\"4\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":180}\n{\"type\":\"text_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":181}\n{\"type\":\"text_delta\",\"delta\":\"决赛\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":182}\n{\"type\":\"text_delta\",\"delta\":\"胜\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":183}\n{\"type\":\"text_delta\",\"delta\":\"者\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":184}\n{\"type\":\"text_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":185}\n{\"type\":\"text_delta\",\"delta\":\"4\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":186}\n{\"type\":\"text_delta\",\"delta\":\" |\\n\\n\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":187}\n{\"type\":\"text_delta\",\"delta\":\"两天\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":188}\n{\"type\":\"text_delta\",\"delta\":\"凌晨\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":189}\n{\"type\":\"text_delta\",\"delta\":\"三点\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":190}\n{\"type\":\"text_delta\",\"delta\":\"各\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":191}\n{\"type\":\"text_delta\",\"delta\":\"一场\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":192}\n{\"type\":\"text_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":193}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\",\"streamId\":\"s_mqnhnjpc_gcrtv6\",\"seq\":194}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T07-52-04-986Z_3aa14ec6-d392-4845-88b3-74b711274d73.jsonl\"}",
+      "status": "quality_fail",
+      "reason": "world-cup-semifinal-question-without-date"
+    }
+  ]
+}

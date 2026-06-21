@@ -1,0 +1,125 @@
+{
+  "outputPath": "/Users/lynn/Downloads/Lynn/reports/gui-target-24-37-49-market-weather-bash-r21.json",
+  "gateCurrentDate": "2026-06-21",
+  "total": 3,
+  "counts": {
+    "ok": 2,
+    "quality_fail": 1
+  },
+  "providerCounts": {
+    "unknown": 2,
+    "deepseek-chat": 1
+  },
+  "toolRuns": 2,
+  "stepExecuteRuns": 0,
+  "avgMs": 12668,
+  "failures": [
+    {
+      "index": 49,
+      "category": "mixed",
+      "prompt": "查深圳明天天气，并说明今天和明天的区别",
+      "status": "quality_fail",
+      "reason": "denies-available-tool-after-tool-event",
+      "errors": [],
+      "textPreview": "深圳天气源本轮超时，wttr.in 和 Open-Meteo 都没有返回可用数据（wttr.in: fetch failed; open-meteo: fetch failed）。 我不会把天气网站首页或导航菜单当成有效结果。 我没有生成降雨判断；可以直接重试一次，或稍后用本地天气 App / 中国天气网核验。 数据来源/判断依据 - 工具：weather - 时间：2026-06-21 17:37（本机时间） - 来源：weather.com.cn、nmc.cn - 依据："
+    }
+  ],
+  "generatedAt": "2026-06-21T09:37:52.545Z",
+  "results": [
+    {
+      "index": 24,
+      "category": "realtime",
+      "prompt": "今天 A 股有什么异动？",
+      "startedAt": 1782034627024,
+      "elapsedMs": 900,
+      "text": "根据已获取的最近可用行情：\n\n**300059.SZ**\n- 名称：东方财富\n- 最新价：18.60 CNY\n- 涨跌/涨跌幅：-0.44 / -2.31%\n- 时间戳：20260618161430\n- 开盘/最高/最低：18.95 / 19.12 / 18.53\n- 来源：[腾讯行情](https://gu.qq.com/sz300059/gp)\n\n**600030.SH**\n- 名称：中信证券\n- 最新价：26.56 CNY\n- 涨跌/涨跌幅：-0.81 / -2.96%\n- 时间戳：20260618161416\n- 开盘/最高/最低：27.35 / 27.35 / 26.50\n- 来源：[腾讯行情](https://gu.qq.com/sh600030/gp)\n\n**002261.SZ**\n- 名称：拓维信息\n- 最新价：30.54 CNY\n- 涨跌/涨跌幅：1.04 / 3.53%\n- 时间戳：20260618161409\n- 开盘/最高/最低：29.86 / 30.76 / 29.48\n- 来源：[腾讯行情](https://gu.qq.com/sz002261/gp)\n\n**300308.SZ**\n- 名称：中际旭创\n- 最新价：1367.88 CNY\n- 涨跌/涨跌幅：91.77 / 7.19%\n- 时间戳：20260618161400\n- 开盘/最高/最低：1270.00 / 1368.50 / 1268.73\n- 来源：[腾讯行情](https://gu.qq.com/sz300308/gp)\n\n**300750.SZ**\n- 名称：宁德时代\n- 最新价：391.55 CNY\n- 涨跌/涨跌幅：-7.45 / -1.87%\n- 时间戳：20260618161415\n- 开盘/最高/最低：400.39 / 409.89 / 389.92\n- 来源：[腾讯行情](https://gu.qq.com/sz300750/gp)\n\n**600519.SH**\n- 名称：贵州茅台\n- 最新价：1215.00 CNY\n- 涨跌/涨跌幅：-25.00 / -2.02%\n- 时间戳：20260618161404\n- 开盘/最高/最低：1235.00 / 1238.87 / 1211.22\n- 来源：[腾讯行情](https://gu.qq.com/sh600519/gp)\n\n说明：这些是最近可用行情，不一定等同于盘中实时成交价；需要交易级实时性时，请再用券商、交易所或专门行情源交叉核验。\n\n以上信息仅作行情展示，不构成任何投资建议、买卖建议或收益承诺。\n数据来源/判断依据\n- 工具：stock_market\n- 时间：2026-06-21 17:37（本机时间）\n- 来源：腾讯行情、gu.qq.com\n- 依据：行情工具返回的最近可用股价、指数或板块候选数据。\n- 注意：行情展示不构成投资建议；交易级实时性请用券商或交易所源核验。",
+      "textChars": 1237,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "stock_market",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "stock_market"
+        },
+        {
+          "event": "end",
+          "name": "stock_market",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-07-032Z_1761288a-6193-4df2-8889-d6517b970fab.jsonl\",\"clientMessageId\":\"gui-50-24-1782034627038\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-07-032Z_1761288a-6193-4df2-8889-d6517b970fab.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"stock_market\",\"args\":{\"query\":\"今天 A 股有什么异动？\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-07-032Z_1761288a-6193-4df2-8889-d6517b970fab.jsonl\",\"streamId\":\"s_mqnleme9_4tz3al\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"stock_market\",\"success\":true,\"summary\":{\"outputPreview\":\"【行情工具资料】\\n财经/行情快照（via 腾讯行情）\\n查询：今天 A 股有什么异动？\\n类型：stock\\n说明：以下结果优先来自直连行情源；关键价格、涨跌幅和时间点建议至少交叉验证 2 个来源。\\n1. 300059.SZ 最近可用行情\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-07-032Z_1761288a-6193-4df2-8889-d6517b970fab.jsonl\",\"streamId\":\"s_mqnleme9_4tz3al\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"根据已获取的最近可用行情：\\n\\n**300059.SZ**\\n- 名称：东方财富\\n- 最新价：18.60 CNY\\n- 涨跌/涨跌幅：-0.44 / -2.31%\\n- 时间戳：20260618161430\\n- 开盘/最高/最低：18.95 / 19.12 / 18.53\\n- 来源：[腾讯行情](https://gu.qq.com/sz300059/gp)\\n\\n**600030.SH**\\n- 名称：中信证券\\n- 最新价：26.56 CNY\\n- 涨跌/涨跌幅：-0.81 / -2.96%\\n- 时间戳：20260618161416\\n- 开盘/最高/最低：27.35 / 27.35 / 26.50\\n- 来源：[腾讯行情](https://gu.qq.com/sh600030/gp)\\n\\n**002261.SZ**\\n- 名称：拓维信息\\n- 最新价：30.54 CNY\\n- 涨跌/涨跌幅：1.04 / 3.53%\\n- 时间戳：20260618161409\\n- 开盘/最高/最低：29.86 / 30.76 / 29.48\\n- 来源：[腾讯行情](https://gu.qq.com/sz002261/gp)\\n\\n**300308.SZ**\\n- 名称：中际旭创\\n- 最新价：1367.88 CNY\\n- 涨跌/涨跌幅：91.77 / 7.19%\\n- 时间戳：20260618161400\\n- 开盘/最高/最低：1270.00 / 1368.50 / 1268.73\\n- 来源：[腾讯行情](https://gu.qq.com/sz300308/gp)\\n\\n**300750.SZ**\\n- 名称：宁德时代\\n- 最新价：391.55 CNY\\n- 涨跌/涨跌幅：-7.45 / -1.87%\\n- 时间戳：20260618161415\\n- 开盘/最高/最低：400.39 / 409.89 / 389.92\\n- 来源：[腾讯行情](https://gu.qq.com/sz300750/gp)\\n\\n**600519.SH**\\n- 名称：贵州茅台\\n- 最新价：1215.00 CNY\\n- 涨跌/涨跌幅：-25.00 / -2.02%\\n- 时间戳：20260618161404\\n-\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-07-032Z_1761288a-6193-4df2-8889-d6517b970fab.jsonl\",\"streamId\":\"s_mqnleme9_4tz3al\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-07-032Z_1761288a-6193-4df2-8889-d6517b970fab.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 37,
+      "category": "code",
+      "prompt": "写一个 bash 命令统计当前目录下所有 .ts 文件行数",
+      "startedAt": 1782034630433,
+      "elapsedMs": 26024,
+      "text": "```bash\nfind . -name \"*.ts\" -type f -exec wc -l {} +\n```\n\n这条命令会递归当前目录及所有子目录，对每个 `.ts` 文件统计行数，最后输出总行数。\n\n如果只要当前目录（不含子目录）：\n\n```bash\nwc -l *.ts\n``````bash\nfind . -maxdepth 1 -name \"*.ts\" -type f | xargs wc -l\n```\n\n如果还想统计子目录：\n\n```bash\nfind . -name \"*.ts\" -type f | xargs wc -l\n```\n\n最后一行的 `total` 就是总和。如果文件太多只想要总数，加个 tail：\n\n```bash\nfind . -name \"*.ts\" -type f -exec cat {} + | wc -l\n```",
+      "textChars": 380,
+      "thinkingChars": 348,
+      "providerTrail": [
+        "deepseek-chat",
+        "deepseek-chat"
+      ],
+      "tools": [],
+      "toolEvents": [],
+      "errors": [],
+      "events": 297,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "q\":274}\n{\"type\":\"text_delta\",\"delta\":\"*.\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":275}\n{\"type\":\"text_delta\",\"delta\":\"ts\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":276}\n{\"type\":\"text_delta\",\"delta\":\"\\\"\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":277}\n{\"type\":\"text_delta\",\"delta\":\" -\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":278}\n{\"type\":\"text_delta\",\"delta\":\"type\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":279}\n{\"type\":\"text_delta\",\"delta\":\" f\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":280}\n{\"type\":\"text_delta\",\"delta\":\" -\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":281}\n{\"type\":\"text_delta\",\"delta\":\"exec\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":282}\n{\"type\":\"text_delta\",\"delta\":\" cat\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":283}\n{\"type\":\"text_delta\",\"delta\":\" {}\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":284}\n{\"type\":\"text_delta\",\"delta\":\" +\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":285}\n{\"type\":\"text_delta\",\"delta\":\" |\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":286}\n{\"type\":\"text_delta\",\"delta\":\" w\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":287}\n{\"type\":\"text_delta\",\"delta\":\"c\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":288}\n{\"type\":\"text_delta\",\"delta\":\" -\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":289}\n{\"type\":\"text_delta\",\"delta\":\"l\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":290}\n{\"type\":\"text_delta\",\"delta\":\"\\n\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":291}\n{\"type\":\"text_delta\",\"delta\":\"```\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":292}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\",\"streamId\":\"s_mqnlep12_3z3tlo\",\"seq\":293}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-10-441Z_ee838499-cff8-4d01-8541-12d32bd11c76.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 49,
+      "category": "mixed",
+      "prompt": "查深圳明天天气，并说明今天和明天的区别",
+      "startedAt": 1782034658960,
+      "elapsedMs": 11080,
+      "text": "深圳天气源本轮超时，wttr.in 和 Open-Meteo 都没有返回可用数据（wttr.in: fetch failed; open-meteo: fetch failed）。\n我不会把天气网站首页或导航菜单当成有效结果。\n我没有生成降雨判断；可以直接重试一次，或稍后用本地天气 App / 中国天气网核验。\n数据来源/判断依据\n- 工具：weather\n- 时间：2026-06-21 17:37（本机时间）\n- 来源：weather.com.cn、nmc.cn\n- 依据：天气工具返回的预报快照，按用户问法优先选择今天/明天/后天对应日期。\n- 注意：天气预报会滚动变化，出门前建议再看本地天气 App 或雷达。",
+      "textChars": 310,
+      "thinkingChars": 0,
+      "providerTrail": [],
+      "tools": [
+        {
+          "id": "",
+          "name": "weather",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "weather"
+        },
+        {
+          "event": "end",
+          "name": "weather",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 7,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "\n{\"type\":\"prompt_accepted\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-38-968Z_ef85b8e2-f6bb-4925-b69c-6e0a544b3ebd.jsonl\",\"clientMessageId\":\"gui-50-49-1782034658978\"}\n{\"type\":\"status\",\"isStreaming\":true,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-38-968Z_ef85b8e2-f6bb-4925-b69c-6e0a544b3ebd.jsonl\"}\n{\"type\":\"tool_start\",\"name\":\"weather\",\"args\":{\"query\":\"查深圳明天天气，并说明今天和明天的区别\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-38-968Z_ef85b8e2-f6bb-4925-b69c-6e0a544b3ebd.jsonl\",\"streamId\":\"s_mqnlfb1f_w4mxoz\",\"seq\":1}\n{\"type\":\"tool_end\",\"name\":\"weather\",\"success\":true,\"summary\":{\"outputPreview\":\"【天气工具资料】\\n未检索到明确天气数据。\\n已尝试 wttr.in 和 Open-Meteo 两个天气源，但这次没有拿到 深圳 的可用天气状态、温度或降雨字段。\\n天气源: wttr.in/open-meteo\\n错误: wttr.in: fetch failed; open-meteo: fetch failed\\n可核验入口：中国天气网 https://www.weather.com.cn/ ，中央气\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-38-968Z_ef85b8e2-f6bb-4925-b69c-6e0a544b3ebd.jsonl\",\"streamId\":\"s_mqnlfb1f_w4mxoz\",\"seq\":2}\n{\"type\":\"text_delta\",\"delta\":\"深圳天气源本轮超时，wttr.in 和 Open-Meteo 都没有返回可用数据（wttr.in: fetch failed; open-meteo: fetch failed）。\\n我不会把天气网站首页或导航菜单当成有效结果。\\n我没有生成降雨判断；可以直接重试一次，或稍后用本地天气 App / 中国天气网核验。\\n数据来源/判断依据\\n- 工具：weather\\n- 时间：2026-06-21 17:37（本机时间）\\n- 来源：weather.com.cn、nmc.cn\\n- 依据：天气工具返回的预报快照，按用户问法优先选择今天/明天/后天对应日期。\\n- 注意：天气预报会滚动变化，出门前建议再看本地天气 App 或雷达。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-38-968Z_ef85b8e2-f6bb-4925-b69c-6e0a544b3ebd.jsonl\",\"streamId\":\"s_mqnlfb1f_w4mxoz\",\"seq\":3}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-38-968Z_ef85b8e2-f6bb-4925-b69c-6e0a544b3ebd.jsonl\",\"streamId\":\"s_mqnlfb1f_w4mxoz\",\"seq\":4}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T09-37-38-968Z_ef85b8e2-f6bb-4925-b69c-6e0a544b3ebd.jsonl\"}",
+      "status": "quality_fail",
+      "reason": "denies-available-tool-after-tool-event"
+    }
+  ]
+}

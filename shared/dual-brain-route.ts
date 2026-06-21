@@ -2,7 +2,7 @@ export const DUAL_BRAIN_ROUTE_VERSION = "v0.82.0";
 
 export const DUAL_BRAIN_MANAGER_MODEL = "local-a3b-distill";
 export const DUAL_BRAIN_WORKER_MODEL = "step-3.7-flash";
-export const DUAL_BRAIN_ESCAPE_MODEL = "ds-v4-flash";
+export const DUAL_BRAIN_ESCAPE_MODEL = "deepseek-v4-flash";
 export const DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY = 1;
 
 export type DualBrainRouteRole = "manager" | "worker" | "escape";
@@ -43,15 +43,15 @@ export const DUAL_BRAIN_ROUTE = Object.freeze({
   escape: Object.freeze({
     role: "escape",
     id: "ds-v4-flash-escape",
-    displayName: "DS-V4 Flash",
+    displayName: "DS V4 Flash",
     providerPreset: "deepseek",
-    apiModel: "deepseek-chat",
+    apiModel: DUAL_BRAIN_ESCAPE_MODEL,
     local: false,
   } satisfies DualBrainRouteNode),
 });
 
-export const DUAL_BRAIN_ROUTE_LABEL = "A3B -> step37 -> DS-V4 Flash";
-export const DUAL_BRAIN_QOS_LABEL = "GUI priority; local A3B single-slot; busy CLI falls back to StepFun; DS-V4 Flash is escape-only";
+export const DUAL_BRAIN_ROUTE_LABEL = "A3B -> StepFun -> DS V4 Flash";
+export const DUAL_BRAIN_QOS_LABEL = "GUI priority; local A3B single-slot; busy CLI falls back to StepFun; DS V4 Flash is escape-only";
 
 export type DualBrainStatus = "passed" | "failed" | "escalated";
 export type DualBrainFalseVerifyRisk = "none" | "suspected" | "confirmed";

@@ -1,0 +1,176 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-14-15-generic-evidence-handoff.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-kmjDG0",
+  "gateCurrentDate": "2026-06-21",
+  "total": 2,
+  "counts": {
+    "process_fail": 2
+  },
+  "providerCounts": {
+    "glm-5-turbo": 2
+  },
+  "toolRuns": 2,
+  "stepExecuteRuns": 0,
+  "avgMs": 53705,
+  "generatedAt": "2026-06-21T03:35:24.147Z",
+  "results": [
+    {
+      "index": 14,
+      "category": "realtime",
+      "prompt": "世界杯半决赛在哪一天？",
+      "exitCode": 1,
+      "durationMs": 23081,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-pro",
+        "glm-5-turbo"
+      ],
+      "toolNames": [
+        "web_search",
+        "web_fetch"
+      ],
+      "assistantText": "",
+      "reasoningChars": 2521,
+      "usage": {
+        "prompt_tokens": 6063,
+        "completion_tokens": 176,
+        "total_tokens": 6239,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 117
+        }
+      },
+      "errors": [
+        "lynn: 默认 StepFun 3.7 Flash 路由在线,但 Brain v2 当前没有可用 provider。请在 Lynn 客户端 Providers 配置 Brain 路由密钥；只有想让 CLI 脱离客户端单独使用时,才运行: Lynn providers set --preset stepfun --api-key <key>"
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_fetch",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_fetch",
+          "ok": false
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "s\":\"2026-06-21T03:33:57.731Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"日\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.731Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"达\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.731Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"拉斯\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.731Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"有一\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.767Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"场\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.821Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"半决赛\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.821Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\n\\n\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.821Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"缺口\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.821Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"：\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.823Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"另一\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.845Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"场\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.845Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"半决赛\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.845Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"的具体\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.845Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"日期\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.886Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"未\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.886Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"在\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.886Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"工具\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.886Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"证据\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.886Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"中\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.915Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"明确\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.915Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"出现\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.915Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\n\\n\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.949Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"最终\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.949Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"答案\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.949Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"：\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.994Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"至少\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:57.994Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"一场\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.035Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"半决赛\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.072Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"在\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.072Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"7\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.080Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"月\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.080Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"14\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.080Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"日\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.111Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"（\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.111Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"达\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.144Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"拉斯\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.144Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"），\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.144Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"另一\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.144Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"场\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.144Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"日期\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.177Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"未\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.177Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"查\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.178Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"到\",\"hidden\":true,\"ts\":\"2026-06-21T03:33:58.178Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T03:33:59.652Z\",\"usage\":{\"prompt_tokens\":6063,\"completion_tokens\":176,\"total_tokens\":6239,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":117}},\"durationMs\":22299}\n{\"type\":\"brain.error\",\"error\":\"all providers failed\",\"ts\":\"2026-06-21T03:33:59.652Z\"}",
+      "timedOut": false,
+      "status": "process_fail",
+      "reason": "exit 1"
+    },
+    {
+      "index": 15,
+      "category": "realtime",
+      "prompt": "2026世界杯已经出的赛事比分",
+      "exitCode": 1,
+      "durationMs": 84328,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-pro",
+        "glm-5-turbo"
+      ],
+      "toolNames": [
+        "web_search"
+      ],
+      "assistantText": "",
+      "reasoningChars": 5955,
+      "usage": {
+        "prompt_tokens": 7075,
+        "completion_tokens": 774,
+        "total_tokens": 7849,
+        "prompt_tokens_details": {
+          "cached_tokens": 512
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 337
+        }
+      },
+      "errors": [
+        "lynn: 默认 StepFun 3.7 Flash 路由在线,但 Brain v2 当前没有可用 provider。请在 Lynn 客户端 Providers 配置 Brain 路由密钥；只有想让 CLI 脱离客户端单独使用时,才运行: Lynn providers set --preset stepfun --api-key <key>"
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "start",
+          "name": "web_search",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        },
+        {
+          "event": "end",
+          "name": "web_search",
+          "ok": true
+        }
+      ],
+      "rawTail": "rue,\"ts\":\"2026-06-21T03:34:39.789Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" \",\"hidden\":true,\"ts\":\"2026-06-21T03:34:39.789Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"赛\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:39.892Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"事\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:39.892Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"于\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:39.940Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"6\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:39.994Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"月\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:39.994Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"12\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:39.994Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"日\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.046Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"揭\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.047Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"幕\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.097Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"，\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.097Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"6\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.097Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"月\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.145Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"12\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.146Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"-\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.199Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"13\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.200Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"日的\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.261Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"比赛\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.302Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"完全\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.302Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"缺失\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.354Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\n\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.404Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"-\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.454Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" 其他\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.454Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"大量\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.507Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"小组\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.559Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"赛场\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.559Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"次\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.612Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"未\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.613Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"覆盖\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.613Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\n\\n\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.675Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"最终\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.675Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"答案\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.675Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"：\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.675Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"列出\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.675Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"已\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"确认\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"的\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"比分\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"，\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.767Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"说明\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.768Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"不\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.822Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"完整\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.871Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\",\"hidden\":true,\"ts\":\"2026-06-21T03:34:40.871Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T03:35:22.671Z\",\"usage\":{\"prompt_tokens\":7075,\"completion_tokens\":774,\"total_tokens\":7849,\"prompt_tokens_details\":{\"cached_tokens\":512},\"completion_tokens_details\":{\"reasoning_tokens\":337}},\"durationMs\":82463}\n{\"type\":\"brain.error\",\"error\":\"all providers failed\",\"ts\":\"2026-06-21T03:35:23.952Z\"}",
+      "timedOut": false,
+      "status": "process_fail",
+      "reason": "exit 1"
+    }
+  ]
+}

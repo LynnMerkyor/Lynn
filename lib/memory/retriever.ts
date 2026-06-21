@@ -6,6 +6,7 @@
  */
 
 import { createVectorRetriever } from "./vector-interface.js";
+import { isMemoryOutcomeFeedbackEnabled } from "./outcome-feedback.js";
 
 const HALF_LIFE_DAYS = 30;
 const DEFAULT_CATEGORY_BOOSTS = Object.freeze({
@@ -26,6 +27,7 @@ interface FactRow {
   last_accessed_at?: string | null;
   importance_score?: number;
   hit_count?: number;
+  harmful_count?: number;
   matchCount?: number;
   project_path?: string | null;
   [key: string]: unknown;
@@ -89,6 +91,7 @@ interface ScoredFact extends FactRow {
   ftsScore: number;
   vectorScore: number;
   categoryBoost: number;
+  harmfulPenalty: number;
   score: number;
 }
 
@@ -127,6 +130,17 @@ function computeCategoryBoost(
   let boost = categoryBoosts[category] || 0;
   if (preferredCategories.has(category)) boost += 1.2;
   return boost;
+}
+
+function computeHarmfulPenalty(row: FactRow): number {
+  const count = Math.max(0, Number(row.harmful_count || 0));
+  if (!Number.isFinite(count) || count <= 0) return 0;
+  return Math.min(3, Math.log1p(count) * 1.25);
+}
+
+function harmfulHideThreshold(): number {
+  const value = Number(process.env.LYNN_MEMORY_HARMFUL_HIDE_THRESHOLD || 6);
+  return Number.isFinite(value) ? Math.max(1, value) : 6;
 }
 
 export class HybridRetriever {
@@ -259,6 +273,7 @@ export class HybridRetriever {
     }
 
     const results: ScoredFact[] = [];
+    const feedbackEnabled = isMemoryOutcomeFeedbackEnabled();
     const w = this._weights;
     const preferredCategories = new Set((opts.preferredCategories || []).map(normalizeCategory));
     const categoryBoosts = {
@@ -267,17 +282,22 @@ export class HybridRetriever {
     };
 
     for (const [, { row, tagScore, ftsScore, vectorScore }] of scoreMap) {
+      const harmfulCount = Math.max(0, Number(row.harmful_count || 0));
+      if (feedbackEnabled && harmfulCount >= harmfulHideThreshold()) continue;
+
       const decay = timeDecay(row.last_accessed_at || row.created_at || row.time);
       const categoryBoost = computeCategoryBoost(row, preferredCategories, categoryBoosts);
+      const harmfulPenalty = feedbackEnabled ? computeHarmfulPenalty(row) : 0;
       const score =
         tagScore * w.tag +
         ftsScore * w.fts +
         vectorScore * w.vector +
         decay * w.recency +
         (row.importance_score || 0) * w.importance +
-        categoryBoost * w.category;
+        categoryBoost * w.category -
+        harmfulPenalty;
 
-      results.push({ ...row, tagScore, ftsScore, vectorScore, categoryBoost, score });
+      results.push({ ...row, tagScore, ftsScore, vectorScore, categoryBoost, harmfulPenalty, score });
     }
 
     results.sort((a, b) => b.score - a.score);
@@ -291,7 +311,7 @@ export class HybridRetriever {
     }
 
     const sliced = finalResults.slice(0, limit);
-    if (sliced.length > 0) {
+    if (!feedbackEnabled && sliced.length > 0) {
       this._factStore.markAccessed(sliced.map((row) => row.id));
     }
     return sliced;

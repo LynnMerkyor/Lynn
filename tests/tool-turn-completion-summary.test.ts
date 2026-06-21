@@ -10,11 +10,11 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
   });
 
   it("summarizes an all-success tool turn factually", () => {
-    expect(buildToolCompletionSummary({ successfulToolCount: 1 })).toContain("已执行 1 个操作");
-    expect(buildToolCompletionSummary({ successfulToolCount: 1 })).toContain("没有返回总结回复");
+    expect(buildToolCompletionSummary({ successfulToolCount: 1 })).toContain("本轮完成 1 个操作");
+    expect(buildToolCompletionSummary({ successfulToolCount: 1 })).toContain("没有可见结果摘要");
     const three = buildToolCompletionSummary({ successfulToolCount: 3 });
-    expect(three).toContain("已执行 3 个操作");
-    expect(three).toContain("没有返回总结回复");
+    expect(three).toContain("本轮完成 3 个操作");
+    expect(three).toContain("没有可见结果摘要");
   });
 
   it("uses realtime evidence previews when search/fetch tools succeeded but the model gave no final text", () => {
@@ -32,7 +32,7 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
       ],
     });
 
-    expect(out).toContain("工具已经返回资料");
+    expect(out).toContain("根据本轮已执行工具返回的证据");
     expect(out).toContain("网页搜索");
     expect(out).toContain("Mexico beat South Africa 2-0");
     expect(out).toContain("网页抓取");
@@ -56,7 +56,7 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
       ],
     });
 
-    expect(out).toContain("工具已经完成执行");
+    expect(out).toContain("根据本轮已执行操作返回的可见结果");
     expect(out).toContain("image_analyze");
     expect(out).toContain("检测到 2 张截图");
     expect(out).toContain("bash");
@@ -73,7 +73,28 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
     expect(out).toContain("2 个成功");
     expect(out).toContain("4 个失败");
     expect(out).toContain("bash、write_file、grep");
+    expect(out).not.toContain("没有返回总结回复");
     expect(out).not.toContain("extra");
+  });
+
+  it("keeps successful realtime evidence visible when a later duplicate tool fails", () => {
+    const out = buildToolCompletionSummary({
+      successfulToolCount: 1,
+      hasFailedTool: true,
+      lastFailedTools: ["stock_market"],
+      lastSuccessfulTools: [
+        {
+          name: "stock_market",
+          outputPreview: "国际现货黄金（XAU/USD） 907.29 元/克（约 4156.7 美元/盎司，USD/CNY 6.7890）",
+        },
+      ],
+    });
+
+    expect(out).toContain("根据本轮已执行工具返回的证据");
+    expect(out).toContain("行情");
+    expect(out).toContain("907.29 元/克");
+    expect(out).toContain("后续工具失败");
+    expect(out).not.toContain("请查看上方工具卡片中的失败项");
   });
 
   it("counts at least one failure even when names were not captured", () => {

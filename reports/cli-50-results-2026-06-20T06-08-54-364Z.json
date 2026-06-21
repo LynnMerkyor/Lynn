@@ -1,0 +1,110 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-50-results-2026-06-20T06-08-54-364Z.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-On6v9A",
+  "total": 3,
+  "counts": {
+    "ok": 3
+  },
+  "providerCounts": {
+    "deepseek-chat": 3
+  },
+  "toolRuns": 0,
+  "avgMs": 1892,
+  "generatedAt": "2026-06-20T06:09:00.049Z",
+  "results": [
+    {
+      "index": 1,
+      "category": "simple",
+      "prompt": "你好，只回复 OK",
+      "exitCode": 0,
+      "durationMs": 1545,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "toolNames": [],
+      "assistantText": "OK",
+      "reasoningChars": 124,
+      "usage": {
+        "prompt_tokens": 1866,
+        "completion_tokens": 37,
+        "total_tokens": 1903,
+        "prompt_tokens_details": {
+          "cached_tokens": 1792
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 35
+        },
+        "prompt_cache_hit_tokens": 1792,
+        "prompt_cache_miss_tokens": 74
+      },
+      "errors": [],
+      "rawTail": "\n{\"type\":\"run.started\",\"ts\":\"2026-06-20T06:08:54.794Z\",\"prompt\":\"你好，只回复 OK\",\"reasoning\":{\"effort\":\"auto\",\"display\":\"auto\"}}\n{\"type\":\"provider\",\"activeProvider\":\"deepseek-chat\",\"ts\":\"2026-06-20T06:08:55.482Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"The\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.482Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" user\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.599Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" just\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.700Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" said\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.702Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" \\\"\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.702Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"你好\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.702Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"，\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.702Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"只\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.702Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"回复\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" OK\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\\"\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" which\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" means\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" \\\"\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"Hello\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\",\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" just\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.737Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" reply\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.738Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" OK\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.738Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\\".\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.738Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" They\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.738Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" want\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.753Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" me\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.753Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" to\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.753Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" just\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.753Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" say\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.797Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" \\\"\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.797Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"OK\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.841Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\\"\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.841Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" in\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.863Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" response\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.863Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\".\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.863Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" Simple\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.863Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" enough\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.889Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\".\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:55.903Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"OK\",\"ts\":\"2026-06-20T06:08:55.903Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T06:08:55.903Z\",\"usage\":{\"prompt_tokens\":1866,\"completion_tokens\":37,\"total_tokens\":1903,\"prompt_tokens_details\":{\"cached_tokens\":1792},\"completion_tokens_details\":{\"reasoning_tokens\":35},\"prompt_cache_hit_tokens\":1792,\"prompt_cache_miss_tokens\":74},\"durationMs\":1106}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T06:08:55.908Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 2,
+      "category": "simple",
+      "prompt": "用一句话解释 ReAct",
+      "exitCode": 0,
+      "durationMs": 2492,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "toolNames": [],
+      "assistantText": "**ReAct（Reasoning + Acting）** 是一种让大语言模型在推理过程中交替进行**思考（Reasoning）**与**行动（Acting，如调用工具/搜索）**的框架，通过将思考链与外部交互循环结合，使模型能基于实时反馈动态修正思路，从而显著提升复杂任务的表现。",
+      "reasoningChars": 115,
+      "usage": {
+        "prompt_tokens": 1866,
+        "completion_tokens": 134,
+        "total_tokens": 2000,
+        "prompt_tokens_details": {
+          "cached_tokens": 1792
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 61
+        },
+        "prompt_cache_hit_tokens": 1792,
+        "prompt_cache_miss_tokens": 74
+      },
+      "errors": [],
+      "rawTail": "ype\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T06:08:57.733Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"思考\",\"ts\":\"2026-06-20T06:08:57.767Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"（\",\"ts\":\"2026-06-20T06:08:57.767Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"Reason\",\"ts\":\"2026-06-20T06:08:57.796Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"ing\",\"ts\":\"2026-06-20T06:08:57.796Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"）\",\"ts\":\"2026-06-20T06:08:57.796Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T06:08:57.796Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"与\",\"ts\":\"2026-06-20T06:08:57.796Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T06:08:57.796Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"行动\",\"ts\":\"2026-06-20T06:08:57.814Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"（\",\"ts\":\"2026-06-20T06:08:57.814Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"Act\",\"ts\":\"2026-06-20T06:08:57.814Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"ing\",\"ts\":\"2026-06-20T06:08:57.852Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T06:08:57.852Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"如\",\"ts\":\"2026-06-20T06:08:57.852Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"调用\",\"ts\":\"2026-06-20T06:08:57.852Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"工具\",\"ts\":\"2026-06-20T06:08:57.876Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"/\",\"ts\":\"2026-06-20T06:08:57.876Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"搜索\",\"ts\":\"2026-06-20T06:08:57.876Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"）\",\"ts\":\"2026-06-20T06:08:57.908Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"**\",\"ts\":\"2026-06-20T06:08:57.909Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"的\",\"ts\":\"2026-06-20T06:08:57.909Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"框架\",\"ts\":\"2026-06-20T06:08:57.925Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T06:08:57.925Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"通过\",\"ts\":\"2026-06-20T06:08:57.925Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"将\",\"ts\":\"2026-06-20T06:08:57.961Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"思考\",\"ts\":\"2026-06-20T06:08:57.987Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"链\",\"ts\":\"2026-06-20T06:08:58.011Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"与\",\"ts\":\"2026-06-20T06:08:58.053Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"外部\",\"ts\":\"2026-06-20T06:08:58.068Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"交互\",\"ts\":\"2026-06-20T06:08:58.092Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"循环\",\"ts\":\"2026-06-20T06:08:58.092Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"结合\",\"ts\":\"2026-06-20T06:08:58.119Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T06:08:58.119Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"使\",\"ts\":\"2026-06-20T06:08:58.119Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"模型\",\"ts\":\"2026-06-20T06:08:58.148Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"能\",\"ts\":\"2026-06-20T06:08:58.148Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"基于\",\"ts\":\"2026-06-20T06:08:58.174Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"实时\",\"ts\":\"2026-06-20T06:08:58.203Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"反馈\",\"ts\":\"2026-06-20T06:08:58.203Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"动态\",\"ts\":\"2026-06-20T06:08:58.240Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"修正\",\"ts\":\"2026-06-20T06:08:58.264Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"思路\",\"ts\":\"2026-06-20T06:08:58.359Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"，\",\"ts\":\"2026-06-20T06:08:58.359Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"从而\",\"ts\":\"2026-06-20T06:08:58.359Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"显著\",\"ts\":\"2026-06-20T06:08:58.359Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"提升\",\"ts\":\"2026-06-20T06:08:58.359Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"复杂\",\"ts\":\"2026-06-20T06:08:58.359Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"任务\",\"ts\":\"2026-06-20T06:08:58.371Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"的表现\",\"ts\":\"2026-06-20T06:08:58.371Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"。\",\"ts\":\"2026-06-20T06:08:58.371Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T06:08:58.401Z\",\"usage\":{\"prompt_tokens\":1866,\"completion_tokens\":134,\"total_tokens\":2000,\"prompt_tokens_details\":{\"cached_tokens\":1792},\"completion_tokens_details\":{\"reasoning_tokens\":61},\"prompt_cache_hit_tokens\":1792,\"prompt_cache_miss_tokens\":74},\"durationMs\":2096}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T06:08:58.405Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 3,
+      "category": "simple",
+      "prompt": "2+2 等于几？只给答案",
+      "exitCode": 0,
+      "durationMs": 1638,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "toolNames": [],
+      "assistantText": "4",
+      "reasoningChars": 94,
+      "usage": {
+        "prompt_tokens": 1871,
+        "completion_tokens": 36,
+        "total_tokens": 1907,
+        "prompt_tokens_details": {
+          "cached_tokens": 1792
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 34
+        },
+        "prompt_cache_hit_tokens": 1792,
+        "prompt_cache_miss_tokens": 79
+      },
+      "errors": [],
+      "rawTail": "\n{\"type\":\"run.started\",\"ts\":\"2026-06-20T06:08:58.771Z\",\"prompt\":\"2+2 等于几？只给答案\",\"reasoning\":{\"effort\":\"auto\",\"display\":\"auto\"}}\n{\"type\":\"provider\",\"activeProvider\":\"deepseek-chat\",\"ts\":\"2026-06-20T06:08:59.619Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"The\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.619Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" user\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.746Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" asks\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.774Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" \\\"\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.774Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"2\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.774Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"+\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.801Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"2\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.801Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"等于\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.801Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"几\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.801Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"？\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.801Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"只\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.826Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"给\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.826Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"答案\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.826Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\\"\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.826Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" (\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.826Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"What\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.855Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" is\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.855Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" \",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.855Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"2\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.855Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"+\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.888Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"2\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.889Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"?\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.889Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" Just\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.889Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" give\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.889Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" the\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.889Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" answer\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.918Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\").\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.918Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" Simple\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.918Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" math\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.918Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\",\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.940Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" no\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.940Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" tools\",\"hidden\":true,\"ts\":\"2026-06-20T06:08:59.940Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" needed\",\"hidden\":true,\"ts\":\"2026-06-20T06:09:00.039Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\".\",\"hidden\":true,\"ts\":\"2026-06-20T06:09:00.039Z\"}\n{\"type\":\"assistant.delta\",\"text\":\"4\",\"ts\":\"2026-06-20T06:09:00.039Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-20T06:09:00.039Z\",\"usage\":{\"prompt_tokens\":1871,\"completion_tokens\":36,\"total_tokens\":1907,\"prompt_tokens_details\":{\"cached_tokens\":1792},\"completion_tokens_details\":{\"reasoning_tokens\":34},\"prompt_cache_hit_tokens\":1792,\"prompt_cache_miss_tokens\":79},\"durationMs\":1265}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-20T06:09:00.042Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

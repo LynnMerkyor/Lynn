@@ -1,0 +1,64 @@
+{
+  "outPath": "/Users/lynn/Downloads/Lynn/reports/cli-target-49-tool-denial-fix.json",
+  "mode": "brain",
+  "dataDir": "/var/folders/6k/k5xx78r11wd6r_ds40hxf8ch0000gn/T/lynn-cli-50-vYwNBl",
+  "gateCurrentDate": "2026-06-21",
+  "total": 1,
+  "counts": {
+    "ok": 1
+  },
+  "providerCounts": {
+    "deepseek-chat": 1
+  },
+  "toolRuns": 1,
+  "stepExecuteRuns": 0,
+  "avgMs": 18209,
+  "generatedAt": "2026-06-21T07:13:52.869Z",
+  "results": [
+    {
+      "index": 49,
+      "category": "mixed",
+      "prompt": "查深圳明天天气，并说明今天和明天的区别",
+      "exitCode": 0,
+      "durationMs": 18209,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "toolNames": [
+        "parallel_research"
+      ],
+      "assistantText": "## 深圳天气：今天 vs 明天\n\n**今天 · 6月21日（周日）** ☁️🌦\n| 项目 | 数据 |\n|------|------|\n| 当前实况 | 31°C（体感 36°C），**晴天** |\n| 全天预报 | 晴转**局部有零星雨** |\n| 温度范围 | 27 ~ 31°C |\n| 湿度 | 79% |\n| 降水 | 0.0mm（当前） |\n| 紫外线指数 | **10（极高）** |\n| 体感较闷热 | ✔️ |\n\n**明天 · 6月22日（周一）** ☀️\n| 项目 | 数据 |\n|------|------|\n| 预报 | **晴** |\n| 温度范围 | **26 ~ 31°C** |\n| 降水 | 无 |\n\n---\n\n### 📊 主要区别对比\n\n| 对比项 | 今天 | 明天 |\n|--------|------|------|\n| **天气状况** | 偶有零星雨 🌦 | **全天晴好 ☀️** |\n| **最低温** | 27°C | **26°C（稍凉1度）** |\n| **最高温** | 31°C | 31°C（持平） |\n| **是否带伞** | 建议带伞防零星雨 | 不用带伞 🎉 |\n| **紫外线** | 极高（当前10） | 预计仍高，注意防晒 |\n\n**小结：** 明天比今天**更晴、更干爽**，最低温略降1°C，出门不用操心下雨。但紫外线同样强烈，出门记得防晒 🧴☀️",
+      "reasoningChars": 259,
+      "usage": {
+        "prompt_tokens": 2789,
+        "completion_tokens": 520,
+        "total_tokens": 3309,
+        "prompt_tokens_details": {
+          "cached_tokens": 1792
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 149
+        },
+        "prompt_cache_hit_tokens": 1792,
+        "prompt_cache_miss_tokens": 997
+      },
+      "errors": [],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "parallel_research",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "parallel_research",
+          "ok": true
+        }
+      ],
+      "rawTail": "\"}\n{\"type\":\"reasoning.delta\",\"text\":\"：\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.038Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"202\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.065Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"6\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.065Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"年\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.065Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"6\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.065Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"月\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.065Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"22\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.065Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"日\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.161Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"（\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.161Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"星期一\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.161Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"）\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.161Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"**\\n\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.161Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"-\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.161Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\" \",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.162Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"天气预报\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.162Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"：\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.162Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"Sun\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.162Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"ny\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.162Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"（\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.162Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"晴天\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.162Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"），\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.162Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"26\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.163Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"~\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.163Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"31\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.163Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"°\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.163Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"C\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.183Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"\\n\\n\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.183Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"我来\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.183Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"对比\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.183Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"一下\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.215Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"两\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.215Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"天的\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.243Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"区别\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.243Z\"}\n{\"type\":\"reasoning.delta\",\"text\":\"。\",\"hidden\":true,\"ts\":\"2026-06-21T07:13:49.243Z\"}\n{\"type\":\"usage\",\"ts\":\"2026-06-21T07:13:52.848Z\",\"usage\":{\"prompt_tokens\":2789,\"completion_tokens\":520,\"total_tokens\":3309,\"prompt_tokens_details\":{\"cached_tokens\":1792},\"completion_tokens_details\":{\"reasoning_tokens\":149},\"prompt_cache_hit_tokens\":1792,\"prompt_cache_miss_tokens\":997},\"durationMs\":18143}\n{\"type\":\"assistant.delta\",\"text\":\"## 深圳天气：今天 vs 明天\\n\\n**今天 · 6月21日（周日）** ☁️🌦\\n| 项目 | 数据 |\\n|------|------|\\n| 当前实况 | 31°C（体感 36°C），**晴天** |\\n| 全天预报 | 晴转**局部有零星雨** |\\n| 温度范围 | 27 ~ 31°C |\\n| 湿度 | 79% |\\n| 降水 | 0.0mm（当前） |\\n| 紫外线指数 | **10（极高）** |\\n| 体感较闷热 | ✔️ |\\n\\n**明天 · 6月22日（周一）** ☀️\\n| 项目 | 数据 |\\n|------|------|\\n| 预报 | **晴** |\\n| 温度范围 | **26 ~ 31°C** |\\n| 降水 | 无 |\\n\\n---\\n\\n### 📊 主要区别对比\\n\\n| 对比项 | 今天 | 明天 |\\n|--------|------|------|\\n| **天气状况** | 偶有零星雨 🌦 | **全天晴好 ☀️** |\\n| **最低温** | 27°C | **26°C（稍凉1度）** |\\n| **最高温** | 31°C | 31°C（持平） |\\n| **是否带伞** | 建议带伞防零星雨 | 不用带伞 🎉 |\\n| **紫外线** | 极高（当前10） | 预计仍高，注意防晒 |\\n\\n**小结：** 明天比今天**更晴、更干爽**，最低温略降1°C，出门不用操心下雨。但紫外线同样强烈，出门记得防晒 🧴☀️\",\"ts\":\"2026-06-21T07:13:52.853Z\"}\n{\"type\":\"run.finished\",\"ts\":\"2026-06-21T07:13:52.857Z\",\"ok\":true,\"reasoningReturned\":true}",
+      "timedOut": false,
+      "status": "ok",
+      "reason": ""
+    }
+  ]
+}

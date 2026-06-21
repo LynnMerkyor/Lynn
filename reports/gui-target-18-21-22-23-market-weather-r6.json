@@ -1,0 +1,326 @@
+{
+  "outputPath": "/Users/lynn/Downloads/Lynn/reports/gui-target-18-21-22-23-market-weather-r6.json",
+  "gateCurrentDate": "2026-06-21",
+  "total": 4,
+  "counts": {
+    "timeout": 1,
+    "ok": 2,
+    "quality_fail": 1
+  },
+  "providerCounts": {
+    "deepseek-chat": 3,
+    "glm-5-turbo": 1
+  },
+  "toolRuns": 4,
+  "stepExecuteRuns": 0,
+  "avgMs": 57145,
+  "failures": [
+    {
+      "index": 18,
+      "category": "realtime",
+      "prompt": "今日金价是多少？",
+      "status": "timeout",
+      "reason": "turn timeout",
+      "errors": [],
+      "textPreview": ""
+    },
+    {
+      "index": 23,
+      "category": "realtime",
+      "prompt": "北京今天空气质量怎么样？",
+      "status": "quality_fail",
+      "reason": "relative-date-answer-used-previous-year",
+      "errors": [],
+      "textPreview": "针对“未检索到明确天气数据。已尝试 wttr.in 和 Open-Meteo 两个天气源，但这次没有拿到 北京 的可用天气状态、温度或降雨字段。天气源: wttr.in/open-meteo 错误: wttr.in: fetch failed; open-meteo: fetch failed 可核验入口：中国天气网 https://www.weather.com.cn/ ，中央气象台 https://www.nmc.cn/ 。北京今天空气质量怎么样？”，我能从工具证据中确认"
+    }
+  ],
+  "generatedAt": "2026-06-21T08:19:22.615Z",
+  "results": [
+    {
+      "index": 18,
+      "category": "realtime",
+      "prompt": "今日金价是多少？",
+      "startedAt": 1782029732023,
+      "elapsedMs": 120010,
+      "text": "",
+      "textChars": 0,
+      "thinkingChars": 578,
+      "providerTrail": [
+        "deepseek-chat",
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "stock_market",
+          "success": false
+        },
+        {
+          "id": "",
+          "name": "stockmarket",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "websearch",
+          "success": null
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "stock_market"
+        },
+        {
+          "event": "end",
+          "name": "stock_market",
+          "ok": false
+        },
+        {
+          "event": "start",
+          "name": "stockmarket"
+        },
+        {
+          "event": "slow_warning",
+          "name": "stockmarket",
+          "ok": null
+        },
+        {
+          "event": "end",
+          "name": "stockmarket",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "websearch"
+        }
+      ],
+      "errors": [],
+      "events": 326,
+      "timedOut": true,
+      "finishedNormally": false,
+      "rawTail": "7ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":303}\n{\"type\":\"thinking_delta\",\"delta\":\"大约\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":304}\n{\"type\":\"thinking_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":305}\n{\"type\":\"thinking_delta\",\"delta\":\"126\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":306}\n{\"type\":\"thinking_delta\",\"delta\":\"0\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":307}\n{\"type\":\"thinking_delta\",\"delta\":\" \",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":308}\n{\"type\":\"thinking_delta\",\"delta\":\"元\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":309}\n{\"type\":\"thinking_delta\",\"delta\":\"/\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":310}\n{\"type\":\"thinking_delta\",\"delta\":\"克\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":311}\n{\"type\":\"thinking_delta\",\"delta\":\"。\\n\\n\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":312}\n{\"type\":\"thinking_delta\",\"delta\":\"我\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":313}\n{\"type\":\"thinking_delta\",\"delta\":\"直接\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":314}\n{\"type\":\"thinking_delta\",\"delta\":\"给\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":315}\n{\"type\":\"thinking_delta\",\"delta\":\"用户\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":316}\n{\"type\":\"thinking_delta\",\"delta\":\"做一个\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":317}\n{\"type\":\"thinking_delta\",\"delta\":\"清晰的\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":318}\n{\"type\":\"thinking_delta\",\"delta\":\"汇总\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":319}\n{\"type\":\"thinking_delta\",\"delta\":\"。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":320}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":321}\n{\"type\":\"tool_start\",\"name\":\"websearch\",\"args\":{\"query\":\"2026年6月21日 黄金价格 国际金价 人民币\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-15-32-026Z_c14c8418-d9eb-4a7b-a2d5-e127ed73f6bd.jsonl\",\"streamId\":\"s_mqnihpdv_o9wl2p\",\"seq\":322}",
+      "status": "timeout",
+      "reason": "turn timeout"
+    },
+    {
+      "index": 21,
+      "category": "realtime",
+      "prompt": "美元人民币汇率现在多少？",
+      "startedAt": 1782029854036,
+      "elapsedMs": 34801,
+      "text": "根据本轮已执行工具返回的证据，当前能确认：\n- 行情: 【行情工具资料】 财经/行情快照（via open.er-api.com） 查询：美元人民币汇率现在多少？ 类型：fx 说明：以下结果来自结构化源、网页搜索与正文抓取汇总；关键价格、涨跌幅和时间点建议至少交叉验证 2 个来源。 1. USD/CNY 汇率\n- 网页抓取: 抓取出错: 抓取失败: HTTP 403 Forbidden\n\n以上只包含工具结果中可见的事实；工具未返回或来源未覆盖的部分，不能继续补推。",
+      "textChars": 234,
+      "thinkingChars": 2605,
+      "providerTrail": [
+        "deepseek-chat",
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "stock_market",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "webfetch",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "stock_market"
+        },
+        {
+          "event": "end",
+          "name": "stock_market",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "webfetch"
+        },
+        {
+          "event": "end",
+          "name": "webfetch",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 692,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":672}\n{\"type\":\"thinking_delta\",\"delta\":\" approach\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":673}\n{\"type\":\"thinking_delta\",\"delta\":\" -\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":674}\n{\"type\":\"thinking_delta\",\"delta\":\" use\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":675}\n{\"type\":\"thinking_delta\",\"delta\":\" web\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":676}\n{\"type\":\"thinking_delta\",\"delta\":\"_search\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":677}\n{\"type\":\"thinking_delta\",\"delta\":\" for\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":678}\n{\"type\":\"thinking_delta\",\"delta\":\" real\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":679}\n{\"type\":\"thinking_delta\",\"delta\":\"-time\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":680}\n{\"type\":\"thinking_delta\",\"delta\":\" USD\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":681}\n{\"type\":\"thinking_delta\",\"delta\":\"/\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":682}\n{\"type\":\"thinking_delta\",\"delta\":\"CN\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":683}\n{\"type\":\"thinking_delta\",\"delta\":\"Y\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":684}\n{\"type\":\"thinking_delta\",\"delta\":\" rates\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":685}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":686}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":687}\n{\"type\":\"text_delta\",\"delta\":\"根据本轮已执行工具返回的证据，当前能确认：\\n- 行情: 【行情工具资料】 财经/行情快照（via open.er-api.com） 查询：美元人民币汇率现在多少？ 类型：fx 说明：以下结果来自结构化源、网页搜索与正文抓取汇总；关键价格、涨跌幅和时间点建议至少交叉验证 2 个来源。 1. USD/CNY 汇率\\n- 网页抓取: 抓取出错: 抓取失败: HTTP 403 Forbidden\\n\\n以上只包含工具结果中可见的事实；工具未返回或来源未覆盖的部分，不能继续补推。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":688}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\",\"streamId\":\"s_mqnikbjc_gb8lyl\",\"seq\":689}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-17-34-044Z_bee09eb3-9c18-48e7-97a5-85e9fbda6982.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 22,
+      "category": "realtime",
+      "prompt": "深圳明天下雨吗？",
+      "startedAt": 1782029888840,
+      "elapsedMs": 4289,
+      "text": "从已有数据看，**深圳明天（6月22日，周一）有降雨可能**。预报显示：\n- 天气状况：附近有零星小雨\n- 气温：26~31°C\n- 降雨判断：有降雨可能\n\n明天出门最好带伞。",
+      "textChars": 88,
+      "thinkingChars": 405,
+      "providerTrail": [
+        "deepseek-chat"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "weather",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "weather"
+        },
+        {
+          "event": "end",
+          "name": "weather",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 127,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "nil2e0_jfwfa3\",\"seq\":105}\n{\"type\":\"thinking_delta\",\"delta\":\" on\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":106}\n{\"type\":\"thinking_delta\",\"delta\":\" the\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":107}\n{\"type\":\"thinking_delta\",\"delta\":\" data\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":108}\n{\"type\":\"thinking_delta\",\"delta\":\" already\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":109}\n{\"type\":\"thinking_delta\",\"delta\":\" available\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":110}\n{\"type\":\"thinking_delta\",\"delta\":\",\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":111}\n{\"type\":\"thinking_delta\",\"delta\":\" I\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":112}\n{\"type\":\"thinking_delta\",\"delta\":\" can\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":113}\n{\"type\":\"thinking_delta\",\"delta\":\" answer\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":114}\n{\"type\":\"thinking_delta\",\"delta\":\" directly\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":115}\n{\"type\":\"thinking_delta\",\"delta\":\" without\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":116}\n{\"type\":\"thinking_delta\",\"delta\":\" calling\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":117}\n{\"type\":\"thinking_delta\",\"delta\":\" any\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":118}\n{\"type\":\"thinking_delta\",\"delta\":\" tools\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":119}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":120}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":121}\n{\"type\":\"text_delta\",\"delta\":\"从已有数据看，**深圳明天（6月22日，周一）有降雨可能**。预报显示：\\n- 天气状况：附近有零星小雨\\n- 气温：26~31°C\\n- 降雨判断：有降雨可能\\n\\n明天出门最好带伞。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":122}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\",\"streamId\":\"s_mqnil2e0_jfwfa3\",\"seq\":123}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-08-844Z_ea9ba9f1-b0fe-4449-8dce-f5fc3bd09124.jsonl\"}",
+      "status": "ok",
+      "reason": ""
+    },
+    {
+      "index": 23,
+      "category": "realtime",
+      "prompt": "北京今天空气质量怎么样？",
+      "startedAt": 1782029893132,
+      "elapsedMs": 69480,
+      "text": "针对“未检索到明确天气数据。已尝试 wttr.in 和 Open-Meteo 两个天气源，但这次没有拿到 北京 的可用天气状态、温度或降雨字段。天气源: wttr.in/open-meteo\n错误: wttr.in: fetch failed; open-meteo: fetch failed\n可核验入口：中国天气网 https://www.weather.com.cn/ ，中央气象台 https://www.nmc.cn/ 。北京今天空气质量怎么样？”，我能从工具证据中确认：\n- &copy; 2013-2026 aqistudy.cn (#) 版权所有 浙ICP备15007754号-1 ( 浙公网安备33011802001982号 (\n- 2025年9月16日&ensp;&#0183;&ensp;2025计划去北京旅游的朋友们，一定要码住这篇攻略 ！景点、住宿、美食、交通、游玩建议全都有，赶紧收藏好， …\n- 4. **2024年 北京 旅游攻略： 北京 30个好玩的地方**\n- 2024年8月20日&ensp;&#0183;&ensp;北京，这座千年古都，以其厚重的历史底蕴和独特的现代魅力，吸引着无数游客。这里不仅有故宫、天坛等世界文化 …\n- 2025年11月16日&ensp;&#0183;&ensp;2025 北京旅游必打卡二十个景点！保姆级攻略 + 避坑全指南,打卡,旅行,静静,游玩,北京市,北京旅游,酒店门票,八达 …\n如果需要更精确的实时结论，建议继续用官方或专业数据源交叉验证。",
+      "textChars": 658,
+      "thinkingChars": 1499,
+      "providerTrail": [
+        "deepseek-chat",
+        "step-3.7-flash",
+        "deepseek-chat",
+        "deepseek-chat",
+        "glm-5-turbo"
+      ],
+      "tools": [
+        {
+          "id": "",
+          "name": "weather",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "webfetch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "websearch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "webfetch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "websearch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "webfetch",
+          "success": true
+        },
+        {
+          "id": "",
+          "name": "websearch",
+          "success": true
+        }
+      ],
+      "toolEvents": [
+        {
+          "event": "start",
+          "name": "weather"
+        },
+        {
+          "event": "end",
+          "name": "weather",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "webfetch"
+        },
+        {
+          "event": "end",
+          "name": "webfetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "websearch"
+        },
+        {
+          "event": "end",
+          "name": "websearch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "webfetch"
+        },
+        {
+          "event": "end",
+          "name": "webfetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "websearch"
+        },
+        {
+          "event": "end",
+          "name": "websearch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "webfetch"
+        },
+        {
+          "event": "end",
+          "name": "webfetch",
+          "ok": true
+        },
+        {
+          "event": "start",
+          "name": "websearch"
+        },
+        {
+          "event": "end",
+          "name": "websearch",
+          "ok": true
+        }
+      ],
+      "errors": [],
+      "events": 416,
+      "timedOut": false,
+      "finishedNormally": true,
+      "rawTail": "4583-983f-0bb9e2aed173.jsonl\",\"streamId\":\"s_mqnil5p7_qjtlhd\",\"seq\":401}\n{\"type\":\"thinking_delta\",\"delta\":\".in\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-13-138Z_c756cf90-f1b7-4583-983f-0bb9e2aed173.jsonl\",\"streamId\":\"s_mqnil5p7_qjtlhd\",\"seq\":402}\n{\"type\":\"thinking_delta\",\"delta\":\".\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-13-138Z_c756cf90-f1b7-4583-983f-0bb9e2aed173.jsonl\",\"streamId\":\"s_mqnil5p7_qjtlhd\",\"seq\":403}\n{\"type\":\"thinking_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-13-138Z_c756cf90-f1b7-4583-983f-0bb9e2aed173.jsonl\",\"streamId\":\"s_mqnil5p7_qjtlhd\",\"seq\":404}\n{\"type\":\"tool_start\",\"name\":\"webfetch\",\"args\":{\"url\":\"https://www.weather.com.cn/air/101010100.html\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-13-138Z_c756cf90-f1b7-4583-983f-0bb9e2aed173.jsonl\",\"streamId\":\"s_mqnil5p7_qjtlhd\",\"seq\":405}\n{\"type\":\"tool_end\",\"name\":\"webfetch\",\"success\":true,\"details\":{},\"summary\":{\"outputPreview\":\"来源: www.weather.com.cn/other/weather_error_404.html (html→text)\\n\\n中国天气 (http://www.weather.com.cn) \\n\\r\\n \\n\\r\\n\\n\\r\\n\\n\\r\\n \\n\\r\\n \\n404您访问的页面不存在\\n\\r\\n\\r\\n \\n 5秒后自动返回 中国天气网首页 (http://www.weather.com.cn)\\n \\r\\n \\n或者看看下面的美图吧！\\n\\r\\n\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-13-138Z_c756cf90-f1b7-4583-983f-0bb9e2aed173.jsonl\",\"streamId\":\"s_mqnil5p7_qjtlhd\",\"seq\":406}\n{\"type\":\"tool_start\",\"name\":\"websearch\",\"args\":{\"query\":\"北京 AQI 实时 空气质量指数 2026年6月21日 site:aqicn.org OR site:pm25.in\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-13-138Z_c756cf90-f1b7-4583-983f-0bb9e2aed173.jsonl\",\"streamId\":\"s_mqnil5p7_qjtlhd\",\"seq\":407}\n{\"type\":\"tool_end\",\"name\":\"websearch\",\"success\":true,\"details\":{\"scene\":\"finance\",\"expandedQuery\":\"北京 AQI 实时 空气质量指数 2026年6月21日 site:aqicn.org OR site:pm25.in AkShare 腾讯自选股 新浪财经\",\"preferFresh\":true,\"preferDocs\":false,\"preferredSources\":[\"AkShare\",\"腾讯自选股\",\"新浪财经\",\"雪球\",\"东方财富\"],\"requiresSpecializedData\":true,\"shouldCrossVerify\":true,\"provider\":\"duckduckgo-html\"},\"summary\":{\"outputPreview\":\"搜索提示：这是财经/行情类问题。优先参考 AkShare / 腾讯自选股 / 新浪财经 / 雪球 / 东方财富 等来源；关键价格、涨跌幅和时间点请至少交叉验证 2 个来源。若需要更精确的实时数据，建议额外接入专门财经数据源（如 Tushare Token 或你自己的行情服务）。当前结果属于网页搜索汇总，不等同于直连行情源。\\n\\n搜索结果 (via duckduckgo-html):\\n\\n1. **北京\"},\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-13-138Z_c756cf90-f1b7-4583-983f-0bb9e2aed173.jsonl\",\"streamId\":\"s_mqnil5p7_qjtlhd\",\"seq\":408}\n{\"type\":\"provider_meta\",\"activeProvider\":\"glm-5-turbo\",\"fallbackFrom\":[{\"id\":\"lynn-brain-router\",\"reason\":\"tool_round_limit\"}],\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-13-138Z_c756cf90-f1b7-4583-983f-0bb9e2aed173.jsonl\",\"streamId\":\"s_mqnil5p7_qjtlhd\",\"seq\":409}\n{\"type\":\"text_delta\",\"delta\":\"针对“未检索到明确天气数据。已尝试 wttr.in 和 Open-Meteo 两个天气源，但这次没有拿到 北京 的可用天气状态、温度或降雨字段。天气源: wttr.in/open-meteo\\n错误: wttr.in: fetch failed; open-meteo: fetch failed\\n可核验入口：中国天气网 https://www.weather.com.cn/ ，中央气象台 https://www.nmc.cn/ 。北京今天空气质量怎么样？”，我能从工具证据中确认：\\n- &copy; 2013-2026 aqistudy.cn (#) 版权所有 浙ICP备15007754号-1 ( 浙公网安备33011802001982号 (\\n- 2025年9月16日&ensp;&#0183;&ensp;2025计划去北京旅游的朋友们，一定要码住这篇攻略 ！景点、住宿、美食、交通、游玩建议全都有，赶紧收藏好， …\\n- 4. **2024年 北京 旅游攻略： 北京 30个好玩的地方**\\n- 2024年8月20日&ensp;&#0183;&ensp;北京，这座千年古都，以其厚重的历史底蕴和独特的现代魅力，吸引着无数游客。这里不仅有故宫、天坛等世界文化 …\\n- 2025年11月16日&ensp;&#0183;&ensp;2025 北京旅游必打卡二十个景点！保姆级攻略 + 避坑全指南,打卡,旅行,静静,游玩,北京市,北京旅游,酒店门票,八达 …\\n如果需要更精确的实时结论，建议继续用官方或专业数据源交叉验证。\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-13-138Z_c756cf90-f1b7-4583-983f-0bb9e2aed173.jsonl\",\"streamId\":\"s_mqnil5p7_qjtlhd\",\"seq\":410}\n{\"type\":\"turn_end\",\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-13-138Z_c756cf90-f1b7-4583-983f-0bb9e2aed173.jsonl\",\"streamId\":\"s_mqnil5p7_qjtlhd\",\"seq\":411}\n{\"type\":\"status\",\"isStreaming\":false,\"sessionPath\":\"/tmp/lynn-gui50-home/agents/lynn/sessions/2026-06-21T08-18-13-138Z_c756cf90-f1b7-4583-983f-0bb9e2aed173.jsonl\"}",
+      "status": "quality_fail",
+      "reason": "relative-date-answer-used-previous-year"
+    }
+  ]
+}

@@ -35,28 +35,39 @@ export function buildToolCompletionSummary(ss: any): string {
   const failedTools = Array.isArray(ss?.lastFailedTools) ? ss.lastFailedTools.filter(Boolean).map(String) : [];
   const failCount = ss?.hasFailedTool ? Math.max(1, failedTools.length) : 0;
   if (okCount + failCount === 0) return "";
-  if (failCount === 0) {
-    const evidenceFallback = buildRealtimeEvidenceFallbackSummary(ss);
-    if (evidenceFallback) return evidenceFallback;
-    const genericEvidenceFallback = buildGenericToolEvidenceFallbackSummary(ss);
-    if (genericEvidenceFallback) return genericEvidenceFallback;
+  const evidenceFallback = buildRealtimeEvidenceFallbackSummary(ss);
+  if (evidenceFallback) {
+    if (failCount === 0) return evidenceFallback;
+    const failDetail = failedTools.length ? `(${failedTools.slice(0, 3).join("、")})` : "";
+    return `${evidenceFallback}\n\n另有 ${failCount} 个后续工具失败${failDetail}；上方结论仅采用已成功返回的工具证据。`;
+  }
+  const genericEvidenceFallback = buildGenericToolEvidenceFallbackSummary(ss);
+  if (genericEvidenceFallback) {
+    if (failCount === 0) return genericEvidenceFallback;
+    const failDetail = failedTools.length ? `(${failedTools.slice(0, 3).join("、")})` : "";
+    return `${genericEvidenceFallback}\n\n另有 ${failCount} 个后续工具失败${failDetail}；上方结论仅采用已成功返回的操作结果。`;
   }
   // 措辞必须诚实:工具跑完≠任务完成 —— 模型没给总结时,明说"没有总结回复",
   // 不写"✅ 全部成功"那种读起来像任务完成的句式(2026-06-10 用户纠偏:"自报完成")。
   if (failCount === 0) {
-    return `已执行 ${okCount} 个操作(工具均成功),但模型没有返回总结回复。工具卡片已保留执行详情;你可以继续追问让 Lynn 基于工具结果总结。`;
+    return `本轮完成 ${okCount} 个操作，但没有可见结果摘要；请查看上方工具卡片中的执行详情。`;
   }
   const failDetail = failedTools.length ? `(${failedTools.slice(0, 3).join("、")})` : "";
-  return `已执行 ${okCount + failCount} 个操作:${okCount} 个成功,${failCount} 个失败${failDetail},且模型没有返回总结回复。工具卡片已保留执行详情;请根据失败项重试或继续追问。`;
+  return `本轮工具执行包含 ${okCount} 个成功、${failCount} 个失败${failDetail}；请查看上方工具卡片中的失败项。`;
 }
 
 const REALTIME_EVIDENCE_TOOL_NAMES = new Set([
   "web_search",
+  "websearch",
   "web_fetch",
+  "webfetch",
   "sports_score",
+  "sportsscore",
   "live_news",
+  "livenews",
   "weather",
   "stock_market",
+  "stockmarket",
 ]);
 
 function formatError(err: unknown): string {
@@ -68,11 +79,16 @@ function formatError(err: unknown): string {
 function displayToolName(name: string): string {
   switch (name) {
     case "web_search": return "网页搜索";
+    case "websearch": return "网页搜索";
     case "web_fetch": return "网页抓取";
+    case "webfetch": return "网页抓取";
     case "sports_score": return "体育比分";
+    case "sportsscore": return "体育比分";
     case "live_news": return "实时新闻";
+    case "livenews": return "实时新闻";
     case "weather": return "天气";
     case "stock_market": return "行情";
+    case "stockmarket": return "行情";
     default: return name;
   }
 }
@@ -83,6 +99,94 @@ function compactEvidencePreview(value: unknown): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 280);
+}
+
+function successfulToolEvidenceText(ss: any): string {
+  const tools = Array.isArray(ss?.lastSuccessfulTools) ? ss.lastSuccessfulTools : [];
+  return tools
+    .map((tool: any) => [
+      tool?.name,
+      tool?.command,
+      tool?.filePath,
+      tool?.outputPreview,
+    ].filter(Boolean).join(" "))
+    .join("\n");
+}
+
+function deniesAvailableToolCapability(text: unknown): boolean {
+  const normalized = String(text || "").replace(/\s+/g, "");
+  if (!normalized) return false;
+  return /(?:工具集|工具箱|工具列表|当前工具|可用工具|CLI工具|LynnCLI工具).{0,24}(?:没有|未包含|不包含|缺少|暂无|不支持).{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问)/iu.test(normalized)
+    || /(?:没有|未包含|不包含|缺少|暂无|不支持).{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问).{0,24}(?:工具|功能|能力|接口)/iu.test(normalized)
+    || /(?:无法|不能|没法|不支持).{0,24}(?:实时|在线|联网|访问网页|查询天气|查询股价|查询汇率|查询比分|查询赛程)/iu.test(normalized);
+}
+
+function contradictsRelativeEventEvidence(ss: any, text: unknown): boolean {
+  const prompt = String(ss?.originalPromptText || ss?.effectivePromptText || "");
+  if (!/(今晚|今夜|今天|今日|昨晚|昨日|昨天|赛程|比分|比赛|场次|半决赛|决赛|schedule|score|match|game|tonight|today|yesterday|semifinal|final)/iu.test(prompt)) return false;
+  const normalized = String(text || "").replace(/\s+/g, "");
+  if (!normalized) return false;
+  const saysNoEvent = /(?:没有|无|暂无|未查到|没有剩余|无剩余).{0,20}(?:比赛|赛事|赛程|场次|比分|结果|资料|信息)/iu.test(normalized)
+    || /(?:比赛|赛事|赛程|场次|比分|结果|资料|信息).{0,20}(?:没有|无|暂无|未查到)/iu.test(normalized);
+  if (!saysNoEvent) return false;
+  const evidence = successfulToolEvidenceText(ss);
+  return /(?:Scheduled|待开赛|即将开赛|未开始|\bvs\b|\d{1,2}:\d{2}|比分|FT|\d+\s*[-–—:：比]\s*\d+)/iu.test(evidence);
+}
+
+function hasMarketNumericEvidence(prompt: unknown, text: unknown): boolean {
+  const p = String(prompt || "");
+  const value = String(text || "");
+  if (/(金价|黄金|XAU|gold)/iu.test(p)) {
+    return /\d{3,5}(?:\.\d+)?\s*元\/克|\d{3,5}(?:\.\d+)?\s*美元\/盎司|XAU\/USD[\s\S]{0,100}\d{3,5}(?:\.\d+)?/iu.test(value);
+  }
+  if (/(汇率|美元人民币|美元兑人民币|USD\s*\/?\s*CNY|人民币)/iu.test(p)) {
+    return /1\s*(?:USD|美元)\s*=\s*\d+(?:\.\d+)?\s*(?:CNY|人民币)|USD\/CNY[\s\S]{0,100}\d+(?:\.\d+)?|美元[兑对]人民币[\s\S]{0,100}\d+(?:\.\d+)?|汇率[\s\S]{0,100}\d+(?:\.\d+)?/iu.test(value);
+  }
+  if (/(股价|股票|行情|最新价|现价|NVDA|AAPL|TSLA|MSFT|英伟达|苹果|特斯拉)/iu.test(p)) {
+    return /\$?\d+(?:\.\d+)?\s*(?:USD|美元|港元|HKD|元)?|涨跌|涨幅|收盘|最新价|当前价/iu.test(value);
+  }
+  return true;
+}
+
+function lacksMarketNumericAnswerDespiteEvidence(ss: any, text: unknown): boolean {
+  const prompt = String(ss?.originalPromptText || ss?.effectivePromptText || "");
+  if (!/(金价|黄金|汇率|美元人民币|美元兑人民币|USD\s*\/?\s*CNY|股价|股票|行情|最新价|现价|NVDA|AAPL|TSLA|MSFT|英伟达|苹果|特斯拉)/iu.test(prompt)) {
+    return false;
+  }
+  const evidence = successfulToolEvidenceText(ss);
+  return hasMarketNumericEvidence(prompt, evidence) && !hasMarketNumericEvidence(prompt, text);
+}
+
+function lacksWeatherAnswerDespiteEvidence(ss: any, text: unknown): boolean {
+  const prompt = String(ss?.originalPromptText || ss?.effectivePromptText || "");
+  if (!/(天气|气温|温度|下雨|降雨|降水|空气质量|AQI|冷不冷|热不热|带伞|雨伞)/iu.test(prompt)) return false;
+  const evidence = successfulToolEvidenceText(ss);
+  if (!/(天气|温度|气温|降雨|降水|雷暴|阵雨|°C|℃|\d+\s*%)/iu.test(evidence)) return false;
+  const normalized = String(text || "").replace(/\s+/g, "");
+  if (/(人类活动史|建城史|生态环境局|工业和信息化局|机动车排放|高新技术企业|政府工作报告|百度百科|如果需要更精确的实时结论)/iu.test(normalized)) {
+    return true;
+  }
+  if (/(下雨|降雨|降水|带伞|雨伞)/iu.test(prompt) && !/(雨|降雨|降水|雷暴|阵雨|\d+\s*%|带伞|不用伞|不必带伞)/iu.test(normalized)) {
+    return true;
+  }
+  if (/(空气质量|AQI)/iu.test(prompt) && !/(AQI|空气质量|优|良|轻度|中度|重度|\d+)/iu.test(normalized)) {
+    return true;
+  }
+  return false;
+}
+
+function selectToolEvidenceVisibleText(ss: any, candidate: unknown): string {
+  const text = String(candidate || "").trim();
+  if (!text) return buildToolCompletionSummary(ss);
+  if (
+    deniesAvailableToolCapability(text)
+    || contradictsRelativeEventEvidence(ss, text)
+    || lacksMarketNumericAnswerDespiteEvidence(ss, text)
+    || lacksWeatherAnswerDespiteEvidence(ss, text)
+  ) {
+    return buildToolCompletionSummary(ss) || "";
+  }
+  return text;
 }
 
 export function buildRealtimeEvidenceFallbackSummary(ss: any): string {
@@ -99,10 +203,10 @@ export function buildRealtimeEvidenceFallbackSummary(ss: any): string {
   if (!evidence.length) return "";
   const lines = evidence.map((tool: any) => `- ${displayToolName(tool.name)}: ${tool.preview}`);
   return [
-    "工具已经返回资料,但模型没有生成最终总结。以下是工具返回的摘要,请以来源页面/工具结果为准:",
+    "根据本轮已执行工具返回的证据，当前能确认：",
     ...lines,
     "",
-    "可点「编辑重发」让模型基于这些结果重新组织回答。",
+    "以上只包含工具结果中可见的事实；工具未返回或来源未覆盖的部分，不能继续补推。",
   ].join("\n");
 }
 
@@ -127,10 +231,10 @@ function buildGenericToolEvidenceFallbackSummary(ss: any): string {
     return tool.preview ? `- ${label}: ${tool.preview}` : `- ${label}: 已完成`;
   });
   return [
-    "工具已经完成执行,但模型没有生成最终总结。以下是可见工具证据摘要:",
+    "根据本轮已执行操作返回的可见结果，当前能确认：",
     ...lines,
     "",
-    "可以直接继续追问“基于这些工具结果总结一下”,或点「编辑重发」重新组织回答。",
+    "以上只包含操作结果中可见的事实；未覆盖的部分不能继续补推。",
   ].join("\n");
 }
 
@@ -420,10 +524,13 @@ export function createToolTurnFinalizer({
           ss.activeToolCallCount = 0;
           ss.activeToolCallStartedAt = null;
           ss.recoveredBashInFlight = false;
+          const bufferedCandidate = isMeaningfulPersistedFinalText(finalText, ss)
+            ? finalText
+            : String(ss.bufferedVisibleTextDuringTool || "");
           flushBufferedToolVisibleText(
             sessionPath,
             ss,
-            isMeaningfulPersistedFinalText(finalText, ss) ? finalText : "",
+            selectToolEvidenceVisibleText(ss, bufferedCandidate),
           );
           debugLog()?.warn("ws", `[TOOL-MISSING-END-FENCE v1] closing turn with visible output despite missing tool_end · age=${toolAgeMs}ms · session=${sessionPath}`);
           Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
@@ -445,10 +552,13 @@ export function createToolTurnFinalizer({
           sessionPath,
           ss.persistedAssistantTextBaseline || 0,
         );
+        const bufferedCandidate = isMeaningfulPersistedFinalText(finalText, ss)
+          ? finalText
+          : String(ss.bufferedVisibleTextDuringTool || "");
         flushBufferedToolVisibleText(
           sessionPath,
           ss,
-          isMeaningfulPersistedFinalText(finalText, ss) ? finalText : "",
+          selectToolEvidenceVisibleText(ss, bufferedCandidate),
         );
       }
       closeStreamWithVisibleFallback(
@@ -512,10 +622,17 @@ export function createToolTurnFinalizer({
     clearSilentBrainAbortTimer(ss);
   }
 
-  function closeStreamAfterError(sessionPath: any, ss: any) {
+  function closeStreamAfterError(sessionPath: any, ss: any, reason: any = "model_tool_error") {
     if (!sessionPath || !ss || hasStreamEvent(ss, "turn_end")) return;
     if (!ss.hasOutput && !ss.hasToolCall) ss._lastTurnAborted = true;
-    closeStreamWithVisibleFallback(sessionPath, ss, "", "model_tool_error");
+    const fallbackText = !ss.hasOutput
+      ? (hasToolEvidence(ss)
+        ? buildEmptyTurnFallbackText(ss, reason)
+        : ss.hasThinking
+        ? "模型请求中断前只返回了思考过程，没有给出最终可见答案。本轮已安全结束，避免空回复污染后续上下文；请点「编辑重发」重试，或稍后再发。"
+        : buildEmptyTurnFallbackText(ss, reason))
+      : "";
+    closeStreamWithVisibleFallback(sessionPath, ss, fallbackText, reason, fallbackText ? { trustedFallback: true } : {});
   }
 
   return {
