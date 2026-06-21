@@ -29,7 +29,7 @@ let _updateState = {
   status: "idle",      // idle | checking | available | downloading | downloaded | error | latest
   version: null,
   releaseNotes: null,
-  releaseUrl: null,     // GitHub release page URL
+  releaseUrl: null,     // source release page URL
   downloadUrl: null,    // direct download URL (asset)
   progress: null,       // { percent, bytesPerSecond, transferred, total }
   error: null,
@@ -114,10 +114,11 @@ function isNewerVersion(latest, current) {
 // ══════════════════════════════════════
 // 静态更新清单（所有平台共用）
 // ══════════════════════════════════════
-const REPO_BASE_URL = "https://github.com/MerkyorLynn/Lynn";
+const SOURCE_RELEASE_URL = "https://gitee.com/merkyor/Lynn/releases";
+const MIRROR_DOWNLOAD_BASE = "https://download.merkyorlynn.com/downloads";
 const UPDATE_MANIFEST_URLS = [
-  "https://raw.githubusercontent.com/MerkyorLynn/Lynn/main/.github/update-manifest.json",
-  "https://cdn.jsdelivr.net/gh/MerkyorLynn/Lynn@main/.github/update-manifest.json",
+  `${MIRROR_DOWNLOAD_BASE}/update-manifest.json`,
+  "https://gitee.com/merkyor/Lynn/raw/main/.github/update-manifest.json",
 ];
 
 function normalizeVersion(version) {
@@ -125,17 +126,17 @@ function normalizeVersion(version) {
 }
 
 function buildReleaseUrl(version) {
-  return `${REPO_BASE_URL}/releases/tag/v${version}`;
+  return `${SOURCE_RELEASE_URL}#v${version}`;
 }
 
 function buildReleaseDownloadBase(version) {
-  return `${REPO_BASE_URL}/releases/download/v${version}`;
+  return MIRROR_DOWNLOAD_BASE;
 }
 
 function getConventionalAssetName(version) {
   if (process.platform === "darwin") {
-    if (process.arch === "arm64") return `Lynn-${version}-macOS-Apple-Silicon.dmg`;
-    if (process.arch === "x64") return `Lynn-${version}-macOS-Intel.dmg`;
+    if (process.arch === "arm64") return `Lynn-${version}-macOS-arm64.dmg`;
+    if (process.arch === "x64") return `Lynn-${version}-macOS-x64.dmg`;
   }
   if (process.platform === "win32") {
     return `Lynn-${version}-Windows-Setup.exe`;
