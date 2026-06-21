@@ -84,7 +84,7 @@ export type StreamChunk =
   | { type: 'usage'; usage: unknown }
   | { type: 'finish'; reason: string }
   | { type: 'tool_progress'; event: 'start' | 'end'; name: string; ms?: number; ok?: boolean; summary?: string; details?: string[]; argsSummary?: string }
-  | { type: 'pre_search'; source: string; query: string; hit: boolean; ms: number; cached: 'request' | 'lru' | null }
+  | { type: 'pre_search'; source: string; query: string; hit: boolean; ms: number; cached: 'request' | 'lru' | null; sourceStatus?: string }
   | { type: 'audio_fallback'; source: string; transcripts: number; total: number; ms: number }
   | ({ type: 'error'; error: string } & Record<string, unknown>);
 

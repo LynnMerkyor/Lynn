@@ -94,22 +94,30 @@ describe('stream-bridge SSE emitter', () => {
     });
   });
 
-  it('exposes pre-search as web_search tool progress', () => {
+  it('exposes sports pre-search as sports_score tool progress', () => {
     const res = makeMockRes();
     const e = makeSSEEmitter(res, { id: 'x' });
-    e.emitChunk({ type: 'pre_search', source: 'espn_scoreboard', query: '世界杯比分', hit: true, ms: 42, cached: null });
+    e.emitChunk({ type: 'pre_search', source: 'espn_scoreboard', query: '世界杯比分', hit: true, ms: 42, cached: null, sourceStatus: 'fallback_static_schedule' });
     const ev = parseSSEWrites(res.writes)[0];
     expect(ev).toMatchObject({
       object: 'lynn.tool_progress',
       tool_progress: {
         event: 'end',
-        name: 'web_search',
+        name: 'sports_score',
         ms: 42,
         ok: true,
         args_summary: '世界杯比分',
-        summary: 'pre-search:espn_scoreboard',
+        summary: 'sports schedule context (builtin fallback; ESPN unavailable)',
       },
     });
+  });
+
+  it('keeps direct ESPN sports pre-search labeled as ESPN context', () => {
+    const res = makeMockRes();
+    const e = makeSSEEmitter(res, { id: 'x' });
+    e.emitChunk({ type: 'pre_search', source: 'espn_scoreboard', query: '世界杯比分', hit: true, ms: 42, cached: 'lru' });
+    const ev = parseSSEWrites(res.writes)[0];
+    expect(ev.tool_progress.summary).toBe('ESPN scoreboard schedule context cache=lru');
   });
 
   it('done() writes [DONE] and ends the response', () => {

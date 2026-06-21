@@ -8,15 +8,15 @@ export function configuredBrainUrl(args?: ParsedArgs): string | null {
 }
 
 export function defaultBrainUrl(): string {
-  return process.env.LYNN_CLI_DISABLE_HOSTED_BRAIN === "1" ? LOCAL_BRAIN_URL : HOSTED_BRAIN_URL;
+  return LOCAL_BRAIN_URL;
 }
 
 export async function resolveDefaultBrainUrl(args?: ParsedArgs, timeoutMs = 500): Promise<string> {
   const explicit = configuredBrainUrl(args);
   if (explicit) return explicit;
+  if (await canReachBrain(LOCAL_BRAIN_URL, timeoutMs)) return LOCAL_BRAIN_URL;
   if (process.env.LYNN_CLI_DISABLE_HOSTED_BRAIN === "1") return LOCAL_BRAIN_URL;
   if (await canReachBrain(HOSTED_BRAIN_URL, timeoutMs)) return HOSTED_BRAIN_URL;
-  if (await canReachBrain(LOCAL_BRAIN_URL, timeoutMs)) return LOCAL_BRAIN_URL;
   return HOSTED_BRAIN_URL;
 }
 

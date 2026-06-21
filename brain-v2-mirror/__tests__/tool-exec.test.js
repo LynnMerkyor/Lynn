@@ -124,6 +124,27 @@ describe('tool-exec dispatcher', () => {
     expect(r).not.toContain('Argentina vs Austria');
   });
 
+  it('uses bundled World Cup schedule fallback when ESPN is temporarily unreachable', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-21T11:05:00Z'));
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new Error('fetch failed');
+    }));
+
+    try {
+      const r = await executeServerTool('sports_score', { query: '你能预测今晚世界杯比分么？' });
+      expect(r).toContain('directSourceStatus: fallback_static_schedule');
+      expect(r).toContain('userIntent: score_prediction');
+      expect(r).toContain('Spain vs Saudi Arabia');
+      expect(r).toContain('Belgium vs Iran');
+      expect(r).toContain('Uruguay vs Cape Verde');
+      expect(r).toContain('New Zealand vs Egypt');
+      expect(r).not.toContain('请改用 web_search');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('isServerTool returns true for known and false for unknown', () => {
     expect(isServerTool('web_search')).toBe(true);
     expect(isServerTool('bash')).toBe(false);

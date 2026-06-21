@@ -1419,7 +1419,7 @@ export function createSportsScoreTool() {
         "directSourceStatus: unavailable",
         directError ? `error: ${directError}` : "",
         "matched: 0",
-        "说明：专用体育数据源本轮不可用或暂不支持该赛事；不会用泛搜索摘要冒充比分、赛程或赛果。",
+        "说明：专用体育数据源本轮不可用或暂不支持该赛事；不会用泛搜索摘要冒充比分、赛程或赛果。若用户要预测，请基于已知对阵做预测，不要把源失败当成最终答案。",
       ].filter(Boolean).join("\n");
       return {
         content: [{ type: "text", text }],

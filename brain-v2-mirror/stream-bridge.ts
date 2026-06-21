@@ -85,15 +85,25 @@ export function makeSSEEmitter(res: ServerResponse, { id, model = 'lynn-v2' }: S
         },
       });
     } else if (chunk.type === 'pre_search') {
+      const source = String(chunk.source || '');
+      const toolName = /^espn_scoreboard$/i.test(source) ? 'sports_score' : 'web_search';
+      const sourceStatus = String(chunk.sourceStatus || '');
+      const sportsSummary = /^fallback_static_schedule$/i.test(sourceStatus)
+        ? `sports schedule context (builtin fallback; ESPN unavailable)${chunk.cached ? ` cache=${chunk.cached}` : ''}`
+        : /^unavailable$/i.test(sourceStatus)
+          ? `sports schedule source unavailable${chunk.cached ? ` cache=${chunk.cached}` : ''}`
+          : `ESPN scoreboard schedule context${chunk.cached ? ` cache=${chunk.cached}` : ''}`;
       write({
         id, object: 'lynn.tool_progress', created, model: originalModel,
         tool_progress: {
           event: 'end',
-          name: 'web_search',
+          name: toolName,
           ms: chunk.ms,
           ok: Boolean(chunk.hit),
           args_summary: chunk.query,
-          summary: `pre-search:${chunk.source}${chunk.cached ? ` cache=${chunk.cached}` : ''}`,
+          summary: toolName === 'sports_score'
+            ? sportsSummary
+            : `pre-search:${chunk.source}${chunk.cached ? ` cache=${chunk.cached}` : ''}`,
         },
       });
     } else if (chunk.type === 'error') {

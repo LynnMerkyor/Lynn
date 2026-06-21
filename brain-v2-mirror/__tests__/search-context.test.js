@@ -258,4 +258,19 @@ describe('applySearchContext — applied path', () => {
     expect(block.length).toBeLessThan(6300);
     expect(block).toContain('[truncated]');
   });
+
+  it('marks sports fallback context so the model cannot overstate the source', () => {
+    const block = __testing__.buildContextBlock([
+      'provider: espn_scoreboard',
+      'directSourceStatus: fallback_static_schedule',
+      'userIntent: score_prediction',
+      'source: builtin:fifa-world-cup-2026-schedule:20260621-20260622',
+      '- 2026/06/22 00:00 Spain vs Saudi Arabia (Scheduled)',
+    ].join('\n'));
+    expect(__testing__.inferDirectSourceStatus(block)).toBe('fallback_static_schedule');
+    expect(block).toContain('直接实时源未完全可用');
+    expect(block).toContain('不得把这些资料表述为实时/官方/ESPN 已确认结论');
+    expect(block).toContain('请给出每场明确的赛前预测比分');
+    expect(block).toContain('不要因为状态是 Scheduled 就空答');
+  });
 });

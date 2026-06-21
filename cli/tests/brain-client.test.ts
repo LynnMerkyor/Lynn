@@ -174,30 +174,31 @@ describe("brain-client stream parser", () => {
       .toBe("https://api.merkyorlynn.com/api/v2/v1/chat/completions");
   });
 
-  it("prefers hosted Brain for default startup when reachable", async () => {
+  it("prefers local Brain for default startup when reachable", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (url: URL | string) => {
       const href = String(url);
+      if (href === `${LOCAL_BRAIN_URL}/health`) return new Response("{}", { status: 200 });
       if (href === `${HOSTED_BRAIN_URL}/health`) return new Response("{}", { status: 200 });
       return new Response("nope", { status: 500 });
     }) as typeof fetch;
     try {
-      await expect(resolveDefaultBrainUrl(undefined, 50)).resolves.toBe(HOSTED_BRAIN_URL);
+      await expect(resolveDefaultBrainUrl(undefined, 50)).resolves.toBe(LOCAL_BRAIN_URL);
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it("falls back to local Brain when hosted Brain is unreachable", async () => {
+  it("falls back to hosted Brain when local Brain is unreachable", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (url: URL | string) => {
       const href = String(url);
-      if (href === `${HOSTED_BRAIN_URL}/health`) throw new Error("hosted down");
-      if (href === `${LOCAL_BRAIN_URL}/health`) return new Response("{}", { status: 200 });
+      if (href === `${LOCAL_BRAIN_URL}/health`) throw new Error("local down");
+      if (href === `${HOSTED_BRAIN_URL}/health`) return new Response("{}", { status: 200 });
       return new Response("nope", { status: 500 });
     }) as typeof fetch;
     try {
-      await expect(resolveDefaultBrainUrl(undefined, 50)).resolves.toBe(LOCAL_BRAIN_URL);
+      await expect(resolveDefaultBrainUrl(undefined, 50)).resolves.toBe(HOSTED_BRAIN_URL);
     } finally {
       globalThis.fetch = originalFetch;
     }

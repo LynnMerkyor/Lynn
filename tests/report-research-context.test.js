@@ -223,6 +223,34 @@ describe("report research context intent", () => {
     expect(answer).not.toContain("百度百科");
   });
 
+  it("builds a sports score prediction when schedule rows are available", () => {
+    const context = [
+      "【体育比分工具资料】",
+      "",
+      "体育查询结果 (ESPN scoreboard)",
+      "provider: espn_scoreboard",
+      "directSourceStatus: fallback_static_schedule",
+      "league: FIFA World Cup",
+      "source: builtin:fifa-world-cup-2026-schedule:20260621-20260622",
+      "dateRange: 20260621-20260622",
+      "时间口径: 北京时间",
+      "匹配比赛: 4 场",
+      "",
+      "- 2026/06/22 00:00 Spain vs Saudi Arabia (Scheduled)",
+      "- 2026/06/22 03:00 Belgium vs Iran (Scheduled)",
+      "- 2026/06/22 06:00 Uruguay vs Cape Verde (Scheduled)",
+      "- 2026/06/22 09:00 New Zealand vs Egypt (Scheduled)",
+    ].join("\n");
+
+    const answer = buildDirectResearchAnswer("sports", context, "你能预测今晚的比分么？");
+    expect(answer).toContain("我的预测比分");
+    expect(answer).toContain("Spain 2-0 Saudi Arabia");
+    expect(answer).toContain("Belgium 2-1 Iran");
+    expect(answer).toContain("Uruguay 2-0 Cape Verde");
+    expect(answer).toContain("New Zealand 0-2 Egypt");
+    expect(answer).not.toContain("暂未形成可核验");
+  });
+
   it("builds a direct market answer with multiple US tickers instead of only the first quote", () => {
     const context = [
       "【系统已完成行情工具预取】",

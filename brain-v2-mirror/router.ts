@@ -385,7 +385,7 @@ function evidenceToolWeight(toolName: string, result: unknown): number {
   const raw = typeof result === 'string' ? result : JSON.stringify(result);
   if (!raw || !raw.trim()) return 0;
   const parsed = parseJsonObject(raw);
-  if (parsed?.error || parsed?.ok === false || parsed?.status === 'no_direct_source') return 0;
+  if (parsed?.error || parsed?.ok === false || parsed?.status === 'no_direct_source' || parsed?.directSourceStatus === 'unavailable') return 0;
 
   if (toolName === 'parallel_research' && parsed) {
     return Math.min(3, Math.max(0, countParallelResearchEvidence(parsed)));
@@ -731,6 +731,7 @@ async function runRound({
             hit: searchContext.meta.hit,
             ms: searchContext.meta.ms,
             cached: searchContext.meta.cached,
+            ...(searchContext.meta.sourceStatus ? { sourceStatus: searchContext.meta.sourceStatus } : {}),
           },
           { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
         );

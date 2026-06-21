@@ -64,6 +64,9 @@ function shouldCloseWithPrefetchDirectAnswer(reportKind: unknown, promptText: un
   if (/(?:深度|完整|全面|系统(?:性)?|报告|调研|研究|分析|对比|比较|引用|来源列表|research|report|analysis|compare)/i.test(prompt)) {
     return false;
   }
+  if (kind === "sports" && /预测|预估|猜|看好|可能比分|比分预测|predict|prediction|forecast/i.test(prompt) && /专用体育比分源返回失败|暂未形成可核验/.test(answer)) {
+    return false;
+  }
   if (kind !== "sports" && /(?:列出|表格|小表格|table)/i.test(prompt)) return false;
   return true;
 }

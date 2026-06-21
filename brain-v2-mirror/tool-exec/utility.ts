@@ -65,12 +65,17 @@ export async function sportsScore(query) {
     const result = await fetchSportsScoreboardEvidence(q);
     if (result) return result.text;
     return JSON.stringify({
-      status: 'no_direct_source',
+      directSourceStatus: 'unavailable',
       query: q,
-      guidance: '暂未识别到可直连的体育联赛数据源,请改用 web_search 检索 赛事+比分/赛果/赛程 等关键词,并以来源页面为准。',
+      guidance: '暂未识别到可直连的体育联赛数据源；不会用泛搜索摘要冒充比分、赛果或赛程。',
     });
   } catch (e) {
-    return JSON.stringify({ error: e.message || 'ESPN scoreboard lookup failed' });
+    return JSON.stringify({
+      directSourceStatus: 'unavailable',
+      query: q,
+      error: e.message || 'ESPN scoreboard lookup failed',
+      guidance: '专用体育数据源本轮不可用；不会用泛搜索摘要冒充比分、赛果或赛程。',
+    });
   }
 }
 

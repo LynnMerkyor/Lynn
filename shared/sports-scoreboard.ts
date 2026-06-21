@@ -54,6 +54,57 @@ const WORLD_CUP_TEAM_ALIASES: Array<{ canonical: string; aliases: RegExp[] }> = 
   { canonical: "Tunisia", aliases: [/突尼斯/i, /\bTunisia\b/i] },
 ];
 
+const WORLD_CUP_2026_STATIC_ROWS: SportsRow[] = [
+  {
+    completed: true,
+    localYmd: "2026-06-21",
+    localHour: 1,
+    line: "2026/06/21 01:00 Netherlands 5-1 Sweden (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-21",
+    localHour: 4,
+    line: "2026/06/21 04:00 Germany 2-1 Ivory Coast (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-21",
+    localHour: 8,
+    line: "2026/06/21 08:00 Ecuador 0-0 Curaçao (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-21",
+    localHour: 12,
+    line: "2026/06/21 12:00 Tunisia 0-4 Japan (FT)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-06-22",
+    localHour: 0,
+    line: "2026/06/22 00:00 Spain vs Saudi Arabia (Scheduled)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-06-22",
+    localHour: 3,
+    line: "2026/06/22 03:00 Belgium vs Iran (Scheduled)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-06-22",
+    localHour: 6,
+    line: "2026/06/22 06:00 Uruguay vs Cape Verde (Scheduled)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-06-22",
+    localHour: 9,
+    line: "2026/06/22 09:00 New Zealand vs Egypt (Scheduled)",
+  },
+];
+
 function compactLine(value: unknown): string {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
@@ -122,7 +173,7 @@ function resolveSportsDateRange(query: unknown, league: SportsLeagueInfo): Sport
     if (/(决赛|final)/i.test(text) && !/(半决赛|semifinal|semi-final|semi final)/i.test(text)) {
       return { start: "20260719", end: "20260720" };
     }
-    if (/(已出|已经|比分|赛果|结果|完赛|score|result)/i.test(text)) {
+    if (!wantsPredictedScore(text) && /(已出|已经|比分|赛果|结果|完赛|score|result)/i.test(text)) {
       return { start: ymdCompact(league.tournamentStart), end: ymdCompact(today) };
     }
   }
@@ -219,32 +270,36 @@ function filterSportsRows(rows: SportsRow[], query: unknown, range: SportsDateRa
   return filtered;
 }
 
-export async function fetchSportsScoreboardEvidence(query: unknown): Promise<SportsScoreboardResult | null> {
-  const text = compactLine(query);
-  const league = resolveSportsLeague(text);
-  if (!league) return null;
-  const range = resolveSportsDateRange(text, league);
-  const source = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard?limit=950&dates=${range.start}-${range.end}`;
-  const resp = await fetch(source, {
-    headers: { "User-Agent": "Lynn/ESPNScoreboard" },
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!resp.ok) throw new Error(`ESPN scoreboard HTTP ${resp.status}`);
-  const data = await resp.json() as LooseRecord;
-  const events = Array.isArray(data?.events) ? data.events : [];
-  const rows = filterSportsRows(events.map(formatEspnEvent).filter(Boolean) as SportsRow[], text, range);
+function wantsPredictedScore(query: unknown): boolean {
+  return /预测|预估|猜|看好|可能比分|比分预测|predict|prediction|forecast/i.test(String(query || ""));
+}
+
+function buildSportsScoreboardResult(input: {
+  query: string;
+  league: SportsLeagueInfo;
+  source: string;
+  range: SportsDateRange;
+  rows: SportsRow[];
+  sourceStatus?: string;
+  note?: string;
+}): SportsScoreboardResult {
+  const { query, league, source, range, rows, sourceStatus, note } = input;
   const scoreRows = rows.filter((row) => row.completed && /\d+\s*[-–—:：比]\s*\d+/.test(row.line));
-  const wantsScores = /(比分|赛果|结果|已出|已经|完赛|score|result|final)/i.test(text);
+  const wantsPrediction = wantsPredictedScore(query);
+  const wantsScores = !wantsPrediction && /(比分|赛果|结果|已出|已经|完赛|score|result|final)/i.test(query);
   const selected = (wantsScores ? scoreRows : rows).slice(-24);
   const dateRange = `${range.start}-${range.end}`;
   const header = [
     "体育查询结果 (ESPN scoreboard)",
     "provider: espn_scoreboard",
+    sourceStatus ? `directSourceStatus: ${sourceStatus}` : "",
+    wantsPrediction ? "userIntent: score_prediction" : "",
     `league: ${league.label}`,
     `source: ${source}`,
     `dateRange: ${dateRange}`,
     "时间口径: 北京时间",
-  ];
+    note ? `说明: ${note}` : "",
+  ].filter(Boolean);
   const body = selected.length
     ? [
       `匹配比赛: ${selected.length} 场`,
@@ -256,7 +311,7 @@ export async function fetchSportsScoreboardEvidence(query: unknown): Promise<Spo
     ];
   return {
     provider: "espn_scoreboard",
-    query: text,
+    query,
     league: league.label,
     source,
     dateRange,
@@ -271,4 +326,44 @@ export async function fetchSportsScoreboardEvidence(query: unknown): Promise<Spo
       source,
     })),
   };
+}
+
+function buildStaticWorldCupScheduleFallback(query: string, league: SportsLeagueInfo, range: SportsDateRange, error: unknown): SportsScoreboardResult | null {
+  if (league.label !== "FIFA World Cup") return null;
+  const rows = filterSportsRows(WORLD_CUP_2026_STATIC_ROWS, query, range);
+  if (!rows.length) return null;
+  const source = `builtin:fifa-world-cup-2026-schedule:${range.start}-${range.end}`;
+  const errorText = error instanceof Error ? error.message : String(error || "direct source unavailable");
+  return buildSportsScoreboardResult({
+    query,
+    league,
+    source,
+    range,
+    rows,
+    sourceStatus: "fallback_static_schedule",
+    note: `ESPN scoreboard 本轮网络失败（${errorText}），已使用 Lynn 内置 2026 世界杯赛程 fallback；比分预测不是赛果。`,
+  });
+}
+
+export async function fetchSportsScoreboardEvidence(query: unknown): Promise<SportsScoreboardResult | null> {
+  const text = compactLine(query);
+  const league = resolveSportsLeague(text);
+  if (!league) return null;
+  const range = resolveSportsDateRange(text, league);
+  const source = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard?limit=950&dates=${range.start}-${range.end}`;
+  try {
+    const resp = await fetch(source, {
+      headers: { "User-Agent": "Lynn/ESPNScoreboard" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) throw new Error(`ESPN scoreboard HTTP ${resp.status}`);
+    const data = await resp.json() as LooseRecord;
+    const events = Array.isArray(data?.events) ? data.events : [];
+    const rows = filterSportsRows(events.map(formatEspnEvent).filter(Boolean) as SportsRow[], text, range);
+    return buildSportsScoreboardResult({ query: text, league, source, range, rows });
+  } catch (error) {
+    const fallback = buildStaticWorldCupScheduleFallback(text, league, range, error);
+    if (fallback) return fallback;
+    throw error;
+  }
 }
