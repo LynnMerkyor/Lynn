@@ -169,7 +169,7 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.0.tgz"
 ```
 
-[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.85.0)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases#v0.85.0)
 
 </details>
 

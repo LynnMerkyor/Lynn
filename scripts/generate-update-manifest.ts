@@ -117,7 +117,7 @@ function generateManifest({ channel, version, notes }: {
 
   const entry: ManifestEntry = {
     version,
-    releaseUrl: `${REPO_BASE}/releases/tag/v${version}`,
+    releaseUrl: `${REPO_BASE}/releases#v${version}`,
     notes,
     assets: buildAssetUrls(version),
   };

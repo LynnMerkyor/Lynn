@@ -129,7 +129,7 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.0.tgz"
 ```
 
-[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.85.0)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases#v0.85.0)
 
 </details>
 
