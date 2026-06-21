@@ -169,7 +169,7 @@ checks.push(run("providers", ["providers", "--data-dir", missingDataDir]).then((
 checks.push(run("provider presets", ["providers", "presets"]).then((r) => {
   assertNotIncludes(r.name, r.stdout, "mimo-v2.5-pro");
   assertIncludes(r.name, r.stdout, "deepseek");
-  assertIncludes(r.name, r.stdout, "deepseek-chat");
+  assertIncludes(r.name, r.stdout, "deepseek-v4-flash");
   assertIncludes(r.name, r.stdout, "stepfun");
   assertIncludes(r.name, r.stdout, "step-3.7-flash");
   assertIncludes(r.name, r.stdout, "Lynn providers set --preset deepseek --api-key <api-key>");
@@ -236,10 +236,10 @@ checks.push(run("byok preset shortcut saves BYOK", [
   "--json",
 ]).then(async (r) => {
   assertIncludes(r.name, r.stdout, '"type":"providers.saved"');
-  assertIncludes(r.name, r.stdout, '"model":"deepseek-chat"');
+  assertIncludes(r.name, r.stdout, '"model":"deepseek-v4-flash"');
   assertNotIncludes(r.name, r.stdout, "byok-preset-key");
   const profile = JSON.parse(await fs.promises.readFile(path.join(byokPresetDataDir, "providers", "cli.json"), "utf8"));
-  if (profile.model !== "deepseek-chat") throw new Error("byok shortcut did not save DeepSeek model");
+  if (profile.model !== "deepseek-v4-flash") throw new Error("byok shortcut did not save DeepSeek model");
   if (profile.apiKey !== "byok-preset-key") throw new Error("byok shortcut did not save key");
 }));
 
@@ -274,7 +274,7 @@ checks.push(run("doctor offline guidance", ["doctor", "--offline", "--data-dir",
   assertIncludes(r.name, r.stdout, "cli-byok");
   assertIncludes(r.name, r.stdout, "optional CLI-only BYOK");
   assertIncludes(r.name, r.stdout, "Lynn providers set --preset stepfun --api-key <api-key>");
-  assertIncludes(r.name, r.stdout, "deepseek:deepseek-chat");
+  assertIncludes(r.name, r.stdout, "deepseek:deepseek-v4-flash");
   assertIncludes(r.name, r.stdout, "stepfun:step-3.7-flash");
   assertNotIncludes(r.name, r.stdout, "mimo:mimo-v2.5-pro");
   assertNotIncludes(r.name, r.stdout, "sk-");
@@ -677,7 +677,7 @@ async function runDeepSeekByokFallbackSmoke() {
     ]);
     assertIncludes(tested.name, tested.stdout, '"type":"providers.test"');
     assertIncludes(tested.name, tested.stdout, '"ok":true');
-    assertIncludes(tested.name, tested.stdout, '"model":"deepseek-chat"');
+    assertIncludes(tested.name, tested.stdout, '"model":"deepseek-v4-flash"');
     assertNotIncludes(tested.name, tested.stdout, "deepseek-smoke-key");
     const result = await run("deepseek byok fallback", [
       "-p",
@@ -697,7 +697,7 @@ async function runDeepSeekByokFallbackSmoke() {
     assertIncludes(result.name, result.stdout, '"text":"ok from deepseek"');
     if (!seen) throw new Error("DeepSeek BYOK smoke did not call the provider");
     if (seen.auth !== "Bearer deepseek-smoke-key") throw new Error(`DeepSeek BYOK smoke used wrong auth: ${seen.auth}`);
-    if (seen.body.model !== "deepseek-chat") throw new Error(`DeepSeek BYOK smoke used wrong model: ${seen.body.model}`);
+    if (seen.body.model !== "deepseek-v4-flash") throw new Error(`DeepSeek BYOK smoke used wrong model: ${seen.body.model}`);
   } finally {
     await new Promise((resolve) => server.close(() => resolve()));
   }

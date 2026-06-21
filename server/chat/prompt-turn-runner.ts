@@ -85,7 +85,7 @@ export interface PromptTurnRunnerDeps {
   lifecycleHooks: any;
   broadcast: (msg: any) => void;
   emitStreamEvent: (sessionPath: any, ss: any, event: any) => void;
-  closeStreamAfterError: (sessionPath: any, ss: any) => void;
+  closeStreamAfterError: (sessionPath: any, ss: any, reason?: any) => void;
   closeStreamWithVisibleFallback: (sessionPath: any, ss: any, text: any, reason: any, options?: any) => boolean;
   finalizeReturnedTurnWithoutStream: (sessionPath: any, ss: any, reason: any, options?: any) => boolean;
   fallbackLocalQwen35DirectToBrain: (args: any) => Promise<boolean>;

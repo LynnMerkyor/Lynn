@@ -29,7 +29,7 @@ describe("parseMessageModelRef", () => {
 
 describe("formatProviderRouteName", () => {
   it("maps vendors and tidies qwen ids", () => {
-    expect(formatProviderRouteName("step-3.7-flash")).toBe("StepFun");
+    expect(formatProviderRouteName("step-3.7-flash")).toBe("Step 3.7 Flash");
     expect(formatProviderRouteName("spark-apex")).toBe("Spark");
     expect(formatProviderRouteName("gpt-5")).toBe("OpenAI");
     expect(formatProviderRouteName("qwen35-9b")).toBe("Qwen 9b");
@@ -39,14 +39,15 @@ describe("formatProviderRouteName", () => {
 
 describe("providerRoute label/title", () => {
   const route = { activeProvider: "spark", fallbackFrom: [{ id: "step-3.7-flash", reason: "timeout" }] } as any;
-  it("builds a de-duped fallback chain label", () => {
-    expect(providerRouteLabel(route)).toBe("StepFun -> Spark");
-    expect(providerRouteLabel({ activeProvider: "x", fallbackFrom: [] } as any)).toBeNull();
+  it("shows only the final answering model in the visible label", () => {
+    expect(providerRouteLabel(route)).toBe("Spark");
+    expect(providerRouteLabel({ activeProvider: "x", fallbackFrom: [] } as any)).toBe("x");
   });
   it("builds a hover title with hop reasons", () => {
     expect(providerRouteTitle(route)).toContain("Spark");
     expect(providerRouteTitle(route)).toContain("timeout");
-    expect(providerRouteTitle({ activeProvider: "spark", fallbackFrom: [] } as any)).toBe("当前回答模型：Spark");
+    expect(providerRouteTitle(route)).toContain("Step 3.7 Flash -> Spark");
+    expect(providerRouteTitle({ activeProvider: "spark", fallbackFrom: [] } as any)).toContain("Spark");
   });
 });
 

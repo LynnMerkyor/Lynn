@@ -83,6 +83,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
   const fallbackBody = useMemo(() => {
     if (sealed || content.trim()) return '';
     if (!isLocalModelThinking) return resolveUiI18nText('thinking.localOrganizing');
+    // Guard text lives in ui-i18n: 本地模型正在本机生成答案 / 首次启动后的第一问可能较慢
     if (elapsed >= 8_000) {
       return resolveUiI18nText('thinking.localStillGenerating');
     }

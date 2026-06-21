@@ -10,6 +10,7 @@ import {
   shouldAttachLocalQwen35BenchContext,
 } from "./local-qwen35-bench-context.js";
 import { buildLocalOfficeDirectAnswer } from "./local-office-answer.js";
+import { detectQuickTranslationIntent } from "./translation-intent.js";
 
 export type ToolUseBehaviorName = "run_llm_again" | "prefetch_then_run_or_stop";
 
@@ -110,6 +111,17 @@ export function resolveInitialToolUseBehavior(promptText: unknown, opts: ToolUse
   // V0.79: do not short-circuit with handcrafted answers. The model should
   // produce the user-visible response; this layer may add context, but should
   // not replace model output.
+
+  if (detectQuickTranslationIntent(text)) {
+    return {
+      behavior: TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN,
+      reason: "default",
+      reportKind: "",
+      budgetContext: "",
+      effectivePromptText: text,
+      disableTools: shouldDisableToolsForTurn(text),
+    };
+  }
 
   const reportKind = inferReportResearchKind(text);
   const budgetContext = buildBudgetCalculationContext(text);

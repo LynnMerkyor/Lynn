@@ -85,12 +85,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.5.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.0.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.84.5
+Lynn --version  # should print 0.85.0
 Lynn agents   # copyable headless/Fleet commands for other agents
 ```
 
@@ -115,8 +115,26 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 
 ## 🆕 Recent Updates
 
+<details open>
+<summary><strong>Lynn v0.85.0</strong> · 2026-06-21 · self-built core + evidence-quality upgrade <em>(latest)</em></summary>
+
+**Runtime and evidence path**:
+- **Self-built core on the main path**: desktop chat, Bridge, isolated dry-run, and Hub agent executor now converge on `core/agent-runtime`, so tool events, evidence ledgers, empty-answer protection, and visible final summaries are handled by Lynn's own runtime.
+- **GUI / CLI convergence**: the Brain SSE, OpenAI-compatible transport, JSONL sessions, runtime frames, prefix-cache discipline, and tool event handling proven in the CLI are reused by the desktop core.
+- **Evidence-first search quality**: Brain V2 performs evidence handoff once enough tool evidence is available, then StepFun 3.7 Flash synthesizes quickly. Fallback models only enter when needed.
+- **Sports and realtime grounding**: World Cup schedule, score, and prediction turns use `sports_score`; prediction questions answer from known matchups and are labeled as predictions, not final scores or betting advice.
+- **Local Brain first**: CLI now prefers `http://127.0.0.1:8790` before falling back to hosted Brain, keeping local GUI and CLI behavior aligned.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.0.tgz"
+```
+
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.85.0)
+
+</details>
+
 <details>
-<summary><strong>Lynn v0.84.5</strong> · 2026-06-14 · BYOK DeepSeek stability + realtime search and market fixes <em>(latest)</em></summary>
+<summary><strong>Lynn v0.84.5</strong> · 2026-06-14 · BYOK DeepSeek stability + realtime search and market fixes</summary>
 
 **Issue #74 and BYOK model closure**:
 - **DeepSeek V4 Pro / V4 Flash verified in real multi-turn chats**: provider ids are normalized, unreadable legacy API keys show an explicit re-entry prompt, and duplicate provider entries no longer route models to an empty-key provider.
@@ -868,11 +886,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-V0.84.5 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
+V0.85.0 macOS artifacts are signed, notarized, stapled, and Gatekeeper-validated for both Apple Silicon and Intel.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.84.5 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.85.0 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -935,7 +953,7 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.84.5 signed + notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.85.0 signed + notarized DMG) |
 | macOS (Intel) | Supported |
 | Windows | Beta |
 | Linux | Planned |

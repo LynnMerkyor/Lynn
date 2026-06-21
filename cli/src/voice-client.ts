@@ -57,6 +57,7 @@ export async function transcribeVoiceAudio(args: ParsedArgs, audio: Buffer): Pro
         ...signedBrainHeaders({ pathname }),
       },
       body: JSON.stringify({
+        audio_base64: pcm.toString("base64"),
         audio_pcm_base64: pcm.toString("base64"),
         sample_rate: 24000,
         language: getStringFlag(args.flags, "language") || "auto",

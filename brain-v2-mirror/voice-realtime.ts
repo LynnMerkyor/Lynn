@@ -234,22 +234,9 @@ async function runRealtime(body: JsonObject, input: { mode: 'asr' | 'tts'; audio
 }
 
 export async function voiceAsr(body: JsonObject, signal?: AbortSignal): Promise<JsonObject> {
-  const audio = extractPcm16FromWav(decodeAudioPayload(body));
-  if (!audio.length) throw new Error('missing audio');
-  const result = await runRealtime(body, {
-    mode: 'asr',
-    audioPcm: audio,
-    signal,
-  });
-  const text = result.text.trim();
-  if (!text) throw new Error('StepFun Realtime returned no transcript');
-  return {
-    ok: true,
-    provider: 'stepfun-realtime',
-    text,
-    transcript: text,
-    raw: result.raw,
-  };
+  void body;
+  void signal;
+  throw new Error('StepFun Realtime stateless returns assistant response transcripts, not standalone user ASR transcripts');
 }
 
 export async function voiceTts(body: JsonObject, signal?: AbortSignal): Promise<JsonObject> {
