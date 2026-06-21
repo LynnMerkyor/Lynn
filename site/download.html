@@ -231,13 +231,20 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
 
         <section class="section release-summary">
           <div class="release-card">
-            <h2>本次版本重点</h2>
+            <h2>V0.85 为什么是划时代版本</h2>
+            <p>
+              V0.85 是 Lynn 从历史 Pi SDK / fork 式 Agent 壳层里真正脱钩的版本:
+              主聊天、工具循环、证据账本、fallback handoff、GUI/CLI 执行链路已经由 Lynn 自研
+              <code>core/agent-runtime</code> 接管。它不是在旧 SDK 上继续补补丁,
+              而是把默认主链换成自主设计、自主实现、自主验证的 <strong>NO Fork</strong> Agent 核心。
+            </p>
             <ul>
-              <li>自研 <code>core/agent-runtime</code> 接管主链:工具事件、证据账本、空答防污染和可见收口进入 Lynn 自己的 runtime</li>
-              <li>GUI / CLI 同核:Brain SSE、OpenAI-compatible transport、JSONL session、runtime frames 和 prefix-cache 纪律统一</li>
-              <li>证据优先搜索:Brain V2 拿到足够证据后快速 handoff 给 StepFun 3.7 Flash 总结,必要时才 fallback</li>
-              <li>体育/实时问题修复:世界杯赛程、比分、预测统一走 <code>sports_score</code>,预测会基于已知对阵给出明确判断并标注不是赛果</li>
-              <li>本地 Brain 优先:CLI 默认先连本机 Lynn Brain,避免本机 GUI/CLI 与托管旧 Brain 行为不一致</li>
+              <li>完全替换 Pi SDK 主链:默认 Agent loop、工具事件、证据 ledger、空答防污染和最终可见收口都进入 Lynn native runtime</li>
+              <li>完全自主自研产品形态:历史 fork/SDK 只保留许可证致谢和兼容迁移背景,不再定义 Lynn 的核心能力边界</li>
+              <li>GUI / CLI 同核:桌面、终端、<code>Lynn -p</code> 和编码执行复用同一套 Brain SSE、runtime frames、JSONL session 和 transport 纪律</li>
+              <li>搜索质量从补丁治理升级为运行时治理:先接证据,再总结,必要时才 fallback,减少工具风暴和“搜到了却空答”的坏结果</li>
+              <li>体育/实时问题统一证据口径:世界杯赛程、比分、预测走同一条证据链,预测基于已知对阵给出判断并标注不是赛果</li>
+              <li>本地 Brain 优先:CLI 默认先连本机 Lynn Brain,让本机 GUI/CLI 不再和托管旧 Brain 各走一套行为</li>
             </ul>
             <a
               class="button button-secondary"
