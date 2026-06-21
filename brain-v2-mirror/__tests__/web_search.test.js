@@ -69,7 +69,7 @@ describe('web_search aggregator', () => {
       .mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'down', json: async () => ({}) })
       .mockResolvedValueOnce(mimoResp('MiMo fallback'));
 
-    const r = await webSearch('2026世界杯赛程');
+    const r = await webSearch('普通即时资讯');
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
     expect(r).toContain('provider: mimo');
@@ -108,6 +108,15 @@ describe('web_search aggregator', () => {
     expect(__testing__.normalizeSearchQueryIntent('今晚的世纪杯比赛有几场')).toBe('今晚的世界杯比赛有几场');
     expect(__testing__.normalizeSearchQueryIntent('新世纪杯龙舟比赛')).toBe('新世纪杯龙舟比赛');
     expect(__testing__.normalizeSearchQueryIntent('21世纪杯英语演讲比赛')).toBe('21世纪杯英语演讲比赛');
+  });
+
+  it('classifies volatile current facts as source-grade instead of keyword-only buckets', () => {
+    expect(__testing__.classifySearchEvidencePolicy('今晚世界杯有几场比赛').grade).toBe('source');
+    expect(__testing__.classifySearchEvidencePolicy('今晚蓝鲸杯有几场比赛').grade).toBe('source');
+    expect(__testing__.classifySearchEvidencePolicy('英伟达今天股价').grade).toBe('source');
+    expect(__testing__.classifySearchEvidencePolicy('深圳明天天气').grade).toBe('source');
+    expect(__testing__.classifySearchEvidencePolicy('中国主要创业社群的人数，收费').grade).toBe('source');
+    expect(__testing__.classifySearchEvidencePolicy('解释一下 React').grade).toBe('fast');
   });
 
   it('uses optional racers only in the fallback lane', async () => {
@@ -160,7 +169,7 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
   it('keeps GLM content-only results usable without inventing a Baidu source URL', async () => {
     global.fetch = vi.fn().mockResolvedValueOnce(glmResp({ link: '', title: '2026世界杯最新赛程', content: '墨西哥 2-0 南非，韩国 2-1 捷克。' }));
 
-    const r = await webSearchStructured('世界杯赛程');
+    const r = await webSearchStructured('普通即时资讯');
 
     expect(r.ok).toBe(true);
     expect(r.provider).toBe('glm');
@@ -186,16 +195,72 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('uses structured MiMo as primary for source-grade people and fee research queries', async () => {
-    global.fetch = vi.fn().mockResolvedValueOnce(mimoResp('MiMo 私董会 citation answer', 'https://source.example/private-board'));
+  it('uses structured MiMo as primary for source-grade comparative fee research queries', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(mimoResp('MiMo comparative citation answer', 'https://source.example/research'));
 
-    const r = await webSearchStructured('中国主要私董会的人数，收费');
+    const r = await webSearchStructured('中国主要创业社群的人数，收费');
 
     expect(r.ok).toBe(true);
     expect(r.provider).toBe('mimo');
-    expect(r.summary).toBe('MiMo 私董会 citation answer');
-    expect(r.items).toEqual([{ title: 'M', url: 'https://source.example/private-board', snippet: 'm-snip' }]);
+    expect(r.summary).toBe('MiMo comparative citation answer');
+    expect(r.items).toEqual([{ title: 'M', url: 'https://source.example/research', snippet: 'm-snip' }]);
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses structured MiMo as primary for sports score and schedule queries', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(mimoResp('MiMo 世界杯赛程 citation answer', 'https://sports.example/world-cup-schedule'));
+
+    const r = await webSearchStructured('昨晚世界杯最新的比赛结果');
+
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('mimo');
+    expect(r.evidencePolicy).toMatchObject({ grade: 'source', reason: 'event-score-schedule-or-prediction' });
+    expect(r.summary).toBe('MiMo 世界杯赛程 citation answer');
+    expect(__testing__.needsSourceGradeEvidence('2026世界杯已经出的赛事比分')).toBe(true);
+    expect(__testing__.isSportsScoreOrScheduleQuery('今晚世界杯有几场比赛')).toBe(true);
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.messages[0].content).toContain('official schedule results fixtures score date source');
+    expect(body.messages[0].content).not.toContain('2026 FIFA World Cup');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to ESPN scoreboard JSON when search providers fail for sports evidence queries', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'mimo down', json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'glm down', json: async () => ({}) })
+      .mockResolvedValueOnce(jsonResp({
+        events: [{
+          date: '2026-07-14T19:00Z',
+          status: { type: { completed: false, shortDetail: 'Scheduled' } },
+          competitions: [{
+            competitors: [
+              { homeAway: 'home', score: '', team: { displayName: 'Winner QF1' } },
+              { homeAway: 'away', score: '', team: { displayName: 'Winner QF2' } },
+            ],
+          }],
+        }],
+      }));
+
+    const r = await webSearchStructured('世界杯半决赛在哪一天？');
+
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('espn_scoreboard');
+    expect(r.summary).toContain('provider: espn_scoreboard');
+    expect(r.summary).toContain('Winner QF1 vs Winner QF2');
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(global.fetch.mock.calls[2][0]).toContain('site.api.espn.com');
+  });
+
+  it('formats source-grade searches with a generic evidence policy hint', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(mimoResp('MiMo citation answer', 'https://sports.example/game'));
+
+    const r = await webSearch('今晚蓝鲸杯有几场比赛');
+
+    expect(r).toContain('证据使用提示');
+    expect(r).toContain('当前北京时间日期');
+    expect(r).toContain('赛事/赛程/比分/预测属于高波动问题');
+    expect(r).toContain('已知事实 / 证据缺口 / 可回答结论');
+    expect(r).toContain('provider: mimo');
   });
 
   it('enriches sports probability queries with English odds terms before calling MiMo', async () => {
@@ -272,14 +337,14 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
   });
 
   it('sends normalized World Cup typo queries to the search provider', async () => {
-    global.fetch = vi.fn().mockResolvedValueOnce(glmResp({ title: '世界杯赛程', content: '今晚 4 场小组赛。' }));
+    global.fetch = vi.fn().mockResolvedValueOnce(mimoResp('今晚 4 场小组赛。', 'https://sports.example/world-cup'));
 
     const r = await webSearchStructured('今晚的世纪杯比赛有几场');
 
     expect(r.ok).toBe(true);
     const body = JSON.parse(global.fetch.mock.calls[0][1].body);
-    expect(body.search_query).toContain('世界杯');
-    expect(body.search_query).not.toContain('世纪杯');
+    expect(body.messages[0].content).toContain('世界杯');
+    expect(body.messages[0].content).not.toContain('世纪杯');
   });
 
   it('serves the second call from the structured cache', async () => {

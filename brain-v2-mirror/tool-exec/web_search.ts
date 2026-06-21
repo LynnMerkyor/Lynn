@@ -1,7 +1,17 @@
 // @ts-nocheck
 // Brain v2 · web_search tool
 // Search chain: GLM Web Search primary for speed/freshness, MiMo fallback for full source links.
+import {
+  buildEvidencePolicyHint,
+  classifySearchEvidencePolicy,
+  enrichEvidenceSearchQuery,
+  isEventPredictionQuery,
+  isSportsScoreOrScheduleQuery,
+  needsSourceGradeEvidence,
+  normalizeSearchQueryIntent,
+} from "../evidence-quality.js";
 import { makeLruCache } from "./_helpers.js";
+import { sportsScore } from "./utility.js";
 const cache = makeLruCache(200, 5 * 60 * 1e3);
 const structuredCache = makeLruCache(200, 5 * 60 * 1e3);
 const BUDGET_MS = 14e3;
@@ -11,21 +21,8 @@ const NL = String.fromCharCode(10);
 function envOr(name, fallback = "") {
   return process.env[name] || fallback;
 }
-function needsSourceGradeEvidence(query) {
-  return /(私董会|会费|收费标准|人数规模|会员人数|主要(?:私董会|机构|协会|商会)|机构(?:名单|对比|收费|人数)|预测|概率|赔率|夺冠(?:概率|热门)?|榜单|排名)/i.test(String(query || ""));
-}
-function normalizeSearchQueryIntent(query) {
-  const q = String(query || "").trim();
-  if (!q) return q;
-  if (!/世纪杯/.test(q)) return q;
-  if (/(?:新世纪杯|21世纪杯|二十一世纪杯|世纪杯(?:英语|演讲|作文|龙舟|朗诵|竞赛|活动|赛事))/.test(q)) return q;
-  if (!/(?:今晚|今夜|今天|今日|明天|昨晚|昨天|比赛|赛程|比分|赛果|小组赛|决赛|半决赛|足球|球队|对阵|夺冠|胜率|预测|world cup|fifa)/i.test(q)) return q;
-  return q.replace(/世纪杯/g, "世界杯");
-}
 function isSportsPredictionQuery(query) {
-  const q = String(query || "");
-  return /(胜率|预测|概率|赔率|盘口|让球|夺冠|热门|odds|prediction|probability|forecast|betting)/i.test(q) &&
-    /(世界杯|足球|英格兰|克罗地亚|西班牙|法国|德国|巴西|阿根廷|葡萄牙|荷兰|意大利|比利时|NBA|总决赛|决赛|半决赛|football|soccer|world cup|fifa|nba|finals|england|croatia|spain|france|germany|brazil|argentina|portugal|netherlands|belgium)/i.test(q);
+  return isEventPredictionQuery(query);
 }
 function enrichSportsPredictionQuery(query) {
   const q = String(query || "").trim();
@@ -52,8 +49,7 @@ function enrichSportsPredictionQuery(query) {
   return [q, ...aliases, tail].join(" ").replace(/\s+/g, " ").trim().slice(0, 220);
 }
 function wantsSourceLinks(query) {
-  const q = String(query || "");
-  return /(官方|官网|来源|出处|引用|参考|链接|原文|source|citation|reference|official|link)/i.test(q) || needsSourceGradeEvidence(q);
+  return needsSourceGradeEvidence(query);
 }
 function configuredStructuredSource(source) {
   const entry = STRUCTURED_RACERS.find((r) => r.source === source);
@@ -61,8 +57,8 @@ function configuredStructuredSource(source) {
 }
 function preferredPrimarySource(query) {
   const override = String(envOr("WEB_SEARCH_PRIMARY_PROVIDER") || "").trim().toLowerCase();
-  if (override && configuredStructuredSource(override)) return override;
   if (wantsSourceLinks(query) && configuredStructuredSource("mimo")) return "mimo";
+  if (override && configuredStructuredSource(override)) return override;
   if (configuredStructuredSource("glm")) return "glm";
   if (configuredStructuredSource("mimo")) return "mimo";
   return "";
@@ -361,7 +357,9 @@ async function webSearchStructured(query, { log } = {}) {
     return cached;
   }
   const ctrl = new AbortController();
-  const providerQuery = enrichSportsPredictionQuery(q);
+  const providerQuery = isSportsPredictionQuery(q)
+    ? enrichSportsPredictionQuery(q)
+    : enrichEvidenceSearchQuery(q);
   const primarySource = preferredPrimarySource(q);
   const primaryRacers = STRUCTURED_RACERS.filter((r) => r.source === primarySource).filter((r) => !r.optional || envOr(r.envKey)).map((r) => ({
     source: r.source,
@@ -393,6 +391,13 @@ async function webSearchStructured(query, { log } = {}) {
     summary: s.ok && s.value?.summary ? s.value.summary : void 0
   }));
   if (!anyOk) {
+    if (isSportsScoreOrScheduleQuery(q)) {
+      const sportsFallback = await structuredSportsScoreFallback(q, sources, { log });
+      if (sportsFallback) {
+        structuredCache.set(q.toLowerCase(), sportsFallback);
+        return sportsFallback;
+      }
+    }
     log && log("warn", "tool-exec/web_search_structured all racers failed");
     return { ok: false, error: "all search sources failed", sources };
   }
@@ -410,6 +415,8 @@ async function webSearchStructured(query, { log } = {}) {
   }
   const result = {
     ok: true,
+    query: q,
+    evidencePolicy: classifySearchEvidencePolicy(q),
     provider: primary.name,
     items: mergedItems,
     summary: primary.summary,
@@ -419,11 +426,52 @@ async function webSearchStructured(query, { log } = {}) {
   structuredCache.set(q.toLowerCase(), result);
   return result;
 }
-function formatStructuredSearchForTool(result) {
+async function structuredSportsScoreFallback(query, previousSources, { log } = {}) {
+  try {
+    const text = await sportsScore(query);
+    const trimmed = String(text || "").trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed?.error || parsed?.status === "no_direct_source" || parsed?.status === "no_score_events") return null;
+    } catch {
+      // formatted sports evidence
+    }
+    if (!/^provider:\s*espn_scoreboard/im.test(trimmed)) return null;
+    const source = trimmed.match(/^source:\s*(.+)$/im)?.[1]?.trim() || "https://site.api.espn.com/";
+    const item = {
+      title: "ESPN scoreboard",
+      url: source,
+      snippet: trimmed.replace(/\s+/g, " ").slice(0, 240)
+    };
+    log && log("info", "tool-exec/web_search_structured sports fallback source=espn_scoreboard q=" + query);
+    return {
+      ok: true,
+      query,
+      evidencePolicy: classifySearchEvidencePolicy(query),
+      provider: "espn_scoreboard",
+      items: [item],
+      summary: trimmed,
+      sources: [
+        ...(Array.isArray(previousSources) ? previousSources : []),
+        { name: "espn_scoreboard", ok: true, items: [item], summary: trimmed }
+      ]
+    };
+  } catch (error) {
+    log && log("warn", "tool-exec/web_search_structured sports fallback failed: " + (error?.message || String(error)));
+    return null;
+  }
+}
+function formatStructuredSearchForTool(result, query) {
   if (!result || result.ok === false) {
     return JSON.stringify(result || { error: "all search sources failed" });
   }
   const lines = [];
+  const policyHint = buildEvidencePolicyHint(query || result.query || "");
+  if (policyHint) {
+    lines.push(policyHint);
+    lines.push("");
+  }
   if (result.provider) lines.push("provider: " + result.provider);
   if (result.summary) lines.push("\u6458\u8981: " + String(result.summary).trim());
   const items = usefulItems(result.items).slice(0, 8);
@@ -465,7 +513,7 @@ async function webSearch(query, { log } = {}) {
     return cached;
   }
   const structured = await webSearchStructured(q, { log });
-  const formatted = formatStructuredSearchForTool(structured);
+  const formatted = formatStructuredSearchForTool(structured, q);
   cache.set(q.toLowerCase(), formatted);
   return formatted;
 }
@@ -482,7 +530,11 @@ const __testing__ = {
   searchGlmWebStructured,
   structuredCache,
   formatStructuredSearchForTool,
-  normalizeSearchQueryIntent
+  normalizeSearchQueryIntent,
+  classifySearchEvidencePolicy,
+  isSportsScoreOrScheduleQuery,
+  buildEvidencePolicyHint,
+  needsSourceGradeEvidence
 };
 export {
   __testing__,

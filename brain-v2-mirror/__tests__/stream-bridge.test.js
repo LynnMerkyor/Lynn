@@ -94,6 +94,24 @@ describe('stream-bridge SSE emitter', () => {
     });
   });
 
+  it('exposes pre-search as web_search tool progress', () => {
+    const res = makeMockRes();
+    const e = makeSSEEmitter(res, { id: 'x' });
+    e.emitChunk({ type: 'pre_search', source: 'espn_scoreboard', query: '世界杯比分', hit: true, ms: 42, cached: null });
+    const ev = parseSSEWrites(res.writes)[0];
+    expect(ev).toMatchObject({
+      object: 'lynn.tool_progress',
+      tool_progress: {
+        event: 'end',
+        name: 'web_search',
+        ms: 42,
+        ok: true,
+        args_summary: '世界杯比分',
+        summary: 'pre-search:espn_scoreboard',
+      },
+    });
+  });
+
   it('done() writes [DONE] and ends the response', () => {
     const res = makeMockRes();
     const e = makeSSEEmitter(res, { id: 'x' });

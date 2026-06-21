@@ -71,6 +71,8 @@ afterEach(() => {
   delete process.env.MIMO_SEARCH_KEY;
   delete process.env.LYNN_TOOL_ROUND_EFFORT_DOWN;
   delete process.env.BRAIN_V2_TOOL_PARALLEL;
+  delete process.env.BRAIN_V2_EVIDENCE_HANDOFF;
+  delete process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER;
 });
 
 function makeTwoToolThenContentAdapter(capturedRounds) {
@@ -129,19 +131,17 @@ function makeToolThenContentAdapter(reasoningSeen) {
 }
 
 describe('Router', () => {
-  it('retries once with reduced reasoning when a turn overflows (finish=length, empty answer)', async () => {
+  it('falls through to the next provider when a turn overflows (finish=length, empty answer)', async () => {
     const reasoningSeen = [];
-    let call = 0;
     mockState.adapterFn = async function* ({ provider, reasoningEffort }) {
       mockState.adapterCalls.push(provider.id);
-      reasoningSeen.push(reasoningEffort ?? null);
-      call += 1;
-      if (call === 1) {
+      reasoningSeen.push(`${provider.id}:${reasoningEffort ?? 'null'}`);
+      if (provider.id === 'p-step') {
         // overflow mid-reasoning: reasoning streamed, no content, finish=length
         yield { type: 'reasoning', delta: 'thinking…' };
         yield { type: 'finish', reason: 'length' };
       } else {
-        // retry produces a real answer
+        // next provider produces a real answer
         yield { type: 'content', delta: 'final answer' };
         yield { type: 'finish', reason: 'stop' };
       }
@@ -155,12 +155,10 @@ describe('Router', () => {
       onChunk: async (c) => chunks.push(c),
     });
     expect(r.ok).toBe(true);
-    // length-overflow with empty answer → retried once on the same provider
-    expect(mockState.adapterCalls).toEqual(['p-step', 'p-step']);
-    // reasoning stepped high → medium on the retry
-    expect(reasoningSeen[0]).toBe('high');
-    expect(reasoningSeen[1]).toBe('medium');
-    // the retry's answer reached the client
+    // length-overflow with empty answer → do not retry; fall through immediately
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
+    expect(reasoningSeen).toEqual(['p-step:high', 'p-spark:high']);
+    // the fallback provider's answer reached the client
     expect(chunks.some((c) => c.type === 'content' && c.delta === 'final answer')).toBe(true);
   });
 
@@ -544,14 +542,14 @@ describe('Router', () => {
     ]));
   });
 
-  it('retries once when a round is reasoning-only with finish=stop (思考完不说话)', async () => {
-    // 2026-06-10 用户实测:工具轮后模型只出 reasoning 就正常收流,正文为空 → GUI 静默无反馈。
+  it('falls through to the next provider when a round is reasoning-only with finish=stop (思考完不说话)', async () => {
+    // 2026-06-19:空正文不能在同一模型上吊死。DS V4 Flash 一旦只出 reasoning
+    // 且没有正文,必须立刻让下一个 provider(生产链路里就是 Step 3.7 Flash)接手。
     const reasoningSeen = [];
-    let call = 0;
-    mockState.adapterFn = async function* ({ reasoningEffort }) {
-      reasoningSeen.push(reasoningEffort ?? null);
-      call += 1;
-      if (call === 1) {
+    mockState.adapterFn = async function* ({ provider, reasoningEffort }) {
+      mockState.adapterCalls.push(provider.id);
+      reasoningSeen.push(`${provider.id}:${reasoningEffort ?? 'null'}`);
+      if (provider.id === 'p-step') {
         yield { type: 'reasoning', delta: '想了一大圈…' };
         yield { type: 'finish', reason: 'stop' }; // 不是 length —— 正常 stop 但零正文
         return;
@@ -566,19 +564,26 @@ describe('Router', () => {
       onChunk: async (chunk) => chunks.push(chunk),
     });
     expect(r).toMatchObject({ ok: true, iterations: 2 });
-    expect(reasoningSeen).toEqual(['high', 'medium']); // 重试降一档
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
+    expect(reasoningSeen).toEqual(['p-step:high', 'p-spark:high']);
     expect(chunks.some((c) => c.type === 'content' && /最终答案/.test(c.delta))).toBe(true);
   });
 
-  it('does NOT retry a plain empty stop without reasoning (kept pass-through)', async () => {
-    let call = 0;
-    mockState.adapterFn = async function* () {
-      call += 1;
+  it('falls through on a plain empty stop without reasoning', async () => {
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      if (provider.id === 'p-step') {
+        yield { type: 'finish', reason: 'stop' };
+        return;
+      }
+      yield { type: 'content', delta: 'fallback answer' };
       yield { type: 'finish', reason: 'stop' }; // 无 reasoning 无 content —— 维持 BYOK 透传语义
     };
-    const r = await run({ messages: [{ role: 'user', content: 'x' }], onChunk: async () => {} });
-    expect(r).toMatchObject({ ok: true, iterations: 1 });
-    expect(call).toBe(1);
+    const chunks = [];
+    const r = await run({ messages: [{ role: 'user', content: 'x' }], onChunk: async (chunk) => chunks.push(chunk) });
+    expect(r).toMatchObject({ ok: true, iterations: 2 });
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
+    expect(chunks.some((c) => c.type === 'content' && c.delta === 'fallback answer')).toBe(true);
   });
 
   it('drops tool continuation rounds to medium reasoning when client did not pin an effort', async () => {
@@ -627,6 +632,7 @@ describe('Router', () => {
   });
 
   it('echoes reasoning_content on DeepSeek tool continuation even when no reasoning streamed', async () => {
+    process.env.BRAIN_V2_EVIDENCE_HANDOFF = '0';
     stubSearchFetchOk();
     mockState.providers = { 'deepseek-chat': makeProvider('deepseek-chat') };
     mockState.order = ['deepseek-chat'];
@@ -722,10 +728,457 @@ describe('Router', () => {
     expect(toolMessages).toHaveLength(2);
     for (const message of toolMessages) {
       expect(message.content).toContain('【Lynn 工具证据 #');
+      expect(message.content).toContain('当前时间(Asia/Shanghai)');
+      expect(message.content).toContain('【证据账本】');
       expect(message.content).toContain('请只基于上方工具证据回答当前事实');
       expect(message.content).toContain('不要用旧知识或记忆补充工具证据里没有的具体事实');
+      expect(message.content).toContain('网页发布时间只能说明来源发布时间');
       expect(message.content).toContain('The user wants');
     }
+  });
+
+  it('weights structured evidence instead of counting every tool as one', () => {
+    expect(__testing__.evidenceToolWeight('sports_score', JSON.stringify({
+      status: 'no_direct_source',
+      guidance: 'use web_search',
+    }))).toBe(0);
+
+    expect(__testing__.evidenceToolWeight('web_search', JSON.stringify({
+      ok: true,
+      items: [
+        { title: 'A', url: 'https://a.example', snippet: 'a' },
+        { title: 'B', url: 'https://b.example', snippet: 'b' },
+        { title: 'C', url: 'https://c.example', snippet: 'c' },
+        { title: 'D', url: 'https://d.example', snippet: 'd' },
+      ],
+    }))).toBe(3);
+
+    expect(__testing__.evidenceToolWeight(
+      'web_search',
+      '综合答案：这是搜索工具返回的长文本证据，虽然没有结构化 citations 字段，但包含足够的来源摘要和可核查事实，应当触发证据交接，让后续总结模型只基于工具证据回答，而不是继续调用工具或使用旧知识。'
+    )).toBe(3);
+
+    expect(__testing__.evidenceToolWeight('parallel_research', JSON.stringify({
+      parallel: true,
+      results: [
+        { ok: true, result: 'source one' },
+        { ok: true, result: { text: 'source two' } },
+        { ok: false, error: 'failed' },
+      ],
+    }))).toBe(2);
+  });
+
+  it('exposes explicit Asia Shanghai date anchors for relative-date synthesis', () => {
+    const context = __testing__.currentTemporalContext(new Date('2026-06-20T16:30:00.000Z'));
+    expect(context).toContain('当前日期锚点(Asia/Shanghai): 今天=2026-06-21');
+    expect(context).toContain('昨天=2026-06-20');
+    expect(context).toContain('明天=2026-06-22');
+    expect(context).toContain('当前时间(UTC): 2026-06-20T16:30:00.000Z');
+  });
+
+  it('detects no-result claims that contradict explicit past/current dates', () => {
+    expect(__testing__.containsTemporalNoResultContradiction(
+      '2026年世界杯正赛要到2026年6月11日—7月19日才举行，所以正赛目前还没有任何比分。',
+      new Date('2026-06-21T00:00:00+08:00'),
+    )).toBe(true);
+    expect(__testing__.containsTemporalNoResultContradiction(
+      '2026年7月10日半决赛尚未开打，暂时没有比分。',
+      new Date('2026-06-21T00:00:00+08:00'),
+    )).toBe(false);
+  });
+
+  it('hands off grounded evidence to the next provider instead of continuing tool loops', async () => {
+    process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER = '3';
+    stubSearchFetchOk();
+    mockState.order = ['p-step', 'p-spark', 'p-cloud'];
+
+    const providerToolArgs = [];
+    const providerMessages = [];
+    let stepRuns = 0;
+    mockState.adapterFn = async function* ({ provider, tools, messages }) {
+      mockState.adapterCalls.push(provider.id);
+      providerToolArgs.push({ provider: provider.id, toolCount: Array.isArray(tools) ? tools.length : -1 });
+      providerMessages.push({ provider: provider.id, messages });
+      if (provider.id === 'p-step') {
+        stepRuns += 1;
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: `tc-handoff-${stepRuns}`,
+            type: 'function',
+            function: { name: 'web_search', arguments: `{"query":"q${stepRuns}"}` },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: 'summarized from evidence' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: '需要实时证据的问题' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'p-spark', iterations: 3 });
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-step', 'p-spark']);
+    const sparkTools = providerToolArgs.find((entry) => entry.provider === 'p-spark');
+    expect(sparkTools.toolCount).toBe(0);
+    const sparkMessages = providerMessages.find((entry) => entry.provider === 'p-spark').messages;
+    expect(sparkMessages.some((message) => (
+      message.role === 'user'
+      && String(message.content).includes('工具证据')
+      && String(message.content).includes('不要再调用工具')
+      && String(message.content).includes('工具证据和当前时间锚点是唯一事实来源')
+      && String(message.content).includes('当前时间(Asia/Shanghai)')
+      && String(message.content).includes('已知事实 / 来源口径 / 缺口 / 最终答案')
+    ))).toBe(true);
+    expect(chunks.some((chunk) => chunk.type === 'content' && chunk.delta === 'summarized from evidence')).toBe(true);
+  });
+
+  it('hands off stale no-result answers after grounded evidence to the next provider', async () => {
+    process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER = '99';
+    stubSearchFetchOk();
+    mockState.order = ['p-step', 'p-spark', 'p-cloud'];
+
+    const providerMessages = [];
+    let stepRuns = 0;
+    mockState.adapterFn = async function* ({ provider, messages }) {
+      mockState.adapterCalls.push(provider.id);
+      providerMessages.push({ provider: provider.id, messages });
+      if (provider.id === 'p-step') {
+        stepRuns += 1;
+        if (stepRuns === 1) {
+          yield {
+            type: 'tool_call_delta',
+            delta: [{
+              index: 0,
+              id: 'tc-stale-evidence',
+              type: 'function',
+              function: { name: 'web_search', arguments: '{"query":"2026世界杯比分"}' },
+            }],
+          };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+        yield { type: 'content', delta: '2026年世界杯正赛要到2026年6月11日—7月19日才举行，所以正赛目前还没有任何比分。' };
+        yield { type: 'finish', reason: 'stop' };
+        return;
+      }
+      yield { type: 'content', delta: '已有比分：A 1-0 B。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: '2026世界杯已经出的赛事比分' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'p-spark', iterations: 3 });
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-step', 'p-spark']);
+    const sparkMessages = providerMessages.find((entry) => entry.provider === 'p-spark').messages;
+    expect(sparkMessages.some((message) => (
+      message.role === 'user'
+      && String(message.content).includes('上一个候选答案')
+      && String(message.content).includes('未开赛、无比分、无结果')
+      && String(message.content).includes('不要再调用工具')
+    ))).toBe(true);
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toBe('已有比分：A 1-0 B。');
+  });
+
+  it('hands off stale no-result answers even when grounded tool output has zero evidence weight', async () => {
+    process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER = '99';
+    process.env.ZHIPU_KEY = 'test-zhipu';
+    process.env.MIMO_SEARCH_KEY = 'test-mimo';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+      text: async () => 'search down',
+    }));
+    mockState.order = ['p-step', 'p-spark', 'p-cloud'];
+
+    let stepRuns = 0;
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      if (provider.id === 'p-step') {
+        stepRuns += 1;
+        if (stepRuns === 1) {
+          yield {
+            type: 'tool_call_delta',
+            delta: [{
+              index: 0,
+              id: 'tc-weak-evidence',
+              type: 'function',
+              function: { name: 'web_search', arguments: '{"query":"2026世界杯比分"}' },
+            }],
+          };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+        yield { type: 'content', delta: '2026年世界杯正赛要到 **2026年6月11日~7月19日** 才开打，目前还没有任何正赛比分。' };
+        yield { type: 'finish', reason: 'stop' };
+        return;
+      }
+      yield { type: 'content', delta: '工具证据不足，未查到可核验比分。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: '2026世界杯已经出的赛事比分' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'p-spark', iterations: 3 });
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-step', 'p-spark']);
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toBe('工具证据不足，未查到可核验比分。');
+    expect(visible).not.toContain('还没有任何正赛比分');
+  });
+
+  it('drops pre-tool process text when a provider ultimately calls tools', async () => {
+    stubSearchFetchOk();
+    mockState.order = ['p-step', 'p-spark'];
+
+    let stepRuns = 0;
+    mockState.adapterFn = async function* ({ provider }) {
+      if (provider.id === 'p-step') {
+        stepRuns += 1;
+        if (stepRuns === 1) {
+          yield { type: 'content', delta: '让我先查一下最新信息。' };
+          yield {
+            type: 'tool_call_delta',
+            delta: [{
+              index: 0,
+              id: 'tc-pre-tool-process',
+              type: 'function',
+              function: { name: 'web_search', arguments: '{"query":"今晚赛程"}' },
+            }],
+          };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+        yield { type: 'content', delta: '根据证据，今晚有 4 场比赛。' };
+        yield { type: 'finish', reason: 'stop' };
+        return;
+      }
+      yield { type: 'content', delta: 'fallback answer' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const chunks = [];
+    await run({
+      messages: [{ role: 'user', content: '今晚有几场比赛' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toContain('根据证据，今晚有 4 场比赛。');
+    expect(visible).not.toContain('让我先查');
+  });
+
+  it('emits a deterministic scoreboard answer when providers fail after ESPN evidence', async () => {
+    mockState.order = ['p-step', 'p-spark'];
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      if (provider.id === 'p-step') {
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: 'tc-espn-evidence',
+            type: 'function',
+            function: { name: 'sports_score', arguments: '{"query":"今晚世界杯有几场比赛"}' },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      throw new Error(`${provider.id} down`);
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        events: [{
+          date: '2026-06-21T16:00Z',
+          status: { type: { completed: false, shortDetail: 'Scheduled' } },
+          competitions: [{ competitors: [
+            { homeAway: 'home', score: '0', team: { displayName: 'Spain' } },
+            { homeAway: 'away', score: '0', team: { displayName: 'Saudi Arabia' } },
+          ] }],
+        }],
+      }),
+    })));
+
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: '今晚世界杯有几场比赛' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result.ok).toBe(true);
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toContain('根据 ESPN scoreboard 工具证据');
+    expect(visible).toContain('| 2026/06/22 00:00 | Spain vs Saudi Arabia | Scheduled |');
+  });
+
+  it('strips process preamble from evidence handoff synthesis without touching facts', async () => {
+    process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER = '3';
+    stubSearchFetchOk();
+    mockState.order = ['p-step', 'p-spark'];
+
+    let stepRuns = 0;
+    mockState.adapterFn = async function* ({ provider }) {
+      if (provider.id === 'p-step') {
+        stepRuns += 1;
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: `tc-process-${stepRuns}`,
+            type: 'function',
+            function: { name: 'web_search', arguments: `{"query":"q${stepRuns}"}` },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: '正在查询更多资料，请稍等——' };
+      yield { type: 'content', delta: '根据现有证据，今晚共有 4 场比赛。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: '今晚有几场' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'p-spark' });
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toBe('根据现有证据，今晚共有 4 场比赛。');
+    expect(visible).not.toContain('正在查询');
+    expect(visible).not.toContain('请稍等');
+  });
+
+  it('strips internal evidence-ledger leak text from grounded synthesis output', async () => {
+    process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER = '3';
+    stubSearchFetchOk();
+    mockState.order = ['p-step', 'p-spark'];
+
+    let stepRuns = 0;
+    mockState.adapterFn = async function* ({ provider }) {
+      if (provider.id === 'p-step') {
+        stepRuns += 1;
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: `tc-internal-ledger-${stepRuns}`,
+            type: 'function',
+            function: { name: 'web_search', arguments: `{"query":"q${stepRuns}"}` },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: '我已经拿到工具证据，但候选模型没有稳定完成最终总结。' };
+      yield { type: 'content', delta: '先按证据账本回答：\n- provider: glm\n- 摘要: irrelevant\n' };
+      yield { type: 'content', delta: '工具结果没有提供可核验日期，因此不能确认半决赛具体日期。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const chunks = [];
+    await run({
+      messages: [{ role: 'user', content: '世界杯半决赛在哪一天？' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toContain('工具结果没有提供可核验日期');
+    expect(visible).not.toContain('候选模型');
+    expect(visible).not.toContain('证据账本');
+    expect(visible).not.toContain('provider:');
+  });
+
+  it('strips process sentences inside evidence handoff synthesis streams', async () => {
+    process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER = '3';
+    stubSearchFetchOk();
+    mockState.order = ['p-step', 'p-spark'];
+
+    let stepRuns = 0;
+    mockState.adapterFn = async function* ({ provider }) {
+      if (provider.id === 'p-step') {
+        stepRuns += 1;
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: `tc-process-middle-${stepRuns}`,
+            type: 'function',
+            function: { name: 'web_search', arguments: `{"query":"q${stepRuns}"}` },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: '证据显示日期口径不完全一致。让我重新确认一下今天准确的信息。' };
+      yield { type: 'content', delta: '基于已返回证据，暂不能确认今天是否有暴雨预警。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const chunks = [];
+    await run({
+      messages: [{ role: 'user', content: '查一下今天有没有预警' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toContain('证据显示日期口径不完全一致。');
+    expect(visible).toContain('基于已返回证据，暂不能确认今天是否有暴雨预警。');
+    expect(visible).not.toContain('让我重新确认');
+  });
+
+  it('keeps normal opening facts in evidence handoff synthesis', async () => {
+    process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER = '3';
+    stubSearchFetchOk();
+    mockState.order = ['p-step', 'p-spark'];
+
+    let stepRuns = 0;
+    mockState.adapterFn = async function* ({ provider }) {
+      if (provider.id === 'p-step') {
+        stepRuns += 1;
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: `tc-fact-${stepRuns}`,
+            type: 'function',
+            function: { name: 'web_search', arguments: `{"query":"q${stepRuns}"}` },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: '现在北京时间 20:10，证据显示今晚有 4 场比赛。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const chunks = [];
+    await run({
+      messages: [{ role: 'user', content: '今晚有几场' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toBe('现在北京时间 20:10，证据显示今晚有 4 场比赛。');
   });
 
   it('falls back to serial tool execution with BRAIN_V2_TOOL_PARALLEL=1', async () => {

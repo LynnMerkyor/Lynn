@@ -84,6 +84,18 @@ export function makeSSEEmitter(res: ServerResponse, { id, model = 'lynn-v2' }: S
           ...(Array.isArray(chunk.details) && chunk.details.length ? { details: chunk.details } : {}),
         },
       });
+    } else if (chunk.type === 'pre_search') {
+      write({
+        id, object: 'lynn.tool_progress', created, model: originalModel,
+        tool_progress: {
+          event: 'end',
+          name: 'web_search',
+          ms: chunk.ms,
+          ok: Boolean(chunk.hit),
+          args_summary: chunk.query,
+          summary: `pre-search:${chunk.source}${chunk.cached ? ` cache=${chunk.cached}` : ''}`,
+        },
+      });
     } else if (chunk.type === 'error') {
       // F7: max_iterations_reached / capability error 等 — 明确告知客户端不撒谎成 stop
       errored = true;

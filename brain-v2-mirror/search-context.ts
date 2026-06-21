@@ -21,6 +21,7 @@ type SearchSkipReason =
   | 'no-user-msg'
   | 'too-short'
   | 'too-long'
+  | 'internal-runtime-frame'
   | 'excluded'
   | 'no-trigger'
   | 'no-search-key'
@@ -99,6 +100,9 @@ export function classifyForSearch(text: unknown): SearchClassification {
   const value = String(text || '').trim();
   if (!value || value.length < 4) return { hit: false, reason: 'too-short' };
   if (value.length > 2000) return { hit: false, reason: 'too-long' };
+  if (/本轮已经获得约\s*\d+\s*条可用工具证据|请接手完成最终总结|不要再调用工具,不要重新搜索|当前日期锚点\(Asia\/Shanghai\)/u.test(value)) {
+    return { hit: false, reason: 'internal-runtime-frame' };
+  }
 
   for (const pattern of EXCLUSION_PATTERNS) {
     if (pattern.test(value)) return { hit: false, reason: 'excluded' };

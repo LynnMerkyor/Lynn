@@ -11,6 +11,7 @@ import { isServerTool, executeServerTool, mergeWithServerTools } from './tool-ex
 import { applySearchContext, createSearchRequestCache, type SearchRequestCache } from './search-context.js';
 import { applyAudioTranscribe, createAudioRequestCache, type AudioRequestCache } from './audio-transcribe.js';
 import { compactToolResults, readToolResultCompactionConfigFromEnv } from './context-compact.js';
+import { containsTemporalNoResultContradiction, currentTemporalContext } from './evidence-quality.js';
 import {
   buildToolStormReflection,
   createToolStormState,
@@ -28,6 +29,12 @@ type RunRoundResult = {
   finishReason: string | null;
   toolCalls: ToolCall[];
   contentAccum: string;
+  bufferedContentChunks?: Array<{
+    delta: string;
+    providerId: ProviderId;
+    fallback_from?: FallbackEntry[];
+  }>;
+  bufferedFinishChunk?: { reason: string; providerId: ProviderId; fallback_from?: FallbackEntry[] };
   reasoningAccum: string;
   /** 本轮是否流出过 reasoning(reasoning-only 空答重试的判据)。 */
   sawReasoning: boolean;
@@ -115,6 +122,50 @@ function compactText(value: string, max = 220): string {
   const singleLine = value.replace(/\s+/g, ' ').trim();
   if (singleLine.length <= max) return singleLine;
   return singleLine.slice(0, Math.max(1, max - 1)).trimEnd() + '…';
+}
+
+function shouldDropSynthesisOpeningSegment(segment: string): boolean {
+  const text = segment.trim();
+  if (!text) return true;
+  const hasSelfOrWaitCue = /(我|让我|咱们|我们|请稍等|稍等|等等|先|继续|重新|再|目前)/u.test(text);
+  const hasProcessVerb = /(查询|搜索|检索|查找|查查|核对|确认|整理|看看|获取|拿到|尝试|换个|继续查|再查)/u.test(text);
+  const saysNoAnswerYet = /((没有|未能|无法|没法).{0,18}(形成|生成|返回|给出).{0,18}(最终|正文|答案|回复)|等.*恢复|工具.*恢复|接口.*恢复|状态异常|请稍后|稍后重试)/u.test(text);
+  const citesToolFailure = /(工具|接口|搜索|web_?search|sports_?score).*(异常|失败|报错|不可用|没恢复|无法正常)/iu.test(text);
+  const leaksInternalWorkflow = /(候选模型|证据账本|接手完成最终总结|工具证据).{0,48}(回答|总结|最终|稳定|完成|provider|证据账本)/iu.test(text)
+    || /^[-*]\s*provider\s*:/iu.test(text)
+    || /^[-*]\s*摘要\s*[:：]/u.test(text);
+  return (hasSelfOrWaitCue && hasProcessVerb) || saysNoAnswerYet || citesToolFailure || leaksInternalWorkflow;
+}
+
+function stripSynthesisProcessPreamble(text: string): string {
+  let rest = text.replace(/^\s+/, '');
+  for (let i = 0; i < 4; i += 1) {
+    const match = rest.match(/^(.{1,120}?)(?:[。！？!?]\s+|[。！？!?]|——|--|\n+)/su);
+    if (!match) break;
+    const segment = match[1] || '';
+    if (!shouldDropSynthesisOpeningSegment(segment)) break;
+    rest = rest.slice(match[0].length).replace(/^\s+/, '');
+  }
+  return rest;
+}
+
+function stripSynthesisProcessSentences(text: string, final = false): { text: string; rest: string } {
+  const input = stripSynthesisProcessPreamble(text);
+  let out = '';
+  let start = 0;
+  const boundaryRe = /[。！？!?]+|\n+/gu;
+  for (const match of input.matchAll(boundaryRe)) {
+    const end = (match.index || 0) + match[0].length;
+    const segment = input.slice(start, end);
+    if (!shouldDropSynthesisOpeningSegment(segment)) out += segment;
+    start = end;
+  }
+  const rest = input.slice(start);
+  if (final) {
+    if (!shouldDropSynthesisOpeningSegment(rest)) out += rest;
+    return { text: out, rest: '' };
+  }
+  return { text: out, rest };
 }
 
 function parseJsonObject(raw: string): Record<string, unknown> | null {
@@ -295,6 +346,116 @@ function summarizeToolResult(toolName: string, result: unknown): { summary?: str
   };
 }
 
+function countArrayEvidence(value: unknown): number {
+  return Array.isArray(value) ? value.filter(Boolean).length : 0;
+}
+
+function countStructuredSearchEvidence(parsed: Record<string, unknown>): number {
+  let count = 0;
+  count += countArrayEvidence(parsed.items);
+  count += countArrayEvidence(parsed.results);
+  count += countArrayEvidence(parsed.search_result);
+  count += countArrayEvidence(parsed.citations);
+  if (Array.isArray(parsed.sources)) {
+    for (const source of parsed.sources) {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+      const record = source as Record<string, unknown>;
+      count += record.ok === false ? 0 : 1;
+      count += countArrayEvidence(record.items);
+      count += countArrayEvidence(record.results);
+    }
+  }
+  return count;
+}
+
+function countParallelResearchEvidence(parsed: Record<string, unknown>): number {
+  if (!Array.isArray(parsed.results)) return 0;
+  return parsed.results.filter((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    const record = item as Record<string, unknown>;
+    if (record.ok === false) return false;
+    if (record.result == null) return false;
+    const result = typeof record.result === 'string' ? record.result : JSON.stringify(record.result);
+    return !!String(result || '').trim();
+  }).length;
+}
+
+function evidenceToolWeight(toolName: string, result: unknown): number {
+  if (!isGroundedToolName(toolName)) return 0;
+  const raw = typeof result === 'string' ? result : JSON.stringify(result);
+  if (!raw || !raw.trim()) return 0;
+  const parsed = parseJsonObject(raw);
+  if (parsed?.error || parsed?.ok === false || parsed?.status === 'no_direct_source') return 0;
+
+  if (toolName === 'parallel_research' && parsed) {
+    return Math.min(3, Math.max(0, countParallelResearchEvidence(parsed)));
+  }
+  if (toolName === 'web_search' && parsed) {
+    const evidence = countStructuredSearchEvidence(parsed);
+    return Math.min(3, Math.max(1, evidence));
+  }
+  if (toolName === 'web_search') {
+    const citationLike = (raw.match(/https?:\/\//g) || []).length
+      + (raw.match(/摘要[:：]/g) || []).length
+      + (raw.match(/\bsources?:/gi) || []).length;
+    if (citationLike > 0) return Math.min(3, Math.max(1, citationLike));
+    const meaningfulLines = raw.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).length;
+    // Some search providers return a plain text synthesis instead of structured
+    // JSON/citations. It is still grounded tool evidence and should be handed
+    // to the fast synthesis model instead of letting the planner continue from
+    // stale parametric memory.
+    return compactText(raw, 500).length >= 80 || meaningfulLines >= 2 ? 3 : 1;
+  }
+  // A successful structured realtime tool (weather/stock/exchange/fetch) is
+  // usually already enough evidence to synthesize instead of looping tools.
+  return 3;
+}
+
+type ScoreboardRow = { time: string; matchup: string; result: string };
+
+function originalUserPrompt(messages: ChatMessage[]): string {
+  const found = messages.find((message) => message.role === 'user' && typeof message.content === 'string');
+  return typeof found?.content === 'string' ? found.content : '';
+}
+
+function parseScoreboardRowsFromEvidence(messages: ChatMessage[]): ScoreboardRow[] {
+  const text = messages
+    .filter((message) => message.role === 'tool')
+    .map((message) => typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''))
+    .join('\n');
+  if (!/provider:\s*espn_scoreboard/i.test(text)) return [];
+  const rows: ScoreboardRow[] = [];
+  for (const line of text.split(/\r?\n/u)) {
+    const match = line.match(/^-\s*(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2})\s+(.+?)\s+\(([^)]+)\)\s*$/u);
+    if (!match) continue;
+    const body = match[2].trim();
+    const scored = body.match(/^(.+?)\s+(\d+\s*[-–—:：比]\s*\d+)\s+(.+)$/u);
+    const scheduled = body.match(/^(.+?)\s+vs\s+(.+)$/iu);
+    if (scored) {
+      rows.push({ time: match[1], matchup: `${scored[1].trim()} vs ${scored[3].trim()}`, result: `${scored[2].replace(/\s+/g, '')} ${match[3]}` });
+    } else if (scheduled) {
+      rows.push({ time: match[1], matchup: `${scheduled[1].trim()} vs ${scheduled[2].trim()}`, result: match[3] });
+    }
+  }
+  return rows;
+}
+
+function buildDeterministicSportsEvidenceAnswer(messages: ChatMessage[]): string | null {
+  const rows = parseScoreboardRowsFromEvidence(messages);
+  if (!rows.length) return null;
+  const prompt = originalUserPrompt(messages);
+  const wantsCount = /(几场|多少场|赛程|今晚|今天|今日|tonight|today|schedule)/i.test(prompt);
+  const title = wantsCount
+    ? `根据 ESPN scoreboard 工具证据，共查到 ${rows.length} 场相关比赛：`
+    : '根据 ESPN scoreboard 工具证据，查到以下相关比赛：';
+  const table = [
+    '| 时间(北京时间) | 对阵 | 状态/比分 |',
+    '|---|---|---|',
+    ...rows.slice(0, 24).map((row) => `| ${row.time} | ${row.matchup} | ${row.result} |`),
+  ].join('\n');
+  return `${title}\n\n${table}`;
+}
+
 const GROUNDED_TOOL_NAMES = new Set([
   'web_search',
   'web_fetch',
@@ -306,18 +467,65 @@ const GROUNDED_TOOL_NAMES = new Set([
   'parallel_research',
 ]);
 
+function isEvidenceHandoffEnabled(): boolean {
+  return process.env.BRAIN_V2_EVIDENCE_HANDOFF !== '0';
+}
+
+function evidenceHandoffAfter(): number {
+  return Math.max(1, Number(process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER || 3) || 3);
+}
+
+function isGroundedToolName(toolName: string | undefined): boolean {
+  return GROUNDED_TOOL_NAMES.has(String(toolName || ''));
+}
+
+function buildEvidenceHandoffPrompt(toolCount: number): string {
+  return [
+    `本轮已经获得约 ${toolCount} 条可用工具证据,请接手完成最终总结。`,
+    currentTemporalContext(),
+    '不要再调用工具,不要重新搜索,只基于上文已有工具证据回答用户原问题。',
+    '如果上文候选模型已经说过结论或夹带旧知识,请忽略；工具证据和当前时间锚点是唯一事实来源。',
+    '先把证据压缩成: 已知事实 / 来源口径 / 缺口 / 最终答案；最终只输出面向用户的答案。',
+    '涉及“今天/明天/昨晚/今晚/最新/当前”等相对时间时,必须以当前时间锚点换算,不要把网页发布时间当成赛事/行情/天气日期。',
+    '如果证据日期与用户问题的相对时间不一致,请说证据不足或口径不匹配,不要混用过期证据。',
+    '如果证据不足,请明确说明缺少什么,并给出当前证据能支持的最小可靠结论。',
+    '回答必须是面向用户的最终正文,不要输出内部计划、工具轨迹或“The user wants...”这类中间推理。',
+  ].join('\n');
+}
+
+function buildTemporalCorrectionHandoffPrompt(toolCount: number, rejectedAnswer: string): string {
+  return [
+    `本轮已经获得约 ${toolCount} 条可用工具证据,但上一个候选答案与当前时间或工具证据存在矛盾,请接手修正并输出最终答案。`,
+    currentTemporalContext(),
+    '不要再调用工具,不要重新搜索,只基于上文已有工具证据回答用户原问题。',
+    `请忽略这个被拦截的候选答案: ${compactText(rejectedAnswer, 420)}`,
+    '重点检查: 是否把当前/过去已经发生的日期说成未开赛、无比分、无结果或尚未公布。',
+    '工具证据和当前时间锚点是唯一事实来源；如果证据仍不足,请明确说明缺少什么,不要用旧知识补具体事实。',
+    '最终只输出面向用户的答案,不要输出内部计划、工具轨迹或“The user wants...”这类中间推理。',
+  ].join('\n');
+}
+
 function formatToolResultContent(toolName: string, result: unknown, stepIndex: number): string {
   const raw = typeof result === 'string' ? result : JSON.stringify(result);
-  if (!GROUNDED_TOOL_NAMES.has(toolName)) return raw;
+  if (!isGroundedToolName(toolName)) return raw;
+  const toolSummary = summarizeToolResult(toolName, result);
+  const ledger = [
+    toolSummary.summary ? `摘要: ${toolSummary.summary}` : null,
+    ...(toolSummary.details || []).slice(0, 5).map((line) => `- ${line}`),
+  ].filter(Boolean).join('\n');
   return [
     `【Lynn 工具证据 #${stepIndex}: ${toolName}】`,
+    currentTemporalContext(),
+    ledger ? `【证据账本】\n${ledger}` : null,
+    '',
     raw,
     '',
     '【回答约束】请只基于上方工具证据回答当前事实、赛程、比分、价格、日期、数值和来源。',
     '不要用旧知识或记忆补充工具证据里没有的具体事实；证据不足就明确说“工具结果中未查到”，并说明还需要继续检索。',
-    '如果涉及时间，请保留工具证据中的日期/时区口径，换算时要说明换算依据。',
+    '如果涉及相对时间,请用当前时间锚点换算；网页发布时间只能说明来源发布时间,不能直接当作比赛/行情/天气日期。',
+    '若同一轮证据存在日期或事实冲突,请先指出冲突并给出最小可靠结论,不要拼接互相矛盾的结论。',
     '不要输出内部规划、英文自述或“The user wants...”这类中间推理文本。',
-  ].join('\n');
+  ].filter((line): line is string => typeof line === 'string').join('\n');
 }
 
 function summarizeToolCallArgs(argsText: string | undefined): string | undefined {
@@ -352,7 +560,10 @@ async function runRound({
   reasoningEffort,
   requestCache,
   audioCache,
-}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache }): Promise<RunRoundResult> {
+  skipProviders,
+  sanitizeSynthesisOpening,
+  bufferContent,
+}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache; skipProviders?: ReadonlySet<ProviderId>; sanitizeSynthesisOpening?: boolean; bufferContent?: boolean }): Promise<RunRoundResult> {
   const errors: Array<{ providerId: ProviderId; error: string }> = [];
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
   // (例:"StepFun → Spark fallback"),不再让 cascade decision 对 UI 不可见。
@@ -360,6 +571,11 @@ async function runRound({
   for (const providerId of providerOrderForCapability(capabilityRequired)) {
     const provider = getProvider(providerId);
     if (!provider) continue;
+    if (skipProviders?.has(providerId)) {
+      log && log('info', `provider ${providerId} skipped by evidence handoff`);
+      fallbackChain.push({ id: providerId, reason: 'handoff' });
+      continue;
+    }
     if (!isProviderConfigured(provider)) {
       log && log('info', `provider ${providerId} has no credential, skip`);
       continue;
@@ -414,7 +630,36 @@ async function runRound({
     let finishReason: string | null = null;
     let contentAccum = '';
     let reasoningAccum = '';
+    let synthesisBuffer = '';
+    const bufferedContentChunks: RunRoundResult['bufferedContentChunks'] = [];
+    let bufferedFinishChunk: RunRoundResult['bufferedFinishChunk'] | undefined;
     const toolCallsAcc: ToolCall[] = [];
+    const emitContentDelta = async (delta: string): Promise<void> => {
+      if (!delta) return;
+      contentAccum += delta;
+      const fallback_from = fallbackChain.length > 0 ? [...fallbackChain] : undefined;
+      if (bufferContent) {
+        bufferedContentChunks.push({ delta, providerId, fallback_from });
+        return;
+      }
+      await onChunk({ type: 'content', delta }, { providerId, fallback_from });
+    };
+    const flushSynthesisBuffer = async (final = false): Promise<void> => {
+      if (!sanitizeSynthesisOpening || !synthesisBuffer) return;
+      const sanitized = stripSynthesisProcessSentences(synthesisBuffer, final);
+      synthesisBuffer = sanitized.rest;
+      await emitContentDelta(sanitized.text);
+    };
+    const emitSynthesisContentDelta = async (delta: string): Promise<void> => {
+      if (!sanitizeSynthesisOpening) {
+        await emitContentDelta(delta);
+        return;
+      }
+      synthesisBuffer += delta;
+      if (synthesisBuffer.length >= 500 || /[。！？!?\n]/u.test(synthesisBuffer)) {
+        await flushSynthesisBuffer(false);
+      }
+    };
     try {
       log && log('info', `→ provider ${providerId}`);
       const searchContext = await applySearchContext({ messages, provider, signal, log, requestCache });
@@ -449,8 +694,7 @@ async function runRound({
       for await (const chunk of adapter({ provider, messages: effectiveMessages, tools, signal, log, extraBody, reasoningEffort })) {
         anyEmit = true;
         if (chunk.type === 'content') {
-          contentAccum += chunk.delta;
-          await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
+          await emitSynthesisContentDelta(chunk.delta);
           continue;
         }
         if (chunk.type === 'tool_call_delta') {
@@ -465,7 +709,16 @@ async function runRound({
           continue;
         }
         if (chunk.type === 'finish') {
+          await flushSynthesisBuffer(true);
           finishReason = chunk.reason;
+          if (bufferContent && chunk.reason !== 'tool_calls') {
+            bufferedFinishChunk = {
+              reason: chunk.reason || 'stop',
+              providerId,
+              fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined,
+            };
+            continue;
+          }
           await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
           continue;
         }
@@ -478,6 +731,7 @@ async function runRound({
         }
         await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
       }
+      await flushSynthesisBuffer(true);
       // [prefix-cache 埋点] StepFun 流式 usage 的中途帧恒报 cached_tokens=0,只有最终帧带真值
       // (2026-06-10 实测)。这里只记最终帧,prod 日志可直接观测真实命中率。
       if (lastUsage && typeof lastUsage === 'object') {
@@ -509,6 +763,8 @@ async function runRound({
         finishReason,
         toolCalls: toolCallsAcc.filter(Boolean),
         contentAccum,
+        bufferedContentChunks,
+        bufferedFinishChunk,
         reasoningAccum,
         sawReasoning,
       };
@@ -564,10 +820,15 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   const toolStormState = createToolStormState();
   const toolResultCompactionConfig = readToolResultCompactionConfigFromEnv();
   let serverToolStepIndex = 0;
-  // [overflow-retry] activeReasoning can be stepped down once if a reasoning model blows past
-  // max_tokens mid-<think> (finish_reason=length with no usable answer), so the answer fits.
+  const skippedProviders = new Set<ProviderId>();
+  let evidenceToolCount = 0;
+  let groundedToolObserved = false;
+  let evidenceHandoffDone = false;
+  let summarizeFromEvidenceOnly = false;
+  // [tool-round effort-down] activeReasoning may be lowered after tool rounds only.
+  // Empty visible answers must hand off to the next provider immediately instead of
+  // retrying the same model and wasting the user's turn.
   let activeReasoning = reasoningEffort;
-  let lengthRetried = false;
   // [tool-round effort-down] Continuation rounds (after server-tool results are fed back) mostly
   // integrate observations instead of re-deriving the plan; at the provider-default `high` they
   // re-burn a long <think> per round. When the CLIENT did not pin an effort (null/auto → provider
@@ -575,47 +836,111 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   // Kill switch: LYNN_TOOL_ROUND_EFFORT_DOWN=0.
   const clientPinnedReasoning = !(reasoningEffort == null || String(reasoningEffort).toLowerCase() === 'auto');
   const toolRoundEffortDown = process.env.LYNN_TOOL_ROUND_EFFORT_DOWN !== '0';
-  const stepDownReasoning = (effort: string | null | undefined): string => {
-    const e = String(effort || 'high').toLowerCase();
-    if (e === 'medium') return 'low';
-    if (e === 'low' || e === 'off' || e === 'none' || e === 'disabled') return 'low';
-    return 'medium'; // high / xhigh / auto / null → medium
+  const flushBufferedContent = async (round: RunRoundResult, sanitize = false): Promise<void> => {
+    if (sanitize && round.bufferedContentChunks?.length) {
+      const first = round.bufferedContentChunks[0];
+      const text = round.bufferedContentChunks.map((chunk) => chunk.delta).join('');
+      const sanitized = stripSynthesisProcessSentences(text, true).text;
+      if (sanitized) {
+        await onChunk(
+          { type: 'content', delta: sanitized },
+          { providerId: first.providerId, fallback_from: first.fallback_from },
+        );
+      }
+      if (round.bufferedFinishChunk) {
+        await onChunk(
+          { type: 'finish', reason: round.bufferedFinishChunk.reason },
+          { providerId: round.bufferedFinishChunk.providerId, fallback_from: round.bufferedFinishChunk.fallback_from },
+        );
+      }
+      return;
+    }
+    for (const chunk of round.bufferedContentChunks || []) {
+      await onChunk(
+        { type: 'content', delta: chunk.delta },
+        { providerId: chunk.providerId, fallback_from: chunk.fallback_from },
+      );
+    }
+    if (round.bufferedFinishChunk) {
+      await onChunk(
+        { type: 'finish', reason: round.bufferedFinishChunk.reason },
+        { providerId: round.bufferedFinishChunk.providerId, fallback_from: round.bufferedFinishChunk.fallback_from },
+      );
+    }
   };
 
   while (iter < maxIter) {
     iter++;
-    const result = await runRound({
-      messages: workingMessages, tools: mergedTools, capabilityRequired,
-      signal, onChunk, log, extraBody, reasoningEffort: activeReasoning,
-      requestCache,
-      audioCache,
-    });
+    const hasGroundedEvidenceContext = evidenceToolCount > 0 || groundedToolObserved;
+    const shouldBufferProviderContent = hasGroundedEvidenceContext;
+    const toolsForRound = summarizeFromEvidenceOnly ? [] : mergedTools;
+    const hasCallableTools = Array.isArray(toolsForRound) && toolsForRound.length > 0;
+    let result: RunRoundResult;
+    try {
+      result = await runRound({
+        messages: workingMessages, tools: toolsForRound, capabilityRequired,
+        signal, onChunk, log, extraBody, reasoningEffort: activeReasoning,
+        requestCache,
+        audioCache,
+        skipProviders: skippedProviders,
+        sanitizeSynthesisOpening: summarizeFromEvidenceOnly || hasGroundedEvidenceContext,
+        bufferContent: shouldBufferProviderContent || hasCallableTools,
+      });
+    } catch (error) {
+      const deterministicAnswer = buildDeterministicSportsEvidenceAnswer(workingMessages);
+      if (deterministicAnswer) {
+        const providerId = (lastProviderId || 'deepseek-chat') as ProviderId;
+        log && log('warn', `all providers failed after sports evidence; emitting deterministic scoreboard fallback`);
+        await onChunk({ type: 'content', delta: deterministicAnswer }, { providerId });
+        await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
+        return { ok: true, providerId, iterations: iter };
+      }
+      throw error;
+    }
     lastProviderId = result.providerId;
 
-    // [empty-answer retry] 两种"只想不说"的空答形态,各重试一次(共用一次配额):
-    //  a) finish=length:reasoning 撑爆 max_tokens,正文没出来(StepFun 高档思考的老问题);
-    //  b) finish=stop + sawReasoning:模型思考完就正常收流,一个字正文都没给 ——
-    //     2026-06-10 用户实测(工具轮后"有授权卡片但最后没有反馈"的上游根因)。
-    // 都是降一档 reasoning + 直答 nudge 重试,不编造内容。
+    // [empty-answer fallback] "只想不说"不能算 provider 成功。空正文不在同一模型上
+    // 重试,直接短 cooldown 并继续下一家 provider(例如 DS V4 Flash → Step 3.7 Flash),
+    // 避免用户等两轮空答。
     const emptyAnswer = result.toolCalls.length === 0 && !String(result.contentAccum || '').trim();
     const reasoningOnlyStop = result.finishReason === 'stop' && result.sawReasoning;
-    if (
-      emptyAnswer
-      && !lengthRetried
-      && (result.finishReason === 'length' || reasoningOnlyStop)
-    ) {
-      lengthRetried = true;
-      activeReasoning = stepDownReasoning(activeReasoning);
-      log && log('warn', `provider ${lastProviderId} ${result.finishReason === 'length' ? 'length-overflow' : 'reasoning-only stop'} with empty answer; retry once with reasoning=${activeReasoning}`);
+    if (emptyAnswer && result.finishReason !== 'tool_calls') {
+      const reason = result.finishReason === 'length'
+        ? 'length-overflow'
+        : reasoningOnlyStop
+          ? 'reasoning-only stop'
+          : `empty-visible (${result.finishReason || 'unknown'})`;
+      log && log('warn', `provider ${lastProviderId} ${reason}; cooldown and fallback`);
+      markUnhealthy(result.providerId, 'empty_visible', 30_000);
       workingMessages.push({
         role: 'user',
-        content: '上一次回答没有给出可见的正文答案。请基于已有的上下文和工具结果,直接、简洁地给出最终答案,不要再展开完整的思考过程。',
+        content: '上一个候选模型没有给出可见正文。请接手并直接给出最终答案;如证据不足,明确说明缺少哪些信息。',
       });
       continue;
     }
 
-    // Model 自然结束 (stop / length / content_filter / function_call 等非 tool_calls) → 透传完成
+    // Model 自然结束 (stop / length / content_filter / function_call 等非 tool_calls) → 透传完成。
+    // 若已经有工具证据,但候选答案把当前/过去日期说成"未开赛/无比分/无结果",
+    // 这是典型的参数记忆覆盖工具证据。不要让该答案落地,直接交给下一模型基于
+    // 同一证据账本总结,避免关键词清单式补丁。
     if (result.finishReason !== 'tool_calls' || result.toolCalls.length === 0) {
+      const visibleText = String(result.contentAccum || '').trim();
+      if (
+        visibleText
+        && hasGroundedEvidenceContext
+        && lastProviderId
+        && containsTemporalNoResultContradiction(visibleText)
+      ) {
+        log && log('warn', `provider ${lastProviderId} produced temporal no-result contradiction after grounded evidence; hand off to next provider`);
+        skippedProviders.add(lastProviderId);
+        summarizeFromEvidenceOnly = true;
+        workingMessages.push({
+          role: 'user',
+          content: buildTemporalCorrectionHandoffPrompt(evidenceToolCount, visibleText),
+        });
+        continue;
+      }
+      await flushBufferedContent(result, hasGroundedEvidenceContext);
       return { ok: true, providerId: lastProviderId, iterations: iter };
     }
 
@@ -718,6 +1043,9 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     await Promise.all(Array.from({ length: Math.min(toolParallel, runnable.length) }, () => runToolWorker()));
     for (const outcome of toolOutcomes) {
       if (!outcome) continue;
+      if (isGroundedToolName(outcome.tc.function.name)) groundedToolObserved = true;
+      const evidenceWeight = evidenceToolWeight(outcome.tc.function.name, outcome.toolResult);
+      if (evidenceWeight > 0) evidenceToolCount += evidenceWeight;
       workingMessages.push({
         role: 'tool',
         tool_call_id: outcome.tc.id || ('tc-' + Math.random().toString(36).slice(2)),
@@ -725,6 +1053,22 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       });
     }
     workingMessages = compactToolResults(workingMessages, toolResultCompactionConfig);
+    if (
+      isEvidenceHandoffEnabled()
+      && !evidenceHandoffDone
+      && evidenceToolCount >= evidenceHandoffAfter()
+      && lastProviderId
+    ) {
+      evidenceHandoffDone = true;
+      summarizeFromEvidenceOnly = true;
+      skippedProviders.add(lastProviderId);
+      workingMessages.push({
+        role: 'user',
+        content: buildEvidenceHandoffPrompt(evidenceToolCount),
+      });
+      log && log('info', `iter ${iter}: grounded evidence budget reached (${evidenceToolCount}/${evidenceHandoffAfter()}); hand off from ${lastProviderId} to next provider for synthesis`);
+      continue;
+    }
     if (toolRoundEffortDown && !clientPinnedReasoning) {
       const e = String(activeReasoning || 'auto').toLowerCase();
       if (e === 'auto' || e === 'high' || e === 'xhigh') {
@@ -772,6 +1116,9 @@ export const __testing__ = {
   buildLocalSlotsUrl,
   isLocalEndpoint,
   localProbeTimeoutMs,
+  currentTemporalContext,
+  containsTemporalNoResultContradiction,
+  evidenceToolWeight,
   summarizeLocalSlots,
   summarizeToolResult,
 };

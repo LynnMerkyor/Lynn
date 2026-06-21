@@ -40,7 +40,7 @@
     "dist:win": "npm run release:preflight && npm run build:server:win && electron-builder --win nsis --x64",
     "test": "vitest run",
     "test:brain-v2": "npm --prefix brain-v2-mirror test",
-    "test:brain-v2:critical": "npm --prefix brain-v2-mirror test -- __tests__/router.test.js __tests__/search-context.test.js __tests__/web_search.test.js __tests__/tool-storm.test.js",
+    "test:brain-v2:critical": "npm --prefix brain-v2-mirror test -- __tests__/router.test.js __tests__/search-context.test.js __tests__/web_search.test.js __tests__/evidence-quality.test.js __tests__/tool-exec.test.js __tests__/stream-bridge.test.js __tests__/tool-storm.test.js",
     "test:cli": "npm run build:cli && node scripts/cli-smoke.mjs",
     "test:cli-pack": "npm run pack:cli -- --out /tmp/lynn-cli-pack-smoke",
     "test:cli-install": "npm run build:cli && node scripts/cli-install-smoke.mjs",

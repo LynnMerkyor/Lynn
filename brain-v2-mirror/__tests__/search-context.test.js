@@ -79,6 +79,16 @@ describe('classifyForSearch', () => {
     expect(classifyForSearch('a'.repeat(3000)).hit).toBe(false);
     expect(classifyForSearch('什么是函数式编程').hit).toBe(false);
   });
+
+  it('rejects internal evidence handoff prompts', () => {
+    const classified = classifyForSearch([
+      '本轮已经获得约 3 条可用工具证据,请接手完成最终总结。',
+      '当前日期锚点(Asia/Shanghai): 今天=2026-06-21, 昨天=2026-06-20, 明天=2026-06-22',
+      '不要再调用工具,不要重新搜索,只基于上文已有工具证据回答用户原问题。',
+    ].join('\n'));
+
+    expect(classified).toEqual({ hit: false, reason: 'internal-runtime-frame' });
+  });
 });
 
 describe('applySearchContext — gating', () => {
@@ -132,6 +142,26 @@ describe('applySearchContext — gating', () => {
     const result = await applySearchContext({ messages: [{ role: 'system', content: 'hi' }], provider: providerSpark, requestCache: createSearchRequestCache() });
     expect(result.meta.applied).toBe(false);
     expect(result.meta.skipReason).toBe('no-user-msg');
+  });
+
+  it('skips internal evidence handoff prompts before provider synthesis', async () => {
+    process.env.BRAIN_V2_PRE_SEARCH = '1';
+    process.env.ZHIPU_KEY = 'k';
+    const result = await applySearchContext({
+      messages: [{
+        role: 'user',
+        content: [
+          '本轮已经获得约 3 条可用工具证据,请接手完成最终总结。',
+          '当前日期锚点(Asia/Shanghai): 今天=2026-06-21, 昨天=2026-06-20, 明天=2026-06-22',
+          '不要再调用工具,不要重新搜索,只基于上文已有工具证据回答用户原问题。',
+        ].join('\n'),
+      }],
+      provider: providerSpark,
+      requestCache: createSearchRequestCache(),
+    });
+
+    expect(result.meta.applied).toBe(false);
+    expect(result.meta.skipReason).toBe('internal-runtime-frame');
   });
 });
 

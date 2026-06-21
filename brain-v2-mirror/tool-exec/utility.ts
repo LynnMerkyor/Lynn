@@ -59,11 +59,187 @@ export async function exchangeRate(query) {
 }
 
 export async function sportsScore(query) {
-  return JSON.stringify({
-    status: 'no_direct_source',
-    query: String(query || ''),
-    guidance: '体育比分暂无独立数据源,请改用 web_search 检索 赛事+比分/赛果/赛程 等关键词,并以来源页面为准。',
-  });
+  const q = String(query || '');
+  const league = resolveEspnLeague(q);
+  if (!league) {
+    return JSON.stringify({
+      status: 'no_direct_source',
+      query: q,
+      guidance: '暂未识别到可直连的体育联赛数据源,请改用 web_search 检索 赛事+比分/赛果/赛程 等关键词,并以来源页面为准。',
+    });
+  }
+
+  const range = resolveSportsDateRange(q, league);
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard?limit=950&dates=${range.start}-${range.end}`;
+  try {
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': 'lobster-brain-v2/0.0' },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) return JSON.stringify({ error: `ESPN scoreboard HTTP ${resp.status}`, source: url });
+    const data = await resp.json();
+    const events = Array.isArray(data?.events) ? data.events : [];
+    const rows = filterSportsRows(events.map(formatEspnEvent).filter(Boolean), q, range);
+    const scoreRows = rows.filter((row) => row.completed && /\d+\s*[-–—:：比]\s*\d+/.test(row.line));
+    const wantsScores = /(比分|赛果|结果|已出|已经|完赛|score|result|final)/i.test(q);
+    const selected = (wantsScores ? scoreRows : rows).slice(-24);
+    if (!selected.length) {
+      return JSON.stringify({
+        status: 'no_score_events',
+        query: q,
+        provider: 'espn_scoreboard',
+        source: url,
+        dateRange: `${range.start}-${range.end}`,
+        events: rows.length,
+      });
+    }
+    return [
+      `provider: espn_scoreboard`,
+      `league: ${league.label}`,
+      `source: ${url}`,
+      `dateRange: ${range.start}-${range.end}`,
+      '',
+      ...selected.map((row) => `- ${row.line}`),
+    ].join('\n');
+  } catch (e) {
+    return JSON.stringify({ error: e.message || 'ESPN scoreboard lookup failed', source: url });
+  }
+}
+
+function resolveEspnLeague(query) {
+  const q = String(query || '');
+  if (/(世界杯|FIFA|World Cup|fifa\.world)/i.test(q)) {
+    return { label: 'FIFA World Cup', path: 'soccer/fifa.world', tournamentStart: '2026-06-11', tournamentEnd: '2026-07-19' };
+  }
+  if (/\bNBA\b|总决赛|尼克斯|马刺|湖人|勇士|凯尔特人/i.test(q)) {
+    return { label: 'NBA', path: 'basketball/nba' };
+  }
+  return null;
+}
+
+function beijingYmd(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const pick = (type) => parts.find((part) => part.type === type)?.value || '';
+  return `${pick('year')}-${pick('month')}-${pick('day')}`;
+}
+
+function ymdCompact(ymd) {
+  return String(ymd || '').replace(/-/g, '');
+}
+
+function addDaysYmd(ymd, days) {
+  const date = new Date(`${ymd}T00:00:00+08:00`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return beijingYmd(date);
+}
+
+function resolveSportsDateRange(query, league) {
+  const q = String(query || '');
+  const today = beijingYmd();
+  if (league?.label === 'FIFA World Cup') {
+    if (/(半决赛|准决赛|semifinal|semi-final|semi final)/i.test(q)) {
+      return { start: '20260714', end: '20260715' };
+    }
+    if (/(决赛|final)/i.test(q) && !/(半决赛|semifinal|semi-final|semi final)/i.test(q)) {
+      return { start: '20260719', end: '20260719' };
+    }
+    if (/(已出|已经|比分|赛果|结果|完赛|score|result)/i.test(q)) {
+      return { start: ymdCompact(league.tournamentStart), end: ymdCompact(today) };
+    }
+  }
+  if (/(昨晚|昨天|昨日|yesterday)/i.test(q)) {
+    return { start: ymdCompact(addDaysYmd(today, -1)), end: ymdCompact(today) };
+  }
+  if (/(明天|明日|tomorrow)/i.test(q)) {
+    const tomorrow = addDaysYmd(today, 1);
+    return { start: ymdCompact(tomorrow), end: ymdCompact(tomorrow) };
+  }
+  if (/(今晚|今夜|今天|今日|today|tonight)/i.test(q)) {
+    return { start: ymdCompact(today), end: ymdCompact(addDaysYmd(today, 1)) };
+  }
+  return { start: ymdCompact(addDaysYmd(today, -7)), end: ymdCompact(addDaysYmd(today, 1)) };
+}
+
+function formatEspnEvent(event) {
+  const competition = event?.competitions?.[0];
+  const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
+  if (!competition || competitors.length < 2) return null;
+  const home = competitors.find((item) => item.homeAway === 'home') || competitors[0];
+  const away = competitors.find((item) => item.homeAway === 'away') || competitors.find((item) => item !== home) || competitors[1];
+  const homeName = home?.team?.displayName || home?.team?.shortDisplayName || 'Home';
+  const awayName = away?.team?.displayName || away?.team?.shortDisplayName || 'Away';
+  const homeScore = home?.score ?? '';
+  const awayScore = away?.score ?? '';
+  const status = event?.status?.type || competition?.status?.type || {};
+  const completed = Boolean(status.completed);
+  const statusText = status.shortDetail || status.detail || status.name || '';
+  const date = new Date(event?.date || Date.now());
+  const dateText = formatBeijingDateTime(date);
+  const localParts = beijingDateTimeParts(date);
+  const score = completed && homeScore !== '' && awayScore !== '' ? `${homeScore}-${awayScore}` : 'vs';
+  return {
+    completed,
+    localYmd: localParts.ymd,
+    localHour: localParts.hour,
+    line: `${dateText} ${homeName} ${score} ${awayName}${statusText ? ` (${statusText})` : ''}`,
+  };
+}
+
+function filterSportsRows(rows, query, range) {
+  const q = String(query || '');
+  const today = beijingYmd();
+  const tomorrow = addDaysYmd(today, 1);
+  const yesterday = addDaysYmd(today, -1);
+  if (/(今晚|今夜|tonight)/i.test(q)) {
+    return rows.filter((row) => (row.localYmd === today && row.localHour >= 18) || row.localYmd === tomorrow);
+  }
+  if (/(今天|今日|today)/i.test(q)) {
+    return rows.filter((row) => row.localYmd === today);
+  }
+  if (/(昨晚|昨天|昨日|yesterday)/i.test(q)) {
+    return rows.filter((row) => (row.localYmd === yesterday && row.localHour >= 18) || (row.localYmd === today && row.localHour <= 12));
+  }
+  const start = compactToYmd(range.start);
+  const end = compactToYmd(range.end);
+  return rows.filter((row) => row.localYmd >= start && row.localYmd <= end);
+}
+
+function formatBeijingDateTime(value) {
+  const date = value instanceof Date ? value : new Date(value || Date.now());
+  if (Number.isNaN(date.getTime())) return String(value || '');
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+}
+
+function beijingDateTimeParts(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const pick = (type) => parts.find((part) => part.type === type)?.value || '';
+  return { ymd: `${pick('year')}-${pick('month')}-${pick('day')}`, hour: Number(pick('hour') || 0) };
+}
+
+function compactToYmd(value) {
+  const raw = String(value || '');
+  if (/^\d{8}$/.test(raw)) return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+  return raw;
 }
 
 export async function expressTracking(query) {

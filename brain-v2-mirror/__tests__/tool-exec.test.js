@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../tool-exec/web_search.js', () => ({
   webSearch: vi.fn(async (q) => 'mock results for: ' + q),
@@ -10,6 +10,7 @@ import { parallelResearch } from '../tool-exec/parallel_research.js';
 
 describe('tool-exec dispatcher', () => {
   beforeEach(() => { vi.restoreAllMocks(); });
+  afterEach(() => { vi.unstubAllGlobals(); });
 
   it('routes web_search to webSearch handler', async () => {
     const r = await executeServerTool('web_search', '{"query":"hello"}');
@@ -43,12 +44,71 @@ describe('tool-exec dispatcher', () => {
     expect(queries.some((q) => q.includes('近7天 最新'))).toBe(true);
   });
 
-  it('guides sports_score callers to web_search instead of returning a dead-source error', async () => {
+  it('returns ESPN scoreboard evidence for recognized sports score queries', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        events: [{
+          date: '2026-06-11T19:00Z',
+          name: 'South Africa at Mexico',
+          status: { type: { completed: true, shortDetail: 'FT' } },
+          competitions: [{
+            competitors: [
+              { homeAway: 'home', score: '2', team: { displayName: 'Mexico' } },
+              { homeAway: 'away', score: '0', team: { displayName: 'South Africa' } },
+            ],
+          }],
+        }],
+      }),
+    })));
+
     const r = await executeServerTool('sports_score', { query: '世界杯比分' });
-    const data = JSON.parse(r);
-    expect(data.status).toBe('no_direct_source');
-    expect(data.guidance).toContain('web_search');
-    expect(data.error).toBeUndefined();
+    expect(r).toContain('provider: espn_scoreboard');
+    expect(r).toContain('league: FIFA World Cup');
+    expect(r).toContain('Mexico 2-0 South Africa');
+    expect(global.fetch.mock.calls[0][0]).toContain('site.api.espn.com');
+  });
+
+  it('filters ESPN scoreboard rows by Beijing tonight window and hides scheduled 0-0 scores', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        events: [
+          {
+            date: '2026-06-21T04:00Z',
+            status: { type: { completed: true, shortDetail: 'FT' } },
+            competitions: [{ competitors: [
+              { homeAway: 'home', score: '4', team: { displayName: 'Japan' } },
+              { homeAway: 'away', score: '0', team: { displayName: 'Tunisia' } },
+            ] }],
+          },
+          {
+            date: '2026-06-21T16:00Z',
+            status: { type: { completed: false, shortDetail: 'Scheduled' } },
+            competitions: [{ competitors: [
+              { homeAway: 'home', score: '0', team: { displayName: 'Spain' } },
+              { homeAway: 'away', score: '0', team: { displayName: 'Saudi Arabia' } },
+            ] }],
+          },
+          {
+            date: '2026-06-22T17:00Z',
+            status: { type: { completed: false, shortDetail: 'Scheduled' } },
+            competitions: [{ competitors: [
+              { homeAway: 'home', score: '0', team: { displayName: 'Argentina' } },
+              { homeAway: 'away', score: '0', team: { displayName: 'Austria' } },
+            ] }],
+          },
+        ],
+      }),
+    })));
+
+    const r = await executeServerTool('sports_score', { query: '今晚世界杯有几场比赛' });
+    expect(r).toContain('Spain vs Saudi Arabia');
+    expect(r).not.toContain('Spain 0-0 Saudi Arabia');
+    expect(r).not.toContain('Japan 4-0 Tunisia');
+    expect(r).not.toContain('Argentina vs Austria');
   });
 
   it('isServerTool returns true for known and false for unknown', () => {
