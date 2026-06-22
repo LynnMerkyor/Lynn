@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/App-0.85.0-brightgreen" alt="App Version"></a>
-  <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.85.0-7bcad3" alt="CLI Version"></a>
+  <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/App-0.85.1-brightgreen" alt="App Version"></a>
+  <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.85.1-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/stargazers"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -102,12 +102,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.1.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI; 输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.85.0
+Lynn --version  # should print 0.85.1
 Lynn agents     # copyable headless/Fleet commands for other agents
 ```
 
@@ -153,23 +153,23 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 ## 🆕 近期更新
 
 <details open>
-<summary><strong>Lynn v0.85.0</strong> · 2026-06-21 · 自研核心主链 + 证据质量升级 <em>(最新)</em></summary>
+<summary><strong>Lynn v0.85.1</strong> · 2026-06-23 · 新内核稳定版 + Session Map 工作地图 <em>(最新)</em></summary>
 
-**自研 core 与证据链路**:
-- **自研核心进入主链**:主聊天、Bridge、isolated dry-run、Hub agent executor 收敛到 `core/agent-runtime`,工具事件、证据账本、空答防污染和可见收口都由 Lynn 自己的 runtime 接管。
-- **GUI / CLI 同核**:CLI 已验证的 Brain SSE / OpenAI-compatible transport、JSONL session、runtime frames、prefix-cache 纪律和工具事件回收到桌面 core,避免 GUI 与 CLI 两套证据逻辑漂移。
-- **证据优先,少工具风暴**:Brain V2 在拿到足够工具证据后快速 evidence handoff 给 StepFun 3.7 Flash 总结,DeepSeek / GLM fallback 只在必要时介入。
+**稳定新内核与工作地图**:
+- **v0.85 自研核心稳定版**:继续保持完全替换 Pi SDK 主链、NO Fork、自主 runtime 的方向,把空答、证据完整性、GUI/CLI 差异和 provider 抖动纳入发版门禁。
+- **Session Map 工作地图**:右侧便签区升级为当前会话工作台,展示当前线索、巡检状态、证据/资料和“从此分支”入口,左侧不再只靠一串重复“新对话”和数字导航。
+- **超大 session health 标记**:巡检会标记 large / huge / blocked / archived 等状态,让 7GB 级历史会话变成可见风险节点,不再一打开就拖死 GUI。
 
-**搜索、体育与实时问答**:
-- **体育/实时问题证据修复**:世界杯赛程、比分、预测类问题统一走 `sports_score`;预测问题会基于已知对阵给出赛前预测,并标注“预测,不是赛果,也不是博彩建议”。
-- **本地 Brain 优先**:CLI 默认优先连接 `http://127.0.0.1:8790`,本地不可用时才回到托管 Brain,让本机 GUI/CLI 行为保持一致。
-- **证据边界更诚实**:`directSourceStatus`、`userIntent`、fallback 来源会进入预取上下文和流式工具摘要,不把内置赛程兜底包装成实时官方数据。
+**GUI / CLI 与 Brain 运维**:
+- **GUI / CLI 继续同核**:桌面包和 CLI 包都走 Brain V2、证据优先、工具事件和最终可见收口门禁,CLI 不再作为另一套临时补丁面存在。
+- **从当前会话开分支**:长对话可以保留血缘、摘要和下一步,同时用新会话继续工作,减少把完整长上下文反复拖入模型。
+- **Brain auth / healthcheck 修复**:修复一条损坏 device JSON 导致的 `internal auth error`,v2 healthcheck / cron-smoke 改为 HMAC 签名请求,并停止旧 v1 smoke 对 MiMo 过期 key 的噪声调用。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.1.tgz"
 ```
 
-[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases#v0.85.0)
+[完整 Release Notes →](https://gitee.com/merkyor/Lynn/releases#v0.85.1)
 
 </details>
 
@@ -1172,11 +1172,11 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [Releases](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.dmg`。V0.85.0 的 Apple Silicon / Intel DMG 会完成签名、公证、stapled,并通过 Gatekeeper 校验。
+**macOS（Apple Silicon / Intel）**：从 [Releases](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.dmg`。V0.85.1 的 Apple Silicon / Intel DMG 是按快速发布流程打包的签名安装包,Apple notarization 本轮跳过。
 
 **Windows**：从 [Releases](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.exe`，直接运行。
 
-> **Windows SmartScreen 提示：** V0.85.0 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
+> **Windows SmartScreen 提示：** V0.85.1 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
 Linux 版本计划中。
 
@@ -1244,7 +1244,7 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（V0.85.0 签名 + 公证 DMG） |
+| macOS (Apple Silicon) | 已支持（V0.85.1 签名 DMG,本轮跳过公证） |
 | macOS (Intel) | 已支持 |
 | Windows x64 | Beta |
 | Linux | 计划中 |
@@ -1306,7 +1306,7 @@ npm run dist:local            # 本地打包（macOS DMG，跳过公证）
 
 ### Q5：Windows 能用吗？
 
-可以。V0.85.0 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均会签名、公证并通过 Gatekeeper 校验。
+可以。V0.85.1 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 均按快速发布流程完成签名打包,Apple notarization 本轮跳过。
 
 ### Q6：能改模型吗？接自己的 API？
 

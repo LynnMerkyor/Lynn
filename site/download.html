@@ -9,14 +9,14 @@
     <title>Lynn 下载 | macOS 与 Windows 安装包</title>
     <meta
       name="description"
-      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.85.0,CLI 当前为 v0.85.0。"
+      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.85.1,CLI 当前为 v0.85.1。"
     />
     <meta name="theme-color" content="#f7f1e6" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Lynn 下载 | macOS 与 Windows 安装包" />
     <meta
       property="og:description"
-      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.85.0,CLI 当前为 v0.85.0。"
+      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.85.1,CLI 当前为 v0.85.1。"
     />
     <meta property="og:image" content="../.github/assets/screenshot-main-20260407-v3.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -47,8 +47,8 @@
             <span class="eyebrow">Lynn 下载页</span>
             <h1>选择适合你设备的版本</h1>
             <p class="lead">
-              客户端 GUI 当前为 <strong id="gui-release-version">0.85.0</strong>,
-              CLI 当前为 <strong id="cli-release-version">0.85.0</strong>。
+              客户端 GUI 当前为 <strong id="gui-release-version">0.85.1</strong>,
+              CLI 当前为 <strong id="cli-release-version">0.85.1</strong>。
               GUI 下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作和显式启用的本地模型；CLI 可独立安装,也可作为 Fleet worker 或 manager。
             </p>
             <div class="platform-callout" id="platform-callout">
@@ -62,7 +62,7 @@
             <span class="eyebrow">Lynn CLI / Lynn Code</span>
             <h2>给开发者和其他智能体的安装方式</h2>
             <p>
-              Lynn CLI 当前最新为 <strong>v0.85.0</strong>。它是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、Markdown 渲染、流式输出、工具调用和长任务续跑。
+              Lynn CLI 当前最新为 <strong>v0.85.1</strong>。它是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、Markdown 渲染、流式输出、工具调用和长任务续跑。
               一行命令装好,不用克隆仓库、不用编译;也可以被 Claude Code、Codex CLI、Kimi Code、Qwen CLI、CI 或 Lynn GUI Fleet 以无交互方式调用。
             </p>
           </div>
@@ -94,7 +94,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
             </div>
             <div class="code-copy-block">
               <button class="copy-button" type="button" data-copy-target="cli-install">复制</button>
-              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.0.tgz</code></pre>
+              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.1.tgz</code></pre>
             </div>
           </div>
           <div class="cli-install-card">
@@ -108,7 +108,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
               <pre><code id="cli-start">Lynn                 # 交互式聊天 TUI
 Lynn code            # 编码 agent TUI
 Lynn manager run -p "拆分并验收这个长任务" --jsonl
-Lynn --version       # 应输出 0.85.0
+Lynn --version       # 应输出 0.85.1
 Lynn agents          # 输出可复制的 Fleet / 其他 CLI 调用方式
 
 # 无交互编码 worker 示例
@@ -128,17 +128,17 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill">推荐给 Apple Silicon Mac</span>
               <h2>macOS Apple Silicon</h2>
             </div>
-            <p>适用于 Apple Silicon 芯片的 Mac。正式发布包会完成 Developer ID 签名、公证、stapled,并通过 Gatekeeper 校验。</p>
+            <p>适用于 Apple Silicon 芯片的 Mac。本轮快速发布包完成签名与真实安装门禁,Apple notarization 按用户要求跳过。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
               <li>签名状态：Developer ID 签名</li>
-              <li>公证状态：已完成 Apple notarization</li>
+              <li>公证状态：本轮快速发布跳过</li>
               <li>下载大小：约 174 MiB</li>
             </ul>
             <a
               class="button button-primary"
               data-download-key="macArm"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.0-macOS-arm64.dmg"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.1-macOS-arm64.dmg"
               target="_blank"
               rel="noreferrer"
             >下载 Apple Silicon 版</a>
@@ -149,17 +149,17 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill pill-soft">适用于 Intel Mac</span>
               <h2>macOS Intel</h2>
             </div>
-            <p>适用于 Intel 芯片的 Mac。正式发布包会完成 Developer ID 签名、公证、stapled,并通过 Gatekeeper 校验。</p>
+            <p>适用于 Intel 芯片的 Mac。本轮快速发布包完成签名与真实安装门禁,Apple notarization 按用户要求跳过。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
               <li>签名状态：Developer ID 签名</li>
-              <li>公证状态：已完成 Apple notarization</li>
+              <li>公证状态：本轮快速发布跳过</li>
               <li>下载大小：约 181 MiB</li>
             </ul>
             <a
               class="button button-primary"
               data-download-key="macIntel"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.0-macOS-x64.dmg"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.1-macOS-x64.dmg"
               target="_blank"
               rel="noreferrer"
             >下载 Intel 版</a>
@@ -170,7 +170,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill pill-warm">Windows 安装版</span>
               <h2>Windows</h2>
             </div>
-            <p>正式发布提供代码签名的 `Setup.exe` 安装包。客户端 GUI v0.85.0 Windows 安装包已同步到镜像站。</p>
+            <p>正式发布提供代码签名的 `Setup.exe` 安装包。客户端 GUI v0.85.1 Windows 安装包已同步到镜像站。</p>
             <ul>
               <li>文件格式：`.exe`</li>
               <li>安装方式：图形安装向导</li>
@@ -180,7 +180,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="windows"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.0-Windows-Setup.exe"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.1-Windows-Setup.exe"
               target="_blank"
               rel="noreferrer"
             >下载 Windows 版</a>
@@ -231,20 +231,19 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
 
         <section class="section release-summary">
           <div class="release-card">
-            <h2>V0.85 为什么是划时代版本</h2>
+            <h2>V0.85.1:稳定新内核和工作地图</h2>
             <p>
-              V0.85 是 Lynn 从历史 Pi SDK / fork 式 Agent 壳层里真正脱钩的版本:
-              主聊天、工具循环、证据账本、fallback handoff、GUI/CLI 执行链路已经由 Lynn 自研
-              <code>core/agent-runtime</code> 接管。它不是在旧 SDK 上继续补补丁,
-              而是把默认主链换成自主设计、自主实现、自主验证的 <strong>NO Fork</strong> Agent 核心。
+              V0.85.1 继续稳定 Lynn 从历史 Pi SDK / fork 式 Agent 壳层里脱钩后的
+              <strong>NO Fork</strong> 自研核心,并把长会话治理放到 GUI 的第一屏:
+              Session Map、巡检、证据、health 标记和“从此分支”都围绕当前工作线索展开。
             </p>
             <ul>
-              <li>完全替换 Pi SDK 主链:默认 Agent loop、工具事件、证据 ledger、空答防污染和最终可见收口都进入 Lynn native runtime</li>
-              <li>完全自主自研产品形态:历史 fork/SDK 只保留许可证致谢和兼容迁移背景,不再定义 Lynn 的核心能力边界</li>
-              <li>GUI / CLI 同核:桌面、终端、<code>Lynn -p</code> 和编码执行复用同一套 Brain SSE、runtime frames、JSONL session 和 transport 纪律</li>
-              <li>搜索质量从补丁治理升级为运行时治理:先接证据,再总结,必要时才 fallback,减少工具风暴和“搜到了却空答”的坏结果</li>
-              <li>体育/实时问题统一证据口径:世界杯赛程、比分、预测走同一条证据链,预测基于已知对阵给出判断并标注不是赛果</li>
-              <li>本地 Brain 优先:CLI 默认先连本机 Lynn Brain,让本机 GUI/CLI 不再和托管旧 Brain 各走一套行为</li>
+              <li>稳定自研 core 主链:工具事件、证据 ledger、空答防污染和最终可见收口继续由 Lynn native runtime 接管</li>
+              <li>Session Map 工作地图:右侧不再是零散便签,而是当前会话的目标、状态、证据、洞察和血缘</li>
+              <li>超大 session health:large / huge / blocked / archived 会话会被标记,避免巨型历史一打开就拖慢 GUI</li>
+              <li>从当前会话开分支:保留摘要、血缘和下一步,用新会话继续工作,不用把完整长上下文拖入模型</li>
+              <li>GUI / CLI 同核门禁:桌面、终端、<code>Lynn -p</code> 和编码执行复用 Brain V2、runtime frames 和 transport 纪律</li>
+              <li>Brain 运维修复:签名 healthcheck / cron-smoke、修复损坏 device JSON,降低 provider 鉴权抖动对用户的影响</li>
             </ul>
             <a
               class="button button-secondary"
@@ -270,6 +269,6 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
       </footer>
     </div>
 
-    <script src="./app.js?v=0.85.0-cli"></script>
+    <script src="./app.js?v=0.85.1-cli"></script>
   </body>
 </html>
