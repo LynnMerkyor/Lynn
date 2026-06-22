@@ -1,7 +1,0 @@
-{
-  "status": "NO_GO_readiness_only",
-  "qwen_dflash_artifact_found": false,
-  "related_diffusion_path_count": 120,
-  "decision": "No local Qwen3.6 DFlash drafter/target artifact found on Spark, so do not run synthetic DFlash speed tests. DFlash remains a parked lead pending concrete model/runtime artifacts.",
-  "sanitization": "Paths omitted in local sanitized artifact."
-}

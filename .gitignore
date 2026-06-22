@@ -121,3 +121,4 @@ desktop/native-modules/**/target/
 /vllm-pr-*/
 /vllm-upstream-prs/
 /worktrees/
+reports/
