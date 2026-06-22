@@ -2,7 +2,7 @@
  * DeskSection — 右侧工作地图 / 巡检侧栏
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../stores';
 import { ContextMenu } from './ContextMenu';
 import { DESK_SORT_KEY, type SortMode, type CtxMenuState } from './desk/desk-types';
@@ -25,7 +25,7 @@ export function DeskSection() {
   const setDeskView = useStore(state => state.setDeskView);
   const sessions = useStore(state => state.sessions);
   const patrolStatus = useStore(state => state.deskPatrolStatus);
-  const automationStatus = useStore(state => state.deskAutomationStatus);
+
   const serverPort = useStore(state => state.serverPort);
   const [patrolBusy, setPatrolBusy] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>(
@@ -49,15 +49,6 @@ export function DeskSection() {
   }, [t]);
   const hasWorkspace = !!deskBasePath;
   const showFileSurface = hasWorkspace && deskFiles.length > 0;
-  const unreadInsightCount = useMemo(
-    () => sessions.reduce((sum, session) => sum + (session.insights || []).filter((item) => item.status === 'unread').length, 0),
-    [sessions],
-  );
-  const largeSessionCount = useMemo(
-    () => sessions.filter((session) => session.health?.level === 'large' || session.health?.level === 'critical').length,
-    [sessions],
-  );
-
   useEffect(() => {
     if (!serverPort) return;
     void loadDeskPatrolStatus();
@@ -105,20 +96,6 @@ export function DeskSection() {
           >
             {patrolStatus?.state === 'running' || patrolBusy ? tt('desk.patrolRunningShort', '巡检中') : tt('desk.runPatrol', '巡检')}
           </button>
-        </div>
-        <div className={styles.workspaceRailSummary}>
-          <div>
-            <strong>{unreadInsightCount}</strong>
-            <span>{tt('session.map.insights', '洞察')}</span>
-          </div>
-          <div>
-            <strong>{largeSessionCount}</strong>
-            <span>{tt('session.map.large', '大会话')}</span>
-          </div>
-          <div>
-            <strong>{automationStatus?.enabledCount || 0}</strong>
-            <span>{tt('sidebar.capability.automation', '自动任务')}</span>
-          </div>
         </div>
         <div className={styles.workspaceRailTabs}>
           <button

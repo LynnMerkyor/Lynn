@@ -137,40 +137,6 @@
     border-color: var(--overlay-light);
 }
 
-.workspaceRailSummary {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-    padding: 0 8px 8px;
-    flex: 0 0 auto;
-}
-
-.workspaceRailSummary div {
-    min-width: 0;
-    border: 1px solid var(--overlay-light);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--bg-card) 86%, var(--bg));
-    padding: 7px 8px;
-}
-
-.workspaceRailSummary strong {
-    display: block;
-    color: var(--text);
-    font-size: 0.88rem;
-    line-height: 1.05;
-}
-
-.workspaceRailSummary span {
-    display: block;
-    color: var(--text-muted);
-    font-size: 0.62rem;
-    line-height: 1.2;
-    margin-top: 3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
 .workspaceRailTabs {
     display: inline-flex;
     align-items: center;
@@ -213,33 +179,15 @@
     overflow: hidden;
 }
 
-.mapStats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+.mapStatusBar {
     flex: 0 0 auto;
-}
-
-.mapStat {
-    min-width: 0;
-    padding: 8px;
-    border: 1px solid var(--overlay-light);
+    padding: 7px 9px;
     border-radius: 8px;
-    background: var(--bg-card);
-}
-
-.mapStat strong {
-    display: block;
-    color: var(--text);
-    font-size: 0.95rem;
-    line-height: 1.1;
-}
-
-.mapStat span {
-    display: block;
-    color: var(--text-muted);
-    font-size: 0.62rem;
-    margin-top: 3px;
+    border: 1px solid var(--overlay-light);
+    background: color-mix(in srgb, var(--bg-card) 92%, var(--bg));
+    color: var(--text-light);
+    font-size: 0.72rem;
+    line-height: 1.45;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -264,46 +212,117 @@
     font-size: 0.72rem;
 }
 
-.mapCanvas {
-    min-width: 100%;
-    min-height: 100%;
-    display: block;
+.mapNodeList {
+    list-style: none;
+    margin: 0;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
 }
 
-.mapEdge {
-    stroke: var(--overlay-medium, rgba(127,127,127,0.25));
-    stroke-width: 1.5;
-}
-
-.mapNodeGroup {
+.mapNodeItem {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 6px 7px;
+    border-radius: 8px;
     cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+    min-width: 0;
 }
 
-.mapNode,
-.mapNodeActive {
-    stroke: color-mix(in srgb, var(--bg) 80%, white);
-    stroke-width: 2;
-    transition: opacity 0.15s, transform 0.15s;
+.mapNodeItem:hover {
+    background: var(--overlay-subtle);
 }
 
-.mapNodeGroup:hover .mapNode,
-.mapNodeGroup:hover .mapNodeActive {
-    opacity: 0.82;
+.mapNodeSelected {
+    background: rgba(var(--accent-rgb), 0.10);
 }
 
 .mapNodeActive {
-    stroke: var(--text);
-    stroke-width: 2.6;
+    background: rgba(var(--accent-rgb), 0.06);
 }
 
-.mapNodeLabel {
-    fill: var(--text);
-    font-size: 10px;
-    paint-order: stroke;
-    stroke: var(--bg-card);
-    stroke-width: 3px;
-    stroke-linejoin: round;
-    pointer-events: none;
+.mapNodeBullet {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.55rem;
+    line-height: 1;
+    margin-top: 2px;
+    border-radius: 50%;
+}
+
+.mapNodeCurrent .mapNodeBullet {
+    color: var(--accent);
+}
+
+.mapNodeRisk .mapNodeBullet {
+    color: var(--danger, #d33);
+}
+
+.mapNodeInsight .mapNodeBullet {
+    color: var(--accent);
+}
+
+.mapNodeBranch .mapNodeBullet {
+    color: var(--text-light);
+}
+
+.mapNodeRecent .mapNodeBullet {
+    color: var(--text-muted);
+}
+
+.mapNodeCluster .mapNodeBullet {
+    color: var(--text-muted);
+}
+
+.mapNodeBody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.mapNodeTitle {
+    color: var(--text);
+    font-size: 0.74rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mapNodeMeta {
+    color: var(--text-muted);
+    font-size: 0.62rem;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mapNodeCluster .mapNodeText {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+.mapNodeActiveBadge {
+    flex: 0 0 auto;
+    font-size: 0.56rem;
+    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.10);
+    border: 1px solid rgba(var(--accent-rgb), 0.18);
+    border-radius: 999px;
+    padding: 1px 5px;
+    line-height: 1;
+    margin-top: 2px;
 }
 
 .mapDetail {
@@ -413,6 +432,17 @@
     display: flex;
     justify-content: flex-end;
     margin-top: 9px;
+}
+
+.mapDetailPlaceholder {
+    flex: 0 0 auto;
+    padding: 9px 10px;
+    border-radius: 9px;
+    border: 1px dashed var(--overlay-light);
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    line-height: 1.45;
+    text-align: center;
 }
 
 .headerCwdBtn {
