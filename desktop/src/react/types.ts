@@ -30,6 +30,40 @@ export interface Session {
   modelProvider?: string | null;
   pinned?: boolean;
   labels?: string[];
+  topology?: {
+    parentSessionPath: string | null;
+    rootSessionPath: string | null;
+    branchLabel: string | null;
+    taskStatus: 'active' | 'paused' | 'completed' | 'archived';
+    summary: string | null;
+    resumeHint: string | null;
+    createdAt: string | null;
+    updatedAt: string | null;
+  } | null;
+  digest?: {
+    objective: string | null;
+    status: string | null;
+    summary: string | null;
+    decisions: string[];
+    openQuestions: string[];
+    nextSteps: string[];
+    evidenceRefs: string[];
+    updatedAt: string | null;
+  } | null;
+  insights?: Array<{
+    id: string;
+    source: string | null;
+    targetSessionPath: string | null;
+    content: string;
+    status: 'unread' | 'consumed' | 'archived';
+    createdAt: string;
+    consumedAt: string | null;
+  }>;
+  health?: {
+    level: 'ok' | 'large' | 'critical';
+    sizeBytes: number | null;
+    reason: string | null;
+  } | null;
   _optimistic?: boolean;
 }
 
@@ -212,6 +246,7 @@ export interface SessionAgent {
 
 // ── 浮动面板类型 ──
 export type ActivePanel = 'activity' | 'automation' | 'bridge' | 'changes' | 'fleet' | null;
+export type DeskView = 'map' | 'materials';
 export type TabType = 'chat' | 'channels';
 
 // ── Platform API 类型声明 ──

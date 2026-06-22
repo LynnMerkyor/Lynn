@@ -175,6 +175,43 @@ describe("code agent loop · core & approvals", () => {
     expect(events.some((event) => event.type === "task.finished" && event.ok)).toBe(true);
   });
 
+  it("answers from collected Brain tool evidence when the provider errors afterwards", async () => {
+    const events: CodeAgentEvent[] = [];
+    await withRawBrainServer(() => rawSsePayloads([
+      JSON.stringify({
+        object: "lynn.tool_progress",
+        tool_progress: {
+          event: "end",
+          name: "web_search",
+          ok: true,
+          summary: "2026/06/22 00:00 Spain vs Saudi Arabia (Scheduled)",
+          details: ["2026/06/22 03:00 Belgium vs Iran (Scheduled)"],
+        },
+      }),
+      JSON.stringify({ object: "lynn.error", error: "all providers failed", code: "BRAIN_ALL_FAILED" }),
+    ]), async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "今晚世界杯有几场比赛",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--max-steps",
+        "1",
+      ]), "今晚世界杯有几场比赛", (event) => {
+        events.push(event);
+      })).resolves.toBe(0);
+    });
+
+    const finished = events.find((event): event is Extract<CodeAgentEvent, { type: "task.finished" }> => event.type === "task.finished");
+    expect(finished?.ok).toBe(true);
+    expect(finished?.text).toContain("2026/06/22 00:00 Spain vs Saudi Arabia");
+    expect(finished?.text).toContain("2026/06/22 03:00 Belgium vs Iran");
+    expect(events.some((event) => event.type === "assistant.delta" && event.text.includes("工具证据"))).toBe(true);
+    expect(events.some((event) => event.type === "error")).toBe(false);
+  });
+
   it("uses a 100 step default and allows explicit budgets up to 300", () => {
     expect(maxSteps(parseArgs(["code", "task"]))).toBe(100);
     expect(maxSteps(parseArgs(["code", "task", "--max-steps", "20"]))).toBe(20);

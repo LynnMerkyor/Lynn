@@ -71,6 +71,9 @@ async function listSessionFileSkeletonsWithStatus(sessionDir: string, agent: Age
       modelProvider: null,
       pinned: false,
       labels: [],
+      topology: null,
+      digest: null,
+      insights: [],
     };
   }));
   return { skeletons: skeletons.filter((entry) => entry.path), complete: true };
@@ -102,6 +105,9 @@ export async function collectAgentSessionEntries(opts: {
               agentId: entry.agentId || agent.id,
               agentName: entry.agentName || agent.name,
               labels: Array.isArray(entry.labels) ? entry.labels.filter(Boolean) : [],
+              topology: entry.topology || null,
+              digest: entry.digest || null,
+              insights: Array.isArray(entry.insights) ? entry.insights : [],
             };
           }));
           continue;
@@ -120,6 +126,9 @@ export async function collectAgentSessionEntries(opts: {
             agentId: entry.agentId || agent.id,
             agentName: entry.agentName || agent.name,
             labels: Array.isArray(entry.labels) ? entry.labels.filter(Boolean) : [],
+            topology: entry.topology || null,
+            digest: entry.digest || null,
+            insights: Array.isArray(entry.insights) ? entry.insights : [],
           });
         }
         for (const skeleton of skeletons) {
@@ -186,6 +195,9 @@ export function buildCurrentSessionListEntry(opts: {
     agentName: opts.activeAgent.agentName,
     modelId: opts.currentEntry?.modelId || null,
     modelProvider: opts.currentEntry?.modelProvider || null,
+    topology: opts.currentEntry?.topology || null,
+    digest: opts.currentEntry?.digest || null,
+    insights: Array.isArray(opts.currentEntry?.insights) ? opts.currentEntry?.insights : [],
   };
 }
 

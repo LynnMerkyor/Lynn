@@ -8,7 +8,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- store partial patch + API 响应 JSON */
 
 import { useStore } from './index';
-import { hanaFetch, hanaUrl } from '../hooks/use-hana-fetch';
+import { hanaFetch, hanaUrl, hasReadyServerPort, isLynnServerPortNotReady } from '../hooks/use-hana-fetch';
 import { loadAvatars as loadAvatarsAction, clearChat as clearChatAction } from './agent-actions';
 import { loadDeskFiles } from './desk-actions';
 import { saveTabState, restoreTabState } from './artifact-actions';
@@ -31,6 +31,7 @@ function formatActionError(err: unknown): string {
 }
 
 function showActionError(key: string, fallback: string, err: unknown, dedupeKey?: string): void {
+  if (isLynnServerPortNotReady(err)) return;
   const detail = formatActionError(err);
   const text = detail ? `${tr(key, fallback)}: ${detail}` : tr(key, fallback);
   showSidebarToast(text, 5000, 'error', dedupeKey);
@@ -43,6 +44,7 @@ function showActionError(key: string, fallback: string, err: unknown, dedupeKey?
 export async function loadMessages(forPath?: string): Promise<void> {
   const targetPath = forPath || useStore.getState().currentSessionPath;
   if (!targetPath) return;
+  if (!hasReadyServerPort()) return;
   try {
     const res = await hanaFetch(`/api/sessions/messages?path=${encodeURIComponent(targetPath)}`);
     const data = await res.json();
@@ -69,6 +71,7 @@ export async function loadMessages(forPath?: string): Promise<void> {
 // ══════════════════════════════════════════════════════
 
 export async function loadSessions(): Promise<void> {
+  if (!hasReadyServerPort()) return;
   try {
     const res = await hanaFetch('/api/sessions');
     const data = await res.json();
@@ -439,6 +442,46 @@ export async function ensureSession(): Promise<boolean> {
   });
 
   return _ensureSessionPromise;
+}
+
+// ══════════════════════════════════════════════════════
+// 从当前/指定 Session 开分支继续
+// ══════════════════════════════════════════════════════
+
+export async function branchSession(path: string): Promise<boolean> {
+  if (useStore.getState().sessionCreationPending) {
+    showSidebarToast(
+      tr('session.creating', 'Creating the new session, please wait a moment'),
+      3000,
+      'info',
+      'session-creation-pending',
+    );
+    return false;
+  }
+  try {
+    const source = useStore.getState().sessions.find((session) => session.path === path);
+    const branchLabel = source?.title || source?.firstMessage
+      ? `${(source.title || source.firstMessage || '').slice(0, 36)} branch`
+      : undefined;
+    const res = await hanaFetch('/api/sessions/branch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, branchLabel }),
+    });
+    const data = await res.json();
+    if (data.error || !data.path) {
+      showActionError('session.branchFailed', 'Failed to branch session', data.error || 'missing path', 'session-branch-failed');
+      return false;
+    }
+    await loadSessions();
+    await switchSession(data.path);
+    showSidebarToast(tr('session.branchCreated', 'Created a branched session'), 2500, 'success', 'session-branch-created');
+    return true;
+  } catch (err) {
+    console.error('[session] branch failed:', err);
+    showActionError('session.branchFailed', 'Failed to branch session', err, 'session-branch-failed');
+    return false;
+  }
 }
 
 // ══════════════════════════════════════════════════════

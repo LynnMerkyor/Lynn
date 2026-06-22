@@ -254,6 +254,7 @@ async function main(): Promise<void> {
       ...process.env,
       LYNN_HOME: lynnHome,
       LYNN_UI_SMOKE: "1",
+      LYNN_UI_NO_FRONT: process.env.LYNN_UI_NO_FRONT || "1",
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -272,7 +273,9 @@ async function main(): Promise<void> {
     await cdp.open();
     await cdp.call("Runtime.enable");
     await cdp.call("Page.enable");
-    await cdp.call("Page.bringToFront");
+    if (process.env.LYNN_UI_NO_FRONT !== "1") {
+      await cdp.call("Page.bringToFront");
+    }
     await cdp.call("Emulation.setDeviceMetricsOverride", {
       width: 1280,
       height: 900,

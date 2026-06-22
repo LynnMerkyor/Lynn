@@ -1,5 +1,15 @@
 import fsp from "fs/promises";
 import path from "path";
+import {
+  normalizeSessionTopology,
+  type SessionTopologyMeta,
+} from "../shared/session-topology.js";
+import {
+  normalizeSessionDigest,
+  normalizeSessionInsights,
+  type SessionDigest,
+  type SessionInsight,
+} from "../shared/session-digest.js";
 
 export const SESSION_INDEX_FILENAME = "session-index.json";
 
@@ -25,6 +35,9 @@ export interface SessionIndexInput {
   modelProvider?: string | null;
   pinned?: unknown;
   labels?: unknown;
+  topology?: unknown;
+  digest?: unknown;
+  insights?: unknown;
 }
 
 export interface SessionIndexEntry {
@@ -40,6 +53,9 @@ export interface SessionIndexEntry {
   modelProvider: string | null;
   pinned: boolean;
   labels: unknown[];
+  topology: SessionTopologyMeta | null;
+  digest: SessionDigest | null;
+  insights: SessionInsight[];
 }
 
 export interface SessionIndexPayload {
@@ -70,6 +86,9 @@ export function normalizeSessionIndexEntry(session: SessionIndexInput | null | u
     modelProvider: session?.modelProvider || null,
     pinned: !!session?.pinned,
     labels: Array.isArray(session?.labels) ? session.labels.filter(Boolean) : [],
+    topology: normalizeSessionTopology(session?.topology),
+    digest: normalizeSessionDigest(session?.digest),
+    insights: normalizeSessionInsights(session?.insights),
   };
 }
 

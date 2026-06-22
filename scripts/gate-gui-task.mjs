@@ -225,6 +225,7 @@ async function main() {
     env: {
       ...process.env,
       LYNN_HOME: lynnHome,
+      LYNN_UI_NO_FRONT: process.env.LYNN_UI_NO_FRONT || "1",
       // Dev/main.cjs launches dist-server-bundle from the repo. Force that child
       // server to use the same Node that loaded node_modules/better-sqlite3
       // above; otherwise Electron's embedded Node can disagree with native ABI
@@ -255,7 +256,9 @@ async function main() {
     await cdp.open();
     await cdp.call("Runtime.enable");
     await cdp.call("Page.enable");
-    await cdp.call("Page.bringToFront");
+    if (process.env.LYNN_UI_NO_FRONT !== "1") {
+      await cdp.call("Page.bringToFront");
+    }
 
     console.log("[gate-gui-task] 等待真实桌面主窗口输入框就绪...");
     assertRunning();

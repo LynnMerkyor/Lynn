@@ -50,6 +50,8 @@ describe('Evidence Quality Protocol', () => {
 
     expect(currentTemporalContext(now)).toContain('今天=2026-06-21');
     expect(containsTemporalNoResultContradiction('2026年6月20日尚未开赛，没有比分。', now)).toBe(true);
+    expect(containsTemporalNoResultContradiction('今天没有比分。', now)).toBe(true);
+    expect(containsTemporalNoResultContradiction('目前暂无赛果数据。', now)).toBe(true);
     expect(containsTemporalNoResultContradiction('2026年6月22日尚未开赛，没有比分。', now)).toBe(false);
   });
 

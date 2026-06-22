@@ -319,10 +319,9 @@ const AUTO_REVIEW_CHAIN_TIMEOUT_MS = Math.max(
 );
 const AUTO_REVIEW_MAX_OUTPUT_TOKENS = Math.max(1200, Math.min(2400, Number(process.env.LYNN_AUTO_REVIEW_MAX_TOKENS || 2000)));
 const AUTO_REVIEW_MODEL_LABEL = "Hanako · DS V4";
-const AUTO_REVIEW_FALLBACK_LABEL = "Hanako · DS V4/MiMo/GLM";
-const AUTO_REVIEW_FALLBACK_PROVIDERS = new Set(["deepseek", "mimo", "xiaomi", "xiaomi-mimo", "token-plan", "zhipu", "zhipu-coding", "brain"]);
+const AUTO_REVIEW_FALLBACK_LABEL = "Hanako · DS V4/GLM/Brain";
+const AUTO_REVIEW_FALLBACK_PROVIDERS = new Set(["deepseek", "zhipu", "zhipu-coding", "brain"]);
 const AUTO_REVIEW_DEEPSEEK_PROVIDERS = new Set(["deepseek"]);
-const AUTO_REVIEW_MIMO_PROVIDERS = new Set(["mimo", "xiaomi", "xiaomi-mimo", "token-plan"]);
 const AUTO_REVIEW_GLM_PROVIDERS = new Set(["zhipu", "zhipu-coding"]);
 const AUTO_REVIEW_BRAIN_PROVIDERS = new Set(["brain"]);
 const AUTO_REVIEW_GLM_MAX_CONCURRENCY = Math.max(1, Number(process.env.LYNN_AUTO_REVIEW_GLM_MAX_CONCURRENCY || 1));
@@ -692,9 +691,8 @@ function isAutoReviewGlmProvider(provider: unknown): boolean {
 function autoReviewProviderTier(provider: unknown): number {
   const normalized = normalizeProviderId(provider);
   if (AUTO_REVIEW_DEEPSEEK_PROVIDERS.has(normalized)) return 0;
-  if (AUTO_REVIEW_MIMO_PROVIDERS.has(normalized)) return 1;
-  if (AUTO_REVIEW_GLM_PROVIDERS.has(normalized)) return 2;
-  if (AUTO_REVIEW_BRAIN_PROVIDERS.has(normalized)) return 3;
+  if (AUTO_REVIEW_GLM_PROVIDERS.has(normalized)) return 1;
+  if (AUTO_REVIEW_BRAIN_PROVIDERS.has(normalized)) return 2;
   return 9;
 }
 
@@ -705,12 +703,6 @@ function autoReviewModelPreference(model: ModelLike | null | undefined): number 
     if (id === "deepseek-v4-flash") return 0;
     if (id.startsWith("deepseek-v4-flash-")) return 1;
     return 9;
-  }
-  if (AUTO_REVIEW_MIMO_PROVIDERS.has(provider)) {
-    if (id === "mimo-v2.5-pro") return 0;
-    if (id.includes("mimo-v2.5-pro")) return 1;
-    if (id.includes("mimo-v2.5")) return 2;
-    return 4;
   }
   if (AUTO_REVIEW_GLM_PROVIDERS.has(provider)) {
     if (id === "glm-5-turbo" || id === "glm-5.0-turbo") return 0;

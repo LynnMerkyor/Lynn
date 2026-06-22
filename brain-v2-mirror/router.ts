@@ -13,16 +13,20 @@ import { applyAudioTranscribe, createAudioRequestCache, type AudioRequestCache }
 import { compactToolResults, readToolResultCompactionConfigFromEnv } from './context-compact.js';
 import { containsGroundedToolDenialContradiction, containsTemporalNoResultContradiction, currentTemporalContext } from './evidence-quality.js';
 import {
+  DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY,
+  resolveDualBrainManagerRoute,
+  type DualBrainManagerDecisionReason,
+} from '../shared/dual-brain-route.js';
+import {
   buildToolStormReflection,
   createToolStormState,
   observeToolCallStorm,
   readToolStormConfigFromEnv,
 } from './tool-storm.js';
-import { errorMessage, type ChatMessage, type FallbackEntry, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
-const DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY = 1;
+import { errorMessage, type ChatMessage, type FallbackEntry, type FallbackReason, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
 
 type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio' | 'video'>>;
-type ProviderError = Error & { suppressBody?: boolean; cooldownMs?: number };
+type ProviderError = Error & { suppressBody?: boolean; cooldownMs?: number; status?: number; statusCode?: number; code?: string };
 type RunRoundResult = {
   ok: true;
   providerId: ProviderId;
@@ -52,16 +56,24 @@ function shouldEchoReasoningContent(providerId: ProviderId | null | undefined): 
   return /deepseek/i.test(String(providerId || ''));
 }
 
+function shouldEchoReasoningContentForContinuation(result: RunRoundResult): boolean {
+  return shouldEchoReasoningContent(result.providerId)
+    || result.sawReasoning
+    || !!String(result.reasoningAccum || '').trim();
+}
+
 function assistantToolContinuationMessage(result: RunRoundResult): ChatMessage {
   const message: ChatMessage = {
     role: 'assistant',
     content: result.contentAccum || null,
     tool_calls: result.toolCalls,
   };
-  if (shouldEchoReasoningContent(result.providerId)) {
+  if (shouldEchoReasoningContentForContinuation(result)) {
     // DeepSeek reasoning models require this field on assistant tool-call messages
     // in the continuation round. They may require it even when no reasoning text
-    // was streamed, so echo an explicit empty string instead of omitting it.
+    // was streamed, so echo an explicit empty string instead of omitting it. If a
+    // provider emitted reasoning under a non-DeepSeek id during fallback, preserve
+    // the streamed reasoning text as well instead of dropping it from the tool turn.
     message.reasoning_content = result.reasoningAccum || '';
   }
   return message;
@@ -79,6 +91,79 @@ const _emptyCounters = new Map<ProviderId, number>();
 const LOCAL_HEALTH_PROBE_ENABLED = process.env.BRAIN_V2_LOCAL_HEALTH_PROBE !== '0';
 const DEFAULT_LOCAL_HEALTH_PROBE_MS = Number(process.env.BRAIN_V2_LOCAL_HEALTH_PROBE_MS || 1_500);
 const LOCAL_SINGLE_SLOT_GUARD_ENABLED = process.env.BRAIN_V2_LOCAL_SINGLE_SLOT_GUARD !== '0';
+
+function positiveEnvNumber(key: string, fallback: number): number {
+  const value = Number(process.env[key] || fallback);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function httpStatusFromError(error: unknown, message = errorMessage(error)): number | null {
+  const record = error && typeof error === 'object' && !Array.isArray(error)
+    ? error as Record<string, unknown>
+    : null;
+  const direct = Number(record?.status ?? record?.statusCode ?? record?.httpStatus);
+  if (Number.isInteger(direct) && direct >= 100 && direct <= 599) return direct;
+  const match = String(message || '').match(/\b(401|403|408|409|425|429|5\d\d)\b/u);
+  return match ? Number(match[1]) : null;
+}
+
+function classifyProviderFallbackReason(error: ProviderError, message = errorMessage(error)): FallbackReason {
+  const status = httpStatusFromError(error, message);
+  const code = String(error.code || '').toUpperCase();
+  const text = `${code} ${message || ''}`;
+  if (status === 401 || status === 403 || /auth|unauthori[sz]ed|forbidden|invalid api key|api[-_ ]?key/i.test(text)) {
+    return 'error-auth';
+  }
+  if (status === 429 || /rate limit|too many requests|quota|throttle/i.test(text)) {
+    return 'error-rate-limit';
+  }
+  if (status != null && status >= 500) return 'error-server';
+  if (status === 408 || /abort|timeout|timed out|ETIMEDOUT/i.test(text)) return 'error-timeout';
+  if (/fetch failed|network|ECONN|ENOTFOUND|EAI_AGAIN|ECONNRESET|socket|dns/i.test(text)) return 'error-network';
+  return 'error';
+}
+
+function localProbeCooldownMs(reason: FallbackReason, status?: number | null): number {
+  if (reason === 'probe-timeout') {
+    return positiveEnvNumber('BRAIN_V2_LOCAL_PROBE_TIMEOUT_COOLDOWN_MS', 2_000);
+  }
+  if (reason === 'probe-threw') {
+    return positiveEnvNumber('BRAIN_V2_LOCAL_PROBE_THROW_COOLDOWN_MS', 3_000);
+  }
+  if (status != null && status >= 500) {
+    return positiveEnvNumber('BRAIN_V2_LOCAL_PROBE_5XX_COOLDOWN_MS', 15_000);
+  }
+  if (status != null && status >= 400) {
+    return positiveEnvNumber('BRAIN_V2_LOCAL_PROBE_4XX_COOLDOWN_MS', 30_000);
+  }
+  return positiveEnvNumber('BRAIN_V2_LOCAL_PROBE_FAIL_COOLDOWN_MS', 5_000);
+}
+
+function classifyLocalProbeFallbackReason(error: unknown, status?: number | null): FallbackReason {
+  const message = errorMessage(error);
+  if (/abort|timeout|timed out/i.test(message)) return 'probe-timeout';
+  if (error) return 'probe-threw';
+  return status != null ? 'probe-http' : 'probe-failed';
+}
+
+function dualBrainFallbackReason(reason: DualBrainManagerDecisionReason): FallbackReason {
+  if (
+    reason === 'local-manager-not-ready'
+    || reason === 'local-manager-loading'
+    || reason === 'local-manager-occupied'
+    || reason === 'local-manager-busy-single-slot'
+    || reason === 'gui-interactive-priority'
+    || reason === 'ds-v4-flash-escape-rule'
+  ) {
+    return reason;
+  }
+  return 'local-busy';
+}
+
+function guiInteractiveActive(): boolean {
+  return process.env.BRAIN_V2_GUI_INTERACTIVE_ACTIVE === '1'
+    || process.env.LYNN_GUI_INTERACTIVE_ACTIVE === '1';
+}
 
 function _bumpEmpty(providerId: ProviderId): number {
   const n = (_emptyCounters.get(providerId) || 0) + 1;
@@ -346,8 +431,33 @@ function summarizeToolResult(toolName: string, result: unknown): { summary?: str
   };
 }
 
+function hasTextEvidence(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasSearchEvidenceObject(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (record.ok === false) return false;
+  if (['title', 'url', 'link', 'href', 'content', 'snippet', 'summary', 'description'].some((key) => hasTextEvidence(record[key]))) {
+    return true;
+  }
+  if (Array.isArray(record.items) || Array.isArray(record.results) || Array.isArray(record.search_result) || Array.isArray(record.citations)) {
+    return countArrayEvidence(record.items)
+      + countArrayEvidence(record.results)
+      + countArrayEvidence(record.search_result)
+      + countArrayEvidence(record.citations) > 0;
+  }
+  return false;
+}
+
+function hasSearchEvidenceItem(value: unknown): boolean {
+  if (hasTextEvidence(value)) return true;
+  return hasSearchEvidenceObject(value);
+}
+
 function countArrayEvidence(value: unknown): number {
-  return Array.isArray(value) ? value.filter(Boolean).length : 0;
+  return Array.isArray(value) ? value.filter(hasSearchEvidenceItem).length : 0;
 }
 
 function countStructuredSearchEvidence(parsed: Record<string, unknown>): number {
@@ -360,7 +470,7 @@ function countStructuredSearchEvidence(parsed: Record<string, unknown>): number 
     for (const source of parsed.sources) {
       if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
       const record = source as Record<string, unknown>;
-      count += record.ok === false ? 0 : 1;
+      count += hasSearchEvidenceObject(record) ? 1 : 0;
       count += countArrayEvidence(record.items);
       count += countArrayEvidence(record.results);
     }
@@ -380,6 +490,59 @@ function countParallelResearchEvidence(parsed: Record<string, unknown>): number 
   }).length;
 }
 
+const GENERIC_EVIDENCE_TEXT_KEYS = new Set([
+  'answer',
+  'content',
+  'description',
+  'detail',
+  'details',
+  'forecast',
+  'headline',
+  'result',
+  'summary',
+  'text',
+  'title',
+]);
+
+const GENERIC_EVIDENCE_VALUE_KEYS = new Set([
+  'amount',
+  'currency',
+  'date',
+  'high',
+  'humidity',
+  'last',
+  'low',
+  'matchup',
+  'open',
+  'price',
+  'rate',
+  'score',
+  'symbol',
+  'temperature',
+  'time',
+  'value',
+]);
+
+function hasGenericStructuredEvidence(value: unknown, depth = 0): boolean {
+  if (hasTextEvidence(value)) return true;
+  if (typeof value === 'number' || typeof value === 'boolean') return true;
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some((item) => hasGenericStructuredEvidence(item, depth + 1));
+  const record = value as Record<string, unknown>;
+  if (record.ok === false || record.error || record.directSourceStatus === 'unavailable' || record.status === 'no_direct_source') {
+    return false;
+  }
+  for (const [key, item] of Object.entries(record)) {
+    if (key === 'ok' || key === 'query' || key === 'guidance') continue;
+    if (GENERIC_EVIDENCE_TEXT_KEYS.has(key) && hasTextEvidence(item)) return true;
+    if (GENERIC_EVIDENCE_VALUE_KEYS.has(key) && (hasTextEvidence(item) || typeof item === 'number' || typeof item === 'boolean')) return true;
+    if (depth < 2 && (Array.isArray(item) || (item && typeof item === 'object'))) {
+      if (hasGenericStructuredEvidence(item, depth + 1)) return true;
+    }
+  }
+  return false;
+}
+
 function evidenceToolWeight(toolName: string, result: unknown): number {
   if (!isGroundedToolName(toolName)) return 0;
   const raw = typeof result === 'string' ? result : JSON.stringify(result);
@@ -392,7 +555,7 @@ function evidenceToolWeight(toolName: string, result: unknown): number {
   }
   if (toolName === 'web_search' && parsed) {
     const evidence = countStructuredSearchEvidence(parsed);
-    return Math.min(3, Math.max(1, evidence));
+    return Math.min(3, Math.max(0, evidence));
   }
   if (toolName === 'web_search') {
     const citationLike = (raw.match(/https?:\/\//g) || []).length
@@ -404,11 +567,13 @@ function evidenceToolWeight(toolName: string, result: unknown): number {
     // JSON/citations. It is still grounded tool evidence and should be handed
     // to the fast synthesis model instead of letting the planner continue from
     // stale parametric memory.
-    return compactText(raw, 500).length >= 80 || meaningfulLines >= 2 ? 3 : 1;
+    return compactText(raw, 500).length >= 80 || meaningfulLines >= 2 ? 3 : 0;
   }
   // A successful structured realtime tool (weather/stock/exchange/fetch) is
   // usually already enough evidence to synthesize instead of looping tools.
-  return 3;
+  if (parsed) return hasGenericStructuredEvidence(parsed) ? 1 : 0;
+  const meaningfulLines = raw.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).length;
+  return compactText(raw, 500).length >= 40 || meaningfulLines >= 2 ? 1 : 0;
 }
 
 type ScoreboardRow = { time: string; matchup: string; result: string };
@@ -519,6 +684,17 @@ function isEvidenceHandoffEnabled(): boolean {
 
 function evidenceHandoffAfter(): number {
   return Math.max(1, Number(process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER || 3) || 3);
+}
+
+function evidenceHandoffAfterForTool(toolName: string): number {
+  const normalized = String(toolName || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  const scoped = normalized ? Number(process.env[`BRAIN_V2_EVIDENCE_HANDOFF_AFTER_${normalized}`] || '') : NaN;
+  if (Number.isFinite(scoped) && scoped > 0) return Math.max(1, scoped);
+  const fallback = evidenceHandoffAfter();
+  if (toolName === 'web_search') return fallback;
+  if (toolName === 'parallel_research') return Math.min(fallback, 2);
+  if (isGroundedToolName(toolName)) return 1;
+  return fallback;
 }
 
 function isGroundedToolName(toolName: string | undefined): boolean {
@@ -653,30 +829,43 @@ async function runRound({
     }
     // 本地 provider 快速探针 (避免 cold-start race + 1s ECONNREFUSED)。BRAIN_V2_LOCAL_HEALTH_PROBE=0 关
     if (LOCAL_HEALTH_PROBE_ENABLED && isLocalEndpoint(provider.endpoint)) {
+      const probeCtrl = new AbortController();
+      const probeTimer = setTimeout(() => probeCtrl.abort(), localProbeTimeoutMs(provider));
+      let probeRes: { ok?: boolean; status?: number } | null = null;
+      let probeError: unknown = null;
       try {
-        const probeCtrl = new AbortController();
-        const probeTimer = setTimeout(() => probeCtrl.abort(), localProbeTimeoutMs(provider));
-        const probeRes = await fetch(buildLocalProbeUrl(provider), { method: 'GET', signal: probeCtrl.signal })
-          .catch(() => null);
+        probeRes = await fetch(buildLocalProbeUrl(provider), { method: 'GET', signal: probeCtrl.signal });
+      } catch (error) {
+        probeError = error;
+      } finally {
         clearTimeout(probeTimer);
-        if (!probeRes || !probeRes.ok) {
-          log && log('info', `provider ${providerId} fast-probe failed, skip+cooldown`);
-          markUnhealthy(providerId, 'health-probe-failed', 5000);
-          fallbackChain.push({ id: providerId, reason: 'probe-failed' });
-          continue;
-        }
-      } catch {
-        log && log('info', `provider ${providerId} fast-probe threw, skip+cooldown`);
-        markUnhealthy(providerId, 'health-probe-threw', 5000);
-        fallbackChain.push({ id: providerId, reason: 'probe-threw' });
+      }
+      if (!probeRes || !probeRes.ok) {
+        const status = typeof probeRes?.status === 'number' ? probeRes.status : null;
+        const reason = classifyLocalProbeFallbackReason(probeError, status);
+        const cooldownMs = localProbeCooldownMs(reason, status);
+        const statusLabel = status ? `-${status}` : '';
+        log && log('info', `provider ${providerId} fast-probe ${reason}${statusLabel}, skip+cooldown ${cooldownMs}ms`);
+        markUnhealthy(providerId, `health-${reason}${statusLabel}`, cooldownMs);
+        fallbackChain.push({ id: providerId, reason });
         continue;
       }
     }
     if (shouldGuardLocalSingleSlot(provider)) {
       const slotSummary = await getLocalSlotSummary(provider).catch(() => null);
-      if (slotSummary && slotSummary.busy >= DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY) {
-        log && log('info', `provider ${providerId} local single-slot busy (${slotSummary.busy}/${slotSummary.total}), skip`);
-        fallbackChain.push({ id: providerId, reason: 'local-busy' });
+      const dualBrainDecision = resolveDualBrainManagerRoute({
+        localEndpointRunning: true,
+        localEndpointLoading: false,
+        localEndpointOccupied: false,
+        localSlotsBusy: slotSummary?.busy ?? null,
+        localSlotsTotal: slotSummary?.total ?? null,
+        guiInteractiveActive: guiInteractiveActive(),
+      });
+      if (!dualBrainDecision.localAllowed) {
+        const fallbackReason = dualBrainFallbackReason(dualBrainDecision.reason);
+        const slotLabel = slotSummary ? ` (${slotSummary.busy}/${slotSummary.total})` : '';
+        log && log('info', `provider ${providerId} dual-brain route=${dualBrainDecision.decision} reason=${dualBrainDecision.reason}${slotLabel}, skip local manager`);
+        fallbackChain.push({ id: providerId, reason: fallbackReason });
         continue;
       }
     }
@@ -835,8 +1024,9 @@ async function runRound({
         ? `provider ${providerId} failed: HTTP-auth (suppressed), fallback`
         : `provider ${providerId} failed: ${message}, fallback`;
       log && log('warn', logMsg);
-      markUnhealthy(providerId, message, err.cooldownMs ?? null); // variable cooldown for auth fail
-      fallbackChain.push({ id: providerId, reason: 'error' });
+      const fallbackReason = classifyProviderFallbackReason(err, message);
+      markUnhealthy(providerId, `${fallbackReason}: ${message}`, err.cooldownMs ?? null);
+      fallbackChain.push({ id: providerId, reason: fallbackReason });
       continue;
     }
   }
@@ -881,6 +1071,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   let serverToolStepIndex = 0;
   const skippedProviders = new Set<ProviderId>();
   let evidenceToolCount = 0;
+  let evidenceHandoffTarget = evidenceHandoffAfter();
   let groundedToolObserved = false;
   let evidenceHandoffDone = false;
   let summarizeFromEvidenceOnly = false;
@@ -1127,7 +1318,10 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       if (!outcome) continue;
       if (isGroundedToolName(outcome.tc.function.name)) groundedToolObserved = true;
       const evidenceWeight = evidenceToolWeight(outcome.tc.function.name, outcome.toolResult);
-      if (evidenceWeight > 0) evidenceToolCount += evidenceWeight;
+      if (evidenceWeight > 0) {
+        evidenceToolCount += evidenceWeight;
+        evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(outcome.tc.function.name));
+      }
       workingMessages.push({
         role: 'tool',
         tool_call_id: outcome.tc.id || ('tc-' + Math.random().toString(36).slice(2)),
@@ -1138,7 +1332,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     if (
       isEvidenceHandoffEnabled()
       && !evidenceHandoffDone
-      && evidenceToolCount >= evidenceHandoffAfter()
+      && evidenceToolCount >= evidenceHandoffTarget
       && lastProviderId
     ) {
       evidenceHandoffDone = true;
@@ -1148,7 +1342,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         role: 'user',
         content: buildEvidenceHandoffPrompt(evidenceToolCount),
       });
-      log && log('info', `iter ${iter}: grounded evidence budget reached (${evidenceToolCount}/${evidenceHandoffAfter()}); hand off from ${lastProviderId} to next provider for synthesis`);
+      log && log('info', `iter ${iter}: grounded evidence budget reached (${evidenceToolCount}/${evidenceHandoffTarget}); hand off from ${lastProviderId} to next provider for synthesis`);
       continue;
     }
     if (toolRoundEffortDown && !clientPinnedReasoning) {
@@ -1201,7 +1395,11 @@ export const __testing__ = {
   currentTemporalContext,
   containsGroundedToolDenialContradiction,
   containsTemporalNoResultContradiction,
+  classifyProviderFallbackReason,
+  evidenceHandoffAfterForTool,
   evidenceToolWeight,
+  hasGenericStructuredEvidence,
+  localProbeCooldownMs,
   summarizeLocalSlots,
   summarizeToolResult,
 };

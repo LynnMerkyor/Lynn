@@ -308,6 +308,7 @@ async function main() {
     env: {
       ...process.env,
       LYNN_HOME: lynnHome,
+      LYNN_UI_NO_FRONT: process.env.LYNN_UI_NO_FRONT || "1",
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
       LYNN_LOCAL_MODEL_AUTO_START: "0",
     },
@@ -326,7 +327,9 @@ async function main() {
     await cdp.open();
     await cdp.call("Runtime.enable");
     await cdp.call("Page.enable");
-    await cdp.call("Page.bringToFront");
+    if (process.env.LYNN_UI_NO_FRONT !== "1") {
+      await cdp.call("Page.bringToFront");
+    }
     await setViewport(cdp, 1040, 760);
 
     await waitFor(cdp, `(() => document.readyState === 'complete' && !!window.platform && !!document.querySelector('#inputBox'))()`, 60000, "main composer");

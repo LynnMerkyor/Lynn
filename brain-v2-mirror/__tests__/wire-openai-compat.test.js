@@ -157,6 +157,18 @@ describe('OpenAI-compat wire adapter', () => {
       expect(body.reasoning_effort).toBe('auto');
     });
 
+    it('default_thinking:false + realtime short query keeps answer budget', async () => {
+      const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'hi' }), sseDone())));
+      await drain(callOpenAI({
+        provider: sparkProvider,
+        messages: [{ role: 'user', content: '今天天气怎样' }],
+        reasoningEffort: 'auto',
+      }));
+      const body = JSON.parse(f.mock.calls[0][1].body);
+      expect(body.chat_template_kwargs.enable_thinking).toBe(false);
+      expect(body.max_tokens).toBe(4096);
+    });
+
     it('default_thinking:false + reasoningEffort=auto → 复杂问题自动打开 thinking', async () => {
       const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'hi' }), sseDone())));
       await drain(callOpenAI({

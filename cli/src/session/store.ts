@@ -1,6 +1,16 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  normalizeSessionDigest,
+  normalizeSessionInsights,
+  type SessionDigest,
+  type SessionInsight,
+} from "../../../shared/session-digest.js";
+import {
+  normalizeSessionTopology,
+  type SessionTopologyMeta,
+} from "../../../shared/session-topology.js";
 
 export const CLI_AGENT_ID = "cli";
 export const SESSION_INDEX_FILENAME = "session-index.json";
@@ -31,6 +41,9 @@ export interface CliSessionIndexEntry {
   modelProvider: string | null;
   pinned: boolean;
   labels: unknown[];
+  topology: SessionTopologyMeta | null;
+  digest: SessionDigest | null;
+  insights: SessionInsight[];
 }
 
 export interface CliSessionIndexPayload {
@@ -154,6 +167,7 @@ export async function appendSessionTurn(input: {
   assistant: string;
   modelId?: string | null;
   modelProvider?: string | null;
+  topology?: unknown;
 }): Promise<string> {
   const target = input.sessionPath ? path.resolve(input.sessionPath) : newSessionPath(input.dataDir);
   await fs.mkdir(path.dirname(target), { recursive: true });
@@ -181,6 +195,9 @@ export async function appendSessionTurn(input: {
       modelProvider: input.modelProvider || old?.modelProvider || null,
       pinned: old?.pinned || false,
       labels: Array.isArray(old?.labels) ? old.labels : [],
+      topology: normalizeSessionTopology(input.topology ?? old?.topology),
+      digest: normalizeSessionDigest(old?.digest),
+      insights: normalizeSessionInsights(old?.insights),
     };
     const next = [entry, ...existing.filter((candidate) => path.resolve(candidate.path) !== path.resolve(target))];
     await writeIndex(input.dataDir, next);
@@ -196,6 +213,7 @@ export async function appendSessionLine(input: {
   line: Omit<CliSessionLine, "ts"> & { ts?: string };
   modelId?: string | null;
   modelProvider?: string | null;
+  topology?: unknown;
 }): Promise<string> {
   const target = input.sessionPath ? path.resolve(input.sessionPath) : newSessionPath(input.dataDir);
   await fs.mkdir(path.dirname(target), { recursive: true });
@@ -224,6 +242,9 @@ export async function appendSessionLine(input: {
       modelProvider: input.modelProvider || old?.modelProvider || null,
       pinned: old?.pinned || false,
       labels: Array.isArray(old?.labels) ? old.labels : [],
+      topology: normalizeSessionTopology(input.topology ?? old?.topology),
+      digest: normalizeSessionDigest(old?.digest),
+      insights: normalizeSessionInsights(old?.insights),
     };
     const next = [entry, ...existing.filter((candidate) => path.resolve(candidate.path) !== path.resolve(target))];
     await writeIndex(input.dataDir, next);

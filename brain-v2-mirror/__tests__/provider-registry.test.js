@@ -69,6 +69,7 @@ describe('provider registry', () => {
     expect(mimo).toBeTruthy();
     expect(String(mimo.id)).toBe('mimo-multimodal');
     expect(mimo.endpoint).toBe('https://token-plan-cn.xiaomimimo.com/v1');
+    expect(mimo.apiKey).toBe(process.env.MIMO_MULTIMODAL_KEY || '');
     expect(String(mimo.model)).toBe('mimo-v2.5');
     expect(mimo.wire).toBe('openai');
     expect(mimo.capability).toMatchObject({

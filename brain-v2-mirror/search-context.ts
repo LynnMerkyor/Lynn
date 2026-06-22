@@ -152,10 +152,10 @@ function trimContext(text: string): string {
 
 function buildContextBlock(searchResult: string): string {
   const sourceStatus = inferDirectSourceStatus(searchResult);
-  const statusGuard = sourceStatus && /^(fallback_static_schedule|unavailable)$/i.test(sourceStatus)
+  const statusGuard = shouldAddDirectSourceBoundary(searchResult, sourceStatus)
     ? [
         '',
-        '证据边界: directSourceStatus 表明直接实时源未完全可用；不得把这些资料表述为实时/官方/ESPN 已确认结论。若需要引用，请明确说明使用的是备用资料或内置赛程。',
+        `证据边界: ${sourceStatus ? 'directSourceStatus 表明直接实时源未完全可用' : '未看到 directSourceStatus 实时确认标记'}；不得把这些资料表述为实时/官方/ESPN 已确认结论。若需要引用，请明确说明使用的是备用资料、搜索资料或内置赛程。`,
       ]
     : [];
   const predictionGuard = /^userIntent:\s*score_prediction/im.test(searchResult)
@@ -213,6 +213,15 @@ function inferSearchProvider(text: string): string {
 function inferDirectSourceStatus(text: string): string | undefined {
   const match = String(text || '').match(/^directSourceStatus:\s*([^\s]+)/im);
   return match?.[1]?.trim() || undefined;
+}
+
+function shouldAddDirectSourceBoundary(text: string, sourceStatus?: string): boolean {
+  const status = String(sourceStatus || '').trim();
+  if (/^(live|official|direct|verified|espn_scoreboard)$/i.test(status)) return false;
+  if (/^(fallback_static_schedule|unavailable)$/i.test(status)) return true;
+  return /^userIntent:\s*score_prediction/im.test(text)
+    || /^provider:\s*(espn_scoreboard|sports_score|scoreboard)/im.test(text)
+    || /(世界杯|比分|赛程|赛果|对阵|开赛|Scheduled|Final|score|fixture|schedule|scoreboard|world cup)/iu.test(text);
 }
 
 function injectSearchContext(messages: ChatMessage[] | undefined, contextBlock: string): ChatMessage[] | undefined {

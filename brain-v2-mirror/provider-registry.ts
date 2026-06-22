@@ -55,8 +55,8 @@ const PROVIDER_DEFS = {
   // and as the first native audio-capable provider in the multimodal route.
   'mimo-multimodal': {
     id: providerId('mimo-multimodal'),
-    endpoint: env('MIMO_MULTIMODAL_BASE', '') || env('MIMO_SEARCH_BASE', 'https://token-plan-cn.xiaomimimo.com/v1'),
-    apiKey: env('MIMO_MULTIMODAL_KEY', '') || env('MIMO_SEARCH_KEY', ''),
+    endpoint: env('MIMO_MULTIMODAL_BASE', 'https://token-plan-cn.xiaomimimo.com/v1'),
+    apiKey: env('MIMO_MULTIMODAL_KEY', ''),
     model: envModel('MIMO_MULTIMODAL_MODEL', 'mimo-v2.5'),
     capability: { vision: true, audio: true, video: true, tools: false, thinking: true, native_search: false },
     wire: 'openai',

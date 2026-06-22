@@ -9,21 +9,34 @@ import { parseOpenAISSE } from './_sse-parser.js';
 import { sanitizeToolsForWire, sanitizeMessagesForWire, restoreToolNameInChunk } from './_tool-name-codec.js';
 import type { ChatMessage, ModelId, StreamChunk, ToolDefinition, WireAdapterOptions } from '../types.js';
 
+function messageText(message?: ChatMessage): string {
+  if (!message) return '';
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (Array.isArray(message.content)) {
+    return (message.content as Array<{ type?: string; text?: string }>)
+      .map((c) => (typeof c?.text === 'string' ? c.text : ''))
+      .join('');
+  }
+  return '';
+}
+
+function lastPromptText(messages?: ChatMessage[]): string {
+  if (!Array.isArray(messages) || messages.length === 0) return '';
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === 'user') {
+      return messageText(messages[i]).trim();
+    }
+  }
+  return messageText(messages[messages.length - 1]).trim();
+}
+
 // F12: 智能判断是否需要 thinking
 // - 短问候/单一指令/简单查询 → false (节省 token + 降延迟)
 // - 包含推理关键词 / 长问题(>80 字)→ true (深度思考)
 function shouldAutoThink(messages?: ChatMessage[]): boolean {
-  const last = messages?.[messages.length - 1];
-  if (!last) return false;
-  let text = '';
-  if (typeof last.content === 'string') {
-    text = last.content;
-  } else if (Array.isArray(last.content)) {
-    text = (last.content as Array<{ type?: string; text?: string }>)
-      .map((c) => (typeof c?.text === 'string' ? c.text : ''))
-      .join('');
-  }
-  text = (text || '').trim();
+  const text = lastPromptText(messages);
   if (!text) return false;
   // 简单问候/确认 → 不开
   if (/^(你好|您好|hi|hello|hey|嗨|早|早上好|晚安|谢谢|好的|是的|嗯|ok|okay)[!,。.?? ]*$/i.test(text)) {
@@ -41,6 +54,13 @@ function shouldAutoThink(messages?: ChatMessage[]): boolean {
   if (text.length < 30) return false;
   // 中长问题(>80 字)→ 开
   return text.length > 80;
+}
+
+function shouldPreserveRealtimeAnswerBudget(messages?: ChatMessage[], tools?: ToolDefinition[]): boolean {
+  const text = lastPromptText(messages);
+  if (!text) return false;
+  if (Array.isArray(tools) && tools.length === 0) return false;
+  return /(今天|今日|今晚|今早|明天|昨日|昨天|最新|现在|目前|实时|新闻|天气|比分|赛程|赛果|预测|股价|股票|汇率|金价|油价|价格|票价|航班|世界杯|比赛|current|latest|today|tonight|tomorrow|yesterday|weather|score|fixture|schedule|result|prediction|price|stock|rate|news|world cup|match|game)/iu.test(text);
 }
 
 type OpenAICompatRequestBody = Record<string, unknown> & {
@@ -150,10 +170,10 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
       ...chatTemplateKwargs,
       enable_thinking: wantsThinking,
     };
-    // F12: 智能 max_tokens — 短答 512 节省;长 think 维持 provider.max_tokens || 4096
+    // F12: 智能 max_tokens — 短答 512 节省;长 think/实时工具问答维持 provider.max_tokens || 4096
     // 用户/extraBody 显式传 max_tokens 时不覆盖(已在初始 body 里设过了,这里只在 default 情况下调小)
     const userOverridesMaxTokens = (extraBody && typeof extraBody === 'object' && 'max_tokens' in (extraBody as object));
-    if (!wantsThinking && !userOverridesMaxTokens) {
+    if (!wantsThinking && !userOverridesMaxTokens && !shouldPreserveRealtimeAnswerBudget(messages, tools ?? undefined)) {
       body.max_tokens = 512;
     }
   }

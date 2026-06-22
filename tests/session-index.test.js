@@ -8,6 +8,7 @@ import {
   readSessionIndex,
   writeSessionIndex,
 } from "../core/session-index.js";
+import { saveSessionMetaFile } from "../core/session-title-meta.js";
 
 describe("session index sidecar", () => {
   const dirs = [];
@@ -31,6 +32,16 @@ describe("session index sidecar", () => {
       modified: new Date("2026-04-30T00:00:00.000Z"),
       messageCount: 3,
       labels: ["pinned", ""],
+      topology: {
+        parentSessionPath: "/tmp/root.jsonl",
+        branchLabel: "V0.85.1 memory",
+        taskStatus: "paused",
+      },
+      digest: {
+        objective: "Stabilize memory map",
+        summary: "Digest should index with sessions.",
+      },
+      insights: [{ id: "i1", content: "Carry this to the branch.", status: "unread" }],
     }, { agent: { id: "a1", name: "Agent One" } });
 
     expect(entry).toMatchObject({
@@ -41,6 +52,15 @@ describe("session index sidecar", () => {
       agentId: "a1",
       agentName: "Agent One",
       labels: ["pinned"],
+      topology: {
+        parentSessionPath: "/tmp/root.jsonl",
+        branchLabel: "V0.85.1 memory",
+        taskStatus: "paused",
+      },
+      digest: {
+        objective: "Stabilize memory map",
+      },
+      insights: [expect.objectContaining({ id: "i1", status: "unread" })],
     });
   });
 
@@ -51,6 +71,7 @@ describe("session index sidecar", () => {
       title: "One",
       modified: "2026-04-30T01:00:00.000Z",
       pinned: true,
+      topology: { branchLabel: "release", status: "completed" },
     }], { agent: { id: "agent-a", name: "Agent A" } });
 
     const filePath = path.join(dir, SESSION_INDEX_FILENAME);
@@ -62,6 +83,56 @@ describe("session index sidecar", () => {
       title: "One",
       agentId: "agent-a",
       pinned: true,
+      topology: {
+        branchLabel: "release",
+        taskStatus: "completed",
+      },
+    });
+  });
+
+  it("syncs topology metadata into basename/full-path meta entries and the session index", async () => {
+    const root = tempDir();
+    const sessionDir = path.join(root, "agent-a", "sessions");
+    fs.mkdirSync(sessionDir, { recursive: true });
+    const sessionPath = path.join(sessionDir, "one.jsonl");
+    fs.writeFileSync(sessionPath, "{}\n");
+
+    await writeSessionIndex(sessionDir, [{
+      path: sessionPath,
+      title: "One",
+      modified: "2026-04-30T01:00:00.000Z",
+    }], { agent: { id: "agent-a", name: "Agent A" } });
+
+    await saveSessionMetaFile(sessionPath, {
+      pinned: true,
+      labels: ["release", ""],
+      topology: { branchLabel: "V0.85.1", status: "paused" },
+      digest: { objective: "Map-first right rail", nextSteps: ["Wire GUI"] },
+      insights: [{ id: "audit-1", content: "Audit result", status: "unread" }],
+    }, {
+      agentsDir: root,
+      currentAgent: { sessionDir },
+      agentIdFromSessionPath: () => "agent-a",
+    });
+
+    const meta = JSON.parse(fs.readFileSync(path.join(sessionDir, "session-meta.json"), "utf-8"));
+    expect(meta[path.basename(sessionPath)]).toMatchObject({ pinned: true });
+    expect(meta[sessionPath]).toMatchObject({ pinned: true });
+
+    const sessions = await readSessionIndex(sessionDir);
+    expect(sessions[0]).toMatchObject({
+      path: sessionPath,
+      pinned: true,
+      labels: ["release"],
+      topology: {
+        branchLabel: "V0.85.1",
+        taskStatus: "paused",
+      },
+      digest: {
+        objective: "Map-first right rail",
+        nextSteps: ["Wire GUI"],
+      },
+      insights: [expect.objectContaining({ id: "audit-1", status: "unread" })],
     });
   });
 });

@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 // hoisted shared mock state
 const mockState = vi.hoisted(() => ({
   cooldown: new Set(),
+  unhealthy: [],
   providers: {},
   order: null,
   adapterFn: null,
@@ -19,7 +20,10 @@ vi.mock('../provider-registry.js', () => ({
   ),
   getProvider: (id) => mockState.providers[id] || null,
   isInCooldown: (id) => mockState.cooldown.has(id),
-  markUnhealthy: (id, reason) => mockState.cooldown.add(id),
+  markUnhealthy: (id, reason, cooldownMs) => {
+    mockState.cooldown.add(id);
+    mockState.unhealthy.push({ id, reason, cooldownMs });
+  },
   clearUnhealthy: (id) => mockState.cooldown.delete(id),
   PROVIDERS: mockState.providers,
 }));
@@ -52,6 +56,7 @@ beforeEach(() => {
   };
   mockState.order = null;
   mockState.adapterCalls = [];
+  mockState.unhealthy = [];
   mockState.adapterFn = null;
   webSearchTesting.cache.clear();
   webSearchTesting.structuredCache.clear();
@@ -73,6 +78,13 @@ afterEach(() => {
   delete process.env.BRAIN_V2_TOOL_PARALLEL;
   delete process.env.BRAIN_V2_EVIDENCE_HANDOFF;
   delete process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER;
+  delete process.env.BRAIN_V2_GUI_INTERACTIVE_ACTIVE;
+  delete process.env.LYNN_GUI_INTERACTIVE_ACTIVE;
+  delete process.env.BRAIN_V2_LOCAL_PROBE_TIMEOUT_COOLDOWN_MS;
+  delete process.env.BRAIN_V2_LOCAL_PROBE_THROW_COOLDOWN_MS;
+  delete process.env.BRAIN_V2_LOCAL_PROBE_4XX_COOLDOWN_MS;
+  delete process.env.BRAIN_V2_LOCAL_PROBE_5XX_COOLDOWN_MS;
+  delete process.env.BRAIN_V2_LOCAL_PROBE_FAIL_COOLDOWN_MS;
 });
 
 function makeTwoToolThenContentAdapter(capturedRounds) {
@@ -210,11 +222,13 @@ describe('Router', () => {
     expect(r.providerId).toBe('p-spark');
     expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
     expect(mockState.cooldown.has('p-step')).toBe(true);  // HTTP error 2192 markUnhealthy
+    expect(mockState.unhealthy[0]).toMatchObject({ id: 'p-step', reason: expect.stringContaining('error-server') });
   });
 
   it('falls back on HTTP 429 rate limit and cools down the limited provider', async () => {
     let callIdx = 0;
     const chunks = [];
+    const metas = [];
     mockState.adapterFn = async function* ({ provider }) {
       mockState.adapterCalls.push(provider.id);
       callIdx++;
@@ -225,13 +239,20 @@ describe('Router', () => {
 
     const r = await run({
       messages: [{ role: 'user', content: 'q' }],
-      onChunk: async c => chunks.push(c),
+      onChunk: async (c, meta) => {
+        chunks.push(c);
+        metas.push(meta);
+      },
     });
 
     expect(r.providerId).toBe('p-spark');
     expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
     expect(mockState.cooldown.has('p-step')).toBe(true);
+    expect(mockState.unhealthy[0]).toMatchObject({ id: 'p-step', reason: expect.stringContaining('error-rate-limit') });
     expect(chunks.find((c) => c.type === 'content')?.delta).toBe('fallback after rate limit');
+    expect(metas.find((_, index) => chunks[index]?.type === 'content')?.fallback_from).toEqual([
+      { id: 'p-step', reason: 'error-rate-limit' },
+    ]);
   });
 
   it('empty-emit single hit: still tries next but no cooldown (P1#4 threshold=2)', async () => {
@@ -318,7 +339,7 @@ describe('Router', () => {
     expect(mockState.adapterCalls).toEqual(['p-cloud']);
     expect(metas[0].fallback_from).toEqual([
       { id: 'p-step', reason: 'cooldown' },
-      { id: 'p-spark', reason: 'local-busy' },
+      { id: 'p-spark', reason: 'local-manager-busy-single-slot' },
     ]);
   });
 
@@ -666,6 +687,39 @@ describe('Router', () => {
     expect(assistantContinuation).not.toHaveProperty('reasoning_content');
   });
 
+  it('preserves streamed reasoning_content on tool continuations even when provider id is not enough', async () => {
+    stubSearchFetchOk();
+    const capturedRounds = [];
+    let adapterRuns = 0;
+    mockState.adapterFn = async function* ({ messages }) {
+      adapterRuns += 1;
+      capturedRounds.push(messages);
+      if (adapterRuns === 1) {
+        yield { type: 'reasoning', delta: 'plan with tool' };
+        yield {
+          type: 'tool_call_delta',
+          delta: [
+            { index: 0, id: 'tc-a', type: 'function', function: { name: 'web_search', arguments: '{"query":"alpha"}' } },
+          ],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: 'done' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const result = await run({
+      messages: [{ role: 'user', content: 'search with streamed reasoning' }],
+      onChunk: async () => {},
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    const assistantContinuation = capturedRounds[1].find((message) => message.role === 'assistant' && Array.isArray(message.tool_calls));
+    expect(assistantContinuation).toBeTruthy();
+    expect(assistantContinuation).toHaveProperty('reasoning_content', 'plan with tool');
+  });
+
   it('runs independent server tools concurrently and feeds results back in original call order', async () => {
     process.env.ZHIPU_KEY = 'test-zhipu';
     process.env.MIMO_SEARCH_KEY = 'test-mimo';
@@ -743,6 +797,16 @@ describe('Router', () => {
       guidance: 'use web_search',
     }))).toBe(0);
 
+    expect(__testing__.evidenceToolWeight('sports_score', JSON.stringify({
+      ok: true,
+      items: [],
+    }))).toBe(0);
+
+    expect(__testing__.evidenceToolWeight('sports_score', [
+      'provider: espn_scoreboard',
+      '- 2026/06/22 00:00 Spain vs Saudi Arabia (Scheduled)',
+    ].join('\n'))).toBe(1);
+
     expect(__testing__.evidenceToolWeight('web_search', JSON.stringify({
       ok: true,
       items: [
@@ -753,10 +817,27 @@ describe('Router', () => {
       ],
     }))).toBe(3);
 
+    expect(__testing__.evidenceToolWeight('web_search', JSON.stringify({
+      ok: true,
+      sources: [
+        { ok: true, items: [] },
+        { ok: true, results: [] },
+      ],
+    }))).toBe(0);
+
+    expect(__testing__.evidenceToolWeight('web_search', JSON.stringify({
+      ok: true,
+      sources: [
+        { ok: true, title: 'Official schedule', url: 'https://example.com/schedule' },
+      ],
+    }))).toBe(1);
+
     expect(__testing__.evidenceToolWeight(
       'web_search',
       '综合答案：这是搜索工具返回的长文本证据，虽然没有结构化 citations 字段，但包含足够的来源摘要和可核查事实，应当触发证据交接，让后续总结模型只基于工具证据回答，而不是继续调用工具或使用旧知识。'
     )).toBe(3);
+
+    expect(__testing__.evidenceToolWeight('web_search', '空')).toBe(0);
 
     expect(__testing__.evidenceToolWeight('parallel_research', JSON.stringify({
       parallel: true,
@@ -766,6 +847,11 @@ describe('Router', () => {
         { ok: false, error: 'failed' },
       ],
     }))).toBe(2);
+
+    expect(__testing__.evidenceHandoffAfterForTool('sports_score')).toBe(1);
+    expect(__testing__.evidenceHandoffAfterForTool('weather')).toBe(1);
+    expect(__testing__.evidenceHandoffAfterForTool('parallel_research')).toBe(2);
+    expect(__testing__.evidenceHandoffAfterForTool('web_search')).toBe(3);
   });
 
   it('exposes explicit Asia Shanghai date anchors for relative-date synthesis', () => {

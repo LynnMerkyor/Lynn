@@ -335,7 +335,7 @@ describe('review route', () => {
     resolveGlmRuns[2]('Third GLM review.\n```json\n{"summary":"Third GLM.","verdict":"pass","findings":[]}\n```');
   });
 
-  it('keeps automatic Hanako fallback on DS V4/MiMo/GLM/Brain instead of unrelated BYOK models', async () => {
+  it('keeps automatic Hanako fallback on DS V4/GLM/Brain instead of unrelated BYOK models', async () => {
     engine.currentModel = { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' };
     engine.availableModels = [
       ...engine.availableModels,
@@ -358,7 +358,8 @@ describe('review route', () => {
 
     expect(callText).toHaveBeenCalledTimes(2);
     expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-flash' }));
-    expect(['mimo', 'zhipu', 'zhipu-coding', 'brain']).toContain(callText.mock.calls[1][0].provider);
+    expect(['zhipu', 'zhipu-coding', 'brain']).toContain(callText.mock.calls[1][0].provider);
+    expect(callText.mock.calls.some(([options]) => options.provider === 'mimo')).toBe(false);
     expect(callText.mock.calls.some(([options]) => options.provider === 'deepseek' && options.model === 'deepseek-chat')).toBe(false);
   });
 

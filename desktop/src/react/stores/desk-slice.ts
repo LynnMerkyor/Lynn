@@ -1,4 +1,4 @@
-import type { DeskFile } from '../types';
+import type { DeskFile, DeskView } from '../types';
 
 export interface DeskSkillInfo {
   name: string;
@@ -55,6 +55,7 @@ export interface DeskSlice {
   deskPatrolStatus: DeskPatrolStatus | null;
   deskAutomationJobs: DeskAutomationJob[];
   deskAutomationStatus: DeskAutomationStatus | null;
+  deskView: DeskView;
   deskSkills: DeskSkillInfo[];
   cwdSkills: CwdSkillInfo[];
   cwdSkillsOpen: boolean;
@@ -73,6 +74,7 @@ export interface DeskSlice {
   setDeskPatrolStatus: (status: DeskPatrolStatus | null) => void;
   setDeskAutomationJobs: (jobs: DeskAutomationJob[]) => void;
   setDeskAutomationStatus: (status: DeskAutomationStatus | null) => void;
+  setDeskView: (view: DeskView) => void;
   setDeskSkills: (skills: DeskSkillInfo[]) => void;
   setHomeFolder: (folder: string | null) => void;
   setTrustedRoots: (roots: string[]) => void;
@@ -94,6 +96,7 @@ export const createDeskSlice = (
   deskPatrolStatus: null,
   deskAutomationJobs: [],
   deskAutomationStatus: null,
+  deskView: 'map',
   deskSkills: [],
   cwdSkills: [],
   cwdSkillsOpen: false,
@@ -113,6 +116,7 @@ export const createDeskSlice = (
   setDeskPatrolStatus: (status) => set({ deskPatrolStatus: status }),
   setDeskAutomationJobs: (jobs) => set({ deskAutomationJobs: jobs }),
   setDeskAutomationStatus: (status) => set({ deskAutomationStatus: status }),
+  setDeskView: (view) => set({ deskView: view }),
   setDeskSkills: (skills) => set({ deskSkills: skills }),
   setHomeFolder: (folder) => set({ homeFolder: folder }),
   setTrustedRoots: (roots) => set({ trustedRoots: roots }),

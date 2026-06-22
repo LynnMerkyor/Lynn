@@ -10,7 +10,7 @@ import { useStore } from '../stores';
 import { hanaFetch, hanaUrl } from '../hooks/use-hana-fetch';
 import { useI18n } from '../hooks/use-i18n';
 import { formatSessionDate } from '../utils/format';
-import { switchSession, archiveSession, renameSession } from '../stores/session-actions';
+import { switchSession, archiveSession, renameSession, branchSession } from '../stores/session-actions';
 import type { Session, Agent } from '../types';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
 import { lookupKnownModel } from '../utils/known-models';
@@ -44,6 +44,14 @@ function PlatformIcon({ platform }: { platform: string }) {
       {info.label.charAt(0)}
     </span>
   );
+}
+
+function formatBytes(value: number | null | undefined): string {
+  if (!value || !Number.isFinite(value)) return '';
+  if (value >= 1024 * 1024 * 1024) return `${(value / (1024 * 1024 * 1024)).toFixed(1)}GB`;
+  if (value >= 1024 * 1024) return `${Math.round(value / (1024 * 1024))}MB`;
+  if (value >= 1024) return `${Math.round(value / 1024)}KB`;
+  return `${value}B`;
 }
 
 // ── Bridge sessions loading ──
@@ -185,9 +193,23 @@ function SessionListInner() {
     ? sessions.filter(s => {
         const q = searchQuery.toLowerCase();
         const labels = Array.isArray(s.labels) ? s.labels.join(' ') : '';
+        const topologyText = [
+          s.topology?.branchLabel,
+          s.topology?.summary,
+          s.topology?.resumeHint,
+        ].filter(Boolean).join(' ');
+        const digestText = [
+          s.digest?.objective,
+          s.digest?.summary,
+          ...(s.digest?.decisions || []),
+          ...(s.digest?.nextSteps || []),
+          ...(s.insights || []).map((item) => item.content),
+        ].filter(Boolean).join(' ');
         return (s.title || '').toLowerCase().includes(q)
           || (s.firstMessage || '').toLowerCase().includes(q)
-          || labels.toLowerCase().includes(q);
+          || labels.toLowerCase().includes(q)
+          || topologyText.toLowerCase().includes(q)
+          || digestText.toLowerCase().includes(q);
       })
     : sessions;
 
@@ -235,7 +257,7 @@ function SessionListInner() {
             <span className={styles.sessionGroupMeta}>
               <span className={styles.sessionGroupTitle}>IM Channels</span>
             </span>
-            <span className={styles.sessionGroupCount}>{bridgeSessions.length}</span>
+            {bridgeCollapsed && bridgeSessions.length > 1 ? <span className={styles.sessionGroupCount}>{bridgeSessions.length}</span> : null}
           </button>
           {!bridgeCollapsed && bridgeSessions.map(bs => (
             <button
@@ -297,7 +319,7 @@ function SessionListInner() {
                 <span className={styles.sessionGroupTitle}>{group.title}</span>
                 {group.path ? <span className={styles.sessionGroupPath}>{group.path}</span> : null}
               </span>
-              <span className={styles.sessionGroupCount}>{group.items.length}</span>
+              {isCollapsed && group.items.length > 1 ? <span className={styles.sessionGroupCount}>{group.items.length}</span> : null}
             </button>
             {!isCollapsed && group.items.map(s => (
               <SessionItem
@@ -402,6 +424,10 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
     }
   }, [s.path, s.pinned]);
 
+  const handleBranch = useCallback(() => {
+    void branchSession(s.path);
+  }, [s.path]);
+
   const startRename = useCallback(() => {
     setEditValue(s.title || s.firstMessage || '');
     setEditing(true);
@@ -419,12 +445,13 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
     if (!ctxMenu) return [];
     return [
       { label: t('session.rename'), action: startRename },
+      { label: t('session.branchContinue') || 'Branch from here', action: handleBranch },
       { label: s.pinned ? t('session.unpin') : t('session.pin'), action: () => { void handlePin(); } },
       { label: t('session.editLabels'), action: startEditLabels },
       { divider: true },
       { label: t('session.archive'), danger: true, action: handleArchive },
     ];
-  }, [ctxMenu, s.pinned, t, startRename, handlePin, startEditLabels, handleArchive]);
+  }, [ctxMenu, s.pinned, t, startRename, handleBranch, handlePin, startEditLabels, handleArchive]);
 
   const commitRename = useCallback(() => {
     const trimmed = editValue.trim();
@@ -476,6 +503,20 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
     if (dirName) parts.push(dirName);
   }
   if (s.modified) parts.push(formatSessionDate(s.modified));
+  const topologyLabel = s.topology?.branchLabel || '';
+  const topologyStatus = s.topology?.taskStatus && s.topology.taskStatus !== 'active'
+    ? s.topology.taskStatus
+    : '';
+  const healthLevel = s.health?.level && s.health.level !== 'ok' ? s.health.level : '';
+  const healthLabel = healthLevel
+    ? `${healthLevel === 'critical' ? 'Huge' : 'Large'}${s.health?.sizeBytes ? ` ${formatBytes(s.health.sizeBytes)}` : ''}`
+    : '';
+  const unreadInsights = (s.insights || []).filter((item) => item.status === 'unread').length;
+  const digestObjective = s.digest?.objective || '';
+  const compactObjective = digestObjective.length > 22 ? `${digestObjective.slice(0, 21).trimEnd()}...` : digestObjective;
+  const rawInsightLabel = t('session.insight');
+  const insightLabel = rawInsightLabel && rawInsightLabel !== 'session.insight' ? rawInsightLabel : '洞察';
+  const sessionLabels = Array.isArray(s.labels) ? s.labels : [];
 
   return (
     <button
@@ -558,9 +599,38 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
           }}
           placeholder={t('session.labelsPlaceholder') || '标签，用逗号分隔'}
         />
-      ) : Array.isArray(s.labels) && s.labels.length > 0 ? (
+      ) : sessionLabels.length > 0 || topologyLabel || topologyStatus || healthLabel || unreadInsights > 0 || digestObjective ? (
         <div className={styles.sessionLabels}>
-          {s.labels.slice(0, 3).map((label) => (
+          {unreadInsights > 0 && (
+            <span className={`${styles.sessionLabelChip} ${styles.sessionSignalChip}`}>
+              <span>{insightLabel}</span>
+              <span className={styles.sessionChipCount}>{Math.min(unreadInsights, 99)}</span>
+            </span>
+          )}
+          {digestObjective && (
+            <span className={`${styles.sessionLabelChip} ${styles.sessionObjectiveChip}`} title={digestObjective}>
+              {compactObjective}
+            </span>
+          )}
+          {topologyLabel && (
+            <span className={styles.sessionLabelChip}>
+              {topologyLabel}
+            </span>
+          )}
+          {topologyStatus && (
+            <span className={styles.sessionLabelChip}>
+              {topologyStatus}
+            </span>
+          )}
+          {healthLabel && (
+            <span
+              className={`${styles.sessionLabelChip} ${healthLevel === 'critical' ? styles.sessionHealthCritical : styles.sessionHealthLarge}`}
+              title={s.health?.reason || undefined}
+            >
+              {healthLabel}
+            </span>
+          )}
+          {sessionLabels.slice(0, 3).map((label) => (
             <span key={`${s.path}:${label}`} className={styles.sessionLabelChip}>
               {label}
             </span>

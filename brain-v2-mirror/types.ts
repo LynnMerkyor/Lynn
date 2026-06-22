@@ -55,7 +55,27 @@ export interface Provider {
   vision_model?: string;
 }
 
-export type FallbackReason = 'cooldown' | 'probe-failed' | 'probe-threw' | 'local-busy' | 'error' | 'empty' | 'handoff';
+export type FallbackReason =
+  | 'cooldown'
+  | 'probe-failed'
+  | 'probe-threw'
+  | 'probe-http'
+  | 'probe-timeout'
+  | 'local-busy'
+  | 'local-manager-not-ready'
+  | 'local-manager-loading'
+  | 'local-manager-occupied'
+  | 'local-manager-busy-single-slot'
+  | 'gui-interactive-priority'
+  | 'ds-v4-flash-escape-rule'
+  | 'error'
+  | 'error-auth'
+  | 'error-rate-limit'
+  | 'error-server'
+  | 'error-timeout'
+  | 'error-network'
+  | 'empty'
+  | 'handoff';
 
 export interface FallbackEntry {
   id: ProviderId;

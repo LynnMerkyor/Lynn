@@ -1075,24 +1075,55 @@ html[data-platform="darwin"] .main-content::before {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+    align-items: center;
 }
 
 .sidebar-capability-chip {
     display: inline-flex;
     align-items: center;
+    gap: 5px;
+    min-height: 22px;
     padding: 2px 8px;
     border-radius: 999px;
-    background: rgba(var(--accent-rgb), 0.1);
-    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.075);
+    border: 1px solid rgba(var(--accent-rgb), 0.11);
+    color: var(--text-muted);
     font-size: 0.64rem;
     font-weight: 600;
-    line-height: 1.6;
-    letter-spacing: 0.02em;
+    line-height: 1.35;
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.sidebar-capability-chip-attention {
+    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.11);
+    border-color: rgba(var(--accent-rgb), 0.18);
+}
+
+.sidebar-capability-chip-quiet {
+    color: var(--text-muted);
+    background: var(--overlay-subtle);
+    border-color: var(--overlay-light);
+}
+
+.sidebar-capability-chip-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: rgba(var(--accent-rgb), 0.14);
+    color: var(--accent);
+    font-size: 0.56rem;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
 }
 
 .sidebar-capability-chip-button {
     font-family: inherit;
-    border: 1px solid rgba(var(--accent-rgb), 0.15);
     cursor: pointer;
     transition: all 0.15s var(--ease-out);
 }
@@ -1113,6 +1144,7 @@ html[data-platform="darwin"] .main-content::before {
     cursor: pointer;
     border: 1px solid rgba(var(--accent-rgb), 0.15);
     background: rgba(var(--accent-rgb), 0.06);
+    color: var(--accent);
     transition: all 0.15s var(--ease-out);
 }
 

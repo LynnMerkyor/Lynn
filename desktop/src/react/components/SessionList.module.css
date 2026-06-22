@@ -145,19 +145,64 @@
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    margin-top: 5px;
+    margin-top: 4px;
+    max-height: 42px;
+    overflow: hidden;
 }
 
 .sessionLabelChip {
     display: inline-flex;
     align-items: center;
+    gap: 4px;
     max-width: 100%;
+    min-height: 18px;
     padding: 1px 6px;
     border-radius: 999px;
-    background: rgba(var(--accent-rgb), 0.08);
-    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.065);
+    border: 1px solid rgba(var(--accent-rgb), 0.10);
+    color: var(--text-muted);
     font-size: 0.6rem;
-    line-height: 1.6;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+}
+
+.sessionSignalChip {
+    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.1);
+    border-color: rgba(var(--accent-rgb), 0.16);
+}
+
+.sessionObjectiveChip {
+    max-width: 150px;
+    color: var(--text-light);
+}
+
+.sessionChipCount {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: rgba(var(--accent-rgb), 0.14);
+    color: var(--accent);
+    line-height: 1;
+    font-size: 0.56rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.sessionHealthLarge {
+    background: rgba(180, 118, 0, 0.12);
+    color: #9a6400;
+}
+
+.sessionHealthCritical {
+    background: rgba(184, 42, 42, 0.12);
+    color: #b82a2a;
 }
 
 .sessionLabelInput {
@@ -424,8 +469,11 @@
     background: rgba(var(--accent-rgb), 0.08);
     border: 1px solid rgba(var(--accent-rgb), 0.14);
     border-radius: 999px;
-    padding: 1px 7px;
+    min-width: 22px;
+    padding: 1px 6px;
     line-height: 1.5;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
     flex-shrink: 0;
 }
 

@@ -31,6 +31,7 @@ describe("CLI session store", () => {
       assistant: "hi",
       modelProvider: "mock",
       modelId: "mock-brain",
+      topology: { branchLabel: "CLI branch", status: "paused" },
     });
 
     const lines = await readSessionLines(sessionPath);
@@ -42,6 +43,10 @@ describe("CLI session store", () => {
     expect(sessions).toHaveLength(1);
     expect(sessions[0]?.agentId).toBe("cli");
     expect(sessions[0]?.path).toBe(sessionPath);
+    expect(sessions[0]?.topology).toMatchObject({
+      branchLabel: "CLI branch",
+      taskStatus: "paused",
+    });
   });
 
   it("tolerates a crash-torn JSONL line instead of failing the whole read", async () => {

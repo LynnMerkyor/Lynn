@@ -205,8 +205,12 @@ function waitForMainWindowReady(timeoutMs = 15000) {
 function revealMainWindowAndCloseStartupShell(reason = "unknown") {
   if (mainWindow && !mainWindow.isDestroyed()) {
     try {
-      if (!mainWindow.isVisible()) mainWindow.show();
-      mainWindow.focus();
+      if (process.env.LYNN_UI_NO_FRONT === "1") {
+        if (!mainWindow.isVisible()) mainWindow.showInactive();
+      } else {
+        if (!mainWindow.isVisible()) mainWindow.show();
+        mainWindow.focus();
+      }
     } catch (err) {
       console.error(`[desktop] show main window failed (${reason}):`, err?.message || err);
     }

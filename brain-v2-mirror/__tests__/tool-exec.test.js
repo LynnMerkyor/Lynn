@@ -84,6 +84,8 @@ describe('tool-exec dispatcher', () => {
   });
 
   it('filters ESPN scoreboard rows by Beijing tonight window and hides scheduled 0-0 scores', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-21T11:05:00Z'));
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       status: 200,
@@ -117,11 +119,15 @@ describe('tool-exec dispatcher', () => {
       }),
     })));
 
-    const r = await executeServerTool('sports_score', { query: '今晚世界杯有几场比赛' });
-    expect(r).toContain('Spain vs Saudi Arabia');
-    expect(r).not.toContain('Spain 0-0 Saudi Arabia');
-    expect(r).not.toContain('Japan 4-0 Tunisia');
-    expect(r).not.toContain('Argentina vs Austria');
+    try {
+      const r = await executeServerTool('sports_score', { query: '今晚世界杯有几场比赛' });
+      expect(r).toContain('Spain vs Saudi Arabia');
+      expect(r).not.toContain('Spain 0-0 Saudi Arabia');
+      expect(r).not.toContain('Japan 4-0 Tunisia');
+      expect(r).not.toContain('Argentina vs Austria');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('uses bundled World Cup schedule fallback when ESPN is temporarily unreachable', async () => {

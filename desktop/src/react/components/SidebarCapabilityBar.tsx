@@ -10,6 +10,15 @@ function joinSummary(parts: string[]) {
   return parts.filter(Boolean).join('、');
 }
 
+type CapabilityChip = {
+  key: string;
+  label: string;
+  count?: number;
+  tone?: 'default' | 'quiet' | 'attention';
+  onClick?: () => void;
+  title?: string;
+};
+
 function countJianTodos(content: string | null) {
   const text = String(content || '');
   const matches = text.match(/^- \[( |x|X)\] /gm) || [];
@@ -186,25 +195,32 @@ export function SidebarCapabilityBar() {
   const patrolLabel = deskPatrolStatus?.text || tt('desk.patrolIdle', '打开笺后会自动巡检一次');
   const automationLabel = deskAutomationStatus?.text || tt('desk.automationIdle', '笺里的重复待办会自动变成自动任务');
 
-  const chips = [
-    {
+  const chips: CapabilityChip[] = [
+    ...(jianStats.pending > 0 ? [{
       key: 'todo',
-      label: `${tt('sidebar.capability.todo', '待办')} ${jianStats.pending}`,
+      label: tt('sidebar.capability.todo', '待办'),
+      count: jianStats.pending,
+      tone: 'attention' as const,
       onClick: openDeskPanel,
-    },
-    {
-      key: 'done',
-      label: `${tt('sidebar.capability.done', '完成')} ${jianStats.done}`,
-      onClick: openDeskPanel,
-    },
-    {
+    }] : []),
+    ...(automationCount > 0 ? [{
       key: 'automation',
-      label: `${tt('sidebar.capability.automation', '自动任务')} ${automationCount || 0}`,
+      label: tt('sidebar.capability.automation', '自动任务'),
+      count: automationCount,
+      tone: 'attention' as const,
       onClick: openAutomationPanel,
-    },
+    }] : []),
+    ...(jianStats.done > 0 && expanded ? [{
+      key: 'done',
+      label: tt('sidebar.capability.done', '完成'),
+      count: jianStats.done,
+      tone: 'quiet' as const,
+      onClick: openDeskPanel,
+    }] : []),
     {
       key: 'fleet',
       label: tt('sidebar.capability.fleet', 'Workers'),
+      tone: 'quiet',
       title: tt('sidebar.capability.fleetTip', 'Fleet 指挥台:把任务拆给多个 CLI worker 并行干,每个独立 worktree'),
       onClick: () => {
         useStore.setState({ welcomeVisible: false, activePanel: 'fleet' });
@@ -213,6 +229,7 @@ export function SidebarCapabilityBar() {
     ...(changesSummary.linesAdded + changesSummary.linesRemoved > 0 ? [{
       key: 'changes',
       label: `+${changesSummary.linesAdded} -${changesSummary.linesRemoved}`,
+      tone: 'attention' as const,
       onClick: () => {
         useStore.setState({ welcomeVisible: false, activePanel: 'changes' });
       },
@@ -220,14 +237,16 @@ export function SidebarCapabilityBar() {
     {
       key: 'skills',
       label: tt('sidebar.capability.skillsCenter', '技能中心'),
+      tone: 'quiet',
       onClick: () => openCapabilityPanel('skills'),
     },
     {
       key: 'mcp',
       label: tt('sidebar.capability.mcpHub', 'MCP 接入'),
+      tone: 'quiet',
       onClick: () => openCapabilityPanel('mcp'),
     },
-  ].filter(Boolean) as Array<{ key: string; label: string; onClick?: () => void; title?: string }>;
+  ];
 
   return (
     <div className="sidebar-capability-bar">
@@ -284,21 +303,30 @@ export function SidebarCapabilityBar() {
         )}
       </div>
       <div className="sidebar-capability-chips">
-        {chips.map((chip) => (
-          chip.onClick ? (
+        {chips.map((chip) => {
+          const content = (
+            <>
+              <span>{chip.label}</span>
+              {typeof chip.count === 'number' && chip.count > 0 ? (
+                <span className="sidebar-capability-chip-count">{Math.min(chip.count, 99)}</span>
+              ) : null}
+            </>
+          );
+          const className = `sidebar-capability-chip sidebar-capability-chip-${chip.tone || 'default'}${chip.onClick ? ' sidebar-capability-chip-button' : ''}`;
+          return chip.onClick ? (
             <button
               key={chip.key}
               type="button"
-              className="sidebar-capability-chip sidebar-capability-chip-button"
+              className={className}
               onClick={chip.onClick}
               title={chip.title}
             >
-              {chip.label}
+              {content}
             </button>
           ) : (
-            <span key={chip.key} className="sidebar-capability-chip">{chip.label}</span>
-          )
-        ))}
+            <span key={chip.key} className={className}>{content}</span>
+          );
+        })}
         <button
           type="button"
           className="sidebar-capability-chip sidebar-capability-chip-action"

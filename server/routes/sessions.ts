@@ -2,7 +2,7 @@
  * Session 管理 REST 路由
  */
 import fs from "fs/promises";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import path from "path";
 import { Hono } from "hono";
@@ -18,6 +18,19 @@ import {
   artifactPreviewsFromContent,
 } from "../chat/artifact-recovery.js";
 import { normalizeArtifactPayload } from "../chat/artifact-shape.js";
+import {
+  mergeSessionTopology,
+  normalizeSessionTopology,
+} from "../../shared/session-topology.js";
+import {
+  appendSessionInsight,
+  consumeSessionInsights,
+  mergeSessionDigest,
+  normalizeSessionDigest,
+  normalizeSessionInsights,
+  unreadInsightCount,
+} from "../../shared/session-digest.js";
+import { SessionManager } from "../../core/agent-runtime/session-manager.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -99,6 +112,16 @@ interface SessionListEntry {
   modelId?: string | null;
   modelProvider?: string | null;
   labels?: unknown[];
+  topology?: unknown;
+  digest?: unknown;
+  insights?: unknown;
+  health?: unknown;
+}
+
+interface SessionHealth {
+  level: "ok" | "large" | "critical";
+  sizeBytes: number | null;
+  reason: string | null;
 }
 
 interface VisibleMessage {
@@ -142,6 +165,19 @@ function asRecord(value: unknown): JsonRecord {
 function stringField(record: JsonRecord, key: string): string | undefined {
   const value = record[key];
   return typeof value === "string" ? value : undefined;
+}
+
+function readSessionMetaEntry(sessionPath: string): JsonRecord {
+  try {
+    const metaPath = path.join(path.dirname(sessionPath), "session-meta.json");
+    const meta = JSON.parse(readFileSync(metaPath, "utf-8")) as JsonRecord;
+    return {
+      ...asRecord(meta[path.basename(sessionPath)]),
+      ...asRecord(meta[sessionPath]),
+    };
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -323,6 +359,75 @@ function formatSessionDate(value: unknown): string | null {
   return null;
 }
 
+const LARGE_SESSION_BYTES = 50 * 1024 * 1024;
+const CRITICAL_SESSION_BYTES = 500 * 1024 * 1024;
+
+function sessionHealthForPath(sessionPath: string): SessionHealth {
+  try {
+    const sizeBytes = statSync(sessionPath).size;
+    if (sizeBytes >= CRITICAL_SESSION_BYTES) {
+      return { level: "critical", sizeBytes, reason: "session_file_critical_size" };
+    }
+    if (sizeBytes >= LARGE_SESSION_BYTES) {
+      return { level: "large", sizeBytes, reason: "session_file_large_size" };
+    }
+    return { level: "ok", sizeBytes, reason: null };
+  } catch {
+    return { level: "ok", sizeBytes: null, reason: null };
+  }
+}
+
+function defaultBranchLabel(sourcePath: string): string {
+  const meta = readSessionMetaEntry(sourcePath);
+  const title = stringField(meta, "title");
+  if (title) return `${title.slice(0, 36)} branch`;
+  const stamp = new Date().toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return `Branch ${stamp}`;
+}
+
+function buildSessionMap(sessions: SessionListEntry[]) {
+  const nodes = sessions.map((s) => {
+    const topology = normalizeSessionTopology(s.topology);
+    const digest = normalizeSessionDigest(s.digest);
+    const insights = normalizeSessionInsights(s.insights);
+    return {
+      id: s.path,
+      path: s.path,
+      title: s.title || s.firstMessage || path.basename(s.path),
+      cwd: normalizeLegacyWorkspaceCwd(s.cwd),
+      agentId: s.agentId || null,
+      agentName: s.agentName || null,
+      modified: formatSessionDate(s.modified),
+      messageCount: s.messageCount || 0,
+      topology,
+      digest,
+      health: sessionHealthForPath(s.path),
+      unreadInsights: unreadInsightCount(insights),
+    };
+  });
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges = nodes
+    .map((node) => {
+      const parent = node.topology?.parentSessionPath || null;
+      if (!parent || !nodeIds.has(parent)) return null;
+      return {
+        id: `${parent}->${node.id}`,
+        from: parent,
+        to: node.id,
+        label: node.topology?.branchLabel || "branch",
+      };
+    })
+    .filter((edge): edge is NonNullable<typeof edge> => !!edge);
+  return { ok: true, nodes, edges };
+}
+
 export function createSessionsRoute(engine: SessionsEngine): Hono {
   const route = new Hono();
 
@@ -342,6 +447,10 @@ export function createSessionsRoute(engine: SessionsEngine): Hono {
         modelId: s.modelId || null,
         modelProvider: s.modelProvider || null,
         labels: Array.isArray(s.labels) ? s.labels : [],
+        topology: normalizeSessionTopology(s.topology),
+        digest: normalizeSessionDigest(s.digest),
+        insights: normalizeSessionInsights(s.insights),
+        health: sessionHealthForPath(s.path),
       })));
     } catch (err) {
       return c.json({ error: errorMessage(err) }, 500);
@@ -596,6 +705,74 @@ export function createSessionsRoute(engine: SessionsEngine): Hono {
     }
   });
 
+  // 从现有 session fork 出一个新 session 并切过去，避免超长会话继续膨胀
+  route.post("/sessions/branch", async (c) => {
+    try {
+      const body = asRecord(await safeJson(c));
+      const sourcePath = stringField(body, "path") || engine.currentSessionPath || "";
+      if (!sourcePath) {
+        return c.json({ error: t("error.missingParam", { param: "path" }) }, 400);
+      }
+      if (!isValidSessionPath(sourcePath, engine.agentsDir)) {
+        return c.json({ error: "Invalid session path" }, 403);
+      }
+      try {
+        await fs.access(sourcePath);
+      } catch {
+        return c.json({ error: t("error.sessionNotFound") }, 404);
+      }
+
+      const branchLabel = (stringField(body, "branchLabel") || defaultBranchLabel(sourcePath)).trim();
+      const targetCwd = normalizeLegacyWorkspaceCwd(stringField(body, "cwd") || engine.cwd || engine.homeCwd || "") || process.cwd();
+      const forked = SessionManager.forkFrom(sourcePath, targetCwd, path.dirname(sourcePath));
+      const branchPath = forked.getSessionFile();
+      if (!branchPath) return c.json({ error: "Failed to create branched session" }, 500);
+
+      const parentMeta = readSessionMetaEntry(sourcePath);
+      const parentTopology = normalizeSessionTopology(parentMeta.topology);
+      const topology = mergeSessionTopology(null, {
+        parentSessionPath: sourcePath,
+        rootSessionPath: parentTopology?.rootSessionPath || sourcePath,
+        branchLabel,
+        taskStatus: "active",
+        summary: stringField(body, "summary") || parentTopology?.summary || null,
+        resumeHint: stringField(body, "resumeHint") || "从这个分支继续，保留父会话作为可回退上下文。",
+      });
+      await engine.saveSessionMeta(branchPath, { topology });
+      await engine.saveSessionTitle(branchPath, branchLabel);
+
+      const bm = BrowserManager.instance();
+      const oldSessionPath = engine.currentSessionPath;
+      if (bm.isRunning) await bm.suspendForSession(oldSessionPath);
+      await engine.switchSession(branchPath);
+      if (bm.isRunning) await bm.resumeForSession(branchPath);
+
+      return c.json({
+        ok: true,
+        path: branchPath,
+        parentSessionPath: sourcePath,
+        topology,
+        health: sessionHealthForPath(branchPath),
+        messageCount: (engine.messages || []).length,
+        memoryEnabled: engine.memoryEnabled,
+        planMode: engine.planMode,
+        securityMode: engine.securityMode,
+        memoryModelUnavailableReason: engine.memoryModelUnavailableReason || null,
+        cwd: engine.cwd,
+        agentId: engine.currentAgentId,
+        agentName: engine.agentName,
+        browserRunning: bm.isRunning,
+        browserUrl: bm.currentUrl || null,
+        isStreaming: engine.isSessionStreaming(engine.currentSessionPath),
+        currentModelId: engine.currentModel?.id || null,
+        currentModelProvider: engine.currentModel?.provider || null,
+      });
+    } catch (err) {
+      console.error("[sessions/branch] error:", errorMessage(err));
+      return c.json({ error: errorMessage(err) }, 500);
+    }
+  });
+
   // 获取所有有浏览器的 session
   route.get("/browser/sessions", async (c) => {
     const bm = BrowserManager.instance();
@@ -674,6 +851,103 @@ export function createSessionsRoute(engine: SessionsEngine): Hono {
         .slice(0, 6))];
       await engine.saveSessionMeta(sessionPath, { labels: normalized });
       return c.json({ ok: true, labels: normalized });
+    } catch (err) {
+      return c.json({ error: errorMessage(err) }, 500);
+    }
+  });
+
+  // 更新 session 的原生拓扑元数据（V0.85.1 memory/topology v0）
+  route.post("/sessions/topology", async (c) => {
+    try {
+      const body = asRecord(await safeJson(c));
+      const sessionPath = stringField(body, "path");
+      if (!sessionPath) {
+        return c.json({ error: t("error.missingParam", { param: "path" }) }, 400);
+      }
+      if (!isValidSessionPath(sessionPath, engine.agentsDir)) {
+        return c.json({ error: "Invalid session path" }, 403);
+      }
+      const patch = asRecord(body.topology) && Object.keys(asRecord(body.topology)).length
+        ? asRecord(body.topology)
+        : body;
+      const existing = readSessionMetaEntry(sessionPath);
+      const topology = body.clear === true
+        ? null
+        : mergeSessionTopology(existing.topology, patch);
+      await engine.saveSessionMeta(sessionPath, { topology });
+      return c.json({ ok: true, topology });
+    } catch (err) {
+      return c.json({ error: errorMessage(err) }, 500);
+    }
+  });
+
+  route.post("/sessions/digest", async (c) => {
+    try {
+      const body = asRecord(await safeJson(c));
+      const sessionPath = stringField(body, "path");
+      if (!sessionPath) {
+        return c.json({ error: t("error.missingParam", { param: "path" }) }, 400);
+      }
+      if (!isValidSessionPath(sessionPath, engine.agentsDir)) {
+        return c.json({ error: "Invalid session path" }, 403);
+      }
+      const patch = Object.keys(asRecord(body.digest)).length ? asRecord(body.digest) : body;
+      const existing = readSessionMetaEntry(sessionPath);
+      const digest = body.clear === true
+        ? null
+        : mergeSessionDigest(existing.digest, patch);
+      await engine.saveSessionMeta(sessionPath, { digest });
+      return c.json({ ok: true, digest });
+    } catch (err) {
+      return c.json({ error: errorMessage(err) }, 500);
+    }
+  });
+
+  route.post("/sessions/insights", async (c) => {
+    try {
+      const body = asRecord(await safeJson(c));
+      const sessionPath = stringField(body, "path") || stringField(body, "targetSessionPath");
+      if (!sessionPath) {
+        return c.json({ error: t("error.missingParam", { param: "path" }) }, 400);
+      }
+      if (!isValidSessionPath(sessionPath, engine.agentsDir)) {
+        return c.json({ error: "Invalid session path" }, 403);
+      }
+      const existing = readSessionMetaEntry(sessionPath);
+      const insight = Object.keys(asRecord(body.insight)).length
+        ? { ...asRecord(body.insight), targetSessionPath: sessionPath }
+        : { ...body, targetSessionPath: sessionPath };
+      const insights = appendSessionInsight(existing.insights, insight);
+      await engine.saveSessionMeta(sessionPath, { insights });
+      return c.json({ ok: true, insights, unread: unreadInsightCount(insights) });
+    } catch (err) {
+      return c.json({ error: errorMessage(err) }, 500);
+    }
+  });
+
+  route.post("/sessions/insights/consume", async (c) => {
+    try {
+      const body = asRecord(await safeJson(c));
+      const sessionPath = stringField(body, "path");
+      if (!sessionPath) {
+        return c.json({ error: t("error.missingParam", { param: "path" }) }, 400);
+      }
+      if (!isValidSessionPath(sessionPath, engine.agentsDir)) {
+        return c.json({ error: "Invalid session path" }, 403);
+      }
+      const existing = readSessionMetaEntry(sessionPath);
+      const insights = consumeSessionInsights(existing.insights, body.ids);
+      await engine.saveSessionMeta(sessionPath, { insights });
+      return c.json({ ok: true, insights, unread: unreadInsightCount(insights) });
+    } catch (err) {
+      return c.json({ error: errorMessage(err) }, 500);
+    }
+  });
+
+  route.get("/sessions/map", async (c) => {
+    try {
+      const sessions = await engine.listSessions();
+      return c.json(buildSessionMap(sessions));
     } catch (err) {
       return c.json({ error: errorMessage(err) }, 500);
     }

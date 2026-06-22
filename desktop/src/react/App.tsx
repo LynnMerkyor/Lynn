@@ -135,13 +135,6 @@ function folderLabel(folderPath: string | null): string {
   return parts[parts.length - 1] || folderPath;
 }
 
-function countPendingJianTodos(content: string | null): number {
-  const text = String(content || '');
-  const matches = text.match(/^- \[( |x|X)\] /gm) || [];
-  const done = matches.filter((item) => /\[(x|X)\]/.test(item)).length;
-  return matches.length - done;
-}
-
 function trimTitle(value: string | null | undefined): string {
   const raw = (value || '').trim();
   if (!raw) return 'Lynn';
@@ -171,14 +164,20 @@ function App() {
   const pendingNewSession = useStore(s => s.pendingNewSession);
   const sessionCreationPending = useStore(s => s.sessionCreationPending);
   const hasPanels = !welcomeVisible && !!currentSessionPath;
-  const jianContent = useStore(s => s.deskJianContent);
   const isStreaming = useStore(s => s.isStreaming);
   const deskPatrolStatus = useStore(s => s.deskPatrolStatus);
   const currentActivity = useStore(s => s.currentActivity);
   const isWorking = isStreaming || deskPatrolStatus?.state === 'running';
   const hasPreviewArtifact = artifacts.length > 0;
-  const jianHasContent = !!jianContent && jianContent.trim().length > 0;
-  const jianPendingCount = countPendingJianTodos(jianContent);
+  const unreadInsightCount = useMemo(
+    () => sessions.reduce((sum, session) => sum + (session.insights || []).filter((item) => item.status === 'unread').length, 0),
+    [sessions],
+  );
+  const largeSessionCount = useMemo(
+    () => sessions.filter((session) => session.health?.level === 'large' || session.health?.level === 'critical').length,
+    [sessions],
+  );
+  const rightRailBadgeCount = unreadInsightCount || largeSessionCount;
   const { floatCard, show: showFloat, scheduleHide: scheduleFloatHide, cancelHide: cancelFloatHide, hide: hideFloat } = useFloatCard();
 
   const currentSession = useMemo(
@@ -349,7 +348,7 @@ function App() {
         <button
           className={`tb-toggle tb-toggle-right${jianOpen ? ' active' : ''}`}
           id="tbToggleRight"
-          title={t('sidebar.jian')}
+          title="工作地图"
           onClick={() => { hideFloat(); toggleJianSidebar(); }}
           onMouseEnter={(e) => showFloat('right', e.currentTarget)}
           onMouseLeave={scheduleFloatHide}
@@ -358,9 +357,9 @@ function App() {
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
             <line x1="15" y1="3" x2="15" y2="21"></line>
           </svg>
-          {(jianPendingCount > 0 || jianHasContent) && (
-            <span className={`tb-toggle-badge${jianPendingCount > 0 ? ' has-count' : ' has-content'}`}>
-              {jianPendingCount > 0 ? String(Math.min(jianPendingCount, 99)) : '•'}
+          {rightRailBadgeCount > 0 && (
+            <span className="tb-toggle-badge has-count">
+              {String(Math.min(rightRailBadgeCount, 99))}
             </span>
           )}
         </button>

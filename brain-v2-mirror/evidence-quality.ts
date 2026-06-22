@@ -198,11 +198,15 @@ function hasPastDateFutureStartClaim(normalized: string): boolean {
     || /要到\d{1,2}月\d{1,2}日(?:[~～—–-]\d{1,2}月?\d{0,2}日?)?(?:才)?(?:正式)?(?:开赛|开始|开幕|开打|举行)/u.test(normalized);
 }
 
+function hasCurrentOrPastRelativeContext(normalized: string): boolean {
+  return /(今天|今日|今晚|今早|今晨|目前|现在|当前|刚刚|刚才|昨晚|昨天|昨日|截至|截止|today|tonight|currently|current|latest|yesterday)/iu.test(normalized);
+}
+
 export function containsTemporalNoResultContradiction(text: unknown, now = new Date()): boolean {
   const normalized = String(text || "").replace(/\s+/g, "");
   if (!normalized) return false;
   const dates = extractExplicitDateSerials(normalized, now);
-  if (!dates.some((date) => date <= currentDateSerialForZone(now))) return false;
+  if (!dates.some((date) => date <= currentDateSerialForZone(now)) && !hasCurrentOrPastRelativeContext(normalized)) return false;
   return hasNoCurrentResultClaim(normalized) || hasPastDateFutureStartClaim(normalized);
 }
 

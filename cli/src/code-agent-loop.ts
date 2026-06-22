@@ -23,6 +23,7 @@ import { checkPlanContract, defaultToolBudget, checkToolBudget } from "./code-pl
 import { createWorkspaceSnapshot, recordWorkspaceSnapshotForRequest, restoreWorkspaceSnapshot, autoRollbackEnabled, type WorkspaceSnapshot } from "./code-snapshot.js";
 import { selfVerifyEnabled, buildSelfVerifyPrompt, parseSelfVerifyVerdict, formatSelfVerifyCritique } from "./code-self-verify.js";
 import { applyWorkingCheckpoint, formatWorkingCheckpointFrame, workingCheckpointObservation } from "./code-working-checkpoint.js";
+import { buildEvidenceSafetyAnswer } from "../../shared/evidence-safety-answer.js";
 
 const MAX_AUTOVERIFY_REVERIFIES = 3;
 const MAX_PLAN_REMINDERS = 2;
@@ -701,6 +702,16 @@ interface BrainTextResult {
   toolCalls: CollectedToolCall[];
 }
 
+function evidenceMessageFromToolProgress(event: Extract<BrainStreamEvent, { type: "tool_progress" }>): ChatMessage | null {
+  if (event.event !== "end" || event.ok === false) return null;
+  const content = [
+    event.summary,
+    ...(Array.isArray(event.details) ? event.details : []),
+  ].filter((line): line is string => typeof line === "string" && !!line.trim()).join("\n");
+  if (!content.trim()) return null;
+  return { role: "tool", name: event.name, content };
+}
+
 async function collectBrainText(inputData: {
   brainUrl: string;
   fallbackProvider?: CliProviderProfile;
@@ -716,9 +727,19 @@ async function collectBrainText(inputData: {
   let usageSummary: string | null = null;
   const usageRecords: Array<{ usage: unknown; durationMs: number }> = [];
   const streamedToolCalls = createStreamingToolCallAccumulator();
+  const brainEvidenceMessages: ChatMessage[] = [];
   const spinner = new TerminalSpinner(process.stderr, inputData.label, { danger: inputData.danger });
   const renderState: HumanBrainRenderState = {};
   const startedAt = Date.now();
+  const emitEvidenceSafetyAnswer = (): boolean => {
+    if (text.trim()) return false;
+    const answer = buildEvidenceSafetyAnswer([...inputData.messages, ...brainEvidenceMessages]);
+    if (!answer) return false;
+    text = answer;
+    inputData.onEvent?.({ type: "assistant.delta", text: answer });
+    if (inputData.json) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: answer, fallback: "evidence_safety" });
+    return true;
+  };
   if (!inputData.json && !inputData.onEvent) spinner.start();
   try {
     for await (const event of streamBrainChat({
@@ -743,13 +764,18 @@ async function collectBrainText(inputData: {
       }
       if (event.type === "tool_call.delta") streamedToolCalls.append(event);
       if (event.type === "provider") inputData.onEvent?.({ type: "provider", provider: event.activeProvider });
-      if (event.type === "tool_progress") inputData.onEvent?.({ type: "tool.progress", message: [event.name, event.event].filter(Boolean).join(" ") });
+      if (event.type === "tool_progress") {
+        const evidenceMessage = evidenceMessageFromToolProgress(event);
+        if (evidenceMessage) brainEvidenceMessages.push(evidenceMessage);
+        inputData.onEvent?.({ type: "tool.progress", message: [event.name, event.event].filter(Boolean).join(" ") });
+      }
       if (event.type === "usage") usageRecords.push({ usage: event.usage, durationMs: Date.now() - startedAt });
       if (inputData.json && (event.type === "provider" || event.type === "tool_progress" || event.type === "brain.error" || event.type === "usage")) {
         if (event.type === "usage") writeJsonLine({ type: "usage", ts: nowIso(), usage: event.usage, durationMs: Date.now() - startedAt });
         else writeJsonLine({ ...event, ts: nowIso() });
       }
       if (event.type === "brain.error") {
+        if (emitEvidenceSafetyAnswer()) break;
         throw new Error(formatBrainErrorForHuman(event.error, event.code));
       }
       if (!inputData.json && event.type !== "assistant.delta" && event.type !== "reasoning.delta") {
@@ -780,6 +806,7 @@ async function collectBrainText(inputData: {
   } finally {
     spinner.stop();
   }
+  emitEvidenceSafetyAnswer();
   return { text, usageSummary, usageRecords, toolCalls: streamedToolCalls.toToolCalls() };
 }
 

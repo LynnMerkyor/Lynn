@@ -273,4 +273,16 @@ describe('applySearchContext — applied path', () => {
     expect(block).toContain('请给出每场明确的赛前预测比分');
     expect(block).toContain('不要因为状态是 Scheduled 就空答');
   });
+
+  it('adds a source-boundary guard for sports context without direct source status', () => {
+    const block = __testing__.buildContextBlock([
+      'provider: espn_scoreboard',
+      'userIntent: score_prediction',
+      '- 2026/06/22 00:00 Spain vs Saudi Arabia (Scheduled)',
+    ].join('\n'));
+    expect(__testing__.inferDirectSourceStatus(block)).toBeUndefined();
+    expect(block).toContain('未看到 directSourceStatus 实时确认标记');
+    expect(block).toContain('不得把这些资料表述为实时/官方/ESPN 已确认结论');
+    expect(block).toContain('请给出每场明确的赛前预测比分');
+  });
 });

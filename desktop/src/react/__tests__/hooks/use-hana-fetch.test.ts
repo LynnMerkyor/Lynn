@@ -1,16 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+const mockStoreState = vi.hoisted(() => ({
+  serverPort: '3210' as string | null,
+  serverToken: 'test-token-123' as string | null,
+}));
+
 // Mock useStore before importing hanaFetch
 vi.mock('../../stores', () => ({
   useStore: {
-    getState: () => ({
-      serverPort: '3210',
-      serverToken: 'test-token-123',
-    }),
+    getState: () => mockStoreState,
   },
 }));
 
 import { hanaUrl, hanaFetch, lynnUrl, lynnFetch } from '../../hooks/use-hana-fetch';
+
+beforeEach(() => {
+  mockStoreState.serverPort = '3210';
+  mockStoreState.serverToken = 'test-token-123';
+});
 
 describe('hanaUrl', () => {
   it('构建本地 server URL，不把 token 放进 query string', () => {
@@ -26,6 +33,12 @@ describe('hanaUrl', () => {
   it('保留 Lynn 命名入口并兼容旧 Hana 入口', () => {
     expect(lynnUrl('/api/health')).toBe(hanaUrl('/api/health'));
     expect(lynnFetch).toBe(hanaFetch);
+  });
+
+  it('serverPort 未就绪时不构造 localhost:null URL', () => {
+    mockStoreState.serverPort = null;
+
+    expect(() => hanaUrl('/api/health')).toThrow('server port is not ready');
   });
 });
 
@@ -55,6 +68,13 @@ describe('hanaFetch', () => {
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toBe('http://127.0.0.1:3210/api/health');
     expect(opts.headers.Authorization).toBe('Bearer test-token-123');
+  });
+
+  it('serverPort 未就绪时不发起 fetch', async () => {
+    mockStoreState.serverPort = null;
+
+    await expect(hanaFetch('/api/health')).rejects.toThrow('server port is not ready');
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('非 2xx 状态码抛出错误', async () => {
