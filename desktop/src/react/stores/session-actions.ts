@@ -523,6 +523,31 @@ export async function archiveSession(path: string): Promise<void> {
 }
 
 // ══════════════════════════════════════════════════════
+// 消费洞察(把 insight 标记为已应用 / 已忽略)
+// ══════════════════════════════════════════════════════
+
+export async function consumeInsights(path: string, ids: string[]): Promise<boolean> {
+  if (!path || !Array.isArray(ids) || ids.length === 0) return false;
+  try {
+    const res = await hanaFetch('/api/sessions/insights/consume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, ids }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      console.error('[session] consume insights failed:', data.error);
+      return false;
+    }
+    await loadSessions();
+    return true;
+  } catch (err) {
+    console.error('[session] consume insights failed:', err);
+    return false;
+  }
+}
+
+// ══════════════════════════════════════════════════════
 // 重命名 Session
 // ══════════════════════════════════════════════════════
 

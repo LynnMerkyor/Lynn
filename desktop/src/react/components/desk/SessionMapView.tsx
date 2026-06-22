@@ -1,25 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../stores';
 import type { Session } from '../../types';
-import { branchSession, switchSession } from '../../stores/session-actions';
+import { branchSession, consumeInsights, switchSession } from '../../stores/session-actions';
 import s from './Desk.module.css';
 
-type MapNodeKind = 'current' | 'risk' | 'insight' | 'branch' | 'recent' | 'cluster';
-type SessionNodeKind = Exclude<MapNodeKind, 'cluster'>;
+type WorkState = 'active' | 'blocked' | 'risk' | 'done';
 
-type MapNode =
-  | { kind: SessionNodeKind; session: Session; key: string }
-  | { kind: 'cluster'; key: string; count: number; onClick?: () => void };
-
-function isCluster(node: MapNode): node is { kind: 'cluster'; key: string; count: number; onClick?: () => void } {
-  return node.kind === 'cluster';
-}
+const GROUP_LIMIT = 8;
 
 function sessionTitle(session: Session): string {
   const raw = session.digest?.objective || session.title || session.firstMessage || '';
   const trimmed = raw.trim();
   if (!trimmed) return '未命名会话';
-  return trimmed.length > 40 ? trimmed.slice(0, 39).trimEnd() + '…' : trimmed;
+  return trimmed.length > 44 ? trimmed.slice(0, 43).trimEnd() + '…' : trimmed;
 }
 
 function formatBytes(bytes?: number | null): string {
@@ -38,8 +31,7 @@ function formatTimeLabel(iso?: string | null): string {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
+  const diffMs = Date.now() - date.getTime();
   const diffMin = Math.floor(diffMs / 60000);
   const diffHour = Math.floor(diffMs / 3600000);
   const diffDay = Math.floor(diffMs / 86400000);
@@ -50,52 +42,16 @@ function formatTimeLabel(iso?: string | null): string {
   return `${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-function nodeIcon(kind: MapNodeKind): string {
-  switch (kind) {
-    case 'current':
-      return '●';
-    case 'risk':
-      return '▲';
-    case 'insight':
-      return '◆';
-    case 'branch':
-      return '◎';
-    case 'recent':
-      return '○';
-    case 'cluster':
-      return '⋯';
-    default:
-      return '○';
-  }
-}
-
-function nodeClassForKind(kind: SessionNodeKind): string {
-  switch (kind) {
-    case 'current':
-      return s.mapNodeCurrent;
-    case 'risk':
-      return s.mapNodeRisk;
-    case 'insight':
-      return s.mapNodeInsight;
-    case 'branch':
-      return s.mapNodeBranch;
-    case 'recent':
-      return s.mapNodeRecent;
-    default:
-      return s.mapNodeRecent;
-  }
-}
-
-function healthText(session: Session): string {
-  const level = session.health?.level;
-  const size = formatBytes(session.health?.sizeBytes);
-  if (level === 'critical') return size ? `超大风险 · ${size}` : '超大风险';
-  if (level === 'large') return size ? `大会话 · ${size}` : '大会话';
-  return '';
-}
-
 function unreadCount(session: Session): number {
   return (session.insights || []).filter((item) => item.status === 'unread').length;
+}
+
+function hasDigest(session: Session): boolean {
+  return Boolean(session.digest?.objective?.trim() || session.digest?.summary?.trim());
+}
+
+function isRisk(session: Session): boolean {
+  return session.health?.level === 'critical' || session.health?.level === 'large';
 }
 
 function hasBranchRelation(session: Session, all: Session[]): boolean {
@@ -103,165 +59,177 @@ function hasBranchRelation(session: Session, all: Session[]): boolean {
   return all.some((other) => other.topology?.parentSessionPath === session.path);
 }
 
-const VISIBLE_LIMIT = 20;
+// 工作节点 = 当前 / 有 digest / 风险 / 有未读洞察 / 有分支关系 / 有明确 taskStatus;archived 与纯噪音折叠。
+function isWorkNode(session: Session, all: Session[], currentPath: string | null): boolean {
+  if (session.path === currentPath) return true;
+  if (session.topology?.taskStatus === 'archived') return false;
+  if (hasDigest(session) || isRisk(session) || unreadCount(session) > 0) return true;
+  if (hasBranchRelation(session, all)) return true;
+  const ts = session.topology?.taskStatus;
+  return ts === 'active' || ts === 'paused' || ts === 'completed';
+}
 
-function buildNodes(
-  sessions: Session[],
-  currentPath: string | null,
-): { nodes: MapNode[]; remaining: number } {
-  if (sessions.length === 0) return { nodes: [], remaining: 0 };
+function deriveState(session: Session): WorkState {
+  if (isRisk(session)) return 'risk';
+  const ts = session.topology?.taskStatus;
+  if (ts === 'completed') return 'done';
+  if (ts === 'paused') return 'blocked';
+  return 'active';
+}
 
-  const scored = sessions.map((session) => {
-    let score = 0;
-    const reasons: SessionNodeKind[] = [];
-    const isCurrent = session.path === currentPath;
-    if (isCurrent) {
-      score += 1000;
-      reasons.push('current');
-    }
-    if (session.health?.level === 'critical') {
-      score += 300;
-      reasons.push('risk');
-    } else if (session.health?.level === 'large') {
-      score += 150;
-      reasons.push('risk');
-    }
-    const unread = unreadCount(session);
-    if (unread > 0) {
-      score += 200 + Math.min(50, unread * 10);
-      reasons.push('insight');
-    }
-    if (hasBranchRelation(session, sessions)) {
-      score += 80;
-      reasons.push('branch');
-    }
-    const modifiedMs = new Date(session.modified || 0).getTime() || 0;
-    const ageDays = (Date.now() - modifiedMs) / 86400000;
-    if (ageDays < 1) score += 60;
-    else if (ageDays < 3) score += 30;
-    else if (ageDays < 7) score += 10;
+const STATE_LABEL: Record<WorkState, string> = {
+  active: '进行中',
+  blocked: '阻塞',
+  risk: '风险',
+  done: '已收口',
+};
 
-    return { session, score, reasons, modifiedMs };
-  });
+const STATE_DOT: Record<WorkState, string> = {
+  active: s.mapDotActive,
+  blocked: s.mapDotBlocked,
+  risk: s.mapDotRisk,
+  done: s.mapDotDone,
+};
 
-  scored.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return b.modifiedMs - a.modifiedMs;
-  });
+const STATE_CHIP: Record<WorkState, string> = {
+  active: s.mapChipActive,
+  blocked: s.mapChipBlocked,
+  risk: s.mapChipRisk,
+  done: s.mapChipDone,
+};
 
-  const visibleItems = scored.slice(0, VISIBLE_LIMIT);
-  const remaining = Math.max(0, sessions.length - visibleItems.length);
+function nextLine(session: Session): string {
+  const next = session.digest?.nextSteps?.find((step) => step.trim());
+  if (next) return `下一步:${next.trim()}`;
+  const status = session.digest?.status?.trim();
+  if (status) return status;
+  const summary = session.digest?.summary?.trim() || session.topology?.summary?.trim();
+  return summary || '';
+}
 
-  const nodes: MapNode[] = visibleItems.map(({ session, reasons }) => {
-    const kind = reasons[0] || 'recent';
-    return { kind, session, key: session.path };
-  });
-
-  if (remaining > 0) {
-    nodes.push({ kind: 'cluster', key: '__cluster__', count: remaining });
-  }
-
-  return { nodes, remaining };
+function sortWork(a: Session, b: Session, currentPath: string | null): number {
+  const ac = a.path === currentPath ? 1 : 0;
+  const bc = b.path === currentPath ? 1 : 0;
+  if (ac !== bc) return bc - ac;
+  const au = unreadCount(a);
+  const bu = unreadCount(b);
+  if (au !== bu) return bu - au;
+  return (new Date(b.modified || 0).getTime() || 0) - (new Date(a.modified || 0).getTime() || 0);
 }
 
 export function SessionMapView() {
   const sessions = useStore((state) => state.sessions);
   const currentSessionPath = useStore((state) => state.currentSessionPath);
   const [selectedPath, setSelectedPath] = useState<string | null>(currentSessionPath);
-  const { nodes, remaining } = useMemo(
-    () => buildNodes(sessions, currentSessionPath),
-    [sessions, currentSessionPath],
-  );
-  const selected = sessions.find((session) => session.path === (selectedPath || currentSessionPath)) || null;
-  const riskCount = sessions.filter((session) => session.health?.level === 'critical' || session.health?.level === 'large').length;
-  const totalUnread = sessions.reduce((sum, session) => sum + unreadCount(session), 0);
-  const t = window.t ?? ((key: string) => key);
-  const tt = (key: string, fallback: string) => {
-    const value = t(key);
-    return !value || value === key ? fallback : value;
-  };
 
   useEffect(() => {
     if (currentSessionPath) setSelectedPath(currentSessionPath);
   }, [currentSessionPath]);
 
-  const statusSummary = useMemo(() => {
-    if (sessions.length === 0) return tt('session.map.empty', '暂无会话');
-    if (riskCount === 0 && totalUnread === 0) {
-      return `当前无大会话风险，${sessions.length} 个会话运行平稳`;
-    }
-    const parts: string[] = [];
-    if (riskCount > 0) parts.push(`${riskCount} 个会话体积偏大`);
-    if (totalUnread > 0) parts.push(`${totalUnread} 条未读洞察`);
-    return parts.join(' · ');
-  }, [sessions.length, riskCount, totalUnread, tt]);
+  const { groups, folded, counts } = useMemo(() => {
+    const work = sessions.filter((sess) => isWorkNode(sess, sessions, currentSessionPath));
+    const buckets: Record<WorkState, Session[]> = { active: [], blocked: [], risk: [], done: [] };
+    for (const sess of work) buckets[deriveState(sess)].push(sess);
+    const sorter = (a: Session, b: Session) => sortWork(a, b, currentSessionPath);
+    const activeItems = buckets.active.sort(sorter);
+    const stalledItems = [...buckets.risk, ...buckets.blocked].sort(sorter);
+    const doneItems = buckets.done.sort(sorter);
+    const groupDefs = [
+      { label: '进行中', items: activeItems },
+      { label: '阻塞 · 风险', items: stalledItems },
+      { label: '已收口', items: doneItems },
+    ].filter((g) => g.items.length > 0);
+    return {
+      groups: groupDefs,
+      folded: sessions.length - work.length,
+      counts: {
+        active: activeItems.length,
+        stalled: stalledItems.length,
+        done: doneItems.length,
+        unread: work.reduce((sum, sess) => sum + unreadCount(sess), 0),
+      },
+    };
+  }, [sessions, currentSessionPath]);
 
-  const handleClusterClick = () => {
-    // 聚合节点可选中但不展示详情操作；未来可展开为完整列表。
-    setSelectedPath(null);
+  const selected = sessions.find((sess) => sess.path === (selectedPath || currentSessionPath)) || null;
+  const parentOf = (sess: Session): Session | null =>
+    sess.topology?.parentSessionPath
+      ? sessions.find((p) => p.path === sess.topology?.parentSessionPath) || null
+      : null;
+
+  const totalWork = counts.active + counts.stalled + counts.done;
+
+  const pulse = totalWork === 0
+    ? '还没有工作节点 · 开始对话或让会话生成 digest 后出现在这里'
+    : [
+        counts.active > 0 ? `${counts.active} 推进中` : '',
+        counts.stalled > 0 ? `${counts.stalled} 阻塞/风险` : '',
+        counts.done > 0 ? `${counts.done} 已收口` : '',
+      ].filter(Boolean).join(' · ');
+
+  const renderCard = (sess: Session) => {
+    const state = deriveState(sess);
+    const active = sess.path === currentSessionPath;
+    const isSel = selected?.path === sess.path;
+    const unread = unreadCount(sess);
+    const parent = parentOf(sess);
+    const next = nextLine(sess);
+    const meta: string[] = [];
+    if (parent) meta.push(`⎇ 从 ${sessionTitle(parent)}`);
+    if (sess.topology?.branchLabel) meta.push(sess.topology.branchLabel);
+    if (isRisk(sess) && sess.health?.sizeBytes) meta.push(formatBytes(sess.health.sizeBytes));
+    if (sess.messageCount) meta.push(`${sess.messageCount} 消息`);
+    const time = formatTimeLabel(sess.modified);
+    if (time) meta.push(time);
+
+    return (
+      <div
+        key={sess.path}
+        className={`${s.mapCard} ${isSel ? s.mapCardSel : ''} ${active ? s.mapCardActive : ''}`}
+        onClick={() => setSelectedPath(sess.path)}
+        onDoubleClick={() => { void switchSession(sess.path); }}
+        role="option"
+        aria-selected={isSel}
+      >
+        <div className={s.mapCardHead}>
+          <span className={`${s.mapDot} ${STATE_DOT[state]}`} aria-hidden="true" />
+          <span className={s.mapCardTitle}>{sessionTitle(sess)}</span>
+          {active && <span className={`${s.mapChip} ${s.mapChipCurrent}`}>当前</span>}
+          <span className={`${s.mapChip} ${STATE_CHIP[state]}`}>{STATE_LABEL[state]}</span>
+          {unread > 0 && <span className={s.mapCardIns} title={`${unread} 条未读洞察`}>◆ {unread}</span>}
+        </div>
+        {next && <div className={s.mapCardNext}>{next}</div>}
+        {meta.length > 0 && <div className={s.mapCardMeta}>{meta.join(' · ')}</div>}
+      </div>
+    );
   };
 
   return (
     <div className={s.sessionMap}>
-      <div className={s.mapStatusBar}>{statusSummary}</div>
+      <div className={s.mapStatusBar}>
+        {pulse}
+        {counts.unread > 0 && (
+          <span className={s.mapPulseInsight}> · {counts.unread} 条洞察待应用</span>
+        )}
+      </div>
 
       <div className={s.mapCanvasWrap}>
-        {nodes.length === 0 ? (
-          <div className={s.mapEmpty}>{tt('session.map.empty', '暂无会话')}</div>
+        {groups.length === 0 ? (
+          <div className={s.mapEmpty}>暂无工作节点</div>
         ) : (
-          <ul className={s.mapNodeList} role="listbox" aria-label="会话工作地图">
-            {nodes.map((node) => {
-              if (isCluster(node)) {
-                return (
-                  <li
-                    key={node.key}
-                    className={`${s.mapNodeItem} ${s.mapNodeCluster}`}
-                    onClick={handleClusterClick}
-                    role="option"
-                    aria-selected="false"
-                  >
-                    <span className={s.mapNodeBullet} aria-hidden="true">
-                      {nodeIcon('cluster')}
-                    </span>
-                    <span className={s.mapNodeText}>
-                      其余 {node.count} 个普通会话
-                    </span>
-                  </li>
-                );
-              }
-              const { session, kind } = node;
-              const active = session.path === currentSessionPath;
-              const selectedNode = selected?.path === session.path;
-              const hText = healthText(session);
-              const uCount = unreadCount(session);
-              const branchLabel = session.topology?.branchLabel;
-              const metaParts: string[] = [];
-              if (hText) metaParts.push(hText);
-              if (uCount > 0) metaParts.push(`${uCount} 条新洞察`);
-              if (branchLabel) metaParts.push(`分支：${branchLabel}`);
-              if (metaParts.length === 0) metaParts.push(formatTimeLabel(session.modified));
-
+          <div className={s.mapBoard} role="listbox" aria-label="会话工作地图">
+            {groups.map((group) => {
+              const shown = group.items.slice(0, GROUP_LIMIT);
+              const overflow = group.items.length - shown.length;
               return (
-                <li
-                  key={session.path}
-                  className={`${s.mapNodeItem} ${nodeClassForKind(kind)} ${selectedNode ? s.mapNodeSelected : ''} ${active ? s.mapNodeActive : ''}`}
-                  onClick={() => setSelectedPath(session.path)}
-                  onDoubleClick={() => { void switchSession(session.path); }}
-                  role="option"
-                  aria-selected={selectedNode}
-                >
-                  <span className={s.mapNodeBullet} aria-hidden="true">
-                    {nodeIcon(kind)}
-                  </span>
-                  <span className={s.mapNodeBody}>
-                    <span className={s.mapNodeTitle}>{sessionTitle(session)}</span>
-                    <span className={s.mapNodeMeta}>{metaParts.filter(Boolean).join(' · ')}</span>
-                  </span>
-                  {active && <span className={s.mapNodeActiveBadge}>当前</span>}
-                </li>
+                <div key={group.label} className={s.mapGroup}>
+                  <div className={s.mapGroupHead}>{group.label} · {group.items.length}</div>
+                  {shown.map(renderCard)}
+                  {overflow > 0 && <div className={s.mapGroupMore}>+{overflow} 更多</div>}
+                </div>
               );
             })}
-          </ul>
+          </div>
         )}
       </div>
 
@@ -269,26 +237,17 @@ export function SessionMapView() {
         <div className={s.mapDetail}>
           <div className={s.mapDetailHead}>
             <div className={s.mapDetailTitle}>{sessionTitle(selected)}</div>
-            <button
-              type="button"
-              className={s.mapActionBtn}
-              onClick={() => { void switchSession(selected.path); }}
-            >
+            <button type="button" className={s.mapActionBtn} onClick={() => { void switchSession(selected.path); }}>
               打开
             </button>
           </div>
           <div className={s.mapMetaLine}>
-            {selected.topology?.branchLabel ? (
-              <span>分支：{selected.topology.branchLabel}</span>
-            ) : null}
-            {selected.health?.level && selected.health.level !== 'ok' ? (
-              <span>{healthText(selected)}</span>
-            ) : null}
+            <span>{STATE_LABEL[deriveState(selected)]}</span>
+            {parentOf(selected) && <span>⎇ 从 {sessionTitle(parentOf(selected) as Session)}</span>}
+            {isRisk(selected) && selected.health?.sizeBytes ? <span>{formatBytes(selected.health.sizeBytes)}</span> : null}
             {unreadCount(selected) > 0 ? <span>{unreadCount(selected)} 条新洞察</span> : null}
           </div>
-          {selected.digest?.summary && (
-            <p className={s.mapSummary}>{selected.digest.summary}</p>
-          )}
+          {selected.digest?.summary && <p className={s.mapSummary}>{selected.digest.summary}</p>}
           {selected.digest?.nextSteps?.length ? (
             <div className={s.mapNextSteps}>
               {selected.digest.nextSteps.slice(0, 3).map((item) => (
@@ -298,27 +257,43 @@ export function SessionMapView() {
           ) : null}
           {unreadCount(selected) > 0 && (
             <div className={s.mapInsights}>
-              {(selected.insights || []).filter((item) => item.status === 'unread').slice(0, 2).map((item) => (
-                <p key={item.id}>{item.content}</p>
+              {(selected.insights || []).filter((item) => item.status === 'unread').slice(0, 3).map((item) => (
+                <div key={item.id} className={s.mapInsightItem}>
+                  <p title={item.source ? `来自 ${item.source}` : undefined}>{item.content}</p>
+                  <div className={s.mapInsightActions}>
+                    <button
+                      type="button"
+                      className={s.mapActionBtn}
+                      onClick={() => {
+                        void consumeInsights(selected.path, [item.id]);
+                        useStore.setState({ composerText: item.content, welcomeVisible: false });
+                        useStore.getState().requestInputFocus();
+                      }}
+                    >
+                      应用
+                    </button>
+                    <button
+                      type="button"
+                      className={s.mapGhostBtn}
+                      onClick={() => { void consumeInsights(selected.path, [item.id]); }}
+                    >
+                      忽略
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
           <div className={s.mapDetailActions}>
-            <button
-              type="button"
-              className={s.mapGhostBtn}
-              onClick={() => { void branchSession(selected.path); }}
-            >
+            <button type="button" className={s.mapGhostBtn} onClick={() => { void branchSession(selected.path); }}>
               从此分支
             </button>
           </div>
         </div>
       )}
 
-      {remaining > 0 && !selected && (
-        <div className={s.mapDetailPlaceholder}>
-          已聚合 {remaining} 个普通会话；选中上方节点可打开或分支。
-        </div>
+      {folded > 0 && (
+        <div className={s.mapFolded}>归档 · {folded} 个空 / 已归档会话(原始历史仍可查)</div>
       )}
     </div>
   );

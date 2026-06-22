@@ -217,15 +217,15 @@ export function SidebarCapabilityBar() {
       tone: 'quiet' as const,
       onClick: openDeskPanel,
     }] : []),
-    {
+    ...(expanded ? [{
       key: 'fleet',
       label: tt('sidebar.capability.fleet', 'Workers'),
-      tone: 'quiet',
+      tone: 'quiet' as const,
       title: tt('sidebar.capability.fleetTip', 'Fleet 指挥台:把任务拆给多个 CLI worker 并行干,每个独立 worktree'),
       onClick: () => {
         useStore.setState({ welcomeVisible: false, activePanel: 'fleet' });
       },
-    },
+    }] : []),
     ...(changesSummary.linesAdded + changesSummary.linesRemoved > 0 ? [{
       key: 'changes',
       label: `+${changesSummary.linesAdded} -${changesSummary.linesRemoved}`,
@@ -234,18 +234,17 @@ export function SidebarCapabilityBar() {
         useStore.setState({ welcomeVisible: false, activePanel: 'changes' });
       },
     }] : []),
-    {
+    ...(expanded ? [{
       key: 'skills',
       label: tt('sidebar.capability.skillsCenter', '技能中心'),
-      tone: 'quiet',
+      tone: 'quiet' as const,
       onClick: () => openCapabilityPanel('skills'),
-    },
-    {
+    }, {
       key: 'mcp',
       label: tt('sidebar.capability.mcpHub', 'MCP 接入'),
-      tone: 'quiet',
+      tone: 'quiet' as const,
       onClick: () => openCapabilityPanel('mcp'),
-    },
+    }] : []),
   ];
 
   return (
@@ -327,27 +326,31 @@ export function SidebarCapabilityBar() {
             <span key={chip.key} className={className}>{content}</span>
           );
         })}
-        <button
-          type="button"
-          className="sidebar-capability-chip sidebar-capability-chip-action"
-          onClick={insertAtHint}
-        >
-          {tt('sidebar.capability.tryAt', '@ 引用文件')}
-        </button>
-        <button
-          type="button"
-          className="sidebar-capability-chip sidebar-capability-chip-action"
-          onClick={() => {
-            const prompt = (tasks?.activeCount || 0) > 0
-              ? tt('sidebar.capability.resumePrompt', '继续刚才的任务，先告诉我当前进度和下一步。')
-              : tt('sidebar.capability.workspacePrompt', '先快速读一下当前工作区，告诉我你会从哪里开始。');
-            void startQuickPrompt(prompt);
-          }}
-        >
-          {(tasks?.activeCount || 0) > 0
-            ? tt('sidebar.capability.resumeTask', '继续任务')
-            : tt('sidebar.capability.startWorkspace', '浏览工作区')}
-        </button>
+        {expanded && (
+          <button
+            type="button"
+            className="sidebar-capability-chip sidebar-capability-chip-action"
+            onClick={insertAtHint}
+          >
+            {tt('sidebar.capability.tryAt', '@ 引用文件')}
+          </button>
+        )}
+        {((tasks?.activeCount || 0) > 0 || expanded) && (
+          <button
+            type="button"
+            className="sidebar-capability-chip sidebar-capability-chip-action"
+            onClick={() => {
+              const prompt = (tasks?.activeCount || 0) > 0
+                ? tt('sidebar.capability.resumePrompt', '继续刚才的任务，先告诉我当前进度和下一步。')
+                : tt('sidebar.capability.workspacePrompt', '先快速读一下当前工作区，告诉我你会从哪里开始。');
+              void startQuickPrompt(prompt);
+            }}
+          >
+            {(tasks?.activeCount || 0) > 0
+              ? tt('sidebar.capability.resumeTask', '继续任务')
+              : tt('sidebar.capability.startWorkspace', '浏览工作区')}
+          </button>
+        )}
       </div>
     </div>
   );

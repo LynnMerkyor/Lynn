@@ -116,6 +116,7 @@ function SessionListInner() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [bridgeCollapsed, setBridgeCollapsed] = useState(false);
+  const [noiseCollapsed, setNoiseCollapsed] = useState(true);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
     try {
       const raw = window.localStorage.getItem('hana-session-workspace-groups');
@@ -213,7 +214,20 @@ function SessionListInner() {
       })
     : sessions;
 
-  const grouped = groupSessionsByWorkspace(filtered, agentName);
+  // 默认列表降噪:从没用过的空会话(无消息 / 无 digest / 无分支 / 未命名)折叠到底部
+  const isNoiseSession = (s: Session): boolean => {
+    if (searchQuery.trim()) return false;
+    if (s.pinned || s.path === currentSessionPath) return false;
+    if (s.digest?.objective?.trim() || s.digest?.summary?.trim()) return false;
+    if (s.topology?.taskStatus) return false;
+    if ((s.insights || []).length > 0) return false;
+    const title = (s.title || '').trim();
+    const untitled = !title || title === '新对话' || title === '未命名' || title === '未命名会话';
+    return untitled && (s.messageCount ?? 0) <= 1;
+  };
+  const noiseSessions = searchQuery.trim() ? [] : filtered.filter(isNoiseSession);
+  const visibleSessions = searchQuery.trim() ? filtered : filtered.filter((s) => !isNoiseSession(s));
+  const grouped = groupSessionsByWorkspace(visibleSessions, agentName);
 
   return (
     <>
@@ -335,6 +349,42 @@ function SessionListInner() {
           </Fragment>
         );
       })}
+      {!searchQuery && noiseSessions.length > 0 && (
+        <>
+          <button
+            type="button"
+            className={styles.sessionGroupHeader}
+            onClick={() => setNoiseCollapsed((prev) => !prev)}
+            title="从没用过的空会话"
+          >
+            <span className={`${styles.sessionGroupArrow}${noiseCollapsed ? ` ${styles.collapsed}` : ''}`} aria-hidden="true">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </span>
+            <span className={styles.sessionGroupIcon} aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path>
+              </svg>
+            </span>
+            <span className={styles.sessionGroupMeta}>
+              <span className={styles.sessionGroupTitle}>空会话</span>
+            </span>
+            <span className={styles.sessionGroupCount}>{noiseSessions.length}</span>
+          </button>
+          {!noiseCollapsed && noiseSessions.map((s) => (
+            <SessionItem
+              key={s.path}
+              session={s}
+              isActive={!pendingNewSession && s.path === currentSessionPath}
+              isStreaming={streamingSessions.includes(s.path)}
+              agents={agents}
+              browserUrl={browserSessions[s.path] || null}
+              disabled={sessionCreationPending}
+            />
+          ))}
+        </>
+      )}
     </>
   );
 }
