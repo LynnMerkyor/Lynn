@@ -6,17 +6,17 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0"
     />
-    <title>Lynn 下载 | Windows 安装包与 CLI</title>
+    <title>Lynn 下载 | macOS 与 Windows 安装包</title>
     <meta
       name="description"
-      content="下载 Lynn 客户端 GUI 的 Windows 安装包和独立 Lynn CLI。macOS V0.85.1 正在等待 Apple notarization 完成后重新开放下载。客户端 GUI 当前为 v0.85.1,CLI 当前为 v0.85.1。"
+      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.85.1,CLI 当前为 v0.85.1。"
     />
     <meta name="theme-color" content="#f7f1e6" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Lynn 下载 | Windows 安装包与 CLI" />
+    <meta property="og:title" content="Lynn 下载 | macOS 与 Windows 安装包" />
     <meta
       property="og:description"
-      content="下载 Lynn 客户端 GUI 的 Windows 安装包和独立 Lynn CLI。macOS V0.85.1 正在等待 Apple notarization 完成后重新开放下载。客户端 GUI 当前为 v0.85.1,CLI 当前为 v0.85.1。"
+      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.85.1,CLI 当前为 v0.85.1。"
     />
     <meta property="og:image" content="../.github/assets/screenshot-main-20260407-v3.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -49,7 +49,7 @@
             <p class="lead">
               客户端 GUI 当前为 <strong id="gui-release-version">0.85.1</strong>,
               CLI 当前为 <strong id="cli-release-version">0.85.1</strong>。
-              Windows GUI 下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作和显式启用的本地模型；CLI 可独立安装,也可作为 Fleet worker 或 manager。macOS V0.85.1 正在等待 Apple notarization 完成后重新开放下载。
+              GUI 下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作和显式启用的本地模型；CLI 可独立安装,也可作为 Fleet worker 或 manager。macOS V0.85.1 已完成 Apple notarization、staple 和 Gatekeeper 验证。
             </p>
             <div class="platform-callout" id="platform-callout">
               系统识别中…
@@ -123,34 +123,46 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
         </section>
 
         <section class="download-grid" aria-label="下载选项">
-          <article class="download-card is-unavailable" data-platform-card="mac-arm">
+          <article class="download-card" data-platform-card="mac-arm">
             <div class="download-card-top">
               <span class="pill">推荐给 Apple Silicon Mac</span>
               <h2>macOS Apple Silicon</h2>
             </div>
-            <p>适用于 Apple Silicon 芯片的 Mac。V0.85.1 macOS 包正在等待 Apple notarization 完成后重新开放下载；当前不提供未公证 DMG。</p>
+            <p>适用于 Apple Silicon 芯片的 Mac。V0.85.1 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
-              <li>签名状态：Developer ID 签名待重新收口</li>
-              <li>公证状态：等待 Apple 协议处理后重新提交</li>
-              <li>下载状态：暂不提供直链</li>
+              <li>签名状态：Developer ID 签名</li>
+              <li>公证状态：Apple notarized + stapled</li>
+              <li>下载大小：约 156 MiB</li>
             </ul>
-            <span class="button button-secondary button-disabled" aria-disabled="true">公证完成后开放</span>
+            <a
+              class="button button-primary"
+              data-download-key="macArm"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.1-macOS-arm64.dmg"
+              target="_blank"
+              rel="noreferrer"
+            >下载 Apple Silicon 版</a>
           </article>
 
-          <article class="download-card is-unavailable" data-platform-card="mac-intel">
+          <article class="download-card" data-platform-card="mac-intel">
             <div class="download-card-top">
               <span class="pill pill-soft">适用于 Intel Mac</span>
               <h2>macOS Intel</h2>
             </div>
-            <p>适用于 Intel 芯片的 Mac。V0.85.1 macOS 包正在等待 Apple notarization 完成后重新开放下载；当前不提供未公证 DMG。</p>
+            <p>适用于 Intel 芯片的 Mac。V0.85.1 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
-              <li>签名状态：Developer ID 签名待重新收口</li>
-              <li>公证状态：等待 Apple 协议处理后重新提交</li>
-              <li>下载状态：暂不提供直链</li>
+              <li>签名状态：Developer ID 签名</li>
+              <li>公证状态：Apple notarized + stapled</li>
+              <li>下载大小：约 164 MiB</li>
             </ul>
-            <span class="button button-secondary button-disabled" aria-disabled="true">公证完成后开放</span>
+            <a
+              class="button button-primary"
+              data-download-key="macIntel"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.1-macOS-x64.dmg"
+              target="_blank"
+              rel="noreferrer"
+            >下载 Intel 版</a>
           </article>
 
           <article class="download-card" data-platform-card="windows">
@@ -183,7 +195,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
           <div class="requirement-grid">
             <article class="requirement-card">
               <h3>macOS</h3>
-              <p>推荐使用较新的 macOS 版本。macOS 正式包必须完成 Apple notarization、staple 和 Gatekeeper 验证后才会开放下载。</p>
+              <p>推荐使用较新的 macOS 版本。Apple Silicon 与 Intel 机型请分别下载对应的已公证 DMG 包。</p>
             </article>
             <article class="requirement-card">
               <h3>Windows</h3>
@@ -204,7 +216,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
           <div class="faq-list">
             <article class="faq-card">
               <h3>我怎么知道我的 Mac 是 Apple Silicon 还是 Intel？</h3>
-              <p>点击左上角苹果菜单，选择“关于本机”。如果看到 M 系列芯片，就是 Apple Silicon；如果看到 Intel，就是 Intel 版。V0.85.1 macOS 包会在 Apple notarization 完成后重新开放。</p>
+              <p>点击左上角苹果菜单，选择“关于本机”。如果看到 M 系列芯片，就是 Apple Silicon；如果看到 Intel，就是 Intel 版。</p>
             </article>
             <article class="faq-card">
               <h3>Windows 弹出安全提示还能装吗？</h3>

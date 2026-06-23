@@ -885,7 +885,7 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** V0.85.1 macOS DMGs are temporarily withheld. The public DMGs will be reissued only after Apple notarization, stapling, and Gatekeeper validation pass.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://gitee.com/merkyor/Lynn/releases). The V0.85.1 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
@@ -952,8 +952,8 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Withheld pending V0.85.1 notarized DMG reissue |
-| macOS (Intel) | Withheld pending V0.85.1 notarized DMG reissue |
+| macOS (Apple Silicon) | Supported (V0.85.1 notarized DMG) |
+| macOS (Intel) | Supported (V0.85.1 notarized DMG) |
 | Windows | Beta |
 | Linux | Planned |
 | Mobile (PWA) | Planned |

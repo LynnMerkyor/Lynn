@@ -1173,7 +1173,7 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：V0.85.1 macOS DMG 暂停开放下载。正式包必须完成 Apple notarization、staple 和 Gatekeeper 验证后才会补发。
+**macOS（Apple Silicon / Intel）**：从 [Releases](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.dmg`。V0.85.1 的 Apple Silicon / Intel DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。
 
 **Windows**：从 [Releases](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.exe`，直接运行。
 
@@ -1245,8 +1245,8 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 暂停下载，等待 V0.85.1 notarized DMG 补发 |
-| macOS (Intel) | 暂停下载，等待 V0.85.1 notarized DMG 补发 |
+| macOS (Apple Silicon) | 已支持（V0.85.1 notarized DMG） |
+| macOS (Intel) | 已支持（V0.85.1 notarized DMG） |
 | Windows x64 | Beta |
 | Linux | 计划中 |
 | 移动端 (PWA) | 计划中 |
@@ -1307,7 +1307,7 @@ npm run dist:local            # 仅本地测试包（macOS DMG，跳过公证；
 
 ### Q5：Windows 能用吗？
 
-可以。V0.85.1 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 当前暂停开放，等待 Apple notarization、staple 和 Gatekeeper 验证完成后补发。
+可以。V0.85.1 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 已完成 Apple notarization、staple 和 Gatekeeper 验证。
 
 ### Q6：能改模型吗？接自己的 API？
 
