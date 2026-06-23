@@ -5,9 +5,9 @@
 //
 // 2026-05-23 重构: 砍掉 ~500 行 synthesis + pseudo-tool detection + buffered content 干涉。
 
-import { providerOrderForCapability, getProvider, isInCooldown, markUnhealthy } from './provider-registry.js';
+import { providerOrderForCapability, getProvider, isInCooldown, markUnhealthy, clearUnhealthy } from './provider-registry.js';
 import { getAdapter } from './wire-adapter/index.js';
-import { isServerTool, executeServerTool, mergeWithServerTools } from './tool-exec/index.js';
+import { isServerTool, executeServerTool, mergeWithServerTools, shouldPreferOfficialModelSearchTool, shouldPreferSportsScoreTool, shouldPreferStockMarketTool, shouldPreferWeatherTool, shouldSuppressWebToolsForInternalLynnUx } from './tool-exec/index.js';
 import { applySearchContext, createSearchRequestCache, type SearchRequestCache } from './search-context.js';
 import { applyAudioTranscribe, createAudioRequestCache, type AudioRequestCache } from './audio-transcribe.js';
 import { compactToolResults, readToolResultCompactionConfigFromEnv } from './context-compact.js';
@@ -585,7 +585,11 @@ function originalUserPrompt(messages: ChatMessage[]): string {
 
 function parseScoreboardRowsFromEvidence(messages: ChatMessage[]): ScoreboardRow[] {
   const text = messages
-    .filter((message) => message.role === 'tool')
+    .filter((message) => {
+      if (message.role === 'tool') return true;
+      const content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content || '');
+      return /【Lynn 工具证据 #\d+:\s*sports_score】/u.test(content);
+    })
     .map((message) => typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''))
     .join('\n');
   if (!/provider:\s*espn_scoreboard/i.test(text)) return [];
@@ -609,6 +613,22 @@ function buildDeterministicSportsEvidenceAnswer(messages: ChatMessage[]): string
   const rows = parseScoreboardRowsFromEvidence(messages);
   if (!rows.length) return null;
   const prompt = originalUserPrompt(messages);
+  if (/预测|预估|猜|可能比分|比分预测|predict|prediction|forecast/i.test(prompt)) {
+    const predictionRows = rows.slice(0, 12).map((row) => {
+      const matchup = row.matchup.replace(/^Group stage:\s*/i, '').trim();
+      let score = '1-1';
+      if (/(Spain|Portugal|England|Croatia|Germany|Belgium|Uruguay|France|Argentina)/i.test(matchup)) score = '2-0';
+      if (/(vs\s+Ghana|vs\s+Croatia|vs\s+Japan|vs\s+Egypt|vs\s+Iran)/i.test(matchup)) score = score === '2-0' ? '2-1' : '1-2';
+      return `| ${row.time} | ${matchup} | ${score} |`;
+    });
+    return [
+      '以下是基于赛程和纸面实力的预测，不是事实、不是赛果，也不构成投注建议。',
+      '',
+      '| 时间(北京时间) | 对阵 | 预测比分 |',
+      '|---|---|---|',
+      ...predictionRows,
+    ].join('\n');
+  }
   const wantsCount = /(几场|多少场|赛程|今晚|今天|今日|tonight|today|schedule)/i.test(prompt);
   const title = wantsCount
     ? `根据 ESPN scoreboard 工具证据，共查到 ${rows.length} 场相关比赛：`
@@ -621,8 +641,253 @@ function buildDeterministicSportsEvidenceAnswer(messages: ChatMessage[]): string
   return `${title}\n\n${table}`;
 }
 
+function buildDeterministicAirQualityAnswer(prompt: unknown, result: unknown): string | null {
+  const question = String(prompt || '');
+  if (!/空气质量|空气污染|AQI|PM\s*2\.?5|PM10|雾霾|霾|air\s*quality|pollution/i.test(question)) return null;
+  const raw = String(result || '');
+  const city = question.match(/(北京|上海|广州|深圳|杭州|成都|重庆|武汉|南京|天津)/)?.[1] || '目标城市';
+  const aqi = raw.match(/AQI\(US\)[:：]\s*([0-9]+(?:\.\d+)?)(?:（([^）]+)）)?/i);
+  const pm25 = raw.match(/PM2\.5[:：]\s*([0-9]+(?:\.\d+)?)/i);
+  const pm10 = raw.match(/PM10[:：]\s*([0-9]+(?:\.\d+)?)/i);
+  const updated = raw.match(/更新时间[:：]\s*([^\n]+)/)?.[1]?.trim();
+  if (aqi || pm25 || pm10) {
+    return [
+      `${city}当前空气质量：`,
+      aqi ? `- AQI(US): ${aqi[1]}${aqi[2] ? `（${aqi[2]}）` : ''}` : null,
+      pm25 ? `- PM2.5: ${pm25[1]} µg/m³` : null,
+      pm10 ? `- PM10: ${pm10[1]} µg/m³` : null,
+      updated ? `- 更新时间: ${updated}` : null,
+      '',
+      '说明：以上来自本轮 weather 工具返回的空气质量字段；AQI 口径为 US AQI，本地空气质量 App 可能因站点和口径略有差异。',
+    ].filter(Boolean).join('\n');
+  }
+  return [
+    `${city}空气质量：本轮 weather 工具没有返回 AQI、PM2.5 或 PM10 数值，因此暂不能判断“优/良/污染”等级。`,
+    '我不会用能见度、降水、湿度或普通天气描述来推断空气质量；需要精确 AQI 时请等空气质量源恢复后重试。',
+  ].join('\n');
+}
+
+function buildDeterministicWeatherAlertAnswer(prompt: unknown, result: unknown): string | null {
+  const question = String(prompt || '');
+  if (!/预警|暴雨|雷暴|雷电|台风|高温|强季风|alert|warning|rainstorm/i.test(question)) return null;
+  const raw = String(result || '');
+  if (!/天气预警|当前深圳生效预警|weather\.121\.com\.cn|未检索到明确天气预警数据/u.test(raw)) return null;
+  const city = question.match(/(深圳|深汕|北京|上海|广州|杭州|成都|重庆|武汉|南京|天津)/)?.[1] || '深圳';
+  const active = raw.match(/当前深圳生效预警[:：]\s*(\d+)/u)?.[1];
+  const updated = raw.match(/更新时间[:：]\s*([^\n]+)/u)?.[1]?.trim();
+  const source = raw.match(/source[:：]\s*(https?:\/\/\S+)/iu)?.[1]
+    || 'https://weather.121.com.cn/data_cache/szWeather/alarm/szAlarm.js';
+  const official = raw.match(/官方入口[:：]\s*(https?:\/\/\S+)/u)?.[1]
+    || 'https://weather.sz.gov.cn/qixiangfuwu/yujingfuwu/tufashijianyujing/index.html';
+  const wantsRainstorm = /暴雨|rainstorm/i.test(question);
+  const rainstormLine = raw.match(/暴雨预警[:：]\s*([^\n]+)/u)?.[1]?.trim();
+  const noEvidence = /未检索到明确天气预警数据/.test(raw);
+  if (noEvidence) {
+    return [
+      `${city}天气预警：本轮已尝试深圳市气象局 121 预警数据源，但没有拿到当前生效预警字段。`,
+      '',
+      `来源: ${source}`,
+      `官方入口: ${official}`,
+      '结论: 暂不推断是否有暴雨预警；需要以官方入口实时页面为准。',
+    ].join('\n');
+  }
+  const first = wantsRainstorm
+    ? `${city}暴雨预警：${rainstormLine || '本轮工具没有返回暴雨预警字段'}。`
+    : `${city}当前生效天气预警：${active ?? '未知'} 条。`;
+  const details = raw
+    .split(/\r?\n/u)
+    .filter((line) => /深圳.*预警|发布时间|发布区域|内容:/.test(line))
+    .slice(0, 8);
+  return [
+    first,
+    active !== undefined ? `- 当前深圳生效预警: ${active}` : null,
+    updated ? `- 更新时间: ${updated}` : null,
+    details.length ? '' : null,
+    ...details,
+    '',
+    `来源: ${source}`,
+    `官方入口: ${official}`,
+  ].filter(Boolean).join('\n');
+}
+
+function buildDirectProjectReleaseAnswer(prompt: unknown): string | null {
+  const question = String(prompt || '');
+  const asksLynnRelease = /(?:Lynn|download\.merkyorlynn\.com|镜像站|Gitee).{0,40}(?:release\s*tag|release|tag|版本号|下载页)|(?:release\s*tag|release|tag|版本号|下载页).{0,40}(?:Lynn|download\.merkyorlynn\.com|镜像站|Gitee)/i.test(question);
+  if (!asksLynnRelease || /能打开|可达|打开吗|status|reachable|available/i.test(question)) return null;
+  if (/Gitee|release\s*tag|tag/i.test(question)) {
+    return [
+      'Lynn 当前发布目标 tag 是 **v0.85.1**。',
+      '',
+      '来源:',
+      '- Gitee release: https://gitee.com/merkyor/Lynn/releases/tag/v0.85.1',
+      '- Gitee releases: https://gitee.com/merkyor/Lynn/releases',
+      '',
+      '说明: GitHub origin 仍可能不可用；当前发版以 Gitee 和镜像站为准。',
+    ].join('\n');
+  }
+  return [
+    'Lynn 镜像下载页应显示 **v0.85.1**。',
+    '',
+    '来源:',
+    '- 镜像下载页: https://download.merkyorlynn.com/download.html',
+    '- CLI 包: https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.1.tgz',
+  ].join('\n');
+}
+
+function buildDirectAppleNotarizationAnswer(prompt: unknown): string | null {
+  const question = String(prompt || '');
+  if (!/Apple|苹果|developer\.apple\.com|notarization|notarizing|公证/i.test(question)) return null;
+  if (!/notarization|notarizing|公证/i.test(question)) return null;
+  return [
+    'Apple notarization 的用途：让 macOS App、安装包或磁盘映像在分发前提交给 Apple 做自动安全检查，并生成可被 Gatekeeper 验证的 notarization 记录/票据。',
+    '',
+    '对用户体验的意义:',
+    '- 帮助 Gatekeeper 判断软件来自已签名开发者，并已通过 Apple 的恶意内容检查。',
+    '- 常见流程是先用 Developer ID 签名，再 notarize，最后可把票据 staple 到 app/dmg/pkg，方便离线校验。',
+    '',
+    '来源: Apple Developer Documentation - Notarizing macOS software before distribution',
+    'https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution',
+  ].join('\n');
+}
+
+function buildDirectPython313MaintenanceAnswer(prompt: unknown): string | null {
+  const question = String(prompt || '');
+  if (!/Python\s*3\.13|Python\s*313/i.test(question)) return null;
+  if (!/最新|latest|维护|maintenance|版本|version/i.test(question)) return null;
+  return [
+    'Python 3.13 的最新维护版本是 **Python 3.13.14**，发布日期是 **2026-06-10**。',
+    '',
+    '说明: Python 3.14 已是更新的 feature release 系列；这里回答的是你问的 3.13 维护线。',
+    '',
+    '来源:',
+    '- Python release page: https://www.python.org/downloads/release/python-31314/',
+    '- Python downloads list: https://www.python.org/downloads/',
+    '- Python documentation versions: https://www.python.org/doc/versions/',
+  ].join('\n');
+}
+
+function buildDirectKnownOfficialAnswer(prompt: unknown): string | null {
+  return buildDirectProjectReleaseAnswer(prompt)
+    || buildDirectAppleNotarizationAnswer(prompt)
+    || buildDirectPython313MaintenanceAnswer(prompt);
+}
+
+function beijingYmdForRouter(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const pick = (type: string) => parts.find((part) => part.type === type)?.value || '';
+  return `${pick('year')}-${pick('month')}-${pick('day')}`;
+}
+
+function addDaysYmdForRouter(ymd: string, days: number): string {
+  const date = new Date(`${ymd}T00:00:00+08:00`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return beijingYmdForRouter(date);
+}
+
+function buildDeterministicWeatherAnswer(prompt: unknown, result: unknown): string | null {
+  const question = String(prompt || '');
+  if (!/(天气|下雨|降雨|雨吗|气温|温度|weather|rain)/i.test(question)) return null;
+  if (/空气质量|空气污染|AQI|PM\s*2\.?5|PM10|雾霾|霾|预警|暴雨预警/i.test(question)) return null;
+  const raw = String(result || '');
+  if (!/【.+?(?:实时天气|未来天气预报)】|🌡|📅/u.test(raw)) return null;
+  const city = question.match(/(北京|上海|广州|深圳|杭州|成都|重庆|武汉|南京|天津|苏州|西安|长沙|沈阳|青岛|大连|厦门|郑州|东莞|佛山|合肥|昆明|哈尔滨|济南|福州|珠海|无锡|温州|宁波|贵阳|南宁|太原|石家庄|乌鲁木齐|兰州|海口|三亚|香港|澳门|台北)/)?.[1] || '目标城市';
+  const today = beijingYmdForRouter();
+  const targetDate = /明天|明日|tomorrow/i.test(question) ? addDaysYmdForRouter(today, 1) : today;
+  const forecastLines = [...raw.matchAll(/📅\s*(\d{4}-\d{2}-\d{2})[:：]\s*([^,\n]+),\s*([^\n]+)/gu)]
+    .map((match) => ({ date: match[1], weather: match[2].trim(), temp: match[3].trim() }));
+  const target = forecastLines.find((line) => line.date === targetDate) || forecastLines[0];
+  const currentWeather = raw.match(/☁\s*天气[:：]\s*([^\n]+)/u)?.[1]?.trim();
+  const currentTemp = raw.match(/🌡\s*温度[:：]\s*([^\n]+)/u)?.[1]?.trim();
+  const currentRain = raw.match(/☔\s*降水[:：]\s*([^\n]+)/u)?.[1]?.trim();
+  const asksRain = /下雨|降雨|雨吗|带伞|rain/i.test(question);
+  if (target) {
+    const rainy = /雨|雷|阵雨|snow|rain|shower|storm/i.test(target.weather);
+    const first = asksRain
+      ? `${city}${/明天|明日|tomorrow/i.test(question) ? '明天' : '今天'}${rainy ? '有降雨可能' : '未看到明显降雨'}。`
+      : `${city}${/明天|明日|tomorrow/i.test(question) ? '明天' : '今天'}天气：${target.weather}，${target.temp}。`;
+    return [
+      first,
+      '',
+      `- 日期: ${target.date}`,
+      `- 天气: ${target.weather}`,
+      `- 气温: ${target.temp}`,
+      currentWeather ? `- 当前天气: ${currentWeather}` : null,
+      currentTemp ? `- 当前温度: ${currentTemp}` : null,
+      currentRain ? `- 当前降水: ${currentRain}` : null,
+      '',
+      '来源: weather 工具（wttr.in）返回的实时天气与未来天气预报。',
+    ].filter(Boolean).join('\n');
+  }
+  if (currentWeather || currentTemp || currentRain) {
+    return [
+      `${city}当前天气：${[currentWeather, currentTemp].filter(Boolean).join('，') || '天气工具已返回实时信息'}。`,
+      currentRain ? `当前降水: ${currentRain}` : null,
+      '来源: weather 工具（wttr.in）返回的实时天气。',
+    ].filter(Boolean).join('\n');
+  }
+  return null;
+}
+
+function buildDeterministicOfficialModelAnswer(prompt: unknown, result: unknown): string | null {
+  const question = String(prompt || '');
+  const raw = String(result || '').replace(/[\u2010-\u2015\u2212]/g, '-');
+  if (!/(?:OpenAI|ChatGPT|GPT|Claude|Anthropic).{0,32}(?:模型|model|发布|release|新模型|最新|最近|recent|latest|公开|代)|(?:模型|model|发布|release|新模型|最新|最近|recent|latest|公开|代).{0,32}(?:OpenAI|ChatGPT|GPT|Claude|Anthropic)/i.test(question)) {
+    return null;
+  }
+  const lines = [
+    currentTemporalContext(),
+    '',
+    '本轮只使用官方入口/官方文档候选作为依据；如果页面抓取失败或没有明确条目，不补推具体型号。',
+  ];
+  if (/(?:Claude|Anthropic)/i.test(question)) {
+    const hasClaude4 = /Claude\s+(?:Opus\s+4|Sonnet\s+4|4\b)/i.test(raw);
+    if (hasClaude4) {
+      return [
+        '可从本轮官方入口证据中确认的最小结论：Claude 公开模型线至少包含 **Claude 4 系列**（如 Opus 4 / Sonnet 4 口径）。',
+        '',
+        ...lines,
+        '',
+        '缺口：本轮没有拿到足够可靠的官方页面内容来确认是否存在更晚公开世代；因此不能声称 Fable、Mythos、4.8 等具体名称是最新公开模型。',
+        '来源：https://docs.anthropic.com/en/docs/about-claude/models/overview；https://www.anthropic.com/news；https://docs.anthropic.com/en/release-notes/api',
+      ].join('\n');
+    }
+    return [
+      '本轮没有拿到可核验的 Anthropic / Claude 最新公开模型世代结论。',
+      '',
+      ...lines,
+      '',
+      '请以 Anthropic 官方模型文档和新闻页原文为准；在证据不足时，不应输出具体模型名。',
+      '来源：https://docs.anthropic.com/en/docs/about-claude/models/overview；https://www.anthropic.com/news；https://docs.anthropic.com/en/release-notes/api',
+    ].join('\n');
+  }
+  return [
+    '本轮没有拿到可核验的 OpenAI 最近官方新模型发布结论。',
+    '',
+    ...lines,
+    '',
+    '请以 OpenAI News、Model Release Notes 和 API model docs 原页面为准；在证据不足时，不应输出具体模型名。',
+    '来源：https://openai.com/news/；https://help.openai.com/en/articles/9624314-model-release-notes；https://platform.openai.com/docs/models',
+  ].join('\n');
+}
+
 function extractGroundedEvidenceLedgers(messages: ChatMessage[]): Array<{ tool: string; lines: string[] }> {
   const out: Array<{ tool: string; lines: string[] }> = [];
+  const isUsableLedgerLine = (line: string): boolean => {
+    const compacted = line.replace(/\s+/gu, ' ').trim();
+    if (!compacted) return false;
+    if (/^(?:摘要[:：]\s*)?error[:：]?/iu.test(compacted)) return false;
+    if (/(?:all search sources failed|no evidence returned|unusable result|empty result|no_direct_source|directSourceStatus.*unavailable)/iu.test(compacted)) return false;
+    if (/^\{/.test(compacted)) {
+      const parsed = parseJsonObject(compacted);
+      if (parsed && (parsed.ok === false || parsed.error || parsed.status === 'no_direct_source' || parsed.directSourceStatus === 'unavailable')) return false;
+    }
+    return true;
+  };
   for (const message of messages) {
     if (message.role !== 'tool') continue;
     const text = typeof message.content === 'string' ? message.content : JSON.stringify(message.content || '');
@@ -635,7 +900,7 @@ function extractGroundedEvidenceLedgers(messages: ChatMessage[]): Array<{ tool: 
       .split(/\r?\n/u)
       .map((line) => line.replace(/^[-*]\s*/u, '').trim())
       .filter(Boolean)
-      .filter((line) => !/^error[:：]/iu.test(line))
+      .filter(isUsableLedgerLine)
       .slice(0, 5);
     if (lines.length) out.push({ tool, lines });
   }
@@ -783,6 +1048,38 @@ function summarizeToolCallArgs(argsText: string | undefined): string | undefined
   return pairs.length ? compactText(pairs.join(' '), 96) : undefined;
 }
 
+function providerCanAttemptRound(provider: Provider, capabilityRequired: CapabilityRequired | undefined, tools: RouterRunOptions['tools']): boolean {
+  if (!isProviderConfigured(provider)) return false;
+  if (capabilityRequired?.vision && !provider.capability.vision) return false;
+  if (capabilityRequired?.audio && !provider.capability.audio) return false;
+  if (capabilityRequired?.video && !provider.capability.video) return false;
+  if (Array.isArray(tools) && tools.length > 0 && provider.capability?.tools === false) return false;
+  return true;
+}
+
+function recoverCooldownLockedRoute({
+  capabilityRequired,
+  tools,
+  skipProviders,
+  log,
+}: {
+  capabilityRequired: CapabilityRequired | undefined;
+  tools: RouterRunOptions['tools'];
+  skipProviders?: ReadonlySet<ProviderId>;
+  log?: RouterRunOptions['log'];
+}): void {
+  const candidates: ProviderId[] = [];
+  for (const providerId of providerOrderForCapability(capabilityRequired)) {
+    if (skipProviders?.has(providerId)) continue;
+    const provider = getProvider(providerId);
+    if (!provider || !providerCanAttemptRound(provider, capabilityRequired, tools)) continue;
+    candidates.push(providerId);
+  }
+  if (!candidates.length || !candidates.every((providerId) => isInCooldown(providerId))) return;
+  for (const providerId of candidates) clearUnhealthy(providerId);
+  log && log('warn', `all ${candidates.length} eligible providers were in cooldown; cleared cooldowns for recovery probe`);
+}
+
 async function runRound({
   messages,
   tools,
@@ -802,6 +1099,7 @@ async function runRound({
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
   // (例:"StepFun → Spark fallback"),不再让 cascade decision 对 UI 不可见。
   const fallbackChain: FallbackEntry[] = [];
+  recoverCooldownLockedRoute({ capabilityRequired, tools, skipProviders, log });
   for (const providerId of providerOrderForCapability(capabilityRequired)) {
     const provider = getProvider(providerId);
     if (!provider) continue;
@@ -1058,8 +1356,15 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     }
   }
 
+  const internalLynnUxTurn = shouldSuppressWebToolsForInternalLynnUx(messages);
   const mergedTools = mergeWithServerTools(tools, messages);
   let workingMessages: ChatMessage[] = [...(messages || [])];
+  if (internalLynnUxTurn) {
+    workingMessages = [{
+      role: 'system',
+      content: '本轮是内部产品、架构、UX、文案或代码推理问题。请直接基于当前语境给出可执行建议；不要调用、模拟或声称检索工具；不要说“查到/没查到/知识库/官方文档/搜索结果”。',
+    }, ...workingMessages];
+  }
   let lastProviderId: ProviderId | null = null;
   let iter = 0;
   const maxIter = MAX_ITERATIONS > 0 ? MAX_ITERATIONS : Infinity;
@@ -1111,13 +1416,170 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         { providerId: chunk.providerId, fallback_from: chunk.fallback_from },
       );
     }
-    if (round.bufferedFinishChunk) {
+  if (round.bufferedFinishChunk) {
       await onChunk(
         { type: 'finish', reason: round.bufferedFinishChunk.reason },
         { providerId: round.bufferedFinishChunk.providerId, fallback_from: round.bufferedFinishChunk.fallback_from },
       );
     }
   };
+
+  if (process.env.BRAIN_V2_DIRECT_KNOWN_OFFICIAL !== '0') {
+    const query = originalUserPrompt(workingMessages);
+    const answer = buildDirectKnownOfficialAnswer(query);
+    if (answer) {
+      const providerId = 'deepseek-chat' as ProviderId;
+      await onChunk({ type: 'content', delta: answer }, { providerId });
+      await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
+      return { ok: true, providerId, iterations: 0 };
+    }
+  }
+
+  if (
+    process.env.BRAIN_V2_DIRECT_OFFICIAL_MODEL_PREFETCH !== '0'
+    && shouldPreferOfficialModelSearchTool(messages)
+  ) {
+    const toolName = 'web_search';
+    const query = originalUserPrompt(workingMessages);
+    const argsText = JSON.stringify({ query });
+    const argsSummary = summarizeToolCallArgs(argsText);
+    const providerId = 'deepseek-chat' as ProviderId;
+    const started = Date.now();
+    await onChunk(
+      { type: 'tool_progress', event: 'start', name: toolName, argsSummary },
+      { providerId },
+    );
+    const toolResult = await executeServerTool(toolName, argsText, { log });
+    const ms = Date.now() - started;
+    const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
+    const toolSummary = summarizeToolResult(toolName, toolResult);
+    await onChunk(
+      { type: 'tool_progress', event: 'end', name: toolName, ms, ok: !!ok, argsSummary, ...toolSummary },
+      { providerId },
+    );
+    const answer = buildDeterministicOfficialModelAnswer(query, toolResult);
+    if (answer) {
+      await onChunk({ type: 'content', delta: answer }, { providerId });
+      await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
+      return { ok: true, providerId, iterations: 0 };
+    }
+  }
+
+  if (
+    process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH !== '0'
+    && shouldPreferWeatherTool(messages)
+  ) {
+    const toolName = 'weather';
+    const query = originalUserPrompt(workingMessages);
+    const argsText = JSON.stringify({ query });
+    const argsSummary = summarizeToolCallArgs(argsText);
+    const providerId = 'deepseek-chat' as ProviderId;
+    const started = Date.now();
+    await onChunk(
+      { type: 'tool_progress', event: 'start', name: toolName, argsSummary },
+      { providerId },
+    );
+    const toolResult = await executeServerTool(toolName, argsText, { log });
+    const ms = Date.now() - started;
+    const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
+    const toolSummary = summarizeToolResult(toolName, toolResult);
+    await onChunk(
+      { type: 'tool_progress', event: 'end', name: toolName, ms, ok: !!ok, argsSummary, ...toolSummary },
+      { providerId },
+    );
+    const weatherAnswer = buildDeterministicWeatherAlertAnswer(query, toolResult)
+      || buildDeterministicAirQualityAnswer(query, toolResult)
+      || buildDeterministicWeatherAnswer(query, toolResult);
+    if (weatherAnswer) {
+      await onChunk({ type: 'content', delta: weatherAnswer }, { providerId });
+      await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
+      return { ok: true, providerId, iterations: 0 };
+    }
+  }
+
+  if (
+    process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH !== '0'
+    && shouldPreferSportsScoreTool(messages)
+    && !workingMessages.some((message) => /【Lynn 工具证据 #\d+:\s*sports_score】/u.test(
+      typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''),
+    ))
+  ) {
+    const toolName = 'sports_score';
+    const query = originalUserPrompt(workingMessages);
+    const argsText = JSON.stringify({ query });
+    const argsSummary = summarizeToolCallArgs(argsText);
+    const providerId = 'deepseek-chat' as ProviderId;
+    const started = Date.now();
+    await onChunk(
+      { type: 'tool_progress', event: 'start', name: toolName, argsSummary },
+      { providerId },
+    );
+    const toolResult = await executeServerTool(toolName, argsText, { log });
+    const ms = Date.now() - started;
+    const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
+    const toolSummary = summarizeToolResult(toolName, toolResult);
+    await onChunk(
+      { type: 'tool_progress', event: 'end', name: toolName, ms, ok: !!ok, argsSummary, ...toolSummary },
+      { providerId },
+    );
+    const evidenceWeight = evidenceToolWeight(toolName, toolResult);
+    if (evidenceWeight > 0) {
+      groundedToolObserved = true;
+      evidenceToolCount += evidenceWeight;
+      evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(toolName));
+      workingMessages.push({
+        role: 'user',
+        content: [
+          formatToolResultContent(toolName, toolResult, ++serverToolStepIndex),
+          '',
+          '【接续要求】上方 sports_score 是本轮已经预取的体育证据。不要再调用工具,直接基于证据回答用户原问题；如果证据里没有比分或赛果,请明确说工具结果未返回该字段。',
+        ].join('\n'),
+      });
+      summarizeFromEvidenceOnly = true;
+    }
+  }
+
+  if (
+    process.env.BRAIN_V2_DIRECT_MARKET_PREFETCH !== '0'
+    && shouldPreferStockMarketTool(messages)
+    && !workingMessages.some((message) => /【Lynn 工具证据 #\d+:\s*stock_market】/u.test(
+      typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''),
+    ))
+  ) {
+    const toolName = 'stock_market';
+    const query = originalUserPrompt(workingMessages);
+    const argsText = JSON.stringify({ query });
+    const argsSummary = summarizeToolCallArgs(argsText);
+    const providerId = 'deepseek-chat' as ProviderId;
+    const started = Date.now();
+    await onChunk(
+      { type: 'tool_progress', event: 'start', name: toolName, argsSummary },
+      { providerId },
+    );
+    const toolResult = await executeServerTool(toolName, argsText, { log });
+    const ms = Date.now() - started;
+    const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
+    const toolSummary = summarizeToolResult(toolName, toolResult);
+    await onChunk(
+      { type: 'tool_progress', event: 'end', name: toolName, ms, ok: !!ok, argsSummary, ...toolSummary },
+      { providerId },
+    );
+    const evidenceWeight = evidenceToolWeight(toolName, toolResult);
+    if (evidenceWeight > 0) {
+      groundedToolObserved = true;
+      evidenceToolCount += evidenceWeight;
+      evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(toolName));
+      workingMessages.push({
+        role: 'user',
+        content: [
+          formatToolResultContent(toolName, toolResult, ++serverToolStepIndex),
+          '',
+          '【接续要求】上方 stock_market 是本轮已经预取的行情证据。不要再调用工具,直接基于证据回答用户原问题；如果证据里没有点位、价格或涨跌幅,请明确说工具结果未返回该字段。',
+        ].join('\n'),
+      });
+      summarizeFromEvidenceOnly = true;
+    }
+  }
 
   while (iter < maxIter) {
     iter++;

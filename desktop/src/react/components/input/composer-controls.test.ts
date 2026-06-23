@@ -48,6 +48,23 @@ describe('composer controls regression', () => {
     expect(cssBlock(inputCss, '.send-controls')).toContain('gap: 0.34rem');
   });
 
+  it('keeps advanced setup out of the primary composer path', () => {
+    const appShell = read('desktop/src/react/App.tsx');
+    const taskModePicker = read('desktop/src/react/components/input/TaskModePicker.tsx');
+    const deskSection = read('desktop/src/react/components/DeskSection.tsx');
+    const deskDropZone = read('desktop/src/react/components/desk/DeskDropZone.tsx');
+    const deskFileList = read('desktop/src/react/components/desk/DeskFileList.tsx');
+
+    expect(appShell).not.toContain('WorkersPanel');
+    expect(taskModePicker).not.toContain('MCP 接入');
+    expect(taskModePicker).not.toContain("openSettings?.('mcp')");
+    expect(deskSection).not.toContain('JianEditor');
+    expect(deskDropZone).not.toContain('deskCreateFile');
+    expect(deskFileList).not.toContain('deskCreateFile');
+    expect(deskDropZone).not.toContain('desk.ctx.newMdFile');
+    expect(deskFileList).not.toContain('desk.ctx.newMdFile');
+  });
+
   it('lets composer controls wrap instead of clipping in narrow windows', () => {
     const inputCss = read('desktop/src/react/components/input/InputArea.module.css');
 

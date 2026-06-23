@@ -1,14 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from '../../stores';
-import {
-  closeDeskDocument,
-  loadDeskAutomationStatus,
-  openDeskDocument,
-  saveDeskDocument,
-  shouldOpenDeskInline,
-} from '../../stores/desk-actions';
+import { loadDeskAutomationStatus } from '../../stores/desk-actions';
 
-describe('desk-actions document mode', () => {
+describe('desk-actions workspace map', () => {
   const fetchMock = vi.fn();
 
   beforeEach(() => {
@@ -20,7 +14,6 @@ describe('desk-actions document mode', () => {
     useStore.setState({
       deskBasePath: '/Users/lynn/Desktop/Lynn',
       deskCurrentPath: '',
-      deskOpenDoc: null,
       jianOpen: false,
       toasts: [],
       serverPort: '8787',
@@ -29,78 +22,7 @@ describe('desk-actions document mode', () => {
   });
 
   afterEach(() => {
-    closeDeskDocument();
     vi.unstubAllGlobals();
-  });
-
-  it('识别应在右侧书桌内打开的 Markdown 文档', () => {
-    expect(shouldOpenDeskInline('note.md')).toBe(true);
-    expect(shouldOpenDeskInline('README.markdown')).toBe(true);
-    expect(shouldOpenDeskInline('data.txt')).toBe(true);
-    expect(shouldOpenDeskInline('screenshot.png')).toBe(false);
-  });
-
-  it('打开 Markdown 文档时写入右侧书桌文档状态', async () => {
-    fetchMock.mockResolvedValue(
-      new Response('# hello', {
-        status: 200,
-        headers: { 'Content-Type': 'text/plain' },
-      }),
-    );
-
-    const ok = await openDeskDocument('note.md');
-
-    expect(ok).toBe(true);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:8787/api/fs/read?path=%2FUsers%2Flynn%2FDesktop%2FLynn%2Fnote.md',
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer test-token',
-        }),
-      }),
-    );
-    expect(useStore.getState().jianOpen).toBe(true);
-    expect(useStore.getState().deskOpenDoc).toEqual({
-      path: '/Users/lynn/Desktop/Lynn/note.md',
-      name: 'note.md',
-      content: '# hello',
-    });
-  });
-
-  it('保存右侧书桌文档时直接写回原文件', async () => {
-    fetchMock
-      .mockResolvedValueOnce(
-        new Response('# hello', {
-          status: 200,
-          headers: { 'Content-Type': 'text/plain' },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      );
-    await openDeskDocument('note.md');
-
-    const ok = await saveDeskDocument('# updated');
-
-    expect(ok).toBe(true);
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      'http://127.0.0.1:8787/api/fs/apply',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer test-token',
-        }),
-        body: JSON.stringify({
-          filePath: '/Users/lynn/Desktop/Lynn/note.md',
-          content: '# updated',
-        }),
-      }),
-    );
-    expect(useStore.getState().deskOpenDoc?.content).toBe('# updated');
   });
 
   it('按当前工作区过滤自动任务并更新书桌状态', async () => {

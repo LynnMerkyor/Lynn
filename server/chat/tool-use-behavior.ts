@@ -60,7 +60,8 @@ export function shouldDisableToolsForTurn(promptText: unknown): boolean {
   if (sameConversationRecallOnly) return true;
 
   const conceptualProductOrWorkflowQuestion =
-    /(?:为什么|如何|怎么|怎样|给(?:出|一个)|设计(?:一个)?|解释).{0,80}(?:模型|工具|产品|展示|UI|输入框|窄屏|流程|门禁|测试|原因|区别|检查清单|冲突|用户|任务)/iu.test(text)
+    /(?:为什么|如何|怎么|怎样|给(?:出|一个)?|写|改写|设计(?:一个)?|解释|拟定|(?:应该)?避免什么).{0,120}(?:模型|工具|产品|展示|UI|输入框|窄屏|流程|门禁|测试|原因|区别|检查清单|冲突|用户|任务|文案|按钮|tooltip|状态|节点|Session\s*Map|工作地图|右侧工作台|左侧会话列表|数字徽标|长会话|7GB|健康检查|会话\s*digest|信息架构|草案|Agent|搜索\s*Agent|证据优先|失败策略|搜索策略)/iu.test(text)
+    || /(?:模型|工具|产品|展示|UI|输入框|窄屏|流程|门禁|测试|原因|区别|检查清单|冲突|用户|任务|文案|按钮|tooltip|状态|节点|Session\s*Map|工作地图|右侧工作台|左侧会话列表|数字徽标|长会话|7GB|健康检查|会话\s*digest|信息架构|草案|Agent|搜索\s*Agent|证据优先|失败策略|搜索策略).{0,120}(?:为什么|如何|怎么|怎样|给(?:出|一个)?|写|改写|设计(?:一个)?|解释|拟定|(?:应该)?避免什么)/iu.test(text)
     && !explicitToolAsk
     && !/(?:最新|今天|今晚|现在|实时|查一下|查询|股价|天气|金价|汇率|世界杯|NBA|OpenAI\s*最近|发布)/iu.test(text);
   if (conceptualProductOrWorkflowQuestion) return true;
@@ -74,6 +75,10 @@ export function shouldDisableToolsForTurn(promptText: unknown): boolean {
   const commandSnippetRequest = /(?:写|给|提供|生成|构造).{0,20}(?:bash|shell|终端|命令|command)|(?:bash|shell).{0,8}(?:命令|command)/iu.test(text)
     && !/(?:运行|执行|帮我跑|实际跑|检查|验证|run|execute|check|verify)/iu.test(text);
   if (commandSnippetRequest) return true;
+
+  const codeSnippetRequest = /(?:写|给|提供|生成|解释).{0,40}(?:TypeScript|JavaScript|Node\.?js|CSS|zod|Electron|React|useMemo|Vitest|JSON\s*schema|IPC\s*handler|函数|schema|伪代码|布局|beforeEach)/iu.test(text)
+    && !/(?:运行|执行|帮我跑|实际跑|检查|验证|写入|保存到|创建文件|改文件|run|execute|write\s+to|save\s+to|create\s+file)/iu.test(text);
+  if (codeSnippetRequest) return true;
 
   const simpleMemoryAck = /(?:请)?记住|remember/iu.test(text)
     && /(?:项目代号|普通项目标签|标签|代号|偏好|preference|label|project\s+code)/iu.test(text)
@@ -89,6 +94,7 @@ export function buildNoToolTurnPrompt(promptText: unknown): string {
     : "";
   return [
     "【Lynn 路由约束】本轮用户要求直接聊天短答。不要调用、模拟或提及任何工具/技能;不要读取或写入文件;不要运行命令;不要创建交付物。",
+    "不要说“我先看一下代码仓库/目录/文件/实现/日志”;不要输出 shell、find、grep、rg、ls、cat、python、node、npm、git 等命令;直接给用户要的文案、方案或代码片段。",
     "本轮没有搜索、检索、查询网页或读取外部资料;不要声称“搜到/没搜到/查到/没查到/检索到/未检索到”。",
     formatHint ? `${formatHint}有数字字数上限时,答案要保守控制在上限的约 70% 以内;不要列清单,不要展开解释。` : "",
     "只根据当前对话直接回答用户。",
@@ -136,7 +142,7 @@ export function resolveInitialToolUseBehavior(promptText: unknown, opts: ToolUse
   // evidence. This does not replace the model answer; it only supplies the
   // current facts so a slow remote tool chain cannot turn weather/market asks
   // into an invisible timeout.
-  if (!suppressLocalPrefetch && shouldPrefetchReportContext(reportKind, modelInfo)) {
+  if (!disableTools && !suppressLocalPrefetch && shouldPrefetchReportContext(reportKind, modelInfo)) {
     return {
       behavior: TOOL_USE_BEHAVIOR.PREFETCH_THEN_RUN_OR_STOP,
       reason: "report_context_prefetch",

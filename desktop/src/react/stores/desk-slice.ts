@@ -16,12 +16,6 @@ export interface CwdSkillInfo {
   providerLabel?: string | null;
 }
 
-export interface DeskOpenDocument {
-  path: string;
-  name: string;
-  content: string;
-}
-
 export interface DeskPatrolStatus {
   state: 'idle' | 'running' | 'done' | 'error';
   text: string;
@@ -50,8 +44,6 @@ export interface DeskSlice {
   deskFiles: DeskFile[];
   deskBasePath: string;
   deskCurrentPath: string;
-  deskJianContent: string | null;
-  deskOpenDoc: DeskOpenDocument | null;
   deskPatrolStatus: DeskPatrolStatus | null;
   deskAutomationJobs: DeskAutomationJob[];
   deskAutomationStatus: DeskAutomationStatus | null;
@@ -69,8 +61,6 @@ export interface DeskSlice {
   setDeskFiles: (files: DeskFile[]) => void;
   setDeskBasePath: (path: string) => void;
   setDeskCurrentPath: (path: string) => void;
-  setDeskJianContent: (content: string | null) => void;
-  setDeskOpenDoc: (doc: DeskOpenDocument | null) => void;
   setDeskPatrolStatus: (status: DeskPatrolStatus | null) => void;
   setDeskAutomationJobs: (jobs: DeskAutomationJob[]) => void;
   setDeskAutomationStatus: (status: DeskAutomationStatus | null) => void;
@@ -91,8 +81,6 @@ export const createDeskSlice = (
   deskFiles: [],
   deskBasePath: '',
   deskCurrentPath: '',
-  deskJianContent: null,
-  deskOpenDoc: null,
   deskPatrolStatus: null,
   deskAutomationJobs: [],
   deskAutomationStatus: null,
@@ -111,8 +99,6 @@ export const createDeskSlice = (
   setDeskFiles: (files) => set({ deskFiles: files }),
   setDeskBasePath: (path) => set({ deskBasePath: path }),
   setDeskCurrentPath: (path) => set({ deskCurrentPath: path }),
-  setDeskJianContent: (content) => set({ deskJianContent: content }),
-  setDeskOpenDoc: (doc) => set({ deskOpenDoc: doc }),
   setDeskPatrolStatus: (status) => set({ deskPatrolStatus: status }),
   setDeskAutomationJobs: (jobs) => set({ deskAutomationJobs: jobs }),
   setDeskAutomationStatus: (status) => set({ deskAutomationStatus: status }),

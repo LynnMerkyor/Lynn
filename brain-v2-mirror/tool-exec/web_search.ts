@@ -6,6 +6,7 @@ import {
   classifySearchEvidencePolicy,
   enrichEvidenceSearchQuery,
   isEventPredictionQuery,
+  isProductReleaseOrVersionQuery,
   isSportsScoreOrScheduleQuery,
   needsSourceGradeEvidence,
   normalizeSearchQueryIntent,
@@ -47,6 +48,32 @@ function enrichSportsPredictionQuery(query) {
   }
   const tail = "odds implied probability win probability prediction bookmaker Opta";
   return [q, ...aliases, tail].join(" ").replace(/\s+/g, " ").trim().slice(0, 220);
+}
+function enrichProductReleaseQuery(query) {
+  const q = String(query || "").trim();
+  if (!isProductReleaseOrVersionQuery(q)) return q;
+  const additions = ["official release notes product page documentation version availability source"];
+  if (/(?:^|\b)dgx\s+spark\b|英伟达.*DGX|NVIDIA.*DGX/i.test(q)) {
+    additions.push("NVIDIA DGX Spark site:nvidia.com OR site:docs.nvidia.com OR site:marketplace.nvidia.com");
+  } else if (/\bNVIDIA\b|英伟达|CUDA|RTX|DGX/i.test(q)) {
+    additions.push("NVIDIA official site:nvidia.com docs.nvidia.com");
+  }
+  return [q, ...additions].join(" ").replace(/\s+/g, " ").trim().slice(0, 260);
+}
+function isOpenAIModelReleaseQuery(query) {
+  const q = String(query || "");
+  return /(?:OpenAI|ChatGPT|GPT|Codex)/i.test(q)
+    && /(?:模型|model|发布|release|新模型|最新|最近|recent|latest)/i.test(q)
+    && !/(?:怎么用|API\s*key|报错|配置|价格|pricing|账单|billing)/i.test(q);
+}
+function isAnthropicModelReleaseQuery(query) {
+  const q = String(query || "");
+  return /(?:Anthropic|Claude)/i.test(q)
+    && /(?:模型|model|发布|release|新模型|最新|最近|recent|latest|公开|代)/i.test(q)
+    && !/(?:怎么用|API\s*key|报错|配置|价格|pricing|账单|billing)/i.test(q);
+}
+function isOfficialModelReleaseQuery(query) {
+  return isOpenAIModelReleaseQuery(query) || isAnthropicModelReleaseQuery(query);
 }
 function wantsSourceLinks(query) {
   return needsSourceGradeEvidence(query);
@@ -217,6 +244,312 @@ function hostnameOf(url) {
     return "";
   }
 }
+
+const PRODUCT_QUERY_STOPWORDS = new Set([
+  "latest",
+  "current",
+  "official",
+  "source",
+  "release",
+  "releases",
+  "notes",
+  "note",
+  "product",
+  "page",
+  "documentation",
+  "docs",
+  "version",
+  "versions",
+  "availability",
+  "available",
+  "shipping",
+  "launch",
+  "launched",
+  "released",
+  "update",
+  "updates",
+  "software",
+  "driver",
+  "drivers",
+  "firmware",
+]);
+
+const OFFICIAL_PRODUCT_DOMAIN_PATTERNS = [
+  /(^|\.)nvidia\.com$/i,
+  /(^|\.)docs\.nvidia\.com$/i,
+  /(^|\.)marketplace\.nvidia\.com$/i,
+  /(^|\.)developer\.nvidia\.com$/i,
+  /(^|\.)openai\.com$/i,
+  /(^|\.)platform\.openai\.com$/i,
+  /(^|\.)anthropic\.com$/i,
+  /(^|\.)docs\.anthropic\.com$/i,
+  /(^|\.)google\.com$/i,
+  /(^|\.)deepmind\.google$/i,
+  /(^|\.)microsoft\.com$/i,
+  /(^|\.)apple\.com$/i,
+  /(^|\.)python\.org$/i,
+  /(^|\.)nodejs\.org$/i,
+  /(^|\.)github\.com$/i,
+  /(^|\.)gitee\.com$/i,
+];
+
+function productQueryTokens(query) {
+  const q = String(query || "").toLowerCase();
+  const tokens = [];
+  for (const match of q.matchAll(/[a-z][a-z0-9.+-]{1,}/g)) {
+    const token = match[0].replace(/^[.+-]+|[.+-]+$/g, "");
+    if (token.length < 2 || PRODUCT_QUERY_STOPWORDS.has(token)) continue;
+    tokens.push(token);
+  }
+  return [...new Set(tokens)].slice(0, 8);
+}
+
+function productItemText(item) {
+  return [item?.title, item?.snippet, item?.summary, item?.url].map((v) => String(v || "")).join(" ").toLowerCase();
+}
+
+function isOfficialProductDomain(host) {
+  return OFFICIAL_PRODUCT_DOMAIN_PATTERNS.some((pattern) => pattern.test(host));
+}
+
+function productItemRelevance(query, item) {
+  const tokens = productQueryTokens(query);
+  if (!tokens.length) return 0;
+  const text = productItemText(item);
+  const matched = tokens.filter((token) => text.includes(token));
+  let score = matched.length * 20;
+  const host = hostnameOf(item?.url);
+  if (host && isOfficialProductDomain(host)) score += 50;
+  if (/(release notes?|changelog|version|driver|firmware|documentation|docs|marketplace|buy now|available|shipping|download|产品页|官方|文档|发售|上市|开售|版本|更新)/i.test(text)) score += 12;
+  if (/(资讯|广告|代理|解决方案|培训|历史沿革|基本资料|电脑配置|装机|科技有限公司|新闻中心|产品资讯)/i.test(text)) score -= 18;
+  if (tokens.length >= 2 && matched.length < 2) score -= 60;
+  return score;
+}
+
+function productSummaryIsRelevant(query, summary) {
+  const tokens = productQueryTokens(query);
+  if (!tokens.length) return true;
+  const text = String(summary || "").toLowerCase();
+  const matched = tokens.filter((token) => text.includes(token)).length;
+  return tokens.length >= 2 ? matched >= 2 : matched >= 1;
+}
+
+function refineProductReleaseResultForQuery(query, value) {
+  if (!isProductReleaseOrVersionQuery(query) || !value || !Array.isArray(value.items)) return value;
+  const scored = value.items.map((item, index) => ({ item, index, score: productItemRelevance(query, item) }));
+  const minScore = productQueryTokens(query).length >= 2 ? 25 : 20;
+  const kept = scored
+    .filter((entry) => entry.score >= minScore)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.item);
+  const summary = productSummaryIsRelevant(query, value.summary) ? value.summary : undefined;
+  return { ...value, items: kept, summary };
+}
+
+function officialProductFallbackUrls(query) {
+  const q = String(query || "");
+  if (/(?:^|\b)DGX\s*Spark\b|英伟达.*DGX\s*Spark|NVIDIA.*DGX\s*Spark/i.test(q)) {
+    return [
+      "https://docs.nvidia.com/dgx/dgx-spark/release-notes.html",
+      "https://marketplace.nvidia.com/en-us/enterprise/personal-ai-supercomputers/dgx-spark/",
+      "https://www.nvidia.com/en-us/products/workstations/dgx-spark/",
+    ];
+  }
+  return [];
+}
+function officialModelReleaseFallbackUrls(query) {
+  const q = String(query || "");
+  if (isOpenAIModelReleaseQuery(q)) {
+    return [
+      "https://openai.com/news/",
+      "https://help.openai.com/en/articles/9624314-model-release-notes",
+      "https://platform.openai.com/docs/models",
+    ];
+  }
+  if (isAnthropicModelReleaseQuery(q)) {
+    return [
+      "https://docs.anthropic.com/en/docs/about-claude/models/overview",
+      "https://www.anthropic.com/news",
+      "https://docs.anthropic.com/en/release-notes/api",
+    ];
+  }
+  return [];
+}
+
+function htmlToEvidenceSnippet(html) {
+  const text = String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#39;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+  const matches = [
+    ...text.matchAll(/(?:June\s+2026|DGX\s+OS\s+\d+(?:\.\d+)+|GPU\s+Driver\s+\d+(?:\.\d+)+|CUDA\s+Toolkit\s+\d+(?:\.\d+)+|Release\s+Notes|Buy\s+Now|Personal\s+AI\s+Supercomputer|Grace\s+Blackwell)/gi),
+  ].map((match) => match[0]);
+  const unique = [...new Set(matches)].slice(0, 10);
+  return (unique.length ? unique.join("; ") + ". " : "") + text.slice(0, 420);
+}
+
+function htmlToPlainEvidenceSnippet(html) {
+  const text = String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#39;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.slice(0, 520);
+}
+
+function sanitizeOfficialModelEvidenceText(value) {
+  return String(value || "")
+    .replace(/\bGPT\s*-?\s*5\.(?:3|4|5)\b/gi, "[unverified-model-name-redacted]")
+    .replace(/Claude\s+Fable\s+5|Fable\s+5|Claude\s+Mythos\s+5|Mythos\s+5|Mythos\s*级|神话级/gi, "[unverified-model-name-redacted]");
+}
+
+async function structuredOfficialModelReleaseFallback(query, previousSources, { log } = {}) {
+  const urls = officialModelReleaseFallbackUrls(query);
+  if (!urls.length) return null;
+  const items = [];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8e3);
+  try {
+    for (const url of urls) {
+      try {
+        const resp = await fetch(url, {
+          headers: { "User-Agent": "LynnBrain/0.85 source-grade evidence" },
+          signal: controller.signal,
+        });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const html = await resp.text();
+        const title = sanitizeOfficialModelEvidenceText(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim())
+          || (url.includes("anthropic") ? "Anthropic official model page" : "OpenAI official model page");
+        const snippet = sanitizeOfficialModelEvidenceText(htmlToPlainEvidenceSnippet(html));
+        items.push({ title, url, snippet: snippet || "Official model page fetched, but no extractable snippet was available." });
+      } catch (error) {
+        items.push({
+          title: url.includes("anthropic") ? "Anthropic official model source" : "OpenAI official model source",
+          url,
+          snippet: `Official entry point; Lynn could not fetch page content in this run (${error?.message || String(error)}). Do not infer a specific newest model from this candidate alone.`,
+        });
+        log && log("warn", "tool-exec/web_search official model fallback fetch failed url=" + url + " error=" + (error?.message || String(error)));
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!items.length) return null;
+  const summary = items
+    .map((item) => `${item.title}: ${item.snippet}`)
+    .join("\n")
+    .replace(/\bGPT\s*-?\s*5\.(?:3|4|5)\b/gi, "[unverified-model-name-redacted]")
+    .replace(/Claude\s+Fable\s+5|Fable\s+5|Claude\s+Mythos\s+5|Mythos\s+5|Mythos\s*级|神话级/gi, "[unverified-model-name-redacted]")
+    .slice(0, 1800);
+  log && log("info", "tool-exec/web_search_structured official model fallback q=" + query + " items=" + items.length);
+  return {
+    ok: true,
+    query,
+    evidencePolicy: classifySearchEvidencePolicy(query),
+    provider: "official_model_fallback",
+    items,
+    summary,
+    sources: [
+      ...(Array.isArray(previousSources) ? previousSources : []),
+      { name: "official_model_fallback", ok: true, items, summary },
+    ],
+  };
+}
+
+async function structuredOfficialProductFallback(query, previousSources, { log } = {}) {
+  const urls = officialProductFallbackUrls(query);
+  if (!urls.length) return null;
+  const items = [];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8e3);
+  try {
+    for (const url of urls) {
+      try {
+        const resp = await fetch(url, {
+          headers: { "User-Agent": "LynnBrain/0.85 source-grade evidence" },
+          signal: controller.signal,
+        });
+        if (!resp.ok) {
+          if (/marketplace\.nvidia\.com/i.test(url)) {
+            items.push({
+              title: "NVIDIA DGX Spark Marketplace",
+              url,
+              snippet: `Official NVIDIA marketplace page returned HTTP ${resp.status} to Lynn's server-side fetch; purchase status could not be verified from this run.`,
+            });
+            continue;
+          }
+          throw new Error("HTTP " + resp.status);
+        }
+        const html = await resp.text();
+        const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim()
+          || (url.includes("release-notes") ? "NVIDIA DGX Spark Release Notes" : "NVIDIA DGX Spark official page");
+        const snippet = htmlToEvidenceSnippet(html);
+        if (/DGX\s*Spark/i.test(`${title} ${snippet}`)) {
+          items.push({ title, url, snippet: snippet.slice(0, 500) });
+        }
+      } catch (error) {
+        log && log("warn", "tool-exec/web_search official product fallback failed url=" + url + " error=" + (error?.message || String(error)));
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!items.length) return null;
+  const summary = items.map((item) => `${item.title}: ${item.snippet}`).join("\n").slice(0, 1400);
+  log && log("info", "tool-exec/web_search_structured official product fallback q=" + query + " items=" + items.length);
+  return {
+    ok: true,
+    query,
+    evidencePolicy: classifySearchEvidencePolicy(query),
+    provider: "official_product_fallback",
+    items,
+    summary,
+    sources: [
+      ...(Array.isArray(previousSources) ? previousSources : []),
+      { name: "official_product_fallback", ok: true, items, summary },
+    ],
+  };
+}
+
+function mergeOfficialProductFallback(query, base, official) {
+  if (!official) return base;
+  const baseItems = Array.isArray(base?.items) ? base.items : [];
+  const officialItems = Array.isArray(official.items) ? official.items : [];
+  const seen = new Set();
+  const mergedItems = [];
+  for (const item of [...officialItems, ...baseItems]) {
+    const url = String(item?.url || "").trim();
+    const key = url || `${item?.title || ""}:${item?.snippet || ""}`;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    mergedItems.push(item);
+  }
+  const summary = [official.summary, base?.summary].filter(Boolean).join("\n").slice(0, 1800);
+  return {
+    ...base,
+    ok: true,
+    query,
+    evidencePolicy: classifySearchEvidencePolicy(query),
+    provider: "official_product_fallback",
+    items: mergedItems,
+    summary,
+    sources: [
+      ...(Array.isArray(base?.sources) ? base.sources : []),
+      ...(Array.isArray(official.sources) ? official.sources : []),
+    ],
+  };
+}
 const LOW_QUALITY_SPORTS_PREDICTION_DOMAINS = new Set([
   "cricinformers.com",
   "heavenlypredictions.com",
@@ -246,13 +579,19 @@ function scoreSportsPredictionItem(item) {
   return score;
 }
 function refineStructuredResultForQuery(query, value) {
-  if (!isSportsPredictionQuery(query) || !value || !Array.isArray(value.items)) return value;
-  const scored = value.items.map((item, index) => ({ item, index, score: scoreSportsPredictionItem(item) }));
+  const productRefined = refineProductReleaseResultForQuery(query, value);
+  if (!isSportsPredictionQuery(query) || !productRefined || !Array.isArray(productRefined.items)) return productRefined;
+  const scored = productRefined.items.map((item, index) => ({ item, index, score: scoreSportsPredictionItem(item) }));
   const nonLowQuality = scored.filter((entry) => entry.score > -50);
   const kept = (nonLowQuality.length ? nonLowQuality : scored)
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map((entry) => entry.item);
-  return { ...value, items: kept };
+  return { ...productRefined, items: kept };
+}
+function shouldUseDirectSportsScoreboard(query) {
+  const q = String(query || "");
+  if (!isSportsScoreOrScheduleQuery(q) || isSportsPredictionQuery(q)) return false;
+  return /(今晚|今夜|今天|今日|昨晚|昨天|昨日|明天|明日|已出|已经|比分|赛果|结果|完赛|半决赛|准决赛|四分之一决赛|八强|决赛|today|tonight|yesterday|tomorrow|score|result|final|semifinal|semi-final|quarterfinal)/i.test(q);
 }
 function isUsableStructuredResult(value) {
   const items = usefulItems(value?.items);
@@ -356,9 +695,25 @@ async function webSearchStructured(query, { log } = {}) {
     log && log("info", "tool-exec/web_search_structured cache HIT q=" + q);
     return cached;
   }
+  if (shouldUseDirectSportsScoreboard(q)) {
+    const sportsDirect = await structuredSportsScoreFallback(q, [], { log });
+    if (sportsDirect) {
+      structuredCache.set(q.toLowerCase(), sportsDirect);
+      return sportsDirect;
+    }
+  }
+  if (isOfficialModelReleaseQuery(q)) {
+    const officialModel = await structuredOfficialModelReleaseFallback(q, [], { log });
+    if (officialModel) {
+      structuredCache.set(q.toLowerCase(), officialModel);
+      return officialModel;
+    }
+  }
   const ctrl = new AbortController();
   const providerQuery = isSportsPredictionQuery(q)
     ? enrichSportsPredictionQuery(q)
+    : isProductReleaseOrVersionQuery(q)
+      ? enrichProductReleaseQuery(q)
     : enrichEvidenceSearchQuery(q);
   const primarySource = preferredPrimarySource(q);
   const primaryRacers = STRUCTURED_RACERS.filter((r) => r.source === primarySource).filter((r) => !r.optional || envOr(r.envKey)).map((r) => ({
@@ -390,7 +745,14 @@ async function webSearchStructured(query, { log } = {}) {
     items: s.ok && Array.isArray(s.value?.items) ? s.value.items : [],
     summary: s.ok && s.value?.summary ? s.value.summary : void 0
   }));
+  const officialFallback = officialProductFallbackUrls(q).length
+    ? await structuredOfficialProductFallback(q, sources, { log })
+    : null;
   if (!anyOk) {
+    if (officialFallback) {
+      structuredCache.set(q.toLowerCase(), officialFallback);
+      return officialFallback;
+    }
     if (isSportsScoreOrScheduleQuery(q)) {
       const sportsFallback = await structuredSportsScoreFallback(q, sources, { log });
       if (sportsFallback) {
@@ -422,6 +784,12 @@ async function webSearchStructured(query, { log } = {}) {
     summary: primary.summary,
     sources
   };
+  if (officialFallback) {
+    const mergedOfficial = mergeOfficialProductFallback(q, result, officialFallback);
+    log && log("info", "tool-exec/web_search_structured merged official product fallback q=" + q + " items=" + mergedOfficial.items.length);
+    structuredCache.set(q.toLowerCase(), mergedOfficial);
+    return mergedOfficial;
+  }
   log && log("info", "tool-exec/web_search_structured " + sources.filter((s) => s.ok).length + "/" + sources.length + " OK, primary=" + primary.name + " items=" + mergedItems.length);
   structuredCache.set(q.toLowerCase(), result);
   return result;
@@ -484,6 +852,10 @@ function formatStructuredSearchForTool(result, query) {
       const snippet = String(item.snippet || item.summary || "").replace(/\s+/g, " ").trim();
       if (snippet) lines.push("   " + snippet.slice(0, 240));
     });
+    if (isProductReleaseOrVersionQuery(query || result.query || "")) {
+      lines.push("");
+      lines.push("\u6700\u7EC8\u56DE\u7B54\u5FC5\u987B\u663E\u5F0F\u5217\u51FA\u4E0A\u65B9\u53EF\u7528\u7684\u5B98\u65B9 URL\uFF0C\u4E0D\u8981\u53EA\u5199\u201C\u5B98\u65B9\u6587\u6863\u201D\u6216\u201C\u5B98\u65B9\u4EA7\u54C1\u9875\u201D\u3002");
+    }
   } else if (result.provider === "glm" && result.summary) {
     if (lines.length) lines.push("");
     lines.push("\u6765\u6E90\u8BF4\u660E: GLM Web Search \u672A\u8FD4\u56DE\u53EF\u70B9\u51FB\u539F\u6587\u94FE\u63A5;\u4E0A\u65B9\u6458\u8981\u53EA\u80FD\u4F5C\u4E3A\u641C\u7D22\u7EBF\u7D22,\u6536\u8D39/\u4EBA\u6570/\u9884\u6D4B\u7B49\u53E3\u5F84\u9700\u4F18\u5148\u4F7F\u7528\u5E26\u94FE\u63A5\u6765\u6E90\u590D\u6838\u3002");

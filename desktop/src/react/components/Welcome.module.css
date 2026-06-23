@@ -162,17 +162,6 @@
     color: var(--accent);
 }
 
-/* First-run coachmark: gentle pulse on the new Fleet quick action until first click. */
-.quickActionCoachmark {
-    animation: fleetCoachPulse 2.2s ease-in-out 3;
-    border-color: rgba(var(--accent-rgb), 0.55);
-}
-
-@keyframes fleetCoachPulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
-    50% { box-shadow: 0 0 0 5px rgba(var(--accent-rgb), 0.22); }
-}
-
 .quickActionBtn:hover:not(:disabled) {
     transform: translateY(-1px);
     border-color: var(--accent);

@@ -16,8 +16,6 @@ const tt = (key: string, fallback: string, vars?: Record<string, string | number
   const value = t(key, vars);
   return !value || value === key ? fallback : value;
 };
-const INLINE_DESK_DOC_EXTS = new Set(['md', 'markdown', 'mdx', 'txt']);
-
 function formatPatrolTime(ts?: number | null): string {
   if (!ts) return '';
   try {
@@ -50,7 +48,7 @@ function deriveDeskPatrolStatus(activities: Array<any>) {
   if (!latest) {
     return {
       state: 'idle' as const,
-      text: tt('desk.patrolIdle', '打开笺后会自动巡检一次'),
+      text: tt('desk.patrolIdle', '工作地图会在巡检后更新状态'),
       updatedAt: null,
     };
   }
@@ -58,7 +56,7 @@ function deriveDeskPatrolStatus(activities: Array<any>) {
   if (!latest.finishedAt && latest.status !== 'error') {
     return {
       state: 'running' as const,
-      text: tt('desk.patrolRunning', 'Lynn 正在阅读当前工作区与笺里的安排'),
+      text: tt('desk.patrolRunning', 'Lynn 正在巡检当前工作区与会话状态'),
       updatedAt: Number(latest.startedAt || Date.now()),
     };
   }
@@ -97,7 +95,7 @@ function deriveDeskAutomationStatus(jobs: DeskAutomationJob[]) {
       enabledCount: 0,
       pausedCount: 0,
       nextRunAt: null,
-      text: tt('desk.automationIdle', '笺里的重复待办会自动变成自动任务'),
+      text: tt('desk.automationIdle', '自动任务会从对话和工作台里的计划生成'),
     };
   }
 
@@ -142,74 +140,12 @@ export function deskCurrentDir(): string | null {
     : s.deskBasePath;
 }
 
-export function shouldOpenDeskInline(name: string): boolean {
-  const ext = name.split('.').pop()?.toLowerCase() || '';
-  return INLINE_DESK_DOC_EXTS.has(ext);
-}
-
-export async function openDeskDocument(name: string): Promise<boolean> {
-  const fullPath = deskFullPath(name);
-  if (!fullPath) return false;
-
-  try {
-    const res = await hanaFetch(`/api/fs/read?path=${encodeURIComponent(fullPath)}`);
-    const content = await res.text();
-    if (content == null) {
-      useStore.getState().addToast(tt('desk.openDocReadFailed', '没能读到这个文档'), 'error');
-      return false;
-    }
-    const s = useStore.getState();
-    s.setJianOpen(true);
-    s.setDeskOpenDoc({ path: fullPath, name, content });
-    return true;
-  } catch (err) {
-    console.error('[desk] open document failed:', err);
-    useStore.getState().addToast(tt('desk.openDocReadFailed', '没能读到这个文档'), 'error');
-    return false;
-  }
-}
-
-export async function saveDeskDocument(
-  content?: string,
-  targetDoc?: { path: string; name?: string | null },
-): Promise<boolean> {
-  const s = useStore.getState();
-  const doc = targetDoc ?? s.deskOpenDoc;
-  if (!doc?.path) return false;
-  const currentOpenDoc = s.deskOpenDoc;
-  const nextContent = content ?? currentOpenDoc?.content ?? '';
-  try {
-    await hanaFetch('/api/fs/apply', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filePath: doc.path, content: nextContent }),
-    });
-    if (currentOpenDoc?.path === doc.path) {
-      s.setDeskOpenDoc({ ...currentOpenDoc, content: nextContent });
-    }
-    return true;
-  } catch (err) {
-    console.error('[desk] save document failed:', err);
-    s.addToast(tt('desk.openDocSaveFailed', '保存文档失败'), 'error');
-    return false;
-  }
-}
-
-export function closeDeskDocument(): void {
-  useStore.getState().setDeskOpenDoc(null);
-}
-
 // ── 文件操作 ──
 
 export async function loadDeskFiles(subdir?: string, overrideDir?: string): Promise<void> {
   const s = useStore.getState();
   if (!s.serverPort) return;
-  const prevPath = s.deskCurrentPath;
-  const prevBasePath = s.deskBasePath;
   if (subdir !== undefined) s.setDeskCurrentPath(subdir);
-  if ((subdir !== undefined && subdir !== prevPath) || (overrideDir && overrideDir !== prevBasePath)) {
-    s.setDeskOpenDoc(null);
-  }
   try {
     const params = new URLSearchParams();
     // 优先用 overrideDir，其次用 store 中已有的 deskBasePath 兜底。
@@ -224,29 +160,11 @@ export async function loadDeskFiles(subdir?: string, overrideDir?: string): Prom
     const st = useStore.getState();
     st.setDeskFiles(data.files || []);
     if (data.basePath) st.setDeskBasePath(data.basePath);
-    loadJianContent();
     void loadDeskPatrolStatus();
     void loadDeskAutomationStatus();
     updateDeskContextBtn();
   } catch (err) {
-    console.error('[jian-desk] load failed:', err);
-  }
-}
-
-export async function loadJianContent(): Promise<void> {
-  const s = useStore.getState();
-  if (!s.serverPort) return;
-  try {
-    const params = new URLSearchParams();
-    if (s.deskBasePath) params.set('dir', s.deskBasePath);
-    if (s.deskCurrentPath) params.set('subdir', s.deskCurrentPath);
-    const qs = params.toString() ? `?${params}` : '';
-    const res = await hanaFetch(`/api/desk/jian${qs}`);
-    const data = await res.json();
-    useStore.getState().setDeskJianContent(data.content || null);
-  } catch (err) {
-    console.error('[jian] load jian.md failed:', err);
-    useStore.getState().setDeskJianContent(null);
+    console.error('[desk] load failed:', err);
   }
 }
 
@@ -259,7 +177,7 @@ export async function loadDeskPatrolStatus(): Promise<void> {
     console.error('[desk] load patrol status failed:', err);
     useStore.getState().setDeskPatrolStatus({
       state: 'idle',
-      text: tt('desk.patrolIdle', '打开笺后会自动巡检一次'),
+      text: tt('desk.patrolIdle', '工作地图会在巡检后更新状态'),
       updatedAt: null,
     });
   }
@@ -297,7 +215,7 @@ export async function loadDeskAutomationStatus(): Promise<void> {
         enabledCount: 0,
         pausedCount: 0,
         nextRunAt: null,
-        text: tt('desk.automationIdle', '笺里的重复待办会自动变成自动任务'),
+        text: tt('desk.automationIdle', '自动任务会从对话和工作台里的计划生成'),
       },
     });
   }
@@ -306,7 +224,7 @@ export async function loadDeskAutomationStatus(): Promise<void> {
 export async function triggerDeskHeartbeat(): Promise<void> {
   useStore.getState().setDeskPatrolStatus({
     state: 'running',
-    text: tt('desk.patrolRunning', 'Lynn 正在阅读当前工作区与笺里的安排'),
+    text: tt('desk.patrolRunning', 'Lynn 正在巡检当前工作区与会话状态'),
     updatedAt: Date.now(),
   });
   try {
@@ -326,32 +244,6 @@ export async function triggerDeskHeartbeat(): Promise<void> {
   }
 }
 
-export async function saveJianContent(content?: string): Promise<void> {
-  const s = useStore.getState();
-  if (!s.serverPort) return;
-  const text = content ?? s.deskJianContent ?? '';
-  try {
-    await hanaFetch('/api/desk/jian', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dir: s.deskBasePath || undefined, subdir: s.deskCurrentPath || '', content: text }),
-    });
-    useStore.getState().setDeskJianContent(text || null);
-    const st2 = useStore.getState();
-    const params = new URLSearchParams();
-    if (st2.deskBasePath) params.set('dir', st2.deskBasePath);
-    if (st2.deskCurrentPath) params.set('subdir', st2.deskCurrentPath);
-    const qs = params.toString() ? `?${params}` : '';
-    const res2 = await hanaFetch(`/api/desk/files${qs}`);
-    const data2 = await res2.json();
-    useStore.getState().setDeskFiles(data2.files || []);
-    void loadDeskPatrolStatus();
-    void loadDeskAutomationStatus();
-  } catch (err) {
-    console.error('[jian] save jian.md failed:', err);
-  }
-}
-
 export async function deskUploadFiles(paths: string[]): Promise<void> {
   const s = useStore.getState();
   try {
@@ -363,26 +255,7 @@ export async function deskUploadFiles(paths: string[]): Promise<void> {
     const data = await res.json();
     if (data.files) useStore.getState().setDeskFiles(data.files);
   } catch (err) {
-    console.error('[jian-desk] upload failed:', err);
-  }
-}
-
-export async function deskCreateFile(text: string): Promise<void> {
-  const s = useStore.getState();
-  const ts = new Date().toISOString().slice(5, 16).replace(/[T:]/g, '-');
-  const locale = window.i18n?.locale || 'zh';
-  const prefix = locale.startsWith('zh') ? '备注' : locale.startsWith('ja') ? 'メモ' : locale.startsWith('ko') ? '메모' : 'note';
-  const name = `${prefix}_${ts}.md`;
-  try {
-    const res = await hanaFetch('/api/desk/files', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'create', dir: s.deskBasePath || undefined, subdir: s.deskCurrentPath || '', name, content: text }),
-    });
-    const data = await res.json();
-    if (data.files) useStore.getState().setDeskFiles(data.files);
-  } catch (err) {
-    console.error('[jian-desk] create failed:', err);
+    console.error('[desk] upload failed:', err);
   }
 }
 
@@ -397,13 +270,12 @@ export async function deskMoveFiles(names: string[], destFolder: string): Promis
     const data = await res.json();
     if (data.files) useStore.getState().setDeskFiles(data.files);
   } catch (err) {
-    console.error('[jian-desk] move failed:', err);
+    console.error('[desk] move failed:', err);
   }
 }
 
 export async function deskRemoveFile(name: string): Promise<boolean> {
   const s = useStore.getState();
-  const fullPath = deskFullPath(name);
   try {
     const res = await hanaFetch('/api/desk/files', {
       method: 'POST',
@@ -412,16 +284,13 @@ export async function deskRemoveFile(name: string): Promise<boolean> {
     });
     const data = await res.json();
     if (data.error) {
-      console.error('[jian-desk] remove error:', data.error);
+      console.error('[desk] remove error:', data.error);
       return false;
     }
     if (data.files) useStore.getState().setDeskFiles(data.files);
-    if (fullPath && useStore.getState().deskOpenDoc?.path === fullPath) {
-      useStore.getState().setDeskOpenDoc(null);
-    }
     return true;
   } catch (err) {
-    console.error('[jian-desk] remove failed:', err);
+    console.error('[desk] remove failed:', err);
     return false;
   }
 }
@@ -456,8 +325,6 @@ export async function deskMkdir(): Promise<string | null> {
 }
 
 export async function deskRenameFile(oldName: string, newName: string): Promise<boolean> {
-  const oldPath = deskFullPath(oldName);
-  const newPath = deskFullPath(newName);
   try {
     const res = await hanaFetch('/api/desk/files', {
       method: 'POST',
@@ -467,10 +334,6 @@ export async function deskRenameFile(oldName: string, newName: string): Promise<
     const data = await res.json();
     if (data.error) { console.error('[desk] rename error:', data.error); return false; }
     if (data.files) useStore.getState().setDeskFiles(data.files);
-    const openDoc = useStore.getState().deskOpenDoc;
-    if (openDoc && oldPath && openDoc.path === oldPath && newPath) {
-      useStore.getState().setDeskOpenDoc({ ...openDoc, path: newPath, name: newName });
-    }
     return true;
   } catch (err) { console.error('[desk] rename failed:', err); return false; }
 }

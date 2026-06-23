@@ -122,7 +122,7 @@
       "analyzePrompt": "我想分析一个文件。告诉我直接把文件拖进来，或者用 @ 引用文件。"
     },
     "activity": "助手活动",
-    "jian": "书桌",
+    "jian": "工作地图",
     "bridge": "接入社交平台",
     "toggle": "侧边栏",
     "bridgeShort": "接入社交平台",
@@ -133,18 +133,18 @@
       "files": "改文件",
       "shell": "跑命令",
       "instructions": "已读项目指令",
-      "mcp": "能用 MCP",
+      "mcp": "扩展在设置中",
       "skills": "技能",
       "automation": "自动任务",
       "assistants": "助手",
       "todo": "待办",
       "done": "完成",
       "skillsCenter": "技能中心",
-      "mcpHub": "MCP 接入",
+      "mcpHub": "设置里的 MCP",
       "projectRules": "指令",
       "state": "现在",
       "model": "模型",
-      "jian": "笺",
+      "jian": "工作地图",
       "continueBusy": "有任务正在推进",
       "continueIdle": "工作区就绪 · 试试搜索“今天的 AI 热点”",
       "tryAt": "@ 引用文件",
@@ -152,7 +152,7 @@
       "resumeTask": "继续当前任务",
       "resumePrompt": "继续刚才的任务，先告诉我当前进度和下一步。",
       "workspacePrompt": "先快速读一下当前工作区，告诉我你会从哪里开始。",
-      "fleetTip": "Fleet 指挥台:把任务拆给多个 CLI worker 并行干,每个独立 worktree"
+      "fleetTip": "CLI 并行协作:在终端用 worker 协议处理长任务"
     }
   },
   "titlebar": {
@@ -384,7 +384,7 @@
     "quickActions": {
       "askFolder": {
         "label": "帮我做个计划",
-        "prompt": "我想先把今天要推进的事理清楚。请结合当前工作空间和笺，先给我一个简短的执行计划和第一步建议。如果还没有笺，就先帮我写一个今天的工作清单。"
+        "prompt": "我想先把今天要推进的事理清楚。请结合当前工作空间和对话状态，先给我一个简短的执行计划和第一步建议。不要先连着反问我很多问题。"
       },
       "summarizeWork": {
         "label": "分析这个文件",
@@ -392,13 +392,10 @@
       },
       "planToday": {
         "label": "看看今天该做什么",
-        "prompt": "请先看看当前工作空间和笺，告诉我今天最值得先推进的 3 件事，并直接给出建议的第一步。如果还没有笺，就先帮我写一份今天的工作清单。不要先连着反问我很多问题。"
+        "prompt": "请先看看当前工作空间和已有对话状态，告诉我今天最值得先推进的 3 件事，并直接给出建议的第一步。不要先连着反问我很多问题。"
       },
       "tryAt": {
         "label": "试试 @ 引用文件"
-      },
-      "fleet": {
-        "label": "⚡ 布置并行任务"
       }
     }
   },
@@ -1123,6 +1120,11 @@
       "trustedRootsDesc": "执行模式下允许工作区级读写的路径列表",
       "addTrustedRoot": "添加受信任路径",
       "trustedRootsHint": "建议至少添加一个项目目录，这样 Lynn 只会在你明确授权的范围内读写文件。",
+      "cliParallel": {
+        "title": "CLI 并行协作",
+        "desc": "GUI 不再展示 Worker 指挥台，主界面专注对话、工作地图和自动任务。需要无头并行时，可以在终端用 Lynn CLI 调 worker。",
+        "commandHint": "给终端或 CI 使用的 JSONL worker 协议"
+      },
       "review": {
         "title": "复查链路",
         "desc": "复查只会从 Hanako / Butter 中选择，不再混入其他频道或专家智能体。为每位复查人绑定独立 Agent 后，就能分别配置各自的模型。",
@@ -1431,11 +1433,11 @@
       },
       "title": "准备就绪 ✿",
       "quickTitle": "Quick Start 已完成 ✿",
-      "quickBannerTitle": "先记住这一条主线：笺就是今天要做的工作",
-      "quickBannerDesc": "把今天要推进的事写进工作台里的 jian.md。\n巡检会反复看它，记忆会把稳定背景留下来，活动面板会告诉你它已经做到了哪一步。",
+      "quickBannerTitle": "先记住这一条主线：对话推进，工作地图记录状态",
+      "quickBannerDesc": "直接和 Lynn 说要做什么。\n巡检会更新右侧工作地图，自动任务负责持续跟进，记忆只留下稳定背景。",
       "memory": {
         "title": "记忆",
-        "desc": "记忆不是另一套待办，而是给巡检和对话用的长期背景。\n工作台里的笺、你反复确认的事实、对话里的稳定约束，会慢慢沉成它之后继续做事时的上下文。"
+        "desc": "记忆不是另一套待办，而是给巡检和对话用的长期背景。\n你反复确认的事实、对话里的稳定约束，会慢慢沉成它之后继续做事时的上下文。"
       },
       "skills": {
         "title": "技能",
@@ -1443,15 +1445,15 @@
       },
       "workspace": {
         "title": "工作空间",
-        "desc": "工作台默认在 ~/Desktop/Lynn。\n这里是你放项目、资料和 jian.md 的地方，也是 Lynn 日常巡检最先看的目录。"
+        "desc": "工作台默认在 ~/Desktop/Lynn。\n这里是你放项目和资料的地方，也是 Lynn 日常巡检最先看的目录。"
       },
       "jian": {
-        "title": "笺",
-        "desc": "jian.md 就是今天的主旋律文件。\n你把今天要做什么、做到哪一步、接下来怎么看，写在这里；巡检和智能体都会先读它，再决定下一步。"
+        "title": "工作地图",
+        "desc": "工作地图记录当前会话的目标、状态、下一步和相关资料。\n它围绕当前对话生长，不把超长上下文硬塞回模型。"
       },
       "patrol": {
         "title": "心跳 / 自动巡检",
-        "desc": "心跳就是 Lynn 按节奏回来看看工作台。\n它会重新读笺、检查项目有没有变化、判断有没有该继续推进的事，然后在合适的时候自己动起来。"
+        "desc": "心跳就是 Lynn 按节奏回来看看工作台。\n它会检查项目有没有变化、更新工作地图、判断有没有该继续推进的事，然后在合适的时候自己动起来。"
       },
       "activity": {
         "title": "活动面板",
@@ -1519,20 +1521,20 @@
     "cwdSkillsDrop": "拖入文件夹或 .zip 安装技能",
     "deleteSkill": "删除技能",
     "openInFinder": "打开文件夹",
-    "jianLabel": "笺",
+    "jianLabel": "工作台记录",
     "jianPlaceholder": "写点什么，告诉助手这个文件夹里面的文件该如何处理...",
-    "jianFooter": "Lynn 巡检时会自动读取这里的内容 · 支持 Markdown · ⌘J 切换",
-    "patrolIdle": "打开笺后会自动巡检一次",
-    "patrolRunning": "Lynn 正在阅读当前工作区与笺里的安排",
+    "jianFooter": "Lynn 巡检时会自动读取工作台状态 · 支持 Markdown",
+    "patrolIdle": "工作地图会在巡检后更新状态",
+    "patrolRunning": "Lynn 正在巡检当前工作区与会话状态",
     "patrolDone": "刚刚完成一次巡检",
     "patrolDoneAt": "上次巡检完成于 {time}",
     "patrolError": "这次巡检没跑完，稍后会再试一次",
-    "automationIdle": "笺里的重复待办会自动变成自动任务",
+    "automationIdle": "自动任务会从对话和工作台里的计划生成",
     "automationReady": "已设 {count} 个自动任务",
     "automationNext": "已设 {count} 个自动任务 · 下次 {time}",
     "automationPausedSummary": "已设 {count} 个自动任务 · {paused} 个暂停中",
     "automationNextWithPause": "已设 {count} 个自动任务 · 下次 {time} · {paused} 个暂停中",
-    "openDocBack": "返回笺",
+    "openDocBack": "返回资料",
     "openDocFooter": "正在编辑这个文档 · 自动保存到原文件",
     "openDocReadFailed": "没能读到这个文档",
     "openDocSaveFailed": "保存文档失败",
@@ -2093,8 +2095,8 @@
     "helpAgent": "查看当前 agent",
     "helpAgentList": "列出所有 agent",
     "helpAgentSwitch": "切换 agent",
-    "helpJian": "查看当前目录的笺",
-    "helpJianSub": "查看子目录的笺",
+    "helpJian": "查看当前目录的工作地图记录",
+    "helpJianSub": "查看子目录的工作地图记录",
     "helpLs": "列出书桌文件",
     "helpLsSub": "列出子目录文件",
     "helpCat": "查看文件内容",
@@ -2119,8 +2121,8 @@
     "agentList": "Agent 列表",
     "agentSwitched": "已切换到 {name}",
     "currentAgent": "当前 Agent:",
-    "jianTitle": "笺",
-    "jianEmpty": "此目录没有笺",
+    "jianTitle": "工作地图记录",
+    "jianEmpty": "此目录没有工作地图记录",
     "dirEmpty": "(空)",
     "catUsage": "用法: /cat <文件路径>",
     "catFailed": "无法读取: {status}",
@@ -2278,7 +2280,7 @@
       "sandbox": "沙箱",
       "sandboxHintFull": "完整文件系统权限只用于可信的本地 worktree。",
       "sandboxHintScoped": "workspace-write 把改动限制在分配的 worktree 内。",
-      "externalHint": "外部 CLI(Codex / Claude 等)自带 shell。从 Fleet 启动必须显式 Approval=yolo + Sandbox=danger-full-access;内置 Lynn / StepFun worker 可保持守护。",
+      "externalHint": "外部 CLI(Codex / Claude 等)自带 shell。用 CLI worker 启动时必须显式 Approval=yolo + Sandbox=danger-full-access;内置 Lynn / StepFun worker 可保持守护。",
       "branch": "分支",
       "worktree": "Worktree",
       "objective": "目标说明",

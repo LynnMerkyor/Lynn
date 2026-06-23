@@ -184,7 +184,10 @@ function resolveSportsDateRange(query: unknown, league: SportsLeagueInfo): Sport
     const tomorrow = addDaysYmd(today, 1);
     return { start: ymdCompact(tomorrow), end: ymdCompact(tomorrow) };
   }
-  if (/(今晚|今夜|今天|今日|today|tonight)/i.test(text)) {
+  if (/(今天|今日|today)/i.test(text) && !/(今晚|今夜|tonight)/i.test(text)) {
+    return { start: ymdCompact(addDaysYmd(today, -1)), end: ymdCompact(addDaysYmd(today, 1)) };
+  }
+  if (/(今晚|今夜|tonight)/i.test(text)) {
     return { start: ymdCompact(today), end: ymdCompact(addDaysYmd(today, 1)) };
   }
   return { start: ymdCompact(addDaysYmd(today, -7)), end: ymdCompact(addDaysYmd(today, 1)) };
@@ -217,6 +220,16 @@ function beijingDateTimeParts(date: Date): { ymd: string; hour: number } {
   return { ymd: `${pick("year")}-${pick("month")}-${pick("day")}`, hour: Number(pick("hour") || 0) };
 }
 
+function formatStageLabel(event: LooseRecord): string {
+  const slug = String(event?.season?.slug || event?.season?.name || event?.season?.type || "").toLowerCase();
+  if (/semi/.test(slug)) return "Semifinal";
+  if (/quarter/.test(slug)) return "Quarterfinal";
+  if (/final/.test(slug)) return "Final";
+  if (/round.*16|last.*16|r16/.test(slug)) return "Round of 16";
+  if (/group/.test(slug)) return "Group stage";
+  return "";
+}
+
 function formatEspnEvent(event: LooseRecord): SportsRow | null {
   const competition = event?.competitions?.[0];
   const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
@@ -234,11 +247,12 @@ function formatEspnEvent(event: LooseRecord): SportsRow | null {
   const dateText = formatBeijingDateTime(date);
   const localParts = beijingDateTimeParts(date);
   const score = completed && homeScore !== "" && awayScore !== "" ? `${homeScore}-${awayScore}` : "vs";
+  const stageLabel = formatStageLabel(event);
   return {
     completed,
     localYmd: localParts.ymd,
     localHour: localParts.hour,
-    line: `${dateText} ${homeName} ${score} ${awayName}${statusText ? ` (${statusText})` : ""}`,
+    line: `${dateText} ${stageLabel ? `${stageLabel}: ` : ""}${homeName} ${score} ${awayName}${statusText ? ` (${statusText})` : ""}`,
   };
 }
 
@@ -253,7 +267,7 @@ function filterSportsRows(rows: SportsRow[], query: unknown, range: SportsDateRa
   } else if (/(今天|今日|today)/i.test(text)) {
     filtered = rows.filter((row) => row.localYmd === today);
   } else if (/(昨晚|昨天|昨日|yesterday)/i.test(text)) {
-    filtered = rows.filter((row) => (row.localYmd === yesterday && row.localHour >= 18) || (row.localYmd === today && row.localHour <= 12));
+    filtered = rows.filter((row) => row.localYmd === yesterday || (row.localYmd === today && row.localHour <= 12));
   } else {
     const start = compactToYmd(range.start);
     const end = compactToYmd(range.end);
@@ -274,6 +288,25 @@ function wantsPredictedScore(query: unknown): boolean {
   return /预测|预估|猜|看好|可能比分|比分预测|predict|prediction|forecast/i.test(String(query || ""));
 }
 
+function relativeSportsScopeNote(query: unknown, range: SportsDateRange): string {
+  const text = String(query || "");
+  const start = compactToYmd(range.start);
+  const end = compactToYmd(range.end);
+  if (/(今晚|今夜|tonight)/i.test(text)) {
+    return `查询口径: “今晚/今夜”按北京时间 ${start} 晚间至 ${end} 后续赛程处理；不是“昨晚”。`;
+  }
+  if (/(今天|今日|today)/i.test(text)) {
+    return `查询口径: “今天/今日”按北京时间 ${start} 当日比赛处理。`;
+  }
+  if (/(昨晚|昨天|昨日|yesterday)/i.test(text)) {
+    return `查询口径: “昨晚/昨天/昨日”按北京时间 ${start} 至 ${end} 中午前后的已结束比赛处理。`;
+  }
+  if (/(明天|明日|tomorrow)/i.test(text)) {
+    return `查询口径: “明天/明日”按北京时间 ${start} 当日比赛处理。`;
+  }
+  return "";
+}
+
 function buildSportsScoreboardResult(input: {
   query: string;
   league: SportsLeagueInfo;
@@ -289,6 +322,7 @@ function buildSportsScoreboardResult(input: {
   const wantsScores = !wantsPrediction && /(比分|赛果|结果|已出|已经|完赛|score|result|final)/i.test(query);
   const selected = (wantsScores ? scoreRows : rows).slice(-24);
   const dateRange = `${range.start}-${range.end}`;
+  const scopeNote = relativeSportsScopeNote(query, range);
   const header = [
     "体育查询结果 (ESPN scoreboard)",
     "provider: espn_scoreboard",
@@ -298,16 +332,20 @@ function buildSportsScoreboardResult(input: {
     `source: ${source}`,
     `dateRange: ${dateRange}`,
     "时间口径: 北京时间",
+    scopeNote,
     note ? `说明: ${note}` : "",
   ].filter(Boolean);
   const body = selected.length
     ? [
+      `matched: ${selected.length}`,
       `匹配比赛: ${selected.length} 场`,
       "",
       ...selected.map((row) => `- ${row.line}`),
     ]
     : [
       "matched: 0",
+      "匹配比赛: 0 场",
+      "结论: 在上述 ESPN scoreboard 与北京时间口径下，未匹配到符合球队/时间条件的比赛；不要把其它日期或其它赛事脑补为本轮结论。",
     ];
   return {
     provider: "espn_scoreboard",

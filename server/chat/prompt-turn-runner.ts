@@ -61,6 +61,10 @@ function shouldCloseWithPrefetchDirectAnswer(reportKind: unknown, promptText: un
   const answer = String(directAnswer || "").trim();
   if (!answer) return false;
   const prompt = String(promptText || "");
+  if (kind === "public_data"
+    && /(?:DGX\s*Spark|RTX\s*Spark|download\.merkyorlynn\.com|Lynn\s+v?0\.85\.1|Gitee.*Lynn|CUDA\s*Toolkit\s*13|Python\s*3\.13|Node\.?js|Kimi\s*K2\.7\s*Code|GLM\s*5\.0\s*Turbo|Responses\s*API|Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?|Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm)/i.test(prompt)) {
+    return true;
+  }
   if (/(?:深度|完整|全面|系统(?:性)?|报告|调研|研究|分析|对比|比较|引用|来源列表|research|report|analysis|compare)/i.test(prompt)) {
     return false;
   }
@@ -75,6 +79,9 @@ function shouldCloseWithImmediateLocalOfficeAnswer(promptText: unknown, directAn
   if (!String(directAnswer || "").trim()) return false;
   const prompt = String(promptText || "");
   return /(?:排序并去重|去重并排序|sort.*unique|unique.*sort)/iu.test(prompt)
+    || /zod\s+schema|schema\s+校验|校验\s+release\s+manifest/i.test(prompt)
+    || /Node\.?js.{0,40}(?:JSON|keys?|数量)|(?:读取|输出).{0,32}(?:JSON|keys?)/i.test(prompt)
+    || /(?:Session\s*Map|工作地图|右侧工作台|左侧会话列表|数字徽标|Huge\s*节点|从此分支|资料不足时应继续补充来源再下结论|伪相关|证据优先搜索\s*Agent|搜索\s*Agent|搜索摘要|长会话|7GB|CLI\s*和\s*GUI|GUI\s*和\s*CLI|共用内核|回归测试矩阵)/iu.test(prompt)
     || /(?:三列表格|3\s*列表格|三列\s*表格|3\s*列\s*表格)/.test(prompt)
     && /(?:任务[、,，]\s*优先级[、,，]\s*风险|任务.*优先级.*风险)/.test(prompt);
 }

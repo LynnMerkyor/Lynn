@@ -7,8 +7,6 @@ import { useStore } from '../../stores';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import styles from './Desk.module.css';
 
-const DESK_CAPABILITY_VIEW_KEY = 'hana-desk-capability-view';
-type CapabilityView = 'skills' | 'mcp';
 type RecommendedSort = 'score' | 'downloads';
 
 interface DeskSkillRecord {
@@ -100,13 +98,9 @@ function recommendedSkillHint(entry: {
 
 export function DeskSkillsSection() {
   const discoveredAgents = useStore((state) => state.discoveredAgents);
-  const capabilitySnapshot = useStore((state) => state.capabilitySnapshot);
   const deskSkillsSnapshot = useStore((state) => state.deskSkills);
   const [loading, setLoading] = useState(true);
   const [visible, setVisible] = useState(false);
-  const [view, setView] = useState<CapabilityView>(
-    () => (localStorage.getItem(DESK_CAPABILITY_VIEW_KEY) as CapabilityView) || 'skills',
-  );
   const [sortMode, setSortMode] = useState<RecommendedSort>('score');
   const [category, setCategory] = useState('全部');
   const [showAllInstalled, setShowAllInstalled] = useState(false);
@@ -162,15 +156,9 @@ export function DeskSkillsSection() {
   }, [loadDeskSkills]);
 
   useEffect(() => {
-    const onOpen = (event: Event) => {
-      const detail = (event as CustomEvent<{ target?: CapabilityView }>).detail || {};
-      const target = detail.target || 'skills';
+    const onOpen = () => {
       setVisible(true);
-      setView(target);
-      localStorage.setItem(DESK_CAPABILITY_VIEW_KEY, target);
-      if (target === 'skills') {
-        void loadDeskSkills();
-      }
+      void loadDeskSkills();
     };
     window.addEventListener('desk-capability-open', onOpen as EventListener);
     return () => window.removeEventListener('desk-capability-open', onOpen as EventListener);
@@ -184,11 +172,6 @@ export function DeskSkillsSection() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [visible]);
-
-  const switchView = useCallback((next: CapabilityView) => {
-    setView(next);
-    localStorage.setItem(DESK_CAPABILITY_VIEW_KEY, next);
-  }, []);
 
   const toggleSkill = useCallback(async (name: string, enable: boolean) => {
     const previous = allSkills;
@@ -350,34 +333,16 @@ export function DeskSkillsSection() {
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={view === 'skills' ? '技能中心' : 'MCP 中心'}
+        aria-label="技能中心"
       >
         <div className={styles.capabilityDialogHeader}>
           <div className={styles.capabilityDialogTitleBlock}>
-            <div className={styles.capabilityDialogTitle}>{view === 'skills' ? '技能' : 'MCP'}</div>
+            <div className={styles.capabilityDialogTitle}>技能</div>
             <div className={styles.capabilityDialogSubtitle}>
-              {view === 'skills'
-                ? '已安装的能力在上面，推荐能力在下面；点击即可启用或安装。'
-                : 'MCP 更像外部能力接入。已接入的服务在上面，推荐接入方式在下面。'}
+              已安装的能力在上面，推荐能力在下面；点击即可启用或安装。
             </div>
           </div>
           <div className={styles.capabilityDialogActions}>
-            <div className={styles.capabilityTabs}>
-              <button
-                type="button"
-                className={`${styles.capabilityTab}${view === 'skills' ? ` ${styles.capabilityTabActive}` : ''}`}
-                onClick={() => switchView('skills')}
-              >
-                技能
-              </button>
-              <button
-                type="button"
-                className={`${styles.capabilityTab}${view === 'mcp' ? ` ${styles.capabilityTabActive}` : ''}`}
-                onClick={() => switchView('mcp')}
-              >
-                MCP
-              </button>
-            </div>
             <button
               type="button"
               className={styles.capabilityCloseBtn}
@@ -390,32 +355,31 @@ export function DeskSkillsSection() {
         </div>
 
         <div className={styles.capabilityDialogBody}>
-          {view === 'skills' ? (
-            <>
-              {discoveredAgents.length > 0 && !localStorage.getItem('agent-discovery-seen') && (
-                <div className={styles.capabilityNotice}>
-                  <div className={styles.capabilityNoticeTitle}>检测到本机已有可复用技能</div>
-                  <div className={styles.capabilityNoticeText}>
-                    其他智能体已经装过的技能，不必再装一遍。你可以先一键关联，本机已有的就能直接复用。
-                  </div>
-                  <div className={styles.capabilityNoticeActions}>
-                    <button type="button" className={styles.noticePrimaryBtn} onClick={() => void enableDiscoveredSkillLibraries()}>
-                      一键关联现有技能
-                    </button>
-                  </div>
+          <>
+            {discoveredAgents.length > 0 && !localStorage.getItem('agent-discovery-seen') && (
+              <div className={styles.capabilityNotice}>
+                <div className={styles.capabilityNoticeTitle}>检测到本机已有可复用技能</div>
+                <div className={styles.capabilityNoticeText}>
+                  其他智能体已经装过的技能，不必再装一遍。你可以先一键关联，本机已有的就能直接复用。
                 </div>
-              )}
-
-              {installFeedback && (
-                <div className={styles.capabilityInlineFeedback}>{installFeedback}</div>
-              )}
-
-              <div className={styles.skillsBlock}>
-                <div className={styles.skillsBlockHeader}>
-                  <span>已安装技能</span>
-                  <span className={styles.skillsMeta}>{installedSkills.length}</span>
+                <div className={styles.capabilityNoticeActions}>
+                  <button type="button" className={styles.noticePrimaryBtn} onClick={() => void enableDiscoveredSkillLibraries()}>
+                    一键关联现有技能
+                  </button>
                 </div>
-                <div className={styles.capabilityGrid}>
+              </div>
+            )}
+
+            {installFeedback && (
+              <div className={styles.capabilityInlineFeedback}>{installFeedback}</div>
+            )}
+
+            <div className={styles.skillsBlock}>
+              <div className={styles.skillsBlockHeader}>
+                <span>已安装技能</span>
+                <span className={styles.skillsMeta}>{installedSkills.length}</span>
+              </div>
+              <div className={styles.capabilityGrid}>
                   {loading ? (
                     <div className={styles.capabilityNotice}>
                       <div className={styles.capabilityNoticeTitle}>正在读取已安装技能</div>
@@ -566,59 +530,7 @@ export function DeskSkillsSection() {
                   </button>
                 </div>
               </div>
-            </>
-          ) : (
-            <>
-              <div className={styles.skillsBlock}>
-                <div className={styles.skillsBlockHeader}>
-                  <span>MCP 接入</span>
-                  <span className={styles.skillsMeta}>{capabilitySnapshot?.mcp?.servers || 0}</span>
-                </div>
-                <div className={styles.capabilityNotice}>
-                  <div className={styles.capabilityNoticeTitle}>MCP 更像外部能力接入，不是应用商店</div>
-                  <div className={styles.capabilityNoticeText}>
-                    你可以把常用服务直接接进 Lynn。像 GitHub、Notion、filesystem、MiniMax 这类能力，接好之后 Lynn 就会自动把它们算进可用工具里。
-                  </div>
-                  <div className={styles.mcpStatsRow}>
-                    <span className={styles.mcpStat}>已连接 {capabilitySnapshot?.mcp?.servers || 0} 个服务</span>
-                    <span className={styles.mcpStat}>可用 {capabilitySnapshot?.mcp?.tools || 0} 个工具</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.skillsBlock}>
-                <div className={styles.skillsBlockHeader}>
-                  <span>推荐接入</span>
-                </div>
-                <div className={styles.capabilityGrid}>
-                  {[
-                    { name: 'MiniMax MCP', desc: '适合把 MiniMax 的网页/文档类能力接进 Lynn。' },
-                    { name: 'GitHub', desc: '适合 issue、PR、仓库信息与自动化流程。' },
-                    { name: 'Notion', desc: '适合知识库、文档、任务与项目摘要。' },
-                    { name: 'filesystem', desc: '适合本地目录读写与工作区工具协同。' },
-                  ].map((item) => (
-                    <div key={item.name} className={styles.recommendedCard}>
-                      <div className={styles.recommendedCardBody}>
-                        <div className={styles.skillCardHeader}>
-                          <span className={styles.skillName}>{item.name}</span>
-                          <span className={styles.recommendedCategory}>MCP</span>
-                        </div>
-                        <div className={styles.skillCardDesc}>{item.desc}</div>
-                        <div className={styles.recommendedHint}>配置好之后，Lynn 会自动在合适时机调用它。</div>
-                      </div>
-                      <button
-                        type="button"
-                        className={styles.recommendedActionBtn}
-                        onClick={() => window.platform?.openSettings?.('mcp')}
-                      >
-                        去设置
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+          </>
         </div>
       </div>
     </div>

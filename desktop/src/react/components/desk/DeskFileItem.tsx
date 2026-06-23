@@ -9,8 +9,6 @@ import {
   deskFullPath,
   deskMoveFiles,
   deskRemoveFile,
-  openDeskDocument,
-  shouldOpenDeskInline,
 } from '../../stores/desk-actions';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import { toSlash } from '../../utils/format';
@@ -111,10 +109,6 @@ export function DeskFileItem({
 
   const openDeskFile = useCallback(() => {
     if (file.isDir) return;
-    if (shouldOpenDeskInline(file.name)) {
-      void openDeskDocument(file.name);
-      return;
-    }
     const full = deskFullPath(file.name);
     if (!full) return;
     const ext = file.name.split('.').pop()?.toLowerCase() || '';

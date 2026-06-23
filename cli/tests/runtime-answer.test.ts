@@ -20,6 +20,11 @@ describe("runtime answer", () => {
     expect(isLocalRuntimeQuestion("Lynn CLI 怎么语音输入")).toBe(true);
     expect(isLocalRuntimeQuestion("帮我写一个版本比较函数")).toBe(false);
     expect(isLocalRuntimeQuestion("帮我实现一个模型选择器")).toBe(false);
+    expect(isLocalRuntimeQuestion("NVIDIA DGX Spark 当前软件版本是什么？列出版本号和来源")).toBe(false);
+    expect(isLocalRuntimeQuestion("OpenAI 最近官方发布的新模型是什么？")).toBe(false);
+    expect(isLocalRuntimeQuestion("Claude 最新公开模型是哪一代？")).toBe(false);
+    expect(isLocalRuntimeQuestion("Node.js 最新 LTS 版本是多少？")).toBe(false);
+    expect(isLocalRuntimeQuestion("CUDA Toolkit 13 最新版是多少？给官方依据")).toBe(false);
     expect(isLocalRuntimeQuestion("bump the package version in package.json")).toBe(false);
     expect(isLocalRuntimeQuestion("write a semantic version comparator")).toBe(false);
     expect(isLocalRuntimeQuestion("train a model router from logs")).toBe(false);

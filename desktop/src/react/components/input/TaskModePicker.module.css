@@ -214,7 +214,7 @@
     border-color: var(--accent);
 }
 
-/* MCP 卡 */
+/* Extensions live in Settings; keep this as a quiet handoff instead of a full tool console. */
 .mcp-section {
     margin-top: 12px;
     padding: 10px 12px;
@@ -242,8 +242,20 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    width: 100%;
     padding: 5px 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
     font-size: 0.78rem;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.mcp-server-row:hover {
+    color: var(--accent);
 }
 
 .mcp-server-name {

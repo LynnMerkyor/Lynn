@@ -2,7 +2,7 @@
  * FloatPreviewCard — 侧边栏折叠时的浮动预览卡片
  *
  * 左侧：session 列表 + 新建聊天 + 设置按钮
- * 右侧：desk 文件列表 + 笺编辑区
+ * 右侧：工作台资料文件概览
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -10,7 +10,6 @@ import { useStore } from '../stores';
 import { hanaUrl } from '../hooks/use-hana-fetch';
 import { createNewSession, switchSession } from '../stores/session-actions';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
-import { saveJianContent } from '../stores/desk-actions';
 
 declare function t(key: string, vars?: Record<string, string | number>): string;
 
@@ -163,12 +162,10 @@ function SessionAvatar({ sess, agents, agentYuan }: { sess: any; agents: any[]; 
   );
 }
 
-// ── 右侧：Desk 文件列表 + 笺 ──
+// ── 右侧：Desk 文件列表 ──
 
 function DeskListCard() {
   const deskFiles = useStore(s => s.deskFiles);
-  const deskJianContent = useStore(s => s.deskJianContent);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const hiddenNames = useMemo(() => new Set(['__pycache__', 'node_modules', '.venv', 'venv', '.pytest_cache', 'dist', 'build']), []);
   const isHiddenFile = useCallback((file: any) => {
     const rawName = String(file?.name || '').trim().replace(/\/+$/, '');
@@ -178,13 +175,6 @@ function DeskListCard() {
     if (rawName.endsWith('.pyc') || rawName.endsWith('.pyo')) return true;
     return false;
   }, [hiddenNames]);
-
-  const handleJianInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    useStore.setState({ deskJianContent: val });
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => saveJianContent(), 800);
-  }, []);
 
   const visibleDeskFiles = deskFiles.filter((file: any) => !isHiddenFile(file)).slice(0, 12);
 
@@ -201,16 +191,6 @@ function DeskListCard() {
           ))}
         </div>
       )}
-      <div className="float-card-jian">
-        <div className="float-card-jian-label">{t('desk.jianLabel')}</div>
-        <textarea
-          className="float-card-jian-input"
-          placeholder={t('desk.jianPlaceholder')}
-          spellCheck={false}
-          value={deskJianContent || ''}
-          onChange={handleJianInput}
-        />
-      </div>
     </>
   );
 }

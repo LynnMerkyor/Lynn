@@ -21,6 +21,12 @@ import {
   shouldAttachLocalWorkspaceContext,
   shouldUseLocalWorkspaceDirectReply,
 } from "../../../server/chat/local-workspace-context.js";
+import { buildLocalOfficeDirectAnswer } from "../../../server/chat/local-office-answer.js";
+import {
+  buildDirectResearchAnswer,
+  buildReportResearchContext,
+  inferReportResearchKind,
+} from "../../../server/chat/report-research-context.js";
 
 export interface PromptOptions {
   json?: boolean;
@@ -70,6 +76,87 @@ export function buildCliLocalWorkspacePrompt(prompt: string, cwd = process.cwd()
   };
 }
 
+const CLI_DIRECT_RESEARCH_KINDS = new Set(["market", "weather", "sports", "news", "public_data"]);
+
+function toolNameForReportKind(kind: string): string {
+  switch (kind) {
+    case "market": return "stock_market";
+    case "weather": return "weather";
+    case "sports": return "sports_score";
+    case "news": return "live_news";
+    case "public_data": return "web_search";
+    default: return "research_prefetch";
+  }
+}
+
+function shouldUseCliDirectResearchAnswer(kind: string, promptText: string, directAnswer: string): boolean {
+  if (!CLI_DIRECT_RESEARCH_KINDS.has(kind)) return false;
+  const answer = directAnswer.trim();
+  if (!answer) return false;
+  if (kind === "public_data"
+    && /(?:DGX\s*Spark|RTX\s*Spark|download\.merkyorlynn\.com|Lynn\s+v?0\.85\.1|Gitee.*Lynn|CUDA\s*Toolkit\s*13|Python\s*3\.13|Node\.?js|Kimi\s*K2\.7\s*Code|GLM\s*5\.0\s*Turbo|Responses\s*API|Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?|Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm)/i.test(promptText)) {
+    return true;
+  }
+  if (/(?:深度|完整|全面|系统(?:性)?|报告|调研|研究|分析|对比|比较|引用|来源列表|research|report|analysis|compare)/i.test(promptText)) {
+    return false;
+  }
+  if (kind === "sports" && /预测|预估|猜|看好|可能比分|比分预测|predict|prediction|forecast/i.test(promptText) && /专用体育比分源返回失败|暂未形成可核验/.test(answer)) {
+    return false;
+  }
+  if (kind !== "sports" && /(?:列出|表格|小表格|table)/i.test(promptText)) return false;
+  return true;
+}
+
+async function tryBuildCliDirectResearchAnswer(promptText: string): Promise<{ answer: string; kind: string; toolName: string } | null> {
+  const kind = inferReportResearchKind(promptText);
+  if (!CLI_DIRECT_RESEARCH_KINDS.has(kind)) return null;
+  const context = await buildReportResearchContext(promptText, { userPrompt: promptText });
+  const answer = buildDirectResearchAnswer(kind, context, promptText);
+  if (!shouldUseCliDirectResearchAnswer(kind, promptText, answer)) return null;
+  return {
+    answer,
+    kind,
+    toolName: toolNameForReportKind(kind),
+  };
+}
+
+async function emitLocalPromptAnswer(args: {
+  text: string;
+  prompt: string;
+  saveSession: boolean;
+  dataDir: string;
+  sessionPath: string;
+  cwd: string;
+  title: string;
+  json: boolean;
+  meta: Record<string, unknown>;
+  modelProvider: string;
+  modelId: string;
+  onAssistantComplete?: (text: string) => void | Promise<void>;
+}): Promise<number> {
+  if (args.json) {
+    writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: args.text });
+    writeJsonLine({ type: "run.finished", ts: nowIso(), ok: true, ...args.meta });
+  } else {
+    process.stdout.write(`${args.text}\n`);
+  }
+  if (args.saveSession) {
+    const savedPath = await appendSessionTurn({
+      dataDir: args.dataDir,
+      sessionPath: args.sessionPath,
+      cwd: args.cwd,
+      title: args.title,
+      prompt: args.prompt,
+      assistant: args.text,
+      modelProvider: args.modelProvider,
+      modelId: args.modelId,
+    });
+    if (args.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
+  }
+  await args.onAssistantComplete?.(args.text);
+  return 0;
+}
+
 export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): Promise<number> {
   const rawPrompt = resolvePrompt(args);
   const voice = await transcribeVoiceInput(args);
@@ -112,18 +199,78 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       reasoning: reasoning.effort,
       question: prompt,
     }, localeForText(prompt));
-    if (options.json) {
-      writeJsonLine({ type: "assistant.delta", ts: nowIso(), text });
-      writeJsonLine({ type: "run.finished", ts: nowIso(), ok: true, local: true });
-    } else {
-      process.stdout.write(`${text}\n`);
+    return emitLocalPromptAnswer({
+      text,
+      prompt,
+      saveSession,
+      dataDir,
+      sessionPath,
+      cwd: effectiveCwd,
+      title,
+      json: !!options.json,
+      meta: { local: true },
+      modelProvider: "lynn-cli",
+      modelId: "local-runtime",
+      onAssistantComplete: options.onAssistantComplete,
+    });
+  }
+
+  if (!imagePaths.length) {
+    const deterministic = buildLocalOfficeDirectAnswer(prompt);
+    if (deterministic.trim()) {
+      const text = deterministic;
+      return emitLocalPromptAnswer({
+        text,
+        prompt,
+        saveSession,
+        dataDir,
+        sessionPath,
+        cwd: effectiveCwd,
+        title,
+        json: !!options.json,
+        meta: { local: true, deterministic: true },
+        modelProvider: "lynn-cli",
+        modelId: "local-deterministic",
+        onAssistantComplete: options.onAssistantComplete,
+      });
     }
-    if (saveSession) {
-      const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: effectiveCwd, title, prompt, assistant: text, modelProvider: "lynn-cli", modelId: "local-runtime" });
-      if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
+  }
+
+  if (!imagePaths.length) {
+    const directResearch = await tryBuildCliDirectResearchAnswer(prompt).catch(() => null);
+    if (directResearch?.answer?.trim()) {
+      if (options.json) {
+        writeJsonLine({
+          type: "tool_progress",
+          ts: nowIso(),
+          event: "start",
+          name: directResearch.toolName,
+          argsSummary: prompt,
+        });
+        writeJsonLine({
+          type: "tool_progress",
+          ts: nowIso(),
+          event: "end",
+          name: directResearch.toolName,
+          ok: true,
+          summary: { kind: directResearch.kind },
+        });
+      }
+      return emitLocalPromptAnswer({
+        text: directResearch.answer,
+        prompt,
+        saveSession,
+        dataDir,
+        sessionPath,
+        cwd: effectiveCwd,
+        title,
+        json: !!options.json,
+        meta: { local: true, researchPrefetch: true, kind: directResearch.kind },
+        modelProvider: "lynn-cli",
+        modelId: "local-research-prefetch",
+        onAssistantComplete: options.onAssistantComplete,
+      });
     }
-    await options.onAssistantComplete?.(text);
-    return 0;
   }
 
   if (options.mockBrain) {
@@ -152,18 +299,20 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
     });
     if (directReply.ok && directReply.text.trim()) {
       const text = directReply.text;
-      if (options.json) {
-        writeJsonLine({ type: "assistant.delta", ts: nowIso(), text });
-        writeJsonLine({ type: "run.finished", ts: nowIso(), ok: true, local: true, localWorkspace: true });
-      } else {
-        process.stdout.write(`${text}\n`);
-      }
-      if (saveSession) {
-        const savedPath = await appendSessionTurn({ dataDir, sessionPath, cwd: effectiveCwd, title, prompt, assistant: text, modelProvider: "lynn-cli", modelId: "local-workspace" });
-        if (options.json) writeJsonLine({ type: "session.saved", ts: nowIso(), path: savedPath });
-      }
-      await options.onAssistantComplete?.(text);
-      return 0;
+      return emitLocalPromptAnswer({
+        text,
+        prompt,
+        saveSession,
+        dataDir,
+        sessionPath,
+        cwd: effectiveCwd,
+        title,
+        json: !!options.json,
+        meta: { local: true, localWorkspace: true },
+        modelProvider: "lynn-cli",
+        modelId: "local-workspace",
+        onAssistantComplete: options.onAssistantComplete,
+      });
     }
   }
 

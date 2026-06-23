@@ -73,6 +73,57 @@ describe("prompt stdin handling", () => {
     expect(output).not.toContain("fetch failed");
   });
 
+  it("answers deterministic zod schema prompts without contacting Brain", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runPrompt(parseArgs([
+        "-p",
+        "写一个 zod schema 校验 release manifest",
+        "--json",
+        "--brain-url",
+        "http://127.0.0.1:1",
+      ]), { json: true })).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain("\"type\":\"assistant.delta\"");
+    expect(output).toContain("import { z } from 'zod';");
+    expect(output).toContain("z.object({");
+    expect(output).toContain("\"deterministic\":true");
+  });
+
+  it("answers known official research prompts without contacting Brain", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runPrompt(parseArgs([
+        "-p",
+        "查 Anthropic docs 是否提到 Claude Code",
+        "--json",
+        "--brain-url",
+        "http://127.0.0.1:1",
+      ]), { json: true })).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain("\"type\":\"tool_progress\"");
+    expect(output).toContain("Anthropic 官方文档中有 Claude Code 文档入口");
+    expect(output).toContain("docs.anthropic.com");
+    expect(output).toContain("\"researchPrefetch\":true");
+    expect(output).not.toContain("fetch failed");
+  });
+
   it("runs prompt mode through CLI BYOK when local Brain is offline", async () => {
     const provider = http.createServer((request, response) => {
       expect(request.url).toBe("/v1/chat/completions");

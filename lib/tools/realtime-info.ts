@@ -598,17 +598,22 @@ function buildOpenAIModelReleaseFallbackText(query: string): string {
   return [
     zhOrEn("OpenAI 官方模型发布资料", "OpenAI official model release lookup"),
     `${zhOrEn("查询", "Query")}: ${query}`,
-    zhOrEn("说明：官方搜索超时后使用稳定官方链接候选；回答需以原页面为准。", "Note: official search timed out; using stable official URL candidates and the original pages should be verified."),
+    zhOrEn("说明：官方搜索超时后只提供官方入口候选；不得把候选链接解读为已确认的新模型。", "Note: official search timed out; these are official entry points only, not confirmed model-release evidence."),
     "",
-    "1. Introducing GPT-5.5 - OpenAI",
+    "1. OpenAI News",
     `${zhOrEn("来源", "Source")}: openai.com`,
-    "https://openai.com/index/introducing-gpt-5-5/",
-    "- GPT-5.5 and GPT-5.5 Pro are available in ChatGPT and Codex, with stronger coding, online research, data analysis, document and spreadsheet work, software operation, and tool-use capabilities.",
+    "https://openai.com/news/",
+    "- OpenAI official news entry point; verify any specific model release on the original page.",
     "",
     "2. Model Release Notes | OpenAI Help Center",
     `${zhOrEn("来源", "Source")}: help.openai.com`,
     "https://help.openai.com/en/articles/9624314-model-release-notes",
-    "- GPT-5.5 Instant Update (May 28, 2026) improves response style and quality in ChatGPT and the API.",
+    "- OpenAI Help Center model release notes; if this run did not fetch a concrete entry, say the evidence is insufficient.",
+    "",
+    "3. OpenAI API model docs",
+    `${zhOrEn("来源", "Source")}: platform.openai.com`,
+    "https://platform.openai.com/docs/models",
+    "- Official API model list; concrete availability should be checked on the original page.",
   ].join("\n");
 }
 

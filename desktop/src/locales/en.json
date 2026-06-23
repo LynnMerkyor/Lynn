@@ -122,7 +122,7 @@
       "analyzePrompt": "I want to analyze a file. Tell me to drag it in or use @ to reference it."
     },
     "activity": "Activity",
-    "jian": "Desk",
+    "jian": "Work map",
     "bridge": "Social Platforms",
     "toggle": "Sidebar",
     "bridgeShort": "Bridge",
@@ -131,18 +131,18 @@
       "files": "file edits",
       "shell": "terminal runs",
       "instructions": "project instructions loaded",
-      "mcp": "MCP ready",
+      "mcp": "Extensions in Settings",
       "skills": "Skills",
       "automation": "Automations",
       "assistants": "Assistants",
       "todo": "Todo",
       "done": "Done",
       "skillsCenter": "Skills",
-      "mcpHub": "MCP",
+      "mcpHub": "MCP in Settings",
       "projectRules": "Rules",
       "state": "Now",
       "model": "Model",
-      "jian": "Jian",
+      "jian": "Work map",
       "continueBusy": "Tasks are still moving",
       "continueIdle": "Ready to start from this workspace",
       "tryAt": "Show a file with @",
@@ -150,7 +150,7 @@
       "resumeTask": "Resume task",
       "resumePrompt": "Continue the last task and tell me the current progress plus the next step first.",
       "workspacePrompt": "Quickly read the current workspace and tell me where you would start.",
-      "fleetTip": "Fleet: split a task across parallel CLI workers, each in its own worktree"
+      "fleetTip": "CLI workers: run long tasks headlessly from the terminal"
     }
   },
   "titlebar": {
@@ -371,7 +371,7 @@
     "quickActions": {
       "askFolder": {
         "label": "Help me plan",
-        "prompt": "I want to get clear on what to move forward today. Use the current workspace and note to give me a short execution plan and the best first step. If there's no note yet, help me create a task list."
+        "prompt": "I want to get clear on what to move forward today. Use the current workspace and conversation state to give me a short execution plan and the best first step. Do not start with a long chain of questions."
       },
       "summarizeWork": {
         "label": "Analyze a file",
@@ -379,13 +379,10 @@
       },
       "planToday": {
         "label": "What should I do today?",
-        "prompt": "First look at the current workspace and note, then tell me the top three things worth moving forward today and the best first step. If there is no note yet, help me create a short work list before asking follow-up questions."
+        "prompt": "First look at the current workspace and existing conversation state, then tell me the top three things worth moving forward today and the best first step. Do not start with a long chain of questions."
       },
       "tryAt": {
         "label": "Try @ file context"
-      },
-      "fleet": {
-        "label": "⚡ Run parallel workers"
       }
     }
   },
@@ -1106,6 +1103,11 @@
       "trustedRootsDesc": "Paths that are allowed for workspace-level read and write in execute mode",
       "addTrustedRoot": "Add trusted path",
       "trustedRootsHint": "Add at least one project folder so Lynn only reads and writes inside places you explicitly trust.",
+      "cliParallel": {
+        "title": "CLI parallel work",
+        "desc": "The GUI no longer shows a Worker command center; it stays focused on chat, the work map, and automations. For headless parallel work, use Lynn CLI workers from the terminal.",
+        "commandHint": "JSONL worker protocol for terminals or CI"
+      },
       "review": {
         "title": "Review chain",
         "desc": "Review now only picks from Hanako / Butter, never from unrelated channel or expert agents. Bind a dedicated agent for each reviewer so they can run on separate models.",
@@ -1412,11 +1414,11 @@
       },
       "title": "All Set ✿",
       "quickTitle": "Quick Start is ready ✿",
-      "quickBannerTitle": "One core idea: jian is today's work file",
-      "quickBannerDesc": "Write today's direction into jian.md inside the workspace.\nPatrol keeps rereading it, memory keeps the stable background, and the activity panel shows how far Lynn has already moved the work.",
+      "quickBannerTitle": "One core idea: chat moves work forward, the work map tracks state",
+      "quickBannerDesc": "Tell Lynn what you want to do directly.\nPatrol updates the work map, automations keep following up, and memory only keeps stable background.",
       "memory": {
         "title": "Memory",
-        "desc": "Memory is not a second todo list. It is the long-term background Lynn carries while working.\nYour jian note, repeated facts, and stable constraints gradually become the context it can continue from later."
+        "desc": "Memory is not a second todo list. It is the long-term background Lynn carries while working.\nRepeated facts and stable constraints gradually become the context it can continue from later."
       },
       "skills": {
         "title": "Skills",
@@ -1424,15 +1426,15 @@
       },
       "workspace": {
         "title": "Workspace",
-        "desc": "The default workspace lives at ~/Desktop/Lynn.\nIt is where you keep project files, references, and jian.md, and the first place Lynn checks during patrol."
+        "desc": "The default workspace lives at ~/Desktop/Lynn.\nIt is where you keep project files and references, and the first place Lynn checks during patrol."
       },
       "jian": {
-        "title": "Jian",
-        "desc": "jian.md is the main theme file for today's work.\nWrite what matters, what is blocked, and what should happen next there. Patrols and agents will read it first before deciding what to do."
+        "title": "Work map",
+        "desc": "The work map tracks the current session's goal, state, next step, and related materials.\nIt grows around the conversation without dragging huge context back into the model."
       },
       "patrol": {
         "title": "Heartbeat / Patrol",
-        "desc": "Heartbeat is Lynn coming back on a rhythm to re-check the workspace.\nIt rereads jian, notices project changes, and decides whether there is something it should continue on its own."
+        "desc": "Heartbeat is Lynn coming back on a rhythm to re-check the workspace.\nIt notices project changes, updates the work map, and decides whether there is something it should continue on its own."
       },
       "activity": {
         "title": "Activity panel",
@@ -1500,20 +1502,20 @@
     "cwdSkillsDrop": "Drop folder or .zip to install skills",
     "deleteSkill": "Delete Skill",
     "openInFinder": "Open Folder",
-    "jianLabel": "Jian",
+    "jianLabel": "Workspace note",
     "jianPlaceholder": "Write something to tell the assistant how to handle files in this folder...",
-    "jianFooter": "Lynn reads this automatically during patrols · Markdown supported · ⌘J to toggle",
-    "patrolIdle": "Opening Jian will trigger a patrol",
-    "patrolRunning": "Lynn is reading this workspace and the plan in Jian",
+    "jianFooter": "Lynn reads workspace state during patrols · Markdown supported",
+    "patrolIdle": "The work map updates after each patrol",
+    "patrolRunning": "Lynn is checking this workspace and session state",
     "patrolDone": "A patrol just finished",
     "patrolDoneAt": "Last patrol finished at {time}",
     "patrolError": "This patrol did not finish. Lynn will try again later",
-    "automationIdle": "Recurring items in jian will automatically become automations",
+    "automationIdle": "Automations can be created from chats and workbench plans",
     "automationReady": "{count} automations ready",
     "automationNext": "{count} automations set · next at {time}",
     "automationPausedSummary": "{count} automations set · {paused} paused",
     "automationNextWithPause": "{count} automations set · next at {time} · {paused} paused",
-    "openDocBack": "Back to Jian",
+    "openDocBack": "Back to Materials",
     "openDocFooter": "Editing this document directly · Auto-saves to the original file",
     "openDocReadFailed": "Couldn't read this document",
     "openDocSaveFailed": "Failed to save document",
@@ -2074,8 +2076,8 @@
     "helpAgent": "View current agent",
     "helpAgentList": "List all agents",
     "helpAgentSwitch": "Switch agent",
-    "helpJian": "View notes in current directory",
-    "helpJianSub": "View notes in subdirectory",
+    "helpJian": "View work-map record in current directory",
+    "helpJianSub": "View work-map record in subdirectory",
     "helpLs": "List desk files",
     "helpLsSub": "List subdirectory files",
     "helpCat": "View file content",
@@ -2100,8 +2102,8 @@
     "agentList": "Agent List",
     "agentSwitched": "Switched to {name}",
     "currentAgent": "Current Agent:",
-    "jianTitle": "Notes",
-    "jianEmpty": "No notes in this directory",
+    "jianTitle": "Work-map record",
+    "jianEmpty": "No work-map record in this directory",
     "dirEmpty": "(empty)",
     "catUsage": "Usage: /cat <file path>",
     "catFailed": "Cannot read: {status}",
@@ -2265,7 +2267,7 @@
       "sandbox": "Sandbox",
       "sandboxHintFull": "Full filesystem access is only for trusted local worktrees.",
       "sandboxHintScoped": "Workspace-write keeps edits scoped to the assigned worktree.",
-      "externalHint": "External CLI adapters run their own shell/process. To launch them from Fleet, explicitly set Approval=yolo and Sandbox=danger-full-access. Built-in Lynn and StepFun workers can stay guarded.",
+      "externalHint": "External CLI adapters run their own shell/process. To launch them through CLI workers, explicitly set Approval=yolo and Sandbox=danger-full-access. Built-in Lynn and StepFun workers can stay guarded.",
       "branch": "Branch",
       "worktree": "Worktree",
       "objective": "Objective",

@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../stores';
 import {
   deskCurrentDir,
-  deskCreateFile,
   deskMkdir,
   deskRenameFile,
 } from '../../stores/desk-actions';
@@ -157,7 +156,6 @@ export function DeskFileList({ sortMode, onShowMenu }: { sortMode: SortMode; onS
     onShowMenu({
       position: { x: e.clientX, y: e.clientY },
       items: [
-        { label: tFn('desk.ctx.newMdFile'), action: () => deskCreateFile('') },
         { label: tFn('desk.ctx.newFolder'), action: async () => {
           const name = await deskMkdir();
           if (name) {

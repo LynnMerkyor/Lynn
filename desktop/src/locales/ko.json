@@ -80,12 +80,12 @@
     "expand": "대화 목록 펼치기",
     "empty": "아직 대화가 없어요 ✿",
     "activity": "활동",
-    "jian": "책상",
+    "jian": "작업 지도",
     "bridge": "소셜 플랫폼",
     "toggle": "사이드바",
     "bridgeShort": "연결",
     "capability": {
-      "fleetTip": "Fleet: 작업을 여러 CLI 워커로 나눠 병렬 실행(각자 독립 worktree)"
+      "fleetTip": "CLI 워커: 긴 작업은 터미널에서 헤드리스로 실행"
     }
   },
   "session": {
@@ -246,9 +246,6 @@
       "planToday": {
         "label": "오늘 계획 만들기",
         "prompt": "현재 워크스페이스를 기준으로 오늘 실행할 3단계 계획을 우선순위대로 만들어 주세요."
-      },
-      "fleet": {
-        "label": "⚡ 병렬 워커 배치"
       }
     }
   },
@@ -1137,8 +1134,8 @@
     "tutorial": {
       "title": "준비 완료 ✿",
       "quickTitle": "Quick Start 준비 완료 ✿",
-      "quickBannerTitle": "이제 작업 공간은 바로 굴리기 시작할 수 있어요",
-      "quickBannerDesc": "먼저 작업 공간, Jian, 순찰부터 써보세요.\nProvider와 모델은 나중에 설정에서 연결할 수 있고, 활동 패널이 백그라운드 진행 상황을 계속 보여줘요.",
+      "quickBannerTitle": "대화로 진행하고 작업 지도로 상태를 남겨요",
+      "quickBannerDesc": "Lynn에게 바로 할 일을 말해 주세요.\n순찰은 오른쪽 작업 지도를 업데이트하고, 자동 작업은 이어서 진행할 일을 따라가며, 기억은 안정된 배경만 남겨요.",
       "memory": {
         "title": "기억",
         "desc": "대화에서 중요한 내용을 기억해요. 오래되고 덜 참조된 기억은 자연스럽게 흐려져요. 우리의 기억처럼."
@@ -1152,12 +1149,12 @@
         "desc": "폴더를 작업 공간으로 설정하면 프로젝트와 파일 관리를 도와줄 수 있어요."
       },
       "jian": {
-        "title": "Jian",
-        "desc": "아무 폴더에 jian.md를 넣어두면\n순찰할 때 확인하고 자동으로 실행해요."
+        "title": "작업 지도",
+        "desc": "현재 대화의 목표, 상태, 다음 단계, 관련 자료를 기록해요.\n너무 긴 컨텍스트를 매번 모델에 밀어 넣지 않고 대화 주변에서 자라요."
       },
       "patrol": {
         "title": "자동 순찰",
-        "desc": "순찰을 켜두면 작업 공간의 변화와 새로운 Jian을 계속 확인하면서 긴 작업도 끊기지 않게 이어가요."
+        "desc": "순찰을 켜두면 작업 공간의 변화와 작업 지도를 계속 확인하면서 긴 작업도 끊기지 않게 이어가요."
       },
       "activity": {
         "title": "활동 패널",
@@ -1247,7 +1244,7 @@
     "cwdSkillsDrop": "폴더나 .zip을 드래그해서 스킬을 설치하세요",
     "deleteSkill": "스킬 삭제",
     "openInFinder": "폴더 열기",
-    "jianLabel": "Jian",
+    "jianLabel": "작업 지도 기록",
     "jianPlaceholder": "이 폴더의 파일을 어떻게 처리할지 어시스턴트에게 알려주세요...",
     "emptyTitle": "책상이 비어 있어요",
     "emptyHint": "책상은 어시스턴트의 순찰 작업 공간이자 모든 대화의 기본 디렉토리예요.\n설정에서 폴더를 지정하세요.",
@@ -1829,8 +1826,8 @@
     "helpAgent": "현재 agent 보기",
     "helpAgentList": "모든 agent 보기",
     "helpAgentSwitch": "agent 전환",
-    "helpJian": "현재 디렉토리의 메모 보기",
-    "helpJianSub": "하위 디렉토리의 메모 보기",
+    "helpJian": "현재 디렉토리의 작업 지도 기록 보기",
+    "helpJianSub": "하위 디렉토리의 작업 지도 기록 보기",
     "helpLs": "데스크 파일 목록",
     "helpLsSub": "하위 디렉토리 파일 목록",
     "helpCat": "파일 내용 보기",

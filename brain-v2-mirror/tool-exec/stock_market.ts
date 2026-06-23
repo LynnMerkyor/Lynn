@@ -397,6 +397,67 @@ async function fetchYesterdayCloseFromTushare(code, { log } = {}) {
   }
 }
 
+function isCryptoQuery(text) {
+  return /比特币|Bitcoin|BTC|crypto|加密货币/i.test(String(text || ''));
+}
+
+function formatNumber(value, digits = 2) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  return n.toLocaleString('en-US', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+async function fetchBitcoinPrice({ log } = {}) {
+  try {
+    const resp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,cny&include_24hr_change=true&include_last_updated_at=true', {
+      headers: { 'User-Agent': 'lobster-brain-v2/0.0' },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!resp.ok) throw new Error('coingecko HTTP ' + resp.status);
+    const json = await resp.json();
+    const btc = json?.bitcoin || {};
+    const usd = Number(btc.usd);
+    const cny = Number(btc.cny);
+    if (!Number.isFinite(usd) && !Number.isFinite(cny)) throw new Error('coingecko empty BTC price');
+    const updated = Number(btc.last_updated_at)
+      ? new Date(Number(btc.last_updated_at) * 1000).toISOString()
+      : '';
+    const change = Number.isFinite(Number(btc.usd_24h_change))
+      ? (Number(btc.usd_24h_change) >= 0 ? '+' : '') + Number(btc.usd_24h_change).toFixed(2) + '%'
+      : '';
+    return [
+      '【加密货币: Bitcoin (BTC)】',
+      Number.isFinite(usd) ? '  价格: ' + formatNumber(usd, 2) + ' USD' : '',
+      Number.isFinite(cny) ? '  约合: ' + formatNumber(cny, 2) + ' CNY' : '',
+      change ? '  24h涨跌幅: ' + change : '',
+      updated ? '  更新时间: ' + updated : '',
+      '  来源: CoinGecko simple price API',
+    ].filter(Boolean).join('\n');
+  } catch (err) {
+    log && log('warn', 'tool-exec/stock_market', 'coingecko BTC failed: ' + err.message);
+  }
+
+  const resp = await fetch('https://api.coinbase.com/v2/exchange-rates?currency=BTC', {
+    headers: { 'User-Agent': 'lobster-brain-v2/0.0' },
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!resp.ok) throw new Error('coinbase HTTP ' + resp.status);
+  const json = await resp.json();
+  const rates = json?.data?.rates || {};
+  const usd = Number(rates.USD);
+  const cny = Number(rates.CNY);
+  if (!Number.isFinite(usd) && !Number.isFinite(cny)) throw new Error('coinbase empty BTC price');
+  return [
+    '【加密货币: Bitcoin (BTC)】',
+    Number.isFinite(usd) ? '  价格: ' + formatNumber(usd, 2) + ' USD' : '',
+    Number.isFinite(cny) ? '  约合: ' + formatNumber(cny, 2) + ' CNY' : '',
+    '  来源: Coinbase exchange-rates API',
+  ].filter(Boolean).join('\n');
+}
+
 // ── 主入口 ───────────────────────────────────────────────
 export async function stockMarket(query, { log, webSearchFn } = {}) {
   const text = String(query || '');
@@ -404,6 +465,7 @@ export async function stockMarket(query, { log, webSearchFn } = {}) {
     const results = [];
     const markets = detectMarketType(text);
     const isCommodity = /金价|黄金|金条|白银|银价|油价|原油|期货|大宗|贵金属|gold|silver|oil|crude|commodity/i.test(text);
+    const isCrypto = isCryptoQuery(text);
     const isHKConnect = /港股通|港股|腾讯|阿里|美团|小米|网易|恒生/i.test(text);
     const isFund = /基金|净值|定投|ETF|指数基金|混合基金/i.test(text);
     const isTopList = /龙虎榜|游资|主力|大单|涨停|跌停/i.test(text);
@@ -416,6 +478,14 @@ export async function stockMarket(query, { log, webSearchFn } = {}) {
           stockTarget = searched;
           break;
         }
+      }
+    }
+
+    if (isCrypto) {
+      try {
+        results.push(await fetchBitcoinPrice({ log }));
+      } catch (err) {
+        log && log('warn', 'tool-exec/stock_market', 'BTC price failed: ' + err.message);
       }
     }
 

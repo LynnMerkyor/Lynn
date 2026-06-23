@@ -17,6 +17,7 @@ vi.mock("../lib/tools/web-fetch.js", () => ({
 }));
 
 import { createStockMarketTool } from "../lib/tools/stock-market.js";
+import { detectKind } from "../lib/tools/stock-market-core.js";
 
 // [v0.76.7] stock-market.js 加了 gold-api.com / open.er-api.com 兜底网络请求,
 // test 必须 stub global fetch 拦截这些 URL,否则会真打外网拿实时价格,
@@ -48,6 +49,14 @@ function makeGlobalFetchStub() {
         text: async () => "",
       };
     }
+    if (u.includes("api.coinbase.com/v2/exchange-rates")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { currency: "BTC", rates: { USD: "63984.10", CNY: "460685.52" } } }),
+        text: async () => "",
+      };
+    }
     // 其他 URL fail-fast,确保测试不依赖意外真实网络
     return {
       ok: false,
@@ -68,6 +77,25 @@ describe("stock market tool", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("classifies explicit index-point prompts as index instead of a Nasdaq stock basket", () => {
+    expect(detectKind("纳斯达克指数最新点位是多少？")).toBe("index");
+    expect(detectKind("纳指科技股今天表现")).toBe("stock");
+  });
+
+  it("classifies bitcoin price prompts as crypto market lookups", async () => {
+    expect(detectKind("比特币现在价格大概多少？")).toBe("crypto");
+
+    const tool = createStockMarketTool();
+    const res = await tool.execute("test", { query: "比特币现在价格大概多少？" });
+    const text = res.content?.[0]?.text || "";
+
+    expect(text).toContain("BTC 最近可用行情");
+    expect(text).toContain("63984.1 USD");
+    expect(text).toContain("Coinbase exchange-rates");
+    expect(res.details?.kind).toBe("crypto");
+    expect(webSearchMock.runSearchQuery).not.toHaveBeenCalled();
   });
 
   it("returns numeric gold prices instead of generic evidence-needed fallback", async () => {
@@ -250,6 +278,37 @@ describe("stock market tool", () => {
     expect(text).toContain("腾讯财经");
     expect(res.details?.provider).toBe("腾讯财经");
     expect(res.details?.directQuotes?.[0]?.symbol).toBe("NVDA");
+  });
+
+  it("returns direct Nasdaq index quotes without falling back to stock baskets", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      const href = String(url);
+      if (href.includes("qt.gtimg.cn/q=usIXIC")) {
+        const body = 'v_usIXIC="200~Nasdaq Composite~.IXIC~26166.60~26517.93~26561.12~123456789~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~~2026-06-22 17:15:59~-351.33~-1.32~26561.12~26125.48~USD~123456789~0";';
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => Buffer.from(body, "utf8"),
+          text: async () => body,
+        };
+      }
+      throw new Error(`unexpected fetch: ${href}`);
+    }));
+
+    const tool = createStockMarketTool();
+    const res = await tool.execute("test", { query: "纳斯达克指数最新点位是多少？", kind: "index" });
+    const text = res.content?.[0]?.text || "";
+
+    expect(webSearchMock.runSearchQuery).not.toHaveBeenCalled();
+    expect(webFetchMock.fetchWebContent).not.toHaveBeenCalled();
+    expect(res.details?.kind).toBe("index");
+    expect(res.details?.provider).toBe("腾讯财经");
+    expect(res.details?.directQuotes?.[0]?.symbol).toBe("IXIC");
+    expect(res.details?.directQuotes?.[0]?.name).toBe("纳斯达克指数");
+    expect(text).toContain("IXIC 最近可用行情");
+    expect(text).toContain("纳斯达克指数");
+    expect(text).toMatch(/26166\.6(?:0)? USD/);
+    expect(text).not.toContain("AAPL");
   });
 
   it("returns direct FX rates instead of fetching garbled forex pages", async () => {

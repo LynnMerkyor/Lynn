@@ -998,6 +998,7 @@ export class Agent {
         + "3. **browser** — 只在以下情况使用：页面需要登录/身份验证、需要填表或点击交互、web_fetch 返回的内容为空或不完整（JS 动态渲染页面）、需要查看页面视觉布局\n\n"
         + "对于「今日/最新/实时/行情/新闻/调研/官方文档」这类任务：若当前链路提供了实时信息工具（例如 stock_market、weather、sports_score、live_news），优先使用；否则先用 **web_search** 找结果，再对最相关的 1-2 个 URL 用 **web_fetch** 深读，不要只看搜索标题就下结论。\n"
         + "对于「股价/金价/基金/汇率/指数/体育比分/天气/热点资讯」这类任务：优先交叉核对 2 个来源；如果 web_search 已提示推荐来源（如 AkShare、腾讯自选股、新浪财经、腾讯体育等），优先从这些来源里挑结果继续深读。\n\n"
+        + "对于 Lynn 内部 UX 文案、Session Map/工作地图、右侧工作台、按钮 tooltip、状态文案、验收标准这类请求，除非用户明确要求查外部来源，否则直接根据当前产品语境回答，不要把内部概念拿去公网搜索。\n\n"
         + "**禁止**在 web_search 或 web_fetch 能完成的场景下启动浏览器。浏览器启动成本高、会打开窗口干扰用户。"
       : "\n## Web Tool Priority\n\n"
         + "When fetching web information, choose tools in this order:\n"
@@ -1006,6 +1007,7 @@ export class Agent {
         + "3. **browser** — Only use when: the page requires login/authentication, form filling or click interaction is needed, web_fetch returns empty or incomplete content (JS-rendered pages), or you need to see visual layout\n\n"
         + "For queries like today/latest/live/market/news/research/official docs, use route-provided real-time tools first when available (for example stock_market, weather, sports_score, or live_news). Otherwise use **web_search** first and then **web_fetch** the most relevant 1-2 URLs before drawing conclusions.\n"
         + "For stock prices, gold prices, funds, FX, indexes, sports scores, weather, or breaking-news summaries, cross-check at least two sources. If web_search suggests preferred sources (for example AkShare, Tencent quotes, Sina Finance, or sports/news sites), use those results first for deeper reading.\n\n"
+        + "For Lynn-internal UX copy, Session Map/work map, right workspace, button tooltips, status copy, or acceptance criteria, answer from the current product context unless the user explicitly asks for external sources; do not web-search an internal concept as a public brand.\n\n"
         + "**Do not** launch the browser when web_search or web_fetch can do the job. Browser startup is expensive and opens a window that interrupts the user."
     );
 

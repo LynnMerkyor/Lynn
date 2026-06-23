@@ -23,6 +23,43 @@ function todayCnText() {
   }
 }
 
+function todayDateParts() {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const obj = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+    return { year: obj.year, month: obj.month, day: obj.day };
+  } catch {
+    const d = new Date(Date.now() + 8 * 3600 * 1000);
+    return {
+      year: String(d.getUTCFullYear()),
+      month: String(d.getUTCMonth() + 1).padStart(2, '0'),
+      day: String(d.getUTCDate()).padStart(2, '0'),
+    };
+  }
+}
+
+function todayDatePattern() {
+  const { year, month, day } = todayDateParts();
+  const m = String(Number(month));
+  const d = String(Number(day));
+  return new RegExp([
+    year + '[-/年]\\s*0?' + m + '[-/月]\\s*0?' + d + '(?:日)?',
+    '0?' + m + '月\\s*0?' + d + '日',
+    '0?' + m + '[-/]0?' + d,
+  ].join('|'));
+}
+
+function isStrictSameDayNewsQuery(query) {
+  const text = compactLine(query);
+  if (!/(?:今天|今日|当前|现在|实时|latest|today|current)/i.test(text)) return false;
+  return /(?:新闻|消息|更新|动态|热点|进展|news|update)/i.test(text);
+}
+
 function buildExpansionQueries(query, days) {
   const raw = compactLine(String(query || '').replace(/(?:昨晚|昨夜|昨天|昨日|前天|前晚|前日|今早|今晨|今晚|今夜|凌晨|清晨|早间|晚间|刚刚|刚才|方才|此前|日前|早些时候|稍早|yesterday)/gi, ' '));
   const core = compactLine(raw.replace(/(?:请|帮我|查一下|查查|搜索|查询|全网|今天|今日|最新|新闻|有什么|哪些|一下)/g, ' ')) || raw;
@@ -50,27 +87,46 @@ function isOpenAIModelReleaseQuery(query) {
   return !/(?:怎么用|API\s*key|报错|配置|价格|pricing|账单|billing)/i.test(text);
 }
 
+function isMarketMovementLookup(query) {
+  const text = compactLine(query);
+  if (!/(?:A\s*股|a\s*股|A股|a股|沪深|上证|深证|创业板|股市|行情|异动|板块|涨跌|领涨|领跌|指数)/i.test(text)) return false;
+  return !/(?:新闻|消息|政策|监管|公告|舆情|发布会|news|policy|announcement)/i.test(text);
+}
+
 function openAIReleaseFallback(raw) {
   return [
     '【OpenAI 官方模型发布资料】',
     '查询：' + raw,
-    '说明：官方搜索超时后使用稳定官方链接候选；回答需以原页面为准。',
+    '说明：官方搜索超时后只提供官方入口候选；不得把候选链接解读为已确认的新模型。',
     '',
-    '1. Introducing GPT-5.5 - OpenAI',
+    '1. OpenAI News',
     '来源: openai.com',
-    'URL: https://openai.com/index/introducing-gpt-5-5/',
-    '摘要: GPT-5.5 and GPT-5.5 Pro are available in ChatGPT and Codex, with stronger coding, online research, data analysis, document and spreadsheet work, software operation, and tool-use capabilities.',
+    'URL: https://openai.com/news/',
+    '摘要: OpenAI 官方新闻入口；具体最近发布的新模型必须以页面原文为准。',
     '',
     '2. Model Release Notes | OpenAI Help Center',
     '来源: help.openai.com',
     'URL: https://help.openai.com/en/articles/9624314-model-release-notes',
-    '摘要: GPT-5.5 Instant Update (May 28, 2026) improves response style and quality in ChatGPT and the API.',
+    '摘要: OpenAI 帮助中心模型发布说明；如本轮未抓到具体条目，应明确证据不足。',
+    '',
+    '3. OpenAI API model docs',
+    '来源: platform.openai.com',
+    'URL: https://platform.openai.com/docs/models',
+    '摘要: OpenAI API 官方模型列表；具体可用模型以原页面为准。',
   ].join('\n');
 }
 
 export async function liveNews(query, { log, webSearchFn } = {}) {
   const raw = compactLine(query);
   if (!raw) return JSON.stringify({ error: 'empty query' });
+  if (isMarketMovementLookup(raw)) {
+    return [
+      '【实时新闻扩展检索】',
+      '查询：' + raw,
+      '状态：market_lookup_misroute',
+      '说明：这是股市行情/盘面异动问题，不适合用 live_news 三窗口新闻扩展；请改用 stock_market 获取指数、板块或行情快照，避免新闻搜索拖慢或引入旧日期内容。',
+    ].join('\n');
+  }
   if (typeof webSearchFn !== 'function') {
     return JSON.stringify({ error: 'live_news 需要注入 webSearchFn' });
   }
@@ -89,8 +145,9 @@ export async function liveNews(query, { log, webSearchFn } = {}) {
           text.slice(0, 2600) + (text.length > 2600 ? '\n...（已截断）' : ''),
           '',
           '官方链接候选：',
-          '- https://openai.com/index/introducing-gpt-5-5/',
+          '- https://openai.com/news/',
           '- https://help.openai.com/en/articles/9624314-model-release-notes',
+          '- https://platform.openai.com/docs/models',
         ].join('\n');
       }
     } catch {
@@ -99,11 +156,15 @@ export async function liveNews(query, { log, webSearchFn } = {}) {
     return openAIReleaseFallback(raw);
   }
 
-  const windows = [
-    { days: 1, label: '今日/最近36小时' },
-    { days: 3, label: '最近3天' },
-    { days: 7, label: '最近7天' },
-  ];
+  const strictSameDay = isStrictSameDayNewsQuery(raw);
+  const currentDatePattern = todayDatePattern();
+  const windows = strictSameDay
+    ? [{ days: 1, label: '今日/最近36小时' }]
+    : [
+        { days: 1, label: '今日/最近36小时' },
+        { days: 3, label: '最近3天' },
+        { days: 7, label: '最近7天' },
+      ];
   const sections = [];
   for (const win of windows) {
     const qs = buildExpansionQueries(raw, win.days);
@@ -118,6 +179,7 @@ export async function liveNews(query, { log, webSearchFn } = {}) {
       const value = item.status === 'fulfilled' ? item.value : null;
       const text = compactLine(value && value.text);
       if (!text) continue;
+      if (strictSameDay && !currentDatePattern.test(text)) continue;
       rows.push('【搜索：' + value.q + '】\n' + text.slice(0, 1300) + (text.length > 1300 ? '\n...（已截断）' : ''));
       if (rows.length >= 2) break;
     }
@@ -126,6 +188,17 @@ export async function liveNews(query, { log, webSearchFn } = {}) {
     }
   }
   if (!sections.length) {
+    if (strictSameDay) {
+      log && log('info', 'tool-exec/live_news', 'no same-day results for: ' + raw);
+      return [
+        '【实时新闻扩展检索】',
+        '查询：' + raw,
+        '状态：no_same_day_evidence',
+        '日期：' + todayCnText(),
+        '说明：未查到日期明确匹配今天的可靠新闻更新；为避免把旧日期内容冒充“今天”，本次不展开最近3天/最近7天背景清单。',
+        '最终回答要求：直接说明未查到今天的可靠更新；不要列出旧日期新闻、背景新闻或传闻清单。',
+      ].join('\n');
+    }
     log && log('info', 'tool-exec/live_news', 'no results for: ' + raw);
     return JSON.stringify({ error: 'no news results' });
   }
@@ -134,6 +207,7 @@ export async function liveNews(query, { log, webSearchFn } = {}) {
     '【实时新闻扩展检索】',
     '查询：' + raw,
     '说明：国内默认不依赖 Google News RSS；已自动扩展到 今日/最近36小时、最近3天、最近7天 三个窗口。部分结果可能需要打开原文核验日期。',
+    '新鲜度规则：如果用户问“今天/今日/当前/最新”，最终回答只可把今日/最近36小时且日期明确匹配的来源当作结论；近3天/近7天内容只能作为背景。没有同日证据时，请直接说“未查到今天的可靠更新”，不要展开旧日期新闻清单。',
     '',
     sections.join('\n\n---\n\n'),
   ].join('\n');

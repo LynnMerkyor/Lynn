@@ -8,7 +8,6 @@ import { ContextMenu } from './ContextMenu';
 import { DESK_SORT_KEY, type SortMode, type CtxMenuState } from './desk/desk-types';
 import { DeskWorkspaceButton, DeskBreadcrumb, DeskSortButton } from './desk/DeskToolbar';
 import { DeskFileList } from './desk/DeskFileList';
-import { JianEditor } from './desk/DeskEditor';
 import { DeskDropZone } from './desk/DeskDropZone';
 import { DeskEmptyOverlay } from './desk/DeskEmptyOverlay';
 import { GalleryPanel } from './desk/GalleryPanel';
@@ -137,7 +136,6 @@ export function DeskSection() {
                 {deskGalleryOpen && <GalleryPanel />}
               </>
             )}
-            <JianEditor />
             <DeskEmptyOverlay />
           </>
         )}

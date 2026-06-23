@@ -19,43 +19,6 @@ type CapabilityChip = {
   title?: string;
 };
 
-function countJianTodos(content: string | null) {
-  const text = String(content || '');
-  const matches = text.match(/^- \[( |x|X)\] /gm) || [];
-  const done = matches.filter((item) => /\[(x|X)\]/.test(item)).length;
-  const pending = matches.length - done;
-  return { pending, done };
-}
-
-function summarizeJianFocus(content: string | null) {
-  const lines = String(content || '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const preferred = lines.find((line) => /^- \[ \] /.test(line))
-    || lines.find((line) => line.startsWith('# '))
-    || lines.find((line) => !line.startsWith('>'));
-  if (!preferred) return '';
-  const normalized = preferred
-    .replace(/^#\s+/, '')
-    .replace(/^- \[[ xX]\]\s+/, '')
-    .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
-    .trim();
-  if (!normalized) return '';
-  return normalized.length > 28 ? `${normalized.slice(0, 28)}…` : normalized;
-}
-
-function getJianPendingPreviews(content: string | null, max = 3): string[] {
-  return String(content || '')
-    .split('\n')
-    .filter((line) => /^- \[ \] /.test(line.trim()))
-    .slice(0, max)
-    .map((line) => {
-      const text = line.trim().replace(/^- \[ \]\s+/, '').replace(/\[(.*?)\]\((.*?)\)/g, '$1').trim();
-      return text.length > 24 ? `${text.slice(0, 24)}…` : text;
-    });
-}
-
 export function SidebarCapabilityBar() {
   const tt = useCallback((key: string, fallback: string) => {
     const value = window.t ? window.t(key) : key;
@@ -65,7 +28,6 @@ export function SidebarCapabilityBar() {
   const agentName = useStore((s) => s.agentName) || 'Lynn';
   const agentYuan = useStore((s) => s.agentYuan) || 'lynn';
   const [expanded, setExpanded] = useState(false);
-  const deskJianContent = useStore((s) => s.deskJianContent);
   const automationCount = useStore((s) => s.automationCount);
   const capabilitySnapshot = useStore((s) => s.capabilitySnapshot);
   const taskSnapshot = useStore((s) => s.taskSnapshot);
@@ -109,7 +71,7 @@ export function SidebarCapabilityBar() {
     useStore.getState().requestInputFocus();
   }, []);
 
-  const openCapabilityPanel = useCallback((target: 'skills' | 'mcp') => {
+  const openCapabilityPanel = useCallback((target: 'skills') => {
     useStore.setState({ welcomeVisible: false });
     window.dispatchEvent(new CustomEvent('desk-capability-open', { detail: { target } }));
   }, []);
@@ -118,13 +80,6 @@ export function SidebarCapabilityBar() {
     useStore.setState({
       welcomeVisible: false,
       activePanel: 'automation',
-    });
-  }, []);
-
-  const openDeskPanel = useCallback(() => {
-    useStore.setState({
-      welcomeVisible: false,
-      jianOpen: true,
     });
   }, []);
 
@@ -176,7 +131,6 @@ export function SidebarCapabilityBar() {
       tt('sidebar.capability.shell', '跑命令'),
     ];
     if (Number(capabilities?.projectInstructions?.layers || 0) > 0) parts.push(tt('sidebar.capability.instructions', '已读项目指令'));
-    if ((capabilities?.mcp?.tools || 0) > 0) parts.push(tt('sidebar.capability.mcp', '能用 MCP'));
     return joinSummary(parts);
   })();
 
@@ -189,42 +143,16 @@ export function SidebarCapabilityBar() {
     return tt('sidebar.capability.continueIdle', '工作区就绪 · 试试"帮我看看项目"');
   })();
 
-  const jianStats = countJianTodos(deskJianContent);
-  const jianFocus = summarizeJianFocus(deskJianContent);
-  const jianPreviews = getJianPendingPreviews(deskJianContent);
-  const patrolLabel = deskPatrolStatus?.text || tt('desk.patrolIdle', '打开笺后会自动巡检一次');
-  const automationLabel = deskAutomationStatus?.text || tt('desk.automationIdle', '笺里的重复待办会自动变成自动任务');
+  const patrolLabel = deskPatrolStatus?.text || tt('desk.patrolIdle', '工作地图会在巡检后更新状态');
+  const automationLabel = deskAutomationStatus?.text || tt('desk.automationIdle', '自动任务会从对话和工作台里的计划生成');
 
   const chips: CapabilityChip[] = [
-    ...(jianStats.pending > 0 ? [{
-      key: 'todo',
-      label: tt('sidebar.capability.todo', '待办'),
-      count: jianStats.pending,
-      tone: 'attention' as const,
-      onClick: openDeskPanel,
-    }] : []),
     ...(automationCount > 0 ? [{
       key: 'automation',
       label: tt('sidebar.capability.automation', '自动任务'),
       count: automationCount,
       tone: 'attention' as const,
       onClick: openAutomationPanel,
-    }] : []),
-    ...(jianStats.done > 0 && expanded ? [{
-      key: 'done',
-      label: tt('sidebar.capability.done', '完成'),
-      count: jianStats.done,
-      tone: 'quiet' as const,
-      onClick: openDeskPanel,
-    }] : []),
-    ...(expanded ? [{
-      key: 'fleet',
-      label: tt('sidebar.capability.fleet', 'Workers'),
-      tone: 'quiet' as const,
-      title: tt('sidebar.capability.fleetTip', 'Fleet 指挥台:把任务拆给多个 CLI worker 并行干,每个独立 worktree'),
-      onClick: () => {
-        useStore.setState({ welcomeVisible: false, activePanel: 'fleet' });
-      },
     }] : []),
     ...(changesSummary.linesAdded + changesSummary.linesRemoved > 0 ? [{
       key: 'changes',
@@ -239,11 +167,6 @@ export function SidebarCapabilityBar() {
       label: tt('sidebar.capability.skillsCenter', '技能中心'),
       tone: 'quiet' as const,
       onClick: () => openCapabilityPanel('skills'),
-    }, {
-      key: 'mcp',
-      label: tt('sidebar.capability.mcpHub', 'MCP 接入'),
-      tone: 'quiet' as const,
-      onClick: () => openCapabilityPanel('mcp'),
     }] : []),
   ];
 
@@ -282,22 +205,6 @@ export function SidebarCapabilityBar() {
               <span className="sidebar-capability-state-label">{tt('sidebar.capability.automation', '自动任务')}</span>
               <span>{automationLabel}</span>
             </div>
-            {jianFocus ? (
-              <div className="sidebar-capability-state-line">
-                <span className="sidebar-capability-state-label">{tt('sidebar.capability.jian', '笺')}</span>
-                <span>{jianFocus}</span>
-              </div>
-            ) : null}
-            {jianPreviews.length > 0 && (
-              <div className="sidebar-capability-jian-previews" onClick={openDeskPanel} role="button" tabIndex={0}>
-                {jianPreviews.map((text, i) => (
-                  <div key={i} className="sidebar-capability-jian-preview-item">
-                    <span className="sidebar-capability-jian-checkbox">☐</span>
-                    <span>{text}</span>
-                  </div>
-                ))}
-              </div>
-            )}
           </>
         )}
       </div>

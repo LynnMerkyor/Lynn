@@ -199,8 +199,8 @@ export function createSessionResourceLoader(opts: {
         if (turnCount <= 2 && !sessionEntry._jianHintInjected) {
           sessionEntry._jianHintInjected = true;
           const jianHint = isZh
-            ? "【一次性提示】如果用户提到了持续要推进的任务或计划，在回复末尾自然地加一句：「如果有持续要推进的事，可以写在右侧的笺里（⌘J 打开），我会定期去看并主动推进。」不要每次都说，只在第一次合适的时机提一次。"
-            : "[One-time hint] If the user mentions ongoing tasks or plans, naturally add at the end of your reply: 'If you have ongoing tasks, you can write them in the Jian panel on the right (⌘J to toggle). I'll check periodically and work on them proactively.' Only mention this once, at an appropriate moment.";
+            ? "【一次性提示】如果用户提到了持续要推进的任务或计划，在回复末尾自然地加一句：「需要我持续跟进的话，可以让我把它设成自动任务。」不要每次都说，只在第一次合适的时机提一次。"
+            : "[One-time hint] If the user mentions ongoing tasks or plans, naturally add at the end of your reply: 'If you want me to keep following up on this, ask me to turn it into an automation.' Only mention this once, at an appropriate moment.";
           extras.push(jianHint);
         }
 

@@ -27,7 +27,7 @@ const WorkspaceIcon = () => (
   </svg>
 );
 
-const JianIcon = () => (
+const WorkMapIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
     <polyline points="14 2 14 8 20 8" />
@@ -66,8 +66,8 @@ function TutorialCard({ icon, title, desc }: {
   );
 }
 
-const PREVIEW_REPLY_ZH = '我看见你的消息了。我可以读写文件、跑命令、整理笔记，先告诉我你今天想做什么吧。';
-const PREVIEW_REPLY_EN = "I see you — I can read/write files, run commands, and tidy notes. Tell me what you want to get done today.";
+const PREVIEW_REPLY_ZH = '我看见你的消息了。我可以读写文件、跑命令、跟进工作地图，先告诉我你今天想做什么吧。';
+const PREVIEW_REPLY_EN = "I see you — I can read/write files, run commands, and keep track of the work map. Tell me what you want to get done today.";
 
 /**
  * StreamingPreview — animates a fake chat reply token-by-token so the user
@@ -169,9 +169,9 @@ function InteractiveTutorial({ isZh, t }: { isZh: boolean; t: (key: string, vars
         <div className="tutorial-interactive-title">{t('onboarding.tutorial.interactive.step3Title')}</div>
         <Multiline className="tutorial-interactive-desc" text={t('onboarding.tutorial.interactive.step3Desc')} />
         <div className="tutorial-preview-sidebar-mock">
-          <div className="tutorial-preview-sidebar-row is-active">{isZh ? '今天的笺' : "Today's jian"}</div>
-          <div className="tutorial-preview-sidebar-row">{isZh ? '本周回顾' : 'Weekly review'}</div>
-          <div className="tutorial-preview-sidebar-row">{isZh ? '与 Lynn 的随手聊' : 'Casual chat with Lynn'}</div>
+          <div className="tutorial-preview-sidebar-row is-active">{isZh ? '工作地图' : 'Work map'}</div>
+          <div className="tutorial-preview-sidebar-row">{isZh ? '自动任务' : 'Automations'}</div>
+          <div className="tutorial-preview-sidebar-row">{isZh ? '与 Lynn 的对话' : 'Chat with Lynn'}</div>
         </div>
       </div>
     </div>
@@ -227,7 +227,7 @@ export function TutorialStep({ preview, showError, track }: TutorialStepProps) {
           desc={t('onboarding.tutorial.workspace.desc')}
         />
         <TutorialCard
-          icon={<JianIcon />}
+          icon={<WorkMapIcon />}
           title={t('onboarding.tutorial.jian.title')}
           desc={t('onboarding.tutorial.jian.desc')}
         />

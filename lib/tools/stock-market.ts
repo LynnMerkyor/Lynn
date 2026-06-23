@@ -59,6 +59,7 @@ import {
 } from "./stock-market-core.js";
 import {
   collectAStockQuotes,
+  collectIndexDirectQuotes,
   collectOilDirectQuotes,
   collectStooqQuotes,
   extractHongKongStockSymbols,
@@ -144,6 +145,32 @@ async function fetchFxMarketSource(query: unknown): Promise<MarketSource | null>
     source: fx.source,
     host: "open.er-api.com",
     timestamp: fx.updatedAt,
+  };
+}
+
+function inferCryptoSymbol(query: unknown): { symbol: string; name: string } {
+  const text = String(query || "");
+  if (/以太坊|ethereum|\beth\b/i.test(text)) return { symbol: "ETH", name: "以太坊" };
+  return { symbol: "BTC", name: "比特币" };
+}
+
+async function fetchCryptoQuote(query: unknown): Promise<MarketQuote | null> {
+  const { symbol, name } = inferCryptoSymbol(query);
+  const url = `https://api.coinbase.com/v2/exchange-rates?currency=${encodeURIComponent(symbol)}`;
+  const json = await fetchJsonWithTimeout(url, 4500);
+  const usd = Number(json?.data?.rates?.USD);
+  if (!Number.isFinite(usd)) return null;
+  const cny = Number(json?.data?.rates?.CNY);
+  return {
+    symbol,
+    name: cny && Number.isFinite(cny)
+      ? `${name}（约 ${formatPrice(cny, 2)} CNY）`
+      : name,
+    close: formatPrice(usd, 2),
+    date: new Date().toISOString(),
+    source: "Coinbase exchange-rates",
+    url,
+    currency: "USD",
   };
 }
 
@@ -693,6 +720,13 @@ async function collectMarketSources(query: string, kind: MarketKind, market = ""
     directQuotes = concept.directQuotes || [];
     conceptSources = concept.sources || [];
   }
+  if (kind === "index" && !directQuotes.length) {
+    directQuotes = await collectIndexDirectQuotes(query, symbol).catch(() => []);
+  }
+  if (kind === "crypto" && !directQuotes.length) {
+    const quote = await fetchCryptoQuote(query).catch(() => null);
+    directQuotes = quote ? [quote] : [];
+  }
   if (directQuotes.length) {
     return {
       provider: directQuotes[0]?.source || "direct_quote",
@@ -901,10 +935,16 @@ export function createStockMarketTool() {
             })),
             directQuotes: (directQuotes || []).map((item) => ({
               symbol: item.symbol,
+              name: item.name,
               close: item.close,
               currency: item.currency,
               date: item.date,
               time: item.time,
+              open: item.open,
+              high: item.high,
+              low: item.low,
+              change: item.change,
+              pct: item.pct,
               source: item.source,
               url: item.url,
             })),

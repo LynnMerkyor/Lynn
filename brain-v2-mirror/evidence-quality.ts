@@ -21,6 +21,9 @@ const PREDICTION_RE = /(预测|概率|热门|看好|prediction|probability|forec
 const ODDS_RE = /(胜率|赔率|盘口|让球|夺冠|胜负|odds|betting|win rate)/i;
 const SOURCE_REQUEST_RE = /(官方|官网|来源|出处|引用|参考|链接|原文|source|citation|reference|official|link)/i;
 const EVENT_STAGE_DATE_RE = /(半决赛|准决赛|四分之一决赛|八强|决赛|总决赛|semifinal|semi-final|semi final|quarterfinal|quarter-final|final)/i;
+const PRODUCT_RELEASE_RE = /(最新版|新版本|版本|发布|发售|开售|上市|开卖|出了吗|出了没|可以买|可购买|能买|购买|在售|售卖|release\s*notes?|released?|available|shipping|launch(?:ed)?|version|update|changelog|firmware|driver|sdk|software|buy\s*now|for\s*sale|purchase|marketplace)/i;
+const PRODUCT_OR_TECH_RE = /(DGX|RTX|CUDA|GPU|NVIDIA|英伟达|OpenAI|ChatGPT|Claude|Gemini|Kimi|Qwen|GLM|StepFun|iPhone|Mac|Windows|Android|Python|Node\.?js|Chrome|Safari|SDK|API|model|模型|产品|软件|固件|驱动|系统|芯片|显卡|服务器|工作站)/i;
+const DGX_SPARK_RE = /(?:^|\b)DGX\s*Spark\b|英伟达.*DGX\s*Spark|NVIDIA.*DGX\s*Spark/i;
 
 export function isSportsScoreOrScheduleQuery(query: unknown): boolean {
   const q = String(query || "");
@@ -45,10 +48,17 @@ export function isEventPredictionQuery(query: unknown): boolean {
   return ODDS_RE.test(q) || (PREDICTION_RE.test(q) && EVENT_SHAPE_RE.test(q));
 }
 
+export function isProductReleaseOrVersionQuery(query: unknown): boolean {
+  const q = String(query || "");
+  if (DGX_SPARK_RE.test(q)) return true;
+  return PRODUCT_RELEASE_RE.test(q) && (PRODUCT_OR_TECH_RE.test(q) || /[A-Za-z][A-Za-z0-9+.-]{1,}/.test(q));
+}
+
 export function classifySearchEvidencePolicy(query: unknown): EvidencePolicy {
   const q = String(query || "");
   if (!q.trim()) return { grade: "fast", reason: "empty" };
   if (SOURCE_REQUEST_RE.test(q)) return { grade: "source", reason: "explicit-source-request" };
+  if (isProductReleaseOrVersionQuery(q)) return { grade: "source", reason: "product-release-or-version" };
   if (isSportsScoreOrScheduleQuery(q) || isEventPredictionQuery(q)) {
     return { grade: "source", reason: "event-score-schedule-or-prediction" };
   }
@@ -98,10 +108,22 @@ export function buildEvidencePolicyHint(query: unknown, now = new Date()): strin
     `- 当前北京时间日期: ${beijingDateStamp(now)}。遇到“今天/今晚/昨晚/最新/实时”必须按这个日期解释，不要沿用旧训练知识。`,
     "- 先把工具返回压缩成“已知事实 / 证据缺口 / 可回答结论”，再作答；不要在同一回答里先说未开始又引用已开赛证据。",
   ];
+  if (isFreshIntent(q)) {
+    lines.push("- 对“今天/当前/最新/实时”问题，如果证据只包含早于当前日期的来源，不要展开旧日期明细或把旧来源当今天结论；只说明“未查到同日/当前有效证据”，必要时用一句话标注旧来源不足。");
+  }
   if (isSportsScoreOrScheduleQuery(q) || isEventPredictionQuery(q)) {
     lines.push("- 赛事/赛程/比分/预测属于高波动问题：只列工具证据支持的时间、队伍、比分；证据冲突时明确说不确定并说明冲突。");
+  } else if (isProductReleaseOrVersionQuery(q)) {
+    lines.push("- 产品发布/版本/上市状态属于高波动问题：优先官方 release notes、产品页、文档或商城；搜索结果只提到上位品牌但没命中具体产品名时，不得当作有效证据。");
+    lines.push("- 最终回答必须显式列出可用的官方 URL（不要只写“官方文档/官方产品页”）；如果只有第三方/代理商/新闻稿线索，必须标为未核实线索。");
+    if (DGX_SPARK_RE.test(q)) {
+      lines.push("- DGX Spark 题必须优先引用 NVIDIA 官方来源：docs.nvidia.com、marketplace.nvidia.com 或 nvidia.com；不要用丽台/代理商/泛硬件站替代官方依据。");
+    }
   } else if (isFreshIntent(q) && isVolatileFactQuery(q)) {
-    lines.push("- 当前行情/天气/政策/人员等高波动事实：优先同日或最新来源；如果来源日期偏旧，必须标注数据日期。");
+    lines.push("- 当前行情/天气/政策/人员等高波动事实：优先同日或最新来源；偏旧来源只能作为“证据不足”的说明，不要展开成主要答案。");
+    if (/(?:A\s*股|a\s*股|A股|a股|沪深|上证|深证|创业板|股市|行情|异动)/i.test(q)) {
+      lines.push("- 询问“今天/当前”的股市异动时，如果证据只包含旧交易日数据，不要展开旧日期明细；最多一句说明“旧数据不能回答今天问题”，并明确等待开盘或补充同日来源。");
+    }
   } else if (isComparativeOrNumericResearch(q)) {
     lines.push("- 人数、收费、榜单、机构对比等数字研究：不要凭常识补数；没有公开数据时明确写“公开资料不足”。");
   }
@@ -118,6 +140,8 @@ export function enrichEvidenceSearchQuery(query: unknown): string {
     additions.push(EVENT_STAGE_DATE_RE.test(q)
       ? "official schedule dates semifinal final fixtures source"
       : "official schedule results fixtures score date source");
+  } else if (isProductReleaseOrVersionQuery(q)) {
+    additions.push("official release notes product page documentation version availability source");
   } else if (isFreshIntent(q) && isVolatileFactQuery(q)) {
     additions.push("latest official source timestamp");
   } else if (isComparativeOrNumericResearch(q)) {

@@ -23,7 +23,7 @@ export const SERVER_TOOLS = [
     type: 'function',
     function: {
       name: 'web_search',
-      description: 'Search the web for real-time information (news, prices, docs, current events). Returns aggregated results from multiple sources.',
+      description: 'Search the web for real-time information (news, prices, docs, current events). Returns aggregated results from multiple sources. Do not use for Lynn-internal UX copy, Session Map/work map labels, tooltip writing, or product wording unless the user explicitly asks to look up external sources.',
       parameters: { type: 'object', properties: { query: { type: 'string', description: 'Search query (any language)' } }, required: ['query'] },
     },
   },
@@ -39,8 +39,14 @@ export const SERVER_TOOLS = [
     type: 'function',
     function: {
       name: 'weather',
-      description: 'Get current weather and 3-day forecast for a city.',
-      parameters: { type: 'object', properties: { city: { type: 'string', description: 'City name in Chinese or English' } }, required: ['city'] },
+      description: 'Get current weather, weather alerts, and 3-day forecast for a city.',
+      parameters: {
+        type: 'object',
+        properties: {
+          city: { type: 'string', description: 'City name in Chinese or English' },
+          query: { type: 'string', description: 'Original weather question, especially for alerts/warnings' },
+        },
+      },
     },
   },
   {
@@ -130,7 +136,7 @@ export const SERVER_TOOLS = [
     type: 'function',
     function: {
       name: 'live_news',
-      description: 'Get latest breaking news on a topic. Returns recent headlines and summaries (今日/3天/7天 三窗口).',
+      description: 'Get latest breaking news on a topic. Returns recent headlines and summaries (今日/3天/7天 三窗口). Do not use for stock/index/market movement or A-share anomaly questions; use stock_market for those.',
       parameters: { type: 'object', properties: { query: { type: 'string', description: 'News topic to search for' } }, required: ['query'] },
     },
   },
@@ -224,7 +230,7 @@ export async function executeServerTool(name, argsStr, { log } = {}) {
     switch (name) {
       case 'web_search':       return (await webSearch(args.query || '', { log })) || JSON.stringify({ error: 'no results' });
       case 'web_fetch':        return await webFetch(args.url || '', args.max_length || 8000, { log });
-      case 'weather':          return await weather(args.city || args.location || args.query || '北京', { log, webSearchFn: (q) => webSearch(q, { log }) });
+      case 'weather':          return await weather(args.query || args.city || args.location || '北京', { log, webSearchFn: (q) => webSearch(q, { log }) });
       case 'exchange_rate':    return await exchangeRate(args.query || '');
       case 'express_tracking': return await expressTracking(args.query || '');
       case 'sports_score':     return await sportsScore(args.query || '');
@@ -286,6 +292,77 @@ export function wantsGatedTools(messages) {
   return DOC_INTENT_RE.test(text);
 }
 
+const INTERNAL_LYNN_UX_RE = /(?:\bLynn\b|Session\s*Map|工作地图|右侧工作台|左侧会话列表|会话\s*digest|Huge\s*节点|从此分支|数字徽标|状态文案|验收标准|信息架构|tooltip|长会话|7GB|卡死|健康检查|搜索结果|伪相关|证据优先|搜索\s*Agent|工具链|聊天工具链|复核模型|主模型|结论冲突|产品上怎么展示|CLI\s*和\s*GUI|共用内核|回归测试矩阵|Vitest|beforeEach|React\s+useMemo|Electron\s+主进程|前端组件|业务规则)/i;
+const UX_COPY_OR_DESIGN_RE = /(?:写|改写|给|设计|拟定|生成|整理|规整|避免什么|解释|为什么|怎么|展示|判断|检查|矩阵|流程|规则|策略|用途|例子|文案|按钮|tooltip|状态|标签|验收标准|信息架构|草案|伪代码|copy|wording|label)/i;
+const EXPLICIT_EXTERNAL_LOOKUP_RE = /(?:(?<!检)(?<!复)查|查询|搜索(?!结果|\s*Agent)|检索|访问|打开|联网|来源|官网|官方|最新|实时|下载页|Gitee|GitHub|release|版本号|look\s*up|search|visit|fetch|source|official|latest|current)/i;
+const INTERNAL_SEARCH_FAILURE_RE = /(?:三次|多次|几次)?搜索(?:都)?没(?:有)?结果|搜索失败|工具成功但最后可能空答/i;
+const CODE_SNIPPET_TOOL_SUPPRESS_RE = /(?:写|给|提供|生成|解释).{0,40}(?:TypeScript|JavaScript|Node\.?js|CSS|bash|shell|zod|Electron|React|useMemo|Vitest|JSON\s*schema|IPC\s*handler|函数|schema|伪代码|布局|beforeEach|命令|行数|wc|find)/i;
+const CODE_EXECUTION_RE = /(?:运行|执行|帮我跑|实际跑|检查|验证|写入|保存到|创建文件|改文件|run|execute|write\s+to|save\s+to|create\s+file)/i;
+const DIRECT_SPORTS_SCORE_RE = /(?:世界杯|世足|FIFA|NBA|总决赛|半决赛|足球|篮球|英格兰|克罗地亚|美国队|马刺|尼克斯).{0,24}(?:赛程|比分|赛果|结果|几场|对阵|比赛|夺冠|预测)|(?:赛程|比分|赛果|结果|几场|对阵|比赛|夺冠|预测).{0,24}(?:世界杯|世足|FIFA|NBA|总决赛|半决赛|足球|篮球|英格兰|克罗地亚|美国队|马刺|尼克斯)/i;
+const DIRECT_STOCK_MARKET_RE = /(?:纳斯达克指数|纳指|道琼斯|道指|标普(?:500)?|上证指数|上证综指|沪指|深证成指|创业板指|恒生指数|恒指|比特币|Bitcoin|BTC|黄金|金价|国际金价|英伟达|苹果公司|特斯拉|NVDA|AAPL|TSLA|NASDAQ|Nasdaq|Dow\s*Jones|S&P\s*500).{0,24}(?:点位|多少|最新|行情|涨跌|收盘|现在|大概|价格|股价|报价|quote|price|level)|(?:点位|多少|最新|行情|涨跌|收盘|现在|大概|价格|股价|报价|quote|price|level).{0,24}(?:纳斯达克指数|纳指|道琼斯|道指|标普(?:500)?|上证指数|上证综指|沪指|深证成指|创业板指|恒生指数|恒指|比特币|Bitcoin|BTC|黄金|金价|国际金价|英伟达|苹果公司|特斯拉|NVDA|AAPL|TSLA|NASDAQ|Nasdaq|Dow\s*Jones|S&P\s*500)/i;
+const DIRECT_AIR_QUALITY_RE = /空气质量|空气污染|AQI|PM\s*2\.?5|PM10|雾霾|霾|air\s*quality|pollution/i;
+const DIRECT_WEATHER_RE = /(?:北京|上海|广州|深圳|杭州|成都|重庆|武汉|南京|天津|苏州|西安|长沙|沈阳|青岛|大连|厦门|郑州|东莞|佛山|合肥|昆明|哈尔滨|济南|福州|珠海|无锡|温州|宁波|贵阳|南宁|太原|石家庄|乌鲁木齐|兰州|海口|三亚|香港|澳门|台北).{0,24}(?:天气|下雨|降雨|雨吗|气温|温度|预警|暴雨|雷暴|雷电|台风|weather|rain|alert|warning)|(?:天气|下雨|降雨|雨吗|气温|温度|预警|暴雨|雷暴|雷电|台风|weather|rain|alert|warning).{0,24}(?:北京|上海|广州|深圳|杭州|成都|重庆|武汉|南京|天津|苏州|西安|长沙|沈阳|青岛|大连|厦门|郑州|东莞|佛山|合肥|昆明|哈尔滨|济南|福州|珠海|无锡|温州|宁波|贵阳|南宁|太原|石家庄|乌鲁木齐|兰州|海口|三亚|香港|澳门|台北)/i;
+const OFFICIAL_MODEL_RELEASE_RE = /(?:(?:OpenAI|ChatGPT|GPT|Claude|Anthropic).{0,32}(?:模型|model|发布|release|新模型|最新|最近|recent|latest|公开|代)|(?:模型|model|发布|release|新模型|最新|最近|recent|latest|公开|代).{0,32}(?:OpenAI|ChatGPT|GPT|Claude|Anthropic))/i;
+
+export function shouldSuppressWebToolsForInternalLynnUx(messages) {
+  if (!Array.isArray(messages)) return false;
+  const text = messages
+    .filter(m => m && m.role === 'user')
+    .slice(-1)
+    .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''))
+    .join('\n');
+  const explicitExternalLookup = EXPLICIT_EXTERNAL_LOOKUP_RE.test(text) && !/\brelease\s+manifest\b/i.test(text);
+  if (CODE_SNIPPET_TOOL_SUPPRESS_RE.test(text) && !CODE_EXECUTION_RE.test(text) && !explicitExternalLookup) {
+    return true;
+  }
+  if (INTERNAL_SEARCH_FAILURE_RE.test(text) && UX_COPY_OR_DESIGN_RE.test(text)) {
+    return true;
+  }
+  return INTERNAL_LYNN_UX_RE.test(text) && UX_COPY_OR_DESIGN_RE.test(text) && !explicitExternalLookup;
+}
+
+export function shouldPreferSportsScoreTool(messages) {
+  if (!Array.isArray(messages)) return false;
+  const text = messages
+    .filter(m => m && m.role === 'user')
+    .slice(-1)
+    .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''))
+    .join('\n');
+  return DIRECT_SPORTS_SCORE_RE.test(text);
+}
+
+export function shouldPreferStockMarketTool(messages) {
+  if (!Array.isArray(messages)) return false;
+  const text = messages
+    .filter(m => m && m.role === 'user')
+    .slice(-1)
+    .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''))
+    .join('\n');
+  if (DIRECT_STOCK_MARKET_RE.test(text)) return true;
+  return /(?:金价|黄金|国际金价|英伟达|苹果公司|特斯拉|NVDA|AAPL|TSLA)/i.test(text)
+    && /(?:查|查询|今天|今日|现在|最新|多少|价格|报价|股价|行情|数据|时间|确切|实时)/i.test(text);
+}
+
+export function shouldPreferWeatherTool(messages) {
+  if (!Array.isArray(messages)) return false;
+  const text = messages
+    .filter(m => m && m.role === 'user')
+    .slice(-1)
+    .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''))
+    .join('\n');
+  return DIRECT_AIR_QUALITY_RE.test(text) || DIRECT_WEATHER_RE.test(text);
+}
+
+export function shouldPreferOfficialModelSearchTool(messages) {
+  if (!Array.isArray(messages)) return false;
+  const text = messages
+    .filter(m => m && m.role === 'user')
+    .slice(-1)
+    .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''))
+    .join('\n');
+  return OFFICIAL_MODEL_RELEASE_RE.test(text);
+}
+
 // Merge serverTools into a client-provided tools array (de-dup by name).
 // When `messages` is provided, the GATED_TOOLS document generators are injected only on
 // explicit document intent; when `messages` is omitted, all server tools are injected
@@ -294,15 +371,27 @@ export function mergeWithServerTools(clientTools, messages) {
   const list = Array.isArray(clientTools) ? [...clientTools] : [];
   const seen = new Set(list.filter(t => t?.function?.name).map(t => t.function.name));
   const allowGated = messages === undefined ? true : wantsGatedTools(messages);
+  const suppressInternalReasoningTools = messages !== undefined && shouldSuppressWebToolsForInternalLynnUx(messages);
+  const preferSportsScore = messages !== undefined && shouldPreferSportsScoreTool(messages);
+  const preferStockMarket = messages !== undefined && shouldPreferStockMarketTool(messages);
+  const preferWeather = messages !== undefined && shouldPreferWeatherTool(messages);
+  const preferOfficialModelSearch = messages !== undefined && shouldPreferOfficialModelSearchTool(messages);
   for (const st of SERVER_TOOLS) {
     if (seen.has(st.function.name)) continue;
     if (!allowGated && GATED_TOOLS.has(st.function.name)) continue;
+    if (suppressInternalReasoningTools) continue;
+    if (preferSportsScore && ['web_search', 'web_fetch', 'live_news', 'calendar', 'parallel_research'].includes(st.function.name)) continue;
+    if (preferStockMarket && ['web_search', 'web_fetch', 'live_news', 'calendar', 'parallel_research'].includes(st.function.name)) continue;
+    if (preferWeather && ['web_search', 'web_fetch', 'live_news', 'calendar', 'parallel_research'].includes(st.function.name)) continue;
+    if (preferOfficialModelSearch && ['web_fetch', 'live_news', 'parallel_research', 'calendar'].includes(st.function.name)) continue;
     list.push(st);
   }
   // MCP 工具(akshare 等):同步快照注入;预热未完时为空,下一回合自然出现。
-  for (const mt of getMcpToolDefs()) {
-    if (seen.has(mt.function.name)) continue;
-    list.push(mt);
+  if (!suppressInternalReasoningTools) {
+    for (const mt of getMcpToolDefs()) {
+      if (seen.has(mt.function.name)) continue;
+      list.push(mt);
+    }
   }
   return list;
 }

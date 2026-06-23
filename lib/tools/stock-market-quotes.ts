@@ -371,6 +371,64 @@ export async function fetchUsStockQuote(symbol: string): Promise<MarketQuote | n
     || await fetchTradingViewQuote(symbol).catch(() => null);
 }
 
+const TENCENT_US_INDEX_TARGETS = [
+  { key: "IXIC", code: "usIXIC", label: "纳斯达克指数", aliases: /纳斯达克|纳指|nasdaq|ixic/i },
+  { key: "DJI", code: "usDJI", label: "道琼斯指数", aliases: /道琼斯|道指|dow|dji/i },
+  { key: "INX", code: "usINX", label: "标普500", aliases: /标普|s&p|sp500|s\s*&\s*p|inx/i },
+] as const;
+
+function extractIndexTargets(query: unknown, explicitSymbol = ""): Array<(typeof TENCENT_US_INDEX_TARGETS)[number]> {
+  const text = `${query || ""} ${explicitSymbol || ""}`;
+  const targets = TENCENT_US_INDEX_TARGETS.filter((item) => item.aliases.test(text));
+  return targets.length ? targets : [];
+}
+
+function parseTencentUsIndexQuote(raw: unknown, target: (typeof TENCENT_US_INDEX_TARGETS)[number]): MarketQuote | null {
+  const match = String(raw || "").match(/="([^"]*)"/);
+  const parts = (match?.[1] || "").split("~");
+  if (parts.length < 35) return null;
+  const price = toFiniteNumber(parts[3]);
+  if (price == null || !Number.isFinite(price)) return null;
+  const prev = toFiniteNumber(parts[4]);
+  const pct = formatSignedNumber(parts[32], 2);
+  const rawSymbol = String(parts[2] || "").replace(/^\./, "").trim().toUpperCase();
+  return {
+    symbol: target.key,
+    name: target.label || parts[1] || rawSymbol,
+    price: formatPrice(price, 2),
+    close: formatPrice(price, 2),
+    previousClose: prev != null && Number.isFinite(prev) ? formatPrice(prev, 2) : "",
+    previous: prev != null && Number.isFinite(prev) ? formatPrice(prev, 2) : "",
+    open: formatPrice(parts[5], 2),
+    high: formatPrice(parts[33], 2),
+    low: formatPrice(parts[34], 2),
+    volume: parts[6] || "",
+    time: parts[30] || "",
+    change: formatSignedNumber(parts[31], 2),
+    pct: pct ? `${pct}%` : "",
+    source: "腾讯财经",
+    url: `https://gu.qq.com/${target.code}`,
+    currency: parts[35] || "USD",
+  };
+}
+
+async function fetchTencentUsIndexQuote(target: (typeof TENCENT_US_INDEX_TARGETS)[number]): Promise<MarketQuote | null> {
+  const raw = await fetchTextWithTimeout(`https://qt.gtimg.cn/q=${target.code}`, 4500, {
+    Referer: "https://gu.qq.com/",
+    "User-Agent": "Mozilla/5.0 Lynn/MarketQuote",
+  }, "gbk");
+  return parseTencentUsIndexQuote(raw, target);
+}
+
+export async function collectIndexDirectQuotes(query: unknown, explicitSymbol = ""): Promise<MarketQuote[]> {
+  const targets = extractIndexTargets(query, explicitSymbol);
+  if (!targets.length) return [];
+  const settled = await Promise.allSettled(targets.map((target) => fetchTencentUsIndexQuote(target)));
+  return settled
+    .map((item) => item.status === "fulfilled" ? item.value : null)
+    .filter((item): item is MarketQuote => Boolean(item));
+}
+
 export async function collectStooqQuotes(query: unknown, explicitSymbol = ""): Promise<MarketQuote[]> {
   const symbols = extractUsStockSymbols(query, explicitSymbol);
   if (!symbols.length) return [];

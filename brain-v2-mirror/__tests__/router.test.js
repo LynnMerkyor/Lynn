@@ -58,6 +58,10 @@ beforeEach(() => {
   mockState.adapterCalls = [];
   mockState.unhealthy = [];
   mockState.adapterFn = null;
+  process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH = '0';
+  process.env.BRAIN_V2_DIRECT_MARKET_PREFETCH = '0';
+  process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH = '0';
+  process.env.BRAIN_V2_DIRECT_OFFICIAL_MODEL_PREFETCH = '0';
   webSearchTesting.cache.clear();
   webSearchTesting.structuredCache.clear();
   searchContextTesting.clearCache();
@@ -75,11 +79,15 @@ afterEach(() => {
   delete process.env.ZHIPU_KEY;
   delete process.env.MIMO_SEARCH_KEY;
   delete process.env.LYNN_TOOL_ROUND_EFFORT_DOWN;
+  delete process.env.BRAIN_V2_DIRECT_OFFICIAL_MODEL_PREFETCH;
   delete process.env.BRAIN_V2_TOOL_PARALLEL;
   delete process.env.BRAIN_V2_EVIDENCE_HANDOFF;
   delete process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER;
   delete process.env.BRAIN_V2_GUI_INTERACTIVE_ACTIVE;
   delete process.env.LYNN_GUI_INTERACTIVE_ACTIVE;
+  delete process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH;
+  delete process.env.BRAIN_V2_DIRECT_MARKET_PREFETCH;
+  delete process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH;
   delete process.env.BRAIN_V2_LOCAL_PROBE_TIMEOUT_COOLDOWN_MS;
   delete process.env.BRAIN_V2_LOCAL_PROBE_THROW_COOLDOWN_MS;
   delete process.env.BRAIN_V2_LOCAL_PROBE_4XX_COOLDOWN_MS;
@@ -114,9 +122,32 @@ function stubSearchFetchOk() {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
-    json: async () => ({ search_result: [{ title: 'search summary', link: 'https://search.example', content: 'search summary' }] }),
+    json: async () => ({ search_result: [{ title: 'OpenAI search summary', link: 'https://search.example', content: 'OpenAI search summary' }] }),
     text: async () => '',
   }));
+}
+
+function beijingTonightMidnightEvent() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const utcDate = `${map.year}-${map.month}-${map.day}`;
+  const bjtDate = new Date(`${utcDate}T16:00:00.000Z`);
+  const bjtParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(bjtDate);
+  const bjtMap = Object.fromEntries(bjtParts.map((part) => [part.type, part.value]));
+  return {
+    iso: `${utcDate}T16:00:00Z`,
+    label: `${bjtMap.year}/${bjtMap.month}/${bjtMap.day} 00:00`,
+  };
 }
 
 function makeToolThenContentAdapter(reasoningSeen) {
@@ -223,6 +254,30 @@ describe('Router', () => {
     expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
     expect(mockState.cooldown.has('p-step')).toBe(true);  // HTTP error 2192 markUnhealthy
     expect(mockState.unhealthy[0]).toMatchObject({ id: 'p-step', reason: expect.stringContaining('error-server') });
+  });
+
+  it('recovers when every eligible provider is already in cooldown', async () => {
+    mockState.cooldown.add('p-step');
+    mockState.cooldown.add('p-spark');
+    mockState.cooldown.add('p-cloud');
+    mockState.cooldown.add('p-vision');
+    const logs = [];
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'recovered' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const r = await run({
+      messages: [{ role: 'user', content: 'q' }],
+      onChunk: async () => {},
+      log: (level, message) => logs.push({ level, message }),
+    });
+
+    expect(r.providerId).toBe('p-step');
+    expect(mockState.adapterCalls).toEqual(['p-step']);
+    expect(mockState.cooldown.size).toBe(0);
+    expect(logs.some((entry) => entry.message.includes('cleared cooldowns for recovery probe'))).toBe(true);
   });
 
   it('falls back on HTTP 429 rate limit and cools down the limited provider', async () => {
@@ -1140,12 +1195,13 @@ describe('Router', () => {
       }
       throw new Error(`${provider.id} down`);
     };
+    const eventTime = beijingTonightMidnightEvent();
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       status: 200,
       json: async () => ({
         events: [{
-          date: '2026-06-21T16:00Z',
+          date: eventTime.iso,
           status: { type: { completed: false, shortDetail: 'Scheduled' } },
           competitions: [{ competitors: [
             { homeAway: 'home', score: '0', team: { displayName: 'Spain' } },
@@ -1164,7 +1220,107 @@ describe('Router', () => {
     expect(result.ok).toBe(true);
     const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
     expect(visible).toContain('根据 ESPN scoreboard 工具证据');
-    expect(visible).toContain('| 2026/06/22 00:00 | Spain vs Saudi Arabia | Scheduled |');
+    expect(visible).toContain(`| ${eventTime.label} | Spain vs Saudi Arabia | Scheduled |`);
+  });
+
+  it('prefetches sports_score evidence for direct World Cup score prompts before provider synthesis', async () => {
+    process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH = '1';
+    mockState.order = ['p-step'];
+    const captured = [];
+    const chunks = [];
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new Error('ESPN unavailable in test');
+    }));
+    mockState.adapterFn = async function* ({ provider, messages, tools }) {
+      mockState.adapterCalls.push(provider.id);
+      captured.push({ messages, tools });
+      yield { type: 'content', delta: '根据 sports_score 证据，已结束比赛包括 Netherlands 5-1 Sweden。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const result = await run({
+      messages: [{ role: 'user', content: '2026世界杯已经出的赛事比分' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockState.adapterCalls).toEqual(['p-step']);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'sports_score' && chunk.event === 'end')).toBe(true);
+    expect(captured[0]?.tools).toEqual([]);
+    const promptText = captured[0]?.messages.map((message) => String(message.content || '')).join('\n') || '';
+    expect(promptText).toContain('sports_score');
+    expect(promptText).toContain('provider: espn_scoreboard');
+    expect(promptText).toContain('Netherlands 5-1 Sweden');
+  });
+
+  it('prefetches stock_market evidence for direct index quote prompts before provider synthesis', async () => {
+    process.env.BRAIN_V2_DIRECT_MARKET_PREFETCH = '1';
+    mockState.order = ['p-step'];
+    const captured = [];
+    const chunks = [];
+    const quoteText = [
+      'var hq_str_gb_dji="DJI,51712.71,0.29,2026-06-22,148.01,51600,51800,51500";',
+      'var hq_str_gb_ixic="NASDAQ,26166.60,-1.32,2026-06-22,-351.33,26500,26600,26000";',
+      'var hq_str_gb_inx="S&P 500,7472.79,-0.37,2026-06-22,-27.79,7500,7520,7460";',
+    ].join('\n');
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => Buffer.from(quoteText, 'utf8'),
+    })));
+    mockState.adapterFn = async function* ({ provider, messages, tools }) {
+      mockState.adapterCalls.push(provider.id);
+      captured.push({ messages, tools });
+      yield { type: 'content', delta: '纳斯达克指数最新点位为 26166.60 点。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const result = await run({
+      messages: [{ role: 'user', content: '纳斯达克指数最新点位是多少？' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockState.adapterCalls).toEqual(['p-step']);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'stock_market' && chunk.event === 'end')).toBe(true);
+    expect(captured[0]?.tools).toEqual([]);
+    const promptText = captured[0]?.messages.map((message) => String(message.content || '')).join('\n') || '';
+    expect(promptText).toContain('stock_market');
+    expect(promptText).toContain('纳斯达克');
+    expect(promptText).toContain('26166.60');
+  });
+
+  it('answers air quality prompts directly from weather evidence without provider inference', async () => {
+    process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH = '1';
+    mockState.order = ['p-step'];
+    const chunks = [];
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        current: {
+          time: '2026-06-23T07:00',
+          us_aqi: 42,
+          pm2_5: 9.5,
+          pm10: 21,
+        },
+      }),
+    })));
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'should not be called' };
+    };
+
+    const result = await run({
+      messages: [{ role: 'user', content: '北京今天空气质量怎么样？' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockState.adapterCalls).toEqual([]);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'weather' && chunk.event === 'end')).toBe(true);
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toContain('北京当前空气质量');
+    expect(visible).toContain('AQI(US): 42');
+    expect(visible).toContain('PM2.5: 9.5');
   });
 
   it('emits a deterministic grounded evidence answer when providers fail after generic tool evidence', async () => {
@@ -1182,7 +1338,7 @@ describe('Router', () => {
               index: 0,
               id: 'tc-generic-evidence',
               type: 'function',
-              function: { name: 'web_search', arguments: '{"query":"OpenAI 最近发布的新模型"}' },
+              function: { name: 'web_search', arguments: '{"query":"generic evidence smoke"}' },
             }],
           };
           yield { type: 'finish', reason: 'tool_calls' };
@@ -1194,7 +1350,7 @@ describe('Router', () => {
 
     const chunks = [];
     const result = await run({
-      messages: [{ role: 'user', content: '查一下 OpenAI 最近发布了什么新模型' }],
+      messages: [{ role: 'user', content: '查一下 generic evidence smoke' }],
       onChunk: async (chunk) => chunks.push(chunk),
     });
 

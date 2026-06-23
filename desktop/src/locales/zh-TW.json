@@ -89,18 +89,18 @@
       "files": "改檔案",
       "shell": "跑命令",
       "instructions": "已讀專案指令",
-      "mcp": "能用 MCP",
+      "mcp": "擴充在設定中",
       "skills": "技能",
       "automation": "自動任務",
       "assistants": "助手",
       "todo": "待辦",
       "done": "完成",
       "skillsCenter": "技能中心",
-      "mcpHub": "MCP 接入",
+      "mcpHub": "設定裡的 MCP",
       "projectRules": "指令",
       "state": "現在",
       "model": "模型",
-      "jian": "箋",
+      "jian": "工作地圖",
       "continueBusy": "有任務正在推進",
       "continueIdle": "可以從目前工作區開始",
       "tryAt": "用 @ 給我檔案",
@@ -108,7 +108,7 @@
       "resumeTask": "繼續目前任務",
       "resumePrompt": "繼續剛才的任務，先告訴我目前進度和下一步。",
       "workspacePrompt": "先快速讀一下目前工作區，告訴我你會從哪裡開始。",
-      "fleetTip": "Fleet 指揮台:把任務拆給多個 CLI worker 並行做,每個獨立 worktree"
+      "fleetTip": "CLI 並行協作:在終端用 worker 協議處理長任務"
     }
   },
   "titlebar": {
@@ -306,13 +306,10 @@
       },
       "planToday": {
         "label": "看看今天該做什麼",
-        "prompt": "請先看看目前工作空間和箋，告訴我今天最值得先推進的 3 件事，並直接給出建議的第一步。如果還沒有箋，就先幫我寫一份今天的工作清單。不要先連續反問很多問題。"
+        "prompt": "請先看看目前工作空間和對話狀態，告訴我今天最值得先推進的 3 件事，並直接給出建議的第一步。不要先連續反問很多問題。"
       },
       "tryAt": {
         "label": "試試 @ 引用檔案"
-      },
-      "fleet": {
-        "label": "⚡ 佈置並行任務"
       }
     }
   },
@@ -1208,11 +1205,11 @@
     "tutorial": {
       "title": "準備就緒 ✿",
       "quickTitle": "Quick Start 已完成 ✿",
-      "quickBannerTitle": "先記住這條主線：箋就是今天要做的工作",
-      "quickBannerDesc": "把今天要推進的事寫進工作台裡的 jian.md。\n巡檢會反覆看它，記憶會把穩定背景留下來，活動面板會告訴你它已經做到哪一步。",
+      "quickBannerTitle": "先記住這條主線：對話推進，工作地圖記錄狀態",
+      "quickBannerDesc": "直接和 Lynn 說要做什麼。\n巡檢會更新右側工作地圖，自動任務負責持續跟進，記憶只留下穩定背景。",
       "memory": {
         "title": "記憶",
-        "desc": "記憶不是另一套待辦，而是給巡檢和對話用的長期背景。\n工作台裡的箋、你反覆確認的事實、對話裡穩定的約束，會慢慢沉成之後繼續做事時的上下文。"
+        "desc": "記憶不是另一套待辦，而是給巡檢和對話用的長期背景。\n你反覆確認的事實、對話裡穩定的約束，會慢慢沉成之後繼續做事時的上下文。"
       },
       "skills": {
         "title": "技能",
@@ -1220,15 +1217,15 @@
       },
       "workspace": {
         "title": "工作空間",
-        "desc": "工作台預設在 ~/Desktop/Lynn。\n這裡是你放專案、資料和 jian.md 的地方，也是 Lynn 日常巡檢最先看的目錄。"
+        "desc": "工作台預設在 ~/Desktop/Lynn。\n這裡是你放專案和資料的地方，也是 Lynn 日常巡檢最先看的目錄。"
       },
       "jian": {
-        "title": "箋",
-        "desc": "jian.md 就是今天的主旋律檔案。\n你把今天要做什麼、做到哪一步、接下來怎麼看，寫在這裡；巡檢和智慧體都會先讀它，再決定下一步。"
+        "title": "工作地圖",
+        "desc": "工作地圖記錄目前會話的目標、狀態、下一步和相關資料。\n它圍繞目前對話生長，不把超長上下文硬塞回模型。"
       },
       "patrol": {
         "title": "心跳 / 自動巡檢",
-        "desc": "心跳就是 Lynn 按節奏回來看看工作台。\n它會重新讀箋、檢查專案是否有變化、判斷有沒有該繼續推進的事，然後在合適的時候自己動起來。"
+        "desc": "心跳就是 Lynn 按節奏回來看看工作台。\n它會檢查專案是否有變化、更新工作地圖、判斷有沒有該繼續推進的事，然後在合適的時候自己動起來。"
       },
       "activity": {
         "title": "活動面板",
@@ -1319,9 +1316,9 @@
     "cwdSkillsDrop": "拖入資料夾或 .zip 安裝技能",
     "deleteSkill": "刪除技能",
     "openInFinder": "打開資料夾",
-    "jianLabel": "箋",
+    "jianLabel": "工作地圖記錄",
     "jianPlaceholder": "寫點什麼，告訴助手這個資料夾裡面的檔案該如何處理...",
-    "jianFooter": "Lynn 巡檢時會自動讀取這裡的內容 · 支援 Markdown · ⌘J 切換",
+    "jianFooter": "Lynn 巡檢時會自動讀取工作地圖狀態 · 支援 Markdown",
     "patrolIdle": "打開箋後會自動巡檢一次",
     "patrolRunning": "Lynn 正在閱讀目前工作區與箋裡的安排",
     "patrolDone": "剛剛完成一次巡檢",
@@ -1917,8 +1914,8 @@
     "helpAgent": "查看目前 agent",
     "helpAgentList": "列出所有 agent",
     "helpAgentSwitch": "切換 agent",
-    "helpJian": "查看目前目錄的箋",
-    "helpJianSub": "查看子目錄的箋",
+    "helpJian": "查看目前目錄的工作地圖記錄",
+    "helpJianSub": "查看子目錄的工作地圖記錄",
     "helpLs": "列出書桌檔案",
     "helpLsSub": "列出子目錄檔案",
     "helpCat": "查看檔案內容",
@@ -1943,8 +1940,8 @@
     "agentList": "Agent 列表",
     "agentSwitched": "已切換到 {name}",
     "currentAgent": "目前 Agent:",
-    "jianTitle": "箋",
-    "jianEmpty": "此目錄沒有箋",
+    "jianTitle": "工作地圖記錄",
+    "jianEmpty": "此目錄沒有工作地圖記錄",
     "dirEmpty": "(空)",
     "catUsage": "用法: /cat <檔案路徑>",
     "catFailed": "無法讀取: {status}",

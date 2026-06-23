@@ -245,7 +245,7 @@ export interface SessionAgent {
 }
 
 // ── 浮动面板类型 ──
-export type ActivePanel = 'activity' | 'automation' | 'bridge' | 'changes' | 'fleet' | null;
+export type ActivePanel = 'activity' | 'automation' | 'bridge' | 'changes' | null;
 export type DeskView = 'map' | 'materials';
 export type TabType = 'chat' | 'channels';
 

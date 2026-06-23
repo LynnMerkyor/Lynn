@@ -121,13 +121,24 @@ export function detectKind(query: unknown, explicitKind = ""): MarketKind {
   if (forced) return forced;
   const text = String(query || "").toLowerCase();
   if (/(?:金价|黄金|白银|\bau\b|\bxau\b|\bgold\b|\bsilver\b)/i.test(text)) return "gold";
+  if (/(?:比特币|bitcoin|\bbtc\b|以太坊|ethereum|\beth\b|加密货币|crypto)/i.test(text)) return "crypto";
   // Order matters: oil before fx, because oil prompts often mention USD/美元.
   if (/(?:原油|油价|布伦特|\bwti\b|\bcrude\b|\boil\b)/i.test(text)) return "oil";
   if (/(?:汇率|美元|人民币|日元|欧元|英镑|\bfx\b|\busd\b|\bcny\b|\beur\b|\bgbp\b|\bjpy\b)/i.test(text)) return "fx";
   if (/(?:基金|净值|\betf\b|\blof\b|\bfof\b)/i.test(text)) return "fund";
+  if (hasExplicitIndexIntent(text)) return "index";
   if (hasStockBasketIntent(query)) return "stock";
   if (/(?:指数|上证|深证|创业板|恒生|纳指|道指|标普|\bindex\b)/i.test(text)) return "index";
   return "stock";
+}
+
+export function hasExplicitIndexIntent(query: unknown): boolean {
+  const text = String(query || "");
+  if (!/(?:指数|点位|上证|深证|创业板指|恒生指数|恒指|纳斯达克指数|道琼斯|道指|标普(?:500)?|\bindex\b|纳指.{0,8}(?:点位|多少|最新|指数))/i.test(text)) return false;
+  if (/(?:科技股|概念股|概念板块|板块|成分股|个股|股票|七姐妹|七巨头|magnificent|mag7)/i.test(text) && !/(?:指数|点位)/i.test(text)) {
+    return false;
+  }
+  return true;
 }
 
 export function hasStockBasketIntent(query: unknown): boolean {
@@ -169,6 +180,8 @@ export function buildQuery(query: unknown, kind: MarketKind, market = "", symbol
     suffix.push("汇率 行情 新浪财经 Investing");
   } else if (kind === "oil") {
     suffix.push("原油 行情 新浪财经 Investing");
+  } else if (kind === "crypto") {
+    suffix.push("加密货币 行情 Coinbase BTC USD");
   } else {
     suffix.push("股票 行情 腾讯自选股 新浪财经 东方财富");
   }
@@ -186,6 +199,7 @@ export function keywordScore(kind: MarketKind, line: unknown): number {
   if (kind === "fund" && /(基金|净值|估值|涨跌幅)/i.test(text)) score += 4;
   if (kind === "fx" && /(汇率|美元|人民币|日元|欧元|英镑|usd|cny|eur|gbp|jpy)/i.test(text)) score += 4;
   if (kind === "oil" && /(原油|布伦特|wti|油价)/i.test(text)) score += 4;
+  if (kind === "crypto" && /(比特币|bitcoin|btc|以太坊|ethereum|eth|加密货币|crypto|usd|usdt|美元)/i.test(text)) score += 4;
   if (kind === "stock" && /(股票|股价|港股|美股|a股|最新价|成交额|成交量)/i.test(text)) score += 4;
   return score;
 }

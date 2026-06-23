@@ -12,19 +12,21 @@ export interface RuntimeAnswerContext {
 
 const VERSION_PATTERNS = [
   /(^|\s)\/(?:version|about)(\s|$)/i,
-  /(?:lynn\s*)?(?:cli\s*)?(?:版本号|about)/i,
-  /(?:lynn|cli|命令行|本地).{0,8}版本/i,
-  /(?:你|当前|现在|本地|运行时|命令行|cli).{0,12}(?:版本|版本号|version)/i,
-  /\b(?:what|which|show|tell|current|your|runtime|cli|lynn)\b.{0,28}\b(?:version|about)\b/i,
+  /(?:lynn\s*cli|lynn|cli|命令行|运行时|本地).{0,12}(?:版本|版本号|version|about)/i,
+  /(?:你|你的|你现在|你当前|当前你|现在你).{0,12}(?:版本|版本号|version)/i,
+  /\bwhat\s+(?:version|about)\s+(?:are\s+)?(?:you|your|runtime|cli|lynn)\b/i,
+  /\b(?:what|which|show|tell)\b.{0,20}\b(?:your|you|runtime|cli|lynn)\b.{0,20}\b(?:version|about)\b/i,
+  /\b(?:your|you|runtime|cli|lynn)\b.{0,24}\b(?:version|about)\b/i,
 ];
 
 const MODEL_ROUTE_PATTERNS = [
   /(^|\s)\/model(\s|$)/i,
   /(?:你|当前|现在|本地|运行时|命令行|cli|lynn).{0,16}(?:当前|正在|实际|默认|工作).{0,8}(?:模型|model|路由|route)/i,
-  /(?:工作|使用|正在用|当前).{0,12}(?:模型|model)/i,
-  /(?:模型|model).{0,12}(?:是什么|是哪|哪个|\broute\b|using|running)/i,
-  /\b(?:what|which|show|tell|current|your|runtime|cli|lynn)\b.{0,32}\b(?:model|route)\b/i,
-  /\b(?:model|route)\b.{0,24}\b(?:using|running|current|active)\b/i,
+  /(?:你|你的|你现在|你当前|当前你|现在你|本地|运行时|命令行|cli|lynn).{0,18}(?:模型|model|路由|route)/i,
+  /当前.{0,8}(?:模型路由|路由|工作模型|默认模型)/i,
+  /\b(?:what|which|show|tell)\b.{0,24}\b(?:your|you|runtime|cli|lynn|active|current)\b.{0,24}\b(?:model|route)\b/i,
+  /\b(?:your|you|runtime|cli|lynn|active|current)\b.{0,24}\b(?:model|route)\b/i,
+  /\b(?:model|route)\b.{0,24}\b(?:using|running|active)\b/i,
 ];
 
 const MEMORY_PATTERNS = [

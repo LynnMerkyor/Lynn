@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../stores';
 import { hanaUrl } from '../hooks/use-hana-fetch';
 import { useI18n } from '../hooks/use-i18n';
-import { loadDeskFiles, toggleJianSidebar } from '../stores/desk-actions';
+import { loadDeskFiles } from '../stores/desk-actions';
 import { clearChat } from '../stores/agent-actions';
 import { sendPrompt } from '../stores/prompt-actions';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
@@ -23,22 +23,19 @@ import styles from './Welcome.module.css';
 let _avatarTs = Date.now();
 export function refreshAvatarTs() { _avatarTs = Date.now(); }
 
-type QuickActionBehavior = 'prompt' | 'at' | 'fleet';
+type QuickActionBehavior = 'prompt' | 'at';
 
 const DEFAULT_QUICK_PROMPT_KEYS = [
   'welcome.quickActions.askFolder',
   'welcome.quickActions.summarizeWork',
   'welcome.quickActions.planToday',
-  // Fleet discoverability: a first-screen way for ordinary GUI users to learn they can
-  // dispatch parallel CLI workers (opens the Fleet panel + Task Brief form).
-  'welcome.quickActions.fleet',
 ] as const;
+const DEFAULT_QUICK_PROMPT_KEY_SET = new Set<string>(DEFAULT_QUICK_PROMPT_KEYS);
 
 const DEFAULT_QUICK_ACTION_BEHAVIORS: Record<string, QuickActionBehavior> = {
   'welcome.quickActions.askFolder': 'prompt',
   'welcome.quickActions.summarizeWork': 'at',
   'welcome.quickActions.planToday': 'prompt',
-  'welcome.quickActions.fleet': 'fleet',
 };
 
 const QUICK_ACTIONS_LS_KEY = 'lynn-welcome-quick-actions-v1';
@@ -62,9 +59,10 @@ export function readQuickActionsConfig(): PersistedQuickAction[] {
     if (!Array.isArray(parsed)) return null as unknown as PersistedQuickAction[];
     const sane = parsed
       .filter((item) => item && typeof item.key === 'string')
+      .filter((item) => DEFAULT_QUICK_PROMPT_KEY_SET.has(String(item.key)))
       .map((item) => ({
         key: String(item.key),
-        behavior: (item.behavior === 'at' ? 'at' : item.behavior === 'fleet' ? 'fleet' : 'prompt') as QuickActionBehavior,
+        behavior: (item.behavior === 'at' ? 'at' : 'prompt') as QuickActionBehavior,
       }));
     return sane.length > 0 ? sane : (null as unknown as PersistedQuickAction[]);
   } catch {
@@ -103,31 +101,11 @@ function WelcomeInner() {
   const selectedFolder = useStore(s => s.selectedFolder);
   const cwdHistory = useStore(s => s.cwdHistory);
   const pendingNewSession = useStore(s => s.pendingNewSession);
-  const deskJianContent = useStore(s => s.deskJianContent);
   const automationCount = useStore(s => s.automationCount);
   const sessions = useStore(s => s.sessions);
   const daySummaryChips = useMemo<DaySummaryChip[]>(() => {
-    const text = String(deskJianContent || '');
-    const todoCount = (text.match(/^- \[ \] /gm) ?? []).length;
-    const doneCount = (text.match(/^- \[[xX]\] /gm) ?? []).length;
     const isZh = (locale || '').startsWith('zh');
     const items: DaySummaryChip[] = [];
-    if (todoCount > 0) {
-      items.push({
-        kind: 'todos',
-        count: todoCount,
-        label: isZh ? '待办' : 'pending',
-        action: 'jian',
-      });
-    }
-    if (doneCount > 0) {
-      items.push({
-        kind: 'done',
-        count: doneCount,
-        label: isZh ? '已完成' : 'done',
-        action: 'jian',
-      });
-    }
     if (automationCount > 0) {
       items.push({
         kind: 'automation',
@@ -145,7 +123,7 @@ function WelcomeInner() {
       });
     }
     return items;
-  }, [deskJianContent, automationCount, sessions.length, locale]);
+  }, [automationCount, sessions.length, locale]);
 
   const daySummaryEmptyHint = useMemo(() => {
     if (daySummaryChips.length > 0) return '';
@@ -203,8 +181,8 @@ function WelcomeInner() {
   );
 }
 
-type DaySummaryAction = 'jian' | 'automation' | 'sessions';
-type DaySummaryKind = 'todos' | 'done' | 'automation' | 'sessions';
+type DaySummaryAction = 'automation' | 'sessions';
+type DaySummaryKind = 'automation' | 'sessions';
 interface DaySummaryChip {
   kind: DaySummaryKind;
   count: number;
@@ -214,19 +192,6 @@ interface DaySummaryChip {
 
 function ChipIcon({ kind }: { kind: DaySummaryKind }) {
   switch (kind) {
-    case 'todos':
-      return (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <rect x="3" y="3" width="18" height="18" rx="3" />
-        </svg>
-      );
-    case 'done':
-      return (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <rect x="3" y="3" width="18" height="18" rx="3" />
-          <polyline points="8 12 11 15 16 9" />
-        </svg>
-      );
     case 'automation':
       return (
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -244,9 +209,6 @@ function ChipIcon({ kind }: { kind: DaySummaryKind }) {
 
 function runDaySummaryAction(action: DaySummaryAction) {
   switch (action) {
-    case 'jian':
-      toggleJianSidebar(true);
-      return;
     case 'automation':
       useStore.getState().setActivePanel('automation');
       return;
@@ -325,28 +287,15 @@ function WelcomeAvatar({ agentId, hasAvatar, agentAvatarUrl, yuan, name }: {
 function QuickActions({ displayName, selectedFolder }: { displayName: string; selectedFolder: string | null }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState<string | null>(null);
-  // First-run coachmark for the Fleet entry: pulse until the user clicks it once.
-  const [fleetCoachSeen, setFleetCoachSeen] = useState(() => {
-    try { return localStorage.getItem('lynn-fleet-coachmark-seen-v1') === '1'; } catch { return true; }
-  });
-  const markFleetCoachSeen = useCallback(() => {
-    setFleetCoachSeen(true);
-    try { localStorage.setItem('lynn-fleet-coachmark-seen-v1', '1'); } catch { /* ignore */ }
-  }, []);
 
   const actions = useMemo(() => {
     const persisted = readQuickActionsConfig();
-    const base = persisted && persisted.length > 0
+    const config = persisted && persisted.length > 0
       ? persisted
       : DEFAULT_QUICK_PROMPT_KEYS.map((key) => ({
           key: key as string,
           behavior: DEFAULT_QUICK_ACTION_BEHAVIORS[key],
         }));
-    // Always surface the Fleet discoverability action, even over a persisted (pre-fleet)
-    // localStorage config — otherwise existing users never see the parallel-workers entry.
-    const config = base.some((a) => a.key === 'welcome.quickActions.fleet')
-      ? base
-      : [...base, { key: 'welcome.quickActions.fleet', behavior: 'fleet' as QuickActionBehavior }];
     return config.map(({ key, behavior }) => ({
       key,
       behavior,
@@ -377,16 +326,10 @@ function QuickActions({ displayName, selectedFolder }: { displayName: string; se
       {actions.map((action) => (
         <button
           key={action.key}
-          className={`${styles.quickActionBtn}${action.behavior === 'fleet' && !fleetCoachSeen ? ` ${styles.quickActionCoachmark}` : ''}`}
-          title={action.behavior === 'fleet' ? (t('fleet.chatHint.text') || undefined) : undefined}
+          className={styles.quickActionBtn}
           onClick={() => {
             if (action.behavior === 'at') {
               handleTryAt();
-              return;
-            }
-            if (action.behavior === 'fleet') {
-              markFleetCoachSeen();
-              useStore.getState().openFleetBriefForm();
               return;
             }
             void handleClick(action.key, action.prompt);

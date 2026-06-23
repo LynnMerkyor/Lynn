@@ -114,6 +114,7 @@ describe('web_search aggregator', () => {
     expect(__testing__.classifySearchEvidencePolicy('今晚世界杯有几场比赛').grade).toBe('source');
     expect(__testing__.classifySearchEvidencePolicy('今晚蓝鲸杯有几场比赛').grade).toBe('source');
     expect(__testing__.classifySearchEvidencePolicy('英伟达今天股价').grade).toBe('source');
+    expect(__testing__.classifySearchEvidencePolicy('DGX Spark 最新版出了吗')).toMatchObject({ grade: 'source', reason: 'product-release-or-version' });
     expect(__testing__.classifySearchEvidencePolicy('深圳明天天气').grade).toBe('source');
     expect(__testing__.classifySearchEvidencePolicy('中国主要创业社群的人数，收费').grade).toBe('source');
     expect(__testing__.classifySearchEvidencePolicy('解释一下 React').grade).toBe('fast');
@@ -207,39 +208,46 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('uses structured MiMo as primary for sports score and schedule queries', async () => {
-    global.fetch = vi.fn().mockResolvedValueOnce(mimoResp('MiMo 世界杯赛程 citation answer', 'https://sports.example/world-cup-schedule'));
+  it('uses ESPN scoreboard before generic search for sports score and schedule queries', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(jsonResp({
+      events: [{
+        date: '2026-06-23T17:00Z',
+        status: { type: { completed: false, shortDetail: 'Scheduled' } },
+        competitions: [{
+          competitors: [
+            { homeAway: 'home', score: '', team: { displayName: 'Portugal' } },
+            { homeAway: 'away', score: '', team: { displayName: 'Uzbekistan' } },
+          ],
+        }],
+      }],
+    }));
 
-    const r = await webSearchStructured('昨晚世界杯最新的比赛结果');
+    const r = await webSearchStructured('今晚世界杯有几场比赛');
 
     expect(r.ok).toBe(true);
-    expect(r.provider).toBe('mimo');
+    expect(r.provider).toBe('espn_scoreboard');
     expect(r.evidencePolicy).toMatchObject({ grade: 'source', reason: 'event-score-schedule-or-prediction' });
-    expect(r.summary).toBe('MiMo 世界杯赛程 citation answer');
+    expect(r.summary).toContain('provider: espn_scoreboard');
+    expect(r.summary).toContain('Portugal vs Uzbekistan');
     expect(__testing__.needsSourceGradeEvidence('2026世界杯已经出的赛事比分')).toBe(true);
     expect(__testing__.isSportsScoreOrScheduleQuery('今晚世界杯有几场比赛')).toBe(true);
-    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
-    expect(body.messages[0].content).toContain('official schedule results fixtures score date source');
-    expect(body.messages[0].content).not.toContain('2026 FIFA World Cup');
     expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch.mock.calls[0][0]).toContain('site.api.espn.com');
   });
 
-  it('falls back to ESPN scoreboard JSON when search providers fail for sports evidence queries', async () => {
-    global.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'mimo down', json: async () => ({}) })
-      .mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'glm down', json: async () => ({}) })
-      .mockResolvedValueOnce(jsonResp({
-        events: [{
-          date: '2026-07-14T19:00Z',
-          status: { type: { completed: false, shortDetail: 'Scheduled' } },
-          competitions: [{
-            competitors: [
-              { homeAway: 'home', score: '', team: { displayName: 'Winner QF1' } },
-              { homeAway: 'away', score: '', team: { displayName: 'Winner QF2' } },
-            ],
-          }],
+  it('returns ESPN scoreboard JSON for sports evidence queries without waiting for generic search providers', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(jsonResp({
+      events: [{
+        date: '2026-07-14T19:00Z',
+        status: { type: { completed: false, shortDetail: 'Scheduled' } },
+        competitions: [{
+          competitors: [
+            { homeAway: 'home', score: '', team: { displayName: 'Winner QF1' } },
+            { homeAway: 'away', score: '', team: { displayName: 'Winner QF2' } },
+          ],
         }],
-      }));
+      }],
+    }));
 
     const r = await webSearchStructured('世界杯半决赛在哪一天？');
 
@@ -247,8 +255,8 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
     expect(r.provider).toBe('espn_scoreboard');
     expect(r.summary).toContain('provider: espn_scoreboard');
     expect(r.summary).toContain('Winner QF1 vs Winner QF2');
-    expect(global.fetch).toHaveBeenCalledTimes(3);
-    expect(global.fetch.mock.calls[2][0]).toContain('site.api.espn.com');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch.mock.calls[0][0]).toContain('site.api.espn.com');
   });
 
   it('formats source-grade searches with a generic evidence policy hint', async () => {
@@ -297,6 +305,143 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
     expect(r.items.map((item) => item.url)).not.toContain('https://soccertips.ai/england-croatia');
   });
 
+  it('filters product release searches to the exact product and official-grade sources', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(jsonResp({
+      choices: [{
+        message: {
+          content: 'DGX Spark official answer',
+          annotations: [
+            { type: 'url_citation', title: 'ZENTEK NVIDIA DGX 解决方案', url: 'https://zentek.example/dgx', summary: 'NVIDIA DGX, Omniverse, GPU training partner.' },
+            { type: 'url_citation', title: 'NVIDIA DGX Spark Release Notes', url: 'https://docs.nvidia.com/dgx/dgx-spark/release-notes.html', summary: 'DGX Spark June 2026 release notes list DGX OS 7.5.0.' },
+            { type: 'url_citation', title: 'NVIDIA DGX Spark Marketplace', url: 'https://marketplace.nvidia.com/en-us/enterprise/personal-ai-supercomputers/dgx-spark/', summary: 'DGX Spark Buy Now product page.' },
+          ],
+        },
+      }],
+    }));
+
+    const r = await webSearchStructured('DGX Spark 最新版出了吗');
+
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('mimo');
+    expect(r.evidencePolicy).toMatchObject({ grade: 'source', reason: 'product-release-or-version' });
+    expect(r.items.map((item) => item.url)).toEqual([
+      'https://docs.nvidia.com/dgx/dgx-spark/release-notes.html',
+      'https://marketplace.nvidia.com/en-us/enterprise/personal-ai-supercomputers/dgx-spark/',
+    ]);
+    expect(r.items.map((item) => item.url)).not.toContain('https://zentek.example/dgx');
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.messages[0].content).toContain('NVIDIA DGX Spark');
+    expect(body.messages[0].content).toContain('site:nvidia.com');
+  });
+
+  it('does not accept product release results that miss the exact product token', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      const target = String(url);
+      if (target.includes('api.xiaomimimo.com')) {
+        return Promise.resolve(jsonResp({
+          choices: [{
+            message: {
+              content: 'generic DGX partner page',
+              annotations: [
+                { type: 'url_citation', title: 'NVIDIA DGX partner solutions', url: 'https://zentek.example/dgx', summary: 'NVIDIA DGX, GPU, Omniverse.' },
+              ],
+            },
+          }],
+        }));
+      }
+      if (target.includes('open.bigmodel.cn')) {
+        return Promise.resolve(glmResp({
+          link: 'https://docs.nvidia.com/dgx/dgx-spark/release-notes.html',
+          title: 'NVIDIA DGX Spark Release Notes',
+          content: 'DGX Spark June 2026 release notes: DGX OS 7.5.0, GPU Driver 580.159.03.',
+        }));
+      }
+      if (target.includes('docs.nvidia.com/dgx/dgx-spark/release-notes.html')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => '<html><title>NVIDIA DGX Spark Release Notes</title><body>DGX Spark Release Notes June 2026 DGX OS 7.5.0 GPU Driver 580.159.03 CUDA Toolkit 13.0</body></html>',
+          json: async () => ({}),
+        });
+      }
+      if (target.includes('marketplace.nvidia.com')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => '<html><title>NVIDIA DGX Spark Marketplace</title><body>DGX Spark Personal AI Supercomputer Buy Now Grace Blackwell</body></html>',
+          json: async () => ({}),
+        });
+      }
+      if (target.includes('www.nvidia.com/en-us/products/workstations/dgx-spark')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => '<html><title>NVIDIA DGX Spark</title><body>DGX Spark Personal AI Supercomputer product page.</body></html>',
+          json: async () => ({}),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, text: async () => 'not found', json: async () => ({}) });
+    });
+
+    const r = await webSearchStructured('DGX Spark 最新版出了吗');
+
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('official_product_fallback');
+    expect(r.items.map((item) => item.url)).toEqual([
+      'https://docs.nvidia.com/dgx/dgx-spark/release-notes.html',
+      'https://marketplace.nvidia.com/en-us/enterprise/personal-ai-supercomputers/dgx-spark/',
+      'https://www.nvidia.com/en-us/products/workstations/dgx-spark/',
+    ]);
+    expect(r.items.map((item) => item.url)).not.toContain('https://zentek.example/dgx');
+    expect(r.summary).toContain('DGX Spark Release Notes');
+    expect(r.summary).toContain('DGX OS 7.5.0');
+    expect(global.fetch).toHaveBeenCalledTimes(5);
+  });
+
+  it('uses official product fallback when configured search providers fail for DGX Spark', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      const target = String(url);
+      if (target.includes('docs.nvidia.com/dgx/dgx-spark/release-notes.html')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => '<html><title>NVIDIA DGX Spark Release Notes</title><body>DGX Spark Release Notes June 2026 DGX OS 7.4.0 GPU Driver 580.159.03 CUDA Toolkit 13.0</body></html>',
+          json: async () => ({}),
+        });
+      }
+      if (target.includes('marketplace.nvidia.com')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => '<html><title>NVIDIA DGX Spark Marketplace</title><body>DGX Spark Personal AI Supercomputer Buy Now Grace Blackwell</body></html>',
+          json: async () => ({}),
+        });
+      }
+      if (target.includes('www.nvidia.com/en-us/products/workstations/dgx-spark')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => '<html><title>NVIDIA DGX Spark</title><body>DGX Spark Personal AI Supercomputer product page.</body></html>',
+          json: async () => ({}),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 401, text: async () => 'unauthorized', json: async () => ({}) });
+    });
+
+    const r = await webSearchStructured('DGX Spark 最新版出了吗');
+
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('official_product_fallback');
+    expect(r.items.map((item) => item.url)).toEqual([
+      'https://docs.nvidia.com/dgx/dgx-spark/release-notes.html',
+      'https://marketplace.nvidia.com/en-us/enterprise/personal-ai-supercomputers/dgx-spark/',
+      'https://www.nvidia.com/en-us/products/workstations/dgx-spark/',
+    ]);
+    expect(r.summary).toContain('DGX Spark Release Notes');
+    expect(r.summary).toContain('DGX OS 7.4.0');
+    expect(global.fetch).toHaveBeenCalledTimes(5);
+  });
+
   it('falls back to non-summary source when MiMo and GLM both fail and Bocha is configured', async () => {
     process.env.BOCHA_KEY = 'test-bocha';
     global.fetch = vi.fn().mockImplementation((url) => {
@@ -336,15 +481,27 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('sends normalized World Cup typo queries to the search provider', async () => {
-    global.fetch = vi.fn().mockResolvedValueOnce(mimoResp('今晚 4 场小组赛。', 'https://sports.example/world-cup'));
+  it('sends normalized World Cup typo queries to the direct scoreboard path', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(jsonResp({
+      events: [{
+        date: '2026-06-23T17:00Z',
+        status: { type: { completed: false, shortDetail: 'Scheduled' } },
+        competitions: [{
+          competitors: [
+            { homeAway: 'home', score: '', team: { displayName: 'Portugal' } },
+            { homeAway: 'away', score: '', team: { displayName: 'Uzbekistan' } },
+          ],
+        }],
+      }],
+    }));
 
     const r = await webSearchStructured('今晚的世纪杯比赛有几场');
 
     expect(r.ok).toBe(true);
-    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
-    expect(body.messages[0].content).toContain('世界杯');
-    expect(body.messages[0].content).not.toContain('世纪杯');
+    expect(r.query).toContain('世界杯');
+    expect(r.query).not.toContain('世纪杯');
+    expect(r.provider).toBe('espn_scoreboard');
+    expect(global.fetch.mock.calls[0][0]).toContain('site.api.espn.com');
   });
 
   it('serves the second call from the structured cache', async () => {

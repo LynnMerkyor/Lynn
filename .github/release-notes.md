@@ -31,11 +31,12 @@
 
 - `npm run typecheck`
 - `npm run typecheck:runtime`
-- `npm run test:release:smoke -- --mode static`
-- packaged server / packaged CLI smoke
-- packaged main UI smoke
-- installed app gate（真实 `/Applications/Lynn.app`）
-- CLI 50 与 GUI 50 证据质量集在 v0.85 轮已通过；v0.85.1 保持同核路径并补充 GUI 工作地图与 Brain 运维修复。
+- 核心单测矩阵：7 files / 157 tests passed
+- `npm run test:release:static`：70/70 passed
+- CLI 100 扩展对话门禁：100 ok / 0 fail
+- GUI 100 扩展对话门禁：100 ok / 0 fail
+- macOS arm64 / macOS x64 / Windows x64 安装包重新打包；macOS 本轮按快速发布流程跳过 Apple notarization。
+- packaged server / packaged CLI smoke 通过；真实 `/Applications/Lynn.app` 安装版 packaged server / CLI smoke 通过。
 
 ---
 

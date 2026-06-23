@@ -67,6 +67,11 @@ function reviewerAvatar(kind: ReviewerKind): string {
   return resolveBundledAvatar(kind === 'butter' ? 'Butter.png' : 'Hanako.png');
 }
 
+function settingsText(key: string, fallback: string): string {
+  const value = t(key);
+  return !value || value === key ? fallback : value;
+}
+
 function toModelRef(raw: unknown): { id: string; provider?: string } | null {
   if (!raw) return null;
   if (typeof raw === 'string') return raw.trim() ? { id: raw.trim() } : null;
@@ -521,6 +526,29 @@ export function WorkTab() {
             <button className={styles['settings-folder-browse']} onClick={addTrustedRoot}>
               +
             </button>
+          </div>
+        </div>
+      </section>
+
+      <section className={styles['settings-section']}>
+        <h2 className={styles['settings-section-title']}>
+          {settingsText('settings.work.cliParallel.title', 'CLI 并行协作')}
+        </h2>
+        <p className={`${styles['settings-desc']} ${styles['settings-desc-compact']}`}>
+          {settingsText(
+            'settings.work.cliParallel.desc',
+            'GUI 不再展示 Worker 指挥台，主界面专注对话、工作地图和自动任务。需要无头并行时，可以在终端用 Lynn CLI 调 worker。',
+          )}
+        </p>
+        <div className={styles['tool-caps-group']}>
+          <div className={styles['tool-caps-item']}>
+            <div className={styles['tool-caps-label']}>
+              <span className={styles['tool-caps-name']}>Lynn worker run</span>
+              <span className={styles['tool-caps-desc']}>
+                {settingsText('settings.work.cliParallel.commandHint', '给终端或 CI 使用的 JSONL worker 协议')}
+              </span>
+            </div>
+            <span className={styles['tool-caps-desc']}>--brief task.md --worktree . --jsonl</span>
           </div>
         </div>
       </section>

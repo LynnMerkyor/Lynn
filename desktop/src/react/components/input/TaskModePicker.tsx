@@ -2,13 +2,11 @@
  * TaskModePicker — 任务模式选择器
  *
  * 输入框左下角的芯片按钮，点击展开下拉面板。
- * 用户在面板里选模式（自动/小说/社媒/代码/...）+ 看 slash 命令 + 激活 MCP 服务器。
+ * 用户在面板里选模式（自动/小说/社媒/代码/...）+ 看 slash 命令。
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useStore } from '../../stores';
-import { hanaFetch } from '../../hooks/use-hana-fetch';
-import { ensureSession } from '../../stores/session-actions';
 import {
   TASK_MODES,
   CATEGORY_LABELS,
@@ -19,27 +17,14 @@ import {
 } from '../../config/task-modes';
 import styles from './TaskModePicker.module.css';
 
-interface McpServerState {
-  name: string;
-  label?: string;
-  toolCount?: number;
-  connected?: boolean;
-}
-
 export const TaskModePicker = memo(function TaskModePicker() {
   const taskModeId = useStore(s => s.taskModeId);
   const open = useStore(s => s.taskModePickerOpen);
   const setTaskModeId = useStore(s => s.setTaskModeId);
   const setOpen = useStore(s => s.setTaskModePickerOpen);
-  const currentSessionPath = useStore(s => s.currentSessionPath);
   const setComposerText = useStore(s => s.setComposerText);
   const requestInputFocus = useStore(s => s.requestInputFocus);
-  const addToast = useStore(s => s.addToast);
   const isZh = String(document?.documentElement?.lang || '').startsWith('zh');
-
-  const [mcpServers, setMcpServers] = useState<McpServerState[]>([]);
-  const [activeMcp, setActiveMcp] = useState<string[]>([]);
-  const [loadingMcp, setLoadingMcp] = useState(false);
 
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -52,22 +37,6 @@ export const TaskModePicker = memo(function TaskModePicker() {
     work: getModesByCategory('work'),
     study: getModesByCategory('study'),
   }), []);
-
-  // 打开面板时拉 MCP 状态
-  useEffect(() => {
-    if (!open) return;
-    setLoadingMcp(true);
-    Promise.all([
-      hanaFetch('/api/mcp/servers').then(r => r.json()).catch(() => ({ servers: [] })),
-      currentSessionPath
-        ? hanaFetch(`/api/mcp/session-active?sessionPath=${encodeURIComponent(currentSessionPath)}`).then(r => r.json()).catch(() => ({ active: [] }))
-        : Promise.resolve({ active: [] }),
-    ]).then(([serversRes, activeRes]) => {
-      const servers = (serversRes?.servers || []).filter((s: McpServerState) => s.connected);
-      setMcpServers(servers);
-      setActiveMcp(activeRes?.active || []);
-    }).finally(() => setLoadingMcp(false));
-  }, [open, currentSessionPath]);
 
   useEffect(() => {
     if (!open) return;
@@ -88,39 +57,6 @@ export const TaskModePicker = memo(function TaskModePicker() {
     setOpen(false);
     requestInputFocus();
   }, [setComposerText, setOpen, requestInputFocus]);
-
-  const handleToggleMcp = useCallback(async (serverName: string) => {
-    // 如果还没建立 session（新会话空白态），先 ensureSession 拿到 sessionPath
-    let sessionPath = currentSessionPath;
-    if (!sessionPath) {
-      const ok = await ensureSession();
-      if (!ok) {
-        addToast(isZh ? '请先选择工作目录' : 'Select a workspace first', 'error', 3000);
-        return;
-      }
-      sessionPath = useStore.getState().currentSessionPath;
-    }
-    if (!sessionPath) return;
-
-    const isActive = activeMcp.includes(serverName);
-    const endpoint = isActive ? '/api/mcp/session-deactivate' : '/api/mcp/session-activate';
-    try {
-      const res = await hanaFetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionPath, serverName }),
-      });
-      const data = await res.json();
-      if (Array.isArray(data?.active)) {
-        setActiveMcp(data.active);
-      } else if (data?.error) {
-        addToast(isZh ? `MCP 切换失败：${data.error}` : `MCP toggle failed: ${data.error}`, 'error', 3000);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      addToast(isZh ? `MCP 切换失败：${msg}` : `MCP toggle failed: ${msg}`, 'error', 3000);
-    }
-  }, [currentSessionPath, activeMcp, addToast, isZh]);
 
   const renderGroup = (category: TaskModeCategory, modes: TaskMode[]) => {
     if (modes.length === 0) return null;
@@ -207,43 +143,6 @@ export const TaskModePicker = memo(function TaskModePicker() {
               </>
             )}
 
-            {/* MCP 激活面板 */}
-            <div className={styles['mcp-section']}>
-              <div className={styles['mcp-title']}>
-                <span>🔌 {isZh ? 'MCP 服务器' : 'MCP Servers'}</span>
-                <span className={styles['mcp-count']}>
-                  {activeMcp.length > 0 ? `${activeMcp.length}/${mcpServers.length} ${isZh ? '已激活' : 'active'}` : `${mcpServers.length} ${isZh ? '可用' : 'available'}`}
-                </span>
-              </div>
-              {loadingMcp ? (
-                <div className={styles['mcp-empty']}>{isZh ? '加载中…' : 'Loading…'}</div>
-              ) : mcpServers.length === 0 ? (
-                <div className={styles['mcp-empty']}>
-                  {isZh ? '未连接任何 MCP 服务器' : 'No MCP servers connected'}
-                </div>
-              ) : (
-                mcpServers.map(srv => {
-                  const on = activeMcp.includes(srv.name);
-                  return (
-                    <div key={srv.name} className={styles['mcp-server-row']}>
-                      <span className={styles['mcp-server-name']}>{srv.label || srv.name}</span>
-                      <span className={styles['mcp-server-tools']}>{srv.toolCount || 0} {isZh ? '工具' : 'tools'}</span>
-                      <span
-                        className={styles.toggle}
-                        onClick={() => handleToggleMcp(srv.name)}
-                        role="switch"
-                        aria-checked={on}
-                        tabIndex={0}
-                      >
-                        <span className={`${styles['toggle-bg']}${on ? ` ${styles['toggle-bg-on']}` : ''}`}>
-                          <span className={styles['toggle-knob']} />
-                        </span>
-                      </span>
-                    </div>
-                  );
-                })
-              )}
-            </div>
           </div>
         </>
       )}

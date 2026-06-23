@@ -4,8 +4,8 @@
 
 <h1 align="center">Lynn</h1>
 
-<p align="center"><strong>GUI command center · CLI Worker Fleet · StepFun default route · realtime voice · long-term memory</strong></p>
-<p align="center">An open-source desktop AI agent whose GUI command center dispatches multiple coding CLIs (Codex / Claude / Qwen ...) in parallel - coding, research, and business in one visual workspace, not another chat box</p>
+<p align="center"><strong>GUI work map · CLI headless workers · StepFun default route · realtime voice · long-term memory</strong></p>
+<p align="center">An open-source desktop AI agent focused on chat, Session Map, and patrol-driven work state in the GUI. Parallel collaboration remains available through headless CLI workers for Codex, Claude, Qwen, and other agents.</p>
 
 <p align="center"><a href="README.md">中文版 (默认)</a> | <strong>English</strong></p>
 
@@ -62,19 +62,19 @@ NVFP4's real payoff is **batched throughput**. Same R6000, `VLLM_MOE_FORCE_MARLI
 - [#44672](https://github.com/vllm-project/vllm/pull/44672) ModelOpt W4A16 NVFP4 Marlin path docs
 - [#44673](https://github.com/vllm-project/vllm/pull/44673) speculative decoding correctness gate
 
-## 🔭 V0.80: GUI + CLI Worker Fleet
+## 🔭 V0.80 Origin: CLI Workers, V0.85.1 Session Map
 
-V0.80 brings Lynn back to the programming battlefield, but not as another single CLI or IDE plugin. The direction is to make **the GUI a command center for multiple CLI agents**: split tasks, dispatch workers, inspect logs and diffs, run gates, then merge or discard the result from one visual workflow.
+V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.1 the GUI no longer surfaces the Fleet command deck. The desktop experience now focuses on **chat + Session Map + patrols / acceptance**, while parallel worker power stays in the CLI for terminals, CI, and other agents.
 
 This is not Lynn stepping away from code. It is the opposite:code tasks, research tasks, and business tasks should share the same orchestration layer.
 
-- **GUI command center**:create tasks in the desktop app, assign workers, watch stdout/stderr, inspect diffs, see tests, and catch forbidden-file edits.
-- **CLI Worker Fleet**:dispatch Codex, Claude Code, Qwen, codebuddy, Kimi, opencode, or custom CLIs. Each worker runs in its own worktree.
+- **GUI Session Map**: capture the current thread's goals, evidence, files, patrol state, and branch relationships.
+- **Headless CLI workers**: dispatch Codex, Claude Code, Qwen, codebuddy, Kimi, opencode, or custom CLIs, each optionally in its own worktree.
 - **Task protocol**: generate task briefs with owned files, forbidden files, done criteria, test commands, and commit rules.
-- **Merge Queue**: completed worker output enters a human review queue for cherry-pick, merge, abandon, and release-gate runs.
-- **`@lynn/cli`**:V0.80 ships a public npm CLI package with `Lynn -p`, `Lynn code`, `Lynn agents`, and `Lynn worker run`, usable directly in terminals and callable by the GUI.
+- **Acceptance flow**: worker output returns to GUI diffs, evidence, test gates, and release flow for review.
+- **`@lynn/cli`**: the CLI package supports `Lynn -p`, `Lynn code`, `Lynn agents`, and `Lynn worker run`, usable directly in terminals and callable by other agents.
 
-Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.80 targets the next layer: **when you have 3-5 CLI agents, multiple worktrees, coding work and business work running in parallel, who coordinates, reviews, and ships the work?**
+Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.1 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
 
 ### CLI Quick Install
 
@@ -91,7 +91,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
 Lynn --version  # should print 0.85.1
-Lynn agents   # copyable headless/Fleet commands for other agents
+Lynn agents   # copyable headless worker commands for other agents
 ```
 
 Default Brain V2 route: **StepFun 3.7 Flash (256K context with Brain-managed reasoning / generation budget)** for normal GUI/CLI chat, `Lynn -p`, and coding execution. Voice is Brain-hosted **StepFun Realtime** by default: the GUI microphone and `/voice` / `lynn voice` inside the CLI chat enter continuous realtime conversation with live status and waveform. Local manager routes remain explicit experiments and do not take over the ordinary GUI/CLI path.
@@ -122,6 +122,7 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 - **Stabilized v0.85 self-built core**: Lynn keeps the no-fork, no-Pi-SDK main path and folds the latest empty-answer, evidence-integrity, GUI/CLI parity, and provider-reliability findings into release verification.
 - **Session Map workbench**: the right sidebar now follows the current thread's work map, inspection state, evidence, and branch-from-here controls instead of acting as a loose note pile.
 - **Huge-session health markers**: session inspection marks large, huge, blocked, and archived states so multi-GB histories become visible risk nodes instead of GUI-freezing entries.
+- **Simpler main UI**: the GUI no longer surfaces the Fleet command deck or standalone notes; MCP setup lives in Settings. Parallel worker power remains in `Lynn worker run` / `Lynn agents` for terminals, CI, and other agents.
 - **GUI and CLI remain aligned**: both packages verify against Brain V2, evidence-first routing, tool events, and visible final-answer closure.
 - **Brain ops fixes**: repaired one corrupt device JSON behind `internal auth error`, moved v2 healthcheck / cron-smoke to signed HMAC requests, and stopped old v1 smoke noise from probing an expired MiMo key.
 
@@ -675,9 +676,9 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 
 Lynn is a personal AI agent for the desktop: it has memory, personality, writing tools, autonomous work loops, and now a path toward orchestrating coding work.
 
-Early Lynn focused on bringing agent workflows out of the terminal so writers, researchers, operators, students, founders, and non-programmers could actually use them. Starting with V0.80, that direction expands rather than retreats: programming tasks, research tasks, and business tasks should be coordinated from the same GUI.
+Early Lynn focused on bringing agent workflows out of the terminal so writers, researchers, operators, students, founders, and non-programmers could actually use them. Starting with V0.85.1, the GUI is deliberately quieter: chat, Session Map, patrols, and acceptance stay on the desktop, while parallel workers remain available as headless CLI capabilities for terminals, CI, and other agents.
 
-If you use Claude Code, Codex, or Cursor, Lynn should feel familiar but one layer higher. It is not just one agent in one terminal. It is a command center for multiple CLI workers, multiple worktrees, multiple models, and multiple tasks. If you have never used those tools, you can still start from the GUI and gradually hand coding, documents, research, and automation work to Lynn.
+If you use Claude Code, Codex, or Cursor, Lynn should feel familiar but more like a workbench than a command deck. It turns the current thread's goals, evidence, files, automations, and branches into an inspectable Session Map. If you have never used those tools, you can still start from the GUI and gradually hand coding, documents, research, and automation work to Lynn.
 
 ## Who Lynn is for
 
@@ -685,7 +686,7 @@ If you use Claude Code, Codex, or Cursor, Lynn should feel familiar but one laye
 
 - Writers and researchers who want long-term memory, writing diffs, and deep research.
 - Operators, founders, and product teams that need recurring work, reports, cross-platform messaging, and local file tasks.
-- Developers and technical leads who want to coordinate several CLI agents across several worktrees and gates.
+- Developers and technical leads who want a GUI work map for acceptance, plus headless CLI workers for parallel tasks.
 - Teams that want code work and business work to share one review and acceptance surface.
 - People who want a desktop AI workspace instead of another browser tab.
 
@@ -695,15 +696,15 @@ If you use Claude Code, Codex, or Cursor, Lynn should feel familiar but one laye
 - If you only want a single terminal agent, Claude Code, Codex CLI, or Gemini CLI may be simpler.
 - If you are building a multi-tenant hosted agent service, use a server-first framework.
 
-Lynn does not replace Cursor. Cursor owns the editor loop. Lynn owns the orchestration layer around the loop:dispatch workers, review diffs, run gates, merge results, write reports, and keep memory across the whole process.
+Lynn does not replace Cursor. Cursor owns the editor loop. Lynn owns the layer around the loop: goals, evidence, files, automations, branch state, review gates, reports, and long-term memory across the whole process.
 
 ## Lynn vs Cursor / Claude Code
 
-|  | **Lynn V0.80** | Cursor | Claude Code / Codex CLI |
+|  | **Lynn V0.85.1** | Cursor | Claude Code / Codex CLI |
 |---|---|---|---|
-| Core shape | **GUI command center + CLI Worker Fleet** | IDE coding flow | Single CLI agent |
-| Parallel work | **Multiple workers / worktrees / merge queue** | Limited | Manually managed |
-| Code acceptance | **GUI diff + tests + release gate** | Inside IDE | Terminal output |
+| Core shape | **GUI Session Map + headless CLI workers** | IDE coding flow | Single CLI agent |
+| Parallel work | **CLI worker / worktree / JSONL protocol** | Limited | Manually managed |
+| Code acceptance | **Session Map + GUI diff + test gates** | Inside IDE | Terminal output |
 | Long-term memory | **6-layer persistent memory** | Session-level | Session-level |
 | Writing and research | **Word-level diff + Deep Research** | Weak | Weak |
 | Built-in keyless route | **Brain provider pool** | Subscription/API required | Provider key required |
@@ -803,11 +804,11 @@ No API key needed — device authentication only. The normal text/coding lane is
 
 This is the fundamental difference between Lynn and conversational AI tools.
 
-**Desk** is the async collaboration space between you and your Agent. Each Agent has its own desk where you can drop files and write notes (Jian). Tasks written on a Jian are proactively picked up and executed — no need to keep the chat window open.
+**Session Map** is the async collaboration space between you and your Agent. The right rail is no longer a loose note pile; it tracks the current thread's goal, status, next step, evidence, and branch-from-here entry without dragging the whole long context back into the model.
 
-**Heartbeat** periodically scans for file changes and Jian updates on the desk. When new tasks appear, they're automatically processed and you're notified when done.
+**Heartbeat** periodically scans the workspace, conversation state, and work map. When new tasks appear, they're automatically processed and you're notified when done.
 
-**Cron** lets Agents run scheduled work. Each Agent's cron jobs run concurrently and independently — switching Agents doesn't interrupt other Agents' schedules. Recurring tasks written in a Jian automatically become cron jobs.
+**Cron** lets Agents run scheduled work. Each Agent's cron jobs run concurrently and independently — switching Agents doesn't interrupt other Agents' schedules. Recurring work can be generated from chat plans and the work map.
 
 **Long-task stability** is the foundation of this autonomous work system. Lynn's server runs as a standalone Node.js process (independent of the Electron renderer), communicating via full-duplex WebSocket. Chat interruptions, window closures, and network hiccups won't break running tasks. A review system automatically verifies AI output quality, and the model auto-falls back to alternatives when issues are detected.
 

@@ -75,6 +75,7 @@ describe("realtime market/weather tools", () => {
   it("routes common realtime prompts into deterministic prefetch kinds", () => {
     expect(inferReportResearchKind("今天金价如何")).toBe("market");
     expect(inferReportResearchKind("今天布伦特石油价格，请给美元/桶")).toBe("market");
+    expect(inferReportResearchKind("比特币现在价格大概多少？")).toBe("market");
     expect(inferReportResearchKind("雪人集团002639现在股价多少？只给价格、涨跌幅和来源。")).toBe("market");
     expect(inferReportResearchKind("雪人集团002639支撑位和压力位怎么看？")).toBe("stock");
     expect(inferReportResearchKind("恒生科技成分股今天表现")).toBe("market");
@@ -90,9 +91,9 @@ describe("realtime market/weather tools", () => {
     searchMock.runSearchQuery.mockResolvedValue({
       provider: "mock-search",
       results: [{
-        title: "Introducing GPT-5.5 - OpenAI",
-        url: "https://openai.com/index/introducing-gpt-5-5/",
-        snippet: "Published: last month; GPT-5.5 and GPT-5.5 Pro are now available in ChatGPT and Codex.",
+        title: "Model Release Notes | OpenAI Help Center",
+        url: "https://help.openai.com/en/articles/9624314-model-release-notes",
+        snippet: "Official model release notes list recent model updates.",
       }],
     });
 
@@ -106,7 +107,8 @@ describe("realtime market/weather tools", () => {
     expect(searchMock.runSearchQuery.mock.calls[0][0]).toContain("site:openai.com");
     expect(fetchContentMock.fetchWebContent).not.toHaveBeenCalled();
     expect(text).toContain("OpenAI 官方模型发布资料");
-    expect(text).toContain("GPT-5.5");
+    expect(text).toContain("Model Release Notes");
+    expect(text).not.toContain("GPT-5.5");
     expect(result.details.fastPath).toBe("openai_model_release");
   });
 

@@ -40,6 +40,10 @@ describe("report research context intent", () => {
     expect(inferReportResearchKind("中国主要私董会的人数和收费大概多少？")).toBe("public_data");
   });
 
+  it("does not classify local code prompts that mention counts as public data", () => {
+    expect(inferReportResearchKind("写一个 Node.js 脚本读取 JSON 并输出 keys 数量")).toBe("");
+  });
+
   it("prefetches OpenAI model-release questions with one official-domain search", async () => {
     const calls = [];
     const context = await buildReportResearchContext("查一下 OpenAI 最近发布了什么新模型，给一句摘要", {
@@ -49,9 +53,9 @@ describe("report research context intent", () => {
           return {
             provider: "mock-search",
             results: [{
-              title: "Introducing GPT-5.5 - OpenAI",
-              url: "https://openai.com/index/introducing-gpt-5-5/",
-              snippet: "Published: last month; GPT-5.5 and GPT-5.5 Pro are now available in ChatGPT and Codex.",
+              title: "Model Release Notes | OpenAI Help Center",
+              url: "https://help.openai.com/en/articles/9624314-model-release-notes",
+              snippet: "Official model release notes list recent model updates. Verify the newest model on the original page.",
             }],
           };
         },
@@ -61,25 +65,102 @@ describe("report research context intent", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].query).toContain("site:openai.com");
     expect(context).toContain("【OpenAI 官方模型发布资料】");
-    expect(context).toContain("Introducing GPT-5.5");
+    expect(context).toContain("Model Release Notes");
   });
 
-  it("builds a one-sentence OpenAI model-release direct answer from official context", () => {
+  it("builds a bounded OpenAI model-release answer from official context", () => {
     const context = [
       "【OpenAI 官方模型发布资料】",
       "查询：site:openai.com OpenAI latest model release GPT model 2026",
-      "1. Introducing GPT-5.5 - OpenAI",
-      "来源: openai.com",
+      "1. Model Release Notes | OpenAI Help Center",
+      "来源: help.openai.com",
       "检索窗口: OpenAI 官方资料",
-      "URL: https://openai.com/index/introducing-gpt-5-5/",
-      "摘要: Published: last month; GPT-5.5 and GPT-5.5 Pro are now available in ChatGPT and Codex.",
+      "URL: https://help.openai.com/en/articles/9624314-model-release-notes",
+      "摘要: Official model release notes list recent model updates. Verify the newest model on the original page.",
     ].join("\n");
 
     const answer = buildDirectResearchAnswer("news", context, "查一下 OpenAI 最近发布了什么新模型，给一句摘要");
-    expect(answer).toContain("GPT-5.5");
-    expect(answer).toContain("一句话摘要");
-    expect(answer).toContain("https://openai.com/index/introducing-gpt-5-5/");
-    expect(answer).not.toContain("数据来源/判断依据");
+    expect(answer).toContain("没有拿到可核验的 OpenAI 官方新模型发布结论");
+    expect(answer).toContain("https://help.openai.com/en/articles/9624314-model-release-notes");
+    expect(answer).not.toContain("GPT-5.5");
+  });
+
+  it("short-circuits broad today tech news when no dated source is available", async () => {
+    const calls = [];
+    const prompt = "今天科技新闻有什么重要更新？";
+    const context = await buildReportResearchContext(prompt, {
+      toolWrappers: {
+        realtimeInfo: async () => {
+          calls.push("live_news");
+          return { content: [{ text: "should not be called" }] };
+        },
+      },
+    });
+
+    const answer = buildDirectResearchAnswer("news", context, prompt);
+    expect(calls).toHaveLength(0);
+    expect(answer).toContain("没有拿到日期明确匹配今天的可核验科技新闻条目");
+    expect(answer).not.toContain("should not be called");
+  });
+
+  it("builds a direct DGX Spark versus Mac Studio positioning answer", async () => {
+    const prompt = "比较 DGX Spark 和 Mac Studio 做本地 AI 的定位差异";
+    const context = await buildReportResearchContext(prompt);
+    const answer = buildDirectResearchAnswer("public_data", context, prompt);
+
+    expect(answer).toContain("DGX Spark 和 Mac Studio 不是同一类本地 AI 设备");
+    expect(answer).toContain("NVIDIA DGX Spark");
+    expect(answer).toContain("Mac Studio");
+    expect(answer).toContain("https://www.nvidia.com/en-us/products/workstations/dgx-spark/");
+  });
+
+  it("answers Anthropic Claude Code docs checks from official docs context", async () => {
+    const prompt = "查 Anthropic docs 是否提到 Claude Code";
+    expect(inferReportResearchKind(prompt)).toBe("public_data");
+
+    const context = await buildReportResearchContext(prompt);
+    const answer = buildDirectResearchAnswer("public_data", context, prompt);
+
+    expect(answer).toContain("Anthropic 官方文档中有 Claude Code 文档入口");
+    expect(answer).toContain("https://docs.anthropic.com/en/docs/claude-code/overview");
+    expect(answer).not.toContain("根据本轮已执行工具返回的证据");
+  });
+
+  it("answers latest Claude public model generation from official model docs context", async () => {
+    const prompt = "Claude 最新公开模型是哪一代？";
+    expect(inferReportResearchKind(prompt)).toBe("public_data");
+
+    const context = await buildReportResearchContext(prompt);
+    const answer = buildDirectResearchAnswer("public_data", context, prompt);
+
+    expect(answer).toContain("Claude 4 系列");
+    expect(answer).toContain("https://docs.anthropic.com/en/docs/about-claude/models/overview");
+    expect(answer).not.toContain("Fable");
+    expect(answer).not.toContain("Mythos");
+  });
+
+  it("answers Apple notarization purpose from Apple Developer context", async () => {
+    const prompt = "查 Apple 开发者文档里 notarization 的用途";
+    expect(inferReportResearchKind(prompt)).toBe("public_data");
+
+    const context = await buildReportResearchContext(prompt);
+    const answer = buildDirectResearchAnswer("public_data", context, prompt);
+
+    expect(answer).toContain("Apple notarization 的用途");
+    expect(answer).toContain("Gatekeeper");
+    expect(answer).toContain("https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution");
+  });
+
+  it("answers Microsoft Windows on Arm developer page summaries from official context", async () => {
+    const prompt = "查 Microsoft Windows on Arm 最新开发者页面一句摘要";
+    expect(inferReportResearchKind(prompt)).toBe("public_data");
+
+    const context = await buildReportResearchContext(prompt);
+    const answer = buildDirectResearchAnswer("public_data", context, prompt);
+
+    expect(answer).toContain("Microsoft Windows on Arm 开发者页面一句话摘要");
+    expect(answer).toContain("https://developer.microsoft.com/windows/arm/");
+    expect(answer).not.toContain("根据搜索结果");
   });
 
   it("builds a direct gold answer when market prefetch already contains prices", () => {
@@ -309,6 +390,25 @@ describe("report research context intent", () => {
     expect(answer).toContain("374.66 USD");
     expect(answer).toContain("**AAPL**");
     expect(answer).toContain("未检索到明确");
+  });
+
+  it("builds an index answer without leaking a default stock quote", () => {
+    const context = [
+      "【行情工具资料】",
+      "【指数快照】",
+      "- 指数: 纳斯达克指数",
+      "- 最新点位: 18865.37",
+      "- 涨跌幅: +0.42%",
+      "- 查询日期: 2026-06-23",
+      "- 来源: 新浪财经",
+      "- 链接: https://finance.sina.com.cn/",
+    ].join("\n");
+
+    const answer = buildDirectResearchAnswer("market", context, "纳斯达克指数最新点位是多少？");
+
+    expect(answer).toContain("纳斯达克指数");
+    expect(answer).toContain("18865.37 点");
+    expect(answer).not.toContain("AAPL");
   });
 
   it("builds a direct composite answer for market plus weather commute prompts", () => {

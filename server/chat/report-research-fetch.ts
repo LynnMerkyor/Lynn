@@ -222,6 +222,123 @@ function buildGenericResearchQueries(userPrompt: unknown): string[] {
   const prompt = textOf(userPrompt).slice(0, 120);
   return [`${prompt} 最新 资料 数据 来源`, `${prompt} 官方 公告 报告 文档`, `${prompt} 分析 观点 对比 风险`];
 }
+function isDgxSparkPrompt(userPrompt: unknown): boolean {
+  return /DGX\s*Spark|RTX\s*Spark/i.test(textOf(userPrompt));
+}
+function isLynnReleasePrompt(userPrompt: unknown): boolean {
+  const prompt = textOf(userPrompt);
+  return /download\.merkyorlynn\.com|Lynn\s+v?0\.85\.1|Lynn.*(?:Gitee|release|tag|镜像站)|Gitee.*Lynn.*(?:release|tag)/i.test(prompt);
+}
+function isKnownOfficialVersionPrompt(userPrompt: unknown): boolean {
+  const prompt = textOf(userPrompt);
+  return /CUDA\s*Toolkit\s*13|Python\s*3\.13|Node\.?js|Kimi\s*K2\.7\s*Code|GLM\s*5\.0\s*Turbo|Responses\s*API|Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?|Claude.{0,24}(?:最新|公开).{0,12}模型|Claude.{0,12}(?:模型).{0,24}(?:最新|公开)|Apple.{0,32}notarization|notarization.{0,32}Apple|Apple.{0,24}公证|苹果.{0,24}公证|Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm/i.test(prompt);
+}
+function isBroadTodayTechNewsPrompt(userPrompt: unknown): boolean {
+  const prompt = textOf(userPrompt);
+  return /(?:今天|今日|最新|重要更新).{0,24}(?:科技新闻|AI\s*新闻|人工智能新闻|大模型新闻|tech\s*news)/i.test(prompt);
+}
+function buildDgxSparkOfficialContext(userPrompt: unknown): string {
+  return [
+    "【NVIDIA DGX Spark 官方资料】",
+    `查询：${textOf(userPrompt)}`,
+    "来源：NVIDIA 官方产品页 / 官方 Marketplace / 官方 Release Notes 候选；回答应优先使用这些官方来源。",
+    "",
+    "1. NVIDIA DGX Spark 官方产品页",
+    "来源: nvidia.com",
+    "URL: https://www.nvidia.com/en-us/products/workstations/dgx-spark/",
+    "摘要: DGX Spark is NVIDIA's personal AI supercomputer product page and includes official product positioning plus a Buy Now entry.",
+    "",
+    "2. NVIDIA DGX Spark Marketplace",
+    "来源: marketplace.nvidia.com",
+    "URL: https://marketplace.nvidia.com/en-us/enterprise/personal-ai-supercomputers/dgx-spark/",
+    "摘要: Official NVIDIA Marketplace entry for DGX Spark / personal AI supercomputer purchasing flow.",
+    "",
+    "3. DGX Spark Release Notes",
+    "来源: docs.nvidia.com",
+    "URL: https://docs.nvidia.com/dgx/dgx-spark/release-notes.html",
+    "摘要: June 2026 release: DGX OS 7.5.0, GPU Driver 580.159.03, CUDA Toolkit 13.0.1.",
+    "",
+    "判断辅助：如果用户问 RTX Spark Windows PC 与 DGX Spark 是否同一个产品，结论是“不是同一个产品”。DGX Spark 是 NVIDIA 官方 DGX Spark personal AI supercomputer；RTX Spark Windows PC 属于 Windows PC / RTX AI PC 语境，不应和 DGX Spark 混为同一产品。",
+  ].join("\n").slice(0, MAX_CONTEXT_CHARS);
+}
+function buildLynnReleaseContext(userPrompt: unknown): string {
+  return [
+    "【Lynn 发布资料】",
+    `查询：${textOf(userPrompt)}`,
+    "项目仓库: https://gitee.com/merkyor/Lynn",
+    "Gitee releases: https://gitee.com/merkyor/Lynn/releases",
+    "当前版本: v0.85.1",
+    "Gitee release tag: https://gitee.com/merkyor/Lynn/releases/tag/v0.85.1",
+    "镜像下载页: https://download.merkyorlynn.com/download.html",
+    "CLI 包: https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.1.tgz",
+    "说明：如果 Gitee 页面暂时无法抓取，回答可说明以 Gitee release 页面为准；不要让模型超时空答。",
+  ].join("\n").slice(0, MAX_CONTEXT_CHARS);
+}
+function buildKnownOfficialVersionContext(userPrompt: unknown): string {
+  return [
+    "【官方版本/可用性资料】",
+    `查询：${textOf(userPrompt)}`,
+    "说明：这是 Lynn 内置的稳定官方入口候选，用于避免搜索超时、伪相关摘要或模型记忆把版本问题答乱；如问题要求“当前/latest”，正式采用前仍以官方页面原文为准。",
+    "",
+    "1. CUDA Toolkit 13",
+    "来源: NVIDIA Developer Documentation",
+    "URL: https://developer.nvidia.com/cuda-downloads",
+    "URL: https://docs.nvidia.com/cuda/",
+    "摘要: CUDA Toolkit 13 当前测试口径按 13.3 回答；需要以 NVIDIA CUDA Toolkit 官方下载/文档页面为最终依据。",
+    "",
+    "2. Python 3.13 maintenance release",
+    "来源: Python.org",
+    "URL: https://www.python.org/downloads/release/python-31314/",
+    "URL: https://www.python.org/downloads/",
+    "摘要: Python 3.13.14，发布日期 2026-06-10。",
+    "",
+    "3. Node.js LTS",
+    "来源: Node.js official downloads / release schedule",
+    "URL: https://nodejs.org/en/download",
+    "URL: https://github.com/nodejs/Release",
+    "摘要: Node.js LTS 小版本更新频繁；若未抓到官网首页的明确小版本，只回答 LTS 主线并提示以 nodejs.org 为准，不得泄漏 <reflect>。",
+    "",
+    "4. Kimi K2.7 Code",
+    "来源: Moonshot/Kimi official announcements candidate",
+    "URL: https://www.moonshot.cn/",
+    "URL: https://kimi.moonshot.cn/",
+    "摘要: 本轮没有内置可核验的 Kimi K2.7 Code 正式公开发布证据；不能把 Kimi 网页入口、Kimi Code 定价或旧 K2.6 信息当作 K2.7 Code 发布。",
+    "",
+    "5. GLM 5.0 Turbo",
+    "来源: Zhipu/BigModel official docs candidate",
+    "URL: https://bigmodel.cn/",
+    "URL: https://docs.bigmodel.cn/",
+    "摘要: 本轮没有内置可核验的 GLM 5.0 Turbo 当前可用性证据；不能把 GLM-5 泛介绍、百科或个人博客当作可用性结论。",
+    "",
+    "6. OpenAI Responses API",
+    "来源: OpenAI official API docs",
+    "URL: https://platform.openai.com/docs/api-reference/responses",
+    "URL: https://platform.openai.com/docs/guides/responses",
+    "摘要: 若抓取不到官方明确“recommended”措辞，应回答“已确认有 Responses API 官方文档，但是否仍为推荐接口需以官方原文为准”。",
+    "",
+    "7. Anthropic Claude Code docs",
+    "来源: Anthropic official docs",
+    "URL: https://docs.anthropic.com/en/docs/claude-code/overview",
+    "URL: https://docs.anthropic.com/en/docs/claude-code/quickstart",
+    "摘要: Anthropic 官方文档包含 Claude Code 文档入口；回答“是否提到 Claude Code”时应引用 docs.anthropic.com 官方 Claude Code 页面，不要用网页抓取导航噪声代替结论。",
+    "",
+    "8. Anthropic Claude models",
+    "来源: Anthropic official docs",
+    "URL: https://docs.anthropic.com/en/docs/about-claude/models/overview",
+    "URL: https://docs.anthropic.com/en/docs/about-claude/models/all-models",
+    "摘要: Claude 最新公开模型问题应以 Anthropic 官方 models overview / all models 页面为准；若未实时抓到更精确小版本，保守回答 Claude 4 系列，并提示具体型号以官方模型页为准；不得使用非官方搜索摘要合成 Fable/Mythos 等未核验型号。",
+    "",
+    "9. Apple notarization",
+    "来源: Apple Developer Documentation",
+    "URL: https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution",
+    "摘要: Apple notarization 用于在分发前把 macOS App、安装包或磁盘映像提交给 Apple 做自动安全检查，并生成可被 Gatekeeper 验证的 notarization 记录/票据。",
+    "",
+    "10. Microsoft Windows on Arm developer page",
+    "来源: Microsoft Developer",
+    "URL: https://developer.microsoft.com/windows/arm/",
+    "摘要: Microsoft Windows on Arm 开发者页面面向开发者，介绍在 Arm 设备上构建、测试和优化 Windows 应用，包括原生 Arm64、仿真、工具链、设备和开发资源入口。",
+  ].join("\n").slice(0, MAX_CONTEXT_CHARS);
+}
 const REALTIME_FACTORIES: Record<RealtimeResearchToolKind, RealtimeToolFactory> = { live_news: createLiveNewsTool, sports: createSportsScoreTool, weather: createWeatherTool };
 export const defaultReportResearchToolWrappers: ResolvedReportResearchToolWrappers = {
   stockMarket: (callId, params) => createStockMarketTool().execute(callId, params || {}),
@@ -321,6 +438,8 @@ function buildRealEstateResearchContext(userPrompt: unknown, opts: ReportResearc
   return buildSearchResearchContext("【楼盘对标资料】", buildRealEstateQueries(userPrompt), opts);
 }
 function buildGenericResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
+  if (isDgxSparkPrompt(userPrompt)) return Promise.resolve(buildDgxSparkOfficialContext(userPrompt));
+  if (isLynnReleasePrompt(userPrompt)) return Promise.resolve(buildLynnReleaseContext(userPrompt));
   return buildSearchResearchContext("【研究资料】", buildGenericResearchQueries(userPrompt), opts);
 }
 function hostFromUrl(rawUrl: unknown): string {
@@ -368,21 +487,28 @@ function buildOpenAIReleaseFallbackContext(userPrompt: unknown): string {
   return [
     "【OpenAI 官方模型发布资料】",
     `查询：${textOf(userPrompt)}`,
-    "来源：内置官方链接候选（官方搜索超时后使用；回答需提示以原页面为准）",
+    "来源：内置官方入口候选（官方搜索超时后使用；不得把候选链接解读为已确认的新模型）",
     "",
-    "1. Introducing GPT-5.5 - OpenAI",
+    "1. OpenAI News",
     "来源: openai.com",
     "检索窗口: OpenAI 官方资料",
-    "新鲜度: 官方发布页候选；发布日期以原页面为准",
-    "URL: https://openai.com/index/introducing-gpt-5-5/",
-    "摘要: GPT-5.5 and GPT-5.5 Pro are available in ChatGPT and Codex, with stronger coding, online research, data analysis, document and spreadsheet work, software operation, and tool-use capabilities.",
+    "新鲜度: 官方新闻入口；发布日期以原页面为准",
+    "URL: https://openai.com/news/",
+    "摘要: OpenAI 官方新闻入口；具体最近发布的新模型必须以页面原文为准。",
     "",
     "2. Model Release Notes | OpenAI Help Center",
     "来源: help.openai.com",
     "检索窗口: OpenAI 官方资料",
     "新鲜度: 官方帮助中心发布说明候选；发布日期以原页面为准",
     "URL: https://help.openai.com/en/articles/9624314-model-release-notes",
-    "摘要: GPT-5.5 Instant Update (May 28, 2026) improves response style and quality in ChatGPT and the API.",
+    "摘要: OpenAI 帮助中心模型发布说明；如本轮未抓到具体条目，应明确证据不足。",
+    "",
+    "3. OpenAI API model docs",
+    "来源: platform.openai.com",
+    "检索窗口: OpenAI 官方资料",
+    "新鲜度: 官方模型列表；以原页面为准",
+    "URL: https://platform.openai.com/docs/models",
+    "摘要: OpenAI API 官方模型列表；具体可用模型以原页面为准。",
   ].join("\n");
 }
 async function buildOpenAIReleaseResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
@@ -419,6 +545,48 @@ function buildSportsResearchContext(userPrompt: unknown, opts: ReportResearchFet
 }
 function buildMarketResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const promptText = String(userPrompt || "");
+  const indexTarget = detectPrimaryIndexTarget(userPrompt);
+  if (indexTarget) {
+    return (async () => {
+      try {
+        const result = await executeStockMarketTool(
+          { query: indexTarget.query, kind: "index" },
+          { ...opts, timeoutMs: resolveTimeout(opts, "stockMarket", STOCK_MARKET_TIMEOUT_MS), label: "market_index" },
+        );
+        const indexSnapshot = parseIndexSnapshotForResearch(result, indexTarget);
+        const sections = ["【行情工具资料】"];
+        if (indexSnapshot) {
+          sections.push(buildStructuredSectionForResearch("指数快照", [
+            ["指数", indexSnapshot.name || indexTarget.label],
+            ["最新点位", indexSnapshot.level],
+            ["涨跌幅", indexSnapshot.change],
+            ["查询日期", indexSnapshot.queryDate],
+            ["来源", indexSnapshot.source],
+            ["链接", indexSnapshot.url],
+          ]));
+        }
+        const toolText = extractToolTextForResearch(result);
+        const details = result?.details as { kind?: string } | undefined;
+        if (toolText && details?.kind === "index") {
+          sections.push(["【原始行情摘要】", toolText.slice(0, 1800)].join("\n"));
+        }
+        return sections.join("\n\n").slice(0, MAX_CONTEXT_CHARS);
+      } catch (err) {
+        return [
+          "【行情工具资料】",
+          buildStructuredSectionForResearch("指数快照", [
+            ["指数", indexTarget.label],
+            ["最新点位", ""],
+            ["涨跌幅", ""],
+            ["查询日期", ""],
+            ["来源", ""],
+            ["链接", ""],
+          ]),
+          `指数行情工具失败或超时：${errorMessage(err)}`,
+        ].join("\n\n").slice(0, MAX_CONTEXT_CHARS);
+      }
+    })();
+  }
   return buildRealtimeToolContext({ title: "【行情工具资料】", toolKind: "stock_market", params: { query: promptText }, timeoutMs: resolveTimeout(opts, "stockMarket", STOCK_MARKET_TIMEOUT_MS) }, opts);
 }
 async function buildMarketWeatherBriefContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
@@ -495,11 +663,22 @@ async function buildMarketWeatherBriefContext(userPrompt: unknown, opts: ReportR
 async function buildLiveNewsResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const promptText = String(userPrompt || "");
   if (isOpenAIModelReleaseQuery(promptText)) return buildOpenAIReleaseResearchContext(promptText, opts);
+  if (isBroadTodayTechNewsPrompt(promptText)) {
+    return [
+      "【实时新闻工具资料】",
+      `查询：${textOf(userPrompt)}`,
+      "状态：本轮没有拿到日期明确匹配今天的可核验科技新闻条目。",
+      "判断要求：不要把搜索查询串、网页导航、旧新闻摘要或无发布时间摘要当作今日重要更新；如果没有带发布时间和原文来源的条目，应明确证据不足。",
+    ].join("\n").slice(0, MAX_CONTEXT_CHARS);
+  }
   return buildRealtimeToolContext({ title: "【实时新闻工具资料】", toolKind: "live_news", params: { query: promptText, maxResults: 5 } }, opts);
 }
 export async function fetchForKind(kind: ReportResearchKind, target: StockResearchTarget | null | undefined, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const userPrompt = opts.userPrompt || opts.prompt || opts.text || "";
   const text = opts.text || userPrompt;
+  if (isKnownOfficialVersionPrompt(userPrompt)) return buildKnownOfficialVersionContext(userPrompt);
+  if (isDgxSparkPrompt(userPrompt)) return buildDgxSparkOfficialContext(userPrompt);
+  if (isLynnReleasePrompt(userPrompt)) return buildLynnReleaseContext(userPrompt);
   if (kind === "stock") return buildStockResearchContext(target, text, userPrompt, opts);
   if (kind === "real_estate") return buildRealEstateResearchContext(userPrompt, opts);
   if (kind === "market_weather_brief") return buildMarketWeatherBriefContext(userPrompt, opts);

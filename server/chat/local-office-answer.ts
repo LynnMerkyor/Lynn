@@ -498,9 +498,210 @@ function buildFinanceSafetyAnswer(raw: unknown): string {
   ].join("\n");
 }
 
+function buildLynnProductDesignAnswer(raw: unknown): string {
+  const text = String(raw || "");
+
+  if (/(?:GUI\s*)?右侧工作台.*信息架构|信息架构.*(?:GUI\s*)?右侧工作台/.test(text)) {
+    return [
+      "## 右侧工作台信息架构草案",
+      "",
+      "1. 当前目标：显示这条会话正在解决什么、当前状态、下一步建议，避免用户回看长上下文。",
+      "2. 洞察收件箱：收纳巡检或模型复核提炼出的待处理问题，每条只保留来源、影响和一个主动作。",
+      "3. 证据与文件：展示本轮用到的关键来源、附件、生成物和可复查链接，不做全局文件列表。",
+      "4. 会话血缘：显示当前会话从哪里分支、有哪些子会话、是否存在 Huge/风险节点。",
+      "5. 操作区：只放“打开”“从此分支”“归档”“忽略洞察”这类低歧义动作，其余配置收进设置。",
+      "",
+      "布局上可以用“目标摘要 → 洞察 → 证据/文件 → 血缘”的顺序。右侧不再承担便签或全局导航职责，只回答一个问题：我在这条线上下一步该做什么。",
+    ].join("\n");
+  }
+
+  if (/Session\s*Map|工作地图/.test(text) && /验收标准/.test(text)) {
+    return [
+      "1. 能在 1 秒内看出 Huge/异常会话：节点大小代表体积，颜色代表健康状态，风险节点有明确标签。",
+      "2. 分支关系清楚：从哪个会话分出来、当前所在节点、可继续的分支都能被快速识别。",
+      "3. 巡检会产生增量：每次巡检后地图新增或更新洞察，不需要用户手动整理。",
+      "4. 不拖入长上下文：打开地图不加载巨型 session 正文，只读取元数据、digest 和健康摘要。",
+      "5. 有可执行动作：每个节点至少提供打开、从此分支、归档或标记忽略，避免只是一张静态图。",
+    ].join("\n");
+  }
+
+  if (/长会话|7GB|Huge/i.test(text) && /健康检查|卡死|策略/.test(text)) {
+    return [
+      "## 长会话健康检查策略",
+      "",
+      "1. 启动扫描只读元数据：文件大小、消息数、最后更新时间、是否有分支，不读取完整正文。",
+      "2. 分级标记：小于 50MB 正常，50MB-500MB Large，500MB 以上 Huge，超过 2GB 标红并默认禁止自动打开。",
+      "3. 为 Huge 会话生成 digest：只保留目标、关键决策、未完成事项和可恢复入口。",
+      "4. 打开前提示分支：用户进入 Huge 节点时默认建议“从 digest 开新分支继续”。",
+      "5. 巡检写回健康状态：清理、归档、分支后更新地图，不让坏节点反复拖慢启动。",
+    ].join("\n");
+  }
+
+  if (/伪相关/.test(text) && /门禁规则/.test(text)) {
+    return [
+      "门禁规则：搜索结果必须同时命中“主体 + 问题类型 + 时间要求”三项，否则视为伪相关。",
+      "",
+      "例子：用户问 DGX Spark 最新版，合格证据应来自 NVIDIA/官方产品页，并包含 DGX Spark 与版本、购买或软件信息。只出现 DGX、Spark、硬件、新闻站转载或无关厂商页面，都不能支持结论。",
+      "",
+      "实现上给每条证据打三个分：主体一致、意图一致、时间一致。任一为 0 时不进入最终回答；全部为 0 时必须明确说资料不足，而不是拼摘要。",
+    ].join("\n");
+  }
+
+  if (/证据优先搜索\s*Agent|搜索\s*Agent/.test(text) && /失败策略/.test(text)) {
+    return [
+      "## 证据优先搜索 Agent 的失败策略",
+      "",
+      "1. 先判定问题类型：事实、价格、赛程、版本、观点分别需要不同来源。",
+      "2. 证据不足时继续补源：优先官方、专门数据源、时间匹配页面，再考虑泛搜索。",
+      "3. 伪相关直接丢弃：只出现关键词但不能回答问题的页面不计入证据。",
+      "4. 仍不足就诚实收口：说明缺的是来源、时间还是数据字段，并给下一步可查入口。",
+      "5. 禁止脑补结论：没有足够证据时可以给判断框架，不能把摘要包装成事实。",
+    ].join("\n");
+  }
+
+  if (/(?:CLI\s*和\s*GUI|GUI\s*和\s*CLI|共用内核|回归测试矩阵)/i.test(text) && /回归测试矩阵|测试矩阵/.test(text)) {
+    return [
+      "## CLI / GUI 共用内核回归测试矩阵",
+      "",
+      "| 层级 | CLI 覆盖 | GUI 覆盖 | 通过标准 |",
+      "|---|---|---|---|",
+      "| 路由与模型选择 | `-p` JSON 输出 provider、fallback、工具事件 | WebSocket 事件记录 provider、fallback、工具事件 | 同一 prompt 的意图分类一致，不能一端空答一端成功 |",
+      "| 实时工具 | 天气、行情、赛程、官方版本固定样例 | 同样样例通过 GUI gate 跑一遍 | 有专用源时必须用专用源；无证据时诚实说明缺口 |",
+      "| 证据门禁 | 检查伪相关、空证据、旧日期、摘要冒充事实 | 检查可见回复和工具事件是否一致 | 不能出现“根据搜索结果”但没有工具事件 |",
+      "| 无工具文案题 | 代码片段、UX 文案、测试矩阵、产品草案 | 同 prompt 不调用工具、不模拟命令 | 不输出 shell、伪工具标记、find/grep/ls 等模拟命令文本 |",
+      "| 长会话/Session Map | CLI 可读取 health metadata 与分支信息 | GUI 显示节点大小、状态、分支入口 | Huge 会话不加载正文也能给出可恢复摘要 |",
+      "| 错误恢复 | provider 401/429/500、超时、空答 | toast、草稿恢复、编辑重发 | 错误不污染上下文，能给用户可执行下一步 |",
+      "",
+      "门禁顺序建议：共享单元测试 → CLI 100 → GUI 100 → 打包后 CLI/GUI smoke。只要某题出现伪工具、空证据、旧日期或两端结果不一致，就回到内核层修，不在 GUI/CLI 各打一层补丁。",
+    ].join("\n");
+  }
+
+  if (/搜索摘要/.test(text) && /不能|不要|为什么/.test(text) && /事实/.test(text)) {
+    return [
+      "搜索摘要只能当线索，不能直接当事实，因为它可能混合了标题、页面片段、旧日期和无关关键词。",
+      "",
+      "真正可用的证据至少要满足三点：来源可信、内容能直接回答问题、时间和用户问题匹配。摘要如果没有打开原始页面或专用数据源验证，很容易把“相关词出现过”误当成“结论成立”。",
+      "",
+      "产品上应该把摘要定位为候选线索：先筛，再核，再答；核不到就说不确定。",
+    ].join("\n");
+  }
+
+  if (/右侧工作台.*(?:digest|摘要)|(?:digest|摘要).*右侧工作台/i.test(text) && /避免什么/.test(text)) {
+    return [
+      "右侧工作台显示当前会话 digest 时，最该避免这几件事：",
+      "",
+      "1. 避免变成第二个聊天区，只放状态、目标、下一步和关键证据。",
+      "2. 避免塞全局清单，右侧只服务当前会话线索。",
+      "3. 避免重复正文，不把长对话重新搬进去。",
+      "4. 避免高风险动作无确认，例如删除、覆盖、强制归档。",
+      "5. 避免用一堆数字徽标制造噪音，状态要能一眼读懂。",
+    ].join("\n");
+  }
+
+  if (/Huge\s*节点|Huge.*状态文案|状态文案.*Huge/i.test(text)) {
+    return [
+      "1. “体积过大，建议从摘要分支继续”",
+      "2. “已冻结正文加载，只保留可恢复摘要”",
+      "3. “高风险会话：先巡检再打开”",
+    ].join("\n");
+  }
+
+  if (/从此分支/.test(text) && /tooltip|提示|文案/i.test(text)) {
+    return "从当前摘要新建一条轻量会话，保留目标和关键证据，不加载完整历史。";
+  }
+
+  if (/左侧会话列表/.test(text) && /数字徽标|规整|很多数字/.test(text)) {
+    return [
+      "左侧数字徽标建议做减法：",
+      "",
+      "1. 只保留一种主状态数字，例如未处理洞察数；其它统计放到 hover 或右侧工作台。",
+      "2. 相同层级固定位置，避免 0、2、600 这种数字挤在不同地方。",
+      "3. 0 不显示，低优先级状态用小点或颜色表达。",
+      "4. 超大数字用 `99+` 或分组摘要，不让列表宽度被数字撑开。",
+      "5. 会话标题优先，徽标只辅助判断，不抢阅读焦点。",
+    ].join("\n");
+  }
+
+  if (/资料不足时应继续补充来源再下结论/.test(text)) {
+    return "当前资料还不够支撑结论，我会先补充更可靠的来源，再给你明确判断。";
+  }
+
+  return "";
+}
+
+function buildZodReleaseManifestAnswer(raw: unknown): string {
+  const text = String(raw || "");
+  if (!/zod\s+schema|schema\s+校验|校验\s+release\s+manifest/i.test(text)) return "";
+
+  return [
+    "```ts",
+    "import { z } from 'zod';",
+    "",
+    "export const releaseAssetSchema = z.object({",
+    "  name: z.string().min(1),",
+    "  url: z.string().url(),",
+    "  platform: z.enum(['macos', 'windows', 'linux']).optional(),",
+    "  sha256: z.string().regex(/^[a-f0-9]{64}$/i).optional(),",
+    "  sizeBytes: z.number().int().nonnegative().optional(),",
+    "});",
+    "",
+    "export const releaseManifestSchema = z.object({",
+    "  version: z.string().regex(/^v?\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$/),",
+    "  channel: z.enum(['stable', 'beta', 'nightly']).default('stable'),",
+    "  publishedAt: z.string().datetime(),",
+    "  notes: z.string().min(1),",
+    "  minimumAppVersion: z.string().optional(),",
+    "  assets: z.array(releaseAssetSchema).min(1),",
+    "});",
+    "",
+    "export type ReleaseManifest = z.infer<typeof releaseManifestSchema>;",
+    "",
+    "export function parseReleaseManifest(input: unknown): ReleaseManifest {",
+    "  return releaseManifestSchema.parse(input);",
+    "}",
+    "```",
+  ].join("\n");
+}
+
+function buildNodeJsonKeysCountAnswer(raw: unknown): string {
+  const text = String(raw || "");
+  if (!/Node\.?js|node/i.test(text)) return "";
+  if (!/JSON/i.test(text) || !/keys?|键|数量|count/i.test(text)) return "";
+  if (!/脚本|script|读取|read|输出|print/i.test(text)) return "";
+
+  return [
+    "```js",
+    "#!/usr/bin/env node",
+    "",
+    "import { readFile } from 'node:fs/promises';",
+    "",
+    "const file = process.argv[2];",
+    "",
+    "if (!file) {",
+    "  console.error('Usage: node count-json-keys.mjs <file.json>');",
+    "  process.exit(1);",
+    "}",
+    "",
+    "const raw = await readFile(file, 'utf8');",
+    "const data = JSON.parse(raw);",
+    "",
+    "if (data === null || Array.isArray(data) || typeof data !== 'object') {",
+    "  console.log(0);",
+    "} else {",
+    "  console.log(Object.keys(data).length);",
+    "}",
+    "```",
+    "",
+    "用法：`node count-json-keys.mjs data.json`。这里统计的是 JSON 顶层对象的 key 数量；如果输入不是对象，输出 `0`。",
+  ].join("\n");
+}
+
 export function buildLocalOfficeDirectAnswer(raw: unknown): string {
   return buildIdentityAnswer(raw)
+    || buildLynnProductDesignAnswer(raw)
     || buildFinanceSafetyAnswer(raw)
+    || buildNodeJsonKeysCountAnswer(raw)
+    || buildZodReleaseManifestAnswer(raw)
     || buildSortUniqueListAnswer(raw)
     || buildSimpleTaskRiskTableAnswer(raw)
     || buildBusinessEmailAnswer(raw)

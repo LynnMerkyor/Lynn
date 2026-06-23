@@ -32,26 +32,42 @@ export async function exchangeRate(query) {
     });
     const text = await resp.text();
     const results = [];
-    const nameMap = {
-      usdcny: '美元/人民币',
-      eurcny: '欧元/人民币',
-      gbpcny: '英镑/人民币',
-      jpycny: '日元/人民币(100)',
-      hkdcny: '港币/人民币',
-      audcny: '澳元/人民币',
-      cadcny: '加元/人民币',
-      chfcny: '瑞郎/人民币',
-      krwcny: '韩元/人民币(100)',
-      sgdcny: '新加坡元/人民币',
-      thbcny: '泰铢/人民币',
+    const metaMap = {
+      usdcny: { label: '美元/人民币', base: '美元', quote: '人民币' },
+      eurcny: { label: '欧元/人民币', base: '欧元', quote: '人民币' },
+      gbpcny: { label: '英镑/人民币', base: '英镑', quote: '人民币' },
+      jpycny: { label: '日元/人民币', base: '日元', quote: '人民币', showHundred: true },
+      hkdcny: { label: '港币/人民币', base: '港币', quote: '人民币' },
+      audcny: { label: '澳元/人民币', base: '澳元', quote: '人民币' },
+      cadcny: { label: '加元/人民币', base: '加元', quote: '人民币' },
+      chfcny: { label: '瑞郎/人民币', base: '瑞郎', quote: '人民币' },
+      krwcny: { label: '韩元/人民币', base: '韩元', quote: '人民币', showHundred: true },
+      sgdcny: { label: '新加坡元/人民币', base: '新加坡元', quote: '人民币' },
+      thbcny: { label: '泰铢/人民币', base: '泰铢', quote: '人民币' },
+    };
+    const fmt = (value, digits = 6) => {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return String(value || '').trim();
+      return n.toFixed(digits).replace(/(?:\.0+|(\.\d*?)0+)$/, '$1');
     };
     for (const line of text.split('\n')) {
       const m = line.match(/var hq_str_fx_s(\w+)="([^"]+)"/);
       if (!m) continue;
       const d = m[2].split(',');
-      if (d.length < 8) continue;
-      const name = nameMap[m[1]] || m[1];
-      results.push(`${name}: ${d[1]} (${parseFloat(d[5]) >= 0 ? '+' : ''}${d[5]}%) 更新: ${d[0]}`);
+      if (d.length < 2) continue;
+      const key = String(m[1] || '').toLowerCase();
+      const meta = metaMap[key] || { label: key.toUpperCase(), base: key.slice(0, 3).toUpperCase(), quote: key.slice(3).toUpperCase() };
+      const rate = Number(d[1]);
+      if (!Number.isFinite(rate)) continue;
+      const pct = Number(d[10]);
+      const change = Number(d[11]);
+      const updated = [d[17], d[0]].filter(Boolean).join(' ').trim();
+      const bits = [`${meta.label}: 1 ${meta.base} = ${fmt(rate)} ${meta.quote}`];
+      if (meta.showHundred) bits.push(`100 ${meta.base} ≈ ${fmt(rate * 100, 4)} ${meta.quote}`);
+      if (Number.isFinite(pct)) bits.push(`涨跌幅 ${pct >= 0 ? '+' : ''}${fmt(pct, 4)}%`);
+      if (Number.isFinite(change)) bits.push(`涨跌 ${change >= 0 ? '+' : ''}${fmt(change, 6)}`);
+      if (updated) bits.push(`更新: ${updated}`);
+      results.push(bits.join('；'));
     }
     return results.length ? '【实时汇率】\n' + results.join('\n') : JSON.stringify({ error: '汇率查询失败' });
   } catch (e) {
