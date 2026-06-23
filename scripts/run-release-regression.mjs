@@ -143,7 +143,9 @@ async function runStaticChecks({ level }) {
     "test:release:ui",
     "release:preflight",
     "release:cli-efficiency",
+    "release:finalize-mac",
     "release:manifest",
+    "release:verify-mac",
   ];
   for (const name of requiredScripts) {
     checks.push(makeCheck(
@@ -159,6 +161,20 @@ async function runStaticChecks({ level }) {
     "blocker",
     Boolean(pkg.scripts?.dist && pkg.scripts.dist.includes("release:preflight")),
     "package.json dist runs release:preflight before packaging",
+  ));
+  checks.push(makeCheck(
+    "static-dist-does-not-skip-notarization",
+    "blocker",
+    Boolean(pkg.scripts?.dist && !pkg.scripts.dist.includes("SKIP_NOTARIZE")),
+    "package.json dist never sets SKIP_NOTARIZE for release builds",
+    String(pkg.scripts?.dist || ""),
+  ));
+  checks.push(makeCheck(
+    "static-dist-local-is-test-only-skip-notarization",
+    "critical",
+    Boolean(pkg.scripts?.["dist:local"]?.includes("SKIP_NOTARIZE=true")),
+    "only dist:local may use SKIP_NOTARIZE for local test packages",
+    String(pkg.scripts?.["dist:local"] || ""),
   ));
   checks.push(makeCheck(
     "static-release-preflight-cli",
@@ -216,6 +232,21 @@ async function runStaticChecks({ level }) {
     "CLI release has a guarded pack command so repo-root npm pack cannot ship the app tarball",
     `${pkg.scripts?.["pack:cli"] || ""}\n${pkg.scripts?.["test:cli-pack"] || ""}`,
   ));
+  const finalizeMacText = await readTextIfExists(path.join(ROOT, "scripts", "finalize-macos-dmg.sh"));
+  const verifyMacText = await readTextIfExists(path.join(ROOT, "scripts", "verify-macos-release-artifacts.mjs"));
+  checks.push(makeCheck(
+    "static-macos-finalize-release-gate",
+    "blocker",
+    Boolean(pkg.scripts?.["release:finalize-mac"]?.includes("finalize-macos-dmg.sh")
+      && pkg.scripts["release:finalize-mac"].includes("release:verify-mac")
+      && finalizeMacText.includes("notarytool submit")
+      && finalizeMacText.includes("stapler staple")
+      && finalizeMacText.includes("spctl -a")
+      && verifyMacText.includes("stapler validate")
+      && verifyMacText.includes("Gatekeeper validate")),
+    "macOS release finalize submits to Apple, staples, Gatekeeper-validates, and runs a post-finalize verifier",
+    `${pkg.scripts?.["release:finalize-mac"] || ""}\n${finalizeMacText.slice(0, 900)}\n${verifyMacText.slice(0, 900)}`,
+  ));
 
   checks.push(makeCheck(
     "static-cli-version-valid",
@@ -251,6 +282,10 @@ async function runStaticChecks({ level }) {
     }
     if (manifest?.stable?.assets) {
       const assetUrls = Object.values(manifest.stable.assets).map(String);
+      const pendingDarwinArm64 = Boolean(manifest.stable.pendingAssets?.["darwin-arm64"]);
+      const pendingDarwinX64 = Boolean(manifest.stable.pendingAssets?.["darwin-x64"]);
+      const darwinArm64Url = String(manifest.stable.assets["darwin-arm64"] || "");
+      const darwinX64Url = String(manifest.stable.assets["darwin-x64"] || "");
       checks.push(makeCheck(
         "static-manifest-stable-version",
         "blocker",
@@ -287,9 +322,23 @@ async function runStaticChecks({ level }) {
       checks.push(makeCheck(
         "static-manifest-macos-arm64-name",
         "blocker",
-        String(manifest.stable.assets["darwin-arm64"] || "").includes(`Lynn-${version}-macOS-arm64.dmg`),
-        "manifest darwin-arm64 URL matches the signed electron-builder artifact name",
-        String(manifest.stable.assets["darwin-arm64"] || ""),
+        pendingDarwinArm64 || darwinArm64Url.includes(`Lynn-${version}-macOS-arm64.dmg`),
+        "manifest darwin-arm64 URL matches the signed electron-builder artifact name, or is explicitly withheld pending notarization",
+        darwinArm64Url || String(manifest.stable.pendingAssets?.["darwin-arm64"] || ""),
+      ));
+      checks.push(makeCheck(
+        "static-manifest-macos-x64-name",
+        "blocker",
+        pendingDarwinX64 || darwinX64Url.includes(`Lynn-${version}-macOS-x64.dmg`),
+        "manifest darwin-x64 URL matches the signed electron-builder artifact name, or is explicitly withheld pending notarization",
+        darwinX64Url || String(manifest.stable.pendingAssets?.["darwin-x64"] || ""),
+      ));
+      checks.push(makeCheck(
+        "static-manifest-pending-macos-has-no-direct-link",
+        "blocker",
+        (!pendingDarwinArm64 || !darwinArm64Url) && (!pendingDarwinX64 || !darwinX64Url),
+        "pending macOS notarization state must not keep direct macOS DMG links in manifest assets",
+        [darwinArm64Url, darwinX64Url].filter(Boolean).join("\n"),
       ));
       checks.push(makeCheck(
         "static-manifest-windows-x64-name",
@@ -334,6 +383,38 @@ async function runStaticChecks({ level }) {
       staleVersions.join(", "),
     ));
   }
+
+  const publicReleaseFiles = [
+    "README.md",
+    "README_EN.md",
+    ".github/release-notes.md",
+    ".github/update-manifest.json",
+    "site/app.js",
+    "site/download.html",
+    "site/index.html",
+  ];
+  const forbiddenNotarizationCopy = [
+    /Apple notarization (?:is )?skipped/i,
+    /notarization skipped for this build/i,
+    /跳过 Apple notarization/,
+    /Apple notarization 本轮跳过/,
+    /本轮快速发布跳过/,
+    /按用户要求跳过/,
+  ];
+  const notarizationCopyLeaks = [];
+  for (const rel of publicReleaseFiles) {
+    const text = await readTextIfExists(path.join(ROOT, rel));
+    for (const pattern of forbiddenNotarizationCopy) {
+      if (pattern.test(text)) notarizationCopyLeaks.push(`${rel}: ${pattern}`);
+    }
+  }
+  checks.push(makeCheck(
+    "static-public-release-copy-never-claims-notarization-skipped",
+    "blocker",
+    notarizationCopyLeaks.length === 0,
+    "public release docs/site must never present skipped Apple notarization as a publishable state",
+    notarizationCopyLeaks.join("\n"),
+  ));
 
   const uiCase = RELEASE_CASES.find((item) => item.type === "static-ui-contract");
   if (uiCase) {

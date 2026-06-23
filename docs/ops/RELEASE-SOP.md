@@ -96,6 +96,7 @@ npm run dist        # macOS(自动先跑 release:preflight;build:server 已含)
 npm run dist:win    # Windows x64(仅 x64,⛔ 不出 ARM64 Windows)
 ```
 
+- ⛔ **正式发布严禁使用 `npm run dist:local` 或任何 `SKIP_NOTARIZE=true` 产物**。`dist:local` 只给本机测试/安装 smoke 用；只要要同步镜像站、Gitee Release 或 auto-update,macOS DMG 必须走 `npm run release:finalize-mac`。
 - dmg **改名后再发布**:arm64 → `Lynn-<ver>-macOS-Apple-Silicon.dmg`,x64 → `…-Intel.dmg`。
 - 公证+装订+验证一条龙:`npm run release:finalize-mac`(= `scripts/finalize-macos-dmg.sh`,
   notarytool submit --wait → stapler staple → Gatekeeper 验证)。

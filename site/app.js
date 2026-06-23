@@ -3,10 +3,8 @@ const RELEASE = {
   cliVersion: "0.85.1",
   releasePage: "https://gitee.com/merkyor/Lynn/releases#v0.85.1",
   assets: {
-    macArm:
-      "https://download.merkyorlynn.com/downloads/Lynn-0.85.1-macOS-arm64.dmg",
-    macIntel:
-      "https://download.merkyorlynn.com/downloads/Lynn-0.85.1-macOS-x64.dmg",
+    macArm: "",
+    macIntel: "",
     windows:
       "https://download.merkyorlynn.com/downloads/Lynn-0.85.1-Windows-Setup.exe",
   },
@@ -35,7 +33,14 @@ function applyReleaseData() {
 
   document.querySelectorAll("[data-download-key]").forEach((link) => {
     const key = link.getAttribute("data-download-key");
-    if (!key || !RELEASE.assets[key]) return;
+    if (!key) return;
+    if (!RELEASE.assets[key]) {
+      link.removeAttribute("href");
+      link.removeAttribute("target");
+      link.setAttribute("aria-disabled", "true");
+      link.classList.add("button-disabled");
+      return;
+    }
     link.setAttribute("href", RELEASE.assets[key]);
     link.setAttribute("target", "_blank");
     link.setAttribute("rel", "noreferrer");
@@ -63,7 +68,7 @@ function applyPlatformHint() {
       ?.classList.add("is-recommended");
     if (callout) {
       callout.innerHTML =
-        "<strong>已识别为 macOS：</strong> 请根据你的芯片型号选择 Apple Silicon 或 Intel 版本。";
+        "<strong>已识别为 macOS：</strong> V0.85.1 macOS 包等待 Apple notarization 完成后重新开放下载；当前请先使用 CLI。";
     }
     return;
   }

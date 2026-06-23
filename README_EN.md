@@ -885,9 +885,7 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://github.com/MerkyorLynn/Lynn/releases).
-
-V0.85.1 macOS artifacts are signed quick-release packages for both Apple Silicon and Intel. Apple notarization is skipped for this build.
+**macOS (Apple Silicon / Intel):** V0.85.1 macOS DMGs are temporarily withheld. The public DMGs will be reissued only after Apple notarization, stapling, and Gatekeeper validation pass.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
 
@@ -954,8 +952,8 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.85.1 signed DMG; notarization skipped for this build) |
-| macOS (Intel) | Supported |
+| macOS (Apple Silicon) | Withheld pending V0.85.1 notarized DMG reissue |
+| macOS (Intel) | Withheld pending V0.85.1 notarized DMG reissue |
 | Windows | Beta |
 | Linux | Planned |
 | Mobile (PWA) | Planned |

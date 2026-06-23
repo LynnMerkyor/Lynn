@@ -12,8 +12,8 @@
   npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.1.tgz"
   ```
 
-- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.1-macOS-arm64.dmg
-- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.1-macOS-x64.dmg
+- **macOS Apple Silicon / ARM64**: 暂停开放。V0.85.1 macOS 包会在 Apple notarization、staple 和 Gatekeeper 验证完成后补发。
+- **macOS Intel / x64**: 暂停开放。V0.85.1 macOS 包会在 Apple notarization、staple 和 Gatekeeper 验证完成后补发。
 - **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.1-Windows-Setup.exe
 - **下载页**: https://download.merkyorlynn.com/download.html
 
@@ -32,10 +32,10 @@
 - `npm run typecheck`
 - `npm run typecheck:runtime`
 - 核心单测矩阵：7 files / 157 tests passed
-- `npm run test:release:static`：70/70 passed
+- `npm run test:release:static`：78/78 passed
 - CLI 100 扩展对话门禁：100 ok / 0 fail
 - GUI 100 扩展对话门禁：100 ok / 0 fail
-- macOS arm64 / macOS x64 / Windows x64 安装包重新打包；macOS 本轮按快速发布流程跳过 Apple notarization。
+- Windows x64 安装包重新打包并同步镜像；macOS arm64 / x64 包因 Apple notarization 被账号协议 403 阻断，已从镜像站隔离下架，等待 Apple 协议恢复后按 SOP 重新公证、staple、Gatekeeper 验证并补发。
 - packaged server / packaged CLI smoke 通过；真实 `/Applications/Lynn.app` 安装版 packaged server / CLI smoke 通过。
 
 ---

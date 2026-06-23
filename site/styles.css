@@ -220,6 +220,16 @@ img {
   transform: translateY(-1px);
 }
 
+.button-disabled,
+.button-disabled:hover {
+  cursor: not-allowed;
+  color: var(--text-soft);
+  background: rgba(255, 251, 244, 0.58);
+  border-color: var(--line);
+  box-shadow: none;
+  transform: none;
+}
+
 .button-primary {
   color: white;
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
@@ -507,6 +517,17 @@ img {
 
 .download-card.is-recommended .pill {
   background: rgba(86, 127, 153, 0.16);
+}
+
+.download-card.is-unavailable {
+  border-style: dashed;
+  background: rgba(255, 251, 244, 0.56);
+}
+
+.download-card.is-unavailable .pill {
+  color: var(--text-soft);
+  background: rgba(103, 118, 135, 0.1);
+  border-color: rgba(103, 118, 135, 0.16);
 }
 
 .faq-section,
