@@ -8,8 +8,8 @@
  * 这条链路替代 v1 的 extractMemoryEvents → findNewEvents → 三区间 → score/decay。
  */
 
-import { callText } from "../../core/llm-client.js";
-import { getLocale } from "../../server/i18n.js";
+import { callText } from "../../shared/llm-client.js";
+import { getLocale } from "../../shared/i18n-runtime.js";
 
 const MAX_RETRIES = 3;
 const MAX_CONCURRENT = 3;

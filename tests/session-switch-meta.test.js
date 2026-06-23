@@ -19,7 +19,7 @@ describe("session switch meta helper", () => {
     return dir;
   }
 
-  it("reads memory state and new model ref format", () => {
+  it("reads memory state and new model ref format", async () => {
     const dir = tempDir();
     const sessionPath = path.join(dir, "s.jsonl");
     fs.writeFileSync(path.join(dir, "session-meta.json"), JSON.stringify({
@@ -29,42 +29,42 @@ describe("session switch meta helper", () => {
       },
     }));
 
-    expect(readSessionSwitchMeta({ sessionPath, sessionDir: dir })).toEqual({
+    await expect(readSessionSwitchMeta({ sessionPath, sessionDir: dir })).resolves.toEqual({
       memoryEnabled: false,
       savedModelRef: { id: "qwen", provider: "local" },
     });
   });
 
-  it("reads legacy modelId format", () => {
+  it("reads legacy modelId format", async () => {
     const dir = tempDir();
     const sessionPath = path.join(dir, "old.jsonl");
     fs.writeFileSync(path.join(dir, "session-meta.json"), JSON.stringify({
       "old.jsonl": { modelId: "legacy-model" },
     }));
 
-    expect(readSessionSwitchMeta({ sessionPath, sessionDir: dir })).toEqual({
+    await expect(readSessionSwitchMeta({ sessionPath, sessionDir: dir })).resolves.toEqual({
       memoryEnabled: true,
       savedModelRef: { id: "legacy-model", provider: "" },
     });
   });
 
-  it("ignores missing meta file and reports malformed meta", () => {
+  it("ignores missing meta file and reports malformed meta", async () => {
     const dir = tempDir();
     const onReadError = vi.fn();
 
-    expect(readSessionSwitchMeta({
+    await expect(readSessionSwitchMeta({
       sessionPath: path.join(dir, "missing.jsonl"),
       sessionDir: dir,
       onReadError,
-    })).toEqual({ memoryEnabled: true, savedModelRef: null });
+    })).resolves.toEqual({ memoryEnabled: true, savedModelRef: null });
     expect(onReadError).not.toHaveBeenCalled();
 
     fs.writeFileSync(path.join(dir, "session-meta.json"), "{nope");
-    expect(readSessionSwitchMeta({
+    await expect(readSessionSwitchMeta({
       sessionPath: path.join(dir, "bad.jsonl"),
       sessionDir: dir,
       onReadError,
-    })).toEqual({ memoryEnabled: true, savedModelRef: null });
+    })).resolves.toEqual({ memoryEnabled: true, savedModelRef: null });
     expect(onReadError).toHaveBeenCalledTimes(1);
   });
 });

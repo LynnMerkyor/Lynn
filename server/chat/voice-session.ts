@@ -37,7 +37,7 @@ import {
   waitForCurrentTurnEmotion,
 } from "./voice-session-utils.js";
 import { FRAME, STATE } from "./voice-ws-types.js";
-import type { VoiceHealthPayload, VoiceProviderHealth } from "./voice-fallback-orchestrator.js";
+import type { VoiceHealthPayload, VoiceProviderHealth } from "../../shared/voice-types.js";
 import type {
   AecCapture,
   AecProcessorHandle,

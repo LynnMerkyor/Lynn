@@ -46,7 +46,7 @@ import {
 } from "./llm-utils.js";
 import { debugLog } from "../lib/debug-log.js";
 import { ContentFilter } from "../lib/content-filter.js";
-import { t } from "../server/i18n.js";
+import { t } from "../shared/i18n-runtime.js";
 import {
   normalizeSecurityMode,
 } from "../shared/security-mode.js";

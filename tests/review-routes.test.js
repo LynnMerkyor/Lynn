@@ -6,12 +6,12 @@ vi.mock('../hub/agent-executor.js', () => ({
   runAgentSession: vi.fn(async () => 'Review looks good.\n```json\n{"summary":"Looks good.","verdict":"pass","findings":[]}\n```'),
 }));
 
-vi.mock('../core/llm-client.js', () => ({
+vi.mock('../shared/llm-client.js', () => ({
   callText: vi.fn(async () => 'Review looks good.\n```json\n{"summary":"Looks good.","verdict":"pass","findings":[]}\n```'),
 }));
 
 const { runAgentSession } = await import('../hub/agent-executor.js');
-const { callText } = await import('../core/llm-client.js');
+const { callText } = await import('../shared/llm-client.js');
 
 async function waitForBroadcast(broadcast, predicate, timeoutMs = 500) {
   const startedAt = Date.now();

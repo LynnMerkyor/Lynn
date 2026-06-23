@@ -1,4 +1,4 @@
-import { getLocale } from "../server/i18n.js";
+import { getLocale } from "../shared/i18n-runtime.js";
 import {
   classifyRouteIntent,
   ROUTE_INTENTS,

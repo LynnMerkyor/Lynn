@@ -6,7 +6,7 @@
  */
 import { Type } from "@sinclair/typebox";
 import { StringEnum } from "../../core/agent-runtime/schema.js";
-import { t } from "../../server/i18n.js";
+import { t } from "../../shared/i18n-runtime.js";
 
 let _counter = 0;
 

@@ -13,7 +13,7 @@ import { Agent } from "./agent.js";
 import { safeReadYAMLSync } from "../shared/safe-fs.js";
 import { createModuleLogger } from "../lib/debug-log.js";
 import { clearConfigCache } from "../lib/memory/config-loader.js";
-import { t } from "../server/i18n.js";
+import { t } from "../shared/i18n-runtime.js";
 import { ActivityStore } from "../lib/desk/activity-store.js";
 import {
   generateAgentId as _generateAgentId,

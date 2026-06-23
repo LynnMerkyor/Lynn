@@ -15,8 +15,8 @@ import os from "os";
 import path from "path";
 import crypto from "crypto";
 import { getLogicalDay } from "../time-utils.js";
-import { callText } from "../../core/llm-client.js";
-import { getLocale } from "../../server/i18n.js";
+import { callText } from "../../shared/llm-client.js";
+import { getLocale } from "../../shared/i18n-runtime.js";
 import { safeReadFile } from "../../shared/safe-fs.js";
 
 export type CompileStatus = "compiled" | "skipped";

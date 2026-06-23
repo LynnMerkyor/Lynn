@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { resolveLynnHome } from "../core/client-agent-identity.js";
+import { resolveLynnHome } from "../shared/client-agent-identity.js";
 
 const OLD_ENV = {
   LYNN_HOME: process.env.LYNN_HOME,

@@ -21,9 +21,9 @@
 import fs from "fs";
 import path from "path";
 import { Type } from "@sinclair/typebox";
-import { t } from "../../server/i18n.js";
-import { callText } from "../../core/llm-client.js";
-import { getLocale } from "../../server/i18n.js";
+import { t } from "../../shared/i18n-runtime.js";
+import { callText } from "../../shared/llm-client.js";
+import { getLocale } from "../../shared/i18n-runtime.js";
 
 const GITHUB_API_TIMEOUT = 15_000;
 const SAFETY_REVIEW_TIMEOUT = 20_000;

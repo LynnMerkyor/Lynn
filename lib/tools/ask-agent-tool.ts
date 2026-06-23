@@ -7,7 +7,7 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import { t } from "../../server/i18n.js";
+import { t } from "../../shared/i18n-runtime.js";
 import { runAgentSession } from "../../hub/agent-executor.js";
 import type { LynnEngine } from "../../core/engine.js";
 

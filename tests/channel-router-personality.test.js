@@ -61,13 +61,13 @@ vi.mock("../lib/memory/config-loader.js", () => ({
 }));
 
 let callTextSpy;
-vi.mock("../core/llm-client.js", () => ({
+vi.mock("../shared/llm-client.js", () => ({
   callText: vi.fn(async () => "NO"),
 }));
 
 describe("ChannelRouter._executeCheck personality 来源", () => {
   it("当 engine.agents 有该 agent 实例时，使用内存中的 personality 而不读磁盘", async () => {
-    const { callText } = await import("../core/llm-client.js");
+    const { callText } = await import("../shared/llm-client.js");
     callTextSpy = callText;
     callTextSpy.mockResolvedValue("NO");
 
@@ -128,7 +128,7 @@ describe("ChannelRouter._executeCheck personality 来源", () => {
   });
 
   it("当 engine.agents 为 undefined 时 fallback 到磁盘读取", async () => {
-    const { callText } = await import("../core/llm-client.js");
+    const { callText } = await import("../shared/llm-client.js");
     callText.mockResolvedValue("NO");
 
     const { loadConfig } = await import("../lib/memory/config-loader.js");
@@ -169,7 +169,7 @@ describe("ChannelRouter._executeCheck personality 来源", () => {
   });
 
   it("立即 triage 时不会因为前一个 agent 已回复而阻断后续 agent", async () => {
-    const { callText } = await import("../core/llm-client.js");
+    const { callText } = await import("../shared/llm-client.js");
     const { appendMessage } = await import("../lib/channels/channel-store.js");
     callText.mockResolvedValue("YES");
     appendMessage.mockClear();
@@ -257,7 +257,7 @@ describe("ChannelRouter._executeCheck personality 来源", () => {
   });
 
   it("用户发在线/在吗这类唤醒消息时，即使 triage 返回 NO 也会强制让成员回应", async () => {
-    const { callText } = await import("../core/llm-client.js");
+    const { callText } = await import("../shared/llm-client.js");
     const { appendMessage } = await import("../lib/channels/channel-store.js");
     callText.mockResolvedValue("NO");
     callText.mockClear();
@@ -331,7 +331,7 @@ describe("ChannelRouter._executeCheck personality 来源", () => {
   });
 
   it("主回复链路失败时，会回退到轻量直连回复继续发言", async () => {
-    const { callText } = await import("../core/llm-client.js");
+    const { callText } = await import("../shared/llm-client.js");
     const { appendMessage } = await import("../lib/channels/channel-store.js");
     callText.mockResolvedValueOnce("我来补一句。");
     appendMessage.mockClear();

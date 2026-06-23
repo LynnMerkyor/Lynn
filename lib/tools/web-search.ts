@@ -16,10 +16,10 @@
 
 import { Type } from "@sinclair/typebox";
 import { loadConfig } from "../memory/config-loader.js";
-import { t, getLocale } from "../../server/i18n.js";
+import { t, getLocale } from "../../shared/i18n-runtime.js";
 import { safeParseResponse } from "../../shared/safe-parse.js";
 import { BRAIN_API_ROOTS } from "../../shared/brain-provider.js";
-import { readSignedClientAgentHeaders } from "../../core/client-agent-identity.js";
+import { readSignedClientAgentHeaders } from "../../shared/client-agent-identity.js";
 
 type SearchScene = "general" | "docs" | "finance" | "sports" | "realtime" | "research" | string;
 

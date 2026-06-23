@@ -12,7 +12,7 @@ import {
   SettingsManager,
 } from "./agent-runtime/settings-manager.js";
 import { createModuleLogger } from "../lib/debug-log.js";
-import { t, getLocale } from "../server/i18n.js";
+import { t, getLocale } from "../shared/i18n-runtime.js";
 import { findModel } from "../shared/model-ref.js";
 import {
   SecurityMode,
@@ -443,7 +443,7 @@ export class SessionCoordinator {
     }
 
     // 从 session-meta.json 恢复记忆开关 & 模型
-    const { memoryEnabled, savedModelRef } = readSessionSwitchMeta({
+    const { memoryEnabled, savedModelRef } = await readSessionSwitchMeta({
       sessionPath,
       sessionDir: this._d.getAgent().sessionDir,
       onReadError: (err) => log.warn(`session-meta.json 读取失败: ${errMessage(err)}`),
@@ -629,10 +629,10 @@ export class SessionCoordinator {
     }
   }
 
-  truncateSessionBeforeVisibleMessage(sessionPath: string, visibleMessageId: string) {
+  async truncateSessionBeforeVisibleMessage(sessionPath: string, visibleMessageId: string) {
     const entry = this._sessions.get(sessionPath);
     if (!entry?.session) return { ok: false, reason: "session-not-in-cache" };
-    return truncateVisibleSessionMessage(entry.session, sessionPath, visibleMessageId);
+    return await truncateVisibleSessionMessage(entry.session, sessionPath, visibleMessageId);
   }
 
   async _refreshBrainSessionSignatureIfNeeded(

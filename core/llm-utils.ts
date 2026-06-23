@@ -7,7 +7,7 @@
 import fs from "fs";
 import path from "path";
 import { callText } from "./llm-client.js";
-import { getLocale } from "../server/i18n.js";
+import { getLocale } from "../shared/i18n-runtime.js";
 import {
   containsPseudoToolSimulation as containsSharedPseudoToolSimulation,
   stripPseudoToolCallMarkup,
@@ -101,7 +101,7 @@ interface SessionMessage {
   content?: SessionContentBlock[];
 }
 
-interface SessionContentBlock extends ContentBlock {}
+type SessionContentBlock = ContentBlock;
 
 interface ErrorLike {
   name?: string;
@@ -162,8 +162,17 @@ async function callLlm({ model, provider, api, api_key, base_url, messages, temp
 }
 
 /** 从 .jsonl session 文件提取 user/assistant 文本和工具调用 */
-function parseSessionContent(sessionPath: string, { userLimit = 1000, assistantLimit = 1000 }: SessionContentOptions = {}): SessionContentSummary {
-  const raw = fs.readFileSync(sessionPath, "utf-8");
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.promises.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function parseSessionContent(sessionPath: string, { userLimit = 1000, assistantLimit = 1000 }: SessionContentOptions = {}): Promise<SessionContentSummary> {
+  const raw = await fs.promises.readFile(sessionPath, "utf-8");
   const lines = raw.trim().split("\n").map(l => {
     try { return JSON.parse(l) as SessionContentLine; } catch { return null; }
   }).filter(Boolean) as SessionContentLine[];
@@ -341,7 +350,7 @@ export async function summarizeActivity(utilConfig: UtilityConfig, sessionPath: 
   const log = emitDevLog || (() => {});
   const isZh = getLocale().startsWith("zh");
   try {
-    const { userText, assistantText, toolCalls } = parseSessionContent(sessionPath);
+    const { userText, assistantText, toolCalls } = await parseSessionContent(sessionPath);
     if (!userText && !assistantText) {
       log("[summarize] session empty, skipping");
       return null;
@@ -414,10 +423,10 @@ Rules:
 
 /** 快速摘要（用 utility 小模型） */
 export async function summarizeActivityQuick(utilConfig: UtilityConfig, sessionPath: string): Promise<string | null> {
-  if (!fs.existsSync(sessionPath)) return null;
+  if (!await fileExists(sessionPath)) return null;
   const isZh = getLocale().startsWith("zh");
   try {
-    const { userText, assistantText } = parseSessionContent(sessionPath, {
+    const { userText, assistantText } = await parseSessionContent(sessionPath, {
       userLimit: 800, assistantLimit: 800,
     });
     if (!userText && !assistantText) return null;
@@ -456,12 +465,12 @@ export async function summarizeActivityQuick(utilConfig: UtilityConfig, sessionP
 
 /** 为自动接力生成 session 摘要（更完整，供下一个 session 继承） */
 export async function summarizeSessionRelay(utilConfig: UtilityConfig, sessionPath: string, opts: SessionRelayOptions = {}): Promise<string | null> {
-  if (!fs.existsSync(sessionPath)) return null;
+  if (!await fileExists(sessionPath)) return null;
   const isZh = getLocale().startsWith("zh");
   const maxTokens = Number(opts.maxTokens) > 0 ? Number(opts.maxTokens) : 800;
 
   try {
-    const { userText, assistantText, toolCallsText } = parseSessionContent(sessionPath, {
+    const { userText, assistantText, toolCallsText } = await parseSessionContent(sessionPath, {
       userLimit: 2400,
       assistantLimit: 3200,
       includeToolCalls: true,

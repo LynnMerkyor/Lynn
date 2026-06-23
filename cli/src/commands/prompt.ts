@@ -236,7 +236,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
     }
   }
 
-  if (!imagePaths.length) {
+  if (!imagePaths.length && !voice) {
     const directResearch = await tryBuildCliDirectResearchAnswer(prompt).catch(() => null);
     if (directResearch?.answer?.trim()) {
       if (options.json) {

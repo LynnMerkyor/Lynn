@@ -1,12 +1,12 @@
 /**
  * lib/llm/provider-client.js — Provider 认证 header 和连通性探测 URL 构造
  *
- * callProviderText 已迁移到 core/llm-client.js（走 Pi SDK），
+ * callProviderText 已迁移到 shared/llm-client.js（走 Pi SDK），
  * 本文件只保留 test/health 路由需要的辅助函数。
  */
 
 import { t } from "../../shared/i18n-runtime.js";
-import { readSignedClientAgentHeaders } from "../../core/client-agent-identity.js";
+import { readSignedClientAgentHeaders } from "../../shared/client-agent-identity.js";
 
 export type ProviderApiProtocol =
   | "anthropic-messages"

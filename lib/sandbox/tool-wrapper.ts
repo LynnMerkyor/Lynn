@@ -14,7 +14,7 @@
  */
 
 import path from "path";
-import { t } from "../../server/i18n.js";
+import { t } from "../../shared/i18n-runtime.js";
 import { createSnapshot, isDangerousCommand } from "./snapshot.js";
 import type { PathGuardOperation } from "./path-guard.js";
 

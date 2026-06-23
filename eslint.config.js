@@ -58,6 +58,35 @@ export default [
     },
   },
 
+  // Keep lower runtime layers independent from server-only modules.
+  {
+    files: ['core/**/*.{ts,tsx,js}', 'lib/**/*.{ts,tsx,js}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '../server/*',
+                '../../server/*',
+                '../../../server/*',
+                '../core/llm-client.js',
+                '../../core/llm-client.js',
+                '../../../core/llm-client.js',
+                '../core/client-agent-identity.js',
+                '../../core/client-agent-identity.js',
+                '../../../core/client-agent-identity.js',
+              ],
+              message:
+                'core/ and lib/ must not import server-only modules or core LLM runtime entrypoints. Move shared runtime helpers into shared/.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Downgrade noisy recommended rules to warnings (non-architectural, fix incrementally)
   {
     rules: {

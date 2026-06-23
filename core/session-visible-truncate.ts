@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import fs from "fs/promises";
 
 type AnyRecord = Record<string, any>;
 
@@ -39,10 +39,16 @@ function isVisibleHistoryMessage(message: AnyRecord | null | undefined): boolean
   return !!textFromContent(content).trim() || hasToolUseContent(content);
 }
 
-function readEntriesFromFile(sessionPath: string): AnyRecord[] {
-  if (!sessionPath || !existsSync(sessionPath)) return [];
+async function readEntriesFromFile(sessionPath: string): Promise<AnyRecord[]> {
+  if (!sessionPath) return [];
+  let raw = "";
+  try {
+    raw = await fs.readFile(sessionPath, "utf8");
+  } catch {
+    return [];
+  }
   const entries: AnyRecord[] = [];
-  for (const line of readFileSync(sessionPath, "utf8").split("\n")) {
+  for (const line of raw.split("\n")) {
     if (!line.trim()) continue;
     try {
       entries.push(JSON.parse(line));
@@ -54,9 +60,9 @@ function readEntriesFromFile(sessionPath: string): AnyRecord[] {
   return entries;
 }
 
-function writeEntriesToFile(sessionPath: string, entries: AnyRecord[]): void {
+async function writeEntriesToFile(sessionPath: string, entries: AnyRecord[]): Promise<void> {
   const content = entries.length ? `${entries.map(entry => JSON.stringify(entry)).join("\n")}\n` : "";
-  writeFileSync(sessionPath, content, "utf8");
+  await fs.writeFile(sessionPath, content, "utf8");
 }
 
 function refreshSessionManager(manager: AnyRecord, entries: AnyRecord[]): void {
@@ -80,11 +86,11 @@ function refreshSessionManager(manager: AnyRecord, entries: AnyRecord[]): void {
   manager.flushed = true;
 }
 
-export function truncateSessionBeforeVisibleMessage(
+export async function truncateSessionBeforeVisibleMessage(
   session: AnyRecord | null | undefined,
   sessionPath: string,
   visibleMessageId: string,
-): TruncateVisibleMessageResult {
+): Promise<TruncateVisibleMessageResult> {
   const targetVisibleIndex = Number.parseInt(String(visibleMessageId), 10);
   if (!Number.isFinite(targetVisibleIndex) || targetVisibleIndex < 0) {
     return { ok: false, reason: "invalid-message-id" };
@@ -92,7 +98,7 @@ export function truncateSessionBeforeVisibleMessage(
 
   const manager = session?.sessionManager;
   const sourceEntries = asArray(manager?.fileEntries);
-  const entries = sourceEntries.length ? [...sourceEntries] : readEntriesFromFile(sessionPath);
+  const entries = sourceEntries.length ? [...sourceEntries] : await readEntriesFromFile(sessionPath);
   if (!entries.length) return { ok: false, reason: "empty-session" };
 
   let visibleIndex = 0;
@@ -110,7 +116,7 @@ export function truncateSessionBeforeVisibleMessage(
   if (truncateAt < 0) return { ok: false, reason: "message-not-found" };
 
   const nextEntries = entries.slice(0, truncateAt);
-  writeEntriesToFile(sessionPath, nextEntries);
+  await writeEntriesToFile(sessionPath, nextEntries);
 
   if (manager) {
     refreshSessionManager(manager, nextEntries);

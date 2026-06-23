@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 import { safeJson } from "../hono-helpers.js";
 import { BRAIN_API_ROOT, BRAIN_BACKUP_API_ROOT, isBrainProvider } from "../../shared/brain-provider.js";
 import { findModel } from "../../shared/model-ref.js";
-import { callText } from "../../core/llm-client.js";
+import { callText } from "../../shared/llm-client.js";
 import { artifactToolArguments, normalizeArtifactPayload } from "../chat/artifact-shape.js";
 import type { ArtifactPayload } from "../chat/artifact-shape.js";
 import type { LLMApi, ModelId, ProviderId } from "../../core/types.js";

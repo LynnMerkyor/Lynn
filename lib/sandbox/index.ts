@@ -19,7 +19,7 @@ import { createWin32Exec } from "./win32-exec.js";
 import { wrapPathTool, wrapBashTool } from "./tool-wrapper.js";
 import { createEnhancedReadFile, wrapReadToolWithFuzzy } from "./read-enhanced.js";
 import { SecurityAllowlist, SessionAllowlist } from "./allowlist.js";
-import { t } from "../../server/i18n.js";
+import { t } from "../../shared/i18n-runtime.js";
 import { constants } from "fs";
 import { access as fsAccess } from "fs/promises";
 import { basename, extname } from "path";

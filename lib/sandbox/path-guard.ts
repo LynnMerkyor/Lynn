@@ -10,7 +10,7 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { t } from "../../server/i18n.js";
+import { t } from "../../shared/i18n-runtime.js";
 import {
   BLOCKED_FILES,
   BLOCKED_DIRS,

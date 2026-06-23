@@ -18,7 +18,7 @@
  * 设计来源：Lynn 自己的三通道 API 概念（两个参考项目都没有）
  */
 
-import { t } from "../server/i18n.js";
+import { t } from "../shared/i18n-runtime.js";
 import { isLocalBaseUrl } from "../shared/net-utils.js";
 import { getAssistantRoleFromConfig, getRoleDefaultModelRefs } from "../shared/assistant-role-models.js";
 import type {

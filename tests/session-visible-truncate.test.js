@@ -42,7 +42,7 @@ describe("session visible message truncation", () => {
       agent: { replaceMessages: vi.fn() },
     };
 
-    const result = truncateSessionBeforeVisibleMessage(session, sessionPath, "2");
+    const result = await truncateSessionBeforeVisibleMessage(session, sessionPath, "2");
 
     expect(result).toEqual({ ok: true });
     expect(manager.fileEntries.map(entry => entry.id)).toEqual(["session-1", "u1", "a1"]);
@@ -67,7 +67,7 @@ describe("session visible message truncation", () => {
     ];
     await fs.writeFile(sessionPath, `${entries.map(entry => JSON.stringify(entry)).join("\n")}\n`, "utf8");
 
-    const result = truncateSessionBeforeVisibleMessage({ sessionManager: { fileEntries: [...entries] } }, sessionPath, "1");
+    const result = await truncateSessionBeforeVisibleMessage({ sessionManager: { fileEntries: [...entries] } }, sessionPath, "1");
 
     expect(result).toEqual({ ok: false, reason: "target-not-user-message" });
     const persisted = await fs.readFile(sessionPath, "utf8");

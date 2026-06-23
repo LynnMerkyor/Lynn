@@ -11,8 +11,8 @@
 
 import fs from "fs";
 import path from "path";
-import { callText } from "../../core/llm-client.js";
-import { getLocale } from "../../server/i18n.js";
+import { callText } from "../../shared/llm-client.js";
+import { getLocale } from "../../shared/i18n-runtime.js";
 
 const PROFILE_VERSION = 1;
 const MIN_SUMMARY_LENGTH = 80;

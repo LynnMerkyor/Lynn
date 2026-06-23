@@ -37,7 +37,9 @@ interface SportsRow {
   line: string;
 }
 
-type LooseRecord = Record<string, any>;
+type LooseRecord = Record<string, unknown>;
+
+const ESPN_SCOREBOARD_MAX_ATTEMPTS = 3;
 
 const WORLD_CUP_TEAM_ALIASES: Array<{ canonical: string; aliases: RegExp[] }> = [
   { canonical: "England", aliases: [/英格兰/i, /\bEngland\b/i] },
@@ -107,6 +109,34 @@ const WORLD_CUP_2026_STATIC_ROWS: SportsRow[] = [
 
 function compactLine(value: unknown): string {
   return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function isLooseRecord(value: unknown): value is LooseRecord {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function asLooseRecord(value: unknown): LooseRecord {
+  return isLooseRecord(value) ? value : {};
+}
+
+function looseRecordArray(value: unknown): LooseRecord[] {
+  return Array.isArray(value) ? value.filter(isLooseRecord) : [];
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function scoreboardHttpError(status: number): Error {
+  const error = new Error(`ESPN scoreboard HTTP ${status}`);
+  (error as Error & { status?: number }).status = status;
+  return error;
+}
+
+function shouldRetryScoreboardError(error: unknown): boolean {
+  const status = Number((error as { status?: number } | null | undefined)?.status || 0);
+  if (!status) return true;
+  return status === 408 || status === 429 || status >= 500;
 }
 
 function resolveSportsLeague(query: unknown): SportsLeagueInfo | null {
@@ -221,7 +251,8 @@ function beijingDateTimeParts(date: Date): { ymd: string; hour: number } {
 }
 
 function formatStageLabel(event: LooseRecord): string {
-  const slug = String(event?.season?.slug || event?.season?.name || event?.season?.type || "").toLowerCase();
+  const season = asLooseRecord(event.season);
+  const slug = String(season.slug || season.name || season.type || "").toLowerCase();
   if (/semi/.test(slug)) return "Semifinal";
   if (/quarter/.test(slug)) return "Quarterfinal";
   if (/final/.test(slug)) return "Final";
@@ -231,19 +262,26 @@ function formatStageLabel(event: LooseRecord): string {
 }
 
 function formatEspnEvent(event: LooseRecord): SportsRow | null {
-  const competition = event?.competitions?.[0];
-  const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
+  const competition = looseRecordArray(event.competitions)[0];
+  const competitors = looseRecordArray(competition?.competitors);
   if (!competition || competitors.length < 2) return null;
   const home = competitors.find((item: LooseRecord) => item.homeAway === "home") || competitors[0];
   const away = competitors.find((item: LooseRecord) => item.homeAway === "away") || competitors.find((item: LooseRecord) => item !== home) || competitors[1];
-  const homeName = home?.team?.displayName || home?.team?.shortDisplayName || "Home";
-  const awayName = away?.team?.displayName || away?.team?.shortDisplayName || "Away";
+  const homeTeam = asLooseRecord(home.team);
+  const awayTeam = asLooseRecord(away.team);
+  const homeName = homeTeam.displayName || homeTeam.shortDisplayName || "Home";
+  const awayName = awayTeam.displayName || awayTeam.shortDisplayName || "Away";
   const homeScore = home?.score ?? "";
   const awayScore = away?.score ?? "";
-  const status = event?.status?.type || competition?.status?.type || {};
+  const status = asLooseRecord(asLooseRecord(event.status).type || asLooseRecord(competition.status).type);
   const completed = Boolean(status.completed);
   const statusText = status.shortDetail || status.detail || status.name || "";
-  const date = new Date(event?.date || Date.now());
+  const rawDate = event.date;
+  const date = new Date(
+    typeof rawDate === "string" || typeof rawDate === "number" || rawDate instanceof Date
+      ? rawDate
+      : Date.now(),
+  );
   const dateText = formatBeijingDateTime(date);
   const localParts = beijingDateTimeParts(date);
   const score = completed && homeScore !== "" && awayScore !== "" ? `${homeScore}-${awayScore}` : "vs";
@@ -252,7 +290,7 @@ function formatEspnEvent(event: LooseRecord): SportsRow | null {
     completed,
     localYmd: localParts.ymd,
     localHour: localParts.hour,
-    line: `${dateText} ${stageLabel ? `${stageLabel}: ` : ""}${homeName} ${score} ${awayName}${statusText ? ` (${statusText})` : ""}`,
+    line: `${dateText} ${stageLabel ? `${stageLabel}: ` : ""}${String(homeName)} ${score} ${String(awayName)}${statusText ? ` (${String(statusText)})` : ""}`,
   };
 }
 
@@ -383,6 +421,33 @@ function buildStaticWorldCupScheduleFallback(query: string, league: SportsLeague
   });
 }
 
+async function fetchEspnScoreboardJson(
+  source: string,
+  options: { shouldAbortRetry?: (error: unknown) => boolean } = {},
+): Promise<LooseRecord> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= ESPN_SCOREBOARD_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const resp = await fetch(source, {
+        headers: { "User-Agent": "Lynn/ESPNScoreboard" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!resp.ok) throw scoreboardHttpError(resp.status);
+      return asLooseRecord(await resp.json());
+    } catch (error) {
+      lastError = error;
+      if (options.shouldAbortRetry?.(error)) {
+        throw error;
+      }
+      if (attempt >= ESPN_SCOREBOARD_MAX_ATTEMPTS || !shouldRetryScoreboardError(error)) {
+        throw error;
+      }
+      await sleep(attempt === 1 ? 120 : 320);
+    }
+  }
+  throw lastError;
+}
+
 export async function fetchSportsScoreboardEvidence(query: unknown): Promise<SportsScoreboardResult | null> {
   const text = compactLine(query);
   const league = resolveSportsLeague(text);
@@ -390,13 +455,10 @@ export async function fetchSportsScoreboardEvidence(query: unknown): Promise<Spo
   const range = resolveSportsDateRange(text, league);
   const source = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard?limit=950&dates=${range.start}-${range.end}`;
   try {
-    const resp = await fetch(source, {
-      headers: { "User-Agent": "Lynn/ESPNScoreboard" },
-      signal: AbortSignal.timeout(10_000),
+    const data = await fetchEspnScoreboardJson(source, {
+      shouldAbortRetry: (error) => Boolean(buildStaticWorldCupScheduleFallback(text, league, range, error)),
     });
-    if (!resp.ok) throw new Error(`ESPN scoreboard HTTP ${resp.status}`);
-    const data = await resp.json() as LooseRecord;
-    const events = Array.isArray(data?.events) ? data.events : [];
+    const events = looseRecordArray(data.events);
     const rows = filterSportsRows(events.map(formatEspnEvent).filter(Boolean) as SportsRow[], text, range);
     return buildSportsScoreboardResult({ query: text, league, source, range, rows });
   } catch (error) {

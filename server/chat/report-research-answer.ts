@@ -693,8 +693,11 @@ function buildDirectSportsAnswer(context: unknown, userPrompt: string = ""): str
   if (!/体育查询结果/.test(text)) return "";
   const prompt = textOf(userPrompt);
   const wantsPrediction = /预测|预估|猜|看好|可能比分|比分预测|predict|prediction|forecast/i.test(prompt);
+  const shouldDeferSourceFailure = wantsPrediction
+    || (/(?:世界杯|World\s*Cup|FIFA|fifa\.world)/i.test(prompt)
+      && /(?:今晚|今夜|今天|今日|明天|明日|昨晚|昨天|昨日|赛程|比赛|几场|几轮|对阵|比分|赛果|结果|score|scores|schedule|fixture|fixtures|match|matches|game|games|result|results)/i.test(prompt));
   if (/directSourceStatus:\s*unavailable/i.test(text)) {
-    if (wantsPrediction) return "";
+    if (shouldDeferSourceFailure) return "";
     const error = text.match(/^error:\s*([^\n]+)/mi)?.[1]?.trim() || "";
     return [
       "本轮专用体育比分源返回失败，暂未形成可核验比分/赛程结论。",

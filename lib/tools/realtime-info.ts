@@ -7,7 +7,7 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import { getLocale } from "../../server/i18n.js";
+import { getLocale } from "../../shared/i18n-runtime.js";
 import { fetchSportsScoreboardEvidence } from "../../shared/sports-scoreboard.js";
 import { runSearchQuery, type SearchResultItem } from "./web-search.js";
 import { fetchWebContent } from "./web-fetch.js";

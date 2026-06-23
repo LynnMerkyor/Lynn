@@ -2,8 +2,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { callText } from "../core/llm-client.js";
-import { buildClientSignaturePayload, registerClientIdentityWithBrainApi } from "../core/client-agent-identity.js";
+import { callText } from "../shared/llm-client.js";
+import { buildClientSignaturePayload, registerClientIdentityWithBrainApi } from "../shared/client-agent-identity.js";
 
 const tempDirs = [];
 

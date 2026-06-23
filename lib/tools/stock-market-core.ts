@@ -1,4 +1,4 @@
-import { getLocale } from "../../server/i18n.js";
+import { getLocale } from "../../shared/i18n-runtime.js";
 import type { GoldSignals, MarketKind, MarketSource, NamedPrice, PriceRange } from "./stock-market-types.js";
 
 export const DEFAULT_FETCH_COUNT = 2;

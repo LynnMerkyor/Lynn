@@ -1,4 +1,4 @@
-import { t, getLocale } from "../server/i18n.js";
+import { t, getLocale } from "../shared/i18n-runtime.js";
 import { formatProjectInstructions } from "../lib/project-instructions.js";
 import { getBrainDisplayName, isBrainModelRef, isBrainProvider } from "../shared/brain-provider.js";
 import { getUserFacingModelAlias } from "../shared/assistant-role-models.js";

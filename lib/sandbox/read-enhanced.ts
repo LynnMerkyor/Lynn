@@ -238,7 +238,7 @@ export function createEnhancedReadFile(): (absolutePath: string) => Promise<Buff
         return Buffer.from(text, "utf-8");
       } catch (err) {
         // 解析失败，返回错误提示而非乱码
-        const { t } = await import("../../server/i18n.js");
+        const { t } = await import("../../shared/i18n-runtime.js");
         return Buffer.from(`[${t("error.xlsxParseFailed", { ext, msg: errorMessage(err) })}]`, "utf-8");
       }
     }
@@ -249,7 +249,7 @@ export function createEnhancedReadFile(): (absolutePath: string) => Promise<Buff
         const text = await docxToText(absolutePath);
         return Buffer.from(text, "utf-8");
       } catch (err) {
-        const { t } = await import("../../server/i18n.js");
+        const { t } = await import("../../shared/i18n-runtime.js");
         return Buffer.from(`[${t("error.docxParseFailed", { ext, msg: errorMessage(err) })}]`, "utf-8");
       }
     }

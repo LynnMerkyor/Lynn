@@ -9,8 +9,8 @@
 
 import fs from "fs";
 import path from "path";
-import { callText } from "../../core/llm-client.js";
-import { getLocale } from "../../server/i18n.js";
+import { callText } from "../../shared/llm-client.js";
+import { getLocale } from "../../shared/i18n-runtime.js";
 import { parseSkillMetadata } from "../skills/skill-metadata.js";
 import { sanitizeSkillName, safetyReview } from "../tools/install-skill.js";
 

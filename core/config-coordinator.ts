@@ -17,7 +17,7 @@ import {
   normalizeTrustedRoot,
   uniqueTrustedRoots,
 } from "../shared/trusted-roots.js";
-import { t } from "../server/i18n.js";
+import { t } from "../shared/i18n-runtime.js";
 import type { ResolvedModel } from "./types.js";
 
 const log = createModuleLogger("config");

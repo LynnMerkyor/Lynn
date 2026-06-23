@@ -352,7 +352,7 @@ app.get("/api/brain/diagnose", async (c) => {
     url: null as string | null,
   };
   try {
-    const { readSignedClientAgentHeaders } = await import("../core/client-agent-identity.js");
+    const { readSignedClientAgentHeaders } = await import("../shared/client-agent-identity.js");
     const { BRAIN_DEFAULT_MODEL_ID, BRAIN_PROVIDER_BASE_URLS } = await import("../shared/brain-provider.js");
     const headers = {
       "Content-Type": "application/json",

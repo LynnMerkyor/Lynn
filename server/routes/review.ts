@@ -16,7 +16,7 @@ import fs from "fs";
 import path from "path";
 import { Hono } from "hono";
 import { runAgentSession, type AgentSessionRound, type RunAgentSessionOptions } from "../../hub/agent-executor.js";
-import { callText } from "../../core/llm-client.js";
+import { callText } from "../../shared/llm-client.js";
 import type { LLMApi, ModelId, ProviderId } from "../../core/types.js";
 import { getLocale } from "../i18n.js";
 import { buildReviewFollowUp, parseStructuredReview } from "../review-result.js";

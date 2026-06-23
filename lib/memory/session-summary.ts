@@ -15,8 +15,8 @@
 import fs from "fs";
 import path from "path";
 import { scrubPII } from "../pii-guard.js";
-import { callText } from "../../core/llm-client.js";
-import { getLocale } from "../../server/i18n.js";
+import { callText } from "../../shared/llm-client.js";
+import { getLocale } from "../../shared/i18n-runtime.js";
 
 interface SummaryData {
   session_id: string;

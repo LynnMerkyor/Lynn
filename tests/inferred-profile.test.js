@@ -3,7 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-vi.mock("../core/llm-client.js", () => ({
+vi.mock("../shared/llm-client.js", () => ({
   callText: vi.fn(),
 }));
 
@@ -11,7 +11,7 @@ vi.mock("../server/i18n.js", () => ({
   getLocale: () => "zh-CN",
 }));
 
-import { callText } from "../core/llm-client.js";
+import { callText } from "../shared/llm-client.js";
 import { InferredProfile } from "../lib/memory/inferred-profile.js";
 
 const tempRoots = [];

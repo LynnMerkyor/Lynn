@@ -27,7 +27,7 @@ import type {
 } from "./agent-runtime/create-session.js";
 import { debugLog } from "../lib/debug-log.js";
 import { READ_ONLY_BUILTIN_TOOLS } from "./config-coordinator.js";
-import { t, getLocale } from "../server/i18n.js";
+import { t, getLocale } from "../shared/i18n-runtime.js";
 import { safeReadJSON } from "../shared/safe-fs.js";
 import { findModel } from "../shared/model-ref.js";
 import {

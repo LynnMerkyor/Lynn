@@ -1,7 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { getLocale } from "../server/i18n.js";
+import { getLocale } from "../shared/i18n-runtime.js";
 import {
   buildRouteIntentSystemHint,
   normalizeRouteIntent,

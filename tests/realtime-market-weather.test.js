@@ -609,6 +609,50 @@ describe("realtime market/weather tools", () => {
     }
   });
 
+  it("retries transient ESPN scoreboard failures before deferring World Cup schedule answers", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-06-23T16:54:00+08:00"));
+      const fetchMock = vi.fn(async () => {
+        if (fetchMock.mock.calls.length === 1) {
+          return new Response("temporary", { status: 503 });
+        }
+        return jsonResponse({
+          events: [
+            {
+              date: "2026-06-23T17:00:00Z",
+              status: { type: { completed: false, shortDetail: "Scheduled" } },
+              season: { slug: "group-stage" },
+              competitions: [{ competitors: [
+                { homeAway: "home", score: "0", team: { displayName: "Portugal" } },
+                { homeAway: "away", score: "0", team: { displayName: "Uzbekistan" } },
+              ] }],
+            },
+          ],
+        });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const pending = createSportsScoreTool().execute("test", {
+        query: "今晚世界杯有几场比赛？",
+        maxResults: 5,
+      });
+      await vi.advanceTimersByTimeAsync(500);
+      const result = await pending;
+      const text = result.content[0].text;
+      const answer = buildDirectResearchAnswer("sports", `【体育比分工具资料】\n\n${text}`, "今晚世界杯有几场比赛？");
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result.details.provider).toBe("espn_scoreboard");
+      expect(text).toContain("匹配比赛: 1 场");
+      expect(text).toContain("Portugal vs Uzbekistan");
+      expect(answer).toContain("共 1 场");
+      expect(answer).not.toContain("专用体育比分源返回失败");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("filters World Cup scoreboard by mentioned teams before answering match-existence questions", async () => {
     vi.useFakeTimers();
     try {

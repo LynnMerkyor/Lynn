@@ -17,7 +17,7 @@ import {
 } from "./agent-runtime/model-registry.js";
 import { registerOAuthProvider } from "./agent-runtime/oauth.js";
 import { minimaxOAuthProvider } from "../lib/oauth/minimax-portal.js";
-import { t } from "../server/i18n.js";
+import { t } from "../shared/i18n-runtime.js";
 import { ProviderRegistry } from "./provider-registry.js";
 import { ExecutionRouter } from "./execution-router.js";
 import { findModel } from "../shared/model-ref.js";

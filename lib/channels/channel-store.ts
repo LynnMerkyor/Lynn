@@ -10,7 +10,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { getLocale, t } from "../../server/i18n.js";
+import { getLocale, t } from "../../shared/i18n-runtime.js";
 
 export type ChannelTimestamp = string;
 export type ChannelId = string;

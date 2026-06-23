@@ -6,8 +6,8 @@
  */
 
 import { recordEntry } from "./tools/experience.js";
-import { callText } from "../core/llm-client.js";
-import { getLocale } from "../server/i18n.js";
+import { callText } from "../shared/llm-client.js";
+import { getLocale } from "../shared/i18n-runtime.js";
 
 export interface ExperienceExtractorModel {
   model: string;

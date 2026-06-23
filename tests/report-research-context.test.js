@@ -285,7 +285,7 @@ describe("report research context intent", () => {
     expect(answer).toContain("不会用猜测补答案");
   });
 
-  it("closes sports direct-source failures without using generic search evidence", () => {
+  it("defers World Cup direct-source failures instead of closing with a source-failure answer", () => {
     const context = [
       "【体育比分工具资料】",
       "",
@@ -298,10 +298,29 @@ describe("report research context intent", () => {
     ].join("\n");
 
     const answer = buildDirectResearchAnswer("sports", context, "昨晚世界杯最新的比赛结果");
-    expect(answer).toContain("专用体育比分源返回失败");
-    expect(answer).toContain("ESPN scoreboard HTTP 503");
-    expect(answer).toContain("不会用泛搜索摘要");
-    expect(answer).not.toContain("百度百科");
+    expect(answer).toBe("");
+  });
+
+  it("drops unavailable World Cup sports prefetch context so the fallback chain can continue", async () => {
+    const prompt = "今晚世界杯有几场比赛？";
+    const context = await buildReportResearchContext(prompt, {
+      toolWrappers: {
+        realtimeInfo: async () => ({
+          content: [{
+            text: [
+              "体育查询结果 (ESPN scoreboard)",
+              "provider: espn_scoreboard",
+              "query: 今晚世界杯有几场比赛？",
+              "directSourceStatus: unavailable",
+              "error: ESPN scoreboard HTTP 503",
+              "matched: 0",
+            ].join("\n"),
+          }],
+        }),
+      },
+    });
+
+    expect(context).toBe("");
   });
 
   it("builds a sports score prediction when schedule rows are available", () => {

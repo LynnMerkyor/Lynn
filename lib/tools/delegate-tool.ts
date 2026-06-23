@@ -10,7 +10,7 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import { t, getLocale } from "../../server/i18n.js";
+import { t, getLocale } from "../../shared/i18n-runtime.js";
 
 /** sub-agent 可用的 custom tools（只读/研究类） */
 const DELEGATE_CUSTOM_TOOLS_READONLY = [

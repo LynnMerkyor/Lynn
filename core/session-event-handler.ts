@@ -1,4 +1,4 @@
-import { getLocale } from "../server/i18n.js";
+import { getLocale } from "../shared/i18n-runtime.js";
 import { isBrainProvider } from "../shared/brain-provider.js";
 import { runReadToolPromptInjectionGuardrail } from "./claw-aegis-guardrails.js";
 import { isBrainManagedCustomToolName } from "./brain-managed-tools.js";

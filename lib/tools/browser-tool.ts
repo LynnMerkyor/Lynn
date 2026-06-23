@@ -26,7 +26,7 @@
 import { Type } from "@sinclair/typebox";
 import { StringEnum } from "../../core/agent-runtime/schema.js";
 import { BrowserManager } from "../browser/browser-manager.js";
-import { t } from "../../server/i18n.js";
+import { t } from "../../shared/i18n-runtime.js";
 
 type BrowserAction =
   | "start" | "stop" | "navigate" | "snapshot" | "screenshot" | "click"

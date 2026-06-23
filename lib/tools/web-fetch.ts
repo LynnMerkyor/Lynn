@@ -10,7 +10,7 @@
 import { Type } from "@sinclair/typebox";
 import { lookup } from "dns/promises";
 import { isIP } from "net";
-import { t } from "../../server/i18n.js";
+import { t } from "../../shared/i18n-runtime.js";
 
 const MAX_CONTENT_LENGTH = 12000;  // 返回最大字符数
 const FETCH_TIMEOUT = 15000;       // 15 秒超时

@@ -1,31 +1,19 @@
-export interface VoiceProviderHealth {
-  ok?: boolean;
-  fallbackOk?: boolean;
-  degraded?: boolean;
-  error?: string;
-  [key: string]: unknown;
-}
+import type {
+  VoiceHealthPayload,
+  VoiceOrbColor,
+  VoiceProviderHealthSnapshot,
+  VoiceTier,
+  VoiceTierInfo,
+} from "../../shared/voice-types.js";
 
-export interface VoiceProviderHealthSnapshot {
-  asr?: VoiceProviderHealth;
-  ser?: VoiceProviderHealth;
-  tts?: VoiceProviderHealth;
-}
-
-export type VoiceTier = 1 | 2 | 3 | 4 | 5 | 6;
-export type VoiceOrbColor = "green" | "yellow" | "red";
-
-export interface VoiceTierInfo {
-  tier: VoiceTier;
-  orbColor: VoiceOrbColor;
-  label: string;
-  details: VoiceProviderHealthSnapshot;
-}
-
-export interface VoiceHealthPayload {
-  providers?: VoiceProviderHealthSnapshot;
-  [key: string]: unknown;
-}
+export type {
+  VoiceHealthPayload,
+  VoiceOrbColor,
+  VoiceProviderHealth,
+  VoiceProviderHealthSnapshot,
+  VoiceTier,
+  VoiceTierInfo,
+} from "../../shared/voice-types.js";
 
 /**
  * Voice Fallback Orchestrator — Lynn V0.79 Phase 2.5 · DS V4 Pro 反馈 #5 落地

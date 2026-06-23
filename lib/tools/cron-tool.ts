@@ -13,7 +13,7 @@
 
 import { Type } from "@sinclair/typebox";
 import { StringEnum } from "../../core/agent-runtime/schema.js";
-import { t, getLocale } from "../../server/i18n.js";
+import { t, getLocale } from "../../shared/i18n-runtime.js";
 
 type CronAction = "list" | "add" | "remove" | "toggle";
 type CronScheduleType = "at" | "every" | "cron";

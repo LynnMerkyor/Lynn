@@ -26,7 +26,7 @@ import {
 } from "./channel-store.js";
 import type { ChannelMessage, SelfName } from "./channel-store.js";
 import { debugLog } from "../debug-log.js";
-import { getLocale } from "../../server/i18n.js";
+import { getLocale } from "../../shared/i18n-runtime.js";
 import fs from "fs";
 import path from "path";
 

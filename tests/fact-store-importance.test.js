@@ -4,7 +4,7 @@ import os from "os";
 import path from "path";
 import { compileFacts } from "../lib/memory/compile.js";
 
-vi.mock("../core/llm-client.js", () => ({
+vi.mock("../shared/llm-client.js", () => ({
   callText: vi.fn().mockImplementation(async ({ messages }) => {
     const input = messages?.[0]?.content || "";
     const lines = String(input)

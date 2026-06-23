@@ -15,7 +15,7 @@
 import WebSocket from 'ws';
 import { makeFrame, makeStateFrame, makeTranscriptFrame, PCM_TTS_CHUNK_BYTES } from './voice-audio-codec.js';
 import { FRAME, STATE } from './voice-ws-types.js';
-import { readSignedClientAgentHeaders } from '../../core/client-agent-identity.js';
+import { readSignedClientAgentHeaders } from '../../shared/client-agent-identity.js';
 import { BRAIN_API_ROOTS } from '../../shared/brain-provider.js';
 
 const REALTIME_PATHNAME = '/v1/voice/realtime';

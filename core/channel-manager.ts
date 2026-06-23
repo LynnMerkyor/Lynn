@@ -12,7 +12,7 @@ import YAML from "js-yaml";
 import { createModuleLogger } from "../lib/debug-log.js";
 import { saveConfig } from "../lib/memory/config-loader.js";
 import { safeReadYAMLSync } from "../shared/safe-fs.js";
-import { t } from "../server/i18n.js";
+import { t } from "../shared/i18n-runtime.js";
 import {
   createChannel as createChannelFile,
   addBookmarkEntry,

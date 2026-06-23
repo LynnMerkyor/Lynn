@@ -1,9 +1,9 @@
-import fs from "fs";
+import fs from "fs/promises";
 import path from "path";
 
 export type ModelRef = { id: string; provider?: string };
 
-export function readSessionSwitchMeta(opts: {
+export async function readSessionSwitchMeta(opts: {
   sessionPath: string;
   sessionDir: string;
   onReadError?: (err: unknown) => void;
@@ -13,7 +13,7 @@ export function readSessionSwitchMeta(opts: {
 
   try {
     const metaPath = path.join(opts.sessionDir, "session-meta.json");
-    const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+    const meta = JSON.parse(await fs.readFile(metaPath, "utf-8"));
     const sessKey = path.basename(opts.sessionPath);
     const metaEntry = meta[sessKey];
     if (metaEntry?.memoryEnabled === false) memoryEnabled = false;

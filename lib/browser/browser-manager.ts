@@ -22,7 +22,7 @@ import crypto from "crypto";
 import os from "os";
 import path from "path";
 import fs from "fs";
-import { t } from "../../server/i18n.js";
+import { t } from "../../shared/i18n-runtime.js";
 import { IpcTransport, WsTransport } from "./browser-transport.js";
 
 type SessionPath = string | null | undefined;

@@ -6,7 +6,7 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import { t } from "../../server/i18n.js";
+import { t } from "../../shared/i18n-runtime.js";
 import { runSearchQuery, type SearchResultItem } from "./web-search.js";
 import { fetchWebContent } from "./web-fetch.js";
 import type {

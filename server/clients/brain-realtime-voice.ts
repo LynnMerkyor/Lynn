@@ -1,4 +1,4 @@
-import { readSignedClientAgentHeaders } from "../../core/client-agent-identity.js";
+import { readSignedClientAgentHeaders } from "../../shared/client-agent-identity.js";
 import { BRAIN_API_ROOTS } from "../../shared/brain-provider.js";
 import { extractPcm16FromWav, pcm16ToWav, toBuffer } from "../chat/voice-audio-codec.js";
 

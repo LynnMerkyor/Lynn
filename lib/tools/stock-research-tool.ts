@@ -5,8 +5,8 @@
  * 不需要本地安装 Python/Tushare。
  */
 import { Type } from "@sinclair/typebox";
-import { t } from "../../server/i18n.js";
-import { readSignedClientAgentHeaders } from "../../core/client-agent-identity.js";
+import { t } from "../../shared/i18n-runtime.js";
+import { readSignedClientAgentHeaders } from "../../shared/client-agent-identity.js";
 import { BRAIN_API_ROOTS } from "../../shared/brain-provider.js";
 
 const STOCK_RESEARCH_PATH = "/stock-research";
