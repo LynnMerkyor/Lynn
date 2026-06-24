@@ -6,6 +6,7 @@
  */
 
 import type { Session } from '../types';
+import { pathDisplayName } from '../utils/path-label';
 
 export interface WorkspaceSessionsGroup {
   key: string;
@@ -36,7 +37,7 @@ export function normalizeLegacyWorkspacePath(cwd: string | null | undefined): st
 export function formatWorkspaceTitle(cwd: string | null, fallbackName: string): string {
   const normalized = normalizeLegacyWorkspacePath(cwd);
   if (!normalized) return fallbackName;
-  const dirName = normalized.split('/').filter(Boolean).pop();
+  const dirName = pathDisplayName(normalized);
   return dirName || fallbackName;
 }
 

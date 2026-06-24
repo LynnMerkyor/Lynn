@@ -8,6 +8,7 @@ import { useStore } from './index';
 import { hanaFetch } from '../hooks/use-hana-fetch';
 import { clearChat } from './agent-actions';
 import type { DeskAutomationJob } from './desk-slice';
+import { uniquePathList } from '../utils/path-label';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- store setState 回调及 IPC callback data */
 
@@ -142,6 +143,35 @@ export function deskCurrentDir(): string | null {
 
 // ── 文件操作 ──
 
+export function nextWorkspaceHistory(folder: string, currentHistory: Iterable<unknown>): string[] {
+  return uniquePathList([folder, ...currentHistory]).slice(0, 10);
+}
+
+export async function rememberWorkspaceFolder(folder: string): Promise<void> {
+  const normalized = String(folder || '').trim();
+  if (!normalized) return;
+
+  const state = useStore.getState();
+  const cwdHistory = nextWorkspaceHistory(normalized, state.cwdHistory || []);
+  const trustedRoots = uniquePathList([...(state.trustedRoots || []), normalized]);
+  useStore.setState({ cwdHistory, trustedRoots });
+
+  if (!state.serverPort) return;
+  try {
+    await hanaFetch('/api/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        last_cwd: normalized,
+        cwd_history: cwdHistory,
+        desk: { trusted_roots: trustedRoots },
+      }),
+    });
+  } catch (err) {
+    console.warn('[desk] remember workspace folder failed:', err);
+  }
+}
+
 export async function loadDeskFiles(subdir?: string, overrideDir?: string): Promise<void> {
   const s = useStore.getState();
   if (!s.serverPort) return;
@@ -158,6 +188,12 @@ export async function loadDeskFiles(subdir?: string, overrideDir?: string): Prom
     const res = await hanaFetch(`/api/desk/files${qs}`);
     const data = await res.json();
     const st = useStore.getState();
+    if (data.error) {
+      console.warn('[desk] load error:', data.error);
+      st.setDeskFiles([]);
+      updateDeskContextBtn();
+      return;
+    }
     st.setDeskFiles(data.files || []);
     if (data.basePath) st.setDeskBasePath(data.basePath);
     void loadDeskPatrolStatus();
@@ -345,14 +381,21 @@ export function toggleMemory(): void {
 }
 
 export function applyFolder(folder: string): void {
-  useStore.setState({ selectedFolder: folder });
+  useStore.setState({
+    selectedFolder: folder,
+    deskBasePath: folder,
+    deskCurrentPath: '',
+    deskFiles: [],
+  });
   const s = useStore.getState();
   if (!s.pendingNewSession) {
     useStore.setState({ currentSessionPath: null, pendingNewSession: true });
     clearChat();
     useStore.getState().requestInputFocus();
   }
-  loadDeskFiles('', folder);
+  void rememberWorkspaceFolder(folder).finally(() => {
+    void loadDeskFiles('', folder);
+  });
 }
 
 export function updateDeskContextBtn(): void {

@@ -39,6 +39,7 @@ import { JarvisRuntimeOverlay } from './components/voice/JarvisRuntimeOverlay';
 import { initTheme, initDragPrevention } from './bootstrap';
 import { initApp } from './app-init';
 import { MainContent } from './MainContent';
+import { pathDisplayName } from './utils/path-label';
 
 declare function t(key: string, vars?: Record<string, string | number>): string;
 
@@ -129,9 +130,7 @@ function ConnectionStatus() {
 }
 
 function folderLabel(folderPath: string | null): string {
-  if (!folderPath) return '';
-  const parts = folderPath.split('/').filter(Boolean);
-  return parts[parts.length - 1] || folderPath;
+  return pathDisplayName(folderPath);
 }
 
 function trimTitle(value: string | null | undefined): string {

@@ -16,6 +16,7 @@ import { safeJson } from "../hono-helpers.js";
 import { parseSkillMetadata } from "../../lib/skills/skill-metadata.js";
 import { t } from "../i18n.js";
 import { readGitContext, readGitDiff } from "../git-context.js";
+import { getWorkspaceRoots, uniqueTrustedRoots } from "../../shared/trusted-roots.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -86,6 +87,7 @@ type SkillManager = {
 type DeskRouteEngine = {
   deskCwd?: string;
   homeCwd?: string;
+  config?: JsonObject;
   lynnHome?: string;
   agentsDir: string;
   currentAgentId: string;
@@ -99,6 +101,7 @@ type DeskRouteEngine = {
   promoteActivitySession(sessionFile: string): string | null | undefined;
   summarizeActivityQuick(id: unknown): Promise<unknown>;
   getDevLogs(): unknown;
+  getTrustedRoots?(): string[];
 };
 
 type DeskRouteHub = {
@@ -192,34 +195,37 @@ function isInsidePath(target: unknown, baseDir: string): boolean {
 }
 
 /** 校验 dir 覆盖：仅允许 engine 已知的根目录（解析 symlink 后比较） */
-function isApprovedDir(dir: unknown, engine: DeskRouteEngine): boolean {
-  if (typeof dir !== "string") return false;
-  const approved = [
+function approvedWorkspaceRoots(engine: DeskRouteEngine): string[] {
+  return uniqueTrustedRoots([
     engine.deskCwd,
     engine.homeCwd,
     os.homedir(),
-  ].filter((root): root is string => Boolean(root));
+    ...getWorkspaceRoots(engine.config || {}, { trusted_roots: engine.getTrustedRoots?.() || [] }),
+  ]);
+}
+
+function isResolvedInsideRoot(resolved: string, root: string): boolean {
+  const rel = path.relative(root, resolved);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
+function isApprovedDir(dir: unknown, engine: DeskRouteEngine): boolean {
+  if (typeof dir !== "string") return false;
   const resolved = realPath(dir);
   if (!resolved) return false;
-  return approved.some(root => {
+  return approvedWorkspaceRoots(engine).some(root => {
     const r = realPath(root);
     if (!r) return false;
-    return resolved === r || resolved.startsWith(r + path.sep);
+    return isResolvedInsideRoot(resolved, r);
   });
 }
 
 function isApprovedDirStringOnly(dir: unknown, engine: DeskRouteEngine): boolean {
   if (typeof dir !== "string" || dir.includes("\0")) return false;
   const resolved = path.resolve(dir);
-  const approved = [
-    engine.deskCwd,
-    engine.homeCwd,
-    os.homedir(),
-  ].filter((root): root is string => Boolean(root)).map((root) => path.resolve(root));
-  return approved.some((root) => {
-    const rel = path.relative(root, resolved);
-    return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
-  });
+  return approvedWorkspaceRoots(engine)
+    .map((root) => path.resolve(root))
+    .some((root) => isResolvedInsideRoot(resolved, root));
 }
 
 function isInsidePathStringOnly(target: unknown, baseDir: string): boolean {

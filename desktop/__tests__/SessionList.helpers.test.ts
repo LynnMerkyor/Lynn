@@ -33,6 +33,11 @@ describe("formatWorkspaceTitle", () => {
     expect(formatWorkspaceTitle("/a/b/myproj", "fb")).toBe("myproj");
     expect(formatWorkspaceTitle(null, "fb")).toBe("fb");
   });
+  it("handles Windows drive and UNC workspace paths", () => {
+    expect(formatWorkspaceTitle("D:\\FPGA\\alpha", "fb")).toBe("alpha");
+    expect(formatWorkspaceTitle("D:/FPGA/beta/", "fb")).toBe("beta");
+    expect(formatWorkspaceTitle("\\\\nas\\share\\gamma", "fb")).toBe("gamma");
+  });
 });
 
 describe("groupSessionsByWorkspace", () => {

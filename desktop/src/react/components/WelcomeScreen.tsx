@@ -10,10 +10,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../stores';
 import { hanaUrl } from '../hooks/use-hana-fetch';
 import { useI18n } from '../hooks/use-i18n';
-import { loadDeskFiles } from '../stores/desk-actions';
+import { loadDeskFiles, rememberWorkspaceFolder } from '../stores/desk-actions';
 import { clearChat } from '../stores/agent-actions';
 import { sendPrompt } from '../stores/prompt-actions';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
+import { pathDisplayName } from '../utils/path-label';
 import { ProviderStatusBadge } from './ProviderStatusBadge';
 import { toggleSidebar } from './SidebarLayout';
 import styles from './Welcome.module.css';
@@ -383,7 +384,7 @@ function FolderPicker({ selectedFolder, cwdHistory, pendingNewSession }: {
     applyFolderAction(folder, pendingNewSession);
   }, [pendingNewSession]);
 
-  const folderName = selectedFolder ? selectedFolder.split('/').pop() || selectedFolder : null;
+  const folderName = pathDisplayName(selectedFolder);
   const label = folderName
     ? `${t('input.workspace')}${folderName}`
     : t('input.selectWorkspace');
@@ -439,7 +440,7 @@ function FolderHistory({ cwdHistory, selectedFolder, onSelect, onBrowse }: {
   return (
     <div className={styles.folderHistory}>
       {cwdHistory.map(p => {
-        const name = p.split('/').pop() || p;
+        const name = pathDisplayName(p, p);
         const isActive = p === selectedFolder;
         return (
           <div
@@ -473,7 +474,12 @@ function FolderHistory({ cwdHistory, selectedFolder, onSelect, onBrowse }: {
 }
 
 function applyFolderAction(folder: string, pendingNewSession: boolean): void {
-  useStore.setState({ selectedFolder: folder });
+  useStore.setState({
+    selectedFolder: folder,
+    deskBasePath: folder,
+    deskCurrentPath: '',
+    deskFiles: [],
+  });
 
   if (!pendingNewSession) {
     useStore.setState({
@@ -484,7 +490,9 @@ function applyFolderAction(folder: string, pendingNewSession: boolean): void {
     useStore.getState().requestInputFocus();
   }
 
-  loadDeskFiles('', folder);
+  void rememberWorkspaceFolder(folder).finally(() => {
+    void loadDeskFiles('', folder);
+  });
 }
 
 function MemoryToggle({ enabled, t }: {

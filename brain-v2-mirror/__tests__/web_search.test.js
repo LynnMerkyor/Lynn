@@ -209,30 +209,36 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
   });
 
   it('uses ESPN scoreboard before generic search for sports score and schedule queries', async () => {
-    global.fetch = vi.fn().mockResolvedValueOnce(jsonResp({
-      events: [{
-        date: '2026-06-23T17:00Z',
-        status: { type: { completed: false, shortDetail: 'Scheduled' } },
-        competitions: [{
-          competitors: [
-            { homeAway: 'home', score: '', team: { displayName: 'Portugal' } },
-            { homeAway: 'away', score: '', team: { displayName: 'Uzbekistan' } },
-          ],
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-23T12:54:00Z'));
+    try {
+      global.fetch = vi.fn().mockResolvedValueOnce(jsonResp({
+        events: [{
+          date: '2026-06-23T17:00Z',
+          status: { type: { completed: false, shortDetail: 'Scheduled' } },
+          competitions: [{
+            competitors: [
+              { homeAway: 'home', score: '', team: { displayName: 'Portugal' } },
+              { homeAway: 'away', score: '', team: { displayName: 'Uzbekistan' } },
+            ],
+          }],
         }],
-      }],
-    }));
+      }));
 
-    const r = await webSearchStructured('今晚世界杯有几场比赛');
+      const r = await webSearchStructured('今晚世界杯有几场比赛');
 
-    expect(r.ok).toBe(true);
-    expect(r.provider).toBe('espn_scoreboard');
-    expect(r.evidencePolicy).toMatchObject({ grade: 'source', reason: 'event-score-schedule-or-prediction' });
-    expect(r.summary).toContain('provider: espn_scoreboard');
-    expect(r.summary).toContain('Portugal vs Uzbekistan');
-    expect(__testing__.needsSourceGradeEvidence('2026世界杯已经出的赛事比分')).toBe(true);
-    expect(__testing__.isSportsScoreOrScheduleQuery('今晚世界杯有几场比赛')).toBe(true);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch.mock.calls[0][0]).toContain('site.api.espn.com');
+      expect(r.ok).toBe(true);
+      expect(r.provider).toBe('espn_scoreboard');
+      expect(r.evidencePolicy).toMatchObject({ grade: 'source', reason: 'event-score-schedule-or-prediction' });
+      expect(r.summary).toContain('provider: espn_scoreboard');
+      expect(r.summary).toContain('Portugal vs Uzbekistan');
+      expect(__testing__.needsSourceGradeEvidence('2026世界杯已经出的赛事比分')).toBe(true);
+      expect(__testing__.isSportsScoreOrScheduleQuery('今晚世界杯有几场比赛')).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch.mock.calls[0][0]).toContain('site.api.espn.com');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('returns ESPN scoreboard JSON for sports evidence queries without waiting for generic search providers', async () => {

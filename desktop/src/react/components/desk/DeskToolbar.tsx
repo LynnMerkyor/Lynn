@@ -13,12 +13,11 @@ import {
   type CtxMenuState,
 } from './desk-types';
 import { showSidebarToast } from '../../stores/session-actions';
+import { pathDisplayName } from '../../utils/path-label';
 import s from './Desk.module.css';
 
 function folderLabel(folderPath: string | null): string {
-  if (!folderPath) return '';
-  const parts = folderPath.split('/').filter(Boolean);
-  return parts[parts.length - 1] || folderPath;
+  return pathDisplayName(folderPath);
 }
 
 export function DeskWorkspaceButton() {
