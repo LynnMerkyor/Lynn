@@ -193,6 +193,7 @@ export function resetCompletedTurnState(ss: SessionLike): void {
   ss.hasFailedTool = false;
   ss.lastFailedTools = [];
   ss.realtimeToolFallbackText = "";
+  ss.realtimeToolFallbackKind = "";
   ss.autoReviewStarted = false;
   if (ss.__slowToolTimers?.size) {
     for (const timer of ss.__slowToolTimers.values()) {

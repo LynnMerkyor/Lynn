@@ -978,14 +978,14 @@ export class Agent {
           + "2. 按 skill 里的步骤执行，而不是只凭技能名或简短描述猜\n"
           + "3. 如果多个已启用 skill 都相关，先加载最贴近主任务的那个，再按需要补第二个\n"
           + "4. 不要在已经有匹配 skill 的情况下重新上网搜替代技能\n"
-          + "5. 像“今天金价多少”“天气如何”“今天股价/指数/新闻”“体育比分”这类通用实时查询，优先使用当前链路已提供的实时信息工具（例如 stock_market、weather、sports_score、live_news），若当前链路未提供，再回退到 web_search、web_fetch。不要优先读取重型分析 skill（例如 stock-analysis、weather）的 SKILL.md。只有当用户明确要求股票分析、持仓分析、分红分析、趋势扫描、传闻扫描、观察列表、深度天气分析或 /stock 系列命令时，才使用这类 skill"
+          + "5. 像“今天金价多少”“天气如何”“今天股价/指数/新闻”“体育比分”这类通用实时查询，优先使用当前链路已提供的实时信息工具（例如 stock_market、weather、sports_score、live_news），若当前链路未提供，再回退到 web_search、web_fetch。体育赛程/比分/几场这类问题中，若 sports_score 已返回 provider: espn_scoreboard 且 matched > 0，直接基于该直源回答；不要再用泛 web_search 交叉核对或覆盖它。不要优先读取重型分析 skill（例如 stock-analysis、weather）的 SKILL.md。只有当用户明确要求股票分析、持仓分析、分红分析、趋势扫描、传闻扫描、观察列表、深度天气分析或 /stock 系列命令时，才使用这类 skill"
         : "\n## Enabled Skill Matching Rules\n\n"
           + "Enabled skills are not decorative. When the request clearly matches a skill description:\n"
           + "1. Read that skill's `SKILL.md` first\n"
           + "2. Follow the workflow in the skill instead of guessing from the name or short description\n"
           + "3. If multiple enabled skills are relevant, load the one most central to the task first, then add others as needed\n"
           + "4. Do not search for replacement skills when an enabled skill already matches\n"
-          + "5. For generic real-time lookups such as today's gold price, weather, stock price/index/news, or sports scores, prefer any real-time information tools available on the current route (for example stock_market, weather, sports_score, or live_news). If the current route does not provide them, fall back to web_search and web_fetch. Do not default to heavyweight analysis skills (for example stock-analysis or weather) unless the user explicitly asks for stock analysis, portfolio/dividend analysis, trend scanning, rumor scanning, watchlists, deeper weather analysis, or /stock-style workflows"
+          + "5. For generic real-time lookups such as today's gold price, weather, stock price/index/news, or sports scores, prefer any real-time information tools available on the current route (for example stock_market, weather, sports_score, or live_news). If sports_score returns provider: espn_scoreboard with matched > 0 for schedule/score/count questions, answer directly from that source; do not cross-check or override it with generic web_search. If the current route does not provide those realtime tools, fall back to web_search and web_fetch. Do not default to heavyweight analysis skills (for example stock-analysis or weather) unless the user explicitly asks for stock analysis, portfolio/dividend analysis, trend scanning, rumor scanning, watchlists, deeper weather analysis, or /stock-style workflows"
       );
     }
 
@@ -997,7 +997,7 @@ export class Agent {
         + "2. **web_fetch** — 已知 URL，需要提取页面文字内容。简单抓取必须用这个\n"
         + "3. **browser** — 只在以下情况使用：页面需要登录/身份验证、需要填表或点击交互、web_fetch 返回的内容为空或不完整（JS 动态渲染页面）、需要查看页面视觉布局\n\n"
         + "对于「今日/最新/实时/行情/新闻/调研/官方文档」这类任务：若当前链路提供了实时信息工具（例如 stock_market、weather、sports_score、live_news），优先使用；否则先用 **web_search** 找结果，再对最相关的 1-2 个 URL 用 **web_fetch** 深读，不要只看搜索标题就下结论。\n"
-        + "对于「股价/金价/基金/汇率/指数/体育比分/天气/热点资讯」这类任务：优先交叉核对 2 个来源；如果 web_search 已提示推荐来源（如 AkShare、腾讯自选股、新浪财经、腾讯体育等），优先从这些来源里挑结果继续深读。\n\n"
+        + "对于「股价/金价/基金/汇率/指数/天气/热点资讯」这类任务：优先交叉核对 2 个来源；如果 web_search 已提示推荐来源（如 AkShare、腾讯自选股、新浪财经等），优先从这些来源里挑结果继续深读。对于体育比分/赛程/几场，sports_score 的 ESPN scoreboard 直源优先级高于泛搜索；直源已匹配时不要再用 web_search 补旧赛程或新闻摘要。\n\n"
         + "对于 Lynn 内部 UX 文案、Session Map/工作地图、右侧工作台、按钮 tooltip、状态文案、验收标准这类请求，除非用户明确要求查外部来源，否则直接根据当前产品语境回答，不要把内部概念拿去公网搜索。\n\n"
         + "**禁止**在 web_search 或 web_fetch 能完成的场景下启动浏览器。浏览器启动成本高、会打开窗口干扰用户。"
       : "\n## Web Tool Priority\n\n"
@@ -1006,7 +1006,7 @@ export class Agent {
         + "2. **web_fetch** — Known URL, need to extract page text. Simple scraping must use this\n"
         + "3. **browser** — Only use when: the page requires login/authentication, form filling or click interaction is needed, web_fetch returns empty or incomplete content (JS-rendered pages), or you need to see visual layout\n\n"
         + "For queries like today/latest/live/market/news/research/official docs, use route-provided real-time tools first when available (for example stock_market, weather, sports_score, or live_news). Otherwise use **web_search** first and then **web_fetch** the most relevant 1-2 URLs before drawing conclusions.\n"
-        + "For stock prices, gold prices, funds, FX, indexes, sports scores, weather, or breaking-news summaries, cross-check at least two sources. If web_search suggests preferred sources (for example AkShare, Tencent quotes, Sina Finance, or sports/news sites), use those results first for deeper reading.\n\n"
+        + "For stock prices, gold prices, funds, FX, indexes, weather, or breaking-news summaries, cross-check at least two sources. For sports scores, fixtures, and match-count questions, an ESPN scoreboard result from sports_score takes priority over generic search; when it has matched events, do not use web_search to add stale schedules or news snippets. If web_search suggests preferred non-sports sources (for example AkShare, Tencent quotes, or Sina Finance), use those results first for deeper reading.\n\n"
         + "For Lynn-internal UX copy, Session Map/work map, right workspace, button tooltips, status copy, or acceptance criteria, answer from the current product context unless the user explicitly asks for external sources; do not web-search an internal concept as a public brand.\n\n"
         + "**Do not** launch the browser when web_search or web_fetch can do the job. Browser startup is expensive and opens a window that interrupts the user."
     );

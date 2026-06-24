@@ -1,6 +1,8 @@
 import fs from "fs";
 import { debugLog } from "../../lib/debug-log.js";
 import { finishSessionStream } from "../session-stream-store.js";
+import { extractText } from "./content-utils.js";
+import { buildDirectSportsAnswer } from "./report-research-answer.js";
 import { buildToolCompletionSummary } from "./tool-turn-finalizer.js";
 import {
   clearToolAuthorizationTimer,
@@ -34,6 +36,7 @@ import {
 } from "./tool-storm-guard.js";
 
 type AnyRecord = Record<string, any>;
+type ExtractableContent = Parameters<typeof extractText>[0];
 
 const REALTIME_EVIDENCE_TOOL_NAMES = new Set([
   "web_search",
@@ -53,6 +56,45 @@ const REALTIME_EVIDENCE_TOOL_NAMES = new Set([
 
 function isRealtimeEvidenceToolName(name: any): boolean {
   return REALTIME_EVIDENCE_TOOL_NAMES.has(String(name || "").trim());
+}
+
+function canonicalToolName(name: unknown): string {
+  return String(name || "").trim().toLowerCase().replace(/-/g, "_");
+}
+
+function isSportsScoreToolName(name: unknown): boolean {
+  const canonical = canonicalToolName(name);
+  return canonical === "sports_score" || canonical === "sportsscore";
+}
+
+function shouldForceCloseSportsDirectTurn(promptText: unknown, answer: unknown): boolean {
+  const prompt = String(promptText || "");
+  const text = String(answer || "").trim();
+  if (!prompt || !text) return false;
+  if (/预测|预估|猜|看好|可能比分|比分预测|predict|prediction|forecast/i.test(prompt)) return false;
+  if (/(?:深度|完整|全面|系统(?:性)?|调研|研究|报告|分析|对比|比较|引用|来源列表|research|report|analysis|compare)/i.test(prompt)) return false;
+  return /(?:今晚|今夜|今天|今日|明天|明日|昨晚|昨天|昨日|赛程|比赛|几场|几轮|对阵|比分|赛果|结果|score|scores|schedule|fixture|fixtures|match|matches|game|games|result|results)/i.test(prompt);
+}
+
+function recordOf(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function buildSportsDirectToolAnswer(ss: unknown, toolName: unknown, event: unknown): string {
+  if (!isSportsScoreToolName(toolName)) return "";
+  const eventRecord = recordOf(event);
+  const resultRecord = recordOf(eventRecord.result);
+  const argsRecord = recordOf(eventRecord.args);
+  const stateRecord = recordOf(ss);
+  const toolText = extractText(resultRecord.content as ExtractableContent).trim();
+  if (
+    !toolText
+    || !/体育查询结果/.test(toolText)
+    || /directSourceStatus:\s*(?:unavailable|fallback_static_schedule)/i.test(toolText)
+  ) return "";
+  const prompt = stateRecord.originalPromptText || stateRecord.effectivePromptText || argsRecord.query || "";
+  const answer = buildDirectSportsAnswer(`【体育比分工具资料】\n\n${toolText}`, prompt);
+  return shouldForceCloseSportsDirectTurn(prompt, answer) ? answer : "";
 }
 
 export interface HubEventForwarderDeps {
@@ -278,8 +320,35 @@ export function createHubEventForwarder({
         rememberSuccessfulTool(ss, toolName, toolSummary, normalizedArgs);
         const realtimeToolFallback = buildRealtimeToolFallbackText(toolName, event);
         if (realtimeToolFallback) ss.realtimeToolFallbackText = realtimeToolFallback;
+        const sportsDirectAnswer = buildSportsDirectToolAnswer(ss, toolName, event);
+        if (sportsDirectAnswer) {
+          ss.realtimeToolFallbackText = sportsDirectAnswer;
+          ss.realtimeToolFallbackKind = "sports_score_direct_answer";
+        }
       } else {
         rememberFailedTool(ss, toolName);
+      }
+      if (
+        ss.realtimeToolFallbackKind === "sports_score_direct_answer"
+        && !ss.hasOutput
+        && !ss.hasError
+        && !ss._turnClosed
+        && !hasStreamEvent(ss, "turn_end")
+        && !hasToolExecutionInFlight(ss)
+      ) {
+        try {
+          void Promise.resolve(engine.abortSessionByPath?.(sessionPath)).catch(() => {});
+        } catch {
+          // Best effort: the local deterministic close below is authoritative.
+        }
+        closeStreamWithVisibleFallback(
+          sessionPath,
+          ss,
+          ss.realtimeToolFallbackText,
+          "sports_score_direct_answer_after_tool",
+          { trustedFallback: true },
+        );
+        return;
       }
       const stormDecision = updateToolStormGuard(ss, toolName, normalizedArgs);
       if (

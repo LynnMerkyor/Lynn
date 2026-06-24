@@ -1962,6 +1962,71 @@ describe("chat route event forwarding", () => {
     expect(visibleText).toContain("Spain vs Saudi Arabia");
   });
 
+  it("closes GUI sports tool-chain turns from ESPN evidence before generic search can override it", async () => {
+    engine.currentModel = { id: "glm-5-turbo", provider: "glm", name: "GLM 5.0 Turbo" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    engine.abortSessionByPath = vi.fn(async () => true);
+    reportResearchMock.inferReportResearchKind.mockReturnValue("");
+    hub.send = vi.fn(() => new Promise(() => {}));
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "今晚世界杯几场比赛帮我查一下" }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
+
+    subscribed({
+      type: "tool_execution_start",
+      toolName: "sportsscore",
+      args: { query: "今晚世界杯几场比赛帮我查一下" },
+    }, "/sessions/current.jsonl");
+    subscribed({
+      type: "tool_execution_end",
+      toolName: "sportsscore",
+      args: { query: "今晚世界杯几场比赛帮我查一下" },
+      result: {
+        content: [{
+          type: "text",
+          text: [
+            "体育查询结果 (ESPN scoreboard)",
+            "provider: espn_scoreboard",
+            "league: FIFA World Cup",
+            "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260625-20260626",
+            "dateRange: 20260625-20260626",
+            "时间口径: 北京时间",
+            "查询口径: “今晚/今夜”按北京时间 2026-06-25 晚间至 2026-06-26 后续赛程处理；不是“昨晚”。",
+            "matched: 6",
+            "匹配比赛: 6 场",
+            "",
+            "- 2026/06/26 04:00 Curaçao vs Ivory Coast (Scheduled)",
+            "- 2026/06/26 04:00 Ecuador vs Germany (Scheduled)",
+            "- 2026/06/26 07:00 Japan vs Sweden (Scheduled)",
+            "- 2026/06/26 07:00 Tunisia vs Netherlands (Scheduled)",
+            "- 2026/06/26 10:00 Paraguay vs Australia (Scheduled)",
+            "- 2026/06/26 10:00 Türkiye vs United States (Scheduled)",
+          ].join("\n"),
+        }],
+        details: { provider: "espn_scoreboard" },
+      },
+    }, "/sessions/current.jsonl");
+
+    await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
+
+    expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(visibleText).toContain("共 6 场");
+    expect(visibleText).toContain("Curaçao vs Ivory Coast");
+    expect(visibleText).toContain("Türkiye vs United States");
+    expect(visibleText).not.toContain("2026/06/21");
+    expect(visibleText).not.toContain("Netherlands 5-1 Sweden");
+  });
+
   it("closes simple table template turns with a deterministic local answer", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);

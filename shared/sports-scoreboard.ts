@@ -193,6 +193,42 @@ function addDaysYmd(ymd: string, days: number): string {
   return beijingYmd(date);
 }
 
+function validYmd(year: unknown, month: unknown, day: unknown): string {
+  const y = Number(year);
+  const m = Number(month);
+  const d = Number(day);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return "";
+  if (y < 2000 || y > 2099 || m < 1 || m > 12 || d < 1 || d > 31) return "";
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return "";
+  return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+function extractExplicitSportsYmd(query: unknown, today = beijingYmd()): string {
+  const text = String(query || "");
+  const ymd = text.match(/\b(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?\b/i)
+    || text.match(/\b(20\d{2})(\d{2})(\d{2})\b/);
+  if (ymd) return validYmd(ymd[1], ymd[2], ymd[3]);
+  const md = text.match(/(?:^|[^\d])(\d{1,2})月(\d{1,2})日?/);
+  if (!md) return "";
+  return validYmd(today.slice(0, 4), md[1], md[2]);
+}
+
+function prefersScheduleRows(query: unknown): boolean {
+  const text = String(query || "");
+  const hasResultIntent = /(已出|已经|比分|赛果|结果|完赛|score|result|final)/i.test(text);
+  return /(今晚|今夜|明天|明日|赛程|有几场|几场|几轮|对阵|schedule|fixture|fixtures)/i.test(text)
+    || (!hasResultIntent && /(比赛|match|matches|game|games)/i.test(text))
+    || (/(今天|今日|today)/i.test(text) && !/(已出|已经|赛果|结果|完赛|result|final)/i.test(text));
+}
+
+function wantsCompletedSportsScores(query: unknown): boolean {
+  const text = String(query || "");
+  return !wantsPredictedScore(text)
+    && !prefersScheduleRows(text)
+    && /(已出|已经|比分|赛果|结果|完赛|score|result|final)/i.test(text);
+}
+
 function resolveSportsDateRange(query: unknown, league: SportsLeagueInfo): SportsDateRange {
   const text = String(query || "");
   const today = beijingYmd();
@@ -203,9 +239,13 @@ function resolveSportsDateRange(query: unknown, league: SportsLeagueInfo): Sport
     if (/(决赛|final)/i.test(text) && !/(半决赛|semifinal|semi-final|semi final)/i.test(text)) {
       return { start: "20260719", end: "20260720" };
     }
-    if (!wantsPredictedScore(text) && /(已出|已经|比分|赛果|结果|完赛|score|result)/i.test(text)) {
-      return { start: ymdCompact(league.tournamentStart), end: ymdCompact(today) };
-    }
+  }
+  const explicitYmd = extractExplicitSportsYmd(text, today);
+  if (explicitYmd) {
+    return {
+      start: ymdCompact(explicitYmd),
+      end: ymdCompact(prefersScheduleRows(text) ? addDaysYmd(explicitYmd, 1) : explicitYmd),
+    };
   }
   if (/(昨晚|昨天|昨日|yesterday)/i.test(text)) {
     return { start: ymdCompact(addDaysYmd(today, -1)), end: ymdCompact(today) };
@@ -219,6 +259,9 @@ function resolveSportsDateRange(query: unknown, league: SportsLeagueInfo): Sport
   }
   if (/(今晚|今夜|tonight)/i.test(text)) {
     return { start: ymdCompact(today), end: ymdCompact(addDaysYmd(today, 1)) };
+  }
+  if (league.label === "FIFA World Cup" && wantsCompletedSportsScores(text)) {
+    return { start: ymdCompact(league.tournamentStart), end: ymdCompact(today) };
   }
   return { start: ymdCompact(addDaysYmd(today, -7)), end: ymdCompact(addDaysYmd(today, 1)) };
 }
@@ -247,7 +290,8 @@ function beijingDateTimeParts(date: Date): { ymd: string; hour: number } {
     hour12: false,
   }).formatToParts(date);
   const pick = (type: string) => parts.find((part) => part.type === type)?.value || "";
-  return { ymd: `${pick("year")}-${pick("month")}-${pick("day")}`, hour: Number(pick("hour") || 0) };
+  const hour = Number(pick("hour") || 0);
+  return { ymd: `${pick("year")}-${pick("month")}-${pick("day")}`, hour: hour === 24 ? 0 : hour };
 }
 
 function formatStageLabel(event: LooseRecord): string {
@@ -299,9 +343,13 @@ function filterSportsRows(rows: SportsRow[], query: unknown, range: SportsDateRa
   const today = beijingYmd();
   const tomorrow = addDaysYmd(today, 1);
   const yesterday = addDaysYmd(today, -1);
+  const explicitYmd = extractExplicitSportsYmd(text, today);
   let filtered: SportsRow[];
-  if (/(今晚|今夜|tonight)/i.test(text)) {
-    filtered = rows.filter((row) => (row.localYmd === today && row.localHour >= 18) || row.localYmd === tomorrow);
+  if (explicitYmd && prefersScheduleRows(text)) {
+    const next = addDaysYmd(explicitYmd, 1);
+    filtered = rows.filter((row) => (row.localYmd === explicitYmd && row.localHour >= 18) || (row.localYmd === next && row.localHour <= 12));
+  } else if (/(今晚|今夜|tonight)/i.test(text)) {
+    filtered = rows.filter((row) => (row.localYmd === today && row.localHour >= 18) || (row.localYmd === tomorrow && row.localHour <= 12));
   } else if (/(今天|今日|today)/i.test(text)) {
     filtered = rows.filter((row) => row.localYmd === today);
   } else if (/(昨晚|昨天|昨日|yesterday)/i.test(text)) {
@@ -357,7 +405,7 @@ function buildSportsScoreboardResult(input: {
   const { query, league, source, range, rows, sourceStatus, note } = input;
   const scoreRows = rows.filter((row) => row.completed && /\d+\s*[-–—:：比]\s*\d+/.test(row.line));
   const wantsPrediction = wantsPredictedScore(query);
-  const wantsScores = !wantsPrediction && /(比分|赛果|结果|已出|已经|完赛|score|result|final)/i.test(query);
+  const wantsScores = wantsCompletedSportsScores(query);
   const selected = (wantsScores ? scoreRows : rows).slice(-24);
   const dateRange = `${range.start}-${range.end}`;
   const scopeNote = relativeSportsScopeNote(query, range);

@@ -65,6 +65,7 @@ export interface ChatTurnState extends SessionStreamStateFields {
   };
   toolStormClosed: boolean;
   realtimeToolFallbackText?: string;
+  realtimeToolFallbackKind?: string;
   __slowToolTimers?: Map<string, TimerHandle>;
   toolFailedFallbackRetryAttempted: boolean;
   toolFinalizationRetryAttempted: boolean;
@@ -138,6 +139,8 @@ export function createChatTurnState(): ChatTurnState {
       lastDecisionReason: "",
     },
     toolStormClosed: false,
+    realtimeToolFallbackText: "",
+    realtimeToolFallbackKind: "",
     toolFailedFallbackRetryAttempted: false,
     toolFinalizationRetryAttempted: false,
     silentBrainAbortTimer: null,

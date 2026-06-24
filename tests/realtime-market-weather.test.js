@@ -653,6 +653,210 @@ describe("realtime market/weather tools", () => {
     }
   });
 
+  it("keeps World Cup tonight match-count answers inside the Beijing tonight window", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-06-25T20:20:00+08:00"));
+      vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+        events: [
+          {
+            date: "2026-06-20T17:00:00Z",
+            status: { type: { completed: true, shortDetail: "FT" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "5", team: { displayName: "Netherlands" } },
+              { homeAway: "away", score: "1", team: { displayName: "Sweden" } },
+            ] }],
+          },
+          {
+            date: "2026-06-25T20:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Curaçao" } },
+              { homeAway: "away", score: "0", team: { displayName: "Ivory Coast" } },
+            ] }],
+          },
+          {
+            date: "2026-06-25T20:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Ecuador" } },
+              { homeAway: "away", score: "0", team: { displayName: "Germany" } },
+            ] }],
+          },
+          {
+            date: "2026-06-25T23:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Japan" } },
+              { homeAway: "away", score: "0", team: { displayName: "Sweden" } },
+            ] }],
+          },
+          {
+            date: "2026-06-25T23:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Tunisia" } },
+              { homeAway: "away", score: "0", team: { displayName: "Netherlands" } },
+            ] }],
+          },
+          {
+            date: "2026-06-26T02:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Paraguay" } },
+              { homeAway: "away", score: "0", team: { displayName: "Australia" } },
+            ] }],
+          },
+          {
+            date: "2026-06-26T02:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Türkiye" } },
+              { homeAway: "away", score: "0", team: { displayName: "United States" } },
+            ] }],
+          },
+        ],
+      })));
+
+      const prompt = "今晚世界杯几场比赛帮我查一下";
+      expect(inferReportResearchKind(prompt)).toBe("sports");
+      const result = await createSportsScoreTool().execute("test", {
+        query: prompt,
+        maxResults: 5,
+      });
+      const text = result.content[0].text;
+      const answer = buildDirectResearchAnswer("sports", `【体育比分工具资料】\n\n${text}`, prompt);
+
+      expect(result.details.provider).toBe("espn_scoreboard");
+      expect(text).toContain("dateRange: 20260625-20260626");
+      expect(text).toContain("匹配比赛: 6 场");
+      expect(text).toContain("Curaçao vs Ivory Coast");
+      expect(text).toContain("Türkiye vs United States");
+      expect(text).not.toContain("Netherlands 5-1 Sweden");
+      expect(answer).toContain("共 6 场");
+      expect(answer).not.toContain("2026/06/21");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps expanded sports search queries from widening tonight into tournament-history scores", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-06-25T20:20:00+08:00"));
+      const fetchMock = vi.fn(async () => jsonResponse({
+        events: [
+          {
+            date: "2026-06-20T17:00:00Z",
+            status: { type: { completed: true, shortDetail: "FT" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "5", team: { displayName: "Netherlands" } },
+              { homeAway: "away", score: "1", team: { displayName: "Sweden" } },
+            ] }],
+          },
+          {
+            date: "2026-06-25T20:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Curaçao" } },
+              { homeAway: "away", score: "0", team: { displayName: "Ivory Coast" } },
+            ] }],
+          },
+          {
+            date: "2026-06-25T20:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Ecuador" } },
+              { homeAway: "away", score: "0", team: { displayName: "Germany" } },
+            ] }],
+          },
+          {
+            date: "2026-06-25T23:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Japan" } },
+              { homeAway: "away", score: "0", team: { displayName: "Sweden" } },
+            ] }],
+          },
+          {
+            date: "2026-06-25T23:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Tunisia" } },
+              { homeAway: "away", score: "0", team: { displayName: "Netherlands" } },
+            ] }],
+          },
+          {
+            date: "2026-06-26T02:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Paraguay" } },
+              { homeAway: "away", score: "0", team: { displayName: "Australia" } },
+            ] }],
+          },
+          {
+            date: "2026-06-26T02:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Türkiye" } },
+              { homeAway: "away", score: "0", team: { displayName: "United States" } },
+            ] }],
+          },
+          {
+            date: "2026-06-26T15:00:00Z",
+            status: { type: { completed: false, shortDetail: "Scheduled" } },
+            competitions: [{ competitors: [
+              { homeAway: "home", score: "0", team: { displayName: "Brazil" } },
+              { homeAway: "away", score: "0", team: { displayName: "Morocco" } },
+            ] }],
+          },
+        ],
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await createSportsScoreTool().execute("test", {
+        query: "2026世界杯 6月25日 赛程 今晚比赛 比分 赛果",
+        maxResults: 5,
+      });
+      const text = result.content[0].text;
+
+      expect(String(fetchMock.mock.calls[0][0])).toContain("dates=20260625-20260626");
+      expect(text).toContain("dateRange: 20260625-20260626");
+      expect(text).toContain("匹配比赛: 6 场");
+      expect(text).toContain("Curaçao vs Ivory Coast");
+      expect(text).toContain("Türkiye vs United States");
+      expect(text).not.toContain("Netherlands 5-1 Sweden");
+      expect(text).not.toContain("Brazil vs Morocco");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not use stale bundled World Cup rows for explicit dates outside the fallback table", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-06-25T20:20:00+08:00"));
+      vi.stubGlobal("fetch", vi.fn(async () => {
+        throw new Error("fetch failed");
+      }));
+
+      const pending = createSportsScoreTool().execute("test", {
+        query: "2026世界杯 6月25日 赛程",
+        maxResults: 5,
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+      const result = await pending;
+      const text = result.content[0].text;
+
+      expect(text).toContain("directSourceStatus: unavailable");
+      expect(text).not.toContain("fallback_static_schedule");
+      expect(text).not.toContain("2026/06/21");
+      expect(text).not.toContain("Netherlands 5-1 Sweden");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("filters World Cup scoreboard by mentioned teams before answering match-existence questions", async () => {
     vi.useFakeTimers();
     try {

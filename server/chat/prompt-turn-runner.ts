@@ -189,6 +189,7 @@ export function createPromptTurnRunner({
       ss.hasThinking = false;
       ss.hasError = false;
       ss.realtimeToolFallbackText = "";
+      ss.realtimeToolFallbackKind = "";
       ss.persistedAssistantTextBaseline = countPersistedAssistantVisibleTexts(
         engine.getSessionByPath(promptSessionPath),
         promptSessionPath,
