@@ -236,9 +236,8 @@
     },
     "publish": [
       {
-        "provider": "github",
-        "owner": "MerkyorLynn",
-        "repo": "Lynn"
+        "provider": "generic",
+        "url": "https://download.merkyorlynn.com/downloads/"
       }
     ],
     "win": {

@@ -9,7 +9,7 @@ import type { AutoUpdateState } from '../../types';
 import { getBrainComplianceNote, getBrainUserNotice } from '../../../../../shared/brain-provider.js';
 
 const hana = window.hana;
-const REPO_URL = 'https://github.com/MerkyorLynn/Lynn';
+const REPO_URL = 'https://gitee.com/merkyor/Lynn';
 
 export function AboutTab() {
   const { settingsConfig } = useSettingsStore();
@@ -159,7 +159,7 @@ export function AboutTab() {
           <span className={styles['about-value']}>&copy; 2026 liliMozi / Merkyor</span>
         </div>
         <div className={styles['about-row']}>
-          <span className={styles['about-label']}>GitHub</span>
+          <span className={styles['about-label']}>Gitee</span>
           <a
             className={`${styles['about-value']} ${styles['about-link']}`}
             href="#"
@@ -168,7 +168,7 @@ export function AboutTab() {
               hana?.openExternal?.(REPO_URL);
             }}
           >
-            github.com/MerkyorLynn/Lynn
+            gitee.com/merkyor/Lynn
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
               <polyline points="15 3 21 3 21 9" />
@@ -227,4 +227,4 @@ limitations under the License.
 This project is based on the open source work of liliMozi.
 Original repository: https://github.com/liliMozi
 Modified and extended by Merkyor.
-Project repository: https://github.com/MerkyorLynn/Lynn`;
+Project repository: https://gitee.com/merkyor/Lynn`;

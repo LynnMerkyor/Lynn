@@ -92,7 +92,7 @@ function buildSportsDirectToolAnswer(ss: unknown, toolName: unknown, event: unkn
     || !/体育查询结果/.test(toolText)
     || /directSourceStatus:\s*(?:unavailable|fallback_static_schedule)/i.test(toolText)
   ) return "";
-  const prompt = stateRecord.originalPromptText || stateRecord.effectivePromptText || argsRecord.query || "";
+  const prompt = String(stateRecord.originalPromptText || stateRecord.effectivePromptText || argsRecord.query || "");
   const answer = buildDirectSportsAnswer(`【体育比分工具资料】\n\n${toolText}`, prompt);
   return shouldForceCloseSportsDirectTurn(prompt, answer) ? answer : "";
 }

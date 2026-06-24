@@ -957,8 +957,8 @@ export class Agent {
 
     const parts = [
       isZh
-        ? "你运行在 Lynn 平台上。项目主页：https://github.com/MerkyorLynn/Lynn"
-        : "You are running on the Lynn platform. Project page: https://github.com/MerkyorLynn/Lynn",
+        ? "你运行在 Lynn 平台上。项目主页：https://gitee.com/merkyor/Lynn"
+        : "You are running on the Lynn platform. Project page: https://gitee.com/merkyor/Lynn",
       ishiki,
     ];
 
