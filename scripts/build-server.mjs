@@ -339,6 +339,11 @@ if (!Array.isArray(viteExternals)) {
 const builtinSet = new Set(builtinModules.flatMap(m => [m, `node:${m}`]));
 const deps = rootPkg.dependencies || {};
 const externalDeps = {};
+const packagedPluginDeps = [
+  // Bundled plugins are loaded dynamically from Resources/server/plugins at runtime,
+  // so Vite's server external list cannot discover their direct imports.
+  "@sinclair/typebox",
+];
 
 for (const ext of viteExternals) {
   if (typeof ext === "string") {
@@ -350,6 +355,10 @@ for (const ext of viteExternals) {
       if (ext.test(dep)) externalDeps[dep] = deps[dep];
     }
   }
+}
+
+for (const dep of packagedPluginDeps) {
+  if (deps[dep]) externalDeps[dep] = deps[dep];
 }
 
 console.log(`[build-server] derived external deps: ${Object.keys(externalDeps).join(", ")}`);

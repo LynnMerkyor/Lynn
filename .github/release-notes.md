@@ -1,6 +1,6 @@
-# Lynn v0.85.1 Release Notes / 发布说明
+# Lynn v0.85.2 Release Notes / 发布说明
 
-> 发布日期: 2026-06-23 · 新内核稳定版 · Session Map 工作地图 · GUI/CLI 同核门禁
+> 发布日期: 2026-06-24 · issue 修复热修 · 工作区选择与证据质量回归
 
 ## 国内镜像站下载（推荐）
 
@@ -9,44 +9,35 @@
 - **CLI**:
 
   ```bash
-  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.1.tgz"
+  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.2.tgz"
   ```
 
-- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.1-macOS-arm64.dmg
-- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.1-macOS-x64.dmg
-- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.1-Windows-Setup.exe
+- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.2-macOS-arm64.dmg
+- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.2-macOS-x64.dmg
+- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.2-Windows-Setup.exe
 - **下载页**: https://download.merkyorlynn.com/download.html
 
 ## 中文重点
 
-- **稳定 v0.85 自研核心**: 保留 v0.85 完全替换 Pi SDK 主链、NO Fork、自主 runtime 的方向，并把这轮审计中发现的空答、证据完整性、CLI/GUI 差异和 Brain provider 抖动问题纳入门禁验收。
-- **Session Map 工作地图**: 右侧便签区升级为围绕当前会话的工作地图/工作台，显示当前线索、巡检状态、证据/资料和从当前会话继续分支的入口，不再让左侧一串重复“新对话”和数字承担全部导航。
-- **超大 session health 标记**: 会话巡检会识别 large / huge / blocked 等状态，让 7GB 级历史会话以健康标记和地图节点呈现，避免一打开巨型会话就拖死 GUI。
-- **从当前会话开分支**: GUI 增加“从此分支”入口，让长对话可以保留血缘、摘要和下一步，同时用新会话继续工作，减少把完整长上下文反复拖入模型。
-- **GUI / CLI 继续同核**: 本地 GUI 包和 CLI 包都走同一套 Brain V2、证据优先、工具事件和最终可见收口门禁；CLI 不再作为另一个临时补丁面存在。
-- **Brain 运维修复**: 修复一条损坏 device JSON 导致的 `internal auth error`，把 v2 healthcheck / cron-smoke 切到 HMAC 签名请求，并停止旧 v1 smoke 对 MiMo 过期 key 的周期性噪声调用。
-- **镜像站与发布纪律**: 更新清单和下载页继续指向腾讯镜像，Gitee Release 作为版本记录；GitHub 暂未恢复期间不依赖 GitHub Assets 作为国内主下载入口。
+- **修复 Windows D 盘工作区选择**: 选择 `D:\...` 等非用户主目录工作区后，会立即写入 `last_cwd`、`cwd_history` 和 `desk.trusted_roots`；书桌文件列表和后续会话会使用新的受信任工作区，不再回退到旧目录。
+- **修复工作区路径显示**: Windows 盘符路径、正斜杠路径和 UNC 路径在侧边栏、欢迎页、书桌和应用标签中会正确显示为目录名，避免 `D:`/数字/空标题混乱。
+- **修复 IJV6WH 证据兜底误判**: 本地文件 read 只返回路径、LaTeX 模板包名、`\includegraphics` 等结构片段时，不再被当作“我能确认”的事实结论；系统会明确提示证据不足，而不是把文档结构噪声当成论文分析。
+- **继续加固旧任务污染回归**: 编辑重发、助手重做和流式中继续发送的回归测试会确认旧分支被正确截断，发送失败不乐观上屏，避免“问新问题却继续回答上一个任务”。
+- **保留 v0.85 工作地图主线**: Session Map 工作地图、超大 session health 标记、从当前会话分支、GUI/CLI 同核和 Brain V2 证据优先链路继续保留。
 
 ## 已验证
 
-- `npm run typecheck`
-- `npm run typecheck:runtime`
-- 核心单测矩阵：7 files / 157 tests passed
-- `npm run test:release:static`：78/78 passed
-- CLI 100 扩展对话门禁：100 ok / 0 fail
-- GUI 100 扩展对话门禁：100 ok / 0 fail
-- macOS arm64 / macOS x64 / Windows x64 安装包重新打包；macOS 两个 DMG 均已完成 Apple notarization、staple 和 Gatekeeper 验证。
-- packaged server / packaged CLI smoke 通过；真实 `/Applications/Lynn.app` 安装版 packaged server / CLI smoke 通过。
+- IJV6WH 图片复现样例：LaTeX 结构片段不再被当作可靠事实证据。
+- targeted regression：`shared/__tests__/evidence-safety-answer.test.ts`、`tests/agent-runtime-create-session.test.js`、`desktop/src/react/__tests__/stores/prompt-actions.test.ts`、`desktop/src/react/components/input/edit-resend-target.test.ts`、`tests/stream-sanitizer.test.js`、`desktop/src/react/__tests__/utils/message-parser.test.ts`。
+- 正式门禁、公证、安装包 smoke 和公网 URL 验证结果随发布执行记录更新。
 
 ---
 
-> Release date: 2026-06-23 · stabilized self-built core · Session Map workbench · GUI/CLI gates
+> Release date: 2026-06-24 · issue hotfix · workspace selection and evidence-quality regression
 
 ## English highlights
 
-- **Stabilizes the v0.85 self-built core**: Lynn keeps the no-fork, no-Pi-SDK main path and folds the latest empty-answer, evidence-integrity, GUI/CLI parity, and provider-reliability findings into release verification.
-- **Session Map workbench**: the right sidebar is now centered on the current thread's work map, inspection status, evidence, and branch-from-here controls instead of a loose note pile.
-- **Huge-session health markers**: session inspection marks large, huge, blocked, and archived states so multi-GB histories become visible health nodes instead of GUI-freezing sidebar entries.
-- **Branch from the current session**: long work can continue from a summarized branch with lineage preserved, without dragging the entire old context into every new turn.
-- **GUI and CLI stay on the same core path**: both packages verify against Brain V2, evidence-first routing, tool events, and visible final-answer closure.
-- **Brain ops fixes**: repaired one corrupt device JSON behind `internal auth error`, moved v2 healthcheck / cron-smoke to signed HMAC requests, and stopped old v1 smoke noise from probing an expired MiMo key.
+- **Fixes Windows D-drive workspace selection**: choosing a workspace outside the user home now persists it immediately to `last_cwd`, `cwd_history`, and `desk.trusted_roots`, so the Desk file list and new sessions use the selected folder.
+- **Fixes workspace path labels**: Windows drive paths, slash-normalized paths, and UNC paths now render as stable folder names across the sidebar, welcome screen, Desk, and app labels.
+- **Fixes IJV6WH evidence fallback regression**: file-read paths, LaTeX package/template fragments, and `\includegraphics` snippets are no longer treated as completed factual analysis.
+- **Keeps edit-resend / retry pollution guards covered**: targeted tests verify branch truncation, no optimistic stale messages after send failure, pseudo-tool stripping, and visible-answer closure.

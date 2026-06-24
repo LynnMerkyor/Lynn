@@ -34,4 +34,40 @@ describe("evidence safety answer", () => {
     ]);
     expect(answer).toBe("");
   });
+
+  it("does not treat file paths or LaTeX structure snippets as completed analysis evidence", () => {
+    const evidence = [
+      "根据本轮已执行操作返回的可见结果，当前能确认：",
+      "- read: /Users/zaintan/Documents/2026-physics/paper/alphaT3SOC_v2/main.tex",
+      "- showpacs,twocolumn,amsmath,amssymb,floatfix,superscriptaddress]{revtex4-2}",
+      "- \\includegraphics[width=0.99\\linewid",
+    ].join("\n");
+    const answer = buildEvidenceSafetyAnswer([
+      { role: "user", content: "帮我综述这篇论文，请先阅读 main.tex 后推导关键发现" },
+      { role: "tool", name: "read", content: evidence },
+    ]);
+
+    expect(evidenceToReadableLines(evidence)).toEqual([]);
+    expect(answer).toContain("没有提取到足够可靠的事实");
+    expect(answer).not.toContain("showpacs");
+    expect(answer).not.toContain("\\includegraphics");
+  });
+
+  it("does not treat scheduler jobs as evidence for sports or realtime questions", () => {
+    const evidence = [
+      "[✓] job_2: 定时工作小结 (cron, 下次: 2026/6/23 10:00:00)",
+      "[✓] job_3: 文件自动归纳 (cron, 下次: 2026/6/23 17:00:00)",
+      "[✓] job_4: 每周工作周报 (cron, 下次: 2026/6/26 18:00:00)",
+      "[✓] job_5: 五点会议提醒 (at, 下次: 2026/6/23 17:00:00)",
+    ].join("\n");
+    const answer = buildEvidenceSafetyAnswer([
+      { role: "user", content: "今晚世界杯有比赛吗？" },
+      { role: "tool", name: "cron", content: evidence },
+    ]);
+
+    expect(evidenceToReadableLines(evidence)).toEqual([]);
+    expect(answer).toContain("没有提取到足够可靠的事实");
+    expect(answer).not.toContain("job_2");
+    expect(answer).not.toContain("定时工作小结");
+  });
 });

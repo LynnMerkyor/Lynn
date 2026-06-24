@@ -54,6 +54,60 @@ function run(command, args, options = {}) {
   });
 }
 
+function capture(command, args, { timeoutMs = 5000 } = {}) {
+  return new Promise((resolve) => {
+    let stdout = "";
+    let stderr = "";
+    const child = spawn(command, args, {
+      cwd: ROOT,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const timer = setTimeout(() => {
+      try { child.kill("SIGKILL"); } catch {}
+    }, timeoutMs);
+    child.stdout.on("data", (chunk) => { stdout += String(chunk); });
+    child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve({ code: 1, stdout, stderr: stderr || error.message });
+    });
+    child.on("exit", (code, signal) => {
+      clearTimeout(timer);
+      resolve({ code: code ?? 1, signal, stdout, stderr });
+    });
+  });
+}
+
+async function listInstalledAppPids() {
+  const pattern = path.join(APP_PATH, "Contents");
+  const result = await capture("pgrep", ["-f", pattern], { timeoutMs: 3000 });
+  return result.stdout
+    .split(/\s+/)
+    .map((value) => Number(value))
+    .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
+}
+
+async function waitForInstalledAppExit(timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let pids = [];
+  while (Date.now() < deadline) {
+    pids = await listInstalledAppPids();
+    if (pids.length === 0) return [];
+    await wait(250);
+  }
+  return pids;
+}
+
+async function signalInstalledAppPids(signal) {
+  const pids = await listInstalledAppPids();
+  for (const pid of pids) {
+    try {
+      process.kill(pid, signal);
+    } catch {}
+  }
+  return pids;
+}
+
 async function quitExistingLynn() {
   await new Promise((resolve) => {
     const child = spawn("osascript", ["-e", 'tell application "Lynn" to quit'], {
@@ -62,7 +116,20 @@ async function quitExistingLynn() {
     child.on("exit", resolve);
     child.on("error", resolve);
   });
-  await wait(2000);
+  let pids = await waitForInstalledAppExit(4000);
+  if (pids.length === 0) return;
+
+  console.warn(`[installed-gate] Lynn still running after quit request; terminating pids=${pids.join(",")}`);
+  await signalInstalledAppPids("SIGTERM");
+  pids = await waitForInstalledAppExit(5000);
+  if (pids.length === 0) return;
+
+  console.warn(`[installed-gate] Lynn still running after SIGTERM; killing pids=${pids.join(",")}`);
+  await signalInstalledAppPids("SIGKILL");
+  pids = await waitForInstalledAppExit(3000);
+  if (pids.length) {
+    throw new Error(`[installed-gate] failed to stop installed Lynn pids=${pids.join(",")}`);
+  }
 }
 
 async function exists(filePath) {
@@ -209,6 +276,29 @@ async function httpJson(baseUrl, token, pathname, { method = "GET", body, timeou
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function waitForHttpJson(baseUrl, token, pathname, {
+  method = "GET",
+  body,
+  timeoutMs = 45000,
+  requestTimeoutMs = 8000,
+} = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      return await httpJson(baseUrl, token, pathname, {
+        method,
+        body,
+        timeoutMs: requestTimeoutMs,
+      });
+    } catch (error) {
+      lastError = error;
+      await wait(500);
+    }
+  }
+  throw new Error(`[installed-gate] timed out waiting for ${method} ${pathname}: ${lastError?.message || lastError || "unknown error"}`);
 }
 
 function openWs(wsUrl, token) {
@@ -567,6 +657,7 @@ async function main() {
   try {
     if (liveFixture) {
       serverInfoPath = path.join(liveFixture.lynnHome, "server-info.json");
+      await fs.rm(serverInfoPath, { force: true }).catch(() => {});
       directLaunch = await launchAppDirect(appBin, {
         ...process.env,
         LYNN_HOME: liveFixture.lynnHome,
@@ -575,17 +666,18 @@ async function main() {
       });
       console.log(`[installed-gate] fixture home=${liveFixture.lynnHome}`);
     } else {
+      await fs.rm(serverInfoPath, { force: true }).catch(() => {});
       await run("open", ["-a", APP_PATH]);
     }
 
     const info = await readServerInfo();
     const baseUrl = `http://127.0.0.1:${info.port}`;
     const wsUrl = `ws://127.0.0.1:${info.port}/ws`;
-    const health = await httpJson(baseUrl, info.token, "/api/health", { timeoutMs: 12000 });
+    const health = await waitForHttpJson(baseUrl, info.token, "/api/health", { timeoutMs: 45000 });
     if (health?.ok !== true && health?.status !== "ok") {
       throw new Error(`[installed-gate] health was not ok: ${JSON.stringify(health)}`);
     }
-    await httpJson(baseUrl, info.token, "/api/review/config", { timeoutMs: 12000 });
+    await waitForHttpJson(baseUrl, info.token, "/api/review/config", { timeoutMs: 45000 });
     await runLiveVisionGate(baseUrl, wsUrl, info.token);
     if (ONLY_LIVE_VISION) {
       console.log("[installed-gate] PASS: installed live vision gate completed.");

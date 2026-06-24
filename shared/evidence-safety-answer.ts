@@ -150,6 +150,8 @@ function isLowValueToolEvidenceLine(line: string): boolean {
   const compact = line.replace(/\s+/g, "");
   if (!compact) return true;
   if (containsPastDateFutureStartContradiction(line)) return true;
+  if (looksLikeSchedulerOrAutomationNoise(line)) return true;
+  if (looksLikeDocumentStructureNoise(line)) return true;
   if (/javascript\s*:|void\(0\)|szqbl\.chscht\.run/i.test(line)) return true;
   if (/您的?浏览器版本过低|请升级到|急速模式|无障碍阅读|手机版|热门搜|点击播放|视频加载|Skip to content|Previous\s+Next/i.test(line)) return true;
   if (/^\W*(?:来源|链接|URL|网站支持|数据开放|English|繁體)(?:\s|[:：]|$)/i.test(line)) return true;
@@ -158,6 +160,29 @@ function isLowValueToolEvidenceLine(line: string): boolean {
   if (urlLikeCount >= 2 && compact.length < 180) return true;
   const alphaNum = compact.replace(/[^\p{L}\p{N}]/gu, "");
   return alphaNum.length < Math.max(6, compact.length * 0.35);
+}
+
+function looksLikeSchedulerOrAutomationNoise(line: string): boolean {
+  const text = line.trim();
+  const compact = text.replace(/\s+/g, "");
+  if (!text) return true;
+  if (/\bjob_[A-Za-z0-9_-]+\b/.test(text) && /(?:cron|下次|next|schedule|定时|自动任务|提醒|巡检)/iu.test(text)) return true;
+  if (/^\[?[✓✔-]\]?\s*job_[A-Za-z0-9_-]+[:：]/u.test(text)) return true;
+  if (/(?:定时工作小结|文件自动归纳|会议提醒|工作周报|自动任务|cron|scheduler|scheduled job)/iu.test(text)
+    && /(?:下次|next|run|cron|at|every|schedule|定时|提醒)/iu.test(text)) return true;
+  if (/^(?:cron|scheduler|automation|自动任务|定时任务|提醒)[:：]/iu.test(text)) return true;
+  return false;
+}
+
+function looksLikeDocumentStructureNoise(line: string): boolean {
+  const text = line.trim();
+  if (!text) return true;
+  const compact = text.replace(/\s+/g, "");
+  if (/^(?:read|read_file)[:：]\s*(?:\/|[A-Za-z]:\\|~\/)/i.test(text)) return true;
+  if (/\\(?:documentclass|usepackage|begin|end|includegraphics|bibliography|bibliographystyle|maketitle|section|subsection|caption|label|ref|cite|input)\b/i.test(text)) return true;
+  if (/[{}\\]/.test(text) && /\b(?:revtex|amsmath|amssymb|showpacs|twocolumn|floatfix|superscriptaddress|graphicx|bibtex|latex|tex)\b/i.test(text)) return true;
+  if (/^(?:[\w-]+,){2,}[\w-]+(?:\]|$)/i.test(compact) && /\b(?:ams|revtex|showpacs|twocolumn|floatfix|graphicx|superscriptaddress)\b/i.test(compact)) return true;
+  return false;
 }
 
 function hasEnoughFactDensity(line: string): boolean {
@@ -200,7 +225,7 @@ function buildInsufficientEvidenceAnswer(question: string): string {
   return [
     question ? `针对“${question}”，工具已经返回内容，但没有提取到足够可靠的事实来直接回答。` : "工具已经返回内容，但没有提取到足够可靠的事实来直接回答。",
     "",
-    "我不会把网页导航、搜索摘要或抓取噪声当成结论。建议换一个更明确的数据源/时间范围再查，或继续让我重新检索并交叉验证。",
+    "我不会把文件路径、文档结构片段、自动任务列表、网页导航或抓取噪声当成结论。建议换一个更明确的数据源/时间范围再查，或继续让我重新检索并交叉验证。",
   ].join("\n");
 }
 
