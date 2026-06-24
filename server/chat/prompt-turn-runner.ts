@@ -81,6 +81,7 @@ function shouldCloseWithImmediateLocalOfficeAnswer(promptText: unknown, directAn
   return /(?:排序并去重|去重并排序|sort.*unique|unique.*sort)/iu.test(prompt)
     || /zod\s+schema|schema\s+校验|校验\s+release\s+manifest/i.test(prompt)
     || /Node\.?js.{0,40}(?:JSON|keys?|数量)|(?:读取|输出).{0,32}(?:JSON|keys?)/i.test(prompt)
+    || /(?:经营分析|环比|增长率).{0,80}(?:Q1|Q2|管理建议)|(?:Q1|Q2).{0,80}(?:经营分析|环比|增长率|管理建议)/iu.test(prompt)
     || /(?:Session\s*Map|工作地图|右侧工作台|左侧会话列表|数字徽标|Huge\s*节点|从此分支|资料不足时应继续补充来源再下结论|伪相关|证据优先搜索\s*Agent|搜索\s*Agent|搜索摘要|长会话|7GB|CLI\s*和\s*GUI|GUI\s*和\s*CLI|共用内核|回归测试矩阵)/iu.test(prompt)
     || /(?:三列表格|3\s*列表格|三列\s*表格|3\s*列\s*表格)/.test(prompt)
     && /(?:任务[、,，]\s*优先级[、,，]\s*风险|任务.*优先级.*风险)/.test(prompt);

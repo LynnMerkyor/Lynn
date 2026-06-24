@@ -607,7 +607,15 @@ function detectDegeneration(text) {
   const raw = String(text || "");
   const issues = [];
   if (/\uFFFD/.test(raw)) issues.push("replacement-character");
-  if (/(.)\1{24,}/.test(raw)) issues.push("single-character-loop");
+  const compactLength = Math.max(1, raw.replace(/\s/g, "").length);
+  const decorativeRepeatChars = new Set(["-", "_", "=", "~", "*", "#", "·", "•", "─", "━", "═", "—", "–"]);
+  for (const match of raw.matchAll(/([^\s])\1{24,}/gu)) {
+    const run = match[0] || "";
+    const char = match[1] || "";
+    if (decorativeRepeatChars.has(char) && run.length < 160 && (run.length / compactLength) < 0.25) continue;
+    issues.push("single-character-loop");
+    break;
+  }
   if ((raw.match(/\(Done\)|\(Proceeds?\)/gi) || []).length >= 3) issues.push("done-proceeds-loop");
   if ((raw.match(/【菜单】|🍽️/g) || []).length >= 3) issues.push("unrelated-menu-repeat");
   return issues;

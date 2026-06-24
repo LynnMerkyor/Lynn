@@ -1,6 +1,6 @@
 # Lynn v0.85.2 Release Notes / 发布说明
 
-> 发布日期: 2026-06-24 · 2026-06-25 同版本替换包 · issue 修复热修 / sports 实时证据修复 / 更新源切换
+> 发布日期: 2026-06-24 · 2026-06-25 同版本替换包 · issue 修复热修 / sports 实时证据修复 / 本地数据分析修复 / 更新源切换
 
 ## 国内镜像站下载（推荐）
 
@@ -22,6 +22,7 @@
 - **06-25 同版本替换包**: 重新生成并替换 v0.85.2 的 macOS ARM64、macOS x64、Windows x64 三个 GUI 安装包和 CLI tarball；macOS DMG 均已重新公证、staple 并通过 Gatekeeper。
 - **修复 GUI sports 实时证据被泛搜覆盖**: 当 `sports_score` 命中 ESPN 直接赛程/比分证据时，GUI 会直接基于该证据闭环，不再继续让泛搜索或模型脑补覆盖结果。`今晚世界杯有比赛吗/有几场比赛` 这类问题会稳定返回当晚赛程，而不是旧比分、自动任务列表或无关搜索摘要。
 - **修复世界杯日期窗口解析**: `6月25日`、`2026-06-25`、`20260625` 等日期会被 sports scoreboard 正确识别；“今晚”窗口限制到次日上午，避免把整届赛事历史窗口混进当前问题。
+- **修复 GUI 小型数据分析误触工具链**: `华东 Q1 120 Q2 150...算环比增长率` 这类纯本地算术/经营建议问题会直接给出可见答案，不再错误进入 `step_execute` 或其它工具导致 40 秒后只显示工具失败。
 - **更新源从 GitHub 切出**: 客户端原生更新 feed 改为 `https://download.merkyorlynn.com/downloads/`，应用内“关于”页和项目主页链接改为 Gitee；GitHub 账号未恢复期间，Gitee 作为源码/Release 记录，镜像站作为下载源。
 - **修复 Windows D 盘工作区选择**: 选择 `D:\...` 等非用户主目录工作区后，会立即写入 `last_cwd`、`cwd_history` 和 `desk.trusted_roots`；书桌文件列表和后续会话会使用新的受信任工作区，不再回退到旧目录。
 - **修复工作区路径显示**: Windows 盘符路径、正斜杠路径和 UNC 路径在侧边栏、欢迎页、书桌和应用标签中会正确显示为目录名，避免 `D:`/数字/空标题混乱。
@@ -33,18 +34,20 @@
 
 - IJV6WH 图片复现样例：LaTeX 结构片段不再被当作可靠事实证据。
 - GUI/CLI sports 回归：`今晚世界杯有几场比赛`、`今晚世界杯有比赛吗`、预测比分等 sports 场景走 `sports_score` 直证据，不再落到自动任务/旧比分/泛搜摘要。
+- GUI 数据分析回归：DATA-01 环比增长率题直接输出 `25%`、`-10%`、`30%` 和 3 条管理建议，不再调用模型工具。
 - targeted regression：`shared/__tests__/evidence-safety-answer.test.ts`、`tests/agent-runtime-create-session.test.js`、`desktop/src/react/__tests__/stores/prompt-actions.test.ts`、`desktop/src/react/components/input/edit-resend-target.test.ts`、`tests/stream-sanitizer.test.js`、`desktop/src/react/__tests__/utils/message-parser.test.ts`。
 - 正式 `release:preflight`、macOS notarization/staple/Gatekeeper、安装包 smoke 和公网 URL 验证结果随发布执行记录更新。
 
 ---
 
-> Release date: 2026-06-24 · 2026-06-25 same-version package replacement · issue hotfix / sports grounding fix / update-feed migration
+> Release date: 2026-06-24 · 2026-06-25 same-version package replacement · issue hotfix / sports grounding fix / local data-analysis fix / update-feed migration
 
 ## English highlights
 
 - **06-25 same-version replacement**: rebuilds and replaces the v0.85.2 macOS ARM64, macOS x64, Windows x64 GUI installers and CLI tarball; both macOS DMGs are notarized, stapled, and Gatekeeper-validated.
 - **Fixes GUI sports grounding being overwritten by generic search**: when `sports_score` returns direct ESPN schedule/score evidence, the GUI now closes on that evidence instead of letting generic web search or model guesses overwrite the answer.
 - **Fixes World Cup date-window parsing**: dates such as `6月25日`, `2026-06-25`, and `20260625` are parsed by the sports scoreboard, and “tonight” is scoped to the evening through the next morning instead of broad tournament history.
+- **Fixes GUI tool misrouting for small local data analysis**: prompts such as Q1/Q2 regional growth calculations now answer directly with the arithmetic and management suggestions instead of falling into `step_execute` and surfacing a tool failure.
 - **Moves update sources off GitHub**: native app update feed now uses `https://download.merkyorlynn.com/downloads/`; the About tab and project homepage link point to Gitee while GitHub access is unavailable.
 - **Fixes Windows D-drive workspace selection**: choosing a workspace outside the user home now persists it immediately to `last_cwd`, `cwd_history`, and `desk.trusted_roots`, so the Desk file list and new sessions use the selected folder.
 - **Fixes workspace path labels**: Windows drive paths, slash-normalized paths, and UNC paths now render as stable folder names across the sidebar, welcome screen, Desk, and app labels.

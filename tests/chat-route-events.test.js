@@ -2152,6 +2152,35 @@ describe("chat route event forwarding", () => {
     }));
   });
 
+  it("answers small regional growth analysis directly without model tools", async () => {
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(async () => {});
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({
+        type: "prompt",
+        text: "【DATA-01】华东 Q1 120 Q2 150；华南 Q1 90 Q2 81；华北 Q1 60 Q2 78（万元）。算环比增长率，给 3 条管理建议。",
+      }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" })));
+
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(hub.send).not.toHaveBeenCalled();
+    expect(clients[0].sent.some((evt) => evt.type === "tool_start" || evt.type === "tool_end")).toBe(false);
+    expect(visibleText).toContain("25%");
+    expect(visibleText).toContain("-10%");
+    expect(visibleText).toContain("30%");
+    expect(visibleText).toContain("管理建议");
+  });
+
   it("suppresses pseudo tool text for Brain without client-side retry prompts", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
