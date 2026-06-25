@@ -354,6 +354,55 @@ describe('prompt-actions', () => {
     });
   });
 
+  it('助手重新回答后下一条新问题不复用旧 prompt 或回滚目标', async () => {
+    mockState.chatSessions = {
+      '/sessions/current': {
+        items: [
+          {
+            type: 'message',
+            data: {
+              id: 'user-1',
+              visibleIndex: 0,
+              role: 'user',
+              text: '上一个问题',
+              requestText: 'persona\n\n上一个问题',
+              retryDraft: {
+                text: '上一个问题',
+                attachedFiles: [],
+                quotedSelection: null,
+                docContextFile: null,
+                workingSet: [],
+              },
+            },
+          },
+          { type: 'message', data: { id: 'assistant-1', visibleIndex: 1, role: 'assistant', text: '上一个回答' } },
+        ],
+      },
+    };
+    const { retryAssistantResponse, submitPromptTask } = await import('../../stores/prompt-actions');
+
+    expect(await retryAssistantResponse('assistant-1')).toBe(true);
+    expect(mockState.chatSessions['/sessions/current'].items).toEqual([]);
+
+    expect(await submitPromptTask({ mode: 'prompt', text: '这是一个全新的问题' })).toBe(true);
+
+    const retryPayload = JSON.parse(websocketRef?.send.mock.calls[0][0]);
+    const nextPayload = JSON.parse(websocketRef?.send.mock.calls[1][0]);
+    expect(retryPayload).toMatchObject({
+      type: 'prompt',
+      text: 'persona\n\n上一个问题',
+      replaceFromMessageId: 'user-1',
+      replaceFromMessageIndex: 0,
+    });
+    expect(nextPayload).toMatchObject({
+      type: 'prompt',
+      text: '这是一个全新的问题',
+      sessionPath: '/sessions/current',
+    });
+    expect(nextPayload).not.toHaveProperty('replaceFromMessageId');
+    expect(nextPayload).not.toHaveProperty('replaceFromMessageIndex');
+  });
+
   it('助手重新回答发送失败时只回填草稿，不乐观裁剪旧分支', async () => {
     websocketRef = null;
     mockState.chatSessions = {
