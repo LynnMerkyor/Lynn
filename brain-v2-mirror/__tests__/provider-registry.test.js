@@ -45,6 +45,24 @@ describe('provider registry', () => {
     expect(tokenPlan.capability.tools).toBe(true);
   });
 
+  it('falls back to bounded MiMo timeouts when timeout env values are invalid', async () => {
+    const savedUltraspeed = process.env.MIMO_ULTRASPEED_TIMEOUT_MS;
+    const savedTokenPlan = process.env.MIMO_TOKEN_PLAN_TIMEOUT_MS;
+    process.env.MIMO_ULTRASPEED_TIMEOUT_MS = '30s';
+    process.env.MIMO_TOKEN_PLAN_TIMEOUT_MS = '0';
+
+    try {
+      const isolated = await import('../provider-registry.js?invalid-mimo-timeouts');
+      expect(isolated.getProvider('mimo-ultraspeed').timeout_ms).toBe(30_000);
+      expect(isolated.getProvider('mimo-token-plan-pro').timeout_ms).toBe(30_000);
+    } finally {
+      if (savedUltraspeed === undefined) delete process.env.MIMO_ULTRASPEED_TIMEOUT_MS;
+      else process.env.MIMO_ULTRASPEED_TIMEOUT_MS = savedUltraspeed;
+      if (savedTokenPlan === undefined) delete process.env.MIMO_TOKEN_PLAN_TIMEOUT_MS;
+      else process.env.MIMO_TOKEN_PLAN_TIMEOUT_MS = savedTokenPlan;
+    }
+  });
+
   it('registers StepFun as a cloud text/tools fallback without native search', () => {
     const step = getProvider('step-3.7-flash');
     expect(step).toBeTruthy();

@@ -15,6 +15,7 @@ HOST="${1:-tencent}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MIRROR="$ROOT/brain-v2-mirror"
 PROD="/opt/lobster-brain-v2"
+PORT="${BRAIN_V2_PORT:-8790}"
 FAIL=0
 WARN=0
 
@@ -79,8 +80,32 @@ anchor "server tools" \
   "grep -o \"name: '[a-z_]*'\" '$PROD/tool-exec/index.js' | sed \"s/name: '\\(.*\\)'/\\1/\" | sort -u"
 
 note ""
+note "== ④ prod 运行态 smoke(ESM import / health / route)=="
+if ssh "$HOST" "cd '$PROD' && node --input-type=module -e \"await import('./provider-registry.js'); await import('./tool-exec/index.js'); await import('./router.js'); console.log('esm-import-ok')\"" >/dev/null; then
+  ok "prod 关键模块 ESM import clean"
+else
+  fail "prod 关键模块 ESM import 失败 — 远端 JS 可能缺 export/import 或依赖漂移"
+fi
+
+health_json=$(ssh "$HOST" "curl -fsS --max-time 5 'http://127.0.0.1:$PORT/health'" 2>/dev/null || true)
+if printf '%s' "$health_json" | grep -q '"brain":"v2"'; then
+  ok "prod /health ok"
+else
+  fail "prod /health 失败或不是 brain=v2: ${health_json:-<empty>}"
+fi
+
+local_route=$(cd "$MIRROR" && node --import tsx -e "const { getProviderStatusSnapshot } = await import('./provider-registry.ts'); console.log(getProviderStatusSnapshot().route.join(' '));" 2>/dev/null || true)
+remote_route=$(ssh "$HOST" "node --input-type=module -e \"const r = await fetch('http://127.0.0.1:$PORT/v2/providers/status'); if (!r.ok) throw new Error('/v2/providers/status HTTP ' + r.status); const j = await r.json(); console.log((j.route || []).join(' '));\"" 2>/dev/null || true)
+if [ -n "$local_route" ] && [ "$local_route" = "$remote_route" ]; then
+  ok "运行态 route 一致: $local_route"
+else
+  fail "运行态 route 漂移:"
+  printf '    mirror: %s\n    prod  : %s\n' "${local_route:-<empty>}" "${remote_route:-<empty>}"
+fi
+
+note ""
 if [ "$FAIL" -ne 0 ]; then
-  note "== 结果:硬信号失败(tsc 门或锚点漂移,见 ✗)。部署前必须人工 reconcile,严禁 wholesale 转译覆盖 prod。=="
+  note "== 结果:硬信号失败(tsc 门 / 锚点 / 运行态 smoke,见 ✗)。部署前必须人工 reconcile,严禁 wholesale 转译覆盖 prod。=="
   exit 1
 fi
 if [ "$WARN" -gt 0 ]; then

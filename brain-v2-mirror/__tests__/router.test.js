@@ -1043,7 +1043,7 @@ describe('Router', () => {
     const chunks = [];
     const result = await run({
       messages: [{ role: 'user', content: '2026世界杯已经出的赛事比分' }],
-      onChunk: async (chunk) => chunks.push(chunk),
+      onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
     });
 
     expect(result).toMatchObject({ ok: true, providerId: 'p-spark', iterations: 3 });
@@ -1152,7 +1152,7 @@ describe('Router', () => {
     const chunks = [];
     const result = await run({
       messages: [{ role: 'user', content: '2026世界杯已经出的赛事比分' }],
-      onChunk: async (chunk) => chunks.push(chunk),
+      onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
     });
 
     expect(result).toMatchObject({ ok: true, providerId: 'p-spark', iterations: 3 });
@@ -1252,7 +1252,12 @@ describe('Router', () => {
 
   it('prefetches sports_score evidence for direct World Cup score prompts before provider synthesis', async () => {
     process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH = '1';
-    mockState.order = ['p-step'];
+    mockState.providers = {
+      'mimo-ultraspeed': makeProvider('mimo-ultraspeed'),
+      'step-3.7-flash': makeProvider('step-3.7-flash'),
+      'deepseek-chat': makeProvider('deepseek-chat'),
+    };
+    mockState.order = ['mimo-ultraspeed', 'step-3.7-flash', 'deepseek-chat'];
     const captured = [];
     const chunks = [];
     vi.stubGlobal('fetch', vi.fn(async () => {
@@ -1267,12 +1272,13 @@ describe('Router', () => {
 
     const result = await run({
       messages: [{ role: 'user', content: '2026世界杯已经出的赛事比分' }],
-      onChunk: async (chunk) => chunks.push(chunk),
+      onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
     });
 
     expect(result.ok).toBe(true);
-    expect(mockState.adapterCalls).toEqual(['p-step']);
-    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'sports_score' && chunk.event === 'end')).toBe(true);
+    expect(result.providerId).toBe('step-3.7-flash');
+    expect(mockState.adapterCalls).toEqual(['step-3.7-flash']);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'sports_score' && chunk.event === 'end' && chunk.meta?.providerId === 'step-3.7-flash')).toBe(true);
     expect(captured[0]?.tools).toEqual([]);
     const promptText = captured[0]?.messages.map((message) => String(message.content || '')).join('\n') || '';
     expect(promptText).toContain('sports_score');
@@ -1282,7 +1288,12 @@ describe('Router', () => {
 
   it('prefetches stock_market evidence for direct index quote prompts before provider synthesis', async () => {
     process.env.BRAIN_V2_DIRECT_MARKET_PREFETCH = '1';
-    mockState.order = ['p-step'];
+    mockState.providers = {
+      'mimo-ultraspeed': makeProvider('mimo-ultraspeed'),
+      'step-3.7-flash': makeProvider('step-3.7-flash'),
+      'deepseek-chat': makeProvider('deepseek-chat'),
+    };
+    mockState.order = ['mimo-ultraspeed', 'step-3.7-flash', 'deepseek-chat'];
     const captured = [];
     const chunks = [];
     const quoteText = [
@@ -1303,12 +1314,13 @@ describe('Router', () => {
 
     const result = await run({
       messages: [{ role: 'user', content: '纳斯达克指数最新点位是多少？' }],
-      onChunk: async (chunk) => chunks.push(chunk),
+      onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
     });
 
     expect(result.ok).toBe(true);
-    expect(mockState.adapterCalls).toEqual(['p-step']);
-    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'stock_market' && chunk.event === 'end')).toBe(true);
+    expect(result.providerId).toBe('step-3.7-flash');
+    expect(mockState.adapterCalls).toEqual(['step-3.7-flash']);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'stock_market' && chunk.event === 'end' && chunk.meta?.providerId === 'step-3.7-flash')).toBe(true);
     expect(captured[0]?.tools).toEqual([]);
     const promptText = captured[0]?.messages.map((message) => String(message.content || '')).join('\n') || '';
     expect(promptText).toContain('stock_market');
@@ -1411,6 +1423,57 @@ describe('Router', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('summarizes weather fallback evidence with Step after skipping MiMo and DS planners', async () => {
+    process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH = '1';
+    process.env.ZHIPU_KEY = 'test-zhipu';
+    mockState.providers = {
+      'mimo-ultraspeed': makeProvider('mimo-ultraspeed'),
+      'step-3.7-flash': makeProvider('step-3.7-flash'),
+      'deepseek-chat': makeProvider('deepseek-chat'),
+    };
+    mockState.order = ['mimo-ultraspeed', 'step-3.7-flash', 'deepseek-chat'];
+    const captured = [];
+    const chunks = [];
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (String(url).startsWith('https://wttr.in/')) {
+        return { ok: false, status: 503, json: async () => ({}) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          search_result: [{
+            title: '杭州天气实况',
+            link: 'https://weather.example/hangzhou',
+            content: '杭州今天傍晚多云转阵雨，晚间可能有零星降雨，建议带伞。',
+            publish_date: '2026-06-25',
+          }],
+        }),
+        text: async () => '',
+      };
+    }));
+    mockState.adapterFn = async function* ({ provider, messages, tools }) {
+      mockState.adapterCalls.push(provider.id);
+      captured.push({ messages, tools });
+      yield { type: 'content', delta: '根据 weather 证据，杭州晚间可能有零星降雨，建议带伞。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const result = await run({
+      messages: [{ role: 'user', content: '杭州今晚天气要不要带伞？' }],
+      onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.providerId).toBe('step-3.7-flash');
+    expect(mockState.adapterCalls).toEqual(['step-3.7-flash']);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'weather' && chunk.event === 'end' && chunk.meta?.providerId === 'step-3.7-flash')).toBe(true);
+    expect(captured[0]?.tools).toEqual([]);
+    const promptText = captured[0]?.messages.map((message) => String(message.content || '')).join('\n') || '';
+    expect(promptText).toContain('weather');
+    expect(promptText).toContain('杭州今天傍晚多云转阵雨');
   });
 
   it('emits a deterministic grounded evidence answer when providers fail after generic tool evidence', async () => {

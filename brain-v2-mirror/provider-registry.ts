@@ -6,6 +6,11 @@ const DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY = 1;
 
 const env = (k: string, d: string): string => process.env[k] || d;
 
+function positiveEnvNumber(key: string, fallback: number): number {
+  const value = Number(process.env[key] || fallback);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 type ProviderRegistry = Record<ProviderIdLiteral, Provider>;
 
 // NOTE: MiMo search is still owned by tool-exec/web_search.ts. Text/agent execution
@@ -43,7 +48,7 @@ const PROVIDER_DEFS = {
     default_thinking: true,
     default_reasoning_effort: 'low',
     max_tokens: 16_384,
-    timeout_ms: Number(process.env.MIMO_ULTRASPEED_TIMEOUT_MS || 30_000),
+    timeout_ms: positiveEnvNumber('MIMO_ULTRASPEED_TIMEOUT_MS', 30_000),
     temperature: 0.2,
   },
   // MiMo Token Plan Pro. Quality is usable, but Agent20 showed heavy 90s tail; keep it
@@ -59,7 +64,7 @@ const PROVIDER_DEFS = {
     default_thinking: true,
     default_reasoning_effort: 'low',
     max_tokens: 16_384,
-    timeout_ms: Number(process.env.MIMO_TOKEN_PLAN_TIMEOUT_MS || 30_000),
+    timeout_ms: positiveEnvNumber('MIMO_TOKEN_PLAN_TIMEOUT_MS', 30_000),
     temperature: 0.2,
   },
   // [step-3.7-flash v1] StepFun 云 198B-MoE/11B-A(step_plan 端点)。

@@ -91,12 +91,18 @@ const _emptyCounters = new Map<ProviderId, number>();
 const LOCAL_HEALTH_PROBE_ENABLED = process.env.BRAIN_V2_LOCAL_HEALTH_PROBE !== '0';
 const DEFAULT_LOCAL_HEALTH_PROBE_MS = Number(process.env.BRAIN_V2_LOCAL_HEALTH_PROBE_MS || 1_500);
 const LOCAL_SINGLE_SLOT_GUARD_ENABLED = process.env.BRAIN_V2_LOCAL_SINGLE_SLOT_GUARD !== '0';
+const MIMO_ULTRASPEED_PROVIDER_ID = providerId('mimo-ultraspeed');
 const DEEPSEEK_CHAT_PROVIDER_ID = providerId('deepseek-chat');
 const STEP_FLASH_PROVIDER_ID = providerId('step-3.7-flash');
 
 function positiveEnvNumber(key: string, fallback: number): number {
   const value = Number(process.env[key] || fallback);
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function skipDirectEvidencePlanningProviders(skippedProviders: Set<ProviderId>): void {
+  skippedProviders.add(MIMO_ULTRASPEED_PROVIDER_ID);
+  skippedProviders.add(DEEPSEEK_CHAT_PROVIDER_ID);
 }
 
 function httpStatusFromError(error: unknown, message = errorMessage(error)): number | null {
@@ -1529,7 +1535,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       groundedToolObserved = true;
       evidenceToolCount += evidenceWeight;
       evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(toolName));
-      skippedProviders.add(DEEPSEEK_CHAT_PROVIDER_ID);
+      skipDirectEvidencePlanningProviders(skippedProviders);
       workingMessages.push({
         role: 'user',
         content: [
@@ -1572,7 +1578,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       groundedToolObserved = true;
       evidenceToolCount += evidenceWeight;
       evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(toolName));
-      skippedProviders.add(DEEPSEEK_CHAT_PROVIDER_ID);
+      skipDirectEvidencePlanningProviders(skippedProviders);
       workingMessages.push({
         role: 'user',
         content: [
@@ -1615,7 +1621,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       groundedToolObserved = true;
       evidenceToolCount += evidenceWeight;
       evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(toolName));
-      skippedProviders.add(DEEPSEEK_CHAT_PROVIDER_ID);
+      skipDirectEvidencePlanningProviders(skippedProviders);
       workingMessages.push({
         role: 'user',
         content: [
