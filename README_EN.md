@@ -62,9 +62,9 @@ NVFP4's real payoff is **batched throughput**. Same R6000, `VLLM_MOE_FORCE_MARLI
 - [#44672](https://github.com/vllm-project/vllm/pull/44672) ModelOpt W4A16 NVFP4 Marlin path docs
 - [#44673](https://github.com/vllm-project/vllm/pull/44673) speculative decoding correctness gate
 
-## 🔭 V0.80 Origin: CLI Workers, V0.85.3 Session Map
+## 🔭 V0.80 Origin: CLI Workers, V0.85.4 Session Map
 
-V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.3 the GUI no longer surfaces the Fleet command deck. The desktop experience now focuses on **chat + Session Map + patrols / acceptance**, while parallel worker power stays in the CLI for terminals, CI, and other agents.
+V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.4 the GUI no longer surfaces the Fleet command deck. The desktop experience now focuses on **chat + Session Map + patrols / acceptance**, while parallel worker power stays in the CLI for terminals, CI, and other agents.
 
 This is not Lynn stepping away from code. It is the opposite:code tasks, research tasks, and business tasks should share the same orchestration layer.
 
@@ -74,7 +74,7 @@ This is not Lynn stepping away from code. It is the opposite:code tasks, researc
 - **Acceptance flow**: worker output returns to GUI diffs, evidence, test gates, and release flow for review.
 - **`@lynn/cli`**: the CLI package supports `Lynn -p`, `Lynn code`, `Lynn agents`, and `Lynn worker run`, usable directly in terminals and callable by other agents.
 
-Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.3 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
+Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.4 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
 
 ### CLI Quick Install
 
@@ -85,12 +85,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.3.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.4.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.85.3
+Lynn --version  # should print 0.85.4
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -116,7 +116,24 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details open>
-<summary><strong>Lynn v0.85.3</strong> · 2026-06-25 · ReAct evidence-quality fixes + Session Runtime split <em>(latest)</em></summary>
+<summary><strong>Lynn v0.85.4</strong> · 2026-06-25 · retry-answer pollution fix + regression gate <em>(latest)</em></summary>
+
+**v0.85.4 hotfix**:
+- **Fixes retry-answer state pollution**: after clicking retry on an assistant answer, Lynn rolls back from the matching previous user message and resends through the normal prompt path. A later new question no longer reuses the old prompt, old `replaceFromMessageId`, or old branch target.
+- **Failed sends stay out of the transcript**: retry / edit-resend failures restore the draft only, without optimistically adding a stale assistant turn that can poison the next request.
+- **Adds an exact regression test**: the store test now covers retry followed by a fresh question and asserts the second WebSocket payload is the new prompt with no stale replacement parameters.
+- **Keeps the v0.85.3 quality fixes**: sports direct evidence closure, local data-analysis direct answers, safer evidence fallback, Windows workspace fixes, Session Runtime split, and mirror update feed remain included.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.4.tgz"
+```
+
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases#v0.85.4)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.85.3</strong> · 2026-06-25 · ReAct evidence-quality fixes + Session Runtime split</summary>
 
 **v0.85.3 hotfix and quality fixes**:
 - **GUI / CLI sports evidence closure**: when `sports_score` returns direct ESPN evidence, Lynn now closes on that evidence instead of letting generic search, local task lists, or stale scores overwrite the answer.
@@ -685,7 +702,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 
 Lynn is a personal AI agent for the desktop: it has memory, personality, writing tools, autonomous work loops, and now a path toward orchestrating coding work.
 
-Early Lynn focused on bringing agent workflows out of the terminal so writers, researchers, operators, students, founders, and non-programmers could actually use them. Starting with V0.85.3, the GUI is deliberately quieter: chat, Session Map, patrols, and acceptance stay on the desktop, while parallel workers remain available as headless CLI capabilities for terminals, CI, and other agents.
+Early Lynn focused on bringing agent workflows out of the terminal so writers, researchers, operators, students, founders, and non-programmers could actually use them. V0.85.4 keeps that quieter GUI direction: chat, Session Map, patrols, and acceptance stay on the desktop, while parallel workers remain available as headless CLI capabilities for terminals, CI, and other agents.
 
 If you use Claude Code, Codex, or Cursor, Lynn should feel familiar but more like a workbench than a command deck. It turns the current thread's goals, evidence, files, automations, and branches into an inspectable Session Map. If you have never used those tools, you can still start from the GUI and gradually hand coding, documents, research, and automation work to Lynn.
 
@@ -709,7 +726,7 @@ Lynn does not replace Cursor. Cursor owns the editor loop. Lynn owns the layer a
 
 ## Lynn vs Cursor / Claude Code
 
-|  | **Lynn V0.85.3** | Cursor | Claude Code / Codex CLI |
+|  | **Lynn V0.85.4** | Cursor | Claude Code / Codex CLI |
 |---|---|---|---|
 | Core shape | **GUI Session Map + headless CLI workers** | IDE coding flow | Single CLI agent |
 | Parallel work | **CLI worker / worktree / JSONL protocol** | Limited | Manually managed |
@@ -894,11 +911,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://gitee.com/merkyor/Lynn/releases). The V0.85.3 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://gitee.com/merkyor/Lynn/releases). The V0.85.4 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
 **Windows:** download the latest `.exe` installer from [Releases](https://gitee.com/merkyor/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.85.3 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.85.4 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -961,8 +978,8 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.85.3 notarized DMG) |
-| macOS (Intel) | Supported (V0.85.3 notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.85.4 notarized DMG) |
+| macOS (Intel) | Supported (V0.85.4 notarized DMG) |
 | Windows | Beta |
 | Linux | Planned |
 | Mobile (PWA) | Planned |
