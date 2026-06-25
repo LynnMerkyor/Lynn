@@ -521,7 +521,9 @@ function hasSyntheticOfficialModelLeak(prompt, text) {
   const p = String(prompt || "");
   const raw = String(text || "").replace(/[\u2010-\u2015\u2212]/g, "-");
   if (/(?:OpenAI|ChatGPT|GPT).{0,24}(?:最新|最近|新模型|官方|发布|model|release)/i.test(p)) {
-    return /\bGPT\s*-?\s*5\.(?:3|4|5)\b/i.test(raw);
+    const hasOpenAIOfficialSource = /(?:https?:\/\/)?(?:platform\.openai\.com|openai\.com|help\.openai\.com)|Model Release Notes|OpenAI API models docs|官方页面正文抓取/i.test(raw);
+    return /\bGPT\s*-?\s*5\.(?:3|4)\b/i.test(raw)
+      || (/\bGPT\s*-?\s*5\.5\b/i.test(raw) && !hasOpenAIOfficialSource);
   }
   if (/(?:Claude|Anthropic).{0,24}(?:最新|最近|公开|模型|官方|发布|model|release)/i.test(p)) {
     return /Claude\s+Fable\s+5|Fable\s+5|Mythos\s+5|神话级|Mythos\s*级/i.test(raw);

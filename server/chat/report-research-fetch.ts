@@ -4,6 +4,7 @@ import { fetchWebContent } from "../../lib/tools/web-fetch.js";
 import { runSearchQuery } from "../../lib/tools/web-search.js";
 import { buildStructuredSection, extractToolText, parseIndexSnapshot, parseStockSnapshot, parseWeatherSnapshot } from "./report-research-answer.js";
 import { detectPrimaryIndexTarget, extractCompositeWeatherLocation, extractPrimaryUsTicker, extractStockTargetForResearch, extractWeatherLocationForResearch } from "./report-research-intent.js";
+import { currentLynnCliTarballName, currentLynnVersionTag } from "./release-info.js";
 import type { IndexResearchTarget, ReportResearchKind, StockResearchTarget } from "./report-research-intent.js";
 
 export type RealtimeResearchToolKind = "live_news" | "sports" | "weather";
@@ -227,7 +228,7 @@ function isDgxSparkPrompt(userPrompt: unknown): boolean {
 }
 function isLynnReleasePrompt(userPrompt: unknown): boolean {
   const prompt = textOf(userPrompt);
-  return /download\.merkyorlynn\.com|Lynn\s+v?0\.85\.1|Lynn.*(?:Gitee|release|tag|镜像站)|Gitee.*Lynn.*(?:release|tag)/i.test(prompt);
+  return /download\.merkyorlynn\.com|Lynn\s+v?\d+\.\d+\.\d+|Lynn.*(?:Gitee|release|tag|镜像站)|Gitee.*Lynn.*(?:release|tag)/i.test(prompt);
 }
 function isKnownOfficialVersionPrompt(userPrompt: unknown): boolean {
   const prompt = textOf(userPrompt);
@@ -262,15 +263,17 @@ function buildDgxSparkOfficialContext(userPrompt: unknown): string {
   ].join("\n").slice(0, MAX_CONTEXT_CHARS);
 }
 function buildLynnReleaseContext(userPrompt: unknown): string {
+  const versionTag = currentLynnVersionTag();
+  const cliTarball = currentLynnCliTarballName();
   return [
     "【Lynn 发布资料】",
     `查询：${textOf(userPrompt)}`,
     "项目仓库: https://gitee.com/merkyor/Lynn",
     "Gitee releases: https://gitee.com/merkyor/Lynn/releases",
-    "当前版本: v0.85.1",
-    "Gitee release tag: https://gitee.com/merkyor/Lynn/releases/tag/v0.85.1",
+    `当前版本: ${versionTag}`,
+    `Gitee release tag: https://gitee.com/merkyor/Lynn/releases/tag/${versionTag}`,
     "镜像下载页: https://download.merkyorlynn.com/download.html",
-    "CLI 包: https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.1.tgz",
+    `CLI 包: https://download.merkyorlynn.com/downloads/cli/${cliTarball}`,
     "说明：如果 Gitee 页面暂时无法抓取，回答可说明以 Gitee release 页面为准；不要让模型超时空答。",
   ].join("\n").slice(0, MAX_CONTEXT_CHARS);
 }
@@ -483,6 +486,100 @@ function formatOpenAIReleaseRows(results: WebSearchResultItem[], query: string, 
     rows.join("\n\n"),
   ].filter(Boolean).join("\n").slice(0, MAX_CONTEXT_CHARS);
 }
+
+const OPENAI_OFFICIAL_RELEASE_URLS = [
+  "https://help.openai.com/en/articles/9624314-model-release-notes",
+  "https://platform.openai.com/docs/models",
+  "https://openai.com/news/",
+] as const;
+
+function compactFetchedLines(value: unknown): string[] {
+  const seen = new Set<string>();
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((line) => textOf(line))
+    .filter((line) => line.length >= 4 && line.length <= 260)
+    .filter((line) => {
+      if (seen.has(line)) return false;
+      seen.add(line);
+      return true;
+    });
+}
+
+function firstFollowingText(lines: string[], startIndex: number): string {
+  for (const line of lines.slice(startIndex + 1, startIndex + 6)) {
+    if (/^(?:Updated|来源|URL|Learn more|Model Release Notes|\(\/|Skip to)/i.test(line)) continue;
+    if (line.length >= 24) return line;
+  }
+  return "";
+}
+
+function extractOpenAIOfficialReleaseRows(url: string, fetched: WebFetchResult): string[] {
+  const lines = compactFetchedLines(fetched?.text || "");
+  const host = hostFromUrl(url);
+  const rows: string[] = [];
+  const addRow = (title: string, snippet: string, freshness = "官方页面正文；发布日期以原页面为准") => {
+    const cleanTitle = textOf(title).replace(/\s*\(\/[^)]*\)/g, "").trim();
+    const cleanSnippet = textOf(snippet).replace(/\s*\(\/[^)]*\)/g, "").trim();
+    if (!cleanTitle || !/(?:GPT|Codex|OpenAI\s+o\d|Latest:)/i.test(cleanTitle)) return;
+    if (rows.some((row) => row.includes(cleanTitle))) return;
+    rows.push([
+      `${rows.length + 1}. ${cleanTitle}`,
+      host ? `来源: ${host}` : "",
+      "检索窗口: OpenAI 官方资料",
+      `新鲜度: ${freshness}`,
+      `URL: ${url}`,
+      cleanSnippet ? `正文摘录: ${cleanSnippet.slice(0, 520)}` : "",
+    ].filter(Boolean).join("\n"));
+  };
+
+  for (let i = 0; i < lines.length && rows.length < 4; i += 1) {
+    const line = lines[i];
+    if (/\b(?:GPT|Codex|OpenAI\s+o\d)\b[\w\s.+-]{0,80}\((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December|\d{4})/i.test(line)) {
+      addRow(`Model Release Notes: ${line}`, firstFollowingText(lines, i));
+    }
+    if (/^Latest:\s*\b(?:GPT|o\d|Codex)/i.test(line)) {
+      addRow(`OpenAI API models docs: ${line}`, "", "官方模型文档导航；具体可用性以原页面为准");
+    }
+    if (/^How\s+GPT-|^Introducing\s+GPT-/i.test(line)) {
+      addRow(line, firstFollowingText(lines, i), "OpenAI News 页面正文；发布日期以原页面为准");
+    }
+  }
+  return rows;
+}
+
+async function buildOpenAIFetchedOfficialRows(opts: ReportResearchFetchOptions = {}): Promise<string> {
+  const settled = await Promise.allSettled(
+    OPENAI_OFFICIAL_RELEASE_URLS.map(async (url) => {
+      const result = await executeWebFetch(url, 2800, {
+        ...opts,
+        timeoutMs: Math.min(resolveTimeout(opts, "fetch", FETCH_TIMEOUT_MS), 7000),
+        label: "openai_official_fetch",
+      });
+      return extractOpenAIOfficialReleaseRows(url, result);
+    }),
+  );
+  const rows: string[] = [];
+  for (const item of settled) {
+    if (item.status !== "fulfilled") continue;
+    for (const row of item.value) {
+      const title = row.match(/^\d+\.\s+([^\n]+)/)?.[1] || row;
+      if (rows.some((existing) => existing.includes(title))) continue;
+      rows.push(row.replace(/^\d+\./, `${rows.length + 1}.`));
+      if (rows.length >= 5) break;
+    }
+    if (rows.length >= 5) break;
+  }
+  if (!rows.length) return "";
+  return [
+    "【OpenAI 官方模型发布资料】",
+    "查询：OpenAI official model release pages deep-read",
+    "来源：官方页面正文抓取（openai.com / help.openai.com / platform.openai.com）",
+    "",
+    rows.join("\n\n"),
+  ].join("\n").slice(0, MAX_CONTEXT_CHARS);
+}
+
 function buildOpenAIReleaseFallbackContext(userPrompt: unknown): string {
   return [
     "【OpenAI 官方模型发布资料】",
@@ -513,6 +610,8 @@ function buildOpenAIReleaseFallbackContext(userPrompt: unknown): string {
 }
 async function buildOpenAIReleaseResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const query = "site:openai.com OpenAI latest model release GPT model 2026";
+  const fetchedOfficial = await buildOpenAIFetchedOfficialRows(opts);
+  if (fetchedOfficial) return fetchedOfficial;
   try {
     const result = await executeWebSearch(query, 6, { sceneHint: "docs" }, {
       ...opts,

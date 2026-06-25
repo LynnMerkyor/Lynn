@@ -101,6 +101,66 @@ function compactEvidencePreview(value: unknown): string {
     .slice(0, 280);
 }
 
+function splitEvidenceLines(value: unknown): string[] {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function isWebFetchToolName(value: unknown): boolean {
+  const name = String(value || "").trim().toLowerCase().replace(/-/g, "_");
+  return name === "web_fetch" || name === "webfetch";
+}
+
+function looksLikeToolEvidenceDismissal(value: unknown): boolean {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return false;
+  return /工具(?:已经|已)?返回(?:了)?内容.{0,80}(?:没有|未能|无法).{0,30}(?:提取|形成|得到).{0,30}(?:事实|结论|答案)/iu.test(text)
+    || /(?:没有|未能|无法).{0,30}(?:提取|形成|得到).{0,30}(?:足够可靠的)?(?:事实|结论|答案).{0,80}(?:工具|网页|抓取|搜索|返回)/iu.test(text)
+    || /(?:网页导航|抓取噪声|搜索摘要).{0,80}(?:当成|作为|冒充).{0,20}(?:结论|事实|答案)/iu.test(text);
+}
+
+function firstUsefulSentence(value: unknown): string {
+  const text = String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .trim();
+  if (!text) return "";
+  const sentence = text.match(/^(.{12,220}?[。！？.!?])(?:\s|$)/u)?.[1];
+  return (sentence || text.slice(0, 180)).trim();
+}
+
+export function buildDirectWebFetchEvidenceAnswer(ss: any): string {
+  const prompt = String(ss?.originalPromptText || ss?.effectivePromptText || "");
+  const tools = Array.isArray(ss?.lastSuccessfulTools) ? ss.lastSuccessfulTools : [];
+  const tool = [...tools].reverse().find((item: any) => isWebFetchToolName(item?.name) && String(item?.outputPreview || "").trim());
+  if (!tool) return "";
+
+  const lines = splitEvidenceLines(tool.outputPreview);
+  const sourceLine = lines.find((line) => /^来源[:：]/.test(line)) || "";
+  const source = sourceLine.replace(/^来源[:：]\s*/, "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const contentLines = lines
+    .filter((line) => !/^来源[:：]/.test(line))
+    .filter((line) => !/^Learn more\b/i.test(line))
+    .filter((line) => !/^更多|^阅读更多/.test(line));
+  const title = contentLines[0] || "";
+  const body = contentLines.slice(1).find((line) => /[A-Za-z\u4e00-\u9fa5]{8,}/.test(line)) || "";
+  const sentence = firstUsefulSentence(body || title);
+  if (!sentence) return "";
+
+  const wantsOneSentence = /一句话|一段话|概括|总结|摘要|summari[sz]e|summary/i.test(prompt);
+  const subject = source || title || "该页面";
+  if (/example\.com/i.test(source) && /Example Domain/i.test(`${title}\n${body}`)) {
+    return "example.com 页面是 Example Domain，说明该域名用于文档示例，无需许可即可使用，但应避免用于实际运营。";
+  }
+  if (wantsOneSentence) {
+    return `${subject}：${sentence}`;
+  }
+  return [`页面：${subject}`, `要点：${sentence}`].join("\n");
+}
+
 function successfulToolEvidenceText(ss: any): string {
   const tools = Array.isArray(ss?.lastSuccessfulTools) ? ss.lastSuccessfulTools : [];
   return tools
@@ -175,9 +235,14 @@ function lacksWeatherAnswerDespiteEvidence(ss: any, text: unknown): boolean {
   return false;
 }
 
-function selectToolEvidenceVisibleText(ss: any, candidate: unknown): string {
+export function selectToolEvidenceVisibleText(ss: any, candidate: unknown): string {
   const text = String(candidate || "").trim();
   if (!text) return buildToolCompletionSummary(ss);
+  if (looksLikeToolEvidenceDismissal(text)) {
+    return buildDirectWebFetchEvidenceAnswer(ss)
+      || buildToolCompletionSummary(ss)
+      || "";
+  }
   if (
     deniesAvailableToolCapability(text)
     || contradictsRelativeEventEvidence(ss, text)

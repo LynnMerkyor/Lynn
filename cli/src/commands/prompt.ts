@@ -27,6 +27,10 @@ import {
   buildReportResearchContext,
   inferReportResearchKind,
 } from "../../../server/chat/report-research-context.js";
+import {
+  buildNoToolTurnPrompt,
+  shouldDisableToolsForTurn,
+} from "../../../server/chat/tool-use-behavior.js";
 
 export interface PromptOptions {
   json?: boolean;
@@ -178,6 +182,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   const effectiveCwd = getStringFlag(args.flags, "cwd") || process.cwd();
   const localWorkspace = buildCliLocalWorkspacePrompt(prompt, effectiveCwd, imagePaths.length);
   const modelPrompt = localWorkspace.prompt;
+  const disableBrainToolsForPrompt = !imagePaths.length && !voice && shouldDisableToolsForTurn(prompt);
 
   if (options.json) {
     if (voice) {
@@ -236,7 +241,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
     }
   }
 
-  if (!imagePaths.length && !voice) {
+  if (!imagePaths.length && !voice && !disableBrainToolsForPrompt) {
     const directResearch = await tryBuildCliDirectResearchAnswer(prompt).catch(() => null);
     if (directResearch?.answer?.trim()) {
       if (options.json) {
@@ -334,6 +339,12 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
       const retryVisibleAnswer = attempt > 0;
       const messages: ChatMessage[] = [
         ...resetCliRuntimeMessages(chatRouteLabel(cliProvider?.profile)),
+        ...(disableBrainToolsForPrompt
+          ? [{
+              role: "system" as const,
+              content: buildNoToolTurnPrompt(prompt),
+            }]
+          : []),
         ...(retryVisibleAnswer
           ? [{
               role: "system" as const,

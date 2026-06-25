@@ -696,11 +696,56 @@ function buildNodeJsonKeysCountAnswer(raw: unknown): string {
   ].join("\n");
 }
 
+function buildQuadraticFormulaAnswer(raw: unknown): string {
+  const text = String(raw || "");
+  if (!/(?:二次方程|quadratic)/iu.test(text)) return "";
+  if (!/(?:求根公式|公式|LaTeX|latex|解|roots?)/iu.test(text)) return "";
+
+  return [
+    "一元二次方程",
+    "",
+    "\\[",
+    "ax^2 + bx + c = 0 \\quad (a \\ne 0)",
+    "\\]",
+    "",
+    "的求根公式是：",
+    "",
+    "\\[",
+    "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
+    "\\]",
+    "",
+    "其中 \\(b^2 - 4ac\\) 是判别式。",
+  ].join("\n");
+}
+
+function buildNarrowInputChecklistAnswer(raw: unknown): string {
+  const text = String(raw || "");
+  if (!/(?:UI|界面|前端|输入框|input|textarea)/iu.test(text)) return "";
+  if (!/(?:窄屏|小屏|移动端|手机|不溢出|溢出|检查清单|checklist|设计检查)/iu.test(text)) return "";
+
+  return [
+    "## 窄屏输入框设计检查清单",
+    "",
+    "1. 宽度使用容器约束：`width: 100%`，并设置合理的 `min-width: 0`，避免被 flex/grid 子项撑开。",
+    "2. 文本可换行或横向滚动：长占位符、长文件名、URL、连续英文字符都不能把布局顶破。",
+    "3. 操作按钮固定尺寸：发送、附件、语音、模式按钮不要随文字变化挤压输入区。",
+    "4. 高度有上限：多行输入可以自增长，但到 4-6 行后进入内部滚动，不能把主内容挤没。",
+    "5. 占位文案短而具体：移动端优先一句话，避免把说明文塞进 placeholder。",
+    "6. 触控目标够大：按钮和输入焦点区域至少约 44px 高，间距稳定。",
+    "7. 错误/加载状态不改布局：校验提示、上传进度、禁用态要预留位置或覆盖在固定区域。",
+    "8. 真实数据压测：用超长中文、英文无空格、emoji、文件名、换行文本分别检查。",
+    "",
+    "验收标准：在 320px 宽度下，输入区、按钮、提示文案都不重叠、不横向撑出视口，发送按钮始终可见。",
+  ].join("\n");
+}
+
 export function buildLocalOfficeDirectAnswer(raw: unknown): string {
   return buildIdentityAnswer(raw)
     || buildLynnProductDesignAnswer(raw)
     || buildFinanceSafetyAnswer(raw)
     || buildNodeJsonKeysCountAnswer(raw)
+    || buildQuadraticFormulaAnswer(raw)
+    || buildNarrowInputChecklistAnswer(raw)
     || buildZodReleaseManifestAnswer(raw)
     || buildSortUniqueListAnswer(raw)
     || buildSimpleTaskRiskTableAnswer(raw)

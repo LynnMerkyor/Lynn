@@ -596,7 +596,9 @@ function hasSyntheticOfficialModelLeak(prompt, text) {
   const p = String(prompt || "");
   const raw = String(text || "").replace(/[\u2010-\u2015\u2212]/g, "-");
   if (/(?:OpenAI|ChatGPT|GPT).{0,24}(?:最新|最近|新模型|官方|发布|model|release)/i.test(p)) {
-    return /\bGPT\s*-?\s*5\.(?:3|4|5)\b/i.test(raw);
+    const hasOpenAIOfficialSource = /(?:https?:\/\/)?(?:platform\.openai\.com|openai\.com|help\.openai\.com)|Model Release Notes|OpenAI API models docs|官方页面正文抓取/i.test(raw);
+    return /\bGPT\s*-?\s*5\.(?:3|4)\b/i.test(raw)
+      || (/\bGPT\s*-?\s*5\.5\b/i.test(raw) && !hasOpenAIOfficialSource);
   }
   if (/(?:Claude|Anthropic).{0,24}(?:最新|最近|公开|模型|官方|发布|model|release)/i.test(p)) {
     return /Claude\s+Fable\s+5|Fable\s+5|Mythos\s+5|神话级|Mythos\s*级/i.test(raw);
@@ -862,15 +864,36 @@ async function runPrompt(config, ws, index, category, prompt, timeoutMs) {
     ws.on("message", onMessage);
     ws.on("error", onError);
     ws.on("close", onClose);
-    ws.send(JSON.stringify({
-      type: "prompt",
-      text: prompt,
-      ...(sessionPath ? { sessionPath } : {}),
-      clientMessageId: `gui-50-${index}-${Date.now()}`,
-    }));
+    if (ws.readyState !== WebSocket.OPEN) {
+      active.errors.push("ws:not_open");
+      cleanup();
+      resolve();
+      return;
+    }
+    try {
+      ws.send(JSON.stringify({
+        type: "prompt",
+        text: prompt,
+        ...(sessionPath ? { sessionPath } : {}),
+        clientMessageId: `gui-50-${index}-${Date.now()}`,
+      }));
+    } catch (error) {
+      active.errors.push(`ws:send_failed:${error?.message || error}`);
+      cleanup();
+      resolve();
+    }
   });
   Object.assign(active, classify(active));
   return active;
+}
+
+async function runPromptWithFreshWs(config, index, category, prompt, timeoutMs) {
+  const ws = await openWs(config.wsUrl, config.token);
+  try {
+    return await runPrompt(config, ws, index, category, prompt, timeoutMs);
+  } finally {
+    try { ws.close(); } catch {}
+  }
 }
 
 const args = parseArgs(process.argv.slice(2));
@@ -882,31 +905,26 @@ await httpJson(config.baseUrl, config.token, "/api/health", { timeoutMs: 10000 }
 
 const selectedPrompts = selectedPromptItems(args);
 const results = [];
-const ws = await openWs(config.wsUrl, config.token);
-try {
-  for (const item of selectedPrompts) {
-    const { index, category, prompt } = item;
-    console.log(`[${index}/${PROMPTS.length}] ${category}: ${prompt}`);
-    let result = await runPrompt(config, ws, index, category, prompt, args.timeoutMs);
-    if (isEmptyTransportTimeout(result)) {
-      console.log(`  -> retry empty transport timeout after ${EMPTY_TIMEOUT_RETRY_MS}ms`);
-      await new Promise((resolve) => setTimeout(resolve, EMPTY_TIMEOUT_RETRY_MS));
-      result = await runPrompt(config, ws, index, category, prompt, args.timeoutMs);
-      result.retriedAfterEmptyTimeout = true;
-    }
-    results.push(result);
-    await fs.writeFile(outputPath, JSON.stringify({ outputPath, generatedAt: new Date().toISOString(), results }, null, 2), "utf8");
-    const preview = result.text.trim().replace(/\s+/g, " ").slice(0, 100);
-    console.log(`  -> ${result.status} ${result.elapsedMs}ms provider=${result.providerTrail.join(">") || "-"} tools=${result.tools.map((tool) => tool.name).join(",") || "-"} text=${preview}`);
-    if (result.timedOut) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }
-    if (TURN_SETTLE_MS > 0) {
-      await new Promise((resolve) => setTimeout(resolve, TURN_SETTLE_MS));
-    }
+for (const item of selectedPrompts) {
+  const { index, category, prompt } = item;
+  console.log(`[${index}/${PROMPTS.length}] ${category}: ${prompt}`);
+  let result = await runPromptWithFreshWs(config, index, category, prompt, args.timeoutMs);
+  if (isEmptyTransportTimeout(result)) {
+    console.log(`  -> retry empty transport timeout after ${EMPTY_TIMEOUT_RETRY_MS}ms`);
+    await new Promise((resolve) => setTimeout(resolve, EMPTY_TIMEOUT_RETRY_MS));
+    result = await runPromptWithFreshWs(config, index, category, prompt, args.timeoutMs);
+    result.retriedAfterEmptyTimeout = true;
   }
-} finally {
-  try { ws.close(); } catch {}
+  results.push(result);
+  await fs.writeFile(outputPath, JSON.stringify({ outputPath, generatedAt: new Date().toISOString(), results }, null, 2), "utf8");
+  const preview = result.text.trim().replace(/\s+/g, " ").slice(0, 100);
+  console.log(`  -> ${result.status} ${result.elapsedMs}ms provider=${result.providerTrail.join(">") || "-"} tools=${result.tools.map((tool) => tool.name).join(",") || "-"} text=${preview}`);
+  if (result.timedOut) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  if (TURN_SETTLE_MS > 0) {
+    await new Promise((resolve) => setTimeout(resolve, TURN_SETTLE_MS));
+  }
 }
 
 const counts = results.reduce((acc, item) => {

@@ -60,8 +60,8 @@ export function shouldDisableToolsForTurn(promptText: unknown): boolean {
   if (sameConversationRecallOnly) return true;
 
   const conceptualProductOrWorkflowQuestion =
-    /(?:为什么|如何|怎么|怎样|给(?:出|一个)?|写|改写|设计(?:一个)?|解释|拟定|(?:应该)?避免什么).{0,120}(?:模型|工具|产品|展示|UI|输入框|窄屏|流程|门禁|测试|原因|区别|检查清单|冲突|用户|任务|文案|按钮|tooltip|状态|节点|Session\s*Map|工作地图|右侧工作台|左侧会话列表|数字徽标|长会话|7GB|健康检查|会话\s*digest|信息架构|草案|Agent|搜索\s*Agent|证据优先|失败策略|搜索策略)/iu.test(text)
-    || /(?:模型|工具|产品|展示|UI|输入框|窄屏|流程|门禁|测试|原因|区别|检查清单|冲突|用户|任务|文案|按钮|tooltip|状态|节点|Session\s*Map|工作地图|右侧工作台|左侧会话列表|数字徽标|长会话|7GB|健康检查|会话\s*digest|信息架构|草案|Agent|搜索\s*Agent|证据优先|失败策略|搜索策略).{0,120}(?:为什么|如何|怎么|怎样|给(?:出|一个)?|写|改写|设计(?:一个)?|解释|拟定|(?:应该)?避免什么)/iu.test(text)
+    /(?:为什么|如何|怎么|怎样|给(?:出|一个)?|写|改写|设计(?:一个)?|解释|拟定|(?:应该)?避免什么).{0,120}(?:模型|工具|产品|展示|UI|输入框|窄屏|流程|门禁|测试|原因|区别|检查清单|冲突|用户|任务|文案|按钮|tooltip|状态|节点|Session\s*Map|工作地图|右侧工作台|左侧会话列表|数字徽标|长会话|7GB|健康检查|会话\s*digest|信息架构|草案|Agent|搜索\s*Agent|证据优先|失败策略|搜索策略|git\s*commit|commit\s*message|提交信息|提交消息|提交规范)/iu.test(text)
+    || /(?:模型|工具|产品|展示|UI|输入框|窄屏|流程|门禁|测试|原因|区别|检查清单|冲突|用户|任务|文案|按钮|tooltip|状态|节点|Session\s*Map|工作地图|右侧工作台|左侧会话列表|数字徽标|长会话|7GB|健康检查|会话\s*digest|信息架构|草案|Agent|搜索\s*Agent|证据优先|失败策略|搜索策略|git\s*commit|commit\s*message|提交信息|提交消息|提交规范).{0,120}(?:为什么|如何|怎么|怎样|给(?:出|一个)?|写|改写|设计(?:一个)?|解释|拟定|(?:应该)?避免什么|规范|规则)/iu.test(text)
     && !explicitToolAsk
     && !/(?:最新|今天|今晚|现在|实时|查一下|查询|股价|天气|金价|汇率|世界杯|NBA|OpenAI\s*最近|发布)/iu.test(text);
   if (conceptualProductOrWorkflowQuestion) return true;

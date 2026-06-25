@@ -39,6 +39,23 @@ describe("buildLocalOfficeDirectAnswer", () => {
     expect(answer).not.toContain("如果需要更精确的实时结论");
   });
 
+  it("answers the quadratic formula without confusing it with Vieta formulas", () => {
+    const answer = buildLocalOfficeDirectAnswer("用 LaTeX 写出二次方程求根公式");
+
+    expect(answer).toContain("x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}");
+    expect(answer).toContain("判别式");
+    expect(answer).not.toContain("韦达");
+  });
+
+  it("answers narrow-screen input checklist prompts without search-language fallback", () => {
+    const answer = buildLocalOfficeDirectAnswer("给一个 UI 输入框在窄屏不溢出的设计检查清单");
+
+    expect(answer).toContain("窄屏输入框设计检查清单");
+    expect(answer).toContain("320px");
+    expect(answer).not.toContain("未查到");
+    expect(answer).not.toContain("搜索");
+  });
+
   it("answers Lynn right workbench architecture prompts without pseudo tool setup", () => {
     const answer = buildLocalOfficeDirectAnswer("给 GUI 右侧工作台写一个信息架构草案");
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
 import {
   buildReportResearchContext,
@@ -6,6 +7,8 @@ import {
   extractStockTargetForResearch,
   inferReportResearchKind,
 } from "../server/chat/report-research-context.js";
+
+const packageVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 
 describe("report research context intent", () => {
   it("detects composite market plus weather prompts that need a direct snapshot answer", () => {
@@ -44,10 +47,40 @@ describe("report research context intent", () => {
     expect(inferReportResearchKind("写一个 Node.js 脚本读取 JSON 并输出 keys 数量")).toBe("");
   });
 
-  it("prefetches OpenAI model-release questions with one official-domain search", async () => {
+  it("prefetches OpenAI model-release questions by deep-reading official pages first", async () => {
+    const fetches = [];
+    const context = await buildReportResearchContext("查一下 OpenAI 最近发布了什么新模型，给一句摘要", {
+      toolWrappers: {
+        webFetch: async (url) => {
+          fetches.push(url);
+          if (url.includes("model-release-notes")) {
+            return {
+              text: [
+                "Model Release Notes",
+                "Updated: 24 hours ago",
+                "GPT-5.5 Instant Update (May 28, 2026)",
+                "We’re updating GPT-5.5 Instant in ChatGPT and the API to improve response style and quality.",
+              ].join("\n"),
+            };
+          }
+          return { text: "" };
+        },
+        webSearch: async (query, limit, options) => {
+          throw new Error(`search should not run before official fetch succeeds: ${query} ${limit} ${JSON.stringify(options)}`);
+        },
+      },
+    });
+
+    expect(fetches).toContain("https://help.openai.com/en/articles/9624314-model-release-notes");
+    expect(context).toContain("【OpenAI 官方模型发布资料】");
+    expect(context).toContain("GPT-5.5 Instant Update");
+  });
+
+  it("falls back to official-domain search when OpenAI official page fetch has no model rows", async () => {
     const calls = [];
     const context = await buildReportResearchContext("查一下 OpenAI 最近发布了什么新模型，给一句摘要", {
       toolWrappers: {
+        webFetch: async () => ({ text: "OpenAI page without model release rows" }),
         webSearch: async (query, limit, options) => {
           calls.push({ query, limit, options });
           return {
@@ -71,18 +104,26 @@ describe("report research context intent", () => {
   it("builds a bounded OpenAI model-release answer from official context", () => {
     const context = [
       "【OpenAI 官方模型发布资料】",
-      "查询：site:openai.com OpenAI latest model release GPT model 2026",
-      "1. Model Release Notes | OpenAI Help Center",
+      "查询：OpenAI official model release pages deep-read",
+      "1. Model Release Notes: GPT-5.5 Instant Update (May 28, 2026)",
       "来源: help.openai.com",
       "检索窗口: OpenAI 官方资料",
       "URL: https://help.openai.com/en/articles/9624314-model-release-notes",
-      "摘要: Official model release notes list recent model updates. Verify the newest model on the original page.",
+      "正文摘录: We’re updating GPT-5.5 Instant in ChatGPT and the API to improve response style and quality.",
     ].join("\n");
 
     const answer = buildDirectResearchAnswer("news", context, "查一下 OpenAI 最近发布了什么新模型，给一句摘要");
-    expect(answer).toContain("没有拿到可核验的 OpenAI 官方新模型发布结论");
+    expect(answer).toContain("GPT-5.5 Instant Update");
     expect(answer).toContain("https://help.openai.com/en/articles/9624314-model-release-notes");
-    expect(answer).not.toContain("GPT-5.5");
+  });
+
+  it("answers Lynn release prompts from the current package version, not a stale hardcoded tag", async () => {
+    const prompt = "查 Gitee 上 Lynn 最新 release tag 是什么";
+    const context = await buildReportResearchContext(prompt);
+    const answer = buildDirectResearchAnswer("public_data", context, prompt);
+
+    expect(answer).toContain(`v${packageVersion}`);
+    expect(answer).toContain(`https://gitee.com/merkyor/Lynn/releases/tag/v${packageVersion}`);
   });
 
   it("short-circuits broad today tech news when no dated source is available", async () => {

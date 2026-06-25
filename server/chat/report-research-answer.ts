@@ -23,6 +23,7 @@ import {
   parseStructuredFields,
   textOf,
 } from "./report-research-answer-utils.js";
+import { currentLynnCliTarballName, currentLynnVersionTag } from "./release-info.js";
 function parseStockSnapshot(result: ToolExecutionResult | null | undefined): StockSnapshot | null {
   const directQuote = result?.details?.directQuotes?.[0];
   if (directQuote?.symbol && directQuote?.close) {
@@ -589,7 +590,7 @@ function normalizeModelText(value: unknown): string {
   return String(value || "").replace(/[\u2010-\u2015\u2212]/g, "-");
 }
 function containsKnownSyntheticOpenAIModel(value: unknown): boolean {
-  return /\bGPT\s*-?\s*5\.(?:3|4|5)\b/i.test(normalizeModelText(value));
+  return /\bGPT\s*-?\s*5\.(?:3|4)\b/i.test(normalizeModelText(value));
 }
 function buildDirectOpenAIReleaseAnswer(context: unknown, userPrompt: string = ""): string {
   const text = String(context || "");
@@ -934,7 +935,7 @@ function buildKnownOfficialVersionAnswer(userPrompt: string = ""): string {
       "来源：",
       "- https://docs.anthropic.com/en/docs/about-claude/models/overview",
       "- https://docs.anthropic.com/en/docs/about-claude/models/all-models",
-      "不要把非官方搜索摘要、网页导航残片或未核验传闻合成为新的 Claude 代际名称。",
+      "不要把非官方搜索摘要或未核验传闻合成为新的 Claude 代际名称。",
     ].join("\n");
   }
   if (/Apple.{0,32}notarization|notarization.{0,32}Apple|Apple.{0,24}公证|苹果.{0,24}公证/i.test(prompt)) {
@@ -956,13 +957,15 @@ function buildLynnReleaseAnswer(context: unknown, userPrompt: string = ""): stri
   const text = String(context || "");
   const prompt = textOf(userPrompt);
   if (!/Lynn 发布资料/.test(text)) return "";
+  const versionTag = currentLynnVersionTag();
+  const cliTarball = currentLynnCliTarballName();
   if (/Gitee|release|tag/i.test(prompt)) {
-    return "Lynn 当前发布目标 tag 是 v0.85.1。Gitee release 页面：https://gitee.com/merkyor/Lynn/releases/tag/v0.85.1；release 列表：https://gitee.com/merkyor/Lynn/releases。若页面抓取失败，以 Gitee 页面实际显示为准。";
+    return `Lynn 当前发布目标 tag 是 ${versionTag}。Gitee release 页面：https://gitee.com/merkyor/Lynn/releases/tag/${versionTag}；release 列表：https://gitee.com/merkyor/Lynn/releases。若页面抓取失败，以 Gitee 页面实际显示为准。`;
   }
   if (/download\.merkyorlynn\.com|镜像站|下载页|版本号/i.test(prompt)) {
-    return "Lynn 镜像下载页应显示 v0.85.1 下载入口。页面：https://download.merkyorlynn.com/download.html；CLI 包：https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.1.tgz。";
+    return `Lynn 镜像下载页应显示 ${versionTag} 下载入口。页面：https://download.merkyorlynn.com/download.html；CLI 包：https://download.merkyorlynn.com/downloads/cli/${cliTarball}。`;
   }
-  return "Lynn 当前版本为 v0.85.1，Gitee release 页面：https://gitee.com/merkyor/Lynn/releases/tag/v0.85.1，镜像下载页：https://download.merkyorlynn.com/download.html。";
+  return `Lynn 当前版本为 ${versionTag}，Gitee release 页面：https://gitee.com/merkyor/Lynn/releases/tag/${versionTag}，镜像下载页：https://download.merkyorlynn.com/download.html。`;
 }
 function buildDirectPublicDataAnswer(context: unknown, userPrompt: string = ""): string {
   const prompt = textOf(userPrompt);

@@ -1,7 +1,11 @@
 // issue #72 第三类(GUI 变体)回归网:工具都执行完、模型没给收尾文本时,
 // turn 不许静默结束 —— 必须有一行基于真实 tool_end 计数的事实反馈。
 import { describe, expect, it } from "vitest";
-import { buildToolCompletionSummary } from "../server/chat/tool-turn-finalizer.js";
+import {
+  buildDirectWebFetchEvidenceAnswer,
+  buildToolCompletionSummary,
+  selectToolEvidenceVisibleText,
+} from "../server/chat/tool-turn-finalizer.js";
 
 describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
   it("returns empty when no tools ran (keeps V0.79 no-synthetic-text rule)", () => {
@@ -100,5 +104,34 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
   it("counts at least one failure even when names were not captured", () => {
     const out = buildToolCompletionSummary({ successfulToolCount: 0, hasFailedTool: true, lastFailedTools: [] });
     expect(out).toContain("1 个失败");
+  });
+
+  it("turns useful web_fetch evidence into a direct answer when the model dismisses it", () => {
+    const state = {
+      originalPromptText: "访问 example.com 并用一句话概括页面内容",
+      successfulToolCount: 1,
+      lastSuccessfulTools: [{
+        name: "webfetch",
+        outputPreview: [
+          "来源: example.com/ (html→text)",
+          "",
+          "Example Domain",
+          "",
+          "This domain is for use in documentation examples without needing permission. Avoid use in operations.",
+          "",
+          "Learn more (https://iana.org/domains/example)",
+        ].join("\n"),
+      }],
+    };
+
+    expect(buildDirectWebFetchEvidenceAnswer(state)).toContain("用于文档示例");
+    const selected = selectToolEvidenceVisibleText(
+      state,
+      "工具已经返回内容，但没有提取到足够可靠的事实来直接回答。",
+    );
+    expect(selected).toContain("example.com 页面");
+    expect(selected).toContain("用于文档示例");
+    expect(selected).not.toContain("没有提取到足够可靠");
+    expect(selected).not.toContain("根据本轮已执行工具返回的证据");
   });
 });

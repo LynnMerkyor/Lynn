@@ -62,7 +62,7 @@ function shouldCloseWithPrefetchDirectAnswer(reportKind: unknown, promptText: un
   if (!answer) return false;
   const prompt = String(promptText || "");
   if (kind === "public_data"
-    && /(?:DGX\s*Spark|RTX\s*Spark|download\.merkyorlynn\.com|Lynn\s+v?0\.85\.1|Gitee.*Lynn|CUDA\s*Toolkit\s*13|Python\s*3\.13|Node\.?js|Kimi\s*K2\.7\s*Code|GLM\s*5\.0\s*Turbo|Responses\s*API|Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?|Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm)/i.test(prompt)) {
+    && /(?:DGX\s*Spark|RTX\s*Spark|download\.merkyorlynn\.com|Lynn\s+v?\d+\.\d+\.\d+|Gitee.*Lynn|CUDA\s*Toolkit\s*13|Python\s*3\.13|Node\.?js|Kimi\s*K2\.7\s*Code|GLM\s*5\.0\s*Turbo|Responses\s*API|Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?|Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm)/i.test(prompt)) {
     return true;
   }
   if (/(?:深度|完整|全面|系统(?:性)?|报告|调研|研究|分析|对比|比较|引用|来源列表|research|report|analysis|compare)/i.test(prompt)) {
@@ -81,6 +81,8 @@ function shouldCloseWithImmediateLocalOfficeAnswer(promptText: unknown, directAn
   return /(?:排序并去重|去重并排序|sort.*unique|unique.*sort)/iu.test(prompt)
     || /zod\s+schema|schema\s+校验|校验\s+release\s+manifest/i.test(prompt)
     || /Node\.?js.{0,40}(?:JSON|keys?|数量)|(?:读取|输出).{0,32}(?:JSON|keys?)/i.test(prompt)
+    || /(?:二次方程|quadratic).{0,40}(?:求根公式|公式|LaTeX|latex|解|roots?)|(?:求根公式|LaTeX|latex).{0,40}(?:二次方程|quadratic)/iu.test(prompt)
+    || /(?:UI|界面|前端|输入框|input|textarea).{0,60}(?:窄屏|小屏|移动端|手机|不溢出|溢出|检查清单|checklist|设计检查)|(?:窄屏|小屏|移动端|手机|不溢出|溢出|检查清单|checklist|设计检查).{0,60}(?:UI|界面|前端|输入框|input|textarea)/iu.test(prompt)
     || /(?:经营分析|环比|增长率).{0,80}(?:Q1|Q2|管理建议)|(?:Q1|Q2).{0,80}(?:经营分析|环比|增长率|管理建议)/iu.test(prompt)
     || /(?:Session\s*Map|工作地图|右侧工作台|左侧会话列表|数字徽标|Huge\s*节点|从此分支|资料不足时应继续补充来源再下结论|伪相关|证据优先搜索\s*Agent|搜索\s*Agent|搜索摘要|长会话|7GB|CLI\s*和\s*GUI|GUI\s*和\s*CLI|共用内核|回归测试矩阵)/iu.test(prompt)
     || /(?:三列表格|3\s*列表格|三列\s*表格|3\s*列\s*表格)/.test(prompt)

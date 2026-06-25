@@ -93,6 +93,8 @@ describe("tool-use behavior resolver", () => {
       "右侧工作台显示当前会话 digest 时应该避免什么？",
       "给 GUI 右侧工作台写一个信息架构草案",
       "给 CLI 和 GUI 共用内核写一个回归测试矩阵",
+      "给我 3 条 git commit message 规范",
+      "给出三条提交信息规则",
     ]) {
       const decision = resolveInitialToolUseBehavior(prompt);
       expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);

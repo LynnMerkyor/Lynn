@@ -52,7 +52,7 @@ const CONCEPT_STOCK_LOOKUP_RE = /(?:概念股|概念板块|板块|行业|题材|
 const MARKET_WEATHER_BRIEF_RE = /(?:机场|出行|着装|穿什么|穿搭|行动建议|浦东|虹桥|登机|航班|明早|早班机|数据快照|行动建议)/i;
 const LIVE_NEWS_LOOKUP_RE = /(?=.*(?:今天|今日|今晚|最新|最近|实时|进展|消息|新闻|报道|发生|发布|了吗|如何|怎么样|快讯|热点|全网))(?=.*(?:AI|人工智能|科技|大模型|模型|Gemini|OpenAI|Anthropic|Claude|芯片|半导体|机器人|美伊|伊朗|美国|中东|巴以|以色列|巴勒斯坦|俄乌|俄罗斯|乌克兰|关税|制裁|冲突|停火|谈判|选举|地震|台风|事故|发布|宣布|外交|战争|袭击|股市|市场|公司|政策|干细胞|细胞治疗|再生医学|临床|医疗|医药|医院|药企))/i;
 const PUBLIC_DATA_LOOKUP_RE = /(?=.*(?:人数|收费|费用|会费|年费|入会费|规模|大概多少|多少))(?!.*(?:月收入|房租|固定支出|预算|攒|存款))/i;
-const OFFICIAL_PRODUCT_LOOKUP_RE = /(?:DGX\s*Spark|RTX\s*Spark|download\.merkyorlynn\.com|Lynn\s+v?0\.85\.1|Lynn.*(?:Gitee|release|tag|镜像站)|Gitee.*Lynn.*(?:release|tag))/i;
+const OFFICIAL_PRODUCT_LOOKUP_RE = /(?:DGX\s*Spark|RTX\s*Spark|download\.merkyorlynn\.com|Lynn\s+v?\d+\.\d+\.\d+|Lynn.*(?:Gitee|release|tag|镜像站)|Gitee.*Lynn.*(?:release|tag))/i;
 const OFFICIAL_VERSION_LOOKUP_RE = /(?:CUDA\s*Toolkit\s*13|Python\s*3\.13|Node\.?js|Kimi\s*K2\.7\s*Code|GLM\s*5\.0\s*Turbo|Responses\s*API|Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?|Claude.{0,24}(?:最新|公开).{0,12}模型|Claude.{0,12}(?:模型).{0,24}(?:最新|公开)|Apple.{0,32}notarization|notarization.{0,32}Apple|Apple.{0,24}公证|苹果.{0,24}公证|Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm)/i;
 const EXTERNAL_RESEARCH_INTENT_RE = /(?:最新|实时|今天|今日|联网|搜索|查询|查一下|找一下|资料|来源|链接|官网|网页|公开信息|公告|财报|研报|新闻|政策|PDF|文档|市场数据|行业数据|竞品)/i;
 const LOCAL_OFFICE_TASK_RE = /(?:会议记录|会议纪要|行动项|负责人|截止时间|风险|经营分析|环比|增长率|根据数据|下面会议|Q[1-4]|报价模板|客户\s*[A-Z]\b)/i;
