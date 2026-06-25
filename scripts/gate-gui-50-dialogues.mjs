@@ -3,6 +3,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 
@@ -268,6 +269,7 @@ function parseArgs(argv) {
     output: "",
     limit: PROMPTS.length,
     only: "",
+    spawnServer: process.env.LYNN_GUI_50_USE_EXISTING_SERVER !== "1",
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -290,6 +292,8 @@ function parseArgs(argv) {
     else if (arg.startsWith("--limit=")) args.limit = Number(arg.slice("--limit=".length));
     else if (arg === "--only") args.only = next();
     else if (arg.startsWith("--only=")) args.only = arg.slice("--only=".length);
+    else if (arg === "--spawn-server") args.spawnServer = true;
+    else if (arg === "--use-existing-server" || arg === "--no-spawn-server") args.spawnServer = false;
     else if (arg === "--current-date") next();
     else if (arg.startsWith("--current-date=")) {
       // Parsed before parseArgs via resolveGateCurrentDate().
@@ -306,7 +310,8 @@ Options:
   --timeout-ms N        per-dialogue timeout, default 120000
   --limit N             run first N prompts for quick checks
   --only LIST           run prompt indexes, e.g. 14,15 or 11-15
-  --output PATH         write JSON report to this path`);
+  --output PATH         write JSON report to this path
+  --use-existing-server read ~/.lynn/server-info.json instead of spawning an isolated test server`);
       process.exit(0);
     }
   }
@@ -353,6 +358,97 @@ function expandHome(input) {
 
 function nowStamp() {
   return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fileExists(file) {
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function shouldSpawnManagedServer(args) {
+  if (!args.spawnServer) return false;
+  if (args.baseUrl || args.wsUrl || args.token || args.serverInfo) return false;
+  return true;
+}
+
+async function readJsonFile(file) {
+  return JSON.parse(await fs.readFile(file, "utf8"));
+}
+
+async function startManagedServer() {
+  const lynnHome = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-gui-gate-"));
+  const infoPath = path.join(lynnHome, "server-info.json");
+  const logs = [];
+  const child = spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
+    cwd: ROOT,
+    env: {
+      ...process.env,
+      LYNN_HOME: lynnHome,
+      HANA_PORT: "0",
+      STEP_TEXT_MODEL: process.env.STEP_TEXT_MODEL || "step-3.7-flash",
+      LYNN_IMPORT_HANAKO_ON_FIRST_RUN: "0",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const remember = (chunk) => {
+    for (const line of String(chunk || "").split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      logs.push(line);
+      if (logs.length > 80) logs.shift();
+    }
+  };
+  child.stdout?.on("data", remember);
+  child.stderr?.on("data", remember);
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 60_000) {
+    if (child.exitCode != null) {
+      throw new Error(`[gui-50] managed server exited early (${child.exitCode})\n${logs.join("\n")}`);
+    }
+    if (await fileExists(infoPath)) {
+      const info = await readJsonFile(infoPath);
+      if (Number.isFinite(Number(info.port)) && info.token) {
+        const baseUrl = `http://127.0.0.1:${Number(info.port)}`;
+        const wsUrl = `ws://127.0.0.1:${Number(info.port)}/ws`;
+        for (let attempt = 0; attempt < 60; attempt += 1) {
+          try {
+            await httpJson(baseUrl, info.token, "/api/health", { timeoutMs: 2000 });
+            return {
+              lynnHome,
+              infoPath,
+              child,
+              logs,
+              config: { baseUrl, wsUrl, token: info.token },
+              async close() {
+                try {
+                  await httpJson(baseUrl, info.token, "/api/shutdown", { method: "POST", timeoutMs: 2000 });
+                } catch {
+                  // Fall through to process kill below.
+                }
+                await sleep(500);
+                if (child.exitCode == null) child.kill("SIGTERM");
+                await fs.rm(lynnHome, { recursive: true, force: true });
+              },
+            };
+          } catch {
+            await sleep(500);
+          }
+        }
+      }
+    }
+    await sleep(250);
+  }
+  child.kill("SIGTERM");
+  await fs.rm(lynnHome, { recursive: true, force: true });
+  throw new Error(`[gui-50] managed server did not become ready\n${logs.join("\n")}`);
 }
 
 async function readServerConfig(args) {
@@ -899,66 +995,76 @@ async function runPromptWithFreshWs(config, index, category, prompt, timeoutMs) 
 const args = parseArgs(process.argv.slice(2));
 const outputPath = path.resolve(args.output || path.join(ROOT, "reports", `gui-50-results-${nowStamp()}.json`));
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
-const config = await readServerConfig(args);
-assertLocalTestEndpoint(config);
-await httpJson(config.baseUrl, config.token, "/api/health", { timeoutMs: 10000 });
+let managedServer = null;
+try {
+  if (shouldSpawnManagedServer(args)) {
+    managedServer = await startManagedServer();
+    console.log(`[gui-50] managed server: ${managedServer.config.baseUrl} home=${managedServer.lynnHome}`);
+  }
+  const config = managedServer?.config || await readServerConfig(args);
+  assertLocalTestEndpoint(config);
+  await httpJson(config.baseUrl, config.token, "/api/health", { timeoutMs: 10000 });
 
-const selectedPrompts = selectedPromptItems(args);
-const results = [];
-for (const item of selectedPrompts) {
-  const { index, category, prompt } = item;
-  console.log(`[${index}/${PROMPTS.length}] ${category}: ${prompt}`);
-  let result = await runPromptWithFreshWs(config, index, category, prompt, args.timeoutMs);
-  if (isEmptyTransportTimeout(result)) {
-    console.log(`  -> retry empty transport timeout after ${EMPTY_TIMEOUT_RETRY_MS}ms`);
-    await new Promise((resolve) => setTimeout(resolve, EMPTY_TIMEOUT_RETRY_MS));
-    result = await runPromptWithFreshWs(config, index, category, prompt, args.timeoutMs);
-    result.retriedAfterEmptyTimeout = true;
+  const selectedPrompts = selectedPromptItems(args);
+  const results = [];
+  for (const item of selectedPrompts) {
+    const { index, category, prompt } = item;
+    console.log(`[${index}/${PROMPTS.length}] ${category}: ${prompt}`);
+    let result = await runPromptWithFreshWs(config, index, category, prompt, args.timeoutMs);
+    if (isEmptyTransportTimeout(result)) {
+      console.log(`  -> retry empty transport timeout after ${EMPTY_TIMEOUT_RETRY_MS}ms`);
+      await new Promise((resolve) => setTimeout(resolve, EMPTY_TIMEOUT_RETRY_MS));
+      result = await runPromptWithFreshWs(config, index, category, prompt, args.timeoutMs);
+      result.retriedAfterEmptyTimeout = true;
+    }
+    results.push(result);
+    await fs.writeFile(outputPath, JSON.stringify({ outputPath, generatedAt: new Date().toISOString(), results }, null, 2), "utf8");
+    const preview = result.text.trim().replace(/\s+/g, " ").slice(0, 100);
+    console.log(`  -> ${result.status} ${result.elapsedMs}ms provider=${result.providerTrail.join(">") || "-"} tools=${result.tools.map((tool) => tool.name).join(",") || "-"} text=${preview}`);
+    if (result.timedOut) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    if (TURN_SETTLE_MS > 0) {
+      await new Promise((resolve) => setTimeout(resolve, TURN_SETTLE_MS));
+    }
   }
-  results.push(result);
-  await fs.writeFile(outputPath, JSON.stringify({ outputPath, generatedAt: new Date().toISOString(), results }, null, 2), "utf8");
-  const preview = result.text.trim().replace(/\s+/g, " ").slice(0, 100);
-  console.log(`  -> ${result.status} ${result.elapsedMs}ms provider=${result.providerTrail.join(">") || "-"} tools=${result.tools.map((tool) => tool.name).join(",") || "-"} text=${preview}`);
-  if (result.timedOut) {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
-  if (TURN_SETTLE_MS > 0) {
-    await new Promise((resolve) => setTimeout(resolve, TURN_SETTLE_MS));
-  }
+
+  const counts = results.reduce((acc, item) => {
+    acc[item.status] = (acc[item.status] || 0) + 1;
+    return acc;
+  }, {});
+  const providerCounts = results.reduce((acc, item) => {
+    const last = item.providerTrail.at(-1) || "unknown";
+    acc[last] = (acc[last] || 0) + 1;
+    return acc;
+  }, {});
+  const toolRuns = results.filter((item) => item.tools.length > 0).length;
+  const stepExecuteRuns = results.filter((item) => item.tools.some((tool) => tool.name === "step_execute")).length;
+  const avgMs = Math.round(results.reduce((sum, item) => sum + item.elapsedMs, 0) / Math.max(1, results.length));
+  const failures = results.filter((item) => item.status !== "ok");
+  const summary = {
+    outputPath,
+    gateCurrentDate: CURRENT_DATE,
+    total: results.length,
+    counts,
+    providerCounts,
+    toolRuns,
+    stepExecuteRuns,
+    avgMs,
+    failures: failures.map((item) => ({
+      index: item.index,
+      category: item.category,
+      prompt: item.prompt,
+      status: item.status,
+      reason: item.reason,
+      errors: item.errors,
+      textPreview: item.text.trim().replace(/\s+/g, " ").slice(0, 240),
+    })),
+  };
+  await fs.writeFile(outputPath, JSON.stringify({ ...summary, generatedAt: new Date().toISOString(), results }, null, 2), "utf8");
+  console.log(`SUMMARY ${JSON.stringify(summary)}`);
+  if (failures.length > 0) process.exitCode = 1;
+} finally {
+  if (managedServer) await managedServer.close();
 }
-
-const counts = results.reduce((acc, item) => {
-  acc[item.status] = (acc[item.status] || 0) + 1;
-  return acc;
-}, {});
-const providerCounts = results.reduce((acc, item) => {
-  const last = item.providerTrail.at(-1) || "unknown";
-  acc[last] = (acc[last] || 0) + 1;
-  return acc;
-}, {});
-const toolRuns = results.filter((item) => item.tools.length > 0).length;
-const stepExecuteRuns = results.filter((item) => item.tools.some((tool) => tool.name === "step_execute")).length;
-const avgMs = Math.round(results.reduce((sum, item) => sum + item.elapsedMs, 0) / Math.max(1, results.length));
-const failures = results.filter((item) => item.status !== "ok");
-const summary = {
-  outputPath,
-  gateCurrentDate: CURRENT_DATE,
-  total: results.length,
-  counts,
-  providerCounts,
-  toolRuns,
-  stepExecuteRuns,
-  avgMs,
-  failures: failures.map((item) => ({
-    index: item.index,
-    category: item.category,
-    prompt: item.prompt,
-    status: item.status,
-    reason: item.reason,
-    errors: item.errors,
-    textPreview: item.text.trim().replace(/\s+/g, " ").slice(0, 240),
-  })),
-};
-await fs.writeFile(outputPath, JSON.stringify({ ...summary, generatedAt: new Date().toISOString(), results }, null, 2), "utf8");
-console.log(`SUMMARY ${JSON.stringify(summary)}`);
-if (failures.length > 0) process.exit(1);
+if (process.exitCode) process.exit(process.exitCode);

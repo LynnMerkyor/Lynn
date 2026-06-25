@@ -10,7 +10,7 @@
 <p align="center"><a href="README.md">中文版 (默认)</a> | <strong>English</strong></p>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://github.com/MerkyorLynn/Lynn/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://gitee.com/merkyor/Lynn/releases)
 
 ---
 
@@ -62,9 +62,9 @@ NVFP4's real payoff is **batched throughput**. Same R6000, `VLLM_MOE_FORCE_MARLI
 - [#44672](https://github.com/vllm-project/vllm/pull/44672) ModelOpt W4A16 NVFP4 Marlin path docs
 - [#44673](https://github.com/vllm-project/vllm/pull/44673) speculative decoding correctness gate
 
-## 🔭 V0.80 Origin: CLI Workers, V0.85.2 Session Map
+## 🔭 V0.80 Origin: CLI Workers, V0.85.3 Session Map
 
-V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.2 the GUI no longer surfaces the Fleet command deck. The desktop experience now focuses on **chat + Session Map + patrols / acceptance**, while parallel worker power stays in the CLI for terminals, CI, and other agents.
+V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.3 the GUI no longer surfaces the Fleet command deck. The desktop experience now focuses on **chat + Session Map + patrols / acceptance**, while parallel worker power stays in the CLI for terminals, CI, and other agents.
 
 This is not Lynn stepping away from code. It is the opposite:code tasks, research tasks, and business tasks should share the same orchestration layer.
 
@@ -74,7 +74,7 @@ This is not Lynn stepping away from code. It is the opposite:code tasks, researc
 - **Acceptance flow**: worker output returns to GUI diffs, evidence, test gates, and release flow for review.
 - **`@lynn/cli`**: the CLI package supports `Lynn -p`, `Lynn code`, `Lynn agents`, and `Lynn worker run`, usable directly in terminals and callable by other agents.
 
-Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.2 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
+Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.3 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
 
 ### CLI Quick Install
 
@@ -85,12 +85,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.3.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.85.2
+Lynn --version  # should print 0.85.3
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -116,15 +116,19 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details open>
-<summary><strong>Lynn v0.85.2</strong> · 2026-06-24 · issue hotfix + Session Map workbench <em>(latest)</em></summary>
+<summary><strong>Lynn v0.85.3</strong> · 2026-06-25 · ReAct evidence-quality fixes + Session Runtime split <em>(latest)</em></summary>
 
-**v0.85.2 hotfix**:
+**v0.85.3 hotfix and quality fixes**:
+- **GUI / CLI sports evidence closure**: when `sports_score` returns direct ESPN evidence, Lynn now closes on that evidence instead of letting generic search, local task lists, or stale scores overwrite the answer.
+- **Stronger ReAct discipline for first-seen questions**: the default path decides whether tools are needed, observes usable tool evidence, then summarizes only from that evidence; failed tools no longer produce unrelated local-task or generic-search conclusions.
+- **Direct answers for small local data analysis**: arithmetic / business-analysis prompts now answer directly instead of falling into `step_execute` timeouts.
 - **Windows D-drive workspace fix**: selecting a workspace outside the user home now persists `last_cwd`, `cwd_history`, and `desk.trusted_roots` immediately, so Desk files and new sessions no longer fall back to the old folder.
 - **IJV6WH evidence fallback fix**: file-read paths, LaTeX package/template fragments, and `\includegraphics` snippets are no longer treated as completed factual analysis.
 - **Stale-task regression coverage**: edit-resend, assistant retry, and failed-send paths are covered so a new question does not continue the previous task branch.
 
 **Stable core and work map**:
 - **Stabilized v0.85 self-built core**: Lynn keeps the no-fork, no-Pi-SDK main path and folds the latest empty-answer, evidence-integrity, GUI/CLI parity, and provider-reliability findings into release verification.
+- **Session Runtime split**: `create-session.ts` no longer carries the OpenAI/tool-continuation adapter and evidence fallback helpers inline; the public API stays stable while the runtime becomes easier to verify and repair.
 - **Session Map workbench**: the right sidebar now follows the current thread's work map, inspection state, evidence, and branch-from-here controls instead of acting as a loose note pile.
 - **Huge-session health markers**: session inspection marks large, huge, blocked, and archived states so multi-GB histories become visible risk nodes instead of GUI-freezing entries.
 - **Simpler main UI**: the GUI no longer surfaces the Fleet command deck or standalone notes; MCP setup lives in Settings. Parallel worker power remains in `Lynn worker run` / `Lynn agents` for terminals, CI, and other agents.
@@ -132,10 +136,10 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 - **Brain ops fixes**: repaired one corrupt device JSON behind `internal auth error`, moved v2 healthcheck / cron-smoke to signed HMAC requests, and stopped old v1 smoke noise from probing an expired MiMo key.
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.3.tgz"
 ```
 
-[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases#v0.85.2)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases#v0.85.3)
 
 </details>
 
@@ -154,7 +158,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.5.tgz"
 ```
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.5)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.84.5)
 
 </details>
 
@@ -173,7 +177,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.4.tgz"
 ```
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.4)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.84.4)
 
 </details>
 
@@ -195,7 +199,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.2.tgz"
 ```
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.84.2)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.84.2)
 
 </details>
 
@@ -213,7 +217,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.84.4.tgz"
 ```
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.6)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.80.6)
 
 </details>
 
@@ -227,7 +231,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - **Packaged Fleet runtime**: the desktop app bundles the same CLI runtime used by the mirror tarball, so GUI Worker Fleet can spawn real workers after packaging.
 - **Release surfaces updated**: mirror install docs, GitHub release notes, README snippets, and CLI agent contract stay aligned.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.1)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.80.1)
 
 </details>
 
@@ -242,7 +246,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - **Local 9B opt-in**:Qwen3.5-9B MTP no longer auto-starts on app launch; users explicitly enable it when they want local inference.
 - **Release gates**:CLI install docs, mirror tarball, packaged CLI runtime, and headless agent contract are part of the release checks.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.80.0)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.80.0)
 
 </details>
 
@@ -256,7 +260,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🛡️ **Runtime regression coverage tightened**:composer replacement, local Qwen status, stock-market, MCP transport, bridge streaming/attachment, session events, engine tool runtime, agent dynamic prompt, web-search, and search source UI all gained or updated focused tests.
 - ✅ **Release gate**:V0.79.9 passed typecheck, runtime typecheck, full vitest, release static/live regressions, UI smoke, macOS signing/notarization/stapling/Gatekeeper validation, and Windows installer signing.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.9)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.9)
 
 </details>
 
@@ -270,7 +274,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧭 **Local model upgrade window**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model; older 9B GGUF files now show as upgrade candidates instead of default-ready models. The 9B/35B download entries point to the ModelScope MTP repositories, and startup keeps MTP + thinking-on by default.
 - ✅ **Release gate**:the V0.79.8 candidate passed `npm run release:gate`:typecheck, runtime typecheck, full vitest, server/main/renderer builds, static regression, and Electron UI smoke.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.8)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.8)
 
 </details>
 
@@ -285,7 +289,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧭 **Local model policy unchanged**:Qwen3.5-9B Q4_K_M imatrix MTP remains the default local onboarding model; 4B remains a low-config downgrade with the thinking-on risk documented.
 - ✅ **Release gate**:V0.79.7 passed `typecheck:runtime`, full `typecheck`, full `npm test`, release static/UI/live regressions, and package/notarization gates.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.7)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.7)
 
 </details>
 
@@ -300,7 +304,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧪 **Core migration deferred intentionally**:`core/session-coordinator.js`, `core/engine.js`, and similarly large files stay out of this package to keep the release stable.
 - 📦 **macOS release artifacts are notarized**:Apple Silicon and Intel DMGs are signed, notarized, stapled, and Gatekeeper-validated; Windows ships as a signed NSIS installer.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.3)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.3)
 
 </details>
 
@@ -315,7 +319,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧱 **Architecture debt cleanup**:`brain-v2-mirror` continues its TypeScript island hardening, while `server/chat` leaf helpers and `core` provider/LLM contracts now have migration-safe type boundaries.
 - ✅ **Release gate**:full `npm test` passed, `typecheck:runtime` was added, brain-v2 `tsc + 104 tests` passed, and release preflight covers build/regression gates.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.2)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.2)
 
 </details>
 
@@ -333,7 +337,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🛡️ **Architecture and safety refresh**: the chat route is split into smaller service modules, local GGUF downloads validate source and file type, and model status/token copy now comes from provider state to avoid 4B/9B confusion.
 - ✅ **Test matrix**: installed-app smoke passed for 9B MTP, GPT-5.4, and the default model; Deep Research HTML artifact gates passed for local/BYOK/default paths; the 4B thinking-on risk is documented in the model guide.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.1)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.1)
 
 </details>
 
@@ -347,7 +351,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧭 **Brain V2 migration**:legacy Brain endpoints migrate to the V2 canonical endpoint; GLM Coding Plan uses the dedicated coding endpoint; empty-answer recovery remains a fallback, not a model-output override.
 - ✅ **Regression gate**:full test suite `168 files / 1447 passed / 1 skipped`,TypeScript, renderer build, local install, and GUI smoke passed.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.79.0)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.79.0)
 
 </details>
 
@@ -364,7 +368,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧩 **Explicit mode**:Deep Research does not hijack normal chat; users opt in from the composer.
 - 📊 **Benchmarks archived**:tool-abstain and Qwen3.5 vs Qwen3.6 experiment files live under `tests/benchmarks/` for reproducibility.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.11)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.11)
 
 </details>
 
@@ -389,7 +393,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 **Monitoring updates**:
 - 📊 Feishu health-check adds MiMo as primary + local GPU route rename + Kimi K2.6 (kimi-for-coding API) replaces K2.5 + brain v2 /api/v2 health probe.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.7)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.7)
 
 </details>
 
@@ -410,7 +414,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 90 vitest unit tests + 16 e2e smoke scenarios
 - Server-side TypeScript / Lint / Build all pass
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.6)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.6)
 
 </details>
 
@@ -461,7 +465,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - ✅ E2E dev verified across multiple runs (with brain in actively flaky state): `PENDING-DELETE-REQUEST v1` 100% fires, `MUTATION-CONFIRM-REHYDRATE v1` 100% fires, `POST-REHYDRATE-ESCALATE v1` fires when brain lip-services after rehydrate. Path B `POST-REHYDRATE-DETERMINISTIC v1` correctly synthesizes `find ... -delete` for Downloads/Desktop/Documents alias scenarios.
 - ✅ +17 unit tests covering storage / consume / confirmation phrases / TTL / unrelated input / auto-clear on real delete / `find -delete` recognition / escalation-prompt forbidden phrasing / route-metadata strip / retry prompt no longer embeds `routeIntent`
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.5)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.5)
 
 </details>
 
@@ -476,7 +480,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🌦️ **Realtime evidence checks**: weather/market answers require actual evidence fields instead of homepage/navigation snippets.
 - 🌐 **Translation and report artifacts**: chat translation, sanitized HTML artifacts, and PNG export are tightened.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.4)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.4)
 
 </details>
 
@@ -492,7 +496,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🪟 **Startup white-screen fixes**: fixed the React selector update-depth loop and the splash screen path when `app-ready` is missed.
 - 🧩 **Packaging hardening**: plugin standalone loading, `build:server` npm registry retry, and local cold-start verification are covered.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.3)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.3)
 
 </details>
 
@@ -508,7 +512,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🧼 **Streaming pseudo-tool cleanup**: unified cleanup of fake `<web_search>` / `<weather>` / `<bash>` tags.
 - 🧩 **Runtime stability patches**: stream LRU, async EventBus errors, ChannelRouter locks, and plugin unload cleanup are hardened.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.2)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.2)
 
 </details>
 
@@ -524,7 +528,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 📁 **File task recognition improvements**: better aliases for Desktop/Downloads and safer handling of zip/excel/pdf cleanup tasks.
 - 🧪 **Release Regression Gate**: continues covering tool calls, file operations, pseudo-tool leaks, thinking leaks, and UI smoke.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.77.1)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.77.1)
 
 </details>
 
@@ -559,7 +563,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🎙️ **PressToTalk UI polish**: button styles + state machine refactor; press-and-lock + recording feedback more stable.
 - 🧱 **brain report-research-context boost**: `server/chat/report-research-context.js` injects more structured data so the model's report generation is more accurate.
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.76.9)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.76.9)
 
 </details>
 
@@ -586,7 +590,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🚫 **Pseudo tool-call detection & recovery**: when the model writes `<web_search>...` / `web_search(query=...)` as plain text instead of a real tool_call, brain auto-steers back to the real tool flow and the user never sees the broken text.
 - 🧪 **771/771 tests + 30 new regression cases** locking in "file-move-image never again misroutes to vision".
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.76.8)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.76.8)
 
 </details>
 
@@ -601,7 +605,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🪟 **IME stability**: Chinese input candidate switching no longer jitters; thinking blocks collapsed by default
 - 📦 **3-platform notarization**: macOS Apple Silicon + Intel + Windows all notarized, mirror site synced
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.76.7)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.76.7)
 
 </details>
 
@@ -616,7 +620,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - 🎯 **Turn isolation TURN-FENCE v1**: when previous turn aborts with no output, next turn auto-isolates to avoid reading residue
 - 🧪 **Tests**: 4 new + 7 expanded, `715/715 vitest all green`
 
-[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.76.6)
+[Full Release Notes →](https://gitee.com/merkyor/Lynn/releases/tag/v0.76.6)
 
 </details>
 
@@ -673,7 +677,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 
 </details>
 
-👉 [Full release history · GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)
+👉 [Full release history · GitHub Releases](https://gitee.com/merkyor/Lynn/releases)
 
 ---
 
@@ -681,7 +685,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 
 Lynn is a personal AI agent for the desktop: it has memory, personality, writing tools, autonomous work loops, and now a path toward orchestrating coding work.
 
-Early Lynn focused on bringing agent workflows out of the terminal so writers, researchers, operators, students, founders, and non-programmers could actually use them. Starting with V0.85.2, the GUI is deliberately quieter: chat, Session Map, patrols, and acceptance stay on the desktop, while parallel workers remain available as headless CLI capabilities for terminals, CI, and other agents.
+Early Lynn focused on bringing agent workflows out of the terminal so writers, researchers, operators, students, founders, and non-programmers could actually use them. Starting with V0.85.3, the GUI is deliberately quieter: chat, Session Map, patrols, and acceptance stay on the desktop, while parallel workers remain available as headless CLI capabilities for terminals, CI, and other agents.
 
 If you use Claude Code, Codex, or Cursor, Lynn should feel familiar but more like a workbench than a command deck. It turns the current thread's goals, evidence, files, automations, and branches into an inspectable Session Map. If you have never used those tools, you can still start from the GUI and gradually hand coding, documents, research, and automation work to Lynn.
 
@@ -705,7 +709,7 @@ Lynn does not replace Cursor. Cursor owns the editor loop. Lynn owns the layer a
 
 ## Lynn vs Cursor / Claude Code
 
-|  | **Lynn V0.85.2** | Cursor | Claude Code / Codex CLI |
+|  | **Lynn V0.85.3** | Cursor | Claude Code / Codex CLI |
 |---|---|---|---|
 | Core shape | **GUI Session Map + headless CLI workers** | IDE coding flow | Single CLI agent |
 | Parallel work | **CLI worker / worktree / JSONL protocol** | Limited | Manually managed |
@@ -890,11 +894,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://gitee.com/merkyor/Lynn/releases). The V0.85.2 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://gitee.com/merkyor/Lynn/releases). The V0.85.3 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
-**Windows:** download the latest `.exe` installer from [Releases](https://github.com/MerkyorLynn/Lynn/releases) and run it directly.
+**Windows:** download the latest `.exe` installer from [Releases](https://gitee.com/merkyor/Lynn/releases) and run it directly.
 
-> **Windows SmartScreen notice:** The v0.85.2 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.85.3 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -957,8 +961,8 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.85.2 notarized DMG) |
-| macOS (Intel) | Supported (V0.85.2 notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.85.3 notarized DMG) |
+| macOS (Intel) | Supported (V0.85.3 notarized DMG) |
 | Windows | Beta |
 | Linux | Planned |
 | Mobile (PWA) | Planned |

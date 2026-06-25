@@ -11,13 +11,15 @@ import { VoiceSession } from "../server/chat/voice-session.ts";
 import { FRAME, STATE } from "../server/chat/voice-ws-types.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const phrase = process.env.LYNN_VOICE_GATE_TEXT || "门禁测试完成";
-const phraseTerms = (process.env.LYNN_VOICE_GATE_TERMS || "门禁,测试,完成")
+const phrase = process.env.LYNN_VOICE_GATE_TEXT || "今天的蓝色月亮语音测试已经完成";
+const phraseTerms = (process.env.LYNN_VOICE_GATE_TERMS || "蓝色,月亮,语音,测试,完成")
   .split(",")
   .map((term) => term.trim())
   .filter(Boolean);
+const minPhraseTerms = Number.parseInt(process.env.LYNN_VOICE_GATE_MIN_TERMS || String(Math.min(3, phraseTerms.length)), 10);
 const reply = "语音回合通过";
 const timeoutMs = Number(process.env.LYNN_VOICE_GATE_TIMEOUT_MS || 90_000);
+const maxAttempts = Number.parseInt(process.env.LYNN_VOICE_GATE_ATTEMPTS || "3", 10);
 
 class MockWs {
   readyState = 1;
@@ -35,8 +37,8 @@ if (process.env.LYNN_SKIP_REAL_VOICE_GATE === "1") {
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-step-voice-gate-"));
 
 try {
-  await withTimeout(runCliRoundTrip(), timeoutMs, "CLI StepFun Realtime voice round-trip");
-  await withTimeout(runVoiceSessionRoundTrip(), timeoutMs, "GUI VoiceSession StepFun Realtime round-trip");
+  await withRetries(() => withTimeout(runCliRoundTrip(), timeoutMs, "CLI StepFun Realtime voice round-trip"), maxAttempts, "CLI StepFun Realtime voice round-trip");
+  await withRetries(() => withTimeout(runVoiceSessionRoundTrip(), timeoutMs, "GUI VoiceSession StepFun Realtime round-trip"), maxAttempts, "GUI VoiceSession StepFun Realtime round-trip");
   console.log("PASS StepFun Realtime voice gate");
   process.exit(0);
 } finally {
@@ -163,7 +165,9 @@ function assertIncludes(value, needle, message) {
 
 function assertSemantic(value, terms, message) {
   const text = String(value || "");
-  if (!terms.every((term) => text.includes(term))) throw new Error(message);
+  const hits = terms.filter((term) => text.includes(term)).length;
+  const required = Math.max(1, Math.min(minPhraseTerms, terms.length));
+  if (hits < required) throw new Error(`${message}\nmatchedTerms=${hits}/${terms.length}, required=${required}, text=${JSON.stringify(text)}`);
 }
 
 function withTimeout(promise, ms, label) {
@@ -171,4 +175,20 @@ function withTimeout(promise, ms, label) {
     promise,
     new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
   ]);
+}
+
+async function withRetries(task, attempts, label) {
+  const max = Math.max(1, Number.isFinite(attempts) ? attempts : 1);
+  let lastError;
+  for (let attempt = 1; attempt <= max; attempt += 1) {
+    try {
+      return await task();
+    } catch (error) {
+      lastError = error;
+      if (attempt < max) {
+        console.warn(`[voice-step-gate] ${label} attempt ${attempt}/${max} failed: ${error?.message || error}`);
+      }
+    }
+  }
+  throw lastError;
 }

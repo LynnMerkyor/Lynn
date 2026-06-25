@@ -10,7 +10,7 @@ import {
   toolNameKey,
   type ModelFallbackReason,
 } from "./session-openai-adapter.js";
-import type { ChatMessage, Model } from "./types.js";
+import type { ChatMessage, ImageContent, MessageContent, Model, PromptOptions, TextContent } from "./types.js";
 
 export function modelSearchText(model: Model): string {
   return [model.provider, model.id, model.name, model.api]

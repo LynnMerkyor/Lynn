@@ -26,6 +26,7 @@ const statusPath = path.join(tmp, "status.txt");
 const transcriptPath = path.join(tmp, "transcript.txt");
 const inputPath = path.join(tmp, "input.txt");
 const appleScriptPath = path.join(tmp, "run.applescript");
+const nodeBin = process.execPath;
 
 const commands = [
   "请用一句话说明 Lynn CLI 的 -p 无交互模式,并提到 JSON 输出。",
@@ -50,9 +51,10 @@ on run argv
   set transcriptPath to item 3 of argv
   set commandCount to item 4 of argv as integer
   set inputPath to item 5 of argv
+  set nodeBin to item 6 of argv
   set fullTuiEnv to ""
-  if item 6 of argv is "1" then set fullTuiEnv to "LYNN_CLI_APPLE_TERMINAL_FULL_TUI=1 "
-  set runCommand to "cd " & quoted form of repoDir & " && printf 'terminal-app-smoke-start\\\\n' > " & quoted form of transcriptPath & " && LYNN_CLI_UPDATE_CHECK=0 LYNN_LANG=zh " & fullTuiEnv & "node cli/bin/lynn.mjs --mock-brain < " & quoted form of inputPath & " >> " & quoted form of transcriptPath & " 2>&1; echo $? > " & quoted form of statusPath
+  if item 7 of argv is "1" then set fullTuiEnv to "LYNN_CLI_APPLE_TERMINAL_FULL_TUI=1 "
+  set runCommand to "cd " & quoted form of repoDir & " && printf 'terminal-app-smoke-start\\\\n' > " & quoted form of transcriptPath & " && LYNN_CLI_UPDATE_CHECK=0 LYNN_LANG=zh " & fullTuiEnv & quoted form of nodeBin & " cli/bin/lynn.mjs --mock-brain < " & quoted form of inputPath & " >> " & quoted form of transcriptPath & " 2>&1; echo $? > " & quoted form of statusPath
   tell application "Terminal"
     activate
     do script runCommand
@@ -74,7 +76,7 @@ end run
 await fs.writeFile(appleScriptPath, appleScript, "utf8");
 const appleScriptTimeoutMs = Math.max(75_000, commands.length * 1_500 + 55_000);
 try {
-  await execFileAsync("osascript", [appleScriptPath, root, statusPath, transcriptPath, String(commands.length), inputPath, fullTui ? "1" : "0"], { timeout: appleScriptTimeoutMs });
+  await execFileAsync("osascript", [appleScriptPath, root, statusPath, transcriptPath, String(commands.length), inputPath, nodeBin, fullTui ? "1" : "0"], { timeout: appleScriptTimeoutMs });
 } catch (error) {
   if (String(error?.message || error).includes("not allowed assistive access")) {
     console.error("[cli-terminal-app-smoke] skipped: osascript/System Events needs Accessibility permission");
