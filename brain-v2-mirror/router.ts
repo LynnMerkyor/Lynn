@@ -12,6 +12,7 @@ import { applySearchContext, createSearchRequestCache, type SearchRequestCache }
 import { applyAudioTranscribe, createAudioRequestCache, type AudioRequestCache } from './audio-transcribe.js';
 import { compactToolResults, readToolResultCompactionConfigFromEnv } from './context-compact.js';
 import { containsGroundedToolDenialContradiction, containsTemporalNoResultContradiction, currentTemporalContext } from './evidence-quality.js';
+import { positiveEnvNumber } from './env-utils.js';
 import {
   DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY,
   resolveDualBrainManagerRoute,
@@ -94,11 +95,6 @@ const LOCAL_SINGLE_SLOT_GUARD_ENABLED = process.env.BRAIN_V2_LOCAL_SINGLE_SLOT_G
 const MIMO_ULTRASPEED_PROVIDER_ID = providerId('mimo-ultraspeed');
 const DEEPSEEK_CHAT_PROVIDER_ID = providerId('deepseek-chat');
 const STEP_FLASH_PROVIDER_ID = providerId('step-3.7-flash');
-
-function positiveEnvNumber(key: string, fallback: number): number {
-  const value = Number(process.env[key] || fallback);
-  return Number.isFinite(value) && value > 0 ? value : fallback;
-}
 
 function skipDirectEvidencePlanningProviders(skippedProviders: Set<ProviderId>): void {
   skippedProviders.add(MIMO_ULTRASPEED_PROVIDER_ID);
@@ -1470,6 +1466,60 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     }
   }
 
+  const prefetchDirectEvidenceTool = async ({
+    toolName,
+    providerId,
+    continuationRequirement,
+    buildDeterministicAnswer,
+  }: {
+    toolName: string;
+    providerId: ProviderId;
+    continuationRequirement: string;
+    buildDeterministicAnswer?: (query: string, toolResult: unknown) => string | null;
+  }): Promise<RouterRunResult | null> => {
+    const query = originalUserPrompt(workingMessages);
+    const argsText = JSON.stringify({ query });
+    const argsSummary = summarizeToolCallArgs(argsText);
+    const started = Date.now();
+    await onChunk(
+      { type: 'tool_progress', event: 'start', name: toolName, argsSummary },
+      { providerId },
+    );
+    const toolResult = await executeServerTool(toolName, argsText, { log });
+    const ms = Date.now() - started;
+    const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
+    const toolSummary = summarizeToolResult(toolName, toolResult);
+    await onChunk(
+      { type: 'tool_progress', event: 'end', name: toolName, ms, ok: !!ok, argsSummary, ...toolSummary },
+      { providerId },
+    );
+
+    const deterministicAnswer = buildDeterministicAnswer?.(query, toolResult) || null;
+    if (deterministicAnswer) {
+      await onChunk({ type: 'content', delta: deterministicAnswer }, { providerId });
+      await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
+      return { ok: true, providerId, iterations: 0 };
+    }
+
+    const evidenceWeight = evidenceToolWeight(toolName, toolResult);
+    if (evidenceWeight > 0) {
+      groundedToolObserved = true;
+      evidenceToolCount += evidenceWeight;
+      evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(toolName));
+      skipDirectEvidencePlanningProviders(skippedProviders);
+      workingMessages.push({
+        role: 'user',
+        content: [
+          formatToolResultContent(toolName, toolResult, ++serverToolStepIndex),
+          '',
+          continuationRequirement,
+        ].join('\n'),
+      });
+      summarizeFromEvidenceOnly = true;
+    }
+    return null;
+  };
+
   if (
     process.env.BRAIN_V2_DIRECT_OFFICIAL_MODEL_PREFETCH !== '0'
     && shouldPreferOfficialModelSearchTool(messages)
@@ -1504,48 +1554,15 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH !== '0'
     && shouldPreferWeatherTool(messages)
   ) {
-    const toolName = 'weather';
-    const query = originalUserPrompt(workingMessages);
-    const argsText = JSON.stringify({ query });
-    const argsSummary = summarizeToolCallArgs(argsText);
-    const providerId = STEP_FLASH_PROVIDER_ID;
-    const started = Date.now();
-    await onChunk(
-      { type: 'tool_progress', event: 'start', name: toolName, argsSummary },
-      { providerId },
-    );
-    const toolResult = await executeServerTool(toolName, argsText, { log });
-    const ms = Date.now() - started;
-    const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
-    const toolSummary = summarizeToolResult(toolName, toolResult);
-    await onChunk(
-      { type: 'tool_progress', event: 'end', name: toolName, ms, ok: !!ok, argsSummary, ...toolSummary },
-      { providerId },
-    );
-    const weatherAnswer = buildDeterministicWeatherAlertAnswer(query, toolResult)
-      || buildDeterministicAirQualityAnswer(query, toolResult)
-      || buildDeterministicWeatherAnswer(query, toolResult);
-    if (weatherAnswer) {
-      await onChunk({ type: 'content', delta: weatherAnswer }, { providerId });
-      await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
-      return { ok: true, providerId, iterations: 0 };
-    }
-    const evidenceWeight = evidenceToolWeight(toolName, toolResult);
-    if (evidenceWeight > 0) {
-      groundedToolObserved = true;
-      evidenceToolCount += evidenceWeight;
-      evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(toolName));
-      skipDirectEvidencePlanningProviders(skippedProviders);
-      workingMessages.push({
-        role: 'user',
-        content: [
-          formatToolResultContent(toolName, toolResult, ++serverToolStepIndex),
-          '',
-          '【接续要求】上方 weather 是本轮已经预取的天气证据。不要再调用工具,直接基于证据回答用户原问题；如果证据里没有目标日期、地点、温度或降雨字段,请明确说工具结果未返回该字段。',
-        ].join('\n'),
-      });
-      summarizeFromEvidenceOnly = true;
-    }
+    const directResult = await prefetchDirectEvidenceTool({
+      toolName: 'weather',
+      providerId: STEP_FLASH_PROVIDER_ID,
+      continuationRequirement: '【接续要求】上方 weather 是本轮已经预取的天气证据。不要再调用工具,直接基于证据回答用户原问题；如果证据里没有目标日期、地点、温度或降雨字段,请明确说工具结果未返回该字段。',
+      buildDeterministicAnswer: (query, toolResult) => buildDeterministicWeatherAlertAnswer(query, toolResult)
+        || buildDeterministicAirQualityAnswer(query, toolResult)
+        || buildDeterministicWeatherAnswer(query, toolResult),
+    });
+    if (directResult) return directResult;
   }
 
   if (
@@ -1555,40 +1572,12 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''),
     ))
   ) {
-    const toolName = 'sports_score';
-    const query = originalUserPrompt(workingMessages);
-    const argsText = JSON.stringify({ query });
-    const argsSummary = summarizeToolCallArgs(argsText);
-    const providerId = STEP_FLASH_PROVIDER_ID;
-    const started = Date.now();
-    await onChunk(
-      { type: 'tool_progress', event: 'start', name: toolName, argsSummary },
-      { providerId },
-    );
-    const toolResult = await executeServerTool(toolName, argsText, { log });
-    const ms = Date.now() - started;
-    const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
-    const toolSummary = summarizeToolResult(toolName, toolResult);
-    await onChunk(
-      { type: 'tool_progress', event: 'end', name: toolName, ms, ok: !!ok, argsSummary, ...toolSummary },
-      { providerId },
-    );
-    const evidenceWeight = evidenceToolWeight(toolName, toolResult);
-    if (evidenceWeight > 0) {
-      groundedToolObserved = true;
-      evidenceToolCount += evidenceWeight;
-      evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(toolName));
-      skipDirectEvidencePlanningProviders(skippedProviders);
-      workingMessages.push({
-        role: 'user',
-        content: [
-          formatToolResultContent(toolName, toolResult, ++serverToolStepIndex),
-          '',
-          '【接续要求】上方 sports_score 是本轮已经预取的体育证据。不要再调用工具,直接基于证据回答用户原问题；如果证据里没有比分或赛果,请明确说工具结果未返回该字段。',
-        ].join('\n'),
-      });
-      summarizeFromEvidenceOnly = true;
-    }
+    const directResult = await prefetchDirectEvidenceTool({
+      toolName: 'sports_score',
+      providerId: STEP_FLASH_PROVIDER_ID,
+      continuationRequirement: '【接续要求】上方 sports_score 是本轮已经预取的体育证据。不要再调用工具,直接基于证据回答用户原问题；如果证据里没有比分或赛果,请明确说工具结果未返回该字段。',
+    });
+    if (directResult) return directResult;
   }
 
   if (
@@ -1598,40 +1587,12 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''),
     ))
   ) {
-    const toolName = 'stock_market';
-    const query = originalUserPrompt(workingMessages);
-    const argsText = JSON.stringify({ query });
-    const argsSummary = summarizeToolCallArgs(argsText);
-    const providerId = STEP_FLASH_PROVIDER_ID;
-    const started = Date.now();
-    await onChunk(
-      { type: 'tool_progress', event: 'start', name: toolName, argsSummary },
-      { providerId },
-    );
-    const toolResult = await executeServerTool(toolName, argsText, { log });
-    const ms = Date.now() - started;
-    const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
-    const toolSummary = summarizeToolResult(toolName, toolResult);
-    await onChunk(
-      { type: 'tool_progress', event: 'end', name: toolName, ms, ok: !!ok, argsSummary, ...toolSummary },
-      { providerId },
-    );
-    const evidenceWeight = evidenceToolWeight(toolName, toolResult);
-    if (evidenceWeight > 0) {
-      groundedToolObserved = true;
-      evidenceToolCount += evidenceWeight;
-      evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(toolName));
-      skipDirectEvidencePlanningProviders(skippedProviders);
-      workingMessages.push({
-        role: 'user',
-        content: [
-          formatToolResultContent(toolName, toolResult, ++serverToolStepIndex),
-          '',
-          '【接续要求】上方 stock_market 是本轮已经预取的行情证据。不要再调用工具,直接基于证据回答用户原问题；如果证据里没有点位、价格或涨跌幅,请明确说工具结果未返回该字段。',
-        ].join('\n'),
-      });
-      summarizeFromEvidenceOnly = true;
-    }
+    const directResult = await prefetchDirectEvidenceTool({
+      toolName: 'stock_market',
+      providerId: STEP_FLASH_PROVIDER_ID,
+      continuationRequirement: '【接续要求】上方 stock_market 是本轮已经预取的行情证据。不要再调用工具,直接基于证据回答用户原问题；如果证据里没有点位、价格或涨跌幅,请明确说工具结果未返回该字段。',
+    });
+    if (directResult) return directResult;
   }
 
   while (iter < maxIter) {

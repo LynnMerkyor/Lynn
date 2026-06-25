@@ -1,15 +1,11 @@
 // Brain v2 · Provider Registry
 // 原则:只做事实型(capability + 健康/cooldown),不做内容判断
 import './env-loader.js';
+import { positiveEnvNumber } from './env-utils.js';
 import { envModel, providerId, type Provider, type ProviderId, type ProviderIdLiteral } from './types.js';
 const DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY = 1;
 
 const env = (k: string, d: string): string => process.env[k] || d;
-
-function positiveEnvNumber(key: string, fallback: number): number {
-  const value = Number(process.env[key] || fallback);
-  return Number.isFinite(value) && value > 0 ? value : fallback;
-}
 
 type ProviderRegistry = Record<ProviderIdLiteral, Provider>;
 
