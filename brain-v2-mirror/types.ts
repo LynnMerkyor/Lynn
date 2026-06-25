@@ -2,6 +2,8 @@ export type Brand<T, Name extends string> = T & { readonly __brand: Name };
 
 export type ProviderIdLiteral =
   | 'apex-spark-i-balanced'
+  | 'mimo-ultraspeed'
+  | 'mimo-token-plan-pro'
   | 'step-3.7-flash'
   | 'mimo-multimodal'
   | 'deepseek-chat'
@@ -13,6 +15,8 @@ export type ModelIdLiteral =
   | 'qwen36-35b-a3b-apex-mtp'
   | 'qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix'
   | 'step-3.7-flash'   // StepFun 198B-MoE/11B-A text/coding fallback, step_plan 端点
+  | 'mimo-v2.5-pro-ultraspeed'
+  | 'mimo-v2.5-pro'
   | 'mimo-v2.5'
   | 'mimo-v2-omni'
   | 'deepseek-v4-flash'
@@ -48,6 +52,7 @@ export interface Provider {
   default_reasoning_effort?: 'low' | 'medium' | 'high' | 'xhigh';
   authType?: 'none' | 'bearer';
   max_tokens?: number;
+  timeout_ms?: number;
   temperature?: number;
   // When set, the openai-compat adapter uses this model id (instead of `model`) for turns that
   // carry image content — lets one provider serve text + vision with different models

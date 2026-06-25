@@ -23,7 +23,7 @@ import {
   observeToolCallStorm,
   readToolStormConfigFromEnv,
 } from './tool-storm.js';
-import { errorMessage, type ChatMessage, type FallbackEntry, type FallbackReason, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
+import { errorMessage, providerId, type ChatMessage, type FallbackEntry, type FallbackReason, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
 
 type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio' | 'video'>>;
 type ProviderError = Error & { suppressBody?: boolean; cooldownMs?: number; status?: number; statusCode?: number; code?: string };
@@ -91,6 +91,8 @@ const _emptyCounters = new Map<ProviderId, number>();
 const LOCAL_HEALTH_PROBE_ENABLED = process.env.BRAIN_V2_LOCAL_HEALTH_PROBE !== '0';
 const DEFAULT_LOCAL_HEALTH_PROBE_MS = Number(process.env.BRAIN_V2_LOCAL_HEALTH_PROBE_MS || 1_500);
 const LOCAL_SINGLE_SLOT_GUARD_ENABLED = process.env.BRAIN_V2_LOCAL_SINGLE_SLOT_GUARD !== '0';
+const DEEPSEEK_CHAT_PROVIDER_ID = providerId('deepseek-chat');
+const STEP_FLASH_PROVIDER_ID = providerId('step-3.7-flash');
 
 function positiveEnvNumber(key: string, fallback: number): number {
   const value = Number(process.env[key] || fallback);
@@ -1057,6 +1059,28 @@ function providerCanAttemptRound(provider: Provider, capabilityRequired: Capabil
   return true;
 }
 
+function createProviderAttemptSignal(provider: Provider, upstreamSignal?: AbortSignal): { signal?: AbortSignal; cleanup: () => void } {
+  const timeoutMs = Number(provider.timeout_ms || 0);
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return { signal: upstreamSignal, cleanup: () => {} };
+  }
+  const ctrl = new AbortController();
+  const abortFromUpstream = (): void => ctrl.abort(upstreamSignal?.reason);
+  if (upstreamSignal?.aborted) {
+    abortFromUpstream();
+  } else {
+    upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true });
+  }
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return {
+    signal: ctrl.signal,
+    cleanup: () => {
+      clearTimeout(timer);
+      upstreamSignal?.removeEventListener('abort', abortFromUpstream);
+    },
+  };
+}
+
 function recoverCooldownLockedRoute({
   capabilityRequired,
   tools,
@@ -1206,76 +1230,81 @@ async function runRound({
       }
     };
     try {
+      const providerAttempt = createProviderAttemptSignal(provider, signal);
       log && log('info', `→ provider ${providerId}`);
-      const searchContext = await applySearchContext({ messages, provider, signal, log, requestCache });
-      let effectiveMessages = searchContext.messages || messages;
-      if (searchContext.meta.applied) {
-        await onChunk(
-          {
-            type: 'pre_search',
-            source: searchContext.meta.source,
-            query: searchContext.meta.query,
-            hit: searchContext.meta.hit,
-            ms: searchContext.meta.ms,
-            cached: searchContext.meta.cached,
-            ...(searchContext.meta.sourceStatus ? { sourceStatus: searchContext.meta.sourceStatus } : {}),
-          },
-          { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
-        );
-      }
-      const audioContext = await applyAudioTranscribe({ messages: effectiveMessages, provider, signal, log, requestCache: audioCache });
-      effectiveMessages = audioContext.messages || effectiveMessages;
-      if (audioContext.meta?.applied) {
-        await onChunk(
-          {
-            type: 'audio_fallback',
-            source: String(audioContext.meta.source ?? 'whisper'),
-            transcripts: Number(audioContext.meta.transcripts ?? 0),
-            total: Number(audioContext.meta.total ?? 0),
-            ms: Number(audioContext.meta.ms ?? 0),
-          },
-          { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
-        );
-      }
-      for await (const chunk of adapter({ provider, messages: effectiveMessages, tools, signal, log, extraBody, reasoningEffort })) {
-        anyEmit = true;
-        if (chunk.type === 'content') {
-          await emitSynthesisContentDelta(chunk.delta);
-          continue;
+      try {
+        const searchContext = await applySearchContext({ messages, provider, signal: providerAttempt.signal, log, requestCache });
+        let effectiveMessages = searchContext.messages || messages;
+        if (searchContext.meta.applied) {
+          await onChunk(
+            {
+              type: 'pre_search',
+              source: searchContext.meta.source,
+              query: searchContext.meta.query,
+              hit: searchContext.meta.hit,
+              ms: searchContext.meta.ms,
+              cached: searchContext.meta.cached,
+              ...(searchContext.meta.sourceStatus ? { sourceStatus: searchContext.meta.sourceStatus } : {}),
+            },
+            { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
+          );
         }
-        if (chunk.type === 'tool_call_delta') {
-          for (const d of (chunk.delta || [])) {
-            const idx = d.index ?? 0;
-            if (!toolCallsAcc[idx]) toolCallsAcc[idx] = { id: '', type: 'function', function: { name: '', arguments: '' } };
-            if (d.id) toolCallsAcc[idx].id = d.id;
-            if (d.function?.name) toolCallsAcc[idx].function.name += d.function.name;
-            if (d.function?.arguments) toolCallsAcc[idx].function.arguments += d.function.arguments;
-          }
-          await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
-          continue;
+        const audioContext = await applyAudioTranscribe({ messages: effectiveMessages, provider, signal: providerAttempt.signal, log, requestCache: audioCache });
+        effectiveMessages = audioContext.messages || effectiveMessages;
+        if (audioContext.meta?.applied) {
+          await onChunk(
+            {
+              type: 'audio_fallback',
+              source: String(audioContext.meta.source ?? 'whisper'),
+              transcripts: Number(audioContext.meta.transcripts ?? 0),
+              total: Number(audioContext.meta.total ?? 0),
+              ms: Number(audioContext.meta.ms ?? 0),
+            },
+            { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
+          );
         }
-        if (chunk.type === 'finish') {
-          await flushSynthesisBuffer(true);
-          finishReason = chunk.reason;
-          if (bufferContent && chunk.reason !== 'tool_calls') {
-            bufferedFinishChunk = {
-              reason: chunk.reason || 'stop',
-              providerId,
-              fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined,
-            };
+        for await (const chunk of adapter({ provider, messages: effectiveMessages, tools, signal: providerAttempt.signal, log, extraBody, reasoningEffort })) {
+          anyEmit = true;
+          if (chunk.type === 'content') {
+            await emitSynthesisContentDelta(chunk.delta);
             continue;
           }
+          if (chunk.type === 'tool_call_delta') {
+            for (const d of (chunk.delta || [])) {
+              const idx = d.index ?? 0;
+              if (!toolCallsAcc[idx]) toolCallsAcc[idx] = { id: '', type: 'function', function: { name: '', arguments: '' } };
+              if (d.id) toolCallsAcc[idx].id = d.id;
+              if (d.function?.name) toolCallsAcc[idx].function.name += d.function.name;
+              if (d.function?.arguments) toolCallsAcc[idx].function.arguments += d.function.arguments;
+            }
+            await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
+            continue;
+          }
+          if (chunk.type === 'finish') {
+            await flushSynthesisBuffer(true);
+            finishReason = chunk.reason;
+            if (bufferContent && chunk.reason !== 'tool_calls') {
+              bufferedFinishChunk = {
+                reason: chunk.reason || 'stop',
+                providerId,
+                fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined,
+              };
+              continue;
+            }
+            await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
+            continue;
+          }
+          if (chunk.type === 'usage') {
+            lastUsage = (chunk as { usage?: unknown }).usage;
+          }
+          if (chunk.type === 'reasoning') {
+            sawReasoning = true;
+            reasoningAccum += String((chunk as { delta?: unknown }).delta || '');
+          }
           await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
-          continue;
         }
-        if (chunk.type === 'usage') {
-          lastUsage = (chunk as { usage?: unknown }).usage;
-        }
-        if (chunk.type === 'reasoning') {
-          sawReasoning = true;
-          reasoningAccum += String((chunk as { delta?: unknown }).delta || '');
-        }
-        await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
+      } finally {
+        providerAttempt.cleanup();
       }
       await flushSynthesisBuffer(true);
       // [prefix-cache 埋点] StepFun 流式 usage 的中途帧恒报 cached_tokens=0,只有最终帧带真值
@@ -1443,7 +1472,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     const query = originalUserPrompt(workingMessages);
     const argsText = JSON.stringify({ query });
     const argsSummary = summarizeToolCallArgs(argsText);
-    const providerId = 'deepseek-chat' as ProviderId;
+    const providerId = DEEPSEEK_CHAT_PROVIDER_ID;
     const started = Date.now();
     await onChunk(
       { type: 'tool_progress', event: 'start', name: toolName, argsSummary },
@@ -1473,7 +1502,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     const query = originalUserPrompt(workingMessages);
     const argsText = JSON.stringify({ query });
     const argsSummary = summarizeToolCallArgs(argsText);
-    const providerId = 'deepseek-chat' as ProviderId;
+    const providerId = STEP_FLASH_PROVIDER_ID;
     const started = Date.now();
     await onChunk(
       { type: 'tool_progress', event: 'start', name: toolName, argsSummary },
@@ -1495,6 +1524,22 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
       return { ok: true, providerId, iterations: 0 };
     }
+    const evidenceWeight = evidenceToolWeight(toolName, toolResult);
+    if (evidenceWeight > 0) {
+      groundedToolObserved = true;
+      evidenceToolCount += evidenceWeight;
+      evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(toolName));
+      skippedProviders.add(DEEPSEEK_CHAT_PROVIDER_ID);
+      workingMessages.push({
+        role: 'user',
+        content: [
+          formatToolResultContent(toolName, toolResult, ++serverToolStepIndex),
+          '',
+          '【接续要求】上方 weather 是本轮已经预取的天气证据。不要再调用工具,直接基于证据回答用户原问题；如果证据里没有目标日期、地点、温度或降雨字段,请明确说工具结果未返回该字段。',
+        ].join('\n'),
+      });
+      summarizeFromEvidenceOnly = true;
+    }
   }
 
   if (
@@ -1508,7 +1553,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     const query = originalUserPrompt(workingMessages);
     const argsText = JSON.stringify({ query });
     const argsSummary = summarizeToolCallArgs(argsText);
-    const providerId = 'deepseek-chat' as ProviderId;
+    const providerId = STEP_FLASH_PROVIDER_ID;
     const started = Date.now();
     await onChunk(
       { type: 'tool_progress', event: 'start', name: toolName, argsSummary },
@@ -1527,6 +1572,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       groundedToolObserved = true;
       evidenceToolCount += evidenceWeight;
       evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(toolName));
+      skippedProviders.add(DEEPSEEK_CHAT_PROVIDER_ID);
       workingMessages.push({
         role: 'user',
         content: [
@@ -1550,7 +1596,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     const query = originalUserPrompt(workingMessages);
     const argsText = JSON.stringify({ query });
     const argsSummary = summarizeToolCallArgs(argsText);
-    const providerId = 'deepseek-chat' as ProviderId;
+    const providerId = STEP_FLASH_PROVIDER_ID;
     const started = Date.now();
     await onChunk(
       { type: 'tool_progress', event: 'start', name: toolName, argsSummary },
@@ -1569,6 +1615,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       groundedToolObserved = true;
       evidenceToolCount += evidenceWeight;
       evidenceHandoffTarget = Math.min(evidenceHandoffTarget, evidenceHandoffAfterForTool(toolName));
+      skippedProviders.add(DEEPSEEK_CHAT_PROVIDER_ID);
       workingMessages.push({
         role: 'user',
         content: [

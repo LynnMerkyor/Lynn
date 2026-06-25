@@ -50,6 +50,9 @@ describe('brain env loader', () => {
       STEP_BASE: 'https://legacy-step.example/v1',
       STEP_TEXT_MODEL: 'step-legacy',
       MIMO_KEY: 'legacy-mimo',
+      MIMO_API_KEY: 'ordinary-mimo',
+      MIMO_API_BASE: 'https://api.xiaomimimo.com/v1',
+      MIMO_API_MODEL: 'mimo-v2.5-pro-ultraspeed',
     };
 
     const result = loadBrainEnvFiles({ env, paths: [] });
@@ -58,11 +61,42 @@ describe('brain env loader', () => {
     expect(env.STEP37_BASE).toBe('https://legacy-step.example/v1');
     expect(env.STEP37_MODEL).toBe('step-legacy');
     expect(env.MIMO_SEARCH_KEY).toBe('legacy-mimo');
+    expect(env.MIMO_ULTRASPEED_KEY).toBe('ordinary-mimo');
+    expect(env.MIMO_ULTRASPEED_BASE).toBe('https://api.xiaomimimo.com/v1');
+    expect(env.MIMO_ULTRASPEED_MODEL).toBe('mimo-v2.5-pro-ultraspeed');
     expect(result.aliases).toEqual(expect.arrayContaining([
       'STEP_KEY->STEP37_KEY',
       'STEP_BASE->STEP37_BASE',
       'STEP_TEXT_MODEL->STEP37_MODEL',
       'MIMO_KEY->MIMO_SEARCH_KEY',
+      'MIMO_API_KEY->MIMO_ULTRASPEED_KEY',
     ]));
+  });
+
+  it('bridges search MiMo to Token Plan only when the search base is token-plan', () => {
+    const tokenPlanEnv = {
+      MIMO_SEARCH_BASE: 'https://token-plan-cn.xiaomimimo.com/v1',
+      MIMO_SEARCH_KEY: 'tp-key',
+      MIMO_SEARCH_MODEL: 'mimo-v2.5-pro',
+    };
+    const tokenPlanResult = loadBrainEnvFiles({ env: tokenPlanEnv, paths: [] });
+
+    expect(tokenPlanEnv.MIMO_TOKEN_PLAN_BASE).toBe('https://token-plan-cn.xiaomimimo.com/v1');
+    expect(tokenPlanEnv.MIMO_TOKEN_PLAN_KEY).toBe('tp-key');
+    expect(tokenPlanEnv.MIMO_TOKEN_PLAN_MODEL).toBe('mimo-v2.5-pro');
+    expect(tokenPlanResult.aliases).toEqual(expect.arrayContaining([
+      'MIMO_SEARCH_KEY->MIMO_TOKEN_PLAN_KEY',
+    ]));
+
+    const ordinaryEnv = {
+      MIMO_SEARCH_BASE: 'https://api.xiaomimimo.com/v1',
+      MIMO_SEARCH_KEY: 'sk-old',
+      MIMO_SEARCH_MODEL: 'mimo-v2-flash',
+    };
+    loadBrainEnvFiles({ env: ordinaryEnv, paths: [] });
+
+    expect(ordinaryEnv.MIMO_TOKEN_PLAN_BASE).toBeUndefined();
+    expect(ordinaryEnv.MIMO_TOKEN_PLAN_KEY).toBeUndefined();
+    expect(ordinaryEnv.MIMO_TOKEN_PLAN_MODEL).toBeUndefined();
   });
 });

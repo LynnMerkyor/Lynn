@@ -24,6 +24,9 @@ const LEGACY_ALIASES: Record<string, string[]> = {
   MIMO_SEARCH_BASE: ['MIMO_BASE'],
   MIMO_SEARCH_KEY: ['MIMO_KEY'],
   MIMO_SEARCH_MODEL: ['MIMO_MODEL'],
+  MIMO_ULTRASPEED_BASE: ['MIMO_API_BASE', 'MIMO_ORDINARY_BASE'],
+  MIMO_ULTRASPEED_KEY: ['MIMO_API_KEY', 'MIMO_ORDINARY_KEY'],
+  MIMO_ULTRASPEED_MODEL: ['MIMO_API_MODEL', 'MIMO_ORDINARY_MODEL'],
 };
 
 function stripQuotes(value: string): string {
@@ -89,6 +92,20 @@ export function loadBrainEnvFiles(options: BrainEnvLoadOptions = {}): BrainEnvLo
     if (!source) continue;
     env[target] = env[source];
     aliases.push(`${source}->${target}`);
+  }
+
+  const searchBase = String(env.MIMO_SEARCH_BASE || '');
+  if (/token-plan/i.test(searchBase)) {
+    const tokenPlanAliases: Array<[string, string]> = [
+      ['MIMO_TOKEN_PLAN_BASE', 'MIMO_SEARCH_BASE'],
+      ['MIMO_TOKEN_PLAN_KEY', 'MIMO_SEARCH_KEY'],
+      ['MIMO_TOKEN_PLAN_MODEL', 'MIMO_SEARCH_MODEL'],
+    ];
+    for (const [target, source] of tokenPlanAliases) {
+      if (env[target] || !env[source]) continue;
+      env[target] = env[source];
+      aliases.push(`${source}->${target}`);
+    }
   }
 
   return { files: loadedFiles, aliases };

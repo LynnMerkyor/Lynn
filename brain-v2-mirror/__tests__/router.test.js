@@ -662,6 +662,33 @@ describe('Router', () => {
     expect(chunks.some((c) => c.type === 'content' && c.delta === 'fallback answer')).toBe(true);
   });
 
+  it('falls through when a provider exceeds its per-attempt timeout', async () => {
+    mockState.providers['p-step'].timeout_ms = 5;
+    mockState.adapterFn = async function* ({ provider, signal }) {
+      mockState.adapterCalls.push(provider.id);
+      if (provider.id === 'p-step') {
+        await new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('timeout')), { once: true });
+        });
+        return;
+      }
+      yield { type: 'content', delta: 'fallback answer' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+
+    const result = await run({
+      messages: [{ role: 'user', content: 'hello' }],
+      onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.providerId).toBe('p-spark');
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
+    expect(mockState.unhealthy.some((entry) => entry.id === 'p-step' && entry.reason.includes('timeout'))).toBe(true);
+    expect(chunks.some((c) => c.type === 'content' && c.delta === 'fallback answer')).toBe(true);
+  });
+
   it('drops tool continuation rounds to medium reasoning when client did not pin an effort', async () => {
     stubSearchFetchOk();
     const reasoningSeen = [];
@@ -1321,6 +1348,69 @@ describe('Router', () => {
     expect(visible).toContain('北京当前空气质量');
     expect(visible).toContain('AQI(US): 42');
     expect(visible).toContain('PM2.5: 9.5');
+  });
+
+  it('answers direct forecast prompts from weather prefetch without DS planning tools', async () => {
+    process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH = '1';
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-25T08:00:00.000Z'));
+    mockState.order = ['p-step'];
+    const chunks = [];
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        current_condition: [{
+          temp_C: '29',
+          FeelsLikeC: '33',
+          lang_zh: [{ value: '多云' }],
+          weatherDesc: [{ value: 'Cloudy' }],
+          humidity: '78',
+          winddir16Point: 'SE',
+          windspeedKmph: '10',
+          visibility: '10',
+          precipMM: '0.0',
+          uvIndex: '2',
+        }],
+        weather: [
+          {
+            date: '2026-06-25',
+            mintempC: '27',
+            maxtempC: '32',
+            hourly: [{}, {}, {}, {}, { lang_zh: [{ value: '多云' }] }],
+          },
+          {
+            date: '2026-06-26',
+            mintempC: '28',
+            maxtempC: '31',
+            hourly: [{}, {}, {}, {}, { lang_zh: [{ value: '阴天' }] }],
+          },
+        ],
+      }),
+    })));
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'should not be called' };
+    };
+
+    try {
+      const result = await run({
+        messages: [{ role: 'user', content: '明天深圳天气如何' }],
+        onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.providerId).toBe('step-3.7-flash');
+      expect(mockState.adapterCalls).toEqual([]);
+      const toolEvents = chunks.filter((chunk) => chunk.type === 'tool_progress');
+      expect(toolEvents.map((chunk) => chunk.name)).toEqual(['weather', 'weather']);
+      expect(toolEvents.every((chunk) => chunk.meta?.providerId === 'step-3.7-flash')).toBe(true);
+      expect(toolEvents.some((chunk) => chunk.name === 'parallel_research' || chunk.name === 'calendar')).toBe(false);
+      const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+      expect(visible).toContain('深圳明天天气：阴天，28~31°C');
+      expect(visible).toContain('来源: weather 工具');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('emits a deterministic grounded evidence answer when providers fail after generic tool evidence', async () => {

@@ -110,6 +110,18 @@ describe('tool-exec dispatcher', () => {
     expect(tools).not.toContain('parallel_research');
   });
 
+  it('prefers the weather tool for direct forecast prompts', () => {
+    const messages = [{ role: 'user', content: '明天深圳天气如何' }];
+    const tools = mergeWithServerTools([], messages).map((tool) => tool.function.name);
+
+    expect(shouldPreferWeatherTool(messages)).toBe(true);
+    expect(tools).toContain('weather');
+    expect(tools).not.toContain('web_search');
+    expect(tools).not.toContain('live_news');
+    expect(tools).not.toContain('calendar');
+    expect(tools).not.toContain('parallel_research');
+  });
+
   it('formats exchange rates with correct pct field and JPY unit', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
