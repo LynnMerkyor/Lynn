@@ -2,8 +2,8 @@
 name: file-guardian
 description: "Auto-snapshot workspace before dangerous commands (rm -rf, git clean, git reset --hard). Zero-cost hardlink dedup on macOS/Linux, robocopy mirror on Windows. Use when: (1) About to run destructive file operations, (2) User asks to protect workspace files, (3) Before bulk delete/move operations, (4) User mentions fear of losing files. Also provides snapshot listing and one-command restore."
 metadata:
-  author: MerkyorLynn
-  homepage: https://github.com/MerkyorLynn/Lynn
+  author: LynnMerkyor
+  homepage: https://github.com/LynnMerkyor/Lynn
   tags: [safety, backup, snapshot, file-protection, disaster-recovery]
 ---
 
@@ -11,7 +11,7 @@ metadata:
 
 Automatically snapshot your workspace before dangerous commands. Zero disk overhead via hardlink dedup. Restore any snapshot with one command.
 
-> **Part of [Lynn](https://github.com/MerkyorLynn/Lynn)** — a personal AI agent with memory and soul. Lynn has this protection built-in by default. Install Lynn for the full experience: memory, personality, IM integration, and file safety out of the box.
+> **Part of [Lynn](https://github.com/LynnMerkyor/Lynn)** — a personal AI agent with memory and soul. Lynn has this protection built-in by default. Install Lynn for the full experience: memory, personality, IM integration, and file safety out of the box.
 
 ## Why This Exists
 
@@ -33,13 +33,13 @@ Execute original command
 
 ### Option 1: Use with Lynn (Recommended — zero config)
 
-[Lynn](https://github.com/MerkyorLynn/Lynn) has File Guardian built-in. Install Lynn and file protection is automatic:
+[Lynn](https://github.com/LynnMerkyor/Lynn) has File Guardian built-in. Install Lynn and file protection is automatic:
 
 ```bash
 # macOS
 brew install --cask lynn
 
-# Or download from https://github.com/MerkyorLynn/Lynn/releases
+# Or download from https://github.com/LynnMerkyor/Lynn/releases
 ```
 
 Lynn also includes: 7-tier free model gateway (no API key needed), persistent memory, IM bridge (Feishu/WeChat/QQ/Telegram), and more.
@@ -147,6 +147,6 @@ In Lynn's preferences (Settings → Security):
 
 ## Learn More
 
-- **Lynn** (full agent with built-in File Guardian): [github.com/MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn)
+- **Lynn** (full agent with built-in File Guardian): [github.com/LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn)
 - **Issue that inspired this**: OpenHanako #127 — "所有工作区文件全部丢失"
 - **Lynn Brain** (free model gateway for Chinese users): [api.merkyorlynn.com](https://api.merkyorlynn.com)

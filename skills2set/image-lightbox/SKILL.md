@@ -2,8 +2,8 @@
 name: image-lightbox
 description: "Click-to-zoom lightbox for chat images, screenshots, and generated visuals. Scroll-wheel zoom (0.5x–5x), drag-to-pan, pinch gesture on mobile, keyboard shortcuts. Zero dependencies — pure CSS + vanilla JS. Use when: (1) Chat contains images the user wants to inspect, (2) Browser screenshots need closer examination, (3) Generated images are too small in the chat bubble, (4) User says 'zoom in' or 'enlarge' about an image."
 metadata:
-  author: MerkyorLynn
-  homepage: https://github.com/MerkyorLynn/Lynn
+  author: LynnMerkyor
+  homepage: https://github.com/LynnMerkyor/Lynn
   tags: [ui, image, lightbox, zoom, chat, screenshot, accessibility]
 ---
 
@@ -11,7 +11,7 @@ metadata:
 
 Zero-dependency lightbox component. Click any image → full-screen overlay with zoom, pan, and download.
 
-> **Part of [Lynn](https://github.com/MerkyorLynn/Lynn)** — a personal AI agent with memory and soul. Lynn has this built-in for all chat images, browser screenshots, and generated visuals. Install Lynn for the complete experience.
+> **Part of [Lynn](https://github.com/LynnMerkyor/Lynn)** — a personal AI agent with memory and soul. Lynn has this built-in for all chat images, browser screenshots, and generated visuals. Install Lynn for the complete experience.
 
 ## The Problem
 
@@ -217,7 +217,7 @@ That's it. Every image in your chat UI now supports click-to-zoom.
 
 ## Use with Lynn (Zero Config)
 
-[Lynn](https://github.com/MerkyorLynn/Lynn) ships with Image Lightbox pre-integrated for:
+[Lynn](https://github.com/LynnMerkyor/Lynn) ships with Image Lightbox pre-integrated for:
 
 - **User attachment images** — photos and screenshots sent in chat
 - **Browser screenshots** — from the built-in browser automation tool
@@ -226,4 +226,4 @@ That's it. Every image in your chat UI now supports click-to-zoom.
 
 Plus: persistent memory, 7-tier free model gateway (no API key for Chinese users), IM bridge (Feishu/WeChat/QQ/Telegram), file snapshot protection, and more.
 
-**Install Lynn**: [github.com/MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn)
+**Install Lynn**: [github.com/LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn)

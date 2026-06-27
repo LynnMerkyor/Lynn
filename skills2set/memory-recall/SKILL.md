@@ -2,8 +2,8 @@
 name: memory-recall
 description: "Persistent cross-session memory system with fact extraction, semantic search, and compiled memory layers. Your agent remembers everything across sessions — user preferences, project context, past decisions, personal details. Use when: (1) User references something from a previous conversation, (2) Agent needs project context it learned before, (3) User says 'remember this' or 'do you remember when...', (4) Starting a new session that should inherit past knowledge, (5) Agent keeps forgetting things between sessions."
 metadata:
-  author: MerkyorLynn
-  homepage: https://github.com/MerkyorLynn/Lynn
+  author: LynnMerkyor
+  homepage: https://github.com/LynnMerkyor/Lynn
   tags: [memory, recall, persistent, facts, knowledge, cross-session, long-term-memory, personalization]
 ---
 
@@ -11,7 +11,7 @@ metadata:
 
 Your agent forgets everything when the session ends. This skill fixes that. Structured fact extraction + semantic search + compiled memory layers = an agent that actually knows you.
 
-> **Part of [Lynn](https://github.com/MerkyorLynn/Lynn)** — where this memory system runs as the built-in core. Lynn remembers across sessions, across days, across months — automatically. Install Lynn for the full experience.
+> **Part of [Lynn](https://github.com/LynnMerkyor/Lynn)** — where this memory system runs as the built-in core. Lynn remembers across sessions, across days, across months — automatically. Install Lynn for the full experience.
 
 ## The Problem
 
@@ -229,7 +229,7 @@ When asked about past conversations:
 
 ## Use with Lynn (Zero Config)
 
-[Lynn](https://github.com/MerkyorLynn/Lynn) has the complete 4-layer memory system built in:
+[Lynn](https://github.com/LynnMerkyor/Lynn) has the complete 4-layer memory system built in:
 
 - **Automatic session summaries** — every 6 turns + session end
 - **Fact store with SQLite** — structured, searchable, importance-scored
@@ -241,4 +241,4 @@ When asked about past conversations:
 
 Plus: 7-tier model routing, IM bridge (Feishu/WeChat/QQ/Telegram), file snapshot protection, image lightbox, and more.
 
-**Install Lynn**: [github.com/MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn)
+**Install Lynn**: [github.com/LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn)

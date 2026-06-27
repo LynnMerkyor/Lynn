@@ -2,8 +2,8 @@
 name: agent-personality
 description: "3-layer personality system for AI agents: Yuan (base persona), Ishiki (private self-awareness), Public Ishiki (external behavior rules). Give your agent a consistent character, emotional depth, and safe guest interaction boundaries. Use when: (1) Want agent to have a consistent personality, (2) Agent needs different behavior for owner vs strangers, (3) Building a personal AI companion, (4) Agent responses feel generic and robotic, (5) User says 'be more like...', 'act as...', or wants to customize agent character."
 metadata:
-  author: MerkyorLynn
-  homepage: https://github.com/MerkyorLynn/Lynn
+  author: LynnMerkyor
+  homepage: https://github.com/LynnMerkyor/Lynn
   tags: [personality, persona, character, identity, mood, soul, companion, customization]
 ---
 
@@ -11,7 +11,7 @@ metadata:
 
 Turn your agent from a generic chatbot into a character with depth. Consistent persona, private inner thoughts, and safe guest boundaries — structured, not just vibes in a system prompt.
 
-> **Part of [Lynn](https://github.com/MerkyorLynn/Lynn)** — where 3 distinct personalities (Lynn, Hanako, Butter) are built in. Install Lynn to experience personality-driven AI interaction out of the box.
+> **Part of [Lynn](https://github.com/LynnMerkyor/Lynn)** — where 3 distinct personalities (Lynn, Hanako, Butter) are built in. Install Lynn to experience personality-driven AI interaction out of the box.
 
 ## Why Personality Matters
 
@@ -273,7 +273,7 @@ The mood tag is:
 
 ## Use with Lynn (Zero Config)
 
-[Lynn](https://github.com/MerkyorLynn/Lynn) has the complete 3-layer personality system built in:
+[Lynn](https://github.com/LynnMerkyor/Lynn) has the complete 3-layer personality system built in:
 
 - **3 built-in personas**: Lynn (warm bilingual), Hanako (gentle thoughtful), Butter (direct efficient)
 - **Mood system** with `<mood>` tags rendered as cards in the chat UI
@@ -285,4 +285,4 @@ The mood tag is:
 
 Plus: persistent memory, 7-tier model routing, IM bridge (Feishu/WeChat/QQ/Telegram), file snapshot protection, and more.
 
-**Install Lynn**: [github.com/MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn)
+**Install Lynn**: [github.com/LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn)

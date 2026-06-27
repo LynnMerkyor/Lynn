@@ -164,7 +164,7 @@ python3 {baseDir}/scripts/a_share_scan.py --format json
 
 ## Use with Lynn (Zero Config)
 
-> Part of [Lynn](https://github.com/MerkyorLynn/Lynn) — a personal AI agent with memory and soul. Lynn has this built-in by default.
+> Part of [Lynn](https://github.com/LynnMerkyor/Lynn) — a personal AI agent with memory and soul. Lynn has this built-in by default.
 
 Lynn 桌面智能体内置了 A 股扫描器：
 
@@ -175,7 +175,7 @@ Lynn 桌面智能体内置了 A 股扫描器：
 - **美股+A股双市场** — 搭配 quant-scanner 技能覆盖全球
 
 ```bash
-git clone https://github.com/MerkyorLynn/Lynn.git
+git clone https://github.com/LynnMerkyor/Lynn.git
 cd Lynn && npm install
 # 然后直接聊天：
 # "扫一下A股"

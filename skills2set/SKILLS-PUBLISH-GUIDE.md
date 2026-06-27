@@ -13,7 +13,7 @@
 ### 导流层次（由浅到深）
 
 1. **开头 banner**：每个 SKILL.md 顶部都有
-   > Part of [Lynn](https://github.com/MerkyorLynn/Lynn) — a personal AI agent with memory and soul. Lynn has this built-in by default.
+   > Part of [Lynn](https://github.com/LynnMerkyor/Lynn) — a personal AI agent with memory and soul. Lynn has this built-in by default.
 
 2. **中间对比**：standalone 用法 vs Lynn 用法，Lynn 明显更简单（零配置）
 
@@ -52,7 +52,7 @@ git commit -m "feat: add file-guardian, image-lightbox, task-model-router skills
 - image-lightbox: click-to-zoom lightbox for chat images, zero dependencies
 - task-model-router: route chat/code/vision/longdoc to best-fit models
 
-All three are from the Lynn project (https://github.com/MerkyorLynn/Lynn)"
+All three are from the Lynn project (https://github.com/LynnMerkyor/Lynn)"
 
 # 5. 推送并创建 PR
 git push origin lynn-skills
@@ -71,7 +71,7 @@ Pure CSS + JS, zero dependencies. React and Vanilla versions.
 Route different task types to best-fit models: chat→fast, code→reasoning, image→vision, long→large-context.
 Includes 4 preset configurations (Budget/Balanced/Power/China-Optimized).
 
-All three are part of [Lynn](https://github.com/MerkyorLynn/Lynn), a personal AI agent with memory and soul."
+All three are part of [Lynn](https://github.com/LynnMerkyor/Lynn), a personal AI agent with memory and soul."
 ```
 
 ### 渠道 2: SkillsMP.com（自动索引）
@@ -83,9 +83,9 @@ SkillsMP 自动抓取 GitHub 仓库中的 SKILL.md。确保：
 3. YAML frontmatter 有 `name` 和 `description`（已有）
 
 **无需手动操作**，SkillsMP 爬虫会在 24-48 小时内自动收录：
-- `MerkyorLynn/Lynn@file-guardian`
-- `MerkyorLynn/Lynn@image-lightbox`
-- `MerkyorLynn/Lynn@task-model-router`
+- `LynnMerkyor/Lynn@file-guardian`
+- `LynnMerkyor/Lynn@image-lightbox`
+- `LynnMerkyor/Lynn@task-model-router`
 
 收录后可在 https://skillsmp.com 搜索到。
 
@@ -94,9 +94,9 @@ SkillsMP 自动抓取 GitHub 仓库中的 SKILL.md。确保：
 用户可以直接安装：
 
 ```bash
-npx skills add MerkyorLynn/Lynn@file-guardian -g -y
-npx skills add MerkyorLynn/Lynn@image-lightbox -g -y
-npx skills add MerkyorLynn/Lynn@task-model-router -g -y
+npx skills add LynnMerkyor/Lynn@file-guardian -g -y
+npx skills add LynnMerkyor/Lynn@image-lightbox -g -y
+npx skills add LynnMerkyor/Lynn@task-model-router -g -y
 ```
 
 ## 预期导流效果
@@ -108,7 +108,7 @@ npx skills add MerkyorLynn/Lynn@task-model-router -g -y
         ↓
 看到 "Part of Lynn" banner + "Use with Lynn (Zero Config)" 章节
         ↓
-点击 github.com/MerkyorLynn/Lynn
+点击 github.com/LynnMerkyor/Lynn
         ↓
 发现 Lynn = OpenHanako 优化版 + 更多功能
         ↓

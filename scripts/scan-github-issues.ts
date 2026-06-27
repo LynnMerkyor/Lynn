@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const repo = process.env.LYNN_GITHUB_REPO || "MerkyorLynn/Lynn";
+const repo = process.env.LYNN_GITHUB_REPO || "LynnMerkyor/Lynn";
 const desktop = path.join(os.homedir(), "Desktop");
 const outDir = process.env.LYNN_ISSUE_DIGEST_DIR || path.join(desktop, "Lynn-GitHub-Issue-Digests");
 const now = new Date();

@@ -2,8 +2,8 @@
 name: task-model-router
 description: "Route different task types to the best-fit model automatically. Chat → fast small model, coding → strong reasoning model, images → vision model, long documents → large context model. Use when: (1) Agent handles mixed tasks (chat + code + vision), (2) Want to optimize speed and cost by matching task to model, (3) User sends an image but current model is text-only, (4) User asks for code review or complex reasoning, (5) User pastes long documents exceeding small model context."
 metadata:
-  author: MerkyorLynn
-  homepage: https://github.com/MerkyorLynn/Lynn
+  author: LynnMerkyor
+  homepage: https://github.com/LynnMerkyor/Lynn
   tags: [model, routing, task-aware, vision, reasoning, optimization, multi-model, cost]
 ---
 
@@ -11,7 +11,7 @@ metadata:
 
 Stop using one model for everything. Route chat to fast models, code to reasoning models, images to vision models, long docs to large-context models — automatically.
 
-> **Part of [Lynn](https://github.com/MerkyorLynn/Lynn)** — a personal AI agent where this routing is built into the core engine. Install Lynn to get task-aware routing out of the box, plus memory, IM bridge, and file protection.
+> **Part of [Lynn](https://github.com/LynnMerkyor/Lynn)** — a personal AI agent where this routing is built into the core engine. Install Lynn to get task-aware routing out of the box, plus memory, IM bridge, and file protection.
 
 ## Why One Model Isn't Enough
 
@@ -227,7 +227,7 @@ Track these metrics to validate your routing:
 
 ## Use with Lynn (Zero Config)
 
-[Lynn](https://github.com/MerkyorLynn/Lynn) has task-aware model routing built into the engine:
+[Lynn](https://github.com/LynnMerkyor/Lynn) has task-aware model routing built into the engine:
 
 - **Automatic task classification** in `core/execution-router.js`
 - **Vision/text split** in `core/bridge-session-manager.js` — images never sent to text-only models
@@ -237,10 +237,10 @@ Track these metrics to validate your routing:
 
 Plus: persistent memory, IM bridge (Feishu/WeChat/QQ/Telegram), file snapshot protection, image lightbox, and more.
 
-**Install Lynn**: [github.com/MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn)
+**Install Lynn**: [github.com/LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn)
 
 ## Further Reading
 
-- [Lynn ROADMAP](https://github.com/MerkyorLynn/Lynn/blob/main/ROADMAP.md) — upcoming model routing enhancements
+- [Lynn ROADMAP](https://github.com/LynnMerkyor/Lynn/blob/main/ROADMAP.md) — upcoming model routing enhancements
 - [Pi Coding Agent Skills](https://github.com/badlogic/pi-skills) — more skills for your agent
 - [SkillsMP](https://skillsmp.com) — discover community skills

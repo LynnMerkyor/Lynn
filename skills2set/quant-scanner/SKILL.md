@@ -159,7 +159,7 @@ User: give me a quick top 10 stock ranking
 
 ## Use with Lynn (Zero Config)
 
-> Part of [Lynn](https://github.com/MerkyorLynn/Lynn) — a personal AI agent with memory and soul. Lynn has this built-in by default.
+> Part of [Lynn](https://github.com/LynnMerkyor/Lynn) — a personal AI agent with memory and soul. Lynn has this built-in by default.
 
 With Lynn desktop agent, quant-scanner works seamlessly:
 
@@ -171,7 +171,7 @@ With Lynn desktop agent, quant-scanner works seamlessly:
 
 ```bash
 # Install Lynn
-git clone https://github.com/MerkyorLynn/Lynn.git
+git clone https://github.com/LynnMerkyor/Lynn.git
 cd Lynn && npm install
 
 # Then just chat:
