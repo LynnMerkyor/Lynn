@@ -3,6 +3,9 @@ import {
   deriveLocalQwenRuntimeState,
   LOCAL_QWEN35_MODEL_ID,
   LOCAL_QWEN35_PROVIDER_ID,
+  LOCAL_QWEN_PROMPT_DISMISS_KEY,
+  LOCAL_QWEN_PROMPT_SHOWN_KEY,
+  isLocalQwenPromptSnoozed,
   type LocalQwen35RuntimeStatus,
 } from './local-qwen-status';
 
@@ -49,5 +52,15 @@ describe('local Qwen status derivation', () => {
     expect(derived.running).toBe(false);
     expect(derived.endpointOccupied).toBe(true);
     expect(derived.active).toBe(true);
+  });
+
+  it('does not hide the install recommendation just because it was shown today', () => {
+    const today = '2026-06-27';
+    const values = new Map<string, string>([[LOCAL_QWEN_PROMPT_SHOWN_KEY, today]]);
+    const storage = { getItem: (key: string) => values.get(key) || null };
+    expect(isLocalQwenPromptSnoozed(storage, today)).toBe(false);
+
+    values.set(LOCAL_QWEN_PROMPT_DISMISS_KEY, today);
+    expect(isLocalQwenPromptSnoozed(storage, today)).toBe(true);
   });
 });

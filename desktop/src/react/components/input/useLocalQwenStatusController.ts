@@ -13,6 +13,7 @@ import {
   LOCAL_QWEN_PROMPT_DELAY_MS,
   LOCAL_QWEN_PROMPT_DISMISS_KEY,
   LOCAL_QWEN_PROMPT_SHOWN_KEY,
+  isLocalQwenPromptSnoozed,
   todayKey,
   type LocalQwen35RuntimeStatus,
 } from './local-qwen-status';
@@ -44,13 +45,7 @@ export function useLocalQwenStatusController({
   const [panelOpen, setPanelOpen] = useState(false);
   const [promptReady, setPromptReady] = useState(false);
   const [snoozed, setSnoozed] = useState(() => {
-    try {
-      const today = todayKey();
-      return localStorage.getItem(LOCAL_QWEN_PROMPT_DISMISS_KEY) === today
-        || localStorage.getItem(LOCAL_QWEN_PROMPT_SHOWN_KEY) === today;
-    } catch {
-      return false;
-    }
+    return isLocalQwenPromptSnoozed(localStorage);
   });
 
   const model = useMemo(

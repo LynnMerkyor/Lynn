@@ -7,6 +7,18 @@ export const LOCAL_QWEN_PROMPT_DISMISS_KEY = 'lynn-local-model-prompt-dismissed-
 export const LOCAL_QWEN_PROMPT_SHOWN_KEY = 'lynn-local-model-prompt-shown-date';
 export const LOCAL_QWEN_PROMPT_DELAY_MS = 8_000;
 
+export interface LocalQwenPromptStorage {
+  getItem(key: string): string | null;
+}
+
+export function isLocalQwenPromptSnoozed(storage: LocalQwenPromptStorage, today = todayKey()) {
+  try {
+    return storage.getItem(LOCAL_QWEN_PROMPT_DISMISS_KEY) === today;
+  } catch {
+    return false;
+  }
+}
+
 export type LocalQwen35RuntimeStatus = {
   ok?: boolean;
   registered_provider?: boolean;
