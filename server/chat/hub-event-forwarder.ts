@@ -75,7 +75,7 @@ function shouldForceCloseSportsDirectTurn(promptText: unknown, answer: unknown):
   if (!prompt || !text) return false;
   if (/预测|预估|猜|看好|可能比分|比分预测|predict|prediction|forecast/i.test(prompt)) return false;
   if (/(?:深度|完整|全面|系统(?:性)?|调研|研究|报告|分析|对比|比较|引用|来源列表|research|report|analysis|compare)/i.test(prompt)) return false;
-  return /(?:今晚|今夜|今天|今日|明天|明日|昨晚|昨天|昨日|赛程|比赛|几场|几轮|对阵|比分|赛果|结果|score|scores|schedule|fixture|fixtures|match|matches|game|games|result|results)/i.test(prompt);
+  return /(?:今晚|今夜|今天|今日|明天|明日|昨晚|昨天|昨日|半决赛|准决赛|决赛|哪一天|什么时候|时间|日期|赛程|比赛|几场|几轮|对阵|比分|赛果|结果|score|scores|schedule|fixture|fixtures|match|matches|game|games|result|results|semifinal|semi-final|final)/i.test(prompt);
 }
 
 function recordOf(value: unknown): Record<string, unknown> {
@@ -117,7 +117,7 @@ function buildSportsDirectToolAnswer(ss: unknown, toolName: unknown, event: unkn
   if (
     !toolText
     || !/体育查询结果/.test(toolText)
-    || /directSourceStatus:\s*(?:unavailable|fallback_static_schedule)/i.test(toolText)
+    || /directSourceStatus:\s*unavailable/i.test(toolText)
   ) return "";
   const prompt = String(stateRecord.originalPromptText || stateRecord.effectivePromptText || argsRecord.query || "");
   const answer = buildDirectSportsAnswer(`【体育比分工具资料】\n\n${toolText}`, prompt);

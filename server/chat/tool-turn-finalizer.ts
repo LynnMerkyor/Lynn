@@ -35,6 +35,8 @@ export function buildToolCompletionSummary(ss: any): string {
   const failedTools = Array.isArray(ss?.lastFailedTools) ? ss.lastFailedTools.filter(Boolean).map(String) : [];
   const failCount = ss?.hasFailedTool ? Math.max(1, failedTools.length) : 0;
   if (okCount + failCount === 0) return "";
+  const realtimeFailureFallback = buildRealtimeToolFailureFallbackSummary(ss, failedTools, failCount);
+  if (realtimeFailureFallback) return realtimeFailureFallback;
   const evidenceFallback = buildRealtimeEvidenceFallbackSummary(ss);
   if (evidenceFallback) {
     if (failCount === 0) return evidenceFallback;
@@ -91,6 +93,33 @@ function displayToolName(name: string): string {
     case "stockmarket": return "行情";
     default: return name;
   }
+}
+
+function canonicalToolName(name: unknown): string {
+  return String(name || "").trim().toLowerCase().replace(/-/g, "_");
+}
+
+function buildRealtimeToolFailureFallbackSummary(ss: any, failedTools: string[], failCount: number): string {
+  if (failCount <= 0 || Number(ss?.successfulToolCount || 0) > 0) return "";
+  const names = failedTools.map(canonicalToolName).filter(Boolean);
+  if (!names.length || !names.every((name) => REALTIME_EVIDENCE_TOOL_NAMES.has(name))) return "";
+  const prompt = String(ss?.originalPromptText || ss?.effectivePromptText || "");
+  if (names.some((name) => name === "sports_score" || name === "sportsscore")) {
+    const target = /比分|赛果|结果|score|result/i.test(prompt)
+      ? "赛果或比分"
+      : /半决赛|准决赛|决赛|赛程|几场|对阵|比赛|match|game|schedule|fixture|semifinal|final/i.test(prompt)
+        ? "赛程或对阵"
+        : "体育比分";
+    return [
+      `体育比分数据源本轮暂时不可用，没能确认这次查询的${target}。`,
+      "我不会把泛搜索摘要、旧新闻或猜测当成实时赛程/比分；请稍后重试，或换用官方赛程页复核。",
+    ].join("\n");
+  }
+  const readable = Array.from(new Set(names.map(displayToolName))).slice(0, 3).join("、") || "实时数据";
+  return [
+    `${readable}数据源本轮暂时不可用，没能形成可核验结论。`,
+    "我不会把旧资料或泛搜索摘要冒充实时结果；请稍后重试，或改用官方/专门数据源复核。",
+  ].join("\n");
 }
 
 function compactEvidencePreview(value: unknown): string {

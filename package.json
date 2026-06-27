@@ -81,10 +81,12 @@
     "test:release:smoke": "node scripts/run-release-regression.mjs --mode all --level smoke",
     "test:release:nightly": "node scripts/run-release-regression.mjs --mode all --level nightly",
     "test:release:ui": "node --import tsx scripts/run-electron-ui-smoke.ts",
+    "gate:clean-data": "node scripts/cleanup-gate-data.mjs",
     "gate:startup": "node scripts/gate-startup-recovery.mjs",
     "gate:cli-task": "npm run build:cli && node scripts/gate-cli-task.mjs",
     "gate:cli-50": "npm run build:cli && node scripts/cli-50-dialogue-runner.mjs",
     "gate:cli-100": "npm run build:cli && node scripts/cli-50-dialogue-runner.mjs --limit 100",
+    "gate:cli-200": "npm run build:cli && node scripts/cli-50-dialogue-runner.mjs --limit 100 --repeat 2",
     "release:gate": "node scripts/release-gate.mjs",
     "release:preflight": "npm test && npm run test:agent-regression && npm run test:agent-regression:gates:smoke && npm run test:brain-v2 && npm run typecheck && npm run typecheck:runtime && npm run build:cli && npm run test:cli-file-size && npm run test:cli-cache-usage && npm run test:cli && npm run test:cli-pack && npm run test:cli-install && npm --prefix cli run stress:cli && npm run test:cli-pty && npm run test:cli-terminal-soak && npm run test:cli-fleet && npm run test:voice-router && npm run test:voice-cli && npm run test:voice-gui && npm run test:voice-step && npm run test:gui-feedback && npm run build:server && npm run build:main && npm run build:renderer && npm run test:release:static && npm run test:release:ui && npm run gate:startup && npm run gate:cli-task && npm run gate:gui-task && npm run gate:agent-matrix",
     "build:server": "node scripts/build-server.mjs",
@@ -101,7 +103,9 @@
     "gate:gui-100": "node scripts/gate-gui-50-dialogues.mjs --limit 100",
     "gate:agent-matrix": "node --import tsx scripts/gate-agent-task-matrix.mjs --live-all",
     "test:voice-step": "node --import tsx scripts/gate-voice-step-realtime.mjs",
-    "release:installed-gate": "node scripts/gate-installed-app.mjs"
+    "release:installed-gate": "node scripts/gate-installed-app.mjs",
+    "release:full-gate": "npm run gate:clean-data && npm run release:preflight && npm run test:agent-regression:gates && npm run gate:cli-200 && npm run gate:gui-100",
+    "release:overnight": "npm run release:full-gate && npm run test:agent-regression:nightly && npm run test:agent-regression:gates:nightly && npm run test:release:nightly"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

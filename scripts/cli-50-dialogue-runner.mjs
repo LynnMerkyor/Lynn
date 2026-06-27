@@ -163,6 +163,8 @@ const BAD_ERROR_NEEDLES = [
   "Error:",
 ];
 
+const FRESH_EVIDENCE_CATEGORIES = new Set(["realtime", "search", "mixed", "product", "official"]);
+
 const CURRENT_YEAR = 2026;
 function beijingDate(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -271,6 +273,7 @@ function parseArgs(argv) {
     output: "",
     mode: process.env.LYNN_CLI_50_MODE || "brain",
     dataDir: process.env.LYNN_CLI_50_DATA_DIR || "",
+    repeat: Number(process.env.LYNN_CLI_50_REPEAT || "1"),
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -289,6 +292,8 @@ function parseArgs(argv) {
     else if (arg.startsWith("--mode=")) args.mode = arg.slice("--mode=".length);
     else if (arg === "--data-dir") args.dataDir = next();
     else if (arg.startsWith("--data-dir=")) args.dataDir = arg.slice("--data-dir=".length);
+    else if (arg === "--repeat") args.repeat = Number(next());
+    else if (arg.startsWith("--repeat=")) args.repeat = Number(arg.slice("--repeat=".length));
     else if (arg === "--current-date") next();
     else if (arg.startsWith("--current-date=")) {
       // Parsed before parseArgs via resolveGateCurrentDate().
@@ -305,6 +310,7 @@ Options:
   --output PATH    write JSON report to this path
   --mode MODE      brain (default) or ambient
   --data-dir PATH  CLI data dir; brain mode defaults to a temporary empty dir
+  --repeat N       repeat the selected prompt set, default 1
   --current-date YYYY-MM-DD
                    gate date anchor for relative-date assertions`);
       process.exit(0);
@@ -313,6 +319,7 @@ Options:
   if (!["brain", "ambient"].includes(args.mode)) {
     throw new Error(`Unsupported --mode ${args.mode}; expected brain or ambient`);
   }
+  args.repeat = Math.max(1, Math.floor(Number(args.repeat) || 1));
   if (args.mode === "brain" && !args.dataDir) {
     args.dataDir = mkdtempSync(resolve(os.tmpdir(), "lynn-cli-50-"));
   }
@@ -351,9 +358,14 @@ function parseOnlyIndexes(raw, total) {
 function selectedPromptItems(args) {
   const only = parseOnlyIndexes(args.only, PROMPTS.length);
   const all = PROMPTS.map(([category, prompt], index) => ({ index: index + 1, category, prompt }));
-  if (only) return all.filter((item) => only.has(item.index));
-  const limit = Math.max(0, Math.min(args.limit, PROMPTS.length));
-  return all.slice(0, limit);
+  const selected = only ? all.filter((item) => only.has(item.index)) : all.slice(0, Math.max(0, Math.min(args.limit, PROMPTS.length)));
+  const repeated = [];
+  for (let round = 1; round <= args.repeat; round += 1) {
+    for (const item of selected) {
+      repeated.push({ ...item, runIndex: repeated.length + 1, repeatRound: round });
+    }
+  }
+  return repeated;
 }
 
 function classify(result) {
@@ -372,6 +384,52 @@ function classify(result) {
 
 function hasToolEvidence(result) {
   return Array.isArray(result.toolNames) && result.toolNames.length > 0;
+}
+
+function buildReactReview(result) {
+  const requiresFreshEvidence = FRESH_EVIDENCE_CATEGORIES.has(result.category);
+  const toolEvents = Array.isArray(result.toolEvents) ? result.toolEvents : [];
+  const toolNames = Array.isArray(result.toolNames) ? result.toolNames : [];
+  const providerTrail = Array.isArray(result.providerTrail) ? result.providerTrail : [];
+  const status = result.status || "unknown";
+  let nextAction = "none";
+  if (status === "timeout") {
+    nextAction = "inspect route/provider latency and tool long-tail; do not mask as acceptable";
+  } else if (status === "empty") {
+    nextAction = "fix final-answer synthesis or retry/finalizer path; empty visible answer is user-visible failure";
+  } else if (status === "fallback_or_error_text") {
+    nextAction = "remove leaked fallback/error text at source and ensure a human answer is synthesized";
+  } else if (status === "quality_fail") {
+    nextAction = "repair route/tool/evidence behavior for this prompt; do not add broad keyword exceptions";
+  } else if (status === "process_fail") {
+    nextAction = "inspect process stderr/rawTail and fix CLI runtime crash";
+  }
+  return {
+    task: {
+      category: result.category,
+      prompt: result.prompt,
+      requiresFreshEvidence,
+    },
+    execute: {
+      providerTrail,
+      toolNames,
+      toolEvents,
+      hadTools: toolNames.length > 0,
+    },
+    observe: {
+      status,
+      reason: result.reason || "",
+      textChars: String(result.assistantText || "").trim().length,
+      reasoningChars: result.reasoningChars || 0,
+      errorCount: Array.isArray(result.errors) ? result.errors.length : 0,
+      timedOut: Boolean(result.timedOut),
+      durationMs: result.durationMs || 0,
+    },
+    review: {
+      userExperience: status === "ok" ? "answer-visible-and-contract-held" : "needs-react-fix",
+      nextAction,
+    },
+  };
 }
 
 function claimsFreshToolEvidence(text) {
@@ -548,9 +606,27 @@ function hasDgxSparkPseudoEvidence(text) {
   return /(丽台|信弘|ZENTEK|广州力铭|万集光电|电子发烧友|装机|历史沿革|培训|Omniverse Enterprise|GPU资源分配)/i.test(String(text || ""));
 }
 
+function hasInternalToolLabelVisible(text) {
+  const raw = String(text || "");
+  return /数据来源\/判断依据/.test(raw)
+    || /(?:^|\n)\s*-\s*工具：/.test(raw)
+    || /工具：(?:research_prefetch|stock_market|weather|sports_score|live_news|web_search|web_fetch)/.test(raw);
+}
+
+function hasSportsContextCrosswire(prompt, text) {
+  if (!/世界杯|World\s*Cup|FIFA/i.test(String(prompt || ""))) return false;
+  return /总决赛已打场次|NBA\s*总决赛|马刺|尼克斯/i.test(String(text || ""));
+}
+
 function qualityReason(prompt, text, result = {}) {
   if (/针对“[^”]+”，我能从工具证据中确认/.test(String(text || ""))) {
     return "tool-evidence-template-leaked";
+  }
+  if (hasInternalToolLabelVisible(text)) {
+    return "internal-tool-label-visible";
+  }
+  if (hasSportsContextCrosswire(prompt, text)) {
+    return "sports-answer-crosswired-competition-context";
   }
   if (/file\s+HANDOFF-\d{4}-\d{2}-\d{2}/.test(String(text || ""))) {
     return "conceptual-question-used-local-file-list";
@@ -669,7 +745,7 @@ function cliInvocation(cliPath) {
   return { command: cliPath, args: [] };
 }
 
-function runOne(index, category, prompt) {
+function runOne(runIndex, index, category, prompt, repeatRound) {
   return new Promise((resolveOne) => {
     const startedAt = Date.now();
     const invocation = cliInvocation(args.cli);
@@ -707,6 +783,8 @@ function runOne(index, category, prompt) {
     });
     const result = {
       index,
+      runIndex,
+      repeatRound,
       category,
       prompt,
       exitCode: null,
@@ -768,6 +846,7 @@ function runOne(index, category, prompt) {
       result.durationMs = Date.now() - startedAt;
       if (stderr.trim()) result.errors.push(stderr.trim().slice(-1000));
       Object.assign(result, classify(result));
+      result.reactReview = buildReactReview(result);
       resolveOne(result);
     });
   });
@@ -776,9 +855,9 @@ function runOne(index, category, prompt) {
 const results = [];
 const selected = selectedPromptItems(args);
 for (const item of selected) {
-  const { index, category, prompt } = item;
-  console.log(`[${index}/${PROMPTS.length}] ${category}: ${prompt}`);
-  const result = await runOne(index, category, prompt);
+  const { index, runIndex, repeatRound, category, prompt } = item;
+  console.log(`[${runIndex}/${selected.length}] #${index} r${repeatRound} ${category}: ${prompt}`);
+  const result = await runOne(runIndex, index, category, prompt, repeatRound);
   results.push(result);
   console.log(`  -> ${result.status} ${result.durationMs}ms provider=${result.providerTrail.join(">") || "-"} tools=${result.toolNames.join(",") || "-"} text=${result.assistantText.trim().slice(0, 80).replace(/\s+/g, " ")}`);
   writeFileSync(outPath, JSON.stringify({ outPath, generatedAt: new Date().toISOString(), results }, null, 2));
@@ -796,7 +875,7 @@ const providerCounts = results.reduce((acc, item) => {
 const toolRuns = results.filter((item) => item.toolNames.length).length;
 const stepExecuteRuns = results.filter((item) => item.toolNames.includes("step_execute")).length;
 const avgMs = Math.round(results.reduce((sum, item) => sum + item.durationMs, 0) / Math.max(1, results.length));
-const summary = { outPath, mode: args.mode, dataDir: args.mode === "brain" ? args.dataDir : "", gateCurrentDate: CURRENT_DATE, total: results.length, counts, providerCounts, toolRuns, stepExecuteRuns, avgMs };
+const summary = { outPath, mode: args.mode, dataDir: args.mode === "brain" ? args.dataDir : "", gateCurrentDate: CURRENT_DATE, prompts: selected.length / args.repeat, repeat: args.repeat, total: results.length, counts, providerCounts, toolRuns, stepExecuteRuns, avgMs };
 
 writeFileSync(outPath, JSON.stringify({ ...summary, generatedAt: new Date().toISOString(), results }, null, 2));
 console.log(`SUMMARY ${JSON.stringify(summary)}`);

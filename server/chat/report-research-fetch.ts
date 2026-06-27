@@ -641,7 +641,7 @@ function buildWeatherResearchContext(userPrompt: unknown, opts: ReportResearchFe
 function shouldDeferUnavailableSportsContext(userPrompt: unknown): boolean {
   const prompt = textOf(userPrompt);
   const worldCup = /(?:世界杯|World\s*Cup|FIFA|fifa\.world)/i.test(prompt);
-  const scheduleLike = /(?:今晚|今夜|今天|今日|明天|明日|昨晚|昨天|昨日|赛程|比赛|几场|几轮|对阵|比分|赛果|结果|score|scores|schedule|fixture|fixtures|match|matches|game|games|result|results)/i.test(prompt);
+  const scheduleLike = /(?:今晚|今夜|今天|今日|明天|明日|昨晚|昨天|昨日|半决赛|准决赛|决赛|哪一天|什么时候|时间|日期|赛程|比赛|几场|几轮|对阵|比分|赛果|结果|score|scores|schedule|fixture|fixtures|match|matches|game|games|result|results|semifinal|semi-final|final)/i.test(prompt);
   const prediction = /(?:预测|预估|猜|看好|可能比分|比分预测|predict|prediction|forecast)/i.test(prompt);
   return prediction || (worldCup && scheduleLike);
 }

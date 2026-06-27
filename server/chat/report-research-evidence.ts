@@ -13,8 +13,15 @@ function inferEvidenceMeta(kind: ResearchAnswerKind | undefined, prompt: string)
   if (kind === "weather") {
     return {
       tool: "weather",
-      basis: "天气工具返回的预报快照，按用户问法优先选择今天/明天/后天对应日期。",
+      basis: "天气预报快照，按用户问法优先选择今天/明天/后天对应日期。",
       caveat: "天气预报会滚动变化，出门前建议再看本地天气 App 或雷达。",
+    };
+  }
+  if (kind === "sports") {
+    return {
+      tool: "sports_score",
+      basis: "体育比分数据源返回的赛程/赛果快照，按用户问法筛选赛事和日期。",
+      caveat: "赛程、开球时间和赛果会滚动更新，赛前/赛后建议再核验官方赛程页。",
     };
   }
   if (kind === "news") {
@@ -41,14 +48,14 @@ function inferEvidenceMeta(kind: ResearchAnswerKind | undefined, prompt: string)
   if (/原油|油价|布伦特|WTI|crude|oil/i.test(prompt)) {
     return {
       tool: "stock_market",
-      basis: "原油行情工具返回的最近可用合约报价。",
+      basis: "原油行情数据返回的最近可用合约报价。",
       caveat: "期货/CFD 价格盘中波动明显，交易前请用行情终端核验。",
     };
   }
   if (kind === "market") {
     return {
       tool: "stock_market",
-      basis: "行情工具返回的最近可用股价、指数或板块候选数据。",
+      basis: "行情数据返回的最近可用股价、指数或板块候选数据。",
       caveat: "行情展示不构成投资建议；交易级实时性请用券商或交易所源核验。",
     };
   }
@@ -59,9 +66,39 @@ function inferEvidenceMeta(kind: ResearchAnswerKind | undefined, prompt: string)
   };
 }
 
+function formatEvidenceDataSource(tool: string): string {
+  const normalized = String(tool || "").trim();
+  if (!normalized) return "资料检索";
+  const parts = normalized
+    .split(/\s*(?:\+|\/|,|，)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const mapped = parts.map((part) => {
+    switch (part) {
+      case "weather":
+        return "天气预报";
+      case "sports_score":
+        return "体育比分";
+      case "stock_market":
+        return "行情报价";
+      case "live_news":
+        return "新闻源";
+      case "web_search":
+        return "网页检索";
+      case "web_fetch":
+        return "网页正文";
+      case "research_prefetch":
+        return "预取资料";
+      default:
+        return "资料检索";
+    }
+  });
+  return Array.from(new Set(mapped)).join(" + ") || "资料检索";
+}
+
 export function appendEvidenceBlock(answer: unknown, { kind, context, userPrompt }: EvidenceBlockOptions = {}): string {
   const body = String(answer || "").trim();
-  if (!body || /数据来源\/判断依据/.test(body)) return body;
+  if (!body || /数据来源\/判断依据|来源与核验/.test(body)) return body;
   const prompt = textOf(userPrompt);
   if (/(?:一句话|一句|一行|简短|简洁|直接回答|只回复|只回答)/.test(prompt)) return body;
   const meta = inferEvidenceMeta(kind, prompt);
@@ -69,10 +106,10 @@ export function appendEvidenceBlock(answer: unknown, { kind, context, userPrompt
   return [
     body,
     "",
-    "数据来源/判断依据",
-    `- 工具：${meta.tool}`,
+    "来源与核验",
+    `- 数据源：${formatEvidenceDataSource(meta.tool)}`,
     `- 时间：${formatLocalDateTime()}（本机时间）`,
-    sources.length ? `- 来源：${sources.join("、")}` : "",
+    sources.length ? `- 参考来源：${sources.join("、")}` : "",
     `- 依据：${meta.basis}`,
     `- 注意：${meta.caveat}`,
   ].filter(Boolean).join("\n");

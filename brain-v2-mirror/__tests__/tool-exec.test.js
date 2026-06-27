@@ -376,7 +376,9 @@ describe('tool-exec dispatcher', () => {
     }));
 
     try {
-      const r = await executeServerTool('sports_score', { query: '你能预测今晚世界杯比分么？' });
+      const pending = executeServerTool('sports_score', { query: '你能预测今晚世界杯比分么？' });
+      await vi.advanceTimersByTimeAsync(1000);
+      const r = await pending;
       expect(r).toContain('directSourceStatus: fallback_static_schedule');
       expect(r).toContain('userIntent: score_prediction');
       expect(r).toContain('Spain vs Saudi Arabia');

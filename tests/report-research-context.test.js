@@ -322,7 +322,7 @@ describe("report research context intent", () => {
 
     const answer = buildDirectResearchAnswer("sports", context, "今年 NBA 马刺夺冠了吗，还是尼克斯？");
     expect(answer).toContain("没有匹配到 NBA");
-    expect(answer).toContain("不能确认马刺或尼克斯");
+    expect(answer).toContain("不能从这条直接数据源确认冠军归属");
     expect(answer).toContain("不会用猜测补答案");
   });
 

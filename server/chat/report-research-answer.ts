@@ -689,6 +689,19 @@ function buildDirectNewsAnswer(context: unknown, userPrompt: string = ""): strin
     "说明：我按检索窗口区分“今日”和“近7日”，不把旧结果冒充今日新闻；正式引用前建议继续打开原站核验全文。",
   ].join("\n");
 }
+function buildSportsNoMatchExplanation(prompt: string, askWinner: boolean): string {
+  if (askWinner) {
+    return "所以我不能从这条直接数据源确认冠军归属，也不会用猜测补答案。";
+  }
+  if (/(?:比分|赛果|结果|已经出|上一场|昨晚|昨天|昨日|score|scores|result|results)/i.test(prompt)) {
+    return "所以我不能从这条直接数据源确认这组比赛的最新赛果或比分。";
+  }
+  if (/(?:赛程|对阵|今晚|今夜|今天|今日|明天|明日|几场|几轮|schedule|fixture|fixtures|match|matches|game|games)/i.test(prompt)) {
+    return "所以我不能从这条直接数据源确认这组比赛的赛程或对阵。";
+  }
+  return "所以我不能从这条直接数据源确认相关比赛记录，也不会用猜测补答案。";
+}
+
 function buildDirectSportsAnswer(context: unknown, userPrompt: string = ""): string {
   const text = String(context || "");
   if (!/体育查询结果/.test(text)) return "";
@@ -696,7 +709,7 @@ function buildDirectSportsAnswer(context: unknown, userPrompt: string = ""): str
   const wantsPrediction = /预测|预估|猜|看好|可能比分|比分预测|predict|prediction|forecast/i.test(prompt);
   const shouldDeferSourceFailure = wantsPrediction
     || (/(?:世界杯|World\s*Cup|FIFA|fifa\.world)/i.test(prompt)
-      && /(?:今晚|今夜|今天|今日|明天|明日|昨晚|昨天|昨日|赛程|比赛|几场|几轮|对阵|比分|赛果|结果|score|scores|schedule|fixture|fixtures|match|matches|game|games|result|results)/i.test(prompt));
+      && /(?:今晚|今夜|今天|今日|明天|明日|昨晚|昨天|昨日|半决赛|准决赛|决赛|哪一天|什么时候|时间|日期|赛程|比赛|几场|几轮|对阵|比分|赛果|结果|score|scores|schedule|fixture|fixtures|match|matches|game|games|result|results|semifinal|semi-final|final)/i.test(prompt));
   if (/directSourceStatus:\s*unavailable/i.test(text)) {
     if (shouldDeferSourceFailure) return "";
     const error = text.match(/^error:\s*([^\n]+)/mi)?.[1]?.trim() || "";
@@ -721,9 +734,7 @@ function buildDirectSportsAnswer(context: unknown, userPrompt: string = ""): str
     }
     return [
       `本轮 ESPN scoreboard 没有匹配到 ${league}${dateRange ? `（${dateRange}）` : ""}的相关比赛记录。`,
-      askWinner
-        ? "所以我不能确认马刺或尼克斯今年是否夺冠，也不会用猜测补答案。"
-        : "所以我不能从这条直接数据源确认总决赛已打场次或总比分。",
+      buildSportsNoMatchExplanation(prompt, askWinner),
       source ? `来源：${source}` : "",
     ].filter(Boolean).join("\n");
   }

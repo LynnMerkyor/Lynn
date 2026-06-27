@@ -105,6 +105,204 @@ const WORLD_CUP_2026_STATIC_ROWS: SportsRow[] = [
     localHour: 9,
     line: "2026/06/22 09:00 New Zealand vs Egypt (Scheduled)",
   },
+  {
+    completed: true,
+    localYmd: "2026-06-23",
+    localHour: 8,
+    line: "2026/06/23 08:00 Group stage: Norway 3-2 Senegal (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-23",
+    localHour: 11,
+    line: "2026/06/23 11:00 Group stage: Jordan 1-2 Algeria (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-24",
+    localHour: 1,
+    line: "2026/06/24 01:00 Group stage: Portugal 5-0 Uzbekistan (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-24",
+    localHour: 4,
+    line: "2026/06/24 04:00 Group stage: England 0-0 Ghana (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-24",
+    localHour: 7,
+    line: "2026/06/24 07:00 Group stage: Panama 0-1 Croatia (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-24",
+    localHour: 10,
+    line: "2026/06/24 10:00 Group stage: Colombia 1-0 Congo DR (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-25",
+    localHour: 3,
+    line: "2026/06/25 03:00 Group stage: Bosnia-Herzegovina 3-1 Qatar (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-25",
+    localHour: 3,
+    line: "2026/06/25 03:00 Group stage: Switzerland 2-1 Canada (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-25",
+    localHour: 6,
+    line: "2026/06/25 06:00 Group stage: Morocco 4-2 Haiti (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-25",
+    localHour: 6,
+    line: "2026/06/25 06:00 Group stage: Scotland 0-3 Brazil (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-25",
+    localHour: 9,
+    line: "2026/06/25 09:00 Group stage: Czechia 0-3 Mexico (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-25",
+    localHour: 9,
+    line: "2026/06/25 09:00 Group stage: South Africa 1-0 South Korea (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-26",
+    localHour: 4,
+    line: "2026/06/26 04:00 Group stage: Curaçao 0-2 Ivory Coast (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-26",
+    localHour: 4,
+    line: "2026/06/26 04:00 Group stage: Ecuador 2-1 Germany (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-26",
+    localHour: 7,
+    line: "2026/06/26 07:00 Group stage: Japan 1-1 Sweden (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-26",
+    localHour: 7,
+    line: "2026/06/26 07:00 Group stage: Tunisia 1-3 Netherlands (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-26",
+    localHour: 10,
+    line: "2026/06/26 10:00 Group stage: Paraguay 0-0 Australia (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-26",
+    localHour: 10,
+    line: "2026/06/26 10:00 Group stage: Türkiye 3-2 United States (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-27",
+    localHour: 3,
+    line: "2026/06/27 03:00 Group stage: Norway 1-4 France (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-27",
+    localHour: 3,
+    line: "2026/06/27 03:00 Group stage: Senegal 5-0 Iraq (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-27",
+    localHour: 8,
+    line: "2026/06/27 08:00 Group stage: Cape Verde 0-0 Saudi Arabia (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-27",
+    localHour: 8,
+    line: "2026/06/27 08:00 Group stage: Uruguay 0-1 Spain (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-27",
+    localHour: 11,
+    line: "2026/06/27 11:00 Group stage: Egypt 1-1 Iran (FT)",
+  },
+  {
+    completed: true,
+    localYmd: "2026-06-27",
+    localHour: 11,
+    line: "2026/06/27 11:00 Group stage: New Zealand 1-5 Belgium (FT)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-06-28",
+    localHour: 5,
+    line: "2026/06/28 05:00 Group stage: Croatia vs Ghana (Scheduled)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-06-28",
+    localHour: 5,
+    line: "2026/06/28 05:00 Group stage: Panama vs England (Scheduled)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-06-28",
+    localHour: 7,
+    line: "2026/06/28 07:30 Group stage: Colombia vs Portugal (Scheduled)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-06-28",
+    localHour: 7,
+    line: "2026/06/28 07:30 Group stage: Congo DR vs Uzbekistan (Scheduled)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-06-28",
+    localHour: 10,
+    line: "2026/06/28 10:00 Group stage: Algeria vs Austria (Scheduled)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-06-28",
+    localHour: 10,
+    line: "2026/06/28 10:00 Group stage: Jordan vs Argentina (Scheduled)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-06-29",
+    localHour: 3,
+    line: "2026/06/29 03:00 Group stage: South Africa vs Canada (Scheduled)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-07-15",
+    localHour: 3,
+    line: "2026/07/15 03:00 Semifinal: Quarterfinal 1 Winner vs Quarterfinal 2 Winner (Scheduled)",
+  },
+  {
+    completed: false,
+    localYmd: "2026-07-16",
+    localHour: 3,
+    line: "2026/07/16 03:00 Semifinal: Quarterfinal 3 Winner vs Quarterfinal 4 Winner (Scheduled)",
+  },
 ];
 
 function compactLine(value: unknown): string {
@@ -465,7 +663,7 @@ function buildStaticWorldCupScheduleFallback(query: string, league: SportsLeague
     range,
     rows,
     sourceStatus: "fallback_static_schedule",
-    note: `ESPN scoreboard 本轮网络失败（${errorText}），已使用 Lynn 内置 2026 世界杯赛程 fallback；比分预测不是赛果。`,
+    note: `ESPN scoreboard 本轮网络失败（${errorText}），已使用 Lynn 内置 2026 世界杯赛程/赛果 fallback；赛前时间和赛后比分仍建议回到官方赛程页复核。`,
   });
 }
 
@@ -503,9 +701,7 @@ export async function fetchSportsScoreboardEvidence(query: unknown): Promise<Spo
   const range = resolveSportsDateRange(text, league);
   const source = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard?limit=950&dates=${range.start}-${range.end}`;
   try {
-    const data = await fetchEspnScoreboardJson(source, {
-      shouldAbortRetry: (error) => Boolean(buildStaticWorldCupScheduleFallback(text, league, range, error)),
-    });
+    const data = await fetchEspnScoreboardJson(source);
     const events = looseRecordArray(data.events);
     const rows = filterSportsRows(events.map(formatEspnEvent).filter(Boolean) as SportsRow[], text, range);
     return buildSportsScoreboardResult({ query: text, league, source, range, rows });

@@ -81,6 +81,21 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
     expect(out).not.toContain("extra");
   });
 
+  it("turns realtime sports failures into user-facing data-source boundaries", () => {
+    const out = buildToolCompletionSummary({
+      originalPromptText: "今晚世界杯有几场比赛",
+      successfulToolCount: 0,
+      hasFailedTool: true,
+      lastFailedTools: ["sports_score"],
+    });
+
+    expect(out).toContain("体育比分数据源本轮暂时不可用");
+    expect(out).toContain("赛程或对阵");
+    expect(out).toContain("不会把泛搜索摘要");
+    expect(out).not.toContain("工具执行包含");
+    expect(out).not.toContain("请查看上方工具卡片");
+  });
+
   it("keeps successful realtime evidence visible when a later duplicate tool fails", () => {
     const out = buildToolCompletionSummary({
       successfulToolCount: 1,

@@ -26,8 +26,17 @@ npm run test:release:ui
 # 一键发版前检查：单测 + 类型 + CLI/Fleet + StepFun efficiency + 构建 + release static gate + UI smoke
 npm run release:preflight
 
+# 正式发版全量门禁：preflight + agent regression release bank + CLI200 + GUI100
+npm run release:full-gate
+
+# 夜跑优化门禁：full-gate + nightly agent/runtime 回归，用于逐条修正用户体验问题
+npm run release:overnight
+
 # 真实安装包门禁：候选包装入 /Applications 后运行；覆盖 GUI server、CLI、Settings、主聊天 UI、并发 Hanako 复查
 npm run release:installed-gate
+
+# 清理本机长跑测试残留：只清测试 userData、临时 homes 和 50/100 报告
+npm run gate:clean-data
 
 # 发布远端同步检查：GitHub + Gitee 的 main 和 v<version> tag 必须都更新
 npm run release:verify-remotes
@@ -56,6 +65,8 @@ LYNN_HOME=~/.lynn-dev npm run test:release
 
 - `package.json` 必须有 build/test/release manifest 入口。
 - `package.json` 必须有 `release:verify-remotes`，用于发布后校验 GitHub/Gitee 双端同步。
+- `release:full-gate` 必须包含 `release:preflight`、`test:agent-regression:gates`、`gate:cli-200`、`gate:gui-100` 和 `gate:clean-data`。
+- `release:overnight` 必须包含 `release:full-gate`、agent regression nightly 和 release nightly。
 - `.github/update-manifest.json` 二进制资产不能指 GitHub `.dmg/.exe`，必须走腾讯镜像。
 - `site/app.js`、`site/download.html`、`site/index.html` 不能把 `.dmg/.exe` 链到 GitHub。
 - 核心 UI 文件必须存在：AssistantMessage、ThinkingBlock、ToolGroupBlock、WritingDiffViewer、TaskModePicker、PressToTalkButton、streaming store。
@@ -127,7 +138,7 @@ LYNN_HOME=~/.lynn-dev npm run test:release
 
 ## 与 V8/V9 的关系
 
-V8/V9 benchmark 主要衡量模型能力和路由质量；release regression 主要衡量用户会不会遇到坏体验。发版前顺序应是：
+V8/V9 benchmark 主要衡量模型能力和路由质量；release regression 主要衡量用户会不会遇到坏体验。hotfix 打包前至少跑到 `release:preflight`；正式版本发布必须跑到 `release:full-gate`。大版本、模型链路改动、GUI/CLI 行为改动或用户体验疑难问题收敛，必须跑 `release:overnight`。发版前顺序应是：
 
 1. `npm test`
 2. `npm run typecheck`
@@ -137,11 +148,21 @@ V8/V9 benchmark 主要衡量模型能力和路由质量；release regression 主
 6. `npm run release:cli-efficiency`（CLI 发版必跑；GUI-only hotpatch 可记录原因后跳过）
 7. `npm run test:release:static`
 8. `npm run test:release:ui`
-9. 平台打包、公证、manifest、镜像站更新（`dist` / `dist:win` 会先跑 `release:preflight`）
-10. GitHub Release + Gitee Release/仓库同步，然后跑 `npm run release:verify-remotes`
-11. 真实安装包 smoke + `npm run release:installed-gate`
-12. 启动打包后的 Lynn 服务后跑 `npm run test:release:live`
-13. 人工 UI Gate(按钮矩阵 + 截图/日志路径)
+9. 正式发版长跑：`npm run release:full-gate`（包含 CLI200 + GUI100）
+10. 夜跑优化：`npm run release:overnight`（大版本/模型链路/体验疑难必跑）
+11. 平台打包、公证、manifest、镜像站更新（`dist` / `dist:win` 会先跑 `release:preflight`）
+12. GitHub Release + Gitee Release/仓库同步，然后跑 `npm run release:verify-remotes`
+13. 真实安装包 smoke + `npm run release:installed-gate`
+14. 启动打包后的 Lynn 服务后跑 `npm run test:release:live`
+15. 人工 UI Gate(按钮矩阵 + 截图/日志路径)
+
+CLI200/GUI100 的目标不是“输出里没出现几个坏词”就算过。关键词只用于抓泄漏、空答模板、伪工具格式和历史事故指纹；每条失败必须按 ReAct 方式收敛：
+
+1. **拆分任务**：标明用户真实意图、是否需要实时证据、是否需要工具。
+2. **执行路径**：确认 CLI/GUI 是否走同一类路由、是否触发工具、是否有 provider/usage/事件。
+3. **观察证据**：看报告里的 text、toolEvents、providerTrail、rawTail，而不是只看失败关键词。
+4. **复核体验**：判断答案是否满足普通用户问题、是否有时间/来源/不确定性说明。
+5. **修复闭环**：修路由、工具、事件或文案；不要用新增大量关键词把坏输出“分类掉”。
 
 不要用裸 `/v1/chat/completions` 结果替代 `test:release`。裸模型端点测不到 Lynn 的 WebSocket、事件解析、UI 渲染、工具卡片和跨 prompt fence。
 

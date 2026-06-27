@@ -42,7 +42,16 @@ npm run release:preflight
 # = 单测(root+brain) + typecheck×2 + CLI 全家桶 + 构建×3 + static gate + UI smoke
 #   + gate:startup(GUI 冷启动三矩阵:fresh / corrupt-db / .hanako 哨兵 —— issue #72 回归网)
 #   + gate:cli-task(CLI 真任务执行:可见答案 / usage 单行 / fast 档 —— 思考不说话回归网)
+
+npm run release:full-gate
+# = release:preflight + agent-regression release bank + CLI200 + GUI100
+
+npm run release:overnight
+# = release:full-gate + agent-regression nightly + release nightly
 ```
+
+hotfix 打包前至少跑 `release:preflight`。正式版本发布必须跑 `release:full-gate`。大版本、模型链路改动、
+GUI/CLI 行为改动、或用户体验疑难问题收敛,必须跑 `release:overnight`。
 
 分步跑/跳过用 `npm run release:gate -- --help` 看开关。阻断规则(blocker/critical/extended)见
 [RELEASE-REGRESSION-GATES.md](../RELEASE-REGRESSION-GATES.md)。
@@ -50,6 +59,8 @@ npm run release:preflight
 - ⚠ `LYNN_UI_SMOKE=1` 的 UI smoke **不覆盖 server 启动链**(它 createMainWindow 后直接 return)——
   #72 当年就是这么漏的。`gate:startup` 跑的才是真启动链,两者都要绿。
 - `gate:cli-task` 需要 Brain 在线;Brain 离线 = 门禁失败(路由不可用不许放行)。
+- 长跑前可用 `npm run gate:clean-data` 清掉本机 Mac 测试残留；它只清 `Lynn-gui-live-*`、`Lynn-ui-smoke-*`、`/tmp/lynn-cli-50-*`、`/tmp/lynn-gui-gate-*` 和 50/100 报告。
+- CLI200/GUI100 失败不能靠继续堆关键词兜底。每条失败都按 ReAct 闭环处理:拆分用户意图 → 执行路径 → 观察 tool/provider/text 证据 → 复核普通用户体验 → 修路由/工具/事件/文案。
 
 ### 2.1 真实安装包门禁(覆盖线上前必须过)
 

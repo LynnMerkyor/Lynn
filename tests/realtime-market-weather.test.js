@@ -588,10 +588,12 @@ describe("realtime market/weather tools", () => {
         ],
       })));
 
-      const result = await createSportsScoreTool().execute("test", {
+      const pending = createSportsScoreTool().execute("test", {
         query: "今晚世界杯有几场比赛",
         maxResults: 5,
       });
+      await vi.advanceTimersByTimeAsync(1_000);
+      const result = await pending;
       const text = result.content[0].text;
 
       expect(searchMock.runSearchQuery).not.toHaveBeenCalled();
@@ -841,7 +843,7 @@ describe("realtime market/weather tools", () => {
       }));
 
       const pending = createSportsScoreTool().execute("test", {
-        query: "2026世界杯 6月25日 赛程",
+        query: "2026世界杯 6月30日 赛程",
         maxResults: 5,
       });
       await vi.advanceTimersByTimeAsync(1_000);
@@ -935,6 +937,43 @@ describe("realtime market/weather tools", () => {
     expect(text).toContain("2026/07/15");
     expect(text).toContain("2026/07/16");
     expect(text).toContain("Quarterfinal 1 Winner vs Quarterfinal 2 Winner");
+  });
+
+  it("uses the built-in World Cup fixture fallback when semifinal scoreboard fetch fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("fetch failed");
+    }));
+
+    const result = await createSportsScoreTool().execute("test", {
+      query: "世界杯半决赛在哪一天？",
+      maxResults: 5,
+    });
+    const text = result.content[0].text;
+
+    expect(searchMock.runSearchQuery).not.toHaveBeenCalled();
+    expect(result.details.provider).toBe("espn_scoreboard");
+    expect(text).toContain("directSourceStatus: fallback_static_schedule");
+    expect(text).toContain("2026/07/15");
+    expect(text).toContain("2026/07/16");
+    expect(text).toContain("Quarterfinal 1 Winner vs Quarterfinal 2 Winner");
+    expect(text).not.toContain("directSourceStatus: unavailable");
+  });
+
+  it("uses the built-in World Cup fixture fallback when tonight scoreboard fetch fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("fetch failed");
+    }));
+
+    const result = await createSportsScoreTool().execute("test", {
+      query: "今晚世界杯有几场比赛",
+      maxResults: 5,
+    });
+    const text = result.content[0].text;
+
+    expect(result.details.provider).toBe("espn_scoreboard");
+    expect(text).toContain("directSourceStatus: fallback_static_schedule");
+    expect(text).toContain("2026/06/29 03:00 Group stage: South Africa vs Canada");
+    expect(text).not.toContain("directSourceStatus: unavailable");
   });
 
   it("does not inject weak HTML fallback results as sports score evidence", async () => {

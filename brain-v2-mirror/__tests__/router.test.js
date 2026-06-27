@@ -1266,7 +1266,7 @@ describe('Router', () => {
     mockState.adapterFn = async function* ({ provider, messages, tools }) {
       mockState.adapterCalls.push(provider.id);
       captured.push({ messages, tools });
-      yield { type: 'content', delta: '根据 sports_score 证据，已结束比赛包括 Netherlands 5-1 Sweden。' };
+      yield { type: 'content', delta: '根据 sports_score 证据，已结束比赛包括 Norway 3-2 Senegal。' };
       yield { type: 'finish', reason: 'stop' };
     };
 
@@ -1283,7 +1283,7 @@ describe('Router', () => {
     const promptText = captured[0]?.messages.map((message) => String(message.content || '')).join('\n') || '';
     expect(promptText).toContain('sports_score');
     expect(promptText).toContain('provider: espn_scoreboard');
-    expect(promptText).toContain('Netherlands 5-1 Sweden');
+    expect(promptText).toContain('Norway 3-2 Senegal');
   });
 
   it('prefetches stock_market evidence for direct index quote prompts before provider synthesis', async () => {

@@ -157,6 +157,7 @@ const BAD_ERROR_NEEDLES = [
   "Error:",
 ];
 
+const FRESH_EVIDENCE_CATEGORIES = new Set(["realtime", "search", "mixed", "product", "official"]);
 const CURRENT_YEAR = 2026;
 const TURN_SETTLE_MS = Math.max(0, Number(process.env.LYNN_GUI_GATE_TURN_SETTLE_MS || 2500));
 const EMPTY_TIMEOUT_RETRY_MS = Math.max(0, Number(process.env.LYNN_GUI_GATE_EMPTY_TIMEOUT_RETRY_MS || 1500));
@@ -552,6 +553,52 @@ function hasToolEvidence(result) {
   return Array.isArray(result.tools) && result.tools.length > 0;
 }
 
+function buildReactReview(result) {
+  const requiresFreshEvidence = FRESH_EVIDENCE_CATEGORIES.has(result.category);
+  const tools = Array.isArray(result.tools) ? result.tools : [];
+  const toolEvents = Array.isArray(result.toolEvents) ? result.toolEvents : [];
+  const providerTrail = Array.isArray(result.providerTrail) ? result.providerTrail : [];
+  const status = result.status || "unknown";
+  let nextAction = "none";
+  if (status === "timeout") {
+    nextAction = "inspect websocket/server/provider latency and tool long-tail; do not mask as acceptable";
+  } else if (status === "empty") {
+    nextAction = "fix GUI stream/finalizer path so the user sees a final answer";
+  } else if (status === "fallback_or_error_text") {
+    nextAction = "remove leaked fallback/error text at source and synthesize a human answer";
+  } else if (status === "quality_fail") {
+    nextAction = "repair route/tool/evidence behavior for this prompt; do not add broad keyword exceptions";
+  } else if (status === "error") {
+    nextAction = "inspect websocket/server errors and fix the runtime path";
+  }
+  return {
+    task: {
+      category: result.category,
+      prompt: result.prompt,
+      requiresFreshEvidence,
+    },
+    execute: {
+      providerTrail,
+      toolNames: tools.map((tool) => tool.name).filter(Boolean),
+      toolEvents,
+      hadTools: tools.length > 0,
+    },
+    observe: {
+      status,
+      reason: result.reason || "",
+      textChars: String(result.text || "").trim().length,
+      thinkingChars: result.thinkingChars || 0,
+      errorCount: Array.isArray(result.errors) ? result.errors.length : 0,
+      timedOut: Boolean(result.timedOut),
+      elapsedMs: result.elapsedMs || 0,
+    },
+    review: {
+      userExperience: status === "ok" ? "answer-visible-and-contract-held" : "needs-react-fix",
+      nextAction,
+    },
+  };
+}
+
 function claimsFreshToolEvidence(text) {
   return /根据(?:最新|真实)?(?:查询结果|搜索结果|工具结果|检索结果|返回结果|工具返回)|实时(?:天气|行情|比分|赛程|数据)|查到|搜索结果|工具结果/.test(text);
 }
@@ -719,9 +766,27 @@ function hasDgxSparkPseudoEvidence(text) {
   return /(丽台|信弘|ZENTEK|广州力铭|万集光电|电子发烧友|装机|历史沿革|培训|Omniverse Enterprise|GPU资源分配)/i.test(String(text || ""));
 }
 
+function hasInternalToolLabelVisible(text) {
+  const raw = String(text || "");
+  return /数据来源\/判断依据/.test(raw)
+    || /(?:^|\n)\s*-\s*工具：/.test(raw)
+    || /工具：(?:research_prefetch|stock_market|weather|sports_score|live_news|web_search|web_fetch)/.test(raw);
+}
+
+function hasSportsContextCrosswire(prompt, text) {
+  if (!/世界杯|World\s*Cup|FIFA/i.test(String(prompt || ""))) return false;
+  return /总决赛已打场次|NBA\s*总决赛|马刺|尼克斯/i.test(String(text || ""));
+}
+
 function qualityReason(prompt, text, result = {}) {
   if (/针对“[^”]+”，我能从工具证据中确认/.test(String(text || ""))) {
     return "tool-evidence-template-leaked";
+  }
+  if (hasInternalToolLabelVisible(text)) {
+    return "internal-tool-label-visible";
+  }
+  if (hasSportsContextCrosswire(prompt, text)) {
+    return "sports-answer-crosswired-competition-context";
   }
   if (/file\s+HANDOFF-\d{4}-\d{2}-\d{2}/.test(String(text || ""))) {
     return "conceptual-question-used-local-file-list";
@@ -980,6 +1045,7 @@ async function runPrompt(config, ws, index, category, prompt, timeoutMs) {
     }
   });
   Object.assign(active, classify(active));
+  active.reactReview = buildReactReview(active);
   return active;
 }
 

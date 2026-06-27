@@ -141,7 +141,13 @@ async function runStaticChecks({ level }) {
     "test:packaged-cli",
     "test:release",
     "test:release:ui",
+    "gate:clean-data",
+    "gate:cli-100",
+    "gate:cli-200",
+    "gate:gui-100",
     "release:preflight",
+    "release:full-gate",
+    "release:overnight",
     "release:cli-efficiency",
     "release:finalize-mac",
     "release:manifest",
@@ -212,6 +218,29 @@ async function runStaticChecks({ level }) {
       && gateCliTaskText.includes("输入超过 10 个汉字")),
     "release uses live >10-Chinese-character CLI tasks, including default-route narrative, instead of IME-only simulation",
     `${pkg.scripts?.["gate:cli-task"] || ""}\n${gateCliTaskText.slice(0, 500)}`,
+  ));
+  checks.push(makeCheck(
+    "static-full-release-gate-includes-long-runs",
+    "blocker",
+    Boolean(pkg.scripts?.["release:full-gate"]
+      && pkg.scripts["release:full-gate"].includes("gate:clean-data")
+      && pkg.scripts["release:full-gate"].includes("release:preflight")
+      && pkg.scripts["release:full-gate"].includes("test:agent-regression:gates")
+      && pkg.scripts["release:full-gate"].includes("gate:cli-200")
+      && pkg.scripts["release:full-gate"].includes("gate:gui-100")),
+    "formal release full gate runs clean-data, preflight, agent regression release gates, CLI200, and GUI100",
+    String(pkg.scripts?.["release:full-gate"] || ""),
+  ));
+  checks.push(makeCheck(
+    "static-overnight-release-gate-includes-nightly",
+    "critical",
+    Boolean(pkg.scripts?.["release:overnight"]
+      && pkg.scripts["release:overnight"].includes("release:full-gate")
+      && pkg.scripts["release:overnight"].includes("test:agent-regression:nightly")
+      && pkg.scripts["release:overnight"].includes("test:agent-regression:gates:nightly")
+      && pkg.scripts["release:overnight"].includes("test:release:nightly")),
+    "overnight gate extends full gate with nightly agent/runtime regressions",
+    String(pkg.scripts?.["release:overnight"] || ""),
   ));
   checks.push(makeCheck(
     "static-cli-efficiency-release-gate",
