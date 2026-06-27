@@ -108,6 +108,27 @@ async function signalInstalledAppPids(signal) {
   return pids;
 }
 
+async function stopInstalledAppProcesses(reason, { initialWaitMs = 0, throwOnFailure = true } = {}) {
+  let pids = initialWaitMs > 0
+    ? await waitForInstalledAppExit(initialWaitMs)
+    : await listInstalledAppPids();
+  if (pids.length === 0) return;
+
+  console.warn(`[installed-gate] Lynn still running during ${reason}; terminating pids=${pids.join(",")}`);
+  await signalInstalledAppPids("SIGTERM");
+  pids = await waitForInstalledAppExit(5000);
+  if (pids.length === 0) return;
+
+  console.warn(`[installed-gate] Lynn still running after SIGTERM during ${reason}; killing pids=${pids.join(",")}`);
+  await signalInstalledAppPids("SIGKILL");
+  pids = await waitForInstalledAppExit(3000);
+  if (!pids.length) return;
+
+  const message = `[installed-gate] failed to stop installed Lynn pids=${pids.join(",")}`;
+  if (throwOnFailure) throw new Error(message);
+  console.warn(message);
+}
+
 async function quitExistingLynn() {
   await new Promise((resolve) => {
     const child = spawn("osascript", ["-e", 'tell application "Lynn" to quit'], {
@@ -116,20 +137,7 @@ async function quitExistingLynn() {
     child.on("exit", resolve);
     child.on("error", resolve);
   });
-  let pids = await waitForInstalledAppExit(4000);
-  if (pids.length === 0) return;
-
-  console.warn(`[installed-gate] Lynn still running after quit request; terminating pids=${pids.join(",")}`);
-  await signalInstalledAppPids("SIGTERM");
-  pids = await waitForInstalledAppExit(5000);
-  if (pids.length === 0) return;
-
-  console.warn(`[installed-gate] Lynn still running after SIGTERM; killing pids=${pids.join(",")}`);
-  await signalInstalledAppPids("SIGKILL");
-  pids = await waitForInstalledAppExit(3000);
-  if (pids.length) {
-    throw new Error(`[installed-gate] failed to stop installed Lynn pids=${pids.join(",")}`);
-  }
+  await stopInstalledAppProcesses("quit request", { initialWaitMs: 4000, throwOnFailure: true });
 }
 
 async function exists(filePath) {
@@ -689,6 +697,7 @@ async function main() {
     if (directLaunch?.child) {
       await terminate(directLaunch.child);
     }
+    await stopInstalledAppProcesses("final cleanup", { initialWaitMs: 1000, throwOnFailure: false });
     if (liveFixture?.tmp && process.env.LYNN_INSTALLED_GATE_KEEP_TMP === "1") {
       console.log(`[installed-gate] keeping fixture home=${liveFixture.lynnHome}`);
     } else if (liveFixture?.tmp) {
