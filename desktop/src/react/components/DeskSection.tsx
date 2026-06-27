@@ -1,5 +1,5 @@
 /**
- * DeskSection — 右侧工作地图 / 巡检侧栏
+ * DeskSection — 右侧会话进展 / 文件侧栏
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -82,9 +82,9 @@ export function DeskSection() {
       <DeskDropZone onShowMenu={handleShowMenu}>
         <div className={styles.workspaceRailHeader}>
           <div className={styles.workspaceRailTitleBlock}>
-            <div className={styles.workspaceRailTitle}>{tt('desk.workspaceMap', '工作地图')}</div>
+            <div className={styles.workspaceRailTitle}>{tt('desk.workspaceMap', '会话进展')}</div>
             <div className={styles.workspaceRailSubline}>
-              {patrolStatus?.text || tt('desk.patrolIdle', '巡检待命')}
+              {patrolStatus?.text || tt('desk.patrolIdle', '同步待命')}
             </div>
           </div>
           <button
@@ -93,7 +93,7 @@ export function DeskSection() {
             onClick={() => { void handleRunPatrol(); }}
             disabled={patrolStatus?.state === 'running' || patrolBusy}
           >
-            {patrolStatus?.state === 'running' || patrolBusy ? tt('desk.patrolRunningShort', '巡检中') : tt('desk.runPatrol', '巡检')}
+            {patrolStatus?.state === 'running' || patrolBusy ? tt('desk.patrolRunningShort', '同步中') : tt('desk.runPatrol', '同步')}
           </button>
         </div>
         <div className={styles.workspaceRailTabs}>
@@ -102,14 +102,14 @@ export function DeskSection() {
             className={`${styles.workspaceRailTab}${deskView === 'map' ? ` ${styles.workspaceRailTabActive}` : ''}`}
             onClick={() => setDeskView('map')}
           >
-            {tt('desk.mapTab', '地图')}
+            {tt('desk.mapTab', '进展')}
           </button>
           <button
             type="button"
             className={`${styles.workspaceRailTab}${deskView === 'materials' ? ` ${styles.workspaceRailTabActive}` : ''}`}
             onClick={() => setDeskView('materials')}
           >
-            {tt('desk.materialsTab', '资料')}
+            {tt('desk.materialsTab', '文件')}
           </button>
         </div>
         {deskView === 'map' ? (
@@ -117,7 +117,7 @@ export function DeskSection() {
         ) : (
           <>
             <div className={styles.header}>
-              <div className={`jian-section-title ${styles.sectionTitle}`}>{tt('desk.materialsTab', '资料')}</div>
+              <div className={`jian-section-title ${styles.sectionTitle}`}>{tt('desk.materialsTab', '文件')}</div>
             </div>
             <DeskWorkspaceButton />
             {showFileSurface && (

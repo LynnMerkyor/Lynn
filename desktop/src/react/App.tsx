@@ -346,7 +346,7 @@ function App() {
         <button
           className={`tb-toggle tb-toggle-right${jianOpen ? ' active' : ''}`}
           id="tbToggleRight"
-          title="工作地图"
+          title="会话进展"
           onClick={() => { hideFloat(); toggleJianSidebar(); }}
           onMouseEnter={(e) => showFloat('right', e.currentTarget)}
           onMouseLeave={scheduleFloatHide}

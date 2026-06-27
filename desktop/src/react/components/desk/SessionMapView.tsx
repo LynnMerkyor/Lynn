@@ -59,6 +59,15 @@ function hasBranchRelation(session: Session, all: Session[]): boolean {
   return all.some((other) => other.topology?.parentSessionPath === session.path);
 }
 
+function isHistoryCandidate(session: Session): boolean {
+  if (session.topology?.taskStatus === 'archived') return false;
+  if (hasDigest(session)) return true;
+  if ((session.insights || []).length > 0) return true;
+  if (session.topology?.parentSessionPath || session.topology?.branchLabel || session.topology?.summary) return true;
+  if ((session.messageCount || 0) > 0) return true;
+  return Boolean(session.title?.trim() || session.firstMessage?.trim());
+}
+
 // 工作节点 = 当前 / 有 digest / 风险 / 有未读洞察 / 有分支关系 / 有明确 taskStatus;archived 与纯噪音折叠。
 function isWorkNode(session: Session, all: Session[], currentPath: string | null): boolean {
   if (session.path === currentPath) return true;
@@ -78,10 +87,10 @@ function deriveState(session: Session): WorkState {
 }
 
 const STATE_LABEL: Record<WorkState, string> = {
-  active: '推进中',
-  blocked: '阻塞',
-  risk: '风险',
-  done: '已收口',
+  active: '进行中',
+  blocked: '需要处理',
+  risk: '需要处理',
+  done: '已完成',
 };
 
 const STATE_DOT: Record<WorkState, string> = {
@@ -127,7 +136,7 @@ export function SessionMapView() {
     if (currentSessionPath) setSelectedPath(currentSessionPath);
   }, [currentSessionPath]);
 
-  const { groups, folded, counts, currentSession } = useMemo(() => {
+  const { attentionItems, recentItems, folded, counts, currentSession } = useMemo(() => {
     const current = sessions.find((sess) => sess.path === currentSessionPath) || null;
     const work = sessions.filter((sess) => isWorkNode(sess, sessions, currentSessionPath));
     const boardWork = work.filter((sess) => sess.path !== currentSessionPath);
@@ -137,21 +146,32 @@ export function SessionMapView() {
     const activeItems = buckets.active.sort(sorter);
     const stalledItems = [...buckets.risk, ...buckets.blocked].sort(sorter);
     const doneItems = buckets.done.sort(sorter);
-    const groupDefs = [
-      { label: '进行中', items: activeItems },
-      { label: '阻塞 · 风险', items: stalledItems },
-      { label: '已收口', items: doneItems },
-    ].filter((g) => g.items.length > 0);
+    const attention = boardWork
+      .filter((sess) => unreadCount(sess) > 0 || isRisk(sess) || deriveState(sess) === 'blocked')
+      .sort(sorter)
+      .slice(0, GROUP_LIMIT);
+    const attentionPaths = new Set(attention.map((sess) => sess.path));
+    const recentPool = sessions.filter((sess) =>
+      sess.path !== currentSessionPath
+      && !attentionPaths.has(sess.path)
+      && isHistoryCandidate(sess)
+    );
+    const recent = (recentPool.length > 0
+      ? recentPool
+      : sessions.filter((sess) => sess.path !== currentSessionPath && !attentionPaths.has(sess.path)))
+      .sort(sorter)
+      .slice(0, GROUP_LIMIT);
     return {
-      groups: groupDefs,
-      folded: sessions.length - work.length,
+      attentionItems: attention,
+      recentItems: recent,
+      folded: Math.max(0, sessions.length - (current ? 1 : 0) - attention.length - recent.length),
       currentSession: current,
       counts: {
         active: activeItems.length + (current ? 1 : 0),
         stalled: stalledItems.length,
         done: doneItems.length,
         unread: work.reduce((sum, sess) => sum + unreadCount(sess), 0),
-        related: boardWork.length,
+        recent: recent.length,
       },
     };
   }, [sessions, currentSessionPath]);
@@ -167,9 +187,9 @@ export function SessionMapView() {
   const pulse = totalWork === 0
     ? '还没有可跟进的会话'
     : [
-        counts.active > 0 ? `${counts.active} 推进中` : '',
-        counts.stalled > 0 ? `${counts.stalled} 阻塞/风险` : '',
-        counts.done > 0 ? `${counts.done} 已收口` : '',
+        counts.active > 0 ? `${counts.active} 进行中` : '',
+        counts.stalled > 0 ? `${counts.stalled} 需要处理` : '',
+        counts.done > 0 ? `${counts.done} 已完成` : '',
       ].filter(Boolean).join(' · ');
 
   const renderCard = (sess: Session) => {
@@ -209,7 +229,21 @@ export function SessionMapView() {
             {next}
           </div>
         )}
-        {meta.length > 0 && <div className={s.mapCardMeta}>{meta.join(' · ')}</div>}
+        <div className={s.mapCardFoot}>
+          {meta.length > 0 && <div className={s.mapCardMeta}>{meta.join(' · ')}</div>}
+          {!active && (
+            <button
+              type="button"
+              className={s.mapInlineBtn}
+              onClick={(event) => {
+                event.stopPropagation();
+                void switchSession(sess.path);
+              }}
+            >
+              打开
+            </button>
+          )}
+        </div>
       </div>
     );
   };
@@ -233,6 +267,7 @@ export function SessionMapView() {
           </div>
           <span className={`${s.mapChip} ${STATE_CHIP[state]}`}>{STATE_LABEL[state]}</span>
         </div>
+        {meta.length > 0 && <div className={s.mapCurrentMeta}>{meta.join(' · ')}</div>}
         <div className={s.mapCurrentBody}>
           {next ? (
             <>
@@ -240,7 +275,7 @@ export function SessionMapView() {
               <p>{next}</p>
             </>
           ) : (
-            <p>{meta.length > 0 ? meta.join(' · ') : '正在等待你的下一条输入'}</p>
+            <p>正在等待你的下一条输入</p>
           )}
         </div>
         <div className={s.mapCurrentActions}>
@@ -267,37 +302,44 @@ export function SessionMapView() {
 
       <div className={s.mapRailStats}>
         <span>{pulse}</span>
-        {counts.related > 0 && <span>相关会话 {counts.related}</span>}
+        {counts.recent > 0 && <span>最近会话 {counts.recent}</span>}
         {counts.unread > 0 && <span className={s.mapPulseInsight}>{counts.unread} 条洞察</span>}
       </div>
 
+      {attentionItems.length > 0 && (
+        <div className={s.mapSection}>
+          <div className={s.mapSectionHead}>需要处理</div>
+          {attentionItems.map(renderCard)}
+        </div>
+      )}
+
       <div className={s.mapCanvasWrap}>
-        {groups.length === 0 ? (
-          <div className={s.mapEmpty}>暂无相关会话</div>
+        {recentItems.length === 0 ? (
+          <div className={s.mapEmpty}>暂无其他会话</div>
         ) : (
-          <div className={s.mapBoard} role="listbox" aria-label="会话工作地图">
-            <div className={s.mapBoardTitle}>相关会话</div>
-            {groups.map((group) => {
-              const shown = group.items.slice(0, GROUP_LIMIT);
-              const overflow = group.items.length - shown.length;
-              return (
-                <div key={group.label} className={s.mapGroup}>
-                  <div className={s.mapGroupHead}>{group.label} · {group.items.length}</div>
-                  {shown.map(renderCard)}
-                  {overflow > 0 && <div className={s.mapGroupMore}>+{overflow} 更多</div>}
-                </div>
-              );
-            })}
+          <div className={s.mapBoard} role="listbox" aria-label="最近会话">
+            <div className={s.mapBoardTitle}>最近会话</div>
+            {recentItems.map(renderCard)}
           </div>
         )}
       </div>
 
-      {selected && selected.path !== currentSessionPath && (
+      {selected && (
         <div className={s.mapDetail}>
           <div className={s.mapDetailHead}>
             <div className={s.mapDetailTitle}>{sessionTitle(selected)}</div>
-            <button type="button" className={s.mapActionBtn} onClick={() => { void switchSession(selected.path); }}>
-              切换
+            <button
+              type="button"
+              className={s.mapActionBtn}
+              onClick={() => {
+                if (selected.path === currentSessionPath) {
+                  requestInputFocus();
+                  return;
+                }
+                void switchSession(selected.path);
+              }}
+            >
+              {selected.path === currentSessionPath ? '继续输入' : '打开会话'}
             </button>
           </div>
           <div className={s.mapMetaLine}>
@@ -352,7 +394,7 @@ export function SessionMapView() {
       )}
 
       {folded > 0 && (
-        <div className={s.mapFolded}>归档 · {folded} 个空 / 已归档会话(原始历史仍可查)</div>
+        <div className={s.mapFolded}>更早的会话 {folded} 个 · 可在左侧搜索打开</div>
       )}
     </div>
   );

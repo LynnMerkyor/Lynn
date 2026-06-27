@@ -223,6 +223,16 @@
     min-width: 0;
 }
 
+.mapCurrentMeta {
+    margin-top: 6px;
+    color: var(--text-muted);
+    font-size: 0.64rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .mapCurrentBody span {
     display: block;
     color: var(--text-muted);
@@ -273,7 +283,7 @@
 
 .mapCanvasWrap {
     flex: 1;
-    min-height: 180px;
+    min-height: 0;
     border: 1px solid var(--overlay-light);
     border-radius: 10px;
     background: color-mix(in srgb, var(--bg-card) 88%, var(--bg));
@@ -282,7 +292,7 @@
 
 .mapEmpty {
     height: 100%;
-    min-height: 180px;
+    min-height: 120px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -528,12 +538,31 @@
     color: var(--accent);
 }
 
+.mapSection {
+    flex: 0 0 auto;
+    border: 1px solid rgba(var(--accent-rgb), 0.16);
+    border-radius: 10px;
+    background: rgba(var(--accent-rgb), 0.04);
+    padding: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mapSectionHead {
+    color: var(--text);
+    font-size: 0.72rem;
+    font-weight: 650;
+    line-height: 1.35;
+    padding: 0 2px;
+}
+
 .mapBoard {
     margin: 0;
     padding: 7px;
     display: flex;
     flex-direction: column;
-    gap: 11px;
+    gap: 6px;
 }
 
 .mapBoardTitle {
@@ -653,13 +682,41 @@
 }
 
 .mapCardMeta {
+    flex: 1;
+    min-width: 0;
     color: var(--text-muted);
     font-size: 0.6rem;
     line-height: 1.35;
-    margin-top: 5px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.mapCardFoot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+    min-height: 22px;
+}
+
+.mapInlineBtn {
+    flex: 0 0 auto;
+    border: 1px solid rgba(var(--accent-rgb), 0.22);
+    background: rgba(var(--accent-rgb), 0.08);
+    color: var(--accent);
+    border-radius: 7px;
+    padding: 3px 8px;
+    font: inherit;
+    font-size: 0.64rem;
+    line-height: 1.35;
+    cursor: pointer;
+}
+
+.mapInlineBtn:hover {
+    color: var(--text);
+    background: var(--overlay-subtle);
 }
 
 .mapFolded {
