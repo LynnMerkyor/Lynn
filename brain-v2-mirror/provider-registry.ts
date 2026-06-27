@@ -7,7 +7,35 @@ const DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY = 1;
 
 const env = (k: string, d: string): string => process.env[k] || d;
 
-type ProviderRegistry = Record<ProviderIdLiteral, Provider>;
+type StaticProviderIdLiteral = Exclude<ProviderIdLiteral, 'p-fake'>;
+type ProviderRegistry = Record<StaticProviderIdLiteral, Provider>;
+
+function pFakeEnabled(): boolean {
+  return process.env.BRAIN_V2_ENABLE_P_FAKE === '1'
+    || process.env.BRAIN_V2_REGRESSION_P_FAKE === '1';
+}
+
+const P_FAKE_ENABLED = pFakeEnabled();
+
+function buildPFakeProvider(): Provider {
+  return {
+    id: providerId('p-fake'),
+    endpoint: env('BRAIN_V2_P_FAKE_BASE', 'http://127.0.0.1:65535/v1'),
+    apiKey: env('BRAIN_V2_P_FAKE_KEY', 'none'),
+    model: envModel('BRAIN_V2_P_FAKE_MODEL', 'p-fake'),
+    capability: { vision: false, audio: false, video: false, tools: true, thinking: true, native_search: false },
+    wire: 'openai',
+    cooldown_ms: positiveEnvNumber('BRAIN_V2_P_FAKE_COOLDOWN_MS', 1_000),
+    health_path: '/models',
+    health_probe_ms: positiveEnvNumber('BRAIN_V2_P_FAKE_HEALTH_PROBE_MS', 500),
+    default_thinking: false,
+    default_reasoning_effort: 'low',
+    max_tokens: positiveEnvNumber('BRAIN_V2_P_FAKE_MAX_TOKENS', 4_096),
+    timeout_ms: positiveEnvNumber('BRAIN_V2_P_FAKE_TIMEOUT_MS', 5_000),
+    temperature: 0,
+    authType: 'none',
+  };
+}
 
 // NOTE: MiMo search is still owned by tool-exec/web_search.ts. Text/agent execution
 // uses separate providers so Token Plan Pro and ordinary API UltraSpeed never share keys.
@@ -142,7 +170,9 @@ const PROVIDER_DEFS = {
   },
 } satisfies ProviderRegistry;
 
-export const PROVIDERS: Record<string, Provider> = PROVIDER_DEFS;
+export const PROVIDERS: Record<string, Provider> = P_FAKE_ENABLED
+  ? { 'p-fake': buildPFakeProvider(), ...PROVIDER_DEFS }
+  : PROVIDER_DEFS;
 
 // universalOrder — 文本/工具编排链路。2026-06-25 Agent20:
 // UltraSpeed 是当前最强执行候选;Step/DS V4 Flash 保留为复核/打回式 fallback。
@@ -172,6 +202,9 @@ export function providerOrderForCapability(capabilityRequired?: { vision?: boole
     // MiMo follows as native image/audio/video fallback; audio requests land there when configured.
     return multimodalOrder;
   }
+  if (P_FAKE_ENABLED) {
+    return [providerId('p-fake'), ...universalOrder];
+  }
   return universalOrder;
 }
 
@@ -194,6 +227,9 @@ export function markUnhealthy(providerId: ProviderId, reason = '', cooldownMs: n
 }
 export function clearUnhealthy(providerId: ProviderId): void {
   cooldownState.delete(providerId);
+}
+export function resetCooldownStateForTests(): void {
+  cooldownState.clear();
 }
 export function getProvider(id: ProviderId | string): Provider | null { return PROVIDERS[id as ProviderId] || null; }
 

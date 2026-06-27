@@ -66,6 +66,8 @@ export function createLynnAdapter() {
           return runLocalQwen35History(input, context);
         case "scripted_provider_probe":
           return runScriptedProviderProbe(input, context);
+        case "brain_v2_route_trace":
+          return runBrainV2RouteTrace(input, context);
         case "native_session_trace":
           return runNativeSessionTrace(input, context);
         case "cli_provider_trace":
@@ -575,6 +577,165 @@ async function runScriptedProviderProbe(input, context) {
   }
 }
 
+async function runBrainV2RouteTrace(input, context) {
+  const modelId = input.model?.id || "p-fake";
+  const provider = await startScriptedOpenAIProvider({
+    script: input.providerScript || input.script || [{ content: "brain v2 route ok" }],
+    defaultModel: modelId,
+    models: input.models || [modelId],
+  });
+  context.addCleanup?.(() => provider.close());
+  try {
+    const childInput = {
+      routerPath: path.join(REPO_ROOT, "brain-v2-mirror", "router.ts"),
+      registryPath: path.join(REPO_ROOT, "brain-v2-mirror", "provider-registry.ts"),
+      messages: input.messages || [{ role: "user", content: String(input.prompt || "") }],
+      tools: input.tools ?? null,
+      capabilityRequired: input.capabilityRequired,
+      extraBody: input.extraBody || null,
+      reasoningEffort: input.reasoningEffort ?? "low",
+    };
+    const child = await runChild(process.execPath, [
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "-e",
+      brainV2RouteTraceChildSource(),
+      Buffer.from(JSON.stringify(childInput), "utf8").toString("base64url"),
+    ], {
+      cwd: REPO_ROOT,
+      env: buildBrainV2RouteTraceEnv(provider, input, modelId),
+      timeoutMs: Number(input.timeoutMs || 20_000),
+    });
+    const childOutput = parseLastJsonLine(child.stdout);
+    const providerRequests = provider.requests.map(canonicalProviderRequest);
+    const diagnostics = buildBrainV2RouteDiagnostics({
+      child,
+      childOutput,
+      providerRequests,
+      modelProbeCount: provider.modelProbeCount,
+      expectedPrompt: input.prompt,
+    });
+    return {
+      code: child.code,
+      stdout: child.stdout,
+      stderr: child.stderr,
+      timedOut: child.timedOut === true,
+      ...childOutput,
+      diagnostics,
+      provider: {
+        baseUrl: provider.baseUrl,
+        requestCount: provider.requestCount,
+        modelProbeCount: provider.modelProbeCount,
+        requests: providerRequests,
+        requestModels: provider.requests.map((request) => request.body?.model || ""),
+        lastUserTexts: provider.requests.map((request) => lastMessageText(request.body?.messages, "user")),
+        requestToolNames: provider.requests.map((request) => Array.isArray(request.body?.tools)
+          ? request.body.tools.map((tool) => tool?.function?.name || tool?.name || "").filter(Boolean)
+          : []),
+      },
+    };
+  } finally {
+    await provider.close();
+  }
+}
+
+function buildBrainV2RouteTraceEnv(provider, input, modelId) {
+  return {
+    ...process.env,
+    NO_COLOR: "1",
+    FORCE_COLOR: "0",
+    BRAIN_V2_ENABLE_P_FAKE: "1",
+    BRAIN_V2_REGRESSION_P_FAKE: "1",
+    BRAIN_V2_P_FAKE_BASE: provider.baseUrl,
+    BRAIN_V2_P_FAKE_KEY: input.model?.apiKey || "none",
+    BRAIN_V2_P_FAKE_MODEL: modelId,
+    BRAIN_V2_P_FAKE_TIMEOUT_MS: String(input.providerTimeoutMs || 5_000),
+    BRAIN_V2_P_FAKE_HEALTH_PROBE_MS: String(input.healthProbeMs || 500),
+    BRAIN_V2_DIRECT_KNOWN_OFFICIAL: "0",
+    BRAIN_V2_DIRECT_OFFICIAL_MODEL_PREFETCH: "0",
+    BRAIN_V2_DIRECT_WEATHER_PREFETCH: "0",
+    BRAIN_V2_DIRECT_SPORTS_PREFETCH: "0",
+    BRAIN_V2_DIRECT_MARKET_PREFETCH: "0",
+    BRAIN_V2_PRE_SEARCH: "0",
+    BRAIN_V2_LOCAL_HEALTH_PROBE: input.localHealthProbe === false ? "0" : "1",
+  };
+}
+
+function brainV2RouteTraceChildSource() {
+  return String.raw`
+import { pathToFileURL } from "node:url";
+
+const encoded = process.argv.at(-1) || "";
+const input = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+const registry = await import(pathToFileURL(input.registryPath).href);
+registry.resetCooldownStateForTests?.();
+const router = await import(pathToFileURL(input.routerPath).href);
+
+const chunks = [];
+const logs = [];
+const result = await router.run({
+  messages: input.messages || [],
+  tools: input.tools ?? null,
+  capabilityRequired: input.capabilityRequired,
+  extraBody: input.extraBody || null,
+  reasoningEffort: input.reasoningEffort ?? null,
+  onChunk(chunk, meta) {
+    chunks.push(canonicalBrainV2Chunk(chunk, meta));
+  },
+  log(level, message) {
+    logs.push({ level: String(level || ""), message: String(message || "") });
+  },
+});
+
+const contentText = chunks
+  .filter((chunk) => chunk.type === "content")
+  .map((chunk) => chunk.delta || "")
+  .join("");
+
+console.log(JSON.stringify({
+  result: canonicalResult(result),
+  chunks,
+  chunkTypes: chunks.map((chunk) => chunk.type),
+  contentText,
+  logs,
+  status: registry.getProviderStatusSnapshot(input.capabilityRequired),
+  cooldown: registry.getCooldownState(),
+}));
+
+function canonicalResult(result) {
+  return {
+    ok: result?.ok === true,
+    providerId: result?.providerId ? String(result.providerId) : null,
+    iterations: Number(result?.iterations || 0),
+    forwardedToClient: result?.forwardedToClient === true,
+    clientToolCalls: Number(result?.clientToolCalls || 0),
+    hitMaxIterations: result?.hitMaxIterations === true,
+    error: result?.error || "",
+  };
+}
+
+function canonicalBrainV2Chunk(chunk, meta) {
+  return {
+    type: chunk?.type || "",
+    delta: typeof chunk?.delta === "string" ? chunk.delta : "",
+    reason: chunk?.reason || "",
+    usage: chunk?.type === "usage" ? chunk.usage ?? null : undefined,
+    toolCallNames: Array.isArray(chunk?.delta)
+      ? chunk.delta.map((item) => item?.function?.name || "").filter(Boolean)
+      : [],
+    providerId: meta?.providerId ? String(meta.providerId) : "",
+    fallback_from: Array.isArray(meta?.fallback_from)
+      ? meta.fallback_from.map((item) => ({
+        id: item?.id ? String(item.id) : "",
+        reason: item?.reason || "",
+      }))
+      : [],
+  };
+}
+`;
+}
+
 function runChild(command, args, { cwd, env, timeoutMs }) {
   return new Promise((resolve) => {
     const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
@@ -611,6 +772,21 @@ function parseJsonLines(text) {
         return { type: "parse_error", raw: line };
       }
     });
+}
+
+function parseLastJsonLine(text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    try {
+      return JSON.parse(lines[i]);
+    } catch {
+      // Keep scanning; imported code may print non-JSON diagnostics.
+    }
+  }
+  throw new Error(`No JSON payload found in child stdout: ${String(text || "").slice(0, 500)}`);
 }
 
 async function fetchJson(url) {
@@ -681,5 +857,29 @@ function buildCliDiagnostics({ events, assistantText, finished, child, providerR
     finishedOk: finished?.ok === true,
     visibleAnswerNonEmpty: String(assistantText || "").trim().length > 0,
     lastUserTexts: providerRequests.map((request) => request.lastUserText || ""),
+  };
+}
+
+function buildBrainV2RouteDiagnostics({ child, childOutput, providerRequests, modelProbeCount, expectedPrompt }) {
+  const chunks = Array.isArray(childOutput?.chunks) ? childOutput.chunks : [];
+  const statusRoute = Array.isArray(childOutput?.status?.route) ? childOutput.status.route : [];
+  const providerIds = [...new Set(chunks.map((chunk) => chunk.providerId).filter(Boolean))];
+  const contentText = String(childOutput?.contentText || "");
+  return {
+    exitCode: child.code,
+    timedOut: child.timedOut === true,
+    providerRequestCount: providerRequests.length,
+    modelProbeCountObserved: Number(modelProbeCount || 0),
+    routeHead: statusRoute[0] || "",
+    routeIncludesPFake: statusRoute.includes("p-fake"),
+    usedProviderIds: providerIds,
+    usedPFake: providerIds.includes("p-fake") || childOutput?.result?.providerId === "p-fake",
+    contentChunkCount: chunks.filter((chunk) => chunk.type === "content").length,
+    finishChunkCount: chunks.filter((chunk) => chunk.type === "finish").length,
+    visibleAnswerNonEmpty: contentText.trim().length > 0,
+    fallbackCount: chunks.reduce((sum, chunk) => sum + (Array.isArray(chunk.fallback_from) ? chunk.fallback_from.length : 0), 0),
+    lastUserTexts: providerRequests.map((request) => request.lastUserText || ""),
+    latestUserText: providerRequests.at(-1)?.lastUserText || "",
+    expectedPromptSeen: expectedPrompt ? providerRequests.some((request) => request.lastUserText.includes(String(expectedPrompt))) : true,
   };
 }

@@ -27,6 +27,8 @@ For agent-runtime cases, use a scripted provider and assert the event/request tr
 
 Lynn's `cli_provider_trace` operation uses the same fake provider through the real `cli/bin/lynn.mjs` prompt command in JSON mode. That gives v1 a cheap CLI shell regression without requiring live Brain or StepFun.
 
+Lynn's `brain_v2_route_trace` operation starts the fake provider in the parent process, then runs Brain v2 `router.run()` in an isolated child process with `BRAIN_V2_ENABLE_P_FAKE=1`. This keeps provider-registry module state and cooldown maps from leaking between cases while still letting the parent inspect the fake provider's `/models` probes and `/chat/completions` requests. The operation also disables Lynn's direct realtime prefetch shortcuts for the child process, so weather/sports/market prompts prove the real provider route instead of a deterministic bypass.
+
 `scripted_provider_probe` verifies the fake provider's health/model endpoints before a case relies on it. Keep this kind of probe in the kit so provider health/cooldown bugs are caught before live Brain-route work starts.
 
 Minimal case:
@@ -57,5 +59,5 @@ The command writes a report under `/tmp/lynn-agent-regression/` by default.
 
 - Layer 1: deterministic helper contracts, no model or server.
 - Layer 2: native runtime trace with scripted OpenAI-compatible SSE provider.
-- Layer 3: CLI shell trace through real `cli/bin/lynn.mjs` and the scripted provider.
+- Layer 3: route/runtime shell traces through real Brain v2 router or `cli/bin/lynn.mjs` and the scripted provider.
 - Layer 4: future live smoke, only structure invariants; never assert full model prose.

@@ -471,6 +471,45 @@
       ]
     },
     {
+      "id": "brain-v2.pfake-weather-route",
+      "title": "Brain v2 route-level regression uses env-gated p-fake instead of direct weather prefetch",
+      "level": "smoke",
+      "tags": ["brain-v2", "route", "provider", "prefetch", "bug"],
+      "operation": "brain_v2_route_trace",
+      "input": {
+        "prompt": "深圳今天会下雨吗？给一句行动建议。",
+        "model": {
+          "id": "p-fake",
+          "apiKey": "none"
+        },
+        "providerScript": [
+          {
+            "content": "p-fake 已接管 Brain v2 route：深圳今天有阵雨，建议带伞。"
+          }
+        ]
+      },
+      "assertions": [
+        { "path": "code", "equals": 0 },
+        { "path": "timedOut", "equals": false },
+        { "path": "result.ok", "equals": true },
+        { "path": "result.providerId", "equals": "p-fake" },
+        { "path": "status.route[0]", "equals": "p-fake" },
+        { "path": "diagnostics.routeHead", "equals": "p-fake" },
+        { "path": "diagnostics.routeIncludesPFake", "equals": true },
+        { "path": "diagnostics.usedPFake", "equals": true },
+        { "path": "diagnostics.providerRequestCount", "equals": 1 },
+        { "path": "diagnostics.modelProbeCountObserved", "greaterThanOrEqual": 1 },
+        { "path": "diagnostics.visibleAnswerNonEmpty", "equals": true },
+        { "path": "diagnostics.fallbackCount", "equals": 0 },
+        { "path": "provider.requestCount", "equals": 1 },
+        { "path": "provider.modelProbeCount", "greaterThanOrEqual": 1 },
+        { "path": "provider.requestModels[0]", "equals": "p-fake" },
+        { "path": "provider.lastUserTexts[0]", "contains": "深圳今天会下雨吗" },
+        { "path": "chunkTypes", "contains": "content" },
+        { "path": "contentText", "contains": "p-fake 已接管 Brain v2 route" }
+      ]
+    },
+    {
       "id": "local-qwen35.empty-reasoning-retry",
       "title": "Empty visible output with reasoning triggers no-thinking retry",
       "level": "release",

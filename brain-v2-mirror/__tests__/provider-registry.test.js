@@ -1,6 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { getProvider, getProviderStatusSnapshot, PROVIDERS, providerOrderForCapability, universalOrder } from '../provider-registry.js';
 
+function withSavedEnv(keys, fn) {
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => {
+      for (const key of keys) {
+        if (saved[key] === undefined) delete process.env[key];
+        else process.env[key] = saved[key];
+      }
+    });
+}
+
 describe('provider registry', () => {
   it('keeps MiMo UltraSpeed as the text/tool execution head with StepFun and DS as fallback reviewers', () => {
     expect(universalOrder.map(String).slice(0, 6)).toEqual([
@@ -157,5 +169,66 @@ describe('provider registry', () => {
       busyFallbackProvider: 'mimo-ultraspeed or step-3.7-flash',
     });
     expect(JSON.stringify(snapshot)).not.toContain('apiKey');
+  });
+
+  it('keeps p-fake absent from the default production registry and route', () => {
+    expect(getProvider('p-fake')).toBeNull();
+    expect(PROVIDERS['p-fake']).toBeUndefined();
+    expect(providerOrderForCapability().map(String)).not.toContain('p-fake');
+    expect(getProviderStatusSnapshot().route).not.toContain('p-fake');
+  });
+
+  it('adds p-fake as an env-gated text-route head without taking over multimodal routing', async () => {
+    await withSavedEnv([
+      'BRAIN_V2_ENABLE_P_FAKE',
+      'BRAIN_V2_P_FAKE_BASE',
+      'BRAIN_V2_P_FAKE_KEY',
+      'BRAIN_V2_P_FAKE_MODEL',
+    ], async () => {
+      process.env.BRAIN_V2_ENABLE_P_FAKE = '1';
+      process.env.BRAIN_V2_P_FAKE_BASE = 'http://127.0.0.1:4567/v1';
+      process.env.BRAIN_V2_P_FAKE_KEY = 'none';
+      process.env.BRAIN_V2_P_FAKE_MODEL = 'p-fake';
+
+      const isolated = await import('../provider-registry.js?p-fake-enabled');
+      const fake = isolated.getProvider('p-fake');
+      const textRoute = isolated.providerOrderForCapability().map(String);
+      const visionRoute = isolated.providerOrderForCapability({ vision: true }).map(String);
+      const snapshot = isolated.getProviderStatusSnapshot();
+
+      expect(fake).toBeTruthy();
+      expect(fake.endpoint).toBe('http://127.0.0.1:4567/v1');
+      expect(fake.apiKey).toBe('none');
+      expect(String(fake.model)).toBe('p-fake');
+      expect(fake.authType).toBe('none');
+      expect(fake.health_path).toBe('/models');
+      expect(textRoute.slice(0, 4)).toEqual([
+        'p-fake',
+        'mimo-ultraspeed',
+        'step-3.7-flash',
+        'deepseek-chat',
+      ]);
+      expect(visionRoute[0]).toBe('step-3.7-flash');
+      expect(visionRoute).not.toContain('p-fake');
+      expect(snapshot.route[0]).toBe('p-fake');
+      expect(snapshot.providers.find((provider) => provider.id === 'p-fake')).toMatchObject({
+        credential: 'not_required',
+        configured: true,
+        local: true,
+        inRoute: true,
+        routeRole: 'head',
+      });
+    });
+  });
+
+  it('can reset cooldown state between route-level regression cases', async () => {
+    await withSavedEnv(['BRAIN_V2_ENABLE_P_FAKE'], async () => {
+      process.env.BRAIN_V2_ENABLE_P_FAKE = '1';
+      const isolated = await import('../provider-registry.js?p-fake-cooldown');
+      isolated.markUnhealthy('p-fake', 'test', 60_000);
+      expect(isolated.getCooldownState()['p-fake']?.reason).toBe('test');
+      isolated.resetCooldownStateForTests();
+      expect(isolated.getCooldownState()).toEqual({});
+    });
   });
 });
