@@ -11,6 +11,17 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://gitee.com/merkyor/Lynn/releases)
+[![HuggingFace Models](https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d)](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill)
+[![ModelScope Models](https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff)](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill)
+
+---
+
+## Ecosystem Links
+
+- **Source and app**: [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [Gitee release mirror](https://gitee.com/merkyor/Lynn/releases)
+- **Models and GGUF mirrors**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
+- **Local orchestrator model**: [HuggingFace 35B Distill](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill) · [ModelScope 35B Distill](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill)
+- **Agent regression**: [`agent-regression-kit/`](agent-regression-kit/) is bundled here today. Coding100, Agent20, automated regression cases, and model tooling should move into a standalone tooling repo; see [`docs/ops/agent-eval-tooling-repo.md`](docs/ops/agent-eval-tooling-repo.md).
 
 ---
 
@@ -31,7 +42,7 @@ Same harness, thinking-on, vs the base A3B:
 
 Distilled and base have **identical single-stream TPS** (~224 tok/s on R6000) — the orchestration speedup comes from **fewer tokens to a decision** (we distilled the *thinking style*, not raw speed). Hard tasks (e.g. concurrency) are still backstopped by **harness objective verification + a DS-V4 Flash escape hatch**.
 
-📦 **ModelScope**: `Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill` · **HuggingFace**: `nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill` (BF16 + Q4_K_M gguf)
+📦 **ModelScope**: [`Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill`](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill) · **HuggingFace**: [`nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill`](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill) (BF16 + Q4_K_M gguf)
 
 ### ② Engine route: we chose the fastest edge framework — llama.cpp — and give back
 
@@ -1011,8 +1022,8 @@ This project is based on the open source work of [liliMozi](https://github.com/l
 
 ## Links
 
-- [Report an Issue](https://github.com/MerkyorLynn/Lynn/issues)
-- [Security](https://github.com/MerkyorLynn/Lynn/security)
-- [Project Repository](https://github.com/MerkyorLynn/Lynn)
+- [Report an Issue](https://github.com/LynnMerkyor/Lynn/issues)
+- [Security](https://github.com/LynnMerkyor/Lynn/security)
+- [Project Repository](https://github.com/LynnMerkyor/Lynn)
 - [Security Policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
