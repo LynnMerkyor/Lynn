@@ -16,9 +16,10 @@ describe("local-qwen id / filename", () => {
     expect(isLocalQwenProviderId("openai")).toBe(false);
     expect(isLocalQwenProviderId(null)).toBe(false);
   });
-  it("isDefaultQwen35MtpFileName matches the canonical + loose mtp names", () => {
-    expect(isDefaultQwen35MtpFileName("Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf")).toBe(true);
-    expect(isDefaultQwen35MtpFileName("qwen35-9b-q4km-mtp.gguf")).toBe(true);
+  it("isDefaultQwen35MtpFileName matches the canonical 27B Q5 + loose mtp names", () => {
+    expect(isDefaultQwen35MtpFileName("Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf")).toBe(true);
+    expect(isDefaultQwen35MtpFileName("qwen3.6-27b-dsv4pro-distill-mtp-q5km.gguf")).toBe(true);
+    expect(isDefaultQwen35MtpFileName("Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf")).toBe(false);
     expect(isDefaultQwen35MtpFileName("other.gguf")).toBe(false);
   });
 });
@@ -45,21 +46,23 @@ describe("normalizeLocalUpgradeOptions (memory-adaptive)", () => {
   it("shows both downgrade + upgrade when memory is unknown", () => {
     const out = normalizeLocalUpgradeOptions([], null);
     expect(out.some((o) => o.id === "qwen35-4b-q4km")).toBe(true);
-    expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix")).toBe(true);
+    expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix")).toBe(true);
   });
   it("hides the 4B downgrade on >32GB machines, keeps 35B", () => {
     const out = normalizeLocalUpgradeOptions([], 64);
     expect(out.some((o) => o.id === "qwen35-4b-q4km")).toBe(false);
-    expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix")).toBe(true);
+    expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix")).toBe(true);
   });
   it("hides the 35B upgrade on <24GB machines, keeps 4B", () => {
     const out = normalizeLocalUpgradeOptions([], 16);
     expect(out.some((o) => o.id === "qwen35-4b-q4km")).toBe(true);
-    expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix")).toBe(false);
+    expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix")).toBe(false);
   });
-  it("drops 9b/27b server options from the optional list", () => {
+  it("drops the default 27b server option from the optional list", () => {
     const out = normalizeLocalUpgradeOptions([{ id: "x-9b" }, { id: "y-27b" }], 28);
-    expect(out.some((o) => o.id === "x-9b" || o.id === "y-27b")).toBe(false);
+    expect(out.some((o) => o.id === "x-9b")).toBe(false);
+    expect(out.some((o) => o.id === "qwen35-9b-q4km-imatrix")).toBe(true);
+    expect(out.some((o) => o.id === "y-27b")).toBe(false);
   });
 });
 
